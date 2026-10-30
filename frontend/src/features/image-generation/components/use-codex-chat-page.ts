@@ -4,15 +4,20 @@ import { useChatPageMedia } from '@/features/codex-chat/use-chat-page-media'
 import { useChatDraftTransaction } from '@/features/codex-chat/use-chat-draft-transaction'
 import { useChatPresetInsertion } from './use-chat-preset-insertion'
 import { useChatCharacterSettingInsertion } from './use-chat-character-setting-insertion'
-import { pageChoice } from '@/features/codex-chat/page-action-helpers'
+import { pageChoice, pageFreeText } from '@/features/codex-chat/page-action-helpers'
+import { useGenerationChatRuns } from './use-generation-chat-runs'
+import { IMAGE_GENERATION_TARGET_GROUP_KEY, useGenerationTargetGroupPath } from '@/features/groups/generation-target-group-store'
+import type { GenerationHistoryRecord } from '@/lib/api-image-generation-types'
 import { useI18n } from '@/i18n'
 import type { CodexFormDraft } from './codex-generation-panel'
 import { getImageDraftRevision } from '../image-generation-shared'
 import { CODEX_REFERENCE_ROLES, applyCodexDraftPatch, canEnableCodexStrict, codexReferenceCapacity } from '../codex-reference-draft'
 import type { ChatPageField } from '@conai/shared'
 
-export function useCodexChatPage(form: CodexFormDraft, setForm: Dispatch<SetStateAction<CodexFormDraft>>, models: Array<{ id: string }>) {
+export function useCodexChatPage(form: CodexFormDraft, setForm: Dispatch<SetStateAction<CodexFormDraft>>, models: Array<{ id: string }>, records: GenerationHistoryRecord[], generate: () => Promise<boolean>, size: string | undefined, samples: number, historyForm: (payload: Record<string, unknown>) => CodexFormDraft) {
   const { t } = useI18n()
+  const runs = useGenerationChatRuns('codex.generate', 'codex', records, generate)
+  const { requestPath: targetGroup } = useGenerationTargetGroupPath(IMAGE_GENERATION_TARGET_GROUP_KEY)
   const capacity = codexReferenceCapacity(form)
   const media = useChatPageMedia(['referenceImage', 'maskImage', ...(form.references.length < capacity ? ['reference:new'] : []), ...form.references.map((_, index) => `reference:${index}`)])
   const presets = useChatPresetInsertion(['prompt', 'negativePrompt'])
@@ -38,12 +43,14 @@ export function useCodexChatPage(form: CodexFormDraft, setForm: Dispatch<SetStat
         { id: `reference${index}Order`, label: t({ ko: '참조 {index} 순서', en: 'Reference {index} position' }, { index: index + 1 }), type: 'number', value: index + 1, min: 1, max: form.references.length, integer: true },
       ]),
     ],
-    actions: [...media.actions, ...presets.actions, ...characterSettings.actions({
+    actions: [...runs.actions, ...media.actions, ...presets.actions, ...characterSettings.actions({
       target: pageChoice(['prompt']),
       ...(characterReference ? { includeReference: { type: 'boolean' as const } } : {}),
-    }, ['target'], 'target prompt = the positive prompt. includeReference (default: when the setting has one) sets its reference image as referenceImage (reference image mode only).')], data: { media: media.candidates, presets: presets.candidates, limits: '5 attachments including source/mask; 10 MiB each, 32 MiB total, 4096px per side. Size is requested, not guaranteed.', selected: { referenceImage: form.referenceImage?.fileName ?? '', maskImage: form.maskImage?.fileName ?? '', references: form.references.map((reference) => ({ role: reference.role, label: reference.label, fileName: reference.image?.fileName ?? '' })) } },
+    }, ['target'], 'target prompt = the positive prompt. includeReference (default: when the setting has one) sets its reference image as referenceImage (reference image mode only).')], data: { recentRuns: runs.recentRuns, generating: runs.generating, media: media.candidates, presets: presets.candidates, limits: '5 attachments including source/mask; 10 MiB each, 32 MiB total, 4096px per side. Size is requested, not guaranteed.', selected: { targetGroup: targetGroup ?? '', prompt: pageFreeText(form.prompt.slice(0, 240)), model: form.model || 'default', size: size ?? 'random', samples, queueCount: 1, referenceImage: form.referenceImage?.fileName ?? '', maskImage: form.maskImage?.fileName ?? '', references: form.references.map((reference) => ({ role: reference.role, label: reference.label, fileName: reference.image?.fileName ?? '' })) } },
     apply: (patch) => { const next = applyCodexDraftPatch(form, patch, t); setForm(next) },
     applyAction: async (id, args, assertCurrent) => {
+      if (id === 'generation.history_load') return commit(historyForm(await runs.loadHistory(args, assertCurrent)))
+      if (await runs.apply(id, args, assertCurrent)) return
       const next = { ...form, references: form.references.map((reference) => ({ ...reference })) }
       const target = String(args.fieldId)
       if (id === 'preset.insert') next[target as 'prompt' | 'negativePrompt'] = presets.value(args, form[target as 'prompt' | 'negativePrompt'])

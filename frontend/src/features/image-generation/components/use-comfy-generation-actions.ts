@@ -41,7 +41,7 @@ function isModalServer(server: ServerLike, serverTests: Record<number, ComfyServ
 }
 
 /** Clamp the requested ComfyUI queue registration count into a safe integer range. */
-function clampComfyQueueRegistrationCount(value: string) {
+export function clampComfyQueueRegistrationCount(value: string) {
   const parsed = Math.trunc(parseNumberInput(value, COMFY_QUEUE_REGISTRATION_COUNT_MIN))
   return Math.min(COMFY_QUEUE_REGISTRATION_COUNT_MAX, Math.max(COMFY_QUEUE_REGISTRATION_COUNT_MIN, parsed))
 }
@@ -158,7 +158,7 @@ export function useComfyGenerationActions({
   /** Generate one or many queue jobs on the current routing target. */
   const handleGenerateSelected = async () => {
     if (isComfyGenerating || !validateComfyGeneration()) {
-      return
+      return false
     }
 
     const registrationCount = clampComfyQueueRegistrationCount(queueRegistrationCount)
@@ -173,7 +173,7 @@ export function useComfyGenerationActions({
         const connectedComfyServers = connectedServers.filter((server) => !isModalServer(server, comfyServerTests))
         if (connectedComfyServers.length === 0) {
           showSnackbar({ message: t({ ko: '연결된 ComfyUI 서버가 없어.', en: 'No ComfyUI server is connected.' }), tone: 'error' })
-          return
+          return false
         }
 
         enqueueJob = (count) => handleGenerateAuto(count)
@@ -189,7 +189,7 @@ export function useComfyGenerationActions({
         })
         if (matchingServers.length === 0) {
           showSnackbar({ message: t({ ko: '연결된 #{tag} 서버가 없어.', en: 'No connected #{tag} server.' }, { tag: selectedTag }), tone: 'error' })
-          return
+          return false
         }
 
         enqueueJob = (count) => handleGenerateOnTag(selectedTag, count)
@@ -198,30 +198,30 @@ export function useComfyGenerationActions({
         const serverId = Number(selectedTarget.slice('server:'.length))
         if (!Number.isFinite(serverId)) {
           showSnackbar({ message: t({ ko: '생성할 서버를 먼저 골라줘.', en: 'Choose a server to generate on first.' }), tone: 'error' })
-          return
+          return false
         }
 
         const server = activeServers.find((item) => item.id === serverId)
         if (!server) {
           showSnackbar({ message: t({ ko: '선택한 서버를 찾지 못했어.', en: 'Could not find the selected server.' }), tone: 'error' })
-          return
+          return false
         }
 
         if (!isModalServer(server, comfyServerTests) && comfyServerTests[serverId]?.status?.is_connected !== true) {
           showSnackbar({ message: t({ ko: '선택한 서버가 아직 연결 확인되지 않았어.', en: 'The selected server has not been confirmed as connected yet.' }), tone: 'error' })
-          return
+          return false
         }
 
         enqueueJob = (count) => handleGenerateOnServer(serverId, count)
         targetLabel = server.name
       } else {
         showSnackbar({ message: t({ ko: '생성 타겟이 올바르지 않아.', en: 'The generation target is invalid.' }), tone: 'error' })
-        return
+        return false
       }
 
       if (!enqueueJob) {
         showSnackbar({ message: t({ ko: '생성 타겟이 올바르지 않아.', en: 'The generation target is invalid.' }), tone: 'error' })
-        return
+        return false
       }
 
       setIsComfyGenerating(true)
@@ -238,8 +238,10 @@ export function useComfyGenerationActions({
       } else {
         showSnackbar({ message: t({ ko: '{target} 큐 등록 {succeeded}건 성공, {failed}건 실패.', en: '{target} queue: {succeeded} added, {failed} failed.' }, { target: targetLabel, succeeded: successCount, failed: failedCount }), tone: 'error' })
       }
+      return failedCount <= 0 ? true : successCount > 0 ? { queued: successCount, requested: registrationCount } : false
     } catch (error) {
       showSnackbar({ message: getErrorMessage(error, t({ ko: 'ComfyUI 생성에 실패했어.', en: 'ComfyUI generation failed.' })), tone: 'error' })
+      return false
     } finally {
       setIsComfyGenerating(false)
     }

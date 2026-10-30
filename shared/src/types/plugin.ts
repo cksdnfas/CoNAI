@@ -108,6 +108,11 @@ export type PluginLlmInput = {
   /** Text mode only. judge: the profile's prompt on its judge model, else the default judge row (cheap quick calls). */
   model?: 'chat' | 'judge'
   useLorebooks?: boolean
+  /**
+   * Text mode only, with lorebooks on: account lorebooks (ids) whose entries join the profile's books for this one
+   * stateless request, selected by the same keyword rules. Profile rooms use the books linked to the room instead.
+   */
+  lorebookIds?: number[]
   /** Optional positive safe integer; only lowers the profile cap. Omitted follows profile/provider settings. Codex cannot enforce it. */
   maxTokens?: number
   /** Optional 1,000–1,800,000 ms explicit deadline. Omitted follows engine/connection settings. */

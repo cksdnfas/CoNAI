@@ -362,6 +362,20 @@ export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOpti
     }
   }
 
+  const deleteSelected = async () => {
+    if (!canDeleteImages || selectedCompositeHashes.length === 0 || isDeleting) throw new Error(t('useHomePageData.failedToDeleteSelectedItems'))
+    try {
+      setIsDeleting(true)
+      const result = await deleteImagesBulk(selectedCompositeHashes)
+      setSelectedIds([])
+      await removeBulkDeletedImagesFromListCaches(queryClient, selectedCompositeHashes, result.details.errors)
+      notifyImageDeleted(result.details)
+      return result
+    } finally {
+      setIsDeleting(false)
+    }
+  }
+
   const handleDeleteSelected = async () => {
     if (!canDeleteImages) {
       notifyError(t('useHomePageData.onlyAdminAccountsCanDelete'))
@@ -384,15 +398,9 @@ export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOpti
     }
 
     try {
-      setIsDeleting(true)
-      const result = await deleteImagesBulk(selectedCompositeHashes)
-      setSelectedIds([])
-      await removeBulkDeletedImagesFromListCaches(queryClient, selectedCompositeHashes, result.details.errors)
-      notifyImageDeleted(result.details)
+      await deleteSelected()
     } catch (error) {
       notifyError(error instanceof Error ? error.message : t('useHomePageData.failedToDeleteSelectedItems'))
-    } finally {
-      setIsDeleting(false)
     }
   }
 
@@ -468,6 +476,7 @@ export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOpti
     handleRetryNextPage,
     handleDownloadSelected,
     handleDeleteSelected,
+    deleteSelected,
     handleOpenAssignModal,
     handleAssignToGroup,
   }

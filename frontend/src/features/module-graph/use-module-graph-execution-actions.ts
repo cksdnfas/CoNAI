@@ -233,7 +233,7 @@ export function useModuleGraphExecutionActions({
   /** Queue a full workflow execution for one saved graph. */
   const handleExecuteGraph = useCallback(async (graphId: number, inputValues?: Record<string, unknown>) => {
     if (executingGraphId !== null) {
-      return
+      return false
     }
 
     try {
@@ -250,8 +250,10 @@ export function useModuleGraphExecutionActions({
         message: t({ ko: '워크플로우 실행 요청을 등록했어. 실행 #{id}가 백그라운드 큐에서 처리돼.', en: 'Workflow run requested. Run #{id} will be processed in the background queue.' }, { id: result.executionId }),
         tone: 'info',
       })
+      return true
     } catch (error) {
       showSnackbar({ message: error instanceof Error ? error.message : t({ ko: '워크플로우 실행에 실패했어.', en: 'Failed to run the workflow.' }), tone: 'error' })
+      return false
     } finally {
       setExecutingGraphId(null)
     }
@@ -335,13 +337,13 @@ export function useModuleGraphExecutionActions({
   const handleRunSelectedWorkflow = useCallback(async () => {
     if (selectedGraphRecord === null) {
       showSnackbar({ message: t({ ko: '먼저 워크플로우를 하나 선택해줘.', en: 'Select a workflow first.' }), tone: 'error' })
-      return
+      return false
     }
 
     const blockingValidationIssue = selectedWorkflowValidationIssues.find((issue) => issue.severity === 'error')
     if (blockingValidationIssue) {
       showSnackbar({ message: `${blockingValidationIssue.nodeLabel}: ${blockingValidationIssue.title}`, tone: 'error' })
-      return
+      return false
     }
 
     const exposedInputs = selectedGraphRecord.graph.metadata?.exposed_inputs ?? []
@@ -356,10 +358,10 @@ export function useModuleGraphExecutionActions({
 
     if (missingRequiredInput) {
       showSnackbar({ message: t({ ko: "필수 입력 '{label}' 값을 먼저 넣어줘.", en: "Fill in the required input '{label}' first." }, { label: missingRequiredInput.label }), tone: 'error' })
-      return
+      return false
     }
 
-    await handleExecuteGraph(selectedGraphRecord.id, workflowRunInputValues)
+    return await handleExecuteGraph(selectedGraphRecord.id, workflowRunInputValues)
   }, [handleExecuteGraph, selectedGraphRecord, selectedWorkflowValidationIssues, showSnackbar, t, workflowRunInputValues])
 
   /** Editor "시험 실행": save the draft when needed, then run the whole graph with the inputs tab's values. */

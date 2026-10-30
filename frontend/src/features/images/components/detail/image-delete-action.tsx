@@ -49,58 +49,48 @@ export function ImageDeleteAction({ image, className, variant = 'secondary', onD
   )
 }
 
-/** The same deletion as a ⋯ menu entry (destructive, confirm first); null without the permission. */
-export function useImageDeleteMenuAction(image: ImageRecord | undefined, onDeleted?: (compositeHash: string) => void): (ActionMenuAction & { label: string }) | null {
+export function useImageDeletion(image: ImageRecord | undefined, onDeleted?: (compositeHash: string) => void) {
   const queryClient = useQueryClient()
-  const confirm = useConfirm()
   const notifyImageDeleted = useImageDeleteUndo()
-  const { showSnackbar } = useSnackbar()
   const { t } = useI18n()
   const canDeleteImages = useCanDeleteImages()
   const [isDeleting, setIsDeleting] = useState(false)
   const compositeHash = typeof image?.composite_hash === 'string' && image.composite_hash.length > 0 ? image.composite_hash : null
-
-  if (!canDeleteImages || !compositeHash) {
-    return null
-  }
-
-  const handleDelete = async () => {
-    if (isDeleting) {
-      return
+  const deleteImage = async () => {
+    if (!canDeleteImages || !compositeHash || isDeleting) throw new Error(t({ ko: '이미지를 지우지 못했어.', en: 'Could not delete the image.' }))
+    try {
+      setIsDeleting(true)
+      const result = await deleteImagesBulk([compositeHash])
+      if (result.details.deleted === 0) throw new Error(result.details.errors[0] ?? t({ ko: '이미지를 지우지 못했어.', en: 'Could not delete the image.' }))
+      onDeleted?.(compositeHash)
+      await removeDeletedImagesFromListCaches(queryClient, [compositeHash])
+      notifyImageDeleted(result.details)
+      if (result.details.failed) throw new Error(result.details.errors.join(', ') || t({ ko: '이미지를 지우지 못했어.', en: 'Could not delete the image.' }))
+    } finally {
+      setIsDeleting(false)
     }
+  }
+  return { canDeleteImages, compositeHash, isDeleting, deleteImage }
+}
 
+/** The same deletion as a ⋯ menu entry (destructive, confirm first); null without the permission. */
+export function useImageDeleteMenuAction(image: ImageRecord | undefined, onDeleted?: (compositeHash: string) => void): (ActionMenuAction & { label: string }) | null {
+  const { canDeleteImages, compositeHash, isDeleting, deleteImage } = useImageDeletion(image, onDeleted)
+  const confirm = useConfirm()
+  const { showSnackbar } = useSnackbar()
+  const { t } = useI18n()
+  if (!canDeleteImages || !compositeHash) return null
+  const handleDelete = async () => {
+    if (isDeleting) return
     const confirmed = await confirm({
       title: t({ ko: '이미지 삭제', en: 'Delete image' }),
       description: await withChatMediaDeleteWarning(t({ ko: '이 이미지를 삭제할까? 삭제 보호가 켜져 있으면 휴지통으로 보내고 되돌릴 수 있어. 꺼져 있으면 영구 삭제돼.', en: 'Delete this image? With deletion protection on, files move to the Recycle Bin and can be undone. Otherwise they are permanently deleted.' }), [compositeHash], t),
       confirmLabel: t({ ko: '삭제', en: 'Delete' }),
       tone: 'destructive',
     })
-    if (!confirmed) {
-      return
-    }
-
-    try {
-      setIsDeleting(true)
-      const result = await deleteImagesBulk([compositeHash])
-      if (result.details.deleted === 0) {
-        showSnackbar({
-          message: result.details.errors[0] ?? t({ ko: '이미지를 지우지 못했어.', en: 'Could not delete the image.' }),
-          tone: 'error',
-        })
-        return
-      }
-
-      onDeleted?.(compositeHash)
-      await removeDeletedImagesFromListCaches(queryClient, [compositeHash])
-      notifyImageDeleted(result.details)
-    } catch (error) {
-      showSnackbar({
-        message: error instanceof Error ? error.message : t({ ko: '이미지를 지우지 못했어.', en: 'Could not delete the image.' }),
-        tone: 'error',
-      })
-    } finally {
-      setIsDeleting(false)
-    }
+    if (!confirmed) return
+    try { await deleteImage() }
+    catch (error) { showSnackbar({ message: error instanceof Error ? error.message : t({ ko: '이미지를 지우지 못했어.', en: 'Could not delete the image.' }), tone: 'error' }) }
   }
 
   return {

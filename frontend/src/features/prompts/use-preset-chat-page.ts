@@ -12,7 +12,7 @@ export function presetChatSchema(parentIds: number[]) {
 export function presetChatInput(args: Record<string, ChatPageData>, previous?: PromptPresetRecord | null): PromptPresetMutationInput {
   return { name: String(args.name ?? previous?.name ?? ''), description: String(args.description ?? previous?.description ?? ''), parent_id: args.parent_id === undefined ? previous?.parent_id ?? null : Number(args.parent_id) || null, items: (args.items ?? previous?.items ?? []) as PromptPresetMutationInput['items'] }
 }
-export function usePresetChatPage(presets: PromptPresetRecord[], selected: PromptPresetRecord | null, select: (id: number) => void, enabled = true) {
+export function usePresetChatPage(presets: PromptPresetRecord[], selected: PromptPresetRecord | null, select: (id: number) => void, remove: (id: number, cascade: boolean) => Promise<unknown>, enabled = true) {
   const { t } = useI18n()
   const queryClient = useQueryClient()
   const permissions = useChatPagePermissions()
@@ -23,12 +23,14 @@ export function usePresetChatPage(presets: PromptPresetRecord[], selected: Promp
       ...(presets.length ? [pageAction('preset.select', t({ ko: '프리셋 선택', en: 'Select preset' }), t({ ko: '목록의 프리셋을 선택해.', en: 'Select a listed preset.' }), pageObject({ id: pageChoice(presets.slice(0, 512).map((item) => item.id)) }, ['id']))] : []),
       ...(permissions.canCreatePrompts ? [pageAction('preset.create', t({ ko: '프리셋 생성', en: 'Create preset' }), t({ ko: '설명·프롬프트 값 쌍을 새 프리셋으로 저장해. parent_id 0은 최상위야.', en: 'Save description/prompt pairs as a new preset. parent_id 0 means root.' }), schema, 'save')] : []),
       ...(permissions.canUpdatePrompts && selected?.assistant_revision ? [pageAction('preset.update', t({ ko: '선택 프리셋 수정', en: 'Edit selected preset' }), t({ ko: '선택한 프리셋을 수정해. items는 전체 항목 목록이야.', en: 'Update the selected preset. items replaces the complete item list.' }), pageObject({ id: pageChoice([selected.id]), ...schema.properties }, ['id', ...schema.required!]), 'save')] : []),
+      ...(permissions.canUpdatePrompts && selected ? [pageAction('preset.delete', t({ ko: '프리셋 삭제', en: 'Delete preset' }), t({ ko: 'cascade는 하위 항목도 삭제해.', en: 'cascade also deletes descendants.' }), pageObject({ id: pageChoice([selected.id]), cascade: { type: 'boolean' } }, ['id', 'cascade']), 'save')] : []),
     ],
     data: { presets: presets.slice(0, 512).map((item) => ({ id: item.id, name: item.name, parent_id: item.parent_id })), selected: selected ? { id: selected.id, name: selected.name, description: selected.description ?? '', parent_id: selected.parent_id ?? 0, items: (selected.items ?? []).map((item) => ({ description: item.description, value: item.value })), revision: selected.assistant_revision ?? '' } : null },
     apply: () => {},
     applyAction: async (id, args, assertCurrent, revision) => {
       assertCurrent()
       if (id === 'preset.select') { select(Number(args.id)); return }
+      if (id === 'preset.delete') { if (!selected || selected.id !== args.id) throw new Error('선택한 프리셋이 바뀌었어.'); await remove(selected.id, args.cascade === true); return }
       const input = presetChatInput(args, id === 'preset.update' ? selected : null)
       const result = id === 'preset.create' ? await createPromptPreset(input) : id === 'preset.update' ? await updatePromptPreset(Number(args.id), input, revision) : null
       if (!result) throw new Error('등록되지 않은 프리셋 작업이야.')

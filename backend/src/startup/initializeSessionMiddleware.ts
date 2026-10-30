@@ -8,6 +8,7 @@ import { FileStoreService } from '../services/fileStoreService';
 import { reconcileLorebookFolders } from '../services/codex-chat/chatLorebookFiles';
 import { resolveSessionSecret } from '../utils/sessionSecret';
 import { throttleSessionStoreTouch } from '../utils/sessionTouchThrottle';
+import { pluginNativeCallSession, setPluginNativeApp } from '../services/plugins/pluginServerNative';
 
 export interface SessionMiddlewareOptions {
   isSecureContext: boolean;
@@ -59,6 +60,10 @@ export async function initializeSessionMiddleware(
   } catch (error) {
     console.warn('[lorebook] Folder reconcile will retry on next start:', error instanceof Error ? error.message : error);
   }
+
+  // A server module's app.fetch carries a one-time grant that becomes a request-only session; it must run first.
+  app.use(pluginNativeCallSession);
+  setPluginNativeApp(app);
 
   const SqliteStore = BetterSqlite3Store(session);
   const sessionSecret = resolveSessionSecret().secret;

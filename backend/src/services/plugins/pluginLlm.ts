@@ -3,6 +3,7 @@ import fs from 'node:fs/promises'
 import sharp from 'sharp'
 import type { PluginLlmJob, PluginLlmMeasurement, PluginLlmProfile, PluginLlmProfileDetail, PluginProfileAsset, PluginLlmDiscardResult } from '@conai/shared'
 import { booksForRequest } from '../codex-chat/chatLoreContext'
+import { OwnedLorebookStore } from '../codex-chat/chatLorebookFiles'
 import { canRequesterViewImages, requireRequesterImagePermission } from '../../middleware/imageAccess'
 import { resolveProfileAsset } from '../codex-chat/chatProfileAssets'
 import { MEDIA_MAX_PIXELS } from '../codex-chat/chatMediaLinks'
@@ -46,6 +47,7 @@ const inputFields = z.object({
   profileId: z.number().int().positive(), message: z.string().trim().min(1),
   history: z.string().default(''), userName: z.string().trim().min(1).default('사용자'),
   useLorebooks: z.boolean().default(true), maxTokens: z.number().int().positive().max(Number.MAX_SAFE_INTEGER).optional(),
+  lorebookIds: z.array(z.number().int().positive()).max(20).optional(),
   timeoutMs: z.number().int().min(1000).max(1_800_000).optional(),
   mode: z.enum(['text', 'profile']).optional(),
   pluginTools: z.array(z.string().regex(/^[a-z0-9_]+$/).max(64)).optional(),
@@ -70,6 +72,7 @@ const measureSchema = inputFields.omit({ requestId: true, mode: true, research: 
 const inputSchema = inputFields.refine(input => input.mode !== 'profile' || input.structuredOutput === undefined, 'structuredOutput is only available in text mode')
   .refine(input => input.mode !== 'profile' || input.translation === undefined, 'profile mode uses native translation')
   .refine(input => input.mode !== 'profile' || input.research || input.useLorebooks, 'Profile execution uses the profile lorebook settings; use text mode to disable lorebooks')
+  .refine(input => input.lorebookIds === undefined || input.mode !== 'profile', 'lorebookIds is for text mode; a profile room reads the lorebooks linked to it')
   .refine(input => input.mode !== 'profile' || input.model !== 'judge', 'The judge model is only available in text mode')
   .refine(input => !input.research || input.mode === 'profile', 'research requires profile mode')
   .refine(input => (input.pluginTools === undefined && input.roomKey === undefined && input.expectedThreadId === undefined) || (input.mode === 'profile' && !input.research), 'pluginTools, roomKey and expectedThreadId require ordinary profile mode')
@@ -136,7 +139,12 @@ function buildText(profile: ChatProfile, input: z.infer<typeof measureSchema>, r
   }
   // Omit only display blocks for JSON, preserving all persona, example, lore and translation instructions.
   const replyProfile = input.structuredOutput === undefined ? profile : { ...profile, style: { ...profile.style, blocks: [] } }
-  const messages = buildChatProfileReplyMessages({ profile: replyProfile, message: input.message, history: input.history || null, userName: input.userName, useLorebooks: input.useLorebooks, loreOwner: fileOwnerKey(requester.accountId), translate: !!input.translation })
+  const loreOwner = fileOwnerKey(requester.accountId)
+  // Requested books are account books this account can read, joining the profile's own for this request only.
+  for (const id of input.useLorebooks ? input.lorebookIds ?? [] : []) {
+    if (OwnedLorebookStore.find(id, loreOwner)?.kind !== 'account') throw new PluginError(`계정 로어북을 찾을 수 없어: ${id}`, 404)
+  }
+  const messages = buildChatProfileReplyMessages({ profile: replyProfile, message: input.message, history: input.history || null, userName: input.userName, useLorebooks: input.useLorebooks, loreOwner, extraBookIds: input.lorebookIds, translate: !!input.translation })
   if (input.structuredOutput !== undefined) {
     const instruction = buildJsonInstruction('json', typeof input.structuredOutput === 'string' ? input.structuredOutput : JSON.stringify(input.structuredOutput))
     const system = messages.find(message => message.role === 'system' && typeof message.content === 'string')

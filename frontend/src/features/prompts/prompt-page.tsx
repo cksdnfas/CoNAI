@@ -29,6 +29,7 @@ import { useI18n } from '@/i18n'
 import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { usePromptChatActions } from './use-prompt-chat-actions'
+import { pageAction, pageNumber, pageObject, pageText } from '@/features/codex-chat/page-action-helpers'
 
 type AssignModalState =
   | { mode: 'single'; item: PromptCollectionItem }
@@ -232,11 +233,32 @@ function PromptPageContent() {
     setPage(1)
   }
 
-  const chatActions = usePromptChatActions(promptType, items, promptGroups, items.find((item) => activePrompt?.prompt === item.prompt && activePrompt.type === item.type) ?? selectedPromptItems[0] ?? null, (item) => { setActivePrompt({ prompt: item.prompt, type: item.type }); setSelectedPromptIds([item.id]) })
+  const chatActions = usePromptChatActions(promptType, items, promptGroups, items.find((item) => activePrompt?.prompt === item.prompt && activePrompt.type === item.type) ?? selectedPromptItems[0] ?? null, (item) => { setActivePrompt({ prompt: item.prompt, type: item.type }); setSelectedPromptIds([item.id]) }, (id) => deletePromptMutation.mutateAsync(id))
   useChatPageRegistration(isPromptTypeView(view) ? {
     kind: 'prompt_search', title: t({ ko: '프롬프트 목록 · {type}', en: 'Prompt list · {type}' }, { type: promptType }),
     resourceId: `${promptType}:${selectedGroupId === undefined ? 'all' : selectedGroupId === null ? 'ungrouped' : selectedGroupId}`,
     ...chatActions,
+    actions: [
+      ...chatActions.actions,
+      pageAction('prompt.search', t({ ko: '검색 실행', en: 'Search prompts' }), '', pageObject({ query: pageText() }, ['query'])),
+      pageAction('prompt.group', t({ ko: '그룹 선택', en: 'Select group' }), t({ ko: 'all, ungrouped 또는 그룹 번호 문자열.', en: 'all, ungrouped or a group ID as a string.' }), pageObject({ groupId: pageText(200) }, ['groupId'])),
+      pageAction('prompt.page', t({ ko: '결과 페이지', en: 'Result page' }), '', pageObject({ page: pageNumber(1, Math.max(1, pagination?.totalPages ?? 1), true) }, ['page'])),
+    ],
+    data: { ...chatActions.data, page, totalPages: pagination?.totalPages ?? 0 },
+    applyAction: async (id, args, assertCurrent, revision) => {
+      assertCurrent()
+      if (id === 'prompt.search') { const query = String(args.query); setSearchInput(query); setSearchQuery(query); setPage(1); return }
+      if (id === 'prompt.group') {
+        const group = String(args.groupId)
+        const selected = promptGroups.find((item) => String(item.id) === group)
+        if (group !== 'all' && group !== 'ungrouped' && !selected) throw new Error('프롬프트 그룹을 찾을 수 없어.')
+        setSelectedGroupId(group === 'all' ? undefined : group === 'ungrouped' ? null : selected!.id)
+        setPage(1)
+        return
+      }
+      if (id === 'prompt.page') { setPage(Number(args.page)); return }
+      await chatActions.applyAction(id, args, assertCurrent, revision)
+    },
     fields: [
       { id: 'searchInput', label: t({ ko: '검색어 입력 (Enter로 검색 실행)', en: 'Search draft (press Enter to search)' }), type: 'text', value: searchInput },
       { id: 'sortBy', label: t({ ko: '정렬 기준 (usage_count: 사용량, created_at: 생성일, prompt: 이름)', en: 'Sort field (usage_count, created_at, prompt)' }), type: 'select', value: sortBy, options: ['usage_count', 'created_at', 'prompt'] },

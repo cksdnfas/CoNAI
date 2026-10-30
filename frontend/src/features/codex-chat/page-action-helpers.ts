@@ -5,7 +5,8 @@ export const pageNumber = (minimum?: number, maximum?: number, integer = false):
 export const pageChoice = (values: string[] | number[]): ChatPageSchema => ({ type: typeof values[0] === 'number' ? 'number' : 'string', enum: values })
 export const pageObject = (properties: Record<string, ChatPageSchema>, required: string[] = []): ChatPageSchema => ({ type: 'object', properties, required })
 export const pageArray = (items: ChatPageSchema, maxItems = 128, minItems = 0): ChatPageSchema => ({ type: 'array', items, maxItems, minItems })
-export const pageAction = (id: NativeChatPageActionId, label: string, description: string, schema = pageObject({}), effect: 'draft' | 'save' = 'draft'): ChatPageAction => ({ id, label, description, schema, effect })
+/** Pass review only when fields/selected/native input revision/targets cover everything this action consumes. */
+export const pageAction = (id: NativeChatPageActionId, label: string, description: string, schema = pageObject({}), effect: 'draft' | 'save' = 'draft', review?: Pick<ChatPageAction, 'inputFields' | 'targets'>): ChatPageAction => ({ id, label, description, schema, effect, ...(review ? { ...review, revisionScope: 'action' as const } : {}) })
 export function pageRecord(value: ChatPageData | undefined): Record<string, ChatPageData> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('객체 입력이 필요해.')
   return value

@@ -534,6 +534,15 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
     // Session engines own their accumulated context; only direct API requests can calculate the remaining room here.
     if (!engineSession && profile.contextTokens !== null) catalogBudget = () => Math.max(0, profile.contextTokens! - estimateMessagesTokens(profile.id, messages, offeredTools) - 2048)
     const offeredNames = new Set([...offeredTools.map((tool) => tool.function.name), ...catalogued])
+    const refreshTools = async () => {
+      await bridge?.refresh()
+      offeredTools.splice(0, offeredTools.length, ...(bridge?.tools ?? []).filter(tool => profile.visionEnabled || !isVisionTool(tool.function.name)))
+      cataloguedSet.clear()
+      for (const name of bridge?.catalogTools ?? []) if (profile.visionEnabled || !isVisionTool(name)) cataloguedSet.add(name)
+      offeredNames.clear()
+      for (const name of [...offeredTools.map(tool => tool.function.name), ...cataloguedSet]) offeredNames.add(name)
+      return offeredTools.filter(tool => isChatProposalToolAvailable(chatContext, tool.function.name))
+    }
     const permitted = (name: string) => offeredNames.has(name) && !blocked.has(name) && isChatProposalToolAvailable(chatContext, name)
     if (judged && turn.contextMeta) turn.contextMeta.judge = judged.diagnostics
     let previousRound: TextSpan | null = null
@@ -546,7 +555,7 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
     for (let round = 1; ; round += 1) {
       turn.controller.signal.throwIfAborted()
       if (turn.research && !turn.research.canCallModel()) return
-      let tools = bridge ? offeredTools.filter(tool => isChatProposalToolAvailable(chatContext, tool.function.name)) : []
+      let tools = bridge ? await refreshTools() : []
       // A request over the limit sheds old turns and cuts tool results first (fitChatContext). When a later round
       // still does not fit, the reply wraps up with what it did instead of failing; a first round has nothing to tell.
       try {
@@ -596,6 +605,7 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
           target,
           messages,
           tools,
+          refreshTools: lastRound ? undefined : refreshTools,
           catalogued: cataloguedSet,
           ...(lastRound && tools.length > 0 ? { toolChoice: 'none' as const } : {}),
           signal: turn.controller.signal,
@@ -607,6 +617,7 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
           research: turn.research,
           usage: { purpose: 'chat', profileId: profile.id, threadId: turn.threadId, replyId: chatContext?.replyId, round: target.transport ? null : round },
           callTool: bridge ? async (name, args, id) => {
+            await refreshTools()
             requireProfileAccess(requester, profile)
             if (turn.research) {
               requireRequesterPermission(requester, 'posts.view')
@@ -689,6 +700,7 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
           messages.push({ role: 'tool', tool_call_id: call.id, content: 'A summary has no tools. Answer only from the text already supplied.' })
           continue
         }
+        await refreshTools()
         const target = calledTool(call.function.name, call.function.arguments)
         messages.push({ role: 'tool', tool_call_id: call.id, content: permitted(call.function.name) && permitted(target)
           ? (await runToolCall(turn, bridge, call, profile.toolOutputLimit, images)).text

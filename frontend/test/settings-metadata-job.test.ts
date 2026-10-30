@@ -52,6 +52,31 @@ test('settings assistant reports start and cancel failures', async () => {
   await assert.rejects(applySettingsChatAction('settings.maintenance', { operation: 'cancel_reextract' }, ctx), /cancel rejected/)
 })
 
+test('settings assistant waits for scan and verification start failures', async () => {
+  const ctx = {
+    maintenance: {
+      isScanningAll: false,
+      isVerifyingAllFiles: false,
+      scanAll: async () => undefined,
+      verifyAllFiles: async () => undefined,
+    },
+  } as unknown as SettingsChatActionContext
+  await assert.rejects(applySettingsChatAction('settings.maintenance', { operation: 'scan_all' }, ctx))
+  await assert.rejects(applySettingsChatAction('settings.maintenance', { operation: 'verify_files' }, ctx))
+})
+
+test('settings assistant reports a rejected AI runtime installation', async () => {
+  const ctx = {
+    auto: {
+      aiRuntimeStatus: { install: { status: 'idle' }, installSupported: true, recommendation: { blocked: null } },
+      onInstallAiRuntime: () => undefined,
+    },
+    autoActions: { install: async () => { throw new Error('runtime rejected') } },
+    maintenance: {},
+  } as unknown as SettingsChatActionContext
+  await assert.rejects(applySettingsChatAction('settings.ai_runtime', { operation: 'install' }, ctx), /runtime rejected/)
+})
+
 test('runtime job action returns its started job or undefined on a failed start', async () => {
   const dom = new JSDOM('<div id="root"></div>')
   const previousWindow = globalThis.window

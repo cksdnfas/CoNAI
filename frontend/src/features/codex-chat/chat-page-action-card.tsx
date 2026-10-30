@@ -27,7 +27,7 @@ export function ChatPageActionCard({ proposal }: { proposal: PageActionProposal 
     <p className="flex items-center gap-1 text-xs font-semibold">{proposal.page.title} · {proposal.action.label}{proposal.action.description ? <FieldInfo>{proposal.action.description}</FieldInfo> : null}</p>
     {/* A save without inputs stores the screen as it is: the card shows only what will be saved. */}
     <div className={hasArguments ? 'grid grid-cols-2 gap-2 text-xs' : 'text-xs'}>
-      <div><p className="mb-1 font-medium">{hasArguments ? t({ ko: '현재 내용', en: 'Current contents' }) : t({ ko: '저장할 내용', en: 'Contents to save' })}</p><CodeBlock maxHeight="sm">{JSON.stringify(proposal.before, (key, value) => key === 'revision' || key === 'schema' ? undefined : value, 2)}</CodeBlock></div>
+      <div><p className="mb-1 font-medium">{hasArguments ? t({ ko: '현재 내용', en: 'Current contents' }) : t({ ko: '저장할 내용', en: 'Contents to save' })}</p><CodeBlock maxHeight="sm">{JSON.stringify(proposal.before, (key, value) => key === 'revision' || key === 'inputRevision' || key === 'workflowRevision' || key === 'schema' ? undefined : value, 2)}</CodeBlock></div>
       {hasArguments ? <div><p className="mb-1 font-medium">{t({ ko: '적용할 내용', en: 'Proposed contents' })}</p><CodeBlock maxHeight="sm">{JSON.stringify(proposal.arguments, null, 2)}</CodeBlock></div> : null}
     </div>
     {error || problem ? <p className="text-xs text-muted-foreground" role={error ? 'alert' : undefined}>{error || problem}</p> : null}

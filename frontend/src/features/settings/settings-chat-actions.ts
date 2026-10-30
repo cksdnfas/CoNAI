@@ -11,17 +11,23 @@ type Translate = ReturnType<typeof useI18n>['t']
 export type SettingsChatActionContext = {
   tab: SettingsTab
   auto: AutoTabProps
+  autoActions: {
+    refresh: () => Promise<unknown>
+    install: (backend: AiTorchBackendPreference) => Promise<unknown>
+    cancel: () => Promise<unknown>
+    requeue: () => Promise<unknown>
+  }
   dirtyCount: number
   saveAll: () => Promise<void>
   mcpHttp: McpHttpSettings | undefined
   setMcpHttpEnabled: (enabled: boolean) => Promise<unknown>
   maintenance: {
-    scanAll: () => void
-    cancelScanAll: () => void
+    scanAll: () => Promise<RuntimeJobRecord | undefined>
+    cancelScanAll: () => Promise<void>
     scanAllJob: RuntimeJobRecord | undefined
     isScanningAll: boolean
-    verifyAllFiles: () => void
-    cancelVerifyAllFiles: () => void
+    verifyAllFiles: () => Promise<RuntimeJobRecord | undefined>
+    cancelVerifyAllFiles: () => Promise<void>
     verifyAllFilesJob: RuntimeJobRecord | undefined
     isVerifyingAllFiles: boolean
     reextractAll: () => Promise<RuntimeJobRecord | undefined>
@@ -151,24 +157,24 @@ export async function applySettingsChatAction(id: string, args: Record<string, C
       if (!runtime) throw new Error('AI 런타임 상태를 아직 못 읽었어.')
       if (args.operation === 'cancel') {
         if (runtime.install.status !== 'running') throw new Error('진행 중인 설치가 없어.')
-        auto.onCancelAiRuntimeInstall()
+        await ctx.autoActions.cancel()
         return true
       }
       if (runtime.install.status === 'running') throw new Error('이미 설치 중이야.')
       if (!runtime.installSupported) throw new Error('이 환경에서는 앱이 AI 런타임을 설치할 수 없어.')
       if (runtime.recommendation.blocked === 'driver-too-old') throw new Error('GPU 드라이버가 낮아서 설치할 수 없어. 드라이버를 580 이상으로 올려줘.')
       const build = (typeof args.build === 'string' ? args.build : auto.aiRuntimeDraft?.torchBackend ?? 'auto') as AiTorchBackendPreference
-      auto.onInstallAiRuntime(build)
+      await ctx.autoActions.install(build)
       return true
     }
     case 'settings.ai_runtime_check':
-      auto.onRefreshAiRuntime()
+      await ctx.autoActions.refresh()
       return true
     case 'settings.kaloscope_requeue': {
       const status = auto.kaloscopeStatus
       if (!status?.outdatedResults) throw new Error('다시 뽑을 예전 결과가 없어.')
       if (!status.enabled || !status.autoTagOnUpload) throw new Error('Kaloscope와 새 이미지 자동 처리를 먼저 켜고 저장해줘.')
-      auto.onRequeueOutdatedKaloscope()
+      await ctx.autoActions.requeue()
       return true
     }
     case 'settings.rating_tier_add':
@@ -179,13 +185,13 @@ export async function applySettingsChatAction(id: string, args: Record<string, C
       return true
     case 'settings.maintenance':
       switch (args.operation) {
-        case 'scan_all': if (maintenance.isScanningAll) throw new Error('이미 스캔 중이야.'); maintenance.scanAll(); return true
-        case 'verify_files': if (maintenance.isVerifyingAllFiles) throw new Error('이미 검증 중이야.'); maintenance.verifyAllFiles(); return true
+        case 'scan_all': if (maintenance.isScanningAll) throw new Error('이미 스캔 중이야.'); if (!(await maintenance.scanAll())) throw new Error('스캔을 시작하지 못했어.'); return true
+        case 'verify_files': if (maintenance.isVerifyingAllFiles) throw new Error('이미 검증 중이야.'); if (!(await maintenance.verifyAllFiles())) throw new Error('검증을 시작하지 못했어.'); return true
         case 'reextract_metadata':
           if (!(await maintenance.reextractAll())) throw new Error('메타데이터 재추출을 시작하지 못했어.')
           return true
-        case 'cancel_scan': maintenance.cancelScanAll(); return true
-        case 'cancel_verify': maintenance.cancelVerifyAllFiles(); return true
+        case 'cancel_scan': if (!maintenance.scanAllJob || !['queued', 'running'].includes(maintenance.scanAllJob.status)) throw new Error('취소할 스캔이 없어.'); await maintenance.cancelScanAll(); return true
+        case 'cancel_verify': if (!maintenance.verifyAllFilesJob || !['queued', 'running'].includes(maintenance.verifyAllFilesJob.status)) throw new Error('취소할 검증이 없어.'); await maintenance.cancelVerifyAllFiles(); return true
         case 'cancel_reextract':
           if (!maintenance.reextractJob || (maintenance.reextractJob.status !== 'queued' && maintenance.reextractJob.status !== 'running')) {
             throw new Error('진행 중인 재추출이 없어.')

@@ -1,6 +1,7 @@
 import { buildGroupAutoCollectFilter, GROUP_AUTO_COLLECT_OPERATORS, GROUP_AUTO_COLLECT_RULE_LIMIT, GROUP_AUTO_COLLECT_SCOPES, readGroupAutoCollectRules, type ChatPageData, type ChatPageField, type ChatPageSchema, type ChatPageValue, type GroupAutoCollectRule } from '@conai/shared'
 import { useImagePermissions } from '@/features/auth/use-image-permissions'
-import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
+import { useChatPage, useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
+import { useChatMediaDeleteDescription } from '@/features/images/chat-media-delete-warning'
 import { pageAction, pageArray, pageChoice, pageObject, pageText } from '@/features/codex-chat/page-action-helpers'
 import { useChatPageDataPermissions } from '@/features/codex-chat/use-chat-page-permissions'
 import { useI18n } from '@/i18n'
@@ -20,10 +21,20 @@ interface GroupChatPageInput {
   selectedGroupId?: number
   selectedGroup?: GroupRecord | null
   selectedImageIds: string[]
+  selectedImageHashes: string[]
   images: Array<{ composite_hash?: string | null; width?: number | null; height?: number | null }>
+  availableImages: Array<{ composite_hash?: string | null }>
+  assignableGroups: GroupWithHierarchy[]
   fields: ChatPageField[]
   apply: (patch: Record<string, ChatPageValue>) => void
   openGroup: (groupId: number) => void
+  selectSource: (source: 'custom' | 'folders') => void
+  selectImages: (hashes: string[]) => void
+  addImages: (groupId: number) => Promise<void>
+  removeImages: () => Promise<void>
+  deleteImages: () => Promise<void>
+  autoCollectAll: () => Promise<void>
+  rebuildFolders: () => Promise<void>
   createGroup: (input: GroupMutationInput) => Promise<unknown>
   updateGroup: (groupId: number, input: GroupMutationInput) => Promise<unknown>
   runAutoCollect: (groupId: number) => Promise<unknown>
@@ -40,11 +51,15 @@ export function useGroupChatPage(input: GroupChatPageInput) {
   const { t } = useI18n()
   const { canAssignGroups, canDeleteImages } = useImagePermissions()
   const canReadImages = useChatPageDataPermissions().canReadImages
+  const chatPage = useChatPage()
+  const deleteDescription = useChatMediaDeleteDescription(input.selectedImageHashes, canDeleteImages && chatPage?.enabled === true)
   const { isCustomSource, groups, selectedGroup } = input
   const editable = isCustomSource && canAssignGroups
   const selected = isCustomSource && selectedGroup && selectedGroup.id === input.selectedGroupId ? selectedGroup : null
   const selectedRules = selected ? readGroupAutoCollectRules(selected.auto_collect_conditions) : null
   const groupIds = groups.slice(0, 511).map((group) => group.id)
+  const imageHashes = canReadImages ? input.images.flatMap((image) => image.composite_hash ? [image.composite_hash] : []).slice(0, 100) : []
+  const assignableIds = input.assignableGroups.slice(0, 200).map((group) => group.id)
   const ruleHelp = t({
     ko: '자동수집 규칙: scope는 positive/negative(프롬프트에 포함된 글), auto_tag(오토 태그, 예: misty_(pokemon)), model, lora, ai_tool(nai/comfyui/other). operator는 AND(모두 만족), OR(하나 이상), NOT(제외).',
     en: 'Auto-collect rules: scope positive/negative (prompt text), auto_tag (tagger tag, e.g. misty_(pokemon)), model, lora, ai_tool (nai/comfyui/other). operator AND (all), OR (any), NOT (exclude).',
@@ -53,8 +68,15 @@ export function useGroupChatPage(input: GroupChatPageInput) {
   useChatPageRegistration({
     kind: 'groups', title: t({ ko: '그룹 목록·이미지', en: 'Groups and images' }), resourceId: `${input.sourceKey}:${input.selectedGroupId ?? 'root'}`,
     fields: input.fields,
-    actions: isCustomSource ? [
+    actions: [
+      pageAction('group.source', t({ ko: '그룹 원본 바꾸기', en: 'Switch group source' }), t({ ko: '커스텀 그룹 또는 감시폴더를 열어.', en: 'Open custom groups or watched folders.' }), pageObject({ source: pageChoice(['custom', 'folders']) }, ['source'])),
       ...(groupIds.length ? [pageAction('group.select', t({ ko: '그룹 열기', en: 'Open group' }), t({ ko: '목록의 그룹을 열어. 연 화면이 바로 돌아오니 이어서 그 그룹을 다룰 수 있어.', en: 'Open a listed group; the opened screen comes back so you can continue with it.' }), pageObject({ id: pageChoice(groupIds) }, ['id']))] : []),
+      ...(imageHashes.length ? [pageAction('group.select_images', t({ ko: '이미지 선택', en: 'Select images' }), t({ ko: '현재 불러온 이미지를 해시로 선택해. data.images는 첫 페이지만 보여 줘. 빈 목록은 선택을 지워.', en: 'Select loaded images by hash; data.images shows only the first page. An empty list clears the selection.' }), pageObject({ hashes: pageArray(pageText(48), 100) }, ['hashes']))] : []),
+      ...(canAssignGroups && input.selectedImageIds.length && assignableIds.length ? [pageAction('group.add_images', t({ ko: '선택 이미지를 그룹에 추가', en: 'Add selected images to group' }), t({ ko: '선택한 이미지를 커스텀 그룹에 추가해.', en: 'Add selected images to a custom group.' }), pageObject({ groupId: pageChoice(assignableIds) }, ['groupId']), 'save', { inputFields: [], targets: [{ argument: 'groupId', collection: 'assignableGroups', id: 'id', keys: ['name'] }] })] : []),
+      ...(editable && selected && input.selectedImageIds.length ? [pageAction('group.remove_images', t({ ko: '선택 이미지를 그룹에서 제거', en: 'Remove selected images from group' }), t({ ko: '선택한 이미지의 현재 그룹 소속을 제거해.', en: 'Remove selected images from the current group.' }), undefined, 'save', { inputFields: [] })] : []),
+      ...(canDeleteImages && input.selectedImageHashes.length && deleteDescription ? [pageAction('group.delete_images', t({ ko: '선택 이미지 삭제', en: 'Delete selected images' }), deleteDescription, undefined, 'save', { inputFields: [] })] : []),
+      ...(editable ? [pageAction('group.auto_collect_all', t({ ko: '전체 자동수집 실행', en: 'Run all auto-collects' }), t({ ko: '모든 커스텀 그룹의 자동수집을 실행해.', en: 'Run auto-collect for all custom groups.' }), undefined, 'save')] : []),
+      ...(!isCustomSource && canAssignGroups ? [pageAction('group.rebuild_folders', t({ ko: '감시폴더 재구축', en: 'Rebuild watched folders' }), t({ ko: '감시폴더 그룹을 재구축해.', en: 'Rebuild watched-folder groups.' }), undefined, 'save')] : []),
       ...(editable ? [pageAction('group.create', t({ ko: '그룹 만들기', en: 'Create group' }), t({ ko: '새 그룹을 만들어. parent_id 0은 최상위야. 규칙을 넣으면 자동수집이 켜지고 바로 모으기 시작해. {help}', en: 'Create a group. parent_id 0 means top level. Rules enable auto-collect and start collecting. {help}' }, { help: ruleHelp }), pageObject({
         name: pageText(200), description: pageText(2000), parent_id: pageChoice([0, ...groupIds]), auto_collect_rules: rulesSchema,
       }, ['name']), 'save')] : []),
@@ -68,12 +90,14 @@ export function useGroupChatPage(input: GroupChatPageInput) {
         ids: pageArray(pageChoice(groupIds), 100, 1), cascade: pageBoolean,
       }, ['ids']), 'save')] : []),
       ...(editable && selected?.auto_collect_enabled ? [pageAction('group.auto_collect', t({ ko: '자동수집 다시 실행', en: 'Run auto-collect' }), t({ ko: '선택한 그룹의 자동수집을 한 번 더 돌려.', en: 'Run auto-collect again for the selected group.' }), pageObject({ id: pageChoice([selected.id]) }, ['id']), 'save')] : []),
-    ] : [],
+    ],
     data: {
       groups: groups.slice(0, 512).map((group) => ({ id: group.id, name: group.name, parent_id: group.parent_id ?? 0 })),
+      assignableGroups: input.assignableGroups.slice(0, 200).map((group) => ({ id: group.id, name: group.name })),
       selected: {
         groupId: input.selectedGroupId ?? 0,
         imageIds: input.selectedImageIds,
+        imageHashes: input.selectedImageHashes,
         ...(selected ? {
           name: selected.name,
           description: selected.description ?? '',
@@ -88,7 +112,20 @@ export function useGroupChatPage(input: GroupChatPageInput) {
     apply: input.apply,
     applyAction: async (id, args, assertCurrent) => {
       assertCurrent()
+      if (id === 'group.source') { input.selectSource(args.source as 'custom' | 'folders'); return }
       if (id === 'group.select') { input.openGroup(Number(args.id)); return }
+      if (id === 'group.select_images') {
+        const hashes = args.hashes as string[]
+        const available = new Set(input.availableImages.map((image) => image.composite_hash))
+        if (hashes.some((hash) => !available.has(hash))) throw new Error('현재 불러온 그룹 이미지가 아니야.')
+        input.selectImages([...new Set(hashes)])
+        return
+      }
+      if (id === 'group.add_images') { await input.addImages(Number(args.groupId)); return }
+      if (id === 'group.remove_images') { await input.removeImages(); return }
+      if (id === 'group.delete_images') { await input.deleteImages(); return }
+      if (id === 'group.auto_collect_all') { await input.autoCollectAll(); return }
+      if (id === 'group.rebuild_folders') { await input.rebuildFolders(); return }
       if (id === 'group.create') {
         const rules = rulesArgument(args.auto_collect_rules)
         await input.createGroup({
@@ -109,7 +146,7 @@ export function useGroupChatPage(input: GroupChatPageInput) {
         return
       }
       if (!selected || Number(args.id) !== selected.id) throw new Error('선택한 그룹이 바뀌었어. 다시 요청해줘.')
-      if (id === 'group.auto_collect') { void input.runAutoCollect(selected.id).catch(() => {}); return }
+      if (id === 'group.auto_collect') { await input.runAutoCollect(selected.id); return }
       if (id !== 'group.update') throw new Error('등록되지 않은 그룹 작업이야.')
       const rules = rulesArgument(args.auto_collect_rules)
       const enabled = typeof args.auto_collect_enabled === 'boolean' ? args.auto_collect_enabled : rules ? true : Boolean(selected.auto_collect_enabled)

@@ -5,7 +5,7 @@ import { createPortal } from 'react-dom'
 import { useQuery } from '@tanstack/react-query'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { useSnackbar } from '@/components/ui/snackbar-context'
-import type { CustomDropdownList, GenerationWorkflow, GenerationWorkflowDetail } from '@/lib/api-image-generation-types'
+import type { CustomDropdownList, GenerationHistoryRecord, GenerationWorkflow, GenerationWorkflowDetail } from '@/lib/api-image-generation-types'
 import {
   createGenerationWorkflow,
   comfyUIServersQueryKey,
@@ -50,12 +50,13 @@ import { useComfyWorkflowDraft } from './use-comfy-workflow-draft'
 import { findAutoCollectedPowerLoraOptions } from './power-lora-loader-utils'
 import { useComfyDropdownListActions } from './use-comfy-dropdown-list-actions'
 import { useComfyChatPage } from './use-generation-chat-page'
-import { useComfyGenerationActions } from './use-comfy-generation-actions'
+import { clampComfyQueueRegistrationCount, useComfyGenerationActions } from './use-comfy-generation-actions'
 import { useComfyModuleSave } from './use-comfy-module-save'
 import { useComfyServerController } from './use-comfy-server-controller'
 
 type ComfyGenerationPanelProps = {
   onHistoryRefresh: () => void
+  historyRecords: GenerationHistoryRecord[]
   selectedWorkflowId: number | null
   onSelectedWorkflowChange: (workflowId: number | null, options?: { replace?: boolean }) => void
   splitPaneScroll?: boolean
@@ -100,6 +101,7 @@ function resolveComfyModelPreviewFolder(dropdownList: CustomDropdownList) {
 /** Render the ComfyUI home/workflow views and coordinate server-targeted generation. */
 function ComfyGenerationPanelContent({
   onHistoryRefresh,
+  historyRecords,
   selectedWorkflowId,
   onSelectedWorkflowChange,
   splitPaneScroll = false,
@@ -310,6 +312,9 @@ function ComfyGenerationPanelContent({
 
   useComfyChatPage(selectedWorkflow, selectedWorkflowFields, workflowDraft, workflowDraftOwnerId, handleWorkflowFieldChange, {
     enabled: !isAuthoringModalOpen, workflows: workflowsQuery.data ?? [], loraOptions, onSelect: onSelectedWorkflowChange,
+    generate: handleGenerateSelected, records: historyRecords, queueCount: clampComfyQueueRegistrationCount(queueRegistrationCount),
+    route: selectedTarget,
+    replaceDraft: (next) => { if (!persistDraft(next)) throw new Error('워크플로우 초안이 바뀌었어.'); setWorkflowDraft(next); clearWorkflowFieldIssues() },
     onOpenCreate: () => { setWorkflowEditorState(null); setIsAuthoringModalOpen(true) },
     onOpenEdit: async (id, assertCurrent) => { const workflow = await getGenerationWorkflow(id); assertCurrent(); setWorkflowEditorState({ workflow }); setIsAuthoringModalOpen(true) },
     onRefresh: async () => { const result = await workflowsQuery.refetch(); if (result.error) throw result.error; const options = await dropdownListsQuery.refetch(); if (options.error) throw options.error },

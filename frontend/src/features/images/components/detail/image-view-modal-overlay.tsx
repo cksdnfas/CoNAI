@@ -68,6 +68,7 @@ export function ImageViewModalOverlay({
           compositeHash={compositeHash}
           presentation="modal"
           initialImage={initialImage}
+          accessOptions={accessOptions}
           modalNavigation={{
             activeIndex,
             totalCount,

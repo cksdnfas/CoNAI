@@ -200,7 +200,10 @@ export function GroupPage() {
     selectedGroupId,
     selectedGroup: selectedGroupQuery.data,
     selectedImageIds: selectedGroupImageIds,
-    images: groupImages,
+    selectedImageHashes: selectedGroupCompositeHashes,
+    images: groupImagesQuery.data?.pages[0]?.images ?? [],
+    availableImages: groupImages,
+    assignableGroups: assignableCustomGroupsQuery.data ?? [],
     fields: [
       { id: 'collectionFilter', label: t({ ko: '수집 유형', en: 'Collection type' }), type: 'select', value: groupImageCollectionFilter, options: ['all', 'manual', 'auto'] },
       { id: 'columns', label: t({ ko: '한 줄의 이미지 수', en: 'Images per row' }), type: 'number', value: groupColumnCount, min: minGroupColumnCount, max: maxGroupColumnCount, integer: true },
@@ -208,9 +211,28 @@ export function GroupPage() {
     ],
     apply: (patch) => { if (patch.collectionFilter !== undefined) setGroupImageCollectionFilter(patch.collectionFilter as GroupCollectionFilter); if (patch.columns !== undefined) setGroupColumnCount(Number(patch.columns)); if (patch.emoticonView !== undefined) setEmoticonView(patch.emoticonView as 'keywords' | 'images') },
     openGroup: handleOpenGroup,
+    selectSource: handleSelectSource,
+    selectImages: setSelectedGroupImageIds,
+    addImages: async (groupId) => {
+      if (!selectedGroupCompositeHashes.length) throw new Error('선택한 이미지가 없어.')
+      const result = await assignToGroupMutation.mutateAsync({ groupId, compositeHashes: selectedGroupCompositeHashes })
+      if (result.errors?.length) throw new Error(result.errors.join(', '))
+    },
+    removeImages: async () => {
+      if (!selectedGroupId || !selectedGroupCompositeHashes.length) throw new Error('선택한 이미지가 없어.')
+      const result = await removeGroupImagesMutation.mutateAsync({ groupId: selectedGroupId, compositeHashes: selectedGroupCompositeHashes })
+      if (result.errors?.length || result.skipped_count) throw new Error(result.errors?.join(', ') || '하위 그룹의 이미지는 해당 그룹에서 제거해야 해.')
+    },
+    deleteImages: async () => {
+      if (!selectedGroupCompositeHashes.length) throw new Error('선택한 이미지가 없어.')
+      const result = await deleteSelectedImagesMutation.mutateAsync(selectedGroupCompositeHashes)
+      if (result.details.failed) throw new Error(result.details.errors.join(', ') || '이미지 삭제에 실패했어.')
+    },
+    autoCollectAll: async () => { if (!(await autoCollectAllJob.run())) throw new Error('전체 자동수집을 시작하지 못했어.') },
+    rebuildFolders: async () => { if (!(await rebuildAutoFolderGroupsJob.run())) throw new Error('감시폴더 재구축을 시작하지 못했어.') },
     createGroup: (input) => createGroupMutation.mutateAsync(input),
     updateGroup: (targetGroupId, input) => updateGroupMutation.mutateAsync({ groupId: targetGroupId, input }),
-    runAutoCollect,
+    runAutoCollect: async (id) => { if (!(await runAutoCollect(id))) throw new Error('자동수집을 시작하지 못했어.') },
     moveGroups: (ids, parentId) => moveGroupsMutation.mutateAsync({ ids, parentId }),
     deleteGroups: (ids, cascade) => deleteGroupsMutation.mutateAsync({ ids, cascade }),
   })

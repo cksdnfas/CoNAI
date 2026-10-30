@@ -39,7 +39,7 @@ test('chat knowledge: linked search, file versions, connected history, group mem
   const { FileStoreRevisions, REVISIONS_PER_FILE } = await import('../src/services/fileStoreRevisions')
   const { OwnedLorebookStore } = await import('../src/services/codex-chat/chatLorebookFiles')
   const linked = await import('../src/services/codex-chat/chatLinkedFiles')
-  const { connectedThreadIds, searchChatMessages } = await import('../src/services/codex-chat/chatHistorySearch')
+  const { connectedThreadIds, searchChatMessages, sharesKnowledge } = await import('../src/services/codex-chat/chatHistorySearch')
   const { proposeLore } = await import('../src/services/codex-chat/chatLoreProposals')
   const { buildGroupCodexInput, withoutStaleWakes } = await import('../src/services/codex-chat/groupChatContext')
   const { openChatMcpBridge } = await import('../src/services/codex-chat/chatMcpBridge')
@@ -162,6 +162,16 @@ test('chat knowledge: linked search, file versions, connected history, group mem
     ChatProfileStore.update(kai.id, { lorebookIds: [global.id] })
     assert.deepEqual(connectedThreadIds(other, null), [], "a global book on Kai's profile does not tie Kai's chats together")
     ChatProfileStore.update(kai.id, { lorebookIds: [] })
+
+    // A setting book shared by separate chats: lore only, no history across them.
+    const loreOnly = OwnedLorebookStore.update(book.id, me, { connectsChats: false })
+    assert.equal(loreOnly?.connectsChats, false)
+    assert.deepEqual(connectedThreadIds(diary, null), [], 'a lore-only book connects nobody')
+    assert.deepEqual(new Set(connectedThreadIds(meeting, null)), new Set([plan]), 'the shared folder still connects')
+    assert.equal(sharesKnowledge({ id: diary, account_id: null, profile_id: kai.id }), false, 'a direct chat with only a lore-only book gets no history tools')
+    assert.throws(() => OwnedLorebookStore.update(book.id, me, { connectsChats: 'no' }), /connectsChats/)
+    OwnedLorebookStore.update(book.id, me, { connectsChats: true })
+    assert.deepEqual(new Set(connectedThreadIds(meeting, null)), new Set([plan, diary]))
 
     const say = (threadId: number, role: 'user' | 'assistant', content: string) => CodexChatStore.addMessage({ thread_id: threadId, role, content, tool_calls: [], status: 'completed', error: null })
     say(meeting, 'assistant', '사전 공지는 18일로 당기자. 예산은 120만 원.')

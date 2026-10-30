@@ -38,7 +38,8 @@ type WorkflowRunnerPanelProps = {
   onInputValueChange: (inputId: string, value: unknown) => void
   onInputValueClear: (inputId: string) => void
   onInputImageChange: (inputId: string, image?: SelectedImageDraft) => Promise<void> | void
-  onExecute: () => void
+  onExecute: () => Promise<boolean>
+  onRefreshRuns: () => Promise<unknown>
   onBack: () => void
   onSwitchGraph: (graph: GraphWorkflowSummaryRecord) => void
   onEdit: () => void
@@ -66,6 +67,7 @@ export function WorkflowRunnerPanel({
   onInputValueClear,
   onInputImageChange,
   onExecute,
+  onRefreshRuns,
   onBack,
   onSwitchGraph,
   onEdit,
@@ -79,7 +81,7 @@ export function WorkflowRunnerPanel({
   const { t } = useI18n()
   const [isPickerOpen, setIsPickerOpen] = useState(false)
   const runDisabled = !canExecuteGeneration || !canExecute || isExecuting
-  useWorkflowRunnerChatPage({ graph: selectedGraph, definitions: inputDefinitions, values: inputValues, change: onInputValueChange, clear: onInputValueClear, enabled: !isExecuting, canRun: !runDisabled, run: onExecute, recentRuns })
+  useWorkflowRunnerChatPage({ graph: selectedGraph, definitions: inputDefinitions, values: inputValues, change: onInputValueChange, clear: onInputValueClear, enabled: true, canRun: !runDisabled, run: onExecute, running: isExecuting, refresh: onRefreshRuns, recentRuns })
   // The slot is rendered by the workspace in the same commit, so look it up after mount.
   const stickyBarTarget = usePortalTargetById(stickyBarTargetId)
   const runBar = (variant: 'inline' | 'sticky') => (

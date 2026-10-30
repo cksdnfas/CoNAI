@@ -331,6 +331,58 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
     assert.deepEqual(buildChatPageChanges(page, [{ fieldId: 'prompt', value: ['first', 'second edited'] }])[0].value, ['first', 'second edited'])
   })
 
+  await t.test('unmigrated adapters reject consumed data changes even for previously action-scoped cards', async () => {
+    const { chatPageActionBefore, requireChatPageActionState } = await import('@conai/shared')
+    const current = normalizeChatPageSnapshot({ ...page, kind: 'files', path: '/files', resourceId: 'document:1', revision: 'document-before', fields: [], actions: [
+      { id: 'files.doc_save', label: 'Save document', description: '', effect: 'save', schema: { type: 'object', properties: {} } },
+    ], data: { document: 'a'.repeat(3000) } })
+    const action = current.actions![0]
+    const proposal = { kind: 'page_action' as const, page: chatPageTarget(current), revision: current.revision!, revisionScope: 'action' as const, action, arguments: {}, before: chatPageActionBefore(current, action, {}), expiresAt: Date.now() + 60_000 }
+    assert.doesNotThrow(() => requireChatPageActionState(current, proposal))
+    assert.throws(() => requireChatPageActionState({ ...current, revision: 'document-after', data: { document: 'b'.repeat(3000) } }, proposal), /입력이나 선택/)
+  })
+
+  await t.test('commit targets bind only the reviewed row while comment pagination preserves consumed inputs', async () => {
+    const { chatPageActionBefore, requireChatPageActionState } = await import('@conai/shared')
+    const current = normalizeChatPageSnapshot({ ...page, kind: 'workflow_runner', path: '/generation', resourceId: 'workflow-reservations', revision: 'schedule-before', fields: [], actions: [{
+      id: 'workflow.schedule_pause', label: 'Pause', description: '', effect: 'save', revisionScope: 'action',
+      schema: { type: 'object', properties: { scheduleId: { type: 'number', enum: [1, 2] } }, required: ['scheduleId'] },
+      targets: [{ argument: 'scheduleId', collection: 'schedules', id: 'id', keys: ['revision', 'workflowVersion'] }],
+    }], data: { schedules: [{ id: 1, revision: 4, workflowVersion: 7, runs: 10 }, { id: 2, revision: 1 }], runs: [{ id: 1, status: 'running' }] } })
+    const action = current.actions![0]
+    const args = { scheduleId: 1 }
+    const proposal = { kind: 'page_action' as const, page: chatPageTarget(current), revision: current.revision!, revisionScope: 'action' as const, action, arguments: args, before: chatPageActionBefore(current, action, args), expiresAt: Date.now() + 60_000 }
+    const refreshed = normalizeChatPageSnapshot({ ...current, revision: 'schedule-after', actions: [{ ...action, schema: { ...action.schema, properties: { scheduleId: { type: 'number', enum: [1, 2, 3] } } } }], data: { schedules: [{ id: 1, revision: 4, workflowVersion: 7, runs: 11 }, { id: 2, revision: 2 }, { id: 3, revision: 1 }], runs: [{ id: 1, status: 'completed' }] } })
+    assert.doesNotThrow(() => requireChatPageActionState(refreshed, proposal))
+    assert.throws(() => requireChatPageActionState({ ...refreshed, data: { schedules: [{ id: 1, revision: 5, workflowVersion: 7 }] } }, proposal), /입력이나 선택/)
+    assert.throws(() => requireChatPageActionState({ ...refreshed, data: { schedules: [{ id: 1, revision: 4, workflowVersion: 8 }] } }, proposal), /입력이나 선택/)
+    assert.throws(() => requireChatPageActionState(refreshed, { ...proposal, arguments: { scheduleId: 2 } }), /입력이나 선택/)
+    const comments = normalizeChatPageSnapshot({ ...page, kind: 'posts', path: '/posts', resourceId: 'post:1', revision: 'comments-before', fields: [
+      { id: 'comment', label: 'Comment', type: 'text', value: 'Reviewed comment' },
+      { id: 'replyTo', label: 'Reply to', type: 'select', value: 'none', options: ['none', '1'] },
+    ], actions: [{ id: 'posts.comment', label: 'Post comment', description: '', effect: 'save', revisionScope: 'action', inputFields: ['comment', 'replyTo'], schema: { type: 'object', properties: {} } }], data: { selected: { id: 1, revision: 2 }, comments: [{ id: 1 }] } })
+    const commentAction = comments.actions![0]
+    const commentProposal = { ...proposal, page: chatPageTarget(comments), revision: comments.revision!, action: commentAction, arguments: {}, before: chatPageActionBefore(comments, commentAction, {}) }
+    assert.doesNotThrow(() => requireChatPageActionState(normalizeChatPageSnapshot({ ...comments, revision: 'comments-after', fields: [
+      comments.fields[0], { ...comments.fields[1], options: ['none', '1', '2'] },
+      { id: 'editComment', label: 'Edit comment', type: 'number', value: 0 },
+    ], data: { ...comments.data, comments: [{ id: 1 }, { id: 2 }], commentPaging: { loaded: 2 } } }), commentProposal))
+  })
+
+  await t.test('chat deletion review names its thread and rejects changed or missing targets', async () => {
+    const { chatPageActionBefore, requireChatPageActionState } = await import('@conai/shared')
+    const current = normalizeChatPageSnapshot({ ...page, kind: 'page', path: '/chat', resourceId: null, fields: [], revision: 'chat-target-before', actions: [
+      { id: 'chat.delete', label: 'Delete chat', description: '', effect: 'save', schema: { type: 'object', properties: { threadId: { type: 'number' } }, required: ['threadId'] }, targets: [{ argument: 'threadId', collection: 'threads', id: 'id', keys: ['title'] }] },
+    ], data: { threads: [{ id: 41, title: 'Reviewed chat' }] } })
+    const action = current.actions![0]
+    const args = { threadId: 41 }
+    const before = chatPageActionBefore(current, action, args)
+    assert.deepEqual(before, { selected: null, fields: {}, targets: { threadId: { id: 41, title: 'Reviewed chat' } } })
+    const proposal = { kind: 'page_action' as const, page: chatPageTarget(current), revision: current.revision!, action, arguments: args, before, expiresAt: Date.now() + 60_000 }
+    assert.throws(() => requireChatPageActionState({ ...current, revision: 'chat-target-after', data: { threads: [{ id: 41, title: 'Renamed chat' }] } }, proposal), /입력이나 선택/)
+    assert.throws(() => chatPageActionBefore(current, action, { threadId: 42 }), /대상/)
+  })
+
   await t.test('profile token limits allow character drafts while saving remains a reviewed action', async () => {
     const { validateChatPageArguments, normalizeChatPageActions, chatPageActionTier } = await import('@conai/shared')
     const { chatPageView } = await import('../src/mcp/tools/chatPageView')
@@ -415,8 +467,8 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
     const { chatPageNativeActionRevision } = await import('../src/services/codex-chat/chatPageNativeActions')
     const preset = PromptPresetModel.create({ name: 'Action fixture', items: [{ description: 'Style', value: 'old' }] })
     const saved = PromptPresetModel.findByIdWithItems(preset.id)!
-    const action = { id: 'preset.update', label: 'Edit preset', description: 'Save reviewed preset', effect: 'save' as const, schema: { type: 'object' as const, properties: { id: { type: 'number' as const, enum: [preset.id] }, name: { type: 'string' as const }, items: { type: 'array' as const, minItems: 1, items: { type: 'object' as const, properties: { description: { type: 'string' as const }, value: { type: 'string' as const } }, required: ['description', 'value'] } } }, required: ['id', 'name', 'items'] } }
-    const snapshot = normalizeChatPageSnapshot({ ...page, path: '/prompts', kind: 'presets', resourceId: String(preset.id), fields: [], revision: 'native-action-revision', actions: [action], data: { presets: [{ id: preset.id, name: preset.name }], selected: { id: preset.id, revision: nativeEditRevision(saved) } } })
+    const action = { id: 'preset.update', label: 'Edit preset', description: 'Save reviewed preset', effect: 'save' as const, revisionScope: 'action' as const, schema: { type: 'object' as const, properties: { id: { type: 'number' as const, enum: [preset.id] }, name: { type: 'string' as const }, items: { type: 'array' as const, minItems: 1, items: { type: 'object' as const, properties: { description: { type: 'string' as const }, value: { type: 'string' as const } }, required: ['description', 'value'] } } }, required: ['id', 'name', 'items'] } }
+    const snapshot = normalizeChatPageSnapshot({ ...page, connectionId: 'native-action-connection', path: '/prompts', kind: 'presets', resourceId: String(preset.id), fields: [{ id: 'prompt', label: 'Prompt', type: 'text', value: 'reviewed input' }, { id: 'context', label: 'Context', type: 'text', value: 'read-only', editable: false }], revision: 'native-action-revision', actions: [action], data: { presets: [{ id: preset.id, name: preset.name }], selected: { id: preset.id, revision: nativeEditRevision(saved) } } })
     const actionProfile = ChatProfileStore.create({ name: 'Action assistant', engine: 'llm', providerName: 'conn', mcpEnabled: true, mcpScopes: ['read'], toolAllowlist: ['get_current_page', 'read_page_data', 'propose_page_action'], pageAssist: true })
     const actionThreadId = CodexChatStore.createThread(null, 'action chat', 'llm', actionProfile.id)
     const context: ChatExecutionContext = { threadId: actionThreadId, profileId: actionProfile.id, kind: 'direct', replyId: 'page-action-tools', page: snapshot }
@@ -432,8 +484,29 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
       assert.ok(!result.isError, JSON.stringify(result))
       const proposal = (result.structuredContent as { proposal: import('@conai/shared').ChatProposal }).proposal
       assert.ok(proposal.kind === 'page_action')
-      assert.equal(proposal.revision, snapshot.revision)
+      const { requireChatPageActionState } = await import('@conai/shared')
+      const refreshed = { ...snapshot, revision: 'background-refresh', data: { ...snapshot.data, presets: [], progress: 50 } }
+      assert.doesNotThrow(() => requireChatPageActionState(refreshed, proposal), 'unrelated list/progress updates preserve a pending review')
+      assert.throws(() => requireChatPageActionState({ ...refreshed, fields: snapshot.fields.map(field => field.id === 'prompt' ? { ...field, value: 'manual edit' } : field) }, proposal), /입력이나 선택/)
+      assert.throws(() => requireChatPageActionState({ ...refreshed, fields: snapshot.fields.map(field => field.id === 'context' ? { ...field, value: 'changed read-only input' } : field) }, proposal), /입력이나 선택/)
+      assert.throws(() => requireChatPageActionState({ ...refreshed, data: { ...refreshed.data, selected: { id: preset.id + 1 } } }, proposal), /입력이나 선택/)
+      assert.throws(() => requireChatPageActionState({ ...refreshed, inputRevision: 'changed-native-input' }, proposal), /입력이나 선택/)
+      for (const changed of [{ instanceId: 'remounted-editor' }, { connectionId: 'other-connection' }, { resourceId: 'other-preset' }, { path: '/wildcards' }, { kind: 'wildcards' as const }]) {
+        assert.throws(() => requireChatPageActionState({ ...refreshed, ...changed }, proposal), /페이지|화면/)
+      }
+      assert.throws(() => requireChatPageActionState({ ...refreshed, actions: [{ ...action, schema: { ...action.schema, required: ['id', 'name'] } }] }, proposal), /작업/)
       assert.equal(proposal.nativeRevision, nativeEditRevision(saved))
+      assert.deepEqual(proposal.before, { selected: snapshot.data!.selected, fields: { prompt: 'reviewed input', context: 'read-only' } }, 'cards retain both editable and read-only consumed values')
+      const { rememberChatPage } = await import('../src/services/codex-chat/chatPageState')
+      const requester = { accountId: null, accountType: 'admin' as const }
+      rememberChatPage(requester, { ...snapshot, actions: [{ ...action, revisionScope: undefined }] })
+      try {
+        const exactResult = await bridge.call('propose_page_action', { actionId: 'preset.update', arguments: args })
+        const exact = (exactResult.structuredContent as { proposal: import('@conai/shared').ChatProposal }).proposal
+        assert.ok(exact.kind === 'page_action')
+        assert.equal(exact.revisionScope, undefined, 'the server does not opt an unmigrated adapter into projection checks')
+        assert.throws(() => requireChatPageActionState(refreshed, exact), /입력이나 선택/)
+      } finally { rememberChatPage(requester, snapshot) }
       assert.equal(PromptPresetModel.findById(preset.id)?.name, 'Action fixture', 'proposals never save native data')
       assert.equal(ChatProposalStore.find(proposal.id)?.kind, 'page_action')
       const restored = attachProposals([{ id: 199, thread_id: actionThreadId, role: 'assistant', content: '', tool_calls: [], routing: { replyId: context.replyId, replyTo: null, recipients: [] } } as unknown as CodexChatMessageRecord])
@@ -592,7 +665,78 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
     } finally { unregister(); await bridge.close() }
   })
 
+  await t.test('public page tools cannot navigate to or operate on a private screen', async () => {
+    const { WorkflowModel } = await import('../src/models/Workflow')
+    const { rememberChatPage } = await import('../src/services/codex-chat/chatPageBridge')
+    const admin = { accountId: null, accountType: 'admin' as const }
+    const publicPath = '/public/workflows/page-tool-boundary'
+    const workflowId = WorkflowModel.create({ name: 'Public page boundary', workflow_json: '{}', marked_fields: [], is_public_page: true, public_slug: 'page-tool-boundary' })
+    const publicPage = normalizeChatPageSnapshot({ instanceId: 'public-page-tools', connectionId: 'public-page-tools-connection', revision: 'public-page-tools-revision', path: publicPath, kind: 'comfyui', title: 'Public', resourceId: String(workflowId),
+      fields: [{ id: 'prompt', label: 'Prompt', type: 'text', value: 'public draft' }],
+      actions: [{ id: 'page.navigate', label: 'Navigate', description: '', effect: 'draft', schema: { type: 'object', properties: { to: { type: 'string', enum: [publicPath, '/files'] } }, required: ['to'] } }] })
+    const privatePage = normalizeChatPageSnapshot({ ...publicPage, instanceId: 'private-page-tools', revision: 'private-page-tools-revision', path: '/files', kind: 'files', title: 'Files', resourceId: 'root',
+      fields: [{ id: 'content', label: 'Content', type: 'text', value: 'private document' }], data: { document: 'private document' },
+      actions: ['files.open', 'files.doc_append', 'files.name_save', 'files.delete'].map(id => ({ id, label: id, description: '', effect: id === 'files.open' || id === 'files.doc_append' ? 'draft' : 'save', schema: { type: 'object', properties: {} } })) })
+    const context: ChatExecutionContext = { threadId: pageThreadId, profileId: pageProfile.id, kind: 'direct', replyId: 'public-page-tools', page: publicPage }
+    const unregister = registerChatReply(context, controller.signal, () => ({ replyTo: null, recipients: ['user'] }))
+    const bridge = await openChatMcpBridge(admin, [], [], { chatContext: context })
+    let browserPage = publicPage
+    const commands: string[] = []
+    const stop = subscribeToRuntimeEvents(record => {
+      if (record.name !== 'chat.page.command') return
+      const event = record.payload as import('@conai/shared').ChatPageCommandEvent
+      if (event.connectionId !== publicPage.connectionId || event.type === 'cancel') return
+      commands.push(event.type)
+      if (event.type === 'action' && event.actionId === 'page.navigate' && event.arguments.to === '/files') browserPage = privatePage
+      setImmediate(() => resolveChatPageCommand(admin, event.commandId, { ok: true, page: browserPage }))
+    })
+    try {
+      assert.notEqual((await bridge.call('page_act', { action: 'page.navigate', arguments: { to: publicPath } })).isError, true)
+      assert.notEqual((await bridge.call('page_fill', { changes: [{ fieldId: 'prompt', value: 'public change' }] })).isError, true)
+      commands.length = 0
+      const navigation = await bridge.call('page_act', { action: 'page.navigate', arguments: { to: '/files' } })
+      assert.equal(navigation.isError, true, 'public navigation must be rejected before a browser command is sent')
+      assert.match(JSON.stringify(navigation.content), /공개.*비공개/)
+      assert.deepEqual(commands, [])
+
+      // A person can navigate independently; the old public reply must not follow them into private data.
+      browserPage = privatePage
+      const captured = await bridge.call('get_current_page', {})
+      assert.equal(captured.isError, true, 'a late capture of a private page must not be returned to the public reply')
+      assert.match(JSON.stringify(captured.content), /공개.*비공개/)
+      assert.doesNotMatch(JSON.stringify(captured), /private document/)
+      commands.length = 0
+      rememberChatPage(admin, privatePage)
+      const before = ChatProposalStore.listForThread(pageThreadId).length
+      const calls: Array<[string, Record<string, unknown>]> = [
+        ['get_current_page', {}], ['read_page_data', { key: 'document' }],
+        ['page_fill', { changes: [{ fieldId: 'content', value: 'injected change' }] }],
+        ...['files.open', 'files.doc_append', 'files.name_save'].map(action => ['page_act', { action, arguments: {} }] as [string, Record<string, unknown>]),
+        ['propose_page_action', { actionId: 'files.delete', arguments: {} }],
+      ]
+      for (const [name, args] of calls) {
+        const result = await bridge.call(name, args)
+        assert.equal(result.isError, true, name)
+        assert.match(JSON.stringify(result.content), /공개.*비공개/, name)
+        assert.doesNotMatch(JSON.stringify(result), /private document/)
+      }
+      assert.deepEqual(commands, [], 'no private capture, draft or direct action is dispatched')
+      assert.equal(ChatProposalStore.listForThread(pageThreadId).length, before)
+      const privateContext = { ...context, replyId: 'private-page-tools', page: privatePage }
+      const unregisterPrivate = registerChatReply(privateContext, controller.signal, () => ({ replyTo: null, recipients: ['user'] }))
+      const privateReply = await openChatMcpBridge(admin, [], [], { chatContext: privateContext })
+      try {
+        assert.notEqual((await privateReply.call('page_act', { action: 'files.name_save', arguments: {} })).isError, true)
+        assert.notEqual((await privateReply.call('page_fill', { changes: [{ fieldId: 'content', value: 'requested change' }] })).isError, true)
+        assert.match(JSON.stringify(await privateReply.call('read_page_data', { key: 'document' })), /private document/)
+      } finally { await privateReply.close(); unregisterPrivate() }
+    } finally { stop(); unregister(); await bridge.close() }
+  })
+
   await t.test('direct page actions carry the current revision and never create a review card', async () => {
+    const { chatPageActionTier } = await import('@conai/shared')
+    for (const id of ['chat.rename', 'chat.pin', 'chat.archive']) assert.equal(chatPageActionTier(id), 'direct')
+    assert.equal(chatPageActionTier('chat.delete'), 'commit')
     const admin = { accountId: null, accountType: 'admin' as const }
     const directPage = normalizeChatPageSnapshot({ instanceId: 'direct-files', connectionId: 'direct-files-connection', revision: 'direct-files-revision', path: '/files', kind: 'files', title: 'Files', resourceId: 'root', fields: [],
       actions: ['files.name_save', 'files.move_save', 'files.delete'].map((id) => ({ id, label: id, description: '', effect: 'save', schema: { type: 'object', properties: {} } })) })
@@ -673,11 +817,15 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
   await t.test('API LLM tools reject account permission revocation during a reply', async (sub) => {
     const { AuthAccount } = await import('../src/models/AuthAccount')
     const { AuthAccessControlService } = await import('../src/services/authAccessControlService')
-    let permissions = ['chat.use', 'page.generation.view', 'workflows.view']
+    let permissions = ['chat.use', 'page.generation.view', 'workflows.view', 'images.view']
     sub.mock.method(AuthAccount, 'findById', () => ({ status: 'active', account_type: 'guest' }))
     sub.mock.method(AuthAccessControlService, 'resolveForAccountId', () => ({ permissionKeys: permissions }))
     const ownedThread = CodexChatStore.createThread(7, 'owned page', 'llm', pageProfile.id)
     const context: ChatExecutionContext = { threadId: ownedThread, profileId: pageProfile.id, kind: 'direct', replyId: 'page-revoke', page }
+    const { isContextToolAllowed } = await import('../src/mcp/toolAccess')
+    for (const tool of ['set_live_wallpaper', 'save_wallpaper_schedule']) {
+      assert.equal(isContextToolAllowed({ requester: { accountId: 7, accountType: 'guest' }, source: 'llm-chat', scopes: ['read', 'organize'], chatContext: context }, tool), false, 'administrator-only writes must not be offered to an image viewer')
+    }
     const unregister = registerChatReply(context, controller.signal, () => ({ replyTo: null, recipients: ['user'] }))
     const bridge = await openChatMcpBridge({ accountId: 7, accountType: 'guest' }, ['read'], ['get_current_page'], { chatContext: context })
     try {
@@ -956,15 +1104,30 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
     const reviewed = ChatProposalStore.find(proposed.id)
     assert.ok(reviewed?.kind === 'page_fields')
     assert.ok(!reviewed.saved, 'authorizing a card is not applying it')
-    assert.equal((await post(proposed.id, binding, 'page-applied')).status, 200)
+    const clock = t.mock.method(Date, 'now', () => proposed.kind === 'page_fields' ? proposed.expiresAt + 1 : 0)
+    try {
+      const { proposalStatuses, proposalOutcomeNote } = await import('../src/services/codex-chat/chatPageContext')
+      const started = proposalStatuses(pageThreadId, [proposed.id])[0]
+      assert.equal(started.state, 'started', 'expiry must not invite replay of a started operation')
+      assert.match(started.recovery ?? '', /check.*result.*before proposing again/i)
+      assert.match(proposalOutcomeNote(pageThreadId), /적용 시작.*결과/)
+      assert.equal((await post(proposed.id, binding, 'page-applied')).status, 200, 'a checked application may finish after expiry')
+      assert.equal(proposalStatuses(pageThreadId, [proposed.id])[0].state, 'saved')
+      const expired = ChatProposalStore.add({ threadId: pageThreadId, profileId: pageProfile.id, kind: 'direct', replyId: 'expired-route' }, { kind: 'page_fields', page: target, changes: buildChatPageChanges(page, [{ fieldId: 'steps', value: 30 }]), expiresAt: Date.now() - 1 })
+      assert.equal((await post(expired.id, binding, 'page-check')).status, 409)
+      assert.equal((await post(expired.id, binding, 'page-applied')).status, 409, 'an unstarted expired card cannot forge a receipt')
+      assert.equal(proposalStatuses(pageThreadId, [expired.id])[0].state, 'expired')
+    } finally { clock.mock.restore() }
     assert.equal((await post(proposed.id, binding, 'page-check')).status, 409, 'no duplicate apply')
     assert.equal((await post(proposed.id, { ...binding, undo: true }, 'page-check')).status, 200)
     const transaction = applyChatWorkflowOperations(emptyWorkflow, workflowModules, createGraph)
+    ChatProfileStore.update(workflowProfile.id, { mcpEnabled: false, toolAllowlist: [] })
+    const unreportedPage = { ...workflowPage, connectionId: 'never-reported-workflow-card' }
     const graphProposal = ChatProposalStore.add({ threadId: workflowThreadId, profileId: workflowProfile.id, kind: 'direct', replyId: 'workflow-route' }, {
-      kind: 'workflow_graph', page: chatPageTarget(workflowPage), revision: emptyWorkflow.revision, operations: transaction.operations,
+      kind: 'workflow_graph', page: chatPageTarget(unreportedPage), revision: emptyWorkflow.revision, operations: transaction.operations,
       modules: [textModule, finalModule], changes: transaction.changes, issues: transaction.issues, nodeCount: 2, edgeCount: 1, expiresAt: Date.now() + 60_000,
     })
-    const graphBinding = { instanceId: workflowPage.instanceId, connectionId: workflowPage.connectionId, revision: emptyWorkflow.revision }
+    const graphBinding = { instanceId: unreportedPage.instanceId, connectionId: unreportedPage.connectionId, revision: emptyWorkflow.revision }
     assert.equal((await post(graphProposal.id, { ...graphBinding, revision: 'wrong-revision' }, 'page-check')).status, 409)
     assert.equal((await post(graphProposal.id, graphBinding, 'page-check')).status, 200)
     ModuleDefinitionModel.update(textModule.id, { version: textModule.version + 1 })

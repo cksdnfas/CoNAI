@@ -76,6 +76,7 @@ export function normalizeChatPageSnapshot(value: unknown): ChatPageSnapshot {
     if (typeof current === 'string' && current.length > CHAT_PAGE_LIMITS.text) throw new Error('필드 내용이 너무 길어.')
     const result: ChatPageField = { id, label: text(field.label, 160), type, value: (segments ? [...current as string[]] : current) as ChatPageValue }
     if (field.editable === false) result.editable = false
+    if (field.viewOnly === true) result.viewOnly = true
     if (field.hint !== undefined) result.hint = text(field.hint, CHAT_PAGE_LIMITS.hint)
     for (const bound of ['min', 'max'] as const) {
       if (field[bound] !== undefined) {
@@ -107,6 +108,7 @@ export function normalizeChatPageSnapshot(value: unknown): ChatPageSnapshot {
   }
   if (kind === 'workflow') snapshot.workflow = normalizeChatWorkflowSnapshot(raw.workflow)
   if (raw.revision !== undefined) snapshot.revision = identity(raw.revision)
+  if (raw.inputRevision !== undefined) snapshot.inputRevision = identity(raw.inputRevision)
   if (raw.actions !== undefined) {
     snapshot.actions = normalizeChatPageActions(path, raw.actions)
     if (!snapshot.revision) throw new Error('페이지 작업의 현재 버전이 필요해.')

@@ -365,6 +365,7 @@ async function requestChatCompletion(meter: { sent: boolean; usage: LlmTokenCoun
   target: ChatCompletionTarget
   messages: ChatCompletionMessage[]
   tools?: ChatCompletionTool[]
+  refreshTools?: () => Promise<ChatCompletionTool[]>
   signal: AbortSignal
   onContent?: (text: string) => void
   onReasoning?: (text: string) => void

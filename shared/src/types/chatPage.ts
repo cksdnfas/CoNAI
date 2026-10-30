@@ -11,6 +11,8 @@ export type ChatPageField = {
   value: ChatPageValue
   /** False for visible context that may be read but never changed by a proposal. */
   editable?: false
+  /** Editable view control, not an input consumed by commit actions. */
+  viewOnly?: true
   min?: number
   max?: number
   integer?: boolean
@@ -31,6 +33,8 @@ export type ChatPageSnapshot = {
   fields: ChatPageField[]
   workflow?: ChatWorkflowSnapshot
   revision?: string
+  /** Opaque revision of native inputs not represented by the exposed fields (e.g. image bytes). */
+  inputRevision?: string
   actions?: ChatPageAction[]
   data?: Record<string, ChatPageData>
   /** The active editor holds unsaved changes; actions that leave it are refused until the person saves or discards. */

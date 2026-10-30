@@ -3,6 +3,8 @@ import { getNaiFixedModelSettings, getNaiQualityTags, getNaiUcPresetIds, getNaiU
 import { useI18n } from '@/i18n'
 import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
 import {
+  clampNaiQueueCount,
+  clampNaiSampleCount,
   getImageDraftRevision,
   getNaiEnhanceIssueLabel,
   getNaiFixedFieldsError,
@@ -21,19 +23,25 @@ import {
   type NAIFormDraft,
   type NaiImageSize,
 } from '../image-generation-shared'
-import { appendNaiCharacterPrompt, applyNaiFormPatch, placeNaiCharacterReference } from './use-nai-form-controller'
+import { appendNaiCharacterPrompt, applyNaiFormPatch, placeNaiCharacterReference, updateNaiVibeField } from './use-nai-form-controller'
+import { buildNaiFormFromHistoryPayload } from '../history-settings-mapping'
 import { useChatCharacterSettingInsertion } from './use-chat-character-setting-insertion'
 import { useChatPageMedia } from '@/features/codex-chat/use-chat-page-media'
 import { useChatDraftTransaction } from '@/features/codex-chat/use-chat-draft-transaction'
-import { pageAction, pageArray, pageChoice, pageNumber, pageObject, pageText } from '@/features/codex-chat/page-action-helpers'
+import { pageAction, pageArray, pageChoice, pageFreeText, pageNumber, pageObject, pageText } from '@/features/codex-chat/page-action-helpers'
 import { useChatPresetInsertion } from './use-chat-preset-insertion'
+import { useGenerationChatRuns, type GenerationSubmitResult } from './use-generation-chat-runs'
+import { IMAGE_GENERATION_TARGET_GROUP_KEY, useGenerationTargetGroupPath } from '@/features/groups/generation-target-group-store'
+import type { GenerationHistoryRecord } from '@/lib/api-image-generation-types'
 import { EMPTY_NAI_CHARACTER_REFERENCE, EMPTY_NAI_VIBE, supportsNaiCharacterPrompts, supportsNaiCharacterReferences } from '../image-generation-shared'
 
 /** Inputs a model with fixed settings (V5 Full Medium) decides itself; the page assistant may read but not change them. */
 const NAI_FIXED_MODEL_FIELDS = ['steps', 'sampler', 'negativePrompt', 'ucPreset'] as const
 
-export function useNaiChatPage(form: NAIFormDraft, setForm: Dispatch<SetStateAction<NAIFormDraft>>, sourceImageSize: NaiImageSize | null) {
+export function useNaiChatPage(form: NAIFormDraft, setForm: Dispatch<SetStateAction<NAIFormDraft>>, sourceImageSize: NaiImageSize | null, records: GenerationHistoryRecord[], generate: () => Promise<GenerationSubmitResult>, cost: { estimate: number | null; free: boolean | null; extraUpscale: boolean; width: number; height: number }) {
   const { t } = useI18n()
+  const runs = useGenerationChatRuns('nai.generate', 'novelai', records, generate)
+  const { requestPath: targetGroup } = useGenerationTargetGroupPath(IMAGE_GENERATION_TARGET_GROUP_KEY)
   const media = useChatPageMedia(['sourceImage', 'maskImage', ...(supportsNaiVibes(form.model) ? ['vibe:new', ...form.vibes.map((_, i) => `vibe:${i}`)] : []), ...(supportsNaiCharacterReferences(form.model) ? ['characterReference:new', ...form.characterReferences.map((_, i) => `characterReference:${i}`)] : [])])
   // Fields show what the request uses: a model with fixed settings overrides steps, sampler and the negatives.
   const fixedSettings = getNaiFixedModelSettings(form.model)
@@ -53,6 +61,13 @@ export function useNaiChatPage(form: NAIFormDraft, setForm: Dispatch<SetStateAct
   const commit = useChatDraftTransaction(form, setForm)
   const promptPresets = resolveNaiPromptPresets(form)
   const sampling = resolveNaiSamplingSettings(form)
+  const needsEncoding = form.vibes.map((vibe) => Boolean(vibe.image && !vibe.encoded.trim()))
+  const chargeVibes = form.model.includes('nai-diffusion-4')
+  const vibeCount = form.vibes.filter((vibe) => vibe.image || vibe.encoded.trim()).length
+  const encodingAnlas = chargeVibes ? needsEncoding.filter(Boolean).length * 2 : 0
+  const extraVibeAnlas = chargeVibes ? Math.max(0, vibeCount - 4) * 2 * clampNaiQueueCount(form.queueCount) : 0
+  const referenceAnlas = supportsNaiCharacterReferences(form.model) ? form.characterReferences.filter((reference) => reference.image).length * 5 * clampNaiSampleCount(form.samples) * clampNaiQueueCount(form.queueCount) : 0
+  const extraAnlas = encodingAnlas + extraVibeAnlas + referenceAnlas
   const fields: ChatPageField[] = [
     { id: 'prompt', label: t({ ko: '포지티브 프롬프트', en: 'Positive prompt' }), type: 'text', value: form.prompt },
     { id: 'negativePrompt', label: t({ ko: '네거티브 프롬프트', en: 'Negative prompt' }), type: 'text', value: fixedSettings ? getNaiUcPresetText(form.model, fixedSettings.ucPreset) ?? '' : form.negativePrompt, ...fixedField },
@@ -79,8 +94,8 @@ export function useNaiChatPage(form: NAIFormDraft, setForm: Dispatch<SetStateAct
   if (supportsNaiTransparentBackground(form.model)) fields.push({ id: 'transparentBackground', label: t({ ko: '투명 배경', en: 'Transparent background' }), type: 'boolean', value: form.transparentBackground })
   useChatPageRegistration({
     kind: 'nai', title: t({ ko: 'NovelAI 생성', en: 'NovelAI generation' }), resourceId: 'novelai', fields, localRevision: getImageDraftRevision(form),
-    data: { media: media.candidates, presets: presets.candidates, characters: form.characters.map((item) => ({ ...item })), enhance: { sourceSize: sourceImageSize ? `${sourceImageSize.width}x${sourceImageSize.height}` : '', amounts: Object.fromEntries(NAI_ENHANCE_AMOUNTS.map((amount) => [amount, planNaiFormEnhance(form, sourceImageSize, amount).issue ?? 'available'])) }, selected: { sourceImage: form.sourceImage?.fileName ?? '', maskImage: form.maskImage?.fileName ?? '', vibes: form.vibes.map((item) => ({ image: item.image?.fileName ?? '', strength: item.strength, informationExtracted: item.informationExtracted })), characterReferences: form.characterReferences.map((item) => ({ image: item.image?.fileName ?? '', type: item.type, strength: item.strength, fidelity: item.fidelity })) } },
-    actions: [...media.actions, ...presets.actions, ...characterSettingActions, ...(supportsNaiCharacterPrompts(form.model) ? [pageAction('nai.characters', t({ ko: '캐릭터 프롬프트 편집', en: 'Edit character prompts' }), t({ ko: '캐릭터별 프롬프트·네거티브 프롬프트·위치의 전체 목록을 입력해.', en: 'Set the complete list of character prompts, negative prompts and positions.' }), pageObject({ characters: pageArray(pageObject({ prompt: pageText(), uc: pageText(), centerX: pageChoice(['0.1', '0.3', '0.5', '0.7', '0.9']), centerY: pageChoice(['0.1', '0.3', '0.5', '0.7', '0.9']) }, ['prompt', 'uc', 'centerX', 'centerY']), 6) }, ['characters']))] : [])],
+    data: { recentRuns: runs.recentRuns, generating: runs.generating, media: media.candidates, presets: presets.candidates, characters: form.characters.map((item) => ({ ...item })), enhance: { sourceSize: sourceImageSize ? `${sourceImageSize.width}x${sourceImageSize.height}` : '', amounts: Object.fromEntries(NAI_ENHANCE_AMOUNTS.map((amount) => [amount, planNaiFormEnhance(form, sourceImageSize, amount).issue ?? 'available'])) }, selected: { targetGroup: targetGroup ?? '', prompt: pageFreeText(form.prompt.slice(0, 240)), model: form.model, size: `${cost.width}x${cost.height}`, samples: clampNaiSampleCount(form.samples), queueCount: clampNaiQueueCount(form.queueCount), anlasEstimate: cost.estimate === null ? null : cost.estimate + extraAnlas, free: extraAnlas > 0 ? false : cost.free, vibeEncodingAnlas: encodingAnlas, extraVibeAnlas, referenceAnlas, extraUpscaleCost: cost.extraUpscale, sourceImage: form.sourceImage?.fileName ?? '', maskImage: form.maskImage?.fileName ?? '', vibes: form.vibes.map((item, index) => ({ image: item.image?.fileName ?? '', strength: item.strength, informationExtracted: item.informationExtracted, needsEncoding: needsEncoding[index] })), characterReferences: form.characterReferences.map((item) => ({ image: item.image?.fileName ?? '', type: item.type, strength: item.strength, fidelity: item.fidelity })) } },
+    actions: [...runs.actions, ...media.actions, ...presets.actions, ...characterSettingActions, ...(form.vibes.length || form.characterReferences.length ? [pageAction('nai.references', t({ ko: '참조 설정 변경', en: 'Edit reference settings' }), t({ ko: '바이브 또는 캐릭터 참조의 0부터 시작하는 index와 변경할 설정을 지정해.', en: 'Set a vibe or character reference by its zero-based index.' }), pageObject({ kind: pageChoice(['vibe', 'characterReference']), index: pageNumber(0, Math.max(form.vibes.length, form.characterReferences.length) - 1, true), strength: pageNumber(0, 1), informationExtracted: pageNumber(0.01, 1), fidelity: pageNumber(0, 1), type: pageChoice(['character', 'style', 'character&style']) }, ['kind', 'index']))] : []), ...(supportsNaiCharacterPrompts(form.model) ? [pageAction('nai.characters', t({ ko: '캐릭터 프롬프트 편집', en: 'Edit character prompts' }), t({ ko: '캐릭터별 프롬프트·네거티브 프롬프트·위치의 전체 목록을 입력해.', en: 'Set the complete list of character prompts, negative prompts and positions.' }), pageObject({ characters: pageArray(pageObject({ prompt: pageText(), uc: pageText(), centerX: pageChoice(['0.1', '0.3', '0.5', '0.7', '0.9']), centerY: pageChoice(['0.1', '0.3', '0.5', '0.7', '0.9']) }, ['prompt', 'uc', 'centerX', 'centerY']), 6) }, ['characters']))] : [])],
     apply: (values) => {
       const patch = values as Partial<NAIFormDraft>
       const model = patch.model ?? form.model
@@ -97,8 +112,28 @@ export function useNaiChatPage(form: NAIFormDraft, setForm: Dispatch<SetStateAct
       setForm((current) => applyNaiFormPatch(current, patch))
     },
     applyAction: async (id, args, assertCurrent) => {
+      if (id === 'generation.history_load') {
+        const payload = await runs.loadHistory(args, assertCurrent)
+        return commit(buildNaiFormFromHistoryPayload(payload, form).form)
+      }
+      if (await runs.apply(id, args, assertCurrent)) return
       const next = { ...form, vibes: [...form.vibes], characterReferences: [...form.characterReferences] }
       if (id === 'preset.insert') next[String(args.fieldId) as 'prompt' | 'negativePrompt'] = presets.value(args, form[String(args.fieldId) as 'prompt' | 'negativePrompt'])
+      else if (id === 'nai.references') {
+        const index = Number(args.index)
+        if (args.kind === 'vibe') {
+          const vibe = next.vibes[index]
+          if (!vibe || args.type !== undefined || args.fidelity !== undefined || (args.strength !== undefined && Number(args.strength) < 0.01)) throw new Error('바이브 참조 설정을 확인해줘.')
+          let updated = vibe
+          if (args.strength !== undefined) updated = updateNaiVibeField(updated, 'strength', String(args.strength))
+          if (args.informationExtracted !== undefined) updated = updateNaiVibeField(updated, 'informationExtracted', String(args.informationExtracted))
+          next.vibes[index] = updated
+        } else {
+          const reference = next.characterReferences[index]
+          if (!reference || args.informationExtracted !== undefined) throw new Error('캐릭터 참조 설정을 확인해줘.')
+          next.characterReferences[index] = { ...reference, strength: args.strength === undefined ? reference.strength : String(args.strength), fidelity: args.fidelity === undefined ? reference.fidelity : String(args.fidelity), type: args.type === undefined ? reference.type : args.type as typeof reference.type }
+        }
+      }
       else if (id === 'character_setting.insert') {
         const target = String(args.target)
         const characterIndex = target === 'character' ? Number(args.characterIndex) : null

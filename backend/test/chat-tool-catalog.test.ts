@@ -56,6 +56,95 @@ test('chat tool catalog: contents, open, run, validation and routing', { timeout
 
   const text = (result: unknown) => ((result as { content?: Array<{ text?: string }> }).content ?? []).map((part) => part.text ?? '').join('\n')
 
+  await t.test('connected page grants follow navigation without escaping public or preset restrictions', async () => {
+    const { rememberChatPage } = await import('../src/services/codex-chat/chatPageBridge')
+    const { isContextToolAllowed } = await import('../src/mcp/toolAccess')
+    const { normalizeChatPageSnapshot } = await import('@conai/shared')
+    const pageProfile = ChatProfileStore.create({ name: 'Page-only', engine: 'llm', providerName: 'conn', mcpEnabled: false, pageAssist: true })
+    const pageThread = CodexChatStore.createThread(null, 'page-only', 'llm', pageProfile.id)
+    const page = normalizeChatPageSnapshot({ instanceId: 'catalog-library', connectionId: 'catalog-navigation', kind: 'library', path: '/', title: 'Library', resourceId: null, fields: [] })
+    const execution = { threadId: pageThread, profileId: pageProfile.id, kind: 'direct' as const, replyId: 'navigation', page }
+    const release = registerChatReply(execution, controller.signal, () => ({ replyTo: null, recipients: ['user'] }))
+    const bridge = await openChatMcpBridge(admin, [], [], { chatContext: execution })
+    try {
+      assert.ok(bridge.tools.some(tool => tool.function.name === 'search_images'))
+      assert.ok(bridge.tools.some(tool => tool.function.name === 'get_chat_settings'), 'small tool sets retain settings discovery')
+      assert.notEqual((await bridge.call('search_images', {})).isError, true)
+      const files = normalizeChatPageSnapshot({ ...page, instanceId: 'catalog-files', kind: 'files', path: '/files' })
+      rememberChatPage(admin, files)
+      assert.notEqual((await bridge.call('list_files', {})).isError, true, 'navigation rebinds before dispatch')
+      assert.ok(!bridge.tools.some(tool => tool.function.name === 'search_images'))
+      assert.equal((await bridge.call('search_images', {})).isError, true)
+      const editor = normalizeChatPageSnapshot({ ...page, instanceId: 'catalog-editor', kind: 'workflow', path: '/generation', resourceId: 'workflow:draft:catalog', workflow: { revision: 'catalog-graph', name: 'Draft', description: '', nodes: [], edges: [] } })
+      rememberChatPage(admin, editor)
+      assert.notEqual((await bridge.call('list_workflow_modules', {})).isError, true, 'an initially ordinary page can enter the node editor')
+      assert.ok(bridge.tools.some(tool => tool.function.name === 'get_workflow_editor'))
+      const codexProfile = ChatProfileStore.create({ name: 'Codex page-only', engine: 'codex', mcpEnabled: false, pageAssist: true })
+      const codexThread = CodexChatStore.createThread(null, 'codex-page', 'codex', codexProfile.id)
+      const codexContext = { ...execution, threadId: codexThread, profileId: codexProfile.id, replyId: 'codex-navigation' }
+      const releaseCodex = registerChatReply(codexContext, controller.signal, () => ({ replyTo: null, recipients: ['user'] }))
+      const server = createMcpServer({ source: 'codex-chat', requester: admin, scopes: [], toolAllowlist: [], chatContext: codexContext })
+      const client = new Client({ name: 'codex-navigation', version: '1' })
+      const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
+      await Promise.all([server.connect(serverTransport), client.connect(clientTransport)])
+      try {
+        assert.ok((await client.listTools()).tools.some(tool => tool.name === CATALOG_OPEN_TOOL))
+        const opened = await client.callTool({ name: CATALOG_OPEN_TOOL, arguments: { tools: ['list_workflow_modules'] } })
+        assert.notEqual(opened.isError, true, text(opened))
+        assert.notEqual(JSON.parse(text(opened)).tools[0].direct, true, 'new schemas use the live catalog, not Codex cached direct names')
+        const result = await client.callTool({ name: CATALOG_RUN_TOOL, arguments: { tool: 'list_workflow_modules', arguments: {} } })
+        assert.notEqual(result.isError, true, text(result))
+      } finally { await client.close(); await server.close(); releaseCodex() }
+      rememberChatPage(admin, files)
+      ChatProfileStore.update(pageProfile.id, { pageAssist: false })
+      assert.equal((await bridge.call('list_files', {})).isError, true, 'live pageAssist revocation also removes domain grants')
+      const context = { requester: admin, source: 'llm-chat' as const, scopes: [] as never[], chatContext: { ...execution, page: { ...page, kind: 'codex' as const, path: '/generation', connectionId: 'preset-guard' } }, generationPresetIds: [1] }
+      assert.equal(isContextToolAllowed(context, 'submit_generation_job', false), false)
+      context.chatContext.page.path = '/public/workflows/example'
+      assert.equal(isContextToolAllowed(context, 'get_generation_job', false), false)
+    } finally { await bridge.close(); release() }
+  })
+
+  await t.test('public reply boundaries survive navigation and tool rebinding', async () => {
+    const { normalizeChatPageSnapshot } = await import('@conai/shared')
+    const { rememberChatPage } = await import('../src/services/codex-chat/chatPageBridge')
+    const { isContextToolAllowed, requireMcpToolAccess } = await import('../src/mcp/toolAccess')
+    for (const engine of ['llm', 'codex'] as const) {
+      const restrictedProfile = ChatProfileStore.create({ name: `Public ${engine}`, engine, providerName: engine === 'llm' ? 'conn' : undefined, pageAssist: true, mcpEnabled: true, mcpScopes: [...CHAT_SCOPES] })
+      const threadId = CodexChatStore.createThread(null, 'public navigation', engine, restrictedProfile.id)
+      const page = normalizeChatPageSnapshot({ instanceId: `public-${engine}`, connectionId: `public-nav-${engine}`, kind: 'comfyui', path: '/public/workflows/example', title: 'Public', resourceId: '1', fields: [] })
+      const chat = { threadId, profileId: restrictedProfile.id, kind: 'direct' as const, replyId: `public-${engine}`, page }
+      const context = { requester: admin, source: engine === 'codex' ? 'codex-chat' as const : 'llm-chat' as const, scopes: [...CHAT_SCOPES], chatContext: chat }
+      const release = registerChatReply(chat, controller.signal, () => ({ replyTo: null, recipients: ['user'] }))
+      const bridge = await openChatMcpBridge(admin, [...CHAT_SCOPES], null, { chatContext: chat })
+      try {
+        assert.equal(isContextToolAllowed(context, 'posts_search'), false)
+        rememberChatPage(admin, normalizeChatPageSnapshot({ ...page, instanceId: `files-${engine}`, kind: 'files', path: '/files', resourceId: null }))
+        await bridge.refresh()
+        for (const name of ['posts_search', 'list_files', 'write_text_file', 'get_chat_settings']) {
+          assert.equal(isContextToolAllowed(context, name), false, `public starting page still restricts ${name}`)
+          assert.throws(() => requireMcpToolAccess(context, name), /not permitted/)
+          assert.ok(!bridge.tools.some(tool => tool.function.name === name) && !bridge.catalogTools.has(name))
+          assert.equal((await bridge.call(name, {})).isError, true)
+        }
+        const server = createMcpServer(context)
+        const client = new Client({ name: 'public-navigation', version: '1' })
+        const [a, b] = InMemoryTransport.createLinkedPair()
+        await Promise.all([server.connect(b), client.connect(a)])
+        try {
+          assert.ok(!(await client.listTools()).tools.some(tool => tool.name === 'list_files'))
+          assert.ok(!catalogToolNames(server).includes('posts_search'))
+          if (engine === 'codex') assert.equal((await client.callTool({ name: CATALOG_OPEN_TOOL, arguments: { tools: ['posts_search', 'list_files', 'write_text_file'] } })).isError, true)
+        } finally { await client.close(); await server.close() }
+        const privatePage = normalizeChatPageSnapshot({ ...page, connectionId: `private-nav-${engine}`, kind: 'files', path: '/files', resourceId: null })
+        const privateContext = { ...context, chatContext: { ...chat, page: privatePage } }
+        assert.equal(isContextToolAllowed(privateContext, 'posts_search'), true)
+        rememberChatPage(admin, { ...page, connectionId: privatePage.connectionId })
+        assert.equal(isContextToolAllowed(privateContext, 'posts_search'), false, 'a live public page restricts a reply that started privately too')
+      } finally { await bridge.close(); release() }
+    }
+  })
+
   // HTTP clients keep the flat list; a chat gets the contents.
   const http = createMcpServer({ scopes: [...CHAT_SCOPES] as never, source: 'http' })
   assert.deepEqual(catalogToolNames(http), [])
@@ -323,6 +412,7 @@ test('chat tool catalog: contents, open, run, validation and routing', { timeout
           assert.equal(unavailable.isError, true, 'direct classification alone must not expose an unoffered room tool')
           const wrongRoute = await granted.call(CATALOG_RUN_TOOL, { tool: name, arguments: {} })
           assert.equal(wrongRoute.isError, true, 'opening a direct tool must not add it to run_tool')
+          assert.match(text(wrongRoute), /direct.*call|call.*direct/i)
         } finally { await granted.close() }
       })
       const ordinary = await openChatMcpBridge(admin, [...CHAT_SCOPES], null, { chatContext })

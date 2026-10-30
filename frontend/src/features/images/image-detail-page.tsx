@@ -22,11 +22,15 @@ export function ImageDetailPage() {
       <ImageDetailView
         compositeHash={compositeHash}
         presentation="page"
-        renderHeader={({ downloadName, downloadUrl, image, isRefreshing, refresh, similarity }) => (
+        onDeleted={handleBackToSource}
+        stepNavigation={sequence ? { canViewPrevious: Boolean(sequence.previousHash), canViewNext: Boolean(sequence.nextHash), onViewPrevious: sequence.goPrevious, onViewNext: sequence.goNext } : undefined}
+        renderHeader={({ downloadName, downloadUrl, image, editOpen, onEditOpenChange, isRefreshing, refresh, similarity }) => (
           <ImageDetailActions
             downloadUrl={downloadUrl}
             downloadName={downloadName}
             image={image}
+            editOpen={editOpen}
+            onEditOpenChange={onEditOpenChange}
             isRefreshing={isRefreshing}
             onBack={handleBackToSource}
             onRefresh={refresh}

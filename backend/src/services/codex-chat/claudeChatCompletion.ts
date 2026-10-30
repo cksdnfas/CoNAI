@@ -110,6 +110,7 @@ export async function streamClaudeChatCompletion(params: {
   onToolStart?: () => void
   onToolEnd?: () => void
   callTool?: (name: string, args: Record<string, unknown>, id: string) => Promise<ChatMcpToolResult>
+  refreshTools?: () => Promise<ChatCompletionTool[]>
   maxToolRounds?: number
   research?: import('./chatResearch').ChatResearchExecution
   /** Claude Code's own tools for this run (web research only); none in a chat. */
@@ -120,16 +121,29 @@ export async function streamClaudeChatCompletion(params: {
   const privateRoot = claudeChatPrivateRoot()
   const session = params.target.claudeSession ?? null
   let root: string | null = null
-  const tools = params.tools ?? []
+  let tools = params.tools ?? []
+  const refreshTools = async () => { if (params.refreshTools) tools = await params.refreshTools() }
   let http: ReturnType<typeof createServer> | null = null
   const mcp = createMcpHandler(() => {
-    const server = new Server({ name: 'conai-claude-chat', version: '1.0.0' }, { capabilities: { tools: {} } })
-    server.setRequestHandler('tools/list', async () => ({ tools: tools.map((tool) => ({ name: tool.function.name, description: tool.function.description, inputSchema: tool.function.parameters as { type: 'object' } })) }))
-    server.setRequestHandler('tools/call', async (request) => {
+    const server = new Server({ name: 'conai-claude-chat', version: '1.0.0' }, { capabilities: { tools: { listChanged: true } } })
+    server.setRequestHandler('tools/list', async () => {
+      await refreshTools()
+      return { tools: tools.map((tool) => ({ name: tool.function.name, description: tool.function.description, inputSchema: tool.function.parameters as { type: 'object' } })) }
+    })
+    server.setRequestHandler('tools/call', async (request, ctx) => {
       params.signal.throwIfAborted()
+      const previousTools = JSON.stringify(tools)
+      await refreshTools()
+      if (JSON.stringify(tools) !== previousTools) await server.notification({ method: 'notifications/tools/list_changed' }, { relatedRequestId: ctx.mcpReq.id })
       if (!tools.some((tool) => tool.function.name === request.params.name) || !params.callTool) throw new Error('Unknown or not permitted tool')
       params.onToolStart?.()
-      try { return await params.callTool(request.params.name, request.params.arguments ?? {}, randomUUID()) as CallToolResult }
+      try {
+        const before = JSON.stringify(tools)
+        const result = await params.callTool(request.params.name, request.params.arguments ?? {}, randomUUID()) as CallToolResult
+        await refreshTools()
+        if (JSON.stringify(tools) !== before) await server.notification({ method: 'notifications/tools/list_changed' }, { relatedRequestId: ctx.mcpReq.id })
+        return result
+      }
       finally { params.onToolEnd?.() }
     })
     return server

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { JSDOM } from 'jsdom'
-import type { ChatPageCommand, ChatPageSnapshot } from '@conai/shared'
+import type { ChatPageCommand, ChatPageSnapshot, ChatProposal } from '@conai/shared'
 import type { CodexChatMessage, CodexChatThreadDetail } from '../src/lib/api-codex-chat'
 import type { RuntimeEventEnvelope } from '../src/lib/runtime-events-types'
 
@@ -335,6 +335,23 @@ test('chat draft comparisons retain JSON numeric, missing-key and array equivale
     assert.equal(chatDraftEqual(right, left), true)
   }
   for (const [left, right] of [[NaN, 1], [undefined, null], [{ value: null }, {}], [[null], []], [Array(1), [1]]]) assert.equal(chatDraftEqual(left, right), false)
+})
+
+test('thread list mutations keep the open header and directory on the same saved row', async t => {
+  const { QueryClient } = await import('@tanstack/react-query')
+  const { codexChatThreadQueryKey } = await import('../src/features/codex-chat/codex-chat-context')
+  const { updateChatListEntry } = await import('../src/features/codex-chat/use-chat-thread-actions')
+  const { scheduleChatDirectoryRefresh } = await import('../src/features/codex-chat/chat-query-refresh')
+  const client = new QueryClient({ defaultOptions: { queries: { gcTime: Infinity } } })
+  t.after(() => clearTestQueryClient(client))
+  const original = { id: 41, title: 'Old', pinned: 0, archived: 0 } as CodexChatThreadDetail['thread']
+  const saved = { ...original, title: 'Renamed', pinned: 1, archived: 1 }
+  client.setQueryData(codexChatThreadQueryKey(41), { thread: original, messages: [], messageCount: 12 })
+  t.mock.method(globalThis, 'fetch', async () => Response.json({ success: true, data: saved }))
+  await updateChatListEntry(client, 41, { title: 'Renamed', pinned: true, archived: true })
+  assert.deepEqual(client.getQueryData<CodexChatThreadDetail>(codexChatThreadQueryKey(41))?.thread, saved)
+  assert.equal(client.getQueryData<CodexChatThreadDetail>(codexChatThreadQueryKey(41))?.messageCount, 12)
+  await scheduleChatDirectoryRefresh(client)
 })
 
 test('chat notifications share directory refreshes, refetch only the new-message tail and still notify', async () => {
@@ -927,16 +944,17 @@ test('page commands preserve draft undo, screen identity and reviewed saves', { 
   for (const [key, value] of Object.entries(globals)) Object.defineProperty(globalThis, key, { configurable: true, value })
   const { act, createElement: h, useEffect, useLayoutEffect, useState } = await import('react')
   const { createRoot } = await import('react-dom/client')
-  const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query')
+  const { QueryClient, QueryClientProvider, notifyManager } = await import('@tanstack/react-query')
   const { MemoryRouter, useLocation, useNavigate } = await import('react-router-dom')
   const { I18nProvider } = await import('../src/i18n')
   const { SnackbarContext } = await import('../src/components/ui/snackbar-context')
   const { ChatPageProvider, useChatPage, useChatPageRegistration } = await import('../src/features/codex-chat/chat-page-context')
   const { pageAction, pageObject, pageText } = await import('../src/features/codex-chat/page-action-helpers')
   const { useChatDraftTransaction } = await import('../src/features/codex-chat/use-chat-draft-transaction')
+  const { useChatThreadActions } = await import('../src/features/codex-chat/use-chat-thread-actions')
   const { useSpriteChatPage, useSpriteNormalizeChatPage } = await import('../src/features/sprite/use-sprite-chat-page')
   const { defaultExtractForm, DEFAULT_OUTPUT, DEFAULT_SAVE } = await import('../src/features/sprite/sprite-options')
-  const { buildChatPageChanges } = await import('@conai/shared')
+  const { buildChatPageChanges, chatPageTarget, chatPageActionBefore } = await import('@conai/shared')
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity, gcTime: Infinity } } })
   client.setQueryData(['auth-status'], { authenticated: true, hasCredentials: true, accountId: 1, permissionKeys: ['page.settings.view'] })
   client.setQueryData(['runtime-language-settings'], { general: { language: 'en' } })
@@ -957,18 +975,28 @@ test('page commands preserve draft undo, screen identity and reviewed saves', { 
   let saves = 0
   let pendingDraft: Promise<void> | undefined
   let editData!: (value: { text: string | number | null }) => void
+  let threadActions!: ReturnType<typeof useChatThreadActions>
+  let selectChat!: (id: number | undefined) => void
+  let selectedChat: number | undefined
+  let listOpened = false
   function Editor() {
     const api = useChatPage()!
     const [value, setValue] = useState('original')
     const [resource, setResource] = useState('one')
     const [payload, setPayload] = useState<{ text: string | number | null }>({ text: 'original data' })
+    const [selectedThreadId, setSelectedThreadId] = useState<number | undefined>(41)
+    const actions = useChatThreadActions({
+      selectedThreadId, selectThread: setSelectedThreadId, setListOpen: (open: boolean) => { listOpened = open },
+      currentDrafts: () => ({}), keepDrafts: () => {},
+    } as import('../src/features/codex-chat/codex-chat-context').CodexChatApi)
+    useLayoutEffect(() => { threadActions = actions; selectChat = setSelectedThreadId; selectedChat = selectedThreadId }, [actions, selectedThreadId])
     useLayoutEffect(() => { editData = setPayload }, [])
     const commit = useChatDraftTransaction(value, setValue)
     useLayoutEffect(() => { page = api; edit = setValue; select = setResource; currentValue = value }, [api, value])
     useChatPageRegistration({
-      kind: 'settings', title: 'Editor', resourceId: resource, fields: [{ id: 'name', label: 'Name', type: 'text', value }],
+      kind: 'settings', title: 'Editor', resourceId: resource, fields: [{ id: 'name', label: 'Name', type: 'text', value }, { id: 'columns', label: 'Columns', type: 'number', value: typeof payload.text === 'number' && Number.isFinite(payload.text) ? payload.text : 3, viewOnly: true }],
       data: { payload },
-      actions: [pageAction('profile.draft', 'Draft', '', pageObject({ value: pageText() }, ['value'])), pageAction('profile.save', 'Save', '', undefined, 'save')],
+      actions: [pageAction('profile.draft', 'Draft', '', pageObject({ value: pageText() }, ['value'])), pageAction('profile.save', 'Save', '', undefined, 'save', {})],
       apply: patch => setValue(String(patch.name)),
       applyAction: async (id, args, assertCurrent) => {
         if (id === 'profile.save') { saves++; return }
@@ -1004,6 +1032,28 @@ test('page commands preserve draft undo, screen identity and reviewed saves', { 
     await act(async () => editData({ text: 'changed data' }))
     assert.equal(page.capture()!.revision, changed.revision)
   })
+  await t.test('commit reviews survive background data and view controls but reject reviewed edits and remounts', async () => {
+    const snapshot = page.capture()!
+    const action = snapshot.actions!.find(action => action.id === 'profile.save')!
+    const proposal = { id: 900, kind: 'page_action' as const, page: chatPageTarget(snapshot), revision: snapshot.revision!, revisionScope: 'action' as const, action, arguments: {}, before: chatPageActionBefore(snapshot, action, {}), expiresAt: Date.now() + 60_000 }
+    await act(async () => editData({ text: 7 }))
+    assert.equal(page.actionProblem(proposal), '')
+    await act(async () => edit('review changed'))
+    assert.match(page.actionProblem(proposal), /입력이나 선택/)
+    await act(async () => { edit('original'); select('other') })
+    assert.match(page.actionProblem(proposal), /페이지|화면/)
+    await act(async () => select('one'))
+  })
+  await t.test('a deletion completion uses the latest selection instead of the one captured before its await', async () => {
+    const finishDelete = threadActions.forgetThread
+    await act(async () => selectChat(42))
+    await act(async () => finishDelete(41))
+    assert.equal(selectedChat, 42)
+    assert.equal(listOpened, false)
+    await act(async () => threadActions.forgetThread(42))
+    assert.equal(selectedChat, undefined)
+    assert.equal(listOpened, true)
+  })
   await t.test('navigation includes unrestricted pages without granting restricted destinations', () => {
     const destinations = page.capture()?.actions?.find(action => action.id === 'page.navigate')?.schema.properties?.to?.enum ?? []
     assert.ok(destinations.includes('/access'))
@@ -1012,8 +1062,14 @@ test('page commands preserve draft undo, screen identity and reviewed saves', { 
     assert.equal(new Set(destinations).size, destinations.length)
   })
   let sequence = 0
+  let authorizedProposal: ChatProposal | undefined
   const replies = new Map<string, (answer: { ok: boolean; error?: string; page?: ChatPageSnapshot }) => void>()
   t.mock.method(globalThis, 'fetch', async (url: string | URL | Request, init?: RequestInit) => {
+    if (String(url).includes('/api/codex-chat/admin/chat-media/usage')) return Response.json({ success: true, data: { profiles: ['Alice'], messages: 0 } })
+    if (String(url).includes('/api/chat-proposals/')) {
+      assert.ok(authorizedProposal)
+      return Response.json({ success: true, data: authorizedProposal })
+    }
     const id = String(url).split('/page-commands/')[1]
     assert.ok(id && replies.has(id), `unexpected request: ${String(url)}`)
     replies.get(id)!(JSON.parse(String(init?.body)))
@@ -1028,6 +1084,23 @@ test('page commands preserve draft undo, screen identity and reviewed saves', { 
     }) })))
     return { commandId, answer }
   }
+  await t.test('applied field cards show chat-filled marks and clear them on undo or manual editing', async () => {
+    const snapshot = page.capture()!
+    const proposal = { id: 901, kind: 'page_fields' as const, page: chatPageTarget(snapshot), changes: buildChatPageChanges(snapshot, [{ fieldId: 'name', value: 'card filled' }]), expiresAt: Date.now() + 60_000 }
+    authorizedProposal = proposal
+    await act(async () => page.apply(proposal))
+    assert.equal(page.isFilled('name'), true)
+    await act(async () => page.apply(proposal, true))
+    assert.equal(currentValue, 'original')
+    assert.equal(page.isFilled('name'), false)
+    const next = { ...proposal, id: 902 }
+    authorizedProposal = next
+    await act(async () => page.apply(next))
+    await act(async () => edit('manual edit'))
+    assert.equal(page.isFilled('name'), false)
+    await act(async () => edit('original'))
+    authorizedProposal = undefined
+  })
   await t.test('field edits can be undone after their normal re-registration, but manual edits cannot be overwritten', async () => {
     const changes = buildChatPageChanges(page.capture()!, [{ fieldId: 'name', value: 'filled' }])
     const command = await send({ type: 'fields', changes })
@@ -1174,5 +1247,218 @@ test('page commands preserve draft undo, screen identity and reviewed saves', { 
     assert.equal(answer.ok, false)
     assert.equal(visibleSheets.length, 41)
     assert.equal(visibleSheets[40].options.columns, 2)
+  })
+  await t.test('generation review submits once and rejects a failed queue submission', async () => {
+    const { useGenerationChatRuns } = await import('../src/features/image-generation/components/use-generation-chat-runs')
+    const { normalizeChatPageActions, chatPageActionAllowed } = await import('@conai/shared')
+    let accepted: boolean | { queued: number; requested: number } = false
+    let submissions = 0
+    let runs!: ReturnType<typeof useGenerationChatRuns>
+    let advance!: () => void
+    function Generation() {
+      const [running, setRunning] = useState<'pending' | 'processing'>('pending')
+      advance = () => setRunning('processing')
+      runs = useGenerationChatRuns('nai.generate', 'novelai', [{ id: 43, service_type: 'novelai', generation_status: running }, { id: 42, service_type: 'novelai', generation_status: 'failed', error_message: 'queue failed' }], async () => { submissions++; return accepted })
+      return null
+    }
+    await act(async () => root.render(h(QueryClientProvider, { client }, h(I18nProvider, null, h(Generation)))))
+    const action = normalizeChatPageActions('/generation', runs.actions).find((item) => item.id === 'nai.generate')
+    assert.equal(action?.effect, 'save')
+    assert.ok(chatPageActionAllowed('/public/workflows/example', 'comfy.generate'))
+    assert.ok(!chatPageActionAllowed('/ext/plugin/page', 'image_detail.delete'))
+    assert.deepEqual(runs.recentRuns, [{ id: 42, hash: '', error: 'queue failed' }])
+    assert.equal(runs.generating, true)
+    const before = JSON.stringify({ recentRuns: runs.recentRuns, generating: runs.generating })
+    await act(async () => advance())
+    assert.equal(JSON.stringify({ recentRuns: runs.recentRuns, generating: runs.generating }), before)
+    await assert.rejects(runs.apply('nai.generate', {}, () => {}), /등록하지 못했어|not queued/)
+    assert.equal(submissions, 1)
+    accepted = true
+    assert.equal(await runs.apply('nai.generate', {}, () => {}), true)
+    assert.equal(submissions, 2)
+    accepted = { queued: 1, requested: 2 }
+    await assert.rejects(runs.apply('nai.generate', {}, () => {}), /이미 큐에|already queued/)
+    assert.equal(submissions, 3)
+  })
+  await t.test('image detail keeps global navigation and respects modal action restrictions', async () => {
+    const { useImageDetailChatPage } = await import('../src/features/images/use-image-detail-chat-page')
+    const { ImagePermissionsContext, resolveImagePermissions } = await import('../src/features/auth/use-image-permissions')
+    const hash = 'a'.repeat(32)
+    const permissions = ['page.home.view', 'images.view', 'images.edit', 'images.upload', 'images.delete', 'page.metadata-editor.view']
+    client.setQueryData(['auth-status'], { authenticated: true, hasCredentials: true, accountId: 1, permissionKeys: permissions })
+    client.setQueryData(['image-vector-similarity', hash], { content: false, style: false })
+    client.setQueryData(['groups-hierarchy-all', 'custom'], [])
+    let allowDelete!: () => void
+    function Detail() {
+      const api = useChatPage()!
+      const [allowed, setAllowed] = useState(false)
+      useLayoutEffect(() => { page = api; allowDelete = () => setAllowed(true) }, [api])
+      useImageDetailChatPage({ composite_hash: hash, file_type: 'image', mime_type: 'image/png' } as import('../src/types/image').ImageRecord, 'modal', 'current', () => {}, undefined, { allowDeleteAction: allowed, allowGroupAssignAction: false })
+      return null
+    }
+    await act(async () => root.render(h(QueryClientProvider, { client }, h(MemoryRouter, { key: 'detail', initialEntries: ['/'] },
+      h(I18nProvider, null, h(SnackbarContext.Provider, { value: { showSnackbar() {}, closeSnackbar() {} } },
+        h(ImagePermissionsContext.Provider, { value: resolveImagePermissions(permissions, true) }, h(ChatPageProvider, null, h(Detail)))))))))
+    await act(async () => page.toggle())
+    const actions = page.capture()!.actions ?? []
+    assert.ok(actions.some((item) => item.id === 'page.navigate'))
+    assert.ok(actions.some((item) => item.id === 'image_detail.open_metadata'))
+    assert.ok(!actions.some((item) => item.id === 'image_detail.delete' || item.id === 'image_detail.assign_group'))
+    await act(async () => allowDelete())
+    await act(async () => { await client.refetchQueries({ queryKey: ['chat-media-delete-warning'] }); await new Promise<void>((resolve) => notifyManager.schedule(resolve)) })
+    assert.match(page.capture()!.actions!.find((action) => action.id === 'image_detail.delete')!.description, /Alice/)
+  })
+  await t.test('loading more group images preserves the pending screen and permits selecting a newly loaded hash', async () => {
+    const { useGroupChatPage } = await import('../src/features/groups/use-group-chat-page')
+    const { ImagePermissionsContext, resolveImagePermissions } = await import('../src/features/auth/use-image-permissions')
+    const first = 'a'.repeat(32)
+    const second = 'b'.repeat(32)
+    const permissions = ['page.groups.view', 'images.view', 'images.edit', 'images.delete']
+    client.setQueryData(['auth-status'], { authenticated: true, hasCredentials: true, accountId: 1, permissionKeys: permissions })
+    let loadMore!: () => void
+    let selection: string[] = []
+    function Group() {
+      const api = useChatPage()!
+      const [availableImages, setAvailableImages] = useState([{ composite_hash: first }])
+      const [selectedImageIds, setSelectedImageIds] = useState<string[]>([])
+      useLayoutEffect(() => { page = api; selection = selectedImageIds; loadMore = () => setAvailableImages([{ composite_hash: first }, { composite_hash: second }]) }, [api, selectedImageIds])
+      useGroupChatPage({
+        sourceKey: 'custom', isCustomSource: true, groups: [], selectedGroupId: 1, selectedImageIds, selectedImageHashes: selectedImageIds,
+        images: [{ composite_hash: first }], availableImages, assignableGroups: [], fields: [], apply: () => {},
+        openGroup: () => {}, selectSource: () => {}, selectImages: setSelectedImageIds,
+        addImages: async () => {}, removeImages: async () => {}, deleteImages: async () => {},
+        autoCollectAll: async () => {}, rebuildFolders: async () => {},
+        createGroup: async () => {}, updateGroup: async () => {}, runAutoCollect: async () => {}, moveGroups: async () => {}, deleteGroups: async () => {},
+      })
+      return null
+    }
+    await act(async () => root.render(h(QueryClientProvider, { client }, h(MemoryRouter, { key: 'groups', initialEntries: ['/groups/1?tab=custom'] },
+      h(I18nProvider, null, h(SnackbarContext.Provider, { value: { showSnackbar() {}, closeSnackbar() {} } },
+        h(ImagePermissionsContext.Provider, { value: resolveImagePermissions(permissions, true) }, h(ChatPageProvider, null, h(Group)))))))))
+    await act(async () => page.toggle())
+    const before = page.capture()!
+    await act(async () => loadMore())
+    assert.equal(page.capture()!.revision, before.revision)
+    const command = await send({ type: 'action', actionId: 'group.select_images', tier: 'view', arguments: { hashes: [second] } })
+    await act(async () => assert.equal((await command.answer).ok, true))
+    assert.deepEqual(selection, [second])
+    await act(async () => { await client.refetchQueries({ queryKey: ['chat-media-delete-warning'] }) })
+    assert.match(page.capture()!.actions!.find((action) => action.id === 'group.delete_images')!.description, /Alice/)
+  })
+  await t.test('editing NAI reference extraction invalidates the old encoding and can be undone', async () => {
+    const { useNaiChatPage } = await import('../src/features/image-generation/components/use-generation-chat-page')
+    const { DEFAULT_NAI_FORM } = await import('../src/features/image-generation/image-generation-shared')
+    const { ImagePermissionsContext, resolveImagePermissions } = await import('../src/features/auth/use-image-permissions')
+    const permissions = ['page.generation.view', 'images.view']
+    client.setQueryData(['auth-status'], { authenticated: true, hasCredentials: true, accountId: 1, permissionKeys: permissions })
+    client.setQueryData(['chat-page-images', 1], { images: [] })
+    let vibe: import('../src/features/image-generation/image-generation-shared').NAIVibeDraft = { image: { fileName: 'reference.png', dataUrl: 'data:image/png;base64,AA==' }, encoded: 'old', strength: '0.6', informationExtracted: '1' }
+    let setVibes!: (vibes: typeof vibe[], model: string, queueCount: string) => void
+    let setReference!: () => void
+    function Nai() {
+      const api = useChatPage()!
+      const [form, setForm] = useState({ ...DEFAULT_NAI_FORM, vibes: [vibe] })
+      useLayoutEffect(() => {
+        page = api
+        vibe = form.vibes[0]
+        setVibes = (vibes, model, queueCount) => setForm((current) => ({ ...current, vibes, model, queueCount }))
+        setReference = () => setForm((current) => ({ ...current, model: 'nai-diffusion-4-5-curated', vibes: [], samples: '2', queueCount: '3', characterReferences: [{ image: { fileName: 'ref.png', dataUrl: 'data:image/png;base64,AA==' }, type: 'character', strength: '0.6', fidelity: '1' }] }))
+      }, [api, form])
+      useNaiChatPage(form, setForm, null, [], async () => true, { estimate: 0, free: true, extraUpscale: false, width: 1024, height: 1024 })
+      return null
+    }
+    await act(async () => root.render(h(QueryClientProvider, { client }, h(MemoryRouter, { key: 'nai', initialEntries: ['/generation?tab=nai'] },
+      h(I18nProvider, null, h(SnackbarContext.Provider, { value: { showSnackbar() {}, closeSnackbar() {} } },
+        h(ImagePermissionsContext.Provider, { value: resolveImagePermissions(permissions, true) }, h(ChatPageProvider, null, h(Nai)))))))))
+    await act(async () => page.toggle())
+    const command = await send({ type: 'action', actionId: 'nai.references', tier: 'draft', arguments: { kind: 'vibe', index: 0, informationExtracted: 0.5 } })
+    await act(async () => assert.equal((await command.answer).ok, true))
+    assert.equal(vibe.informationExtracted, '0.5')
+    assert.equal(vibe.encoded, '')
+    const selected = page.capture()!.data!.selected as { anlasEstimate: number; free: boolean; vibes: Array<{ needsEncoding: boolean }> }
+    assert.equal(selected.anlasEstimate, 2)
+    assert.equal(selected.free, false)
+    assert.equal(selected.vibes[0].needsEncoding, true)
+    await act(async () => page.undoActivity(command.commandId))
+    assert.equal(vibe.informationExtracted, '1')
+    assert.equal(vibe.encoded, 'old')
+    await act(async () => setVibes(Array.from({ length: 5 }, () => ({ ...vibe })), 'nai-diffusion-4-5-curated', '3'))
+    const multi = page.capture()!.data!.selected as { anlasEstimate: number; free: boolean; extraVibeAnlas: number }
+    assert.equal(multi.extraVibeAnlas, 6)
+    assert.equal(multi.anlasEstimate, 6)
+    assert.equal(multi.free, false)
+    await act(async () => setVibes([{ ...vibe, encoded: '' }], 'nai-diffusion-3', '1'))
+    const v3 = page.capture()!.data!.selected as { anlasEstimate: number; free: boolean }
+    assert.equal(v3.anlasEstimate, 0)
+    assert.equal(v3.free, true)
+    await act(async () => setReference())
+    const reference = page.capture()!.data!.selected as { anlasEstimate: number; free: boolean; referenceAnlas: number }
+    assert.equal(reference.referenceAnlas, 30)
+    assert.equal(reference.anlasEstimate, 30)
+    assert.equal(reference.free, false)
+  })
+  await t.test('history loading applies directly and provides draft undo', async () => {
+    const { useNaiChatPage } = await import('../src/features/image-generation/components/use-generation-chat-page')
+    const { DEFAULT_NAI_FORM } = await import('../src/features/image-generation/image-generation-shared')
+    const { ImagePermissionsContext, resolveImagePermissions } = await import('../src/features/auth/use-image-permissions')
+    const permissions = ['page.generation.view', 'images.view']
+    client.setQueryData(['auth-status'], { authenticated: true, hasCredentials: true, accountId: 1, permissionKeys: permissions })
+    client.setQueryData(['chat-page-images', 1], { images: [] })
+    client.setQueryData(['generation-history-request', 7], { history_id: 7, service_type: 'novelai', workflow_id: null, payload_status: 'available', request_payload: { prompt: 'history prompt' }, result_prompt: null, result_negative_prompt: null })
+    let prompt = ''
+    function NaiHistory() {
+      const api = useChatPage()!
+      const [form, setForm] = useState({ ...DEFAULT_NAI_FORM, prompt: 'original prompt' })
+      useLayoutEffect(() => { page = api; prompt = form.prompt }, [api, form])
+      useNaiChatPage(form, setForm, null, [], async () => true, { estimate: 0, free: true, extraUpscale: false, width: 1024, height: 1024 })
+      return null
+    }
+    await act(async () => root.render(h(QueryClientProvider, { client }, h(MemoryRouter, { key: 'nai-history', initialEntries: ['/generation?tab=nai'] },
+      h(I18nProvider, null, h(SnackbarContext.Provider, { value: { showSnackbar() {}, closeSnackbar() {} } },
+        h(ImagePermissionsContext.Provider, { value: resolveImagePermissions(permissions, true) }, h(ChatPageProvider, null, h(NaiHistory)))))))))
+    await act(async () => page.toggle())
+    const command = await send({ type: 'action', actionId: 'generation.history_load', tier: 'draft', arguments: { historyId: 7 } })
+    await act(async () => assert.equal((await command.answer).ok, true))
+    assert.equal(prompt, 'history prompt')
+    await act(async () => page.undoActivity(command.commandId))
+    assert.equal(prompt, 'original prompt')
+  })
+  await t.test('Comfy history requires the open workflow and returns undo on private and public pages', async () => {
+    const { useComfyChatPage } = await import('../src/features/image-generation/components/use-comfy-chat-page')
+    const { ImagePermissionsContext, resolveImagePermissions } = await import('../src/features/auth/use-image-permissions')
+    const permissions = ['page.generation.view', 'images.view', 'workflows.view']
+    client.setQueryData(['auth-status'], { authenticated: true, hasCredentials: true, accountId: 1, permissionKeys: permissions })
+    const history = (workflowId: number, payload: Record<string, unknown>) => ({ service_type: 'comfyui', workflow_id: workflowId, payload_status: 'available', request_payload: payload, result_prompt: null })
+    client.setQueryData(['generation-history-request', 21], history(2, { prompt_data: { prompt: 'other' } }))
+    client.setQueryData(['generation-history-request', 22], history(1, {}))
+    client.setQueryData(['generation-history-request', 23], history(1, { prompt_data: { prompt: 'restored' } }))
+    const fields: import('../src/lib/api-image-generation-types').WorkflowMarkedField[] = [{ id: 'prompt', label: 'Prompt', jsonPath: '1.inputs.text', type: 'text' }]
+    let prompt = ''
+    function Comfy() {
+      const api = useChatPage()!
+      const [draft, setDraft] = useState<Record<string, import('../src/features/image-generation/image-generation-shared').WorkflowFieldDraftValue>>({ prompt: 'before' })
+      useLayoutEffect(() => { page = api; prompt = String(draft.prompt) }, [api, draft])
+      useComfyChatPage({ id: 1, name: 'Workflow' }, fields, draft, 1, (id, value) => setDraft((current) => ({ ...current, [id]: value })), {
+        records: [], generate: async () => true, queueCount: 1, replaceDraft: setDraft,
+      })
+      return null
+    }
+    for (const route of ['/generation?tab=comfyui', '/public/workflows/example']) {
+      await act(async () => root.render(h(QueryClientProvider, { client }, h(MemoryRouter, { key: route, initialEntries: [route] },
+        h(I18nProvider, null, h(SnackbarContext.Provider, { value: { showSnackbar() {}, closeSnackbar() {} } },
+          h(ImagePermissionsContext.Provider, { value: resolveImagePermissions(permissions, true) }, h(ChatPageProvider, null, h(Comfy)))))))))
+      await act(async () => page.toggle())
+      const wrong = await send({ type: 'action', actionId: 'generation.history_load', tier: 'draft', arguments: { historyId: 21 } })
+      await act(async () => assert.equal((await wrong.answer).ok, false))
+      assert.equal(prompt, 'before')
+      const missing = await send({ type: 'action', actionId: 'generation.history_load', tier: 'draft', arguments: { historyId: 22 } })
+      await act(async () => assert.equal((await missing.answer).ok, false))
+      assert.equal(prompt, 'before')
+      const loaded = await send({ type: 'action', actionId: 'generation.history_load', tier: 'draft', arguments: { historyId: 23 } })
+      await act(async () => assert.equal((await loaded.answer).ok, true))
+      assert.equal(prompt, 'restored')
+      await act(async () => page.undoActivity(loaded.commandId))
+      assert.equal(prompt, 'before')
+    }
   })
 })

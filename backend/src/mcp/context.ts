@@ -1,4 +1,5 @@
-import type { McpHttpScope, ChatExecutionContext, FileWriteSource } from '@conai/shared';
+import type { McpHttpScope, ChatExecutionContext, ChatPageSnapshot, FileWriteSource } from '@conai/shared';
+import { currentChatPage } from '../services/codex-chat/chatPageState';
 import type { AuthAccountType } from '../types/authAccount';
 import { findExternalMcpTool, externalMcpTools } from '../services/externalMcp/externalMcpServers';
 import { findPluginServerTool, pluginServerTools } from '../services/plugins/pluginServerTools';
@@ -86,6 +87,11 @@ export function resolveMcpInlineWaitMs(source: McpRequestContext['source'], seco
 export const CHAT_BLOCKED_TOOLS = new Set(['wait_generation_job', 'wait_audio_order', 'execute_graph_workflow', 'import_workflow_definition']);
 /** A page grants a bounded input task; explicitly linked generation presets keep their independent grant. */
 export const CHAT_PAGE_TOOLS = new Set(['get_current_page', 'page_fill', 'page_act', 'get_workflow_editor', 'list_workflow_modules', 'workflow_edit', 'read_page_data', 'propose_page_action']);
+const WORKFLOW_EDITOR_TOOLS = new Set(['get_workflow_editor', 'list_workflow_modules', 'workflow_edit']);
+const IMAGE_PAGE_TOOLS = new Set(['search_images', 'search_images_by_tags', 'search_images_by_meaning', 'find_similar_images', 'get_image_metadata', 'get_generation_history', 'get_generation_history_request', 'list_image_groups', 'get_image_groups', 'get_image_group', 'list_group_resources']);
+const PROMPT_PAGE_TOOLS = new Set(['search_prompts', 'get_most_used_prompts', 'list_prompt_groups', 'get_prompt_group_structure', 'get_prompts_in_group', 'list_prompt_presets', 'search_wildcards', 'preview_random_prompt']);
+const GENERATION_PAGE_TOOLS = new Set(['get_generation_job', 'get_generation_artifacts', 'get_generation_history', 'get_generation_history_request', 'get_generation_routing_options', 'list_workflows', 'get_workflow_details', 'list_comfyui_servers', 'list_graph_workflows', 'get_graph_workflow_details', 'get_graph_workflow_execution']);
+const CHARACTER_PAGE_TOOLS = new Set(['list_character_library', 'get_character_setting', 'propose_character_library']);
 
 /**
  * Tools a connected page of one kind adds to the page tools: the sprite page works through its own engine tools, so
@@ -93,6 +99,14 @@ export const CHAT_PAGE_TOOLS = new Set(['get_current_page', 'page_fill', 'page_a
  * they follow the profile grants through the catalog. The account's feature keys still apply to each call.
  */
 export const CHAT_PAGE_KIND_TOOLS: Partial<Record<string, ReadonlySet<string>>> = {
+  library: IMAGE_PAGE_TOOLS, image_detail: IMAGE_PAGE_TOOLS, metadata: IMAGE_PAGE_TOOLS, groups: IMAGE_PAGE_TOOLS,
+  prompt_search: PROMPT_PAGE_TOOLS, presets: PROMPT_PAGE_TOOLS, wildcards: PROMPT_PAGE_TOOLS,
+  files: new Set(['list_files', 'search_files', 'get_file_info', 'read_file_text', 'list_file_versions', 'read_file_version']),
+  posts: new Set(['posts_categories', 'posts_search', 'posts_read', 'posts_tags', 'posts_revisions']),
+  nai: GENERATION_PAGE_TOOLS,
+  codex: new Set([...GENERATION_PAGE_TOOLS, 'get_codex_generation_options']),
+  comfyui: GENERATION_PAGE_TOOLS, workflow_runner: GENERATION_PAGE_TOOLS,
+  wallpaper: new Set(['list_wallpapers']),
   extension: new Set(['list_plugin_pages', 'run_plugin_action', 'get_plugin_action', 'cancel_plugin_action']),
   sprite: new Set(['get_video_info', 'get_sprite_job', 'extract_sprite_sheet', 'extract_sprite_sheets_batch', 'normalize_sprite_sheets', 'create_sprite_animation', 'download_sprite_frames']),
   audio: new Set([
@@ -105,11 +119,43 @@ export const CHAT_PAGE_KIND_TOOLS: Partial<Record<string, ReadonlySet<string>>> 
   ]),
 };
 
-/** Page tools are enabled by the user's explicit connection, independently of general profile tools. */
-export function isConnectedChatPageTool(context: McpRequestContext, toolName: string) {
+export function currentMcpChatPage(context: McpRequestContext) {
   const page = context.chatContext?.page;
-  return isChatMcpSource(context.source) && context.chatContext?.kind === 'direct' && !!page
-    && (CHAT_PAGE_TOOLS.has(toolName) || Boolean(CHAT_PAGE_KIND_TOOLS[page.kind]?.has(toolName)));
+  return page && context.requester ? currentChatPage(context.requester, page) : page;
+}
+
+/** Navigation cannot shed the trust boundary of the screen this reply started on. */
+export function isPublicChatPage(context: McpRequestContext, page = currentMcpChatPage(context)): boolean {
+  return context.chatContext?.page?.path.startsWith('/public/') === true || page?.path.startsWith('/public/') === true;
+}
+
+/** A public reply cannot use the page bridge as an alternate route into private data or actions. */
+export function requirePublicChatPageTarget(context: McpRequestContext, page: ChatPageSnapshot, destination = page.path): ChatPageSnapshot {
+  if (isPublicChatPage(context, page) && (!page.path.startsWith('/public/') || !destination.startsWith('/public/'))) {
+    throw new Error('공개 페이지가 포함된 답변에서는 비공개 페이지를 조회·이동·편집할 수 없어. 비공개 화면에서 새 답변을 시작해줘.')
+  }
+  return page;
+}
+
+export function chatPageDomainTools(page: ChatPageSnapshot): ReadonlySet<string> | undefined {
+  return page.path === '/characters' && page.kind === 'page' ? CHARACTER_PAGE_TOOLS : CHAT_PAGE_KIND_TOOLS[page.kind];
+}
+
+/** Only discriminators that change tool eligibility; selection and revision do not change schemas. */
+export function chatPageToolSignature(page: ChatPageSnapshot | undefined): string {
+  if (!page) return 'none';
+  return JSON.stringify([page.path.startsWith('/public/') ? 'public' : 'private',
+    page.kind === 'workflow' && !!page.workflow, [...(chatPageDomainTools(page) ?? [])].sort()]);
+}
+
+/** The same eligibility decides exposure, direct/catalog classification and execution. */
+export function isConnectedChatPageTool(context: McpRequestContext, toolName: string, page = currentMcpChatPage(context)) {
+  if (!isChatMcpSource(context.source) || context.chatContext?.kind !== 'direct' || !page) return false;
+  if (WORKFLOW_EDITOR_TOOLS.has(toolName)) return page.kind === 'workflow' && !!page.workflow && !isPublicChatPage(context, page);
+  if (CHAT_PAGE_TOOLS.has(toolName)) return true;
+  return !isPublicChatPage(context, page)
+    && !((context.generationPresetIds?.length ?? 0) > 0 && GENERATION_PRESET_BLOCKED_TOOLS.has(toolName))
+    && Boolean(chatPageDomainTools(page)?.has(toolName));
 }
 
 /** Chat agents must not spend paid NovelAI multi-sample generations on their own; one image per request is free. */

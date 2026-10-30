@@ -68,7 +68,7 @@ export function PluginAuthoring({ page }: { page?: PluginManagementPage }) {
     ],
     applyAction: async (id, args, assertCurrent) => {
       assertCurrent()
-      if (id.startsWith('plugin_source.') && page) await page.applyAction(id, args)
+      if (page?.actions.some((action) => action.id === id)) await page.applyAction(id, args)
       else if (id === 'plugin_author.open') open(String(args.draftId))
       else if (id === 'plugin_author.create') await create(String(args.pluginId), String(args.name ?? args.pluginId), args.fromInstalled === true)
       else await drafts.refetch()

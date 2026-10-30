@@ -14,6 +14,8 @@ import {
 } from '@/lib/api-danbooru-browser'
 import type { DanbooruBrowserDatabaseInfo, DanbooruBrowserRelatedTagCategory, DanbooruBrowserTreeNode } from '@/types/danbooru-browser'
 import { useI18n } from '@/i18n'
+import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
+import { pageAction, pageChoice, pageNumber, pageObject, pageText } from '@/features/codex-chat/page-action-helpers'
 import { useCanSeeServerDetails } from '../use-can-see-server-details'
 import { PromptPageToolbar, type PromptPageToolbarBaseProps } from './prompt-page-toolbar'
 import { SidebarTree } from './sidebar-tree'
@@ -181,6 +183,32 @@ export function PromptDanbooruBrowserPanel({ toolbarProps }: { toolbarProps: Pro
   const tagItems = useMemo(() => tagsQuery.data?.items ?? [], [tagsQuery.data?.items])
   const artistItems = useMemo(() => artistsQuery.data?.items ?? [], [artistsQuery.data?.items])
   const characterItems = useMemo(() => charactersQuery.data?.items ?? [], [charactersQuery.data?.items])
+
+  useChatPageRegistration({
+    kind: 'prompt_search', title: 'Danbooru', resourceId: `danbooru:${selectedNode.id}`, fields: [],
+    data: {
+      available: isDanbooruDbAvailable, query: searchQuery, page, totalPages: pagination?.totalPages ?? 0,
+      nodes: tree.slice(0, 100).map((node) => ({ id: node.id, label: getLocalizedTreeLabel(node, language), section: node.section })),
+      items: activeSection === 'tags'
+        ? tagItems.slice(0, 40).map((item) => ({ id: item.id, name: item.name, count: item.usageCount }))
+        : activeSection === 'artists'
+          ? artistItems.slice(0, 40).map((item) => ({ id: item.tagId, name: item.name, count: item.worksCount }))
+          : characterItems.slice(0, 40).map((item) => ({ id: item.tagId, name: item.name, count: item.worksCount })),
+    },
+    actions: [
+      pageAction('prompt.search', t({ ko: 'Danbooru 검색', en: 'Search Danbooru' }), '', pageObject({ query: pageText() }, ['query'])),
+      pageAction('prompt.group', t({ ko: '분류 선택', en: 'Select category' }), '', pageObject({ groupId: pageChoice(tree.slice(0, 100).map((node) => node.id)) }, ['groupId'])),
+      pageAction('prompt.page', t({ ko: '결과 페이지', en: 'Result page' }), '', pageObject({ page: pageNumber(1, Math.max(1, pagination?.totalPages ?? 1), true) }, ['page'])),
+    ],
+    apply: () => {},
+    applyAction: (id, args, assertCurrent) => {
+      assertCurrent()
+      if (id === 'prompt.search') { const query = String(args.query).trim(); setSearchInput(query); setSearchQuery(query); setPage(1); return }
+      if (id === 'prompt.group') { setSelectedNodeId(String(args.groupId)); setPage(1); return }
+      if (id === 'prompt.page') { setPage(Number(args.page)); return }
+      throw new Error('등록되지 않은 Danbooru 작업이야.')
+    },
+  })
 
   const handleSelectNode = useCallback((node: DanbooruBrowserTreeNode) => {
     setSelectedNodeId(node.id)

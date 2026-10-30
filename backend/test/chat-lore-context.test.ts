@@ -100,6 +100,8 @@ test('lore context: books per request, the index, always-on entries, linked file
     assert.deepEqual(booksForRequest({ thread: null, profile: profile() }).map((book) => book.label), ['항구 도시 설정'])
     // Authenticated stateless plugin replies include shared file-backed profile books, but never a chat's book/links.
     assert.deepEqual(booksForRequest({ thread: null, profile: profile(), profileOwner: other }).map((book) => book.label), ['카이', '항구 도시 설정'])
+    // Such a reply may add account books for that request (a plugin's world book), shared like a chat link, ahead of the profile's.
+    assert.deepEqual(booksForRequest({ thread: null, profile: profile(), profileOwner: me, extraBookIds: [taste.id, theirs.id] }).map((book) => book.label), ['내 취향', '남의 책', '카이', '항구 도시 설정'])
     const reply = (enabled = true) => JSON.stringify(buildChatProfileReplyMessages({ profile: profile(), message: '항구', history: null, userName: '손님', useLorebooks: enabled, loreOwner: other }))
     assert.match(reply(), /왼손잡이/)
     assert.doesNotMatch(reply(), /내일 저녁 바다에서 반지|단 음식을 좋아한다/)

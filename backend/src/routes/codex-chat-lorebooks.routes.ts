@@ -54,23 +54,30 @@ router.get('/lorebooks/:lorebookId', requireChatAccess, (req: Request, res: Resp
   } catch (error) { sendChatError(res, error) }
 })
 
-/** POST /api/codex-chat/lorebooks — `{ name, entries? }`: a new account book, a folder under 로어북/ in the file store. */
+/**
+ * POST /api/codex-chat/lorebooks — `{ name, entries?, connectsChats? }`: a new account book, a folder under 로어북/ in
+ * the file store. `connectsChats: false` keeps chats that share only this book apart.
+ */
 router.post('/lorebooks', requireChatAccess, (req: Request, res: Response) => {
-  const body = (req.body ?? {}) as { name?: unknown; entries?: unknown }
+  const body = (req.body ?? {}) as { name?: unknown; entries?: unknown; connectsChats?: unknown }
   try {
     res.status(201).json({ success: true, data: OwnedLorebookStore.create(lorebookOwner(req), body) })
   } catch (error) { sendChatError(res, error) }
 })
 
-/** PATCH /api/codex-chat/lorebooks/:lorebookId — `{ name?, entries? }` of an own account or chat book (null: an emptied chat book went away). */
+/**
+ * PATCH /api/codex-chat/lorebooks/:lorebookId — `{ name?, entries?, connectsChats? }` of an own account or chat book
+ * (null: an emptied chat book went away). `connectsChats` applies to account books only.
+ */
 router.patch('/lorebooks/:lorebookId', requireChatAccess, (req: Request, res: Response) => {
   const lorebookId = parseId(req.params.lorebookId)
   if (lorebookId === null) { sendRouteBadRequest(res, 'Invalid lorebook id'); return }
-  const body = (req.body ?? {}) as { name?: unknown; entries?: unknown; revision?: unknown }
+  const body = (req.body ?? {}) as { name?: unknown; entries?: unknown; connectsChats?: unknown; revision?: unknown }
   if (body.entries !== undefined && !Array.isArray(body.entries)) { sendRouteBadRequest(res, 'entries must be a list'); return }
+  if (body.connectsChats !== undefined && typeof body.connectsChats !== 'boolean') { sendRouteBadRequest(res, 'connectsChats must be a boolean'); return }
   if (body.revision !== undefined && typeof body.revision !== 'string') { sendRouteBadRequest(res, 'revision must be a string'); return }
   try {
-    res.json({ success: true, data: OwnedLorebookStore.update(lorebookId, lorebookOwner(req), { name: body.name, entries: body.entries }, body.revision) })
+    res.json({ success: true, data: OwnedLorebookStore.update(lorebookId, lorebookOwner(req), { name: body.name, entries: body.entries, connectsChats: body.connectsChats }, body.revision) })
   } catch (error) {
     if (error instanceof ChatRevisionConflict) { res.status(409).json({ success: false, code: 'revision_conflict', error: error.message, data: error.current }); return }
     sendChatError(res, error)

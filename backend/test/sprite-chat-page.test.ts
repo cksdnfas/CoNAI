@@ -45,7 +45,7 @@ test('sprite page connection: sprite tools stay listed on /sprite and retain gra
   const { InMemoryTransport } = await import('@modelcontextprotocol/client')
 
   ExternalApiProvider.create({ provider_name: 'conn', display_name: 'Conn', provider_type: 'llm_openai_compatible', base_url: 'http://unused.invalid', is_enabled: true, additional_config: { default_model: 'm' } })
-  const profile = ChatProfileStore.create({ name: 'Sprite page', engine: 'llm', providerName: 'conn', mcpEnabled: true, mcpScopes: [...CHAT_SCOPES] })
+  const profile = ChatProfileStore.create({ name: 'Sprite page', engine: 'llm', providerName: 'conn', mcpEnabled: true, mcpScopes: [...CHAT_SCOPES], pageAssist: true })
   const threadId = CodexChatStore.createThread(null, 'sprite page chat', 'llm', profile.id)
   const base = { instanceId: 'page-sprite', connectionId: 'connection-sprite', fields: [] }
   const spritePage = normalizeChatPageSnapshot({ ...base, path: '/sprite', title: 'Sprite', kind: 'sprite', resourceId: null,

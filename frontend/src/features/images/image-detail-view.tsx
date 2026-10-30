@@ -38,6 +38,7 @@ import {
 import { shouldAutoRunImageSimilarityChecks } from './components/detail/image-similarity-policy'
 import { RelatedImageGallerySection } from './components/detail/related-image-gallery-section'
 import { useImageDetailChatPage } from './use-image-detail-chat-page'
+import type { ImageViewModalAccessOptions } from './components/detail/image-view-modal-context'
 
 const SIMILARITY_INSPECTION_STABLE_DELAY_MS = 350
 
@@ -47,6 +48,8 @@ export interface ImageDetailViewHeaderControls {
   downloadName: string
   downloadUrl: string | null
   image: ImageRecord | undefined
+  editOpen: boolean
+  onEditOpenChange: (open: boolean) => void
   isRefreshing: boolean
   refresh: () => void
   /** Similar / duplicate scan trigger for the page top bar. */
@@ -147,10 +150,13 @@ interface ImageDetailViewProps {
   initialImage?: ImageRecord | null
   renderHeader?: (controls: ImageDetailViewHeaderControls) => ReactNode
   modalNavigation?: ImageDetailViewModalNavigation
+  stepNavigation?: Pick<ImageDetailViewModalNavigation, 'canViewPrevious' | 'canViewNext' | 'onViewPrevious' | 'onViewNext'>
+  accessOptions?: ImageViewModalAccessOptions
+  onDeleted?: () => void
 }
 
 /** Render the shared image detail body so page and modal presentations stay aligned. */
-export function ImageDetailView({ compositeHash, presentation = 'page', initialImage = null, renderHeader, modalNavigation }: ImageDetailViewProps) {
+export function ImageDetailView({ compositeHash, presentation = 'page', initialImage = null, renderHeader, modalNavigation, stepNavigation, accessOptions, onDeleted }: ImageDetailViewProps) {
   const { t } = useI18n()
   const canUseSplitPaneScroll = useMinWidth(1280)
   // The modal may share the screen with the docked chat: its own width picks the layout, not the viewport's.
@@ -161,6 +167,7 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
   const isViewportWideForRelatedColumns = useMinWidth(768)
   const usesDesktopRelatedImageColumns = useElementMinWidth(modalShellElement, 768) ?? isViewportWideForRelatedColumns
   const [activeImageAreaTab, setActiveImageAreaTab] = useState<ImageDetailImageAreaTab>('current')
+  const [editOpen, setEditOpen] = useState(false)
   const [isModalInfoViewerOpen, setIsModalInfoViewerOpen] = useState(canUseDesktopModalLayout)
   const [isPrimaryMediaReady, setIsPrimaryMediaReady] = useState(false)
   const [isSimilarityInspectionRequested, setIsSimilarityInspectionRequested] = useState(false)
@@ -217,6 +224,7 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
     setIsVectorSimilarityInspectionRequested(false)
     setStableSimilarityInspectionCompositeHash(null)
     setActiveImageAreaTab('current')
+    setEditOpen(false)
   }, [compositeHash])
 
   useEffect(() => {
@@ -264,7 +272,7 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
   const refetchImage = imageQuery.refetch
 
   const image = canViewImages ? imageQuery.data : undefined
-  useImageDetailChatPage(image, presentation, activeImageAreaTab, setActiveImageAreaTab)
+  useImageDetailChatPage(image, presentation, activeImageAreaTab, setActiveImageAreaTab, modalNavigation ?? stepNavigation, accessOptions, () => setEditOpen(true), onDeleted)
   const mediaKind = image ? getImageListMediaKind(image) : null
   const canLoadRelatedImages = mediaKind === 'image'
   const isSecondaryContentReady = Boolean(image) && canLoadRelatedImages && isPrimaryMediaReady
@@ -499,6 +507,8 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
     downloadName,
     downloadUrl,
     image,
+    editOpen,
+    onEditOpenChange: setEditOpen,
     isRefreshing: imageQuery.isFetching,
     refresh: refreshImage,
     similarity: {
@@ -506,7 +516,7 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
       active: isSimilarityInspectionRequested,
       onRequest: handleRequestSimilarityInspection,
     },
-  }), [canLoadRelatedImages, downloadName, downloadUrl, handleRequestSimilarityInspection, image, imageQuery.isFetching, isSimilarityInspectionRequested, refreshImage])
+  }), [canLoadRelatedImages, downloadName, downloadUrl, editOpen, handleRequestSimilarityInspection, image, imageQuery.isFetching, isSimilarityInspectionRequested, refreshImage])
 
   // The page's scan trigger sits in the top bar; bring the results into view once they render below the image.
   useEffect(() => {

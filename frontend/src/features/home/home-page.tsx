@@ -27,7 +27,8 @@ import { SearchChipStrip } from '@/features/search/components/search-chip-strip'
 import { SEARCH_SCOPE_TABS, SEARCH_SCOPE_TABS_WITH_MEANING, SEARCH_TEXT_INPUT_SCOPES } from '@/features/search/search-constants'
 import type { SearchScope } from '@/features/search/search-types'
 import { useI18n } from '@/i18n'
-import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
+import { useChatPage, useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
+import { useChatMediaDeleteDescription } from '@/features/images/chat-media-delete-warning'
 import { pageAction, pageArray, pageChoice, pageNumber, pageObject, pageText } from '@/features/codex-chat/page-action-helpers'
 import { useChatDraftTransaction } from '@/features/codex-chat/use-chat-draft-transaction'
 import { useChatPageDataPermissions } from '@/features/codex-chat/use-chat-page-permissions'
@@ -68,7 +69,6 @@ export function HomePage() {
     defaultColumnCount: defaultHomeColumnCount,
     minColumnCount: minHomeColumnCount,
     maxColumnCount: maxHomeColumnCount,
-    viewportClass,
   } = useImageListColumnPreference('home')
   const {
     authStatusQuery,
@@ -108,6 +108,7 @@ export function HomePage() {
     handleRetryNextPage,
     handleDownloadSelected,
     handleDeleteSelected,
+    deleteSelected,
     handleOpenAssignModal,
     handleAssignToGroup,
   } = useHomePageData({
@@ -130,6 +131,8 @@ export function HomePage() {
   })
 
   const chatCanReadImages = useChatPageDataPermissions().canReadImages
+  const chatPage = useChatPage()
+  const deleteDescription = useChatMediaDeleteDescription(selectedCompositeHashes, canDeleteImages && chatPage?.enabled === true)
   const navigate = useNavigate()
   const chatOpenableHashes = chatCanReadImages ? visibleImages.slice(0, 100).map((image) => image.composite_hash ?? '').filter(Boolean) : []
   // The chat gets the scopes the search drawer shows: 설명 (meaning) only while image search is on.
@@ -142,18 +145,18 @@ export function HomePage() {
   // Undo restores the list the chat replaced.
   const applyChatHiddenGroups = useChatDraftTransaction(hiddenGroupIds, setHiddenGroupIds)
   useChatPageRegistration(canViewHome && !isAnonymousSession ? {
-    kind: 'library', title: t({ ko: '이미지 라이브러리', en: 'Image library' }), resourceId: `library:${viewportClass}`,
+    kind: 'library', title: t({ ko: '이미지 라이브러리', en: 'Image library' }), resourceId: 'library',
     fields: [
       isMeaningSearch
         ? { id: 'sortOrder', label: t({ ko: '정렬 (설명 검색은 뜻이 가까운 순 고정, 설명 칩을 빼면 최신·오래된 순)', en: 'Sort (a description search is ordered by meaning; remove its chip for newest/oldest)' }), type: 'select', value: 'meaning', options: ['meaning'], editable: false }
         : { id: 'sortOrder', label: t({ ko: '정렬 (newest: 최신순, oldest: 오래된순)', en: 'Sort (newest or oldest)' }), type: 'select', value: sortOrder, options: ['newest', 'oldest'] },
       { id: 'searchInput', label: t({ ko: '검색어 입력 (Enter로 검색 실행)', en: 'Search draft (press Enter to search)' }), type: 'text', value: searchInput },
       { id: 'searchScope', label: t({ ko: '검색 범위 (positive·negative 프롬프트, auto 자동 태그, model, lora, meaning 설명=뜻으로 찾기)', en: 'Search scope (prompts, auto tags, model, LoRA, meaning = by description)' }), type: 'select', value: searchScope, options: [...new Set([...chatScopes, searchScope])] },
-      { id: 'columns', label: t({ ko: '한 줄의 이미지 수', en: 'Images per row' }), type: 'number', value: homeColumnCount, min: minHomeColumnCount, max: maxHomeColumnCount, integer: true },
+      { id: 'columns', label: t({ ko: '한 줄의 이미지 수', en: 'Images per row' }), type: 'number', value: homeColumnCount, min: minHomeColumnCount, max: maxHomeColumnCount, integer: true, viewOnly: true },
       { id: 'hideGroups', label: t({ ko: '그룹 숨김 켜기 (data.hiddenGroups를 갤러리에서 뺌)', en: 'Hide groups (leave data.hiddenGroups out of the gallery)' }), type: 'boolean', value: hidingEnabled },
     ],
     data: {
-      filters: JSON.parse(JSON.stringify(appliedChips)), selected: { imageIds: selectedIds },
+      filters: JSON.parse(JSON.stringify(appliedChips)), selected: { imageIds: selectedIds, imageHashes: selectedCompositeHashes },
       images: chatCanReadImages ? visibleImages.slice(0, 100).map((image) => ({ hash: image.composite_hash ?? '', width: image.width ?? 0, height: image.height ?? 0, ...(typeof image.meaning_score === 'number' ? { meaningScore: image.meaning_score } : {}) })) : [],
       history: chatHistory.map((entry) => ({ id: entry.id, label: entry.label, chips: entry.chips.map((chip) => ({ scope: chip.scope, operator: chip.operator, value: chip.value })) })),
       hiddenGroups: hiddenGroups.map((group) => ({ id: group.id, name: group.name })),
@@ -164,10 +167,31 @@ export function HomePage() {
       ...(chatHistory.length ? [pageAction('library.history', t({ ko: '최근 검색 다시 적용', en: 'Re-apply a recent search' }), t({ ko: '최근 검색(data.history)의 칩을 그대로 다시 적용해.', en: 'Re-apply the chips of a recent search (data.history).' }), pageObject({ id: pageChoice(chatHistory.map((entry) => entry.id)) }, ['id']))] : []),
       ...(chatOpenableHashes.length ? [pageAction('library.select', t({ ko: '이미지 선택', en: 'Select images' }), t({ ko: '목록(data.images)의 이미지를 선택해. 빈 목록이면 선택을 풀어. 선택한 이미지로 하단 작업줄(그룹 담기·다운로드)을 쓸 수 있어.', en: 'Select listed images (data.images); an empty list clears the selection.' }), pageObject({ hashes: pageArray(pageChoice(chatOpenableHashes), 100) }, ['hashes']))] : []),
       ...(chatOpenableHashes.length ? [pageAction('library.open', t({ ko: '이미지 열기', en: 'Open image' }), t({ ko: '목록(data.images)의 이미지 상세를 열어.', en: 'Open a listed image (data.images).' }), pageObject({ hash: pageChoice(chatOpenableHashes) }, ['hash']))] : []),
+      ...(appliedChips.length ? [pageAction('library.filters', t({ ko: '검색 필터 변경', en: 'Change search filters' }), t({ ko: '필터 ID를 제거하거나 연산자를 바꾸거나 전체를 지워.', en: 'Remove a filter ID, cycle its operator, or clear all filters.' }), pageObject({ remove: pageChoice(appliedChips.map((chip) => chip.id)), cycle: pageChoice(appliedChips.map((chip) => chip.id)), clear: { type: 'boolean' } }))] : []),
+      ...(canAssignGroups && selectedCompositeHashes.length && chatGroups.length ? [pageAction('library.assign_group', t({ ko: '선택 이미지를 그룹에 담기', en: 'Add selected images to group' }), t({ ko: '선택한 이미지를 지정한 커스텀 그룹에 추가해.', en: 'Add selected images to the specified custom group.' }), pageObject({ groupId: pageChoice(chatGroups.slice(0, 200).map((group) => group.id)) }, ['groupId']), 'save', { inputFields: [], targets: [{ argument: 'groupId', collection: 'groups', id: 'id', keys: ['name'] }] })] : []),
+      ...(canDeleteImages && selectedCompositeHashes.length && deleteDescription ? [pageAction('library.delete', t({ ko: '선택 이미지 삭제', en: 'Delete selected images' }), deleteDescription, undefined, 'save', { inputFields: [] })] : []),
       ...(chatGroups.length ? [pageAction('library.hide_groups', t({ ko: '숨길 그룹 지정', en: 'Set hidden groups' }), t({ ko: '갤러리 목록·검색 결과·전체 수에서 뺄 커스텀 그룹 목록을 통째로 바꿔(id는 data.groups, 목록에 없는 그룹은 list_image_groups로 찾아. 지금 숨긴 그룹은 data.hiddenGroups). 그룹을 넣으면 그 하위 그룹도 함께 숨겨지고, 빈 목록이면 모두 다시 보여. hideGroups 필드가 꺼져 있으면 목록이 있어도 숨기지 않아. 이 브라우저에만 저장돼.', en: 'Replace the list of custom groups the gallery, its searches and its total leave out (ids in data.groups, others via list_image_groups; data.hiddenGroups is the current list). A group also hides its subgroups; an empty list shows everything. Nothing is hidden while the hideGroups field is off. Saved in this browser only.' }), pageObject({ groupIds: pageArray(pageNumber(1, undefined, true), HOME_HIDDEN_GROUPS_LIMIT) }, ['groupIds']))] : []),
     ],
-    applyAction: (id, args, assertCurrent) => {
+    applyAction: async (id, args, assertCurrent) => {
       assertCurrent()
+      if (id === 'library.filters') {
+        const count = Number(typeof args.remove === 'string') + Number(typeof args.cycle === 'string') + Number(args.clear === true)
+        if (count !== 1) throw new Error('필터 제거, 연산자 변경, 전체 지우기 중 하나를 선택해줘.')
+        if (typeof args.remove === 'string') removeAppliedChip(args.remove)
+        else if (typeof args.cycle === 'string') cycleAppliedChipOperator(args.cycle)
+        else clearAppliedChips()
+        return
+      }
+      if (id === 'library.assign_group') {
+        const result = await assignToGroupMutation.mutateAsync({ groupId: Number(args.groupId), compositeHashes: selectedCompositeHashes })
+        if (result.errors?.length) throw new Error(result.errors.join(', '))
+        return
+      }
+      if (id === 'library.delete') {
+        const result = await deleteSelected()
+        if (result.details.failed) throw new Error(result.details.errors.join(', ') || t('useHomePageData.failedToDeleteSelectedItems'))
+        return
+      }
       // Applied straight away with the search drawer closed, so the chat panel stays where it is.
       if (id === 'library.search') {
         const scope = typeof args.scope === 'string' ? args.scope as TextSearchScope : searchScope === 'rating' || searchScope === 'tool' ? 'positive' : searchScope

@@ -47,7 +47,7 @@ import { useAutoSettingsTab } from './use-auto-settings-tab'
 import { useContentEvaluationSettings } from './use-content-evaluation-settings'
 import { useUnsavedSettingsGuard } from './use-unsaved-settings-guard'
 import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
-import { pageAction, pageChoice, pageObject, pageText } from '@/features/codex-chat/page-action-helpers'
+import { pageAction, pageChoice, pageNumber, pageObject, pageText } from '@/features/codex-chat/page-action-helpers'
 import { applySettingsChatPatch, settingsChatFields, type SettingsChatSources } from './settings-chat-fields'
 import { applySettingsChatAction, settingsChatActions, settingsChatData, type SettingsChatActionContext } from './settings-chat-actions'
 
@@ -218,7 +218,7 @@ export function SettingsPage() {
     ])
   }
 
-  const { tabProps: foldersTabProps } = useFolderSettingsTab({ isActive: activeTab === 'library' || activeTab === 'maintenance', notifyInfo, notifyError })
+  const { tabProps: foldersTabProps, chatActions: folderChatActions } = useFolderSettingsTab({ isActive: activeTab === 'library' || activeTab === 'maintenance', notifyInfo, notifyError })
 
   const effectiveGeneralDraft = generalDraft ?? settingsQuery.data?.general ?? null
   const contentEvaluation = useContentEvaluationSettings(canOpenSettings && activeTab === 'posts')
@@ -298,7 +298,7 @@ export function SettingsPage() {
     notifyError,
   })
 
-  const { tabProps: autoTabProps, draftSections: autoDraftSections } = useAutoSettingsTab({
+  const { tabProps: autoTabProps, draftSections: autoDraftSections, chatActions: autoChatActions } = useAutoSettingsTab({
     isActive: activeTab === 'auto',
     revisions: settingsQuery.data?.pageSettingsRevisions,
     taggerSettings: settingsQuery.data?.tagger,
@@ -393,9 +393,10 @@ export function SettingsPage() {
     ratingTiers: autoTabProps.ratingTiersDraft,
     taggerModels: autoTabProps.taggerModels.filter((model) => model.available !== false).map((model) => model.name),
   }
-  // Folder rows save on their own buttons and carry server paths, so the chat only reads names and watcher state.
+  // Folder paths stay on the server; chat sees folder IDs and watcher state and uses the native scan/save handlers.
   const chatFolderData: Record<string, ChatPageData> = activeTab === 'library' ? {
-    watchedFolders: foldersTabProps.folders.map((folder) => ({
+    watchedFolders: foldersTabProps.folders.slice(0, 100).map((folder) => ({
+      id: folder.id,
       name: folder.folder_name || folder.folder_path.split(/[\\/]/).filter(Boolean).pop() || `#${folder.id}`,
       active: folder.is_active === 1,
       autoScan: folder.auto_scan === 1,
@@ -411,7 +412,7 @@ export function SettingsPage() {
 
   const handleSaveAll = async () => {
     if (savingAllRef.current || dirtySections.length === 0) {
-      return
+      return false
     }
 
     savingAllRef.current = true
@@ -422,7 +423,7 @@ export function SettingsPage() {
 
     if (failures.length === 0) {
       notifyInfo(t({ ko: '변경 {count}건을 저장했어.', en: 'Saved {count} changes.' }, { count: formatNumber(dirtySections.length) }))
-      return
+      return true
     }
 
     const savedCount = dirtySections.length - failures.length
@@ -430,6 +431,7 @@ export function SettingsPage() {
     notifyError(savedCount > 0
       ? t({ ko: '{saved}건은 저장했지만 {failed}건은 실패했어. {details}', en: 'Saved {saved}, but {failed} failed. {details}' }, { saved: formatNumber(savedCount), failed: formatNumber(failures.length), details })
       : t({ ko: '{failed}건을 저장하지 못했어. {details}', en: 'Could not save {failed} changes. {details}' }, { failed: formatNumber(failures.length), details }))
+    return false
   }
 
   const handleDiscardAll = () => {
@@ -440,17 +442,18 @@ export function SettingsPage() {
   const chatActionContext: SettingsChatActionContext = {
     tab: activeTab,
     auto: autoTabProps,
+    autoActions: autoChatActions,
     dirtyCount: dirtySections.length,
-    saveAll: handleSaveAll,
+    saveAll: async () => { if (!await handleSaveAll()) throw new Error('설정 저장에 실패했어.') },
     mcpHttp: mcpHttpQuery.data,
     setMcpHttpEnabled: async (enabled) => queryClient.setQueryData(['mcp-http-settings'], await updateMcpHttpEnabled(enabled)),
     maintenance: {
-      scanAll: foldersTabProps.onScanAll,
-      cancelScanAll: foldersTabProps.onCancelScanAll,
+      scanAll: folderChatActions.scanAll,
+      cancelScanAll: folderChatActions.cancelScanAll,
       scanAllJob: foldersTabProps.scanAllJob,
       isScanningAll: foldersTabProps.isScanningAll,
-      verifyAllFiles: foldersTabProps.onVerifyAllFiles,
-      cancelVerifyAllFiles: foldersTabProps.onCancelVerifyAllFiles,
+      verifyAllFiles: folderChatActions.verifyAllFiles,
+      cancelVerifyAllFiles: folderChatActions.cancelVerifyAllFiles,
       verifyAllFilesJob: foldersTabProps.verifyAllFilesJob,
       isVerifyingAllFiles: foldersTabProps.isVerifyingAllFiles,
       reextractAll: () => metadataReextractJob.run(),
@@ -465,6 +468,7 @@ export function SettingsPage() {
     data: { section: activeTab, ...chatFolderData, ...settingsChatData(chatActionContext), ...(activeTab === 'general' ? { appMark: { configured: Boolean(savedAppearance.appIconDataUrl), outputSize: 128, saving: appearanceTabProps.isSavingAppIcon } } : {}) },
     actions: [
       ...settingsChatActions(chatActionContext, t),
+      ...(activeTab === 'library' && foldersTabProps.folders.length ? [pageAction('settings.folder', t({ ko: '감시 폴더 작업', en: 'Watched folder operation' }), t({ ko: '폴더 스캔 또는 활성 상태 변경.', en: 'Scan a folder or change its active state.' }), pageObject({ folderId: pageNumber(1, undefined, true), operation: pageChoice(['scan', 'activate', 'deactivate']) }, ['folderId', 'operation']), 'save')] : []),
       ...(activeTab === 'general' ? [
         pageAction('resource.open', t({ ko: '앱 마크 편집기 열기', en: 'Open app mark editor' }), t({ ko: 'kind=app_mark. compositeHash를 주면 내부 이미지로 열고, 비우면 현재 마크를 편집해. 등록 전 위치·확대·회전·반전을 조절할 수 있어.', en: 'Use kind=app_mark. Supply compositeHash to use an app library image, or omit it to edit the current mark. Adjust position, zoom, rotation, and flip before registering.' }), pageObject({ kind: pageChoice(['app_mark']), compositeHash: pageText(80) }, ['kind'])),
         pageAction('resource.save', t({ ko: '기본 앱 마크 복원', en: 'Restore default app mark' }), t({ ko: '등록한 공용 앱 마크를 기본 마크로 되돌려.', en: 'Restore the default shared app mark.' }), pageObject({ kind: pageChoice(['app_mark']), operation: pageChoice(['reset']) }, ['kind', 'operation']), 'save'),
@@ -493,6 +497,14 @@ export function SettingsPage() {
     },
     applyAction: async (id, args, assertCurrent) => {
       assertCurrent()
+      if (id === 'settings.folder' && activeTab === 'library') {
+        const folder = foldersTabProps.folders.find((item) => item.id === args.folderId)
+        if (!folder) throw new Error('감시 폴더를 찾을 수 없어.')
+        if (args.operation === 'scan') await foldersTabProps.onFolderScan(folder.id)
+        else if (args.operation === 'activate' || args.operation === 'deactivate') await foldersTabProps.onFolderSave(folder.id, { is_active: args.operation === 'activate' })
+        else throw new Error('알 수 없는 폴더 작업이야.')
+        return
+      }
       if (savingAllRef.current && (id === 'settings.save' || id === 'settings.rating_tier_add' || (id === 'resource.save' && args.kind === 'app_mark'))) {
         throw new Error(t({ ko: '설정 저장이 끝날 때까지 기다려줘.', en: 'Wait for settings to finish saving.' }))
       }

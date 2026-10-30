@@ -523,7 +523,7 @@ test('permissions: independent pages, features, migration, grants, scopes and ro
     const { requireMcpToolAccess } = await import('../src/mcp/toolAccess')
     const { WorkflowModel } = await import('../src/models/Workflow')
     updateChatSettings({ enabled: true })
-    const profile = ChatProfileStore.create({ name: 'Page connection only', engine: 'llm', providerName: 'fixture', mcpEnabled: false, mcpScopes: [], toolAllowlist: [] })
+    const profile = ChatProfileStore.create({ name: 'Page connection only', engine: 'llm', providerName: 'fixture', pageAssist: true, mcpEnabled: false, mcpScopes: [], toolAllowlist: [] })
     const visible = { instanceId: 'visible-page', connectionId: 'visible-connection', path: '/generation', title: 'Generation', kind: 'nai', resourceId: null, fields: [{ id: 'prompt', label: 'Prompt', type: 'text', value: 'visible draft', editable: false }], data: { files: [{ id: 'private-file' }] } }
     const keys = ['chat.use', 'chat.agent.use', 'generation.execute']
     AuthPermissionGroup.updateCustomGroup(group.id, { name: group.name, permissionKeys: keys })
@@ -561,7 +561,7 @@ test('permissions: independent pages, features, migration, grants, scopes and ro
           }
         } finally { stop(); await bridge.close(); await unbound.close() }
       }
-      const codexProfile = ChatProfileStore.create({ name: 'Codex page only', engine: 'codex', mcpEnabled: false, toolAllowlist: [] })
+      const codexProfile = ChatProfileStore.create({ name: 'Codex page only', engine: 'codex', pageAssist: true, mcpEnabled: false, toolAllowlist: [] })
       const context = { threadId: CodexChatStore.createThread(accountId, 'codex connected page', 'codex', codexProfile.id), profileId: codexProfile.id, kind: 'direct' as const, replyId: 'codex-page-only', page: parseChatPageContext(visible, { accountId, accountType: 'guest' })! }
       const stop = registerChatReply(context, controller.signal, () => ({ replyTo: null, recipients: ['user'] }))
       const token = issueCodexChatMcpToken({ accountId, accountType: 'guest' }, [], [], [], context)
@@ -595,7 +595,7 @@ test('permissions: independent pages, features, migration, grants, scopes and ro
     const workflowId = WorkflowModel.create({ name: 'Linked workflow', workflow_json: JSON.stringify({ '1': { class_type: 'CLIPTextEncode', inputs: { text: '' } } }), marked_fields: [{ id: 'prompt', label: 'Prompt', type: 'text', jsonPath: '1.inputs.text', required: true }] })
     const nai = ChatGenerationPresetStore.create({ name: 'Linked NAI', kind: 'nai' })
     const comfy = ChatGenerationPresetStore.create({ name: 'Linked Comfy', kind: 'comfyui', comfyui: { workflowId, exposedFieldIds: ['prompt'] } })
-    const profile = ChatProfileStore.create({ name: 'Linked generator', engine: 'llm', providerName: 'fixture', mcpEnabled: true, mcpScopes: ['read'], toolAllowlist: ['get_current_page'], generationPresetIds: [nai.id, comfy.id] })
+    const profile = ChatProfileStore.create({ name: 'Linked generator', engine: 'llm', providerName: 'fixture', pageAssist: true, mcpEnabled: true, mcpScopes: ['read'], toolAllowlist: ['get_current_page'], generationPresetIds: [nai.id, comfy.id] })
     const controller = new AbortController()
     const page = normalizeChatPageSnapshot({ instanceId: 'page-instance', connectionId: 'page-connection', path: '/generation', title: 'Generation', kind: 'page', resourceId: null, fields: [] })
     assert.ok(resolveChatAccess(adminId).scopes.includes('generate'), 'administrator already holds account generation scope')

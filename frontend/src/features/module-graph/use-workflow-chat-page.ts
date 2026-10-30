@@ -3,6 +3,7 @@ import { useReactFlow } from '@xyflow/react'
 import { applyChatWorkflowOperations, describeChatWorkflowModule, normalizeChatWorkflowSnapshot, replayWorkflowLocalInputs, sanitizeChatWorkflowInputs, type ChatWorkflowSnapshot } from '@conai/shared'
 import { useChatPage, useChatPageRegistration, type WorkflowPageProposal } from '@/features/codex-chat/chat-page-context'
 import { useI18n } from '@/i18n'
+import { pageAction } from '@/features/codex-chat/page-action-helpers'
 import type { GraphWorkflowExposedInput, ModuleDefinitionRecord } from '@/lib/api-module-graph'
 import { createRandomUuid } from '@/lib/random-uuid'
 import { buildGraphEditorSnapshot, buildGraphPayload } from './module-graph-flow'
@@ -17,6 +18,7 @@ type Params = Draft & {
   setName: Dispatch<SetStateAction<string>>; setDescription: Dispatch<SetStateAction<string>>
   setRunInputs: Dispatch<SetStateAction<Record<string, unknown>>>; setExposedInputs: Dispatch<SetStateAction<GraphWorkflowExposedInput[]>>
   setSelectedNodeId: Dispatch<SetStateAction<string | null>>; setSelectedEdgeId: Dispatch<SetStateAction<string | null>>
+  canSave: boolean; save: () => Promise<boolean>
 }
 
 /** Private inputs participate in concurrency checks locally, but never enter the chat snapshot. */
@@ -25,7 +27,7 @@ function signature(snapshot: string, draft: Pick<Draft, 'name' | 'description' |
   return `${snapshot}\n${JSON.stringify([draft.name, draft.description, draft.runInputs])}`
 }
 
-/** A typed native-editor adapter. It has no access to Save or Run actions. */
+/** A typed native-editor adapter; saving uses the editor's own revision-checked handler. */
 export function useWorkflowChatPage(params: Params) {
   const { t } = useI18n()
   const flow = useReactFlow()
@@ -116,5 +118,13 @@ export function useWorkflowChatPage(params: Params) {
   useChatPageRegistration(params.enabled && (!connected || snapshot) ? {
     title: t({ ko: '노드 워크플로 편집기', en: 'Node workflow editor' }), kind: 'workflow', resourceId: `workflow:${params.selectedGraphId ?? 'draft'}:${params.editorSessionId}`,
     fields: [], ...(snapshot ? { workflow: snapshot } : {}), dirty: params.dirty, apply: () => {}, applyWorkflow,
+    // A new draft is saved through the register dialog (name and folder), so it offers no save card that could only fail.
+    actions: params.canSave && params.selectedGraphId !== null ? [pageAction('workflow.save', t({ ko: '워크플로 저장', en: 'Save workflow' }), t({ ko: '열린 워크플로를 저장해.', en: 'Save the open workflow.' }), undefined, 'save')] : [],
+    applyAction: async (id, _args, assertCurrent) => {
+      assertCurrent()
+      if (id !== 'workflow.save') throw new Error('등록되지 않은 워크플로 작업이야.')
+      if (params.selectedGraphId === null) throw new Error(t({ ko: '새 워크플로는 등록 창에서 이름과 폴더를 선택한 뒤 저장해줘.', en: 'Save a new workflow in the register dialog after choosing its name and folder.' }))
+      if (!await params.save()) throw new Error('워크플로를 저장하지 못했어.')
+    },
   } : null)
 }

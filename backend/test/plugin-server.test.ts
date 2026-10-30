@@ -92,6 +92,27 @@ test('trusted plugins run a server module with their own data, hooks and tools',
   AuthPermissionGroup.addAccountMembership(adminGroup.id, adminId)
   invalidateConfiguredAuthCache()
   const admin = { accountId: adminId, accountType: 'admin' as const }
+  await t.test('server-module app.fetch runs a native route once as the calling account, never as a replayable session', async () => {
+    const express = (await import('express')).default
+    const native = await import('../src/services/plugins/pluginServerNative')
+    const seen: Array<{ accountId: unknown; token: string; port: number }> = []
+    const web = express()
+    web.use(native.pluginNativeCallSession)
+    web.get('/api/codex-chat/lorebooks', (req, res) => {
+      seen.push({ accountId: (req.session as { accountId?: number } | undefined)?.accountId, token: String(req.headers['x-conai-plugin-call']), port: req.socket.localPort! })
+      res.setHeader('set-cookie', 'sid=leak'); res.json({ ok: true })
+    })
+    native.setPluginNativeApp(web)
+    const reply = await native.callPluginServerNative(admin, { path: '/api/codex-chat/lorebooks' })
+    assert.equal(reply.status, 200)
+    assert.deepEqual(JSON.parse(Buffer.from(reply.body as ArrayBuffer).toString()), { ok: true })
+    assert.ok(!reply.headers.some(([name]) => name.toLowerCase() === 'set-cookie'), 'no session cookie reaches the worker')
+    assert.equal(seen[0].accountId, adminId, 'the route sees the calling account')
+    const replay = await fetch(`http://127.0.0.1:${seen[0].port}/api/codex-chat/lorebooks`, { headers: { 'x-conai-plugin-call': seen[0].token } })
+    assert.equal(replay.status, 401, 'a used grant cannot be replayed'); assert.equal(seen.length, 1)
+    await assert.rejects(native.callPluginServerNative(admin, { path: '/api/auth/login', method: 'POST', body: '{}' }), (error: { status?: number }) => error.status === 400)
+    await assert.rejects(native.callPluginServerNative(undefined, { path: '/api/codex-chat/lorebooks' }), /계정/)
+  })
   const folder = path.resolve(__dirname, '../../plugins/chat-instructions')
   const status = () => runtime.pluginServerStatus('chat-instructions')
   runtime.startPluginServers()
@@ -378,6 +399,8 @@ test('trusted plugins run a server module with their own data, hooks and tools',
     assert.deepEqual(llm.listPluginLlmProfiles('llm-bridge', guest).find(item => item.id === profile.id)!.context, { contextTokens: null, maxOutputTokens: 100 })
     assert.throws(() => llm.measurePluginLlm('llm-bridge', guest, { ...measureInput, requestId: 'not-allowed' }))
     assert.throws(() => llm.measurePluginLlm('llm-bridge', nobody, measureInput), /권한/)
+    // A text request may add account lorebooks, of the calling account only.
+    assert.throws(() => llm.measurePluginLlm('llm-bridge', guest, { ...measureInput, lorebookIds: [987654] }), /계정 로어북을 찾을 수 없어/)
     ChatProfileStore.update(profile.id, { contextTokens: 2048 })
     const overInput = { ...measureInput, message: '가'.repeat(8000) }
     const over = llm.measurePluginLlm('llm-bridge', guest, overInput)

@@ -67,7 +67,7 @@ function WorkflowPageFallback() {
 
 function ModuleWorkflowWorkspaceInner({ isWideLayout }: ModuleWorkflowWorkspaceProps) {
   const { t, formatNumber } = useI18n()
-  const { isAdmin } = useFeaturePermissions()
+  const { isAdmin, canUpdateWorkflows } = useFeaturePermissions()
   const { showSnackbar } = useSnackbar()
   const reactFlow = useReactFlow()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -365,6 +365,7 @@ function ModuleWorkflowWorkspaceInner({ isWideLayout }: ModuleWorkflowWorkspaceP
     dirty: isDirty, currentSnapshot, editorSessionId, selectedGraphId, name: workflowName, description: workflowDescription, debugMode: workflowDebugMode,
     nodes, edges, modules, runInputs: workflowRunInputValues, setNodes, setEdges,
     setName: setWorkflowName, setDescription: setWorkflowDescription, setRunInputs: setWorkflowRunInputValues, setExposedInputs: setWorkflowExposedInputs, setSelectedNodeId, setSelectedEdgeId,
+    canSave: canUpdateWorkflows, save: handleSaveGraph,
   })
 
   useChatPageRegistration(workflowView === 'browse' ? {
@@ -759,11 +760,12 @@ function ModuleWorkflowWorkspaceInner({ isWideLayout }: ModuleWorkflowWorkspaceP
         onInputValueChange={handleWorkflowRunInputChange}
         onInputValueClear={handleWorkflowRunInputClear}
         onInputImageChange={handleWorkflowRunInputImageChange}
-        onExecute={() => {
+        onRefreshRuns={graphExecutionsQuery.refetch}
+        onExecute={async () => {
           setResultsTab('results')
-          void handleRunSelectedWorkflow().then(() => {
-            if (!isWideLayout) setNarrowView('result')
-          })
+          const started = await handleRunSelectedWorkflow()
+          if (started && !isWideLayout) setNarrowView('result')
+          return started
         }}
         onBack={() => {
           setSelectedGraphId(null)

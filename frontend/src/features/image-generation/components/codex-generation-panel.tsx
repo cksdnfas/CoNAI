@@ -38,12 +38,14 @@ import { CodexCliUpdateButton } from './codex-cli-update-button'
 import { CodexModelSelect } from './codex-model-select'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { resolveAccountDraftOwner } from '@/features/auth/auth-permissions'
+import type { GenerationHistoryRecord } from '@/lib/api-image-generation-types'
 import { GenerationBlockLayout, StackedPluginBlocks } from '../layout/generation-block-layout'
 import { useGenerationLayoutSurface } from '../layout/generation-layout-context'
 import { stackedLayoutBlocks } from '../layout/generation-layout-ops'
 
 type CodexGenerationPanelProps = {
   onHistoryRefresh: () => void
+  historyRecords: GenerationHistoryRecord[]
   splitPaneScroll?: boolean
   compactActionBarContentTargetId?: string
   /** Page toolbar slot for the Codex status; replaces the inline Codex header row. */
@@ -243,6 +245,7 @@ function buildCodexFormFromHistoryPayload(payload: Record<string, unknown>, curr
 /** Render the Codex image-generation controller with the same controller chrome used by other generation tabs. */
 export function CodexGenerationPanel({
   onHistoryRefresh,
+  historyRecords,
   splitPaneScroll = false,
   compactActionBarContentTargetId,
   statusPortalTargetId,
@@ -256,7 +259,6 @@ export function CodexGenerationPanel({
   const [codexForm, setCodexForm] = useState<CodexFormDraft>(() => loadPersistedCodexFormDraft(draftStorageOwner))
   const [isSubmitting, setIsSubmitting] = useState(false)
   const modelOptionsQuery = useQuery({ queryKey: ['codex-generation-models'], queryFn: getCodexGenerationModels, staleTime: 60_000, retry: false })
-  useCodexChatPage(codexForm, setCodexForm, modelOptionsQuery.data?.data.models ?? [])
   const confirm = useConfirm()
   useHistorySettingsLoad('codex', (request) => {
     const { form: nextForm, hasImageInputs } = buildCodexFormFromHistoryPayload(request.payload, codexForm)
@@ -370,33 +372,33 @@ export function CodexGenerationPanel({
 
   const handleGenerate = useCallback(async () => {
     if (isSubmitting) {
-      return
+      return false
     }
 
-    if (codexStatusQuery.isSuccess && !codexStatus?.available) {
+    if (!canGenerateWithCodex) {
       const codexInstalled = codexStatus?.installed ?? false
       showSnackbar({
         message: codexInstalled ? t({ ko: 'Codex 로그인 상태부터 확인해줘.', en: 'Check the Codex login status first.' }) : t({ ko: '이 서버에서 Codex를 아직 바로 쓸 수 없는 상태야.', en: 'Codex is not ready to use directly on this server yet.' }),
         tone: 'error',
       })
-      return
+      return false
     }
 
     const prompt = normalizeTextSegmentSpreadsheetText(codexForm.prompt).trim()
 
     if (prompt.length === 0) {
       showSnackbar({ message: t({ ko: 'Codex 프롬프트를 먼저 넣어줘.', en: 'Enter a Codex prompt first.' }), tone: 'error' })
-      return
+      return false
     }
 
     if (codexForm.maskImage && !codexForm.referenceImage) {
       showSnackbar({ message: t({ ko: '마스크를 쓰려면 먼저 참조 이미지를 넣어줘.', en: 'Choose a reference image before using a mask.' }), tone: 'error' })
-      return
+      return false
     }
 
     if (codexForm.imageMode === 'edit' && !codexForm.referenceImage) {
       showSnackbar({ message: t({ ko: '편집할 원본 이미지를 첨부해줘.', en: 'Attach the source image to edit.' }), tone: 'error' })
-      return
+      return false
     }
 
     try {
@@ -427,17 +429,18 @@ export function CodexGenerationPanel({
 
       await refreshGenerationQueueViews(queryClient, onHistoryRefresh)
       showSnackbar({ message: response.message || t({ ko: 'Codex 큐에 생성 작업을 넣었어.', en: 'Added the Codex generation job to the queue.' }), tone: 'info' })
+      return Boolean(response.record || response.enqueued_count)
     } catch (error) {
       showSnackbar({ message: getErrorMessage(error, t({ ko: 'Codex 이미지 생성에 실패했어.', en: 'Failed to generate the Codex image.' })), tone: 'error' })
+      return false
     } finally {
       setIsSubmitting(false)
     }
   }, [
     codexForm,
     attachmentLimitExceeded,
-    codexStatus?.available,
     codexStatus?.installed,
-    codexStatusQuery.isSuccess,
+    canGenerateWithCodex,
     generationImageSaveOptions,
     isSubmitting,
     onHistoryRefresh,
@@ -448,6 +451,7 @@ export function CodexGenerationPanel({
     t,
     targetGroupPath,
   ])
+  useCodexChatPage(codexForm, setCodexForm, modelOptionsQuery.data?.data.models ?? [], historyRecords, handleGenerate, outputSize, queueCount, (payload) => buildCodexFormFromHistoryPayload(payload, codexForm).form)
 
   const headerToolbarContent = (
     <div className="flex items-center justify-between gap-3">

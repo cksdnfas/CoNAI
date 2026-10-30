@@ -5,6 +5,8 @@ import { publishRuntimeEvent } from '../runtime-events/runtimeEventBus'
 import { ChatPageContextError, parseChatPageContext } from './chatPageContext'
 import { RuntimeEventBroadcaster } from '../runtime-events/runtimeEventBroadcaster'
 import { requireActiveChatReply } from './chatReplyRegistry'
+import { currentChatPage, rememberChatPage } from './chatPageState'
+export { currentChatPage, rememberChatPage, lastChatPageForThread } from './chatPageState'
 
 /**
  * Same-turn round trip to the person's connected page: a tool asks, the browser tab that holds the connection runs one
@@ -21,38 +23,6 @@ export const newChatPageCommandId = () => crypto.randomUUID()
 
 type Pending = { accountId: number | null; connectionId: string; resolve: (page: ChatPageSnapshot) => void; reject: (error: Error) => void; cleanup: () => void; claimed: boolean; expiresAt: number }
 const pending = new Map<string, Pending>()
-
-/** The newest screen each connection reported. Tools read it so a reply sees what its own earlier steps changed. */
-const latest = new Map<string, { accountId: number | null; page: ChatPageSnapshot; at: number }>()
-const LATEST_MAX = 200
-const LATEST_TTL_MS = 60 * 60_000
-
-/** The connection each chat last sent with, so a task continuation (sent by the server) can reach the same tab. */
-const threadConnections = new Map<number, string>()
-
-export function lastChatPageForThread(requester: McpRequester, threadId: number): ChatPageSnapshot | undefined {
-  const connectionId = threadConnections.get(threadId)
-  const live = connectionId ? latest.get(connectionId) : undefined
-  return live && live.accountId === requester.accountId ? live.page : undefined
-}
-
-export function rememberChatPage(requester: McpRequester, page: ChatPageSnapshot | undefined, threadId?: number) {
-  if (!page) return
-  if (threadId !== undefined) { threadConnections.delete(threadId); threadConnections.set(threadId, page.connectionId); if (threadConnections.size > LATEST_MAX) threadConnections.delete(threadConnections.keys().next().value!) }
-  const now = Date.now()
-  latest.delete(page.connectionId)
-  latest.set(page.connectionId, { accountId: requester.accountId, page, at: now })
-  for (const [key, entry] of latest) {
-    if (latest.size <= LATEST_MAX && now - entry.at < LATEST_TTL_MS) break
-    latest.delete(key)
-  }
-}
-
-/** The connection's newest screen for this account, or the screen the request started with. */
-export function currentChatPage(requester: McpRequester, page: ChatPageSnapshot): ChatPageSnapshot {
-  const live = latest.get(page.connectionId)
-  return live && live.accountId === requester.accountId ? live.page : page
-}
 
 /** The registered reply owns cancellation even when its MCP request runs in a separate Codex process. */
 export function chatPageReplySignal(context: McpRequestContext) {

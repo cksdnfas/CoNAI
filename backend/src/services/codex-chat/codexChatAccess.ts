@@ -1,7 +1,7 @@
 import crypto from 'crypto'
 import type { ChatExecutionContext } from '@conai/shared'
 import type { Request } from 'express'
-import { getMcpToolScope, isChatGenerationTool, isConnectedChatPageTool, chatGenerationToolName, CHAT_ROOM_TOOLS, CHAT_SETTINGS_TOOLS, CHAT_VISION_BUILTIN_TOOLS, GENERATION_PRESET_BLOCKED_TOOLS, type McpRequester, type McpRequestContext } from '../../mcp/context'
+import { getMcpToolScope, currentMcpChatPage, requirePublicChatPageTarget, isChatGenerationTool, isConnectedChatPageTool, chatGenerationToolName, CHAT_PAGE_TOOLS, CHAT_ROOM_TOOLS, CHAT_SETTINGS_TOOLS, CHAT_VISION_BUILTIN_TOOLS, GENERATION_PRESET_BLOCKED_TOOLS, type McpRequester, type McpRequestContext } from '../../mcp/context'
 import { AuthAccount } from '../../models/AuthAccount'
 import { hasConfiguredAuth } from '../auth/sessionAccess'
 import { AuthAccessControlService, isActiveAdminRecord } from '../authAccessControlService'
@@ -113,24 +113,26 @@ export function resolveChatProfileToolGrant(profile: Pick<ChatProfile, 'mcpEnabl
 }
 
 /** Recheck account revocation for in-process API LLM tools as well as loopback Codex tools. */
-export function requireChatMcpAccountAccess(context: McpRequestContext, toolName: string) {
+export function requireChatMcpAccountAccess(context: McpRequestContext, toolName: string, page = currentMcpChatPage(context)) {
   if (!context.requester || !loadChatSettings().enabled) throw new Error('채팅이 꺼졌거나 사용할 권한이 없어.')
   const access = resolveChatAccess(context.requester.accountId)
-  const profileEngine = context.chatContext ? ChatProfileStore.find(context.chatContext.profileId)?.engine : 'llm'
-  if (context.source === 'codex-chat' ? !access.codex : profileEngine === 'claude' ? !access.claude : !access.llm) throw new Error('채팅 권한이 변경됐어.')
-  const scope = isChatGenerationTool(toolName) ? 'generate' : getMcpToolScope(toolName)
-  const pageTool = isConnectedChatPageTool(context, toolName)
-  const builtin = CHAT_ROOM_TOOLS.has(toolName) || CHAT_VISION_BUILTIN_TOOLS.has(toolName) || CHAT_SETTINGS_TOOLS.has(toolName) || (!!context.workspace && toolName.startsWith('workspace_'))
-  if (!pageTool && !builtin && (!scope || !access.scopes.includes(scope as ChatScope))) throw new Error('이 도구를 사용할 권한이 변경됐어.')
   const chat = context.chatContext
   const profile = chat ? ChatProfileStore.find(chat.profileId) : null
+  const profileEngine = profile?.engine ?? 'llm'
+  if (context.source === 'codex-chat' ? !access.codex : profileEngine === 'claude' ? !access.claude : !access.llm) throw new Error('채팅 권한이 변경됐어.')
+  const scope = isChatGenerationTool(toolName) ? 'generate' : getMcpToolScope(toolName)
+  const pageTool = profile?.pageAssist && isConnectedChatPageTool(context, toolName, page)
+  const builtin = CHAT_ROOM_TOOLS.has(toolName) || CHAT_VISION_BUILTIN_TOOLS.has(toolName) || CHAT_SETTINGS_TOOLS.has(toolName) || (!!context.workspace && toolName.startsWith('workspace_'))
+  if (!pageTool && !builtin && (!scope || !access.scopes.includes(scope as ChatScope))) throw new Error('이 도구를 사용할 권한이 변경됐어.')
   const thread = chat ? CodexChatStore.findThread(chat.threadId, context.requester.accountId) : null
   if (!chat || !profile?.isEnabled || (context.source === 'codex-chat' ? profile.engine !== 'codex' : profile.engine !== 'llm' && profile.engine !== 'claude') || !canUseChatProfile(access, profile) || !thread
     || (chat.kind === 'group' ? !ChatGroupStore.member(chat.threadId, chat.profileId) : thread.profile_id !== chat.profileId)) {
     throw new Error('이 채팅의 프로필 또는 방 접근 권한이 변경됐어.')
   }
+  if (CHAT_PAGE_TOOLS.has(toolName) && !profile.pageAssist) throw new Error('프로필의 페이지 어시스턴트가 꺼졌어.')
   if (pageTool) {
-    requireChatPageAccess(context.requester, chat.page!)
+    requirePublicChatPageTarget(context, page!)
+    requireChatPageAccess(context.requester, page!)
   } else if (!builtin) {
     // The chat's own tools (reply, room, lorebook, frame viewing) are always there; everything else follows the profile.
     const grant = resolveChatProfileToolGrant(profile, access, chat.threadId)

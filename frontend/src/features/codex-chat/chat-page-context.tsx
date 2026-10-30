@@ -25,7 +25,7 @@ type PageProposal = Extract<ChatProposal, { kind: 'page_fields' }>
 export type PageActionProposal = Extract<ChatProposal, { kind: 'page_action' }>
 export type WorkflowPageProposal = Extract<ChatProposal, { kind: 'workflow_graph' }>
 export type WorkflowUndo = { isCurrent: () => boolean; restore: () => void }
-type Editor = { instanceId: string; path: string; title: string; kind: ChatPageSnapshot['kind']; resourceId: string | null; fields: ChatPageField[]; workflow?: ChatWorkflowSnapshot; revision?: string; actions?: ChatPageAction[]; data?: Record<string, ChatPageData>; priority?: number; dirty?: boolean; apply: (patch: Record<string, ChatPageValue>) => void; applyWorkflow?: (proposal: WorkflowPageProposal) => WorkflowUndo; applyAction?: (id: string, args: Record<string, ChatPageData>, assertCurrent: () => void, nativeRevision?: string) => Promise<WorkflowUndo | void> | WorkflowUndo | void }
+type Editor = { instanceId: string; path: string; title: string; kind: ChatPageSnapshot['kind']; resourceId: string | null; fields: ChatPageField[]; workflow?: ChatWorkflowSnapshot; revision?: string; inputRevision?: string; actions?: ChatPageAction[]; data?: Record<string, ChatPageData>; priority?: number; dirty?: boolean; apply: (patch: Record<string, ChatPageValue>) => void; applyWorkflow?: (proposal: WorkflowPageProposal) => WorkflowUndo; applyAction?: (id: string, args: Record<string, ChatPageData>, assertCurrent: () => void, nativeRevision?: string) => Promise<WorkflowUndo | void> | WorkflowUndo | void }
 type PageApi = {
   snapshot: ChatPageSnapshot | null
   available: boolean
@@ -197,6 +197,16 @@ export function ChatPageProvider({ children }: PropsWithChildren) {
   const drivingTimer = useRef<number | null>(null)
   /** `${instanceId}:${fieldId}` → JSON of the value the chat filled. */
   const [filled, setFilled] = useState(new Map<string, string>())
+  const markFilled = useCallback((instance: string, patch: Record<string, ChatPageValue>, undo = false) => {
+    setFilled(old => {
+      const next = new Map(old)
+      for (const [id, value] of Object.entries(patch)) {
+        if (undo) next.delete(`${instance}:${id}`)
+        else next.set(`${instance}:${id}`, JSON.stringify(value))
+      }
+      return next
+    })
+  }, [])
   const handledCommands = useRef(new Set<string>())
   const activeCommands = useRef(new Set<string>())
   const cancelledCommands = useRef(new Set<string>())
@@ -205,6 +215,7 @@ export function ChatPageProvider({ children }: PropsWithChildren) {
     kind: activeEditor?.kind ?? 'page', resourceId: activeEditor?.resourceId ?? null, fields: activeEditor?.fields ?? [],
     ...(activeEditor?.workflow ? { workflow: activeEditor.workflow } : {}),
     ...(activeEditor?.revision ? { revision: activeEditor.revision } : {}),
+    ...(activeEditor?.inputRevision ? { inputRevision: activeEditor.inputRevision } : {}),
     ...(activeEditor?.actions ? { actions: activeEditor.actions } : {}),
     ...(activeEditor?.dirty ? { dirty: true as const } : {}),
     data: { view: new URLSearchParams(location.search).get('tab') ?? new URLSearchParams(location.search).get('section') ?? new URLSearchParams(location.search).get('view') ?? '', ...(activeEditor?.data ?? {}) },
@@ -248,6 +259,7 @@ export function ChatPageProvider({ children }: PropsWithChildren) {
       if (!live.snapshot || !live.editor) throw new Error('페이지 연결이 해제됐어.')
       const patch = chatPagePatch(live.snapshot, authorized, undo)
       live.editor.apply(patch)
+      markFilled(live.snapshot.instanceId, patch, undo)
       statesRef.current = new Map(statesRef.current).set(proposal.id, undo ? 'undone' : 'applied')
       setStates(statesRef.current)
       if (!undo) {
@@ -255,7 +267,7 @@ export function ChatPageProvider({ children }: PropsWithChildren) {
         catch { showSnackbar({ message: t({ ko: '입력은 적용했어. 채팅의 적용 상태는 기록하지 못했어.', en: 'The inputs were applied, but their chat receipt could not be saved.' }), tone: 'error' }) }
       }
     } finally { busy.current.delete(proposal.id) }
-  }, [showSnackbar, t])
+  }, [markFilled, showSnackbar, t])
   const workflowProblem = useCallback((proposal: WorkflowPageProposal, undo = false) => {
     try { validateWorkflow(snapshot, proposal, undo, workflowUndos.current.get(proposal.id)); return '' }
     catch (error) { return error instanceof Error ? error.message : '워크플로를 확인하지 못했어.' }
@@ -296,17 +308,19 @@ export function ChatPageProvider({ children }: PropsWithChildren) {
     if (busy.current.size) throw new Error('다른 제안을 처리하고 있어.')
     const state = statesRef.current.get(proposal.id)
     if (undo ? state !== 'applied' : !!state || proposal.saved) throw new Error('이미 처리한 제안이야.')
+    let checked = proposal
     const assertCurrent = () => {
       const live = current.current
       if (!live.snapshot || !live.editor?.applyAction) throw new Error('페이지 연결이나 편집기가 닫혔어.')
-      requireChatPageTarget(live.snapshot, proposal.page)
+      requireChatPageTarget(live.snapshot, checked.page)
       if (undo) { if (!actionUndos.current.get(proposal.id)?.isCurrent()) throw new Error('적용 뒤 입력이 바뀌었어.') }
-      else requireChatPageActionState(live.snapshot, proposal)
+      else requireChatPageActionState(live.snapshot, checked)
     }
     assertCurrent()
     busy.current.add(proposal.id)
     try {
       const authorized = await checkChatPageProposal(proposal, undo)
+      checked = authorized
       assertCurrent()
       if (undo) { actionUndos.current.get(proposal.id)!.restore(); actionUndos.current.delete(proposal.id) }
       else {
@@ -382,13 +396,14 @@ export function ChatPageProvider({ children }: PropsWithChildren) {
       } else if (event.type === 'fields') {
         const proposal = { kind: 'page_fields' as const, page: chatPageTarget(live.snapshot), changes: event.changes, expiresAt: event.expiresAt }
         const filledOn = live.snapshot.instanceId
-        live.editor.apply(chatPagePatch(live.snapshot, proposal))
-        setFilled((old) => { const next = new Map(old); event.changes.forEach((change) => next.set(`${filledOn}:${change.fieldId}`, JSON.stringify(change.value))); return next })
+        const patch = chatPagePatch(live.snapshot, proposal)
+        live.editor.apply(patch)
+        markFilled(filledOn, patch)
         record({ id: event.commandId, threadId: event.threadId, label: event.changes.map((change) => change.label).join(', '), tier: 'draft', undo: () => {
           assertTargetCurrent()
           const now = current.current
           now.editor!.apply(chatPagePatch(now.snapshot!, proposal, true))
-          setFilled((old) => { const next = new Map(old); event.changes.forEach((change) => next.delete(`${filledOn}:${change.fieldId}`)); return next })
+          markFilled(filledOn, patch, true)
         } })
       }
       const page = await settledSnapshot(() => current.current.snapshot ? normalizeChatPageSnapshot(current.current.snapshot) : undefined, event.type)
@@ -401,7 +416,7 @@ export function ChatPageProvider({ children }: PropsWithChildren) {
       cancelledCommands.current.delete(event.commandId)
       if (event.type !== 'capture') drivingTimer.current = window.setTimeout(() => { drivingTimer.current = null; setDriving(false) }, 1500)
     }
-  }, [record])
+  }, [markFilled, record])
   const runCommandAction = useCallback(async (id: string) => {
     const { editor, commandActions: listed } = current.current
     if (!editor || !listed.some((action) => action.id === id)) throw new Error('이 화면에서 바로 실행할 수 없는 작업이야.')
@@ -445,7 +460,7 @@ function PageNavigationRegistration({ title }: { title: string }) {
 export function useChatPage() { return useContext(PageContext) }
 
 /** Primitive descriptors stay stable across unrelated chat renders; setters always read their latest closure. */
-export function useChatPageRegistration(input: (Omit<Editor, 'instanceId' | 'path' | 'revision'> & { localRevision?: string }) | null, options?: { preserveOnSearchChange?: boolean }) {
+export function useChatPageRegistration(input: (Omit<Editor, 'instanceId' | 'path' | 'revision' | 'inputRevision'> & { localRevision?: string; reviewRevision?: string }) | null, options?: { preserveOnSearchChange?: boolean }) {
   const page = useChatPage()
   const register = page?.register
   const location = useLocation()
@@ -457,7 +472,10 @@ export function useChatPageRegistration(input: (Omit<Editor, 'instanceId' | 'pat
   const connected = page?.enabled === true
   // The command palette also needs the operations and unsaved state, only while it is open.
   const listsActions = page?.actionsWanted === true
-  const nextDescription = input && register ? { title: input.title, kind: input.kind, resourceId: input.resourceId, fields: input.fields, priority: input.priority, ...(connected ? { workflow: input.workflow, data: input.data, localRevision: input.localRevision } : {}), ...(listsActions ? { actions: input.actions, dirty: input.dirty } : {}) } : null
+  const reviewRevision = input?.reviewRevision ?? input?.localRevision
+  const [review, setReview] = useState(() => ({ value: reviewRevision, id: createRandomUuid() }))
+  if (review.value !== reviewRevision) setReview({ value: reviewRevision, id: createRandomUuid() })
+  const nextDescription = input && register ? { title: input.title, kind: input.kind, resourceId: input.resourceId, fields: input.fields, priority: input.priority, ...(connected ? { workflow: input.workflow, data: input.data, localRevision: input.localRevision, ...(reviewRevision !== undefined ? { inputRevision: review.id } : {}) } : {}), ...(listsActions ? { actions: input.actions, dirty: input.dirty } : {}) } : null
   const [registration, setRegistration] = useState(() => ({ description: nextDescription, revision: createRandomUuid() }))
   // Immutable branches compare by identity; equal re-renders never serialize or re-register a payload.
   // Fields/data still participate even when a caller supplies localRevision: direct actions must reject stale state.

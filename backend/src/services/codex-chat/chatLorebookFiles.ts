@@ -64,6 +64,13 @@ export type OwnedLorebookSummary = ChatLorebookSummary & { threadId: number | nu
 
 type OwnedKind = 'account' | 'chat'
 
+/** The account book's "connect chats" switch from a request: undefined leaves it as it is. */
+function connectsChatsOf(value: unknown): boolean | undefined {
+  if (value === undefined) return undefined
+  if (typeof value !== 'boolean') throw new LorebookError('connectsChats는 true 또는 false로 보내줘.')
+  return value
+}
+
 // ---- Names and paths ------------------------------------------------------------------------------------------
 
 /** A name the file store accepts as a folder name ('' when nothing usable is left). */
@@ -622,15 +629,16 @@ export const OwnedLorebookStore = {
   },
 
   /** A new account book: `로어북/<name>/` with lorebook.json, lorebook.md and an empty 자료/. */
-  create(owner: string, input: { name?: unknown; entries?: unknown }): OwnedLorebook {
+  create(owner: string, input: { name?: unknown; entries?: unknown; connectsChats?: unknown }): OwnedLorebook {
     const name = accountBookName(input.name)
+    const connects = connectsChatsOf(input.connectsChats) ?? true
     const db = getUserSettingsDb()
     const row = db.transaction(() => {
       const root = lorebookRoot(owner)
       if (FileStoreService.findChild(owner, root.id, name)) throw new LorebookError(`같은 이름의 로어북이 있어: ${name}`, 409)
       const folder = FileStoreService.createFolder(owner, root.id, name)
       FileStoreService.createFolder(owner, folder.id, LORE_FILES_FOLDER)
-      const result = db.prepare("INSERT INTO chat_lorebooks (name, entries, kind, owner_key, folder_id) VALUES (?, '[]', 'account', ?, ?)").run(name, owner, folder.id)
+      const result = db.prepare("INSERT INTO chat_lorebooks (name, entries, kind, owner_key, folder_id, connects_chats) VALUES (?, '[]', 'account', ?, ?, ?)").run(name, owner, folder.id, connects ? 1 : 0)
       const created = rowById(Number(result.lastInsertRowid)) as LorebookRow
       writeBook(created, preparedEntries(created, input.entries ?? []))
       return rowById(created.id) as LorebookRow
@@ -642,8 +650,9 @@ export const OwnedLorebookStore = {
    * Rename (the folder follows) and/or replace the entries: lorebook.json is written first, then the cache. A chat
    * book left empty is removed (null).
    */
-  update(bookId: number, owner: string, patch: { name?: unknown; entries?: unknown }, revision?: string): OwnedLorebook | null {
+  update(bookId: number, owner: string, patch: { name?: unknown; entries?: unknown; connectsChats?: unknown }, revision?: string): OwnedLorebook | null {
     const db = getUserSettingsDb()
+    const connects = connectsChatsOf(patch.connectsChats)
     // Refresh may rewrite files; complete it before a later conflict or validation error can roll back the cache.
     requireOwn(bookId, owner)
     const result = db.transaction(() => {
@@ -653,6 +662,11 @@ export const OwnedLorebookStore = {
         if (sourceChanged(row)) return undefined
         const current = toOwned(row)
         if (current.revision !== revision) throw new ChatRevisionConflict(current)
+      }
+      if (connects !== undefined && (row.connects_chats !== 0) !== connects) {
+        if (row.kind !== 'account') throw new LorebookError('대화 기록 연결은 계정 로어북에서만 정할 수 있어.')
+        db.prepare('UPDATE chat_lorebooks SET connects_chats = ? WHERE id = ?').run(connects ? 1 : 0, row.id)
+        row = rowById(row.id) as LorebookRow
       }
       if (patch.name !== undefined) {
         const name = row.kind === 'account' ? accountBookName(patch.name) : folderName(patch.name, CHAT_FOLDER_NAME_MAX_LENGTH)

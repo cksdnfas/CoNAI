@@ -102,7 +102,7 @@ export function ImageViewModalActions({
   )
 
   const groupAssignButton = allowGroupAssignAction ? <ImageGroupAssignAction image={controls.image} variant="overlay" /> : null
-  const editButton = allowEditAction && permissions.canEditImages ? <ImageEditAction image={controls.image} variant="overlay" /> : null
+  const editButton = allowEditAction && permissions.canEditImages ? <ImageEditAction image={controls.image} variant="overlay" open={controls.editOpen} onOpenChange={controls.onEditOpenChange} /> : null
   const downloadButton = controls.downloadUrl ? <ImageDownloadTriggerButton image={controls.image} variant="overlay" /> : null
   // Secondary actions share one ⋯ menu so the toolbar over the photo stays short.
   const moreEntries: ActionMenuEntry[] = [

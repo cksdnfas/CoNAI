@@ -1,4 +1,7 @@
 import type { useI18n } from '@/i18n'
+import { useI18n as useI18nContext } from '@/i18n'
+import { useQuery } from '@tanstack/react-query'
+import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { getChatMediaUsage } from '@/lib/api-codex-chat'
 
 type Translate = ReturnType<typeof useI18n>['t']
@@ -27,4 +30,20 @@ export async function chatMediaDeleteWarning(compositeHashes: string[], t: Trans
 export async function withChatMediaDeleteWarning(description: string, compositeHashes: string[], t: Translate) {
   const warning = await chatMediaDeleteWarning(compositeHashes, t)
   return warning ? `${description}\n\n${warning}` : description
+}
+
+export function useChatMediaDeleteDescription(compositeHashes: string[], enabled: boolean) {
+  const { t, language } = useI18nContext()
+  const auth = useAuthStatusQuery().data
+  const description = t({
+    ko: '이미지를 삭제해. 보호 설정에 따라 영구 삭제될 수 있고, 채팅 프로필이나 메시지에 쓰인 이미지는 채팅에서 사라져.',
+    en: 'Delete the images; deletion may be permanent. Images used by chat profiles or messages will disappear from chat.',
+  })
+  const hashes = compositeHashes.slice(0, 500)
+  return useQuery({
+    queryKey: ['chat-media-delete-warning', auth?.accountId ?? null, auth?.accountType ?? null, language, hashes],
+    queryFn: async () => (await withChatMediaDeleteWarning(description, hashes, t)).slice(0, 500),
+    enabled: enabled && hashes.length > 0,
+    staleTime: 30_000,
+  }).data
 }

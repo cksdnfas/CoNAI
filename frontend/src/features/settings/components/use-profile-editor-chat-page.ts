@@ -189,6 +189,7 @@ export function useProfileEditorChatPage({ open, profile, draft, setDraft, dirty
     kind: 'settings',
     title: profile ? t({ ko: '프로필 편집 · {name}', en: 'Edit profile · {name}' }, { name: profile.name }) : t({ ko: '프로필 추가', en: 'Add profile' }),
     resourceId: profile ? `profile:${profile.id}` : 'profile:new',
+    localRevision: JSON.stringify([draft, profile?.revision]),
     priority: 10,
     dirty,
     fields: [],

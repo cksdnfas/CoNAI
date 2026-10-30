@@ -147,7 +147,16 @@ export function useAutoSettingsTab({
   refreshAutoQueries,
   notifyInfo,
   notifyError,
-}: UseAutoSettingsTabOptions): { tabProps: AutoTabProps; draftSections: SettingsDraftSection[] } {
+}: UseAutoSettingsTabOptions): {
+  tabProps: AutoTabProps
+  draftSections: SettingsDraftSection[]
+  chatActions: {
+    refresh: () => Promise<unknown>
+    install: (backend: Parameters<typeof installAiRuntime>[0]) => Promise<unknown>
+    cancel: () => Promise<unknown>
+    requeue: () => Promise<unknown>
+  }
+} {
   const queryClient = useQueryClient()
   const { t } = useI18n()
   const [taggerDraft, setTaggerDraft] = useState<TaggerSettings | null>(null)
@@ -681,6 +690,12 @@ export function useAutoSettingsTab({
 
   return {
     draftSections,
+    chatActions: {
+      refresh: () => aiRuntimeRefreshMutation.mutateAsync(),
+      install: (backend: Parameters<typeof installAiRuntime>[0]) => aiRuntimeInstallMutation.mutateAsync(backend),
+      cancel: () => aiRuntimeCancelMutation.mutateAsync(),
+      requeue: () => kaloscopeRequeueMutation.mutateAsync(),
+    },
     tabProps: {
       aiRuntimeDraft: effectiveAiRuntimeDraft,
       aiRuntimeStatus: aiRuntimeStatusQuery.data,

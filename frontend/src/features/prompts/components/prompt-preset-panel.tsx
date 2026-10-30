@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { usePresetChatPage, presetChatInput, presetChatSchema } from '../use-preset-chat-page'
 import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
 import { useDirtyBaseline } from '@/features/codex-chat/use-dirty-baseline'
-import { pageAction } from '@/features/codex-chat/page-action-helpers'
+import { pageAction, pageChoice, pageObject } from '@/features/codex-chat/page-action-helpers'
 import { useChatDraftTransaction } from '@/features/codex-chat/use-chat-draft-transaction'
 import { Copy, Pencil, Plus, Trash2 } from 'lucide-react'
 import { HierarchyPicker } from '@/components/common/hierarchy-picker'
@@ -151,10 +151,20 @@ function PromptPresetEditorModal({
       { id: 'name', label: t({ ko: '이름', en: 'Name' }), type: 'text', value: name },
       { id: 'description', label: t({ ko: '설명', en: 'Description' }), type: 'text', value: description },
     ],
-    data: { selected: { ...chatDraft, parent_id: parentId ?? 0 } },
-    actions: [pageAction('preset.draft', t({ ko: '프리셋 항목 입력', en: 'Fill preset items' }), t({ ko: '프리셋 이름·설명·상위 항목·프롬프트 목록을 편집 초안에 입력해.', en: 'Fill the preset name, description, parent and prompt items in the draft.' }), presetChatSchema(selectableParents.map((item) => item.id)))],
+    data: { selected: { ...chatDraft, id: preset?.id ?? null, revision: preset?.assistant_revision ?? '', parent_id: parentId ?? 0 } },
+    actions: [
+      pageAction('preset.draft', t({ ko: '프리셋 항목 입력', en: 'Fill preset items' }), t({ ko: '프리셋 이름·설명·상위 항목·프롬프트 목록을 편집 초안에 입력해.', en: 'Fill the preset name, description, parent and prompt items in the draft.' }), presetChatSchema(selectableParents.map((item) => item.id))),
+      pageAction(mode === 'create' ? 'preset.create' : 'preset.update', t({ ko: '초안 저장', en: 'Save draft' }), t({ ko: '현재 편집 초안을 저장해.', en: 'Save the current editor draft.' }), mode === 'edit' && preset ? pageObject({ id: pageChoice([preset.id]) }, ['id']) : undefined, 'save'),
+    ],
     apply: (patch) => { if (patch.name !== undefined) setName(String(patch.name)); if (patch.description !== undefined) setDescription(String(patch.description)) },
-    applyAction: (_id, args, assertCurrent) => { assertCurrent(); const next = presetChatInput(args); return applyChatDraft({ name: next.name, description: next.description ?? '', parent_id: next.parent_id ?? null, items: next.items }) },
+    applyAction: async (id, args, assertCurrent) => {
+      assertCurrent()
+      if (id === 'preset.draft') { const next = presetChatInput(args); return applyChatDraft({ name: next.name, description: next.description ?? '', parent_id: next.parent_id ?? null, items: next.items }) }
+      if (id !== (mode === 'create' ? 'preset.create' : 'preset.update')) throw new Error('등록되지 않은 프리셋 작업이야.')
+      const input = normalizePromptPresetInput(name, description, parentId, drafts)
+      if (!input.name || input.items.length === 0) throw new Error('이름과 프롬프트 항목이 필요해.')
+      await onSubmit(input, false)
+    },
   } : null)
 
   const handleChangeDraft = (draftId: string, field: 'description' | 'value', value: string) => {
@@ -285,7 +295,6 @@ export function PromptPresetPanel({ toolbarProps }: { toolbarProps: PromptPageTo
 
   const entries = useMemo(() => flattenPromptPresetTree(presetsQuery.data ?? []), [presetsQuery.data])
   const selectedPreset = entries.find((entry) => entry.preset.id === selectedPresetId)?.preset ?? null
-  usePresetChatPage(entries.map((entry) => entry.preset), selectedPreset, setSelectedPresetId, editorState === null)
   const insertionPreview = selectedPreset ? buildPromptPresetInsertionText(selectedPreset) : ''
 
   const createMutation = useMutation({
@@ -340,6 +349,7 @@ export function PromptPresetPanel({ toolbarProps }: { toolbarProps: PromptPageTo
     },
     onError: (error) => showSnackbar({ message: getErrorMessage(error, t('prompts.components.prompt.preset.panel.failed.to.delete.preset')), tone: 'error' }),
   })
+  usePresetChatPage(entries.map((entry) => entry.preset), selectedPreset, setSelectedPresetId, (presetId, cascade) => deleteMutation.mutateAsync({ presetId, cascade }), editorState === null)
 
   const handleCopyInsertion = async () => {
     if (!insertionPreview) {

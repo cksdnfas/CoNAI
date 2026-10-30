@@ -10,7 +10,7 @@ import { BoardCallRooms } from '../services/posts/boardCallRooms';
 import { validateMcpToolArguments } from './requestSecurity';
 import { findExternalMcpTool } from '../services/externalMcp/externalMcpServers';
 import { findPluginServerTool } from '../services/plugins/pluginServerTools';
-import { CHAT_BLOCKED_TOOLS, CHAT_ROOM_TOOLS, CHAT_SETTINGS_TOOLS, CHAT_VISION_BUILTIN_TOOLS, GENERATION_PRESET_BLOCKED_TOOLS, GROUP_ONLY_CHAT_TOOLS, getMcpToolScope, isChatGenerationTool, isChatMcpSource, isConnectedChatPageTool, isMcpToolAllowed, type McpRequestContext, type McpRequester } from './context';
+import { CHAT_BLOCKED_TOOLS, CHAT_PAGE_TOOLS, CHAT_ROOM_TOOLS, CHAT_SETTINGS_TOOLS, CHAT_VISION_BUILTIN_TOOLS, GENERATION_PRESET_BLOCKED_TOOLS, GROUP_ONLY_CHAT_TOOLS, isPublicChatPage, getMcpToolScope, isChatGenerationTool, isChatMcpSource, isConnectedChatPageTool, isMcpToolAllowed, type McpRequestContext, type McpRequester } from './context';
 
 export const TOOL_FEATURE_PERMISSIONS: Record<string, string | readonly string[]> = {
   list_character_library: 'characters.view', get_character_setting: 'characters.view',
@@ -104,8 +104,7 @@ const BOARD_CALL_BLOCKED_TOOLS = new Set(['run_plugin_action', 'get_plugin_actio
 const BOARD_CALL_BLOCKED_POST_TOOLS = new Set(['posts_delete', 'posts_restore_revision', 'post_comment_delete']);
 
 /**
- * Writes the web allows administrators only (`/api/settings` sits behind requireAdmin). They stay listed so a
- * non-administrator's call gets a clear refusal; HTTP keys hold no administrator role.
+ * Writes the web allows administrators only; HTTP keys hold no administrator role.
  */
 const ADMIN_ONLY_TOOLS = new Set(['set_live_wallpaper', 'save_wallpaper_schedule']);
 
@@ -144,6 +143,8 @@ function accountHoldsTool(context: McpRequestContext, toolName: string): boolean
   const { keys, admin, profile } = factsFor(context);
   if (!requiredToolKeys(toolName).every((key) => keys.has(key))) return false;
   if (getMcpToolScope(toolName) === 'configure' && !admin) return false;
+  if (ADMIN_ONLY_TOOLS.has(toolName) && !admin) return false;
+  if (isChatMcpSource(context.source) && CHAT_PAGE_TOOLS.has(toolName) && !profile?.pageAssist) return false;
   if (profile && isVisionTool(toolName) && !profileSeesImages(profile)) return false;
   if (profile && (toolName === 'save_lore' || toolName === 'edit_lore_file') && !profile.allowLoreProposals) return false;
   return true;
@@ -157,6 +158,7 @@ function isKeyContext(context: McpRequestContext) {
 /** What the key's permission group must hold: the same keys an account of that group would need. */
 const keyListingFacts = new WeakMap<McpRequestContext, { at: number; keys: Set<string> }>();
 function keyHoldsTool(context: McpRequestContext, toolName: string): boolean {
+  if (ADMIN_ONLY_TOOLS.has(toolName)) return false;
   let facts = keyListingFacts.get(context);
   if (!facts || Date.now() - facts.at >= 1000) {
     facts = { at: Date.now(), keys: new Set(keyGroupPermissionKeys(context.keyGroup ?? null)) };
@@ -173,9 +175,10 @@ function keyHoldsTool(context: McpRequestContext, toolName: string): boolean {
  * `requireMcpToolAccess` re-runs this before each call, then rechecks the account with explicit errors.
  */
 export function isContextToolAllowed(context: McpRequestContext, toolName: string, accountChecks = true): boolean {
+  const publicPage = isPublicChatPage(context);
   if (toolName === 'call_agent' && (!context.chatContext || context.scopes.length === 0
     || (context.toolAllowlist && !context.toolAllowlist.includes(toolName))
-    || context.chatContext.page?.path.startsWith('/public/')
+    || publicPage
     || BoardCallRooms.runFor(context.chatContext.threadId, context.chatContext.profileId) !== null)) return false;
   if (context.chatContext && (toolName === 'call_agent' || toolName === 'task_propose' || isProposalTool(toolName)) && isAgentRoom(context.chatContext.threadId)) return false;
   if (context.research && !context.research.allowsTool(toolName)) return false;
@@ -183,6 +186,7 @@ export function isContextToolAllowed(context: McpRequestContext, toolName: strin
     if (!context.requester || !isChatMcpSource(context.source) || context.chatContext?.kind !== 'direct' || BoardCallRooms.runFor(context.chatContext.threadId, context.chatContext.profileId) !== null) return false;
   }
   if (toolName.startsWith('workspace_')) {
+    if (publicPage) return false;
     const writes = toolName === 'workspace_apply' || toolName === 'workspace_publish_resources';
     if (context.source === 'plugin') return !!context.workspace && !!context.requester && context.scopes.includes(writes ? 'organize' : 'read') && (!context.toolAllowlist || context.toolAllowlist.includes(toolName)) && (!writes || context.workspace.write) && featurePermissionOf(toolName) !== undefined && (!accountChecks || accountHoldsTool(context, toolName));
     if (!context.workspace || !context.chatContext || context.chatContext.kind !== 'direct' || !isChatMcpSource(context.source)) return false;
@@ -195,12 +199,13 @@ export function isContextToolAllowed(context: McpRequestContext, toolName: strin
   if (isKeyContext(context) && (featurePermissionOf(toolName) === undefined || (accountChecks && !keyHoldsTool(context, toolName)))) return false;
   if (isChatMcpSource(context.source) && CHAT_BLOCKED_TOOLS.has(toolName)) return false;
   if (accountChecks && context.requester && !accountHoldsTool(context, toolName)) return false;
-  const publicPage = context.chatContext?.page?.path.startsWith('/public/') === true;
   if ((toolName === 'edit_lore_file' || toolName.startsWith('linked_') || toolName.startsWith('room_history_')) && publicPage) return false;
   if (CHAT_SETTINGS_TOOLS.has(toolName)) return Boolean(context.chatContext) && !publicPage && BoardCallRooms.runFor(context.chatContext!.threadId, context.chatContext!.profileId) === null;
   if (CHAT_ROOM_TOOLS.has(toolName)) return Boolean(context.chatContext) && (!GROUP_ONLY_CHAT_TOOLS.has(toolName) || context.chatContext?.kind === 'group');
   if (CHAT_VISION_BUILTIN_TOOLS.has(toolName) && context.chatContext) return true;
-  if (isConnectedChatPageTool(context, toolName)) return true;
+  if ((context.generationPresetIds?.length ?? 0) > 0 && GENERATION_PRESET_BLOCKED_TOOLS.has(toolName)) return false;
+  if (isConnectedChatPageTool(context, toolName) && (!accountChecks || !context.requester || factsFor(context).profile?.pageAssist)) return true;
+  if (isChatMcpSource(context.source) && CHAT_PAGE_TOOLS.has(toolName)) return false;
   if (publicPage && !isChatGenerationTool(toolName)) return false;
   if (context.toolAllowlist && !context.toolAllowlist.includes(toolName)) return false;
   const presetMode = (context.generationPresetIds?.length ?? 0) > 0;

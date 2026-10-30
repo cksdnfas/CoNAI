@@ -244,12 +244,14 @@ test('content rating ceilings: what a model may be shown', { timeout: 60000 }, a
     try {
       const result = await bridge.call('propose_page_action', { actionId: 'metadata.save', arguments: {} })
       assert.ok(!result.isError, JSON.stringify(result))
-      const shown = (result.structuredContent as { proposal: { id: number; before: Record<string, unknown>; rating_restricted?: boolean } }).proposal
+      const shown = (result.structuredContent as { proposal: { id: number; before: { selected: Record<string, unknown>; fields: Record<string, unknown> }; rating_restricted?: boolean } }).proposal
       assert.doesNotMatch(JSON.stringify(result), /page probe|neg probe/)
       assert.equal(shown.rating_restricted, true)
-      assert.equal(shown.before.steps, 28)
-      const stored = ChatProposalStore.find(shown.id) as { before: Record<string, unknown> }
-      assert.equal(stored.before.prompt, 'page probe', 'the review card keeps the live values')
+      assert.equal(shown.before.selected.steps, 28)
+      assert.equal(shown.before.fields.steps, 28)
+      const stored = ChatProposalStore.find(shown.id) as { before: { selected: Record<string, unknown>; fields: Record<string, unknown> } }
+      assert.equal(stored.before.selected.prompt, 'page probe', 'the review card keeps the live values')
+      assert.equal(stored.before.fields.negativePrompt, 'neg probe')
     } finally {
       await bridge.close()
       unregister()

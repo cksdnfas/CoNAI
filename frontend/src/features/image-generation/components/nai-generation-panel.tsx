@@ -57,11 +57,13 @@ import { ChatGenerationPresetSaveModal } from '@/features/settings/components/ch
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { normalizeTextSegmentSpreadsheetText } from './text-segment-spreadsheet-input'
 import { useNaiChatPage } from './use-generation-chat-page'
+import type { GenerationHistoryRecord } from '@/lib/api-image-generation-types'
 
 const ImageEditor = lazy(() => import('@/features/image-editor/image-editor'))
 
 type NaiGenerationPanelProps = {
   onHistoryRefresh: () => void
+  historyRecords: GenerationHistoryRecord[]
   splitPaneScroll?: boolean
   compactActionBar?: boolean
   compactActionBarContentTargetId?: string
@@ -74,6 +76,7 @@ type NaiGenerationPanelProps = {
 /** Render the NAI login, generation, and image-editing workflow. */
 export function NaiGenerationPanel({
   onHistoryRefresh,
+  historyRecords,
   splitPaneScroll = false,
   compactActionBar = false,
   compactActionBarContentTargetId,
@@ -115,8 +118,6 @@ export function NaiGenerationPanel({
   const sourceImageSize = useNaiImageSize(naiForm.sourceImage?.dataUrl)
   const naiEnhance = resolveNaiFormEnhance(naiForm, sourceImageSize)
   const naiEnhancePlan = naiEnhance?.plan ?? null
-
-  useNaiChatPage(naiForm, setNaiForm, sourceImageSize)
 
   const confirm = useConfirm()
   useHistorySettingsLoad('novelai', (request) => {
@@ -297,6 +298,13 @@ export function NaiGenerationPanel({
     onHistoryRefresh,
     imageSaveOptions: generationImageSaveOptions,
     showSnackbar,
+  })
+  useNaiChatPage(naiForm, setNaiForm, sourceImageSize, historyRecords, handleNaiGenerate, {
+    estimate: naiCostEstimate ? naiClickCost : null,
+    free: naiCostEstimate ? naiFreePerJob : null,
+    extraUpscale: naiServerUpscale,
+    width: naiCostWidth,
+    height: naiCostHeight,
   })
 
   const handleOpenNaiAuthModal = useCallback(() => setIsNaiAuthModalOpen(true), [setIsNaiAuthModalOpen])

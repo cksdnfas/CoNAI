@@ -55,6 +55,61 @@ function writePrefs(key: string, value: unknown) {
   }
 }
 
+const DEFAULT_PREFS: GenerationPrefs = { seconds: '3', count: '4', seed: '' }
+
+export type AudioGenerateDraft = ReturnType<typeof useAudioGenerateDraft>
+
+/**
+ * The composer's draft (prompt, length, count, seed, workflow and server route), held by the page so the connected chat
+ * can fill it as well. The prompt follows the effect's representative prompt while it is untouched (a dialog edit shows
+ * up at once) and starts over when another effect opens; the other values carry across effects. `active`: the bar is
+ * shown and may generate, so the workflow and server lists are worth loading.
+ */
+export function useAudioGenerateDraft(group: AudioGroup | null, active: boolean) {
+  const groupId = group?.id ?? null
+  const groupPrompt = group?.prompt ?? ''
+  // seen: the last representative prompt observed; synced: the prompt the text counts as untouched against.
+  const [draft, setDraft] = useState({ groupId, text: groupPrompt, synced: groupPrompt, seen: groupPrompt })
+  if (draft.groupId !== groupId) setDraft({ groupId, text: groupPrompt, synced: groupPrompt, seen: groupPrompt })
+  else if (draft.seen !== groupPrompt) setDraft({ groupId, text: draft.text === draft.synced ? groupPrompt : draft.text, synced: groupPrompt, seen: groupPrompt })
+  // Keep the last generation settings across effects; migrate the first effect's saved values on first use.
+  const [prefs, setPrefs] = useState<GenerationPrefs>(() => readPrefs(GENERATION_PREFS_KEY, group ? readPrefs(legacyGroupPrefsKey(group.id), DEFAULT_PREFS) : DEFAULT_PREFS))
+  useEffect(() => { writePrefs(GENERATION_PREFS_KEY, prefs) }, [prefs])
+  const workflows = useQuery({ queryKey: [AUDIO_QUERY_KEY, 'workflows'], queryFn: listAudioWorkflows, enabled: active })
+  const servers = useQuery({ queryKey: comfyUIServersQueryKey(true), queryFn: () => getGenerationComfyUIServers(true), enabled: active, retry: false })
+  const [global, setGlobal] = useState<GlobalPrefs>(() => readPrefs(GLOBAL_PREFS_KEY, { workflowId: null, route: '' }))
+  useEffect(() => { writePrefs(GLOBAL_PREFS_KEY, global) }, [global])
+  const list = useMemo(() => workflows.data ?? [], [workflows.data])
+  const bound = useMemo(() => list.filter((entry) => entry.binding && entry.is_active), [list])
+  const workflow = bound.find((entry) => entry.id === global.workflowId) ?? bound.find((entry) => entry.binding?.is_default) ?? bound[0] ?? null
+  const tags = [...new Set((servers.data ?? []).flatMap((server) => server.routing_tags ?? []))]
+  const routeServers = (servers.data ?? []).filter((server) => server.backend_type !== 'modal')
+  // The shown bar's generate (it alone knows the workflow, servers and readiness); the chat's audio.generate runs it.
+  const runner = useRef<(() => Promise<void>) | null>(null)
+  return {
+    text: draft.text,
+    setText: (text: string) => setDraft((current) => ({ ...current, text })),
+    /** The text was saved as the representative prompt. */
+    markSaved: (prompt: string) => setDraft((current) => ({ ...current, synced: prompt })),
+    prefs,
+    setPrefs: (patch: Partial<GenerationPrefs>) => setPrefs((current) => ({ ...current, ...patch })),
+    workflows,
+    servers,
+    list,
+    bound,
+    /** The workflow a run uses: the picked one, else the default binding, else the first bound one. */
+    workflow,
+    tags,
+    routeServers,
+    /** '' = automatic, `tag:<tag>` = automatic among servers with that tag, `server:<id>` = that server. */
+    route: global.route,
+    setGlobal: (patch: Partial<GlobalPrefs>) => setGlobal((current) => ({ ...current, ...patch })),
+    bindRunner: (run: (() => Promise<void>) | null) => { runner.current = run },
+    /** Generate with the current draft, as the bar's button does; rejects when the bar is not shown or cannot run. */
+    generate: () => runner.current ? runner.current() : Promise.reject(new Error('생성 바가 열려 있지 않아.')),
+  }
+}
+
 /** The binding the server would have suggested, when all three roles have distinct fields. */
 function suggestedBinding(workflow: AudioWorkflowSummary) {
   const { prompt, seconds, seed } = workflow.suggested
@@ -77,8 +132,10 @@ type Readiness =
  * status chip that says which workflow and servers will run it. When something blocks generation the chip turns
  * red or amber and the fix sits next to it; the generate button stays in place, disabled.
  */
-export function AudioGenerateBar({ group, autoFocus = false, canGenerate, canAddWorkflow, onOrdered, onPromptSaved, onOpenSettings }: {
+export function AudioGenerateBar({ group, draft, autoFocus = false, canGenerate, canAddWorkflow, onOrdered, onPromptSaved, onOpenSettings }: {
   group: AudioGroup
+  /** useAudioGenerateDraft for this group. */
+  draft: AudioGenerateDraft
   /** Focus the prompt (a just-created effect). */
   autoFocus?: boolean
   canGenerate: boolean
@@ -93,34 +150,16 @@ export function AudioGenerateBar({ group, autoFocus = false, canGenerate, canAdd
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { showSnackbar } = useSnackbar()
-  const workflows = useQuery({ queryKey: [AUDIO_QUERY_KEY, 'workflows'], queryFn: listAudioWorkflows, enabled: canGenerate })
-  const servers = useQuery({ queryKey: comfyUIServersQueryKey(true), queryFn: () => getGenerationComfyUIServers(true), enabled: canGenerate, retry: false })
-  const [text, setText] = useState(group.prompt)
-  // Keep the last generation settings across effects; migrate the current effect's saved values on first use.
-  const [prefs, setPrefs] = useState<GenerationPrefs>(() => readPrefs(GENERATION_PREFS_KEY, readPrefs(legacyGroupPrefsKey(group.id), { seconds: '3', count: '4', seed: '' })))
-  const [global, setGlobal] = useState<GlobalPrefs>(() => readPrefs(GLOBAL_PREFS_KEY, { workflowId: null, route: '' }))
+  const { text, setText, markSaved, prefs, setPrefs: set, workflows, servers, list, bound, workflow, tags, routeServers, route, setGlobal } = draft
   const [busy, setBusy] = useState<'order' | 'fix' | 'check' | null>(null)
   const [chipOpen, setChipOpen] = useState(false)
   const fail = (error: unknown) => showSnackbar({ message: getErrorMessage(error, t({ ko: '실패했어.', en: 'Failed.' })), tone: 'error' })
 
-  // The prompt follows the effect's representative prompt while it is untouched here (a dialog edit shows up at once).
-  const syncedPrompt = useRef(group.prompt)
-  useEffect(() => {
-    setText((current) => (current === syncedPrompt.current ? group.prompt : current))
-    syncedPrompt.current = group.prompt
-  }, [group.prompt])
-  useEffect(() => { writePrefs(GENERATION_PREFS_KEY, prefs) }, [prefs])
-  useEffect(() => { writePrefs(GLOBAL_PREFS_KEY, global) }, [global])
-
-  const list = useMemo(() => workflows.data ?? [], [workflows.data])
-  const bound = useMemo(() => list.filter((entry) => entry.binding && entry.is_active), [list])
-  const workflow = bound.find((entry) => entry.id === global.workflowId) ?? bound.find((entry) => entry.binding?.is_default) ?? bound[0] ?? null
   const compat = workflow?.binding?.compat ?? null
-  const routeServerId = global.route.startsWith('server:') ? Number(global.route.slice(7)) : null
+  const routeServerId = route.startsWith('server:') ? Number(route.slice(7)) : null
   const scoped = compat ? (routeServerId !== null ? compat.servers.filter((entry) => entry.server_id === routeServerId) : compat.servers) : []
   const okServers = scoped.filter((entry) => entry.status === 'ok').length
   const secondsMax = compat?.seconds_max ?? null
-  const tags = [...new Set((servers.data ?? []).flatMap((server) => server.routing_tags ?? []))]
 
   const readiness: Readiness = !canGenerate ? { kind: 'no-permission' }
     : workflows.isPending ? { kind: 'loading' }
@@ -147,7 +186,7 @@ export function AudioGenerateBar({ group, autoFocus = false, canGenerate, canAdd
     }
     await saveAudioWorkflowBinding(target.id, { ...binding, is_default: !list.some((entry) => entry.binding) })
     await refreshWorkflows()
-    setGlobal((current) => ({ ...current, workflowId: target.id }))
+    setGlobal({ workflowId: target.id })
     showSnackbar({ message: t({ ko: '{name} 연결했어.', en: 'Linked {name}.' }, { name: target.name }) })
   }
   const runFix = async (work: () => Promise<void>) => {
@@ -180,15 +219,15 @@ export function AudioGenerateBar({ group, autoFocus = false, canGenerate, canAdd
     }
   }
 
-  const submit = async (event?: FormEvent) => {
-    event?.preventDefault()
-    if (!runnable || !valid || !workflow || busy) return
+  const order = async () => {
+    if (!runnable || !valid || !workflow) throw new Error(t({ ko: '지금은 생성할 수 없어. 프롬프트·길이·개수·seed와 생성 바의 워크플로 상태를 확인해.', en: 'Cannot generate now. Check the prompt, length, count, seed and the bar\'s workflow status.' }))
+    if (busy) throw new Error(t({ ko: '생성 바가 다른 작업 중이야.', en: 'The generate bar is busy.' }))
     setBusy('order')
     try {
       const prompt = text.trim()
       if (prompt !== group.prompt.trim()) {
         await updateAudioGroup(group.id, { prompt })
-        syncedPrompt.current = prompt
+        markSaved(prompt)
         onPromptSaved()
       }
       onOrdered(await createAudioOrder({
@@ -200,13 +239,20 @@ export function AudioGenerateBar({ group, autoFocus = false, canGenerate, canAdd
         seed: prefs.seed.trim() === '' ? null : Number(prefs.seed.trim()),
         request_key: createRandomUuid(),
         server_id: routeServerId,
-        server_tag: global.route.startsWith('tag:') ? global.route.slice(4) : null,
+        server_tag: route.startsWith('tag:') ? route.slice(4) : null,
       }))
-    } catch (error) {
-      fail(error)
     } finally {
       setBusy(null)
     }
+  }
+  useEffect(() => {
+    draft.bindRunner(order)
+    return () => draft.bindRunner(null)
+  })
+  const submit = (event?: FormEvent) => {
+    event?.preventDefault()
+    if (!runnable || !valid || !workflow || busy) return
+    order().catch(fail)
   }
 
   const savePrompt = async () => {
@@ -214,14 +260,13 @@ export function AudioGenerateBar({ group, autoFocus = false, canGenerate, canAdd
     if (!prompt || prompt === group.prompt.trim() || busy === 'order') return
     try {
       await updateAudioGroup(group.id, { prompt })
-      syncedPrompt.current = prompt
+      markSaved(prompt)
       onPromptSaved()
     } catch (error) {
       fail(error)
     }
   }
 
-  const set = (patch: Partial<GenerationPrefs>) => setPrefs((current) => ({ ...current, ...patch }))
   const workflowDetail = workflow ? [
     workflow.name,
     secondsMax !== null ? t({ ko: '최대 {max}초', en: 'max {max} s' }, { max: secondsMax }) : null,
@@ -261,16 +306,16 @@ export function AudioGenerateBar({ group, autoFocus = false, canGenerate, canAdd
         <PopoverContent align="end" className="w-80 space-y-3">
           {bound.length > 1 ? (
             <Field label={t({ ko: '워크플로', en: 'Workflow' })}>
-              <Select value={workflow?.id ?? ''} onChange={(event) => setGlobal((current) => ({ ...current, workflowId: Number(event.target.value) }))}>
+              <Select value={workflow?.id ?? ''} onChange={(event) => setGlobal({ workflowId: Number(event.target.value) })}>
                 {bound.map((entry) => <option key={entry.id} value={entry.id}>{entry.name}</option>)}
               </Select>
             </Field>
           ) : null}
           <Field label={t({ ko: '서버', en: 'Server' })}>
-            <Select value={global.route} onChange={(event) => setGlobal((current) => ({ ...current, route: event.target.value }))}>
+            <Select value={route} onChange={(event) => setGlobal({ route: event.target.value })}>
               <option value="">{t({ ko: '자동', en: 'Auto' })}</option>
               {tags.map((tag) => <option key={`tag:${tag}`} value={`tag:${tag}`}>{t({ ko: '자동 · {tag}', en: 'Auto · {tag}' }, { tag })}</option>)}
-              {(servers.data ?? []).filter((server) => server.backend_type !== 'modal').map((server) => <option key={server.id} value={`server:${server.id}`}>{server.name}</option>)}
+              {routeServers.map((server) => <option key={server.id} value={`server:${server.id}`}>{server.name}</option>)}
             </Select>
           </Field>
           <CompatLine compat={compat} />

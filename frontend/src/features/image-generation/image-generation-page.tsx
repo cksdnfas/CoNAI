@@ -12,6 +12,7 @@ import type { GenerationResultView } from './components/generation-result-area'
 import { GenerationNarrowSplit, type GenerationNarrowView } from './components/generation-narrow-split'
 import { GENERATION_TOOLBAR_STATUS_SLOT_ID } from './components/generation-toolbar-status'
 import { useGenerationHistoryFeed } from './components/use-generation-history-feed'
+import { useChatPage } from '@/features/codex-chat/chat-page-context'
 import { usePendingHistorySettingsLoad } from './history-settings-load-store'
 import { GenerationLayoutControls } from './layout/generation-layout-controls'
 import { GenerationLayoutProvider, useGenerationLayout } from './layout/generation-layout-context'
@@ -83,6 +84,7 @@ export function ImageGenerationPage() {
 
 function ImageGenerationPageContent() {
   const { t, formatNumber } = useI18n()
+  const chatPage = useChatPage()
   const [searchParams, setSearchParams] = useSearchParams()
   const [historyRefreshNonce, setHistoryRefreshNonce] = useState(0)
   const [resultView, setResultView] = useState<GenerationResultView>('stage')
@@ -134,7 +136,7 @@ function ImageGenerationPageContent() {
     refreshNonce: historyRefreshNonce,
     serviceType: historyServiceType,
     workflowId: historyWorkflowId,
-    enabled: shouldShowHistory,
+    enabled: shouldShowHistory || (chatPage?.enabled === true && activeTab === 'comfyui' && selectedComfyWorkflowId !== null),
   })
 
   // "이 설정 불러오기": 기록의 제공자 탭/워크플로우로 옮기고, 좁은 화면에서는 편집 보기로 돌린다.
@@ -250,6 +252,7 @@ function ImageGenerationPageContent() {
     ? (
       <NaiGenerationPanelLazy
         onHistoryRefresh={handleHistoryRefresh}
+        historyRecords={historyFeed.historyRecords}
         splitPaneScroll={useWideSplitPaneScroll}
         compactActionBar={useWideSplitPaneScroll || useNarrowTabs}
         compactActionBarContentTargetId={stickyActionBarTargetId}
@@ -261,6 +264,7 @@ function ImageGenerationPageContent() {
       ? (
         <CodexGenerationPanelLazy
           onHistoryRefresh={handleHistoryRefresh}
+          historyRecords={historyFeed.historyRecords}
           splitPaneScroll={useWideSplitPaneScroll}
           compactActionBarContentTargetId={stickyActionBarTargetId}
           statusPortalTargetId={GENERATION_TOOLBAR_STATUS_SLOT_ID}
@@ -271,6 +275,7 @@ function ImageGenerationPageContent() {
         ? (
           <ComfyGenerationPanelLazy
             onHistoryRefresh={handleHistoryRefresh}
+            historyRecords={historyFeed.historyRecords}
             selectedWorkflowId={selectedComfyWorkflowId}
             onSelectedWorkflowChange={setSelectedComfyWorkflowId}
             splitPaneScroll={useWideSplitPaneScroll}

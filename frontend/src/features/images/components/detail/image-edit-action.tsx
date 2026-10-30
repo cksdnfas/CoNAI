@@ -19,6 +19,8 @@ const ImageEditor = lazy(() => import('@/features/image-editor/image-editor'))
 
 interface ImageEditActionProps {
   image?: ImageRecord
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
   /** `ghost` in page toolbars, `overlay` on the viewer's photo stage. */
   variant?: 'ghost' | 'secondary' | 'overlay'
 }
@@ -34,12 +36,14 @@ function editedFileName(image?: ImageRecord) {
 }
 
 /** Edit an image and save the result into the library as a new image, in the same groups as the original. */
-export function ImageEditAction({ image, variant = 'secondary' }: ImageEditActionProps) {
+export function ImageEditAction({ image, variant = 'secondary', open, onOpenChange }: ImageEditActionProps) {
   const { canCreateImageCopies } = useImagePermissions()
   const queryClient = useQueryClient()
   const { showSnackbar } = useSnackbar()
   const { t } = useI18n()
-  const [isEditorOpen, setIsEditorOpen] = useState(false)
+  const [internalOpen, setInternalOpen] = useState(false)
+  const isEditorOpen = open ?? internalOpen
+  const setIsEditorOpen = onOpenChange ?? setInternalOpen
   const [imageSaveOptions, setImageSaveOptions] = useState<ImageSaveSettings>(DEFAULT_IMAGE_SAVE_SETTINGS)
   const [pendingResult, setPendingResult] = useState<Blob | null>(null)
   const [pendingInfo, setPendingInfo] = useState<ImageSaveSourceInfo | null>(null)

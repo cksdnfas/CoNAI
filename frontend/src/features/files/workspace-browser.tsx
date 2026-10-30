@@ -202,6 +202,7 @@ export function WorkspaceBrowser({ projectId, dir, onNavigate, onProject, onCrea
 
   useChatPageRegistration(chatPage ? {
     kind: 'files', title: projectName, resourceId: `workspace:${projectId}`, localRevision: JSON.stringify([dir, offset, selected, nameDialog, searchInput, editor?.entry?.id]),
+    reviewRevision: JSON.stringify([dir, selected, nameDialog, editor?.entry?.id]),
     fields: [
       { id: 'search', label: t({ ko: '검색어 (빈 값은 검색 닫기)', en: 'Search (empty closes search)' }), type: 'text', value: searchOpen ? searchInput : '' },
       ...(nameDialog ? [{ id: 'name', label: t({ ko: '폴더 이름 입력', en: 'Folder name draft' }), type: 'text' as const, value: nameDialog.name }] : []),

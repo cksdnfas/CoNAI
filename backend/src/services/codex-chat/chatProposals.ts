@@ -43,6 +43,12 @@ function toProposal(row: ProposalRow): ChatProposal {
   return merged as ChatProposal
 }
 
+export function hasStartedPageApplication(proposal: ChatProposal | null): boolean {
+  if (!proposal || !['page_fields', 'workflow_graph', 'page_action'].includes(proposal.kind)) return false
+  const { applicationStartedAt, expiresAt } = proposal as { applicationStartedAt?: unknown; expiresAt?: unknown }
+  return typeof applicationStartedAt === 'number' && typeof expiresAt === 'number' && applicationStartedAt < expiresAt
+}
+
 export const ChatProposalStore = {
   /** Stores a proposal for the reply it was made in; `seq` is its order within that reply. */
   add(context: ChatExecutionContext, proposal: NewChatProposal): ChatProposal {
@@ -68,6 +74,18 @@ export const ChatProposalStore = {
   find(id: number): ChatProposal | null {
     const row = table().prepare('SELECT * FROM chat_proposals WHERE id = ?').get(id) as ProposalRow | undefined
     return row ? toProposal(row) : null
+  },
+
+  /** Server-only start marker: a successful owned page-check may be acknowledged after expiry. */
+  markPageStarted(id: number): boolean {
+    const now = Date.now()
+    return table().prepare(`UPDATE chat_proposals SET proposal = json_set(proposal, '$.applicationStartedAt', ?)
+      WHERE id = ? AND kind IN ('page_fields', 'workflow_graph', 'page_action') AND saved = 0 AND dismissed = 0
+      AND json_extract(proposal, '$.expiresAt') > ?`).run(now, id, now).changes === 1
+  },
+
+  pageApplicationStarted(id: number): boolean {
+    return hasStartedPageApplication(ChatProposalStore.find(id))
   },
 
   /** Keep what undoing an applied lore entry needs (the entry before and after, a file it created), without general entry history. */

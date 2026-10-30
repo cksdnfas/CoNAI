@@ -31,7 +31,7 @@ import { createPluginDraft, downloadPluginPackage, PLUGIN_DRAFTS_QUERY_KEY } fro
 import { createRandomUuid } from '@/lib/random-uuid'
 
 /** Settings › 플러그인 관리 and the 플러그인 page: install a package, switch plugins on and off, see what each may do, remove one. */
-export function PluginManagement() {
+export function PluginManagement({ assistantPage }: { assistantPage?: PluginManagementPage } = {}) {
   const { t } = useI18n()
   const navigate = useNavigate()
   const [, setParams] = useSearchParams()
@@ -120,8 +120,9 @@ export function PluginManagement() {
   })
   // Page data and arguments never carry URLs (shared page-data rule), so the repository travels as host/owner/repo.
   const sourcePage: PluginManagementPage = {
-    localRevision: JSON.stringify([busy, detail, sourceInstall.input, sourceInstall.review?.reviewId, sourceInstall.busy]),
+    localRevision: JSON.stringify([busy, detail, sourceInstall.input, sourceInstall.review?.reviewId, sourceInstall.busy, assistantPage?.localRevision]),
     data: {
+      ...assistantPage?.data,
       linkedPlugins: linked.slice(0, 80).map(({ manifest, source }) => ({
         pluginId: manifest.id, name: pageFreeText(manifest.name), version: manifest.version,
         repository: source!.url.replace(/^https:\/\//, ''), ref: source!.ref, path: source!.path, commit: source!.commit, latestCommit: source!.latestCommit,
@@ -141,8 +142,10 @@ export function PluginManagement() {
         pluginId: pageText(48), repository: pageText(2000), provider: pageChoice(['github', 'gitlab', 'gitea']), ref: pageText(200), folder: pageText(200),
       })),
       ...(sourceInstall.input && sourceInstall.review ? [pageAction('plugin_source.install', t({ ko: '검토한 패키지 적용', en: 'Apply reviewed package' }), 'Install exactly the displayed Git package review. A new package stays disabled; an enabled update restarts its code.', undefined, 'save')] : []),
+      ...assistantPage?.actions ?? [],
     ],
     applyAction: async (id, args) => {
+      if (assistantPage?.actions.some((action) => action.id === id)) { await assistantPage.applyAction(id, args); return }
       if (busy || sourceInstall.busy) throw new Error(t({ ko: '진행 중인 작업이 끝나면 다시 요청해줘.', en: 'Wait for the current operation to finish.' }))
       if (id === 'plugin_source.check') await checkSources()
       else if (id === 'plugin_source.review') {

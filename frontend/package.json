@@ -18,7 +18,7 @@
     "test:chat-page": "tsx --tsconfig tsconfig.test.json --test test/chat-page-context.test.ts",
     "test:image-pagination": "tsx --tsconfig tsconfig.test.json --test test/image-list-pagination.test.ts",
     "test:generation-layout": "tsx --tsconfig tsconfig.test.json --test test/generation-layout.test.ts",
-    "test:module-graph": "tsx --tsconfig tsconfig.test.json --test test/module-graph-loading.test.ts",
+    "test:module-graph": "tsx --tsconfig tsconfig.test.json --test test/module-graph-loading.test.ts test/workflow-chat-adapter.test.tsx",
     "test:chat-integrity": "tsx --tsconfig tsconfig.test.json --test test/chat-draft-integrity.test.ts test/chat-tail-integrity.test.ts",
     "test:editor-conflicts": "tsx --tsconfig tsconfig.test.json --test test/post-editor-conflict.test.tsx test/native-editor-conflicts.test.ts test/workflow-save-conflicts.test.ts test/comfy-draft-integrity.test.tsx",
     "lint": "eslint .",

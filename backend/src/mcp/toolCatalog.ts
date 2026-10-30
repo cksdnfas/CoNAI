@@ -2,7 +2,7 @@ import { McpServer } from '@modelcontextprotocol/server';
 import { Client, InMemoryTransport } from '@modelcontextprotocol/client';
 import { z } from 'zod';
 import { rawTokenEstimate } from '../services/llmUsage';
-import { CHAT_PAGE_KIND_TOOLS, CHAT_PAGE_TOOLS, CHAT_ROOM_TOOLS, CHAT_SETTINGS_TOOLS, CHAT_VISION_BUILTIN_TOOLS, isChatGenerationTool, type McpRequestContext } from './context';
+import { CHAT_ROOM_TOOLS, CHAT_VISION_BUILTIN_TOOLS, isChatGenerationTool, isConnectedChatPageTool, type McpRequestContext } from './context';
 import { errorResult } from './toolResults';
 import { PLUGIN_SERVER_TOOL_PREFIX, pluginProfileTools } from '../services/plugins/pluginServerTools';
 import { isChatProposalToolAvailable } from '../services/codex-chat/chatProposals';
@@ -72,10 +72,14 @@ function contentsLine(names: string[]) {
 /** The chat's own tools and what a connected page brings stay in the tool list; everything else may be catalogued. */
 export function isDirectChatTool(context: McpRequestContext, toolName: string): boolean {
   if (context.workspace && toolName.startsWith('workspace_') && toolName !== 'workspace_publish_resources') return true;
-  if (CHAT_ROOM_TOOLS.has(toolName) || CHAT_VISION_BUILTIN_TOOLS.has(toolName) || CHAT_PAGE_TOOLS.has(toolName) || isChatGenerationTool(toolName)) return true;
+  if (CHAT_ROOM_TOOLS.has(toolName) || CHAT_VISION_BUILTIN_TOOLS.has(toolName) || isChatGenerationTool(toolName)) return true;
+  if (isConnectedChatPageTool(context, toolName)) {
+    // Codex caches direct definitions for its process. Newly gained page tools stay reachable via the live catalog
+    // until the next reply selects a session with this page signature.
+    return context.source !== 'codex-chat' || isConnectedChatPageTool(context, toolName, context.chatContext?.page);
+  }
   if (toolName.startsWith(PLUGIN_SERVER_TOOL_PREFIX) && pluginProfileTools(context.chatContext?.threadId).some(tool => tool.name === toolName)) return true;
-  const page = context.chatContext?.page;
-  return Boolean(page && CHAT_PAGE_KIND_TOOLS[page.kind]?.has(toolName));
+  return false;
 }
 
 /** A `run_tool` call as the tool it runs (for records, judges and permission checks); any other call unchanged. */
@@ -104,7 +108,7 @@ function firstSentence(description: string) {
  * Collects the catalogued tools while the server is built, then either lists them directly (few of them) or puts them
  * on a private server behind `open_tools` / `run_tool`.
  */
-export function createToolCatalog(server: McpServer, registerDirect: (args: unknown[]) => void, remainingTokens?: () => number, chatContext?: McpRequestContext['chatContext']) {
+export function createToolCatalog(server: McpServer, registerDirect: (args: unknown[]) => void, remainingTokens?: () => number, chatContext?: McpRequestContext['chatContext'], livePageCatalog = false) {
   const pending: PendingTool[] = [];
   return {
     add(name: string, category: ToolCategoryId, args: unknown[], direct = false) {
@@ -114,9 +118,8 @@ export function createToolCatalog(server: McpServer, registerDirect: (args: unkn
     install() {
       // Direct tools can be looked up by query/name too, but never become catalog-only or run_tool targets.
       const catalogued = pending.filter((tool) => !tool.direct);
-      // The chat's settings tools never cost a direct definition: without a catalog they are left out.
-      if (catalogued.filter((tool) => !CHAT_SETTINGS_TOOLS.has(tool.name)).length < CATALOG_MIN_TOOLS) {
-        for (const tool of catalogued) if (!CHAT_SETTINGS_TOOLS.has(tool.name)) registerDirect(tool.args);
+      if (!livePageCatalog && catalogued.length < CATALOG_MIN_TOOLS) {
+        for (const tool of catalogued) registerDirect(tool.args);
         return;
       }
       const inner = new McpServer({ name: 'conai-catalog', version: '1.0.0' });
@@ -206,7 +209,8 @@ export function createToolCatalog(server: McpServer, registerDirect: (args: unkn
         tool: z.string().describe('The tool name, e.g. "create_audio_folder"'),
         arguments: z.record(z.string(), z.unknown()).optional().describe('The tool\'s arguments, as its input schema describes'),
       }) }, async ({ tool, arguments: args }: { tool: string; arguments?: Record<string, unknown> }, ctx: { mcpReq?: { signal?: AbortSignal } }) => {
-        if (!byName.has(tool) || byName.get(tool)?.direct) return errorResult(`Unknown tool: ${tool}. See the contents of ${CATALOG_OPEN_TOOL}.`);
+        if (!byName.has(tool)) return errorResult(`Unknown tool: ${tool}. See the contents of ${CATALOG_OPEN_TOOL}.`);
+        if (byName.get(tool)?.direct) return errorResult(`${tool} is available directly. Call ${tool} with its arguments, not through ${CATALOG_RUN_TOOL}. ${CATALOG_OPEN_TOOL} {"tools":["${tool}"]} shows its schema.`);
         if (!isChatProposalToolAvailable(chatContext, tool)) return errorResult(`${tool} is not available in this reply.`);
         try {
           const connected = await client();

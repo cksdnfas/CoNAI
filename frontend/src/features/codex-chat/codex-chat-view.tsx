@@ -1,5 +1,5 @@
 import { useChatThreadData } from './use-chat-thread-data'
-import { applyChatThreadUpdate, refetchActiveChatQuery, runChatThreadDetailMutation, scheduleChatDirectoryRefresh } from './chat-query-refresh'
+import { applyChatThreadUpdate, refetchActiveChatQuery, runChatThreadDetailMutation } from './chat-query-refresh'
 import { useChatTranscriptWindow } from './use-chat-transcript-window'
 import { resolveChatPortrait } from '@conai/shared'
 import { useImagePermissions } from '@/features/auth/use-image-permissions'
@@ -49,7 +49,6 @@ import {
   updateCodexChatThreadContext,
   readThreadFlagIds,
   setChatThreadFlags,
-  updateChatListState,
   runChatOrder,
   type ChatEmoticon,
   type ChatOpeningMessage,
@@ -58,7 +57,6 @@ import {
   type CodexChatMessage,
   type ChatBlocksState,
   type ChatDisplayBlock,
-  type CodexChatThread,
   type ChatOrderKind,
   type CodexChatThreadDetail,
   type LoreMergePreview,
@@ -80,7 +78,8 @@ import { ChatStatusAside, ChatStatusFloating, ChatStatusStrip, useStatusPanelLay
 import { ChatStreamingMessage, ChatStreamingPortrait } from './chat-streaming-surfaces'
 import { ChatProfilePicker } from './chat-profile-picker'
 import { ChatThreadList, type ChatListPatch } from './chat-thread-list'
-import { applyChatReadReceipt, patchChatRoomLists, useChatRoomSummaries, usePagedChatDraftRetention } from './use-chat-room-directory'
+import { applyChatReadReceipt, useChatRoomSummaries, usePagedChatDraftRetention } from './use-chat-room-directory'
+import { useChatThreadActions } from './use-chat-thread-actions'
 import { ChatAttachButton, ChatDraftAttachments, useChatFileDrop } from './chat-attachments'
 import { ChatFlagButton, ChatFlagManagerModal, ChatFlagTray, useChatFlags } from './chat-flags'
 import { useRoutineThreadIds } from './chat-routines'
@@ -198,6 +197,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   const isWide = useMinWidth(1024)
   const hasSideList = useMinWidth(768)
   const { selectThread, listOpen, setListOpen, view, setView, messageFocus, clearMessageFocus, prepareChat, isStartingChat, editMessage, regenerate, continueReply } = chat
+  const { dropThread, forgetThread, updateListEntry: updateEntry } = useChatThreadActions(chat)
   const liveTurn = useCodexChatLiveState()
 
   const profilesQuery = useQuery({ queryKey: CHAT_PROFILES_QUERY_KEY, queryFn: listChatProfiles, staleTime: 30_000 })
@@ -622,20 +622,6 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   // a merge with duplicates goes through the merge dialog (D) and is retried with its decisions (and the backup).
   const [deleteTarget, setDeleteTarget] = useState<{ threadId: number; book: OwnedChatLorebook | null } | null>(null)
   const [deleteMerge, setDeleteMerge] = useState<{ threadId: number; targetId: number; preview: LoreMergePreview; backupDate?: string } | null>(null)
-  /** A deleted chat: stop and drop its queries and take it out of the cached list, so nothing asks for its id again. */
-  const dropThread = (threadId: number) => {
-    void queryClient.cancelQueries({ queryKey: codexChatThreadQueryKey(threadId) })
-    patchChatRoomLists(queryClient, threadId, null)
-    queryClient.removeQueries({ queryKey: codexChatThreadQueryKey(threadId) })
-    queryClient.removeQueries({ queryKey: codexChatMediaQueryKey(threadId) })
-    queryClient.removeQueries({ queryKey: threadLorebooksQueryKey(threadId) })
-  }
-  // The open chat is gone: drop it before selecting, so the chat that becomes active is the next one.
-  const forgetThread = (threadId: number) => {
-    dropThread(threadId)
-    selectThread(undefined)
-    setListOpen(true)
-  }
   const backedUpMessage = (date: string) => t({ ko: '백업하고 지웠어 · 파일 보관함/{folder}/{date}', en: 'Backed up and deleted · Files/{folder}/{date}' }, { folder: CHAT_BACKUP_FOLDER, date })
   const afterDelete = async (threadId: number, backupDate?: string) => {
     setDeleteTarget(null)
@@ -809,23 +795,8 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   ])
   // Pin, archive and rename show at once; the server's answer (or a refetch on failure) settles it.
   const updateListEntry = (threadId: number, patch: ChatListPatch) => {
-    const apply = (entry: CodexChatThread) => entry.id !== threadId ? entry : {
-      ...entry,
-      ...(patch.title !== undefined ? { title: patch.title } : {}),
-      ...(patch.pinned !== undefined ? { pinned: patch.pinned ? 1 as const : 0 as const } : {}),
-      ...(patch.archived !== undefined ? { archived: patch.archived ? 1 as const : 0 as const } : {}),
-      ...(patch.notify !== undefined ? { notify_enabled: patch.notify } : {}),
-    }
-    patchChatRoomLists(queryClient, threadId, apply({ id: threadId } as CodexChatThread))
-    queryClient.setQueryData<CodexChatThreadDetail>(codexChatThreadQueryKey(threadId), (current) => current ? { ...current, thread: apply(current.thread) } : current)
-    updateChatListState(threadId, patch).then((thread) => {
-      patchChatRoomLists(queryClient, threadId, thread)
-      queryClient.setQueryData<CodexChatThreadDetail>(codexChatThreadQueryKey(threadId), (current) => current ? { ...current, thread } : current)
-    }).catch((error: unknown) => {
+    void updateEntry(threadId, patch).catch((error: unknown) => {
       showSnackbar({ message: getErrorMessage(error, t({ ko: '채팅을 바꾸지 못했어.', en: 'Could not change the chat.' })), tone: 'error' })
-      void refetchActiveChatQuery(queryClient, codexChatThreadQueryKey(threadId))
-    }).finally(() => {
-      void scheduleChatDirectoryRefresh(queryClient)
     })
   }
   const threadList = (dense: boolean) => <>

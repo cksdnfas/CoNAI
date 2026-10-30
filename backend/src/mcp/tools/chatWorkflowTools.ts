@@ -27,7 +27,7 @@ const failure = (error: unknown) => ({ isError: true, content: [{ type: 'text' a
 /** Edits run in the person's open editor as an undoable draft; nothing here saves or executes a workflow. */
 export function registerChatWorkflowTools(server: McpServer, context: McpRequestContext) {
   const original = context.chatContext?.page
-  if (original?.kind !== 'workflow' || !original.workflow || !context.requester) return
+  if (!original || !context.requester) return
   // The editor's newest reported state, so a reply sees what its own earlier edits changed.
   const live = () => currentChatPage(context.requester!, original)
   const page = () => {

@@ -1,10 +1,11 @@
-import { CHAT_PAGE_LIMITS, isPrivateChatPageKey, type ChatPageField } from '@conai/shared'
+import { CHAT_PAGE_LIMITS, isPrivateChatPageKey, type ChatPageData, type ChatPageField } from '@conai/shared'
 import { useI18n } from '@/i18n'
 import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
 import { useChatPageMedia } from '@/features/codex-chat/use-chat-page-media'
 import { useChatDraftTransaction } from '@/features/codex-chat/use-chat-draft-transaction'
-import { pageAction, pageChoice, pageObject } from '@/features/codex-chat/page-action-helpers'
+import { pageAction, pageChoice, pageFreeText, pageObject } from '@/features/codex-chat/page-action-helpers'
 import { useChatPagePermissions } from '@/features/codex-chat/use-chat-page-permissions'
+import { IMAGE_GENERATION_TARGET_GROUP_KEY, useGenerationTargetGroupPath } from '@/features/groups/generation-target-group-store'
 import type { WorkflowMarkedField } from '@/lib/api-image-generation-types'
 import { uploadWorkflowInputAsset, deleteWorkflowInputAsset } from '@/lib/api-workflow-input-assets'
 import { getImageDraftRevision, type WorkflowFieldDraftValue } from '../image-generation-shared'
@@ -14,15 +15,35 @@ import { fitsMiniMaxDirectorMedia, getMiniMaxDirectorFreeSlot } from './minimax-
 import { probeMediaDuration, probeMediaDimensions } from './minimax-h3-director-media-probe'
 import { useChatPresetInsertion } from './use-chat-preset-insertion'
 import { useChatCharacterSettingInsertion } from './use-chat-character-setting-insertion'
+import { useGenerationChatRuns, type GenerationSubmitResult } from './use-generation-chat-runs'
+import { buildComfyDraftFromHistoryPayload } from '../history-settings-mapping'
+import type { GenerationHistoryRecord } from '@/lib/api-image-generation-types'
 
-type Options = { enabled?: boolean; workflows?: Array<{ id: number; name: string }>; loraOptions?: string[]; onSelect?: (id: number) => void; onOpenCreate?: () => void; onOpenEdit?: (id: number, assertCurrent: () => void) => Promise<void>; onRefresh?: () => Promise<void> }
+type Options = { enabled?: boolean; workflows?: Array<{ id: number; name: string }>; loraOptions?: string[]; onSelect?: (id: number) => void; onOpenCreate?: () => void; onOpenEdit?: (id: number, assertCurrent: () => void) => Promise<void>; onRefresh?: () => Promise<void>; generate: () => Promise<GenerationSubmitResult>; records: GenerationHistoryRecord[]; queueCount: number; replaceDraft: (draft: Record<string, WorkflowFieldDraftValue>) => void
+  /** The normal page's server route ('auto' | 'tag:<tag>' | 'server:<id>'); its runs also use the target group. */
+  route?: string }
 const SEED_JSON_PATH = /\.inputs\.(seed|noise_seed)$/
 const protectedField = (field: WorkflowMarkedField) => isPrivateChatPageKey(`${field.id}.${field.label}.${field.jsonPath}`)
 function mediaName(value: WorkflowFieldDraftValue | undefined) { return value && typeof value === 'object' && !Array.isArray(value) && 'fileName' in value ? String(value.fileName) : '' }
+function nodeRunSummary(value: ChatPageData): ChatPageData {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const prompt = value.prompt && typeof value.prompt === 'object' && !Array.isArray(value.prompt)
+    ? Object.fromEntries(Object.entries(value.prompt).filter(([, item]) => typeof item === 'string').map(([key, item]) => [key, pageFreeText(String(item).slice(0, 240))]))
+    : undefined
+  return {
+    fieldId: value.fieldId, label: value.label, editor: value.editor,
+    mode: value.mode, width: value.width, height: value.height, duration: value.duration, frameRate: value.frame_rate,
+    ...(prompt ? { prompt } : {}),
+    ...(Array.isArray(value.loras) ? { loras: value.loras.slice(0, 20) } : {}),
+    ...(Array.isArray(value.timelineItems) ? { timelineItems: value.timelineItems.slice(0, 10) } : {}),
+  }
+}
 
 /** Normal and public ComfyUI pages share this exact input and complex-node adapter. */
-export function useComfyChatPage(workflow: { id: number; name: string } | null | undefined, marked: WorkflowMarkedField[], draft: Record<string, WorkflowFieldDraftValue>, ownerId: number | null, onChange: (id: string, value: WorkflowFieldDraftValue) => void, options: Options = {}) {
+export function useComfyChatPage(workflow: { id: number; name: string; assistant_revision?: string } | null | undefined, marked: WorkflowMarkedField[], draft: Record<string, WorkflowFieldDraftValue>, ownerId: number | null, onChange: (id: string, value: WorkflowFieldDraftValue) => void, options: Options) {
   const { t } = useI18n()
+  const runs = useGenerationChatRuns('comfy.generate', 'comfyui', options.records, options.generate, workflow?.id)
+  const { requestPath: targetGroup } = useGenerationTargetGroupPath(IMAGE_GENERATION_TARGET_GROUP_KEY)
   const permissions = useChatPagePermissions()
   const active = workflow?.id === ownerId
   const safe = active ? marked.filter((field) => !protectedField(field)) : []
@@ -38,6 +59,7 @@ export function useComfyChatPage(workflow: { id: number; name: string } | null |
     ...(referenceTargets.length ? { referenceTarget: pageChoice(referenceTargets) } : {}),
   }, ['target'], 'target = a text field id. referenceTarget = an image field id that gets the reference image; omit it for tags only.') : []
   const commit = useChatDraftTransaction(draft, (next) => { for (const [id, value] of Object.entries(next)) onChange(id, value) })
+  const commitHistory = useChatDraftTransaction(draft, options.replaceDraft)
   const fields: ChatPageField[] = safe.filter((field) => field.type !== 'image' && field.type !== 'node').slice(0, CHAT_PAGE_LIMITS.fields).flatMap((field) => {
     const value = draft[field.id] ?? ''
     if (typeof value !== 'string' && !(Array.isArray(value) && value.every((part) => typeof part === 'string'))) return []
@@ -48,11 +70,12 @@ export function useComfyChatPage(workflow: { id: number; name: string } | null |
   const workflowChoices = options.workflows?.slice(0, 512) ?? []
   // Seeds the backend rolls per run unless this field gives one (backend comfyui/seedControl): empty or -1 = new seed each run.
   const seedFields = safe.filter((field) => field.type === 'number' && SEED_JSON_PATH.test(field.jsonPath))
+  const chatNodes = nodeFields.map((field) => comfyNodeChatData(field, draft[field.id]))
   useChatPageRegistration(options.enabled !== false ? {
-    kind: 'comfyui', title: workflow ? t({ ko: 'ComfyUI · {name}', en: 'ComfyUI · {name}' }, { name: workflow.name }).slice(0, 160) : 'ComfyUI', resourceId: workflow ? String(workflow.id) : 'comfy-picker', fields, localRevision: getImageDraftRevision(draft),
-    data: { workflows: workflowChoices.map((item) => ({ id: item.id, name: item.name })), seedFields: seedFields.map((field) => field.id), nodes: nodeFields.map((field) => comfyNodeChatData(field, draft[field.id])), media: media.candidates, presets: presets.candidates,
-      options: { ...Object.fromEntries(safe.filter((field) => field.options?.length).map((field) => [field.id, field.options!.slice(0, 512)])), loras: (options.loraOptions ?? []).slice(0, 512) }, selected: { workflowId: workflow?.id ?? 0, name: workflow?.name ?? '', images: mediaFields.map((field) => ({ fieldId: field.id, label: field.label, name: mediaName(draft[field.id]) })) } },
-    actions: [...media.actions, ...presets.actions, ...characterSettingActions,
+    kind: 'comfyui', title: workflow ? t({ ko: 'ComfyUI · {name}', en: 'ComfyUI · {name}' }, { name: workflow.name }).slice(0, 160) : 'ComfyUI', resourceId: workflow ? String(workflow.id) : 'comfy-picker', fields, localRevision: JSON.stringify([getImageDraftRevision(draft), marked, workflow?.assistant_revision]),
+    data: { recentRuns: runs.recentRuns, generating: runs.generating, workflows: workflowChoices.map((item) => ({ id: item.id, name: item.name })), seedFields: seedFields.map((field) => field.id), nodes: chatNodes, media: media.candidates, presets: presets.candidates,
+      options: { ...Object.fromEntries(safe.filter((field) => field.options?.length).map((field) => [field.id, field.options!.slice(0, 512)])), loras: (options.loraOptions ?? []).slice(0, 512) }, selected: { workflowId: workflow?.id ?? 0, ...(options.route !== undefined ? { route: options.route, targetGroup: targetGroup ?? '' } : {}), name: workflow?.name ?? '', queueCount: options.queueCount, inputs: safe.filter((field) => field.type !== 'image' && field.type !== 'node').slice(0, 20).map((field) => ({ id: field.id, label: pageFreeText(field.label), value: pageFreeText(String(draft[field.id] ?? '').slice(0, 240)) })), nodes: chatNodes.slice(0, 10).map(nodeRunSummary), images: mediaFields.map((field) => ({ fieldId: field.id, label: field.label, name: mediaName(draft[field.id]) })) } },
+    actions: [...(workflow && active ? runs.actions : []), ...media.actions, ...presets.actions, ...characterSettingActions,
       ...(nodeFields.length ? [pageAction('comfy.node', t({ ko: 'H3·LoRA 노드 입력', en: 'Edit H3 or LoRA inputs' }), t({ ko: 'nodes에 나온 노드별 schema에 맞춰 patch를 입력해. 타임라인은 기존 미디어 ID만 편집하고 새 미디어는 media.attach로 등록해.', en: 'Match patch to the node-specific schema in nodes. Edit existing timeline media IDs; attach new media with media.attach.' }), pageObject({ fieldId: pageChoice(nodeFields.map((field) => field.id)), patch: COMFY_NODE_PATCH_SCHEMA }, ['fieldId', 'patch']))] : []),
       ...(options.onSelect && workflowChoices.length ? [pageAction('comfy.select', t({ ko: '워크플로 선택', en: 'Select workflow' }), t({ ko: '등록된 워크플로를 선택해. 선택한 화면이 바로 돌아오니 이어서 입력을 채워.', en: 'Select a registered workflow; the new screen comes back so you can fill its inputs next.' }), pageObject({ id: pageChoice(workflowChoices.map((item) => item.id)) }, ['id']))] : []),
       ...(options.onRefresh ? [pageAction('comfy.refresh', t({ ko: '워크플로·선택 목록 최신화', en: 'Refresh workflow and options' }), t({ ko: '서버에 저장된 최신 워크플로와 선택 목록을 다시 읽어.', en: 'Reload the latest saved workflow and input options.' }))] : []),
@@ -66,6 +89,13 @@ export function useComfyChatPage(workflow: { id: number; name: string } | null |
     },
     applyAction: async (id, args, assertCurrent) => {
       assertCurrent()
+      if (id === 'generation.history_load') {
+        const payload = await runs.loadHistory(args, assertCurrent)
+        const result = buildComfyDraftFromHistoryPayload(payload, marked, draft)
+        if (!result) throw new Error(t({ ko: '이 기록에는 불러올 워크플로우 입력이 없어.', en: 'This record has no workflow inputs to load.' }))
+        return commitHistory(result.draft)
+      }
+      if (await runs.apply(id, args, assertCurrent)) return
       if (id === 'comfy.select') { options.onSelect?.(Number(args.id)); return }
       if (id === 'comfy.open_create') { options.onOpenCreate?.(); return }
       if (id === 'comfy.open_edit' && workflow) { await options.onOpenEdit?.(workflow.id, assertCurrent); return }

@@ -81,7 +81,7 @@ import { cn } from '@/lib/utils'
 import { AudioCandidateRow, AudioOrderRow, activeJobCount, arrangeCandidates } from './audio-candidate-list'
 import { AudioCleanupDialog, AudioCommentsDialog, AudioGroupDialog, AudioProjectDialog } from './audio-dialogs'
 import { AudioEditorPanel } from './audio-editor-panel'
-import { AudioGenerateBar } from './audio-generate-bar'
+import { AudioGenerateBar, useAudioGenerateDraft } from './audio-generate-bar'
 import { autoAudioLabel } from './audio-naming'
 import { audioPlayer } from './audio-player'
 import { AUDIO_SHORTCUT_ACTIONS, normalizeShortcutKey, shouldIgnoreReviewKey, useAudioShortcuts } from './audio-shortcuts'
@@ -89,6 +89,9 @@ import { AudioSettingsDialog } from './audio-settings-dialog'
 import { AudioSidebar, AudioSidebarFooter, type AudioSidebarFilter } from './audio-sidebar'
 
 const PROJECT_STORAGE_KEY = 'conai:audio:project'
+/** Longer id lists are passed as text (checked on apply): listing every id in the schema fills the page view. */
+const CHAT_CHOICES_INLINE = 20
+const chatChoice = (ids: string[]) => ids.length <= CHAT_CHOICES_INLINE ? pageChoice(ids) : pageText(64)
 const FOLDERS_STORAGE_KEY = 'conai:audio:folders'
 const PAGE_SIZE = 200
 /** Failed orders stay listed (with retry) for a day. */
@@ -215,6 +218,7 @@ function AudioPageContent() {
   const listedProjects = useMemo(() => projectsQuery.data?.pages.flatMap((page) => page.items) ?? [], [projectsQuery.data])
   const groupQuery = useQuery({ queryKey: [AUDIO_QUERY_KEY, 'group', groupId], queryFn: () => getAudioGroup(groupId!), enabled: Boolean(groupId), retry: false })
   const group = groupQuery.data && groupQuery.data.id === groupId ? groupQuery.data : null
+  const generateDraft = useAudioGenerateDraft(group, group !== null && !group.is_inbox && permissions.canGenerate)
   // The open group decides the project. The URL (?group=) updates in a router transition, a render after the
   // remembered project, so comparing the two mid-switch would bounce the click back to the old group.
   const projectId = group?.project_id ?? storedProjectId
@@ -568,11 +572,22 @@ function AudioPageContent() {
   // reviewing stays here.
   const chatGroups = (searchResults ? Object.values(searchResults).flatMap((entries) => entries ?? []) : projectGroups).slice(0, 200)
   const chatTakes = rows.slice(0, 200).map((row) => row.candidate)
+  // The generate bar's inputs, while it is shown.
+  const composing = group !== null && !group.is_inbox && permissions.canEdit
+  // A stored route the server list does not show (still loading, failed, or removed) stays visible as it is: a run sends it unchanged.
+  const audioRoutes = [...new Set(['', generateDraft.route, ...generateDraft.tags.map((tag) => `tag:${tag}`), ...generateDraft.routeServers.map((server) => `server:${server.id}`)])]
   useChatPageRegistration({
     kind: 'audio',
     title: t({ ko: '오디오', en: 'Audio' }),
     resourceId: group?.id ?? null,
-    fields: [],
+    fields: composing ? [
+      { id: 'prompt', label: t({ ko: '대표 프롬프트', en: 'Representative prompt' }), type: 'text', value: generateDraft.text, hint: 'English generation prompt of the open effect. Saved to the effect when the user generates or leaves the field; update_audio_group saves it right away.' },
+      { id: 'seconds', label: t({ ko: '길이(초)', en: 'Length (s)' }), type: 'number', value: Number(generateDraft.prefs.seconds), min: 0.1 },
+      { id: 'count', label: t({ ko: '개수', en: 'Count' }), type: 'number', value: Number(generateDraft.prefs.count), min: 1, max: 50, integer: true },
+      { id: 'seed', label: 'seed', type: 'number', value: generateDraft.prefs.seed.trim() === '' ? '' : Number(generateDraft.prefs.seed), min: 0, integer: true, allowEmpty: true, hint: 'Empty = a random seed each run.' },
+      ...(generateDraft.workflow ? [{ id: 'workflowId', label: t({ ko: '워크플로', en: 'Workflow' }), type: 'select' as const, value: String(generateDraft.workflow.id), options: generateDraft.bound.map((entry) => String(entry.id)), hint: 'Linked audio workflow the run uses (names in data.audioWorkflows).' }] : []),
+      ...(permissions.canGenerate ? [{ id: 'route', label: t({ ko: '서버', en: 'Server' }), type: 'select' as const, value: generateDraft.route, options: audioRoutes, hint: "'' = automatic, tag:<tag> = automatic among servers with that tag, server:<id> = that server (names in data.audioServers)." }] : []),
+    ] : [],
     data: {
       project: project ? { id: project.id, name: project.name } : null,
       ...(projects.length > 1 ? { projects: projects.slice(0, 50).map((entry) => ({ id: entry.id, name: entry.name })) } : {}),
@@ -582,17 +597,30 @@ function AudioPageContent() {
       selectedCandidateIds: selected ? [selected.id] : [],
       groups: chatGroups.map((entry) => ({ id: entry.id, projectId: entry.project_id, name: entry.name, isInbox: entry.is_inbox })),
       takes: chatTakes.map((candidate) => ({ id: candidate.id, name: candidate.name, review: candidate.review })),
+      ...(composing && generateDraft.bound.length ? { audioWorkflows: generateDraft.bound.map((entry) => ({ id: entry.id, name: entry.name })) } : {}),
+      ...(composing && generateDraft.routeServers.length ? { audioServers: generateDraft.routeServers.map((server) => ({ route: `server:${server.id}`, name: server.name })) } : {}),
+      // Coarse on purpose: job progress must not change the page revision under a pending review card.
+      ...(ordersQuery.data?.items.some((order) => activeJobCount(order) > 0) ? { generating: true } : {}),
     },
     actions: [
       ...(projects.length > 1 ? [pageAction('audio.project', t({ ko: '프로젝트 바꾸기', en: 'Switch project' }), t({ ko: '드롭다운의 프로젝트(data.projects)로 바꿔. 트리가 그 프로젝트의 그룹을 보여줘.', en: 'Switch the project dropdown to a listed project (data.projects); the tree then shows its groups.' }), pageObject({ projectId: pageChoice(projects.slice(0, 50).map((entry) => entry.id)) }, ['projectId']))] : []),
       pageAction('audio.search', t({ ko: '트리 검색', en: 'Search the tree' }), t({ ko: '모든 프로젝트에서 효과음 그룹을 찾아. 결과는 data.groups에 나오고 audio.open으로 열어. 빈 text와 filter 없음이면 검색을 지워. filter: unselected = 채택 안 된 그룹, pending_comments = 답 안 한 코멘트가 있는 그룹.', en: 'Search effect groups across every project; results appear in data.groups (open one with audio.open). Empty text and no filter clears the search. filter: unselected = groups without an adopted take, pending_comments = groups with unanswered comments.' }), pageObject({ text: pageText(200), filter: pageChoice(['none', 'unselected', 'pending_comments']) }, ['text'])),
-      ...(chatGroups.length ? [pageAction('audio.open', t({ ko: '오디오 그룹 열기', en: 'Open audio group' }), t({ ko: '목록(data.groups)의 효과음 그룹이나 받은 파일을 열어.', en: 'Open a listed group (data.groups).' }), pageObject({ groupId: pageChoice(chatGroups.map((entry) => entry.id)) }, ['groupId']))] : []),
+      ...(chatGroups.length ? [pageAction('audio.open', t({ ko: '오디오 그룹 열기', en: 'Open audio group' }), t({ ko: '목록(data.groups)의 효과음 그룹이나 받은 파일을 열어.', en: 'Open a listed group (data.groups).' }), pageObject({ groupId: chatChoice(chatGroups.map((entry) => entry.id)) }, ['groupId']))] : []),
       ...(group ? [pageAction('audio.filter', t({ ko: '검수 탭 바꾸기', en: 'Switch review tab' }), t({ ko: '전체·미검수·채택·보류 탭으로 바꿔.', en: 'Show all, unreviewed, adopted or rejected takes.' }), pageObject({ review: pageChoice(['all', 'pending', 'selected', 'rejected']) }, ['review']))] : []),
-      ...(chatTakes.length ? [pageAction('audio.select', t({ ko: '테이크 선택', en: 'Select take' }), t({ ko: '목록(data.takes)의 테이크를 골라 편집 패널을 열어.', en: 'Select a listed take (data.takes) and open its editor.' }), pageObject({ candidateId: pageChoice(chatTakes.map((candidate) => candidate.id)) }, ['candidateId']))] : []),
+      ...(chatTakes.length ? [pageAction('audio.select', t({ ko: '테이크 선택', en: 'Select take' }), t({ ko: '목록(data.takes)의 테이크를 골라 편집 패널을 열어.', en: 'Select a listed take (data.takes) and open its editor.' }), pageObject({ candidateId: chatChoice(chatTakes.map((candidate) => candidate.id)) }, ['candidateId']))] : []),
+      ...(composing && permissions.canGenerate ? [pageAction('audio.generate', t({ ko: '생성', en: 'Generate' }), t({ ko: '생성 바의 지금 값(prompt·seconds·count·seed)과 워크플로로 열린 효과음을 생성해. 먼저 page_fill로 채워. 진행 중이면 data.generating, 끝나면 data.takes에 나와.', en: 'Generate the open effect with the bar\'s current values (prompt, seconds, count, seed) and workflow; fill them with page_fill first. data.generating shows a running order; finished takes appear in data.takes.' }), pageObject({}), 'save')] : []),
     ],
-    apply: () => undefined,
-    applyAction: (id, args, assertCurrent) => {
+    apply: (patch) => {
+      if ('prompt' in patch) generateDraft.setText(String(patch.prompt))
+      const prefs: Partial<Record<'seconds' | 'count' | 'seed', string>> = {}
+      for (const key of ['seconds', 'count', 'seed'] as const) if (key in patch) prefs[key] = String(patch[key])
+      if (Object.keys(prefs).length) generateDraft.setPrefs(prefs)
+      if ('workflowId' in patch) generateDraft.setGlobal({ workflowId: Number(patch.workflowId) })
+      if ('route' in patch) generateDraft.setGlobal({ route: String(patch.route) })
+    },
+    applyAction: async (id, args, assertCurrent) => {
       assertCurrent()
+      if (id === 'audio.generate') { await generateDraft.generate(); return }
       if (id === 'audio.open') {
         const target = chatGroups.find((entry) => entry.id === String(args.groupId))
         if (!target) throw new Error('목록에 없는 그룹이야.')
@@ -857,6 +885,7 @@ function AudioPageContent() {
                     <AudioGenerateBar
                       key={group.id}
                       group={group}
+                      draft={generateDraft}
                       autoFocus={freshGroupId === group.id}
                       canGenerate={permissions.canGenerate}
                       canAddWorkflow={permissions.canAddWorkflow}

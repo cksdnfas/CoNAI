@@ -1,6 +1,7 @@
 import express, { type Request, type Response } from 'express'
 import { asyncHandler } from '../middleware/asyncHandler'
 import { requireAdmin, requirePermission } from '../middleware/authMiddleware'
+import { requireRequesterPermission } from '../middleware/featureAccess'
 import { canRequesterViewImages } from '../middleware/imageAccess'
 import { requireCharacterImageAccess } from '../services/characterLibrary'
 import { ChatProposalStore } from '../services/codex-chat/chatProposals'
@@ -30,20 +31,24 @@ function pageProposal(req: Request, res: Response, receipt = false): Extract<Cha
   try {
     const proposal = ChatProposalStore.find(id)
     if (proposal?.kind !== 'page_fields' && proposal?.kind !== 'workflow_graph' && proposal?.kind !== 'page_action') throw new ChatPageContextError('페이지 편집 제안이 아니야.')
-    // Cards made before the graph edit ran right away (workflow_graph) are checked against the tool that replaced it.
-    const tool = proposal.kind === 'workflow_graph' ? 'workflow_edit' : proposal.kind === 'page_action' ? 'propose_page_action' : 'page_fill'
+    // Legacy graph cards authorize their stored target, not an editor report that may no longer be in memory.
+    const tool = proposal.kind === 'workflow_graph' ? 'get_current_page' : proposal.kind === 'page_action' ? 'propose_page_action' : 'page_fill'
     const thread = CodexChatStore.findThread(ChatProposalStore.threadIdOf(id)!, getRequesterAccountId(req))!
     const profile = thread.profile_id === null ? null : ChatProfileStore.find(thread.profile_id)
     // Page tools come with the person's connection, not the profile's tool list (isConnectedChatPageTool), so a card stays
     // appliable exactly as long as the profile keeps its page assistant. The account check below sees the card's page the same way.
     if (!profile?.isEnabled || !profile.pageAssist) throw new ChatPageContextError('프로필의 페이지 어시스턴트가 꺼졌어.', 403)
     const requester = { accountId: getRequesterAccountId(req), accountType: getRequesterAccountType(req) }
-    requireChatMcpAccountAccess({ requester, scopes: ['read'], source: thread.engine === 'codex' ? 'codex-chat' : 'llm-chat', chatContext: { threadId: thread.id, profileId: profile.id, kind: 'direct', page: { ...proposal.page, fields: [] } } }, tool)
+    const page = { ...proposal.page, fields: [] }
+    requireChatMcpAccountAccess({ requester, scopes: ['read'], source: thread.engine === 'codex' ? 'codex-chat' : 'llm-chat', chatContext: { threadId: thread.id, profileId: profile.id, kind: 'direct', page } }, tool, page)
+    if (proposal.kind === 'workflow_graph') requireRequesterPermission(requester, 'workflows.view')
     requireChatPageAccess(requester, proposal.page)
     if (proposal.kind === 'page_action') requireChatPageActionAccess(requester, proposal.page, proposal.action.id, proposal.arguments)
     const undo = req.body?.undo === true
     if (proposal.dismissed || (!receipt && !undo && proposal.saved)) throw new ChatPageContextError('이미 적용하거나 무시한 제안이야.', 409)
-    requireChatPageProposalBinding(proposal, req.body, undo)
+    const started = receipt && (proposal.saved === true || ChatProposalStore.pageApplicationStarted(id))
+    if (receipt && !started) throw new ChatPageContextError('적용 시작을 확인할 수 없어. 페이지를 다시 읽고 새 검토 카드를 제안해줘.', 409)
+    requireChatPageProposalBinding(proposal, req.body, undo, started)
     if (!receipt && proposal.kind === 'page_action' && proposal.nativeRevision !== chatPageNativeActionRevision(proposal.page, proposal.action.id, proposal.arguments)) throw new ChatPageContextError('저장된 항목이 다른 작업에서 바뀌었어. 새로 읽고 다시 요청해줘.', 409)
     if (proposal.kind === 'workflow_graph') {
       try { requireChatWorkflowModules(proposal.modules) }
@@ -58,7 +63,12 @@ function pageProposal(req: Request, res: Response, receipt = false): Extract<Cha
 
 router.post('/:proposalId/page-check', (req: Request, res: Response) => {
   const proposal = pageProposal(req, res)
-  if (proposal) res.json({ success: true, data: proposal })
+  if (!proposal) return
+  if (req.body?.undo !== true && !ChatProposalStore.markPageStarted(proposal.id)) {
+    res.status(409).json({ success: false, error: '검토 카드가 만료됐거나 사용할 수 없어. 페이지를 다시 읽고 새로 제안해줘.' })
+    return
+  }
+  res.json({ success: true, data: proposal })
 })
 
 /** A receipt after the browser applied the registered form setters; never changes application data. */

@@ -74,12 +74,12 @@ export function useNaiGenerationActions({
   /** Submit one NAI image-generation request from the current form state. */
   const handleNaiGenerate = useCallback(async () => {
     if (isNaiGenerating || generatingRef.current) {
-      return
+      return false
     }
 
     if (!connected) {
       showSnackbar({ message: t('image-generation.components.use.nai.generation.actions.log.in.before.nai.generation.use.the'), tone: 'error' })
-      return
+      return false
     }
 
     const prompt = normalizeTextSegmentSpreadsheetText(naiForm.prompt).trim()
@@ -87,27 +87,27 @@ export function useNaiGenerationActions({
 
     if (prompt.length === 0) {
       showSnackbar({ message: t('image-generation.components.use.nai.generation.actions.enter.an.nai.prompt.first'), tone: 'error' })
-      return
+      return false
     }
 
     if ((naiForm.action === 'img2img' || naiForm.action === 'infill') && !naiForm.sourceImage) {
       showSnackbar({ message: t('image-generation.components.use.nai.generation.actions.img2img.infill.requires.a.source.image'), tone: 'error' })
-      return
+      return false
     }
 
     if (naiForm.action === 'infill' && !naiForm.maskImage) {
       showSnackbar({ message: t('image-generation.components.use.nai.generation.actions.infill.also.requires.a.mask.image'), tone: 'error' })
-      return
+      return false
     }
 
     if (!supportsCharacterReference && naiForm.characterReferences.length > 0) {
       showSnackbar({ message: t('image-generation.components.use.nai.generation.actions.character.reference.is.only.available.with.nai'), tone: 'error' })
-      return
+      return false
     }
 
     if (!supportsNaiVibes(naiForm.model) && naiForm.vibes.length > 0) {
       showSnackbar({ message: getNaiVibesUnsupportedMessage(t), tone: 'error' })
-      return
+      return false
     }
 
     const enhance = resolveNaiFormEnhance(naiForm, sourceImageSize)
@@ -116,7 +116,7 @@ export function useNaiGenerationActions({
         message: t({ ko: 'Enhance를 쓸 수 없어: {reason}', en: 'Enhance is unavailable: {reason}' }, { reason: getNaiEnhanceIssueLabel(t, enhance.issue) }),
         tone: 'error',
       })
-      return
+      return false
     }
 
     const queueCount = clampNaiQueueCount(naiForm.queueCount)
@@ -135,7 +135,7 @@ export function useNaiGenerationActions({
         }),
         tone: 'error',
       })
-      return
+      return false
     }
 
     // The payload builders drop image-less rows, so the row would look applied while being ignored.
@@ -149,7 +149,7 @@ export function useNaiGenerationActions({
         }),
         tone: 'error',
       })
-      return
+      return false
     }
 
     generatingRef.current = true
@@ -159,7 +159,7 @@ export function useNaiGenerationActions({
       const useCharacterPositions = shouldUseNaiCharacterPositions(naiForm)
       const encodedVibes = await ensureEncodedVibes()
       if (!encodedVibes) {
-        return
+        return false
       }
 
       const promptPresets = resolveNaiPromptPresets(naiForm)
@@ -203,8 +203,11 @@ export function useNaiGenerationActions({
 
       void refreshGenerationQueueViews(queryClient, onHistoryRefresh)
       showSnackbar({ message: response.message || t('image-generation.components.use.nai.generation.actions.added.a.generation.job.to.the.nai'), tone: 'info' })
+      const queued = response.enqueued_count ?? (response.record ? 1 : 0)
+      return queued >= queueCount ? true : queued > 0 ? { queued, requested: queueCount } : false
     } catch (error) {
       showSnackbar({ message: getErrorMessage(error, t('image-generation.components.use.nai.generation.actions.nai.image.generation.failed')), tone: 'error' })
+      return false
     } finally {
       generatingRef.current = false
       setIsNaiGenerating(false)

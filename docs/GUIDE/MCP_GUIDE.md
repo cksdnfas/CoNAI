@@ -6,6 +6,14 @@ CoNAI는 MCP(Model Context Protocol) 서버를 제공합니다. Claude Code, Her
 
 ## 핵심 요약
 
+### 연결 페이지와 채팅 도구 탐색
+
+페이지 어시스턴트는 현재 화면의 도메인 조회 도구를 프로필의 일반 도구 목록과 별도로 제공하며, 계정 기능 권한과 호출 시 재검사는 유지합니다. `/characters`의 캐릭터 라이브러리만 캐릭터 도구를 추가하고 일반 `page` 종류 전체에 권한을 주지 않습니다. 공개 페이지는 다른 영역의 도구를 얻지 못하며 생성 프리셋 제한도 유지됩니다.
+
+`open_tools`는 카탈로그 도구와 직접 제공된 도구의 스키마를 모두 조회합니다. 직접 도구를 `run_tool`로 호출하면 직접 호출 방법을 안내합니다. 작은 도구 목록에서는 설정 조회·제안도 직접 제공하므로 사라지지 않습니다. 페이지 이동 시 API 브리지는 시작 화면을 유지한 채 도구를 다시 연결하고 Claude는 현재 도구 호출의 요청 ID로 연결된 응답 스트림에 목록 변경 알림을 보냅니다. pi의 직접 도구 목록은 실행 시작 때 고정됩니다. Codex 세션 키에는 도메인 도구 집합·노드 편집기 여부·공개 여부가 포함되며 연결 페이지에서는 카탈로그를 항상 유지해 같은 답변에서 새로 얻은 도구를 조회·실행합니다. 시작 화면이나 현재 화면 중 하나라도 공개이면 공개 제한은 계속 적용됩니다.
+
+현재 화면의 입력을 쓰는 실행은 등록된 검토 카드 작업을 사용합니다. `workflow.run`은 그래프를 큐에 넣고, `submit_generation_job`이 제공되는 프로필은 `service_type="codex"`로 비동기 이미지 생성도 요청할 수 있습니다. 검토 카드의 대상과 입력값을 확인하고 적용하며, 만료된 미시작 카드는 새로 제안해야 합니다. 서버가 만료 전에 적용 시작을 확인했다면 완료 확인은 만료 뒤에도 허용합니다.
+
 ### 채팅 전용 `call_agent`
 
 1:1·그룹 채팅에서 목록에 제공하고 실행 시 활성 답변을 확인합니다. 호출 프로필에 비어 있지 않은 도구 grant가 있어야 하며 allowlist가 있으면 `call_agent`도 허용해야 합니다. 현재 방의 소유자가 사용할 수 있는 다른 `agentEnabled` 프로필이 있어야 하며 에이전트 작업방·게시판 호출·공개 페이지에서는 제공/실행하지 않습니다. 도구 설명에는 최대 20개 대상의 ID·이름·`agentDescription`만 나열합니다.
@@ -259,7 +267,7 @@ ComfyUI 시드(`seed`·`noise_seed`)는 실행마다 새로 뽑힙니다. marked
 - 자동수집 규칙(`auto_collect_rules`)은 그룹 편집기의 칩과 같은 형식입니다. `scope`는 `positive`/`negative`(프롬프트에 포함된 글), `auto_tag`(오토 태그, 일반·캐릭터), `model`, `lora`, `ai_tool`(`nai`/`comfyui`/`other`)이고, `operator`는 `AND`(모두 만족, 기본값), `OR`(하나 이상), `NOT`(제외)입니다. 규칙을 주면 기존 조건 전체를 교체합니다.
 - 규칙으로 표현할 수 없는 조건(정규식, 등급 점수 등)이 저장된 그룹은 `get_image_group`이 `rules: null`과 원본 `custom_conditions`를 돌려줍니다. 이런 그룹에 규칙을 넘기면 기존 조건은 사라집니다.
 - 자동수집을 끄면 앞으로의 수집만 멈추고, 이미 모은 이미지와 저장된 조건은 남습니다. 다시 켜면 저장된 조건으로 다시 수집합니다. 그룹 이동·삭제 도구는 없습니다.
-- 채팅에서 그룹 페이지를 연결하면 같은 작업이 페이지 작업(`group.create`, `group.update`, `group.auto_collect`, `group.select`)으로 제안되고, 사용자가 적용을 눌러야 저장됩니다.
+- 채팅에서 그룹 페이지를 연결하면 그룹 고르기(`group.select`, 폴더 그룹 포함), 원천 전환(`group.source`), 이미지 선택(`group.select_images`)은 바로 실행됩니다. 만들기·수정·자동수집·이동·삭제(`group.create`, `group.update`, `group.auto_collect`, `group.move`, `group.delete`)와 이미지 추가·제거·삭제(`group.add_images`, `group.remove_images`, `group.delete_images`), 전체 자동수집(`group.auto_collect_all`), 폴더 다시 만들기(`group.rebuild_folders`)는 검토 카드로 제안되고, 사용자가 적용을 눌러야 실행됩니다.
 
 자동수집 그룹 생성 (`create_image_group`):
 

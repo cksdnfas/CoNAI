@@ -773,6 +773,8 @@ export function createUserSettingsSchema(db: Database.Database): void {
     ['revision', 'INTEGER NOT NULL DEFAULT 0'],
     // The book's own settings as JSON (key language); cached from lorebook.json for account and chat books.
     ['settings', 'TEXT'],
+    // Account books: 0 keeps chats that share only this book apart (no cross-chat history search).
+    ['connects_chats', 'INTEGER NOT NULL DEFAULT 1'],
   ] as Array<[string, string]>) {
     if (!hasColumn('chat_lorebooks', columnName)) {
       db.exec(`ALTER TABLE chat_lorebooks ADD COLUMN ${columnName} ${definition}`);

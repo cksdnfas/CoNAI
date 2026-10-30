@@ -203,7 +203,7 @@ export function WildcardGenerationPanel({ refreshNonce }: WildcardGenerationPane
   const { canEditWildcardEntries, canDeleteWildcardEntries, canScanLora } = getWildcardWorkspacePermissions(permissionKeys)
   const canCreateInActiveTab = canCreateWorkspaceTabItem(activeWorkspaceTab) && canEditWildcardEntries
   const isReadonlyActiveTab = isReadonlyWorkspaceTab(activeWorkspaceTab)
-  useWildcardChatPage({ records: browserEntries.map((entry) => entry.wildcard), selected: selectedWildcard, select: setSelectedWildcardId, search: searchInput, setSearch: setSearchInput, canCreate: canCreateInActiveTab, canEdit: canEditWildcardEntries && !isReadonlyActiveTab, enabled: !isSettingsTab && editorState === null })
+  useWildcardChatPage({ records: browserEntries.map((entry) => entry.wildcard), selected: selectedWildcard, select: setSelectedWildcardId, remove: (wildcardId, cascade) => deleteMutation.mutateAsync({ wildcardId, cascade }), search: searchInput, setSearch: setSearchInput, canCreate: canCreateInActiveTab, canEdit: canEditWildcardEntries && !isReadonlyActiveTab, canDelete: canDeleteWildcardEntries && !isReadonlyActiveTab, enabled: !isSettingsTab && editorState === null })
 
   useEffect(() => {
     if (!selectedWildcardSyntax) {

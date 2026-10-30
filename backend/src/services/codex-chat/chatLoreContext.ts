@@ -62,9 +62,10 @@ function ownedBook(book: OwnedLorebook, owner: string, via: AttachedLoreBook['vi
  * The books a request attaches, in index order: the chat's own book, the account books linked to this chat, then the
  * profile's books (shared account books, then global ones). A trusted stateless caller can provide profileOwner
  * from its authenticated requester to load shared profile books without any private chat state. An unscoped
- * preview keeps only global books. A book attached twice counts once, where it first appears.
+ * preview keeps only global books. A book attached twice counts once, where it first appears. `extraBookIds` are
+ * account books a stateless trusted caller (a plugin's text request) links for that one request, like a chat link.
  */
-export function booksForRequest({ thread, profile, profileOwner }: { thread: RequestThread | null; profile: Pick<ChatProfile, 'lorebookIds'>; profileOwner?: string }): AttachedLoreBook[] {
+export function booksForRequest({ thread, profile, profileOwner, extraBookIds = [] }: { thread: RequestThread | null; profile: Pick<ChatProfile, 'lorebookIds'>; profileOwner?: string; extraBookIds?: number[] }): AttachedLoreBook[] {
   const books: AttachedLoreBook[] = []
   const seen = new Set<number>()
   const add = (book: AttachedLoreBook) => {
@@ -82,6 +83,12 @@ export function booksForRequest({ thread, profile, profileOwner }: { thread: Req
     for (const id of links) {
       const book = OwnedLorebookStore.find(id, owner)
       if (book?.kind === 'account') add({ ...ownedBook(book, owner, 'thread'), ...(id === record ? { record: true } : {}) })
+    }
+  }
+  if (!thread && owner) {
+    for (const id of extraBookIds) {
+      const book = OwnedLorebookStore.find(id, owner)
+      if (book?.kind === 'account') add(ownedBook(book, owner, 'thread'))
     }
   }
   const ids = profile.lorebookIds

@@ -22,27 +22,15 @@ interface ImageGroupAssignActionProps {
   labelled?: boolean
 }
 
-/** Render a reusable single-image group assignment action for detail views. */
-export function ImageGroupAssignAction({ image, variant = 'secondary', labelled = false }: ImageGroupAssignActionProps) {
-  const { canAssignGroups } = useImagePermissions()
+export function useImageGroupAssignMutation(compositeHash: string | null, onAssigned?: () => void) {
   const queryClient = useQueryClient()
   const { showSnackbar } = useSnackbar()
   const { t, formatNumber } = useI18n()
-  const [isModalOpen, setIsModalOpen] = useState(false)
-  const compositeHash = image?.composite_hash ?? null
-
-  const groupsQuery = useQuery({
-    queryKey: GROUPS_HIERARCHY_ALL_QUERY_KEY,
-    queryFn: getGroupsHierarchyAll,
-    enabled: false,
-    staleTime: GROUPS_STALE_TIME,
-  })
-
-  const assignMutation = useMutation({
+  return useMutation({
     // The bulk endpoint reports "already in the group" as a count instead of an English 409 message.
     mutationFn: (groupId: number) => addImagesToGroup(groupId, [compositeHash as string]),
     onSuccess: async (result) => {
-      setIsModalOpen(false)
+      onAssigned?.()
       showSnackbar(formatGroupBulkAddNotice(result, t, formatNumber))
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: GROUPS_HIERARCHY_ALL_QUERY_KEY }),
@@ -55,6 +43,23 @@ export function ImageGroupAssignAction({ image, variant = 'secondary', labelled 
       showSnackbar({ message: error instanceof Error ? error.message : t('images.components.detail.image.group.assign.action.failed.to.add.the.image.to.the'), tone: 'error' })
     },
   })
+}
+
+/** Render a reusable single-image group assignment action for detail views. */
+export function ImageGroupAssignAction({ image, variant = 'secondary', labelled = false }: ImageGroupAssignActionProps) {
+  const { canAssignGroups } = useImagePermissions()
+  const queryClient = useQueryClient()
+  const { showSnackbar } = useSnackbar()
+  const { t } = useI18n()
+  const [isModalOpen, setIsModalOpen] = useState(false)
+  const compositeHash = image?.composite_hash ?? null
+  const groupsQuery = useQuery({
+    queryKey: GROUPS_HIERARCHY_ALL_QUERY_KEY,
+    queryFn: getGroupsHierarchyAll,
+    enabled: false,
+    staleTime: GROUPS_STALE_TIME,
+  })
+  const assignMutation = useImageGroupAssignMutation(compositeHash, () => setIsModalOpen(false))
 
   if (!canAssignGroups || !compositeHash) {
     return null

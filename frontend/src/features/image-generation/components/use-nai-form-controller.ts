@@ -24,6 +24,7 @@ import {
   type NAICharacterPromptDraft,
   type NAICharacterReferenceDraft,
   type NAIFormDraft,
+  type NAIVibeDraft,
   type SelectedImageDraft,
 } from '../image-generation-shared'
 import { loadPersistedNaiFormDraft, persistNaiFormDraft } from '../image-generation-drafts'
@@ -54,6 +55,10 @@ export function applyNaiFormPatch(current: NAIFormDraft, patch: Partial<NAIFormD
     nextForm.noise = patch.noise ?? String(NAI_ENHANCE_DEFAULT_NOISE)
   }
   return nextForm
+}
+
+export function updateNaiVibeField(vibe: NAIVibeDraft, field: 'strength' | 'informationExtracted', value: string): NAIVibeDraft {
+  return { ...vibe, [field]: value, ...(field === 'informationExtracted' && vibe.image && value !== vibe.informationExtracted ? { encoded: '' } : {}) }
 }
 
 /** Append one character-prompt row (empty, or a loaded character's tags) with normalized grid positions. */
@@ -306,11 +311,7 @@ export function useNaiFormController({
       ...current,
       vibes: current.vibes.map((vibe, vibeIndex) => (
         vibeIndex === index
-          ? {
-            ...vibe,
-            [field]: value,
-            ...(field === 'informationExtracted' && vibe.image && value !== vibe.informationExtracted ? { encoded: '' } : {}),
-          }
+          ? updateNaiVibeField(vibe, field, value)
           : vibe
       )),
     }))

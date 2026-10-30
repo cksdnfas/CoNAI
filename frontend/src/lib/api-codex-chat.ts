@@ -476,6 +476,8 @@ export interface ChatLorebook {
   kind?: ChatLorebookKind
   entries: ChatLoreEntry[]
   profiles: Array<{ id: number; name: string }>
+  /** Account books: chats sharing it are connected (history search across them). False: lore only. */
+  connectsChats?: boolean
   createdDate: string
   updatedDate: string
 }
@@ -1824,12 +1826,12 @@ export function getOwnLorebook(lorebookId: number, signal?: AbortSignal) {
   return requestApiData<OwnedChatLorebook>(`/api/codex-chat/lorebooks/${lorebookId}`, { signal, cache: 'no-store' })
 }
 
-export function createOwnLorebook(input: { name: string; entries?: ChatLoreEntry[] }) {
+export function createOwnLorebook(input: { name: string; entries?: ChatLoreEntry[]; connectsChats?: boolean }) {
   return requestApiData<OwnedChatLorebook>('/api/codex-chat/lorebooks', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(input) })
 }
 
 /** Null: an emptied chat book went away. */
-export function updateOwnLorebook(lorebookId: number, patch: { name?: string; entries?: ChatLoreEntry[]; revision?: string }) {
+export function updateOwnLorebook(lorebookId: number, patch: { name?: string; entries?: ChatLoreEntry[]; connectsChats?: boolean; revision?: string }) {
   return requestRevisionChecked<OwnedChatLorebook | null>(`/api/codex-chat/lorebooks/${lorebookId}`, { method: 'PATCH', headers: JSON_HEADERS, body: JSON.stringify(patch) })
 }
 

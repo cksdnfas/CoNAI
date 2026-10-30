@@ -288,6 +288,12 @@ export function useFolderSettingsTab({ isActive, notifyInfo, notifyError }: UseF
   }
 
   return {
+    chatActions: {
+      scanAll: scanAllJob.run,
+      verifyAllFiles: verifyAllFilesJob.run,
+      cancelScanAll: scanAllJob.cancel,
+      cancelVerifyAllFiles: verifyAllFilesJob.cancel,
+    },
     tabProps: {
       newFolder,
       onNewFolderChange: (patch: Partial<typeof newFolder>) => setNewFolder((current) => ({ ...current, ...patch })),

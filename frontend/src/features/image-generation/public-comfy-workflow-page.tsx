@@ -19,6 +19,9 @@ import { ComfyWorkflowControllerPanel } from './components/comfy-workflow-contro
 import { useGenerationImageSaveOptions } from './components/use-generation-image-save-options'
 import { useComfyWorkflowDraft } from './components/use-comfy-workflow-draft'
 import { useComfyFieldValidation } from './components/use-comfy-field-validation'
+import { useHistorySettingsLoad } from './components/use-history-settings-load'
+import { useChatPage } from '@/features/codex-chat/chat-page-context'
+import { useConfirm } from '@/components/ui/confirm-dialog'
 import { WorkflowArtifactExplorerPanel } from './components/workflow-artifact-explorer-panel'
 import { useComfyChatPage } from './components/use-comfy-chat-page'
 import { ComfyWorkflowAuthoringModal } from './components/comfy-workflow-authoring-modal'
@@ -29,8 +32,10 @@ import { GenerationLayoutProvider, useGenerationLayout } from './layout/generati
 import { GenerationLayoutListEditor } from './layout/generation-layout-list-editor'
 import { resolveRecentStripPlacement } from './layout/generation-layout-ops'
 import {
+  buildWorkflowDraft,
   buildWorkflowPromptData,
 } from './image-generation-drafts'
+import { buildComfyDraftFromHistoryPayload, confirmHistorySettingsOverwrite, getHistorySettingsLoadedMessage, hasWorkflowDraftDifference } from './history-settings-mapping'
 import {
   getErrorMessage,
   parseNumberInput,
@@ -79,6 +84,8 @@ function PublicComfyWorkflowPageContent() {
   const queryClient = useQueryClient()
   const { showSnackbar } = useSnackbar()
   const { t, formatNumber } = useI18n()
+  const chatPage = useChatPage()
+  const confirm = useConfirm()
   const generationLayout = useGenerationLayout()
   const authStatusQuery = useAuthStatusQuery()
   const draftStorageOwner = resolveAccountDraftOwner(authStatusQuery.data)
@@ -102,7 +109,7 @@ function PublicComfyWorkflowPageContent() {
 
   const workflow = workflowQuery.data ?? null
   const workflowFields = useMemo(() => (workflow?.marked_fields ?? []) as WorkflowMarkedField[], [workflow?.marked_fields])
-  const { workflowDraft, setWorkflowDraft, workflowDraftOwnerId, resetDraft } = useComfyWorkflowDraft(draftStorageOwner, workflow, workflowFields)
+  const { workflowDraft, setWorkflowDraft, workflowDraftOwnerId, persistDraft, resetDraft } = useComfyWorkflowDraft(draftStorageOwner, workflow, workflowFields)
   const { fieldIssues, clearFieldIssue, clearFieldIssues, validate } = useComfyFieldValidation(workflow?.id ?? null, workflowFields, workflowDraft, showSnackbar)
   const shouldShowArtifactExplorer = workflow?.result_view_mode === 'artifact_explorer'
   const publicQueueMaxCount = resolvePublicQueueMaxCount(workflow?.public_queue_max_count)
@@ -117,7 +124,7 @@ function PublicComfyWorkflowPageContent() {
     serviceType: 'comfyui',
     workflowId: workflow?.id ?? null,
     publicWorkflowSlug: slug,
-    enabled: workflow !== null && !shouldShowArtifactExplorer,
+    enabled: workflow !== null && (!shouldShowArtifactExplorer || chatPage?.enabled === true),
   })
 
   useEffect(() => {
@@ -136,9 +143,34 @@ function PublicComfyWorkflowPageContent() {
     handleFieldChange(fieldId, image ?? '')
   }
 
+  useHistorySettingsLoad('comfyui', (request) => {
+    if (!workflow || request.workflowId !== workflow.id) {
+      showSnackbar({ message: t({ ko: '이 기록의 워크플로우가 현재 공유 화면과 달라.', en: 'This record belongs to a different workflow.' }), tone: 'error' })
+      return
+    }
+    if (workflowDraftOwnerId !== workflow.id) return false
+    const result = buildComfyDraftFromHistoryPayload(request.payload, workflowFields, workflowDraft)
+    if (!result) {
+      showSnackbar({ message: t({ ko: '이 기록에는 불러올 워크플로우 입력이 없어.', en: 'This record has no workflow inputs to load.' }), tone: 'error' })
+      return
+    }
+    void (async () => {
+      const dirty = hasWorkflowDraftDifference(workflowFields, workflowDraft, buildWorkflowDraft(workflowFields))
+      if (dirty && hasWorkflowDraftDifference(workflowFields, workflowDraft, result.draft) && !(await confirmHistorySettingsOverwrite(confirm, t))) return
+      if (!persistDraft(result.draft)) return
+      setWorkflowDraft(result.draft)
+      clearFieldIssues()
+      showSnackbar({ message: getHistorySettingsLoadedMessage(t, request.historyId, result.hasImageInputs), tone: 'info' })
+    })()
+  })
+
   const loraOptions = findAutoCollectedPowerLoraOptions(authoringDropdowns.data ?? [])
   useComfyChatPage(workflow, workflowFields, workflowDraft, workflowDraftOwnerId, handleFieldChange, {
     enabled: !!workflow && !isAuthoringOpen,
+    generate: () => handleQueueSubmit(),
+    records: historyFeed.historyRecords,
+    queueCount: clampQueueRegistrationCount(queueRegistrationCount, publicQueueMaxCount),
+    replaceDraft: (next) => { if (!persistDraft(next)) throw new Error('워크플로우 초안이 바뀌었어.'); setWorkflowDraft(next); clearFieldIssues() },
     loraOptions,
     onRefresh: async () => { const result = await workflowQuery.refetch(); if (result.error) throw result.error },
     onOpenCreate: authStatusQuery.data?.permissionKeys.includes('workflows.edit') && authStatusQuery.data.permissionKeys.includes('workflows.view') ? () => { setAuthoringWorkflow(null); setIsAuthoringOpen(true) } : undefined,
@@ -171,10 +203,10 @@ function PublicComfyWorkflowPageContent() {
 
   const handleQueueSubmit = async () => {
     if (!workflow || isQueueSubmitting) {
-      return
+      return false
     }
 
-    if (!validate()) return
+    if (!validate()) return false
 
     const promptData = buildWorkflowPromptData(workflowFields, workflowDraft)
     const registrationCount = clampQueueRegistrationCount(queueRegistrationCount, publicQueueMaxCount)
@@ -194,8 +226,10 @@ function PublicComfyWorkflowPageContent() {
 
       void refreshGenerationQueueViews(queryClient, () => setHistoryRefreshNonce((current) => current + 1))
       showSnackbar({ message: t({ ko: '{name} 큐에 {count}건 등록했어.', en: 'Queued {count} job(s) for {name}.' }, { name: workflow.name, count: successCount }), tone: 'info' })
+      return successCount >= registrationCount ? true : successCount > 0 ? { queued: successCount, requested: registrationCount } : false
     } catch (error) {
       showSnackbar({ message: getErrorMessage(error, t({ ko: '공용 워크플로우 큐 등록에 실패했어.', en: 'Failed to enqueue the public workflow.' })), tone: 'error' })
+      return false
     } finally {
       setIsQueueSubmitting(false)
       if (viewerQueueRoleLimit !== null) {

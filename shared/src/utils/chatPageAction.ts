@@ -1,6 +1,7 @@
 import { pageSettingsScopes } from '../constants/pageSettings'
 import type { ChatPageAction, ChatPageActionProposal, ChatPageData, ChatPageSchema } from '../types/chatPageAction'
 import type { ChatPageSnapshot } from '../types/chatPage'
+import { requireChatPageTarget } from './chatPage'
 
 // Node schemas include nested properties/enums inside a page collection; schema recursion stays capped at eight.
 export const CHAT_PAGE_ACTION_LIMITS = { actions: 26, bytes: 320000, text: 200000, depth: 20, array: 512 } as const
@@ -76,9 +77,10 @@ const nativeActionPermissions = {
   'plugin_source.check': null, 'plugin_source.review': null, 'plugin_source.install': null,
   'workspace.open': 'files.view', 'workspace.search': 'files.view', 'workspace.new': 'files.edit', 'workspace.create': 'files.edit', 'workspace.mkdir': 'files.edit', 'workspace.save': 'files.edit',
   'page.navigate': null, 'page.refresh': null, 'page.settings_open': null, 'page_settings.save': null, 'page_settings.select': null, 'page_settings.close': null,
-  'prompt.create': 'prompts.edit', 'prompt.update': 'prompts.edit', 'prompt.select': 'prompts.view',
-  'preset.create': 'prompts.edit', 'preset.update': 'prompts.edit', 'preset.select': 'prompts.view', 'preset.draft': 'prompts.view', 'preset.insert': 'prompts.view',
-  'wildcard.create': 'wildcards.edit', 'wildcard.update': 'wildcards.edit', 'wildcard.select': 'wildcards.view', 'wildcard.draft': 'wildcards.view',
+  'prompt.create': 'prompts.edit', 'prompt.update': 'prompts.edit', 'prompt.delete': 'prompts.edit', 'prompt.select': 'prompts.view',
+  'prompt.search': 'prompts.view', 'prompt.group': 'prompts.view', 'prompt.page': 'prompts.view',
+  'preset.create': 'prompts.edit', 'preset.update': 'prompts.edit', 'preset.delete': 'prompts.edit', 'preset.select': 'prompts.view', 'preset.draft': 'prompts.view', 'preset.insert': 'prompts.view',
+  'wildcard.create': 'wildcards.edit', 'wildcard.update': 'wildcards.edit', 'wildcard.delete': 'wildcards.edit', 'wildcard.select': 'wildcards.view', 'wildcard.draft': 'wildcards.view',
   // Character library (/characters): folder and setting navigation, the open editor's draft, and review-card saves/deletes.
   'character.open_folder': 'characters.view', 'character.search': 'characters.view', 'character.open_setting': 'characters.view',
   'character.new_setting': 'characters.edit', 'character.draft': 'characters.edit', 'character.save': 'characters.edit', 'character.delete': 'characters.edit',
@@ -87,34 +89,40 @@ const nativeActionPermissions = {
   // The server check uses the editor's own check route (workflows.edit); suggested fields only mark inputs in the draft.
   'comfy.check': 'workflows.edit', 'comfy.suggest_fields': 'workflows.view',
   'media.attach': null, 'media.clear': null,
-  'nai.characters': null,
-  'workflow.select': 'workflows.view', 'workflow.inputs': 'workflows.view',
+  'nai.characters': null, 'nai.references': null,
+  'nai.generate': 'generation.execute', 'codex.generate': 'generation.execute', 'comfy.generate': 'generation.execute',
+  'generation.history_load': 'images.view',
+  'workflow.select': 'workflows.view', 'workflow.inputs': 'workflows.view', 'workflow.save': 'workflows.edit',
   // Workflow runs and autoruns (예약): each applied card calls the same route as its button, as the person.
   'workflow.run': 'generation.execute', 'workflow.schedule_save': 'workflows.edit', 'workflow.schedule_pause': 'generation.execute',
   'workflow.schedule_resume': 'generation.execute', 'workflow.schedule_run_now': 'generation.execute', 'workflow.schedule_delete': 'workflows.edit',
   'workflow.run_cancel': 'generation.execute', 'workflow.runs_cleanup': 'workflows.edit',
   'group.select': 'images.view', 'group.create': 'images.edit', 'group.update': 'images.edit', 'group.auto_collect': 'images.edit',
   'group.move': 'images.edit', 'group.delete': 'images.delete',
+  'group.source': 'images.view', 'group.select_images': 'images.view', 'group.add_images': 'images.edit',
+  'group.remove_images': 'images.edit', 'group.delete_images': 'images.delete', 'group.auto_collect_all': 'images.edit', 'group.rebuild_folders': 'images.edit',
   // Chat profile editor (settings › chat). Saving goes through the editor's own admin-only API.
   'profile.open_create': null, 'profile.open_edit': null, 'profile.copy': null, 'profile.section': null, 'profile.draft': null, 'profile.save': null, 'profile.assets': 'generation.execute',
   // Saves the profile's own appearance into the character library (new setting, or over its detached origin).
   'profile.character_save': 'characters.edit',
   // Generation pages: copy a character library setting's tags (and reference image) into the form.
   'character_setting.insert': 'characters.view',
-  'library.search': 'images.view', 'library.history': 'images.view', 'library.open': 'images.view', 'library.select': 'images.view', 'library.hide_groups': 'images.view', 'files.open': 'files.view', 'files.preview': 'files.view',
+  'library.search': 'images.view', 'library.history': 'images.view', 'library.open': 'images.view', 'library.select': 'images.view', 'library.hide_groups': 'images.view',
+  'library.filters': 'images.view', 'library.assign_group': 'images.edit', 'library.delete': 'images.delete', 'files.open': 'files.view', 'files.preview': 'files.view',
   // File store: names and moves run directly; deletes, restores and document saves use review cards.
   'files.select': 'files.view', 'files.new_folder': 'files.edit', 'files.rename': 'files.edit', 'files.move': 'files.edit', 'files.new_document': 'files.edit', 'files.edit_document': 'files.edit',
   'files.name_save': 'files.edit', 'files.move_save': 'files.edit', 'files.delete': 'files.delete', 'files.restore_version': 'files.edit',
   'files.doc_at': 'files.view', 'files.doc_edit': 'files.edit', 'files.doc_append': 'files.edit', 'files.doc_save': 'files.edit',
   // Settings › Chat › 자원 editors (lorebooks, generation presets, judge presets, blocks, tool presets). Saving uses each editor's own admin API.
   'resource.open': null, 'resource.save': null, 'lorebook.entries': null, 'block.fields': null,
-  'chat.open': 'chat.use', 'chat.prepare': 'chat.use',
+  'chat.open': 'chat.use', 'chat.prepare': 'chat.use', 'chat.rename': 'chat.use', 'chat.pin': 'chat.use', 'chat.archive': 'chat.use', 'chat.delete': 'chat.use',
+  'plugins.open': null,
   'audio.open': 'audio.view', 'audio.filter': 'audio.view', 'audio.select': 'audio.view',
   'sprite.select': null,
   // Sprite tabs: list and form edits are drafts; runs that save to the library are review cards.
   'sprite.add_videos': 'images.edit', 'sprite.remove_videos': 'images.edit', 'sprite.preview': 'images.edit', 'sprite.run': 'images.upload', 'sprite.stop': 'images.edit', 'sprite.download_zip': 'images.view',
   'sprite.add_sheets': 'images.edit', 'sprite.remove_sheets': 'images.edit', 'sprite.sheet': 'images.edit', 'sprite.download': 'images.edit',
-  'audio.project': 'audio.view', 'audio.search': 'audio.view',
+  'audio.project': 'audio.view', 'audio.search': 'audio.view', 'audio.generate': 'generation.execute',
   // Upload page: re-reading, converting and downloading stay on screen; adding to the library is a review card.
   'upload.reextract': 'images.upload', 'upload.convert': 'images.upload', 'upload.download': 'images.upload', 'upload.library': 'images.upload',
   // Posts board: the editor and the comment box save through the board's own routes.
@@ -131,6 +139,8 @@ const nativeActionPermissions = {
   'wallpaper.history': null, 'wallpaper.open_dialog': null,
   'wallpaper.delete_preset': null, 'wallpaper.save_schedule': null, 'wallpaper.issue_key': null, 'wallpaper.revoke_key': null,
   'metadata.save': 'images.edit',
+  'image_detail.open_metadata': 'page.metadata-editor.view', 'image_detail.step': 'images.view', 'image_detail.similar': 'images.view',
+  'image_detail.edit': 'images.edit', 'image_detail.sprite': 'images.edit', 'image_detail.assign_group': 'images.edit', 'image_detail.delete': 'images.delete',
   // Full-screen image editor (an overlay on any page that opens it). Edits stay in the browser's canvas; saving runs the
   // opener's own save path (library upload or the generation form), whose routes check their permissions.
   'image_editor.tool': null, 'image_editor.layer_select': null, 'image_editor.brush': null, 'image_editor.layer': null,
@@ -138,7 +148,7 @@ const nativeActionPermissions = {
   'image_editor.selection': null, 'image_editor.mask': null, 'image_editor.save': null,
   // Settings tabs (an administrator's page). Every change saves through that tab's own admin API, so each is a review card.
   'settings.save': null, 'settings.ai_runtime': null, 'settings.ai_runtime_check': null, 'settings.kaloscope_requeue': null, 'settings.rating_tier_add': null,
-  'settings.mcp_http': null, 'settings.maintenance': null,
+  'settings.mcp_http': null, 'settings.maintenance': null, 'settings.folder': null,
   'settings.chat_options': null, 'settings.default_model': null, 'settings.default_judge': null, 'settings.llm_preset': null, 'settings.mcp_server': null, 'settings.mcp_server_draft': null,
   'settings.usage_period': null, 'settings.judge_filter': null,
   'settings.content_topic': null,
@@ -156,8 +166,8 @@ export const CHAT_PAGE_ACTION_PERMISSIONS: Readonly<Record<string, string | null
  */
 export type ChatPageActionTier = 'view' | 'draft' | 'direct' | 'commit'
 /** Native operations with bounded effects; extensions cannot declare this tier. */
-const DIRECT_ACTIONS = new Set(['files.name_save', 'files.move_save', 'sprite.stop', 'workflow.run_cancel', 'posts.bot_cancel'])
-const COMMIT_ACTIONS = new Set(['page_settings.save', 'prompt.create', 'prompt.update', 'preset.create', 'preset.update', 'wildcard.create', 'wildcard.update', 'comfy.save', 'comfy.register', 'group.create', 'group.update', 'group.auto_collect', 'group.move', 'group.delete', 'profile.save', 'profile.assets', 'resource.save', 'wallpaper.save', 'metadata.save', 'posts.save', 'posts.comment', 'workflow.run', 'workflow.schedule_save', 'workflow.schedule_pause', 'workflow.schedule_resume', 'workflow.schedule_run_now', 'workflow.schedule_delete', 'workflow.runs_cleanup', 'sprite.run', 'upload.library', 'posts.delete', 'posts.restore_revision', 'posts.comment_update', 'posts.comment_delete', 'posts.comment_hide', 'posts.category_create', 'posts.category_update', 'posts.category_delete', 'files.delete', 'files.restore_version', 'files.doc_save', 'settings.save', 'settings.ai_runtime', 'settings.kaloscope_requeue', 'settings.mcp_http', 'settings.maintenance', 'settings.chat_options', 'settings.default_model', 'settings.default_judge', 'settings.llm_preset', 'settings.mcp_server', 'settings.user_profile', 'settings.flag', 'settings.routine', 'settings.automation_switch', 'wallpaper.delete_preset', 'wallpaper.save_schedule', 'wallpaper.issue_key', 'wallpaper.revoke_key'])
+const DIRECT_ACTIONS = new Set(['files.name_save', 'files.move_save', 'sprite.stop', 'workflow.run_cancel', 'posts.bot_cancel', 'chat.rename', 'chat.pin', 'chat.archive'])
+const COMMIT_ACTIONS = new Set(['page_settings.save', 'prompt.create', 'prompt.update', 'preset.create', 'preset.update', 'wildcard.create', 'wildcard.update', 'comfy.save', 'comfy.register', 'group.create', 'group.update', 'group.auto_collect', 'group.move', 'group.delete', 'profile.save', 'profile.assets', 'resource.save', 'wallpaper.save', 'metadata.save', 'posts.save', 'posts.comment', 'workflow.run', 'workflow.schedule_save', 'workflow.schedule_pause', 'workflow.schedule_resume', 'workflow.schedule_run_now', 'workflow.schedule_delete', 'workflow.runs_cleanup', 'sprite.run', 'audio.generate', 'upload.library', 'posts.delete', 'posts.restore_revision', 'posts.comment_update', 'posts.comment_delete', 'posts.comment_hide', 'posts.category_create', 'posts.category_update', 'posts.category_delete', 'files.delete', 'files.restore_version', 'files.doc_save', 'settings.save', 'settings.ai_runtime', 'settings.kaloscope_requeue', 'settings.mcp_http', 'settings.maintenance', 'settings.chat_options', 'settings.default_model', 'settings.default_judge', 'settings.llm_preset', 'settings.mcp_server', 'settings.user_profile', 'settings.flag', 'settings.routine', 'settings.automation_switch', 'wallpaper.delete_preset', 'wallpaper.save_schedule', 'wallpaper.issue_key', 'wallpaper.revoke_key'])
 const VIEW_ACTIONS = new Set(['page.settings_open', 'page_settings.select', 'page_settings.close', 'page.navigate', 'page.refresh', 'prompt.select', 'preset.select', 'wildcard.select', 'comfy.select', 'comfy.refresh', 'comfy.open_create', 'comfy.open_edit', 'workflow.select', 'group.select', 'profile.open_create', 'profile.open_edit', 'profile.section', 'library.search', 'library.history', 'library.open', 'library.select', 'files.open', 'files.preview', 'comfy.check', 'profile.copy', 'resource.open', 'chat.open', 'chat.prepare', 'audio.open', 'audio.filter', 'audio.select', 'sprite.select', 'wallpaper.select', 'wallpaper.open_preset', 'posts.open', 'posts.category', 'posts.tag', 'posts.back', 'posts.new', 'posts.edit', 'audio.project', 'audio.search', 'sprite.download_zip', 'upload.download', 'posts.layout', 'posts.filter', 'posts.body_at', 'files.select', 'files.new_folder', 'files.rename', 'files.move', 'files.new_document', 'files.edit_document', 'files.doc_at', 'settings.ai_runtime_check', 'settings.usage_period', 'settings.judge_filter', 'wallpaper.open_dialog'])
 /** View operations that stay inside the open editor, so unsaved changes there do not block them. */
 const IN_PLACE_VIEW_ACTIONS = new Set(['page.settings_open', 'comfy.check', 'profile.section', 'library.select', 'resource.open', 'audio.filter', 'audio.select', 'sprite.select', 'wallpaper.select', 'audio.search', 'sprite.download_zip', 'upload.download', 'posts.layout', 'posts.body_at', 'files.select', 'files.new_folder', 'files.rename', 'files.move', 'files.doc_at', 'settings.ai_runtime_check', 'settings.usage_period', 'settings.judge_filter', 'wallpaper.open_dialog'])
@@ -172,6 +182,15 @@ for (const id of ['posts.comments_more', 'posts.comments_at']) { VIEW_ACTIONS.ad
 COMMIT_ACTIONS.add('image_editor.save')
 for (const id of ['character.open_folder', 'character.search', 'character.open_setting', 'character.new_setting']) VIEW_ACTIONS.add(id)
 for (const id of ['character.save', 'character.delete', 'profile.character_save']) COMMIT_ACTIONS.add(id)
+for (const id of ['library.assign_group', 'library.delete', 'group.add_images', 'group.remove_images', 'group.delete_images', 'group.auto_collect_all', 'group.rebuild_folders']) COMMIT_ACTIONS.add(id)
+for (const id of ['nai.generate', 'codex.generate', 'comfy.generate']) COMMIT_ACTIONS.add(id)
+for (const id of ['image_detail.assign_group', 'image_detail.delete']) COMMIT_ACTIONS.add(id)
+for (const id of ['library.filters', 'group.source', 'group.select_images', 'image_detail.open_metadata', 'image_detail.step', 'image_detail.similar']) VIEW_ACTIONS.add(id)
+for (const id of ['image_detail.edit', 'image_detail.sprite']) VIEW_ACTIONS.add(id)
+for (const id of ['library.filters', 'group.select_images', 'image_detail.similar']) IN_PLACE_VIEW_ACTIONS.add(id)
+for (const id of ['prompt.delete', 'preset.delete', 'wildcard.delete', 'chat.delete', 'settings.folder', 'workflow.save']) COMMIT_ACTIONS.add(id)
+for (const id of ['prompt.search', 'prompt.group', 'prompt.page', 'plugins.open']) VIEW_ACTIONS.add(id)
+for (const id of ['prompt.search', 'prompt.group', 'prompt.page']) IN_PLACE_VIEW_ACTIONS.add(id)
 export function chatPageActionTier(id: string, action?: { tier?: ChatPageActionTier }): ChatPageActionTier {
   if (!own(CHAT_PAGE_ACTION_PERMISSIONS, id)) {
     if (action?.tier === 'view' || action?.tier === 'draft') return action.tier
@@ -194,7 +213,8 @@ export function chatPageActionAllowed(path: string, id: string): boolean {
   if (id.startsWith('page_settings.') || id === 'page.settings_open') return pageSettingsScopes(path).length > 0
   if (id.startsWith('page.')) return true
   // The editor opens over library, group, detail and generation pages; extension pages never host it.
-  if (id.startsWith('image_editor.')) return !path.startsWith('/ext/')
+  if (id.startsWith('image_editor.') || id.startsWith('image_detail.')) return !path.startsWith('/ext/')
+  if (id === 'generation.history_load') return path === '/generation' || /^\/public\/workflows\/[\w-]+$/.test(path)
   if (id.startsWith('profile.')) return path === '/settings' || path === '/characters'
   if (id.startsWith('library.')) return path === '/'
   if (id.startsWith('files.')) return path === '/files'
@@ -202,18 +222,19 @@ export function chatPageActionAllowed(path: string, id: string): boolean {
   if (id === 'settings.routine' || id === 'settings.automation_switch') return path === '/settings' || path === '/chat/resources'
   if (id.startsWith('settings.')) return path === '/settings'
   if (id.startsWith('chat.')) return path === '/chat'
+  if (id.startsWith('plugins.')) return path === '/extensions'
   if (id.startsWith('audio.')) return path === '/audio'
   if (id.startsWith('sprite.')) return path === '/sprite'
   if (id.startsWith('upload.')) return path === '/upload'
   if (id.startsWith('posts.')) return path === '/posts'
   if (id.startsWith('wallpaper.')) return path === '/wallpaper'
   if (id.startsWith('metadata.')) return /^\/images\/[\w.-]+\/metadata$/.test(path)
-  if (id.startsWith('prompt.') || id === 'preset.create' || id === 'preset.update' || id === 'preset.select' || id === 'preset.draft') return path === '/prompts'
+  if (id.startsWith('prompt.') || id === 'preset.create' || id === 'preset.update' || id === 'preset.delete' || id === 'preset.select' || id === 'preset.draft') return path === '/prompts'
   if (id.startsWith('wildcard.')) return path === '/wildcards'
   if (id.startsWith('character.')) return path === '/characters'
   if (id.startsWith('group.')) return /^\/groups(?:\/[\w-]+)?$/.test(path)
   if (id === 'media.attach' || id === 'media.clear' || id === 'preset.insert' || id === 'character_setting.insert') return path === '/generation' || /^\/public\/workflows\/[\w-]+$/.test(path)
-  if (['comfy.node', 'comfy.refresh', 'comfy.open_create', 'comfy.open_edit', 'comfy.author', 'comfy.register', 'comfy.save', 'comfy.check', 'comfy.suggest_fields'].includes(id)) return path === '/generation' || /^\/public\/workflows\/[\w-]+$/.test(path)
+  if (['comfy.node', 'comfy.refresh', 'comfy.open_create', 'comfy.open_edit', 'comfy.author', 'comfy.register', 'comfy.save', 'comfy.check', 'comfy.suggest_fields', 'comfy.generate'].includes(id)) return path === '/generation' || /^\/public\/workflows\/[\w-]+$/.test(path)
   return path === '/generation'
 }
 export function normalizeChatPageActions(path: string, input: unknown): ChatPageAction[] {
@@ -225,16 +246,69 @@ export function normalizeChatPageActions(path: string, input: unknown): ChatPage
     if ((raw.effect === 'save') !== (COMMIT_ACTIONS.has(raw.id) || DIRECT_ACTIONS.has(raw.id))) throw new Error('작업의 저장 범위가 올바르지 않아.')
     const schema = normalizeChatPageSchema(raw.schema)
     if (schema.type !== 'object') throw new Error('작업 인수는 객체여야 해.')
+    if (raw.inputFields !== undefined && (!Array.isArray(raw.inputFields) || raw.inputFields.some(id => typeof id !== 'string' || !id || id.length > 200))) throw new Error('작업 입력 필드 목록이 올바르지 않아.')
+    const inputs = raw.inputFields === undefined ? {} : { inputFields: [...new Set(raw.inputFields)].sort() }
+    if (raw.revisionScope !== undefined && raw.revisionScope !== 'action') throw new Error('작업 리비전 범위가 올바르지 않아.')
+    const targets = raw.targets?.map(target => {
+      const keys = [target.argument, target.collection, target.id, ...target.keys]
+      if (keys.some(key => typeof key !== 'string' || !key || key.length > 200 || isPrivateChatPageKey(key)) || !own(schema.properties ?? {}, target.argument)) throw new Error('작업 대상 정의가 올바르지 않아.')
+      return { argument: target.argument, collection: target.collection, id: target.id, keys: [...new Set(target.keys)].sort() }
+    })
     if (path.startsWith('/ext/') && !own(CHAT_PAGE_ACTION_PERMISSIONS, raw.id)) {
       if (raw.effect !== 'draft' || (raw.tier !== 'view' && raw.tier !== 'draft')) throw new Error('확장에는 조회와 초안 작업만 등록할 수 있어.')
       return { id: raw.id, label: raw.label, description: raw.description, effect: raw.effect, schema, tier: raw.tier }
     }
-    return { id: raw.id, label: raw.label, description: raw.description, effect: raw.effect, schema }
+    return { id: raw.id, label: raw.label, description: raw.description, effect: raw.effect, schema, ...inputs, ...(targets ? { targets } : {}), ...(raw.revisionScope === 'action' ? { revisionScope: 'action' as const } : {}) }
   })
 }
+
+/** Reuse the card's reviewed values instead of storing a second full snapshot or hashing it on every render. */
+export function chatPageActionBefore(page: ChatPageSnapshot, action: ChatPageAction, args: Record<string, ChatPageData>): ChatPageData {
+  const data = page.data ?? {}
+  const fields = page.fields.filter(field => !field.viewOnly && (action.inputFields ? action.inputFields.includes(field.id) : !args.fieldId || field.id === args.fieldId))
+  const node = args.fieldId && Array.isArray(data.nodes) ? data.nodes.find(item => item && typeof item === 'object' && !Array.isArray(item) && item.fieldId === args.fieldId) : undefined
+  const targets = Object.fromEntries((action.targets ?? []).filter(target => args[target.argument] !== undefined).map(target => {
+    const collection = data[target.collection]
+    const row = Array.isArray(collection) ? collection.find(item => item && typeof item === 'object' && !Array.isArray(item) && item[target.id] === args[target.argument]) : undefined
+    if (!row || typeof row !== 'object' || Array.isArray(row)) throw new Error('검토할 작업 대상을 현재 페이지에서 찾을 수 없어.')
+    return [target.argument, { id: row[target.id], ...Object.fromEntries(target.keys.filter(key => own(row, key)).map(key => [key, row[key]])) }]
+  }))
+  return {
+    selected: data.selected ?? null,
+    fields: Object.fromEntries(fields.map(field => [field.id, field.value])),
+    ...(node ? { node } : {}),
+    ...(page.inputRevision ? { inputRevision: page.inputRevision } : {}),
+    ...(page.workflow ? { workflowRevision: page.workflow.revision } : {}),
+    ...(Object.keys(targets).length ? { targets } : {}),
+  }
+}
+
+function canonicalJson(value: unknown): string {
+  return JSON.stringify(value, (_key, item) => item && typeof item === 'object' && !Array.isArray(item)
+    ? Object.fromEntries(Object.keys(item).sort().map(key => [key, item[key]]))
+    : item)
+}
+
+function schemaWithoutChoices(schema: ChatPageSchema): ChatPageSchema {
+  const result = { ...schema }
+  delete result.enum
+  if (result.properties) result.properties = Object.fromEntries(Object.entries(result.properties).map(([key, value]) => [key, schemaWithoutChoices(value)]))
+  if (result.items) result.items = schemaWithoutChoices(result.items)
+  return result
+}
+
 export function requireChatPageActionState(page: ChatPageSnapshot, proposal: ChatPageActionProposal) {
-  if (proposal.expiresAt < Date.now() || page.revision !== proposal.revision) throw new Error('페이지 입력이나 선택이 바뀌었거나 제안이 만료됐어. 다시 요청해줘.')
+  requireChatPageTarget(page, proposal.page)
   const action = page.actions?.find((item) => item.id === proposal.action.id)
-  if (!action || JSON.stringify(normalizeChatPageActions(page.path, [action])[0]) !== JSON.stringify(normalizeChatPageActions(page.path, [proposal.action])[0])) throw new Error('현재 페이지에서 사용할 수 없는 작업이야.')
-  validateChatPageArguments(action.schema, proposal.arguments)
+  const scoped = proposal.revisionScope === 'action' && proposal.action.revisionScope === 'action' && action?.revisionScope === 'action'
+  if (proposal.expiresAt < Date.now() || (!scoped && page.revision !== proposal.revision)) throw new Error('페이지 입력이나 선택이 바뀌었거나 제안이 만료됐어. 다시 요청해줘.')
+  // Both schemas must still accept these arguments; adding other choices is not a change to their reviewed target.
+  const reviewedAction = (item: ChatPageAction) => {
+    const normalized = normalizeChatPageActions(page.path, [item])[0]
+    return scoped ? { ...normalized, schema: schemaWithoutChoices(normalized.schema) } : normalized
+  }
+  if (!action || canonicalJson(reviewedAction(action)) !== canonicalJson(reviewedAction(proposal.action))) throw new Error('현재 페이지에서 사용할 수 없는 작업이야.')
+  validateChatPageArguments(proposal.action.schema, proposal.arguments)
+  const args = validateChatPageArguments(action.schema, proposal.arguments) as Record<string, ChatPageData>
+  if (scoped && canonicalJson(chatPageActionBefore(page, action, args)) !== canonicalJson(proposal.before)) throw new Error('페이지 입력이나 선택이 바뀌었거나 제안이 만료됐어. 다시 요청해줘.')
 }

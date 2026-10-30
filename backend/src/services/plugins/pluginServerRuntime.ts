@@ -16,6 +16,7 @@ import { callTrustedAppTool, trustedAppToolDefinitions } from './pluginAppBridge
 import { callPluginLlm } from './pluginLlm'
 import { callPluginTask, setPluginTaskInvoker } from './pluginTasks'
 import { callPluginServerMedia } from './pluginServerMedia'
+import { callPluginServerNative } from './pluginServerNative'
 import type { RuntimeJobContext } from '../runtimeJobs/runtimeJobRunner'
 
 /**
@@ -130,6 +131,16 @@ const conai = Object.freeze({
     resolve: (reference) => call('media.resolve', reference),
     save: (input) => call('media.save', input),
   }),
+  app: Object.freeze({
+    // The native feature routes a page reaches with api.app.fetch, as this call's account; resolves to a Response.
+    async fetch(path, options = {}) {
+      const raw = options.body;
+      if (raw !== undefined && raw !== null && typeof raw !== 'string' && !(raw instanceof ArrayBuffer) && !ArrayBuffer.isView(raw)) throw new TypeError('app.fetch body: a string, ArrayBuffer or typed array');
+      const body = raw === undefined || raw === null || typeof raw === 'string' || raw instanceof ArrayBuffer ? raw : raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength);
+      const value = await call('app.fetch', { path, method: options.method, headers: options.headers, body });
+      return new Response(value.body, { status: value.status, statusText: value.statusText, headers: value.headers });
+    },
+  }),
   llm: Object.freeze({
     profiles: () => call('llm.profiles', {}),
     profile: (input) => call('llm.profile', input),
@@ -237,6 +248,8 @@ async function answerCall(server: Server, message: { id: number; method: string;
       reply({ value: callPluginTask(server.pluginId, requester, message.method.slice(5), message.params) })
     } else if (message.method.startsWith('media.')) {
       reply({ value: await callPluginServerMedia(server.pluginId, requester, message.method.slice(6), message.params, invocation?.signal) })
+    } else if (message.method === 'app.fetch') {
+      reply({ value: await callPluginServerNative(requester, message.params, invocation?.signal) })
     } else if (message.method === 'job.progress') {
       const job = invocation?.job
       if (!job) throw new PluginError('실행 중인 작업에서만 진행률을 보낼 수 있어.')

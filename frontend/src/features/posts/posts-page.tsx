@@ -180,6 +180,7 @@ export function PostsPage() {
     title: t({ ko: '게시판', en: 'Posts' }),
     resourceId: view === 'list' ? 'list' : `${view}:${postId ?? edit}`,
     localRevision: JSON.stringify([searchOpen, searchInput]),
+    reviewRevision: '',
     fields: [
       ...(view === 'list' ? [{ id: 'search', label: t({ ko: '게시물 검색어 (제목·태그·본문·댓글, 빈 값은 검색 닫기)', en: 'Post search (title, tags, text, comments; empty closes search)' }), type: 'text' as const, value: searchOpen ? searchInput : '' }] : []),
       ...(canCommentHere ? [
@@ -193,6 +194,7 @@ export function PostsPage() {
       ] : []),
     ],
     data: {
+      selected: openPostData ? { id: openPostData.id, revision: openPostData.revision } : null,
       categories: categories.map((category) => ({ id: category.id, name: category.name, parentId: category.parentId, posts: category.postCount })),
       ...(view === 'list' ? { list: { layout, tab, ...(tab === 'knowledge' ? { review: proposalsView ? 'proposals' : reviewStatus ?? 'any' } : {}) } } : {}),
       ...(view === 'list' ? { posts: posts.slice(0, 100).map((post) => ({ id: post.id, title: pageFreeText(post.title), author: post.author.name, bot: post.author.type === 'profile', categoryId: post.categoryId, tags: post.tags, comments: post.commentCount })) } : {}),
@@ -221,7 +223,7 @@ export function PostsPage() {
       ...(view !== 'list' ? [pageAction('posts.back', t({ ko: '목록으로', en: 'Back to the list' }), t({ ko: '글 목록으로 돌아가.', en: 'Go back to the post list.' }))] : []),
       ...(permissions.canWrite ? [pageAction('posts.new', t({ ko: '새 글 쓰기', en: 'New post' }), t({ ko: '새 글 편집기를 열어. 내용은 편집기 필드로 채워.', en: 'Open the editor for a new post; fill it through its fields.' }))] : []),
       ...(openPostData?.canEdit && !openPostData.knowledge ? [pageAction('posts.edit', t({ ko: '이 글 고치기', en: 'Edit this post' }), t({ ko: '열린 글의 편집기를 열어.', en: 'Open the editor for the open post.' }))] : []),
-      ...(canCommentHere && draftedComment ? [pageAction('posts.comment', t({ ko: '댓글 올리기', en: 'Post comment' }), t({ ko: '입력칸의 댓글(comment) 또는 답글(reply)을 올려.', en: 'Post the drafted comment or reply.' }), pageObject({ target: pageChoice(['comment', 'reply']) }, ['target']), 'save')] : []),
+      ...(canCommentHere && draftedComment ? [pageAction('posts.comment', t({ ko: '댓글 올리기', en: 'Post comment' }), t({ ko: '입력칸의 댓글(comment) 또는 답글(reply)을 올려.', en: 'Post the drafted comment or reply.' }), pageObject({ target: pageChoice(['comment', 'reply']) }, ['target']), 'save', { inputFields: ['comment', 'replyTo', 'reply'] })] : []),
       ...(view === 'list' ? [
         pageAction('posts.layout', t({ ko: '목록 모양', en: 'List layout' }), '', pageObject({ layout: pageChoice(['feed', 'cards', 'sns']) }, ['layout'])),
         pageAction('posts.filter', t({ ko: '목록 탭', en: 'List tab' }), t({ ko: '고른 카테고리 안에서 바꿔', en: 'Within the chosen category' }), pageObject({ tab: pageChoice(listTabs) }, ['tab'])),
@@ -279,8 +281,13 @@ export function PostsPage() {
       else if (id === 'posts.body_at') setBodyOffset(Number(args.offset))
       else if (id === 'posts.comments_at') setCommentOffset(Number(args.offset))
       else if (id === 'posts.comments_more') {
-        if (typeof args.parentId === 'number') await commentData.loadMoreReplies(args.parentId)
-        else await commentData.loadMore()
+        if (typeof args.parentId === 'number') {
+          if (!commentData.moreReplies.get(args.parentId) || commentData.loadingReplies.has(args.parentId)) throw new Error('불러올 이전 답글이 없거나 이미 불러오는 중이야.')
+          await commentData.loadMoreReplies(args.parentId)
+        } else {
+          if (!commentData.hasMore || commentData.isLoadingMore) throw new Error('불러올 이전 댓글이 없거나 이미 불러오는 중이야.')
+          await commentData.loadMore()
+        }
         setCommentOffset(0)
       }
       else if (id === 'posts.delete' && openPostData && !openPostData.knowledge) {

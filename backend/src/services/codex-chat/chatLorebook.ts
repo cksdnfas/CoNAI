@@ -68,6 +68,8 @@ export type ChatLorebook = {
   entries: ChatLoreEntry[]
   /** Profiles that link this book. */
   profiles: Array<{ id: number; name: string }>
+  /** Account books: chats sharing it count as connected (history search across them). False: lore only. */
+  connectsChats: boolean
   createdDate: string
   updatedDate: string
 }
@@ -214,6 +216,8 @@ export type LorebookRow = {
   thread_id: number | null
   /** Account and chat books: which lorebook.json the cached entries came from (id, updated_at, size). */
   source_stamp: string | null
+  /** 0: chats sharing this account book are not connected through it. */
+  connects_chats: number
   created_date: string
   updated_date: string
 }
@@ -222,7 +226,7 @@ export type LorebookSummaryRow = Omit<LorebookRow, 'entries'> & { entry_count: n
 export type ChatLorebookSummary = Omit<ChatLorebook, 'entries'> & { entryCount: number }
 
 /** Count the same valid objects in the same first 500 positions that normalizeLorebook would return. */
-export const lorebookSummaryColumns = `id, revision, name, kind, owner_key, folder_id, thread_id, source_stamp, created_date, updated_date,
+export const lorebookSummaryColumns = `id, revision, name, kind, owner_key, folder_id, thread_id, source_stamp, connects_chats, created_date, updated_date,
   CASE WHEN json_valid(entries) THEN CASE WHEN json_type(entries) = 'array' THEN
     (SELECT count(*) FROM json_each(entries) WHERE key < ${LOREBOOK_MAX_ENTRIES} AND type = 'object')
   ELSE 0 END ELSE 0 END AS entry_count`
@@ -244,6 +248,7 @@ export function toLorebook(row: LorebookRow, profiles: ReturnType<typeof linkedP
     kind: row.kind ?? 'global',
     entries: normalizeLorebook(row.entries),
     profiles: profiles.filter((profile) => profile.lorebookIds.includes(row.id)).map(({ id, name }) => ({ id, name })),
+    connectsChats: row.connects_chats !== 0,
     createdDate: row.created_date,
     updatedDate: row.updated_date,
   }
@@ -257,6 +262,7 @@ export function toLorebookSummary(row: LorebookSummaryRow, profiles: ReturnType<
     kind: row.kind ?? 'global',
     entryCount: row.entry_count,
     profiles: profiles.filter((profile) => profile.lorebookIds.includes(row.id)).map(({ id, name }) => ({ id, name })),
+    connectsChats: row.connects_chats !== 0,
     createdDate: row.created_date,
     updatedDate: row.updated_date,
   }

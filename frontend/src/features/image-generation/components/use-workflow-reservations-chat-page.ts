@@ -158,16 +158,18 @@ export function useWorkflowReservationsChatPage({ enabled, view, automationPause
         maxRuns: schedule.max_run_count && schedule.max_run_count > 0 ? schedule.max_run_count : 0, perRun: schedule.run_enqueue_count ?? 1, onFailure: schedule.failure_policy ?? 'stop',
         nextRun: schedule.next_run_at ?? null, runAs: schedule.run_as_account_name ?? (schedule.run_as_account_id === null || schedule.run_as_account_id === undefined ? null : `#${schedule.run_as_account_id}`),
         ...(schedule.stop_reason_message ? { stopReason: schedule.stop_reason_message.slice(0, 120) } : {}),
-        runs: Object.fromEntries(Object.entries({ done: schedule.completed_run_count, queued: schedule.queued_run_count, running: schedule.running_run_count, failed: schedule.failed_run_count, remaining: schedule.remaining_run_count }).filter(([, count]) => typeof count === 'number' && count > 0)) as Record<string, number>,
         inputValues: shownInputs(schedule.input_values),
       })),
       runs: executions.slice(0, RUN_ROWS).map((execution) => ({
         id: execution.id, workflowId: execution.graph_workflow_id, status: execution.status, scheduleId: execution.schedule_id ?? null,
-        ...(execution.queue_position ? { queuePosition: execution.queue_position } : {}), created: execution.created_date,
+        created: execution.created_date,
         ...(execution.error_message ? { error: execution.error_message.slice(0, 120) } : {}),
       })),
     },
-    actions,
+    actions: actions.map(action => action.schema.properties?.scheduleId ? { ...action, revisionScope: 'action' as const, inputFields: [], targets: [
+      { argument: 'scheduleId', collection: 'schedules', id: 'id', keys: ['revision', 'workflowVersion'] },
+      ...(action.schema.properties.workflowId ? [{ argument: 'workflowId', collection: 'workflows', id: 'id', keys: ['name'] }] : []),
+    ] } : action),
     apply: () => {},
     applyAction: async (id, args, assertCurrent) => {
       assertCurrent()

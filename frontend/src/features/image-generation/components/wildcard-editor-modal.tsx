@@ -23,7 +23,7 @@ import type { WildcardRecord, WildcardTool } from '@/lib/api-wildcards'
 import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
 import { useDirtyBaseline } from '@/features/codex-chat/use-dirty-baseline'
 import { useChatDraftTransaction } from '@/features/codex-chat/use-chat-draft-transaction'
-import { pageAction } from '@/features/codex-chat/page-action-helpers'
+import { pageAction, pageChoice, pageObject } from '@/features/codex-chat/page-action-helpers'
 import { wildcardChatInput, wildcardChatSchema } from './use-wildcard-chat-page'
 
 export interface WildcardEditorModalInput {
@@ -542,16 +542,60 @@ export function WildcardEditorModal({
     setItemDrafts(Object.fromEntries(wildcardTools.map((tool) => [tool, next.items[tool].map((item) => createWildcardItemDraft(item.content, item.weight))])) as Record<WildcardTool, WildcardItemDraft[]>)
   })
   const chatDirty = useDirtyBaseline(`${open}:${wildcard?.id ?? 'new'}`, chatDraft)
+  const submitDraft = async (overwrite: boolean) => {
+    const trimmedName = name.trim()
+    if (!trimmedName) {
+      const message = t(wildcardEditorKey('name.is.required'))
+      setFormError(message)
+      throw new Error(message)
+    }
+
+    const generalItems = normalizeWildcardItemDrafts(itemDrafts.general)
+    const naiItems = normalizeWildcardItemDrafts(itemDrafts.nai)
+    const comfyuiItems = normalizeWildcardItemDrafts(itemDrafts.comfyui)
+    if (generalItems.length === 0 && naiItems.length === 0 && comfyuiItems.length === 0) {
+      const message = t(wildcardEditorKey('at.least.one.general.nai.or.comfyui'))
+      setFormError(message)
+      throw new Error(message)
+    }
+
+    setFormError(null)
+    await onSubmit({
+      name: trimmedName,
+      description: description.trim() || undefined,
+      parent_id: parentValue === 'root' ? null : Number(parentValue),
+      include_children: includeChildren ? 1 : 0,
+      only_children: onlyChildren ? 1 : 0,
+      chain_option: chainOption,
+      items: {
+        general: generalItems,
+        comfyui: comfyuiItems,
+        nai: naiItems,
+      },
+    }, overwrite)
+  }
   useChatPageRegistration(open && !isSubmitting ? {
     kind: 'wildcards', title: t({ ko: '와일드카드 편집', en: 'Wildcard editor' }), priority: 100, resourceId: String(wildcard?.id ?? 'new-wildcard'), dirty: chatDirty, fields: [
       { id: 'name', label: t({ ko: '이름', en: 'Name' }), type: 'text', value: name }, { id: 'description', label: t({ ko: '설명', en: 'Description' }), type: 'text', value: description },
       { id: 'includeChildren', label: t({ ko: '하위 항목 포함', en: 'Include children' }), type: 'boolean', value: includeChildren }, { id: 'onlyChildren', label: t({ ko: '하위 항목만', en: 'Only children' }), type: 'boolean', value: onlyChildren },
       { id: 'chainOption', label: t({ ko: '체인 동작', en: 'Chain behavior' }), type: 'select', value: chainOption, options: ['replace', 'append'] },
     ],
-    data: { selected: { ...chatDraft, parent_id: chatDraft.parent_id ?? 0, include_children: !!includeChildren, only_children: !!onlyChildren } },
-    actions: [pageAction('wildcard.draft', t({ ko: '와일드카드 항목 입력', en: 'Fill wildcard items' }), t({ ko: '편집 초안의 전체 항목과 가중치를 입력해. 저장 버튼으로 저장할 수 있어.', en: 'Fill the complete draft item list and weights; use Save to persist it.' }), wildcardChatSchema(parentCandidates.map((item) => item.id)))],
+    data: { selected: { ...chatDraft, id: wildcard?.id ?? null, revision: wildcard?.assistant_revision ?? '', parent_id: chatDraft.parent_id ?? 0, include_children: !!includeChildren, only_children: !!onlyChildren } },
+    actions: [
+      pageAction('wildcard.draft', t({ ko: '와일드카드 항목 입력', en: 'Fill wildcard items' }), t({ ko: '편집 초안의 전체 항목과 가중치를 입력해. 저장 버튼으로 저장할 수 있어.', en: 'Fill the complete draft item list and weights; use Save to persist it.' }), wildcardChatSchema(parentCandidates.map((item) => item.id))),
+      pageAction(mode === 'create' ? 'wildcard.create' : 'wildcard.update', t({ ko: '초안 저장', en: 'Save draft' }), t({ ko: '현재 편집 초안을 저장해.', en: 'Save the current editor draft.' }), mode === 'edit' && wildcard ? pageObject({ id: pageChoice([wildcard.id]) }, ['id']) : undefined, 'save'),
+    ],
     apply: (patch) => { if (patch.name !== undefined) setName(String(patch.name)); if (patch.description !== undefined) setDescription(String(patch.description)); if (patch.includeChildren !== undefined) setIncludeChildren(Boolean(patch.includeChildren)); if (patch.onlyChildren !== undefined) setOnlyChildren(Boolean(patch.onlyChildren)); if (patch.chainOption !== undefined) setChainOption(patch.chainOption as 'replace' | 'append') },
-    applyAction: (_id, args, assertCurrent) => { assertCurrent(); const next = wildcardChatInput({ ...args, type: args.type ?? chatDraft.type }, wildcard); if (next.type !== chatDraft.type) throw new Error('다른 종류의 항목은 해당 탭에서 만들어줘.'); return applyChatDraft({ ...chatDraft, ...next, description: next.description ?? '', parent_id: next.parent_id ?? null, include_children: next.include_children ?? 0, only_children: next.only_children ?? 0, chain_option: next.chain_option ?? 'replace', type: chatDraft.type }) },
+    applyAction: async (id, args, assertCurrent) => {
+      assertCurrent()
+      if (id === 'wildcard.draft') {
+        const next = wildcardChatInput({ ...args, type: args.type ?? chatDraft.type }, wildcard)
+        if (next.type !== chatDraft.type) throw new Error('다른 종류의 항목은 해당 탭에서 만들어줘.')
+        return applyChatDraft({ ...chatDraft, ...next, description: next.description ?? '', parent_id: next.parent_id ?? null, include_children: next.include_children ?? 0, only_children: next.only_children ?? 0, chain_option: next.chain_option ?? 'replace', type: chatDraft.type })
+      }
+      if (id !== (mode === 'create' ? 'wildcard.create' : 'wildcard.update')) throw new Error('등록되지 않은 와일드카드 작업이야.')
+      await submitDraft(false)
+    },
   } : null)
 
   const handleDownloadTemplate = (format: WildcardJsonFormat) => {
@@ -633,43 +677,7 @@ export function WildcardEditorModal({
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    return submitDraft(false)
-  }
-
-  /** `overwrite`: after a revision conflict, save this draft over the newer version. */
-  const submitDraft = async (overwrite: boolean) => {
-    const trimmedName = name.trim()
-    if (!trimmedName) {
-      setFormError(t(wildcardEditorKey('name.is.required')))
-      return
-    }
-
-    const generalItems = normalizeWildcardItemDrafts(itemDrafts.general)
-    const naiItems = normalizeWildcardItemDrafts(itemDrafts.nai)
-    const comfyuiItems = normalizeWildcardItemDrafts(itemDrafts.comfyui)
-    if (generalItems.length === 0 && naiItems.length === 0 && comfyuiItems.length === 0) {
-      setFormError(t(wildcardEditorKey('at.least.one.general.nai.or.comfyui')))
-      return
-    }
-
-    setFormError(null)
-    try {
-      await onSubmit({
-        name: trimmedName,
-        description: description.trim() || undefined,
-        parent_id: parentValue === 'root' ? null : Number(parentValue),
-        include_children: includeChildren ? 1 : 0,
-        only_children: onlyChildren ? 1 : 0,
-        chain_option: chainOption,
-        items: {
-          general: generalItems,
-          comfyui: comfyuiItems,
-          nai: naiItems,
-        },
-      }, overwrite)
-    } catch {
-      // The mutation reports the error; keep the editor and its draft open.
-    }
+    return submitDraft(false).catch(() => undefined)
   }
 
   const canSave = !isSubmitting && (mode === 'create' || chatDirty)
@@ -696,7 +704,7 @@ export function WildcardEditorModal({
         ) : null}
         {conflict ? (
           <SaveConflictAlert>
-            <SaveConflictOverwriteButton disabled={isSubmitting} onClick={() => void submitDraft(true)} />
+            <SaveConflictOverwriteButton disabled={isSubmitting} onClick={() => void submitDraft(true).catch(() => undefined)} />
           </SaveConflictAlert>
         ) : null}
 

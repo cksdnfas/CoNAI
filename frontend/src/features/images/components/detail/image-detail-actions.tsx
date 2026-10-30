@@ -16,6 +16,8 @@ interface ImageDetailActionsProps {
   downloadUrl?: string | null
   downloadName: string
   image?: ImageRecord
+  editOpen?: boolean
+  onEditOpenChange?: (open: boolean) => void
   isRefreshing: boolean
   onBack: () => void
   onRefresh: () => void
@@ -33,7 +35,7 @@ interface ImageDetailActionsProps {
  * Top bar of the image page, same arrangement as the viewer: back · ‹ N / total › on the left, icon actions on the
  * right (group, editor, download, then ⋯ with metadata, similar scan, sprites and delete). Flat row with a hairline below.
  */
-export function ImageDetailActions({ downloadUrl, image, isRefreshing, onBack, onRefresh, onDeleted, sequence, similarity, trailing }: ImageDetailActionsProps) {
+export function ImageDetailActions({ downloadUrl, image, editOpen, onEditOpenChange, isRefreshing, onBack, onRefresh, onDeleted, sequence, similarity, trailing }: ImageDetailActionsProps) {
   const { t, formatNumber } = useI18n()
   const positionLabel = sequence
     ? `${formatNumber(sequence.index + 1)} / ${formatNumber(Math.max(sequence.total ?? 0, sequence.loadedCount))}${sequence.total === null && sequence.hasMore ? '+' : ''}`
@@ -74,7 +76,7 @@ export function ImageDetailActions({ downloadUrl, image, isRefreshing, onBack, o
           </IconButton>
         ) : null}
         <ImageGroupAssignAction image={image} variant="ghost" />
-        <ImageEditAction image={image} variant="ghost" />
+        <ImageEditAction image={image} variant="ghost" open={editOpen} onOpenChange={onEditOpenChange} />
         {downloadUrl ? <ImageDownloadTriggerButton image={image} variant="ghost" size="icon-sm" /> : null}
         <ActionMenuButton entries={moreEntries} label={t({ ko: '더 보기', en: 'More' })} variant="ghost" size="icon-sm" />
         {trailing}

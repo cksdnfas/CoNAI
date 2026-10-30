@@ -23,6 +23,9 @@ import type { PluginAppRequest } from '@conai/shared'
 import { PluginAppRequestList, usePendingAppRequests, usePluginAppRequests } from './plugin-app-requests'
 import { PluginManagement } from './plugin-management'
 import { PluginReviewModal } from './plugin-review'
+import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
+import { pageAction, pageFreeText, pageObject, pageText } from '@/features/codex-chat/page-action-helpers'
+import type { PluginManagementPage } from './plugin-authoring'
 
 const HISTORY_PAGE = 20
 
@@ -76,6 +79,24 @@ export function PluginsPage() {
       ? t({ ko: '파일 조회 권한이 필요해', en: 'File access required' }) : null
     return { manifest, page, blocked }
   }))
+
+  const chatPages = pages.slice(0, 100)
+  const assistantPage: PluginManagementPage = {
+    localRevision: JSON.stringify([files, projectId]),
+    data: { pages: chatPages.map(({ manifest, page, blocked }) => ({ pluginId: manifest.id, pageId: page.id, plugin: pageFreeText(manifest.name), title: pageFreeText(page.title), blocked: !!blocked })) },
+    actions: pages.some(({ blocked }) => !blocked) ? [pageAction('plugins.open', t({ ko: '플러그인 열기', en: 'Open plugin' }), t({ ko: 'data.pages의 플러그인과 페이지를 열어. 승인 요청은 사람이 검토해.', en: 'Open a page in data.pages. Pending requests remain human-only.' }), pageObject({ pluginId: pageText(48), pageId: pageText(48) }, ['pluginId', 'pageId']))] : [],
+    applyAction: async (id, args) => {
+      const target = pages.find(({ manifest, page, blocked }) => !blocked && manifest.id === args.pluginId && page.id === args.pageId)
+      if (id !== 'plugins.open' || !target) throw new Error('열 수 있는 플러그인 페이지를 찾지 못했어.')
+      navigate(`/ext/${target.manifest.id}/${target.page.id}${contextParams.size ? `?${contextParams.toString()}` : ''}`)
+    },
+  }
+  useChatPageRegistration({
+    kind: 'page', title: t({ ko: '플러그인', en: 'Plugins' }), resourceId: 'extensions', fields: [],
+    ...assistantPage,
+    apply: () => {},
+    applyAction: async (id, args, assertCurrent) => { assertCurrent(); await assistantPage.applyAction(id, args) },
+  })
 
   return (
     <div className="pb-6">
@@ -139,7 +160,7 @@ export function PluginsPage() {
           </RowGroup>
         )}
 
-        {auth.data?.isAdmin ? <PluginManagement /> : null}
+        {auth.data?.isAdmin ? <PluginManagement assistantPage={assistantPage} /> : null}
       </div>
       <AppRequestHistory open={history} onClose={() => setHistory(false)} pluginName={pluginName} onReview={(request) => { setHistory(false); setReview(request) }} />
       <PluginReviewModal

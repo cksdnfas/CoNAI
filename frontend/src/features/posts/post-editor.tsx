@@ -229,6 +229,7 @@ export function PostEditor({ post, categories, defaultCategoryId, onSaved, onCan
     kind: 'posts',
     title: post ? t({ ko: '글 고치기', en: 'Edit post' }) : t({ ko: '새 글', en: 'New post' }),
     resourceId: `edit:${post?.id ?? 'new'}`,
+    localRevision: JSON.stringify([body, post?.revision]),
     priority: 1,
     dirty,
     fields: [

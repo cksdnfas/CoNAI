@@ -11,11 +11,12 @@ import { Chip } from '@/components/ui/chip'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { EmptyState } from '@/components/ui/empty-state'
 import { ErrorState } from '@/components/ui/error-state'
-import { Field } from '@/components/ui/field'
+import { Field, FieldInfo } from '@/components/ui/field'
 import { FloatingSaveBar } from '@/components/ui/floating-save-bar'
 import { Input } from '@/components/ui/input'
 import { LoadingState } from '@/components/ui/loading-state'
 import { useSnackbar } from '@/components/ui/snackbar-context'
+import { SwitchLine } from '@/components/ui/switch-line'
 import { useI18n } from '@/i18n'
 import {
   CHAT_ADMIN_PROFILES_QUERY_KEY,
@@ -135,6 +136,8 @@ function LorebookEditor({ initial, kind }: { initial: Book | null; kind: 'global
   const [lorebook, setLorebook] = useState(initial)
   const [name, setName] = useState(initial?.name ?? '')
   const [entries, setEntries] = useState<ChatLoreEntry[]>(initial?.entries ?? [])
+  /** Account books only: whether chats sharing this book can search each other's talk. */
+  const [connectsChats, setConnectsChats] = useState(initial?.connectsChats !== false)
   const [fillOpen, setFillOpen] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
   const importing = useRef(false)
@@ -144,12 +147,16 @@ function LorebookEditor({ initial, kind }: { initial: Book | null; kind: 'global
   entriesRef.current = entries
   const nameRef = useRef(name)
   nameRef.current = name
+  const connectsRef = useRef(connectsChats)
+  connectsRef.current = connectsChats
+  const storedConnects = (book: Book | null) => book?.connectsChats !== false
   const folderId = lorebook && 'folderId' in lorebook ? lorebook.folderId : null
   const back = () => navigate(LOREBOOKS_PATH)
-  const takeSaved = (book: Book, submitted: { name: string; entries: ChatLoreEntry[] }) => {
+  const takeSaved = (book: Book, submitted: { name: string; entries: ChatLoreEntry[]; connectsChats: boolean }) => {
     setLorebook(book)
     setName((current) => current === submitted.name ? book.name : current)
     setEntries((current) => current === submitted.entries ? book.entries : current)
+    setConnectsChats((current) => current === submitted.connectsChats ? storedConnects(book) : current)
   }
 
   const missing = keyLanguage ? entries.filter((entry) => lacksLanguageKeys(entry, keyLanguage)) : []
@@ -163,17 +170,18 @@ function LorebookEditor({ initial, kind }: { initial: Book | null; kind: 'global
   }
   const saveMutation = useMutation({
     mutationFn: async () => {
-      let submitted = { name, entries }
+      let submitted = { name, entries, connectsChats }
       if (entries.length > 500) throw new Error(t({ ko: '항목이 500개를 넘었어. 줄인 뒤 저장해.', en: 'There are more than 500 entries. Remove some before saving.' }))
       if (!lorebook) {
-        const saved = await (owned ? createOwnLorebook(submitted) : createChatLorebook(submitted))
+        const saved = await (owned ? createOwnLorebook(submitted) : createChatLorebook({ name, entries }))
         return { saved, submitted }
       }
-      const write = (base: Book, value: BookDraft) => {
+      const write = (base: Book, value: BookDraft & { connectsChats: boolean }) => {
         if (value.entries.length > 500) throw new Error(t({ ko: '합친 항목이 500개를 넘었어. 줄인 뒤 저장해.', en: 'The merged book exceeds 500 entries. Remove some before saving.' }))
+        // The switch goes out only when it differs from the stored book, so a save never resets someone else's change.
         return owned
-          ? updateOwnLorebook(base.id, { ...value, revision: base.revision })
-          : updateChatLorebook(base.id, { ...value, revision: base.revision })
+          ? updateOwnLorebook(base.id, { name: value.name, entries: value.entries, ...(value.connectsChats !== storedConnects(base) ? { connectsChats: value.connectsChats } : {}), revision: base.revision })
+          : updateChatLorebook(base.id, { name: value.name, entries: value.entries, revision: base.revision })
       }
       try {
         return { saved: await write(lorebook, submitted), submitted }
@@ -183,6 +191,8 @@ function LorebookEditor({ initial, kind }: { initial: Book | null; kind: 'global
         if (!mounted.current) throw error
         const conflictDraft = { name: nameRef.current, entries: entriesRef.current }
         const merged = mergeBookDraft(lorebook, latest, conflictDraft)
+        // A boolean has no partial merge: an edited switch wins, an untouched one takes the latest.
+        const mergedConnects = connectsRef.current !== storedConnects(lorebook) ? connectsRef.current : storedConnects(latest)
         if (merged.conflicts.name || merged.conflicts.entries.length) {
           const titles = new Map([...lorebook.entries, ...latest.entries, ...conflictDraft.entries].map((entry) => [entry.id, loreEntryTitle(entry) || entry.id]))
           const fields = [...(merged.conflicts.name ? [t({ ko: '이름', en: 'name' })] : []), ...merged.conflicts.entries.map((id) => `“${titles.get(id)}”`)].join(' · ')
@@ -212,12 +222,14 @@ function LorebookEditor({ initial, kind }: { initial: Book | null; kind: 'global
           if (!overwrite) throw new ChatEditorResolution(t({ ko: '저장을 멈췄어.', en: 'Save stopped.' }), error)
         }
         if (!mounted.current) throw error
-        submitted = merged.draft
+        submitted = { ...merged.draft, connectsChats: mergedConnects }
         nameRef.current = submitted.name
         entriesRef.current = submitted.entries
+        connectsRef.current = submitted.connectsChats
         setLorebook(latest)
         setName(submitted.name)
         setEntries(submitted.entries)
+        setConnectsChats(submitted.connectsChats)
         return { saved: await write(latest, submitted), submitted }
       }
     },
@@ -254,7 +266,7 @@ function LorebookEditor({ initial, kind }: { initial: Book | null; kind: 'global
     onSettled: () => { importing.current = false },
   })
 
-  const dirty = name !== (lorebook?.name ?? '') || entries.length !== (lorebook?.entries.length ?? 0) || entries.some((entry, index) => entry !== lorebook?.entries[index] && JSON.stringify(entry) !== JSON.stringify(lorebook?.entries[index]))
+  const dirty = name !== (lorebook?.name ?? '') || (owned && connectsChats !== storedConnects(lorebook)) || entries.length !== (lorebook?.entries.length ?? 0) || entries.some((entry, index) => entry !== lorebook?.entries[index] && JSON.stringify(entry) !== JSON.stringify(lorebook?.entries[index]))
   const canSave = Boolean(name.trim()) && !saveMutation.isPending && !fileMutation.isPending && !deleteMutation.isPending && (dirty || !lorebook)
   const assertImportFinished = () => {
     if (importing.current || fileMutation.isPending) throw new Error(t({ ko: '파일 업데이트가 끝난 뒤 편집해줘.', en: 'Wait for the file update before editing.' }))
@@ -272,15 +284,23 @@ function LorebookEditor({ initial, kind }: { initial: Book | null; kind: 'global
     open: true,
     title: lorebook ? t({ ko: '로어북 편집 · {name}', en: 'Edit lorebook · {name}' }, { name: lorebook.name }) : t({ ko: '로어북 추가', en: 'Add lorebook' }),
     resourceId: `lorebook:${lorebook?.id ?? 'new'}`,
+    localRevision: JSON.stringify([entries, keyLanguage, lorebook?.revision]),
     dirty,
-    fields: fileMutation.isPending ? [] : [{ id: 'name', label: t({ ko: '이름', en: 'Name' }), type: 'text', value: name }],
+    fields: fileMutation.isPending ? [] : [
+      { id: 'name', label: t({ ko: '이름', en: 'Name' }), type: 'text', value: name },
+      ...(owned ? [{ id: 'connectsChats', label: t({ ko: '다른 채팅과 대화 기록 연결 (끄면 로어만 공유)', en: 'Connect chats through this book (off: lore only)' }), type: 'boolean' as const, value: connectsChats }] : []),
+    ],
     data: {
       kind: owned ? 'account' : 'global',
       keyLanguage,
       entries: entries.slice(0, 200).map((entry) => ({ id: entry.id, title: entry.title ?? '', keys: entry.keys, localKeys: entry.localKeys ?? [], content: entry.content.slice(0, 2000), language: entry.language ?? null, translation: entry.translation ? { ...entry.translation, content: entry.translation.content.slice(0, 2000) } : null, enabled: entry.enabled, constant: entry.constant, ...(entry.excludeRecursion ? { excludeRecursion: true } : {}), ...(entry.preventRecursion ? { preventRecursion: true } : {}) })),
       selected: { name, entries: entries.length },
     },
-    apply: (patch) => { assertImportFinished(); if (patch.name !== undefined) setName(String(patch.name)) },
+    apply: (patch) => {
+      assertImportFinished()
+      if (patch.name !== undefined) setName(String(patch.name))
+      if (owned && patch.connectsChats !== undefined) setConnectsChats(patch.connectsChats === true)
+    },
     actions: fileMutation.isPending ? [] : [pageAction('lorebook.entries', t({ ko: '로어북 항목 채우기', en: 'Fill lorebook entries' }), t({ ko: '항목을 뒤에 더하거나(append) 전부 바꿔(replace). 저장하지 않아. keys는 이 단어가 대화에 나오면 content가 들어가는 영어 키워드, localKeys는 같은 키워드를 keyLanguage(로어북 추가 언어)로 쓴 것, constant는 항상 넣기. exclude/preventRecursion은 재귀 스캔에서 안 걸림/안 부름.', en: 'Append entries or replace them all; nothing is saved. keys are English keywords that trigger the content when they appear in the chat, localKeys the same keywords in keyLanguage (the lorebooks’ other language); constant always includes it. exclude/preventRecursion: not triggered by / not triggering others in recursive scans.' }), pageObject({
       mode: pageChoice(['append', 'replace']),
       entries: pageArray(pageObject({ title: pageText(120), keys: pageArray(pageText(100), 20), localKeys: pageArray(pageText(100), 20), content: pageText(8000), language: pageChoice(['en', 'ko', 'ja', 'zh']), translation: pageObject({ language: pageChoice(['en', 'ko', 'ja', 'zh']), title: pageText(80), keys: pageArray(pageText(100), 20), content: pageText(8000) }, ['language', 'title', 'keys', 'content']), constant: { type: 'boolean' }, enabled: { type: 'boolean' }, excludeRecursion: { type: 'boolean' }, preventRecursion: { type: 'boolean' } }, ['keys', 'content']), 50, 1),
@@ -321,7 +341,7 @@ function LorebookEditor({ initial, kind }: { initial: Book | null; kind: 'global
       cancelLabel: t({ ko: '계속 편집', en: 'Keep editing' }),
       tone: 'destructive',
     })
-    if (confirmed) { setName(lorebook?.name ?? ''); setEntries(lorebook?.entries ?? []) }
+    if (confirmed) { setName(lorebook?.name ?? ''); setEntries(lorebook?.entries ?? []); setConnectsChats(storedConnects(lorebook)) }
   }
 
   const save = () => { if (canSave) saveMutation.mutate() }
@@ -368,6 +388,16 @@ function LorebookEditor({ initial, kind }: { initial: Book | null; kind: 'global
         <Field label={<ChatFilledLabel fieldId="name">{t({ ko: '이름', en: 'Name' })}</ChatFilledLabel>}>
           <Input variant="settings" value={name} maxLength={80} onChange={(event) => setName(event.target.value)} />
         </Field>
+        {owned ? (
+          <SwitchLine
+            label={<ChatFilledLabel fieldId="connectsChats">
+              {t({ ko: '다른 채팅과 대화 기록 연결', en: 'Connect chats through this book' })}
+              <FieldInfo>{t({ ko: '켜면 이 책을 함께 쓰는 채팅끼리 지난 대화를 서로 찾아 읽어. 세계관처럼 설정만 나눠 쓰는 책은 꺼 두면 로어만 들어가고 대화는 섞이지 않아.', en: 'On: chats sharing this book can search each other’s past talk. Turn it off for a setting book shared by separate chats: they get the lore, never each other’s talk.' })}</FieldInfo>
+            </ChatFilledLabel>}
+            checked={connectsChats}
+            onCheckedChange={setConnectsChats}
+          />
+        ) : null}
         <ChatLorebookEditor entries={entries} onChange={(next) => { if (!importing.current) setEntries(next) }} filePlace={owned ? { kind: 'owned', folderId } : { kind: 'global' }} keyLanguage={keyLanguage} />
       </fieldset>
       {keyLanguage ? <ChatLoreKeyFillDialog open={fillOpen} language={keyLanguage} entries={missing} onClose={() => setFillOpen(false)} onApply={(keys) => { if (!importing.current) setEntries((current) => current.map((entry) => keys[entry.id] ? { ...entry, localKeys: [...new Set([...(entry.localKeys ?? []), ...keys[entry.id]])].slice(0, 20) } : entry)) }} /> : null}
