@@ -1,0 +1,664 @@
+{
+  "apiVersion": 1,
+  "id": "ai-aquarium",
+  "name": "AI 어항",
+  "version": "3.26.0",
+  "description": "AI 주민이 여관과 신전뿐인 강변 마을에서 낮과 밤을 보내며 NPC와 거래하고 물건을 만들고 시설을 지어 마을을 키우고, 신관에게 받은 직업으로 던전을 탐험하며 길드 의뢰와 성장, 세계와 던전을 맡은 GM의 공사 심사·발전 판단과 층 확장을 이어간다.",
+  "capabilities": [
+    "server"
+  ],
+  "server": {
+    "entry": "server/main.mjs"
+  },
+  "pages": [
+    {
+      "id": "village",
+      "title": "AI 어항",
+      "entry": "index.html",
+      "icon": "fish",
+      "accepts": [],
+      "actions": [
+        {
+          "id": "ai-aquarium.gm_open",
+          "label": "GM 대화 열기",
+          "description": "GM 대화와 최근 제안·실제 적용 결과를 조회한다. GM 직접 제안은 시설 신축·증축·이름·이동·철거, 지도 확장, 즉시 완공·취소, NPC 재고·골드·직장, 주민 골드·가방·창고, 템플릿 물품 생성·편집·지급·회수, 의뢰 등록·취소, 다음 층 즉시 설계·기존 층 이름/테마/몬스터/수호자/전리품/외형 편집, 그림 다시 그리기를 지원한다. 사람이 적용하면 게임 비용·공공 금고 지출·별도 심사·자동 GM 일일 한도 없이 실행하고 항목별 결과를 보여 준다. 외부 이미지 서비스 비용은 별도다. 게임 그림 미설정은 rpg_open settings에서 설정한다.",
+          "effect": "draft", "tier": "view",
+          "schema": { "type": "object", "properties": {} }
+        },
+        {
+          "id": "ai-aquarium.gm_prepare",
+          "label": "GM 요청 초안",
+          "description": "text를 GM 대화 입력란에 준비한다. 모델 호출·게임 변경은 하지 않는다. 사람이 보내기를 누르고, GM 제안 카드에서 적용/고쳐 줘/안 할래를 고른다. 사건 서술은 소식·기억만 바꾸며 건물이나 물품 변경은 실제 관리 작업이 포함된 제안이 필요하다.",
+          "effect": "draft", "tier": "draft",
+          "schema": { "type": "object", "properties": { "text": { "type": "string", "minLength": 1 } }, "required": ["text"] }
+        },
+        {
+          "id": "ai-aquarium.lore_open",
+          "label": "어항 로어북 조회",
+          "description": "profileId 0은 모든 어항 프로필에 적용되는 세계관, 주민 ID는 해당 주민의 기억, 마을 GM(세계와 던전 담당) 프로필 ID의 음수는 GM의 기억이다. lore는 장기 기억, recent는 최근 기억, events는 사건 기록. 검색과 페이지 조회만 하며 모델 호출은 없다.",
+          "effect": "draft", "tier": "view",
+          "schema": { "type": "object", "properties": {
+            "profileId": { "type": "number", "integer": true },
+            "tab": { "type": "string", "enum": ["lore", "recent", "events"] },
+            "query": { "type": "string", "maxLength": 200 },
+            "offset": { "type": "number", "integer": true, "minimum": 0 }
+          }, "required": ["profileId"] }
+        },
+        {
+          "id": "ai-aquarium.lore_prepare",
+          "label": "어항 로어북 편집 초안",
+          "description": "세계관(profileId 0), 주민별 장기 기억, 또는 마을 GM의 장기 기억(GM 프로필 ID의 음수)의 항목 편집기를 연다. 기존 항목은 조회한 id로 지정한다. title, content, keys, constant(항상 적용), enabled, state를 초안에 넣고 사람이 저장한다. 다른 채팅의 프로필은 변경하지 않는다.",
+          "effect": "draft", "tier": "draft",
+          "schema": { "type": "object", "properties": {
+            "profileId": { "type": "number", "integer": true },
+            "id": { "type": "string", "maxLength": 100 },
+            "title": { "type": "string", "maxLength": 80 },
+            "content": { "type": "string", "maxLength": 2000 },
+            "language": { "type": "string", "enum": ["en", "ko", "ja", "zh"] },
+            "translation": { "type": "object", "properties": {
+              "language": { "type": "string", "enum": ["en", "ko", "ja", "zh"] },
+              "title": { "type": "string", "maxLength": 80 },
+              "keys": { "type": "array", "maxItems": 20, "items": { "type": "string", "maxLength": 100 } },
+              "content": { "type": "string", "maxLength": 2000 }
+            }, "required": ["language", "title", "keys", "content"] },
+            "keys": { "type": "array", "maxItems": 20, "items": { "type": "string", "maxLength": 100 } },
+            "constant": { "type": "boolean" }, "enabled": { "type": "boolean" },
+            "state": { "type": "string", "enum": ["active", "completed", "superseded"] }
+          }, "required": ["profileId"] }
+        },
+        {
+          "id": "ai-aquarium.refresh",
+          "label": "마을 상태 확인",
+          "description": "주민, 실행 상태와 최근 마을 소식을 다시 읽는다.",
+          "effect": "draft",
+          "tier": "view",
+          "schema": {
+            "type": "object",
+            "properties": {}
+          }
+        },
+        {
+          "id": "ai-aquarium.select",
+          "label": "주민 살펴보기",
+          "description": "프로필 ID로 주민을 선택하고 지도에서 강조한다.",
+          "effect": "draft",
+          "tier": "view",
+          "schema": {
+            "type": "object",
+            "properties": {
+              "profileId": {
+                "type": "number",
+                "integer": true,
+                "minimum": 1
+              }
+            },
+            "required": [
+              "profileId"
+            ]
+          }
+        },
+        {
+          "id": "ai-aquarium.prepare",
+          "label": "마을 꾸리기 초안",
+          "description": "주민·지시·상황과 AI 행동 설정 초안. 주민 대화·방송은 메인 프로필 채팅 엔진의 도구·판단·생성 프리셋·로어를 사용한다. 주민 그림 별도 설정은 없고 게임 그림은 rpg_prepare에서 설정한다. village는 생활·교류·구매·장비·근무·수면·출발과 받은 요청에 지금 답할지 판단하며 모든 선택지를 함께 제시한다. combat은 전투·탐사, social은 대화·방송·신탁이다. 자기 프로필의 모델만 사용하며 모델 부재·한도·간격·재시도 대기에는 행동을 대신하지 않는다. minInterval은 실제 초, maxCallsPerHour는 주민별 게임 시간당, maxCallsPerDay는 UTC 하루 슬롯 공용 한도이고 0이면 기다린다. effect의 상태 변경은 [{id,delta}]로 슬롯 숫자 상태를 참조한다. 기본 효과는 고정이다. 목록은 전체 교체, deciders는 분류별 병합이다. 초안만 준비하고 사람이 적용한다.",
+          "effect": "draft",
+          "tier": "draft",
+          "schema": {
+            "type": "object",
+            "properties": {
+              "profileIds": {
+                "type": "array",
+                "maxItems": 6,
+                "items": {
+                  "type": "number",
+                  "integer": true,
+                  "minimum": 1
+                }
+              },
+              "residentInstructions": {
+                "type": "array",
+                "maxItems": 6,
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "profileId": {
+                      "type": "number",
+                      "integer": true,
+                      "minimum": 1
+                    },
+                    "instructions": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "profileId",
+                    "instructions"
+                  ]
+                }
+              },
+              "scene": {
+                "type": "string",
+                "maxLength": 500
+              },
+              "actionMin": {
+                "type": "number",
+                "integer": true,
+                "minimum": 1,
+                "maximum": 60
+              },
+              "actionMax": {
+                "type": "number",
+                "integer": true,
+                "minimum": 1,
+                "maximum": 60
+              },
+              "walkSpeed": {
+                "type": "number",
+                "minimum": 0.5,
+                "maximum": 4
+              },
+              "wander": {
+                "type": "boolean"
+              },
+              "dayMinutes": {
+                "type": "number",
+                "integer": true,
+                "enum": [
+                  4,
+                  6,
+                  8,
+                  12,
+                  16,
+                  24,
+                  36,
+                  48,
+                  72,
+                  96,
+                  144,
+                  240
+                ]
+              },
+              "sleep": {
+                "type": "boolean"
+              },
+              "replyLength": {
+                "type": "number",
+                "integer": true,
+                "enum": [0, 256, 512, 1024, 1536, 2048, 3072, 4096],
+                "description": "0은 프로필 기본값(추가 출력 상한 없음). 숫자를 직접 고를 때만 마을 상한을 적용한다."
+              },
+              "replyTimeoutMinutes": {
+                "type": "number",
+                "integer": true,
+                "enum": [0, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30],
+                "description": "0은 프로필 기본값: timeoutMs를 보내거나 플러그인에서 별도 취소 기한을 만들지 않는다."
+              },
+              "conversationMaxTurns": { "type": "number", "integer": true, "minimum": 2, "maximum": 24 },
+              "maxConversations": { "type": "number", "integer": true, "minimum": 1, "maximum": 3 },
+              "statusDefs": {
+                "type": "array", "maxItems": 16, "items": { "type": "object", "properties": {
+                  "id": { "type": "string", "maxLength": 40 }, "name": { "type": "string", "maxLength": 40 },
+                  "description": { "type": "string", "maxLength": 300 }, "kind": { "type": "string", "enum": ["number", "choice"] },
+                  "min": { "type": "number", "minimum": -10000, "maximum": 10000 }, "max": { "type": "number", "minimum": -10000, "maximum": 10000 },
+                  "initial": { "type": "number", "minimum": -10000, "maximum": 10000 },
+                  "values": { "type": "array", "maxItems": 16, "items": { "type": "string", "maxLength": 40 } },
+                  "perHour": { "type": "number", "minimum": -100, "maximum": 100 }, "step": { "type": "number", "minimum": 0, "maximum": 100 },
+                  "low": { "type": "number", "minimum": -10000, "maximum": 10000 }, "high": { "type": "number", "minimum": -10000, "maximum": 10000 },
+                  "lowHint": { "type": "string", "maxLength": 160 }, "highHint": { "type": "string", "maxLength": 160 }, "enabled": { "type": "boolean" }
+                }, "required": ["id", "kind"] }
+              },
+              "actionCatalog": {
+                "type": "array", "items": { "type": "object", "properties": {
+                  "id": { "type": "string", "maxLength": 40 }, "category": { "type": "string", "enum": ["combat", "social", "village"] },
+                  "label": { "type": "string", "maxLength": 40 }, "description": { "type": "string", "maxLength": 300 }, "enabled": { "type": "boolean" },
+                  "effect": { "type": "object", "properties": {
+                    "damage": { "type": "number", "minimum": 0, "maximum": 2 }, "guard": { "type": "number", "minimum": 0, "maximum": 0.75 },
+                    "heal": { "type": "number", "minimum": 0, "maximum": 0.3 }, "fleeChance": { "type": "number", "minimum": 0, "maximum": 1 },
+                    "mpCost": { "type": "number", "integer": true, "minimum": 0, "maximum": 20 }, "affinity": { "type": "number", "minimum": -20, "maximum": 20 },
+                    "needsAcceptance": { "type": "boolean" }, "transfer": { "type": "string", "enum": ["none", "item", "gold"] },
+                    "amount": { "type": "number", "integer": true, "minimum": 1, "maximum": 100 }, "duration": { "type": "number", "minimum": 5, "maximum": 300 },
+                    "place": { "type": "string", "maxLength": 60 },
+                    "actorStatuses": { "type": "array", "maxItems": 16, "items": { "type": "object", "properties": { "id": { "type": "string", "minLength": 1, "maxLength": 40 }, "delta": { "type": "number", "minimum": -30, "maximum": 30 } }, "required": ["id", "delta"] } },
+                    "targetStatuses": { "type": "array", "maxItems": 16, "items": { "type": "object", "properties": { "id": { "type": "string", "minLength": 1, "maxLength": 40 }, "delta": { "type": "number", "minimum": -30, "maximum": 30 } }, "required": ["id", "delta"] } }
+                  } }
+                }, "required": ["id", "category"] }
+              },
+              "deciders": {
+                "type": "object", "properties": {
+                  "combat": { "type": "object", "properties": { "decider": { "type": "string", "enum": ["judge", "chat"] }, "minInterval": { "type": "number", "minimum": 1, "maximum": 3600 }, "unlimitedHour": { "type": "boolean", "description": "true이면 시간당 한도를 null(무제한)로 지운다." }, "unlimitedDay": { "type": "boolean", "description": "true이면 하루 한도를 null(무제한)로 지운다." }, "maxCallsPerHour": { "type": "number", "integer": true, "minimum": 0, "maximum": 120 }, "maxCallsPerDay": { "type": "number", "integer": true, "minimum": 0, "maximum": 10000 } } },
+                  "social": { "type": "object", "properties": { "decider": { "type": "string", "enum": ["judge", "chat"] }, "minInterval": { "type": "number", "minimum": 1, "maximum": 3600 }, "unlimitedHour": { "type": "boolean", "description": "true이면 시간당 무제한." }, "unlimitedDay": { "type": "boolean", "description": "true이면 하루 무제한." }, "maxCallsPerHour": { "type": "number", "integer": true, "minimum": 0, "maximum": 120 }, "maxCallsPerDay": { "type": "number", "integer": true, "minimum": 0, "maximum": 10000 } } },
+                  "village": { "type": "object", "properties": { "decider": { "type": "string", "enum": ["judge", "chat"] }, "minInterval": { "type": "number", "minimum": 1, "maximum": 3600 }, "unlimitedHour": { "type": "boolean", "description": "true이면 시간당 무제한." }, "unlimitedDay": { "type": "boolean", "description": "true이면 하루 무제한." }, "maxCallsPerHour": { "type": "number", "integer": true, "minimum": 0, "maximum": 120 }, "maxCallsPerDay": { "type": "number", "integer": true, "minimum": 0, "maximum": 10000 } } }
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "ai-aquarium.resident_prepare",
+          "label": "주민 상태·관계 초안",
+          "description": "주민 상태 창을 열고 profileId 주민의 상태 값과 관계 편집을 초안으로 채운다. statusValues의 id는 페이지 상태 agentSettings.statusDefs에서 켜진 정의나 그 주민의 residents[].profileStatusIds이며, 숫자 상태는 number(정의의 min–max로 맞춤), 선택형 상태는 choice(정의의 values 중 하나)를 쓴다. 프로필 고정 필드(valueReadonly)도 사람의 직접 편집으로는 바꿀 수 있다. relationship은 profileId 주민과 다른 주민 사이의 호감도(-100–100)와 관계 이름(30자, 생략하면 기존 이름과 자동 이름 유지, 지금 값과 같으면 채우지 않음)이며 profileId를 생략하면 from 주민의 창을 연다. 저장하지 않으며 사람이 상태 저장이나 그 관계 줄의 저장을 누른다.",
+          "effect": "draft",
+          "tier": "draft",
+          "schema": {
+            "type": "object",
+            "properties": {
+              "profileId": { "type": "number", "integer": true, "minimum": 1 },
+              "statusValues": {
+                "type": "array", "maxItems": 16, "items": { "type": "object", "properties": {
+                  "id": { "type": "string", "minLength": 1, "maxLength": 120 },
+                  "number": { "type": "number", "minimum": -10000, "maximum": 10000 },
+                  "choice": { "type": "string", "maxLength": 40 }
+                }, "required": ["id"] }
+              },
+              "relationship": {
+                "type": "object", "properties": {
+                  "from": { "type": "number", "integer": true, "minimum": 1 },
+                  "to": { "type": "number", "integer": true, "minimum": 1 },
+                  "affinity": { "type": "number", "integer": true, "minimum": -100, "maximum": 100 },
+                  "label": { "type": "string", "maxLength": 30 }
+                }, "required": ["from", "to", "affinity"]
+              }
+            }
+          }
+        },
+        {
+          "id": "ai-aquarium.pause",
+          "label": "마을 재우기",
+          "description": "상시 구동과 모험을 멈추고 진행 중인 답변·GM 요청을 취소한다.",
+          "effect": "draft",
+          "tier": "draft",
+          "schema": {
+            "type": "object",
+            "properties": {}
+          }
+        },
+        {
+          "id": "ai-aquarium.rpg_open",
+          "label": "길드 살펴보기",
+          "description": "방송 채널 목록(live), 봇 정보(actors), 길드 의뢰(quests), 던전 지도(zones), 상점(shop) 팝업이나 설정 메뉴의 모험 탭(settings)을 연다. 지도는 zoneId로 층을 고른다. 조회만 하며 게임을 시작하지 않는다.",
+          "effect": "draft",
+          "tier": "view",
+          "schema": {
+            "type": "object",
+            "properties": {
+              "tab": {
+                "type": "string",
+                "enum": [
+                  "live",
+                  "actors",
+                  "quests",
+                  "zones",
+                  "settings",
+                  "shop"
+                ]
+              },
+              "zoneId": {
+                "type": "string",
+                "maxLength": 100
+              }
+            }
+          }
+        },
+        {
+          "id": "ai-aquarium.commission_cancel",
+          "label": "의뢰 취소 준비",
+          "description": "모집 중인 사용자 의뢰를 선택하고 취소 적용 버튼을 보여준다. 사람이 눌러야 취소되며 이미 맡은 의뢰는 취소할 수 없다.",
+          "effect": "draft",
+          "tier": "draft",
+          "schema": {
+            "type": "object",
+            "properties": {
+              "questId": {
+                "type": "string",
+                "maxLength": 100
+              }
+            },
+            "required": [
+              "questId"
+            ]
+          }
+        },
+        {
+          "id": "ai-aquarium.commission",
+          "label": "길드 의뢰 초안",
+          "description": "의뢰 초안: hunt 토벌 1~20, clear 수호자 1, explore 탐색률 20~100%, survey 기록실 1, recover 유물 1~3. type 생략은 hunt. 사람이 의뢰 등록을 눌러야 저장한다.",
+          "effect": "draft",
+          "tier": "draft",
+          "schema": {
+            "type": "object",
+            "properties": {
+              "title": {
+                "type": "string",
+                "maxLength": 80
+              },
+              "note": {
+                "type": "string",
+                "maxLength": 500
+              },
+              "zoneId": {
+                "type": "string",
+                "maxLength": 100
+              },
+              "count": {
+                "type": "number",
+                "integer": true,
+                "minimum": 1,
+                "maximum": 100
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "hunt",
+                  "clear",
+                  "explore",
+                  "survey",
+                  "recover"
+                ]
+              }
+            },
+            "required": [
+              "title",
+              "zoneId",
+              "count"
+            ]
+          }
+        },
+        {
+          "id": "ai-aquarium.rpg_prepare",
+          "label": "길드 운영 초안",
+          "description": "자율 탐험 활성화, GM과 GM 하루 한도, 층 수, 사망 손실, 물리 진행 속도, 게임 그림, 주민 역할과 참고 근무 습관(shifts)을 준비한다. 근무·수면·보급·장비·귀환 여부는 주민 모델이 결정한다. 모델 방식과 모든 주민 호출 한도는 prepare.deciders에서만 설정한다. 전투 off/boss 및 자동 규칙 대체는 없다. 저장은 사람이 적용한다.",
+          "effect": "draft",
+          "tier": "draft",
+          "schema": {
+            "type": "object",
+            "properties": {
+              "settings": {
+                "type": "object",
+                "properties": {
+                  "enabled": {
+                    "type": "boolean"
+                  },
+                  "gameArt": {
+                    "type": "object",
+                    "properties": {
+                      "service": {
+                        "type": "string",
+                        "enum": ["off", "novelai", "comfyui"]
+                      },
+                      "workflowId": {
+                        "type": "number",
+                        "integer": true,
+                        "minimum": 1
+                      },
+                      "promptField": {
+                        "type": "string",
+                        "maxLength": 200
+                      }
+                    },
+                    "required": ["service"]
+                  },
+                  "assetDaily": {
+                    "type": "number",
+                    "integer": true,
+                    "minimum": 0,
+                    "maximum": 200
+                  },
+                  "dmProfileId": {
+                    "type": "number",
+                    "integer": true,
+                    "minimum": 0
+                  },
+                  "maxZones": {
+                    "type": "number",
+                    "integer": true,
+                    "minimum": 3,
+                    "maximum": 30
+                  },
+                  "dmDailyLimit": {
+                    "type": "number",
+                    "integer": true,
+                    "minimum": 1,
+                    "maximum": 10
+                  },
+                  "xpLoss": {
+                    "type": "number",
+                    "integer": true,
+                    "minimum": 0,
+                    "maximum": 100
+                  },
+                  "goldLoss": {
+                    "type": "number",
+                    "integer": true,
+                    "minimum": 0,
+                    "maximum": 100
+                  },
+                  "gearLoss": {
+                    "type": "number",
+                    "integer": true,
+                    "minimum": 0,
+                    "maximum": 100
+                  },
+                  "reviveSeconds": {
+                    "type": "number",
+                    "integer": true,
+                    "minimum": 10,
+                    "maximum": 600
+                  },
+                  "stepMs": {
+                    "type": "number",
+                    "integer": true,
+                    "minimum": 500,
+                    "maximum": 3000
+                  },
+                  "roundMs": {
+                    "type": "number",
+                    "integer": true,
+                    "minimum": 500,
+                    "maximum": 6000
+                  },
+                  "shifts": {
+                    "type": "object",
+                    "properties": {
+                      "guild": {
+                        "type": "object",
+                        "properties": {
+                          "open": {
+                            "type": "number",
+                            "integer": true,
+                            "minimum": 0,
+                            "maximum": 1410
+                          },
+                          "close": {
+                            "type": "number",
+                            "integer": true,
+                            "minimum": 0,
+                            "maximum": 1410
+                          },
+                          "off": {
+                            "type": "array",
+                            "maxItems": 6,
+                            "items": {
+                              "type": "number",
+                              "integer": true,
+                              "minimum": 0,
+                              "maximum": 6
+                            }
+                          }
+                        }
+                      },
+                      "merchant": {
+                        "type": "object",
+                        "properties": {
+                          "open": {
+                            "type": "number",
+                            "integer": true,
+                            "minimum": 0,
+                            "maximum": 1410
+                          },
+                          "close": {
+                            "type": "number",
+                            "integer": true,
+                            "minimum": 0,
+                            "maximum": 1410
+                          },
+                          "off": {
+                            "type": "array",
+                            "maxItems": 6,
+                            "items": {
+                              "type": "number",
+                              "integer": true,
+                              "minimum": 0,
+                              "maximum": 6
+                            }
+                          }
+                        }
+                      },
+                      "oracle": {
+                        "type": "object",
+                        "properties": {
+                          "open": {
+                            "type": "number",
+                            "integer": true,
+                            "minimum": 0,
+                            "maximum": 1410
+                          },
+                          "close": {
+                            "type": "number",
+                            "integer": true,
+                            "minimum": 0,
+                            "maximum": 1410
+                          },
+                          "off": {
+                            "type": "array",
+                            "maxItems": 6,
+                            "items": {
+                              "type": "number",
+                              "integer": true,
+                              "minimum": 0,
+                              "maximum": 6
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "roles": {
+                "type": "array",
+                "maxItems": 6,
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "profileId": {
+                      "type": "number",
+                      "integer": true,
+                      "minimum": 1
+                    },
+                    "role": {
+                      "type": "string",
+                      "enum": [
+                        "adventurer",
+                        "guild",
+                        "merchant",
+                        "oracle"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "profileId",
+                    "role"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "ai-aquarium.life_open",
+          "label": "마을 생활 살펴보기",
+          "description": "생활 창을 연다. tab은 resident(주민 가방·창고·작업·기부), market(NPC 재고·자금·영업 상태·납품 의뢰·근무), facility(시설 소유·단계·서비스·제작·증축, 신전은 발전 헌금 누적·GM 판단 대기), works(마을 키우기 안내·공사 신청·현황·공공 금고). profileId·npcId·buildingId로 대상을 고른다. 조회만 하며 거래나 공사를 하지 않는다.",
+          "effect": "draft",
+          "tier": "view",
+          "schema": {
+            "type": "object",
+            "properties": {
+              "tab": { "type": "string", "enum": ["resident", "market", "facility", "works"] },
+              "profileId": { "type": "number", "integer": true, "minimum": 1 },
+              "npcId": { "type": "string", "maxLength": 100 },
+              "buildingId": { "type": "string", "maxLength": 100 }
+            }
+          }
+        },
+        {
+          "id": "ai-aquarium.life_prepare",
+          "label": "마을 생활 작업 초안",
+          "description": "생활 행동 하나를 초안으로 준비한다. 페이지 상태 life의 residents[].actorId, npcs, buildings, items, recipes, deliveryQuests, constructions의 ID를 쓴다. action: buy·sell(npcId,itemId,quantity; 영업 중인 NPC의 유한한 재고·자금), use(itemId), store·take(itemId, store는 창고 buildingId 선택), produce(buildingId,recipeId), work(생산자 npcId), deliver(questId,quantity), place(가구 itemId,x,y), donate(공공 금고에 amount 골드 또는 자재 itemId,quantity), temple-donate(신전 buildingId와 amount 골드; 공공 금고로 들어가고 누적 헌금 life.donations에 쌓여 GM 발전 판단을 부른다. 하루 한 번까지 판단하며 보상·즉시 공사는 보장하지 않는다. 신전이 하나면 buildingId 생략 가능), service(주택·여관 buildingId 휴식), construct(kind merchant·guild·workshop·tea·home·warehouse·expansion와 funding private/public, 신축은 x,y, 증축은 buildingId, 인접 구역은 kind expansion과 direction east/south), cancel-construction(constructionId). construct는 읽기 전용 견적(비용·자재·시간·부지)을 함께 보여준다. 마을에 돌아온 주민만 행동한다. 사람이 생활 창의 실행·공사 신청을 눌러야 적용되며, 같은 초안을 다시 실행해도 같은 요청 ID라 두 번 결제되지 않는다. 공사는 예치 후 GM 심사를 기다린다.",
+          "effect": "draft",
+          "tier": "draft",
+          "schema": {
+            "type": "object",
+            "properties": {
+              "action": { "type": "string", "enum": ["buy", "sell", "use", "store", "take", "produce", "work", "deliver", "place", "construct", "cancel-construction", "donate", "temple-donate", "service"] },
+              "actorId": { "type": "string", "maxLength": 100 },
+              "npcId": { "type": "string", "maxLength": 100 },
+              "itemId": { "type": "string", "maxLength": 100 },
+              "quantity": { "type": "number", "integer": true, "minimum": 1, "maximum": 99 },
+              "recipeId": { "type": "string", "maxLength": 100 },
+              "buildingId": { "type": "string", "maxLength": 100 },
+              "questId": { "type": "string", "maxLength": 100 },
+              "constructionId": { "type": "string", "maxLength": 100 },
+              "kind": { "type": "string", "enum": ["merchant", "guild", "workshop", "tea", "home", "warehouse", "expansion"] },
+              "x": { "type": "number", "integer": true, "minimum": 0, "maximum": 80 },
+              "y": { "type": "number", "integer": true, "minimum": 0, "maximum": 60 },
+              "funding": { "type": "string", "enum": ["private", "public"] },
+              "direction": { "type": "string", "enum": ["east", "south"] },
+              "amount": { "type": "number", "integer": true, "minimum": 1, "maximum": 10000 }
+            },
+            "required": ["action", "actorId"]
+          }
+        },
+        {
+          "id": "ai-aquarium.watch",
+          "label": "봇 실시간 관전",
+          "description": "profileId 주민의 방송을 연다. 던전에 있으면 던전 LIVE, 마을에 있으면 생활 방송이다. 0 또는 생략은 지금 방송 중인 주민을 자동으로 고른다. 게임을 시작하거나 모델을 호출하지 않는다.",
+          "effect": "draft",
+          "tier": "view",
+          "schema": {
+            "type": "object",
+            "properties": {
+              "profileId": {
+                "type": "number",
+                "integer": true,
+                "minimum": 0
+              }
+            }
+          }
+        },
+        {
+          "id": "ai-aquarium.research_open",
+          "label": "자료 조사 살펴보기",
+          "description": "자료 조사 창을 열고 현재 또는 마지막 조사의 상태, 실제로 읽은 근거(게시글 ID·판·구간·발췌), 토론 수, 호출 한도와 결과 초안 여부를 돌려준다. 조회만 하며 모델을 호출하지 않는다.",
+          "effect": "draft", "tier": "view",
+          "schema": { "type": "object", "properties": {} }
+        },
+        {
+          "id": "ai-aquarium.research_prepare",
+          "label": "자료 조사 초안",
+          "description": "자료 조사 창의 입력만 채운다: topic(1–500자), postIds(공개된 게시글 ID 1–8개), profileIds(마을 주민 2–3명, 프로필에 정해진 엔진 그대로 실행하며 조사에 맞지 않는 설정은 앱이 이유와 함께 거절), rounds(토론 1–3회차, 기본 1), budget(선택, 제한 시간만: timeoutMs 한 차례 1000–600000ms 기본 300000, totalTimeoutMs 전체 1000–7200000ms 기본 1800000). 한 차례의 도구 사용 횟수는 앱의 도구 호출 반복 한도(설정 › 채팅 › 자원 › 도구 사용)를 따른다. 실행·저장·모델 호출은 하지 않으며 사람이 조사 시작을 눌러야 한다. 진행 중인 조사가 있으면 준비할 수 없다.",
+          "effect": "draft", "tier": "draft",
+          "schema": { "type": "object", "properties": {
+            "topic": { "type": "string", "maxLength": 500 },
+            "postIds": { "type": "array", "minItems": 1, "maxItems": 8, "items": { "type": "number", "integer": true, "minimum": 1 } },
+            "profileIds": { "type": "array", "minItems": 2, "maxItems": 3, "items": { "type": "number", "integer": true, "minimum": 1 } },
+            "rounds": { "type": "number", "integer": true, "minimum": 1, "maximum": 3 },
+            "budget": { "type": "object", "properties": {
+              "timeoutMs": { "type": "number", "integer": true, "minimum": 1000, "maximum": 600000 },
+              "totalTimeoutMs": { "type": "number", "integer": true, "minimum": 1000, "maximum": 7200000 }
+            } }
+          } }
+        }
+      ]
+    }
+  ]
+}

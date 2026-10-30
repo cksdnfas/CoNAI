@@ -1,0 +1,324 @@
+/* Game screen: the village fills the page and every control floats over it as HUD. */
+/* The SDK sits in a lower cascade layer: its strong element rules (label > input, input:not(...)) must never beat a
+   plugin class, whatever the selector weight. Loaded here, not by a <link>, so the layer wraps the whole sheet. */
+@import url("../../conai-plugin.css") layer(sdk);
+:root{--hud:#101512d9;--hud-solid:#101512;--hud-line:#f4ecd426;--hud-fg:#f4efe2;--hud-muted:#b8b8a4;--gold:#ffd98a;--ok:#7fd49a;--think:#9cc6ff;--live:#d93a40;--live-fg:#ff8a8d;--life:#237a48;--life-fg:#7fd49a;--rarity-common:#c9c6b4;--rarity-fine:#7fd49a;--rarity-rare:#9cc6ff;--potion-health:#ef8f8f;--potion-mana:#9cc6ff;--foe:#ef8f6c}
+html,body{height:100%;overflow:hidden}
+body{background:#2c4a36}
+/* The HUD is always dark: dark native controls and thin quiet scrollbars in every window. */
+.stage{color-scheme:dark;scrollbar-color:#f4ecd438 transparent;word-break:keep-all;overflow-wrap:break-word} /* Korean wraps between words */
+.stage *{scrollbar-width:thin}
+section+section{margin-top:0}
+.num{font-variant-numeric:tabular-nums}
+.wc .ln button.name{display:inline;min-height:0;padding:0;border-radius:3px;background:none;font:inherit;font-weight:700;text-shadow:inherit;cursor:pointer}
+.wc .ln button.name:hover{background:none;text-decoration:underline;text-underline-offset:2px}
+.wc .scope{position:absolute;left:12px;top:-30px;min-height:0;height:24px;padding:0 10px;border-radius:999px;background:var(--hud);border:1px solid var(--hud-line);color:var(--gold);font-size:11px;font-weight:600}
+.wc.open .scope{position:static;margin:8px 12px 0}
+.name-menu{z-index:15;display:flex;flex-direction:column;min-width:130px;padding:4px;background:var(--hud-solid)}
+.name-menu button{justify-content:flex-start;min-height:0;height:30px;padding:0 10px;border-radius:5px;background:none;color:var(--hud-fg);font-size:12px;font-weight:500}
+.name-menu button:hover:not(:disabled){background:#ffffff14}
+
+/* World */
+.world{position:absolute;inset:0;overflow:clip;cursor:grab;touch-action:none}
+.stage[data-panning] .world,.stage[data-panning] .village-actors>*{cursor:grabbing}
+.world canvas{position:absolute;left:0;top:0;transform-origin:0 0;image-rendering:pixelated;will-change:transform}
+/* Time of day: a colour multiplied over the map, then lit windows and lamps screened on top as it gets dark. */
+.world .tint{position:absolute;left:0;top:0;transform-origin:0 0;will-change:transform;mix-blend-mode:multiply;background-color:#fff;pointer-events:none;transition:background-color 1.5s linear}
+.world canvas.glow{mix-blend-mode:screen;image-rendering:auto;pointer-events:none;transition:opacity 1.5s linear}
+/* Field: residents on tile centres, bubbles above heads, earshot ring for the selected resident. */
+.village-actors{position:absolute;inset:0;z-index:2;pointer-events:none}
+.village-actors>*{position:absolute;left:0;top:0;pointer-events:auto;touch-action:none}
+.sign{padding:2px 8px;border-radius:4px;background:#2b2118e6;color:#f4e3c2;font-size:11px;font-weight:650;white-space:nowrap;pointer-events:none;box-shadow:0 1px 0 #0006}
+.sleepers{color:#e8ddc3;background:#101512d9}
+.earshot{border-radius:50%;border:1.5px dashed #fff8e07a;background:radial-gradient(circle,#fff8e014,#fff8e00a 70%,transparent);pointer-events:none}
+.tok{--size:clamp(22px,calc(var(--tile,32px) * .82),40px);display:block;width:0;height:0;min-height:0;padding:0;border:0;background:none!important;cursor:pointer}
+.tok::before{content:"";position:absolute;left:calc(var(--size) * -.45);top:calc(var(--size) * -.14);width:calc(var(--size) * .9);height:calc(var(--size) * .28);border-radius:50%;background:#1d2e2266}
+.tok .profile-face{position:absolute;left:calc(var(--size) / -2);top:calc(var(--size) * -1.02);width:var(--size);height:var(--size);border:2px solid #fff;box-shadow:0 2px 4px #0005}
+.tok .profile-initial{font-size:calc(var(--size) * .42)}
+.tok[data-walking=true] .profile-face{animation:bob .5s ease-in-out infinite alternate}
+@keyframes bob{to{transform:translateY(-2px)}}
+/* Under a window the map holds still (scene.js): no bobbing or thinking dots to redraw behind the blur. */
+.stage[data-covered=true] .tok .profile-face,.stage[data-covered=true] .say.dots i{animation:none}
+.profile-face{position:relative;display:grid;place-items:center;flex:none;width:40px;height:40px;border-radius:50%;overflow:hidden;background:var(--resident-color,#668578);border:2px solid #fff9e8;box-shadow:0 2px 6px #0006;color:#fff}
+.profile-clip{position:absolute;inset:0;border-radius:inherit;overflow:hidden}
+.profile-face img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.profile-initial{font-size:16px;font-weight:700;line-height:1;text-shadow:0 1px 2px #0004}
+.tok .nm{position:absolute;left:0;top:calc(var(--size) * .1);transform:translateX(-50%);max-width:100px;padding:0 5px;border-radius:3px;background:#101512cc;color:#f4efe2;overflow:hidden;text-overflow:ellipsis;font-size:10.5px;font-weight:650;line-height:16px;white-space:nowrap}
+.tok[aria-pressed=true] .profile-face{border-color:var(--gold);box-shadow:0 0 0 3px #ffd98a55,0 2px 4px #0005}
+.tok[aria-pressed=true] .nm{color:var(--gold)}
+.tok:focus-visible{outline:none}.tok:focus-visible .profile-face{outline:2px solid var(--gold);outline-offset:2px}
+.tok .badge{position:absolute;left:calc(var(--size) * .18);top:calc(var(--size) * -1.22);display:grid;place-items:center;width:20px;height:20px;padding:0;border-radius:50%;background:#fff;box-shadow:0 1px 3px #0006}
+.tok .badge svg{width:14px;height:14px;fill:#c88a3a}.tok .badge svg circle{fill:#fff}
+.tok[data-sleeping=true] .profile-face{filter:grayscale(.5) brightness(.75)}.tok[data-sleeping=true]::after{content:"z";position:absolute;left:calc(var(--size) * .3);top:calc(var(--size) * -1.35);color:#cfe3ff;font-size:12px;font-weight:750;text-shadow:0 1px 2px #000a}
+.say{z-index:400;max-width:240px;padding:7px 11px;border-radius:10px;background:#fffdf6;color:#2a2a24;font-size:12.5px;font-weight:550;line-height:1.5;box-shadow:0 3px 10px #0004;pointer-events:none;word-break:keep-all;overflow-wrap:anywhere}
+/* Each bubble names its speaker in the resident colour; a bubble stacked above another drops its tail. */
+.say:not(.dots){border-left:3px solid var(--who,#668578)}
+.say-who{display:block;margin-bottom:1px;font-size:10.5px;font-weight:750;line-height:1.4;color:color-mix(in srgb,var(--who,#668578) 55%,#1d1f1b)}
+.say.lifted::after{display:none}
+.say p{margin:0;white-space:pre-wrap;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:4;overflow:hidden}
+.say::after{content:"";position:absolute;left:var(--tail,50%);bottom:-6px;width:12px;height:12px;background:#fffdf6;transform:translateX(-50%) rotate(45deg);border-radius:0 0 3px 0}
+.say.dots{display:flex;gap:4px;padding:9px 11px}
+.say.dots i{width:6px;height:6px;border-radius:50%;background:#9a9a8c;animation:dot 1s infinite}.say.dots i:nth-child(2){animation-delay:.15s}.say.dots i:nth-child(3){animation-delay:.3s}
+@keyframes dot{50%{transform:translateY(-3px);opacity:.5}}
+
+/* HUD */
+.hud{position:absolute;z-index:10}
+.surf{background:var(--hud);backdrop-filter:blur(6px);border:1px solid var(--hud-line);border-radius:8px}
+.ib{position:relative;display:grid;place-items:center;width:34px;height:34px;min-height:0;padding:0;border-radius:7px;background:transparent;color:var(--hud-fg)}
+.ib:hover:not(:disabled){background:#ffffff14}
+.ib svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.ib.main{background:var(--conai-primary);color:var(--conai-primary-foreground)}
+.ib.main:hover:not(:disabled){background:color-mix(in srgb,var(--conai-primary) 88%,#fff 12%)}
+.ib.main svg{fill:currentColor;stroke:none}
+.ib.main .i-pause,.ib.main[data-running=true] .i-play{display:none}.ib.main[data-running=true] .i-pause{display:inline}
+/* Tooltips float above every layer (tip.js) so no scrolling box clips them. */
+.tip{position:fixed;z-index:1000;width:max-content;max-width:240px;padding:4px 8px;border-radius:5px;background:#000d;color:#fff;font-size:11px;font-weight:500;line-height:1.5;text-align:left;pointer-events:none}
+.live{display:inline-block;width:7px;height:7px;border-radius:50%;background:#8a8a80}
+body[data-running=true] .live{background:var(--ok);box-shadow:0 0 0 3px #7fd49a33}
+.sep{width:1px;height:20px;background:var(--hud-line);margin:0 4px}
+
+/* Top left: where and when, and whether the village is awake (the switch says the state, its tip what it does). */
+.top-l{left:14px;top:14px;display:flex;align-items:center;gap:10px;height:46px;padding:0 6px 0 14px}
+.top-l b{font-size:13.5px}#clock{color:var(--hud-muted)}
+.wake{display:flex;align-items:center;gap:7px;min-height:0;height:32px;padding:0 12px;border-radius:999px;background:#ffffff12;color:var(--hud-muted);font-size:12px;font-weight:700}
+.wake i{width:7px;height:7px;border-radius:50%;background:currentColor}
+.wake[data-running=true]{background:#7fd49a1f;color:var(--ok)}
+.wake:hover:not(:disabled){background:#ffffff1f;color:var(--hud-fg)}.wake[data-running=true]:hover:not(:disabled){background:#7fd49a33;color:var(--ok)}
+.wake:disabled{opacity:.55}
+/* Top right: every action says its name. */
+.top-r{right:14px;top:14px;display:flex;align-items:center;gap:2px;height:46px;padding:0 5px}
+.act{display:flex;align-items:center;gap:7px;min-height:0;height:36px;padding:0 11px;border-radius:7px;background:transparent;color:var(--hud-fg);font-size:12.5px;font-weight:650;white-space:nowrap}
+.act:hover:not(:disabled){background:#ffffff14}
+.act svg{flex:none;width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.act .live-count{position:static;height:17px;padding:0 6px;line-height:17px;border-radius:5px;font-size:10px}
+
+/* Bottom right: zoom, the broadcast mini player and the DM stacked in one column, so none covers another. */
+.corner{position:absolute;right:14px;bottom:14px;z-index:10;display:flex;flex-direction:column;align-items:flex-end;gap:10px;pointer-events:none}
+.corner>*{pointer-events:auto}
+.corner>.hud{position:relative;inset:auto}
+.corner>.bc-pip{width:min(380px,calc(100vw - 28px))}
+@media(max-width:760px),(max-height:560px){.corner>.bc-pip{width:min(220px,calc(100vw - 20px))}}
+.zoom{display:flex;gap:2px;padding:4px}
+.zoom .ib:disabled{opacity:.35}
+.dm-call{display:flex;align-items:center;gap:11px;width:min(320px,calc(100vw - 28px));min-height:0;padding:9px 14px 9px 9px;border-radius:12px;border-color:#b9a4ff55;color:var(--hud-fg);text-align:left;cursor:pointer}
+.dm-call:hover:not(:disabled){background:#161c18f2;border-color:#b9a4ff99}
+.dm-face .profile-face{width:42px;height:42px;border-color:#b9a4ff}
+.dm-blank{display:grid;place-items:center;width:42px;height:42px;border-radius:50%;background:linear-gradient(135deg,#6d5bd0,#2f2a63);border:2px solid #b9a4ff;font-size:12px;font-weight:800}
+.dm-call-text{min-width:0;flex:1}
+.dm-call-text b{display:block;font-size:13px}
+.dm-call-text small{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;color:#d9ceff;font-size:12px;line-height:1.45}
+.dm-dot{position:absolute;left:42px;top:7px;width:12px;height:12px;border-radius:50%;background:var(--conai-primary);border:2px solid var(--hud-solid)}
+
+/* Residents: a rail of faces; pointing at it shows names and where they are. */
+.party{left:14px;top:72px;width:56px;max-height:calc(100% - 290px);overflow:hidden auto;padding:5px;display:flex;flex-direction:column;gap:2px;transition:width .15s}
+.party:hover,.party:focus-within{width:186px}
+.party:not(:hover):not(:focus-within) .pm .who{display:none}
+.party:not(:hover):not(:focus-within) .pm .live-tag{position:absolute;right:3px;top:3px;width:9px;height:9px;padding:0;border-radius:50%;font-size:0;box-shadow:0 0 0 2px var(--hud)}
+.pm{position:relative}
+.party>*{flex:none} /* a short list scrolls; its rows must not squash into each other */
+.pm{display:flex;align-items:center;justify-content:flex-start;gap:9px;width:100%;min-height:0;padding:5px 7px;border-radius:6px;background:transparent;color:var(--hud-fg);font-weight:400;text-align:left}
+.pm:hover:not(:disabled){background:#ffffff0d}
+.pm[aria-pressed=true]{background:#ffd98a1a;box-shadow:inset 2px 0 0 var(--gold)}
+.pm .profile-face{width:30px;height:30px;border-width:1.5px;overflow:visible}.pm .profile-initial{font-size:12px}
+.pm .st{position:absolute;right:-2px;bottom:-2px;width:10px;height:10px;border-radius:50%;border:2px solid var(--hud-solid);background:#888}
+.st[data-state=walk]{background:var(--ok)}.st[data-state=think]{background:var(--think)}.st[data-state=talk]{background:var(--gold)}
+.pm .who{min-width:0;flex:1}.pm b{display:block;font-size:12px;font-weight:650;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.pm small{display:block;font-size:10.5px;color:var(--hud-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pm.add{color:var(--hud-muted)}.pm.add .profile-face{background:transparent;border:1.5px dashed #ffffff44;box-shadow:none;color:var(--hud-muted)}
+
+/* World chat */
+.wc{left:14px;bottom:14px;width:min(380px,calc(100% - 28px));border-radius:8px;background:linear-gradient(to top,#0b100dc4 0,#0b100d8c 60%,#0b100d00 100%);line-height:1.5;cursor:pointer}
+.wc .lines{display:flex;flex-direction:column;gap:3px;padding:14px 12px 10px;-webkit-mask-image:linear-gradient(to bottom,transparent 0,#000 30%);mask-image:linear-gradient(to bottom,transparent 0,#000 30%)}
+.wc .ln{display:grid;grid-template-columns:36px 1fr;color:#efeadd;text-shadow:0 1px 2px #0008;user-select:text}
+.wc .ln time{color:#cfc9b8a0;font-size:10.5px;padding-top:1px}
+.wc .ln .name{font-weight:700}.wc .ln .to{color:#cfc9b8;font-size:11px;margin:0 5px 0 3px}
+.wc .ln[data-kind=event] span{color:#e2cf94}
+.wc .ln[data-kind=dm] span{color:#d9ceff}.wc .ln .name.dm{margin-right:6px;color:#b9a4ff}
+.wc .ln p{margin:0;overflow-wrap:anywhere;white-space:pre-wrap}
+em.speech-narration{font-style:italic;color:var(--hud-muted)}
+.wc .bar{display:none;align-items:center;gap:14px;padding:0 6px 0 12px;height:34px;border-bottom:1px solid var(--hud-line)}
+.wc .bar button:not(.ib){min-height:0;padding:0;background:none;color:var(--hud-muted);font-size:11.5px;font-weight:500}
+.wc .bar button[aria-selected=true]{color:var(--hud-fg);font-weight:650}
+.wc .bar .ib,.wc .grip{width:24px;height:24px}.wc .bar .ib{margin-left:auto}.wc .bar .ib svg,.wc .grip svg{width:14px;height:14px}
+.wc .grip{position:absolute;right:6px;bottom:6px}
+.wc.open{width:min(440px,calc(100% - 28px));background:var(--hud);backdrop-filter:blur(6px);border:1px solid var(--hud-line);cursor:default}
+.wc.open .bar{display:flex}.wc.open .grip{display:none}
+.wc.open .lines{-webkit-mask-image:none;mask-image:none;max-height:min(46vh,420px);overflow:auto;overscroll-behavior:contain;gap:5px;padding:10px 12px}
+.wc.open .ln{text-shadow:none}
+.wc .empty{color:var(--hud-muted);padding:2px 0}
+.wc:not(.open) .lines{max-height:min(170px,28vh);overflow:hidden;justify-content:flex-end}
+.wc:not(.open) .ln{flex:none}
+.wc:not(.open) .ln p{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
+.wc:not(.open) .ln details{display:none}
+
+/* Above every layer (menu, guild, broadcast): an error from inside a dialog must not hide behind it. */
+.toast{z-index:60;cursor:pointer;left:50%;top:14px;transform:translateX(-50%);max-width:min(560px,calc(100% - 420px));margin:0;padding:7px 14px;font-size:12px;line-height:1.6;color:var(--gold)}
+
+.center{position:absolute;inset:0;z-index:8;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;background:radial-gradient(ellipse at center,#0a0e0c55,#0a0e0caa 75%)}
+.center h2{margin:0;font-size:24px;letter-spacing:-.03em;text-shadow:0 2px 10px #000a;color:var(--hud-fg)}
+.center .big{height:46px;padding:0 26px;border-radius:9px;background:var(--conai-primary);color:var(--conai-primary-foreground);font-size:15px;font-weight:700;box-shadow:0 6px 20px #0006}
+.center .big:hover:not(:disabled){background:color-mix(in srgb,var(--conai-primary) 88%,#fff 12%)}
+/* First steps under the title: done ones fade, the next one is gold. */
+.center-steps{display:flex;gap:10px;margin:0;padding:0;list-style:none;counter-reset:step}
+.center-steps li{counter-increment:step;display:flex;align-items:center;gap:7px;padding:6px 12px 6px 7px;border-radius:999px;background:var(--hud);border:1px solid var(--hud-line);color:var(--hud-muted);font-size:12.5px;font-weight:650}
+.center-steps li::before{content:counter(step);display:grid;place-items:center;width:20px;height:20px;border-radius:50%;background:#ffffff1f;font-size:11px}
+.center-steps li[data-state=done]{opacity:.6}.center-steps li[data-state=done]::before{content:"✓";background:var(--life);color:#fff}
+.center-steps li[data-state=now]{border-color:var(--gold);color:var(--hud-fg)}.center-steps li[data-state=now]::before{background:var(--gold);color:#2b2118}
+.center-slot{display:flex;align-items:center;gap:6px;min-height:0;height:30px;padding:0 12px;border-radius:999px;background:var(--hud);border:1px solid var(--hud-line);color:var(--hud-muted);font-size:12px;font-weight:600}
+.center-slot:hover:not(:disabled){border-color:var(--gold);color:var(--hud-fg)}
+.center-slot svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linejoin:round}
+.save-chip{min-height:0;height:auto;padding:0;border-radius:3px;background:none;color:var(--hud-fg);font:inherit;cursor:pointer}
+.save-chip:hover{background:none;text-decoration:underline;text-underline-offset:2px}
+
+/* Menu */
+.menu-layer{position:absolute;inset:0;z-index:20}
+.dim{position:absolute;inset:0;background:#0a0e0cb8;backdrop-filter:blur(3px) saturate(.6)}
+.menu{position:absolute;inset:max(16px,5%) max(16px,7%);display:flex;flex-direction:column;background:var(--hud-solid);border:1px solid var(--hud-line);border-radius:10px;overflow:clip}
+/* Only the window's own header and footer: cards inside a window use <header> too. */
+.menu>header{display:flex;align-items:center;gap:26px;padding:0 10px 0 22px;border-bottom:1px solid var(--hud-line)}
+.menu>header h2{margin:0;font-size:15px;padding:15px 0;color:var(--hud-fg)}
+.mtabs{display:flex;gap:20px;flex:1}
+.mtabs button{min-height:0;padding:16px 0 14px;border-radius:0;background:none;color:var(--hud-muted);font-weight:500;border-bottom:2px solid transparent}
+.mtabs button:hover:not(:disabled){background:none;color:var(--hud-fg)}
+.mtabs button[aria-selected=true]{color:var(--hud-fg);font-weight:650;border-color:var(--gold)}
+.tab{flex:1;min-height:0;display:flex;flex-direction:column}
+.instructions{padding:20px 22px;overflow:auto;gap:10px;user-select:text}
+.instructions label{color:var(--hud-muted);font-size:12px}
+.instructions select,.instructions textarea{width:100%;background:var(--hud);color:var(--hud-fg);border:1px solid var(--hud-line);border-radius:7px;padding:10px 12px;font:inherit}
+.instructions select{flex-shrink:0;margin-bottom:10px}
+.instructions textarea{min-height:160px;resize:vertical;line-height:1.7}
+.instructions p{margin:0;color:var(--hud-muted);line-height:1.6}
+#instructions-count{align-self:flex-end;color:var(--hud-muted)}
+.slots{display:flex;align-items:center;gap:14px;padding:16px 22px;border-bottom:1px solid var(--hud-line)}
+.slot-row{display:flex;gap:12px;flex-wrap:wrap}
+.slot{display:flex;flex-direction:column;align-items:center;gap:6px;width:62px;min-height:0;padding:0;background:none;color:var(--hud-muted);font-size:11px;font-weight:500}
+.slot:hover:not(:disabled){background:none}
+.slot .profile-face{width:50px;height:50px;border-radius:12px}
+.slot .hole{width:50px;height:50px;border-radius:12px;border:1.5px dashed #ffffff33}
+.slot b{color:var(--hud-fg);font-weight:600;font-size:11.5px;max-width:62px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.slots .count{margin-left:auto;color:var(--hud-muted)}
+.grid{flex:1;overflow:auto;padding:16px 22px;display:grid;grid-template-columns:repeat(auto-fill,minmax(118px,1fr));gap:12px;align-content:start;grid-auto-rows:max-content}
+.card{position:relative;display:flex;flex-direction:column;align-items:stretch;min-height:0;padding:0;border-radius:9px;overflow:hidden;background:#1b221e;color:var(--hud-fg);font-weight:400;text-align:left;white-space:normal}
+.card:hover:not(:disabled){background:#222b26}
+.card .art{position:relative;aspect-ratio:1;display:grid;place-items:end start;padding:8px;font-size:32px;font-weight:800;color:#ffffffcc;background:var(--resident-color,#4d5a52);overflow:hidden}
+.card .art img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.card .nm{padding:7px 9px 8px;font-size:12px;font-weight:650}
+.card .nm small{display:block;font-weight:400;color:var(--hud-muted);font-size:10.5px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.card[aria-pressed=true]{box-shadow:0 0 0 2px var(--gold)}
+.card .pick{position:absolute;top:7px;right:7px;width:22px;height:22px;border-radius:50%;background:var(--gold);color:#283c32;font-size:12px;font-weight:800;display:grid;place-items:center}
+.story-fields{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:28px;padding:20px 22px;align-content:start;overflow:auto}
+.story-fields label,.story-fields .label{position:relative;display:inline-block;margin:0 0 8px;font-size:12px;font-weight:500;color:var(--hud-muted)}
+.story-fields textarea{width:100%;min-height:130px;background:#ffffff0a;border:1px solid var(--hud-line);border-radius:7px;color:var(--hud-fg);font-size:13.5px;line-height:1.7;padding:12px 14px}
+.presets{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.presets button{min-height:0;padding:5px 11px;border:1px solid var(--hud-line);border-radius:999px;background:none;color:var(--hud-muted);font-size:11.5px;font-weight:500}
+.presets button:hover:not(:disabled){background:#ffffff0d;color:var(--hud-fg)}
+.range{display:flex;align-items:center;gap:10px;color:var(--hud-muted)}
+.menu>footer{display:flex;align-items:center;gap:10px;padding:12px 16px 12px 22px;border-top:1px solid var(--hud-line)}
+.menu>footer .grow{flex:1;color:var(--gold)}
+.btn{height:34px;padding:0 16px;border-radius:7px;background:#ffffff12;color:var(--hud-fg)}
+.btn:hover:not(:disabled){background:#ffffff1f}
+.btn.main{background:var(--conai-primary);color:var(--conai-primary-foreground)}
+.btn.main:hover:not(:disabled){background:color-mix(in srgb,var(--conai-primary) 88%,#fff 12%)}
+
+@media(max-width:640px){
+  #clock{display:none}
+  .toast{max-width:calc(100% - 28px);top:58px}
+  .story-fields{grid-template-columns:1fr}
+  .menu{inset:8px}
+  .menu>header{gap:14px;padding-left:14px}.mtabs{gap:14px}.mtabs button{white-space:nowrap}
+}
+
+
+/* Broadcast button badge: how many residents are streaming from the dungeon. */
+.live-count{position:absolute;right:1px;top:1px;min-width:15px;height:15px;padding:0 3px;border-radius:8px;background:#d93a40;color:#fff;font-size:10px;font-weight:750;line-height:15px;text-align:center;pointer-events:none}
+.pm .live-tag{flex:none;padding:2px 5px;border-radius:4px;background:#d93a40;color:#fff;font-size:9px;font-weight:750;letter-spacing:.05em}
+/* The corner column (zoom, mini player, DM) is as wide as its widest part, --corner-w: the chat stops beside it. */
+/* clip, not hidden: focusing a control near an edge must never scroll the whole game sideways. */
+.stage{position:relative;width:100%;height:100%;overflow:clip;user-select:none;color:var(--hud-fg);font-size:12px;--corner-w:320px}
+.stage:has(#bc-pip:not([hidden])){--corner-w:380px}
+.wc{width:min(420px,calc(100% - 52px - var(--corner-w)))}
+.wc.open{width:min(440px,calc(100% - 52px - var(--corner-w)))}
+.stage:has(#dm:not([hidden])) .corner{display:none}
+
+/* The DM sheet: beside the map, never over the whole village. */
+.dm-sheet{position:absolute;top:10px;right:10px;bottom:10px;z-index:15;width:min(420px,calc(100% - 20px));display:flex;flex-direction:column;background:var(--hud-solid);border:1px solid var(--hud-line);border-radius:14px;box-shadow:-12px 0 40px #0008;overflow:hidden}
+.dm-sheet[hidden]{display:none}
+.dm-sheet header{display:flex;align-items:center;gap:11px;padding:12px 8px 12px 14px;border-bottom:1px solid var(--hud-line)}
+.dm-sheet header .grow{flex:1;min-width:0}
+.dm-sheet header b{display:block;font-size:14px}.dm-sheet header small{color:var(--hud-muted);font-size:11.5px}
+.dm-sheet header .profile-face{width:36px;height:36px;border-color:#b9a4ff}
+.dm-log{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:10px;padding:16px 14px;user-select:text}
+.dm-log>*{flex:none}
+.dm-msg{max-width:88%;margin:0;padding:9px 13px;border-radius:14px;font-size:13.5px;line-height:1.6;white-space:pre-wrap;word-break:break-word}
+.dm-msg.dm{align-self:flex-start;background:#ffffff10;border-bottom-left-radius:4px}
+.dm-msg.me{align-self:flex-end;background:color-mix(in srgb,var(--conai-primary) 28%,transparent);border-bottom-right-radius:4px}
+.dm-msg.typing{display:flex;gap:4px;padding:14px 16px}
+.dm-msg.typing i{width:6px;height:6px;border-radius:50%;background:var(--hud-muted);animation:dot 1.2s infinite}
+.dm-msg.typing i:nth-child(2){animation-delay:.2s}.dm-msg.typing i:nth-child(3){animation-delay:.4s}
+.dm-prop{align-self:stretch;border:1px solid #b9a4ff55;border-radius:12px;background:#b9a4ff0d;overflow:hidden}
+.dm-prop h4{margin:0;padding:9px 12px;border-bottom:1px solid #b9a4ff2e;color:#d9ceff;font-size:12px}
+.dm-prop ul{list-style:none;margin:0;padding:4px 12px}
+.dm-prop li{display:grid;grid-template-columns:minmax(0,1fr);gap:3px;padding:7px 0;font-size:12.5px;line-height:1.55;overflow-wrap:anywhere}
+.dm-prop li+li{border-top:1px solid var(--hud-line)}
+.dm-prop em{font-style:normal;color:var(--hud-muted)}.dm-prop del{color:var(--hud-muted)}.dm-prop ins{text-decoration:none}
+.dm-prop-btns{display:flex;gap:6px;padding:8px 12px 12px}.dm-prop-btns .btn.main{flex:1}
+.dm-prop.applied h4{color:var(--ok)}.dm-prop.dismissed{opacity:.55}.dm-prop.dismissed ul{display:none}
+.dm-error{align-self:center;display:flex;align-items:center;gap:10px;padding:6px 6px 6px 12px;border-radius:9px;background:#d93a401f;color:var(--live-fg);font-size:12.5px}
+.dm-error .btn{height:28px;padding:0 10px;font-size:12px}
+.dm-chips{display:flex;flex-wrap:wrap;gap:6px;padding:0 14px 10px}
+.dm-chips button{min-height:0;height:30px;padding:0 11px;border-radius:999px;border:1px solid var(--hud-line);background:none;color:#e2dccb;font-size:12px;font-weight:600}
+.dm-chips button:hover:not(:disabled){border-color:#b9a4ff99;background:#b9a4ff14}
+.dm-input{display:flex;align-items:flex-end;gap:8px;padding:12px 14px 14px;border-top:1px solid var(--hud-line)}
+.dm-input textarea{flex:1;min-height:42px;max-height:140px;resize:none;padding:10px 12px;border:1px solid var(--hud-line);border-radius:10px;background:var(--hud);color:var(--hud-fg);font:inherit;font-size:13.5px;line-height:1.5}
+.dm-input textarea:focus{outline:none;border-color:#b9a4ff}
+.dm-input .btn{height:42px}
+.pm[data-live=true] .profile-face{box-shadow:0 0 0 2px #d93a40}
+
+.ib.framed svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+
+/* Adventure places on the map: the guild, the shop and the road to the dungeon. */
+.place-hit{min-height:0;padding:0;border-radius:6px;background:transparent!important;cursor:pointer}
+.place-hit:hover,.place-hit:focus-visible{outline:2px solid #ffd98acc;outline-offset:2px}
+.gate{z-index:300;display:flex;align-items:center;gap:7px;min-height:0;height:32px;padding:0 10px 0 5px;border-radius:999px;background:#101512e6;border:1px solid var(--hud-line);color:var(--hud-fg);font-size:11px;font-weight:750;letter-spacing:.04em;box-shadow:0 3px 10px #0005}
+.gate:hover:not(:disabled){background:#101512}
+.gate[data-live=true] b{color:#ff8a8d}
+.gate-faces{display:flex}.gate-faces:empty{display:none}
+.gate-faces .profile-face{width:22px;height:22px;border:0;box-shadow:0 0 0 2px #d93a40}.gate-faces .profile-face+.profile-face{margin-left:-6px}
+.gate-faces .profile-initial{font-size:10px}
+.gate:not([data-live=true]){padding-left:12px}
+
+/* Small stages (a phone, a foldable's inner screen, a phone on its side): a lighter HUD, the party as faces.
+   Kept last so it overrides the base rules above. */
+@media(max-width:760px),(max-height:560px){
+  .stage{--corner-w:104px}.stage:has(#bc-pip:not([hidden])){--corner-w:220px}
+  .hud .ib{width:30px;height:30px}.hud .ib svg{width:15px;height:15px}
+  .top-l{left:10px;top:10px;gap:8px;height:40px;padding:0 4px 0 11px}.top-l b{font-size:12.5px}#clock{font-size:11px}
+  .wake{height:28px;padding:0 10px;font-size:11px}
+  .top-r{right:10px;top:10px;height:40px;padding:0 3px}
+  .act{height:32px;padding:0 8px}.act .act-label{display:none}
+  .corner{right:10px;bottom:10px;gap:8px}
+  .zoom{padding:3px}
+  .dm-call{width:auto;padding:5px;border-radius:50%}.dm-call-text{display:none}.dm-dot{left:auto;right:0;top:0}
+  .party{left:10px;top:58px;width:46px;max-height:calc(100% - 216px);padding:4px}
+  .party:hover,.party:focus-within{width:46px}
+  .pm .who,.pm.add .who{display:none}.pm{justify-content:center;padding:5px}
+  .pm .profile-face{width:26px;height:26px}.pm .profile-initial{font-size:11px}
+  .pm .live-tag{position:absolute;right:1px;top:1px;width:9px;height:9px;padding:0;border-radius:50%;font-size:0;box-shadow:0 0 0 2px var(--hud)}
+  .wc{left:10px;bottom:10px;width:min(380px,calc(100% - 30px - var(--corner-w)))}
+  .wc.open{width:min(440px,calc(100% - 30px - var(--corner-w)))}
+  .wc:not(.open) .lines{max-height:min(130px,24vh);padding:10px 10px 8px}
+  /* The DM comes up from the bottom over the lower part of the village. */
+  .dm-sheet{top:auto;left:0;right:0;bottom:0;width:auto;height:72%;border-radius:16px 16px 0 0;border-width:1px 0 0}
+}
+/* Too narrow for both top bars on one row: the actions move to a second row on the right, beside the party rail. */
+@media(max-width:520px){
+  .top-r{top:58px}
+  .toast{top:106px}
+}
+/* Too narrow for the chat beside a mini player: the player leaves the corner for the top right, under the actions,
+   and steps aside while the sleeping village's call to action is up. */
+@media(max-width:460px){
+  .stage:has(#bc-pip:not([hidden])){--corner-w:104px}
+  .corner>.bc-pip{position:fixed;top:106px;right:10px;width:min(200px,calc(100% - 76px))}
+  .stage:has(#center:not([hidden])) .corner>.bc-pip{display:none}
+  .wc.open{z-index:11}
+}

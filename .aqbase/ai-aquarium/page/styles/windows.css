@@ -1,0 +1,235 @@
+/* Game windows: the guild, the settings and the broadcast fill the game screen (12px margin, none on a phone).
+   One header row with the title and text tabs, the body below; hairlines and spacing, no boxes inside boxes. */
+.menu.gw,.bc-layer .bc{inset:12px;left:12px;top:12px;width:auto;height:auto;min-height:0;max-height:none;transform:none;display:flex;flex-direction:column;border-radius:12px;box-shadow:0 24px 70px #0009;overflow:hidden}
+.menu .gw-head{flex:none;display:flex;align-items:center;gap:12px;height:52px;padding:0 8px 0 18px;border-bottom:1px solid var(--hud-line)}
+.menu .gw-head h2{margin:0;padding:0;font-size:15px;white-space:nowrap}
+.gw-icon{display:grid;place-items:center;color:var(--gold)}
+.gw-icon svg,.gw-tabs svg,.btn svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.gw-tabs{display:flex;align-self:stretch;gap:2px;margin-left:14px;min-width:0;overflow-x:auto;scrollbar-width:none}
+.gw-tabs button{height:100%;min-height:0;padding:0 14px;border-radius:0;background:none;color:var(--hud-muted);font-size:13.5px;font-weight:550;border-bottom:2px solid transparent}
+.gw-tabs button:hover:not(:disabled){background:none;color:var(--hud-fg)}
+.gw-tabs button:focus-visible{outline:none;color:var(--hud-fg);background:#ffffff08}
+.gw-tabs button[aria-selected=true]{color:var(--hud-fg);font-weight:700;border-color:var(--gold)}
+.gw-status{display:inline-flex;align-items:center;gap:7px;padding:0 10px;font-size:12px;color:var(--hud-muted);white-space:nowrap}
+.gw-status:empty{display:none}
+.gw-status::before{content:"";width:7px;height:7px;border-radius:50%;background:#8a8a80}
+.gw-status[data-state=on]::before{background:var(--ok);box-shadow:0 0 0 3px #7fd49a33}
+.gw-status[data-state=busy]::before{background:var(--think);box-shadow:0 0 0 3px #9cc6ff33}
+.gw-status[data-state=wait]::before{background:var(--gold)}
+.gw-error{flex:none;display:flex;align-items:center;gap:12px;padding:8px 18px;border-bottom:1px solid var(--hud-line);background:#ffd98a0d}
+.gw-error p{flex:1;margin:0;font-size:12.5px;color:var(--gold)}
+.gw-empty{margin:40px 0;color:var(--hud-muted);font-size:13px;text-align:center}
+.gw-seg{display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:#ffffff0a}
+.gw-seg button{min-height:0;height:30px;padding:0 12px;border-radius:6px;background:none;color:var(--hud-muted);font-size:12.5px;font-weight:550}
+.gw-seg button:hover:not(:disabled){background:#ffffff0d;color:var(--hud-fg)}
+.gw-seg button[aria-selected=true],.gw-seg button[aria-pressed=true]{background:#ffffff1a;color:var(--hud-fg)}
+.gw-seg.icons button{width:34px;padding:0}
+.gw-seg svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.gw-count{margin-left:6px;color:var(--hud-muted);font-weight:500}
+.btn{display:inline-flex;align-items:center;gap:6px}
+.btn.danger{background:#d93a4033;color:var(--live-fg)}
+.ib.sm{width:28px;height:28px}.ib.sm svg{width:15px;height:15px}
+
+/* Settings: a rail of pages on the left, rows of label · control on the right, one 적용 for everything. */
+#menu .menu.settings{display:flex}
+.set-body{flex:1;min-height:0;display:grid;grid-template-columns:184px minmax(0,1fr)}
+.set-rail{display:flex;flex-direction:column;gap:2px;padding:12px 8px;border-right:1px solid var(--hud-line);overflow-y:auto}
+.set-rail button{justify-content:flex-start;gap:11px;width:100%;min-height:0;height:40px;padding:0 12px;border-radius:7px;background:none;color:var(--hud-muted);font-size:13.5px;font-weight:550}
+.set-rail button:hover:not(:disabled){background:#ffffff0a;color:var(--hud-fg)}
+.set-rail button[aria-selected=true]{background:#ffd98a17;color:var(--hud-fg);font-weight:700;box-shadow:inset 2px 0 0 var(--gold)}
+.set-rail svg{width:18px;height:18px;flex:none;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.set-rail button[aria-selected=true] svg{color:var(--gold)}
+.set-content{min-width:0;min-height:0;display:flex;flex-direction:column}
+.set-content>.tab{flex:1;min-height:0;overflow-y:auto}
+.set-page,.set-content>.story-fields{padding:8px 28px 28px;display:block}
+.set-group{max-width:760px}
+.set-group+.set-group,.story-main+.set-group{margin-top:10px}
+.set-group h3{margin:18px 0 2px;font-size:11px;font-weight:700;letter-spacing:.08em;color:var(--hud-muted)}
+/* A label keeps room for a short word; when the control does not fit beside it, the control drops to its own line. */
+.set-row{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 20px;min-height:56px;padding:8px 0;border-bottom:1px solid var(--hud-line)}
+.set-label{flex:1 1 auto;min-width:min(8em,100%);display:flex;align-items:center;gap:10px;font-size:13.5px;font-weight:550;color:var(--hud-fg)}
+.set-label[data-tip]{cursor:help}
+.set-label label{margin:0;font-size:inherit;font-weight:inherit;color:inherit;cursor:inherit}
+.set-control{flex:none;display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap;max-width:100%;margin-left:auto}
+.set-unit{min-width:20px;font-size:12px;color:var(--hud-muted);white-space:nowrap}
+/* The trailing unit is a fixed column, so steppers line up on their right edge whatever the unit says. */
+.set-control>.set-unit:last-child{min-width:4.5em}
+.set-empty{margin:24px 0;color:var(--hud-muted)}
+/* 세계 만들기: the DM conversation on the left, the world card it fills on the right. */
+.menu.setup{inset:max(16px,4%) max(16px,6%)}
+.setup .gw-head{gap:10px}.setup .gw-head .grow{flex:1}
+.setup-face .profile-face{width:30px;height:30px;border-width:1.5px}
+.setup-pick{flex:1;overflow:auto;padding:24px 28px}
+.setup-pick h3{margin:0 0 6px;font-size:16px;color:var(--hud-fg)}
+.setup-pick .lore-help{margin:0 0 18px}
+.setup-dms{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}
+/* A card is a button: its tagline must wrap inside the card, not run on one line across the row. */
+.setup-dm{display:flex;flex-direction:column;align-items:center;gap:6px;min-width:0;min-height:0;height:auto;padding:18px 12px 14px;border:1px solid var(--hud-line);border-radius:12px;background:#ffffff08;color:var(--hud-fg);font-weight:500;white-space:normal}
+.setup-dm b{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.setup-dm:hover:not(:disabled){border-color:var(--gold);background:#ffd98a0f}
+.setup-dm[aria-pressed=true]{border-color:var(--gold);box-shadow:0 0 0 3px #ffd98a1a}
+.setup-dm .profile-face{width:64px;height:64px}
+.setup-dm b{font-size:13.5px}
+.setup-dm small{align-self:stretch;color:var(--hud-muted);font-size:11.5px;line-height:1.4;text-align:center;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.setup-dm small:empty{display:none}
+.setup-body{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 320px}
+.setup-chat{display:flex;flex-direction:column;min-height:0;border-right:1px solid var(--hud-line)}
+.setup-log{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:14px;padding:20px 24px}
+.sm-row{display:flex;align-items:flex-end;gap:10px;max-width:min(680px,88%)}
+.sm-row.me{align-self:flex-end}
+.sm-row .profile-face{flex:none;width:34px;height:34px;border-width:1.5px}
+.sm-text{margin:0;padding:10px 14px;border-radius:14px;background:#ffffff10;color:var(--hud-fg);font-size:14px;font-weight:400;line-height:1.65;white-space:pre-wrap;word-break:break-word}
+.sm-row.dm .sm-text{border-bottom-left-radius:4px}
+.sm-row.me .sm-text{background:color-mix(in srgb,var(--conai-primary) 28%,transparent);border-bottom-right-radius:4px}
+.sm-text.typing{display:flex;gap:4px;padding:15px 16px}
+.sm-text.typing i{width:6px;height:6px;border-radius:50%;background:var(--hud-muted);animation:dot 1.2s infinite}
+.sm-text.typing i:nth-child(2){animation-delay:.2s}.sm-text.typing i:nth-child(3){animation-delay:.4s}
+.sm-error{align-self:center;display:flex;align-items:center;gap:10px;padding:6px 6px 6px 12px;border-radius:9px;background:#d93a401f;color:var(--live-fg);font-size:12.5px}
+.sm-error .btn{height:28px;padding:0 10px;font-size:12px}
+.setup-input{display:flex;align-items:flex-end;gap:8px;padding:12px 16px;border-top:1px solid var(--hud-line)}
+.setup-input textarea{flex:1;min-height:44px;max-height:160px;resize:none;padding:10px 12px;border:1px solid var(--hud-line);border-radius:10px;background:var(--hud);color:var(--hud-fg);font:inherit;font-size:14px;line-height:1.5}
+.setup-input textarea:focus{outline:none;border-color:var(--gold)}
+.setup-input .btn{height:44px}
+.setup-card{display:flex;flex-direction:column;min-height:0;overflow-y:auto;padding:18px;background:#ffffff05}
+.sw-head small,.setup-card h4{display:block;margin:0 0 4px;font-size:11px;font-weight:700;letter-spacing:.08em;color:var(--hud-muted)}
+.setup-card h4{margin:18px 0 8px}
+.sw-head b{font-size:18px;color:var(--gold)}
+.setup-card [data-empty=true]{color:var(--hud-muted);font-weight:500;font-size:13px}
+.sw-scene{margin:8px 0 0;font-size:13px;line-height:1.6;color:var(--hud-fg)}
+.sw-lore{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:6px}
+.sw-lore li{padding:8px 10px;border-radius:8px;background:#ffffff0a;font-size:12.5px}
+.sw-lore li b{display:block;color:var(--hud-fg)}
+.sw-lore li span{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;color:var(--hud-muted);line-height:1.5}
+.sw-lore li.empty,.sw-adventure .empty{padding:0;background:none;color:var(--hud-muted);font-size:12.5px}
+.sw-adventure{display:flex;flex-direction:column;gap:6px;font-size:13px}
+.sw-adventure div{display:flex;gap:10px}.sw-adventure small{flex:none;width:42px;color:var(--hud-muted);font-size:12px}
+.sw-foot{margin-top:auto;display:flex;flex-direction:column;gap:10px;padding-top:16px}
+.sw-missing{display:flex;flex-wrap:wrap;gap:6px}
+.sw-missing .chip{padding:3px 9px;border-radius:999px;border:1px dashed var(--hud-line);color:var(--hud-muted);font-size:11.5px}
+.sw-missing .chip.ok{border:none;background:#237a4840;color:var(--life-fg)}
+.sw-foot .btn{height:42px;justify-content:center;font-size:14px}
+.lore-controls #open-setup{border:none;background:var(--conai-primary);color:var(--conai-primary-foreground);font-weight:700}
+@media(max-width:760px){.setup-body{grid-template-columns:1fr;grid-template-rows:minmax(0,1fr) auto}.setup-chat{border-right:none}.setup-card{max-height:42vh;border-top:1px solid var(--hud-line)}}
+
+/* 세이브 슬롯: a grid of save cards; empty ones are dashed "새 마을" buttons. */
+.set-rail .rail-saves{margin-top:auto}
+.save-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;max-width:980px;padding-top:16px}
+.save-card{position:relative;display:flex;flex-direction:column;gap:12px;min-width:0;min-height:176px;padding:14px;border:1px solid var(--hud-line);border-radius:12px;background:linear-gradient(180deg,#ffffff0e,#ffffff05)}
+.save-card[data-active=true]{border-color:var(--gold);background:linear-gradient(180deg,#ffd98a1c,#ffd98a06);box-shadow:0 0 0 3px #ffd98a1a}
+.save-top{display:flex;align-items:center;gap:8px;min-height:28px}
+.save-no{flex:none;display:grid;place-items:center;width:22px;height:22px;border-radius:6px;background:#ffffff14;color:var(--hud-muted);font-size:11px;font-weight:700}
+.save-card[data-active=true] .save-no{background:var(--gold);color:#2b2118}
+.save-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14.5px;font-weight:700}
+.save-live{flex:none;width:8px;height:8px;border-radius:50%;background:var(--live);box-shadow:0 0 0 3px #d93a4033}
+.save-tools{flex:none;display:flex;margin-right:-6px;opacity:.55;transition:opacity .15s}
+.save-card:hover .save-tools,.save-tools:focus-within{opacity:1}
+.save-tools .ib.armed{background:var(--live);color:#fff;opacity:1}
+.save-faces{display:flex;align-items:center;min-height:36px;padding-left:8px}
+.save-faces .profile-face{width:36px;height:36px;margin-left:-8px;border-width:2px}
+.save-faces .none{margin-left:-8px;color:var(--hud-muted);font-size:12px}
+.save-meta{display:flex;justify-content:space-between;color:var(--hud-muted);font-size:12px}
+.save-foot{margin-top:auto;display:flex;align-items:center;gap:6px}.save-foot.stack{flex-direction:column;align-items:stretch}
+.save-row{display:flex;gap:6px}
+.save-foot .btn{flex:1;justify-content:center;height:32px;padding:0 10px}
+.save-playing{flex:1;color:var(--gold);font-size:12px;font-weight:700}
+.save-ghost{min-height:0;height:28px;padding:0 8px;border-radius:6px;background:none;color:var(--hud-muted);font-size:12px}
+.save-ghost:hover:not(:disabled){background:#d93a4026;color:var(--live-fg)}
+.save-card input{flex:1;min-width:0;width:100%;height:32px;padding:0 10px;border:1px solid var(--hud-line);border-radius:7px;background:var(--hud-solid);color:var(--hud-fg);font-size:13px}
+.save-card input:focus{outline:none;border-color:var(--gold)}
+.save-modes{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.save-modes button{min-height:0;height:34px;padding:0 6px;border-radius:7px;background:#ffffff0d;color:var(--hud-muted);font-size:12px;font-weight:600}
+.save-modes button[aria-pressed=true]{background:#ffd98a1f;color:var(--gold);box-shadow:inset 0 0 0 1px var(--gold)}
+button.save-empty{justify-content:center;align-items:center;gap:6px;width:100%;border-style:dashed;background:none;color:var(--hud-muted);font-size:13px;font-weight:650;cursor:pointer}
+button.save-empty:hover:not(:disabled){border-color:var(--gold);background:#ffd98a0a;color:var(--hud-fg)}
+button.save-empty svg{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round}
+.set-content select,#menu .set-content select{width:220px;height:36px;min-height:0;padding:0 10px;border:1px solid var(--hud-line);border-radius:7px;background:var(--hud);color:var(--hud-fg);font-size:13px}
+/* Switch: a checkbox drawn as a pill. */
+.switch{position:relative;display:inline-block;width:44px;height:24px;margin:0;cursor:pointer}
+.switch input{position:absolute;opacity:0;inset:0;margin:0;cursor:pointer}
+.switch i{position:absolute;inset:0;border-radius:12px;background:#ffffff1f;transition:background .15s}
+.switch i::after{content:"";position:absolute;left:3px;top:3px;width:18px;height:18px;border-radius:50%;background:#e8e4d6;transition:transform .15s}
+.switch input:checked+i{background:var(--conai-primary)}
+.switch input:checked+i::after{transform:translateX(20px);background:#fff}
+.switch input:focus-visible+i{outline:2px solid var(--gold);outline-offset:2px}
+.switch input:disabled+i{opacity:.5}
+/* Steppers: the story's outputs and the adventure's inputs look the same. */
+.stepper,.rpg-num{display:inline-flex;align-items:center;height:36px;border:1px solid var(--hud-line);border-radius:8px;overflow:hidden}
+.stepper button,.rpg-num button{width:34px;height:100%;min-height:0;padding:0;border-radius:0;background:none;color:var(--hud-fg);font-size:16px;font-weight:400}
+.stepper button:hover:not(:disabled),.rpg-num button:hover:not(:disabled){background:#ffffff12}
+.stepper output{min-width:54px;text-align:center;font-size:14px;font-weight:700;color:var(--hud-fg)}
+.rpg-num input,#menu .rpg-num input,.rpg-layer .rpg-num input{width:64px;height:100%;min-height:0;padding:0 2px;border:0;border-radius:0;background:none;color:var(--hud-fg);text-align:center;font-size:14px;font-weight:700;font-variant-numeric:tabular-nums;-moz-appearance:textfield;appearance:textfield;box-shadow:none}
+.rpg-num input::-webkit-inner-spin-button,.rpg-num input::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+.seg{flex-wrap:wrap;display:inline-flex;gap:2px;padding:3px;border-radius:9px;background:#ffffff0a}
+.seg button{min-height:0;height:30px;padding:0 13px;border-radius:6px;background:none;border:0;color:var(--hud-muted);font-size:12.5px;font-weight:550}
+.seg button:hover:not(:disabled){background:#ffffff0d;color:var(--hud-fg)}
+.seg button[aria-pressed=true]{border-color:var(--gold);background:#ffffff1f;color:var(--hud-fg);box-shadow:none}
+.draw-comfy select{height:32px;padding:0 8px;background:#ffffff0a;border:1px solid var(--hud-line);border-radius:7px;color:var(--hud-fg);font-size:12px;width:180px}
+/* 주민 */
+#menu .residents{display:flex;flex-direction:column;overflow:hidden}
+#menu .slots{flex:none;display:flex;align-items:center;gap:14px;padding:16px 28px;border-bottom:1px solid var(--hud-line);overflow-x:auto}
+#menu .slot-row{flex-wrap:nowrap}
+#menu .grid{flex:1;min-height:0;overflow-y:auto;padding:18px 28px 28px;grid-template-columns:repeat(auto-fill,minmax(132px,1fr));gap:14px}
+#menu .card{background:none;border-radius:10px}
+#menu .card:hover:not(:disabled){background:#ffffff08}
+#menu .card .art{border-radius:10px}
+#menu .card .nm{padding:8px 8px 6px}
+/* 지시문 */
+#menu .instructions{display:grid;grid-template-columns:200px minmax(0,1fr);gap:0;padding:0;overflow:hidden}
+.inst-list{display:flex;flex-direction:column;gap:2px;padding:14px 8px;border-right:1px solid var(--hud-line);overflow-y:auto}
+.inst-who{position:relative;justify-content:flex-start;gap:10px;width:100%;min-height:0;height:44px;padding:0 10px;border-radius:7px;background:none;color:var(--hud-fg);font-weight:500}
+.inst-who:hover:not(:disabled){background:#ffffff0a}
+.inst-who[aria-pressed=true]{background:#ffd98a17;box-shadow:inset 2px 0 0 var(--gold)}
+.inst-who .profile-face{width:28px;height:28px;border-width:1.5px}.inst-who .profile-initial{font-size:11px}
+.inst-who b{flex:1;min-width:0;text-align:left;font-size:13px;overflow:hidden;text-overflow:ellipsis}
+.inst-dot{width:7px;height:7px;border-radius:50%;background:var(--gold)}
+.inst-edit{min-width:0;min-height:0;display:flex;flex-direction:column;gap:10px;padding:18px 28px 24px}
+.inst-head{display:flex;align-items:baseline;justify-content:space-between}
+.inst-head label{margin:0;font-size:13.5px;font-weight:600;color:var(--hud-fg);cursor:help}
+.inst-head span{font-size:12px;color:var(--hud-muted)}
+#menu .inst-edit textarea{flex:1;min-height:200px;max-width:900px;width:100%;resize:none;padding:14px 16px;border:1px solid var(--hud-line);border-radius:9px;background:#ffffff06;color:var(--hud-fg);font:inherit;font-size:14px;line-height:1.75}
+/* 이야기 */
+#menu .story-fields{display:block;padding:18px 28px 28px}
+#menu .story-main{max-width:760px}
+#menu .story-main label{display:block;margin:0 0 8px;font-size:13.5px;font-weight:600;color:var(--hud-fg)}
+#menu .story-fields textarea{min-height:150px;border-radius:9px;background:#ffffff06}
+#menu .menu>footer{flex:none;display:flex;align-items:center;gap:10px;padding:12px 16px 12px 20px;border-top:1px solid var(--hud-line)}
+#menu .menu>footer .grow{font-size:12.5px;color:var(--gold)}
+/* Adventure pages (rows built by rpg-view.js). */
+.rpg-settings{max-width:760px}
+.rpg-role-who .profile-face{width:30px;height:30px;border-width:1.5px}.rpg-role-who .profile-initial{font-size:12px}
+.set-row.rpg-role-row{flex-wrap:nowrap}.rpg-role-who{gap:10px;flex:1 1 0;min-width:0}
+.rpg-role-name{display:flex;flex-direction:column;min-width:0;line-height:1.3}
+.rpg-role-name>*{overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.rpg-role-name small{font-size:12px;font-weight:500;color:var(--hud-muted)}
+#menu .rpg-shift-row .set-control{gap:14px}
+.rpg-shift-hours{display:inline-flex;align-items:center;gap:6px}
+#menu .rpg-shift-hours select{width:86px;padding:0 8px}
+.rpg-shift-days{display:inline-flex;gap:4px}
+.rpg-shift-days button{width:30px;height:30px;min-height:0;padding:0;border-radius:50%;background:none;box-shadow:inset 0 0 0 1px var(--hud-line);color:var(--hud-muted);font-size:12px;font-weight:600}
+.rpg-shift-days button[aria-pressed=true]{background:var(--ok);box-shadow:none;color:#10201a}
+.rpg-shift-days button:hover:not(:disabled){box-shadow:inset 0 0 0 1px var(--hud-fg)}
+
+@media(max-width:760px){
+  .menu.gw,.bc-layer .bc{inset:0;left:0;top:0;border-radius:0}
+  .stepper button,.rpg-num button{width:30px}.stepper output{min-width:40px}.rpg-num input,#menu .rpg-num input,.rpg-layer .rpg-num input{width:52px}
+  .menu .gw-head{height:48px;padding:0 4px 0 12px;gap:6px}
+  .menu .gw-head h2{display:none}
+  .gw-tabs{margin-left:0}.gw-tabs button{padding:0 10px}
+  .gw-status{font-size:0;padding:0 6px}
+  .set-body{grid-template-columns:1fr;grid-template-rows:auto minmax(0,1fr)}
+  .set-rail{flex-direction:row;padding:6px 8px;border-right:0;border-bottom:1px solid var(--hud-line);overflow-x:auto;scrollbar-width:none}
+  .set-rail button{width:auto;flex:none;height:36px;padding:0 10px}
+  .set-rail button[aria-selected=true]{box-shadow:inset 0 -2px 0 var(--gold)}
+  .set-page,#menu .story-fields{padding:4px 16px 20px}
+  /* A control that fits shares the label's line; one that doesn't starts under the label, never hangs at the right edge. */
+  .set-row{flex-wrap:wrap;gap:8px 12px}
+  .set-control{margin-left:0;gap:6px;justify-content:flex-start}
+  .set-content select,#menu .set-content select{width:min(150px,100%)}
+  #menu .instructions{grid-template-columns:1fr;grid-template-rows:auto minmax(0,1fr)}
+  .inst-list{flex-direction:row;padding:8px;border-right:0;border-bottom:1px solid var(--hud-line);overflow-x:auto}
+  .inst-who{width:auto;flex:none}
+  .inst-edit{padding:14px 16px}
+  #menu .slots,#menu .grid{padding-inline:16px}
+  #menu .grid{grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:12px}
+  #menu .rpg-shift-row .set-control{width:100%;justify-content:flex-start;margin-left:0}
+}

@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="ko">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>AI 어항</title><link rel="stylesheet" href="page/styles/style.css"><link rel="stylesheet" href="page/styles/album.css"><link rel="stylesheet" href="page/styles/memory.css"><link rel="stylesheet" href="page/styles/rpg.css"><link rel="stylesheet" href="page/styles/panels.css"><link rel="stylesheet" href="page/styles/windows.css"><link rel="stylesheet" href="page/styles/guild.css"><link rel="stylesheet" href="page/styles/life.css"><link rel="stylesheet" href="page/styles/research.css"><link rel="stylesheet" href="page/styles/agents.css"></head>
+<body>
+<main id="stage" class="stage">
+  <div class="world"><canvas id="village" aria-label="작은 마을 지도. 주민은 왼쪽 목록에서도 고를 수 있어."></canvas></div>
+
+  <div class="hud surf top-l"><span class="live" aria-hidden="true"></span><button id="open-saves" type="button" class="save-chip" data-tip="세이브 슬롯"><b id="save-title">햇살 마을</b></button><span id="clock" class="num" data-tip="마을 시간"></span><span class="sep"></span><button id="toggle" type="button" class="wake" data-running="false" disabled><i aria-hidden="true"></i><span id="toggle-label">마을 깨우기</span></button><span id="memory-flag" class="hud-flag" hidden>기억 정리 중</span></div>
+  <div class="hud surf top-r">
+    <button id="open-rpg" type="button" class="act" aria-label="방송" data-tip="주민들의 방송"><svg viewBox="0 0 24 24"><rect x="3" y="6.5" width="18" height="13" rx="2.5"/><path d="M8.5 3l3.5 3.5L15.5 3"/></svg><span class="act-label">방송</span><span id="live-count" class="live-count num" hidden></span></button>
+    <button id="open-guild" type="button" class="act" aria-label="길드" data-tip="길드 · 의뢰와 던전" hidden><svg viewBox="0 0 24 24"><path d="M3 10l9-6 9 6M5 9v11h14V9M9 20v-6h6v6"/></svg><span class="act-label">길드</span></button>
+    <button id="open-life" type="button" class="act" aria-label="마을 생활" data-tip="생활 · 상점·시설·공사" hidden><svg viewBox="0 0 24 24"><path d="M3 11l9-7 9 7M5 9.5V20h14V9.5M10 20v-5h4v5"/></svg><span class="act-label">생활</span></button>
+    <button id="open-research" type="button" class="act" aria-label="자료 조사" data-tip="조사 · 게시글을 읽고 주민끼리 토론"><svg viewBox="0 0 24 24"><path d="M5 4.5h11a3 3 0 0 1 3 3V20H8a3 3 0 0 1-3-3zM5 17a3 3 0 0 1 3-3h11M9 8.5h6M9 11.5h4"/></svg><span class="act-label">조사</span></button>
+    <button id="open-album" type="button" class="act" aria-label="앨범" data-tip="주민이 그린 그림"><svg viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2"/><circle cx="9" cy="10" r="1.8"/><path d="M20.5 16l-5-5-8 8.5"/></svg><span class="act-label">앨범</span></button>
+    <button id="open-menu" type="button" class="act" aria-label="마을 관리" data-tip="주민·규칙·모험·저장"><svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg><span class="act-label">마을 관리</span></button>
+  </div>
+
+  <nav id="party" class="hud surf party" aria-label="주민" hidden></nav>
+  <!-- The bottom-right corner is one column: zoom, the broadcast mini player (moved in by main.js), the DM. -->
+  <div id="corner" class="corner">
+    <div id="zoom" class="hud surf zoom" role="group" aria-label="지도 확대">
+      <button id="zoom-out" type="button" class="ib" data-hold="220" data-tip="축소" aria-label="축소"><svg viewBox="0 0 24 24"><path d="M5 12h14"/></svg></button>
+      <button id="zoom-fit" type="button" class="ib" data-tip="마을 전체 보기" aria-label="마을 전체 보기"><svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+      <button id="zoom-in" type="button" class="ib" data-hold="220" data-tip="확대 · 휠, 두 손가락" aria-label="확대"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
+    </div>
+    <button id="dm-call" type="button" class="hud surf dm-call"><span id="dm-call-face" class="dm-face"></span><span class="dm-call-text"><b id="dm-call-name">GM 부르기</b><small id="dm-call-line">GM과 이야기하며 세계를 만들어 봐</small></span><i id="dm-call-dot" class="dm-dot" hidden></i></button>
+  </div>
+
+  <aside id="dm" class="dm-sheet" aria-label="GM과 대화" hidden>
+    <header><span id="dm-face" class="dm-face"></span><span class="grow"><b id="dm-name"></b><small id="dm-status">마을을 지켜보는 중</small></span>
+      <button id="dm-memory" type="button" class="ib" data-tip="GM의 기억 · 장기 로어북" aria-label="GM의 기억"><svg viewBox="0 0 24 24"><path d="M9 4.5a3.5 3.5 0 0 0-3.5 3.5A3.5 3.5 0 0 0 4 14.5 3.5 3.5 0 0 0 8.5 19H12V4.5zM15 4.5a3.5 3.5 0 0 1 3.5 3.5 3.5 3.5 0 0 1 1.5 6.5 3.5 3.5 0 0 1-4.5 4.5H12"/></svg></button>
+      <button id="dm-lore" type="button" class="ib" data-tip="세계관 로어북" aria-label="세계관 로어북"><svg viewBox="0 0 24 24"><path d="M5 4.5h11a3 3 0 0 1 3 3V20H8a3 3 0 0 1-3-3zM5 17a3 3 0 0 1 3-3h11"/></svg></button>
+      <button id="dm-change" type="button" class="ib" data-tip="GM 바꾸기" aria-label="GM 바꾸기"><svg viewBox="0 0 24 24"><path d="M17 3l4 4-4 4M21 7H9a5 5 0 0 0-5 5M7 21l-4-4 4-4M3 17h12a5 5 0 0 0 5-5"/></svg></button>
+      <button id="dm-close" type="button" class="ib" data-tip="닫기 · 대화는 남아" aria-label="닫기"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></header>
+    <div id="dm-log" class="dm-log" role="log" aria-live="polite"></div>
+    <div class="dm-chips"><button type="button" data-say="오늘 마을에 작은 사건을 하나 만들어 줘.">오늘의 사건</button><button type="button" data-say="요즘 주민들 근황 알려 줘.">주민 근황</button><button type="button" data-fill="다음 층은 ">다음 층 부탁</button><button type="button" data-fill="세계관을 이렇게 바꾸고 싶어: ">세계관 바꾸기</button></div>
+    <div class="dm-input"><textarea id="dm-text" rows="1" placeholder="GM에게 말하기"></textarea><button id="dm-send" type="button" class="btn main">보내기</button></div>
+  </aside>
+
+  <section id="chat" class="hud wc" aria-label="마을 소식">
+    <div class="bar" role="tablist"><button type="button" data-filter="all" aria-selected="true">전체</button><button type="button" data-filter="say" aria-selected="false">대화</button><button type="button" data-filter="event" aria-selected="false">알림</button><button id="chat-close" type="button" class="ib" data-tip="접기" aria-label="접기"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+    <button id="chat-scope" type="button" class="scope" hidden></button>
+    <div id="talks" class="talks" aria-label="진행 중인 대화와 요청" hidden></div>
+    <div id="logs" class="lines" role="log" aria-live="polite"></div>
+    <button id="chat-open" type="button" class="ib grip up" data-tip="펼치기" aria-label="펼치기"><svg viewBox="0 0 24 24"><path d="M6 15l6-6 6 6"/></svg></button>
+  </section>
+
+  <div id="name-menu" class="hud surf name-menu" role="menu" hidden></div>
+  <div id="quick" class="hud quick" role="menu" hidden></div>
+  <p id="toast" class="hud surf toast" role="status" hidden></p>
+
+  <div id="center" class="center" hidden><h2 id="center-title"></h2>
+    <ol id="center-steps" class="center-steps"><li data-step="world">세계 만들기</li><li data-step="invite">주민 초대</li><li data-step="wake">깨우기</li></ol>
+    <button id="center-action" type="button" class="big"></button>
+    <button id="center-saves" type="button" class="center-slot" data-tip="세이브 슬롯"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h11l3 3v13H5zM8 4v5h7V4M8 20v-6h8v6"/></svg><span id="center-save"></span></button></div>
+
+  <div id="album" class="album-layer" hidden>
+    <div class="dim"></div>
+    <section class="menu" role="dialog" aria-modal="true" aria-label="마을 앨범">
+      <header><h2>마을 앨범<span id="album-count" class="num"></span></h2><span class="grow"></span><button id="album-close" type="button" class="ib" data-tip="닫기" aria-label="닫기"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></header>
+      <div id="album-grid" class="album-grid"><div id="album-cols" class="album-cols"></div></div>
+      <p id="album-empty" class="album-empty">아직 걸린 그림이 없어.</p>
+      <div id="album-view" class="album-view" hidden><img id="album-image" alt=""><p id="album-prompt"></p></div>
+    </section>
+  </div>
+
+  <div id="memory" class="album-layer memory-layer" hidden>
+    <div class="dim"></div>
+    <section class="menu" role="dialog" aria-modal="true" aria-labelledby="memory-title">
+      <header><h2 id="memory-title"></h2><span class="grow"></span><button id="memory-close" type="button" class="ib" data-tip="닫기" aria-label="닫기"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></header>
+      <div id="memory-body" class="memory-body"></div>
+    </section>
+  </div>
+
+  <div id="setup" class="menu-layer" hidden>
+    <div class="dim"></div>
+    <section class="menu setup" role="dialog" aria-modal="true" aria-labelledby="setup-title">
+      <header class="gw-head"><span id="setup-face" class="setup-face"></span><h2 id="setup-title">세계 만들기</h2><span class="grow"></span><button id="setup-dm" type="button" class="btn">GM 바꾸기</button><button id="setup-close" type="button" class="ib" data-tip="닫기 · 대화는 남아" aria-label="닫기"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></header>
+      <div id="setup-pick" class="setup-pick" hidden><h3>누가 이 세계의 GM이 될까?</h3><p class="lore-help">GM은 세계 설정과 마을 이야기, 던전의 다음 층 설계와 게임 그림 묘사를 함께 맡아.</p><div id="setup-dms" class="setup-dms"></div></div>
+      <div id="setup-body" class="setup-body">
+        <div class="setup-chat">
+          <div id="setup-log" class="setup-log" role="log" aria-live="polite"></div>
+          <div class="setup-input"><textarea id="setup-text" rows="2" placeholder="GM에게 답하기 ·Enter 보내기, Shift+Enter 줄바꿈"></textarea><button id="setup-send" type="button" class="btn main">보내기</button></div>
+        </div>
+        <aside class="setup-card">
+          <div class="sw-head"><small>세계</small><b id="sw-title"></b></div>
+          <p id="sw-scene" class="sw-scene"></p>
+          <h4>세계관 <span id="sw-lore-count" class="num"></span></h4><ul id="sw-lore" class="sw-lore"></ul>
+          <h4>모험</h4><div id="sw-adventure" class="sw-adventure"></div>
+          <div class="sw-foot"><div id="sw-missing" class="sw-missing"></div><button id="setup-apply" type="button" class="btn main">이대로 시작</button></div>
+        </aside>
+      </div>
+    </section>
+  </div>
+
+  <div id="menu" class="menu-layer" hidden>
+    <div class="dim"></div>
+    <section class="menu gw settings" role="dialog" aria-modal="true" aria-labelledby="menu-title">
+      <header class="gw-head"><span class="gw-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.8 1.1V21a2 2 0 1 1-4 0v-.1a1.6 1.6 0 0 0-2.8-1.1l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0-1.1-2.8H3a2 2 0 1 1 0-4h.1a1.6 1.6 0 0 0 1.1-2.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 2.8-1.1V3a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 2.8 1.1l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0 1.1 2.8H21a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1z"/></svg></span><h2 id="menu-title">마을 관리</h2><span class="grow"></span><button id="menu-close" type="button" class="ib" data-tip="닫기" aria-label="닫기"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></header>
+      <div class="set-body">
+        <nav class="set-rail" role="tablist" aria-label="설정">
+          <button type="button" role="tab" data-tab="residents" aria-selected="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM2.5 20a6.5 6.5 0 0 1 13 0M16 4.3a3.5 3.5 0 0 1 0 6.4M18 14a6.5 6.5 0 0 1 3.5 6"/></svg><span>주민</span></button>
+          <button type="button" role="tab" data-tab="instructions" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20l4-1L19 8l-3-3L5 16zM14 7l3 3"/></svg><span>지시문</span></button>
+          <button type="button" role="tab" data-tab="story" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4.5h11a3 3 0 0 1 3 3V20H8a3 3 0 0 1-3-3zM5 17a3 3 0 0 1 3-3h11"/></svg><span>이야기</span></button>
+          <button type="button" role="tab" data-tab="village" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-7 9 7M5 9.5V20h14V9.5M10 20v-5h4v5"/></svg><span>마을</span></button>
+          <button type="button" role="tab" data-tab="adventure" aria-selected="false" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 17.5L4 7V4h3l10.5 10.5M13 19l6-6M16 16l4 4"/></svg><span>모험</span></button>
+          <button type="button" role="tab" data-tab="combat" aria-selected="false" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 3L5 14h6l-1 7 8-11h-6z"/></svg><span>전투 AI</span></button>
+          <button type="button" role="tab" data-tab="roles" aria-selected="false" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 7v5l3 2"/></svg><span>역할·근무</span></button>
+          <button type="button" role="tab" data-tab="agents" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h6M12 3v3M5 10a7 7 0 0 1 14 0v4a7 7 0 0 1-14 0zM9.5 12h.01M14.5 12h.01M9.5 16h5"/></svg><span>AI 행동</span></button>
+          <button type="button" role="tab" data-tab="statuses" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h4l3-7 4 14 3-7h4"/></svg><span>상태 정의</span></button>
+          <button type="button" role="tab" data-tab="saves" aria-selected="false" class="rail-saves"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h11l3 3v13H5zM8 4v5h7V4M8 20v-6h8v6"/></svg><span>세이브 슬롯</span></button>
+        </nav>
+        <div class="set-content">
+          <div id="tab-residents" class="tab residents">
+            <div class="slots"><div id="slots" class="slot-row"></div><span id="slot-count" class="count num">0 / 6</span></div>
+            <div id="profiles" class="grid"></div>
+          </div>
+          <div id="tab-instructions" class="tab instructions" hidden>
+            <nav id="instruction-residents" class="inst-list" aria-label="주민"></nav>
+            <div class="inst-edit">
+              <p id="instructions-empty" class="set-empty" hidden>주민부터 초대해줘.</p>
+              <div class="inst-head"><label for="resident-instructions" data-tip="이 마을에서 맡을 역할·말투·행동 규칙이야. 원본 프로필 지시문에 더해지고 다른 채팅엔 영향이 없어. 새 대화부터 적용돼.">어항 전용 지시문</label><span id="instructions-count" class="num"></span></div>
+              <textarea id="resident-instructions" maxlength="2000" placeholder="예: 마을 여관 주인이다. 손님에게 존댓말로 인사하고, 마을에서 들은 소식을 알려준다."></textarea>
+            </div>
+          </div>
+          <div id="tab-story" class="tab story-fields" hidden>
+            <div class="lore-controls"><button id="open-setup" type="button" class="btn main">GM과 세계관 다듬기</button><button id="world-lore" type="button">세계관 로어북 관리</button><span class="lore-help">모든 어항 프로필이 함께 참고하는 설정</span></div>
+            <div class="story-main"><label for="scene">오늘의 상황</label><textarea id="scene" rows="6" maxlength="500"></textarea>
+              <div class="presets"><button type="button">비 오는 오후</button><button type="button">마을 축제 전날</button><button type="button">정전된 밤</button><button type="button">새 이웃이 이사 온 날</button></div></div>
+            <p class="lore-help">주민 대화·그림·로어는 각 프로필의 채팅 엔진과 도구·판단·생성 프리셋을 그대로 사용해. 생성된 그림은 마을 앨범에 모아.</p>
+          </div>
+          <div id="tab-village" class="tab set-page" hidden>
+            <section class="set-group"><h3>주민</h3>
+              <div class="set-row"><span class="set-label" data-tip="주민마다 이 간격 안에서 무작위로 한 번씩 움직이거나 말을 걸어.">행동 간격</span><div class="set-control"><div class="stepper"><button type="button" data-step="actionMin" data-by="-1" aria-label="최소 줄이기">−</button><output id="actionMin" class="num">3</output><button type="button" data-step="actionMin" data-by="1" aria-label="최소 늘리기">+</button></div><span class="set-unit">~</span><div class="stepper"><button type="button" data-step="actionMax" data-by="-1" aria-label="최대 줄이기">−</button><output id="actionMax" class="num">6</output><button type="button" data-step="actionMax" data-by="1" aria-label="최대 늘리기">+</button></div><span class="set-unit">초</span></div></div>
+              <div class="set-row"><span class="set-label" data-tip="한 칸은 길 한 칸이야.">걷는 속도</span><div class="set-control"><div class="stepper"><button type="button" data-walk="-0.1" aria-label="걷는 속도 줄이기">−</button><output id="walkSpeed" class="num">1.1</output><button type="button" data-walk="0.1" aria-label="걷는 속도 늘리기">+</button></div><span class="set-unit">칸/초</span></div></div>
+              <div class="set-row"><span class="set-label" data-tip="할 일이 없는 주민이 제자리에 서 있을지, 근처를 어슬렁거릴지야. 모델 호출은 없어.">쉬는 주민</span><div class="set-control"><div id="wander" class="seg"><button type="button" data-wander="true">어슬렁</button><button type="button" data-wander="false">가만히</button></div></div></div>
+              <div class="set-row"><span class="set-label" data-tip="기본은 프로필의 최대 토큰 설정을 그대로 써. 숫자를 직접 고를 때만 마을 요청에 추가 상한을 적용해. 프로필 한도가 더 작으면 그쪽을 따라.">AI 답변 한도</span><div class="set-control"><div class="stepper"><button type="button" data-reply="-1" aria-label="답변 한도 줄이기">−</button><output id="replyLength">프로필 기본값</output><button type="button" data-reply="1" aria-label="답변 한도 늘리기">+</button></div><span class="set-unit">토큰</span></div></div>
+              <div class="set-row"><span class="set-label" data-tip="기본은 프로필/연결의 대기 설정이야. 플러그인에서 별도 취소 기한을 만들지 않아. 숫자를 직접 고르면 새 요청에 5–30분을 적용해. 전투·자료 조사·그림 생성 시간은 별도야.">AI 답변 대기</span><div class="set-control"><div class="stepper"><button type="button" data-reply-timeout="-1" aria-label="답변 대기 줄이기">−</button><output id="replyTimeoutMinutes">프로필 기본값</output><button type="button" data-reply-timeout="1" aria-label="답변 대기 늘리기">+</button></div><span class="set-unit">분</span></div></div>
+            </section>
+            <section class="set-group"><h3>시간</h3>
+              <div class="set-row"><span class="set-label" data-tip="실제 몇 분이 마을의 하루인지야. 시계는 마을이 깨어 있을 때만 가.">하루 길이</span><div class="set-control"><div class="stepper"><button type="button" data-day="-1" aria-label="하루 줄이기">−</button><output id="dayMinutes" class="num">24</output><button type="button" data-day="1" aria-label="하루 늘리기">+</button></div><span class="set-unit">분</span></div></div>
+              <div class="set-row"><span class="set-label" data-tip="밤 10시쯤 여관에서 자고 아침 6시쯤 일어나. 자는 동안은 대화 요청이 없어.">밤</span><div class="set-control"><div id="sleep" class="seg"><button type="button" data-sleep="true">잠자기</button><button type="button" data-sleep="false">안 자기</button></div></div></div>
+            </section>
+            <section class="set-group"><h3>화면</h3>
+              <div class="set-row"><span class="set-label" data-tip="생활 중심은 길드 버튼과 LIVE 표시를 숨겨. 던전 설정·장비·진행 기록은 그대로고, 누르는 즉시 이 계정의 화면에만 적용돼.">보기</span><div class="set-control"><div id="display" class="seg"><button type="button" data-display="adventure" aria-pressed="true">모험 포함</button><button type="button" data-display="life" aria-pressed="false">생활 중심</button></div></div></div>
+            </section>
+          </div>
+          <div id="tab-adventure" class="tab set-page" hidden></div>
+          <div id="tab-combat" class="tab set-page" hidden></div>
+          <div id="tab-roles" class="tab set-page" hidden></div>
+          <div id="tab-agents" class="tab set-page" hidden></div>
+          <div id="tab-statuses" class="tab set-page" hidden></div>
+          <div id="tab-saves" class="tab set-page" hidden><div id="save-grid" class="save-grid"></div></div>
+        </div>
+      </div>
+      <footer id="menu-footer"><span id="draft-label" class="grow"></span><button id="cancel" type="button" class="btn">되돌리기</button><button id="apply" type="button" class="btn main" disabled>적용</button></footer>
+    </section>
+  </div>
+</main>
+<script type="module" src="page/main.js"></script>
+</body></html>

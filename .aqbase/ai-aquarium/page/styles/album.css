@@ -1,0 +1,16 @@
+/* Village album: same overlay frame as the settings menu, masonry list of the album group. */
+#open-album[data-fresh=true]::before{content:"";position:absolute;top:6px;right:6px;width:7px;height:7px;border-radius:50%;background:var(--gold);box-shadow:0 0 0 2px var(--hud-solid)}
+.album-layer{position:absolute;inset:0;z-index:20}
+.album-layer .menu header h2 span{margin-left:8px;font-size:12px;font-weight:500;color:var(--hud-muted)}
+.album-layer .menu header .grow{flex:1}
+.album-grid{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;padding:16px 22px}
+.album-cols{columns:200px;column-gap:10px}
+.album-grid .tile{display:block;width:100%;min-height:0;margin:0 0 10px;padding:0;border-radius:6px;overflow:hidden;background:#1b221e;break-inside:avoid;aspect-ratio:1}
+.album-grid .tile:hover:not(:disabled){background:#222b26}
+.album-grid .tile img{display:block;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .2s}
+.album-grid .tile img[src]{opacity:1}
+.album-grid .tile[data-broken=true]{opacity:.4}
+.album-empty{position:absolute;inset:60px 0 0;display:grid;place-items:center;color:var(--hud-muted);font-size:13px;pointer-events:none}
+.album-view{position:absolute;inset:0;z-index:30;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:24px;background:#050806e6;cursor:zoom-out}
+.album-view img{max-width:100%;max-height:calc(100% - 60px);object-fit:contain;border-radius:4px;box-shadow:0 8px 30px #000a}
+.album-view p{max-width:min(720px,100%);margin:0;color:var(--hud-muted);font-size:11.5px;line-height:1.6;text-align:center;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden}

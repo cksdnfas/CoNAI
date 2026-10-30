@@ -1,0 +1,63 @@
+/* The life window (주민 생활 · 상점·NPC · 시설 · 공사·공공), map NPC tokens and site picking. Loaded after guild.css. */
+.life-panel .btn{height:30px;min-height:0;padding:0 11px;font-size:12px;white-space:nowrap}
+.life-panel h4{margin:0 0 8px;font-size:11px;font-weight:700;letter-spacing:.08em;color:var(--hud-muted)}
+.life-bar{flex:none;display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px;padding:10px 18px;border-bottom:1px solid var(--hud-line)}
+/* An inline caption and its control on one line (the SDK label stacks a full-width control under its caption). */
+.life-who{display:inline-flex;align-items:center;gap:8px;margin:0;font-size:12px;font-weight:500;color:var(--hud-muted);white-space:nowrap}
+.life-who>:is(input,select){flex:none;margin:0}
+.life-select,.ag-text{min-height:0;height:32px;padding:0 10px;border:1px solid var(--hud-line);border-radius:7px;background:var(--hud);color:var(--hud-fg);font-size:12.5px}
+.life-select{width:auto;max-width:220px}
+.life-num{width:72px;min-height:0;height:32px;padding:0 8px;border:1px solid var(--hud-line);border-radius:7px;background:var(--hud);color:var(--hud-fg);font-size:12.5px}
+.life-gold{display:inline-flex;align-items:center;gap:5px;color:var(--gold);font-weight:700;font-size:13px}
+.life-gold svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.9}
+.life-draft{flex:none;display:flex;align-items:center;gap:10px;padding:10px 18px;background:#ffd98a14;border-bottom:1px solid #ffd98a40}
+.life-draft .life-name{flex:1}
+.life-body{flex:1;min-height:0;overflow-y:auto;padding:14px 18px 20px}
+.life-sec{margin-top:18px}
+.life-sec .gw-empty{margin:10px 0;font-size:12.5px;text-align:left}
+.life-facts{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px}
+.life-fact{display:flex;flex-direction:column;gap:2px;padding:8px 10px;border-radius:8px;background:#ffffff0a;min-width:0}
+.life-fact small{font-size:10.5px;color:var(--hud-muted)}.life-fact b{font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.life-row{display:grid;grid-template-columns:36px minmax(0,1fr) auto auto;align-items:center;gap:10px;min-height:48px;padding:6px 0;border-bottom:1px solid var(--hud-line)}
+.life-row.life-work{grid-template-columns:36px minmax(0,1fr) auto auto;background:linear-gradient(90deg,#7fd49a1a var(--progress,0%),transparent var(--progress,0%))}
+.life-row.life-work[data-status=reserved] .life-state,.life-row.life-work[data-status=approved] .life-state{color:var(--gold)}
+.life-row.life-work[data-status=building] .life-state{color:var(--ok)}
+.life-row.life-work:is([data-status=rejected],[data-status=cancelled],[data-status=failed]) .life-state{color:var(--hud-muted)}
+.life-state{font-size:12px;font-weight:650;white-space:nowrap}
+.life-ic{display:grid;place-items:center;width:36px;height:36px;border-radius:8px;background:#ffffff0d;color:var(--hud-muted)}
+.life-ic svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.life-ic img{width:30px;height:30px;object-fit:contain}
+.life-name{display:flex;flex-direction:column;gap:2px;min-width:0}
+.life-name b{font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.life-name small{font-size:11.5px;color:var(--hud-muted);line-height:1.45}
+.life-qty{font-size:12.5px;color:var(--hud-muted);white-space:nowrap}
+.life-acts{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:5px}
+.life-opts{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin:8px 0}
+.life-note{margin:6px 0;font-size:12px;line-height:1.55;color:var(--hud-muted)}
+.life-note.warn{color:var(--gold)}
+.life-split{display:grid;grid-template-columns:240px minmax(0,1fr);gap:16px;min-height:100%}
+.life-list{display:flex;flex-direction:column;gap:2px;padding-right:12px;border-right:1px solid var(--hud-line)}
+.life-panel .life-item{display:flex;justify-content:flex-start;width:100%;min-height:0;height:auto;padding:8px 10px;border-radius:8px;background:none;color:var(--hud-fg);text-align:left;font-weight:400}
+.life-panel .life-item:hover:not(:disabled){background:#ffffff0d}
+.life-panel .life-item[aria-pressed=true]{background:#ffffff1a}
+.life-detail{min-width:0}
+.life-title{display:flex;flex-direction:column;gap:3px;margin-bottom:10px}.life-title b{font-size:15px}.life-title small{font-size:12px;color:var(--hud-muted)}
+.life-hero{display:flex;align-items:center;gap:14px;margin-bottom:10px}.life-hero .life-title{flex:1;min-width:0;margin:0}
+.life-art{width:96px;height:72px;object-fit:contain;border-radius:8px;background:#ffffff0a}
+.life-art.blank{display:grid;place-items:center;color:var(--hud-muted)}.life-art.blank svg{width:30px;height:30px;fill:none;stroke:currentColor;stroke-width:1.6}
+.life-panel .gw-seg{flex-wrap:wrap;margin:6px 0}
+/* Map: rule-based NPCs wear a dashed ring; a closed shop's keeper is dimmed. Construction signs are lighter. */
+.tok.npc .profile-face{border-style:dashed}
+.tok.npc[data-open=false]{opacity:.7}
+.sign.site{background:#5a4326e6;color:#ffe7b5;font-weight:600}
+.pick-ghost{pointer-events:none!important;border:2px dashed var(--gold);border-radius:4px;background:#ffd98a2e}
+.pick-ghost[data-valid=false]{border-color:var(--foe);background:#ef8f6c2e}
+.life-pick{position:absolute;left:50%;top:64px;z-index:21;transform:translateX(-50%);display:flex;align-items:center;gap:12px;padding:8px 10px 8px 16px;font-size:12.5px;color:var(--hud-fg)}
+@media(max-width:760px){
+  .life-split{grid-template-columns:1fr}
+  .life-list{flex-direction:row;overflow-x:auto;padding:0 0 8px;border-right:none;border-bottom:1px solid var(--hud-line)}
+  .life-panel .life-item{flex:none;width:auto;max-width:200px}
+  .life-row,.life-row.life-work{grid-template-columns:36px minmax(0,1fr) auto}
+  .life-row .life-acts{grid-column:1/-1;justify-content:flex-start}
+  .life-pick{left:10px;right:10px;transform:none}
+}

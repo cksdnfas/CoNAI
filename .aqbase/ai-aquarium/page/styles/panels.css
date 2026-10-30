@@ -1,0 +1,64 @@
+/* Resident quick menu, item tiles and the expedition journal (shared by the guild window and the broadcast). */
+
+/* Quick menu: pills pop out one after another with a little overshoot. */
+.quick{z-index:16;display:flex;flex-direction:column;align-items:flex-start;gap:5px;pointer-events:none}
+.quick .pill{pointer-events:auto;display:inline-flex;align-items:center;gap:8px;min-height:0;height:32px;padding:0 13px 0 10px;border-radius:999px;border:1px solid var(--hud-line);background:var(--hud);backdrop-filter:blur(6px);color:var(--hud-fg);font-size:12px;font-weight:600;box-shadow:0 6px 16px #0007;transform-origin:left center}
+.quick .pill:hover:not(:disabled){background:#1c241f;color:var(--gold)}
+.quick .pill svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.quick .pill.onair{color:var(--live-fg);border-color:#d93a4066}
+.quick .pill.onair:hover:not(:disabled){color:#ffb0b2}
+.quick[data-from=map] .pill{transform-origin:left center}
+.quick.pop .pill{animation:quick-pop .46s cubic-bezier(.3,1.7,.55,1) both;animation-delay:calc(var(--i,0) * 50ms)}
+@keyframes quick-pop{0%{opacity:0;transform:translateX(-14px) scale(.35)}60%{opacity:1}100%{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){.quick.pop .pill{animation:none}}
+/* Items: the colour is the rarity, E marks what is worn. */
+.rpg-it{--rc:var(--rarity-common);position:relative;display:grid;place-items:center;flex:none;width:44px;height:44px;min-height:0;padding:0;border:0;border-radius:8px;background:color-mix(in srgb,var(--rc) 11%,#ffffff05);color:var(--rc)}
+.rpg-it[data-rarity=fine]{--rc:var(--rarity-fine)}.rpg-it[data-rarity=rare]{--rc:var(--rarity-rare)}
+.rpg-it[data-kind=health]{--rc:var(--potion-health)}.rpg-it[data-kind=mana]{--rc:var(--potion-mana)}
+.rpg-it svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+button.rpg-it{cursor:pointer}
+button.rpg-it:hover:not(:disabled){background:color-mix(in srgb,var(--rc) 20%,#ffffff05)}
+button.rpg-it[aria-pressed=true]{box-shadow:0 0 0 2px var(--rc)}
+.rpg-it[data-worn=true]::after{content:"E";position:absolute;right:3px;top:1px;font-size:8.5px;font-weight:800;color:var(--gold)}
+.rpg-it.empty{background:none;box-shadow:inset 0 0 0 1px #ffffff14;color:#ffffff30}
+.rpg-it.sm{width:30px;height:30px;border-radius:6px}.rpg-it.sm svg{width:15px;height:15px}
+.rpg-it.sm[data-worn=true]::after{right:2px;top:0;font-size:7.5px}
+.rpg-grid{display:grid;grid-template-columns:repeat(auto-fill,44px);gap:6px}
+.rpg-grid.sm{grid-template-columns:repeat(auto-fill,30px);gap:4px}
+.rpg-gear-detail{display:grid;grid-template-columns:44px minmax(0,1fr);gap:12px;align-items:center;padding-top:12px;min-width:0}
+.rpg-gear-detail:empty{display:none}
+.rpg-gear-detail>div{min-width:0;display:flex;flex-direction:column;gap:2px}
+.rpg-gear-detail b{font-size:13px;color:var(--rarity-common);overflow-wrap:anywhere}
+.rpg-gear-detail[data-rarity=fine] b{color:var(--rarity-fine)}.rpg-gear-detail[data-rarity=rare] b{color:var(--rarity-rare)}
+.rpg-gear-detail small{font-size:11px!important}
+#rpg-character .rpg-detail-stats{display:flex;flex-wrap:wrap;gap:2px 12px;margin:0;font-size:12px}
+.rpg-diff{font-style:normal;font-size:11px;color:var(--hud-muted)}.rpg-diff.up{color:var(--ok)}.rpg-diff.down{color:var(--foe)}
+.rpg-journal{display:flex;flex-direction:column}
+.rpg-trip{display:grid;grid-template-columns:64px 36px minmax(0,1fr) auto;grid-template-areas:"out floor stats time" "out floor reason reason";gap:2px 12px;align-items:baseline;padding:10px 0;border-bottom:1px solid var(--hud-line);font-size:12.5px}
+.rpg-trip-out{grid-area:out;display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:650;color:var(--hud-muted)}
+.rpg-trip-out::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor;flex:none}
+.rpg-trip[data-outcome=completed] .rpg-trip-out{color:var(--gold)}.rpg-trip[data-outcome=death] .rpg-trip-out{color:var(--live-fg)}.rpg-trip[data-outcome=returned] .rpg-trip-out{color:var(--ok)}
+.rpg-trip>b{grid-area:floor}
+.rpg-trip>span.num{grid-area:stats;min-width:0}
+.rpg-trip>small{grid-area:reason;font-size:11.5px!important;overflow-wrap:anywhere}.rpg-trip>small:empty{display:none}
+.rpg-trip>time{grid-area:time;font-size:11px;color:var(--hud-muted)}
+/* −/+ buttons repeat while held (hold.js): a long press must not select text or open the touch menu. */
+:is([data-step],[data-walk],[data-day],[data-reply],[data-num],[data-qcount],[data-hold]){touch-action:manipulation;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+
+/* 게임 그림: DM이 정한 모습대로 그린 그림이 있으면 아이콘 자리를 대신하고, 없으면 원래 글리프 그대로. */
+.rpg-art{display:block;object-fit:contain;filter:drop-shadow(0 1px 1px #0009);pointer-events:none;user-select:none}
+.rpg-it img.rpg-art{width:88%;height:88%}
+.rpg-pot img.rpg-art{width:22px;height:22px}
+.rpg-skill.has-art{grid-template-columns:32px minmax(0,1fr) auto}
+.rpg-skill.has-art>img{grid-row:span 2;width:32px;height:32px;align-self:center}
+.rpg-skill.has-art>span{grid-column:2/-1}
+.rpg-line-head:has(.rpg-foe-art){align-items:center;justify-content:flex-start}
+.rpg-line-head .rpg-foe-art{width:36px;height:36px;flex:none}
+.rpg-line-head:has(.rpg-foe-art) .rpg-intent{margin-left:auto}
+.rz-cast{display:flex;flex-direction:column;margin-bottom:14px;border-top:1px solid var(--hud-line)}
+.rz-cast-row{display:grid;grid-template-columns:44px minmax(0,1fr);align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--hud-line)}
+.rz-cast-row>img{width:44px;height:44px}
+.rz-cast-row>svg{width:20px;height:20px;justify-self:center;fill:none;stroke:var(--hud-muted);stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.rz-cast-row b{display:block;font-size:12.5px;overflow-wrap:anywhere}
+.rz-cast-row small{font-size:10.5px;color:var(--hud-muted)}
+.bc-foe-art{width:72px;height:72px;object-fit:contain;filter:drop-shadow(0 2px 4px #000c)}

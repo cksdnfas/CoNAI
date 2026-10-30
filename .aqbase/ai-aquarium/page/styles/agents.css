@@ -1,0 +1,87 @@
+/* Autonomous residents: 마을 관리 › AI 행동 · 상태 정의, the resident window, the feed's conversation strip. Loaded last. */
+.ag-help{margin:6px 0 4px;max-width:720px}
+.ag-help b{color:var(--hud-fg)}
+.ag-tabs{margin:8px 0 4px}
+.ag-tabs .gw-count{font-size:11px}
+.ag-item{padding:10px 0;border-bottom:1px solid var(--hud-line)}
+.ag-head{display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px}
+.ag-head .btn{height:30px;min-height:0;padding:0 11px;font-size:12px}
+.ag-title{flex:1 1 220px;display:flex;flex-direction:column;gap:2px;min-width:0}
+.ag-title b{font-size:13.5px}.ag-title small{font-size:11.5px;color:var(--hud-muted);overflow-wrap:anywhere}
+.ag-text{min-width:0;font:inherit;font-size:12.5px}
+.ag-text:focus{outline:none;border-color:var(--gold)}
+.ag-name{flex:1 1 160px;max-width:240px;font-weight:650}
+.ag-desc{display:block;width:100%;margin-top:6px}
+textarea.ag-values{height:auto;padding:6px 10px;resize:vertical;line-height:1.5}
+.ag-tag{flex:none;padding:2px 8px;border-radius:999px;background:#ffffff12;color:var(--hud-muted);font-size:11px;font-weight:600;white-space:nowrap}
+.ag-tag.custom{background:#ffd98a1f;color:var(--gold)}
+.ag-effect{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px 16px;margin-top:10px;padding:12px 14px;border-radius:9px;background:#ffffff08}
+.ag-field{display:flex;flex-direction:column;gap:5px;margin:0;min-width:0;font-size:12px;font-weight:600;color:var(--hud-fg)}
+.ag-field>span[data-tip]{cursor:help}
+.ag-field>small{font-size:11px;font-weight:400;color:var(--hud-muted)}
+.ag-field:has(.ag-desc),.ag-field:has(.ag-deltas),.ag-field:has(.ag-values){grid-column:1/-1}
+.ag-field .ag-desc{margin-top:0}
+.ag-deltas{display:flex;flex-wrap:wrap;gap:8px 14px}
+.ag-delta{display:inline-flex;align-items:center;gap:6px;font-weight:400}
+.ag-delta small{color:var(--hud-muted);font-size:11.5px}
+.ag-readonly{max-width:460px;font-size:12px;color:var(--hud-muted);text-align:right;line-height:1.5}
+
+/* The resident window. */
+.resident-panel .rs-who{gap:10px;align-items:center}
+.rs-who .profile-face{width:28px;height:28px;border-width:1.5px}.rs-who .profile-initial{font-size:11px}
+.rs-who b{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px}
+.rs-warn{flex:none;width:8px;height:8px;border-radius:50%;background:var(--foe)}
+.resident-panel .life-hero .profile-face{width:56px;height:56px}
+.rs-goal{margin:0;padding:8px 12px;border-radius:8px;background:#ffd98a12;font-size:13px;line-height:1.55;overflow-wrap:anywhere}
+.rs-goal-label{margin-right:8px;color:var(--gold);font-size:11px;font-weight:700;letter-spacing:.06em}
+.rs-sec-head{display:flex;align-items:center;gap:6px;margin-bottom:4px}.rs-sec-head h4{margin:0}
+.rs-stat,.rs-rel{display:grid;align-items:center;gap:6px 12px;padding:8px 0;border-bottom:1px solid var(--hud-line)}
+.rs-stat{grid-template-columns:minmax(0,1.2fr) minmax(120px,1fr) auto}
+.rs-stat[data-edited=true] :is(.life-num,.life-select){border-color:var(--gold)}
+.rs-stat .life-name b{display:flex;align-items:center;gap:6px}
+.rs-hint{grid-column:1/-1;font-size:11.5px;color:var(--hud-muted)}.rs-hint:empty{display:none}
+.rs-stat[data-level=low] .rs-hint,.rs-stat[data-level=high] .rs-hint{color:var(--gold)}
+.rs-meter{display:flex;align-items:center;gap:8px;min-width:0}
+.rs-meter .rpg-bar{flex:1;min-width:60px}
+.rs-stat[data-level=low] .rpg-bar i{background:var(--think)}.rs-stat[data-level=high] .rpg-bar i{background:var(--gold)}
+.rs-value{min-width:34px;font-size:12.5px;font-weight:650;text-align:right}
+.rs-chip{padding:2px 10px;border-radius:999px;background:#ffffff14;text-align:center}
+.rs-rel{grid-template-columns:30px minmax(0,1fr) minmax(110px,1fr) auto}
+.rs-rel .profile-face{width:30px;height:30px;border-width:1.5px}.rs-rel .profile-initial{font-size:11px}
+.rs-affinity[data-sign=neg] i{background:var(--foe)}
+.rs-rel-edit{display:flex;align-items:center;gap:6px}
+.rs-label{width:110px}
+.rs-talk,.rs-request{display:flex;flex-direction:column;gap:3px;padding:8px 10px;margin:6px 0;border-radius:8px;background:#ffffff0a;font-size:12px;line-height:1.5}
+.rs-talk small,.rs-request small{color:var(--hud-muted);overflow-wrap:anywhere}
+.rs-request-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.rs-request-head b{font-size:12.5px;overflow-wrap:anywhere}
+.rs-request-state{flex:none;font-size:11.5px;font-weight:650;color:var(--hud-muted);white-space:nowrap}
+.rs-request[data-status=pending]{box-shadow:inset 2px 0 0 var(--gold)}.rs-request[data-status=pending] .rs-request-state{color:var(--gold)}
+.rs-request[data-status=accepted] .rs-request-state{color:var(--ok)}
+.rs-request .rs-reason{color:var(--hud-fg)}
+.rs-request-head .rs-request-state{margin-left:auto}
+.rs-request-head .rs-cancel{flex:none;align-self:center;min-height:0;padding:2px 9px;font-size:11.5px}
+.ag-cap{display:inline-flex;align-items:center;gap:6px;flex:none}
+.ag-daily{min-width:6.5em;font-size:12px;color:var(--hud-muted);white-space:nowrap}.ag-daily[data-full=true]{color:var(--gold)}
+
+/* The feed: conversations now, then (open) the request cards. */
+.talks{padding:8px 12px 0}
+.talk-row{display:flex;flex-wrap:wrap;gap:6px}
+.talk-chip{display:inline-flex;align-items:center;gap:6px;min-height:0;height:24px;padding:0 10px;border-radius:999px;background:#101512cc;border:1px solid var(--hud-line);color:var(--hud-fg);font-size:11.5px;font-weight:500;white-space:nowrap}
+.talk-chip b{font-weight:650}.talk-chip .num{color:var(--hud-muted)}
+.talk-chip[data-thinking=true]{border-color:#9cc6ff66}
+.talk-chip.waiting{color:var(--gold);border-color:#ffd98a55}
+.talk-dots{width:5px;height:5px;border-radius:50%;background:var(--think);animation:dot 1.2s infinite}
+.wc.open .talks{max-height:min(24vh,220px);overflow:auto;padding-bottom:4px;border-bottom:1px solid var(--hud-line)}
+.wc.open .talks .rs-request{margin:6px 0 0}
+.stage[data-covered=true] .talk-dots{animation:none}
+
+/* HUD: the memory backlog, and a resident waiting to retry a failed decision. */
+.hud-flag{padding:2px 9px;border-radius:999px;background:#ffd98a1f;color:var(--gold);font-size:11.5px;font-weight:650;white-space:nowrap;cursor:help}
+.st[data-state=wait]{background:var(--foe)}
+
+@media(max-width:760px){
+  .rs-stat{grid-template-columns:minmax(0,1fr) auto}.rs-stat .rs-meter{grid-column:1/-1;order:3}
+  .rs-rel{grid-template-columns:30px minmax(0,1fr) auto}.rs-rel-edit{grid-column:1/-1;flex-wrap:wrap}
+  .ag-readonly{text-align:left}
+}

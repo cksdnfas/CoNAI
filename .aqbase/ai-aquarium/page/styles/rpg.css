@@ -1,0 +1,127 @@
+/* Broadcast: channel list, watch view, replays and the mini player. The guild window is guild.css. */
+.grow{flex:1}
+.ib.framed{border:1px solid var(--hud-line);width:38px;height:38px}
+.ib svg .fill{fill:currentColor;stroke:none}
+.ib.onair{color:var(--live-fg);background:#d93a4024}.ib.onair:hover:not(:disabled){background:#d93a403d}
+
+/* Broadcast */
+.bc-progress{display:block;height:4px;border-radius:2px;background:#f4ecd41f;overflow:hidden}
+.bc-progress i{display:block;height:100%;background:var(--gold)}
+.bc-layer{z-index:26}
+/* Same 52px header as the other game windows; the tabs fill its height like .gw-tabs. */
+.bc>header{flex:none;gap:10px;height:52px;padding:0 8px 0 18px}
+.bc>header h2{font-size:15px;padding:0;white-space:nowrap}
+.bc-logo{display:grid;place-items:center;color:var(--conai-primary)}.bc-logo svg,.bc-home-btn svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.bc>header .mtabs{flex:none;align-self:stretch;gap:4px;margin-left:12px}.bc>header .mtabs button{height:100%;padding:0 10px}
+.bc-home-btn{display:inline-flex;align-items:center;gap:7px;background:none;color:var(--hud-muted)}.bc-home-btn svg{width:17px;height:17px}
+.bc-tag{display:inline-block;padding:3px 7px;border-radius:4px;font-size:10.5px;font-weight:750;letter-spacing:.05em;color:#fff;background:#5a5f58}
+.bc-tag[data-kind=live]{background:var(--live)}.bc-tag[data-kind=life]{background:var(--life)}
+.bc-time{padding:2px 7px;border-radius:4px;background:#0009;font-size:11.5px;color:#f4efe2}
+.bc-face{position:relative;display:grid;place-items:center;flex:none;width:34px;height:34px;border-radius:50%;overflow:hidden;background:var(--resident-color,#668578);color:#1d1f1b;font-weight:750;font-size:14px;box-shadow:0 0 0 2px var(--hud-solid),0 0 0 3.5px var(--ring,transparent)}
+.bc-face img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.bc-face.big{width:46px;height:46px;font-size:19px;box-shadow:0 0 0 3px var(--ring,transparent)}
+
+.bc-home{flex:1;min-height:0;overflow:auto;padding:8px 24px 20px;display:flex;flex-direction:column}
+.bc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:22px 20px;align-content:start}
+.bc-card{display:flex;flex-direction:column;align-items:stretch;gap:10px;min-height:0;padding:0;border-radius:10px;background:none;color:var(--hud-fg);font-weight:400;text-align:left;white-space:normal}
+.bc-card:hover:not(:disabled){background:none}.bc-card:hover .bc-thumb{box-shadow:0 0 0 2px var(--hud-line)}
+.bc-thumb{position:relative;display:block;aspect-ratio:16/9;border-radius:10px;overflow:hidden;background:#0b0f0d}
+.bc-thumb canvas{position:absolute;inset:0;width:100%;height:100%}
+.bc-thumb .bc-tag{position:absolute;left:8px;top:8px}.bc-thumb .bc-time{position:absolute;right:8px;bottom:8px}
+.bc-card[data-kind=rest] .bc-thumb{filter:grayscale(.8) brightness(.7)}
+.bc-card-row{display:flex;gap:10px;align-items:flex-start}
+.bc-meta{min-width:0;display:flex;flex-direction:column;gap:3px}
+.bc-meta b{font-size:13.5px;font-weight:650;line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.bc-meta small{font-size:12px;color:var(--hud-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bc-offline{margin:auto 0 0;padding-top:14px;border-top:1px solid var(--hud-line);color:var(--hud-muted);font-size:12.5px}.bc-offline:empty{display:none}
+.bc-empty{color:var(--hud-muted);font-size:13px}
+
+.bc-watch{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:24px;padding:18px 24px 22px}
+.bc-main{min-width:0;min-height:0;display:flex;flex-direction:column;overflow:auto}
+/* The player gives up height before the column scrolls; the canvas just shows a shorter strip of the scene. */
+.bc-player{position:relative;flex:0 1 auto;width:100%;min-height:160px;aspect-ratio:16/9;border-radius:10px;overflow:hidden;background:#0b0f0d}
+.bc-player canvas{position:absolute;inset:0;width:100%;height:100%}
+.bc-tl{position:absolute;left:12px;top:12px;display:flex;align-items:center;gap:6px;pointer-events:none}
+.bc-goal{position:absolute;right:12px;top:12px;display:flex;flex-direction:column;gap:5px;min-width:190px;max-width:45%;padding:9px 12px;border-radius:8px;background:#080a09b8;pointer-events:none}
+.bc-goal small{font-size:11px;color:var(--hud-muted)}.bc-goal b{font-size:13px}
+.bc-lower{position:absolute;left:0;right:0;bottom:0;display:flex;align-items:center;gap:12px;padding:40px 16px 14px;background:linear-gradient(to top,#080a09eb,#080a0900);pointer-events:none}
+.bc-who{display:flex;flex-direction:column;gap:3px;min-width:0}.bc-who b{font-size:20px;font-weight:750;line-height:1.1}.bc-who small{font-size:12px;color:#d6d3c4}
+.bc-bars{display:flex;flex-direction:column;gap:5px;width:150px;margin-left:8px}
+.bc-bar{display:flex;align-items:center;gap:6px;font-size:10px;font-weight:750}.bc-bar>span{flex:1;height:5px;border-radius:3px;background:#ffffff29;overflow:hidden}.bc-bar i{display:block;height:100%}
+.bc-bar.hp{color:var(--ok)}.bc-bar.hp i{background:var(--ok)}.bc-bar.mp{color:var(--think)}.bc-bar.mp i{background:var(--think)}
+.bc-foe{position:absolute;right:16px;bottom:16px;display:flex;flex-direction:column;align-items:flex-end;gap:6px;width:170px;pointer-events:none}.bc-foe b{font-size:12px;color:#efae91}.bc-foe .bc-progress{width:100%}.bc-progress.foe i{background:#ef8f6c}
+.bc-title{margin:14px 0 0;font-size:21px;font-weight:750;line-height:1.3;letter-spacing:-.02em;color:var(--hud-fg);overflow-wrap:anywhere}
+.bc-row{display:flex;align-items:center;gap:10px;margin-top:10px;flex-wrap:wrap}
+.bc-chan{display:flex;flex-direction:column;gap:1px;min-width:0}.bc-chan b{font-size:14px}.bc-chan small{font-size:12px;color:var(--hud-muted)}
+.bc-seg{display:flex;padding:3px;border:1px solid var(--hud-line);border-radius:9px}
+.bc-seg button{min-height:0;height:32px;padding:0 12px;border-radius:6px;background:none;color:var(--hud-muted);font-size:12.5px;font-weight:500}
+.bc-seg button:hover:not(:disabled){background:#ffffff0d;color:var(--hud-fg)}
+.bc-seg button[aria-pressed=true]{background:#ffffff17;color:var(--hud-fg)}
+.bc-others{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:6px;margin-top:auto;padding-top:14px;border-top:1px solid var(--hud-line)}
+.bc-other{min-width:0;display:flex;justify-content:flex-start;align-items:center;gap:10px;min-height:52px;padding:0 10px;border-radius:9px;background:none;color:var(--hud-fg);font-weight:400;text-align:left}
+.bc-other:hover:not(:disabled){background:#ffffff0d}.bc-other[data-kind=rest]{opacity:.6}
+.bc-other .bc-meta b{font-size:13px;-webkit-line-clamp:1}
+.bc-mini-tag{margin-left:6px;font-style:normal;font-size:10px;font-weight:750;color:var(--hud-muted)}.bc-mini-tag[data-kind=live]{color:var(--live-fg)}.bc-mini-tag[data-kind=life]{color:var(--life-fg)}
+.bc-chat{min-height:0;display:flex;flex-direction:column;gap:12px;padding-left:24px;border-left:1px solid var(--hud-line)}
+.bc-chat>b{font-size:14px}
+.bc-feed{flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;gap:11px;user-select:text;overscroll-behavior:contain}
+.bc-feed>:first-child{margin-top:auto}
+.bc-feed p{margin:0;font-size:13px;line-height:1.55;overflow-wrap:anywhere}
+.bc-say b{margin-right:2px}.bc-say small{color:var(--hud-muted);font-size:11px;margin:0 2px}
+.bc-host{display:inline-block;margin:0 4px;padding:0 4px;border-radius:3px;background:var(--hud-line);font-size:10px;font-weight:750;vertical-align:1px}
+.bc-sys{display:flex;align-items:baseline;gap:8px;font-size:12px!important;color:var(--hud-muted)}
+.bc-sys::before{content:"";flex:none;width:6px;height:6px;transform:rotate(45deg) translateY(-2px);background:#6f7a70}
+.bc-sys.hit::before{background:#ef8f6c}.bc-sys.win{color:var(--gold)}.bc-sys.win::before{background:var(--gold)}
+.bc-sys.typing{font-style:italic}.bc-sys.typing::before{background:var(--think)}
+.bc-say .bc-viewer{color:var(--hud-fg)}.bc-say.mine{padding:6px 10px;border-radius:8px;background:#ffffff0d}
+.bc-input{flex:none;display:flex;align-items:center;gap:6px;padding-top:12px;border-top:1px solid var(--hud-line)}
+.bc-input input{flex:1;min-width:0;height:38px;padding:0 12px;border:1px solid var(--hud-line);border-radius:8px;background:var(--hud);color:var(--hud-fg);font:inherit;font-size:13px}
+.bc-input input:disabled{opacity:.55}
+.bc-input .ib{flex:none;width:38px;height:38px;color:var(--conai-primary)}.bc-input .ib:disabled{color:var(--hud-muted)}
+
+/* Replays: the recorded expedition plays back on the same floor renderer. */
+.bc-tag[data-kind=replay]{background:#56627a}
+.bc-replays{margin-top:28px}.bc-replays h3{margin:0 0 6px;font-size:14px}
+.bc-replays>div{display:flex;flex-direction:column}
+.bc-replay-row{display:flex;align-items:center;gap:12px;min-height:58px;padding:8px 6px;border-radius:0;border-bottom:1px solid var(--hud-line);background:none;color:var(--hud-fg);font-weight:400;text-align:left}
+.bc-replay-row:hover:not(:disabled){background:#ffffff08}
+.bc-replay-row .bc-meta{flex:1}.bc-replay-row .bc-meta b{-webkit-line-clamp:1}
+.bc-outcome{flex:none;font-size:11.5px;color:var(--hud-muted)}
+.bc-replay-row[data-outcome=completed] .bc-outcome{color:var(--gold)}.bc-replay-row[data-outcome=death] .bc-outcome{color:var(--live-fg)}
+.bc-replay-bar{flex:none;display:flex;align-items:center;gap:10px;margin-top:10px}
+.bc-replay-bar input[type=range]{flex:1;min-width:60px;accent-color:var(--conai-primary)}
+.bc-replay-bar .num{flex:none;font-size:12px;color:var(--hud-muted)}
+.bc-replay-bar .bc-seg button{height:28px;padding:0 9px}
+
+/* Mini player */
+.bc-pip{right:14px;bottom:14px;width:min(380px,calc(100% - 28px));background:#0d110fef;border:1px solid var(--hud-line);border-radius:12px;overflow:hidden;box-shadow:0 18px 50px #0007}
+.bc-pip-screen{position:relative;aspect-ratio:16/9;background:#0b0f0d}
+.bc-pip-screen canvas{position:absolute;inset:0;width:100%;height:100%;cursor:pointer}
+.bc-pip-tools{position:absolute;right:8px;top:8px;display:flex;gap:4px}
+.bc-pip-tools .ib{width:30px;height:30px;background:#000a}.bc-pip-tools .ib:hover:not(:disabled){background:#000d}
+.bc-pip .bc-lower{padding:30px 12px 10px;gap:9px}
+/* One line beside the bars: a long name and place end in an ellipsis instead of wrapping into the bars. */
+.bc-pip .bc-who{flex:1;min-width:0}.bc-pip .bc-who b{font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.bc-pip .bc-face{width:28px;height:28px;font-size:12px}.bc-pip .bc-bars{width:96px}
+.bc-pip-bar{display:flex;align-items:center;gap:2px;height:42px;padding:0 6px 0 12px;font-size:12.5px}
+.bc-pip-bar>span:first-child{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bc-pip-bar .num{color:var(--hud-muted);font-size:11px}
+
+@media(max-width:900px){
+  .bc-watch{display:flex;flex-direction:column;overflow:auto}.bc-main{flex:none;overflow:visible}.bc-main>*{flex-shrink:0}.bc-chat{flex:none}.bc-player{max-height:none}
+  .bc-chat{padding-left:0;border-left:0;border-top:1px solid var(--hud-line);padding-top:14px;min-height:260px}
+  /* Stacked, the feed grows with its lines and the page scrolls; left a contained scroller it swallowed every swipe. */
+  .bc-feed{flex:none;overflow:visible;overscroll-behavior:auto}
+}
+@media(max-width:760px){
+  .bc>header .mtabs{margin-left:0}.bc>header h2{display:none}.bc-home-btn{font-size:0;gap:0}
+  .bc-watch{padding:12px 12px 14px}.bc-home{padding:0 12px 14px}.bc-title{font-size:17px}.bc-bars{display:none}
+  .bc-player{aspect-ratio:4/3}
+  .bc-goal{right:8px;top:8px;min-width:0;max-width:56%;padding:6px 9px;gap:4px}.bc-goal small{font-size:10px}.bc-goal b{font-size:12px}
+  .bc-player .bc-lower{padding:28px 12px 10px;gap:9px}.bc-face.big{width:36px;height:36px;font-size:15px}.bc-player .bc-who b{font-size:15px}
+  .bc-foe{right:12px;bottom:12px;width:104px}
+  .bc-replay-bar{flex-wrap:wrap}.bc-replay-bar input[type=range]{order:3;flex-basis:100%}
+}
+/* Small stages: a smaller mini player without the HP/MP bars (style.css keeps the chat and zoom clear of it). */
+@media(max-width:760px),(max-height:560px){.bc-pip{right:10px;bottom:10px;width:min(220px,calc(100% - 20px))}.bc-pip .bc-bars{display:none}.bc-pip-bar{height:36px;font-size:12px}
+  .bc-pip .bc-lower{padding:22px 10px 8px;gap:7px}.bc-pip .bc-face{width:24px;height:24px;font-size:11px}
+  .bc-pip .bc-who b{font-size:12px}}

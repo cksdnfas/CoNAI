@@ -1,0 +1,35 @@
+/* Resident memory panel. */
+.memory-layer .menu{inset:max(16px,8%) max(16px,calc(50% - 300px))}
+.memory-body{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;padding:14px 22px 18px;user-select:text}
+.mem-summary{margin:0 0 14px;padding:0 0 14px;border-bottom:1px solid var(--hud-line);color:var(--hud-fg);font-size:12.5px;line-height:1.7;white-space:pre-wrap}
+.mem-line{display:grid;grid-template-columns:96px 1fr;gap:10px;padding:5px 0;font-size:12px;line-height:1.6}
+.mem-line time{color:var(--hud-muted);font-size:11px;padding-top:1px}
+.mem-line p{margin:0;color:#efeadd;white-space:pre-wrap}
+.lore-tabs{display:flex;align-items:center;gap:16px;margin:0 0 12px;border-bottom:1px solid var(--hud-line);overflow-x:auto;scrollbar-width:none}
+.lore-tabs button{flex:none;min-height:0;padding:8px 0;border:0;border-bottom:2px solid transparent;border-radius:0;background:none;color:var(--hud-muted);font-size:12.5px;font-weight:550;white-space:nowrap}
+.lore-tabs button[aria-pressed=true]{border-bottom-color:var(--gold);color:var(--hud-fg);font-weight:700}
+.lore-tabs .lore-view{margin-left:auto;color:var(--gold)}
+.mem-empty{margin:40px 0;text-align:center;color:var(--hud-muted)}
+.lore-controls{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 14px;align-items:center}
+.lore-controls button,.lore-entry button{padding:7px 10px;background:transparent;color:var(--hud-fg);border:1px solid var(--hud-line);border-radius:6px;font-size:12px}
+.lore-controls button:hover:not(:disabled),.lore-entry button:hover:not(:disabled){background:#ffffff0d}
+.lore-controls button[aria-pressed=true]{color:var(--gold)}
+.lore-controls input{flex:1;min-width:140px}
+.lore-form{display:grid;gap:12px}
+.lore-form label{display:grid;gap:6px;margin:0;font-size:12px;color:var(--hud-muted)}
+.lore-form label>:is(input,select,textarea){margin:0}
+.lore-form input,.lore-form textarea,.lore-form select,.lore-controls input{box-sizing:border-box;max-width:100%;padding:8px;background:var(--hud-solid);color:var(--hud-fg);border:1px solid var(--hud-line);border-radius:5px;font:inherit}
+.lore-form textarea{width:100%;resize:vertical}.lore-form input[type=checkbox]{width:18px;height:18px}
+.lore-entry{padding:12px 0;border-bottom:1px solid var(--hud-line)}
+.lore-entry p,.lore-form details p{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;line-height:1.6}
+.lore-entry small,.lore-help{color:var(--hud-muted);font-size:12px;line-height:1.6}
+
+@media(max-width:760px){
+  .album-layer .menu{inset:0;border-radius:0}
+  .memory-body{padding:10px 16px 16px}
+  .mem-line{grid-template-columns:72px 1fr;gap:8px}
+  .lore-controls input{min-width:0}
+}
+
+.draw-comfy{display:grid;gap:8px;margin-top:10px}
+.draw-comfy select option{background:var(--hud-solid)}
