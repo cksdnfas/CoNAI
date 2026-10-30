@@ -2,6 +2,7 @@ import { z } from 'zod'
 import fs from 'node:fs/promises'
 import sharp from 'sharp'
 import type { PluginLlmJob, PluginLlmMeasurement, PluginLlmProfile, PluginLlmProfileDetail, PluginProfileAsset, PluginLlmDiscardResult } from '@conai/shared'
+import { profileFolderPaths } from '../codex-chat/chatProfileFolders'
 import { booksForRequest } from '../codex-chat/chatLoreContext'
 import { OwnedLorebookStore } from '../codex-chat/chatLorebookFiles'
 import { canRequesterViewImages, requireRequesterImagePermission } from '../../middleware/imageAccess'
@@ -214,8 +215,9 @@ function pluginProfileOf(profile: ChatProfile, images: boolean, loreSelectionLim
 export function listPluginLlmProfiles(pluginId: string, requester: McpRequester | undefined): PluginLlmProfile[] {
   const { chat, requester: actor } = access(pluginId, requester)
   const images = canRequesterViewImages(actor), { loreSelectionLimit } = loadChatSettings()
-  return ChatProfileStore.list({ enabledOnly: true }).filter(profile => canUseChatProfile(chat, profile))
-    .map(profile => pluginProfileOf(profile, images, loreSelectionLimit))
+  const profiles = ChatProfileStore.list({ enabledOnly: true }).filter(profile => canUseChatProfile(chat, profile))
+  const paths = profileFolderPaths(profiles, () => true)
+  return profiles.map(profile => ({ ...pluginProfileOf(profile, images, loreSelectionLimit), folderId: profile.folderId, folderPath: paths.get(profile.id) ?? [], sortOrder: profile.sortOrder }))
 }
 
 /** One profile with its lorebooks and judge preset read whole (`llm.profile`). */
@@ -225,6 +227,7 @@ export function readPluginLlmProfile(pluginId: string, requester: McpRequester |
   const books = booksForRequest({ thread: null, profile, profileOwner: fileOwnerKey(actor.accountId ?? null) })
   return {
     ...pluginProfileOf(profile, canRequesterViewImages(actor), loadChatSettings().loreSelectionLimit),
+    folderId: profile.folderId, folderPath: profileFolderPaths([profile], () => true).get(profile.id) ?? [], sortOrder: profile.sortOrder,
     lorebooks: books.map(book => ({ id: book.id, name: book.name, kind: book.kind, entries: book.entries })),
     judgePreset: profile.judgePresetId ? ChatJudgePresetStore.find(profile.judgePresetId) : null,
   }

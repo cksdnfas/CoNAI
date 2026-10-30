@@ -19,6 +19,23 @@ Personal packages belong in `local-plugins/<plugin-name>/`, excluded from Git an
 
 ## Package contract
 
+### Chat profile folders
+
+`llm.profiles()` and `llm.profile({profileId})` add optional `folderId: number|null`,
+`folderPath: Array<{id:number,name:string}>`, and `sortOrder: number`. Older hosts may omit them (top level, existing
+order). These are profile folders, never appearance-library folders. Only paths to usable profiles are returned;
+do not infer or fetch hidden sibling names. Display root profiles first, folder paths by segment name, profiles within
+each folder by `sortOrder` then id. `details.folderId` is the persisted nullable reference.
+
+Native admin REST `/api/codex-chat/admin/profile-folders` owns list/create and `/:id` update/delete. Profile updates
+keep the existing optional revision/conflict contract. Folder deletion atomically reparents profiles and child folders;
+duplicate names reject the entire write. Moved profiles append to the destination, preserving relative order when a
+folder is deleted. Global profile directories use the same root-first/name-ordered depth-first folder order as pickers.
+MCP `manage_chat_profile_folders` lists immediately but proposes create/rename/move/delete as `profile_folder` cards.
+Approval through `/api/chat-proposals/:id/apply` checks the live administrator, chat ownership and reviewed snapshot,
+then commits the domain change and receipt atomically; repeats or stale cards are rejected. Deletion needs no connected page.
+Profile setup proposals accept `folderId` (`folder_id`) and retain review/conflict checks.
+
 ### In-app authoring and distribution
 
 Administrators can create inactive source drafts in Settings → Plugins, copy an installed package for editing, edit text/add/rename/delete files, upload binary assets, review and apply a package, and export a distributable ZIP. Installed exports contain package assets only; server databases, plugin data directories and account settings are never included. The host SDK is included in new drafts and shipped with backend builds (`backend/dist/plugin-sdk`, copied beside portable/SEA applications). Existing drafts keep their SDK until explicitly edited or replaced.

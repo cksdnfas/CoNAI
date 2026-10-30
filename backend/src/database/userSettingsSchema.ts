@@ -1,5 +1,6 @@
 import { ensureChatAssetSchema } from './chatAssetSchema';
 import { ensureCharacterLibrarySchema } from './characterLibrarySchema';
+import { chatProfileOrderSql } from '../services/codex-chat/chatProfileOrder';
 import Database from 'better-sqlite3';
 import {
   applyGenerationQueueDebugColumns,
@@ -19,6 +20,16 @@ import { ensureGraphWorkflowRevisionSchema } from './graphWorkflowRevisionSchema
 /** Bootstrap core user-settings tables, indexes, and simple column backfills. */
 export function createUserSettingsSchema(db: Database.Database): void {
   ensureCharacterLibrarySchema(db);
+  db.exec(`CREATE TABLE IF NOT EXISTS chat_profile_folders (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    parent_id INTEGER REFERENCES chat_profile_folders(id) DEFERRABLE INITIALLY DEFERRED,
+    name TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_chat_profile_folders_name
+    ON chat_profile_folders(COALESCE(parent_id, 0), name COLLATE NOCASE);
+  CREATE INDEX IF NOT EXISTS idx_chat_profile_folders_parent ON chat_profile_folders(parent_id);`);
   console.log('📊 Creating user settings tables...');
   db.exec(`CREATE TABLE IF NOT EXISTS chat_settings_migrations (
     name TEXT PRIMARY KEY,
@@ -1015,6 +1026,7 @@ export function createUserSettingsSchema(db: Database.Database): void {
     ['avatar_hash', 'TEXT'],
     ['avatar_crop', 'TEXT'],
     ['character_setting_id', 'INTEGER REFERENCES character_settings(id) ON DELETE SET NULL'],
+    ['folder_id', 'INTEGER REFERENCES chat_profile_folders(id) DEFERRABLE INITIALLY DEFERRED'],
     ['character_sync', 'INTEGER NOT NULL DEFAULT 0 CHECK(character_sync IN (0, 1))'],
     ['background_hash', 'TEXT'],
     ['vision_enabled', 'INTEGER'],
@@ -1072,6 +1084,7 @@ export function createUserSettingsSchema(db: Database.Database): void {
   db.exec(`CREATE TRIGGER IF NOT EXISTS llm_chat_profiles_revision
     AFTER UPDATE ON llm_chat_profiles WHEN NEW.revision = OLD.revision
     BEGIN UPDATE llm_chat_profiles SET revision = OLD.revision + 1 WHERE id = NEW.id; END`);
+  db.exec('CREATE INDEX IF NOT EXISTS idx_chat_profiles_folder_order ON llm_chat_profiles(folder_id, sort_order, id)');
   db.exec(`CREATE TRIGGER IF NOT EXISTS llm_chat_profiles_background_revision
     AFTER UPDATE OF background_image, background_hash ON llm_chat_profiles
     WHEN NEW.background_image IS NOT OLD.background_image OR NEW.background_hash IS NOT OLD.background_hash
@@ -1645,7 +1658,7 @@ function migrateProfileToolsToPresets(db: Database.Database): void {
   };
   const insert = db.prepare('INSERT INTO chat_tool_presets (name, scopes, tool_allowlist) VALUES (?, ?, ?)');
   const link = db.prepare('UPDATE llm_chat_profiles SET tool_preset_id = ? WHERE id = ?');
-  const rows = db.prepare('SELECT id, name, mcp_scopes, tool_allowlist FROM llm_chat_profiles WHERE mcp_enabled = 1 ORDER BY sort_order ASC, id ASC').all() as Array<{ id: number; name: string; mcp_scopes: string; tool_allowlist: string | null }>;
+  const rows = db.prepare(`SELECT id, name, mcp_scopes, tool_allowlist FROM llm_chat_profiles WHERE mcp_enabled = 1 ORDER BY ${chatProfileOrderSql('', db)}`).all() as Array<{ id: number; name: string; mcp_scopes: string; tool_allowlist: string | null }>;
   db.transaction(() => {
     const presetByKey = new Map<string, number>();
     for (const starter of starters) {

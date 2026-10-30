@@ -95,6 +95,7 @@ function CharacterSettingPicker({ onOpenChange, onPick, title, confirmLabel, ini
                 <SearchField className="sm:max-w-64" value={searchText} onChange={setSearchText} placeholder={t({ ko: '외형 설정 이름 검색', en: 'Search settings by name' })} />
               </div>
               <CharacterSettingGrid
+                errorTitle={t({ ko: '외형 설정을 불러오지 못했어', en: 'Could not load settings' })}
                 query={settingsQuery}
                 page={page}
                 onPageChange={(next) => setPaging({ key: scopeKey, page: next })}

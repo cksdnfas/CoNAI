@@ -341,6 +341,7 @@ const TOOL_SCOPES: Record<string, McpHttpScope> = {
   // Chat-only: HTTP keys never hold `configure` (admin chat accounts only), and propose_* only shows a card a person saves.
   get_chat_setup_guide: 'configure',
   list_chat_profiles: 'configure',
+  manage_chat_profile_folders: 'configure',
   get_chat_profile: 'configure',
   list_display_blocks: 'configure',
   get_display_block: 'configure',

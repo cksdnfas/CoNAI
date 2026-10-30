@@ -901,7 +901,7 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
     assert.deepEqual(intersectChatScopes(['read', 'configure'], access(['read', 'configure'])), ['read', 'configure'])
     assert.ok(!(MCP_HTTP_SCOPES as readonly string[]).includes('configure'))
     assert.ok(!(ALL_MCP_HTTP_SCOPES as string[]).includes('configure'))
-    for (const tool of ['get_chat_setup_guide', 'list_chat_profiles', 'get_chat_profile', 'list_display_blocks', 'get_display_block', 'propose_display_block', 'propose_chat_profile', 'propose_profile_update', 'propose_profile_assets', 'get_asset_batch']) {
+    for (const tool of ['get_chat_setup_guide', 'list_chat_profiles', 'get_chat_profile', 'manage_chat_profile_folders', 'list_display_blocks', 'get_display_block', 'propose_display_block', 'propose_chat_profile', 'propose_profile_update', 'propose_profile_assets', 'get_asset_batch']) {
       assert.equal(getMcpToolScope(tool), 'configure', tool)
     }
     const without = await openChatMcpBridge({ accountId: null, accountType: 'admin' }, ['read'])
@@ -909,7 +909,7 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
     try {
       assert.ok(!offered(without).some((tool) => tool.startsWith('propose_')))
       assert.equal(offered(withScope).filter((tool) => tool.startsWith('propose_')).length, 4)
-      assert.equal(offered(withScope).length, 10)
+      assert.equal(offered(withScope).length, 11)
     } finally { await without.close(); await withScope.close() }
   })
 
@@ -985,7 +985,7 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
       assert.match(profileGuide, /Existing card/)
       const list = JSON.parse(text(await bridge.call('list_chat_profiles', {})))
       assert.equal(list[0].name, 'Mina')
-      assert.deepEqual(Object.keys(list[0]).sort(), ['blockIds', 'engine', 'id', 'isEnabled', 'lorebookIds', 'model', 'modelSlotId', 'name', 'systemPromptLength', 'tagline'])
+      assert.deepEqual(Object.keys(list[0]).sort(), ['blockIds', 'engine', 'folderId', 'folderPath', 'id', 'isEnabled', 'lorebookIds', 'model', 'modelSlotId', 'name', 'sortOrder', 'systemPromptLength', 'tagline'])
       const view = JSON.parse(text(await bridge.call('get_chat_profile', {})))
       assert.equal(view.systemPrompt, 'old prompt')
       assert.equal(typeof view.mcpEnabled, 'boolean')
@@ -997,6 +997,40 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
       assert.equal(one.name, 'Existing card')
       assert.equal(one.block.key, 'status')
       assert.equal((await bridge.call('get_display_block', { block_id: 9999 })).isError, true)
+    } finally { close(); await bridge.close() }
+  })
+
+  await t.test('MCP folder mutations stay review cards until an administrator applies them', async () => {
+    const folders = await import('../src/services/codex-chat/chatProfileFolders')
+    const close = registerChatReply(replyContext('folder-review'), controller.signal, () => ({ replyTo: null, recipients: ['user'] }))
+    const bridge = await openChatMcpBridge({ accountId: null, accountType: 'admin' }, ['configure'], null, { chatContext: replyContext('folder-review') })
+    const read = (result: { content?: unknown[] }) => JSON.parse(String((result.content?.[0] as { text?: string }).text))
+    try {
+      const before = folders.listChatProfileFolders()
+      const creation = read(await bridge.call('manage_chat_profile_folders', { action: 'create', name: 'Review folder' }))
+      assert.deepEqual(folders.listChatProfileFolders(), before)
+      assert.equal(ChatProposalStore.find(creation.proposalId)?.kind, 'profile_folder')
+      const { applyProfileFolderProposal } = await import('../src/services/codex-chat/chatProfileFolderProposals')
+      const requester = { accountId: null, accountType: 'admin' as const }
+      assert.throws(() => applyProfileFolderProposal({ accountId: 999999, accountType: 'guest' }, creation.proposalId), /관리자/)
+      assert.deepEqual(folders.listChatProfileFolders(), before)
+      const created = applyProfileFolderProposal(requester, creation.proposalId)
+      assert.equal(created.saved, true)
+      const target = folders.listChatProfileFolders().find((folder) => folder.name === 'Review folder')!
+      const parent = folders.createChatProfileFolder({ name: 'Review parent', parentId: null })
+      for (const args of [
+        { action: 'rename', folder_id: target.id, name: 'Reviewed name' },
+        { action: 'move', folder_id: target.id, parent_id: parent.id },
+        { action: 'delete', folder_id: target.id },
+      ]) {
+        const previous = folders.listChatProfileFolders()
+        const result = read(await bridge.call('manage_chat_profile_folders', args))
+        assert.deepEqual(folders.listChatProfileFolders(), previous)
+        assert.equal(ChatProposalStore.find(result.proposalId)?.kind, 'profile_folder')
+        applyProfileFolderProposal(requester, result.proposalId)
+        assert.throws(() => applyProfileFolderProposal(requester, result.proposalId), /이미/)
+      }
+      assert.ok(!folders.listChatProfileFolders().some((folder) => folder.id === target.id))
     } finally { close(); await bridge.close() }
   })
 

@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react'
+import { Fragment, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Check, ChevronDown, Search } from 'lucide-react'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { useI18n } from '@/i18n'
@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils'
 
 export type RowPickerItem = {
   id: string
+  group?: string
   /** The face on the row's start (avatar, avatar stack, thumbnail). */
   media: ReactNode
   title: ReactNode
@@ -133,7 +134,8 @@ export function RowPicker({ items, value, onChange, placeholder, searchPlacehold
         <div ref={listRef} id={listId} role="listbox" aria-label={ariaLabel} className="min-h-0 flex-1 overflow-y-auto p-1.5">
           {shown.length === 0 ? <div className="px-3 py-6 text-center text-xs text-muted-foreground">{emptyLabel}</div> : shown.map((item, index) => {
             const selected = item.id === value
-            return (
+            return (<Fragment key={item.id}>
+              {item.group && item.group !== shown[index - 1]?.group ? <div role="presentation" className="px-2.5 pb-1 pt-3 text-xs font-semibold text-muted-foreground">{item.group}</div> : null}
               <div
                 key={item.id}
                 id={`${listId}-${index}`}
@@ -151,7 +153,7 @@ export function RowPicker({ items, value, onChange, placeholder, searchPlacehold
                 <PickerRow item={item} />
                 {selected ? <Check className="size-4 shrink-0 text-primary" aria-label={t({ ko: '선택됨', en: 'Selected' })} /> : null}
               </div>
-            )
+            </Fragment>)
           })}
           {footer}
         </div>

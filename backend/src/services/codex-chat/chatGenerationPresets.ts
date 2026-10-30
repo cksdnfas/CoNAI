@@ -1,4 +1,5 @@
 import { getUserSettingsDb } from '../../database/userSettingsDb'
+import { chatProfileOrderSql } from './chatProfileOrder'
 import { createHash } from 'crypto'
 import path from 'path'
 import { WorkflowModel } from '../../models/Workflow'
@@ -296,7 +297,7 @@ export function normalizeGenerationPresetIds(value: unknown): number[] {
 }
 
 function linkedProfiles() {
-  const rows = getUserSettingsDb().prepare("SELECT id, name, generation_preset_ids FROM llm_chat_profiles WHERE generation_preset_ids IS NOT NULL AND generation_preset_ids != '[]' ORDER BY sort_order ASC, id ASC").all() as Array<{ id: number; name: string; generation_preset_ids: string }>
+  const rows = getUserSettingsDb().prepare(`SELECT id, name, generation_preset_ids FROM llm_chat_profiles WHERE generation_preset_ids IS NOT NULL AND generation_preset_ids != '[]' ORDER BY ${chatProfileOrderSql()}`).all() as Array<{ id: number; name: string; generation_preset_ids: string }>
   return rows.map((row) => ({ id: row.id, name: row.name, presetIds: normalizeGenerationPresetIds(row.generation_preset_ids) }))
 }
 

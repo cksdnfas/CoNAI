@@ -1,4 +1,5 @@
-import { useMemo, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
+import { ChatProfileGroups } from './chat-profile-groups'
 import { Crown, FileUp, FolderOpen, HardDriveUpload, X } from 'lucide-react'
 import type { StoredFileEntry } from '@conai/shared'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -12,7 +13,7 @@ import { Tip } from '@/components/ui/tooltip'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { FilePicker } from '@/features/files/file-browser'
 import { useI18n } from '@/i18n'
-import { CHAT_BACKUP_FOLDER, type ChatProfileSummary, type CodexChatThreadSummary } from '@/lib/api-codex-chat'
+import { CHAT_BACKUP_FOLDER, type ChatProfileSummary } from '@/lib/api-codex-chat'
 import { listStoredFiles } from '@/lib/api-files'
 import { cn } from '@/lib/utils'
 import { GROUP_MEMBER_MAX } from './chat-group'
@@ -23,8 +24,8 @@ import { ChatProfileAvatar } from './chat-profile-avatar'
  * Pick who to chat with. A tap on a profile starts a direct chat. Ticking profiles (the check that shows on hover,
  * always on touch) collects a room instead: the first one ticked represents it, the rest join as members.
  */
-export function ChatProfilePicker({ profiles, threads, layout, disabled, onPick, onPickGroup, onImport, onImportFiles }: {
-  profiles: ChatProfileSummary[]; threads: CodexChatThreadSummary[]; layout: 'panel' | 'page'; disabled: boolean
+export function ChatProfilePicker({ profiles, layout, disabled, onPick, onPickGroup, onImport, onImportFiles }: {
+  profiles: ChatProfileSummary[]; layout: 'panel' | 'page'; disabled: boolean
   onPick: (profileId: number) => void
   /** A CoNAI chat JSON to bring back as a new chat. */
   onImport?: (file: File) => void
@@ -46,19 +47,8 @@ export function ChatProfilePicker({ profiles, threads, layout, disabled, onPick,
     setFilePickerAt(root?.entries.find((entry) => entry.kind === 'folder' && entry.name === CHAT_BACKUP_FOLDER)?.id ?? null)
   }
   const importLabel = t({ ko: '대화 가져오기 (JSON)', en: 'Import a chat (JSON)' })
-  // Each profile's latest direct chat (threads come newest first); group rooms belong to several profiles.
-  const recent = useMemo(() => {
-    const result = new Map<number, CodexChatThreadSummary>()
-    for (const thread of threads) if (thread.kind !== 'group' && thread.profile_id !== null && !result.has(thread.profile_id)) result.set(thread.profile_id, thread)
-    return result
-  }, [threads])
-  const rank = useMemo(() => new Map([...recent.keys()].map((profileId, index) => [profileId, index])), [recent])
-  // Most recently used first; profiles never chatted with keep their settings order after them.
   const usable = profiles
     .filter((profile) => profile.usable && `${profile.name} ${profile.tagline} ${profile.engine} ${profile.model}`.toLowerCase().includes(query.trim().toLowerCase()))
-    .map((profile, index) => ({ profile, order: rank.get(profile.id) ?? recent.size + index }))
-    .sort((a, b) => a.order - b.order)
-    .map((entry) => entry.profile)
   const pickedProfiles = picked.flatMap((id) => profiles.find((profile) => profile.id === id) ?? [])
   const selecting = picked.length > 0
   // Same rules as inviting into a room: one profile per name, and a room size cap.
@@ -103,8 +93,8 @@ export function ChatProfilePicker({ profiles, threads, layout, disabled, onPick,
           </> : null}
         </div>
         {/* grid-cols-1 sizes the column to the panel, so a long tagline truncates instead of widening the list. */}
-        <div className={cn('grid grid-cols-1 gap-x-6', layout === 'page' && 'md:grid-cols-2')}>
-          {usable.map((profile) => {
+        <ChatProfileGroups profiles={usable} className={cn('grid grid-cols-1 gap-x-6', layout === 'page' && 'md:grid-cols-2')}>
+          {(profile) => {
             const pickedIndex = picked.indexOf(profile.id)
             const isPicked = pickedIndex >= 0
             const blocked = selecting && !isPicked && (picked.length >= GROUP_MEMBER_MAX || takenNames.has(profile.name.trim().toLowerCase()))
@@ -138,8 +128,8 @@ export function ChatProfilePicker({ profiles, threads, layout, disabled, onPick,
                 />
               </div>
             </div>
-          })}
-        </div>
+          }}
+        </ChatProfileGroups>
         {usable.length === 0 ? <EmptyState size="compact" title={t({ ko: '프로필이 없어', en: 'No profiles' })} /> : null}
       </div>
     </div>

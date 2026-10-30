@@ -1,5 +1,6 @@
 import type { ChatJudgeChoiceOption, ChatJudgeFollowUp, ChatJudgeItem, ChatJudgePreset, ChatJudgePresetInput, ChatJudgeUncertain } from '@conai/shared'
 import { getUserSettingsDb } from '../../database/userSettingsDb'
+import { chatProfileOrderSql } from './chatProfileOrder'
 import { ChatProfileError } from './chatProfileError'
 import { LLM_CONNECTION_TYPES, MODEL_CONNECTION_TYPES, ModelSlotStore } from './modelSlots'
 import { JUDGE_FOLLOW_UP_DEFAULTS, JUDGE_ITEM_DEFAULTS, JUDGE_OPTION_DEFAULTS, type JudgeOptions } from './chatJudgeDefaults'
@@ -189,7 +190,7 @@ function presetName(value: unknown) {
 }
 
 function profilesUsing(presetId: number) {
-  return getUserSettingsDb().prepare('SELECT id, name FROM llm_chat_profiles WHERE judge_preset_id = ? ORDER BY sort_order ASC, id ASC').all(presetId) as Array<{ id: number; name: string }>
+  return getUserSettingsDb().prepare(`SELECT id, name FROM llm_chat_profiles WHERE judge_preset_id = ? ORDER BY ${chatProfileOrderSql()}`).all(presetId) as Array<{ id: number; name: string }>
 }
 
 function roomsUsing(presetId: number) {

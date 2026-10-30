@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { ChatProfileOptions } from '@/features/codex-chat/chat-profile-groups'
 import { loreKeyLanguageTag } from '@conai/shared'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { BookOpen, Trash2 } from 'lucide-react'
@@ -198,7 +199,7 @@ export function ChatLoreEntryFields({ entry, onChange, filePlace, keyLanguage = 
       <Button size="xs" variant="ghost" onClick={() => setTranslationOpen(!translationOpen)}>{t({ ko: '번역 만들기', en: 'Translate' })}</Button>
       {entry.translation ? <Button size="xs" variant="ghost" onClick={() => setOriginal(!original)}>{original ? t({ ko: '번역 보기', en: 'Show translation' }) : t({ ko: '원문 보기', en: 'Show original' })}</Button> : <span>{t({ ko: '표시용 번역 없음', en: 'No display translation' })}</span>}
     </div>
-    {translationOpen ? <div className="flex gap-2"><Select variant="settings" value={translator ?? ''} onChange={e => setTranslator(Number(e.target.value) || null)} aria-label={t({ ko: '번역 프로필', en: 'Translation profile' })}><option value="">{t({ ko: '번역 모델이 설정된 프로필을 골라줘', en: 'Choose a profile with translation configured' })}</option>{(profilesQuery.data ?? []).filter(p => p.usable).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</Select><Button variant="secondary" size="xs" disabled={!translator || translate.isPending} onClick={() => translate.mutate()}>{translate.isPending ? t({ ko: '번역 중', en: 'Translating' }) : t({ ko: '초안에 반영', en: 'Apply to draft' })}</Button></div> : null}
+    {translationOpen ? <div className="flex gap-2"><Select variant="settings" value={translator ?? ''} onChange={e => setTranslator(Number(e.target.value) || null)} aria-label={t({ ko: '번역 프로필', en: 'Translation profile' })}><option value="">{t({ ko: '번역 모델이 설정된 프로필을 골라줘', en: 'Choose a profile with translation configured' })}</option><ChatProfileOptions profiles={(profilesQuery.data ?? []).filter(p => p.usable)} /></Select><Button variant="secondary" size="xs" disabled={!translator || translate.isPending} onClick={() => translate.mutate()}>{translate.isPending ? t({ ko: '번역 중', en: 'Translating' }) : t({ ko: '초안에 반영', en: 'Apply to draft' })}</Button></div> : null}
     <Field label={t({ ko: '제목', en: 'Title' })}>
       <Input variant="settings" value={display.title ?? ''} maxLength={80} placeholder={loreEntryTitle({ ...entry, title: '' }) || t({ ko: '제목', en: 'Title' })} onChange={(event) => textChange({ title: event.target.value })} />
     </Field>

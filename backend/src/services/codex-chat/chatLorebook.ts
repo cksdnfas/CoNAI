@@ -1,6 +1,7 @@
 import { createHash } from 'crypto'
 import { CHAT_PROFILE_LIMITS, sortLoreKeysByLanguage } from '@conai/shared'
 import { getUserSettingsDb } from '../../database/userSettingsDb'
+import { chatProfileOrderSql } from './chatProfileOrder'
 import { notifySemanticChange } from '../embeddings/semanticSignal'
 import { loadChatSettings } from './chatSettings'
 import { normalizeLoreTranslation } from './loreTranslation'
@@ -236,7 +237,7 @@ function lorebookName(value: unknown) {
 }
 
 export function linkedProfiles() {
-  const rows = getUserSettingsDb().prepare("SELECT id, name, lorebook_ids FROM llm_chat_profiles WHERE lorebook_ids IS NOT NULL AND lorebook_ids != '[]' ORDER BY sort_order ASC, id ASC").all() as Array<{ id: number; name: string; lorebook_ids: string }>
+  const rows = getUserSettingsDb().prepare(`SELECT id, name, lorebook_ids FROM llm_chat_profiles WHERE lorebook_ids IS NOT NULL AND lorebook_ids != '[]' ORDER BY ${chatProfileOrderSql()}`).all() as Array<{ id: number; name: string; lorebook_ids: string }>
   return rows.map((row) => ({ id: row.id, name: row.name, lorebookIds: normalizeLorebookIds(row.lorebook_ids) }))
 }
 

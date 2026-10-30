@@ -6,7 +6,6 @@ import {
   listCharacterFolders,
   listCharacterSettings,
   type CharacterAvatarCrop,
-  type CharacterFolder,
   type CharacterSetting,
   type CharacterSettingScope,
 } from '@/lib/api-character-library'
@@ -31,35 +30,7 @@ export function settingDraftOf(setting: CharacterSetting): SettingDraft {
   return { name: setting.name, folderId: setting.folderId, appearance: setting.appearance, referenceHash: setting.referenceHash, avatarHash: setting.avatarHash, avatarCrop: setting.avatarCrop }
 }
 
-/** Folders from the top level down to `folderId` (empty at the top level). */
-export function folderPath(byId: ReadonlyMap<number, CharacterFolder>, folderId: number | null) {
-  const path: CharacterFolder[] = []
-  const seen = new Set<number>()
-  let current = folderId
-  while (current !== null && !seen.has(current)) {
-    seen.add(current)
-    const folder = byId.get(current)
-    if (!folder) break
-    path.unshift(folder)
-    current = folder.parentId
-  }
-  return path
-}
-
-/** The folder and everything under it (a folder never moves into these). */
-export function folderSubtreeIds(folders: CharacterFolder[], rootId: number) {
-  const ids = new Set([rootId])
-  let grew = true
-  while (grew) {
-    grew = false
-    for (const folder of folders) {
-      if (folder.parentId !== null && ids.has(folder.parentId) && !ids.has(folder.id)) { ids.add(folder.id); grew = true }
-    }
-  }
-  return ids
-}
-
-export const sortFoldersByName = (left: CharacterFolder, right: CharacterFolder) => left.name.localeCompare(right.name)
+export { folderPath, folderSubtreeIds, sortFoldersByName, type LibraryFolder } from '@conai/shared'
 
 /** Library originals for unsaved or full-size views; thumbnails for lists. */
 export const characterImageUrl = (hash: string) => buildApiUrl(`/api/images/${encodeURIComponent(hash)}/file`)

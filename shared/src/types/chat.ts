@@ -122,6 +122,18 @@ export type ChatProposal = { id: number; dismissed?: boolean } & (
   | ChatTaskPlanProposal
   | ChatChoiceProposal
   | {
+      kind: 'profile_folder'
+      action: 'create' | 'rename' | 'move' | 'delete'
+      folderId: number | null
+      name: string
+      parentId: number | null
+      beforePath: string[]
+      afterPath: string[]
+      /** Opaque snapshot of the reviewed target, destination and deletion members. */
+      revision: string
+      saved?: boolean
+    }
+  | {
       kind: 'display_block'
       /** Shared block name (defaults to the block key). */
       name: string

@@ -1,18 +1,20 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
+import { useLibraryLocation, positiveLibraryId as positiveId } from '@/components/common/use-library-location'
+import { LibraryFolderContent, libraryFolderView } from '@/components/common/library-folder-content'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Link, useSearchParams } from 'react-router-dom'
+import { useSearchParams } from 'react-router-dom'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { ChatProfileEditorPage } from '@/features/settings/components/chat-profile-editor'
 import { ChatSettingsProfiles } from '@/features/settings/components/chat-settings-profiles'
 import { registerTranslationCatalog } from '@/i18n'
 import { settingsCatalog } from '@/i18n/resources/settings'
-import { Folder, FolderInput, FolderPlus, Pencil, Plus, SquarePen, Trash2, UserRound } from 'lucide-react'
+import { FolderInput, FolderPlus, Pencil, Plus, SquarePen, Trash2, UserRound } from 'lucide-react'
 import { NameDialog } from '@/components/common/entry-dialogs'
 import { PageToolbar } from '@/components/common/page-toolbar'
 import { PageWithSidebar } from '@/components/common/page-with-sidebar'
 import { PathBreadcrumbs } from '@/components/common/path-breadcrumbs'
 import { ToolbarSearchField } from '@/components/common/search-field'
-import { ActionContextMenu, ActionMenuButton, type ActionMenuEntry } from '@/components/ui/action-menu'
+import { ActionMenuButton, type ActionMenuEntry } from '@/components/ui/action-menu'
 import { Button } from '@/components/ui/button'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -38,7 +40,7 @@ import {
   type CharacterSettingSummary,
 } from '@/lib/api-character-library'
 import { getErrorMessage } from '@/lib/error-message'
-import { folderPath, folderSubtreeIds, refreshCharacterViews, sortFoldersByName, useCharacterFolders, useCharacterSettingsPage } from './character-library-shared'
+import { folderSubtreeIds, refreshCharacterViews, useCharacterFolders, useCharacterSettingsPage } from './character-library-shared'
 import { CharacterFolderPickerModal, CharacterFolderSidebar } from './components/character-folder-nav'
 import { CharacterSettingCard } from './components/character-setting-card'
 import { CharacterSettingGrid } from './components/character-setting-grid'
@@ -50,8 +52,6 @@ import { useCharacterSettingEditor, type SettingEditorTarget } from './use-chara
 type NameDialogState = { mode: 'create'; parentId: number | null; name: string } | { mode: 'rename'; folder: CharacterFolder; name: string }
 type MoveState = { kind: 'folder'; folder: CharacterFolder } | { kind: 'setting'; setting: CharacterSettingSummary }
 
-const positiveId = (value: string | null) => (value && /^\d+$/.test(value) && Number(value) > 0 ? Number(value) : null)
-
 /**
  * 캐릭터: the appearance library and (administrators) the chat profiles. The library's URL holds the open folder
  * (`folder`), the name search across the library (`q`), the page (`page`), the setting open in its editor page
@@ -61,17 +61,11 @@ const positiveId = (value: string | null) => (value && /^\d+$/.test(value) && Nu
 registerTranslationCatalog(settingsCatalog)
 
 export function CharacterLibraryPage() {
-  const { t } = useI18n()
   const permissions = useFeaturePermissions()
   const [params] = useSearchParams()
   if (!permissions.isAdmin || params.get('view') !== 'profiles' || params.has('setting') || params.has('new')) return <AppearanceLibraryPage />
   if (params.has('profile')) return <ChatProfileEditorPage />
-  return (
-    <div className="space-y-6">
-      <PageToolbar start={<CharacterViewSwitch />} actions={<Button asChild variant="ghost"><Link to="/chat">{t({ ko: '채팅 열기', en: 'Open chat' })}</Link></Button>} />
-      <ChatSettingsProfiles />
-    </div>
-  )
+  return <ChatSettingsProfiles viewSwitch={<CharacterViewSwitch />} />
 }
 
 /** Administrators switch the page between the appearance library and the chat profiles; the switch leads the toolbar. */
@@ -102,51 +96,23 @@ function AppearanceLibraryPage() {
   const queryClient = useQueryClient()
   const permissions = useFeaturePermissions()
   const canEdit = permissions.has('characters.edit')
-  const [searchParams, setSearchParams] = useSearchParams()
-  const folderId = positiveId(searchParams.get('folder'))
-  const query = searchParams.get('q')?.trim() ?? ''
-  const page = positiveId(searchParams.get('page')) ?? 0
+  const { params: searchParams, folderId, query, page, searchText, setSearchText, update, openFolder, search } = useLibraryLocation(CHARACTER_SETTINGS_PAGE_SIZE)
   const openSettingId = positiveId(searchParams.get('setting'))
   // `new`: a new setting drafted in a folder (`root` for the top level); an open saved setting wins.
   const newParam = searchParams.get('new')
   const newIn = openSettingId === null && newParam !== null && (newParam === 'root' || positiveId(newParam) !== null) ? { folderId: positiveId(newParam) } : null
-  const editing = openSettingId !== null || newIn !== null
   const [nameDialog, setNameDialog] = useState<NameDialogState | null>(null)
   const [moving, setMoving] = useState<MoveState | null>(null)
   /** A new setting's name and folder, asked before it is made and opened in its editor page. */
   const [creating, setCreating] = useState<{ folderId: number | null } | null>(null)
-  const [searchText, setSearchText] = useState(query)
-  const [syncedQuery, setSyncedQuery] = useState(query)
-  if (syncedQuery !== query) { setSyncedQuery(query); setSearchText(query) }
-
-  const update = (changes: Record<string, string | null>, replace = false) => setSearchParams((current) => {
-    const next = new URLSearchParams(current)
-    for (const [key, value] of Object.entries(changes)) { if (value === null) next.delete(key); else next.set(key, value) }
-    return next
-  }, { replace })
-  const pageParam = (offset: number) => (offset > 0 ? String(Math.floor(offset / CHARACTER_SETTINGS_PAGE_SIZE)) : null)
-  const openFolder = (id: number | null, offset = 0) => update({ folder: id === null ? null : String(id), q: null, page: pageParam(offset), setting: null, new: null })
-  const search = (text: string, offset = 0) => update({ q: text.trim() || null, page: pageParam(offset), setting: null, new: null })
   const openSetting = (id: number) => update({ setting: String(id), new: null })
   const newSetting = (inFolder: number | null) => update({ setting: null, new: inFolder === null ? 'root' : String(inFolder) })
   const closeEditor = () => update({ setting: null, new: null })
 
-  // Live name search: the URL follows the field after a short pause.
-  useEffect(() => {
-    if (editing || searchText.trim() === query) return
-    const timer = window.setTimeout(() => update({ q: searchText.trim() || null, page: null, setting: null, new: null }, true), 300)
-    return () => window.clearTimeout(timer)
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- typed text schedules the change; opening an editor cancels it
-  }, [searchText, editing])
-
   const foldersQuery = useCharacterFolders()
   const folders = foldersQuery.data ?? []
-  const byId = new Map(folders.map((folder) => [folder.id, folder]))
-  const currentFolder = folderId !== null ? byId.get(folderId) ?? null : null
-  const path = folderPath(byId, folderId)
-  const subfolders = folders.filter((folder) => folder.parentId === folderId).sort(sortFoldersByName)
+  const { currentFolder, path, subfolders, folderMissing } = libraryFolderView(folders, folderId, foldersQuery.isSuccess)
   const scope = { folder: query ? 'all' as const : folderId ?? 'root' as const, query, offset: page * CHARACTER_SETTINGS_PAGE_SIZE, limit: CHARACTER_SETTINGS_PAGE_SIZE }
-  const folderMissing = folderId !== null && foldersQuery.isSuccess && !currentFolder
   const settingsQuery = useCharacterSettingsPage(scope, !folderMissing)
   const settingsPage = settingsQuery.data
 
@@ -283,27 +249,10 @@ function AppearanceLibraryPage() {
       sidebar={<CharacterFolderSidebar folders={folders} selectedId={query ? null : folderId} loading={foldersQuery.isPending} error={foldersQuery.isError ? foldersQuery.error : null} onSelect={(id) => openFolder(id)} onCreate={canEdit ? () => setNameDialog({ mode: 'create', parentId: folderId, name: '' }) : undefined} getMenu={canEdit ? folderMenu : undefined} />}
       toolbar={toolbar}
     >
-      <section className="min-w-0 space-y-6">
-        {folderMissing ? (
-          <EmptyState icon={Folder} title={t({ ko: '폴더를 찾지 못했어', en: 'Folder not found' })} action={<Button variant="secondary" size="sm" onClick={() => openFolder(null)}>{rootLabel}</Button>} />
-        ) : <>
-          {!query && subfolders.length ? (
-            <RowGroup heading={t('characterLibraryPage.folders')} count={subfolders.length}>
-              <div className="grid grid-cols-2 gap-1 sm:grid-cols-3 xl:grid-cols-4">
-                {subfolders.map((folder) => (
-                  <ActionContextMenu key={folder.id} entries={folderMenu(folder)}>
-                    <Button type="button" variant="nav" size="sm" onClick={() => openFolder(folder.id)}>
-                      <Folder />
-                      <span className="min-w-0 flex-1 truncate">{folder.name}</span>
-                      {folder.settingCount ? <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{folder.settingCount}</span> : null}
-                    </Button>
-                  </ActionContextMenu>
-                ))}
-              </div>
-            </RowGroup>
-          ) : null}
+      <LibraryFolderContent folderMissing={folderMissing} subfolders={subfolders} query={query} rootLabel={rootLabel} onOpen={openFolder} getMenu={folderMenu}>
           <RowGroup heading={t('characterLibraryPage.settings')} count={settingsPage?.total}>
             <CharacterSettingGrid
+              errorTitle={t({ ko: '외형 설정을 불러오지 못했어', en: 'Could not load settings' })}
               query={settingsQuery}
               page={page}
               onPageChange={(next) => update({ page: next > 0 ? String(next) : null })}
@@ -317,8 +266,7 @@ function AppearanceLibraryPage() {
               )}
             />
           </RowGroup>
-        </>}
-      </section>
+      </LibraryFolderContent>
 
       {creating ? (
         <CharacterSettingSaveDialog

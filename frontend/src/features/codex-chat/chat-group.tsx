@@ -1,4 +1,5 @@
 import { useEffect, useId, useState, type ReactNode } from 'react'
+import { ChatProfileGroups } from './chat-profile-groups'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Crown, UserMinus, UserPlus, Users } from 'lucide-react'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -228,7 +229,7 @@ export function GroupInviteDialog({ open, mode, profiles, userProfiles = [], onC
               <Checkbox checked disabled aria-label={base.name} />
             </div>
           ) : null}
-          {candidates.map((profile) => {
+          <ChatProfileGroups profiles={candidates}>{(profile) => {
             const checked = picked.includes(profile.id)
             const blocked = !checked && (roomSize >= GROUP_MEMBER_MAX || takenNames.has(profile.name.trim().toLowerCase()))
             return (
@@ -238,7 +239,7 @@ export function GroupInviteDialog({ open, mode, profiles, userProfiles = [], onC
                 <Checkbox checked={checked} disabled={blocked} onCheckedChange={() => toggle(profile.id)} aria-label={profile.name} />
               </label>
             )
-          })}
+          }}</ChatProfileGroups>
           {candidates.length === 0 ? <EmptyState size="compact" title={t({ ko: '초대할 수 있는 프로필이 없어', en: 'No profiles to invite' })} /> : null}
         </div>
         {mode?.kind === 'create' ? (

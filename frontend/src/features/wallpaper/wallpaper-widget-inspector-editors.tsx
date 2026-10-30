@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { ChatProfileOptions } from '@/features/codex-chat/chat-profile-groups'
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { SearchField } from '@/components/common/search-field'
 import { Button } from '@/components/ui/button'
@@ -76,7 +77,7 @@ function CharacterSelect({ value, allowLatest, emptyLabel, ariaLabel, onChange }
   return (
     <Select aria-label={ariaLabel} value={value === null ? '' : String(value)} onChange={(event) => onChange(event.target.value ? Number(event.target.value) : null)}>
       <option value="">{emptyLabel ?? (allowLatest ? t({ ko: '가장 최근 대화', en: 'Latest chat' }) : t({ ko: '최근 대화의 캐릭터', en: 'Latest chat’s character' }))}</option>
-      {(profilesQuery.data ?? []).map((profile) => <option key={profile.id} value={profile.id}>{profile.name}</option>)}
+      <ChatProfileOptions profiles={profilesQuery.data ?? []} />
     </Select>
   )
 }

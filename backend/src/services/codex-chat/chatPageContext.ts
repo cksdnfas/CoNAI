@@ -258,6 +258,7 @@ function proposalName(proposal: ChatProposal) {
   switch (proposal.kind) {
     case 'profile': return `새 프로필 "${String((proposal.input as { name?: unknown }).name ?? '')}"`
     case 'profile_update': return `프로필 수정 "${proposal.profileName}"`
+    case 'profile_folder': return `프로필 폴더 ${proposal.action} "${proposal.name}"`
     case 'chat_settings': return `채팅 설정 (${Object.keys(proposal.patch).join(', ')})`
     case 'profile_assets': return `이미지 ${proposal.action === 'apply' ? '적용' : '생성'} "${proposal.profileName}"`
     case 'character_assets': return `캐릭터 이미지 ${proposal.action === 'apply' ? '적용' : '생성'} "${proposal.settingName}"`

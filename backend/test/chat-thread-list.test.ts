@@ -646,10 +646,10 @@ test('chat list: previews, pin/archive/rename, branch origin', { timeout: 60000 
     try {
       const listed = ChatProfileStore.list()
       assert.deepEqual(listed, expected)
-      assert.equal(queries, 5, 'one profile query plus batched slots, judges, generation presets and requested block definitions')
+      assert.equal(queries, 6, 'one profile query plus one folder order read and batched slots, judges, generation presets and requested block definitions')
       queries = 0
       assert.equal(ChatProfileStore.listNames({ ids }).length, 12)
-      assert.equal(queries, 1, 'name-only lists never hydrate dependencies')
+      assert.equal(queries, 2, 'name-only lists read the folder order once and never hydrate dependencies')
       const first = listed.find((row) => row.id === ids[0])!
       const second = listed.find((row) => row.id === ids[1])!
       assert.equal(first.modelSlotId, null)

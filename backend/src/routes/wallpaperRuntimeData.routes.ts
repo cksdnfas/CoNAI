@@ -5,7 +5,8 @@ import { GenerationQueueModel } from '../models/GenerationQueue';
 import { GraphExecutionModel } from '../models/GraphExecution';
 import { ImageStatsModel } from '../models/Image/ImageStatsModel';
 import { audioCandidateFile, listAudioCandidates } from '../services/audio/audioService';
-import { resolveChatAccess } from '../services/codex-chat/codexChatAccess';
+import { canUseChatProfile, resolveChatAccess } from '../services/codex-chat/codexChatAccess';
+import { profileFolderPaths } from '../services/codex-chat/chatProfileFolders';
 import { loadChatSettings } from '../services/codex-chat/chatSettings';
 import { ChatProfileStore } from '../services/codex-chat/chatProfiles';
 import { profileAssetFields } from '../services/codex-chat/chatProfileAssets';
@@ -218,11 +219,17 @@ export function registerWallpaperRuntimeDataRoutes(router: Router) {
   });
 
   router.get('/chat/profiles', requireChatReader, (_req: Request, res: Response) => {
-    const canViewImages = getWallpaperRuntimeAccess(res).permissionKeys.includes('images.view');
-    res.json(successResponse(ChatProfileStore.list({ enabledOnly: true }).map((profile) => {
+    const reader = getWallpaperRuntimeAccess(res);
+    const canViewImages = reader.permissionKeys.includes('images.view');
+    const access = resolveChatAccess(reader.accountId);
+    const profiles = ChatProfileStore.list({ enabledOnly: true });
+    const paths = profileFolderPaths(profiles, (profile) => canUseChatProfile(access, profile) && reader.permissionKeys.includes(profile.engine === 'llm' ? 'chat.use' : 'chat.agent.use'));
+    res.json(successResponse(profiles.map((profile) => {
       const assets = profileAssetFields(profile, canViewImages);
       return {
         id: profile.id,
+        folderPath: paths.get(profile.id) ?? [],
+        sortOrder: profile.sortOrder,
         name: profile.name,
         engine: profile.engine,
         tagline: profile.tagline,

@@ -1,6 +1,8 @@
 import { ApiRequestError, requestApiData, requestJson } from '@/lib/api-request'
 import { buildApiUrl } from '@/lib/api-url'
 import type { QueryClient } from '@tanstack/react-query'
+import type { ChatProfileFolder, ChatProfileFolderFields } from '@conai/shared'
+export type { ChatProfileFolder } from '@conai/shared'
 import type { ChatAssetVisionReview, ChatAssetBatch, ChatAssetBatchInput, ChatAssetApplyInput, ChatAssetApplyResult, ChatAssetOwner, CharacterSetting, ChatProfileCharacterLink, ChatProfileCharacterLinkInput } from '@conai/shared'
 export type { ChatAssetBatch, ChatAssetBatchInput, ChatAssetKind, ChatAssetReview, ChatAssetVisionReview, ChatAssetCandidate, ChatAssetAttempt, ChatAssetApplyInput, ChatAssetApplyResult, ChatAssetOwner } from '@conai/shared'
 import type { ChatJudgeDiagnostics, ChatFileChange, ChatProfileAgentSettings } from '@conai/shared'
@@ -286,7 +288,7 @@ export interface ChatProfileAssetFields {
   avatarThumbnailUrl?: string | null
 }
 
-export interface ChatProfileSummary extends ChatProfileAssetFields {
+export interface ChatProfileSummary extends ChatProfileAssetFields, ChatProfileFolderFields {
   expressionGroupId?: number | null
   tagline: string
   model: string
@@ -666,6 +668,9 @@ export const CHAT_GENERATION_PRESET_FILE_MARK = 'conai_generation_preset'
 
 /** `agentEnabled`: other profiles may call this one during a chat; `agentDescription` tells them when. */
 export interface ChatProfile extends ChatProfileAssetFields, ChatProfileAgentSettings {
+  folderId?: number | null
+  folderPath?: ChatProfileFolderFields['folderPath']
+  libraryReferenceHash?: string | null
   revision: string
   backgroundRevision: number
   /** The effective expression group on synced profiles; also returned by the single-profile admin read. */
@@ -778,7 +783,7 @@ export interface ChatCardImportReport {
 }
 
 /** `background`: a new image (data URL), null to remove it, left out to keep the current one. */
-export type ChatProfileInput = Partial<Omit<ChatProfile, 'id' | 'revision' | 'backgroundRevision' | 'expressionGroupId' | 'createdDate' | 'updatedDate' | 'backgroundVersion' | 'suggestWriterReady' | 'assetVersion' | 'hasAvatar' | 'avatarThumbnailUrl' | 'characterLink'>> & {
+export type ChatProfileInput = Partial<Omit<ChatProfile, 'id' | 'folderPath' | 'libraryReferenceHash' | 'revision' | 'backgroundRevision' | 'expressionGroupId' | 'createdDate' | 'updatedDate' | 'backgroundVersion' | 'suggestWriterReady' | 'assetVersion' | 'hasAvatar' | 'avatarThumbnailUrl' | 'characterLink'>> & {
   background?: string | null
   /** The library link to set (null removes it; left out keeps it). While synced the appearance fields are not sent. */
   characterLink?: ChatProfileCharacterLinkInput
@@ -838,6 +843,7 @@ export function chatProfileSaveInput(input: ChatProfileInput, stored?: ChatProfi
 export function invalidateChatProfileViews(queryClient: QueryClient, profileIds: ReadonlySet<number>) {
   const holds = (data: unknown) => Array.isArray(data) && data.some((entry) => profileIds.has((entry as { id?: number }).id ?? 0))
   return Promise.all([
+    queryClient.invalidateQueries({ queryKey: CHAT_PROFILE_LIBRARY_QUERY_KEY }),
     queryClient.invalidateQueries({ queryKey: CHAT_ADMIN_PROFILES_QUERY_KEY, predicate: ({ state }) => holds(state.data) }),
     queryClient.invalidateQueries({ queryKey: CHAT_PROFILES_QUERY_KEY, predicate: ({ state }) => holds(state.data) }),
     ...[...profileIds].map((id) => queryClient.invalidateQueries({ queryKey: chatProfileEmoticonsQueryKey(id) })),
@@ -1104,13 +1110,36 @@ export function listChatAdminProfiles() {
   return requestApiData<ChatProfile[]>('/api/codex-chat/admin/profiles', { cache: 'no-store' })
 }
 
+export const CHAT_PROFILE_FOLDERS_QUERY_KEY = ['chat-profile-folders'] as const
+export const CHAT_PROFILE_LIBRARY_QUERY_KEY = ['chat-profile-library'] as const
+export function listChatProfileFolders() {
+  return requestApiData<ChatProfileFolder[]>('/api/codex-chat/admin/profile-folders')
+}
+export function createChatProfileFolder(input: { name: string; parentId: number | null }) {
+  return requestApiData<ChatProfileFolder>('/api/codex-chat/admin/profile-folders', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(input) })
+}
+export function updateChatProfileFolder(id: number, input: { name?: string; parentId?: number | null }) {
+  return requestApiData<ChatProfileFolder>(`/api/codex-chat/admin/profile-folders/${id}`, { method: 'PUT', headers: JSON_HEADERS, body: JSON.stringify(input) })
+}
+export function deleteChatProfileFolder(id: number) {
+  return requestApiData<{ parentId: number | null }>(`/api/codex-chat/admin/profile-folders/${id}`, { method: 'DELETE' })
+}
+export function listChatProfilePage(scope: { folderId: number | null; query: string; limit: number; offset: number }) {
+  const params = new URLSearchParams({ folder: scope.folderId === null ? 'root' : String(scope.folderId), q: scope.query, limit: String(scope.limit), offset: String(scope.offset) })
+  return requestApiData<{ items: ChatProfile[]; total: number; hasMore: boolean }>(`/api/codex-chat/admin/profiles?${params}`)
+}
+
 export function getChatAdminProfile(profileId: number) {
   return requestApiData<ChatProfile>(`/api/codex-chat/admin/profiles/${profileId}`, { cache: 'no-store' })
 }
 
-/** Every chat profile in this order; returns the reordered admin list. */
-export function reorderChatProfiles(ids: number[]) {
-  return requestApiData<ChatProfile[]>('/api/codex-chat/admin/profiles/order', { method: 'PUT', headers: JSON_HEADERS, body: JSON.stringify({ ids }) })
+export function listChatProfileNames() {
+  return requestApiData<Array<{ id: number; name: string }>>('/api/codex-chat/admin/profile-names')
+}
+
+/** With folderId: replace the listed cards' positions in that folder, returning null. Legacy calls return the directory in folder-tree order. */
+export function reorderChatProfiles(ids: number[], folderId?: number | null) {
+  return requestApiData<ChatProfile[] | null>('/api/codex-chat/admin/profiles/order', { method: 'PUT', headers: JSON_HEADERS, body: JSON.stringify({ ids, folderId }) })
 }
 
 /** `copyOf`: the profile this one copies; it keeps that profile's links and gets its own copy of its expressions. */
@@ -1927,6 +1956,10 @@ export function translateLoreEntry(profileId: number, entry: Pick<ChatLoreEntry,
 /** Save a save_lore proposal into the chat book (the server writes it). */
 export function applyChatProposal(proposalId: number) {
   return requestApiData<{ proposal: unknown; book: OwnedChatLorebook | null }>(`/api/chat-proposals/${proposalId}/apply`, { method: 'POST' })
+}
+
+export function applyChatProfileFolderProposal(proposalId: number) {
+  return requestApiData<Extract<ChatProposal, { kind: 'profile_folder' }>>(`/api/chat-proposals/${proposalId}/apply`, { method: 'POST' })
 }
 
 export function undoChatLoreProposal(proposalId: number, force = false, expectedHash?: string) {

@@ -109,7 +109,7 @@ export class ImageProcessor {
         quality: quality,
         effort: 4
       })
-      .toFile(outputPath);
+      .toFile(toWindowsLongPathIfNeeded(outputPath));
   }
 
 

@@ -12,6 +12,7 @@ import { asyncHandler } from '../middleware/asyncHandler'
 import { requireAdmin } from '../middleware/authMiddleware'
 import { AUTHOR_NOTE_MAX_LENGTH, CHAT_PROFILE_DEFAULTS, ChatProfileError, ChatProfileStore, DEFAULT_CHAT_SUMMARY_PROMPT, ensureCodexProfileMigrated, isVisionTool, type ChatProfile, type ChatProfileInput } from '../services/codex-chat/chatProfiles'
 import { ChatRevisionConflict } from '../services/codex-chat/chatProfileError'
+import { checkedProfileFolder, createChatProfileFolder, deleteChatProfileFolder, listChatProfileFolders, profileFolderPaths, updateChatProfileFolder } from '../services/codex-chat/chatProfileFolders'
 import { CHAT_SCOPES, LORE_SELECTION_LIMITS, MAX_CHAT_CAPTURE_LIMIT, TOOL_ROUND_LIMITS, WEB_RESEARCH_ENGINES, WEB_RESEARCH_MAX_DAILY_LIMIT, loadChatSettings, updateChatSettings } from '../services/codex-chat/chatSettings'
 import { exportChatDiagnostics, getChatDiagnostics, visibleContextMessages } from '../services/codex-chat/chatDiagnostics'
 import { DEFAULT_CHAT_STYLE } from '../services/codex-chat/chatStyle'
@@ -198,13 +199,18 @@ router.get('/profiles', requireChatAccess, (req: Request, res: Response) => {
   const access = chatAccessOf(req)
   const accountId = getRequesterAccountId(req)
   const profiles = ChatProfileStore.list({ directory: true })
+  const usable = (profile: ChatProfile) => profile.isEnabled && canUseChatProfile(access, profile)
+  const paths = profileFolderPaths(profiles, usable)
   const hidden = hiddenProfileAssets(profiles)
   const canViewLibrary = requesterPermissionKeys({ accountId, accountType: null }).includes('characters.view')
   res.json({
     success: true,
     data: ChatProfileStore.mapDirectory((profile) => ({
       ...toPublicProfile(profile, accountId, canViewLibrary, hidden),
-      usable: profile.isEnabled && canUseChatProfile(access, profile),
+      folderId: usable(profile) ? profile.folderId : null,
+      folderPath: paths.get(profile.id) ?? [],
+      sortOrder: profile.sortOrder,
+      usable: usable(profile),
       canReadFileText: profile.mcpEnabled && profile.mcpScopes.includes('read') && access.scopes.includes('read') && (!profile.toolAllowlist || profile.toolAllowlist.includes('read_file_text')),
       // What a reply's bar can order this character to do (`choices` only in a direct chat).
       orders: chatOrdersOf(profile, access, 'direct'),
@@ -869,14 +875,50 @@ router.get('/admin/profile-defaults', requireAdmin, (_req: Request, res: Respons
   res.json({ success: true, data: { ...CHAT_PROFILE_DEFAULTS, systemPrompt: ModelSlotStore.routePrompt('chat'), summaryPrompt: ModelSlotStore.routePrompt('summary') || DEFAULT_CHAT_SUMMARY_PROMPT, scopes: CHAT_SCOPES, style: DEFAULT_CHAT_STYLE } })
 })
 
-function adminProfileList() {
-  const profiles = ChatProfileStore.list({ admin: true })
+function adminProfileList(options: Parameters<typeof ChatProfileStore.list>[0] = {}) {
+  const profiles = ChatProfileStore.list({ ...options, admin: true })
   const hidden = hiddenProfileAssets(profiles)
-  return ModelSlotStore.withReadSnapshot(() => profiles.map((profile) => toAdminProfile(profile, hidden)))
+  const paths = profileFolderPaths(profiles, () => true)
+  const references = new Map((getUserSettingsDb().prepare('SELECT id, reference_hash FROM character_settings WHERE id IN (SELECT value FROM json_each(?))')
+    .all(JSON.stringify([...new Set(profiles.flatMap((profile) => profile.characterLink ? [profile.characterLink.settingId] : []))])) as Array<{ id: number; reference_hash: string | null }>).map((row) => [row.id, row.reference_hash]))
+  return ModelSlotStore.withReadSnapshot(() => profiles.map((profile) => ({
+    ...toAdminProfile(profile, hidden),
+    folderPath: paths.get(profile.id) ?? [],
+    libraryReferenceHash: profile.characterLink ? references.get(profile.characterLink.settingId) ?? null : null,
+  })))
 }
 
-router.get('/admin/profiles', requireAdmin, (_req: Request, res: Response) => {
-  res.json({ success: true, data: adminProfileList() })
+router.get('/admin/profile-names', requireAdmin, (_req, res) => {
+  res.json({ success: true, data: ChatProfileStore.listNames() })
+})
+
+router.get('/admin/profiles', requireAdmin, (req: Request, res: Response) => {
+  try {
+    if (req.query.limit === undefined) { res.json({ success: true, data: adminProfileList() }); return }
+    const parsed = z.object({ limit: z.coerce.number().int().positive().safe(), offset: z.coerce.number().int().nonnegative().safe().default(0), q: z.string().default(''), folder: z.union([z.literal('root'), z.coerce.number().int().positive().safe()]).optional() }).safeParse(req.query)
+    if (!parsed.success) throw new ChatProfileError('프로필 목록 범위가 올바르지 않아.')
+    const { limit, offset, q, folder } = parsed.data
+    const query = q.trim()
+    const folderId = query ? undefined : folder === 'root' || folder === undefined ? null : checkedProfileFolder(folder)
+    const total = (getUserSettingsDb().prepare(`SELECT COUNT(*) AS n FROM llm_chat_profiles WHERE ${query ? 'instr(lower(name), lower(?)) > 0' : 'folder_id IS ?'}`).get(query || folderId) as { n: number }).n
+    res.json({ success: true, data: { items: adminProfileList({ folderId, query, limit, offset }), total, hasMore: offset + limit < total } })
+  } catch (error) { sendChatError(res, error) }
+})
+
+router.get('/admin/profile-folders', requireAdmin, (_req, res) => {
+  res.json({ success: true, data: listChatProfileFolders() })
+})
+router.post('/admin/profile-folders', requireAdmin, (req, res) => {
+  try { res.status(201).json({ success: true, data: createChatProfileFolder(req.body) }) }
+  catch (error) { sendChatError(res, error) }
+})
+router.put('/admin/profile-folders/:folderId', requireAdmin, (req, res) => {
+  try { res.json({ success: true, data: updateChatProfileFolder(characterId(req.params.folderId), req.body) }) }
+  catch (error) { sendChatError(res, error) }
+})
+router.delete('/admin/profile-folders/:folderId', requireAdmin, (req, res) => {
+  try { res.json({ success: true, data: deleteChatProfileFolder(characterId(req.params.folderId)) }) }
+  catch (error) { sendChatError(res, error) }
 })
 
 /** Read one profile without fetching the whole admin list. */
@@ -888,10 +930,12 @@ router.get('/admin/profiles/:profileId', requireAdmin, (req: Request, res: Respo
   res.json({ success: true, data: toAdminProfile(profile, undefined, true) })
 })
 
-/** PUT /api/codex-chat/admin/profiles/order — `{ ids }`: every chat profile in this order (settings and chat pickers). */
+/** PUT /admin/profiles/order — `{ ids, folderId }` replaces listed positions in one folder. Legacy unscoped calls retain the folder-tree grouping. */
 router.put('/admin/profiles/order', requireAdmin, (req: Request, res: Response) => {
-  ChatProfileStore.reorder(parseFlagIds(req.body?.ids))
-  res.json({ success: true, data: adminProfileList() })
+  try {
+    ChatProfileStore.reorder(parseFlagIds(req.body?.ids), req.body?.folderId === undefined ? undefined : checkedProfileFolder(req.body.folderId))
+    res.json({ success: true, data: req.body?.folderId === undefined ? adminProfileList() : null })
+  } catch (error) { sendChatError(res, error) }
 })
 
 /** A Codex profile's effort must be one its model supports (when the CLI catalog lists the model). */
@@ -980,8 +1024,8 @@ router.post('/admin/profiles', requireAdmin, asyncHandler(async (req: Request, r
       return
     }
     assertLinkedFiles(fileOwnerKey(getRequesterAccountId(req)), normalizeLinkedFiles(input.linkedFiles), source?.linkedFiles)
-    // A new profile joins the end of the list; a copy sits right after its source.
-    input.sortOrder = source ? source.sortOrder : ChatProfileStore.nextSortOrder()
+    // A new profile/cross-folder copy appends to its folder; a same-folder copy stays by its source.
+    input.sortOrder = source && source.folderId === (input.folderId ?? null) ? source.sortOrder : ChatProfileStore.nextSortOrder(checkedProfileFolder(input.folderId))
     // A copy follows its source's link unless the draft chose its own (linked or unlinked before the first save).
     if (source && input.characterLink === undefined) input.characterLink = source.characterLink ? { settingId: source.characterLink.settingId, synced: source.characterLink.synced } : null
     const created = ChatProfileStore.create(input, source ?? undefined)

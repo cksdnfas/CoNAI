@@ -103,6 +103,8 @@ const nativeActionPermissions = {
   'group.remove_images': 'images.edit', 'group.delete_images': 'images.delete', 'group.auto_collect_all': 'images.edit', 'group.rebuild_folders': 'images.edit',
   // Chat profile editor (settings › chat). Saving goes through the editor's own admin-only API.
   'profile.open_create': null, 'profile.open_edit': null, 'profile.copy': null, 'profile.section': null, 'profile.draft': null, 'profile.save': null, 'profile.assets': 'generation.execute',
+  'profile.open_folder': null, 'profile.search': null, 'profile.folder_create': null, 'profile.folder_rename': null,
+  'profile.folder_move': null, 'profile.folder_delete': null, 'profile.move': null,
   // Saves the profile's own appearance into the character library (new setting, or over its detached origin).
   'profile.character_save': 'characters.edit',
   // Generation pages: copy a character library setting's tags (and reference image) into the form.
@@ -182,6 +184,8 @@ for (const id of ['posts.comments_more', 'posts.comments_at']) { VIEW_ACTIONS.ad
 COMMIT_ACTIONS.add('image_editor.save')
 for (const id of ['character.open_folder', 'character.search', 'character.open_setting', 'character.new_setting']) VIEW_ACTIONS.add(id)
 for (const id of ['character.save', 'character.delete', 'profile.character_save']) COMMIT_ACTIONS.add(id)
+for (const id of ['profile.open_folder', 'profile.search']) VIEW_ACTIONS.add(id)
+for (const id of ['profile.folder_create', 'profile.folder_rename', 'profile.folder_move', 'profile.folder_delete', 'profile.move']) COMMIT_ACTIONS.add(id)
 for (const id of ['library.assign_group', 'library.delete', 'group.add_images', 'group.remove_images', 'group.delete_images', 'group.auto_collect_all', 'group.rebuild_folders']) COMMIT_ACTIONS.add(id)
 for (const id of ['nai.generate', 'codex.generate', 'comfy.generate']) COMMIT_ACTIONS.add(id)
 for (const id of ['image_detail.assign_group', 'image_detail.delete']) COMMIT_ACTIONS.add(id)

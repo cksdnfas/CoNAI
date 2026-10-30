@@ -9,6 +9,7 @@ import { PassThrough, Writable } from 'node:stream'
 import { test } from 'node:test'
 import sharp from 'sharp'
 import type { Request, Response } from 'express'
+import Database from 'better-sqlite3'
 
 test('chat profile assets: library migration, access, imports and generation references', { timeout: 60000 }, async (t) => {
   const temp = path.resolve(__dirname, '../../temp')
@@ -90,6 +91,95 @@ test('chat profile assets: library migration, access, imports and generation ref
       if (options.multipart) req.end(options.multipart)
     })
   }
+
+  await t.test('profile moves append and every global directory follows the folder tree', async () => {
+    const folders = await import('../src/services/codex-chat/chatProfileFolders')
+    const z = folders.createChatProfileFolder({ name: 'Z ordering', parentId: null })
+    const a = folders.createChatProfileFolder({ name: 'A ordering', parentId: null })
+    const child = folders.createChatProfileFolder({ name: 'Child ordering', parentId: a.id })
+    const make = (name: string, folderId: number | null, sortOrder: number) => ChatProfileStore.create({ name, folderId, sortOrder, engine: 'llm', agentEnabled: true })
+    const rootProfile = make('Order root', null, 400)
+    const last = make('Order z', z.id, 0)
+    const inA = make('Order a', a.id, 10)
+    const inChild = make('Order child', child.id, 0)
+    const moved = make('Order moved', z.id, -1)
+    ChatProfileStore.update(moved.id, { folderId: a.id }, undefined, { revision: moved.revision })
+    const ids = new Set([rootProfile.id, last.id, inA.id, inChild.id, moved.id])
+    const expected = [rootProfile.id, inA.id, moved.id, inChild.id, last.id]
+    const listedIds = (rows: Array<{ id: number }>) => rows.filter((row) => ids.has(row.id)).map((row) => row.id)
+    assert.deepEqual(listedIds(ChatProfileStore.list()), expected)
+    assert.deepEqual(listedIds(ChatProfileStore.listNames()), expected)
+    assert.deepEqual(listedIds(ChatProfileStore.listAgents()), expected)
+    assert.deepEqual(listedIds(ChatProfileStore.workflowOptions()), expected)
+    const second = make('Order child second', child.id, 7)
+    folders.deleteChatProfileFolder(child.id)
+    assert.deepEqual(ChatProfileStore.list({ folderId: a.id }).map((row) => row.id), [inA.id, moved.id, inChild.id, second.id])
+    for (const id of [...ids, second.id]) ChatProfileStore.delete(id)
+    folders.deleteChatProfileFolder(a.id)
+    folders.deleteChatProfileFolder(z.id)
+  })
+
+  await t.test('profile folder deletion reparents without losing profiles, and conflicts roll back', async () => {
+    const folders = await import('../src/services/codex-chat/chatProfileFolders')
+    const parent = folders.createChatProfileFolder({ name: 'Profile parent', parentId: null })
+    const removed = folders.createChatProfileFolder({ name: 'Same name', parentId: parent.id })
+    const child = folders.createChatProfileFolder({ name: 'Same name', parentId: removed.id })
+    const profile = ChatProfileStore.create({ name: 'Keep me', engine: 'codex', folderId: removed.id, sortOrder: 17, isEnabled: false, systemPrompt: 'keep the prompt' })
+    folders.deleteChatProfileFolder(removed.id)
+    const saved = ChatProfileStore.find(profile.id)!
+    assert.equal(saved.folderId, parent.id)
+    assert.equal(saved.systemPrompt, 'keep the prompt')
+    assert.equal(saved.sortOrder, 0)
+    assert.equal(saved.isEnabled, false)
+    assert.notEqual(saved.revision, profile.revision)
+    assert.equal(folders.listChatProfileFolders().find((folder) => folder.id === child.id)?.parentId, parent.id)
+    const collision = folders.createChatProfileFolder({ name: 'Same name', parentId: child.id })
+    const sibling = folders.createChatProfileFolder({ name: 'Sibling', parentId: parent.id })
+    folders.updateChatProfileFolder(child.id, { name: 'Sibling child' })
+    folders.updateChatProfileFolder(collision.id, { name: 'Sibling' })
+    assert.throws(() => folders.deleteChatProfileFolder(child.id), /같은/)
+    assert.equal(folders.listChatProfileFolders().find((folder) => folder.id === collision.id)?.parentId, child.id)
+    assert.ok(folders.listChatProfileFolders().some((folder) => folder.id === sibling.id))
+    folders.deleteChatProfileFolder(parent.id)
+    assert.equal(ChatProfileStore.find(profile.id)?.folderId, null)
+    assert.deepEqual(db.pragma('foreign_key_check'), [])
+  })
+
+  await t.test('non-admin profile pickers receive only folder names on usable profile paths', async () => {
+    const folders = await import('../src/services/codex-chat/chatProfileFolders')
+    const { canUseChatProfile } = await import('../src/services/codex-chat/codexChatAccess')
+    const parent = folders.createChatProfileFolder({ name: 'Visible ancestor', parentId: null })
+    const child = folders.createChatProfileFolder({ name: 'Visible leaf', parentId: parent.id })
+    const hidden = folders.createChatProfileFolder({ name: 'Private folder', parentId: null })
+    folders.createChatProfileFolder({ name: 'Empty folder', parentId: parent.id })
+    const allowed = ChatProfileStore.create({ name: 'Allowed profile', engine: 'codex', folderId: child.id })
+    const denied = ChatProfileStore.create({ name: 'Denied profile', engine: 'codex', folderId: hidden.id, allowedGroupKeys: ['admin'] })
+    const disabled = ChatProfileStore.create({ name: 'Disabled profile', engine: 'codex', folderId: hidden.id, isEnabled: false })
+    const access = { codex: true, claude: true, llm: true, isAdmin: false, groupKeys: ['reader'], scopes: [], diagnostics: 'none' as const }
+    const paths = folders.profileFolderPaths([allowed, denied, disabled], (profile) => profile.isEnabled && canUseChatProfile(access, profile))
+    assert.deepEqual(paths.get(allowed.id)?.map((folder) => folder.name), ['Visible ancestor', 'Visible leaf'])
+    assert.deepEqual(paths.get(denied.id), [])
+    assert.deepEqual(paths.get(disabled.id), [])
+    assert.ok(!JSON.stringify([...paths.values()]).includes('Empty folder'))
+  })
+
+  await t.test('user settings migration adds profile folders without changing legacy profile data and is repeatable', async () => {
+    const { createUserSettingsSchema } = await import('../src/database/userSettingsSchema')
+    const old = new Database(':memory:')
+    try {
+      old.pragma('foreign_keys = ON')
+      createUserSettingsSchema(old)
+      old.exec('DROP INDEX idx_chat_profiles_folder_order; ALTER TABLE llm_chat_profiles DROP COLUMN folder_id;')
+      old.prepare(`INSERT INTO llm_chat_profiles(id, name, engine, system_prompt, sort_order, is_enabled, created_date, updated_date)
+        VALUES (900, 'Legacy profile', 'codex', 'Exact legacy prompt', 42, 0, '2020-01-02', '2020-02-03')`).run()
+      const before = old.prepare('SELECT id, name, engine, system_prompt, sort_order, is_enabled, created_date, updated_date FROM llm_chat_profiles').get()
+      createUserSettingsSchema(old)
+      createUserSettingsSchema(old)
+      assert.deepEqual(old.prepare('SELECT id, name, engine, system_prompt, sort_order, is_enabled, created_date, updated_date FROM llm_chat_profiles').get(), before)
+      assert.deepEqual(old.prepare('SELECT folder_id FROM llm_chat_profiles').get(), { folder_id: null })
+      assert.deepEqual(old.pragma('foreign_key_check'), [])
+    } finally { old.close() }
+  })
 
   await t.test('profile editor revisions reject stale writes and include synced setting changes', async () => {
     const profile = ChatProfileStore.create({ name: 'Revision profile', engine: 'codex' })

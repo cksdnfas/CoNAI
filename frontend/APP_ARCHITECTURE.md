@@ -84,6 +84,12 @@ draft after a delay and flushes pending edits on owner change or unmount.
 
 ## Character library
 
+The profiles view uses the same sidebar/toolbar/card-grid frame and generalized folder navigation/path helpers as
+appearance settings, but reads its own admin-only profile folder tree. `chat-settings-profiles.tsx` queries SQL pages
+by `folder`, `q`, `page`; `profile` opens the editor without discarding that location. Moves use revision-checked profile
+updates; scoped reorder preserves other pages and folders. `chat-profile-groups.tsx` provides shared folder headings
+and ordering for profile selectors, using only server-authorized directory paths.
+
 `features/characters/character-library-page.tsx` owns the folder tree, paged name search and editor URL state.
 `lib/api-character-library.ts` uses `/api/character-library`; shared contracts live in
 `shared/src/types/characterLibrary.ts`. Access is `characters.view`/`characters.edit`, header key `characters`;

@@ -1,4 +1,6 @@
 import { Select } from '@/components/ui/select'
+import type { ChatProfileFolderFields } from '@conai/shared'
+import { ChatProfileOptions } from '@/features/codex-chat/chat-profile-groups'
 import { useI18n } from '@/i18n'
 import { ROUTE_NO_CEILING, type ModelRole, type ModelRouteKey, type ModelSlot } from '@/lib/api-codex-chat'
 import type { Draft } from './chat-profile-editor-fields'
@@ -12,7 +14,7 @@ import { useRouteName } from './llm-connection-models'
 export type RoleChoice = 'off' | 'inherit' | `slot:${number}` | `profile:${number}` | `user:${number}`
 
 /** A profile that can write reply suggestions; `ready` false (no model, or a connection that cannot be used) greys it out. */
-export type SuggestWriter = { id: number; name: string; ready: boolean }
+export type SuggestWriter = ChatProfileFolderFields & { id: number; name: string; ready: boolean }
 
 /** The chat profiles and the editor's own user profiles that can write suggestions (undefined until loaded). */
 export type SuggestWriters = { profiles?: SuggestWriter[]; users?: SuggestWriter[] }
@@ -171,9 +173,7 @@ export function ModelRoleSelect({ role, value, slots, slotsReady, canInherit, wr
         ? <option value={value} disabled>{t({ ko: '모델 #{id}', en: 'Model #{id}' }, { id: value.slice(5) })}</option>
         : null}
       {role === 'suggest' && writers?.profiles?.length ? (
-        <optgroup label={t({ ko: '프로필', en: 'Profiles' })}>
-          {writers.profiles.map((writer) => <option key={writer.id} value={`profile:${writer.id}`} disabled={!writer.ready}>{writer.name}</option>)}
-        </optgroup>
+        <ChatProfileOptions profiles={writers.profiles} prefix="profile:" disabled={(writer) => !writer.ready} />
       ) : null}
       {role === 'suggest' && writers?.users?.length ? (
         <optgroup label={t({ ko: '사용자 프로필', en: 'User profiles' })}>

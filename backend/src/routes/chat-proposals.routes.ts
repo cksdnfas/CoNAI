@@ -21,6 +21,8 @@ import { ChatAssetError } from '../services/codex-chat/chatAssetAccess'
 import { hasAdminAccess } from '../middleware/authMiddleware'
 import { ChatTaskRunner } from '../services/codex-chat/chatTasks'
 import { applyChatSettingsProposal, ChatSettingsError } from '../services/codex-chat/chatSettingsProposals'
+import { applyProfileFolderProposal, ProfileFolderProposalError } from '../services/codex-chat/chatProfileFolderProposals'
+import { ChatProfileError } from '../services/codex-chat/chatProfileError'
 
 const router = express.Router()
 
@@ -115,6 +117,10 @@ router.post('/:proposalId/saved', (req, res, next) => {
     try { requireCharacterImageAccess(proposal.input, canRequesterViewImages(getRequester(req))) }
     catch (error) { res.status(403).json({ success: false, error: error instanceof Error ? error.message : 'Permission required: images.view' }); return }
   }
+  if (proposal?.kind === 'profile_folder') {
+    res.status(400).json({ success: false, error: '폴더 제안은 승인 경로에서 적용해줘.' })
+    return
+  }
   if (proposal?.kind === 'profile_assets' || proposal?.kind === 'character_assets') {
     res.status(400).json({ success: false, error: '자산 제안은 승인 경로에서 적용해줘.' })
     return
@@ -139,6 +145,14 @@ router.post('/:proposalId/saved', (req, res, next) => {
 router.post('/:proposalId/apply', asyncHandler(async (req: Request, res: Response) => {
   const proposalId = visibleProposalId(req, res)
   if (proposalId === null) return
+  if (ChatProposalStore.find(proposalId)?.kind === 'profile_folder') {
+    try { res.json({ success: true, data: applyProfileFolderProposal(getRequester(req), proposalId) }) }
+    catch (error) {
+      if (error instanceof ChatProfileError) { res.status(error instanceof ProfileFolderProposalError ? error.status : 400).json({ success: false, error: error.message }); return }
+      throw error
+    }
+    return
+  }
   if (ChatProposalStore.find(proposalId)?.kind !== 'lore') {
     // The chat's own settings: saved by its owner (the visibility check above) with the context tab's rules.
     if (ChatProposalStore.find(proposalId)?.kind === 'chat_settings') {

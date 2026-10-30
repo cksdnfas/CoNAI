@@ -12,14 +12,13 @@ import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
 import { usePageSidebar } from '@/components/ui/sidebar'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useI18n } from '@/i18n'
-import type { CharacterFolder } from '@/lib/api-character-library'
-import { sortFoldersByName } from '../character-library-shared'
+import { sortFoldersByName, type LibraryFolder } from '../character-library-shared'
 
-const getFolderId = (folder: CharacterFolder) => folder.id
-const getFolderParentId = (folder: CharacterFolder) => folder.parentId
+const getFolderId = (folder: LibraryFolder) => folder.id
+const getFolderParentId = (folder: LibraryFolder) => folder.parentId
 
 /** Folders whose name matches plus every ancestor of a match (so the path stays visible), and those ancestors to expand. */
-function filterFolders(folders: CharacterFolder[], text: string) {
+function filterFolders<T extends LibraryFolder>(folders: T[], text: string) {
   const query = text.trim().toLocaleLowerCase()
   if (!query) return { visible: folders, expanded: [] as number[] }
   const byId = new Map(folders.map((folder) => [folder.id, folder]))
@@ -42,15 +41,15 @@ function filterFolders(folders: CharacterFolder[], text: string) {
  * The page sidebar: the top level, a name filter and the folder tree (right-click / long-press for a folder's actions).
  * In the page's narrow-screen drawer a pick closes the drawer (`inDialog`: never, the tree sits in a picker).
  */
-export function CharacterFolderSidebar({ folders, selectedId, loading, error, onSelect, onCreate, getMenu, inDialog = false }: {
-  folders: CharacterFolder[]
+export function CharacterFolderSidebar<T extends LibraryFolder>({ folders, selectedId, loading, error, onSelect, onCreate, getMenu, inDialog = false }: {
+  folders: T[]
   /** null: the top level. */
   selectedId: number | null
   loading: boolean
   error: unknown
   onSelect: (folderId: number | null) => void
   onCreate?: () => void
-  getMenu?: (folder: CharacterFolder) => ActionMenuEntry[]
+  getMenu?: (folder: T) => ActionMenuEntry[]
   inDialog?: boolean
 }) {
   const { t } = useI18n()
@@ -62,10 +61,10 @@ export function CharacterFolderSidebar({ folders, selectedId, loading, error, on
     if (pageSidebar && !pageSidebar.isDesktop) pageSidebar.setMobileOpen(false)
     onSelect(folderId)
   }
-  const getLabel = (folder: CharacterFolder) => (
+  const getLabel = (folder: T) => (
     <div className="flex min-w-0 items-center justify-between gap-2">
       <span className="truncate">{folder.name}</span>
-      {folder.settingCount ? <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{folder.settingCount}</span> : null}
+      {(folder.settingCount ?? folder.profileCount) ? <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{folder.settingCount ?? folder.profileCount}</span> : null}
     </div>
   )
   return (
@@ -107,7 +106,7 @@ export function CharacterFolderSidebar({ folders, selectedId, loading, error, on
 /** Pick a folder (or the top level) for a move or a setting's place; `excludeIds` are not offered (a folder's own subtree). */
 export function CharacterFolderPickerModal({ title, folders, value, excludeIds, submitLabel, busy = false, onPick, onClose }: {
   title: string
-  folders: CharacterFolder[]
+  folders: LibraryFolder[]
   value: number | null
   excludeIds?: ReadonlySet<number>
   submitLabel?: string

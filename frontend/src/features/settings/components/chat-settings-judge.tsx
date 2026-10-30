@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { ChatProfileOptions } from '@/features/codex-chat/chat-profile-groups'
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import type { ChatJudgeItemStats, ChatJudgeLogRun, ChatPageData } from '@conai/shared'
 import { ChevronRight, RefreshCw } from 'lucide-react'
@@ -220,7 +221,7 @@ export function ChatSettingsJudge() {
       <div className="flex flex-wrap items-center gap-2">
         <Select variant="settings" className="w-40" aria-label={t({ ko: '봇', en: 'Bot' })} value={filter.profileId ?? ''} onChange={(event) => patch({ profileId: number(event.target.value) })}>
           <option value="">{t({ ko: '봇 · 전체', en: 'All bots' })}</option>
-          {profiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.name}</option>)}
+          <ChatProfileOptions profiles={profiles} />
         </Select>
         <Select variant="settings" className="w-40" aria-label={t({ ko: '프리셋', en: 'Preset' })} value={filter.presetId ?? ''} onChange={(event) => patch({ presetId: number(event.target.value), itemId: undefined })}>
           <option value="">{t({ ko: '프리셋 · 전체', en: 'All presets' })}</option>

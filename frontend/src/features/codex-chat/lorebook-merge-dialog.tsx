@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { ChatProfileOptions } from './chat-profile-groups'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Pencil, Sparkles, TriangleAlert } from 'lucide-react'
 import { SegmentedControl } from '@/components/common/segmented-control'
@@ -258,7 +259,7 @@ function MergeBody({ sourceId, targetId: fixedTargetId, entryIds, deleteSource, 
             <IconButton variant="ghost" size="icon-sm" active={instructionOpen} onClick={() => setInstructionOpen((open) => !open)} label={t({ ko: '지시 고치기', en: 'Edit instruction' })}><Pencil /></IconButton>
             {profiles.length > 1 ? (
               <Select variant="settings" controlSize="compact" className="w-40" value={profileId === null ? '' : String(profileId)} onChange={(event) => setProfileId(Number(event.target.value))} aria-label={t({ ko: '맡길 프로필', en: 'Profile to ask' })}>
-                {profiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.name}</option>)}
+                <ChatProfileOptions profiles={profiles} />
               </Select>
             ) : null}
           </>

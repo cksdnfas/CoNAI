@@ -17,6 +17,8 @@ import type { ChatProfileCharacterLink, ChatProfileCharacterLinkInput } from '@c
 import { CHARACTER_APPEARANCE_FIELDS, CHARACTER_PROFILE_COLUMNS, characterProfileDependencies, effectiveCharacterProfile, normalizeCharacterLink, detachedCharacterFields, storedCharacterStyle, type CharacterProfileRow } from './chatProfileCharacters'
 import { characterChanged } from '../characterLibrary'
 import { attachMainImagesDatabase } from '../../database/userSettingsBootstrap'
+import { checkedProfileFolder } from './chatProfileFolders'
+import { chatProfileFolderRankSql, chatProfileOrderSql, nextProfileSortOrder } from './chatProfileOrder'
 
 const NAME_MAX_LENGTH = CHAT_PROFILE_TEXT_LIMITS.name
 const MODEL_MAX_LENGTH = 200
@@ -100,6 +102,7 @@ export type ChatContentRatingMode = 'model' | 'custom'
 
 export type ChatProfile = {
   id: number
+  folderId: number | null
   /** Opaque editor revision, including the synced character setting. */
   revision: string
   /** The omitted background image's own revision for editor merges. */
@@ -269,6 +272,7 @@ const LEGACY_PAIR_KEYS: Array<[keyof ChatProfileInput, keyof LegacyModelPairs, k
 
 type ProfileRow = CharacterProfileRow & {
   id: number
+  folder_id: number | null
   revision: number
   background_revision: number
   name: string
@@ -437,6 +441,7 @@ function toProfile(row: ProfileRow, dependencies?: ProfileListDependencies): Cha
   try { avatarCrop = normalizeAvatarCrop(row.avatar_crop ? JSON.parse(row.avatar_crop) : null) } catch { /* Keep malformed legacy crops unset. */ }
   const profile: ChatProfile = {
     id: row.id,
+    folderId: row.folder_id ?? null,
     revision: `${row.revision ?? 0}:${row.character_sync === 1 ? row.linked_revision ?? '' : ''}`,
     backgroundRevision: row.background_revision ?? 0,
     characterLink: null,
@@ -680,6 +685,7 @@ function toColumns(input: ChatProfileInput, options: { draft?: boolean; strictKe
   const characterLink = normalizeCharacterLink(input.characterLink)
   const columns = {
     name,
+    folder_id: checkedProfileFolder(input.folderId),
     character_setting_id: characterLink?.settingId ?? null,
     character_sync: characterLink?.synced ? 1 : 0,
     tagline: text(input.tagline, CHAT_PROFILE_TEXT_LIMITS.tagline),
@@ -770,7 +776,7 @@ function toColumns(input: ChatProfileInput, options: { draft?: boolean; strictKe
   return columns
 }
 
-const ADMIN_PROFILE_COLUMNS = `id, revision, background_revision, name, tagline, lorebook_ids, block_ids, lore_scan_depth, lore_token_budget,
+const ADMIN_PROFILE_COLUMNS = `id, folder_id, revision, background_revision, name, tagline, lorebook_ids, block_ids, lore_scan_depth, lore_token_budget,
   lore_depth, lore_recursion_depth, author_note, avatar, appearance, reference_hash, avatar_hash, avatar_crop,
   background_hash, engine, model, llm_runtime, reasoning_effort, reasoning_budget_tokens, extra_params, system_prompt,
   prompt_sections, tool_allowlist, tool_output_limit, character_description, example_dialogue, user_persona, greeting,
@@ -786,7 +792,7 @@ export const ChatProfileStore = {
   /** Agent discovery needs no prompts, assets, model slots or display blocks. */
   listAgents() {
     const rows = getUserSettingsDb().prepare(`SELECT id, name, agent_description, engine, allowed_group_keys
-      FROM llm_chat_profiles WHERE is_enabled = 1 AND agent_enabled = 1 ORDER BY sort_order, id`).all() as
+      FROM llm_chat_profiles WHERE is_enabled = 1 AND agent_enabled = 1 ORDER BY ${chatProfileOrderSql()}`).all() as
       Array<Pick<ProfileRow, 'id' | 'name' | 'agent_description' | 'engine' | 'allowed_group_keys'>>
     return rows.map(row => ({ id: row.id, name: row.name, agentDescription: row.agent_description ?? '',
       engine: (row.engine === 'codex' || row.engine === 'claude' ? row.engine : 'llm') as ChatProfileEngine,
@@ -824,26 +830,30 @@ export const ChatProfileStore = {
       ...(options.enabledOnly ? ['is_enabled = 1'] : []),
       ...(ids ? [`id IN (${ids.map(() => '?').join(', ')})`] : []),
     ]
-    return getUserSettingsDb().prepare(`SELECT id, name FROM llm_chat_profiles ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY sort_order ASC, id ASC`)
+    return getUserSettingsDb().prepare(`SELECT id, name FROM llm_chat_profiles ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY ${chatProfileOrderSql()}`)
       .all(...ids ?? []) as Array<Pick<ChatProfile, 'id' | 'name'>>
   },
 
-  list(options: { enabledOnly?: boolean; directory?: boolean; admin?: boolean } = {}): ChatProfile[] {
+  list(options: { enabledOnly?: boolean; directory?: boolean; admin?: boolean; folderId?: number | null; query?: string; limit?: number; offset?: number } = {}): ChatProfile[] {
     const db = getUserSettingsDb()
     // The public directory never sends prompts, greetings, linked-file contents or inline images.
     // Presence sentinels retain the legacy asset URLs without hydrating the base64 payloads.
-    const projection = options.directory ? `id, revision, background_revision, name, tagline, engine, model, llm_runtime, model_slot_id, summary_slot_id,
+    const projection = options.directory ? `id, folder_id, revision, background_revision, name, tagline, engine, model, llm_runtime, model_slot_id, summary_slot_id,
       translation_slot_id, suggest_slot_id, suggest_profile_id, suggest_user_profile_id, suggest_enabled,
       reasoning_effort, reasoning_budget_tokens, temperature, max_tokens, context_turns, context_tokens, summary_enabled,
       lore_depth, author_note, appearance, avatar_hash, avatar_crop, background_hash, reference_hash, chat_style, block_ids,
       mcp_enabled, mcp_scopes, tool_allowlist, allowed_group_keys, generation_preset_ids, allow_lore_proposals, agent_enabled, agent_description, page_assist, is_enabled, sort_order, created_date, updated_date,
       CASE WHEN avatar IS NOT NULL AND avatar != '' THEN 'present' ELSE NULL END AS avatar,
       CASE WHEN background_image IS NOT NULL AND background_image != '' THEN 'present' ELSE NULL END AS background_image` : options.admin ? ADMIN_PROFILE_COLUMNS : '*'
+    const where = [options.enabledOnly ? 'is_enabled = 1' : '', options.folderId !== undefined ? 'folder_id IS @folderId' : '', options.query ? 'instr(lower(name), lower(@query)) > 0' : ''].filter(Boolean)
+    const rank = options.folderId === undefined ? chatProfileFolderRankSql() : '0'
+    const order = options.folderId === undefined ? 'profile_folder_rank, sort_order, id' : 'sort_order, id'
     const rows = db.prepare(`
       SELECT p.*, ${CHARACTER_PROFILE_COLUMNS} FROM
-        (SELECT ${projection}${projection === '*' ? '' : ', character_setting_id, character_sync'} FROM llm_chat_profiles ${options.enabledOnly ? 'WHERE is_enabled = 1' : ''}) p
-        LEFT JOIN character_settings s ON s.id = p.character_setting_id ORDER BY p.sort_order ASC, p.id ASC
-    `).all() as ProfileRow[]
+        (SELECT ${projection}${projection === '*' ? '' : ', character_setting_id, character_sync'}, ${rank} AS profile_folder_rank FROM llm_chat_profiles ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
+          ORDER BY ${order} ${options.limit !== undefined ? 'LIMIT @limit OFFSET @offset' : ''}) p
+        LEFT JOIN character_settings s ON s.id = p.character_setting_id ORDER BY p.profile_folder_rank, p.sort_order, p.id
+    `).all({ folderId: options.folderId ?? null, query: options.query ?? '', limit: options.limit ?? -1, offset: options.offset ?? 0 }) as ProfileRow[]
     if (!rows.length) return []
     const slots = new Set(ModelSlotStore.existingIds(rows.flatMap((row) =>
       [row.model_slot_id, row.summary_slot_id, row.translation_slot_id, row.suggest_slot_id, row.judge_slot_id].filter((id): id is number => id !== null))))
@@ -865,7 +875,7 @@ export const ChatProfileStore = {
   workflowOptions() {
     const rows = getUserSettingsDb().prepare(`SELECT p.id, p.name, CASE WHEN p.character_sync = 1 AND s.id IS NOT NULL THEN NULL ELSE p.avatar END AS avatar, p.model_slot_id, p.is_enabled
       FROM llm_chat_profiles p LEFT JOIN character_settings s ON s.id = p.character_setting_id
-      WHERE p.engine IS NULL OR p.engine NOT IN ('codex', 'claude') ORDER BY p.sort_order ASC, p.id ASC`).all() as Array<{ id: number; name: string; avatar: string | null; model_slot_id: number | null; is_enabled: number }>
+      WHERE p.engine IS NULL OR p.engine NOT IN ('codex', 'claude') ORDER BY ${chatProfileOrderSql('p.')}`).all() as Array<{ id: number; name: string; avatar: string | null; model_slot_id: number | null; is_enabled: number }>
     return ModelSlotStore.withReadSnapshot(() => rows.map((row) => {
       const target = ModelSlotStore.target(row.model_slot_id) ?? ModelSlotStore.defaultTarget()
       return { id: row.id, name: row.name, avatar: row.avatar, provider_name: target?.providerName ?? '', model: target?.model || null, is_enabled: row.is_enabled === 1 }
@@ -952,6 +962,7 @@ export const ChatProfileStore = {
       if ((key === 'reasoningBudgetTokens' || key === 'extraParams') && strictKeys.has('engine')) continue
       ;(columns as Record<string, unknown>)[column] = (stored as unknown as Record<string, unknown>)[column]
     }
+    if (columns.folder_id !== (stored.folder_id ?? null)) columns.sort_order = nextProfileSortOrder(columns.folder_id)
     if (columns.engine !== current.engine && getUserSettingsDb().prepare(`
       SELECT 1 FROM codex_chat_threads WHERE profile_id = ?
       UNION ALL SELECT 1 FROM chat_group_members WHERE profile_id = ? LIMIT 1
@@ -987,18 +998,24 @@ export const ChatProfileStore = {
     return Boolean(row)
   },
 
-  /** The sort order after every current profile: a new profile joins the end of the list. */
-  nextSortOrder() {
-    return (getUserSettingsDb().prepare('SELECT COALESCE(MAX(sort_order), -1) + 1 AS next FROM llm_chat_profiles').get() as { next: number }).next
+  /** A new profile joins the end of its folder. */
+  nextSortOrder(folderId: number | null = null) {
+    return nextProfileSortOrder(folderId)
   },
 
-  /** Every profile in this order; profiles missing from `ids` keep their place after them. */
-  reorder(ids: number[]) {
+  /** Scoped calls replace the listed cards' positions only. Legacy unscoped calls reorder within each folder. */
+  reorder(ids: number[], folderId?: number | null) {
     const db = getUserSettingsDb()
-    const current = (db.prepare('SELECT id FROM llm_chat_profiles ORDER BY sort_order ASC, id ASC').all() as Array<{ id: number }>).map((row) => row.id)
-    const ordered = [...new Set(ids.filter((id) => current.includes(id))), ...current.filter((id) => !ids.includes(id))]
-    const update = db.prepare('UPDATE llm_chat_profiles SET sort_order = ? WHERE id = ?')
-    db.transaction(() => ordered.forEach((id, index) => update.run(index, id)))()
+    db.transaction(() => {
+      if (folderId !== undefined) checkedProfileFolder(folderId)
+      const current = (db.prepare(`SELECT id FROM llm_chat_profiles ${folderId !== undefined ? 'WHERE folder_id IS ?' : ''} ORDER BY ${folderId === undefined ? chatProfileOrderSql() : 'sort_order, id'}`).all(...(folderId !== undefined ? [folderId] : [])) as Array<{ id: number }>).map((row) => row.id)
+      const selected = new Set(ids), existing = new Set(current)
+      if (selected.size !== ids.length || ids.some((id) => !existing.has(id))) throw new ChatProfileError('목록이 바뀌었어. 새로 불러온 뒤 순서를 바꿔줘.')
+      let index = 0
+      const ordered = folderId === undefined ? [...ids, ...current.filter((id) => !selected.has(id))] : current.map((id) => selected.has(id) ? ids[index++]! : id)
+      const update = db.prepare('UPDATE llm_chat_profiles SET sort_order = ? WHERE id = ? AND sort_order != ?')
+      ordered.forEach((id, position) => update.run(position, id, position))
+    }).immediate()
   },
 }
 

@@ -20,6 +20,14 @@
 
 ## 채팅과 페이지 어시스턴트
 
+### 채팅 프로필 폴더
+
+`chat_profile_folders`와 프로필의 nullable `folder_id`는 `userSettingsSchema.ts`에서 멱등 추가한다. 외형 폴더와 별개이며 같은 부모 아래 이름은 대소문자 없이 유일하다. `chatProfileFolders.ts`가 생성·이름 변경·순환 방지 이동·삭제를 공유한다. 삭제는 한 트랜잭션에서 프로필과 직계 하위 폴더를 부모로 옮긴다. 이름 충돌은 전체 롤백하며 프로필을 삭제하거나 자동 개명하지 않는다. 프로필 revision 트리거는 폴더 이동에도 적용된다.
+
+관리자 `/api/codex-chat/admin/profile-folders`와 기존 프로필 update/reorder를 사용한다. `/admin/profiles?folder=root|ID&q=&limit=&offset=`는 SQL 페이지와 total/hasMore를 반환하며 쿼리 없는 기존 배열 계약도 유지한다. `order`의 선택적 `folderId`는 해당 폴더 안에서 지정한 카드들의 위치만 교체하고 다른 페이지·폴더는 보존한다. 이동한 프로필은 대상 폴더 끝에 추가하며 폴더 삭제 때 올라온 프로필도 상대 순서를 유지해 끝에 추가한다. `chatProfileOrder.ts`와 공유 `folderHierarchy.ts`가 최상위 → 이름순 깊이 우선 폴더 → 폴더 안 sort_order/id 순서를 모든 디렉터리와 선택기에 적용한다. 폴더 집계는 grouped query, 경로는 폴더를 일괄 읽어 계산한다. 공개 `/profiles`는 사용 가능한 프로필에만 `folderId`·`folderPath`를 붙이며 사용 불가/꺼진 항목은 null/빈 경로다.
+
+두 탭은 `use-library-location.ts`, `library-folder-content.tsx`, `character-card.tsx`, 폴더 트리·선택기·그리드를 공유한다. 서버의 `libraryFolderStore.ts`는 트랜잭션/이름 충돌, 집계와 순환 검사를 공유한다. URL은 `view=profiles`, `folder`, `q`, `page`, `profile`이다. 검색 중 생성·복사·가져오기는 최상위에 두고 빈 프로필의 초기 폴더는 초안 변경이 아닌 baseline이다. 페이지 어댑터 `profile.open_folder/search`는 view, 폴더 변경과 프로필 이동은 검토 카드다. MCP `manage_chat_profile_folders`는 목록만 즉시 읽으며 생성·이름 변경·이동·삭제는 `profile_folder` 제안으로 저장한다. `chatProfileFolderProposals.ts`와 `/api/chat-proposals/:id/apply`는 관리자·대화 소유권·대상 리비전을 확인하고 변경과 승인 표시를 한 트랜잭션으로 저장한다. 연결 페이지 없이 삭제 카드도 승인할 수 있다. 설정 제안은 `settings.folderId`/`patch.folderId` (`folder_id` 별칭)를 받는다.
+
 ### 프로필 에이전트
 
 - `chatAgentCalls.ts`는 `chat_agent_calls`의 최초 생성, 비동기 실행·결과 게시·재시작 실패·호출방 삭제 취소·1분 청소를 담당한다. `chatAgentTools.ts`의 `call_agent`는 현재 답변의 방 소유자 권한으로 사용 가능한 다른 에이전트만 호출한다. 게시판 호출·공개 페이지·에이전트 방에서는 도구 목록과 실행 양쪽에서 거부한다. 호출 프로필의 유효 도구 grant가 비어 있으면 제공하지 않으며 allowlist도 따른다. 후보는 `ChatProfileStore.listAgents`의 경량 projection으로 조회하고 도구 설명에는 최대 20개만 넣는다. 동시 실행·비용 상한은 두지 않는다.

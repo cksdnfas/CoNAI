@@ -1,4 +1,5 @@
 import { getUserSettingsDb } from '../../database/userSettingsDb'
+import { chatProfileOrderSql } from './chatProfileOrder'
 import { ChatProfileError } from './chatProfileError'
 import { normalizeBlock, type ChatDisplayBlock } from './chatStyle'
 
@@ -45,7 +46,7 @@ function savedBlock(value: unknown): ChatDisplayBlock {
 }
 
 function linkedProfiles() {
-  const rows = getUserSettingsDb().prepare("SELECT id, name, block_ids FROM llm_chat_profiles WHERE block_ids IS NOT NULL AND block_ids != '[]' ORDER BY sort_order ASC, id ASC").all() as Array<{ id: number; name: string; block_ids: string }>
+  const rows = getUserSettingsDb().prepare(`SELECT id, name, block_ids FROM llm_chat_profiles WHERE block_ids IS NOT NULL AND block_ids != '[]' ORDER BY ${chatProfileOrderSql()}`).all() as Array<{ id: number; name: string; block_ids: string }>
   return rows.map((row) => ({ id: row.id, name: row.name, blockIds: normalizeBlockIds(row.block_ids) }))
 }
 

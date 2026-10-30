@@ -136,6 +136,10 @@ export type PluginLlmMeasurement = {
   engine: 'api' | 'claude-code' | 'codex'; estimator: 'tokenizer' | 'heuristic'
 }
 export type PluginLlmProfile = {
+  /** Optional for old hosts; names only describe paths to profiles this account can use. */
+  folderId?: number | null
+  folderPath?: Array<{ id: number; name: string }>
+  sortOrder?: number
   id: number; name: string; tagline: string; engine: string
   context: { contextTokens: number | null; maxOutputTokens: number | null }
   /** Visible look as image-prompt tags (the profile's appearance field); empty when unset. */

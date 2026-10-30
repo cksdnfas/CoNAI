@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { ChatProfileOptions } from '@/features/codex-chat/chat-profile-groups'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { Sparkles } from 'lucide-react'
 import { loreKeyLanguageLabel } from '@conai/shared'
@@ -97,7 +98,7 @@ export function ChatLoreKeyFillDialog({ open, language, entries, onApply, onClos
         </IconButton>
         {profiles.length > 1 ? (
           <Select variant="settings" controlSize="compact" className="w-40" value={profileId === null ? '' : String(profileId)} onChange={(event) => setProfileId(Number(event.target.value))} aria-label={t({ ko: '맡길 프로필', en: 'Profile to ask' })}>
-            {profiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.name}</option>)}
+            <ChatProfileOptions profiles={profiles} />
           </Select>
         ) : null}
         {profilesQuery.isSuccess && profiles.length === 0 ? <span className="text-xs text-muted-foreground">{t({ ko: '맡길 프로필이 없어', en: 'No profile to ask' })}</span> : null}

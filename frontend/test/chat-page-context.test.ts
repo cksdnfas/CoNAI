@@ -11,6 +11,73 @@ function clearTestQueryClient(client: import('@tanstack/react-query').QueryClien
   client.clear()
 }
 
+test('warm and delayed-default profile drafts become ready without dirtying untouched new profiles', async (t) => {
+  const dom = new JSDOM('<div id="root"></div>', { url: 'http://localhost/' })
+  const globals = { window: dom.window, document: dom.window.document, navigator: dom.window.navigator, IS_REACT_ACT_ENVIRONMENT: true }
+  const previous = Object.keys(globals).map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)] as const)
+  for (const [key, value] of Object.entries(globals)) Object.defineProperty(globalThis, key, { configurable: true, value })
+  const { act, createElement: h, useLayoutEffect } = await import('react')
+  const { createRoot } = await import('react-dom/client')
+  const { QueryClient, QueryClientProvider, notifyManager } = await import('@tanstack/react-query')
+  const { useProfileEditorDraft } = await import('../src/features/settings/components/chat-profile-editor')
+  const { CHAT_PROFILE_DEFAULTS_QUERY_KEY, getChatProfileDefaults } = await import('../src/lib/api-codex-chat')
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } })
+  const defaults = {} as import('../src/lib/api-codex-chat').ChatProfileDefaults
+  let state!: ReturnType<typeof useProfileEditorDraft>
+  function Editor({ imported = false, cold = false }: { imported?: boolean; cold?: boolean }) {
+    const result = useProfileEditorDraft({ open: true, profile: null, initialFolderId: 55, initialDraft: imported ? { name: 'Imported', folderId: 55 } : undefined, defaults: cold ? undefined : defaults })
+    useLayoutEffect(() => { state = result }, [result])
+    return h('div', null, result.draft ? 'editor' : 'loading')
+  }
+  const root = createRoot(document.getElementById('root')!)
+  try {
+    await act(async () => root.render(h(QueryClientProvider, { client }, h(Editor))))
+    assert.equal(state.draft?.folderId, 55)
+    assert.equal(state.dirty, false)
+    await act(async () => state.setDraft(draft => ({ ...draft, name: 'Edited' })))
+    assert.equal(state.dirty, true)
+    await act(async () => state.setDraft(draft => ({ ...draft, name: '' })))
+    assert.equal(state.dirty, false)
+    await act(async () => root.render(h(QueryClientProvider, { client }, h(Editor, { key: 'import', imported: true }))))
+    assert.equal(state.dirty, true)
+    let response!: Promise<Response>
+    let requests = 0
+    t.mock.method(globalThis, 'fetch', async () => { requests++; return response })
+    for (const imported of [false, true]) {
+      await act(async () => root.render(h(QueryClientProvider, { client })))
+      client.removeQueries({ queryKey: CHAT_PROFILE_DEFAULTS_QUERY_KEY })
+      let resolveResponse!: (value: Response) => void
+      response = new Promise<Response>((resolve) => { resolveResponse = resolve })
+      await act(async () => root.render(h(QueryClientProvider, { client }, h(Editor, { cold: true, imported }))))
+      assert.equal(state.draft, null)
+      assert.equal(document.getElementById('root')!.textContent, 'loading')
+      await act(async () => {
+        resolveResponse(Response.json({ success: true, data: { ...defaults, style: { typeface: 'sans' }, systemPrompt: 'Loaded defaults' } }))
+        await client.fetchQuery({ queryKey: CHAT_PROFILE_DEFAULTS_QUERY_KEY, queryFn: getChatProfileDefaults, staleTime: Infinity })
+        await new Promise<void>((resolve) => notifyManager.schedule(resolve))
+      })
+      assert.equal(state.defaultsQuery.isSuccess, true)
+      assert.equal(document.getElementById('root')!.textContent, 'editor')
+      assert.equal(state.draft?.folderId, 55)
+      assert.equal(state.draft?.systemPrompt, 'Loaded defaults')
+      assert.equal(state.draft?.name, imported ? 'Imported' : '')
+      assert.equal(state.dirty, imported)
+    }
+    await act(async () => root.render(h(QueryClientProvider, { client }, h(Editor, { key: 'cached', cold: true }))))
+    assert.equal(document.getElementById('root')!.textContent, 'editor')
+    assert.equal(state.dirty, false)
+    assert.equal(requests, 2, 'warm navigation reuses the fetched defaults')
+  } finally {
+    await act(async () => root.unmount())
+    clearTestQueryClient(client)
+    dom.window.close()
+    for (const [key, descriptor] of previous) {
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor)
+      else Reflect.deleteProperty(globalThis, key)
+    }
+  }
+})
+
 test('editor merges preserve unrelated drafts and do not misidentify their own asset changes', async () => {
   const { buildDraft, mergeProfileDraft, mergeProfileConflict, mergeOwnProfileDraft, latestProfileConflicts, profileAssetDraft, profileSettingNeedsRefresh, rebaseProfileDraft, rebaseAppearancePatch } = await import('../src/features/settings/components/chat-profile-editor')
   const { mergeBookDraft, latestBookConflicts } = await import('../src/features/settings/components/chat-lorebook-editor-page')

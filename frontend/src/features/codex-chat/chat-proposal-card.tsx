@@ -15,6 +15,10 @@ import {
   CHAT_ADMIN_PROFILES_QUERY_KEY,
   CHAT_BLOCKS_QUERY_KEY,
   CHAT_PROFILES_QUERY_KEY,
+  CHAT_PROFILE_FOLDERS_QUERY_KEY,
+  CHAT_PROFILE_LIBRARY_QUERY_KEY,
+  applyChatProfileFolderProposal,
+  listChatProfileFolders,
   CHAT_PROFILE_DEFAULTS_QUERY_KEY as DEFAULTS_QUERY_KEY,
   CHAT_PROFILE_SYNCED_KEYS,
   MODEL_SLOTS_QUERY_KEY,
@@ -47,6 +51,7 @@ import { ChatAssetProposalCard } from './chat-asset-proposal-card'
 import { ChatCharacterLibraryProposalCard } from './chat-character-library-proposal-card'
 import { ChatProfileLinkChange } from './chat-profile-link-change'
 import { ProposalFooter, ProposalFrame } from './chat-proposal-parts'
+import { folderPath } from '@conai/shared'
 
 type Proposal = NonNullable<CodexChatToolCall['proposal']>
 type BlockProposal = Extract<Proposal, { kind: 'display_block' }>
@@ -92,6 +97,7 @@ function ProposalCard({ proposal, threadId }: { proposal: Proposal; threadId?: n
   if (proposal.kind === 'profile') return <ProfileProposalCard proposal={proposal} threadId={threadId} />
   if (proposal.kind === 'lore') return <LoreProposalCard proposal={proposal} threadId={threadId} />
   if (proposal.kind === 'profile_update') return <ProfileUpdateCard proposal={proposal} threadId={threadId} />
+  if (proposal.kind === 'profile_folder') return <ProfileFolderProposalCard proposal={proposal} threadId={threadId} />
   if (proposal.kind === 'chat_settings') return <ChatSettingsCard proposal={proposal} threadId={threadId} />
   if (proposal.kind === 'task_plan') return <TaskPlanCard proposal={proposal} threadId={threadId} />
   return null
@@ -105,6 +111,8 @@ function useProposalRefresh(threadId?: number) {
       queryClient.invalidateQueries({ queryKey: CHAT_BLOCKS_QUERY_KEY }),
       queryClient.invalidateQueries({ queryKey: CHAT_ADMIN_PROFILES_QUERY_KEY }),
       queryClient.invalidateQueries({ queryKey: CHAT_PROFILES_QUERY_KEY }),
+      queryClient.invalidateQueries({ queryKey: CHAT_PROFILE_FOLDERS_QUERY_KEY }),
+      queryClient.invalidateQueries({ queryKey: CHAT_PROFILE_LIBRARY_QUERY_KEY }),
       ...(threadId !== undefined ? [queryClient.invalidateQueries({ queryKey: codexChatThreadQueryKey(threadId) })] : []),
     ])
   }
@@ -286,6 +294,7 @@ function ProfileProposalCard({ proposal, threadId }: { proposal: ProfileProposal
 }
 
 const UPDATE_LABELS: Record<string, { ko: string; en: string }> = {
+  folderId: { ko: '프로필 폴더', en: 'Profile folder' },
   name: { ko: '이름', en: 'Name' },
   tagline: { ko: '짧은 소개', en: 'Tagline' },
   systemPrompt: { ko: '시스템 프롬프트', en: 'System prompt' },
@@ -370,6 +379,9 @@ function ProfileUpdateCard({ proposal, threadId }: { proposal: UpdateProposal; t
   const [savedNow, setSavedNow] = useState(false)
   const saved = savedNow || proposal.saved === true
   const slotsQuery = useQuery({ queryKey: MODEL_SLOTS_QUERY_KEY, queryFn: listModelSlots, enabled: admin })
+  const foldersQuery = useQuery({ queryKey: CHAT_PROFILE_FOLDERS_QUERY_KEY, queryFn: listChatProfileFolders, enabled: admin && 'folderId' in proposal.patch })
+  const byFolderId = new Map((foldersQuery.data ?? []).map((folder) => [folder.id, folder]))
+  const folderLabel = (value: unknown) => value === null ? t({ ko: '최상위', en: 'Top level' }) : folderPath(byFolderId, Number(value)).map((folder) => folder.name).join(' / ') || t({ ko: '찾을 수 없는 폴더', en: 'Folder unavailable' })
   const defaultsQuery = useQuery({ queryKey: DEFAULTS_QUERY_KEY, queryFn: getChatProfileDefaults, staleTime: Infinity, enabled: admin })
   const profilesQuery = useQuery({ queryKey: CHAT_ADMIN_PROFILES_QUERY_KEY, queryFn: listChatAdminProfiles, enabled: admin && editorOpen })
   const slotNames = useMemo(() => new Map((slotsQuery.data ?? []).map((slot) => [slot.id, slot.label])), [slotsQuery.data])
@@ -456,8 +468,8 @@ function ProfileUpdateCard({ proposal, threadId }: { proposal: UpdateProposal; t
           <UpdateRow
             key={key}
             label={UPDATE_LABELS[key] ? t(UPDATE_LABELS[key]) : key}
-            before={proposal.display?.[key]?.before ?? formatValue(key, proposal.before[key], slotNames, t)}
-            after={proposal.display?.[key]?.after ?? formatValue(key, proposal.patch[key], slotNames, t)}
+            before={proposal.display?.[key]?.before ?? (key === 'folderId' ? folderLabel(proposal.before[key]) : formatValue(key, proposal.before[key], slotNames, t))}
+            after={proposal.display?.[key]?.after ?? (key === 'folderId' ? folderLabel(proposal.patch[key]) : formatValue(key, proposal.patch[key], slotNames, t))}
           />
         ))}
       </div>
@@ -469,6 +481,35 @@ function ProfileUpdateCard({ proposal, threadId }: { proposal: UpdateProposal; t
       {admin && editorOpen && editorProfile ? <Suspense fallback={null}><ChatProfileEditorModal open profile={editorProfile} draftLink={proposedLink} defaults={defaultsQuery.data} onClose={handleEditorClose} /></Suspense> : null}
     </ProposalFrame>
   )
+}
+
+/** A chat profile folder change (create, rename, move, delete): an administrator applies it here. */
+function ProfileFolderProposalCard({ proposal, threadId }: { proposal: Extract<Proposal, { kind: 'profile_folder' }>; threadId?: number }) {
+  const { t } = useI18n()
+  const admin = useIsAdmin()
+  const refresh = useProposalRefresh(threadId)
+  const { showSnackbar } = useSnackbar()
+  const [savedNow, setSavedNow] = useState(false)
+  const save = useMutation({
+    mutationFn: () => applyChatProfileFolderProposal(proposal.id),
+    onSuccess: async () => { setSavedNow(true); await refresh() },
+    onError: (error) => showSnackbar({ message: getErrorMessage(error, t({ ko: '폴더 제안을 저장하지 못했어.', en: 'Could not apply folder proposal.' })), tone: 'error' }),
+  })
+  const labels = {
+    create: t({ ko: '폴더 만들기 제안', en: 'Create folder proposal' }),
+    rename: t({ ko: '폴더 이름 변경 제안', en: 'Rename folder proposal' }),
+    move: t({ ko: '폴더 이동 제안', en: 'Move folder proposal' }),
+    delete: t({ ko: '폴더 삭제 제안', en: 'Delete folder proposal' }),
+  }
+  const pathLabel = (path: string[]) => path.join(' / ') || t({ ko: '최상위', en: 'Top level' })
+  return <ProposalFrame>
+    <Header label={labels[proposal.action]} name={proposal.name} />
+    <UpdateRow label={t({ ko: '폴더 경로', en: 'Folder path' })} before={pathLabel(proposal.beforePath)} after={pathLabel(proposal.afterPath)} />
+    {proposal.action === 'delete' ? <p className="text-xs text-muted-foreground">{t({ ko: '프로필과 하위 폴더는 지워지지 않고 부모로 옮겨져. 프로필은 기존 항목 뒤에 추가돼.', en: 'Profiles and subfolders move to the parent, never deleted. Profiles append after its existing items.' })}</p> : null}
+    <Footer saved={savedNow || proposal.saved === true} savedLink="/characters?view=profiles" admin={admin}>
+      <span className="flex-1" /><SaveButton pending={save.isPending} disabled={proposal.dismissed} onClick={() => save.mutate()} />
+    </Footer>
+  </ProposalFrame>
 }
 
 /** This chat's own settings (lorebook links, record book, linked files, minutes): the chat's owner saves it here. */

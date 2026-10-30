@@ -26,6 +26,8 @@ export * from './types/contentEvaluation';
 export { TOPIC_EVALUATION_LIMITS } from './types/contentEvaluation';
 export * from './types/chatAssets'
 export * from './types/characterLibrary'
+export * from './types/chatProfileFolders'
+export * from './utils/folderHierarchy'
 export * from './utils/chatPortrait'
 export * from './constants/pageSettings'
 export * from './constants/chatLimits'

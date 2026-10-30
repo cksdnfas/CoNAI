@@ -20,6 +20,7 @@ export type ProfileEditorSection = 'basic' | 'character' | 'appearance' | 'model
  * call this one's tools); the agent description is.
  */
 const DRAFT_KEYS = {
+  folderId: 'basic',
   name: 'basic', tagline: 'basic', systemPrompt: 'character', promptSections: 'character', greeting: 'character', alternateGreetings: 'character', authorNote: 'character',
   openingHistory: 'character', greetingPosition: 'character',
   appearance: 'appearance', engine: 'model', modelSlotId: 'model', lorebookIds: 'memory', blockIds: 'look', isEnabled: 'basic',
@@ -33,7 +34,7 @@ const DRAFT_KEYS = {
 type DraftKey = keyof typeof DRAFT_KEYS
 
 /** Keys a page value of 0 clears (the action schema has no null): a role's model row, a picked id or an optional cap. */
-const ZERO_CLEARS = new Set<DraftKey>(['summarySlotId', 'translationSlotId', 'suggestSlotId', 'judgeSlotId', 'judgePresetId', 'suggestProfileId', 'contentRatingTierId', 'contextTokens', 'maxTokens', 'reasoningBudgetTokens'])
+const ZERO_CLEARS = new Set<DraftKey>(['folderId', 'summarySlotId', 'translationSlotId', 'suggestSlotId', 'judgeSlotId', 'judgePresetId', 'suggestProfileId', 'contentRatingTierId', 'contextTokens', 'maxTokens', 'reasoningBudgetTokens'])
 const LANGUAGES = CHAT_TRANSLATION_LANGUAGES.map((language) => language.id)
 
 /** A filled page value as the draft holds it: 0 (or −1 for temperature) for "unset", linked files with their write flag. */
@@ -144,6 +145,7 @@ export function useProfileEditorChatPage({ open, profile, draft, setDraft, dirty
   }, ['mode'])
   const ids = <T extends { id: number }>(items: T[] | undefined) => (items ?? []).map((item) => item.id)
   const draftSchema = pageObject({
+    folderId: { ...pageNumber(0, undefined, true), description: 'Chat profile folder id; 0 = top level. Not an appearance folder.' },
     name: pageText(CHAT_PROFILE_TEXT_LIMITS.name), tagline: pageText(CHAT_PROFILE_TEXT_LIMITS.tagline), systemPrompt: pageText(CHAT_PROFILE_TEXT_LIMITS.text),
     promptSections: pageArray(pageObject({ id: pageText(100), title: pageText(CHAT_PROFILE_TEXT_LIMITS.sectionTitle), content: pageText(CHAT_PROFILE_TEXT_LIMITS.text), kind: pageChoice(['text', 'dialogue', 'post']), enabled: { type: 'boolean' } }, ['title', 'content']), CHAT_PROFILE_TEXT_LIMITS.sections),
     greeting: pageText(CHAT_PROFILE_TEXT_LIMITS.text), alternateGreetings: pageArray(pageText(CHAT_PROFILE_TEXT_LIMITS.text), CHAT_PROFILE_TEXT_LIMITS.alternateGreetings), authorNote: pageText(CHAT_PROFILE_TEXT_LIMITS.authorNote), appearance: pageText(CHAT_PROFILE_TEXT_LIMITS.text),
@@ -196,6 +198,7 @@ export function useProfileEditorChatPage({ open, profile, draft, setDraft, dirty
     data: {
       section,
       profile: {
+        folderId: draft.folderId ?? 0,
         saved: Boolean(profile), id: profile?.id ?? null, name: draft.name, tagline: draft.tagline, systemPrompt: cut(draft.systemPrompt),
         promptSections: draft.promptSections.map((entry) => ({ id: entry.id, title: entry.title, content: cut(entry.content), kind: entry.kind, enabled: entry.enabled !== false })),
         greeting: cut(draft.greeting), alternateGreetings: draft.alternateGreetings.map(cut), authorNote: draft.authorNote, appearance: cut(look.appearance ?? ''),

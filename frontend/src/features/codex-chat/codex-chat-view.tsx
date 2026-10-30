@@ -1080,7 +1080,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
     // The unsaved new chat shows its greeting and the composer; otherwise there is no chat yet: the picker.
     body = pendingProfile
       ? chatBody
-      : threadsQuery.isPending ? null : <ChatProfilePicker profiles={profiles} threads={threads} layout={layout} disabled={isStartingChat || createGroupMutation.isPending || isBusy} onPick={pickProfile} onPickGroup={pickGroup} onImport={(file) => void handleImport(file)} onImportFiles={(entries) => void handleImportFiles(entries)} />
+      : threadsQuery.isPending ? null : <ChatProfilePicker profiles={profiles} layout={layout} disabled={isStartingChat || createGroupMutation.isPending || isBusy} onPick={pickProfile} onPickGroup={pickGroup} onImport={(file) => void handleImport(file)} onImportFiles={(entries) => void handleImportFiles(entries)} />
   } else if (!thread) {
     // An opened chat that is still loading or could not be read is never the new-chat picker.
     body = threadQuery.isError ? (

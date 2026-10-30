@@ -92,6 +92,7 @@ export const TOOL_FEATURE_PERMISSIONS: Record<string, string | readonly string[]
   // The user guides are the app's public documentation: any signed-in account reads them.
   get_app_guide: [],
   get_chat_setup_guide: [], list_chat_profiles: [], get_chat_profile: [], list_display_blocks: [], get_display_block: [],
+  manage_chat_profile_folders: [],
   propose_display_block: [], propose_chat_profile: [], propose_profile_update: [], propose_profile_assets: [], get_asset_batch: [],
 };
 

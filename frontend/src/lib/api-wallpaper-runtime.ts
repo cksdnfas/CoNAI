@@ -182,6 +182,8 @@ export function getWallpaperLibraryStats() {
 }
 
 export interface WallpaperChatProfile {
+  folderPath?: Array<{ id: number; name: string }>
+  sortOrder?: number
   id: number
   name: string
   /** Picks the no-avatar fallback, as in the chat (Codex shows a terminal). */

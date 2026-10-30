@@ -26,6 +26,9 @@ import { SwitchLine } from '@/components/ui/switch-line'
 import { Tip } from '@/components/ui/tooltip'
 import { ChatProfileAvatar } from '@/features/codex-chat/chat-profile-avatar'
 import { settingDraftOf } from '@/features/characters/character-library-shared'
+import { folderPath } from '@/features/characters/character-library-shared'
+import { CharacterFolderPickerModal } from '@/features/characters/components/character-folder-nav'
+import { CHAT_PROFILE_FOLDERS_QUERY_KEY, CHAT_PROFILE_LIBRARY_QUERY_KEY, listChatProfileFolders } from '@/lib/api-codex-chat'
 import { useI18n } from '@/i18n'
 import { listAuthPermissionGroups } from '@/lib/api-auth'
 import {
@@ -84,11 +87,12 @@ export const CHAT_PROFILES_PATH = '/characters?view=profiles'
 /** The editor page of a saved profile, or of a new one (`new`). */
 export const chatProfileEditorPath = (id: number | 'new') => `${CHAT_PROFILES_PATH}&profile=${id}`
 /** What a new profile's page starts from: a copy, a card import or a proposal (kept in the history entry). */
-export type ChatProfileEditorPageState = { draft?: ChatProfileInput; copyOf?: number }
+export type ChatProfileEditorPageState = { draft?: ChatProfileInput; copyOf?: number; initialFolderId?: number | null }
 
-export function buildDraft(profile: ChatProfileInput | null, defaults: ChatProfileDefaults | undefined): Draft {
+export function buildDraft(profile: ChatProfileInput | null, defaults: ChatProfileDefaults | undefined, initialFolderId: number | null = null): Draft {
   return {
     name: profile?.name ?? '',
+    folderId: profile?.folderId === undefined ? initialFolderId : profile.folderId,
     tagline: profile?.tagline ?? '',
     lorebookIds: profile?.lorebookIds ?? [],
     blockIds: profile?.blockIds ?? [],
@@ -345,6 +349,10 @@ function ChatProfileBasicPanel({ draft, patch, profile, audience, onOpenAppearan
 }) {
   const { t } = useI18n()
   const { filled } = useProfileAssist()
+  const [choosingFolder, setChoosingFolder] = useState(false)
+  const foldersQuery = useQuery({ queryKey: CHAT_PROFILE_FOLDERS_QUERY_KEY, queryFn: listChatProfileFolders })
+  const folders = foldersQuery.data ?? []
+  const path = folderPath(new Map(folders.map((folder) => [folder.id, folder])), draft.folderId)
   return (
     <div className="space-y-4">
       <EditorGroup label={t({ ko: '프로필', en: 'Profile' })}>
@@ -359,6 +367,10 @@ function ChatProfileBasicPanel({ draft, patch, profile, audience, onOpenAppearan
             <Input variant="settings" assisted={filled('tagline')} value={draft.tagline} maxLength={CHAT_PROFILE_TEXT_LIMITS.tagline} placeholder={t({ ko: '짧은 소개', en: 'Tagline' })} aria-label={t({ ko: '짧은 소개', en: 'Tagline' })} onChange={(event) => patch({ tagline: event.target.value })} />
           </div>
         </div>
+      </EditorGroup>
+      <EditorGroup label={t({ ko: '프로필 폴더', en: 'Profile folder' })}>
+        <Button variant="field" size="field" onClick={() => setChoosingFolder(true)}>{path.map((folder) => folder.name).join(' / ') || t({ ko: '최상위', en: 'Top level' })}</Button>
+        {choosingFolder ? <CharacterFolderPickerModal title={t({ ko: '프로필 폴더', en: 'Profile folder' })} folders={folders} value={draft.folderId} onPick={(folderId) => { patch({ folderId }); setChoosingFolder(false) }} onClose={() => setChoosingFolder(false)} /> : null}
       </EditorGroup>
       <EditorGroup label={t({ ko: '사용', en: 'Use' })}>
         <SwitchLine label={t({ ko: '채팅에서 사용', en: 'Use in chat' })} checked={draft.isEnabled} onCheckedChange={(isEnabled) => patch({ isEnabled })} />
@@ -375,6 +387,7 @@ type ProfileEditorProps = {
   open: boolean
   profile: ChatProfile | null
   initialDraft?: ChatProfileInput
+  initialFolderId?: number | null
   /** The profile a new one copies (initialDraft holds its settings). */
   copyOf?: number
   /** A library link the draft starts with over the stored profile's (a proposal's, not stored yet). */
@@ -384,7 +397,7 @@ type ProfileEditorProps = {
 }
 
 /** One editor's profile and draft, kept while the server defaults load, fail or retry. */
-function useProfileEditorDraft({ open, profile: initialProfile, initialDraft, draftLink, defaults }: Pick<ProfileEditorProps, 'open' | 'profile' | 'initialDraft' | 'draftLink' | 'defaults'>) {
+export function useProfileEditorDraft({ open, profile: initialProfile, initialDraft, initialFolderId = null, draftLink, defaults }: Pick<ProfileEditorProps, 'open' | 'profile' | 'initialDraft' | 'initialFolderId' | 'draftLink' | 'defaults'>) {
   const queryClient = useQueryClient()
   const cached = initialProfile && queryClient.getQueryData<ChatProfile[]>(CHAT_ADMIN_PROFILES_QUERY_KEY)?.find((entry) => entry.id === initialProfile.id && entry.revision === initialProfile.revision)
   // Proposal modals can pass a profile with proposed fields overlaid; its cached record is the actual base.
@@ -394,30 +407,36 @@ function useProfileEditorDraft({ open, profile: initialProfile, initialDraft, dr
   const [profile, setProfile] = useState(initialBase)
   const editorSession = useRef({ open: false, id: initialProfile?.id ?? null })
   const [draft, setDraft] = useState<Draft | null>(() => {
-    const built = initialProfile || currentDefaults ? buildDraft(initialProfile ?? initialDraft ?? null, currentDefaults) : null
+    const built = initialProfile || currentDefaults ? buildDraft(initialProfile ?? initialDraft ?? null, currentDefaults, initialFolderId) : null
     return built && profile && draftLink !== undefined ? { ...built, characterLink: draftLink } : built
   })
-  const [draftDefaults, setDraftDefaults] = useState(currentDefaults)
-  if (currentDefaults !== draftDefaults) {
-    setDraftDefaults(currentDefaults)
-    if (!profile && currentDefaults && (!draft || (draftDefaults && JSON.stringify(draft) === JSON.stringify(buildDraft(initialDraft ?? null, draftDefaults))))) {
-      setDraft(buildDraft(initialDraft ?? null, currentDefaults))
-    }
-  }
+  const draftDefaults = useRef(currentDefaults)
   useEffect(() => {
+    // Hydration and session resets must share one writer: a reset must not clear a draft after hydration consumed its trigger.
+    const previousDefaults = draftDefaults.current
+    let reset = false
     if (open && (!editorSession.current.open || editorSession.current.id !== (initialProfile?.id ?? null))) {
       // A new page moving to the id it just created is still the same editor and draft.
       if (!editorSession.current.open || initialProfile?.id !== profile?.id) {
+        reset = true
         setProfile(initialBase)
-        const built = initialProfile || currentDefaults ? buildDraft(initialProfile ?? initialDraft ?? null, currentDefaults) : null
+        const built = initialProfile || currentDefaults ? buildDraft(initialProfile ?? initialDraft ?? null, currentDefaults, initialFolderId) : null
         setDraft(built && initialProfile && draftLink !== undefined ? { ...built, characterLink: draftLink } : built)
       }
     }
+    if (!reset && open && !profile && currentDefaults) {
+      setDraft((current) => {
+        if (current && (previousDefaults === currentDefaults || !previousDefaults || !chatDraftEqual(current, buildDraft(initialDraft ?? null, previousDefaults, initialFolderId)))) return current
+        return buildDraft(initialDraft ?? null, currentDefaults, initialFolderId)
+      })
+    }
+    draftDefaults.current = currentDefaults
     editorSession.current = { open, id: initialProfile?.id ?? null }
-  }, [currentDefaults, initialDraft, open, initialProfile, initialBase, draftLink, profile])
+  }, [currentDefaults, initialDraft, initialFolderId, open, initialProfile, initialBase, draftLink, profile])
 
-  const baseline = buildDraft(profile ?? initialDraft ?? null, currentDefaults)
-  const dirty = open && ((!profile && Boolean(initialDraft)) || (draft !== null && !chatDraftEqual(draft, baseline)))
+  // A new profile has no baseline until the server defaults load (buildDraft needs one of the two).
+  const baseline = profile || currentDefaults ? buildDraft(profile ?? initialDraft ?? null, currentDefaults, initialFolderId) : null
+  const dirty = open && ((!profile && Boolean(initialDraft)) || (draft !== null && baseline !== null && !chatDraftEqual(draft, baseline)))
   // Unsaved edits of a synced library setting's look (held by the editor below).
   const [settingDirty, setSettingDirty] = useState(false)
   return {
@@ -503,31 +522,32 @@ export function ChatProfileEditorPage() {
   const pageState = (location.state ?? null) as ChatProfileEditorPageState | null
   const profilesQuery = useQuery({ queryKey: CHAT_ADMIN_PROFILES_QUERY_KEY, queryFn: listChatAdminProfiles })
   const found = id === null ? null : profilesQuery.data?.find((entry) => entry.id === id) ?? null
-  const back = () => navigate(CHAT_PROFILES_PATH)
+  const back = () => { const next = new URLSearchParams(params); next.delete('profile'); navigate(`/characters?${next}`) }
   if (invalid || (id !== null && !found)) {
     return (
-      <EditorPage crumbs={profileCrumbs(t, navigate)} title={t({ ko: '채팅 프로필', en: 'Chat profile' })}>
+      <EditorPage crumbs={profileCrumbs(t, navigate, location.search)} title={t({ ko: '채팅 프로필', en: 'Chat profile' })}>
         {!invalid && profilesQuery.isPending ? <LoadingState variant="inline" /> : !invalid && profilesQuery.isError
           ? <ErrorState title={t({ ko: '프로필을 불러오지 못했어', en: 'Could not load the profile' })} error={profilesQuery.error} onRetry={() => void profilesQuery.refetch()} />
           : <EmptyState icon={UserRound} title={t({ ko: '프로필을 찾지 못했어', en: 'Profile not found' })} action={<Button variant="secondary" size="sm" onClick={back}>{t({ ko: '프로필 목록', en: 'Profile list' })}</Button>} />}
       </EditorPage>
     )
   }
-  return <ProfileEditorPageBody profile={found} initialDraft={id === null ? pageState?.draft : undefined} copyOf={id === null ? pageState?.copyOf : undefined} onClose={back} />
+  const initialFolderId = pageState?.initialFolderId !== undefined ? pageState.initialFolderId : !params.get('q')?.trim() && Number(params.get('folder')) > 0 ? Number(params.get('folder')) : null
+  return <ProfileEditorPageBody profile={found} initialFolderId={initialFolderId} initialDraft={id === null ? pageState?.draft : undefined} copyOf={id === null ? pageState?.copyOf : undefined} onClose={back} />
 }
 
-const profileCrumbs = (t: ReturnType<typeof useI18n>['t'], navigate: ReturnType<typeof useNavigate>): PathCrumb[] => [
+const profileCrumbs = (t: ReturnType<typeof useI18n>['t'], navigate: ReturnType<typeof useNavigate>, search = ''): PathCrumb[] => [
   { key: 'characters', label: t({ ko: '캐릭터', en: 'Characters' }), onClick: () => navigate('/characters') },
-  { key: 'profiles', label: t({ ko: '채팅 프로필', en: 'Chat profiles' }), onClick: () => navigate(CHAT_PROFILES_PATH) },
+  { key: 'profiles', label: t({ ko: '채팅 프로필', en: 'Chat profiles' }), onClick: () => { const params = new URLSearchParams(search); params.set('view', 'profiles'); params.delete('profile'); navigate(`/characters?${params}`) } },
 ]
 
-function ProfileEditorPageBody({ profile, initialDraft, copyOf, onClose }: { profile: ChatProfile | null; initialDraft?: ChatProfileInput; copyOf?: number; onClose: () => void }) {
+function ProfileEditorPageBody({ profile, initialDraft, initialFolderId, copyOf, onClose }: { profile: ChatProfile | null; initialDraft?: ChatProfileInput; initialFolderId?: number | null; copyOf?: number; onClose: () => void }) {
   const { t } = useI18n()
   const navigate = useNavigate()
   const location = useLocation()
-  const state = useProfileEditorDraft({ open: true, profile, initialDraft, defaults: undefined })
+  const state = useProfileEditorDraft({ open: true, profile, initialDraft, initialFolderId, defaults: undefined })
   if (!state.draft) {
-    return <EditorPage crumbs={profileCrumbs(t, navigate)} title={t({ ko: '새 프로필', en: 'New profile' })}><DefaultsState query={state.defaultsQuery} /></EditorPage>
+    return <EditorPage crumbs={profileCrumbs(t, navigate, location.search)} title={t({ ko: '새 프로필', en: 'New profile' })}><DefaultsState query={state.defaultsQuery} /></EditorPage>
   }
   return (
     <ProfileEditor
@@ -540,6 +560,7 @@ function ProfileEditorPageBody({ profile, initialDraft, copyOf, onClose }: { pro
       dirty={state.dirty}
       onSettingDirtyChange={state.setSettingDirty}
       initialDraft={initialDraft}
+      initialFolderId={initialFolderId}
       copyOf={copyOf}
       defaults={state.currentDefaults}
       onClose={onClose}
@@ -547,7 +568,9 @@ function ProfileEditorPageBody({ profile, initialDraft, copyOf, onClose }: { pro
       // A new profile's page moves to its id (the same editor stays, so nothing in progress is lost).
       onSaved={(saved, allowNavigation) => {
         if (!profile) {
-          const path = chatProfileEditorPath(saved.id)
+          const params = new URLSearchParams(location.search)
+          params.set('profile', String(saved.id))
+          const path = `/characters?${params}`
           allowNavigation(path, () => navigate(path, { replace: true }))
         }
       }}
@@ -555,7 +578,7 @@ function ProfileEditorPageBody({ profile, initialDraft, copyOf, onClose }: { pro
   )
 }
 
-function ProfileEditor({ layout, open, profile, setProfile, draft, setDraft, dirty: profileDirty, onSettingDirtyChange, initialDraft, copyOf, defaults, onClose, onSaved, pageLocation, ref }: ProfileEditorProps & {
+function ProfileEditor({ layout, open, profile, setProfile, draft, setDraft, dirty: profileDirty, onSettingDirtyChange, initialDraft, initialFolderId, copyOf, defaults, onClose, onSaved, pageLocation, ref }: ProfileEditorProps & {
   layout: 'modal' | 'page'
   draft: Draft
   setDraft: Dispatch<SetStateAction<Draft>>
@@ -601,6 +624,8 @@ function ProfileEditor({ layout, open, profile, setProfile, draft, setDraft, dir
   const patch = (next: Partial<Draft>) => setDraft((current) => ({ ...current, ...next }))
   const audience = useAudience(draft)
   const refreshProfiles = (lorebooksChanged = false) => Promise.all([
+    queryClient.invalidateQueries({ queryKey: CHAT_PROFILE_FOLDERS_QUERY_KEY }),
+    queryClient.invalidateQueries({ queryKey: CHAT_PROFILE_LIBRARY_QUERY_KEY }),
     queryClient.invalidateQueries({ queryKey: CHAT_ADMIN_PROFILES_QUERY_KEY }),
     queryClient.invalidateQueries({ queryKey: CHAT_PROFILES_QUERY_KEY }),
     ...(lorebooksChanged ? [queryClient.invalidateQueries({ queryKey: CHAT_LOREBOOKS_QUERY_KEY })] : []),
@@ -781,8 +806,8 @@ function ProfileEditor({ layout, open, profile, setProfile, draft, setDraft, dir
   const userProfilesQuery = useQuery({ queryKey: CHAT_USER_PROFILES_QUERY_KEY, queryFn: listChatUserProfiles, enabled: open })
   const suggestWriters = {
     profiles: profilesQuery.data?.map((entry) => entry.id === profile?.id
-      ? { id: entry.id, name: t({ ko: '{name} (이 프로필)', en: '{name} (this profile)' }, { name: entry.name }), ready: entry.suggestWriterReady !== false }
-      : { id: entry.id, name: entry.name, ready: entry.isEnabled && entry.suggestWriterReady !== false }),
+      ? { id: entry.id, folderPath: entry.folderPath, sortOrder: entry.sortOrder, name: t({ ko: '{name} (이 프로필)', en: '{name} (this profile)' }, { name: entry.name }), ready: entry.suggestWriterReady !== false }
+      : { id: entry.id, folderPath: entry.folderPath, sortOrder: entry.sortOrder, name: entry.name, ready: entry.isEnabled && entry.suggestWriterReady !== false }),
     users: userProfilesQuery.data?.map((entry) => ({ id: entry.id, name: entry.name, ready: entry.modelReady === true })),
   }
   const lorebooksQuery = useQuery({ queryKey: CHAT_LOREBOOK_SUMMARIES_QUERY_KEY, queryFn: listChatLorebookSummaries, enabled: open })
@@ -884,7 +909,7 @@ function ProfileEditor({ layout, open, profile, setProfile, draft, setDraft, dir
     })
     if (!confirmed) return
     expectedRef.current = null
-    setDraft(buildDraft(profile ?? initialDraft ?? null, defaults))
+    setDraft(buildDraft(profile ?? initialDraft ?? null, defaults, initialFolderId))
     const settingBase = link.setting.baseRef.current
     if (link.dirty && settingBase) link.setting.patch(settingDraftOf(settingBase))
   }
@@ -954,7 +979,7 @@ function ProfileEditor({ layout, open, profile, setProfile, draft, setDraft, dir
     return (
       <ProfileAssistContext.Provider value={assist}>
         <EditorPage
-          crumbs={profileCrumbs(t, navigate)}
+          crumbs={profileCrumbs(t, navigate, pageLocation?.search)}
           title={draft.name.trim() || profile?.name || t({ ko: '새 프로필', en: 'New profile' })}
           status={<>
             {profile ? null : <Chip tone="muted" size="sm">{t({ ko: '아직 저장 안 한 새 프로필', en: 'New, not saved yet' })}</Chip>}

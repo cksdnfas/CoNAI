@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { groupChatProfiles } from './chat-profile-groups'
 import { Chip } from '@/components/ui/chip'
 import { RowPicker, type RowPickerItem } from '@/components/ui/row-picker'
 import { useI18n } from '@/i18n'
@@ -138,13 +139,17 @@ export function ChatProfileSelect({ profiles, value, onChange, disabled }: {
   disabled?: boolean
 }) {
   const { t } = useI18n()
-  const items = useMemo<RowPickerItem[]>(() => profiles.map((profile) => ({
+  const items = useMemo<RowPickerItem[]>(() => {
+    const hasFolders = profiles.some((profile) => profile.folderPath?.length)
+    return groupChatProfiles(profiles).flatMap((group) => group.profiles.map((profile) => ({
+    group: hasFolders ? group.path.map((folder) => folder.name).join(' / ') || t({ ko: '최상위', en: 'Top level' }) : undefined,
     id: String(profile.id),
     media: <ChatProfileAvatar name={profile.name} profile={profile} engine={profile.engine} size="md" />,
     title: <span className="truncate">{profile.name}</span>,
     subtitle: profile.tagline.trim() || profile.modelLabel || undefined,
     searchText: `${profile.name} ${profile.tagline}`,
-  })), [profiles])
+  })))
+  }, [profiles, t])
   return (
     <RowPicker
       items={items}

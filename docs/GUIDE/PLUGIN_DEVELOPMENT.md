@@ -112,6 +112,8 @@ node scripts/build-plugin.mjs --local my-plugin
 | 모델의 단일 답변 | `api.llm` 또는 `conai.llm`의 기본 `text` 모드 |
 | 대화방 없이 프로필의 판단 모델·프리셋 사용 | `llm.decide`(직접 질문), `llm.judgeTurn`(프리셋의 before/after 항목) |
 | 프로필 설정·성격·로어북 조회 | `llm.profiles()`의 `details`(이미지 바이트·라이브러리 연결 상세 제외), 외형 출처 `character: {settingId, synced} \| null`, `loreSelectionLimit`; `llm.profile({profileId})`는 로어북 항목·판단 프리셋도 반환 |
+| 프로필 폴더별 선택 | `llm.profiles()`/`llm.profile()`의 선택적 `folderId`, `folderPath: {id,name}[]`, `sortOrder`; `pluginLlm.ts`는 사용 권한으로 거른 뒤 경로를 일괄 계산하며 숨겨진 형제 폴더는 노출하지 않음. 이전 호스트에서는 누락을 최상위로 취급 |
+| 프로필 폴더 변경 제안 | `manage_chat_profile_folders`의 목록만 즉시 조회. 생성·이름 변경·이동·삭제는 `profile_folder` 카드이며 `/api/chat-proposals/:id/apply`가 관리자·대화 소유권·현재 대상 스냅샷을 확인한 뒤 변경과 영수증을 원자 저장. 연결 페이지 없이 승인 가능하고 중복/오래된 승인은 거부. 프로필 이동은 대상 끝에 추가 |
 | AI가 도구를 골라 실제 작업 | 같은 LLM API의 `mode: 'profile'` |
 | 플러그인 고유 서버 기능을 AI/MCP에 노출 | `conai.tools.register`; 등록 이름은 `p_<pluginId>_<name>` 형식이며 pluginId의 `-`를 `_`로 변환 |
 | 오래 걸리는 처리 | `conai.onJob` + `conai.jobs.start/get/cancel` |

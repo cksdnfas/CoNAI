@@ -21,6 +21,10 @@ import { ChatGenerationPresetStore, resolvePresetWorkflow } from '../../services
 import { PromptPresetModel } from '../../models/PromptPreset';
 import { parseMcpMarkedFields } from '../../services/comfyui/comfyWorkflowInputs';
 import { errorResult, textResult } from '../toolResults';
+import { checkedProfileFolder, listChatProfileFolders, profileFolderPaths } from '../../services/codex-chat/chatProfileFolders';
+import { profileFolderMutationSchema, proposeProfileFolder } from '../../services/codex-chat/chatProfileFolderProposals';
+import { folderPath } from '@conai/shared';
+import { isRequesterAdmin } from '../../middleware/featureAccess';
 
 const BLOCK_KEY_ERROR = 'block.key must match /^[a-z][a-z0-9_-]{0,31}$/';
 import { normalizeCharacterLink, refuseSyncedCharacterProposal } from '../../services/codex-chat/chatProfileCharacters';
@@ -32,7 +36,7 @@ const NO_CHAT_ERROR = 'Proposals need an active chat reply.';
  * who may chat with it, generation presets and provider/model pairs are set by hand in the editor.
  */
 const PROPOSABLE_KEYS = [
-  'name', 'tagline', 'systemPrompt', 'promptSections', 'greeting', 'alternateGreetings', 'openingHistory', 'greetingPosition', 'authorNote', 'appearance',
+  'name', 'folderId', 'tagline', 'systemPrompt', 'promptSections', 'greeting', 'alternateGreetings', 'openingHistory', 'greetingPosition', 'authorNote', 'appearance',
   'modelSlotId', 'summarySlotId', 'translationSlotId', 'suggestSlotId', 'judgeSlotId', 'judgePresetId', 'lorebookIds', 'blockIds',
   'temperature', 'maxTokens', 'contextTurns', 'contextTokens', 'toolOutputLimit',
   'summaryEnabled', 'summaryTriggerTurns', 'summaryPrompt',
@@ -44,6 +48,7 @@ const PROPOSABLE_KEYS = [
 type ProposableKey = typeof PROPOSABLE_KEYS[number];
 
 const KEY_ALIASES: Record<string, ProposableKey> = {
+  folder_id: 'folderId',
   character_link: 'characterLink',
   system_prompt: 'systemPrompt',
   prompt_sections: 'promptSections',
@@ -132,6 +137,7 @@ function profileGuide() {
   const limits = CHAT_PROFILE_TEXT_LIMITS;
   return [
     'CHAT PROFILE reference',
+    'Profile folders are separate from appearance folders. manage_chat_profile_folders lists immediately and proposes create/rename/move/delete as review cards, including headless deletion. No mutation happens until administrator approval; stale cards need a new proposal. Deletion reparents children and appends profiles to the parent. Set settings.folderId on creation or patch.folderId on updates (folder_id alias, null = top level).',
     '',
     'A profile is a character/persona the user chats with. propose_chat_profile proposes a NEW profile; propose_profile_update proposes changes to an existing one. Both only show a card; the user saves it with the 저장 button.',
     'characterLink: null (own appearance), or {settingId, synced:true} (shared appearance) / {settingId, synced:false} (detached copy). get_chat_profile also returns settingName, path, revision and linkedProfileCount. Synced appearance edits must use propose_character_library with setting_id; all linkedProfileCount profiles change. Detach first to edit only this profile.',
@@ -280,6 +286,7 @@ type FieldContext = { owner?: string | null; current?: ChatProfile | null; openi
 /** Validates one proposable field and returns its normalized value (what the admin REST would store). */
 function normalizeProposedField(key: ProposableKey, value: unknown, fieldContext: FieldContext = {}): unknown {
   switch (key) {
+    case 'folderId': return checkedProfileFolder(value);
     case 'characterLink': return normalizeCharacterLink(value);
     case 'name':
     case 'tagline':
@@ -328,6 +335,7 @@ function normalizeProposedField(key: ProposableKey, value: unknown, fieldContext
 /** How a value with an id in it reads on the card; null where the raw value already reads well. */
 function displayValue(key: ProposableKey, value: unknown, owner: string | null): string | null {
   const none = '—';
+  if (key === 'folderId') return value === null ? '최상위' : folderPath(new Map(listChatProfileFolders().map((folder) => [folder.id, folder])), Number(value)).map((folder) => folder.name).join(' / ') || '찾을 수 없는 폴더';
   if (key === 'contentRatingTierId') return value === null ? '제한 없음' : RatingScoreModel.getAllTiers().find((tier) => tier.id === value)?.tier_name ?? `#${String(value)}`;
   if (key === 'judgePresetId') return value === null ? none : ChatJudgePresetStore.find(Number(value))?.name ?? `#${String(value)}`;
   if (key === 'suggestProfileId') return value === null ? none : ChatProfileStore.find(Number(value))?.name ?? `#${String(value)}`;
@@ -479,6 +487,8 @@ export function buildProfileUpdateProposal(args: { profile_id?: number; patch: R
 function profileSummary(profile: ChatProfile) {
   return {
     id: profile.id,
+    folderId: profile.folderId,
+    sortOrder: profile.sortOrder,
     name: profile.name,
     tagline: profile.tagline,
     engine: profile.engine,
@@ -499,6 +509,7 @@ export function profileSetupView(profile: ChatProfile, owner: string | null = nu
   const { typeface, roleplay, colors, backgroundDim, backgroundBlur, cast, emoticonGroupIds, blocks } = profile.style;
   return {
     id: profile.id,
+    folderId: profile.folderId,
     name: profile.name,
     tagline: profile.tagline,
     systemPrompt: profile.systemPrompt,
@@ -569,6 +580,18 @@ function profileAssetsGuide(context: McpRequestContext) {
 
 /** Chat setup tools (scope `configure`, chat accounts with admin rights only): read the setup, propose changes as cards. */
 export function registerChatSetupTools(server: McpServer, context: McpRequestContext): void {
+  server.registerTool('manage_chat_profile_folders', {
+    description: 'Administrator-only profile folder tree, separate from appearance folders. List reads immediately. Create, rename, move and delete attach review cards to the active chat, without changing folders. An administrator saves the card, including headless deletion (profiles and children move up, never deleted). Stale cards require a fresh proposal. Profile updates accept patch.folderId (null = top level).',
+    inputSchema: z.union([z.object({ action: z.literal('list') }).strict(), profileFolderMutationSchema]),
+  }, async (args) => {
+    try {
+      if (!context.requester || !isRequesterAdmin(context.requester)) throw new Error('Administrator required.');
+      if (args.action === 'list') return textResult(listChatProfileFolders());
+      if (!context.chatContext) throw new Error(NO_CHAT_ERROR);
+      const proposal = proposeProfileFolder(context.chatContext, args);
+      return textResult({ proposalId: proposal.id, note: PROPOSAL_NOTE }, { structuredContent: { proposal } });
+    } catch (error) { return errorResult(error); }
+  });
   server.registerTool('get_asset_batch', { description: 'Read a character asset batch: each slot with its status (waiting, queued, processing, completed, failed, blocked), chosen candidate and candidates with review results (expression match, hair/eye match with the reference, judge pick). Without batch_id: the newest batch of the profile (default: your speaking profile), or of its linked setting when synced (a synced profile\'s own background batches are read by batch_id). Use batch_id to inspect a particular batch. Follow generation and choose candidates for propose_profile_assets(action=apply, picks).', inputSchema: z.object({
     batch_id: z.number().int().positive().optional(), profile_id: z.number().int().positive().optional(), setting_id: z.number().int().positive().optional(),
   }) }, async ({ batch_id, profile_id, setting_id }) => {
@@ -618,7 +641,11 @@ export function registerChatSetupTools(server: McpServer, context: McpRequestCon
     'list_chat_profiles',
     { description: 'List the chat profiles (characters) with id, name, tagline, engine, enabled flag, model label, linked block and lorebook ids, and system prompt length.', inputSchema: z.object({}) },
     async () => {
-      try { return textResult(ChatProfileStore.list().map(profileSummary)); } catch (error) { return errorResult(error); }
+      try {
+        const profiles = ChatProfileStore.list();
+        const paths = profileFolderPaths(profiles, () => true);
+        return textResult(profiles.map((profile) => ({ ...profileSummary(profile), folderPath: paths.get(profile.id) })));
+      } catch (error) { return errorResult(error); }
     },
   );
 
@@ -631,7 +658,7 @@ export function registerChatSetupTools(server: McpServer, context: McpRequestCon
         if (id === undefined) throw new Error('profile_id is required.');
         const profile = ChatProfileStore.find(id);
         if (!profile) throw new Error(`Chat profile not found: ${id}`);
-        return textResult(profileSetupView(profile, proposerFileOwner(context)));
+        return textResult({ ...profileSetupView(profile, proposerFileOwner(context)), folderPath: profileFolderPaths([profile], () => true).get(profile.id) ?? [] });
       } catch (error) { return errorResult(error); }
     },
   );

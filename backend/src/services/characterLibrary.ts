@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { assertFolderDestination, folderWrite, listFoldersWithCounts } from './libraryFolderStore'
 import type Database from 'better-sqlite3'
 import { CHAT_PROFILE_TEXT_LIMITS, type CharacterFolder, type CharacterSetting, type CharacterSettingSummary, type CharacterSettingPage, type CharacterLibraryDeletePreview, type CharacterLibraryDeleteResult } from '@conai/shared'
 import { getUserSettingsDb } from '../database/userSettingsDb'
@@ -41,16 +42,10 @@ export function characterChanged(folderIds: Array<number | null>, settingIds: nu
   publishRuntimeEvent({ name: 'characters.changed', topic: 'characters', payload: { folderIds: [...new Set(folderIds.filter((value): value is number => value !== null))], settingIds: [...new Set(settingIds)], profileIds: [...new Set([...profileIds, ...syncedCharacterProfiles(settingIds).map((profile) => profile.id)])] } })
 }
 function write<T>(run: () => T) {
-  try { return getUserSettingsDb().transaction(run).immediate() }
-  catch (error) {
-    if (error instanceof Error && error.message.includes('UNIQUE constraint failed')) throw new CharacterLibraryError('같은 위치에 같은 이름이 있어.', 409, undefined, 'name_conflict')
-    throw error
-  }
+  return folderWrite(run, () => new CharacterLibraryError('같은 위치에 같은 이름이 있어.', 409, undefined, 'name_conflict'))
 }
 export function listCharacterFolders(parentId?: number | null): CharacterFolder[] {
-  return getUserSettingsDb().prepare(`SELECT ${folderColumns}, COALESCE(s.n, 0) AS settingCount FROM character_folders f
-    LEFT JOIN (SELECT folder_id, COUNT(*) n FROM character_settings GROUP BY folder_id) s ON s.folder_id = f.id
-    ${parentId === undefined ? '' : 'WHERE f.parent_id IS ?'} ORDER BY f.name COLLATE NOCASE, f.id`).all(...(parentId === undefined ? [] : [parentId])) as CharacterFolder[]
+  return listFoldersWithCounts('character_folders', 'character_settings', 'settingCount', parentId)
 }
 export function getCharacterFolder(folderId: number): CharacterFolder {
   const folder = getUserSettingsDb().prepare(`SELECT ${folderColumns}, (SELECT COUNT(*) FROM character_settings WHERE folder_id = f.id) AS settingCount FROM character_folders f WHERE f.id = ?`).get(folderId) as CharacterFolder | undefined
@@ -79,7 +74,8 @@ export function patchCharacterFolder(folderId: number, input: unknown) {
   const before = getCharacterFolder(folderId)
   const folder = write(() => {
     const parentId = value.parentId === undefined ? before.parentId : value.parentId
-    if (characterFolderPath(parentId).some((folder) => folder.id === folderId)) throw new CharacterLibraryError('폴더를 자신이나 하위 폴더로 옮길 수 없어.')
+    checkFolder(parentId)
+    assertFolderDestination('character_folders', folderId, parentId, () => new CharacterLibraryError('폴더를 자신이나 하위 폴더로 옮길 수 없어.'))
     getUserSettingsDb().prepare("UPDATE character_folders SET parent_id = ?, name = ?, updated_at = datetime('now') WHERE id = ?").run(parentId, value.name ?? before.name, folderId)
     return getCharacterFolder(folderId)
   })

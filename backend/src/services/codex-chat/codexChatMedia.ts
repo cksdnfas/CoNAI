@@ -95,6 +95,7 @@ const PROPOSAL_TOOLS: Record<ChatProposal['kind'], string> = {
   display_block: 'propose_display_block',
   profile: 'propose_chat_profile',
   profile_update: 'propose_profile_update',
+  profile_folder: 'manage_chat_profile_folders',
   chat_settings: 'propose_chat_settings',
   profile_assets: 'propose_profile_assets',
   character_assets: 'propose_profile_assets',
@@ -109,14 +110,12 @@ const PROPOSAL_TOOLS: Record<ChatProposal['kind'], string> = {
 
 /** Tools whose call leaves a proposal card under the reply. */
 export function isProposalTool(tool: string) {
-  return tool.startsWith('propose_') || tool === 'save_lore' || tool === 'offer_choices'
+  return tool.startsWith('propose_') || tool === 'manage_chat_profile_folders' || tool === 'save_lore' || tool === 'offer_choices'
 }
 
 /**
- * Hang each reply's stored proposals on its `propose_*` / save_lore tool calls (read-only, not stored on the message). Calls and
- * proposals both keep their order within a reply, so the i-th proposal belongs to the i-th such call; a failed call
- * stored nothing and is skipped. Replies whose calls were not recorded by name (Codex keeps only a summary) get the
- * leftover proposals as synthetic calls, like generation results below.
+ * Attach stored proposals by tool and per-tool order. Reads and failed calls never consume a card.
+ * Replies without recorded calls (Codex can keep only a summary) get the remaining proposals as synthetic calls.
  */
 export function attachProposals(messages: CodexChatMessageRecord[]): CodexChatMessageRecord[] {
   const byReply = new Map<string, Array<{ id: number; proposal: ChatProposal }>>()
@@ -131,12 +130,16 @@ export function attachProposals(messages: CodexChatMessageRecord[]): CodexChatMe
     const replyId = message.routing?.replyId
     const proposals = message.role === 'assistant' && replyId ? byReply.get(`${message.thread_id}:${replyId}`) : undefined
     if (!proposals?.length) return message
-    let next = 0
+    const remaining = [...proposals]
     const calls = message.tool_calls.map((call) => {
-      if (!isProposalTool(call.tool) || call.status === 'failed' || next >= proposals.length) return call
-      return { ...call, proposal: proposals[next++].proposal }
+      if (!isProposalTool(call.tool) || call.status === 'failed') return call
+      // The folder tool also lists without proposing; never attach a later write card to that read.
+      if (call.tool === 'manage_chat_profile_folders' && (!call.arguments || typeof call.arguments !== 'object' || !('action' in call.arguments) || call.arguments.action === 'list')) return call
+      const next = remaining.findIndex(({ proposal }) => PROPOSAL_TOOLS[proposal.kind] === call.tool)
+      if (next < 0) return call
+      return { ...call, proposal: remaining.splice(next, 1)[0].proposal }
     })
-    const extra = proposals.slice(next).map(({ id, proposal }) => ({ id: `proposal-${id}`, tool: PROPOSAL_TOOLS[proposal.kind], status: 'completed' as const, arguments: null, summary: null, historyIds: [], compositeHashes: [], proposal }))
+    const extra = remaining.map(({ id, proposal }) => ({ id: `proposal-${id}`, tool: PROPOSAL_TOOLS[proposal.kind], status: 'completed' as const, arguments: null, summary: null, historyIds: [], compositeHashes: [], proposal }))
     return { ...message, tool_calls: [...calls, ...extra] }
   })
 }
