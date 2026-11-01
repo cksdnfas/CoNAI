@@ -112,7 +112,7 @@ export function BackupSourceCard({
               onChange={(event) => setDraft((current) => ({ ...current, target_folder_name: event.target.value }))}
               placeholder={t({ ko: 'Backup 또는 Backup/001', en: 'Backup or Backup/001' })}
             />
-            <p className="mt-2 break-all font-mono text-xs text-primary">{t({ ko: '최종 경로: {path}', en: 'Final path: {path}' }, { path: buildBackupTargetPreviewPath(draft.target_folder_name) })}</p>
+            <p className="mt-2 break-all font-mono text-xs text-primary-text">{t({ ko: '최종 경로: {path}', en: 'Final path: {path}' }, { path: buildBackupTargetPreviewPath(draft.target_folder_name) })}</p>
           </Field>
 
           <Field label={t({ ko: '가져오기 모드', en: 'Import mode' })}>

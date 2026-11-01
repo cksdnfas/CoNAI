@@ -361,7 +361,7 @@ export function ChatStatusStrip({ data, activeKey, onActiveKey, open, onOpenChan
         aria-expanded={open}
         onClick={() => onOpenChange(!open)}
       >
-        <Activity className="size-3.5 shrink-0 text-primary" />
+        <Activity className="size-3.5 shrink-0 text-primary-text" />
         <span className="min-w-0 flex-1 truncate text-left">{stripLabel}{summary || block?.key || data.portraitLabel}</span>
         <span className="flex size-8 shrink-0 items-center justify-center text-muted-foreground">{open ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}</span>
       </button>

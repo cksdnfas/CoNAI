@@ -21,7 +21,7 @@ const chipVariants = cva(
         /** Quieter piece; translucent, so it reads on any surface tone. */
         muted: 'bg-foreground/5 text-muted-foreground',
         /** Selected / current value. */
-        primary: 'bg-primary/12 text-primary',
+        primary: 'bg-primary/12 text-primary-text',
         success: 'bg-success-soft text-success-soft-foreground',
         warning: 'bg-warning-soft text-warning-soft-foreground',
         info: 'bg-info-soft text-info-soft-foreground',
@@ -97,7 +97,7 @@ const toggleChipVariants = cva(
     variants: {
       tone: {
         /** Neutral when off, primary tint when pressed. */
-        default: 'bg-foreground/5 text-muted-foreground hover:bg-foreground/10 hover:text-foreground aria-pressed:bg-primary/12 aria-pressed:text-primary aria-pressed:hover:bg-primary/16 aria-pressed:hover:text-primary',
+        default: 'bg-foreground/5 text-muted-foreground hover:bg-foreground/10 hover:text-foreground aria-pressed:bg-primary/12 aria-pressed:text-primary-text aria-pressed:hover:bg-primary/16 aria-pressed:hover:text-primary-text',
         /** Neutral on/off for a dense block of options (header menu items), where primary would flood the screen: outlined when off, a neutral fill when pressed. */
         neutral: 'border border-foreground/15 bg-transparent text-muted-foreground hover:bg-foreground/5 hover:text-foreground aria-pressed:border-transparent aria-pressed:bg-foreground/12 aria-pressed:text-foreground aria-pressed:hover:bg-foreground/16',
         /** Categorical tones (e.g. prompt syntax kinds): the category fill stays, pressed adds an inset ring. */

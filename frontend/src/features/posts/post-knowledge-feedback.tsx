@@ -20,7 +20,7 @@ const EVALUATORS: Record<PostAssessmentEvaluator, { label: { ko: string; en: str
   judge: { label: { ko: '판단모델', en: 'Judge' }, icon: Scale },
 }
 const QUALITY: Record<PostAssessmentQuality, { label: { ko: string; en: string }; className: string }> = {
-  up: { label: { ko: '추천', en: 'Up' }, className: 'bg-primary/15 text-primary' },
+  up: { label: { ko: '추천', en: 'Up' }, className: 'bg-primary/15 text-primary-text' },
   down: { label: { ko: '비추천', en: 'Down' }, className: 'bg-info-soft text-info-soft-foreground' },
   abstain: { label: { ko: '기권', en: 'Abstain' }, className: 'bg-surface-high text-muted-foreground' },
 }

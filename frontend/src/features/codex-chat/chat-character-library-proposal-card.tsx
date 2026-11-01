@@ -141,7 +141,7 @@ export function ChatCharacterLibraryProposalCard({ proposal, threadId }: { propo
       {saved || dismissed ? (
         <ProposalFooter status>
           <span>{dismissed ? t({ ko: '거절됨', en: 'Dismissed' }) : deleting ? t({ ko: '삭제됨', en: 'Deleted' }) : t({ ko: '저장됨', en: 'Saved' })}</span>
-          {openLink && canView ? <Link to={openLink} className="text-primary hover:underline">{t({ ko: '라이브러리에서 열기', en: 'Open in library' })}</Link> : null}
+          {openLink && canView ? <Link to={openLink} className="text-primary-text hover:underline">{t({ ko: '라이브러리에서 열기', en: 'Open in library' })}</Link> : null}
         </ProposalFooter>
       ) : canEdit ? (
         <ProposalFooter>

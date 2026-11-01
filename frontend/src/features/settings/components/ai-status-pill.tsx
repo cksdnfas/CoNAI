@@ -5,7 +5,7 @@ export type AiStatusTone = 'ok' | 'busy' | 'warn' | 'error' | 'muted'
 
 const TONE_CLASS: Record<AiStatusTone, { text: string; dot: string }> = {
   ok: { text: 'text-success', dot: 'bg-success' },
-  busy: { text: 'text-primary', dot: 'bg-primary animate-pulse motion-reduce:animate-none' },
+  busy: { text: 'text-primary-text', dot: 'bg-primary animate-pulse motion-reduce:animate-none' },
   warn: { text: 'text-warning', dot: 'bg-warning' },
   error: { text: 'text-destructive', dot: 'bg-destructive' },
   muted: { text: 'text-muted-foreground', dot: 'bg-muted-foreground' },

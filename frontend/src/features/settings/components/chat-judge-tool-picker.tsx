@@ -85,7 +85,7 @@ function ToolMenu({ groups, byName, tools, onToggle }: { groups: JudgeToolGroup[
         asChild
         interactive
         size="sm"
-        leading={<span className="flex size-3.5 text-primary">{chosen ? <Check className="size-3.5" /> : null}</span>}
+        leading={<span className="flex size-3.5 text-primary-text">{chosen ? <Check className="size-3.5" /> : null}</span>}
         trailing={trailing}
         selected={at === current}
       >
@@ -129,7 +129,7 @@ function ToolMenu({ groups, byName, tools, onToggle }: { groups: JudgeToolGroup[
               <Tip key={tool.name} content={<span className="block max-w-72">{tool.description}</span>} side="right" align="start">
                 {option(
                   tool.name,
-                  <span className={cn('truncate', tool.pattern && 'text-primary')}>{tool.label}</span>,
+                  <span className={cn('truncate', tool.pattern && 'text-primary-text')}>{tool.label}</span>,
                   <span className="font-mono text-2xs">{tool.name}</span>,
                 )}
               </Tip>

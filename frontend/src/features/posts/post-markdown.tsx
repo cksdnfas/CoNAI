@@ -76,8 +76,8 @@ const COMPONENTS: Components = {
   p: ({ node, children }) => holdsEmbed(node as HastNode | undefined) ? <div className="my-3">{children}</div> : <p className="my-3 first:mt-0 last:mb-0">{children}</p>,
   a: ({ children, href }) => {
     const post = parsePostLink(href)
-    return post ? <Link to={postRoute(post)} className="text-primary underline underline-offset-2">{children}</Link>
-      : <a href={href} target="_blank" rel="noreferrer noopener" className="text-primary underline underline-offset-2">{children}</a>
+    return post ? <Link to={postRoute(post)} className="text-primary-text underline underline-offset-2">{children}</Link>
+      : <a href={href} target="_blank" rel="noreferrer noopener" className="text-primary-text underline underline-offset-2">{children}</a>
   },
   ul: ({ children }) => <ul className="my-3 list-disc space-y-1 pl-5">{children}</ul>,
   ol: ({ children }) => <ol className="my-3 list-decimal space-y-1 pl-5">{children}</ol>,

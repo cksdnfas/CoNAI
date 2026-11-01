@@ -46,7 +46,7 @@ function PostTitle({ post, className }: { post: PostSummary; className?: string 
   const { t } = useI18n()
   return (
     <div className="flex min-w-0 items-center gap-1.5">
-      {post.pinned ? <Pin className="size-3.5 shrink-0 text-primary" aria-label={t({ ko: '고정', en: 'Pinned' })} /> : null}
+      {post.pinned ? <Pin className="size-3.5 shrink-0 text-primary-text" aria-label={t({ ko: '고정', en: 'Pinned' })} /> : null}
       <span className={cn('min-w-0 font-semibold', className)}>{post.title}</span>
       {post.status === 'draft' ? <FileClock className="size-3.5 shrink-0 text-muted-foreground" aria-label={t({ ko: '초안', en: 'Draft' })} /> : null}
       {post.status === 'hidden' ? <EyeOff className="size-3.5 shrink-0 text-destructive" aria-label={t({ ko: '숨김', en: 'Hidden' })} /> : null}

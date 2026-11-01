@@ -137,7 +137,7 @@ function Footer({ saved, savedLink, admin, children }: { saved: boolean; savedLi
     return (
       <ProposalFooter status>
         <span>{t({ ko: '저장됨', en: 'Saved' })}</span>
-        {admin ? <Link to={savedLink} className="text-primary hover:underline">{t({ ko: '열기', en: 'Open' })}</Link> : null}
+        {admin ? <Link to={savedLink} className="text-primary-text hover:underline">{t({ ko: '열기', en: 'Open' })}</Link> : null}
       </ProposalFooter>
     )
   }

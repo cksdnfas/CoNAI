@@ -39,7 +39,7 @@ function AccessEntryCard({ label, description, href, icon: Icon }: AccessEntryCa
           'hover:bg-fill focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/40',
         )}
       >
-        <Icon className="size-4 shrink-0 text-muted-foreground transition-colors group-hover:text-primary" aria-hidden />
+        <Icon className="size-4 shrink-0 text-muted-foreground transition-colors group-hover:text-primary-text" aria-hidden />
 
         <span className="min-w-0 flex-1">
           <Text as="div" variant="title" className="truncate">{label}</Text>

@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils"
 
 /** Pressed look for toggle buttons (IconButton `active` sets data-pressed="true" + aria-pressed). */
 const PRESSED_TINT =
-  "data-[pressed=true]:bg-primary/12 data-[pressed=true]:text-primary data-[pressed=true]:hover:bg-primary/16 data-[pressed=true]:hover:text-primary"
+  "data-[pressed=true]:bg-primary/12 data-[pressed=true]:text-primary-text data-[pressed=true]:hover:bg-primary/16 data-[pressed=true]:hover:text-primary-text"
 
 const buttonVariants = cva(
   "inline-flex shrink-0 items-center justify-center gap-2 rounded-sm text-sm font-medium whitespace-nowrap cursor-pointer transition duration-150 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
@@ -16,9 +16,10 @@ const buttonVariants = cva(
         /**
          * Primary CTA: one per view. Solid primary (text uses the contrast-picked primary-foreground) with a secondary
          * top highlight standing in for the preset's gradient; kept in box-shadow so a bg-* override still replaces the fill.
+         * Disabled drops to a quiet neutral fill (a half-faded orange reads as mud); `aria-busy` keeps the orange while it works.
          */
         default:
-          "bg-primary text-primary-foreground shadow-[inset_0_1px_0_color-mix(in_srgb,var(--secondary)_45%,transparent)] hover:brightness-108 hover:shadow-[inset_0_1px_0_color-mix(in_srgb,var(--secondary)_55%,transparent)]",
+          "bg-primary text-primary-foreground shadow-[inset_0_1px_0_color-mix(in_srgb,var(--secondary)_45%,transparent)] hover:brightness-108 hover:shadow-[inset_0_1px_0_color-mix(in_srgb,var(--secondary)_55%,transparent)] [&:disabled:not([aria-busy=true])]:bg-fill [&:disabled:not([aria-busy=true])]:text-muted-foreground [&:disabled:not([aria-busy=true])]:opacity-100 [&:disabled:not([aria-busy=true])]:shadow-none",
         destructive:
           "bg-destructive-soft text-destructive-soft-foreground hover:brightness-110 focus-visible:ring-destructive/25",
         /** Delete in editor footers and rows: red icon/text, no fill until hover, so it never outweighs Save. */

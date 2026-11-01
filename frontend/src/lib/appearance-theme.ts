@@ -149,6 +149,8 @@ export function buildAppearanceVariables(appearance: AppearanceThemeSettings) {
   const mutedForeground = ensureTextContrast(surfacePalette.mutedForeground, textBackgrounds, 4.5, surfacePalette.foreground)
   // 라이트 모드의 secondary는 채움용 옅은 색이라 글자로 쓰면 안 보인다. 글자용은 primary에서 따로 만든다.
   const secondaryText = ensureTextContrast(mode === 'light' ? primary : secondary, textBackgrounds, 4.5, surfacePalette.foreground)
+  // The accent as text (current page, links, selected labels): the brand orange itself where it reads (dark), a darker step on light surfaces.
+  const primaryText = ensureTextContrast(primary, [surfacePalette.background, surfacePalette.surfaceLow, mixColors(surfacePalette.background, primary, 0.16)], 4.5, surfacePalette.foreground)
 
   return {
     '--radius': RADIUS_PRESETS[appearance.radiusPreset].radius,
@@ -173,6 +175,7 @@ export function buildAppearanceVariables(appearance: AppearanceThemeSettings) {
     '--secondary': secondary,
     '--secondary-foreground': secondaryForeground,
     '--secondary-text': secondaryText,
+    '--primary-text': primaryText,
     '--ring': ring,
     '--theme-primary-soft': mixColors(primary, tintBase, 0.82),
     '--theme-secondary-soft': mixColors(secondary, tintBase, secondaryTintRatio),

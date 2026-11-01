@@ -151,7 +151,7 @@ export function RowPicker({ items, value, onChange, placeholder, searchPlacehold
                 )}
               >
                 <PickerRow item={item} />
-                {selected ? <Check className="size-4 shrink-0 text-primary" aria-label={t({ ko: '선택됨', en: 'Selected' })} /> : null}
+                {selected ? <Check className="size-4 shrink-0 text-primary-text" aria-label={t({ ko: '선택됨', en: 'Selected' })} /> : null}
               </div>
             </Fragment>)
           })}

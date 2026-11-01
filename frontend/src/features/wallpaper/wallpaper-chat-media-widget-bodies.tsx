@@ -100,7 +100,7 @@ export function WallpaperCharacterCardBody({ widget }: { widget: Extract<Wallpap
         <div className="flex items-center" style={{ gap: '0.5em' }}>
           <span className="truncate font-semibold" style={{ fontSize: '1.15em' }}>{profile.name}</span>
           {settings.showTyping && running ? (
-            <span className="flex shrink-0 items-center text-primary" style={{ gap: '0.35em', fontSize: '0.8em' }}><TypingDots />{t({ ko: '입력 중', en: 'typing' })}</span>
+            <span className="flex shrink-0 items-center text-primary-text" style={{ gap: '0.35em', fontSize: '0.8em' }}><TypingDots />{t({ ko: '입력 중', en: 'typing' })}</span>
           ) : null}
           {settings.showUnread && (thread?.unreadCount ?? 0) > 0 ? (
             <span className="ml-auto shrink-0 rounded-full bg-primary font-semibold text-primary-foreground tabular-nums" style={{ paddingInline: '0.45em', fontSize: '0.72em' }}>{thread?.unreadCount}</span>

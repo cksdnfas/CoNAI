@@ -407,7 +407,7 @@ export function AudioSidebar({
 function EffectCounts({ group }: { group: AudioGroup }) {
   return (
     <span className="flex items-center gap-2">
-      {group.pending_comment_count > 0 ? <span className="flex items-center gap-0.5 text-primary"><MessageSquare className="size-3" aria-hidden />{group.pending_comment_count}</span> : null}
+      {group.pending_comment_count > 0 ? <span className="flex items-center gap-0.5 text-primary-text"><MessageSquare className="size-3" aria-hidden />{group.pending_comment_count}</span> : null}
       {group.selected_count > 0 ? <span className="flex items-center gap-0.5 text-success"><Check className="size-3" aria-hidden />{group.selected_count}</span> : null}
       <span>{group.candidate_count}</span>
     </span>

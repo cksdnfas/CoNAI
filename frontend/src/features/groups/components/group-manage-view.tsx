@@ -130,7 +130,7 @@ export function GroupManageView({ groups, countMaps, selectedIds, onSelectedIdsC
                     <span className="min-w-0 truncate font-medium">{group.name}</span>
                     {group.auto_collect_enabled ? (
                       <Tip content={t({ ko: '자동수집 켜짐', en: 'Auto-collect on' })}>
-                        <Bot className="size-3.5 shrink-0 text-primary" aria-label={t({ ko: '자동수집 켜짐', en: 'Auto-collect on' })} />
+                        <Bot className="size-3.5 shrink-0 text-primary-text" aria-label={t({ ko: '자동수집 켜짐', en: 'Auto-collect on' })} />
                       </Tip>
                     ) : null}
                   </div>

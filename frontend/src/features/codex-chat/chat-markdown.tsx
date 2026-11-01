@@ -115,8 +115,8 @@ function urlTransform(url: string) {
 /** Links open in a new tab, except a board link (`post:12`), which opens the post in the app. */
 function MarkdownLink({ children, href }: ComponentProps<'a'>) {
   const post = parsePostLink(href)
-  if (post) return <Link to={postRoute(post)} className="text-primary underline underline-offset-2">{children}</Link>
-  return <a href={href} target="_blank" rel="noreferrer noopener" className="text-primary underline underline-offset-2">{children}</a>
+  if (post) return <Link to={postRoute(post)} className="text-primary-text underline underline-offset-2">{children}</Link>
+  return <a href={href} target="_blank" rel="noreferrer noopener" className="text-primary-text underline underline-offset-2">{children}</a>
 }
 
 function MarkdownImage({ src, alt }: ComponentProps<'img'>) {

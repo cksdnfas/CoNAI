@@ -34,8 +34,8 @@ export function AppNavGroupMenu({ group }: { group: AppNavGroup }) {
               {link.plugin && index > 0 && !links[index - 1].plugin ? <DropdownMenuSeparator /> : null}
               <DropdownMenuItem asChild>
                 <Link to={link.to} aria-current={active ? 'page' : undefined} onMouseEnter={() => prefetchAppRoute(link.to)} onFocus={() => prefetchAppRoute(link.to)}>
-                  <Icon className={cn(active && 'text-primary')} />
-                  <span className={cn('truncate', active && 'text-primary')}>{link.label}</span>
+                  <Icon className={cn(active && 'text-primary-text')} />
+                  <span className={cn('truncate', active && 'text-primary-text')}>{link.label}</span>
                 </Link>
               </DropdownMenuItem>
             </Fragment>

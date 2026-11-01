@@ -975,10 +975,10 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
       {picks.length > 0 || (choiceDraft && openChoice?.multiple) ? (
         <div className="mb-2 flex flex-wrap gap-1.5">
           {picks.map((label) => (
-            <ComposerPickChip key={label} icon={<Target className="size-3 text-primary" />} label={label} disabled={isBusy} onRemove={() => removePick(label)} />
+            <ComposerPickChip key={label} icon={<Target className="size-3 text-primary-text" />} label={label} disabled={isBusy} onRemove={() => removePick(label)} />
           ))}
           {openChoice?.multiple && activeThreadId !== null ? choiceDraft?.labels.map((label) => (
-            <ComposerPickChip key={`choice-${label}`} icon={<ListChecks className="size-3 text-primary" />} label={label} disabled={isBusy} onRemove={() => chat.toggleChoice(activeThreadId, openChoice, label)} />
+            <ComposerPickChip key={`choice-${label}`} icon={<ListChecks className="size-3 text-primary-text" />} label={label} disabled={isBusy} onRemove={() => chat.toggleChoice(activeThreadId, openChoice, label)} />
           )) : null}
         </div>
       ) : null}

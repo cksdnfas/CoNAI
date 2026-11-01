@@ -18,7 +18,8 @@ import { PageWithSidebar } from '@/components/common/page-with-sidebar'
 import { RuntimeJobProgress } from '@/components/common/runtime-job-progress'
 import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
 import { cn } from '@/lib/utils'
-import type { CountState } from '@/lib/count-display'
+import { COUNT_UNITS, type CountState } from '@/lib/count-display'
+import { CountSummary } from '@/components/ui/count-summary'
 import { GroupExplorerSidebarPanel } from './components/group-explorer-sidebar-panel'
 import { GroupRootOverview } from './components/group-root-overview'
 import { GroupSubgroupStrip } from './components/group-subgroup-strip'
@@ -371,7 +372,7 @@ export function GroupPage() {
   ) : selectedGroupId ? (
     <PageToolbar />
   ) : (
-    <PageToolbar title={`${rootLabel} (${formatNumber(allGroups.length)})`} actions={rootActions} />
+    <PageToolbar title={rootLabel} start={<CountSummary status="known" total={allGroups.length} unit={COUNT_UNITS.items} />} actions={rootActions} />
   )
 
   if (!canViewImages) return <ImagePermissionNotice />

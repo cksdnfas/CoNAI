@@ -258,7 +258,7 @@ export function GroupEmbed({ groupId, caption }: { groupId: number; caption?: st
         <span className="font-medium">{caption || groupQuery.data?.name || t({ ko: '그룹', en: 'Group' })}</span>
         <span className="text-xs tabular-nums text-muted-foreground">{t({ ko: '{count}개', en: '{count} items' }, { count: total })}</span>
         <span className="flex-1" />
-        {total > images.length ? <Link to={`/groups/${groupId}`} className="text-xs text-primary hover:underline">{t({ ko: '더 보기', en: 'See all' })}</Link> : null}
+        {total > images.length ? <Link to={`/groups/${groupId}`} className="text-xs text-primary-text hover:underline">{t({ ko: '더 보기', en: 'See all' })}</Link> : null}
       </div>
       {imagesQuery.isPending ? <span className="block h-40 animate-pulse rounded-sm bg-surface-low" /> : (
         // Videos go through LibraryMedia too: an <img> on a video's thumbnail URL renders nothing until a poster exists.

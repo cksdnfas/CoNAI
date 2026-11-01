@@ -123,7 +123,7 @@ export function AppearanceTab({
           className="flex items-center justify-between gap-3 rounded-sm bg-primary/12 py-2 pr-2 pl-4"
         >
           <div className="flex min-w-0 items-center gap-3">
-            <Eye className="h-4 w-4 shrink-0 text-primary" aria-hidden />
+            <Eye className="h-4 w-4 shrink-0 text-primary-text" aria-hidden />
             <div className="min-w-0 truncate text-sm text-foreground">{importPreviewFileName}</div>
           </div>
           <div className="flex shrink-0 gap-1">

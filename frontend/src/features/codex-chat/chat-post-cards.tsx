@@ -65,7 +65,7 @@ export function ChatPostRefChip({ item, onRemove }: { item: PostRef & { label: s
   const Icon = item.commentId ? MessageSquare : Newspaper
   return (
     <span className="inline-flex h-7 max-w-full items-center gap-1.5 rounded-sm border border-line pl-2 pr-1 text-xs">
-      <Icon className="size-3.5 shrink-0 text-primary" aria-hidden />
+      <Icon className="size-3.5 shrink-0 text-primary-text" aria-hidden />
       <Link to={postRoute(item)} className="max-w-56 truncate hover:underline" title={item.label}>{item.label}</Link>
       {onRemove ? <IconButton variant="ghost" size="icon-xs" label={t({ ko: '참조 빼기', en: 'Remove reference' })} onClick={onRemove}><X /></IconButton> : <span className="w-1" />}
     </span>

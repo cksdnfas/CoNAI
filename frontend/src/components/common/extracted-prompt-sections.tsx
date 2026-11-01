@@ -34,7 +34,7 @@ function getPromptBadgeStyle(label: string) {
 
 function getGroupedSectionIcon(section: ExtractedPromptGroupedSection) {
   if (section.kind === 'root') {
-    return <FolderTree className="h-3.5 w-3.5 text-primary/80" />
+    return <FolderTree className="h-3.5 w-3.5 text-primary-text/80" />
   }
 
   if (section.kind === 'child') {

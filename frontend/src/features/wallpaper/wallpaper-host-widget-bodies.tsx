@@ -155,7 +155,7 @@ export function WallpaperAudioVisualizerBody({ widget }: { widget: Extract<Wallp
 
   return (
     <div className="relative h-full w-full">
-      <canvas ref={canvasRef} aria-hidden="true" className="block h-full w-full text-primary" style={color ? { color } : undefined} />
+      <canvas ref={canvasRef} aria-hidden="true" className="block h-full w-full text-primary-text" style={color ? { color } : undefined} />
       {/* Outside a host the live page has no audio; say why instead of flat bars. */}
       {mode === 'runtime' && host === null ? <div className="absolute inset-0"><WallpaperWidgetNote>{hostHint}</WallpaperWidgetNote></div> : null}
     </div>

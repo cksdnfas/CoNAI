@@ -86,7 +86,7 @@ export function WorkspaceProjectPicker({ open, onClose, projectId, write, writeL
       interactive
       size="sm"
       selected={selected === id}
-      leading={<Check className={cn('size-4 text-primary', selected === id ? 'opacity-100' : 'opacity-0')} aria-hidden />}
+      leading={<Check className={cn('size-4 text-primary-text', selected === id ? 'opacity-100' : 'opacity-0')} aria-hidden />}
     >
       <button type="button" role="radio" aria-checked={selected === id} onClick={() => setSelected(id)}>
         {icon ? <FolderKanban className="size-4 shrink-0 text-muted-foreground" aria-hidden /> : null}

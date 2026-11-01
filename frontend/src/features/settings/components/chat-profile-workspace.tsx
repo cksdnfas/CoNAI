@@ -18,7 +18,7 @@ function ProjectChip({ link, onChange, onRemove }: { link: ProfileWorkspaceLink;
   const missing = project.isError
   return (
     <Chip tone={missing ? 'muted' : 'default'} removeLabel={t({ ko: '연결 해제', en: 'Unlink' })} onRemove={onRemove}>
-      <FolderKanban className={cn('size-3.5', link.write ? 'text-primary' : 'text-muted-foreground')} aria-hidden />
+      <FolderKanban className={cn('size-3.5', link.write ? 'text-primary-text' : 'text-muted-foreground')} aria-hidden />
       <span className={cn('max-w-48 truncate', missing && 'line-through')}>{project.data?.name ?? (missing ? t({ ko: '없는 작업 공간', en: 'Missing workspace' }) : '…')}</span>
       <ChipAction
         onClick={() => onChange({ ...link, write: !link.write })}

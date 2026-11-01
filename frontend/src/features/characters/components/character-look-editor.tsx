@@ -179,7 +179,7 @@ function OutfitList({ outfits, editable, disabled, onChange }: { outfits: Charac
         <div key={index} className="space-y-1.5">
           <div className="flex items-center gap-2">
             <Input variant="settings" controlSize="compact" className="max-w-60" aria-label={t({ ko: '의상 이름', en: 'Outfit name' })} readOnly={!editable} disabled={disabled} maxLength={CHAT_PROFILE_TEXT_LIMITS.name} value={outfit.name} onChange={(event) => update(index, { name: event.target.value })} />
-            {index === 0 ? <span className="text-xs text-primary">{t({ ko: '기본', en: 'Default' })}</span> : null}
+            {index === 0 ? <span className="text-xs text-primary-text">{t({ ko: '기본', en: 'Default' })}</span> : null}
             {editable ? <>
               {index > 0 ? <IconButton variant="ghost" size="icon-xs" className="ml-auto" label={t({ ko: '기본 의상으로', en: 'Make default' })} disabled={disabled} onClick={() => onChange([outfit, ...outfits.filter((_, at) => at !== index)])}><ArrowUpToLine /></IconButton> : <span className="ml-auto" />}
               <IconButton variant="ghost" size="icon-xs" label={t({ ko: '의상 지우기', en: 'Remove outfit' })} disabled={disabled} onClick={() => onChange(outfits.filter((_, at) => at !== index))}><Trash2 /></IconButton>

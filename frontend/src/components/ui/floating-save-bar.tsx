@@ -29,7 +29,7 @@ export function FloatingSaveBar({ label, saving, canSave = true, onSave, onDisca
       <div className={cn('theme-floating-panel', floatingSurfaceClassName, 'flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg py-2 pr-2 pl-4')}>
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-2" aria-live="polite">
           <div className="flex shrink-0 items-center gap-2 text-sm font-semibold text-foreground">
-            <CircleDot className="size-4 text-primary" aria-hidden />
+            <CircleDot className="size-4 text-primary-text" aria-hidden />
             {label}
           </div>
           <kbd className="hidden rounded-xs border border-line px-2 font-sans text-2xs text-muted-foreground sm:inline">{formatShortcut('Mod+S')}</kbd>

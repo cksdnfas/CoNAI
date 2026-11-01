@@ -64,7 +64,7 @@ export function WildcardPreviewModal({
       onClose={onClose}
       title={(
         <span className="flex items-center gap-2">
-          <Shuffle className="h-4 w-4 text-primary" />
+          <Shuffle className="h-4 w-4 text-primary-text" />
           {t('image-generation.components.wildcard.generation.panel.parsing.test')}
         </span>
       )}

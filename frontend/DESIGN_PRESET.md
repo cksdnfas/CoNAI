@@ -431,7 +431,7 @@ A large editor (chat profile, appearance setting, lorebook) is a page with its o
 ### Button variants
 | Variant | Use | Look |
 |---|---|---|
-| `default` | the one primary CTA of a view | solid primary + secondary top highlight (gradient stand-in that survives `bg-*` overrides), `primary-foreground` text |
+| `default` | the one primary CTA of a view | solid primary + secondary top highlight (gradient stand-in that survives `bg-*` overrides), `primary-foreground` text (picked by contrast: dark on the brand orange, 5.5:1). Disabled = quiet `bg-fill` with muted text; `aria-busy` keeps the orange while it works |
 | `secondary` | every other action (was `outline`) | `surface-high` fill, no border; `surface-highest` on a `high` parent |
 | `subtle` | dense toolbars, sidebars, low-emphasis actions | `foreground/5` wash, muted text; works on any tone |
 | `ghost` | icon toolbars, inline actions | transparent until hover (`bg-fill` wash) |
@@ -516,6 +516,8 @@ use `Shuffle`; the page of every page (`/access`, 전체) uses `LayoutGrid`. Pag
 ### Other tokens
 - Text: `Text` variants `overline / label / body / muted / caption / title`, `Heading level`; type scale
   `text-2xs … text-5xl` (scaled by `--theme-text-scale`). Body text is `foreground`, metadata `muted-foreground`.
+- Accent as text: `text-primary-text` (never `text-primary`, which is the fill colour). It is the brand orange where that reads
+  (dark theme) and a darker step on light surfaces, kept at 4.5:1 on the page, the plinth and the active-nav tint.
 - Status colours: `destructive / success / warning / info`, each with `-foreground`, `-soft`, `-soft-foreground`.
 - Elevation: `shadow-elevation-1` (raised controls), `-2` (menus, popovers), `-3` (modals).
 - Stacking: `z-raised / sticky / header / drawer / popover / popover-nested / modal / floating / toast` (see `index.css`).

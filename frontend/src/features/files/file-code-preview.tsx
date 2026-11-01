@@ -39,7 +39,7 @@ function highlightedLines(text: string, extension: string): ReactNode[][] {
 
 export default function FileCodePreview({ text, extension, wrap, firstLine }: { text: string; extension: string; wrap: boolean; firstLine: number }) {
   const lines = useMemo(() => highlightedLines(text, extension), [text, extension])
-  return <div className="max-h-[60vh] overflow-auto font-mono text-xs leading-relaxed [&_.hljs-comment]:text-muted-foreground [&_.hljs-keyword]:text-primary [&_.hljs-string]:text-success [&_.hljs-number]:text-warning [&_.hljs-literal]:text-warning [&_.hljs-title]:text-info [&_.hljs-attr]:text-info [&_.hljs-tag]:text-primary">
+  return <div className="max-h-[60vh] overflow-auto font-mono text-xs leading-relaxed [&_.hljs-comment]:text-muted-foreground [&_.hljs-keyword]:text-primary-text [&_.hljs-string]:text-success [&_.hljs-number]:text-warning [&_.hljs-literal]:text-warning [&_.hljs-title]:text-info [&_.hljs-attr]:text-info [&_.hljs-tag]:text-primary-text">
     <table className={cn('w-full border-collapse', wrap && 'table-fixed')}><tbody>{lines.map((line, index) => <tr key={index}>
       <td className="w-14 select-none border-r border-line pr-3 text-right align-top text-muted-foreground" aria-hidden="true">{firstLine + index}</td>
       <td className={cn('pl-3 align-top', wrap ? 'whitespace-pre-wrap break-words' : 'whitespace-pre')}><code>{line.length ? line : '\u00a0'}</code></td>

@@ -58,16 +58,14 @@ export function getRelativeLuminance(channel: number) {
     : ((normalized + 0.055) / 1.055) ** 2.4
 }
 
+/** The text colour (dark brown or white) that reads better on `background`; a luminance cut-off picks white on mid tones like the brand orange (3.2:1 against 5.5:1 for dark). */
 export function getContrastTextColor(background: string) {
-  const color = normalizeHexPair(background)
-  if (!color) return '#ffffff'
+  const dark = '#241814'
+  const darkRatio = getContrastRatio(dark, background)
+  const whiteRatio = getContrastRatio('#ffffff', background)
+  if (darkRatio === null || whiteRatio === null) return '#ffffff'
 
-  const luminance =
-    0.2126 * getRelativeLuminance(color.r) +
-    0.7152 * getRelativeLuminance(color.g) +
-    0.0722 * getRelativeLuminance(color.b)
-
-  return luminance > 0.45 ? '#241814' : '#ffffff'
+  return darkRatio > whiteRatio ? dark : '#ffffff'
 }
 
 /** CIE L* (0 = black, 100 = white) of a #rrggbb colour; null for anything else. */

@@ -311,7 +311,7 @@ export function HomeSearchDrawerContent({ active, onReturnFocus }: { active: boo
                                   {t(SEARCH_SCOPE_LABEL_KEYS[chip.scope])}
                                 </span>
                                 <Tip content={t(SEARCH_OPERATOR_DESCRIPTIONS[chip.operator])}>
-                                  <span className="rounded-sm bg-primary/10 px-1.5 py-0.5 text-2xs font-semibold text-primary">
+                                  <span className="rounded-sm bg-primary/10 px-1.5 py-0.5 text-2xs font-semibold text-primary-text">
                                     {t(SEARCH_OPERATOR_LABELS[chip.operator])}
                                   </span>
                                 </Tip>

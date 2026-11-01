@@ -543,7 +543,7 @@ export function SettingsPage() {
       <div className="space-y-4">
         <PageToolbar title={t('pageAccessCatalog.settings')} />
         <div role="status" className="flex items-start gap-3">
-          <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+          <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-primary-text" />
           <div className="min-w-0 flex-1 space-y-3">
             <div className="text-sm font-semibold text-foreground">
               {t({ ko: '설정은 관리자만 변경할 수 있어.', en: 'Only administrators can change settings.' })}

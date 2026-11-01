@@ -87,7 +87,7 @@ export function ChatChoiceDock({ card, selected, disabled, onPick, onClose }: { 
         const leading = (
           <span className="flex items-center gap-2.5">
             <span className={cn('flex size-5.5 items-center justify-center rounded-sm font-mono text-xs tabular-nums', on && !card.multiple ? 'bg-primary text-primary-foreground' : 'bg-fill text-muted-foreground')}>{index + 1}</span>
-            {card.multiple ? (on ? <SquareCheck className="size-4 text-primary" /> : <Square className="size-4 text-muted-foreground" />) : null}
+            {card.multiple ? (on ? <SquareCheck className="size-4 text-primary-text" /> : <Square className="size-4 text-muted-foreground" />) : null}
           </span>
         )
         return (

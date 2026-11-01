@@ -1,4 +1,5 @@
 import { Folder, History, Plus, Search, Shuffle, Upload } from 'lucide-react'
+import { COUNT_UNITS } from '@/lib/count-display'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -56,7 +57,7 @@ export function WildcardExplorerSidebarPanel({
   const hasSearch = searchInput.trim().length > 0
   const countLabel = hasSearch
     ? `${formatNumber(filteredEntries.length)} / ${formatNumber(browserEntries.length)}`
-    : formatNumber(browserEntries.length)
+    : t(COUNT_UNITS.items, { count: formatNumber(browserEntries.length) })
 
   const labelActions = activeWorkspaceTab === 'lora' ? (
     <>

@@ -64,7 +64,7 @@ export function PromptListItem({ item, groupName, selected = false, active = fal
             >
               <ActionMenuButton entries={entries} size="icon-xs" label={t({ ko: '더 보기', en: 'More' })} />
             </span>
-            {active ? <Sparkles className="size-3.5 text-primary" aria-hidden /> : null}
+            {active ? <Sparkles className="size-3.5 text-primary-text" aria-hidden /> : null}
             <Tip content={t({ ko: '사용 {count}회', en: 'Used {count} times' }, { count: formatNumber(item.usage_count) })}>
               <span className="min-w-10 text-right text-xs tabular-nums text-muted-foreground">{formatPromptUsageCount(item.usage_count)}</span>
             </Tip>

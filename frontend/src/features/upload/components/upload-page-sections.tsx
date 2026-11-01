@@ -103,7 +103,7 @@ export function UploadDropZone({
       >
         {children ?? (
           <span className="flex flex-col items-center gap-2 text-center">
-            <ImagePlus className={cn('size-7', dropZone.isDragActive ? 'text-primary' : 'text-muted-foreground/70')} aria-hidden />
+            <ImagePlus className={cn('size-7', dropZone.isDragActive ? 'text-primary-text' : 'text-muted-foreground/70')} aria-hidden />
             <Text as="span" variant="muted">{hint}</Text>
           </span>
         )}
@@ -163,7 +163,7 @@ function RowStatusIcon({ status, label }: { status: UploadQueueFileState['status
     : status === 'failed'
       ? <CircleAlert className="size-4 text-destructive" />
       : status === 'uploading' || status === 'processing'
-        ? <LoaderCircle className="size-4 animate-spin text-primary motion-reduce:animate-none" />
+        ? <LoaderCircle className="size-4 animate-spin text-primary-text motion-reduce:animate-none" />
         : <Clock className="size-4 text-muted-foreground" />
 
   return (

@@ -30,7 +30,7 @@ export function PromptDanbooruMissingNotice({ database }: { database: DanbooruBr
               <span className="font-medium text-muted-foreground">{t({ ko: '허용 파일명', en: 'Accepted names' })}</span>
               <span className="min-w-0 break-all font-mono text-foreground">{database.filePatterns.join(', ')}</span>
               <span className="font-medium text-muted-foreground">{t({ ko: '다운로드', en: 'Download' })}</span>
-              <a className="min-w-0 break-all text-primary underline-offset-4 hover:underline" href={database.downloadUrl} target="_blank" rel="noreferrer">{database.downloadUrl}</a>
+              <a className="min-w-0 break-all text-primary-text underline-offset-4 hover:underline" href={database.downloadUrl} target="_blank" rel="noreferrer">{database.downloadUrl}</a>
             </div>
           </div>
         ) : t({ ko: '관리자가 Danbooru DB를 설치해야 해.', en: 'An administrator needs to install the Danbooru DB.' })}

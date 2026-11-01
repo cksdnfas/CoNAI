@@ -112,7 +112,7 @@ function LinkRow({ view, open, onToggle, actions }: { view: LinkedFileView; open
       {/* eslint-disable-next-line no-restricted-syntax -- a full-width disclosure row; Button would pad and centre it */}
       <button type="button" onClick={folder ? onToggle : undefined} aria-expanded={folder ? open : undefined} disabled={!folder} className="flex min-h-9 min-w-0 flex-1 items-center gap-2 text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/40 disabled:cursor-default">
         <Chevron className={cn('size-3 shrink-0 text-muted-foreground', !folder && 'invisible')} aria-hidden />
-        <Icon className={cn('size-3.5 shrink-0', view.write ? 'text-primary' : 'text-muted-foreground')} aria-hidden />
+        <Icon className={cn('size-3.5 shrink-0', view.write ? 'text-primary-text' : 'text-muted-foreground')} aria-hidden />
         <span className={cn('min-w-0 truncate font-semibold', view.missing && 'text-muted-foreground line-through')}>{view.name}</span>
         {view.path ? <span className="min-w-0 truncate text-xs text-muted-foreground/70">{view.path}</span> : null}
         <span className="flex-1" />

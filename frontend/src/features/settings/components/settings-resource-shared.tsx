@@ -276,7 +276,7 @@ export function SettingsResourceCreateActionRow({
 }: SettingsResourceCreateActionRowProps) {
   return (
     <>
-      {validationMessage ? <p className="text-sm text-primary">{validationMessage}</p> : null}
+      {validationMessage ? <p className="text-sm text-primary-text">{validationMessage}</p> : null}
 
       <div className="flex flex-wrap justify-between gap-2">
         <IconButton size="icon-sm" variant="secondary" disabled={!canValidate || isValidating} onClick={onValidate} label={validateLabel}>

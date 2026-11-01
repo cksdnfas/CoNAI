@@ -41,7 +41,7 @@ export function useChatTask(threadId: number | null) {
 function StepIcon({ status, current }: { status: ChatTaskStep['status']; current: boolean }) {
   if (status === 'done') return <CircleCheck className="size-3.5 shrink-0 text-success" />
   if (status === 'skipped') return <CircleMinus className="size-3.5 shrink-0 text-muted-foreground" />
-  if (current) return <CircleDot className="size-3.5 shrink-0 text-primary" />
+  if (current) return <CircleDot className="size-3.5 shrink-0 text-primary-text" />
   return <Circle className="size-3.5 shrink-0 text-muted-foreground/60" />
 }
 
@@ -236,7 +236,7 @@ export function ChatTaskRing({ summary }: { summary: ChatTaskSummary }) {
   const state = useWaitLabel()(summary)
   const circumference = 2 * Math.PI * 9
   const filled = summary.total ? (summary.done / summary.total) * circumference : 0
-  const tone = summary.status === 'running' ? 'text-primary' : summary.status === 'waiting' ? 'text-warning' : 'text-muted-foreground'
+  const tone = summary.status === 'running' ? 'text-primary-text' : summary.status === 'waiting' ? 'text-warning' : 'text-muted-foreground'
   const label = [t({ ko: '작업 {done}/{total}', en: 'Task {done}/{total}' }, { done: summary.done, total: summary.total }), summary.step, state].filter(Boolean).join(' · ')
   return (
     <Tip content={label}>

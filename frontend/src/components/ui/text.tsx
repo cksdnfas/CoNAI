@@ -19,7 +19,7 @@ const textVariants = cva('', {
     tone: {
       default: 'text-foreground',
       muted: 'text-muted-foreground',
-      primary: 'text-primary',
+      primary: 'text-primary-text',
       secondary: 'text-secondary-text',
       destructive: 'text-destructive',
       success: 'text-success',

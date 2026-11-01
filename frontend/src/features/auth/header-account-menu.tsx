@@ -129,7 +129,7 @@ export function HeaderAccountMenu({ foldedSearch = false, foldedChat = false }: 
           <div className="flex items-center gap-2.5">
             {isSignedIn ? (
               <Tip content={accountTypeLabel}>
-                <span role="img" aria-label={accountTypeLabel} className="grid size-8 shrink-0 place-items-center rounded-full bg-primary/12 text-sm font-semibold text-primary">
+                <span role="img" aria-label={accountTypeLabel} className="grid size-8 shrink-0 place-items-center rounded-full bg-primary/12 text-sm font-semibold text-primary-text">
                   {authStatus.username?.charAt(0).toUpperCase()}
                 </span>
               </Tip>

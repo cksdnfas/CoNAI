@@ -161,7 +161,7 @@ function AgentCliRow({ agent }: { agent: AgentRuntimeName }) {
         <Tip content={status.data?.authMethod ?? stateLabel}>
           <span className="text-xs text-muted-foreground">{stateLabel}</span>
         </Tip>
-        <span className={`text-xs ${info?.updateAvailable ? 'text-primary' : 'text-muted-foreground'}`}>
+        <span className={`text-xs ${info?.updateAvailable ? 'text-primary-text' : 'text-muted-foreground'}`}>
           {busy ? t({ ko: '업데이트 중…', en: 'Updating…' }) : version.isPending ? t({ ko: '버전 확인 중…', en: 'Checking version…' }) : info?.updateAvailable ? t({ ko: '→ v{version} 업데이트 가능', en: '→ v{version} available' }, { version: info.latest ?? '' }) : upToDate ? t({ ko: '최신 버전', en: 'Up to date' }) : info?.current ? t({ ko: '최신 버전 확인 실패', en: 'Latest version unavailable' }) : null}
         </span>
       </span>

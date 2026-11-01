@@ -117,7 +117,7 @@ export function AppearanceTabSlotSection({
               placeholder={t('appearanceTabSlotSection.slotName')}
             />
             {statusLabel ? (
-              <span className={cn('shrink-0 text-xs', isActiveSlot ? 'font-medium text-primary' : 'text-muted-foreground')}>{statusLabel}</span>
+              <span className={cn('shrink-0 text-xs', isActiveSlot ? 'font-medium text-primary-text' : 'text-muted-foreground')}>{statusLabel}</span>
             ) : null}
           </ListRow>
         )

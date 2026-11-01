@@ -63,7 +63,7 @@ function AnalogFace({ now, showSeconds }: { now: Date; showSeconds: boolean }) {
       })}
       {hand(hours * 30, 24, 3)}
       {hand(minutes * 6, 35, 2)}
-      {showSeconds ? <g className="text-primary">{hand(seconds * 6, 39, 0.8)}</g> : null}
+      {showSeconds ? <g className="text-primary-text">{hand(seconds * 6, 39, 0.8)}</g> : null}
       <circle cx="50" cy="50" r="2" fill="currentColor" />
     </svg>
   )

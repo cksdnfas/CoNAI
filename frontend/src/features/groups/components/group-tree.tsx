@@ -84,7 +84,7 @@ export function GroupTree({ groups, countMaps, selectedGroupId, filterText = '',
     return (
       <div className="flex min-w-0 items-center justify-between gap-2">
         <span className="truncate">{group.name}</span>
-        {pickedGroupIds?.has(group.id) ? <Check className="ml-auto size-3.5 shrink-0 text-primary" aria-label={t({ ko: '넣음', en: 'Inserted' })} /> : null}
+        {pickedGroupIds?.has(group.id) ? <Check className="ml-auto size-3.5 shrink-0 text-primary-text" aria-label={t({ ko: '넣음', en: 'Inserted' })} /> : null}
         <Tip content={countDescription}>
           <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
             <span aria-hidden="true">{countLabel}</span>

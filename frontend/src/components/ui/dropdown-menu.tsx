@@ -70,7 +70,7 @@ function DropdownMenuCheckboxItem({ className, children, checked, ...props }: Re
     <DropdownMenuPrimitive.CheckboxItem data-slot="dropdown-menu-checkbox-item" className={cn(menuItemClassName, 'pl-8', className)} checked={checked} {...props}>
       <span className="pointer-events-none absolute left-2 flex size-4 items-center justify-center">
         <DropdownMenuPrimitive.ItemIndicator>
-          <Check className="size-4 text-primary" />
+          <Check className="size-4 text-primary-text" />
         </DropdownMenuPrimitive.ItemIndicator>
       </span>
       {children}
@@ -83,7 +83,7 @@ function DropdownMenuRadioItem({ className, children, ...props }: React.Componen
     <DropdownMenuPrimitive.RadioItem data-slot="dropdown-menu-radio-item" className={cn(menuItemClassName, 'pl-8', className)} {...props}>
       <span className="pointer-events-none absolute left-2 flex size-4 items-center justify-center">
         <DropdownMenuPrimitive.ItemIndicator>
-          <Circle className="size-2 fill-current text-primary" />
+          <Circle className="size-2 fill-current text-primary-text" />
         </DropdownMenuPrimitive.ItemIndicator>
       </span>
       {children}

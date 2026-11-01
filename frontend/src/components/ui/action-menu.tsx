@@ -54,7 +54,7 @@ function Entries({ entries, primitive }: { entries: ActionMenuEntry[]; primitive
     const Icon = entry.icon
     return (
       <Item key={entry.key} disabled={entry.disabled} onSelect={entry.onSelect} className={cn(itemClassName, entry.destructive && destructiveClassName)}>
-        {anyChecked ? <Check className={cn('size-4', entry.checked ? 'text-primary' : 'invisible')} /> : Icon ? <Icon /> : null}
+        {anyChecked ? <Check className={cn('size-4', entry.checked ? 'text-primary-text' : 'invisible')} /> : Icon ? <Icon /> : null}
         {entry.label}
       </Item>
     )

@@ -53,7 +53,7 @@ export function PostView({ post, categories, onTag, onCategory, commentDraft, se
           </nav>
         ) : null}
         <h1 className="flex items-start gap-2 text-2xl font-semibold leading-snug [text-wrap:balance]">
-          {post.pinned ? <Pin className="mt-1.5 size-4 shrink-0 text-primary" aria-label={t({ ko: '고정', en: 'Pinned' })} /> : null}
+          {post.pinned ? <Pin className="mt-1.5 size-4 shrink-0 text-primary-text" aria-label={t({ ko: '고정', en: 'Pinned' })} /> : null}
           <span>{post.title}</span>
         </h1>
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">

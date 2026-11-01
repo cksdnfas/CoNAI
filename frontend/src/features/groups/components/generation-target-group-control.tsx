@@ -166,7 +166,7 @@ function GenerationTargetGroupModal({
             {tooDeep ? (
               <p className="text-xs text-destructive">{t({ ko: `그룹은 최대 ${GROUP_PATH_MAX_DEPTH}단계까지야.`, en: `Groups can be at most ${GROUP_PATH_MAX_DEPTH} levels deep.` })}</p>
             ) : normalizedDraft && missingCount > 0 ? (
-              <p className="text-xs text-primary">{t({ ko: `새 그룹 ${missingCount}개가 만들어져.`, en: `${missingCount} new group(s) will be created.` })}</p>
+              <p className="text-xs text-primary-text">{t({ ko: `새 그룹 ${missingCount}개가 만들어져.`, en: `${missingCount} new group(s) will be created.` })}</p>
             ) : null}
           </div>
 

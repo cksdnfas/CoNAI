@@ -393,7 +393,7 @@ export function ChatFlagRows({ flags: allFlags, onEdit }: { flags: ChatFlag[]; o
     <Tip content={isAdmin
       ? t({ ko: '모든 계정에 공유돼', en: 'Shared with every account' })
       : flag.edited ? t({ ko: '공유 플래그 (내가 고침)', en: 'Shared flag (my edit)' }) : t({ ko: '관리자 공유 플래그', en: 'Shared by an admin' })}>
-      <Users aria-hidden="true" className={cn('size-3.5 shrink-0', flag.edited ? 'text-primary' : 'text-muted-foreground')} />
+      <Users aria-hidden="true" className={cn('size-3.5 shrink-0', flag.edited ? 'text-primary-text' : 'text-muted-foreground')} />
     </Tip>
   ) : null
   const [dragId, setDragId] = useState<number | null>(null)

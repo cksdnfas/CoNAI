@@ -136,7 +136,7 @@ function AppShellLayout() {
                         className={cn(
                           // Icon and name from xl; narrower, only the current page keeps its name.
                           'inline-flex h-9 min-w-9 shrink-0 items-center justify-center gap-2 rounded-sm px-2.5 text-sm text-muted-foreground transition-colors duration-200 outline-none select-none hover:bg-fill hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/40',
-                          isActive && 'bg-primary/12 font-semibold text-primary hover:bg-primary/16 hover:text-primary',
+                          isActive && 'bg-primary/12 font-semibold text-primary-text hover:bg-primary/16 hover:text-primary-text',
                         )}
                       >
                         <Icon className="size-4 shrink-0" />

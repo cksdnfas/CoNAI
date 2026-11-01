@@ -393,10 +393,10 @@ function BookRow({ name, kind, kindTip, accent, count, open, onToggle, actions, 
       <button type="button" onClick={onToggle} aria-expanded={open} className="flex min-h-9 min-w-0 flex-1 items-center gap-2 text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/40">
         <Chevron className="size-3 shrink-0 text-muted-foreground" aria-hidden />
         <span className="min-w-0 truncate font-semibold">{name}</span>
-        {record ? <Tip content={record}><PenLine className="size-3 shrink-0 text-primary" aria-label={record} /></Tip> : null}
+        {record ? <Tip content={record}><PenLine className="size-3 shrink-0 text-primary-text" aria-label={record} /></Tip> : null}
         <span className="flex-1" />
         <Tip content={kindTip}>
-          <span className={cn('shrink-0 text-2xs font-semibold tracking-wide', accent ? 'text-primary' : 'text-muted-foreground')}>{kind}</span>
+          <span className={cn('shrink-0 text-2xs font-semibold tracking-wide', accent ? 'text-primary-text' : 'text-muted-foreground')}>{kind}</span>
         </Tip>
         <span className="shrink-0 font-mono text-xs text-muted-foreground">{count}</span>
       </button>
@@ -412,7 +412,7 @@ function EntryRow({ entry, onOpen }: { entry: ChatLoreEntry; onOpen?: () => void
     <>
       <span className={cn('min-w-0 flex-1 truncate text-xs font-semibold', !entry.enabled && 'text-muted-foreground line-through')}>{loreEntryTitle(entry) || t({ ko: '새 항목', en: 'New entry' })}</span>
       {fileName ? <span className="inline-flex shrink-0 items-center gap-1 font-mono text-2xs text-muted-foreground"><FileText className="size-3" aria-hidden />{fileName}</span> : null}
-      {entry.constant ? <span className="shrink-0 text-2xs font-semibold text-primary">{t({ ko: '상시', en: 'Always' })}</span> : null}
+      {entry.constant ? <span className="shrink-0 text-2xs font-semibold text-primary-text">{t({ ko: '상시', en: 'Always' })}</span> : null}
     </>
   )
   // Both sides padded: the clickable row shows a hover wash, so its trailing marks must not touch the edge.

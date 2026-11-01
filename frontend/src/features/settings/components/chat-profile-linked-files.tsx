@@ -65,7 +65,7 @@ export function ChatProfileLinkedFiles({ value, onChange }: { value: LinkedFileL
             const Icon = view?.kind === 'file' ? FileText : Folder
             return (
               <Chip key={link.id} tone={view?.missing ? 'muted' : 'default'} removeLabel={t({ ko: '연결 해제', en: 'Unlink' })} onRemove={() => onChange(value.filter((item) => item.id !== link.id))}>
-                <Icon className={cn('size-3.5', link.write ? 'text-primary' : 'text-muted-foreground')} aria-hidden />
+                <Icon className={cn('size-3.5', link.write ? 'text-primary-text' : 'text-muted-foreground')} aria-hidden />
                 <Tip content={view?.path ?? undefined}><span className={cn('max-w-48 truncate', view?.missing && 'line-through')}>{view?.name ?? '…'}</span></Tip>
                 <ChipAction
                   onClick={() => onChange(value.map((item) => (item.id === link.id ? { ...item, write: !item.write } : item)))}

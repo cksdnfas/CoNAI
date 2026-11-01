@@ -31,8 +31,8 @@ export type GraphExecutionListPaging = {
 const STATUS_PILL_CLASS: Record<string, string> = {
   completed: 'bg-success/12 text-success',
   failed: 'bg-destructive-soft text-destructive-soft-foreground',
-  running: 'bg-primary/12 text-primary',
-  queued: 'bg-primary/8 text-primary',
+  running: 'bg-primary/12 text-primary-text',
+  queued: 'bg-primary/8 text-primary-text',
 }
 
 export function isActiveGraphExecution(status: ExecutionStatus | undefined) {
@@ -144,7 +144,7 @@ export function WorkflowActiveRunCard({
                 className={cn(
                   'inline-flex h-5 items-center gap-1 rounded-sm px-1.5 text-2xs',
                   node.state === 'done' && 'bg-success/10 text-success',
-                  node.state === 'now' && 'bg-primary/12 text-primary',
+                  node.state === 'now' && 'bg-primary/12 text-primary-text',
                   node.state === 'failed' && 'bg-destructive-soft text-destructive-soft-foreground',
                   node.state === 'pending' && 'bg-fill text-muted-foreground',
                 )}

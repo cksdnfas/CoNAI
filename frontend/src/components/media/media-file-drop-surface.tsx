@@ -61,7 +61,7 @@ export function MediaFileDropSurface({
         >
           {children ?? (
             <span className="flex flex-col items-center gap-3 text-center">
-              <ImageIcon className={active ? 'h-10 w-10 text-primary' : 'h-10 w-10 text-muted-foreground'} />
+              <ImageIcon className={active ? 'h-10 w-10 text-primary-text' : 'h-10 w-10 text-muted-foreground'} />
               <span className="text-sm text-muted-foreground">{hint ?? t({ ko: '여기에 끌어다 놓거나 눌러서 골라 줘', en: 'Drop files here or click to browse' })}</span>
             </span>
           )}

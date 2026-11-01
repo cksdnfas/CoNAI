@@ -70,7 +70,7 @@ function scheduleLabel(routine: ChatRoutineView, t: Translate, formatDate: (valu
 }
 
 function lastResultLabel(routine: ChatRoutineView, t: Translate) {
-  if (routine.running) return <span className="text-primary">{t({ ko: '실행 중', en: 'Running' })}</span>
+  if (routine.running) return <span className="text-primary-text">{t({ ko: '실행 중', en: 'Running' })}</span>
   if (routine.lastResult === 'ok') return <span>{t({ ko: '최근 성공', en: 'Last ok' })}</span>
   if (routine.lastResult === 'skipped') return <span>{t({ ko: '최근 건너뜀', en: 'Last skipped' })}</span>
   if (routine.lastResult === 'failed') return <span className="text-destructive">{t({ ko: '최근 실패', en: 'Last failed' })}</span>

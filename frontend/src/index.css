@@ -50,6 +50,7 @@
   --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
   --color-secondary-text: var(--secondary-text);
+  --color-primary-text: var(--primary-text);
   /* Chat narration edge: inlined into each utility, so it resolves the element's own --chat-rp-narration. */
   --color-narration-edge: color-mix(in srgb, var(--chat-rp-narration, var(--secondary-text)) 70%, transparent);
   --color-accent: var(--accent);
@@ -199,6 +200,7 @@
   --secondary: #ffb59a;
   --secondary-foreground: #380d00;
   --secondary-text: #ffb59a;
+  --primary-text: #f95e14;
   --muted: #201f1f;
   --muted-foreground: #b9a49b;
   --accent: #2a2a2a;
@@ -360,10 +362,11 @@
   --card: #ffffff;
   --card-foreground: #241814;
   --primary: #f95e14;
-  --primary-foreground: #ffffff;
+  --primary-foreground: #241814;
   --secondary: #ffdbcf;
   --secondary-foreground: #5b1b00;
   --secondary-text: #9a3a12;
+  --primary-text: #b83c0a;
   --checker-a: #ffffff;
   --checker-b: #e4dfdc;
   --muted: #efe6e2;

@@ -404,7 +404,7 @@ function SlotOverlay({ file, appearance, onApply, onNew, onSaveSlots, onClose }:
           // eslint-disable-next-line no-restricted-syntax -- see above
           <button key={slot.id} type="button" style={delay(index + 1)} onClick={() => onApply(slot)} className={popChipClassName(slot.id === appearance.slotId, SLOT_CHIP_CLASS)}>
             {slot.name}
-            {slot.id === file.defaultSlotId ? <Star aria-label={t({ ko: '새 채팅 기본', en: 'New-chat default' })} className="size-3 fill-primary text-primary" /> : null}
+            {slot.id === file.defaultSlotId ? <Star aria-label={t({ ko: '새 채팅 기본', en: 'New-chat default' })} className="size-3 fill-primary text-primary-text" /> : null}
           </button>
         ))}
         {file.slots.length < CHAT_APPEARANCE_LIMITS.slots ? (
@@ -419,7 +419,7 @@ function SlotOverlay({ file, appearance, onApply, onNew, onSaveSlots, onClose }:
           {renaming === null ? (
             <>
               <IconButton size="icon-sm" variant="ghost" active={active.id === file.defaultSlotId} label={t({ ko: '새 채팅 기본', en: 'New-chat default' })} onClick={() => void onSaveSlots({ defaultSlotId: active.id === file.defaultSlotId ? null : active.id, slots: file.slots })}>
-                <Star className={cn('size-4', active.id === file.defaultSlotId && 'fill-primary text-primary')} />
+                <Star className={cn('size-4', active.id === file.defaultSlotId && 'fill-primary text-primary-text')} />
               </IconButton>
               <IconButton size="icon-sm" variant="ghost" label={t({ ko: '이름 바꾸기', en: 'Rename' })} onClick={() => setRenaming(active.name)}><Pencil className="size-4" /></IconButton>
               <IconButton size="icon-sm" variant="ghost" label={t({ ko: '슬롯 지우기', en: 'Delete slot' })} onClick={() => void (async () => {

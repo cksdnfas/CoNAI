@@ -83,7 +83,7 @@ export function ImageBatchResizeAction({ compositeHashes, referenceSize }: Image
               <a
                 href={`#/groups/${result.groupId}`}
                 onClick={(event) => { event.preventDefault(); navigate(`/groups/${result.groupId}`) }}
-                className="font-semibold text-primary underline-offset-2 hover:underline"
+                className="font-semibold text-primary-text underline-offset-2 hover:underline"
               >
                 {t({ ko: '그룹 열기', en: 'Open group' })}
               </a>

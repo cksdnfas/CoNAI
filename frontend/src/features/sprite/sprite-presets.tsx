@@ -82,7 +82,7 @@ export function SpritePresetMenu({ activeId, current, onApply, onActiveChange }:
         <DropdownMenuContent align="end" className="w-80">
           {(presets.data ?? []).map((preset) => (
             <DropdownMenuItem key={preset.id} onSelect={() => choose(preset)}>
-              {preset.id === activeId ? <Check className="text-primary" /> : <span className="size-4 shrink-0" />}
+              {preset.id === activeId ? <Check className="text-primary-text" /> : <span className="size-4 shrink-0" />}
               <span className="min-w-0 flex-1 truncate">{preset.name}</span>
               <span className="shrink-0 font-mono text-2xs text-muted-foreground">{presetSummary(preset.options, t)}</span>
             </DropdownMenuItem>

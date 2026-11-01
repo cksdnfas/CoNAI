@@ -40,7 +40,7 @@ export function AppBottomNav({ pinned }: { pinned: AppNavLink[] }) {
           onFocus={() => prefetchAppRoute(to)}
           className={({ isActive }) => cn(
             'flex h-(--shell-bottom-nav-height) min-w-0 flex-1 flex-col items-center justify-center gap-1 text-2xs text-muted-foreground outline-none transition-colors focus-visible:bg-fill',
-            isActive && 'font-semibold text-primary',
+            isActive && 'font-semibold text-primary-text',
           )}
         >
           <span className="relative">
