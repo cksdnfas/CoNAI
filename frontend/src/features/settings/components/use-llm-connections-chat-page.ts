@@ -1,4 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useLocation } from 'react-router-dom'
 import type { AgentCliName, ChatPageData } from '@conai/shared'
 import { useI18n } from '@/i18n'
 import { useChatPageRegistration, type WorkflowUndo } from '@/features/codex-chat/chat-page-context'
@@ -16,6 +17,7 @@ import { buildPresetId, LLM_PRESET_SECTIONS } from './llm-connections-tab-utils'
 import { useLlmPresetMutations } from './llm-prompt-preset-mutations'
 import type { LlmPresetSnapshot } from '@/lib/api-settings-llm'
 import { useAgentCliQueries } from './llm-agent-cli-queries'
+import { CHAT_WORKSPACE_PATHS } from '@/features/codex-chat/chat-admin-location'
 
 type LlmPresetKind = (typeof LLM_PRESET_SECTIONS)[number]['key']
 /** Non-secret fields of a new outside MCP server; the address, command and secrets stay the person's to type. */
@@ -23,6 +25,16 @@ export type ExternalMcpDraftSeed = { id: string; name: string; transport: Extern
 
 const AGENTS: AgentCliName[] = ['codex', 'claude']
 const SCOPES: ExternalMcpScope[] = ['read', 'organize', 'configure']
+
+/** Only the selected AI group registers, even while Settings keeps other sections mounted. */
+export function useLlmSettingsGroupActive(group: 'connections' | 'dashboard' | 'prompts') {
+  const { pathname, search } = useLocation()
+  const groupActive = useSettingsGroupActive(group, 'connections')
+  const hostActive = pathname === CHAT_WORKSPACE_PATHS.llm
+    ? group !== 'prompts'
+    : pathname === '/settings' && new URLSearchParams(search).get('section') === 'llm'
+  return hostActive && groupActive
+}
 
 /** Codex / Claude Code sign-in and subscription limits as one short line each, from the queries the LLM tab already keeps. */
 export function useAgentCliChatData(): ChatPageData {
@@ -54,7 +66,7 @@ function serverInput(server: ExternalMcpServer, patch: { enabled?: boolean; scop
 }
 
 /**
- * Settings › LLM › 연결 for a connected chat: the connections and their models, the representative models (대표모델) that
+ * AI 연결 in Settings or the chat workspace: the connections and their models, the representative models (대표모델) that
  * route each part to one of them, the outside MCP servers and the Codex / Claude Code sign-in. Changes are review cards; connection keys and server secrets
  * never reach the chat. Lists sit at the top of `data`, so a long one shows as a count until read_page_data reads it.
  */
@@ -130,7 +142,7 @@ export function useLlmConnectionsChatPage({ providers, slots, onPointRoute, onDr
     await queryClient.invalidateQueries({ queryKey: EXTERNAL_MCP_QUERY_KEY })
   }
 
-  const groupActive = useSettingsGroupActive('connections', 'connections')
+  const groupActive = useLlmSettingsGroupActive('connections')
   useChatPageRegistration(groupActive ? {
     kind: 'settings', title: t(SETTINGS_ROW_BY_ID['llm.connections'].label), resourceId: 'llm', priority: 5, fields: [], data, actions,
     apply: () => {},
@@ -193,7 +205,7 @@ export function useLlmPromptPresetsChatPage(snapshot: LlmPresetSnapshot | undefi
     }
   }
 
-  const groupActive = useSettingsGroupActive('prompts', 'connections')
+  const groupActive = useLlmSettingsGroupActive('prompts')
   useChatPageRegistration(groupActive && snapshot ? {
     kind: 'settings', title: t(SETTINGS_ROW_BY_ID['llm.prompts'].label), resourceId: 'llm', priority: 5, fields: [], data,
     actions: [pageAction('settings.llm_preset', t({ ko: 'LLM 프리셋 저장·삭제', en: 'Save or delete an LLM preset' }), t({

@@ -1,12 +1,11 @@
 import type { ReactNode } from 'react'
-import { CircleQuestionMark } from 'lucide-react'
+import { Field } from '@/components/ui/field'
 import type { WorkflowMarkedField } from '@/lib/api-image-generation-types'
 import { TYPED_FIELD_RANDOM_OPTION_VALUE, TypedFieldInput } from '@/features/shared-fields/typed-field-input'
-import { FormField, type SelectedImageDraft, type WorkflowFieldDraftValue } from '../image-generation-shared'
+import type { SelectedImageDraft, WorkflowFieldDraftValue } from '../image-generation-shared'
 import { PowerLoraLoaderInput } from './power-lora-loader-input'
 import { MiniMaxH3DirectorDasiwaInput } from './minimax-h3-director-dasiwa-input'
 import { PathOptionTreeSelect } from './path-option-tree-select'
-import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 
 function shouldUsePathTreeSelect(options: string[]) {
@@ -45,27 +44,15 @@ function isWorkflowNodeDraftValue(value: WorkflowFieldDraftValue): value is Reco
 export function WorkflowFieldInput({ field, value, hideLabel = false, loraOptions, isRefreshingOptions = false, onRefreshOptions, invalid = false, errorMessageId, onChange, onImageChange }: WorkflowFieldInputProps) {
   const { t } = useI18n()
   const fieldLabel = field.required ? `${field.label} *` : field.label
-  const labelAccessory = field.description ? (
-    <Tip content={field.description}>
-      <span
-        className="inline-flex cursor-help text-muted-foreground"
-        tabIndex={0}
-        aria-label={t({ ko: '{label} 설명', en: '{label} description' }, { label: field.label })}
-      >
-        <CircleQuestionMark className="h-3.5 w-3.5" />
-      </span>
-    </Tip>
-  ) : null
-
   const wrapField = (children: ReactNode) => {
     if (hideLabel) {
       return <div>{children}</div>
     }
 
     return (
-      <FormField label={fieldLabel} labelAccessory={labelAccessory}>
+      <Field label={fieldLabel} info={field.description}>
         {children}
-      </FormField>
+      </Field>
     )
   }
 

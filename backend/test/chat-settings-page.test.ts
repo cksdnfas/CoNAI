@@ -36,7 +36,7 @@ test('settings page connection: field hints, settings operation tiers and bindin
 
   await t.test('moved resource adapters retain action IDs and their route boundaries', async () => {
     const { chatPagePermission } = await import('@conai/shared')
-    for (const path of ['/chat/profiles', '/chat/resources', '/chat/routines', '/chat/judge']) assert.equal(chatPagePermission(path), 'page.settings.view', path)
+    for (const path of ['/chat/profiles', '/chat/resources', '/chat/llm', '/chat/routines', '/chat/judge']) assert.equal(chatPagePermission(path), 'page.settings.view', path)
     assert.equal(chatPagePermission('/chat/mine'), 'page.chat.view')
     assert.equal(chatPagePermission('/settings?section=mine'), 'page.chat.view')
     assert.equal(chatPagePermission('/settings?section=chat'), 'page.settings.view')
@@ -47,9 +47,11 @@ test('settings page connection: field hints, settings operation tiers and bindin
     for (const id of ['resource.open', 'resource.save', 'lorebook.entries', 'block.fields']) assert.ok(chatPageActionAllowed('/chat/resources', id), id)
     for (const id of ['settings.routine', 'settings.automation_switch']) assert.ok(chatPageActionAllowed('/chat/routines', id) && !chatPageActionAllowed('/chat/resources', id), id)
     assert.ok(chatPageActionAllowed('/chat/judge', 'settings.judge_filter'))
+    for (const id of ['settings.default_model', 'settings.default_judge', 'settings.mcp_server', 'settings.mcp_server_draft', 'settings.usage_period']) assert.ok(chatPageActionAllowed('/chat/llm', id) && chatPageActionAllowed('/settings', id) && !chatPageActionAllowed('/chat/judge', id), id)
+    assert.ok(!chatPageActionAllowed('/chat/llm', 'settings.llm_preset'))
     for (const id of ['settings.user_profile', 'settings.flag']) assert.ok(chatPageActionAllowed('/chat/mine', id), id)
     assert.ok(!chatPageActionAllowed('/chat/resources', 'settings.save'))
-    for (const path of ['/chat/profiles', '/chat/resources', '/chat/routines', '/chat/judge', '/chat/mine']) assert.equal(normalizeChatPageSnapshot({ ...page, path, fields: [] }).path, path)
+    for (const path of ['/chat/profiles', '/chat/resources', '/chat/llm', '/chat/routines', '/chat/judge', '/chat/mine']) assert.equal(normalizeChatPageSnapshot({ ...page, path, fields: [] }).path, path)
   })
 
   await t.test('a field hint is kept, capped, and shown in the view', () => {

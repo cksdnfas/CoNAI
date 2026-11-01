@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Trash2 } from 'lucide-react'
+import { EmptyState } from '@/components/ui/empty-state'
 import { IconButton } from '@/components/ui/icon-button'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { useSnackbar } from '@/components/ui/snackbar-context'
@@ -165,7 +166,7 @@ export function PowerLoraLoaderInput({
   if (nodeItems.length === 0) {
     return (
       <div className={cn(isCompact ? 'space-y-1' : 'space-y-2')}>
-        <div className={cn('text-muted-foreground', isCompact ? 'py-1.5 text-2xs' : 'py-3 text-sm')}>{t('image-generation.components.power.lora.loader.input.no.lora.fields.to.expose')}</div>
+        <EmptyState size="compact" title={t('image-generation.components.power.lora.loader.input.no.lora.fields.to.expose')} />
         {addLoraControl}
       </div>
     )

@@ -109,7 +109,7 @@ function SearchHits({ hits, terms, truncated, search, onOpen, onRetry, retrying 
 }
 
 /** Shared file store, also used as a file/folder picker. */
-export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, pickFolders = false, pickHint, accept, refuse, system = null, onSystemNavigate, workspaces }: {
+export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, pickFolders = false, accept, refuse, refuseReason, system = null, onSystemNavigate, workspaces }: {
   /** The files page: project workspaces as the first sidebar group. */
   workspaces?: { onOpen: (id: string) => void; onCreate?: () => void }
   parentId: string | null
@@ -118,14 +118,14 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, pickFolde
   onPick?: (files: StoredFileEntry[]) => void
   /** Picker: folders get a checkbox as files do (they still open on a click). */
   pickFolders?: boolean
-  /** Picker: a line in the footer saying what can be chosen. */
-  pickHint?: string
   /** Picker: the confirm button's text for `count` chosen entries (default: attach). */
   pickLabel?: (count: number) => string
   /** Picker: only files with these extensions (lowercase, with the dot) can be chosen; the others are dimmed. */
   accept?: readonly string[]
   /** Picker: entries (folders too) that can be neither chosen nor opened; they are dimmed. */
   refuse?: (entry: StoredFileEntry) => boolean
+  /** Picker: why `refuse` dims an entry, shown on hover. */
+  refuseReason?: string
   /** Server folder shown instead of the store (administrators); null shows the store. */
   system?: SystemFolderLocation | null
   /** With it, administrators get the "서버 폴더" sidebar group. */
@@ -410,6 +410,7 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, pickFolde
     id: entry.id, name: entry.name, folder: entry.kind === 'folder', size: entry.size, modified: formatDateTime(entry.updatedAt),
     icon: <EntryIcon entry={entry} />, face: <StoredFileFace entry={entry} />,
     disabled: isPicker && (entry.kind === 'file' ? !pickable(entry) : refuse?.(entry) === true),
+    disabledReason: isPicker && refuse?.(entry) === true ? refuseReason : undefined,
   })
   let list
   if (searching) {
@@ -480,7 +481,7 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, pickFolde
             {body}
           </ModalBody>
           <ModalFooter>
-            <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">{pickHint}</span>
+            <span className="flex-1" />
             <Button disabled={chosen.length === 0 || busy} onClick={() => onPick(chosen)}>
               {pickLabel
                 ? pickLabel(chosen.length)
@@ -556,19 +557,19 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, pickFolde
 }
 
 /** Choose stored files (and, with `pickFolders`, folders) to attach or link. The ticks stay while you move between folders. */
-export function FilePicker({ onClose, onPick, pickFolders, pickHint, title, pickLabel, accept, refuse, initialParentId = null }: {
+export function FilePicker({ onClose, onPick, pickFolders, title, pickLabel, accept, refuse, refuseReason, initialParentId = null }: {
   onClose: () => void
   onPick: (entries: StoredFileEntry[]) => void
   /** Folders get a checkbox too. */
   pickFolders?: boolean
-  /** A footer line saying what can be chosen. */
-  pickHint?: string
   title?: string
   pickLabel?: (count: number) => string
   /** Only files with these extensions can be chosen; the others are dimmed. */
   accept?: readonly string[]
   /** Entries (folders too) that can be neither chosen nor opened; they are dimmed. */
   refuse?: (entry: StoredFileEntry) => boolean
+  /** Why `refuse` dims an entry, shown on hover. */
+  refuseReason?: string
   /** The folder it opens in (null: the top). */
   initialParentId?: string | null
 }) {
@@ -576,7 +577,7 @@ export function FilePicker({ onClose, onPick, pickFolders, pickHint, title, pick
   const [parentId, setParentId] = useState<string | null>(initialParentId)
   return (
     <Modal open title={title ?? t({ ko: '보관함에서 첨부', en: 'Attach from files' })} onClose={onClose} size="lg" height="tall">
-      <FileBrowser parentId={parentId} onNavigate={setParentId} onPick={onPick} pickLabel={pickLabel} pickFolders={pickFolders} pickHint={pickHint} accept={accept} refuse={refuse} />
+      <FileBrowser parentId={parentId} onNavigate={setParentId} onPick={onPick} pickLabel={pickLabel} pickFolders={pickFolders} accept={accept} refuse={refuse} refuseReason={refuseReason} />
     </Modal>
   )
 }

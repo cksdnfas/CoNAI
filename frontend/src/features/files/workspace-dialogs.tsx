@@ -61,7 +61,7 @@ export function WorkspaceProjectDialog({ open, project, canEdit, onClose, onSave
     },
     onError: (error) => {
       if (base && error instanceof ApiRequestError && error.status === 409) { setConflict(true); void queryClient.invalidateQueries({ queryKey: ['workspaces', base.id, 'info'] }); return }
-      showSnackbar({ tone: 'error', message: getErrorMessage(error, t({ ko: '프로젝트를 저장하지 못했어.', en: 'Could not save the project.' })) })
+      showSnackbar({ tone: 'error', message: getErrorMessage(error, t({ ko: '작업 공간을 저장하지 못했어.', en: 'Could not save the workspace.' })) })
     },
   })
   /** The newer version replaces the draft. */
@@ -76,7 +76,7 @@ export function WorkspaceProjectDialog({ open, project, canEdit, onClose, onSave
   return (
     <Modal
       open={open}
-      title={base ? base.name : t({ ko: '새 프로젝트', en: 'New project' })}
+      title={base ? base.name : t({ ko: '새 작업 공간', en: 'New workspace' })}
       onClose={() => { if (!save.isPending) onClose() }}
       size="md"
       dirty={canEdit && dirty}

@@ -644,13 +644,6 @@ export function PromptAutocompletePopup({
               <div className="px-2 py-2 text-xs text-muted-foreground">{t('image-generation.components.wildcard.inline.picker.autocomplete.no.suggestions')}</div>
             )}
           </div>
-          {!isLoading && visibleSuggestions.length > 0 ? (
-            <div className="flex shrink-0 gap-3 bg-surface-high px-3 py-1 text-2xs text-muted-foreground">
-              <span>{t({ ko: '↑↓ 이동', en: '↑↓ move' })}</span>
-              <span>{t({ ko: 'Enter/Tab 넣기', en: 'Enter/Tab insert' })}</span>
-              <span>{t({ ko: 'Esc 닫기', en: 'Esc close' })}</span>
-            </div>
-          ) : null}
         </>
       )}
     </WildcardInlinePickerPopup>

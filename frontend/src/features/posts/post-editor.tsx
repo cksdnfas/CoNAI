@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import type { Location } from 'react-router-dom'
 import type { PostCategory, PostCommentMode, PostDetail, PostStatus } from '@conai/shared'
 import { CHAT_PAGE_LIMITS, POST_LIMITS } from '@conai/shared'
@@ -21,7 +21,7 @@ import { useChatDraftTransaction } from '@/features/codex-chat/use-chat-draft-tr
 import { pageAction, pageArray, pageFreeText, pageNumber, pageObject, pageText } from '@/features/codex-chat/page-action-helpers'
 import { useI18n } from '@/i18n'
 import { useEditorPageGuard } from '@/features/settings/use-unsaved-settings-guard'
-import { invalidatePostScope, createPost, getPost, updatePost, getPostsSettings } from '@/lib/api-posts'
+import { invalidatePostScope, createPost, getPost, updatePost } from '@/lib/api-posts'
 import { ApiRequestError } from '@/lib/api-request'
 import { getErrorMessage } from '@/lib/error-message'
 import { replaceExactText, type ExactTextEdit } from '@/lib/exact-text-edits'
@@ -126,7 +126,6 @@ export function PostEditor({ post, categories, defaultCategoryId, onSaved, onCan
   const { showSnackbar } = useSnackbar()
   const queryClient = useQueryClient()
   const { isAdmin, canUseFiles, canViewImages, canViewAudio } = usePostPermissions()
-  const settings = useQuery({ queryKey: ['post-settings'], queryFn: getPostsSettings, staleTime: 60_000 })
   const [title, setTitle] = useState(post?.title ?? '')
   const [body, setBody] = useState(post?.body ?? '')
   const [categoryId, setCategoryId] = useState<number | null>(post ? post.categoryId : defaultCategoryId)
@@ -367,10 +366,6 @@ export function PostEditor({ post, categories, defaultCategoryId, onSaved, onCan
         <Button variant="ghost" onClick={() => void cancel()} disabled={save.isPending}>{t({ ko: '취소', en: 'Cancel' })}</Button>
         <Button onClick={() => save.mutate()} disabled={!title.trim() || save.isPending}>{t({ ko: '저장', en: 'Save' })}</Button>
       </div>
-      {settings.data?.topicEvaluation.autoEnabled ? <p className="text-xs text-muted-foreground">{t(status === 'draft'
-        ? { ko: '초안은 발행할 때 주제 관련도를 평가해.', en: 'Draft topic relevance is evaluated when published.' }
-        : post ? { ko: '제목·본문이 바뀌면 주제 관련도가 이전 내용 기준으로 표시돼.', en: 'Editing the title or body marks previous topic scores as outdated.' }
-          : { ko: '발행 후 주제 관련도를 자동으로 평가해. 글은 먼저 등록돼.', en: 'Topic relevance is evaluated after publication. The post is saved first.' })}</p> : null}
 
       {picker ? <PostAttachPicker initialTab={picker} onClose={() => setPicker(null)} onInsert={(lines) => { setPicker(null); insert(lines) }} /> : null}
     </div>

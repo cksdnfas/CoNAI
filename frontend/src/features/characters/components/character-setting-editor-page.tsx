@@ -101,7 +101,7 @@ export function CharacterSettingEditorPage({ editor, folders, canEdit, admin, ro
   ) : null
 
   const aside = synced ? (
-    <EditorGroup label={t({ ko: '동기화 중인 프로필', en: 'Synced profiles' })} description={t({ ko: '{count}개', en: '{count}' }, { count: synced })}>
+    <EditorGroup label={t({ ko: '동기화 중인 프로필', en: 'Synced profiles' })} count={synced}>
       {base?.linkedProfiles.length ? (
         <ul>
           {base.linkedProfiles.map((profile) => (

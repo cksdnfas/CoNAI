@@ -59,7 +59,7 @@ export function ComfyWorkflowListSection({
 
   return (
     <RowGroup
-      heading={<SectionLabel icon={<ListTree />}>{t({ ko: '워크플로우', en: 'Workflows' })}</SectionLabel>}
+      heading={<SectionLabel icon={<ListTree />}>{t({ ko: 'ComfyUI 워크플로', en: 'ComfyUI workflows' })}</SectionLabel>}
       count={workflows.length}
       actions={(
         <IconButton size="icon-sm" variant="ghost" onClick={onCreateWorkflow} disabled={!canUpdateWorkflows} label={t({ ko: '워크플로우 등록', en: 'Add workflow' })}>

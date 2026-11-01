@@ -27,7 +27,7 @@ export function getImageGenerationTabLabel(tab: ImageGenerationTab, t: Translate
     return t({ ko: '워크플로', en: 'Workflow' })
   }
 
-  return t({ ko: '예약', en: 'Reservations' })
+  return t({ ko: '예약 작업', en: 'Reservation jobs' })
 }
 
 export function getImageGenerationTabs(t: Translate): Array<{ value: ImageGenerationTab; label: string }> {

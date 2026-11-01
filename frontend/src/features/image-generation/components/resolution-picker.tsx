@@ -1,9 +1,8 @@
 import type { ReactNode } from 'react'
+import { Field } from '@/components/ui/field'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { Select } from '@/components/ui/select'
-import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
-import { FormField } from '../image-generation-shared'
 
 export type ResolutionOption = { value: string; label: string }
 
@@ -56,14 +55,14 @@ export function DimensionInputs({
   const fields = (
     <>
       <FieldSlot above={renderAbove?.('width')}>
-        <FormField label={resolvedWidthLabel}>
+        <Field label={resolvedWidthLabel}>
           <NumberStepperInput aria-label={resolvedWidthLabel} min={bounds?.min} max={bounds?.max} step={bounds?.step} value={width} onValueCommit={onWidthCommit} />
-        </FormField>
+        </Field>
       </FieldSlot>
       <FieldSlot above={renderAbove?.('height')}>
-        <FormField label={resolvedHeightLabel}>
+        <Field label={resolvedHeightLabel}>
           <NumberStepperInput aria-label={resolvedHeightLabel} min={heightBounds?.min} max={heightBounds?.max} step={heightBounds?.step} value={height} onValueCommit={onHeightCommit} />
-        </FormField>
+        </Field>
       </FieldSlot>
     </>
   )
@@ -83,17 +82,13 @@ type OptionSelectFieldProps = {
 function OptionSelectField({ label, hint, value, options, onChange, above }: OptionSelectFieldProps) {
   return (
     <FieldSlot above={above}>
-      <FormField label={label}>
-        <Tip content={hint}>
-          <div>
-            <Select value={value} onChange={(event) => onChange(event.target.value)}>
-              {options.map((option) => (
-                <option key={option.value} value={option.value}>{option.label}</option>
-              ))}
-            </Select>
-          </div>
-        </Tip>
-      </FormField>
+      <Field label={label} info={hint}>
+        <Select value={value} onChange={(event) => onChange(event.target.value)}>
+          {options.map((option) => (
+            <option key={option.value} value={option.value}>{option.label}</option>
+          ))}
+        </Select>
+      </Field>
     </FieldSlot>
   )
 }

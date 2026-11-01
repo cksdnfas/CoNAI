@@ -21,6 +21,8 @@ export interface AppNavLink {
   label: string
   icon: LucideIcon
   pinned: boolean
+  /** An installed plugin's page (listed after the group's own pages). */
+  plugin?: boolean
 }
 
 export interface AppNavGroup {
@@ -31,9 +33,6 @@ export interface AppNavGroup {
 
 /** Saved by the settings page after a save, so the header follows without a reload. */
 export const HEADER_NAVIGATION_QUERY_KEY = ['public-header-navigation-settings'] as const
-
-/** Where the pins are chosen (an administrator's shared setting). */
-export const HEADER_PIN_SETTING_PATH = '/settings?section=general&group=display&setting=headerNavigation'
 
 type BuiltInHeaderKey = Exclude<HeaderNavigationPageKey, PluginHeaderNavigationKey>
 
@@ -96,15 +95,15 @@ export function useAppNavigation() {
     const link: AppNavLink = { key: headerKey ?? path, to: path, label: t(entry.labelKey), icon: entry.icon, pinned: headerKey !== null && pinnedKeys.has(headerKey) }
     return [{ group, link }]
   })
-  const plugins: AppNavLink[] = pluginPages.map((page) => ({ key: page.id, to: page.to, label: page.title, icon: page.icon, pinned: pinnedKeys.has(page.id) }))
+  const plugins: AppNavLink[] = pluginPages.map((page) => ({ key: page.id, to: page.to, label: page.title, icon: page.icon, pinned: pinnedKeys.has(page.id), plugin: true }))
   const linkByKey = new Map([...builtIns.map(({ link }) => link), ...plugins].map((link) => [link.key, link]))
   const pinned = order.flatMap((key) => (pinnedKeys.has(key) ? linkByKey.get(key) ?? [] : []))
   const inGroup = (id: AppNavGroupId) => builtIns.filter(({ group }) => group === id).map(({ link }) => link)
   const groups: AppNavGroup[] = GROUPS.map(({ id, label }) => ({
     id,
     label: t(label),
-    // Plugin pages lead 확장; the plugin list closes it.
-    links: id === 'extend' ? [...plugins, ...inGroup(id)] : inGroup(id),
+    // The plugin list leads 확장; the installed plugins' pages follow it.
+    links: id === 'extend' ? [...inGroup(id), ...plugins] : inGroup(id),
   })).filter((group) => group.links.length > 0)
   const ungrouped = builtIns.filter(({ group }) => group === null).map(({ link }) => link)
 

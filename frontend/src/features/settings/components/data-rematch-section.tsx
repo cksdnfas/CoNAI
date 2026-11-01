@@ -1,9 +1,8 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, DatabaseZap, RotateCw } from 'lucide-react'
+import { DatabaseZap, RotateCw } from 'lucide-react'
 import { Alert } from '@/components/ui/alert'
 import { IconButton } from '@/components/ui/icon-button'
-import { Checkbox } from '@/components/ui/checkbox'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { getDataRematchStatus, startDataRematchJob, type DataRematchJobSnapshot, type DataRematchOptions } from '@/lib/api-settings'
@@ -47,7 +46,6 @@ export function DataRematchSection() {
   const { showSnackbar } = useSnackbar()
   const queryClient = useQueryClient()
   const [dataRematchOptions, setDataRematchOptions] = useState<DataRematchOptions>(DEFAULT_DATA_REMATCH_OPTIONS)
-  const [hashConfirmed, setHashConfirmed] = useState(false)
 
   const dataRematchStatusQuery = useQuery({
     queryKey: ['data-rematch-status'],
@@ -58,7 +56,8 @@ export function DataRematchSection() {
   const dataRematchMutation = useMutation({
     mutationFn: () => startDataRematchJob({
       ...dataRematchOptions,
-      confirmHashRegeneration: dataRematchOptions.hash && hashConfirmed,
+      // startDataRematch only reaches this after the destructive confirm dialog was accepted.
+      confirmHashRegeneration: dataRematchOptions.hash,
     }),
     onSuccess: (status) => {
       queryClient.setQueryData(['data-rematch-status'], status)
@@ -82,7 +81,6 @@ export function DataRematchSection() {
   const updateDataRematchOption = (key: keyof DataRematchOptions, checked: boolean) => {
     if (key === 'hash') {
       setDataRematchOptions(checked ? { thumbnail: false, metadata: false, hash: true } : { ...dataRematchOptions, hash: false })
-      setHashConfirmed(false)
       return
     }
 
@@ -91,10 +89,6 @@ export function DataRematchSection() {
       [key]: checked,
       hash: checked ? false : previous.hash,
     }))
-
-    if (checked) {
-      setHashConfirmed(false)
-    }
   }
 
   const startDataRematch = async () => {
@@ -106,7 +100,7 @@ export function DataRematchSection() {
     const confirmed = await confirm(dataRematchOptions.hash
       ? {
           title: t({ ko: '해시 재생성', en: 'Regenerate hashes' }),
-          description: t({ ko: '모든 이미지의 해시를 다시 계산하고, 옮겨지지 않는 연결은 끊어져. 되돌릴 수 없어. 시작할까?', en: 'Every image hash is recalculated and links that cannot be carried over are removed. This cannot be undone. Start?' }),
+          description: t({ ko: '모든 이미지의 해시를 다시 계산해. 그룹·자동 폴더 그룹·모델 정보·임시 링크·생성 기록과의 연결은 옮겨지지 않고 끊어지고, 되돌릴 수 없어. 시작할까?', en: 'Every image hash is recalculated. Links to groups, auto-folder groups, model info, temporary links and generation history are not carried over but removed, and this cannot be undone. Start?' }),
           confirmLabel: t({ ko: '해시 재생성', en: 'Regenerate hashes' }),
           tone: 'destructive',
         }
@@ -136,7 +130,7 @@ export function DataRematchSection() {
           size="icon-sm"
           variant={dataRematchOptions.hash ? 'destructive' : 'secondary'}
           onClick={() => void startDataRematch()}
-          disabled={isDataRematchBusy || !hasSelectedDataRematchOption || (dataRematchOptions.hash && !hashConfirmed)}
+          disabled={isDataRematchBusy || !hasSelectedDataRematchOption}
           label={isDataRematchBusy ? t({ ko: '진행 중', en: 'Running' }) : t({ ko: '데이터 재매칭 실행', en: 'Run data rematch' })}
         >
           {isDataRematchBusy ? <RotateCw className="h-4 w-4 animate-spin" /> : <DatabaseZap className="h-4 w-4" />}
@@ -152,23 +146,6 @@ export function DataRematchSection() {
           label={option.label}
         />
       ))}
-
-      {dataRematchOptions.hash ? (
-        <Alert variant="destructive" className="my-2">
-          <AlertTriangle />
-          <div className="col-start-2 space-y-2">
-            <p>{t({ ko: '그룹·자동 폴더 그룹·모델 정보·임시 링크·생성 기록과의 연결은 옮겨지지 않고 끊어져. 필요하면 다시 지정해야 해.', en: 'Links to groups, auto-folder groups, model info, temporary links and generation history are not carried over — they are removed and must be set again if needed.' })}</p>
-            <label className="flex cursor-pointer items-center gap-2 text-xs font-semibold">
-              <Checkbox
-                checked={hashConfirmed}
-                disabled={isDataRematchBusy}
-                onCheckedChange={(checked) => setHashConfirmed(checked === true)}
-              />
-              {t({ ko: '위 내용을 확인했어', en: 'I understand the above' })}
-            </label>
-          </div>
-        </Alert>
-      ) : null}
 
       <div className="space-y-2 pt-3">
         <SettingsStatLine

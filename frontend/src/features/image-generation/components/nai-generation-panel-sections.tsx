@@ -47,6 +47,20 @@ function NaiOpusUsage({ percent }: { percent: number }) {
   )
 }
 
+function NaiAuthButton({ onOpenAuth, variant }: { onOpenAuth: () => void; variant: 'secondary' | 'ghost' }) {
+  const { t } = useI18n()
+  const { isAdmin } = useFeaturePermissions()
+  return (
+    <Tip content={isAdmin ? null : t({ ko: 'NovelAI 토큰 연결은 관리자 권한이 필요해.', en: 'Connecting a NovelAI token requires an administrator.' })}>
+      <span tabIndex={isAdmin ? undefined : 0}>
+        <IconButton size="icon-sm" variant={variant} onClick={onOpenAuth} disabled={!isAdmin} tooltip={isAdmin} label={t('image-generation.components.nai.auth.modal.log.in')}>
+          <LogIn />
+        </IconButton>
+      </span>
+    </Tip>
+  )
+}
+
 /** Render the NovelAI connection header with auth status and external link. */
 export function NaiConnectionHeader({ connected, tierName, anlasBalance, opusRemainingPercent, onOpenAuth, compact = false }: NaiConnectionHeaderProps) {
   const { t, formatNumber } = useI18n()
@@ -66,9 +80,7 @@ export function NaiConnectionHeader({ connected, tierName, anlasBalance, opusRem
         </div>
         <div className="flex items-center gap-2">
           {!connected ? (
-            <IconButton size="icon-sm" variant="secondary" onClick={onOpenAuth} label={t('image-generation.components.nai.auth.modal.log.in')}>
-              <LogIn />
-            </IconButton>
+            <NaiAuthButton variant="secondary" onOpenAuth={onOpenAuth} />
           ) : null}
           <Tip content={novelAiHomeLabel}>
             <Button type="button" variant="secondary" size="icon-sm" asChild>
@@ -96,9 +108,7 @@ export function NaiToolbarStatus({ connected, tierName, anlasBalance, opusRemain
       {connected && anlasBalance !== undefined ? <Chip size="sm" mono>Anlas {formatNumber(anlasBalance)}</Chip> : null}
       {connected && tierName === 'Opus' && opusRemainingPercent != null ? <NaiOpusUsage percent={opusRemainingPercent} /> : null}
       {!connected ? (
-        <IconButton size="icon-sm" variant="ghost" onClick={onOpenAuth} label={t('image-generation.components.nai.auth.modal.log.in')}>
-          <LogIn />
-        </IconButton>
+        <NaiAuthButton variant="ghost" onOpenAuth={onOpenAuth} />
       ) : null}
       <Tip content={novelAiHomeLabel}>
         <Button type="button" variant="ghost" size="icon-sm" asChild>

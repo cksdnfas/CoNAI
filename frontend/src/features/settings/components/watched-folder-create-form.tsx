@@ -5,7 +5,6 @@ import type { NewWatchedFolderDraft } from '../settings-utils'
 import { useI18n } from '@/i18n'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { SettingsSwitchRow } from '@/components/ui/settings-switch-row'
-import { SettingsLabelTip } from './settings-label-tip'
 
 interface WatchedFolderCreateFormProps {
   newFolder: NewWatchedFolderDraft
@@ -43,7 +42,7 @@ export function WatchedFolderCreateForm({
           <NumberStepperInput min={1} variant="settings" value={newFolder.scan_interval} onValueCommit={(nextValue) => onNewFolderChange({ scan_interval: Number(nextValue) || 1 })} />
         </Field>
 
-        <Field label={<SettingsLabelTip label={t({ ko: '폴링 주기(ms)', en: 'Polling interval (ms)' })} tip={t({ ko: '비워두면 자동 (권장)', en: 'Empty = auto (recommended)' })} />}>
+        <Field label={t({ ko: '폴링 주기(ms)', en: 'Polling interval (ms)' })} info={t({ ko: '비워두면 자동 (권장)', en: 'Empty = auto (recommended)' })}>
           <NumberStepperInput min={2000} allowEmpty variant="settings" value={newFolder.watcher_polling_interval} onValueCommit={(nextValue) => onNewFolderChange({ watcher_polling_interval: nextValue === '' ? null : Number(nextValue) || null })} placeholder={t({ ko: '자동 감지', en: 'Auto detect' })} disabled={!newFolder.watcher_enabled} />
         </Field>
 

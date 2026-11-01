@@ -3,6 +3,8 @@ import { useQueryClient } from '@tanstack/react-query'
 import { LoaderCircle, Plus } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
+import { EmptyState } from '@/components/ui/empty-state'
+import { FieldGroup } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { Modal, ModalBody } from '@/components/ui/modal'
 import { buildGroupCountMaps } from '@/features/groups/group-count-utils'
@@ -136,8 +138,7 @@ export function GroupAssignModal({
           ) : null}
 
           {recentGroups.length > 0 ? (
-            <div className="space-y-1.5">
-              <p className="text-xs font-semibold text-muted-foreground">{t({ ko: '최근', en: 'Recent' })}</p>
+            <FieldGroup label={t({ ko: '최근', en: 'Recent' })}>
               <div className="flex flex-wrap gap-1.5">
                 {recentGroups.map((group) => (
                   <Button
@@ -155,7 +156,7 @@ export function GroupAssignModal({
                   </Button>
                 ))}
               </div>
-            </div>
+            </FieldGroup>
           ) : null}
 
           {groupOptions.length > 0 ? (
@@ -168,10 +169,7 @@ export function GroupAssignModal({
               countMaps={countMaps}
             />
           ) : (
-            <Alert>
-              <AlertTitle>{t('groups.components.group.assign.modal.no.groups')}</AlertTitle>
-              <AlertDescription>{t('groups.components.group.assign.modal.create.a.group.first')}</AlertDescription>
-            </Alert>
+            <EmptyState size="compact" title={t('groups.components.group.assign.modal.no.groups')} />
           )}
 
           {newGroupName !== null ? (

@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { ArrowLeft, Save, Server } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
+import { EmptyState } from '@/components/ui/empty-state'
 import { Heading } from '@/components/ui/heading'
 import { IconButton } from '@/components/ui/icon-button'
 import { useOverlayBackClose } from '@/components/ui/use-overlay-back-close'
@@ -198,6 +199,7 @@ type ComfyWorkflowControllerPanelProps = {
   onRefreshDropdownLists?: () => Promise<void> | void
   /** Omitted where the viewer cannot author modules (public pages): no save-as-module action. */
   onOpenModuleSave?: () => void
+  onOpenCreateServer?: () => void
   /**
    * False when the server picks the ComfyUI target itself (public pages): no target picker and no server readiness checks.
    * The page still sends the job; the server answers if nothing can run it.
@@ -237,6 +239,7 @@ export function ComfyWorkflowControllerPanel({
   onImageChange,
   onRefreshDropdownLists,
   onOpenModuleSave,
+  onOpenCreateServer,
   serverRouting = true,
   queueMaxCount = 32,
   notice,
@@ -455,9 +458,11 @@ export function ComfyWorkflowControllerPanel({
     <div className="space-y-6">
       {notice}
       {serverRouting && servers.length === 0 ? (
-        <Alert>
-          <AlertTitle>{t({ ko: '서버를 먼저 등록해줘.', en: 'Register a server first.' })}</AlertTitle>
-        </Alert>
+        <EmptyState
+          size="compact"
+          title={t({ ko: '활성 ComfyUI 서버가 없어', en: 'No active ComfyUI servers' })}
+          action={onOpenCreateServer ? <Button size="sm" onClick={onOpenCreateServer}>{t({ ko: '서버 등록', en: 'Register server' })}</Button> : undefined}
+        />
       ) : null}
 
       {readinessIssues.length > 0 ? (
@@ -510,9 +515,7 @@ export function ComfyWorkflowControllerPanel({
             />
           </GenerationControllerFieldStack>
         ) : (
-          <Alert>
-            <AlertTitle>{t({ ko: '노출된 입력 필드 없음', en: 'No exposed input fields' })}</AlertTitle>
-          </Alert>
+          <EmptyState size="compact" title={t({ ko: '노출된 입력 필드 없음', en: 'No exposed input fields' })} />
         )}
       </section>
     </div>

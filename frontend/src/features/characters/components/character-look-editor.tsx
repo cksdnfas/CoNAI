@@ -5,7 +5,8 @@ import { ActionMenuButton } from '@/components/ui/action-menu'
 import { Button } from '@/components/ui/button'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { EditorGroup } from '@/components/ui/editor-group'
-import { Field } from '@/components/ui/field'
+import { EmptyState } from '@/components/ui/empty-state'
+import { Field, FieldInfo } from '@/components/ui/field'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { Spinner } from '@/components/ui/loading-state'
@@ -25,16 +26,17 @@ type SectionKey = (typeof CHARACTER_APPEARANCE_SECTION_KEYS)[number]
 /** Section labels and hints, in editor order (the editor and the chat's proposal card). */
 export function useSectionLabels() {
   const { t } = useI18n()
-  return {
+  const labels: Record<SectionKey, { label: string; hint?: string }> = {
     identity: { label: t({ ko: '정체성', en: 'Identity' }), hint: t({ ko: '캐릭터·작품 태그, 1girl 같은 인물 태그', en: 'Character and work tags, 1girl…' }) },
-    hair: { label: t({ ko: '머리', en: 'Hair' }), hint: t({ ko: '머리색, 길이, 헤어스타일', en: 'Colour, length, style' }) },
-    eyes: { label: t({ ko: '눈', en: 'Eyes' }), hint: t({ ko: '눈색, 눈동자 모양', en: 'Colour, pupils' }) },
+    hair: { label: t({ ko: '머리', en: 'Hair' }) },
+    eyes: { label: t({ ko: '눈', en: 'Eyes' }) },
     face: { label: t({ ko: '얼굴·머리 장식 외', en: 'Face and head' }), hint: t({ ko: '얼굴 특징, 귀, 뿔', en: 'Facial features, ears, horns' }) },
-    body: { label: t({ ko: '체형', en: 'Body' }), hint: t({ ko: '체격, 키, 신체 특징', en: 'Build, height, body features' }) },
+    body: { label: t({ ko: '체형', en: 'Body' }) },
     skin: { label: t({ ko: '피부·표식', en: 'Skin and markings' }), hint: t({ ko: '피부색, 흉터, 문신', en: 'Skin colour, scars, tattoos' }) },
     traits: { label: t({ ko: '종족·특성', en: 'Species and traits' }), hint: t({ ko: '엘프, 수인, 로봇, 직업', en: 'Elf, kemonomimi, robot, role' }) },
     other: { label: t({ ko: '기타', en: 'Other' }), hint: t({ ko: '분류되지 않은 태그 (Danbooru 사전이 없으면 전부 여기)', en: 'Unsorted tags (all of them without the Danbooru dictionary)' }) },
-  } satisfies Record<SectionKey, { label: string; hint: string }>
+  }
+  return labels
 }
 
 const hasLook = (sections: CharacterAppearanceSections, outfits: CharacterOutfit[]) => CHARACTER_APPEARANCE_SECTION_KEYS.some((key) => sections[key].trim()) || outfits.some((outfit) => outfit.tags.trim())
@@ -117,7 +119,7 @@ export function CharacterLookEditor({ editor, editable, generation, busy, onBusy
   return (
     <EditorGroup
       label={t({ ko: '외형 태그', en: 'Appearance tags' })}
-      description={t({ ko: '항목과 기본 의상을 합친 태그를 프로필과 이미지 생성이 읽어.', en: 'Profiles and generation read the sections plus the default outfit.' })}
+      info={t({ ko: '항목과 기본 의상을 합친 태그를 프로필과 이미지 생성이 읽어.', en: 'Profiles and generation read the sections plus the default outfit.' })}
       actions={<>
         {filling ? <Spinner className="size-3.5" /> : null}
         {danbooruUrl ? <IconButton asChild variant="ghost" size="icon-sm" label={t({ ko: 'Danbooru에서 보기', en: 'Open on Danbooru' })}><a href={danbooruUrl} target="_blank" rel="noopener noreferrer"><ExternalLink /></a></IconButton> : null}
@@ -166,8 +168,10 @@ function OutfitList({ outfits, editable, disabled, onChange }: { outfits: Charac
   return (
     <div className="space-y-3 border-t border-line pt-3">
       <div className="flex items-center gap-2">
-        <span className="text-sm font-medium">{t({ ko: '의상', en: 'Outfits' })}</span>
-        <span className="text-xs text-muted-foreground">{t({ ko: '맨 위가 기본 의상이야.', en: 'The first one is the default.' })}</span>
+        <span className="flex items-center gap-1 text-sm font-bold">
+          {t({ ko: '의상', en: 'Outfits' })}
+          <FieldInfo>{t({ ko: '맨 위가 기본 의상이야. 옷·액세서리 태그는 의상에 두면 갈아입힐 수 있어.', en: 'The first one is the default. Keep clothing tags in outfits to switch them.' })}</FieldInfo>
+        </span>
         {editable ? <Button size="sm" variant="ghost" className="ml-auto" disabled={disabled} onClick={() => onChange([...outfits, { name: t({ ko: '의상 {count}', en: 'Outfit {count}' }, { count: outfits.length + 1 }), tags: '' }])}><Plus />{t({ ko: '의상 추가', en: 'Add outfit' })}</Button> : null}
       </div>
       {outfits.length ? outfits.map((outfit, index) => (
@@ -183,7 +187,7 @@ function OutfitList({ outfits, editable, disabled, onChange }: { outfits: Charac
           </div>
           <Textarea variant="settings" textSize="sm" autoGrow rows={1} readOnly={!editable} disabled={disabled} maxLength={CHAT_PROFILE_TEXT_LIMITS.text} aria-label={t({ ko: '{name} 태그', en: '{name} tags' }, { name: outfit.name })} value={outfit.tags} onChange={(event) => update(index, { tags: event.target.value })} />
         </div>
-      )) : <p className="text-xs text-muted-foreground">{t({ ko: '의상이 없어. 옷·액세서리 태그는 의상에 두면 갈아입힐 수 있어.', en: 'No outfits. Keep clothing tags in outfits to switch them.' })}</p>}
+      )) : <EmptyState size="compact" title={t({ ko: '아직 의상이 없어', en: 'No outfits yet' })} />}
     </div>
   )
 }

@@ -12,7 +12,7 @@ import {
   getDanbooruBrowserSummary,
   getDanbooruBrowserTags,
 } from '@/lib/api-danbooru-browser'
-import type { DanbooruBrowserDatabaseInfo, DanbooruBrowserRelatedTagCategory, DanbooruBrowserTreeNode } from '@/types/danbooru-browser'
+import type { DanbooruBrowserRelatedTagCategory, DanbooruBrowserTreeNode } from '@/types/danbooru-browser'
 import { useI18n } from '@/i18n'
 import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
 import { pageAction, pageChoice, pageNumber, pageObject, pageText } from '@/features/codex-chat/page-action-helpers'
@@ -20,7 +20,7 @@ import { useCanSeeServerDetails } from '../use-can-see-server-details'
 import { PromptPageToolbar, type PromptPageToolbarBaseProps } from './prompt-page-toolbar'
 import { SidebarTree } from './sidebar-tree'
 import { ToolbarSearchField } from '@/components/common/search-field'
-import { PromptDanbooruInstallation } from './prompt-danbooru-installation'
+import { PromptDanbooruInstallation, PromptDanbooruMissingNotice } from './prompt-danbooru-installation'
 import {
   CHARACTER_PAGE_SIZE,
   DEFAULT_PAGE_SIZE,
@@ -43,43 +43,6 @@ import {
   readStoredRelatedTagOptions,
   type DanbooruBrowserSelectedNode,
 } from './prompt-danbooru-browser-panel-ui'
-
-function DanbooruDatabaseMissingNotice({ database }: { database: DanbooruBrowserDatabaseInfo }) {
-  const { t } = useI18n()
-  const canSeeServerDetails = useCanSeeServerDetails()
-  const filePatterns = database.filePatterns.join(', ')
-
-  if (!canSeeServerDetails) {
-    return (
-      <Alert>
-        <AlertTitle>{t({ ko: 'Danbooru 데이터가 아직 없어', en: 'Danbooru data is not installed yet' })}</AlertTitle>
-        <AlertDescription>
-          {t({ ko: '태그, 작가, 캐릭터 목록을 쓰려면 관리자가 Danbooru DB 파일을 설치해야 해.', en: 'An administrator needs to install the Danbooru DB file before tags, artists and characters can be browsed.' })}
-        </AlertDescription>
-      </Alert>
-    )
-  }
-
-  return (
-    <Alert>
-      <AlertTitle>{t({ ko: 'Danbooru DB 파일 없음', en: 'Danbooru DB file missing' })}</AlertTitle>
-      <AlertDescription>
-        <div className="space-y-2">
-          <PromptDanbooruInstallation available={false} />
-          <div className="grid gap-1 text-xs sm:grid-cols-[120px_minmax(0,1fr)]">
-            <span className="font-medium text-muted-foreground">{t({ ko: '기본 경로', en: 'Default path' })}</span>
-            <span className="min-w-0 break-all font-mono text-foreground">{database.expectedPath}</span>
-            <span className="font-medium text-muted-foreground">{t({ ko: '허용 파일명', en: 'Accepted names' })}</span>
-            <span className="min-w-0 break-all font-mono text-foreground">{filePatterns}</span>
-            <span className="font-medium text-muted-foreground">{t({ ko: '다운로드', en: 'Download' })}</span>
-            <a className="min-w-0 break-all text-primary underline-offset-4 hover:underline" href={database.downloadUrl} target="_blank" rel="noreferrer">{database.downloadUrl}</a>
-          </div>
-          <p className="text-xs">{t({ ko: '다른 위치를 쓰려면 DANBOORU_SQLITE_PATH 환경변수로 파일 경로를 지정해.', en: 'Set DANBOORU_SQLITE_PATH to use a file from another location.' })}</p>
-        </div>
-      </AlertDescription>
-    </Alert>
-  )
-}
 
 export function PromptDanbooruBrowserPanel({ toolbarProps }: { toolbarProps: PromptPageToolbarBaseProps }) {
   const { language, t, formatNumber } = useI18n()
@@ -367,7 +330,7 @@ export function PromptDanbooruBrowserPanel({ toolbarProps }: { toolbarProps: Pro
 
         {isDanbooruDbAvailable && activeQuery.isLoading ? <TableLoading columns={activeSection === 'characters' ? 6 : activeSection === 'artists' ? 3 : 2} /> : null}
 
-        {!summaryQuery.isLoading && !summaryQuery.isError && database && !isDanbooruDbAvailable ? <DanbooruDatabaseMissingNotice database={database} /> : null}
+        {!summaryQuery.isLoading && !summaryQuery.isError && database && !isDanbooruDbAvailable ? <PromptDanbooruMissingNotice database={database} /> : null}
 
         {isDanbooruDbAvailable && !activeQuery.isLoading && activeSection === 'tags' ? <TagsTable items={tagItems} language={language} /> : null}
         {isDanbooruDbAvailable && !activeQuery.isLoading && activeSection === 'artists' ? <ArtistsTable items={artistItems} language={language} /> : null}

@@ -12,7 +12,6 @@ import { Tip } from '@/components/ui/tooltip'
 import { DataTable, DataTd, DataTh, DataTr } from '@/components/ui/data-table'
 import { useI18n } from '@/i18n'
 import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
-import { useSettingsGroupActive } from './settings-navigation'
 import { SETTINGS_ROW_BY_ID } from '@conai/shared'
 import { pageAction, pageChoice, pageObject } from '@/features/codex-chat/page-action-helpers'
 import { CHAT_JUDGE_STATS_QUERY_KEY, getChatJudgeStats } from '@/lib/api-chat-judge'
@@ -23,7 +22,7 @@ import { cn } from '@/lib/utils'
 import { AgentCliUsageBars } from './agent-cli-settings'
 import { Sparkline, StackedBars, type StackedSeries } from './llm-usage-charts'
 import { SettingsEmptyRow, SettingsRowsSkeleton } from './settings-rows'
-import { useAgentCliChatData } from './use-llm-connections-chat-page'
+import { useAgentCliChatData, useLlmSettingsGroupActive } from './use-llm-connections-chat-page'
 import { useAgentCliQueries } from './llm-agent-cli-queries'
 
 type Split = 'purpose' | 'model'
@@ -217,7 +216,7 @@ export function LlmUsageDashboard({ onOpenJudge }: { onOpenJudge: () => void }) 
     judge: judgeQuery.isSuccess ? { runs: judgeRuns, uncertain: judgeUnsure, failed: judgeFailed, overThirtyPercentUnsure: unsureItems.map((entry) => entry.name) } : null,
     subscriptions: agentCli,
   }
-  const groupActive = useSettingsGroupActive('dashboard', 'connections')
+  const groupActive = useLlmSettingsGroupActive('dashboard')
   useChatPageRegistration(groupActive ? {
     kind: 'settings', title: t(SETTINGS_ROW_BY_ID['llm.dashboard'].label), resourceId: 'llm', priority: 5, fields: [], data: chatData,
     actions: [pageAction('settings.usage_period', t({ ko: '기간 바꾸기', en: 'Change the period' }), t({ ko: '최근 7일 또는 30일로 바꿔.', en: 'Show the last 7 or 30 days.' }), pageObject({ days: pageChoice([7, 30]) }, ['days']))],

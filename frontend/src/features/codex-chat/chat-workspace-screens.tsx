@@ -6,6 +6,8 @@ import { ChatSettingsJudge } from '@/features/settings/components/chat-settings-
 import { ChatSettingsMine } from '@/features/settings/components/chat-settings-mine'
 import { ChatSettingsProfiles } from '@/features/settings/components/chat-settings-profiles'
 import { ChatSettingsResources } from '@/features/settings/components/chat-settings-resources'
+import { LlmSettingsTab } from '@/features/settings/components/llm-settings-tab'
+import { SettingsJumpTarget } from '@/features/settings/components/settings-navigation'
 import { registerTranslationCatalog, useI18n } from '@/i18n'
 import { charactersCatalog } from '@/i18n/resources/characters'
 import { settingsCatalog } from '@/i18n/resources/settings'
@@ -47,6 +49,11 @@ export function ChatResourcesScreen() {
       <ChatSettingsResources tab={tab} />
     </div>
   )
+}
+
+/** AI 연결: the same connections, representative models and usage as Settings, without workflow prompt presets. */
+export function ChatLlmScreen() {
+  return <div className="pt-3"><SettingsJumpTarget><LlmSettingsTab /></SettingsJumpTarget></div>
 }
 
 export function ChatRoutinesScreen() {

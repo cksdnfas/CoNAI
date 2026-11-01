@@ -53,7 +53,7 @@ export function CharacterFacetPanel({ facets, filters, onChange, loading }: {
   return (
     <div className="space-y-3 border-t border-line pt-3">
       <div className="flex items-center gap-2">
-        <span className="text-sm font-medium">{t({ ko: '필터', en: 'Filters' })}</span>
+        <span className="text-sm font-bold">{t({ ko: '필터', en: 'Filters' })}</span>
         {hasActiveFilters(filters) ? <Button size="xs" variant="ghost" className="ml-auto" onClick={() => onChange({})}>{t({ ko: '모두 해제', en: 'Clear all' })}</Button> : null}
       </div>
       {facets.dimensions.map((dimension) => {
@@ -62,7 +62,7 @@ export function CharacterFacetPanel({ facets, filters, onChange, loading }: {
         const shown = open ? dimension.values : dimension.values.filter((value, index) => index < FACET_PREVIEW_COUNT || selected.includes(value.tag))
         return (
           <div key={dimension.key} role="group" aria-label={labels[dimension.key]} className="space-y-1.5">
-            <Text as="span" variant="overline">{labels[dimension.key]}</Text>
+            <Text as="span" variant="label">{labels[dimension.key]}</Text>
             <div className="flex flex-wrap gap-1">
               {shown.map((value) => (
                 <ToggleChip key={value.tag} size="sm" pressed={selected.includes(value.tag)} title={value.tag} onClick={() => onChange(toggleFilter(filters, dimension.key, value.tag))}>

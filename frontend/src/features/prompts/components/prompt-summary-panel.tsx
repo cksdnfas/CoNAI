@@ -2,7 +2,7 @@ import { Badge } from '@/components/ui/badge'
 import { Inset } from '@/components/ui/inset'
 import { StatTile } from '@/components/ui/stat-tile'
 import { ListRow } from '@/components/ui/list-row'
-import { Text } from '@/components/ui/text'
+import { EmptyState } from '@/components/ui/empty-state'
 import { Section } from '@/components/ui/section'
 import type { PromptCollectionItem, PromptGroupRecord, PromptStatistics, PromptTypeFilter } from '@/types/prompt'
 import { useI18n } from '@/i18n'
@@ -47,7 +47,7 @@ export function PromptSummaryPanel({ promptType, statistics, topPrompts = [], gr
             <ListRow key={group.id} trailing={<Badge variant="secondary">{formatNumber(group.prompt_count ?? 0)}</Badge>}>
               <span className="min-w-0 truncate text-foreground">{group.group_name}</span>
             </ListRow>
-          )) : <Inset padding="sm"><Text variant="muted">{t('prompts.components.prompt.summary.panel.no.group.statistics.to.show')}</Text></Inset>}
+          )) : <EmptyState size="compact" title={t('prompts.components.prompt.summary.panel.no.group.statistics.to.show')} />}
         </div>
       </Section>
 
@@ -58,7 +58,7 @@ export function PromptSummaryPanel({ promptType, statistics, topPrompts = [], gr
               <div className="truncate text-sm font-medium text-foreground">{item.prompt}</div>
               <div className="mt-1 text-xs text-muted-foreground">{t({ ko: '사용량 {count}', en: 'usage {count}' }, { count: formatNumber(item.usage_count) })}</div>
             </Inset>
-          )) : <Inset padding="sm" className="md:col-span-2 xl:col-span-3"><Text variant="muted">{t('prompts.components.prompt.summary.panel.no.top.prompts.to.show')}</Text></Inset>}
+          )) : <EmptyState size="compact" className="md:col-span-2 xl:col-span-3" title={t('prompts.components.prompt.summary.panel.no.top.prompts.to.show')} />}
         </div>
       </Section>
     </div>

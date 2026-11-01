@@ -5,6 +5,7 @@ import { Fragment, useCallback, useMemo, useState, type ReactNode } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowUp, ArrowDown, LogIn, RefreshCw, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { FieldInfo } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { Checkbox } from '@/components/ui/checkbox'
 import { CODEX_REFERENCE_ROLES, codexReferenceSlots, codexAttachmentUsage, codexReferencePayload, canEnableCodexStrict, shouldConfirmCodexHistoryLoad, type CodexReferenceDraft } from '../codex-reference-draft'
@@ -586,7 +587,6 @@ export function CodexGenerationPanel({
     ),
     output: (
       <Section variant="settings" heading={t({ ko: '출력', en: 'Output' })} className="@container">
-        {codexForm.strictPreservation ? <Text variant="muted">{t({ ko: '엄격 보존: 출력 크기는 원본 이미지 크기로 고정돼. 다른 요청 크기는 무시해.', en: 'Strict preservation: output size is locked to the source image. Other requested sizes are overridden.' })}</Text> : null}
         {!codexForm.strictPreservation ? <div className="grid gap-4 @sm:grid-cols-2 @3xl:grid-cols-3">
           <ResolutionPicker
             mode="ratio"
@@ -601,7 +601,7 @@ export function CodexGenerationPanel({
             tierHint={outputSizeHint}
             onTierChange={(value) => handleFieldChange('resolution', value)}
           />
-        </div> : null}
+        </div> : <p className="text-xs text-muted-foreground">{t({ ko: '엄격 보존 중에는 원본 크기를 그대로 써.', en: 'Strict preservation keeps the source size.' })}</p>}
       </Section>
     ),
     images: (
@@ -682,10 +682,12 @@ export function CodexGenerationPanel({
             <Text variant="label">{t({ ko: '엄격 마스크 보존 · 검정 픽셀 고정, 원본 크기 PNG만 저장', en: 'Strict mask preservation · lock black pixels, source-sized PNG only' })}</Text>
           </label>
         ) : null}
-        <Text variant="muted">
-          {t({ ko: '첨부 {count}/5 · {bytes} MiB/32 MiB · 파일당 10 MiB, 최대 4096px · 원본/마스크 포함', en: 'Attachments {count}/5 · {bytes} MiB/32 MiB · 10 MiB each, max 4096px · includes source/mask' }, { count: attachmentUsage.count, bytes: (attachmentUsage.bytes / 1024 / 1024).toFixed(2) })}
-        </Text>
-        <Text variant="muted">{t({ ko: '원본·참조: PNG/JPEG/WebP · 마스크: 원본과 같은 크기의 PNG', en: 'Source/references: PNG/JPEG/WebP · mask: source-sized PNG' })}</Text>
+        <div className="flex items-center gap-1">
+          <Text variant="muted">
+            {t({ ko: '첨부 {count}/5 · {bytes} MiB/32 MiB', en: 'Attachments {count}/5 · {bytes} MiB/32 MiB' }, { count: attachmentUsage.count, bytes: (attachmentUsage.bytes / 1024 / 1024).toFixed(2) })}
+          </Text>
+          <FieldInfo>{t({ ko: '파일당 10 MiB, 최대 4096px · 원본/마스크 포함. 원본·참조: PNG/JPEG/WebP · 마스크: 원본과 같은 크기의 PNG', en: '10 MiB each, max 4096px, including source/mask. Source/references: PNG/JPEG/WebP · mask: source-sized PNG' })}</FieldInfo>
+        </div>
         {codexForm.references.map((reference, index) => (
           <div key={index} className="space-y-2 border-b border-line py-3">
             <div className="flex flex-wrap items-center gap-2">

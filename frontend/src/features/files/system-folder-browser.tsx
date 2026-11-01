@@ -1,9 +1,11 @@
 import { lazy, Suspense, useState, type ReactNode } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ChevronRight, Clock, Download, File, Folder, LayoutGrid, List, Lock, RefreshCw, RotateCcw, Save, ScrollText, Trash2, Upload } from 'lucide-react'
+import { Clock, Download, File, Folder, LayoutGrid, List, Lock, RefreshCw, RotateCcw, Save, ScrollText, Trash2, Upload } from 'lucide-react'
 import type { SystemFolderEntry, SystemFolderRootId } from '@conai/shared'
 import { PageWithSidebar } from '@/components/common/page-with-sidebar'
 import { PageToolbar } from '@/components/common/page-toolbar'
+import { PathBreadcrumbs } from '@/components/common/path-breadcrumbs'
 import { MediaCard } from '@/components/common/media-card'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { SelectionActionBar, SelectionBarAction } from '@/components/common/selection-action-bar'
@@ -117,6 +119,7 @@ export function SystemFolderBrowser({ location, onNavigate, sidebar }: {
   sidebar: ReactNode
 }) {
   const { t, formatDateTime } = useI18n()
+  const navigateTo = useNavigate()
   const { showSnackbar } = useSnackbar()
   const confirm = useConfirm()
   const queryClient = useQueryClient()
@@ -190,27 +193,23 @@ export function SystemFolderBrowser({ location, onNavigate, sidebar }: {
     })
   }
 
-  const crumb = (label: string, active: boolean, onClick: () => void, first = false) => (
-    <span className="inline-flex min-w-0 items-center">
-      {first ? null : <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" />}
-      <Button variant="ghost" size="sm" className="max-w-48" aria-current={active ? 'location' : undefined} onClick={onClick}>
-        <span className="truncate">{label}</span>
-      </Button>
-    </span>
-  )
   const breadcrumbs = (
-    <nav aria-label={t({ ko: '현재 경로', en: 'Current path' })} className="flex min-w-0 flex-wrap items-center gap-0.5 text-sm">
-      {crumb(rootLabel(root, t), path === '', () => navigate({ root, path: '' }), true)}
-      {query.data?.breadcrumbs.map((item, index, all) => (
-        <span key={item.path} className="contents">{crumb(item.name, index === all.length - 1, () => navigate({ root, path: item.path }))}</span>
-      ))}
+    <>
+      <PathBreadcrumbs
+        ariaLabel={t({ ko: '현재 경로', en: 'Current path' })}
+        items={[
+          { key: 'files', label: t('pageAccessCatalog.files'), onClick: () => navigateTo('/files') },
+          { key: 'root', label: rootLabel(root, t), onClick: () => navigate({ root, path: '' }) },
+          ...(query.data?.breadcrumbs ?? []).map((item) => ({ key: item.path, label: item.name, onClick: () => navigate({ root, path: item.path }) })),
+        ]}
+      />
       {root === 'recycle-bin' ? null : (
         <span className="ml-1 inline-flex items-center gap-1 text-2xs text-muted-foreground">
           <Lock className="size-3" aria-hidden />
           {t({ ko: '읽기 전용', en: 'Read-only' })}
         </span>
       )}
-    </nav>
+    </>
   )
 
   const actions = (

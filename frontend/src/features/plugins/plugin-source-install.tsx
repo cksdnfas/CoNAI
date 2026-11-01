@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import type { PluginInstallResult, PluginSourceInput, PluginSourceProvider, PluginSourceReview } from '@conai/shared'
 import { Button } from '@/components/ui/button'
+import { DisclosureButton } from '@/components/ui/disclosure-button'
 import { Field } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { ListRow } from '@/components/ui/list-row'
@@ -76,6 +77,7 @@ export function usePluginSourceInstall(onInstalled: (result: PluginInstallResult
 
 export function PluginSourceInstall({ state }: { state: ReturnType<typeof usePluginSourceInstall> }) {
   const { t } = useI18n()
+  const [showSkipped, setShowSkipped] = useState(false)
   const { input, review, busy, error } = state
   return <Modal open={input !== null} onClose={state.close} title={t(state.pluginId ? { ko: 'Git 업데이트 검토', en: 'Review Git update' } : { ko: 'Git에서 설치', en: 'Install from Git' })} size="xl" sidePanelInset={CHAT_DOCK_INSET}>
     {input ? <>
@@ -104,12 +106,12 @@ export function PluginSourceInstall({ state }: { state: ReturnType<typeof usePlu
           <p className="pb-2 font-mono text-xs text-muted-foreground">{t({ ko: '커밋', en: 'Commit' })} · <span title={review.source.commit}>{review.source.commit.slice(0, 7)}</span></p>
           {review.previousSource ? <p className="pb-2 text-sm text-warning">{t({ ko: '기존 Git 연결을 바꿔.', en: 'This replaces the previous Git link.' })} <span className="break-all">{review.previousSource.url}@{review.previousSource.ref}{review.previousSource.path ? ` · ${review.previousSource.path}` : ''}</span></p> : null}
         </>}>
-          {review.skipped.length ? <details className="pt-2">
-            <summary className="cursor-pointer text-sm text-muted-foreground">{t({ ko: '제외한 파일 ({count})', en: 'Skipped files ({count})' }, { count: review.skipped.length })}</summary>
-            <div className="max-h-36 overflow-y-auto">
+          {review.skipped.length ? <div className="pt-2">
+            <DisclosureButton open={showSkipped} onClick={() => setShowSkipped((open) => !open)}>{t({ ko: '제외한 파일 ({count})', en: 'Skipped files ({count})' }, { count: review.skipped.length })}</DisclosureButton>
+            <div hidden={!showSkipped} className="max-h-36 overflow-y-auto">
               {review.skipped.slice(0, 50).map(name => <ListRow key={name} size="sm"><span className="break-all font-mono text-xs">{name}</span></ListRow>)}
             </div>
-          </details> : null}
+          </div> : null}
         </PluginPackageReviewSummary> : null}
         {review && state.pluginId && review.pluginId !== state.pluginId ? <Text role="status" tone="warning">{t({ ko: '저장소의 플러그인 ID가 {next}(으)로 바뀌었어. 적용하면 {current}을 업데이트하지 않고 새 플러그인으로 설치해.', en: 'The repository plugin ID is now {next}. Applying installs a new plugin instead of updating {current}.' }, { next: review.pluginId, current: state.pluginId })}</Text> : null}
       </ModalBody>

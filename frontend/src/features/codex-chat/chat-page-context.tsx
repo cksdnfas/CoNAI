@@ -106,10 +106,10 @@ const NESTED_VIEWS: Record<string, string[]> = {
     ...['topics', 'knowledge'].map((group) => `/settings?section=posts&group=${group}`),
     ...['nai', 'comfyui', 'pacing', 'schedules'].map((group) => `/settings?section=generation&group=${group}`),
   ],
-  '/chat': ['/chat/profiles', ...CHAT_RESOURCE_TABS.map((tab) => `/chat/resources?tab=${tab}`), '/chat/routines', '/chat/judge', '/chat/mine'],
+  '/chat': ['/chat/profiles', ...CHAT_RESOURCE_TABS.map((tab) => `/chat/resources?tab=${tab}`), '/chat/llm', ...['connections', 'dashboard'].map((group) => `/chat/llm?group=${group}`), '/chat/routines', '/chat/judge', '/chat/mine'],
 }
 /** The chat workspace screens an account without administrator rights never gets offered. */
-const CHAT_ADMIN_DESTINATION = /^\/chat\/(?:profiles|resources|routines|judge)(?:\?|$)/
+const CHAT_ADMIN_DESTINATION = /^\/chat\/(?:profiles|resources|llm|routines|judge)(?:\?|$)/
 
 function withNavigation(editor: Editor | null, navigation: Editor | undefined): Editor | null {
   const additions = (navigation?.actions ?? []).filter((action) => !(editor?.actions ?? []).some((own) => own.id === action.id))
@@ -192,8 +192,8 @@ export function ChatPageProvider({ children }: PropsWithChildren) {
   }, [])
   const commandActions = useMemo(() => commandWatchers ? (activeEditor?.actions ?? []).filter((action) => isCommandAction(action, location.pathname, auth?.permissionKeys)) : NO_ACTIONS, [commandWatchers, activeEditor, location.pathname, auth?.permissionKeys])
   const fallbackTitle = t({
-    ko: ({ '/': '이미지 라이브러리', '/access': '접근 가능한 페이지', '/chat': '채팅', '/chat/profiles': '채팅 · 프로필', '/chat/resources': '채팅 · 자원', '/chat/routines': '채팅 · 루틴', '/chat/judge': '채팅 · 판단 기록', '/chat/mine': '채팅 · 내 설정', '/generation': '이미지 생성', '/prompts': '프롬프트', '/groups': '그룹', '/characters': '캐릭터 라이브러리', '/wildcards': '와일드카드', '/files': '파일 보관함', '/upload': '업로드', '/settings': '설정', '/wallpaper': '배경화면', '/wallpaper/runtime': '배경화면 실행' } as Record<string, string>)[location.pathname] ?? (location.pathname.startsWith('/groups/') ? '그룹 상세' : '이미지 상세'),
-    en: ({ '/': 'Image library', '/access': 'Available pages', '/chat': 'Chat', '/chat/profiles': 'Chat · Profiles', '/chat/resources': 'Chat · Resources', '/chat/routines': 'Chat · Routines', '/chat/judge': 'Chat · Judge log', '/chat/mine': 'Chat · My settings', '/generation': 'Image generation', '/prompts': 'Prompts', '/groups': 'Groups', '/characters': 'Character library', '/wildcards': 'Wildcards', '/files': 'File store', '/upload': 'Upload', '/settings': 'Settings', '/wallpaper': 'Wallpaper', '/wallpaper/runtime': 'Wallpaper runtime' } as Record<string, string>)[location.pathname] ?? (location.pathname.startsWith('/groups/') ? 'Group detail' : 'Image detail'),
+    ko: ({ '/': '이미지 라이브러리', '/access': '접근 가능한 페이지', '/chat': '채팅', '/chat/profiles': '채팅 · 프로필', '/chat/resources': '채팅 · 자원', '/chat/llm': '채팅 · AI 연결', '/chat/routines': '채팅 · 루틴', '/chat/judge': '채팅 · 판단 기록', '/chat/mine': '채팅 · 내 설정', '/generation': '이미지 생성', '/prompts': '프롬프트', '/groups': '그룹', '/characters': '캐릭터 라이브러리', '/wildcards': '와일드카드', '/files': '파일 보관함', '/upload': '업로드', '/settings': '설정', '/wallpaper': '배경화면', '/wallpaper/runtime': '배경화면 실행' } as Record<string, string>)[location.pathname] ?? (location.pathname.startsWith('/groups/') ? '그룹 상세' : '이미지 상세'),
+    en: ({ '/': 'Image library', '/access': 'Available pages', '/chat': 'Chat', '/chat/profiles': 'Chat · Profiles', '/chat/resources': 'Chat · Resources', '/chat/llm': 'Chat · AI connections', '/chat/routines': 'Chat · Routines', '/chat/judge': 'Chat · Judge log', '/chat/mine': 'Chat · My settings', '/generation': 'Image generation', '/prompts': 'Prompts', '/groups': 'Groups', '/characters': 'Character library', '/wildcards': 'Wildcards', '/files': 'File store', '/upload': 'Upload', '/settings': 'Settings', '/wallpaper': 'Wallpaper', '/wallpaper/runtime': 'Wallpaper runtime' } as Record<string, string>)[location.pathname] ?? (location.pathname.startsWith('/groups/') ? 'Group detail' : 'Image detail'),
   })
   const title = activeEditor?.title ?? fallbackTitle
   const [activity, setActivity] = useState<ChatPageActivity[]>([])

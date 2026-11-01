@@ -149,13 +149,14 @@ export function CharacterAppearanceEditor({ value, onChange, onAvatarChange, ref
             {avatar}
             {editable ? (
               <div className="flex min-w-0 flex-col items-start gap-1">
-                <Button size="sm" variant="secondary" disabled={busy || !referenceUrl || !value.referenceHash} onClick={() => setCropOpen(true)}><Crop />{t({ ko: '기준 이미지에서 자르기', en: 'Crop the reference' })}</Button>
+                {referenceUrl && value.referenceHash ? <Button size="sm" variant="secondary" disabled={busy} onClick={() => setCropOpen(true)}><Crop />{t({ ko: '기준 이미지에서 자르기', en: 'Crop the reference' })}</Button> : null}
                 <ChatProfileAssetInput
                   target={uploadTarget}
                   libraryGroupId={libraryGroupId}
                   onChange={(avatarHash) => onAvatarChange(avatarHash, null)}
                   onBusyChange={onBusyChange}
                   busy={busy}
+                  label={t({ ko: '아바타 바꾸기', en: 'Change avatar' })}
                   variant="ghost"
                   onClear={hasAvatar ? () => onAvatarChange(null, null) : undefined}
                   clearLabel={t({ ko: '아바타 지우기', en: 'Remove avatar' })}

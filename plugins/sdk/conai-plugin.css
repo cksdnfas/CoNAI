@@ -72,8 +72,8 @@ a { color: var(--conai-foreground); text-underline-offset: 2px }
 hr { border: 0; border-top: 1px solid var(--conai-line); margin: 16px 0 }
 .muted { color: var(--conai-muted-foreground) }
 
-/* Overline label above a field; the control sits inside the label. */
-label { display: block; margin: 10px 0; font-size: 11px; font-weight: 600; color: var(--conai-muted-foreground) }
+/* Field label above a control; the control sits inside the label. */
+label { display: block; margin: 10px 0; font-size: 12px; font-weight: 500; color: color-mix(in srgb, var(--conai-foreground) 80%, transparent) }
 label > input:not([type=checkbox]):not([type=radio]):not([type=range]), label > select, label > textarea { display: block; width: 100%; margin-top: 5px; color: var(--conai-foreground) }
 
 input, select, textarea, button { font: inherit; font-size: 13px; color: inherit; border-radius: var(--conai-radius) }
@@ -186,12 +186,14 @@ dialog::backdrop { background: var(--conai-scrim, rgba(0, 0, 0, .62)) }
 
 /* ---------- Labels ---------- */
 
-/* Overline label (field / sidebar group caption). .conai-group-head is the RowGroup heading: overline over a rule,
+/* Overline label: a muted kicker for data (sidebar group caption, table header). */
+.conai-overline { font-size: 11px; font-weight: 600; letter-spacing: .16em; text-transform: uppercase; color: var(--conai-muted-foreground) }
+.conai-overline:lang(ko) { letter-spacing: .02em }
+/* .conai-group-head is the RowGroup heading: bold body-size text over a rule, never lighter than the rows under it,
    with room for small actions at the end. */
-.conai-overline, .conai-group-head { font-size: 11px; font-weight: 600; letter-spacing: .16em; text-transform: uppercase; color: var(--conai-muted-foreground) }
-:is(.conai-overline, .conai-group-head):lang(ko) { letter-spacing: .02em }
 .conai-group-head {
   display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 32px; margin: 0 0 4px;
+  font-size: 14px; font-weight: 700; color: var(--conai-foreground);
   border-bottom: 1px solid color-mix(in srgb, var(--conai-foreground) 15%, transparent);
 }
 

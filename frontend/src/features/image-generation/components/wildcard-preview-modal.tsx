@@ -3,6 +3,7 @@ import { Modal } from '@/components/ui/modal'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { EmptyState } from '@/components/ui/empty-state'
 import { IconButton } from '@/components/ui/icon-button'
 import { Inset } from '@/components/ui/inset'
 import { Text } from '@/components/ui/text'
@@ -115,7 +116,7 @@ export function WildcardPreviewModal({
               <Badge variant="outline">{t({ ko: '사용됨', en: 'Used' })}</Badge>
               {parseResult.usedWildcards.length > 0
                 ? parseResult.usedWildcards.map((name) => <Badge key={name} variant="outline">{name}</Badge>)
-                : <span>{t('image-generation.components.wildcard.preview.modal.no.wildcards.detected')}</span>}
+                : <EmptyState size="compact" title={t('image-generation.components.wildcard.preview.modal.no.wildcards.detected')} />}
             </div>
 
             <div className="space-y-2">

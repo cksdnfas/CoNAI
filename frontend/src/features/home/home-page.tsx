@@ -297,9 +297,6 @@ export function HomePage() {
               <Button asChild>
                 <Link to="/login">{t('homePage.signIn')}</Link>
               </Button>
-              <Button asChild variant="secondary">
-                <Link to="/login">{t('homePage.createGuestAccount')}</Link>
-              </Button>
             </>
           }
         />
@@ -331,10 +328,6 @@ export function HomePage() {
           action={hiddenGroupsEmpty ? (
             <Button size="sm" variant="secondary" onClick={() => setHidingEnabled(false)}>
               {t({ ko: '숨긴 그룹 보이기', en: 'Show hidden groups' })}
-            </Button>
-          ) : !isAnonymousSession && appliedChips.length > 0 ? (
-            <Button size="sm" variant="secondary" onClick={clearAppliedChips}>
-              {t({ ko: '필터 모두 지우기', en: 'Clear all filters' })}
             </Button>
           ) : undefined}
         />

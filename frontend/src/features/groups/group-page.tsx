@@ -73,7 +73,7 @@ export function GroupPage() {
   const isCustomSource = selectedSource.key === 'custom'
   // Emoticon groups open on their keyword sheet; the usual image list stays one switch away.
   const [emoticonView, setEmoticonView] = useState<'keywords' | 'images'>('keywords')
-  const rootLabel = isCustomSource ? t({ ko: '모든 그룹', en: 'All groups' }) : t({ ko: '감시폴더', en: 'Watched folders' })
+  const rootLabel = isCustomSource ? t({ ko: '그룹', en: 'Groups' }) : t({ ko: '감시 폴더', en: 'Watched folders' })
 
   const {
     groupsQuery,
@@ -294,7 +294,6 @@ export function GroupPage() {
       errorMessage={groupsQuery.error instanceof Error ? groupsQuery.error.message : null}
       onSelectSource={handleSelectSource}
       onSelectGroup={handleOpenGroup}
-      onCreateGroup={isCustomSource ? handleOpenCreateModal : undefined}
       onDropImages={isCustomSource && isWideLayout ? handleDropImages : undefined}
       getGroupMenu={isCustomSource ? getGroupMenu : undefined}
     />
@@ -372,7 +371,7 @@ export function GroupPage() {
   ) : selectedGroupId ? (
     <PageToolbar />
   ) : (
-    <PageToolbar title={rootLabel} actions={rootActions} />
+    <PageToolbar title={`${rootLabel} (${formatNumber(allGroups.length)})`} actions={rootActions} />
   )
 
   if (!canViewImages) return <ImagePermissionNotice />

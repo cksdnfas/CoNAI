@@ -6,7 +6,8 @@ import { Section } from '@/components/ui/section'
 import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import type { StoredNaiCharacterReferenceAsset } from '@/lib/api-image-generation-types'
-import { FormField, type NAICharacterReferenceDraft, type SelectedImageDraft } from '../../image-generation-shared'
+import { Field } from '@/components/ui/field'
+import type { NAICharacterReferenceDraft, SelectedImageDraft } from '../../image-generation-shared'
 import { ImageAttachmentPickerButton } from '../image-attachment-picker'
 import { NaiAssetRow } from './nai-asset-row'
 import { NaiSavedAssetBrowser, type NaiSavedAssetBrowserProps } from './nai-saved-asset-browser'
@@ -166,9 +167,9 @@ export function NaiCharacterReferencesEditor({
               strengthMin={0}
               onStrengthCommit={(value) => onFieldChange(index, 'strength', value)}
               menuFields={(
-                <FormField label={t({ ko: '충실도', en: 'Fidelity' })}>
+                <Field label={t({ ko: '충실도', en: 'Fidelity' })}>
                   <NumberStepperInput aria-label={t({ ko: '충실도', en: 'Fidelity' })} min={0} max={1} step={0.01} value={reference.fidelity} onValueCommit={(value) => onFieldChange(index, 'fidelity', value)} />
-                </FormField>
+                </Field>
               )}
               onReplaceImage={() => setPicker({ mode: 'replace', index })}
               onSave={onSave ? () => onSave(index) : undefined}

@@ -4,7 +4,6 @@ import { RowGroup } from '@/components/ui/row-group'
 import type { MetadataExtractionSettings } from '@conai/shared'
 import { useI18n } from '@/i18n'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
-import { SectionDirtyBadge } from './settings-section-status'
 import { SettingsSwitchRow } from '@/components/ui/settings-switch-row'
 import { ChatFilledLabel } from './settings-filled-label'
 import { SettingsRowsSkeleton } from './settings-rows'
@@ -12,10 +11,9 @@ import { SettingsRowsSkeleton } from './settings-rows'
 interface MetadataTabProps {
   metadataDraft: MetadataExtractionSettings | null
   onPatchMetadata: (patch: Partial<MetadataExtractionSettings>) => void
-  hasChanges: boolean
 }
 
-export function MetadataTab({ metadataDraft, onPatchMetadata, hasChanges }: MetadataTabProps) {
+export function MetadataTab({ metadataDraft, onPatchMetadata }: MetadataTabProps) {
   const { t } = useI18n()
   const isStealthEnabled = metadataDraft?.enableSecondaryExtraction === true
   const scanModeLabel = t({ ko: '숨은 정보 탐색 방식', en: 'Hidden info scan' })
@@ -23,7 +21,7 @@ export function MetadataTab({ metadataDraft, onPatchMetadata, hasChanges }: Meta
   const maxResolutionLabel = t('metadataTab.maximumResolutionMp')
 
   return (
-    <RowGroup heading={t({ ko: '메타데이터', en: 'Metadata' })} actions={<SectionDirtyBadge dirty={hasChanges} />}>
+    <RowGroup>
       {metadataDraft ? (
         <>
           <SettingsSwitchRow

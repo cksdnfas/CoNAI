@@ -151,7 +151,7 @@ export const appRouter = createHashRouter([
           { index: true, element: <CodexChatRoute /> },
           { path: 'mine', lazy: async () => ({ Component: (await import('@/features/codex-chat/chat-workspace-screens')).ChatMineScreen }) },
           {
-            // Profiles, resources, routines and the judge log stay with the administrator, as in their earlier homes.
+            // Profiles, resources, AI connections, routines and the judge log stay with the administrator.
             lazy: async () => {
               const { ChatAdminGuard } = await import('@/features/codex-chat/chat-workspace')
               return { Component: ChatAdminGuard }
@@ -159,6 +159,7 @@ export const appRouter = createHashRouter([
             children: [
               { path: 'profiles', lazy: async () => ({ Component: (await import('@/features/codex-chat/chat-workspace-screens')).ChatProfilesScreen }) },
               { path: 'resources', lazy: async () => ({ Component: (await import('@/features/codex-chat/chat-workspace-screens')).ChatResourcesScreen }) },
+              { path: 'llm', lazy: async () => ({ Component: (await import('@/features/codex-chat/chat-workspace-screens')).ChatLlmScreen }) },
               { path: 'routines', lazy: async () => ({ Component: (await import('@/features/codex-chat/chat-workspace-screens')).ChatRoutinesScreen }) },
               { path: 'judge', lazy: async () => ({ Component: (await import('@/features/codex-chat/chat-workspace-screens')).ChatJudgeScreen }) },
             ],

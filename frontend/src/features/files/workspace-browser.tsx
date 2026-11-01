@@ -113,7 +113,7 @@ export function WorkspaceBrowser({ projectId, dir, onNavigate, onProject, onCrea
   const folders = useQuery({ queryKey: ['workspaces', projectId, 'folders'], queryFn: () => listWorkspaceFolders(projectId), enabled: moveOpen })
   const shown = useMemo(() => entries.data?.entries ?? [], [entries.data])
   const selection = shown.filter((entry) => selected.includes(entry.target))
-  const projectName = project.data?.name ?? t({ ko: '프로젝트', en: 'Project' })
+  const projectName = project.data?.name ?? t({ ko: '작업 공간', en: 'Workspace' })
   const refresh = () => queryClient.invalidateQueries({ queryKey: ['workspaces', projectId] })
 
   /** Applies and reports a partial failure as an error (the change history keeps what did go through). */
@@ -209,7 +209,7 @@ export function WorkspaceBrowser({ projectId, dir, onNavigate, onProject, onCrea
     ],
     data: { project: { id: projectId, name: projectName }, folder: dir, offset, entries: shown.map((entry) => ({ target: entry.target, kind: entry.kind, bytes: entry.size })), selected },
     actions: [
-      pageAction('workspace.open', t({ ko: '항목 열기', en: 'Open item' }), t({ ko: '목록의 폴더나 문서, 빈 값은 프로젝트 최상위', en: 'a listed folder or document; empty opens the top' }), pageObject({ target: pageText(1000) }, ['target'])),
+      pageAction('workspace.open', t({ ko: '항목 열기', en: 'Open item' }), t({ ko: '목록의 폴더나 문서, 빈 값은 작업 공간 최상위', en: 'a listed folder or document; empty opens the workspace root' }), pageObject({ target: pageText(1000) }, ['target'])),
       pageAction('workspace.search', t({ ko: '검색', en: 'Search' }), t({ ko: 'search를 채운 뒤', en: 'after filling search' })),
       ...(canWrite ? [
         pageAction('workspace.new', t({ ko: '새 문서 쓰기', en: 'New document' }), ''),
@@ -261,7 +261,7 @@ export function WorkspaceBrowser({ projectId, dir, onNavigate, onProject, onCrea
 
   const actions = (
     <>
-      <IconButton variant="ghost" label={t({ ko: '프로젝트 지침', en: 'Project guidelines' })} disabled={!project.data} onClick={() => setProjectOpen(true)}><BookOpen /></IconButton>
+      <IconButton variant="ghost" label={t({ ko: '작업 공간 지침', en: 'Workspace guidelines' })} disabled={!project.data} onClick={() => setProjectOpen(true)}><BookOpen /></IconButton>
       <IconButton variant="ghost" label={t({ ko: '플러그인으로 열기', en: 'Open with plugin' })} onClick={() => navigateTo(`/extensions?project=${projectId}`)}><Puzzle /></IconButton>
       <SegmentedControl
         size="xs"
@@ -291,7 +291,7 @@ export function WorkspaceBrowser({ projectId, dir, onNavigate, onProject, onCrea
   const breadcrumbs = (
     <PathBreadcrumbs
       ariaLabel={t({ ko: '현재 경로', en: 'Current path' })}
-      items={[{ key: '', label: projectName, onClick: () => openFolder('') }, ...segments.map((segment, index) => ({ key: segments.slice(0, index + 1).join('/'), label: segment, onClick: () => openFolder(segments.slice(0, index + 1).join('/')) }))]}
+      items={[{ key: 'files', label: t('pageAccessCatalog.files'), onClick: () => onStore(null) }, { key: '', label: projectName, onClick: () => openFolder('') }, ...segments.map((segment, index) => ({ key: segments.slice(0, index + 1).join('/'), label: segment, onClick: () => openFolder(segments.slice(0, index + 1).join('/')) }))]}
     />
   )
   const searchField = (
@@ -309,7 +309,7 @@ export function WorkspaceBrowser({ projectId, dir, onNavigate, onProject, onCrea
   )
 
   let list
-  if (project.isError) list = <ErrorState title={t({ ko: '프로젝트를 열지 못했어.', en: 'Could not open the project.' })} error={project.error} onRetry={() => void project.refetch()} />
+  if (project.isError) list = <ErrorState title={t({ ko: '작업 공간을 열지 못했어.', en: 'Could not open the workspace.' })} error={project.error} onRetry={() => void project.refetch()} />
   else if (searching) {
     if (results.isPending) list = <LoadingState />
     else if (results.isError) list = <ErrorState title={t({ ko: '검색하지 못했어.', en: 'Search failed.' })} error={results.error} onRetry={() => void results.refetch()} />

@@ -299,7 +299,7 @@ function featureSettingsScopes(path: string): PageSettingsScopeId[] {
   if (path === '/generation') return ['generation-throttle', 'image-save', 'video-optimization'];
   if (path === '/posts') return ['posts', 'embedding'];
   if (path === '/chat') return ['chat', 'embedding'];
-  if (['/chat/profiles', '/chat/resources', '/chat/routines', '/chat/judge'].includes(path)) return ['chat'];
+  if (['/chat/profiles', '/chat/resources', '/chat/llm', '/chat/routines', '/chat/judge', '/chat/mine'].includes(path)) return ['chat'];
   if (path === '/prompts') return ['similarity'];
   if (path === '/files') return ['embedding'];
   if (path === '/sprite') return ['image-save'];

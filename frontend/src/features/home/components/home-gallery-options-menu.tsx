@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Check, SlidersHorizontal } from 'lucide-react'
+import { Check, EyeOff } from 'lucide-react'
 import { HierarchyNav } from '@/components/common/hierarchy-nav'
 import { SearchField } from '@/components/common/search-field'
 import { CountBadge } from '@/components/ui/count-badge'
@@ -83,14 +83,14 @@ export function HomeGalleryOptionsMenu(props: HomeGalleryOptionsMenuProps) {
   // Only existing groups count: ids of deleted groups drop out with the next change.
   const hiddenCount = props.enabled ? props.hiddenGroupIds.filter((id) => groupIds.has(id)).length : 0
   const label = hiddenCount > 0
-    ? t({ ko: '갤러리 옵션 · 그룹 {count}개 숨김', en: 'Gallery options · {count} groups hidden' }, { count: formatNumber(hiddenCount) })
-    : t({ ko: '갤러리 옵션', en: 'Gallery options' })
+    ? t({ ko: '숨길 그룹 · {count}개 숨김', en: 'Hidden groups · {count} hidden' }, { count: formatNumber(hiddenCount) })
+    : t({ ko: '숨길 그룹', en: 'Hidden groups' })
 
   return (
     <Popover>
       <PopoverTrigger asChild>
         <IconButton size="icon-sm" variant="ghost" label={label} className="relative">
-          <SlidersHorizontal className="size-4" />
+          <EyeOff className="size-4" />
           {hiddenCount > 0 ? <CountBadge corner="top-right" size="xs" count={hiddenCount} max={99} /> : null}
         </IconButton>
       </PopoverTrigger>

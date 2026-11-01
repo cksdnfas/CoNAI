@@ -117,7 +117,7 @@ Transient connection-check failures retain the iframe and draft and offer retry.
 
 Spacing and size tokens: `--conai-edge` (focus-ring room at the frame edge, not a gutter), `--conai-gutter` (content pane to column hairline, 32px, 24px below 1200px), `--conai-sidebar-width` (232px), `--conai-sidebar-pad-x` / `--conai-sidebar-pad-top`, `--conai-toolbar-height` (56px), `--conai-control-height`, `--conai-field-height`, `--conai-row-height`, `--conai-text-inset`, plus `--conai-radius-md`, `--conai-scrim`, `--conai-key-shadow` and `--conai-float-shadow`. The host does not send these; they keep the SDK values.
 
-Compatibility: each package bundles its own copy of `conai-plugin.css`, so installed plugins change only when rebuilt. When you rebuild an older plugin, check four changes: there is no generic `button.active` / `button.ghost.active` look any more (use `.conai-nav-item` for the current row, `aria-pressed="true"` on a ghost or icon toggle, or the component's own state class); `.list` resets list bullets, margin and padding; `<dialog>` gets the SDK modal defaults (width cap, padding, edge, shadow); `.badge` is 20px tall.
+Compatibility: each package bundles its own copy of `conai-plugin.css`, so installed plugins change only when rebuilt. When you rebuild an older plugin, check five changes: the field `label` (12px medium) and `.conai-group-head` (14px bold) are no longer muted uppercase overlines, so a title is never fainter than the rows under it; there is no generic `button.active` / `button.ghost.active` look any more (use `.conai-nav-item` for the current row, `aria-pressed="true"` on a ghost or icon toggle, or the component's own state class); `.list` resets list bullets, margin and padding; `<dialog>` gets the SDK modal defaults (width cap, padding, edge, shadow); `.badge` is 20px tall.
 
 | Class | Purpose | App equivalent |
 | --- | --- | --- |
@@ -126,7 +126,7 @@ Compatibility: each package bundles its own copy of `conai-plugin.css`, so insta
 | `.conai-header`, `.conai-title`, `.conai-spacer` | One 56px row, no surface; hairline under it inside `.conai-app` | `PageToolbar` |
 | `.conai-split` > `.conai-sidebar` (`.end`) + `.conai-pane` | 232px column with own scroll and hairline, content pane with the gutter only beside a hairline; stacks into one scrolling column below 900px | `PageWithSidebar` |
 | `.conai-nav` > `.conai-nav-item` (`.conai-nav-count`) | Navigation rows; current row (`.active` or `aria-current`) = fill + 2px primary bar | `SidebarNav` / `SidebarItem` |
-| `.conai-overline`, `.conai-group-head` | Overline label; group heading with rule and an actions slot | `Text variant="overline"`, `RowGroup` heading |
+| `.conai-overline`, `.conai-group-head` | Muted overline kicker for data; bold group heading (14px) with rule and an actions slot | `Text variant="overline"`, `RowGroup` heading |
 | `.conai-tabs` > `button` | Underlined text tabs; current = `.active` or `aria-selected="true"` | `TextTabs` |
 | `.conai-segmented` (`.full`) > `button` | Fill tray with a raised selected key (`.active`, `aria-pressed` or `aria-selected`) | `SegmentedControl` |
 | `.conai-chips` > `button.conai-chip` | Filter chips; pressed (`.active` or `aria-pressed`) = primary tint | `ToggleChip` |

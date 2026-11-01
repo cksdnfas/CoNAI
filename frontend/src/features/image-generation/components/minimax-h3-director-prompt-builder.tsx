@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Modal, ModalFooter } from '@/components/ui/modal'
 import { useI18n } from '@/i18n'
-import { FormField } from '../image-generation-shared'
+import { Field } from '@/components/ui/field'
 import {
   buildMiniMaxH3DirectorPrompt,
   prefillMiniMaxH3DirectorRefBuilder,
@@ -110,39 +110,39 @@ export function MiniMaxH3DirectorPromptBuilder({
         />)
       ) : state.mode === 'REF2VA' ? (
         <div className="grid gap-4">
-          {renderPortedField('prompt.subject_definitions', <FormField label="subject_definitions">
+          {renderPortedField('prompt.subject_definitions', <Field label="subject_definitions">
             <Textarea rows={4} value={state.ref.subject_definitions} placeholder="<Subject 1> ... / <Picture 1> ..." onChange={(event) => patchRef({ subject_definitions: event.target.value })} />
-          </FormField>)}
-          {renderPortedField('prompt.summary', <FormField label="summary">
+          </Field>)}
+          {renderPortedField('prompt.summary', <Field label="summary">
             <Textarea rows={3} value={state.ref.summary} placeholder="[reference generation] Use <Picture 1> ..." onChange={(event) => patchRef({ summary: event.target.value })} />
-          </FormField>)}
-          {renderPortedField('prompt.retention_analysis', <FormField label="retention_analysis">
+          </Field>)}
+          {renderPortedField('prompt.retention_analysis', <Field label="retention_analysis">
             <Textarea rows={4} value={state.ref.retention_analysis} placeholder="<Subject 1>: fully_preserved - ..." onChange={(event) => patchRef({ retention_analysis: event.target.value })} />
-          </FormField>)}
-          {renderPortedField('prompt.detailed_description', <FormField label="detailed_description">
+          </Field>)}
+          {renderPortedField('prompt.detailed_description', <Field label="detailed_description">
             <Textarea rows={6} value={state.ref.detailed_description} placeholder="[Shot 1] ... [Shot 2] At 00:04.500, ..." aria-invalid={invalid} onChange={(event) => patchRef({ detailed_description: event.target.value })} />
-          </FormField>)}
+          </Field>)}
           <div className="grid gap-4 sm:grid-cols-2">
-            {renderPortedField('prompt.soundscape', <FormField label="overall_soundscape">
+            {renderPortedField('prompt.soundscape', <Field label="overall_soundscape">
               <Textarea rows={3} value={state.ref.soundscape} onChange={(event) => patchRef({ soundscape: event.target.value })} />
-            </FormField>)}
-            {renderPortedField('prompt.music', <FormField label="non_diegetic_music">
+            </Field>)}
+            {renderPortedField('prompt.music', <Field label="non_diegetic_music">
               <Textarea rows={3} value={state.ref.music} onChange={(event) => patchRef({ music: event.target.value })} />
-            </FormField>)}
+            </Field>)}
           </div>
         </div>
       ) : (
         <div className="grid gap-4">
-          {renderPortedField('prompt.imd', <FormField label="integrated_multimodal_description">
+          {renderPortedField('prompt.imd', <Field label="integrated_multimodal_description">
             <Textarea rows={6} value={state.imd} placeholder="[Shot 1] Start your scene description here..." aria-invalid={invalid} onChange={(event) => patchState({ imd: event.target.value })} />
-          </FormField>)}
+          </Field>)}
           <div className="grid gap-4 sm:grid-cols-2">
-            {renderPortedField('prompt.soundscape', <FormField label="overall_soundscape">
+            {renderPortedField('prompt.soundscape', <Field label="overall_soundscape">
               <Textarea rows={3} value={state.soundscape} onChange={(event) => patchState({ soundscape: event.target.value })} />
-            </FormField>)}
-            {renderPortedField('prompt.music', <FormField label="non_diegetic_music">
+            </Field>)}
+            {renderPortedField('prompt.music', <Field label="non_diegetic_music">
               <Textarea rows={3} value={state.music} onChange={(event) => patchState({ music: event.target.value })} />
-            </FormField>)}
+            </Field>)}
           </div>
         </div>
       )}

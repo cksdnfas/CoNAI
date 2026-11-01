@@ -170,10 +170,10 @@ function WorkflowReservationsPanelContent() {
     try {
       setIsMutatingSchedules(true)
       await pauseGraphWorkflowSchedule(schedule.id, { expected_revision: schedule.revision })
-      showSnackbar({ message: t({ ko: '예약작업을 일시정지했어.', en: 'Paused the reservation job.' }), tone: 'info' })
+      showSnackbar({ message: t({ ko: '예약 작업을 일시정지했어.', en: 'Paused the reservation job.' }), tone: 'info' })
       await handleRefresh()
     } catch (error) {
-      showSnackbar({ message: error instanceof Error ? error.message : t({ ko: '예약작업 일시정지에 실패했어.', en: 'Failed to pause the reservation job.' }), tone: 'error' })
+      showSnackbar({ message: error instanceof Error ? error.message : t({ ko: '예약 작업 일시정지에 실패했어.', en: 'Failed to pause the reservation job.' }), tone: 'error' })
     } finally {
       setIsMutatingSchedules(false)
     }
@@ -187,10 +187,10 @@ function WorkflowReservationsPanelContent() {
     try {
       setIsMutatingSchedules(true)
       await resumeGraphWorkflowSchedule(schedule.id, { expected_revision: schedule.revision, expected_graph_version: schedule.workflow_version })
-      showSnackbar({ message: t({ ko: '예약작업을 다시 켰어.', en: 'Resumed the reservation job.' }), tone: 'info' })
+      showSnackbar({ message: t({ ko: '예약 작업을 다시 켰어.', en: 'Resumed the reservation job.' }), tone: 'info' })
       await handleRefresh()
     } catch (error) {
-      showSnackbar({ message: error instanceof Error ? error.message : t({ ko: '예약작업 재개에 실패했어.', en: 'Failed to resume the reservation job.' }), tone: 'error' })
+      showSnackbar({ message: error instanceof Error ? error.message : t({ ko: '예약 작업 재개에 실패했어.', en: 'Failed to resume the reservation job.' }), tone: 'error' })
     } finally {
       setIsMutatingSchedules(false)
     }
@@ -201,7 +201,7 @@ function WorkflowReservationsPanelContent() {
       setIsMutatingSchedules(true)
       const result = await runGraphWorkflowScheduleNow(scheduleId)
       const enqueuedCount = result.enqueue?.enqueued_count ?? 1
-      showSnackbar({ message: result.executionId ? t({ ko: '예약작업에서 즉시 실행 {count}개를 등록했어. 첫 실행 #{executionId}', en: 'Queued {count} immediate runs from the reservation job. First run #{executionId}.' }, { count: formatNumber(enqueuedCount), executionId: result.executionId }) : result.message, tone: 'info' })
+      showSnackbar({ message: result.executionId ? t({ ko: '예약 작업에서 즉시 실행 {count}개를 등록했어. 첫 실행 #{executionId}', en: 'Queued {count} immediate runs from the reservation job. First run #{executionId}.' }, { count: formatNumber(enqueuedCount), executionId: result.executionId }) : result.message, tone: 'info' })
       await handleRefresh()
     } catch (error) {
       showSnackbar({ message: error instanceof Error ? error.message : t({ ko: '즉시 실행 요청에 실패했어.', en: 'Failed to request an immediate run.' }), tone: 'error' })
@@ -212,8 +212,8 @@ function WorkflowReservationsPanelContent() {
 
   const handleDeleteSchedule = async (scheduleId: number) => {
     const confirmed = await confirm({
-      title: t({ ko: '예약작업 삭제', en: 'Delete reservation job' }),
-      description: t({ ko: '이 예약작업을 정말 삭제할까? 연결된 queued 예약 실행도 함께 정리될 수 있어.', en: 'Delete this reservation job? Linked queued reservation runs may be cleaned up too.' }),
+      title: t({ ko: '예약 작업 삭제', en: 'Delete reservation job' }),
+      description: t({ ko: '이 예약 작업을 정말 삭제할까? 연결된 queued 예약 실행도 함께 정리될 수 있어.', en: 'Delete this reservation job? Linked queued reservation runs may be cleaned up too.' }),
       confirmLabel: t({ ko: '삭제', en: 'Delete' }),
       tone: 'destructive',
     })
@@ -224,10 +224,10 @@ function WorkflowReservationsPanelContent() {
     try {
       setIsMutatingSchedules(true)
       await deleteGraphWorkflowSchedule(scheduleId)
-      showSnackbar({ message: t({ ko: '예약작업을 삭제했어.', en: 'Deleted the reservation job.' }), tone: 'info' })
+      showSnackbar({ message: t({ ko: '예약 작업을 삭제했어.', en: 'Deleted the reservation job.' }), tone: 'info' })
       await handleRefresh()
     } catch (error) {
-      showSnackbar({ message: error instanceof Error ? error.message : t({ ko: '예약작업 삭제에 실패했어.', en: 'Failed to delete the reservation job.' }), tone: 'error' })
+      showSnackbar({ message: error instanceof Error ? error.message : t({ ko: '예약 작업 삭제에 실패했어.', en: 'Failed to delete the reservation job.' }), tone: 'error' })
     } finally {
       setIsMutatingSchedules(false)
     }
@@ -259,7 +259,7 @@ function WorkflowReservationsPanelContent() {
         ]}
       />
       {automationSwitchQuery.data?.paused ? <Badge variant="warning">{t({ ko: '전체 멈춤 중', en: 'All stopped' })}</Badge> : null}
-      <IconButton size="icon-sm" variant="ghost" onClick={() => void handleRefresh()} label={t({ ko: '예약작업 새로고침', en: 'Refresh reservation jobs' })}>
+      <IconButton size="icon-sm" variant="ghost" onClick={() => void handleRefresh()} label={t({ ko: '예약 작업 새로고침', en: 'Refresh reservation jobs' })}>
         <RefreshCw />
       </IconButton>
     </>
@@ -272,10 +272,10 @@ function WorkflowReservationsPanelContent() {
           <div className="flex flex-wrap items-center gap-2">{toolbar}</div>
           {reservationsQuery.isError ? (
             <ErrorState
-              title={t({ ko: '예약작업을 불러오지 못했어', en: 'Could not load reservation jobs' })}
-              description={getErrorMessage(reservationsQuery.error, t({ ko: '예약작업 조회 실패', en: 'Failed to load reservation jobs' }))}
+              title={t({ ko: '예약 작업을 불러오지 못했어', en: 'Could not load reservation jobs' })}
+              description={getErrorMessage(reservationsQuery.error, t({ ko: '예약 작업 조회 실패', en: 'Failed to load reservation jobs' }))}
             />
-          ) : <LoadingState variant="inline" label={t({ ko: '예약작업 불러오는 중…', en: 'Loading reservation jobs…' })} />}
+          ) : <LoadingState variant="inline" label={t({ ko: '예약 작업 불러오는 중…', en: 'Loading reservation jobs…' })} />}
         </div>
       ) : null}
 

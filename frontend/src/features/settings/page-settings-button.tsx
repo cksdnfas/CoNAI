@@ -17,10 +17,11 @@ export function PageSettingsButton() {
   const settings = usePageSettings()
   const { pathname } = useLocation()
   const { t } = useI18n()
-  if (!settings.scopes.length) return null
+  // The Settings page is every shared setting already; a quick-edit dialog over it would only repeat it.
+  if (!settings.scopes.length || pathname === '/settings') return null
   // The chat workspace's screens (/chat/profiles …) are tabs of the chat page.
   const page = PAGE_ACCESS_CATALOG.find((item) => item.path === (pathname.startsWith('/chat/') ? '/chat' : pathname))
-  const label = pathname === '/settings' ? t({ ko: '공용 설정 빠른 편집', en: 'Quick shared settings' }) : settings.scopes.length === 1 && settings.scopes[0] === 'appearance' ? t({ ko: '공용 화면 설정', en: 'Shared appearance settings' }) : page ? t({ ko: '{page} 설정', en: '{page} settings' }, { page: t(page.labelKey) }) : t({ ko: '현재 페이지 설정', en: 'Current page settings' })
+  const label = settings.scopes.length === 1 && settings.scopes[0] === 'appearance' ? t({ ko: '공용 화면 설정', en: 'Shared appearance settings' }) : page ? t({ ko: '{page} 설정', en: '{page} settings' }, { page: t(page.labelKey) }) : t({ ko: '현재 페이지 설정', en: 'Current page settings' })
   return <>
     <Button variant="ghost" size="sm" className="hidden lg:inline-flex" onClick={() => settings.open()}><SlidersHorizontal />{label}</Button>
     <IconButton className="lg:hidden" variant="ghost" label={label} onClick={() => settings.open()}><SlidersHorizontal /></IconButton>

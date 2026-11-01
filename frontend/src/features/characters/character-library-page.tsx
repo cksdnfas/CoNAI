@@ -99,7 +99,8 @@ function CharacterViewSwitch() {
     { value: 'appearance', label: t({ ko: '외형 라이브러리', en: 'Appearance library' }) },
     ...(permissions.has('prompts.view') ? [{ value: 'catalog', label: t({ ko: '캐릭터 카탈로그', en: 'Character catalog' }) }] : []),
   ]
-  if (items.length < 2) return null
+  // Without the catalog there is nothing to switch to: the page's name leads the toolbar instead.
+  if (items.length < 2) return <Heading level={3} as="h1" className="truncate">{items[0].label}</Heading>
   const view = params.get('view')
   return (
     <SegmentedControl
@@ -350,7 +351,7 @@ function AppearanceLibraryPage() {
     bulk: (input) => bulkMutation.mutateAsync(input),
   })
 
-  const rootLabel = t('characterLibraryPage.title')
+  const rootLabel = t({ ko: '외형 라이브러리', en: 'Appearance library' })
   if (editor.open) {
     return <CharacterSettingEditorPage editor={editor} folders={folders} canEdit={canEdit} admin={permissions.isAdmin} rootLabel={rootLabel} onOpenFolder={(id) => openFolder(id)} />
   }
@@ -359,12 +360,12 @@ function AppearanceLibraryPage() {
     <PageToolbar
       start={<>
         <CharacterViewSwitch />
-        {query ? <Heading level={3} as="h1" className="truncate">{t({ ko: '‘{query}’ 검색 결과', en: 'Results for ‘{query}’' }, { query })}</Heading> : filtering ? <Heading level={3} as="h1" className="truncate">{t({ ko: '라이브러리 전체 · 필터 결과', en: 'Whole library · filtered' })}</Heading> : (
+        {query ? <Heading level={3} as="h1" className="truncate">{t({ ko: '‘{query}’ 검색 결과', en: 'Results for ‘{query}’' }, { query })}</Heading> : filtering ? <Heading level={3} as="h1" className="truncate">{t({ ko: '라이브러리 전체 · 필터 결과', en: 'Whole library · filtered' })}</Heading> : path.length ? (
           <PathBreadcrumbs
             ariaLabel={t({ ko: '폴더 경로', en: 'Folder path' })}
-            items={[{ key: 'root', label: rootLabel, onClick: () => openFolder(null) }, ...path.map((folder) => ({ key: String(folder.id), label: folder.name, onClick: () => openFolder(folder.id) }))]}
+            items={[{ key: 'root', label: t({ ko: '최상위', en: 'Top level' }), onClick: () => openFolder(null) }, ...path.map((folder) => ({ key: String(folder.id), label: folder.name, onClick: () => openFolder(folder.id) }))]}
           />
-        )}
+        ) : null}
       </>}
       actions={(
         <>
@@ -374,18 +375,18 @@ function AppearanceLibraryPage() {
             <option value="created">{t({ ko: '최근 추가순', en: 'Newest' })}</option>
             <option value="created_asc">{t({ ko: '오래된 순', en: 'Oldest' })}</option>
           </Select>
-          <ToggleChip pressed={favoriteOnly} onClick={() => setListView({ favorite: !favoriteOnly })}><Star className={favoriteOnly ? 'fill-current' : undefined} />{t({ ko: '즐겨찾기', en: 'Favorites' })}</ToggleChip>
+          <ToggleChip pressed={favoriteOnly} aria-label={t({ ko: '즐겨찾기', en: 'Favorites' })} onClick={() => setListView({ favorite: !favoriteOnly })}><Star className={favoriteOnly ? 'fill-current' : undefined} /><span className="hidden sm:inline">{t({ ko: '즐겨찾기', en: 'Favorites' })}</span></ToggleChip>
           {canEdit ? <IconButton variant="ghost" size="icon-sm" active={selectMode} label={selectMode ? t({ ko: '선택 끝내기', en: 'Stop selecting' }) : t({ ko: '여러 개 선택', en: 'Select several' })} onClick={() => { if (selectMode) setSelected(new Map()); setSelectMode(!selectMode) }}><CheckSquare /></IconButton> : null}
           <ActionMenuButton
             label={t({ ko: '라이브러리 작업', en: 'Library actions' })}
             entries={[
               ...CHARACTER_SETTINGS_PAGE_SIZES.map((size) => ({ key: `size-${size}`, label: t({ ko: '한 쪽에 {count}개', en: '{count} per page' }, { count: size }), checked: pageSize === size, onSelect: () => setPageSize(size) })),
               '-',
+              canEdit ? { key: 'new-folder', label: t({ ko: '새 폴더', en: 'New folder' }), icon: FolderPlus, onSelect: () => setNameDialog({ mode: 'create', parentId: query || filtering ? null : folderId, name: '' }) } : null,
               { key: 'export', label: query || filtering || folderId === null ? t({ ko: '라이브러리 전체 내보내기', en: 'Export the whole library' }) : t({ ko: '이 폴더 내보내기', en: 'Export this folder' }), icon: Download, onSelect: () => void exportSettings({ folderId: query || filtering ? null : folderId }, currentFolder && !query && !filtering ? currentFolder.name : rootLabel) },
               canEdit ? { key: 'import', label: t({ ko: '외형 묶음 ZIP 가져오기', en: 'Import a settings bundle' }), icon: Upload, onSelect: () => importInput.current?.click() } : null,
             ]}
           />
-          {canEdit ? <IconButton variant="ghost" size="icon-sm" label={t({ ko: '새 폴더', en: 'New folder' })} onClick={() => setNameDialog({ mode: 'create', parentId: query || filtering ? null : folderId, name: '' })}><FolderPlus /></IconButton> : null}
           {currentFolder && !query && !filtering && canEdit ? <ActionMenuButton entries={folderMenu(currentFolder)} label={t({ ko: '폴더 작업', en: 'Folder actions' })} /> : null}
           {canEdit ? <Button size="sm" onClick={() => setCreating({ folderId: query || filtering ? null : folderId })}><Plus />{t({ ko: '새 외형 설정', en: 'New appearance setting' })}</Button> : null}
           <input ref={importInput} type="file" accept=".zip,application/zip" hidden onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ''; if (file) void importFile(file) }} />
@@ -433,7 +434,6 @@ function AppearanceLibraryPage() {
                 <EmptyState
                   icon={UserRound}
                   title={query || filtering ? t({ ko: '맞는 외형 설정이 없어', en: 'No matching settings' }) : t({ ko: '여기엔 외형 설정이 없어', en: 'No appearance settings here' })}
-                  action={!query && !filtering && canEdit ? <Button size="sm" onClick={() => setCreating({ folderId })}><Plus />{t({ ko: '새 외형 설정', en: 'New appearance setting' })}</Button> : undefined}
                 />
               )}
             />

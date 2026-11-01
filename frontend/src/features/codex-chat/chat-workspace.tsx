@@ -14,7 +14,7 @@ type WorkspaceTab = keyof typeof CHAT_WORKSPACE_PATHS
 const ADMIN_PERMISSION = 'page.settings.view'
 
 /**
- * The chat's one row of screens: the conversations, what they draw on (profiles, resources, routines, the judge log;
+ * The chat's one row of screens: the conversations, what they draw on (profiles, resources, AI connections, routines, the judge log;
  * administrators) and the account's own personas and flags. Each is a route under /chat, so the assistant side panel
  * stays available on all but the conversations, which are the page itself.
  */
@@ -35,11 +35,12 @@ function ChatWorkspace() {
     chat: t({ ko: '대화', en: 'Chats' }),
     profiles: t({ ko: '프로필', en: 'Profiles' }),
     resources: t({ ko: '자원', en: 'Resources' }),
+    llm: t({ ko: 'AI 연결', en: 'AI connections' }),
     routines: t({ ko: '루틴', en: 'Routines' }),
     judge: t({ ko: '판단 기록', en: 'Judge log' }),
     mine: t({ ko: '내 설정', en: 'My settings' }),
   }
-  const tabs: WorkspaceTab[] = admin ? ['chat', 'profiles', 'resources', 'routines', 'judge', 'mine'] : ['chat', 'mine']
+  const tabs: WorkspaceTab[] = admin ? ['chat', 'profiles', 'resources', 'llm', 'routines', 'judge', 'mine'] : ['chat', 'mine']
 
   // Pages under the row stick below it: the strip's measured height becomes --page-top-offset (see PageWithSidebar).
   const stripRef = useRef<HTMLDivElement>(null)

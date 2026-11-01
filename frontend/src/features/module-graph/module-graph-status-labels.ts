@@ -22,7 +22,7 @@ export function formatDateTime(value?: string | null) {
 type GraphWorkflowTranslate = (input: TranslationInput, params?: TranslationParams) => string
 
 const GRAPH_WORKFLOW_STOP_REASON_LABELS: Partial<Record<string, TranslationDictionary>> = {
-  manual_pause: { ko: '사용자가 예약작업을 일시정지했어.', en: 'The reservation was paused by a user.' },
+  manual_pause: { ko: '사용자가 예약 작업을 일시정지했어.', en: 'The reservation was paused by a user.' },
   workflow_changed: { ko: '워크플로우가 바뀌어서 다시 시작 전에 검토가 필요해.', en: 'The workflow changed, so review it before restarting.' },
   workflow_missing: { ko: '연결된 워크플로우가 더 이상 없어.', en: 'The linked workflow no longer exists.' },
   execution_failed: { ko: '예약 실행에 실패했어.', en: 'The scheduled run failed.' },
@@ -39,8 +39,8 @@ const GRAPH_WORKFLOW_ERROR_MESSAGE_LABELS: Record<string, TranslationDictionary>
   'Maximum scheduled run count has been reserved or completed.': GRAPH_WORKFLOW_STOP_REASON_LABELS.max_run_count_reached!,
   'One-time schedule has been consumed.': GRAPH_WORKFLOW_STOP_REASON_LABELS.one_time_consumed!,
   'Schedule paused by user.': GRAPH_WORKFLOW_STOP_REASON_LABELS.manual_pause!,
-  'Schedule paused.': { ko: '예약작업이 일시정지 상태야.', en: 'The reservation is paused.' },
-  'Schedule created in paused state.': { ko: '예약작업이 일시정지 상태로 생성됐어.', en: 'The reservation was created in a paused state.' },
+  'Schedule paused.': { ko: '예약 작업이 일시정지 상태야.', en: 'The reservation is paused.' },
+  'Schedule created in paused state.': { ko: '예약 작업이 일시정지 상태로 생성됐어.', en: 'The reservation was created in a paused state.' },
   'Queue job cancelled before ComfyUI output handoff completed': { ko: '취소 요청 뒤에 ComfyUI 결과 전달이 끝나기 전에 작업이 정리됐어.', en: 'The job was cancelled before ComfyUI finished handing off its output.' },
 }
 
@@ -124,5 +124,5 @@ export function getGraphWorkflowStopReasonLabel(stopReasonCode: string | null | 
     return t(reasonLabel)
   }
 
-  return localizeGraphWorkflowErrorMessage(stopReasonMessage, t, t({ ko: '예약작업이 중지됐어.', en: 'The reservation stopped.' }))
+  return localizeGraphWorkflowErrorMessage(stopReasonMessage, t, t({ ko: '예약 작업이 중지됐어.', en: 'The reservation stopped.' }))
 }

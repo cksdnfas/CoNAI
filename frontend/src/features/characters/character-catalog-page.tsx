@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { composeCharacterAppearance, formatDanbooruTagForPrompt, type ChatPageData } from '@conai/shared'
 import { BookOpen, Copy, ExternalLink, Image as ImageIcon, Import, Library } from 'lucide-react'
 import { CharacterCard } from '@/components/common/character-card'
@@ -203,7 +203,7 @@ export function CharacterCatalogPage({ viewSwitch }: { viewSwitch: ReactNode }) 
       )}
     >
       {!available ? (
-        <EmptyState icon={Library} title={t({ ko: 'Danbooru 사전이 설치되어 있지 않아', en: 'No Danbooru dictionary is installed' })} description={t({ ko: '프롬프트 화면의 Danbooru 탭에서 사전을 설치하면 캐릭터 카탈로그를 볼 수 있어.', en: 'Install it from the Danbooru tab of the prompts page.' })} />
+        <EmptyState icon={Library} title={t({ ko: 'Danbooru 사전이 설치되어 있지 않아', en: 'No Danbooru dictionary is installed' })} action={<Button asChild size="sm"><Link to="/prompts?tab=danbooru">{t({ ko: '프롬프트에서 설치', en: 'Install in Prompts' })}</Link></Button>} />
       ) : list.isPending ? (
         <div className="grid gap-4 pt-2" style={{ gridTemplateColumns: `repeat(${columns.columnCount}, minmax(0, 1fr))` }}>{Array.from({ length: 6 }).map((_, index) => <Skeleton key={index} radius="sm" className="aspect-[3/4] w-full" />)}</div>
       ) : list.isError && !list.data ? (

@@ -1,4 +1,3 @@
-import type { ReactNode } from 'react'
 import {
   getNaiFixedModelSettings,
   getNaiQualityTags,
@@ -257,31 +256,6 @@ export const DEFAULT_COMFYUI_SERVER_FORM: ComfyUIServerFormDraft = {
 }
 
 export * from './generation-history-status'
-
-export function FormField({
-  label,
-  children,
-  hint,
-  labelAccessory,
-}: {
-  label: string
-  children: ReactNode
-  hint?: string
-  labelAccessory?: ReactNode
-}) {
-  return (
-    <label className="space-y-2">
-      <div className="flex items-center justify-between gap-3">
-        <div className="min-w-0 flex items-center gap-2">
-          <span className="text-sm font-medium text-foreground">{label}</span>
-          {labelAccessory}
-        </div>
-        {hint ? <span className="shrink-0 text-xs text-muted-foreground">{hint}</span> : null}
-      </div>
-      {children}
-    </label>
-  )
-}
 
 /** Parse a numeric text input while keeping a safe fallback. */
 export function parseNumberInput(value: string, fallback: number) {

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type PropsWithChildren } from 'react'
+import { useEffect, useRef, useState, type PropsWithChildren, type ReactNode } from 'react'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { SETTINGS_ROW_BY_ID, searchSettingsRows, settingRowHref } from '@conai/shared'
 import { SearchField } from '@/components/common/search-field'
@@ -23,23 +23,29 @@ export function SettingsSearch() {
   </div>
 }
 
-export function SettingsGroup({ id, title, children }: PropsWithChildren<{ id: string; title: string }>) {
+/**
+ * A titled block of one settings tab; a tab's only group omits the title because the page toolbar already names it.
+ * `actions` (an unsaved-changes badge) sit at the title's end, so the rows below need no second heading of their own.
+ */
+export function SettingsGroup({ id, title, actions, children }: PropsWithChildren<{ id: string; title?: string; actions?: ReactNode }>) {
   // The margin clears the fixed header and the sticky page toolbar when a link aligns the group to the top.
-  return <section data-settings-group={id} className="scroll-mt-36 space-y-4"><h2 className="text-sm font-semibold">{title}</h2>{children}</section>
+  return <section data-settings-group={id} className="scroll-mt-36 space-y-4">
+    {title ? <div className="flex items-center justify-between gap-3"><h2 className="text-base font-bold text-foreground">{title}</h2>{actions}</div> : null}
+    {children}
+  </section>
 }
 
-export function RegistrySettingsGroup({ id, contents = false, children }: PropsWithChildren<{ id: string; contents?: boolean }>) {
+export function RegistrySettingsGroup({ id, only = false, children }: PropsWithChildren<{ id: string; only?: boolean }>) {
   const { t } = useI18n()
   const row = SETTINGS_ROW_BY_ID[id]
-  return <div className="space-y-4">
-    {contents ? <SettingsContents groups={[{ id: row.group, label: t(row.label) }]} /> : null}
-    <SettingsGroup id={row.group} title={t(row.label)}><div data-setting-id={id}>{children}</div></SettingsGroup>
-  </div>
+  return <SettingsGroup id={row.group} title={only ? undefined : t(row.label)}><div data-setting-id={id}>{children}</div></SettingsGroup>
 }
 
+/** Jump links between a tab's groups; one group has nothing to jump to. */
 export function SettingsContents({ groups }: { groups: Array<{ id: string; label: string }> }) {
   const { t } = useI18n()
   const [params] = useSearchParams()
+  if (groups.length < 2) return null
   return <nav className="flex flex-wrap gap-1" aria-label={t({ ko: '설정 목차', en: 'Settings contents' })}>{groups.map((group) => {
     const next = new URLSearchParams(params); next.set('group', group.id); next.delete('setting')
     return <Button key={group.id} asChild variant="ghost" size="sm"><Link to={`?${next}`}>{group.label}</Link></Button>
@@ -91,7 +97,7 @@ export function SettingsJumpTarget({ children }: PropsWithChildren) {
 
 export function SettingsAdvanced({ count, children }: PropsWithChildren<{ count: number }>) {
   const { t } = useI18n()
-  return <details className="border-t border-line py-3"><summary className="cursor-pointer text-sm text-muted-foreground">{t({ ko: '고급 설정 {count}개', en: '{count} advanced settings' }, { count })}</summary><div className="mt-4">{children}</div></details>
+  return <details className="border-t border-line py-3"><summary className="cursor-pointer text-xs font-medium text-muted-foreground">{t({ ko: '고급 설정 {count}개', en: '{count} advanced settings' }, { count })}</summary><div className="mt-4">{children}</div></details>
 }
 
 /** Scrolling groups stay mounted; only the addressed group's assistant adapter owns the page snapshot. */

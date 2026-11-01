@@ -4,6 +4,7 @@ import { useLocation, useSearchParams } from 'react-router-dom'
 import type { PostCategory, PostKnowledgeReviewStatus, PostListLayout, PostSummary } from '@conai/shared'
 import { ArrowLeft, ChevronDown, ChevronRight, FolderPlus, LayoutGrid, Newspaper, Pencil, PenSquare, Rows3, Search, Smartphone, Trash2, Undo2, X } from 'lucide-react'
 import { PageToolbar } from '@/components/common/page-toolbar'
+import { PathBreadcrumbs } from '@/components/common/path-breadcrumbs'
 import { PageWithSidebar } from '@/components/common/page-with-sidebar'
 import { ActionContextMenu, ActionMenuButton, type ActionMenuEntry } from '@/components/ui/action-menu'
 import { Button } from '@/components/ui/button'
@@ -354,7 +355,7 @@ export function PostsPage() {
   ] : []
   const sidebar = (
     <SidebarNav aria-label={t({ ko: '게시판', en: 'Posts' })}>
-      <SidebarItem icon={Newspaper} label={t({ ko: '전체', en: 'All posts' })} active={view === 'list' && !categoryId && !tag} onClick={() => filterCategory(null)} />
+      <SidebarItem icon={Newspaper} label={t({ ko: '모든 글', en: 'All posts' })} active={view === 'list' && !categoryId && !tag} onClick={() => filterCategory(null)} />
       {categories.length || permissions.isAdmin ? <SidebarGroupLabel actions={permissions.isAdmin ? (
         <IconButton size="icon-xs" variant="ghost" label={t({ ko: '새 카테고리', en: 'New category' })} onClick={() => setCategoryDialog({ category: null, parentId: null })}><FolderPlus /></IconButton>
       ) : undefined}>{t({ ko: '카테고리', en: 'Categories' })}</SidebarGroupLabel> : null}
@@ -426,18 +427,15 @@ export function PostsPage() {
         <IconButton variant="ghost" size="icon-sm" label={t({ ko: '검색 닫기', en: 'Close search' })} onClick={closeSearch}><X /></IconButton>
       </div>
     ) : (
-      <nav className="flex min-w-0 flex-wrap items-center gap-1 text-sm" aria-label={t({ ko: '현재 위치', en: 'Current location' })}>
-        <Button variant="ghost" size="sm" aria-current={!crumbs.length ? 'location' : undefined} onClick={() => filterCategory(null)}>{t({ ko: '게시판', en: 'Posts' })}</Button>
-        {crumbs.map((category, index) => (
-          <span key={category.id} className="inline-flex items-center gap-1">
-            <span className="text-muted-foreground">›</span>
-            <Button variant="ghost" size="sm" className="max-w-48" aria-current={index === crumbs.length - 1 ? 'location' : undefined} onClick={() => filterCategory(category.id)}><span className="truncate">{category.name}</span></Button>
-          </span>
-        ))}
+      <>
+        <PathBreadcrumbs
+          ariaLabel={t({ ko: '현재 위치', en: 'Current location' })}
+          items={[{ key: 'posts', label: t('pageAccessCatalog.posts'), onClick: () => filterCategory(null) }, ...crumbs.map((category) => ({ key: String(category.id), label: category.name, onClick: () => filterCategory(category.id) }))]}
+        />
         {tag ? (
           <Chip tone="primary" className="ml-1" removeLabel={t({ ko: '태그 필터 빼기', en: 'Clear tag filter' })} onRemove={() => openList({ tag: null })}>#{tag}</Chip>
         ) : null}
-      </nav>
+      </>
     )
     toolbarActions = (
       <>

@@ -213,6 +213,8 @@ export function chatPageActionTier(id: string, action?: { tier?: ChatPageActionT
 export function chatPageActionLeavesScreen(id: string, action?: Pick<ChatPageAction, 'tier'>) {
   return chatPageActionTier(id, action) === 'view' && !IN_PLACE_VIEW_ACTIONS.has(id)
 }
+/** The AI connection operations (representative models, MCP servers, usage) that Settings › AI 연결 and the chat's AI 연결 tab share. */
+const CHAT_LLM_SCREEN_ACTIONS = new Set(['settings.default_model', 'settings.default_judge', 'settings.mcp_server', 'settings.mcp_server_draft', 'settings.usage_period'])
 export function chatPageActionAllowed(path: string, id: string): boolean {
   // Plugin management (drafts and Git sources) appears in Settings and on the 플러그인 page; the server requires an administrator.
   if (id.startsWith('plugin_author.') || id.startsWith('plugin_source.')) return (path === '/settings' || path === '/extensions') && own(CHAT_PAGE_ACTION_PERMISSIONS, id)
@@ -234,6 +236,7 @@ export function chatPageActionAllowed(path: string, id: string): boolean {
   if (id === 'settings.routine' || id === 'settings.automation_switch') return path === '/settings' || path === '/chat/routines'
   if (id === 'settings.judge_filter') return path === '/settings' || path === '/chat/judge'
   if (id === 'settings.user_profile' || id === 'settings.flag') return path === '/settings' || path === '/chat/mine'
+  if (CHAT_LLM_SCREEN_ACTIONS.has(id)) return path === '/settings' || path === '/chat/llm'
   if (id.startsWith('settings.')) return path === '/settings'
   if (id.startsWith('chat.')) return path === '/chat'
   if (id.startsWith('plugins.')) return path === '/extensions'

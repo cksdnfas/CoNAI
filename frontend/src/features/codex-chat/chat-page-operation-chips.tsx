@@ -18,7 +18,7 @@ function useDestinationLabel() {
     const name = page ? t(page.labelKey) : path
     const view = new URLSearchParams(query)
     const workspace = ({
-      '/chat/profiles': t({ ko: '프로필', en: 'Profiles' }), '/chat/resources': t({ ko: '자원', en: 'Resources' }), '/chat/routines': t({ ko: '루틴', en: 'Routines' }),
+      '/chat/profiles': t({ ko: '프로필', en: 'Profiles' }), '/chat/resources': t({ ko: '자원', en: 'Resources' }), '/chat/llm': t({ ko: 'AI 연결', en: 'AI connections' }), '/chat/routines': t({ ko: '루틴', en: 'Routines' }),
       '/chat/judge': t({ ko: '판단 기록', en: 'Judge log' }), '/chat/mine': t({ ko: '내 설정', en: 'My settings' }),
     } as Record<string, string>)[path]
     if (workspace) return t({ ko: '채팅 › {screen}', en: 'Chat › {screen}' }, { screen: workspace })

@@ -1,10 +1,11 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect } from 'react'
 import { cn } from '@/lib/utils'
 import { SEARCH_SCOPE_LABEL_KEYS, SEARCH_SCOPE_TABS } from '@/features/search/search-constants'
 import { getSearchScopeStyle } from '@/features/search/search-utils'
 import type { SearchScope } from '@/features/search/search-types'
 import { SegmentedControl } from '@/components/common/segmented-control'
+import { useHorizontalDragScroll } from '@/components/common/use-horizontal-drag-scroll'
 import { IconButton } from '@/components/ui/icon-button'
 import { useI18n } from '@/i18n'
 
@@ -21,47 +22,18 @@ const DEFAULT_SCOPES = SEARCH_SCOPE_TABS.map((tab) => tab.value)
 /** Render the shared search scope tabs with drag-scroll and edge hints. */
 export function SearchScopeTabs({ searchScope, onChange, scopes = DEFAULT_SCOPES, className }: SearchScopeTabsProps) {
   const { t } = useI18n()
-  const scrollRef = useRef<HTMLDivElement | null>(null)
-  const dragPointerIdRef = useRef<number | null>(null)
-  const dragStartXRef = useRef(0)
-  const dragStartScrollLeftRef = useRef(0)
-  const suppressClickRef = useRef(false)
-  const bodyUserSelectRef = useRef('')
-  const [isDragging, setIsDragging] = useState(false)
-  const [canScrollLeft, setCanScrollLeft] = useState(false)
-  const [canScrollRight, setCanScrollRight] = useState(false)
-
-  useEffect(() => {
-    const element = scrollRef.current
-    if (!element) {
-      return
-    }
-
-    const updateScrollHints = () => {
-      const maxScrollLeft = Math.max(element.scrollWidth - element.clientWidth, 0)
-      setCanScrollLeft(element.scrollLeft > 8)
-      setCanScrollRight(element.scrollLeft < maxScrollLeft - 8)
-    }
-
-    updateScrollHints()
-
-    const resizeObserver = new ResizeObserver(updateScrollHints)
-    resizeObserver.observe(element)
-
-    const contentElement = element.firstElementChild
-    if (contentElement instanceof HTMLElement) {
-      resizeObserver.observe(contentElement)
-    }
-
-    element.addEventListener('scroll', updateScrollHints, { passive: true })
-    window.addEventListener('resize', updateScrollHints)
-
-    return () => {
-      resizeObserver.disconnect()
-      element.removeEventListener('scroll', updateScrollHints)
-      window.removeEventListener('resize', updateScrollHints)
-    }
-  }, [])
+  const {
+    scrollRef,
+    canScrollLeft,
+    canScrollRight,
+    isDragging,
+    handlePointerDown,
+    handlePointerMove,
+    handlePointerUp,
+    handlePointerCancel,
+    handlePointerLeave,
+    handleItemClick,
+  } = useHorizontalDragScroll(scopes)
 
   useEffect(() => {
     const element = scrollRef.current
@@ -71,22 +43,7 @@ export function SearchScopeTabs({ searchScope, onChange, scopes = DEFAULT_SCOPES
 
     const activeButton = element.querySelector<HTMLButtonElement>('button[aria-pressed="true"]')
     activeButton?.scrollIntoView({ behavior: 'smooth', inline: 'nearest', block: 'nearest' })
-  }, [searchScope])
-
-  const finishDrag = () => {
-    dragPointerIdRef.current = null
-    dragStartXRef.current = 0
-    dragStartScrollLeftRef.current = 0
-    setIsDragging(false)
-
-    if (document.body.style.userSelect === 'none') {
-      document.body.style.userSelect = bodyUserSelectRef.current
-    }
-
-    window.setTimeout(() => {
-      suppressClickRef.current = false
-    }, 0)
-  }
+  }, [searchScope, scrollRef])
 
   return (
     <div className={cn('relative', className)}>
@@ -117,56 +74,12 @@ export function SearchScopeTabs({ searchScope, onChange, scopes = DEFAULT_SCOPES
       <div
         ref={scrollRef}
         className={cn('scroll-x theme-nav-scroll', isDragging && 'cursor-grabbing select-none')}
-        onPointerDown={(event) => {
-          if (event.button !== 0) {
-            return
-          }
-
-          dragPointerIdRef.current = event.pointerId
-          dragStartXRef.current = event.clientX
-          dragStartScrollLeftRef.current = scrollRef.current?.scrollLeft ?? 0
-          suppressClickRef.current = false
-          bodyUserSelectRef.current = document.body.style.userSelect
-          setIsDragging(false)
-        }}
-        onPointerMove={(event) => {
-          if (dragPointerIdRef.current !== event.pointerId || !scrollRef.current) {
-            return
-          }
-
-          const deltaX = event.clientX - dragStartXRef.current
-          if (!isDragging && Math.abs(deltaX) > 6) {
-            suppressClickRef.current = true
-            document.body.style.userSelect = 'none'
-            setIsDragging(true)
-          }
-
-          if (Math.abs(deltaX) <= 1) {
-            return
-          }
-
-          scrollRef.current.scrollLeft = dragStartScrollLeftRef.current - deltaX
-          event.preventDefault()
-          event.stopPropagation()
-        }}
-        onPointerUp={(event) => {
-          if (dragPointerIdRef.current !== event.pointerId) {
-            return
-          }
-          finishDrag()
-        }}
-        onPointerCancel={(event) => {
-          if (dragPointerIdRef.current !== event.pointerId) {
-            return
-          }
-          finishDrag()
-        }}
-        onPointerLeave={(event) => {
-          if (dragPointerIdRef.current !== event.pointerId || !isDragging) {
-            return
-          }
-          finishDrag()
-        }}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerCancel}
+        onPointerLeave={handlePointerLeave}
+        onClickCapture={handleItemClick}
       >
         <div className="min-w-full pr-9">
           <SegmentedControl
@@ -174,11 +87,7 @@ export function SearchScopeTabs({ searchScope, onChange, scopes = DEFAULT_SCOPES
             items={scopes.map((scope) => ({ value: scope, label: t(SEARCH_SCOPE_LABEL_KEYS[scope]), activeStyle: getSearchScopeStyle(scope) }))}
             size="xs"
             className="flex-nowrap"
-            onChange={(scope) => {
-              if (!suppressClickRef.current) {
-                onChange(scope as SearchScope)
-              }
-            }}
+            onChange={(scope) => onChange(scope as SearchScope)}
           />
         </div>
       </div>

@@ -1,5 +1,6 @@
 import { BookOpen } from 'lucide-react'
 import { ToggleChip } from '@/components/ui/chip'
+import { EmptyState } from '@/components/ui/empty-state'
 import { Field } from '@/components/ui/field'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { useI18n } from '@/i18n'
@@ -41,7 +42,7 @@ export function ChatProfileMemoryPanel({ draft, patch, lorebooks }: {
               </ToggleChip>
             )
           })}
-          {lorebooks && lorebooks.length === 0 ? <span className="text-sm text-muted-foreground">{t({ ko: '가져온 로어북이 없어.', en: 'No lorebooks yet.' })}</span> : null}
+          {lorebooks && lorebooks.length === 0 ? <EmptyState size="compact" title={t({ ko: '아직 로어북이 없어', en: 'No lorebooks yet' })} /> : null}
         </div>
         <SwitchLine label={t({ ko: '대화 중 로어 제안 받기', en: 'Allow lore proposals' })} checked={draft.allowLoreProposals} onCheckedChange={(allowLoreProposals) => patch({ allowLoreProposals })} />
         <SettingsAdvanced count={draft.engine === 'llm' && !isPi ? 4 : 3}>
@@ -64,13 +65,8 @@ export function ChatProfileMemoryPanel({ draft, patch, lorebooks }: {
         </SettingsAdvanced>
       </EditorGroup>
 
-      <EditorGroup label={t({ ko: '연결 파일', en: 'Linked files' })} description={t({ ko: '폴더나 텍스트·이미지·PDF·XLSX 파일. 캐릭터가 필요할 때 찾아 열어 봐.', en: 'Folders, or text, image, PDF and XLSX files the character opens when it needs them.' })}>
-        <ChatProfileLinkedFiles value={draft.linkedFiles} onChange={(linkedFiles) => patch({ linkedFiles })} />
-      </EditorGroup>
-
-      <EditorGroup label={t({ ko: '작업 공간', en: 'Workspaces' })} description={t({ ko: '캐릭터가 일할 폴더(프로젝트). 1:1·그룹 채팅과 게시판 호출에서 열려. 채팅에서는 더 추가하거나 끌 수 있어.', en: 'The project folders the character works in, in 1:1 and group chats and board calls. A chat can add more or turn one off.' })}>
-        <ChatProfileWorkspace value={draft.workspaces} onChange={(workspaces) => patch({ workspaces })} />
-      </EditorGroup>
+      <ChatProfileLinkedFiles value={draft.linkedFiles} onChange={(linkedFiles) => patch({ linkedFiles })} />
+      <ChatProfileWorkspace value={draft.workspaces} onChange={(workspaces) => patch({ workspaces })} />
     </div>
   )
 }

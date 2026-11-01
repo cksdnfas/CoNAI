@@ -1,7 +1,5 @@
 import { useState, type DragEvent } from 'react'
-import { Plus } from 'lucide-react'
 import { ErrorState } from '@/components/ui/error-state'
-import { IconButton } from '@/components/ui/icon-button'
 import { SearchField } from '@/components/common/search-field'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -24,8 +22,6 @@ interface GroupExplorerSidebarPanelProps {
   errorMessage?: string | null
   onSelectSource: (sourceKey: GroupSourceKey) => void
   onSelectGroup: (groupId: number) => void
-  /** Custom groups only: open the new-group editor. */
-  onCreateGroup?: () => void
   /** Custom groups only: images dropped on a tree row. */
   onDropImages?: (groupId: number, compositeHashes: string[]) => void
   /** Custom groups only: a row's actions (edit, move, delete…), opened by right-click / long-press. */
@@ -40,7 +36,7 @@ function getDropGroupId(event: DragEvent<HTMLElement>) {
 }
 
 /**
- * Page sidebar content: source switch, name search, new-group action, and the group tree (also an image drop target).
+ * Page sidebar content: source switch, name search, and the group tree (also an image drop target).
  * Rendered by PageWithSidebar in its column and, on narrow screens, in its drawer (which a pick closes).
  */
 export function GroupExplorerSidebarPanel({
@@ -53,7 +49,6 @@ export function GroupExplorerSidebarPanel({
   errorMessage,
   onSelectSource,
   onSelectGroup,
-  onCreateGroup,
   onDropImages,
   getGroupMenu,
 }: GroupExplorerSidebarPanelProps) {
@@ -108,26 +103,13 @@ export function GroupExplorerSidebarPanel({
           className="min-w-0 flex-1"
           items={[
             { value: 'custom', label: t({ ko: '커스텀', en: 'Custom' }) },
-            { value: 'folders', label: t({ ko: '감시폴더', en: 'Watched' }) },
+            { value: 'folders', label: t({ ko: '감시 폴더', en: 'Watched folders' }) },
           ]}
           onChange={(value) => {
             closeDrawer()
             onSelectSource(value as GroupSourceKey)
           }}
         />
-        {onCreateGroup ? (
-          <IconButton
-            label={t({ ko: '새 그룹', en: 'New group' })}
-            size="icon-sm"
-            variant="ghost"
-            onClick={() => {
-              closeDrawer()
-              onCreateGroup()
-            }}
-          >
-            <Plus />
-          </IconButton>
-        ) : null}
       </div>
       <SearchField value={filterText} onChange={setFilterText} placeholder={t({ ko: '그룹 검색', en: 'Search groups' })} />
     </div>

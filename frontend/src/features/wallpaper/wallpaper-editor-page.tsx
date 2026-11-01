@@ -1025,19 +1025,18 @@ export function WallpaperEditorPage() {
     <PageToolbar
       title={t('pageAccessCatalog.wallpaper')}
       start={(<>
-        <Select
-          aria-label={t({ ko: '프리셋', en: 'Preset' })}
-          className="h-8 w-44 sm:w-52"
-          value={effectiveActivePresetId ?? '__new__'}
-          onChange={(event) => {
-            void handleLoadPreset(event.target.value === '__new__' ? null : event.target.value)
-          }}
-        >
-          <option value="__new__" hidden>{t({ ko: '미저장 새 캔버스', en: 'Unsaved new canvas' })}</option>
-          {savedPresets.map((preset) => (
-            <option key={preset.id} value={preset.id}>{preset.name}</option>
-          ))}
-        </Select>
+        <ActionMenuButton
+          size="icon-sm"
+          icon={LayoutTemplate}
+          label={t({ ko: '프리셋 불러오기', en: 'Load preset' })}
+          entries={savedPresets.map((preset) => ({
+            key: preset.id,
+            label: preset.name,
+            checked: preset.id === effectiveActivePresetId,
+            // Reloading the preset that is already open would reset the canvas without the unsaved-changes prompt.
+            onSelect: () => { if (preset.id !== effectiveActivePresetId) void handleLoadPreset(preset.id) },
+          }))}
+        />
         {isLivePreset ? (
           <Badge role="status" title={t({ ko: '지금 월페이퍼에 나오는 프리셋', en: 'Shown on the live wallpaper' })}>{t({ ko: '라이브', en: 'Live' })}</Badge>
         ) : null}

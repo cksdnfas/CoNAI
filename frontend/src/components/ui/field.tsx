@@ -10,7 +10,7 @@ interface FieldProps extends ComponentProps<'label'> {
   children: ReactNode
 }
 
-const FIELD_LABEL_CLASS = 'flex items-center gap-1 text-2xs font-semibold tracking-overline text-muted-foreground uppercase'
+const FIELD_LABEL_CLASS = 'flex items-center gap-1 text-xs font-medium text-foreground/80'
 
 /** Render a labelled form field with an overline label and an optional info tooltip. */
 function Field({ label, info, children, className, ...props }: FieldProps) {

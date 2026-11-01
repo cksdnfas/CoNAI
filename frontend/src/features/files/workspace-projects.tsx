@@ -39,7 +39,7 @@ export function WorkspaceSidebarGroup({ activeId, onOpen, onCreate }: { activeId
   const { projects, hasMore, loadMore, query } = useWorkspaceProjects()
   return (
     <>
-      <SidebarGroupLabel actions={onCreate ? <IconButton size="icon-xs" variant="ghost" label={t({ ko: '새 프로젝트', en: 'New project' })} onClick={onCreate}><Plus /></IconButton> : undefined}>
+      <SidebarGroupLabel actions={onCreate ? <IconButton size="icon-xs" variant="ghost" label={t({ ko: '새 작업 공간', en: 'New workspace' })} onClick={onCreate}><Plus /></IconButton> : undefined}>
         {t({ ko: '작업 공간', en: 'Workspaces' })}
       </SidebarGroupLabel>
       {projects.map((project) => <SidebarItem key={project.id} icon={FolderKanban} label={project.name} active={project.id === activeId} onClick={() => onOpen(project.id)} />)}
@@ -95,11 +95,11 @@ export function WorkspaceProjectPicker({ open, onClose, projectId, write, writeL
     </ListRow>
   )
   return (
-    <Modal open={open} onClose={() => { if (!busy) onClose() }} title={title ?? t({ ko: '프로젝트 연결', en: 'Connect a project' })} size="md">
+    <Modal open={open} onClose={() => { if (!busy) onClose() }} title={title ?? t({ ko: '작업 공간 연결', en: 'Connect a workspace' })} size="md">
       <ModalBody spacing="sm">
-        <SearchField value={search} onChange={setSearch} placeholder={t({ ko: '프로젝트 찾기', en: 'Find a project' })} />
+        <SearchField value={search} onChange={setSearch} placeholder={t({ ko: '작업 공간 찾기', en: 'Find a workspace' })} />
         {query.isError ? <ErrorState error={query.error} onRetry={() => void query.refetch()} /> : null}
-        <div role="radiogroup" aria-label={t({ ko: '프로젝트', en: 'Project' })} className="max-h-72 overflow-y-auto">
+        <div role="radiogroup" aria-label={t({ ko: '작업 공간', en: 'Workspace' })} className="max-h-72 overflow-y-auto">
           {term || noneLabel === null ? null : row(null, noneLabel ?? t({ ko: '연결 안 함', en: 'Not connected' }), false)}
           {shown.map((project) => row(project.id, project.name, true))}
           {query.isPending ? <LoadingState /> : null}

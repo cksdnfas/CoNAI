@@ -200,7 +200,7 @@ export function GeneralPreferencesSections({
       ) : null}
 
       {visibleSections.has('library') ? (
-        <RowGroup heading={t({ ko: '라이브러리 동작', en: 'Library behavior' })} actions={<SectionDirtyBadge dirty={isSectionDirty('library')} />}>
+        <RowGroup>
           <SettingRow label={<ChatFilledLabel fieldId="imageSimilarityCheckMode">{similarityLabel}</ChatFilledLabel>} controlWidth="standard">
             <Select
               variant="settings"
@@ -216,7 +216,7 @@ export function GeneralPreferencesSections({
       ) : null}
 
       {visibleSections.has('safety') ? (
-        <RowGroup heading={t({ ko: '안전 및 정리', en: 'Safety and cleanup' })} actions={<SectionDirtyBadge dirty={isSectionDirty('safety')} />}>
+        <RowGroup>
           <SettingsSwitchRow
             checked={generalDraft.deleteProtection.enabled}
             onCheckedChange={(checked) => onPatchDeleteProtection({ enabled: checked })}

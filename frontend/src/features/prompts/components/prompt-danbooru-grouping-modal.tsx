@@ -10,7 +10,7 @@ import { SettingsSwitchRow } from '@/components/ui/settings-switch-row'
 import { applyDanbooruPromptGrouping, getDanbooruPromptGroupingPreview } from '@/lib/api-prompts'
 import type { DanbooruPromptGroupingTypeResult } from '@/types/prompt'
 import { useI18n } from '@/i18n'
-import { useCanSeeServerDetails } from '../use-can-see-server-details'
+import { PromptDanbooruMissingNotice } from './prompt-danbooru-installation'
 
 interface PromptDanbooruGroupingModalProps {
   open: boolean
@@ -56,7 +56,6 @@ function TypeSummaryRow({ item }: { item: DanbooruPromptGroupingTypeResult }) {
 
 export function PromptDanbooruGroupingModal({ open, onClose, onInfo, onError }: PromptDanbooruGroupingModalProps) {
   const { t, formatNumber, language } = useI18n()
-  const canSeeServerDetails = useCanSeeServerDetails()
   const queryClient = useQueryClient()
   const [includeAssignedPrompts, setIncludeAssignedPrompts] = useState(false)
   const groupingMode = includeAssignedPrompts ? 'overwrite-existing' : 'unclassified-only'
@@ -119,22 +118,7 @@ export function PromptDanbooruGroupingModal({ open, onClose, onInfo, onError }: 
         {preview ? (
           <>
             {!isDanbooruDbAvailable ? (
-              <Alert>
-                <AlertTitle>{t({ ko: 'Danbooru DB 파일 없음', en: 'Danbooru DB file missing' })}</AlertTitle>
-                <AlertDescription>
-                  <div className="space-y-1">
-                    {canSeeServerDetails ? (
-                      <>
-                        <p className="break-all font-mono text-xs text-foreground">{preview.database.expectedPath}</p>
-                        <a className="block break-all text-xs text-primary underline-offset-4 hover:underline" href={preview.database.downloadUrl} target="_blank" rel="noreferrer">{preview.database.downloadUrl}</a>
-                        <p className="text-xs">{t({ ko: '다른 위치는 DANBOORU_SQLITE_PATH 환경변수로 지정 가능해.', en: 'Set DANBOORU_SQLITE_PATH to use another location.' })}</p>
-                      </>
-                    ) : (
-                      <p className="text-xs">{t({ ko: '관리자에게 Danbooru DB 파일 설치를 요청해.', en: 'Ask an administrator to install the Danbooru DB file.' })}</p>
-                    )}
-                  </div>
-                </AlertDescription>
-              </Alert>
+              <PromptDanbooruMissingNotice database={preview.database} />
             ) : null}
 
             <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm">

@@ -756,9 +756,9 @@ export function UiCatalogPage() {
 
         <CatalogSection id="states" title="EmptyState / LoadingState / ErrorState">
           <div className="grid gap-4 md:grid-cols-2">
-            <EmptyState icon={ImageOff} title="이미지가 아직 없어" description="폴더를 추가하면 여기에 보여." action={<Button size="sm"><Plus />폴더 추가</Button>} />
+            <EmptyState icon={ImageOff} title="이미지가 아직 없어" action={<Button size="sm"><Plus />폴더 추가</Button>} />
             <EmptyState icon={Inbox} title="Default without action" />
-            <EmptyState size="compact" icon={Inbox} title="Compact empty state" description="With a caption" action={<Button size="xs" variant="secondary">Action</Button>} />
+            <EmptyState size="compact" icon={Inbox} title="Compact empty state" action={<Button size="xs" variant="secondary">Action</Button>} />
             <EmptyState size="compact" title="Compact, no icon" />
             <LoadingState />
             <div className="space-y-3">

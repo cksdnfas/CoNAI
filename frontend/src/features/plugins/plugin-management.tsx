@@ -24,14 +24,13 @@ import { useRuntimeEventStream } from '@/features/runtime-events/use-runtime-eve
 import { useI18n } from '@/i18n'
 import { checkPluginSources, listPlugins, pluginRequest, PLUGINS_QUERY_KEY, unlinkPluginSource } from '@/lib/api-plugins'
 import { getErrorMessage } from '@/lib/error-message'
-import { PluginRuntimeSummary } from './plugin-capabilities'
 import { PluginAuthoring, type PluginManagementPage } from './plugin-authoring'
 import { PluginSourceInstall, usePluginSourceInstall } from './plugin-source-install'
 import { createPluginDraft, downloadPluginPackage, PLUGIN_DRAFTS_QUERY_KEY } from '@/lib/api-plugin-authoring'
 import { createRandomUuid } from '@/lib/random-uuid'
 
 /** Settings › 플러그인 관리 and the 플러그인 page: install a package, switch plugins on and off, see what each may do, remove one. */
-export function PluginManagement({ assistantPage }: { assistantPage?: PluginManagementPage } = {}) {
+export function PluginManagement({ assistantPage, pageContext }: { assistantPage?: PluginManagementPage; pageContext?: { search: string; blocked: string | null } } = {}) {
   const { t } = useI18n()
   const navigate = useNavigate()
   const [, setParams] = useSearchParams()
@@ -222,7 +221,6 @@ export function PluginManagement({ assistantPage }: { assistantPage?: PluginMana
           <>
             <ModalBody spacing="lg">
               {opened.manifest.description ? <p className="text-sm">{opened.manifest.description}</p> : null}
-              <PluginRuntimeSummary server={Boolean(opened.manifest.server)} />
               {isAdmin && opened.source ? <RowGroup heading={t({ ko: 'Git 연결', en: 'Git source' })}>
                 <ListRow size="sm"><span className="shrink-0 text-xs text-muted-foreground">{t({ ko: '저장소 주소', en: 'Repository URL' })}</span><span className="min-w-0 break-all text-sm">{opened.source.url}</span></ListRow>
                 <ListRow size="sm"><span className="shrink-0 text-xs text-muted-foreground">{t({ ko: '브랜치·태그', en: 'Branch / tag' })}</span><span className="min-w-0 break-all font-mono text-xs">{opened.source.ref}</span></ListRow>
@@ -265,7 +263,7 @@ export function PluginManagement({ assistantPage }: { assistantPage?: PluginMana
                     trailing={(
                       <>
                         {page.accepts.length ? <span className="text-xs">{page.accepts.join(' ')}</span> : null}
-                        <IconButton size="icon-sm" variant="ghost" disabled={!opened.enabled} label={t({ ko: '열기', en: 'Open' })} onClick={() => navigate(`/ext/${opened.manifest.id}/${page.id}`)}><ExternalLink /></IconButton>
+                        <IconButton size="icon-sm" variant="ghost" disabled={!opened.enabled || !!pageContext?.blocked} label={pageContext?.blocked ?? t({ ko: '열기', en: 'Open' })} onClick={() => navigate(`/ext/${opened.manifest.id}/${page.id}${pageContext?.search ? `?${pageContext.search}` : ''}`)}><ExternalLink /></IconButton>
                       </>
                     )}
                   >

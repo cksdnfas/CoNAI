@@ -312,16 +312,18 @@ buttons up one tone.
   it instead of a column table; flag only what is off or failing (inactive, watcher error, not used), never the normal
   state. Keep a table (`DataTable`) only where values are compared down columns (usage, stats, file lists).
 - `RowGroup` (`heading?`, `count?`, `headingClassName?`, `actions?`, `bodyClassName?`): group label over rows. The label
-  is a muted overline over a hairline (`border-foreground/15`), one rank below the rows' names, so a long page reads by
-  group; `count` adds the item count, `headingClassName` gives the label a kind colour that the rows' icons share.
-  `Section variant="settings"` has the same heading.
+  is bold body-size foreground text (`text-sm font-bold`) over a hairline (`border-foreground/15`), never smaller or
+  lighter than the rows' names, so a long page reads by group; `count` adds the item count, `headingClassName` gives
+  the label a kind colour that the rows' icons share. `Section variant="settings"` and `EditorGroup` have the same
+  heading. A settings tab with one group shows no group title or contents list: the toolbar title already names it.
 - Rows must be direct siblings: never put `space-y-*` / `gap-*` between them.
 
 ### Form pieces (inside editors / panels)
 - `Input variant="title"` is an in-place document heading with a hairline; `variant="bare"` is the text slot inside a
   caller-owned frame. `Textarea variant="inline"` grows inside a caller-owned composer frame.
 - `Field` (`label`, `info?`) is a `<label>` around one control; `FieldGroup` (same props, `components/ui/field`) is the
-  same overline label over content that holds several controls or buttons (`role="group"` + `aria-labelledby`).
+  same label (`text-xs font-medium`) over content that holds several controls or buttons (`role="group"` +
+  `aria-labelledby`).
   `FramedField` (`components/common/field-tabs`) = FieldGroup + the field frame.
 - `SliderRow` (`components/ui/slider-row`): label · slider · value on one line. `readout?` (shown text, default the
   value), `editable` + `unit` (typed value), `mixed`, `onCommit` (drag end), `ariaLabel?`, `labelClassName` (label
@@ -479,11 +481,18 @@ conditional warning about the input itself, or a setup step in another app. Back
 feed search and the assistant; never render them as a visible line.
 
 ### Labels
-Overline-style labels (use `<Text variant="overline">` or the structural component; hand-rolled `tracking-overline`
-is `[ds/overline]`) (Field label, StatTile label, Badge, RowGroup heading, Section `drawer` / `settings` heading,
-anchored-popup label) are `text-2xs` + `tracking-overline`. `--overline-tracking` is 0.16em for Latin and
-0.02em under `html:lang(ko)`, so never hard-code `tracking-[0.1Xem]` or `text-[11px]` on a label. Overlines are muted
-(no accent colour, no rule line); the RowGroup heading is the one overline with a rule under it.
+A title is never smaller, lighter or fainter than what it names. Three ranks, from the top:
+1. Group headings (RowGroup, Section `settings` / `drawer`, EditorGroup, a settings group `h2`): `text-sm font-bold`
+   foreground (the group `h2` of a settings tab is `text-base`). A row's name is at most `font-medium`, a group's body
+   text never bolder than its heading.
+2. Input labels (Field / FieldGroup): `text-xs font-medium`, foreground at 80%.
+3. Overlines (`<Text variant="overline">`, hand-rolled `tracking-overline` is `[ds/overline]`): only for kickers that
+   label data (StatTile label, table header, Badge, anchored-popup label); `text-2xs` + `tracking-overline`, muted.
+   `--overline-tracking` is 0.16em for Latin and 0.02em under `html:lang(ko)`, so never hard-code `tracking-[0.1Xem]` or
+   `text-[11px]` on a label.
+
+One screen shows each name once: a page, tab or dialog title is not repeated as a group heading under it, and a button
+that opens a window is not explained again inside it.
 
 ### Navigation rows
 Current row = `bg-fill` + 2px primary bar on the left + `foreground` text (SidebarItem, Button `nav`, `HierarchyNav`).

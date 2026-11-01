@@ -21,8 +21,8 @@ type EmptyStateIcon = ComponentType<{ className?: string; 'aria-hidden'?: boolea
 interface EmptyStateProps extends Omit<ComponentProps<'div'>, 'title'>, VariantProps<typeof emptyStateVariants> {
   /** Lucide icon component (preferred) or a prebuilt node. */
   icon?: EmptyStateIcon | ReactNode
+  /** What is missing; there is no description line (DESIGN_PRESET "Helper text"). */
   title: ReactNode
-  description?: ReactNode
   /** Usually one Button; rendered below (default) or at the row end (compact). */
   action?: ReactNode
 }
@@ -43,16 +43,15 @@ function renderIcon(icon: EmptyStateProps['icon'], className: string) {
 }
 
 /** Render a quiet "nothing here yet" block, optionally with a next-step action. */
-function EmptyState({ icon, title, description, action, size, className, ...props }: EmptyStateProps) {
+function EmptyState({ icon, title, action, size, className, ...props }: EmptyStateProps) {
   if (size === 'compact') {
     return (
       <div data-slot="empty-state" data-size="compact" className={cn(emptyStateVariants({ size }), className)} {...props}>
         {renderIcon(icon, 'mt-0.5 size-4 shrink-0 text-muted-foreground')}
         {/* The action sits at the row end and drops under the text where the row is narrow (a sidebar). */}
         <div className="flex min-w-0 flex-1 flex-wrap items-start gap-x-2.5 gap-y-2">
-          <div className="min-w-0 flex-1 basis-40 space-y-0.5">
+          <div className="min-w-0 flex-1 basis-40">
             <Text as="div" variant="muted">{title}</Text>
-            {description ? <Text as="div" variant="caption">{description}</Text> : null}
           </div>
           {action ? <div className="shrink-0">{action}</div> : null}
         </div>
@@ -67,9 +66,8 @@ function EmptyState({ icon, title, description, action, size, className, ...prop
       {iconNode ? (
         <div className="flex size-10 items-center justify-center rounded-sm bg-surface-high text-muted-foreground">{iconNode}</div>
       ) : null}
-      <div className="max-w-md space-y-1">
+      <div className="max-w-md">
         <Text as="div" variant="label">{title}</Text>
-        {description ? <Text as="div" variant="muted">{description}</Text> : null}
       </div>
       {action ? <div className="flex flex-wrap items-center justify-center gap-2">{action}</div> : null}
     </div>

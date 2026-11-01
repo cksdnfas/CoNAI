@@ -8,6 +8,7 @@ export const CHAT_WORKSPACE_PATHS = {
   chat: '/chat',
   profiles: '/chat/profiles',
   resources: '/chat/resources',
+  llm: '/chat/llm',
   routines: '/chat/routines',
   judge: '/chat/judge',
   mine: '/chat/mine',
@@ -29,8 +30,8 @@ export type ChatSettingsGroup = (typeof CHAT_SETTINGS_GROUPS)[number]
 const LIST_PARAMS = ['folder', 'q', 'page'] as const
 
 /**
- * Every chat management screen (profiles, resources, routines, judge log, personas and flags) lives in two places:
- * the chat workspace and Settings › 채팅. The same components serve both, so what they link to follows the host.
+ * Every chat management screen lives in two places: the chat workspace and Settings.
+ * The same components serve both, so what they link to follows the host.
  */
 export type ChatAdminHost = 'workspace' | 'settings'
 export const chatAdminHostOf = (pathname: string): ChatAdminHost => (pathname.startsWith('/settings') ? 'settings' : 'workspace')
@@ -50,6 +51,8 @@ export function chatAdminLinks(host: ChatAdminHost, current?: URLSearchParams) {
     profiles: (keep = false) => settings ? withParams('/settings', { section: 'chat', group: 'profiles' }, keep ? current : undefined) : withParams(CHAT_WORKSPACE_PATHS.profiles, {}, keep ? current : undefined),
     profile: (id: number | 'new') => settings ? withParams('/settings', { section: 'chat', profile: String(id) }, current) : withParams(CHAT_WORKSPACE_PATHS.profiles, { profile: String(id) }, current),
     resources: (tab: ChatResourceTab = 'presets') => settings ? withParams('/settings', { section: 'chat', group: tab }) : withParams(CHAT_WORKSPACE_PATHS.resources, { tab }),
+    llm: (group?: 'connections' | 'dashboard') => settings ? withParams('/settings', { section: 'llm', ...(group ? { group } : {}) }) : withParams(CHAT_WORKSPACE_PATHS.llm, group ? { group } : {}),
+    judge: () => settings ? withParams('/settings', { section: 'chat', group: 'judge' }) : CHAT_WORKSPACE_PATHS.judge,
     /** A lorebook's editor page: a shared book by id, an account book as `account-<id>`, or `new` / `new-account`. */
     lorebook: (key: string) => settings ? withParams('/settings', { section: 'chat', lorebook: key }) : withParams(CHAT_WORKSPACE_PATHS.resources, { tab: 'lorebooks', lorebook: key }),
   }

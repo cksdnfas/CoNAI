@@ -12,7 +12,6 @@ import { WildcardTree } from './wildcard-browser-cards'
 
 interface WildcardExplorerSidebarPanelProps {
   activeWorkspaceTab: WildcardWorkspaceTab
-  tabLabel: string
   browserEntries: WildcardTreeEntry[]
   browserTreeNodes: WildcardRecord[]
   filteredEntries: WildcardTreeEntry[]
@@ -35,7 +34,6 @@ interface WildcardExplorerSidebarPanelProps {
 /** Sidebar of /wildcards: the active tab's tree (or the search matches) with add / LoRA collect keys on the label. */
 export function WildcardExplorerSidebarPanel({
   activeWorkspaceTab,
-  tabLabel,
   browserEntries,
   browserTreeNodes,
   filteredEntries,
@@ -86,7 +84,7 @@ export function WildcardExplorerSidebarPanel({
   return (
     <SidebarNav>
       <SidebarGroupLabel actions={labelActions}>
-        {tabLabel} <span className="ml-1 tabular-nums">{countLabel}</span>
+        <span className="tabular-nums">{countLabel}</span>
       </SidebarGroupLabel>
 
       {isLoading ? Array.from({ length: 6 }).map((_, index) => <Skeleton key={index} radius="sm" className="my-0.5 h-8 w-full" />) : null}

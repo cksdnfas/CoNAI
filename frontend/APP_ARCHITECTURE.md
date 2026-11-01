@@ -33,6 +33,7 @@ current screen state. See `components/layout/app-shell.tsx`; these providers are
 | `/chat` | `features/codex-chat` (대화) | `page.chat.view` |
 | `/chat/profiles` (`?profile=<id\|new>`, `folder`, `q`, `page`) | `features/codex-chat` reuses settings profile editors | `page.chat.view` + `page.settings.view` |
 | `/chat/resources?tab=presets\|blocks\|lorebooks` (`&lorebook=<key>`) | `features/codex-chat` reuses settings resource editors | `page.chat.view` + `page.settings.view` |
+| `/chat/llm` (`?group=connections\|dashboard` for assistant context) | `features/codex-chat` reuses settings LLM connections and usage | `page.chat.view` + `page.settings.view` |
 | `/chat/routines`, `/chat/judge` | `features/codex-chat` (루틴 / 판단 기록) | `page.chat.view` + `page.settings.view` |
 | `/chat/mine` | `features/codex-chat` reuses `ChatSettingsMine` (내 설정) | `page.chat.view` |
 | `/files` | `features/files` | `page.files.view` |
@@ -75,6 +76,8 @@ Settings › 채팅 keeps 기본, 기억, 도구 사용, 웹 검색, 진단, 프
 공용 플래그 in place. Profile and lorebook editors stay under `/settings?section=chat&profile=<id|new>` and
 `/settings?section=chat&lorebook=<key>`, using `chat-admin-location.ts` host-aware links. Settings › AI 연결 contains
 only AI 연결·모델 슬롯, AI 사용량 and AI 프롬프트; pi codemode belongs to chat's 도구 사용, diagnostics to 진단.
+`/chat/llm` reuses `LlmConnectionsTab` and `LlmUsageDashboard` without workflow prompt presets or a duplicate page title.
+`chat-admin-location.ts` also keeps AI connections and usage's judge link in the current workspace/Settings host.
 Settings' `section=mine` and `/chat/mine` render the same personas/flags screen. NovelAI authentication and ComfyUI
 server editors are available directly on generation screens as well as Settings, without a Settings-management link.
 - `src/components/ui/` — design-system primitives (Button, IconButton, Panel, Section, Modal, Input, …). No feature
@@ -144,17 +147,18 @@ live catalog at `/#/dev/ui`. Use `components/ui`; the `[ds/*]` lint guards in `e
 - New page features include an assistant path: register bounded fields/data/actions with the page context and reuse
   the native state setters/API. Follow the shared action schema, permission mapping and view/draft/commit tiers.
 - Server-side automation uses MCP tools over the same domain services. A navigation entry alone is not full feature support.
-- `chat-workspace.tsx` provides 대화 · 프로필 · 자원 · 루틴 · 판단 기록 · 내 설정 in that order; non-admin accounts see
+- `chat-workspace.tsx` provides 대화 · 프로필 · 자원 · AI 연결 · 루틴 · 판단 기록 · 내 설정 in that order; non-admin accounts see
   대화 and 내 설정 only. `chat-workspace-screens.tsx` switches 프리셋 / 표시 블록 / 로어북 inside 자원 and redirects its
   legacy routines tab to `/chat/routines`; the character page redirects legacy profile links to `/chat/profiles`.
-  The shared `chatPagePermission` map gives the four management paths `page.settings.view`, `/chat/mine` `page.chat.view`.
+  The shared `chatPagePermission` map gives the management paths `page.settings.view`, `/chat/mine` `page.chat.view`.
 - `chatPageActionAllowed` allows `profile.*` on `/settings` and `/chat/profiles`; `resource.*`, `lorebook.*`, `block.*`
   additionally on `/chat/resources`. `settings.routine` / `settings.automation_switch` also work on `/chat/routines`,
-  `settings.judge_filter` on `/chat/judge`, `settings.user_profile` / `settings.flag` on `/chat/mine`.
+  `settings.judge_filter` on `/chat/judge`, `settings.user_profile` / `settings.flag` on `/chat/mine`,
+  `settings.default_model` / `default_judge` / `mcp_server` / `mcp_server_draft` / `usage_period` on `/chat/llm`.
   `settings.chat_options` stays on `/settings` for memory, tool use, web search and diagnostics.
   `backend/src/services/codex-chat/chatPageContext.ts` rechecks access and restricts personal settings to account-owned actions.
 - The header's 채팅 설정 sheet covers enabled, lore auto-save/selection count, tool round limit, pi codemode, web engine,
-  diagnostics enabled/raw capture/per-chat retention on `/chat` and its four management screens. Web model, daily search
+  diagnostics enabled/raw capture/per-chat retention on `/chat`, its management screens and `/chat/mine`. Web model, daily search
   limit and lorebook second-key language stay Settings-only (`shared/src/constants/pageSettings.ts`).
 - Chat thread queries/selection live in `features/codex-chat/use-chat-thread-data.ts`; transcript windowing, streaming
   follow and focus restoration live in `use-chat-transcript-window.ts`. Both chat layouts share them.

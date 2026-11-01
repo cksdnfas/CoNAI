@@ -525,6 +525,7 @@ function ComfyGenerationPanelContent({
             onRefreshDropdownLists={handleRefreshDropdownLists}
             onResetDraft={() => void handleResetWorkflowDraft()}
             onOpenModuleSave={handleOpenSelectedModuleSave}
+            onOpenCreateServer={authStatus?.isAdmin ? handleOpenCreateServer : undefined}
             onGenerateSelected={handleGenerateSelectedWorkflow}
             onRevealFieldIssues={revealComfyFieldIssues}
           />

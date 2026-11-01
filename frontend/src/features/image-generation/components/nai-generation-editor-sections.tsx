@@ -4,6 +4,7 @@ import { getNaiFixedModelSettings, getNaiQualityTags, getNaiUcPresetIds, getNaiU
 import type { StoredNaiCharacterReferenceAsset, StoredNaiVibeAsset } from '@/lib/api-image-generation-types'
 import { DisclosureButton } from '@/components/ui/disclosure-button'
 import { Button } from '@/components/ui/button'
+import { Field } from '@/components/ui/field'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
@@ -15,7 +16,6 @@ import { ToggleRow } from '@/components/ui/toggle-row'
 import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import {
-  FormField,
   getNaiEnhanceIssueLabel,
   getNaiFixedNegativeHint,
   NAI_ACTION_OPTIONS,
@@ -339,7 +339,7 @@ export function NaiGenerationEditorSections({
   const images = naiForm.action !== 'generate' ? (
       <Section variant="settings" heading={t({ ko: '이미지', en: 'Images' })} collapsible defaultOpen={false} className="@container">
         <div className="space-y-4">
-          <FormField label={t({ ko: '원본 이미지', en: 'Source Image' })}>
+          <Field label={t({ ko: '원본 이미지', en: 'Source Image' })}>
             <div className="space-y-3">
               <div className="flex flex-wrap gap-2">
                 <ImageAttachmentPickerButton
@@ -373,14 +373,14 @@ export function NaiGenerationEditorSections({
               </div>
               {naiForm.sourceImage ? <NaiSelectedImageCard image={naiForm.sourceImage} alt="NAI source" /> : null}
             </div>
-          </FormField>
+          </Field>
 
           {naiForm.action === 'img2img' && naiForm.sourceImage ? (
             <NaiEnhanceField naiForm={naiForm} sourceImageSize={sourceImageSize} onChange={handleNaiOptionChange} />
           ) : null}
 
           {naiForm.action === 'infill' ? (
-            <FormField label={t({ ko: '마스크 이미지', en: 'Mask Image' })}>
+            <Field label={t({ ko: '마스크 이미지', en: 'Mask Image' })}>
               <div className="space-y-3">
                 <div className="flex flex-wrap gap-2">
                   <ImageAttachmentPickerButton
@@ -403,17 +403,17 @@ export function NaiGenerationEditorSections({
                 </div>
                 {naiForm.maskImage ? <NaiSelectedImageCard image={naiForm.maskImage} alt="NAI mask" /> : null}
               </div>
-            </FormField>
+            </Field>
           ) : null}
 
           <NaiControllerInsetBlock className="space-y-4">
             <div className="grid gap-4 @sm:grid-cols-2">
-              <FormField label={t({ ko: '강도', en: 'Strength' })}>
+              <Field label={t({ ko: '강도', en: 'Strength' })}>
                 <NumberStepperInput aria-label={t({ ko: '강도', en: 'Strength' })} min={0} max={1} step={0.01} value={naiForm.strength} onValueCommit={(value) => handleNaiFieldChange('strength', value)} />
-              </FormField>
-              <FormField label={t({ ko: '노이즈', en: 'Noise' })}>
+              </Field>
+              <Field label={t({ ko: '노이즈', en: 'Noise' })}>
                 <NumberStepperInput aria-label={t({ ko: '노이즈', en: 'Noise' })} min={0} max={1} step={0.01} value={naiForm.noise} onValueCommit={(nextValue) => handleNaiFieldChange('noise', nextValue)} />
-              </FormField>
+              </Field>
             </div>
 
             {naiForm.action === 'infill' ? (
@@ -523,16 +523,6 @@ function rollNaiSeed() {
   return String(Math.floor(Math.random() * NAI_SEED_MAX))
 }
 
-/** Render one on/off setting as a label + Switch row that lines up with the grid's form fields. */
-function NaiSwitchField({ label, checked, onCheckedChange }: { label: string, checked: boolean, onCheckedChange: (checked: boolean) => void }) {
-  return (
-    <ToggleRow variant="detail" size="field" className="justify-between self-end">
-      <span className="min-w-0 truncate font-medium">{label}</span>
-      <Switch checked={checked} onCheckedChange={onCheckedChange} />
-    </ToggleRow>
-  )
-}
-
 const NAI_UC_PRESET_LABELS: Record<Exclude<NaiUcPresetId, 'none'>, string> = { heavy: 'Heavy', light: 'Light', human_focus: 'Human Focus' }
 const NAI_ENHANCE_AMOUNT_LABELS: Record<NaiEnhanceAmount, string> = { '1x': '1x', '1.5x': '1.5x', max: 'Max' }
 
@@ -561,9 +551,7 @@ function NaiPromptPresetControls({ naiForm, onChange }: { naiForm: NAIFormDraft,
           onCheckedChange={(checked) => onChange({ qualityToggle: checked })}
         />
       </Tip>
-      <Tip content={ucPresetIds.length <= 1
-        ? unsupportedHint
-        : ucPresetFixed
+      {ucPresetIds.length > 1 ? <Tip content={ucPresetFixed
           ? t({ ko: '이 모델은 Heavy로 고정이야: {text}', en: 'This model always uses Heavy: {text}' }, { text: ucPresetText ?? '' })
           : ucPresetText
           ? t({ ko: '네거티브 프롬프트 앞에 붙여: {text}', en: 'Placed before the negative prompt: {text}' }, { text: ucPresetText })
@@ -575,7 +563,7 @@ function NaiPromptPresetControls({ naiForm, onChange }: { naiForm: NAIFormDraft,
             id={ucPresetSelectId}
             className="w-auto"
             value={presets.ucPreset}
-            disabled={ucPresetIds.length <= 1 || ucPresetFixed}
+            disabled={ucPresetFixed}
             onChange={(event) => {
               const ucPreset = ucPresetIds.find((id) => id === event.target.value)
               if (ucPreset) onChange({ ucPreset })
@@ -586,7 +574,7 @@ function NaiPromptPresetControls({ naiForm, onChange }: { naiForm: NAIFormDraft,
             ))}
           </Select>
         </div>
-      </Tip>
+      </Tip> : null}
     </div>
   )
 }
@@ -600,7 +588,7 @@ function NaiEnhanceField({ naiForm, sourceImageSize, onChange }: { naiForm: NAIF
     : active?.issue ? getNaiEnhanceIssueLabel(t, active.issue) : undefined
 
   return (
-    <FormField label={t({ ko: '인핸스', en: 'Enhance' })} hint={hint}>
+    <Field label={t({ ko: '인핸스', en: 'Enhance' })} info={hint}>
       <Select
         value={naiForm.enhance}
         onChange={(event) => {
@@ -618,7 +606,7 @@ function NaiEnhanceField({ naiForm, sourceImageSize, onChange }: { naiForm: NAIF
           )
         })}
       </Select>
-    </FormField>
+    </Field>
   )
 }
 
@@ -729,33 +717,33 @@ function NaiSettingsSection({
       <div id={settingsRegionId} hidden={!isSettingsOpen} className="space-y-5">
         <div className="grid gap-4 @md:grid-cols-4">
           <div className="@md:col-span-3">
-            <FormField label={t({ ko: '모델', en: 'Model' })}>
+            <Field label={t({ ko: '모델', en: 'Model' })}>
               <Select value={naiForm.model} onChange={(event) => handleNaiFieldChange('model', event.target.value)}>
                 {NAI_MODEL_OPTIONS.map((option) => (
                   <option key={option.value} value={option.value}>{option.label}</option>
                 ))}
               </Select>
-            </FormField>
+            </Field>
           </div>
 
-          <FormField label={t({ ko: '생성 방식', en: 'Action' })}>
+          <Field label={t({ ko: '생성 방식', en: 'Action' })}>
             <Select value={naiForm.action} onChange={(event) => handleNaiFieldChange('action', event.target.value)}>
               {NAI_ACTION_OPTIONS.map((option) => (
                 <option key={option.value} value={option.value}>{t(option.label)}</option>
               ))}
             </Select>
-          </FormField>
+          </Field>
         </div>
 
         <div className="grid gap-4 @sm:grid-cols-2 @3xl:grid-cols-4">
           {enhance ? (
-            <FormField label={t({ ko: '크기', en: 'Size' })} hint={t({ ko: '인핸스가 원본으로 정해', en: 'Set by enhance' })}>
+            <Field label={t({ ko: '크기', en: 'Size' })} info={t({ ko: '인핸스가 원본으로 정해', en: 'Set by enhance' })}>
               <Input
                 readOnly
                 disabled
                 value={enhance.plan ? `${enhance.plan.width}×${enhance.plan.height}` : getNaiEnhanceIssueLabel(t, enhance.issue)}
               />
-            </FormField>
+            </Field>
           ) : (
             <ResolutionPicker
               mode="preset"
@@ -773,26 +761,27 @@ function NaiSettingsSection({
             />
           )}
 
-          <FormField label={t({ ko: '스텝', en: 'Steps' })} hint={fixedHint}>
+          <Field label={t({ ko: '스텝', en: 'Steps' })} info={fixedHint}>
             <NumberStepperInput aria-label={t({ ko: '스텝', en: 'Steps' })} min={1} max={100} value={sampling.steps} disabled={samplingFixed} onValueCommit={(nextValue) => handleNaiFieldChange('steps', nextValue)} />
-          </FormField>
+          </Field>
 
-          <FormField label={t({ ko: '샘플러', en: 'Sampler' })} hint={fixedHint}>
+          <Field label={t({ ko: '샘플러', en: 'Sampler' })} info={fixedHint}>
             <Select value={sampling.sampler} disabled={samplingFixed} onChange={(event) => handleNaiFieldChange('sampler', event.target.value)}>
               {NAI_SAMPLER_OPTIONS.map((option) => (
                 <option key={option.value} value={option.value}>{option.label}</option>
               ))}
             </Select>
-          </FormField>
+          </Field>
 
-          <FormField label={t({ ko: '요청당 이미지', en: 'Images per request' })}>
+          <Field label={t({ ko: '요청당 이미지', en: 'Images per request' })}>
             <NumberStepperInput aria-label={t({ ko: '요청당 이미지', en: 'Images per request' })} min={NAI_SAMPLE_COUNT_MIN} max={maxSampleCount} step={1} value={naiForm.samples} onValueCommit={(nextValue) => handleNaiFieldChange('samples', nextValue)} />
-          </FormField>
+          </Field>
 
           <NaiSeedField seed={naiForm.seed} onSeedChange={(nextValue) => handleNaiFieldChange('seed', nextValue)} />
 
           {supportsNaiTransparentBackground(naiForm.model) ? (
-            <NaiSwitchField
+            <SwitchLine
+              className="self-end"
               label={t({ ko: '투명 배경', en: 'Transparent background' })}
               checked={naiForm.transparentBackground}
               onCheckedChange={(checked) => setNaiForm((current) => ({ ...current, transparentBackground: checked }))}
@@ -803,25 +792,26 @@ function NaiSettingsSection({
         <div>
           <Tip content={isAdvancedOpen ? null : advancedSummary} side="top" align="start">
             <DisclosureButton open={isAdvancedOpen} aria-controls={advancedRegionId} onClick={toggleAdvancedOpen}>
-              <Text as="span" variant="overline" tone="inherit" className="shrink-0">{t({ ko: '고급', en: 'Advanced' })}</Text>
+              {t({ ko: '고급', en: 'Advanced' })}
             </DisclosureButton>
           </Tip>
 
           {isAdvancedOpen ? (
             <div id={advancedRegionId} className="mt-3 grid gap-4 @sm:grid-cols-2 @3xl:grid-cols-4">
-              <FormField label={t({ ko: '스케줄러', en: 'Scheduler' })}>
+              <Field label={t({ ko: '스케줄러', en: 'Scheduler' })}>
                 <Select value={naiForm.scheduler} onChange={(event) => handleNaiFieldChange('scheduler', event.target.value)}>
                   {NAI_SCHEDULER_OPTIONS.map((option) => (
                     <option key={option.value} value={option.value}>{option.label}</option>
                   ))}
                 </Select>
-              </FormField>
+              </Field>
 
-              <FormField label="CFG Scale">
+              <Field label="CFG Scale">
                 <NumberStepperInput aria-label="CFG Scale" min={1} max={20} step={0.1} value={naiForm.scale} onValueCommit={(nextValue) => handleNaiFieldChange('scale', nextValue)} />
-              </FormField>
+              </Field>
 
-              <NaiSwitchField
+              <SwitchLine
+                className="self-end"
                 label="Variety+"
                 checked={naiForm.varietyPlus}
                 onCheckedChange={(checked) => setNaiForm((current) => ({ ...current, varietyPlus: checked }))}

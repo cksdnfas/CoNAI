@@ -50,7 +50,7 @@ function AppRequestHistory({ open, onClose, pluginName, onReview }: { open: bool
   )
 }
 
-/** The plugin page: operations waiting for approval, every page of the enabled plugins, then the same management as Settings for admins. */
+/** The plugin page: pending operations and one plugin list, with management controls for administrators. */
 export function PluginsPage() {
   const { t } = useI18n()
   const navigate = useNavigate()
@@ -73,11 +73,11 @@ export function PluginsPage() {
   const pluginName = (id: string) => plugins.data?.find((plugin) => plugin.manifest.id === id)?.manifest.name ?? id
   const pending = (requests.data?.requests ?? []).filter((request) => request.status === 'pending')
   const fileCount = files ? files.split(',').filter(Boolean).length : 0
+  const pageOpenBlocked = (projectId || fileCount) && !auth.data?.permissionKeys.includes('files.view')
+    ? t({ ko: '파일 조회 권한이 필요해', en: 'File access required' }) : null
   const pages = enabled.flatMap(({ manifest }) => manifest.pages.filter((page) => page.menu !== false).map((page) => {
     // A page opened with a project needs project access; one opened with files needs file access.
-    const blocked = (projectId || fileCount) && !auth.data?.permissionKeys.includes('files.view')
-      ? t({ ko: '파일 조회 권한이 필요해', en: 'File access required' }) : null
-    return { manifest, page, blocked }
+    return { manifest, page, blocked: pageOpenBlocked }
   }))
 
   const chatPages = pages.slice(0, 100)
@@ -101,7 +101,7 @@ export function PluginsPage() {
   return (
     <div className="pb-6">
       <PageToolbar
-        title={t({ ko: '플러그인', en: 'Plugins' })}
+        title={t('pageAccessCatalog.extensions')}
         start={fileCount || projectId ? (
           <div className="flex flex-wrap items-center gap-1">
             {fileCount ? <Chip tone="muted" onRemove={() => clearContext('files')} removeLabel={t({ ko: '파일 연결 빼기', en: 'Remove files' })}><Files />{t({ ko: '파일 {count}개', en: '{count} files' }, { count: fileCount })}</Chip> : null}
@@ -133,7 +133,7 @@ export function PluginsPage() {
           </RowGroup>
         ) : null}
 
-        {plugins.isPending ? <LoadingState /> : plugins.error ? <ErrorState error={plugins.error} onRetry={() => void plugins.refetch()} /> : pages.length === 0 ? (
+        {auth.data?.isAdmin ? <PluginManagement assistantPage={assistantPage} pageContext={{ search: contextParams.toString(), blocked: pageOpenBlocked }} /> : plugins.isPending ? <LoadingState /> : plugins.error ? <ErrorState error={plugins.error} onRetry={() => void plugins.refetch()} /> : pages.length === 0 ? (
           <EmptyState icon={Puzzle} title={t({ ko: '쓸 수 있는 플러그인이 없어', en: 'No plugins available' })} />
         ) : (
           <RowGroup heading={t({ ko: '도구', en: 'Tools' })} count={pages.length}>
@@ -160,7 +160,6 @@ export function PluginsPage() {
           </RowGroup>
         )}
 
-        {auth.data?.isAdmin ? <PluginManagement assistantPage={assistantPage} /> : null}
       </div>
       <AppRequestHistory open={history} onClose={() => setHistory(false)} pluginName={pluginName} onReview={(request) => { setHistory(false); setReview(request) }} />
       <PluginReviewModal

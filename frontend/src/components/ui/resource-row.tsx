@@ -56,7 +56,7 @@ function ResourceRow({ leading, name, extra, aside, trailing, onOpen, openLabel,
         </span>
       ) : null}
       <div className="flex min-w-0 flex-1 items-center gap-2">
-        <span className="truncate text-sm font-semibold text-foreground">{name}</span>
+        <span className="truncate text-sm font-medium text-foreground">{name}</span>
         {extra}
       </div>
       {children}

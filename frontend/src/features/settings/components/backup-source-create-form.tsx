@@ -6,7 +6,6 @@ import { buildBackupTargetPreviewPath, type NewBackupSourceDraft } from '../sett
 import { useI18n } from '@/i18n'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { SettingsSwitchRow } from '@/components/ui/settings-switch-row'
-import { SettingsLabelTip } from './settings-label-tip'
 
 interface BackupSourceCreateFormProps {
   newBackupSource: NewBackupSourceDraft
@@ -41,7 +40,8 @@ export function BackupSourceCreateForm({
         </Field>
 
         <Field
-          label={<SettingsLabelTip label={t({ ko: 'Upload 내부 대상 경로', en: 'Target path inside Upload' })} tip={t({ ko: '업로드 폴더 안의 상대 경로로 지정해.', en: 'Use a relative path inside the upload folder.' })} />}
+          label={t({ ko: 'Upload 내부 대상 경로', en: 'Target path inside Upload' })}
+          info={t({ ko: '업로드 폴더 안의 상대 경로로 지정해.', en: 'Use a relative path inside the upload folder.' })}
         >
           <Input
             variant="settings"
@@ -59,7 +59,7 @@ export function BackupSourceCreateForm({
           </Select>
         </Field>
 
-        <Field label={<SettingsLabelTip label={t({ ko: '폴링 주기(ms)', en: 'Polling interval (ms)' })} tip={t({ ko: '비워두면 자동 (권장)', en: 'Empty = auto (recommended)' })} />}>
+        <Field label={t({ ko: '폴링 주기(ms)', en: 'Polling interval (ms)' })} info={t({ ko: '비워두면 자동 (권장)', en: 'Empty = auto (recommended)' })}>
           <NumberStepperInput min={2000} allowEmpty variant="settings" value={newBackupSource.watcher_polling_interval} onValueCommit={(nextValue) => onNewBackupSourceChange({ watcher_polling_interval: nextValue === '' ? null : Number(nextValue) || null })} placeholder={t({ ko: '자동 감지', en: 'Auto detect' })} disabled={!newBackupSource.watcher_enabled} />
         </Field>
 

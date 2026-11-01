@@ -7,7 +7,6 @@ import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { Spinner } from '@/components/ui/loading-state'
 import { Select } from '@/components/ui/select'
-import { textVariants } from '@/components/ui/text'
 import { Tip } from '@/components/ui/tooltip'
 import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { ChatProfileImage } from '@/features/codex-chat/chat-profile-image'
@@ -241,8 +240,8 @@ export function ExpressionSlots({ runs, groupSource, referenceHash, canGenerate,
   return (
     <section className="space-y-3">
       <div className="flex min-h-8 flex-wrap items-center gap-2">
-        <h3 className={textVariants({ variant: 'overline' })}>{t({ ko: '표정', en: 'Expressions' })}</h3>
-        <span className="text-xs font-semibold tabular-nums">{names.filter((name) => filled.get(name)).length}/{names.length}</span>
+        <h3 className="text-sm font-bold text-foreground">{t({ ko: '표정', en: 'Expressions' })}</h3>
+        <span className="text-sm font-medium tabular-nums text-muted-foreground">{names.filter((name) => filled.get(name)).length}/{names.length}</span>
         <span className="flex-1" />
         {editable ? <>
           <AssetPresetPicker runs={runs} showExpressionMenu />
@@ -274,7 +273,7 @@ export function ExpressionSlots({ runs, groupSource, referenceHash, canGenerate,
                   <span className="pointer-events-none absolute inset-0 flex items-center justify-center [&>*]:pointer-events-auto">
                     <Tip content={blockedReason}>
                       <span className="inline-flex" tabIndex={blockedReason ? 0 : -1}>
-                        <Button size="xs" variant="ghost" disabled={!canGenerate || !runs.emotionNames.includes(name)} aria-label={t({ ko: '{name} 만들기', en: 'Make {name}' }, { name })} onClick={() => void runs.start({ kind: 'expressions', names: [name] }, true)}><Plus />{t({ ko: '만들기', en: 'Make' })}</Button>
+                        <Button size="xs" variant="ghost" disabled={!canGenerate || !runs.emotionNames.includes(name)} aria-label={t({ ko: '{name} 만들기', en: 'Make {name}' }, { name })} onClick={() => void runs.start({ kind: 'expressions', names: [name] }, true)}><Plus /></Button>
                       </span>
                     </Tip>
                   </span>

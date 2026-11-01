@@ -2,8 +2,9 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { FolderKanban } from 'lucide-react'
 import { MAX_WORKSPACE_LINKS } from '@conai/shared'
+import { Button } from '@/components/ui/button'
 import { Chip, ChipAction } from '@/components/ui/chip'
-import { IconButton } from '@/components/ui/icon-button'
+import { EditorGroup } from '@/components/ui/editor-group'
 import { WorkspaceProjectPicker } from '@/features/files/workspace-projects'
 import { useI18n } from '@/i18n'
 import { getWorkspace } from '@/lib/api-workspaces'
@@ -41,16 +42,22 @@ export function ChatProfileWorkspace({ value, onChange }: { value: ProfileWorksp
   const linked = new Set(value.map((link) => link.id))
 
   return (
-    <div className="flex flex-wrap items-center gap-1.5">
-      {value.length === 0 ? <span className="text-sm text-muted-foreground">{t({ ko: '연결 안 함', en: 'Not connected' })}</span> : null}
-      {value.map((link) => (
-        <ProjectChip key={link.id} link={link} onChange={(next) => onChange(value.map((item) => item.id === link.id ? next : item))} onRemove={() => onChange(value.filter((item) => item.id !== link.id))} />
-      ))}
-      <IconButton variant="ghost" size="icon-sm" disabled={value.length >= MAX_WORKSPACE_LINKS} onClick={() => setPicking(true)} label={t({ ko: '작업 공간 추가', en: 'Add a workspace' })}><FolderKanban /></IconButton>
+    <EditorGroup
+      label={t({ ko: '작업 공간', en: 'Workspaces' })}
+      info={t({ ko: '캐릭터가 일할 폴더(프로젝트). 1:1·그룹 채팅과 게시판 호출에서 열려. 채팅에서는 더 추가하거나 끌 수 있어.', en: 'The project folders the character works in, in 1:1 and group chats and board calls. A chat can add more or turn one off.' })}
+      actions={<Button variant="subtle" size="compact" disabled={value.length >= MAX_WORKSPACE_LINKS} onClick={() => setPicking(true)}><FolderKanban />{t({ ko: '작업 공간 연결', en: 'Connect a workspace' })}</Button>}
+    >
+      {value.length ? (
+        <div className="flex flex-wrap items-center gap-1.5">
+          {value.map((link) => (
+            <ProjectChip key={link.id} link={link} onChange={(next) => onChange(value.map((item) => item.id === link.id ? next : item))} onRemove={() => onChange(value.filter((item) => item.id !== link.id))} />
+          ))}
+        </div>
+      ) : null}
       <WorkspaceProjectPicker
         open={picking}
         onClose={() => setPicking(false)}
-        title={t({ ko: '작업 공간 추가', en: 'Add a workspace' })}
+        title={t({ ko: '작업 공간 연결', en: 'Connect a workspace' })}
         projectId={null}
         write={false}
         writeLabel={t({ ko: '쓰기 허용', en: 'Allow writing' })}
@@ -58,6 +65,6 @@ export function ChatProfileWorkspace({ value, onChange }: { value: ProfileWorksp
         exclude={linked}
         onConnect={(projectId, write) => { if (projectId) onChange([...value, { id: projectId, write }]); setPicking(false) }}
       />
-    </div>
+    </EditorGroup>
   )
 }

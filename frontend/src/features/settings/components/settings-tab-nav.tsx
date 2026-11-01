@@ -26,8 +26,8 @@ const SETTINGS_TAB_ICONS: Record<SettingsTab, LucideIcon> = {
 }
 
 const SETTINGS_TAB_GROUP_LABELS: Record<SettingsTabGroup, TranslationDictionary> = {
-  mine: { ko: '내 설정 (나에게만)', en: 'My settings (just me)' },
-  shared: { ko: '앱 관리 (공용 · 관리자)', en: 'App management (shared · admin)' },
+  mine: { ko: '내 설정', en: 'My settings' },
+  shared: { ko: '앱 관리', en: 'App management' },
 }
 
 /** Settings sections as sidebar rows, grouped; the current section gets the fill + accent bar. Labels and rows stay

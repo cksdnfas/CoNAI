@@ -353,7 +353,7 @@ function ChatProfileBasicPanel({ draft, patch, profile, audience, onOpenAppearan
   const path = folderPath(new Map(folders.map((folder) => [folder.id, folder])), draft.folderId)
   return (
     <div className="space-y-4">
-      <EditorGroup label={t({ ko: '프로필', en: 'Profile' })}>
+      <EditorGroup>
         <div className="flex items-center gap-4">
           <Tip content={t({ ko: '외형에서 바꾸기', en: 'Change under Appearance' })}>
             <AvatarButton onClick={onOpenAppearance} aria-label={t({ ko: '외형에서 바꾸기', en: 'Change under Appearance' })}>
@@ -922,7 +922,8 @@ function ProfileEditor({ layout, open, profile, setProfile, draft, setDraft, dir
   const modelLine = draft.engine === 'codex' ? `Codex · ${draft.model || t({ ko: '기본 모델', en: 'default model' })}`
     : draft.engine === 'claude' ? `Claude Code · ${draft.model || 'sonnet'}`
       : draft.modelSlotId !== null ? slots.find((slot) => slot.id === draft.modelSlotId)?.label ?? t({ ko: '모델 없음', en: 'No model' })
-        : defaultSlot ? t({ ko: '대표 모델 · {label}', en: 'Default · {label}' }, { label: defaultSlot.label }) : t({ ko: '모델 없음', en: 'No model' })
+        // A representative model's own label already starts with 대표, so only a plain default model gets the prefix.
+        : defaultSlot ? (defaultSlot.kind === 'route' ? defaultSlot.label : t({ ko: '기본 모델 · {label}', en: 'Default · {label}' }, { label: defaultSlot.label })) : t({ ko: '모델 없음', en: 'No model' })
   const sections: Array<{ value: ProfileEditorSection; label: string; icon: typeof UserRound; incomplete?: boolean }> = [
     { value: 'basic', label: t({ ko: '기본 정보', en: 'Basics' }), icon: UserRound, incomplete: nameMissing },
     { value: 'character', label: t({ ko: '캐릭터', en: 'Character' }), icon: FileText },
@@ -980,8 +981,9 @@ function ProfileEditor({ layout, open, profile, setProfile, draft, setDraft, dir
           title={draft.name.trim() || profile?.name || t({ ko: '새 프로필', en: 'New profile' })}
           status={<>
             {profile ? null : <Chip tone="muted" size="sm">{t({ ko: '아직 저장 안 한 새 프로필', en: 'New, not saved yet' })}</Chip>}
-            <Chip tone={draft.isEnabled ? 'success' : 'muted'} size="sm">{draft.isEnabled ? t({ ko: '채팅에서 사용 중', en: 'In use' }) : t({ ko: '꺼짐', en: 'Off' })}</Chip>
-            <Chip tone="muted" size="sm">{audience.picked.length ? t({ ko: '{who}만 사용', en: 'Only {who}' }, { who: audience.summary }) : t({ ko: '모두 사용 가능', en: 'Everyone' })}</Chip>
+            {/* Only what is off or restricted: the normal state (in use, open to everyone) needs no mark. */}
+            {draft.isEnabled ? null : <Chip tone="muted" size="sm">{t({ ko: '꺼짐', en: 'Off' })}</Chip>}
+            {audience.picked.length ? <Chip tone="muted" size="sm">{t({ ko: '{who}만 사용', en: 'Only {who}' }, { who: audience.summary })}</Chip> : null}
           </>}
           actions={(
             <ActionMenuButton
@@ -1002,10 +1004,7 @@ function ProfileEditor({ layout, open, profile, setProfile, draft, setDraft, dir
               header={(
                 <div className="flex min-w-0 items-center gap-2.5 px-2.5 pt-1">
                   <ChatProfileAvatar name={draft.name || '?'} avatar={draft.avatar} imageUrl={draftProfileAssetUrl(draft, profile, 'avatar')} avatarCrop={draft.avatarHash ? draft.avatarCrop : null} engine={draft.engine} size="sm" />
-                  <span className="flex min-w-0 flex-col">
-                    <span className="truncate text-sm font-semibold">{draft.name.trim() || t({ ko: '새 프로필', en: 'New profile' })}</span>
-                    <span className="truncate text-xs text-muted-foreground">{modelLine}</span>
-                  </span>
+                  <span className="truncate text-xs text-muted-foreground">{modelLine}</span>
                 </div>
               )}
             />
@@ -1026,7 +1025,6 @@ function ProfileEditor({ layout, open, profile, setProfile, draft, setDraft, dir
             </FloatingSaveBar>
           ) : null}
         >
-          <h2 className="text-base font-semibold text-foreground">{current.label}</h2>
           <div className="min-w-0 space-y-4">{panel}</div>
           {preview}
         </EditorPage>

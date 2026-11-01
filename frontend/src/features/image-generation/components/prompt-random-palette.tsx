@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { TextTabs } from '@/components/common/text-tabs'
+import { EmptyState } from '@/components/ui/empty-state'
 import { ListRow } from '@/components/ui/list-row'
 import { useI18n } from '@/i18n'
 import { getDanbooruBrowserTags } from '@/lib/api-danbooru-browser'
@@ -207,19 +208,13 @@ export function PromptRandomPalette({ tab, entries, recents, activeIndex, isLoad
                   ))}
                 </div>
               ) : (
-                <div className="text-xs text-muted-foreground">{t({ ko: '항목이 없어요.', en: 'No items.' })}</div>
+                <EmptyState size="compact" title={t({ ko: '항목이 없어', en: 'No items' })} />
               )}
             </>
           ) : null}
         </div>
       </div>
 
-      <div className="flex shrink-0 flex-wrap gap-x-3 bg-surface-high px-3 py-1 text-2xs text-muted-foreground">
-        <span>{t({ ko: '↑↓ 이동', en: '↑↓ move' })}</span>
-        <span>{t({ ko: 'Tab 탭 전환', en: 'Tab switch tab' })}</span>
-        <span>{t({ ko: 'Enter 넣기', en: 'Enter insert' })}</span>
-        <span>{t({ ko: 'Shift+Enter 옵션 정하고 넣기', en: 'Shift+Enter insert with options' })}</span>
-      </div>
     </div>
   )
 }

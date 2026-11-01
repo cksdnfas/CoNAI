@@ -1,14 +1,18 @@
 import { useState, type ReactNode } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { ChevronDown, Scale, TriangleAlert } from 'lucide-react'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { Field } from '@/components/ui/field'
+import { Button } from '@/components/ui/button'
+import { EmptyState } from '@/components/ui/empty-state'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { Tip } from '@/components/ui/tooltip'
 import { CodexModelSelect } from '@/features/image-generation/components/codex-model-select'
 import { CodexReasoningSelect } from '@/features/image-generation/components/codex-reasoning-select'
+import { useChatAdminLinks } from '@/features/codex-chat/chat-admin-location'
 import { useI18n } from '@/i18n'
 import { CHAT_JUDGE_PRESETS_QUERY_KEY, listChatJudgePresets } from '@/lib/api-chat-judge'
 import { thinkingMayFillCap, type ChatProfileDefaults, type ChatProfileInput, type ModelRole, type ModelSlot } from '@/lib/api-codex-chat'
@@ -17,7 +21,7 @@ import { cn } from '@/lib/utils'
 import { CHAT_PROFILE_LIMITS, CHAT_PROFILE_TEXT_LIMITS, CHAT_TRANSLATION_LANGUAGES, type ChatTranslationLanguage, type ClaudeModelOption } from '@conai/shared'
 import { ClaudeEffortSelect, ClaudeModelSelect } from './claude-model-select'
 import { JudgeModelSelect, useDefaultJudgeLabel, useModelLabel } from './chat-judge-connection-select'
-import { applyRoleChoice, ModelRoleSelect, roleChoice, slotCeiling, type SuggestWriters } from './chat-model-role-select'
+import { applyRoleChoice, chatModelRows, ModelRoleSelect, roleChoice, slotCeiling, type SuggestWriters } from './chat-model-role-select'
 import { enginePatch, judgePresetPatch, numberOrNull, type Draft, type PatchDraft } from './chat-profile-editor-fields'
 import { SwitchLine } from '@/components/ui/switch-line'
 import { ContentRatingSelect, useCeilingLabel } from './content-rating-select'
@@ -183,6 +187,9 @@ export function ChatProfileModelPanel({ draft, patch, defaults, slots, slotsRead
   claudeModels: ClaudeModelOption[] | undefined
 }) {
   const { t } = useI18n()
+  const navigate = useNavigate()
+  const links = useChatAdminLinks()
+  const openConnections = () => navigate(links.llm())
   const isLlm = draft.engine === 'llm'
   const hasLlmContext = draft.engine !== 'codex'
   // Codex, Claude and pi fold their own sessions with the chat model.
@@ -203,7 +210,9 @@ export function ChatProfileModelPanel({ draft, patch, defaults, slots, slotsRead
   })()
 
   /** The select for one role, wired to the draft. */
-  const roleSelect = (role: ModelRole, ariaLabel: string) => (
+  const roleSelect = (role: ModelRole, ariaLabel: string) => role === 'chat' && slotsReady && !chatModelRows(slots).some((slot) => slot.kind === 'model') ? (
+    <EmptyState size="compact" title={t({ ko: '연결된 모델이 없어', en: 'No connected models' })} action={<Button onClick={openConnections}>{t({ ko: 'AI 연결 열기', en: 'Open AI connections' })}</Button>} />
+  ) : (
     <ModelRoleSelect
       role={role}
       value={roleChoice(draft, role, slots, hasLlmContext, slotsReady)}

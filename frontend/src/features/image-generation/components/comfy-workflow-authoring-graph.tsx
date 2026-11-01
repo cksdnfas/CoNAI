@@ -3,6 +3,7 @@ import { Check, GripVertical, Plus, TriangleAlert } from 'lucide-react'
 import { Handle, Position, type Edge, type Node, type NodeProps } from '@xyflow/react'
 import type { WorkflowMarkedField } from '@/lib/api-image-generation-types'
 import { Button } from '@/components/ui/button'
+import { EmptyState } from '@/components/ui/empty-state'
 import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
@@ -714,7 +715,7 @@ function ComfyAuthoringNodeCard({ id, data }: NodeProps<AuthoringNode>) {
           })}
         </div>
       ) : (
-        <div className="mt-3 text-xs text-muted-foreground">{t('image-generation.components.comfy.workflow.authoring.graph.no.direct.inputs')}</div>
+        <EmptyState size="compact" className="mt-3" title={t('image-generation.components.comfy.workflow.authoring.graph.no.direct.inputs')} />
       )}
     </div>
   )

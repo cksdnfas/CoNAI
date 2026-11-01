@@ -424,7 +424,6 @@ export function WildcardGenerationPanel({ refreshNonce }: WildcardGenerationPane
           sidebar={(
             <WildcardExplorerSidebarPanel
               activeWorkspaceTab={activeWorkspaceTab}
-              tabLabel={activeTabLabel}
               browserEntries={browserEntries}
               browserTreeNodes={browserTreeNodes}
               filteredEntries={filteredEntries}

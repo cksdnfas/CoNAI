@@ -22,6 +22,8 @@ export type EntryItem = {
   face: ReactNode
   /** A file the picker cannot take: shown dimmed, with no checkbox, and a click does nothing. */
   disabled?: boolean
+  /** Why it is dimmed; shown with the name on hover. */
+  disabledReason?: string
 }
 
 export type EntryViewProps = {
@@ -72,7 +74,7 @@ export function FileEntryView({ items, mode, selected, onToggle, onSelectAll, ca
           const selectable = canSelect(item)
           return (
             <ActionContextMenu key={item.id} entries={menu?.(item) ?? []} onOpenChange={menuOpenChange}>
-              <div {...dragProps(item)} title={item.name} className={cn('group relative min-w-0 [-webkit-touch-callout:none]', item.disabled && 'opacity-40')}>
+              <div {...dragProps(item)} title={item.disabledReason ? `${item.name} · ${item.disabledReason}` : item.name} className={cn('group relative min-w-0 [-webkit-touch-callout:none]', item.disabled && 'opacity-40')}>
                 <MediaCard
                   onClick={() => open(item)}
                   title={<span className="line-clamp-2 whitespace-normal wrap-anywhere">{item.name}</span>}
@@ -122,7 +124,7 @@ export function FileEntryView({ items, mode, selected, onToggle, onSelectAll, ca
                 {canSelect(item) ? <Checkbox aria-label={t({ ko: '{name} 선택', en: 'Select {name}' }, { name: item.name })} checked={isSelected} onCheckedChange={(checked) => onToggle(item.id, checked === true)} /> : null}
               </DataCheckTd>
               <DataTd flush className="min-w-40">
-                <Button variant="ghost" className="max-w-full justify-start" disabled={item.disabled} onClick={() => open(item)}>
+                <Button variant="ghost" className="max-w-full justify-start" disabled={item.disabled} title={item.disabledReason} onClick={() => open(item)}>
                   {item.icon}
                   <span className="max-w-80 truncate">{item.name}</span>
                 </Button>

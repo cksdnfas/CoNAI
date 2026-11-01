@@ -3,7 +3,7 @@ import type { WorkflowNodeNumericBounds } from '@/lib/api-image-generation-types
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { Select } from '@/components/ui/select'
 import { useI18n } from '@/i18n'
-import { FormField } from '../image-generation-shared'
+import { Field } from '@/components/ui/field'
 import { DimensionInputs, ResolutionPicker } from './resolution-picker'
 import {
   MINIMAX_H3_DIRECTOR_ASPECT_OPTIONS,
@@ -53,13 +53,13 @@ export function MiniMaxH3DirectorResolutionPanel({ value, canvas, numericBounds,
 
         {!hiddenControls?.includes('resolution.input_scaling') ? <div className="space-y-1">
           {renderInputPort?.('resolution.input_scaling')}
-          <FormField label={t({ ko: '입력 스케일링', en: 'Input scaling' })}>
+          <Field label={t({ ko: '입력 스케일링', en: 'Input scaling' })}>
             <Select value={value.input_scaling} onChange={(event) => patch({ input_scaling: event.target.value as MiniMaxH3DirectorResolutionState['input_scaling'] })}>
               {MINIMAX_H3_DIRECTOR_INPUT_SCALING_OPTIONS.map((option) => (
                 <option key={option} value={option}>{option}</option>
               ))}
             </Select>
-          </FormField>
+          </Field>
         </div> : null}
       </div>
 
@@ -81,19 +81,19 @@ export function MiniMaxH3DirectorResolutionPanel({ value, canvas, numericBounds,
         <div className="space-y-3">
           <div className="max-w-xs space-y-1">
             {renderInputPort?.('resolution.custom_mode')}
-            <FormField label={t({ ko: 'CUSTOM 방식', en: 'CUSTOM mode' })}>
+            <Field label={t({ ko: 'CUSTOM 방식', en: 'CUSTOM mode' })}>
               <Select value={value.custom_mode} onChange={(event) => patch({ custom_mode: event.target.value === 'fixed' ? 'fixed' : 'mp' })}>
                 <option value="mp">{t({ ko: '메가픽셀', en: 'Megapixels' })}</option>
                 <option value="fixed">{t({ ko: '고정 픽셀', en: 'Fixed pixels' })}</option>
               </Select>
-            </FormField>
+            </Field>
           </div>
           {value.custom_mode === 'mp' ? (
             <div className="max-w-xs space-y-1">
               {renderInputPort?.('resolution.custom_mp')}
-              <FormField label="MP">
+              <Field label="MP">
                 <NumberStepperInput aria-label="MP" min={mpBounds?.min ?? 0.01} max={mpBounds?.max} step={0.01} value={String(value.custom_mp)} onValueCommit={(next) => patch({ custom_mp: Number(next) })} />
-              </FormField>
+              </Field>
             </div>
           ) : (
             <DimensionInputs

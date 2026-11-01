@@ -70,7 +70,7 @@ test('maintenance routes are admin-only and search history is per account', { ti
   await t.test('moving resource editors keeps administrator access; personal settings cannot run shared actions', async () => {
     const { requireChatPageAccess, requireChatPageActionAccess } = await import('../src/services/codex-chat/chatPageContext')
     const guest = { accountId: guestId, accountType: 'guest' as const }
-    for (const path of ['/chat/profiles', '/chat/resources', '/chat/routines', '/chat/judge']) {
+    for (const path of ['/chat/profiles', '/chat/resources', '/chat/llm', '/chat/routines', '/chat/judge']) {
       assert.throws(() => requireChatPageAccess(guest, { path, kind: 'settings', resourceId: 'chat' }), /권한/, path)
     }
     const personal = { path: '/settings', kind: 'settings' as const, resourceId: 'mine' }

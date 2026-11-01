@@ -37,13 +37,13 @@ function WorkspaceLanding({ onProject, onCreate, onStore, onSystem }: { onProjec
           {auth.data?.isAdmin ? <SystemFolderSidebarGroup active={null} onOpen={(root) => onSystem({ root, path: '' })} /> : null}
         </SidebarNav>
       )}
-      toolbar={<PageToolbar sticky title={t({ ko: '작업 공간', en: 'Workspaces' })} />}
+      toolbar={<PageToolbar sticky title={t('pageAccessCatalog.files')} />}
     >
       {query.isPending || first ? <LoadingState /> : (
         <EmptyState
           icon={FolderKanban}
-          title={t({ ko: '아직 프로젝트가 없어', en: 'No projects yet' })}
-          action={onCreate ? <Button onClick={onCreate}><Plus />{t({ ko: '새 프로젝트', en: 'New project' })}</Button> : undefined}
+          title={t({ ko: '아직 작업 공간이 없어', en: 'No workspaces yet' })}
+          action={onCreate ? <Button onClick={onCreate}><Plus />{t({ ko: '새 작업 공간', en: 'New workspace' })}</Button> : undefined}
         />
       )}
     </PageWithSidebar>

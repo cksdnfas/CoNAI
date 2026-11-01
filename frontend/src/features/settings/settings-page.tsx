@@ -21,6 +21,7 @@ import { APP_BRAND_TOOLTIP, APP_VERSION_LABEL } from '@/lib/app-metadata'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { usePluginPages } from '@/features/plugins/use-plugin-pages'
 import { useI18n } from '@/i18n'
+import { SETTINGS_ROW_BY_ID } from '@conai/shared'
 import type {
   ChatPageData,
   GenerationThrottleSettings,
@@ -33,6 +34,7 @@ import type {
   VideoOptimizationSettings,
 } from '@conai/shared'
 import type { GeneralPreferenceSection } from './components/general-preferences-sections'
+import { SectionDirtyBadge } from './components/settings-section-status'
 import { SettingsSaveBar } from './components/settings-save-bar'
 import { SettingsTabNav } from './components/settings-tab-nav'
 import { RegistrySettingsGroup, SettingsContents, SettingsGroup, SettingsJumpTarget, SettingsSearch } from './components/settings-navigation'
@@ -667,14 +669,13 @@ export function SettingsPage() {
 
           {activeTab === 'library' ? (
             <div className="space-y-8">
-              <SettingsContents groups={[{ id: 'similarity', label: t({ ko: '유사도', en: 'Similarity' }) }, { id: 'folders', label: t({ ko: '폴더', en: 'Folders' }) }, { id: 'metadata', label: t({ ko: '메타데이터', en: 'Metadata' }) }]} />
-              <SettingsGroup id="similarity" title={t({ ko: '유사도', en: 'Similarity' })}>{whenLoaded(settingsQuery, <fieldset disabled={isSavingAll} className="contents"><GeneralPreferencesSectionsLazy sections={['library']} {...generalSectionsProps} /></fieldset>)}<PageSettingsSection scope="similarity" /></SettingsGroup>
+              <SettingsContents groups={[{ id: 'similarity', label: t({ ko: '유사도', en: 'Similarity' }) }, { id: 'folders', label: t(SETTINGS_ROW_BY_ID['library.folders'].label) }, { id: 'metadata', label: t({ ko: '메타데이터', en: 'Metadata' }) }]} />
+              <SettingsGroup id="similarity" title={t({ ko: '유사도', en: 'Similarity' })} actions={<SectionDirtyBadge dirty={isGeneralSectionDirty('library')} />}>{whenLoaded(settingsQuery, <fieldset disabled={isSavingAll} className="contents"><GeneralPreferencesSectionsLazy sections={['library']} {...generalSectionsProps} /></fieldset>)}<PageSettingsSection scope="similarity" /></SettingsGroup>
               <RegistrySettingsGroup id="library.folders"><FoldersTabLazy {...foldersTabProps} /></RegistrySettingsGroup>
-              <SettingsGroup id="metadata" title={t({ ko: '메타데이터', en: 'Metadata' })}>
+              <SettingsGroup id="metadata" title={t({ ko: '메타데이터', en: 'Metadata' })} actions={<SectionDirtyBadge dirty={isMetadataDraftDirty} />}>
               {whenLoaded(settingsQuery, <fieldset disabled={isSavingAll} className="contents"><MetadataTabLazy
                 metadataDraft={effectiveMetadataDraft}
                 onPatchMetadata={patchMetadataDraft}
-                hasChanges={isMetadataDraftDirty}
               /></fieldset>)}
               </SettingsGroup>
             </div>
@@ -719,19 +720,19 @@ export function SettingsPage() {
           {activeTab === 'chat' ? <ChatSettingsTabLazy /> : null}
           {activeTab === 'llm' ? <LlmSettingsTabLazy /> : null}
 
-          {activeTab === 'accounts' ? <RegistrySettingsGroup id="accounts.access" contents><SecurityTabLazy /></RegistrySettingsGroup> : null}
-          {activeTab === 'plugins' ? <RegistrySettingsGroup id="plugins.management" contents><PluginsTabLazy /></RegistrySettingsGroup> : null}
+          {activeTab === 'accounts' ? <RegistrySettingsGroup id="accounts.access" only><SecurityTabLazy /></RegistrySettingsGroup> : null}
+          {activeTab === 'plugins' ? <RegistrySettingsGroup id="plugins.management" only><PluginsTabLazy /></RegistrySettingsGroup> : null}
 
           {activeTab === 'system' ? (
             <div className="space-y-8">
               <SettingsContents groups={[{ id: 'mcp', label: 'MCP' }, { id: 'safety', label: t({ ko: '안전·정리', en: 'Safety and cleanup' }) }]} />
               <RegistrySettingsGroup id="system.mcp"><McpHttpSettingsCardLazy /></RegistrySettingsGroup>
-              <SettingsGroup id="safety" title={t({ ko: '안전·정리', en: 'Safety and cleanup' })}>{whenLoaded(settingsQuery, <fieldset disabled={isSavingAll} className="contents"><GeneralPreferencesSectionsLazy sections={['safety']} {...generalSectionsProps} /></fieldset>)}</SettingsGroup>
+              <SettingsGroup id="safety" title={t({ ko: '안전·정리', en: 'Safety and cleanup' })} actions={<SectionDirtyBadge dirty={isGeneralSectionDirty('safety')} />}>{whenLoaded(settingsQuery, <fieldset disabled={isSavingAll} className="contents"><GeneralPreferencesSectionsLazy sections={['safety']} {...generalSectionsProps} /></fieldset>)}</SettingsGroup>
             </div>
           ) : null}
 
           {activeTab === 'maintenance' ? (
-            <RegistrySettingsGroup id="maintenance.operations" contents>
+            <RegistrySettingsGroup id="maintenance.operations" only>
             <MaintenanceTabLazy
               onScanAll={foldersTabProps.onScanAll}
               isScanningAll={foldersTabProps.isScanningAll}

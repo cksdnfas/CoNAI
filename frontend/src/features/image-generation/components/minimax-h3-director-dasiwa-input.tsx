@@ -23,7 +23,7 @@ import {
 import type { WorkflowNodeNumericBounds } from '@/lib/api-image-generation-types'
 import { isFromOwnDom } from '@/lib/portal-events'
 import { cn } from '@/lib/utils'
-import { FormField } from '../image-generation-shared'
+import { Field } from '@/components/ui/field'
 import {
   createMiniMaxH3DirectorItemId,
   createMiniMaxH3DirectorBuilderState,
@@ -709,23 +709,23 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
           {isFieldVisible('width') ? (
             <div className="space-y-1">
               {renderInputPort?.('width')}
-              <FormField label={t({ ko: '너비', en: 'Width' })}>
+              <Field label={t({ ko: '너비', en: 'Width' })}>
                 <NumberStepperInput aria-label={t({ ko: '너비', en: 'Width' })} min={numericBounds?.width?.min} max={numericBounds?.width?.max} step={1} value={widthValue} onValueCommit={(nextValue) => emit({ width: Number(nextValue) })} />
-              </FormField>
+              </Field>
             </div>
           ) : null}
           {isFieldVisible('height') ? (
             <div className="space-y-1">
               {renderInputPort?.('height')}
-              <FormField label={t({ ko: '높이', en: 'Height' })}>
+              <Field label={t({ ko: '높이', en: 'Height' })}>
                 <NumberStepperInput aria-label={t({ ko: '높이', en: 'Height' })} min={numericBounds?.height?.min} max={numericBounds?.height?.max} step={1} value={heightValue} onValueCommit={(nextValue) => emit({ height: Number(nextValue) })} />
-              </FormField>
+              </Field>
             </div>
           ) : null}
           {isFieldVisible('duration') ? (
             <div className="space-y-1">
               {renderInputPort?.('duration')}
-              <FormField label={t({ ko: '길이(초)', en: 'Duration (seconds)' })}>
+              <Field label={t({ ko: '길이(초)', en: 'Duration (seconds)' })}>
                 <NumberStepperInput
                   aria-label={t({ ko: '길이(초)', en: 'Duration (seconds)' })}
                   disabled={mode === 'Image Inpaint'}
@@ -739,13 +739,13 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
                     emit({ duration }, undefined, assets, { ...builderState, duration })
                   }}
                 />
-              </FormField>
+              </Field>
             </div>
           ) : null}
           {isFieldVisible('frame_rate') ? (
             <div className="space-y-1">
               {renderInputPort?.('frame_rate')}
-              <FormField label={t({ ko: '프레임 레이트', en: 'Frame rate' })}>
+              <Field label={t({ ko: '프레임 레이트', en: 'Frame rate' })}>
                 <NumberStepperInput
                   aria-label={t({ ko: '프레임 레이트', en: 'Frame rate' })}
                   disabled={mode === 'Image Inpaint'}
@@ -756,19 +756,19 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
                   aria-invalid={invalidFields.has('frame_rate')}
                   onValueCommit={(nextValue) => emit({ frame_rate: Number(nextValue) })}
                 />
-              </FormField>
+              </Field>
             </div>
           ) : null}
           {isFieldVisible('ref_image_size') ? (
             <div className="space-y-1">
               {renderInputPort?.('ref_image_size')}
-              <FormField label={t({ ko: '이미지 크기', en: 'Image size' })}>
+              <Field label={t({ ko: '이미지 크기', en: 'Image size' })}>
                 <Select value={refImageSizeValue} onChange={(event) => emit({ ref_image_size: event.target.value })}>
                   {refImageSizeValue === '' ? <option value="">{t({ ko: '선택', en: 'Select' })}</option> : null}
                   <option value="match">match</option>
                   <option value="max">max</option>
                 </Select>
-              </FormField>
+              </Field>
             </div>
           ) : null}
         </div>

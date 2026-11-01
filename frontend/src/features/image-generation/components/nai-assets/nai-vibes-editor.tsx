@@ -8,7 +8,8 @@ import { Textarea } from '@/components/ui/textarea'
 import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import type { StoredNaiVibeAsset } from '@/lib/api-image-generation-types'
-import { FormField, type NAIVibeDraft, type SelectedImageDraft } from '../../image-generation-shared'
+import { Field } from '@/components/ui/field'
+import type { NAIVibeDraft, SelectedImageDraft } from '../../image-generation-shared'
 import { ImageAttachmentPickerButton } from '../image-attachment-picker'
 import { NaiAssetRow } from './nai-asset-row'
 import { NaiSavedAssetBrowser, type NaiSavedAssetBrowserProps } from './nai-saved-asset-browser'
@@ -178,13 +179,13 @@ export function NaiVibesEditor({
               onStrengthCommit={(value) => onFieldChange(index, 'strength', value)}
               menuFields={(
                 <>
-                  <FormField label={t({ ko: '정보 추출량', en: 'Information Extracted' })}>
+                  <Field label={t({ ko: '정보 추출량', en: 'Information Extracted' })}>
                     <NumberStepperInput aria-label={t({ ko: '정보 추출량', en: 'Information Extracted' })} min={0.01} max={1} step={0.01} value={vibe.informationExtracted} onValueCommit={(value) => onFieldChange(index, 'informationExtracted', value)} />
-                  </FormField>
+                  </Field>
                   {onEncodedChange ? (
-                    <FormField label={t({ ko: '인코딩된 데이터', en: 'Encoded' })}>
+                    <Field label={t({ ko: '인코딩된 데이터', en: 'Encoded' })}>
                       <Textarea rows={3} value={vibe.encoded} onChange={(event) => onEncodedChange(index, event.target.value)} placeholder={t({ ko: '인코딩된 Vibe 데이터', en: 'Encoded Vibe payload' })} />
-                    </FormField>
+                    </Field>
                   ) : null}
                 </>
               )}

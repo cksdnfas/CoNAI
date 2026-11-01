@@ -1,5 +1,6 @@
 import { createContext, useContext, type ComponentType, type ReactNode } from 'react'
 import { ArrowLeft } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { SidebarItem, usePageSidebar } from '@/components/ui/sidebar'
 import { useI18n } from '@/i18n'
@@ -122,7 +123,10 @@ export function EditorPage({ crumbs, title, status, actions, nav, navLabel, stor
     <PageToolbar
       // Inside a page that already has its own sticky toolbar (Settings) a second one would stack on top of it.
       sticky={!insideSidebarPage}
-      start={(
+      start={crumbs.length === 1 && back ? (
+        // One place above: a single way back, not an arrow plus a path button to the same place.
+        <Button variant="ghost" size="sm" className="min-w-0" onClick={back.onClick}><ArrowLeft /><span className="truncate">{back.label}</span></Button>
+      ) : (
         <div className="flex min-w-0 items-center gap-1">
           {back ? <IconButton size="icon-sm" variant="ghost" label={t({ ko: '{place}(으)로 돌아가기', en: 'Back to {place}' }, { place: back.label })} onClick={back.onClick}><ArrowLeft /></IconButton> : null}
           <PathBreadcrumbs items={crumbs} ariaLabel={t({ ko: '경로', en: 'Path' })} />
