@@ -5,6 +5,7 @@ import { requireImagesView } from '../middleware/imageAccess';
 import { danbooruBrowserService } from '../services/danbooruBrowserService';
 import { toPublicDanbooruDbInfo } from '../services/danbooruBrowser/dbResolver';
 import { danbooruReleaseInstaller } from '../services/danbooruBrowser/releaseInstaller';
+import { catalogFacetDimensions } from '../services/characterAppearanceTags';
 
 const router = Router();
 
@@ -65,7 +66,14 @@ router.get('/characters', asyncHandler(async (req: Request, res: Response) => {
     relatedTagScoreMin: req.query.relatedTagScoreMin,
     relatedTagScoreMax: req.query.relatedTagScoreMax,
     relatedTagLimit: req.query.relatedTagLimit,
+    ...(typeof req.query.tags === 'string' && req.query.tags ? { tags: req.query.tags.split(',').map((tag) => tag.trim()).filter(Boolean) } : {}),
+    ...(req.query.sort === 'name' ? { sort: 'name' as const } : {}),
   }));
+}));
+
+// The character catalog's filter choices (hair and eye colours…), from the taxonomy; empty without a dictionary.
+router.get('/character-facets', asyncHandler(async (_req: Request, res: Response) => {
+  sendSuccess(res, { available: danbooruBrowserService.isAvailable(), dimensions: catalogFacetDimensions() });
 }));
 
 router.get('/character-images/:tagId/:fileName', requireImagesView, asyncHandler(async (req: Request, res: Response) => {

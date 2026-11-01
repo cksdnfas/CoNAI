@@ -1028,6 +1028,8 @@ export function createUserSettingsSchema(db: Database.Database): void {
     ['character_setting_id', 'INTEGER REFERENCES character_settings(id) ON DELETE SET NULL'],
     ['folder_id', 'INTEGER REFERENCES chat_profile_folders(id) DEFERRABLE INITIALLY DEFERRED'],
     ['character_sync', 'INTEGER NOT NULL DEFAULT 0 CHECK(character_sync IN (0, 1))'],
+    // The linked setting's outfit by name (null: its default outfit).
+    ['character_outfit', 'TEXT'],
     ['background_hash', 'TEXT'],
     ['vision_enabled', 'INTEGER'],
     // Page assistant: the chat may be connected to the current CoNAI page (the monitor button). Off unless switched on.
@@ -1063,6 +1065,9 @@ export function createUserSettingsSchema(db: Database.Database): void {
     ['agent_description', "TEXT NOT NULL DEFAULT ''"],
     // JSON [{ id, write }]: file store folders and files the profile's characters may open in any chat of their owner.
     ['linked_files', 'TEXT'],
+    // The project workspace (workspace_projects, no foreign key) its 1:1 chats, group turns and board calls work in unless a chat picks another, and whether they may write.
+    ['workspace_id', 'TEXT'],
+    ['workspace_write', 'INTEGER NOT NULL DEFAULT 0'],
     // Judge preset (chat_judge_presets; no foreign key, like the slots) and an override of its judge connection.
     ['judge_preset_id', 'INTEGER'],
     ['judge_provider_name', 'TEXT'],

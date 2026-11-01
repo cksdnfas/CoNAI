@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useLibraryLocation, positiveLibraryId as positiveId } from '@/components/common/use-library-location'
 import { LibraryFolderContent, libraryFolderView } from '@/components/common/library-folder-content'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
@@ -8,8 +8,14 @@ import { ChatProfileEditorPage } from '@/features/settings/components/chat-profi
 import { ChatSettingsProfiles } from '@/features/settings/components/chat-settings-profiles'
 import { registerTranslationCatalog } from '@/i18n'
 import { settingsCatalog } from '@/i18n/resources/settings'
-import { FolderInput, FolderPlus, Pencil, Plus, SquarePen, Trash2, UserRound } from 'lucide-react'
+import { CheckCheck, CheckSquare, Copy, Download, FolderInput, FolderPlus, Pencil, Plus, SquarePen, Star, StarOff, Trash2, Upload, UserRound } from 'lucide-react'
 import { NameDialog } from '@/components/common/entry-dialogs'
+import { SelectionActionBar, SelectionBarAction } from '@/components/common/selection-action-bar'
+import { ToggleChip } from '@/components/ui/chip'
+import { Select } from '@/components/ui/select'
+import { ImageListColumnFloatingControl } from '@/features/images/components/image-list/image-list-column-floating-control'
+import { useImageListColumnPreference } from '@/features/images/components/image-list/image-list-column-preferences'
+import { copyTextToClipboard } from '@/lib/clipboard'
 import { PageToolbar } from '@/components/common/page-toolbar'
 import { PageWithSidebar } from '@/components/common/page-with-sidebar'
 import { PathBreadcrumbs } from '@/components/common/path-breadcrumbs'
@@ -24,8 +30,17 @@ import { RowGroup } from '@/components/ui/row-group'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
 import { useI18n } from '@/i18n'
+import type { CharacterSettingBulkInput } from '@conai/shared'
 import {
+  CHARACTER_LIBRARY_QUERY_KEY,
   CHARACTER_SETTINGS_PAGE_SIZE,
+  CHARACTER_SETTINGS_PAGE_SIZES,
+  bulkCharacterSettings,
+  downloadCharacterLibraryExport,
+  getCharacterSetting,
+  importCharacterLibrary,
+  type CharacterSettingFilters,
+  type CharacterSettingSort,
   createCharacterFolder,
   createCharacterSetting,
   deleteCharacterFolder,
@@ -40,7 +55,9 @@ import {
   type CharacterSettingSummary,
 } from '@/lib/api-character-library'
 import { getErrorMessage } from '@/lib/error-message'
-import { folderSubtreeIds, refreshCharacterViews, useCharacterFolders, useCharacterSettingsPage } from './character-library-shared'
+import { folderSubtreeIds, refreshCharacterViews, useCharacterFacets, useCharacterFolders, useCharacterSettingsPage } from './character-library-shared'
+import { CharacterCatalogPage } from './character-catalog-page'
+import { CharacterFacetPanel, hasActiveFilters } from './components/character-facet-panel'
 import { CharacterFolderPickerModal, CharacterFolderSidebar } from './components/character-folder-nav'
 import { CharacterSettingCard } from './components/character-setting-card'
 import { CharacterSettingGrid } from './components/character-setting-grid'
@@ -63,30 +80,57 @@ registerTranslationCatalog(settingsCatalog)
 export function CharacterLibraryPage() {
   const permissions = useFeaturePermissions()
   const [params] = useSearchParams()
-  if (!permissions.isAdmin || params.get('view') !== 'profiles' || params.has('setting') || params.has('new')) return <AppearanceLibraryPage />
+  const view = params.get('view')
+  if (params.has('setting') || params.has('new')) return <AppearanceLibraryPage />
+  if (view === 'catalog' && permissions.has('prompts.view')) return <CharacterCatalogPage viewSwitch={<CharacterViewSwitch />} />
+  if (!permissions.isAdmin || view !== 'profiles') return <AppearanceLibraryPage />
   if (params.has('profile')) return <ChatProfileEditorPage />
   return <ChatSettingsProfiles viewSwitch={<CharacterViewSwitch />} />
 }
 
-/** Administrators switch the page between the appearance library and the chat profiles; the switch leads the toolbar. */
+/**
+ * The page's views: the appearance library, the Danbooru character catalog (with the dictionary's `prompts.view`) and
+ * (administrators) the chat profiles; the switch leads the toolbar and shows when there is more than one.
+ */
 function CharacterViewSwitch() {
   const { t } = useI18n()
   const permissions = useFeaturePermissions()
   const [params, setParams] = useSearchParams()
-  if (!permissions.isAdmin) return null
+  const items = [
+    { value: 'appearance', label: t({ ko: '외형 라이브러리', en: 'Appearance library' }) },
+    ...(permissions.has('prompts.view') ? [{ value: 'catalog', label: t({ ko: '캐릭터 카탈로그', en: 'Character catalog' }) }] : []),
+    ...(permissions.isAdmin ? [{ value: 'profiles', label: t({ ko: '채팅 프로필', en: 'Chat profiles' }) }] : []),
+  ]
+  if (items.length < 2) return null
+  const view = params.get('view')
   return (
     <SegmentedControl
-      value={params.get('view') === 'profiles' ? 'profiles' : 'appearance'}
-      onChange={(value) => setParams(value === 'profiles' ? { view: 'profiles' } : {})}
+      value={view === 'profiles' || view === 'catalog' ? view : 'appearance'}
+      onChange={(value) => setParams(value === 'appearance' ? {} : { view: value })}
       size="sm"
       semantics="tabs"
       ariaLabel={t({ ko: '캐릭터 보기', en: 'Character views' })}
-      items={[
-        { value: 'appearance', label: t({ ko: '외형 라이브러리', en: 'Appearance library' }) },
-        { value: 'profiles', label: t({ ko: '채팅 프로필', en: 'Chat profiles' }) },
-      ]}
+      items={items}
     />
   )
+}
+
+const SORTS: readonly CharacterSettingSort[] = ['name', 'updated', 'created', 'created_asc']
+const PAGE_SIZE_STORAGE_KEY = 'conai:characters:page-size:v1'
+function readPageSize() {
+  try {
+    const stored = Number(window.localStorage.getItem(PAGE_SIZE_STORAGE_KEY))
+    return (CHARACTER_SETTINGS_PAGE_SIZES as readonly number[]).includes(stored) ? stored : CHARACTER_SETTINGS_PAGE_SIZE
+  } catch { return CHARACTER_SETTINGS_PAGE_SIZE }
+}
+/** The URL's `f` (filters as JSON); anything malformed reads as no filters. */
+function parseFilters(value: string | null): CharacterSettingFilters {
+  if (!value) return {}
+  try {
+    const parsed = JSON.parse(value) as unknown
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {}
+    return Object.fromEntries(Object.entries(parsed).filter((entry): entry is [string, string[]] => Array.isArray(entry[1]) && entry[1].every((tag) => typeof tag === 'string')))
+  } catch { return {} }
 }
 
 function AppearanceLibraryPage() {
@@ -96,7 +140,31 @@ function AppearanceLibraryPage() {
   const queryClient = useQueryClient()
   const permissions = useFeaturePermissions()
   const canEdit = permissions.has('characters.edit')
-  const { params: searchParams, folderId, query, page, searchText, setSearchText, update, openFolder, search } = useLibraryLocation(CHARACTER_SETTINGS_PAGE_SIZE)
+  const [pageSize, setPageSizeState] = useState(readPageSize)
+  const { params: searchParams, folderId, query, page, searchText, setSearchText, update, openFolder, search } = useLibraryLocation(pageSize)
+  const sortParam = searchParams.get('sort') as CharacterSettingSort | null
+  const sort: CharacterSettingSort = sortParam && SORTS.includes(sortParam) ? sortParam : 'name'
+  const favoriteOnly = searchParams.get('fav') === '1'
+  const filters = parseFilters(searchParams.get('f'))
+  // Filters and favorites look across the whole library, like a name search.
+  const filtering = favoriteOnly || hasActiveFilters(filters)
+  const setListView = (changes: { sort?: CharacterSettingSort; favorite?: boolean; filters?: CharacterSettingFilters }) => update({
+    ...(changes.sort !== undefined ? { sort: changes.sort === 'name' ? null : changes.sort } : {}),
+    ...(changes.favorite !== undefined ? { fav: changes.favorite ? '1' : null } : {}),
+    ...(changes.filters !== undefined ? { f: hasActiveFilters(changes.filters) ? JSON.stringify(changes.filters) : null } : {}),
+    page: null,
+  })
+  const setPageSize = (size: number) => {
+    setPageSizeState(size)
+    try { window.localStorage.setItem(PAGE_SIZE_STORAGE_KEY, String(size)) } catch { /* private mode: this session only */ }
+    update({ page: null })
+  }
+  const columns = useImageListColumnPreference('characters')
+  /** Settings chosen for a bulk action, kept across pages; `selectMode` makes a card click choose instead of open. */
+  const [selected, setSelected] = useState<ReadonlyMap<number, CharacterSettingSummary>>(new Map())
+  const [selectMode, setSelectMode] = useState(false)
+  const [bulkMoving, setBulkMoving] = useState(false)
+  const importInput = useRef<HTMLInputElement | null>(null)
   const openSettingId = positiveId(searchParams.get('setting'))
   // `new`: a new setting drafted in a folder (`root` for the top level); an open saved setting wins.
   const newParam = searchParams.get('new')
@@ -112,9 +180,10 @@ function AppearanceLibraryPage() {
   const foldersQuery = useCharacterFolders()
   const folders = foldersQuery.data ?? []
   const { currentFolder, path, subfolders, folderMissing } = libraryFolderView(folders, folderId, foldersQuery.isSuccess)
-  const scope = { folder: query ? 'all' as const : folderId ?? 'root' as const, query, offset: page * CHARACTER_SETTINGS_PAGE_SIZE, limit: CHARACTER_SETTINGS_PAGE_SIZE }
+  const scope = { folder: query || filtering ? 'all' as const : folderId ?? 'root' as const, query, offset: page * pageSize, limit: pageSize, favorite: favoriteOnly, filters, sort }
   const settingsQuery = useCharacterSettingsPage(scope, !folderMissing)
   const settingsPage = settingsQuery.data
+  const facetsQuery = useCharacterFacets({ folder: 'all', query, favorite: favoriteOnly, filters })
 
   const target: SettingEditorTarget = openSettingId !== null ? { settingId: openSettingId } : newIn ? { newIn: newIn.folderId } : null
   const editor = useCharacterSettingEditor({
@@ -125,7 +194,7 @@ function AppearanceLibraryPage() {
 
   const onError = (error: unknown, fallback: string) => showSnackbar({ message: getErrorMessage(error, fallback), tone: 'error' })
   const createMutation = useMutation({
-    mutationFn: (input: { folderId: number | null; name: string }) => createCharacterSetting({ ...input, appearance: '' }),
+    mutationFn: (input: { folderId: number | null; name: string }) => createCharacterSetting(input),
     onSuccess: (setting) => {
       setCreating(null)
       void refreshCharacterViews(queryClient, { folderIds: [setting.folderId], settingIds: [setting.id] })
@@ -195,16 +264,79 @@ function AppearanceLibraryPage() {
     }
   }
 
+  const bulkMutation = useMutation({
+    mutationFn: (input: CharacterSettingBulkInput) => bulkCharacterSettings(input),
+    onSuccess: (_, input) => {
+      const settings = input.ids.map((id) => selected.get(id) ?? settingsPage?.items.find((item) => item.id === id)).filter((item): item is CharacterSettingSummary => Boolean(item))
+      void refreshCharacterViews(queryClient, { folderIds: [...settings.map((setting) => setting.folderId), ...(input.action === 'move' ? [input.folderId] : [])], settingIds: input.ids, foldersChanged: input.action !== 'favorite' })
+      if (input.action !== 'favorite' || input.ids.length > 1) { setSelected(new Map()); setSelectMode(false) }
+      setBulkMoving(false)
+    },
+    onError: (error) => onError(error, t({ ko: '선택한 외형 설정을 바꾸지 못했어.', en: 'Could not change the selected settings.' })),
+  })
+  const toggleFavorite = (setting: CharacterSettingSummary) => bulkMutation.mutate({ action: 'favorite', ids: [setting.id], favorite: !setting.favorite })
+  const deleteSelected = async () => {
+    const settings = [...selected.values()]
+    const linked = settings.reduce((sum, setting) => sum + setting.linkedProfileCount, 0)
+    const ok = await confirm({
+      title: t({ ko: '외형 설정 {count}개 삭제', en: 'Delete {count} settings' }, { count: settings.length }),
+      description: [
+        t({ ko: '선택한 외형 설정을 모두 지울까? 이미지와 그룹은 남아.', en: 'Delete every selected setting? Images and groups stay.' }),
+        linked ? t({ ko: '연결된 프로필 {count}개는 지금 값의 사본을 유지해.', en: '{count} linked profiles keep a copy of the values.' }, { count: linked }) : '',
+      ].filter(Boolean).join('\n'),
+      confirmLabel: t({ ko: '삭제', en: 'Delete' }),
+      tone: 'destructive',
+    })
+    if (ok) bulkMutation.mutate({ action: 'delete', ids: settings.map((setting) => setting.id) })
+  }
+  const copyTags = async (setting: CharacterSettingSummary) => {
+    try {
+      await copyTextToClipboard((await getCharacterSetting(setting.id)).appearance)
+      showSnackbar({ message: t({ ko: '‘{name}’ 외형 태그를 복사했어.', en: 'Copied the tags of ‘{name}’.' }, { name: setting.name }), tone: 'info' })
+    } catch (error) { onError(error, t({ ko: '복사하지 못했어.', en: 'Could not copy.' })) }
+  }
+  const exportSettings = async (input: { ids: number[] } | { folderId: number | null }, name: string) => {
+    try {
+      const count = await downloadCharacterLibraryExport(input, name)
+      showSnackbar({ message: t({ ko: '외형 설정 {count}개를 내보냈어.', en: 'Exported {count} settings.' }, { count }), tone: 'info' })
+    } catch (error) { onError(error, t({ ko: '내보내지 못했어.', en: 'Could not export.' })) }
+  }
+  const importFile = async (file: File) => {
+    try {
+      const result = await importCharacterLibrary(query || filtering ? null : folderId, file)
+      void refreshCharacterViews(queryClient, { folderIds: [folderId], settingIds: [], foldersChanged: true })
+      void queryClient.invalidateQueries({ queryKey: [CHARACTER_LIBRARY_QUERY_KEY, 'settings'] })
+      showSnackbar({
+        message: [
+          t({ ko: '외형 설정 {settings}개, 폴더 {folders}개를 가져왔어.', en: 'Imported {settings} settings and {folders} folders.' }, { settings: result.createdSettings, folders: result.createdFolders }),
+          result.renamed ? t({ ko: '이름이 겹친 {count}개는 번호를 붙였어.', en: '{count} taken names got a number.' }, { count: result.renamed }) : '',
+          result.importedImages ? t({ ko: '이미지 {count}장을 라이브러리에 넣었어.', en: 'Added {count} images to the library.' }, { count: result.importedImages }) : '',
+          result.droppedImages ? t({ ko: '쓸 수 없는 이미지 {count}장은 빼고 가져왔어.', en: '{count} unusable images were left out.' }, { count: result.droppedImages }) : '',
+        ].filter(Boolean).join(' '),
+        tone: 'info',
+      })
+    } catch (error) { onError(error, t({ ko: '가져오지 못했어. CoNAI에서 내보낸 외형 묶음 ZIP인지 확인해줘.', en: 'Could not import. Check that it is a bundle ZIP exported from CoNAI.' })) }
+  }
+  const toggleSelected = (setting: CharacterSettingSummary) => setSelected((current) => {
+    const next = new Map(current)
+    if (next.has(setting.id)) next.delete(setting.id)
+    else next.set(setting.id, setting)
+    return next
+  })
+
   const folderMenu = (folder: CharacterFolder): ActionMenuEntry[] => canEdit ? [
     { key: 'subfolder', label: t({ ko: '하위 폴더 추가', en: 'Add subfolder' }), icon: FolderPlus, onSelect: () => setNameDialog({ mode: 'create', parentId: folder.id, name: '' }) },
     { key: 'setting', label: t({ ko: '외형 설정 추가', en: 'Add appearance setting' }), icon: Plus, onSelect: () => setCreating({ folderId: folder.id }) },
     { key: 'rename', label: t({ ko: '이름 바꾸기', en: 'Rename' }), icon: Pencil, onSelect: () => setNameDialog({ mode: 'rename', folder, name: folder.name }) },
     { key: 'move', label: t({ ko: '다른 위치로 옮기기', en: 'Move to…' }), icon: FolderInput, onSelect: () => setMoving({ kind: 'folder', folder }) },
+    { key: 'export', label: t({ ko: '폴더 내보내기', en: 'Export folder' }), icon: Download, onSelect: () => void exportSettings({ folderId: folder.id }, folder.name) },
     '-',
     { key: 'delete', label: t({ ko: '폴더 삭제', en: 'Delete folder' }), icon: Trash2, destructive: true, onSelect: () => void deleteFolder(folder) },
   ] : []
   const settingMenu = (setting: CharacterSettingSummary): ActionMenuEntry[] => [
     { key: 'open', label: canEdit ? t({ ko: '편집', en: 'Edit' }) : t({ ko: '열기', en: 'Open' }), icon: SquarePen, onSelect: () => openSetting(setting.id) },
+    { key: 'copy', label: t({ ko: '외형 태그 복사', en: 'Copy appearance tags' }), icon: Copy, onSelect: () => void copyTags(setting) },
+    canEdit ? { key: 'select', label: selected.has(setting.id) ? t({ ko: '선택 해제', en: 'Deselect' }) : t({ ko: '선택', en: 'Select' }), icon: CheckSquare, onSelect: () => { setSelectMode(true); toggleSelected(setting) } } : null,
     canEdit ? { key: 'move', label: t({ ko: '다른 폴더로 옮기기', en: 'Move to…' }), icon: FolderInput, onSelect: () => setMoving({ kind: 'setting', setting }) } : null,
     canEdit ? '-' : null,
     canEdit ? { key: 'delete', label: t({ ko: '삭제', en: 'Delete' }), icon: Trash2, destructive: true, onSelect: () => void deleteSetting(setting) } : null,
@@ -213,17 +345,23 @@ function AppearanceLibraryPage() {
   useCharacterLibraryChatPage({
     folders, folderId, path, subfolders, query, settingsPage, offset: scope.offset, editor, canEdit,
     openFolder, search, openSetting, newSetting,
+    createFolder: (parentId, name) => nameMutation.mutateAsync({ mode: 'create', parentId, name }),
+    renameFolder: (folder, name) => nameMutation.mutateAsync({ mode: 'rename', folder, name }),
+    moveFolder: (folder, parentId) => moveMutation.mutateAsync({ state: { kind: 'folder', folder }, to: parentId }),
+    sort, favoriteOnly, filters, facets: facetsQuery.data, setListView,
+    bulk: (input) => bulkMutation.mutateAsync(input),
   })
 
   const rootLabel = t('characterLibraryPage.title')
   if (editor.open) {
     return <CharacterSettingEditorPage editor={editor} folders={folders} canEdit={canEdit} admin={permissions.isAdmin} rootLabel={rootLabel} onOpenFolder={(id) => openFolder(id)} />
   }
+  const pageItems = settingsPage?.items ?? []
   const toolbar = (
     <PageToolbar
       start={<>
         <CharacterViewSwitch />
-        {query ? <Heading level={3} as="h1" className="truncate">{t({ ko: '‘{query}’ 검색 결과', en: 'Results for ‘{query}’' }, { query })}</Heading> : (
+        {query ? <Heading level={3} as="h1" className="truncate">{t({ ko: '‘{query}’ 검색 결과', en: 'Results for ‘{query}’' }, { query })}</Heading> : filtering ? <Heading level={3} as="h1" className="truncate">{t({ ko: '라이브러리 전체 · 필터 결과', en: 'Whole library · filtered' })}</Heading> : (
           <PathBreadcrumbs
             ariaLabel={t({ ko: '폴더 경로', en: 'Folder path' })}
             items={[{ key: 'root', label: rootLabel, onClick: () => openFolder(null) }, ...path.map((folder) => ({ key: String(folder.id), label: folder.name, onClick: () => openFolder(folder.id) }))]}
@@ -232,13 +370,31 @@ function AppearanceLibraryPage() {
       </>}
       actions={(
         <>
-          {canEdit ? <IconButton variant="ghost" size="icon-sm" label={t({ ko: '새 폴더', en: 'New folder' })} onClick={() => setNameDialog({ mode: 'create', parentId: query ? null : folderId, name: '' })}><FolderPlus /></IconButton> : null}
-          {currentFolder && !query && canEdit ? <ActionMenuButton entries={folderMenu(currentFolder)} label={t({ ko: '폴더 작업', en: 'Folder actions' })} /> : null}
-          {canEdit ? <Button size="sm" onClick={() => setCreating({ folderId: query ? null : folderId })}><Plus />{t({ ko: '새 외형 설정', en: 'New appearance setting' })}</Button> : null}
+          <Select variant="default" controlSize="compact" className="w-auto" aria-label={t({ ko: '정렬', en: 'Sort' })} value={sort} onChange={(event) => setListView({ sort: event.target.value as CharacterSettingSort })}>
+            <option value="name">{t({ ko: '이름순', en: 'Name' })}</option>
+            <option value="updated">{t({ ko: '최근 수정순', en: 'Recently edited' })}</option>
+            <option value="created">{t({ ko: '최근 추가순', en: 'Newest' })}</option>
+            <option value="created_asc">{t({ ko: '오래된 순', en: 'Oldest' })}</option>
+          </Select>
+          <ToggleChip pressed={favoriteOnly} onClick={() => setListView({ favorite: !favoriteOnly })}><Star className={favoriteOnly ? 'fill-current' : undefined} />{t({ ko: '즐겨찾기', en: 'Favorites' })}</ToggleChip>
+          {canEdit ? <IconButton variant="ghost" size="icon-sm" active={selectMode} label={selectMode ? t({ ko: '선택 끝내기', en: 'Stop selecting' }) : t({ ko: '여러 개 선택', en: 'Select several' })} onClick={() => { if (selectMode) setSelected(new Map()); setSelectMode(!selectMode) }}><CheckSquare /></IconButton> : null}
+          <ActionMenuButton
+            label={t({ ko: '라이브러리 작업', en: 'Library actions' })}
+            entries={[
+              ...CHARACTER_SETTINGS_PAGE_SIZES.map((size) => ({ key: `size-${size}`, label: t({ ko: '한 쪽에 {count}개', en: '{count} per page' }, { count: size }), checked: pageSize === size, onSelect: () => setPageSize(size) })),
+              '-',
+              { key: 'export', label: query || filtering || folderId === null ? t({ ko: '라이브러리 전체 내보내기', en: 'Export the whole library' }) : t({ ko: '이 폴더 내보내기', en: 'Export this folder' }), icon: Download, onSelect: () => void exportSettings({ folderId: query || filtering ? null : folderId }, currentFolder && !query && !filtering ? currentFolder.name : rootLabel) },
+              canEdit ? { key: 'import', label: t({ ko: '외형 묶음 ZIP 가져오기', en: 'Import a settings bundle' }), icon: Upload, onSelect: () => importInput.current?.click() } : null,
+            ]}
+          />
+          {canEdit ? <IconButton variant="ghost" size="icon-sm" label={t({ ko: '새 폴더', en: 'New folder' })} onClick={() => setNameDialog({ mode: 'create', parentId: query || filtering ? null : folderId, name: '' })}><FolderPlus /></IconButton> : null}
+          {currentFolder && !query && !filtering && canEdit ? <ActionMenuButton entries={folderMenu(currentFolder)} label={t({ ko: '폴더 작업', en: 'Folder actions' })} /> : null}
+          {canEdit ? <Button size="sm" onClick={() => setCreating({ folderId: query || filtering ? null : folderId })}><Plus />{t({ ko: '새 외형 설정', en: 'New appearance setting' })}</Button> : null}
+          <input ref={importInput} type="file" accept=".zip,application/zip" hidden onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ''; if (file) void importFile(file) }} />
         </>
       )}
     >
-      <ToolbarSearchField value={searchText} onChange={setSearchText} placeholder={t({ ko: '외형 설정 이름 검색', en: 'Search settings by name' })} />
+      <ToolbarSearchField value={searchText} onChange={setSearchText} placeholder={t({ ko: '이름·태그·한국어 태그 검색', en: 'Search names and tags' })} />
     </PageToolbar>
   )
 
@@ -246,27 +402,77 @@ function AppearanceLibraryPage() {
     <PageWithSidebar
       storageKey="characters"
       sidebarLabel={t('characterLibraryPage.folders')}
-      sidebar={<CharacterFolderSidebar folders={folders} selectedId={query ? null : folderId} loading={foldersQuery.isPending} error={foldersQuery.isError ? foldersQuery.error : null} onSelect={(id) => openFolder(id)} onCreate={canEdit ? () => setNameDialog({ mode: 'create', parentId: folderId, name: '' }) : undefined} getMenu={canEdit ? folderMenu : undefined} />}
+      sidebar={(
+        <div className="space-y-3">
+          <CharacterFolderSidebar folders={folders} selectedId={query || filtering ? null : folderId} loading={foldersQuery.isPending} error={foldersQuery.isError ? foldersQuery.error : null} onSelect={(id) => openFolder(id)} onCreate={canEdit ? () => setNameDialog({ mode: 'create', parentId: folderId, name: '' }) : undefined} getMenu={canEdit ? folderMenu : undefined} />
+          <CharacterFacetPanel facets={facetsQuery.data} filters={filters} loading={facetsQuery.isPending} onChange={(next) => setListView({ filters: next })} />
+        </div>
+      )}
       toolbar={toolbar}
     >
-      <LibraryFolderContent folderMissing={folderMissing} subfolders={subfolders} query={query} rootLabel={rootLabel} onOpen={openFolder} getMenu={folderMenu}>
+      <LibraryFolderContent folderMissing={folderMissing} subfolders={filtering ? [] : subfolders} query={query} rootLabel={rootLabel} onOpen={openFolder} getMenu={folderMenu}>
           <RowGroup heading={t('characterLibraryPage.settings')} count={settingsPage?.total}>
             <CharacterSettingGrid
               errorTitle={t({ ko: '외형 설정을 불러오지 못했어', en: 'Could not load settings' })}
               query={settingsQuery}
               page={page}
+              columns={columns.columnCount}
               onPageChange={(next) => update({ page: next > 0 ? String(next) : null })}
-              renderSetting={(setting) => <CharacterSettingCard key={setting.id} setting={setting} onOpen={() => openSetting(setting.id)} menu={settingMenu(setting)} />}
+              renderSetting={(setting) => (
+                <CharacterSettingCard
+                  key={setting.id}
+                  setting={setting}
+                  selected={selectMode ? selected.has(setting.id) : undefined}
+                  onOpen={() => (selectMode ? toggleSelected(setting) : openSetting(setting.id))}
+                  onToggleFavorite={canEdit && !selectMode ? () => toggleFavorite(setting) : undefined}
+                  menu={settingMenu(setting)}
+                />
+              )}
               empty={(
                 <EmptyState
                   icon={UserRound}
-                  title={query ? t({ ko: '맞는 외형 설정이 없어', en: 'No matching settings' }) : t({ ko: '여기엔 외형 설정이 없어', en: 'No appearance settings here' })}
-                  action={!query && canEdit ? <Button size="sm" onClick={() => setCreating({ folderId })}><Plus />{t({ ko: '새 외형 설정', en: 'New appearance setting' })}</Button> : undefined}
+                  title={query || filtering ? t({ ko: '맞는 외형 설정이 없어', en: 'No matching settings' }) : t({ ko: '여기엔 외형 설정이 없어', en: 'No appearance settings here' })}
+                  action={!query && !filtering && canEdit ? <Button size="sm" onClick={() => setCreating({ folderId })}><Plus />{t({ ko: '새 외형 설정', en: 'New appearance setting' })}</Button> : undefined}
                 />
               )}
             />
           </RowGroup>
       </LibraryFolderContent>
+
+      <ImageListColumnFloatingControl
+        value={columns.columnCount}
+        defaultValue={columns.defaultColumnCount}
+        min={columns.minColumnCount}
+        max={columns.maxColumnCount}
+        onChange={columns.setColumnCount}
+        onReset={columns.resetColumnCount}
+        aboveSelectionBar={selected.size > 0}
+      />
+      {canEdit ? (
+        <SelectionActionBar
+          selectedCount={selected.size}
+          onClear={() => { setSelected(new Map()); setSelectMode(false) }}
+          responsiveActions
+          actions={<>
+            <SelectionBarAction icon={CheckCheck} label={t({ ko: '이 쪽 전부 선택', en: 'Select this page' })} variant="ghost" disabled={!pageItems.length} onClick={() => setSelected((current) => new Map([...current, ...pageItems.map((item) => [item.id, item] as const)]))} />
+            <SelectionBarAction icon={Star} label={t({ ko: '즐겨찾기', en: 'Favorite' })} disabled={bulkMutation.isPending} onClick={() => bulkMutation.mutate({ action: 'favorite', ids: [...selected.keys()], favorite: true })} />
+            <SelectionBarAction icon={StarOff} label={t({ ko: '즐겨찾기 해제', en: 'Unfavorite' })} disabled={bulkMutation.isPending} onClick={() => bulkMutation.mutate({ action: 'favorite', ids: [...selected.keys()], favorite: false })} />
+            <SelectionBarAction icon={Download} label={t({ ko: '내보내기', en: 'Export' })} onClick={() => void exportSettings({ ids: [...selected.keys()] }, t({ ko: '선택한 외형', en: 'selected settings' }))} />
+            <SelectionBarAction icon={Trash2} label={t({ ko: '삭제', en: 'Delete' })} disabled={bulkMutation.isPending} onClick={() => void deleteSelected()} />
+            <SelectionBarAction icon={FolderInput} label={t({ ko: '다른 폴더로 옮기기', en: 'Move to…' })} variant="default" disabled={bulkMutation.isPending} onClick={() => setBulkMoving(true)} />
+          </>}
+        />
+      ) : null}
+      {bulkMoving ? (
+        <CharacterFolderPickerModal
+          title={t({ ko: '외형 설정 {count}개 옮기기', en: 'Move {count} settings' }, { count: selected.size })}
+          folders={folders}
+          value={null}
+          busy={bulkMutation.isPending}
+          onPick={(to) => bulkMutation.mutate({ action: 'move', ids: [...selected.keys()], folderId: to })}
+          onClose={() => setBulkMoving(false)}
+        />
+      ) : null}
 
       {creating ? (
         <CharacterSettingSaveDialog

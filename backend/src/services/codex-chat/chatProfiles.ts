@@ -11,10 +11,11 @@ import { ChatGenerationPresetStore, normalizeGenerationPresetIds } from './chatG
 import { contentRatingTier, LLM_CONNECTION_TYPES, MODEL_CONNECTION_TYPES, ModelSlotStore } from './modelSlots'
 import { ChatJudgePresetStore } from './chatJudgePresets'
 import { normalizeLinkedFiles, type LinkedFileLink } from './chatLinkedFiles'
+import { WorkspaceService } from '../workspaceService'
 import { chatCharacterGroupPath, fileProfileAssetsUnderGroup, renameCharacterGroup, normalizeAvatarCrop, normalizeProfileAssetHash, type ChatAvatarCrop } from './chatProfileAssets'
 import { keptGreetingPosition, normalizeGreetingPosition, normalizeOpeningHistory, TEXT_MAX_LENGTH, type ChatOpeningMessage } from './chatOpeningHistory'
 import type { ChatProfileCharacterLink, ChatProfileCharacterLinkInput } from '@conai/shared'
-import { CHARACTER_APPEARANCE_FIELDS, CHARACTER_PROFILE_COLUMNS, characterProfileDependencies, effectiveCharacterProfile, normalizeCharacterLink, detachedCharacterFields, storedCharacterStyle, type CharacterProfileRow } from './chatProfileCharacters'
+import { CHARACTER_APPEARANCE_FIELDS, CHARACTER_PROFILE_COLUMNS, characterLinkOutfit, characterProfileDependencies, effectiveCharacterProfile, normalizeCharacterLink, detachedCharacterFields, storedCharacterStyle, type CharacterProfileRow } from './chatProfileCharacters'
 import { characterChanged } from '../characterLibrary'
 import { attachMainImagesDatabase } from '../../database/userSettingsBootstrap'
 import { checkedProfileFolder } from './chatProfileFolders'
@@ -226,6 +227,8 @@ export type ChatProfile = {
   agentDescription: string
   /** File store folders and text files its characters may open (and write, where `write`) in any chat of the owner. */
   linkedFiles: LinkedFileLink[]
+  /** The project workspace it works in (1:1 and group chats, board calls) unless the chat picks another (see WorkspaceService.effective). */
+  workspace: { id: string; write: boolean } | null
   /**
    * The judge preset (chat_judge_presets) that steers each turn; null judges nothing (the chat behaves as without a
    * judge). A preset that went missing reads as null.
@@ -345,6 +348,8 @@ type ProfileRow = CharacterProfileRow & {
   agent_enabled: number | null
   agent_description: string | null
   linked_files: string | null
+  workspace_id: string | null
+  workspace_write: number | null
   judge_preset_id: number | null
   judge_provider_name: string | null
   judge_model: string | null
@@ -505,6 +510,7 @@ function toProfile(row: ProfileRow, dependencies?: ProfileListDependencies): Cha
     agentEnabled: row.agent_enabled === 1,
     agentDescription: row.agent_description ?? '',
     linkedFiles: normalizeLinkedFiles(row.linked_files),
+    workspace: row.workspace_id ? { id: row.workspace_id, write: row.workspace_write === 1 } : null,
     judgePresetId: dependencies ? row.judge_preset_id !== null && dependencies.judges.has(row.judge_preset_id) ? row.judge_preset_id : null : ChatJudgePresetStore.existing(row.judge_preset_id),
     judgeSlotId: slot(row.judge_slot_id),
     // Display blocks live in chat_display_blocks; the profile only links them (the style column's own list is legacy).
@@ -578,7 +584,7 @@ export function sessionRuntimeOf(profile: Pick<ChatProfile, 'engine' | 'llmRunti
 }
 
 /** Tools that answer with pictures: offered only to a profile whose model sees images (profileSeesImages). */
-const VISION_TOOLS = new Set(['view_images', 'view_media_frames'])
+const VISION_TOOLS = new Set(['view_images', 'view_media_frames', 'linked_view'])
 
 export function isVisionTool(toolName: string) {
   return VISION_TOOLS.has(toolName)
@@ -612,6 +618,15 @@ function normalizeAllowedGroupKeys(value: unknown): string[] {
   if (!Array.isArray(value) || value.length === 0) return []
   const known = new Set(AuthPermissionGroup.listAllGroups().map((group) => group.group_key).filter((key) => key !== 'guest' && key !== 'anonymous'))
   return [...new Set(value.filter((key): key is string => typeof key === 'string' && known.has(key)))]
+}
+
+/** The default project workspace of a profile: a live project (checked when it is being written), or null. */
+function profileWorkspace(value: unknown, check: boolean) {
+  if (value === null || value === undefined) return null
+  const record = value as { id?: unknown; write?: unknown }
+  if (typeof record.id !== 'string' || !/^[a-f0-9]{32}$/.test(record.id)) throw new ChatProfileError('작업 공간을 찾을 수 없어.')
+  if (check && !WorkspaceService.exists(record.id)) throw new ChatProfileError('작업 공간을 찾을 수 없어.')
+  return { id: record.id, write: record.write === true }
 }
 
 function judgePresetId(value: unknown) {
@@ -682,12 +697,14 @@ function toColumns(input: ChatProfileInput, options: { draft?: boolean; strictKe
   }
 
   const openingHistory = normalizeOpeningHistory(input.openingHistory)
+  const workspace = profileWorkspace(input.workspace, strict('workspace'))
   const characterLink = normalizeCharacterLink(input.characterLink)
   const columns = {
     name,
     folder_id: checkedProfileFolder(input.folderId),
     character_setting_id: characterLink?.settingId ?? null,
     character_sync: characterLink?.synced ? 1 : 0,
+    character_outfit: characterLink?.outfit ?? null,
     tagline: text(input.tagline, CHAT_PROFILE_TEXT_LIMITS.tagline),
     lorebook_ids: JSON.stringify(ChatLorebookStore.existing(normalizeLorebookIds(input.lorebookIds))),
     block_ids: JSON.stringify(ChatSharedBlockStore.existing(normalizeBlockIds(input.blockIds))),
@@ -759,6 +776,8 @@ function toColumns(input: ChatProfileInput, options: { draft?: boolean; strictKe
     agent_enabled: input.agentEnabled === true ? 1 : 0,
     agent_description: input.agentDescription ?? '',
     linked_files: JSON.stringify(normalizeLinkedFiles(input.linkedFiles)),
+    workspace_id: workspace?.id ?? null,
+    workspace_write: workspace?.write ? 1 : 0,
     // Every engine can be judged (a Codex chat gets the directives and status fields only, see chatJudge).
     judge_preset_id: strict('judgePresetId') ? judgePresetId(input.judgePresetId) : input.judgePresetId ?? null,
     judge_provider_name: null,
@@ -785,7 +804,7 @@ const ADMIN_PROFILE_COLUMNS = `id, folder_id, revision, background_revision, nam
   summary_prompt, translation_instructions, translation_model_language, translation_display_language, suggest_enabled,
   model_slot_id, summary_slot_id, translation_slot_id, suggest_slot_id, suggest_profile_id, suggest_user_profile_id,
   chat_style, vision_enabled, content_rating_mode, content_rating_tier_id, page_assist, allow_lore_proposals,
-  agent_enabled, agent_description, linked_files, judge_preset_id, judge_slot_id, is_enabled, sort_order, created_date, updated_date,
+  agent_enabled, agent_description, linked_files, workspace_id, workspace_write, judge_preset_id, judge_slot_id, is_enabled, sort_order, created_date, updated_date,
   CASE WHEN background_image IS NOT NULL AND background_image != '' THEN 'present' ELSE NULL END AS background_image`
 
 export const ChatProfileStore = {
@@ -850,7 +869,7 @@ export const ChatProfileStore = {
     const order = options.folderId === undefined ? 'profile_folder_rank, sort_order, id' : 'sort_order, id'
     const rows = db.prepare(`
       SELECT p.*, ${CHARACTER_PROFILE_COLUMNS} FROM
-        (SELECT ${projection}${projection === '*' ? '' : ', character_setting_id, character_sync'}, ${rank} AS profile_folder_rank FROM llm_chat_profiles ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
+        (SELECT ${projection}${projection === '*' ? '' : ', character_setting_id, character_sync, character_outfit'}, ${rank} AS profile_folder_rank FROM llm_chat_profiles ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
           ORDER BY ${order} ${options.limit !== undefined ? 'LIMIT @limit OFFSET @offset' : ''}) p
         LEFT JOIN character_settings s ON s.id = p.character_setting_id ORDER BY p.profile_folder_rank, p.sort_order, p.id
     `).all({ folderId: options.folderId ?? null, query: options.query ?? '', limit: options.limit ?? -1, offset: options.offset ?? 0 }) as ProfileRow[]
@@ -896,7 +915,7 @@ export const ChatProfileStore = {
     if (link?.synced && initial.style !== undefined) initial.style = storedCharacterStyle(input.name ?? '', normalizeChatStyle(undefined), initial.style, null, link, db)
     if (link && !link.synced && !copyOf) {
       attachMainImagesDatabase(db)
-      Object.assign(initial, detachedCharacterFields(link.settingId, { name: input.name ?? '', style: normalizeChatStyle(input.style) }, input, db))
+      Object.assign(initial, detachedCharacterFields(link.settingId, link.outfit ?? null, { name: input.name ?? '', style: normalizeChatStyle(input.style) }, input, db))
     }
     const columns = toColumns(initial)
     fileProfileAssetsUnderGroup(columns.name, [columns.avatar_hash, columns.background_hash, columns.reference_hash], link && !link.synced && !copyOf ? db : undefined)
@@ -930,16 +949,17 @@ export const ChatProfileStore = {
     }
     const current = toProfile(stored)
     previousSettingId = stored.character_setting_id ?? null
-    const previousLink = previousSettingId === null ? null : { settingId: previousSettingId, synced: stored.character_sync === 1 }
-    const nextLink = patch.characterLink === undefined ? previousLink : normalizeCharacterLink(patch.characterLink)
-    linkChanged = previousLink?.settingId !== nextLink?.settingId || previousLink?.synced !== nextLink?.synced
+    const previousLink = previousSettingId === null ? null : { settingId: previousSettingId, synced: stored.character_sync === 1, outfit: stored.character_outfit ?? null }
+    const requestedLink = patch.characterLink === undefined ? previousLink : normalizeCharacterLink(patch.characterLink)
+    const nextLink = requestedLink && { ...requestedLink, outfit: characterLinkOutfit(requestedLink, previousLink) }
+    linkChanged = previousLink?.settingId !== nextLink?.settingId || previousLink?.synced !== nextLink?.synced || previousLink?.outfit !== nextLink?.outfit
     patch = { ...patch }
     if ((previousLink?.synced || nextLink?.synced) && patch.style !== undefined) patch.style = storedCharacterStyle(current.name, current.style, patch.style, previousLink, nextLink, db)
     let copyingCharacter = false
     if (nextLink?.synced) for (const key of CHARACTER_APPEARANCE_FIELDS) delete patch[key]
     else if ((nextLink && (!previousLink || previousLink.synced || nextLink.settingId !== previousLink.settingId)) || (!nextLink && previousLink?.synced)) {
       attachMainImagesDatabase(db)
-      Object.assign(patch, detachedCharacterFields(nextLink?.settingId ?? previousLink!.settingId, { name: patch.name ?? current.name, style: normalizeChatStyle(patch.style ?? current.style) }, patch, db, options.deletingCharacterSetting === true))
+      Object.assign(patch, detachedCharacterFields(nextLink?.settingId ?? previousLink!.settingId, (nextLink ?? previousLink)!.outfit, { name: patch.name ?? current.name, style: normalizeChatStyle(patch.style ?? current.style) }, patch, db, options.deletingCharacterSetting === true))
       copyingCharacter = true
       assetDatabase = db
     }

@@ -1,6 +1,6 @@
 import { useRef } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import type { ChatProfileCharacterLinkInput } from '@conai/shared'
+import { characterOutfitIndex, composeCharacterAppearance, type ChatProfileCharacterLinkInput } from '@conai/shared'
 import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
 import { refreshCharacterViews } from '@/features/characters/character-library-shared'
 import { useCharacterSettingEditor } from '@/features/characters/use-character-setting-editor'
@@ -12,7 +12,6 @@ import {
   type CharacterSetting,
 } from '@/lib/api-character-library'
 import { CHAT_ADMIN_PROFILES_QUERY_KEY, CHAT_PROFILE_SYNCED_KEYS, getChatAdminProfile, listChatAdminProfiles, type ChatProfile } from '@/lib/api-codex-chat'
-import { settingDraftOf } from '@/features/characters/character-library-shared'
 import type { Draft } from './chat-profile-editor-fields'
 import type { ProfileOwnEffect } from './chat-profile-editor'
 
@@ -75,10 +74,11 @@ export function useProfileCharacterLink({ open, profile, draft, setDraft, adoptO
     const current = draftRef.current.characterLink
     const copyOf = (value: Pick<Draft, 'appearance' | 'referenceHash' | 'avatarHash' | 'avatarCrop'>): Partial<Draft> => ({ appearance: value.appearance, referenceHash: value.referenceHash, avatarHash: value.avatarHash, avatarCrop: value.avatarCrop, avatar: null })
     if (next && !next.synced && next.settingId !== current?.settingId && target?.id === next.settingId) {
-      return { ...copyOf(settingDraftOf(target)), characterLink: next }
+      return { ...copyOf({ ...target, appearance: composeCharacterAppearance(target, characterOutfitIndex(target.outfits, next.outfit)) }), characterLink: next }
     }
     const leaving = Boolean(current?.synced) && setting.baseRef.current?.id === current?.settingId && !(next?.synced && next.settingId === current?.settingId)
-    return { ...(leaving ? copyOf(setting.draftRef.current) : {}), characterLink: next }
+    const look = setting.draftRef.current
+    return { ...(leaving ? copyOf({ ...look, appearance: composeCharacterAppearance(look, characterOutfitIndex(look.outfits, current?.outfit)) }) : {}), characterLink: next }
   }
   const setLink = (next: ChatProfileCharacterLinkInput, values?: Partial<Draft>) => {
     const change = { ...linkPatch(next), ...values }
@@ -134,14 +134,16 @@ export function useProfileCharacterLink({ open, profile, draft, setDraft, adoptO
     /** Link to a picked setting, synced (the tab shows it at once). */
     load: (picked: CharacterSetting) => {
       queryClient.setQueryData(characterSettingQueryKey(picked.id), picked)
-      setLink({ settingId: picked.id, synced: true })
+      setLink({ settingId: picked.id, synced: true, outfit: null })
     },
-    /** Keep a copy of the setting's current look as the profile's own. */
-    detach: () => { if (link) setLink({ settingId: link.settingId, synced: false }) },
+    /** Keep a copy of the setting's current look (wearing the chosen outfit) as the profile's own. */
+    detach: () => { if (link) setLink({ settingId: link.settingId, synced: false, outfit: link.outfit ?? null }) },
+    /** The synced setting's outfit this profile wears (null: the default one). */
+    setOutfit: (outfit: string | null) => { if (link?.synced) setLink({ ...link, outfit }) },
     /** Back to the origin, synced; the profile's own look goes back to what is stored. */
     revert: () => {
       if (!link) return
-      setLink({ settingId: link.settingId, synced: true }, profile ? Object.fromEntries(CHAT_PROFILE_SYNCED_KEYS.map((key) => [key, profile[key]])) as Partial<Draft> : undefined)
+      setLink({ settingId: link.settingId, synced: true, outfit: link.outfit ?? null }, profile ? Object.fromEntries(CHAT_PROFILE_SYNCED_KEYS.map((key) => [key, profile[key]])) as Partial<Draft> : undefined)
     },
     linkPatch,
     /** Read a setting about to be linked (it must exist; the tab then shows it at once). */

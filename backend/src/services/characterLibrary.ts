@@ -1,16 +1,24 @@
+import path from 'path'
+import AdmZip from 'adm-zip'
 import { z } from 'zod'
 import { assertFolderDestination, folderWrite, listFoldersWithCounts } from './libraryFolderStore'
+import { MAX_UPLOAD_FILE_SIZE_BYTES } from '../middleware/upload'
+import { zipEntryBytes, zipEntryKind } from '../utils/zipEntries'
+import { EmoticonService } from './emoticonService'
 import type Database from 'better-sqlite3'
-import { CHAT_PROFILE_TEXT_LIMITS, type CharacterFolder, type CharacterSetting, type CharacterSettingSummary, type CharacterSettingPage, type CharacterLibraryDeletePreview, type CharacterLibraryDeleteResult } from '@conai/shared'
+import { CHAT_PROFILE_TEXT_LIMITS, characterOutfitIndex, composeCharacterAppearance, emptyCharacterAppearanceSections, folderPath, normalizeCharacterTag, type CharacterAppearanceSections, type CharacterFacetKey, type CharacterFolder, type CharacterLibraryExport, type CharacterLibraryFacets, type CharacterLibraryImportResult, type CharacterOutfit, type CharacterSetting, type CharacterSettingBulkResult, type CharacterSettingSummary, type CharacterSettingPage, type CharacterLibraryDeletePreview, type CharacterLibraryDeleteResult } from '@conai/shared'
 import { getUserSettingsDb } from '../database/userSettingsDb'
+import { indexCharacterSettingTags } from '../database/characterLibrarySchema'
+import { CHARACTER_FACET_KEYS, libraryFacetDimensions, splitAppearanceText } from './characterAppearanceTags'
+import { danbooruBrowserService } from './danbooruBrowserService'
 import { attachMainImagesDatabase } from '../database/userSettingsBootstrap'
 import { normalizeAvatarCrop, normalizeProfileAssetHash } from './codex-chat/chatProfileAssets'
 import { GroupPathService } from './groupPathService'
 import { publishRuntimeEvent } from './runtime-events/runtimeEventBus'
-import { characterMediaGroupPath } from './codex-chat/chatCardAssets'
+import { activeMediaFile, characterMediaGroupPath, ingestMedia } from './codex-chat/chatCardAssets'
 import { ChatProfileStore } from './codex-chat/chatProfiles'
 import { copyExpressionGroup, expressionGroupId } from './codex-chat/chatProfileExpressions'
-import { characterLibraryId as id, characterLibraryName as name, characterSettingFields as fields, characterSettingCreateSchema, characterSettingPatchSchema, characterFolderCreateSchema, characterFolderPatchSchema } from './characterLibraryInput'
+import { characterLibraryId as id, characterLibraryName as name, characterSettingFields as fields, characterSettingCreateSchema, characterSettingPatchSchema, characterFolderCreateSchema, characterFolderPatchSchema, characterOutfitsSchema, characterSectionsSchema } from './characterLibraryInput'
 export { characterSettingCreateSchema, characterSettingPatchSchema, characterFolderCreateSchema, characterFolderPatchSchema } from './characterLibraryInput'
 
 export class CharacterLibraryError extends Error {
@@ -29,11 +37,12 @@ type SettingRow = {
   id: number; folder_id: number | null; name: string; appearance: string
   reference_hash: string | null; avatar_hash: string | null; avatar_crop: string | null
   asset_group_id: number | null; expression_group_id: number | null; candidate_group_id: number | null
+  sections: string | null; outfits: string; favorite: number
   revision: number; created_at: string; updated_at: string
   linked_profile_count?: number
 }
 const linkedCountColumn = '(SELECT COUNT(*) FROM llm_chat_profiles p WHERE p.character_setting_id = character_settings.id AND p.character_sync = 1) AS linked_profile_count'
-const summaryColumns = `id, folder_id, name, reference_hash, avatar_hash, avatar_crop, revision, updated_at, ${linkedCountColumn}`
+const summaryColumns = `id, folder_id, name, reference_hash, avatar_hash, avatar_crop, favorite, revision, updated_at, ${linkedCountColumn}`
 const folderColumns = 'f.id, f.parent_id AS parentId, f.name, f.created_at AS createdAt, f.updated_at AS updatedAt'
 export function syncedCharacterProfiles(settingIds: number[]) {
   return getUserSettingsDb().prepare('SELECT id, name FROM llm_chat_profiles WHERE character_sync = 1 AND character_setting_id IN (SELECT value FROM json_each(?)) ORDER BY id').all(JSON.stringify(settingIds)) as Array<{ id: number; name: string }>
@@ -88,23 +97,95 @@ export function characterSettingRow(settingId: number): SettingRow {
   return row
 }
 function summary(row: SettingRow, images: boolean): CharacterSettingSummary {
-  return { id: row.id, folderId: row.folder_id, name: row.name, referenceHash: images ? row.reference_hash : null, avatarHash: images ? row.avatar_hash : null, avatarCrop: row.avatar_crop ? JSON.parse(row.avatar_crop) : null, revision: row.revision, updatedAt: row.updated_at, linkedProfileCount: row.linked_profile_count ?? 0 }
+  return { id: row.id, folderId: row.folder_id, name: row.name, referenceHash: images ? row.reference_hash : null, avatarHash: images ? row.avatar_hash : null, avatarCrop: row.avatar_crop ? JSON.parse(row.avatar_crop) : null, favorite: row.favorite === 1, revision: row.revision, updatedAt: row.updated_at, linkedProfileCount: row.linked_profile_count ?? 0 }
+}
+/** The stored look; a setting from before sections reads its whole appearance as `other`. */
+function lookOf(row: Pick<SettingRow, 'sections' | 'outfits' | 'appearance'>): { sections: CharacterAppearanceSections; outfits: CharacterOutfit[] } {
+  return {
+    sections: row.sections ? { ...emptyCharacterAppearanceSections(), ...JSON.parse(row.sections) as Partial<CharacterAppearanceSections> } : { ...emptyCharacterAppearanceSections(), other: row.appearance },
+    outfits: JSON.parse(row.outfits) as CharacterOutfit[],
+  }
+}
+/** The appearance a profile or workflow gets wearing the named outfit (`characterOutfitIndex`); stored text for the default. */
+export function characterSettingAppearance(row: Pick<SettingRow, 'sections' | 'outfits' | 'appearance'>, outfit: string | null | undefined): string {
+  if (!outfit?.trim()) return row.appearance
+  const look = lookOf(row)
+  const index = characterOutfitIndex(look.outfits, outfit)
+  return index === 0 ? row.appearance : composeCharacterAppearance(look, index)
 }
 export function getCharacterSetting(settingId: number, images = true): CharacterSetting {
   const row = characterSettingRow(settingId)
-  return { ...summary(row, images), appearance: row.appearance, expressionGroupId: row.expression_group_id, candidateGroupId: row.candidate_group_id, createdAt: row.created_at, path: characterFolderPath(row.folder_id).map((folder) => folder.name), linkedProfiles: syncedCharacterProfiles([settingId]) }
+  return { ...summary(row, images), appearance: row.appearance, ...lookOf(row), expressionGroupId: row.expression_group_id, candidateGroupId: row.candidate_group_id, createdAt: row.created_at, path: characterFolderPath(row.folder_id).map((folder) => folder.name), linkedProfiles: syncedCharacterProfiles([settingId]) }
 }
-export function listCharacterSettings(input: { folderId?: number | null; query?: string; limit?: number; offset?: number } = {}, images = true): CharacterSettingPage {
-  const value = parse(z.object({ folderId: id.nullable().optional(), query: z.string().optional(), limit: z.number().int().min(1).max(200).default(60), offset: z.number().int().nonnegative().default(0) }).strict(), input)
-  if (value.folderId !== undefined) checkFolder(value.folderId)
+
+const tagList = z.array(z.string().trim().min(1).transform(normalizeCharacterTag))
+const listFields = {
+  folderId: id.nullable().optional(),
+  query: z.string().optional(),
+  favorite: z.boolean().optional(),
+  filters: z.partialRecord(z.enum(CHARACTER_FACET_KEYS as [CharacterFacetKey, ...CharacterFacetKey[]]), tagList).optional(),
+  sort: z.enum(['name', 'updated', 'created', 'created_asc']).default('name'),
+}
+type ListScope = { folderId?: number | null; query?: string; favorite?: boolean; filters?: Partial<Record<CharacterFacetKey, string[]>> }
+const ORDER_BY = { name: 'name COLLATE NOCASE, id', updated: 'updated_at DESC, id DESC', created: 'created_at DESC, id DESC', created_asc: 'created_at, id' } as const
+const likePattern = (text: string) => `%${text.replace(/[\\%_]/g, '\\$&')}%`
+
+/** Library tags whose Korean dictionary name contains the query; translations are Korean only, so other text skips it. */
+function translatedTagMatches(query: string): string[] {
+  if (!/[^\u0000-\u007f]/.test(query) || !danbooruBrowserService.isAvailable()) return []
+  const tags = (getUserSettingsDb().prepare('SELECT DISTINCT tag FROM character_setting_tags').all() as Array<{ tag: string }>).map((row) => row.tag)
+  return [...danbooruBrowserService.describeTags(tags)].filter(([, description]) => description.translated?.includes(query)).map(([tag]) => tag)
+}
+
+/** WHERE over character_settings for a scope; `excluded` leaves one dimension's selection out (its own counts). */
+function scopeWhere(scope: ListScope, excluded?: CharacterFacetKey) {
   const where: string[] = [], bindings: Array<number | string | null> = []
-  if (value.folderId !== undefined) { where.push('folder_id IS ?'); bindings.push(value.folderId) }
-  if (value.query) { where.push("name LIKE ? ESCAPE '\\'"); bindings.push(`%${value.query.replace(/[\\%_]/g, '\\$&')}%`) }
-  const filter = where.length ? `WHERE ${where.join(' AND ')}` : ''
+  if (scope.folderId !== undefined) { checkFolder(scope.folderId); where.push('folder_id IS ?'); bindings.push(scope.folderId) }
+  const query = scope.query?.trim()
+  if (query) {
+    where.push("(name LIKE ? ESCAPE '\\' OR id IN (SELECT setting_id FROM character_setting_tags WHERE tag LIKE ? ESCAPE '\\' OR tag IN (SELECT value FROM json_each(?))))")
+    bindings.push(likePattern(query), likePattern(normalizeCharacterTag(query)), JSON.stringify(translatedTagMatches(query)))
+  }
+  if (scope.favorite) where.push('favorite = 1')
+  for (const [key, tags] of Object.entries(scope.filters ?? {}) as Array<[CharacterFacetKey, string[]]>) {
+    if (key === excluded || !tags.length) continue
+    where.push('id IN (SELECT setting_id FROM character_setting_tags WHERE tag IN (SELECT value FROM json_each(?)))')
+    bindings.push(JSON.stringify(tags))
+  }
+  return { filter: where.length ? `WHERE ${where.join(' AND ')}` : '', bindings }
+}
+
+export function listCharacterSettings(input: unknown = {}, images = true): CharacterSettingPage {
+  const value = parse(z.object({ ...listFields, limit: z.number().int().min(1).max(200).default(60), offset: z.number().int().nonnegative().default(0) }).strict(), input)
+  const { filter, bindings } = scopeWhere(value)
   const db = getUserSettingsDb()
   const total = (db.prepare(`SELECT COUNT(*) n FROM character_settings ${filter}`).get(...bindings) as { n: number }).n
-  const rows = db.prepare(`SELECT ${summaryColumns} FROM character_settings ${filter} ORDER BY name COLLATE NOCASE, id LIMIT ? OFFSET ?`).all(...bindings, value.limit, value.offset) as SettingRow[]
+  const rows = db.prepare(`SELECT ${summaryColumns} FROM character_settings ${filter} ORDER BY ${ORDER_BY[value.sort]} LIMIT ? OFFSET ?`).all(...bindings, value.limit, value.offset) as SettingRow[]
   return { items: rows.map((row) => summary(row, images)), total, hasMore: value.offset + rows.length < total }
+}
+
+/**
+ * Filter dimensions of the listed scope with each tag's setting count. A dimension with a selection is counted
+ * without that selection (choosing a second hair colour stays possible); the others share one count.
+ */
+export function characterLibraryFacets(input: unknown = {}): CharacterLibraryFacets {
+  const { sort: _sort, ...scopeFields } = listFields
+  const value = parse(z.object(scopeFields).strict(), input)
+  if (!danbooruBrowserService.isAvailable()) return { available: false, dimensions: [] }
+  const counted = new Map<string, Map<string, number>>()
+  const countsFor = (key: CharacterFacetKey) => {
+    const excluded = value.filters?.[key]?.length ? key : undefined
+    const cacheKey = excluded ?? ''
+    let counts = counted.get(cacheKey)
+    if (!counts) {
+      const { filter, bindings } = scopeWhere(value, excluded)
+      const rows = getUserSettingsDb().prepare(`SELECT tag, COUNT(*) n FROM character_setting_tags WHERE setting_id IN (SELECT id FROM character_settings ${filter}) GROUP BY tag`).all(...bindings) as Array<{ tag: string; n: number }>
+      counts = new Map(rows.map((row) => [row.tag, row.n]))
+      counted.set(cacheKey, counts)
+    }
+    return counts
+  }
+  return { available: true, dimensions: libraryFacetDimensions(countsFor) }
 }
 export function requireCharacterImageAccess(input: unknown, canViewImages: boolean) {
   const value = input as { referenceHash?: unknown; avatarHash?: unknown } | null
@@ -112,9 +193,38 @@ export function requireCharacterImageAccess(input: unknown, canViewImages: boole
     throw new CharacterLibraryError('Permission required: images.view', 403)
   }
 }
+type LookInput = { appearance?: string; sections?: Partial<CharacterAppearanceSections>; outfits?: CharacterOutfit[] }
+/**
+ * The look a write stores, null when it leaves the look alone. Sections and outfits apply over the current ones; a
+ * plain appearance text is split by the dictionary, its outfit tags replacing the default outfit's (an unchanged text
+ * keeps the stored structure).
+ */
+function resolveLook(value: LookInput, current: SettingRow | null) {
+  if (value.appearance === undefined && value.sections === undefined && value.outfits === undefined) return null
+  if (value.appearance !== undefined && (value.sections !== undefined || value.outfits !== undefined)) throw new CharacterLibraryError('appearance 텍스트와 sections/outfits는 함께 보낼 수 없어. 하나만 보내줘.')
+  const base = current ? lookOf(current) : { sections: emptyCharacterAppearanceSections(), outfits: [] as CharacterOutfit[] }
+  let sections: CharacterAppearanceSections, outfits: CharacterOutfit[]
+  if (value.appearance !== undefined) {
+    if (current && value.appearance === current.appearance) return null
+    const split = splitAppearanceText(value.appearance)
+    sections = split.sections
+    const [first, ...rest] = base.outfits
+    outfits = first ? [{ ...first, tags: split.outfitTags }, ...rest] : split.outfitTags ? [{ name: '기본', tags: split.outfitTags }] : []
+  } else {
+    sections = { ...base.sections, ...value.sections }
+    outfits = value.outfits ?? base.outfits
+  }
+  const appearance = composeCharacterAppearance({ sections, outfits })
+  // Profiles and workflows may wear any outfit, so every combination must fit.
+  const tooLong = outfits.findIndex((_, index) => composeCharacterAppearance({ sections, outfits }, index).length > CHAT_PROFILE_TEXT_LIMITS.text)
+  if (appearance.length > CHAT_PROFILE_TEXT_LIMITS.text || tooLong >= 0) throw new CharacterLibraryError(`외형 태그가 너무 길어. 섹션과 ${tooLong > 0 ? `'${outfits[tooLong].name}' 의상` : '기본 의상'}을 합쳐 ${CHAT_PROFILE_TEXT_LIMITS.text}자 이하로 줄여줘.`)
+  return { sections, outfits, appearance }
+}
+
 export function validateCharacterSetting(input: unknown, settingId?: number, canViewImages = true) {
   requireCharacterImageAccess(input, canViewImages)
   const value = settingId === undefined ? parse(characterSettingCreateSchema, input) : parse(characterSettingPatchSchema, input)
+  resolveLook(value, settingId === undefined ? null : characterSettingRow(settingId))
   if (value.folderId !== undefined) checkFolder(value.folderId)
   if (settingId !== undefined) {
     const row = characterSettingRow(settingId)
@@ -165,8 +275,11 @@ export function createCharacterSetting(input: unknown, canViewImages = true) {
   const nested = getUserSettingsDb().inTransaction
   const value = validateCharacterSetting(input, undefined, canViewImages)
   if (value.referenceHash || value.avatarHash) attachMainImagesDatabase(getUserSettingsDb())
+  const look = resolveLook(value, null) ?? { sections: emptyCharacterAppearanceSections(), outfits: [], appearance: '' }
   const setting = write(() => {
-    const settingId = Number(getUserSettingsDb().prepare('INSERT INTO character_settings(folder_id, name, appearance, reference_hash, avatar_hash, avatar_crop) VALUES (?, ?, ?, ?, ?, ?)').run(value.folderId, value.name, value.appearance ?? '', value.referenceHash ?? null, value.avatarHash ?? null, value.avatarCrop ? JSON.stringify(value.avatarCrop) : null).lastInsertRowid)
+    const db = getUserSettingsDb()
+    const settingId = Number(db.prepare('INSERT INTO character_settings(folder_id, name, appearance, sections, outfits, reference_hash, avatar_hash, avatar_crop) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(value.folderId, value.name, look.appearance, JSON.stringify(look.sections), JSON.stringify(look.outfits), value.referenceHash ?? null, value.avatarHash ?? null, value.avatarCrop ? JSON.stringify(value.avatarCrop) : null).lastInsertRowid)
+    indexCharacterSettingTags(db, settingId, look.appearance, look.outfits)
     fileCharacterAssets(settingId, [value.referenceHash ?? null, value.avatarHash ?? null])
     return getCharacterSetting(settingId)
   })
@@ -178,11 +291,14 @@ export function updateCharacterSetting(settingId: number, input: unknown, databa
   const value = validateCharacterSetting(input, settingId)
   const before = characterSettingRow(settingId)
   const settingName = value.name ?? before.name
-  database.prepare(`UPDATE character_settings SET folder_id = ?, name = ?, appearance = ?, reference_hash = ?, avatar_hash = ?, avatar_crop = ?, revision = revision + 1, updated_at = datetime('now') WHERE id = ?`).run(
-    value.folderId === undefined ? before.folder_id : value.folderId, settingName, value.appearance ?? before.appearance,
+  const look = resolveLook(value, before)
+  database.prepare(`UPDATE character_settings SET folder_id = ?, name = ?, appearance = ?, sections = ?, outfits = ?, reference_hash = ?, avatar_hash = ?, avatar_crop = ?, revision = revision + 1, updated_at = datetime('now') WHERE id = ?`).run(
+    value.folderId === undefined ? before.folder_id : value.folderId, settingName,
+    look ? look.appearance : before.appearance, look ? JSON.stringify(look.sections) : before.sections, look ? JSON.stringify(look.outfits) : before.outfits,
     value.referenceHash === undefined ? before.reference_hash : value.referenceHash,
     value.avatarHash === undefined ? before.avatar_hash : value.avatarHash,
     value.avatarCrop === undefined ? before.avatar_crop : value.avatarCrop === null ? null : JSON.stringify(value.avatarCrop), settingId)
+  if (look) indexCharacterSettingTags(database, settingId, look.appearance, look.outfits)
   if (before.asset_group_id && settingName !== before.name) {
     attachMainImagesDatabase(database)
     const label = characterGroupLabel(settingName, settingId)
@@ -235,6 +351,205 @@ export function deleteCharacterLibrary(kind: 'folder' | 'setting', targetId: num
   })
   characterChanged([...targets.folderIds, targets.parentId], targets.settingIds, targets.profileIds)
   return { deletedFolders: targets.folderIds.length, deletedSettings: targets.settingIds.length }
+}
+
+const idList = z.array(id).min(1)
+const bulkSchema = z.discriminatedUnion('action', [
+  z.object({ action: z.literal('favorite'), ids: idList, favorite: z.boolean() }).strict(),
+  z.object({ action: z.literal('move'), ids: idList, folderId: id.nullable() }).strict(),
+  z.object({ action: z.literal('delete'), ids: idList }).strict(),
+])
+/** One write for several settings (by id, without revisions: the person chose them in the list just now). */
+export function bulkCharacterSettings(input: unknown): CharacterSettingBulkResult {
+  const value = parse(bulkSchema, input)
+  const ids = [...new Set(value.ids)]
+  const done = write(() => {
+    const db = getUserSettingsDb()
+    const rows = ids.map((settingId) => characterSettingRow(settingId))
+    if (value.action === 'favorite') {
+      const changed = db.prepare('UPDATE character_settings SET favorite = ?, revision = revision + 1 WHERE id IN (SELECT value FROM json_each(?)) AND favorite != ?').run(value.favorite ? 1 : 0, JSON.stringify(ids), value.favorite ? 1 : 0).changes
+      return { changed, folderIds: [], profileIds: [] as number[] }
+    }
+    if (value.action === 'move') {
+      checkFolder(value.folderId)
+      const moving = rows.filter((row) => row.folder_id !== value.folderId)
+      // A name taken in the destination (or twice among the moved) fails the unique index and the whole move.
+      const move = db.prepare("UPDATE character_settings SET folder_id = ?, revision = revision + 1, updated_at = datetime('now') WHERE id = ?")
+      for (const row of moving) move.run(value.folderId, row.id)
+      return { changed: moving.length, folderIds: [...moving.map((row) => row.folder_id), value.folderId], profileIds: [] }
+    }
+    const profileIds = (db.prepare('SELECT id FROM llm_chat_profiles WHERE character_setting_id IN (SELECT value FROM json_each(?))').all(JSON.stringify(ids)) as Array<{ id: number }>).map((row) => row.id)
+    ids.forEach((settingId) => deleteCharacterSetting(settingId))
+    return { changed: ids.length, folderIds: rows.map((row) => row.folder_id), profileIds }
+  })
+  characterChanged(done.folderIds, ids, done.profileIds)
+  return { changed: done.changed }
+}
+
+const exportSchema = z.union([z.object({ ids: idList }).strict(), z.object({ folderId: id.nullable() }).strict()])
+/** The bundle's document entry; images sit beside it as `images/<hash>.<ext>`. */
+export const CHARACTER_BUNDLE_DOCUMENT = 'character-library.json'
+const BUNDLE_DOCUMENT_MAX_BYTES = 50 * 1024 * 1024
+/**
+ * Settings as a portable bundle: the document (folder paths from the export's top, the folder exported or the top
+ * level) and the library file of every image it names (reference, avatar, expressions, candidates). Images whose file
+ * is gone are left out of the document. Without `images` (no `images.view`) the document names no image.
+ */
+export function exportCharacterLibrary(input: unknown, images: boolean): { document: CharacterLibraryExport; files: Array<{ name: string; path: string }> } {
+  const value = parse(exportSchema, input)
+  const db = getUserSettingsDb()
+  const folders = new Map(listCharacterFolders().map((folder) => [folder.id, folder]))
+  let rows: SettingRow[], depth = 0
+  if ('ids' in value) rows = [...new Set(value.ids)].map((settingId) => characterSettingRow(settingId))
+  else if (value.folderId === null) rows = db.prepare('SELECT * FROM character_settings ORDER BY id').all() as SettingRow[]
+  else {
+    rows = db.prepare('SELECT * FROM character_settings WHERE folder_id IN (SELECT value FROM json_each(?)) ORDER BY id').all(JSON.stringify(subtree(value.folderId).map((folder) => folder.id))) as SettingRow[]
+    depth = folderPath(folders, value.folderId).length
+  }
+  if (images) attachMainImagesDatabase(db)
+  const files = new Map<string, { name: string; path: string }>()
+  const bundled = (hash: string | null) => {
+    if (!images || !hash) return null
+    if (files.has(hash)) return hash
+    const file = activeMediaFile(hash)
+    if (!file) return null
+    files.set(hash, { name: `images/${hash}${path.extname(file.path).toLowerCase()}`, path: file.path })
+    return hash
+  }
+  const groupExists = (groupId: number | null): groupId is number => images && groupId !== null && Boolean(db.prepare('SELECT 1 FROM groups WHERE id = ?').get(groupId))
+  const candidateHashes = db.prepare('SELECT composite_hash FROM image_groups WHERE group_id = ? ORDER BY order_index, id')
+  const document: CharacterLibraryExport = {
+    format: 'conai.character-library',
+    version: 1,
+    settings: rows.map((row) => {
+      const avatarHash = bundled(row.avatar_hash)
+      return {
+        path: folderPath(folders, row.folder_id).slice(depth).map((folder) => folder.name),
+        name: row.name,
+        ...lookOf(row),
+        favorite: row.favorite === 1,
+        referenceHash: bundled(row.reference_hash),
+        avatarHash,
+        avatarCrop: avatarHash && row.avatar_crop ? JSON.parse(row.avatar_crop) : null,
+        expressions: groupExists(row.expression_group_id)
+          ? EmoticonService.listEntries(row.expression_group_id, db).flatMap((entry) => bundled(entry.compositeHash) ? [{ hash: entry.compositeHash, keywords: entry.explicit ? entry.keywords : [] }] : [])
+          : [],
+        candidates: groupExists(row.candidate_group_id)
+          ? (candidateHashes.all(row.candidate_group_id) as Array<{ composite_hash: string }>).flatMap((entry) => bundled(entry.composite_hash) ?? [])
+          : [],
+      }
+    }),
+  }
+  return { document, files: [...files.values()] }
+}
+
+const documentSchema = z.object({
+  format: z.literal('conai.character-library'),
+  version: z.literal(1),
+  settings: z.array(z.object({
+    path: z.array(name), name, sections: characterSectionsSchema, outfits: characterOutfitsSchema, favorite: z.boolean(),
+    referenceHash: z.string().nullable(), avatarHash: z.string().nullable(), avatarCrop: fields.avatarCrop.unwrap(),
+    expressions: z.array(z.object({ hash: z.string(), keywords: z.array(z.string()) }).strict()),
+    candidates: z.array(z.string()),
+  }).strict()),
+}).strict()
+/**
+ * Add a bundle's settings under `folderId`: path folders are reused by name or created, a taken name gets ` (2)`,
+ * ` (3)`…, bundled images join the library first (`canUpload`; already stored ones are reused), and an image neither
+ * bundled nor in this library, or one the person may not see, is dropped and counted.
+ */
+export async function importCharacterLibrary(input: { folderId: unknown; bundlePath: string }, canViewImages: boolean, canUpload: boolean): Promise<CharacterLibraryImportResult> {
+  const targetFolderId = parse(id.nullable(), input.folderId)
+  checkFolder(targetFolderId)
+  let zip: AdmZip
+  try { zip = new AdmZip(input.bundlePath) } catch { throw new CharacterLibraryError('ZIP 파일을 읽지 못했어. CoNAI에서 내보낸 외형 묶음인지 확인해줘.') }
+  const entries = zip.getEntries().filter((entry) => zipEntryKind(entry) === 'file')
+  const documentEntry = entries.find((entry) => entry.entryName === CHARACTER_BUNDLE_DOCUMENT)
+  const documentBytes = documentEntry ? zipEntryBytes(documentEntry, BUNDLE_DOCUMENT_MAX_BYTES) : null
+  if (!documentBytes) throw new CharacterLibraryError(`묶음에 ${CHARACTER_BUNDLE_DOCUMENT}가 없어. CoNAI에서 내보낸 외형 묶음인지 확인해줘.`)
+  let raw: unknown
+  try { raw = JSON.parse(documentBytes.toString('utf8')) } catch { throw new CharacterLibraryError(`${CHARACTER_BUNDLE_DOCUMENT}를 읽지 못했어.`) }
+  const document = parse(documentSchema, raw)
+  const result = { createdSettings: 0, createdFolders: 0, renamed: 0, importedImages: 0, droppedImages: 0 }
+
+  // Images first (asynchronous): a bundled file joins the library, else a hash this library has stays.
+  const imageEntries = new Map(entries.flatMap((entry) => {
+    const match = /^images\/([^/.]+)\.[a-z0-9]+$/i.exec(entry.entryName)
+    return match ? [[match[1], entry] as const] : []
+  }))
+  const hashes = new Map<string, string | null>()
+  for (const setting of document.settings) {
+    for (const hash of [setting.referenceHash, setting.avatarHash, ...setting.expressions.map((entry) => entry.hash), ...setting.candidates]) {
+      if (!hash || hashes.has(hash)) continue
+      let stored: string | null = null
+      if (canViewImages) {
+        const entry = imageEntries.get(hash)
+        const bytes = entry && canUpload ? zipEntryBytes(entry, MAX_UPLOAD_FILE_SIZE_BYTES) : null
+        if (bytes) {
+          try { stored = (await ingestMedia(bytes)).compositeHash; result.importedImages += 1 } catch { /* counted below: not a usable image */ }
+        }
+        if (!stored && activeMediaFile(hash)) stored = hash
+      }
+      if (!stored) result.droppedImages += 1
+      hashes.set(hash, stored)
+    }
+  }
+  const mapped = (hash: string | null) => hash ? hashes.get(hash) ?? null : null
+
+  const db = getUserSettingsDb()
+  if (canViewImages) attachMainImagesDatabase(db)
+  const settingIds: number[] = [], folderIds: Array<number | null> = [targetFolderId]
+  write(() => {
+    checkFolder(targetFolderId)
+    const findFolder = db.prepare('SELECT id FROM character_folders WHERE parent_id IS ? AND name = ? COLLATE NOCASE')
+    const nameTaken = db.prepare('SELECT 1 FROM character_settings WHERE folder_id IS ? AND name = ? COLLATE NOCASE')
+    const folderFor = (folderNames: string[]) => folderNames.reduce<number | null>((parentId, folderName) => {
+      const found = findFolder.get(parentId, folderName) as { id: number } | undefined
+      if (found) return found.id
+      result.createdFolders += 1
+      const created = Number(db.prepare('INSERT INTO character_folders(parent_id, name) VALUES (?, ?)').run(parentId, folderName).lastInsertRowid)
+      folderIds.push(created)
+      return created
+    }, targetFolderId)
+    for (const entry of document.settings) {
+      const folderId = folderFor(entry.path)
+      let settingName = entry.name
+      for (let copy = 2; nameTaken.get(folderId, settingName); copy += 1) {
+        const suffix = ` (${copy})`
+        settingName = entry.name.slice(0, CHAT_PROFILE_TEXT_LIMITS.name - suffix.length) + suffix
+      }
+      if (settingName !== entry.name) result.renamed += 1
+      const referenceHash = mapped(entry.referenceHash)
+      const avatarHash = mapped(entry.avatarHash)
+      const setting = createCharacterSetting({
+        folderId, name: settingName, sections: entry.sections, outfits: entry.outfits,
+        ...(canViewImages ? { referenceHash, avatarHash, avatarCrop: avatarHash ? entry.avatarCrop : null } : {}),
+      }, canViewImages)
+      if (entry.favorite) db.prepare('UPDATE character_settings SET favorite = 1 WHERE id = ?').run(setting.id)
+      // Two bundled images may be the same picture here; the first one keeps its keywords.
+      const seen = new Set<string>()
+      const expressions = entry.expressions.flatMap((item) => {
+        const hash = mapped(item.hash)
+        if (!hash || seen.has(hash)) return []
+        seen.add(hash)
+        return [{ compositeHash: hash, keywords: item.keywords.length ? item.keywords : undefined }]
+      })
+      const candidates = [...new Set(entry.candidates.flatMap((hash) => mapped(hash) ?? []))]
+      if (expressions.length || candidates.length) {
+        const groups = ensureCharacterGroups(setting.id, db)
+        if (expressions.length) {
+          const added = EmoticonService.addImages(groups.expressionGroupId, expressions, db)
+          if (added.conflicts.length || added.missing.length) throw new CharacterLibraryError(`'${entry.name}'의 표정 키워드가 겹치거나 이미지가 사라졌어.`, 409)
+        }
+        const insert = db.prepare("INSERT OR IGNORE INTO image_groups(group_id, composite_hash, collection_type, order_index) VALUES (?, ?, 'manual', ?)")
+        candidates.forEach((hash, index) => insert.run(groups.candidateGroupId, hash, index))
+      }
+      settingIds.push(setting.id)
+      result.createdSettings += 1
+    }
+  })
+  characterChanged(folderIds, settingIds)
+  return result
 }
 
 const fromProfileFields = {

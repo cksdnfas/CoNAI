@@ -55,7 +55,7 @@ import {
 import { getErrorMessage } from '@/lib/error-message'
 import { type ChatProfileEditorPageState } from './chat-profile-editor'
 import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
-import { pageAction, pageChoice, pageNumber, pageObject, pageText } from '@/features/codex-chat/page-action-helpers'
+import { pageAction, pageArray, pageChoice, pageNumber, pageObject, pageText } from '@/features/codex-chat/page-action-helpers'
 import { ChatCardImportReportModal } from './chat-card-import-report'
 
 /** An API LLM profile's model row: its own, else the chat representative model it falls back to. */
@@ -236,6 +236,7 @@ export function ChatSettingsProfiles({ viewSwitch }: { viewSwitch?: ReactNode })
       pageAction('profile.open_create', t({ ko: '새 프로필 편집기 열기', en: 'Open new profile editor' }), t({ ko: '빈 프로필 편집기를 열어. 열린 편집기가 바로 돌아오니 이어서 profile.draft로 채워.', en: 'Open an empty profile editor; it comes back so you can fill it with profile.draft next.' })),
       ...(profiles.length ? [
         pageAction('profile.move', t({ ko: '프로필 옮기기', en: 'Move profile' }), 'Move a listed profile after review, checking its listed revision.', pageObject({ id: pageChoice(profiles.map((profile) => profile.id)), folderId: pageChoice([0, ...folders.map((folder) => folder.id)]) }, ['id', 'folderId']), 'save'),
+        ...(profiles.length > 1 && !query ? [pageAction('profile.reorder', t({ ko: '프로필 순서 바꾸기', en: 'Reorder profiles' }), 'Reorder the listed profiles of the open folder page after review: ids holds every id of data.profiles exactly once, in the new order. Not offered while searching.', pageObject({ ids: pageArray(pageChoice(profiles.map((profile) => profile.id)), profiles.length, profiles.length) }, ['ids']), 'save')] : []),
         pageAction('profile.open_edit', t({ ko: '프로필 편집기 열기', en: 'Open profile editor' }), t({ ko: '목록(data.profiles)의 프로필 편집기를 열어.', en: 'Open the editor of a listed profile (data.profiles).' }), pageObject({ id: pageChoice(profiles.map((profile) => profile.id)) }, ['id'])),
         pageAction('profile.copy', t({ ko: '프로필 복사', en: 'Copy profile' }), t({ ko: '목록 프로필의 사본 초안을 열어. 저장해야 생겨.', en: 'Open a copy of a listed profile as a new draft; saved only from the editor.' }), pageObject({ id: pageChoice(profiles.map((profile) => profile.id)) }, ['id'])),
       ] : []),
@@ -257,6 +258,11 @@ export function ChatSettingsProfiles({ viewSwitch }: { viewSwitch?: ReactNode })
         await removeFolder(folder, false); return
       }
       if (id === 'profile.open_create') { openEditor(null); return }
+      if (id === 'profile.reorder') {
+        const ids = Array.isArray(args.ids) ? args.ids.map(Number) : []
+        if (query || ids.length !== profiles.length || new Set(ids).size !== ids.length || ids.some((value) => !profiles.some((profile) => profile.id === value))) throw new Error('검색 중이 아닐 때, 목록(data.profiles)의 프로필 ID를 모두 한 번씩 새 순서대로 넣어줘.')
+        await reorderMutation.mutateAsync(ids); return
+      }
       const profile = profiles.find((entry) => entry.id === Number(args.id))
       if (!profile) throw new Error('목록에 없는 프로필이야.')
       if (id === 'profile.move') { await moveMutation.mutateAsync({ target: { kind: 'profile', profile }, to: to(args.folderId) }); return }

@@ -7,6 +7,28 @@
 
 export type CharacterAvatarCrop = { x: number; y: number; scale: number }
 
+/**
+ * The look as image-prompt tags in fixed sections (comma-separated text each, emphasis syntax kept): who it is
+ * (character/work tags, 1girl…), hair, eyes, face, body, skin and markings, species and type traits, and the rest.
+ */
+export type CharacterAppearanceSectionKey = 'identity' | 'hair' | 'eyes' | 'face' | 'body' | 'skin' | 'traits' | 'other'
+export type CharacterAppearanceSections = Record<CharacterAppearanceSectionKey, string>
+/** One outfit of the look (its clothing and accessory tags); the first is the default one. */
+export type CharacterOutfit = { name: string; tags: string }
+
+/**
+ * Filter dimensions of the library and the catalog, classified by the installed Danbooru dictionary: work, character,
+ * subject (1girl…), hair colour/length/style, eye colour, skin colour, species and outfit.
+ */
+export type CharacterFacetKey = 'copyright' | 'character' | 'subject' | 'hairColor' | 'hairLength' | 'hairStyle' | 'eyeColor' | 'skinColor' | 'species' | 'outfit'
+/** Selected tags per dimension: tags of one dimension match any of them, dimensions all apply. */
+export type CharacterSettingFilters = Partial<Record<CharacterFacetKey, string[]>>
+export type CharacterSettingSort = 'name' | 'updated' | 'created' | 'created_asc'
+/** One dimension's tags present in the listed settings (or the catalog's choices, with `count` null). */
+export type CharacterFacetDimension = { key: CharacterFacetKey; values: Array<{ tag: string; label: string; translated: string | null; count: number | null }> }
+/** `available` false: no Danbooru dictionary is installed, so there are no dimensions. */
+export type CharacterLibraryFacets = { available: boolean; dimensions: CharacterFacetDimension[] }
+
 export type CharacterFolder = {
   id: number
   parentId: number | null
@@ -36,13 +58,20 @@ export type CharacterSettingSummary = {
   updatedAt: string
   /** Chat profiles synced to this setting: editing the setting changes all of them. */
   linkedProfileCount: number
+  favorite: boolean
 }
 
 export type CharacterSetting = CharacterSettingSummary & {
   /** Folder names from the top level down to the setting's folder; empty at the top level. */
   path: string[]
-  /** Image-prompt tags of the look (hair, eyes, outfit…), up to `CHAT_PROFILE_TEXT_LIMITS.text` characters. */
+  /**
+   * What profiles, generation and expressions read: the sections then the default (first) outfit, joined
+   * (`composeCharacterAppearance`), up to `CHAT_PROFILE_TEXT_LIMITS.text` characters.
+   */
   appearance: string
+  /** A setting saved before sections existed reads its whole text as `other`. */
+  sections: CharacterAppearanceSections
+  outfits: CharacterOutfit[]
   /** Emoticon group with one keyworded image per emotion; null until the first expression. */
   expressionGroupId: number | null
   /** Group holding this setting's generated asset candidates; null until the first generation. */
@@ -55,11 +84,18 @@ export type CharacterSetting = CharacterSettingSummary & {
 /** One page of a folder's settings, or of a search across the whole library. */
 export type CharacterSettingPage = { items: CharacterSettingSummary[]; total: number; hasMore: boolean }
 
-/** Names are unique within a folder (case-insensitive). Image fields take library composite hashes. */
+/**
+ * Names are unique within a folder (case-insensitive). Image fields take library composite hashes. The look is
+ * written as `sections` (omitted keys stay) and/or `outfits`; a plain `appearance` text instead (older writers, a
+ * profile's own text) is split into sections and the default outfit by the Danbooru dictionary, everything under
+ * `other` without one. Both at once are refused.
+ */
 export type CharacterSettingCreateInput = {
   folderId: number | null
   name: string
   appearance?: string
+  sections?: Partial<CharacterAppearanceSections>
+  outfits?: CharacterOutfit[]
   referenceHash?: string | null
   avatarHash?: string | null
   avatarCrop?: CharacterAvatarCrop | null
@@ -67,6 +103,66 @@ export type CharacterSettingCreateInput = {
 
 /** Only the given fields change. `revision` must equal the stored one, otherwise the save is refused with 409. */
 export type CharacterSettingPatch = Partial<CharacterSettingCreateInput> & { revision: number }
+
+/** `GET /settings`: a folder (`root`) or the whole library, a search over names and tags (Korean tag names too). */
+export type CharacterSettingListQuery = {
+  folderId?: number | null
+  query?: string
+  favorite?: boolean
+  filters?: CharacterSettingFilters
+  sort?: CharacterSettingSort
+  limit?: number
+  offset?: number
+}
+
+/**
+ * An unsaved look from a source, already in sections: a Danbooru character's frequent tags, the reference image's
+ * auto tags (tagged now when it has none), or a text to sort into sections. Expressions, poses and scene tags are
+ * left out for the first two. `POST /settings/appearance-fill`.
+ */
+export type CharacterAppearanceFillInput =
+  | { source: 'danbooru'; character: string }
+  | { source: 'image'; imageHash: string }
+  | { source: 'text'; text: string }
+/** `outfitTags` belong in an outfit; `name` is the Danbooru character's Korean or display name. */
+export type CharacterAppearanceFill = { sections: CharacterAppearanceSections; outfitTags: string; name: string | null }
+
+/** Several listed settings at once; a move is refused whole when a name is taken in the destination. */
+export type CharacterSettingBulkInput = { ids: number[] } & (
+  | { action: 'favorite'; favorite: boolean }
+  | { action: 'move'; folderId: number | null }
+  | { action: 'delete' }
+)
+export type CharacterSettingBulkResult = { changed: number }
+
+/**
+ * One setting of a portable bundle (`POST /settings/export` answers a ZIP: `character-library.json` holding
+ * `CharacterLibraryExport`, and `images/<hash>.<ext>` for every image named here). Folder path from the export's top.
+ */
+export type CharacterLibraryExportEntry = {
+  path: string[]
+  name: string
+  sections: CharacterAppearanceSections
+  outfits: CharacterOutfit[]
+  favorite: boolean
+  /** Composite hashes of the bundled images; null/empty for viewers without `images.view`. */
+  referenceHash: string | null
+  avatarHash: string | null
+  avatarCrop: CharacterAvatarCrop | null
+  /** The expression images with their emotion keywords. */
+  expressions: Array<{ hash: string; keywords: string[] }>
+  /** The generated asset candidates. */
+  candidates: string[]
+}
+export type CharacterLibraryExport = { format: 'conai.character-library'; version: 1; settings: CharacterLibraryExportEntry[] }
+/** `ids`, or a folder with everything under it (`null`: the whole library). */
+export type CharacterLibraryExportInput = { ids: number[] } | { folderId: number | null }
+/**
+ * `POST /settings/import` (multipart `file`: an exported ZIP, `folderId`: target, empty for the top level): folders
+ * are created (or reused by name) under it, taken names get ` (2)`, ` (3)`…, bundled images join the library (needs
+ * `images.view` and `images.upload`), and an image neither bundled nor already in the library is dropped and counted.
+ */
+export type CharacterLibraryImportResult = { createdSettings: number; createdFolders: number; renamed: number; importedImages: number; droppedImages: number }
 
 /** What a folder or setting deletion removes; synced profiles keep a copy of a deleted setting's values. */
 export type CharacterLibraryDeletePreview = {
@@ -95,10 +191,18 @@ export type ChatProfileCharacterLink = {
   revision: number
   /** Profiles synced to the setting, this one included when synced. */
   linkedProfileCount: number
+  /**
+   * The setting's outfit (by name) the profile wears while synced, and copies when detaching; null, or a name the
+   * setting no longer has, is the default (first) outfit.
+   */
+  outfit: string | null
 }
 
-/** The link a profile save sets: a setting, synced or detached; null removes the link; omitted leaves it as is. */
-export type ChatProfileCharacterLinkInput = { settingId: number; synced: boolean } | null
+/**
+ * The link a profile save sets: a setting, synced or detached; null removes the link; omitted leaves it as is.
+ * `outfit` omitted keeps the stored choice while the setting stays the same (else the default).
+ */
+export type ChatProfileCharacterLinkInput = { settingId: number; synced: boolean; outfit?: string | null } | null
 
 /**
  * Save a profile's own appearance (the editor's current values) into the library and leave the profile synced to it:

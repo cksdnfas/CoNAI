@@ -759,6 +759,8 @@ export interface ChatProfile extends ChatProfileAssetFields, ChatProfileAgentSet
   allowLoreProposals: boolean
   /** File store folders and text files its characters may open (and write where allowed) in any chat of the owner. */
   linkedFiles: LinkedFileLink[]
+  /** The project workspace it works in (1:1 and group chats, board calls) unless a chat picks another (null: none), and whether it may write there. */
+  workspace: { id: string; write: boolean } | null
   /** The judge preset steering each turn (null: no judge) and a judge model instead of the preset's (null: the preset's). */
   judgePresetId: number | null
   judgeSlotId: number | null
@@ -792,9 +794,9 @@ export type ChatProfileInput = Partial<Omit<ChatProfile, 'id' | 'folderPath' | '
 /** The profile fields that are the linked setting's while synced (the server ignores them in a save then). */
 export const CHAT_PROFILE_SYNCED_KEYS = ['appearance', 'referenceHash', 'avatarHash', 'avatarCrop', 'avatar'] as const satisfies ReadonlyArray<keyof ChatProfileInput>
 
-/** Two library links name the same setting and sync (a stored link's name and path aside). */
+/** Two library links name the same setting, sync and outfit (a stored link's name and path aside). */
 export function sameCharacterLink(left: ChatProfileCharacterLinkInput | undefined, right: ChatProfileCharacterLinkInput | undefined) {
-  return (left?.settingId ?? null) === (right?.settingId ?? null) && Boolean(left?.synced) === Boolean(right?.synced)
+  return (left?.settingId ?? null) === (right?.settingId ?? null) && Boolean(left?.synced) === Boolean(right?.synced) && (left?.outfit ?? null) === (right?.outfit ?? null)
 }
 
 /** The current record returned with a rejected revision-checked save. */

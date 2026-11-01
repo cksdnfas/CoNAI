@@ -13,7 +13,7 @@ import { findPluginServerTool } from '../services/plugins/pluginServerTools';
 import { CHAT_BLOCKED_TOOLS, CHAT_PAGE_TOOLS, CHAT_ROOM_TOOLS, CHAT_SETTINGS_TOOLS, CHAT_VISION_BUILTIN_TOOLS, GENERATION_PRESET_BLOCKED_TOOLS, GROUP_ONLY_CHAT_TOOLS, isPublicChatPage, getMcpToolScope, isChatGenerationTool, isChatMcpSource, isConnectedChatPageTool, isMcpToolAllowed, type McpRequestContext, type McpRequester } from './context';
 
 export const TOOL_FEATURE_PERMISSIONS: Record<string, string | readonly string[]> = {
-  list_character_library: 'characters.view', get_character_setting: 'characters.view',
+  list_character_library: 'characters.view', get_character_setting: 'characters.view', fill_character_appearance: 'characters.view',
   manage_character_folders: 'characters.edit', propose_character_library: 'characters.edit',
   call_agent: [],
   workspace_publish_resources: ['files.view', 'files.edit', 'images.view', 'images.edit'],
@@ -84,7 +84,7 @@ export const TOOL_FEATURE_PERMISSIONS: Record<string, string | readonly string[]
   order_audio: ['audio.view', 'audio.edit', 'generation.execute'], wait_audio_order: 'audio.view',
   cancel_audio_order: ['audio.view', 'audio.edit'], retry_audio_order_job: ['audio.view', 'audio.edit', 'generation.execute'],
   chat_reply_to: [], room_call_member: [], task_propose: [], task_status: [], task_update: [], task_wait: [], task_finish: [], get_proposal_status: [], offer_choices: [], room_history_search: [], room_history_read: [], read_lore_file: [], save_lore: [], edit_lore_file: [],
-  linked_list: 'files.view', linked_search: 'files.view', linked_read: 'files.view', linked_write: ['files.view', 'files.edit'], linked_edit: ['files.view', 'files.edit'],
+  linked_list: 'files.view', linked_search: 'files.view', linked_read: 'files.view', linked_view: 'files.view', linked_write: ['files.view', 'files.edit'], linked_edit: ['files.view', 'files.edit'],
   // The chat's own settings card; saving rechecks the file store right for links and minutes, as the context tab does.
   get_chat_settings: [], propose_chat_settings: [],
   get_current_page: [], page_fill: [], page_act: [], read_page_data: [], propose_page_action: [],
@@ -98,9 +98,10 @@ export const TOOL_FEATURE_PERMISSIONS: Record<string, string | readonly string[]
 
 /**
  * A turn answering a posts board call reads posts and comments other people wrote: whatever they ask, it must not
- * reach the caller's private file store.
+ * reach the caller's private file store. Only what its profile designates stays open (the profile's linked files and
+ * default project workspace; see placesForRequest and chatWorkspace), the way the lorebook does.
  */
-const BOARD_CALL_BLOCKED_TOOLS = new Set(['run_plugin_action', 'get_plugin_action', 'cancel_plugin_action', 'list_plugin_pages', 'list_files', 'get_file_info', 'read_file_text', 'search_files', 'write_text_file', 'update_file_text', 'edit_file_text', 'create_file_folder', 'rename_file', 'move_files', 'delete_files', 'edit_lore_file', 'linked_list', 'linked_search', 'linked_read', 'linked_write', 'linked_edit', 'room_history_search', 'room_history_read', 'list_file_versions', 'read_file_version', 'restore_file_version']);
+const BOARD_CALL_BLOCKED_TOOLS = new Set(['run_plugin_action', 'get_plugin_action', 'cancel_plugin_action', 'list_plugin_pages', 'list_files', 'get_file_info', 'read_file_text', 'search_files', 'write_text_file', 'update_file_text', 'edit_file_text', 'create_file_folder', 'rename_file', 'move_files', 'delete_files', 'edit_lore_file', 'room_history_search', 'room_history_read', 'list_file_versions', 'read_file_version', 'restore_file_version']);
 /** Posts tools a board-call turn never gets: comments it answers are other people's text, and these cannot be taken back easily. */
 const BOARD_CALL_BLOCKED_POST_TOOLS = new Set(['posts_delete', 'posts_restore_revision', 'post_comment_delete']);
 
@@ -190,8 +191,7 @@ export function isContextToolAllowed(context: McpRequestContext, toolName: strin
     if (publicPage) return false;
     const writes = toolName === 'workspace_apply' || toolName === 'workspace_publish_resources';
     if (context.source === 'plugin') return !!context.workspace && !!context.requester && context.scopes.includes(writes ? 'organize' : 'read') && (!context.toolAllowlist || context.toolAllowlist.includes(toolName)) && (!writes || context.workspace.write) && featurePermissionOf(toolName) !== undefined && (!accountChecks || accountHoldsTool(context, toolName));
-    if (!context.workspace || !context.chatContext || context.chatContext.kind !== 'direct' || !isChatMcpSource(context.source)) return false;
-    if (BoardCallRooms.runFor(context.chatContext.threadId, context.chatContext.profileId) !== null) return false;
+    if (!context.workspace || !context.chatContext || !isChatMcpSource(context.source)) return false;
     if (writes && !context.workspace.write) return false;
     return featurePermissionOf(toolName) !== undefined && (!accountChecks || accountHoldsTool(context, toolName));
   }

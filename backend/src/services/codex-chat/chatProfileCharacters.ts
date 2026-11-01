@@ -1,8 +1,8 @@
 import type Database from 'better-sqlite3'
-import type { ChatProfileCharacterLink, ChatProfileCharacterLinkInput } from '@conai/shared'
+import { CHAT_PROFILE_TEXT_LIMITS, type ChatProfileCharacterLink, type ChatProfileCharacterLinkInput } from '@conai/shared'
 import { getUserSettingsDb } from '../../database/userSettingsDb'
 import { attachMainImagesDatabase } from '../../database/userSettingsBootstrap'
-import { characterSettingRow } from '../characterLibrary'
+import { characterSettingAppearance, characterSettingRow } from '../characterLibrary'
 import { ChatProfileError } from './chatProfileError'
 import { chatCharacterGroupPath } from './chatProfileAssets'
 import { GroupPathService } from '../groupPathService'
@@ -19,10 +19,15 @@ const expressionPathKey = (path: string) => path.split('/').map((part) => part.r
 export function normalizeCharacterLink(value: unknown): ChatProfileCharacterLinkInput {
   if (value === null || value === undefined) return null
   if (typeof value !== 'object' || Array.isArray(value)) throw new ChatProfileError('캐릭터 연결 값을 확인해줘.')
-  const { settingId, synced } = value as { settingId?: unknown; synced?: unknown }
+  const { settingId, synced, outfit } = value as { settingId?: unknown; synced?: unknown; outfit?: unknown }
   if (typeof settingId !== 'number' || !Number.isSafeInteger(settingId) || settingId <= 0 || typeof synced !== 'boolean') throw new ChatProfileError('캐릭터 설정 id와 동기화 여부를 확인해줘.')
+  if (outfit !== undefined && outfit !== null && (typeof outfit !== 'string' || outfit.length > CHAT_PROFILE_TEXT_LIMITS.name)) throw new ChatProfileError('의상 이름을 확인해줘.')
   if (!getUserSettingsDb().prepare('SELECT 1 FROM character_settings WHERE id = ?').get(settingId)) throw new ChatProfileError('연결할 캐릭터 외형 설정을 찾을 수 없어.')
-  return { settingId, synced }
+  return { settingId, synced, ...(outfit !== undefined ? { outfit: typeof outfit === 'string' && outfit.trim() ? outfit.trim() : null } : {}) }
+}
+/** A link as stored: an omitted outfit keeps the previous choice for the same setting, else the default. */
+export function characterLinkOutfit(next: NonNullable<ChatProfileCharacterLinkInput>, previous: { settingId: number; outfit?: string | null } | null) {
+  return next.outfit !== undefined ? next.outfit : previous?.settingId === next.settingId ? previous.outfit ?? null : null
 }
 export function refuseSyncedCharacterProposal(input: Record<string, unknown>, current?: ChatProfile | null) {
   const next = input.characterLink === undefined ? current?.characterLink : normalizeCharacterLink(input.characterLink)
@@ -37,11 +42,12 @@ export function refuseSyncedCharacterProposal(input: Record<string, unknown>, cu
 export const CHARACTER_PROFILE_COLUMNS = `s.id AS linked_setting_id, s.name AS linked_setting_name, s.folder_id AS linked_folder_id,
   s.revision AS linked_revision, s.appearance AS linked_appearance, s.reference_hash AS linked_reference_hash,
   s.avatar_hash AS linked_avatar_hash, s.avatar_crop AS linked_avatar_crop, s.expression_group_id AS linked_expression_group_id,
+  s.sections AS linked_sections, s.outfits AS linked_outfits,
   (SELECT COUNT(*) FROM llm_chat_profiles cp WHERE cp.character_setting_id = s.id AND cp.character_sync = 1) AS linked_profile_count`
 export type CharacterProfileRow = {
-  character_setting_id?: number | null; character_sync?: number
+  character_setting_id?: number | null; character_sync?: number; character_outfit?: string | null
   linked_setting_id?: number | null; linked_setting_name?: string; linked_folder_id?: number | null
-  linked_revision?: number; linked_appearance?: string; linked_reference_hash?: string | null
+  linked_revision?: number; linked_appearance?: string; linked_sections?: string | null; linked_outfits?: string; linked_reference_hash?: string | null
   linked_avatar_hash?: string | null; linked_avatar_crop?: string | null; linked_expression_group_id?: number | null; linked_profile_count?: number
 }
 export function characterProfileDependencies(rows: CharacterProfileRow[]) {
@@ -104,19 +110,20 @@ export function effectiveCharacterProfile(profile: ChatProfile, row: CharacterPr
     if (!folder) break
     path.unshift(folder.name); folderId = folder.parent_id
   }
-  const link: ChatProfileCharacterLink = { settingId: row.linked_setting_id, synced: row.character_sync === 1, settingName: row.linked_setting_name!, path, revision: row.linked_revision!, linkedProfileCount: row.linked_profile_count ?? 0 }
+  const link: ChatProfileCharacterLink = { settingId: row.linked_setting_id, synced: row.character_sync === 1, settingName: row.linked_setting_name!, path, revision: row.linked_revision!, linkedProfileCount: row.linked_profile_count ?? 0, outfit: row.character_outfit ?? null }
   if (!link.synced) return { ...profile, characterLink: link }
   const expressionGroupId = row.linked_expression_group_id ?? null
   const own = dependencies.expressions.get(expressionPathKey(chatCharacterGroupPath(profile.name)))
+  const appearance = characterSettingAppearance({ appearance: row.linked_appearance ?? '', sections: row.linked_sections ?? null, outfits: row.linked_outfits ?? '[]' }, link.outfit)
   return { ...profile, characterLink: link, characterExpressionGroupId: expressionGroupId,
-    appearance: row.linked_appearance ?? '', referenceHash: row.linked_reference_hash ?? null,
+    appearance, referenceHash: row.linked_reference_hash ?? null,
     avatarHash: row.linked_avatar_hash ?? null, avatarCrop: row.linked_avatar_crop ? JSON.parse(row.linked_avatar_crop) : null, avatar: null,
     style: { ...profile.style, emoticonGroupIds: effectiveExpressionGroups(profile.style.emoticonGroupIds, expressionGroupId, own) },
   }
 }
 
-/** Snapshot a setting into local profile fields and its own expression group, in the caller's transaction. */
-export function detachedCharacterFields(settingId: number, profile: Pick<ChatProfile, 'name' | 'style'>, patch: ChatProfileInput, database: Database.Database, deletingSetting = false): ChatProfileInput {
+/** Snapshot a setting (wearing `outfit`) into local profile fields and its own expression group, in the caller's transaction. */
+export function detachedCharacterFields(settingId: number, outfit: string | null, profile: Pick<ChatProfile, 'name' | 'style'>, patch: ChatProfileInput, database: Database.Database, deletingSetting = false): ChatProfileInput {
   const setting = characterSettingRow(settingId)
   attachMainImagesDatabase(database)
   const path = `${chatCharacterGroupPath(profile.name)}/표정`
@@ -126,7 +133,7 @@ export function detachedCharacterFields(settingId: number, profile: Pick<ChatPro
   if (groupId) copyExpressionGroup(source, groupId, database)
   // A deleted file must not prevent detaching or deleting its setting. Explicit patch hashes are still validated by the store.
   const availableHash = (hash: string | null) => hash && activeMediaFile(hash)?.mimeType.startsWith('image/') ? hash : null
-  const fields: ChatProfileInput = { appearance: setting.appearance, referenceHash: availableHash(setting.reference_hash), avatarHash: availableHash(setting.avatar_hash), avatarCrop: setting.avatar_crop ? JSON.parse(setting.avatar_crop) : null, avatar: null }
+  const fields: ChatProfileInput = { appearance: characterSettingAppearance(setting, outfit), referenceHash: availableHash(setting.reference_hash), avatarHash: availableHash(setting.avatar_hash), avatarCrop: setting.avatar_crop ? JSON.parse(setting.avatar_crop) : null, avatar: null }
   for (const key of CHARACTER_APPEARANCE_FIELDS) if (key !== 'avatar' && patch[key] !== undefined) (fields as Record<string, unknown>)[key] = patch[key]
   let emoticonGroupIds = [...(groupId ? [groupId] : []), ...profile.style.emoticonGroupIds.filter((id) => id !== groupId && id !== setting.expression_group_id)]
   if (emoticonGroupIds.length > MAX_EMOTICON_GROUPS) {

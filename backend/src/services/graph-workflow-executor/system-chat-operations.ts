@@ -1,6 +1,7 @@
 import crypto from 'crypto'
 import fs from 'fs'
 import path from 'path'
+import { characterOutfitIndex, composeCharacterAppearance } from '@conai/shared'
 import { parseMcpMarkedFields, normalizeMcpWorkflowInputs } from '../comfyui/comfyWorkflowInputs'
 import { resolveMcpGenerationRoutingInput } from '../generation-queue/generationJobRouting'
 import { hasConfiguredAuth } from '../auth/sessionAccess'
@@ -245,6 +246,8 @@ export async function executeGenerateWithChatPresetNode(
   if (hasProfile && hasSetting) throw new Error('profile_id와 character_setting_id 중 하나만 골라줘.')
   const settingId = hasSetting ? parsePositiveIntegerish(resolvedInputs.character_setting_id) : null
   if (hasSetting && settingId === null) throw new Error('캐릭터 외형 설정 id를 확인해줘.')
+  const outfit = optionalText(resolvedInputs.character_outfit)
+  if (outfit && !hasSetting) throw new Error('의상 이름은 캐릭터 외형 설정과 함께 써. 프로필은 프로필에 고른 의상을 써.')
   const requester = runRequester(context)
   if (hasSetting && requester !== null) requireRequesterPermission({ accountId: requester, accountType: null }, 'characters.view')
   const profile = hasProfile ? requireWorkflowProfile(context, resolvedInputs.profile_id) : null
@@ -253,8 +256,13 @@ export async function executeGenerateWithChatPresetNode(
   // otherwise the setting still lends its tags. Account-less scheduled runs retain their existing access.
   const setting = settingId === null ? null : getCharacterSetting(settingId,
     explicitReference === null && (requester === null || canRequesterViewImages({ accountId: requester, accountType: null })))
+  // A named outfit must exist: a typo would otherwise draw the default one silently.
+  if (setting && outfit && !setting.outfits.some((entry) => entry.name.trim().toLowerCase() === outfit.toLowerCase())) {
+    throw new Error(`외형 설정 '${setting.name}'에 '${outfit}' 의상이 없어. 있는 의상: ${setting.outfits.map((entry) => entry.name).join(', ') || '(없음)'}`)
+  }
   const referenceHash = explicitReference ?? setting?.referenceHash ?? profile?.referenceHash ?? null
-  const fullPrompt = joinPrompt([setting?.appearance ?? profile?.appearance ?? '', prompt])
+  const appearance = setting ? composeCharacterAppearance(setting, characterOutfitIndex(setting.outfits, outfit)) : profile?.appearance ?? ''
+  const fullPrompt = joinPrompt([appearance, prompt])
   // The builder reads only the reference from the profile; a connected reference image stands in for the character's.
   const referenceSource = profile ? { ...profile, referenceHash } : ({ referenceHash } as ChatProfile)
   const options = { forceReference: explicitReference !== null, omitReference: referenceHash === null }
@@ -284,7 +292,7 @@ export async function executeGenerateWithChatPresetNode(
 
   const metadata = context.artifactsByNode.get(node.id)?.metadata
   if (metadata && metadata.value && typeof metadata.value === 'object' && !Array.isArray(metadata.value)) {
-    metadata.value = { ...metadata.value, chat_preset: { id: preset.id, name: preset.name, kind: preset.kind }, profile_id: profile?.id ?? null, character_setting_id: setting?.id ?? null, reference_hash: referenceHash }
+    metadata.value = { ...metadata.value, chat_preset: { id: preset.id, name: preset.name, kind: preset.kind }, profile_id: profile?.id ?? null, character_setting_id: setting?.id ?? null, character_outfit: setting ? setting.outfits[characterOutfitIndex(setting.outfits, outfit)]?.name ?? null : null, reference_hash: referenceHash }
   }
 }
 

@@ -8,12 +8,35 @@ import { FilePicker } from '@/features/files/file-browser'
 import { useI18n } from '@/i18n'
 import { describeLinkedFiles, type LinkedFileLink } from '@/lib/api-codex-chat'
 import { cn } from '@/lib/utils'
+import { LINKABLE_IMAGE_EXTENSIONS, LOREBOOK_ROOT_FOLDER, type StoredFileEntry } from '@conai/shared'
 import { TEXT_EXTENSIONS } from './chat-profile-lorebook'
 
 const MAX_LINKS = 20
+/** What a link can name besides folders (the server refuses the rest): text, PDF, XLSX and images. */
+const LINKABLE_EXTENSIONS = [...TEXT_EXTENSIONS, '.pdf', '.xlsx', ...LINKABLE_IMAGE_EXTENSIONS]
+
+/** The lorebook folder at the top of the store: the server refuses links into it (writing there would skip the lore flow). */
+const isLorebookRoot = (entry: StoredFileEntry) => entry.kind === 'folder' && entry.parentId === null && entry.name === LOREBOOK_ROOT_FOLDER
+
+/** The file store picker for links: folders and the files a link can name are ticked together; other files are dimmed. */
+export function LinkFilePicker({ onPick, onClose }: { onPick: (ids: string[]) => void; onClose: () => void }) {
+  const { t } = useI18n()
+  return (
+    <FilePicker
+      title={t({ ko: '폴더·파일 연결', en: 'Link folders and files' })}
+      accept={LINKABLE_EXTENSIONS}
+      refuse={isLorebookRoot}
+      pickFolders
+      pickHint={t({ ko: '폴더, 텍스트·이미지·PDF·XLSX 파일을 고를 수 있어. 로어북 폴더는 안 돼.', en: 'Folders and text, image, PDF or XLSX files. Not lorebook folders.' })}
+      pickLabel={(count) => (count > 0 ? t({ ko: '{count}개 연결', en: 'Link {count}' }, { count }) : t({ ko: '연결', en: 'Link' }))}
+      onPick={(entries) => onPick(entries.map((entry) => entry.id))}
+      onClose={onClose}
+    />
+  )
+}
 
 /**
- * A profile's linked files: folders and text files of your file store its characters may open in any chat of yours
+ * A profile's linked files: folders and text, image, PDF and XLSX files of your file store its characters may open in any chat of yours
  * (chats of other accounts skip them). New links are read-only; the mode on a chip switches writing on and off.
  */
 export function ChatProfileLinkedFiles({ value, onChange }: { value: LinkedFileLink[]; onChange: (links: LinkedFileLink[]) => void }) {
@@ -48,17 +71,7 @@ export function ChatProfileLinkedFiles({ value, onChange }: { value: LinkedFileL
         )
       })}
       <IconButton variant="ghost" size="icon-sm" disabled={value.length >= MAX_LINKS} onClick={() => setPicking(true)} label={t({ ko: '폴더·파일 연결', en: 'Link a folder or file' })}><FolderPlus /></IconButton>
-      {picking ? (
-        <FilePicker
-          title={t({ ko: '파일 연결', en: 'Link files' })}
-          accept={[...TEXT_EXTENSIONS, '.pdf', '.xlsx']}
-          pickLabel={(count) => (count > 0 ? t({ ko: '{count}개 연결', en: 'Link {count}' }, { count }) : t({ ko: '파일 연결', en: 'Link files' }))}
-          onPick={(entries) => add(entries.map((entry) => entry.id))}
-          pickFolderLabel={t({ ko: '이 폴더 연결', en: 'Link this folder' })}
-          onPickFolder={(folderId) => add([folderId])}
-          onClose={() => setPicking(false)}
-        />
-      ) : null}
+      {picking ? <LinkFilePicker onPick={add} onClose={() => setPicking(false)} /> : null}
     </div>
   )
 }

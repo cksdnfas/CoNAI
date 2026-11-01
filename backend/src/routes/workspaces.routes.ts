@@ -20,7 +20,7 @@ router.post('/', requirePermission('files.edit'), asyncHandler(async (req, res) 
   const input = z.object({ name: z.string().trim().min(1).max(100), guidelines: z.string().max(64000).default('') }).parse(req.body)
   res.status(201).json({ success: true, data: await WorkspaceService.create(requireFileStoreAction(requester(req), 'organize'), input.name, input.guidelines) })
 }))
-router.get('/threads/:threadId', (req, res) => res.json({ success: true, data: WorkspaceService.binding(owner(req), threadId(req)) }))
+router.get('/threads/:threadId', (req, res) => res.json({ success: true, data: WorkspaceService.effective(owner(req), threadId(req)) }))
 router.put('/threads/:threadId', asyncHandler(async (req, res) => {
   const input = z.object({ projectId: workspaceIdSchema.nullable(), write: z.boolean().default(false) }).parse(req.body)
   const thread = threadId(req)

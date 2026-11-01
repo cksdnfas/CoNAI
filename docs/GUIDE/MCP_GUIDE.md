@@ -475,8 +475,9 @@ ComfyUI 시드(`seed`·`noise_seed`)는 실행마다 새로 뽑힙니다. marked
 
 | Tool | 주요 인자와 결과 | 도구 범위 / 계정 권한 |
 | --- | --- | --- |
-| `list_character_library` | `folder_id`(생략: 전체 설정, `null`: 최상위), `query`, `limit`, `offset`. 경로·바로 아래 폴더·페이지형 설정 요약을 반환하며 외형 본문은 제외합니다. | `read` / `characters.view` |
-| `get_character_setting` | `setting_id`. 외형 태그·이미지 해시·표정 키워드 맵·그룹·`revision`을 조회합니다. | `read` / `characters.view` |
+| `list_character_library` | `folder_id`(생략: 전체 설정, `null`: 최상위), `query`(이름·태그·한국어 태그 이름), `favorite`, `filters`(`{분류: [태그]}`), `sort`(`name`/`updated`/`created`/`created_asc`), `include_facets`, `limit`, `offset`. 경로·바로 아래 폴더·페이지형 설정 요약과 선택적인 필터 후보(태그별 개수)를 반환하며 외형 본문은 제외합니다. | `read` / `characters.view` |
+| `get_character_setting` | `setting_id`. 항목별 태그(`sections`)·의상(`outfits`, 첫 번째가 기본)·합친 `appearance`·즐겨찾기·이미지 해시·표정 키워드 맵·그룹·`revision`을 조회합니다. | `read` / `characters.view` |
+| `fill_character_appearance` | `source: danbooru`(`character`: 태그 이름 또는 한국어 이름), `image`(`image_hash`), `text`(`text`). 저장하지 않고 항목별 태그와 의상 태그를 반환합니다. Danbooru·이미지 경로는 Danbooru 사전이 필요합니다. | `read` / `characters.view` |
 | `manage_character_folders` | `action: create`는 `name`, 선택 `parent_id`; `rename`은 `folder_id`, `name`; `move`는 `folder_id`, `parent_id`(`null`: 최상위). 즉시 정리하며 순환 이동·형제 이름 중복을 거부합니다. | `organize` / `characters.edit` |
 | `propose_character_library` | `save_setting`, `delete_setting`, `delete_folder` 검토 카드. **채팅 전용**이며 카드 저장 전에는 변경하지 않습니다. | `organize` / `characters.edit` |
 
@@ -723,7 +724,7 @@ claude mcp list
 
 ## 채팅 프로젝트 파일 도구
 
-1:1 채팅에 작업 공간을 명시적으로 연결하면 Codex·Claude Code·Pi·직접 API LLM에 다음 도구가 직접 제공됩니다. 일반 채팅, 게시판 봇 호출과 외부 HTTP 키에는 자동으로 노출하지 않습니다. 대상은 서버가 확인한 현재 프로젝트이며 모델이 계정이나 프로젝트 ID를 바꿔 접근 범위를 넓힐 수 없습니다.
+작업 공간이 정해진 1:1·그룹 채팅(프로필 기본 또는 채팅의 선택)과 게시판 봇 호출(프로필 기본만)에는 Codex·Claude Code·Pi·직접 API LLM에 다음 도구가 직접 제공됩니다. 작업 공간이 없는 채팅과 외부 HTTP 키에는 노출하지 않습니다. 대상은 서버가 확인한 현재 프로젝트이며 모델이 계정이나 프로젝트 ID를 바꿔 접근 범위를 넓힐 수 없습니다.
 
 | 도구 | 역할 |
 | --- | --- |

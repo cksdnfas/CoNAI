@@ -1,17 +1,18 @@
 import { DOCUMENT_EXTENSIONS } from '../fileDocumentExtraction'
 import path from 'path'
-import type { FileWriteSource, StoredFileEntry } from '@conai/shared'
+import { LINKABLE_IMAGE_EXTENSIONS, type FileWriteSource, type StoredFileEntry } from '@conai/shared'
 import { getUserSettingsDb } from '../../database/userSettingsDb'
 import { retryFileSearchIndex, searchStoredFiles } from '../fileStoreSearch'
 import { FileStoreError, FileStoreService, MAX_TEXT_DOCUMENT_BYTES, TEXT_EXTENSIONS, applyTextEdits, fileOwnerKey, type TextEdit } from '../fileStoreService'
 import { LOREBOOK_ROOT_FOLDER } from './chatLorebookFiles'
+import { BoardCallRooms } from '../posts/boardCallRooms'
 
 /**
- * Linked files: shared folders and text files that a chat (`codex_chat_threads.linked_files`)
+ * Linked files: shared folders and files (text, PDF, XLSX, images) that a chat (`codex_chat_threads.linked_files`)
  * or a profile (`llm_chat_profiles.linked_files`) hands its characters. A request carries only a short index of them
- * (names and counts, never contents) beside the lore index; the characters search, open and — where the link allows
- * writing — write and edit them with the linked_* tools, which never leave the linked places. Lorebook folders cannot
- * be linked: writing there would skip the lore proposal flow.
+ * (names and counts, never contents) beside the lore index; the characters search, open, look at images and — where
+ * the link allows writing — write and edit them with the linked_* tools, which never leave the linked places. Lorebook
+ * folders cannot be linked: writing there would skip the lore proposal flow.
  */
 
 export type LinkedFileLink = { id: string; write: boolean }
@@ -30,6 +31,7 @@ export const LINKED_TOOLS = {
   list: 'linked_list',
   search: 'linked_search',
   read: 'linked_read',
+  view: 'linked_view',
   write: 'linked_write',
   edit: 'linked_edit',
 } as const
@@ -60,8 +62,16 @@ function entryOf(owner: string, id: string): StoredFileEntry | null {
   try { return FileStoreService.get(owner, id) } catch { return null }
 }
 
-function isTextName(name: string) {
-  return TEXT_EXTENSIONS.has(path.extname(name).toLowerCase()) || DOCUMENT_EXTENSIONS.has(path.extname(name).toLowerCase())
+const IMAGE_EXTENSIONS: ReadonlySet<string> = new Set(LINKABLE_IMAGE_EXTENSIONS)
+
+function isImageName(name: string) {
+  return IMAGE_EXTENSIONS.has(path.extname(name).toLowerCase())
+}
+
+/** The files a link may name: text, PDF/XLSX documents and images. Folders are always linkable. */
+function isLinkableName(name: string) {
+  const extension = path.extname(name).toLowerCase()
+  return TEXT_EXTENSIONS.has(extension) || DOCUMENT_EXTENSIONS.has(extension) || IMAGE_EXTENSIONS.has(extension)
 }
 
 /** Whether the entry is the owner's lorebook folder or inside it. */
@@ -84,7 +94,7 @@ export function assertLinkedFiles(owner: string, links: LinkedFileLink[], kept: 
     if (kept.some((item) => item.id === link.id)) continue
     const entry = entryOf(owner, link.id)
     if (!entry) throw new LinkedFileError('연결할 파일이나 폴더를 찾을 수 없어.', 404)
-    if (entry.kind === 'file' && !isTextName(entry.name)) throw new LinkedFileError(`텍스트·PDF·XLSX 파일만 연결할 수 있어: ${entry.name}`)
+    if (entry.kind === 'file' && !isLinkableName(entry.name)) throw new LinkedFileError(`텍스트·이미지·PDF·XLSX 파일만 연결할 수 있어: ${entry.name}`)
     if (isInsideLorebooks(owner, entry.id)) throw new LinkedFileError('로어북 폴더는 연결할 수 없어. 로어북은 로어북 칸에서 연결해줘.')
   }
   return links
@@ -124,8 +134,9 @@ function fold(value: string) {
 export function placesForRequest({ thread, profile }: { thread: ThreadRef | null; profile: { linkedFiles?: LinkedFileLink[] } | null }): LinkedPlace[] {
   if (!thread) return []
   const owner = fileOwnerKey(thread.account_id ?? null)
+  // A board call reads other people's text, so it opens only what its profile designates, not links its room has.
   const links = [
-    ...LinkedFileStore.threadLinks(thread.id).map((link) => ({ ...link, via: 'thread' as const })),
+    ...(BoardCallRooms.active(thread.id) ? [] : LinkedFileStore.threadLinks(thread.id)).map((link) => ({ ...link, via: 'thread' as const })),
     ...(profile?.linkedFiles ?? []).map((link) => ({ ...link, via: 'profile' as const })),
   ]
   const places: LinkedPlace[] = []
@@ -133,7 +144,7 @@ export function placesForRequest({ thread, profile }: { thread: ThreadRef | null
   for (const link of links) {
     if (places.some((place) => place.entry.id === link.id)) continue
     const entry = entryOf(owner, link.id)
-    if (!entry || (entry.kind === 'file' && !isTextName(entry.name)) || isInsideLorebooks(owner, entry.id)) continue
+    if (!entry || (entry.kind === 'file' && !isLinkableName(entry.name)) || isInsideLorebooks(owner, entry.id)) continue
     // Brackets and slashes would break `[label]/path`.
     const base = entry.name.replace(/[[\]/]/g, ' ').replace(/\s+/g, ' ').trim() || entry.id.slice(0, 8)
     let label = base
@@ -185,7 +196,7 @@ export function buildLinkedIndex(places: LinkedPlace[], estimate: (text: string)
     }
   })
   const writable = places.some((place) => place.write)
-  const footer = `(이름만 있고 내용은 없어. 필요하면 ${LINKED_TOOLS.search}·${LINKED_TOOLS.list}·${LINKED_TOOLS.read}로 찾아 열어. 경로는 [이름]/하위경로${writable ? `. 쓰기 표시된 곳은 ${LINKED_TOOLS.write}·${LINKED_TOOLS.edit}로 쓰고 고쳐` : ''}.)`
+  const footer = `(이름만 있고 내용은 없어. 필요하면 ${LINKED_TOOLS.search}·${LINKED_TOOLS.list}·${LINKED_TOOLS.read}로 찾아 열고, 이미지는 ${LINKED_TOOLS.view}로 봐. 경로는 [이름]/하위경로${writable ? `. 쓰기 표시된 곳은 ${LINKED_TOOLS.write}·${LINKED_TOOLS.edit}로 쓰고 고쳐` : ''}.)`
   const shown = lines.map((line) => line.full)
   const text = () => ['## 연결 파일', ...shown, footer].join('\n')
   const order = lines.map((_, index) => index).filter((index) => lines[index].full !== lines[index].short)
@@ -285,6 +296,7 @@ export async function readLinked(places: LinkedPlace[], value: string, offset = 
   const entry = resolveEntry(resolved)
   if (!entry) throw new LinkedFileError(`Not found: ${resolved.display}`, 404)
   if (entry.kind !== 'file') throw new LinkedFileError(`${resolved.display} is a folder; list it with ${LINKED_TOOLS.list}.`)
+  if (isImageName(entry.name)) throw new LinkedFileError(`${resolved.display} is an image; look at it with ${LINKED_TOOLS.view}.`)
   if (options.retry) await retryFileSearchIndex(resolved.place.owner, entry.id)
   const read = await FileStoreService.readText(resolved.place.owner, entry.id, offset, options.limit ?? READ_CHUNK_BYTES, options)
   return [
@@ -295,6 +307,24 @@ export async function readLinked(places: LinkedPlace[], value: string, offset = 
     '[/파일]',
     ...(read.nextOffset !== null ? [`(${read.size}바이트 중 ${read.nextOffset}바이트까지 읽음. 이어 읽으려면 ${LINKED_TOOLS.read}(target=${JSON.stringify(resolved.display)}, offset=${read.nextOffset}, source=${read.extracted ? 'extracted' : 'original'}${read.revision ? `, revision=${JSON.stringify(read.revision)}` : ''}))`] : []),
   ].join('\n')
+}
+
+export type LinkedImage = { display: string; id: string; filePath: string } | { display: string; error: string }
+
+/** The image files the paths name inside the linked places, each ready to show (linked_view) or the reason it cannot be. */
+export function linkedImages(places: LinkedPlace[], values: string[]): LinkedImage[] {
+  return values.map((value) => {
+    try {
+      const resolved = splitLinkedPath(places, value)
+      const entry = resolveEntry(resolved)
+      if (!entry) throw new LinkedFileError(`Not found: ${resolved.display}`, 404)
+      if (entry.kind !== 'file') throw new LinkedFileError(`${resolved.display} is a folder; list it with ${LINKED_TOOLS.list}.`)
+      if (!isImageName(entry.name)) throw new LinkedFileError(`${resolved.display} is not an image (${LINKABLE_IMAGE_EXTENSIONS.join(' ')}); open text and documents with ${LINKED_TOOLS.read}.`)
+      return { display: resolved.display, id: entry.id, filePath: FileStoreService.resolveFile(resolved.place.owner, entry.id).filePath }
+    } catch (error) {
+      return { display: value, error: error instanceof Error ? error.message : 'unavailable' }
+    }
+  })
 }
 
 /** A new text document (folders on the way are made), or a whole file replaced with `overwrite`. */
@@ -369,7 +399,7 @@ function folderPath(owner: string, parentId: string | null) {
 export function describeLinkedFiles(owner: string, links: LinkedFileLink[], via: 'thread' | 'profile' = 'thread'): LinkedFileView[] {
   return links.map((link) => {
     const entry = entryOf(owner, link.id)
-    const usable = entry !== null && !(entry.kind === 'file' && !isTextName(entry.name)) && !isInsideLorebooks(owner, entry.id)
+    const usable = entry !== null && !(entry.kind === 'file' && !isLinkableName(entry.name)) && !isInsideLorebooks(owner, entry.id)
     return {
       id: link.id,
       name: entry?.name ?? link.id.slice(0, 8),

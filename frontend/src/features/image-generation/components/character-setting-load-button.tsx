@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ComponentProps } from 'react'
+import { composeCharacterAppearance } from '@conai/shared'
 import { Check, UserRound, UserRoundPlus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Field } from '@/components/ui/field'
@@ -62,7 +63,9 @@ type CharacterSettingLoadButtonProps = {
   onLoad: (load: CharacterSettingLoad) => void
 }
 
-type ConfirmStep = { setting: CharacterSetting; textTargetId: string | null; referenceTarget: CharacterSettingLoadTarget | null }
+/** `outfitIndex`: which outfit goes with the sections (0: the default). */
+type ConfirmStep = { setting: CharacterSetting; textTargetId: string | null; referenceTarget: CharacterSettingLoadTarget | null; outfitIndex: number }
+const appearanceOf = (setting: CharacterSetting, outfitIndex: number) => composeCharacterAppearance(setting, outfitIndex).trim()
 
 /**
  * "캐릭터 불러오기": pick a character library setting and copy its appearance tags (and, when chosen, its reference
@@ -97,8 +100,8 @@ export function CharacterSettingLoadButton({
   const Icon = icon === 'add' ? UserRoundPlus : UserRound
   const referenceOptionsOf = (setting: CharacterSetting) => (canViewImages && setting.referenceHash ? referenceTargets : [])
 
-  const finish = async ({ setting, textTargetId, referenceTarget }: ConfirmStep) => {
-    const appearance = setting.appearance.trim()
+  const finish = async ({ setting, textTargetId, referenceTarget, outfitIndex }: ConfirmStep) => {
+    const appearance = appearanceOf(setting, outfitIndex)
     if (!appearance && !referenceTarget) {
       showSnackbar({ message: t({ ko: '이 외형 설정엔 넣을 외형 태그가 없어.', en: 'This setting has no appearance tags to insert.' }), tone: 'info' })
       setStep(null)
@@ -119,9 +122,9 @@ export function CharacterSettingLoadButton({
 
   const handlePick = (setting: CharacterSetting) => {
     const referenceOptions = referenceOptionsOf(setting)
-    const next = { setting, textTargetId: textTargets?.[0]?.id ?? null, referenceTarget: referenceOptions[0] ?? null }
-    // Ask only when there is a choice to make: which field, or whether the reference goes in too.
-    if ((textTargets?.length ?? 0) > 1 || referenceOptions.length > 0) setStep(next)
+    const next = { setting, textTargetId: textTargets?.[0]?.id ?? null, referenceTarget: referenceOptions[0] ?? null, outfitIndex: 0 }
+    // Ask only when there is a choice to make: which field, which outfit, or whether the reference goes in too.
+    if ((textTargets?.length ?? 0) > 1 || referenceOptions.length > 0 || setting.outfits.length > 1) setStep(next)
     else void finish(next)
   }
 
@@ -130,7 +133,7 @@ export function CharacterSettingLoadButton({
   const chosenReference = step?.referenceTarget
     ? referenceOptions.find((option) => isSameTarget(option, step.referenceTarget as CharacterSettingLoadTarget)) ?? referenceOptions[0] ?? null
     : null
-  const stepAppearance = step?.setting.appearance.trim() ?? ''
+  const stepAppearance = step ? appearanceOf(step.setting, step.outfitIndex) : ''
 
   return (
     <>
@@ -152,6 +155,13 @@ export function CharacterSettingLoadButton({
             <Text as="p" variant="muted" className="line-clamp-4 break-words">
               {stepAppearance || t({ ko: '외형 태그가 비어 있어.', en: 'No appearance tags.' })}
             </Text>
+            {step.setting.outfits.length > 1 ? (
+              <Field label={t({ ko: '의상', en: 'Outfit' })}>
+                <Select value={String(step.outfitIndex)} disabled={loading} onChange={(event) => setStep({ ...step, outfitIndex: Number(event.target.value) })}>
+                  {step.setting.outfits.map((outfit, index) => <option key={`${index}:${outfit.name}`} value={index}>{index === 0 ? t({ ko: '{name} (기본)', en: '{name} (default)' }, { name: outfit.name }) : outfit.name}</option>)}
+                </Select>
+              </Field>
+            ) : null}
             {textTargets && textTargets.length > 1 ? (
               <Field label={t({ ko: '태그를 넣을 칸', en: 'Insert the tags into' })}>
                 <Select value={step.textTargetId ?? ''} disabled={loading} onChange={(event) => setStep({ ...step, textTargetId: event.target.value })}>

@@ -144,6 +144,42 @@ test('chat linked files: links, index, tools stay inside the linked places, writ
     try { assert.deepEqual(names(publicPage), [], 'public pages still cannot access linked files') } finally { await publicPage.close() }
   })
 
+  await t.test('a board call opens what its profile links, not the links of the room it runs in', async () => {
+    const { BoardCallRooms } = await import('../src/services/posts/boardCallRooms')
+    linked.LinkedFileStore.setThreadLinks(threadId, [{ id: world.id, write: false }])
+    const context: ChatExecutionContext = { threadId, profileId: profile.id, kind: 'direct', replyId: 'board-call' }
+    const close = registerChatReply(context, new AbortController().signal, () => ({ replyTo: null, recipients: ['user'] }))
+    const unbind = BoardCallRooms.bind(threadId, 555, profile.id)
+    const bridge = await openChatMcpBridge({ accountId: null, accountType: 'admin' }, [], null, { chatContext: context })
+    try {
+      assert.ok(bridge.tools.some((tool) => tool.function.name === 'linked_read'), 'the profile link keeps the tools')
+      assert.match(JSON.stringify(await bridge.call('linked_read', { target: '[장기기억 정리.md]' })), /고양이 알레르기/)
+      assert.equal((await bridge.call('linked_read', { target: '[세계관]/연표.md' })).isError, true, 'the room link stays closed')
+    } finally { unbind(); close(); await bridge.close() }
+  })
+
+  await t.test('images can be linked and looked at, only inside the linked places, and are not read as text', async () => {
+    const pictures = FileStoreService.createFolder(me, null, '사진첩')
+    const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=', 'base64')
+    const staged = path.join(root, 'pic.png')
+    fs.writeFileSync(staged, png)
+    const [picture] = FileStoreService.upload(me, pictures.id, [{ originalname: 'pic.png', mimetype: 'image/png', size: png.length, path: staged } as Express.Multer.File])
+    const sound = path.join(root, 'clip.mp3')
+    fs.writeFileSync(sound, 'x')
+    const [clip] = FileStoreService.upload(me, pictures.id, [{ originalname: 'clip.mp3', mimetype: 'audio/mpeg', size: 1, path: sound } as Express.Multer.File])
+    FileStoreService.writeText(me, pictures.id, '메모.md', '사진 설명\n', { create: true })
+    assert.doesNotThrow(() => linked.assertLinkedFiles(me, [{ id: picture.id, write: false }]), 'an image can be linked on its own')
+    assert.throws(() => linked.assertLinkedFiles(me, [{ id: clip.id, write: false }]), /텍스트·이미지·PDF·XLSX/, 'sound still cannot')
+    linked.LinkedFileStore.setThreadLinks(threadId, [{ id: pictures.id, write: false }])
+    const inPlaces = linked.placesForRequest({ thread: CodexChatStore.findThreadById(threadId)!, profile: null })
+    const [seen] = linked.linkedImages(inPlaces, ['[사진첩]/pic.png'])
+    assert.ok('filePath' in seen && seen.id === picture.id, 'a linked folder gives its image')
+    const [notImage, outside] = linked.linkedImages(inPlaces, ['[사진첩]/메모.md', '[비밀]/pic.png'])
+    assert.match('error' in notImage ? notImage.error : '', /not an image/)
+    assert.ok('error' in outside, 'a path outside the linked places is refused')
+    await assert.rejects(linked.readLinked(inPlaces, '[사진첩]/pic.png'), /linked_view/)
+  })
+
   await t.test('clearing the conversation keeps the links', () => {
     linked.LinkedFileStore.setThreadLinks(threadId, [{ id: journal.id, write: true }])
     CodexChatStore.clearThread(threadId, '')

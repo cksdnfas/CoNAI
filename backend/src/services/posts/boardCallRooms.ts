@@ -17,6 +17,10 @@ export const BoardCallRooms = {
     const call = callsByRoom.get(threadId);
     return call && call.profileId === profileId ? call.runId : null;
   },
+  /** Whether `threadId` is answering a board call now, whichever bot. */
+  active(threadId: number): boolean {
+    return callsByRoom.has(threadId);
+  },
   quotedPostFor(threadId: number, profileId: number) {
     const call = callsByRoom.get(threadId);
     return call?.profileId === profileId ? call.quotedPost : null;

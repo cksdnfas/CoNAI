@@ -109,19 +109,23 @@ function SearchHits({ hits, terms, truncated, search, onOpen, onRetry, retrying 
 }
 
 /** Shared file store, also used as a file/folder picker. */
-export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, onPickFolder, pickFolderLabel, accept, system = null, onSystemNavigate, workspaces }: {
+export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, pickFolders = false, pickHint, accept, refuse, system = null, onSystemNavigate, workspaces }: {
   /** The files page: project workspaces as the first sidebar group. */
   workspaces?: { onOpen: (id: string) => void; onCreate?: () => void }
   parentId: string | null
   onNavigate: (id: string | null) => void
+  /** Picker: the chosen entries (folders too with `pickFolders`). The choice survives moving between folders. */
   onPick?: (files: StoredFileEntry[]) => void
-  /** Picker: also choose the open folder itself (not the top). */
-  onPickFolder?: () => void
-  pickFolderLabel?: string
-  /** Picker: the confirm button's text for `count` chosen files (default: attach). */
+  /** Picker: folders get a checkbox as files do (they still open on a click). */
+  pickFolders?: boolean
+  /** Picker: a line in the footer saying what can be chosen. */
+  pickHint?: string
+  /** Picker: the confirm button's text for `count` chosen entries (default: attach). */
   pickLabel?: (count: number) => string
-  /** Picker: only files with these extensions (lowercase, with the dot) can be chosen. */
+  /** Picker: only files with these extensions (lowercase, with the dot) can be chosen; the others are dimmed. */
   accept?: readonly string[]
+  /** Picker: entries (folders too) that can be neither chosen nor opened; they are dimmed. */
+  refuse?: (entry: StoredFileEntry) => boolean
   /** Server folder shown instead of the store (administrators); null shows the store. */
   system?: SystemFolderLocation | null
   /** With it, administrators get the "서버 폴더" sidebar group. */
@@ -147,6 +151,8 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, onPickFol
   const accountKey = auth.data?.accountId ?? (auth.data?.hasCredentials ? 'anonymous' : 'bootstrap')
   const [offset, setOffset] = useState(0)
   const [selected, setSelected] = useState<string[]>([])
+  /** Picker only: what is ticked, kept across folders (the list shows one folder at a time). */
+  const [chosen, setChosen] = useState<StoredFileEntry[]>([])
   const [nameDialog, setNameDialog] = useState<NameDialog>(null)
   const [moveOpen, setMoveOpen] = useState(false)
   const [moveTarget, setMoveTarget] = useState('')
@@ -173,8 +179,10 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, onPickFol
   })
   const entries = query.data?.entries ?? []
   const rootLabel = t({ ko: '공용 파일', en: 'Shared files' })
-  // The picker attaches files only; folders are for navigating.
-  const selectable = isPicker ? entries.filter((entry) => entry.kind === 'file') : entries
+  // A picker takes files of the accepted types, and folders only when asked; everything else is just shown.
+  const pickable = (entry: StoredFileEntry) => refuse?.(entry) !== true && (entry.kind === 'folder' ? pickFolders : !accept || accept.some((extension) => entry.name.toLowerCase().endsWith(extension)))
+  const selectable = isPicker ? entries.filter(pickable) : entries
+  const checked = isPicker ? chosen.map((entry) => entry.id) : selected
   const selection = entries.filter((entry) => selected.includes(entry.id))
   const audioSelection = selection.length > 0 && selection.every((entry) => entry.kind === 'file' && mediaKind(entry) === 'audio')
   const refresh = () => queryClient.invalidateQueries({ queryKey: FILES_QUERY_KEY })
@@ -266,7 +274,16 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, onPickFol
     setOffset(0)
     onNavigate(id)
   }
-  const toggle = (id: string, checked: boolean) => setSelected((current) => (checked ? [...current, id] : current.filter((entry) => entry !== id)))
+  const toggle = (id: string, on: boolean) => {
+    if (!isPicker) { setSelected((current) => (on ? [...current, id] : current.filter((entry) => entry !== id))); return }
+    const entry = entries.find((item) => item.id === id)
+    setChosen((current) => (on && entry && !current.some((item) => item.id === id) ? [...current, entry] : on ? current : current.filter((item) => item.id !== id)))
+  }
+  const selectAll = (on: boolean) => {
+    if (!isPicker) { setSelected(on ? selectable.map((entry) => entry.id) : []); return }
+    const here = new Set(selectable.map((entry) => entry.id))
+    setChosen((current) => [...current.filter((item) => !here.has(item.id)), ...(on ? selectable : [])])
+  }
   const upload = (files: File[], target: string | null = parentId) => {
     if (canUpload && !busy && files.length) mutation.mutate(() => uploadStoredFiles(target, files, { allowAnyType: canUploadAny }))
   }
@@ -392,6 +409,7 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, onPickFol
   const toItem = (entry: StoredFileEntry): EntryItem => ({
     id: entry.id, name: entry.name, folder: entry.kind === 'folder', size: entry.size, modified: formatDateTime(entry.updatedAt),
     icon: <EntryIcon entry={entry} />, face: <StoredFileFace entry={entry} />,
+    disabled: isPicker && (entry.kind === 'file' ? !pickable(entry) : refuse?.(entry) === true),
   })
   let list
   if (searching) {
@@ -411,10 +429,10 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, onPickFol
         items={entries.map(toItem)}
         mode={viewMode}
         compact={isPicker}
-        selected={selected}
+        selected={checked}
         onToggle={toggle}
-        onSelectAll={(checked) => setSelected(checked ? selectable.map((entry) => entry.id) : [])}
-        canSelect={(item) => !isPicker || !item.folder}
+        onSelectAll={selectAll}
+        canSelect={(item) => !isPicker || pickable(byId.get(item.id)!)}
         menu={isPicker ? undefined : (item) => rowEntries(byId.get(item.id)!)}
         formatSize={formatFileSize}
         draggable={canOrganize && !busy && !isPicker}
@@ -426,7 +444,7 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, onPickFol
         onOpen={(item) => {
           const entry = byId.get(item.id)!
           if (entry.kind === 'folder') navigate(entry.id)
-          else if (isPicker || (viewMode === 'grid' && selected.length > 0)) toggle(entry.id, !selected.includes(entry.id))
+          else if (isPicker || (viewMode === 'grid' && selected.length > 0)) toggle(entry.id, !checked.includes(entry.id))
           else setPreview(entry)
         }}
       />
@@ -450,8 +468,6 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, onPickFol
     </div>
   )
 
-  const pickedFiles = selection.filter((entry) => entry.kind === 'file' && (!accept || accept.some((extension) => entry.name.toLowerCase().endsWith(extension))))
-
   return (
     <>
       {isPicker ? (
@@ -464,15 +480,12 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, onPickFol
             {body}
           </ModalBody>
           <ModalFooter>
-            <span className="flex-1" />
-            {onPickFolder ? (
-              <Button variant="secondary" disabled={parentId === null || busy} onClick={onPickFolder}>{pickFolderLabel ?? t({ ko: '이 폴더 선택', en: 'Choose this folder' })}</Button>
-            ) : null}
-            <Button disabled={pickedFiles.length === 0 || busy} onClick={() => onPick(pickedFiles)}>
+            <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">{pickHint}</span>
+            <Button disabled={chosen.length === 0 || busy} onClick={() => onPick(chosen)}>
               {pickLabel
-                ? pickLabel(pickedFiles.length)
-                : pickedFiles.length > 0
-                  ? t({ ko: '{count}개 첨부', en: 'Attach {count}' }, { count: pickedFiles.length })
+                ? pickLabel(chosen.length)
+                : chosen.length > 0
+                  ? t({ ko: '{count}개 첨부', en: 'Attach {count}' }, { count: chosen.length })
                   : t({ ko: '첨부', en: 'Attach' })}
             </Button>
           </ModalFooter>
@@ -542,16 +555,20 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, onPickFol
   )
 }
 
-/** Choose stored files to attach (chat). */
-export function FilePicker({ onClose, onPick, onPickFolder, pickFolderLabel, title, pickLabel, accept, initialParentId = null }: {
+/** Choose stored files (and, with `pickFolders`, folders) to attach or link. The ticks stay while you move between folders. */
+export function FilePicker({ onClose, onPick, pickFolders, pickHint, title, pickLabel, accept, refuse, initialParentId = null }: {
   onClose: () => void
   onPick: (entries: StoredFileEntry[]) => void
-  /** Also choose the open folder (its id); the top of the store cannot be chosen. */
-  onPickFolder?: (folderId: string) => void
-  pickFolderLabel?: string
+  /** Folders get a checkbox too. */
+  pickFolders?: boolean
+  /** A footer line saying what can be chosen. */
+  pickHint?: string
   title?: string
   pickLabel?: (count: number) => string
+  /** Only files with these extensions can be chosen; the others are dimmed. */
   accept?: readonly string[]
+  /** Entries (folders too) that can be neither chosen nor opened; they are dimmed. */
+  refuse?: (entry: StoredFileEntry) => boolean
   /** The folder it opens in (null: the top). */
   initialParentId?: string | null
 }) {
@@ -559,7 +576,7 @@ export function FilePicker({ onClose, onPick, onPickFolder, pickFolderLabel, tit
   const [parentId, setParentId] = useState<string | null>(initialParentId)
   return (
     <Modal open title={title ?? t({ ko: '보관함에서 첨부', en: 'Attach from files' })} onClose={onClose} size="lg" height="tall">
-      <FileBrowser key={parentId ?? 'root'} parentId={parentId} onNavigate={setParentId} onPick={onPick} pickLabel={pickLabel} onPickFolder={onPickFolder ? () => { if (parentId) onPickFolder(parentId) } : undefined} pickFolderLabel={pickFolderLabel} accept={accept} />
+      <FileBrowser parentId={parentId} onNavigate={setParentId} onPick={onPick} pickLabel={pickLabel} pickFolders={pickFolders} pickHint={pickHint} accept={accept} refuse={refuse} />
     </Modal>
   )
 }

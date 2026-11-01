@@ -49,3 +49,9 @@ export const LORE_SELECTION_LIMITS = { min: 1, max: 100, default: 8 } as const
 
 /** Raw request captures kept per chat (ChatSettings.diagnostics.captureLimit). */
 export const CHAT_CAPTURE_LIMITS = { min: 1, max: 200, default: 20 } as const
+
+/** The top folder of the file store that holds the lorebooks; it cannot be linked to a chat or profile. */
+export const LOREBOOK_ROOT_FOLDER = '로어북'
+
+/** Image files a linked file can be: the characters look at them with linked_view (text, PDF and XLSX are the other linkable files). */
+export const LINKABLE_IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.avif'] as const

@@ -48,12 +48,69 @@ test('project files share files while preserving revisions, execution boundaries
   await t.test('shared projects retain path checks and private chat bindings', async () => {
     assert.equal(service.get('account:77', project.id).id, project.id)
     assert.equal(service.list('account:77')[0].id, project.id)
-    assert.throws(() => service.bind('account:77', threadId, project.id, true), /내 1:1 채팅/)
+    assert.throws(() => service.bind('account:77', threadId, project.id, true), /내 채팅/)
     assert.equal(service.binding('account:77', threadId), null)
     for (const target of ['../secret', 'a/../b', '/tmp/a', 'C:/a', 'a\\b', 'a:stream', 'node_modules/a', '.git/config', 'CON.txt', '.workspace-abc', 'a.']) assert.throws(() => workspaceTarget(target), /경로/)
     assert.equal((await service.read('account:77', project.id, [{ target: 'AI_GUIDELINES.md' }])).files[0].text, 'Use Korean names.')
     assert.throws(() => validateMcpToolArguments({ path: 'file.md' }), /not allowed/)
     assert.doesNotThrow(() => validateMcpToolArguments({ target: 'file.md' }))
+  })
+  await t.test('a profile brings a default project; the chat keeps its own choice over it and the owner boundary stays', async () => {
+    const other = await service.create('bootstrap', '다른 프로젝트')
+    const withDefault = ChatProfileStore.create({ name: 'Default workspace', engine: 'llm', providerName: 'workspace-test', workspace: { id: project.id, write: true } })
+    assert.deepEqual(withDefault.workspace, { id: project.id, write: true })
+    assert.throws(() => ChatProfileStore.update(withDefault.id, { workspace: { id: 'f'.repeat(32), write: false } }), /작업 공간을 찾을 수 없어/)
+    const chat = CodexChatStore.createThread(null, 'Default workspace chat', 'llm', withDefault.id)
+    const inherited = service.effective('bootstrap', chat)
+    assert.equal(inherited?.project.id, project.id)
+    assert.equal(inherited?.write, true)
+    assert.equal(inherited?.source, 'profile')
+    assert.equal(service.binding('bootstrap', chat), null, 'the default is not a chat binding')
+    assert.equal(service.effective('account:77', chat), null, 'another account sees no default of this chat')
+    assert.equal(service.bind('bootstrap', chat, other.id, false)?.source, 'chat')
+    assert.equal(service.effective('bootstrap', chat)?.project.id, other.id, 'the chat choice wins')
+    assert.equal(service.bind('bootstrap', chat, null, false)?.project.id, project.id, 'clearing it goes back to the profile default')
+    ChatProfileStore.update(withDefault.id, { workspace: null })
+    assert.equal(service.effective('bootstrap', chat), null)
+  })
+  await t.test('group chats and board calls work in the speaking profile’s project; a board call never takes its room’s own choice', async () => {
+    const { ChatGroupStore } = await import('../src/services/codex-chat/chatGroupStore')
+    const other = await service.create('bootstrap', '그룹 다른 프로젝트')
+    const withDefault = ChatProfileStore.create({ name: 'Group default', engine: 'llm', providerName: 'workspace-test', workspace: { id: project.id, write: true } })
+    const plain = ChatProfileStore.create({ name: 'Group plain', engine: 'llm', providerName: 'workspace-test' })
+    const outsider = ChatProfileStore.create({ name: 'Group outsider', engine: 'llm', providerName: 'workspace-test', workspace: { id: project.id, write: true } })
+    const group = ChatGroupStore.create(null, 'Group workspace', [withDefault.id, plain.id], withDefault.id)
+    const toolsOf = async (profileId: number, room: number, kind: 'group' | 'direct') => {
+      const chatContext: ChatExecutionContext = { threadId: room, profileId, kind, replyId: `ws-${room}-${profileId}` }
+      const close = registerChatReply(chatContext, new AbortController().signal, () => ({ replyTo: null, recipients: ['user'] }))
+      const bridge = await openChatMcpBridge(requester, [], null, { chatContext })
+      try { return bridge.tools.map(tool => tool.function.name).filter(name => name.startsWith('workspace_')) } finally { close(); await bridge.close() }
+    }
+    assert.equal(service.effective('bootstrap', group), null, 'a group has no default of its own')
+    assert.equal(service.effective('bootstrap', group, withDefault.id)?.project.id, project.id)
+    assert.equal(service.effective('bootstrap', group, outsider.id), null, 'only a member’s default counts')
+    assert.ok((await toolsOf(withDefault.id, group, 'group')).includes('workspace_apply'), 'a member with a default writes in it')
+    assert.deepEqual(await toolsOf(plain.id, group, 'group'), [], 'a member without one has none')
+    assert.deepEqual(await toolsOf(outsider.id, group, 'group'), [], 'a profile outside the group has none')
+    assert.equal(service.bind('bootstrap', group, other.id, false)?.project.id, other.id, 'a group room can choose a project')
+    assert.equal(service.effective('bootstrap', group, withDefault.id)?.project.id, other.id, 'the room’s choice wins for every member')
+    const sharedTools = await toolsOf(plain.id, group, 'group')
+    assert.ok(sharedTools.includes('workspace_read') && !sharedTools.includes('workspace_apply'), 'read-only as the room allows')
+    service.bind('bootstrap', group, null, false)
+
+    const boardRoom = CodexChatStore.createThread(null, 'Board room', 'llm', withDefault.id)
+    const unbind = BoardCallRooms.bind(boardRoom, 4321, withDefault.id)
+    try {
+      service.bind('bootstrap', boardRoom, other.id, false)
+      assert.equal(service.effective('bootstrap', boardRoom, withDefault.id, true)?.project.id, project.id, 'only the profile’s project')
+      assert.ok((await toolsOf(withDefault.id, boardRoom, 'direct')).includes('workspace_read'), 'a board call opens its profile’s project')
+      const plainRoom = CodexChatStore.createThread(null, 'Plain board room', 'llm', plain.id)
+      const unbindPlain = BoardCallRooms.bind(plainRoom, 4322, plain.id)
+      try {
+        service.bind('bootstrap', plainRoom, other.id, true)
+        assert.deepEqual(await toolsOf(plain.id, plainRoom, 'direct'), [], 'a project the room chose is not open to a board call')
+      } finally { unbindPlain() }
+    } finally { unbind() }
   })
   await t.test('revision checks and identical retries do not apply edits twice', async () => {
     const create: WorkspaceOperation[] = [{ kind: 'write', target: 'note.md', text: 'first', expectedRevision: null }]

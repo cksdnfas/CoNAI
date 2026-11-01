@@ -4,9 +4,14 @@ import { requireFileStoreOwner } from '../fileStoreAccess'
 import { WorkspaceService } from '../workspaceService'
 import { BoardCallRooms } from '../posts/boardCallRooms'
 
+/**
+ * The project a speaking profile works in, in a 1:1 chat, a group chat or a board call. A board call reads text other
+ * people wrote, so it reaches only the project its profile designates, never one the call's room chose for itself.
+ */
 export function chatWorkspace(requester: McpRequester | undefined, threadId?: number, profileId?: number): WorkspaceBinding | null {
-  if (!requester || !threadId || (profileId && BoardCallRooms.runFor(threadId, profileId) !== null)) return null
-  try { return WorkspaceService.binding(requireFileStoreOwner(requester), threadId) } catch { return null }
+  if (!requester || !threadId) return null
+  const board = profileId !== undefined && BoardCallRooms.runFor(threadId, profileId) !== null
+  try { return WorkspaceService.effective(requireFileStoreOwner(requester), threadId, profileId, board) } catch { return null }
 }
 export function workspaceSignature(binding: WorkspaceBinding | null) {
   return binding ? `${binding.project.id}:${binding.bindingRevision}:${binding.project.revision}` : ''

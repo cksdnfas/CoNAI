@@ -1,4 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
+import { characterOutfitIndex, composeCharacterAppearance } from '@conai/shared'
+import { Select } from '@/components/ui/select'
 import { ChatProfileAvatar } from '@/features/codex-chat/chat-profile-avatar'
 import { useI18n } from '@/i18n'
 import { CHAT_GENERATION_PRESETS_QUERY_KEY, ChatEditorResolution, clearChatProfileExpression, draftChatAppearance, listChatGenerationPresets, sameCharacterLink, setChatProfileExpression, type ChatProfile } from '@/lib/api-codex-chat'
@@ -71,14 +73,35 @@ function EmoticonGroupsRow({ draft, patch }: { draft: Draft; patch: PatchDraft }
 function SyncedAppearance({ link, draft, patch, busy, onBusyChange }: { link: ProfileCharacterLink; draft: Draft; patch: PatchDraft; busy: boolean; onBusyChange: (busy: boolean) => void }) {
   const { t } = useI18n()
   const { setting } = link
-  const appearanceWarning = useAppearanceWarning(draft, setting.draft.appearance)
+  const appearanceWarning = useAppearanceWarning(draft, composeCharacterAppearance(setting.draft, characterOutfitIndex(setting.draft.outfits, link.link?.outfit)))
   if (setting.loading || !setting.ready) return setting.error
     ? <ErrorState title={t({ ko: '외형 설정을 불러오지 못했어', en: 'Could not load the setting' })} error={setting.error} onRetry={setting.retry} />
     : <LoadingState variant="inline" />
   return (
     <CharacterSettingAppearanceEditor editor={setting} runs={link.runs} editable={link.canEdit} generation={link.generation} busy={busy} onBusyChange={onBusyChange} appearanceWarning={appearanceWarning}>
+      <ProfileOutfitRow link={link} busy={busy} />
       <EmoticonGroupsRow draft={draft} patch={patch} />
     </CharacterSettingAppearanceEditor>
+  )
+}
+
+/** Which of the synced setting's outfits this profile wears; other profiles of the setting choose their own. */
+function ProfileOutfitRow({ link, busy }: { link: ProfileCharacterLink; busy: boolean }) {
+  const { t } = useI18n()
+  const outfits = link.setting.draft.outfits
+  const chosen = link.link?.outfit ?? null
+  const index = characterOutfitIndex(outfits, chosen)
+  const missing = chosen !== null && outfits[index]?.name.trim().toLowerCase() !== chosen.trim().toLowerCase()
+  if (outfits.length < 2 && !missing) return null
+  return (
+    <div className="flex min-h-10 flex-wrap items-center gap-x-3 gap-y-2 border-t border-line pt-3">
+      <span className="shrink-0 text-sm">{t({ ko: '이 프로필의 의상', en: 'Outfit of this profile' })}</span>
+      <Select variant="default" controlSize="compact" className="w-auto min-w-40" aria-label={t({ ko: '이 프로필의 의상', en: 'Outfit of this profile' })} disabled={busy} value={missing ? '' : String(index)} onChange={(event) => link.setOutfit(event.target.value === '0' || event.target.value === '' ? null : outfits[Number(event.target.value)]?.name ?? null)}>
+        {missing ? <option value="" disabled>{t({ ko: '없는 의상: {name}', en: 'Missing outfit: {name}' }, { name: chosen })}</option> : null}
+        {outfits.map((outfit, position) => <option key={`${position}:${outfit.name}`} value={position}>{position === 0 ? t({ ko: '{name} (기본)', en: '{name} (default)' }, { name: outfit.name }) : outfit.name}</option>)}
+      </Select>
+      {missing ? <span className="text-xs text-muted-foreground">{t({ ko: '그 이름의 의상이 없어서 기본 의상을 쓰고 있어.', en: 'That outfit is gone, so the default one is used.' })}</span> : null}
+    </div>
   )
 }
 

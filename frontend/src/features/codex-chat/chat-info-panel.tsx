@@ -5,8 +5,10 @@ import { Button } from '@/components/ui/button'
 import { ListRow } from '@/components/ui/list-row'
 import { RowGroup } from '@/components/ui/row-group'
 import { Switch } from '@/components/ui/switch'
+import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { useI18n } from '@/i18n'
-import { getThreadLorebookSummary, threadLorebookSummaryQueryKey, type ChatProfileSummary } from '@/lib/api-codex-chat'
+import { getThreadLinkedFiles, getThreadLorebookSummary, threadLinkedFilesQueryKey, threadLorebookSummaryQueryKey, type ChatProfileSummary } from '@/lib/api-codex-chat'
+import { getChatWorkspace } from '@/lib/api-workspaces'
 import { ChatAppearancePopover } from './chat-appearance'
 import { useChatPage } from './chat-page-context'
 import { ChatProfileAvatar } from './chat-profile-avatar'
@@ -21,9 +23,9 @@ function RowLink({ to, children }: { to: string; children: ReactNode }) {
   return <Button asChild variant="link" size="xs"><Link to={to}>{children}</Link></Button>
 }
 
-/** A row whose value may run long: the label keeps its width and the value is cut at the row's end. */
-function ValueRow({ label, children }: { label: ReactNode; children: ReactNode }) {
-  return <ListRow size="sm"><span className="shrink-0">{label}</span><span className="ml-auto min-w-0 truncate text-right text-muted-foreground">{children}</span></ListRow>
+/** A row whose value may run long: the label keeps its width and the value is cut at the row's end; `action` follows it. */
+function ValueRow({ label, children, action }: { label: ReactNode; children: ReactNode; action?: ReactNode }) {
+  return <ListRow size="sm" trailing={action}><span className="shrink-0">{label}</span><span className="ml-auto min-w-0 truncate text-right text-muted-foreground">{children}</span></ListRow>
 }
 
 export type ChatInfoPanelProps = {
@@ -56,6 +58,12 @@ export function ChatInfoPanelBody({ threadId, profile, members, summaryCount, ca
   const [appearanceOpen, setAppearanceOpen] = useState(false)
   const lore = useQuery({ queryKey: threadLorebookSummaryQueryKey(threadId), queryFn: () => getThreadLorebookSummary(threadId), staleTime: 30_000 })
   const isRoom = members.length > 0
+  const auth = useAuthStatusQuery()
+  const canReadFiles = auth.data?.permissionKeys?.includes('files.view') === true
+  // The same queries as the context tab's blocks (shared cache), so opening the panel costs no extra request there.
+  const files = useQuery({ queryKey: threadLinkedFilesQueryKey(threadId), queryFn: () => getThreadLinkedFiles(threadId), enabled: canReadFiles, staleTime: 30_000 })
+  const linkedCount = (files.data ?? []).filter((view) => !view.missing).length
+  const workspace = useQuery({ queryKey: ['workspace-binding', auth.data?.accountId ?? 'bootstrap', threadId], queryFn: () => getChatWorkspace(threadId), enabled: canReadFiles, staleTime: 30_000 })
   const link = isRoom ? null : profile?.characterLink
   const openProfile = (id: number) => canEditProfiles ? <RowLink to={`/characters?view=profiles&profile=${id}`}>{t({ ko: '프로필 열기', en: 'Open profile' })}</RowLink> : null
   const face = (entry: ChatProfileSummary) => <ChatProfileAvatar name={entry.name} avatar={entry.avatar} profile={entry} engine={entry.engine} size="sm" />
@@ -82,7 +90,7 @@ export function ChatInfoPanelBody({ threadId, profile, members, summaryCount, ca
         {!isRoom && profile?.modelLabel ? <ValueRow label={t({ ko: '모델', en: 'Model' })}><span title={profile.modelLabel}>{profile.modelLabel}</span></ValueRow> : null}
         <ListRow size="sm" trailing={<RowKey onClick={onContext}>{t({ ko: '자세히', en: 'Details' })}</RowKey>}>{t({ ko: '컨텍스트', en: 'Context' })}</ListRow>
       </RowGroup>
-      <RowGroup heading={t({ ko: '기억', en: 'Memory' })}>
+      <RowGroup heading={t({ ko: '참고 자료', en: 'References' })}>
         {summaryCount !== null ? (
           <ValueRow label={t({ ko: '대화 요약', en: 'Summaries' })}>
             {summaryCount > 0 ? t({ ko: '{count}개', en: '{count}' }, { count: formatNumber(summaryCount) }) : t({ ko: '없음', en: 'None' })}
@@ -91,6 +99,16 @@ export function ChatInfoPanelBody({ threadId, profile, members, summaryCount, ca
         <ValueRow label={t({ ko: '로어북', en: 'Lorebooks' })}>
           {lore.data ? lore.data.bookCount > 0 ? t({ ko: '{books}권 · 항목 {entries}개', en: '{books} books · {entries} entries' }, { books: formatNumber(lore.data.bookCount), entries: formatNumber(lore.data.entryCount) }) : t({ ko: '없음', en: 'None' }) : null}
         </ValueRow>
+        {files.data ? (
+          <ValueRow label={t({ ko: '연결 파일', en: 'Linked files' })} action={<RowKey onClick={onContext}>{t({ ko: '바꾸기', en: 'Change' })}</RowKey>}>
+            {linkedCount > 0 ? t({ ko: '{count}개', en: '{count}' }, { count: formatNumber(linkedCount) }) : t({ ko: '없음', en: 'None' })}
+          </ValueRow>
+        ) : null}
+        {canReadFiles ? (
+          <ValueRow label={t({ ko: '작업 공간', en: 'Workspace' })} action={<RowKey onClick={onContext}>{t({ ko: '바꾸기', en: 'Change' })}</RowKey>}>
+            {workspace.data ? workspace.data.project.name : workspace.isPending ? null : isRoom ? t({ ko: '멤버별 기본', en: 'Per member' }) : t({ ko: '없음', en: 'None' })}
+          </ValueRow>
+        ) : null}
       </RowGroup>
       {!isRoom && profile?.pageAssist && page?.available ? (
         <RowGroup heading={t({ ko: '연결', en: 'Connection' })}>

@@ -6,7 +6,9 @@ import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/loading-state'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
+import { CHARACTER_APPEARANCE_SECTION_KEYS } from '@conai/shared'
 import { folderPath, refreshCharacterViews, useCharacterFolders } from '@/features/characters/character-library-shared'
+import { useSectionLabels } from '@/features/characters/components/character-look-editor'
 import { useI18n } from '@/i18n'
 import {
   createCharacterSetting,
@@ -51,6 +53,8 @@ export function ChatCharacterLibraryProposalCard({ proposal, threadId }: { propo
   const saved = state === 'saved' || proposal.saved === true || proposal.savedId != null
   const dismissed = !saved && (state === 'dismissed' || proposal.dismissed === true)
   const input = proposal.action === 'save_setting' ? proposal.input : null
+  const sectionLabels = useSectionLabels()
+  const sectionLabel = (key: keyof typeof sectionLabels) => sectionLabels[key].label
   const foldersQuery = useCharacterFolders(canView && input?.folderId !== undefined)
   const previewQuery = useQuery({
     queryKey: ['character-library-delete-preview', proposal.action, proposal.action === 'delete_folder' ? proposal.folderId : proposal.action === 'delete_setting' ? proposal.settingId : 0],
@@ -116,6 +120,8 @@ export function ChatCharacterLibraryProposalCard({ proposal, threadId }: { propo
           {input.name !== undefined ? <Row label={t({ ko: '이름', en: 'Name' })}>{input.name}</Row> : null}
           {input.folderId !== undefined ? <Row label={t({ ko: '폴더', en: 'Folder' })}>{folderLabel(input.folderId)}</Row> : null}
           {input.appearance !== undefined ? <Row label={t({ ko: '외형', en: 'Appearance' })}>{input.appearance || '—'}</Row> : null}
+          {input.sections ? CHARACTER_APPEARANCE_SECTION_KEYS.filter((key) => input.sections?.[key] !== undefined).map((key) => <Row key={key} label={sectionLabel(key)}>{input.sections?.[key] || '—'}</Row>) : null}
+          {input.outfits ? <Row label={t({ ko: '의상', en: 'Outfits' })}>{input.outfits.length ? input.outfits.map((outfit) => `${outfit.name}: ${outfit.tags || '—'}`).join(' / ') : t({ ko: '없음', en: 'None' })}</Row> : null}
           {input.referenceHash === null ? <Row label={t({ ko: '기준 이미지', en: 'Reference image' })}>{t({ ko: '비우기', en: 'Clear' })}</Row> : null}
           {input.avatarHash === null ? <Row label={t({ ko: '아바타', en: 'Avatar' })}>{t({ ko: '비우기', en: 'Clear' })}</Row> : null}
           {input.avatarCrop ? <Row label={t({ ko: '아바타 자르기', en: 'Avatar crop' })}>{`${Math.round(input.avatarCrop.x)}%, ${Math.round(input.avatarCrop.y)}% · ×${input.avatarCrop.scale.toFixed(2)}`}</Row> : null}

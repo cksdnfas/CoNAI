@@ -119,22 +119,28 @@ function ContentRatingField({ draft, patch, slots }: { draft: Draft; patch: Patc
 }
 
 /**
- * 최대 컨텍스트 · 최대 출력 토큰 · 추론 토큰 예산, as far as the engine applies them: API LLM (direct and pi) all three;
- * Claude Code output and thinking budget (it holds its own context); Codex none (model and effort only).
+ * 최대 컨텍스트 · 최근 턴 수 · 최대 출력 토큰 · 추론 토큰 예산, as far as the engine applies them: API LLM all of them
+ * (pi keeps the conversation in its session, so no turn count); Claude Code output and thinking budget (it holds its
+ * own context); Codex none (model and effort only).
  */
 function TokenFields({ draft, patch, serverDefault }: { draft: Draft; patch: PatchDraft; serverDefault: string }) {
   const { t } = useI18n()
   if (draft.engine === 'codex') return null
   const isLlm = draft.engine === 'llm'
   return (
-    <EditorGroup label={t({ ko: '토큰', en: 'Tokens' })}>
-      <div className="grid gap-3 md:grid-cols-3">
+    <EditorGroup label={isLlm ? t({ ko: '컨텍스트와 토큰', en: 'Context and tokens' }) : t({ ko: '토큰', en: 'Tokens' })}>
+      <div className={isLlm ? 'grid gap-3 md:grid-cols-2' : 'grid gap-3 md:grid-cols-3'}>
         {isLlm ? (
           <Field
             label={t({ ko: '최대 컨텍스트', en: 'Max context' })}
             info={t({ ko: '요청 하나가 넣을 수 있는 전체 토큰(입력+출력). 비우면 서버가 알려준 크기를 쓰고, 서버도 모르면 제한 없이 보내. 정하면 서버 크기와 둘 중 작은 값을 써. 대화·요약·도구 설명·답변 몫이 이 안에 맞춰지고, pi는 이 크기에서 세션을 압축해.', en: 'All tokens one request may hold (input + output). Empty uses the size the server reports, and no cap when it does not say. When set, the smaller of it and the server size counts. Conversation, summary, tool descriptions and the reply fit inside it; pi folds its session at it.' })}
           >
             <NumberStepperInput variant="settings" allowEmpty shorthand step={1024} {...CHAT_PROFILE_LIMITS.contextTokens} value={draft.contextTokens} placeholder={t({ ko: '서버 크기', en: 'Server size' })} onValueCommit={(value) => patch({ contextTokens: numberOrNull(value) })} />
+          </Field>
+        ) : null}
+        {isLlm && draft.llmRuntime !== 'pi' ? (
+          <Field label={t({ ko: '최근 턴 수', en: 'Recent turns' })} info={t({ ko: '요청마다 보내는 최근 대화. 사용자 메시지 하나와 그 답변이 한 턴. 최대 컨텍스트에 맞지 않는 오래된 턴은 빠져.', en: 'The recent conversation sent with each request. One user message and its reply make a turn. Older turns that do not fit the max context are left out.' })}>
+            <NumberStepperInput variant="settings" step={1} {...CHAT_PROFILE_LIMITS.contextTurns} value={draft.contextTurns} onValueCommit={(value) => patch({ contextTurns: numberOrNull(value) ?? draft.contextTurns })} />
           </Field>
         ) : null}
         <Field

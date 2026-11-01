@@ -4,6 +4,7 @@
  */
 
 export * from './promptParser';
+export * from './characterAppearance';
 export * from './validators';
 export * from './responseHelpers';
 

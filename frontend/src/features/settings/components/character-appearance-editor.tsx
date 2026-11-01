@@ -29,7 +29,7 @@ export type AppearanceValue = { name: string; appearance?: string; referenceHash
  * archive). Every image changes through the same "이미지 바꾸기" menu. The owner supplies its storage (upload target,
  * group ids, expression writes).
  */
-export function CharacterAppearanceEditor({ value, onChange, onAvatarChange, referenceUrl, avatar, hasAvatar, uploadTarget, groupSource, runs, busy, onBusyChange, draftAppearance, draftNeedsName = false, onSetExpression, onClearExpression, appearanceWarning = null, appearanceInvalid = false, appearanceNote = null, editable = true, generation = true, expressionsEditable = true, expressionsNote = null, aside, children }: {
+export function CharacterAppearanceEditor({ value, onChange, onAvatarChange, referenceUrl, avatar, hasAvatar, uploadTarget, groupSource, runs, busy, onBusyChange, draftAppearance, draftNeedsName = false, onSetExpression, onClearExpression, appearanceWarning = null, appearanceInvalid = false, appearanceNote = null, appearanceEditor, editable = true, generation = true, expressionsEditable = true, expressionsNote = null, aside, children }: {
   value: AppearanceValue
   onChange: (patch: { appearance?: string; referenceHash?: string | null }) => void
   /** A picked or cropped avatar; null clears it. */
@@ -54,6 +54,8 @@ export function CharacterAppearanceEditor({ value, onChange, onAvatarChange, ref
   appearanceInvalid?: boolean
   /** A quiet line under the appearance text (who else a change reaches). */
   appearanceNote?: ReactNode
+  /** Replaces the single appearance text (a library setting's sections and outfits); its owner shows warnings and notes. */
+  appearanceEditor?: ReactNode
   /** Under the avatar in the image column (the profiles synced to a library setting). */
   aside?: ReactNode
   /** False: everything only shows. */
@@ -166,7 +168,7 @@ export function CharacterAppearanceEditor({ value, onChange, onAvatarChange, ref
       </div>
 
       <div className="min-w-0 space-y-6">
-        <EditorGroup
+        {appearanceEditor ?? <EditorGroup
           label={t({ ko: '외형 설명', en: 'Appearance' })}
           actions={editable && draftAppearance ? (
             <Tip content={draftBlocked}>
@@ -181,7 +183,7 @@ export function CharacterAppearanceEditor({ value, onChange, onAvatarChange, ref
           <Textarea variant="settings" disabled={appearance.isPending} readOnly={!editable} className="min-h-[120px]" rows={5} value={value.appearance ?? ''} maxLength={CHAT_PROFILE_TEXT_LIMITS.text} aria-invalid={appearanceInvalid || undefined} aria-label={t({ ko: '외형 설명', en: 'Appearance' })} onChange={(event) => onChange({ appearance: event.target.value })} />
           {appearanceWarning ? <p role="note" className="text-xs text-warning">{appearanceWarning}</p> : null}
           {appearanceNote ? <p className="text-xs text-muted-foreground">{appearanceNote}</p> : null}
-        </EditorGroup>
+        </EditorGroup>}
 
         {reference.working || reference.failed || reference.candidates.length ? (
           <AssetCandidateTray runs={runs} slotKey={REFERENCE_SLOT} title={t({ ko: '기준 이미지 후보', en: 'Reference candidates' })} currentHash={value.referenceHash ?? null} referenceHash={null} />

@@ -9,11 +9,13 @@ import { numberOrNull, type Draft, type PatchDraft } from './chat-profile-editor
 import { SwitchLine } from '@/components/ui/switch-line'
 import { EditorGroup } from '@/components/ui/editor-group'
 import { ChatProfileLinkedFiles } from './chat-profile-linked-files'
+import { ChatProfileWorkspace } from './chat-profile-workspace'
 import { SettingsAdvanced } from './settings-navigation'
 
 /**
- * What the model is given from before: how much of the conversation, and the lorebooks with how much of them.
- * The lorebook numbers fold away as advanced settings.
+ * What the model may draw on (the 참고 자료 tab): the lorebooks, linked folders and files, and a default workspace to
+ * work in. The lorebook numbers fold away as advanced settings. The recent-turn count is on the model tab, beside the
+ * context size it has to fit.
  */
 export function ChatProfileMemoryPanel({ draft, patch, lorebooks }: {
   draft: Draft
@@ -26,15 +28,6 @@ export function ChatProfileMemoryPanel({ draft, patch, lorebooks }: {
 
   return (
     <div className="space-y-4">
-      {/* Codex, Claude and pi keep the conversation in their sessions. The context size is on the model tab (토큰). */}
-      {draft.engine === 'llm' && !isPi ? <EditorGroup label={t({ ko: '대화', en: 'Conversation' })}>
-        <div className="grid gap-3 md:grid-cols-2">
-          <Field label={t({ ko: '최근 턴 수', en: 'Recent turns' })} info={t({ ko: '요청마다 보내는 최근 대화. 사용자 메시지 하나와 그 답변이 한 턴. 모델 탭의 최대 컨텍스트에 맞지 않는 오래된 턴은 빠져.', en: 'The recent conversation sent with each request. One user message and its reply make a turn. Older turns that do not fit the max context (model tab) are left out.' })}>
-            <NumberStepperInput variant="settings" step={1} {...CHAT_PROFILE_LIMITS.contextTurns} value={draft.contextTurns} onValueCommit={(value) => patch({ contextTurns: numberOrNull(value) ?? draft.contextTurns })} />
-          </Field>
-        </div>
-      </EditorGroup> : null}
-
       <EditorGroup label={t({ ko: '로어북', en: 'Lorebooks' })}>
         <div className="flex flex-wrap gap-1.5">
           {(lorebooks ?? []).map((lorebook) => {
@@ -71,8 +64,12 @@ export function ChatProfileMemoryPanel({ draft, patch, lorebooks }: {
         </SettingsAdvanced>
       </EditorGroup>
 
-      <EditorGroup label={t({ ko: '연결 파일', en: 'Linked files' })}>
+      <EditorGroup label={t({ ko: '연결 파일', en: 'Linked files' })} description={t({ ko: '폴더나 텍스트·이미지·PDF·XLSX 파일. 캐릭터가 필요할 때 찾아 열어 봐.', en: 'Folders, or text, image, PDF and XLSX files the character opens when it needs them.' })}>
         <ChatProfileLinkedFiles value={draft.linkedFiles} onChange={(linkedFiles) => patch({ linkedFiles })} />
+      </EditorGroup>
+
+      <EditorGroup label={t({ ko: '작업 공간', en: 'Workspace' })} description={t({ ko: '캐릭터가 일할 기본 폴더. 1:1·그룹 채팅과 게시판 호출에서 열려. 채팅에서는 다른 폴더로 바꿀 수 있어.', en: 'The default folder the character works in, in 1:1 and group chats and board calls. A chat can pick another.' })}>
+        <ChatProfileWorkspace value={draft.workspace} onChange={(workspace) => patch({ workspace })} />
       </EditorGroup>
     </div>
   )

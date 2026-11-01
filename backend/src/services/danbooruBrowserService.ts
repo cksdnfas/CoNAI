@@ -179,6 +179,29 @@ interface PromptGroupTagRow {
   post_count: number;
 }
 
+/** A dictionary tag as the character library sorts it: category, taxonomy group keys (deepest) and Korean name. */
+export interface DanbooruTagDescription {
+  name: string;
+  category: string;
+  nodeKeys: string[];
+  translated: string | null;
+}
+
+export interface DanbooruTaxonomyTag {
+  name: string;
+  translated: string | null;
+  postCount: number;
+}
+
+/**
+ * Related-tag score from which a character counts as having the tag (catalog filters, appearance fills). The score is
+ * co-occurrence on Danbooru posts: below this a tag is mostly incidental (fan variants, one artist's picture), e.g.
+ * hatsune_miku has aqua_hair at 0.47 but blue_hair at 0.09.
+ */
+export const DANBOORU_APPEARANCE_MIN_SCORE = 0.1;
+/** Bounded so a long-running server does not keep every looked-up name. */
+const TAG_DESCRIPTION_CACHE_MAX = 100_000;
+
 export { resolveDanbooruDbInfo };
 
 
@@ -252,12 +275,108 @@ class DanbooruBrowserService {
   private db: Database.Database | null = null;
   private taxonomyDescendantIdsById: Map<number, number[]> | null = null;
   private characterImages = new DanbooruCharacterImageStore();
+  /** Normalized name → its description, null when the dictionary has no such tag. */
+  private tagDescriptions = new Map<string, DanbooruTagDescription | null>();
+  private taxonomyTags = new Map<string, DanbooruTaxonomyTag[]>();
 
   close(): void {
     this.db?.close();
     this.db = null;
     this.taxonomyDescendantIdsById = null;
     this.characterImages.clear();
+    this.tagDescriptions.clear();
+    this.taxonomyTags.clear();
+  }
+
+  /** Whether a dictionary is installed (the library's filters and fills need it). */
+  isAvailable(): boolean {
+    return this.hasAvailableDb();
+  }
+
+  /**
+   * Describe normalized tag names (an alias resolves to its target); names the dictionary lacks are left out, as are
+   * all of them without a dictionary. Cached until the dictionary changes.
+   */
+  describeTags(names: readonly string[]): Map<string, DanbooruTagDescription> {
+    const result = new Map<string, DanbooruTagDescription>();
+    if (!names.length || !this.hasAvailableDb()) return result;
+    const missing = [...new Set(names)].filter((name) => !this.tagDescriptions.has(name));
+    if (missing.length) {
+      if (this.tagDescriptions.size + missing.length > TAG_DESCRIPTION_CACHE_MAX) this.tagDescriptions.clear();
+      const rows = this.getDb().prepare(`
+        WITH input(n) AS (SELECT DISTINCT value FROM json_each(?)),
+        resolved AS (
+          SELECT input.n AS input_name, COALESCE(
+            (SELECT id FROM tags WHERE normalized_name = input.n AND is_deprecated = 0 LIMIT 1),
+            (SELECT target_tag_id FROM tag_aliases WHERE alias_normalized_name = input.n AND status = 'active' LIMIT 1)
+          ) AS tag_id FROM input
+        )
+        SELECT r.input_name, t.name, t.category_name, tt.translated_name,
+          (SELECT group_concat(n.node_key, ' ') FROM taxonomy_tag_memberships m JOIN taxonomy_nodes n ON n.id = m.taxonomy_node_id
+            WHERE m.tag_id = t.id AND n.node_type = 'manual_group') AS node_keys
+        FROM resolved r
+        JOIN tags t ON t.id = r.tag_id
+        LEFT JOIN tag_translations tt ON tt.tag_id = t.id AND tt.locale = 'ko'
+      `).all(JSON.stringify(missing)) as Array<{ input_name: string; name: string; category_name: string; translated_name: string | null; node_keys: string | null }>;
+      for (const name of missing) this.tagDescriptions.set(name, null);
+      for (const row of rows) {
+        this.tagDescriptions.set(row.input_name, { name: row.name, category: row.category_name, nodeKeys: row.node_keys ? row.node_keys.split(' ') : [], translated: row.translated_name });
+      }
+    }
+    for (const name of names) {
+      const description = this.tagDescriptions.get(name);
+      if (description) result.set(name, description);
+    }
+    return result;
+  }
+
+  /**
+   * A character by tag name, alias or exact Korean name: its primary work and general tags scored at or above
+   * `DANBOORU_APPEARANCE_MIN_SCORE`, highest first. Null when the dictionary has no such character.
+   */
+  characterAppearance(rawName: string) {
+    if (!this.hasAvailableDb()) return null;
+    const db = this.getDb();
+    const normalized = normalizeQuery(rawName);
+    const row = db.prepare(`
+      SELECT c.tag_id, c.name, tt.translated_name FROM characters c
+      LEFT JOIN tag_translations tt ON tt.tag_id = c.tag_id AND tt.locale = 'ko'
+      WHERE c.tag_id = COALESCE(
+        (SELECT tag_id FROM characters WHERE normalized_name = ? LIMIT 1),
+        (SELECT a.target_tag_id FROM tag_aliases a JOIN characters ca ON ca.tag_id = a.target_tag_id WHERE a.alias_normalized_name = ? AND a.status = 'active' LIMIT 1),
+        (SELECT t.tag_id FROM tag_translations t JOIN characters ct ON ct.tag_id = t.tag_id WHERE t.locale = 'ko' AND t.translated_name = ? ORDER BY ct.post_count DESC LIMIT 1)
+      )
+    `).get(normalized, normalized, rawName.trim()) as { tag_id: number; name: string; translated_name: string | null } | undefined;
+    if (!row) return null;
+    const copyright = db.prepare(`
+      SELECT cp.name FROM character_copyright_links l JOIN copyrights cp ON cp.tag_id = l.copyright_tag_id
+      WHERE l.character_tag_id = ? ORDER BY l.is_primary DESC, l.confidence DESC, cp.post_count DESC LIMIT 1
+    `).get(row.tag_id) as { name: string } | undefined;
+    const tags = db.prepare(`
+      SELECT t.name, crt.score FROM character_related_tags crt JOIN tags t ON t.id = crt.related_tag_id
+      WHERE crt.character_tag_id = ? AND t.is_deprecated = 0 AND t.category_name = 'general' AND crt.score >= ?
+      ORDER BY crt.score DESC
+    `).all(row.tag_id, DANBOORU_APPEARANCE_MIN_SCORE) as Array<{ name: string; score: number }>;
+    return { name: row.name, displayName: displayName(row.name), translatedName: row.translated_name, copyright: copyright?.name ?? null, tags };
+  }
+
+  /** Tags of taxonomy groups (key prefixes, subgroups included), most used first, with Korean names. Cached. */
+  listTaxonomyTags(prefixes: readonly string[]): DanbooruTaxonomyTag[] {
+    if (!this.hasAvailableDb()) return [];
+    const key = prefixes.join(' ');
+    const cached = this.taxonomyTags.get(key);
+    if (cached) return cached;
+    const rows = this.getDb().prepare(`
+      SELECT t.name, MAX(tt.translated_name) AS translated_name, t.post_count FROM json_each(?) p
+      JOIN taxonomy_nodes n ON n.node_type = 'manual_group' AND (n.node_key = p.value OR substr(n.node_key, 1, length(p.value) + 2) = p.value || '__')
+      JOIN taxonomy_tag_memberships m ON m.taxonomy_node_id = n.id
+      JOIN tags t ON t.id = m.tag_id AND t.is_deprecated = 0
+      LEFT JOIN tag_translations tt ON tt.tag_id = t.id AND tt.locale = 'ko'
+      GROUP BY t.id ORDER BY t.post_count DESC
+    `).all(JSON.stringify(prefixes)) as Array<{ name: string; translated_name: string | null; post_count: number }>;
+    const tags = rows.map((row) => ({ name: row.name, translated: row.translated_name, postCount: row.post_count }));
+    this.taxonomyTags.set(key, tags);
+    return tags;
   }
 
   private hasAvailableDb(): boolean {
@@ -622,7 +741,11 @@ class DanbooruBrowserService {
     };
   }
 
-  async listCharacters(params: { q?: string; copyrightTagId?: string; page?: unknown; limit?: unknown; relatedTagCategories?: unknown; relatedTagScoreMin?: unknown; relatedTagScoreMax?: unknown; relatedTagLimit?: unknown }) {
+  /**
+   * `tags`: normalized tag names the character must have (related score at least `DANBOORU_APPEARANCE_MIN_SCORE`),
+   * all of them; `sort` `name` instead of most posts first.
+   */
+  async listCharacters(params: { q?: string; copyrightTagId?: string; page?: unknown; limit?: unknown; relatedTagCategories?: unknown; relatedTagScoreMin?: unknown; relatedTagScoreMax?: unknown; relatedTagLimit?: unknown; tags?: string[]; sort?: 'posts' | 'name' }) {
     const page = clampInteger(params.page, 1, 1, 100_000);
     const limit = clampInteger(params.limit, CHARACTER_PAGE_SIZE, 1, CHARACTER_PAGE_SIZE);
     if (!this.hasAvailableDb()) {
@@ -656,6 +779,12 @@ class DanbooruBrowserService {
       values.push(Math.trunc(copyrightTagId));
     }
 
+    // Each tag narrows through the related-tag index first, instead of checking every character's tags.
+    for (const tag of [...new Set(params.tags ?? [])]) {
+      clauses.push('c.tag_id IN (SELECT crt.character_tag_id FROM character_related_tags crt WHERE crt.related_tag_id = (SELECT id FROM tags WHERE normalized_name = ? LIMIT 1) AND crt.score >= ?)');
+      values.push(tag, DANBOORU_APPEARANCE_MIN_SCORE);
+    }
+
     const whereSql = clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : '';
     const total = (db.prepare(`SELECT COUNT(*) AS total FROM characters c ${whereSql}`).get(...values) as CountRow).total;
     const rows = db.prepare(`
@@ -663,7 +792,7 @@ class DanbooruBrowserService {
       FROM characters c
       LEFT JOIN tag_translations tt ON tt.tag_id = c.tag_id AND tt.locale = 'ko'
       ${whereSql}
-      ORDER BY c.post_count DESC, c.name ASC
+      ORDER BY ${params.sort === 'name' ? 'c.name ASC' : 'c.post_count DESC, c.name ASC'}
       LIMIT ? OFFSET ?
     `).all(...values, limit, offset) as CharacterRow[];
 

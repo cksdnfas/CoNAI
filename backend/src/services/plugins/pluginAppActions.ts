@@ -15,7 +15,7 @@ import { RuntimeJobStore, RuntimeJobConflictError } from '../runtimeJobs/runtime
 import { WorkspaceService } from '../workspaceService'
 import { requireFileStoreOwner } from '../fileStoreAccess'
 
-type Context = Pick<McpRequestContext, 'requester' | 'scopes' | 'keyId' | 'keyGroup' | 'baseUrl' | 'contentRatingLimit' | 'toolAllowlist' | 'workspace'> & { autoApply?: boolean; projectGrant?: { id: string; revision: number; write: boolean; threadId?: number; bindingRevision?: string } }
+type Context = Pick<McpRequestContext, 'requester' | 'scopes' | 'keyId' | 'keyGroup' | 'baseUrl' | 'contentRatingLimit' | 'toolAllowlist' | 'workspace'> & { autoApply?: boolean; projectGrant?: { id: string; revision: number; write: boolean; threadId?: number; profileId?: number; bindingRevision?: string } }
 type Row = { id: string; owner_key: string; request_key: string; fingerprint: string; plugin_id: string; digest: string; body: string; context: string; status: PluginAppRequest['status']; job_id: string | null; expires_at: number }
 const REQUEST_LIFETIME_MS = 24 * 60 * 60_000
 const requestKey = z.string().regex(/^[a-zA-Z0-9_-]{8,100}$/)
@@ -30,7 +30,7 @@ function owner(context: Context) {
 function fresh(context: Context) {
   // A TypeScript Pick is not a runtime filter: never persist chat/page snapshots or bridge metadata.
   const origin = context as McpRequestContext
-  const projectGrant = context.projectGrant ?? (context.workspace ? { id: context.workspace.project.id, revision: context.workspace.project.revision, write: context.workspace.write, threadId: origin.chatContext?.threadId, bindingRevision: origin.chatContext ? context.workspace.bindingRevision : undefined } : undefined)
+  const projectGrant = context.projectGrant ?? (context.workspace ? { id: context.workspace.project.id, revision: context.workspace.project.revision, write: context.workspace.write, threadId: origin.chatContext?.threadId, profileId: origin.chatContext?.profileId, bindingRevision: origin.chatContext ? context.workspace.bindingRevision : undefined } : undefined)
   context = { requester: context.requester ? { accountId: context.requester.accountId, accountType: context.requester.accountType } : undefined, scopes: [...context.scopes], keyId: context.keyId, keyGroup: context.keyGroup, baseUrl: context.baseUrl, contentRatingLimit: context.contentRatingLimit, toolAllowlist: context.toolAllowlist ? [...context.toolAllowlist] : undefined, projectGrant }
   owner(context)
   if (projectGrant) {
@@ -38,7 +38,7 @@ function fresh(context: Context) {
     const current = WorkspaceService.get(actor, projectGrant.id)
     if (current.revision !== projectGrant.revision) throw new PluginError('프로젝트 지침이 변경됐어. 새 작업을 요청해줘.', 409)
     if (projectGrant.threadId) {
-      const binding = WorkspaceService.binding(actor, projectGrant.threadId)
+      const binding = WorkspaceService.effective(actor, projectGrant.threadId, projectGrant.profileId)
       if (!binding || binding.bindingRevision !== projectGrant.bindingRevision || binding.project.id !== projectGrant.id || (projectGrant.write && !binding.write)) throw new PluginError('채팅의 프로젝트 연결이 변경됐어.', 403)
     }
     context.workspace = { project: { ...current, guidelines: '' }, write: projectGrant.write, bindingRevision: projectGrant.bindingRevision ?? 'plugin-approved-project' }

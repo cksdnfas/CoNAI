@@ -3,7 +3,9 @@ import { z } from 'zod'
 import type { McpRequestContext } from '../context'
 import { errorResult, runToolResult, textResult } from '../toolResults'
 import { isRequesterAdmin, keyGroupPermissionKeys, requesterPermissionKeys, requireContextPermission } from '../../middleware/featureAccess'
-import { characterFolderPath, createCharacterFolder, getCharacterSetting, listCharacterFolders, listCharacterSettings, patchCharacterFolder } from '../../services/characterLibrary'
+import type { CharacterFacetKey } from '@conai/shared'
+import { characterFolderPath, characterLibraryFacets, createCharacterFolder, getCharacterSetting, listCharacterFolders, listCharacterSettings, patchCharacterFolder } from '../../services/characterLibrary'
+import { CHARACTER_FACET_KEYS, fillCharacterAppearance } from '../../services/characterAppearanceTags'
 import { EmoticonService } from '../../services/emoticonService'
 import { characterLibraryProposalSchema, proposeCharacterLibrary } from '../../services/codex-chat/characterLibraryProposals'
 
@@ -11,14 +13,34 @@ export function registerCharacterLibraryTools(server: McpServer, context: McpReq
   const id = z.number().int().positive().safe()
   const canViewImages = () => context.requester ? requesterPermissionKeys(context.requester).includes('images.view') : context.keyGroup !== undefined ? keyGroupPermissionKeys(context.keyGroup).includes('images.view') : true
   server.registerTool('list_character_library', {
-    description: 'Browse character appearance settings by folder or search name across the library. folder_id null means top level; omitted means all settings. Returns path, direct folders and a paged settings summary (no appearance text). Use get_character_setting for the selected id. If a folder is missing, browse from the top again.',
-    inputSchema: z.object({ folder_id: id.nullable().optional(), query: z.string().optional(), limit: z.number().int().min(1).max(200).optional(), offset: z.number().int().nonnegative().optional() }).strict(),
-  }, async ({ folder_id, ...input }) => runToolResult(() => {
+    description: 'Browse character appearance settings by folder, or search names, tags and Korean tag names across the library. folder_id null means top level; omitted means all settings. favorite, filters ({dimension: [tags]}: any tag of a dimension, all dimensions) and sort narrow the list; include_facets adds the dimensions with tag counts to choose filters from (needs the Danbooru dictionary). Returns path, direct folders and a paged settings summary (no tags). Use get_character_setting for the selected id. If a folder is missing, browse from the top again.',
+    inputSchema: z.object({
+      folder_id: id.nullable().optional(), query: z.string().optional(), favorite: z.boolean().optional(),
+      filters: z.partialRecord(z.enum(CHARACTER_FACET_KEYS as [CharacterFacetKey, ...CharacterFacetKey[]]), z.array(z.string())).optional(),
+      sort: z.enum(['name', 'updated', 'created', 'created_asc']).optional(), include_facets: z.boolean().optional(),
+      limit: z.number().int().min(1).max(200).optional(), offset: z.number().int().nonnegative().optional(),
+    }).strict(),
+  }, async ({ folder_id, include_facets, limit, offset, sort, ...scope }) => runToolResult(() => {
     requireContextPermission(context, 'characters.view')
-    return { path: characterFolderPath(folder_id ?? null).map(({ id, name }) => ({ id, name })), folders: listCharacterFolders(folder_id ?? null), settings: listCharacterSettings({ ...input, ...(folder_id !== undefined ? { folderId: folder_id } : {}) }, canViewImages()) }
+    const listed = { ...scope, ...(folder_id !== undefined ? { folderId: folder_id } : {}) }
+    return {
+      path: characterFolderPath(folder_id ?? null).map(({ id, name }) => ({ id, name })),
+      folders: listCharacterFolders(folder_id ?? null),
+      settings: listCharacterSettings({ ...listed, ...(sort ? { sort } : {}), ...(limit !== undefined ? { limit } : {}), ...(offset !== undefined ? { offset } : {}) }, canViewImages()),
+      ...(include_facets ? { facets: characterLibraryFacets(listed) } : {}),
+    }
   }))
+  server.registerTool('fill_character_appearance', {
+    description: 'Draft a look in setting sections without saving: source danbooru takes a character tag name or exact Korean name (its frequent appearance/outfit tags), image takes a library composite hash (its auto tags; an untagged image is tagged now), text sorts given tags. Returns sections, outfitTags and the Danbooru name. Put the result into propose_character_library save_setting (sections, outfits) or the open page draft. Danbooru and image sources need the Danbooru dictionary to sort tags.',
+    inputSchema: z.object({ source: z.enum(['danbooru', 'image', 'text']), character: z.string().optional(), image_hash: z.string().optional(), text: z.string().optional() }).strict(),
+  }, async ({ source, character, image_hash, text }) => {
+    try {
+      requireContextPermission(context, 'characters.view')
+      return textResult(await fillCharacterAppearance(source === 'danbooru' ? { source, character } : source === 'image' ? { source, imageHash: image_hash } : { source, text }, canViewImages()))
+    } catch (error) { return errorResult(error) }
+  })
   server.registerTool('get_character_setting', {
-    description: 'Read one character appearance setting by setting_id: appearance, image hashes, expression emotion-to-hash map, groups and revision. Images are hidden without images.view. Use the revision in propose_character_library to update it. If missing, list_character_library again.',
+    description: 'Read one character appearance setting by setting_id: sections (identity, hair, eyes, face, body, skin, traits, other), outfits (first is the default), the composed appearance, favorite, image hashes, expression emotion-to-hash map, groups and revision. Images are hidden without images.view. Use the revision in propose_character_library to update it. If missing, list_character_library again.',
     inputSchema: z.object({ setting_id: id }).strict(),
   }, async ({ setting_id }) => runToolResult(() => {
     requireContextPermission(context, 'characters.view')
@@ -40,7 +62,7 @@ export function registerCharacterLibraryTools(server: McpServer, context: McpReq
     return patchCharacterFolder(value.folder_id, value.action === 'move' ? { parentId: value.parent_id } : { name: value.name })
   }))
   server.registerTool('propose_character_library', {
-    description: 'Attach a character-library review card to the active chat: save_setting creates/updates, delete_setting or delete_folder proposes deletion. Nothing is written before a person saves the card. Create input needs folderId (null=root) and name; updates/deletes need setting_id and its current revision. input uses REST camelCase fields. Returns proposalId and the card. On conflict read get_character_setting and propose again; missing folders require list_character_library.',
+    description: 'Attach a character-library review card to the active chat: save_setting creates/updates, delete_setting or delete_folder proposes deletion. Nothing is written before a person saves the card. Create input needs folderId (null=root) and name; updates/deletes need setting_id and its current revision. input uses REST camelCase fields: write the look as sections (given keys replace those sections) and/or outfits ([{name, tags}], the whole list, first = default), or a plain appearance text that the server sorts into them, never both. Returns proposalId and the card. On conflict read get_character_setting and propose again; missing folders require list_character_library.',
     inputSchema: characterLibraryProposalSchema,
   }, async (input) => {
     try {

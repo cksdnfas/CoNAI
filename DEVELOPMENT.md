@@ -121,7 +121,8 @@ API 연결의 일시적 장애 재시도와 출력 이후 재전송 금지는 `s
 | 변경 지점 | 코드 |
 | --- | --- |
 | 페이지·폴더 트리·설정 편집기·선택기 | `frontend/src/features/characters/`, [API 클라이언트](frontend/src/lib/api-character-library.ts). `/characters?folder=&q=&page=&setting=&new=` |
-| 타입·입력·저장 | [공유 계약](shared/src/types/characterLibrary.ts), [입력 검증](backend/src/services/characterLibraryInput.ts), [도메인 서비스](backend/src/services/characterLibrary.ts), [user.db 스키마](backend/src/database/characterLibrarySchema.ts) |
+| 타입·입력·저장 | [공유 계약](shared/src/types/characterLibrary.ts), [항목 합성](shared/src/utils/characterAppearance.ts), [입력 검증](backend/src/services/characterLibraryInput.ts), [도메인 서비스](backend/src/services/characterLibrary.ts), [user.db 스키마](backend/src/database/characterLibrarySchema.ts). `sections`·`outfits`가 원본이고 `appearance`는 합친 결과로 함께 저장한다. 검색·필터는 `character_setting_tags` 색인을 쓰며 시작 시 비어 있는 설정을 채운다. |
+| 태그 분류·자동 채우기·필터 | [characterAppearanceTags.ts](backend/src/services/characterAppearanceTags.ts)가 Danbooru 분류 트리로 태그를 항목·필터 분류에 나누고 Danbooru 캐릭터·이미지 자동 태그·글에서 초안을 만든다. 사전이 없으면 모두 `other`로 두고 필터를 끈다. 카탈로그 화면은 [character-catalog-page.tsx](frontend/src/features/characters/character-catalog-page.tsx)와 `danbooruBrowserService`의 캐릭터 목록을 쓴다. |
 | REST | [character-library.routes.ts](backend/src/routes/character-library.routes.ts), `/api/character-library`의 folders/settings, 삭제 미리보기, `settings/from-profile`, 자산 배치·표정 경로 |
 | 프로필의 유효 외형·독립 사본 | [chatProfileCharacters.ts](backend/src/services/codex-chat/chatProfileCharacters.ts)의 `effectiveCharacterProfile`·`detachedCharacterFields`, [chatProfiles.ts](backend/src/services/codex-chat/chatProfiles.ts) |
 | 프로필 연결 UI·저장 순서 | [chat-profile-character-link.tsx](frontend/src/features/settings/components/chat-profile-character-link.tsx), [use-profile-character-link.ts](frontend/src/features/settings/components/use-profile-character-link.ts), [chat-profile-editor-appearance.tsx](frontend/src/features/settings/components/chat-profile-editor-appearance.tsx) |
@@ -201,7 +202,7 @@ ComfyUI 라이브러리 입력은 계정의 `images.view`를 검사한다. 계�
 
 ## 미디어 기반을 수정할 때
 
-프로젝트 작업 공간의 첫 단계는 셸 없는 서버 파일 도구다. `workspaceService.ts`의 공용 실제 폴더·리비전·프로젝트 쓰기 직렬화·요청별 결과를 HTTP `workspaces.routes.ts`와 MCP `workspaceTools.ts`가 공유한다. `chatWorkspace.ts`가 명시적인 1:1 채팅 연결과 지침을 해석하며 게시판 호출은 제외한다. 도구는 프로젝트를 연결한 채팅에만 직접 제공하고, `workspace.changed` 파일 조회 권한 구독자 이벤트로 해당 프로젝트 화면을 갱신한다.
+프로젝트 작업 공간의 첫 단계는 셸 없는 서버 파일 도구다. `workspaceService.ts`의 공용 실제 폴더·리비전·프로젝트 쓰기 직렬화·요청별 결과를 HTTP `workspaces.routes.ts`와 MCP `workspaceTools.ts`가 공유한다. `chatWorkspace.ts`가 말하는 프로필의 유효 연결(`WorkspaceService.effective`: 채팅의 선택, 없으면 말하는 프로필의 `workspace_id`·`workspace_write` 기본. 그룹 채팅은 멤버의 기본만, 게시판 호출은 방의 선택을 건너뛰고 프로필 기본만 쓴다)과 지침을 해석한다. 연결 파일도 같아서 `placesForRequest`가 게시판 호출 방의 채팅 연결을 빼고 프로필 연결만 연다. 개인 파일 도구(`BOARD_CALL_BLOCKED_TOOLS`)는 그대로 막는다. 도구는 프로젝트가 정해진 채팅에만 직접 제공하고, `workspace.changed` 파일 조회 권한 구독자 이벤트로 해당 프로젝트 화면을 갱신한다.
 
 파일함·작업 공간은 인스턴스 공용이며 `files.view/edit/delete` 기능 권한은 유지한다. `fileStoreAccess.ts`의 계정 키는 실행 주체·개인 채팅 연결용이고 파일 조회 범위가 아니다. DB의 기존 `owner_key`는 생성 출처 기록으로 보존한다. 파일·검색·버전 조회는 안정된 ID로 접근하고 이름 유일성은 공용 부모 폴더 단위로 검사한다. `fileStoreSchema.ts`는 기존 이름 충돌을 ID 접미사로 해소하며, 시작 시 `fileStorePaths.ts`가 계정별 원본·버전·프로젝트 경로를 공용 경로로 이전한다. 충돌이나 링크 발견 시 시작을 중단하며 기존 자료를 덮어쓰지 않는다. `files.changed`와 `workspace.changed`는 해당 기능 권한이 있는 구독자의 캐시를 갱신한다. 계정별 파일함 선택 UI와 `/api/files/owners`는 제거했다. 이전 URL의 `owner`는 저장소 선택에 사용하지 않는다.
 

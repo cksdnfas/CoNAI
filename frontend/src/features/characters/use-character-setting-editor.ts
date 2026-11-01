@@ -144,7 +144,8 @@ export function useCharacterSettingEditor({ target, onCreated, onClose }: {
   const fieldLabel = (key: DraftKey) => ({
     name: t({ ko: '이름', en: 'name' }),
     folderId: t({ ko: '폴더', en: 'folder' }),
-    appearance: t({ ko: '외형 설명', en: 'appearance' }),
+    sections: t({ ko: '외형 태그', en: 'appearance tags' }),
+    outfits: t({ ko: '의상', en: 'outfits' }),
     referenceHash: t({ ko: '기준 이미지', en: 'reference image' }),
     avatarHash: t({ ko: '아바타', en: 'avatar' }),
     avatarCrop: t({ ko: '아바타', en: 'avatar' }),
@@ -181,7 +182,8 @@ export function useCharacterSettingEditor({ target, onCreated, onClose }: {
     const promise = createCharacterSetting({
       folderId: submitted.folderId,
       name: submitted.name.trim(),
-      appearance: submitted.appearance,
+      sections: submitted.sections,
+      outfits: submitted.outfits,
       ...(canViewImages ? { referenceHash: submitted.referenceHash, avatarHash: submitted.avatarHash, avatarCrop: submitted.avatarCrop } : {}),
     })
     const request = { session: sessionRef.current, submitted, promise }
@@ -191,8 +193,9 @@ export function useCharacterSettingEditor({ target, onCreated, onClose }: {
     return request
   }
 
-  /** Saves what image generation reads (name, appearance, reference); a new setting is created whole here. */
+  /** Saves what image generation reads (name, look, reference); a new setting is created whole here. */
   const ensureSetting = async () => {
+    const generationKeys = ['name', 'sections', 'outfits', 'referenceHash'] as const
     const sourceSession = sessionRef.current
     if (!baseRef.current) {
       const { submitted, promise } = createFromDraft()
@@ -201,15 +204,15 @@ export function useCharacterSettingEditor({ target, onCreated, onClose }: {
       if (sessionRef.current === sourceSession) {
         adopt(created, mergeDraft(submitted, settingDraftOf(created), draftRef.current).draft)
         onCreated(created)
-        if (Object.keys(changesFrom(created, ['name', 'appearance', 'referenceHash'])).length) {
-          const updated = await writeChanges(['name', 'appearance', 'referenceHash'])
+        if (Object.keys(changesFrom(created, generationKeys)).length) {
+          const updated = await writeChanges(generationKeys)
           if (sessionRef.current === sourceSession) rebase(updated)
           return updated
         }
       }
       return created
     }
-    const updated = await writeChanges(['name', 'appearance', 'referenceHash'])
+    const updated = await writeChanges(generationKeys)
     if (sessionRef.current === sourceSession) rebase(updated)
     return updated
   }

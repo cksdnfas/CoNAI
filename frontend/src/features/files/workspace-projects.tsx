@@ -52,7 +52,7 @@ export function WorkspaceSidebarGroup({ activeId, onOpen, onCreate }: { activeId
  * Choose the project a chat or a plugin works in (or none), and whether it may save. Search filters the loaded
  * projects; "더 보기" loads the next 50. `writeLabel` null hides the write switch.
  */
-export function WorkspaceProjectPicker({ open, onClose, projectId, write, writeLabel, onConnect, busy = false, title }: {
+export function WorkspaceProjectPicker({ open, onClose, projectId, write, writeLabel, onConnect, busy = false, title, noneLabel }: {
   open: boolean
   onClose: () => void
   projectId: string | null
@@ -61,6 +61,8 @@ export function WorkspaceProjectPicker({ open, onClose, projectId, write, writeL
   onConnect: (projectId: string | null, write: boolean) => void | Promise<void>
   busy?: boolean
   title?: string
+  /** The first row, which connects no project (default: 연결 안 함). */
+  noneLabel?: string
 }) {
   const { t } = useI18n()
   const { projects, hasMore, loadMore, query } = useWorkspaceProjects(open)
@@ -96,7 +98,7 @@ export function WorkspaceProjectPicker({ open, onClose, projectId, write, writeL
         <SearchField value={search} onChange={setSearch} placeholder={t({ ko: '프로젝트 찾기', en: 'Find a project' })} />
         {query.isError ? <ErrorState error={query.error} onRetry={() => void query.refetch()} /> : null}
         <div role="radiogroup" aria-label={t({ ko: '프로젝트', en: 'Project' })} className="max-h-72 overflow-y-auto">
-          {term ? null : row(null, t({ ko: '연결 안 함', en: 'Not connected' }), false)}
+          {term ? null : row(null, noneLabel ?? t({ ko: '연결 안 함', en: 'Not connected' }), false)}
           {shown.map((project) => row(project.id, project.name, true))}
           {query.isPending ? <LoadingState /> : null}
           {hasMore ? <Button variant="ghost" size="sm" className="w-full" disabled={query.isFetchingNextPage} onClick={loadMore}>{t({ ko: '더 보기', en: 'More' })}</Button> : null}

@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query'
-import type { ChatPageData, ChatPageSchema } from '@conai/shared'
+import { composeCharacterAppearance, type ChatPageData, type ChatPageSchema } from '@conai/shared'
 import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
 import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { pageAction, pageChoice, pageNumber, pageObject } from '@/features/codex-chat/page-action-helpers'
@@ -29,8 +29,8 @@ export function useChatCharacterSettingInsertion() {
     actions: (targets: Record<string, ChatPageSchema>, required: string[], description: string) => canView ? [pageAction(
       'character_setting.insert',
       t({ ko: '캐릭터 외형 불러오기', en: 'Load character appearance' }),
-      `Copy a character library setting (find settingId with list_character_library) into this form: its appearance tags go into target like a preset row (append adds them on a new line; replace replaces the input), its reference image optionally too. A copy: later library edits do not change the form. ${description}`,
-      pageObject({ settingId: pageNumber(1, undefined, true), ...targets, mode: pageChoice(['append', 'replace']) }, ['settingId', ...required]),
+      `Copy a character library setting (find settingId with list_character_library) into this form: its appearance tags (sections plus outfit: outfitIndex in its outfits, 0 = default) go into target like a preset row (append adds them on a new line; replace replaces the input), its reference image optionally too. A copy: later library edits do not change the form. ${description}`,
+      pageObject({ settingId: pageNumber(1, undefined, true), outfitIndex: pageNumber(0, undefined, true), ...targets, mode: pageChoice(['append', 'replace']) }, ['settingId', ...required]),
     )] : [],
     /** Map an `includeReference` argument onto what the form can take. */
     referenceMode: (include: ChatPageData | undefined, available: boolean): ReferenceMode => {
@@ -46,7 +46,9 @@ export function useChatCharacterSettingInsertion() {
       if (!canView) throw new Error(t({ ko: '캐릭터 라이브러리 조회 권한이 없어.', en: 'Character library view permission is required.' }))
       const settingId = Number(args.settingId)
       const setting = await queryClient.fetchQuery({ queryKey: characterSettingQueryKey(settingId), queryFn: ({ signal }) => getCharacterSetting(settingId, signal), staleTime: 0 })
-      const appearance = setting.appearance.trim()
+      const outfitIndex = args.outfitIndex === undefined ? 0 : Number(args.outfitIndex)
+      if (outfitIndex > 0 && outfitIndex >= setting.outfits.length) throw new Error(t({ ko: '이 외형 설정엔 그 의상이 없어. outfits를 다시 확인해줘.', en: 'This setting has no such outfit.' }))
+      const appearance = composeCharacterAppearance(setting, outfitIndex).trim()
       const withReference = reference !== 'off' && canViewImages && !!setting.referenceHash
       if (reference === 'required' && !withReference) throw new Error(t({ ko: '이 외형 설정엔 쓸 수 있는 레퍼런스 이미지가 없어.', en: 'This setting has no usable reference image.' }))
       if (!appearance && !withReference) throw new Error(t({ ko: '이 외형 설정엔 넣을 외형 태그가 없어.', en: 'This setting has no appearance tags to insert.' }))

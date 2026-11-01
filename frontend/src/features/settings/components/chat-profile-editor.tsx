@@ -102,7 +102,7 @@ export function buildDraft(profile: ChatProfileInput | null, defaults: ChatProfi
     loreRecursionDepth: profile?.loreRecursionDepth ?? defaults?.loreRecursionDepth ?? CHAT_PROFILE_DEFAULTS.loreRecursionDepth,
     authorNote: profile?.authorNote ?? '',
     avatar: profile?.avatar ?? null,
-    characterLink: profile?.characterLink ? { settingId: profile.characterLink.settingId, synced: profile.characterLink.synced } : null,
+    characterLink: profile?.characterLink ? { settingId: profile.characterLink.settingId, synced: profile.characterLink.synced, outfit: profile.characterLink.outfit ?? null } : null,
     appearance: profile?.appearance,
     referenceHash: profile?.referenceHash,
     avatarHash: profile?.avatarHash,
@@ -151,6 +151,7 @@ export function buildDraft(profile: ChatProfileInput | null, defaults: ChatProfi
     agentEnabled: profile?.agentEnabled ?? false,
     agentDescription: profile?.agentDescription ?? '',
     linkedFiles: profile?.linkedFiles ?? [],
+    workspace: profile?.workspace ?? null,
     judgePresetId: profile?.judgePresetId ?? null,
     judgeSlotId: profile?.judgeSlotId ?? null,
     style: profile?.style ?? defaults!.style,
@@ -245,7 +246,8 @@ export function mergeOwnProfileDraft(base: ChatProfile, updated: ChatProfile | n
   } else if (effect.kind === 'setting') {
     const { setting, submitted, previousGroupId } = effect
     const groups = [...(setting.expressionGroupId ? [setting.expressionGroupId] : []), ...before.style.emoticonGroupIds.filter((id) => id !== previousGroupId && id !== setting.expressionGroupId)].slice(0, CHAT_MAX_EMOTICON_GROUPS)
-    expected = { ...before, characterLink: { settingId: setting.id, synced: true }, appearance: setting.appearance, referenceHash: setting.referenceHash, avatarHash: setting.avatarHash, avatarCrop: setting.avatarCrop, avatar: null, style: { ...before.style, emoticonGroupIds: groups } }
+    // The server keeps the outfit choice only when the profile stays on the same setting.
+    expected = { ...before, characterLink: { settingId: setting.id, synced: true, outfit: before.characterLink?.settingId === setting.id ? before.characterLink.outfit ?? null : null }, appearance: setting.appearance, referenceHash: setting.referenceHash, avatarHash: setting.avatarHash, avatarCrop: setting.avatarCrop, avatar: null, style: { ...before.style, emoticonGroupIds: groups } }
     next = { ...current }
     const linkUnchanged = sameCharacterLink(current.characterLink, submitted.characterLink)
     if (linkUnchanged) {
@@ -931,7 +933,7 @@ function ProfileEditor({ layout, open, profile, setProfile, draft, setDraft, dir
     { value: 'character', label: t({ ko: '캐릭터', en: 'Character' }), icon: FileText },
     { value: 'appearance', label: t({ ko: '외형', en: 'Appearance' }), icon: ImageIcon },
     { value: 'model', label: t({ ko: '모델', en: 'Model' }), icon: Sparkles, incomplete: connectionMissing },
-    { value: 'memory', label: t({ ko: '기억', en: 'Memory' }), icon: BookOpen },
+    { value: 'memory', label: t({ ko: '참고 자료', en: 'References' }), icon: BookOpen },
     { value: 'tools', label: t({ ko: '도구', en: 'Tools' }), icon: Wrench },
     { value: 'look', label: t({ ko: '꾸미기', en: 'Look' }), icon: Palette },
   ]

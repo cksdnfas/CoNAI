@@ -1,3 +1,4 @@
+import type { CharacterLibraryFacets } from '@conai/shared'
 import { requestJson } from '@/lib/api-request'
 import type { ApiResponse } from '@/types/image'
 import type {
@@ -56,9 +57,17 @@ export async function getDanbooruBrowserArtists(params?: { query?: string; page?
   return requestDanbooruData<DanbooruBrowserListPayload<DanbooruBrowserArtistRecord>>(`/api/danbooru-browser/artists?${searchParams.toString()}`, 'Failed to load Danbooru artists.')
 }
 
-export async function getDanbooruBrowserCharacters(params?: { query?: string; copyrightTagId?: number; page?: number; limit?: number; relatedTagCategories?: DanbooruBrowserRelatedTagCategory[]; relatedTagScoreMin?: number; relatedTagScoreMax?: number; relatedTagLimit?: number }) {
+/** The character catalog's filter choices (hair and eye colours…); `available` false without a dictionary. */
+export function getDanbooruCharacterFacets() {
+  return requestDanbooruData<CharacterLibraryFacets>('/api/danbooru-browser/character-facets', 'Failed to load character filters.')
+}
+
+/** `tags`: normalized tag names every result has (frequent on its posts); `sort` `name` instead of most posts. */
+export async function getDanbooruBrowserCharacters(params?: { query?: string; copyrightTagId?: number; page?: number; limit?: number; relatedTagCategories?: DanbooruBrowserRelatedTagCategory[]; relatedTagScoreMin?: number; relatedTagScoreMax?: number; relatedTagLimit?: number; tags?: string[]; sort?: 'posts' | 'name' }) {
   const searchParams = new URLSearchParams()
   appendPagingParams(searchParams, params)
+  if (params?.tags?.length) searchParams.set('tags', params.tags.join(','))
+  if (params?.sort === 'name') searchParams.set('sort', 'name')
   if (params?.copyrightTagId !== undefined) searchParams.set('copyrightTagId', String(params.copyrightTagId))
   if (params?.relatedTagCategories !== undefined) searchParams.set('relatedTagCategories', params.relatedTagCategories.join(','))
   if (params?.relatedTagScoreMin !== undefined) searchParams.set('relatedTagScoreMin', String(params.relatedTagScoreMin))

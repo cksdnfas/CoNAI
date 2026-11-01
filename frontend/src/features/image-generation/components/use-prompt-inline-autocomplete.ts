@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { formatDanbooruTagForPrompt } from '@conai/shared'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { getPromptSuggestions, type PromptSuggestResponse } from '@/lib/api-prompts'
 import type { DanbooruBrowserCharacterRecord, DanbooruBrowserRelatedTagRecord, DanbooruBrowserTagRecord } from '@/types/danbooru-browser'
@@ -55,10 +56,7 @@ function normalizeAutocompleteLookup(value: string) {
   return normalizeAutocompleteText(value).replace(/ /g, '_')
 }
 
-/** Danbooru tag name as prompt text: underscores become spaces unless kept by setting, except short emoticon tags such as `^_^`. */
-export function formatDanbooruTagForPrompt(name: string, keepUnderscores = false) {
-  return keepUnderscores || name.length <= 3 ? name : name.replace(/_/g, ' ')
-}
+export { formatDanbooruTagForPrompt }
 
 /** 3 = exact, 2 = starts with the query, 1 = contains it. */
 function getAutocompleteMatchTier(suggestion: PromptAutocompleteSuggestion, normalizedQuery: string) {

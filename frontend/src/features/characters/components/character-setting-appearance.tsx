@@ -4,12 +4,13 @@ import { ChatProfileAvatar } from '@/features/codex-chat/chat-profile-avatar'
 import { CharacterAppearanceEditor } from '@/features/settings/components/character-appearance-editor'
 import type { AssetRuns } from '@/features/settings/components/chat-profile-asset-runs'
 import { clearChatProfileExpression, setChatProfileExpression } from '@/lib/api-codex-chat'
-import { draftCharacterAppearance, refreshCharacterSettingAssets } from '@/lib/api-character-library'
+import { refreshCharacterSettingAssets } from '@/lib/api-character-library'
 import { characterImageUrl } from '../character-library-shared'
 import type { CharacterSettingEditorState } from '../use-character-setting-editor'
+import { CharacterLookEditor } from './character-look-editor'
 
 /**
- * The look of the setting an editor holds (reference, avatar, appearance tags, expressions, candidates), bound to the
+ * The look of the setting an editor holds (reference, avatar, sectioned tags and outfits, expressions, candidates), bound to the
  * setting: imports, generation and expressions are the setting's. The library editor and a profile synced to the
  * setting both show it. Without `editable` it only shows; `generation` (administrators) adds imports and generation.
  */
@@ -57,11 +58,7 @@ export function CharacterSettingAppearanceEditor({ editor, runs, editable, gener
       runs={runs}
       busy={busy}
       onBusyChange={onBusyChange}
-      draftAppearance={generation ? (signal) => draftCharacterAppearance({ settingId: base?.id ?? null, name: draft.name.trim(), appearance: draft.appearance, referenceHash: draft.referenceHash }, signal) : undefined}
-      draftNeedsName
-      appearanceWarning={appearanceWarning}
-      appearanceInvalid={Boolean(appearanceWarning)}
-      appearanceNote={appearanceNote}
+      appearanceEditor={<CharacterLookEditor editor={editor} editable={editable} generation={generation} busy={busy} onBusyChange={onBusyChange} warning={appearanceWarning} note={appearanceNote} />}
       aside={aside}
       onSetExpression={setExpression}
       onClearExpression={clearExpression}

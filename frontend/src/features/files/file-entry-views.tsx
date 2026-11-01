@@ -20,6 +20,8 @@ export type EntryItem = {
   icon: ReactNode
   /** Square face of the grid tile (thumbnail or large icon). */
   face: ReactNode
+  /** A file the picker cannot take: shown dimmed, with no checkbox, and a click does nothing. */
+  disabled?: boolean
 }
 
 export type EntryViewProps = {
@@ -51,7 +53,7 @@ export function FileEntryView({ items, mode, selected, onToggle, onSelectAll, ca
   const touchMenuAt = useRef(0)
   const pointerType = useRef('mouse')
   const menuOpenChange = (open: boolean) => { if (open && pointerType.current !== 'mouse') touchMenuAt.current = Date.now() }
-  const open = (item: EntryItem) => { if (Date.now() - touchMenuAt.current >= 800) onOpen(item) }
+  const open = (item: EntryItem) => { if (!item.disabled && Date.now() - touchMenuAt.current >= 800) onOpen(item) }
   const dragProps = (item: EntryItem) => ({
     draggable,
     onPointerDown: (event: { pointerType: string }) => { pointerType.current = event.pointerType },
@@ -70,7 +72,7 @@ export function FileEntryView({ items, mode, selected, onToggle, onSelectAll, ca
           const selectable = canSelect(item)
           return (
             <ActionContextMenu key={item.id} entries={menu?.(item) ?? []} onOpenChange={menuOpenChange}>
-              <div {...dragProps(item)} title={item.name} className="group relative min-w-0 [-webkit-touch-callout:none]">
+              <div {...dragProps(item)} title={item.name} className={cn('group relative min-w-0 [-webkit-touch-callout:none]', item.disabled && 'opacity-40')}>
                 <MediaCard
                   onClick={() => open(item)}
                   title={<span className="line-clamp-2 whitespace-normal wrap-anywhere">{item.name}</span>}
@@ -81,7 +83,7 @@ export function FileEntryView({ items, mode, selected, onToggle, onSelectAll, ca
                   meta={item.folder ? undefined : formatSize(item.size)}
                 />
                 {selectable ? (
-                  <span className={cn('absolute left-2.5 top-2.5 rounded-sm bg-background/80 p-0.5 transition-opacity', isSelected || selected.length > 0 ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus-within:opacity-100')}>
+                  <span className={cn('absolute left-2.5 top-2.5 rounded-sm bg-background/80 p-0.5 transition-opacity', isSelected || selected.length > 0 || compact ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus-within:opacity-100')}>
                     <Checkbox aria-label={t({ ko: '{name} 선택', en: 'Select {name}' }, { name: item.name })} checked={isSelected} onCheckedChange={(checked) => onToggle(item.id, checked === true)} />
                   </span>
                 ) : null}
@@ -120,7 +122,7 @@ export function FileEntryView({ items, mode, selected, onToggle, onSelectAll, ca
                 {canSelect(item) ? <Checkbox aria-label={t({ ko: '{name} 선택', en: 'Select {name}' }, { name: item.name })} checked={isSelected} onCheckedChange={(checked) => onToggle(item.id, checked === true)} /> : null}
               </DataCheckTd>
               <DataTd flush className="min-w-40">
-                <Button variant="ghost" className="max-w-full justify-start" onClick={() => open(item)}>
+                <Button variant="ghost" className="max-w-full justify-start" disabled={item.disabled} onClick={() => open(item)}>
                   {item.icon}
                   <span className="max-w-80 truncate">{item.name}</span>
                 </Button>

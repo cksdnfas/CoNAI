@@ -219,9 +219,11 @@ No new SDK method or API version is required for an existing fetch bridge.
 | Native path under `/api/character-library` | Contract |
 | --- | --- |
 | `GET /folders` | Folder tree rows. `POST /folders` takes `{parentId: number \| null, name}`; `PATCH /folders/:id` renames/moves with `{name?, parentId?}`. |
-| `GET /settings` | `folderId=root` for root, a numeric folder ID for that folder, omitted for all; `query`, `limit`, `offset` page settings. |
-| `GET /settings/:id` | Full setting: appearance tags, reference/avatar hashes and crop, expression/candidate group IDs, path, revision and synced-profile count. |
-| `POST /settings`, `PATCH /settings/:id` | Create with `{folderId, name, appearance?, referenceHash?, avatarHash?, avatarCrop?}`; patch only changed fields and the read `revision`. |
+| `GET /settings` | `folderId=root` for root, a numeric folder ID for that folder, omitted for all; `query` (names, tags, Korean tag names), `favorite=1`, `filters` (JSON `{dimension: tags[]}`), `sort` (`name`, `updated`, `created`, `created_asc`), `limit`, `offset` page settings. `GET /facets` takes the same scope and returns filter dimensions with tag counts. |
+| `GET /settings/:id` | Full setting: `sections`, `outfits` (first is the default), the composed `appearance`, `favorite`, reference/avatar hashes and crop, expression/candidate group IDs, path, revision and synced-profile count. |
+| `POST /settings`, `PATCH /settings/:id` | Create with `{folderId, name, sections?, outfits?, favorite?, referenceHash?, avatarHash?, avatarCrop?}` or a plain `appearance` the server sorts into sections (never both); patch only changed fields and the read `revision`. |
+| `POST /settings/appearance-fill` | `{source: 'danbooru', character}`, `{source: 'image', imageHash}` or `{source: 'text', text}`: an unsaved `{sections, outfitTags}` draft. |
+| `POST /settings/bulk`, `/settings/export`, `/settings/import` | Bulk `favorite`/`move`/`delete` by `ids` (a move refuses all on any name clash). Export a folder or `ids` as a ZIP bundle: `character-library.json` plus `images/<hash>.<ext>` for the reference, avatar, expressions (with keywords) and candidates (`X-Character-Count` header). Import takes multipart `file` (that ZIP) and optional `folderId`, renames clashes and adds bundled images with `images.view` + `images.upload`. |
 | `GET /folders/:id/delete-preview`, `GET /settings/:id/delete-preview` | Affected folder/setting counts and `linkedProfileCount`; linked profile names are administrator-only. |
 | `DELETE /folders/:id`, `DELETE /settings/:id?revision=...` | Delete the subtree/setting; synced profiles retain copied values and are unlinked. Send the read revision for setting deletion. |
 

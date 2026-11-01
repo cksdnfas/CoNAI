@@ -4,7 +4,7 @@ import fs from 'fs'
 import path from 'path'
 import { createHash } from 'crypto'
 import type Database from 'better-sqlite3'
-import { loreKeyLanguageLabel, type StoredFileEntry } from '@conai/shared'
+import { LOREBOOK_ROOT_FOLDER, loreKeyLanguageLabel, type StoredFileEntry } from '@conai/shared'
 import { getUserSettingsDb } from '../../database/userSettingsDb'
 import { ensureFileStoreSchema } from '../../database/fileStoreSchema'
 import { FileStoreError, FileStoreService, TEXT_EXTENSIONS, fileOwnerKey, type FileStoreChange } from '../fileStoreService'
@@ -46,7 +46,7 @@ import { stampLoreEntryIds } from './chatLorebookIds'
  * cache disagree, the file wins.
  */
 
-export const LOREBOOK_ROOT_FOLDER = '로어북'
+export { LOREBOOK_ROOT_FOLDER }
 export const CHAT_LOREBOOK_FOLDER = '채팅'
 export const LORE_FILES_FOLDER = '자료'
 export const LOREBOOK_JSON = 'lorebook.json'

@@ -334,6 +334,7 @@ const UPDATE_LABELS: Record<string, { ko: string; en: string }> = {
   agentEnabled: { ko: '에이전트로 사용', en: 'Use as an agent' },
   agentDescription: { ko: '에이전트 설명', en: 'Agent description' },
   linkedFiles: { ko: '연결 파일', en: 'Linked files' },
+  workspace: { ko: '작업 공간', en: 'Workspace' },
   loreRecordBookId: { ko: '기록할 곳', en: 'Record book' },
   minutesFolderId: { ko: '회의록', en: 'Minutes' },
 }

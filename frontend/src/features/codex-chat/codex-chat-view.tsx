@@ -10,7 +10,7 @@ import { Link } from 'react-router-dom'
 import { Chip } from '@/components/ui/chip'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
-import { Sheet } from '@/components/ui/sheet'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { IconButton } from '@/components/ui/icon-button'
 import { pageGutterStyle, SidebarColumn } from '@/components/common/sidebar-layout'
 import { useSnackbar } from '@/components/ui/snackbar-context'
@@ -819,9 +819,6 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   const infoShown = infoOpen && displayThread !== null && !showList
   // A view picked in the sheet shows at once; the docked panel stays beside it.
   const openView = (next: 'context' | 'gallery') => { setView(next); if (!dockInfo) setInfoOpen(false) }
-  const infoButton = displayThread ? (
-    <Button variant="ghost" size="sm" aria-pressed={infoShown} data-pressed={infoShown ? 'true' : undefined} onClick={() => setInfoOpen(!infoShown)}><PanelRight />{t({ ko: '정보', en: 'Info' })}</Button>
-  ) : null
   // A 1:1 chat's model and library look beside its name on the page (the side panel has no room for them).
   const roomChips = layout === 'page' && displayThread && !isGroup && profile && activeView === 'chat' ? (
     <span className="hidden min-w-0 items-center gap-1.5 lg:flex">
@@ -943,7 +940,17 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
       <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">{infoBody}</div>
     </aside>
   ) : null
-  const infoSheet = !dockInfo && infoBody ? <Sheet open={infoShown} onClose={() => setInfoOpen(false)} title={infoTitle}><ModalBody>{infoBody}</ModalBody></Sheet> : null
+  // Where there is no room to dock it (the side panel, a narrow page) the info panel drops down from its key as a list,
+  // so the transcript stays in sight; a click elsewhere closes it.
+  const infoToggle = displayThread ? (
+    <Button variant="ghost" size="sm" aria-pressed={infoShown} data-pressed={infoShown ? 'true' : undefined} onClick={dockInfo ? () => setInfoOpen(!infoShown) : undefined}><PanelRight />{t({ ko: '정보', en: 'Info' })}</Button>
+  ) : null
+  const infoButton = infoToggle && !dockInfo && infoBody ? (
+    <Popover open={infoShown} onOpenChange={setInfoOpen}>
+      <PopoverTrigger asChild>{infoToggle}</PopoverTrigger>
+      <PopoverContent align="end" padding="md" collisionPadding={8} aria-label={infoTitle} className="max-h-(--radix-popover-content-available-height) w-80 overflow-y-auto">{infoBody}</PopoverContent>
+    </Popover>
+  ) : infoToggle
 
   // A direct LLM chat whose background summary failed: older turns may have left the request unsummarized.
   // A room's summary is its own switch; a direct chat's follows the profile unless set.
@@ -1143,7 +1150,6 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
     return (
       <div className="flex min-h-0 flex-1">
         {dialogs}
-        {infoSheet}
         {/* The PageWithSidebar column spec; the page root (CodexChatPage) bleeds to the shell edges like PageWithSidebar. */}
         {hasSideList ? (
           <SidebarColumn as="nav" label={t({ ko: '채팅 목록', en: 'Chats' })} bodyClassName="flex flex-col gap-1">
@@ -1199,7 +1205,6 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       {dialogs}
-      {infoSheet}
       <div className="flex h-12 shrink-0 items-center gap-0.5 border-b border-line px-1.5">
         {showList ? <>
           {listTitle}

@@ -7,8 +7,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { IconButton } from '@/components/ui/icon-button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Tip } from '@/components/ui/tooltip'
-import { FilePicker } from '@/features/files/file-browser'
-import { TEXT_EXTENSIONS } from '@/features/settings/components/chat-profile-lorebook'
+import { LinkFilePicker } from '@/features/settings/components/chat-profile-linked-files'
 import { useI18n } from '@/i18n'
 import { getThreadLinkedFiles, threadLinkedFilesQueryKey, updateCodexChatThreadContext, type LinkedFileLink, type LinkedFileView } from '@/lib/api-codex-chat'
 import { listStoredFiles } from '@/lib/api-files'
@@ -23,7 +22,7 @@ const MAX_LINKS = 20
  * where a link allows it), then those the profile (a room: the members) brings. Requests carry only their names; the
  * characters open them with their own tools. New links start read-only; ⋯ allows writing.
  */
-export function LinkedFilesBlock({ threadId, workspaceEnabled = false }: { threadId: number; workspaceEnabled?: boolean }) {
+export function LinkedFilesBlock({ threadId, group = false }: { threadId: number; group?: boolean }) {
   const { t } = useI18n()
   const { showSnackbar } = useSnackbar()
   const queryClient = useQueryClient()
@@ -58,7 +57,7 @@ export function LinkedFilesBlock({ threadId, workspaceEnabled = false }: { threa
 
   return (
     <div className="flex flex-col gap-1.5 border-b border-line py-2.5">
-      {workspaceEnabled ? <ChatWorkspaceBlock threadId={threadId} /> : null}
+      <ChatWorkspaceBlock threadId={threadId} group={group} />
       <div className="flex min-h-8 items-center justify-between gap-2">
         <span className="text-sm">{t({ ko: '연결 파일', en: 'Linked files' })}</span>
         <div className="flex items-center gap-0.5">
@@ -97,17 +96,7 @@ export function LinkedFilesBlock({ threadId, workspaceEnabled = false }: { threa
           ))}
         </div>
       ) : null}
-      {picking ? (
-        <FilePicker
-          title={t({ ko: '파일 연결', en: 'Link files' })}
-          accept={[...TEXT_EXTENSIONS, '.pdf', '.xlsx']}
-          pickLabel={(count) => (count > 0 ? t({ ko: '{count}개 연결', en: 'Link {count}' }, { count }) : t({ ko: '파일 연결', en: 'Link files' }))}
-          onPick={(entries) => add(entries.map((entry) => entry.id))}
-          pickFolderLabel={t({ ko: '이 폴더 연결', en: 'Link this folder' })}
-          onPickFolder={(folderId) => add([folderId])}
-          onClose={() => setPicking(false)}
-        />
-      ) : null}
+      {picking ? <LinkFilePicker onPick={add} onClose={() => setPicking(false)} /> : null}
     </div>
   )
 }

@@ -172,6 +172,7 @@ export const WorkspaceService = {
     return rows.map(row => ({ id: row.id, name: row.name, revision: row.revision, createdAt: row.created_at }))
   },
   get(owner: string, projectId: string) { return project(requireProject(owner, projectId)) },
+  exists(projectId: string) { return /^[a-f0-9]{32}$/.test(projectId) && Boolean(db().prepare('SELECT 1 FROM workspace_projects WHERE id=?').get(projectId)) },
   /** Name and guidelines from the project settings dialog. The guidelines go through the same file write as any edit, so they are logged and bump the revision. */
   async update(owner: string, projectId: string, input: { name?: string; guidelines?: string; revision: number }, checkAccess: () => void = () => {}) {
     const current = requireProject(owner, projectId)
@@ -215,15 +216,31 @@ export const WorkspaceService = {
       .get(threadId, owner) as (ProjectRow & { binding_revision: string; writable: number }) | undefined
     return row ? { project: project(row), bindingRevision: row.binding_revision, write: row.writable === 1 } : null
   },
+  /**
+   * What a speaker works in: the project its chat chose itself, else the default of the speaking profile (a 1:1 chat's
+   * own profile; in a group chat `profileId`, who must be a member). Without `profileId` a group chat has only its own
+   * choice. `profileOnly` skips the chat's choice: a board call reaches only what its profile designates.
+   */
+  effective(owner: string, threadId: number, profileId?: number, profileOnly = false): WorkspaceBinding | null {
+    const own = profileOnly ? null : this.binding(owner, threadId)
+    if (own) return { ...own, source: 'chat' }
+    const row = db().prepare(`SELECT p.*,pr.workspace_write AS writable FROM codex_chat_threads t
+      JOIN llm_chat_profiles pr ON pr.id=CASE WHEN t.kind='group' THEN ? ELSE t.profile_id END
+      JOIN workspace_projects p ON p.id=pr.workspace_id
+      WHERE t.id=? AND (CASE WHEN t.account_id IS NULL THEN 'bootstrap' ELSE 'account:'||t.account_id END)=?
+        AND (t.kind='direct' OR (t.kind='group' AND EXISTS(SELECT 1 FROM chat_group_members m WHERE m.thread_id=t.id AND m.profile_id=pr.id)))`)
+      .get(profileId ?? null, threadId, owner) as (ProjectRow & { writable: number }) | undefined
+    return row ? { project: project(row), bindingRevision: `profile:${row.writable}`, write: row.writable === 1, source: 'profile' } : null
+  },
   bind(owner: string, threadId: number, projectId: string | null, write: boolean) {
-    const thread = db().prepare("SELECT id FROM codex_chat_threads WHERE id=? AND kind='direct' AND (CASE WHEN account_id IS NULL THEN 'bootstrap' ELSE 'account:'||account_id END)=?").get(threadId, owner)
-    if (!thread) throw new WorkspaceError('내 1:1 채팅에만 프로젝트를 연결할 수 있어.', 404)
+    const thread = db().prepare("SELECT id FROM codex_chat_threads WHERE id=? AND kind IN ('direct','group') AND (CASE WHEN account_id IS NULL THEN 'bootstrap' ELSE 'account:'||account_id END)=?").get(threadId, owner)
+    if (!thread) throw new WorkspaceError('내 채팅에만 프로젝트를 연결할 수 있어.', 404)
     if (projectId) {
       requireProject(owner, projectId)
       db().prepare(`INSERT INTO workspace_bindings(thread_id,project_id,revision,writable) VALUES(?,?,?,?)
         ON CONFLICT(thread_id) DO UPDATE SET project_id=excluded.project_id,revision=excluded.revision,writable=excluded.writable`).run(threadId, projectId, id(), write ? 1 : 0)
     } else db().prepare('DELETE FROM workspace_bindings WHERE thread_id=?').run(threadId)
-    return this.binding(owner, threadId)
+    return this.effective(owner, threadId)
   },
   /** `revisions`: files carry their revision (the screen's move and delete check against what the person saw). */
   async entries(owner: string, projectId: string, target = '', offset = 0, options: { revisions?: boolean } = {}) {

@@ -195,7 +195,7 @@ export function GroupContextView({ thread, group, profilesById, segments }: {
       <AuthorNoteBlock key={thread.id} thread={thread} defaults={{ note: '', depth: null }} />
       {llmMembers.length > 0 ? <GenerationReactionSettings thread={thread} /> : null}
       <LorebookBlock threadId={thread.id} loreAutoSave={thread.lore_auto_save} profiles={(group?.memberIds ?? thread.member_profile_ids ?? []).flatMap((id) => profilesById.get(id) ?? []).map(({ id, name }) => ({ id, name }))} />
-      <LinkedFilesBlock threadId={thread.id} workspaceEnabled={thread.kind !== 'group'} />
+      <LinkedFilesBlock threadId={thread.id} group={thread.kind === 'group'} />
       {group ? (
         <>
           <SettingRow label={capLabel}>
@@ -459,7 +459,7 @@ export function CodexChatContextView({ thread, profiles, segments, profileTurns,
       <AuthorNoteBlock key={thread.id} thread={thread} defaults={noteDefaults} />
       <GenerationReactionSettings thread={thread} />
       <LorebookBlock threadId={thread.id} loreAutoSave={thread.lore_auto_save} profiles={profiles} />
-      <LinkedFilesBlock threadId={thread.id} workspaceEnabled={thread.kind !== 'group'} />
+      <LinkedFilesBlock threadId={thread.id} group={thread.kind === 'group'} />
       <SettingRow label={t({ ko: '참고할 최근 턴 수', en: 'Recent turns sent' })}>
         <NumberStepperInput
           allowEmpty
@@ -534,7 +534,7 @@ export function CodexEngineContextView({ thread, profiles, noteDefaults }: { thr
       <ChatUserProfileRow thread={thread} />
       <AuthorNoteBlock key={thread.id} thread={thread} defaults={noteDefaults} />
       <LorebookBlock threadId={thread.id} loreAutoSave={thread.lore_auto_save} profiles={profiles} />
-      <LinkedFilesBlock threadId={thread.id} workspaceEnabled={thread.kind !== 'group'} />
+      <LinkedFilesBlock threadId={thread.id} group={thread.kind === 'group'} />
       {/* One line: context / model window. Running totals live in its tooltip. */}
       <SettingRow label={t({ ko: '현재 컨텍스트', en: 'Current context' })}>
         <Tip
