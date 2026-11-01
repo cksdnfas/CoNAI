@@ -268,7 +268,7 @@ export function WorkflowListPanel({
     <div className={cn('flex min-h-0 flex-col gap-2', className)}>
       {!isPicker ? (
         <div className="flex min-h-9 shrink-0 items-center gap-1">
-          <span className="text-base font-bold">{t({ ko: '워크플로', en: 'Workflows' })}</span>
+          <span className="text-base font-semibold">{t({ ko: '워크플로', en: 'Workflows' })}</span>
           <span className="ml-1 font-mono text-xs text-muted-foreground">{formatNumber(graphs.length)}</span>
           <span className="flex-1" />
           {onCreateFolder ? (

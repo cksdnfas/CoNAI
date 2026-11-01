@@ -72,7 +72,7 @@ export function PostRevisionsDialog({ post, onClose }: { post: PostDetail; onClo
           {revisionQuery.isError ? <ErrorState size="compact" error={revisionQuery.error} onRetry={() => void revisionQuery.refetch()} /> : null}
           {picked ? (
             <>
-              <h3 className="text-lg font-bold leading-snug">{picked.title}</h3>
+              <h3 className="text-lg font-semibold leading-snug">{picked.title}</h3>
               <PostMediaContext.Provider value={mediaContext}>
                 <PostMarkdown text={picked.body} className="text-sm" />
               </PostMediaContext.Provider>

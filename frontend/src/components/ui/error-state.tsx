@@ -10,7 +10,7 @@ const errorStateVariants = cva('rounded-sm bg-destructive-soft text-destructive-
   variants: {
     size: {
       default: 'flex w-full flex-col items-start gap-3 px-4 py-4',
-      compact: 'flex w-full flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2.5',
+      compact: 'flex w-full flex-wrap items-center gap-x-3 gap-y-2 px-3 py-3',
     },
   },
   defaultVariants: {
@@ -82,7 +82,7 @@ function ErrorState({
 
   return (
     <div data-slot="error-state" data-size={isCompact ? 'compact' : 'default'} role="alert" className={cn(errorStateVariants({ size }), className)} {...props}>
-      <div className="flex min-w-0 flex-1 items-start gap-2.5">
+      <div className="flex min-w-0 flex-1 items-start gap-3">
         <AlertTriangle className={cn('shrink-0', isCompact ? 'mt-0.5 size-4' : 'mt-0.5 size-5')} aria-hidden />
         <div className="min-w-0 space-y-1">
           <div className="text-sm font-medium">{title ?? t({ ko: '문제가 생겼어', en: 'Something went wrong' })}</div>

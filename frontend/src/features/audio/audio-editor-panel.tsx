@@ -236,7 +236,7 @@ export function AudioEditorPanel({ candidate, canEdit, onClose, onSaved, classNa
     <div className={cn('flex min-w-0 flex-col gap-4', className)}>
       {showHeader ? (
         <div className="flex items-center gap-2">
-          <h2 className="min-w-0 flex-1 truncate text-sm font-bold">{candidate.name}</h2>
+          <h2 className="min-w-0 flex-1 truncate text-sm font-semibold">{candidate.name}</h2>
           <IconButton variant="ghost" size="icon-sm" label={t({ ko: '닫기', en: 'Close' })} onClick={onClose}><X /></IconButton>
         </div>
       ) : null}

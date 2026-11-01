@@ -14,7 +14,7 @@ export function CharacterCard({ name, mediaSrc, crop, ...cardProps }: {
 } & Omit<ComponentProps<typeof OverlayCard>, 'media' | 'label' | 'title'>) {
   const fill = avatarInitialFill(name)
   const fallback = (
-    <span className="flex size-full items-center justify-center text-5xl font-bold" style={{ backgroundColor: `color-mix(in srgb, ${fill} 24%, var(--surface-low))`, color: fill }} aria-hidden="true">
+    <span className="flex size-full items-center justify-center text-5xl font-semibold" style={{ backgroundColor: `color-mix(in srgb, ${fill} 24%, var(--surface-low))`, color: fill }} aria-hidden="true">
       {Array.from(name.trim())[0] ?? '?'}
     </span>
   )

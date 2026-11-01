@@ -244,7 +244,7 @@ export function ComfyWorkflowAuthoringModal({
           aria-label={t({ ko: '워크플로우 이름', en: 'Workflow name' })}
           placeholder={t({ ko: '이름 없음', en: 'Untitled' })}
           className={cn(
-            'h-8 min-w-20 rounded-sm bg-transparent px-1.5 text-sm font-bold text-foreground outline-none [field-sizing:content] placeholder:text-muted-foreground hover:bg-fill focus:bg-field',
+            'h-8 min-w-20 rounded-sm bg-transparent px-1.5 text-sm font-semibold text-foreground outline-none [field-sizing:content] placeholder:text-muted-foreground hover:bg-fill focus:bg-field',
             isWideLayout ? 'max-w-72' : 'max-w-28',
           )}
         />

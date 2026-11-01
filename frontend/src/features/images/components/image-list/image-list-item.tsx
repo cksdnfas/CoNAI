@@ -114,7 +114,7 @@ const ImageListItemComponent = memo(function ImageListItemComponent({
       <ImageListVideoPreview
         key={imageId}
         image={image}
-        className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.02]"
+        className="h-full w-full object-cover transition-opacity duration-150 group-hover:opacity-85"
         style={mediaFrameStyle}
         draggable={false}
         onDragStart={preventNativeDrag}
@@ -125,7 +125,7 @@ const ImageListItemComponent = memo(function ImageListItemComponent({
       <ImagePreviewMedia
         image={image}
         alt={displayName}
-        className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.02]"
+        className="h-full w-full object-cover transition-opacity duration-150 group-hover:opacity-85"
         style={mediaFrameStyle}
         loading="lazy"
         draggable={false}

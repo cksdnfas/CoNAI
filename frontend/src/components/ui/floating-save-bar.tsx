@@ -27,15 +27,15 @@ export function FloatingSaveBar({ label, saving, canSave = true, onSave, onDisca
   return (
     <div className="sticky bottom-[calc(var(--shell-float-bottom)+1rem)] z-30 mt-8" role="region" aria-label={ariaLabel ?? t({ ko: '저장', en: 'Save' })}>
       <div className={cn('theme-floating-panel', floatingSurfaceClassName, 'flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg py-2 pr-2 pl-4')}>
-        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1.5" aria-live="polite">
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-2" aria-live="polite">
           <div className="flex shrink-0 items-center gap-2 text-sm font-semibold text-foreground">
             <CircleDot className="size-4 text-primary" aria-hidden />
             {label}
           </div>
-          <kbd className="hidden rounded-xs border border-line px-1.5 font-sans text-2xs text-muted-foreground sm:inline">{formatShortcut('Mod+S')}</kbd>
-          {children ? <div className="flex min-w-0 flex-wrap gap-1.5">{children}</div> : null}
+          <kbd className="hidden rounded-xs border border-line px-2 font-sans text-2xs text-muted-foreground sm:inline">{formatShortcut('Mod+S')}</kbd>
+          {children ? <div className="flex min-w-0 flex-wrap gap-2">{children}</div> : null}
         </div>
-        <div className="ml-auto flex shrink-0 items-center gap-1.5">
+        <div className="ml-auto flex shrink-0 items-center gap-2">
           {onDiscard ? <Button size="sm" variant="ghost" disabled={saving} onClick={onDiscard}>{t({ ko: '되돌리기', en: 'Revert' })}</Button> : null}
           <Button size="sm" disabled={saving || !canSave} aria-busy={saving || undefined} onClick={onSave}>
             {saving ? <LoaderCircle className="animate-spin" /> : null}

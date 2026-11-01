@@ -6,7 +6,7 @@ const toggleRowVariants = cva('flex items-center gap-3 rounded-sm text-sm text-f
   variants: {
     variant: {
       settings: 'theme-settings-panel theme-input-surface',
-      detail: 'theme-input-surface border px-3 py-2.5',
+      detail: 'theme-input-surface border px-3 py-3',
     },
     /** `field`: the height of the inputs beside it in a form grid (44px on phones, 36px from sm). */
     size: {

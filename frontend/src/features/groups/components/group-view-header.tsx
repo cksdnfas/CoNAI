@@ -149,7 +149,7 @@ export function GroupViewHeader({
   )
 
   const nameHeading = (
-    <h1 className="flex min-w-0 items-center gap-2 text-base font-bold tracking-tight text-foreground">
+    <h1 className="flex min-w-0 items-center gap-2 text-base font-semibold tracking-tight text-foreground">
       <GroupColorDot color={color} size="md" />
       <span className="min-w-0 truncate">{name}</span>
     </h1>

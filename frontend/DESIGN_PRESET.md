@@ -74,7 +74,8 @@ Midnight / Paper light 프리셋도 같은 L* 단계를 따른다. custom 팔레
 
 ## Typography
 
-- Primary font: `Manrope`
+- Primary font: `Manrope` (Latin only; bundled in `src/assets/fonts`, no external request). Hangul falls through the
+  `--font-sans` stack to `Apple SD Gothic Neo`, `Malgun Gothic`, `Noto Sans KR`.
 - tone: precise, quiet, editorial
 
 ### Hierarchy
@@ -302,7 +303,9 @@ buttons up one tone.
 ### Rows
 - `SettingRow` (`label`, `description?`, `htmlFor?`, `align?` center|start, `stacked?`, `controlClassName?`, children =
   control): label left, control right, 52px min, hairline below, control wraps under the label on phones.
-- `ListRow` (`leading?`, `trailing?`, `selected?`, `interactive?`, `size?` sm|md|lg, `asChild?`): hairline row; with
+- `ListRow` (`leading?`, `trailing?`, `selected?`, `current?`, `interactive?`, `size?` sm|md|lg, `asChild?`): hairline row;
+  `selected` is the picked / multi-select wash, `current` is where you are in a navigation list (the sidebar's fill +
+  2px primary bar, e.g. the open chat thread); with
   `asChild` a `<button>` / `<a>` / `<li>` child becomes the row (lint allows `<ListRow asChild><button/></ListRow>`).
 - `ResourceRow` (`leading?`, `name`, `extra?`, `meta?`, `trailing?`, `onOpen?`, `openLabel?`): one named thing in a list
   (preset, profile, lorebook…). Name + extras over one muted meta line; `onOpen` makes the whole row clickable and shows
@@ -312,7 +315,7 @@ buttons up one tone.
   it instead of a column table; flag only what is off or failing (inactive, watcher error, not used), never the normal
   state. Keep a table (`DataTable`) only where values are compared down columns (usage, stats, file lists).
 - `RowGroup` (`heading?`, `count?`, `headingClassName?`, `actions?`, `bodyClassName?`): group label over rows. The label
-  is bold body-size foreground text (`text-sm font-bold`) over a hairline (`border-foreground/15`), never smaller or
+  is semibold body-size foreground text (`text-sm font-semibold`) over a hairline (`border-foreground/15`), never smaller or
   lighter than the rows' names, so a long page reads by group; `count` adds the item count, `headingClassName` gives
   the label a kind colour that the rows' icons share. `Section variant="settings"` and `EditorGroup` have the same
   heading. A settings tab with one group shows no group title or contents list: the toolbar title already names it.
@@ -482,7 +485,7 @@ feed search and the assistant; never render them as a visible line.
 
 ### Labels
 A title is never smaller, lighter or fainter than what it names. Three ranks, from the top:
-1. Group headings (RowGroup, Section `settings` / `drawer`, EditorGroup, a settings group `h2`): `text-sm font-bold`
+1. Group headings (RowGroup, Section `settings` / `drawer`, EditorGroup, a settings group `h2`): `text-sm font-semibold`
    foreground (the group `h2` of a settings tab is `text-base`). A row's name is at most `font-medium`, a group's body
    text never bolder than its heading.
 2. Input labels (Field / FieldGroup): `text-xs font-medium`, foreground at 80%.

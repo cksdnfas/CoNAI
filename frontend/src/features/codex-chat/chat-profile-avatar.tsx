@@ -35,7 +35,7 @@ export function ChatProfileAvatar({ name, avatar, profile, imageUrl, avatarCrop,
   size?: keyof typeof SIZE_CLASS
   className?: string
 }) {
-  const base = cn('inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full font-bold', SIZE_CLASS[size], className)
+  const base = cn('inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full font-semibold', SIZE_CLASS[size], className)
   const { canViewImages } = useImagePermissions()
   const src = imageUrl !== undefined ? imageUrl : profile?.id
     ? profile.hasAvatar === false ? null : chatProfileAssetUrl(profile.id, 'avatar', profile.assetVersion) : avatar

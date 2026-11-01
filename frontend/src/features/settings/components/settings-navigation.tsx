@@ -30,7 +30,7 @@ export function SettingsSearch() {
 export function SettingsGroup({ id, title, actions, children }: PropsWithChildren<{ id: string; title?: string; actions?: ReactNode }>) {
   // The margin clears the fixed header and the sticky page toolbar when a link aligns the group to the top.
   return <section data-settings-group={id} className="scroll-mt-36 space-y-4">
-    {title ? <div className="flex items-center justify-between gap-3"><h2 className="text-base font-bold text-foreground">{title}</h2>{actions}</div> : null}
+    {title ? <div className="flex items-center justify-between gap-3"><h2 className="text-base font-semibold text-foreground">{title}</h2>{actions}</div> : null}
     {children}
   </section>
 }

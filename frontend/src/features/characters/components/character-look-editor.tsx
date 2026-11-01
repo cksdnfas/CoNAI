@@ -168,7 +168,7 @@ function OutfitList({ outfits, editable, disabled, onChange }: { outfits: Charac
   return (
     <div className="space-y-3 border-t border-line pt-3">
       <div className="flex items-center gap-2">
-        <span className="flex items-center gap-1 text-sm font-bold">
+        <span className="flex items-center gap-1 text-sm font-semibold">
           {t({ ko: '의상', en: 'Outfits' })}
           <FieldInfo>{t({ ko: '맨 위가 기본 의상이야. 옷·액세서리 태그는 의상에 두면 갈아입힐 수 있어.', en: 'The first one is the default. Keep clothing tags in outfits to switch them.' })}</FieldInfo>
         </span>

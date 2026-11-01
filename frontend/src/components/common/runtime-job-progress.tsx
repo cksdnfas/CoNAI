@@ -49,7 +49,7 @@ export function RuntimeJobProgress({ job, cancel, isCancelling = false, classNam
                 tone: 'error',
               }))
             }}
-            label={isCancelling ? t({ ko: '취소하는 중...', en: 'Cancelling...' }) : t({ ko: '취소', en: 'Cancel' })}
+            label={isCancelling ? t({ ko: '취소하는 중…', en: 'Cancelling…' }) : t({ ko: '취소', en: 'Cancel' })}
           >
             {isCancelling ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <X className="h-3.5 w-3.5" />}
           </IconButton>
@@ -59,10 +59,10 @@ export function RuntimeJobProgress({ job, cancel, isCancelling = false, classNam
       <div className="h-2 overflow-hidden rounded-full bg-surface-low">
         <div
           className={cn(
-            'h-full rounded-full transition-all',
+            'h-full rounded-full transition',
             job.status === 'failed' ? 'bg-destructive' : job.status === 'cancelled' ? 'bg-muted-foreground' : 'bg-primary',
           )}
-          style={{ width: `${Math.min(100, Math.max(0, job.progress.percentage))}%` }}
+          style={{ width: `${Math.min(100, Math.max(0, job.progress.percentage))}%`, transitionProperty: 'width, background-color' }}
         />
       </div>
 

@@ -126,7 +126,7 @@ export function MediaLibraryBrowser({
   }
   const renderOrder = (image: ImageRecord) => {
     const position = image.composite_hash ? orderByHash.get(image.composite_hash) : undefined
-    return position ? <span className="flex size-6 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground tabular-nums shadow-key">{position}</span> : null
+    return position ? <span className="flex size-6 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground tabular-nums shadow-key">{position}</span> : null
   }
   const selectGroup = (id: number | null) => {
     setGroupId(id)

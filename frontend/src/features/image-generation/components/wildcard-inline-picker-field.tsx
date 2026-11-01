@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent, type FocusEvent, type KeyboardEvent, type MouseEvent, type SyntheticEvent, type UIEvent } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { AtSign, Dices } from 'lucide-react'
+import { AtSign, Dices, TriangleAlert } from 'lucide-react'
 import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
 import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
@@ -757,7 +757,8 @@ export function WildcardInlinePickerField({
         <div className="space-y-1 px-1 text-xs text-destructive">
           {missingTokens.map(({ token, status }) => (
             <div key={token.key} className="flex flex-wrap items-center gap-1">
-              <span>{t({ ko: `⚠ ${token.name}: 찾을 수 없어 생성할 때 빈 값으로 들어가요.`, en: `⚠ ${token.name}: not found, becomes empty at generation.` })}</span>
+              <TriangleAlert className="size-3.5 shrink-0" />
+              <span>{t({ ko: `${token.name}: 찾을 수 없어 생성할 때 빈 값으로 들어가요.`, en: `${token.name}: not found, becomes empty at generation.` })}</span>
               {status.suggestion ? (
                 <Button type="button" size="xs" variant="link" onClick={() => handleRenameRandomToken(token, status.source, status.suggestion ?? token.name)}>
                   {t({ ko: `혹시 ${status.suggestion}?`, en: `Did you mean ${status.suggestion}?` })}

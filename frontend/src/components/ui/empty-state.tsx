@@ -8,7 +8,7 @@ const emptyStateVariants = cva('rounded-sm', {
   variants: {
     size: {
       default: 'flex w-full flex-col items-center justify-center gap-3 px-6 py-10 text-center',
-      compact: 'flex w-full items-start gap-2.5 px-3 py-2.5 text-left',
+      compact: 'flex w-full items-start gap-3 px-3 py-3 text-left',
     },
   },
   defaultVariants: {
@@ -49,7 +49,7 @@ function EmptyState({ icon, title, action, size, className, ...props }: EmptySta
       <div data-slot="empty-state" data-size="compact" className={cn(emptyStateVariants({ size }), className)} {...props}>
         {renderIcon(icon, 'mt-0.5 size-4 shrink-0 text-muted-foreground')}
         {/* The action sits at the row end and drops under the text where the row is narrow (a sidebar). */}
-        <div className="flex min-w-0 flex-1 flex-wrap items-start gap-x-2.5 gap-y-2">
+        <div className="flex min-w-0 flex-1 flex-wrap items-start gap-x-3 gap-y-2">
           <div className="min-w-0 flex-1 basis-40">
             <Text as="div" variant="muted">{title}</Text>
           </div>

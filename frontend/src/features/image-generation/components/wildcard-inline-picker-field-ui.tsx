@@ -1,7 +1,7 @@
 import { createPortal } from 'react-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react'
-import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Dices, TriangleAlert } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { floatingSurfaceClassName } from '@/components/ui/floating-surface'
 import { IconButton } from '@/components/ui/icon-button'
@@ -163,7 +163,7 @@ function findAbsoluteContainingBlock(node: HTMLElement) {
  * One random token in the overlay: its raw text stays (invisible) so wrapping matches the textarea, every line piece
  * gets the tone fill, and the label sits on the widest piece, so a token broken over two lines still shows its label.
  */
-function PromptRandomTokenChip({ raw, label, className, layoutKey }: { raw: string; label: string; className: string; layoutKey: string }) {
+function PromptRandomTokenChip({ raw, label, missing, className, layoutKey }: { raw: string; label: string; missing: boolean; className: string; layoutKey: string }) {
   const chipRef = useRef<HTMLSpanElement>(null)
   const [box, setBox] = useState<ChipLabelBox | null>(null)
   const [resizeTick, setResizeTick] = useState(0)
@@ -209,8 +209,9 @@ function PromptRandomTokenChip({ raw, label, className, layoutKey }: { raw: stri
     <span ref={chipRef} className={cn('rounded-sm ring-1 ring-inset [-webkit-box-decoration-break:clone] [box-decoration-break:clone]', className)}>
       <span className="invisible">{raw}</span>
       {box ? (
-        <span className="absolute overflow-hidden px-1 text-xs text-ellipsis whitespace-nowrap" style={box}>
-          {label}
+        <span className="absolute flex items-center gap-1 overflow-hidden px-1 text-xs whitespace-nowrap" style={box}>
+          {missing ? <TriangleAlert className="size-3 shrink-0" /> : <Dices className="size-3 shrink-0" />}
+          <span className="truncate">{label}</span>
         </span>
       ) : null}
     </span>
@@ -253,7 +254,8 @@ export function renderPromptFieldOverlay(
           key={range.random.key}
           raw={raw}
           layoutKey={value}
-          label={`${status.state === 'missing' ? '⚠ ' : '🎲 '}${formatPromptRandomTokenLabel({ ...range.random, source: status.source })}`}
+          label={formatPromptRandomTokenLabel({ ...range.random, source: status.source })}
+          missing={status.state === 'missing'}
           className={cn(
             status.state === 'missing' ? 'bg-destructive/12 text-destructive ring-destructive/50' : cn(PROMPT_RANDOM_SOURCE_TONE[status.source], 'ring-transparent'),
             range.random.key === activeTokenKey && 'ring-current',

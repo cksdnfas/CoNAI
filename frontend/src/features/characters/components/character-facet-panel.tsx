@@ -53,7 +53,7 @@ export function CharacterFacetPanel({ facets, filters, onChange, loading }: {
   return (
     <div className="space-y-3 border-t border-line pt-3">
       <div className="flex items-center gap-2">
-        <span className="text-sm font-bold">{t({ ko: '필터', en: 'Filters' })}</span>
+        <span className="text-sm font-semibold">{t({ ko: '필터', en: 'Filters' })}</span>
         {hasActiveFilters(filters) ? <Button size="xs" variant="ghost" className="ml-auto" onClick={() => onChange({})}>{t({ ko: '모두 해제', en: 'Clear all' })}</Button> : null}
       </div>
       {facets.dimensions.map((dimension) => {

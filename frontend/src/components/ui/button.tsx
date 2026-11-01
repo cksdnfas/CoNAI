@@ -9,7 +9,7 @@ const PRESSED_TINT =
   "data-[pressed=true]:bg-primary/12 data-[pressed=true]:text-primary data-[pressed=true]:hover:bg-primary/16 data-[pressed=true]:hover:text-primary"
 
 const buttonVariants = cva(
-  "inline-flex shrink-0 items-center justify-center gap-2 rounded-sm text-sm font-medium tracking-tight whitespace-nowrap cursor-pointer transition-all duration-300 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+  "inline-flex shrink-0 items-center justify-center gap-2 rounded-sm text-sm font-medium whitespace-nowrap cursor-pointer transition duration-150 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
   {
     variants: {
       variant: {
@@ -18,7 +18,7 @@ const buttonVariants = cva(
          * top highlight standing in for the preset's gradient; kept in box-shadow so a bg-* override still replaces the fill.
          */
         default:
-          "bg-primary text-primary-foreground shadow-[inset_0_1px_0_color-mix(in_srgb,var(--secondary)_45%,transparent),0_0_20px_color-mix(in_srgb,var(--primary)_14%,transparent)] hover:brightness-108 hover:shadow-[inset_0_1px_0_color-mix(in_srgb,var(--secondary)_55%,transparent),0_0_28px_color-mix(in_srgb,var(--primary)_18%,transparent)]",
+          "bg-primary text-primary-foreground shadow-[inset_0_1px_0_color-mix(in_srgb,var(--secondary)_45%,transparent)] hover:brightness-108 hover:shadow-[inset_0_1px_0_color-mix(in_srgb,var(--secondary)_55%,transparent)]",
         destructive:
           "bg-destructive-soft text-destructive-soft-foreground hover:brightness-110 focus-visible:ring-destructive/25",
         /** Delete in editor footers and rows: red icon/text, no fill until hover, so it never outweighs Save. */
@@ -73,13 +73,13 @@ const buttonVariants = cva(
       },
       size: {
         default: "h-9 px-4 py-2 has-[>svg]:px-3",
-        xs: "h-6 gap-1 rounded-sm px-2 text-xs has-[>svg]:px-1.5 [&_svg:not([class*='size-'])]:size-3",
-        compact: "h-7 gap-1.5 px-2 text-xs has-[>svg]:px-2 [&_svg:not([class*='size-'])]:size-3.5",
+        xs: "h-6 gap-1 rounded-sm px-2 text-xs has-[>svg]:px-2 [&_svg:not([class*='size-'])]:size-3",
+        compact: "h-7 gap-2 px-2 text-xs has-[>svg]:px-2 [&_svg:not([class*='size-'])]:size-3.5",
         /** Wrapping user-content actions (tags), not a fixed-height toolbar key. */
         content: "h-auto min-h-6 gap-1 px-2 py-1 text-xs font-normal whitespace-normal break-words text-left",
         /** Field-height trigger whose label may run to two lines (variant="field"). */
         field: "h-auto min-h-9 gap-3 px-3 py-2",
-        sm: "h-8 gap-1.5 rounded-sm px-3 has-[>svg]:px-2.5",
+        sm: "h-8 gap-2 rounded-sm px-3 has-[>svg]:px-3",
         lg: "h-10 rounded-sm px-6 has-[>svg]:px-4",
         /** Touch-first worded key in a bottom-docked bar: 44px on phones, `default` (36px) from sm up. */
         touch: "h-11 px-5 has-[>svg]:px-4 sm:h-9 sm:px-4 sm:has-[>svg]:px-3",

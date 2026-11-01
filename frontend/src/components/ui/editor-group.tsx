@@ -12,7 +12,7 @@ export function EditorGroup({ label, info, count, actions, children }: { label?:
       {label || actions ? (
         <div className="flex min-h-7 flex-wrap items-center gap-x-3 gap-y-1">
           {label ? (
-            <h3 className="flex items-center gap-1 text-sm font-bold text-foreground">
+            <h3 className="flex items-center gap-1 text-sm font-semibold text-foreground">
               {label}
               {count !== undefined ? <span className="ml-1 font-medium text-muted-foreground tabular-nums">{count}</span> : null}
               {info ? <FieldInfo>{info}</FieldInfo> : null}

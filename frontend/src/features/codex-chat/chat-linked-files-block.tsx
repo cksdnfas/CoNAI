@@ -117,15 +117,15 @@ function LinkRow({ view, open, onToggle, actions }: { view: LinkedFileView; open
         {view.path ? <span className="min-w-0 truncate text-xs text-muted-foreground/70">{view.path}</span> : null}
         <span className="flex-1" />
         {view.missing ? (
-          <span className="shrink-0 text-2xs font-bold text-muted-foreground">{t({ ko: '없음', en: 'Missing' })}</span>
+          <span className="shrink-0 text-2xs font-semibold text-muted-foreground">{t({ ko: '없음', en: 'Missing' })}</span>
         ) : (
-          <span className={cn('shrink-0 rounded px-1.5 text-2xs font-bold', view.write ? 'bg-success/10 text-success' : 'bg-surface-low text-muted-foreground')}>
+          <span className={cn('shrink-0 rounded px-1.5 text-2xs font-semibold', view.write ? 'bg-success/10 text-success' : 'bg-surface-low text-muted-foreground')}>
             {view.write ? t({ ko: '쓰기', en: 'Write' }) : t({ ko: '읽기', en: 'Read' })}
           </span>
         )}
         {view.via === 'profile' ? (
           <Tip content={view.profiles.map((profile) => profile.name).join(', ') || undefined}>
-            <span className="shrink-0 text-2xs font-bold tracking-wide text-muted-foreground">{t({ ko: '프로필', en: 'Profile' })}</span>
+            <span className="shrink-0 text-2xs font-semibold tracking-wide text-muted-foreground">{t({ ko: '프로필', en: 'Profile' })}</span>
           </Tip>
         ) : null}
         <span className="shrink-0 font-mono text-xs text-muted-foreground">{detail}</span>

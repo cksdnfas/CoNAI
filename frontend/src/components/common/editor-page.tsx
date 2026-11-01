@@ -45,7 +45,7 @@ export function EditorTitleInput({ value, onChange, label, placeholder, maxLengt
         maxLength={maxLength}
         readOnly={readOnly}
         className={cn(
-          '-mx-1.5 w-full min-w-0 rounded-sm bg-transparent px-1.5 py-0.5 text-xl font-bold tracking-tight text-foreground outline-none placeholder:text-muted-foreground/60',
+          '-mx-1.5 w-full min-w-0 rounded-sm bg-transparent px-1.5 py-0.5 text-xl font-semibold tracking-tight text-foreground outline-none placeholder:text-muted-foreground/60',
           !readOnly && 'hover:bg-fill focus-visible:bg-fill focus-visible:ring-2 focus-visible:ring-ring/40',
           'aria-invalid:ring-2 aria-invalid:ring-destructive/40',
         )}
@@ -139,7 +139,7 @@ export function EditorPage({ crumbs, title, status, actions, nav, navLabel, stor
     <div className={cn('w-full space-y-6', nav ? 'max-w-4xl' : 'mx-auto max-w-6xl')}>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1.5">
-          {typeof title === 'string' ? <h1 className="min-w-0 text-xl font-bold tracking-tight text-foreground">{title}</h1> : title}
+          {typeof title === 'string' ? <h1 className="min-w-0 text-xl font-semibold tracking-tight text-foreground">{title}</h1> : title}
           {status}
         </div>
         {actions ? <div className="ml-auto flex shrink-0 items-center gap-1">{actions}</div> : null}

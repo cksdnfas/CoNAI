@@ -58,7 +58,7 @@ const sectionSlots: Record<SectionVariant, SectionSlots> = {
     // Same rank as a RowGroup heading: bold body-size text over a hairline.
     header: 'mb-1 flex min-h-8 items-center justify-between gap-3 border-b border-foreground/15',
     titleBlock: 'min-w-0 flex-1',
-    heading: 'text-sm font-bold text-foreground',
+    heading: 'text-sm font-semibold text-foreground',
     headingAs: 'h3',
     actions: 'flex shrink-0 items-center gap-2',
     body: 'space-y-4',
@@ -66,7 +66,7 @@ const sectionSlots: Record<SectionVariant, SectionSlots> = {
   drawer: {
     header: 'flex min-h-8 items-center justify-between gap-3',
     titleBlock: 'min-w-0 flex-1',
-    heading: 'text-sm font-bold text-foreground',
+    heading: 'text-sm font-semibold text-foreground',
     headingAs: 'div',
     actions: 'flex shrink-0 items-center gap-2',
     body: '',

@@ -419,7 +419,7 @@ export const FONT_PRESETS: Record<FontPreset, FontPresetDefinition> = {
   manrope: {
     label: 'Manrope',
     description: 'appearancePresets.font.manrope.description',
-    fontFamily: "'Manrope', ui-sans-serif, system-ui, sans-serif",
+    fontFamily: "'Manrope', 'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', ui-sans-serif, system-ui, sans-serif",
     monoFamily: "'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, Consolas, 'D2Coding', 'Malgun Gothic', 'Apple SD Gothic Neo', 'Noto Sans KR', monospace",
   },
   system: {

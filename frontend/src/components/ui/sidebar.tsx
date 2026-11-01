@@ -49,7 +49,7 @@ function SidebarGroupLabel({ className, children, actions, ...props }: SidebarGr
     <div
       data-slot="sidebar-group-label"
       className={cn(
-        'flex min-h-7 items-center justify-between gap-2 px-2.5 pt-3 pb-1 text-2xs font-semibold text-muted-foreground/75 first:pt-0.5',
+        'flex min-h-7 items-center justify-between gap-2 px-2.5 pt-3 pb-1 text-xs font-semibold text-muted-foreground/75 first:pt-0.5',
         className,
       )}
       {...props}

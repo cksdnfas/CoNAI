@@ -38,7 +38,7 @@ export function SearchChipStrip({ chips, onCycleOperator, onRemove, className }:
               removeLabel={t({ ko: '{label} 삭제', en: 'Delete {label}' }, { label: chip.label })}
             >
               {isFixedOperatorChip(chip) ? (
-                <span className="px-1.5 text-xs font-bold">{t(SEARCH_OPERATOR_LABELS[chip.operator])}</span>
+                <span className="px-1.5 text-xs font-semibold">{t(SEARCH_OPERATOR_LABELS[chip.operator])}</span>
               ) : (
                 <Tip content={[operatorDescription, t(SEARCH_OPERATOR_CYCLE_HINT)].join('\n')} className="whitespace-pre-line">
                   <ChipAction

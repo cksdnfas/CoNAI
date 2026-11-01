@@ -117,8 +117,8 @@ function RowProgress({ percent, tone = 'primary', className }: { percent: number
   return (
     <span className={cn('block h-1 w-44 overflow-hidden rounded-full bg-fill', className)} aria-hidden>
       <span
-        className={cn('block h-full rounded-full transition-all duration-200', tone === 'destructive' ? 'bg-destructive' : 'bg-primary')}
-        style={{ width: `${percent}%` }}
+        className={cn('block h-full rounded-full transition duration-200', tone === 'destructive' ? 'bg-destructive' : 'bg-primary')}
+        style={{ width: `${percent}%`, transitionProperty: 'width, background-color' }}
       />
     </span>
   )

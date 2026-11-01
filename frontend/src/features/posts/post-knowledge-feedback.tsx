@@ -58,7 +58,7 @@ function ScoreSummary({ stats }: { stats: PostQualityStats }) {
   return (
     <div className="flex items-center gap-8 py-5">
       <div className="flex min-w-20 flex-col gap-1">
-        <span className="text-3xl leading-none font-bold tabular-nums">{score > 0 ? `+${score}` : score}</span>
+        <span className="text-3xl leading-none font-semibold tabular-nums">{score > 0 ? `+${score}` : score}</span>
         <Tip content={<span className="flex flex-col gap-0.5">{details.map((line) => <span key={line}>{line}</span>)}</span>}>
           <span className="inline-flex w-fit items-center gap-1 text-xs text-muted-foreground" tabIndex={0}>
             {t({ ko: '{version}판', en: 'v{version}' }, { version: stats.contentVersion })}<Info className="size-3" />

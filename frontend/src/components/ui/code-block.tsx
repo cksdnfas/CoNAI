@@ -29,7 +29,7 @@ export function CodeBlock({ size = 'xs', maxHeight = 'none', fill = true, wrap =
         'overflow-auto font-mono leading-relaxed text-foreground',
         size === '2xs' ? 'text-2xs' : 'text-xs',
         wrap && 'whitespace-pre-wrap break-words',
-        fill && 'rounded-sm bg-field p-2.5',
+        fill && 'rounded-sm bg-field p-3',
         maxHeightClassName[maxHeight],
         className,
       )}

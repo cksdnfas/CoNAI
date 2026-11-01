@@ -63,7 +63,7 @@ export function ChatFlagIcon({ icon, name, className }: { icon: string; name: st
   // A fixed icon from the catalog (module scope), picked by key: createElement keeps it from reading as a new component.
   if (Lucide) return createElement(Lucide, { 'aria-hidden': true, className: cn('size-4 shrink-0', className) })
   if (icon && !icon.startsWith(LUCIDE_PREFIX)) return <span aria-hidden="true" className={cn('shrink-0 text-base leading-none', className)}>{icon}</span>
-  return <span aria-hidden="true" className={cn('shrink-0 text-xs font-bold leading-none', className)}>{[...name.trim()][0]?.toUpperCase() ?? '?'}</span>
+  return <span aria-hidden="true" className={cn('shrink-0 text-xs font-semibold leading-none', className)}>{[...name.trim()][0]?.toUpperCase() ?? '?'}</span>
 }
 
 /** The composer's flag chip (next to attach): how many flags are on (tinted while any is), and opens the tray. */

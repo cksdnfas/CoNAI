@@ -12,7 +12,7 @@ import { IconButton } from './icon-button'
  * label) a chip keeps the text's own case and weight, so it suits free text in any language.
  */
 const chipVariants = cva(
-  'inline-flex max-w-full min-w-0 shrink-0 items-center gap-1.5 rounded-sm whitespace-nowrap [&_svg]:pointer-events-none [&_svg]:shrink-0',
+  'inline-flex max-w-full min-w-0 shrink-0 items-center gap-2 rounded-sm whitespace-nowrap [&_svg]:pointer-events-none [&_svg]:shrink-0',
   {
     variants: {
       tone: {
@@ -28,7 +28,7 @@ const chipVariants = cva(
         destructive: 'bg-destructive-soft text-destructive-soft-foreground',
       },
       size: {
-        sm: 'px-1.5 py-0.5 text-2xs [&_svg:not([class*=size-])]:size-3',
+        sm: 'px-2 py-0.5 text-2xs [&_svg:not([class*=size-])]:size-3',
         md: 'px-2 py-1 text-xs [&_svg:not([class*=size-])]:size-3.5',
       },
       mono: { true: 'font-mono tabular-nums', false: '' },
@@ -68,7 +68,7 @@ function ChipRemoveKey({ size, label, disabled, onRemove }: { size: ChipProps['s
 
 /** A text key inside a chip (e.g. a search operator that cycles on click): ghost wash on hover, keeps the chip's tone. */
 function ChipAction({ className, type = 'button', ...props }: Omit<ComponentProps<typeof Button>, 'variant' | 'size'>) {
-  return <Button type={type} variant="ghost" size="xs" className={cn('px-1.5 font-bold text-current hover:text-current', className)} {...props} />
+  return <Button type={type} variant="ghost" size="xs" className={cn('px-2 font-semibold text-current hover:text-current', className)} {...props} />
 }
 
 /** Render a static chip; with `onRemove` it ends in an X key. For a pressable on/off chip use ToggleChip. */
@@ -82,15 +82,14 @@ function Chip({ className, tone, size, mono, asChild = false, onRemove, removeLa
       className={cn(chipVariants({ tone, size, mono }), removable && (size === 'sm' ? 'gap-1 pr-0.5' : 'gap-0.5 py-0.5 pr-0.5'), className)}
       {...props}
     >
-      {children}
-      {removable && onRemove ? <ChipRemoveKey size={size} label={removeLabel} disabled={removeDisabled} onRemove={onRemove} /> : null}
+      {removable && onRemove ? <>{children}<ChipRemoveKey size={size} label={removeLabel} disabled={removeDisabled} onRemove={onRemove} /></> : children}
     </Comp>
   )
 }
 
 const toggleChipVariants = cva(
   [
-    'inline-flex max-w-full min-w-0 shrink-0 cursor-pointer items-center gap-1.5 rounded-sm font-medium whitespace-nowrap transition-colors outline-none',
+    'inline-flex max-w-full min-w-0 shrink-0 cursor-pointer items-center gap-2 rounded-sm font-medium whitespace-nowrap transition-colors outline-none',
     'focus-visible:ring-[3px] focus-visible:ring-ring/40 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50',
     '[&_svg]:pointer-events-none [&_svg]:shrink-0',
   ],

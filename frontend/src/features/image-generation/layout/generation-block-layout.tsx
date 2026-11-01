@@ -370,7 +370,7 @@ function ColumnDivider({ left, right, total, containerRef, onLive, onCommit }: {
           onPointerCancel={handlePointerEnd}
         >
           <MoveHorizontal className="size-3.5" />
-          <span className="text-2xs font-bold tabular-nums text-muted-foreground [writing-mode:vertical-rl]">{percent(left)} : {percent(right)}</span>
+          <span className="text-2xs font-semibold tabular-nums text-muted-foreground [writing-mode:vertical-rl]">{percent(left)} : {percent(right)}</span>
         </Button>
       </Tip>
     </div>

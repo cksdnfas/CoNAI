@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, Check, ImageOff, RefreshCw, ScanEye, Square, Wand } from 'lucide-react'
+import { AlertTriangle, Check, ImageOff, RefreshCw, ScanEye, Square, Wand, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Chip, ToggleChip } from '@/components/ui/chip'
 import { Field } from '@/components/ui/field'
@@ -71,7 +71,7 @@ export function SlotVisionReview({ owner, batchId, slotKey, hash, referenceHash,
   })
   return <>
     {review.data ? <>
-      <Chip size="sm" tone={review.data.samePerson ? 'success' : 'warning'}>{t({ ko: '같은 인물', en: 'Same character' })} {review.data.samePerson ? '✓' : '✗'}</Chip>
+      <Chip size="sm" tone={review.data.samePerson ? 'success' : 'warning'}>{t({ ko: '같은 인물', en: 'Same character' })}{review.data.samePerson ? <Check /> : <X />}</Chip>
       <Tip content={[review.data.expression, review.data.flaw].filter(Boolean).join(' · ')}><Chip size="sm" tone="muted"><span className="max-w-52 truncate">{t({ ko: '표정: {expression}', en: 'Expression: {expression}' }, { expression: review.data.expression })}</span></Chip></Tip>
     </> : null}
     <IconButton variant="ghost" size="icon-sm" disabled={disabled || !hash || !referenceHash || !modelSlotId || review.isPending} label={t({ ko: '비전 검수', en: 'Vision review' })} onClick={() => review.mutate()}>{review.isPending ? <Spinner /> : <ScanEye />}</IconButton>

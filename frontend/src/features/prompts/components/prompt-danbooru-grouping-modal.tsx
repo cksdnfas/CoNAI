@@ -142,7 +142,7 @@ export function PromptDanbooruGroupingModal({ open, onClose, onInfo, onError }: 
           <span className="flex-1" />
           <Button type="button" onClick={() => applyMutation.mutate()} disabled={applyMutation.isPending || !isDanbooruDbAvailable || preview.totals.matchedPrompts === 0}>
             <WandSparkles className="h-4 w-4" />
-            {applyMutation.isPending ? t({ ko: '적용 중...', en: 'Applying...' }) : t({ ko: '자동 그룹 구성 적용', en: 'Apply auto grouping' })}
+            {applyMutation.isPending ? t({ ko: '적용 중…', en: 'Applying…' }) : t({ ko: '자동 그룹 구성 적용', en: 'Apply auto grouping' })}
           </Button>
         </ModalFooter>
       ) : null}

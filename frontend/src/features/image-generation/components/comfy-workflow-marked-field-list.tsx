@@ -124,7 +124,7 @@ export function ComfyWorkflowMarkedFieldList({
           </div>
         ) : (
           <>
-            <span className="text-sm font-bold text-foreground">{t({ ko: '필드', en: 'Fields' })}</span>
+            <span className="text-sm font-semibold text-foreground">{t({ ko: '필드', en: 'Fields' })}</span>
             <span className="font-mono text-2xs text-muted-foreground">{markedFields.length}</span>
             <span className="flex-1" />
             {onSuggestFields ? (
@@ -209,7 +209,7 @@ export function ComfyWorkflowMarkedFieldList({
                     onClick={() => onFieldSelect(field.id)}
                     className="h-full min-w-0 flex-1"
                   >
-                    <span className={cn('min-w-0 truncate', isSelected ? 'font-bold text-secondary-text' : 'text-foreground')}>{field.label || field.id}</span>
+                    <span className={cn('min-w-0 truncate', isSelected ? 'font-semibold text-secondary-text' : 'text-foreground')}>{field.label || field.id}</span>
                     {field.required ? <span role="img" className="size-1.5 shrink-0 rounded-full bg-secondary-text" aria-label={t({ ko: '필수', en: 'Required' })} /> : null}
                     {missingFieldIds?.has(field.id) ? (
                       <Tip content={t({ ko: '워크플로에 이 입력이 없어', en: 'This input is not in the workflow' })}>

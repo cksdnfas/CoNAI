@@ -46,7 +46,7 @@ export function WorkflowValidationIndicator({
         <span
           aria-hidden
           className={cn(
-            'absolute top-0 right-0 flex h-3.5 min-w-3.5 items-center justify-center rounded-full px-1 font-mono text-2xs leading-none font-bold',
+            'absolute top-0 right-0 flex h-3.5 min-w-3.5 items-center justify-center rounded-full px-1 font-mono text-2xs leading-none font-semibold',
             tone === 'error' ? 'bg-destructive text-background' : 'bg-warning text-background',
           )}
         >

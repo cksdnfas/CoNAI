@@ -169,7 +169,7 @@ function MetaSection({ title, actions, children }: { title: string; actions?: Re
   return (
     <section className="space-y-2">
       <div className="flex min-h-8 items-center justify-between gap-2">
-        <h3 className="text-xs font-bold text-foreground">{title}</h3>
+        <h3 className="text-xs font-semibold text-foreground">{title}</h3>
         {actions ? <div className="flex shrink-0 items-center gap-1">{actions}</div> : null}
       </div>
       {children}
@@ -353,7 +353,7 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
     <div className="space-y-7 text-sm text-muted-foreground">
       <div>
         <div className="flex min-h-8 items-start gap-2">
-          <h2 className="min-w-0 flex-1 pt-1 text-sm font-bold break-all text-foreground">
+          <h2 className="min-w-0 flex-1 pt-1 text-sm font-semibold break-all text-foreground">
             {fileName ?? t('images.components.detail.image.detail.meta.card.metadata')}
           </h2>
           {image.is_processing ? <Badge variant="secondary">{t({ ko: '처리 중', en: 'Processing' })}</Badge> : null}

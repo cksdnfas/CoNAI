@@ -214,7 +214,7 @@ export function ImageMetadataEditPage() {
             <IconButton size="icon-sm" variant="ghost" onClick={handleBack} label={t({ ko: '돌아가기', en: 'Back' })}>
               <ArrowLeft className="size-4" />
             </IconButton>
-            <h1 className="min-w-0 truncate text-sm font-bold text-foreground" title={downloadName}>
+            <h1 className="min-w-0 truncate text-sm font-semibold text-foreground" title={downloadName}>
               {t('metadata.image.metadata.edit.page.edit.metadata')}
               <span className="ml-2 font-normal text-muted-foreground">{downloadName}</span>
             </h1>

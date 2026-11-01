@@ -192,7 +192,7 @@ export function ModuleWorkflowEditorView({
           onChange={(event) => onWorkflowNameChange(event.target.value)}
           aria-label={t({ ko: '워크플로 이름', en: 'Workflow name' })}
           placeholder={t({ ko: '이름 없음', en: 'Untitled' })}
-          className="h-8 max-w-72 min-w-0 rounded-sm bg-transparent px-1.5 text-sm font-bold sm:min-w-20 text-foreground outline-none [field-sizing:content] hover:bg-fill focus:bg-field"
+          className="h-8 max-w-72 min-w-0 rounded-sm bg-transparent px-1.5 text-sm font-semibold sm:min-w-20 text-foreground outline-none [field-sizing:content] hover:bg-fill focus:bg-field"
         />
         {isDirty ? (
           <Tip content={t({ ko: '저장 안 한 변경 있음', en: 'Unsaved changes' })}>

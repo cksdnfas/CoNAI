@@ -351,7 +351,7 @@ function FailedJobThumb({ job, size }: { job: NonNullable<CodexChatToolCall['fai
   const Icon = cancelled ? Ban : AlertTriangle
   return (
     <Tip content={`${t({ ko: '작업', en: 'Job' })} #${job.jobId} · ${reason}`}>
-      <div className={cn('flex shrink-0 flex-col items-center justify-center gap-1.5 rounded-sm border bg-surface-low text-xs font-bold', THUMB_PLACEHOLDER_CLASS[size], cancelled ? 'border-line text-muted-foreground' : 'border-destructive/22 text-destructive')}>
+      <div className={cn('flex shrink-0 flex-col items-center justify-center gap-1.5 rounded-sm border bg-surface-low text-xs font-semibold', THUMB_PLACEHOLDER_CLASS[size], cancelled ? 'border-line text-muted-foreground' : 'border-destructive/22 text-destructive')}>
         <Icon className="size-[18px]" />
         {label}
       </div>
@@ -368,7 +368,7 @@ function DeferredThumb({ call, size }: { call: CodexChatToolCall; size: ThumbSiz
   if (call.deferred?.state === 'failed') {
     return (
       <Tip content={call.deferred.error || t({ ko: '프롬프트를 쓰지 못했어', en: 'Could not write the prompt' })}>
-        <div className={cn('flex shrink-0 flex-col items-center justify-center gap-1.5 rounded-sm border border-destructive/22 bg-surface-low text-xs font-bold text-destructive', THUMB_PLACEHOLDER_CLASS[size])}>
+        <div className={cn('flex shrink-0 flex-col items-center justify-center gap-1.5 rounded-sm border border-destructive/22 bg-surface-low text-xs font-semibold text-destructive', THUMB_PLACEHOLDER_CLASS[size])}>
           <AlertTriangle className="size-[18px]" />
           {t({ ko: '프롬프트 실패', en: 'Prompt failed' })}
         </div>

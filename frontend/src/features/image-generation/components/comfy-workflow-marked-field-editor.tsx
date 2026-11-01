@@ -183,7 +183,7 @@ export function ComfyWorkflowMarkedFieldEditor({ field, dropdownListNames, canLo
     <div className="space-y-3">
       <div className="flex items-start gap-1">
         <div className="min-w-0 flex-1">
-          <div className="truncate text-sm font-bold text-foreground">{field.label || field.id}</div>
+          <div className="truncate text-sm font-semibold text-foreground">{field.label || field.id}</div>
           <div className="truncate font-mono text-2xs text-muted-foreground">{field.jsonPath}</div>
         </div>
         <IconButton size="icon-sm" variant="ghost" disabled={!canLocate} onClick={onLocate} label={t({ ko: '그래프에서 보기', en: 'Show in graph' })}>

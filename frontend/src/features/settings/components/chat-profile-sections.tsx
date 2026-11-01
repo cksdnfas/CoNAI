@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
-import { Braces, Plus } from 'lucide-react'
+import { Braces, Plus, TriangleAlert } from 'lucide-react'
 import { CHAT_PROFILE_TEXT_LIMITS, rawTokenEstimate, unknownChatMacros } from '@conai/shared'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Badge } from '@/components/ui/badge'
@@ -160,7 +160,7 @@ export function PromptCard({ itemKey, title, meta, text, maxLength = CHAT_PROFIL
               <Input variant="settings" controlSize="compact" value={titleField.value} maxLength={CHAT_PROFILE_TEXT_LIMITS.sectionTitle} aria-label={t({ ko: '제목', en: 'Title' })} placeholder={t({ ko: '제목 (예: 캐릭터, 세계관, 말투)', en: 'Title (e.g. Character, World, Tone)' })} onChange={(event) => titleField.onChange(event.target.value)} />
             ) : <Text variant="caption">{title}</Text>}
             <Textarea ref={textarea} variant="settings" autoGrow autoFocus rows={4} assisted={assisted} value={text} maxLength={maxLength} placeholder={editPlaceholder} aria-label={titleField?.value || title} onChange={(event) => onTextChange(event.target.value)} />
-            {warnings.length ? <Text variant="caption" tone="warning">{t({ ko: '⚠ 모르는 변수 {variables}', en: '⚠ Unknown variables {variables}' }, { variables: warnings.join(', ') })}</Text> : null}
+            {warnings.length ? <div className="flex items-center gap-1 text-warning"><TriangleAlert className="size-3.5 shrink-0" /><Text variant="caption" tone="warning">{t({ ko: '모르는 변수 {variables}', en: 'Unknown variables {variables}' }, { variables: warnings.join(', ') })}</Text></div> : null}
             {note}
             <div className="flex flex-wrap items-center gap-0.5">
               {kind}

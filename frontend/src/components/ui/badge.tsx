@@ -26,9 +26,9 @@ const badgeVariants = cva(
         overlay: "bg-backdrop font-medium tracking-normal normal-case text-white backdrop-blur-sm",
       },
       size: {
-        default: "px-2.5 py-1",
+        default: "px-3 py-1",
         /** 20px tall: overlay tags on cards. */
-        sm: "px-1.5 py-0 leading-5",
+        sm: "px-2 py-0 leading-5",
         /** 16px tall: overlay counts on small thumbnails. */
         xs: "px-1 py-0 leading-4",
       },

@@ -162,7 +162,7 @@ export function MaintenanceTab({
                       size="icon-xs"
                       variant="ghost"
                       disabled={isCancellingReextractAll}
-                      label={isCancellingReextractAll ? t({ ko: '취소하는 중...', en: 'Cancelling...' }) : t({ ko: '취소', en: 'Cancel' })}
+                      label={isCancellingReextractAll ? t({ ko: '취소하는 중…', en: 'Cancelling…' }) : t({ ko: '취소', en: 'Cancel' })}
                       onClick={onCancelReextractAll}
                     >
                       {isCancellingReextractAll ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <X className="h-3.5 w-3.5" />}

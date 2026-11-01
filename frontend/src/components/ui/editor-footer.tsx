@@ -34,7 +34,7 @@ export function EditorFooter({ onDelete, deleteLabel, deleteDisabled = false, de
   const modal = useOptionalModal()
   const commits = Boolean(onSave || saveSubmit)
   return (
-    <ModalFooter separated className="mt-4 gap-1.5">
+    <ModalFooter separated className="mt-4 gap-2">
       {onDelete ? (
         <Tip content={deleteTip}>
           <span>

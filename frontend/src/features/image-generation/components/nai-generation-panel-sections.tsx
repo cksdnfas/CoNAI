@@ -2,7 +2,6 @@ import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
 import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import type { ReactNode } from 'react'
 import { ArrowUp, BookmarkPlus, ExternalLink, LogIn } from 'lucide-react'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Chip } from '@/components/ui/chip'
 import { Heading } from '@/components/ui/heading'
@@ -32,7 +31,7 @@ function NaiOpusUsage({ percent }: { percent: number }) {
   const label = `Opus ${formatNumber(percent, { maximumFractionDigits: 1 })}%`
 
   return (
-    <Badge variant="outline" className="tabular-nums" asChild>
+    <Chip size="sm" tone="muted" mono asChild>
       <div>
         <span>{label}</span>
         <Progress
@@ -43,7 +42,7 @@ function NaiOpusUsage({ percent }: { percent: number }) {
           aria-valuetext={label}
         />
       </div>
-    </Badge>
+    </Chip>
   )
 }
 
@@ -72,10 +71,10 @@ export function NaiConnectionHeader({ connected, tierName, anlasBalance, opusRem
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <Heading level={3} as="div" className="truncate">NovelAI</Heading>
           {connected
-            ? <Badge variant="success">{t('image-generation.components.nai.generation.panel.sections.connected')}</Badge>
-            : <Badge variant="outline">{t('image-generation.components.nai.generation.panel.sections.disconnected')}</Badge>}
-          {connected && tierName ? <Badge variant="outline">{tierName}</Badge> : null}
-          {connected && anlasBalance !== undefined ? <Badge variant="outline">Anlas {formatNumber(anlasBalance)}</Badge> : null}
+            ? <Chip size="sm" tone="success">{t('image-generation.components.nai.generation.panel.sections.connected')}</Chip>
+            : <Chip size="sm" tone="muted">{t('image-generation.components.nai.generation.panel.sections.disconnected')}</Chip>}
+          {connected && tierName ? <Chip size="sm" tone="muted">{tierName}</Chip> : null}
+          {connected && anlasBalance !== undefined ? <Chip size="sm" tone="muted" mono>Anlas {formatNumber(anlasBalance)}</Chip> : null}
           {connected && tierName === 'Opus' && opusRemainingPercent != null ? <NaiOpusUsage percent={opusRemainingPercent} /> : null}
         </div>
         <div className="flex items-center gap-2">
@@ -105,7 +104,7 @@ export function NaiToolbarStatus({ connected, tierName, anlasBalance, opusRemain
 
   return (
     <GenerationToolbarStatus tone={connected ? 'ready' : 'off'} label={statusLabel}>
-      {connected && anlasBalance !== undefined ? <Chip size="sm" mono>Anlas {formatNumber(anlasBalance)}</Chip> : null}
+      {connected && anlasBalance !== undefined ? <Chip size="sm" tone="muted" mono>Anlas {formatNumber(anlasBalance)}</Chip> : null}
       {connected && tierName === 'Opus' && opusRemainingPercent != null ? <NaiOpusUsage percent={opusRemainingPercent} /> : null}
       {!connected ? (
         <NaiAuthButton variant="ghost" onOpenAuth={onOpenAuth} />

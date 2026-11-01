@@ -402,7 +402,7 @@ export function CustomNodeManagementPanel({ onModulesChanged }: CustomNodeManage
                   })}
                   disabled={scaffoldMutation.isPending || !folderName.trim() || !nodeKey.trim() || !nodeName.trim()}
                 >
-                  {scaffoldMutation.isPending ? t({ ko: '생성 중...', en: 'Creating...' }) : t({ ko: '스캐폴드 생성', en: 'Create scaffold' })}
+                  {scaffoldMutation.isPending ? t({ ko: '생성 중…', en: 'Creating…' }) : t({ ko: '스캐폴드 생성', en: 'Create scaffold' })}
                 </Button>
               </div>
           </Section>
@@ -445,7 +445,7 @@ export function CustomNodeManagementPanel({ onModulesChanged }: CustomNodeManage
                     <IconButton
                       size="icon-sm"
                       variant="ghost"
-                      label={installDependenciesMutation.isPending ? t({ ko: 'npm install 중...', en: 'Running npm install...' }) : 'npm install'}
+                      label={installDependenciesMutation.isPending ? t({ ko: 'npm install 중…', en: 'Running npm install…' }) : 'npm install'}
                       onClick={() => void installDependenciesMutation.mutateAsync(selectedNodeSourceQuery.data.key)}
                       disabled={installDependenciesMutation.isPending || !selectedNodeSourceQuery.data.packageJsonPath}
                     >
@@ -469,7 +469,7 @@ export function CustomNodeManagementPanel({ onModulesChanged }: CustomNodeManage
                 />
               </Field>
               <Button type="button" variant="secondary" onClick={() => void testMutation.mutateAsync()} disabled={testMutation.isPending || !selectedTestKey}>
-                {testMutation.isPending ? t({ ko: '테스트 실행 중...', en: 'Running test...' }) : t({ ko: '테스트 실행', en: 'Run test' })}
+                {testMutation.isPending ? t({ ko: '테스트 실행 중…', en: 'Running test…' }) : t({ ko: '테스트 실행', en: 'Run test' })}
               </Button>
 
               {previewableImageOutputs.length > 0 ? (

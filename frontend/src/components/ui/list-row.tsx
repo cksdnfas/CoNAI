@@ -32,6 +32,8 @@ interface ListRowProps extends ComponentProps<'div'>, VariantProps<typeof listRo
   trailing?: ReactNode
   /** Current / selected row: subtle primary wash (also sets data-selected). Passing it (even `false`) pads the row. */
   selected?: boolean
+  /** Where you are in a navigation list: the sidebar's current-row look (fill + 2px primary bar), not the picked wash. */
+  current?: boolean
   /**
    * Render the single child element (a `<button>`, `<a>`, router `Link`, `<li>`) as the row. Its own children become
    * the main slot between `leading` and `trailing`.
@@ -43,12 +45,13 @@ interface ListRowProps extends ComponentProps<'div'>, VariantProps<typeof listRo
  * Generic flat list row: hairline below (none on the last row), leading / main / trailing slots. Stack rows directly
  * in a container without `space-y-*` (or a `RowGroup`) so the hairlines touch.
  */
-function ListRow({ leading, trailing, selected, size, interactive, asChild = false, className, children, ...props }: ListRowProps) {
+function ListRow({ leading, trailing, selected, current, size, interactive, asChild = false, className, children, ...props }: ListRowProps) {
   const rowClassName = cn(
     listRowVariants({ size, interactive }),
     // A selectable row (selected passed, true or false) can show the wash, so it pads its text like an interactive one.
     selected !== undefined && 'px-2',
     selected && 'bg-primary/8 hover:bg-primary/12',
+    current && 'bg-fill shadow-nav-active',
     className,
   )
   const renderSlots = (main: ReactNode) => (

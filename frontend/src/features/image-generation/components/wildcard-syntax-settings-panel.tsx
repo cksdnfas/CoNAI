@@ -141,7 +141,7 @@ export function WildcardSyntaxSettingsPanel() {
 
       <div>
         <DisclosureButton open={guideOpen} aria-controls="wildcard-syntax-guide" onClick={() => setGuideOpen((open) => !open)}>
-          <span className="text-sm font-bold text-foreground">{t({ ko: '문법 안내', en: 'Syntax guide' })}</span>
+          <span className="text-sm font-semibold text-foreground">{t({ ko: '문법 안내', en: 'Syntax guide' })}</span>
         </DisclosureButton>
         <div id="wildcard-syntax-guide" hidden={!guideOpen}>
           <p className="pt-1 pb-2 text-xs text-muted-foreground">{t({ ko: '완결된 토큰은 입력창에서 칩으로 보이고, 클릭하면 개수·사용량을 고를 수 있어. 예전 ++이름++, [1~2], <1k> 문법도 계속 동작해.', en: 'Finished tokens show as chips; click one to set pick count and usage. Old ++name++, [1~2] and <1k> forms still work.' })}</p>

@@ -80,7 +80,7 @@ export function NaiSavedAssetTile({
           image={previewImage}
           alt={title}
           loading="lazy"
-          className="block h-auto w-full transition-transform duration-500 group-hover:scale-[1.03]"
+          className="block h-auto w-full transition-opacity duration-150 group-hover:opacity-85"
           onError={() => setHasPreviewError(true)}
         />
       ) : (

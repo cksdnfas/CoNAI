@@ -225,7 +225,7 @@ export function ChatUserProfilePickModal({ open, profiles, onPick, onClose }: {
         ))}
         <ListRow asChild interactive>
           <button type="button" className="w-full gap-3 text-left text-muted-foreground" onClick={() => onPick(null)}>
-            <span className="inline-flex size-8 shrink-0 items-center justify-center rounded-full bg-surface-high text-xs font-bold">?</span>
+            <span className="inline-flex size-8 shrink-0 items-center justify-center rounded-full bg-surface-high text-xs font-semibold">?</span>
             <span className="text-sm">{t({ ko: '프로필 없이', en: 'No profile' })}</span>
           </button>
         </ListRow>
@@ -247,7 +247,7 @@ export function ChatUserProfileSelect({ value, profiles, disabled, onChange, cla
   return (
     <Select variant="settings" className={className} value={value === null ? '' : String(value)} disabled={disabled} aria-label={ariaLabel} onChange={(event) => onChange(event.target.value === '' ? null : Number(event.target.value))}>
       <option value="">{t({ ko: '기본 사용자', en: 'Plain user' })}</option>
-      {profiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.name}{profile.isDefault ? ' ★' : ''}</option>)}
+      {profiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.isDefault ? t({ ko: '{name} · 기본', en: '{name} · default' }, { name: profile.name }) : profile.name}</option>)}
     </Select>
   )
 }

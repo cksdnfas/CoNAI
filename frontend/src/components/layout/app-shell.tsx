@@ -116,7 +116,7 @@ function AppShellLayout() {
                     if (event.currentTarget.getAttribute('src') !== APP_ICON_SRC) event.currentTarget.src = APP_ICON_SRC
                   }}
                 />
-                <span className="text-lg font-bold tracking-tighter text-foreground md:hidden lg:inline">{APP_NAME}</span>
+                <span className="text-lg font-semibold tracking-tighter text-foreground md:hidden lg:inline">{APP_NAME}</span>
               </NavLink>
             </Tip>
 

@@ -120,7 +120,7 @@ export function PageToolbar({ title, start, children, actions, className, sticky
           {showSidebarToggle || title ? (
             <div className="flex min-w-0 items-center gap-2">
               {showSidebarToggle ? <SidebarToggle className="-ml-1.5" /> : null}
-              {title ? <h1 className="min-w-0 truncate text-base font-bold tracking-tight text-foreground">{title}</h1> : null}
+              {title ? <h1 className="min-w-0 truncate text-base font-semibold tracking-tight text-foreground">{title}</h1> : null}
             </div>
           ) : null}
           {start}

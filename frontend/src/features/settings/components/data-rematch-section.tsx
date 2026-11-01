@@ -159,8 +159,8 @@ export function DataRematchSection() {
 
         <div className="h-1.5 overflow-hidden rounded-full bg-fill">
           <div
-            className={cn('h-full rounded-full transition-all', status?.status === 'failed' ? 'bg-destructive' : 'bg-primary')}
-            style={{ width: `${Math.min(100, Math.max(0, dataRematchProgress))}%` }}
+            className={cn('h-full rounded-full transition', status?.status === 'failed' ? 'bg-destructive' : 'bg-primary')}
+            style={{ width: `${Math.min(100, Math.max(0, dataRematchProgress))}%`, transitionProperty: 'width, background-color' }}
           />
         </div>
 

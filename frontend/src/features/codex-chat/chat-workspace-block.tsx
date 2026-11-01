@@ -36,7 +36,7 @@ export function ChatWorkspaceBlock({ threadId, group = false }: { threadId: numb
     <div key={item.project.id} className={cn('flex min-h-8 items-center gap-2 text-sm', item.off && 'opacity-60')}>
       <FolderKanban className="size-4 shrink-0 text-muted-foreground" aria-hidden />
       <Link to={`/files?view=workspaces&workspace=${item.project.id}`} className={cn('min-w-0 flex-1 truncate hover:underline', item.off && 'line-through')} title={t({ ko: '작업 공간 열기', en: 'Open workspace' })}>{item.project.name}</Link>
-      {item.source === 'profile' ? <span className="shrink-0 text-2xs font-bold tracking-wide text-muted-foreground">{t({ ko: '프로필', en: 'Profile' })}</span> : null}
+      {item.source === 'profile' ? <span className="shrink-0 text-2xs font-semibold tracking-wide text-muted-foreground">{t({ ko: '프로필', en: 'Profile' })}</span> : null}
       {item.off ? (
         <IconButton variant="ghost" size="icon-sm" disabled={busy} onClick={() => mutation.mutate({ projectId: item.project.id, mode: null })} label={t({ ko: '다시 켜기 (프로필 기본으로)', en: 'Turn back on (the profile’s)' })}><RotateCcw /></IconButton>
       ) : (

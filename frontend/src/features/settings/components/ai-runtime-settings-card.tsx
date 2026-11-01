@@ -1,6 +1,6 @@
 import { formatFileSize } from '@/lib/format-size'
 import { useState, type ReactNode } from 'react'
-import { Download, RefreshCw, ScrollText, X } from 'lucide-react'
+import { Check, Download, RefreshCw, ScrollText, X } from 'lucide-react'
 import type { AiRuntimeInstallStep, AiRuntimeSettings, AiRuntimeStatus, AiTorchBackend, AiTorchBackendPreference } from '@conai/shared'
 import { CodeBlock } from '@/components/ui/code-block'
 import { IconButton } from '@/components/ui/icon-button'
@@ -166,8 +166,8 @@ export function AiRuntimeSettingsCard({
                 <>
                   <div className="flex flex-wrap gap-x-3.5 gap-y-1 text-xs text-muted-foreground">
                     {STEPS.map((step, index) => (
-                      <span key={step} className={cn(index < stepIndex && 'text-success', index === stepIndex && 'font-semibold text-foreground')}>
-                        {stepLabel(step, t)}{index < stepIndex ? ' ✓' : ''}
+                      <span key={step} className={cn('inline-flex items-center gap-1', index < stepIndex && 'text-success', index === stepIndex && 'font-semibold text-foreground')}>
+                        {stepLabel(step, t)}{index < stepIndex ? <Check className="size-3" /> : null}
                         {index === stepIndex && step === 'packages' && install && install.downloadedBytes > 0 ? ` ${formatFileSize(install.downloadedBytes)}` : ''}
                       </span>
                     ))}

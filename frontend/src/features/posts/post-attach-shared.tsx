@@ -56,7 +56,7 @@ export function LoadMoreSentinel({ enabled, onVisible, rootMargin = '240px' }: {
 /** A list row's pick slot: an empty ring, or the pick's order number once picked. */
 export function PickOrderMark({ position }: { position: number | undefined }) {
   return (
-    <span className={cn('flex size-5 items-center justify-center rounded-full text-2xs font-bold tabular-nums', position ? 'bg-primary text-primary-foreground' : 'border-2 border-outline-input')}>
+    <span className={cn('flex size-5 items-center justify-center rounded-full text-2xs font-semibold tabular-nums', position ? 'bg-primary text-primary-foreground' : 'border-2 border-outline-input')}>
       {position ?? null}
     </span>
   )
@@ -81,7 +81,7 @@ const EXTENSION_TONES: Record<string, string> = {
 export function ExtensionTile({ name, className }: { name: string; className?: string }) {
   const extension = fileExtension(name)
   return (
-    <span className={cn('flex shrink-0 items-end justify-center rounded-sm pb-1 text-2xs font-bold', extension ? EXTENSION_TONES[extension] ?? 'bg-surface-highest text-muted-foreground' : 'bg-surface-highest text-muted-foreground', className)}>
+    <span className={cn('flex shrink-0 items-end justify-center rounded-sm pb-1 text-2xs font-semibold', extension ? EXTENSION_TONES[extension] ?? 'bg-surface-highest text-muted-foreground' : 'bg-surface-highest text-muted-foreground', className)}>
       {extension ?? 'FILE'}
     </span>
   )

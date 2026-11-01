@@ -179,7 +179,7 @@ export function ImageDetailTransformControls({
     <div className="absolute bottom-3 right-3 z-30 flex items-end gap-2" onPointerDown={(event) => event.stopPropagation()}>
       <div
         className={cn(
-          'transition-all duration-200 ease-out',
+          'transition duration-200 ease-out',
           isControlsCollapsed ? 'pointer-events-none translate-x-3 opacity-0' : 'translate-x-0 opacity-100',
         )}
       >

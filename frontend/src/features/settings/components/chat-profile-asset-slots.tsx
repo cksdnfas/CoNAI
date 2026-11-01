@@ -240,7 +240,7 @@ export function ExpressionSlots({ runs, groupSource, referenceHash, canGenerate,
   return (
     <section className="space-y-3">
       <div className="flex min-h-8 flex-wrap items-center gap-2">
-        <h3 className="text-sm font-bold text-foreground">{t({ ko: '표정', en: 'Expressions' })}</h3>
+        <h3 className="text-sm font-semibold text-foreground">{t({ ko: '표정', en: 'Expressions' })}</h3>
         <span className="text-sm font-medium tabular-nums text-muted-foreground">{names.filter((name) => filled.get(name)).length}/{names.length}</span>
         <span className="flex-1" />
         {editable ? <>

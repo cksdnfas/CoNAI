@@ -76,7 +76,7 @@ export function OverlayCard({ media, mediaClassName = 'aspect-[3/4]', label, tit
           {meta ? <div className="flex shrink-0 items-center gap-1 text-xs text-white/85 tabular-nums [&_svg]:size-3.5">{meta}</div> : null}
         </div>
         {details || actions ? (
-          <div className="invisible grid grid-rows-[0fr] transition-all duration-200 motion-reduce:transition-none group-focus-within/overlay-card:visible group-focus-within/overlay-card:grid-rows-[1fr] group-hover/overlay-card:visible group-hover/overlay-card:grid-rows-[1fr] pointer-coarse:visible pointer-coarse:grid-rows-[1fr]">
+          <div className="invisible grid grid-rows-[0fr] transition duration-200 motion-reduce:transition-none group-focus-within/overlay-card:visible group-focus-within/overlay-card:grid-rows-[1fr] group-hover/overlay-card:visible group-hover/overlay-card:grid-rows-[1fr] pointer-coarse:visible pointer-coarse:grid-rows-[1fr]" style={{ transitionProperty: 'grid-template-rows, visibility' }}>
             <div className="min-h-0 overflow-hidden">
               {details ? <div className="flex flex-wrap gap-1 pt-2">{details}</div> : null}
               {actions ? <div className="pointer-events-auto flex gap-1.5 pt-2">{actions}</div> : null}

@@ -267,7 +267,7 @@ export function ModuleGraphQuickCreateMenu({
             />
           ) : groups.map((group) => (
             <div key={group.key} role="group" aria-label={group.label}>
-              <div className="px-3.5 pt-2.5 pb-1 text-2xs font-bold tracking-wider text-muted-foreground">{group.label}</div>
+              <div className="px-3.5 pt-2.5 pb-1 text-2xs font-semibold tracking-wider text-muted-foreground">{group.label}</div>
               {group.rows.map((row) => {
                 rowIndex += 1
                 const index = rowIndex

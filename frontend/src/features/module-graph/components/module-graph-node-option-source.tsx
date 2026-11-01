@@ -26,7 +26,7 @@ type OptionSourceFieldProps = {
 
 /**
  * The empty choice: an empty entry the list names itself ("기본"), else the module default the node runs with when
- * left empty, else the default the list marks (`★ gemma-4 · strata`), else "선택" for a required pick and "없음" for
+ * left empty, else the default the list marks (`기본: gemma-4 · strata`), else "선택" for a required pick and "없음" for
  * an optional one.
  */
 function resolveEmptyLabel(t: Translate, options: GraphNodeOption[] | undefined, isLoading: boolean, required: boolean, defaultValue: unknown) {
@@ -35,7 +35,7 @@ function resolveEmptyLabel(t: Translate, options: GraphNodeOption[] | undefined,
   if (namedEmpty) return namedEmpty.label
   if (hasMeaningfulValue(defaultValue)) return formatModuleGraphDefaultOptionLabel(t, defaultValue)
   const defaultOption = options?.find((option) => option.is_default)
-  if (defaultOption) return `★ ${defaultOption.label}`
+  if (defaultOption) return t({ ko: '기본: {value}', en: 'Default: {value}' }, { value: defaultOption.label })
   return required ? t({ ko: '선택', en: 'Select' }) : t({ ko: '없음', en: 'None' })
 }
 

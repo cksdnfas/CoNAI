@@ -176,7 +176,7 @@ export function AppIconEditor({ source, isSaving, registerBlocked = false, onReg
         </div>
         <div className="flex items-center justify-between gap-3 border-t border-line pt-3">
           <span className="text-xs text-muted-foreground">{t({ ko: '상단 표시 미리보기', en: 'Header preview' })}</span>
-          <div className="flex items-center gap-3"><canvas ref={previewRef} className="size-8 rounded-sm" aria-label={t({ ko: '앱 마크 실제 크기 미리보기', en: 'App mark at actual display size' })} /><span className="text-lg font-bold tracking-tight">{APP_NAME}</span></div>
+          <div className="flex items-center gap-3"><canvas ref={previewRef} className="size-8 rounded-sm" aria-label={t({ ko: '앱 마크 실제 크기 미리보기', en: 'App mark at actual display size' })} /><span className="text-lg font-semibold tracking-tight">{APP_NAME}</span></div>
         </div>
         {loadError || saveError ? <div role="alert" className="text-sm text-destructive">{loadError ?? saveError}</div> : null}
       </ModalBody>
