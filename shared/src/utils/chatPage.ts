@@ -15,6 +15,9 @@ function text(value: unknown, max: number, empty = false): string {
   return value
 }
 
+/** The chat workspace screens that manage what chats draw on (profiles, resources, routines, judge log): administrators only. */
+const CHAT_ADMIN_PATHS = ['/chat/profiles', '/chat/resources', '/chat/routines', '/chat/judge']
+
 /**
  * The one app route → page key map, read by route guards, the access page and chat page links. Page keys are derived
  * from feature keys (see PAGE_PERMISSION_RULES); an empty key means any signed-in account, null an unknown route.
@@ -24,8 +27,8 @@ export function chatPagePermission(path: string): string | null {
   if (pathname === '/settings' && new URLSearchParams(query).get('section') === 'mine') return 'page.chat.view'
   path = pathname
   if (path === '/') return 'page.home.view'
-  if (path === '/chat') return 'page.chat.view'
-  if (path === '/chat/resources') return 'page.settings.view'
+  if (path === '/chat' || path === '/chat/mine') return 'page.chat.view'
+  if (CHAT_ADMIN_PATHS.includes(path)) return 'page.settings.view'
   if (path === '/access' || /^\/public\/workflows\/[\w-]+$/.test(path)) return ''
   if (path === '/generation') return 'page.generation.view'
   if (path === '/sprite') return 'page.sprite.view'
@@ -58,7 +61,7 @@ export function normalizeChatPageSnapshot(value: unknown): ChatPageSnapshot {
   if (kind === 'page_settings' && (typeof raw.resourceId !== 'string' || !isPageSettingsScope(raw.resourceId) || !pageSettingsScopes(path).includes(raw.resourceId))) throw new Error('이 페이지의 설정 항목이 아니야.')
   const metadataHash = /^\/images\/([\w.-]+)\/metadata$/.exec(path)?.[1]
   const publicComfy = /^\/public\/workflows\/[\w-]+$/.test(path)
-  const routes: Partial<Record<ChatPageSnapshot['kind'], RegExp>> = { groups: /^\/groups(?:\/[\w-]+)?$/, files: /^\/files$/, upload: /^\/upload$/, settings: /^\/(?:settings|characters|chat\/resources)$/, wallpaper: /^\/wallpaper(?:\/runtime)?$/, audio: /^\/audio$/, sprite: /^\/sprite$/, posts: /^\/posts$/ }
+  const routes: Partial<Record<ChatPageSnapshot['kind'], RegExp>> = { groups: /^\/groups(?:\/[\w-]+)?$/, files: /^\/files$/, upload: /^\/upload$/, settings: /^\/(?:settings|chat\/(?:profiles|resources|routines|judge|mine))$/, wallpaper: /^\/wallpaper(?:\/runtime)?$/, audio: /^\/audio$/, sprite: /^\/sprite$/, posts: /^\/posts$/ }
   if (routes[kind as ChatPageSnapshot['kind']] && !routes[kind as ChatPageSnapshot['kind']]!.test(path)) throw new Error('입력 종류와 대상 페이지가 맞지 않아.')
   if ((['nai', 'codex', 'workflow', 'workflow_runner'].includes(kind as string) && path !== '/generation') || (['comfyui', 'comfy_author'].includes(kind as string) && path !== '/generation' && !publicComfy) || (kind === 'library' && path !== '/') || (['prompt_search', 'presets'].includes(kind as string) && path !== '/prompts') || (kind === 'wildcards' && path !== '/wildcards') || (kind === 'metadata' && (!metadataHash || raw.resourceId !== metadataHash))) throw new Error('입력 종류와 대상 페이지가 맞지 않아.')
   if (!Array.isArray(raw.fields) || raw.fields.length > CHAT_PAGE_LIMITS.fields || (kind === 'page' && raw.fields.length > 0)) throw new Error('페이지 필드 목록이 올바르지 않아.')

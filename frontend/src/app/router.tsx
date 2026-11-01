@@ -141,15 +141,29 @@ export const appRouter = createHashRouter([
         element: <RequireAuthPermission permissionKey="page.characters.view"><CharacterLibraryRoute /></RequireAuthPermission>,
       },
       {
-        path: 'chat/resources',
-        lazy: async () => {
-          const { ChatResourcesPage } = await import('@/features/codex-chat/chat-resources-page')
-          return { Component: ChatResourcesPage }
-        },
-      },
-      {
+        // The chat's one row of screens (ChatWorkspaceLayout): the conversations at /chat, what they draw on under it.
         path: 'chat',
-        element: <RequireAuthPermission permissionKey="page.chat.view"><CodexChatRoute /></RequireAuthPermission>,
+        lazy: async () => {
+          const { ChatWorkspaceLayout } = await import('@/features/codex-chat/chat-workspace')
+          return { Component: ChatWorkspaceLayout }
+        },
+        children: [
+          { index: true, element: <CodexChatRoute /> },
+          { path: 'mine', lazy: async () => ({ Component: (await import('@/features/codex-chat/chat-workspace-screens')).ChatMineScreen }) },
+          {
+            // Profiles, resources, routines and the judge log stay with the administrator, as in their earlier homes.
+            lazy: async () => {
+              const { ChatAdminGuard } = await import('@/features/codex-chat/chat-workspace')
+              return { Component: ChatAdminGuard }
+            },
+            children: [
+              { path: 'profiles', lazy: async () => ({ Component: (await import('@/features/codex-chat/chat-workspace-screens')).ChatProfilesScreen }) },
+              { path: 'resources', lazy: async () => ({ Component: (await import('@/features/codex-chat/chat-workspace-screens')).ChatResourcesScreen }) },
+              { path: 'routines', lazy: async () => ({ Component: (await import('@/features/codex-chat/chat-workspace-screens')).ChatRoutinesScreen }) },
+              { path: 'judge', lazy: async () => ({ Component: (await import('@/features/codex-chat/chat-workspace-screens')).ChatJudgeScreen }) },
+            ],
+          },
+        ],
       },
       {
         path: 'public/workflows/:slug',

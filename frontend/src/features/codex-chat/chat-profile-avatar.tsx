@@ -16,7 +16,7 @@ const SIZE_CLASS = {
   xl: 'size-16 text-xl',
 } as const
 
-function pickFill(name: string) {
+export function avatarInitialFill(name: string) {
   let hash = 0
   for (const char of name) {
     hash = (hash * 31 + char.charCodeAt(0)) >>> 0
@@ -42,7 +42,7 @@ export function ChatProfileAvatar({ name, avatar, profile, imageUrl, avatarCrop,
   const thumbnailSrc = imageUrl === undefined && profile?.avatarHash && profile.avatarThumbnailUrl
     ? buildApiUrl(`${profile.avatarThumbnailUrl}?v=${encodeURIComponent(profile.assetVersion ?? '')}`) : null
   const fallback = engine === 'codex' ? <SquareTerminal className="size-[60%]" /> : Array.from(name.trim())[0] ?? '?'
-  return <span className={cn(base, engine === 'codex' ? 'bg-foreground text-background' : 'text-black/80')} style={engine === 'codex' ? undefined : { backgroundColor: pickFill(name) }} aria-hidden="true">
+  return <span className={cn(base, engine === 'codex' ? 'bg-foreground text-background' : 'text-black/80')} style={engine === 'codex' ? undefined : { backgroundColor: avatarInitialFill(name) }} aria-hidden="true">
     <ChatProfileImage src={canViewImages ? src : null} thumbnailSrc={thumbnailSrc} crop={avatarCrop !== undefined ? avatarCrop : profile?.avatarCrop} fallback={fallback} />
   </span>
 }

@@ -3,19 +3,22 @@ import { useSearchParams } from 'react-router-dom'
 
 export const positiveLibraryId = (value: string | null) => value && /^\d+$/.test(value) && Number.isSafeInteger(Number(value)) && Number(value) > 0 ? Number(value) : null
 
-/** Both character libraries keep navigation, name search and editor return locations in the same URL contract. */
-export function useLibraryLocation(pageSize: number, view?: 'profiles') {
+/**
+ * The appearance library and the chat profile list keep navigation, name search and editor return locations in the same
+ * URL contract. `editorKeys` are the parameters that mean "an editor page is open" for this list (the library's
+ * `setting`/`new`, the chat profiles' `profile`): inside Settings `setting` is only a jump anchor, never an editor.
+ */
+export function useLibraryLocation(pageSize: number, editorKeys: readonly string[]) {
   const [params, setParams] = useSearchParams()
   const folderId = positiveLibraryId(params.get('folder'))
   const query = params.get('q')?.trim() ?? ''
   const page = positiveLibraryId(params.get('page')) ?? 0
-  const editing = params.has('setting') || params.has('new') || params.has('profile')
+  const editing = editorKeys.some((key) => params.has(key))
   const [searchText, setSearchText] = useState(query)
   const [syncedQuery, setSyncedQuery] = useState(query)
   if (syncedQuery !== query) { setSyncedQuery(query); setSearchText(query) }
   const update = (changes: Record<string, string | null>, replace = false) => setParams((current) => {
     const next = new URLSearchParams(current)
-    if (view) next.set('view', view)
     for (const [key, value] of Object.entries(changes)) { if (value === null) next.delete(key); else next.set(key, value) }
     return next
   }, { replace })

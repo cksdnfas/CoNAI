@@ -12,13 +12,15 @@ interface SettingsSaveBarProps {
   onSave: () => void
   onDiscard: () => void
   onOpenTab: (tab: SettingsTab) => void
+  /** Whether Ctrl/⌘ S saves these sections; false while an editor page inside Settings owns the shortcut. */
+  shortcut?: boolean
 }
 
 /** Floating page-wide bar (the one surface with a shadow on the page) that saves or discards every edited settings section at once. */
-export function SettingsSaveBar({ dirtySections, isSaving, onSave, onDiscard, onOpenTab }: SettingsSaveBarProps) {
+export function SettingsSaveBar({ dirtySections, isSaving, onSave, onDiscard, onOpenTab, shortcut = true }: SettingsSaveBarProps) {
   const { t, formatNumber } = useI18n()
   const confirm = useConfirm()
-  usePageSaveShortcut(dirtySections.length ? onSave : undefined, isSaving)
+  usePageSaveShortcut(shortcut && dirtySections.length ? onSave : undefined, isSaving)
 
   if (dirtySections.length === 0 && !isSaving) {
     return null

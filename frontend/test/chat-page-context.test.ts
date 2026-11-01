@@ -528,16 +528,19 @@ test('settings deep links preserve legacy destinations and search never exposes 
   const { resolveSettingsLocation, parseSettingsTab } = await import('../src/features/settings/settings-tabs')
   const { SETTINGS_ROWS, searchSettingsRows, settingRowHref, pageSettingRow, PAGE_SETTINGS_SCOPES } = await import('@conai/shared')
   const redirects: Record<string, string> = {
-    'section=chat&view=profiles': '/characters?view=profiles',
-    'section=chat&view=resources': '/chat/resources',
-    'section=chat&view=routines': '/chat/resources?tab=routines',
+    'section=chat&view=profiles': '/settings?section=chat&group=profiles',
+    'section=chat&view=resources': '/settings?section=chat&group=presets',
+    'section=chat&view=routines': '/settings?section=chat&group=routines',
     'section=chat&view=mine': '/settings?section=mine',
     'section=llm&view=connections': '/settings?section=llm&group=connections',
-    'section=chat&view=judge': '/settings?section=llm&group=log',
+    'section=chat&view=judge': '/settings?section=chat&group=judge',
+    'section=llm&group=log': '/settings?section=chat&group=judge',
+    'section=llm&view=judge': '/settings?section=chat&group=judge',
     'section=llm&view=content-evaluation': '/settings?section=posts&group=topics',
     'section=posts&view=knowledge': '/settings?section=posts&group=knowledge',
     'section=llm-connections': '/settings?section=llm&group=connections',
-    'section=llm&setting=chat.diagnostics.captureRaw': '/settings?section=llm&setting=chat.diagnostics.captureRaw&group=log',
+    'section=llm&setting=chat.diagnostics.captureRaw': '/settings?section=chat&setting=chat.diagnostics.captureRaw&group=diagnostics',
+    'section=llm&group=connections&setting=chat.piCodemode': '/settings?section=chat&group=tools&setting=chat.piCodemode',
   }
   for (const [query, expected] of Object.entries(redirects)) assert.equal(resolveSettingsLocation(new URLSearchParams(query)), expected, query)
   for (const [old, section] of Object.entries({ appearance: 'general', integration: 'generation', 'integration-tools': 'generation', folders: 'library', metadata: 'library', security: 'accounts', 'image-save': 'media', 'llm-connections': 'llm' })) assert.equal(parseSettingsTab(old), section)
@@ -549,7 +552,7 @@ test('settings deep links preserve legacy destinations and search never exposes 
   const advanced = searchSettingsRows('원문 기록', { isAdmin: true, permissionKeys: allPermissions })[0]
   assert.equal(advanced.id, 'chat.diagnostics.captureRaw')
   assert.equal(advanced.advanced, true)
-  assert.equal(settingRowHref(advanced), '/settings?section=llm&group=log&setting=chat.diagnostics.captureRaw')
+  assert.equal(settingRowHref(advanced), '/settings?section=chat&group=diagnostics&setting=chat.diagnostics.captureRaw')
   assert.equal(pageSettingRow('general', PAGE_SETTINGS_SCOPES.general.fields[0]).label.ko, '갤러리 기능 사용')
 })
 

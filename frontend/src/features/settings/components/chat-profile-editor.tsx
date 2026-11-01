@@ -4,7 +4,7 @@ import { useLocation, useNavigate, useSearchParams, type Location } from 'react-
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { BookOpen, ChevronDown, ChevronLeft, ChevronRight, Eye, FileText, Image as ImageIcon, Palette, Sparkles, Trash2, UserRound, Wrench } from 'lucide-react'
 import { EditorPage, EditorSectionNav, type EditorSectionEntry } from '@/components/common/editor-page'
-import type { PathCrumb } from '@/components/common/path-breadcrumbs'
+import { useChatAdminCrumbs, useChatAdminLinks } from '@/features/codex-chat/chat-admin-location'
 import { ActionMenuButton } from '@/components/ui/action-menu'
 import { AvatarButton } from '@/components/ui/avatar-button'
 import { Button } from '@/components/ui/button'
@@ -82,10 +82,6 @@ import { ProfileAssistContext, useProfileAssist, useProfileEditorChatPage, type 
 import { useProfileCharacterLink } from './use-profile-character-link'
 import { CHAT_DOCK_INSET } from './use-settings-editor-chat-page'
 
-/** The profile list, where the editor page returns to. */
-export const CHAT_PROFILES_PATH = '/characters?view=profiles'
-/** The editor page of a saved profile, or of a new one (`new`). */
-export const chatProfileEditorPath = (id: number | 'new') => `${CHAT_PROFILES_PATH}&profile=${id}`
 /** What a new profile's page starts from: a copy, a card import or a proposal (kept in the history entry). */
 export type ChatProfileEditorPageState = { draft?: ChatProfileInput; copyOf?: number; initialFolderId?: number | null }
 
@@ -500,23 +496,26 @@ export function ChatProfileEditorModal(props: ProfileEditorProps) {
   )
 }
 
-/** Leaving the open profile (its address changes). */
+/** Leaving the open profile: another page, another profile, or (in Settings) another section. */
 function leavesProfile(current: Location, next: Location) {
   if (current.pathname !== next.pathname) return true
-  const before = new URLSearchParams(current.search).get('profile')
-  const after = new URLSearchParams(next.search).get('profile')
-  return before !== after || new URLSearchParams(current.search).get('view') !== new URLSearchParams(next.search).get('view')
+  const before = new URLSearchParams(current.search)
+  const after = new URLSearchParams(next.search)
+  return before.get('profile') !== after.get('profile') || before.get('section') !== after.get('section')
 }
 
 /**
- * One chat profile as a page (/characters?view=profiles&profile=<id|new>): the way back to the list, the name with its
- * state, the sections with what each holds on the left, and the save bar while something is unsaved. A new profile's
- * page may start from a copy or an import (the history entry's state) and moves to its own id once saved.
+ * One chat profile as a page (/chat/profiles?profile=<id|new>, or the same inside Settings › 채팅): the way back to the
+ * list, the name with its state, the sections with what each holds on the left, and the save bar while something is
+ * unsaved. A new profile's page may start from a copy or an import (the history entry's state) and moves to its own id
+ * once saved.
  */
 export function ChatProfileEditorPage() {
   const { t } = useI18n()
   const navigate = useNavigate()
   const location = useLocation()
+  const links = useChatAdminLinks()
+  const crumbs = useChatAdminCrumbs('profiles')
   const [params] = useSearchParams()
   const raw = params.get('profile')
   const invalid = raw !== 'new' && (!raw || !/^\d+$/.test(raw) || !Number.isSafeInteger(Number(raw)) || Number(raw) < 1)
@@ -524,10 +523,10 @@ export function ChatProfileEditorPage() {
   const pageState = (location.state ?? null) as ChatProfileEditorPageState | null
   const profilesQuery = useQuery({ queryKey: CHAT_ADMIN_PROFILES_QUERY_KEY, queryFn: listChatAdminProfiles })
   const found = id === null ? null : profilesQuery.data?.find((entry) => entry.id === id) ?? null
-  const back = () => { const next = new URLSearchParams(params); next.delete('profile'); navigate(`/characters?${next}`) }
+  const back = () => navigate(links.profiles(true))
   if (invalid || (id !== null && !found)) {
     return (
-      <EditorPage crumbs={profileCrumbs(t, navigate, location.search)} title={t({ ko: '채팅 프로필', en: 'Chat profile' })}>
+      <EditorPage crumbs={crumbs} title={t({ ko: '채팅 프로필', en: 'Chat profile' })}>
         {!invalid && profilesQuery.isPending ? <LoadingState variant="inline" /> : !invalid && profilesQuery.isError
           ? <ErrorState title={t({ ko: '프로필을 불러오지 못했어', en: 'Could not load the profile' })} error={profilesQuery.error} onRetry={() => void profilesQuery.refetch()} />
           : <EmptyState icon={UserRound} title={t({ ko: '프로필을 찾지 못했어', en: 'Profile not found' })} action={<Button variant="secondary" size="sm" onClick={back}>{t({ ko: '프로필 목록', en: 'Profile list' })}</Button>} />}
@@ -538,18 +537,15 @@ export function ChatProfileEditorPage() {
   return <ProfileEditorPageBody profile={found} initialFolderId={initialFolderId} initialDraft={id === null ? pageState?.draft : undefined} copyOf={id === null ? pageState?.copyOf : undefined} onClose={back} />
 }
 
-const profileCrumbs = (t: ReturnType<typeof useI18n>['t'], navigate: ReturnType<typeof useNavigate>, search = ''): PathCrumb[] => [
-  { key: 'characters', label: t({ ko: '캐릭터', en: 'Characters' }), onClick: () => navigate('/characters') },
-  { key: 'profiles', label: t({ ko: '채팅 프로필', en: 'Chat profiles' }), onClick: () => { const params = new URLSearchParams(search); params.set('view', 'profiles'); params.delete('profile'); navigate(`/characters?${params}`) } },
-]
-
 function ProfileEditorPageBody({ profile, initialDraft, initialFolderId, copyOf, onClose }: { profile: ChatProfile | null; initialDraft?: ChatProfileInput; initialFolderId?: number | null; copyOf?: number; onClose: () => void }) {
   const { t } = useI18n()
   const navigate = useNavigate()
   const location = useLocation()
+  const links = useChatAdminLinks()
+  const crumbs = useChatAdminCrumbs('profiles')
   const state = useProfileEditorDraft({ open: true, profile, initialDraft, initialFolderId, defaults: undefined })
   if (!state.draft) {
-    return <EditorPage crumbs={profileCrumbs(t, navigate, location.search)} title={t({ ko: '새 프로필', en: 'New profile' })}><DefaultsState query={state.defaultsQuery} /></EditorPage>
+    return <EditorPage crumbs={crumbs} title={t({ ko: '새 프로필', en: 'New profile' })}><DefaultsState query={state.defaultsQuery} /></EditorPage>
   }
   return (
     <ProfileEditor
@@ -570,9 +566,7 @@ function ProfileEditorPageBody({ profile, initialDraft, initialFolderId, copyOf,
       // A new profile's page moves to its id (the same editor stays, so nothing in progress is lost).
       onSaved={(saved, allowNavigation) => {
         if (!profile) {
-          const params = new URLSearchParams(location.search)
-          params.set('profile', String(saved.id))
-          const path = `/characters?${params}`
+          const path = links.profile(saved.id)
           allowNavigation(path, () => navigate(path, { replace: true }))
         }
       }}
@@ -594,7 +588,8 @@ function ProfileEditor({ layout, open, profile, setProfile, draft, setDraft, dir
 }) {
   const { t } = useI18n()
   const confirm = useConfirm()
-  const navigate = useNavigate()
+  const links = useChatAdminLinks()
+  const crumbs = useChatAdminCrumbs('profiles')
   const { showSnackbar } = useSnackbar()
   const queryClient = useQueryClient()
   const page = layout === 'page'
@@ -614,7 +609,7 @@ function ProfileEditor({ layout, open, profile, setProfile, draft, setDraft, dir
     const before = new URLSearchParams(source.search)
     const after = new URLSearchParams(current.search)
     return savedId !== undefined && source.pathname === current.pathname && before.get('profile') === 'new'
-      && after.get('view') === 'profiles' && Number(after.get('profile')) === savedId
+      && after.get('section') === before.get('section') && Number(after.get('profile')) === savedId
   }
   const [section, setSection] = useState<ProfileEditorSection>(profile ? 'character' : 'basic')
   const [showingList, setShowingList] = useState(true)
@@ -887,7 +882,7 @@ function ProfileEditor({ layout, open, profile, setProfile, draft, setDraft, dir
     onSuccess: async (sourceLocation) => {
       await refreshProfiles(Boolean(profile?.lorebookIds.length))
       if (!mounted.current || !isCurrentPage(sourceLocation)) return
-      if (page) allowNavigation(CHAT_PROFILES_PATH, onClose)
+      if (page) allowNavigation(links.profiles(true), onClose)
       else onClose()
     },
     onError: (error) => showSnackbar({ message: getErrorMessage(error, t({ ko: '삭제하지 못했어.', en: 'Could not delete.' })), tone: 'error' }),
@@ -981,7 +976,7 @@ function ProfileEditor({ layout, open, profile, setProfile, draft, setDraft, dir
     return (
       <ProfileAssistContext.Provider value={assist}>
         <EditorPage
-          crumbs={profileCrumbs(t, navigate, pageLocation?.search)}
+          crumbs={crumbs}
           title={draft.name.trim() || profile?.name || t({ ko: '새 프로필', en: 'New profile' })}
           status={<>
             {profile ? null : <Chip tone="muted" size="sm">{t({ ko: '아직 저장 안 한 새 프로필', en: 'New, not saved yet' })}</Chip>}

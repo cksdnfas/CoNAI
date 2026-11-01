@@ -2,10 +2,8 @@ import { useRef, useState } from 'react'
 import { useLibraryLocation, positiveLibraryId as positiveId } from '@/components/common/use-library-location'
 import { LibraryFolderContent, libraryFolderView } from '@/components/common/library-folder-content'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { useSearchParams } from 'react-router-dom'
+import { Navigate, useSearchParams } from 'react-router-dom'
 import { SegmentedControl } from '@/components/common/segmented-control'
-import { ChatProfileEditorPage } from '@/features/settings/components/chat-profile-editor'
-import { ChatSettingsProfiles } from '@/features/settings/components/chat-settings-profiles'
 import { registerTranslationCatalog } from '@/i18n'
 import { settingsCatalog } from '@/i18n/resources/settings'
 import { CheckCheck, CheckSquare, Copy, Download, FolderInput, FolderPlus, Pencil, Plus, SquarePen, Star, StarOff, Trash2, Upload, UserRound } from 'lucide-react'
@@ -70,10 +68,10 @@ type NameDialogState = { mode: 'create'; parentId: number | null; name: string }
 type MoveState = { kind: 'folder'; folder: CharacterFolder } | { kind: 'setting'; setting: CharacterSettingSummary }
 
 /**
- * 캐릭터: the appearance library and (administrators) the chat profiles. The library's URL holds the open folder
+ * 캐릭터: the appearance library and the Danbooru character catalog. The library's URL holds the open folder
  * (`folder`), the name search across the library (`q`), the page (`page`), the setting open in its editor page
- * (`setting`) and a new setting's draft (`new`: its folder id or `root`); the profiles' the profile open in its editor
- * page (`profile`: an id or `new`). An open editor replaces the list and its tabs.
+ * (`setting`) and a new setting's draft (`new`: its folder id or `root`). An open editor replaces the list and its
+ * tabs. Chat profiles are not part of this page (they live in the chat workspace and only borrow a look from here).
  */
 registerTranslationCatalog(settingsCatalog)
 
@@ -81,17 +79,18 @@ export function CharacterLibraryPage() {
   const permissions = useFeaturePermissions()
   const [params] = useSearchParams()
   const view = params.get('view')
+  // Chat profiles were once a view of this page.
+  if (view === 'profiles') {
+    const next = new URLSearchParams(params)
+    next.delete('view')
+    return <Navigate to={`/chat/profiles${next.size ? `?${next}` : ''}`} replace />
+  }
   if (params.has('setting') || params.has('new')) return <AppearanceLibraryPage />
   if (view === 'catalog' && permissions.has('prompts.view')) return <CharacterCatalogPage viewSwitch={<CharacterViewSwitch />} />
-  if (!permissions.isAdmin || view !== 'profiles') return <AppearanceLibraryPage />
-  if (params.has('profile')) return <ChatProfileEditorPage />
-  return <ChatSettingsProfiles viewSwitch={<CharacterViewSwitch />} />
+  return <AppearanceLibraryPage />
 }
 
-/**
- * The page's views: the appearance library, the Danbooru character catalog (with the dictionary's `prompts.view`) and
- * (administrators) the chat profiles; the switch leads the toolbar and shows when there is more than one.
- */
+/** The page's views: the appearance library and the Danbooru character catalog (with the dictionary's `prompts.view`); the switch leads the toolbar and shows when both are there. */
 function CharacterViewSwitch() {
   const { t } = useI18n()
   const permissions = useFeaturePermissions()
@@ -99,13 +98,12 @@ function CharacterViewSwitch() {
   const items = [
     { value: 'appearance', label: t({ ko: '외형 라이브러리', en: 'Appearance library' }) },
     ...(permissions.has('prompts.view') ? [{ value: 'catalog', label: t({ ko: '캐릭터 카탈로그', en: 'Character catalog' }) }] : []),
-    ...(permissions.isAdmin ? [{ value: 'profiles', label: t({ ko: '채팅 프로필', en: 'Chat profiles' }) }] : []),
   ]
   if (items.length < 2) return null
   const view = params.get('view')
   return (
     <SegmentedControl
-      value={view === 'profiles' || view === 'catalog' ? view : 'appearance'}
+      value={view === 'catalog' ? view : 'appearance'}
       onChange={(value) => setParams(value === 'appearance' ? {} : { view: value })}
       size="sm"
       semantics="tabs"
@@ -141,7 +139,7 @@ function AppearanceLibraryPage() {
   const permissions = useFeaturePermissions()
   const canEdit = permissions.has('characters.edit')
   const [pageSize, setPageSizeState] = useState(readPageSize)
-  const { params: searchParams, folderId, query, page, searchText, setSearchText, update, openFolder, search } = useLibraryLocation(pageSize)
+  const { params: searchParams, folderId, query, page, searchText, setSearchText, update, openFolder, search } = useLibraryLocation(pageSize, ['setting', 'new'])
   const sortParam = searchParams.get('sort') as CharacterSettingSort | null
   const sort: CharacterSettingSort = sortParam && SORTS.includes(sortParam) ? sortParam : 'name'
   const favoriteOnly = searchParams.get('fav') === '1'
@@ -425,6 +423,9 @@ function AppearanceLibraryPage() {
                   selected={selectMode ? selected.has(setting.id) : undefined}
                   onOpen={() => (selectMode ? toggleSelected(setting) : openSetting(setting.id))}
                   onToggleFavorite={canEdit && !selectMode ? () => toggleFavorite(setting) : undefined}
+                  onToggleSelect={canEdit ? () => { setSelectMode(true); toggleSelected(setting) } : undefined}
+                  onCopyTags={() => void copyTags(setting)}
+                  onEdit={canEdit ? () => openSetting(setting.id) : undefined}
                   menu={settingMenu(setting)}
                 />
               )}

@@ -49,7 +49,8 @@ function writeCollapsed(storageKey: string, collapsed: boolean) {
  * Desktop: a fixed-width column that stays in place (sticky under the app header, own scroll), separated from the
  * content by one hairline; collapsible, state persisted per `storageKey`. Narrow screens: no column; the toolbar's
  * sidebar button opens the same content in a BottomDrawerSheet. Bleeds to the shell's content edges, so render it as
- * the page root.
+ * the page root. A parent row that sticks under the app header (the chat workspace's tabs) sets `--page-top-offset`
+ * to its height, and the column and toolbar stick below it.
  */
 export function PageWithSidebar({
   storageKey,
@@ -88,13 +89,13 @@ export function PageWithSidebar({
       <div
         data-slot="page-with-sidebar"
         // page-bleed: the column runs the full height and edge; the content column puts the bottom padding back.
-        className={cn('page-bleed flex min-h-(--shell-content-height)', className)}
+        className={cn('page-bleed flex min-h-[calc(var(--shell-content-height)-var(--page-top-offset,0px))]', className)}
         style={sidebarWidth ? { '--sidebar-column-width': `${sidebarWidth}px` } as CSSProperties : undefined}
       >
         {showColumn ? (
           <SidebarColumn
             label={sidebarLabel}
-            className="sticky top-(--theme-shell-header-height) h-(--shell-content-height) self-start"
+            className="sticky top-[calc(var(--theme-shell-header-height)+var(--page-top-offset,0px))] h-[calc(var(--shell-content-height)-var(--page-top-offset,0px))] self-start"
             footer={(
               <SidebarFooter>
                 <div className="flex min-w-0 items-center gap-2">{sidebarFooter}</div>

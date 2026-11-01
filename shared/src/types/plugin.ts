@@ -172,7 +172,7 @@ export type PluginLlmProfile = {
    * them with `asset()`.
    */
   details: Record<string, unknown>
-  /** App-wide (Settings › 채팅 › 자원 › 기억): keyword lore entries one selection keeps, best matches first. */
+  /** App-wide (Settings › 채팅 › 기억): keyword lore entries one selection keeps, best matches first. */
   loreSelectionLimit: number
 }
 /** `llm.profile({ profileId })`: one profile with what it links, read whole. */
@@ -242,7 +242,7 @@ export type PluginResearchInput = {
   slotId: string; activityId: string; allowedPostIds: number[]
   /** Summary keeps the same source checks but exposes no tools on any engine. */
   purpose?: 'research' | 'summary'
-  /** @deprecated Accepted and ignored: research follows the app-wide tool round limit (Settings › 채팅 › 자원 › 도구 사용). */
+  /** @deprecated Accepted and ignored: research follows the app-wide tool round limit (Settings › 채팅 › 도구 사용). */
   maxModelCalls?: number
   /** @deprecated Accepted and ignored, as maxModelCalls. */
   maxToolCalls?: number

@@ -89,7 +89,7 @@ export function AssetPresetPicker({ runs, showExpressionMenu = false }: { runs: 
   const { presets, preset } = runs
   const support = preset?.assetSupport
   const warning = !preset
-    ? (runs.presetsLoaded ? t({ ko: '자산을 만들 수 있는 생성 프리셋이 없어. 설정 › 채팅 › 생성 프리셋에서 만들어줘.', en: 'No generation preset can make assets. Make one under Settings › Chat › Generation presets.' }) : null)
+    ? (runs.presetsLoaded ? t({ ko: '자산을 만들 수 있는 생성 프리셋이 없어. 채팅 › 자원 › 프리셋에서 만들어줘.', en: 'No generation preset can make assets. Make one under Chat › Resources › Presets.' }) : null)
     : support?.problem ?? (support?.mode === 'appearance' ? t({ ko: '이미지 입력이 없는 워크플로라 기준 이미지를 못 받아. 칸마다 얼굴이 달라질 수 있어. 이미지 입력 워크플로(i2i)를 권장해.', en: 'This workflow takes no image, so it cannot use the reference; faces may differ per slot. An image-input (i2i) workflow is recommended.' }) : null)
   return (
     <div className="flex min-w-0 items-center gap-1">

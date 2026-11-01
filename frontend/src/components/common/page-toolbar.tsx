@@ -108,7 +108,7 @@ export function PageToolbar({ title, start, children, actions, className, sticky
         'flex min-h-14 flex-wrap items-center gap-x-3 gap-y-2 py-2',
         // Sticky under the header so the sidebar toggle and page actions stay reachable anywhere on the page. It is flat
         // at rest and only takes a surface + hairline while it floats over scrolled content.
-        sticky && '-mx-(--page-gutter) sticky top-(--theme-shell-header-height) z-sticky px-(--page-gutter) transition-colors duration-150',
+        sticky && '-mx-(--page-gutter) sticky top-[calc(var(--theme-shell-header-height)+var(--page-top-offset,0px))] z-sticky px-(--page-gutter) transition-colors duration-150',
         sticky && isStuck && 'bg-background/92 shadow-toolbar-edge backdrop-blur-md',
         className,
       )}

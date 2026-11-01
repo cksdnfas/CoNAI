@@ -9,7 +9,7 @@ import type Database from 'better-sqlite3'
 import { CHAT_PROFILE_TEXT_LIMITS, characterOutfitIndex, composeCharacterAppearance, emptyCharacterAppearanceSections, folderPath, normalizeCharacterTag, type CharacterAppearanceSections, type CharacterFacetKey, type CharacterFolder, type CharacterLibraryExport, type CharacterLibraryFacets, type CharacterLibraryImportResult, type CharacterOutfit, type CharacterSetting, type CharacterSettingBulkResult, type CharacterSettingSummary, type CharacterSettingPage, type CharacterLibraryDeletePreview, type CharacterLibraryDeleteResult } from '@conai/shared'
 import { getUserSettingsDb } from '../database/userSettingsDb'
 import { indexCharacterSettingTags } from '../database/characterLibrarySchema'
-import { CHARACTER_FACET_KEYS, libraryFacetDimensions, splitAppearanceText } from './characterAppearanceTags'
+import { CHARACTER_FACET_KEYS, libraryFacetDimensions, settingCopyrightLabels, splitAppearanceText } from './characterAppearanceTags'
 import { danbooruBrowserService } from './danbooruBrowserService'
 import { attachMainImagesDatabase } from '../database/userSettingsBootstrap'
 import { normalizeAvatarCrop, normalizeProfileAssetHash } from './codex-chat/chatProfileAssets'
@@ -42,7 +42,7 @@ type SettingRow = {
   linked_profile_count?: number
 }
 const linkedCountColumn = '(SELECT COUNT(*) FROM llm_chat_profiles p WHERE p.character_setting_id = character_settings.id AND p.character_sync = 1) AS linked_profile_count'
-const summaryColumns = `id, folder_id, name, reference_hash, avatar_hash, avatar_crop, favorite, revision, updated_at, ${linkedCountColumn}`
+const summaryColumns = `id, folder_id, name, reference_hash, avatar_hash, avatar_crop, outfits, favorite, revision, updated_at, ${linkedCountColumn}`
 const folderColumns = 'f.id, f.parent_id AS parentId, f.name, f.created_at AS createdAt, f.updated_at AS updatedAt'
 export function syncedCharacterProfiles(settingIds: number[]) {
   return getUserSettingsDb().prepare('SELECT id, name FROM llm_chat_profiles WHERE character_sync = 1 AND character_setting_id IN (SELECT value FROM json_each(?)) ORDER BY id').all(JSON.stringify(settingIds)) as Array<{ id: number; name: string }>
@@ -96,8 +96,13 @@ export function characterSettingRow(settingId: number): SettingRow {
   if (!row) throw new CharacterLibraryError('외형 설정을 찾을 수 없어.', 404)
   return row
 }
-function summary(row: SettingRow, images: boolean): CharacterSettingSummary {
-  return { id: row.id, folderId: row.folder_id, name: row.name, referenceHash: images ? row.reference_hash : null, avatarHash: images ? row.avatar_hash : null, avatarCrop: row.avatar_crop ? JSON.parse(row.avatar_crop) : null, favorite: row.favorite === 1, revision: row.revision, updatedAt: row.updated_at, linkedProfileCount: row.linked_profile_count ?? 0 }
+function summary(row: SettingRow, images: boolean, copyrights: ReadonlyMap<number, string>): CharacterSettingSummary {
+  return { id: row.id, folderId: row.folder_id, name: row.name, referenceHash: images ? row.reference_hash : null, avatarHash: images ? row.avatar_hash : null, avatarCrop: row.avatar_crop ? JSON.parse(row.avatar_crop) : null, favorite: row.favorite === 1, revision: row.revision, updatedAt: row.updated_at, linkedProfileCount: row.linked_profile_count ?? 0, copyright: copyrights.get(row.id) ?? null, outfitCount: (JSON.parse(row.outfits) as unknown[]).length }
+}
+/** The settings' works from their tag index; none without a Danbooru dictionary. */
+function copyrightsOf(settingIds: number[]): Map<number, string> {
+  if (!settingIds.length || !danbooruBrowserService.isAvailable()) return new Map()
+  return settingCopyrightLabels(getUserSettingsDb().prepare('SELECT setting_id AS settingId, tag FROM character_setting_tags WHERE setting_id IN (SELECT value FROM json_each(?))').all(JSON.stringify(settingIds)) as Array<{ settingId: number; tag: string }>)
 }
 /** The stored look; a setting from before sections reads its whole appearance as `other`. */
 function lookOf(row: Pick<SettingRow, 'sections' | 'outfits' | 'appearance'>): { sections: CharacterAppearanceSections; outfits: CharacterOutfit[] } {
@@ -115,7 +120,7 @@ export function characterSettingAppearance(row: Pick<SettingRow, 'sections' | 'o
 }
 export function getCharacterSetting(settingId: number, images = true): CharacterSetting {
   const row = characterSettingRow(settingId)
-  return { ...summary(row, images), appearance: row.appearance, ...lookOf(row), expressionGroupId: row.expression_group_id, candidateGroupId: row.candidate_group_id, createdAt: row.created_at, path: characterFolderPath(row.folder_id).map((folder) => folder.name), linkedProfiles: syncedCharacterProfiles([settingId]) }
+  return { ...summary(row, images, copyrightsOf([settingId])), appearance: row.appearance, ...lookOf(row), expressionGroupId: row.expression_group_id, candidateGroupId: row.candidate_group_id, createdAt: row.created_at, path: characterFolderPath(row.folder_id).map((folder) => folder.name), linkedProfiles: syncedCharacterProfiles([settingId]) }
 }
 
 const tagList = z.array(z.string().trim().min(1).transform(normalizeCharacterTag))
@@ -161,7 +166,8 @@ export function listCharacterSettings(input: unknown = {}, images = true): Chara
   const db = getUserSettingsDb()
   const total = (db.prepare(`SELECT COUNT(*) n FROM character_settings ${filter}`).get(...bindings) as { n: number }).n
   const rows = db.prepare(`SELECT ${summaryColumns} FROM character_settings ${filter} ORDER BY ${ORDER_BY[value.sort]} LIMIT ? OFFSET ?`).all(...bindings, value.limit, value.offset) as SettingRow[]
-  return { items: rows.map((row) => summary(row, images)), total, hasMore: value.offset + rows.length < total }
+  const copyrights = copyrightsOf(rows.map((row) => row.id))
+  return { items: rows.map((row) => summary(row, images, copyrights)), total, hasMore: value.offset + rows.length < total }
 }
 
 /**

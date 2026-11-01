@@ -59,6 +59,10 @@ export type CharacterSettingSummary = {
   /** Chat profiles synced to this setting: editing the setting changes all of them. */
   linkedProfileCount: number
   favorite: boolean
+  /** The work among its tags (a Danbooru copyright, Korean name when known); null without one or a dictionary. */
+  copyright: string | null
+  /** Its outfits; the first is the default one. */
+  outfitCount: number
 }
 
 export type CharacterSetting = CharacterSettingSummary & {

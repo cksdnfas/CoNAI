@@ -156,7 +156,7 @@ function SubscriptionLimits() {
 
 /**
  * Settings › LLM › 계기판: a rough look at what the models were asked for — totals with a trend, daily bars by
- * purpose or by model, the models table, a judge line and the subscription limits. The judge tab has the detail.
+ * purpose or by model, the models table, a judge line and the subscription limits. The judge log (Settings › 채팅 › 판단 기록) has the detail.
  */
 export function LlmUsageDashboard({ onOpenJudge }: { onOpenJudge: () => void }) {
   const { t, formatNumber } = useI18n()

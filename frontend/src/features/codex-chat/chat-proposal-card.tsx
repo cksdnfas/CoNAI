@@ -137,7 +137,7 @@ function Footer({ saved, savedLink, admin, children }: { saved: boolean; savedLi
     return (
       <ProposalFooter status>
         <span>{t({ ko: '저장됨', en: 'Saved' })}</span>
-        {admin ? <Link to={savedLink} className="text-primary hover:underline">{t({ ko: '설정에서 열기', en: 'Open in settings' })}</Link> : null}
+        {admin ? <Link to={savedLink} className="text-primary hover:underline">{t({ ko: '열기', en: 'Open' })}</Link> : null}
       </ProposalFooter>
     )
   }
@@ -283,7 +283,7 @@ function ProfileProposalCard({ proposal, threadId }: { proposal: ProfileProposal
         </div>
       </div>
       {input.characterLink !== undefined ? <ChatProfileLinkChange after={input.characterLink} profileId={null} showBefore={false} /> : null}
-      <Footer saved={saved} savedLink="/characters?view=profiles" admin={admin}>
+      <Footer saved={saved} savedLink="/chat/profiles" admin={admin}>
         <span className="flex-1" />
         <OpenEditorButton onClick={() => setEditorOpen(true)} disabled={saveMutation.isPending} />
         <SaveButton pending={saveMutation.isPending} onClick={() => saveMutation.mutate()} />
@@ -474,7 +474,7 @@ function ProfileUpdateCard({ proposal, threadId }: { proposal: UpdateProposal; t
           />
         ))}
       </div>
-      <Footer saved={saved} savedLink="/characters?view=profiles" admin={admin}>
+      <Footer saved={saved} savedLink="/chat/profiles" admin={admin}>
         <span className="flex-1" />
         <OpenEditorButton onClick={() => setEditorOpen(true)} disabled={saveMutation.isPending || checking} />
         <SaveButton pending={saveMutation.isPending || checking} onClick={() => void handleSave()} />
@@ -507,7 +507,7 @@ function ProfileFolderProposalCard({ proposal, threadId }: { proposal: Extract<P
     <Header label={labels[proposal.action]} name={proposal.name} />
     <UpdateRow label={t({ ko: '폴더 경로', en: 'Folder path' })} before={pathLabel(proposal.beforePath)} after={pathLabel(proposal.afterPath)} />
     {proposal.action === 'delete' ? <p className="text-xs text-muted-foreground">{t({ ko: '프로필과 하위 폴더는 지워지지 않고 부모로 옮겨져. 프로필은 기존 항목 뒤에 추가돼.', en: 'Profiles and subfolders move to the parent, never deleted. Profiles append after its existing items.' })}</p> : null}
-    <Footer saved={savedNow || proposal.saved === true} savedLink="/characters?view=profiles" admin={admin}>
+    <Footer saved={savedNow || proposal.saved === true} savedLink="/chat/profiles" admin={admin}>
       <span className="flex-1" /><SaveButton pending={save.isPending} disabled={proposal.dismissed} onClick={() => save.mutate()} />
     </Footer>
   </ProposalFrame>

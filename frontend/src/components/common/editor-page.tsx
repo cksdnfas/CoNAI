@@ -1,13 +1,17 @@
-import type { ComponentType, ReactNode } from 'react'
+import { createContext, useContext, type ComponentType, type ReactNode } from 'react'
 import { ArrowLeft } from 'lucide-react'
 import { IconButton } from '@/components/ui/icon-button'
-import { SidebarItem } from '@/components/ui/sidebar'
+import { SidebarItem, usePageSidebar } from '@/components/ui/sidebar'
 import { useI18n } from '@/i18n'
 import { usePageSaveShortcut } from '@/lib/keyboard-shortcut'
 import { cn } from '@/lib/utils'
 import { PageToolbar } from './page-toolbar'
 import { PageWithSidebar } from './page-with-sidebar'
 import { PathBreadcrumbs, type PathCrumb } from './path-breadcrumbs'
+import { TextTabs } from './text-tabs'
+
+/** Where an editor's section list sits: a column of the page's own sidebar, or one row when the page already has one. */
+const EditorNavLayoutContext = createContext<'column' | 'row'>('column')
 
 /** One entry of an editor's section list: its icon and name. */
 export type EditorSectionEntry<T extends string> = {
@@ -49,7 +53,11 @@ export function EditorTitleInput({ value, onChange, label, placeholder, maxLengt
   )
 }
 
-/** The section list of an editor page: icon and name, with a mark where input is needed. */
+/**
+ * The section list of an editor page: icon and name, with a mark where input is needed. In the page's sidebar column
+ * normally; one row of text tabs (no header, the title row above already names the item) inside a page that has its own
+ * sidebar, such as an editor opened within Settings.
+ */
 export function EditorSectionNav<T extends string>({ sections, value, onChange, label, header }: {
   sections: Array<EditorSectionEntry<T>>
   value: T
@@ -58,6 +66,10 @@ export function EditorSectionNav<T extends string>({ sections, value, onChange, 
   /** Above the list (the item's avatar and name). */
   header?: ReactNode
 }) {
+  const layout = useContext(EditorNavLayoutContext)
+  if (layout === 'row') {
+    return <TextTabs value={value} onChange={onChange} ariaLabel={label} items={sections.map((entry) => ({ value: entry.value, label: <span className="inline-flex items-center gap-1.5">{entry.label}{entry.mark}</span> }))} />
+  }
   return (
     <nav aria-label={label} className="space-y-3">
       {header}
@@ -82,7 +94,8 @@ export function EditorSectionNav<T extends string>({ sections, value, onChange, 
 /**
  * A page that edits one thing (a popup grown too big): the way back as a path, the title row with its state chips and
  * actions, the editor itself, and the save bar that floats up while there are changes. With `nav` the editor's
- * sections sit in the page's left column (a drawer on a phone). Ctrl/⌘ S saves while no dialog is open over it.
+ * sections sit in the page's left column (a drawer on a phone); inside a page that already has a sidebar (Settings),
+ * they sit in one row under the title instead. Ctrl/⌘ S saves while no dialog is open over it.
  * Leaving with unsaved changes is guarded by the caller (useUnsavedSettingsGuard), which knows its own address.
  */
 export function EditorPage({ crumbs, title, status, actions, nav, navLabel, storageKey, onSave, saveBar, children }: {
@@ -101,11 +114,14 @@ export function EditorPage({ crumbs, title, status, actions, nav, navLabel, stor
   children: ReactNode
 }) {
   const { t } = useI18n()
+  const insideSidebarPage = usePageSidebar() !== null
   usePageSaveShortcut(onSave)
 
   const back = crumbs[crumbs.length - 1]
   const toolbar = (
     <PageToolbar
+      // Inside a page that already has its own sticky toolbar (Settings) a second one would stack on top of it.
+      sticky={!insideSidebarPage}
       start={(
         <div className="flex min-w-0 items-center gap-1">
           {back ? <IconButton size="icon-sm" variant="ghost" label={t({ ko: '{place}(으)로 돌아가기', en: 'Back to {place}' }, { place: back.label })} onClick={back.onClick}><ArrowLeft /></IconButton> : null}
@@ -114,6 +130,7 @@ export function EditorPage({ crumbs, title, status, actions, nav, navLabel, stor
       )}
     />
   )
+  const rowNav = Boolean(nav) && insideSidebarPage
   const body = (
     <div className={cn('w-full space-y-6', nav ? 'max-w-4xl' : 'mx-auto max-w-6xl')}>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
@@ -123,11 +140,12 @@ export function EditorPage({ crumbs, title, status, actions, nav, navLabel, stor
         </div>
         {actions ? <div className="ml-auto flex shrink-0 items-center gap-1">{actions}</div> : null}
       </div>
+      {rowNav ? <EditorNavLayoutContext.Provider value="row">{nav}</EditorNavLayoutContext.Provider> : null}
       {children}
       {saveBar}
     </div>
   )
-  if (nav) {
+  if (nav && !rowNav) {
     return (
       <PageWithSidebar storageKey={storageKey ?? 'editor'} sidebarLabel={navLabel ?? t({ ko: '편집 항목', en: 'Sections' })} sidebar={nav} toolbar={toolbar}>
         {body}

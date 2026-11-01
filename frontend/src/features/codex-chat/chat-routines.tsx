@@ -37,7 +37,7 @@ import { pageAction, pageChoice, pageNumber, pageObject, pageText } from './page
 import { useChatRoomPages, useChatRoomSummaries } from './use-chat-room-directory'
 
 /**
- * Chat routines: wake a chat on a schedule (Settings › 채팅 › 루틴, and 채팅 메뉴 › 루틴 for the open room).
+ * Chat routines: wake a chat on a schedule (채팅 › 루틴, Settings › 채팅 › 루틴, and 채팅 메뉴 › 루틴 for the open room).
  * Administrators make them; each runs as the account that saved it.
  */
 
@@ -335,8 +335,11 @@ function AutomationSwitchControl() {
   )
 }
 
-/** Settings › 채팅 › 루틴. */
-export function ChatSettingsRoutines() {
+/**
+ * The routines that wake chats at set times: the workspace's 루틴 and Settings › 채팅 › 루틴. `active` is whether this
+ * list owns the page snapshot for a connected chat (Settings keeps several groups mounted).
+ */
+export function ChatSettingsRoutines({ active = true }: { active?: boolean }) {
   const { t } = useI18n()
   const query = useChatRoutines()
   const [editing, setEditing] = useState<ChatRoutineView | null>(null)
@@ -346,9 +349,9 @@ export function ChatSettingsRoutines() {
     setEditing(routine)
     setEditorOpen(true)
   }
-  useRoutinesChatPage(routines)
+  useRoutinesChatPage(routines, active)
   return (
-    <div className="space-y-3">
+    <div className="scroll-mt-36 space-y-3" data-settings-group="routines" data-setting-id="chat.routines">
       <div className="flex items-center gap-3">
         <div className="text-sm font-semibold text-foreground">{t({ ko: '루틴 {count}', en: 'Routines {count}' }, { count: routines.length })}</div>
         <div className="flex-1" />
@@ -393,8 +396,8 @@ function routineInput(args: Record<string, ChatPageData>, base: ChatRoutineView 
   return input
 }
 
-/** Settings › 채팅 › 루틴 for a connected chat: the routines, the rooms and characters they can wake, and review cards for every change. */
-function useRoutinesChatPage(routines: ChatRoutineView[]) {
+/** The routines screen for a connected chat: the routines, the rooms and characters they can wake, and review cards for every change. */
+function useRoutinesChatPage(routines: ChatRoutineView[], active: boolean) {
   const { t } = useI18n()
   const queryClient = useQueryClient()
   const profiles = useQuery({ queryKey: CHAT_PROFILES_QUERY_KEY, queryFn: listChatProfiles, staleTime: 30_000 }).data ?? []
@@ -420,8 +423,8 @@ function useRoutinesChatPage(routines: ChatRoutineView[]) {
     characters: profiles.map((profile) => ({ id: profile.id, name: profile.name })),
     rooms: threads.map((thread) => ({ id: thread.id, title: thread.title, ...(thread.kind === 'group' ? { group: true } : {}) })),
   }
-  useChatPageRegistration({
-    kind: 'settings', title: t({ ko: '설정 · 채팅 루틴', en: 'Settings · Chat routines' }), resourceId: 'chat', priority: 5, fields: [], data,
+  useChatPageRegistration(active ? {
+    kind: 'settings', title: t({ ko: '채팅 · 루틴', en: 'Chat · Routines' }), resourceId: 'chat-routines', priority: 5, fields: [], data,
     actions: [
       pageAction('settings.routine', t({ ko: '루틴 만들기·바꾸기', en: 'Make or change a routine' }), t({
         ko: '정해진 때 방을 깨워 message를 보내(저장한 계정으로). save: id 있으면 넘긴 것만 수정, 없으면 추가. target dedicated=캐릭터(profileId) 전용 방, room=고른 방(threadId). once는 runAt(ISO), interval은 intervalMinutes, daily는 dailyTime(HH:MM). maxRunCount 0=무제한. pause/resume/run(지금 한 번)/delete는 id만.',
@@ -457,5 +460,5 @@ function useRoutinesChatPage(routines: ChatRoutineView[]) {
       }
       await queryClient.invalidateQueries({ queryKey: CHAT_ROUTINES_QUERY_KEY })
     },
-  }, { preserveOnSearchChange: true })
+  } : null, { preserveOnSearchChange: true })
 }

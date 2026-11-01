@@ -5,8 +5,7 @@ import { resolveChatPortrait } from '@conai/shared'
 import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useIsMutating, useMutation, useQueries, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query'
-import { Activity, AlarmClock, ALargeSmall, ArrowLeft, ArrowUp, ChevronLeft, ChevronRight, Cpu, Download, Eraser, Flag, FoldVertical, Image as ImageIcon, LayoutGrid, ListChecks, Maximize2, Minimize2, MoreHorizontal, Plus, RotateCw, SlidersHorizontal, Square, Target, Trash2, TriangleAlert, UserPlus, UserRound, X } from 'lucide-react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Activity, AlarmClock, ALargeSmall, ArrowLeft, ArrowUp, ChevronLeft, ChevronRight, Cpu, Download, Eraser, Flag, FoldVertical, Image as ImageIcon, LayoutGrid, ListChecks, Maximize2, Minimize2, MoreHorizontal, Plus, RotateCw, SlidersHorizontal, Square, Target, Trash2, TriangleAlert, UserPlus, X } from 'lucide-react'
 import { Chip } from '@/components/ui/chip'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
@@ -80,7 +79,7 @@ import { applyChatReadReceipt, useChatRoomSummaries, usePagedChatDraftRetention 
 import { useChatThreadActions } from './use-chat-thread-actions'
 import { ChatAttachButton, ChatDraftAttachments, useChatFileDrop } from './chat-attachments'
 import { ChatFlagButton, ChatFlagManagerModal, ChatFlagTray, useChatFlags } from './chat-flags'
-import { useRoutineThreadIds } from './chat-routines'
+import { ChatRoutineEditor, useRoutineThreadIds } from './chat-routines'
 import { ChatSuggestButton, ChatSuggestTray } from './chat-suggestions'
 import { ChatUserProfilePickModal, newChatUserProfile, useChatUserProfiles, userSpeakerOf } from './chat-user-profiles'
 import {
@@ -178,6 +177,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   const [commandPending, setCommandPending] = useState(false)
   const [exportOpen, setExportOpen] = useState(false)
   const [flagManagerOpen, setFlagManagerOpen] = useState(false)
+  const [routineOpen, setRoutineOpen] = useState(false)
   const routineThreadIds = useRoutineThreadIds()
   const isAdmin = useAuthStatusQuery().data?.isAdmin === true
   /** A new chat (one profile) or room (several, the first representing it) waiting for the user to say who they are in it. */
@@ -188,7 +188,6 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   const [appearanceOpen, setAppearanceOpen] = useState(false)
   // Set while ⋯ closes onto "Chat appearance": focus must stay with the popover instead of returning to the key.
   const appearanceOpenRef = useRef(false)
-  const navigate = useNavigate()
   // Status panel: docked / floating on a wide page (kept per browser), a fold-out strip elsewhere.
   const [statusLayout, setStatusLayout] = useStatusPanelLayout()
   const [statusKey, setStatusKey] = useState<string | null>(null)
@@ -804,19 +803,12 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
     })
   }
   const threadList = (dense: boolean) => <>
-    {/* The page layout's list screen already sits on --page-gutter; only the panel adds its own inset. */}
-    <div className={dense ? 'pb-2' : cn('pb-2 pt-3', layout === 'panel' && 'px-3')}><ChatSearchInput value={searchText} onChange={setSearchText} /></div>
+    {/* The page layout's list screen already sits on --page-gutter; only the panel adds its own inset. The side column carries the search in its own header row. */}
+    {dense ? null : <div className={cn('pb-2 pt-3', layout === 'panel' && 'px-3')}><ChatSearchInput value={searchText} onChange={setSearchText} /></div>}
     <div ref={dense ? undefined : restoreChatListScroll} onScroll={dense ? undefined : (event) => { chatListScrollTop = event.currentTarget.scrollTop }} className={cn('min-h-0 flex-1 overflow-y-auto', !dense && layout === 'panel' && 'px-1')}>
       <ChatThreadList query={searchText} profilesById={profilesById} activeThreadId={activeThreadId} runningThreadIds={runningThreadIds} routineThreadIds={routineThreadIds} dense={dense} onSelect={openThread} onUpdate={updateListEntry} onBulk={runBulk} />
       {searchText.trim() ? <ChatSearchResults query={searchText} disabled={false} onPick={pickSearchResult} /> : null}
     </div>
-    {/* What the chats draw on (lorebooks, presets, blocks) and the routines that wake them, for administrators. */}
-    {isAdmin ? (
-      <div className={cn('flex shrink-0 gap-1 border-t border-line pt-1.5', !dense && layout === 'panel' && 'px-3 pb-1.5')}>
-        <Button asChild variant="ghost" size="xs"><Link to="/chat/resources">{t({ ko: '채팅 자원', en: 'Chat resources' })}</Link></Button>
-        <Button asChild variant="ghost" size="xs"><Link to="/chat/resources?tab=routines">{t({ ko: '루틴', en: 'Routines' })}</Link></Button>
-      </div>
-    ) : null}
   </>
   // Context stays in the header, the rest of the chat's actions sit under ⋯; a second press on a view closes it again.
   // The look and the other views share the wide page's one column, so opening one folds the other.
@@ -912,10 +904,8 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
       {isGroup ? null : <DropdownMenuItem disabled={!thread || isBusy} onSelect={() => void runCommand('/compact')}><FoldVertical />{isCodexThread ? t({ ko: '압축', en: 'Compact' }) : t({ ko: '지금 요약', en: 'Summarize now' })}</DropdownMenuItem>}
       <DropdownMenuItem onSelect={() => setExportOpen(true)}><Download />{t({ ko: '내보내기', en: 'Export' })}</DropdownMenuItem>
       <DropdownMenuSeparator />
-      <DropdownMenuLabel>{t({ ko: '내 설정', en: 'My settings' })}</DropdownMenuLabel>
       <DropdownMenuItem onSelect={() => setFlagManagerOpen(true)}><Flag />{t({ ko: '플래그 관리', en: 'Manage flags' })}</DropdownMenuItem>
-      <DropdownMenuItem onSelect={() => navigate('/settings?section=mine')}><UserRound />{t({ ko: '사용자 프로필', en: 'User profiles' })}</DropdownMenuItem>
-      {isAdmin ? <DropdownMenuItem onSelect={() => navigate('/chat/resources?tab=routines')}><AlarmClock />{t({ ko: '루틴', en: 'Routines' })}</DropdownMenuItem> : null}
+      {isAdmin && thread ? <DropdownMenuItem onSelect={() => setRoutineOpen(true)}><AlarmClock />{t({ ko: '이 채팅에 루틴 만들기', en: 'Make a routine for this chat' })}</DropdownMenuItem> : null}
       <DropdownMenuSeparator />
       {displayThread ? <DropdownMenuItem disabled={!thread || isBusy} onSelect={() => void runCommand('/clear')}><Eraser />{t({ ko: '대화 비우기', en: 'Clear chat' })}</DropdownMenuItem> : null}
       <DropdownMenuItem variant="destructive" disabled={isBusy || deleteMutation.isPending} onSelect={() => void handleDelete()}><Trash2 />{t({ ko: '삭제', en: 'Delete' })}</DropdownMenuItem>
@@ -1125,6 +1115,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   const dialogs = <>
     <ChatExportDialog threadId={activeThreadId} open={exportOpen} onClose={() => setExportOpen(false)} />
     <ChatFlagManagerModal open={flagManagerOpen} onClose={() => setFlagManagerOpen(false)} />
+    {isAdmin && activeThreadId !== null ? <ChatRoutineEditor open={routineOpen} routine={null} presetThreadId={activeThreadId} onClose={() => setRoutineOpen(false)} /> : null}
     <ChatUserProfilePickModal open={pendingStart !== null} profiles={userProfiles} onClose={() => setPendingStart(null)} onPick={(userProfileId) => { const profileIds = pendingStart; setPendingStart(null); if (profileIds !== null) void startWith(profileIds, userProfileId) }} />
     <ChatDeleteDialog open={deleteTarget !== null} book={deleteTarget?.book ?? null} pending={deleteMutation.isPending} onClose={() => setDeleteTarget(null)} onConfirm={(choice) => deleteTarget && deleteMutation.mutate({ threadId: deleteTarget.threadId, ...choice })} />
     {deleteMerge ? (
@@ -1156,11 +1147,11 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
     return (
       <div className="flex min-h-0 flex-1">
         {dialogs}
-        {/* The PageWithSidebar column spec; the page root (CodexChatPage) bleeds to the shell edges like PageWithSidebar. */}
+        {/* The PageWithSidebar column spec; the page root (the workspace's 대화) bleeds to the shell edges like PageWithSidebar. The tab row above already names this screen, so the column opens with search and the new-chat key. */}
         {hasSideList ? (
           <SidebarColumn as="nav" label={t({ ko: '채팅 목록', en: 'Chats' })} bodyClassName="flex flex-col gap-1">
-            <div className="flex items-center justify-between pb-1 pl-2">
-              <span className="text-xs font-semibold text-muted-foreground">{t({ ko: '채팅', en: 'Chats' })}</span>
+            <div className="flex items-center gap-2 pb-2">
+              <div className="min-w-0 flex-1"><ChatSearchInput value={searchText} onChange={setSearchText} /></div>
               {newChatButton}
             </div>
             {threadList(true)}

@@ -266,6 +266,9 @@ buttons up one tone.
   `BottomDrawerSheet`. No floating frame, no pin.
 - `/chat` keeps its own full-height layout (list screen on phones, column from 768px) but uses SidebarColumn,
   `.page-bleed` and the gutter: header row, transcript and composer sit on `--page-gutter`.
+  `ChatWorkspaceLayout` owns the top TextTabs row: 대화 · 프로필 · 자원 · 루틴 · 판단 기록 · 내 설정. Only 대화 uses the
+  full-height conversation layout; the other routes are ordinary pages below that row. Non-admin accounts see 대화 and
+  내 설정 only. Settings › 채팅 edits the same profiles/resources in place, with editors staying under `/settings`.
 - `TwoPane` / `TwoPaneToolbar` (`components/common/sidebar-layout`): the in-panel split (pickers inside a Modal,
   catalog mocks). `sidebar?`, `sidebarLabel?`, `sidebarFooter?`, `bleed` (default true: cancels the Modal body padding,
   hairline above and below; `false` inside a framed block). Column from 640px; the content pane carries `--page-gutter`
@@ -282,8 +285,10 @@ buttons up one tone.
   `start` after the title (prompts, wildcards, sprite); a sidebar page names the open item after the title as a muted
   path with the current step in the foreground (audio: project / folder / effect); folder pages lead with a breadcrumb
   whose first step is the page (files, groups, posts, character library). Tabs over a list inside the page sit in a
-  TextTabs row right under the toolbar (posts, chat resources). The generation page and, for administrators, 캐릭터
-  lead with their view switch instead, since it names the page. A page root takes the full content width (no
+  TextTabs row right under the toolbar (posts). Chat's 자원 screen switches 프리셋 / 표시 블록 / 로어북 with a
+  SegmentedControl below the workspace row. The generation and 캐릭터 pages lead with their view switch instead,
+  since it names the page; 캐릭터 switches only 외형 라이브러리 / 캐릭터 카탈로그 (catalog needs `prompts.view`).
+  A page root takes the full content width (no
   `mx-auto max-w-*`); a form inside may narrow itself.
 - Empty states: a page, list, menu or picker with nothing in it shows `EmptyState`, never a hand-written muted line.
   The title says what is missing (아직 효과음이 없어) and the action is one Button that does it; no description line
@@ -407,6 +412,16 @@ A large editor (chat profile, appearance setting, lorebook) is a page with its o
     padded body (`--theme-panel-padding-x/y`).
 - Do not hand-build cards with `<Panel asChild interactive padding="none">`; clickable rows are
   `<ListRow asChild interactive><button …/></ListRow>`.
+
+### Overlay card
+- `OverlayCard` (`components/common/overlay-card`) is the image-first card of the character library, catalog, chat
+  profiles and group covers; `CharacterCard` wraps it with a portrait and the initial-letter fallback. The picture
+  fills the card and is the open button; `title` / `subtitle` / `leading` / `meta` sit on a `backdrop` gradient at the
+  bottom, `topStart` / `topEnd` float in the corners, and `details` + `actions` unfold under the title on hover or
+  focus (always on touch screens). `menu` adds the context menu and a ⋯ key.
+- Controls on the image are `variant="overlay"` Buttons / IconButtons and `Badge variant="overlay"`. A control that
+  shows only on hover goes in `OverlayCardHoverOnly` (`shown` keeps it up), never an opacity class on the button.
+- Selection is a primary ring around the card. Use `MediaCard` for captions below the media and inline strip chips.
 
 ### Button variants
 | Variant | Use | Look |

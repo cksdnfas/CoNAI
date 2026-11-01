@@ -119,7 +119,7 @@ const nativeActionPermissions = {
   'files.select': 'files.view', 'files.new_folder': 'files.edit', 'files.rename': 'files.edit', 'files.move': 'files.edit', 'files.new_document': 'files.edit', 'files.edit_document': 'files.edit',
   'files.name_save': 'files.edit', 'files.move_save': 'files.edit', 'files.delete': 'files.delete', 'files.restore_version': 'files.edit',
   'files.doc_at': 'files.view', 'files.doc_edit': 'files.edit', 'files.doc_append': 'files.edit', 'files.doc_save': 'files.edit',
-  // Settings › Chat › 자원 editors (lorebooks, generation presets, judge presets, blocks, tool presets). Saving uses each editor's own admin API.
+  // Chat › 자원 and Settings › 채팅 editors (lorebooks, generation presets, judge presets, blocks, tool presets). Saving uses each editor's own admin API.
   'resource.open': null, 'resource.save': null, 'lorebook.entries': null, 'block.fields': null,
   'chat.open': 'chat.use', 'chat.prepare': 'chat.use', 'chat.rename': 'chat.use', 'chat.pin': 'chat.use', 'chat.archive': 'chat.use', 'chat.delete': 'chat.use',
   'plugins.open': null,
@@ -226,11 +226,14 @@ export function chatPageActionAllowed(path: string, id: string): boolean {
   // The editor opens over library, group, detail and generation pages; extension pages never host it.
   if (id.startsWith('image_editor.') || id.startsWith('image_detail.')) return !path.startsWith('/ext/')
   if (id === 'generation.history_load') return path === '/generation' || /^\/public\/workflows\/[\w-]+$/.test(path)
-  if (id.startsWith('profile.')) return path === '/settings' || path === '/characters'
+  // The chat management screens live in the chat workspace (/chat/…) and in Settings › 채팅; the same operations serve both.
+  if (id.startsWith('profile.')) return path === '/settings' || path === '/chat/profiles'
   if (id.startsWith('library.')) return path === '/'
   if (id.startsWith('files.')) return path === '/files'
-  if (id.startsWith('resource.') || id.startsWith('lorebook.') || id.startsWith('block.')) return path === '/settings' || path === '/characters' || path === '/chat/resources'
-  if (id === 'settings.routine' || id === 'settings.automation_switch') return path === '/settings' || path === '/chat/resources'
+  if (id.startsWith('resource.') || id.startsWith('lorebook.') || id.startsWith('block.')) return path === '/settings' || path === '/chat/profiles' || path === '/chat/resources'
+  if (id === 'settings.routine' || id === 'settings.automation_switch') return path === '/settings' || path === '/chat/routines'
+  if (id === 'settings.judge_filter') return path === '/settings' || path === '/chat/judge'
+  if (id === 'settings.user_profile' || id === 'settings.flag') return path === '/settings' || path === '/chat/mine'
   if (id.startsWith('settings.')) return path === '/settings'
   if (id.startsWith('chat.')) return path === '/chat'
   if (id.startsWith('plugins.')) return path === '/extensions'

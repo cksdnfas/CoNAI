@@ -12,6 +12,7 @@ import { useConfirm } from '@/components/ui/confirm-dialog'
 import { SettingRow } from '@/components/ui/setting-row'
 import { SettingsSwitchRow } from '@/components/ui/settings-switch-row'
 import { Select } from '@/components/ui/select'
+import { RowGroup } from '@/components/ui/row-group'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
@@ -132,7 +133,9 @@ function SettingsEditor({ scope, scopes, title, onSelect, onClose, inline = fals
     {scope === 'embedding' || scope === 'tagger' || scope === 'kaloscope' ? <p className="my-3 text-sm text-muted-foreground">{t({ ko: '활성화하면 모델을 내려받거나 색인·분석 작업이 시작될 수 있어.', en: 'Enabling can download models or start indexing and analysis.' })}</p> : null}
     {snapshot ? scope === 'video-optimization'
       ? <VideoOptimizationTab videoOptimizationDraft={values as unknown as VideoOptimizationSettings} onPatchVideoOptimization={(changes) => apply(changes as Record<string, PageSettingValue>)} hasChanges={dirty} />
-      : <div className="mt-4 divide-y divide-line">{definition.fields.map((field) => <SettingField key={field.id} scope={scope} field={field} value={values[field.id]} disabled={saving} onChange={(value) => apply({ [field.id]: value })} />)}</div>
+      : <div className="mt-4 space-y-4">{fieldRuns(definition.fields).map((run) => <RowGroup key={run[0].id} heading={run[0].heading ? t(run[0].heading) : undefined}>
+        {run.map((field) => <SettingField key={field.id} scope={scope} field={field} value={values[field.id]} disabled={saving} onChange={(value) => apply({ [field.id]: value })} />)}
+      </RowGroup>)}</div>
       : query.isPending ? <p className="py-6">{t({ ko: '설정 불러오는 중…', en: 'Loading settings…' })}</p> : null}
     {error || query.error ? <p role="alert" className="mt-4 text-sm text-destructive">{error ?? query.error?.message}</p> : null}
   </>
@@ -150,6 +153,16 @@ function SettingsEditor({ scope, scopes, title, onSelect, onClose, inline = fals
   </Sheet>
 }
 
+/** The fields in runs: a field with a `heading` opens a new run (drawn under that sub-heading). */
+function fieldRuns(fields: readonly PageSettingField[]): PageSettingField[][] {
+  const runs: PageSettingField[][] = []
+  for (const field of fields) {
+    if (field.heading || !runs.length) runs.push([field])
+    else runs[runs.length - 1].push(field)
+  }
+  return runs
+}
+
 function SettingField({ scope, field, value, disabled, onChange }: { scope: PageSettingsScopeId; field: PageSettingField; value: PageSettingValue; disabled: boolean; onChange: (value: PageSettingValue) => void }) {
   const { t } = useI18n()
   const row = pageSettingRow(scope, field)
@@ -164,6 +177,7 @@ function SettingField({ scope, field, value, disabled, onChange }: { scope: Page
 }
 
 const OPTION_LABELS: Record<string, { ko: string; en: string }> = {
+  off: { ko: '끄기', en: 'Off' }, codex: { ko: 'Codex', en: 'Codex' }, claude: { ko: 'Claude Code', en: 'Claude Code' },
   original: { ko: '원본 유지', en: 'Keep original' }, manual: { ko: '수동', en: 'Manual' }, always: { ko: '항상', en: 'Always' },
   fast: { ko: '빠르게', en: 'Fast' }, full: { ko: '전체 탐색', en: 'Full scan' }, skip: { ko: '생략', en: 'Skip' },
   similarity: { ko: '유사도', en: 'Similarity' }, upload_date: { ko: '업로드 날짜', en: 'Upload date' }, file_size: { ko: '파일 크기', en: 'File size' },

@@ -107,7 +107,7 @@ export function CharacterSettingEditorPage({ editor, folders, canEdit, admin, ro
           {base.linkedProfiles.map((profile) => (
             <li key={profile.id}>
               <ListRow asChild interactive size="sm">
-                <Link to={`/characters?view=profiles&profile=${profile.id}`}><span className="truncate">{profile.name}</span></Link>
+                <Link to={`/chat/profiles?profile=${profile.id}`}><span className="truncate">{profile.name}</span></Link>
               </ListRow>
             </li>
           ))}

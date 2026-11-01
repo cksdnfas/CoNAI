@@ -12,7 +12,7 @@ import { pageAction, pageChoice, pageNumber, pageObject, pageText } from './page
 import { useLeaveCodexChatPage } from './codex-chat-shell'
 import { CodexChatView } from './codex-chat-view'
 
-/** /chat: the same chat as the side panel, with room for the thread list and wider results. */
+/** /chat (the workspace's 대화): the same chat as the side panel, with room for the thread list and wider results. */
 export function CodexChatPage() {
   const { t } = useI18n()
   const queryClient = useQueryClient()
@@ -85,9 +85,9 @@ export function CodexChatPage() {
   }
 
   return (
-    // Same edges as PageWithSidebar: the thread column runs to the shell's sides and bottom; the view puts the bottom
-    // padding back under the chat.
-    <div className="page-bleed flex h-(--shell-content-height) min-h-0 flex-col">
+    // The workspace (ChatWorkspaceLayout) gives this the shell's full height under its tab row, edge to edge: the thread
+    // column runs to the shell's sides and bottom; the view puts the bottom padding back under the chat.
+    <div className="flex min-h-0 flex-1 flex-col">
       <CodexChatView
         layout="page"
         onCollapse={() => {

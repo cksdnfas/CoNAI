@@ -64,6 +64,9 @@ export function parseSettingsTab(value: string | null): SettingsTab {
   return LEGACY_SETTINGS_TAB_MAP[value] ?? 'general'
 }
 
+/** The group of Settings › 채팅 that each old `?view=` sub-page became. */
+const CHAT_VIEW_GROUPS: Record<string, string> = { profiles: 'profiles', resources: 'presets', routines: 'routines', judge: 'judge' }
+
 /** Canonicalize old bookmarks without losing unrelated editor parameters. */
 export function resolveSettingsLocation(params: URLSearchParams): string | null {
   const next = new URLSearchParams(params)
@@ -75,26 +78,21 @@ export function resolveSettingsLocation(params: URLSearchParams): string | null 
     const groups: Record<string, string> = { appearance: 'appearance', folders: 'folders', metadata: 'metadata', 'image-save': 'image-save', 'llm-connections': 'connections', integration: 'pacing', 'integration-tools': 'comfyui' }
     if (raw && groups[raw] && !next.has('group')) next.set('group', groups[raw])
   }
-  if (section === 'chat') {
-    if (view === 'resources' || view === 'routines' || view === 'profiles') {
-      next.delete('section')
-      next.delete('view')
-      next.delete('group')
-      next.delete('setting')
-      if (view === 'routines') next.set('tab', 'routines')
-      if (view === 'profiles') next.set('view', 'profiles')
-      const query = next.toString()
-      return `${view === 'profiles' ? '/characters' : '/chat/resources'}${query ? `?${query}` : ''}`
-    }
+  if (section === 'chat' && view) {
     if (view === 'mine') { next.set('section', 'mine'); next.delete('view') }
-    else if (view === 'judge') { next.set('section', 'llm'); next.set('group', 'log'); next.delete('view') }
+    else if (CHAT_VIEW_GROUPS[view]) { next.set('group', CHAT_VIEW_GROUPS[view]); next.delete('view') }
   }
   if (section === 'llm' && view === 'content-evaluation') {
     next.set('section', 'posts'); next.set('group', 'topics'); next.delete('view')
+  } else if (section === 'llm' && (view === 'judge' || params.get('group') === 'log')) {
+    // The AI log moved to the chat: the judge log and answer diagnostics are chat records.
+    next.set('section', 'chat'); next.set('group', 'judge'); next.delete('view')
   } else if ((section === 'llm' || section === 'posts') && view) {
-    next.set('group', view === 'judge' ? 'log' : view); next.delete('view')
+    next.set('group', view); next.delete('view')
   }
+  // A setting that moved to another section keeps its old links alive.
   const row = SETTINGS_ROW_BY_ID[next.get('setting') ?? '']
-  if (row && row.section === parseSettingsTab(next.get('section')) && !next.has('group')) next.set('group', row.group)
+  if (row && row.section !== parseSettingsTab(next.get('section'))) { next.set('section', row.section); next.set('group', row.group) }
+  else if (row && !next.has('group')) next.set('group', row.group)
   return next.toString() === params.toString() ? null : `/settings?${next}`
 }

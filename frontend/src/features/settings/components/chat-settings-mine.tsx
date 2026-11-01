@@ -16,31 +16,29 @@ import {
 } from '@/lib/api-codex-chat'
 import { getErrorMessage } from '@/lib/error-message'
 import { SettingsEmptyRow, SettingsRowsSkeleton } from './settings-rows'
-import { SettingsContents } from './settings-navigation'
 import { ChatFilledLabel } from './settings-filled-label'
-import { Link } from 'react-router-dom'
-import { Button } from '@/components/ui/button'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
-import type { useChatOptionsPageParts } from './chat-options-page'
 
-/** Settings › Chat › 내 설정: the signed-in account's own user profiles, and its flags (with the admins' shared ones). */
-export function ChatSettingsMine({ sharedFlags = false, options }: { sharedFlags?: boolean; options?: ReturnType<typeof useChatOptionsPageParts> }) {
+/**
+ * The signed-in account's own user profiles (personas) and flags. An administrator's flags are the shared ones every
+ * account sees, so that is the one list they edit here and in Settings › 채팅 (`flagsOnly`, without the personas).
+ * `active` is whether this view owns the page snapshot for a connected chat (Settings keeps several groups mounted).
+ */
+export function ChatSettingsMine({ flagsOnly = false, active = true }: { flagsOnly?: boolean; active?: boolean }) {
   const { t } = useI18n()
   const isAdmin = useAuthStatusQuery().data?.isAdmin === true
   const [flagEditor, setFlagEditor] = useState<{ flag: ChatFlag | null } | null>(null)
   const [userProfileEditor, setUserProfileEditor] = useState<{ profile: ChatUserProfile | null } | null>(null)
   const flagsQuery = useChatFlags(true, { includeHidden: true })
   const userProfilesQuery = useChatUserProfiles()
-  const flags = (flagsQuery.data ?? []).filter((flag) => isAdmin ? flag.shared === sharedFlags : !sharedFlags)
+  const flags = (flagsQuery.data ?? []).filter((flag) => !isAdmin || flag.shared)
   const userProfiles = userProfilesQuery.data ?? []
-  const hasFlagRoom = useChatFlagRoom(flags)
-  const canAddFlag = hasFlagRoom && (!isAdmin || sharedFlags)
+  const canAddFlag = useChatFlagRoom(flags)
   const queryClient = useQueryClient()
 
   // A connected chat reads and writes the account's own user profiles and flags; every change is a review card.
   const chatData: Record<string, ChatPageData> = {
-    ...(!sharedFlags ? { userProfiles: userProfiles.map((profile) => ({ id: profile.id, name: profile.name, persona: profile.persona, isDefault: profile.isDefault, modelSlotId: profile.modelSlotId })) } : {}),
-    ...options?.data,
+    ...(!flagsOnly ? { userProfiles: userProfiles.map((profile) => ({ id: profile.id, name: profile.name, persona: profile.persona, isDefault: profile.isDefault, modelSlotId: profile.modelSlotId })) } : {}),
     flags: flags.map((flag) => ({ id: flag.id, icon: flag.icon, name: flag.name, content: flag.content, shared: flag.shared, edited: flag.edited, hidden: flag.hidden })),
   }
   const saveUserProfile = async (args: Record<string, ChatPageData>) => {
@@ -61,7 +59,6 @@ export function ChatSettingsMine({ sharedFlags = false, options }: { sharedFlags
     const current = typeof args.id === 'number' ? flags.find((flag) => flag.id === args.id) : undefined
     if (typeof args.id === 'number' && !current) throw new Error('목록에 없는 플래그야.')
     if (args.operation === 'save') {
-      if (isAdmin && !sharedFlags && !current) throw new Error('새 공용 플래그는 설정 → 채팅에서 만들어줘.')
       const name = (typeof args.name === 'string' ? args.name : current?.name ?? '').trim()
       const content = typeof args.content === 'string' ? args.content : current?.content ?? ''
       if (!name || !content.trim()) throw new Error('플래그 이름과 내용이 필요해.')
@@ -73,40 +70,34 @@ export function ChatSettingsMine({ sharedFlags = false, options }: { sharedFlags
     }
     await queryClient.invalidateQueries({ queryKey: CHAT_FLAGS_QUERY_KEY })
   }
-  useChatPageRegistration({
-    kind: 'settings', title: sharedFlags ? t({ ko: '설정 · 채팅', en: 'Settings · Chat' }) : t({ ko: '설정 · 내 채팅 설정', en: 'Settings · My chat settings' }), resourceId: sharedFlags ? 'chat' : 'mine', priority: 5, fields: [], data: chatData,
+  useChatPageRegistration(active ? {
+    kind: 'settings', title: flagsOnly ? t({ ko: '설정 · 채팅 · 공용 플래그', en: 'Settings · Chat · Shared flags' }) : t({ ko: '내 채팅 설정', en: 'My chat settings' }), resourceId: flagsOnly ? 'chat-flags' : 'mine', priority: 5, fields: [], data: chatData,
     actions: [
-      ...options?.actions ?? [],
       pageAction('settings.user_profile', t({ ko: '{name} 저장·삭제', en: 'Save or delete {name}' }, { name: t(SETTINGS_ROW_BY_ID['mine.persona'].label) }), t({
         ko: 'data.userProfiles(채팅에서 내가 누구인지). save: id 있으면 넘긴 것만 수정, 없으면 추가. 아바타·제안 모델은 사람이 편집기에서.',
         en: 'data.userProfiles (who the account is in chats). save: with id edits what is passed, without adds. Avatar and suggestion model stay in the editor.',
       }), pageObject({ operation: pageChoice(['save', 'delete']), id: pageNumber(0, undefined, true), name: pageText(CHAT_USER_PROFILE_LIMITS.name), persona: pageText(CHAT_USER_PROFILE_LIMITS.persona), isDefault: { type: 'boolean' } }, ['operation']), 'save'),
-      pageAction('settings.flag', t({ ko: '{name} 저장·삭제', en: 'Save or delete {name}' }, { name: t(SETTINGS_ROW_BY_ID[sharedFlags ? 'chat.flags' : 'mine.flags'].label) }), sharedFlags ? t(SETTINGS_ROW_BY_ID['chat.flags'].description) : isAdmin ? t({
-        ko: 'data.flags의 개인 플래그를 id로 수정하거나 지워. 새 공용 플래그는 설정 → 채팅에서 만들어.',
-        en: 'Edit or delete an existing personal flag from data.flags by id. Create new shared flags under Settings → Chat.',
-      }) : t({
+      pageAction('settings.flag', t({ ko: '{name} 저장·삭제', en: 'Save or delete {name}' }, { name: t(SETTINGS_ROW_BY_ID[isAdmin ? 'chat.flags' : 'mine.flags'].label) }), isAdmin ? t(SETTINGS_ROW_BY_ID['chat.flags'].description) : t({
         ko: 'data.flags(채팅마다 켜면 메시지에 붙는 지시문). save: id 있으면 수정(공용이면 내 사본), 없으면 추가. icon: 이모지나 lucide:<이름>. restore: 숨긴 공용 꺼내기, reset: 공용 원문으로.',
         en: 'data.flags (instructions switched on per chat). save: with id edits (a shared one becomes an own copy), without adds. icon: emoji or lucide:<name>. restore: unhide a shared one, reset: back to the shared text.',
-      }), pageObject({ operation: pageChoice(isAdmin && !sharedFlags ? ['save', 'delete'] : ['save', 'delete', 'restore', 'reset']), id: pageNumber(0, undefined, true), icon: pageText(60), name: pageText(CHAT_FLAG_LIMITS.name), content: pageText(CHAT_FLAG_LIMITS.content) }, ['operation']), 'save'),
-    ].filter((action) => sharedFlags ? action.id !== 'settings.user_profile' : !isAdmin || flags.length > 0 || action.id !== 'settings.flag'),
+      }), pageObject({ operation: pageChoice(isAdmin ? ['save', 'delete'] : ['save', 'delete', 'restore', 'reset']), id: pageNumber(0, undefined, true), icon: pageText(60), name: pageText(CHAT_FLAG_LIMITS.name), content: pageText(CHAT_FLAG_LIMITS.content) }, ['operation']), 'save'),
+    ].filter((action) => !flagsOnly || action.id !== 'settings.user_profile'),
     apply: () => {},
     applyAction: async (id, args, assertCurrent) => {
       assertCurrent()
-      const optionSave = options?.apply(id, args)
-      if (optionSave) return optionSave
       const normalized = args.id === 0 ? { ...args, id: null } : args
-      if (id === 'settings.user_profile' && !sharedFlags) return saveUserProfile(normalized)
+      if (id === 'settings.user_profile' && !flagsOnly) return saveUserProfile(normalized)
       if (id === 'settings.flag') return saveFlag(normalized)
       throw new Error('이 화면에 없는 작업이야.')
     },
-  }, { preserveOnSearchChange: true })
+  } : null, { preserveOnSearchChange: true })
 
   return (
     <div className="space-y-8">
-      {!sharedFlags ? <SettingsContents groups={[{ id: 'persona', label: t({ ko: '페르소나', en: 'Personas' }) }, { id: 'flags', label: t({ ko: '플래그', en: 'Flags' }) }]} /> : null}
-      {!sharedFlags ? (
+      {!flagsOnly ? (
       <RowGroup
         data-settings-group="persona"
+        className="scroll-mt-36"
         heading={<ChatFilledLabel fieldId="mine.persona" />}
         count={userProfilesQuery.isSuccess ? userProfiles.length : undefined}
         actions={(
@@ -124,15 +115,17 @@ export function ChatSettingsMine({ sharedFlags = false, options }: { sharedFlags
 
       <RowGroup
         data-settings-group="flags"
-        heading={<ChatFilledLabel fieldId={sharedFlags ? 'chat.flags' : 'mine.flags'} />}
+        // 내 설정's flags row is searchable as mine.flags for everyone, though an administrator's heading is the shared one.
+        data-setting-id={flagsOnly ? undefined : 'mine.flags'}
+        className="scroll-mt-36"
+        heading={<ChatFilledLabel fieldId={isAdmin ? 'chat.flags' : 'mine.flags'} />}
         count={flagsQuery.isSuccess ? flags.length : undefined}
         actions={(
-          !isAdmin || sharedFlags ? <IconButton size="icon-sm" variant="ghost" disabled={!canAddFlag} onClick={() => setFlagEditor({ flag: null })} label={t({ ko: '플래그 추가', en: 'Add flag' })}>
+          <IconButton size="icon-sm" variant="ghost" disabled={!canAddFlag} onClick={() => setFlagEditor({ flag: null })} label={t({ ko: '플래그 추가', en: 'Add flag' })}>
             <Plus />
-          </IconButton> : null
+          </IconButton>
         )}
       >
-        {isAdmin && !sharedFlags ? <Button asChild variant="ghost" size="sm"><Link to="/settings?section=chat&group=flags">{t({ ko: '공용 플래그는 앱 관리 → 채팅에서 바꿔 → 열기', en: 'Shared flags live in App management → Chat → Open' })}</Link></Button> : null}
         {flagsQuery.isLoading ? <SettingsRowsSkeleton rows={1} /> : null}
         {flagsQuery.isSuccess && flags.length === 0 ? <SettingsEmptyRow>{t({ ko: '아직 플래그가 없어', en: 'No flags yet' })}</SettingsEmptyRow> : null}
         <ChatFlagRows flags={flags} onEdit={(flag) => setFlagEditor({ flag })} />

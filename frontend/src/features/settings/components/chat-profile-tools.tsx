@@ -38,7 +38,7 @@ export function ChatProfileAgentSetting({ agentEnabled, agentDescription, onChan
 
 /**
  * API LLM profiles: how much of one tool result the model sees. How many tool rounds a reply may take is app-wide
- * (Settings › 채팅 › 자원 › 도구 사용).
+ * (Settings › 채팅 › 도구 사용).
  */
 export function ChatProfileToolLimits({ toolOutputLimit, onChange }: {
   toolOutputLimit: number

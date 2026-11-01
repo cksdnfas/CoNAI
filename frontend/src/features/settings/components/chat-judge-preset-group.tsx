@@ -14,7 +14,7 @@ import { ChatJudgePresetEditorModal } from './chat-judge-preset-editor-modal'
 import { useDefaultJudge } from './chat-judge-connection-select'
 import { readChatToolPresetFile } from './chat-tool-preset-file'
 
-/** Settings › Chat › 자원: the judge presets (questions a decision model answers about chat turns, group rooms, status fields and assets). */
+/** Chat › 프리셋 (and Settings › 채팅 › 프리셋): the judge presets (questions a decision model answers about chat turns, group rooms, status fields and assets). */
 export function ChatJudgePresetGroup({ editor, setEditor, visible }: { editor: { preset: ChatJudgePreset | null } | null; setEditor: (editor: { preset: ChatJudgePreset | null } | null) => void; visible: boolean }) {
   const { t } = useI18n()
   const enabled = visible || editor !== null

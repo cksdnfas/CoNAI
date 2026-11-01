@@ -24,14 +24,17 @@ current screen state. See `components/layout/app-shell.tsx`; these providers are
 | `/access` | `features/auth` | shell |
 | `/groups`, `/groups/:groupId` | `features/groups` | `page.groups.view` |
 | `/prompts` | `features/prompts` | `page.prompts.view` |
-| `/characters` (`?view=profiles`, `?folder=`, `?q=`, `?page=`, `?setting=`, `?new=`) | `features/characters` (appearance library + existing chat profile editors) | `page.characters.view`; profiles admin-only |
+| `/characters` (`?view=catalog`, `?folder=`, `?q=`, `?page=`, `?setting=`, `?new=`) | `features/characters` (외형 라이브러리 / 캐릭터 카탈로그) | `page.characters.view`; catalog also needs `prompts.view` |
 | `/generation` (NAI, ComfyUI, workflows, queue) | `features/image-generation`, `features/module-graph` | `page.generation.view` |
 | `/wildcards` | `features/image-generation` | `page.wildcards.view` |
 | `/public/workflows/:slug` | `features/image-generation` | public workflow page |
 | `/images/:compositeHash`, `/images/:compositeHash/metadata` | `features/images`, `features/metadata` | `page.image-detail.view`, `page.metadata-editor.view` |
 | `/upload` | `features/upload` | `page.upload.view` |
-| `/chat` | `features/codex-chat` | `page.chat.view` |
-| `/chat/resources?tab=presets|blocks|lorebooks|routines` | `features/codex-chat` reuses settings resource editors | administrator, unchanged |
+| `/chat` | `features/codex-chat` (대화) | `page.chat.view` |
+| `/chat/profiles` (`?profile=<id\|new>`, `folder`, `q`, `page`) | `features/codex-chat` reuses settings profile editors | `page.chat.view` + `page.settings.view` |
+| `/chat/resources?tab=presets\|blocks\|lorebooks` (`&lorebook=<key>`) | `features/codex-chat` reuses settings resource editors | `page.chat.view` + `page.settings.view` |
+| `/chat/routines`, `/chat/judge` | `features/codex-chat` (루틴 / 판단 기록) | `page.chat.view` + `page.settings.view` |
+| `/chat/mine` | `features/codex-chat` reuses `ChatSettingsMine` (내 설정) | `page.chat.view` |
 | `/files` | `features/files` | `page.files.view` |
 | `/posts` | `features/posts` (board and knowledge) | `page.posts.view` |
 | `/audio` | `features/audio` | `page.audio.view` |
@@ -63,11 +66,17 @@ meant shown/hidden, so loading an older settings file keeps only the tool flags 
 
 Settings use a **Mine / Shared administration** sidebar and scrolling sections with group links, not inner tabs.
 `section`, `group` and `setting` select a section, scroll group and highlighted registry row. `settings-tabs.ts`
-normalizes legacy section/view links, including moved chat resources. `shared/src/constants/pageSettings.ts`
+normalizes legacy section/view links; `section=llm&group=log` becomes `section=chat&group=judge`. `shared/src/constants/pageSettings.ts`
 defines names, descriptions, synonyms, storage scope, permission and advanced metadata. Page search, Ctrl K and the
 right-side contextual settings sheet reuse it. `SettingsAdvanced` is local to its group; editor-dialog switches
 remain independent of page disclosure state. Generation's `nai`, `comfyui`, `pacing`, `schedules` anchors are stable;
 connection controllers and dialogs are imported from image-generation without duplicating their API operations.
+Settings › 채팅 keeps 기본, 기억, 도구 사용, 웹 검색, 진단, 프로필, 프리셋, 표시 블록, 로어북, 루틴, 판단 기록 and
+공용 플래그 in place. Profile and lorebook editors stay under `/settings?section=chat&profile=<id|new>` and
+`/settings?section=chat&lorebook=<key>`, using `chat-admin-location.ts` host-aware links. Settings › AI 연결 contains
+only AI 연결·모델 슬롯, AI 사용량 and AI 프롬프트; pi codemode belongs to chat's 도구 사용, diagnostics to 진단.
+Settings' `section=mine` and `/chat/mine` render the same personas/flags screen. NovelAI authentication and ComfyUI
+server editors are available directly on generation screens as well as Settings, without a Settings-management link.
 - `src/components/ui/` — design-system primitives (Button, IconButton, Panel, Section, Modal, Input, …). No feature
   knowledge, no API calls. Visual rules live here.
 - `src/components/common/` — shared composites built from `ui` (segmented controls, page-with-sidebar / sidebar
@@ -84,7 +93,9 @@ draft after a delay and flushes pending edits on owner change or unmount.
 
 ## Character library
 
-The profiles view uses the same sidebar/toolbar/card-grid frame and generalized folder navigation/path helpers as
+Chat and the appearance library are independent features. `/characters` offers only 외형 라이브러리 and 캐릭터 카탈로그;
+profiles live at `/chat/profiles` and may optionally borrow a library look in the editor's 외형 section (unlinked by default).
+The profile list uses the same sidebar/toolbar/card-grid frame and generalized folder navigation/path helpers as
 appearance settings, but reads its own admin-only profile folder tree. `chat-settings-profiles.tsx` queries SQL pages
 by `folder`, `q`, `page`; `profile` opens the editor without discarding that location. Moves use revision-checked profile
 updates; scoped reorder preserves other pages and folders. `chat-profile-groups.tsx` provides shared folder headings
@@ -133,6 +144,18 @@ live catalog at `/#/dev/ui`. Use `components/ui`; the `[ds/*]` lint guards in `e
 - New page features include an assistant path: register bounded fields/data/actions with the page context and reuse
   the native state setters/API. Follow the shared action schema, permission mapping and view/draft/commit tiers.
 - Server-side automation uses MCP tools over the same domain services. A navigation entry alone is not full feature support.
+- `chat-workspace.tsx` provides 대화 · 프로필 · 자원 · 루틴 · 판단 기록 · 내 설정 in that order; non-admin accounts see
+  대화 and 내 설정 only. `chat-workspace-screens.tsx` switches 프리셋 / 표시 블록 / 로어북 inside 자원 and redirects its
+  legacy routines tab to `/chat/routines`; the character page redirects legacy profile links to `/chat/profiles`.
+  The shared `chatPagePermission` map gives the four management paths `page.settings.view`, `/chat/mine` `page.chat.view`.
+- `chatPageActionAllowed` allows `profile.*` on `/settings` and `/chat/profiles`; `resource.*`, `lorebook.*`, `block.*`
+  additionally on `/chat/resources`. `settings.routine` / `settings.automation_switch` also work on `/chat/routines`,
+  `settings.judge_filter` on `/chat/judge`, `settings.user_profile` / `settings.flag` on `/chat/mine`.
+  `settings.chat_options` stays on `/settings` for memory, tool use, web search and diagnostics.
+  `backend/src/services/codex-chat/chatPageContext.ts` rechecks access and restricts personal settings to account-owned actions.
+- The header's 채팅 설정 sheet covers enabled, lore auto-save/selection count, tool round limit, pi codemode, web engine,
+  diagnostics enabled/raw capture/per-chat retention on `/chat` and its four management screens. Web model, daily search
+  limit and lorebook second-key language stay Settings-only (`shared/src/constants/pageSettings.ts`).
 - Chat thread queries/selection live in `features/codex-chat/use-chat-thread-data.ts`; transcript windowing, streaming
   follow and focus restoration live in `use-chat-transcript-window.ts`. Both chat layouts share them.
 - The chat view delegates the composer (`chat-composer.tsx`), live turn state (`chat-live-state-provider.tsx`),

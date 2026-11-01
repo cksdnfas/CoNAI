@@ -1,5 +1,4 @@
 import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
-import { Link, useLocation } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Text } from '@/components/ui/text'
 import { Input } from '@/components/ui/input'
@@ -31,8 +30,6 @@ export function NaiAuthModal({
 }: NaiAuthModalProps) {
   const { t } = useI18n()
   const { isAdmin } = useFeaturePermissions()
-  // Settings › 생성 엔진 opens this same dialog; the link only helps from the generation screen.
-  const onSettingsPage = useLocation().pathname === '/settings'
   const submitDisabled = !isAdmin || isSubmitting || token.trim().length === 0
 
   return (
@@ -55,11 +52,6 @@ export function NaiAuthModal({
         </FormField>
 
         {showStatusHint ? <Text variant="caption" tone="destructive">{connectionHint}</Text> : null}
-        {isAdmin && !onSettingsPage ? (
-          <Button variant="link" size="sm" asChild>
-            <Link to="/settings?section=generation&group=nai">{t({ ko: '설정에서 관리', en: 'Manage in settings' })}</Link>
-          </Button>
-        ) : null}
 
         <ModalFooter className="justify-between">
           <Button type="button" variant="secondary" onClick={onClose} disabled={isSubmitting}>

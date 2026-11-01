@@ -1,9 +1,9 @@
-import { useRef, useState, type DragEvent, type ReactNode } from 'react'
+import { useRef, useState, type DragEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useLibraryLocation } from '@/components/common/use-library-location'
 import { LibraryFolderContent, libraryFolderView } from '@/components/common/library-folder-content'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Copy, FileUp, FolderInput, FolderPlus, Pencil, Plus, Power, SquarePen, Trash2, UserRound } from 'lucide-react'
+import { Copy, FileUp, FolderInput, FolderPlus, Link2, Pencil, Plus, Power, SquarePen, Trash2, UserRound } from 'lucide-react'
 import { NameDialog } from '@/components/common/entry-dialogs'
 import { CharacterCard } from '@/components/common/character-card'
 import { PageToolbar } from '@/components/common/page-toolbar'
@@ -14,17 +14,18 @@ import { ActionMenuButton, type ActionMenuEntry } from '@/components/ui/action-m
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Heading } from '@/components/ui/heading'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Chip } from '@/components/ui/chip'
 import { IconButton } from '@/components/ui/icon-button'
 import { RowGroup } from '@/components/ui/row-group'
 import { useSnackbar } from '@/components/ui/snackbar-context'
-import { Tip } from '@/components/ui/tooltip'
 import { CharacterFolderPickerModal, CharacterFolderSidebar } from '@/features/characters/components/character-folder-nav'
 import { CharacterSettingGrid } from '@/features/characters/components/character-setting-grid'
 import { characterThumbnailUrl, folderSubtreeIds } from '@/features/characters/character-library-shared'
 import { CHARACTER_SETTINGS_PAGE_SIZE } from '@/lib/api-character-library'
-import { ChatHealthDot, ChatHealthTip, useChatHealth } from '@/features/codex-chat/chat-health'
+import { useChatAdminLinks } from '@/features/codex-chat/chat-admin-location'
+import { ChatHealthDot, useChatHealth } from '@/features/codex-chat/chat-health'
+import { ChatProfileAvatar } from '@/features/codex-chat/chat-profile-avatar'
 import { getChatScopeCopy } from '@/features/codex-chat/chat-scope-copy'
 import { useI18n } from '@/i18n'
 import {
@@ -65,7 +66,7 @@ function profileModelRow(profile: ChatProfile, slots: ModelSlot[]) {
 }
 
 /** `connection · model` (through `대표 · name` when the profile picked a representative model), else the engine and its model. */
-function profileModelLine(profile: ChatProfile, slots: ModelSlot[], t: ReturnType<typeof useI18n>['t']) {
+export function profileModelLine(profile: ChatProfile, slots: ModelSlot[], t: ReturnType<typeof useI18n>['t']) {
   const slot = profileModelRow(profile, slots)
   const reaches = slot?.kind === 'route' ? ` (${slot.model ? `${slot.providerLabel} · ${slot.model}` : t({ ko: '비어 있음', en: 'empty' })})` : ''
   if (slot) return `${slot.label}${reaches}${profile.llmRuntime === 'pi' ? ' · pi' : ''}`
@@ -75,7 +76,7 @@ function profileModelLine(profile: ChatProfile, slots: ModelSlot[], t: ReturnTyp
 }
 
 /** Short chip text for the row: the model, else the engine. The full line is its tooltip. */
-function profileModelChip(profile: ChatProfile, slots: ModelSlot[]) {
+export function profileModelChip(profile: ChatProfile, slots: ModelSlot[]) {
   const slot = profileModelRow(profile, slots)
   if (slot) return slot.model || slot.label
   if (profile.engine === 'claude') return 'Claude Code'
@@ -83,7 +84,7 @@ function profileModelChip(profile: ChatProfile, slots: ModelSlot[]) {
 }
 
 /** The one tool chip of a profile: the allowed-tool count, else just "tools". */
-function profileToolChip(profile: ChatProfile, t: ReturnType<typeof useI18n>['t']) {
+export function profileToolChip(profile: ChatProfile, t: ReturnType<typeof useI18n>['t']) {
   if (Array.isArray(profile.toolAllowlist)) return t({ ko: '도구 {count}', en: '{count} tools' }, { count: profile.toolAllowlist.length })
   return t({ ko: '도구', en: 'Tools' })
 }
@@ -100,25 +101,25 @@ function copyDraft(profile: ChatProfile, profiles: Array<{ name: string }>, t: R
   return { ...profile, name, suggestProfileId: profile.suggestProfileId === profile.id ? null : profile.suggestProfileId }
 }
 
-/**
- * 캐릭터 › 채팅 프로필: the chat profiles (Codex and API LLM) in their chat order. A profile opens in its editor page
- * (?profile=<id>); a new one, a copy or a card import opens a new profile's page with that draft.
- */
 type FolderName = { name: string; parentId: number | null; folder?: ChatProfileFolder }
 type MoveTarget = { kind: 'folder'; folder: ChatProfileFolder } | { kind: 'profile'; profile: ChatProfile }
 
-export function ChatSettingsProfiles({ viewSwitch }: { viewSwitch?: ReactNode }) {
+/**
+ * The chat profiles (Codex and API LLM) in their chat order, with their folders: what the list needs wherever it is
+ * drawn (the workspace's cards, Settings › 채팅's rows). A profile opens in its editor page (?profile=<id>) in the
+ * same host; a new one, a copy or a card import opens a new profile's page with that draft. `active` is whether
+ * this list owns the page snapshot for a connected chat (Settings keeps several groups mounted).
+ */
+export function useChatProfileLibrary({ active = true }: { active?: boolean } = {}) {
   const { t } = useI18n()
   const { showSnackbar } = useSnackbar()
   const queryClient = useQueryClient()
   const navigate = useNavigate()
+  const links = useChatAdminLinks()
   const confirm = useConfirm()
-  const { params, folderId, query, page, searchText, setSearchText, update, openFolder, creationFolderId } = useLibraryLocation(CHARACTER_SETTINGS_PAGE_SIZE, 'profiles')
+  const { folderId, query, page, searchText, setSearchText, update, openFolder, creationFolderId } = useLibraryLocation(CHARACTER_SETTINGS_PAGE_SIZE, ['profile'])
   const openEditor = (profile: ChatProfile | null, state?: ChatProfileEditorPageState) => {
-    const next = new URLSearchParams(params)
-    next.set('view', 'profiles')
-    next.set('profile', String(profile?.id ?? 'new'))
-    navigate(`/characters?${next}`, { state: profile ? state : { ...state, initialFolderId: creationFolderId, ...(state?.draft ? { draft: { ...state.draft, folderId: creationFolderId } } : {}) } })
+    navigate(links.profile(profile?.id ?? 'new'), { state: profile ? state : { ...state, initialFolderId: creationFolderId, ...(state?.draft ? { draft: { ...state.draft, folderId: creationFolderId } } : {}) } })
   }
   const [nameDialog, setNameDialog] = useState<FolderName | null>(null)
   const [moving, setMoving] = useState<MoveTarget | null>(null)
@@ -221,8 +222,8 @@ export function ChatSettingsProfiles({ viewSwitch }: { viewSwitch?: ReactNode })
   }
 
   // A connected chat can open the editor for a new or listed profile; it fills and saves from there.
-  useChatPageRegistration({
-    kind: 'settings', title: t({ ko: '캐릭터 · 채팅 프로필', en: 'Characters · Chat profiles' }), resourceId: 'chat', priority: 5, fields: [],
+  useChatPageRegistration(active ? {
+    kind: 'settings', title: t({ ko: '채팅 · 프로필', en: 'Chat · Profiles' }), resourceId: 'chat-profiles', priority: 5, fields: [],
     data: { section: 'chat', folderId: folderId ?? 0, query, page, total: profilesQuery.data?.total ?? 0, folders: folders.map(({ id, name, parentId, profileCount }) => ({ id, name, parentId: parentId ?? 0, profileCount })), profiles: profiles.map((profile) => ({ id: profile.id, name: profile.name, folderId: profile.folderId ?? 0, revision: profile.revision, tagline: profile.tagline, engine: profile.engine, isEnabled: profile.isEnabled })) },
     actions: [
       pageAction('profile.open_folder', t({ ko: '폴더 열기', en: 'Open folder' }), 'Open a profile folder; 0 is top level.', pageObject({ folderId: pageChoice([0, ...folders.map((folder) => folder.id)]) }, ['folderId'])),
@@ -269,12 +270,29 @@ export function ChatSettingsProfiles({ viewSwitch }: { viewSwitch?: ReactNode })
       if (id === 'profile.copy') { await copy(profile); return }
       openEditor(profile)
     },
-  }, { preserveOnSearchChange: true })
+  } : null, { preserveOnSearchChange: true })
 
+  return {
+    t, folders, foldersQuery, folderId, query, page, searchText, setSearchText, update, openFolder, creationFolderId,
+    path, currentFolder, subfolders, folderMissing, profiles, profilesQuery, slots, healthOf,
+    openEditor, copy, onError, folderMenu, profileMenu, setNameDialog, nameDialog, nameMutation, moving, setMoving, moveMutation, toggleMutation,
+    imported, setImported, importRef, importMutation, dragId, setDragId, overId, setOverId, drop, reorderMutation,
+  }
+}
+
+/** The workspace's 프로필: folders on the left, the profiles as cards. */
+export function ChatSettingsProfiles() {
+  const library = useChatProfileLibrary()
+  const {
+    t, folders, foldersQuery, folderId, query, page, searchText, setSearchText, update, openFolder, creationFolderId,
+    path, currentFolder, subfolders, folderMissing, profilesQuery, slots, healthOf,
+    openEditor, copy, onError, folderMenu, profileMenu, setNameDialog,
+    importRef, importMutation, dragId, setDragId, overId, setOverId, drop, reorderMutation,
+  } = library
   return (
-    <PageWithSidebar storageKey="characters" sidebarLabel={t('characterLibraryPage.folders')}
+    <PageWithSidebar storageKey="chat-profiles" sidebarLabel={t('characterLibraryPage.folders')}
       sidebar={<CharacterFolderSidebar folders={folders} selectedId={query ? null : folderId} loading={foldersQuery.isPending} error={foldersQuery.error} onSelect={openFolder} onCreate={() => setNameDialog({ name: '', parentId: creationFolderId })} getMenu={folderMenu} />}
-      toolbar={<PageToolbar start={<>{viewSwitch}{query ? <Heading level={3} as="h1" className="truncate">{t({ ko: '‘{query}’ 검색 결과', en: 'Results for ‘{query}’' }, { query })}</Heading> : <PathBreadcrumbs ariaLabel={t({ ko: '폴더 경로', en: 'Folder path' })} items={[{ key: 'root', label: t({ ko: '채팅 프로필', en: 'Chat profiles' }), onClick: () => openFolder(null) }, ...path.map((folder) => ({ key: String(folder.id), label: folder.name, onClick: () => openFolder(folder.id) }))]} />}</>}
+      toolbar={<PageToolbar start={<>{query ? <Heading level={3} as="h1" className="truncate">{t({ ko: '‘{query}’ 검색 결과', en: 'Results for ‘{query}’' }, { query })}</Heading> : <PathBreadcrumbs ariaLabel={t({ ko: '폴더 경로', en: 'Folder path' })} items={[{ key: 'root', label: t({ ko: '최상위', en: 'Top level' }), onClick: () => openFolder(null) }, ...path.map((folder) => ({ key: String(folder.id), label: folder.name, onClick: () => openFolder(folder.id) }))]} />}</>}
         actions={<>
             <IconButton size="icon-sm" variant="ghost" label={t({ ko: '새 폴더', en: 'New folder' })} onClick={() => setNameDialog({ name: '', parentId: creationFolderId })}><FolderPlus /></IconButton>
             {currentFolder && !query ? <ActionMenuButton entries={folderMenu(currentFolder)} label={t({ ko: '폴더 작업', en: 'Folder actions' })} /> : null}
@@ -289,8 +307,8 @@ export function ChatSettingsProfiles({ viewSwitch }: { viewSwitch?: ReactNode })
         <ToolbarSearchField value={searchText} onChange={setSearchText} placeholder={t({ ko: '프로필 이름 검색', en: 'Search profiles by name' })} />
       </PageToolbar>}
     >
-      <LibraryFolderContent folderMissing={folderMissing} subfolders={subfolders} query={query} rootLabel={t({ ko: '채팅 프로필', en: 'Chat profiles' })} onOpen={openFolder} getMenu={folderMenu}>
-        <RowGroup heading={t({ ko: '채팅 프로필', en: 'Chat profiles' })} count={profilesQuery.data?.total}>
+      <LibraryFolderContent folderMissing={folderMissing} subfolders={subfolders} query={query} rootLabel={t({ ko: '최상위', en: 'Top level' })} onOpen={openFolder} getMenu={folderMenu}>
+        <RowGroup heading={t({ ko: '프로필', en: 'Profiles' })} count={profilesQuery.data?.total}>
           <CharacterSettingGrid query={profilesQuery} page={page} onPageChange={(next) => update({ page: next ? String(next) : null })}
             errorTitle={t({ ko: '프로필을 불러오지 못했어', en: 'Could not load profiles' })}
             empty={<EmptyState icon={UserRound} title={query ? t({ ko: '맞는 프로필이 없어', en: 'No matching profiles' }) : t({ ko: '여기엔 프로필이 없어', en: 'No profiles here' })} />}
@@ -299,37 +317,44 @@ export function ChatSettingsProfiles({ viewSwitch }: { viewSwitch?: ReactNode })
             onDragLeave={() => setOverId((current) => (current === profile.id ? null : current))}
             onDrop={(event) => { drop(event, profile.id); setDragId(null); setOverId(null) }}
           >
-              <CharacterCard name={profile.name} onOpen={() => openEditor(profile)} selected={overId === profile.id && dragId !== profile.id} dimmed={!profile.isEnabled} menu={profileMenu(profile)} actionsButton
+              <CharacterCard name={profile.name} onOpen={() => openEditor(profile)} selected={overId === profile.id && dragId !== profile.id} dimmed={!profile.isEnabled} menu={profileMenu(profile)}
                 draggable={!query && !reorderMutation.isPending}
                 onDragStart={(event) => { setDragId(profile.id); event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('text/plain', String(profile.id)) }}
                 onDragEnd={() => { setDragId(null); setOverId(null) }}
                 mediaSrc={profile.libraryReferenceHash ? characterThumbnailUrl(profile.libraryReferenceHash) : profile.avatarThumbnailUrl ?? (profile.hasAvatar ? chatProfileAssetUrl(profile.id, 'avatar', profile.assetVersion) : profile.avatar)}
                 crop={profile.libraryReferenceHash ? null : profile.avatarCrop}
-                avatarProps={{ name: profile.name, avatar: profile.avatar, profile, engine: profile.engine, size: 'sm' }}
-                decorateAvatar={(avatar) => <ChatHealthDot down={healthOf(profile.id)}>{avatar}</ChatHealthDot>}
-              >
-            <div className="mt-2 flex min-w-0 flex-wrap gap-1">
-              {!profile.isEnabled ? <Chip size="sm" tone="muted">{t({ ko: '꺼짐', en: 'Disabled' })}</Chip> : null}
-              <Tip content={healthOf(profile.id) ? <ChatHealthTip down={healthOf(profile.id)!} /> : profileModelLine(profile, slots, t)}>
-                <span className="min-w-0"><Chip size="sm" tone={healthOf(profile.id) ? 'destructive' : 'muted'} className="max-w-full"><span className="truncate">{profileModelChip(profile, slots)}</span></Chip></span>
-              </Tip>
-              {profile.mcpEnabled ? <Tip content={profile.mcpScopes.map((scope) => getChatScopeCopy(scope, t).label).join(' · ')}><span><Chip size="sm" tone="muted">{profileToolChip(profile, t)}</Chip></span></Tip> : null}
-            </div>
-              </CharacterCard>
+                leading={<ChatHealthDot down={healthOf(profile.id)}><ChatProfileAvatar name={profile.name} avatar={profile.avatar} profile={profile} engine={profile.engine} size="md" className="ring-2 ring-white/85" /></ChatHealthDot>}
+                subtitle={healthOf(profile.id) ? <span className="text-destructive-soft-foreground">{t({ ko: '연결 끊김', en: 'Connection down' })}</span> : [profileModelChip(profile, slots), profile.mcpEnabled ? profileToolChip(profile, t) : null].filter(Boolean).join(' · ')}
+                topStart={!profile.isEnabled ? <Badge variant="overlay" size="sm"><Power />{t({ ko: '꺼짐', en: 'Disabled' })}</Badge>
+                  : profile.characterLink?.synced ? <Badge variant="overlay" size="sm"><Link2 />{t({ ko: '동기화', en: 'Synced' })}</Badge> : undefined}
+                details={<span className="truncate text-xs text-white/75">{profileModelLine(profile, slots, t)}{profile.mcpEnabled ? ` · ${profile.mcpScopes.map((scope) => getChatScopeCopy(scope, t).label).join(' · ')}` : ''}</span>}
+                actions={<>
+                  <Button variant="overlay" size="compact" className="min-w-0 flex-1" onClick={() => openEditor(profile)}><SquarePen /><span className="truncate">{t({ ko: '편집', en: 'Edit' })}</span></Button>
+                  <IconButton variant="overlay" size="icon-sm" label={t({ ko: '복사', en: 'Copy' })} onClick={() => void copy(profile).catch(onError)}><Copy /></IconButton>
+                </>}
+              />
           </div>}
           />
         </RowGroup>
       </LibraryFolderContent>
-      {nameDialog ? <NameDialog open title={nameDialog.folder ? t({ ko: '폴더 이름 바꾸기', en: 'Rename folder' }) : t({ ko: '새 폴더', en: 'New folder' })} value={nameDialog.name} onChange={(name) => setNameDialog({ ...nameDialog, name })} onSubmit={() => nameMutation.mutate(nameDialog)} onClose={() => setNameDialog(null)} busy={nameMutation.isPending} /> : null}
-      {moving ? <CharacterFolderPickerModal title={t({ ko: '폴더로 옮기기', en: 'Move to folder' })} folders={folders} value={moving.kind === 'folder' ? moving.folder.parentId : moving.profile.folderId ?? null} excludeIds={moving.kind === 'folder' ? folderSubtreeIds(folders, moving.folder.id) : undefined} busy={moveMutation.isPending} onPick={(to) => moveMutation.mutate({ target: moving, to })} onClose={() => setMoving(null)} /> : null}
-
-      <ChatCardImportReportModal
-        report={imported?.report ?? null}
-        onClose={() => {
-          if (imported) openEditor(null, { draft: imported.draft })
-          setImported(null)
-        }}
-      />
+      <ChatProfileLibraryDialogs library={library} />
     </PageWithSidebar>
   )
+}
+
+/** The folder-name, move-to-folder and card-import report dialogs that both profile lists open. */
+export function ChatProfileLibraryDialogs({ library }: { library: ReturnType<typeof useChatProfileLibrary> }) {
+  const { t, folders, nameDialog, setNameDialog, nameMutation, moving, setMoving, moveMutation, imported, setImported, openEditor } = library
+  return <>
+    {nameDialog ? <NameDialog open title={nameDialog.folder ? t({ ko: '폴더 이름 바꾸기', en: 'Rename folder' }) : t({ ko: '새 폴더', en: 'New folder' })} value={nameDialog.name} onChange={(name) => setNameDialog({ ...nameDialog, name })} onSubmit={() => nameMutation.mutate(nameDialog)} onClose={() => setNameDialog(null)} busy={nameMutation.isPending} /> : null}
+    {moving ? <CharacterFolderPickerModal title={t({ ko: '폴더로 옮기기', en: 'Move to folder' })} folders={folders} value={moving.kind === 'folder' ? moving.folder.parentId : moving.profile.folderId ?? null} excludeIds={moving.kind === 'folder' ? folderSubtreeIds(folders, moving.folder.id) : undefined} busy={moveMutation.isPending} onPick={(to) => moveMutation.mutate({ target: moving, to })} onClose={() => setMoving(null)} /> : null}
+
+    <ChatCardImportReportModal
+      report={imported?.report ?? null}
+      onClose={() => {
+        if (imported) openEditor(null, { draft: imported.draft })
+        setImported(null)
+      }}
+    />
+  </>
 }

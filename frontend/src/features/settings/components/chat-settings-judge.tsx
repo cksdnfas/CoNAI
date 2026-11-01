@@ -12,8 +12,6 @@ import { Text } from '@/components/ui/text'
 import { DataTable, DataTd, DataTh, DataTr } from '@/components/ui/data-table'
 import { useI18n } from '@/i18n'
 import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
-import { useSettingsGroupActive } from './settings-navigation'
-import { SETTINGS_ROW_BY_ID } from '@conai/shared'
 import { pageAction, pageChoice, pageNumber, pageObject, pageText } from '@/features/codex-chat/page-action-helpers'
 import {
   CHAT_JUDGE_LOGS_QUERY_KEY,
@@ -29,7 +27,6 @@ import { getErrorMessage } from '@/lib/error-message'
 import { cn } from '@/lib/utils'
 import { formatProbability, judgeActionLabel, judgeDecidedByLabel, judgeOutcomeLabel, judgeStageLabel, JudgeVerdictChip } from './chat-judge-parts'
 import { SettingsEmptyRow, SettingsRowsSkeleton } from './settings-rows'
-import { useChatOptionsPageParts } from './chat-options-page'
 import { parseServerDate } from '@/lib/server-time'
 
 const PAGE_SIZE = 50
@@ -154,10 +151,12 @@ function LogRow({ run }: { run: ChatJudgeLogRun }) {
 }
 
 /**
- * Settings › LLM › 판단: whether the judge decides well and where its thresholds need moving. Per-item stats for the
- * period first, then the runs, each unfolding to the request it sent (the original conversation) and what came of it.
+ * The judge log (the workspace's 판단 기록 and Settings › 채팅 › 판단 기록): whether the judge decides well and where
+ * its thresholds need moving. Per-item stats for the period first, then the runs, each unfolding to the request it sent
+ * (the original conversation) and what came of it. `active` is whether this log owns the page snapshot for a
+ * connected chat (Settings keeps several groups mounted).
  */
-export function ChatSettingsJudge() {
+export function ChatSettingsJudge({ active = true }: { active?: boolean }) {
   const { t, formatNumber } = useI18n()
   const [filter, setFilter] = useState<ChatJudgeLogFilter>({ days: 7 })
   const presetsQuery = useQuery({ queryKey: CHAT_JUDGE_PRESETS_QUERY_KEY, queryFn: listChatJudgePresets })
@@ -191,20 +190,15 @@ export function ChatSettingsJudge() {
       verdicts: run.items.map((item) => `${item.name}: ${item.verdict}`).join(', '),
     })),
   }
-  // The answer diagnostics shown above the log on the same view.
-  const diagnosticsParts = useChatOptionsPageParts('diagnostics')
-  const groupActive = useSettingsGroupActive('log', 'connections')
-  useChatPageRegistration(groupActive ? {
-    kind: 'settings', title: t(SETTINGS_ROW_BY_ID['llm.log'].label), resourceId: 'llm', priority: 5, fields: [], data: { ...chatData, ...diagnosticsParts.data },
-    actions: [...diagnosticsParts.actions, pageAction('settings.judge_filter', t({ ko: '판단 기록 거르기', en: 'Filter the judge log' }), t({
+  useChatPageRegistration(active ? {
+    kind: 'settings', title: t({ ko: '채팅 · 판단 기록', en: 'Chat · Judge log' }), resourceId: 'chat-judge', priority: 5, fields: [], data: chatData,
+    actions: [pageAction('settings.judge_filter', t({ ko: '판단 기록 거르기', en: 'Filter the judge log' }), t({
       ko: 'data.filter를 바꿔(넘긴 것만, 0이나 빈 값 = 전체).',
       en: 'Change data.filter (only what you pass; 0 or empty = all).',
     }), pageObject({ profileId: pageNumber(0, undefined, true), presetId: pageNumber(0, undefined, true), itemId: pageText(120), verdict: pageChoice(['', 'yes', 'no', 'uncertain', 'failed']), days: pageChoice([1, 7, 30]) }))],
     apply: () => {},
     applyAction: (id, args, assertCurrent) => {
       assertCurrent()
-      const saved = diagnosticsParts.apply(id, args)
-      if (saved) return saved
       if (id !== 'settings.judge_filter') throw new Error('이 화면에 없는 작업이야.')
       const next: Partial<ChatJudgeLogFilter> = {}
       if (typeof args.profileId === 'number') next.profileId = args.profileId || undefined
@@ -217,10 +211,10 @@ export function ChatSettingsJudge() {
   } : null, { preserveOnSearchChange: true })
 
   return (
-    <div className="space-y-6">
+    <div className="scroll-mt-36 space-y-6" data-settings-group="judge">
       <div className="flex flex-wrap items-center gap-2">
-        <Select variant="settings" className="w-40" aria-label={t({ ko: '봇', en: 'Bot' })} value={filter.profileId ?? ''} onChange={(event) => patch({ profileId: number(event.target.value) })}>
-          <option value="">{t({ ko: '봇 · 전체', en: 'All bots' })}</option>
+        <Select variant="settings" className="w-40" aria-label={t({ ko: '프로필', en: 'Profile' })} value={filter.profileId ?? ''} onChange={(event) => patch({ profileId: number(event.target.value) })}>
+          <option value="">{t({ ko: '프로필 · 전체', en: 'All profiles' })}</option>
           <ChatProfileOptions profiles={profiles} />
         </Select>
         <Select variant="settings" className="w-40" aria-label={t({ ko: '프리셋', en: 'Preset' })} value={filter.presetId ?? ''} onChange={(event) => patch({ presetId: number(event.target.value), itemId: undefined })}>

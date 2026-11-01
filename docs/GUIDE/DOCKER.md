@@ -122,7 +122,7 @@ services:
       - D:/AI/outputs:/mnt/outputs   # 호스트 경로:컨테이너 경로
 ```
 
-설정 → 감시 폴더에서 `/mnt/outputs`를 등록합니다.
+**설정 → 라이브러리 → 폴더 → 감시 폴더**(`/settings?section=library&group=folders`)에서 `/mnt/outputs`를 등록합니다.
 
 ## 환경 변수
 

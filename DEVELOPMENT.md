@@ -26,7 +26,7 @@
 
 관리자 `/api/codex-chat/admin/profile-folders`와 기존 프로필 update/reorder를 사용한다. `/admin/profiles?folder=root|ID&q=&limit=&offset=`는 SQL 페이지와 total/hasMore를 반환하며 쿼리 없는 기존 배열 계약도 유지한다. `order`의 선택적 `folderId`는 해당 폴더 안에서 지정한 카드들의 위치만 교체하고 다른 페이지·폴더는 보존한다. 이동한 프로필은 대상 폴더 끝에 추가하며 폴더 삭제 때 올라온 프로필도 상대 순서를 유지해 끝에 추가한다. `chatProfileOrder.ts`와 공유 `folderHierarchy.ts`가 최상위 → 이름순 깊이 우선 폴더 → 폴더 안 sort_order/id 순서를 모든 디렉터리와 선택기에 적용한다. 폴더 집계는 grouped query, 경로는 폴더를 일괄 읽어 계산한다. 공개 `/profiles`는 사용 가능한 프로필에만 `folderId`·`folderPath`를 붙이며 사용 불가/꺼진 항목은 null/빈 경로다.
 
-두 탭은 `use-library-location.ts`, `library-folder-content.tsx`, `character-card.tsx`, 폴더 트리·선택기·그리드를 공유한다. 서버의 `libraryFolderStore.ts`는 트랜잭션/이름 충돌, 집계와 순환 검사를 공유한다. URL은 `view=profiles`, `folder`, `q`, `page`, `profile`이다. 검색 중 생성·복사·가져오기는 최상위에 두고 빈 프로필의 초기 폴더는 초안 변경이 아닌 baseline이다. 페이지 어댑터 `profile.open_folder/search`는 view, 폴더 변경과 프로필 이동은 검토 카드다. MCP `manage_chat_profile_folders`는 목록만 즉시 읽으며 생성·이름 변경·이동·삭제는 `profile_folder` 제안으로 저장한다. `chatProfileFolderProposals.ts`와 `/api/chat-proposals/:id/apply`는 관리자·대화 소유권·대상 리비전을 확인하고 변경과 승인 표시를 한 트랜잭션으로 저장한다. 연결 페이지 없이 삭제 카드도 승인할 수 있다. 설정 제안은 `settings.folderId`/`patch.folderId` (`folder_id` 별칭)를 받는다.
+채팅의 프로필 목록과 외형 라이브러리는 별도 페이지이며 `use-library-location.ts`, `library-folder-content.tsx`, `character-card.tsx`, 폴더 트리·선택기·그리드를 공유한다. 서버의 `libraryFolderStore.ts`는 트랜잭션/이름 충돌, 집계와 순환 검사를 공유한다. 프로필 URL은 `/chat/profiles`에 `folder`, `q`, `page`, `profile=<id|new>`를 붙인다. 설정 안에서는 `/settings?section=chat&profile=<id|new>`로 편집하며 목록 위치를 유지한다. 검색 중 생성·복사·가져오기는 최상위에 두고 빈 프로필의 초기 폴더는 초안 변경이 아닌 baseline이다. 페이지 어댑터 `profile.open_folder/search`는 view, 폴더 변경과 프로필 이동은 검토 카드다. MCP `manage_chat_profile_folders`는 목록만 즉시 읽으며 생성·이름 변경·이동·삭제는 `profile_folder` 제안으로 저장한다. `chatProfileFolderProposals.ts`와 `/api/chat-proposals/:id/apply`는 관리자·대화 소유권·대상 리비전을 확인하고 변경과 승인 표시를 한 트랜잭션으로 저장한다. 연결 페이지 없이 삭제 카드도 승인할 수 있다. 설정 제안은 `settings.folderId`/`patch.folderId` (`folder_id` 별칭)를 받는다.
 
 ### 프로필 에이전트
 
@@ -116,7 +116,7 @@ API 연결의 일시적 장애 재시도와 출력 이후 재전송 금지는 `s
 
 ## 캐릭터 라이브러리와 외형 재사용
 
-사용 흐름은 [캐릭터 라이브러리](docs/GUIDE/CHARACTER_LIBRARY.md)에 둔다. 폴더는 중첩되고 외형 설정은 폴더 또는 루트에 속한다. 별도의 캐릭터 엔터티를 만들지 않으며 한 캐릭터의 기본·수영복 등을 여러 설정으로 관리한다.
+사용 흐름은 [캐릭터 라이브러리](docs/GUIDE/CHARACTER_LIBRARY.md)에 둔다. 채팅과 외형 라이브러리는 서로 독립적이며, 프로필의 외형 연결은 기본 없음인 선택 사항이다. 캐릭터 페이지는 외형 라이브러리와 캐릭터 카탈로그(`view=catalog`, `prompts.view` 필요)만 제공한다. 폴더는 중첩되고 외형 설정은 폴더 또는 루트에 속한다. 별도의 캐릭터 엔터티를 만들지 않으며 한 캐릭터의 기본·수영복 등을 여러 설정으로 관리한다.
 
 | 변경 지점 | 코드 |
 | --- | --- |
@@ -287,7 +287,13 @@ Save 선택기와 워크플로 산출물(비공개·공개) 목록은 `directory
 
 페이지별 공용 설정 항목·필드 허용 목록·권한·경로 매핑과 설정 행 레지스트리는 `shared/src/constants/pageSettings.ts`가 정의한다. `SETTINGS_ROWS`의 ID·한/영 이름·설명·동의어·section/group·mine/shared·권한·advanced 메타데이터를 설정 행, 검색, Ctrl K, 페이지 설정 시트와 어시스턴트가 공유한다. 앱 셸의 `PageSettingsProvider`와 글자 버튼 `PageSettingsButton`은 관리자의 현재 페이지에 맞는 오른쪽 시트를 열며, `page-settings-dialog.tsx`는 선택한 항목만 조회하고 변경 필드만 저장한다. 시트는 Modal의 포커스·닫기·미저장 확인을 재사용한다. 오디오의 작업 설정 등 기존 기능 모달은 별도로 유지한다.
 
-설정 주소는 `/settings?section=<id>&group=<id>&setting=<row-id>`다. `settings-tabs.ts`가 이전 section/view 주소를 정규화하고 `SettingsJumpTarget`은 지연 렌더된 행이 나타나면 상위 고급 접기를 펼쳐 이동·강조한다. 개인 사용자 프로필·플래그는 `section=mine`, 공유 기본 언어와 테마는 `general`이다. 채팅 프로필은 `/characters?view=profiles`, 프리셋·표시 블록·로어북·루틴은 `/chat/resources?tab=presets|blocks|lorebooks|routines`에서 기존 편집기·저장 서비스를 재사용한다. 새 경로의 어시스턴트 계약은 shared의 chatPage/chatPageAction과 서버 chatPageContext가 같은 관리자·계정 경계를 유지한다.
+설정 주소는 `/settings?section=<id>&group=<id>&setting=<row-id>`다. `settings-tabs.ts`가 이전 section/view 주소를 정규화하고 `SettingsJumpTarget`은 지연 렌더된 행이 나타나면 상위 고급 접기를 펼쳐 이동·강조한다. 개인 사용자 프로필·플래그는 `section=mine`이며 `/chat/mine`과 같은 화면이고, 공유 기본 언어와 테마는 `general`이다. 설정 › 채팅은 기본·기억·도구 사용·웹 검색·진단·프로필·프리셋·표시 블록·로어북·루틴·판단 기록·공용 플래그를 제자리에서 편집한다. 프로필과 로어북 편집 주소는 각각 `/settings?section=chat&profile=<id|new>`, `/settings?section=chat&lorebook=<key>`다. AI 연결은 AI 연결·모델 슬롯·AI 사용량·AI 프롬프트만 담으며 pi codemode는 채팅의 도구 사용, 답변 진단·원문 기록·채팅당 보관은 진단 그룹이다. 이전 `section=llm&group=log`는 `section=chat&group=judge`로 연결된다.
+
+`chat-workspace.tsx`의 위쪽 탭 순서는 대화(`/chat`)·프로필(`/chat/profiles`)·자원(`/chat/resources?tab=presets|blocks|lorebooks`)·루틴(`/chat/routines`)·판단 기록(`/chat/judge`)·내 설정(`/chat/mine`)이다. `chat-workspace-screens.tsx`와 `chat-admin-location.ts`가 설정의 기존 편집기·저장 서비스를 재사용하고, 자원의 루틴 옛 주소는 `/chat/routines`, 캐릭터의 프로필 옛 주소는 `/chat/profiles`로 보낸다. 전체 작업 공간은 `page.chat.view`, 프로필·자원·루틴·판단 기록은 추가로 `page.settings.view`를 요구한다.
+
+어시스턴트 계약은 shared의 `chatPage.ts`·`chatPageAction.ts`와 서버 `chatPageContext.ts`가 관리자·계정 경계를 확인한다. `profile.*`는 `/settings`·`/chat/profiles`, `resource.*`·`lorebook.*`·`block.*`는 두 경로와 `/chat/resources`에서 허용한다. `settings.routine`·`settings.automation_switch`, `settings.judge_filter`, `settings.user_profile`·`settings.flag`는 `/settings` 외에도 각각 `/chat/routines`, `/chat/judge`, `/chat/mine`에서 허용한다. `settings.chat_options`는 `/settings`의 기억·도구 사용·웹 검색·진단 공용 옵션을 저장한다. 내 설정은 사용자 프로필·플래그와 허용된 페이지 이동 작업만 사용한다.
+
+상단 **채팅 설정** 시트는 `/chat`과 프로필·자원·루틴·판단 기록 화면에서 채팅 활성화·로어 자동 저장·선택 로어 상위 개수·도구 호출 반복 한도·pi codemode·웹 검색 담당·답변 진단·원문 기록·채팅당 보관을 제공한다. 웹 검색 모델·계정당 하루 검색·로어북 추가 키 언어는 설정에만 있다. NovelAI 인증·ComfyUI 서버는 생성 화면에서 직접 편집하며 설정의 생성 엔진도 같은 편집기를 재사용한다.
 
 `/api/page-settings/:scope`는 명시적 설정 권한과 `If-Match`를 요구한다. 일반·미디어·분석·외형은 기존 설정 라우터를 재사용하되 허용된 필드만 입력·응답에 통과시킨다. 비동기 의존성 검사 뒤에도 실제 저장 직전에 권한과 버전을 재확인한다. 네이티브 설정 응답의 `pageSettingsRevisions`는 전송용 정보이며 저장 파일에 쓰지 않는다. 중앙 설정 편집기도 초안 시작 시 버전을 유지해 같은 공용 항목의 오래된 저장을 막는다.
 

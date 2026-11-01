@@ -129,7 +129,10 @@ export function updateChatSettings(patch: { enabled?: boolean; diagnostics?: Par
     diagnostics: diagnosticsOf(patch.diagnostics, current.diagnostics),
     loreAutoSave: typeof patch.loreAutoSave === 'boolean' ? patch.loreAutoSave : current.loreAutoSave,
     loreKeyLanguage: patch.loreKeyLanguage === undefined ? current.loreKeyLanguage : normalizeLoreKeyLanguage(patch.loreKeyLanguage),
-    webResearch: patch.webResearch === undefined ? current.webResearch : webResearchOf(patch.webResearch, current.webResearch),
+    // A model belongs to its engine: changing the engine alone clears it, as the settings screen does.
+    webResearch: patch.webResearch === undefined ? current.webResearch : webResearchOf(
+      patch.webResearch.engine !== undefined && patch.webResearch.engine !== current.webResearch.engine && patch.webResearch.model === undefined ? { ...patch.webResearch, model: null } : patch.webResearch,
+      current.webResearch),
     piCodemode: typeof patch.piCodemode === 'boolean' ? patch.piCodemode : current.piCodemode,
     toolRoundLimit: toolRoundLimitOf(patch.toolRoundLimit, current.toolRoundLimit),
     loreSelectionLimit: loreSelectionLimitOf(patch.loreSelectionLimit, current.loreSelectionLimit),

@@ -179,6 +179,17 @@ export function libraryFacetDimensions(countsFor: (key: CharacterFacetKey) => Re
   return dimensions;
 }
 
+/** Each setting's work for its card: the first of its indexed tags the dictionary files as a copyright (facet label). */
+export function settingCopyrightLabels(rows: ReadonlyArray<{ settingId: number; tag: string }>): Map<number, string> {
+  const result = new Map<number, string>();
+  const descriptions = danbooruBrowserService.describeTags(rows.map((row) => row.tag));
+  for (const row of rows) {
+    const description = descriptions.get(row.tag);
+    if (description && !result.has(row.settingId) && description.category === 'copyright') result.set(row.settingId, facetLabel(description));
+  }
+  return result;
+}
+
 /** The catalog's filter choices: every tag of its dimensions, most used on Danbooru first. */
 export function catalogFacetDimensions(): CharacterFacetDimension[] {
   return CATALOG_FACET_KEYS.map((key) => {

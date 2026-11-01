@@ -54,7 +54,7 @@ test('audio page: connected pages preserve authorized tools and audio adds its b
 
   ExternalApiProvider.create({ provider_name: 'conn', display_name: 'Conn', provider_type: 'llm_openai_compatible', base_url: 'http://unused.invalid', is_enabled: true, additional_config: { default_model: 'm' } })
   // A profile without any general tool scope: only a connected page can bring tools in.
-  const profile = ChatProfileStore.create({ name: 'Sound', engine: 'llm', providerName: 'conn', mcpEnabled: true, mcpScopes: [] })
+  const profile = ChatProfileStore.create({ name: 'Sound', engine: 'llm', providerName: 'conn', mcpEnabled: true, mcpScopes: [], pageAssist: true })
   const threadId = CodexChatStore.createThread(null, 'audio page chat', 'llm', profile.id)
   const base = { instanceId: 'page-audio', connectionId: 'connection-audio', title: '오디오', fields: [] }
   const audioPage = normalizeChatPageSnapshot({ ...base, path: '/audio', kind: 'audio', resourceId: 'project:p1' })

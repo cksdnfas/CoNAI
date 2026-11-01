@@ -70,8 +70,9 @@ test('maintenance routes are admin-only and search history is per account', { ti
   await t.test('moving resource editors keeps administrator access; personal settings cannot run shared actions', async () => {
     const { requireChatPageAccess, requireChatPageActionAccess } = await import('../src/services/codex-chat/chatPageContext')
     const guest = { accountId: guestId, accountType: 'guest' as const }
-    assert.throws(() => requireChatPageAccess(guest, { path: '/chat/resources', kind: 'settings', resourceId: 'chat' }), /권한/)
-    assert.throws(() => requireChatPageActionAccess(guest, { path: '/characters', kind: 'settings' }, 'profile.save'), /관리자/)
+    for (const path of ['/chat/profiles', '/chat/resources', '/chat/routines', '/chat/judge']) {
+      assert.throws(() => requireChatPageAccess(guest, { path, kind: 'settings', resourceId: 'chat' }), /권한/, path)
+    }
     const personal = { path: '/settings', kind: 'settings' as const, resourceId: 'mine' }
     assert.throws(() => requireChatPageActionAccess(guest, personal, 'settings.save'), /내 설정/)
     assert.throws(() => requireChatPageActionAccess(guest, personal, 'settings.mcp_server'), /내 설정/)
@@ -80,6 +81,11 @@ test('maintenance routes are admin-only and search history is per account', { ti
     assert.doesNotThrow(() => requireChatPageAccess(guest, personal))
     assert.doesNotThrow(() => requireChatPageActionAccess(guest, personal, 'settings.user_profile'))
     assert.doesNotThrow(() => requireChatPageActionAccess(guest, personal, 'settings.flag'))
+    // The chat workspace's own-settings screen follows the same boundary as Settings › 내 설정.
+    const workspaceMine = { path: '/chat/mine', kind: 'settings' as const, resourceId: 'mine' }
+    assert.doesNotThrow(() => requireChatPageAccess(guest, workspaceMine))
+    assert.doesNotThrow(() => requireChatPageActionAccess(guest, workspaceMine, 'settings.flag'))
+    assert.throws(() => requireChatPageActionAccess(guest, workspaceMine, 'settings.save'), /내 설정/)
   })
 
   await t.test('all page-setting snapshots fit the public field contract without exposing extra values', async () => {

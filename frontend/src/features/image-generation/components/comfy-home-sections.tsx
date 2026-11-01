@@ -1,6 +1,5 @@
 import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { Link } from 'react-router-dom'
 import { Copy, Ellipsis, Eye, ListFilter, ListTree, Pencil, Play, Plus, RefreshCw, RotateCcw, Save, Server, Star, Trash2, Upload } from 'lucide-react'
 import { EmptyState } from '@/components/ui/empty-state'
 import { ActionContextMenu, ActionMenuButton, type ActionMenuEntry } from '@/components/ui/action-menu'
@@ -136,16 +135,9 @@ export function ComfyServerListSection({ servers, serverTests, onOpenCreateServe
       heading={<SectionLabel icon={<Server />}>{t({ ko: '서버', en: 'Servers' })}</SectionLabel>}
       count={servers.length}
       actions={(
-        <>
-        {isAdmin ? (
-          <Button variant="link" size="sm" asChild>
-            <Link to="/settings?section=generation&group=comfyui">{t({ ko: '설정에서 관리', en: 'Manage in settings' })}</Link>
-          </Button>
-        ) : null}
         <IconButton size="icon-sm" variant="ghost" onClick={onOpenCreateServer} disabled={!isAdmin} label={t({ ko: '서버 등록', en: 'Add server' })}>
           <Plus />
         </IconButton>
-        </>
       )}
     >
       {servers.length > 0 ? servers.map((server) => {

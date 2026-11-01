@@ -1,3 +1,5 @@
+import { CHAT_CAPTURE_LIMITS, LORE_SELECTION_LIMITS, TOOL_ROUND_LIMITS } from './chatLimits';
+
 /** Safe, delegable settings exposed beside a page. Paths are an explicit allowlist, never client supplied paths. */
 export interface PageSettingField {
   id: string;
@@ -8,8 +10,10 @@ export interface PageSettingField {
   min?: number;
   max?: number;
   integer?: boolean;
+  /** A sub-heading the page sheet draws above this field, opening a run of related fields. */
+  heading?: { ko: string; en: string };
 }
-const flag = (id: string, ko: string, en: string): PageSettingField => ({ id, label: { ko, en }, type: 'boolean' });
+const flag =(id: string, ko: string, en: string): PageSettingField => ({ id, label: { ko, en }, type: 'boolean' });
 const number = (id: string, ko: string, en: string, min: number, max?: number, integer = true): PageSettingField => ({ id, label: { ko, en }, type: 'number', min, max, integer });
 const choice = (id: string, ko: string, en: string, options: readonly (string | number)[]): PageSettingField => ({ id, label: { ko, en }, type: typeof options[0] === 'number' ? 'number' : 'string', options });
 export interface PageSettingsScope {
@@ -111,8 +115,15 @@ export const PAGE_SETTINGS_SCOPES = {
     flag('topicEvaluation.autoEnabled', '주제 관련도 평가', 'Topic relevance evaluation'),
   ] },
   chat: { label: { ko: '채팅 공통', en: 'Shared chat settings' }, permission: 'settings.chat.manage', section: 'chat', fields: [
-    flag('enabled', '채팅 활성화', 'Enable chat'), flag('loreAutoSave', '로어 자동 저장', 'Automatically save lore'),
-    flag('diagnostics.enabled', '답변 진단', 'Answer diagnostics'),
+    { ...flag('enabled', '채팅 활성화', 'Enable chat'), heading: { ko: '기본', en: 'Basics' } },
+    { ...flag('loreAutoSave', '로어 자동 저장', 'Automatically save lore'), heading: { ko: '기억', en: 'Memory' } },
+    number('loreSelectionLimit', '선택 로어 상위 개수', 'Top lore entries kept', LORE_SELECTION_LIMITS.min, LORE_SELECTION_LIMITS.max),
+    { ...number('toolRoundLimit', '도구 호출 반복 한도', 'Tool round limit', TOOL_ROUND_LIMITS.min, TOOL_ROUND_LIMITS.max), heading: { ko: '도구 사용', en: 'Tool use' } },
+    flag('piCodemode', 'pi codemode', 'pi codemode'),
+    { ...choice('webResearch.engine', '웹 검색 담당', 'Web search by', ['off', 'codex', 'claude']), heading: { ko: '웹 검색', en: 'Web search' } },
+    { ...flag('diagnostics.enabled', '답변 진단', 'Answer diagnostics'), heading: { ko: '진단', en: 'Diagnostics' } },
+    flag('diagnostics.captureRaw', '원문 기록', 'Capture raw requests'),
+    number('diagnostics.captureLimit', '채팅당 보관', 'Keep per chat', CHAT_CAPTURE_LIMITS.min, CHAT_CAPTURE_LIMITS.max),
   ] },
 } satisfies Record<string, PageSettingsScope>;
 export type PageSettingsScopeId = keyof typeof PAGE_SETTINGS_SCOPES;
@@ -158,10 +169,11 @@ const registeredPageRows: SettingRowDefinition[] = (Object.keys(PAGE_SETTINGS_SC
       ? { ko: '기존 썸네일은 유지보수의 데이터 재매칭에서 새 품질로 다시 만들어야 해.', en: 'Rebuild existing thumbnails at Maintenance → Data rematch to apply the new quality.' }
       : NO_DESCRIPTION,
     synonyms: [scope, field.id, definition.label.ko, definition.label.en],
-    section: field.id === 'diagnostics.enabled' ? 'llm' : field.id === 'imageSimilarityCheckMode' ? 'library' : location.section,
+    section: field.id === 'imageSimilarityCheckMode' ? 'library' : location.section,
     group: scope === 'posts' ? (field.id.startsWith('knowledge.') ? 'knowledge' : field.id.startsWith('topicEvaluation.') ? 'topics' : 'general')
-      : field.id === 'diagnostics.enabled' ? 'log'
-        : field.id === 'imageSimilarityCheckMode' ? 'similarity' : scope === 'generation-throttle' && field.id.startsWith('reservations.') ? 'schedules' : location.group,
+      : scope === 'chat' && field.id === 'enabled' ? 'basic'
+        : scope === 'chat' && field.id === 'diagnostics.enabled' ? 'diagnostics'
+          : field.id === 'imageSimilarityCheckMode' ? 'similarity' : scope === 'generation-throttle' && field.id.startsWith('reservations.') ? 'schedules' : location.group,
     scope: 'shared',
     permission: definition.permission,
     advanced: scope === 'posts' && field.id.startsWith('knowledge.daily'),
@@ -202,7 +214,7 @@ const appearanceRows = settingGroup('general', 'appearance', 'appearance.', [
 ]);
 
 /** One name for the full page, contextual sheet, search and assistant. IDs are also deep-link anchors. */
-export const SETTINGS_ROWS: readonly SettingRowDefinition[] = [
+const SETTINGS_ROW_DEFINITIONS: readonly SettingRowDefinition[] = [
   ...registeredPageRows,
   ...advancedKnowledgeRows,
   ...advancedTopicRows,
@@ -215,7 +227,7 @@ export const SETTINGS_ROWS: readonly SettingRowDefinition[] = [
   setting('mcpHttp.enabled', 'HTTP MCP 사용', 'Enable HTTP MCP', { ko: '권한 그룹이 지정된 API 키로 외부 도구의 접속을 허용해.', en: 'Allow external tools to connect using permission-group API keys.' }, 'system', 'mcp', 'page.settings.view'),
   setting('headerNavigation', '상단 고정 페이지', 'Pinned pages', { ko: '누른 페이지는 상단에 이름과 함께 늘 보이고(휴대폰은 앞 4개가 하단 탭), 나머지는 라이브러리·만들기·확장 메뉴에 들어가. 끌어서 순서를 바꿔. 공용 설정이야.', en: 'Pinned pages stay in the top bar with their names (the first four are the phone’s bottom tabs); the rest sit in the Library, Create and Extensions menus. Drag to reorder. Shared for everyone.' }, 'general', 'display', 'page.settings.view', false, 'shared', ['상단 메뉴', '고정', '핀', '하단 탭', 'navigation', 'pin', 'header menu']),
   setting('headerTools', '오른쪽 고정 메뉴', 'Fixed right-side menu', { ko: '헤더 오른쪽에 고정되는 메뉴야. 눌러서 표시 여부를 바꿔.', en: 'These controls stay on the right of the header. Click to show or hide them.' }, 'general', 'display', 'page.settings.view'),
-  setting('chat.piCodemode', 'pi codemode', 'pi codemode', { ko: 'pi 프로필이 짧은 스크립트로 도구 여러 개를 호출해. 도구 호출 반복 한도가 적용돼.', en: 'Let pi profiles call tools through short scripts. The tool round limit applies.' }, 'llm', 'connections', 'page.settings.view'),
+  setting('chat.piCodemode', 'pi codemode', 'pi codemode', { ko: 'pi 프로필이 짧은 스크립트로 도구 여러 개를 호출해. 도구 호출 반복 한도가 적용돼.', en: 'Let pi profiles call tools through short scripts. The tool round limit applies.' }, 'chat', 'tools', 'settings.chat.manage'),
   setting('contentEvaluation.modelSlotId', '주제 관련도 판단 모델', 'Topic relevance judge model', { ko: '등록한 주제의 관련도를 평가할 모델이야.', en: 'The model that evaluates relevance to registered topics.' }, 'posts', 'topics', 'page.settings.view'),
   setting('posts.knowledge.judgeSlotId', '지식 판단 모델', 'Knowledge judge model', { ko: '지식 문서의 근거와 품질을 평가할 모델이야.', en: 'The model that evaluates knowledge evidence and quality.' }, 'posts', 'knowledge', 'settings.posts.manage'),
   setting('posts.knowledge.weights', '평가 비중', 'Feedback weights', { ko: '사람·사용 AI·판단 모델의 평가 비중을 정해.', en: 'Set the weights of human, use-AI and judge feedback.' }, 'posts', 'knowledge', 'settings.posts.manage', true),
@@ -233,7 +245,12 @@ export const SETTINGS_ROWS: readonly SettingRowDefinition[] = [
   setting('llm.connections', 'AI 연결·모델 슬롯', 'AI connections and model slots', { ko: '연결과 대표 모델을 관리해.', en: 'Manage connections and representative models.' }, 'llm', 'connections', 'page.settings.view', false, 'shared', ['LLM', '모델', 'Codex', 'Claude', 'pi']),
   setting('llm.dashboard', 'AI 사용량', 'AI usage', { ko: '연결별 사용량을 확인해.', en: 'Review usage by connection.' }, 'llm', 'dashboard', 'page.settings.view'),
   setting('llm.prompts', 'AI 프롬프트', 'AI prompts', { ko: '워크플로에서 쓸 프롬프트를 관리해.', en: 'Manage workflow prompts.' }, 'llm', 'prompts', 'page.settings.view'),
-  setting('llm.log', 'AI 기록', 'AI log', { ko: '답변 진단과 판단 기록을 확인해.', en: 'Review answer diagnostics and judge logs.' }, 'llm', 'log', 'page.settings.view'),
+  setting('chat.profiles', '채팅 프로필', 'Chat profiles', { ko: '채팅에 쓸 프로필을 폴더로 정리하고 만들고 고쳐.', en: 'Organize, create and edit the profiles chats use.' }, 'chat', 'profiles', 'page.settings.view', false, 'shared', ['프로필', 'profile', '봇', '캐릭터 카드']),
+  setting('chat.presets', '채팅 프리셋', 'Chat presets', { ko: '도구·생성·판단 프리셋을 관리해.', en: 'Manage tool, generation and judge presets.' }, 'chat', 'presets', 'page.settings.view', false, 'shared', ['도구 프리셋', '생성 프리셋', '판단 프리셋', 'preset']),
+  setting('chat.blocks', '표시 블록', 'Display blocks', { ko: '채팅 답변에 붙는 표시 블록을 관리해.', en: 'Manage the display blocks attached to chat replies.' }, 'chat', 'blocks', 'page.settings.view', false, 'shared', ['block', '블록']),
+  setting('chat.lorebooks', '로어북', 'Lorebooks', { ko: '공용 로어북과 계정 로어북을 관리해.', en: 'Manage shared and account lorebooks.' }, 'chat', 'lorebooks', 'page.settings.view', false, 'shared', ['lore', '로어']),
+  setting('chat.routines', '채팅 루틴', 'Chat routines', { ko: '정해진 시각에 채팅을 깨우는 루틴을 관리해.', en: 'Manage the routines that wake chats at set times.' }, 'chat', 'routines', 'page.settings.view', false, 'shared', ['routine', '예약', '스케줄']),
+  setting('chat.judge', '판단 기록', 'Judge log', { ko: '판단 모델이 내린 판정과 기준선을 확인해.', en: 'Review the judge model\'s verdicts and thresholds.' }, 'chat', 'judge', 'page.settings.view', false, 'shared', ['judge', '판정', '기록', 'log']),
   setting('chat.toolRoundLimit', '도구 호출 반복 한도', 'Tool round limit', { ko: '한 답변에서 모델이 도구를 부르고 결과를 받는 왕복의 최대 횟수야.', en: 'Maximum model/tool round trips in one reply.' }, 'chat', 'tools', 'settings.chat.manage', false, 'shared', ['tool', '도구', '반복']),
   setting('chat.flags', '공용 플래그', 'Shared flags', { ko: '관리자가 만든 원본은 모든 계정에 공유돼. 개인 사본은 내 설정에서 바꿔.', en: 'Administrator-created originals are shared with every account. Edit personal copies in My settings.' }, 'chat', 'flags', 'page.settings.view', false, 'shared', ['flag', '플래그']),
   setting('chat.loreSelectionLimit', '선택 로어 상위 개수', 'Top lore entries kept', { ko: '항상 적용 로어를 제외하고 키워드가 잘 맞는 로어를 이 개수까지 넣어.', en: 'Keep this many matching keyword lore entries, excluding always-on lore.' }, 'chat', 'memory', 'settings.chat.manage'),
@@ -241,9 +258,11 @@ export const SETTINGS_ROWS: readonly SettingRowDefinition[] = [
   setting('chat.webResearch.engine', '웹 검색 담당', 'Web search by', { ko: '채팅의 웹 검색을 맡을 엔진이야.', en: 'The engine responsible for chat web search.' }, 'chat', 'web', 'settings.chat.manage', false, 'shared', ['web', '검색']),
   setting('chat.webResearch.model', '웹 검색 모델', 'Web search model', { ko: '비워 두면 엔진의 기본 모델을 써.', en: 'Leave empty to use the engine default.' }, 'chat', 'web', 'settings.chat.manage'),
   setting('chat.webResearch.dailyLimit', '계정당 하루 검색', 'Searches per account a day', { ko: '비워 두면 검색 횟수를 제한하지 않아.', en: 'Leave empty for unlimited searches.' }, 'chat', 'web', 'settings.chat.manage'),
-  setting('chat.diagnostics.captureRaw', '원문 기록', 'Capture raw requests', { ko: '진단할 때 요청 원문도 보관해.', en: 'Keep raw requests for diagnostics.' }, 'llm', 'log', 'settings.chat.manage', true),
-  setting('chat.diagnostics.captureLimit', '채팅당 보관', 'Keep per chat', { ko: '채팅마다 보관할 진단 기록 수야.', en: 'Number of diagnostic records retained per chat.' }, 'llm', 'log', 'settings.chat.manage', true),
+  setting('chat.diagnostics.captureRaw', '원문 기록', 'Capture raw requests', { ko: '진단할 때 요청 원문도 보관해.', en: 'Keep raw requests for diagnostics.' }, 'chat', 'diagnostics', 'settings.chat.manage', true),
+  setting('chat.diagnostics.captureLimit', '채팅당 보관', 'Keep per chat', { ko: '채팅마다 보관할 진단 기록 수야.', en: 'Number of diagnostic records retained per chat.' }, 'chat', 'diagnostics', 'settings.chat.manage', true),
 ];
+/** A hand-written row replaces the one generated from a page-settings field with the same id (it adds the description and search terms). */
+export const SETTINGS_ROWS: readonly SettingRowDefinition[] = [...new Map(SETTINGS_ROW_DEFINITIONS.map((row) => [row.id, row])).values()];
 export const SETTINGS_ROW_BY_ID: Readonly<Record<string, SettingRowDefinition>> = Object.fromEntries(SETTINGS_ROWS.map((row) => [row.id, row]));
 export function pageSettingRow(scope: PageSettingsScopeId, field: PageSettingField): SettingRowDefinition {
   return SETTINGS_ROW_BY_ID[`${SETTING_SCOPE_LOCATION[scope].prefix}${field.path ?? field.id}`];
@@ -280,6 +299,7 @@ function featureSettingsScopes(path: string): PageSettingsScopeId[] {
   if (path === '/generation') return ['generation-throttle', 'image-save', 'video-optimization'];
   if (path === '/posts') return ['posts', 'embedding'];
   if (path === '/chat') return ['chat', 'embedding'];
+  if (['/chat/profiles', '/chat/resources', '/chat/routines', '/chat/judge'].includes(path)) return ['chat'];
   if (path === '/prompts') return ['similarity'];
   if (path === '/files') return ['embedding'];
   if (path === '/sprite') return ['image-save'];

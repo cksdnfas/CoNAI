@@ -1,29 +1,59 @@
-import { Link } from 'react-router-dom'
-import { Button } from '@/components/ui/button'
-import { useI18n } from '@/i18n'
-import { ChatMemorySettings, ChatToolSettings, ChatWebSettings, useChatOptions } from './chat-options-settings'
-import { useChatOptionsPageParts } from './chat-options-page'
-import { SettingsContents, SettingsGroup } from './settings-navigation'
+import { useSearchParams } from 'react-router-dom'
+import { RowGroup } from '@/components/ui/row-group'
 import { SettingsSwitchRow } from '@/components/ui/settings-switch-row'
-import { ChatFilledLabel } from './settings-filled-label'
+import { CHAT_SETTINGS_GROUPS, CHAT_SETTINGS_OPTION_GROUPS, type ChatSettingsGroup } from '@/features/codex-chat/chat-admin-location'
+import { ChatSettingsRoutines } from '@/features/codex-chat/chat-routines'
+import { useI18n } from '@/i18n'
+import { ChatLorebookEditorPage } from './chat-lorebook-editor-page'
+import { useChatOptionsPageRegistration } from './chat-options-page'
+import { ChatDiagnosticsSettings, ChatMemorySettings, ChatToolSettings, ChatWebSettings, useChatOptions } from './chat-options-settings'
+import { ChatProfileEditorPage } from './chat-profile-editor'
+import { ChatProfilesCompact } from './chat-profiles-compact'
+import { ChatSettingsJudge } from './chat-settings-judge'
 import { ChatSettingsMine } from './chat-settings-mine'
+import { ChatSettingsResources } from './chat-settings-resources'
+import { ChatFilledLabel } from './settings-filled-label'
+import { SettingsContents } from './settings-navigation'
+import { SettingsRowsSkeleton } from './settings-rows'
 
-/** Behaviour only: resources live in the character and chat workspaces. */
+/**
+ * Settings › 채팅: everything the chat workspace manages, edited here without leaving Settings. The lists are the
+ * workspace's own components; a profile or lorebook opens as its editor page under /settings (?profile=, ?lorebook=).
+ */
 export function ChatSettingsTab() {
+  const [params] = useSearchParams()
+  if (params.has('profile')) return <ChatProfileEditorPage />
+  if (params.has('lorebook')) return <ChatLorebookEditorPage />
+  return <ChatSettingsGroups current={params.get('group') ?? CHAT_SETTINGS_GROUPS[0]} />
+}
+
+/** One scrolling page: all groups stay mounted, and only the addressed group's assistant adapter owns the page snapshot. */
+function ChatSettingsGroups({ current }: { current: string }) {
   const { t } = useI18n()
-  const options = useChatOptionsPageParts('memory-web')
   const { settingsQuery, settingsMutation } = useChatOptions()
-  const groups = [{ id: 'memory', label: t({ ko: '기억', en: 'Memory' }) }, { id: 'tools', label: t({ ko: '도구 사용', en: 'Tool use' }) }, { id: 'web', label: t({ ko: '웹 검색', en: 'Web search' }) }, { id: 'flags', label: t({ ko: '공용 플래그', en: 'Shared flags' }) }]
+  useChatOptionsPageRegistration((CHAT_SETTINGS_OPTION_GROUPS as readonly string[]).includes(current))
+  const labels: Record<ChatSettingsGroup, string> = {
+    basic: t({ ko: '기본', en: 'Basics' }), memory: t({ ko: '기억', en: 'Memory' }), tools: t({ ko: '도구 사용', en: 'Tool use' }),
+    web: t({ ko: '웹 검색', en: 'Web search' }), diagnostics: t({ ko: '진단', en: 'Diagnostics' }),
+    profiles: t({ ko: '프로필', en: 'Profiles' }), presets: t({ ko: '프리셋', en: 'Presets' }), blocks: t({ ko: '표시 블록', en: 'Display blocks' }),
+    lorebooks: t({ ko: '로어북', en: 'Lorebooks' }), routines: t({ ko: '루틴', en: 'Routines' }), judge: t({ ko: '판단 기록', en: 'Judge log' }),
+    flags: t({ ko: '공용 플래그', en: 'Shared flags' }),
+  }
   return <div className="space-y-8">
-    <SettingsContents groups={groups} />
-    <div className="flex flex-wrap gap-2">
-      <Button asChild variant="ghost" size="sm"><Link to="/characters?view=profiles">{t({ ko: '채팅 프로필 열기', en: 'Open chat profiles' })}</Link></Button>
-      <Button asChild variant="ghost" size="sm"><Link to="/chat/resources">{t({ ko: '채팅 자원 열기', en: 'Open chat resources' })}</Link></Button>
-    </div>
-    {settingsQuery.data ? <SettingsSwitchRow label={<ChatFilledLabel fieldId="chat.enabled" />} checked={settingsQuery.data.enabled} disabled={settingsMutation.isPending} onCheckedChange={(enabled) => settingsMutation.mutate({ enabled })} /> : null}
-    <SettingsGroup id="memory" title={groups[0].label}><ChatMemorySettings /></SettingsGroup>
-    <SettingsGroup id="tools" title={groups[1].label}><ChatToolSettings /></SettingsGroup>
-    <SettingsGroup id="web" title={groups[2].label}><ChatWebSettings /></SettingsGroup>
-    <ChatSettingsMine sharedFlags options={options} />
+    <SettingsContents groups={CHAT_SETTINGS_GROUPS.map((id) => ({ id, label: labels[id] }))} />
+    <RowGroup data-settings-group="basic" className="scroll-mt-36" heading={labels.basic}>
+      {settingsQuery.data
+        ? <SettingsSwitchRow label={<ChatFilledLabel fieldId="chat.enabled" />} checked={settingsQuery.data.enabled} disabled={settingsMutation.isPending} onCheckedChange={(enabled) => settingsMutation.mutate({ enabled })} />
+        : settingsQuery.isError ? null : <SettingsRowsSkeleton rows={1} />}
+    </RowGroup>
+    <div data-settings-group="memory" className="scroll-mt-36"><ChatMemorySettings /></div>
+    <div data-settings-group="tools" className="scroll-mt-36"><ChatToolSettings /></div>
+    <div data-settings-group="web" className="scroll-mt-36"><ChatWebSettings /></div>
+    <div data-settings-group="diagnostics" className="scroll-mt-36"><ChatDiagnosticsSettings /></div>
+    <ChatProfilesCompact active={current === 'profiles'} />
+    <ChatSettingsResources tab="all" active={current === 'presets' || current === 'blocks' || current === 'lorebooks'} />
+    <ChatSettingsRoutines active={current === 'routines'} />
+    <RowGroup data-setting-id="chat.judge" heading={labels.judge}><ChatSettingsJudge active={current === 'judge'} /></RowGroup>
+    <ChatSettingsMine flagsOnly active={current === 'flags'} />
   </div>
 }

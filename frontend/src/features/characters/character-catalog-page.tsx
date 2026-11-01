@@ -1,15 +1,18 @@
 import { useState, type ReactNode } from 'react'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
-import { composeCharacterAppearance, type ChatPageData } from '@conai/shared'
-import { Copy, ExternalLink, Import, Library } from 'lucide-react'
+import { composeCharacterAppearance, formatDanbooruTagForPrompt, type ChatPageData } from '@conai/shared'
+import { BookOpen, Copy, ExternalLink, Image as ImageIcon, Import, Library } from 'lucide-react'
 import { CharacterCard } from '@/components/common/character-card'
+import { OverlayCardHoverOnly } from '@/components/common/overlay-card'
 import { ListPager } from '@/components/common/list-pager'
 import { PageToolbar } from '@/components/common/page-toolbar'
 import { PageWithSidebar } from '@/components/common/page-with-sidebar'
 import { SearchField, ToolbarSearchField } from '@/components/common/search-field'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
+import { IconButton } from '@/components/ui/icon-button'
 import { ErrorState } from '@/components/ui/error-state'
 import { LoadingState } from '@/components/ui/loading-state'
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
@@ -47,6 +50,9 @@ function singleChoice(previous: CharacterSettingFilters, next: CharacterSettingF
 }
 
 const catalogName = (character: DanbooruBrowserCharacterRecord) => character.translatedName || character.displayName
+const catalogFillKey = (character: DanbooruBrowserCharacterRecord) => ['character-library', 'catalog-fill', character.name]
+/** The look an import would get, as one prompt line (sections, then the default outfit). */
+const catalogLookText = (fill: CharacterAppearanceFill) => composeCharacterAppearance({ sections: fill.sections, outfits: fill.outfitTags ? [{ name: '', tags: fill.outfitTags }] : [] })
 
 /**
  * 캐릭터 카탈로그: the installed Danbooru dictionary's characters (by work, appearance filters, most posts or name), each
@@ -108,6 +114,15 @@ export function CharacterCatalogPage({ viewSwitch }: { viewSwitch: ReactNode }) 
     },
     onError: (error) => showSnackbar({ message: getErrorMessage(error, t({ ko: '외형 설정으로 가져오지 못했어.', en: 'Could not import it as a setting.' })), tone: 'error' }),
   })
+
+  // The library's look for a card's quick copy (it needs characters.edit, like the import); else the character tag.
+  const copyLook = async (character: DanbooruBrowserCharacterRecord) => {
+    try {
+      const fill = canImport ? await queryClient.fetchQuery({ queryKey: catalogFillKey(character), queryFn: ({ signal }) => fillCharacterAppearance({ source: 'danbooru', character: character.name }, signal) }) : null
+      await copyTextToClipboard(fill ? catalogLookText(fill) : formatDanbooruTagForPrompt(character.name))
+      showSnackbar({ message: t({ ko: '태그를 복사했어.', en: 'Copied the tags.' }), tone: 'info' })
+    } catch (error) { showSnackbar({ message: getErrorMessage(error, t({ ko: '복사하지 못했어.', en: 'Could not copy.' })), tone: 'error' }) }
+  }
 
   useChatPageRegistration({
     kind: 'page',
@@ -197,15 +212,25 @@ export function CharacterCatalogPage({ viewSwitch }: { viewSwitch: ReactNode }) 
         <section className="space-y-3">
           <Text as="p" variant="caption">{t({ ko: '캐릭터 {count}명', en: '{count} characters' }, { count: formatNumber(pagination?.total ?? items.length) })}</Text>
           <div className="grid gap-4" style={{ gridTemplateColumns: `repeat(${columns.columnCount}, minmax(0, 1fr))` }}>
-            {items.map((item) => (
-              <CharacterCard
-                key={item.tagId}
-                name={catalogName(item)}
-                mediaSrc={canViewImages && item.images[0] ? buildApiUrl(item.images[0].url) : null}
-                avatarProps={{ name: catalogName(item), engine: 'llm', size: 'sm' }}
-                onOpen={() => setOpen(item)}
-              />
-            ))}
+            {items.map((item) => {
+              const work = item.copyrights[0]
+              return (
+                <CharacterCard
+                  key={item.tagId}
+                  name={catalogName(item)}
+                  mediaSrc={canViewImages && item.images[0] ? buildApiUrl(item.images[0].url) : null}
+                  onOpen={() => setOpen(item)}
+                  subtitle={item.translatedName ? item.displayName : undefined}
+                  meta={<span className="flex items-center gap-1" aria-label={t({ ko: '이미지 {count}장', en: '{count} posts' }, { count: formatNumber(item.worksCount) })}><ImageIcon />{formatNumber(item.worksCount)}</span>}
+                  topStart={work ? <Badge variant="overlay" size="sm" className="max-w-full"><BookOpen /><span className="truncate">{work.translatedName || work.displayName}</span></Badge> : undefined}
+                  topEnd={<OverlayCardHoverOnly><IconButton asChild variant="overlay" size="icon-sm" label="Danbooru"><a href={item.danbooruUrl} target="_blank" rel="noopener noreferrer"><ExternalLink /></a></IconButton></OverlayCardHoverOnly>}
+                  actions={<>
+                    {canImport ? <Button size="compact" className="min-w-0 flex-1" disabled={importMutation.isPending} onClick={() => importMutation.mutate({ character: item, folderId: null, name: catalogName(item) })}><Import /><span className="truncate">{t({ ko: '가져오기', en: 'Import' })}</span></Button> : null}
+                    <IconButton variant="overlay" size="icon-sm" label={t({ ko: '태그 복사', en: 'Copy tags' })} onClick={() => void copyLook(item)}><Copy /></IconButton>
+                  </>}
+                />
+              )
+            })}
           </div>
           <ListPager className="pt-3" hasPrevious={page > 1} hasNext={page < (pagination?.totalPages ?? 1)} onPrevious={() => update({ page: page > 2 ? String(page - 1) : null })} onNext={() => update({ page: String(page + 1) })} />
         </section>
@@ -230,8 +255,8 @@ function CatalogCharacterModal({ character, canImport, canViewImages, importing,
   const { showSnackbar } = useSnackbar()
   const [saving, setSaving] = useState(false)
   // The preview uses the library's fill (it needs characters.edit, like the import).
-  const preview = useQuery({ queryKey: ['character-library', 'catalog-fill', character.name], queryFn: ({ signal }) => fillCharacterAppearance({ source: 'danbooru', character: character.name }, signal), enabled: canImport })
-  const composed = preview.data ? composeCharacterAppearance({ sections: preview.data.sections, outfits: preview.data.outfitTags ? [{ name: '', tags: preview.data.outfitTags }] : [] }) : ''
+  const preview = useQuery({ queryKey: catalogFillKey(character), queryFn: ({ signal }) => fillCharacterAppearance({ source: 'danbooru', character: character.name }, signal), enabled: canImport })
+  const composed = preview.data ? catalogLookText(preview.data) : ''
   const copy = async () => {
     try {
       await copyTextToClipboard(composed || character.name)

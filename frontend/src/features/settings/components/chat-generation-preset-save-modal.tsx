@@ -45,7 +45,7 @@ export function ChatGenerationPresetSaveModal({ open, build, summary, onClose }:
     onSuccess: async (created) => {
       if (!created) return
       await queryClient.invalidateQueries({ queryKey: CHAT_GENERATION_PRESETS_QUERY_KEY })
-      showSnackbar({ message: t({ ko: '채팅 생성 프리셋 "{name}"을 저장했어. 설정 › 채팅에서 프로필에 연결해.', en: 'Saved chat generation preset "{name}". Link it to a profile in settings › chat.' }, { name: created.name }), tone: 'info' })
+      showSnackbar({ message: t({ ko: '채팅 생성 프리셋 "{name}"을 저장했어. 채팅 › 프로필에서 연결해.', en: 'Saved chat generation preset "{name}". Link it to a profile under Chat › Profiles.' }, { name: created.name }), tone: 'info' })
       onClose()
     },
     onError: (error) => showSnackbar({ message: getErrorMessage(error, t({ ko: '저장하지 못했어.', en: 'Could not save.' })), tone: 'error' }),

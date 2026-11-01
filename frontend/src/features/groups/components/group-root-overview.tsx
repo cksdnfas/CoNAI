@@ -1,9 +1,9 @@
-import { Bot, FolderOpen } from 'lucide-react'
+import { Bot, FolderOpen, Image as ImageIcon } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
 import { EmptyState } from '@/components/ui/empty-state'
 import { ErrorState } from '@/components/ui/error-state'
-import { MediaCard } from '@/components/common/media-card'
+import { OverlayCard } from '@/components/common/overlay-card'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import type { GroupWithHierarchy } from '@/types/group'
 import type { ImageRecord } from '@/types/image'
@@ -22,7 +22,7 @@ interface GroupRootOverviewProps {
   onRetry?: () => void
 }
 
-/** Root view: every top-level group as a cover card (image mosaic + caption line, no card surface). */
+/** Root view: every top-level group as an overlay cover card (image mosaic with its name and count over it). */
 export function GroupRootOverview({
   groups,
   countMaps,
@@ -57,22 +57,16 @@ export function GroupRootOverview({
           {groups.map((group) => {
             const totalCount = getGroupHierarchyTotalCount(group, countMaps)
             return (
-              <MediaCard
+              <OverlayCard
                 key={group.id}
-                className="w-full"
-                onClick={() => onOpenGroup(group.id)}
-                mediaClassName="aspect-4/3 w-full"
+                onOpen={() => onOpenGroup(group.id)}
+                mediaClassName="aspect-4/3"
                 media={<GroupCoverMosaic groupId={group.id} sourceKey={sourceKey} imageCount={totalCount} loadCoverImages={loadCoverImages} className="size-full" />}
-                leading={<GroupColorDot color={group.color} size="md" />}
+                label={group.name}
+                leading={<GroupColorDot color={group.color} size="md" className="mb-1.5" />}
                 title={group.name}
-                meta={<>
-                  {group.auto_collect_enabled ? (
-                    <Tip content={t({ ko: '자동수집 켜짐', en: 'Auto-collect on' })}>
-                      <Bot className="size-3.5 shrink-0 text-primary" aria-label={t({ ko: '자동수집 켜짐', en: 'Auto-collect on' })} />
-                    </Tip>
-                  ) : null}
-                  {formatNumber(totalCount)}
-                </>}
+                meta={<span className="flex items-center gap-1" aria-label={t({ ko: '이미지 {count}장', en: '{count} images' }, { count: formatNumber(totalCount) })}><ImageIcon />{formatNumber(totalCount)}</span>}
+                topStart={group.auto_collect_enabled ? <Badge variant="overlay" size="sm"><Bot />{t({ ko: '자동수집', en: 'Auto-collect' })}</Badge> : undefined}
               />
             )
           })}

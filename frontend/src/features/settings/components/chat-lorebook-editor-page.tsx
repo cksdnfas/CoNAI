@@ -4,7 +4,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { BookOpen, Languages, RefreshCw, Trash2 } from 'lucide-react'
 import { loreKeyLanguageLabel, sortLoreKeysByLanguage } from '@conai/shared'
 import { EditorPage } from '@/components/common/editor-page'
-import type { PathCrumb } from '@/components/common/path-breadcrumbs'
 import { ActionMenuButton } from '@/components/ui/action-menu'
 import { Button } from '@/components/ui/button'
 import { Chip } from '@/components/ui/chip'
@@ -44,6 +43,7 @@ import {
 } from '@/lib/api-codex-chat'
 import { ApiRequestError } from '@/lib/api-request'
 import { getErrorMessage } from '@/lib/error-message'
+import { useChatAdminCrumbs, useChatAdminLinks } from '@/features/codex-chat/chat-admin-location'
 import { ChatFilledLabel } from '@/features/codex-chat/chat-page-context'
 import { pageAction, pageArray, pageChoice, pageObject, pageText } from '@/features/codex-chat/page-action-helpers'
 import { useEditorPageGuard } from '../use-unsaved-settings-guard'
@@ -68,12 +68,9 @@ export function latestBookConflicts(latest: Book, draft: BookDraft, conflicts: {
   return { name: conflicts.name ? latest.name : draft.name, entries: latestLoreEntryConflicts(draft.entries, latest.entries, conflicts.entries) }
 }
 
-/** The lorebook list of 채팅 자원, where the editor page returns to. */
-export const LOREBOOKS_PATH = '/chat/resources?tab=lorebooks'
-/** A lorebook's editor page: a shared book by id, an account book as `account-<id>`, or a new one of either kind. */
-export function lorebookEditorPath(target: Pick<Book, 'id' | 'kind'> | 'new' | 'new-account') {
-  const key = typeof target === 'string' ? target : target.kind === 'account' ? `account-${target.id}` : String(target.id)
-  return `${LOREBOOKS_PATH}&lorebook=${key}`
+/** The `?lorebook=` of a book's editor page: a shared book by id, an account book as `account-<id>`, or a new one of either kind. */
+export function lorebookKey(target: Pick<Book, 'id' | 'kind'> | 'new' | 'new-account') {
+  return typeof target === 'string' ? target : target.kind === 'account' ? `account-${target.id}` : String(target.id)
 }
 function parseLorebookKey(raw: string | null): { kind: 'global' | 'account'; id: number | null } | null {
   if (raw === 'new') return { kind: 'global', id: null }
@@ -90,21 +87,18 @@ function leavesLorebook(current: Location, next: Location) {
   const after = new URLSearchParams(next.search)
   const from = before.get('lorebook')
   const to = after.get('lorebook')
-  return from !== to || before.get('tab') !== after.get('tab')
+  return from !== to || before.get('tab') !== after.get('tab') || before.get('section') !== after.get('section')
 }
 
-const lorebookCrumbs = (t: ReturnType<typeof useI18n>['t'], navigate: ReturnType<typeof useNavigate>): PathCrumb[] => [
-  { key: 'resources', label: t({ ko: '채팅 자원', en: 'Chat resources' }), onClick: () => navigate('/chat/resources') },
-  { key: 'lorebooks', label: t({ ko: '로어북', en: 'Lorebooks' }), onClick: () => navigate(LOREBOOKS_PATH) },
-]
-
 /**
- * One lorebook as a page (채팅 자원 › 로어북 › ?lorebook=<key>): a shared (global) book, or one of the signed-in
- * account's own (a 로어북/ folder in its file store). Saving reaches every profile that links it.
+ * One lorebook as a page (채팅 › 로어북 › ?lorebook=<key>, or the same inside Settings › 채팅): a shared (global) book,
+ * or one of the signed-in account's own (a 로어북/ folder in its file store). Saving reaches every profile that links it.
  */
 export function ChatLorebookEditorPage() {
   const { t } = useI18n()
   const navigate = useNavigate()
+  const links = useChatAdminLinks()
+  const crumbs = useChatAdminCrumbs('lorebooks')
   const [params] = useSearchParams()
   const raw = params.get('lorebook')
   const target = parseLorebookKey(raw)
@@ -115,10 +109,10 @@ export function ChatLorebookEditorPage() {
   const notFound = query.error instanceof ApiRequestError && query.error.status === 404
   if (!target || (target.id !== null && !found)) {
     return (
-      <EditorPage crumbs={lorebookCrumbs(t, navigate)} title={t({ ko: '로어북', en: 'Lorebook' })}>
+      <EditorPage crumbs={crumbs} title={t({ ko: '로어북', en: 'Lorebook' })}>
         {target && query.isPending ? <LoadingState variant="inline" /> : target && query.isError && !notFound
           ? <ErrorState title={t({ ko: '로어북을 불러오지 못했어', en: 'Could not load the lorebook' })} error={query.error} onRetry={() => void query.refetch()} />
-          : <EmptyState icon={BookOpen} title={t({ ko: '로어북을 찾지 못했어', en: 'Lorebook not found' })} action={<Button variant="secondary" size="sm" onClick={() => navigate(LOREBOOKS_PATH)}>{t({ ko: '로어북 목록', en: 'Lorebook list' })}</Button>} />}
+          : <EmptyState icon={BookOpen} title={t({ ko: '로어북을 찾지 못했어', en: 'Lorebook not found' })} action={<Button variant="secondary" size="sm" onClick={() => navigate(links.resources('lorebooks'))}>{t({ ko: '로어북 목록', en: 'Lorebook list' })}</Button>} />}
       </EditorPage>
     )
   }
@@ -151,7 +145,10 @@ function LorebookEditor({ initial, kind }: { initial: Book | null; kind: 'global
   connectsRef.current = connectsChats
   const storedConnects = (book: Book | null) => book?.connectsChats !== false
   const folderId = lorebook && 'folderId' in lorebook ? lorebook.folderId : null
-  const back = () => navigate(LOREBOOKS_PATH)
+  const links = useChatAdminLinks()
+  const crumbs = useChatAdminCrumbs('lorebooks')
+  const listPath = links.resources('lorebooks')
+  const back = () => navigate(listPath)
   const takeSaved = (book: Book, submitted: { name: string; entries: ChatLoreEntry[]; connectsChats: boolean }) => {
     setLorebook(book)
     setName((current) => current === submitted.name ? book.name : current)
@@ -236,7 +233,7 @@ function LorebookEditor({ initial, kind }: { initial: Book | null; kind: 'global
     onSuccess: async ({ saved, submitted }) => {
       await refresh()
       if (!mounted.current) return
-      if (!saved) { allowNavigation(LOREBOOKS_PATH, back); return }
+      if (!saved) { allowNavigation(listPath, back); return }
       takeSaved(saved, submitted)
       showSnackbar({ message: t({ ko: '저장했어.', en: 'Saved.' }), tone: 'info' })
     },
@@ -247,7 +244,7 @@ function LorebookEditor({ initial, kind }: { initial: Book | null; kind: 'global
     onSuccess: async () => {
       await refresh()
       if (!mounted.current) return
-      allowNavigation(LOREBOOKS_PATH, back)
+      allowNavigation(listPath, back)
     },
     onError: (error) => showSnackbar({ message: getErrorMessage(error, t({ ko: '삭제하지 못했어.', en: 'Could not delete.' })), tone: 'error' }),
   })
@@ -275,10 +272,10 @@ function LorebookEditor({ initial, kind }: { initial: Book | null; kind: 'global
   // Keep later edits on the new route until saved or discarded; remounting before then would lose them.
   useEffect(() => {
     if (dirty || !lorebook || initial !== null || saveMutation.isPending || fileMutation.isPending) return
-    const path = lorebookEditorPath(lorebook)
+    const path = links.lorebook(lorebookKey(lorebook))
     queryClient.setQueryData(owned ? ownLorebookQueryKey(lorebook.id) : chatLorebookQueryKey(lorebook.id), lorebook)
     allowNavigation(path, () => navigate(path, { replace: true }))
-  }, [dirty, lorebook, initial, owned, saveMutation.isPending, fileMutation.isPending, allowNavigation, navigate, queryClient])
+  }, [dirty, lorebook, initial, owned, saveMutation.isPending, fileMutation.isPending, allowNavigation, navigate, queryClient, links])
   // A connected chat reads the book, adds or replaces entries (draft) and asks to save it with a card.
   useSettingsEditorChatPage({
     open: true,
@@ -349,7 +346,7 @@ function LorebookEditor({ initial, kind }: { initial: Book | null; kind: 'global
 
   return (
     <EditorPage
-      crumbs={lorebookCrumbs(t, navigate)}
+      crumbs={crumbs}
       title={name.trim() || lorebook?.name || (owned ? t({ ko: '새 계정 로어북', en: 'New account lorebook' }) : t({ ko: '새 로어북', en: 'New lorebook' }))}
       status={<>
         <Chip tone="muted" size="sm">{owned ? t({ ko: '내 계정 로어북', en: 'Account lorebook' }) : t({ ko: '공용 로어북', en: 'Shared lorebook' })}</Chip>

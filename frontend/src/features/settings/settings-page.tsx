@@ -169,6 +169,8 @@ export function SettingsPage() {
     const nextSearchParams = new URLSearchParams(searchParams)
     // `?view=` is the inner tab of one section; carried over, LLM's `view=judge` trips Chat's old-link redirect back to LLM.
     if (tab !== activeTab) { nextSearchParams.delete('view'); nextSearchParams.delete('group'); nextSearchParams.delete('setting') }
+    // An open profile or lorebook editor (and the list state it returns to) belongs to Settings › 채팅 only; choosing a section, that one included, closes it.
+    for (const key of ['profile', 'lorebook', 'folder', 'q', 'page']) nextSearchParams.delete(key)
     nextSearchParams.set('section', tab)
     setSearchParams(nextSearchParams, { replace: true })
   }
@@ -758,6 +760,8 @@ export function SettingsPage() {
           onSave={() => void handleSaveAll()}
           onDiscard={handleDiscardAll}
           onOpenTab={setActiveTab}
+          // Ctrl/⌘ S belongs to the profile or lorebook editor while one is open.
+          shortcut={!(activeTab === 'chat' && (searchParams.has('profile') || searchParams.has('lorebook')))}
         />
       </SettingsJumpTarget>
     </PageWithSidebar>
