@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { FileText, Folder, FolderPlus } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
 import { Chip, ChipAction } from '@/components/ui/chip'
 import { EditorGroup } from '@/components/ui/editor-group'
 import { Tip } from '@/components/ui/tooltip'
@@ -56,7 +56,7 @@ export function ChatProfileLinkedFiles({ value, onChange }: { value: LinkedFileL
     <EditorGroup
       label={t({ ko: '연결 파일', en: 'Linked files' })}
       info={t({ ko: '폴더, 텍스트·이미지·PDF·XLSX 파일. 캐릭터가 필요할 때 찾아 열어 봐.', en: 'Folders, or text, image, PDF and XLSX files the character opens when it needs them.' })}
-      actions={<Button variant="subtle" size="compact" disabled={value.length >= MAX_LINKS} onClick={() => setPicking(true)}><FolderPlus />{t({ ko: '폴더·파일 연결', en: 'Link folders and files' })}</Button>}
+      actions={<IconButton variant="subtle" size="icon-sm" label={t({ ko: '폴더·파일 연결', en: 'Link folders and files' })} disabled={value.length >= MAX_LINKS} onClick={() => setPicking(true)}><FolderPlus /></IconButton>}
     >
       {value.length ? (
         <div className="flex flex-wrap items-center gap-1.5">

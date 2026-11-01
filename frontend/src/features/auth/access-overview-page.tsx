@@ -4,7 +4,6 @@ import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { PageToolbar } from '@/components/common/page-toolbar'
 import { useAppNavigation, type AppNavLink } from '@/components/layout/app-navigation'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Heading } from '@/components/ui/heading'
 import { IconButton } from '@/components/ui/icon-button'
@@ -91,12 +90,11 @@ function BlockedRouteNotice({ path, permissionKey, isAnonymous, onDismiss }: { p
         <AlertDescription>
           <p>{isAnonymous ? t('accessOverviewPage.blockedHintAnonymous') : t('accessOverviewPage.blockedHintSignedIn')}</p>
           {isAnonymous ? (
-            <Button asChild size="sm" className="mt-1">
+            <IconButton asChild size="icon-sm" className="mt-1" label={t('loginPage.signIn')}>
               <Link to={`/login?next=${encodeURIComponent(path)}`}>
                 <LogIn className="h-4 w-4" />
-                {t('loginPage.signIn')}
               </Link>
-            </Button>
+            </IconButton>
           ) : null}
         </AlertDescription>
       </div>

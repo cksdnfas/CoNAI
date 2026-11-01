@@ -12,7 +12,6 @@ import '@xyflow/react/dist/style.css'
 import { ArrowLeft, ChevronDown, ChevronUp, CircleCheck, CloudOff, LayoutGrid, Loader2, Save, Search, TriangleAlert, Upload, Workflow } from 'lucide-react'
 import { SaveConflictAlert, SaveConflictOverwriteButton } from '@/components/common/save-conflict-alert'
 import { TextTabs } from '@/components/common/text-tabs'
-import { Button } from '@/components/ui/button'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { IconButton } from '@/components/ui/icon-button'
 import { Tip } from '@/components/ui/tooltip'
@@ -274,9 +273,9 @@ export function ComfyWorkflowAuthoringModal({
       <IconButton size="icon-sm" variant="ghost" className="shrink-0" onClick={openFilePicker} label={t({ ko: '워크플로 불러오기 (JSON·이미지·영상)', en: 'Load workflow (JSON, image, video)' })}>
         <Upload />
       </IconButton>
-      <Button size="sm" className="shrink-0" onClick={() => void handleSave()} disabled={isSaving} aria-busy={isSaving || undefined}>
-        {isSaving ? <Loader2 className="animate-spin" /> : <Save />}{saveLabel}
-      </Button>
+      <IconButton size="icon-sm" className="shrink-0" label={saveLabel} onClick={() => void handleSave()} disabled={isSaving} aria-busy={isSaving || undefined}>
+        {isSaving ? <Loader2 className="animate-spin" /> : <Save />}
+      </IconButton>
     </div>
   )
 
@@ -333,10 +332,9 @@ export function ComfyWorkflowAuthoringModal({
   ) : (
     <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
       {jsonError ? <div className="text-sm text-muted-foreground">{jsonError}</div> : null}
-      <Button type="button" size="sm" variant="secondary" onClick={openFilePicker}>
+      <IconButton size="icon-sm" variant="secondary" label={t({ ko: 'JSON 불러오기', en: 'Load JSON' })} onClick={openFilePicker}>
         <Upload className="size-4" />
-        {t({ ko: 'JSON 불러오기', en: 'Load JSON' })}
-      </Button>
+      </IconButton>
     </div>
   )
 

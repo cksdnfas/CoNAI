@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Copy, ExternalLink } from 'lucide-react'
+import { Copy } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { Spinner } from '@/components/ui/loading-state'
@@ -122,7 +122,6 @@ export function CodexDeviceLoginDialog({ open, onClose, onSucceeded }: CodexDevi
             {verificationUrl ? (
               <Button asChild className="w-full">
                 <a href={verificationUrl} target="_blank" rel="noopener noreferrer">
-                  <ExternalLink />
                   {t({ ko: '인증 페이지 열기', en: 'Open sign-in page' })}
                 </a>
               </Button>

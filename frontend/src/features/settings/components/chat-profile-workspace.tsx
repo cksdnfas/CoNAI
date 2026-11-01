@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { FolderKanban } from 'lucide-react'
 import { MAX_WORKSPACE_LINKS } from '@conai/shared'
-import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
 import { Chip, ChipAction } from '@/components/ui/chip'
 import { EditorGroup } from '@/components/ui/editor-group'
 import { WorkspaceProjectPicker } from '@/features/files/workspace-projects'
@@ -45,7 +45,7 @@ export function ChatProfileWorkspace({ value, onChange }: { value: ProfileWorksp
     <EditorGroup
       label={t({ ko: '작업 공간', en: 'Workspaces' })}
       info={t({ ko: '캐릭터가 일할 폴더(프로젝트). 1:1·그룹 채팅과 게시판 호출에서 열려. 채팅에서는 더 추가하거나 끌 수 있어.', en: 'The project folders the character works in, in 1:1 and group chats and board calls. A chat can add more or turn one off.' })}
-      actions={<Button variant="subtle" size="compact" disabled={value.length >= MAX_WORKSPACE_LINKS} onClick={() => setPicking(true)}><FolderKanban />{t({ ko: '작업 공간 연결', en: 'Connect a workspace' })}</Button>}
+      actions={<IconButton variant="subtle" size="icon-sm" label={t({ ko: '작업 공간 연결', en: 'Connect a workspace' })} disabled={value.length >= MAX_WORKSPACE_LINKS} onClick={() => setPicking(true)}><FolderKanban /></IconButton>}
     >
       {value.length ? (
         <div className="flex flex-wrap items-center gap-1.5">

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import type { AgentCliName, ChatPageData } from '@conai/shared'
-import { ChevronRight, RefreshCw } from 'lucide-react'
+import { RefreshCw } from 'lucide-react'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { Button } from '@/components/ui/button'
 import { Chip } from '@/components/ui/chip'
@@ -347,7 +347,7 @@ export function LlmUsageDashboard({ onOpenJudge }: { onOpenJudge: () => void }) 
 
           <div className="space-y-8">
             <RowGroup heading={t({ ko: '판단', en: 'Judge' })} actions={
-              <Button variant="ghost" size="xs" onClick={onOpenJudge}>{t({ ko: '자세히', en: 'Details' })}<ChevronRight /></Button>
+              <Button variant="ghost" size="xs" onClick={onOpenJudge}>{t({ ko: '자세히', en: 'Details' })}</Button>
             }>
               {judgeRuns > 0 ? (
                 <div className="space-y-1 pt-2">

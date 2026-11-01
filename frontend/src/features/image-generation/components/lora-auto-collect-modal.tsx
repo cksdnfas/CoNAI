@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
-import { FolderOpen, Upload } from 'lucide-react'
+import { FolderOpen } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Field, FieldInfo } from '@/components/ui/field'
@@ -247,10 +248,13 @@ export function LoraAutoCollectModal({ open, isSubmitting = false, onClose, onSu
 
         <Inset className="space-y-3">
           <div className="flex flex-wrap items-center gap-3">
-            <Button type="button" onClick={handlePickFolder} disabled={isSubmitting || isPreparingFiles}>
+            <IconButton
+              onClick={handlePickFolder}
+              disabled={isSubmitting || isPreparingFiles}
+              label={selectedFiles.length > 0 ? t({ ko: 'LoRA {count}개 선택됨', en: '{count} LoRA files selected' }, { count: formatNumber(selectedFiles.length) }) : t({ ko: 'LoRA 폴더 선택', en: 'Select LoRA folder' })}
+            >
               <FolderOpen className="h-4 w-4" />
-              {selectedFiles.length > 0 ? t({ ko: 'LoRA {count}개 선택됨', en: '{count} LoRA files selected' }, { count: formatNumber(selectedFiles.length) }) : t({ ko: 'LoRA 폴더 선택', en: 'Select LoRA folder' })}
-            </Button>
+            </IconButton>
             <FieldInfo>{t({ ko: '폴더 안의 .safetensors, 같은 이름의 .txt, 공용 txt를 읽어 자동 수집 LoRA 트리를 다시 만들어.', en: 'Reads .safetensors, same-name .txt and the shared txt in the folder, then rebuilds the auto-collected LoRA tree.' })}</FieldInfo>
             {isPreparingFiles ? <div className="text-sm text-muted-foreground">{t({ ko: '폴더 구조 읽는 중…', en: 'Reading folder structure…' })}</div> : null}
           </div>
@@ -307,7 +311,6 @@ export function LoraAutoCollectModal({ open, isSubmitting = false, onClose, onSu
             {t({ ko: '취소', en: 'Cancel' })}
           </Button>
           <Button type="button" onClick={() => void handleSubmit()} disabled={isSubmitting || isPreparingFiles || selectedSourceFiles.length === 0}>
-            <Upload className="h-4 w-4" />
             {isSubmitting ? t({ ko: '수집 중…', en: 'Collecting…' }) : t({ ko: '자동 수집 실행', en: 'Run auto-collection' })}
           </Button>
         </ModalFooter>

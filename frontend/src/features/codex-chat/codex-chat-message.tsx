@@ -869,7 +869,7 @@ export const CodexChatAssistantMessage = memo(function CodexChatAssistantMessage
       {status === 'interrupted' ? <p className="text-xs text-muted-foreground">{t({ ko: '중단됨', en: 'Stopped' })}</p> : null}
       {status === 'failed' ? <div className="flex flex-wrap items-center gap-2">
         <ChatErrorChip error={error ?? null} />
-        {onRetry ? <Button type="button" variant="link" size="xs" onClick={onRetry}><RefreshCw />{t({ ko: '다시 시도', en: 'Try again' })}</Button> : null}
+        {onRetry ? <IconButton variant="link" size="icon-xs" label={t({ ko: '다시 시도', en: 'Try again' })} onClick={onRetry}><RefreshCw /></IconButton> : null}
       </div> : null}
       {truncated ? (
         <Tip content={t({ ko: '최대 출력 토큰에 닿아서 답변이 여기서 끊겼어. 컨텍스트에서 한도를 올릴 수 있어.', en: 'The reply hit the max output tokens. Raise the cap under Context.' })} side="bottom" align="start">

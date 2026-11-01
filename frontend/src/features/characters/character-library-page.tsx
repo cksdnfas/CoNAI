@@ -9,7 +9,6 @@ import { settingsCatalog } from '@/i18n/resources/settings'
 import { CheckCheck, CheckSquare, Copy, Download, FolderInput, FolderPlus, Pencil, Plus, SquarePen, Star, StarOff, Trash2, Upload, UserRound } from 'lucide-react'
 import { NameDialog } from '@/components/common/entry-dialogs'
 import { SelectionActionBar, SelectionBarAction } from '@/components/common/selection-action-bar'
-import { ToggleChip } from '@/components/ui/chip'
 import { Select } from '@/components/ui/select'
 import { ImageListColumnFloatingControl } from '@/features/images/components/image-list/image-list-column-floating-control'
 import { useImageListColumnPreference } from '@/features/images/components/image-list/image-list-column-preferences'
@@ -19,7 +18,6 @@ import { PageWithSidebar } from '@/components/common/page-with-sidebar'
 import { PathBreadcrumbs } from '@/components/common/path-breadcrumbs'
 import { ToolbarSearchField } from '@/components/common/search-field'
 import { ActionMenuButton, type ActionMenuEntry } from '@/components/ui/action-menu'
-import { Button } from '@/components/ui/button'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Heading } from '@/components/ui/heading'
@@ -375,7 +373,7 @@ function AppearanceLibraryPage() {
             <option value="created">{t({ ko: '최근 추가순', en: 'Newest' })}</option>
             <option value="created_asc">{t({ ko: '오래된 순', en: 'Oldest' })}</option>
           </Select>
-          <ToggleChip pressed={favoriteOnly} aria-label={t({ ko: '즐겨찾기', en: 'Favorites' })} onClick={() => setListView({ favorite: !favoriteOnly })}><Star className={favoriteOnly ? 'fill-current' : undefined} /><span className="hidden sm:inline">{t({ ko: '즐겨찾기', en: 'Favorites' })}</span></ToggleChip>
+          <IconButton variant="ghost" size="icon-sm" active={favoriteOnly} label={t({ ko: '즐겨찾기', en: 'Favorites' })} onClick={() => setListView({ favorite: !favoriteOnly })}><Star className={favoriteOnly ? 'fill-current' : undefined} /></IconButton>
           {canEdit ? <IconButton variant="ghost" size="icon-sm" active={selectMode} label={selectMode ? t({ ko: '선택 끝내기', en: 'Stop selecting' }) : t({ ko: '여러 개 선택', en: 'Select several' })} onClick={() => { if (selectMode) setSelected(new Map()); setSelectMode(!selectMode) }}><CheckSquare /></IconButton> : null}
           <ActionMenuButton
             label={t({ ko: '라이브러리 작업', en: 'Library actions' })}
@@ -388,7 +386,7 @@ function AppearanceLibraryPage() {
             ]}
           />
           {currentFolder && !query && !filtering && canEdit ? <ActionMenuButton entries={folderMenu(currentFolder)} label={t({ ko: '폴더 작업', en: 'Folder actions' })} /> : null}
-          {canEdit ? <Button size="sm" onClick={() => setCreating({ folderId: query || filtering ? null : folderId })}><Plus />{t({ ko: '새 외형 설정', en: 'New appearance setting' })}</Button> : null}
+          {canEdit ? <IconButton size="icon-sm" label={t({ ko: '새 외형 설정', en: 'New appearance setting' })} onClick={() => setCreating({ folderId: query || filtering ? null : folderId })}><Plus /></IconButton> : null}
           <input ref={importInput} type="file" accept=".zip,application/zip" hidden onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ''; if (file) void importFile(file) }} />
         </>
       )}

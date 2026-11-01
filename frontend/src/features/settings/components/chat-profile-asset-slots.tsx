@@ -247,10 +247,9 @@ export function ExpressionSlots({ runs, groupSource, referenceHash, canGenerate,
           <AssetPresetPicker runs={runs} showExpressionMenu />
           <Tip content={blockedReason}>
             <span className="inline-flex" tabIndex={blockedReason ? 0 : -1}>
-              <Button variant="secondary" size="sm" disabled={!canGenerate || !emptyNames.length} onClick={fillAll}>
+              <IconButton variant="secondary" size="icon-sm" label={emptyNames.length ? t({ ko: '빈 칸 {count}개 만들기', en: 'Make {count} empty' }, { count: emptyNames.length }) : t({ ko: '빈 칸 없음', en: 'No empty slots' })} disabled={!canGenerate || !emptyNames.length} onClick={fillAll}>
                 <Wand />
-                {emptyNames.length ? t({ ko: '빈 칸 {count}개 만들기', en: 'Make {count} empty' }, { count: emptyNames.length }) : t({ ko: '빈 칸 없음', en: 'No empty slots' })}
-              </Button>
+              </IconButton>
             </span>
           </Tip>
         </> : null}

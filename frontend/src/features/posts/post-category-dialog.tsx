@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import type { PostCategory } from '@conai/shared'
-import { Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { Input } from '@/components/ui/input'
@@ -77,7 +76,7 @@ export function PostCategoryDialog({ category, parentId, categories, onClose, on
             <Button type="button" variant="destructive-ghost" disabled={busy} onClick={async () => {
               if (await confirm({ title: t({ ko: '"{name}" 카테고리를 지울까?', en: 'Delete "{name}"?' }, { name: category.name }), description: t({ ko: '글과 하위 카테고리가 없을 때만 지울 수 있어.', en: 'Only empty categories can be deleted.' }), tone: 'destructive' })) remove.mutate()
             }}>
-              <Trash2 />{t({ ko: '지우기', en: 'Delete' })}
+              {t({ ko: '지우기', en: 'Delete' })}
             </Button>
           ) : null}
           <span className="flex-1" />

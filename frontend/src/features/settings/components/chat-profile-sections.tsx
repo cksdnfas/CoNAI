@@ -83,7 +83,7 @@ export function PromptAdder({ label, choices, disabled = false, onAdd }: { label
         setExpanded(false)
       }}
     >
-      <Button variant="ghost" size="sm" disabled={disabled} aria-expanded={choices ? expanded : undefined} onClick={() => (choices ? setExpanded(!expanded) : onAdd(''))}><Plus />{label}</Button>
+      <IconButton variant="ghost" size="icon-sm" label={label} disabled={disabled} aria-expanded={choices ? expanded : undefined} onClick={() => (choices ? setExpanded(!expanded) : onAdd(''))}><Plus /></IconButton>
       {choices && expanded ? choices.map((choice, index) => (
         <Button key={choice.value} variant="secondary" size="sm" autoFocus={index === 0} onClick={() => { setExpanded(false); onAdd(choice.value) }}>{choice.label}</Button>
       )) : null}

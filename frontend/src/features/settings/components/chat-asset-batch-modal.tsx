@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, Check, ImageOff, RefreshCw, ScanEye, Square, Wand, X } from 'lucide-react'
+import { AlertTriangle, Check, ImageOff, Plus, RefreshCw, ScanEye, Square, Wand, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Chip, ToggleChip } from '@/components/ui/chip'
 import { Field } from '@/components/ui/field'
@@ -248,7 +248,7 @@ export function ChatAssetBatchModal({ target, initialBatchId, referenceOnly = fa
         </div>
         <span className="flex-1" />
         {isRunning ? <span aria-live="polite" className="text-xs tabular-nums text-muted-foreground">{complete} / {batch?.slots.length}</span> : null}
-        <Tip content={batchId !== null ? t({ ko: '새 묶음 만들기', en: 'Create a new batch' }) : onPrepare ? t({ ko: '이름·외형·기준 이미지를 저장하고 만들기', en: 'Save name, appearance and reference, then create' }) : t({ ko: '만들기', en: 'Create' })}><Button size="sm" aria-busy={create.isPending || undefined} disabled={busy || isRunning || !savedTarget?.name.trim() || (batchId === null && (!presetId || !preview.length || preview.length > 32 || (expressions && !emotionNames.length) || (preset?.kind === 'comfyui' && !promptField)))} onClick={() => { if (batchId !== null) { setBatchId(null); request.current = null } else if (!creating.current) { creating.current = true; create.mutate() } }}>{create.isPending ? <Spinner /> : <Wand />}{batchId !== null ? t({ ko: '새 묶음', en: 'New batch' }) : t({ ko: '만들기', en: 'Create' })}</Button></Tip>
+        <Tip content={batchId !== null ? t({ ko: '새 묶음 만들기', en: 'Create a new batch' }) : onPrepare ? t({ ko: '이름·외형·기준 이미지를 저장하고 만들기', en: 'Save name, appearance and reference, then create' }) : t({ ko: '만들기', en: 'Create' })}><IconButton size="icon-sm" tooltip={false} label={batchId !== null ? t({ ko: '새 묶음', en: 'New batch' }) : t({ ko: '만들기', en: 'Create' })} aria-busy={create.isPending || undefined} disabled={busy || isRunning || !savedTarget?.name.trim() || (batchId === null && (!presetId || !preview.length || preview.length > 32 || (expressions && !emotionNames.length) || (preset?.kind === 'comfyui' && !promptField)))} onClick={() => { if (batchId !== null) { setBatchId(null); request.current = null } else if (!creating.current) { creating.current = true; create.mutate() } }}>{create.isPending ? <Spinner /> : batchId !== null ? <Plus /> : <Wand />}</IconButton></Tip>
       </div>
       {[presets, expressionPresets, workflows, modelSlots, batchQuery].filter((query) => query.isError).map((query, index) => <div key={index} role="alert" className="flex items-center gap-2 text-sm text-destructive">{getErrorMessage(query.error, t({ ko: '불러오지 못했어.', en: 'Could not load.' }))}<Button size="xs" variant="ghost" onClick={() => void query.refetch()}>{t({ ko: '다시 시도', en: 'Retry' })}</Button></div>)}
       {batchQuery.isPending && batchId !== null ? <Spinner /> : null}
@@ -298,7 +298,7 @@ export function ChatAssetBatchModal({ target, initialBatchId, referenceOnly = fa
         })}
       </div>
     </ModalBody>
-    <ModalFooter separated className="mt-4"><Button size="sm" disabled={!selected || busy} onClick={() => apply.mutate()}>{apply.isPending ? <Spinner /> : <Check />}{t({ ko: '적용 {count}', en: 'Apply {count}' }, { count: selected })}</Button></ModalFooter>
+    <ModalFooter separated className="mt-4"><Button size="sm" disabled={!selected || busy} onClick={() => apply.mutate()}>{apply.isPending ? <Spinner /> : null}{t({ ko: '적용 {count}', en: 'Apply {count}' }, { count: selected })}</Button></ModalFooter>
     <MediaLightbox items={safety.visibleItems} index={lightboxIndex} onIndexChange={setLightboxIndex} onClose={() => setLightboxIndex(null)} />
   </Modal>
 }

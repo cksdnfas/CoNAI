@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { ExternalLink, RotateCcw } from 'lucide-react'
+import { RotateCcw } from 'lucide-react'
 import { PAGE_SETTINGS_SCOPES, pageSettingsPatch, pageSettingRow, type PageSettingField, type PageSettingValue, type PageSettingsScopeId, type PageSettingsSnapshot } from '@conai/shared'
 import { usePageSettings } from '@/components/common/page-settings-context'
 import { Sheet } from '@/components/ui/sheet'
@@ -148,7 +148,7 @@ function SettingsEditor({ scope, scopes, title, onSelect, onClose, inline = fals
     </div>
     <EditorFooter onSave={onSave} canSave={dirty && Boolean(snapshot)} saving={saving}>
       <IconButton label={t({ ko: '최신 설정 불러오기', en: 'Reload settings' })} variant="ghost" disabled={saving} onClick={() => void reload()}><RotateCcw /></IconButton>
-      {admin ? <Button asChild variant="ghost" size="sm"><Link to={`/settings?section=${destination.section}&group=${destination.group}`} onClick={(event) => { if (saving) event.preventDefault() }}>{t({ ko: '설정에서 모두 보기', en: 'View all in settings' })}<ExternalLink className="size-4" /></Link></Button> : null}
+      {admin ? <Button asChild variant="ghost" size="sm"><Link to={`/settings?section=${destination.section}&group=${destination.group}`} onClick={(event) => { if (saving) event.preventDefault() }}>{t({ ko: '설정에서 모두 보기', en: 'View all in settings' })}</Link></Button> : null}
     </EditorFooter>
   </Sheet>
 }

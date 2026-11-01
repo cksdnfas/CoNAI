@@ -3,7 +3,6 @@ import { CharacterCard } from '@/components/common/character-card'
 import { OverlayCardHoverOnly } from '@/components/common/overlay-card'
 import type { ActionMenuEntry } from '@/components/ui/action-menu'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { useI18n } from '@/i18n'
 import type { CharacterSettingSummary } from '@/lib/api-character-library'
@@ -53,7 +52,7 @@ export function CharacterSettingCard({ setting, onOpen, onDoubleClick, menu, sel
         </OverlayCardHoverOnly>
       ) : undefined}
       actions={onCopyTags || onEdit ? <>
-        {onEdit ? <Button variant="overlay" size="compact" className="min-w-0 flex-1" onClick={onEdit}><SquarePen /><span className="truncate">{t({ ko: '편집', en: 'Edit' })}</span></Button> : null}
+        {onEdit ? <IconButton variant="overlay" size="icon-sm" label={t({ ko: '편집', en: 'Edit' })} onClick={onEdit}><SquarePen /></IconButton> : null}
         {onCopyTags ? <IconButton variant="overlay" size="icon-sm" label={t({ ko: '태그 복사', en: 'Copy tags' })} onClick={onCopyTags}><Copy /></IconButton> : null}
       </> : undefined}
     />

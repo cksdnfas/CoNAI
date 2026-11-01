@@ -407,6 +407,14 @@ export function PostsPage() {
     { key: 'cards', label: t({ ko: '카드', en: 'Cards' }), checked: layout === 'cards', onSelect: () => setLayout('cards') },
     { key: 'sns', label: t({ ko: 'SNS', en: 'SNS' }), checked: layout === 'sns', onSelect: () => setLayout('sns') },
   ]
+  const tabLabels: Record<ListTab, string> = {
+    all: t({ ko: '전체', en: 'All' }), knowledge: t({ ko: '지식', en: 'Knowledge' }), draft: t({ ko: '초안', en: 'Drafts' }),
+    trash: t({ ko: '휴지통', en: 'Trash' }), hidden: t({ ko: '숨김', en: 'Hidden' }),
+  }
+  // The list tabs share the toolbar row with the title and the actions instead of a second row under it.
+  const listTabsNode = view === 'list' && listTabs.length > 1 ? (
+    <TextTabs value={tab} onChange={openTab} hairline={false} ariaLabel={t({ ko: '목록', en: 'List' })} items={listTabs.map((item) => ({ value: item, label: tabLabels[item] }))} />
+  ) : null
   let toolbarStart
   let toolbarActions
   if (view === 'list') {
@@ -425,6 +433,8 @@ export function PostsPage() {
           {searchInput.trim().startsWith('#') ? tagNames.map((name) => <option key={name} value={`#${name}`} />) : null}
         </datalist>
         <IconButton variant="ghost" size="icon-sm" label={t({ ko: '검색 닫기', en: 'Close search' })} onClick={closeSearch}><X /></IconButton>
+        {/* On phones the search field needs the row; the tabs come back when search closes. */}
+        {listTabsNode ? <div className="hidden shrink-0 md:block">{listTabsNode}</div> : null}
       </div>
     ) : (
       <>
@@ -435,13 +445,14 @@ export function PostsPage() {
         {tag ? (
           <Chip tone="primary" className="ml-1" removeLabel={t({ ko: '태그 필터 빼기', en: 'Clear tag filter' })} onRemove={() => openList({ tag: null })}>#{tag}</Chip>
         ) : null}
+        {listTabsNode}
       </>
     )
     toolbarActions = (
       <>
         {!proposalsView ? <ActionMenuButton size="icon" icon={LayoutIcon} entries={layoutEntries} label={t({ ko: '목록 모양', en: 'Layout' })} /> : null}
         {!searchOpen && !proposalsView ? <IconButton variant="ghost" label={t({ ko: '검색', en: 'Search' })} onClick={() => setSearchOpen(true)}><Search /></IconButton> : null}
-        {permissions.canWrite ? <Button onClick={() => update({ edit: 'new', post: null })}><PenSquare />{t({ ko: '새 글', en: 'New post' })}</Button> : null}
+        {permissions.canWrite ? <IconButton label={t({ ko: '새 글', en: 'New post' })} onClick={() => update({ edit: 'new', post: null })}><PenSquare /></IconButton> : null}
       </>
     )
   } else {
@@ -459,29 +470,18 @@ export function PostsPage() {
     ) : null
   }
 
-  const tabLabels: Record<ListTab, string> = {
-    all: t({ ko: '전체', en: 'All' }), knowledge: t({ ko: '지식', en: 'Knowledge' }), draft: t({ ko: '초안', en: 'Drafts' }),
-    trash: t({ ko: '휴지통', en: 'Trash' }), hidden: t({ ko: '숨김', en: 'Hidden' }),
-  }
   const reviewChips: Array<{ value: PostKnowledgeReviewStatus; label: string }> = [
     { value: 'needs_review', label: t({ ko: '재검토 필요', en: 'Needs review' }) },
     { value: 'unreviewed', label: t({ ko: '미검토', en: 'Unreviewed' }) },
     { value: 'verified', label: t({ ko: '검증됨', en: 'Verified' }) },
   ]
-  const listHeader = view === 'list' && (listTabs.length > 1 || tab === 'knowledge') ? (
-    <div className="flex flex-col gap-2.5 pb-3">
-      {listTabs.length > 1 ? (
-        <TextTabs value={tab} onChange={openTab} ariaLabel={t({ ko: '목록', en: 'List' })} items={listTabs.map((item) => ({ value: item, label: tabLabels[item] }))} />
-      ) : null}
-      {tab === 'knowledge' ? (
-        <div className="flex flex-wrap gap-1.5">
-          {reviewChips.map((chip) => (
-            <ToggleChip key={chip.value} size="sm" pressed={!proposalsView && reviewStatus === chip.value} onClick={() => openList({ section: null, review: reviewStatus === chip.value && !proposalsView ? null : chip.value })}>{chip.label}</ToggleChip>
-          ))}
-          {permissions.canWrite || permissions.canReview ? (
-            <ToggleChip size="sm" pressed={proposalsView} onClick={() => openList({ section: proposalsView ? null : 'proposals', review: null })}>{t({ ko: '변경 제안', en: 'Change proposals' })}</ToggleChip>
-          ) : null}
-        </div>
+  const listHeader = view === 'list' && tab === 'knowledge' ? (
+    <div className="flex flex-wrap gap-1.5 pb-3">
+      {reviewChips.map((chip) => (
+        <ToggleChip key={chip.value} size="sm" pressed={!proposalsView && reviewStatus === chip.value} onClick={() => openList({ section: null, review: reviewStatus === chip.value && !proposalsView ? null : chip.value })}>{chip.label}</ToggleChip>
+      ))}
+      {permissions.canWrite || permissions.canReview ? (
+        <ToggleChip size="sm" pressed={proposalsView} onClick={() => openList({ section: proposalsView ? null : 'proposals', review: null })}>{t({ ko: '변경 제안', en: 'Change proposals' })}</ToggleChip>
       ) : null}
     </div>
   ) : null
@@ -512,7 +512,7 @@ export function PostsPage() {
   } else if (listQuery.isError) {
     content = <ErrorState title={t({ ko: '글 목록을 불러오지 못했어.', en: 'Could not load posts.' })} error={listQuery.error} onRetry={() => void listQuery.refetch()} />
   } else if (posts.length === 0) {
-    content = <EmptyState icon={searchOpen && searchQuery ? Search : tab === 'trash' ? Trash2 : Newspaper} title={searchOpen && searchQuery ? t({ ko: '찾은 글이 없어', en: 'No matching posts' }) : tab === 'trash' ? t({ ko: '휴지통이 비었어', en: 'The trash is empty' }) : t({ ko: '아직 글이 없어', en: 'No posts yet' })} action={!(searchOpen && searchQuery) && tab !== 'trash' && permissions.canWrite ? <Button size="sm" onClick={() => update({ edit: 'new', post: null })}><PenSquare />{t({ ko: '새 글', en: 'New post' })}</Button> : undefined} />
+    content = <EmptyState icon={searchOpen && searchQuery ? Search : tab === 'trash' ? Trash2 : Newspaper} title={searchOpen && searchQuery ? t({ ko: '찾은 글이 없어', en: 'No matching posts' }) : tab === 'trash' ? t({ ko: '휴지통이 비었어', en: 'The trash is empty' }) : t({ ko: '아직 글이 없어', en: 'No posts yet' })} action={!(searchOpen && searchQuery) && tab !== 'trash' && permissions.canWrite ? <IconButton size="icon-sm" label={t({ ko: '새 글', en: 'New post' })} onClick={() => update({ edit: 'new', post: null })}><PenSquare /></IconButton> : undefined} />
   } else {
     const listProps = tab === 'trash' ? { posts, categories, onOpen: () => undefined, onTag: filterTag, menu: trashMenu, menuOnClick: true } : { posts, categories, onOpen: openPost, onTag: filterTag }
     content = (

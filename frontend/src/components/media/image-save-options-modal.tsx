@@ -1,4 +1,3 @@
-import { Save } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -115,7 +114,6 @@ export function ImageSaveOptionsModal({
             {t({ ko: '취소', en: 'Cancel' })}
           </Button>
           <Button type="button" onClick={onConfirm} disabled={isSaving}>
-            <Save className="h-4 w-4" />
             {isSaving ? t({ ko: '적용 중…', en: 'Applying…' }) : t({ ko: '적용', en: 'Apply' })}
           </Button>
         </ModalFooter>

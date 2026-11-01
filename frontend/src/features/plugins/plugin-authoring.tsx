@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useLocation, useSearchParams } from 'react-router-dom'
-import { Code, Download, FilePlus, Plus, RefreshCw, Save, Trash2, Upload } from 'lucide-react'
+import { Code, FilePlus, Plus, RefreshCw, Save, Trash2, Upload } from 'lucide-react'
 import type { ChatPageAction, ChatPageData, PluginDraft, PluginPackageReview } from '@conai/shared'
 import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
@@ -77,7 +77,7 @@ export function PluginAuthoring({ page }: { page?: PluginManagementPage }) {
   return <>
     <RowGroup heading={t({ ko: '제작 중인 플러그인', en: 'Plugin drafts' })} count={drafts.data?.length} actions={<>
       <IconButton variant="ghost" size="icon-sm" label={t({ ko: '초안 새로고침', en: 'Refresh drafts' })} onClick={() => void drafts.refetch()}><RefreshCw /></IconButton>
-      <Button size="sm" onClick={() => setCreating(true)}><Plus />{t({ ko: '새 플러그인', en: 'New plugin' })}</Button>
+      <IconButton size="icon-sm" label={t({ ko: '새 플러그인', en: 'New plugin' })} onClick={() => setCreating(true)}><Plus /></IconButton>
     </>}>
       {error || drafts.error ? <p role="alert" className="text-sm text-destructive">{error || getErrorMessage(drafts.error, t({ ko: '초안을 읽지 못했어.', en: 'Could not load drafts.' }))}</p> : null}
       {drafts.isSuccess && drafts.data.length === 0 ? <EmptyState size="compact" icon={Code} title={t({ ko: '제작 중인 플러그인이 없어', en: 'No plugin drafts' })} /> : null}
@@ -250,17 +250,19 @@ function PluginDraftEditor({ initial, remoteRevision, onClose }: { initial: Plug
             {draft.files.map(file => <ListRow key={file.name} asChild selected={selectedFile === file.name} size="sm"><button type="button" disabled={busy || dirty} onClick={() => void run(() => load(file.name))} title={`${file.name} (${file.size})`}><span className="truncate font-mono text-xs">{file.name}</span></button></ListRow>)}
           </div>
           <Input aria-label={t({ ko: '새 파일 이름', en: 'New file name' })} placeholder="src/helper.js" value={newTarget} onChange={event => setNewTarget(event.target.value)} />
-          <Button size="sm" variant="ghost" disabled={busy || dirty || !newTarget} onClick={() => void run(addFile)}><FilePlus />{t({ ko: '파일 추가', en: 'Add file' })}</Button>
-          <Button size="sm" variant="ghost" disabled={busy || dirty || !newTarget || !selectedFile} onClick={() => void run(renameFile)}>{t({ ko: '선택 파일 이름 변경', en: 'Rename selected file' })}</Button>
+          <div className="flex flex-wrap items-center gap-1">
+            <IconButton size="icon-sm" variant="ghost" label={t({ ko: '파일 추가', en: 'Add file' })} disabled={busy || dirty || !newTarget} onClick={() => void run(addFile)}><FilePlus /></IconButton>
+            <IconButton size="icon-sm" variant="ghost" label={t({ ko: '파일 업로드', en: 'Upload asset' })} disabled={busy || dirty} onClick={() => uploadInput.current?.click()}><Upload /></IconButton>
+            <Button size="sm" variant="ghost" disabled={busy || dirty || !newTarget || !selectedFile} onClick={() => void run(renameFile)}>{t({ ko: '선택 파일 이름 변경', en: 'Rename selected file' })}</Button>
+          </div>
           <input ref={uploadInput} className="hidden" type="file" onChange={event => { const file = event.target.files?.[0]; if (file) void run(() => upload(file)); event.target.value = '' }} />
-          <Button size="sm" variant="ghost" disabled={busy || dirty} onClick={() => uploadInput.current?.click()}><Upload />{t({ ko: '파일 업로드', en: 'Upload asset' })}</Button>
         </div>
         <div className="min-w-0 flex-1">
           <div className="mb-2 flex items-center gap-2">
             <span className="min-w-0 flex-1 truncate font-mono text-xs">{selectedFile || t({ ko: '파일을 선택해줘', en: 'Select a file' })}{dirty ? ' *' : ''}</span>
             <IconButton variant="ghost" size="icon-sm" disabled={busy || dirty} label={t({ ko: '최신 소스 읽기', en: 'Reload source' })} onClick={() => void run(() => load(document?.target ?? 'plugin.json'))}><RefreshCw /></IconButton>
             <IconButton variant="ghost" size="icon-sm" disabled={busy || dirty || !selectedFile} label={t({ ko: '초안 파일 삭제', en: 'Delete draft file' })} onClick={() => void run(removeFile)}><Trash2 /></IconButton>
-            <Button size="sm" variant="secondary" disabled={busy || !dirty} onClick={() => void run(save)}><Save />{t({ ko: '파일 저장', en: 'Save file' })}</Button>
+            <IconButton size="icon-sm" variant="secondary" label={t({ ko: '파일 저장', en: 'Save file' })} disabled={busy || !dirty} onClick={() => void run(save)}><Save /></IconButton>
           </div>
           {document ? <PlainTextEditor value={document.text} onChange={changeText} fileName={document.target} heightClassName="h-[45vh] min-h-40" /> : null}
         </div>
@@ -268,9 +270,9 @@ function PluginDraftEditor({ initial, remoteRevision, onClose }: { initial: Plug
       {review ? <PluginPackageReviewSummary review={review} /> : null}
     </ModalBody>
     <ModalFooter>
-      <IconButton variant="ghost" disabled={busy} label={t({ ko: '초안 삭제', en: 'Delete draft' })} onClick={() => void run(removeDraft)}><Trash2 /></IconButton>
+      <Button variant="destructive-ghost" disabled={busy} onClick={() => void run(removeDraft)}>{t({ ko: '초안 삭제', en: 'Delete draft' })}</Button>
       <span className="flex-1" />
-      <Button variant="ghost" disabled={busy || dirty} onClick={() => void run(download)}><Download />{t({ ko: 'ZIP 내보내기', en: 'Export ZIP' })}</Button>
+      <Button variant="ghost" disabled={busy || dirty} onClick={() => void run(download)}>{t({ ko: 'ZIP 내보내기', en: 'Export ZIP' })}</Button>
       <Button variant="secondary" disabled={busy || dirty} onClick={() => void run(prepare)}>{t({ ko: '검증 및 설치 검토', en: 'Validate and review' })}</Button>
       {review ? <Button disabled={busy || dirty} onClick={() => void run(install)}>{t({ ko: '검토한 패키지 적용', en: 'Apply reviewed package' })}</Button> : null}
     </ModalFooter>

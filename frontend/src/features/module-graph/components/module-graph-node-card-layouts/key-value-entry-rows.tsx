@@ -1,5 +1,4 @@
 import { Plus, X } from 'lucide-react'
-import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { useI18n } from '@/i18n'
 import type { ModulePortDataType, ModulePortDefinition } from '@/lib/api-module-graph'
@@ -90,10 +89,10 @@ export function KeyValueEntryRows({
         )
       })}
       <div className="px-2">
-        <Button
-          type="button"
+        <IconButton
           variant="ghost"
-          size="xs"
+          size="icon-xs"
+          label={t({ ko: '항목 추가', en: 'Add item' })}
           onMouseDown={stopNodeEvent}
           onClick={(event) => {
             event.stopPropagation()
@@ -102,8 +101,7 @@ export function KeyValueEntryRows({
           className="nodrag"
         >
           <Plus />
-          {t({ ko: '항목 추가', en: 'Add item' })}
-        </Button>
+        </IconButton>
       </div>
     </>
   )

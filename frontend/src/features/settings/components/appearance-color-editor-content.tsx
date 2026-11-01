@@ -1,5 +1,5 @@
 import type { CSSProperties, ReactNode } from 'react'
-import { Monitor, Moon, Pipette, Sun } from 'lucide-react'
+import { Pipette } from 'lucide-react'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { IconButton } from '@/components/ui/icon-button'
 import { Select } from '@/components/ui/select'
@@ -57,9 +57,9 @@ export function AppearanceThemeRows({
           value={appearanceDraft.themeMode}
           onChange={(value) => onPatchAppearance({ themeMode: value as AppearanceSettings['themeMode'] })}
           items={[
-            { value: 'light', label: <><Sun className="h-4 w-4" />{getThemeModeLabel('light', t)}</> },
-            { value: 'dark', label: <><Moon className="h-4 w-4" />{getThemeModeLabel('dark', t)}</> },
-            { value: 'system', label: <><Monitor className="h-4 w-4" />{getThemeModeLabel('system', t)}</> },
+            { value: 'light', label: getThemeModeLabel('light', t) },
+            { value: 'dark', label: getThemeModeLabel('dark', t) },
+            { value: 'system', label: getThemeModeLabel('system', t) },
           ]}
         />
       </SettingRow>

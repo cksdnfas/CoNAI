@@ -2,7 +2,7 @@ import { useState, type ReactNode } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { ClipboardCopy, Loader2, SlidersHorizontal } from 'lucide-react'
 import type { ActionMenuAction } from '@/components/ui/action-menu'
-import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useImageViewModal } from '@/features/images/components/detail/image-view-modal-context'
 import { useI18n } from '@/i18n'
@@ -28,15 +28,13 @@ export function GenerationHistoryReuseActions({ historyId, between }: Generation
 
   return (
     <>
-      <Button size="compact" variant="secondary" onClick={load.onSelect} disabled={load.disabled}>
-        {busyAction === 'load' ? <Loader2 className="h-4 w-4 animate-spin" /> : <SlidersHorizontal className="h-4 w-4" />}
-        {load.label}
-      </Button>
+      <IconButton size="icon-sm" variant="secondary" onClick={load.onSelect} disabled={load.disabled} label={load.label}>
+        {busyAction === 'load' ? <Loader2 className="animate-spin" /> : <SlidersHorizontal />}
+      </IconButton>
       {between}
-      <Button size="compact" variant="secondary" onClick={copy.onSelect} disabled={copy.disabled}>
-        {busyAction === 'copy' ? <Loader2 className="h-4 w-4 animate-spin" /> : <ClipboardCopy className="h-4 w-4" />}
-        {copy.label}
-      </Button>
+      <IconButton size="icon-sm" variant="secondary" onClick={copy.onSelect} disabled={copy.disabled} label={copy.label}>
+        {busyAction === 'copy' ? <Loader2 className="animate-spin" /> : <ClipboardCopy />}
+      </IconButton>
     </>
   )
 }

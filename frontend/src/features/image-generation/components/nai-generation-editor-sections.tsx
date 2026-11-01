@@ -1,9 +1,9 @@
 import { useId, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react'
-import { Brush, ChevronDown, Dices, Plus, Trash2 } from 'lucide-react'
+import { Brush, Dices, Plus, SlidersHorizontal, Trash2 } from 'lucide-react'
 import { getNaiFixedModelSettings, getNaiQualityTags, getNaiUcPresetIds, getNaiUcPresetText, NAI_ENHANCE_AMOUNTS, type NaiEnhanceAmount, type NaiUcPresetId } from '@conai/shared'
 import type { StoredNaiCharacterReferenceAsset, StoredNaiVibeAsset } from '@/lib/api-image-generation-types'
 import { DisclosureButton } from '@/components/ui/disclosure-button'
-import { Button } from '@/components/ui/button'
+import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Field } from '@/components/ui/field'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
@@ -679,7 +679,6 @@ function NaiSettingsSection({
   handleResolutionPresetChange: (presetKey: string) => void
 }) {
   const { t } = useI18n()
-  const settingsRegionId = useId()
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const advancedRegionId = useId()
   const [isAdvancedOpen, setIsAdvancedOpen] = useState(readAdvancedOpen)
@@ -707,14 +706,22 @@ function NaiSettingsSection({
   )
 
   return (
-    <section className="@container space-y-3">
-      <div className="flex min-w-0 flex-wrap items-center gap-2">
-        <span className="min-w-0 flex-1 text-sm text-muted-foreground">{summary}</span>
-        <Button type="button" variant="secondary" size="sm" aria-expanded={isSettingsOpen} aria-controls={settingsRegionId} onClick={() => setIsSettingsOpen((open) => !open)}>
-          {t({ ko: '세부 설정', en: 'Details' })}<ChevronDown />
-        </Button>
-      </div>
-      <div id={settingsRegionId} hidden={!isSettingsOpen} className="space-y-5">
+    // The details float over the form instead of unfolding above the prompt and pushing it down.
+    <Popover open={isSettingsOpen} onOpenChange={setIsSettingsOpen}>
+      <PopoverAnchor asChild>
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="min-w-0 flex-1 truncate text-sm text-muted-foreground">{summary}</span>
+          <PopoverTrigger asChild>
+            <IconButton size="icon-sm" variant="ghost" label={t({ ko: '세부 설정', en: 'Details' })}>
+              <SlidersHorizontal />
+            </IconButton>
+          </PopoverTrigger>
+        </div>
+      </PopoverAnchor>
+      <PopoverContent
+        align="end"
+        className="@container max-h-(--radix-popover-content-available-height) w-(--radix-popover-trigger-width) space-y-5 overflow-y-auto"
+      >
         <div className="grid gap-4 @md:grid-cols-4">
           <div className="@md:col-span-3">
             <Field label={t({ ko: '모델', en: 'Model' })}>
@@ -819,7 +826,7 @@ function NaiSettingsSection({
             </div>
           ) : null}
         </div>
-      </div>
-    </section>
+      </PopoverContent>
+    </Popover>
   )
 }

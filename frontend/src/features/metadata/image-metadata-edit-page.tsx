@@ -7,7 +7,6 @@ import { useParams } from 'react-router-dom'
 import { PageToolbar } from '@/components/common/page-toolbar'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { CollapsibleRow } from '@/components/ui/collapsible-row'
-import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useSnackbar } from '@/components/ui/snackbar-context'
@@ -228,9 +227,9 @@ export function ImageMetadataEditPage() {
             <Tip content={draft && isEditableImage && !hasUnsavedChanges ? t({ ko: '바뀐 게 없어', en: 'No changes to save' }) : null}>
               {/* The span carries the tooltip: a disabled button gets no pointer events. */}
               <span className="inline-flex" tabIndex={draft && isEditableImage && !hasUnsavedChanges ? 0 : undefined}>
-                <Button size="sm" onClick={handleSave} disabled={!canSave}>
-                  <Save />{t({ ko: '저장', en: 'Save' })}
-                </Button>
+                <IconButton size="icon-sm" label={t({ ko: '저장', en: 'Save' })} onClick={handleSave} disabled={!canSave}>
+                  <Save />
+                </IconButton>
               </span>
             </Tip>
           </>

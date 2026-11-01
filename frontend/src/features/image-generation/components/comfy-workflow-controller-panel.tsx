@@ -487,7 +487,6 @@ export function ComfyWorkflowControllerPanel({
         {characterTextTargets.length > 0 ? (
           <div className="flex justify-end">
             <CharacterSettingLoadButton
-              showLabel
               label={t({ ko: '캐릭터 불러오기', en: 'Load character' })}
               textTargets={characterTextTargets}
               referenceTargets={characterImageTargets}

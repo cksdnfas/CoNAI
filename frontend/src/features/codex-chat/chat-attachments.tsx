@@ -16,9 +16,8 @@ import { isFromOwnDom } from '@/lib/portal-events'
 import type { CodexChatApi } from './codex-chat-context'
 import { ChatMediaAttachments, ChatMediaPicker } from './chat-media-picker'
 import { ChatPostRefChip } from './chat-post-cards'
-import { ToggleChip } from '@/components/ui/chip'
 
-/** The composer's 첨부 chip: upload, private stored files, or references to app media. */
+/** The composer's 첨부 key: upload, private stored files, or references to app media. */
 export function ChatAttachButton({ chat, disabled }: { chat: CodexChatApi; disabled: boolean }) {
   const { t } = useI18n()
   const auth = useAuthStatusQuery()
@@ -37,7 +36,7 @@ export function ChatAttachButton({ chat, disabled }: { chat: CodexChatApi; disab
       <input ref={input} type="file" multiple className="hidden" onChange={(event) => { void chat.uploadAttachments(Array.from(event.target.files ?? [])); event.target.value = '' }} />
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <ToggleChip disabled={isDisabled}><Paperclip />{t({ ko: '첨부', en: 'Attach' })}</ToggleChip>
+          <IconButton variant="ghost" size="icon-sm" disabled={isDisabled} label={t({ ko: '첨부', en: 'Attach' })}><Paperclip /></IconButton>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" side="top">
           {canUpload ? <DropdownMenuItem onSelect={() => input.current?.click()}>

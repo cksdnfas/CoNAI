@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { PostAssessmentQuality, PostDetail, PostReviewIssue } from '@conai/shared'
 import { RefreshCw, ThumbsDown, ThumbsUp } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
 import { ToggleChip } from '@/components/ui/chip'
 import { Field } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
@@ -128,7 +129,7 @@ export function PostVoteBar({ post }: { post: PostDetail }) {
   return (
     <div className="flex min-h-9 items-center justify-center gap-2 py-6" aria-label={t({ ko: '게시물 평가', en: 'Post feedback' })}>
       {quality.isError ? (
-        <Button variant="ghost" size="sm" onClick={() => void quality.refetch()}><RefreshCw />{t({ ko: '평가 다시 불러오기', en: 'Retry feedback' })}</Button>
+        <IconButton variant="ghost" size="icon-sm" label={t({ ko: '평가 다시 불러오기', en: 'Retry feedback' })} onClick={() => void quality.refetch()}><RefreshCw /></IconButton>
       ) : <>
         <Tip content={noPermission}>
           <span className="inline-flex">

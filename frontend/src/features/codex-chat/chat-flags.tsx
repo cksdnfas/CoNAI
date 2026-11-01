@@ -1,6 +1,6 @@
 import { createElement, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type RefObject } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Ban, Eye, EyeOff, Flag, GripVertical, Pencil, Plus, RotateCcw, Users } from 'lucide-react'
+import { Ban, Eye, EyeOff, Flag, GripVertical, Pencil, RotateCcw, Users } from 'lucide-react'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Button } from '@/components/ui/button'
 import { useConfirm } from '@/components/ui/confirm-dialog'
@@ -35,7 +35,7 @@ import { cn } from '@/lib/utils'
 import type { ChatFlagStyle } from './chat-appearance'
 import { CHAT_FLAG_EMOJI, CHAT_FLAG_ICON_GROUPS, LUCIDE_PREFIX, chatFlagLucideIcon } from './chat-flag-icons'
 import { popChipAddClassName, popChipClassName } from './chat-pop-chip'
-import { ToggleChip } from '@/components/ui/chip'
+import { CountBadge } from '@/components/ui/count-badge'
 
 const POP_STAGGER_MS = 45
 const DROP_STAGGER_MS = 18
@@ -66,7 +66,7 @@ export function ChatFlagIcon({ icon, name, className }: { icon: string; name: st
   return <span aria-hidden="true" className={cn('shrink-0 text-xs font-semibold leading-none', className)}>{[...name.trim()][0]?.toUpperCase() ?? '?'}</span>
 }
 
-/** The composer's flag chip (next to attach): how many flags are on (tinted while any is), and opens the tray. */
+/** The composer's flag key (next to attach): how many flags are on (tinted while any is), and opens the tray. */
 export function ChatFlagButton({ buttonRef, count, open, disabled, onToggle }: {
   buttonRef: RefObject<HTMLButtonElement | null>
   count: number
@@ -76,10 +76,20 @@ export function ChatFlagButton({ buttonRef, count, open, disabled, onToggle }: {
 }) {
   const { t } = useI18n()
   return (
-    <ToggleChip ref={buttonRef} pressed={count > 0} aria-expanded={open} disabled={disabled} onClick={onToggle}>
+    <IconButton
+      ref={buttonRef}
+      variant="ghost"
+      size="icon-sm"
+      active={count > 0}
+      aria-expanded={open}
+      disabled={disabled}
+      onClick={onToggle}
+      className="relative"
+      label={count > 0 ? t({ ko: '플래그 {count}', en: 'Flags {count}' }, { count }) : t({ ko: '플래그', en: 'Flags' })}
+    >
       <Flag className={cn('transition-transform duration-300 ease-out motion-reduce:transition-none', open && '-rotate-12 scale-110')} />
-      {count > 0 ? t({ ko: '플래그 {count}', en: 'Flags {count}' }, { count }) : t({ ko: '플래그', en: 'Flags' })}
-    </ToggleChip>
+      {count > 0 ? <CountBadge count={count} size="xs" corner="top-right" /> : null}
+    </IconButton>
   )
 }
 
@@ -502,7 +512,7 @@ export function ChatFlagManagerModal({ open, onClose }: { open: boolean; onClose
           )}
         </ModalBody>
         <ModalFooter separated>
-          <Button size="sm" variant="secondary" disabled={full} onClick={() => setEditor({ flag: null })}><Plus />{t({ ko: '플래그 추가', en: 'Add flag' })}</Button>
+          <Button size="sm" variant="secondary" disabled={full} onClick={() => setEditor({ flag: null })}>{t({ ko: '플래그 추가', en: 'Add flag' })}</Button>
         </ModalFooter>
       </Modal>
       <ChatFlagEditorModal open={editor !== null} flag={editor?.flag ?? null} onClose={() => setEditor(null)} />

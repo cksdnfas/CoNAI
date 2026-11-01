@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Code, Download, ExternalLink, FileText, GitBranch, Puzzle, RefreshCw, ServerCog, Trash2, Upload, Webhook, Wrench } from 'lucide-react'
+import { ExternalLink, FileText, GitBranch, Puzzle, RefreshCw, ServerCog, Upload, Webhook, Wrench } from 'lucide-react'
 import { EmptyState } from '@/components/ui/empty-state'
 import type { InstalledPlugin, PluginInstallResult, PluginServerStatus, PluginSourceProvider } from '@conai/shared'
 import { Button } from '@/components/ui/button'
@@ -280,9 +280,9 @@ export function PluginManagement({ assistantPage, pageContext }: { assistantPage
                   setDetail(null)
                   // The editor follows ?draft= on whichever page holds this list.
                   setParams((previous) => { const next = new URLSearchParams(previous); next.set('draft', draft.id); return next })
-                })}><Code />{t({ ko: '소스 수정', en: 'Edit source' })}</Button>
-                <Button variant="ghost" size="sm" disabled={busy} onClick={() => void run(() => downloadPluginPackage(`${opened.manifest.id}-${opened.manifest.version}.zip`, { pluginId: opened.manifest.id }))}><Download />{t({ ko: 'ZIP 내보내기', en: 'Export ZIP' })}</Button>
-                <Button variant="destructive" size="sm" disabled={busy} onClick={() => void remove(opened)}><Trash2 />{t({ ko: '제거', en: 'Remove' })}</Button>
+                })}>{t({ ko: '소스 수정', en: 'Edit source' })}</Button>
+                <Button variant="ghost" size="sm" disabled={busy} onClick={() => void run(() => downloadPluginPackage(`${opened.manifest.id}-${opened.manifest.version}.zip`, { pluginId: opened.manifest.id }))}>{t({ ko: 'ZIP 내보내기', en: 'Export ZIP' })}</Button>
+                <Button variant="destructive" size="sm" disabled={busy} onClick={() => void remove(opened)}>{t({ ko: '제거', en: 'Remove' })}</Button>
                 <span className="flex-1" />
                 <SwitchLine label={t({ ko: '켜짐', en: 'Enabled' })} checked={opened.enabled} disabled={busy} onCheckedChange={(value) => void setEnabled(opened, value)} />
               </ModalFooter>

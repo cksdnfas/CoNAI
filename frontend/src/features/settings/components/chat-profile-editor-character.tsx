@@ -5,7 +5,6 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { useSnackbar } from '@/components/ui/snackbar-context'
-import { Button } from '@/components/ui/button'
 import { Chip } from '@/components/ui/chip'
 import { IconButton } from '@/components/ui/icon-button'
 import { Text } from '@/components/ui/text'
@@ -353,7 +352,7 @@ export function ChatProfileCharacterPanel({ open, draft, patch, onPreview, profi
         assisted={filled('greeting') || filled('alternateGreetings')}
         onTextChange={(next) => patch(greetingFields(greetings.map((entry, i) => (i === greetingIndex ? next : entry))))}
         onClose={() => openItem(null)}
-        lead={<Button variant="secondary" size="sm" disabled={!text.trim() || draft.alternateGreetings.length >= CHAT_PROFILE_TEXT_LIMITS.alternateGreetings} onClick={addGreeting}><Plus />{t({ ko: '다른 인사말', en: 'Another greeting' })}</Button>}
+        lead={<IconButton variant="secondary" size="icon-sm" label={t({ ko: '다른 인사말', en: 'Another greeting' })} disabled={!text.trim() || draft.alternateGreetings.length >= CHAT_PROFILE_TEXT_LIMITS.alternateGreetings} onClick={addGreeting}><Plus /></IconButton>}
         tools={(
           <>
             <IconButton size="icon-sm" variant="ghost" disabled={first} onClick={() => patch({ greetingPosition: position - 1 })} label={t({ ko: '위로', en: 'Move up' })}><ArrowUp /></IconButton>

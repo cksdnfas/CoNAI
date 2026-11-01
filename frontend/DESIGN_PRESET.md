@@ -259,7 +259,8 @@ buttons up one tone.
   layout): the column itself — token width and padding, right hairline, own scroll. PageWithSidebar, TwoPane and the
   chat page render it.
 - `.page-bleed`: a page root with a column cancels the shell's side and bottom padding (column runs edge to edge and
-  full height); its content column puts `pb-(--theme-shell-main-padding-bottom)` back. PageWithSidebar and `/chat`.
+  full height); its content column puts `pb-(--theme-shell-main-padding-bottom)` back. PageWithSidebar and `/chat`
+  (the chat column does not: its composer is the last row and keeps its own small bottom gap).
 - `PageWithSidebar` (`components/common/page-with-sidebar`): render it as the page root.
   `storageKey`, `sidebar`, `sidebarLabel`, `sidebarFooter?`, `sidebarWidth?` (default token), `toolbar?`, `defaultCollapsed?`.
   Desktop (`useDesktopPageLayout`, 1280px default): sticky column under the header, own scroll, right hairline,
@@ -279,8 +280,8 @@ buttons up one tone.
   `depth?`, `asChild?`) / `SidebarFooter` (`components/ui/sidebar`). Current row = `bg-fill` + 2px primary bar.
   In the mobile drawer an item click closes the drawer.
 - `PageToolbar` (`components/common/page-toolbar`): one 56px row, no surface. `title?` · `start?` (segmented…) ·
-  `children` (flexible middle, e.g. search) · `actions?` (ghost IconButtons, at most one primary Button that names its
-  action). Adds the sidebar toggle itself inside PageWithSidebar.
+  `children` (flexible middle, e.g. search) · `actions?` (IconButtons; at most one primary). Adds the sidebar toggle
+  itself inside PageWithSidebar.
 - Page first row: every page opens with its PageToolbar, and its left end says where you are. `title` is the page's
   menu name (`t('pageAccessCatalog.<page>')`) followed by the count; views of the whole page are a SegmentedControl in
   `start` after the title (prompts, wildcards, sprite); a sidebar page names the open item after the title as a muted
@@ -365,9 +366,8 @@ Dialogs are for short jobs: a question, a name, a choice, a small form. An edito
   a consequence the user must know (what is deleted or kept), `status` holds a state chip (linked, synced). No switches, menus or buttons in the header; they go in
   the body or the footer.
 - Footer (`EditorFooter`): Delete in words on the left (asks first), the editor's other actions, then on the right the
-  unsaved status (`Ctrl S`), Cancel and the primary action as a verb (저장 · 만들기 · 불러오기). An icon-only primary
-  action fails lint (`[ds/icon-primary]`) in a `ModalFooter` / `EditorFooter` and on pages alike; icons alone stay for
-  small repeated tools (export, duplicate), and the chat composer's send arrow is the one exception.
+  unsaved status (`Ctrl S`), Cancel and the primary action as a verb (저장 · 만들기 · 불러오기). Footer keys are words
+  without icons; everywhere else see "Icon or words, never both" below.
 - Height: `auto` by default. `medium` / `tall` only when the body changes while open (pickers, managers, tabs or a
   section list), so the frame does not jump.
 
@@ -442,6 +442,15 @@ A large editor (chat profile, appearance setting, lorebook) is a page with its o
 | `overlay` | controls sitting on photos (viewer toolbar, media tiles) | `backdrop/50` scrim + blur, white foreground; readable on any image in both themes |
 
 `outline` no longer exists. Icon-only buttons use `IconButton` (label = aria-label + tooltip).
+
+**Icon or words, never both.** An action key with an icon is an `IconButton` (primary CTAs included: `variant="default"`
+IconButton, its cost or count in the label/tooltip). A key without a fitting icon is a word-only Button (dialog footers:
+취소 · 저장). Rows that name a place or a value are not action keys and keep icon + name: navigation rows (`nav`,
+SidebarItem), menu items, field-style pickers (`variant="field"`) and chips that name user data.
+A tab strip and the actions of its content share one row: tabs on the left, IconButtons on the right
+(TextTabs `actions`, or a `justify-between` row), never a second row of buttons under the tabs.
+A folding section opens under its own trigger in reading order; never unfold rarely used settings above the main
+input (open them in a Popover, or place the trigger after the main input).
 Toggle icon buttons pass `active` (`aria-pressed` + `data-pressed`): primary/12 tint on ghost/subtle/secondary, solid
 primary on `overlay`, primary tint on `shell`.
 Do not restyle buttons with `bg-*`, `border`, `rounded-*` or `shadow-*` overrides; pick a variant.
@@ -451,7 +460,7 @@ Do not restyle buttons with `bg-*`, `border`, `rounded-*` or `shadow-*` override
 |---|---|---|
 | `Badge` | short status / kind labels | `text-2xs` semibold, `tracking-overline`, uppercase (Latin); variants `default secondary outline ghost link` + status `success warning info destructive` (soft token fills) |
 | `Chip` | user content: tags, terms, tokens | keeps text case; `tone` `default muted primary success warning info destructive`, `size` `sm md` |
-| `ToggleChip` | multi-select filters / category toggles; the chat composer's tools (the label says the state: 페이지 연결 켜짐, 플래그 2) | `aria-pressed`; muted wash → primary/12 tint when pressed. Without `pressed` it is a plain worded key (a menu or popup trigger) in the same row |
+| `ToggleChip` | multi-select filters / category toggles that name data (the chat composer's tools are `IconButton`s with `active`; the flag count is a `CountBadge`) | `aria-pressed`; muted wash → primary/12 tint when pressed. Without `pressed` it is a plain worded key (a menu or popup trigger) in the same row |
 | `Chip onRemove` | removable tag / keyword / applied filter | `onRemove`, `removeLabel?` (default 빼기), `removeDisabled?`; trailing ghost X key sized to the chip (sm 16px, md 20px). Never hand-place an IconButton X inside a Chip |
 | `Badge variant="overlay"` | counts / kind tags on a photo or thumbnail (`+3`, `1/4`, 영상, GIF) | `bg-backdrop` scrim + blur, white, own case, medium weight; `size` `default` (24px) `sm` (20px) `xs` (16px). Never re-create with `bg-backdrop … text-white text-2xs` |
 | `CountBadge` (`ui/count-badge`) | unread / pending counter or attention dot on a key, inline unread pill | `count?` (none = 8px dot), `max?` (`99+`), `label?` (role img), `tone` `primary destructive`, `size` `xs` 14 / `sm` 16 / `md` 18px, `corner` `top-right bottom-right` (absolute on a `relative` parent), `ring` |
@@ -509,7 +518,7 @@ Hover = `bg-fill`. Only the top app nav uses primary text for the active item.
 | wand `Wand` | image or media generation (생성, 만들기, empty slots, the generation page) | AI text |
 | ✦ `Sparkles` | AI writes or suggests text (AI 초안, reply suggestions, keyword fill, merge drafts) | generation runs |
 
-The wand and ✦ never stand alone on a primary action: pair them with the verb ("생성", "만들기", "AI 초안"). Wildcards
+A primary IconButton with the wand or ✦ names its verb in the label ("생성 · 무료", "AI 초안"). Wildcards
 use `Shuffle`; the page of every page (`/access`, 전체) uses `LayoutGrid`. Page icons come from
 `features/auth/page-access-catalog.tsx`.
 

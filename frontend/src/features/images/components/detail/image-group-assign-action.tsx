@@ -2,7 +2,6 @@ import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { FolderPlus } from 'lucide-react'
-import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
@@ -18,8 +17,6 @@ interface ImageGroupAssignActionProps {
   image?: ImageRecord
   /** `ghost` in page toolbars, `overlay` on the viewer's photo stage. */
   variant?: 'ghost' | 'secondary' | 'overlay'
-  /** Show the label beside the icon (a toolbar of worded actions). */
-  labelled?: boolean
 }
 
 export function useImageGroupAssignMutation(compositeHash: string | null, onAssigned?: () => void) {
@@ -46,7 +43,7 @@ export function useImageGroupAssignMutation(compositeHash: string | null, onAssi
 }
 
 /** Render a reusable single-image group assignment action for detail views. */
-export function ImageGroupAssignAction({ image, variant = 'secondary', labelled = false }: ImageGroupAssignActionProps) {
+export function ImageGroupAssignAction({ image, variant = 'secondary' }: ImageGroupAssignActionProps) {
   const { canAssignGroups } = useImagePermissions()
   const queryClient = useQueryClient()
   const { showSnackbar } = useSnackbar()
@@ -97,15 +94,9 @@ export function ImageGroupAssignAction({ image, variant = 'secondary', labelled 
 
   return (
     <>
-      {labelled ? (
-        <Button size="compact" variant={variant} onClick={() => void handleOpenModal()} disabled={busy}>
-          <FolderPlus />{label}
-        </Button>
-      ) : (
-        <IconButton size="icon-sm" variant={variant} onClick={() => void handleOpenModal()} disabled={busy} label={label}>
-          <FolderPlus className="h-4 w-4" />
-        </IconButton>
-      )}
+      <IconButton size="icon-sm" variant={variant} onClick={() => void handleOpenModal()} disabled={busy} label={label}>
+        <FolderPlus className="h-4 w-4" />
+      </IconButton>
 
       <GroupAssignModal
         open={isModalOpen}

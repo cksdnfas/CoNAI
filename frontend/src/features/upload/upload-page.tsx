@@ -1,10 +1,9 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
 import type { ChatPageData } from '@conai/shared'
-import { FileDown, FileSearch, ImageDown, Library, RotateCcw, ScanSearch, Settings2, Upload } from 'lucide-react'
+import { FileDown, ImageDown, RotateCcw, ScanSearch, Settings2, Upload } from 'lucide-react'
 import { PageToolbar } from '@/components/common/page-toolbar'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
-import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import {
@@ -462,14 +461,20 @@ function UploadPageContent() {
       >
         <RotateCcw />
       </IconButton>
-      <Button size="sm" className="ml-1" onClick={() => void handleUpload()} disabled={uploadFiles.length === 0 || isUploading} aria-busy={isUploading || undefined}>
-        <Upload />
-        {isUploading
+      <IconButton
+        size="icon-sm"
+        className="ml-1"
+        onClick={() => void handleUpload()}
+        disabled={uploadFiles.length === 0 || isUploading}
+        aria-busy={isUploading || undefined}
+        label={isUploading
           ? t('uploadPageSections.uploading')
           : uploadFiles.length > 0
             ? t({ ko: '업로드 · {count}', en: 'Upload · {count}' }, { count: formatNumber(uploadFiles.length) })
             : t({ ko: '업로드', en: 'Upload' })}
-      </Button>
+      >
+        <Upload />
+      </IconButton>
     </>
   )
 
@@ -526,8 +531,8 @@ function UploadPageContent() {
             semantics="tabs"
             ariaLabel={t({ ko: '업로드 방식', en: 'Upload mode' })}
             items={[
-              { value: 'library', label: <><Library />{t({ ko: '라이브러리에 저장', en: 'Save to library' })}</>, ariaLabel: t({ ko: '라이브러리에 저장: 올린 파일을 라이브러리에 넣어', en: 'Save to library: upload files into the library' }) },
-              { value: 'inspect', label: <><FileSearch />{t({ ko: '메타데이터만 보기', en: 'Metadata only' })}</>, ariaLabel: t({ ko: '메타데이터만 보기: 저장 없이 이미지 정보만 확인해', en: 'Metadata only: inspect an image without saving it' }) },
+              { value: 'library', label: t({ ko: '라이브러리에 저장', en: 'Save to library' }), ariaLabel: t({ ko: '라이브러리에 저장: 올린 파일을 라이브러리에 넣어', en: 'Save to library: upload files into the library' }) },
+              { value: 'inspect', label: t({ ko: '메타데이터만 보기', en: 'Metadata only' }), ariaLabel: t({ ko: '메타데이터만 보기: 저장 없이 이미지 정보만 확인해', en: 'Metadata only: inspect an image without saving it' }) },
             ]}
           />
         )}

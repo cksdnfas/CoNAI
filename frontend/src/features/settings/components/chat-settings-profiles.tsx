@@ -15,7 +15,6 @@ import { useConfirm } from '@/components/ui/confirm-dialog'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Heading } from '@/components/ui/heading'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { RowGroup } from '@/components/ui/row-group'
 import { useSnackbar } from '@/components/ui/snackbar-context'
@@ -302,7 +301,7 @@ export function ChatSettingsProfiles() {
               if (file) importMutation.mutate(file)
             }} />
             <IconButton size="icon-sm" variant="ghost" disabled={importMutation.isPending} onClick={() => importRef.current?.click()} label={t({ ko: '캐릭터 카드 가져오기', en: 'Import character card' })}><FileUp /></IconButton>
-            <Button size="sm" onClick={() => openEditor(null)}><Plus />{t({ ko: '새 프로필', en: 'New profile' })}</Button>
+            <IconButton size="icon-sm" label={t({ ko: '새 프로필', en: 'New profile' })} onClick={() => openEditor(null)}><Plus /></IconButton>
           </>}>
         <ToolbarSearchField value={searchText} onChange={setSearchText} placeholder={t({ ko: '프로필 이름 검색', en: 'Search profiles by name' })} />
       </PageToolbar>}
@@ -329,7 +328,7 @@ export function ChatSettingsProfiles() {
                   : profile.characterLink?.synced ? <Badge variant="overlay" size="sm"><Link2 />{t({ ko: '동기화', en: 'Synced' })}</Badge> : undefined}
                 details={<span className="truncate text-xs text-white/75">{profileModelLine(profile, slots, t)}{profile.mcpEnabled ? ` · ${profile.mcpScopes.map((scope) => getChatScopeCopy(scope, t).label).join(' · ')}` : ''}</span>}
                 actions={<>
-                  <Button variant="overlay" size="compact" className="min-w-0 flex-1" onClick={() => openEditor(profile)}><SquarePen /><span className="truncate">{t({ ko: '편집', en: 'Edit' })}</span></Button>
+                  <IconButton variant="overlay" size="icon-sm" label={t({ ko: '편집', en: 'Edit' })} onClick={() => openEditor(profile)}><SquarePen /></IconButton>
                   <IconButton variant="overlay" size="icon-sm" label={t({ ko: '복사', en: 'Copy' })} onClick={() => void copy(profile).catch(onError)}><Copy /></IconButton>
                 </>}
               />

@@ -2,7 +2,6 @@ import { Folder, History, Plus, Search, Shuffle, Upload } from 'lucide-react'
 import { COUNT_UNITS } from '@/lib/count-display'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { SidebarGroupLabel, SidebarItem, SidebarNav } from '@/components/ui/sidebar'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -121,9 +120,9 @@ export function WildcardExplorerSidebarPanel({
             icon={Shuffle}
             title={t('image-generation.components.wildcard.explorer.sidebar.panel.no.items.to.display.yet')}
             action={activeWorkspaceTab !== 'lora' && canEditInActiveTab && canCreateInActiveTab ? (
-              <Button size="sm" variant="secondary" onClick={() => onOpenCreate(null)}>
-                <Plus />{t('image-generation.components.wildcard.explorer.sidebar.panel.add.item')}
-              </Button>
+              <IconButton size="icon-sm" variant="secondary" label={t('image-generation.components.wildcard.explorer.sidebar.panel.add.item')} onClick={() => onOpenCreate(null)}>
+                <Plus />
+              </IconButton>
             ) : undefined}
           />
         )

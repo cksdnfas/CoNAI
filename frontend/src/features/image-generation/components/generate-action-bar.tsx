@@ -1,7 +1,6 @@
 import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { AlertTriangle, Loader2, MoreHorizontal, RotateCcw, Wand } from 'lucide-react'
-import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { IconButton } from '@/components/ui/icon-button'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
@@ -28,8 +27,8 @@ export type GenerateActionBarProps = {
   variant?: GenerateActionBarVariant
   /** Accessible Generate label and tooltip chosen by the provider ("생성", "로그인 후 생성"…). */
   generateLabel: string
-  /** Cost next to Generate, such as NAI "(무료)" or "12 Anlas"; shown in the tooltip on narrow sticky bars. */
-  generateSuffix?: ReactNode
+  /** Cost of Generate, such as NAI "무료" or "12 Anlas"; joined into its label and tooltip ("생성 · 무료"). */
+  generateSuffix?: string
   /** Tooltip on the cost suffix (also appended to the Generate tooltip), e.g. what the estimate leaves out. */
   generateSuffixHint?: string
   onGenerate: () => void
@@ -171,19 +170,24 @@ export function GenerateActionBar({
       ? 'text-muted-foreground'
       : 'text-warning'
 
+  const generateButtonLabel = generateSuffix && !isGenerating ? `${actionLabel} · ${generateSuffix}` : actionLabel
   const generateButton = (
-      <Tip content={<>{`${actionLabel} (${shortcutHint})`}{generateSuffix && !isGenerating ? <> · {generateSuffix}{generateSuffixHint ? <> · {generateSuffixHint}</> : null}</> : null}</>}>
-        <Button
+      <Tip content={<>{`${generateButtonLabel} (${shortcutHint})`}{generateSuffix && !isGenerating && generateSuffixHint ? <> · {generateSuffixHint}</> : null}</>}>
+        {/* A disabled button swallows hover and focus, so the span carries the tooltip that says why it is off. */}
+        <span className="inline-flex shrink-0" tabIndex={canGenerate ? undefined : 0}>
+        <IconButton
           variant="default"
-          size={isSticky ? 'touch' : 'default'}
+          size={isSticky ? 'icon-touch' : 'icon'}
+          label={generateButtonLabel}
+          tooltip={false}
           onClick={onGenerate}
           disabled={!canGenerate}
           aria-busy={isGenerating || undefined}
           aria-keyshortcuts="Control+Enter Meta+Enter"
         >
           {isGenerating ? <Loader2 className="animate-spin" aria-hidden="true" /> : <Wand aria-hidden="true" />}
-          {actionLabel}{generateSuffix && !isGenerating ? <> · {generateSuffix}</> : null}
-        </Button>
+        </IconButton>
+        </span>
       </Tip>
   )
 

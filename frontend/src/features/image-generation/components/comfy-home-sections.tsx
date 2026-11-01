@@ -1,6 +1,6 @@
 import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { Copy, Ellipsis, Eye, ListFilter, ListTree, Pencil, Play, Plus, RefreshCw, RotateCcw, Save, Server, Star, Trash2, Upload } from 'lucide-react'
+import { Copy, Ellipsis, Eye, ListFilter, ListTree, Pencil, Play, Plus, RefreshCw, RotateCcw, Save, Server, Star, Trash2 } from 'lucide-react'
 import { EmptyState } from '@/components/ui/empty-state'
 import { ActionContextMenu, ActionMenuButton, type ActionMenuEntry } from '@/components/ui/action-menu'
 import { Badge } from '@/components/ui/badge'
@@ -308,7 +308,6 @@ function CustomDropdownListEditorModal({ open, isSubmitting = false, initialList
             <Button type="button" variant="secondary" onClick={onClose} disabled={isSubmitting}>{readOnly ? t({ ko: '닫기', en: 'Close' }) : t({ ko: '취소', en: 'Cancel' })}</Button>
             {!readOnly ? (
               <Button type="button" onClick={() => void handleSubmit()} disabled={isSubmitting || !name.trim() || items.length === 0}>
-                <Save className="h-4 w-4" />
                 {t({ ko: '저장', en: 'Save' })}
               </Button>
             ) : null}
@@ -367,7 +366,6 @@ function ComfyDropdownAutoCollectModal({ open, isSubmitting = false, onClose, on
         <ModalFooter>
           <Button type="button" variant="secondary" onClick={onClose} disabled={isSubmitting}>{t({ ko: '취소', en: 'Cancel' })}</Button>
           <Button type="button" onClick={() => void handleSubmit()} disabled={isSubmitting}>
-            <Upload className="h-4 w-4" />
             {t({ ko: '자동수집 실행', en: 'Run auto collect' })}
           </Button>
         </ModalFooter>

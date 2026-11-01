@@ -1,7 +1,6 @@
 import { useState, type ReactNode } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { Check, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/loading-state'
 import { useSnackbar } from '@/components/ui/snackbar-context'
@@ -148,7 +147,7 @@ export function ChatCharacterLibraryProposalCard({ proposal, threadId }: { propo
           <span className="flex-1" />
           <Button size="xs" variant="ghost" disabled={busy} onClick={() => dismiss.mutate()}>{t({ ko: '거절', en: 'Dismiss' })}</Button>
           <Button size="xs" variant={deleting ? 'destructive' : 'default'} disabled={busy || (deleting && !preview)} onClick={() => apply.mutate()}>
-            {apply.isPending ? <Spinner className="size-3" /> : deleting ? <Trash2 /> : <Check />}
+            {apply.isPending ? <Spinner className="size-3" /> : null}
             {deleting ? t({ ko: '삭제', en: 'Delete' }) : t({ ko: '저장', en: 'Save' })}
           </Button>
         </ProposalFooter>

@@ -1,6 +1,5 @@
 import { useRef, type ChangeEvent } from 'react'
 import { Plus, RotateCcw, Trash2 } from 'lucide-react'
-import { Button } from '@/components/ui/button'
 import { AvatarButton } from '@/components/ui/avatar-button'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
@@ -87,15 +86,15 @@ export function ChatCastEditor({ cast, onChange }: { cast: ChatCastMember[]; onC
           ))}
         </div>
       ) : null}
-      <Button
+      <IconButton
         variant="secondary"
-        size="sm"
+        size="icon-sm"
+        label={t({ ko: '등장인물 추가', en: 'Add character' })}
         disabled={cast.length >= MAX_CAST}
         onClick={() => onChange([...cast, { id: `c${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, name: '', avatar: null, color: '' }])}
       >
         <Plus />
-        {t({ ko: '등장인물 추가', en: 'Add character' })}
-      </Button>
+      </IconButton>
     </div>
   )
 }

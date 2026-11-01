@@ -5,7 +5,6 @@ import { SearchField } from '@/components/common/search-field'
 import { ListRow } from '@/components/ui/list-row'
 import { Chip } from '@/components/ui/chip'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
-import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
 import { IconButton } from '@/components/ui/icon-button'
 import { Tip } from '@/components/ui/tooltip'
@@ -295,9 +294,9 @@ export function WorkflowListPanel({
             </>
           ) : null}
           {onCreateWorkflow ? (
-            <Button size="sm" variant="secondary" onClick={onCreateWorkflow} disabled={!canUpdateWorkflows}>
-              <Plus />{t({ ko: '새 워크플로', en: 'New workflow' })}
-            </Button>
+            <IconButton size="icon-sm" variant="secondary" label={t({ ko: '새 워크플로', en: 'New workflow' })} onClick={onCreateWorkflow} disabled={!canUpdateWorkflows}>
+              <Plus />
+            </IconButton>
           ) : null}
         </div>
       ) : null}

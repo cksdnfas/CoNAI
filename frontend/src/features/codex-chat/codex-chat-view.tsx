@@ -783,7 +783,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   const pickGroup = (profileIds: number[]) => void beginChat(profileIds)
 
   // 새 채팅 opens the profile picker, which lists the most recently used profiles first.
-  const newChatButton = <Button variant="subtle" size="xs" disabled={isStartingChat} onClick={() => selectThread(null)}><Plus />{t({ ko: '새 채팅', en: 'New chat' })}</Button>
+  const newChatButton = <IconButton variant="ghost" size="icon-sm" disabled={isStartingChat} onClick={() => selectThread(null)} label={t({ ko: '새 채팅', en: 'New chat' })}><Plus /></IconButton>
   const backButton = canOpenList
     ? <IconButton variant="ghost" size="icon-sm" onClick={() => setListOpen(true)} label={t({ ko: '채팅 목록', en: 'Chats' })}><ArrowLeft /></IconButton>
     : pendingProfile && (layout === 'panel' || !hasSideList)
@@ -1033,7 +1033,6 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
             <RotateCw className={cn(healthRecheck.isPending && 'animate-spin')} />
           </IconButton>
         ) : (
-          // eslint-disable-next-line no-restricted-syntax -- the composer's send arrow is the one icon-only primary key (DESIGN_PRESET).
           <IconButton variant="default" size="icon-sm" onClick={handleSend} disabled={!canSend} label={t({ ko: '보내기', en: 'Send' })}>
             <ArrowUp />
           </IconButton>
@@ -1158,7 +1157,8 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
           </SidebarColumn>
         ) : null}
 
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col pb-(--theme-shell-main-padding-bottom)" style={pageGutterStyle(hasSideList)}>
+        {/* No shell bottom padding: the composer is the last row and keeps its own small gap to the screen edge. */}
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col" style={pageGutterStyle(hasSideList)}>
           <div className="flex h-12 shrink-0 items-center gap-1 px-(--page-gutter)">
             {showList ? <>{listTitle}{newChatButton}</> : <>
               {backButton}

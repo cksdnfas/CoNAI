@@ -1,6 +1,6 @@
 import { ArrowLeft, Compass, Home } from 'lucide-react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
 import { useI18n } from '@/i18n'
 import { SystemMessagePanel } from './system-message-panel'
 
@@ -18,15 +18,15 @@ export function NotFoundPage() {
       title={t('notFoundPage.pageNotFound')}
       actions={(
         <>
-          <Button asChild>
+          <IconButton asChild label={t('notFoundPage.goToHome')}>
             <Link to="/">
-              <Home />{t('notFoundPage.goToHome')}
+              <Home />
             </Link>
-          </Button>
+          </IconButton>
           {canGoBack ? (
-            <Button variant="ghost" onClick={() => navigate(-1)}>
-              <ArrowLeft />{t({ ko: '뒤로 가기', en: 'Go back' })}
-            </Button>
+            <IconButton variant="ghost" label={t({ ko: '뒤로 가기', en: 'Go back' })} onClick={() => navigate(-1)}>
+              <ArrowLeft />
+            </IconButton>
           ) : null}
         </>
       )}

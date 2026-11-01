@@ -2,7 +2,6 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { CHARACTER_APPEARANCE_SECTION_KEYS, CHAT_PROFILE_TEXT_LIMITS, composeCharacterAppearance, joinPromptParts, tokenizePrompt } from '@conai/shared'
 import { ArrowUpToLine, Copy, ExternalLink, ImageIcon, ListTree, Plus, Sparkles, Trash2, UserSearch, Wand2 } from 'lucide-react'
 import { ActionMenuButton } from '@/components/ui/action-menu'
-import { Button } from '@/components/ui/button'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { EditorGroup } from '@/components/ui/editor-group'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -172,7 +171,7 @@ function OutfitList({ outfits, editable, disabled, onChange }: { outfits: Charac
           {t({ ko: '의상', en: 'Outfits' })}
           <FieldInfo>{t({ ko: '맨 위가 기본 의상이야. 옷·액세서리 태그는 의상에 두면 갈아입힐 수 있어.', en: 'The first one is the default. Keep clothing tags in outfits to switch them.' })}</FieldInfo>
         </span>
-        {editable ? <Button size="sm" variant="ghost" className="ml-auto" disabled={disabled} onClick={() => onChange([...outfits, { name: t({ ko: '의상 {count}', en: 'Outfit {count}' }, { count: outfits.length + 1 }), tags: '' }])}><Plus />{t({ ko: '의상 추가', en: 'Add outfit' })}</Button> : null}
+        {editable ? <IconButton size="icon-sm" variant="ghost" className="ml-auto" label={t({ ko: '의상 추가', en: 'Add outfit' })} disabled={disabled} onClick={() => onChange([...outfits, { name: t({ ko: '의상 {count}', en: 'Outfit {count}' }, { count: outfits.length + 1 }), tags: '' }])}><Plus /></IconButton> : null}
       </div>
       {outfits.length ? outfits.map((outfit, index) => (
         // Outfits have no id; their position is their identity while editing.

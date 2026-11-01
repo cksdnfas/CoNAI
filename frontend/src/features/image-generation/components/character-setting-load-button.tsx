@@ -1,10 +1,9 @@
 import { useEffect, useRef, useState, type ComponentProps } from 'react'
 import { composeCharacterAppearance } from '@conai/shared'
-import { Check, UserRound, UserRoundPlus } from 'lucide-react'
+import { UserRound, UserRoundPlus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Field } from '@/components/ui/field'
 import { IconButton } from '@/components/ui/icon-button'
-import { Spinner } from '@/components/ui/loading-state'
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
 import { Select } from '@/components/ui/select'
 import { useSnackbar } from '@/components/ui/snackbar-context'
@@ -51,8 +50,6 @@ type CharacterSettingLoadButtonProps = {
   label: string
   /** `add`: the pick becomes a new entry (a new NAI character). */
   icon?: 'load' | 'add'
-  /** A labelled button (section-level entry) instead of an icon key with a tooltip. */
-  showLabel?: boolean
   size?: 'icon-xs' | 'icon-sm'
   tooltipSide?: ComponentProps<typeof IconButton>['tooltipSide']
   disabled?: boolean
@@ -75,7 +72,6 @@ const appearanceOf = (setting: CharacterSetting, outfitIndex: number) => compose
 export function CharacterSettingLoadButton({
   label,
   icon = 'load',
-  showLabel = false,
   size = 'icon-sm',
   tooltipSide,
   disabled = false,
@@ -137,16 +133,9 @@ export function CharacterSettingLoadButton({
 
   return (
     <>
-      {showLabel ? (
-        <Button type="button" variant="ghost" size="compact" disabled={disabled} onClick={() => setPickerOpen(true)}>
-          <Icon />
-          {label}
-        </Button>
-      ) : (
-        <IconButton size={size} variant="ghost" disabled={disabled} label={label} tooltipSide={tooltipSide} onClick={() => setPickerOpen(true)}>
-          <Icon />
-        </IconButton>
-      )}
+      <IconButton size={size} variant="ghost" disabled={disabled} label={label} tooltipSide={tooltipSide} onClick={() => setPickerOpen(true)}>
+        <Icon />
+      </IconButton>
       <CharacterSettingPickerDialog open={pickerOpen} onOpenChange={setPickerOpen} onPick={handlePick} title={label} />
       {step ? (
         <Modal open size="md" title={t({ ko: '‘{name}’ 불러오기', en: 'Load ‘{name}’' }, { name: step.setting.name })} onClose={() => { if (!loading) setStep(null) }}>
@@ -201,8 +190,7 @@ export function CharacterSettingLoadButton({
           <ModalFooter>
             <span className="flex-1" />
             <Button type="button" variant="ghost" disabled={loading} onClick={() => setStep(null)}>{t({ ko: '취소', en: 'Cancel' })}</Button>
-            <Button type="button" disabled={loading} onClick={() => void finish({ ...step, referenceTarget: chosenReference })}>
-              {loading ? <Spinner className="size-3" /> : <Check />}
+            <Button type="button" disabled={loading} aria-busy={loading || undefined} onClick={() => void finish({ ...step, referenceTarget: chosenReference })}>
               {t({ ko: '불러오기', en: 'Load' })}
             </Button>
           </ModalFooter>

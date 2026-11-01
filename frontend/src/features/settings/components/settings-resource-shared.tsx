@@ -2,7 +2,6 @@ import { createContext, useContext, type ComponentProps, type ReactNode } from '
 import { FolderCheck, FolderPlus, LoaderCircle, Save, Trash2 } from 'lucide-react'
 import { SegmentedControl, type SegmentedControlItem } from '@/components/common/segmented-control'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { ResourceRowStatus } from '@/components/ui/resource-row'
 import { textVariants } from '@/components/ui/text'
@@ -258,7 +257,7 @@ interface SettingsResourceCreateActionRowProps {
   onValidate: () => void
   canSubmit: boolean
   isSubmitting: boolean
-  submitLabel: ReactNode
+  submitLabel: string
   onSubmit: () => void
 }
 
@@ -283,10 +282,9 @@ export function SettingsResourceCreateActionRow({
           {isValidating ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <FolderCheck className="h-4 w-4" />}
         </IconButton>
 
-        <Button type="button" size="sm" disabled={!canSubmit || isSubmitting} onClick={onSubmit}>
+        <IconButton size="icon-sm" disabled={!canSubmit || isSubmitting} onClick={onSubmit} label={submitLabel}>
           {isSubmitting ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <FolderPlus className="h-4 w-4" />}
-          {submitLabel}
-        </Button>
+        </IconButton>
       </div>
     </>
   )
@@ -313,7 +311,7 @@ interface SettingsResourceFooterActionsProps {
   dangerLabel: string
   onDanger: () => void
   dangerDisabled?: boolean
-  primaryLabel: ReactNode
+  primaryLabel?: string
   onPrimary: () => void
   primaryDisabled?: boolean
 }
@@ -335,10 +333,9 @@ export function SettingsResourceFooterActions({
         <Trash2 className="h-4 w-4" />
       </IconButton>
 
-      <Button size="sm" disabled={primaryDisabled} onClick={onPrimary}>
+      <IconButton size="icon-sm" disabled={primaryDisabled} onClick={onPrimary} label={primaryLabel ?? t({ ko: '저장', en: 'Save' })}>
         {primaryDisabled ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-        {primaryLabel ?? t({ ko: '저장', en: 'Save' })}
-      </Button>
+      </IconButton>
     </div>
   )
 }

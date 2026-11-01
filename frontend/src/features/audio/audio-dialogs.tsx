@@ -370,7 +370,7 @@ export function AudioCleanupDialog({ open, group, onClose, onDone }: { open: boo
         </p>
       </ModalBody>
       <ModalFooter separated className="mt-4">
-        <Button variant="destructive" disabled={busy || !plan.data || plan.data.count === 0} onClick={() => void run()}><Trash2 />{t({ ko: '정리', en: 'Clean up' })}</Button>
+        <Button variant="destructive" disabled={busy || !plan.data || plan.data.count === 0} onClick={() => void run()}>{t({ ko: '정리', en: 'Clean up' })}</Button>
       </ModalFooter>
     </Modal>
   )

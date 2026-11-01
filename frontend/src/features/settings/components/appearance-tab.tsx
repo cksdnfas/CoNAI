@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import { Check, Download, Eye, Images, Pencil, RotateCcw, Undo2, Upload } from 'lucide-react'
 import { IconButton } from '@/components/ui/icon-button'
-import { Button } from '@/components/ui/button'
+import { Spinner } from '@/components/ui/loading-state'
 import { SettingRow } from '@/components/ui/setting-row'
 import { APP_ICON_SRC } from '@/lib/app-metadata'
 import { useImagePermissions } from '@/features/auth/use-image-permissions'
@@ -127,12 +127,12 @@ export function AppearanceTab({
             <div className="min-w-0 truncate text-sm text-foreground">{importPreviewFileName}</div>
           </div>
           <div className="flex shrink-0 gap-1">
-            <Button size="sm" variant="secondary" onClick={onRevertImportPreview}>
-              <Undo2 />{t({ ko: '되돌리기', en: 'Revert' })}
-            </Button>
-            <Button size="sm" onClick={onApplyImportPreview} disabled={draftLocked}>
-              <Check />{t({ ko: '적용', en: 'Apply' })}
-            </Button>
+            <IconButton size="icon-sm" variant="secondary" label={t({ ko: '되돌리기', en: 'Revert' })} onClick={onRevertImportPreview}>
+              <Undo2 />
+            </IconButton>
+            <IconButton size="icon-sm" label={t({ ko: '적용', en: 'Apply' })} onClick={onApplyImportPreview} disabled={draftLocked}>
+              <Check />
+            </IconButton>
           </div>
         </div>
       ) : null}
@@ -166,22 +166,18 @@ export function AppearanceTab({
                 className="bg-checker size-12 shrink-0 rounded-sm object-contain"
                 draggable={false}
               />
-              <Button type="button" size="sm" variant="secondary" onClick={() => appIconInputRef.current?.click()} disabled={isSaving || isLoadingAppIcon}>
-                <Upload className="size-4" aria-hidden />
-                {isLoadingAppIcon ? t({ ko: '불러오는 중', en: 'Loading' }) : t({ ko: 'PC에서 선택', en: 'Choose local file' })}
-              </Button>
-              <Button type="button" size="sm" variant="secondary" onClick={() => setAppIconPickerOpen(true)} disabled={isSaving || isLoadingAppIcon || !canViewImages}>
+              <IconButton size="icon-sm" variant="secondary" label={isLoadingAppIcon ? t({ ko: '불러오는 중', en: 'Loading' }) : t({ ko: 'PC에서 선택', en: 'Choose local file' })} onClick={() => appIconInputRef.current?.click()} disabled={isSaving || isLoadingAppIcon}>
+                {isLoadingAppIcon ? <Spinner className="size-4" /> : <Upload className="size-4" aria-hidden />}
+              </IconButton>
+              <IconButton size="icon-sm" variant="secondary" label={t({ ko: '내부 이미지', en: 'App library' })} onClick={() => setAppIconPickerOpen(true)} disabled={isSaving || isLoadingAppIcon || !canViewImages}>
                 <Images className="size-4" aria-hidden />
-                {t({ ko: '내부 이미지', en: 'App library' })}
-              </Button>
-              <Button type="button" size="sm" variant="ghost" onClick={onEditAppIcon} disabled={isSaving || isLoadingAppIcon}>
+              </IconButton>
+              <IconButton size="icon-sm" variant="ghost" label={t({ ko: '편집', en: 'Edit' })} onClick={onEditAppIcon} disabled={isSaving || isLoadingAppIcon}>
                 <Pencil className="size-4" aria-hidden />
-                {t({ ko: '편집', en: 'Edit' })}
-              </Button>
-              <Button type="button" size="sm" variant="ghost" onClick={() => void onResetAppIcon().catch(() => {})} disabled={isSaving || isLoadingAppIcon || !editorProps.appearanceDraft.appIconDataUrl || draftLocked}>
+              </IconButton>
+              <IconButton size="icon-sm" variant="ghost" label={t({ ko: '기본 마크', en: 'Default mark' })} onClick={() => void onResetAppIcon().catch(() => {})} disabled={isSaving || isLoadingAppIcon || !editorProps.appearanceDraft.appIconDataUrl || draftLocked}>
                 <RotateCcw className="size-4" aria-hidden />
-                {t({ ko: '기본 마크', en: 'Default mark' })}
-              </Button>
+              </IconButton>
             </SettingRow>
             <fieldset disabled={draftLocked} className="contents"><AppearanceThemeRows {...editorProps} /></fieldset>
           </RowGroup>

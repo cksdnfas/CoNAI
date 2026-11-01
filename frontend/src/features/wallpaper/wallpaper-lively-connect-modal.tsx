@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ClipboardCopy, Download, ExternalLink, KeyRound, Monitor, Plus, Trash2 } from 'lucide-react'
+import { ClipboardCopy, ExternalLink, KeyRound, Monitor, Plus, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
 import { useConfirm } from '@/components/ui/confirm-dialog'
@@ -109,12 +109,10 @@ export function WallpaperLivelyConnectModal({ open, onClose, presets, initialIss
             </div>
             <div className="flex flex-wrap gap-2">
               <Button type="button" variant="secondary" size="sm" title={t({ ko: '설정·오디오·재생 중 곡을 쓰는 Lively 패키지 (zip을 Lively 창에 끌어다 놓기)', en: 'Lively package with settings, audio and now playing (drop the zip on Lively)' })} onClick={() => downloadPackage('lively')}>
-                <Download className="size-4" />
-                Lively
+                {t({ ko: 'Lively 패키지 받기', en: 'Get Lively package' })}
               </Button>
               <Button type="button" variant="secondary" size="sm" title={t({ ko: 'Wallpaper Engine 웹 프로젝트 (압축을 풀어 myprojects에 넣기)', en: 'Wallpaper Engine web project (unzip into myprojects)' })} onClick={() => downloadPackage('wallpaper-engine')}>
-                <Download className="size-4" />
-                Wallpaper Engine
+                {t({ ko: 'Wallpaper Engine 패키지 받기', en: 'Get Wallpaper Engine package' })}
               </Button>
             </div>
             <div className="text-xs text-muted-foreground">{t({ ko: '키는 지금만 보여. 보기 전용이고(빠른 실행 버튼만 예외) 언제든 폐기할 수 있어.', en: 'The key is shown only now. It only views (except quick-run buttons) and can be revoked any time.' })}</div>
@@ -135,10 +133,9 @@ export function WallpaperLivelyConnectModal({ open, onClose, presets, initialIss
             <option value="">{t({ ko: '활성 월페이퍼 따라가기', en: 'Follow the active one' })}</option>
             {presets.map((preset) => <option key={preset.id} value={preset.id}>{preset.name}</option>)}
           </Select>
-          <Button type="button" disabled={!name.trim() || createMutation.isPending} onClick={() => createMutation.mutate()}>
+          <IconButton label={t({ ko: '새 키', en: 'New key' })} disabled={!name.trim() || createMutation.isPending} onClick={() => createMutation.mutate()}>
             <Plus className="size-4" />
-            {t({ ko: '새 키', en: 'New key' })}
-          </Button>
+          </IconButton>
         </div>
 
         <RowGroup heading={t({ ko: '발급한 키', en: 'Issued keys' })}>

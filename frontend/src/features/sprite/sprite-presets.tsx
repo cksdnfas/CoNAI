@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Bookmark, Check, ChevronDown, FileInput, RefreshCw, Save, Trash2 } from 'lucide-react'
+import { Check,ChevronDown, FileInput, RefreshCw, Save, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
@@ -73,8 +73,7 @@ export function SpritePresetMenu({ activeId, current, onApply, onActiveChange }:
     <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button size="sm" variant="secondary" className="max-w-64">
-            <Bookmark />
+          <Button size="sm" variant="ghost" className="max-w-64">
             <span className="truncate">{active?.name ?? t({ ko: '프리셋', en: 'Preset' })}</span>
             <ChevronDown className="text-muted-foreground" />
           </Button>

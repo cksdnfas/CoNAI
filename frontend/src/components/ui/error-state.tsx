@@ -3,7 +3,7 @@ import { cva, type VariantProps } from 'class-variance-authority'
 import { AlertTriangle, RotateCw } from 'lucide-react'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
-import { Button } from './button'
+import { IconButton } from './icon-button'
 import { Spinner } from './loading-state'
 
 const errorStateVariants = cva('rounded-sm bg-destructive-soft text-destructive-soft-foreground', {
@@ -29,7 +29,7 @@ interface ErrorStateProps extends Omit<ComponentProps<'div'>, 'title'>, VariantP
    */
   error?: unknown
   onRetry?: () => void
-  retryLabel?: ReactNode
+  retryLabel?: string
   isRetrying?: boolean
 }
 
@@ -67,17 +67,16 @@ function ErrorState({
   const isCompact = size === 'compact'
 
   const retryButton = onRetry ? (
-    <Button
-      type="button"
-      size={isCompact ? 'xs' : 'sm'}
+    <IconButton
+      size={isCompact ? 'icon-xs' : 'icon-sm'}
       variant="secondary"
       className="bg-destructive-soft-foreground/10 text-destructive-soft-foreground hover:bg-destructive-soft-foreground/20 hover:text-destructive-soft-foreground"
+      label={retryLabel ?? t({ ko: '다시 시도', en: 'Retry' })}
       onClick={onRetry}
       disabled={isRetrying}
     >
       {isRetrying ? <Spinner size="sm" /> : <RotateCw />}
-      {retryLabel ?? t({ ko: '다시 시도', en: 'Retry' })}
-    </Button>
+    </IconButton>
   ) : null
 
   return (

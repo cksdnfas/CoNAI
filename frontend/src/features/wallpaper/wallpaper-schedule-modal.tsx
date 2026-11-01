@@ -11,6 +11,7 @@ import { Modal, ModalFooter } from '@/components/ui/modal'
 import { Select } from '@/components/ui/select'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { SwitchLine } from '@/components/ui/switch-line'
+import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import { updateAppearanceSettings } from '@/lib/api-settings-appearance'
 import type { WallpaperLayoutPreset } from './wallpaper-types'
@@ -114,17 +115,21 @@ export function WallpaperScheduleModal({ onClose, presets, schedule, revision, o
           )
         })}
         <div className="pt-3">
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            title={t({ ko: '겹치면 위쪽이 이겨. 키나 링크로 고정한 월페이퍼는 그대로야.', en: 'The upper window wins on overlap. Wallpapers pinned by a key or link stay put.' })}
-            disabled={presets.length === 0 || entries.length >= MAX_ENTRIES}
-            onClick={addEntry}
+          <Tip
+            className="whitespace-pre-line"
+            content={`${t({ ko: '시간대 추가', en: 'Add a window' })}\n${t({ ko: '겹치면 위쪽이 이겨. 키나 링크로 고정한 월페이퍼는 그대로야.', en: 'The upper window wins on overlap. Wallpapers pinned by a key or link stay put.' })}`}
           >
-            <Plus className="size-4" />
-            {t({ ko: '시간대 추가', en: 'Add a window' })}
-          </Button>
+            <IconButton
+              variant="ghost"
+              size="icon-sm"
+              label={t({ ko: '시간대 추가', en: 'Add a window' })}
+              tooltip={false}
+              disabled={presets.length === 0 || entries.length >= MAX_ENTRIES}
+              onClick={addEntry}
+            >
+              <Plus className="size-4" />
+            </IconButton>
+          </Tip>
         </div>
       </div>
       <ModalFooter separated className="mt-4">

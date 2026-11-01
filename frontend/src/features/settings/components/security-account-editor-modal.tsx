@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { LoaderCircle, Trash2 } from 'lucide-react'
 import { TextTabs } from '@/components/common/text-tabs'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { useI18n } from '@/i18n'
@@ -233,16 +233,15 @@ export function SecurityAccountEditorModal({
                   placeholder={account.username}
                 />
               </Field>
-              <Button
-                type="button"
+              <IconButton
                 variant="destructive-ghost"
-                className="h-10"
+                size="icon-lg"
+                label={t({ ko: '계정 삭제', en: 'Delete account' })}
                 onClick={() => void submitDelete()}
                 disabled={isDeletingAccount || deleteConfirmText.trim() !== account.username}
               >
                 {isDeletingAccount ? <LoaderCircle className="animate-spin" /> : <Trash2 />}
-                {t({ ko: '계정 삭제', en: 'Delete account' })}
-              </Button>
+              </IconButton>
             </div>
           ) : (
             <p className="text-sm text-muted-foreground">{t({ ko: '레거시 관리자 계정은 여기서 못 지워.', en: 'Legacy admin accounts cannot be deleted here.' })}</p>

@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query'
-import { AudioLines } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Field } from '@/components/ui/field'
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
@@ -92,7 +91,7 @@ export function SendToAudioDialog({ files, onClose }: { files: Array<{ id: strin
       <ModalFooter separated className="mt-4">
         <Tip content={projects.isSuccess && projectItems.length === 0 ? t({ ko: '오디오 탭에서 프로젝트를 먼저 만들어줘.', en: 'Create a project in the Audio tab first.' }) : null}>
           <span className="inline-flex" tabIndex={projects.isSuccess && projectItems.length === 0 ? 0 : undefined}>
-            <Button disabled={busy || !projectId} onClick={() => void send()}><AudioLines />{t({ ko: '{count}개 보내기', en: 'Send {count}' }, { count: files?.length ?? 0 })}</Button>
+            <Button disabled={busy || !projectId} onClick={() => void send()}>{t({ ko: '{count}개 보내기', en: 'Send {count}' }, { count: files?.length ?? 0 })}</Button>
           </span>
         </Tip>
       </ModalFooter>

@@ -381,10 +381,9 @@ export function AudioGenerateBar({ group, draft, autoFocus = false, canGenerate,
             {chip}
             {fix}
           </div>
-          <Button type="submit" size="sm" disabled={!runnable || !valid || busy !== null}>
+          <IconButton type="submit" size="icon-sm" label={t({ ko: '{count}개 생성', en: 'Generate {count}' }, { count: Number.isInteger(count) && count > 0 ? count : 0 })} disabled={!runnable || !valid || busy !== null}>
             <Wand />
-            {t({ ko: '{count}개 생성', en: 'Generate {count}' }, { count: Number.isInteger(count) && count > 0 ? count : 0 })}
-          </Button>
+          </IconButton>
         </div>
       </div>
     </form>

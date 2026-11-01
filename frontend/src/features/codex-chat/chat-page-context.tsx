@@ -19,7 +19,7 @@ import { IMAGE_GENERATION_TAB_ORDER } from '@/features/image-generation/image-ge
 import { PROMPT_PAGE_VIEWS } from '@/features/prompts/prompt-page-view'
 import { pageAction, pageChoice, pageObject } from './page-action-helpers'
 import { CHAT_RESOURCE_TABS, CHAT_SETTINGS_GROUPS } from './chat-admin-location'
-import { ToggleChip } from '@/components/ui/chip'
+import { IconButton } from '@/components/ui/icon-button'
 import { chatDraftEqual } from './chat-draft-equal'
 
 type PageProposal = Extract<ChatProposal, { kind: 'page_fields' }>
@@ -502,13 +502,13 @@ export function useChatPageRegistration(input: (Omit<Editor, 'instanceId' | 'pat
   }, [register, description, revision, instanceId, location.pathname])
 }
 
-/** The composer's page link chip: says whether the chat sees the current page, and turns that on or off. */
+/** The composer's page link key: says whether the chat sees the current page, and turns that on or off. */
 export function ChatPageConnectButton({ disabled }: { disabled: boolean }) {
   const page = useChatPage()
   const { t } = useI18n()
   if (!page?.available) return null
   const label = t(page.driving ? { ko: '페이지 조작 중', en: 'Operating the page' } : page.enabled ? { ko: '페이지 연결 켜짐', en: 'Page linked' } : { ko: '페이지 연결', en: 'Link page' })
-  return <ToggleChip pressed={page.enabled} disabled={disabled} onClick={page.toggle}><Monitor className={page.driving ? 'animate-pulse motion-reduce:animate-none' : undefined} />{label}</ToggleChip>
+  return <IconButton variant="ghost" size="icon-sm" active={page.enabled} disabled={disabled} onClick={page.toggle} label={label}><Monitor className={page.driving ? 'animate-pulse motion-reduce:animate-none' : undefined} /></IconButton>
 }
 
 export function ChatPageConnectionNotice() {

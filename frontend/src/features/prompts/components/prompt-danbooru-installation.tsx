@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Download, RefreshCw } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
 import { FieldInfo } from '@/components/ui/field'
 import { Progress } from '@/components/ui/progress'
 import { useI18n } from '@/i18n'
@@ -94,18 +94,21 @@ export function PromptDanbooruInstallation({ available }: { available: boolean }
         {status?.latestVersion ? <span className="text-xs text-muted-foreground">{t({ ko: '최신 버전', en: 'Latest' })} {status.latestVersion}</span> : null}
         {(!status?.installedVersion || status.updateAvailable || busy || status.phase === 'error') ? (
           <>
-            <Button size="sm" variant={available ? 'secondary' : 'default'} disabled={busy || check.isPending || statusQuery.isLoading} onClick={() => install.mutate()}>
+            <IconButton
+              size="icon-sm"
+              variant={available ? 'secondary' : 'default'}
+              label={`${busy ? phaseLabel : available ? t({ ko: '최신 버전으로 업데이트', en: 'Update to latest' }) : t({ ko: '최신 DB 다운로드하고 설치', en: 'Download and install latest DB' })}${!busy && status?.latestSize ? ` · ${megabytes(status.latestSize)} MB` : ''}`}
+              disabled={busy || check.isPending || statusQuery.isLoading}
+              onClick={() => install.mutate()}
+            >
               <Download />
-              {busy ? phaseLabel : available ? t({ ko: '최신 버전으로 업데이트', en: 'Update to latest' }) : t({ ko: '최신 DB 다운로드하고 설치', en: 'Download and install latest DB' })}
-              {!busy && status?.latestSize ? ` · ${megabytes(status.latestSize)} MB` : ''}
-            </Button>
+            </IconButton>
             <FieldInfo>{t({ ko: '다른 위치를 쓰려면 DANBOORU_SQLITE_PATH 환경변수로 파일 경로를 지정해.', en: 'Set DANBOORU_SQLITE_PATH to use a file from another location.' })}</FieldInfo>
           </>
         ) : <span className="text-xs text-muted-foreground">{t({ ko: '최신 버전을 사용 중이야.', en: 'Your database is up to date.' })}</span>}
-        {available ? <Button size="sm" variant="ghost" disabled={busy || check.isPending || statusQuery.isLoading} onClick={() => { install.reset(); check.mutate() }}>
+        {available ? <IconButton size="icon-sm" variant="ghost" label={t({ ko: '업데이트 확인', en: 'Check for updates' })} disabled={busy || check.isPending || statusQuery.isLoading} onClick={() => { install.reset(); check.mutate() }}>
           <RefreshCw className={check.isPending ? 'animate-spin' : undefined} />
-          {t({ ko: '업데이트 확인', en: 'Check for updates' })}
-        </Button> : null}
+        </IconButton> : null}
       </div>
       {busy ? (
         <div className="max-w-md space-y-1" role="status" aria-live="polite">

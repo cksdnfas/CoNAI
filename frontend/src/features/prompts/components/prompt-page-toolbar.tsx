@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { Bookmark, Shuffle } from 'lucide-react'
 import { PageToolbar } from '@/components/common/page-toolbar'
 import { SegmentedControl } from '@/components/common/segmented-control'
-import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
 import { useI18n } from '@/i18n'
 import type { PromptTypeFilter } from '@/types/prompt'
 import type { PromptPageView } from '../prompt-page-view'
@@ -50,19 +50,19 @@ export function PromptPageToolbar({ view, promptType, canViewWildcards, onChange
         <>
           {actions}
           {canViewWildcards ? (
-            <Button asChild variant="ghost" size="sm">
-              <Link to="/wildcards"><Shuffle />{t({ ko: '와일드카드', en: 'Wildcards' })}</Link>
-            </Button>
+            <IconButton asChild variant="ghost" size="icon-sm" label={t({ ko: '와일드카드', en: 'Wildcards' })}>
+              <Link to="/wildcards"><Shuffle /></Link>
+            </IconButton>
           ) : null}
-          <Button
+          <IconButton
             variant="ghost"
-            size="sm"
-            aria-pressed={isPresetView}
-            data-pressed={isPresetView ? 'true' : undefined}
+            size="icon-sm"
+            label={t({ ko: '프리셋', en: 'Presets' })}
+            active={isPresetView}
             onClick={() => onChangeView(isPresetView ? promptType : 'presets')}
           >
-            <Bookmark />{t({ ko: '프리셋', en: 'Presets' })}
-          </Button>
+            <Bookmark />
+          </IconButton>
         </>
       )}
     >

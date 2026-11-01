@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { CHAT_PROFILE_TEXT_LIMITS } from '@conai/shared'
 import { useMutation } from '@tanstack/react-query'
 import { Crop, ImagePlus, Sparkles } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { EditorGroup } from '@/components/ui/editor-group'
 import { Spinner } from '@/components/ui/loading-state'
@@ -149,7 +149,7 @@ export function CharacterAppearanceEditor({ value, onChange, onAvatarChange, ref
             {avatar}
             {editable ? (
               <div className="flex min-w-0 flex-col items-start gap-1">
-                {referenceUrl && value.referenceHash ? <Button size="sm" variant="secondary" disabled={busy} onClick={() => setCropOpen(true)}><Crop />{t({ ko: '기준 이미지에서 자르기', en: 'Crop the reference' })}</Button> : null}
+                {referenceUrl && value.referenceHash ? <IconButton size="icon-sm" variant="secondary" label={t({ ko: '기준 이미지에서 자르기', en: 'Crop the reference' })} disabled={busy} onClick={() => setCropOpen(true)}><Crop /></IconButton> : null}
                 <ChatProfileAssetInput
                   target={uploadTarget}
                   libraryGroupId={libraryGroupId}
@@ -174,9 +174,9 @@ export function CharacterAppearanceEditor({ value, onChange, onAvatarChange, ref
           actions={editable && draftAppearance ? (
             <Tip content={draftBlocked}>
               <span className="inline-flex" tabIndex={draftBlocked ? 0 : -1}>
-                <Button size="sm" variant="ghost" disabled={busy || appearance.isPending || Boolean(draftBlocked)} onClick={() => void writeAppearance()}>
-                  {appearance.isPending ? <Spinner className="size-3.5" /> : <Sparkles />}{t({ ko: 'AI 초안', en: 'AI draft' })}
-                </Button>
+                <IconButton size="icon-sm" variant="ghost" label={t({ ko: 'AI 초안', en: 'AI draft' })} disabled={busy || appearance.isPending || Boolean(draftBlocked)} onClick={() => void writeAppearance()}>
+                  {appearance.isPending ? <Spinner className="size-3.5" /> : <Sparkles />}
+                </IconButton>
               </span>
             </Tip>
           ) : undefined}

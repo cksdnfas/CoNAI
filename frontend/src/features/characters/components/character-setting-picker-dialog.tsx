@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Check, UserRound } from 'lucide-react'
+import { UserRound } from 'lucide-react'
 import { PathBreadcrumbs } from '@/components/common/path-breadcrumbs'
 import { SearchField } from '@/components/common/search-field'
 import { Button } from '@/components/ui/button'
@@ -114,7 +114,7 @@ function CharacterSettingPicker({ onOpenChange, onPick, title, confirmLabel, ini
         <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>{t({ ko: '취소', en: 'Cancel' })}</Button>
         {canView ? (
           <Button type="button" disabled={selectedId === null || confirm.isPending} onClick={() => { if (selectedId !== null) pick(selectedId) }}>
-            {confirm.isPending ? <Spinner className="size-3" /> : <Check />}
+            {confirm.isPending ? <Spinner className="size-3" /> : null}
             {confirmLabel ?? t({ ko: '선택', en: 'Select' })}
           </Button>
         ) : null}

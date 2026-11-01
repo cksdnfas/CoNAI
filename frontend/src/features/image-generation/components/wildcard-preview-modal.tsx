@@ -1,8 +1,7 @@
-import { Braces, Copy, FlaskConical, Shuffle } from 'lucide-react'
+import { Braces, Copy, FlaskConical, Loader2, Shuffle } from 'lucide-react'
 import { Modal } from '@/components/ui/modal'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
 import { IconButton } from '@/components/ui/icon-button'
 import { Inset } from '@/components/ui/inset'
@@ -97,10 +96,14 @@ export function WildcardPreviewModal({
           <IconButton variant="secondary" onClick={onFillSelectedSyntax} disabled={!selectedWildcardSyntax} label={t({ ko: '선택 항목 넣기', en: 'Insert selection' })}>
             <Braces className="h-4 w-4" />
           </IconButton>
-          <Button onClick={onParsePreview} disabled={isParsing || previewText.trim().length === 0} aria-busy={isParsing || undefined}>
-            <FlaskConical />
-            {isParsing ? t('image-generation.components.wildcard.preview.modal.testing') : t('image-generation.components.wildcard.preview.modal.test')}
-          </Button>
+          <IconButton
+            onClick={onParsePreview}
+            disabled={isParsing || previewText.trim().length === 0}
+            aria-busy={isParsing || undefined}
+            label={isParsing ? t('image-generation.components.wildcard.preview.modal.testing') : t('image-generation.components.wildcard.preview.modal.test')}
+          >
+            {isParsing ? <Loader2 className="animate-spin" /> : <FlaskConical />}
+          </IconButton>
         </div>
 
         {parseErrorMessage ? (

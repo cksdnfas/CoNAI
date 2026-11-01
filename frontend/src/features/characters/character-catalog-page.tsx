@@ -225,7 +225,7 @@ export function CharacterCatalogPage({ viewSwitch }: { viewSwitch: ReactNode }) 
                   topStart={work ? <Badge variant="overlay" size="sm" className="max-w-full"><BookOpen /><span className="truncate">{work.translatedName || work.displayName}</span></Badge> : undefined}
                   topEnd={<OverlayCardHoverOnly><IconButton asChild variant="overlay" size="icon-sm" label="Danbooru"><a href={item.danbooruUrl} target="_blank" rel="noopener noreferrer"><ExternalLink /></a></IconButton></OverlayCardHoverOnly>}
                   actions={<>
-                    {canImport ? <Button size="compact" className="min-w-0 flex-1" disabled={importMutation.isPending} onClick={() => importMutation.mutate({ character: item, folderId: null, name: catalogName(item) })}><Import /><span className="truncate">{t({ ko: '가져오기', en: 'Import' })}</span></Button> : null}
+                    {canImport ? <IconButton size="icon-sm" label={t({ ko: '가져오기', en: 'Import' })} disabled={importMutation.isPending} onClick={() => importMutation.mutate({ character: item, folderId: null, name: catalogName(item) })}><Import /></IconButton> : null}
                     <IconButton variant="overlay" size="icon-sm" label={t({ ko: '태그 복사', en: 'Copy tags' })} onClick={() => void copyLook(item)}><Copy /></IconButton>
                   </>}
                 />
@@ -282,10 +282,10 @@ function CatalogCharacterModal({ character, canImport, canViewImages, importing,
         )) : null}
       </ModalBody>
       <ModalFooter>
-        <Button asChild variant="ghost" size="sm"><a href={character.danbooruUrl} target="_blank" rel="noopener noreferrer"><ExternalLink />Danbooru</a></Button>
-        <Button variant="ghost" size="sm" onClick={() => void copy()}><Copy />{t({ ko: '태그 복사', en: 'Copy tags' })}</Button>
+        <Button asChild variant="ghost" size="sm"><a href={character.danbooruUrl} target="_blank" rel="noopener noreferrer">Danbooru</a></Button>
+        <Button variant="ghost" size="sm" onClick={() => void copy()}>{t({ ko: '태그 복사', en: 'Copy tags' })}</Button>
         <span className="flex-1" />
-        {canImport ? <Button size="sm" disabled={importing || preview.isPending} onClick={() => setSaving(true)}><Import />{t({ ko: '내 외형으로 가져오기', en: 'Import as a setting' })}</Button> : null}
+        {canImport ? <Button size="sm" disabled={importing || preview.isPending} onClick={() => setSaving(true)}>{t({ ko: '내 외형으로 가져오기', en: 'Import as a setting' })}</Button> : null}
       </ModalFooter>
       {saving ? (
         <CharacterSettingSaveDialog

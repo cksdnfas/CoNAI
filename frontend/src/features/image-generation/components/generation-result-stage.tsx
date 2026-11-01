@@ -1,4 +1,4 @@
-import { useEffect, type KeyboardEvent } from 'react'
+import { useEffect, type KeyboardEvent, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { AudioLines, ChevronLeft, ChevronRight, History, ImageIcon, Info, Maximize2 } from 'lucide-react'
 import { useHorizontalDragScroll } from '@/components/common/use-horizontal-drag-scroll'
@@ -46,6 +46,8 @@ type GenerationResultStageProps = {
   onShowHistory?: () => void
   /** Where the recent-results filmstrip sits (layout preset); `hidden` drops it. */
   stripPlacement?: 'top' | 'bottom' | 'hidden'
+  /** Start of the toolbar row (the result/history toggle); the result's actions sit on the same row's right end. */
+  toolbarStart?: ReactNode
 }
 
 /**
@@ -141,6 +143,7 @@ export function GenerationResultStage({
   onDeleted,
   onShowHistory,
   stripPlacement = 'bottom',
+  toolbarStart,
 }: GenerationResultStageProps) {
   const { t } = useI18n()
   const imageViewModal = useImageViewModal()
@@ -209,21 +212,26 @@ export function GenerationResultStage({
   }
 
   if (isLoading && items.length === 0) {
-    return <LoadingState variant="inline" label={t('image-generation.components.generation.history.panel.loading.history')} />
+    return (
+      <div className="flex flex-col gap-3">
+        {toolbarStart ? <div className="flex shrink-0 items-center gap-2">{toolbarStart}</div> : null}
+        <LoadingState variant="inline" label={t('image-generation.components.generation.history.panel.loading.history')} />
+      </div>
+    )
   }
 
   const historyId = typeof selected?.generation_history_id === 'number' ? selected.generation_history_id : null
   // A sound-only run has no picture: the image actions (group, viewer, delete) do not apply.
   const actions = selected && sounds ? (
-    <div className="flex shrink-0 flex-wrap items-center gap-1.5">
+    <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
       {allowReuse && historyId !== null ? <GenerationHistoryReuseActions key={historyId} historyId={historyId} /> : null}
       <DownloadSoundButton sound={sounds[0]} />
       <OpenSoundsInAudioTab sounds={sounds} />
     </div>
   ) : selected ? (
-    <div className="flex shrink-0 flex-wrap items-center gap-1.5">
+    <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
       {allowReuse ? (
-        <GenerationHistoryReuseActions key={historyId ?? selectedId} historyId={historyId} between={<ImageGroupAssignAction key={`group-${selectedId}`} image={selected} labelled />} />
+        <GenerationHistoryReuseActions key={historyId ?? selectedId} historyId={historyId} between={<ImageGroupAssignAction key={`group-${selectedId}`} image={selected} />} />
       ) : null}
       <ImageDownloadTriggerButton image={selected} size="icon-sm" variant="secondary" />
       <IconButton size="icon-sm" variant="secondary" onClick={handleOpenDetail} label={t({ ko: '크게 보기', en: 'Open viewer' })}>
@@ -317,8 +325,13 @@ export function GenerationResultStage({
 
   return (
     <div className={cn('flex min-h-0 flex-col gap-3', !compact && 'flex-1')}>
+      {toolbarStart || actions ? (
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-2">
+          <div className="flex min-w-0 items-center gap-2">{toolbarStart}</div>
+          {actions}
+        </div>
+      ) : null}
       {stripPlacement === 'top' ? strip : null}
-      {actions}
       <div className={cn('flex min-h-0 gap-3', compact ? 'flex-col' : 'flex-1')}>
         <div
           className={cn(

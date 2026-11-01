@@ -1,6 +1,5 @@
 import { FolderInput, FolderPlus, PenSquare, Save, Trash2 } from 'lucide-react'
 import { useMemo, useState } from 'react'
-import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { Heading } from '@/components/ui/heading'
 import { Inset } from '@/components/ui/inset'
@@ -131,10 +130,9 @@ export function WorkflowFolderSettingsPanel({
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            <Button type="button" onClick={() => void onAssignWorkflowFolder(workflowFolderId)}>
+            <IconButton label={t({ ko: '할당 저장', en: 'Save assignment' })} onClick={() => void onAssignWorkflowFolder(workflowFolderId)}>
               <Save className="h-4 w-4" />
-              {t({ ko: '할당 저장', en: 'Save assignment' })}
-            </Button>
+            </IconButton>
             {onEditWorkflow ? (
               <IconButton variant="secondary" onClick={onEditWorkflow} label={t({ ko: '편집 열기', en: 'Open editor' })}>
                 <PenSquare className="h-4 w-4" />
@@ -187,10 +185,9 @@ export function WorkflowFolderSettingsPanel({
               </div>
 
               <div className="flex flex-wrap gap-2">
-                <Button type="button" onClick={() => selectedFolder && void onUpdateFolder(selectedFolder.id, { name: folderName.trim(), description: folderDescription.trim() || null, parent_id: folderParentId })} disabled={!selectedFolder || !folderName.trim()}>
+                <IconButton label={t({ ko: '폴더 저장', en: 'Save folder' })} onClick={() => selectedFolder && void onUpdateFolder(selectedFolder.id, { name: folderName.trim(), description: folderDescription.trim() || null, parent_id: folderParentId })} disabled={!selectedFolder || !folderName.trim()}>
                   <Save className="h-4 w-4" />
-                  {t({ ko: '폴더 저장', en: 'Save folder' })}
-                </Button>
+                </IconButton>
                 <IconButton variant="destructive" onClick={() => selectedFolder && void onDeleteFolder(selectedFolder.id)} disabled={!selectedFolder} label={t({ ko: '폴더 삭제', en: 'Delete folder' })}>
                   <Trash2 className="h-4 w-4" />
                 </IconButton>

@@ -1,7 +1,6 @@
 import { useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AudioLines, Check, Download, Eye, FileArchive, Link2, RefreshCcw, X } from 'lucide-react'
-import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { ListRow } from '@/components/ui/list-row'
@@ -106,15 +105,14 @@ export function LegacyAudioImportRow() {
             <FileArchive className="h-4 w-4" />
           </IconButton>
           {previewReady ? (
-            <Button size="sm" onClick={() => start.mutate({ dryRun: false })}>
-              <Download />{t({ ko: '가져오기', en: 'Import' })}
-            </Button>
+            <IconButton size="icon-sm" label={t({ ko: '가져오기', en: 'Import' })} onClick={() => start.mutate({ dryRun: false })}>
+              <Download />
+            </IconButton>
           ) : (
             // The first step counts what would be imported, so the import itself shows what it will bring in.
-            <Button size="sm" variant="secondary" disabled={running || source === null} onClick={() => start.mutate({ dryRun: true })}>
+            <IconButton size="icon-sm" variant="secondary" label={running ? t({ ko: '진행 중', en: 'Working' }) : t({ ko: '미리보기', en: 'Preview' })} disabled={running || source === null} onClick={() => start.mutate({ dryRun: true })}>
               {running ? <RefreshCcw className="animate-spin" /> : <Eye />}
-              {running ? t({ ko: '진행 중', en: 'Working' }) : t({ ko: '미리보기', en: 'Preview' })}
-            </Button>
+            </IconButton>
           )}
         </>}
       >

@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { LoaderCircle, Trash2 } from 'lucide-react'
+import { LoaderCircle } from 'lucide-react'
 import { useI18n } from '@/i18n'
 import { formatShortcut } from '@/lib/keyboard-shortcut'
 import { Button } from './button'
@@ -39,7 +39,7 @@ export function EditorFooter({ onDelete, deleteLabel, deleteDisabled = false, de
         <Tip content={deleteTip}>
           <span>
             <Button size="sm" variant="destructive-ghost" onClick={onDelete} disabled={deleteDisabled || deleting || saving}>
-              {deleting ? <LoaderCircle className="animate-spin" /> : <Trash2 />}
+              {deleting ? <LoaderCircle className="animate-spin" /> : null}
               {deleteLabel ?? t({ ko: '삭제', en: 'Delete' })}
             </Button>
           </span>

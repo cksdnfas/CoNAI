@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { JUDGE_OPTION_DEFAULTS, type ChatJudgeFollowUp, type ChatJudgeItem, type ChatJudgeTestTurn } from '@conai/shared'
-import { Copy, Download, FlaskConical, LoaderCircle, Play, Plus, Square } from 'lucide-react'
+import { Copy, Download, LoaderCircle, Play, Plus, Square } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { EditorFooter } from '@/components/ui/editor-footer'
@@ -332,7 +332,7 @@ export function ChatJudgePresetEditorModal({ open, preset, initial, onClose, onD
               {afterItems.length === 0 ? (
                 <div className="flex items-center justify-between gap-3 border-t border-line py-3">
                   <span className="text-sm text-muted-foreground">{t({ ko: '보낼 조건이 없어', en: 'No conditions yet' })}</span>
-                  <Button size="sm" variant="secondary" disabled={draft.items.length >= 16} onClick={() => addItem('after')}><Plus />{t({ ko: '조건 추가', en: 'Add condition' })}</Button>
+                  <IconButton size="icon-sm" variant="secondary" label={t({ ko: '조건 추가', en: 'Add condition' })} disabled={draft.items.length >= 16} onClick={() => addItem('after')}><Plus /></IconButton>
                 </div>
               ) : null}
               <div className="border-t border-line">
@@ -364,7 +364,7 @@ export function ChatJudgePresetEditorModal({ open, preset, initial, onClose, onD
         saving={saveMutation.isPending}
       >
         <Button size="sm" variant="ghost" aria-pressed={testOpen} onClick={() => setTestOpen(!testOpen)}>
-          {testMutation.isPending ? <LoaderCircle className="animate-spin" /> : <FlaskConical />}
+          {testMutation.isPending ? <LoaderCircle className="animate-spin" /> : null}
           {t({ ko: '테스트', en: 'Test' })}
         </Button>
         <SettingsAdvancedSwitch />

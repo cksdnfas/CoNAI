@@ -176,7 +176,6 @@ export function ImageBatchResizeAction({ compositeHashes, referenceSize }: Image
             {resize.job && resize.isRunning ? <RuntimeJobProgress job={resize.job} cancel={resize.cancel} isCancelling={resize.isCancelling} /> : null}
             <ModalFooter>
               <Button type="submit" disabled={busy || compositeHashes.length === 0}>
-                <ImageUpscale className="h-4 w-4" />
                 {t({ ko: '크기 변경', en: 'Resize' })}
               </Button>
             </ModalFooter>

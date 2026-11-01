@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { LoaderCircle, Plus } from 'lucide-react'
+import { LoaderCircle } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -200,7 +200,6 @@ export function GroupAssignModal({
           busy={busy}
           start={newGroupName === null ? (
             <Button type="button" variant="ghost" onClick={() => setNewGroupName('')} disabled={busy}>
-              <Plus />
               {t({ ko: '새 그룹', en: 'New group' })}
             </Button>
           ) : null}

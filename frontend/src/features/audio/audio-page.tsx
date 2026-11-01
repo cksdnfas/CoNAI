@@ -851,7 +851,7 @@ function AudioPageContent() {
         <EmptyState
           icon={AudioLines}
           title={t({ ko: '아직 프로젝트가 없어', en: 'No projects yet' })}
-          action={permissions.canEdit ? <Button onClick={() => setDialog('project-new')}><FolderPlus />{t({ ko: '새 프로젝트', en: 'New project' })}</Button> : undefined}
+          action={permissions.canEdit ? <IconButton label={t({ ko: '새 프로젝트', en: 'New project' })} onClick={() => setDialog('project-new')}><FolderPlus /></IconButton> : undefined}
         />
       ) : !group && project && projectGroupsQuery.isSuccess && effects.length === 0 && !groupId ? (
         <EmptyState
@@ -1064,7 +1064,7 @@ function NewEffectButton({ onCreate }: { onCreate: (name: string) => Promise<boo
     if (created) setName(null)
   }
   return <>
-    <Button onClick={() => setName('')}><Plus />{t({ ko: '효과음 추가', en: 'Add effect' })}</Button>
+    <IconButton label={t({ ko: '효과음 추가', en: 'Add effect' })} onClick={() => setName('')}><Plus /></IconButton>
     {name !== null ? (
       <NameDialog
         open

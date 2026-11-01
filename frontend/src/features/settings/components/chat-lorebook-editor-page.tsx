@@ -6,6 +6,7 @@ import { loreKeyLanguageLabel, sortLoreKeysByLanguage } from '@conai/shared'
 import { EditorPage } from '@/components/common/editor-page'
 import { ActionMenuButton } from '@/components/ui/action-menu'
 import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
 import { Chip } from '@/components/ui/chip'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -354,10 +355,9 @@ function LorebookEditor({ initial, kind }: { initial: Book | null; kind: 'global
       </>}
       actions={<>
         {keyLanguage ? (
-          <Button size="sm" variant="ghost" disabled={missing.length === 0 || fileMutation.isPending} onClick={() => setFillOpen(true)}>
+          <IconButton size="icon-sm" variant="ghost" label={missing.length ? t({ ko: '빠진 {language} 키 채우기 {count}', en: 'Fill missing {language} keywords ({count})' }, { language: loreKeyLanguageLabel(keyLanguage), count: missing.length }) : t({ ko: '빠진 {language} 키 없음', en: 'No {language} keywords missing' }, { language: loreKeyLanguageLabel(keyLanguage) })} disabled={missing.length === 0 || fileMutation.isPending} onClick={() => setFillOpen(true)}>
             <Languages />
-            {missing.length ? t({ ko: '빠진 {language} 키 채우기 {count}', en: 'Fill missing {language} keywords ({count})' }, { language: loreKeyLanguageLabel(keyLanguage), count: missing.length }) : t({ ko: '빠진 {language} 키 없음', en: 'No {language} keywords missing' }, { language: loreKeyLanguageLabel(keyLanguage) })}
-          </Button>
+          </IconButton>
         ) : null}
         <ActionMenuButton
           label={t({ ko: '로어북 작업', en: 'Lorebook actions' })}

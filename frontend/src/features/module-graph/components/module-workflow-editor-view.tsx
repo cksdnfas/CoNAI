@@ -3,7 +3,6 @@ import { ArrowLeft, Bug, FolderCog, LayoutGrid, Loader2, Maximize, PanelRight, P
 import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
 import { TextTabs } from '@/components/common/text-tabs'
 import { ActionMenuButton, type ActionMenuEntry } from '@/components/ui/action-menu'
-import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover'
 import { Tip } from '@/components/ui/tooltip'
@@ -232,9 +231,9 @@ export function ModuleWorkflowEditorView({
           {settingsPanel}
         </PopoverContent>
       </Popover>
-      <Button size="sm" onClick={onSave} disabled={!canUpdateWorkflows || isSavingGraph || nodesCount === 0} aria-busy={isSavingGraph || undefined} aria-keyshortcuts="Control+S">
-        {isSavingGraph ? <Loader2 className="animate-spin" /> : <Save />}{isSavingGraph ? t({ ko: '저장 중', en: 'Saving' }) : t({ ko: '저장', en: 'Save' })}
-      </Button>
+      <IconButton size="icon-sm" label={isSavingGraph ? t({ ko: '저장 중', en: 'Saving' }) : t({ ko: '저장', en: 'Save' })} onClick={onSave} disabled={!canUpdateWorkflows || isSavingGraph || nodesCount === 0} aria-busy={isSavingGraph || undefined} aria-keyshortcuts="Control+S">
+        {isSavingGraph ? <Loader2 className="animate-spin" /> : <Save />}
+      </IconButton>
     </div>
   )
 

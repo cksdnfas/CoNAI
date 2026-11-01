@@ -559,8 +559,7 @@ export function ImageAttachmentPickerButton({
               />
               <ModalFooter>
                 <span className="mr-auto min-w-0 truncate text-sm text-muted-foreground">{selectedLibraryImage ? getImageListDisplayName(selectedLibraryImage) : t({ ko: '이미지 한 장을 골라줘.', en: 'Choose one image.' })}</span>
-                <Button disabled={!canViewImages || isImporting || !selectedLibraryImage} onClick={() => void handleImportExistingImage(selectedLibraryImage, true)}>
-                  {isImporting ? <Loader2 className="size-4 animate-spin" /> : null}
+                <Button disabled={!canViewImages || isImporting || !selectedLibraryImage} aria-busy={isImporting || undefined} onClick={() => void handleImportExistingImage(selectedLibraryImage, true)}>
                   {t({ ko: '선택', en: 'Select' })}
                 </Button>
               </ModalFooter>

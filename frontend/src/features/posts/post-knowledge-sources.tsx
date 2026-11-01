@@ -1,7 +1,6 @@
 import { Link } from 'react-router-dom'
 import type { PostKnowledgeSource } from '@conai/shared'
 import { Plus, X } from 'lucide-react'
-import { Button } from '@/components/ui/button'
 import { Field } from '@/components/ui/field'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
@@ -64,7 +63,7 @@ export function KnowledgeSourcesEditor({ sources, onChange }: { sources: PostKno
           <Field label={t({ ko: '공개할 짧은 인용', en: 'Short public quotation' })}><Textarea rows={2} maxLength={2000} value={source.quote} onChange={(event) => patch(index, { quote: event.target.value })} /></Field>
         </div>
       ))}
-      <Button variant="ghost" size="sm" onClick={() => onChange([...sources, knowledgeSource()])}><Plus />{t({ ko: '출처 추가', en: 'Add source' })}</Button>
+      <IconButton variant="ghost" size="icon-sm" label={t({ ko: '출처 추가', en: 'Add source' })} onClick={() => onChange([...sources, knowledgeSource()])}><Plus /></IconButton>
     </div>
   )
 }
