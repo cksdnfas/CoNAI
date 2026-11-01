@@ -85,3 +85,78 @@ test('token fields read "260K" as people write it; plain number fields do not', 
   assert.ok(Number.isNaN(parseNumberDraft('260K')))
   assert.equal(parseNumberDraft('0.7'), 0.7)
 })
+
+test('profile token and conversation settings preserve finite user values beyond old product ceilings', (t) => {
+  mockModelRows(t, { 1: ['test', 'test'] }, 1)
+  const settings = { maxTokens: 1_500_000, contextTokens: 8_000_000, contextTurns: 300, summaryTriggerTurns: 250, reasoningBudgetTokens: 1_200_000 }
+  const profile = ChatProfileStore.draft({ name: 'Large model', ...settings })
+  for (const key of Object.keys(settings) as Array<keyof typeof settings>) assert.equal(profile[key], settings[key])
+  assert.equal(ChatProfileStore.draft({ name: 'Small model', contextTokens: 512 }).contextTokens, 512)
+  assert.throws(() => ChatProfileStore.draft({ name: 'Invalid', maxTokens: Infinity }), /숫자/)
+  for (const key of ['maxTokens', 'contextTokens', 'contextTurns', 'summaryTriggerTurns']) {
+    assert.throws(() => ChatProfileStore.draft({ name: 'Unsafe number', [key]: Number.MAX_SAFE_INTEGER + 1 }), /정수/)
+  }
+})
+
+test('per-chat, group and imported overrides preserve positive safe integers beyond the old ceilings', async (t) => {
+  const db = await import('../src/database/userSettingsDb')
+  db.initializeUserSettingsDb()
+  const { AuthAccount } = await import('../src/models/AuthAccount')
+  const { AuthAccessControlService } = await import('../src/services/authAccessControlService')
+  const { ExternalApiProvider } = await import('../src/models/ExternalApiProvider')
+  const { CodexChatService } = await import('../src/services/codex-chat/codexChatService')
+  const { CodexChatStore } = await import('../src/services/codex-chat/codexChatStore')
+  const { GroupChatService } = await import('../src/services/codex-chat/groupChatService')
+  const { ChatGroupStore } = await import('../src/services/codex-chat/chatGroupStore')
+  const { importChatThread } = await import('../src/services/codex-chat/chatImport')
+  const { updateChatSettings } = await import('../src/services/codex-chat/chatSettings')
+  t.after(async () => {
+    db.closeUserSettingsDb()
+    ;(await import('../src/database/init')).closeDatabase()
+    await new Promise<void>(async resolve => (await import('../src/utils/logger')).logger.close(resolve))
+  })
+  t.mock.method(AuthAccount, 'findById', (id: number) => ({ id, status: 'active', account_type: 'admin' }) as never)
+  t.mock.method(AuthAccessControlService, 'resolveForAccountId', () => ({ permissionKeys: ['chat.use'] }))
+  updateChatSettings({ enabled: true })
+  ExternalApiProvider.create({ provider_name: 'overrides', display_name: 'Overrides', provider_type: 'llm_openai_compatible', base_url: 'http://unused.invalid', is_enabled: true, additional_config: { default_model: 'm' } })
+  const profiles = ['First', 'Second'].map(name => ChatProfileStore.create({ name, providerName: 'overrides', model: 'm', mcpEnabled: false }))
+  const requester = { accountId: 1, accountType: 'admin' as const }
+  const importedTarget = {
+    direct: (id: number) => CodexChatService.createThread(requester, id),
+    group: (profileIds: number[], representativeId: number) => GroupChatService.create(requester, { profileIds, representativeId, userProfileId: null }),
+  }
+  const thread = importedTarget.direct(profiles[0].id)
+  const express = (await import('express')).default
+  const app = express()
+  app.use(express.json())
+  app.use((req, _res, next) => { req.session = { accountId: 1, accountType: 'admin' } as typeof req.session; next() })
+  app.use('/api/codex-chat', (await import('../src/routes/codex-chat.routes')).default)
+  const server = app.listen(0, '127.0.0.1')
+  await new Promise<void>(resolve => server.once('listening', resolve))
+  t.after(() => new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve())))
+  const address = server.address() as import('node:net').AddressInfo
+  const patch = (body: unknown) => fetch(`http://127.0.0.1:${address.port}/api/codex-chat/threads/${thread.id}/context`, {
+    method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+  })
+  const response = await patch({ maxTokens: 1_500_000, contextTurns: 300 })
+  assert.equal(response.status, 200, await response.text())
+  assert.equal(CodexChatStore.findThreadById(thread.id)!.max_tokens, 1_500_000)
+  assert.equal(CodexChatStore.findThreadById(thread.id)!.context_turns, 300)
+  for (const value of [0, 1.5, Number.MAX_SAFE_INTEGER + 1]) {
+    for (const key of ['maxTokens', 'contextTurns']) {
+      const rejected = await patch({ [key]: value })
+      assert.equal(rejected.status, 400, await rejected.text())
+    }
+  }
+  const room = importedTarget.group(profiles.map(profile => profile.id), profiles[0].id)
+  GroupChatService.updateRoom(requester, room.id, { maxTokens: 1_500_000 })
+  GroupChatService.updateMember(requester, room.id, profiles[0].id, { maxTokens: 2_000_000 })
+  assert.equal(CodexChatStore.findThreadById(room.id)!.max_tokens, 1_500_000)
+  assert.equal(ChatGroupStore.member(room.id, profiles[0].id)!.max_tokens, 2_000_000)
+  assert.throws(() => GroupChatService.updateRoom(requester, room.id, { maxTokens: Number.MAX_SAFE_INTEGER + 1 }))
+  const file = { format: 'conai-chat', version: 1, profileName: profiles[0].name,
+    thread: CodexChatStore.findThreadById(thread.id), messages: [{ id: 1, role: 'user', content: 'Imported conversation.' }] }
+  const imported = importChatThread(requester, Buffer.from(JSON.stringify(file)), importedTarget)
+  assert.equal(CodexChatStore.findThreadById(imported.threadId)!.max_tokens, 1_500_000)
+  assert.equal(CodexChatStore.findThreadById(imported.threadId)!.context_turns, 300)
+})

@@ -129,16 +129,19 @@ test('external mcp: settings, connection, tools in chats, calls', { timeout: 120
   await t.test('the path rule still holds for app tools, in chats and over HTTP', () => {
     assert.doesNotThrow(() => validateMcpToolArguments({ path: '/x' }, undefined, true))
     assert.throws(() => validateMcpToolArguments({ path: '/x' }), /not allowed/)
-    const run = (name: string) => {
+    const run = (name: string, catalog = false) => {
       let status = 200
       let passed = false
-      validateMcpRequestBody({ method: 'POST', body: { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: { path: '/x' } } } } as never,
+      const params = catalog ? { name: 'run_tool', arguments: { tool: name, arguments: { path: '/x' } } } : { name, arguments: { path: '/x' } }
+      validateMcpRequestBody({ method: 'POST', body: { jsonrpc: '2.0', id: 1, method: 'tools/call', params } } as never,
         { status(code: number) { status = code; return this }, json() { return this } } as never, () => { passed = true })
       return passed ? 200 : status
     }
     assert.equal(run('x_echo_read_file'), 200)
+    assert.equal(run('x_echo_read_file', true), 200, 'catalog calls use the target tool path contract')
     assert.equal(run('x_unknown_tool'), 400)
     assert.equal(run('read_file_text'), 400)
+    assert.equal(run('read_file_text', true), 400)
   })
 
   await t.test('an HTTP server gets its headers on every request', async () => {

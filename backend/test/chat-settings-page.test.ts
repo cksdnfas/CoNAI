@@ -87,7 +87,6 @@ test('settings page connection: field hints, settings operation tiers and bindin
     const schema = { type: 'object' as const, properties: {} }
     assert.equal(normalizeChatPageActions('/settings', [{ id: 'settings.save', label: '설정 저장', description: '', effect: 'save', schema }])[0].effect, 'save')
     assert.throws(() => normalizeChatPageActions('/settings', [{ id: 'settings.save', label: '설정 저장', description: '', effect: 'draft', schema }]), 'a save is never a draft')
-    assert.throws(() => normalizeChatPageActions('/settings', [{ id: 'settings.mcp_server', label: 'MCP', description: '', effect: 'save', schema: { type: 'object', properties: { url: { type: 'string' } } } }]), 'no outside address argument')
     // Page data and argument keys of these operations are plain; dashboard counts are keyed "tok" because token keys are private.
     for (const key of ['loreKeyLanguage', 'webEngine', 'timeoutSeconds', 'scope', 'persona', 'dailyTime', 'mcpHttpKeys', 'inputTok', 'tok']) assert.ok(!isPrivateChatPageKey(key), key)
     assert.ok(isPrivateChatPageKey('inputTokens'))

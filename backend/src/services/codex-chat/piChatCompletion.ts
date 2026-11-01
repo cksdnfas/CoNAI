@@ -36,8 +36,6 @@ export type PiChatSession = ClaudeChatSession
 /** The provider id the profile's connection is registered under, in a model runtime of its own per run. */
 const PI_PROVIDER = 'conai'
 const PI_SESSION_ID = /^[\w.-]{1,160}$/
-/** The window pi folds at when the server does not name its context (a hosted API). */
-const DEFAULT_CONTEXT_WINDOW = 32_768
 const TOOL_BUDGET_NOTE = 'The tool budget for this reply is used up. Do not call tools; answer now with what you have.'
 const CODEMODE_TOOL = 'codemode'
 /** One codemode script makes at most as many tool calls as the reply has rounds; past it they fail, so a loop in a script cannot run the tools up. */
@@ -96,24 +94,17 @@ export function piToolResult(result: ChatMcpToolResult) {
 }
 
 /**
- * The reply room in a context window: the profile's max output tokens (else a quarter of the window, at most 8192) as a
- * ceiling, cut to half the window so a cap near the window's size still leaves the conversation room. pi folds the
- * session before it would no longer leave this room, and sends it as the request's max_tokens.
- */
-export function piReplyRoom(contextWindow: number, maxTokens: number | null | undefined) {
-  return Math.max(1, Math.min(maxTokens ?? Math.min(8192, Math.floor(contextWindow / 4)), Math.floor(contextWindow / 2)))
-}
-
-/**
  * The compaction budget for a context window: pi folds the memory once the context passes `window - reserve`, and
  * keeps the latest `keepRecent` tokens verbatim. Its defaults (16k / 20k) suit a large hosted model; a small local
- * context gets proportionate ones. The reserve always holds the reply room, so a folded session plus a full reply fits.
+ * context gets proportionate ones. A configured output that fits the window is reserved before the next request;
+ * this changes the compaction threshold, not the output ceiling sent to the provider.
  */
 export function piCompactionSettings(contextWindow: number, maxTokens?: number | null) {
+  const outputReserve = typeof maxTokens === 'number' && maxTokens > 0 && maxTokens < contextWindow ? maxTokens : 0
   return {
-    enabled: true,
-    reserveTokens: Math.max(Math.min(16_384, Math.max(1024, Math.floor(contextWindow * 0.2))), piReplyRoom(contextWindow, maxTokens)),
-    keepRecentTokens: Math.min(20_000, Math.max(1024, Math.floor(contextWindow * 0.25))),
+    enabled: contextWindow > 0,
+    reserveTokens: Math.max(Math.min(16_384, Math.max(1, Math.floor(contextWindow * 0.2))), outputReserve),
+    keepRecentTokens: Math.min(20_000, Math.max(1, Math.floor(contextWindow * 0.25))),
   }
 }
 
@@ -135,7 +126,8 @@ export function piModelConfig(target: ChatCompletionTarget, contextWindow: numbe
         cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
         reasoning, contextWindow,
         compat: { maxTokensField: 'max_tokens' as const },
-        maxTokens: piReplyRoom(contextWindow, target.generation.maxTokens),
+        // Pi's runtime model uses zero for unknown limits; the wire request below preserves unset output.
+        maxTokens: target.generation.maxTokens ?? 0,
         ...(Object.keys(sampling).length ? { samplingParams: sampling } : {}),
       }],
     },
@@ -196,10 +188,6 @@ async function runPiChatCompletion(params: {
   onReasoning?: (text: string) => void
   /** Cumulative provider usage, including compaction and requests completed before a failure. */
   onUsage?: (usage: LlmTokenCounts) => void
-  /** Any sign of life (a tool running, a compaction), so a quiet stretch is not taken for a stuck server. */
-  onActivity?: () => void
-  onToolStart?: () => void
-  onToolEnd?: () => void
   callTool?: (name: string, args: Record<string, unknown>, id: string) => Promise<ChatMcpToolResult>
   catalogued?: ReadonlySet<string>
   maxToolRounds?: number
@@ -218,7 +206,7 @@ async function runPiChatCompletion(params: {
   const tools = params.tools ?? []
   const toolRounds = params.maxToolRounds ?? chatToolRoundLimit()
   const codemode = tools.length > 0 && loadChatSettings().piCodemode
-  const contextWindow = params.target.contextWindow ?? DEFAULT_CONTEXT_WINDOW
+  const contextWindow = params.target.contextWindow ?? 0
   const { thinkingLevel, provider } = piModelConfig(params.target, contextWindow, Boolean(params.target.piVision))
 
   // A turn continues a copy of the session, so a failed or retried turn leaves the chat on the file it was on.
@@ -239,6 +227,7 @@ async function runPiChatCompletion(params: {
   const system = params.messages.filter((message) => message.role === 'system').map((message) => message.content).join('\n\n')
   const settingsManager = pi.SettingsManager.inMemory({
     compaction: params.research ? { enabled: false } : piCompactionSettings(contextWindow, params.target.generation.maxTokens),
+    httpIdleTimeoutMs: params.target.timeoutMs ?? 0,
     retry: { enabled: !params.research, maxRetries: params.research ? 0 : 2, ...(params.target.timeoutMs != null ? { provider: { timeoutMs: params.target.timeoutMs } } : {}) },
     enableInstallTelemetry: false,
     cacheWarming: 'off',
@@ -299,7 +288,6 @@ async function runPiChatCompletion(params: {
     execute: async (toolCallId, args) => {
       params.signal.throwIfAborted()
       if (looping) throw new Error('pi 응답 반복으로 도구 실행이 중단됐어.')
-      params.onActivity?.()
       if (!params.callTool) throw new Error('Unknown or not permitted tool')
       if (round > toolRounds) return { content: [{ type: 'text' as const, text: TOOL_BUDGET_NOTE }], details: {}, isError: true }
       const slash = toolCallId.lastIndexOf('/')
@@ -316,6 +304,19 @@ async function runPiChatCompletion(params: {
   const { session: agent } = await pi.createAgentSession({
     cwd, agentDir, model, thinkingLevel, modelRuntime, resourceLoader, settingsManager, sessionManager,
     customTools, tools: [...customTools.map((tool) => tool.name), ...(codemode ? [CODEMODE_TOOL] : [])],
+  })
+  // Pi's simple adapter invents an output cap and subtracts a fixed context margin; its summaries also set their
+  // own cap. Preserve the profile on every request instead. The provider validates the actual remaining context.
+  const stream = agent.agent.streamFunction
+  agent.agent.streamFunction = (requestModel, context, options) => stream(requestModel, context, {
+    ...options,
+    onPayload: async (payload, model) => {
+      const body = (await options?.onPayload?.(payload, model) ?? payload) as Record<string, unknown>
+      delete body.max_tokens
+      delete body.max_completion_tokens
+      if (params.target.generation.maxTokens != null) body.max_tokens = params.target.generation.maxTokens
+      return body
+    },
   })
   // This run's model answers, in order (a compaction rebuilds the session's messages, so they are collected here).
   const produced: Array<Extract<AgentSessionEvent, { type: 'message_end' }>['message'] & { role: 'assistant' }> = []
@@ -334,9 +335,6 @@ async function runPiChatCompletion(params: {
   const abort = () => { void agent.abort() }
   params.signal.addEventListener('abort', abort, { once: true })
   const unsubscribe = agent.subscribe((event: AgentSessionEvent) => {
-    if (event.type === 'tool_execution_start') params.onToolStart?.()
-    if (event.type === 'tool_execution_end') params.onToolEnd?.()
-    params.onActivity?.()
     // Nothing here can read codemode's output files (pi's file tools are off): they go as soon as the script ends.
     if (event.type === 'tool_execution_end' && event.toolName === CODEMODE_TOOL) {
       for (const part of (event.result?.content ?? []) as Array<{ type?: string; text?: unknown }>) {

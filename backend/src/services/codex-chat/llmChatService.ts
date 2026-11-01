@@ -503,7 +503,7 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
     if (!turn.research && !turn.engineSession && hasPluginServerHook('chat.instructions')) {
       const at = built.findIndex((message) => message.role === 'system')
       const current = at >= 0 && typeof built[at].content === 'string' ? built[at].content as string : ''
-      const next = await applyChatInstructionHooks(current, { engine: 'llm', threadId: turn.threadId, group: CodexChatStore.findThreadById(turn.threadId)?.kind === 'group', profile: { id: profile.id, name: profile.name } }, requester)
+      const next = await applyChatInstructionHooks(current, { engine: 'llm', threadId: turn.threadId, group: CodexChatStore.findThreadById(turn.threadId)?.kind === 'group', profile: { id: profile.id, name: profile.name } }, requester, turn.controller.signal)
       if (next !== current) {
         if (at >= 0) built[at] = { ...built[at], content: next } as typeof built[number]
         else built.unshift({ role: 'system', content: next })

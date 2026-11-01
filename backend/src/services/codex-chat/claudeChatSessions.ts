@@ -111,7 +111,7 @@ export async function buildClaudeSessionTurn(params: {
   const user = userPersonaForThread(thread)
   const workspaces = chatWorkspaces(requester, threadId, profile.id)
   // Plugins may rewrite it; a changed system prompt starts a new session (systemHash).
-  const system = await applyChatInstructionHooks([claudeSessionSystem(profile, params.withTools, user), workspaceInstructions(workspaces)].filter(Boolean).join('\n\n'), { engine: runtime, threadId, group: false, profile: { id: profile.id, name: profile.name } }, requester)
+  const system = await applyChatInstructionHooks([claudeSessionSystem(profile, params.withTools, user), workspaceInstructions(workspaces)].filter(Boolean).join('\n\n'), { engine: runtime, threadId, group: false, profile: { id: profile.id, name: profile.name } }, requester, params.signal)
   const systemHash = systemHashOf(system)
   const baseDir = claudeSessionDir(threadId, runtime)
   const workspaceKey = workspaceRuntimeKey(workspaces)
@@ -202,7 +202,7 @@ export async function buildClaudeGroupSessionTurn(params: {
   const { requester, thread, members, profile, messages } = params
   const runtime = params.runtime ?? 'claude'
   const user = userPersonaForThread(thread)
-  const system = await applyChatInstructionHooks([claudeSessionSystem(profile, params.withTools, user), buildGroupHeader({ thread, members, self: profile, user })].join('\n\n'), { engine: runtime, threadId: thread.id, group: true, profile: { id: profile.id, name: profile.name } }, requester)
+  const system = await applyChatInstructionHooks([claudeSessionSystem(profile, params.withTools, user), buildGroupHeader({ thread, members, self: profile, user })].join('\n\n'), { engine: runtime, threadId: thread.id, group: true, profile: { id: profile.id, name: profile.name } }, requester, params.signal)
   const systemHash = systemHashOf(system)
   const dir = claudeMemberSessionDir(thread.id, profile.id, runtime)
   const member = ChatGroupStore.member(thread.id, profile.id)

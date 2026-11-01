@@ -98,19 +98,19 @@ test('trusted plugins run a server module with their own data, hooks and tools',
     const seen: Array<{ accountId: unknown; token: string; port: number }> = []
     const web = express()
     web.use(native.pluginNativeCallSession)
-    web.get('/api/codex-chat/lorebooks', (req, res) => {
+    web.get('/api/future-feature/state', (req, res) => {
       seen.push({ accountId: (req.session as { accountId?: number } | undefined)?.accountId, token: String(req.headers['x-conai-plugin-call']), port: req.socket.localPort! })
       res.setHeader('set-cookie', 'sid=leak'); res.json({ ok: true })
     })
     native.setPluginNativeApp(web)
-    const reply = await native.callPluginServerNative(admin, { path: '/api/codex-chat/lorebooks' })
+    const reply = await native.callPluginServerNative(admin, { path: '/api/future-feature/state' })
     assert.equal(reply.status, 200)
     assert.deepEqual(JSON.parse(Buffer.from(reply.body as ArrayBuffer).toString()), { ok: true })
     assert.ok(!reply.headers.some(([name]) => name.toLowerCase() === 'set-cookie'), 'no session cookie reaches the worker')
     assert.equal(seen[0].accountId, adminId, 'the route sees the calling account')
-    const replay = await fetch(`http://127.0.0.1:${seen[0].port}/api/codex-chat/lorebooks`, { headers: { 'x-conai-plugin-call': seen[0].token } })
+    const replay = await fetch(`http://127.0.0.1:${seen[0].port}/api/future-feature/state`, { headers: { 'x-conai-plugin-call': seen[0].token } })
     assert.equal(replay.status, 401, 'a used grant cannot be replayed'); assert.equal(seen.length, 1)
-    await assert.rejects(native.callPluginServerNative(admin, { path: '/api/auth/login', method: 'POST', body: '{}' }), (error: { status?: number }) => error.status === 400)
+    await assert.rejects(native.callPluginServerNative(admin, { path: '/api/future-feature/state', headers: { Cookie: 'forged' } }), (error: { status?: number }) => error.status === 400)
     await assert.rejects(native.callPluginServerNative(undefined, { path: '/api/codex-chat/lorebooks' }), /계정/)
   })
   const folder = path.resolve(__dirname, '../../plugins/chat-instructions')
@@ -518,7 +518,7 @@ test('trusted plugins run a server module with their own data, hooks and tools',
     const noJudgeCalls = calls
     for (const invalid of [
       { ...decideInput, extra: true }, { ...decideInput, state: [] },
-      { ...decideInput, timeoutMs: 999 }, { ...decideInput, questions: [] },
+      { ...decideInput, timeoutMs: 0 }, { ...decideInput, questions: [] },
       { ...decideInput, questions: Array(9).fill(decideInput.questions[0]) },
       { ...decideInput, questions: [decideInput.questions[0], decideInput.questions[0]] },
       ...['_bad', 'a'.repeat(41), 'a.b'].map(id => ({ ...decideInput, questions: [{ ...decideInput.questions[0], id }] })),
@@ -610,13 +610,12 @@ test('trusted plugins run a server module with their own data, hooks and tools',
     const failed = await decide() as import('@conai/shared').PluginLlmDecision
     assert.deepEqual(failed.answers, {}); assert.ok(failed.error); assert.doesNotMatch(failed.error!, /SECRET|PRIVATE_BODY/)
     judgeFailure = false; hold = true; aborted = 0
-    const judging = [decide(), turn(), decide(), turn()]
+    const judging = [decide(), turn(), decide(), turn(), decide()]
     const stoppedJudging = Promise.allSettled(judging)
-    await until(() => aborted === 0 && calls >= configuredCalls + 8, 'concurrent judge requests start')
-    await assert.rejects(async () => decide(), (error: any) => error.status === 429 && /4개/.test(error.message))
+    await until(() => aborted === 0 && calls >= configuredCalls + 9, 'concurrent judge requests start')
     await registry.setPluginEnabled('llm-bridge', false, adminId)
     assert.ok((await stoppedJudging).every(result => result.status === 'rejected'))
-    assert.equal(aborted, 4)
+    assert.equal(aborted, 5)
     await registry.setPluginEnabled('llm-bridge', true, adminId)
     await until(() => runtime.pluginServerStatus('llm-bridge').state === 'ready', 'judge bridge re-enabled')
     await assert.rejects(async () => decide({ ...decideInput, timeoutMs: 1000 }), /제한 시간/)
@@ -1443,21 +1442,27 @@ test('trusted plugins run a server module with their own data, hooks and tools',
     await registry.setPluginEnabled('chat-instructions', false)
   })
 
-  await t.test('slow hooks are skipped, failures stay inside the call and a crashed module comes back', async (s) => {
+  await t.test('hooks finish or cancel, failures stay inside the call and a crashed module comes back', async (s) => {
     const lab = path.join(root, 'lab-plugin')
     fs.mkdirSync(lab)
     fs.writeFileSync(path.join(lab, 'plugin.json'), JSON.stringify({ apiVersion: 1, id: 'lab', name: 'lab', version: '1.0.0', description: '', capabilities: ['server'], server: { entry: 'server.mjs' }, pages: [{ id: 'main', title: 'lab', entry: 'index.html', accepts: [], actions: [] }] }))
     fs.writeFileSync(path.join(lab, 'index.html'), '<!doctype html><title>lab</title>')
     fs.writeFileSync(path.join(lab, 'server.mjs'), `export function activate(conai) {
-      let cancelled = false, toolCancelled = false, pendingTool = null;
+      let cancelled = false, toolCancelled = false, pendingTool = null, pendingHook = null, hookCancelled = false;
       conai.onRequest(({ body }, { signal }) => {
         if (body.op === 'cancelled') return cancelled;
         if (body.op === 'tool-waiting') return pendingTool !== null;
         if (body.op === 'tool-cancelled') return toolCancelled;
         if (body.op === 'release-tool') { pendingTool?.(); return true; }
+        if (body.op === 'hook-waiting') return pendingHook !== null;
+        if (body.op === 'hook-cancelled') return hookCancelled;
+        if (body.op === 'release-hook') { pendingHook?.(); return true; }
         return new Promise((resolve, reject) => signal.addEventListener('abort', () => { cancelled = true; reject(signal.reason); }, { once: true }));
       });
-      conai.hooks.on('chat.instructions', () => new Promise(resolve => setTimeout(() => resolve('SLOW'), 5000)))
+      conai.hooks.on('chat.instructions', (_, { signal }) => new Promise((resolve, reject) => {
+        pendingHook = () => { pendingHook = null; resolve('HOOK'); };
+        signal.addEventListener('abort', () => { pendingHook = null; hookCancelled = true; reject(signal.reason); }, { once: true });
+      }))
       conai.tools.register({ name: 'fail', scope: 'read', inputSchema: { type: 'object' }, handler: () => { throw new Error('boom') } })
       conai.tools.register({ name: 'crash', scope: 'read', inputSchema: { type: 'object' }, handler: () => process.exit(3) })
       conai.tools.register({ name: 'wait', scope: 'read', inputSchema: { type: 'object' }, handler: (_, { signal }) => new Promise((resolve, reject) => {
@@ -1497,9 +1502,18 @@ test('trusted plugins run a server module with their own data, hooks and tools',
     cancellation.abort()
     await rejected
     await until(async () => Boolean(await runtime.requestPluginServer('lab', { op: 'cancelled' }, admin, {})), 'cancellation reached the module')
-    const started = Date.now()
-    assert.equal(await runtime.applyChatInstructionHooks('BASE', { engine: 'codex', threadId: null, group: false, profile: { id: 1, name: 'x' } }, admin), 'BASE')
-    assert.ok(Date.now() - started < 4_500, 'the hook gives up after three seconds')
+    const hookContext = { engine: 'codex' as const, threadId: null, group: false, profile: { id: 1, name: 'x' } }
+    const hook = runtime.applyChatInstructionHooks('BASE', hookContext, admin)
+    assert.equal(await runtime.requestPluginServer('lab', { op: 'hook-waiting' }, admin, {}), true)
+    await runtime.requestPluginServer('lab', { op: 'release-hook' }, admin, {})
+    assert.equal(await hook, 'HOOK')
+    const hookController = new AbortController()
+    const cancelledHook = runtime.applyChatInstructionHooks('BASE', hookContext, admin, hookController.signal)
+    assert.equal(await runtime.requestPluginServer('lab', { op: 'hook-waiting' }, admin, {}), true)
+    const hookRejected = assert.rejects(cancelledHook, { name: 'AbortError' })
+    hookController.abort()
+    await hookRejected
+    assert.equal(await runtime.requestPluginServer('lab', { op: 'hook-cancelled' }, admin, {}), true)
     const failed = await serverTools.callPluginServerTool('p_lab_fail', {}, admin)
     assert.equal(failed.isError, true)
     assert.match(JSON.stringify(failed.content), /boom/)
@@ -1529,6 +1543,9 @@ test('trusted plugins run a server module with their own data, hooks and tools',
     const fields = [{ id: 'prompt', label: '프롬프트', type: 'text', value: '1girl,  smile , 1girl,, Smile' }, { id: 'seed', label: '시드', type: 'number', value: 1 }]
     assert.deepEqual(await runtime.runGenerationActionHook('generation-helper', { action: 'tidy', surface: 'nai', fields }, admin), { message: '프롬프트 1개를 정리했어.', fill: { prompt: '1girl, smile' } })
     assert.deepEqual(await runtime.runGenerationActionHook('generation-helper', { action: 'tidy', surface: 'nai', fields: [{ ...fields[0], value: 'a, b' }] }, admin), { message: '정리할 게 없어.' })
+    const cancelledAction = new AbortController()
+    cancelledAction.abort()
+    await assert.rejects(runtime.runGenerationActionHook('generation-helper', { action: 'tidy', surface: 'nai', fields }, admin, cancelledAction.signal), { name: 'AbortError' })
     await assert.rejects(runtime.runGenerationActionHook('generation-helper', { action: 'nope', surface: 'nai', fields }, admin), /모르는 버튼/)
     await assert.rejects(runtime.runGenerationActionHook('chat-instructions', { action: 'tidy', surface: 'nai', fields }, admin), /준비가 안 됐어/)
 

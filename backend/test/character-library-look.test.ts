@@ -99,7 +99,7 @@ test('character looks: dictionary sorting, legacy text, tag search and filters, 
   assert.deepEqual(ids({ filters: { hairColor: ['aqua_hair'], outfit: ['bikini'] } }), [])
   const facets = library.characterLibraryFacets({})
   assert.equal(facets.available, true)
-  assert.deepEqual(facets.dimensions.find((dimension) => dimension.key === 'hairColor')?.values, [{ tag: 'aqua_hair', label: '물빛 머리', translated: '물빛 머리', count: 1 }])
+  assert.deepEqual(facets.dimensions.find((dimension) => dimension.key === 'hairColor')?.values, [{ tag: 'aqua_hair', label: 'aqua hair', translated: '물빛 머리', count: 1 }])
 
   // A setting stored before sections reads its text as `other` and is indexed at startup.
   const db = settings.getUserSettingsDb()

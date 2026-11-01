@@ -4,9 +4,9 @@ import type { ChatPageSnapshot } from '../types/chatPage'
 import { requireChatPageTarget } from './chatPage'
 
 // Node schemas include nested properties/enums inside a page collection; schema recursion stays capped at eight.
-export const CHAT_PAGE_ACTION_LIMITS = { actions: 26, bytes: 320000, text: 200000, depth: 20, array: 512 } as const
+export const CHAT_PAGE_ACTION_LIMITS = { bytes: 320000, text: 200000, depth: 20, array: 512 } as const
 function own(value: object, key: PropertyKey) { return Object.prototype.hasOwnProperty.call(value, key) }
-const privateKey = /password|secret|credential|api[ _-]?key|authorization|bearer|token|headers|(?:file|source|output|save|artifact)[ _-]?(?:path|directory)|(?:^|[_.-])(?:code|script|url|endpoint)(?:$|[_.-])|filename_prefix|비밀번호|인증키|저장.?경로/i
+const privateKey = /password|secret|credential|api[ _-]?key|authorization|bearer|token|headers|비밀번호|인증키/i
 export function isPrivateChatPageKey(key: string) {
   // These exact profile settings are model token counts, not authentication tokens.
   // Keep the exception narrow so credential names and nested keys still receive the normal checks.
@@ -19,7 +19,7 @@ export function copyChatPageData(value: unknown, depth = 0): ChatPageData {
   if (depth > CHAT_PAGE_ACTION_LIMITS.depth) throw new Error('페이지 데이터가 너무 깊어.')
   if (value === null || typeof value === 'boolean') return value
   if (typeof value === 'number' && Number.isFinite(value)) return value
-  if (typeof value === 'string' && value.length <= CHAT_PAGE_ACTION_LIMITS.text && !/^data:|^https?:\/\//i.test(value.trim())) return value
+  if (typeof value === 'string' && value.length <= CHAT_PAGE_ACTION_LIMITS.text && !/^data:/i.test(value.trim())) return value
   if (Array.isArray(value) && value.length <= CHAT_PAGE_ACTION_LIMITS.array) return value.map((item) => copyChatPageData(item, depth + 1))
   if (value && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype && Object.keys(value).length <= 512) {
     // Like JSON, a key whose value is undefined is left out rather than rejected.
@@ -164,14 +164,14 @@ const nativeActionPermissions = {
 export type NativeChatPageActionId = keyof typeof nativeActionPermissions
 export const CHAT_PAGE_ACTION_PERMISSIONS: Readonly<Record<string, string | null>> = nativeActionPermissions
 /**
- * What running an action does, decided here and never by the page that registers it:
+ * Native action tiers are fixed here; installed plugins declare their own tiers in the manifest:
  * - view: moves or opens something (navigation, tabs, selection, opening an editor). Runs right away.
  * - draft: changes inputs on screen without saving. Runs right away; the person can undo it.
- * - direct: native rename/move and cancellation, checked against the current screen; no review card or draft undo.
+ * - direct: executes immediately, checked against the current screen; no review card or draft undo.
  * - commit: saves, registers or otherwise decides. Always a review card the person applies.
  */
 export type ChatPageActionTier = 'view' | 'draft' | 'direct' | 'commit'
-/** Native operations with bounded effects; extensions cannot declare this tier. */
+/** Native operations that run without a review card. */
 const DIRECT_ACTIONS = new Set(['files.name_save', 'files.move_save', 'sprite.stop', 'workflow.run_cancel', 'posts.bot_cancel', 'chat.rename', 'chat.pin', 'chat.archive'])
 const COMMIT_ACTIONS = new Set(['page_settings.save', 'prompt.create', 'prompt.update', 'preset.create', 'preset.update', 'wildcard.create', 'wildcard.update', 'comfy.save', 'comfy.register', 'group.create', 'group.update', 'group.auto_collect', 'group.move', 'group.delete', 'profile.save', 'profile.assets', 'resource.save', 'wallpaper.save', 'metadata.save', 'posts.save', 'posts.comment', 'workflow.run', 'workflow.schedule_save', 'workflow.schedule_pause', 'workflow.schedule_resume', 'workflow.schedule_run_now', 'workflow.schedule_delete', 'workflow.runs_cleanup', 'sprite.run', 'audio.generate', 'upload.library', 'posts.delete', 'posts.restore_revision', 'posts.comment_update', 'posts.comment_delete', 'posts.comment_hide', 'posts.category_create', 'posts.category_update', 'posts.category_delete', 'files.delete', 'files.restore_version', 'files.doc_save', 'settings.save', 'settings.ai_runtime', 'settings.kaloscope_requeue', 'settings.mcp_http', 'settings.maintenance', 'settings.chat_options', 'settings.default_model', 'settings.default_judge', 'settings.llm_preset', 'settings.mcp_server', 'settings.user_profile', 'settings.flag', 'settings.routine', 'settings.automation_switch', 'wallpaper.delete_preset', 'wallpaper.save_schedule', 'wallpaper.issue_key', 'wallpaper.revoke_key'])
 const VIEW_ACTIONS = new Set(['page.settings_open', 'page_settings.select', 'page_settings.close', 'page.navigate', 'page.refresh', 'prompt.select', 'preset.select', 'wildcard.select', 'comfy.select', 'comfy.refresh', 'comfy.open_create', 'comfy.open_edit', 'workflow.select', 'group.select', 'profile.open_create', 'profile.open_edit', 'profile.section', 'library.search', 'library.history', 'library.open', 'library.select', 'files.open', 'files.preview', 'comfy.check', 'profile.copy', 'resource.open', 'chat.open', 'chat.prepare', 'audio.open', 'audio.filter', 'audio.select', 'sprite.select', 'wallpaper.select', 'wallpaper.open_preset', 'posts.open', 'posts.category', 'posts.tag', 'posts.back', 'posts.new', 'posts.edit', 'audio.project', 'audio.search', 'sprite.download_zip', 'upload.download', 'posts.layout', 'posts.filter', 'posts.body_at', 'files.select', 'files.new_folder', 'files.rename', 'files.move', 'files.new_document', 'files.edit_document', 'files.doc_at', 'settings.ai_runtime_check', 'settings.usage_period', 'settings.judge_filter', 'wallpaper.open_dialog'])
@@ -204,7 +204,7 @@ for (const id of ['prompt.search', 'prompt.group', 'prompt.page', 'plugins.open'
 for (const id of ['prompt.search', 'prompt.group', 'prompt.page']) IN_PLACE_VIEW_ACTIONS.add(id)
 export function chatPageActionTier(id: string, action?: { tier?: ChatPageActionTier }): ChatPageActionTier {
   if (!own(CHAT_PAGE_ACTION_PERMISSIONS, id)) {
-    if (action?.tier === 'view' || action?.tier === 'draft') return action.tier
+    if (action?.tier === 'view' || action?.tier === 'draft' || action?.tier === 'direct' || action?.tier === 'commit') return action.tier
     throw new Error('등록된 작업 등급이 필요해.')
   }
   return DIRECT_ACTIONS.has(id) ? 'direct' : COMMIT_ACTIONS.has(id) ? 'commit' : VIEW_ACTIONS.has(id) ? 'view' : 'draft'
@@ -255,12 +255,13 @@ export function chatPageActionAllowed(path: string, id: string): boolean {
   return path === '/generation'
 }
 export function normalizeChatPageActions(path: string, input: unknown): ChatPageAction[] {
-  if (!Array.isArray(input) || input.length > CHAT_PAGE_ACTION_LIMITS.actions) throw new Error('페이지 작업 목록이 올바르지 않아.')
+  if (!Array.isArray(input)) throw new Error('페이지 작업 목록이 올바르지 않아.')
   const ids = new Set<string>()
   return input.map((raw: ChatPageAction) => {
     if (!chatPageActionAllowed(path, raw?.id) || ids.has(raw.id) || typeof raw.label !== 'string' || !raw.label || raw.label.length > 160 || typeof raw.description !== 'string' || raw.description.length > 1000 || !['draft', 'save'].includes(raw.effect)) throw new Error('등록되지 않았거나 잘못된 페이지 작업이야.')
     ids.add(raw.id)
-    if ((raw.effect === 'save') !== (COMMIT_ACTIONS.has(raw.id) || DIRECT_ACTIONS.has(raw.id))) throw new Error('작업의 저장 범위가 올바르지 않아.')
+    const tier = chatPageActionTier(raw.id, raw)
+    if ((raw.effect === 'save') !== (tier === 'commit' || tier === 'direct')) throw new Error('작업의 저장 범위가 올바르지 않아.')
     const schema = normalizeChatPageSchema(raw.schema)
     if (schema.type !== 'object') throw new Error('작업 인수는 객체여야 해.')
     if (raw.inputFields !== undefined && (!Array.isArray(raw.inputFields) || raw.inputFields.some(id => typeof id !== 'string' || !id || id.length > 200))) throw new Error('작업 입력 필드 목록이 올바르지 않아.')
@@ -272,8 +273,7 @@ export function normalizeChatPageActions(path: string, input: unknown): ChatPage
       return { argument: target.argument, collection: target.collection, id: target.id, keys: [...new Set(target.keys)].sort() }
     })
     if (path.startsWith('/ext/') && !own(CHAT_PAGE_ACTION_PERMISSIONS, raw.id)) {
-      if (raw.effect !== 'draft' || (raw.tier !== 'view' && raw.tier !== 'draft')) throw new Error('확장에는 조회와 초안 작업만 등록할 수 있어.')
-      return { id: raw.id, label: raw.label, description: raw.description, effect: raw.effect, schema, tier: raw.tier }
+      return { id: raw.id, label: raw.label, description: raw.description, effect: raw.effect, schema, tier }
     }
     return { id: raw.id, label: raw.label, description: raw.description, effect: raw.effect, schema, ...inputs, ...(targets ? { targets } : {}), ...(raw.revisionScope === 'action' ? { revisionScope: 'action' as const } : {}) }
   })

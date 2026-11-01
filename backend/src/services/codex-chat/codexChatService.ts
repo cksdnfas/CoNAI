@@ -297,7 +297,7 @@ export function buildCodexInstructions(profile: ChatProfile) {
 }
 
 /** Developer instructions are fixed when a Codex thread starts or resumes, so plugin hooks apply then. */
-async function threadOverrides(session: Session, profile: ChatProfile) {
+async function threadOverrides(session: Session, profile: ChatProfile, signal?: AbortSignal) {
   const { model, effort } = resolveCodexRun(session, profile)
   const instructions = [buildCodexInstructions(profile), workspaceInstructions(session.workspaces)].filter(Boolean).join('\n\n')
   return {
@@ -307,7 +307,7 @@ async function threadOverrides(session: Session, profile: ChatProfile) {
     cwd: session.runtime.cwd,
     approvalPolicy: 'never',
     sandbox: 'read-only',
-    developerInstructions: await applyChatInstructionHooks(instructions, { engine: 'codex', threadId: null, group: false, profile: { id: profile.id, name: profile.name } }, session.requester),
+    developerInstructions: await applyChatInstructionHooks(instructions, { engine: 'codex', threadId: null, group: false, profile: { id: profile.id, name: profile.name } }, session.requester, signal),
   }
 }
 
@@ -703,7 +703,7 @@ function requireThread(requester: McpRequester, threadId: number) {
  * Load the Codex thread into this process: start a new one, or resume from its rollout (a fresh one if that is gone).
  * `saveNew` records a newly started thread where the chat (or the group member) keeps it.
  */
-async function ensureCodexThread(session: Session, codexThreadId: string | null, profile: ChatProfile, saveNew: (codexThreadId: string) => void) {
+async function ensureCodexThread(session: Session, codexThreadId: string | null, profile: ChatProfile, saveNew: (codexThreadId: string) => void, signal?: AbortSignal) {
   await verifyChatRuntime(session.client, session.features, session.runtime.cwd, process.env.PORT || String(PORTS.BACKEND_DEFAULT), false)
   if (codexThreadId && session.loadedThreads.has(codexThreadId)) {
     return codexThreadId
@@ -711,16 +711,17 @@ async function ensureCodexThread(session: Session, codexThreadId: string | null,
 
   if (codexThreadId) {
     try {
-      await session.client.request('thread/resume', { threadId: codexThreadId, ...(await threadOverrides(session, profile)) }, THREAD_REQUEST_TIMEOUT_MS)
+      await session.client.request('thread/resume', { threadId: codexThreadId, ...(await threadOverrides(session, profile, signal)) }, THREAD_REQUEST_TIMEOUT_MS)
       session.loadedThreads.add(codexThreadId)
       return codexThreadId
     } catch {
+      signal?.throwIfAborted()
       // Rollout missing (CODEX_HOME reset, other account): continue in a new Codex thread.
     }
   }
 
   const started = await session.client.request<{ thread: { id: string } }>('thread/start', {
-    ...(await threadOverrides(session, profile)),
+    ...(await threadOverrides(session, profile, signal)),
     serviceName: 'conai',
   }, THREAD_REQUEST_TIMEOUT_MS)
   saveNew(started.thread.id)
@@ -865,7 +866,7 @@ export async function runCodexGroupReply(params: {
   setCodexChatExecution(session.token, params.chatContext)
   const previousCodexThreadId = ChatGroupStore.member(threadId, profile.id)?.codex_thread_id ?? null
   const codexThreadId = await ensureCodexThread(session, previousCodexThreadId, profile,
-    (id) => ChatGroupStore.setMemberCodexThread(threadId, profile.id, id))
+    (id) => ChatGroupStore.setMemberCodexThread(threadId, profile.id, id), params.signal)
   if (session.activeTurns.has(codexThreadId)) throw new CodexChatError('이 참가자의 이전 답변이 아직 진행 중이야.', 409)
 
   const turn: TurnState = {
@@ -975,7 +976,7 @@ export async function runCodexOrderTurn(params: {
   params.chatContext.knowledgeOutputLimit = profile.toolOutputLimit
   params.chatContext.knowledgeModel = run.model ?? session.catalog.models.find(item => item.isDefault)?.id ?? 'unspecified'
   setCodexChatExecution(session.token, params.chatContext)
-  const codexThreadId = await ensureCodexThread(session, null, profile, () => {})
+  const codexThreadId = await ensureCodexThread(session, null, profile, () => {}, params.signal)
   let outcome: GroupReplyResult | null = null
   const turn: TurnState = {
     usage: { ...currentLlmUsageContext(), threadId, replyId: params.chatContext.replyId },
@@ -1095,14 +1096,20 @@ export const CodexChatService = {
     if (CodexChatService.isRunning(threadId)) throw new CodexChatError('이전 답변이 아직 진행 중이야.', 409)
     if (!thread.codex_thread_id) throw new CodexChatError('아직 압축할 대화가 없어.', 409)
 
-    reserveStarting(threadId, null)
+    const controller = new AbortController()
+    reserveStarting(threadId, controller)
     let session: Session | null = null
     let codexThreadId: string | null = null
     try {
       const profile = requireCodexProfile(thread.profile_id, requester)
       const { scopes, toolAllowlist } = resolveChatProfileToolGrant(profile, resolveChatAccess(requester.accountId))
       session = await ensureSession(requester, scopes, toolAllowlist, profile.generationPresetIds, { threadId, profileId: profile.id, kind: 'direct' })
-      codexThreadId = await ensureCodexThread(session, thread.codex_thread_id, profile, (id) => CodexChatStore.setCodexThreadId(threadId, id))
+      controller.signal.throwIfAborted()
+      codexThreadId = await ensureCodexThread(session, thread.codex_thread_id, profile, (id) => {
+        controller.signal.throwIfAborted()
+        CodexChatStore.setCodexThreadId(threadId, id)
+      }, controller.signal)
+      controller.signal.throwIfAborted()
       // The rollout was gone and a fresh thread started: nothing left to fold.
       if (codexThreadId !== thread.codex_thread_id) return CodexChatService.getThread(requester, threadId).thread
 
@@ -1120,6 +1127,7 @@ export const CodexChatService = {
       await finished
       return CodexChatService.getThread(requester, threadId).thread
     } finally {
+      controller.abort()
       if (session && codexThreadId) session.compactions.delete(codexThreadId)
       if (session) scheduleIdleClose(session)
       releaseStarting(threadId)
@@ -1385,7 +1393,7 @@ export const CodexChatService = {
       controller.signal.throwIfAborted()
       const run = resolveCodexRun(session, profile)
       // Keep a new memory uncommitted until turn/start accepts its first input, including the opening recap.
-      const codexThreadId = await ensureCodexThread(session, thread.codex_thread_id, profile, () => {})
+      const codexThreadId = await ensureCodexThread(session, thread.codex_thread_id, profile, () => {}, controller.signal)
       const freshCodexThread = codexThreadId !== thread.codex_thread_id
 
       const turn: TurnState = {

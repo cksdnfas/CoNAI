@@ -59,7 +59,7 @@ export function registerChatPageActionTools(server: McpServer, context: McpReque
     } catch (error) { return pageFailure(error) }
   })
 
-  server.registerTool('page_act', { description: 'Run one registered view/draft/direct action using its current screen ID and exact schema; returns updated screen. Draft never saves; direct actions rename/move files or stop work immediately with a screen revision check. Leaving unsaved edits is blocked. Commit actions require propose_page_action; extension save requests require human host Apply.', inputSchema: z.object({
+  server.registerTool('page_act', { description: 'Run one registered view/draft/direct action using its current screen ID and exact schema; returns updated screen. Draft never saves; direct actions execute immediately with a screen revision check, including installed plugin actions. Leaving unsaved edits is blocked. Commit actions require propose_page_action; explicit propose* requests require human Apply.', inputSchema: z.object({
     action: z.string().max(80).describe('Operation ID from the screen.'),
     arguments: z.record(z.string(), z.unknown()).default({}).describe('Object matching the operation schema exactly.'),
   }) }, async ({ action: actionId, arguments: args }) => {
@@ -76,7 +76,7 @@ export function registerChatPageActionTools(server: McpServer, context: McpReque
     } catch (error) { return pageFailure(error) }
   })
 
-  server.registerTool('propose_page_action', { description: 'Create a review card for one registered commit action. Only human Apply saves; never report a proposal as saved. View/draft/direct actions, including extension save requests, use page_act.', inputSchema: z.object({
+  server.registerTool('propose_page_action', { description: 'Create a review card for one registered commit action, including installed plugin actions. Only human Apply saves; never report a proposal as saved. View/draft/direct actions use page_act.', inputSchema: z.object({
     actionId: z.string().max(80).describe('Operation ID from the screen.'),
     arguments: z.record(z.string(), z.unknown()).describe('Object matching the exact registered schema for this action.'),
   }) }, async ({ actionId, arguments: args }) => {

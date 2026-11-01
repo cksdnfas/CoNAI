@@ -14,7 +14,7 @@ import { pluginLlmInputBytes } from './pluginLlmInput'
 const id = z.string().regex(/^[a-zA-Z][\w-]{0,39}$/)
 const criteria = z.object({ yes: z.string(), no: z.string() }).strict()
 const question = { id, instructions: z.string().min(1) }
-const timeoutMs = z.number().int().min(1000).max(1_800_000).optional()
+const timeoutMs = z.number().int().positive().max(2_147_483_647).optional()
 const profileId = z.number().int().positive()
 const decideSchema = z.object({
   profileId,
@@ -66,7 +66,6 @@ onPluginChanged(pluginId => {
 
 async function execute<T>(pluginId: string, input: { profileId: number; timeoutMs?: number }, authorized: Authorized, authorize: Authorize, run: (signal: AbortSignal) => Promise<T>): Promise<T> {
   const controllers = active.get(pluginId) ?? new Set<AbortController>()
-  if (controllers.size >= 4) throw new PluginError('플러그인 판단 4개가 실행 중이야. 완료 후 다시 시도해줘.', 429)
   const controller = new AbortController()
   controllers.add(controller)
   active.set(pluginId, controllers)

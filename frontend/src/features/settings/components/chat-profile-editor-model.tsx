@@ -137,7 +137,7 @@ function TokenFields({ draft, patch, serverDefault }: { draft: Draft; patch: Pat
         {isLlm ? (
           <Field
             label={t({ ko: '최대 컨텍스트', en: 'Max context' })}
-            info={t({ ko: '요청 하나가 넣을 수 있는 전체 토큰(입력+출력). 비우면 서버가 알려준 크기를 쓰고, 서버도 모르면 제한 없이 보내. 정하면 서버 크기와 둘 중 작은 값을 써. 대화·요약·도구 설명·답변 몫이 이 안에 맞춰지고, pi는 이 크기에서 세션을 압축해.', en: 'All tokens one request may hold (input + output). Empty uses the size the server reports, and no cap when it does not say. When set, the smaller of it and the server size counts. Conversation, summary, tool descriptions and the reply fit inside it; pi folds its session at it.' })}
+            info={t({ ko: '요청 하나가 넣을 수 있는 전체 토큰(입력+출력). 비우면 서버가 알려준 크기를 쓰고, 서버도 모르면 크기를 추측하지 않아. 정하면 서버 크기와 둘 중 작은 값을 써. pi는 알려진 크기에서 세션을 압축하고, 크기를 모르면 자동 압축을 하지 않아.', en: 'All tokens one request may hold (input + output). Empty uses the size the server reports without guessing when unknown. When set, the smaller of it and the server size counts. Pi folds its session at the known size; automatic compaction is off when unknown.' })}
           >
             <NumberStepperInput variant="settings" allowEmpty shorthand step={1024} {...CHAT_PROFILE_LIMITS.contextTokens} value={draft.contextTokens} placeholder={t({ ko: '서버 크기', en: 'Server size' })} onValueCommit={(value) => patch({ contextTokens: numberOrNull(value) })} />
           </Field>
@@ -149,7 +149,7 @@ function TokenFields({ draft, patch, serverDefault }: { draft: Draft; patch: Pat
         ) : null}
         <Field
           label={t({ ko: '최대 출력 토큰', en: 'Max output tokens' })}
-          info={t({ ko: '추론과 답변을 합친 상한. 미리 비워두는 자리가 아니라 상한이라, 컨텍스트에 남은 자리가 더 작으면 그만큼으로 줄여서 보내. 채팅 헤더의 컨텍스트에서 따로 정하면 그쪽이 우선이야.', en: 'Ceiling for reasoning and answer combined. It is a ceiling, not a reservation: when less room is left in the context, the request goes with that much. A value set per chat under Context in the chat header takes precedence.' })}
+          info={t({ ko: '추론과 답변을 합친 상한. 비우면 서버 기본값을 써. 직접 API는 남은 컨텍스트에 맞춰 줄이고, pi는 정한 값을 그대로 보내 서버가 실제 여유를 검사해. 채팅 헤더의 컨텍스트에서 따로 정하면 그쪽이 우선이야.', en: 'Ceiling for reasoning and answer combined. Empty keeps the server default. Direct API fits it to remaining context; Pi sends the configured value and the provider validates the available room. A per-chat value under Context in the header takes precedence.' })}
         >
           <div className="flex items-center gap-2">
             {isLlm && thinkingMayFillCap(draft.reasoningEffort, draft.maxTokens) ? (

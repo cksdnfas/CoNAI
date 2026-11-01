@@ -4,10 +4,10 @@
  */
 export const CHAT_PROFILE_LIMITS = {
   temperature: { min: 0, max: 2 },
-  maxTokens: { min: 1, max: 1_000_000 },
-  contextTurns: { min: 1, max: 200 },
-  contextTokens: { min: 1024, max: 4_000_000 },
-  summaryTriggerTurns: { min: 1, max: 200 },
+  maxTokens: { min: 1 },
+  contextTurns: { min: 1 },
+  contextTokens: { min: 1 },
+  summaryTriggerTurns: { min: 1 },
   loreScanDepth: { min: 1, max: 100 },
   loreTokenBudget: { min: 0, max: 32768 },
   loreDepth: { min: 0, max: 20 },

@@ -543,16 +543,20 @@ export function validateProfileFlag(label: string, value: unknown) {
   return value
 }
 
-export function validateProfileNumber(label: string, value: unknown, range: { min: number; max: number }, options: { integer?: boolean; nullable?: boolean } = {}) {
+export function validateProfileNumber(label: string, value: unknown, range: { min: number; max?: number }, options: { integer?: boolean; nullable?: boolean } = {}) {
   label = fieldLabel(label)
+  const bounds = range.max === undefined ? `${range.min} 이상` : `${range.min}~${range.max}`
   if (value === null || value === '') {
     if (options.nullable) return null
-    throw new ChatProfileError(`${label}에 숫자를 입력해줘. (${range.min}~${range.max})`)
+    throw new ChatProfileError(`${label}에 숫자를 입력해줘. (${bounds})`)
   }
   const number = Number(value)
-  if ((typeof value !== 'number' && typeof value !== 'string') || !Number.isFinite(number)) throw new ChatProfileError(`${label}에 숫자를 입력해줘. (${range.min}~${range.max})`)
-  const clamped = Math.min(range.max, Math.max(range.min, number))
-  return options.integer === false ? clamped : Math.round(clamped)
+  if ((typeof value !== 'number' && typeof value !== 'string') || !Number.isFinite(number)) throw new ChatProfileError(`${label}에 숫자를 입력해줘. (${bounds})`)
+  const clamped = Math.max(range.min, range.max === undefined ? number : Math.min(range.max, number))
+  if (options.integer === false) return clamped
+  const rounded = Math.round(clamped)
+  if (!Number.isSafeInteger(rounded)) throw new ChatProfileError(`${label}에 정확히 표현할 수 있는 정수를 입력해줘.`)
+  return rounded
 }
 
 /** Shared scalar write contract; legacy row reads deliberately remain tolerant. */
@@ -663,13 +667,13 @@ function judgePresetId(value: unknown) {
 function toColumns(input: ChatProfileInput, options: { draft?: boolean; strictKeys?: Set<string> } = {}) {
   const strict = (key: string) => !options.strictKeys || options.strictKeys.has(key)
   input = Object.fromEntries(Object.entries(input).map(([key, value]) => [key, value === undefined || !strict(key) ? value : normalizeProfileScalarField(key, value)])) as ChatProfileInput
-  const optionalNumber = (key: keyof ChatProfileInput, range: { min: number; max: number }, integer: boolean) => {
+  const optionalNumber = (key: keyof ChatProfileInput, range: { min: number; max?: number }, integer: boolean) => {
     const value = input[key]
     if (value === undefined) return null
     if (!strict(key)) {
       const number = Number(value)
       if (value === null || value === '' || !Number.isFinite(number)) return null
-      const clamped = Math.min(range.max, Math.max(range.min, number))
+      const clamped = Math.max(range.min, range.max === undefined ? number : Math.min(range.max, number))
       return integer ? Math.round(clamped) : clamped
     }
     return validateProfileNumber(key, value, range, { integer, nullable: true })

@@ -1,5 +1,6 @@
-/** Native feature APIs plugins may use. Authentication, credentials and host administration stay outside this bridge. */
+/** Discovery metadata, not an allowlist. Keep legacy entries for older plugins using exact includes checks. */
 export const PLUGIN_NATIVE_API_ROOTS = [
+  '/api',
   '/api/images', '/api/groups', '/api/files', '/api/workspaces', '/api/posts', '/api/audio', '/api/sprite',
   '/api/prompt-collection', '/api/prompt-groups', '/api/negative-prompt-groups', '/api/prompt-presets', '/api/wildcards',
   '/api/workflows', '/api/graph-workflows', '/api/module-definitions', '/api/custom-dropdown-lists',
@@ -22,9 +23,18 @@ export function pluginNativeApiPath(input: string, origins: readonly string[]): 
   }
   const url = new URL(input, origins[0])
   if (!origins.includes(url.origin) || url.username || url.password) throw new Error('다른 서버로 요청할 수 없어.')
-  if (!PLUGIN_NATIVE_API_ROOTS.some(root => url.pathname === root || url.pathname.startsWith(`${root}/`))) throw new Error('이 경로는 앱 기능 API가 아니야. 로그인·인증정보·서버 관리는 앱에서 열어줘.')
   return `${url.pathname}${url.search}`
 }
 
-export const PLUGIN_REQUEST_TIMEOUT_MS = 10 * 60_000
+/** Custom feature headers are allowed; the host, not the plugin request, supplies caller identity. */
+export function pluginNativeApiHeaders(input: Record<string, string> = {}): Headers {
+  const headers = new Headers(input)
+  for (const name of headers.keys()) {
+    if (/^(?:authorization|proxy-authorization|cookie|host|origin|referer|forwarded|connection|content-length|x-conai-plugin-call)$|^(?:x-forwarded-|sec-)/i.test(name)) throw new Error('인증·연결 헤더는 앱이 관리해.')
+  }
+  return headers
+}
+
+/** No plugin-specific deadline; callers may set one and can always cancel. */
+export const PLUGIN_REQUEST_TIMEOUT_MS = 0
 export const PLUGIN_SDK_FEATURES = ['app.fetch', 'app.cancel', 'app.wait', 'media.open', 'preview', 'storage', 'events', 'navigation', 'request.abort', 'errors.structured', 'llm.asset', 'llm.profile', 'llm.judge', 'llm.decide', 'llm.measure', 'llm.room', 'llm.forgetRooms', 'llm.discard', 'page.form'] as const

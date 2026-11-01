@@ -1,6 +1,7 @@
 import type { NextFunction, Request, Response } from 'express';
 import { findExternalMcpTool } from '../services/externalMcp/externalMcpServers';
 import { findPluginServerTool } from '../services/plugins/pluginServerTools';
+import { unwrapCatalogCall } from './toolCatalog';
 
 export const MCP_DECODED_MEDIA_LIMIT_BYTES = 50 * 1024 * 1024;
 export const MCP_HTTP_JSON_LIMIT_MB = 70;
@@ -136,8 +137,11 @@ export function validateMcpRequestBody(req: Request, res: Response, next: NextFu
   }
 
   try {
-    const call = req.body?.method === 'tools/call' ? req.body.params?.name : undefined;
-    inspectValue(req.body, { decodedBytes: 0, outside: typeof call === 'string' && (findExternalMcpTool(call) !== null || findPluginServerTool(call) !== null) });
+    const name = req.body?.method === 'tools/call' ? req.body.params?.name : undefined;
+    const call = typeof name === 'string' ? unwrapCatalogCall(name, req.body.params?.arguments) : undefined;
+    // Page actions are checked again against the live page and its registered schema before execution.
+    const ownPaths = call && (findExternalMcpTool(call.tool) !== null || findPluginServerTool(call.tool) !== null || call.tool === 'page_act' || call.tool === 'propose_page_action');
+    inspectValue(req.body, { decodedBytes: 0, outside: !!ownPaths });
     next();
   } catch (error) {
     const validationError = error instanceof McpRequestValidationError

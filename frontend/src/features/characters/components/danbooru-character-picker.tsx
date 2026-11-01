@@ -20,7 +20,7 @@ export function DanbooruCharacterPicker({ initialQuery, onPick, onClose }: {
   onPick: (character: DanbooruBrowserCharacterRecord) => void
   onClose: () => void
 }) {
-  const { t, formatNumber } = useI18n()
+  const { t, formatNumber, language } = useI18n()
   const [text, setText] = useState(initialQuery)
   const query = useDebouncedValue(text.trim(), 300)
   const result = useQuery({
@@ -42,7 +42,7 @@ export function DanbooruCharacterPicker({ initialQuery, onPick, onClose }: {
               <ListRow key={item.tagId} asChild interactive size="sm" trailing={<span className="text-xs tabular-nums">{formatNumber(item.worksCount)}</span>}>
                 <button type="button" onClick={() => onPick(item)}>
                   <span className="min-w-0 truncate">{item.displayName}</span>
-                  {item.translatedName ? <span className="min-w-0 truncate text-muted-foreground">{item.translatedName}</span> : null}
+                  {language === 'ko' && item.translatedName ? <span className="min-w-0 truncate text-muted-foreground">{item.translatedName}</span> : null}
                   {item.copyrights[0] ? <span className="min-w-0 truncate text-xs text-muted-foreground">{item.copyrights[0].displayName}</span> : null}
                 </button>
               </ListRow>

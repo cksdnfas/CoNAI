@@ -512,6 +512,26 @@ test('chat tool catalog: contents, open, run, validation and routing', { timeout
     } finally { clearPluginServerTools('catalog-wait') }
   })
 
+  await t.test('an open bridge refreshes installed plugin schemas and removed tools', async () => {
+    const { setPluginServerTool, clearPluginServerTools } = await import('../src/services/plugins/pluginServerTools')
+    const tool = { name: 'p_catalog_refresh_read', pluginId: 'catalog-refresh', localName: 'read', description: 'Read the original item', scope: 'read' as const, inputSchema: { type: 'object', properties: {} } }
+    setPluginServerTool(tool)
+    const bridge = await openChatMcpBridge(admin, [...CHAT_SCOPES], null, { toolCatalog: false })
+    try {
+      assert.ok(bridge.tools.some(item => item.function.name === tool.name))
+      setPluginServerTool(structuredClone(tool))
+      assert.equal(await bridge.refresh(), false, 'an identical registration keeps the existing bridge')
+      setPluginServerTool({ ...tool, description: 'Read a selected item', inputSchema: { type: 'object', properties: { item: { type: 'string' } }, required: ['item'] } })
+      assert.equal(await bridge.refresh(), true)
+      const updated = bridge.tools.find(item => item.function.name === tool.name)!
+      assert.match(updated.function.description ?? '', /^Read a selected item\b/)
+      assert.deepEqual(updated.function.parameters.required, ['item'])
+      clearPluginServerTools(tool.pluginId)
+      assert.equal(await bridge.refresh(), true)
+      assert.ok(!bridge.tools.some(item => item.function.name === tool.name))
+    } finally { clearPluginServerTools(tool.pluginId); await bridge.close() }
+  })
+
   // The admin tool picker lists every tool by name, not the catalog's two entries.
   const picker = await openChatMcpBridge(admin, [...CHAT_SCOPES], null, { toolCatalog: false })
   try {

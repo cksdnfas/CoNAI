@@ -28,7 +28,7 @@ import { CHAT_PAGE_LIMITS, GENERATION_LAYOUT_SURFACES, type InstalledPlugin } fr
 import { pluginInstanceAppContext, pluginBrowserContext, listPluginAppTools, runPluginAppTool, runPluginServerAction, listPluginAppRequests, getPluginAppRequest, applyPluginAppRequest, cancelPluginAppRequest } from '../services/plugins/pluginAppActions'
 
 const router = Router()
-// No legacy null-origin exception, even when Sec-Fetch-Site is absent. Never expose these methods in the iframe SDK.
+// Preserve external-origin protection; trusted plugin pages can send the same host header as native UI.
 router.use((req, res, next) => {
   res.setHeader('Cache-Control', 'private, no-store')
   if (req.get('Origin') === 'null' || req.get('Sec-Fetch-Site') === 'cross-site' || req.get('X-CoNAI-Plugin-Host') !== '1') { res.status(403).json({ error: '앱의 확장 호스트에서만 호출할 수 있어.' }); return }
@@ -130,12 +130,12 @@ const generationActionSchema = z.object({
   fields: z.array(z.object({ id: z.string().max(100), label: z.string().max(160), type: z.string().max(20), value: actionValueSchema }).strip()).max(CHAT_PAGE_LIMITS.fields),
 }).strict()
 /** A plugin's button next to Generate: its server module answers with a note and form values, as the signed-in account. */
-router.post('/:pluginId/generation-actions/:actionId', cancellableAsyncHandler(async (req, res) => {
+router.post('/:pluginId/generation-actions/:actionId', cancellableAsyncHandler(async (req, res, signal) => {
   const input = generationActionSchema.parse(req.body)
   const plugin = getPlugin(param(req, 'pluginId'))
   const action = plugin.definition.generation?.actions.find(item => item.id === param(req, 'actionId'))
   if (!action || !(action.surfaces as string[]).includes(input.surface)) { res.status(404).json({ error: '이 화면에 없는 플러그인 버튼이야.' }); return }
-  res.json({ success: true, data: await runGenerationActionHook(plugin.id, { action: action.id, surface: input.surface, fields: input.fields }, caller(req).requester) })
+  res.json({ success: true, data: await runGenerationActionHook(plugin.id, { action: action.id, surface: input.surface, fields: input.fields }, caller(req).requester, signal) })
 }))
 router.post('/:pluginId/pages/:pageId/instances', (req, res) => {
   const input = z.object({ files: z.array(z.string()).max(20), workspace: z.object({ id: z.string(), write: z.boolean().default(false) }).strict().optional() }).strict().parse(req.body)

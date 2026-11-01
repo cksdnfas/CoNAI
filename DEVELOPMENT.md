@@ -67,7 +67,7 @@
 - `page_action`의 안전한 기본값은 전체 페이지 `revision` 일치다. 어댑터가 소비하는 상태를 모두 선언한 작업만 `ChatPageAction.revisionScope: 'action'`으로 명시적으로 선택한다(`pageAction`의 여섯 번째 `review` 인수). 서버는 선택한 작업에만 카드의 `revisionScope`를 기록하며, 브라우저도 저장된 작업과 현재 작업 양쪽의 선택을 확인한다. 기존 `before`를 재사용하는 `chatPageActionBefore`는 대상(instance/connection/path/kind/resourceId), 작업·입력 스키마, 검증한 인수의 대상(`targets`), 소비하는 필드 값(`inputFields`, 생략하면 읽기 전용을 포함한 모든 비-viewOnly 필드), `data.selected`, 네이티브 입력/워크플로 리비전을 묶는다. 선택한 작업에서는 다른 enum 선택지·목록·진행률·폴링·필드 옵션 변화만으로 무효화하지 않는다. `viewOnly: true`만 표시용 필드를 제외하며, `localRevision`/`reviewRevision`은 원본을 전송하지 않고 불투명한 `inputRevision`으로 바꾼다. 현재 선택 대상과 전체 네이티브 입력이 선언된 생성·워크플로 실행, 예약 수정/제어, 게시판 댓글 등록, 홈/그룹의 선택 이미지 작업에만 적용한다. 문서·스프라이트·블록·주제·업로드 등 미전환 작업 및 기존 카드는 전체 리비전을 검사한다. 저장소 `nativeRevision`, 만료·소유권·시작/완료 검사는 그대로다.
 
 - `view`는 탐색·선택, `draft`는 초안 변경이다. 등록된 경로로 즉시 실행하고 결과 화면을 반환한다. 초안은 현재 상태가 맞을 때 되돌릴 수 있다.
-- `direct`는 파일 이름·이동, 채팅 이름·고정·보관과 실행 중단이다. 현재 화면 전체 리비전을 브라우저에서 확인하고 기존 API 권한·검증으로 즉시 실행하며 초안 되돌리기는 제공하지 않는다. 채팅 삭제는 검토 카드다. 확장 플러그인은 이 등급을 선언할 수 없다.
+- `direct`는 현재 화면 전체 리비전을 브라우저에서 확인하고 기존 API 권한·검증으로 즉시 실행하며 초안 되돌리기는 제공하지 않는다. 기본 앱의 파일 이름·이동, 채팅 이름·고정·보관과 실행 중단뿐 아니라 설치된 플러그인의 manifest 작업도 선언할 수 있다. 기본 앱의 채팅 삭제와 `commit` 작업은 검토 카드다.
 - `commit`은 그 외 저장·실행 등 확정 작업으로 검토 카드를 거친다. 제안 생성과 실제 적용을 구분한다.
 - 생성 어댑터는 NAI·Codex·ComfyUI(공유 워크플로 포함)의 현재 요청 요약과 최근 기록을 제공하고 기존 큐 제출 경로를 검토 카드에 연결한다. 기록 설정은 `useHistorySettingsLoad`가 같은 제공자 초안에 적용한다. 라이브러리·상세·그룹의 선택과 조회는 즉시 실행하고 그룹 배정·삭제·일괄 수집/재구축은 기존 변이와 검토 카드를 사용한다.
 - 답변 중단은 `chatPageBridge.ts`의 대기 명령도 취소한다. 브라우저는 명령 실행 직전에 해당 연결로 claim해야 하며 취소·만료·재전달된 미시작 명령은 claim할 수 없다. claim 허가는 시작 경계이므로 그 이후의 효과가 반드시 중단되거나 되돌아간다고 가정하지 않는다.
@@ -161,7 +161,7 @@ API 연결의 일시적 장애 재시도와 출력 이후 재전송 금지는 `s
 
 채팅은 필요한 도구를 `open_tools`로 탐색하고 `run_tool`로 호출하는 카탈로그와 직접 제공되는 도구를 함께 사용한다. 외부 클라이언트의 도구 노출과 채팅의 노출은 같지 않다. 새 도구는 적절한 카테고리·권한·설명·입출력 제한과 호출 후 상태 확인을 연결한다. 카탈로그를 통하더라도 기존 검증과 권한 검사를 유지한다. 서버가 `tool_calls`로 바꾸지 못하고 본문에 남긴 도구 호출(Hermes JSON·Qwen XML)은 `backend/src/services/codex-chat/textToolCalls.ts`가 복구한다. 직접 API 라운드는 `llmChatService.ts`의 `streamReply`에서, pi는 `piChatCompletion.ts`의 `message_end` 확장에서 같은 함수를 쓰며, 제공된 도구와 카탈로그 도구(`run_tool` 경유)만 실행한다.
 
-`inProcessClient.ts`는 채팅의 직접·카탈로그 도구 호출과 플러그인의 네이티브 도구 호출에 암묵적 호출 타이머를 두지 않고 취소 신호를 전달한다. 플러그인 서버 도구에도 고정 기한은 없으며 각 작업·모델의 설정된 제한은 별도다. `llmChatCompletion.ts`의 스트림 유휴 감시는 도구 실행 중 일시 정지하고, Claude 프로세스 기한은 설정된 경우에만 건다. 외부 MCP는 서버별 호출 제한을 유지한다.
+`inProcessClient.ts`는 채팅의 직접·카탈로그 도구 호출과 플러그인의 네이티브 도구 호출에 암묵적 호출 타이머를 두지 않고 취소 신호를 전달한다. 플러그인 서버 도구에도 고정 기한은 없으며 각 작업·모델의 설정된 제한은 별도다. `llmChatCompletion.ts`의 스트림 유휴 감시와 그 용도의 Claude/Pi 생명주기 콜백은 제거했다. Claude 프로세스 기한은 설정된 경우에만 건다. 외부 MCP는 서버별 호출 제한을 유지한다.
 
 직접 API 답변의 `save_lore`·`propose_profile_assets`는 해당 종류의 제안이 실제 저장되면 남은 라운드에서 제외한다(실패 횟수가 아니라 `ChatProposalStore`의 현재 reply ID 기준). 카탈로그도 이미 사용한 자산 제안의 스키마를 다시 제공하지 않는다. 1:1 `chat_reply_to`는 이전 메시지를 인용할 때만 필요하며 `message_id`가 필수이고 수신자 선택은 없다. 이전 메시지가 없으면 제공하지 않는다(Codex의 세션 고정 도구 목록은 예외). 플러그인 wake도 전용 방의 이전 대화를 유지하므로 이전 메시지가 있으면 인용할 수 있다. 기존 Qwen XML 복구는 공백·HTML escape를 지원하며, 직접 API의 마지막 텍스트 전용 라운드에서도 인식한 마크업은 발화로 저장하지 않고 도구 실행 상한은 유지한다. 미제공 도구의 유효한 호출 문법도 발화에서 제거하되 실행 권한은 주지 않는다.
 
@@ -300,6 +300,8 @@ Save 선택기와 워크플로 산출물(비공개·공개) 목록은 `directory
 어시스턴트의 `page.settings_open`은 조회 작업, `page_settings.save`는 검토 카드 작업이다. `page_settings` 스냅샷은 원래 페이지 경로와 허용된 설정 범위에 결합되며, 기존 관리자용 `settings.*` 작업을 다른 경로에 개방하지 않는다. 미저장 변경은 `UnsavedSettingsGuardProvider`가 페이지·모달을 합쳐 하나의 라우터 차단기로 보호한다.
 
 ## 선택 설치 확장
+
+설치된 화면은 같은 origin의 신뢰된 앱 코드다. `pluginNativeApi.ts`는 기능별 허용 목록 대신 모든 `/api` 경로와 일반 기능 헤더를 허용하고 origin·경로 정규화·호스트 인증 헤더 경계를 검사한다. `plugin-assets.routes.ts`는 설치 코드의 sandbox를 제거하되 생성된 HTML preview에는 기존 격리를 유지한다. 페이지 작업은 manifest의 `view/draft/direct/commit`을 `chatPageAction.ts`와 MCP·브라우저가 공유한다. 직접 호출에 플러그인 전용 확인창을 덧붙이지 않으며 명시적 제안은 검토한다. `pluginServerTools.ts`의 등록 리비전은 스키마/설명 변경·제거 때도 바뀌고 `chatMcpBridge.ts` 및 Codex 세션 키가 사용한다. HTTP 카탈로그는 실제 대상 도구의 경로 계약으로 검증한다.
 
 프로필 방 수명은 `ensurePluginProfileRoom`/`forgetPluginProfileRooms`가 계정·플러그인·정확한 roomKey로 관리한다. `llm.room`은 모델 실행 잠금 대신 생성 전용 guard를 쓰며 표시 이름 `roomTitle`을 받는다. expectedThreadId 실행은 `findAutomationRoom` 조회만 하여 삭제 후 대기 작업의 방 재생성을 막는다. forgetRooms는 run guard에 진입한 작업/생성/네이티브 실행 중에는 거부하고 방별 deleted/unlinked를 반환한다. `hasNonPluginUserMessages`가 사람이 쓴 방을 보존한다. 삭제는 `chatThreadDeletion.ts`를 HTTP 단건 삭제 라우트와 공유해 백업·로어 정책·네이티브 삭제·외관 정리를 한 경로로 처리한다(플러그인은 기본 delete 정책). `captureRunningCompletion`은 취소 순간 Promise만 캡처하며 새 실행은 별도의 `waitUntilIdle`을 사용한다. 완료/비취소 첫 답변만 후속 drain으로 넘어가 전역 슬롯을 반환한다.
 

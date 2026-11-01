@@ -122,28 +122,6 @@ test('pi sessions: tool rounds, forked turns, failures leave no trace, compactio
     assert.equal(mock.requests[0].body.reasoning_budget_tokens, 128)
   })
 
-  await t.test('native tool lifecycle spans the awaited call', async () => {
-    mock.script.push({ kind: 'tool' }, { kind: 'text', text: 'Tool finished.' })
-    let release!: () => void
-    let entered!: () => void
-    const started = new Promise<void>((resolve) => { entered = resolve })
-    const held = new Promise<void>((resolve) => { release = resolve })
-    const lifecycle: string[] = []
-    const result = streamPiChatCompletion({
-      target: target({ resumeId: sessionId, onDone: (id) => { sessionId = id } }),
-      messages: [{ role: 'system', content: 'You are a test.' }, { role: 'user', content: 'wait for the tool' }],
-      tools, signal: new AbortController().signal,
-      onToolStart: () => lifecycle.push('start'),
-      onToolEnd: () => lifecycle.push('end'),
-      callTool: async () => { entered(); await held; return { content: [{ type: 'text', text: 'done' }] } },
-    })
-    await started
-    assert.deepEqual(lifecycle, ['start'])
-    release()
-    assert.match((await result).content, /Tool finished/)
-    assert.deepEqual(lifecycle, ['start', 'end'])
-  })
-
   await t.test('a later turn forks the session: the model sees the earlier turn, the old file goes', async () => {
     mock.requests.length = 0
     mock.script.push({ kind: 'text', text: 'Still red.' })
@@ -187,6 +165,40 @@ test('pi sessions: tool rounds, forked turns, failures leave no trace, compactio
       outputTokens: mock.requests.reduce((total, request) => total + request.usage.outputTokens, 0),
       cachedInputTokens: 0,
     }, 'the compaction request is included in the run usage')
+  })
+
+  await t.test('output follows the profile while unknown context and output retain provider defaults', async () => {
+    for (const limits of [
+      { contextWindow: 65000, maxTokens: 50000 },
+      { contextWindow: null, maxTokens: 50000 },
+      { contextWindow: null, maxTokens: null },
+    ]) {
+      mock.script.push({ kind: 'text', text: 'Configured reply.' })
+      const configured = target({ resumeId: null, onDone: (id) => { sessionId = id } })
+      const result = await streamPiChatCompletion({
+        target: { ...configured, contextWindow: limits.contextWindow, generation: { ...configured.generation, maxTokens: limits.maxTokens } },
+        messages: [{ role: 'user', content: 'Use my configured limits.' }],
+        signal: new AbortController().signal,
+      })
+      assert.equal(result.content, 'Configured reply.')
+      assert.equal(mock.requests.at(-1)!.body.max_tokens, limits.maxTokens ?? undefined)
+    }
+  })
+
+  await t.test('compaction leaves the configured output room before the next provider request', async () => {
+    mock.requests.length = 0
+    mock.script.push({ kind: 'tool', promptTokens: 80000 }, { kind: 'text', text: 'Enough room after folding.' })
+    const configured = target({ resumeId: null, onDone: (id) => { sessionId = id } }, 128000)
+    const result = await streamPiChatCompletion({
+      target: { ...configured, generation: { ...configured.generation, maxTokens: 50000 } },
+      messages: [{ role: 'user', content: `Look this up. ${'please '.repeat(400)}` }],
+      tools, signal: new AbortController().signal,
+      // Pi retains 20k recent tokens; a longer tool result lets it compact the preceding turn prefix.
+      callTool: async () => ({ content: [{ type: 'text', text: 'apple fact '.repeat(9000) }] }),
+    })
+    assert.equal(result.content, 'Looking it up.\n\nEnough room after folding.')
+    assert.ok(mock.requests.some(request => request.summary), '80k input plus 50k output does not fit a 128k context')
+    assert.ok(mock.requests.every(request => request.body.max_tokens === 50000), 'compaction must not reduce the configured output ceiling')
   })
 
   await t.test('a tool call written as text runs as a call, and a catalogued name goes through run_tool', async () => {

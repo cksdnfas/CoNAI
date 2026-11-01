@@ -73,6 +73,7 @@ export const authResources = {
     "loginPage.createGuestAccount": "Create guest account",
     "loginPage.creating": "Creating…",
     "loginPage.createAndStart": "Create and start",
+    "pageAccessCatalog.chat": "Chat",
     "pageAccessCatalog.home": "Gallery",
     "pageAccessCatalog.groups": "Groups",
     "pageAccessCatalog.prompts": "Prompts",

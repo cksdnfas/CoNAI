@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge'
 import { IconButton } from '@/components/ui/icon-button'
 import { useI18n } from '@/i18n'
 import type { CharacterSettingSummary } from '@/lib/api-character-library'
-import { characterThumbnailUrl } from '../character-library-shared'
+import { characterThumbnailUrl, localizedTagName } from '../character-library-shared'
 
 /**
  * One appearance setting in the grid: its reference thumbnail (else the avatar crop) with the name, work and outfit
@@ -25,9 +25,9 @@ export function CharacterSettingCard({ setting, onOpen, onDoubleClick, menu, sel
   onCopyTags?: () => void
   onEdit?: () => void
 }) {
-  const { t } = useI18n()
+  const { t, language } = useI18n()
   const favoriteLabel = setting.favorite ? t({ ko: '즐겨찾기 해제', en: 'Unfavorite' }) : t({ ko: '즐겨찾기', en: 'Favorite' })
-  const subtitle = [setting.copyright, setting.outfitCount > 1 ? t({ ko: '의상 {count}벌', en: '{count} outfits' }, { count: setting.outfitCount }) : null].filter(Boolean).join(' · ')
+  const subtitle = [setting.copyright ? localizedTagName(language, setting.copyright, setting.copyrightTranslated) : null, setting.outfitCount > 1 ? t({ ko: '의상 {count}벌', en: '{count} outfits' }, { count: setting.outfitCount }) : null].filter(Boolean).join(' · ')
   return (
     <CharacterCard
       name={setting.name}

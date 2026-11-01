@@ -159,7 +159,9 @@ function facetKeysOf(description: DanbooruTagDescription): CharacterFacetKey[] {
     || rule.nodes?.some((prefix) => description.nodeKeys.some((key) => under(key, prefix)))).map(([key]) => key);
 }
 
-const facetLabel = (description: DanbooruTagDescription) => description.translated ?? formatDanbooruTagForPrompt(description.name);
+/** A facet tag is named by its tag text; the Korean translation travels beside it so the UI picks by language. */
+const facetLabel = (description: DanbooruTagDescription) => formatDanbooruTagForPrompt(description.name);
+export type CopyrightName = { label: string; translated: string | null };
 
 /**
  * The dimensions present in tag counts: `countsFor(key)` gives a dimension's counts (the caller excludes that
@@ -180,12 +182,12 @@ export function libraryFacetDimensions(countsFor: (key: CharacterFacetKey) => Re
 }
 
 /** Each setting's work for its card: the first of its indexed tags the dictionary files as a copyright (facet label). */
-export function settingCopyrightLabels(rows: ReadonlyArray<{ settingId: number; tag: string }>): Map<number, string> {
-  const result = new Map<number, string>();
+export function settingCopyrightLabels(rows: ReadonlyArray<{ settingId: number; tag: string }>): Map<number, CopyrightName> {
+  const result = new Map<number, CopyrightName>();
   const descriptions = danbooruBrowserService.describeTags(rows.map((row) => row.tag));
   for (const row of rows) {
     const description = descriptions.get(row.tag);
-    if (description && !result.has(row.settingId) && description.category === 'copyright') result.set(row.settingId, facetLabel(description));
+    if (description && !result.has(row.settingId) && description.category === 'copyright') result.set(row.settingId, { label: facetLabel(description), translated: description.translated });
   }
   return result;
 }
@@ -194,6 +196,6 @@ export function settingCopyrightLabels(rows: ReadonlyArray<{ settingId: number; 
 export function catalogFacetDimensions(): CharacterFacetDimension[] {
   return CATALOG_FACET_KEYS.map((key) => {
     const rule = FACET_RULES.find(([facet]) => facet === key)![1];
-    return { key, values: danbooruBrowserService.listTaxonomyTags(rule.nodes ?? []).map((tag) => ({ tag: normalizeCharacterTag(tag.name), label: tag.translated ?? formatDanbooruTagForPrompt(tag.name), translated: tag.translated, count: null })) };
+    return { key, values: danbooruBrowserService.listTaxonomyTags(rule.nodes ?? []).map((tag) => ({ tag: normalizeCharacterTag(tag.name), label: formatDanbooruTagForPrompt(tag.name), translated: tag.translated, count: null })) };
   }).filter((dimension) => dimension.values.length);
 }

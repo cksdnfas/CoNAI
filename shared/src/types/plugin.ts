@@ -17,7 +17,7 @@ export const PLUGIN_PAGE_ICONS = [
 export type PluginPageIcon = (typeof PLUGIN_PAGE_ICONS)[number]
 export type PluginPage = {
   id: string; title: string; entry: string; accepts: string[]
-  actions: Array<ChatPageAction & { tier: 'view' | 'draft' }>
+  actions: ChatPageAction[]
   serverActions?: string[]
   /** false: no header menu entry (a page that only lives as a layout block). */
   menu?: boolean
@@ -32,6 +32,8 @@ export type PluginGenerationAction = { id: string; label: string; surfaces: Gene
 export type PluginGenerationActionResult = { message?: string; fill?: Record<string, ChatPageValue> }
 export type PluginServerAction = {
   id: string; label: string; description: string; schema: ChatPageSchema; tool: string
+  /** Connected-page mutations default to direct; commit opts into the normal review card. Reads stay view. */
+  tier?: 'direct' | 'commit'
   /** JSON constants or { "$input": "field.nested" }; absent: forward validated input. */
   arguments?: Record<string, ChatPageData>
 }
@@ -115,7 +117,7 @@ export type PluginLlmInput = {
   lorebookIds?: number[]
   /** Optional positive safe integer; only lowers the profile cap. Omitted follows profile/provider settings. Codex cannot enforce it. */
   maxTokens?: number
-  /** Optional 1,000–1,800,000 ms explicit deadline. Omitted follows engine/connection settings. */
+  /** Optional positive deadline in ms (up to the JavaScript timer maximum, 2,147,483,647). Omitted follows engine/connection settings. */
   timeoutMs?: number
   /** JSON example/schema passed through native workflow JSON mode; no separate size cap beyond request transport/context. */
   structuredOutput?: string | Record<string, unknown>

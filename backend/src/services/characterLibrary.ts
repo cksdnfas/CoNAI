@@ -9,7 +9,7 @@ import type Database from 'better-sqlite3'
 import { CHAT_PROFILE_TEXT_LIMITS, characterOutfitIndex, composeCharacterAppearance, emptyCharacterAppearanceSections, folderPath, normalizeCharacterTag, type CharacterAppearanceSections, type CharacterFacetKey, type CharacterFolder, type CharacterLibraryExport, type CharacterLibraryFacets, type CharacterLibraryImportResult, type CharacterOutfit, type CharacterSetting, type CharacterSettingBulkResult, type CharacterSettingSummary, type CharacterSettingPage, type CharacterLibraryDeletePreview, type CharacterLibraryDeleteResult } from '@conai/shared'
 import { getUserSettingsDb } from '../database/userSettingsDb'
 import { indexCharacterSettingTags } from '../database/characterLibrarySchema'
-import { CHARACTER_FACET_KEYS, libraryFacetDimensions, settingCopyrightLabels, splitAppearanceText } from './characterAppearanceTags'
+import { CHARACTER_FACET_KEYS, libraryFacetDimensions, settingCopyrightLabels, splitAppearanceText, type CopyrightName } from './characterAppearanceTags'
 import { danbooruBrowserService } from './danbooruBrowserService'
 import { attachMainImagesDatabase } from '../database/userSettingsBootstrap'
 import { normalizeAvatarCrop, normalizeProfileAssetHash } from './codex-chat/chatProfileAssets'
@@ -96,11 +96,12 @@ export function characterSettingRow(settingId: number): SettingRow {
   if (!row) throw new CharacterLibraryError('외형 설정을 찾을 수 없어.', 404)
   return row
 }
-function summary(row: SettingRow, images: boolean, copyrights: ReadonlyMap<number, string>): CharacterSettingSummary {
-  return { id: row.id, folderId: row.folder_id, name: row.name, referenceHash: images ? row.reference_hash : null, avatarHash: images ? row.avatar_hash : null, avatarCrop: row.avatar_crop ? JSON.parse(row.avatar_crop) : null, favorite: row.favorite === 1, revision: row.revision, updatedAt: row.updated_at, linkedProfileCount: row.linked_profile_count ?? 0, copyright: copyrights.get(row.id) ?? null, outfitCount: (JSON.parse(row.outfits) as unknown[]).length }
+function summary(row: SettingRow, images: boolean, copyrights: ReadonlyMap<number, CopyrightName>): CharacterSettingSummary {
+  const copyright = copyrights.get(row.id)
+  return { id: row.id, folderId: row.folder_id, name: row.name, referenceHash: images ? row.reference_hash : null, avatarHash: images ? row.avatar_hash : null, avatarCrop: row.avatar_crop ? JSON.parse(row.avatar_crop) : null, favorite: row.favorite === 1, revision: row.revision, updatedAt: row.updated_at, linkedProfileCount: row.linked_profile_count ?? 0, copyright: copyright?.label ?? null, copyrightTranslated: copyright?.translated ?? null, outfitCount: (JSON.parse(row.outfits) as unknown[]).length }
 }
 /** The settings' works from their tag index; none without a Danbooru dictionary. */
-function copyrightsOf(settingIds: number[]): Map<number, string> {
+function copyrightsOf(settingIds: number[]): Map<number, CopyrightName> {
   if (!settingIds.length || !danbooruBrowserService.isAvailable()) return new Map()
   return settingCopyrightLabels(getUserSettingsDb().prepare('SELECT setting_id AS settingId, tag FROM character_setting_tags WHERE setting_id IN (SELECT value FROM json_each(?))').all(JSON.stringify(settingIds)) as Array<{ settingId: number; tag: string }>)
 }

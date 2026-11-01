@@ -51,7 +51,6 @@ export function openPluginInstance(pluginId: string, pageId: string, input: unkn
   const owner = fileOwnerKey(caller.requester.accountId)
   if (ids.length || workspaceInput !== undefined) requireFileStoreOwner(caller.requester)
   if (!caller.sessionId) throw new PluginError('세션이 필요해.', 401)
-  if ((pluginDb().prepare('SELECT COUNT(*) AS n FROM plugin_instances WHERE session_key = ? AND expires_at > ?').get(hash(caller.sessionId), Date.now()) as { n: number }).n >= 12) throw new PluginError('열린 확장 창이 너무 많아. 기존 창을 닫아줘.', 429)
   const files = ids.map((id) => {
     const file = FileStoreService.get(owner, id)
     if (file.kind !== 'file' || (page.accepts.length && !page.accepts.some((ext) => file.name.toLowerCase().endsWith(ext)))) throw new PluginError('이 확장이 지원하는 파일을 선택해줘.')
@@ -128,7 +127,7 @@ function requireProposal(id: string, caller: PluginCaller) {
   const instance = requireFile(row.instance_id, row.file_id, caller, 'files.write')
   return { row, instance, proposal: JSON.parse(row.body) as PluginWriteProposal }
 }
-/** Called only by the trusted host UI; the iframe broker has no approve/apply operation. */
+/** Issues approval for this immutable proposal; applying it still rechecks the caller and file revision. */
 export function approvePluginWrite(id: string, caller: PluginCaller) {
   const { row, instance, proposal } = requireProposal(id, caller)
   if (row.result) return { applied: true as const, result: JSON.parse(row.result) }

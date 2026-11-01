@@ -1,4 +1,4 @@
-import { pluginNativeApiPath } from '@conai/shared'
+import { pluginNativeApiHeaders, pluginNativeApiPath } from '@conai/shared'
 import { buildApiUrl } from '@/lib/api-url'
 import { ApiRequestError } from '@/lib/api-request'
 import { pluginRequest } from '@/lib/api-plugins'
@@ -8,17 +8,13 @@ type NativeInput = { path: string; method?: string; headers?: Record<string, str
 export type PluginNativeResponse = { status: number; statusText: string; headers: Array<[string, string]>; body: ReadableStream<Uint8Array> | null }
 
 /** Use native HTTP validation and permissions, including multipart/streaming, without copying bytes into JSON. */
-export async function fetchPluginNative(instanceId: string, value: unknown, signal: AbortSignal, review: (path: string, method: string, details: string) => Promise<boolean>): Promise<Response> {
+export async function fetchPluginNative(instanceId: string, value: unknown, signal: AbortSignal): Promise<Response> {
   if (!value || typeof value !== 'object') throw new ApiRequestError('앱 요청 형식이 올바르지 않아.', 400, 'INVALID_INPUT')
   const input = value as NativeInput
   const path = pluginNativeApiPath(input.path, [window.location.origin, new URL(buildApiUrl('/'), window.location.href).origin])
   const method = input.method?.toUpperCase() ?? 'GET'
   if (!['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) throw new ApiRequestError('지원하지 않는 HTTP 메서드야.', 400)
-  const headers = new Headers()
-  for (const [name, content] of Object.entries(input.headers ?? {})) {
-    if (!['accept', 'content-type', 'if-match', 'if-none-match', 'range'].includes(name.toLowerCase()) || typeof content !== 'string' || content.length > 1000) throw new ApiRequestError('이 요청 헤더는 사용할 수 없어.', 400)
-    headers.set(name, content)
-  }
+  const headers = pluginNativeApiHeaders(input.headers)
   let body: BodyInit | undefined
   if (input.form !== undefined) {
     if (!Array.isArray(input.form) || input.form.length > 100 || input.body !== undefined) throw new ApiRequestError('업로드 형식이 올바르지 않아.', 400)
@@ -44,9 +40,6 @@ export async function fetchPluginNative(instanceId: string, value: unknown, sign
     body = input.body
   }
   if ((method === 'GET' || method === 'HEAD') && body !== undefined) throw new ApiRequestError('조회 요청에는 본문을 넣을 수 없어.', 400)
-  const details = input.form ? JSON.stringify(input.form.map(field => ({ field: field.name, ...(field.value instanceof Blob ? { filename: field.filename, bytes: field.value.size } : { value: field.value }) })), null, 2)
-    : typeof input.body === 'string' ? input.body : input.body ? `${new Blob([input.body]).size} bytes` : ''
-  if (!['GET', 'HEAD'].includes(method) && !await review(path, method, details)) throw new DOMException('작업을 취소했어.', 'AbortError')
   signal.throwIfAborted()
   // Every call rechecks the installed version, account and session; a cached page cannot outlive disable/logout.
   await pluginRequest(`/instances/${instanceId}`, 'GET', undefined, signal)

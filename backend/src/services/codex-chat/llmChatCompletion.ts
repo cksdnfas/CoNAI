@@ -76,26 +76,6 @@ function readPromptTokens(json: unknown) {
   return typeof value === 'number' && value > 0 ? value : null
 }
 
-/** No reply bytes for this long means the server is stuck; a long answer that keeps streaming is fine. */
-const STREAM_IDLE_TIMEOUT_MS = 5 * 60 * 1000
-
-/** The stream is not idle while native tools are executing, including overlapping tool calls. */
-export function createStreamIdleWatch(controller: AbortController) {
-  let timer: NodeJS.Timeout | null = null
-  let tools = 0
-  const clear = () => { if (timer) clearTimeout(timer); timer = null }
-  const touch = () => {
-    clear()
-    if (!tools && !controller.signal.aborted) timer = setTimeout(() => controller.abort(new Error('LLM 응답이 너무 오래 멈춰 있어.')), STREAM_IDLE_TIMEOUT_MS)
-  }
-  return {
-    touch,
-    toolStart: () => { tools += 1; clear() },
-    toolEnd: () => { if (tools > 0 && --tools === 0) touch() },
-    close: clear,
-  }
-}
-
 /**
  * Models whose server refused `tools` (Ollama "does not support tools", llama-server without --jinja), by connection
  * and model, until when: their requests go without tools instead of failing first every time. Expires so a server
@@ -393,28 +373,24 @@ async function requestChatCompletion(meter: { sent: boolean; usage: LlmTokenCoun
   else params.signal.addEventListener('abort', abort, { once: true })
   let requestTimer: NodeJS.Timeout | null = null
   let reader: ReadableStreamDefaultReader<string> | null = null
-  const idle = createStreamIdleWatch(controller)
-  const touch = idle.touch
   // A pi run is a whole agent run (many requests and tool calls): pi applies the limit to each request instead.
   if (params.target.timeoutMs != null && params.target.transport !== 'pi') {
     requestTimer = setTimeout(() => controller.abort(new DOMException(`LLM 요청 제한 시간을 초과했어 (${params.target.timeoutMs}ms).`, 'TimeoutError')), params.target.timeoutMs)
   }
-  touch()
-
   try {
     if (params.target.transport === 'claude-code') {
       signal.throwIfAborted()
       const claudeTools = params.toolChoice === 'none' ? [] : params.tools ?? []
       params.onRequestBody?.({ model: params.target.model, messages: params.messages, tools: claudeTools, transport: 'claude-code' }, params.target)
       meter.sent = true
-      return await streamClaudeChatCompletion({ ...params, tools: claudeTools, signal, onToolStart: idle.toolStart, onToolEnd: idle.toolEnd, onContent: (text) => { touch(); params.onContent?.(text) }, onReasoning: (text) => { touch(); params.onReasoning?.(text) } })
+      return await streamClaudeChatCompletion({ ...params, tools: claudeTools, signal })
     }
     if (params.target.transport === 'pi') {
       signal.throwIfAborted()
       const piTools = params.toolChoice === 'none' ? [] : params.tools ?? []
       params.onRequestBody?.({ model: params.target.model, messages: params.messages, tools: piTools, transport: 'pi' }, params.target)
       meter.sent = true
-      return await streamPiChatCompletion({ ...params, tools: piTools, signal, onToolStart: idle.toolStart, onToolEnd: idle.toolEnd, onUsage: (usage) => { meter.usage = usage }, onActivity: touch, onContent: (text) => { touch(); params.onContent?.(text) }, onReasoning: (text) => { touch(); params.onReasoning?.(text) } })
+      return await streamPiChatCompletion({ ...params, tools: piTools, signal, onUsage: (usage) => { meter.usage = usage } })
     }
     let streamUsage = (streamUsageRefused.get(toolsKey(params.target)) ?? 0) <= Date.now()
     let toolChoiceRefused = false
@@ -458,7 +434,6 @@ async function requestChatCompletion(meter: { sent: boolean; usage: LlmTokenCoun
         if (wait <= 10_000) {
           rateLimited = true
           await delay(wait, undefined, { signal })
-          touch()
           continue
         }
       }
@@ -467,27 +442,23 @@ async function requestChatCompletion(meter: { sent: boolean; usage: LlmTokenCoun
         console.warn(`[llm-chat] ${params.target.displayName}: request with cache marks rejected (${errorText.slice(0, 200)}); retrying without`)
         target = { ...target, promptCacheMarks: false }
         marksRefused.set(toolsKey(target), Date.now() + 60 * 60_000)
-        touch()
         continue
       }
       // Likewise the usage chunk: a server that names stream_options in its refusal gets the request without it.
       if (params.allowCompatibilityFallback !== false && response.status === 400 && streamUsage && errorText.includes('stream_options')) {
         streamUsage = false
         streamUsageRefused.set(toolsKey(target), Date.now() + 60 * 60_000)
-        touch()
         continue
       }
       // A server that does not take tool_choice gets the old last round: no tools at all.
       if (params.allowCompatibilityFallback !== false && response.status === 400 && params.toolChoice && !toolChoiceRefused && errorText.includes('tool_choice')) {
         toolChoiceRefused = true
-        touch()
         continue
       }
       // A model that cannot take tools still answers in text: remember it and send the request without them.
       if (params.allowCompatibilityFallback !== false && response.status === 400 && (params.tools?.length ?? 0) > 0 && !toolsRefusedBy(target) && isToolsRefusal(errorText)) {
         console.warn(`[llm-chat] ${params.target.displayName} (${target.model}): tools refused (${errorText.slice(0, 200)}); sending without tools for ${TOOLS_REFUSED_TTL_MS / 60_000} min`)
         toolsRefused.set(toolsKey(target), Date.now() + TOOLS_REFUSED_TTL_MS)
-        touch()
         continue
       }
       // A server that names its context size in a refusal sizes the next request (see serverContextLimit).
@@ -500,7 +471,6 @@ async function requestChatCompletion(meter: { sent: boolean; usage: LlmTokenCoun
         if (typeof sent === 'number' && room !== null && room >= MIN_FITTED_REPLY_TOKENS && room < sent) {
           capFitted = true
           target = { ...target, generation: { ...target.generation, maxTokens: room } }
-          touch()
           continue
         }
       }
@@ -588,7 +558,6 @@ async function requestChatCompletion(meter: { sent: boolean; usage: LlmTokenCoun
       if (done) {
         break
       }
-      touch()
       buffer += value
       let boundary = buffer.search(/\r?\n\r?\n/)
       while (boundary >= 0 && !looping) {
@@ -616,7 +585,6 @@ async function requestChatCompletion(meter: { sent: boolean; usage: LlmTokenCoun
     signal.throwIfAborted()
     throw error
   } finally {
-    idle.close()
     if (requestTimer) clearTimeout(requestTimer)
     params.signal.removeEventListener('abort', abort)
     reader?.releaseLock()

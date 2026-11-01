@@ -9,6 +9,7 @@ import type { ChatScope } from './chatSettings'
 import type { ChatCompletionTool } from './llmChatCompletion'
 import { currentChatPage } from './chatPageBridge'
 import { ChatProfileStore } from './chatProfiles'
+import { pluginServerToolsSignature } from '../plugins/pluginServerTools'
 
 export type ChatMcpToolResult = { content?: unknown[]; structuredContent?: unknown; isError?: boolean }
 
@@ -21,7 +22,7 @@ export async function openChatMcpBridge(requester: McpRequester, scopes: ChatSco
   const catalogTools = new Set<string>()
   const chatContext = options.chatContext ? { ...options.chatContext } : undefined
   const livePage = () => chatContext?.page ? currentChatPage(requester, chatContext.page) : undefined
-  const signature = () => `${chatPageToolSignature(livePage())}|assist:${chatContext ? ChatProfileStore.find(chatContext.profileId)?.pageAssist : false}`
+  const signature = () => `${chatPageToolSignature(livePage())}|assist:${chatContext ? ChatProfileStore.find(chatContext.profileId)?.pageAssist : false}|plugins:${pluginServerToolsSignature()}`
   const connect = async () => {
     const server = createMcpServer({ scopes: [...scopes], requester, source: 'llm-chat', toolAllowlist, generationPresetIds: options.generationPresetIds ?? [], chatContext, contentRatingLimit: options.contentRatingLimit, toolCatalog: options.toolCatalog, toolCatalogBudget: options.toolCatalogBudget, research: options.research })
     const client = inProcessMcpClient({ name: 'conai-llm-chat', version: '1.0.0' })

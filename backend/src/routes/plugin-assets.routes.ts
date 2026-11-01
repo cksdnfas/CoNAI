@@ -38,9 +38,8 @@ pluginAssetRoutes.get('/:pluginId/:version/*asset', (req, res, next) => {
     if (plugin.version !== version) throw new PluginError('패키지 버전이 바뀌었어.', 404)
     const asset = Array.isArray(req.params.asset) ? req.params.asset.join('/') : String(req.params.asset)
     const file = packageFile(id, version, asset)
-    const origin = requestOrigin(req)
-    const base = `${origin}/api/plugin-assets/${id}/${version}/`
-    res.setHeader('Content-Security-Policy', `sandbox allow-scripts; default-src 'none'; script-src ${base} 'wasm-unsafe-eval'; style-src ${base}; font-src ${base}; img-src ${base} ${origin}/api/plugin-media/ blob:; media-src ${base} ${origin}/api/plugin-media/ blob:; connect-src ${base}; form-action 'none'; base-uri 'none'; object-src 'none'; frame-src ${origin}/api/plugin-media/preview/; worker-src 'none'; frame-ancestors 'self'`)
+    // Administrator-installed code is trusted like the app; generated preview documents remain sandboxed below.
+    res.setHeader('Content-Security-Policy', "frame-ancestors 'self'")
     // The verified private root itself may be a dot-directory (portable/dev instances).
     res.sendFile(file, { dotfiles: 'allow' }, (error) => { if (error) next(error) })
   } catch (error) { next(error) }

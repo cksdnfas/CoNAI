@@ -107,8 +107,6 @@ export async function streamClaudeChatCompletion(params: {
   signal: AbortSignal
   onContent?: (text: string) => void
   onReasoning?: (text: string) => void
-  onToolStart?: () => void
-  onToolEnd?: () => void
   callTool?: (name: string, args: Record<string, unknown>, id: string) => Promise<ChatMcpToolResult>
   refreshTools?: () => Promise<ChatCompletionTool[]>
   maxToolRounds?: number
@@ -136,15 +134,11 @@ export async function streamClaudeChatCompletion(params: {
       await refreshTools()
       if (JSON.stringify(tools) !== previousTools) await server.notification({ method: 'notifications/tools/list_changed' }, { relatedRequestId: ctx.mcpReq.id })
       if (!tools.some((tool) => tool.function.name === request.params.name) || !params.callTool) throw new Error('Unknown or not permitted tool')
-      params.onToolStart?.()
-      try {
-        const before = JSON.stringify(tools)
-        const result = await params.callTool(request.params.name, request.params.arguments ?? {}, randomUUID()) as CallToolResult
-        await refreshTools()
-        if (JSON.stringify(tools) !== before) await server.notification({ method: 'notifications/tools/list_changed' }, { relatedRequestId: ctx.mcpReq.id })
-        return result
-      }
-      finally { params.onToolEnd?.() }
+      const before = JSON.stringify(tools)
+      const result = await params.callTool(request.params.name, request.params.arguments ?? {}, randomUUID()) as CallToolResult
+      await refreshTools()
+      if (JSON.stringify(tools) !== before) await server.notification({ method: 'notifications/tools/list_changed' }, { relatedRequestId: ctx.mcpReq.id })
+      return result
     })
     return server
   })

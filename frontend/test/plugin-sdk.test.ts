@@ -14,7 +14,15 @@ test('plugin SDK preserves cancellation, structured errors, binary uploads and r
     channel.port1.close(); channel.port2.close()
     if (previous) Object.defineProperty(globalThis, 'window', previous); else Reflect.deleteProperty(globalThis, 'window')
   })
-  const connected = connectPlugin()
+  let actionSignal: AbortSignal | undefined
+  let actionStarted: (() => void) | undefined
+  const connected = connectPlugin({
+    'test.wait': (_args: unknown, context?: { signal: AbortSignal }) => {
+      actionSignal = context?.signal
+      actionStarted?.()
+      return new Promise<void>((_resolve, reject) => actionSignal?.addEventListener('abort', () => reject(actionSignal!.reason), { once: true }))
+    },
+  })
   window.dispatchEvent(Object.assign(new Event('message'), { source: window, data: { type: 'conai-plugin-connect', version: 1, features: ['app.fetch', 'request.abort'], nativeApiRoots: ['/api/files'], files: [] }, ports: [channel.port2] }))
   const api = await connected
   assert.equal(api.supports('app.fetch'), true)
@@ -93,6 +101,47 @@ test('plugin SDK preserves cancellation, structured errors, binary uploads and r
     assert.deepEqual([request.method, request.args], ['llm.discard', { jobId: 'discard-job' }])
     channel.port1.postMessage({ type: 'response', id: request.id, result: { jobId: 'discard-job', deleted: 2 } })
     assert.deepEqual(await result, { jobId: 'discard-job', deleted: 2 })
+  })
+
+  await t.test('parallel requests complete independently with caller-selected deadlines', async () => {
+    const received: Array<{ id: string; args: { body: { index: number } }; timeoutMs: number }> = []
+    const respond = (message: typeof received[number]) => {
+      received.push(message)
+      if (received.length === 8) {
+        for (const request of received) channel.port1.postMessage({ type: 'response', id: request.id, result: request.args.body.index })
+      }
+    }
+    channel.port1.on('message', respond)
+    try {
+      const results = await Promise.all(Array.from({ length: 8 }, (_, index) => api.server({ index }, { timeoutMs: index === 0 ? 2_147_483_648 : 3_600_000 })))
+      assert.deepEqual(results, [0, 1, 2, 3, 4, 5, 6, 7])
+      assert.ok(received.every(request => request.timeoutMs === (request.args.body.index === 0 ? 2_147_483_647 : 3_600_000)))
+    } finally { channel.port1.off('message', respond) }
+  })
+
+  await t.test('job waits honor a caller deadline beyond ten minutes', async () => {
+    const incoming = once(channel.port1, 'message')
+    const waiting = api.app.wait('long-job', { timeoutMs: 3_600_000 })
+    const [request] = await incoming
+    assert.equal(request.method, 'app.getRequest')
+    assert.ok(request.timeoutMs > 600_000 && request.timeoutMs <= 3_600_000)
+    channel.port1.postMessage({ type: 'response', id: request.id, result: { status: 'completed', result: 'ready' } })
+    assert.deepEqual(await waiting, { status: 'completed', result: 'ready' })
+  })
+
+  await t.test('host action cancellation reaches the plugin handler', async () => {
+    const started = new Promise<void>(resolve => { actionStarted = resolve })
+    channel.port1.postMessage({ type: 'action', id: 'cancel-action', actionId: 'test.wait', args: {} })
+    await started
+    assert.ok(actionSignal)
+    assert.equal(actionSignal.aborted, false)
+    const incoming = once(channel.port1, 'message')
+    channel.port1.postMessage({ type: 'action-cancel', id: 'cancel-action' })
+    const [result] = await incoming
+    assert.equal(actionSignal.aborted, true)
+    assert.equal(result.type, 'action-result')
+    assert.equal(result.id, 'cancel-action')
+    assert.equal(typeof result.error, 'string')
   })
 
   await t.test('closing the host rejects pending calls immediately', async () => {

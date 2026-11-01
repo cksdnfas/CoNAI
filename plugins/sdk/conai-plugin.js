@@ -1,4 +1,4 @@
-/** CoNAI web extension SDK v1. No cookies, localStorage, network access or approval tokens. */
+/** CoNAI web extension SDK v1 for administrator-trusted app extensions. */
 
 /** The app's current colours and fonts as `--conai-*` variables for conai-plugin.css. Without a theme (older host) its dark defaults stay. */
 function applyTheme(theme) {
@@ -20,7 +20,7 @@ export function connectPlugin(handlers = {}) {
       window.removeEventListener('message', connect)
       clearTimeout(connectionTimeout)
       applyTheme(event.data.theme)
-      const port = event.ports[0], pending = new Map(), saved = new Set(), listeners = new Map()
+      const port = event.ports[0], pending = new Map(), saved = new Set(), listeners = new Map(), actions = new Map()
       let closed = false
       // Snapshots follow typing: the first goes at once, then the newest one every 100 ms at most.
       let queued = null, timer = null
@@ -38,14 +38,13 @@ export function connectPlugin(handlers = {}) {
         request(method, args, options = {}) {
           if (closed) return Promise.reject(new Error('Plugin connection closed'))
           if (options.signal?.aborted) return Promise.reject(options.signal.reason || new DOMException('Cancelled', 'AbortError'))
-          if (pending.size >= (['app.cancel', 'llm.cancel'].includes(method) ? 5 : 4)) return Promise.reject(new Error('Too many pending requests'))
           return new Promise((resolve, reject) => {
             const id = Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) => byte.toString(16).padStart(2, '0')).join('')
-            const timeoutMs = Math.min(600000, Math.max(1000, Number.isFinite(options.timeoutMs) ? options.timeoutMs : 600000))
+            const timeoutMs = Number.isFinite(options.timeoutMs) && options.timeoutMs > 0 ? Math.min(2_147_483_647, options.timeoutMs) : 0
             const cleanup = () => { clearTimeout(timer); options.signal?.removeEventListener('abort', abort); pending.delete(id) }
             const cancel = reason => { port.postMessage({ type: 'cancel', id }); cleanup(); reject(reason) }
             const abort = () => cancel(options.signal.reason || new DOMException('Cancelled', 'AbortError'))
-            const timer = setTimeout(() => cancel(new DOMException('Host request timed out; check job status before retrying a change', 'TimeoutError')), timeoutMs)
+            const timer = timeoutMs ? setTimeout(() => cancel(new DOMException('Host request timed out; check job status before retrying a change', 'TimeoutError')), timeoutMs) : undefined
             pending.set(id, { resolve, reject, cleanup })
             options.signal?.addEventListener('abort', abort, { once: true })
             try { port.postMessage({ type: 'request', id, method, args, timeoutMs }) }
@@ -92,11 +91,11 @@ export function connectPlugin(handlers = {}) {
         signal?.addEventListener('abort', abort, { once: true }); if (signal?.aborted) abort()
       })
       const wait = async (get, id, options = {}) => {
-        const deadline = Date.now() + Math.min(600000, Math.max(1000, options.timeoutMs || 600000))
+        const deadline = Number.isFinite(options.timeoutMs) && options.timeoutMs > 0 ? Date.now() + options.timeoutMs : null
         while (true) {
-          const state = await get(id, { ...options, timeoutMs: Math.max(1000, deadline - Date.now()) })
+          const state = await get(id, { ...options, timeoutMs: deadline === null ? 0 : Math.max(1, deadline - Date.now()) })
           if (['pending', 'completed', 'failed', 'cancelled'].includes(state.status)) return state
-          if (Date.now() >= deadline) throw new DOMException('Wait timed out; query the same job again', 'TimeoutError')
+          if (deadline !== null && Date.now() >= deadline) throw new DOMException('Wait timed out; query the same job again', 'TimeoutError')
           await pause(1000, options.signal)
         }
       }
@@ -154,18 +153,27 @@ export function connectPlugin(handlers = {}) {
         } else if (data?.type === 'closed') {
           closed = true; clearTimeout(timer); queued = null
           for (const request of pending.values()) { request.cleanup(); request.reject(new Error('Plugin connection closed')) }
+          for (const controller of actions.values()) controller.abort()
+          actions.clear()
           listeners.clear()
         } else if (data?.type === 'event') {
           for (const listener of new Set([...(listeners.get(data.event?.name) || []), ...(listeners.get('*') || [])])) {
             try { listener(data.event) } catch (error) { console.error(error) }
           }
+        } else if (data?.type === 'action-cancel') {
+          actions.get(data.id)?.abort()
+          actions.delete(data.id)
         } else if (data?.type === 'action') {
+          const controller = new AbortController()
+          actions.set(data.id, controller)
           try {
             const handler = handlers[data.actionId]
             if (typeof handler !== 'function') throw new Error('Unknown extension action')
-            await handler(data.args)
+            await handler(data.args, { signal: controller.signal })
+            controller.signal.throwIfAborted()
             port.postMessage({ type: 'action-result', id: data.id })
           } catch (error) { port.postMessage({ type: 'action-result', id: data.id, error: error instanceof Error ? error.message : String(error) }) }
+          finally { actions.delete(data.id) }
         } else if (data?.type === 'saved') {
           for (const listener of saved) listener(data)
         } else if (data?.type === 'theme') {

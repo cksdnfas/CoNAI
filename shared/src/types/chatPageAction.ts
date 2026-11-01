@@ -25,7 +25,7 @@ export type ChatPageAction = {
   /** Bind an argument's target to these keys of its row in page.data, not the rest of the collection. */
   targets?: Array<{ argument: string; collection: string; id: string; keys: string[] }>
   /** Extension-only; checked against the server manifest. */
-  tier?: 'view' | 'draft'
+  tier?: 'view' | 'draft' | 'direct' | 'commit'
 }
 export type ChatPageActionProposal = {
   kind: 'page_action'; page: ChatPageTarget; revision: string; action: ChatPageAction

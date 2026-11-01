@@ -204,7 +204,7 @@ export function GroupContextView({ thread, group, profilesById, segments }: {
               shorthand
               step={128}
               min={1}
-              max={1000000}
+              max={Number.MAX_SAFE_INTEGER}
               className="w-48"
               value={group.maxTokens}
               placeholder={profileLabel}
@@ -243,7 +243,7 @@ export function GroupContextView({ thread, group, profilesById, segments }: {
                     shorthand
                     step={128}
                     min={1}
-                    max={1000000}
+                    max={Number.MAX_SAFE_INTEGER}
                     className="w-48"
                     value={own}
                     placeholder={fallback !== null ? `${fallbackLabel} (${fallback})` : fallbackLabel}
@@ -465,7 +465,7 @@ export function CodexChatContextView({ thread, profiles, segments, profileTurns,
           allowEmpty
           step={1}
           min={1}
-          max={200}
+          max={Number.MAX_SAFE_INTEGER}
           className="w-48"
           value={thread.context_turns}
           placeholder={profileTurns !== null ? `${profileLabel} (${profileTurns})` : profileLabel}
@@ -486,7 +486,7 @@ export function CodexChatContextView({ thread, profiles, segments, profileTurns,
             shorthand
             step={128}
             min={1}
-            max={1000000}
+            max={Number.MAX_SAFE_INTEGER}
             className="w-48"
             value={thread.max_tokens}
             placeholder={profileMaxTokens !== null ? `${profileLabel} (${profileMaxTokens})` : profileLabel}

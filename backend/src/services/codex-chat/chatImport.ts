@@ -228,8 +228,8 @@ export function importChatThread(requester: McpRequester, raw: Buffer, target: C
     db.prepare(`UPDATE codex_chat_threads SET title = ?, context_turns = ?, summary_enabled = ?, author_note = ?, author_note_depth = ?, max_tokens = ?,
       block_edits = ? WHERE id = ?`).run(
       textOf(thread.title, 60) || '가져온 대화',
-      intOrNull(thread.context_turns, 1, 200), intOrNull(thread.summary_enabled, 0, 1),
-      nullableText(thread.author_note, 4000), intOrNull(thread.author_note_depth, 0, 20), intOrNull(thread.max_tokens, 1, 1_000_000),
+      intOrNull(thread.context_turns, 1, Number.MAX_SAFE_INTEGER), intOrNull(thread.summary_enabled, 0, 1),
+      nullableText(thread.author_note, 4000), intOrNull(thread.author_note_depth, 0, 20), intOrNull(thread.max_tokens, 1, Number.MAX_SAFE_INTEGER),
       edits.length ? JSON.stringify(edits) : null, created.id,
     )
     // An imported transcript is history, not new replies.

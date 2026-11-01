@@ -16,6 +16,10 @@ import {
 } from '@/lib/api-character-library'
 import { buildApiUrl } from '@/lib/api-url'
 import { libraryThumbnailUrl } from '@/lib/api-sprite'
+import type { AppLanguage } from '@/i18n'
+
+/** The Danbooru dictionary translates to Korean only: other UI languages show the tag name itself. */
+export const localizedTagName = (language: AppLanguage, name: string, translated: string | null | undefined) => (language === 'ko' && translated ? translated : name)
 
 /**
  * The editable fields of one appearance setting (what a save sends). The look is its sections and outfits; the text

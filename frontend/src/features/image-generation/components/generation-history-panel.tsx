@@ -308,12 +308,6 @@ export function GenerationHistoryPanelView({ feed, serviceType, workflowId, publ
                 <LoadingState variant="inline" label={t({ ko: '기록 더 불러오는 중…', en: 'Loading more history…' })} />
               ) : null}
 
-              {Boolean(historyQuery.hasNextPage) && !historyQuery.isFetchingNextPage && !historyQuery.isFetchNextPageError ? (
-                <Button size="sm" variant="secondary" onClick={handleLoadMoreHistory}>
-                  {t({ ko: '더 보기', en: 'Load more' })}
-                </Button>
-              ) : null}
-
               {historyQuery.isFetchNextPageError ? (
                 <Button size="sm" variant="secondary" onClick={handleLoadMoreHistory}>
                   {t({ ko: '다음 기록 다시 시도', en: 'Retry next history batch' })}

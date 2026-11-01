@@ -6,6 +6,7 @@ import { validateMcpToolArguments } from '../../mcp/requestSecurity'
 import { requireRequesterImagePermission } from '../../middleware/imageAccess'
 import { pluginAppToolScope, pluginAppTools } from './pluginAppPolicy'
 import { PluginError } from './pluginStore'
+import { findPluginServerTool } from './pluginServerTools'
 
 export async function withPluginAppClient<T>(context: McpRequestContext, names: string[], use: (client: Client) => Promise<T>): Promise<T> {
   const { createMcpServer } = await import('../../mcp/server')
@@ -22,7 +23,6 @@ export async function pluginAppDefinitions(context: McpRequestContext, names: st
     do {
       const page = await client.listTools(cursor ? { cursor } : {})
       tools.push(...page.tools); cursor = page.nextCursor
-      if (tools.length > 1000) throw new PluginError('도구 목록이 너무 커.')
     } while (cursor)
     return tools
   })
@@ -32,15 +32,8 @@ export async function callPluginAppTool(context: McpRequestContext, name: string
   if (!pluginAppToolScope(name)) throw new PluginError(`플러그인 실행 문맥에서 지원하지 않는 앱 도구야: ${name}`, 400)
   const native = { ...context, source: 'plugin' as const, chatContext: undefined, generationPresetIds: [], toolAllowlist: [name] }
   requireMcpToolAccess(native, name, args)
-  validateMcpToolArguments(args, () => requireRequesterImagePermission(native.requester))
-  return withPluginAppClient(native, [name], async client => {
-    const result = await client.callTool({ name, arguments: args }, { timeout: NO_TOOL_DEADLINE, signal })
-    // Preserve native small image/audio previews as well as text; cap the complete response.
-    const safe = { ...result }
-    const text = JSON.stringify(safe)
-    if (Buffer.byteLength(text) > 512 * 1024) return { isError: Boolean(result.isError), content: [{ type: 'text', text: '결과가 512KB를 넘었어. 조회 범위를 줄이거나 앱에서 생성 이력·작업 결과를 확인해줘.' }], omitted: true }
-    return safe
-  })
+  validateMcpToolArguments(args, () => requireRequesterImagePermission(native.requester), findPluginServerTool(name) !== null)
+  return withPluginAppClient(native, [name], client => client.callTool({ name, arguments: args }, { timeout: NO_TOOL_DEADLINE, signal }))
 }
 
 /** A server module's calls: every scope, bounded by the requester's own permissions (requireMcpToolAccess). */

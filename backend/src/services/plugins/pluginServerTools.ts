@@ -17,6 +17,7 @@ export type PluginServerToolResult = { content: ToolContent[]; isError?: boolean
 type Invoker = (tool: PluginServerTool, args: Record<string, unknown>, requester: McpRequester | undefined, signal?: AbortSignal, run?: PluginProfileRunIdentity) => Promise<PluginServerToolResult>
 
 const tools = new Map<string, PluginServerTool>()
+let toolsRevision = 0
 let invoker: Invoker | null = null
 type ProfileRun = PluginProfileRunIdentity & { pluginId: string; accountId: number | null; tools: string[] }
 const profileRuns = new Map<number, ProfileRun>()
@@ -43,9 +44,12 @@ export function pluginServerToolName(pluginId: string, localName: string) {
   const name = `${PLUGIN_SERVER_TOOL_PREFIX}${pluginId.replace(/-/g, '_')}_${localName}`
   return /^[a-z][a-z0-9_]{1,63}$/.test(name) ? name : null
 }
-export function setPluginServerTool(tool: PluginServerTool) { tools.set(tool.name, tool) }
+export function setPluginServerTool(tool: PluginServerTool) {
+  if (JSON.stringify(tools.get(tool.name)) === JSON.stringify(tool)) return
+  tools.set(tool.name, tool); toolsRevision++
+}
 export function clearPluginServerTools(pluginId: string) {
-  for (const [name, tool] of tools) if (tool.pluginId === pluginId) tools.delete(name)
+  for (const [name, tool] of tools) if (tool.pluginId === pluginId) { tools.delete(name); toolsRevision++ }
 }
 export function pluginServerTools(): PluginServerTool[] {
   return [...tools.values()].sort((a, b) => a.name.localeCompare(b.name))
@@ -53,9 +57,9 @@ export function pluginServerTools(): PluginServerTool[] {
 export function findPluginServerTool(name: string) {
   return tools.get(name) ?? null
 }
-/** Changes when a plugin's tools come or go, so a chat engine holding a tool list (Codex) starts a fresh one. */
+/** Registration includes schema/description changes, not just changes to tool names or scopes. */
 export function pluginServerToolsSignature() {
-  return pluginServerTools().map(tool => `${tool.name}:${tool.scope}`).join(',')
+  return String(toolsRevision)
 }
 export function setPluginServerToolInvoker(next: Invoker) { invoker = next }
 export async function callPluginServerTool(name: string, args: Record<string, unknown>, requester: McpRequester | undefined, signal?: AbortSignal, chat?: ChatExecutionContext): Promise<PluginServerToolResult> {

@@ -29,12 +29,8 @@ import type { RuntimeJobContext } from '../runtimeJobs/runtimeJobRunner'
 /** Hooks a module may listen to; each one has a call site that waits for it. */
 export const PLUGIN_SERVER_HOOKS = ['chat.instructions', 'generation.action', 'generation.queued', 'generation.finished'] as const
 export type PluginServerHook = typeof PLUGIN_SERVER_HOOKS[number]
-const HOOK_TIMEOUT_MS = 3_000
 const ACTION_TIMEOUT_MS = 30_000
 const NOTIFY_TIMEOUT_MS = 10_000
-const REQUEST_TIMEOUT_MS = 10 * 60_000
-const JOB_TIMEOUT_MS = 10 * 60_000
-const RESULT_LIMIT = 512 * 1024
 const CRASH_WINDOW_MS = 5 * 60_000
 const CRASH_LIMIT = 3
 
@@ -451,7 +447,6 @@ function invoke(pluginId: string, kind: 'hook' | 'tool' | 'request' | 'job', nam
   const worker = server?.worker
   if (!server || !worker || server.state !== 'ready') return Promise.reject(new PluginError('플러그인 서버가 실행 중이 아니야.', 503))
   if (signal?.aborted) return Promise.reject(signal.reason)
-  if (server.waiting.size >= 32) return Promise.reject(new PluginError('실행 중인 플러그인 요청이 너무 많아.', 429))
   const id = ++server.seq
   const token = pluginToken()
   const controller = new AbortController()
@@ -470,22 +465,17 @@ function invoke(pluginId: string, kind: 'hook' | 'tool' | 'request' | 'job', nam
 const accountOf = (requester: McpRequester | undefined) => requester ? { id: requester.accountId, type: requester.accountType } : null
 
 setPluginTaskInvoker((pluginId, data, requester, job) => invoke(pluginId, 'job', '', data,
-  { account: accountOf(requester), jobId: job.jobId }, { requester, job }, JOB_TIMEOUT_MS, job.signal))
+  { account: accountOf(requester), jobId: job.jobId }, { requester, job }, undefined, job.signal))
 
 /** A plugin page's `api.server(body)`: the module's `onRequest({ body, account, page })`. */
 export async function requestPluginServer(pluginId: string, body: unknown, requester: McpRequester | undefined, page: Record<string, unknown>, baseUrl?: string, workspace?: McpRequestContext['workspace'], signal?: AbortSignal) {
-  const value = await invoke(pluginId, 'request', '', { body, account: accountOf(requester), page }, { account: accountOf(requester) }, { requester, baseUrl, workspace }, REQUEST_TIMEOUT_MS, signal)
-  if (Buffer.byteLength(JSON.stringify(value ?? null)) > 2 * 1024 * 1024) throw new PluginError('플러그인 서버 응답이 2MB를 넘었어.', 502)
-  return value
+  return invoke(pluginId, 'request', '', { body, account: accountOf(requester), page }, { account: accountOf(requester) }, { requester, baseUrl, workspace }, undefined, signal)
 }
 
 /** Text, an MCP result as is (`{ content: [...] }`), or any other value as JSON. */
 function toolResult(value: unknown): PluginServerToolResult {
-  let result: PluginServerToolResult
-  if (value && typeof value === 'object' && Array.isArray((value as { content?: unknown }).content)) result = value as PluginServerToolResult
-  else result = { content: [{ type: 'text', text: typeof value === 'string' ? value : JSON.stringify(value ?? null, null, 2) }] }
-  if (Buffer.byteLength(JSON.stringify(result)) > RESULT_LIMIT) return { isError: true, content: [{ type: 'text', text: '플러그인 도구 결과가 512KB를 넘었어.' }] }
-  return result
+  if (value && typeof value === 'object' && Array.isArray((value as { content?: unknown }).content)) return value as PluginServerToolResult
+  return { content: [{ type: 'text', text: typeof value === 'string' ? value : JSON.stringify(value ?? null, null, 2) }] }
 }
 setPluginServerToolInvoker(async (tool, args, requester, signal, run) => {
   try {
@@ -502,15 +492,16 @@ export type ChatInstructionsContext = {
 }
 /**
  * `chat.instructions`: every listening module, in plugin id order, gets the finished instructions and may return
- * changed ones (a string). A module that fails or takes over three seconds is skipped for this request.
+ * changed ones (a string). A failed hook is logged; cancellation follows the calling chat.
  */
-export async function applyChatInstructionHooks(instructions: string, context: ChatInstructionsContext, requester: McpRequester | undefined) {
+export async function applyChatInstructionHooks(instructions: string, context: ChatInstructionsContext, requester: McpRequester | undefined, signal?: AbortSignal) {
   let current = instructions
   for (const server of listeningTo('chat.instructions')) {
     try {
-      const value = await invoke(server.pluginId, 'hook', 'chat.instructions', { instructions: current, ...context, account: accountOf(requester) }, { account: accountOf(requester) }, { requester }, HOOK_TIMEOUT_MS)
+      const value = await invoke(server.pluginId, 'hook', 'chat.instructions', { instructions: current, ...context, account: accountOf(requester) }, { account: accountOf(requester) }, { requester }, undefined, signal)
       if (typeof value === 'string') current = value
     } catch (error) {
+      signal?.throwIfAborted()
       console.warn(`[plugin:${server.pluginId}] chat.instructions skipped:`, error instanceof Error ? error.message : error)
     }
   }
@@ -531,10 +522,10 @@ function actionValue(value: unknown): ChatPageValue {
  * `generation.action`: a plugin's button next to Generate. The module gets the screen's form fields and may answer
  * `{ message, fill }`; the browser checks `fill` against the same fields before the form changes.
  */
-export async function runGenerationActionHook(pluginId: string, input: { action: string; surface: string; fields: Array<{ id: string; label: string; type: string; value: ChatPageValue }> }, requester: McpRequester | undefined): Promise<PluginGenerationActionResult> {
+export async function runGenerationActionHook(pluginId: string, input: { action: string; surface: string; fields: Array<{ id: string; label: string; type: string; value: ChatPageValue }> }, requester: McpRequester | undefined, signal?: AbortSignal): Promise<PluginGenerationActionResult> {
   const server = servers.get(pluginId)
   if (!server || server.state !== 'ready' || !server.hooks.has('generation.action')) throw new PluginError('플러그인 서버가 이 버튼에 답할 준비가 안 됐어.', 503)
-  const value = await invoke(pluginId, 'hook', 'generation.action', { ...input, account: accountOf(requester) }, { account: accountOf(requester) }, { requester }, ACTION_TIMEOUT_MS)
+  const value = await invoke(pluginId, 'hook', 'generation.action', { ...input, account: accountOf(requester) }, { account: accountOf(requester) }, { requester }, ACTION_TIMEOUT_MS, signal)
   if (value === null || value === undefined) return {}
   if (typeof value !== 'object' || Array.isArray(value)) throw new PluginError('플러그인 답은 { message, fill } 객체여야 해.', 502)
   const { message, fill } = value as { message?: unknown; fill?: unknown }

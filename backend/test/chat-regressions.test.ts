@@ -24,6 +24,110 @@ import { claudeChatArgs, claudeChatInput, verifyClaudeTools } from '../src/servi
 import { claudeLoginUrl, claudeModelOptions } from '../src/services/claudeCli'
 import { mockModelRows } from './modelRowMocks'
 
+test('manual Codex compaction cancels a waiting instruction hook and releases the chat', { timeout: 30000 }, async (t) => {
+  const fs = (await import('node:fs')).default
+  const os = await import('node:os')
+  const path = await import('node:path')
+  const childProcess = (await import('node:child_process')).default
+  const { EventEmitter } = await import('node:events')
+  const { PassThrough } = await import('node:stream')
+  const AdmZip = (await import('adm-zip')).default
+  const { CodexAppServerClient } = await import('../src/services/codex-chat/codexAppServerClient')
+  const { CodexChatService } = await import('../src/services/codex-chat/codexChatService')
+  const { AuthAccount } = await import('../src/models/AuthAccount')
+  const { AuthAccessControlService } = await import('../src/services/authAccessControlService')
+  const { updateChatSettings } = await import('../src/services/codex-chat/chatSettings')
+  const db = await import('../src/database/userSettingsDb')
+  const runtime = await import('../src/services/plugins/pluginServerRuntime')
+  const registry = await import('../src/services/plugins/pluginRegistry')
+  const { subscribeToRuntimeEvents } = await import('../src/services/runtime-events/runtimeEventBus')
+  db.initializeUserSettingsDb()
+  updateChatSettings({ enabled: true })
+  t.mock.method(AuthAccount, 'findById', (id: number) => ({ id, status: 'active', account_type: 'admin' }) as never)
+  t.mock.method(AuthAccessControlService, 'resolveForAccountId', () => ({ permissionKeys: ['chat.use', 'chat.agent.use'] }))
+  const requester = { accountId: 1, accountType: 'admin' as const }
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'conai-compact-auth-'))
+  fs.writeFileSync(path.join(home, 'auth.json'), '{}')
+  const previousHome = process.env.CODEX_HOME
+  process.env.CODEX_HOME = home
+  let running: Promise<unknown> | undefined
+  t.after(async () => {
+    await runtime.requestPluginServer('compact-test', { op: 'release' }, requester, {}).catch(() => {})
+    await running?.catch(() => {})
+    await runtime.closePluginServers()
+    await CodexChatService.stopAllSessions('compaction regression complete')
+    db.closeUserSettingsDb()
+    if (previousHome === undefined) delete process.env.CODEX_HOME
+    else process.env.CODEX_HOME = previousHome
+    fs.rmSync(home, { recursive: true, force: true })
+  })
+  const features = new Set(['shell_tool', 'unified_exec', 'hooks', 'plugins', 'apps', 'code_mode_host', 'code_mode', 'browser_use', 'computer_use', 'multi_agent', 'image_generation', 'view_image', 'skill_mcp_dependency_install', 'skill_search', 'skip_host_skill_discovery'])
+  t.mock.method(childProcess, 'spawn', (_command: string, args: string[]) => {
+    const child = Object.assign(new EventEmitter(), { stdout: new PassThrough(), stderr: new PassThrough(), kill: () => true })
+    setImmediate(() => {
+      child.stdout.end(args.includes('features') ? [...features].map(name => `${name} stable false`).join('\n') : '[]')
+      child.emit('close', 0)
+    })
+    return child
+  })
+  const calls: string[] = []
+  t.mock.method(CodexAppServerClient, 'start', async (options: Parameters<typeof CodexAppServerClient.start>[0]) => {
+    const client = Object.assign(new EventEmitter(), { whenExited: Promise.resolve(), close: () => {}, isAlive: true,
+      request: async (method: string) => {
+        calls.push(method)
+        if (method === 'config/read') return { config: { approval_policy: 'never', sandbox_mode: 'read-only', web_search: 'disabled', project_doc_max_bytes: 0,
+          features: chatFeatureOverrides(features), mcp_servers: { conai: { url: `http://127.0.0.1:${process.env.PORT || 1666}/mcp` } }, projects: { [options.cwd]: { trust_level: 'untrusted' } } } }
+        if (method === 'mcpServerStatus/list') return { data: [{ name: 'conai' }] }
+        if (method === 'model/list') return { data: [{ id: 'compact-model', isDefault: true }] }
+        if (method === 'thread/resume' || method === 'thread/delete') return {}
+        assert.equal(method, 'thread/compact/start')
+        setImmediate(() => client.emit('notification', { method: 'turn/completed', params: { threadId: 'compact-memory', turn: { id: 'compact-turn', status: 'completed' } } }))
+        return {}
+      },
+    })
+    return client as unknown as CodexAppServerClient
+  })
+  const zip = new AdmZip()
+  zip.addFile('plugin.json', Buffer.from(JSON.stringify({ apiVersion: 1, id: 'compact-test', name: 'Compaction test', version: '1.0.0', description: '', server: { entry: 'server.mjs' }, pages: [{ id: 'main', title: 'Test', entry: 'index.html', accepts: [], actions: [] }] })))
+  zip.addFile('index.html', Buffer.from('<!doctype html><title>Test</title>'))
+  zip.addFile('server.mjs', Buffer.from(`export function activate(conai) {
+    let entered = false, cancelled = false, notify, release;
+    conai.onRequest(({ body }) => {
+      if (body.op === 'entered') return entered || new Promise(resolve => { notify = resolve; });
+      if (body.op === 'cancelled') return cancelled;
+      if (body.op === 'release') { release?.('unchanged'); return true; }
+    });
+    conai.hooks.on('chat.instructions', (_, { signal }) => new Promise((resolve, reject) => {
+      release = resolve; entered = true; notify?.(true);
+      signal.addEventListener('abort', () => { cancelled = true; reject(signal.reason); }, { once: true });
+    }));
+  }`))
+  await registry.installPlugin(zip.toBuffer())
+  const ready = new Promise<void>(resolve => {
+    const unsubscribe = subscribeToRuntimeEvents(event => {
+      if (event.name === 'plugin.server.changed' && runtime.pluginServerStatus('compact-test').state === 'ready') { unsubscribe(); resolve() }
+    })
+    t.after(unsubscribe)
+  })
+  runtime.startPluginServers()
+  await registry.setPluginEnabled('compact-test', true)
+  await ready
+  const profile = ChatProfileStore.create({ name: 'Compact', engine: 'codex', mcpEnabled: false })
+  const thread = CodexChatService.createThread(requester, profile.id)
+  CodexChatStore.setCodexThreadId(thread.id, 'compact-memory')
+  running = CodexChatService.compact(requester, thread.id)
+  void running.catch(() => {})
+  assert.equal(await runtime.requestPluginServer('compact-test', { op: 'entered' }, requester, {}), true)
+  assert.equal(CodexChatService.isRunning(thread.id), true)
+  await CodexChatService.interrupt(requester, thread.id)
+  assert.equal(await runtime.requestPluginServer('compact-test', { op: 'cancelled' }, requester, {}), true)
+  await assert.rejects(running, { name: 'AbortError' })
+  assert.equal(CodexChatService.isRunning(thread.id), false)
+  assert.ok(!calls.includes('thread/compact/start'))
+  await CodexChatService.deleteThread(requester, thread.id)
+  assert.equal(CodexChatStore.findThreadById(thread.id), undefined)
+})
+
 test('Claude chat rejects unexpected host tools, keeps vision data and restricts OAuth links', () => {
   const tools = [{ type: 'function' as const, function: { name: 'search_images', parameters: { type: 'object' } } }]
   assert.doesNotThrow(() => verifyClaudeTools(['mcp__conai__search_images', 'EndConversation'], tools))

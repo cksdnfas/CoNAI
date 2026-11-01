@@ -108,7 +108,7 @@ function requireGroup(requester: McpRequester, threadId: number) {
 function replyCapOf(value: unknown) {
   if (value === null) return null
   const number = Number(value)
-  if (!Number.isSafeInteger(number) || number < 1 || number > 1_000_000) throw new CodexChatError('최대 출력 토큰은 1~1000000 사이로 정해줘.')
+  if (!Number.isSafeInteger(number) || number < 1) throw new CodexChatError('최대 출력 토큰은 정확히 표현할 수 있는 양의 정수로 정해줘.')
   return number
 }
 

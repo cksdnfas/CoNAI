@@ -1044,6 +1044,7 @@ test('page commands preserve draft undo, screen identity and reviewed saves', { 
   let currentValue = ''
   let saves = 0
   let pendingDraft: Promise<void> | undefined
+  let draftSignal: AbortSignal | undefined
   let editData!: (value: { text: string | number | null }) => void
   let threadActions!: ReturnType<typeof useChatThreadActions>
   let selectChat!: (id: number | undefined) => void
@@ -1068,8 +1069,12 @@ test('page commands preserve draft undo, screen identity and reviewed saves', { 
       data: { payload },
       actions: [pageAction('profile.draft', 'Draft', '', pageObject({ value: pageText() }, ['value'])), pageAction('profile.save', 'Save', '', undefined, 'save', {})],
       apply: patch => setValue(String(patch.name)),
-      applyAction: async (id, args, assertCurrent) => {
+      applyAction: async (id, args, assertCurrent, _nativeRevision, signal) => {
         if (id === 'profile.save') { saves++; return }
+        if (args.value === 'wait-for-cancel') {
+          draftSignal = signal
+          await new Promise<void>((_resolve, reject) => signal?.addEventListener('abort', () => reject(signal.reason), { once: true }))
+        }
         if (pendingDraft) await pendingDraft
         assertCurrent()
         return commit(String(args.value))
@@ -1209,6 +1214,19 @@ test('page commands preserve draft undo, screen identity and reviewed saves', { 
     assert.equal(answer.ok, false)
     assert.equal(currentValue, 'newer manual edit')
   })
+  await t.test('cancelling a running page action aborts its handler and settles the command', async () => {
+    const before = currentValue
+    const command = await send({ type: 'action', actionId: 'profile.draft', tier: 'draft', arguments: { value: 'wait-for-cancel' } })
+    assert.ok(draftSignal)
+    const snapshot = page.capture()!
+    await act(async () => TestEventSource.latest.dispatchEvent(new dom.window.MessageEvent('chat.page.command', { data: JSON.stringify({
+      name: 'chat.page.command', payload: { type: 'cancel', commandId: command.commandId, connectionId: snapshot.connectionId },
+    }) })))
+    await act(async () => assert.equal((await command.answer).ok, false))
+    assert.equal(draftSignal.aborted, true)
+    assert.equal(currentValue, before)
+  })
+
   await t.test('a model command cannot execute a save without the review flow', async () => {
     const command = await send({ type: 'action', actionId: 'profile.save', tier: 'draft', arguments: {} })
     await act(async () => assert.equal((await command.answer).ok, false))

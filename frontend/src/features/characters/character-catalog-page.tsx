@@ -26,14 +26,14 @@ import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context
 import { pageAction, pageChoice, pageNumber, pageObject, pageText } from '@/features/codex-chat/page-action-helpers'
 import { ImageListColumnFloatingControl } from '@/features/images/components/image-list/image-list-column-floating-control'
 import { useImageListColumnPreference } from '@/features/images/components/image-list/image-list-column-preferences'
-import { useI18n } from '@/i18n'
+import { useI18n, type AppLanguage } from '@/i18n'
 import { createCharacterSetting, fillCharacterAppearance, type CharacterAppearanceFill, type CharacterFacetKey, type CharacterSettingFilters } from '@/lib/api-character-library'
 import { getDanbooruBrowserCharacters, getDanbooruBrowserSummary, getDanbooruCharacterFacets } from '@/lib/api-danbooru-browser'
 import { buildApiUrl } from '@/lib/api-url'
 import { copyTextToClipboard } from '@/lib/clipboard'
 import { getErrorMessage } from '@/lib/error-message'
 import type { DanbooruBrowserCharacterRecord } from '@/types/danbooru-browser'
-import { refreshCharacterViews } from './character-library-shared'
+import { localizedTagName, refreshCharacterViews } from './character-library-shared'
 import { CharacterFacetPanel } from './components/character-facet-panel'
 import { CharacterSettingSaveDialog } from './components/character-setting-save-dialog'
 
@@ -49,7 +49,7 @@ function singleChoice(previous: CharacterSettingFilters, next: CharacterSettingF
   }).filter(([, tags]) => (tags as string[]).length))
 }
 
-const catalogName = (character: DanbooruBrowserCharacterRecord) => character.translatedName || character.displayName
+const catalogName = (character: DanbooruBrowserCharacterRecord, language: AppLanguage) => localizedTagName(language, character.displayName, character.translatedName)
 const catalogFillKey = (character: DanbooruBrowserCharacterRecord) => ['character-library', 'catalog-fill', character.name]
 /** The look an import would get, as one prompt line (sections, then the default outfit). */
 const catalogLookText = (fill: CharacterAppearanceFill) => composeCharacterAppearance({ sections: fill.sections, outfits: fill.outfitTags ? [{ name: '', tags: fill.outfitTags }] : [] })
@@ -60,7 +60,7 @@ const catalogLookText = (fill: CharacterAppearanceFill) => composeCharacterAppea
  * setting (sections and a default outfit). The URL holds `q`, `copyright`, `tags` (comma list), `sort` and `page`.
  */
 export function CharacterCatalogPage({ viewSwitch }: { viewSwitch: ReactNode }) {
-  const { t, formatNumber } = useI18n()
+  const { t, formatNumber, language } = useI18n()
   const { showSnackbar } = useSnackbar()
   const queryClient = useQueryClient()
   const permissions = useFeaturePermissions()
@@ -145,7 +145,7 @@ export function CharacterCatalogPage({ viewSwitch }: { viewSwitch: ReactNode }) 
     } as Record<string, ChatPageData>,
     actions: [
       pageAction('character.catalog_search', t({ ko: '카탈로그 검색', en: 'Search the catalog' }), t({ ko: '이름(영문 태그·한국어), 작품 tag id(0은 전체), 외형 태그(쉼표, data.filterChoices), 정렬과 쪽으로 카탈로그를 봐.', en: 'Browse by name, work tag id (0: all), appearance tags (comma list from data.filterChoices), sort and page.' }), pageObject({ query: pageText(200), copyrightTagId: pageNumber(0, undefined, true), tags: pageText(2000), sort: pageChoice(['posts', 'name']), page: pageNumber(1, undefined, true) })),
-      ...(canImport ? [pageAction('character.catalog_import', t({ ko: '외형으로 가져오기', en: 'Import as a setting' }), t({ ko: 'data.characters의 캐릭터를 외형 라이브러리 폴더(0은 최상위)에 새 외형 설정으로 만들어. 이름을 비우면 한국어·표시 이름을 써.', en: 'Create a setting from a listed character in a library folder (0: top level); an empty name uses its Korean or display name.' }), pageObject({ tagId: pageChoice(items.length ? items.map((item) => item.tagId) : [0]), folderId: pageNumber(0, undefined, true), name: pageText(60) }, ['tagId', 'folderId']), 'save')] : []),
+      ...(canImport ? [pageAction('character.catalog_import', t({ ko: '외형으로 가져오기', en: 'Import as a setting' }), t({ ko: 'data.characters의 캐릭터를 외형 라이브러리 폴더(0은 최상위)에 새 외형 설정으로 만들어. 이름을 비우면 카드에 보이는 이름을 써.', en: 'Create a setting from a listed character in a library folder (0: top level); an empty name uses the name shown on its card.' }), pageObject({ tagId: pageChoice(items.length ? items.map((item) => item.tagId) : [0]), folderId: pageNumber(0, undefined, true), name: pageText(60) }, ['tagId', 'folderId']), 'save')] : []),
     ],
     apply: () => {},
     applyAction: async (id, args, assertCurrent) => {
@@ -163,7 +163,7 @@ export function CharacterCatalogPage({ viewSwitch }: { viewSwitch: ReactNode }) 
       if (id !== 'character.catalog_import') throw new Error('캐릭터 카탈로그에 없는 작업이야.')
       const character = items.find((item) => item.tagId === Number(args.tagId))
       if (!character) throw new Error('지금 목록에 없는 캐릭터야. character.catalog_search로 다시 찾아줘.')
-      await importMutation.mutateAsync({ character, folderId: Number(args.folderId) > 0 ? Number(args.folderId) : null, name: String(args.name ?? '').trim() || catalogName(character) })
+      await importMutation.mutateAsync({ character, folderId: Number(args.folderId) > 0 ? Number(args.folderId) : null, name: String(args.name ?? '').trim() || catalogName(character, language) })
     },
   })
 
@@ -193,7 +193,7 @@ export function CharacterCatalogPage({ viewSwitch }: { viewSwitch: ReactNode }) 
             <Button type="button" variant="nav" size="sm" data-active={copyrightTagId === null ? 'true' : undefined} onClick={() => update({ copyright: null })}><Library />{t({ ko: '모든 작품', en: 'All works' })}</Button>
             {shownCopyrights.map((node) => (
               <Button key={node.id} type="button" variant="nav" size="sm" data-active={copyrightTagId === node.filter?.copyrightTagId ? 'true' : undefined} onClick={() => update({ copyright: String(node.filter?.copyrightTagId) })}>
-                <span className="min-w-0 flex-1 truncate">{node.translatedLabel || node.label}</span>
+                <span className="min-w-0 flex-1 truncate">{localizedTagName(language, node.label, node.translatedLabel)}</span>
                 <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{formatNumber(node.count)}</span>
               </Button>
             ))}
@@ -214,18 +214,19 @@ export function CharacterCatalogPage({ viewSwitch }: { viewSwitch: ReactNode }) 
           <div className="grid gap-4" style={{ gridTemplateColumns: `repeat(${columns.columnCount}, minmax(0, 1fr))` }}>
             {items.map((item) => {
               const work = item.copyrights[0]
+              const name = catalogName(item, language)
               return (
                 <CharacterCard
                   key={item.tagId}
-                  name={catalogName(item)}
+                  name={name}
                   mediaSrc={canViewImages && item.images[0] ? buildApiUrl(item.images[0].url) : null}
                   onOpen={() => setOpen(item)}
-                  subtitle={item.translatedName ? item.displayName : undefined}
+                  subtitle={name !== item.displayName ? item.displayName : undefined}
                   meta={<span className="flex items-center gap-1" aria-label={t({ ko: '이미지 {count}장', en: '{count} posts' }, { count: formatNumber(item.worksCount) })}><ImageIcon />{formatNumber(item.worksCount)}</span>}
-                  topStart={work ? <Badge variant="overlay" size="sm" className="max-w-full"><BookOpen /><span className="truncate">{work.translatedName || work.displayName}</span></Badge> : undefined}
+                  topStart={work ? <Badge variant="overlay" size="sm" className="max-w-full"><BookOpen /><span className="truncate">{localizedTagName(language, work.displayName, work.translatedName)}</span></Badge> : undefined}
                   topEnd={<OverlayCardHoverOnly><IconButton asChild variant="overlay" size="icon-sm" label="Danbooru"><a href={item.danbooruUrl} target="_blank" rel="noopener noreferrer"><ExternalLink /></a></IconButton></OverlayCardHoverOnly>}
                   actions={<>
-                    {canImport ? <IconButton size="icon-sm" label={t({ ko: '가져오기', en: 'Import' })} disabled={importMutation.isPending} onClick={() => importMutation.mutate({ character: item, folderId: null, name: catalogName(item) })}><Import /></IconButton> : null}
+                    {canImport ? <IconButton size="icon-sm" label={t({ ko: '가져오기', en: 'Import' })} disabled={importMutation.isPending} onClick={() => importMutation.mutate({ character: item, folderId: null, name })}><Import /></IconButton> : null}
                     <IconButton variant="overlay" size="icon-sm" label={t({ ko: '태그 복사', en: 'Copy tags' })} onClick={() => void copyLook(item)}><Copy /></IconButton>
                   </>}
                 />
@@ -251,7 +252,7 @@ function CatalogCharacterModal({ character, canImport, canViewImages, importing,
   onImport: (input: { folderId: number | null; name: string; fill?: CharacterAppearanceFill }) => void
   onClose: () => void
 }) {
-  const { t, formatNumber } = useI18n()
+  const { t, formatNumber, language } = useI18n()
   const { showSnackbar } = useSnackbar()
   const [saving, setSaving] = useState(false)
   // The preview uses the library's fill (it needs characters.edit, like the import).
@@ -264,7 +265,7 @@ function CatalogCharacterModal({ character, canImport, canViewImages, importing,
     } catch (error) { showSnackbar({ message: getErrorMessage(error, t({ ko: '복사하지 못했어.', en: 'Could not copy.' })), tone: 'error' }) }
   }
   return (
-    <Modal open size="lg" title={catalogName(character)} description={[character.displayName, ...character.copyrights.slice(0, 3).map((copyright) => copyright.translatedName || copyright.displayName)].join(' · ')} onClose={onClose}>
+    <Modal open size="lg" title={catalogName(character, language)} description={[character.displayName, ...character.copyrights.slice(0, 3).map((copyright) => localizedTagName(language, copyright.displayName, copyright.translatedName))].join(' · ')} onClose={onClose}>
       <ModalBody spacing="sm">
         {canViewImages && character.images.length ? (
           <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
@@ -290,7 +291,7 @@ function CatalogCharacterModal({ character, canImport, canViewImages, importing,
       {saving ? (
         <CharacterSettingSaveDialog
           title={t({ ko: '외형 라이브러리로 가져오기', en: 'Import into the library' })}
-          initialName={catalogName(character)}
+          initialName={catalogName(character, language)}
           submitLabel={t({ ko: '가져오고 편집하기', en: 'Import and edit' })}
           busy={importing}
           onSubmit={(target) => { setSaving(false); onImport({ ...target, fill: preview.data }) }}

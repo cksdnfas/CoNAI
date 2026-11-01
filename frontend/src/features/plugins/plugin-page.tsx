@@ -6,7 +6,6 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { copyChatPageData, type ChatPageData, type GenerationLayoutSurface, type PluginInstance, type PluginSnapshot, type PluginWorkspaceProposal, type PluginMediaProposal, type StoredFileEntry } from '@conai/shared'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { CodeBlock } from '@/components/ui/code-block'
 import { IconButton } from '@/components/ui/icon-button'
 import { Modal, ModalBody } from '@/components/ui/modal'
 import { LoadingState } from '@/components/ui/loading-state'
@@ -139,7 +138,6 @@ function PluginFrame({ instance, onDirty, embed }: { instance: PluginInstance; o
   const chat = useCodexChat()
   const hostPage = useChatPage()
   const { t } = useI18n()
-  const confirm = useConfirm()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const frame = useRef<HTMLIFrameElement>(null)
@@ -148,11 +146,10 @@ function PluginFrame({ instance, onDirty, embed }: { instance: PluginInstance; o
   const alive = useRef(true)
   const requests = useRef(new Map<string, { controller: AbortController; finish: () => void }>())
   const eventSubscription = useRef<(() => void) | null>(null)
-  const rate = useRef({ start: Date.now(), count: 0 })
   // Snapshots follow typing; the latest one is taken at most every 150 ms and never counts as a request.
   const latestSnapshot = useRef<PluginSnapshot | null>(null)
   const snapshotTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const commands = useRef(new Map<string, { resolve: () => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> }>())
+  const commands = useRef(new Map<string, { resolve: () => void; reject: (error: Error) => void }>())
   const [snapshot, setSnapshot] = useState<PluginSnapshot>({ revision: '0', data: { files: instance.files } })
   const [proposals, setProposals] = useState<PluginProposal[]>([])
   const [appRequestIds, setAppRequestIds] = useState<string[]>([])
@@ -160,8 +157,8 @@ function PluginFrame({ instance, onDirty, embed }: { instance: PluginInstance; o
   const [review, setReview] = useState(false)
   const appRequestsQuery = useAppRequestsById(appRequestIds)
   const appRequests = appRequestsQuery.data?.requests ?? []
-  const appCall = async (method: 'call' | 'action', args: unknown, requireReview = commands.current.size > 0, signal?: AbortSignal) => {
-    const result = await pluginRequest<import('@conai/shared').PluginAppRequest | { status: 'completed'; result: unknown }>(`/instances/${instance.id}/app/${method}${requireReview ? '?review=1' : ''}`, 'POST', args, signal)
+  const appCall = async (method: 'call' | 'action', args: unknown, signal?: AbortSignal) => {
+    const result = await pluginRequest<import('@conai/shared').PluginAppRequest | { status: 'completed'; result: unknown }>(`/instances/${instance.id}/app/${method}`, 'POST', args, signal)
     if ('id' in result) {
       setAppRequestIds(ids => [...new Set([...ids, result.id])].slice(-16))
       await queryClient.invalidateQueries({ queryKey: APP_REQUESTS_KEY })
@@ -181,7 +178,7 @@ function PluginFrame({ instance, onDirty, embed }: { instance: PluginInstance; o
     for (const request of requests.current.values()) { request.controller.abort(); request.finish() }
     channel.current?.postMessage({ type: 'closed' })
     channel.current?.close(); channel.current = null
-    for (const pending of commands.current.values()) { clearTimeout(pending.timer); pending.reject(new Error('플러그인 연결이 닫혔어.')) }
+    for (const pending of commands.current.values()) pending.reject(new Error('플러그인 연결이 닫혔어.'))
     commands.current.clear()
   }, [])
   const checkConnection = useCallback(async () => {
@@ -223,13 +220,21 @@ function PluginFrame({ instance, onDirty, embed }: { instance: PluginInstance; o
     return () => { clearInterval(timer); document.removeEventListener('visibilitychange', visible); window.removeEventListener('online', check); window.removeEventListener('pageshow', check) }
   }, [checkConnection, closed])
 
-  const perform = (actionId: string, args: Record<string, ChatPageData>) => new Promise<void>((resolve, reject) => {
+  const perform = (actionId: string, args: Record<string, ChatPageData>, signal?: AbortSignal) => new Promise<void>((resolve, reject) => {
+    if (signal?.aborted) { reject(signal.reason); return }
     const port = channel.current
     if (!port || closed) { reject(new Error('플러그인 화면이 준비되지 않았어.')); return }
     const id = createRandomUuid()
-    const timer = setTimeout(() => { commands.current.delete(id); reject(new Error('플러그인 작업 제한 시간을 넘었어. 실행 상태를 확인해줘.')) }, PLUGIN_REQUEST_TIMEOUT_MS)
-    commands.current.set(id, { resolve, reject, timer })
-    port.postMessage({ type: 'action', id, actionId, args })
+    const cleanup = () => { commands.current.delete(id); signal?.removeEventListener('abort', abort) }
+    const pending = { resolve: () => { cleanup(); resolve() }, reject: (error: Error) => { cleanup(); reject(error) } }
+    const abort = () => {
+      port.postMessage({ type: 'action-cancel', id })
+      pending.reject(signal?.reason ?? new DOMException('작업을 취소했어.', 'AbortError'))
+    }
+    commands.current.set(id, pending)
+    signal?.addEventListener('abort', abort, { once: true })
+    try { port.postMessage({ type: 'action', id, actionId, args }) }
+    catch (error) { pending.reject(error instanceof Error ? error : new Error(String(error))) }
   })
   // An embedded block is part of the screen it sits on; that screen's own editor stays the chat's page.
   useChatPageRegistration(closed || embed ? null : {
@@ -241,13 +246,13 @@ function PluginFrame({ instance, onDirty, embed }: { instance: PluginInstance; o
       appRequests: appRequests.map(item => ({ requestId: item.id, label: item.label, tool: item.tool, status: item.status, jobId: item.jobId })),
       appResult,
       jobs: jobs.map(item => ({ jobId: item.jobId, proposalId: item.proposalId, status: item.status })),
-      note: 'These reviews belong to the extension host, not get_proposal_status. Only human host Apply authorizes changes.',
+      note: 'Explicit propose* reviews belong to the extension host, not get_proposal_status, and need human Apply. Direct actions execute normally.',
     } }, dirty: snapshot.dirty,
     apply: () => { throw new Error('등록된 플러그인 작업을 사용해줘.') },
-    applyAction: async (actionId, args, assertCurrent) => {
+    applyAction: async (actionId, args, assertCurrent, _nativeRevision, signal) => {
       assertCurrent()
-      if (instance.page.serverActions?.includes(actionId)) await appCall('action', { action: actionId, arguments: args, requestId: createRandomUuid() }, true)
-      else await perform(actionId, args)
+      if (instance.page.serverActions?.includes(actionId)) await appCall('action', { action: actionId, arguments: args, requestId: createRandomUuid() }, signal)
+      else await perform(actionId, args, signal)
       assertCurrent()
     },
   })
@@ -276,12 +281,9 @@ function PluginFrame({ instance, onDirty, embed }: { instance: PluginInstance; o
         snapshotTimer.current ??= setTimeout(() => { snapshotTimer.current = null; if (alive.current) takeSnapshot(latestSnapshot.current) }, 150)
         return
       }
-      if (Date.now() - rate.current.start > 1000) rate.current = { start: Date.now(), count: 0 }
-      if (++rate.current.count > 40) { stop(); setClosed(true); setBlockedFrame(true); setError('플러그인 요청이 너무 많아.'); return }
       if (message.type === 'action-result' && typeof message.id === 'string') {
         const pending = commands.current.get(message.id)
         if (!pending) return
-        clearTimeout(pending.timer); commands.current.delete(message.id)
         if (message.error) pending.reject(new Error(String(message.error).slice(0, 500)))
         else pending.resolve()
         return
@@ -294,10 +296,10 @@ function PluginFrame({ instance, onDirty, embed }: { instance: PluginInstance; o
           errorInfo: { name: result instanceof Error ? result.name : 'Error', status: result instanceof ApiRequestError ? result.status : undefined, code: result instanceof ApiRequestError ? result.code : undefined },
         } : { result }) }, transfer)
       }
-      if (requests.current.size >= (['app.cancel', 'llm.cancel'].includes(message.method ?? '') ? 5 : 4) || requests.current.has(requestId)) { respond(new ApiRequestError('실행 중인 요청이 너무 많아.', 429, 'BUSY'), true); return }
+      if (requests.current.has(requestId)) { respond(new ApiRequestError('이미 실행 중인 요청 ID야.', 409, 'DUPLICATE_REQUEST'), true); return }
       const controller = new AbortController()
-      const timeoutMs = Math.min(PLUGIN_REQUEST_TIMEOUT_MS, Math.max(1000, Number.isFinite(message.timeoutMs) ? message.timeoutMs! : PLUGIN_REQUEST_TIMEOUT_MS))
-      const timeout = setTimeout(() => controller.abort(new DOMException('요청 제한 시간을 넘었어.', 'TimeoutError')), timeoutMs)
+      const timeoutMs = Number.isFinite(message.timeoutMs) && message.timeoutMs! > 0 ? Math.min(2_147_483_647, message.timeoutMs!) : PLUGIN_REQUEST_TIMEOUT_MS
+      const timeout = timeoutMs ? setTimeout(() => controller.abort(new DOMException('요청 제한 시간을 넘었어.', 'TimeoutError')), timeoutMs) : undefined
       const finish = () => {
         clearTimeout(timeout)
         controller.signal.removeEventListener('abort', finish)
@@ -308,11 +310,7 @@ function PluginFrame({ instance, onDirty, embed }: { instance: PluginInstance; o
       let streaming = false
       const request = <T,>(suffix: string, method = 'GET', body?: unknown) => pluginRequest<T>(suffix, method, body, controller.signal)
       void (async () => {
-        if (message.method === 'app.fetch') return fetchPluginNative(instance.id, message.args, controller.signal, async (path, method, details) => {
-          if (commands.current.size === 0) return true
-          if (details.length > 32_000) throw new ApiRequestError('검토할 입력이 너무 커. 변경을 나누거나 앱 도구의 저장 제안을 사용해줘.', 413)
-          return confirm({ title: t({ ko: '플러그인의 변경 적용', en: 'Apply plugin change' }), description: <div className="space-y-2"><p>{instance.page.title} · {method} {path}</p>{details ? <CodeBlock maxHeight="sm">{details}</CodeBlock> : null}</div>, confirmLabel: t({ ko: '적용', en: 'Apply' }) })
-        })
+        if (message.method === 'app.fetch') return fetchPluginNative(instance.id, message.args, controller.signal)
         if (JSON.stringify(message.args ?? null).length > 4_500_000) throw new Error('요청이 너무 커.')
         const args = message.args as Record<string, unknown> | undefined
         if (message.method === 'app.download') {
@@ -324,7 +322,7 @@ function PluginFrame({ instance, onDirty, embed }: { instance: PluginInstance; o
           return { started: true }
         }
         if (message.method === 'app.tools') return request(`/instances/${instance.id}/app/tools`, 'POST', args ?? {})
-        if (message.method === 'app.call' || message.method === 'app.action') return appCall(message.method === 'app.call' ? 'call' : 'action', args, commands.current.size > 0, controller.signal)
+        if (message.method === 'app.call' || message.method === 'app.action') return appCall(message.method === 'app.call' ? 'call' : 'action', args, controller.signal)
         if (message.method === 'app.getRequest') return request(`/instances/${instance.id}/app/requests/${encodeURIComponent(String(args?.requestId ?? ''))}`)
         if (message.method === 'app.cancel') return request(`/instances/${instance.id}/app/requests/${encodeURIComponent(String(args?.requestId ?? ''))}/cancel`, 'POST')
         if (message.method === 'server.request') return request(`/instances/${instance.id}/server`, 'POST', { body: args?.body ?? null })
@@ -364,7 +362,7 @@ function PluginFrame({ instance, onDirty, embed }: { instance: PluginInstance; o
         if (message.method === 'events.subscribe') {
           eventSubscription.current?.()
           eventSubscription.current = args?.enabled === false ? null : createRuntimeEventStream({
-            onEnvelope: envelope => { if (!envelope.name.startsWith('chat.')) connection.port1.postMessage({ type: 'event', event: envelope }) },
+            onEnvelope: envelope => connection.port1.postMessage({ type: 'event', event: envelope }),
             onStatusChange: status => connection.port1.postMessage({ type: 'event', event: { name: 'connection', status } }),
             onResync: () => connection.port1.postMessage({ type: 'event', event: { name: 'resync' } }),
             onSessionExpired: stop,
@@ -432,7 +430,7 @@ function PluginFrame({ instance, onDirty, embed }: { instance: PluginInstance; o
   return <>
     {error ? <Alert variant="destructive" className="mb-2"><TriangleAlert /><AlertDescription>{error}</AlertDescription></Alert> : null}
     {connectionError ? <Alert variant="warning" className="mb-2"><TriangleAlert /><AlertDescription className="flex flex-wrap items-center gap-2"><span className="min-w-0 flex-1">{connectionError}</span>{closed ? null : <Button size="sm" variant="secondary" onClick={() => void checkConnection()}>{t({ ko: '다시 확인', en: 'Retry' })}</Button>}</AlertDescription></Alert> : null}
-    {blockedFrame ? null : <iframe ref={frame} title={instance.page.title} sandbox="allow-scripts" allow="autoplay" referrerPolicy="no-referrer" src={`/api/plugin-assets/${instance.plugin.id}/${instance.plugin.version}/${instance.page.entry}`} onLoad={connect} style={embed ? { height: embed.height } : undefined} className={cn('w-full rounded-sm border-0', !embed && 'h-[max(420px,calc(100dvh-var(--theme-shell-header-height)-7rem))]')} />}
+    {blockedFrame ? null : <iframe ref={frame} title={instance.page.title} allow="autoplay" referrerPolicy="no-referrer" src={`/api/plugin-assets/${instance.plugin.id}/${instance.plugin.version}/${instance.page.entry}`} onLoad={connect} style={embed ? { height: embed.height } : undefined} className={cn('w-full rounded-sm border-0', !embed && 'h-[max(420px,calc(100dvh-var(--theme-shell-header-height)-7rem))]')} />}
     {/* App operations started here report their job result back to the plugin page. */}
     {appRequests.filter(request => request.jobId).map(request => <AppRequestJob key={request.id} jobId={request.jobId!} showProgress={false} onFinished={result => { channel.current?.postMessage({ type: 'saved', proposalId: request.id, result }); setAppResult(appResultSummary(result)) }} />)}
     <PluginReviewBar

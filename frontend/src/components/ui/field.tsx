@@ -1,6 +1,7 @@
 import { useId, type ComponentProps, type ReactNode } from 'react'
 import { Info } from 'lucide-react'
 import { Tip } from '@/components/ui/tooltip'
+import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 
 interface FieldProps extends ComponentProps<'label'> {
@@ -50,11 +51,12 @@ function FieldGroup({ label, info, children, className, ...props }: FieldGroupPr
 
 /** The ⓘ icon. A real button so a tap or keyboard focus opens the tooltip; a click here never reaches the input. */
 function FieldInfo({ children }: { children: ReactNode }) {
+  const { t } = useI18n()
   return (
     <Tip content={children} side="top" align="start">
       <button
         type="button"
-        aria-label="설명"
+        aria-label={t({ ko: '설명', en: 'Description' })}
         onClick={(event) => event.preventDefault()}
         className="inline-flex shrink-0 cursor-help items-center rounded-full text-muted-foreground normal-case outline-none hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/40"
       >

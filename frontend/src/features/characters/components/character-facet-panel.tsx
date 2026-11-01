@@ -4,6 +4,7 @@ import { ToggleChip } from '@/components/ui/chip'
 import { Text } from '@/components/ui/text'
 import { useI18n } from '@/i18n'
 import type { CharacterFacetKey, CharacterLibraryFacets, CharacterSettingFilters } from '@/lib/api-character-library'
+import { localizedTagName } from '../character-library-shared'
 
 /** Values a dimension shows before "더 보기"; selected values always show. */
 const FACET_PREVIEW_COUNT = 12
@@ -44,7 +45,7 @@ export function CharacterFacetPanel({ facets, filters, onChange, loading }: {
   onChange: (filters: CharacterSettingFilters) => void
   loading: boolean
 }) {
-  const { t, formatNumber } = useI18n()
+  const { t, formatNumber, language } = useI18n()
   const labels = useFacetLabels()
   const [expanded, setExpanded] = useState<ReadonlySet<CharacterFacetKey>>(new Set())
   if (loading && !facets) return null
@@ -66,7 +67,7 @@ export function CharacterFacetPanel({ facets, filters, onChange, loading }: {
             <div className="flex flex-wrap gap-1">
               {shown.map((value) => (
                 <ToggleChip key={value.tag} size="sm" pressed={selected.includes(value.tag)} title={value.tag} onClick={() => onChange(toggleFilter(filters, dimension.key, value.tag))}>
-                  <span className="max-w-[9rem] truncate">{value.label}</span>
+                  <span className="max-w-[9rem] truncate">{localizedTagName(language, value.label, value.translated)}</span>
                   {value.count !== null ? <span className="tabular-nums opacity-70">{formatNumber(value.count)}</span> : null}
                 </ToggleChip>
               ))}

@@ -42,7 +42,7 @@ const LANGUAGES = CHAT_TRANSLATION_LANGUAGES.map((language) => language.id)
 function draftValue(key: DraftKey, value: ChatPageData, current: Draft): unknown {
   if (ZERO_CLEARS.has(key) && value === 0) return null
   if (key === 'contextTokens' && typeof value === 'number' && value < CHAT_PROFILE_LIMITS.contextTokens.min) {
-    throw new Error(`contextTokens: 0 or ${CHAT_PROFILE_LIMITS.contextTokens.min}–${CHAT_PROFILE_LIMITS.contextTokens.max}`)
+    throw new Error(`contextTokens: 0 or at least ${CHAT_PROFILE_LIMITS.contextTokens.min}`)
   }
   if (key === 'temperature' && typeof value === 'number' && value < 0) return null
   if (key === 'linkedFiles' && Array.isArray(value)) return value.map((entry) => ({ id: String((entry as Record<string, unknown>).id), write: (entry as Record<string, unknown>).write === true }))
@@ -163,8 +163,8 @@ export function useProfileEditorChatPage({ open, profile, draft, setDraft, dirty
     ...(blocks?.length ? { blockIds: pageArray(pageChoice(ids(blocks)), 20) } : {}),
     isEnabled: { type: 'boolean' },
     temperature: { ...pageNumber(-1, CHAT_PROFILE_LIMITS.temperature.max), description: '-1: default' },
-    maxTokens: { ...pageNumber(0, CHAT_PROFILE_LIMITS.maxTokens.max, true), description: '0: default; a ceiling, cut to the room left' },
-    contextTokens: { ...pageNumber(0, CHAT_PROFILE_LIMITS.contextTokens.max, true), description: `Max context (API LLM, direct and pi). 0: the server's own size (no token cap when it does not say); otherwise at least ${CHAT_PROFILE_LIMITS.contextTokens.min}, and the smaller of it and the server's size counts` },
+    maxTokens: { ...pageNumber(0, undefined, true), description: '0: server default; direct API fits to remaining context, Pi sends the configured ceiling' },
+    contextTokens: { ...pageNumber(0, undefined, true), description: `Max context (API LLM, direct and pi). 0: the server's own size (no token cap or Pi automatic compaction when unknown); otherwise at least ${CHAT_PROFILE_LIMITS.contextTokens.min}, and the smaller of it and the server's size counts` },
     reasoningBudgetTokens: { ...pageNumber(0, undefined, true), description: '0: not sent. API LLM reasoning_budget_tokens, Claude Code thinking budget' },
     visionEnabled: { type: 'boolean' },
     contentRatingMode: pageChoice(['model', 'custom']),
@@ -176,7 +176,7 @@ export function useProfileEditorChatPage({ open, profile, draft, setDraft, dirty
       suggestSlotId: { ...pageChoice([0, ...slots.map((slot) => slot.id)]), description: '0: suggestions representative model (follows chat when unset)' },
       judgeSlotId: { ...pageChoice([0, ...slots.map((slot) => slot.id)]), description: '0: preset\'s' },
     } : {}),
-    summaryTriggerTurns: pageNumber(CHAT_PROFILE_LIMITS.summaryTriggerTurns.min, CHAT_PROFILE_LIMITS.summaryTriggerTurns.max, true),
+    summaryTriggerTurns: pageNumber(CHAT_PROFILE_LIMITS.summaryTriggerTurns.min, undefined, true),
     summaryPrompt: pageText(CHAT_PROFILE_TEXT_LIMITS.summaryPrompt),
     translationModelLanguage: pageChoice(LANGUAGES),
     translationDisplayLanguage: pageChoice(LANGUAGES),
@@ -184,7 +184,7 @@ export function useProfileEditorChatPage({ open, profile, draft, setDraft, dirty
     suggestEnabled: { type: 'boolean' },
     suggestProfileId: { ...pageNumber(0, undefined, true), description: '0: none' },
     judgePresetId: { ...pageNumber(0, undefined, true), description: '0: none' },
-    contextTurns: pageNumber(CHAT_PROFILE_LIMITS.contextTurns.min, CHAT_PROFILE_LIMITS.contextTurns.max, true),
+    contextTurns: pageNumber(CHAT_PROFILE_LIMITS.contextTurns.min, undefined, true),
     loreRecursionDepth: { ...pageNumber(CHAT_PROFILE_LIMITS.loreRecursionDepth.min, CHAT_PROFILE_LIMITS.loreRecursionDepth.max, true), description: '0: off' },
     allowLoreProposals: { type: 'boolean' },
     linkedFiles: pageArray(pageObject({ id: pageText(32), write: { type: 'boolean' } }, ['id']), 20),

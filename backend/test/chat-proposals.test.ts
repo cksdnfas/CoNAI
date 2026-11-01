@@ -390,7 +390,7 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
     const { pageAction, pageNumber, pageObject, pageText } = await import('../../frontend/src/features/codex-chat/page-action-helpers')
     const schema = pageObject({
       systemPrompt: pageText(20000), appearance: pageText(20000),
-      maxTokens: pageNumber(0, 1_000_000, true), contextTokens: pageNumber(0, 4_000_000, true),
+      maxTokens: pageNumber(0, undefined, true), contextTokens: pageNumber(0, undefined, true),
     })
     const profile = { systemPrompt: 'Character traits', appearance: 'blue hair', maxTokens: 2048, contextTokens: null }
     const snapshot = normalizeChatPageSnapshot({
@@ -405,10 +405,10 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
     const draft = snapshot.actions![0]
     const patch = { systemPrompt: 'Revised character traits', appearance: 'black hair' }
     assert.deepEqual(validateChatPageArguments(draft.schema, patch), patch, 'character-only edits do not trip other schema fields')
-    assert.deepEqual(validateChatPageArguments(draft.schema, { maxTokens: 4096, contextTokens: 32000 }), { maxTokens: 4096, contextTokens: 32000 })
+    assert.deepEqual(validateChatPageArguments(draft.schema, { maxTokens: 1_500_000, contextTokens: 8_000_000 }), { maxTokens: 1_500_000, contextTokens: 8_000_000 })
     assert.deepEqual(validateChatPageArguments(draft.schema, { maxTokens: 0, contextTokens: 0 }), { maxTokens: 0, contextTokens: 0 })
     assert.throws(() => validateChatPageArguments(draft.schema, { maxTokens: 'credential' }), /허용 범위/)
-    assert.throws(() => validateChatPageArguments(draft.schema, { contextTokens: 4_000_001 }), /허용 범위/)
+    assert.throws(() => validateChatPageArguments(draft.schema, { contextTokens: Number.MAX_SAFE_INTEGER + 1 }), /허용 범위/)
     assert.equal(chatPageActionTier(draft.id), 'draft')
     assert.equal(chatPageActionTier(snapshot.actions![1].id), 'commit')
     assert.throws(() => normalizeChatPageActions('/settings', [{ ...snapshot.actions![1], effect: 'draft' }]), /저장 범위/)

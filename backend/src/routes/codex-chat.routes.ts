@@ -659,16 +659,16 @@ router.patch('/threads/:threadId/context', requireChatAccess, (req: Request, res
     let contextTurns: number | null | undefined
     if (body.contextTurns !== undefined) {
       contextTurns = body.contextTurns === null ? null : Number(body.contextTurns)
-      if (contextTurns !== null && (!Number.isSafeInteger(contextTurns) || contextTurns < 1 || contextTurns > 200)) {
-        sendRouteBadRequest(res, 'contextTurns must be 1-200 or null')
+      if (contextTurns !== null && (!Number.isSafeInteger(contextTurns) || contextTurns < 1)) {
+        sendRouteBadRequest(res, 'contextTurns must be a positive safe integer or null')
         return
       }
     }
     let maxTokens: number | null | undefined
     if (body.maxTokens !== undefined) {
       maxTokens = body.maxTokens === null ? null : Number(body.maxTokens)
-      if (maxTokens !== null && (!Number.isSafeInteger(maxTokens) || maxTokens < 1 || maxTokens > 1_000_000)) {
-        sendRouteBadRequest(res, 'maxTokens must be 1-1000000 or null')
+      if (maxTokens !== null && (!Number.isSafeInteger(maxTokens) || maxTokens < 1)) {
+        sendRouteBadRequest(res, 'maxTokens must be a positive safe integer or null')
         return
       }
     }

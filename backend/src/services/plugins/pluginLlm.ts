@@ -49,7 +49,7 @@ const inputFields = z.object({
   history: z.string().default(''), userName: z.string().trim().min(1).default('사용자'),
   useLorebooks: z.boolean().default(true), maxTokens: z.number().int().positive().max(Number.MAX_SAFE_INTEGER).optional(),
   lorebookIds: z.array(z.number().int().positive()).max(20).optional(),
-  timeoutMs: z.number().int().min(1000).max(1_800_000).optional(),
+  timeoutMs: z.number().int().positive().max(2_147_483_647).optional(),
   mode: z.enum(['text', 'profile']).optional(),
   pluginTools: z.array(z.string().regex(/^[a-z0-9_]+$/).max(64)).optional(),
   roomKey: roomKeySchema.optional(),

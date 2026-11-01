@@ -8,7 +8,7 @@ import { randomUUID } from 'node:crypto'
 import { test } from 'node:test'
 import AdmZip from 'adm-zip'
 
-test('extensions enforce package, caller, approval and opaque-origin boundaries', { timeout: 60000 }, async (t) => {
+test('trusted extensions preserve package, caller, explicit approval and external-origin boundaries', { timeout: 60000 }, async (t) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'conai-plugin-test-'))
   process.env.RUNTIME_BASE_PATH = path.join(root, '.private')
   for (const part of ['DATABASE', 'UPLOADS', 'LOGS', 'TEMP', 'SAVE', 'CANVAS', 'ARTIFACTS', 'MODELS', 'CUSTOM_NODES', 'RECYCLE_BIN']) process.env[`RUNTIME_${part}_DIR`] = path.join(root, part.toLowerCase())
@@ -26,11 +26,14 @@ test('extensions enforce package, caller, approval and opaque-origin boundaries'
   const host = await import('../src/services/plugins/pluginHost')
   const { pluginDb } = await import('../src/services/plugins/pluginStore')
   const shared = await import('@conai/shared')
-  await t.test('native API paths cannot leave feature routes or reach credentials', () => {
+  await t.test('native API paths reach all app routes without crossing origins or forging identity', () => {
     const origins = ['http://localhost:1677', 'http://localhost:1666']
     assert.equal(shared.pluginNativeApiPath('http://localhost:1666/api/files?limit=20', origins), '/api/files?limit=20')
     assert.equal(shared.pluginNativeApiPath('/api/codex-chat/admin/profiles/1', origins), '/api/codex-chat/admin/profiles/1')
-    for (const value of ['https://outside.invalid/api/files', '//outside.invalid/api/files', '/api/auth/status', '/api/settings/llm', '/api/codex-chat/admin/external-mcp', '/api/plugins/x/enabled', '/api/files/../auth', '/api/files/%2e%2e/auth', '/api/files/%252e%252e/auth', '/api/files/..%2fauth']) {
+    for (const value of ['/api/auth/status', '/api/settings/llm', '/api/codex-chat/admin/external-mcp', '/api/plugins/x/enabled', '/api/future-feature/run']) assert.equal(shared.pluginNativeApiPath(value, origins), value)
+    assert.equal(shared.pluginNativeApiHeaders({ 'Last-Event-ID': 'cursor', 'X-CoNAI-Plugin-Host': '1' }).get('last-event-id'), 'cursor')
+    for (const name of ['Authorization', 'Cookie', 'Host', 'Origin', 'X-Forwarded-For', 'X-CoNAI-Plugin-Call']) assert.throws(() => shared.pluginNativeApiHeaders({ [name]: 'forged' }))
+    for (const value of ['https://outside.invalid/api/files', '//outside.invalid/api/files', '/uploads/a', '/api/files/../auth', '/api/files/%2e%2e/auth', '/api/files/%252e%252e/auth', '/api/files/..%2fauth']) {
       assert.throws(() => shared.pluginNativeApiPath(value, origins), value)
     }
   })
@@ -54,6 +57,12 @@ test('extensions enforce package, caller, approval and opaque-origin boundaries'
   const zip = new AdmZip()
   zip.addLocalFolder(path.resolve(__dirname, '../../plugins/text-editor'))
   zip.addLocalFile(path.resolve(__dirname, '../../plugins/sdk/conai-plugin.js'))
+  const manifest = JSON.parse(zip.readAsText('plugin.json'))
+  manifest.pages[0].actions.push(
+    { id: 'text-editor.direct', label: 'Direct save', description: '', effect: 'save', tier: 'direct', schema: { type: 'object', properties: { path: { type: 'string' }, url: { type: 'string' }, code: { type: 'string' } }, required: ['path', 'url', 'code'] } },
+    { id: 'text-editor.commit', label: 'Reviewed save', description: '', effect: 'save', tier: 'commit', schema: { type: 'object', properties: {} } },
+  )
+  zip.updateFile('plugin.json', Buffer.from(JSON.stringify(manifest)))
   const bytes = zip.toBuffer()
 
   await t.test('installed packages begin disabled and reject unsafe contracts and paths', async () => {
@@ -75,14 +84,13 @@ test('extensions enforce package, caller, approval and opaque-origin boundaries'
     await registry.setPluginEnabled('text-editor', true)
   })
   let instance = host.openPluginInstance('text-editor', 'editor', [file.id], alice)
-  await t.test('reload closes do not exhaust slots and expired leases cannot be revived', () => {
+  await t.test('connection leases stay session-bound and expired leases cannot be revived', () => {
     const caller = { ...alice, sessionId: 'lease-test' }
     for (let index = 0; index < 16; index++) {
       const opened = host.openPluginInstance('text-editor', 'editor', [file.id], caller)
       host.closePluginInstance(opened.id, caller)
     }
-    const slots = Array.from({ length: 12 }, () => host.openPluginInstance('text-editor', 'editor', [file.id], caller))
-    assert.throws(() => host.openPluginInstance('text-editor', 'editor', [file.id], caller), /너무 많아/)
+    const slots = Array.from({ length: 16 }, () => host.openPluginInstance('text-editor', 'editor', [file.id], caller))
     const soon = Date.now() + 1000
     pluginDb().prepare('UPDATE plugin_instances SET expires_at = ? WHERE id = ?').run(soon, slots[0].id)
     assert.ok(host.renewPluginInstance(slots[0].id, caller).expiresAt > soon)
@@ -190,9 +198,14 @@ test('extensions enforce package, caller, approval and opaque-origin boundaries'
     let dispatched = 0
     const unsubscribe = subscribeToRuntimeEvents(event => {
       if (event.name !== 'chat.page.command') return
-      const payload = event.payload as { commandId: string; actionId: string; tier: string }
-      assert.equal(payload.actionId, 'text-editor.replace')
-      assert.equal(payload.tier, 'draft')
+      const payload = event.payload as { commandId: string; actionId: string; tier: string; revision?: string }
+      if (payload.actionId === 'text-editor.direct') {
+        assert.equal(payload.tier, 'direct')
+        assert.equal(payload.revision, page.revision)
+      } else {
+        assert.equal(payload.actionId, 'text-editor.replace')
+        assert.equal(payload.tier, 'draft')
+      }
       dispatched++
       resolveChatPageCommand(requester, payload.commandId, { ok: true, page })
     })
@@ -205,6 +218,13 @@ test('extensions enforce package, caller, approval and opaque-origin boundaries'
       assert.equal(leave.isError, true)
       assert.match(JSON.stringify(leave), /저장하지 않은 변경/)
       assert.equal(dispatched, 1, 'dirty editor cannot dispatch a view action that loses its draft')
+      const direct = await client.callTool({ name: 'page_act', arguments: { action: 'text-editor.direct', arguments: { path: 'project/main.js', url: 'https://example.invalid/reference', code: 'export const answer = 42' } } })
+      assert.notEqual(direct.isError, true, JSON.stringify(direct))
+      assert.equal(dispatched, 2, 'an installed direct action dispatches with its current revision')
+      const commit = await client.callTool({ name: 'page_act', arguments: { action: 'text-editor.commit' } })
+      assert.equal(commit.isError, true)
+      assert.match(JSON.stringify(commit), /propose_page_action/)
+      assert.equal(dispatched, 2, 'a commit action still needs its review card')
     } finally { unsubscribe(); releaseReply(); await client.close(); await server.close() }
   })
   await t.test('extension result deltas preserve changed, removed and newly opened document state', async () => {
@@ -404,6 +424,9 @@ test('extensions enforce package, caller, approval and opaque-origin boundaries'
     const parsed = (await registry.installPlugin(packageZip.toBuffer())).plugin; await registry.setPluginEnabled('app-workbench', true)
     sub.after(async () => { if (registry.listPlugins(true).some(plugin => plugin.manifest.id === 'app-workbench')) await registry.removePlugin('app-workbench') })
     assert.equal(parsed.manifest.pages[0].actions.length, 7, 'server actions supply browser schemas automatically')
+    assert.equal(parsed.manifest.pages[0].actions.find(action => action.id === 'app-workbench.create_group')?.tier, 'commit')
+    const directActions = registry.parsePluginManifest({ ...parsed.manifest, serverActions: parsed.manifest.serverActions!.map(action => ({ ...action, tier: undefined })) })
+    assert.equal(directActions.pages[0].actions.find(action => action.id === 'app-workbench.create_group')?.tier, 'direct')
     assert.doesNotThrow(() => registry.parsePluginManifest({ ...parsed.manifest, appTools: undefined, capabilities: undefined }), 'native actions need no duplicate permission declarations')
     assert.doesNotThrow(() => registry.parsePluginManifest({ ...parsed.manifest, appTools: ['read_file_text'] }))
     // A retired native handler drops its action, while legacy declaration metadata stays readable.
@@ -519,7 +542,7 @@ test('extensions enforce package, caller, approval and opaque-origin boundaries'
     instance = host.openPluginInstance('text-editor', 'editor', [file.id], alice)
     assert.equal(host.readPluginFile(instance.id, file.id, alice).text, 'newer')
   })
-  await t.test('opaque-origin assets bypass only credentialed CORS, never host approvals', async () => {
+  await t.test('installed assets are trusted documents while external origins cannot call the host', async () => {
     const express = (await import('express')).default
     const { configureAppMiddleware } = await import('../src/startup/configureAppMiddleware')
     const pluginRoutes = (await import('../src/routes/plugins.routes')).default
@@ -542,10 +565,7 @@ test('extensions enforce package, caller, approval and opaque-origin boundaries'
         assert.ok(hostResponse.status >= 400)
       }
       const document = await fetch(`${origin}/api/plugin-assets/text-editor/1.0.0/index.html`)
-      assert.match(document.headers.get('content-security-policy')!, /sandbox allow-scripts/)
-      // A page may fetch its own package files (data, wasm) and nothing else.
-      assert.match(document.headers.get('content-security-policy')!, /connect-src http:\/\/[^ ;]+\/api\/plugin-assets\/text-editor\/1\.0\.0\/;/)
-      assert.ok(!document.headers.get('content-security-policy')!.includes('allow-same-origin'))
+      assert.match(document.headers.get('content-security-policy')!, /frame-ancestors 'self'/)
       assert.equal((await fetch(`${origin}/api/plugins/instances/${instance.id}`)).status, 403)
       assert.equal((await fetch(`${origin}/api/plugins/instances/${instance.id}`, { headers: { 'X-CoNAI-Plugin-Host': '1' } })).status, 200)
       assert.equal((await fetch(`${origin}/api/plugins/instances/${instance.id}/renew`, { method: 'POST', headers: { 'X-CoNAI-Plugin-Host': '1', Origin: 'null' } })).status, 403)
@@ -573,8 +593,6 @@ test('extensions enforce package, caller, approval and opaque-origin boundaries'
     const page = host.openPluginInstance('text-editor', 'editor', [], alice)
     const call = (method: string, suffix: string, body: unknown) => fetch(`${origin}/api/plugins/instances/${page.id}/previews${suffix}`, { method, headers: { 'X-CoNAI-Plugin-Host': '1', 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
     try {
-      const pageDocument = await fetch(`${origin}/api/plugin-assets/text-editor/1.0.0/index.html`)
-      assert.ok(pageDocument.headers.get('content-security-policy')!.includes(`frame-src ${origin}/api/plugin-media/preview/;`))
       const files = { 'pic.png': { source: 'files', fileId: picture.id }, 'lib/main.js': { source: 'package', path: 'main.js' } }
       const created = await call('POST', '', { html: '<img src="pic.png"><script src="lib/main.js"></script>', files })
       assert.equal(created.status, 200)

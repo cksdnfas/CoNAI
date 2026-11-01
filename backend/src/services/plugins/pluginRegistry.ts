@@ -17,7 +17,7 @@ export const pluginIdSchema = z.string().regex(/^[a-z][a-z0-9-]{1,47}$/)
 const reserved = new Set(['page', 'page-settings', 'files', 'workspace', 'library', 'settings', 'profile', 'resource', 'chat', 'audio', 'sprite', 'upload', 'posts', 'wallpaper', 'metadata', 'prompt', 'preset', 'wildcard', 'group', 'media', 'nai', 'comfy', 'workflow'])
 const actionSchema = z.object({
   id: z.string().max(110), label: z.string().min(1).max(160), description: z.string().max(1000),
-  effect: z.literal('draft'), tier: z.enum(['view', 'draft']), schema: z.unknown(),
+  effect: z.enum(['draft', 'save']), tier: z.enum(['view', 'draft', 'direct', 'commit']), schema: z.unknown(),
 }).strict()
 const surfacesSchema = z.array(z.enum(GENERATION_LAYOUT_SURFACES as [string, ...string[]])).min(1).max(GENERATION_LAYOUT_SURFACES.length)
 const manifestSchema = z.object({
@@ -25,13 +25,13 @@ const manifestSchema = z.object({
   version: z.string().regex(/^\d{1,4}\.\d{1,4}\.\d{1,4}$/), description: z.string().max(1000),
   capabilities: z.array(z.enum(['files.read', 'files.write', 'files.media', 'workspace.read', 'workspace.write', 'workspace.media', 'media.process', 'server'])).max(8).default([]),
   server: z.object({ entry: z.string().min(1).max(200) }).strict().optional(),
-  appTools: z.array(z.string().regex(/^[a-z][a-z0-9_]{1,63}$/)).max(128).optional(),
-  serverActions: z.array(z.object({ id: z.string().max(100), label: z.string().min(1).max(160), description: z.string().max(1000), schema: z.unknown(), tool: z.string().max(64), arguments: z.record(z.string(), z.unknown()).optional() }).strict()).max(64).optional(),
+  appTools: z.array(z.string().regex(/^[a-z][a-z0-9_]{1,63}$/)).optional(),
+  serverActions: z.array(z.object({ id: z.string().max(100), label: z.string().min(1).max(160), description: z.string().max(1000), schema: z.unknown(), tool: z.string().max(64), tier: z.enum(['direct', 'commit']).optional(), arguments: z.record(z.string(), z.unknown()).optional() }).strict()).optional(),
   pages: z.array(z.object({
     id: pluginIdSchema, title: z.string().min(1).max(160), entry: z.string().min(1).max(200),
-    accepts: z.array(z.string().regex(/^\.[a-z0-9]{1,16}$/)).max(40), actions: z.array(actionSchema).max(26), serverActions: z.array(z.string().max(100)).max(26).optional(),
+    accepts: z.array(z.string().regex(/^\.[a-z0-9]{1,16}$/)).max(40), actions: z.array(actionSchema), serverActions: z.array(z.string().max(100)).optional(),
     menu: z.boolean().optional(), icon: z.enum(PLUGIN_PAGE_ICONS).optional(),
-  }).strict()).min(1).max(12),
+  }).strict()).min(1),
   generation: z.object({
     blocks: z.array(z.object({ id: pluginIdSchema, page: pluginIdSchema, surfaces: surfacesSchema, height: z.number().int().min(120).max(1200).optional() }).strict()).max(8).default([]),
     actions: z.array(z.object({ id: pluginIdSchema, label: z.string().min(1).max(40), surfaces: surfacesSchema }).strict()).max(8).default([]),
@@ -78,15 +78,12 @@ export function parsePluginManifest(value: unknown, stored = false): PluginManif
     const ids = new Set<string>()
     const referenced = new Set(page.serverActions ?? [])
     if (referenced.size !== (page.serverActions ?? []).length || [...referenced].some(id => !actionIds.has(id))) throw new PluginError('페이지의 서버 작업 참조를 확인해줘.')
-    const actions = [...page.actions.filter(action => !referenced.has(action.id)), ...serverActions.filter(action => referenced.has(action.id)).map(action => ({ id: action.id, label: action.label, description: action.description, schema: action.schema, effect: 'draft' as const, tier: pluginAppToolScope(action.tool) === 'read' ? 'view' as const : 'draft' as const }))]
-    if (actions.length > 26) throw new PluginError('페이지 작업은 26개까지 등록할 수 있어.')
-    return { ...page, actions: actions.map((action) => {
+    const actions = [...page.actions.filter(action => !referenced.has(action.id)), ...serverActions.filter(action => referenced.has(action.id)).map(action => ({ id: action.id, label: action.label, description: action.description, schema: action.schema, effect: pluginAppToolScope(action.tool) === 'read' ? 'draft' as const : 'save' as const, tier: pluginAppToolScope(action.tool) === 'read' ? 'view' as const : action.tier ?? 'direct' as const }))]
+    for (const action of actions) {
       if (!action.id.startsWith(`${raw.id}.`) || !/^[a-z][a-z0-9-]*\.[a-z][a-z0-9_]{0,47}$/.test(action.id) || ids.has(action.id)) throw new PluginError('페이지 작업 ID가 올바르지 않아.')
       ids.add(action.id)
-      const schema = normalizeChatPageSchema(action.schema)
-      if (schema.type !== 'object') throw new PluginError('작업 입력은 객체여야 해.')
-      return { ...action, schema }
-    }) }
+    }
+    return { ...page, actions: normalizeChatPageActions(`/ext/${raw.id}/${page.id}`, actions) }
   }) }
 }
 /** Layout blocks show one of the package's pages; Generate-bar buttons need a server module to answer them. */

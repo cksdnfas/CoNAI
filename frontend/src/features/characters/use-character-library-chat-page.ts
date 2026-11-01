@@ -3,7 +3,7 @@ import { useChatPageRegistration, type WorkflowUndo } from '@/features/codex-cha
 import { pageAction, pageArray, pageChoice, pageNumber, pageObject, pageRecord, pageText } from '@/features/codex-chat/page-action-helpers'
 import { useI18n } from '@/i18n'
 import { fillCharacterAppearance, type CharacterFacetKey, type CharacterFolder, type CharacterLibraryFacets, type CharacterSettingFilters, type CharacterSettingPage, type CharacterSettingSort } from '@/lib/api-character-library'
-import type { SettingDraft } from './character-library-shared'
+import { localizedTagName, type SettingDraft } from './character-library-shared'
 import type { CharacterSettingEditorState } from './use-character-setting-editor'
 
 /** Tags per dimension the page data lists as filter choices (the most common first). */
@@ -41,7 +41,7 @@ export function useCharacterLibraryChatPage({ folders, folderId, path, subfolder
   renameFolder: (folder: CharacterFolder, name: string) => Promise<unknown>
   moveFolder: (folder: CharacterFolder, parentId: number | null) => Promise<unknown>
 }) {
-  const { t } = useI18n()
+  const { t, language } = useI18n()
   const { base, draft, ready } = editor
   const targetSettingId = editor.target && 'settingId' in editor.target ? editor.target.settingId : null
   const byId = new Map(folders.map((folder) => [folder.id, folder]))
@@ -80,7 +80,7 @@ export function useCharacterLibraryChatPage({ folders, folderId, path, subfolder
       sort,
       favoriteOnly,
       filters: filters as Record<string, ChatPageData>,
-      filterChoices: facets?.available ? facets.dimensions.map((dimension) => ({ key: dimension.key, values: dimension.values.slice(0, FACET_CHOICE_LIMIT).map((value) => ({ tag: value.tag, label: value.label, count: value.count ?? 0 })) })) : null,
+      filterChoices: facets?.available ? facets.dimensions.map((dimension) => ({ key: dimension.key, values: dimension.values.slice(0, FACET_CHOICE_LIMIT).map((value) => ({ tag: value.tag, label: localizedTagName(language, value.label, value.translated), count: value.count ?? 0 })) })) : null,
       folder: { id: folderId ?? 0, path: path.map((folder) => folder.name) },
       subfolders: query ? [] : subfolders.slice(0, FOLDER_LIMIT).map((folder) => ({ id: folder.id, name: folder.name, settingCount: folder.settingCount })),
       folders: listed.map((folder) => ({ id: folder.id, name: folder.name, parentId: folder.parentId ?? 0 })),

@@ -1,7 +1,7 @@
 import crypto from 'node:crypto'
 import { createServer } from 'node:http'
 import type { Express, NextFunction, Request, Response } from 'express'
-import { pluginNativeApiPath } from '@conai/shared'
+import { pluginNativeApiHeaders, pluginNativeApiPath } from '@conai/shared'
 import type { McpRequester } from '../../mcp/context'
 import { AuthAccount } from '../../models/AuthAccount'
 import { hasConfiguredAuth } from '../auth/sessionAccess'
@@ -11,17 +11,16 @@ import { PluginError } from './pluginStore'
 
 /**
  * `conai.app.fetch` for server modules: the same native feature routes a plugin page reaches with `api.app.fetch`
- * (`PLUGIN_NATIVE_API_ROOTS`), run as the account the call belongs to. The host sends the request through its own
+ * (all `/api` routes), run as the account the call belongs to. The host sends the request through its own
  * Express app on a private loopback port with a one-time grant bound to that account, method and exact path; the
  * grant becomes a request-only session (never stored, no cookie), so every route keeps its own permission, ownership,
- * revision and body checks. Login, credentials and server administration stay outside, as for pages.
+ * revision and body checks. Administrator routes still require the calling account to be an administrator.
  */
 const CALL_HEADER = 'x-conai-plugin-call'
 const GRANT_TTL_MS = 10 * 60_000
 /** The response is buffered for the worker: a host memory bound, not an API rule. Media goes through conai.media. */
 const RESPONSE_MAX_BYTES = 64 * 1024 * 1024
 const METHODS = new Set(['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE'])
-const HEADERS = new Set(['accept', 'content-type', 'if-match', 'if-none-match', 'range'])
 const NULL_BODY = new Set([101, 103, 204, 205, 304])
 
 type Grant = { accountId: number | null; method: string; path: string; expiresAt: number }
@@ -108,10 +107,11 @@ export async function callPluginServerNative(requester: McpRequester | undefined
   if (input.headers !== undefined) {
     if (!input.headers || typeof input.headers !== 'object' || Array.isArray(input.headers)) throw new PluginError('headers는 이름과 문자열 값의 객체로 보내줘.', 400)
     for (const [name, value] of Object.entries(input.headers)) {
-      if (!HEADERS.has(name.toLowerCase()) || typeof value !== 'string' || value.length > 1000) throw new PluginError('이 요청 헤더는 사용할 수 없어.', 400)
+      if (typeof value !== 'string') throw new PluginError('요청 헤더 값은 문자열이어야 해.', 400)
       headers[name] = value
     }
   }
+  try { pluginNativeApiHeaders(headers) } catch (error) { throw new PluginError(error instanceof Error ? error.message : String(error), 400) }
   const body = requestBody(input.body)
   if ((method === 'GET' || method === 'HEAD') && body !== undefined) throw new PluginError('조회 요청에는 본문을 넣을 수 없어.', 400)
   const token = crypto.randomBytes(32).toString('base64url')

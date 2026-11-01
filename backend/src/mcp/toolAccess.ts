@@ -8,6 +8,7 @@ import { isAgentRoom } from '../services/codex-chat/chatRoomWake';
 import { isProposalTool } from '../services/codex-chat/codexChatMedia';
 import { BoardCallRooms } from '../services/posts/boardCallRooms';
 import { validateMcpToolArguments } from './requestSecurity';
+import { currentMcpChatPage } from './context';
 import { findExternalMcpTool } from '../services/externalMcp/externalMcpServers';
 import { findPluginServerTool } from '../services/plugins/pluginServerTools';
 import { CHAT_BLOCKED_TOOLS, CHAT_PAGE_TOOLS, CHAT_ROOM_TOOLS, CHAT_SETTINGS_TOOLS, CHAT_VISION_BUILTIN_TOOLS, GENERATION_PRESET_BLOCKED_TOOLS, GROUP_ONLY_CHAT_TOOLS, isPublicChatPage, getMcpToolScope, isChatGenerationTool, isChatMcpSource, isConnectedChatPageTool, isMcpToolAllowed, type McpRequestContext, type McpRequester } from './context';
@@ -247,7 +248,8 @@ export function requireMcpToolAccess(context: McpRequestContext, toolName: strin
     requireChatMcpAccountAccess(context, toolName);
     if (execution !== 'queued') {
       if (execution === 'reply') requireActiveChatReply(context.chatContext);
-      validateMcpToolArguments(params, () => requireRequesterPermission(context.requester, 'images.view'), findExternalMcpTool(toolName) !== null || findPluginServerTool(toolName) !== null);
+      const pluginPageAction = (toolName === 'page_act' || toolName === 'propose_page_action') && currentMcpChatPage(context)?.kind === 'extension';
+      validateMcpToolArguments(params, () => requireRequesterPermission(context.requester, 'images.view'), pluginPageAction || findExternalMcpTool(toolName) !== null || findPluginServerTool(toolName) !== null);
     }
   }
   // An account's groups, or an HTTP MCP key's group: permissions only ever come from permission groups.

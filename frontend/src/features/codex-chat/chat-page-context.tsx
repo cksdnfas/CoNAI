@@ -3,7 +3,7 @@ import { type PageSettingsScopeId } from '@conai/shared'
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type PropsWithChildren, type ReactNode } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Monitor } from 'lucide-react'
-import { CHAT_PAGE_ACTION_LIMITS, CHAT_PAGE_ACTION_PERMISSIONS, chatPageActionAllowed, normalizeChatPageValue, chatPageActionLeavesScreen, chatPageActionTier, chatPagePatch, chatPagePermission, chatPageTarget, validateChatPageArguments, type ChatPageCommandEvent, normalizeChatPageSnapshot, requireChatPageTarget, requireChatPageActionState, type ChatPageAction, type ChatPageData, type ChatPageField, type ChatPageSnapshot, type ChatPageValue, type ChatProposal, type ChatWorkflowSnapshot } from '@conai/shared'
+import { CHAT_PAGE_ACTION_PERMISSIONS, chatPageActionAllowed, normalizeChatPageValue, chatPageActionLeavesScreen, chatPageActionTier, chatPagePatch, chatPagePermission, chatPageTarget, validateChatPageArguments, type ChatPageCommandEvent, normalizeChatPageSnapshot, requireChatPageTarget, requireChatPageActionState, type ChatPageAction, type ChatPageData, type ChatPageField, type ChatPageSnapshot, type ChatPageValue, type ChatProposal, type ChatWorkflowSnapshot } from '@conai/shared'
 import { Tip } from '@/components/ui/tooltip'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
@@ -26,7 +26,7 @@ type PageProposal = Extract<ChatProposal, { kind: 'page_fields' }>
 export type PageActionProposal = Extract<ChatProposal, { kind: 'page_action' }>
 export type WorkflowPageProposal = Extract<ChatProposal, { kind: 'workflow_graph' }>
 export type WorkflowUndo = { isCurrent: () => boolean; restore: () => void }
-type Editor = { instanceId: string; path: string; title: string; kind: ChatPageSnapshot['kind']; resourceId: string | null; fields: ChatPageField[]; workflow?: ChatWorkflowSnapshot; revision?: string; inputRevision?: string; actions?: ChatPageAction[]; data?: Record<string, ChatPageData>; priority?: number; dirty?: boolean; apply: (patch: Record<string, ChatPageValue>) => void; applyWorkflow?: (proposal: WorkflowPageProposal) => WorkflowUndo; applyAction?: (id: string, args: Record<string, ChatPageData>, assertCurrent: () => void, nativeRevision?: string) => Promise<WorkflowUndo | void> | WorkflowUndo | void }
+type Editor = { instanceId: string; path: string; title: string; kind: ChatPageSnapshot['kind']; resourceId: string | null; fields: ChatPageField[]; workflow?: ChatWorkflowSnapshot; revision?: string; inputRevision?: string; actions?: ChatPageAction[]; data?: Record<string, ChatPageData>; priority?: number; dirty?: boolean; apply: (patch: Record<string, ChatPageValue>) => void; applyWorkflow?: (proposal: WorkflowPageProposal) => WorkflowUndo; applyAction?: (id: string, args: Record<string, ChatPageData>, assertCurrent: () => void, nativeRevision?: string, signal?: AbortSignal) => Promise<WorkflowUndo | void> | WorkflowUndo | void }
 type PageApi = {
   snapshot: ChatPageSnapshot | null
   available: boolean
@@ -115,27 +115,26 @@ function withNavigation(editor: Editor | null, navigation: Editor | undefined): 
   const additions = (navigation?.actions ?? []).filter((action) => !(editor?.actions ?? []).some((own) => own.id === action.id))
   if (!editor || !navigation || !additions.length || editor === navigation) return editor
   const actions = editor.actions ?? []
-  if (actions.length + additions.length > CHAT_PAGE_ACTION_LIMITS.actions) return editor
   const own = editor.applyAction
   return {
     ...editor,
     actions: [...actions, ...additions],
-    applyAction: (id, args, assertCurrent, nativeRevision) => {
-      if (additions.some((action) => action.id === id)) return navigation.applyAction?.(id, args, assertCurrent)
+    applyAction: (id, args, assertCurrent, nativeRevision, signal) => {
+      if (additions.some((action) => action.id === id)) return navigation.applyAction?.(id, args, assertCurrent, nativeRevision, signal)
       if (!own) throw new Error('페이지 작업 편집기가 닫혔어.')
-      return own(id, args, assertCurrent, nativeRevision)
+      return own(id, args, assertCurrent, nativeRevision, signal)
     },
   }
 }
 
 /** The one way a registered operation runs, for chat commands and the command palette alike. */
-async function runRegisteredAction(editor: Editor, actionId: string, tier: 'view' | 'draft' | 'direct', input: unknown, assertCurrent: () => void) {
+async function runRegisteredAction(editor: Editor, actionId: string, tier: 'view' | 'draft' | 'direct', input: unknown, assertCurrent: () => void, signal?: AbortSignal) {
   const action = editor.actions?.find((item) => item.id === actionId)
   if (!action || chatPageActionTier(action.id, action) === 'commit' || chatPageActionTier(action.id, action) !== tier) throw new Error('이 화면에서 바로 실행할 수 없는 작업이야.')
   if (chatPageActionLeavesScreen(action.id, action) && editor.dirty) throw new Error('저장하지 않은 변경이 있어. 사용자가 저장하거나 버린 뒤에 다시 해.')
   const args = validateChatPageArguments(action.schema, input) as Record<string, ChatPageData>
   if (!editor.applyAction) throw new Error('페이지 작업 편집기가 닫혔어.')
-  return { action, undo: await editor.applyAction(action.id, args, assertCurrent) }
+  return { action, undo: await editor.applyAction(action.id, args, assertCurrent, undefined, signal) }
 }
 
 const NO_ACTIONS: ChatPageAction[] = []
@@ -180,9 +179,9 @@ export function ChatPageProvider({ children }: PropsWithChildren) {
     // The run screen's own operations (workflow.run) stay with it; the browser's (workflow.select) go to the browser.
     const browserActions = new Set((workflowBrowser.actions ?? []).map((action) => action.id))
     const runner = primaryEditor.applyAction
-    return withNavigation({ ...primaryEditor, actions: [...(primaryEditor.actions ?? []), ...(workflowBrowser.actions ?? [])], data: { ...workflowBrowser.data, ...primaryEditor.data }, applyAction: (id, args, assertCurrent, nativeRevision) => {
-      if (browserActions.has(id) || !runner) return workflowBrowser.applyAction?.(id, args, assertCurrent, nativeRevision)
-      return runner(id, args, assertCurrent, nativeRevision)
+    return withNavigation({ ...primaryEditor, actions: [...(primaryEditor.actions ?? []), ...(workflowBrowser.actions ?? [])], data: { ...workflowBrowser.data, ...primaryEditor.data }, applyAction: (id, args, assertCurrent, nativeRevision, signal) => {
+      if (browserActions.has(id) || !runner) return workflowBrowser.applyAction?.(id, args, assertCurrent, nativeRevision, signal)
+      return runner(id, args, assertCurrent, nativeRevision, signal)
     } }, navigation)
   }, [primaryEditor, workflowBrowser, navigation])
   const [commandWatchers, setCommandWatchers] = useState(0)
@@ -212,7 +211,8 @@ export function ChatPageProvider({ children }: PropsWithChildren) {
     })
   }, [])
   const handledCommands = useRef(new Set<string>())
-  const activeCommands = useRef(new Set<string>())
+  const activeCommands = useRef(new Map<string, AbortController>())
+  const actionControllers = useRef(new Map<number, AbortController>())
   const cancelledCommands = useRef(new Set<string>())
   const snapshot = useMemo<ChatPageSnapshot | null>(() => enabled && connection ? {
     instanceId: activeEditor?.instanceId ?? instanceId, connectionId: connection.id, path: location.pathname, title,
@@ -313,7 +313,9 @@ export function ChatPageProvider({ children }: PropsWithChildren) {
     const state = statesRef.current.get(proposal.id)
     if (undo ? state !== 'applied' : !!state || proposal.saved) throw new Error('이미 처리한 제안이야.')
     let checked = proposal
+    const controller = new AbortController()
     const assertCurrent = () => {
+      controller.signal.throwIfAborted()
       const live = current.current
       if (!live.snapshot || !live.editor?.applyAction) throw new Error('페이지 연결이나 편집기가 닫혔어.')
       requireChatPageTarget(live.snapshot, checked.page)
@@ -322,13 +324,14 @@ export function ChatPageProvider({ children }: PropsWithChildren) {
     }
     assertCurrent()
     busy.current.add(proposal.id)
+    actionControllers.current.set(proposal.id, controller)
     try {
       const authorized = await checkChatPageProposal(proposal, undo)
       checked = authorized
       assertCurrent()
       if (undo) { actionUndos.current.get(proposal.id)!.restore(); actionUndos.current.delete(proposal.id) }
       else {
-        const record = await current.current.editor!.applyAction!(authorized.action.id, authorized.arguments, assertCurrent, authorized.nativeRevision)
+        const record = await current.current.editor!.applyAction!(authorized.action.id, authorized.arguments, assertCurrent, authorized.nativeRevision, controller.signal)
         if (record && authorized.action.effect === 'draft') actionUndos.current.set(proposal.id, record)
       }
       statesRef.current = new Map(statesRef.current).set(proposal.id, undo ? 'undone' : 'applied')
@@ -337,9 +340,16 @@ export function ChatPageProvider({ children }: PropsWithChildren) {
         try { await acknowledgeChatPageProposal(authorized) }
         catch { showSnackbar({ message: t({ ko: '작업은 적용했어. 채팅의 적용 상태는 기록하지 못했어.', en: 'The operation was applied, but its chat receipt could not be saved.' }), tone: 'error' }) }
       }
-    } finally { busy.current.delete(proposal.id) }
+    } finally { busy.current.delete(proposal.id); actionControllers.current.delete(proposal.id) }
   }, [showSnackbar, t])
   const connectionId = enabled ? connection?.id ?? null : null
+  useEffect(() => {
+    const commands = activeCommands.current, actions = actionControllers.current
+    return () => {
+      for (const controller of commands.values()) controller.abort()
+      for (const controller of actions.values()) controller.abort()
+    }
+  }, [connectionId])
   const connectionRef = useRef(connectionId)
   useLayoutEffect(() => { connectionRef.current = connectionId })
   const record = useCallback((entry: Omit<ChatPageActivity, 'at' | 'state'>) => {
@@ -355,13 +365,17 @@ export function ChatPageProvider({ children }: PropsWithChildren) {
   const runCommand = useCallback(async (event: ChatPageCommandEvent) => {
     if (event.type === 'cancel') {
       if (event.connectionId !== connectionRef.current) return
-      if (activeCommands.current.has(event.commandId)) cancelledCommands.current.add(event.commandId)
+      if (activeCommands.current.has(event.commandId)) {
+        cancelledCommands.current.add(event.commandId)
+        activeCommands.current.get(event.commandId)!.abort()
+      }
       handledCommands.current.add(event.commandId)
       return
     }
     if (event.connectionId !== connectionRef.current || event.expiresAt < Date.now() || handledCommands.current.has(event.commandId)) return
     handledCommands.current.add(event.commandId)
-    activeCommands.current.add(event.commandId)
+    const controller = new AbortController()
+    activeCommands.current.set(event.commandId, controller)
     if (event.type !== 'capture') {
       if (drivingTimer.current !== null) window.clearTimeout(drivingTimer.current)
       setDriving(true)
@@ -389,7 +403,7 @@ export function ChatPageProvider({ children }: PropsWithChildren) {
       }
       if (event.type === 'action') {
         if (event.tier === 'direct' && (!event.revision || live.snapshot.revision !== event.revision)) throw new Error('그사이 화면이나 선택이 바뀌었어. get_current_page로 다시 읽고 요청해줘.')
-        const { action, undo } = await runRegisteredAction(live.editor, event.actionId, event.tier, event.arguments, assertCurrent)
+        const { action, undo } = await runRegisteredAction(live.editor, event.actionId, event.tier, event.arguments, assertCurrent, controller.signal)
         record({ id: event.commandId, threadId: event.threadId, label: action.label, tier: event.tier, ...(undo && event.tier === 'draft' ? { undo: () => { assertTargetCurrent(); if (!undo.isCurrent()) throw new Error('그 뒤에 입력이 바뀌어서 되돌리지 않았어.'); undo.restore() } } : {}) })
       } else if (event.type === 'workflow') {
         if (!live.snapshot.workflow || !live.editor.applyWorkflow) throw new Error('노드 워크플로 편집기가 닫혔어.')
@@ -492,9 +506,9 @@ export function useChatPageRegistration(input: (Omit<Editor, 'instanceId' | 'pat
   const instanceId = useMemo(() => ({ key: `${navigationKey}:${location.pathname}:${kind}:${resourceId}`, id: createRandomUuid() }), [navigationKey, location.pathname, kind, resourceId]).id
   useLayoutEffect(() => {
     if (!register || !description) return
-    return register({ ...description, revision, instanceId, path: location.pathname, apply: (patch) => applyRef.current?.(patch), applyAction: async (id, args, assertCurrent, nativeRevision) => {
+    return register({ ...description, revision, instanceId, path: location.pathname, apply: (patch) => applyRef.current?.(patch), applyAction: async (id, args, assertCurrent, nativeRevision, signal) => {
       if (!actionApplyRef.current) throw new Error('페이지 작업 편집기가 닫혔어.')
-      return actionApplyRef.current(id, args, assertCurrent, nativeRevision)
+      return actionApplyRef.current(id, args, assertCurrent, nativeRevision, signal)
     }, applyWorkflow: (proposal) => {
       if (!workflowApplyRef.current) throw new Error('워크플로 편집기가 닫혔어.')
       return workflowApplyRef.current(proposal)
