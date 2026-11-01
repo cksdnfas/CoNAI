@@ -5,12 +5,11 @@ import { resolveChatPortrait } from '@conai/shared'
 import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useIsMutating, useMutation, useQueries, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query'
-import { ArrowLeft, ArrowUp, ChevronLeft, ChevronRight, Cpu, Eraser, FoldVertical, Image as ImageIcon, ListChecks, Maximize2, Minimize2, MoreHorizontal, PanelRight, Plus, RotateCw, Square, Target, Trash2, TriangleAlert, UserPlus, X } from 'lucide-react'
-import { Link } from 'react-router-dom'
+import { Activity, AlarmClock, ALargeSmall, ArrowLeft, ArrowUp, ChevronLeft, ChevronRight, Cpu, Download, Eraser, Flag, FoldVertical, Image as ImageIcon, LayoutGrid, ListChecks, Maximize2, Minimize2, MoreHorizontal, Plus, RotateCw, SlidersHorizontal, Square, Target, Trash2, TriangleAlert, UserPlus, UserRound, X } from 'lucide-react'
+import { Link, useNavigate } from 'react-router-dom'
 import { Chip } from '@/components/ui/chip'
 import { useConfirm } from '@/components/ui/confirm-dialog'
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { IconButton } from '@/components/ui/icon-button'
 import { pageGutterStyle, SidebarColumn } from '@/components/common/sidebar-layout'
 import { useSnackbar } from '@/components/ui/snackbar-context'
@@ -70,8 +69,7 @@ import { useMinWidth } from '@/lib/use-min-width'
 import { cn } from '@/lib/utils'
 import { ChatComposerNarrationBackdrop, ChatUserMessage, caretOnNarration, narrationColorStyle } from './chat-narration'
 import { ChatComposer } from './chat-composer'
-import { CHAT_MESSAGE_GAP_PX, CHAT_WIDTH_CLASS, chatBackgroundLook, chatTranscriptStyle, useChatAppearance, type ChatBackgroundFit } from './chat-appearance'
-import { ChatInfoPanelBody } from './chat-info-panel'
+import { CHAT_MESSAGE_GAP_PX, CHAT_WIDTH_CLASS, ChatAppearancePane, ChatAppearancePopover, chatBackgroundLook, chatTranscriptStyle, useChatAppearance, type ChatBackgroundFit } from './chat-appearance'
 import { ChatBlockChangesContext, type BlockAction } from './chat-display-block'
 import { ChatProfileAvatar } from './chat-profile-avatar'
 import { ChatStatusAside, ChatStatusFloating, ChatStatusStrip, useStatusPanelLayout, type ChatStatusBlock, type ChatStatusData } from './chat-status-panel'
@@ -187,8 +185,10 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchText, setSearchText] = useState('')
   const [invite, setInvite] = useState<GroupInviteMode | null>(null)
-  /** The chat's info panel: docked beside the transcript on a wide page, a sheet elsewhere. */
-  const [infoOpen, setInfoOpen] = useState(false)
+  const [appearanceOpen, setAppearanceOpen] = useState(false)
+  // Set while ⋯ closes onto "Chat appearance": focus must stay with the popover instead of returning to the key.
+  const appearanceOpenRef = useRef(false)
+  const navigate = useNavigate()
   // Status panel: docked / floating on a wide page (kept per browser), a fold-out strip elsewhere.
   const [statusLayout, setStatusLayout] = useStatusPanelLayout()
   const [statusKey, setStatusKey] = useState<string | null>(null)
@@ -357,12 +357,16 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
     return runningFromServer.speakerProfileId != null ? [{ profileId: runningFromServer.speakerProfileId, text: runningFromServer.text, toolCalls: runningFromServer.toolCalls }] : []
   }, [isGroup, runningFromServer])
   const activeView = activeThreadId === null ? 'chat' : view
+  // The wide page keeps the context, image and appearance views in a column beside the transcript; the side panel and
+  // a narrow page have no room for one and drop them over the transcript's top as a sheet instead.
+  const dockView = layout === 'page' && isWide
   // The panel and a phone-width page have no room for the chat list beside a chat: the list is a screen of its own,
   // and a chat (or the picker) goes back to it. With no chat saved yet the picker is all there is.
   const canOpenList = threads.length > 0 && (layout === 'panel' || !hasSideList)
   const showList = canOpenList && listOpen
   // Off while the list covers the chat: coming back remounts the transcript, which scrolls down again.
-  const isTranscript = activeView === 'chat' && !showList
+  const isTranscript = !showList
+  const sheetView = activeView !== 'chat' && !dockView
   const { scrollRef, visibleMessages, flashMessageId, observeTranscript, showEarlierMessages, onTranscriptScroll, followLatest } = useChatTranscriptWindow({
     activeThreadId, messages, isTranscript, messageFocus, clearMessageFocus, runningText: threadQuery.data?.running?.text,
     loadEarlier, preserveHistory, loadingEarlier, earlierError, hasMoreBefore,
@@ -814,13 +818,11 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
       </div>
     ) : null}
   </>
-  // The chat's details and views open from the info panel; ⋯ keeps only what is done to the chat itself.
-  const dockInfo = layout === 'page' && isWide
-  const infoShown = infoOpen && displayThread !== null && !showList
-  // A view picked in the sheet shows at once; the docked panel stays beside it.
-  const openView = (next: 'context' | 'gallery') => { setView(next); if (!dockInfo) setInfoOpen(false) }
+  // Context stays in the header, the rest of the chat's actions sit under ⋯; a second press on a view closes it again.
+  // The look and the other views share the wide page's one column, so opening one folds the other.
+  const toggleView = (next: 'context' | 'gallery') => { setAppearanceOpen(false); setView(activeView === next ? 'chat' : next) }
   // A 1:1 chat's model and library look beside its name on the page (the side panel has no room for them).
-  const roomChips = layout === 'page' && displayThread && !isGroup && profile && activeView === 'chat' ? (
+  const roomChips = layout === 'page' && displayThread && !isGroup && profile ? (
     <span className="hidden min-w-0 items-center gap-1.5 lg:flex">
       {profile.modelLabel ? <Chip size="sm" tone="muted" className="min-w-0 shrink" title={profile.modelLabel}><Cpu /><span className="truncate">{profile.modelLabel}</span></Chip> : null}
       {profile.characterLink ? <Chip size="sm" tone="muted" className="min-w-0 shrink" title={[...profile.characterLink.path, profile.characterLink.settingName].join(' › ')}><ImageIcon /><span className="truncate">{t({ ko: '외형: {name}', en: 'Look: {name}' }, { name: profile.characterLink.settingName })}</span></Chip> : null}
@@ -892,20 +894,37 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
     setStripOpen(open)
   }
   const setStripPanelOpen = (open: boolean) => { setStripOpen(open); if (hasPortrait) updateAppearance({ portrait: open }) }
-  // Only what is done to this chat; its details and views (status panel, look, images, export) are in the info panel,
-  // the account's flags and user profiles under Settings › Mine, chat resources and routines under the chat list.
-  const chatMenu = <DropdownMenu>
+  // The status panel opens from here on the page only (the side panel's strip folds out by itself).
+  const statusItem = layout === 'page' && hasPanel && (wideStatus || hasPortrait) ? (
+    <DropdownMenuItem onSelect={togglePanel}><Activity />{(wideStatus ? panelOpen : stripOpen) ? t({ ko: '상태창 닫기', en: 'Hide status panel' }) : t({ ko: '상태창 열기', en: 'Show status panel' })}</DropdownMenuItem>
+  ) : null
+  // One list for everything done to this chat; the look opens as a popover under it, so the chat stays in sight.
+  const chatMenu = <ChatAppearancePopover threadId={activeThreadId} style={profile?.style} layout={layout} open={appearanceOpen && !dockView} onOpenChange={setAppearanceOpen}><span className="inline-flex"><DropdownMenu>
     <Tip content={t({ ko: '채팅 메뉴', en: 'Chat menu' })}><DropdownMenuTrigger asChild>
       <IconButton variant="ghost" size="icon-sm" disabled={activeThreadId === null} label={t({ ko: '채팅 메뉴', en: 'Chat menu' })} tooltip={false}><MoreHorizontal /></IconButton>
     </DropdownMenuTrigger></Tip>
-    <DropdownMenuContent align="end" className="min-w-48">
-      {isGroup ? null : <DropdownMenuItem disabled={!thread || isBusy} onSelect={() => void runCommand('/compact')}><FoldVertical />{isCodexThread ? t({ ko: '압축', en: 'Compact' }) : t({ ko: '지금 요약', en: 'Summarize now' })}</DropdownMenuItem>}
+    <DropdownMenuContent align="end" className="min-w-48" onCloseAutoFocus={(event) => { if (appearanceOpenRef.current) { event.preventDefault(); appearanceOpenRef.current = false } }}>
+      <DropdownMenuLabel>{t({ ko: '이 채팅', en: 'This chat' })}</DropdownMenuLabel>
+      {displayThread ? <DropdownMenuItem onSelect={() => toggleView('gallery')}><LayoutGrid />{activeView === 'gallery' ? t({ ko: '이미지 모아보기 닫기', en: 'Close image gallery' }) : t({ ko: '이미지 모아보기', en: 'Image gallery' })}</DropdownMenuItem> : null}
+      {statusItem}
       {inviteItem}
-      {!isGroup || inviteItem ? <DropdownMenuSeparator /> : null}
+      <DropdownMenuItem onSelect={() => { if (dockView) setView('chat'); else appearanceOpenRef.current = true; setAppearanceOpen(true) }}><ALargeSmall />{t({ ko: '채팅 모양', en: 'Chat appearance' })}</DropdownMenuItem>
+      {isGroup ? null : <DropdownMenuItem disabled={!thread || isBusy} onSelect={() => void runCommand('/compact')}><FoldVertical />{isCodexThread ? t({ ko: '압축', en: 'Compact' }) : t({ ko: '지금 요약', en: 'Summarize now' })}</DropdownMenuItem>}
+      <DropdownMenuItem onSelect={() => setExportOpen(true)}><Download />{t({ ko: '내보내기', en: 'Export' })}</DropdownMenuItem>
+      <DropdownMenuSeparator />
+      <DropdownMenuLabel>{t({ ko: '내 설정', en: 'My settings' })}</DropdownMenuLabel>
+      <DropdownMenuItem onSelect={() => setFlagManagerOpen(true)}><Flag />{t({ ko: '플래그 관리', en: 'Manage flags' })}</DropdownMenuItem>
+      <DropdownMenuItem onSelect={() => navigate('/settings?section=mine')}><UserRound />{t({ ko: '사용자 프로필', en: 'User profiles' })}</DropdownMenuItem>
+      {isAdmin ? <DropdownMenuItem onSelect={() => navigate('/chat/resources?tab=routines')}><AlarmClock />{t({ ko: '루틴', en: 'Routines' })}</DropdownMenuItem> : null}
+      <DropdownMenuSeparator />
       {displayThread ? <DropdownMenuItem disabled={!thread || isBusy} onSelect={() => void runCommand('/clear')}><Eraser />{t({ ko: '대화 비우기', en: 'Clear chat' })}</DropdownMenuItem> : null}
       <DropdownMenuItem variant="destructive" disabled={isBusy || deleteMutation.isPending} onSelect={() => void handleDelete()}><Trash2 />{t({ ko: '삭제', en: 'Delete' })}</DropdownMenuItem>
     </DropdownMenuContent>
-  </DropdownMenu>
+  </DropdownMenu></span></ChatAppearancePopover>
+  // The context stays one press away in the header, beside ⋯.
+  const headerActions = displayThread ? (
+    <IconButton variant="ghost" size="icon-sm" active={activeView === 'context'} onClick={() => toggleView('context')} label={t({ ko: '컨텍스트', en: 'Context' })}><SlidersHorizontal /></IconButton>
+  ) : null
   const statusStrip = hasPanel && statusData && !wideStatus ? <ChatStatusStrip data={statusData} activeKey={activeStatusKey} onActiveKey={setStatusKey} open={stripOpen} onOpenChange={setStripPanelOpen} /> : null
   const statusAside = hasPanel && statusData && wideStatus && panelOpen && statusLayout.mode === 'docked'
     ? <ChatStatusAside data={statusData} activeKey={activeStatusKey} onActiveKey={setStatusKey} onFloat={() => setStatusLayout({ mode: 'floating' })} onHide={hidePanel} />
@@ -913,44 +932,6 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   const statusFloating = hasPanel && statusData && wideStatus && panelOpen && statusLayout.mode === 'floating'
     ? <ChatStatusFloating data={statusData} activeKey={activeStatusKey} onActiveKey={setStatusKey} layout={statusLayout} onLayout={setStatusLayout} onDock={() => setStatusLayout({ mode: 'docked' })} onHide={hidePanel} containerRef={statusAreaRef} />
     : null
-  const infoTitle = t({ ko: '이 채팅', en: 'This chat' })
-  const infoBody = thread && activeThreadId !== null ? (
-    <ChatInfoPanelBody
-      threadId={activeThreadId}
-      profile={profile}
-      members={isGroup ? memberProfiles : []}
-      summaryCount={isCodexThread ? null : threadQuery.data?.summarySegments?.length ?? 0}
-      canEditProfiles={isAdmin}
-      // The page's status panel opens from here; the side panel's strip folds out over the transcript by itself.
-      statusOpen={layout === 'page' && hasPanel && (wideStatus || hasPortrait) ? (wideStatus ? panelOpen : stripOpen) : null}
-      onToggleStatus={togglePanel}
-      onContext={() => openView('context')}
-      onGallery={() => openView('gallery')}
-      onExport={() => setExportOpen(true)}
-      layout={layout}
-    />
-  ) : null
-  // Docked, the info panel takes the status panel's column while it is open.
-  const infoAside = dockInfo && infoShown && infoBody ? (
-    <aside aria-label={infoTitle} className="flex w-[300px] shrink-0 flex-col border-l border-line">
-      <div className="flex h-12 shrink-0 items-center gap-1 pl-4 pr-2">
-        <span className="min-w-0 flex-1 truncate text-sm font-semibold">{infoTitle}</span>
-        <IconButton variant="ghost" size="icon-sm" onClick={() => setInfoOpen(false)} label={t({ ko: '정보 닫기', en: 'Close info' })}><X /></IconButton>
-      </div>
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">{infoBody}</div>
-    </aside>
-  ) : null
-  // Where there is no room to dock it (the side panel, a narrow page) the info panel drops down from its key as a list,
-  // so the transcript stays in sight; a click elsewhere closes it.
-  const infoToggle = displayThread ? (
-    <Button variant="ghost" size="sm" aria-pressed={infoShown} data-pressed={infoShown ? 'true' : undefined} onClick={dockInfo ? () => setInfoOpen(!infoShown) : undefined}><PanelRight />{t({ ko: '정보', en: 'Info' })}</Button>
-  ) : null
-  const infoButton = infoToggle && !dockInfo && infoBody ? (
-    <Popover open={infoShown} onOpenChange={setInfoOpen}>
-      <PopoverTrigger asChild>{infoToggle}</PopoverTrigger>
-      <PopoverContent align="end" padding="md" collisionPadding={8} aria-label={infoTitle} className="max-h-(--radix-popover-content-available-height) w-80 overflow-y-auto">{infoBody}</PopoverContent>
-    </Popover>
-  ) : infoToggle
 
   // A direct LLM chat whose background summary failed: older turns may have left the request unsummarized.
   // A room's summary is its own switch; a direct chat's follows the profile unless set.
@@ -1082,6 +1063,15 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
       {composer}
     </div>
   ) : <>{transcript}{composer}</>
+  const noteDefaults = { note: profile?.authorNote ?? '', depth: profile?.loreDepth ?? null }
+  const loreProfiles = profile ? [{ id: profile.id, name: profile.name }] : []
+  const viewPane: ReactNode = !thread || activeThreadId === null || activeView === 'chat' ? null : activeView === 'gallery'
+    ? <Suspense fallback={null}><CodexChatGallery threadId={activeThreadId} columns={layout === 'page' && !dockView ? 'wide' : 'narrow'} pendingJobs={threadQuery.data?.pendingJobs ?? 0} /></Suspense>
+    : <Suspense fallback={null}>{isGroup
+      ? <GroupContextView thread={thread} group={group} profilesById={profilesById} segments={threadQuery.data?.summarySegments ?? []} />
+      : isCodexThread
+        ? <CodexEngineContextView thread={thread} profiles={loreProfiles} noteDefaults={noteDefaults} />
+        : <CodexChatContextView thread={thread} profiles={loreProfiles} segments={threadQuery.data?.summarySegments ?? []} profileTurns={profile?.contextTurns ?? null} profileMaxTokens={profile?.maxTokens ?? null} profileReasoningBudget={profile?.reasoningBudgetTokens ?? null} profileSummaryEnabled={profile?.summaryEnabled ?? null} noteDefaults={noteDefaults} />}</Suspense>
   let body: ReactNode
   if (activeThreadId === null) {
     // The unsaved new chat shows its greeting and the composer; otherwise there is no chat yet: the picker.
@@ -1095,25 +1085,42 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
         <ErrorState title={t({ ko: '채팅을 불러오지 못했어.', en: 'Could not load the chat.' })} error={threadQuery.error} onRetry={() => void threadQuery.refetch()} isRetrying={threadQuery.isFetching} />
       </div>
     ) : <LoadingState />
-  } else if (activeView === 'gallery') {
-    body = <Suspense fallback={null}><CodexChatGallery threadId={activeThreadId} columns={layout === 'page' ? 'wide' : 'narrow'} pendingJobs={threadQuery.data?.pendingJobs ?? 0} /></Suspense>
-  } else if (activeView === 'context') {
-    const noteDefaults = { note: profile?.authorNote ?? '', depth: profile?.loreDepth ?? null }
-    const loreProfiles = profile ? [{ id: profile.id, name: profile.name }] : []
-    body = <Suspense fallback={null}>{isGroup
-      ? <GroupContextView thread={thread} group={group} profilesById={profilesById} segments={threadQuery.data?.summarySegments ?? []} />
-      : isCodexThread
-        ? <CodexEngineContextView thread={thread} profiles={loreProfiles} noteDefaults={noteDefaults} />
-        : <CodexChatContextView thread={thread} profiles={loreProfiles} segments={threadQuery.data?.summarySegments ?? []} profileTurns={profile?.contextTurns ?? null} profileMaxTokens={profile?.maxTokens ?? null} profileReasoningBudget={profile?.reasoningBudgetTokens ?? null} profileSummaryEnabled={profile?.summaryEnabled ?? null} noteDefaults={noteDefaults} />}</Suspense>
   } else {
     body = chatBody
   }
 
+  const chatTitle = displayThread ? displayThread.title || untitled : pendingProfile?.name ?? untitled
   const viewTitle = activeView === 'gallery'
     ? t({ ko: '이미지 모아보기', en: 'Image gallery' })
-    : activeView === 'context'
-      ? t({ ko: '컨텍스트', en: 'Context' })
-      : displayThread ? displayThread.title || untitled : pendingProfile?.name ?? untitled
+    : t({ ko: '컨텍스트', en: 'Context' })
+  const closeView = <IconButton variant="ghost" size="icon-sm" onClick={() => setView('chat')} label={t({ ko: '닫기', en: 'Close' })}><X /></IconButton>
+  // Wide page: the look or the view is a column beside the transcript, taking the status panel's place while it is open.
+  const showAppearancePane = dockView && appearanceOpen && activeThreadId !== null && Boolean(thread)
+  const viewAside = showAppearancePane || (dockView && viewPane) ? (
+    <aside aria-label={showAppearancePane ? t({ ko: '채팅 모양', en: 'Chat appearance' }) : viewTitle} className="flex w-[400px] shrink-0 flex-col border-l border-line">
+      {showAppearancePane ? <ChatAppearancePane threadId={activeThreadId} style={profile?.style} onClose={() => setAppearanceOpen(false)} /> : <>
+        <div className="flex h-12 shrink-0 items-center gap-1 pl-4 pr-2">
+          <span className="min-w-0 flex-1 truncate text-sm font-semibold">{viewTitle}</span>
+          {closeView}
+        </div>
+        <div className="relative flex min-h-0 flex-1 flex-col">{viewPane}</div>
+      </>}
+    </aside>
+  ) : null
+  // Side panel and narrow page: the view drops from the header over the top of the transcript (the status strip's
+  // sheet), with the rest of the chat dimmed below it; the scrim or × folds it away.
+  const viewSheet = sheetView && viewPane ? (
+    <div className="absolute inset-0 z-20 flex flex-col">
+      <section aria-label={viewTitle} className="flex max-h-[70%] flex-col border-b border-line bg-background shadow-xl">
+        <div className="flex h-11 shrink-0 items-center gap-1 pl-3 pr-1.5">
+          <span className="min-w-0 flex-1 truncate text-sm font-semibold">{viewTitle}</span>
+          {closeView}
+        </div>
+        <div className="relative flex min-h-0 flex-1 flex-col">{viewPane}</div>
+      </section>
+      <Button variant="scrim" aria-label={t({ ko: '닫기', en: 'Close' })} onClick={() => setView('chat')} className="h-auto flex-1" />
+    </div>
+  ) : null
 
   const dialogs = <>
     <ChatExportDialog threadId={activeThreadId} open={exportOpen} onClose={() => setExportOpen(false)} />
@@ -1144,7 +1151,6 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   </>
 
   const listTitle = <span className="min-w-0 flex-1 truncate pl-1.5 text-sm font-semibold">{t({ ko: '채팅', en: 'Chats' })}</span>
-  const backToChat = <IconButton variant="ghost" size="icon-sm" onClick={() => setView('chat')} label={t({ ko: '채팅으로 돌아가기', en: 'Back to chat' })}><ArrowLeft /></IconButton>
 
   if (layout === 'page') {
     return (
@@ -1164,13 +1170,12 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
         <div className="flex min-h-0 min-w-0 flex-1 flex-col pb-(--theme-shell-main-padding-bottom)" style={pageGutterStyle(hasSideList)}>
           <div className="flex h-12 shrink-0 items-center gap-1 px-(--page-gutter)">
             {showList ? <>{listTitle}{newChatButton}</> : <>
-              {/* A view opened from the info panel (context, images) goes back to the chat from here. */}
-              {activeView !== 'chat' && thread ? backToChat : backButton}
+              {backButton}
               {headerAvatar}
-              <span className="min-w-0 truncate text-sm font-semibold">{viewTitle}</span>
+              <span className="min-w-0 truncate text-sm font-semibold">{chatTitle}</span>
               {roomChips}
               <span className="flex-1" />
-              {infoButton}
+              {headerActions}
               {chatMenu}
             </>}
             {onCollapse ? (
@@ -1184,10 +1189,11 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
               {statusStrip}
               {body}
               {statusFloating}
+              {viewSheet}
             </>}
           </div>
         </div>
-        {showList ? null : infoAside ?? statusAside}
+        {showList ? null : viewAside ?? statusAside}
       </div>
     )
   }
@@ -1213,25 +1219,20 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
         </> : <>
           {backButton ?? <span className="w-1" />}
           {headerAvatar}
-          <span className="min-w-0 flex-1 truncate px-1.5 text-sm font-semibold">{displayThread ? displayThread.title || untitled : pendingProfile?.name ?? untitled}</span>
+          <span className="min-w-0 flex-1 truncate px-1.5 text-sm font-semibold">{chatTitle}</span>
           {expandButton}
-          {infoButton}
+          {headerActions}
           {displayThread ? chatMenu : null}
         </>}
         {closeButton}
       </div>
-      {showList ? threadList(false) : <>
-        {activeView !== 'chat' && thread ? (
-          <div className="flex h-10 shrink-0 items-center gap-1 px-1.5">
-            {backToChat}
-            <span className="truncate text-sm font-semibold">{viewTitle}</span>
-          </div>
-        ) : null}
+      {showList ? threadList(false) : (
         <div className="relative flex min-h-0 flex-1 flex-col">
           {statusStrip}
           {body}
+          {viewSheet}
         </div>
-      </>}
+      )}
     </div>
   )
 }

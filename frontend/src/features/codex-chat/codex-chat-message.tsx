@@ -872,7 +872,7 @@ export const CodexChatAssistantMessage = memo(function CodexChatAssistantMessage
         {onRetry ? <Button type="button" variant="link" size="xs" onClick={onRetry}><RefreshCw />{t({ ko: '다시 시도', en: 'Try again' })}</Button> : null}
       </div> : null}
       {truncated ? (
-        <Tip content={t({ ko: '최대 출력 토큰에 닿아서 답변이 여기서 끊겼어. 정보 패널의 컨텍스트에서 한도를 올릴 수 있어.', en: 'The reply hit the max output tokens. Raise the cap under Context in the chat’s info panel.' })} side="bottom" align="start">
+        <Tip content={t({ ko: '최대 출력 토큰에 닿아서 답변이 여기서 끊겼어. 컨텍스트에서 한도를 올릴 수 있어.', en: 'The reply hit the max output tokens. Raise the cap under Context.' })} side="bottom" align="start">
           <p tabIndex={0} className="flex w-fit cursor-help items-center gap-1 rounded-sm text-xs text-muted-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/40">
             <Scissors className="size-3" aria-hidden />{t({ ko: '길이 제한에서 잘림', en: 'Cut at the length limit' })}
           </p>

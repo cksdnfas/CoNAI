@@ -98,7 +98,7 @@
 
 `GET /api/codex-chat/lorebooks?summary=1`은 기존 목록·권한·항목 필드를 유지하되 `entries`를 제외하고 `entryCount`를 제공한다. 쿼리를 생략하면 기존 응답 그대로다. 목록은 요청당 프로필 연결 스냅샷 하나를 공유하고, 요약 목록은 바뀐 원본 파일을 먼저 갱신한 뒤 항목 수를 SQL로 센다(항목 본문 정규화 없음). 공개 프로필·워크플로 선택 목록은 목적별 projection과 요청 범위 모델 스냅샷을 사용하며 레거시 이미지 대체 경로는 유지한다. 레거시 Codex 프로필 이전 완료는 `user.db`의 `chat_settings_migrations`에 이전 작업과 같은 트랜잭션으로 기록한다. 실패하면 한 번 경고하고 해당 프로세스에서는 재시도하지 않아 채팅 API를 막지 않으며, 재시작 때 다시 시도한다. 레거시 파일은 삭제하지 않는다.
 
-`GET /api/codex-chat/threads/:threadId/lorebooks?summary=1`은 같은 채팅 소유권 검사 뒤 정보 패널용 `bookCount`·`entryCount`만 반환한다. `OwnedLorebookStore.threadSummary`가 `booksForRequest`와 같은 소유자 필터로 채팅·연결·참가자 책 ID를 중복 없이 모으고 바뀐 원본만 갱신한 뒤 항목 수를 SQL로 세며 대화 사용 기록 조회와 항목 본문 응답은 생략한다. 쿼리가 없으면 컨텍스트 편집기의 전체 로어북 응답을 그대로 제공한다.
+`GET /api/codex-chat/threads/:threadId/lorebooks?summary=1`은 같은 채팅 소유권 검사 뒤 가벼운 요약용 `bookCount`·`entryCount`만 반환한다. `OwnedLorebookStore.threadSummary`가 `booksForRequest`와 같은 소유자 필터로 채팅·연결·참가자 책 ID를 중복 없이 모으고 바뀐 원본만 갱신한 뒤 항목 수를 SQL로 세며 대화 사용 기록 조회와 항목 본문 응답은 생략한다. 쿼리가 없으면 컨텍스트 편집기의 전체 로어북 응답을 그대로 제공한다.
 
 로어북 편집기의 단건 조회는 `GET /api/codex-chat/admin/lorebooks/:lorebookId`(관리자의 전역 책)와 `GET /api/codex-chat/lorebooks/:lorebookId`(채팅 권한이 있는 계정의 공용 파일함 책)이다. 둘 다 항목을 포함하고 종류가 다르거나 없는 책은 404다. 채팅 전용 책은 채팅 소유권을 검사하는 기존 채팅 로어북 경로로 읽는다. 프론트의 단건 키는 각각 전체 목록 키 아래 `detail`·ID를 붙여 기존 무효화가 함께 적용된다.
 

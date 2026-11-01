@@ -1,6 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Check, Layers, Pencil, Plus, RotateCcw, Star, Trash2 } from 'lucide-react'
+import { Check, Layers, Pencil, Plus, RotateCcw, Star, Trash2, X } from 'lucide-react'
 import { TextTabs } from '@/components/common/text-tabs'
 import { Button } from '@/components/ui/button'
 import { useConfirm } from '@/components/ui/confirm-dialog'
@@ -455,20 +455,21 @@ function SlotOverlay({ file, appearance, onApply, onNew, onSaveSlots, onClose }:
 type AppearanceTab = 'text' | 'layout' | 'pictures' | 'background' | 'composer'
 const TABS: AppearanceTab[] = ['text', 'layout', 'pictures', 'background', 'composer']
 
-/**
- * The reader's adjustments for this chat, opened from the chat's info panel and placed beside `children` (its key):
- * under it, or (`side="left"`) to its left over the transcript, so a panel at the screen's edge stays readable.
- * `style` is the profile's look (the sample line and the background rows start from it); `layout` hides the width row
- * in the side panel, which is as wide as it is.
- */
-export function ChatAppearancePopover({ threadId, style, layout = 'page', side = 'bottom', open, onOpenChange, children }: {
+/** The open tab and slot overlay; held by whoever shows the content, so a popover that unmounts it keeps them. */
+function useAppearanceView() {
+  const [slotsOpen, setSlotsOpen] = useState(false)
+  const [tab, setTab] = useState<AppearanceTab>('text')
+  return { slotsOpen, setSlotsOpen, tab, setTab }
+}
+type AppearanceView = ReturnType<typeof useAppearanceView>
+
+/** The adjustments themselves: a header (name, save, slots, and a close key when `onClose` is given), the sample line and the tabs. */
+function ChatAppearanceContent({ threadId, style, layout, view: { slotsOpen, setSlotsOpen, tab, setTab }, onClose }: {
   threadId: number | null
   style?: ChatStyle | null
-  layout?: 'page' | 'panel'
-  side?: 'bottom' | 'left'
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  children: ReactNode
+  layout: 'page' | 'panel'
+  view: AppearanceView
+  onClose?: () => void
 }) {
   const { t } = useI18n()
   const { showSnackbar } = useSnackbar()
@@ -478,9 +479,6 @@ export function ChatAppearancePopover({ threadId, style, layout = 'page', side =
   const toolsId = useId()
   const reasoningId = useId()
   const diagnosticsId = useId()
-  const [slotsOpen, setSlotsOpen] = useState(false)
-  const [tab, setTab] = useState<AppearanceTab>('text')
-  const escapeHandledRef = useRef(false)
   const small = t({ ko: '작게', en: 'S' })
   const medium = t({ ko: '보통', en: 'M' })
   const large = t({ ko: '크게', en: 'L' })
@@ -496,8 +494,6 @@ export function ChatAppearancePopover({ threadId, style, layout = 'page', side =
   const activeSlot = file.slots.find((slot) => slot.id === appearance.slotId) ?? null
   const dirty = !sameLook(appearance, activeSlot ? normalize(activeSlot.appearance) : DEFAULT_CHAT_APPEARANCE)
   const background = style ? chatBackgroundLook(appearance, style) : null
-
-  useEffect(() => { if (!open) setSlotsOpen(false) }, [open])
 
   const persistSlots = async (next: { defaultSlotId: number | null; slots: ChatAppearanceSlot[] }) => {
     try {
@@ -540,26 +536,7 @@ export function ChatAppearancePopover({ threadId, style, layout = 'page', side =
   })
 
   return (
-    <Popover open={open} onOpenChange={onOpenChange}>
-      <PopoverAnchor asChild>{children}</PopoverAnchor>
-      <PopoverContent align={side === 'left' ? 'center' : 'end'} side={side} padding="none" className="relative flex max-h-[calc(100vh-6rem)] w-88 max-w-[calc(100vw-2rem)] flex-col overflow-hidden"
-        // Focus moving back to its key (or out of a closing sheet) must not dismiss it; a click outside or Esc does.
-        onFocusOutside={(event) => event.preventDefault()}
-        // With the slot overlay open, Esc closes the overlay only (Radix would otherwise dismiss the popover too).
-        onEscapeKeyDown={(event) => {
-          escapeHandledRef.current = true
-          if (slotsOpen) { event.preventDefault(); setSlotsOpen(false) }
-        }}
-        onKeyDownCapture={(event) => {
-          if (event.key !== 'Escape') return
-          event.preventDefault()
-          event.stopPropagation()
-          // Radix's document handler ran first (and React re-rendered in between): nothing more to do here.
-          if (escapeHandledRef.current) { escapeHandledRef.current = false; return }
-          // A nested tooltip can consume Radix's document Escape handler before the popover sees it.
-          if (slotsOpen) setSlotsOpen(false)
-          else onOpenChange(false)
-        }}>
+    <>
         <div className="flex h-12 shrink-0 items-center justify-between gap-2 pl-4 pr-3">
           <span className="flex min-w-0 items-baseline gap-2">
             <span className="shrink-0 text-sm font-semibold">{t({ ko: '채팅 모양', en: 'Chat appearance' })}</span>
@@ -575,6 +552,7 @@ export function ChatAppearancePopover({ threadId, style, layout = 'page', side =
             <IconButton size="icon-sm" variant="ghost" active={slotsOpen} aria-expanded={slotsOpen} disabled={threadId === null} onClick={() => setSlotsOpen((current) => !current)} label={t({ ko: '슬롯', en: 'Slots' })}>
               <Layers className={cn('transition-transform duration-300 ease-out motion-reduce:transition-none', slotsOpen && '-rotate-45 scale-110')} />
             </IconButton>
+            {onClose ? <IconButton size="icon-sm" variant="ghost" onClick={onClose} label={t({ ko: '닫기', en: 'Close' })}><X /></IconButton> : null}
           </span>
         </div>
         <div className="flex min-h-0 flex-1 flex-col" inert={slotsOpen || undefined}>
@@ -725,7 +703,63 @@ export function ChatAppearancePopover({ threadId, style, layout = 'page', side =
           </div>
         </div>
         {slotsOpen ? <SlotOverlay file={file} appearance={appearance} onApply={apply} onNew={() => void saveAsNew()} onSaveSlots={persistSlots} onClose={() => setSlotsOpen(false)} /> : null}
+    </>
+  )
+}
+
+/**
+ * The reader's adjustments for this chat as a popover under `children` (the chat menu's key), for the side panel and
+ * narrow pages, where the transcript stays in sight around it. The wide page docks `ChatAppearancePane` instead.
+ * `style` is the profile's look (the sample line and the background rows start from it); `layout` hides the width row
+ * in the side panel, which is as wide as it is.
+ */
+export function ChatAppearancePopover({ threadId, style, layout = 'page', open, onOpenChange, children }: {
+  threadId: number | null
+  style?: ChatStyle | null
+  layout?: 'page' | 'panel'
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  children: ReactNode
+}) {
+  const view = useAppearanceView()
+  const { slotsOpen, setSlotsOpen } = view
+  const escapeHandledRef = useRef(false)
+  useEffect(() => { if (!open) setSlotsOpen(false) }, [open, setSlotsOpen])
+  return (
+    <Popover open={open} onOpenChange={onOpenChange}>
+      <PopoverAnchor asChild>{children}</PopoverAnchor>
+      <PopoverContent align="end" side="bottom" padding="none" className="relative flex max-h-[calc(100vh-6rem)] w-88 max-w-[calc(100vw-2rem)] flex-col overflow-hidden"
+        // Focus returning to the menu button as the menu closes must not dismiss it; a click outside or Esc does.
+        onFocusOutside={(event) => event.preventDefault()}
+        // With the slot overlay open, Esc closes the overlay only (Radix would otherwise dismiss the popover too).
+        onEscapeKeyDown={(event) => {
+          escapeHandledRef.current = true
+          if (slotsOpen) { event.preventDefault(); setSlotsOpen(false) }
+        }}
+        onKeyDownCapture={(event) => {
+          if (event.key !== 'Escape') return
+          event.preventDefault()
+          event.stopPropagation()
+          // Radix's document handler ran first (and React re-rendered in between): nothing more to do here.
+          if (escapeHandledRef.current) { escapeHandledRef.current = false; return }
+          // A nested tooltip can consume Radix's document Escape handler before the popover sees it.
+          if (slotsOpen) setSlotsOpen(false)
+          else onOpenChange(false)
+        }}>
+        <ChatAppearanceContent threadId={threadId} style={style} layout={layout} view={view} />
       </PopoverContent>
     </Popover>
+  )
+}
+
+/** The same adjustments docked as a column beside the transcript (the wide page); `onClose` folds it away. */
+export function ChatAppearancePane({ threadId, style, onClose }: { threadId: number | null; style?: ChatStyle | null; onClose: () => void }) {
+  const view = useAppearanceView()
+  return (
+    <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden"
+      // With the slot overlay open, Esc closes the overlay only.
+      onKeyDown={(event) => { if (event.key === 'Escape' && view.slotsOpen) { event.stopPropagation(); view.setSlotsOpen(false) } }}>
+      <ChatAppearanceContent threadId={threadId} style={style} layout="page" view={view} onClose={onClose} />
+    </div>
   )
 }

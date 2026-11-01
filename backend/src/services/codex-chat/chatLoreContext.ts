@@ -137,7 +137,7 @@ export type ThreadLorebooks = {
   books: ThreadLoreBookView[]
 }
 
-/** The info panel needs only the union's counts, not entry bodies or transcript usage. */
+/** The union's counts alone, without entry bodies or transcript usage. */
 export function threadLorebookSummary(thread: RequestThread, profiles: Array<Pick<ChatProfile, 'lorebookIds'>>) {
   return OwnedLorebookStore.threadSummary(thread.id, profiles.flatMap(profile => profile.lorebookIds))
 }

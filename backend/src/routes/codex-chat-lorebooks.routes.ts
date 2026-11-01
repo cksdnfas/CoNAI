@@ -278,7 +278,7 @@ router.post('/threads/:threadId/lorebooks', requireChatAccess, (req: Request, re
 /**
  * GET /api/codex-chat/threads/:threadId/lorebooks — the context tab's books: the chat's own book (null until its
  * first entry), the account books linked to this chat, and the books the profile (a room: every member) brings.
- * `summary=1` returns only the book and entry counts for the info panel.
+ * `summary=1` returns only the book and entry counts.
  */
 router.get('/threads/:threadId/lorebooks', requireChatAccess, (req: Request, res: Response) => {
   const threadId = parseThreadId(req, res)

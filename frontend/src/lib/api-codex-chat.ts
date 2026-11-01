@@ -520,10 +520,6 @@ export interface ThreadLorebooks {
   books: ThreadLoreBook[]
 }
 
-export interface ThreadLorebookSummary {
-  bookCount: number
-  entryCount: number
-}
 
 export type LoreMergeChoice = 'source' | 'target' | 'both' | 'merged'
 export type LoreMergeDecision = { entryId: string; choice: LoreMergeChoice; content?: string }
@@ -1807,7 +1803,6 @@ async function requestWithMergePreview<T>(path: string, init: RequestInit): Prom
 export const OWN_LOREBOOKS_QUERY_KEY = ['codex-chat-own-lorebooks'] as const
 export const ownLorebookQueryKey = (lorebookId: number) => [...OWN_LOREBOOKS_QUERY_KEY, 'detail', lorebookId] as const
 export const threadLorebooksQueryKey = (threadId: number) => ['codex-chat-thread-lorebooks', threadId] as const
-export const threadLorebookSummaryQueryKey = (threadId: number) => [...threadLorebooksQueryKey(threadId), 'summary'] as const
 
 /** A file store folder or text file linked to a chat or a profile; `write` lets its characters write there. */
 export type LinkedFileLink = { id: string; write: boolean }
@@ -1872,10 +1867,6 @@ export function deleteOwnLorebook(lorebookId: number) {
 
 export function getThreadLorebooks(threadId: number) {
   return requestApiData<ThreadLorebooks>(`/api/codex-chat/threads/${threadId}/lorebooks`, { cache: 'no-store' })
-}
-
-export function getThreadLorebookSummary(threadId: number) {
-  return requestApiData<ThreadLorebookSummary>(`/api/codex-chat/threads/${threadId}/lorebooks?summary=1`, { cache: 'no-store' })
 }
 
 /** Replace the chat book's entries; it is made with its first entry (null once emptied). */

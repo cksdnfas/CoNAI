@@ -279,9 +279,9 @@ export function ChatProfileCharacterPanel({ open, draft, patch, onPreview, profi
         editing={editing === key}
         onEditingChange={(next) => openItem(next ? key : null)}
         onTextChange={(content) => updateSection(section.id, { content })}
-        note={reading && !bothSidesSpeak(reading.turns)
-          ? <Text variant="caption" tone="warning">{t({ ko: '양쪽 말이 다 있어야 대화로 보내져. 지금은 지시문 뒤에 글로 붙어.', en: 'Both sides must speak to send this as dialogue. For now it goes as text after the instructions.' })}</Text>
-          : reading?.leading ? <Text variant="caption">{t({ ko: '첫 화자 표시 앞의 글은 대화로 보낼 때 빠져.', en: 'Text before the first speaker is left out when sent as dialogue.' })}</Text> : undefined}
+        note={reading && bothSidesSpeak(reading.turns) && reading.leading
+          ? <Text variant="caption">{t({ ko: '첫 화자 표시 앞의 글은 대화로 보낼 때 빠져.', en: 'Text before the first speaker is left out when sent as dialogue.' })}</Text>
+          : undefined}
         kind={kindSwitch(section.kind, section.content, (kind) => changeKind(section, kind))}
         tools={(
           <SectionTools
