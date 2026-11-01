@@ -8,6 +8,7 @@ import { registerChatReply, skipThreadGenerationReactions } from './chatReplyReg
 import { notifyChatUserSend } from './chatSendEvents'
 import type { McpRequester } from '../../mcp/context'
 import { inlineTextsForChat, loadAttachedImages, validateChatAttachments, withLatestMediaGeneration } from './chatAttachments'
+import { chatProfileRequester } from './chatProfilePermissions'
 import { generatedImagesTokens, loadInlineGeneratedImages, withGeneratedImages } from './chatGenerationPrompting'
 import { ChatFlagStore, parseFlagIds, parsePicks } from './chatFlags'
 import { foldGroupBlockState, parseBlockEdits } from './chatBlockState'
@@ -235,7 +236,8 @@ async function replyAs(run: GroupRun, requester: McpRequester, profile: ChatProf
   const controller = new AbortController()
   const bounded = readGroupReplyHistory(thread, profile, { threadId: run.threadId, excludeMessageId: replacingMessageId })
   const history = bounded.history
-  const messages = withLatestMediaGeneration(withGenerationOutcomes(bounded.messages), profile, requester)
+  const mediaRequester = chatProfileRequester(requester, { threadId: run.threadId, profileId: profile.id, kind: 'group' })
+  const messages = withLatestMediaGeneration(withGenerationOutcomes(bounded.messages), profile, mediaRequester)
   const source = sourceMessageId === replacingMessageId ? null : CodexChatStore.findMessage(run.threadId, sourceMessageId) ?? null
   const replyId = randomUUID()
   const context: ChatExecutionContext = { threadId: run.threadId, profileId: profile.id, kind: 'group', replyId, rootExecutionId: chatExecutionRoot(run.threadId, sourceMessageId) }
@@ -339,7 +341,7 @@ async function replyAs(run: GroupRun, requester: McpRequester, profile: ChatProf
     const sessionRuntime = sessionRuntimeOf(profile)
     const [attachmentTexts, attachedImages] = await Promise.all([
       sessionRuntime ? undefined : inlineTextsForChat(profile, requester.accountId, attachmentMessages),
-      sessionRuntime ? undefined : loadAttachedImages(profile, requester, attachmentMessages),
+      sessionRuntime ? undefined : loadAttachedImages(profile, mediaRequester, attachmentMessages),
     ])
     if (profile.engine === 'codex') {
       message = await runCodexGroupReply({
@@ -359,7 +361,7 @@ async function replyAs(run: GroupRun, requester: McpRequester, profile: ChatProf
     } else {
       const maxTokens = ChatGroupStore.member(run.threadId, profile.id)?.max_tokens ?? thread.max_tokens ?? profile.maxTokens
       const inSession = sessionRuntime !== null
-      const generatedImages = inSession ? [] : await loadInlineGeneratedImages(profile, requester, run.threadId)
+      const generatedImages = inSession ? [] : await loadInlineGeneratedImages(profile, mediaRequester, run.threadId)
       const extraTokens = generatedImagesTokens(profile.id, generatedImages)
       message = await persist(await generateLlmGroupReply({
         requester,

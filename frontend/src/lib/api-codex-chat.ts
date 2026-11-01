@@ -714,6 +714,8 @@ export interface ChatProfile extends ChatProfileAssetFields, ChatProfileAgentSet
   mcpScopes: ChatScope[]
   /** Only these tools; null offers every tool the scopes allow. */
   toolAllowlist: string[] | null
+  /** Additional feature permissions used only by this profile's enabled tools; never account or administration grants. */
+  delegatedPermissions: string[]
   /** Generation presets the profile draws with; any linked withholds free-form generation and workflow lookups. */
   generationPresetIds: number[]
   toolOutputLimit: number
@@ -987,6 +989,8 @@ export interface CodexChatMessage {
 
 /** Media kind of an image a transcript references (so videos can play inline). */
 export interface CodexChatMediaInfo {
+  /** File/thumbnail base bound to a stored assistant result; grants no library access. */
+  resultMediaUrl?: string
   postprocessStatus?: string | null
   historyId?: number
   mimeType: string | null
@@ -1055,6 +1059,7 @@ export interface ChatGroupInfo {
 
 /** One image a chat brought in: `generated` by its jobs, or `found` through searches and lookups. */
 export interface CodexChatMediaItem {
+  resultMediaUrl?: string
   postprocessStatus?: string | null
   historyId?: number
   compositeHash: string

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Download, Link2, Lock, Save } from 'lucide-react'
+import { CHAT_DELEGATABLE_PERMISSION_KEYS, PERMISSION_CATALOG } from '@conai/shared'
 import { Chip, ToggleChip } from '@/components/ui/chip'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { IconButton } from '@/components/ui/icon-button'
@@ -16,6 +17,12 @@ import { ChatProfileAgentSetting, ChatProfileToolLimits } from './chat-profile-t
 import { ChatToolPicker, useChatToolGroups } from './chat-tool-picker'
 import { ChatToolPresetEditorModal } from './chat-tool-preset-editor-modal'
 import { SettingsAdvanced } from './settings-navigation'
+import { SecurityPermissionChecklist } from './security-permission-checklist'
+import { setPermissionGrant } from './security-permission-catalog'
+
+const DELEGATABLE_PERMISSIONS = PERMISSION_CATALOG
+  .filter((permission) => CHAT_DELEGATABLE_PERMISSION_KEYS.some((key) => key === permission.key))
+  .map((permission) => ({ permissionKey: permission.key, label: permission.label.en, description: permission.description }))
 
 /**
  * CoNAI tools (MCP) for the profile: the switch, the profile's own scopes and tools (a tool preset only loads a copy),
@@ -136,6 +143,19 @@ export function ChatProfileToolsPanel({ open, draft, patch, defaults }: {
             <ChatProfileToolLimits toolOutputLimit={draft.toolOutputLimit} onChange={patch} />
           </SettingsAdvanced>
         ) : null}
+      </EditorGroup>
+      <EditorGroup label={t({ ko: '프로필 위임 권한', en: 'Profile-delegated permissions' })} count={draft.delegatedPermissions.length}>
+        <p className="text-sm text-muted-foreground">
+          {t({ ko: '이 프로필에서 켜고 선택한 도구만 추가 권한을 사용해. 사용자의 페이지·직접 API 권한은 바뀌지 않아. 설정·관리 권한은 위임할 수 없어.', en: 'Only this profile’s enabled and selected tools can use these additional permissions. The user’s own pages and direct API permissions stay unchanged. Configuration and administration privileges cannot be delegated.' })}
+        </p>
+        <SecurityPermissionChecklist
+          permissionCatalog={DELEGATABLE_PERMISSIONS}
+          groupKey={null}
+          selectedKeys={draft.delegatedPermissions}
+          inheritedSources={{}}
+          disabled={false}
+          onToggle={(key, enabled) => patch({ delegatedPermissions: setPermissionGrant(draft.delegatedPermissions, key, enabled) })}
+        />
       </EditorGroup>
       <EditorGroup label={t({ ko: '에이전트', en: 'Agent' })}>
         <ChatProfileAgentSetting agentEnabled={draft.agentEnabled} agentDescription={draft.agentDescription} onChange={patch} />

@@ -1,4 +1,5 @@
 import { useImagePermissions } from '@/features/auth/use-image-permissions'
+import { isChatResultMedia } from '@/lib/chat-result-media'
 import { useQuery } from '@tanstack/react-query'
 import { getImage, getImageDetailQueryKey, IMAGE_DETAIL_STALE_TIME_MS } from '@/lib/api-images'
 import { Spinner } from '@/components/ui/loading-state'
@@ -494,15 +495,15 @@ function MediaLightboxOverlay({ items, index, onIndexChange, onClose, renderActi
 export function MediaLightbox({ items, index, onIndexChange, onClose, renderActions }: MediaLightboxProps) {
   const { canViewImages } = useImagePermissions()
   const imageViewModal = useImageViewModal()
-  const detailOpen = Boolean(imageViewModal?.activeCompositeHash)
-  const open = canViewImages && index !== null && items.length > 0
+  const detailOpen = canViewImages && Boolean(imageViewModal?.activeCompositeHash)
   const clampedIndex = index === null ? 0 : Math.min(Math.max(index, 0), items.length - 1)
+  const open = (canViewImages || isChatResultMedia(items[clampedIndex])) && index !== null && items.length > 0
   const { handOff } = useOverlayBackClose({ open: open && !detailOpen, onClose })
 
   /** Show `items[target]` in the image modal, paging through this same list. */
   const showInDetail = useCallback((target: number) => {
     const compositeHash = items[target]?.composite_hash
-    if (!compositeHash || !imageViewModal) {
+    if (!canViewImages || !compositeHash || !imageViewModal) {
       return false
     }
 
@@ -515,7 +516,7 @@ export function MediaLightbox({ items, index, onIndexChange, onClose, renderActi
       accessOptions: { allowDetailNavigation: false },
     })
     return true
-  }, [imageViewModal, items])
+  }, [canViewImages, imageViewModal, items])
 
   // Opened while the image modal is showing: the modal moves to the item and the lightbox stays shut.
   useEffect(() => {
@@ -530,7 +531,7 @@ export function MediaLightbox({ items, index, onIndexChange, onClose, renderActi
     return null
   }
 
-  const canOpenDetail = Boolean(items[clampedIndex]?.composite_hash && imageViewModal)
+  const canOpenDetail = canViewImages && Boolean(items[clampedIndex]?.composite_hash && imageViewModal)
   const openDetail = () => {
     if (showInDetail(clampedIndex)) {
       handOff()

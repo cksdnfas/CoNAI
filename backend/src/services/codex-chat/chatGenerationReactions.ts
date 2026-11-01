@@ -1,6 +1,7 @@
 import { getUserSettingsDb } from '../../database/userSettingsDb'
 import { AuthAccount } from '../../models/AuthAccount'
 import { requireRequesterPermission } from '../../middleware/featureAccess'
+import { chatProfileRequester } from './chatProfilePermissions'
 import { publishRuntimeEvent, subscribeToRuntimeEvents } from '../runtime-events/runtimeEventBus'
 import { previewImage } from '../imagePreview'
 import { libraryMediaAllowed } from '../contentRating'
@@ -106,7 +107,7 @@ export class ChatGenerationReactionService {
       return
     }
     try {
-      const requester = { accountId: thread.account_id, accountType: thread.account_id === null ? null : AuthAccount.findById(thread.account_id)?.account_type ?? null }
+      const requester = chatProfileRequester({ accountId: thread.account_id, accountType: thread.account_id === null ? null : AuthAccount.findById(thread.account_id)?.account_type ?? null }, { threadId, profileId: profile.id, kind: thread.kind })
       const jobs = db.prepare('SELECT j.id, j.status, j.failure_code, j.requested_by_account_id FROM chat_generation_links l JOIN generation_queue_jobs j ON j.id = l.job_id WHERE l.thread_id = ? AND l.reply_id = ? ORDER BY j.id').all(threadId, replyId) as Job[]
       if (jobs.some((job) => job.requested_by_account_id !== thread.account_id)) {
         this.transition(replyId, 'pending', 'skipped')

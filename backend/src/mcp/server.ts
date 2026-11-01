@@ -42,8 +42,14 @@ import { isContextToolAllowed, requireMcpToolAccess } from './toolAccess';
 import { ChatGenerationPresetStore } from '../services/codex-chat/chatGenerationPresets';
 import { createToolCatalog, isDirectChatTool, type ToolCategoryId } from './toolCatalog';
 import { registerAppGuideTools } from './tools/appGuideTools';
+import { chatResultMediaRecorder } from '../services/codex-chat/chatResultMediaGrants';
 
 type ToolRegistrar = (server: McpServer, context: McpRequestContext) => void;
+// These native result formats contain actual lookup rows, not arbitrary text, echoed inputs or download errors.
+const NATIVE_IMAGE_LOOKUP_RESULTS = new Set([
+  'search_images', 'search_images_by_tags', 'search_images_by_meaning', 'find_similar_images',
+  'get_image_metadata', 'get_generation_history',
+]);
 // Only names and registrar functions are shared; handlers and their account/workspace context are never cached.
 const pluginToolRegistrars = new Map<string, ToolRegistrar>();
 
@@ -87,6 +93,8 @@ export function createMcpServer(context: McpRequestContext = { scopes: ALL_MCP_H
     }
     if (!isContextToolAllowed(context, toolName)) return undefined;
     const handler = args[args.length - 1];
+    const nativeImageResult = currentRegistrar === registerImageTools && NATIVE_IMAGE_LOOKUP_RESULTS.has(toolName)
+      || currentRegistrar === registerEmoticonTools && (toolName === 'view_images' || toolName === 'view_media_frames');
     if (typeof handler === 'function' && (isChatMcpSource(context.source) || context.requester || context.keyGroup !== undefined)) {
       args[args.length - 1] = async (...input: unknown[]) => {
         try {
@@ -97,7 +105,10 @@ export function createMcpServer(context: McpRequestContext = { scopes: ALL_MCP_H
           requireMcpToolAccess(context, toolName, input[0] as Record<string, unknown> | undefined);
         }
         catch (error) { return { isError: true, content: [{ type: 'text', text: error instanceof Error ? error.message : String(error) }] }; }
-        return handler(...input);
+        const recordMedia = nativeImageResult ? chatResultMediaRecorder(context, toolName) : undefined;
+        const result = await handler(...input);
+        recordMedia?.(result);
+        return result;
       };
     }
     if (catalog && !isDirectChatTool(context, toolName)) {

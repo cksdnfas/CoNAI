@@ -1,4 +1,5 @@
 import { useImagePermissions } from '@/features/auth/use-image-permissions'
+import { isChatResultMedia } from '@/lib/chat-result-media'
 import type { CSSProperties, DragEventHandler } from 'react'
 import type { ImageRecord } from '@/types/image'
 import {
@@ -30,7 +31,7 @@ export function ImagePreviewMedia({
   onError,
 }: ImagePreviewMediaProps) {
   const { canViewImages } = useImagePermissions()
-  if (!canViewImages || !image) {
+  if (!image || (!canViewImages && !isChatResultMedia(image))) {
     return null
   }
 

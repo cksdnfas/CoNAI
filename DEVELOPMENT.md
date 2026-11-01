@@ -20,6 +20,14 @@
 
 ## 채팅과 페이지 어시스턴트
 
+### 프로필 기능 권한 위임
+
+프로필의 `delegatedPermissions`는 `llm_chat_profiles.delegated_permissions`에 저장하며 기본값은 빈 배열이다. `CHAT_DELEGATABLE_PERMISSION_KEYS`는 공용 기능 카탈로그에서 계정·채팅·설정 권한을 제외한다. `chatProfilePermissions.ts`는 활성 계정, 현재 프로필 공개 범위와 도구 사용, 대화 소유권·참가자를 확인한 requester를 만들고 `featureAccess.ts`의 서버 전용 WeakMap에 현재 권한 해석을 결합한다. 직렬화하거나 복사한 requester에는 위임이 따라가지 않으며 `page.*` 권한을 파생하지 않는다.
+
+MCP 목록·실행은 `toolAccess.ts`에서 같은 위임을 적용한다. 큐는 저장된 채팅 권한과 `chat_generation_links`의 실제 작업·대화·답변 연결을 검증하고 현재 권한을 다시 읽는다. 후속 프롬프트·이미지 입력도 해당 프로필의 requester를 사용하며 공개 페이지에서 시작한 지연 요청은 공개 경계를 보존한다. 권한 자체는 관리자 프로필 편집기로만 변경하고 설정 제안 도구로는 바꾸지 않는다.
+
+`chatResultMediaAccess.ts`는 대화·메시지·프로필과 실제 서버 검색/생성 결과에 결합된 `resultMediaUrl`을 제공한다. 파일·썸네일은 매번 현재 접근과 안전 정책을 검사하고 `private, no-store`로 전달하며 일반 이미지·이력 API를 열지 않는다. 가져오기 기록·본문·사용자가 제공한 해시나 서버 형식의 답변 ID만으로는 증거가 되지 않는다. 과거 검색 결과에 서버 실행 증거가 없으면 새로 검색해야 하고, 생성 결과는 기존 `chat_generation_links`를 재사용한다.
+
 ### 채팅 프로필 폴더
 
 `chat_profile_folders`와 프로필의 nullable `folder_id`는 `userSettingsSchema.ts`에서 멱등 추가한다. 외형 폴더와 별개이며 같은 부모 아래 이름은 대소문자 없이 유일하다. `chatProfileFolders.ts`가 생성·이름 변경·순환 방지 이동·삭제를 공유한다. 삭제는 한 트랜잭션에서 프로필과 직계 하위 폴더를 부모로 옮긴다. 이름 충돌은 전체 롤백하며 프로필을 삭제하거나 자동 개명하지 않는다. 프로필 revision 트리거는 폴더 이동에도 적용된다.

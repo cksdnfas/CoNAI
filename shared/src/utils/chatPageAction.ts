@@ -10,7 +10,7 @@ const privateKey = /password|secret|credential|api[ _-]?key|authorization|bearer
 export function isPrivateChatPageKey(key: string) {
   // These exact profile settings are model token counts, not authentication tokens.
   // Keep the exception narrow so credential names and nested keys still receive the normal checks.
-  if (key === 'maxTokens' || key === 'contextTokens') return false
+  if (key === 'maxTokens' || key === 'contextTokens' || key === 'reasoningBudgetTokens') return false
   return privateKey.test(key) || ['__proto__', 'prototype', 'constructor', 'dataUrl', 'base64', 'encoded'].includes(key)
 }
 

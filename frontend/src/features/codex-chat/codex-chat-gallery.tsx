@@ -1,7 +1,5 @@
 import { useRuntimeEventStream } from '@/features/runtime-events/use-runtime-event-stream'
 import { chatGenerationPollInterval } from '@/features/runtime-events/chat-generation-query-updates'
-import { ImagePermissionNotice } from '@/features/images/components/image-permission-notice'
-import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { buildChatImageRecord } from './chat-image-record'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -35,15 +33,14 @@ export function CodexChatGallery({ threadId, columns, pendingJobs }: { threadId:
   const chat = useCodexChat()
   const queryClient = useQueryClient()
   const [filter, setFilter] = useState<GalleryFilter>('all')
-  const { canViewImages } = useImagePermissions()
   const { status: streamStatus } = useRuntimeEventStream()
-  const mediaQuery = useQuery({ refetchInterval: (query) => pendingJobs > 0 || query.state.data?.some((item) => item.postprocessStatus === 'pending') ? chatGenerationPollInterval(streamStatus) : false, enabled: canViewImages, queryKey: codexChatMediaQueryKey(threadId), queryFn: () => getCodexChatThreadMedia(threadId) })
+  const mediaQuery = useQuery({ refetchInterval: (query) => pendingJobs > 0 || query.state.data?.some((item) => item.postprocessStatus === 'pending') ? chatGenerationPollInterval(streamStatus) : false, queryKey: codexChatMediaQueryKey(threadId), queryFn: () => getCodexChatThreadMedia(threadId) })
   const previousJobs = useRef({ threadId, count: pendingJobs })
   useEffect(() => {
     // Without SSE, a final job can finish between polling ticks; read its result before stopping the timer.
-    if (canViewImages && streamStatus !== 'live' && previousJobs.current.threadId === threadId && previousJobs.current.count > pendingJobs) void refetchActiveChatQuery(queryClient, codexChatMediaQueryKey(threadId))
+    if (streamStatus !== 'live' && previousJobs.current.threadId === threadId && previousJobs.current.count > pendingJobs) void refetchActiveChatQuery(queryClient, codexChatMediaQueryKey(threadId))
     previousJobs.current = { threadId, count: pendingJobs }
-  }, [canViewImages, streamStatus, threadId, pendingJobs, queryClient])
+  }, [streamStatus, threadId, pendingJobs, queryClient])
 
   const allEntries = useMemo<GalleryEntry[]>(
     () => (mediaQuery.data ?? []).map((media) => ({ media, image: toImageRecord(media) })),
@@ -68,8 +65,6 @@ export function CodexChatGallery({ threadId, columns, pendingJobs }: { threadId:
       <span className="text-xs tabular-nums text-muted-foreground">{formatNumber(count)}</span>
     </span>
   )
-
-  if (!canViewImages) return <ImagePermissionNotice />
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">

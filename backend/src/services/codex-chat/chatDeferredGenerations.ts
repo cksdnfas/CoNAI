@@ -1,6 +1,6 @@
 import type { ChatToolCall } from '@conai/shared'
 import { getUserSettingsDb } from '../../database/userSettingsDb'
-import type { McpRequestContext } from '../../mcp/context'
+import { isPublicChatPage, type McpRequestContext } from '../../mcp/context'
 
 /**
  * Pictures a reply asked for under an `after` generation preset (see ChatPresetPrompting). The chat model's tool call
@@ -33,7 +33,7 @@ export const ChatDeferredGenerationStore = {
   add(context: McpRequestContext, presetId: number, toolName: string, focus: string) {
     const chat = context.chatContext
     if (!chat?.replyId) throw new Error('This tool works only inside a chat reply.')
-    const stored: McpRequestContext = { ...context, chatContext: { threadId: chat.threadId, profileId: chat.profileId, kind: chat.kind, replyId: chat.replyId } }
+    const stored: McpRequestContext = { ...context, publicChatPage: isPublicChatPage(context) ? true : undefined, chatContext: { threadId: chat.threadId, profileId: chat.profileId, kind: chat.kind, replyId: chat.replyId } }
     return db().transaction(() => {
       const count = (db().prepare('SELECT COUNT(*) AS count FROM chat_deferred_generations WHERE thread_id = ? AND reply_id = ?').get(chat.threadId, chat.replyId) as { count: number }).count
       if (count >= DEFERRED_PER_REPLY_MAX) throw new Error(`One reply can ask for at most ${DEFERRED_PER_REPLY_MAX} pictures.`)

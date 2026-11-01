@@ -240,6 +240,8 @@ async function runDeferred(row: DeferredGenerationRow) {
   const profile = context.chatContext ? ChatProfileStore.find(context.chatContext.profileId) : null
   const preset = ChatGenerationPresetStore.find(row.preset_id)
   if (!thread || !profile || !preset) throw new DeferredSkip('채팅이나 프리셋이 없어졌어.')
+  const { requireMcpToolAccess } = await import('../../mcp/toolAccess')
+  requireMcpToolAccess(context, row.tool_name, {}, 'after-reply')
   const saved = await savedReply(row)
   if (!saved || saved.reply.status !== 'completed') throw new DeferredSkip('답변이 끝까지 저장되지 않았어.')
   const writer = writerOf(profile)

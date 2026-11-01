@@ -132,6 +132,23 @@ export function readMcpToolResult(result: McpToolResult, toolName?: string) {
     }
   }
 
+  // Native view handlers label only successful previews with an adjacent image (frames use one leading label).
+  const content = result?.content ?? []
+  if (toolName === 'view_images') {
+    for (let index = 0; index < content.length - 1; index += 1) {
+      const label = content[index] as { type?: string; text?: string } | null
+      const next = content[index + 1] as { type?: string } | null
+      const hash = label?.type === 'text' && typeof label.text === 'string'
+        ? /^composite_hash ([a-f0-9]{48}|[a-f0-9]{32}):$/.exec(label.text)?.[1] : undefined
+      if (hash && next?.type === 'image') compositeHashes.add(hash)
+    }
+  } else if (toolName === 'view_media_frames' && content.some((part) => (part as { type?: string } | null)?.type === 'image')) {
+    const label = content[0] as { type?: string; text?: string } | null
+    const hash = label?.type === 'text' && typeof label.text === 'string'
+      ? /^composite_hash ([a-f0-9]{48}|[a-f0-9]{32}): /.exec(label.text)?.[1] : undefined
+    if (hash) compositeHashes.add(hash)
+  }
+
   return { texts, historyIds: [...historyIds], compositeHashes: [...compositeHashes], jobIds: [...jobIds], pendingJobIds: [...pendingJobIds], audioCandidateIds: [...audioCandidateIds], pageOperation: readPageOperation(result?.structuredContent) }
 }
 

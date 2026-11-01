@@ -10,6 +10,7 @@ import type { McpRequester } from '../../mcp/context'
 import type { LlmGenerationOptions } from '../llmGenerationOptions'
 import { profileGenerationOptions } from './chatProfiles'
 import { inlineTextsForChat, loadAttachedImages, withLatestMediaGeneration } from './chatAttachments'
+import { chatProfileRequester } from './chatProfilePermissions'
 import { ChatFlagStore } from './chatFlags'
 import { profileContentLimit } from './chatContentRating'
 import { openChatMcpBridge, type ChatMcpBridge } from './chatMcpBridge'
@@ -299,7 +300,8 @@ async function runReply(turn: LlmTurn, requester: McpRequester, thread: CodexCha
   let preparing: Promise<Awaited<ReturnType<typeof prepareRequest>>> | null = null
   const prepareRequest = async (tools: ChatCompletionTool[]) => {
     await turn.translation
-    const history = withLatestMediaGeneration(listMessages(), profile, requester)
+    const mediaRequester = chatProfileRequester(requester, { threadId: thread.id, profileId: profile.id, kind: thread.kind, page: turn.page })
+    const history = withLatestMediaGeneration(listMessages(), profile, mediaRequester)
     const current = CodexChatStore.findThreadById(thread.id) ?? thread
     // A session prepares its latest input itself. Other requests can only show their unsummarized window.
     const attachmentMessages = inSession ? [] : thread.kind === 'group'
@@ -307,9 +309,9 @@ async function runReply(turn: LlmTurn, requester: McpRequester, thread: CodexCha
       : directContextTurns(history, current, config).flat()
     const [attachmentTexts, attachedImages, generatedImages] = await Promise.all([
       inSession ? undefined : inlineTextsForChat(turn.reaction ? { ...profile, mcpEnabled: false } : profile, requester.accountId, attachmentMessages),
-      inSession ? null : loadAttachedImages(profile, requester, attachmentMessages),
+      inSession ? null : loadAttachedImages(profile, mediaRequester, attachmentMessages),
       // The chat's latest pictures, for presets that let the chat model see them (a reaction carries its own).
-      turn.reaction || inSession ? [] : loadInlineGeneratedImages(profile, requester, thread.id),
+      turn.reaction || inSession ? [] : loadInlineGeneratedImages(profile, mediaRequester, thread.id),
     ])
     // Continuing: the cut reply as the model's own turn, then the request to carry on from its last word — room for
     // both is kept before the window is chosen.

@@ -21,6 +21,8 @@ export type CodexChatMediaItem = {
   /** Existing owner-scoped history source, when this chat references a generated result. */
   historyId?: number
   postprocessStatus?: string | null
+  /** Result-bound delivery base; never a grant to browse the library. */
+  resultMediaUrl?: string
 }
 
 /** Keep comfortably below SQLite's default 999 binding limit. */

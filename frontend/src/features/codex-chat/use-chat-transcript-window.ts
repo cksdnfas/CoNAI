@@ -26,6 +26,7 @@ export function useChatTranscriptWindow({ activeThreadId, messages, isTranscript
   const prependHeightRef = useRef<number | null>(null)
   const prependFirstRef = useRef<number | null>(null)
   const followBottomRef = useRef(true)
+  const [followRequest, setFollowRequest] = useState(0)
   const currentThreadRef = useRef(activeThreadId)
   useLayoutEffect(() => { currentThreadRef.current = activeThreadId }, [activeThreadId])
   const [flashMessageId, setFlashMessageId] = useState<number | null>(null)
@@ -40,7 +41,11 @@ export function useChatTranscriptWindow({ activeThreadId, messages, isTranscript
     const node = scrollRef.current
     if (node) node.scrollTop = node.scrollHeight
   }, [])
-  const followLatest = () => { followBottomRef.current = true; scrollToBottom() }
+  const followLatest = () => { followBottomRef.current = true; setFollowRequest((current) => current + 1) }
+  // Wait for the sent message and the cleared composer's height to reach the DOM.
+  useLayoutEffect(() => {
+    if (followRequest > 0) scrollToBottom()
+  }, [followRequest, scrollToBottom])
   const transcriptObserverRef = useRef<ResizeObserver | null>(null)
   const observeTranscript = useCallback((node: HTMLDivElement | null) => {
     transcriptObserverRef.current?.disconnect()

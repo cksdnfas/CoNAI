@@ -2,7 +2,7 @@ import { useRuntimeEventStream } from '@/features/runtime-events/use-runtime-eve
 import { chatGenerationPollInterval } from '@/features/runtime-events/chat-generation-query-updates'
 import type { RuntimeStreamStatus } from '@/features/runtime-events/runtime-event-fallback'
 import { useImagePermissions } from '@/features/auth/use-image-permissions'
-import { memo, useCallback, useEffect, useId, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
+import { memo, useCallback, useContext, useEffect, useId, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { useQueries, useQuery } from '@tanstack/react-query'
 import { AlertTriangle, Ban, Check, ChevronDown, ChevronLeft, ChevronRight, CircleX, ImageOff, RefreshCw, Repeat, Scissors, SquareCheck, Wrench, X } from 'lucide-react'
 import { isCodexChatGenerationTool, stripEchoedAddresses, withChatGenerationProgress } from '@conai/shared'
@@ -37,6 +37,7 @@ import { ChatFileChangeChips } from './chat-file-change-chips'
 import { ChatReferenceButton, ChatThumbOverlay } from './chat-reference'
 import { MENTION_CLASS, splitMentions } from './chat-mentions'
 import { chatToolLabel } from './chat-tool-catalog'
+import { ChatMessageIdContext } from './chat-display-block'
 
 const THUMB_CLASS = 'w-auto rounded-sm object-cover'
 /**
@@ -287,7 +288,7 @@ function finishedHistoryHashes(media: Record<string, CodexChatMediaInfo> | undef
   if (!index) {
     index = new Map()
     for (const [hash, info] of Object.entries(media)) {
-      if (info.historyId !== undefined && (info.postprocessStatus == null || info.postprocessStatus === 'ready')) index.set(info.historyId, hash)
+      if (info.historyId !== undefined && (info.resultMediaUrl || info.postprocessStatus == null || info.postprocessStatus === 'ready')) index.set(info.historyId, hash)
     }
     historyHashIndexes.set(media, index)
   }
@@ -321,8 +322,10 @@ function HistoryThumb({ historyId, size, media, onOpen }: { historyId: number; s
  */
 function PendingJobThumb({ jobId, size, onResolved }: { jobId: number; size: ThumbSize; onResolved: (jobId: number, historyId: number) => void }) {
   const { t } = useI18n()
+  const { canViewImages } = useImagePermissions()
   const { status: streamStatus } = useRuntimeEventStream()
   const jobQuery = useQuery({
+    enabled: canViewImages,
     queryKey: ['image-generation-history', 'codex-chat-job', jobId] as const,
     queryFn: () => getGenerationHistory(undefined, { queueJobId: jobId, limit: 1 }),
     refetchInterval: (query: { state: { data?: { records: GenerationHistoryRecord[] } } }) => (query.state.data?.records.length ? false : chatGenerationPollInterval(streamStatus)),
@@ -494,7 +497,11 @@ function ChatMediaMasonry({ tiles, size }: { tiles: ReactNode[]; size: ChatImage
  * with the `column` layout) followed by the ones it only looked up (a compact paged grid). An image in both groups
  * shows large only.
  */
-function CodexChatToolMedia({ calls, size = 'md', layout = 'grid', media }: { calls: CodexChatToolCall[]; size?: ChatImageSize; layout?: ChatImageLayout; media?: Record<string, CodexChatMediaInfo> }) {
+function CodexChatToolMedia({ calls, size = 'md', layout = 'grid', media: providedMedia }: { calls: CodexChatToolCall[]; size?: ChatImageSize; layout?: ChatImageLayout; media?: Record<string, CodexChatMediaInfo> }) {
+  const { canViewImages } = useImagePermissions()
+  const messageId = useContext(ChatMessageIdContext)
+  const media = providedMedia
+  const canShowHash = (hash: string) => canViewImages || (messageId !== null && media?.[hash]?.resultMediaUrl?.includes(`/messages/${messageId}/media/`))
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
   // Jobs that were still queued when the message was stored, resolved to their history row on this client.
   const { status: streamStatus } = useRuntimeEventStream()
@@ -507,10 +514,11 @@ function CodexChatToolMedia({ calls, size = 'md', layout = 'grid', media }: { ca
   const failedJobIds = new Set(failedJobs.map((job) => job.jobId))
   const deferredCalls = generatedCalls.filter((call) => call.deferred)
   const pendingJobIds = [...new Set(generatedCalls.flatMap((call) => call.pendingJobIds ?? []))].filter((jobId) => !failedJobIds.has(jobId) && resolvedJobs[jobId] === undefined)
-  const historyIds = [...new Set([...generatedCalls.flatMap((call) => call.historyIds), ...generatedCalls.flatMap((call) => (call.pendingJobIds ?? []).flatMap((jobId) => (resolvedJobs[jobId] !== undefined ? [resolvedJobs[jobId]] : [])))])]
-  const foundHistoryIds = [...new Set(foundCalls.flatMap((call) => call.historyIds))].filter((historyId) => !historyIds.includes(historyId))
   // Results the thread's media map already resolved need no history request; only the rest are asked (and polled).
   const knownHashes = finishedHistoryHashes(media)
+  const canShowHistory = (id: number) => canViewImages || (knownHashes?.has(id) && canShowHash(knownHashes.get(id)!))
+  const historyIds = [...new Set([...generatedCalls.flatMap((call) => call.historyIds), ...generatedCalls.flatMap((call) => (call.pendingJobIds ?? []).flatMap((jobId) => (resolvedJobs[jobId] !== undefined ? [resolvedJobs[jobId]] : [])))])].filter(canShowHistory)
+  const foundHistoryIds = [...new Set(foundCalls.flatMap((call) => call.historyIds))].filter((historyId) => !historyIds.includes(historyId) && canShowHistory(historyId))
   const queriedIds = [...historyIds, ...foundHistoryIds].filter((historyId) => !knownHashes?.has(historyId))
   const historyQueries = useQueries({ queries: queriedIds.map((historyId) => historyQueryOptions(historyId, streamStatus)) })
   const records = new Map(queriedIds.map((historyId, index) => [historyId, historyQueries[index]?.data?.record]))
@@ -523,13 +531,13 @@ function CodexChatToolMedia({ calls, size = 'md', layout = 'grid', media }: { ca
   }
   // History rows resolve to library images too; skip hashes a history thumbnail already shows.
   const historyHashes = new Set(historyIds.map((historyId) => knownHashes?.get(historyId) ?? resolveHistoryHash(records.get(historyId))).filter(Boolean))
-  const compositeHashes = [...new Set(generatedCalls.flatMap((call) => call.compositeHashes))].filter((hash) => !historyHashes.has(hash))
+  const compositeHashes = [...new Set(generatedCalls.flatMap((call) => call.compositeHashes))].filter((hash) => !historyHashes.has(hash) && canShowHash(hash))
   const generatedHashes = new Set([...historyHashes, ...compositeHashes])
   // Looked-up history rows count once their image exists (no polling placeholders in the grid).
   const foundHashes = [...new Set([
     ...foundHistoryIds.flatMap((historyId) => finishedHash(historyId) ?? []),
     ...foundCalls.flatMap((call) => call.compositeHashes),
-  ])].filter((hash) => !generatedHashes.has(hash))
+  ])].filter((hash) => !generatedHashes.has(hash) && canShowHash(hash))
   const foundItems = foundHashes.map((hash) => buildChatImageRecord(hash, undefined, media?.[hash]))
   // The lightbox pages through this message's images only, in the order the thumbnails show them.
   const lightboxItems: ImageRecord[] = [
@@ -794,7 +802,6 @@ export const CodexChatAssistantMessage = memo(function CodexChatAssistantMessage
 }) {
   const { t } = useI18n()
   // Older stored replies and live streams may still carry the model's copy of the app's [message_id=...] label.
-  const { canViewImages } = useImagePermissions()
   const content = stripEchoedAddresses(written)
   const { avatarSize } = appearance
   // A delegated agent's result says so (and whether it failed) on its card, under the agent's own name.
@@ -848,7 +855,7 @@ export const CodexChatAssistantMessage = memo(function CodexChatAssistantMessage
       <ChatMessageReply routing={routing} recipientLabel={routing?.replyTo ? recipientLabel : undefined} />
       {showReasoning ? <ReasoningBlock text={reasoning as string} active={streaming && !content} /> : null}
       {agentCard}
-      {canViewImages ? <CodexChatToolMedia calls={toolCalls.filter((call) => !isAudioWorkspaceCall(call))} size={appearance.imageSize} layout={appearance.imageLayout} media={media} /> : null}
+      <CodexChatToolMedia calls={toolCalls.filter((call) => !isAudioWorkspaceCall(call))} size={appearance.imageSize} layout={appearance.imageLayout} media={media} />
       <ChatAudioCards calls={toolCalls} />
       <ChatProposalCards calls={toolCalls} threadId={threadId} />
       <ChatPageOperationChips calls={toolCalls} />

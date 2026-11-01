@@ -12,8 +12,10 @@ test('chat generation prompting: preset settings, guide, writer answers and defe
   process.env.RUNTIME_BASE_PATH = root
   process.env.RUNTIME_DATABASE_DIR = path.join(root, 'database')
   process.env.RUNTIME_SAVE_DIR = path.join(root, 'save')
+  await (await import('../src/database/init')).initializeDatabase()
   const dbModule = await import('../src/database/userSettingsDb')
   dbModule.initializeUserSettingsDb()
+  ;(await import('../src/database/apiGenerationDb')).initializeApiGenerationDb()
   ;(await import('../src/models/ExternalApiProvider')).ExternalApiProvider.create({ provider_name: 'test', display_name: 'test', provider_type: 'llm_openai_compatible', base_url: 'http://unused.invalid', is_enabled: true, additional_config: { default_model: 'm' } })
   const { ChatGenerationPresetStore, readGenerationPresetFile } = await import('../src/services/codex-chat/chatGenerationPresets')
   const { FileStoreService, fileOwnerKey } = await import('../src/services/fileStoreService')
@@ -158,6 +160,13 @@ test('chat generation prompting: preset settings, guide, writer answers and defe
   await t.test('once the reply is saved the chat model writes the prompt from it; a cut-off reply is skipped', async (s) => {
     const { ChatGenerationPromptingService } = await import('../src/services/codex-chat/chatGenerationPrompting')
     const { ExternalApiProvider } = await import('../src/models/ExternalApiProvider')
+    const { initializeAuthDb, getAuthDb } = await import('../src/database/authDb')
+    const { updateChatSettings } = await import('../src/services/codex-chat/chatSettings')
+    const { GenerationQueueService } = await import('../src/services/generationQueueService')
+    initializeAuthDb()
+    s.after(() => getAuthDb().close())
+    updateChatSettings({ enabled: true })
+    s.mock.method(GenerationQueueService, 'requestDispatch', () => {})
     s.mock.method(ExternalApiProvider, 'findByName', () => ({ provider_name: 'test', display_name: 'Test', is_enabled: true, provider_type: 'llm_openai_compatible', base_url: 'http://unused.invalid/v1', additional_config: '{}' }))
     s.mock.method(ExternalApiProvider, 'getDecryptedKey', () => null)
     const bodies: Array<{ model: string; messages: Array<{ role: string; content: unknown }> }> = []
@@ -167,11 +176,15 @@ test('chat generation prompting: preset settings, guide, writer answers and defe
       return Response.json({ choices: [{ message: { content: '{"prompt": "1girl, smile, rooftop"}' }, finish_reason: 'stop' }] })
     })
     const preset = ChatGenerationPresetStore.create({ name: '뒤에', kind: 'nai', prompting: { timing: 'after', guide: '표정을 꼭 넣어.' } })
-    const profile = ChatProfileStore.create({ name: '루나', engine: 'llm', providerName: 'test', model: 'chat-model', appearance: 'silver hair' })
+    const profile = ChatProfileStore.create({ name: '루나', engine: 'llm', providerName: 'test', model: 'chat-model', appearance: 'silver hair', mcpEnabled: true, generationPresetIds: [preset.id] })
     const { learnServerContextLimit } = await import('../src/services/codex-chat/serverContextLimit')
     learnServerContextLimit({ providerName: 'test', model: 'chat-model' }, 'context length (8192 tokens)')
-    const thread = CodexChatStore.findThreadById(CodexChatStore.createThread(1, '옥상', 'llm', profile.id))!
-    const contextOf = (replyId: string) => ({ scopes: [], source: 'llm-chat' as const, requester: { accountId: 1, accountType: null }, chatContext: { threadId: thread.id, profileId: profile.id, kind: 'direct' as const, replyId } })
+    const thread = CodexChatStore.findThreadById(CodexChatStore.createThread(null, '옥상', 'llm', profile.id))!
+    const contextOf = (replyId: string) => ({
+      scopes: ['generate' as const], source: 'llm-chat' as const, requester: { accountId: null, accountType: null },
+      generationPresetIds: [preset.id], generationPresetSnapshot: JSON.stringify(ChatGenerationPresetStore.resolve([preset.id])),
+      chatContext: { threadId: thread.id, profileId: profile.id, kind: 'direct' as const, replyId },
+    })
     CodexChatStore.addMessage({ thread_id: thread.id, role: 'user', content: 'OLDER-TURN ' + 'older context '.repeat(5000), tool_calls: [], status: 'completed', error: null })
     CodexChatStore.addMessage({ thread_id: thread.id, role: 'assistant', content: 'OLDER-ANSWER', tool_calls: [], status: 'completed', error: null })
     CodexChatStore.addMessage({ thread_id: thread.id, role: 'user', content: '옥상에 가자', tool_calls: [], status: 'completed', error: null })
@@ -192,9 +205,12 @@ test('chat generation prompting: preset settings, guide, writer answers and defe
     assert.match(String(user.content), /silver hair/)
     assert.doesNotMatch(String(user.content), /OLDER-TURN|OLDER-ANSWER/, 'only the oversized older turn is dropped')
     const row = (id: number) => dbModule.getUserSettingsDb().prepare('SELECT state, error FROM chat_deferred_generations WHERE id = ?').get(id) as { state: string; error: string | null }
-    // The written prompt reaches the job submission (refused here: the profile does not link the preset's tool).
-    assert.equal(row(done).state, 'failed')
-    assert.equal(row(done).error, 'Unknown or not permitted tool.')
+    assert.equal(row(done).state, 'queued', row(done).error ?? undefined)
     assert.equal(row(cut).state, 'skipped')
+    ChatProfileStore.update(profile.id, { generationPresetIds: [] })
+    const revoked = ChatDeferredGenerationStore.add(contextOf('reply-done'), preset.id, 'generate_image', '')
+    await process('reply-done')
+    assert.equal(row(revoked).state, 'failed')
+    assert.equal(bodies.length, 1, 'revoked authorization must stop before another paid prompt-writing request')
   })
 })

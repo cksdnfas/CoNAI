@@ -1,4 +1,5 @@
 import type { ImageRecord } from '@/types/image'
+import { isChatResultMedia } from '@/lib/chat-result-media'
 
 export type ImageListMediaKind = 'image' | 'gif' | 'video' | 'audio'
 
@@ -39,8 +40,8 @@ export function getImageListPreviewUrl(image: ImageRecord): string | null {
   const mediaKind = getImageListMediaKind(image)
 
   if (mediaKind === 'video') {
-    if (image.image_url?.startsWith('/api/generation-history/')) {
-      return image.image_url
+    if (isChatResultMedia(image) || image.image_url?.startsWith('/api/generation-history/')) {
+      return image.image_url ?? null
     }
 
     if (image.composite_hash) {

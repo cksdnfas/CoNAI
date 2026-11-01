@@ -27,6 +27,8 @@ export interface McpRequestContext {
   /** A chat turn's server-resolved projects (its speaker's and its chat's); never accepted from model arguments. */
   workspaces?: import('@conai/shared').WorkspaceBinding[];
   chatContext?: ChatExecutionContext;
+  /** Preserve the original public-page boundary when deferred work omits the page snapshot. */
+  publicChatPage?: true;
   scopes: McpHttpScope[];
   keyId?: string;
   keyName?: string;
@@ -128,7 +130,7 @@ export function currentMcpChatPage(context: McpRequestContext) {
 
 /** Navigation cannot shed the trust boundary of the screen this reply started on. */
 export function isPublicChatPage(context: McpRequestContext, page = currentMcpChatPage(context)): boolean {
-  return context.chatContext?.page?.path.startsWith('/public/') === true || page?.path.startsWith('/public/') === true;
+  return context.publicChatPage === true || context.chatContext?.page?.path.startsWith('/public/') === true || page?.path.startsWith('/public/') === true;
 }
 
 /** A public reply cannot use the page bridge as an alternate route into private data or actions. */

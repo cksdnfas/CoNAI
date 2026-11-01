@@ -573,6 +573,105 @@ test('permissions: independent pages, features, migration, grants, scopes and ro
       } finally { stop(); revokeCodexChatMcpToken(token) }
     } finally { AuthPermissionGroup.updateCustomGroup(group.id, { name: group.name, permissionKeys: ['images.view'] }) }
   })
+  await t.test('profile delegation permits chat image tools without opening account pages and is revocable', async (sub) => {
+    const { ChatProfileStore } = await import('../src/services/codex-chat/chatProfiles')
+    const { ChatGenerationPresetStore } = await import('../src/services/codex-chat/chatGenerationPresets')
+    const { resolveChatAccess, resolveChatProfileToolGrant } = await import('../src/services/codex-chat/codexChatAccess')
+    const { CodexChatStore } = await import('../src/services/codex-chat/codexChatStore')
+    const { registerChatReply } = await import('../src/services/codex-chat/chatReplyRegistry')
+    const { updateChatSettings } = await import('../src/services/codex-chat/chatSettings')
+    const { openChatMcpBridge } = await import('../src/services/codex-chat/chatMcpBridge')
+    const { GenerationQueueModel } = await import('../src/models/GenerationQueue')
+    const { GenerationQueueService } = await import('../src/services/generationQueueService')
+    const { requireQueuedChatGenerationAccess } = await import('../src/services/generation-queue/queueJobExecutors')
+    updateChatSettings({ enabled: true })
+    sub.mock.method(GenerationQueueService, 'requestDispatch', () => {})
+    AuthPermissionGroup.updateCustomGroup(group.id, { name: group.name, permissionKeys: ['chat.use'] })
+    const preset = ChatGenerationPresetStore.create({ name: 'Delegated NAI', kind: 'nai' })
+    const profile = ChatProfileStore.create({
+      name: 'Delegated images', engine: 'llm', providerName: 'fixture', mcpEnabled: true,
+      mcpScopes: ['read'], toolAllowlist: ['search_images', 'get_image_metadata', 'view_images'],
+      generationPresetIds: [preset.id], visionEnabled: true,
+      delegatedPermissions: ['images.view', 'generation.execute'],
+    })
+    const requester = { accountId, accountType: 'guest' as const }
+    const chat = { threadId: CodexChatStore.createThread(accountId, 'delegated images', 'llm', profile.id), profileId: profile.id, kind: 'direct' as const, replyId: 'delegated-images' }
+    const stop = registerChatReply(chat, new AbortController().signal, () => ({ replyTo: null, recipients: ['user'] }))
+    const grant = resolveChatProfileToolGrant(profile, resolveChatAccess(accountId))
+    const bridge = await openChatMcpBridge(requester, grant.scopes, grant.toolAllowlist, { chatContext: chat, generationPresetIds: profile.generationPresetIds, toolCatalog: false })
+    try {
+      const names = bridge.tools.map((tool) => tool.function.name)
+      assert.ok(names.includes('search_images'), 'the profile must grant image searching without granting the account images.view')
+      assert.ok(names.includes('view_images'))
+      assert.ok(names.includes('generate_image'))
+      assert.equal(names.includes('delete_images'), false)
+      assert.notEqual((await bridge.call('search_images', { limit: 1 })).isError, true)
+      const hash = 'd8'.repeat(24)
+      const imagePath = path.join(root, 'uploads', 'delegated-image.png')
+      await (await import('sharp')).default({ create: { width: 2, height: 2, channels: 3, background: '#123456' } }).png().toFile(imagePath)
+      const folder = main.db.prepare('SELECT id FROM watched_folders LIMIT 1').get() as { id: number }
+      main.db.prepare("INSERT INTO media_metadata (composite_hash, width, height, postprocess_status, metadata_extraction_status) VALUES (?, 2, 2, 'ready', 'completed')").run(hash)
+      main.db.prepare("INSERT INTO image_files (composite_hash, original_file_path, folder_id, file_type, mime_type, file_status, file_size) VALUES (?, ?, ?, 'image', 'image/png', 'active', ?)")
+        .run(hash, imagePath, folder.id, fs.statSync(imagePath).size)
+      const viewed = await bridge.call('view_images', { composite_hashes: [hash] })
+      assert.ok(viewed.content?.some((item) => (item as { type: string }).type === 'image'), JSON.stringify(viewed))
+      const generated = await bridge.call('generate_image', { prompt: 'a cat', n_samples: 1 })
+      assert.notEqual(generated.isError, true, JSON.stringify(generated))
+      const jobId = JSON.parse((generated.content![0] as { text: string }).text).id
+      const job = GenerationQueueModel.findById(jobId)!
+      assert.equal(job.requested_by_account_id, accountId)
+      assert.doesNotThrow(() => requireQueuedChatGenerationAccess(job))
+      const continued = 'continued-delegated-images'
+      CodexChatStore.moveGenerationLinks(chat.threadId, chat.replyId, continued)
+      assert.doesNotThrow(() => requireQueuedChatGenerationAccess(job), 'continuing the same reply must not invalidate a queued job')
+      assert.ok(user.getUserSettingsDb().prepare('SELECT 1 FROM chat_result_media_grants WHERE thread_id = ? AND reply_id = ? AND composite_hash = ?')
+        .get(chat.threadId, continued, hash), 'continued replies retain their proven image results')
+      const { ChatAgentRunner } = await import('../src/services/codex-chat/chatAgentCalls')
+      await ChatAgentRunner.poll()
+      const caller = ChatProfileStore.create({ name: 'Delegation caller', engine: 'llm', providerName: 'fixture' })
+      const callerThread = CodexChatStore.createThread(accountId, 'agent result destination', 'llm', caller.id)
+      CodexChatStore.addMessage({ thread_id: chat.threadId, role: 'assistant', content: 'Queued an image.', tool_calls: [], status: 'completed', error: null,
+        routing: { replyId: continued, replyTo: null, recipients: ['user'] } })
+      const now = new Date().toISOString()
+      user.getUserSettingsDb().prepare(`INSERT INTO chat_agent_calls
+        (account_key, caller_thread_id, caller_profile_id, agent_profile_id, agent_thread_id, agent_name, caller_name, instruction, on_done, status, finished_at, created_at)
+        VALUES (?, ?, ?, ?, ?, 'Generator', 'Caller', 'draw', 'notify', 'completed', ?, ?)`)
+        .run(String(accountId), callerThread, caller.id, profile.id, chat.threadId, now, now)
+      await ChatAgentRunner.poll()
+      const moved = user.getUserSettingsDb().prepare('SELECT thread_id, reply_id FROM chat_generation_links WHERE job_id = ?').get(jobId) as { thread_id: number; reply_id: string }
+      assert.equal(moved.thread_id, callerThread)
+      assert.match(moved.reply_id, /^agent-result:/)
+      assert.doesNotThrow(() => requireQueuedChatGenerationAccess(job), 'publishing an agent result must preserve the original generator authority')
+      const unrelatedThread = CodexChatStore.createThread(accountId, 'not a recorded destination', 'llm', caller.id)
+      user.getUserSettingsDb().prepare('UPDATE chat_generation_links SET thread_id = ? WHERE job_id = ?').run(unrelatedThread, jobId)
+      assert.throws(() => requireQueuedChatGenerationAccess(job), /binding/, 'an unrecorded cross-thread move must not be accepted')
+      user.getUserSettingsDb().prepare('UPDATE chat_generation_links SET thread_id = ? WHERE job_id = ?').run(callerThread, jobId)
+      user.getUserSettingsDb().prepare("UPDATE generation_queue_jobs SET status = 'failed' WHERE id = ?").run(jobId)
+      const retry = GenerationQueueService.retryJob(jobId)!
+      const retryJob = GenerationQueueModel.findById(retry.id)!
+      assert.doesNotThrow(() => requireQueuedChatGenerationAccess(retryJob), 'a retry inherits the proven server link, not authority from client inputs')
+      for (const [url, method] of [['/api/images', 'GET'], [`/api/images/${hash}/file`, 'GET'], ['/api/generation-queue', 'POST']]) {
+        assert.equal(await status(url, accountId, method), 403, url)
+      }
+      const keys = AuthAccessControlService.resolveForAccountId(accountId).permissionKeys
+      assert.ok(!keys.includes('page.generation.view') && !keys.includes('page.home.view'))
+      assert.equal(await status(`/api/codex-chat/admin/profiles/${profile.id}`, accountId, 'PUT'), 403)
+      const other = ChatProfileStore.create({ name: 'Another delegated profile', engine: 'llm', providerName: 'fixture', mcpEnabled: true, mcpScopes: ['read'], delegatedPermissions: ['images.view'] })
+      const foreign = await openChatMcpBridge(requester, ['read'], null, { chatContext: { ...chat, profileId: other.id }, toolCatalog: false })
+      try { assert.equal(foreign.tools.some((tool) => tool.function.name === 'search_images'), false) } finally { await foreign.close() }
+      ChatProfileStore.update(profile.id, { delegatedPermissions: [] })
+      assert.equal((await bridge.call('search_images', {})).isError, true, 'an already open bridge rechecks delegation')
+      assert.equal((await bridge.call('generate_image', { prompt: 'revoked' })).isError, true)
+      assert.throws(() => requireQueuedChatGenerationAccess(job), /Permission required/)
+      assert.throws(() => requireQueuedChatGenerationAccess(retryJob), /Permission required/, 'retries also recheck current delegation')
+      assert.throws(() => ChatProfileStore.update(profile.id, { delegatedPermissions: ['page.settings.view'] }), /위임/)
+      assert.throws(() => ChatProfileStore.update(profile.id, { delegatedPermissions: ['settings.chat.manage'] }), /위임/)
+    } finally {
+      stop()
+      await bridge.close()
+    }
+  })
+
   await t.test('linked NAI and Comfy presets generate independently of page binding and general tool selection', async (sub) => {
     const { ChatProfileStore } = await import('../src/services/codex-chat/chatProfiles')
     const { ChatToolPresetStore } = await import('../src/services/codex-chat/chatToolPresets')
@@ -600,9 +699,10 @@ test('permissions: independent pages, features, migration, grants, scopes and ro
     const page = normalizeChatPageSnapshot({ instanceId: 'page-instance', connectionId: 'page-connection', path: '/generation', title: 'Generation', kind: 'page', resourceId: null, fields: [] })
     assert.ok(resolveChatAccess(adminId).scopes.includes('generate'), 'administrator already holds account generation scope')
     const permittedGuestKeys = ['chat.use', 'generation.execute', 'workflows.view']
-    const cases: Array<[number, 'admin' | 'guest', boolean]> = [[adminId, 'admin', false], [adminId, 'admin', true], [accountId, 'guest', false], [accountId, 'guest', true]]
-    for (const [callerId, accountType, connected] of cases) {
-      AuthPermissionGroup.updateCustomGroup(group.id, { name: group.name, permissionKeys: permittedGuestKeys })
+    const cases: Array<[number, 'admin' | 'guest', boolean, boolean?]> = [[adminId, 'admin', false], [adminId, 'admin', true], [accountId, 'guest', false], [accountId, 'guest', true], [accountId, 'guest', false, true]]
+    for (const [callerId, accountType, connected, delegated] of cases) {
+      AuthPermissionGroup.updateCustomGroup(group.id, { name: group.name, permissionKeys: delegated ? ['chat.use'] : permittedGuestKeys })
+      ChatProfileStore.update(profile.id, { delegatedPermissions: delegated ? ['generation.execute', 'workflows.view'] : [] })
       const requester = { accountId: callerId, accountType }
       const current = ChatProfileStore.find(profile.id)!
       const connectedPage = parseChatPageContext(connected ? page : undefined, requester)
@@ -633,6 +733,7 @@ test('permissions: independent pages, features, migration, grants, scopes and ro
         ChatProfileStore.update(profile.id, { generationPresetIds: [nai.id, comfy.id] })
       }
     }
+    ChatProfileStore.update(profile.id, { delegatedPermissions: [] })
     const guestContext = { threadId: CodexChatStore.createThread(accountId, 'denied presets', 'llm', profile.id), profileId: profile.id, kind: 'direct' as const, replyId: 'linked-denied' }
     const stop = registerChatReply(guestContext, controller.signal, () => ({ replyTo: null, recipients: ['user'] }))
     AuthPermissionGroup.updateCustomGroup(group.id, { name: group.name, permissionKeys: ['chat.use'] })

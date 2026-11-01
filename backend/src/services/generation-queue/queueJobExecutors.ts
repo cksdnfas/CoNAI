@@ -33,7 +33,7 @@ import { publishQueueJobEvent, publishQueueJobProgressEvent } from '../runtime-e
 import { requireMcpToolAccess } from '../../mcp/toolAccess'
 import { requireRequesterPermission } from '../../middleware/featureAccess'
 import { requireMcpQueueImageGrant } from './queueMcpImageGrant'
-import { isChatMcpSource, type McpRequestContext } from '../../mcp/context'
+import { isChatMcpSource, type McpRequester, type McpRequestContext } from '../../mcp/context'
 import { parseStoredRequestPayload } from './queuePayloads'
 import { getUserSettingsDb } from '../../database/userSettingsDb'
 import { requireChatAssetGeneration, requireLocalProfileAssets } from '../codex-chat/chatAssetAccess'
@@ -136,11 +136,23 @@ export function requireQueuedChatGenerationAccess(job: GenerationQueueJobRecord)
   if (!grant && getUserSettingsDb().prepare('SELECT 1 FROM chat_generation_links WHERE job_id = ?').get(job.id)) throw new Error('This older chat generation job has no current authorization binding. Resubmit it from chat.')
   if (grant) {
     if (!grant.context || !isChatMcpSource(grant.context.source) || !grant.toolName) throw new Error('Invalid or unsafe chat generation grant.')
+    const link = getUserSettingsDb().prepare('SELECT thread_id, reply_id FROM chat_generation_links WHERE job_id = ?').get(job.id) as { thread_id: number; reply_id: string } | undefined
+    const chat = grant.context.chatContext
+    const agentResultId = /^agent-result:([1-9]\d*)$/.exec(link?.reply_id ?? '')?.[1]
+    const forwarded = link && chat && link.thread_id !== chat.threadId && agentResultId
+      && getUserSettingsDb().prepare(`SELECT 1 FROM chat_agent_calls
+        WHERE id = ? AND agent_thread_id = ? AND agent_profile_id = ? AND caller_thread_id = ?`)
+        .get(agentResultId, chat.threadId, chat.profileId, link.thread_id)
+    // A continuation changes the reply id; agent publication moves delivery to the recorded caller.
+    // Execution still uses the originating profile/thread, never the destination's authority.
+    if (!link || !chat || (link.thread_id !== chat.threadId && !forwarded)) throw new Error('Invalid chat generation job binding.')
     const authority = { ...grant.context, requester: { accountId: job.requested_by_account_id ?? null, accountType: null } }
     requireMcpToolAccess(authority, grant.toolName, { group_id: job.requested_group_id }, 'queued')
     if (job.service_type === 'comfyui' && !isAudioOrderChatJob(job.id, grant.toolName)) requireRequesterPermission(authority.requester, 'workflows.view')
     if (grant.usesImages) requireRequesterPermission(authority.requester, 'images.view')
+    return authority.requester
   }
+  return undefined
 }
 
 export async function executeGenerationQueueJob(
@@ -148,9 +160,9 @@ export async function executeGenerationQueueJob(
   assignedServer: ComfyUIServerRecord | null,
   context: QueueJobExecutorContext,
 ) {
-  requireQueuedChatGenerationAccess(job)
+  const requester = requireQueuedChatGenerationAccess(job) ?? { accountId: job.requested_by_account_id ?? null, accountType: null }
   if (job.service_type === 'comfyui') {
-    await executeComfyUiJob(job, assignedServer, context)
+    await executeComfyUiJob(job, assignedServer, context, requester)
     return
   }
 
@@ -167,7 +179,7 @@ export async function executeGenerationQueueJob(
   throw new Error(`Unsupported queue service type: ${job.service_type}`)
 }
 
-async function executeComfyUiJob(job: GenerationQueueJobRecord, assignedServer: ComfyUIServerRecord | null, context: QueueJobExecutorContext) {
+async function executeComfyUiJob(job: GenerationQueueJobRecord, assignedServer: ComfyUIServerRecord | null, context: QueueJobExecutorContext, requester: McpRequester) {
   if (!job.workflow_id) {
     throw new Error(`Queue job ${job.id} is missing workflow_id for ComfyUI execution`)
   }
@@ -195,7 +207,7 @@ async function executeComfyUiJob(job: GenerationQueueJobRecord, assignedServer: 
     if (job.requested_by_account_id == null && payload.mcpImageGrant !== undefined) {
       requireMcpQueueImageGrant(payload.mcpImageGrant, workflow.id, payload.promptData)
     } else {
-      requireRequesterPermission({ accountId: job.requested_by_account_id ?? null, accountType: null }, 'images.view')
+      requireRequesterPermission(requester, 'images.view')
     }
   }
   const preparedPromptData = await prepareComfyPromptData(comfyService, markedFields, payload.promptData)

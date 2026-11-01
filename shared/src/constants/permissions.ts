@@ -53,6 +53,11 @@ export type PermissionSection = (typeof PERMISSION_CATALOG)[number]['section']
 
 export const PERMISSION_KEYS: readonly PermissionKey[] = PERMISSION_CATALOG.map((permission) => permission.key)
 
+/** Profile tools may receive domain capabilities, never account, chat admission or server administration. */
+export const CHAT_DELEGATABLE_PERMISSION_KEYS: readonly PermissionKey[] = PERMISSION_CATALOG
+  .filter((permission) => permission.section !== 'settings' && permission.section !== 'account' && permission.section !== 'chat')
+  .map((permission) => permission.key)
+
 /**
  * Pages are not granted: each page opens for whoever holds the features it shows. These keys are derived when access
  * is resolved, so menus, route guards and chat page links keep reading one `page.*` key per page.

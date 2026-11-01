@@ -506,7 +506,14 @@ export class GenerationQueueService {
       request_summary: retrySummary,
     }, {
       roleLimitWorkflow: graphOrigin ? null : options?.roleLimitWorkflow,
-      withinTransaction: graphOrigin ? ({ jobIds }) => jobIds.forEach((jobId) => GenerationQueueModel.markGraphOrigin(jobId)) : undefined,
+      withinTransaction: ({ jobIds }) => {
+        const copyChatLink = getUserSettingsDb().prepare(`INSERT INTO chat_generation_links (job_id, thread_id, reply_id, message_id, reaction_target)
+          SELECT ?, thread_id, reply_id, message_id, reaction_target FROM chat_generation_links WHERE job_id = ?`)
+        for (const jobId of jobIds) {
+          if (graphOrigin) GenerationQueueModel.markGraphOrigin(jobId)
+          copyChatLink.run(jobId, existing.id)
+        }
+      },
     }).jobIds
 
     // E5: 재시도는 신규 잡 생성이다 (enqueueGenerationJobs 가 created 이벤트를 낸다).

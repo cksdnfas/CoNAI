@@ -3,6 +3,7 @@ import { hasConfiguredAuth } from '../services/auth/sessionAccess';
 import { isRequesterAdmin, keyGroupPermissionKeys, requesterPermissionKeys, requireContextPermission, requireRequesterPermission } from '../middleware/featureAccess';
 import { ChatProfileStore, isVisionTool, profileSeesImages } from '../services/codex-chat/chatProfiles';
 import { requireChatMcpAccountAccess } from '../services/codex-chat/codexChatAccess';
+import { chatMcpRequester } from '../services/codex-chat/chatProfilePermissions';
 import { requireActiveChatReply } from '../services/codex-chat/chatReplyRegistry';
 import { isAgentRoom } from '../services/codex-chat/chatRoomWake';
 import { isProposalTool } from '../services/codex-chat/codexChatMedia';
@@ -133,7 +134,7 @@ function factsFor(context: McpRequestContext) {
   const requester = context.requester!;
   const facts = {
     at: Date.now(),
-    keys: new Set(requesterPermissionKeys(requester)),
+    keys: new Set(requesterPermissionKeys(chatMcpRequester(context) ?? requester)),
     admin: isRequesterAdmin(requester),
     profile: context.chatContext ? ChatProfileStore.find(context.chatContext.profileId) : null,
   };
@@ -242,6 +243,7 @@ export function requireMcpResourceOwner(context: McpRequestContext, record: { re
  * a picture an `after` generation preset queues once the reply that asked for it ended (chatGenerationPrompting).
  */
 export function requireMcpToolAccess(context: McpRequestContext, toolName: string, params: Record<string, unknown> = {}, execution: 'reply' | 'after-reply' | 'queued' = 'reply'): void {
+  context.requester = chatMcpRequester(context);
   if (!isContextToolAllowed(context, toolName, false)) throw new Error('Unknown or not permitted tool.');
   refreshMcpRequester(context.requester);
   if (isChatMcpSource(context.source)) {
@@ -252,7 +254,7 @@ export function requireMcpToolAccess(context: McpRequestContext, toolName: strin
       validateMcpToolArguments(params, () => requireRequesterPermission(context.requester, 'images.view'), pluginPageAction || findExternalMcpTool(toolName) !== null || findPluginServerTool(toolName) !== null);
     }
   }
-  // An account's groups, or an HTTP MCP key's group: permissions only ever come from permission groups.
+  // A chat may add its administrator-delegated domain keys; external keys still use only their permission group.
   if (context.requester || isKeyContext(context)) {
     if (featurePermissionOf(toolName) === undefined) throw new Error('Unclassified account-bound tool.');
     for (const permission of requiredToolKeys(toolName)) requireContextPermission(context, permission);

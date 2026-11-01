@@ -920,7 +920,11 @@ export const CodexChatStore = {
         SELECT ?, thread_id, state, attempts, message_id, updated_at FROM chat_generation_reactions WHERE thread_id = ? AND reply_id = ?`)
         .run(toReplyId, threadId, fromReplyId)
       db.prepare('UPDATE chat_generation_links SET reply_id = ? WHERE thread_id = ? AND reply_id = ?').run(toReplyId, threadId, fromReplyId)
-      db.prepare('UPDATE chat_deferred_generations SET reply_id = ? WHERE thread_id = ? AND reply_id = ?').run(toReplyId, threadId, fromReplyId)
+      db.prepare(`INSERT OR IGNORE INTO chat_result_media_grants (account_id, thread_id, profile_id, reply_id, composite_hash)
+        SELECT account_id, thread_id, profile_id, ?, composite_hash FROM chat_result_media_grants WHERE thread_id = ? AND reply_id = ?`)
+        .run(toReplyId, threadId, fromReplyId)
+      db.prepare("UPDATE chat_deferred_generations SET reply_id = ?, context = json_set(context, '$.chatContext.replyId', ?) WHERE thread_id = ? AND reply_id = ?")
+        .run(toReplyId, toReplyId, threadId, fromReplyId)
     }).immediate()
   },
 

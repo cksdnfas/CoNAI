@@ -1,5 +1,7 @@
 import { requireImagesView, canRequesterViewImages } from '../middleware/imageAccess'
 import fs from 'fs'
+import path from 'path'
+import { runtimePaths } from '../config/runtimePaths'
 import { getUserSettingsDb } from '../database/userSettingsDb'
 import multer from 'multer'
 import express, { type NextFunction, type Request, type Response } from 'express'
@@ -36,7 +38,8 @@ import { ModelSlotStore } from '../services/codex-chat/modelSlots'
 import { downChatProfiles } from '../services/codex-chat/chatConnectionHealth'
 import { effectiveModelOf, modelLabelOf } from '../services/codex-chat/chatModelRoles'
 import { CodexChatStore, type ChatThreadSummary } from '../services/codex-chat/codexChatStore'
-import { attachJobResults, collectCodexChatMedia } from '../services/codex-chat/codexChatMedia'
+import { attachJobResults } from '../services/codex-chat/codexChatMedia'
+import { chatResultMediaMap, resolveChatResultMedia } from '../services/codex-chat/chatResultMediaAccess'
 import { CHAT_IMPORT_MAX_BYTES, ChatImportError, importChatThread } from '../services/codex-chat/chatImport'
 import { ChatSummaryStore } from '../services/codex-chat/chatMemory'
 import { isChatTargetReady, listChatCompletionModels } from '../services/codex-chat/llmChatCompletion'
@@ -97,7 +100,7 @@ function mutationDetail(req: Request, detail: ReturnType<typeof CodexChatService
   const visible = detail.messages.some((entry) => entry.id === changed.messageId)
     ? message
     : visibleContextMessages(detail.thread, attachJobResults([message]).messages, requester.accountId)[0]
-  const extraMedia = canRequesterViewImages(requester) ? Object.fromEntries(collectCodexChatMedia([visible]).map((item) => [item.compositeHash, { mimeType: item.mimeType, width: item.width, height: item.height, historyId: item.historyId, postprocessStatus: item.postprocessStatus }])) : {}
+  const extraMedia = chatResultMediaMap(requester, detail.thread, [visible])
   return { ...detail, media: { ...detail.media, ...extraMedia }, hasMoreBefore: detail.messagesFrom !== undefined, changedMessage: visible, previousContextRevision: changed.previousContextRevision }
 }
 
@@ -1327,7 +1330,7 @@ router.get('/threads/:threadId', requireChatAccess, (req: Request, res: Response
     }
     const selected = CodexChatStore.listMessages(threadId, { tail: tail!, before })
     const messages = visibleContextMessages(detail.thread, attachJobResults(selected).messages, requester.accountId)
-    const media = canRequesterViewImages(requester) ? Object.fromEntries(collectCodexChatMedia(messages).map((item) => [item.compositeHash, { mimeType: item.mimeType, width: item.width, height: item.height, historyId: item.historyId, postprocessStatus: item.postprocessStatus }])) : {}
+    const media = chatResultMediaMap(requester, detail.thread, messages)
     res.json({ success: true, data: { ...detail, messages, media, messagesFrom: messages[0]?.id, messageCount: CodexChatStore.messageCount(threadId), hasMoreBefore: messages.length > 0 && CodexChatStore.hasMessagesBefore(threadId, messages[0].id) } })
   } catch (error) {
     sendChatError(res, error)
@@ -1335,15 +1338,40 @@ router.get('/threads/:threadId', requireChatAccess, (req: Request, res: Response
 })
 
 /** GET /api/codex-chat/threads/:threadId/media — images the chat generated or looked up, newest first. */
-router.get('/threads/:threadId/media', requireChatAccess, requireImagesView, (req: Request, res: Response) => {
+router.get('/threads/:threadId/media', requireChatAccess, (req: Request, res: Response) => {
   const threadId = parseThreadId(req, res)
   if (threadId === null) return
   try {
+    res.setHeader('Cache-Control', 'private, no-store')
     res.json({ success: true, data: CodexChatService.listThreadMedia(requesterFrom(req), threadId) })
   } catch (error) {
     sendChatError(res, error)
   }
 })
+
+/** A stored reply's actual result, never a profile/hash supplied as an authorization grant. */
+router.get('/threads/:threadId/messages/:messageId/media/:compositeHash/:variant', requireChatAccess, asyncHandler(async (req: Request, res: Response) => {
+  res.setHeader('Cache-Control', 'private, no-store')
+  res.setHeader('X-Content-Type-Options', 'nosniff')
+  const threadId = parseId(req.params.threadId)
+  const messageId = parseId(req.params.messageId)
+  const compositeHash = String(req.params.compositeHash ?? '')
+  const variant = req.params.variant
+  const result = threadId !== null && messageId !== null && MEDIA_HASH_PATTERN.test(compositeHash) && (variant === 'file' || variant === 'thumbnail')
+    ? resolveChatResultMedia(requesterFrom(req), threadId, messageId, compositeHash) : null
+  const metadata = result ? MediaMetadataModel.findByHash(compositeHash) : null
+  const file = metadata ? activeMediaFile(compositeHash) : null
+  if (!result || !metadata || !file) {
+    res.status(404).json({ success: false, error: 'Not found' })
+    return
+  }
+  const thumbnail = variant === 'thumbnail' && metadata.thumbnail_path ? path.join(runtimePaths.tempDir, metadata.thumbnail_path) : null
+  const filePath = thumbnail && fs.existsSync(thumbnail) ? thumbnail : file.path
+  // Do not use immutable image/history stream helpers here: scoped grants must be checked on every request.
+  delete req.headers['if-none-match']
+  delete req.headers['if-modified-since']
+  res.sendFile(filePath, { cacheControl: false, lastModified: false, dotfiles: 'allow' })
+}))
 
 
 /** The `lorebook` option of a chat deletion; null when it is malformed. No option: the book goes with the chat. */

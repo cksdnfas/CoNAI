@@ -830,6 +830,14 @@ export function createUserSettingsSchema(db: Database.Database): void {
   if (!hasColumn('chat_generation_links', 'reaction_target')) {
     db.exec('ALTER TABLE chat_generation_links ADD COLUMN reaction_target INTEGER NOT NULL DEFAULT 0');
   }
+  db.exec(`CREATE TABLE IF NOT EXISTS chat_result_media_grants (
+    account_id INTEGER NOT NULL,
+    thread_id INTEGER NOT NULL REFERENCES codex_chat_threads(id) ON DELETE CASCADE,
+    profile_id INTEGER NOT NULL REFERENCES llm_chat_profiles(id) ON DELETE CASCADE,
+    reply_id TEXT NOT NULL,
+    composite_hash TEXT NOT NULL,
+    PRIMARY KEY (account_id, thread_id, profile_id, reply_id, composite_hash)
+  )`);
   // Save/review cards a chat reply proposed (profiles, lore, page actions…), in reply order.
   db.exec(`CREATE TABLE IF NOT EXISTS chat_proposals (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1016,6 +1024,7 @@ export function createUserSettingsSchema(db: Database.Database): void {
     ['max_tool_rounds', 'INTEGER'],
     ['prompt_sections', 'TEXT'],
     ['tool_allowlist', 'TEXT'],
+    ['delegated_permissions', "TEXT NOT NULL DEFAULT '[]'"],
     ['tool_output_limit', 'INTEGER'],
     // JSON ids of the generation presets (chat_generation_presets) the profile draws with.
     ['generation_preset_ids', 'TEXT'],

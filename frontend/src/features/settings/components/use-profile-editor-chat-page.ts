@@ -16,8 +16,8 @@ import type { ProfileCharacterLink } from './use-profile-character-link'
 export type ProfileEditorSection = 'basic' | 'character' | 'appearance' | 'model' | 'memory' | 'tools' | 'look'
 
 /**
- * Draft keys the chat may fill, and the section that shows each. Tool grants and access are never among them (tool
- * scopes and list, the page assistant switch, allowed groups, generation presets, agent use — which lets other profiles
+ * Draft keys the chat may fill, and the section that shows each. Tool grants and access stay manual (delegated
+ * permissions, tool scopes and list, the page assistant switch, allowed groups, generation presets, agent use — which lets other profiles
  * call this one's tools); the agent description is.
  */
 const DRAFT_KEYS = {
@@ -219,11 +219,12 @@ export function useProfileEditorChatPage({ open, profile, draft, setDraft, dirty
         contextTurns: draft.contextTurns, loreRecursionDepth: draft.loreRecursionDepth, allowLoreProposals: draft.allowLoreProposals,
         linkedFiles: draft.linkedFiles.map((link) => ({ id: link.id, write: link.write })), workspaces: draft.workspaces, toolOutputLimit: draft.toolOutputLimit,
         agentEnabled: draft.agentEnabled, agentDescription: draft.agentDescription,
-        // Grants (and agent use) stay manual. Engine fills above use the editor's engine switch patch.
+        delegatedPermissions: draft.delegatedPermissions,
+        // Grants and agent use stay manual. Engine fills above use the editor's engine switch patch.
         pageAssist: draft.pageAssist,
       },
       // What a save card shows as the contents it will store.
-      selected: { name: draft.name, tagline: draft.tagline, engine: draft.engine, modelSlotId: draft.modelSlotId, greeting: draft.greeting.slice(0, 200), appearance: (lookAppearance ?? '').slice(0, 200), characterLink },
+      selected: { name: draft.name, tagline: draft.tagline, engine: draft.engine, modelSlotId: draft.modelSlotId, greeting: draft.greeting.slice(0, 200), appearance: (lookAppearance ?? '').slice(0, 200), characterLink, delegatedPermissions: draft.delegatedPermissions },
       modelSlots: slots.map((slot) => ({ id: slot.id, label: slot.label, ...(slot.kind === 'route' ? { reaches: slot.model || null } : {}), ...(slot.isDefault ? { isDefault: true } : {}) })),
       lorebooks: (lorebooks ?? []).map((book) => ({ id: book.id, name: book.name })),
       blocks: (blocks ?? []).map((block) => ({ id: block.id, name: block.name })),

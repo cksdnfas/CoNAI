@@ -33,7 +33,7 @@ const PROPOSAL_NOTE = 'The card is shown to the user; nothing is saved until the
 const NO_CHAT_ERROR = 'Proposals need an active chat reply.';
 
 /**
- * Profile fields a chat may propose changing. Grants stay out: engine, tool scopes and allowlists, the page assistant,
+ * Profile fields a chat may propose changing. Grants stay out: delegated permissions, engine, tool scopes and allowlists, the page assistant,
  * who may chat with it, generation presets and provider/model pairs are set by hand in the editor.
  */
 const PROPOSABLE_KEYS = [
@@ -92,7 +92,7 @@ const KEY_ALIASES: Record<string, ProposableKey> = {
   linked_files: 'linkedFiles',
 };
 
-const NOT_PROPOSABLE = 'Engine, tool scopes, tool allowlists, the page assistant, allowed groups, generation presets and provider/model pairs are never proposable (the user sets them in the profile editor).';
+const NOT_PROPOSABLE = 'Delegated permissions, engine, tool scopes, tool allowlists, the page assistant, allowed groups, generation presets and provider/model pairs are never proposable (the administrator sets them in the profile editor).';
 const LANGUAGE_IDS = CHAT_TRANSLATION_LANGUAGES.map((language) => language.id);
 
 // ---------------------------------------------------------------- guide text

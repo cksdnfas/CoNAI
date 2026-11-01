@@ -30,9 +30,10 @@ import { profileContentLimit } from './chatContentRating'
 import type { ChatSendOptions } from './chatTasks'
 import { rememberChatPage } from './chatPageBridge'
 import { notifyChatUserSend } from './chatSendEvents'
-import { attachJobResults, collectCodexChatMedia, countPendingChatJobs, pendingGenerationOutcomes } from './codexChatMedia'
+import { attachJobResults, countPendingChatJobs, pendingGenerationOutcomes } from './codexChatMedia'
+import { chatResultMediaMap, collectChatResultMedia } from './chatResultMediaAccess'
 import { pendingGeneratedImages } from './chatGenerationPrompting'
-import { canRequesterViewImages } from '../../middleware/imageAccess'
+import { chatProfileRequester } from './chatProfilePermissions'
 import { buildEmoticonGuidance } from './chatEmoticons'
 import { buildChatStyleGuidance } from './chatStyle'
 import { BLOCK_EDITS_MAX, foldBlockState, parseBlockEdits, usableBlocks } from './chatBlockState'
@@ -904,7 +905,7 @@ export async function runCodexGroupReply(params: {
         const state = pendingBlockState(room, profile, params.messages, sent, profile.id, params.history?.source)
         const rejected = pendingRejectedLore(threadId, profile, sent)
         const outcomes = pendingGenerationOutcomes(threadId, params.messages.filter((message) => message.speaker_profile_id === profile.id), sent, params.history ? { source: params.history.source, speakerId: profile.id } : undefined)
-        const generated = await pendingGeneratedImages(profile, requester, threadId, sent)
+        const generated = await pendingGeneratedImages(profile, chatProfileRequester(requester, params.chatContext), threadId, sent)
         const input = params.buildInput([persona.text, lore.index.text, lore.keyed, rejected.text, note.text, state.text, outcomes.text, generated.text].filter(Boolean).join('\n\n'))
         const keys = [...persona.keys, ...lore.index.keys, ...lore.keyedKeys, ...rejected.keys, ...note.keys, ...state.keys, ...outcomes.keys, ...generated.keys]
         const lastSeen = ChatGroupStore.member(threadId, profile.id)?.last_seen_message_id ?? null
@@ -1286,7 +1287,7 @@ export const CodexChatService = {
     const attached = attachJobResults(selected)
     const pendingJobs = partial ? countPendingChatJobs(threadId) : attached.pendingJobs
     const messages = visibleContextMessages(thread, attached.messages, requester.accountId)
-    const media = canRequesterViewImages(requester) ? Object.fromEntries(collectCodexChatMedia(messages).map((item) => [item.compositeHash, { mimeType: item.mimeType, width: item.width, height: item.height, historyId: item.historyId, postprocessStatus: item.postprocessStatus }])) : {}
+    const media = chatResultMediaMap(requester, thread, messages)
     const profile = thread.profile_id ? ChatProfileStore.find(thread.profile_id) : null
     // Display block state: direct chats only (a room's members each have their own blocks; not folded yet).
     const blocks = profile && thread.kind === 'direct' && usableBlocks(profile.style.blocks).length
@@ -1331,8 +1332,8 @@ export const CodexChatService = {
 
   /** Images the chat's transcript references, for the chat's image gallery. */
   listThreadMedia(requester: McpRequester, threadId: number) {
-    requireThread(requester, threadId)
-    return collectCodexChatMedia(attachJobResults(CodexChatStore.listMessages(threadId)).messages)
+    const thread = requireThread(requester, threadId)
+    return collectChatResultMedia(requester, thread, attachJobResults(CodexChatStore.listMessages(threadId)).messages)
   },
 
   async deleteThread(requester: McpRequester, threadId: number, beforeDelete?: () => void, preserve?: () => void) {
@@ -1471,9 +1472,10 @@ export const CodexChatService = {
         const reference = referenceBlock([persona.text, lore.index.text, lore.keyed, rejected.text, note.text, state.text, outcomes.text])
         const recap = freshCodexThread ? codexHistoryRecap(current, history.filter((entry) => entry.id < userMessageId), profile, user, historySource, userMessageId) : ''
         const agentResults = pendingAgentResults(threadId, userMessageId, sent, { recap: freshCodexThread || Boolean(recap) })
-        const images = await loadAttachedImages(profile, requester, [{ attachments, mediaAttachments }])
-        const generated = await pendingGeneratedImages(profile, requester, threadId, sent)
-        const input = [recap, reference, agentResults.text, replyGuide.text, buildReplyContext(history, routing, { historySource }), pageReference.text, cards.text, chatContentWithAttachments(modelText ?? trimmed, attachments, withMediaGeneration(mediaAttachments, profile, requester), await inlineTextsForChat(profile, requester.accountId, [{ attachments }]), images), directive, generated.text].filter(Boolean).join('\n\n')
+        const mediaRequester = chatProfileRequester(requester, turn.delivery.context)
+        const images = await loadAttachedImages(profile, mediaRequester, [{ attachments, mediaAttachments }])
+        const generated = await pendingGeneratedImages(profile, mediaRequester, threadId, sent)
+        const input = [recap, reference, agentResults.text, replyGuide.text, buildReplyContext(history, routing, { historySource }), pageReference.text, cards.text, chatContentWithAttachments(modelText ?? trimmed, attachments, withMediaGeneration(mediaAttachments, profile, mediaRequester), await inlineTextsForChat(profile, requester.accountId, [{ attachments }]), images), directive, generated.text].filter(Boolean).join('\n\n')
         const keys = [...persona.keys, ...lore.index.keys, ...lore.keyedKeys, ...rejected.keys, ...note.keys, ...state.keys, ...outcomes.keys, ...replyGuide.keys, ...pageReference.keys, ...cards.keys, ...generated.keys, ...agentResults.keys]
         turn.contextMeta = codexInputMeta(profile, [userMessage], lore, input, keys, [
           ...contextSource('user-persona', persona.text), ...contextSource('lore-index', lore.index.keys.length ? lore.selected.index : ''), ...contextSource('constant-lore', lore.index.keys.length ? lore.selected.constant : ''),

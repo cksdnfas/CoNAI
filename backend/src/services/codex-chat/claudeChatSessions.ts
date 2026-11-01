@@ -9,6 +9,7 @@ import type { McpRequester } from '../../mcp/context'
 import { attachedImagesOf, chatContentWithAttachments, inlineTextsForChat, loadAttachedImages, type AttachedImages } from './chatAttachments'
 import { contextSource } from './chatContextDiagnostics'
 import { pendingGeneratedImages } from './chatGenerationPrompting'
+import { chatProfileRequester } from './chatProfilePermissions'
 import { ChatGroupStore } from './chatGroupStore'
 import { pendingPageReference, pendingProposalOutcomes } from './chatPageContext'
 import { profileContentLimit } from './chatContentRating'
@@ -130,9 +131,10 @@ export async function buildClaudeSessionTurn(params: {
   const pageReference = pendingPageReference(params.page, requester, sent, profileContentLimit(profile))
   const cards = pendingProposalOutcomes(threadId, sent)
   const agentResults = latest ? pendingAgentResults(threadId, latest.id, sent, { recap: !resumeId || Boolean(recap) }) : { text: '', keys: [] }
+  const mediaRequester = chatProfileRequester(requester, { threadId, profileId: profile.id, kind: 'direct', page: params.page })
   const [generated, images, attachmentTexts] = await Promise.all([
-    pendingGeneratedImages(profile, requester, threadId, sent),
-    latest ? loadAttachedImages(profile, requester, [latest]) : null,
+    pendingGeneratedImages(profile, mediaRequester, threadId, sent),
+    latest ? loadAttachedImages(profile, mediaRequester, [latest]) : null,
     latest ? inlineTextsForChat(profile, requester.accountId, [latest]) : undefined,
   ])
   const body = latest ? chatContentWithAttachments(latest.content, latest.attachments, latest.mediaAttachments, attachmentTexts, images) : ''
@@ -216,10 +218,11 @@ export async function buildClaudeGroupSessionTurn(params: {
   const rejected = pendingRejectedLore(thread.id, profile, sent)
   const outcomes = pendingGenerationOutcomes(thread.id, messages.filter((message) => message.speaker_profile_id === profile.id), sent, params.history ? { source: params.history.source, speakerId: profile.id } : undefined)
   const { missed, shown } = groupMissedMessages(messages, profile.id, lastSeen, params.windowLimit, params.history)
+  const mediaRequester = chatProfileRequester(requester, { threadId: thread.id, profileId: profile.id, kind: 'group' })
   const [generated, attachmentTexts, attachedImages] = await Promise.all([
-    pendingGeneratedImages(profile, requester, thread.id, sent),
+    pendingGeneratedImages(profile, mediaRequester, thread.id, sent),
     params.attachmentTexts ?? inlineTextsForChat(profile, requester.accountId, shown),
-    params.attachedImages === undefined ? loadAttachedImages(profile, requester, shown) : params.attachedImages,
+    params.attachedImages === undefined ? loadAttachedImages(profile, mediaRequester, shown) : params.attachedImages,
   ])
   const flags = flagDirectiveFor(messages, profile, user)
   const text = buildGroupCodexInput({

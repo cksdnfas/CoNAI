@@ -5,6 +5,7 @@ import { beginKnowledgeOrderTask } from '../posts/knowledge/knowledgeTaskObserva
 import type { ChatExecutionContext } from '@conai/shared'
 import { isChatOwnTool, type McpRequester } from '../../mcp/context'
 import { inlineTextsForChat, loadAttachedImages } from './chatAttachments'
+import { chatProfileRequester } from './chatProfilePermissions'
 import { ChatFlagError } from './chatFlags'
 import { ChatGroupStore, groupLimitsOf } from './chatGroupStore'
 import { ChatSummaryStore } from './chatMemory'
@@ -104,7 +105,7 @@ export async function runChatOrder(requester: McpRequester, threadId: number, me
       })
     } else {
       const attachmentTexts = await inlineTextsForChat(profile, requester.accountId, history)
-      const attachedImages = await loadAttachedImages(profile, requester, history)
+      const attachedImages = await loadAttachedImages(profile, chatProfileRequester(requester, context), history)
       const done = (call: Parameters<typeof chatOrderDone>[1]) => chatOrderDone(kind, call)
       if (group) {
         const room: CodexChatThreadRecord = summarized ? { ...thread, summary_enabled: 0 } : thread

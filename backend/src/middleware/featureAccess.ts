@@ -3,11 +3,23 @@ import { AuthAccessControlService, isActiveAdminAccount } from '../services/auth
 import { hasConfiguredAuth } from '../services/auth/sessionAccess';
 import type { McpRequester } from '../mcp/context';
 
+const requesterGrants = new WeakMap<McpRequester, () => readonly string[]>();
+
+/** Server-only authority: JSON, browser parameters and copies of a requester cannot carry this grant. */
+export function withRequesterPermissionGrant(requester: McpRequester, currentPermissions: () => readonly string[]): McpRequester {
+  const scoped = { accountId: requester.accountId, accountType: requester.accountType };
+  requesterGrants.set(scoped, currentPermissions);
+  return scoped;
+}
+
 /** The account's current keys; the bootstrap owner holds every key only while no accounts are configured. */
 export function requesterPermissionKeys(requester: McpRequester): string[] {
-  return requester.accountId === null
+  const keys = requester.accountId === null
     ? (hasConfiguredAuth() ? [] : AuthAccessControlService.resolveBootstrapAccess().permissionKeys)
     : (AuthAccount.findById(requester.accountId)?.status === 'active' ? AuthAccessControlService.resolveForAccountId(requester.accountId).permissionKeys : []);
+  const delegated = requesterGrants.get(requester)?.() ?? [];
+  // Delegated domain keys deliberately do not derive page.* keys or enter the account's access cache.
+  return delegated.length ? [...new Set([...keys, ...delegated])] : keys;
 }
 
 /** The account's current role, re-read rather than taken from the session or the browser. */
