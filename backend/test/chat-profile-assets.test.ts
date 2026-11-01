@@ -321,6 +321,52 @@ test('chat profile assets: library migration, access, imports and generation ref
     assert.equal((await call('/profiles')).body.data.find((profile: any) => profile.id === first.id).avatarHash, null)
   })
 
+  await t.test('chat-only readers see avatar thumbnails without access to originals, other media or hidden assets', async (sub) => {
+    const large = await sharp({ create: { width: 512, height: 256, channels: 3, background: '#234567' } }).png().toBuffer()
+    const legacy = `data:image/png;base64,${large.toString('base64')}`
+    const asset = await assets.ingestProfileAsset(large, 'Thumbnail access')
+    const profile = ChatProfileStore.create({ name: 'Thumbnail access', engine: 'codex', avatar: legacy, avatarHash: asset.compositeHash, backgroundHash: asset.compositeHash, referenceHash: asset.compositeHash })
+    const legacyProfile = ChatProfileStore.create({ name: 'Legacy thumbnail', engine: 'codex', avatar: legacy })
+    const bootstrap = AuthAccessControlService.resolveBootstrapAccess()
+    let permissions = bootstrap.permissionKeys.filter((key) => key !== 'images.view')
+    sub.mock.method(AuthAccessControlService, 'resolveBootstrapAccess', () => ({ ...bootstrap, permissionKeys: permissions }))
+    const publicProfile = (await call('/profiles')).body.data.find((entry: any) => entry.id === profile.id)
+    assert.equal(publicProfile.hasAvatar, true, 'chat access is enough to display the profile thumbnail')
+    assert.equal(publicProfile.avatarHash, null)
+    assert.equal(publicProfile.backgroundHash, null)
+    assert.equal(publicProfile.referenceHash, null)
+    assert.equal(publicProfile.avatarThumbnailUrl, `/api/codex-chat/profiles/${profile.id}/avatar-thumbnail`)
+    for (const id of [profile.id, legacyProfile.id]) {
+      const response = await call('/profiles/:profileId/avatar-thumbnail', { profileId: String(id) })
+      assert.equal(response.status, 200)
+      assert.equal(response.headers['cache-control'], 'private, no-store')
+      assert.equal(response.headers['content-type'], 'image/webp')
+      const metadata = await sharp(response.body).metadata()
+      assert.deepEqual([metadata.width, metadata.height], [128, 64], 'only the resized thumbnail is delivered')
+    }
+    for (const kind of ['avatar', 'background', 'reference', asset.compositeHash]) {
+      assert.equal((await call('/profiles/:profileId/assets/:kind', { profileId: String(profile.id), kind })).status, 403)
+    }
+    assert.equal((await call('/profiles/:profileId/background', { profileId: String(profile.id) })).status, 403)
+    assert.equal((await call('/media/:compositeHash/thumbnail', { compositeHash: asset.compositeHash })).status, 403)
+    for (const id of [String(second.id), '999999', asset.compositeHash]) {
+      assert.equal((await call('/profiles/:profileId/avatar-thumbnail', { profileId: id })).status, 404)
+    }
+    const tier = RatingScoreModel.createTier({ tier_name: 'Thumbnail safety', min_score: 10000, max_score: null, tier_order: -100, color: '#000000', feed_visibility: 'hide' })
+    try {
+      images.db.prepare('UPDATE media_metadata SET rating_score = 10001 WHERE composite_hash = ?').run(asset.compositeHash)
+      const hidden = await call('/profiles/:profileId/avatar-thumbnail', { profileId: String(profile.id) })
+      assert.equal(hidden.status, 403, 'cached thumbnails and legacy fallbacks cannot bypass safety')
+      assert.equal(hidden.body.code, 'hidden_by_safety_policy')
+      assert.equal((await call('/profiles')).body.data.find((entry: any) => entry.id === profile.id).avatarThumbnailUrl, null)
+    } finally {
+      images.db.prepare('UPDATE media_metadata SET rating_score = NULL WHERE composite_hash = ?').run(asset.compositeHash)
+      RatingScoreModel.deleteTier(tier.id)
+    }
+    permissions = permissions.filter((key) => key !== 'chat.use' && key !== 'chat.agent.use')
+    assert.equal((await call('/profiles/:profileId/avatar-thumbnail', { profileId: String(legacyProfile.id) })).status, 403, 'chat access is still required')
+  })
+
   await t.test('multipart upload uses the library/group and returns a hash without mutating a profile; bad bytes are rejected', async () => {
     const boundary = 'conai-test-boundary'
     const multipart = Buffer.concat([Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="characterName"\r\n\r\n업로드 캐릭터\r\n--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="avatar.png"\r\nContent-Type: image/png\r\n\r\n`), png, Buffer.from(`\r\n--${boundary}--\r\n`)])

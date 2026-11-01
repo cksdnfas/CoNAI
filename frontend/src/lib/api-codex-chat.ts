@@ -285,6 +285,7 @@ export interface ChatProfileAssetFields {
   assetVersion?: string | null
   /** False when the server has no avatar to serve for this profile (absent on drafts and older payloads). */
   hasAvatar?: boolean
+  /** The server may return a chat-only thumbnail without granting access to the original. */
   avatarThumbnailUrl?: string | null
 }
 

@@ -8,7 +8,7 @@ export const PERMISSION_CATALOG = [
     label: { ko: `${({ appearance: '공용 화면', library: '라이브러리', media: '미디어 저장', generation: '생성 실행', analysis: '자동 분석·의미 검색', posts: '게시판·지식', chat: '채팅 공통' })[area]} 설정 관리 (전체 사용자 적용)`, en: `Manage ${area} settings (all users)` },
     description: `Manage allowlisted shared ${area} settings from page dialogs. Does not grant server administration or credentials.`,
   })),
-  { key: 'images.view', section: 'images', anonymous: true, label: { ko: '이미지 보기', en: 'View images' }, description: 'List and view images, videos and animated images everywhere, including chat.' },
+  { key: 'images.view', section: 'images', anonymous: true, label: { ko: '이미지 보기', en: 'View images' }, description: 'List and view images, videos and animated images everywhere, including chat. Chat profile thumbnails require only chat access.' },
   { key: 'images.edit', section: 'images', label: { ko: '이미지 편집·그룹 정리', en: 'Edit images and groups' }, description: 'Edit tags and metadata, process images, create groups and assign images.' },
   { key: 'images.delete', section: 'images', label: { ko: '이미지·그룹 삭제', en: 'Delete images and groups' }, description: 'Delete library images and groups.' },
   { key: 'images.upload', section: 'images', label: { ko: '이미지 업로드', en: 'Upload images' }, description: 'Upload images and videos into the library.' },

@@ -1,6 +1,10 @@
 import type Database from 'better-sqlite3'
 import fs from 'fs'
+import path from 'path'
+import sharp from 'sharp'
 import { createHash } from 'crypto'
+import { runtimePaths } from '../../config/runtimePaths'
+import { ThumbnailGenerator } from '../../utils/thumbnailGenerator'
 import { db as imagesDb } from '../../database/init'
 import { getUserSettingsDb } from '../../database/userSettingsDb'
 import { MAX_UPLOAD_FILE_SIZE_BYTES } from '../../middleware/upload'
@@ -10,7 +14,7 @@ import { FileStoreService, parseFileId } from '../fileStoreService'
 import { GroupPathService } from '../groupPathService'
 import type { McpRequester } from '../../mcp/context'
 import { activeMediaFile, characterMediaGroupPath, downloadToLibrary, fileLibraryMediaUnderGroup, ingestMedia } from './chatCardAssets'
-import { MEDIA_HASH_PATTERN, MEDIA_MIME_TYPES, sniffMediaExtension } from './chatMediaLinks'
+import { MEDIA_HASH_PATTERN, MEDIA_MAX_PIXELS, MEDIA_MIME_TYPES, sniffMediaExtension } from './chatMediaLinks'
 import { ChatProfileError } from './chatProfileError'
 import type { ChatProfile } from './chatProfiles'
 import { characterId, characterSettingRow, fileCharacterAssets } from '../characterLibrary'
@@ -64,24 +68,39 @@ export function resolveProfileAsset(profile: Pick<ChatProfile, 'referenceHash' |
   const hash = kind === 'avatar' ? profile.avatarHash : kind === 'background' ? profile.backgroundHash : profile.referenceHash
   if (isProfileAssetHidden(hash)) return { state: 'hidden' as const }
   const file = hash ? activeMediaFile(hash) : null
-  if (file?.mimeType.startsWith('image/')) return { state: 'file' as const, file }
+  if (hash && file?.mimeType.startsWith('image/')) return { state: 'file' as const, file, hash }
   const legacy = kind === 'avatar' ? profile.avatar : kind === 'background' ? profile.background : null
   const match = /^data:(image\/(?:png|jpeg|webp|gif));base64,([A-Za-z0-9+/=]+)$/.exec(legacy ?? '')
   return match ? { state: 'legacy' as const, mimeType: match[1], buffer: Buffer.from(match[2], 'base64') } : { state: 'missing' as const }
 }
 
+/** A bounded avatar preview, even when library thumbnail settings retain original dimensions. */
+export async function profileAvatarThumbnail(asset: Extract<ReturnType<typeof resolveProfileAsset>, { state: 'file' | 'legacy' }>) {
+  const input = asset.state === 'file' ? asset.file.path : asset.buffer
+  const hash = asset.state === 'file' ? asset.hash : createHash('sha256').update(asset.buffer).digest('hex')
+  const thumbnail = await ThumbnailGenerator.generateThumbnail(
+    asset.state === 'file' ? asset.file.path : '', `chat-avatar-${hash}`,
+    sharp(input, { animated: false, limitInputPixels: MEDIA_MAX_PIXELS }).rotate(), 128,
+  )
+  return path.join(runtimePaths.tempDir, thumbnail)
+}
+
 /** Additive fields shared by the public and admin profile responses. */
 export function profileAssetFields(profile: ChatProfile, canViewImages: boolean, hidden?: ReadonlySet<string>) {
+  const hasAvatar = Boolean(profile.avatarHash || profile.avatar)
+  const avatarHidden = profile.avatarHash ? (hidden ? hidden.has(profile.avatarHash) : isProfileAssetHidden(profile.avatarHash)) : false
   return {
     appearance: profile.appearance,
     referenceHash: canViewImages ? profile.referenceHash : null,
     avatarHash: canViewImages ? profile.avatarHash : null,
     avatarCrop: profile.avatarCrop,
     backgroundHash: canViewImages ? profile.backgroundHash : null,
-    assetVersion: canViewImages ? [profile.avatarHash, profile.backgroundHash, profile.referenceHash].map((hash) => hash?.slice(0, 8) ?? '').join('-') + `-${Date.parse(profile.updatedDate) || 0}${profile.characterLink?.synced ? `-${createHash('sha256').update(JSON.stringify([profile.characterLink.settingId, profile.characterLink.revision])).digest('hex')}` : ''}` : null,
+    assetVersion: [profile.avatarHash, profile.backgroundHash, profile.referenceHash].map((hash) => hash?.slice(0, 8) ?? '').join('-') + `-${Date.parse(profile.updatedDate) || 0}${profile.characterLink?.synced ? `-${createHash('sha256').update(JSON.stringify([profile.characterLink.settingId, profile.characterLink.revision])).digest('hex')}` : ''}`,
     // Whether the avatar asset route has anything to serve (a library image or a legacy data URL); clients skip the request otherwise.
-    hasAvatar: canViewImages && Boolean(profile.avatarHash || profile.avatar),
-    avatarThumbnailUrl: canViewImages && profile.avatarHash && !(hidden ? hidden.has(profile.avatarHash) : isProfileAssetHidden(profile.avatarHash)) ? `/api/images/${profile.avatarHash}/thumbnail` : null,
+    hasAvatar,
+    avatarThumbnailUrl: hasAvatar && !avatarHidden
+      ? canViewImages && profile.avatarHash ? `/api/images/${profile.avatarHash}/thumbnail` : `/api/codex-chat/profiles/${profile.id}/avatar-thumbnail`
+      : null,
   }
 }
 

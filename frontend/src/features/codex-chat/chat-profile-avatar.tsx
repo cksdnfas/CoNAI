@@ -1,4 +1,3 @@
-import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { SquareTerminal } from 'lucide-react'
 import { buildApiUrl } from '@/lib/api-client'
 import { cn } from '@/lib/utils'
@@ -36,13 +35,12 @@ export function ChatProfileAvatar({ name, avatar, profile, imageUrl, avatarCrop,
   className?: string
 }) {
   const base = cn('inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full font-semibold', SIZE_CLASS[size], className)
-  const { canViewImages } = useImagePermissions()
   const src = imageUrl !== undefined ? imageUrl : profile?.id
     ? profile.hasAvatar === false ? null : chatProfileAssetUrl(profile.id, 'avatar', profile.assetVersion) : avatar
-  const thumbnailSrc = imageUrl === undefined && profile?.avatarHash && profile.avatarThumbnailUrl
+  const thumbnailSrc = imageUrl === undefined && profile?.avatarThumbnailUrl
     ? buildApiUrl(`${profile.avatarThumbnailUrl}?v=${encodeURIComponent(profile.assetVersion ?? '')}`) : null
   const fallback = engine === 'codex' ? <SquareTerminal className="size-[60%]" /> : Array.from(name.trim())[0] ?? '?'
   return <span className={cn(base, engine === 'codex' ? 'bg-foreground text-background' : 'text-black/80')} style={engine === 'codex' ? undefined : { backgroundColor: avatarInitialFill(name) }} aria-hidden="true">
-    <ChatProfileImage src={canViewImages ? src : null} thumbnailSrc={thumbnailSrc} crop={avatarCrop !== undefined ? avatarCrop : profile?.avatarCrop} fallback={fallback} />
+    <ChatProfileImage src={src} thumbnailSrc={thumbnailSrc} allowThumbnailWithoutImagePermission={Boolean(profile?.id) && imageUrl === undefined} crop={avatarCrop !== undefined ? avatarCrop : profile?.avatarCrop} fallback={fallback} />
   </span>
 }

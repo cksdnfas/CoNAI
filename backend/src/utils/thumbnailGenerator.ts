@@ -21,12 +21,14 @@ export class ThumbnailGenerator {
    * @param inputPath 원본 이미지 파일 경로
    * @param compositeHash 이미지의 composite hash (파일명으로 사용)
    * @param sourceImage 재사용할 sharp 인스턴스 (없으면 inputPath로 생성)
+   * @param customSize 고정 크기 미리보기. 일반 썸네일과 별도 캐시를 사용합니다.
    * @returns DB 저장용 상대 경로 (temp 폴더 기준: "thumbnails/2025-11-15/hash.webp")
    */
   static async generateThumbnail(
     inputPath: string,
     compositeHash: string,
-    sourceImage?: Sharp
+    sourceImage?: Sharp,
+    customSize?: number
   ): Promise<string> {
     // Create date-based directory structure
     const dateStr = new Date().toISOString().split('T')[0];
@@ -34,7 +36,8 @@ export class ThumbnailGenerator {
     const tempDir = path.join(runtimePaths.tempDir, 'thumbnails', dateStr);
 
     // DB 저장용 상대 경로 (temp 폴더 기준)
-    const thumbnailPath = path.join('thumbnails', dateStr, `${compositeHash}.webp`);
+    const cacheKey = customSize === undefined ? compositeHash : `${compositeHash}-${customSize}`;
+    const thumbnailPath = path.join('thumbnails', dateStr, `${cacheKey}.webp`);
     // 파일 시스템용 절대 경로
     const absoluteThumbnailPath = path.join(runtimePaths.tempDir, thumbnailPath);
 
@@ -51,9 +54,9 @@ export class ThumbnailGenerator {
 
       // The temp directory may have been cleaned since the last generation.
       await fs.promises.mkdir(tempDir, { recursive: true });
-      const temporary = path.join(tempDir, `${compositeHash}.${randomUUID()}.partial.webp`);
+      const temporary = path.join(tempDir, `${cacheKey}.${randomUUID()}.partial.webp`);
       try {
-        await ImageProcessor.generateThumbnail(inputPath, temporary, undefined, sourceImage);
+        await ImageProcessor.generateThumbnail(inputPath, temporary, customSize, sourceImage);
         // Readers must never mistake a partially written thumbnail for a completed one.
         await fs.promises.rename(temporary, absoluteThumbnailPath);
         return thumbnailPath;

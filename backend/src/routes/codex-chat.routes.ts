@@ -65,7 +65,7 @@ import { ChatAppearanceStore } from '../services/codex-chat/chatAppearance'
 import { validateBlockData } from '../services/codex-chat/chatBlockState'
 import { canSuggest, ChatSuggestError, profileWriterReady, suggestReplies, userWriterReady } from '../services/codex-chat/chatSuggestions'
 import { createUploadStorage, MAX_UPLOAD_FILE_SIZE_BYTES } from '../middleware/upload'
-import { downloadProfileAsset, hiddenProfileAssets, importFileStoreProfileAsset, ingestProfileAsset, isProfileAssetHidden, profileAssetFields, resolveProfileAsset } from '../services/codex-chat/chatProfileAssets'
+import { downloadProfileAsset, hiddenProfileAssets, importFileStoreProfileAsset, ingestProfileAsset, isProfileAssetHidden, profileAssetFields, profileAvatarThumbnail, resolveProfileAsset } from '../services/codex-chat/chatProfileAssets'
 import chatAssetBatchesRouter, { chatProfileExpressionsRouter } from './chat-asset-batches.routes'
 import externalMcpRouter from './external-mcp.routes'
 import { draftChatAppearance } from '../services/codex-chat/chatAppearanceDraft'
@@ -222,7 +222,7 @@ router.get('/profiles', requireChatAccess, (req: Request, res: Response) => {
 })
 
 /** GET /api/codex-chat/profiles/:profileId/background — the chat background image (`?v=` busts the cache). */
-async function serveProfileAsset(req: Request, res: Response, kind: string) {
+async function serveProfileAsset(req: Request, res: Response, kind: string, thumbnail = false) {
   const profileId = parseId(req.params.profileId)
   const profile = profileId === null ? null : ChatProfileStore.find(profileId)
   if (!profile || (kind !== 'avatar' && kind !== 'background' && kind !== 'reference')) {
@@ -235,6 +235,12 @@ async function serveProfileAsset(req: Request, res: Response, kind: string) {
     res.status(403).json({ success: false, code: 'hidden_by_safety_policy', error: 'This image is hidden by the current safety policy' })
   } else if (asset.state === 'missing') {
     res.status(404).json({ success: false, error: '프로필 자산을 찾을 수 없어.' })
+  } else if (thumbnail) {
+    const thumbnailPath = await profileAvatarThumbnail(asset)
+    res.setHeader('Cache-Control', 'private, no-store')
+    res.setHeader('Content-Type', 'image/webp')
+    res.setHeader('X-Content-Type-Options', 'nosniff')
+    res.send(await fs.promises.readFile(thumbnailPath))
   } else if (asset.state === 'legacy') {
     res.setHeader('Content-Type', asset.mimeType)
     res.send(asset.buffer)
@@ -244,6 +250,9 @@ async function serveProfileAsset(req: Request, res: Response, kind: string) {
 }
 
 router.get('/profiles/:profileId/background', requireChatAccess, requireImagesView, asyncHandler(async (req, res) => serveProfileAsset(req, res, 'background')))
+
+/** Chat directory faces do not grant access to original assets or arbitrary library hashes. */
+router.get('/profiles/:profileId/avatar-thumbnail', requireChatAccess, asyncHandler(async (req, res) => serveProfileAsset(req, res, 'avatar', true)))
 
 /** Only the selected profile's asset is served; the caller cannot supply an arbitrary hash. */
 router.get('/profiles/:profileId/assets/:kind', requireChatAccess, requireImagesView, asyncHandler(async (req, res) => serveProfileAsset(req, res, String(req.params.kind))))

@@ -28,6 +28,8 @@ MCP 목록·실행은 `toolAccess.ts`에서 같은 위임을 적용한다. 큐�
 
 `chatResultMediaAccess.ts`는 대화·메시지·프로필과 실제 서버 검색/생성 결과에 결합된 `resultMediaUrl`을 제공한다. 파일·썸네일은 매번 현재 접근과 안전 정책을 검사하고 `private, no-store`로 전달하며 일반 이미지·이력 API를 열지 않는다. 가져오기 기록·본문·사용자가 제공한 해시나 서버 형식의 답변 ID만으로는 증거가 되지 않는다. 과거 검색 결과에 서버 실행 증거가 없으면 새로 검색해야 하고, 생성 결과는 기존 `chat_generation_links`를 재사용한다.
 
+채팅 프로필의 `avatarThumbnailUrl`은 이미지 보기 권한이 없는 계정에 `/api/codex-chat/profiles/:profileId/avatar-thumbnail`을 반환한다. 채팅 디렉터리와 같은 접근 경계에서 서버에 저장된 아바타만 128px 이내로 축소하고, 일반 썸네일 설정과 분리된 생성 캐시를 재사용한다. 요청마다 안전 정책을 검사하며 원본으로 대체하거나 임의 해시를 받지 않는다. 브라우저는 이 썸네일만 표시하고 실패 시 원본으로 우회하지 않는다. 원본·배경·참조 이미지와 일반 라이브러리 API의 `images.view` 검사는 유지한다.
+
 ### 채팅 프로필 폴더
 
 `chat_profile_folders`와 프로필의 nullable `folder_id`는 `userSettingsSchema.ts`에서 멱등 추가한다. 외형 폴더와 별개이며 같은 부모 아래 이름은 대소문자 없이 유일하다. `chatProfileFolders.ts`가 생성·이름 변경·순환 방지 이동·삭제를 공유한다. 삭제는 한 트랜잭션에서 프로필과 직계 하위 폴더를 부모로 옮긴다. 이름 충돌은 전체 롤백하며 프로필을 삭제하거나 자동 개명하지 않는다. 프로필 revision 트리거는 폴더 이동에도 적용된다.

@@ -10,9 +10,11 @@ export function chatAvatarCropStyle(crop?: ChatAvatarCrop | null): CSSProperties
 }
 
 /** Failed assets keep the placeholder; the server alone may supply a safe legacy fallback. */
-export function ChatProfileImage({ src, thumbnailSrc, crop, fallback, className = 'size-full object-cover', onLoad }: {
+export function ChatProfileImage({ src, thumbnailSrc, allowThumbnailWithoutImagePermission = false, crop, fallback, className = 'size-full object-cover', onLoad }: {
   src?: string | null
   thumbnailSrc?: string | null
+  /** Only profile-bound chat thumbnails may bypass the library image permission. */
+  allowThumbnailWithoutImagePermission?: boolean
   crop?: ChatAvatarCrop | null
   fallback?: ReactNode
   className?: string
@@ -21,8 +23,9 @@ export function ChatProfileImage({ src, thumbnailSrc, crop, fallback, className 
   const { canViewImages } = useImagePermissions()
   const [failedSrc, setFailedSrc] = useState<string | null>(null)
   const [failedThumbnail, setFailedThumbnail] = useState<string | null>(null)
-  const imageSrc = thumbnailSrc && thumbnailSrc !== failedThumbnail ? thumbnailSrc : src
-  return canViewImages && src && failedSrc !== src
-    ? <img key={imageSrc} src={imageSrc ?? undefined} alt="" draggable={false} className={className} style={chatAvatarCropStyle(crop)} onLoad={onLoad} onError={() => { if (thumbnailSrc && imageSrc === thumbnailSrc) setFailedThumbnail(thumbnailSrc); else setFailedSrc(src) }} />
+  const imageSrc = (canViewImages || allowThumbnailWithoutImagePermission) && thumbnailSrc && thumbnailSrc !== failedThumbnail
+    ? thumbnailSrc : canViewImages && src && failedSrc !== src ? src : null
+  return imageSrc
+    ? <img key={imageSrc} src={imageSrc} alt="" draggable={false} className={className} style={chatAvatarCropStyle(crop)} onLoad={onLoad} onError={() => { if (thumbnailSrc && imageSrc === thumbnailSrc) setFailedThumbnail(thumbnailSrc); else setFailedSrc(src ?? null) }} />
     : fallback ?? null
 }

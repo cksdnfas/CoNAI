@@ -128,7 +128,7 @@ export function CollapsibleScoreMeterList({
   entries: Array<[string, number]>
   accentClassName?: string
   defaultExpanded?: boolean
-  /** Skip the overline when the surrounding section already names it. */
+  /** Use a score count when the surrounding section already names the category. */
   hideTitle?: boolean
 }) {
   const { t } = useI18n()
@@ -138,8 +138,8 @@ export function CollapsibleScoreMeterList({
 
   return (
     <div className="space-y-3 rounded-sm bg-surface-lowest px-3 py-3">
-      <div className={cn('flex items-center gap-3', hideTitle ? 'justify-end' : 'justify-between')}>
-        {hideTitle ? null : <Text as="div" variant="overline">{title}</Text>}
+      <div className="flex items-center justify-between gap-3">
+        <Text as="div" variant="overline">{hideTitle ? t({ ko: '점수 ({count}개)', en: 'Scores ({count})' }, { count: entries.length }) : title}</Text>
         <IconButton
           variant="ghost"
           size="icon-xs"

@@ -30,6 +30,37 @@ async function useDom(t: TestContext) {
   return { dom, root, client }
 }
 
+test('chat-only profile avatars show thumbnails but never fall back to originals or unrelated previews', async t => {
+  const { dom, root } = await useDom(t)
+  const { act, createElement: h } = await import('react')
+  const { ChatProfileAvatar } = await import('../src/features/codex-chat/chat-profile-avatar')
+  const { ChatProfileImage } = await import('../src/features/codex-chat/chat-profile-image')
+  const { ImagePermissionsContext, resolveImagePermissions } = await import('../src/features/auth/use-image-permissions')
+  const profile = { id: 7, avatarHash: null, hasAvatar: true, avatarThumbnailUrl: '/api/codex-chat/profiles/7/avatar-thumbnail', assetVersion: 'v1' }
+  const render = async (canViewImages: boolean) => {
+    await act(async () => root.render(h(ImagePermissionsContext.Provider, {
+      value: resolveImagePermissions(canViewImages ? ['chat.use', 'images.view'] : ['chat.use'], true),
+    }, h('div', null,
+      h(ChatProfileAvatar, { name: 'Profile', engine: 'llm', profile }),
+      h(ChatProfileImage, { src: '/api/images/unrelated/file', fallback: 'Restricted image' }),
+    ))))
+  }
+  await render(false)
+  let shown = document.querySelectorAll('img')
+  assert.equal(shown.length, 1)
+  assert.equal(shown[0].getAttribute('src'), '/api/codex-chat/profiles/7/avatar-thumbnail?v=v1')
+  await act(async () => shown[0].dispatchEvent(new dom.window.Event('error')))
+  assert.equal(document.querySelectorAll('img').length, 0, 'a failed thumbnail cannot fall back to the original without image permission')
+  assert.match(document.body.textContent ?? '', /Restricted image/)
+  await render(true)
+  shown = document.querySelectorAll('img')
+  assert.equal(shown.length, 2)
+  assert.equal(shown[0].getAttribute('src'), '/api/codex-chat/profiles/7/assets/avatar?v=v1')
+  assert.equal(shown[1].getAttribute('src'), '/api/images/unrelated/file')
+  await render(false)
+  assert.equal(document.querySelectorAll('img').length, 0, 'revoking image permission hides originals again')
+})
+
 const json = (data: unknown) => new Response(JSON.stringify({ success: true, data }), { status: 200, headers: { 'Content-Type': 'application/json' } })
 const tick = () => new Promise<void>(resolve => setImmediate(resolve))
 
