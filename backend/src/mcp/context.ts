@@ -22,8 +22,10 @@ export interface McpRequestContext {
   research?: import('../services/codex-chat/chatResearch').ChatResearchExecution;
   /** Internal native-tool bridge; prevents recursive plugin registration. */
   omitPluginTools?: boolean;
-  /** Server-resolved project; never accepted from model arguments. */
+  /** A plugin window's server-resolved project; never accepted from model arguments. */
   workspace?: import('@conai/shared').WorkspaceBinding | null;
+  /** A chat turn's server-resolved projects (its speaker's and its chat's); never accepted from model arguments. */
+  workspaces?: import('@conai/shared').WorkspaceBinding[];
   chatContext?: ChatExecutionContext;
   scopes: McpHttpScope[];
   keyId?: string;

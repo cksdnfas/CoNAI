@@ -11,5 +11,13 @@ export type WorkspaceOperation =
   /** Screen only (a person confirmed it): assistants and plugins cannot delete. A folder goes with everything in it. */
   | { kind: 'delete'; target: string; expectedRevision: string }
 export type WorkspaceBatchResult = { requestId: string; status: 'completed' | 'failed' | 'interrupted'; results: Array<{ target: string; revision?: string; deleted?: true }>; error?: string; /** Stopped on a file or folder that changed since its revision was read (retry after re-reading). */ conflict?: true }
-/** `source`: the chat's own choice, or the default its profile brings (1:1 chats only). */
-export type WorkspaceBinding = { project: WorkspaceProject; bindingRevision: string; write: boolean; source?: 'chat' | 'profile' }
+/**
+ * One project a speaker works in. `source`: the chat's own choice (or its change to a profile's project) or the default
+ * its profile brings. `off`: a project of the profile this chat turned off; only the chat's settings list those, a
+ * speaker never gets them.
+ */
+export type WorkspaceBinding = { project: WorkspaceProject; bindingRevision: string; write: boolean; source?: 'chat' | 'profile'; off?: true }
+/** How a chat treats one project: its own read or write link, or off for a project its profile brings. */
+export type WorkspaceChatMode = 'read' | 'write' | 'off'
+/** Projects one chat or one profile can bring: every project's guidelines go into the instructions. */
+export const MAX_WORKSPACE_LINKS = 8

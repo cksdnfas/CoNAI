@@ -1,4 +1,4 @@
-import { CHAT_PROFILE_DEFAULTS, CHAT_PROFILE_LIMITS, CHAT_PROFILE_TEXT_LIMITS, CHAT_TRANSLATION_DEFAULTS, isChatTranslationLanguage, isCodexReasoningEffort, type ChatTranslationLanguage, type CodexReasoningEffort } from '@conai/shared'
+import { CHAT_PROFILE_DEFAULTS, CHAT_PROFILE_LIMITS, CHAT_PROFILE_TEXT_LIMITS, CHAT_TRANSLATION_DEFAULTS, MAX_WORKSPACE_LINKS, isChatTranslationLanguage, isCodexReasoningEffort, type ChatTranslationLanguage, type CodexReasoningEffort } from '@conai/shared'
 import { getUserSettingsDb } from '../../database/userSettingsDb'
 import { CHAT_SCOPES, readLegacyCodexChatSettings, type ChatScope } from './chatSettings'
 import { isClaudeReasoningEffort, isLlmReasoningEffort, parseLlmExtraParams, type LlmGenerationOptions } from '../llmGenerationOptions'
@@ -21,6 +21,8 @@ import { attachMainImagesDatabase } from '../../database/userSettingsBootstrap'
 import { checkedProfileFolder } from './chatProfileFolders'
 import { chatProfileFolderRankSql, chatProfileOrderSql, nextProfileSortOrder } from './chatProfileOrder'
 
+/** A project workspace a profile works in, and whether it may write there. */
+export type ProfileWorkspace = { id: string; write: boolean }
 const NAME_MAX_LENGTH = CHAT_PROFILE_TEXT_LIMITS.name
 const MODEL_MAX_LENGTH = 200
 const AVATAR_MAX_LENGTH = 300_000
@@ -227,8 +229,8 @@ export type ChatProfile = {
   agentDescription: string
   /** File store folders and text files its characters may open (and write, where `write`) in any chat of the owner. */
   linkedFiles: LinkedFileLink[]
-  /** The project workspace it works in (1:1 and group chats, board calls) unless the chat picks another (see WorkspaceService.effective). */
-  workspace: { id: string; write: boolean } | null
+  /** The project workspaces it works in (1:1 and group chats, board calls); a chat adds to or turns off some (see WorkspaceService.effective). */
+  workspaces: ProfileWorkspace[]
   /**
    * The judge preset (chat_judge_presets) that steers each turn; null judges nothing (the chat behaves as without a
    * judge). A preset that went missing reads as null.
@@ -348,8 +350,7 @@ type ProfileRow = CharacterProfileRow & {
   agent_enabled: number | null
   agent_description: string | null
   linked_files: string | null
-  workspace_id: string | null
-  workspace_write: number | null
+  workspaces: string | null
   judge_preset_id: number | null
   judge_provider_name: string | null
   judge_model: string | null
@@ -510,7 +511,7 @@ function toProfile(row: ProfileRow, dependencies?: ProfileListDependencies): Cha
     agentEnabled: row.agent_enabled === 1,
     agentDescription: row.agent_description ?? '',
     linkedFiles: normalizeLinkedFiles(row.linked_files),
-    workspace: row.workspace_id ? { id: row.workspace_id, write: row.workspace_write === 1 } : null,
+    workspaces: normalizeProfileWorkspaces(storedJson(row.workspaces), false),
     judgePresetId: dependencies ? row.judge_preset_id !== null && dependencies.judges.has(row.judge_preset_id) ? row.judge_preset_id : null : ChatJudgePresetStore.existing(row.judge_preset_id),
     judgeSlotId: slot(row.judge_slot_id),
     // Display blocks live in chat_display_blocks; the profile only links them (the style column's own list is legacy).
@@ -620,13 +621,35 @@ function normalizeAllowedGroupKeys(value: unknown): string[] {
   return [...new Set(value.filter((key): key is string => typeof key === 'string' && known.has(key)))]
 }
 
-/** The default project workspace of a profile: a live project (checked when it is being written), or null. */
-function profileWorkspace(value: unknown, check: boolean) {
-  if (value === null || value === undefined) return null
-  const record = value as { id?: unknown; write?: unknown }
-  if (typeof record.id !== 'string' || !/^[a-f0-9]{32}$/.test(record.id)) throw new ChatProfileError('작업 공간을 찾을 수 없어.')
-  if (check && !WorkspaceService.exists(record.id)) throw new ChatProfileError('작업 공간을 찾을 수 없어.')
-  return { id: record.id, write: record.write === true }
+function storedJson(json: string | null): unknown {
+  try { return json ? JSON.parse(json) : null } catch { return null }
+}
+
+/**
+ * The project workspaces of a profile, once each. Being written (`check`) they must be a list of live projects;
+ * read back from the column, whatever is malformed is skipped (a deleted project is skipped where it is opened).
+ */
+function normalizeProfileWorkspaces(value: unknown, check: boolean): ProfileWorkspace[] {
+  if (value === null || value === undefined) return []
+  if (!Array.isArray(value)) {
+    if (check) throw new ChatProfileError('workspaces는 [{ id, write }] 목록이어야 해.')
+    return []
+  }
+  const seen = new Set<string>()
+  const result: ProfileWorkspace[] = []
+  for (const item of value) {
+    const record = item as { id?: unknown; write?: unknown } | null
+    if (typeof record?.id !== 'string' || !/^[a-f0-9]{32}$/.test(record.id)) {
+      if (check) throw new ChatProfileError('작업 공간을 찾을 수 없어.')
+      continue
+    }
+    if (check && !WorkspaceService.exists(record.id)) throw new ChatProfileError('작업 공간을 찾을 수 없어.')
+    if (seen.has(record.id)) continue
+    seen.add(record.id)
+    result.push({ id: record.id, write: record.write === true })
+  }
+  if (check && result.length > MAX_WORKSPACE_LINKS) throw new ChatProfileError(`작업 공간은 ${MAX_WORKSPACE_LINKS}개까지 연결할 수 있어.`)
+  return result
 }
 
 function judgePresetId(value: unknown) {
@@ -697,7 +720,7 @@ function toColumns(input: ChatProfileInput, options: { draft?: boolean; strictKe
   }
 
   const openingHistory = normalizeOpeningHistory(input.openingHistory)
-  const workspace = profileWorkspace(input.workspace, strict('workspace'))
+  const workspaces = normalizeProfileWorkspaces(input.workspaces, strict('workspaces'))
   const characterLink = normalizeCharacterLink(input.characterLink)
   const columns = {
     name,
@@ -776,8 +799,7 @@ function toColumns(input: ChatProfileInput, options: { draft?: boolean; strictKe
     agent_enabled: input.agentEnabled === true ? 1 : 0,
     agent_description: input.agentDescription ?? '',
     linked_files: JSON.stringify(normalizeLinkedFiles(input.linkedFiles)),
-    workspace_id: workspace?.id ?? null,
-    workspace_write: workspace?.write ? 1 : 0,
+    workspaces: workspaces.length ? JSON.stringify(workspaces) : null,
     // Every engine can be judged (a Codex chat gets the directives and status fields only, see chatJudge).
     judge_preset_id: strict('judgePresetId') ? judgePresetId(input.judgePresetId) : input.judgePresetId ?? null,
     judge_provider_name: null,
@@ -804,7 +826,7 @@ const ADMIN_PROFILE_COLUMNS = `id, folder_id, revision, background_revision, nam
   summary_prompt, translation_instructions, translation_model_language, translation_display_language, suggest_enabled,
   model_slot_id, summary_slot_id, translation_slot_id, suggest_slot_id, suggest_profile_id, suggest_user_profile_id,
   chat_style, vision_enabled, content_rating_mode, content_rating_tier_id, page_assist, allow_lore_proposals,
-  agent_enabled, agent_description, linked_files, workspace_id, workspace_write, judge_preset_id, judge_slot_id, is_enabled, sort_order, created_date, updated_date,
+  agent_enabled, agent_description, linked_files, workspaces, judge_preset_id, judge_slot_id, is_enabled, sort_order, created_date, updated_date,
   CASE WHEN background_image IS NOT NULL AND background_image != '' THEN 'present' ELSE NULL END AS background_image`
 
 export const ChatProfileStore = {

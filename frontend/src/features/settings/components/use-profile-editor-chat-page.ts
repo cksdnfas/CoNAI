@@ -1,5 +1,5 @@
 import { createContext, useContext, useMemo, useRef, useState } from 'react'
-import { CHAT_PROFILE_LIMITS, CHAT_PROFILE_TEXT_LIMITS, CHAT_TRANSLATION_LANGUAGES, composeCharacterAppearance, type ChatPageData } from '@conai/shared'
+import { CHAT_PROFILE_LIMITS, CHAT_PROFILE_TEXT_LIMITS, CHAT_TRANSLATION_LANGUAGES, MAX_WORKSPACE_LINKS, composeCharacterAppearance, type ChatPageData } from '@conai/shared'
 import { useI18n } from '@/i18n'
 import { useChatPageRegistration, type WorkflowUndo } from '@/features/codex-chat/chat-page-context'
 import { pageAction, pageArray, pageChoice, pageNumber, pageObject, pageRecord, pageText } from '@/features/codex-chat/page-action-helpers'
@@ -29,7 +29,7 @@ const DRAFT_KEYS = {
   summaryEnabled: 'model', summarySlotId: 'model', summaryTriggerTurns: 'model', summaryPrompt: 'model',
   translationSlotId: 'model', translationModelLanguage: 'model', translationDisplayLanguage: 'model', translationInstructions: 'model',
   suggestEnabled: 'model', suggestSlotId: 'model', suggestProfileId: 'model', judgePresetId: 'model', judgeSlotId: 'model',
-  contextTurns: 'memory', loreRecursionDepth: 'memory', allowLoreProposals: 'memory', linkedFiles: 'memory', workspace: 'memory',
+  contextTurns: 'model', loreRecursionDepth: 'memory', allowLoreProposals: 'memory', linkedFiles: 'memory', workspaces: 'memory',
   toolOutputLimit: 'tools', agentDescription: 'tools',
 } as const satisfies Partial<Record<keyof Draft, ProfileEditorSection>>
 type DraftKey = keyof typeof DRAFT_KEYS
@@ -46,10 +46,7 @@ function draftValue(key: DraftKey, value: ChatPageData, current: Draft): unknown
   }
   if (key === 'temperature' && typeof value === 'number' && value < 0) return null
   if (key === 'linkedFiles' && Array.isArray(value)) return value.map((entry) => ({ id: String((entry as Record<string, unknown>).id), write: (entry as Record<string, unknown>).write === true }))
-  if (key === 'workspace') {
-    const record = pageRecord(value)
-    return record.id ? { id: String(record.id), write: record.write === true } : null
-  }
+  if (key === 'workspaces' && Array.isArray(value)) return value.map((entry) => ({ id: String((entry as Record<string, unknown>).id), write: (entry as Record<string, unknown>).write === true }))
   if (key === 'promptSections' && Array.isArray(value)) {
     // The whole array is resent to change one section: an entry keeps what it leaves out from the section with its id,
     // and content that is still the cut read-out keeps the full text. A repeated id gets a new one.
@@ -191,7 +188,7 @@ export function useProfileEditorChatPage({ open, profile, draft, setDraft, dirty
     loreRecursionDepth: { ...pageNumber(CHAT_PROFILE_LIMITS.loreRecursionDepth.min, CHAT_PROFILE_LIMITS.loreRecursionDepth.max, true), description: '0: off' },
     allowLoreProposals: { type: 'boolean' },
     linkedFiles: pageArray(pageObject({ id: pageText(32), write: { type: 'boolean' } }, ['id']), 20),
-    ...(projects.length ? { workspace: { ...pageObject({ id: pageChoice(['', ...projects.map((project) => project.id)]), write: { type: 'boolean' } }, ['id']), description: 'Default project workspace of the profile, in 1:1 and group chats and board calls (data.workspaces lists them); id "" removes it; write: may create and edit text files there' } } : {}),
+    ...(projects.length ? { workspaces: { ...pageArray(pageObject({ id: pageChoice(projects.map((project) => project.id)), write: { type: 'boolean' } }, ['id']), MAX_WORKSPACE_LINKS), description: 'Project workspaces of the profile, in 1:1 and group chats and board calls (data.workspaces lists them); [] removes all; write: may create and edit text files there' } } : {}),
     toolOutputLimit: pageNumber(CHAT_PROFILE_LIMITS.toolOutputLimit.min, CHAT_PROFILE_LIMITS.toolOutputLimit.max, true),
     agentDescription: { ...pageText(CHAT_PROFILE_TEXT_LIMITS.agentDescription), description: 'What it can do and when to call it (used while agentEnabled, which the user turns on)' },
     ...(link.canView ? { characterLink: linkSchema } : {}),
@@ -220,7 +217,7 @@ export function useProfileEditorChatPage({ open, profile, draft, setDraft, dirty
         translationSlotId: draft.translationSlotId, translationModelLanguage: draft.translationModelLanguage, translationDisplayLanguage: draft.translationDisplayLanguage, translationInstructions: brief(draft.translationInstructions),
         suggestEnabled: draft.suggestEnabled, suggestSlotId: draft.suggestSlotId, suggestProfileId: draft.suggestProfileId, judgePresetId: draft.judgePresetId, judgeSlotId: draft.judgeSlotId,
         contextTurns: draft.contextTurns, loreRecursionDepth: draft.loreRecursionDepth, allowLoreProposals: draft.allowLoreProposals,
-        linkedFiles: draft.linkedFiles.map((link) => ({ id: link.id, write: link.write })), workspace: draft.workspace, toolOutputLimit: draft.toolOutputLimit,
+        linkedFiles: draft.linkedFiles.map((link) => ({ id: link.id, write: link.write })), workspaces: draft.workspaces, toolOutputLimit: draft.toolOutputLimit,
         agentEnabled: draft.agentEnabled, agentDescription: draft.agentDescription,
         // Grants (and agent use) stay manual. Engine fills above use the editor's engine switch patch.
         pageAssist: draft.pageAssist,

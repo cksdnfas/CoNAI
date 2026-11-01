@@ -13,7 +13,7 @@ import { ChatGenerationPresetStore } from './chatGenerationPresets'
 import { CodexChatStore } from './codexChatStore'
 import { ChatGroupStore } from './chatGroupStore'
 import { requireChatPageAccess } from './chatPageContext'
-import { chatWorkspace } from './chatWorkspace'
+import { chatWorkspaces } from './chatWorkspace'
 import { mcpToolNames } from '../../mcp/context'
 import { pluginProfileTools } from '../plugins/pluginServerTools'
 
@@ -122,7 +122,7 @@ export function requireChatMcpAccountAccess(context: McpRequestContext, toolName
   if (context.source === 'codex-chat' ? !access.codex : profileEngine === 'claude' ? !access.claude : !access.llm) throw new Error('채팅 권한이 변경됐어.')
   const scope = isChatGenerationTool(toolName) ? 'generate' : getMcpToolScope(toolName)
   const pageTool = profile?.pageAssist && isConnectedChatPageTool(context, toolName, page)
-  const builtin = CHAT_ROOM_TOOLS.has(toolName) || CHAT_VISION_BUILTIN_TOOLS.has(toolName) || CHAT_SETTINGS_TOOLS.has(toolName) || (!!context.workspace && toolName.startsWith('workspace_'))
+  const builtin = CHAT_ROOM_TOOLS.has(toolName) || CHAT_VISION_BUILTIN_TOOLS.has(toolName) || CHAT_SETTINGS_TOOLS.has(toolName) || (!!context.workspaces?.length && toolName.startsWith('workspace_'))
   if (!pageTool && !builtin && (!scope || !access.scopes.includes(scope as ChatScope))) throw new Error('이 도구를 사용할 권한이 변경됐어.')
   const thread = chat ? CodexChatStore.findThread(chat.threadId, context.requester.accountId) : null
   if (!chat || !profile?.isEnabled || (context.source === 'codex-chat' ? profile.engine !== 'codex' : profile.engine !== 'llm' && profile.engine !== 'claude') || !canUseChatProfile(access, profile) || !thread
@@ -151,7 +151,7 @@ export function requireChatMcpAccountAccess(context: McpRequestContext, toolName
   }
 }
 
-const tokens = new Map<string, { research?: McpHttpAuthentication['research']; requester: McpRequester; scopes: ChatScope[]; toolAllowlist: string[] | null; generationPresetIds: number[]; generationPresetSnapshot: string; chatContext?: ChatExecutionContext; workspace: ReturnType<typeof chatWorkspace> }>()
+const tokens = new Map<string, { research?: McpHttpAuthentication['research']; requester: McpRequester; scopes: ChatScope[]; toolAllowlist: string[] | null; generationPresetIds: number[]; generationPresetSnapshot: string; chatContext?: ChatExecutionContext; workspaces: ReturnType<typeof chatWorkspaces> }>()
 
 /**
  * One token per chat app-server process; it lets that process reach `/mcp` as the chatting account with the
@@ -159,7 +159,7 @@ const tokens = new Map<string, { research?: McpHttpAuthentication['research']; r
  */
 export function issueCodexChatMcpToken(requester: McpRequester, scopes: ChatScope[], toolAllowlist: string[] | null, generationPresetIds: number[] = [], chatContext?: ChatExecutionContext, research?: McpHttpAuthentication['research']) {
   const token = `${CHAT_MCP_TOKEN_PREFIX}${crypto.randomBytes(32).toString('base64url')}`
-  tokens.set(token, { research, requester: { ...requester }, scopes: [...scopes], toolAllowlist: toolAllowlist ? [...toolAllowlist] : null, generationPresetIds: [...generationPresetIds], generationPresetSnapshot: JSON.stringify(ChatGenerationPresetStore.resolve(generationPresetIds)), chatContext, workspace: research ? null : chatWorkspace(requester, chatContext?.threadId, chatContext?.profileId) })
+  tokens.set(token, { research, requester: { ...requester }, scopes: [...scopes], toolAllowlist: toolAllowlist ? [...toolAllowlist] : null, generationPresetIds: [...generationPresetIds], generationPresetSnapshot: JSON.stringify(ChatGenerationPresetStore.resolve(generationPresetIds)), chatContext, workspaces: research ? [] : chatWorkspaces(requester, chatContext?.threadId, chatContext?.profileId) })
   return token
 }
 
@@ -203,7 +203,7 @@ export function authenticateCodexChatMcpRequest(req: Request, candidate: string 
     requester,
     source: 'codex-chat',
     research: grant.research,
-    workspace: grant.workspace,
+    workspaces: grant.workspaces,
     toolAllowlist: grant.toolAllowlist,
     generationPresetIds: grant.generationPresetIds,
     generationPresetSnapshot: grant.generationPresetSnapshot,

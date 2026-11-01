@@ -30,7 +30,9 @@ function owner(context: Context) {
 function fresh(context: Context) {
   // A TypeScript Pick is not a runtime filter: never persist chat/page snapshots or bridge metadata.
   const origin = context as McpRequestContext
-  const projectGrant = context.projectGrant ?? (context.workspace ? { id: context.workspace.project.id, revision: context.workspace.project.revision, write: context.workspace.write, threadId: origin.chatContext?.threadId, profileId: origin.chatContext?.profileId, bindingRevision: origin.chatContext ? context.workspace.bindingRevision : undefined } : undefined)
+  // A plugin acts on one project: the window's, or a chat's only one (with several the plugin gets none, never a guess).
+  const bound = context.workspace ?? (origin.workspaces?.length === 1 ? origin.workspaces[0] : undefined)
+  const projectGrant = context.projectGrant ?? (bound ? { id: bound.project.id, revision: bound.project.revision, write: bound.write, threadId: origin.chatContext?.threadId, profileId: origin.chatContext?.profileId, bindingRevision: origin.chatContext ? bound.bindingRevision : undefined } : undefined)
   context = { requester: context.requester ? { accountId: context.requester.accountId, accountType: context.requester.accountType } : undefined, scopes: [...context.scopes], keyId: context.keyId, keyGroup: context.keyGroup, baseUrl: context.baseUrl, contentRatingLimit: context.contentRatingLimit, toolAllowlist: context.toolAllowlist ? [...context.toolAllowlist] : undefined, projectGrant }
   owner(context)
   if (projectGrant) {
@@ -38,7 +40,7 @@ function fresh(context: Context) {
     const current = WorkspaceService.get(actor, projectGrant.id)
     if (current.revision !== projectGrant.revision) throw new PluginError('프로젝트 지침이 변경됐어. 새 작업을 요청해줘.', 409)
     if (projectGrant.threadId) {
-      const binding = WorkspaceService.effective(actor, projectGrant.threadId, projectGrant.profileId)
+      const binding = WorkspaceService.effective(actor, projectGrant.threadId, projectGrant.profileId).find((item) => item.project.id === projectGrant.id)
       if (!binding || binding.bindingRevision !== projectGrant.bindingRevision || binding.project.id !== projectGrant.id || (projectGrant.write && !binding.write)) throw new PluginError('채팅의 프로젝트 연결이 변경됐어.', 403)
     }
     context.workspace = { project: { ...current, guidelines: '' }, write: projectGrant.write, bindingRevision: projectGrant.bindingRevision ?? 'plugin-approved-project' }

@@ -52,7 +52,7 @@ export function WorkspaceSidebarGroup({ activeId, onOpen, onCreate }: { activeId
  * Choose the project a chat or a plugin works in (or none), and whether it may save. Search filters the loaded
  * projects; "더 보기" loads the next 50. `writeLabel` null hides the write switch.
  */
-export function WorkspaceProjectPicker({ open, onClose, projectId, write, writeLabel, onConnect, busy = false, title, noneLabel }: {
+export function WorkspaceProjectPicker({ open, onClose, projectId, write, writeLabel, onConnect, busy = false, title, noneLabel, exclude }: {
   open: boolean
   onClose: () => void
   projectId: string | null
@@ -61,8 +61,10 @@ export function WorkspaceProjectPicker({ open, onClose, projectId, write, writeL
   onConnect: (projectId: string | null, write: boolean) => void | Promise<void>
   busy?: boolean
   title?: string
-  /** The first row, which connects no project (default: 연결 안 함). */
-  noneLabel?: string
+  /** The first row, which connects no project (default: 연결 안 함); null leaves it out, for adding one more. */
+  noneLabel?: string | null
+  /** Projects already connected, left out of the list. */
+  exclude?: ReadonlySet<string>
 }) {
   const { t } = useI18n()
   const { projects, hasMore, loadMore, query } = useWorkspaceProjects(open)
@@ -76,7 +78,7 @@ export function WorkspaceProjectPicker({ open, onClose, projectId, write, writeL
     setSearch('')
   }, [open, projectId, write])
   const term = search.trim().toLowerCase()
-  const shown = term ? projects.filter((project) => project.name.toLowerCase().includes(term)) : projects
+  const shown = projects.filter((project) => !exclude?.has(project.id) && (!term || project.name.toLowerCase().includes(term)))
   const row = (id: string | null, label: string, icon: boolean) => (
     <ListRow
       key={id ?? 'none'}
@@ -98,7 +100,7 @@ export function WorkspaceProjectPicker({ open, onClose, projectId, write, writeL
         <SearchField value={search} onChange={setSearch} placeholder={t({ ko: '프로젝트 찾기', en: 'Find a project' })} />
         {query.isError ? <ErrorState error={query.error} onRetry={() => void query.refetch()} /> : null}
         <div role="radiogroup" aria-label={t({ ko: '프로젝트', en: 'Project' })} className="max-h-72 overflow-y-auto">
-          {term ? null : row(null, noneLabel ?? t({ ko: '연결 안 함', en: 'Not connected' }), false)}
+          {term || noneLabel === null ? null : row(null, noneLabel ?? t({ ko: '연결 안 함', en: 'Not connected' }), false)}
           {shown.map((project) => row(project.id, project.name, true))}
           {query.isPending ? <LoadingState /> : null}
           {hasMore ? <Button variant="ghost" size="sm" className="w-full" disabled={query.isFetchingNextPage} onClick={loadMore}>{t({ ko: '더 보기', en: 'More' })}</Button> : null}
@@ -107,7 +109,7 @@ export function WorkspaceProjectPicker({ open, onClose, projectId, write, writeL
       </ModalBody>
       <ModalFooter>
         <span className="flex-1" />
-        <Button disabled={busy} onClick={() => void onConnect(selected, selected !== null && writeLabel !== null && allowWrite)}>{t({ ko: '연결', en: 'Connect' })}</Button>
+        <Button disabled={busy || (noneLabel === null && selected === null)} onClick={() => void onConnect(selected, selected !== null && writeLabel !== null && allowWrite)}>{t({ ko: '연결', en: 'Connect' })}</Button>
       </ModalFooter>
     </Modal>
   )

@@ -1,5 +1,5 @@
 import type { JudgedContext } from './chatJudgeContext'
-import { chatWorkspace, workspaceInstructions } from './chatWorkspace'
+import { chatWorkspaces, workspaceInstructions, workspaceRuntimeKey } from './chatWorkspace'
 import { applyChatInstructionHooks } from '../plugins/pluginServerRuntime'
 import fs from 'fs'
 import path from 'path'
@@ -109,12 +109,13 @@ export async function buildClaudeSessionTurn(params: {
   const runtime = params.runtime ?? 'claude'
   const thread = CodexChatStore.findThreadById(threadId) ?? null
   const user = userPersonaForThread(thread)
-  const workspace = chatWorkspace(requester, threadId, profile.id)
+  const workspaces = chatWorkspaces(requester, threadId, profile.id)
   // Plugins may rewrite it; a changed system prompt starts a new session (systemHash).
-  const system = await applyChatInstructionHooks([claudeSessionSystem(profile, params.withTools, user), workspaceInstructions(workspace)].filter(Boolean).join('\n\n'), { engine: runtime, threadId, group: false, profile: { id: profile.id, name: profile.name } }, requester)
+  const system = await applyChatInstructionHooks([claudeSessionSystem(profile, params.withTools, user), workspaceInstructions(workspaces)].filter(Boolean).join('\n\n'), { engine: runtime, threadId, group: false, profile: { id: profile.id, name: profile.name } }, requester)
   const systemHash = systemHashOf(system)
   const baseDir = claudeSessionDir(threadId, runtime)
-  const dir = workspace ? path.join(baseDir, 'projects', workspace.project.id) : baseDir
+  const workspaceKey = workspaceRuntimeKey(workspaces)
+  const dir = workspaceKey ? path.join(baseDir, 'projects', workspaceKey) : baseDir
   const resumeId = resumableSession(thread?.codex_thread_id, systemHash, dir, runtime)
   const sent = resumeId ? readLoreSent(thread?.codex_lore_sent ?? null) : new Set<string>()
 

@@ -21,7 +21,7 @@ import { resolveCodexCommand } from '../codexGenerationExecutor'
 import { getCodexModelSuggestions } from '../codexGenerationOptions'
 import { CodexAppServerClient, type CodexAppServerNotification } from './codexAppServerClient'
 import { prepareChatRuntime, parseChatFeatureInventory, chatRuntimeArgs, chatTurnRestrictions, verifyChatRuntime } from './codexChatRuntime'
-import { chatWorkspace, workspaceSignature, workspaceInstructions } from './chatWorkspace'
+import { chatWorkspaces, workspaceSignature, workspaceInstructions, workspaceRuntimeKey } from './chatWorkspace'
 import { ChatProfileStore, chatGreetings, type ChatProfile } from './chatProfiles'
 import { loadChatSettings, type ChatScope } from './chatSettings'
 import { canUseChatProfile, resolveChatProfileToolGrant, issueCodexChatMcpToken, resolveChatAccess, revokeCodexChatMcpToken, setCodexChatExecution } from './codexChatAccess'
@@ -129,7 +129,7 @@ type TurnState = {
 }
 
 type Session = {
-  workspace: ReturnType<typeof chatWorkspace>
+  workspaces: ReturnType<typeof chatWorkspaces>
   key: string
   requester: McpRequester
   client: CodexAppServerClient
@@ -189,7 +189,7 @@ function releaseStarting(threadId: number) {
  * by the generation presets with their edit time: Codex reads tool schemas once, so an edited preset gets a new process.
  */
 function sessionKey(requester: McpRequester, scopes: ChatScope[], toolAllowlist: string[] | null, generationPresetIds: number[], chatContext?: ChatExecutionContext) {
-  const workspace = workspaceSignature(chatWorkspace(requester, chatContext?.threadId, chatContext?.profileId))
+  const workspace = workspaceSignature(chatWorkspaces(requester, chatContext?.threadId, chatContext?.profileId))
   const tools = toolAllowlist ? [...toolAllowlist].sort().join(',') : '*'
   const presets = ChatGenerationPresetStore.signature(generationPresetIds)
   // Tools are offered from the account's grants, so a changed grant or role needs a process with a fresh tool list.
@@ -299,7 +299,7 @@ export function buildCodexInstructions(profile: ChatProfile) {
 /** Developer instructions are fixed when a Codex thread starts or resumes, so plugin hooks apply then. */
 async function threadOverrides(session: Session, profile: ChatProfile) {
   const { model, effort } = resolveCodexRun(session, profile)
-  const instructions = [buildCodexInstructions(profile), workspaceInstructions(session.workspace)].filter(Boolean).join('\n\n')
+  const instructions = [buildCodexInstructions(profile), workspaceInstructions(session.workspaces)].filter(Boolean).join('\n\n')
   return {
     model,
     config: effort ? { model_reasoning_effort: effort } : {},
@@ -588,8 +588,8 @@ function handleNotification(session: Session, notification: CodexAppServerNotifi
 }
 
 async function startSession(requester: McpRequester, scopes: ChatScope[], toolAllowlist: string[] | null, generationPresetIds: number[], chatContext?: ChatExecutionContext, research?: ChatResearchExecution): Promise<Session> {
-  const workspace = research ? null : chatWorkspace(requester, chatContext?.threadId, chatContext?.profileId)
-  const runtime = prepareChatRuntime(requester, 'chat', research ? randomUUID().replace(/-/g, '') : workspace?.project.id)
+  const workspaces = research ? [] : chatWorkspaces(requester, chatContext?.threadId, chatContext?.profileId)
+  const runtime = prepareChatRuntime(requester, 'chat', research ? randomUUID().replace(/-/g, '') : workspaceRuntimeKey(workspaces))
   let features: Set<string>
   try { features = await probeCodexCli(runtime) }
   catch (error) {
@@ -626,7 +626,7 @@ async function startSession(requester: McpRequester, scopes: ChatScope[], toolAl
   }
 
   const session: Session = {
-    workspace,
+    workspaces,
     key: sessionKey(requester, scopes, toolAllowlist, generationPresetIds, chatContext) + (research ? `|research:${randomUUID()}` : ''),
     requester,
     client,

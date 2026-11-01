@@ -8,7 +8,7 @@ import { Switch } from '@/components/ui/switch'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { useI18n } from '@/i18n'
 import { getThreadLinkedFiles, getThreadLorebookSummary, threadLinkedFilesQueryKey, threadLorebookSummaryQueryKey, type ChatProfileSummary } from '@/lib/api-codex-chat'
-import { getChatWorkspace } from '@/lib/api-workspaces'
+import { getChatWorkspaces } from '@/lib/api-workspaces'
 import { ChatAppearancePopover } from './chat-appearance'
 import { useChatPage } from './chat-page-context'
 import { ChatProfileAvatar } from './chat-profile-avatar'
@@ -63,7 +63,8 @@ export function ChatInfoPanelBody({ threadId, profile, members, summaryCount, ca
   // The same queries as the context tab's blocks (shared cache), so opening the panel costs no extra request there.
   const files = useQuery({ queryKey: threadLinkedFilesQueryKey(threadId), queryFn: () => getThreadLinkedFiles(threadId), enabled: canReadFiles, staleTime: 30_000 })
   const linkedCount = (files.data ?? []).filter((view) => !view.missing).length
-  const workspace = useQuery({ queryKey: ['workspace-binding', auth.data?.accountId ?? 'bootstrap', threadId], queryFn: () => getChatWorkspace(threadId), enabled: canReadFiles, staleTime: 30_000 })
+  const workspace = useQuery({ queryKey: ['workspace-binding', auth.data?.accountId ?? 'bootstrap', threadId], queryFn: () => getChatWorkspaces(threadId), enabled: canReadFiles, staleTime: 30_000 })
+  const workspaceNames = (workspace.data ?? []).filter((item) => !item.off).map((item) => item.project.name)
   const link = isRoom ? null : profile?.characterLink
   const openProfile = (id: number) => canEditProfiles ? <RowLink to={`/characters?view=profiles&profile=${id}`}>{t({ ko: '프로필 열기', en: 'Open profile' })}</RowLink> : null
   const face = (entry: ChatProfileSummary) => <ChatProfileAvatar name={entry.name} avatar={entry.avatar} profile={entry} engine={entry.engine} size="sm" />
@@ -106,7 +107,7 @@ export function ChatInfoPanelBody({ threadId, profile, members, summaryCount, ca
         ) : null}
         {canReadFiles ? (
           <ValueRow label={t({ ko: '작업 공간', en: 'Workspace' })} action={<RowKey onClick={onContext}>{t({ ko: '바꾸기', en: 'Change' })}</RowKey>}>
-            {workspace.data ? workspace.data.project.name : workspace.isPending ? null : isRoom ? t({ ko: '멤버별 기본', en: 'Per member' }) : t({ ko: '없음', en: 'None' })}
+            {workspaceNames.length > 0 ? workspaceNames.join(', ') : workspace.isPending ? null : isRoom ? t({ ko: '멤버별 기본', en: 'Per member' }) : t({ ko: '없음', en: 'None' })}
           </ValueRow>
         ) : null}
       </RowGroup>

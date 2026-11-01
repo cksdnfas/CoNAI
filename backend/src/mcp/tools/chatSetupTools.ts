@@ -1,5 +1,5 @@
 import type { McpServer } from '@modelcontextprotocol/server';
-import { CHAT_TRANSLATION_LANGUAGES, isChatTranslationLanguage, type ChatProposal } from '@conai/shared';
+import { CHAT_TRANSLATION_LANGUAGES, MAX_WORKSPACE_LINKS, isChatTranslationLanguage, type ChatProposal } from '@conai/shared';
 import { z } from 'zod';
 import { ChatProposalStore, type NewChatProposal } from '../../services/codex-chat/chatProposals';
 import { ChatProfileStore, CHAT_PROFILE_LIMITS, CHAT_PROFILE_TEXT_LIMITS, normalizeAlternateGreetings, normalizeSections, normalizeProfileScalarField, validateProfileText as limitedText, type ChatProfile } from '../../services/codex-chat/chatProfiles';
@@ -44,7 +44,7 @@ const PROPOSABLE_KEYS = [
   'translationModelLanguage', 'translationDisplayLanguage', 'translationInstructions',
   'suggestEnabled', 'suggestProfileId',
   'visionEnabled', 'contentRatingMode', 'contentRatingTierId',
-  'loreRecursionDepth', 'allowLoreProposals', 'agentEnabled', 'agentDescription', 'linkedFiles', 'workspace', 'characterLink',
+  'loreRecursionDepth', 'allowLoreProposals', 'agentEnabled', 'agentDescription', 'linkedFiles', 'workspaces', 'characterLink',
 ] as const;
 type ProposableKey = typeof PROPOSABLE_KEYS[number];
 
@@ -167,7 +167,7 @@ function profileGuide() {
     `- loreRecursionDepth (0-${LORE_RECURSION_MAX_DEPTH}): how many times chosen lore entries\' text is scanned for more entries (0: off). allowLoreProposals: the model may save_lore.`,
     `- agentEnabled (default false): other chat profiles may delegate work to this profile. agentDescription (max ${limits.agentDescription}): short description shown in call_agent's agent list.`,
     '- linkedFiles: [{ "id": "<32-hex file store id>", "write": false }]: folders, text files, images, PDFs or XLSX documents (PDF/XLSX content is read-only; images are looked at with linked_view) in the shared file store every chat of this profile can open (write: may write there); not inside 로어북/.',
-    '- workspace: { "id": "<32-hex project workspace id>", "write": false } or null: the project workspace (files page › 작업 공간) the profile works in (1:1 and group chats, board calls) unless a chat picks another; write: may create and edit text files there.',
+    `- workspaces: [{ "id": "<32-hex project workspace id>", "write": false }]: the project workspaces (files page › 작업 공간) the profile works in (1:1 and group chats, board calls), at most ${MAX_WORKSPACE_LINKS}, [] for none; a chat can add more or turn one off; write: may create and edit text files there.`,
     NOT_PROPOSABLE,
     'Where to find those by hand (profile editor tabs 캐릭터 · 외형 · 모델 · 참고 자료 · 도구 · 꾸미기): engine and model params in 모델; tool scopes, tool list, tool presets and the 페이지 어시스턴트 switch in 도구; generation presets and character images in 외형 (images: propose_profile_assets); who may chat with it in the editor header\'s access menu; colours and blocks in 꾸미기.',
     'Values equal to the current ones are dropped.',
@@ -282,11 +282,12 @@ function proposedLinkedFiles(value: unknown, owner: string | null, kept: LinkedF
   return owner ? assertLinkedFiles(owner, links, kept) : links;
 }
 
-function proposedWorkspace(value: unknown) {
-  if (value === null) return null;
-  const record = value && typeof value === 'object' ? value as { id?: unknown; write?: unknown } : null;
-  if (!record || typeof record.id !== 'string' || !WorkspaceService.exists(record.id)) throw new Error('workspace: { id, write } needs the 32-character id of an existing project workspace (files page › 작업 공간), or null for none.');
-  return { id: record.id, write: record.write === true };
+function proposedWorkspaces(value: unknown) {
+  const list = Array.isArray(value) ? value as Array<{ id?: unknown; write?: unknown } | null> : null;
+  if (!list || list.some((item) => typeof item?.id !== 'string' || !WorkspaceService.exists(item.id))) throw new Error('workspaces must be a list of { id, write }, each id the 32-character id of an existing project workspace (files page › 작업 공간); [] for none.');
+  const unique = [...new Map(list.map((item) => [item!.id as string, { id: item!.id as string, write: item!.write === true }])).values()];
+  if (unique.length > MAX_WORKSPACE_LINKS) throw new Error(`workspaces: at most ${MAX_WORKSPACE_LINKS} projects.`);
+  return unique;
 }
 
 /** What validating a field may need beyond its value: the proposer's file store and the profile's current links. */
@@ -338,7 +339,7 @@ function normalizeProposedField(key: ProposableKey, value: unknown, fieldContext
       return value;
     case 'contentRatingTierId': return ratingTier(value);
     case 'linkedFiles': return proposedLinkedFiles(value, fieldContext.owner ?? null, fieldContext.current?.linkedFiles ?? []);
-    case 'workspace': return proposedWorkspace(value);
+    case 'workspaces': return proposedWorkspaces(value);
   }
 }
 
@@ -354,10 +355,10 @@ function displayValue(key: ProposableKey, value: unknown, owner: string | null):
     if (!links.length) return none;
     return owner ? describeLinkedFiles(owner, links, 'profile').map((view) => `${view.name}${view.kind === 'folder' ? '/' : ''}${view.write ? ' (쓰기)' : ''}`).join(', ') : `${links.length}`;
   }
-  if (key === 'workspace') {
-    const target = value as { id: string; write: boolean } | null;
-    if (!target) return none;
-    return `${WorkspaceService.exists(target.id) ? WorkspaceService.get('', target.id).name : target.id.slice(0, 8)}${target.write ? ' (쓰기)' : ''}`;
+  if (key === 'workspaces') {
+    const targets = Array.isArray(value) ? value as Array<{ id: string; write: boolean }> : [];
+    if (!targets.length) return none;
+    return targets.map((target) => `${WorkspaceService.exists(target.id) ? WorkspaceService.get('', target.id).name : target.id.slice(0, 8)}${target.write ? ' (쓰기)' : ''}`).join(', ');
   }
   return null;
 }
@@ -568,9 +569,7 @@ export function profileSetupView(profile: ChatProfile, owner: string | null = nu
     linkedFiles: owner
       ? describeLinkedFiles(owner, profile.linkedFiles, 'profile').map((view) => ({ id: view.id, name: view.missing ? null : view.name, kind: view.kind, write: view.write, ...(view.missing ? { missing: true } : {}) }))
       : profile.linkedFiles,
-    workspace: profile.workspace && WorkspaceService.exists(profile.workspace.id)
-      ? { id: profile.workspace.id, name: WorkspaceService.get('', profile.workspace.id).name, write: profile.workspace.write }
-      : null,
+    workspaces: profile.workspaces.filter((workspace) => WorkspaceService.exists(workspace.id)).map((workspace) => ({ id: workspace.id, name: WorkspaceService.get('', workspace.id).name, write: workspace.write })),
     style: { typeface, roleplay, colors, backgroundDim, backgroundBlur, emoticonGroupIds, cast: cast.map(({ id, name, color }) => ({ id, name, color })), blockKeys: blocks.map((block) => block.key) },
     mcpEnabled: profile.mcpEnabled,
     notProposable: { engine: profile.engine, pageAssist: profile.pageAssist },

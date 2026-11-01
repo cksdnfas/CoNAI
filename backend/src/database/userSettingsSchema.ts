@@ -1065,7 +1065,9 @@ export function createUserSettingsSchema(db: Database.Database): void {
     ['agent_description', "TEXT NOT NULL DEFAULT ''"],
     // JSON [{ id, write }]: file store folders and files the profile's characters may open in any chat of their owner.
     ['linked_files', 'TEXT'],
-    // The project workspace (workspace_projects, no foreign key) its 1:1 chats, group turns and board calls work in unless a chat picks another, and whether they may write.
+    // JSON [{ id, write }]: the project workspaces (workspace_projects, no foreign key) its 1:1 chats, group turns and board calls work in, and whether they may write.
+    ['workspaces', 'TEXT'],
+    // The single default project this list replaced; migrated below, then left empty.
     ['workspace_id', 'TEXT'],
     ['workspace_write', 'INTEGER NOT NULL DEFAULT 0'],
     // Judge preset (chat_judge_presets; no foreign key, like the slots) and an override of its judge connection.
@@ -1086,6 +1088,8 @@ export function createUserSettingsSchema(db: Database.Database): void {
       db.exec(`ALTER TABLE llm_chat_profiles ADD COLUMN ${columnName} ${definition}`);
     }
   }
+  db.exec(`UPDATE llm_chat_profiles SET workspaces = json_array(json_object('id', workspace_id, 'write', json(CASE WHEN workspace_write = 1 THEN 'true' ELSE 'false' END))), workspace_id = NULL
+    WHERE workspace_id IS NOT NULL AND workspaces IS NULL`);
   db.exec(`CREATE TRIGGER IF NOT EXISTS llm_chat_profiles_revision
     AFTER UPDATE ON llm_chat_profiles WHEN NEW.revision = OLD.revision
     BEGIN UPDATE llm_chat_profiles SET revision = OLD.revision + 1 WHERE id = NEW.id; END`);

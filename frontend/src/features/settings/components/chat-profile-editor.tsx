@@ -151,7 +151,7 @@ export function buildDraft(profile: ChatProfileInput | null, defaults: ChatProfi
     agentEnabled: profile?.agentEnabled ?? false,
     agentDescription: profile?.agentDescription ?? '',
     linkedFiles: profile?.linkedFiles ?? [],
-    workspace: profile?.workspace ?? null,
+    workspaces: profile?.workspaces ?? [],
     judgePresetId: profile?.judgePresetId ?? null,
     judgeSlotId: profile?.judgeSlotId ?? null,
     style: profile?.style ?? defaults!.style,

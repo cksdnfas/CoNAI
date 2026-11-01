@@ -13,7 +13,7 @@ import { inlineTextsForChat, loadAttachedImages, withLatestMediaGeneration } fro
 import { ChatFlagStore } from './chatFlags'
 import { profileContentLimit } from './chatContentRating'
 import { openChatMcpBridge, type ChatMcpBridge } from './chatMcpBridge'
-import { chatWorkspace, workspaceInstructions } from './chatWorkspace'
+import { chatWorkspaces, workspaceInstructions } from './chatWorkspace'
 import { applyChatInstructionHooks, hasPluginServerHook } from '../plugins/pluginServerRuntime'
 import { CATALOG_OPEN_TOOL, unwrapCatalogCall } from '../../mcp/toolCatalog'
 import { readMcpToolResult, truncateToolSummary } from './chatToolReferences'
@@ -510,7 +510,7 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
       }
     }
     if (!turn.engineSession && offeredTools.some(tool => tool.function.name === 'workspace_read')) {
-      const instruction = workspaceInstructions(chatWorkspace(requester, turn.threadId, profile.id))
+      const instruction = workspaceInstructions(chatWorkspaces(requester, turn.threadId, profile.id))
       if (instruction) built.unshift({ role: 'system', content: instruction })
     }
     // Record the completed session without capturing its private history or filesystem path.

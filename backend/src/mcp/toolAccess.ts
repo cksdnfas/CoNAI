@@ -191,8 +191,8 @@ export function isContextToolAllowed(context: McpRequestContext, toolName: strin
     if (publicPage) return false;
     const writes = toolName === 'workspace_apply' || toolName === 'workspace_publish_resources';
     if (context.source === 'plugin') return !!context.workspace && !!context.requester && context.scopes.includes(writes ? 'organize' : 'read') && (!context.toolAllowlist || context.toolAllowlist.includes(toolName)) && (!writes || context.workspace.write) && featurePermissionOf(toolName) !== undefined && (!accountChecks || accountHoldsTool(context, toolName));
-    if (!context.workspace || !context.chatContext || !isChatMcpSource(context.source)) return false;
-    if (writes && !context.workspace.write) return false;
+    if (!context.workspaces?.length || !context.chatContext || !isChatMcpSource(context.source)) return false;
+    if (writes && !context.workspaces.some((binding) => binding.write)) return false;
     return featurePermissionOf(toolName) !== undefined && (!accountChecks || accountHoldsTool(context, toolName));
   }
   if ((BOARD_CALL_BLOCKED_TOOLS.has(toolName) || BOARD_CALL_BLOCKED_POST_TOOLS.has(toolName)) && context.chatContext && BoardCallRooms.runFor(context.chatContext.threadId, context.chatContext.profileId) !== null) return false;

@@ -759,8 +759,8 @@ export interface ChatProfile extends ChatProfileAssetFields, ChatProfileAgentSet
   allowLoreProposals: boolean
   /** File store folders and text files its characters may open (and write where allowed) in any chat of the owner. */
   linkedFiles: LinkedFileLink[]
-  /** The project workspace it works in (1:1 and group chats, board calls) unless a chat picks another (null: none), and whether it may write there. */
-  workspace: { id: string; write: boolean } | null
+  /** The project workspaces it works in (1:1 and group chats, board calls), and whether it may write in each; a chat adds more or turns one off. */
+  workspaces: Array<{ id: string; write: boolean }>
   /** The judge preset steering each turn (null: no judge) and a judge model instead of the preset's (null: the preset's). */
   judgePresetId: number | null
   judgeSlotId: number | null

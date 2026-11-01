@@ -68,8 +68,8 @@ export function ChatProfileMemoryPanel({ draft, patch, lorebooks }: {
         <ChatProfileLinkedFiles value={draft.linkedFiles} onChange={(linkedFiles) => patch({ linkedFiles })} />
       </EditorGroup>
 
-      <EditorGroup label={t({ ko: '작업 공간', en: 'Workspace' })} description={t({ ko: '캐릭터가 일할 기본 폴더. 1:1·그룹 채팅과 게시판 호출에서 열려. 채팅에서는 다른 폴더로 바꿀 수 있어.', en: 'The default folder the character works in, in 1:1 and group chats and board calls. A chat can pick another.' })}>
-        <ChatProfileWorkspace value={draft.workspace} onChange={(workspace) => patch({ workspace })} />
+      <EditorGroup label={t({ ko: '작업 공간', en: 'Workspaces' })} description={t({ ko: '캐릭터가 일할 폴더(프로젝트). 1:1·그룹 채팅과 게시판 호출에서 열려. 채팅에서는 더 추가하거나 끌 수 있어.', en: 'The project folders the character works in, in 1:1 and group chats and board calls. A chat can add more or turn one off.' })}>
+        <ChatProfileWorkspace value={draft.workspaces} onChange={(workspaces) => patch({ workspaces })} />
       </EditorGroup>
     </div>
   )

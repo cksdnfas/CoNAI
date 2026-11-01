@@ -1,4 +1,4 @@
-import type { WorkspaceProject, WorkspaceSummary, WorkspaceEntry, WorkspaceText, WorkspaceBinding, WorkspaceOperation, WorkspaceBatchResult } from '@conai/shared'
+import type { WorkspaceProject, WorkspaceSummary, WorkspaceEntry, WorkspaceText, WorkspaceBinding, WorkspaceChatMode, WorkspaceOperation, WorkspaceBatchResult } from '@conai/shared'
 import { requestApiData } from './api-request'
 const headers = { 'Content-Type': 'application/json' }
 const post = <T>(url: string, body: unknown) => requestApiData<T>(url, { method: 'POST', headers, body: JSON.stringify(body) })
@@ -14,5 +14,7 @@ export const searchWorkspace = (id: string, query: string, offset = 0, signal?: 
 export const applyWorkspace = (id: string, operations: WorkspaceOperation[], requestId = crypto.randomUUID()) => post<WorkspaceBatchResult>(`/api/workspaces/${id}/apply`, { requestId, operations })
 export const deleteWorkspaceEntries = (id: string, targets: Array<{ target: string; expectedRevision: string }>, requestId = crypto.randomUUID()) => post<WorkspaceBatchResult>(`/api/workspaces/${id}/delete`, { requestId, targets })
 export const workspaceChanges = (id: string) => requestApiData<Array<{ requestId: string; status: string; result: string; completed: number; createdAt: string }>>(`/api/workspaces/${id}/changes`)
-export const getChatWorkspace = (threadId: number) => requestApiData<WorkspaceBinding | null>(`/api/workspaces/threads/${threadId}`)
-export const setChatWorkspace = (threadId: number, projectId: string | null, write: boolean) => requestApiData<WorkspaceBinding | null>(`/api/workspaces/threads/${threadId}`, { method: 'PUT', headers, body: JSON.stringify({ projectId, write }) })
+/** Every project of a chat (its profile's and its own); the ones it turned off carry `off`. */
+export const getChatWorkspaces = (threadId: number) => requestApiData<WorkspaceBinding[]>(`/api/workspaces/threads/${threadId}`)
+/** `mode` null removes the chat's own row for the project (back to what its profile brings). */
+export const setChatWorkspace = (threadId: number, projectId: string, mode: WorkspaceChatMode | null) => requestApiData<WorkspaceBinding[]>(`/api/workspaces/threads/${threadId}`, { method: 'PUT', headers, body: JSON.stringify({ projectId, mode }) })

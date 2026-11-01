@@ -3,7 +3,7 @@ import path from 'path'
 import os from 'os'
 import { createHash, randomBytes } from 'crypto'
 import type Database from 'better-sqlite3'
-import type { WorkspaceProject, WorkspaceEntry, WorkspaceText, WorkspaceOperation, WorkspaceBinding, WorkspaceBatchResult } from '@conai/shared'
+import { MAX_WORKSPACE_LINKS, type WorkspaceProject, type WorkspaceEntry, type WorkspaceText, type WorkspaceOperation, type WorkspaceBinding, type WorkspaceBatchResult, type WorkspaceChatMode } from '@conai/shared'
 import { getUserSettingsDb } from '../database/userSettingsDb'
 import { runtimePaths } from '../config/runtimePaths'
 import { applyTextEdits, TEXT_EXTENSIONS } from './fileStoreService'
@@ -29,6 +29,10 @@ export const WORKSPACE_TOOLS = ['workspace_list', 'workspace_read', 'workspace_s
 function db() {
   const store = getUserSettingsDb()
   if (!initialized.has(store)) {
+    // A chat used to link one project (thread_id was the key); it links several now, and can turn one of its profile's off.
+    const single = Boolean(store.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='workspace_bindings'").get()) && !store.prepare("SELECT 1 FROM pragma_table_info('workspace_bindings') WHERE name='off'").get()
+    store.transaction(() => {
+    if (single) store.exec('ALTER TABLE workspace_bindings RENAME TO workspace_bindings_single')
     store.exec(`
       CREATE TABLE IF NOT EXISTS workspace_projects (
         id TEXT PRIMARY KEY, owner_key TEXT NOT NULL, name TEXT NOT NULL, revision INTEGER NOT NULL DEFAULT 1,
@@ -40,8 +44,9 @@ function db() {
       CREATE INDEX IF NOT EXISTS workspace_entries_parent ON workspace_entries(project_id, parent, target);
       CREATE INDEX IF NOT EXISTS workspace_entries_search ON workspace_entries(project_id, target);
       CREATE TABLE IF NOT EXISTS workspace_bindings (
-        thread_id INTEGER PRIMARY KEY REFERENCES codex_chat_threads(id) ON DELETE CASCADE,
-        project_id TEXT NOT NULL REFERENCES workspace_projects(id), revision TEXT NOT NULL, writable INTEGER NOT NULL);
+        thread_id INTEGER NOT NULL REFERENCES codex_chat_threads(id) ON DELETE CASCADE,
+        project_id TEXT NOT NULL REFERENCES workspace_projects(id), revision TEXT NOT NULL, writable INTEGER NOT NULL,
+        off INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(thread_id, project_id));
       CREATE TABLE IF NOT EXISTS workspace_operations (
         project_id TEXT NOT NULL REFERENCES workspace_projects(id), request_id TEXT NOT NULL, input_hash TEXT NOT NULL,
         status TEXT NOT NULL, process_id INTEGER NOT NULL, hostname TEXT NOT NULL, result TEXT NOT NULL,
@@ -49,6 +54,8 @@ function db() {
       CREATE UNIQUE INDEX IF NOT EXISTS workspace_one_writer ON workspace_operations(project_id) WHERE status='running';
       CREATE INDEX IF NOT EXISTS workspace_operations_recent ON workspace_operations(project_id, created_at);
     `)
+    if (single) store.exec('INSERT INTO workspace_bindings(thread_id,project_id,revision,writable) SELECT thread_id,project_id,revision,writable FROM workspace_bindings_single; DROP TABLE workspace_bindings_single')
+    })()
     initialized.add(store)
   }
   return store
@@ -209,38 +216,51 @@ export const WorkspaceService = {
     changed(owner, projectId)
     return this.get(owner, projectId)
   },
-  binding(owner: string, threadId: number): WorkspaceBinding | null {
-    const row = db().prepare(`SELECT p.*,b.revision AS binding_revision,b.writable FROM workspace_bindings b
+  /** The chat's own rows, oldest first: projects it linked (read or write) and profile projects it turned off. */
+  own(owner: string, threadId: number): WorkspaceBinding[] {
+    const rows = db().prepare(`SELECT p.*,b.revision AS binding_revision,b.writable,b.off FROM workspace_bindings b
       JOIN workspace_projects p ON p.id=b.project_id JOIN codex_chat_threads t ON t.id=b.thread_id
-      WHERE b.thread_id=? AND (CASE WHEN t.account_id IS NULL THEN 'bootstrap' ELSE 'account:'||t.account_id END)=?`)
-      .get(threadId, owner) as (ProjectRow & { binding_revision: string; writable: number }) | undefined
-    return row ? { project: project(row), bindingRevision: row.binding_revision, write: row.writable === 1 } : null
+      WHERE b.thread_id=? AND (CASE WHEN t.account_id IS NULL THEN 'bootstrap' ELSE 'account:'||t.account_id END)=? ORDER BY b.rowid`)
+      .all(threadId, owner) as Array<ProjectRow & { binding_revision: string; writable: number; off: number }>
+    return rows.map(row => ({ project: project(row), bindingRevision: row.binding_revision, write: row.writable === 1, source: 'chat' as const, ...(row.off === 1 ? { off: true as const } : {}) }))
   },
   /**
-   * What a speaker works in: the project its chat chose itself, else the default of the speaking profile (a 1:1 chat's
-   * own profile; in a group chat `profileId`, who must be a member). Without `profileId` a group chat has only its own
-   * choice. `profileOnly` skips the chat's choice: a board call reaches only what its profile designates.
+   * Every project a speaker has in a chat, the chat's turned-off ones marked `off`: what its settings list. The
+   * speaking profile brings its own (a 1:1 chat's profile; in a group chat `profileId`, who must be a member); the chat
+   * adds more, changes the access to one, or turns one off. `profileOnly` leaves the chat's rows out: a board call
+   * reaches only what its profile designates.
    */
-  effective(owner: string, threadId: number, profileId?: number, profileOnly = false): WorkspaceBinding | null {
-    const own = profileOnly ? null : this.binding(owner, threadId)
-    if (own) return { ...own, source: 'chat' }
-    const row = db().prepare(`SELECT p.*,pr.workspace_write AS writable FROM codex_chat_threads t
+  resolve(owner: string, threadId: number, profileId?: number, profileOnly = false): WorkspaceBinding[] {
+    const merged = new Map<string, WorkspaceBinding>()
+    const brought = db().prepare(`SELECT p.*,json_extract(j.value,'$.write') AS writable FROM codex_chat_threads t
       JOIN llm_chat_profiles pr ON pr.id=CASE WHEN t.kind='group' THEN ? ELSE t.profile_id END
-      JOIN workspace_projects p ON p.id=pr.workspace_id
+      JOIN json_each(COALESCE(pr.workspaces,'[]')) j JOIN workspace_projects p ON p.id=json_extract(j.value,'$.id')
       WHERE t.id=? AND (CASE WHEN t.account_id IS NULL THEN 'bootstrap' ELSE 'account:'||t.account_id END)=?
-        AND (t.kind='direct' OR (t.kind='group' AND EXISTS(SELECT 1 FROM chat_group_members m WHERE m.thread_id=t.id AND m.profile_id=pr.id)))`)
-      .get(profileId ?? null, threadId, owner) as (ProjectRow & { writable: number }) | undefined
-    return row ? { project: project(row), bindingRevision: `profile:${row.writable}`, write: row.writable === 1, source: 'profile' } : null
+        AND (t.kind='direct' OR (t.kind='group' AND EXISTS(SELECT 1 FROM chat_group_members m WHERE m.thread_id=t.id AND m.profile_id=pr.id)))
+      ORDER BY j.key`).all(profileId ?? null, threadId, owner) as Array<ProjectRow & { writable: number }>
+    for (const row of brought) merged.set(row.id, { project: project(row), bindingRevision: `profile:${row.writable}`, write: row.writable === 1, source: 'profile' })
+    if (!profileOnly) for (const row of this.own(owner, threadId)) if (!row.off || merged.has(row.project.id)) merged.set(row.project.id, row)
+    return [...merged.values()]
   },
-  bind(owner: string, threadId: number, projectId: string | null, write: boolean) {
+  /** What a speaker works in: `resolve` without the projects its chat turned off. */
+  effective(owner: string, threadId: number, profileId?: number, profileOnly = false): WorkspaceBinding[] {
+    return this.resolve(owner, threadId, profileId, profileOnly).filter(binding => !binding.off)
+  },
+  /**
+   * How one chat treats one project: `read` or `write` links it (or changes the access to its profile's), `off` turns
+   * a project its profile brings off for this chat, and null removes the chat's own row (back to the profile's).
+   */
+  setChatProject(owner: string, threadId: number, projectId: string, mode: WorkspaceChatMode | null) {
     const thread = db().prepare("SELECT id FROM codex_chat_threads WHERE id=? AND kind IN ('direct','group') AND (CASE WHEN account_id IS NULL THEN 'bootstrap' ELSE 'account:'||account_id END)=?").get(threadId, owner)
     if (!thread) throw new WorkspaceError('내 채팅에만 프로젝트를 연결할 수 있어.', 404)
-    if (projectId) {
-      requireProject(owner, projectId)
-      db().prepare(`INSERT INTO workspace_bindings(thread_id,project_id,revision,writable) VALUES(?,?,?,?)
-        ON CONFLICT(thread_id) DO UPDATE SET project_id=excluded.project_id,revision=excluded.revision,writable=excluded.writable`).run(threadId, projectId, id(), write ? 1 : 0)
-    } else db().prepare('DELETE FROM workspace_bindings WHERE thread_id=?').run(threadId)
-    return this.effective(owner, threadId)
+    requireProject(owner, projectId)
+    if (mode) {
+      const linked = (db().prepare('SELECT COUNT(*) AS n FROM workspace_bindings WHERE thread_id=? AND off=0 AND project_id<>?').get(threadId, projectId) as { n: number }).n
+      if (mode !== 'off' && linked >= MAX_WORKSPACE_LINKS) throw new WorkspaceError(`작업 공간은 채팅마다 ${MAX_WORKSPACE_LINKS}개까지 연결할 수 있어.`)
+      db().prepare(`INSERT INTO workspace_bindings(thread_id,project_id,revision,writable,off) VALUES(?,?,?,?,?)
+        ON CONFLICT(thread_id,project_id) DO UPDATE SET revision=excluded.revision,writable=excluded.writable,off=excluded.off`).run(threadId, projectId, id(), mode === 'write' ? 1 : 0, mode === 'off' ? 1 : 0)
+    } else db().prepare('DELETE FROM workspace_bindings WHERE thread_id=? AND project_id=?').run(threadId, projectId)
+    return this.resolve(owner, threadId)
   },
   /** `revisions`: files carry their revision (the screen's move and delete check against what the person saw). */
   async entries(owner: string, projectId: string, target = '', offset = 0, options: { revisions?: boolean } = {}) {
