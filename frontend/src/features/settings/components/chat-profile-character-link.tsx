@@ -142,7 +142,7 @@ export function ChatProfileCharacterLinkBar({ link, profileName, dirty, busy, on
         <Link2 />
         <AlertTitle>{t({ ko: '라이브러리와 동기화 중', en: 'Synced with the library' })}</AlertTitle>
         <AlertDescription>
-          <p>{t({ ko: '‘{label}’ 설정과 동기화 중 · 이 설정을 쓰는 프로필 {count}개에 함께 반영돼', en: 'Synced with ‘{label}’ · edits reach all {count} profiles using this setting' }, { label, count })}</p>
+          <p>{t({ ko: '‘{label}’ · 프로필 {count}개에 함께 반영돼', en: '‘{label}’ · edits reach {count} profiles' }, { label, count })}</p>
           <div className="flex flex-wrap gap-1">
             <Button type="button" size="sm" variant="secondary" disabled={disabled || !link.setting.ready} onClick={link.detach}>{t({ ko: '동기화 끊기', en: 'Stop syncing' })}</Button>
             <Button type="button" size="sm" variant="ghost" disabled={disabled} onClick={() => setPicking(true)}>{t({ ko: '다른 설정 불러오기', en: 'Load another setting' })}</Button>
@@ -158,7 +158,7 @@ export function ChatProfileCharacterLinkBar({ link, profileName, dirty, busy, on
       <Unlink />
       <AlertTitle>{t({ ko: '동기화 끊김', en: 'Not synced' })}</AlertTitle>
       <AlertDescription>
-        <p>{t({ ko: '동기화 끊김 · 원본 ‘{label}’', en: 'Not synced · origin ‘{label}’' }, { label })}</p>
+        <p>{t({ ko: '원본 ‘{label}’', en: 'Origin ‘{label}’' }, { label })}</p>
         {link.originError ? <p className="text-destructive">{getErrorMessage(link.originError, t({ ko: '원본 외형 설정을 불러오지 못했어.', en: 'Could not load the origin setting.' }))}</p> : null}
         <div className="flex flex-wrap gap-1">
           {link.canEdit ? <Button type="button" size="sm" variant="secondary" disabled={disabled || !link.origin} onClick={() => void overwrite()}>{t({ ko: '원본에 덮어쓰기', en: 'Overwrite origin' })}</Button> : null}

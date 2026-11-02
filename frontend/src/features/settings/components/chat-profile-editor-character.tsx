@@ -149,8 +149,6 @@ export function ChatProfileCharacterPanel({ open, draft, patch, onPreview, profi
   const textSections = sections.filter((section) => section.kind === 'text')
   const postSections = sections.filter((section) => section.kind === 'post')
   const exampleSections = sections.filter((section) => section.kind === 'dialogue')
-  // API LLMs get an example where both sides speak as messages, introduced by a notice.
-  const examplesAsMessages = llm && exampleSections.some((section) => section.enabled && bothSidesSpeak(splitExampleDialogue(section.content, name).turns))
   const noteTaken = draft.authorNote.trim() !== ''
   const history = draft.openingHistory
   const greetings = [draft.greeting, ...draft.alternateGreetings]
@@ -163,13 +161,6 @@ export function ChatProfileCharacterPanel({ open, draft, patch, onPreview, profi
   const reveal = (key: string) => setFlash((current) => ({ key, n: (current?.n ?? 0) + 1 }))
   const avatar = <ChatProfileAvatar name={draft.name || '?'} avatar={draft.avatar} imageUrl={draftProfileAssetUrl(draft, profile, 'avatar')} avatarCrop={draft.avatarHash ? draft.avatarCrop : null} engine={draft.engine} size="sm" />
   const emptyText = t({ ko: '비어 있어 · 눌러서 쓰기', en: 'Empty · click to write' })
-
-  // The examples' group says how they are sent once, instead of every example card.
-  const meta: Record<ChatPromptSection['kind'], string | undefined> = {
-    text: undefined,
-    post: t({ ko: '매번 마지막 메시지 뒤에 붙어', en: 'Added after the last message every time' }),
-    dialogue: undefined,
-  }
 
   /**
    * Closes the item being edited (dropped when left empty) and opens `build(base).open`, or nothing. `base` is the draft
@@ -268,7 +259,6 @@ export function ChatProfileCharacterPanel({ open, draft, patch, onPreview, profi
         key={section.id}
         itemKey={key}
         title={section.title || (example ? t({ ko: '대화 예시', en: 'Example dialogue' }) : section.kind === 'post' ? t({ ko: '대화 뒤 지시', en: 'After the conversation' }) : t({ ko: '제목 없음', en: 'Untitled' }))}
-        meta={meta[section.kind]}
         text={section.content}
         placeholder={emptyText}
         editPlaceholder={example ? '{{user}}: …\n{{char}}: …' : undefined}
@@ -402,9 +392,6 @@ export function ChatProfileCharacterPanel({ open, draft, patch, onPreview, profi
             <PromptCard
               itemKey="author-note"
               title={t({ ko: '작가 노트', en: "Author's note" })}
-              meta={llm
-                ? t({ ko: '끝에서 {depth}턴 앞에 끼워 넣어', en: 'Inserted {depth} turns before the end' }, { depth: draft.loreDepth })
-                : t({ ko: '매 메시지와 함께 참고 설정으로 들어가', en: 'Sent as reference settings with every message' })}
               text={draft.authorNote}
               maxLength={CHAT_PROFILE_TEXT_LIMITS.authorNote}
               placeholder={emptyText}
@@ -418,27 +405,16 @@ export function ChatProfileCharacterPanel({ open, draft, patch, onPreview, profi
           ) : null}
           {postSections.map((section, index) => sectionCard(section, index, postSections))}
         </div>
-        <div className="flex flex-col gap-2.5">
-          <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-            <span>{t({ ko: '자동 포함', en: 'Added automatically' })}</span>
-            <Chip size="sm" tone="muted">{t({ ko: '답변 형식', en: 'Reply format' })}</Chip>
-            {draft.mcpScopes.length > 0 || draft.generationPresetIds.length > 0 ? <Chip size="sm" tone="muted">{t({ ko: '도구 사용', en: 'Tool use' })}</Chip> : null}
-            {draft.lorebookIds.length > 0 ? <Chip size="sm" tone="muted">{t({ ko: '로어북 목록', en: 'Lorebook list' })}</Chip> : null}
-            {draft.summaryEnabled && llm ? <Chip size="sm" tone="muted">{t({ ko: '대화 요약', en: 'Conversation summary' })}</Chip> : null}
-            {examplesAsMessages ? <Chip size="sm" tone="muted">{t({ ko: '예시 안내문', en: 'Example notice' })}</Chip> : null}
-          </div>
-          <PromptAdder
-            label={t({ ko: '지시 추가', en: 'Add instruction' })}
-            disabled={sectionLimitReached && noteTaken}
-            choices={[
-              ...(sectionLimitReached ? [] : [{ value: 'text', label: t({ ko: '지시문', en: 'Instruction' }) }]),
-              ...(noteTaken ? [] : [{ value: 'note', label: t({ ko: '작가 노트', en: "Author's note" }) }]),
-              ...(sectionLimitReached ? [] : [{ value: 'post', label: t({ ko: '대화 뒤 지시', en: 'After the conversation' }) }]),
-            ]}
-            onAdd={(value) => (value === 'note' ? openItem('note') : addSection(value === 'post' ? 'post' : 'text'))}
-          />
-
-        </div>
+        <PromptAdder
+          label={t({ ko: '지시 추가', en: 'Add instruction' })}
+          disabled={sectionLimitReached && noteTaken}
+          choices={[
+            ...(sectionLimitReached ? [] : [{ value: 'text', label: t({ ko: '지시문', en: 'Instruction' }) }]),
+            ...(noteTaken ? [] : [{ value: 'note', label: t({ ko: '작가 노트', en: "Author's note" }) }]),
+            ...(sectionLimitReached ? [] : [{ value: 'post', label: t({ ko: '대화 뒤 지시', en: 'After the conversation' }) }]),
+          ]}
+          onAdd={(value) => (value === 'note' ? openItem('note') : addSection(value === 'post' ? 'post' : 'text'))}
+        />
       </EditorGroup>
 
       <EditorGroup label={t({ ko: '예시', en: 'Examples' })}>

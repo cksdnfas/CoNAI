@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Download, Link2, Lock, Plus, Save } from 'lucide-react'
 import { CHAT_DELEGATABLE_PERMISSION_KEYS, PERMISSION_CATALOG } from '@conai/shared'
-import { Chip, ToggleChip } from '@/components/ui/chip'
+import { ToggleChip } from '@/components/ui/chip'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { IconButton } from '@/components/ui/icon-button'
 import { Tip } from '@/components/ui/tooltip'
@@ -66,7 +66,7 @@ export function ChatProfileToolsPanel({ open, draft, patch, defaults, skills }: 
                   const copy = getChatScopeCopy(scope, t)
                   const forced = scope === 'generate' && presetGenerates
                   const pressed = forced || draft.mcpScopes.includes(scope)
-                  const tip = forced ? t({ ko: '생성 프리셋이 켰어', en: 'On because a generation preset is linked' })
+                  const tip = forced ? t({ ko: '생성 프리셋이 켰어. 자유 생성과 워크플로 조회는 숨겨져.', en: 'On because a generation preset is linked. Free-form generation and workflow lookup are hidden.' })
                     : scope === 'configure' ? `${copy.description} ${t({ ko: '관리자 계정에서만 동작해.', en: 'Works only for administrator accounts.' })}`
                     : copy.description
                   return (
@@ -135,12 +135,6 @@ export function ChatProfileToolsPanel({ open, draft, patch, defaults, skills }: 
                 })}
                 {generationPresetsQuery.isSuccess && generationPresets.length === 0 ? <span className="text-sm text-muted-foreground">{t({ ko: '아직 없어.', en: 'None yet.' })}</span> : null}
               </div>
-              {presetGenerates ? (
-                <div className="flex flex-wrap gap-1.5 pt-2">
-                  <Chip size="sm" tone="muted">{t({ ko: '생성 범위 켜짐', en: 'Generate scope on' })}</Chip>
-                  <Chip size="sm" tone="muted">{t({ ko: '자유 생성·워크플로 조회 숨김', en: 'Free-form generation and workflow lookup hidden' })}</Chip>
-                </div>
-              ) : null}
             </CollapsibleRow>
           </div>
         ) : null}
@@ -174,10 +168,11 @@ export function ChatProfileToolsPanel({ open, draft, patch, defaults, skills }: 
           {skills && skills.length === 0 ? <span className="text-sm text-muted-foreground">{t({ ko: '아직 없어.', en: 'None yet.' })}</span> : null}
         </div>
       </EditorGroup>
-      <EditorGroup label={t({ ko: '프로필 위임 권한', en: 'Profile-delegated permissions' })} count={draft.delegatedPermissions.length}>
-        <p className="text-sm text-muted-foreground">
-          {t({ ko: '이 프로필에서 켜고 선택한 도구만 추가 권한을 사용해. 사용자의 페이지·직접 API 권한은 바뀌지 않아. 설정·관리 권한은 위임할 수 없어.', en: 'Only this profile’s enabled and selected tools can use these additional permissions. The user’s own pages and direct API permissions stay unchanged. Configuration and administration privileges cannot be delegated.' })}
-        </p>
+      <EditorGroup
+        label={t({ ko: '프로필 위임 권한', en: 'Profile-delegated permissions' })}
+        info={t({ ko: '이 프로필에서 켜고 선택한 도구만 추가 권한을 사용해. 사용자의 페이지·직접 API 권한은 바뀌지 않아. 설정·관리 권한은 위임할 수 없어.', en: 'Only this profile’s enabled and selected tools can use these additional permissions. The user’s own pages and direct API permissions stay unchanged. Configuration and administration privileges cannot be delegated.' })}
+        count={draft.delegatedPermissions.length}
+      >
         <SecurityPermissionChecklist
           permissionCatalog={DELEGATABLE_PERMISSIONS}
           groupKey={null}

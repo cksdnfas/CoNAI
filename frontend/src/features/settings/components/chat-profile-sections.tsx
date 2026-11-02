@@ -96,11 +96,10 @@ export function PromptAdder({ label, choices, disabled = false, onAdd }: { label
  * author's note) or an example kept as written. The row shows its title, its rough token count and two lines of its
  * text (more on request); clicking it edits it in place, with `kind` and `tools` in the editor's footer.
  */
-export function PromptCard({ itemKey, title, meta, text, maxLength = CHAT_PROFILE_TEXT_LIMITS.text, placeholder, editPlaceholder, onTextChange, titleField, enabled = true, assisted = false, flash = false, note, kind, tools, remove, editing, onEditingChange: setEditing }: {
+export function PromptCard({ itemKey, title, text,maxLength = CHAT_PROFILE_TEXT_LIMITS.text, placeholder, editPlaceholder, onTextChange, titleField, enabled = true, assisted = false, flash = false, note, kind, tools, remove, editing, onEditingChange: setEditing }: {
   /** `data-prompt-item`, which a preset scrolls to after adding. */
   itemKey: string
   title: string
-  meta?: ReactNode
   text: string
   maxLength?: number
   /** Shown instead of empty text. */
@@ -178,7 +177,6 @@ export function PromptCard({ itemKey, title, meta, text, maxLength = CHAT_PROFIL
             <span className="flex w-full min-w-0 flex-col gap-0.5 px-1 py-1">
               <span className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-sm font-semibold text-foreground">
                 <span className={cn(!enabled && 'text-muted-foreground line-through')}>{title}</span>
-                {meta ? <span className="text-xs font-normal text-muted-foreground">{meta}</span> : null}
                 {enabled ? null : <Badge variant="secondary" size="xs">{t({ ko: '꺼짐', en: 'Off' })}</Badge>}
                 {tokens ? <span className="ml-auto text-2xs font-normal tabular-nums text-muted-foreground">{t({ ko: '약 {count} 토큰', en: '~{count} tokens' }, { count: formatNumber(tokens) })}</span> : null}
               </span>
