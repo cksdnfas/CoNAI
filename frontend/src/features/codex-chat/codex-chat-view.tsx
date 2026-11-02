@@ -869,7 +869,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
         </> : null}
         <ChatSavedMessages messages={visibleMessages} contextMessages={messages} segments={threadQuery.data?.summarySegments} flashMessageId={flashMessageId} summaryUntilId={isGroup ? null : thread?.summary_until_message_id ?? null} media={media} actions={messageActions} appearance={appearance} speaker={speaker} userSpeaker={userSpeaker} speakerOf={isGroup ? speakerOf : undefined} agentSpeakerOf={speakerOf} mentions={isGroup ? memberNames : undefined} />
         <ChatStreamingMessage threadId={activeThreadId} appearance={appearance} speaker={speaker} userSpeaker={userSpeaker} speakerOf={isGroup ? speakerOf : undefined} mentions={isGroup ? memberNames : undefined} />
-        {runningFromServer && !isGroup && speaker ? <CodexChatAssistantMessage content={runningFromServer.text} routing={runningFromServer.routing} toolCalls={runningFromServer.toolCalls} streaming appearance={appearance} speaker={speaker} /> : null}
+        {runningFromServer && !isGroup && speaker ? <CodexChatAssistantMessage content={runningFromServer.text} toolCalls={runningFromServer.toolCalls} streaming appearance={appearance} speaker={speaker} /> : null}
         {serverReplies.map((reply) => {
           const replySpeaker = speakerOf(reply.profileId)
           return replySpeaker ? <CodexChatAssistantMessage key={reply.routing?.replyId ?? reply.profileId} content={reply.text} routing={reply.routing} toolCalls={reply.toolCalls} streaming appearance={appearance} speaker={replySpeaker} /> : null

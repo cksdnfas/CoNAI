@@ -442,15 +442,26 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
       queue,
     } : current)
 
-    /** Group rooms: a stored message joins the transcript right away, since more members keep the stream going. */
-    const putMessage = (message: CodexChatMessage) => queryClient.setQueryData<CodexChatThreadDetail>(codexChatThreadQueryKey(sentThreadId), (current) => current ? {
-      ...current,
-      running: null,
-      messageCount: current.messageCount === undefined ? undefined : current.messageCount + (current.messages.some((entry) => entry.id === message.id) ? 0 : 1),
-      messages: current.messages.some((entry) => entry.id === message.id)
-        ? current.messages.map((entry) => entry.id === message.id ? message : entry)
-        : [...current.messages, message],
-    } : current)
+    /**
+     * A stored message joins the transcript right away (group rooms: more members keep the stream going). False when
+     * the chat is not loaded, so its live copy must stay.
+     */
+    const putMessage = (message: CodexChatMessage) => {
+      let stored = false
+      queryClient.setQueryData<CodexChatThreadDetail>(codexChatThreadQueryKey(sentThreadId), (current) => {
+        if (!current) return current
+        stored = true
+        return {
+          ...current,
+          running: null,
+          messageCount: current.messageCount === undefined ? undefined : current.messageCount + (current.messages.some((entry) => entry.id === message.id) ? 0 : 1),
+          messages: current.messages.some((entry) => entry.id === message.id)
+            ? current.messages.map((entry) => entry.id === message.id ? message : entry)
+            : [...current.messages, message],
+        }
+      })
+      return stored
+    }
 
     const showUserActivity = (message: CodexChatMessage) => {
       const found = patchChatRoomLists(queryClient, sentThreadId, {
@@ -468,10 +479,11 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
     try {
       const onEvent = (event: CodexChatStreamEvent) => {
         if (streamAbortRef.current !== controller || controller.signal.aborted) return
-        if (isGroup && event.type === 'user') {
+        if (event.type === 'user') {
           accepted = true
-          putMessage(event.message)
-          updateLiveTurn((current) => current ? { ...current, userText: '', userRouting: undefined, flags: [], attachments: [], mediaAttachments: [] } : current)
+          // A refetch mid-reply (a generation job, a reaction) brings the stored message in anyway; keeping the live copy
+          // too would show it twice.
+          if (putMessage(event.message)) updateLiveTurn((current) => current ? { ...current, userText: '', userRouting: undefined, flags: [], attachments: [], mediaAttachments: [] } : current)
           flush()
           showUserActivity(event.message)
         } else if (event.type === 'speaker') {
@@ -517,9 +529,6 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
             toolCalls.set(event.call.id, event.call)
             return { ...current, toolCalls }
           })
-        } else if (event.type === 'user') {
-          accepted = true
-          showUserActivity(event.message)
         } else if (event.type === 'rewind') {
           accepted = true
           queryClient.setQueryData<CodexChatThreadDetail>(codexChatThreadQueryKey(sentThreadId), (current) => current ? {
