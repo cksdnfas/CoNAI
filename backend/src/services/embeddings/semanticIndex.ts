@@ -21,6 +21,7 @@ import { SEMANTIC_SPACES } from './rankFusion'
 import { indexPendingImages, pruneImageVectors } from './imageIndex'
 import { onSemanticChange, type SemanticSource } from './semanticSignal'
 import { loadPostsSettings } from '../posts/postsSettings'
+import { pendingSkills, pruneSkillVectors, skillDocumentCurrent } from './skillIndex'
 
 /**
  * What text embeddings are kept for, one vector space each (vectors.db; derived data, rebuilt when missing):
@@ -29,6 +30,7 @@ import { loadPostsSettings } from '../posts/postsSettings'
  *   chat-message  messages of chats that share knowledge (rooms, chats with books or linked files)
  *                                                    source `<message id>`, owner `thread:<id>`
  *   file          file store text (minutes too)      source `<entry id>`, owner `<file owner key>`
+ *   chat-skill    enabled skill overviews/sections   source `<skill id>:<path_key>` (overview: empty path), owner `skill:<id>`
  * and, with image search on, `media-image` (imageIndex.ts): library still images by composite hash.
  * A background pass embeds what is new or changed (content fingerprints), a few items per worker request at low
  * priority so chat queries go first, and drops vectors whose source is gone. Stores signal changes (semanticSignal):
@@ -56,7 +58,7 @@ const FIRST_SWEEP_MS = 60_000
 /** After a failed pass (not an embedding failure, which has its own rest). */
 const ERROR_SWEEP_MS = 60_000
 /** How soon a change is looked at: a chat message is searched with on-the-spot indexing anyway, so it can wait. */
-const SIGNAL_DELAY_MS: Record<SemanticSource, number> = { recall: 2_000, lore: 2_000, file: 5_000, post: 5_000, image: 10_000, message: 60_000 }
+const SIGNAL_DELAY_MS: Record<SemanticSource, number> = { recall: 2_000, lore: 2_000, skill: 2_000, file: 5_000, post: 5_000, image: 10_000, message: 60_000 }
 /** Items one scan queues: a backlog is scanned once per this many, not once per batch. */
 const QUEUE_ITEMS = 64
 const PRUNE_EVERY_MS = 60 * 60_000
@@ -204,6 +206,9 @@ function store(item: IndexItem, chunks: EmbeddedChunk[]) {
 /** Awaited work may describe a deleted source or an older edit; never overwrite its current index. */
 function itemCurrent(item: IndexItem) {
   const db = getUserSettingsDb()
+  if (item.space === SEMANTIC_SPACES.skill) {
+    return embeddingSettings().enabled && skillDocumentCurrent(item.sourceKey, item.ownerKey, item.hash)
+  }
   if (item.space === SEMANTIC_SPACES.recall || item.space === SEMANTIC_SPACES.message) {
     const recall = item.space === SEMANTIC_SPACES.recall
     if (recall ? !embeddingFeatureOn('chatRecall') : !embeddingFeatureOn('chatHistory') && !embeddingFeatureOn('chatRecall')) return false
@@ -295,6 +300,7 @@ async function pendingFiles(limit: number): Promise<IndexItem[]> {
 /** Vectors whose source is gone (or out of scope), and those of another model. */
 function pruneVectors() {
   const db = getUserSettingsDb()
+  pruneSkillVectors()
   db.prepare(`DELETE FROM vector_db.file_progress WHERE NOT EXISTS (SELECT 1 FROM stored_file_entries e WHERE e.id = source_key AND e.deleted_at IS NULL)`).run()
   for (const space of Object.values(SEMANTIC_SPACES)) vectorStore.pruneOtherModels(space, EMBEDDING_MODEL_KEY)
   let removed = 0
@@ -321,7 +327,7 @@ function pruneVectors() {
 
 type TextSource = {
   source: Exclude<SemanticSource, 'image'>
-  feature: EmbeddingFeature
+  feature: EmbeddingFeature | 'enabled'
   /** What is missing, at most `limit` items, most useful first. */
   pending: (limit: number) => IndexItem[] | Promise<IndexItem[]>
   /** Items one scan takes, and items embedded per pass. */
@@ -345,12 +351,13 @@ function pendingPosts(limit: number): IndexItem[] {
 const TEXT_SOURCES: TextSource[] = [
   { source: 'recall', feature: 'chatRecall', pending: (limit) => pendingSegments(limit), scan: QUEUE_ITEMS, batch: BATCH_ITEMS },
   { source: 'lore', feature: 'lorebook', pending: (limit) => pendingLore(limit), scan: QUEUE_ITEMS, batch: BATCH_ITEMS },
+  { source: 'skill', feature: 'enabled', pending: pendingSkills, scan: QUEUE_ITEMS, batch: BATCH_ITEMS },
   { source: 'message', feature: 'chatHistory', pending: (limit) => pendingMessages(limit), scan: QUEUE_ITEMS, batch: BATCH_ITEMS },
   // Files persist four chunks and their resume cursor per pass.
   { source: 'file', feature: 'fileSearch', pending: pendingFiles, scan: 2, batch: 1 },
   { source: 'post', feature: 'postSearch', pending: pendingPosts, scan: 4, batch: 1 },
 ]
-const ALL_SOURCES: SemanticSource[] = ['recall', 'lore', 'message', 'file', 'post', 'image']
+const ALL_SOURCES: SemanticSource[] = ['recall', 'lore', 'skill', 'message', 'file', 'post', 'image']
 
 function sourceOn(settings: EmbeddingSettings, source: SemanticSource) {
   if (source === 'post') return loadPostsSettings().knowledge.enabled && settings.postSearch === true
@@ -378,6 +385,7 @@ class SemanticIndexer {
   /** The rest of the last scan, embedded a batch per pass before anything is scanned again. */
   private queue: { source: SemanticSource; items: IndexItem[] } | null = null
   private lastPruneAt = 0
+  private skillPrunePending = true
   private unsubscribeFiles: (() => void) | null = null
 
   /** Start sweeping (once, after boot). */
@@ -386,7 +394,10 @@ class SemanticIndexer {
     this.started = true
     this.stopped = false
     startFileSearchMaintenance()
-    onSemanticChange((source) => this.poke(source))
+    onSemanticChange((source) => {
+      if (source === 'skill') this.skillPrunePending = true
+      this.poke(source)
+    })
     this.unsubscribeFiles = FileStoreService.onChange((change) => {
       if (change.action === 'write' && change.entries.some((entry) => entry.kind === 'file')) this.poke('file')
     })
@@ -476,6 +487,10 @@ class SemanticIndexer {
     if (Date.now() - this.lastPruneAt >= PRUNE_EVERY_MS) {
       this.lastPruneAt = Date.now()
       pruneVectors()
+      this.skillPrunePending = false
+    } else if (this.skillPrunePending) {
+      pruneSkillVectors()
+      this.skillPrunePending = false
     }
     pruneImageVectors()
     // Derived-data cleanup does not need a model and continues while embeddings are off or unavailable.
@@ -548,6 +563,14 @@ export async function indexMessagesNow(threadIds: number[], limit: number) {
   const eligible = new Set(historyThreadIds())
   const items = pendingMessages(limit + 1, threadIds.filter((id) => eligible.has(id)))
   if (items.length > limit) semanticIndexer.poke('message')
+  return indexItems(items.slice(0, limit), 'normal')
+}
+
+/** Search backfill is bounded and shared with background work; callers must not await it before keyword fallback. */
+export async function indexSkillsNow(skillIds: number[], limit: number) {
+  if (!embeddingSettings().enabled) return 0
+  const items = pendingSkills(limit + 1, skillIds)
+  if (items.length > limit) semanticIndexer.poke('skill')
   return indexItems(items.slice(0, limit), 'normal')
 }
 

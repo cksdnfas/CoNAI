@@ -1,7 +1,7 @@
 import { useRef, useState, type ComponentProps } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { BookOpen, BookUser, FileUp, ImagePlus, LayoutTemplate, Link2, List, Plus, Rows3, Sparkles, Wrench } from 'lucide-react'
+import { BookOpen, BookUser, FileUp, ImagePlus, LayoutTemplate, Link2, List, Plus, Rows3, Wrench } from 'lucide-react'
 import { Chip } from '@/components/ui/chip'
 import { IconButton } from '@/components/ui/icon-button'
 import { ResourceRow, ResourceRowStat, ResourceRowStatus } from '@/components/ui/resource-row'
@@ -34,7 +34,6 @@ import {
   type ChatLorebook,
   type OwnedChatLorebook,
   type ChatSharedBlock,
-  type ChatSkill,
   type ChatToolPreset,
 } from '@/lib/api-codex-chat'
 import { getErrorMessage } from '@/lib/error-message'
@@ -46,6 +45,7 @@ import { readChatBlockFile } from './chat-block-file'
 import { ChatGenerationPresetEditorModal } from './chat-generation-preset-editor-modal'
 import { ChatJudgePresetGroup } from './chat-judge-preset-group'
 import { ChatSkillEditorModal } from './chat-skill-editor-modal'
+import { ChatSkillResourceGroup, type ChatSkillEditorTarget } from './chat-skill-resource-group'
 import { readChatGenerationPresetFile } from './chat-generation-preset-file'
 import { useChatAdminLinks } from '@/features/codex-chat/chat-admin-location'
 import { lorebookKey } from './chat-lorebook-editor-page'
@@ -59,7 +59,6 @@ const KIND_CLASS = {
   generation: 'text-resource-generation',
   block: 'text-resource-block',
   lorebook: 'text-resource-lorebook',
-  skill: 'text-resource-skill',
 } as const
 
 type Profiles = Array<{ id: number; name: string }>
@@ -99,7 +98,7 @@ export function ChatSettingsResources({ tab = 'presets', active = true }: { tab?
   const presetImportRef = useRef<HTMLInputElement>(null)
   const [generationEditor, setGenerationEditor] = useState<{ preset: ChatGenerationPreset | null } | null>(null)
   const [judgeEditor, setJudgeEditor] = useState<{ preset: ChatJudgePreset | null } | null>(null)
-  const [skillEditor, setSkillEditor] = useState<{ skill: ChatSkill | null } | null>(null)
+  const [skillEditor, setSkillEditor] = useState<ChatSkillEditorTarget | null>(null)
   const generationImportRef = useRef<HTMLInputElement>(null)
 
   // The assistant can open resources from any tab; otherwise only the visible tab needs its lists.
@@ -145,7 +144,7 @@ export function ChatSettingsResources({ tab = 'presets', active = true }: { tab?
       } else if (kind === 'generation_preset') setGenerationEditor({ preset: find(generationPresetsQuery.data) })
       else if (kind === 'judge_preset') setJudgeEditor({ preset: find(judgePresetsQuery.data) })
       else if (kind === 'block') setBlockEditor({ shared: find(blocksQuery.data) })
-      else if (kind === 'skill') setSkillEditor({ skill: find(skillsQuery.data) })
+      else if (kind === 'skill') setSkillEditor({ skillId: find(skillsQuery.data)?.id ?? null })
       else setPresetEditor({ preset: find(presetsQuery.data) })
     },
   } : null, { preserveOnSearchChange: true })
@@ -232,7 +231,6 @@ export function ChatSettingsResources({ tab = 'presets', active = true }: { tab?
   const blocks = blocksQuery.data ?? []
   const presets = presetsQuery.data ?? []
   const generationPresets = generationPresetsQuery.data ?? []
-  const skills = skillsQuery.data ?? []
 
   const toolPresetsLabel = t({ ko: '도구 프리셋', en: 'Tool presets' })
   const generationPresetsLabel = t({ ko: '생성 프리셋', en: 'Generation presets' })
@@ -312,31 +310,7 @@ export function ChatSettingsResources({ tab = 'presets', active = true }: { tab?
         {generationPresetsQuery.isError ? <p className="py-3 text-sm text-destructive">{getErrorMessage(generationPresetsQuery.error, t({ ko: '생성 프리셋을 불러오지 못했어.', en: 'Could not load generation presets.' }))}</p> : null}
       </RowGroup>
 
-      <RowGroup
-        headingClassName={KIND_CLASS.skill}
-        heading={t({ ko: '스킬', en: 'Skills' })}
-        count={skillsQuery.isSuccess ? skills.length : undefined}
-        actions={<IconButton size="icon-sm" variant="ghost" onClick={() => setSkillEditor({ skill: null })} label={t({ ko: '스킬 추가', en: 'Add skill' })}><Plus /></IconButton>}
-      >
-        {skillsQuery.isLoading ? <SettingsRowsSkeleton rows={1} /> : null}
-        {skillsQuery.isSuccess && skills.length === 0 ? <SettingsEmptyRow>{t({ ko: '아직 스킬이 없어', en: 'No skills yet' })}</SettingsEmptyRow> : null}
-        {skills.map((skill) => (
-          <ResourceRow
-            key={skill.id}
-            leading={<Sparkles className={KIND_CLASS.skill} />}
-            name={skill.name}
-            extra={(
-              <>
-                <Tip content={skill.description}><span className="min-w-0 truncate text-xs text-muted-foreground">{skill.description}</span></Tip>
-                <NotLinked profiles={skill.profiles} />
-              </>
-            )}
-            aside={skill.profiles.length > 0 ? <ResourceRowStat icon={Link2} tip={skill.profiles.map((profile) => profile.name).join(', ')}>{skill.profiles.length}</ResourceRowStat> : null}
-            onOpen={() => setSkillEditor({ skill })}
-          />
-        ))}
-        {skillsQuery.isError ? <p className="py-3 text-sm text-destructive">{getErrorMessage(skillsQuery.error, t({ ko: '스킬을 불러오지 못했어.', en: 'Could not load skills.' }))}</p> : null}
-      </RowGroup>
+      <ChatSkillResourceGroup query={skillsQuery} onOpen={setSkillEditor} />
 
       </div> : null}
       <ChatJudgePresetGroup editor={judgeEditor} setEditor={setJudgeEditor} visible={shows('presets')} />
@@ -450,7 +424,9 @@ export function ChatSettingsResources({ tab = 'presets', active = true }: { tab?
       />
       <ChatSkillEditorModal
         open={skillEditor !== null}
-        skill={skillEditor?.skill ?? null}
+        skillId={skillEditor?.skillId ?? null}
+        initial={skillEditor?.initial}
+        imported={skillEditor?.imported}
         onClose={() => setSkillEditor(null)}
       />
       <ChatGenerationPresetEditorModal

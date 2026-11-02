@@ -534,6 +534,7 @@ export function createUserSettingsSchema(db: Database.Database): void {
   `);
 
   // Shared skills: task instructions chat profiles link by id (llm_chat_profiles.skill_ids) and load with use_skill.
+  // `instructions` is the overview; the details are sections (chat_skill_sections) loaded one at a time.
   db.exec(`
     CREATE TABLE IF NOT EXISTS chat_skills (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -542,6 +543,57 @@ export function createUserSettingsSchema(db: Database.Database): void {
       instructions TEXT NOT NULL DEFAULT '',
       created_date DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_date DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  const skillColumns = new Set((db.prepare('PRAGMA table_info(chat_skills)').all() as Array<{ name: string }>).map((column) => column.name));
+  for (const [column, definition] of [
+    ['category', "TEXT NOT NULL DEFAULT ''"],
+    // 'user', 'import' or 'plugin'; a plugin's skill names its package folder in source_ref ('<plugin id>/<folder>').
+    ['source', "TEXT NOT NULL DEFAULT 'user'"],
+    ['source_ref', 'TEXT'],
+    // 0 while the plugin that brings the skill is off: profiles keep the link, use_skill does not offer it.
+    ['enabled', 'INTEGER NOT NULL DEFAULT 1'],
+    // Counts saves; editors send the one they loaded, and chat_skill_versions keeps the states before each.
+    ['revision', 'INTEGER NOT NULL DEFAULT 1'],
+    ['load_count', 'INTEGER NOT NULL DEFAULT 0'],
+    ['last_loaded_at', 'DATETIME'],
+  ] as const) {
+    if (!skillColumns.has(column)) db.exec(`ALTER TABLE chat_skills ADD COLUMN ${column} ${definition}`);
+  }
+  db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_chat_skills_source_ref ON chat_skills(source_ref) WHERE source_ref IS NOT NULL');
+  // A skill's sections, by path ('name' or 'group/name'); the overview lists them and use_skill loads them by path.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS chat_skill_sections (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      skill_id INTEGER NOT NULL REFERENCES chat_skills(id) ON DELETE CASCADE,
+      path TEXT NOT NULL,
+      path_key TEXT NOT NULL,
+      title TEXT NOT NULL,
+      summary TEXT NOT NULL DEFAULT '',
+      content TEXT NOT NULL DEFAULT '',
+      -- Rough tokens of content, kept with it so a table of contents never reads the texts.
+      tokens INTEGER NOT NULL DEFAULT 0,
+      position INTEGER NOT NULL,
+      load_count INTEGER NOT NULL DEFAULT 0,
+      last_loaded_at DATETIME,
+      created_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(skill_id, path_key)
+    )
+  `);
+  db.exec('CREATE INDEX IF NOT EXISTS idx_chat_skill_sections_order ON chat_skill_sections(skill_id, position)');
+  // A skill's earlier states: a JSON snapshot (name, description, category, overview, sections) of each revision a
+  // save replaced, with the time that revision was saved.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS chat_skill_versions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      skill_id INTEGER NOT NULL REFERENCES chat_skills(id) ON DELETE CASCADE,
+      revision INTEGER NOT NULL,
+      name TEXT NOT NULL,
+      section_count INTEGER NOT NULL,
+      snapshot TEXT NOT NULL,
+      saved_date DATETIME NOT NULL,
+      UNIQUE(skill_id, revision)
     )
   `);
 

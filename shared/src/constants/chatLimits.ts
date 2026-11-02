@@ -26,10 +26,42 @@ export const CHAT_PROFILE_TEXT_LIMITS = {
 } as const
 
 /**
- * Shared chat skills: the name and "use when" text of each linked skill go into the system prompt, the instructions
- * come through use_skill. `perProfile`: skills one profile links.
+ * Shared chat skills: the name and "use when" text of each linked skill go into the system prompt; the overview
+ * (`instructions`, with a table of the sections) and each section come through use_skill. `perProfile`: skills one
+ * profile links. `description` matches the Agent Skills format, so an imported SKILL.md fits.
  */
-export const CHAT_SKILL_LIMITS = { name: 80, description: 500, instructions: 20_000, perProfile: 20 } as const
+export const CHAT_SKILL_LIMITS = {
+  name: 80, description: 1024, category: 60, instructions: 20_000, perProfile: 20,
+  sections: 100, sectionPath: 120, sectionTitle: 120, sectionSummary: 300, sectionContent: 20_000,
+} as const
+
+/** Earlier states kept per skill for its history (the oldest go first). */
+export const CHAT_SKILL_VERSIONS_KEPT = 20
+
+/** One segment of a skill section path: a letter or digit, then letters, digits, '.', '_' or '-'. */
+const SKILL_SECTION_SEGMENT = /^[\p{L}\p{N}][\p{L}\p{N}._-]*$/u
+
+/**
+ * A skill section path as saved: `name` or `group/name` (one group level, so a table of contents stays one read
+ * away), or null when `value` is not one.
+ */
+export function normalizeSkillSectionPath(value: string): string | null {
+  const path = value.normalize('NFKC').trim()
+  const parts = path.split('/')
+  if (!path || path.length > CHAT_SKILL_LIMITS.sectionPath || parts.length > 2 || !parts.every((part) => SKILL_SECTION_SEGMENT.test(part))) return null
+  return path
+}
+
+/** Section paths compare without case. */
+export function skillSectionPathKey(path: string) {
+  return path.normalize('NFKC').trim().toLowerCase()
+}
+
+/** The group of `group/name`, or null for a top-level section. */
+export function skillSectionGroup(path: string) {
+  const slash = path.indexOf('/')
+  return slash < 0 ? null : path.slice(0, slash)
+}
 
 export const CHAT_PROFILE_DEFAULTS = {
   loreScanDepth: 4,

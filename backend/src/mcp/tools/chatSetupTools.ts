@@ -1,11 +1,11 @@
 import type { McpServer } from '@modelcontextprotocol/server';
-import { CHAT_PROFILE_DEFAULTS, CHAT_SKILL_LIMITS, CHAT_TRANSLATION_LANGUAGES, MAX_WORKSPACE_LINKS, isChatTranslationLanguage, type ChatProposal } from '@conai/shared';
+import { CHAT_PROFILE_DEFAULTS, CHAT_SKILL_LIMITS, CHAT_TRANSLATION_LANGUAGES, MAX_WORKSPACE_LINKS, isChatTranslationLanguage, skillSectionPathKey, type ChatProposal, type ChatSkillSectionChange, type ChatSkillSectionFields } from '@conai/shared';
 import { z } from 'zod';
 import { ChatProposalStore, type NewChatProposal } from '../../services/codex-chat/chatProposals';
 import { ChatProfileStore, CHAT_PROFILE_LIMITS, CHAT_PROFILE_TEXT_LIMITS, normalizeAlternateGreetings, normalizeSections, normalizeProfileScalarField, validateProfileText as limitedText, type ChatProfile } from '../../services/codex-chat/chatProfiles';
 import { normalizeGreetingPosition, normalizeOpeningHistory } from '../../services/codex-chat/chatOpeningHistory';
 import { ChatSharedBlockStore, PROFILE_MAX_BLOCKS } from '../../services/codex-chat/chatDisplayBlocks';
-import { checkSkillFields, ChatSkillStore, skillChunk } from '../../services/codex-chat/chatSkills';
+import { applySectionChanges, checkSkill, ChatSkillStore, contentsEntries, skillChunk, skillContents } from '../../services/codex-chat/chatSkills';
 import { applyTextEdits, type TextEdit } from '../../services/fileStoreService';
 import { ChatLorebookStore, LORE_RECURSION_MAX_DEPTH, PROFILE_MAX_LOREBOOKS } from '../../services/codex-chat/chatLorebook';
 import { ChatJudgePresetStore } from '../../services/codex-chat/chatJudgePresets';
@@ -157,7 +157,7 @@ function profileGuide() {
     `- appearance (max ${limits.text}): the character's look as image-prompt tags (hair, eyes, outfit…). Character image generation puts it in front of every asset prompt.`,
     '- model_slot: model id or `connection · model` label (the chat model). Omit to start on the default model.',
     `- lorebook_ids (max ${PROFILE_MAX_LOREBOOKS}) and block_ids (max ${PROFILE_MAX_BLOCKS}): link existing shared lorebooks / display blocks by id.`,
-    `- skill_ids (max ${CHAT_SKILL_LIMITS.perProfile}, a propose_profile_update patch key or a propose_chat_profile setting): link shared skills by id. The chat model sees each linked skill's name and description and loads its instructions with use_skill when a request fits. Write a new skill or change one with propose_skill (list_chat_skills lists them, get_chat_skill reads one).`,
+    `- skill_ids (max ${CHAT_SKILL_LIMITS.perProfile}, a propose_profile_update patch key or a propose_chat_profile setting): link shared skills by id. The chat model sees each linked skill's name and description and, when a request fits, loads its overview and then only the sections it needs with use_skill. Write a new skill or change one with propose_skill (list_chat_skills lists them, get_chat_skill reads one).`,
     '- typeface: "sans" | "serif" | "mono".',
     '- settings: any other key below, e.g. {"translationSlotId": 3, "translationDisplayLanguage": "ko", "summaryEnabled": true}.',
     '',
@@ -359,7 +359,7 @@ function displayValue(key: ProposableKey, value: unknown, owner: string | null):
   if (key === 'suggestProfileId') return value === null ? none : ChatProfileStore.find(Number(value))?.name ?? `#${String(value)}`;
   if (key === 'skillIds') {
     const ids = Array.isArray(value) ? value.map(Number) : [];
-    const names = new Map(ChatSkillStore.skillsOf(ids).map((skill) => [skill.id, skill.name]));
+    const names = ChatSkillStore.names(ids);
     return ids.length ? ids.map((id) => names.get(id) ?? `#${id}`).join(', ') : none;
   }
   if (key === 'linkedFiles') {
@@ -417,32 +417,72 @@ export function buildDisplayBlockProposal(args: DisplayBlockArgs, linkProfileId:
   return { proposal, warnings, block };
 }
 
-export type SkillProposalArgs = { skill_id?: number; name?: string; description?: string; instructions?: string; edits?: TextEdit[]; link_to_profile?: boolean };
+export type SkillSectionArgs = { path: string; title?: string; summary?: string; content?: string; edits?: TextEdit[]; new_path?: string; remove?: boolean };
+export type SkillProposalArgs = { skill_id?: number; name?: string; description?: string; category?: string; instructions?: string; edits?: TextEdit[]; sections?: SkillSectionArgs[]; link_to_profile?: boolean };
+
+/** One section argument of propose_skill as a section change against the skill's current sections. */
+function sectionChangeOf(arg: SkillSectionArgs, current: ChatSkillSectionFields[]): ChatSkillSectionChange {
+  const existing = current.find((section) => skillSectionPathKey(section.path) === skillSectionPathKey(arg.path));
+  if (!existing) {
+    if (arg.remove || arg.edits?.length || arg.new_path !== undefined) throw new Error(`Section "${arg.path}" does not exist: to add it, give its title, summary and content.`);
+    return { action: 'add', path: arg.path, title: arg.title ?? '', summary: arg.summary ?? '', content: arg.content ?? '' };
+  }
+  const before = { title: existing.title, summary: existing.summary, content: existing.content };
+  if (arg.remove) return { action: 'remove', path: existing.path, before };
+  if (arg.edits?.length && arg.content !== undefined) throw new Error(`Section "${arg.path}": give either content or edits, not both.`);
+  const content = arg.edits?.length ? applyTextEdits(existing.content, arg.edits).text : arg.content;
+  return { action: 'update', path: existing.path, newPath: arg.new_path, title: arg.title, summary: arg.summary, content, before };
+}
 
 /**
  * A new shared skill, or changes to `skill_id` (fields left out keep their value; `edits` replace exact text in its
- * instructions instead of resending them whole). The card offers to link it to the speaking profile unless that
- * profile links it already or `link_to_profile` is false.
+ * overview instead of resending it whole; `sections` lists only the sections to add, change or remove). The card
+ * offers to link it to the speaking profile unless that profile links it already or `link_to_profile` is false.
  */
 export function buildSkillProposal(args: SkillProposalArgs, linkProfileId: number | null) {
   const current = args.skill_id === undefined ? null : ChatSkillStore.find(args.skill_id);
   if (args.skill_id !== undefined && !current) throw new Error(`Skill not found: ${args.skill_id}. list_chat_skills lists them.`);
+  if (current?.source === 'plugin') throw new Error(`Skill "${current.name}" comes from plugin ${current.pluginId} and changes only with it.`);
   if (args.edits?.length && !current) throw new Error('edits change an existing skill: give its skill_id.');
   if (args.edits?.length && args.instructions !== undefined) throw new Error('Give either instructions or edits, not both.');
-  const fields = checkSkillFields({
+  const currentSections = current?.sections.map(({ path, title, summary, content }) => ({ path, title, summary, content })) ?? [];
+  const changes = (args.sections ?? []).map((arg) => sectionChangeOf(arg, currentSections));
+  const sections = applySectionChanges(currentSections, changes, (path) => { throw new Error(`Section "${path}" clashes with the skill's sections (listed twice, a path already taken, or changed while proposing); read the skill again.`); }, true);
+  const fields = checkSkill({
     name: args.name ?? current?.name,
     description: args.description ?? current?.description,
+    category: args.category ?? current?.category,
     instructions: args.edits?.length && current ? applyTextEdits(current.instructions, args.edits).text : args.instructions ?? current?.instructions,
+    sections,
   }, current?.id ?? null, true);
-  if (current && fields.name === current.name && fields.description === current.description && fields.instructions === current.instructions) {
+  // The card shows (and saving sends) each change as it will be saved: trimmed, and without what stays the same.
+  const saved = (path: string) => fields.sections.find((section) => skillSectionPathKey(section.path) === skillSectionPathKey(path))!;
+  const sectionChanges = changes.flatMap((change): ChatSkillSectionChange[] => {
+    if (change.action === 'remove') return [change];
+    if (change.action === 'add') return [{ action: 'add', ...saved(change.path) }];
+    const after = saved(change.newPath ?? change.path);
+    const update: ChatSkillSectionChange = {
+      action: 'update', path: change.path, before: change.before,
+      ...(after.path !== change.path ? { newPath: after.path } : {}),
+      ...(after.title !== change.before.title ? { title: after.title } : {}),
+      ...(after.summary !== change.before.summary ? { summary: after.summary } : {}),
+      ...(after.content !== change.before.content ? { content: after.content } : {}),
+    };
+    return Object.keys(update).length > 3 ? [update] : [];
+  });
+  if (current && sectionChanges.length === 0 && fields.name === current.name && fields.description === current.description && fields.category === current.category && fields.instructions === current.instructions) {
     throw new Error('Nothing would change: every proposed value equals the current one.');
   }
   const linked = current !== null && linkProfileId !== null && (ChatProfileStore.find(linkProfileId)?.skillIds ?? []).includes(current.id);
   const proposal: NewChatProposal = {
     kind: 'skill',
     skillId: current?.id ?? null,
-    ...fields,
-    ...(current ? { before: { name: current.name, description: current.description, instructions: current.instructions } } : {}),
+    name: fields.name,
+    description: fields.description,
+    category: fields.category,
+    instructions: fields.instructions,
+    sectionChanges,
+    ...(current ? { before: { name: current.name, description: current.description, category: current.category, instructions: current.instructions } } : {}),
     linkProfileId: args.link_to_profile === false || linked ? null : linkProfileId,
   };
   return { proposal };
@@ -773,46 +813,86 @@ export function registerChatSetupTools(server: McpServer, context: McpRequestCon
 
   server.registerTool(
     'list_chat_skills',
-    { description: 'List the shared skills: id, name, description (when to use it), instructions length and the profiles that link them. A profile links skills by id (skill_ids); its chat model loads one with use_skill when a request fits the description. Read one skill\'s instructions with get_chat_skill.', inputSchema: z.object({}) },
-    async () => {
+    { description: 'List the shared skills: id, name, description (when to use it), category, source (user, import or plugin; plugin skills change only with their plugin), overview length, section count and the profiles that link them. A profile links skills by id (skill_ids); its chat model loads one with use_skill when a request fits the description. query keeps the skills whose name, description, category or a section\'s path, title or summary holds every word. Read one skill with get_chat_skill.', inputSchema: z.object({
+      query: z.string().trim().min(1).max(200).optional(),
+    }) },
+    async ({ query }) => {
       try {
-        return textResult(ChatSkillStore.list().map(({ id, name, description, instructions, profiles }) => ({ id, name, description, instructionsLength: instructions.length, profiles })));
+        return textResult(ChatSkillStore.list(query).map(({ id, name, description, category, source, pluginId, enabled, instructionsLength, sections, profiles }) => ({
+          id, name, description, category, source: pluginId ? `plugin ${pluginId}${enabled ? '' : ' (off)'}` : source, instructionsLength, sections: sections.length, profiles,
+        })));
       } catch (error) { return errorResult(error); }
     },
   );
 
   server.registerTool(
     'get_chat_skill',
-    { description: 'Read one shared skill: name, description, linked profiles and its instructions. Long instructions come in parts; continue with the offset the result gives. Read the instructions before proposing edits to them.', inputSchema: z.object({
+    { description: 'Read one shared skill: name, description, category, linked profiles, its table of sections and its overview; with section, that section\'s text instead. Long text comes in parts; continue with the offset the result gives. Read what you change before proposing edits to it.', inputSchema: z.object({
       skill_id: z.number().int().positive(),
+      section: z.string().trim().min(1).max(CHAT_SKILL_LIMITS.sectionPath + 1).optional().describe('A section path from the table of sections, or "group/" to list a folded group'),
       offset: z.number().int().min(0).optional().describe('Only to continue: the offset the previous result gave'),
     }) },
-    async ({ skill_id, offset }) => {
+    async ({ skill_id, section, offset }) => {
       try {
         const skill = ChatSkillStore.find(skill_id);
         if (!skill) throw new Error(`Skill not found: ${skill_id}. list_chat_skills lists them.`);
-        const header = [
-          `Skill #${skill.id} "${skill.name}"`,
-          `Description: ${skill.description}`,
-          `Linked profiles: ${skill.profiles.map((profile) => `#${profile.id} "${profile.name}"`).join(', ') || '(none)'}`,
-        ].join('\n');
         // Plain text, not JSON: escaping would grow the part past the profile's tool output limit.
         const outputLimit = (context.chatContext ? ChatProfileStore.find(context.chatContext.profileId)?.toolOutputLimit : undefined) ?? CHAT_PROFILE_DEFAULTS.toolOutputLimit;
-        const part = skillChunk(skill.instructions, offset ?? 0, outputLimit - header.length - 300);
-        const more = part.more ? `\n\n(More follows: call get_chat_skill with skill_id ${skill.id} and offset ${part.end}.)` : '';
-        return { content: [{ type: 'text' as const, text: `${header}\nInstructions (characters ${part.start}-${part.end} of ${skill.instructions.length}):\n\n${part.text}${more}` }] };
+        const read = (header: string, label: string, text: string, continueWith: string) => {
+          const start = Math.min(offset ?? 0, text.length);
+          const more = (end: number) => `\n\n(More follows: call get_chat_skill with skill_id ${skill.id}${continueWith} and offset ${end}.)`;
+          // Measured with the largest offsets, so the part, its header and the continuation fit the limit together. The
+          // details under the first header line come only with the first part, and only when they leave room for text.
+          const head = (lines: string, end: number) => `${lines}\n${label} (characters ${start}-${end} of ${text.length}):\n\n`;
+          const room = (lines: string) => outputLimit - head(lines, text.length).length - more(text.length).length;
+          const lines = start === 0 && room(header) >= 100 ? header : header.split('\n')[0];
+          const part = skillChunk(text, start, room(lines));
+          return { content: [{ type: 'text' as const, text: `${head(lines, part.end)}${part.text}${part.more ? more(part.end) : ''}` }] };
+        };
+        if (section?.endsWith('/')) {
+          const listed = skillContents(skill.name, contentsEntries(skill.sections), Number.MAX_SAFE_INTEGER, section.slice(0, -1));
+          if (!listed) throw new Error(`Skill "${skill.name}" has no group "${section}".`);
+          return read(`Skill #${skill.id} "${skill.name}"`, `Sections in "${section}"`, listed.replace(/^[^\n]*\n[^\n]*\n/, ''), `, section "${section}"`);
+        }
+        if (section !== undefined) {
+          const found = skill.sections.find((item) => skillSectionPathKey(item.path) === skillSectionPathKey(section));
+          if (!found) throw new Error(`Skill "${skill.name}" has no section "${section}". Its sections: ${skill.sections.map((item) => `"${item.path}"`).join(', ') || '(none)'}.`);
+          return read(`Skill #${skill.id} "${skill.name}", section "${found.path}"\nTitle: ${found.title}\nSummary: ${found.summary || '(none)'}`, 'Content', found.content, `, section "${found.path}"`);
+        }
+        const header = [
+          `Skill #${skill.id} "${skill.name}" (revision ${skill.revision}${skill.pluginId ? `, from plugin ${skill.pluginId}${skill.enabled ? '' : ' (off)'}` : ''})`,
+          `Description: ${skill.description}`,
+          `Category: ${skill.category || '(none)'}`,
+          `Linked profiles: ${skill.profiles.map((profile) => `#${profile.id} "${profile.name}"`).join(', ') || '(none)'}`,
+        ].join('\n');
+        // The table goes after the overview in the same parts (folded past half the limit), so neither crowds a part out.
+        const contents = skill.sections.length
+          ? skillContents(skill.name, contentsEntries(skill.sections), Math.floor(outputLimit / 2)).replace(/^## Sections\n[^\n]*\n/, '')
+          : '';
+        if (!contents) return read(`${header}\nSections: (none)`, 'Overview', skill.instructions, '');
+        return read(header, 'Overview, then the table of sections after "## Sections" (read one with section; "group/" lists a folded group)', `${skill.instructions}\n\n## Sections\n${contents}`, '');
       } catch (error) { return errorResult(error); }
     },
   );
 
   server.registerTool(
     'propose_skill',
-    { description: `Propose a shared skill as a card under your reply: a new one, or changes to an existing one (skill_id; fields you leave out stay as they are). Nothing is saved until the user presses 저장. A skill is task instructions a chat profile loads with use_skill when a request matches; its chat model sees only the name and description until then. Write: name — short and unique (max ${CHAT_SKILL_LIMITS.name}); description — when to use it, one or two sentences starting with "Use when", concrete enough that a small model can match a request to it (max ${CHAT_SKILL_LIMITS.description}); instructions — the steps and rules to follow, as direct numbered orders, in English unless the user asks otherwise (max ${CHAT_SKILL_LIMITS.instructions}; {{char}} and {{user}} become the profile and user names). To change part of an existing skill's instructions, read them with get_chat_skill and send edits instead of instructions. The card offers to link the skill to the profile you speak as.`, inputSchema: z.object({
+    { description: `Propose a shared skill as a card under your reply: a new one, or changes to an existing one (skill_id; fields you leave out stay as they are). Nothing is saved until the user presses 저장. A skill is task instructions a chat profile loads with use_skill when a request matches; its chat model sees only the name and description until then, then the overview with a table of the sections, and loads only the sections it needs. Write: name — short and unique (max ${CHAT_SKILL_LIMITS.name}); description — what it is for and when to use it, one or two sentences starting with "Use when", concrete enough that a small model can match a request to it (max ${CHAT_SKILL_LIMITS.description}); instructions — the overview: the common steps and rules as direct numbered orders, and which section to read for what (max ${CHAT_SKILL_LIMITS.instructions}); sections — details that only some requests need, one topic each (e.g. one per model or workflow: "models/nai-v4"), each with a title, a one-line summary of when to read it, and the content (max ${CHAT_SKILL_LIMITS.sections} sections, ${CHAT_SKILL_LIMITS.sectionContent} characters each). Write in English unless the user asks otherwise; {{char}} and {{user}} become the profile and user names. To change part of an existing skill, read it with get_chat_skill and send edits (overview) or the changed sections only. The card offers to link the skill to the profile you speak as.`, inputSchema: z.object({
       skill_id: z.number().int().positive().optional().describe('Change this existing skill (list_chat_skills shows ids); omit to propose a new one'),
       name: z.string().optional(),
       description: z.string().optional().describe('When to use the skill, starting with "Use when"'),
-      instructions: z.string().optional().describe('The whole new instructions'),
-      edits: z.array(z.object({ old_text: z.string().min(1), new_text: z.string(), replace_all: z.boolean().optional() })).optional().describe('With skill_id, instead of instructions: exact replacements in the current instructions, applied in order; each old_text must match once unless replace_all'),
+      category: z.string().optional().describe('A library group for the administrator (the chat model never sees it)'),
+      instructions: z.string().optional().describe('The whole new overview'),
+      edits: z.array(z.object({ old_text: z.string().min(1), new_text: z.string(), replace_all: z.boolean().optional() })).optional().describe('With skill_id, instead of instructions: exact replacements in the current overview, applied in order; each old_text must match once unless replace_all'),
+      sections: z.array(z.object({
+        path: z.string().describe('"name" or "group/name": letters, digits, ".", "_" or "-"; an existing path changes that section, a new one adds it'),
+        title: z.string().optional(),
+        summary: z.string().optional().describe('One line for the table of contents: when to read this section'),
+        content: z.string().optional().describe('The whole section text'),
+        edits: z.array(z.object({ old_text: z.string().min(1), new_text: z.string(), replace_all: z.boolean().optional() })).optional().describe('For an existing section, instead of content: exact replacements'),
+        new_path: z.string().optional().describe('Move an existing section to this path'),
+        remove: z.boolean().optional().describe('Remove this existing section'),
+      })).optional().describe('Only the sections to add, change or remove; the others stay as they are'),
       link_to_profile: z.boolean().default(true).describe('Offer to link the saved skill to the profile you speak as'),
     }) },
     async (args) => {

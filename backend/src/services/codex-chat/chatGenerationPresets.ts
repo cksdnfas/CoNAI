@@ -3,8 +3,11 @@ import { chatProfileOrderSql } from './chatProfileOrder'
 import { createHash } from 'crypto'
 import path from 'path'
 import { WorkflowModel } from '../../models/Workflow'
-import { FileStoreService, TEXT_EXTENSIONS, parseFileId } from '../fileStoreService'
+import { CHAT_SKILL_LIMITS, normalizeSkillSectionPath } from '@conai/shared'
+import { FileStoreService } from '../fileStoreService'
 import { ChatProfileError } from './chatProfileError'
+import { splitLong } from './chatSkillPackages'
+import { ChatSkillStore, skillChunk, skillGuide, uniqueSkillName } from './chatSkills'
 import type { MarkedField } from '../../types/workflow'
 
 /**
@@ -58,18 +61,20 @@ export type ChatComfyPresetConfig = {
  * How the scene prompt gets written. `inline`: the chat model fills the tool while it replies. `after`: the chat
  * model only asks for a picture (with an optional note of the moment), and once the reply is finished a separate call
  * writes the prompt from the finished text (chatGenerationPrompting.ts). Either way the writer gets the guide (the
- * text here and the linked file store file) and up to `previousImages` of the chat's latest generated images.
+ * text here and the linked skill section) and up to `previousImages` of the chat's latest generated images.
  */
 export type ChatPresetPrompting = {
   timing: 'inline' | 'after'
   guide: string
   /**
-   * A text file of an administrator's file store. `owner` is the store it lives in (the admin who linked it), kept
-   * so the file still reads when another account's chat uses the preset; `path` is where it is now (null: gone).
+   * A section of a shared skill (or `group/` for a group's sections), so one skill can hold the guides of several
+   * models side by side. The names are read on load; null once the skill or the section is gone.
    */
-  guideFile: { owner: string; fileId: string; path: string | null; updatedAt: string | null } | null
+  guideSkill: ChatPresetGuideSkill | null
   previousImages: number
 }
+
+export type ChatPresetGuideSkill = { skillId: number; path: string; skillName: string | null; title: string | null; updatedDate: string | null }
 
 export const PRESET_PREVIOUS_IMAGES_MAX = 4
 export const PRESET_GUIDE_MAX_LENGTH = 4000
@@ -89,11 +94,8 @@ export type ChatGenerationPreset = {
   updatedDate: string
 }
 
-/** `prompting.guideFileId`: a file of the saving admin's own store (null unlinks it); the rest as ChatPresetPrompting. */
+/** `prompting.guideSkill`: `{ skillId, path }` of an existing section or group (null unlinks it); the rest as ChatPresetPrompting. */
 export type ChatGenerationPresetInput = { name?: unknown; instruction?: unknown; kind?: unknown; nai?: unknown; comfyui?: unknown; prompting?: unknown }
-
-/** Where a guide file is linked from: the store of the admin saving the preset, asked only when a new file is linked. */
-export type PresetSaveOptions = { guideOwner?: () => string }
 
 export const PROFILE_MAX_GENERATION_PRESETS = 8
 const NAME_MAX_LENGTH = 80
@@ -301,10 +303,25 @@ function linkedProfiles() {
   return rows.map((row) => ({ id: row.id, name: row.name, presetIds: normalizeGenerationPresetIds(row.generation_preset_ids) }))
 }
 
-const DEFAULT_PROMPTING: ChatPresetPrompting = { timing: 'inline', guide: '', guideFile: null, previousImages: 0 }
+const DEFAULT_PROMPTING: ChatPresetPrompting = { timing: 'inline', guide: '', guideSkill: null, previousImages: 0 }
 
-/** Where a linked guide file is now (`a/b/c.md` from the store root) and when it last changed; nulls once it is gone. */
-function guideFileAt(_actor: string, fileId: string): { path: string | null; updatedAt: string | null } {
+/** A stored or saved `{ skillId, path }` as a guide link (path: a section, or `group/`), else null. */
+function guideSkillLink(value: unknown): { skillId: number; path: string } | null {
+  if (!isRecord(value) || !Number.isSafeInteger(value.skillId) || (value.skillId as number) <= 0 || typeof value.path !== 'string') return null
+  const raw = value.path.trim()
+  const group = raw.endsWith('/')
+  const path = normalizeSkillSectionPath(group ? raw.slice(0, -1) : raw)
+  if (!path || (group && path.includes('/'))) return null
+  return { skillId: value.skillId as number, path: group ? `${path}/` : path }
+}
+
+function resolveGuideSkill(link: { skillId: number; path: string }): ChatPresetGuideSkill {
+  const { skillName, title, updatedDate } = skillGuide(link.skillId, link.path)
+  return { ...link, skillName, title, updatedDate }
+}
+
+/** Where a guide file (the older way to attach a guide) is (`a/b/c.md` from the store root); null once it is gone. */
+function guideFileAt(fileId: string): { path: string | null; updatedAt: string | null } {
   const lookup = getUserSettingsDb().prepare('SELECT parent_id, name, updated_at FROM stored_file_entries WHERE id = ? AND deleted_at IS NULL')
   const file = lookup.get(fileId) as { parent_id: string | null; name: string; updated_at: string } | undefined
   if (!file) return { path: null, updatedAt: null }
@@ -323,44 +340,124 @@ function readPrompting(value: string | null): ChatPresetPrompting {
   let raw: unknown = null
   try { raw = JSON.parse(value || '{}') } catch { raw = null }
   const stored = isRecord(raw) ? raw : {}
-  const file = isRecord(stored.guideFile) && typeof stored.guideFile.owner === 'string' && typeof stored.guideFile.fileId === 'string' && /^[a-f0-9]{32}$/.test(stored.guideFile.fileId)
-    ? { owner: stored.guideFile.owner, fileId: stored.guideFile.fileId }
-    : null
+  const link = guideSkillLink(stored.guideSkill)
   return {
     timing: stored.timing === 'after' ? 'after' : 'inline',
     guide: text(stored.guide, PRESET_GUIDE_MAX_LENGTH),
-    guideFile: file ? { ...file, ...guideFileAt(file.owner, file.fileId) } : null,
+    guideSkill: link ? resolveGuideSkill(link) : null,
     previousImages: number(stored.previousImages, { min: 0, max: PRESET_PREVIOUS_IMAGES_MAX }, 0, true),
   }
 }
 
-/** The prompting a save leaves: `input` over `current`; a newly linked guide file must be a text file of the saver's store. */
-function promptingOf(input: unknown, current: ChatPresetPrompting | null, options: PresetSaveOptions): ChatPresetPrompting {
+/** The prompting a save leaves: `input` over `current`; a newly linked guide must be an existing section or group. */
+function promptingOf(input: unknown, current: ChatPresetPrompting | null): ChatPresetPrompting {
   const base = current ?? DEFAULT_PROMPTING
   if (input === undefined || input === null) return base
   if (!isRecord(input)) throw new ChatProfileError('프롬프트 작성 설정이 올바르지 않아.')
   if (input.timing !== undefined && input.timing !== 'inline' && input.timing !== 'after') throw new ChatProfileError('작성 시점은 inline 또는 after여야 해.')
-  let guideFile = base.guideFile
-  if (input.guideFileId === null || input.guideFileId === '') guideFile = null
-  else if (input.guideFileId !== undefined && input.guideFileId !== base.guideFile?.fileId) {
-    const fileId = parseFileId(input.guideFileId) as string
-    if (!options.guideOwner) throw new ChatProfileError('가이드 문서는 설정 화면에서 연결해줘.')
-    const owner = options.guideOwner()
-    const { entry } = FileStoreService.resolveFile(owner, fileId)
-    if (!TEXT_EXTENSIONS.has(path.extname(entry.name).toLowerCase())) throw new ChatProfileError('가이드 문서는 텍스트 파일만 연결할 수 있어.')
-    guideFile = { owner, fileId, ...guideFileAt(owner, fileId) }
+  let guideSkill = base.guideSkill
+  if (input.guideSkill === null) guideSkill = null
+  else if (input.guideSkill !== undefined) {
+    const link = guideSkillLink(input.guideSkill)
+    if (!link) throw new ChatProfileError('가이드 스킬 섹션은 { skillId, path }로 골라줘.')
+    if (link.skillId !== base.guideSkill?.skillId || link.path !== base.guideSkill.path) {
+      guideSkill = resolveGuideSkill(link)
+      if (guideSkill.title === null) throw new ChatProfileError('가이드로 고른 스킬 섹션을 찾을 수 없어.')
+    }
   }
   return {
     timing: input.timing === undefined ? base.timing : input.timing,
     guide: input.guide === undefined ? base.guide : text(input.guide, PRESET_GUIDE_MAX_LENGTH),
-    guideFile,
+    guideSkill,
     previousImages: input.previousImages === undefined ? base.previousImages : number(input.previousImages, { min: 0, max: PRESET_PREVIOUS_IMAGES_MAX }, 0, true),
   }
 }
 
 function promptingColumn(prompting: ChatPresetPrompting) {
-  const { timing, guide, guideFile, previousImages } = prompting
-  return JSON.stringify({ timing, guide, guideFile: guideFile ? { owner: guideFile.owner, fileId: guideFile.fileId } : null, previousImages })
+  const { timing, guide, guideSkill, previousImages } = prompting
+  return JSON.stringify({ timing, guide, guideSkill: guideSkill ? { skillId: guideSkill.skillId, path: guideSkill.path } : null, previousImages })
+}
+
+/**
+ * Presets that still link a guide file (how guides were attached before skill sections) get a skill made from that
+ * file, one per file and split into sections when long, and point at it; an unreadable file only loses the link.
+ * Each file's skill and its presets' links change together, so a failure (or a stop) leaves that file linked for the
+ * next start. Idempotent: once no preset names a file, a run changes nothing.
+ */
+export function migratePresetGuideFiles() {
+  const db = getUserSettingsDb()
+  const rows = db.prepare(`SELECT id, name, prompting FROM chat_generation_presets WHERE prompting LIKE '%"guideFile":{%'`).all() as Array<{ id: number; name: string; prompting: string }>
+  const update = db.prepare('UPDATE chat_generation_presets SET prompting = ? WHERE id = ?')
+  const byFile = new Map<string | null, { file: { owner: string; fileId: string } | null; presets: Array<{ id: number; name: string; stored: Record<string, unknown> }> }>()
+  for (const row of rows) {
+    let stored: Record<string, unknown> = {}
+    try { const parsed: unknown = JSON.parse(row.prompting); stored = isRecord(parsed) ? parsed : {} } catch { stored = {} }
+    const file = isRecord(stored.guideFile) && typeof stored.guideFile.owner === 'string' && typeof stored.guideFile.fileId === 'string' ? { owner: stored.guideFile.owner, fileId: stored.guideFile.fileId } : null
+    const group = byFile.get(file?.fileId ?? null) ?? { file, presets: [] }
+    group.presets.push({ id: row.id, name: row.name, stored })
+    byFile.set(file?.fileId ?? null, group)
+  }
+  let moved = 0
+  for (const { file, presets } of byFile.values()) {
+    try {
+      db.transaction(() => {
+        const guide = file ? guideSkillFromFile(file, presets.map((preset) => `"${preset.name}"`)) : null
+        for (const { id, stored } of presets) {
+          const { guideFile: _file, ...rest } = stored
+          update.run(JSON.stringify({ ...rest, guideSkill: guide ?? rest.guideSkill ?? null }), id)
+        }
+      })()
+      moved += presets.length
+    } catch (error) {
+      console.warn(`[generation-presets] Guide file ${file?.fileId ?? '(unnamed)'} stays linked until the next start:`, error instanceof Error ? error.message : error)
+    }
+  }
+  if (moved) console.log(`📘 Moved the guide files of ${moved} generation preset(s) into skills`)
+}
+
+/** `content` in parts that fit a section: at headings when that fits the section count, else packed full. */
+function guideParts(content: string) {
+  const max = CHAT_SKILL_LIMITS.sectionContent
+  const parts = splitLong(content, max)
+  if (parts.length <= CHAT_SKILL_LIMITS.sections) return parts
+  const packed: string[] = []
+  for (let offset = 0; offset < content.length;) {
+    const chunk = skillChunk(content, offset, max)
+    packed.push(chunk.text)
+    offset = chunk.end
+  }
+  return packed
+}
+
+function guideSkillFromFile(file: { owner: string; fileId: string }, presets: string[]): { skillId: number; path: string } | null {
+  let content: string
+  try { content = FileStoreService.readEditableText(file.owner, file.fileId).text.trim() } catch (error) {
+    console.warn(`[generation-presets] Guide file ${file.fileId} could not be read and was unlinked:`, error instanceof Error ? error.message : error)
+    return null
+  }
+  if (!content) return null
+  const where = guideFileAt(file.fileId).path ?? file.fileId
+  const parts = guideParts(content)
+  // Only an ASCII file near the 2MB editor limit outgrows 100 full sections.
+  if (parts.length > CHAT_SKILL_LIMITS.sections) console.warn(`[generation-presets] Guide file ${where} needs ${parts.length} sections; only the first ${CHAT_SKILL_LIMITS.sections} were moved.`)
+  const kept = parts.slice(0, CHAT_SKILL_LIMITS.sections)
+  // Room for " (100/100)" after the file's name.
+  const title = (path.basename(where, path.extname(where)) || 'guide').slice(0, CHAT_SKILL_LIMITS.sectionTitle - 10).trim() || 'guide'
+  const sections = kept.map((part, index) => ({
+    path: kept.length > 1 ? `guide/part-${index + 1}` : 'guide',
+    title: kept.length > 1 ? `${title} (${index + 1}/${kept.length})` : title,
+    summary: `Prompt-writing rules from ${where}.`.slice(0, CHAT_SKILL_LIMITS.sectionSummary),
+    content: part,
+  }))
+  const users = presets.join(', ')
+  const skill = ChatSkillStore.create({
+    name: uniqueSkillName(`생성 가이드 · ${title}`.slice(0, CHAT_SKILL_LIMITS.name), file.fileId.slice(0, 6), null),
+    description: `Use when writing or checking image prompts for the ${users} generation preset${presets.length > 1 ? 's' : ''}.`.slice(0, CHAT_SKILL_LIMITS.description),
+    category: '이미지 생성',
+    instructions: `The prompt-writing guide of the ${users} generation preset${presets.length > 1 ? 's' : ''}, moved here from the file "${where}". Those presets' image tools read it on their own; load it only when the user asks about these rules.`.slice(0, CHAT_SKILL_LIMITS.instructions),
+    sections,
+  })
+  return { skillId: skill.id, path: kept.length > 1 ? 'guide/' : 'guide' }
 }
 
 function parseConfig(row: PresetRow): Pick<ChatGenerationPreset, 'kind' | 'nai' | 'comfyui'> {
@@ -390,7 +487,7 @@ function toPreset(row: PresetRow, profiles: ReturnType<typeof linkedProfiles>): 
   }
 }
 
-function columnsOf(input: ChatGenerationPresetInput, current: ChatGenerationPreset | null, options: PresetSaveOptions) {
+function columnsOf(input: ChatGenerationPresetInput, current: ChatGenerationPreset | null) {
   const kind = input.kind === undefined && current ? current.kind : kindOf(input.kind)
   const config = kind === 'nai'
     ? normalizeNaiPresetConfig(input.nai === undefined && current ? current.nai : input.nai)
@@ -400,7 +497,7 @@ function columnsOf(input: ChatGenerationPresetInput, current: ChatGenerationPres
     instruction: input.instruction === undefined && current ? current.instruction : text(input.instruction, INSTRUCTION_MAX_LENGTH),
     kind,
     config: JSON.stringify(config),
-    prompting: promptingColumn(promptingOf(input.prompting, current?.prompting ?? null, options)),
+    prompting: promptingColumn(promptingOf(input.prompting, current?.prompting ?? null)),
   }
 }
 
@@ -442,17 +539,17 @@ export const ChatGenerationPresetStore = {
     return createHash('sha256').update(JSON.stringify(ChatGenerationPresetStore.resolve(ids))).digest('hex')
   },
 
-  create(input: ChatGenerationPresetInput, options: PresetSaveOptions = {}) {
-    const columns = columnsOf(input, null, options)
+  create(input: ChatGenerationPresetInput) {
+    const columns = columnsOf(input, null)
     const result = getUserSettingsDb().prepare('INSERT INTO chat_generation_presets (name, instruction, kind, config, prompting) VALUES (?, ?, ?, ?, ?)')
       .run(columns.name, columns.instruction, columns.kind, columns.config, columns.prompting)
     return ChatGenerationPresetStore.find(Number(result.lastInsertRowid)) as ChatGenerationPreset
   },
 
-  update(presetId: number, patch: ChatGenerationPresetInput, options: PresetSaveOptions = {}) {
+  update(presetId: number, patch: ChatGenerationPresetInput) {
     const current = ChatGenerationPresetStore.find(presetId)
     if (!current) return null
-    const columns = columnsOf(patch, current, options)
+    const columns = columnsOf(patch, current)
     getUserSettingsDb().prepare('UPDATE chat_generation_presets SET name = ?, instruction = ?, kind = ?, config = ?, prompting = ?, updated_date = CURRENT_TIMESTAMP WHERE id = ?')
       .run(columns.name, columns.instruction, columns.kind, columns.config, columns.prompting, presetId)
     return ChatGenerationPresetStore.find(presetId)
@@ -484,7 +581,7 @@ export function readGenerationPresetFile(value: unknown): ChatGenerationPresetIn
     if (!isRecord(item)) return []
     const inner = isRecord(item.preset) ? item.preset : item
     if (inner.kind !== 'nai' && inner.kind !== 'comfyui') return []
-    // A guide file is a file of this server's store: an imported preset keeps the writing settings but not the link.
+    // A guide skill is one of this server's skills: an imported preset keeps the writing settings but not the link.
     const prompting = isRecord(inner.prompting) ? { timing: inner.prompting.timing, guide: inner.prompting.guide, previousImages: inner.prompting.previousImages } : undefined
     return [{ name: item.name ?? inner.name ?? '생성 프리셋', instruction: item.instruction ?? inner.instruction ?? '', kind: inner.kind, nai: inner.nai, comfyui: inner.comfyui, prompting }]
   })

@@ -118,6 +118,14 @@ export function packageRepositoryArchive(archive: Buffer, folder: string) {
   const assets = new Map<string, Buffer>()
   const skipped: string[] = []
   let total = 0, files = 0, found = false
+  // Skill folders the manifest declares keep their Markdown (SKILL.md and references); packaging checks the manifest itself.
+  let skillFolders: string[] = []
+  const manifestEntry = entries.find(entry => entry.entryName === `${prefix}plugin.json`)
+  const manifestBytes = manifestEntry && zipEntryBytes(manifestEntry, PLUGIN_PACKAGE_LIMITS.file)
+  try {
+    const skills: unknown = manifestBytes ? JSON.parse(manifestBytes.toString('utf8')).skills : null
+    if (Array.isArray(skills)) skillFolders = skills.filter((item): item is string => typeof item === 'string').map(item => `${item.replace(/\/+$/, '')}/`)
+  } catch { /* an unreadable manifest is refused when the package is checked below */ }
   for (const entry of entries) {
     if (!entry.entryName.startsWith(prefix)) continue
     found = true
@@ -127,9 +135,14 @@ export function packageRepositoryArchive(archive: Buffer, folder: string) {
     if (name.includes('\\') || parts.some(part => !part || part === '.' || part === '..')) throw new PluginError(`허용하지 않는 경로가 저장소에 있어: ${name.slice(0, 200)}`)
     const kind = zipEntryKind(entry)
     let allowed = false
-    try { allowed = pluginAssetAllowed(name) } catch { /* a name a package can't hold */ }
-    // Dot-files and folders, Markdown and other files a package can't hold stay out, like the local build script.
-    if (parts.some(part => part.startsWith('.')) || (kind === 'file' && (/\.md$/i.test(name) || !allowed))) {
+    try { allowed = pluginAssetAllowed(name) } catch {
+      // Left out, a skill's document would drop its section without a word.
+      if (kind === 'file' && /\.(md|markdown|txt)$/i.test(name) && skillFolders.some(skill => name.startsWith(skill))) throw new PluginError(`스킬 문서 이름은 영문·숫자와 _ - . 만 쓸 수 있어: ${name.slice(0, 200)}`)
+    }
+    // A .markdown file has a valid name but is not a package asset; skipped, its section would vanish the same way.
+    if (kind === 'file' && !allowed && /\.markdown$/i.test(name) && skillFolders.some(skill => name.startsWith(skill))) throw new PluginError(`스킬 문서는 .md나 .txt로 저장해줘: ${name.slice(0, 200)}`)
+    // Dot-files and folders, Markdown outside skill folders and other files a package can't hold stay out, like the local build script.
+    if (parts.some(part => part.startsWith('.')) || (kind === 'file' && ((/\.md$/i.test(name) && !skillFolders.some(skill => name.startsWith(skill))) || !allowed))) {
       if (kind !== 'folder' && skipped.length < 50) skipped.push(name.slice(0, 200))
       continue
     }

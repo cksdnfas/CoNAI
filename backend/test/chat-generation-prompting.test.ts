@@ -35,11 +35,11 @@ test('chat generation prompting: preset settings, guide, writer answers and defe
     await fs.promises.rm(root, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 })
   })
   const owner = fileOwnerKey(1)
-  const guideOwner = () => owner
+  const { ChatSkillStore } = await import('../src/services/codex-chat/chatSkills')
 
   await t.test('a preset starts inline with no guide; settings are kept, clamped and patched', () => {
     const preset = ChatGenerationPresetStore.create({ name: '장면', kind: 'nai' })
-    assert.deepEqual(preset.prompting, { timing: 'inline', guide: '', guideFile: null, previousImages: 0 })
+    assert.deepEqual(preset.prompting, { timing: 'inline', guide: '', guideSkill: null, previousImages: 0 })
     const updated = ChatGenerationPresetStore.update(preset.id, { prompting: { timing: 'after', guide: '  1girl 위주로  ', previousImages: 9 } })!
     assert.equal(updated.prompting.timing, 'after')
     assert.equal(updated.prompting.guide, '1girl 위주로')
@@ -49,26 +49,58 @@ test('chat generation prompting: preset settings, guide, writer answers and defe
     assert.throws(() => ChatGenerationPresetStore.update(preset.id, { prompting: { timing: 'later' } }), /inline 또는 after/)
   })
 
-  await t.test('a guide file links from the saver store, follows renames and reads into the guide', () => {
-    const folder = FileStoreService.ensureFolder(owner, null, '가이드')
-    const file = FileStoreService.writeText(owner, folder.id, 'nai.md', '태그는 영어로.\n표정을 꼭 넣어.')
-    const other = FileStoreService.writeText(owner, folder.id, 'notes.txt', 'x')
-    const preset = ChatGenerationPresetStore.create({ name: '가이드', kind: 'nai', prompting: { guide: '짧게.', guideFileId: file.id } }, { guideOwner })
-    assert.equal(preset.prompting.guideFile?.path, '가이드/nai.md')
-    assert.equal(preset.prompting.guideFile?.owner, owner)
-    assert.equal(presetGuideText(preset), '짧게.\n\n[가이드/nai.md]\n태그는 영어로.\n표정을 꼭 넣어.')
-    const completeGuide = '가이드 전체 문장. '.repeat(2000) + '끝까지 보존'
-    FileStoreService.updateText(owner, file.id, completeGuide)
-    assert.ok(presetGuideText(preset).endsWith(completeGuide), 'the guide is not clipped to its old 12 KB prefix')
-    FileStoreService.rename(owner, file.id, 'scene.md')
-    assert.equal(ChatGenerationPresetStore.find(preset.id)!.prompting.guideFile?.path, '가이드/scene.md')
-    // Linking needs the saver's store; keeping the same file does not ask for it again.
-    assert.throws(() => ChatGenerationPresetStore.update(preset.id, { prompting: { guideFileId: other.id } }), /설정 화면에서/)
-    assert.equal(ChatGenerationPresetStore.update(preset.id, { prompting: { guideFileId: file.id, guide: '' } })!.prompting.guideFile?.fileId, file.id)
-    assert.equal(ChatGenerationPresetStore.update(preset.id, { prompting: { guideFileId: null } })!.prompting.guideFile, null)
-    // An imported preset keeps how it writes but not another store's file.
-    const [imported] = readGenerationPresetFile({ kind: 'nai', name: 'x', prompting: { timing: 'after', guide: 'g', guideFileId: file.id, previousImages: 2 } })
+  await t.test('a guide is a skill section (or a group) that reads into the guide and follows its edits', () => {
+    const skill = ChatSkillStore.create({ name: '이미지 생성', description: 'Use when drawing.', instructions: 'Pick the section of the model.', sections: [
+      { path: 'models/nai', title: 'NAI', summary: 'NAI presets', content: '태그는 영어로.\n표정을 꼭 넣어.' },
+      { path: 'models/comfy', title: 'Comfy', summary: 'ComfyUI presets', content: '문장으로 써.' },
+    ] })
+    const preset = ChatGenerationPresetStore.create({ name: '가이드', kind: 'nai', prompting: { guide: '짧게.', guideSkill: { skillId: skill.id, path: 'models/nai' } } })
+    assert.deepEqual({ ...preset.prompting.guideSkill, updatedDate: null }, { skillId: skill.id, path: 'models/nai', skillName: '이미지 생성', title: 'NAI', updatedDate: null })
+    assert.equal(presetGuideText(preset), '짧게.\n\n[이미지 생성 › models/nai]\n태그는 영어로.\n표정을 꼭 넣어.')
+    const completeGuide = '가이드 전체 문장. '.repeat(1500) + '끝까지 보존'
+    ChatSkillStore.update(skill.id, { sectionChanges: [{ action: 'update', path: 'models/nai', content: completeGuide, before: { title: 'NAI', summary: 'NAI presets', content: '태그는 영어로.\n표정을 꼭 넣어.' } }] })
+    assert.ok(presetGuideText(ChatGenerationPresetStore.find(preset.id)!).endsWith(completeGuide), 'the whole section reads, as edited')
+    const group = ChatGenerationPresetStore.update(preset.id, { prompting: { guideSkill: { skillId: skill.id, path: 'models/' } } })!
+    assert.equal(group.prompting.guideSkill?.title, 'models/ (2)')
+    assert.match(presetGuideText(group), /### NAI \(models\/nai\)[\s\S]*### Comfy \(models\/comfy\)\n\n문장으로 써\./, 'a group reads its sections in order')
+    assert.throws(() => ChatGenerationPresetStore.update(preset.id, { prompting: { guideSkill: { skillId: skill.id, path: 'models/none' } } }), /찾을 수 없어/)
+    assert.equal(ChatGenerationPresetStore.update(preset.id, { prompting: { guideSkill: null } })!.prompting.guideSkill, null)
+    // An imported preset keeps how it writes but not this server's skill.
+    const [imported] = readGenerationPresetFile({ kind: 'nai', name: 'x', prompting: { timing: 'after', guide: 'g', guideSkill: { skillId: skill.id, path: 'models/nai' }, previousImages: 2 } })
     assert.deepEqual(imported.prompting, { timing: 'after', guide: 'g', previousImages: 2 })
+  })
+
+  await t.test('presets that link a guide file move it into a skill once, whole', async () => {
+    const { migratePresetGuideFiles } = await import('../src/services/codex-chat/chatGenerationPresets')
+    const { getUserSettingsDb } = await import('../src/database/userSettingsDb')
+    const folder = FileStoreService.ensureFolder(owner, null, '가이드')
+    const short = FileStoreService.writeText(owner, folder.id, 'nai.md', '태그는 영어로.')
+    const completeGuide = '가이드 전체 문장. '.repeat(4000) + '끝까지 보존'
+    const long = FileStoreService.writeText(owner, folder.id, 'long.md', completeGuide)
+    const legacy = (name: string, fileId: string) => {
+      const preset = ChatGenerationPresetStore.create({ name, kind: 'nai', prompting: { guide: '짧게.' } })
+      getUserSettingsDb().prepare('UPDATE chat_generation_presets SET prompting = ? WHERE id = ?').run(JSON.stringify({ timing: 'inline', guide: '짧게.', guideFile: { owner, fileId }, previousImages: 0 }), preset.id)
+      return preset.id
+    }
+    const first = legacy('짧은 가이드', short.id)
+    const second = legacy('같은 파일', short.id)
+    const third = legacy('긴 가이드', long.id)
+    const gone = legacy('지워진 파일', 'f'.repeat(32))
+    // A file name longer than a section title fits once shortened instead of stopping the migration.
+    const named = legacy('긴 이름', FileStoreService.writeText(owner, folder.id, `${'n'.repeat(150)}.md`, '긴 이름의 가이드').id)
+    migratePresetGuideFiles()
+    assert.equal(ChatGenerationPresetStore.find(named)!.prompting.guideSkill?.path, 'guide', 'a long file name does not stop the move')
+    const [a, b, c, d] = [first, second, third, gone].map((id) => ChatGenerationPresetStore.find(id)!.prompting)
+    assert.equal(a.guideSkill?.path, 'guide')
+    assert.deepEqual(b.guideSkill?.skillId, a.guideSkill?.skillId, 'presets sharing a file share its skill')
+    assert.match(a.guideSkill?.skillName ?? '', /^생성 가이드 · nai/)
+    assert.equal(presetGuideText(ChatGenerationPresetStore.find(first)!), `짧게.\n\n[${a.guideSkill?.skillName} › guide]\n태그는 영어로.`)
+    assert.equal(c.guideSkill?.path, 'guide/', 'a long file becomes a group of sections')
+    assert.equal(presetGuideText(ChatGenerationPresetStore.find(third)!).replace(/### [^\n]+\n\n/g, '').replace(/\s+/g, ''), `짧게.[${c.guideSkill?.skillName}›guide/]${completeGuide}`.replace(/\s+/g, ''), 'nothing of the file is lost')
+    assert.equal(d.guideSkill, null, 'an unreadable file only loses the link')
+    const skills = ChatSkillStore.list().length
+    migratePresetGuideFiles()
+    assert.equal(ChatSkillStore.list().length, skills, 'a second run changes nothing')
   })
 
   await t.test('the writer is asked for the tool fields and its answer is read out of prose', () => {
@@ -88,25 +120,17 @@ test('chat generation prompting: preset settings, guide, writer answers and defe
     assert.equal(parseWriterAnswer('no json'), null)
   })
 
-  await t.test('unreadable linked guides never prevent inline tool registration', async () => {
+  await t.test('a guide whose skill is gone never prevents inline tool registration', async () => {
     const { registerChatGenerationTools } = await import('../src/mcp/tools/chatGenerationTools')
-    const { MAX_TEXT_DOCUMENT_BYTES } = await import('../src/services/fileStoreService')
-    const folder = FileStoreService.ensureFolder(owner, null, 'bad-guides')
-    const file = FileStoreService.writeText(owner, folder.id, 'guide.txt', 'valid')
-    const preset = ChatGenerationPresetStore.create({ name: 'bad guide', kind: 'nai', prompting: { guide: 'inline fallback', guideFileId: file.id } }, { guideOwner })
-    const { filePath } = FileStoreService.resolveFile(owner, file.id)
-    for (const bytes of [Buffer.from([0xb0, 0xa1]), Buffer.from('contains\0nul'), Buffer.alloc(MAX_TEXT_DOCUMENT_BYTES + 1, 'x')]) {
-      fs.writeFileSync(filePath, bytes)
-      const descriptions: string[] = []
-      registerChatGenerationTools({ registerTool: (_name: string, options: { description: string }) => { descriptions.push(options.description) } } as never,
-        { scopes: ['generate'], source: 'llm-chat', generationPresetIds: [preset.id] })
-      assert.equal(descriptions.length, 1)
-      assert.match(descriptions[0], /inline fallback/)
-      assert.match(descriptions[0], /guide.*skipped/i)
-    }
-    fs.writeFileSync(filePath, 'valid')
-    FileStoreService.rename(owner, file.id, 'guide.png')
-    assert.match(presetGuideText(ChatGenerationPresetStore.find(preset.id)!), /guide.*skipped/i)
+    const skill = ChatSkillStore.create({ name: 'bad guide skill', description: 'Use when testing.', instructions: 'x', sections: [{ path: 'guide', title: 'Guide', summary: '', content: 'valid' }] })
+    const preset = ChatGenerationPresetStore.create({ name: 'bad guide', kind: 'nai', prompting: { guide: 'inline fallback', guideSkill: { skillId: skill.id, path: 'guide' } } })
+    ChatSkillStore.delete(skill.id)
+    const descriptions: string[] = []
+    registerChatGenerationTools({ registerTool: (_name: string, options: { description: string }) => { descriptions.push(options.description) } } as never,
+      { scopes: ['generate'], source: 'llm-chat', generationPresetIds: [preset.id] })
+    assert.equal(descriptions.length, 1)
+    assert.match(descriptions[0], /inline fallback/)
+    assert.match(descriptions[0], /Linked guide "guide" of skill #\d+ is gone/)
   })
 
   await t.test('generated pictures join the latest user message', () => {

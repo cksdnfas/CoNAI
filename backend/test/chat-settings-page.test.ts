@@ -44,7 +44,7 @@ test('settings page connection: field hints, settings operation tiers and bindin
       assert.ok(chatPageActionAllowed('/chat/profiles', id), id)
       assert.ok(!chatPageActionAllowed('/characters', id) && !chatPageActionAllowed('/chat/resources', id), id)
     }
-    for (const id of ['resource.open', 'resource.save', 'lorebook.entries', 'block.fields']) assert.ok(chatPageActionAllowed('/chat/resources', id), id)
+    for (const id of ['resource.open', 'resource.save', 'lorebook.entries', 'block.fields', 'skill.sections']) assert.ok(chatPageActionAllowed('/chat/resources', id), id)
     for (const id of ['settings.routine', 'settings.automation_switch']) assert.ok(chatPageActionAllowed('/chat/routines', id) && !chatPageActionAllowed('/chat/resources', id), id)
     assert.ok(chatPageActionAllowed('/chat/judge', 'settings.judge_filter'))
     for (const id of ['settings.default_model', 'settings.default_judge', 'settings.mcp_server', 'settings.mcp_server_draft', 'settings.usage_period']) assert.ok(chatPageActionAllowed('/chat/llm', id) && chatPageActionAllowed('/settings', id) && !chatPageActionAllowed('/chat/judge', id), id)

@@ -29,6 +29,7 @@ import {
   createChatSkill,
   updateChatSkill,
   getChatAdminProfile,
+  isChatRevisionConflict,
   dismissChatProposal,
   threadLorebooksQueryKey,
   chatProfileSaveInput,
@@ -263,7 +264,34 @@ function SkillTextRow({ label, text }: { label: string; text: string }) {
   )
 }
 
-/** propose_skill: a new shared skill, or changes to one as before/after rows; saving may also link it to the profile. */
+type SkillSectionChange = NonNullable<SkillProposal['sectionChanges']>[number]
+
+/** One section edit of a skill card: an added section's text, an update's before/after rows, or a removal. */
+function SkillSectionChangeRows({ change }: { change: SkillSectionChange }) {
+  const { t } = useI18n()
+  if (change.action === 'add') return <SkillTextRow label={`+ ${change.path}`} text={[change.title, change.summary, change.content].filter(Boolean).join('\n\n')} />
+  if (change.action === 'remove') {
+    return (
+      <div className="grid grid-cols-[6rem_minmax(0,1fr)] gap-x-3 text-xs">
+        <span className="truncate pt-px font-mono text-muted-foreground">− {change.path}</span>
+        <span className="min-w-0 text-muted-foreground line-through">{change.before.title}</span>
+      </div>
+    )
+  }
+  const labels = { title: t({ ko: '제목', en: 'Title' }), summary: t({ ko: '목차 요약', en: 'Table line' }), content: t({ ko: '내용', en: 'Content' }) }
+  const edits = (['title', 'summary', 'content'] as const).filter((key) => change[key] !== undefined && change[key] !== change.before[key])
+  return (
+    <div className="space-y-1">
+      <div className="truncate font-mono text-xs text-muted-foreground">~ {change.newPath && change.newPath !== change.path ? `${change.path} → ${change.newPath}` : change.path}</div>
+      {edits.map((key) => <UpdateRow key={key} label={labels[key]} before={change.before[key]} after={change[key] ?? ''} />)}
+    </div>
+  )
+}
+
+/**
+ * propose_skill: a new shared skill, or changes to one as before/after rows (its overview fields and section edits);
+ * saving may also link it to the profile. Cards from before categories and sections still read as overview-only.
+ */
 function SkillProposalCard({ proposal, threadId }: { proposal: SkillProposal; threadId?: number }) {
   const { t } = useI18n()
   const { showSnackbar } = useSnackbar()
@@ -274,21 +302,27 @@ function SkillProposalCard({ proposal, threadId }: { proposal: SkillProposal; th
   const [savedNow, setSavedNow] = useState(false)
   const saved = savedNow || (proposal.savedId !== undefined && proposal.savedId !== null)
   const canLink = proposal.linkProfileId !== null
-  const fields = { name: proposal.name, description: proposal.description, instructions: proposal.instructions }
-  const initial = useMemo(() => ({ name: proposal.name, description: proposal.description, instructions: proposal.instructions }), [proposal.name, proposal.description, proposal.instructions])
+  const fields = { name: proposal.name, description: proposal.description, category: proposal.category ?? '', instructions: proposal.instructions }
+  const sectionChanges = useMemo(() => proposal.sectionChanges ?? [], [proposal.sectionChanges])
+  const addedSections = useMemo(() => sectionChanges.flatMap((change) => change.action === 'add' ? [{ path: change.path, title: change.title, summary: change.summary, content: change.content }] : []), [sectionChanges])
+  const initial = useMemo(() => ({ name: proposal.name, description: proposal.description, category: proposal.category ?? '', instructions: proposal.instructions, sections: addedSections }), [proposal.name, proposal.description, proposal.category, proposal.instructions, addedSections])
   const labels = {
     name: t({ ko: '이름', en: 'Name' }),
     description: t({ ko: '언제 쓰는지', en: 'When to use' }),
-    instructions: t({ ko: '지시', en: 'Instructions' }),
+    category: t({ ko: '분류', en: 'Category' }),
+    instructions: t({ ko: '개요', en: 'Overview' }),
   }
-  const changed = (['name', 'description', 'instructions'] as const).filter((key) => !proposal.before || proposal.before[key] !== fields[key])
+  const before = proposal.before ? { ...proposal.before, category: proposal.before.category ?? '' } : null
+  const changed = (['name', 'description', 'category', 'instructions'] as const).filter((key) => (before ? before[key] !== fields[key] : key !== 'category' || fields.category !== ''))
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      // A change sends only the fields the card changes, so edits made to the others since the proposal stay.
+      // A change sends only the fields and sections the card changes, so edits made to the others since the proposal stay.
       const patch: Partial<typeof fields> = {}
       for (const key of changed) patch[key] = fields[key]
-      const skill = proposal.skillId === null ? await createChatSkill(fields) : await updateChatSkill(proposal.skillId, patch)
+      const skill = proposal.skillId === null
+        ? await createChatSkill({ ...fields, sections: addedSections })
+        : await updateChatSkill(proposal.skillId, { ...patch, ...(sectionChanges.length > 0 ? { sectionChanges } : {}) })
       if (proposal.linkProfileId !== null && link) {
         // A profile deleted since the proposal leaves the skill saved and unlinked.
         const profile = await getChatAdminProfile(proposal.linkProfileId).catch((error: unknown) => {
@@ -304,7 +338,12 @@ function SkillProposalCard({ proposal, threadId }: { proposal: SkillProposal; th
       setSavedNow(true)
       await refresh()
     },
-    onError: (error) => showSnackbar({ message: getErrorMessage(error, t({ ko: '저장하지 못했어.', en: 'Could not save.' })), tone: 'error' }),
+    onError: (error) => showSnackbar({
+      message: isChatRevisionConflict(error)
+        ? t({ ko: '제안한 뒤 스킬의 섹션이 바뀌어서 저장하지 않았어. 최신 내용으로 다시 제안해 달라고 해줘.', en: 'The skill’s sections changed after this proposal, so nothing was saved. Ask for a new proposal on the latest version.' })
+        : getErrorMessage(error, t({ ko: '저장하지 못했어.', en: 'Could not save.' })),
+      tone: 'error',
+    }),
   })
 
   // The editor created the skill itself; only the proposal's mark is left.
@@ -317,12 +356,18 @@ function SkillProposalCard({ proposal, threadId }: { proposal: SkillProposal; th
 
   return (
     <ProposalFrame>
-      <Header label={proposal.before ? t({ ko: '스킬 수정 제안', en: 'Skill update proposal' }) : t({ ko: '스킬 제안', en: 'Skill proposal' })} name={proposal.before?.name ?? proposal.name} />
+      <Header label={before ? t({ ko: '스킬 수정 제안', en: 'Skill update proposal' }) : t({ ko: '스킬 제안', en: 'Skill proposal' })} name={before?.name ?? proposal.name} />
       <div className="space-y-1.5">
-        {proposal.before
-          ? changed.map((key) => <UpdateRow key={key} label={labels[key]} before={proposal.before![key]} after={fields[key]} />)
+        {before
+          ? changed.map((key) => <UpdateRow key={key} label={labels[key]} before={before[key]} after={fields[key]} />)
           : changed.map((key) => <SkillTextRow key={key} label={labels[key]} text={fields[key]} />)}
       </div>
+      {sectionChanges.length > 0 ? (
+        <div className="space-y-1.5 border-t border-line pt-1.5">
+          <div className="text-xs text-muted-foreground">{t({ ko: '섹션 변경 {count}', en: '{count} section changes' }, { count: sectionChanges.length })}</div>
+          {sectionChanges.map((change, index) => <SkillSectionChangeRows key={`${change.action}:${change.path}:${index}`} change={change} />)}
+        </div>
+      ) : null}
       <Footer saved={saved} savedLink="/chat/resources" admin={admin}>
         {canLink ? (
           <label className="flex cursor-pointer items-center gap-1.5 text-xs text-muted-foreground">
@@ -334,7 +379,7 @@ function SkillProposalCard({ proposal, threadId }: { proposal: SkillProposal; th
         {proposal.skillId === null ? <OpenEditorButton onClick={() => setEditorOpen(true)} disabled={saveMutation.isPending} /> : null}
         <SaveButton pending={saveMutation.isPending} onClick={() => saveMutation.mutate()} />
       </Footer>
-      {admin && editorOpen ? <Suspense fallback={null}><ChatSkillEditorModal open skill={null} initial={initial} onClose={() => setEditorOpen(false)} onSaved={handleEditorSaved} /></Suspense> : null}
+      {admin && editorOpen ? <Suspense fallback={null}><ChatSkillEditorModal open skillId={null} initial={initial} onClose={() => setEditorOpen(false)} onSaved={handleEditorSaved} /></Suspense> : null}
     </ProposalFrame>
   )
 }

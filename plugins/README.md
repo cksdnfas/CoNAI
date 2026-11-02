@@ -83,6 +83,10 @@ Installed and enabled plugins are app features. `capabilities` and `appTools` ar
 
 Assets may be `.html .js .mjs .css .json .png .jpg .jpeg .webp .gif .ico .svg .woff .woff2 .ttf .otf .wasm .md .txt .csv .mp3 .wav .ogg`. No install scripts or package manager hooks execute; only a declared server module runs.
 
+#### Chat skills
+
+`"skills": ["skills/drawing", …]` (up to 20) names package folders that each hold an [Agent Skills](https://agentskills.io/specification) folder: `SKILL.md` with YAML front matter (`name`, `description`; optional `metadata.conai-name` and `metadata.conai-category`) and the overview as its body, plus reference documents (`.md`, `.txt`) beside it or under `references/`. Installation refuses a declared folder without `SKILL.md`; `scripts/build-plugin.mjs` and Git installs keep Markdown inside declared folders (Markdown elsewhere stays out). Each folder becomes a shared chat skill: the body is the overview, each document a section (path from its place, `references/` dropped; `title`/`summary` front matter, else its first `#` heading). Administrators link them to profiles like any skill; the chat model reads the overview's table of contents and loads only the sections it needs. They follow the package: installed or switched off → kept but out of use (profile links stay), updated → replaced without history, removed → deleted and unlinked. They are read-only in the editor and to `propose_skill`; a name another skill already has becomes `name · <pluginId>`. A folder that does not read is left out with a server log warning. `scripts/` and `assets/` are never run or imported. Requires a host with skill support; older hosts refuse a manifest with `skills`.
+
 Uploading an installed package ID updates it in place, keeps plugin data and its enabled state, closes old windows and cancels pending requests. Legacy capability/tool declaration changes do not require reactivation. The same package is refused. An unreadable prior installation is recovered disabled. Removing a plugin deletes its data folder too.
 
 ## Host bridge

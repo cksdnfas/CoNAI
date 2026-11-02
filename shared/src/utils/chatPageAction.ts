@@ -124,8 +124,8 @@ const nativeActionPermissions = {
   'files.select': 'files.view', 'files.new_folder': 'files.edit', 'files.rename': 'files.edit', 'files.move': 'files.edit', 'files.new_document': 'files.edit', 'files.edit_document': 'files.edit',
   'files.name_save': 'files.edit', 'files.move_save': 'files.edit', 'files.delete': 'files.delete', 'files.restore_version': 'files.edit',
   'files.doc_at': 'files.view', 'files.doc_edit': 'files.edit', 'files.doc_append': 'files.edit', 'files.doc_save': 'files.edit',
-  // Chat › 자원 and Settings › 채팅 editors (lorebooks, generation presets, judge presets, blocks, tool presets). Saving uses each editor's own admin API.
-  'resource.open': null, 'resource.save': null, 'lorebook.entries': null, 'block.fields': null,
+  // Chat › 자원 and Settings › 채팅 editors (lorebooks, generation presets, judge presets, blocks, tool presets, skills). Saving uses each editor's own admin API.
+  'resource.open': null, 'resource.save': null, 'lorebook.entries': null, 'block.fields': null, 'skill.sections': null,
   'chat.open': 'chat.use', 'chat.prepare': 'chat.use', 'chat.rename': 'chat.use', 'chat.pin': 'chat.use', 'chat.archive': 'chat.use', 'chat.delete': 'chat.use',
   'plugins.open': null,
   'audio.open': 'audio.view', 'audio.filter': 'audio.view', 'audio.select': 'audio.view',
@@ -239,7 +239,7 @@ export function chatPageActionAllowed(path: string, id: string): boolean {
   if (id.startsWith('profile.')) return path === '/settings' || path === '/chat/profiles'
   if (id.startsWith('library.')) return path === '/'
   if (id.startsWith('files.')) return path === '/files'
-  if (id.startsWith('resource.') || id.startsWith('lorebook.') || id.startsWith('block.')) return path === '/settings' || path === '/chat/profiles' || path === '/chat/resources'
+  if (id.startsWith('resource.') || id.startsWith('lorebook.') || id.startsWith('block.') || id.startsWith('skill.')) return path === '/settings' || path === '/chat/profiles' || path === '/chat/resources'
   if (id === 'settings.routine' || id === 'settings.automation_switch') return path === '/settings' || path === '/chat/routines'
   if (id === 'settings.judge_filter') return path === '/settings' || path === '/chat/judge'
   if (id === 'settings.user_profile' || id === 'settings.flag') return path === '/settings' || path === '/chat/mine'

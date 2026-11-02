@@ -255,6 +255,90 @@ test('chat semantic: index, recall, lore, history search', { timeout: 60000 }, a
     semanticIndexInternals.pruneVectors()
   })
 
+  await t.test('skill search keeps semantic and lexical hits inside enabled linked skills and follows edits', async () => {
+    const { ChatSkillStore } = await import('../src/services/codex-chat/chatSkills')
+    const { searchSkills } = await import('../src/services/codex-chat/chatSkillSearch')
+    const { vectorSpaceVersion } = await import('../src/services/vectors/vectorStore')
+    const winter = { path: 'travel/winter', title: 'Winter travel', summary: 'Cold weather', content: '설원에서 늑대를 피해 이끼를 찾는다.' }
+    const advice = Array.from({ length: 10 }, (_, index) => ({ path: `advice-${index}`, title: 'Advice', summary: '', content: `lexicalneedle ${index}` }))
+    const fields = { name: 'Travel guide', description: 'Travel advice', instructions: '여행 안내', sections: [winter, ...advice] }
+    const linked = ChatSkillStore.create(fields)
+    const other = ChatSkillStore.create({ ...fields, name: 'Unlinked guide' })
+    const plugin = [{ folder: 'travel', snapshot: { ...fields, name: 'Plugin guide', category: '' } }]
+    ChatSkillStore.syncPlugin('semantic-test', plugin, false)
+    const pluginId = ChatSkillStore.list().find(skill => skill.source === 'plugin')!.id
+    const ids = [linked.id, pluginId]
+    try {
+      while (await semanticIndexer.sweep() > 0) { /* drain */ }
+      const found = await searchSkills(ids, '눈밭', 10)
+      assert.deepEqual(found.map(hit => [hit.skillId, hit.path]), [[linked.id, winter.path]], 'meaning finds a section without shared query words, never an unlinked or disabled skill')
+      assert.match(found[0].excerpt, /설원/)
+      const before = requests.filter(request => request.op === 'embed' && request.payload.kind === 'document').length
+      await semanticIndexer.sweep()
+      assert.equal(requests.filter(request => request.op === 'embed' && request.payload.kind === 'document').length, before, 'unchanged skill text keeps its fingerprint')
+
+      const key = `${linked.id}:travel/winter`
+      const saved = vectorStore.get('chat-skill', key, embedding.EMBEDDING_MODEL_KEY)
+      const expanded = Array.from({ length: 1200 }, (_, chunk) => ({ ...saved[0], chunk, vector: saved[0].vector }))
+      let writes = 0
+      let writer: NodeJS.Immediate
+      const conflict = () => {
+        writer = setImmediate(() => {
+          vectorStore.replace('chat-skill', key, embedding.EMBEDDING_MODEL_KEY, expanded)
+          writes++
+          conflict()
+        })
+      }
+      vectorStore.replace('chat-skill', key, embedding.EMBEDDING_MODEL_KEY, expanded)
+      conflict()
+      try {
+        assert.deepEqual((await searchSkills(ids, '눈밭')).map(hit => [hit.skillId, hit.path]), [[linked.id, winter.path]], 'yielding scans retain semantic results while vectors are repeatedly written')
+        assert.ok(writes >= 2, 'both cooperative attempts race actual vector writes before the synchronous fallback')
+      } finally {
+        clearImmediate(writer!)
+        vectorStore.replace('chat-skill', key, embedding.EMBEDDING_MODEL_KEY, saved)
+      }
+
+      settingsService.updateEmbeddingSettings({ enabled: false })
+      assert.deepEqual((await searchSkills(ids, '늑대', 10)).map(hit => hit.skillId), [linked.id])
+      assert.deepEqual(await searchSkills(ids, '눈밭', 10), [])
+      assert.equal((await searchSkills(ids, 'lexicalneedle')).length, 10, 'omitting limit returns every lexical match')
+      assert.equal((await searchSkills(ids, 'lexicalneedle', 3)).length, 3)
+      assert.deepEqual(await searchSkills(ids, 'zz0 zz1 zz2 zz3 zz4 zz5 zz6 zz7 lexicalneedle'), [], 'lexical scoring uses at most eight distinct terms')
+      settingsService.updateEmbeddingSettings({ enabled: true })
+
+      const unrelated = vectorSpaceVersion('chat-message')
+      ChatSkillStore.update(linked.id, { instructions: '설원 늑대 이끼', sections: [] })
+      while (await semanticIndexer.sweep(false) > 0) { /* drain signalled edits */ }
+      assert.equal(vectorSpaceVersion('chat-message'), unrelated, 'skill pruning does not invalidate other spaces')
+      assert.deepEqual((await searchSkills(ids, '눈밭', 10)).map(hit => hit.path), [null], 'removed sections disappear and edited overviews are indexed')
+      assert.equal(vectorStore.get('chat-skill', `${linked.id}:travel/winter`, embedding.EMBEDDING_MODEL_KEY).length, 0)
+      ChatSkillStore.syncPlugin('semantic-test', plugin, true)
+      while (await semanticIndexer.sweep(false) > 0) { /* drain toggle */ }
+      assert.ok((await searchSkills(ids, '눈밭', 10)).some(hit => hit.skillId === pluginId))
+      ChatSkillStore.syncPlugin('semantic-test', plugin, false)
+      while (await semanticIndexer.sweep(false) > 0) { /* prune toggle */ }
+      assert.ok((await searchSkills(ids, '눈밭', 10)).every(hit => hit.skillId === linked.id))
+      assert.ok(vectorStore.get('chat-skill', `${pluginId}:travel/winter`, embedding.EMBEDDING_MODEL_KEY).length, 'disabled skills retain their derived vectors')
+      const toggled = requests.filter(request => request.op === 'embed' && request.payload.kind === 'document').length
+      ChatSkillStore.syncPlugin('semantic-test', plugin, true)
+      while (await semanticIndexer.sweep(false) > 0) { /* reuse toggle */ }
+      assert.ok((await searchSkills(ids, '눈밭')).some(hit => hit.skillId === pluginId))
+      assert.equal(requests.filter(request => request.op === 'embed' && request.payload.kind === 'document').length, toggled, 're-enabling unchanged plugin text never re-embeds it')
+      ChatSkillStore.syncPlugin('semantic-test', plugin, false)
+      ChatSkillStore.delete(linked.id)
+      while (await semanticIndexer.sweep(false) > 0) { /* prune deletion */ }
+      assert.deepEqual(await searchSkills(ids, '눈밭', 10), [])
+      assert.equal(vectorStore.get('chat-skill', `${linked.id}:`, embedding.EMBEDDING_MODEL_KEY).length, 0)
+    } finally {
+      settingsService.updateEmbeddingSettings({ enabled: true })
+      ChatSkillStore.delete(linked.id)
+      ChatSkillStore.delete(other.id)
+      ChatSkillStore.syncPlugin('semantic-test', null, false)
+      while (await semanticIndexer.sweep(false) > 0) { /* finish cleanup before shared vector tests */ }
+    }
+  })
+
   await t.test('the loaded vectors follow writes without a reload', async () => {
     const space = 'test-cache'
     const axis = (i: number) => Array.from({ length: DIM }, (_, k) => (k === i ? 1 : 0))

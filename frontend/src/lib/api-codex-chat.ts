@@ -1,11 +1,13 @@
 import { ApiRequestError, requestApiData, requestJson } from '@/lib/api-request'
 import { buildApiUrl } from '@/lib/api-url'
+import { getDownloadFileName, prepareDownloadTarget, readDownloadBlob, saveDownloadBlob } from '@/lib/download-utils'
 import type { QueryClient } from '@tanstack/react-query'
 import type { ChatProfileFolder, ChatProfileFolderFields } from '@conai/shared'
 export type { ChatProfileFolder } from '@conai/shared'
 import type { ChatAssetVisionReview, ChatAssetBatch, ChatAssetBatchInput, ChatAssetApplyInput, ChatAssetApplyResult, ChatAssetOwner, CharacterSetting, ChatProfileCharacterLink, ChatProfileCharacterLinkInput } from '@conai/shared'
 export type { ChatAssetBatch, ChatAssetBatchInput, ChatAssetKind, ChatAssetReview, ChatAssetVisionReview, ChatAssetCandidate, ChatAssetAttempt, ChatAssetApplyInput, ChatAssetApplyResult, ChatAssetOwner } from '@conai/shared'
-import type { ChatJudgeDiagnostics, ChatFileChange, ChatProfileAgentSettings } from '@conai/shared'
+import type { ChatJudgeDiagnostics, ChatFileChange, ChatProfileAgentSettings, ChatSkillSectionChange, ChatSkillSectionFields } from '@conai/shared'
+export type { ChatSkillSectionChange, ChatSkillSectionFields } from '@conai/shared'
 import type { ChatStreamEvent, ChatTranslationLanguage, CodexReasoningEffort, StoredFileEntry, ChatMessageRouting, ChatPageSnapshot, ChatProposal, ChatTask, ChatChoiceAnswer } from '@conai/shared'
 
 export type ChatScope = 'read' | 'generate' | 'organize' | 'configure'
@@ -645,18 +647,19 @@ export type ChatPresetAssetSupport = { mode: 'reference' | 'appearance' | null; 
 
 /**
  * How a preset's scene prompt is written. `inline`: the chat model fills the tool while it replies; `after`: it only
- * asks for a picture, and the prompt is written from the finished reply. The writer gets the guide (text and a linked
- * file of an administrator's file store; `path` null once that file is gone) and the chat's latest `previousImages`.
+ * asks for a picture, and the prompt is written from the finished reply. The writer gets the guide (text and one
+ * section of a shared skill; `skillName` / `title` null once that skill or section is gone) and the chat's latest
+ * `previousImages`.
  */
 export interface ChatPresetPrompting {
   timing: 'inline' | 'after'
   guide: string
-  guideFile: { owner: string; fileId: string; path: string | null; updatedAt: string | null } | null
+  guideSkill: { skillId: number; path: string; skillName: string | null; title: string | null; updatedDate: string | null } | null
   previousImages: number
 }
 
-/** What the editor keeps and saves: the guide file by id (null unlinks; a new one must be in your own store), its path for display. */
-export type ChatPresetPromptingInput = Pick<ChatPresetPrompting, 'timing' | 'guide' | 'previousImages'> & { guideFileId: string | null; guideFilePath: string | null }
+/** What the editor keeps and saves: the guide section by skill id and path (null unlinks). */
+export type ChatPresetPromptingInput = Pick<ChatPresetPrompting, 'timing' | 'guide' | 'previousImages'> & { guideSkill: { skillId: number; path: string } | null }
 
 export const CHAT_PRESET_PREVIOUS_IMAGES_MAX = 4
 
@@ -1222,37 +1225,114 @@ export function deleteChatBlock(blockId: number) {
   return requestApiData<{ deleted: boolean }>(`/api/codex-chat/admin/blocks/${blockId}`, { method: 'DELETE' })
 }
 
-/**
- * A shared skill: task instructions profiles link by id. The chat model sees the name and the description (when to
- * use it) and loads the instructions with use_skill when a request fits.
- */
-export interface ChatSkill {
+export type ChatSkillSource = 'user' | 'import' | 'plugin'
+type ChatSkillUsage = { loadCount: number; lastLoadedAt: string | null }
+
+/** One section of a stored skill, with how often use_skill loaded it. */
+export type ChatSkillSection = ChatSkillSectionFields & ChatSkillUsage & { updatedDate: string }
+
+interface ChatSkillBase extends ChatSkillUsage {
   id: number
   name: string
   description: string
-  instructions: string
+  category: string
+  /** `plugin`: read-only, owned by `pluginId`; `enabled` false while that plugin is off. */
+  source: ChatSkillSource
+  pluginId: string | null
+  enabled: boolean
+  revision: number
   /** Profiles that link this skill. */
   profiles: Array<{ id: number; name: string }>
   createdDate: string
   updatedDate: string
 }
 
-export type ChatSkillInput = Pick<ChatSkill, 'name' | 'description' | 'instructions'>
-
-export function listChatSkills() {
-  return requestApiData<ChatSkill[]>('/api/codex-chat/admin/skills')
+/**
+ * A shared skill: a package profiles link by id. The chat model sees the name and the description (when to use it);
+ * use_skill returns the overview (`instructions`) with a table of the sections, then each section it asks for.
+ */
+export interface ChatSkill extends ChatSkillBase {
+  instructions: string
+  sections: ChatSkillSection[]
 }
 
-export function createChatSkill(input: ChatSkillInput) {
+/** A list row: no overview or section text, only their lengths. */
+export interface ChatSkillSummary extends ChatSkillBase {
+  instructionsLength: number
+  sections: Array<Pick<ChatSkillSection, 'path' | 'title' | 'summary' | 'loadCount' | 'lastLoadedAt'> & { length: number }>
+}
+
+/** A skill's own contents: what a draft, a preview, a stored version and an import carry. */
+export type ChatSkillSnapshot = { name: string; description: string; category: string; instructions: string; sections: ChatSkillSectionFields[] }
+
+/** What use_skill would return for a draft: the system prompt line, the first result, each section's result. */
+export type ChatSkillPreview = {
+  index: string
+  overview: string
+  sections: Array<{ path: string; text: string }>
+  tokens: { index: number; overview: number; sections: Record<string, number> }
+  warnings: string[]
+}
+
+export type ChatSkillVersionSummary = { revision: number; savedDate: string; name: string; sectionCount: number }
+
+export const chatSkillQueryKey = (skillId: number) => [...CHAT_SKILLS_QUERY_KEY, 'detail', skillId] as const
+export const chatSkillVersionsQueryKey = (skillId: number) => [...CHAT_SKILLS_QUERY_KEY, 'versions', skillId] as const
+
+export function listChatSkills() {
+  return requestApiData<ChatSkillSummary[]>('/api/codex-chat/admin/skills')
+}
+
+export function getChatSkill(skillId: number, signal?: AbortSignal) {
+  return requestApiData<ChatSkill>(`/api/codex-chat/admin/skills/${skillId}`, { signal, cache: 'no-store' })
+}
+
+export function createChatSkill(input: Pick<ChatSkillSnapshot, 'name' | 'description' | 'instructions'> & Partial<Pick<ChatSkillSnapshot, 'category' | 'sections'>> & { source?: 'user' | 'import' }) {
   return requestApiData<ChatSkill>('/api/codex-chat/admin/skills', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(input) })
 }
 
-export function updateChatSkill(skillId: number, patch: Partial<ChatSkillInput>) {
-  return requestApiData<ChatSkill>(`/api/codex-chat/admin/skills/${skillId}`, { method: 'PUT', headers: JSON_HEADERS, body: JSON.stringify(patch) })
+/** `sections` replaces them all in order; `sectionChanges` edits single ones (refused once their `before` is stale). */
+export function updateChatSkill(skillId: number, patch: Partial<ChatSkillSnapshot> & { sectionChanges?: ChatSkillSectionChange[]; revision?: number }) {
+  return requestRevisionChecked<ChatSkill>(`/api/codex-chat/admin/skills/${skillId}`, { method: 'PUT', headers: JSON_HEADERS, body: JSON.stringify(patch) })
 }
 
 export function deleteChatSkill(skillId: number) {
   return requestApiData<{ deleted: boolean }>(`/api/codex-chat/admin/skills/${skillId}`, { method: 'DELETE' })
+}
+
+export function previewChatSkill(draft: ChatSkillSnapshot & { skillId?: number }, signal?: AbortSignal) {
+  return requestApiData<ChatSkillPreview>('/api/codex-chat/admin/skills/preview', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(draft), signal })
+}
+
+/** Earlier revisions, newest first. */
+export function listChatSkillVersions(skillId: number) {
+  return requestApiData<{ current: number; versions: ChatSkillVersionSummary[] }>(`/api/codex-chat/admin/skills/${skillId}/versions`, { cache: 'no-store' })
+}
+
+export function getChatSkillVersion(skillId: number, revision: number) {
+  return requestApiData<{ revision: number; savedDate: string; snapshot: ChatSkillSnapshot }>(`/api/codex-chat/admin/skills/${skillId}/versions/${revision}`)
+}
+
+/** Saves revision `from`'s contents as a new revision; `revision` is the one the person looked at. */
+export function restoreChatSkill(skillId: number, from: number, revision: number) {
+  return requestRevisionChecked<ChatSkill>(`/api/codex-chat/admin/skills/${skillId}/restore`, { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ from, revision }) })
+}
+
+/** The skill as an Agent Skills ZIP (`<slug>/SKILL.md` + `references/*.md`). */
+export async function downloadChatSkillExport(skillId: number, name: string) {
+  const fallback = `${name.replace(/[\\/:*?"<>|]+/g, '_').trim() || 'skill'}.zip`
+  const target = await prepareDownloadTarget(fallback)
+  if (!target) return
+  const response = await fetch(buildApiUrl(`/api/codex-chat/admin/skills/${skillId}/export`), { credentials: 'include', headers: { Accept: 'application/zip' } })
+  const blob = await readDownloadBlob(response)
+  await saveDownloadBlob(target, blob, getDownloadFileName(response.headers.get('Content-Disposition'), fallback))
+}
+
+/** Reads an Agent Skills `.zip` or a `SKILL.md` into a draft; nothing is saved. */
+export function importChatSkillFile(file: File) {
+  const body = new FormData()
+  body.append('file', file)
+  return requestApiData<{ draft: ChatSkillSnapshot; warnings: string[] }>('/api/codex-chat/admin/skills/import', { method: 'POST', body })
 }
 
 export function listChatToolPresets() {

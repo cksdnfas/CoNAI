@@ -7,6 +7,7 @@ export const SEMANTIC_SPACES = {
   message: 'chat-message',
   file: 'file',
   post: 'post-knowledge',
+  skill: 'chat-skill',
 } as const
 
 /** Reciprocal rank fusion of several best-first rankings (k = 60, the usual damping). */

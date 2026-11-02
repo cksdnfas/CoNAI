@@ -4,7 +4,10 @@ import { asyncHandler } from '../middleware/asyncHandler'
 import { requireAdmin } from '../middleware/authMiddleware'
 import { ChatProfileStore } from '../services/codex-chat/chatProfiles'
 import { ChatSharedBlockStore, readBlockFile } from '../services/codex-chat/chatDisplayBlocks'
-import { ChatSkillStore, type ChatSkillInput } from '../services/codex-chat/chatSkills'
+import multer from 'multer'
+import { ChatSkillStore, previewSkill, type ChatSkillInput, type ChatSkillPatch } from '../services/codex-chat/chatSkills'
+import { exportSkillZip, readSkillUpload, SKILL_UPLOAD_LIMIT } from '../services/codex-chat/chatSkillPackages'
+import { ChatRevisionConflict } from '../services/codex-chat/chatProfileError'
 import { ChatToolPresetStore, readToolPresetFile } from '../services/codex-chat/chatToolPresets'
 import { ChatJudgePresetStore, readJudgePresetFile } from '../services/codex-chat/chatJudgePresets'
 import { ChatJudgeLogStore } from '../services/codex-chat/chatJudgeLogs'
@@ -17,10 +20,9 @@ import { ChatGenerationPresetStore, readGenerationPresetFile, type ChatGeneratio
 import { CodexChatStore } from '../services/codex-chat/codexChatStore'
 import { isChatTargetReady } from '../services/codex-chat/llmChatCompletion'
 import { sharedServerProfiles } from '../services/codex-chat/chatServerSharing'
-import { requireFileStoreOwner } from '../services/fileStoreAccess'
 import { getRequesterAccountId } from './requester-session-helpers'
 import { sendRouteBadRequest } from './routeValidation'
-import { parseId, requesterFrom, requireChatAccess, sendChatError } from './codex-chat-route-helpers'
+import { parseId, requireChatAccess, sendChatError } from './codex-chat-route-helpers'
 
 /** /api/codex-chat admin library: display blocks, model rows and representative models, usage, tool/judge/generation presets. */
 const router = express.Router()
@@ -62,32 +64,122 @@ router.delete('/admin/blocks/:blockId', requireAdmin, (req: Request, res: Respon
   res.json({ success: true, data: { deleted: ChatSharedBlockStore.delete(blockId) } })
 })
 
-/** Shared skills: `{ name, description, instructions }`. Profiles link them by id; an edit reaches every linked profile. */
+/**
+ * Shared skills: an overview (`instructions`) and sections, `{ name, description, category, instructions, sections }`.
+ * Profiles link them by id; an edit reaches every linked profile. The list leaves the texts to GET /admin/skills/:id.
+ */
+const SKILL_NOT_FOUND = '스킬을 찾을 수 없어.'
+
+function sendSkillError(res: Response, error: unknown) {
+  if (error instanceof ChatRevisionConflict) { res.status(409).json({ success: false, code: 'revision_conflict', error: error.message, data: error.current }); return }
+  sendChatError(res, error)
+}
+
+/** A body's `revision` (the one the editor loaded); undefined when absent. */
+function revisionOf(value: unknown): number | undefined | null {
+  if (value === undefined) return undefined
+  return Number.isSafeInteger(value) && (value as number) > 0 ? value as number : null
+}
+
 router.get('/admin/skills', requireAdmin, (_req: Request, res: Response) => {
   res.json({ success: true, data: ChatSkillStore.list() })
 })
 
 router.post('/admin/skills', requireAdmin, (req: Request, res: Response) => {
   try {
-    res.status(201).json({ success: true, data: ChatSkillStore.create((req.body ?? {}) as ChatSkillInput) })
+    const body = (req.body ?? {}) as ChatSkillInput & { source?: unknown }
+    res.status(201).json({ success: true, data: ChatSkillStore.create(body, body.source === 'import' ? 'import' : 'user') })
   } catch (error) { sendChatError(res, error) }
 })
 
+/** POST /admin/skills/preview — what the chat model would see of a draft (`skillId`: the skill it edits), and hints. */
+router.post('/admin/skills/preview', requireAdmin, (req: Request, res: Response) => {
+  try {
+    const body = (req.body ?? {}) as ChatSkillInput & { skillId?: unknown }
+    res.json({ success: true, data: previewSkill(body, parseId(body.skillId)) })
+  } catch (error) { sendChatError(res, error) }
+})
+
+/** POST /admin/skills/import — a `.zip` (Agent Skills folder) or `.md` as a draft for the editor; nothing is saved. */
+router.post('/admin/skills/import', requireAdmin, multer({ defParamCharset: 'utf8', storage: multer.memoryStorage(), limits: { fileSize: SKILL_UPLOAD_LIMIT, files: 1, fields: 0 } }).single('file'), (req: Request, res: Response) => {
+  if (!req.file) { sendRouteBadRequest(res, '가져올 파일을 골라줘.'); return }
+  try {
+    res.json({ success: true, data: readSkillUpload(req.file.originalname, req.file.buffer) })
+  } catch (error) { sendChatError(res, error) }
+})
+
+router.get('/admin/skills/:skillId', requireAdmin, (req: Request, res: Response) => {
+  const skillId = parseId(req.params.skillId)
+  if (skillId === null) { sendRouteBadRequest(res, 'Invalid skill id'); return }
+  const skill = ChatSkillStore.find(skillId)
+  if (!skill) { res.status(404).json({ success: false, error: SKILL_NOT_FOUND }); return }
+  res.json({ success: true, data: skill })
+})
+
+/** `sections` replaces the list, `sectionChanges` edits it (a proposal card); `revision` refuses a stale editor. */
 router.put('/admin/skills/:skillId', requireAdmin, (req: Request, res: Response) => {
   const skillId = parseId(req.params.skillId)
   if (skillId === null) { sendRouteBadRequest(res, 'Invalid skill id'); return }
+  const body = (req.body ?? {}) as ChatSkillPatch & { revision?: unknown }
+  const revision = revisionOf(body.revision)
+  if (revision === null) { sendRouteBadRequest(res, 'revision must be a positive integer'); return }
   try {
-    const body = (req.body ?? {}) as ChatSkillInput
-    const updated = ChatSkillStore.update(skillId, { name: body.name, description: body.description, instructions: body.instructions })
-    if (!updated) { res.status(404).json({ success: false, error: '스킬을 찾을 수 없어.' }); return }
+    const updated = ChatSkillStore.update(skillId, { name: body.name, description: body.description, category: body.category, instructions: body.instructions, sections: body.sections, sectionChanges: body.sectionChanges }, { revision })
+    if (!updated) { res.status(404).json({ success: false, error: SKILL_NOT_FOUND }); return }
     res.json({ success: true, data: updated })
-  } catch (error) { sendChatError(res, error) }
+  } catch (error) { sendSkillError(res, error) }
 })
 
 router.delete('/admin/skills/:skillId', requireAdmin, (req: Request, res: Response) => {
   const skillId = parseId(req.params.skillId)
   if (skillId === null) { sendRouteBadRequest(res, 'Invalid skill id'); return }
-  res.json({ success: true, data: { deleted: ChatSkillStore.delete(skillId) } })
+  try {
+    res.json({ success: true, data: { deleted: ChatSkillStore.delete(skillId) } })
+  } catch (error) { sendChatError(res, error) }
+})
+
+/** GET /admin/skills/:id/versions — the current revision and the earlier ones kept, newest first. */
+router.get('/admin/skills/:skillId/versions', requireAdmin, (req: Request, res: Response) => {
+  const skillId = parseId(req.params.skillId)
+  if (skillId === null) { sendRouteBadRequest(res, 'Invalid skill id'); return }
+  const versions = ChatSkillStore.versions(skillId)
+  if (!versions) { res.status(404).json({ success: false, error: SKILL_NOT_FOUND }); return }
+  res.json({ success: true, data: versions })
+})
+
+router.get('/admin/skills/:skillId/versions/:revision', requireAdmin, (req: Request, res: Response) => {
+  const skillId = parseId(req.params.skillId)
+  const revision = parseId(req.params.revision)
+  if (skillId === null || revision === null) { sendRouteBadRequest(res, 'Invalid skill id or revision'); return }
+  const version = ChatSkillStore.version(skillId, revision)
+  if (!version) { res.status(404).json({ success: false, error: '그 버전을 찾을 수 없어.' }); return }
+  res.json({ success: true, data: version })
+})
+
+/** POST /admin/skills/:id/restore `{ from, revision? }` — saves revision `from` as the newest one. */
+router.post('/admin/skills/:skillId/restore', requireAdmin, (req: Request, res: Response) => {
+  const skillId = parseId(req.params.skillId)
+  const body = (req.body ?? {}) as { from?: unknown; revision?: unknown }
+  const from = parseId(body.from)
+  const revision = revisionOf(body.revision)
+  if (skillId === null || from === null || revision === null) { sendRouteBadRequest(res, 'Invalid skill id, from or revision'); return }
+  try {
+    const restored = ChatSkillStore.restore(skillId, from, { revision })
+    if (!restored) { res.status(404).json({ success: false, error: '그 버전을 찾을 수 없어.' }); return }
+    res.json({ success: true, data: restored })
+  } catch (error) { sendSkillError(res, error) }
+})
+
+/** GET /admin/skills/:id/export — the skill as an Agent Skills ZIP (SKILL.md and references/). */
+router.get('/admin/skills/:skillId/export', requireAdmin, (req: Request, res: Response) => {
+  const skillId = parseId(req.params.skillId)
+  if (skillId === null) { sendRouteBadRequest(res, 'Invalid skill id'); return }
+  const skill = ChatSkillStore.find(skillId)
+  if (!skill) { res.status(404).json({ success: false, error: SKILL_NOT_FOUND }); return }
+  const { fileName, bytes } = exportSkillZip(skill)
+  res.setHeader('Content-Type', 'application/zip')
+  res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`)
+  res.send(bytes)
 })
 
 /**
@@ -337,7 +429,7 @@ router.get('/admin/generation-presets', requireAdmin, (_req: Request, res: Respo
 
 router.post('/admin/generation-presets', requireAdmin, (req: Request, res: Response) => {
   try {
-    res.status(201).json({ success: true, data: ChatGenerationPresetStore.create((req.body ?? {}) as ChatGenerationPresetInput, { guideOwner: () => requireFileStoreOwner(requesterFrom(req)) }) })
+    res.status(201).json({ success: true, data: ChatGenerationPresetStore.create((req.body ?? {}) as ChatGenerationPresetInput) })
   } catch (error) { sendChatError(res, error) }
 })
 
@@ -353,7 +445,7 @@ router.put('/admin/generation-presets/:presetId', requireAdmin, (req: Request, r
   const presetId = parseId(req.params.presetId)
   if (presetId === null) { sendRouteBadRequest(res, 'Invalid preset id'); return }
   try {
-    const updated = ChatGenerationPresetStore.update(presetId, (req.body ?? {}) as ChatGenerationPresetInput, { guideOwner: () => requireFileStoreOwner(requesterFrom(req)) })
+    const updated = ChatGenerationPresetStore.update(presetId, (req.body ?? {}) as ChatGenerationPresetInput)
     if (!updated) { res.status(404).json({ success: false, error: '생성 프리셋을 찾을 수 없어.' }); return }
     res.json({ success: true, data: updated })
   } catch (error) { sendChatError(res, error) }

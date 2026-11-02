@@ -10,8 +10,13 @@ const name = args[local ? 1 : 0] ?? (local ? '' : 'text-editor')
 if (args.length > (local ? 2 : 1) || !/^[a-z][a-z0-9-]+$/.test(name)) throw new Error('Usage: node scripts/build-plugin.mjs [--local] <plugin-name>')
 const source = path.join(root, local ? 'local-plugins' : 'plugins', name)
 const zip = new AdmZip()
+// Skill folders the manifest declares keep their Markdown (SKILL.md and references); it is what they are made of.
+const skillFolders = (JSON.parse(fs.readFileSync(path.join(source, 'plugin.json'), 'utf8')).skills ?? []).map(folder => `${String(folder).replace(/\/+$/, '')}/`)
 // Package runtime assets only; developer guides are not permitted web assets.
-zip.addLocalFolder(source, '', entry => !/\.md$/i.test(entry))
+zip.addLocalFolder(source, '', entry => {
+  const name = entry.replace(/\\/g, '/')
+  return !/\.md$/i.test(name) || skillFolders.some(folder => name.startsWith(folder))
+})
 zip.addLocalFile(path.join(root, 'plugins', 'sdk', 'conai-plugin.js'))
 zip.addLocalFile(path.join(root, 'plugins', 'sdk', 'conai-plugin.css'))
 const output = path.join(root, 'build-output', local ? 'local-plugins' : 'plugins', `${name}.zip`)

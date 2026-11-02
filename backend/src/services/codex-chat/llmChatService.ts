@@ -18,7 +18,7 @@ import { chatWorkspaces, workspaceInstructions } from './chatWorkspace'
 import { applyChatInstructionHooks, hasPluginServerHook } from '../plugins/pluginServerRuntime'
 import { CATALOG_OPEN_TOOL, unwrapCatalogCall } from '../../mcp/toolCatalog'
 import { readMcpToolResult, truncateToolSummary } from './chatToolReferences'
-import { USE_SKILL_TOOL } from './chatSkills'
+import { skillCallLabel, USE_SKILL_TOOL } from './chatSkills'
 import { ChatProfileStore, isVisionTool, sessionRuntimeOf, type ChatProfile } from './chatProfiles'
 import { translateReply, translateUserMessage } from './chatTranslation'
 import { hasTranslation, resolveProfileModel } from './chatModelRoles'
@@ -273,9 +273,9 @@ async function runToolCall(turn: LlmTurn, bridge: ChatMcpBridge, call: { id: str
   // Opened tool schemas are for this reply; a later one opens them again rather than carrying them in every request.
   const catalogRead = record.tool === CATALOG_OPEN_TOOL && record.status === 'completed'
   // So are a skill's instructions: a later request replays tool results cut short, which would read as the whole skill.
-  const skillName = record.tool === USE_SKILL_TOOL && record.status === 'completed' ? String((record.arguments as { name?: unknown } | null)?.name ?? '').trim() : null
-  record.summary = pageRead ? '현재 요청에 연결한 페이지를 읽었어.' : catalogRead ? '도구 설명을 열람했어.' : skillName !== null ? `Loaded skill "${skillName}".` : record.pageOperation ? record.pageOperation.label : output ? truncateToolSummary(output) : null
-  record.output = pageRead ? '(Page/editor snapshot omitted; use the screen in the current request, or the page tools for what it does not show.)' : catalogRead ? '(Tool schemas omitted; open them again with open_tools when needed.)' : skillName !== null ? `(Skill "${skillName}" was loaded for that reply; its instructions are not kept. Call ${USE_SKILL_TOOL} again in a reply that needs them.)` : record.pageOperation ? `(Page operation done: ${record.pageOperation.label}. Screen snapshot omitted; use the screen in the current request.)` : cutToolOutput(output, STORED_TOOL_OUTPUT_LENGTH)
+  const skillCall = record.tool === USE_SKILL_TOOL && record.status === 'completed' ? skillCallLabel((record.arguments ?? {}) as Record<string, unknown>) : null
+  record.summary = pageRead ? '현재 요청에 연결한 페이지를 읽었어.' : catalogRead ? '도구 설명을 열람했어.' : skillCall !== null ? `Loaded: ${skillCall}.` : record.pageOperation ? record.pageOperation.label : output ? truncateToolSummary(output) : null
+  record.output = pageRead ? '(Page/editor snapshot omitted; use the screen in the current request, or the page tools for what it does not show.)' : catalogRead ? '(Tool schemas omitted; open them again with open_tools when needed.)' : skillCall !== null ? `(${skillCall} was loaded for that reply; its instructions are not kept. Call ${USE_SKILL_TOOL} again in a reply that needs them.)` : record.pageOperation ? `(Page operation done: ${record.pageOperation.label}. Screen snapshot omitted; use the screen in the current request.)` : cutToolOutput(output, STORED_TOOL_OUTPUT_LENGTH)
   emit(turn, { type: 'tool', call: { ...record } })
   // The catalog pages at whole-schema boundaries; cutting JSON here makes the opened tools unusable.
   // A workspace read is shortened at a resumable offset instead, so a cut file never looks whole.

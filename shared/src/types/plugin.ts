@@ -45,6 +45,11 @@ export type PluginManifest = {
   server?: { entry: string }
   /** Blocks and Generate-bar buttons on the generation layouts. */
   generation?: { blocks: PluginGenerationBlock[]; actions: PluginGenerationAction[] }
+  /**
+   * Package folders that each hold an Agent Skills folder (`SKILL.md` and reference documents). They become shared
+   * chat skills administrators link to profiles; they change only with the package and go out of use while it is off.
+   */
+  skills?: string[]
 }
 export type PluginAppRequest = {
   id: string; pluginId: string; version: string; label: string; tool: string; arguments: Record<string, unknown>

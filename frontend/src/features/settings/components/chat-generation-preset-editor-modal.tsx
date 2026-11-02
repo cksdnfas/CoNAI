@@ -467,6 +467,8 @@ function useGenerationPresetChatPage({ open, preset, draft, setDraft, dirty, sav
     data: {
       sizes: nai ? nai.sizes.map((size) => size.label) : [],
       workflows: (workflowsQuery.data ?? []).map((entry) => ({ id: String(entry.id), name: entry.name })),
+      // The guide section (`path` ending in '/': a whole group) is picked in the editor; the chat only reads it.
+      guideSkill: prompting.guideSkill,
       selected: { name: draft.name, kind: draft.kind, instruction: draft.instruction },
     },
     save,

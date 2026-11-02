@@ -15,6 +15,18 @@ export const CHAT_THREAD_TITLE_MAX_LENGTH = 60
 /** A recipient is a member profile, the human, or a room announcement (no automatic reply). */
 export type ChatRecipient = number | 'user' | 'room'
 
+/** One section of a shared skill: `path` is how use_skill and the table of contents name it ('name' or 'group/name'). */
+export type ChatSkillSectionFields = { path: string; title: string; summary: string; content: string }
+
+/**
+ * One edit to a skill's sections. `update` and `remove` carry the section as it was when the edit was made; the
+ * server refuses them once that section has changed since, so a stale proposal never overwrites newer text.
+ */
+export type ChatSkillSectionChange =
+  | ({ action: 'add' } & ChatSkillSectionFields)
+  | { action: 'update'; path: string; newPath?: string; title?: string; summary?: string; content?: string; before: Omit<ChatSkillSectionFields, 'path'> }
+  | { action: 'remove'; path: string; before: Omit<ChatSkillSectionFields, 'path'> }
+
 export type ChatReplyQuote = {
   messageId: number
   role: 'user' | 'assistant'
@@ -149,9 +161,18 @@ export type ChatProposal = { id: number; dismissed?: boolean } & (
       skillId: number | null
       name: string
       description: string
+      /** Absent on cards proposed before categories existed: treat as ''. */
+      category?: string
+      /** The overview: what use_skill returns first, above the table of sections. */
       instructions: string
+      /**
+       * Section edits: every section of a new skill as `add`; for a change, only the sections it adds, changes or
+       * removes. Saving sends them as `sectionChanges`, so sections edited since stay unless the card changes them.
+       * Absent on cards proposed before sections existed: treat as [].
+       */
+      sectionChanges?: ChatSkillSectionChange[]
       /** The skill as it was when proposed (changes only), for the before/after view. */
-      before?: { name: string; description: string; instructions: string }
+      before?: { name: string; description: string; category?: string; instructions: string }
       /** Profile the card offers to link the skill to (the speaking profile, when it does not link it yet), or null. */
       linkProfileId: number | null
       savedId?: number | null

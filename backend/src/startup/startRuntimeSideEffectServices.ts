@@ -41,6 +41,12 @@ export async function startRuntimeSideEffectServices(
 
   warnUnknownRuntimeSideEffectRole()
   if (runtimeRole !== 'worker') {
+    // Generation presets that still link a guide file move it into a skill (no-op once none does).
+    const { migratePresetGuideFiles } = await import('../services/codex-chat/chatGenerationPresets')
+    try { migratePresetGuideFiles() } catch (error) { console.warn('⚠️ Moving generation preset guide files into skills failed:', error instanceof Error ? error.message : error) }
+    // Plugins' skills follow their packages from here on (install, update, on/off, removal).
+    const { syncAllPluginSkills } = await import('../services/codex-chat/chatPluginSkills')
+    syncAllPluginSkills()
     // Chats (served by the API) reach the external MCP servers' tools once connected.
     const { startExternalMcpServers } = await import('../services/externalMcp/externalMcpServers')
     startExternalMcpServers()

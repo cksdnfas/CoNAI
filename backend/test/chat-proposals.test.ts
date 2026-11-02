@@ -1125,8 +1125,8 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
       assert.equal(change.linkProfileId, null, 'no link offer while the profile links the skill')
       assert.match(read(await setup.bridge.call('propose_skill', { skill_id: skillId })), /Nothing would change/)
       const listed = JSON.parse(read(await setup.bridge.call('list_chat_skills', {})))
-      assert.deepEqual(Object.keys(listed[0]).sort(), ['description', 'id', 'instructionsLength', 'name', 'profiles'], 'the list leaves the instructions to get_chat_skill')
-      assert.match(read(await setup.bridge.call('get_chat_skill', { skill_id: skillId })), /Instructions \(characters 0-\d+ of \d+\):\n\n1\. Ask for the pose\./)
+      assert.deepEqual(Object.keys(listed[0]).sort(), ['category', 'description', 'id', 'instructionsLength', 'name', 'profiles', 'sections', 'source'], 'the list leaves the texts to get_chat_skill')
+      assert.match(read(await setup.bridge.call('get_chat_skill', { skill_id: skillId })), /Overview \(characters 0-\d+ of \d+\):\n\n1\. Ask for the pose\./)
       const edited = ChatProposalStore.find(JSON.parse(read(await setup.bridge.call('propose_skill', { skill_id: skillId, edits: [{ old_text: 'Ask for the pose', new_text: 'Ask for the pose and the outfit' }] }))).proposalId)
       assert.ok(edited?.kind === 'skill' && edited.instructions.startsWith('1. Ask for the pose and the outfit.'), 'edits change part of the instructions')
       assert.equal((await setup.bridge.call('propose_skill', { skill_id: skillId, edits: [{ old_text: 'not in the skill', new_text: 'x' }] })).isError, true)
@@ -1146,8 +1146,67 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
       assert.match(read(await chat.bridge.call('use_skill', { name: 'missing' })), /Your skills: "Picture request"/)
     } finally { chat.close(); await chat.bridge.close() }
 
+    // Sections: one skill holds per-model details; the model reads the overview's table, then only what it needs.
+    const { ChatRevisionConflict } = await import('../src/services/codex-chat/chatProfileError')
+    const { exportSkillZip, readSkillUpload } = await import('../src/services/codex-chat/chatSkillPackages')
+    const { buildSkillProposal } = await import('../src/mcp/tools/chatSetupTools')
+    const base = ChatSkillStore.find(skillId)!
+    const sectioned = ChatSkillStore.update(skillId, { sections: [
+      { path: 'models/nai', title: 'NAI', summary: 'Use for NAI presets.', content: 'NAI_RULES: tags in English.' },
+      { path: 'models/comfy', title: 'Comfy', summary: 'Use for ComfyUI presets.', content: 'COMFY_RULES: {{char}} writes prose.' },
+      { path: 'style', title: 'Style', summary: '', content: 'STYLE_RULES' },
+    ] }, { revision: base.revision })!
+    assert.equal(sectioned.revision, base.revision + 1)
+    assert.throws(() => ChatSkillStore.update(skillId, { category: 'x' }, { revision: base.revision }), ChatRevisionConflict, 'a stale editor never overwrites a newer save')
+    assert.throws(() => ChatSkillStore.update(skillId, { sectionChanges: [{ action: 'update', path: 'style', content: 'NEW', before: { title: 'Style', summary: '', content: 'OLD' } }] }), ChatRevisionConflict, 'a stale proposal never overwrites a changed section')
+    const sectionsChat = await open('r-skill-sections', ['read'])
+    try {
+      const use = async (args: Record<string, unknown>) => read(await sectionsChat.bridge.call('use_skill', { name: 'Picture request', ...args }))
+      const overview = await use({})
+      assert.match(overview, /## Sections\n[^\n]*\n- models\/nai — NAI: Use for NAI presets\. \(~\d+ tokens\)/)
+      assert.doesNotMatch(overview, /NAI_RULES/, 'the overview lists the sections without their text')
+      const nai = await use({ section: 'MODELS/NAI' })
+      assert.match(nai, /NAI_RULES/)
+      assert.doesNotMatch(nai, /COMFY_RULES|STYLE_RULES/, 'one section loads alone')
+      const both = await use({ section: 'models/comfy, style' })
+      assert.ok(both.includes(`COMFY_RULES: ${ChatProfileStore.find(profile.id)!.name} writes prose.`) && both.includes('STYLE_RULES'))
+      assert.match(await use({ section: 'models/' }), /## Sections in "models\/"[\s\S]*- models\/comfy/)
+      assert.match(await use({ section: 'nope' }), /no section "nope"\. Its sections: "models\/nai", "models\/comfy", "style"/)
+      assert.match(read(await sectionsChat.bridge.call('use_skill', { query: 'comfyui' })), /skill "Picture request" section "models\/comfy"/)
+      assert.equal(ChatSkillStore.find(skillId)!.sections.find((section) => section.path === 'models/nai')!.loadCount, 1, 'loads are counted per section')
+    } finally { sectionsChat.close(); await sectionsChat.bridge.close() }
+
+    const { proposal: sectionProposal } = buildSkillProposal({ skill_id: skillId, sections: [
+      { path: 'style', edits: [{ old_text: 'STYLE', new_text: 'LOOK' }] },
+      { path: 'models/new', title: ' New ', summary: 's', content: 'c' },
+      { path: 'models/comfy', remove: true },
+    ] }, null)
+    assert.ok(sectionProposal.kind === 'skill')
+    assert.deepEqual(sectionProposal.sectionChanges, [
+      { action: 'update', path: 'style', content: 'LOOK_RULES', before: { title: 'Style', summary: '', content: 'STYLE_RULES' } },
+      { action: 'add', path: 'models/new', title: 'New', summary: 's', content: 'c' },
+      { action: 'remove', path: 'models/comfy', before: { title: 'Comfy', summary: 'Use for ComfyUI presets.', content: 'COMFY_RULES: {{char}} writes prose.' } },
+    ], 'a proposal carries only the changed sections, as they will be saved')
+    const applied = ChatSkillStore.update(skillId, { sectionChanges: sectionProposal.sectionChanges })!
+    assert.deepEqual(applied.sections.map((section) => section.path), ['models/nai', 'models/new', 'style'], 'an added section joins its group')
+
+    // An export reads back as the same skill (an Agent Skills folder: SKILL.md and references/).
+    const exported = exportSkillZip(applied)
+    assert.equal(exported.fileName, 'picture-request.zip')
+    const reread = readSkillUpload(exported.fileName, exported.bytes)
+    assert.deepEqual(reread.draft, { name: applied.name, description: applied.description, category: applied.category, instructions: applied.instructions, sections: applied.sections.map(({ path, title, summary, content }) => ({ path, title, summary, content })) })
+
+    const restored = ChatSkillStore.restore(skillId, base.revision)!
+    assert.deepEqual([restored.revision, restored.sections.length, restored.instructions], [base.revision + 3, 0, base.instructions], 'restoring saves the earlier state as a new revision')
+    assert.deepEqual(ChatSkillStore.versions(skillId)!.versions.map((version) => version.revision), [base.revision + 2, base.revision + 1, base.revision])
+
     const long = 'a'.repeat(1500)
-    assert.match(skillResultText({ name: 'Long' }, long, 0, 500), /offset 100 for the rest/, 'cut to the tool output limit with where to go on')
+    const cut = skillResultText({ name: 'A rather long skill name here' }, long, 0, 600, 'model/one, model/two, model/three')
+    assert.ok(cut.length <= 600, 'the header and the continuation fit the tool output limit with the part')
+    const next = Number(/offset (\d+) for the rest/.exec(cut)?.[1])
+    assert.equal(cut.split('\n\n')[1], long.slice(0, next), 'the part ends where the continuation goes on')
+    const smallest = skillResultText({ name: 'A rather long skill name here' }, long, 0, 500, 'model/one, model/two, model/three')
+    assert.ok(smallest.length <= 500 && /offset \d+ for the rest/.test(smallest), 'the smallest output limit still keeps the continuation')
     assert.doesNotMatch(skillResultText({ name: 'Long' }, long, 1400, 500), /continues/)
     ChatSkillStore.delete(skillId)
     assert.deepEqual(ChatProfileStore.find(profile.id)!.skillIds, [], 'deleting a skill unlinks it')

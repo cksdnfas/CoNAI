@@ -8,7 +8,7 @@ import { IconButton } from '@/components/ui/icon-button'
 import { Tip } from '@/components/ui/tooltip'
 import { getChatScopeCopy } from '@/features/codex-chat/chat-scope-copy'
 import { useI18n } from '@/i18n'
-import { CHAT_GENERATION_PRESETS_QUERY_KEY, CHAT_SCOPES, CHAT_TOOL_PRESETS_QUERY_KEY, listChatGenerationPresets, listChatToolPresets, type ChatProfileDefaults, type ChatSkill, type ChatToolPreset, type ChatToolPresetInput } from '@/lib/api-codex-chat'
+import { CHAT_GENERATION_PRESETS_QUERY_KEY, CHAT_SCOPES, CHAT_TOOL_PRESETS_QUERY_KEY, listChatGenerationPresets, listChatToolPresets, type ChatProfileDefaults, type ChatSkillSummary, type ChatToolPreset, type ChatToolPresetInput } from '@/lib/api-codex-chat'
 import { CHAT_SKILL_LIMITS } from '@conai/shared'
 import { ChatSkillEditorModal } from './chat-skill-editor-modal'
 import { CollapsibleRow } from '@/components/ui/collapsible-row'
@@ -36,7 +36,7 @@ export function ChatProfileToolsPanel({ open, draft, patch, defaults, skills }: 
   draft: Draft
   patch: PatchDraft
   defaults: ChatProfileDefaults | undefined
-  skills: ChatSkill[] | undefined
+  skills: ChatSkillSummary[] | undefined
 }) {
   const { t } = useI18n()
   const presetsQuery = useQuery({ queryKey: CHAT_TOOL_PRESETS_QUERY_KEY, queryFn: listChatToolPresets, enabled: open && draft.mcpEnabled })
@@ -146,21 +146,24 @@ export function ChatProfileToolsPanel({ open, draft, patch, defaults, skills }: 
       </EditorGroup>
       <EditorGroup
         label={t({ ko: '스킬', en: 'Skills' })}
-        info={t({ ko: '모델은 연결한 스킬의 이름과 "언제 쓰는지"만 보다가, 요청이 맞으면 use_skill로 지시를 불러와 따라. 스킬은 자원 › 프리셋에서 고쳐.', en: 'The model sees the name and "when to use" of each linked skill and loads its instructions with use_skill when a request fits. Edit skills under Resources › Presets.' })}
+        info={t({ ko: '모델은 연결한 스킬의 이름과 "언제 쓰는지"만 보다가, 요청이 맞으면 use_skill로 개요와 섹션 목차를 불러오고 필요한 섹션만 읽어. 스킬은 자원 › 프리셋에서 고쳐.', en: 'The model sees the name and "when to use" of each linked skill; when a request fits, use_skill loads the overview and section table, then only the sections it needs. Edit skills under Resources › Presets.' })}
         count={draft.skillIds.length}
         actions={<IconButton size="icon-sm" variant="ghost" disabled={skillsFull} onClick={() => setSkillEditor(true)} label={t({ ko: '스킬 추가', en: 'Add skill' })}><Plus /></IconButton>}
       >
         <div className="flex flex-wrap gap-1.5">
           {(skills ?? []).map((skill) => {
             const linked = draft.skillIds.includes(skill.id)
+            // A plugin's skill stays linkable while the plugin is off, but the model does not see it then.
+            const tip = skill.enabled ? skill.description : `${t({ ko: '플러그인이 꺼져 있어서 지금은 모델에 보이지 않아.', en: 'Its plugin is off, so models do not see it now.' })}\n${skill.description}`
             return (
-              <Tip key={skill.id} content={skill.description} className="whitespace-pre-line">
+              <Tip key={skill.id} content={tip} className="whitespace-pre-line">
                 <ToggleChip
                   pressed={linked}
                   disabled={!linked && skillsFull}
                   onClick={() => patch({ skillIds: linked ? draft.skillIds.filter((id) => id !== skill.id) : [...draft.skillIds, skill.id] })}
                 >
-                  {skill.name}
+                  <span className={skill.enabled ? undefined : 'line-through opacity-60'}>{skill.name}</span>
+                  {skill.enabled ? null : <span className="opacity-60">{t({ ko: '꺼짐', en: 'Off' })}</span>}
                 </ToggleChip>
               </Tip>
             )
@@ -193,7 +196,7 @@ export function ChatProfileToolsPanel({ open, draft, patch, defaults, skills }: 
       />
       <ChatSkillEditorModal
         open={skillEditor}
-        skill={null}
+        skillId={null}
         onClose={() => setSkillEditor(false)}
         onSaved={(created) => patch({ skillIds: [...draft.skillIds, created.id] })}
       />

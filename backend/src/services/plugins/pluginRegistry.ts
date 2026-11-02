@@ -36,6 +36,8 @@ const manifestSchema = z.object({
     blocks: z.array(z.object({ id: pluginIdSchema, page: pluginIdSchema, surfaces: surfacesSchema, height: z.number().int().min(120).max(1200).optional() }).strict()).max(8).default([]),
     actions: z.array(z.object({ id: pluginIdSchema, label: z.string().min(1).max(40), surfaces: surfacesSchema }).strict()).max(8).default([]),
   }).strict().optional(),
+  // Package folders holding an Agent Skills folder each (SKILL.md at the folder's root); see chatPluginSkills.
+  skills: z.array(z.string().min(1).max(200)).max(20).optional(),
 }).strict()
 export const PLUGIN_ZIP_LIMIT = 8 * 1024 * 1024
 const MAX_FILE = 4 * 1024 * 1024
@@ -71,6 +73,10 @@ export function parsePluginManifest(value: unknown, stored = false): PluginManif
     return { ...action, schema, arguments: action.arguments as import('@conai/shared').PluginServerAction['arguments'] }
   })
   if (reserved.has(raw.id) || new Set(raw.pages.map((page) => page.id)).size !== raw.pages.length || new Set(raw.capabilities).size !== raw.capabilities.length) throw new PluginError('중복되거나 예약된 플러그인 ID야.')
+  if (raw.skills) {
+    raw.skills = raw.skills.map((folder) => pluginAssetName(folder.replace(/\/+$/, '')))
+    if (new Set(raw.skills.map((folder) => folder.toLowerCase())).size !== raw.skills.length) throw new PluginError('스킬 폴더가 겹쳐.')
+  }
   const generation = raw.generation ? parseGeneration(raw.generation, raw.pages.map(page => page.id), !!raw.server) : undefined
   return { ...raw, appTools, serverActions, generation, pages: raw.pages.map((page) => {
     pluginAssetName(page.entry)
@@ -169,8 +175,8 @@ export function packageFile(id: string, version: string, asset: string) {
   if (!stat.isFile() || stat.nlink > 1 || stat.size > MAX_FILE) throw new PluginError('패키지 파일이 올바르지 않아.')
   return current
 }
-/** Only installed package assets, never the plugin's data directory or linked files. */
-export function readInstalledPluginAssets(id: string) {
+/** Only installed package assets, never the plugin's data directory or linked files; `include` narrows what is read. */
+export function readInstalledPluginAssets(id: string, include?: (name: string) => boolean) {
   const plugin = getPlugin(id, false)
   const directory = walkPackagePath(['plugins', 'packages', id, plugin.version])!
   const assets = new Map<string, Buffer>()
@@ -187,6 +193,7 @@ export function readInstalledPluginAssets(id: string) {
       }
       if (++entries > 256) throw new PluginError('패키지 파일 개수가 너무 많아.')
       if (!stat.isFile() || stat.nlink !== 1 || !pluginAssetAllowed(name) || stat.size > MAX_FILE || (total += stat.size) > MAX_TOTAL) throw new PluginError('패키지 파일 형식이나 크기를 확인해줘.')
+      if (include && !include(name)) continue
       assets.set(name, fs.readFileSync(packageFile(id, plugin.version, name)))
     }
   }
@@ -224,6 +231,7 @@ export function unpackPlugin(zipBytes: Buffer) {
   const manifest = parsePluginManifest(JSON.parse(manifestBytes.toString('utf8')))
   for (const page of manifest.pages) if (!assets.has(page.entry)) throw new PluginError(`페이지 파일이 없어: ${page.entry}`)
   if (manifest.server && !assets.has(manifest.server.entry)) throw new PluginError(`서버 모듈 파일이 없어: ${manifest.server.entry}`)
+  for (const folder of manifest.skills ?? []) if (!assets.has(`${folder}/SKILL.md`)) throw new PluginError(`스킬 폴더에 SKILL.md가 없어: ${folder}`)
   return { manifest, assets }
 }
 /**

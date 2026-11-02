@@ -10,8 +10,10 @@ export const CHAT_DOCK_INSET = 'var(--chat-dock-width, 0px)'
  * Registers an open settings editor (lorebook, generation preset, judge preset, block, tool preset) with a connected
  * chat. The chat fills the registered fields right away (draft); saving is a review card (`resource.save`).
  */
-export function useSettingsEditorChatPage({ open, title, resourceId, fields, data, dirty, localRevision, apply, actions, applyAction, save }: {
+export function useSettingsEditorChatPage({ open, priority = 20, title, resourceId, fields, data, dirty, localRevision, apply, actions, applyAction, save }: {
   open: boolean
+  /** Higher wins when editors stack; one opened on top of another settings editor sets more than the default. */
+  priority?: number
   title: string
   resourceId: string
   fields: ChatPageField[]
@@ -26,7 +28,7 @@ export function useSettingsEditorChatPage({ open, title, resourceId, fields, dat
 }) {
   const { t } = useI18n()
   useChatPageRegistration(open ? {
-    kind: 'settings', title, resourceId, priority: 20, dirty, fields, data, localRevision,
+    kind: 'settings', title, resourceId, priority, dirty, fields, data, localRevision,
     actions: [
       ...(actions ?? []),
       ...(save ? [pageAction('resource.save', t({ ko: '저장', en: 'Save' }), t({ ko: '편집기의 지금 내용을 저장해.', en: 'Save the editor as it is now.' }), undefined, 'save')] : []),
