@@ -106,13 +106,13 @@ function useRetriedThumbnail(url: string) {
   return { src, loaded, failed, onError, onLoad }
 }
 
-/** Click opens the lightbox; on PC a short hover shows a larger preview beside it. */
+/** Click opens the lightbox; on PC a short hover shows a larger preview of an image beside it (videos already play in place). */
 function ChatImageThumb({ image, size, onOpen }: { image: ImageRecord; size: ThumbSize; onOpen: () => void }) {
   const { t } = useI18n()
   const thumbnailUrl = image.thumbnail_url ?? ''
   const isVideo = image.mime_type?.startsWith('video/') === true
   const retried = useRetriedThumbnail(size === 'full' && !isVideo ? image.image_url ?? thumbnailUrl : thumbnailUrl)
-  const hoverPreview = useMediaHoverPreview(thumbnailUrl ? { src: thumbnailUrl, fullSrc: isVideo ? null : image.image_url, videoSrc: isVideo ? image.image_url : null } : null)
+  const hoverPreview = useMediaHoverPreview(thumbnailUrl && !isVideo ? { src: thumbnailUrl, fullSrc: image.image_url } : null)
   // Mount playback once its poster is available; enrichment does not gate the owner preview.
   const drawn = retried.loaded
   const placeholder = thumbPlaceholder(size, image.width, image.height)
@@ -166,14 +166,14 @@ function ChatImageThumb({ image, size, onOpen }: { image: ImageRecord; size: Thu
   )
 }
 
-/** A looked-up image in the compact grid: a square crop of its thumbnail. Click opens the lightbox; hover previews. */
+/** A looked-up image in the compact grid: a square crop of its thumbnail. Click opens the lightbox; hover previews images (videos play in place). */
 function ChatFoundTile({ image, onOpen }: { image: ImageRecord; onOpen: () => void }) {
   const { t } = useI18n()
   const thumbnailUrl = image.thumbnail_url ?? ''
   const isVideo = image.mime_type?.startsWith('video/') === true
   // 썸네일이 아직 준비되지 않았으면 깨진 이미지 대신 스피너를 보이고 다시 시도한다
   const retried = useRetriedThumbnail(thumbnailUrl)
-  const hoverPreview = useMediaHoverPreview(thumbnailUrl ? { src: thumbnailUrl, fullSrc: isVideo ? null : image.image_url, videoSrc: isVideo ? image.image_url : null } : null)
+  const hoverPreview = useMediaHoverPreview(thumbnailUrl && !isVideo ? { src: thumbnailUrl, fullSrc: image.image_url } : null)
 
   return (
     <ChatThumbOverlay actions={<ChatReferenceButton compositeHash={image.composite_hash} mimeType={image.mime_type ?? null} size="icon-xs" />}>
