@@ -35,6 +35,7 @@ import { chatResultMediaMap, collectChatResultMedia } from './chatResultMediaAcc
 import { pendingGeneratedImages } from './chatGenerationPrompting'
 import { chatProfileRequester } from './chatProfilePermissions'
 import { buildEmoticonGuidance } from './chatEmoticons'
+import { profileSkillIndex } from './chatSkills'
 import { buildChatStyleGuidance } from './chatStyle'
 import { BLOCK_EDITS_MAX, foldBlockState, parseBlockEdits, usableBlocks } from './chatBlockState'
 import { postHistoryText, buildPersonaPrompt, fillCharacterPlaceholders, flagDirectiveFor, referenceBlock, resolveAuthorNote, sendableMessages, splitTurns, REPLY_FORMAT_GUIDANCE, GENERATION_GUIDANCE, ACTION_AUTHORIZATION_GUIDANCE, type ChatContextMeta } from './llmChatContext'
@@ -292,9 +293,12 @@ async function probeCodexCliNow(runtime: ReturnType<typeof prepareChatRuntime>) 
   return features
 }
 
-/** What a Codex profile's chats get as developer instructions: the fixed tool rules, then the profile's prompt. */
+/**
+ * What a Codex profile's chats get as developer instructions: the fixed tool rules, the profile's skill list (a
+ * Codex session always has use_skill), then the profile's prompt.
+ */
 export function buildCodexInstructions(profile: ChatProfile) {
-  return [developerInstructions(profile.generationPresetIds.length > 0), buildChatStyleGuidance(profile.style, profile.name), buildEmoticonGuidance(profile.style), buildPersonaPrompt(profile, { dialogueAsText: true })].filter(Boolean).join('\n\n')
+  return [developerInstructions(profile.generationPresetIds.length > 0), profileSkillIndex(profile), buildChatStyleGuidance(profile.style, profile.name), buildEmoticonGuidance(profile.style), buildPersonaPrompt(profile, { dialogueAsText: true })].filter(Boolean).join('\n\n')
 }
 
 /** Developer instructions are fixed when a Codex thread starts or resumes, so plugin hooks apply then. */

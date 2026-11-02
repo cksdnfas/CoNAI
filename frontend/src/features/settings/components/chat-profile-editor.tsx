@@ -34,6 +34,7 @@ import { listAuthPermissionGroups } from '@/lib/api-auth'
 import {
   CHAT_ADMIN_PROFILES_QUERY_KEY,
   CHAT_BLOCKS_QUERY_KEY,
+  CHAT_SKILLS_QUERY_KEY,
   CHAT_LOREBOOKS_QUERY_KEY,
   CHAT_LOREBOOK_SUMMARIES_QUERY_KEY,
   CHAT_PROFILE_DEFAULTS_QUERY_KEY,
@@ -52,6 +53,7 @@ import {
   isChatRevisionConflict,
   listChatAdminProfiles,
   listChatBlocks,
+  listChatSkills,
   listChatLorebookSummaries,
   listChatUserProfiles,
   listModelSlots,
@@ -149,6 +151,7 @@ export function buildDraft(profile: ChatProfileInput | null, defaults: ChatProfi
     agentDescription: profile?.agentDescription ?? '',
     linkedFiles: profile?.linkedFiles ?? [],
     workspaces: profile?.workspaces ?? [],
+    skillIds: profile?.skillIds ?? [],
     judgePresetId: profile?.judgePresetId ?? null,
     judgeSlotId: profile?.judgeSlotId ?? null,
     style: profile?.style ?? defaults!.style,
@@ -811,6 +814,7 @@ function ProfileEditor({ layout, open, profile, setProfile, draft, setDraft, dir
   const lorebooksQuery = useQuery({ queryKey: CHAT_LOREBOOK_SUMMARIES_QUERY_KEY, queryFn: listChatLorebookSummaries, enabled: open })
   const linkableLorebooks = lorebooksQuery.data?.filter((book) => book.kind !== 'chat')
   const blocksQuery = useQuery({ queryKey: CHAT_BLOCKS_QUERY_KEY, queryFn: listChatBlocks, enabled: open })
+  const skillsQuery = useQuery({ queryKey: CHAT_SKILLS_QUERY_KEY, queryFn: listChatSkills, enabled: open })
   const codexModelsQuery = useQuery({ queryKey: ['codex-generation-models'], queryFn: getCodexGenerationModels, staleTime: 5 * 60 * 1000, enabled: open && draft.engine === 'codex' })
   const claudeModelsQuery = useQuery({ queryKey: ['claude-models'], queryFn: getClaudeModels, staleTime: 5 * 60 * 1000, enabled: open && draft.engine === 'claude' })
 
@@ -939,7 +943,7 @@ function ProfileEditor({ layout, open, profile, setProfile, draft, setDraft, dir
   // A connected chat reads and fills this draft, opens sections, and asks (by card) to save or generate images.
   const assist = useProfileEditorChatPage({
     open, profile, draft, setDraft, dirty, section, go, slots,
-    lorebooks: linkableLorebooks, blocks: blocksQuery.data, runs, link, save: () => saveMutation.mutateAsync(),
+    lorebooks: linkableLorebooks, blocks: blocksQuery.data, skills: skillsQuery.data, runs, link, save: () => saveMutation.mutateAsync(),
   })
   const mark = (entry: (typeof sections)[number]) => entry.incomplete
     ? <><span aria-hidden="true" className="size-1.5 rounded-full bg-primary" /><span className="sr-only">{incompleteLabel}</span></>
@@ -968,7 +972,7 @@ function ProfileEditor({ layout, open, profile, setProfile, draft, setDraft, dir
       />
     ) : null}
     {section === 'memory' ? <ChatProfileMemoryPanel draft={draft} patch={patch} lorebooks={linkableLorebooks} /> : null}
-    {section === 'tools' ? <ChatProfileToolsPanel open={open} draft={draft} patch={patch} defaults={defaults} /> : null}
+    {section === 'tools' ? <ChatProfileToolsPanel open={open} draft={draft} patch={patch} defaults={defaults} skills={skillsQuery.data} /> : null}
     {section === 'look' ? <ChatProfileLookPanel profile={profile} draft={draft} patch={patch} defaults={defaults?.style} backgroundUrl={backgroundUrl} blocks={blocksQuery.data} onBusyChange={onAssetBusyChange} busy={assetBusy} runs={runs} /> : null}
   </>
   const preview = previewDraft ? <ChatProfilePreviewModal open draft={previewDraft} onClose={() => setPreviewDraft(null)} /> : null

@@ -1,5 +1,5 @@
 import { createContext, useContext, useMemo, useRef, useState } from 'react'
-import { CHAT_PROFILE_LIMITS, CHAT_PROFILE_TEXT_LIMITS, CHAT_TRANSLATION_LANGUAGES, MAX_WORKSPACE_LINKS, composeCharacterAppearance, type ChatPageData } from '@conai/shared'
+import { CHAT_PROFILE_LIMITS, CHAT_PROFILE_TEXT_LIMITS, CHAT_SKILL_LIMITS, CHAT_TRANSLATION_LANGUAGES, MAX_WORKSPACE_LINKS, composeCharacterAppearance, type ChatPageData } from '@conai/shared'
 import { useI18n } from '@/i18n'
 import { useChatPageRegistration, type WorkflowUndo } from '@/features/codex-chat/chat-page-context'
 import { pageAction, pageArray, pageChoice, pageNumber, pageObject, pageRecord, pageText } from '@/features/codex-chat/page-action-helpers'
@@ -30,7 +30,7 @@ const DRAFT_KEYS = {
   translationSlotId: 'model', translationModelLanguage: 'model', translationDisplayLanguage: 'model', translationInstructions: 'model',
   suggestEnabled: 'model', suggestSlotId: 'model', suggestProfileId: 'model', judgePresetId: 'model', judgeSlotId: 'model',
   contextTurns: 'model', loreRecursionDepth: 'memory', allowLoreProposals: 'memory', linkedFiles: 'memory', workspaces: 'memory',
-  toolOutputLimit: 'tools', agentDescription: 'tools',
+  toolOutputLimit: 'tools', agentDescription: 'tools', skillIds: 'tools',
 } as const satisfies Partial<Record<keyof Draft, ProfileEditorSection>>
 type DraftKey = keyof typeof DRAFT_KEYS
 
@@ -87,7 +87,7 @@ export const useProfileAssist = () => useContext(ProfileAssistContext)
  * Registers the open profile editor with a connected chat: it reads the draft, fills it (draft: nothing is saved),
  * switches sections, and asks to save or generate images through review cards.
  */
-export function useProfileEditorChatPage({ open, profile, draft, setDraft, dirty, section, go, slots, lorebooks, blocks, runs, link, save }: {
+export function useProfileEditorChatPage({ open, profile, draft, setDraft, dirty, section, go, slots, lorebooks, blocks, skills, runs, link, save }: {
   open: boolean
   profile: ChatProfile | null
   draft: Draft
@@ -98,6 +98,7 @@ export function useProfileEditorChatPage({ open, profile, draft, setDraft, dirty
   slots: ModelSlot[]
   lorebooks?: Array<{ id: number; name: string }>
   blocks?: Array<{ id: number; name: string }>
+  skills?: Array<{ id: number; name: string; description: string }>
   runs: AssetRuns
   /** The library link; while synced the look (appearance, images, generation) is the setting's. */
   link: ProfileCharacterLink
@@ -161,6 +162,7 @@ export function useProfileEditorChatPage({ open, profile, draft, setDraft, dirty
     ...(slots.length ? { modelSlotId: pageChoice(slots.map((slot) => slot.id)) } : {}),
     ...(lorebooks?.length ? { lorebookIds: pageArray(pageChoice(ids(lorebooks)), 20) } : {}),
     ...(blocks?.length ? { blockIds: pageArray(pageChoice(ids(blocks)), 20) } : {}),
+    ...(skills?.length ? { skillIds: { ...pageArray(pageChoice(ids(skills)), CHAT_SKILL_LIMITS.perProfile), description: 'Shared skills (data.skills) the chat model may load with use_skill' } } : {}),
     isEnabled: { type: 'boolean' },
     temperature: { ...pageNumber(-1, CHAT_PROFILE_LIMITS.temperature.max), description: '-1: default' },
     maxTokens: { ...pageNumber(0, undefined, true), description: '0: server default; direct API fits to remaining context, Pi sends the configured ceiling' },
@@ -217,7 +219,7 @@ export function useProfileEditorChatPage({ open, profile, draft, setDraft, dirty
         translationSlotId: draft.translationSlotId, translationModelLanguage: draft.translationModelLanguage, translationDisplayLanguage: draft.translationDisplayLanguage, translationInstructions: brief(draft.translationInstructions),
         suggestEnabled: draft.suggestEnabled, suggestSlotId: draft.suggestSlotId, suggestProfileId: draft.suggestProfileId, judgePresetId: draft.judgePresetId, judgeSlotId: draft.judgeSlotId,
         contextTurns: draft.contextTurns, loreRecursionDepth: draft.loreRecursionDepth, allowLoreProposals: draft.allowLoreProposals,
-        linkedFiles: draft.linkedFiles.map((link) => ({ id: link.id, write: link.write })), workspaces: draft.workspaces, toolOutputLimit: draft.toolOutputLimit,
+        linkedFiles: draft.linkedFiles.map((link) => ({ id: link.id, write: link.write })), workspaces: draft.workspaces, skillIds: draft.skillIds, toolOutputLimit: draft.toolOutputLimit,
         agentEnabled: draft.agentEnabled, agentDescription: draft.agentDescription,
         delegatedPermissions: draft.delegatedPermissions,
         // Grants and agent use stay manual. Engine fills above use the editor's engine switch patch.
@@ -228,6 +230,7 @@ export function useProfileEditorChatPage({ open, profile, draft, setDraft, dirty
       modelSlots: slots.map((slot) => ({ id: slot.id, label: slot.label, ...(slot.kind === 'route' ? { reaches: slot.model || null } : {}), ...(slot.isDefault ? { isDefault: true } : {}) })),
       lorebooks: (lorebooks ?? []).map((book) => ({ id: book.id, name: book.name })),
       blocks: (blocks ?? []).map((block) => ({ id: block.id, name: block.name })),
+      skills: (skills ?? []).map((skill) => ({ id: skill.id, name: skill.name, description: brief(skill.description) })),
       workspaces: projects.map((project) => ({ id: project.id, name: project.name })),
       assets,
     } as Record<string, ChatPageData>,

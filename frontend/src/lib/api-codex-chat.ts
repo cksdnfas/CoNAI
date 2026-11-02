@@ -139,6 +139,7 @@ export const CHAT_LOREBOOKS_QUERY_KEY = ['codex-chat-lorebooks'] as const
 export const CHAT_LOREBOOK_SUMMARIES_QUERY_KEY = [...CHAT_LOREBOOKS_QUERY_KEY, 'summary'] as const
 export const chatLorebookQueryKey = (lorebookId: number) => [...CHAT_LOREBOOKS_QUERY_KEY, 'detail', lorebookId] as const
 export const CHAT_BLOCKS_QUERY_KEY = ['codex-chat-blocks'] as const
+export const CHAT_SKILLS_QUERY_KEY = ['codex-chat-skills'] as const
 export const CHAT_TOOL_PRESETS_QUERY_KEY = ['codex-chat-tool-presets'] as const
 export const CHAT_GENERATION_PRESETS_QUERY_KEY = ['codex-chat-generation-presets'] as const
 export const MODEL_SLOTS_QUERY_KEY = ['codex-chat-model-slots'] as const
@@ -760,6 +761,8 @@ export interface ChatProfile extends ChatProfileAssetFields, ChatProfileAgentSet
   linkedFiles: LinkedFileLink[]
   /** The project workspaces it works in (1:1 and group chats, board calls), and whether it may write in each; a chat adds more or turns one off. */
   workspaces: Array<{ id: string; write: boolean }>
+  /** Shared skills its chat model may load with use_skill, in the order its system prompt lists them. */
+  skillIds: number[]
   /** The judge preset steering each turn (null: no judge) and a judge model instead of the preset's (null: the preset's). */
   judgePresetId: number | null
   judgeSlotId: number | null
@@ -1216,6 +1219,39 @@ export function updateChatBlock(blockId: number, patch: { name?: string; block?:
 
 export function deleteChatBlock(blockId: number) {
   return requestApiData<{ deleted: boolean }>(`/api/codex-chat/admin/blocks/${blockId}`, { method: 'DELETE' })
+}
+
+/**
+ * A shared skill: task instructions profiles link by id. The chat model sees the name and the description (when to
+ * use it) and loads the instructions with use_skill when a request fits.
+ */
+export interface ChatSkill {
+  id: number
+  name: string
+  description: string
+  instructions: string
+  /** Profiles that link this skill. */
+  profiles: Array<{ id: number; name: string }>
+  createdDate: string
+  updatedDate: string
+}
+
+export type ChatSkillInput = Pick<ChatSkill, 'name' | 'description' | 'instructions'>
+
+export function listChatSkills() {
+  return requestApiData<ChatSkill[]>('/api/codex-chat/admin/skills')
+}
+
+export function createChatSkill(input: ChatSkillInput) {
+  return requestApiData<ChatSkill>('/api/codex-chat/admin/skills', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(input) })
+}
+
+export function updateChatSkill(skillId: number, patch: Partial<ChatSkillInput>) {
+  return requestApiData<ChatSkill>(`/api/codex-chat/admin/skills/${skillId}`, { method: 'PUT', headers: JSON_HEADERS, body: JSON.stringify(patch) })
+}
+
+export function deleteChatSkill(skillId: number) {
+  return requestApiData<{ deleted: boolean }>(`/api/codex-chat/admin/skills/${skillId}`, { method: 'DELETE' })
 }
 
 export function listChatToolPresets() {

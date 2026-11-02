@@ -1,10 +1,11 @@
 import type { McpServer } from '@modelcontextprotocol/server';
-import { CHAT_TRANSLATION_LANGUAGES, MAX_WORKSPACE_LINKS, isChatTranslationLanguage, type ChatProposal } from '@conai/shared';
+import { CHAT_SKILL_LIMITS, CHAT_TRANSLATION_LANGUAGES, MAX_WORKSPACE_LINKS, isChatTranslationLanguage, type ChatProposal } from '@conai/shared';
 import { z } from 'zod';
 import { ChatProposalStore, type NewChatProposal } from '../../services/codex-chat/chatProposals';
 import { ChatProfileStore, CHAT_PROFILE_LIMITS, CHAT_PROFILE_TEXT_LIMITS, normalizeAlternateGreetings, normalizeSections, normalizeProfileScalarField, validateProfileText as limitedText, type ChatProfile } from '../../services/codex-chat/chatProfiles';
 import { normalizeGreetingPosition, normalizeOpeningHistory } from '../../services/codex-chat/chatOpeningHistory';
 import { ChatSharedBlockStore, PROFILE_MAX_BLOCKS } from '../../services/codex-chat/chatDisplayBlocks';
+import { checkSkillFields, ChatSkillStore } from '../../services/codex-chat/chatSkills';
 import { ChatLorebookStore, LORE_RECURSION_MAX_DEPTH, PROFILE_MAX_LOREBOOKS } from '../../services/codex-chat/chatLorebook';
 import { ChatJudgePresetStore } from '../../services/codex-chat/chatJudgePresets';
 import { assertLinkedFiles, describeLinkedFiles, normalizeLinkedFiles, type LinkedFileLink } from '../../services/codex-chat/chatLinkedFiles';
@@ -38,7 +39,7 @@ const NO_CHAT_ERROR = 'Proposals need an active chat reply.';
  */
 const PROPOSABLE_KEYS = [
   'name', 'folderId', 'tagline', 'systemPrompt', 'promptSections', 'greeting', 'alternateGreetings', 'openingHistory', 'greetingPosition', 'authorNote', 'appearance',
-  'modelSlotId', 'summarySlotId', 'translationSlotId', 'suggestSlotId', 'judgeSlotId', 'judgePresetId', 'lorebookIds', 'blockIds',
+  'modelSlotId', 'summarySlotId', 'translationSlotId', 'suggestSlotId', 'judgeSlotId', 'judgePresetId', 'lorebookIds', 'blockIds', 'skillIds',
   'temperature', 'maxTokens', 'contextTurns', 'contextTokens', 'toolOutputLimit',
   'summaryEnabled', 'summaryTriggerTurns', 'summaryPrompt',
   'translationModelLanguage', 'translationDisplayLanguage', 'translationInstructions',
@@ -70,6 +71,7 @@ const KEY_ALIASES: Record<string, ProposableKey> = {
   judge_preset_id: 'judgePresetId',
   lorebook_ids: 'lorebookIds',
   block_ids: 'blockIds',
+  skill_ids: 'skillIds',
   max_tokens: 'maxTokens',
   context_turns: 'contextTurns',
   context_tokens: 'contextTokens',
@@ -132,6 +134,7 @@ function profileGuide() {
   const slots = ModelSlotStore.list({ usage: false });
   const lorebooks = ChatLorebookStore.list();
   const blocks = ChatSharedBlockStore.list();
+  const skills = ChatSkillStore.list();
   const judges = ChatJudgePresetStore.list();
   const tiers = RatingScoreModel.getAllTiers();
   const profiles = ChatProfileStore.list();
@@ -153,6 +156,7 @@ function profileGuide() {
     `- appearance (max ${limits.text}): the character's look as image-prompt tags (hair, eyes, outfit…). Character image generation puts it in front of every asset prompt.`,
     '- model_slot: model id or `connection · model` label (the chat model). Omit to start on the default model.',
     `- lorebook_ids (max ${PROFILE_MAX_LOREBOOKS}) and block_ids (max ${PROFILE_MAX_BLOCKS}): link existing shared lorebooks / display blocks by id.`,
+    `- skill_ids (max ${CHAT_SKILL_LIMITS.perProfile}, a propose_profile_update patch key or a propose_chat_profile setting): link shared skills by id. The chat model sees each linked skill's name and description and loads its instructions with use_skill when a request fits. Write a new skill or change one with propose_skill (list_chat_skills shows them in full).`,
     '- typeface: "sans" | "serif" | "mono".',
     '- settings: any other key below, e.g. {"translationSlotId": 3, "translationDisplayLanguage": "ko", "summaryEnabled": true}.',
     '',
@@ -180,6 +184,7 @@ function profileGuide() {
     `Profiles: ${profiles.map((profile) => `#${profile.id} "${profile.name}"`).join(', ') || '(none)'}`,
     `Lorebooks: ${lorebooks.length ? lorebooks.map((book) => `#${book.id} "${book.name}"`).join(', ') : '(none)'}`,
     `Shared display blocks: ${blocks.length ? blocks.map((block) => `#${block.id} "${block.name}" (\`${block.block.key}\`)`).join(', ') : '(none)'}`,
+    `Shared skills: ${skills.length ? skills.map((skill) => `#${skill.id} "${skill.name}"`).join(', ') : '(none)'}`,
     '',
     'Never claim a proposal is saved. Tell the user to check the card and press 저장.',
   ].join('\n');
@@ -319,6 +324,7 @@ function normalizeProposedField(key: ProposableKey, value: unknown, fieldContext
     case 'judgePresetId': return judgePreset(value);
     case 'lorebookIds': return resolveIds(key, value, PROFILE_MAX_LOREBOOKS, (ids) => ChatLorebookStore.existing(ids));
     case 'blockIds': return resolveIds(key, value, PROFILE_MAX_BLOCKS, (ids) => ChatSharedBlockStore.existing(ids));
+    case 'skillIds': return resolveIds(key, value, CHAT_SKILL_LIMITS.perProfile, (ids) => ChatSkillStore.existing(ids));
     case 'temperature':
     case 'maxTokens':
     case 'contextTurns':
@@ -350,6 +356,11 @@ function displayValue(key: ProposableKey, value: unknown, owner: string | null):
   if (key === 'contentRatingTierId') return value === null ? '제한 없음' : RatingScoreModel.getAllTiers().find((tier) => tier.id === value)?.tier_name ?? `#${String(value)}`;
   if (key === 'judgePresetId') return value === null ? none : ChatJudgePresetStore.find(Number(value))?.name ?? `#${String(value)}`;
   if (key === 'suggestProfileId') return value === null ? none : ChatProfileStore.find(Number(value))?.name ?? `#${String(value)}`;
+  if (key === 'skillIds') {
+    const ids = Array.isArray(value) ? value.map(Number) : [];
+    const names = new Map(ChatSkillStore.skillsOf(ids).map((skill) => [skill.id, skill.name]));
+    return ids.length ? ids.map((id) => names.get(id) ?? `#${id}`).join(', ') : none;
+  }
   if (key === 'linkedFiles') {
     const links = Array.isArray(value) ? value as LinkedFileLink[] : [];
     if (!links.length) return none;
@@ -403,6 +414,34 @@ export function buildDisplayBlockProposal(args: DisplayBlockArgs, linkProfileId:
     linkProfileId: args.link_to_profile === false ? null : linkProfileId,
   };
   return { proposal, warnings, block };
+}
+
+export type SkillProposalArgs = { skill_id?: number; name?: string; description?: string; instructions?: string; link_to_profile?: boolean };
+
+/**
+ * A new shared skill, or changes to `skill_id` (fields left out keep their value). The card offers to link it to the
+ * speaking profile unless that profile links it already or `link_to_profile` is false.
+ */
+export function buildSkillProposal(args: SkillProposalArgs, linkProfileId: number | null) {
+  const current = args.skill_id === undefined ? null : ChatSkillStore.find(args.skill_id);
+  if (args.skill_id !== undefined && !current) throw new Error(`Skill not found: ${args.skill_id}. list_chat_skills lists them.`);
+  const fields = checkSkillFields({
+    name: args.name ?? current?.name,
+    description: args.description ?? current?.description,
+    instructions: args.instructions ?? current?.instructions,
+  }, current?.id ?? null, true);
+  if (current && fields.name === current.name && fields.description === current.description && fields.instructions === current.instructions) {
+    throw new Error('Nothing would change: every proposed value equals the current one.');
+  }
+  const linked = current !== null && linkProfileId !== null && (ChatProfileStore.find(linkProfileId)?.skillIds ?? []).includes(current.id);
+  const proposal: NewChatProposal = {
+    kind: 'skill',
+    skillId: current?.id ?? null,
+    ...fields,
+    ...(current ? { before: { name: current.name, description: current.description, instructions: current.instructions } } : {}),
+    linkProfileId: args.link_to_profile === false || linked ? null : linkProfileId,
+  };
+  return { proposal };
 }
 
 export type ProfileProposalArgs = {
@@ -545,6 +584,7 @@ export function profileSetupView(profile: ChatProfile, owner: string | null = nu
     judgePresetId: profile.judgePresetId,
     lorebookIds: profile.lorebookIds,
     blockIds: profile.blockIds,
+    skillIds: profile.skillIds,
     temperature: profile.temperature,
     maxTokens: profile.maxTokens,
     contextTurns: profile.contextTurns,
@@ -646,7 +686,7 @@ export function registerChatSetupTools(server: McpServer, context: McpRequestCon
   });
   server.registerTool(
     'get_chat_setup_guide',
-    { description: 'Read the reference for writing a chat display block (status card: JSON shape, limits, template syntax, runtime behavior), a chat profile (every proposable setting with its range, where the others are set by hand, available models, judge presets, rating tiers, lorebooks and shared blocks), character assets, or how the chat\'s user-side features work (features: narration lines, reply orders, file versions, minutes, record book, linked files, web research, outside MCP tools). Read it once before proposing.', inputSchema: z.object({ topic: z.enum(['display_block', 'profile', 'profile_assets', 'features']) }) },
+    { description: 'Read the reference for writing a chat display block (status card: JSON shape, limits, template syntax, runtime behavior), a chat profile (every proposable setting with its range, where the others are set by hand, available models, judge presets, rating tiers, lorebooks, shared blocks and skills), character assets, or how the chat\'s user-side features work (features: narration lines, reply orders, file versions, minutes, record book, linked files, web research, outside MCP tools). Read it once before proposing.', inputSchema: z.object({ topic: z.enum(['display_block', 'profile', 'profile_assets', 'features']) }) },
     async ({ topic }) => {
       try {
         return { content: [{ type: 'text' as const, text: topic === 'display_block' ? DISPLAY_BLOCK_GUIDE : topic === 'profile_assets' ? profileAssetsGuide(context) : topic === 'features' ? CHAT_FEATURES_GUIDE : profileGuide() }] };
@@ -723,6 +763,35 @@ export function registerChatSetupTools(server: McpServer, context: McpRequestCon
         const built = buildDisplayBlockProposal(args, context.chatContext.profileId);
         const proposal = storeProposal(context, built.proposal);
         return textResult({ proposalId: proposal.id, block: built.block, warnings: built.warnings, note: PROPOSAL_NOTE }, { structuredContent: { proposal } });
+      } catch (error) { return errorResult(error); }
+    },
+  );
+
+  server.registerTool(
+    'list_chat_skills',
+    { description: 'List the shared skills in full (id, name, description, instructions) with the profiles that link them. A profile links skills by id (skill_ids); its chat model loads one with use_skill when a request fits the description.', inputSchema: z.object({}) },
+    async () => {
+      try {
+        return textResult(ChatSkillStore.list().map(({ id, name, description, instructions, profiles }) => ({ id, name, description, instructions, profiles })));
+      } catch (error) { return errorResult(error); }
+    },
+  );
+
+  server.registerTool(
+    'propose_skill',
+    { description: `Propose a shared skill as a card under your reply: a new one, or changes to an existing one (skill_id; fields you leave out stay as they are). Nothing is saved until the user presses 저장. A skill is task instructions a chat profile loads with use_skill when a request matches; its chat model sees only the name and description until then. Write: name — short and unique (max ${CHAT_SKILL_LIMITS.name}); description — when to use it, one or two sentences starting with "Use when", concrete enough that a small model can match a request to it (max ${CHAT_SKILL_LIMITS.description}); instructions — the steps and rules to follow, as direct numbered orders, in English unless the user asks otherwise (max ${CHAT_SKILL_LIMITS.instructions}; {{char}} and {{user}} become the profile and user names). The card offers to link the skill to the profile you speak as.`, inputSchema: z.object({
+      skill_id: z.number().int().positive().optional().describe('Change this existing skill (list_chat_skills shows ids); omit to propose a new one'),
+      name: z.string().optional(),
+      description: z.string().optional().describe('When to use the skill, starting with "Use when"'),
+      instructions: z.string().optional(),
+      link_to_profile: z.boolean().default(true).describe('Offer to link the saved skill to the profile you speak as'),
+    }) },
+    async (args) => {
+      try {
+        if (!context.chatContext) throw new Error(NO_CHAT_ERROR);
+        const built = buildSkillProposal(args, context.chatContext.profileId);
+        const proposal = storeProposal(context, built.proposal);
+        return textResult({ proposalId: proposal.id, note: PROPOSAL_NOTE }, { structuredContent: { proposal } });
       } catch (error) { return errorResult(error); }
     },
   );

@@ -13,7 +13,7 @@ import { estimateMessagesTokens, replyReserveFor } from './llmChatContext'
 import { postHistoryText, buildContextMeta, recalledSegments, type ChatContextMeta } from './llmChatContext'
 import { recallText } from './chatMemory'
 import { contextSource, limitContextMeta, contextPartsOf, markContextParts } from './chatContextDiagnostics'
-import { appendUserDirective, buildLeadingMessages, depthBlocks, flagDirectiveFor, insertDepthBlocks, offersLinkedFiles, offersLoreFileTool, recallFor, rejectedLoreFor, resolveAuthorNote, selectChatLore, sendableMessages, threadBlockStateText, toCompletionMessages, unsummarizedMessages, latestWindow } from './llmChatContext'
+import { appendUserDirective, buildLeadingMessages, depthBlocks, flagDirectiveFor, insertDepthBlocks, offersLinkedFiles, offersLoreFileTool, offersSkills, recallFor, rejectedLoreFor, resolveAuthorNote, selectChatLore, sendableMessages, threadBlockStateText, toCompletionMessages, unsummarizedMessages, latestWindow } from './llmChatContext'
 import { booksForRequest, type AttachedLoreBook, type ChatLore } from './chatLoreContext'
 import type { ChatSummarySegment } from './chatMemory'
 import type { JudgedContext } from './chatJudgeContext'
@@ -236,7 +236,7 @@ function buildGroupWindowMessages(params: GroupLlmContext, window: CodexChatMess
   const names = new Map(members.map((member) => [member.id, member.name]))
   // The room's own book and the account books linked to the room, then this member's profile books.
   const summaryOn = groupSummaryOn(thread)
-  const leading = buildLeadingMessages(profile, { summary: thread.summary }, { summaryEnabled: summaryOn }, withTools, lore, user)
+  const leading = buildLeadingMessages(profile, { summary: thread.summary }, { summaryEnabled: summaryOn }, withTools, lore, user, offersSkills(params.tools))
   // The header joins the persona's system message: a second system message in the middle is dropped or rejected by
   // many chat templates, and this one is what keeps the model from writing other members' names its own way.
   const header = buildGroupHeader({ thread, members, self: profile, user })

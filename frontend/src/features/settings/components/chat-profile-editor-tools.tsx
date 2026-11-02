@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Download, Link2, Lock, Save } from 'lucide-react'
+import { Download, Link2, Lock, Plus, Save } from 'lucide-react'
 import { CHAT_DELEGATABLE_PERMISSION_KEYS, PERMISSION_CATALOG } from '@conai/shared'
 import { Chip, ToggleChip } from '@/components/ui/chip'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
@@ -8,7 +8,9 @@ import { IconButton } from '@/components/ui/icon-button'
 import { Tip } from '@/components/ui/tooltip'
 import { getChatScopeCopy } from '@/features/codex-chat/chat-scope-copy'
 import { useI18n } from '@/i18n'
-import { CHAT_GENERATION_PRESETS_QUERY_KEY, CHAT_SCOPES, CHAT_TOOL_PRESETS_QUERY_KEY, listChatGenerationPresets, listChatToolPresets, type ChatProfileDefaults, type ChatToolPreset, type ChatToolPresetInput } from '@/lib/api-codex-chat'
+import { CHAT_GENERATION_PRESETS_QUERY_KEY, CHAT_SCOPES, CHAT_TOOL_PRESETS_QUERY_KEY, listChatGenerationPresets, listChatToolPresets, type ChatProfileDefaults, type ChatSkill, type ChatToolPreset, type ChatToolPresetInput } from '@/lib/api-codex-chat'
+import { CHAT_SKILL_LIMITS } from '@conai/shared'
+import { ChatSkillEditorModal } from './chat-skill-editor-modal'
 import { CollapsibleRow } from '@/components/ui/collapsible-row'
 import { type Draft, type PatchDraft } from './chat-profile-editor-fields'
 import { SwitchLine } from '@/components/ui/switch-line'
@@ -26,18 +28,22 @@ const DELEGATABLE_PERMISSIONS = PERMISSION_CATALOG
 
 /**
  * CoNAI tools (MCP) for the profile: the switch, the profile's own scopes and tools (a tool preset only loads a copy),
- * the linked generation presets, and (folded advanced settings) the tool-call limits for API LLM profiles.
+ * the linked generation presets, and (folded advanced settings) the tool-call limits for API LLM profiles. Skills are
+ * the chat's own (use_skill), so they are linked whether or not CoNAI tools are on.
  */
-export function ChatProfileToolsPanel({ open, draft, patch, defaults }: {
+export function ChatProfileToolsPanel({ open, draft, patch, defaults, skills }: {
   open: boolean
   draft: Draft
   patch: PatchDraft
   defaults: ChatProfileDefaults | undefined
+  skills: ChatSkill[] | undefined
 }) {
   const { t } = useI18n()
   const presetsQuery = useQuery({ queryKey: CHAT_TOOL_PRESETS_QUERY_KEY, queryFn: listChatToolPresets, enabled: open && draft.mcpEnabled })
   const presets = presetsQuery.data ?? []
   const [presetEditor, setPresetEditor] = useState<{ preset: ChatToolPreset | null; initial?: ChatToolPresetInput } | null>(null)
+  const [skillEditor, setSkillEditor] = useState(false)
+  const skillsFull = draft.skillIds.length >= CHAT_SKILL_LIMITS.perProfile
   const { groups, isPending } = useChatToolGroups(open && draft.mcpEnabled)
   const generationPresetsQuery = useQuery({ queryKey: CHAT_GENERATION_PRESETS_QUERY_KEY, queryFn: listChatGenerationPresets, enabled: open && draft.mcpEnabled })
   const generationPresets = generationPresetsQuery.data ?? []
@@ -144,6 +150,30 @@ export function ChatProfileToolsPanel({ open, draft, patch, defaults }: {
           </SettingsAdvanced>
         ) : null}
       </EditorGroup>
+      <EditorGroup
+        label={t({ ko: '스킬', en: 'Skills' })}
+        info={t({ ko: '모델은 연결한 스킬의 이름과 "언제 쓰는지"만 보다가, 요청이 맞으면 use_skill로 지시를 불러와 따라. 스킬은 자원 › 프리셋에서 고쳐.', en: 'The model sees the name and "when to use" of each linked skill and loads its instructions with use_skill when a request fits. Edit skills under Resources › Presets.' })}
+        count={draft.skillIds.length}
+        actions={<IconButton size="icon-sm" variant="ghost" disabled={skillsFull} onClick={() => setSkillEditor(true)} label={t({ ko: '스킬 추가', en: 'Add skill' })}><Plus /></IconButton>}
+      >
+        <div className="flex flex-wrap gap-1.5">
+          {(skills ?? []).map((skill) => {
+            const linked = draft.skillIds.includes(skill.id)
+            return (
+              <Tip key={skill.id} content={skill.description} className="whitespace-pre-line">
+                <ToggleChip
+                  pressed={linked}
+                  disabled={!linked && skillsFull}
+                  onClick={() => patch({ skillIds: linked ? draft.skillIds.filter((id) => id !== skill.id) : [...draft.skillIds, skill.id] })}
+                >
+                  {skill.name}
+                </ToggleChip>
+              </Tip>
+            )
+          })}
+          {skills && skills.length === 0 ? <span className="text-sm text-muted-foreground">{t({ ko: '아직 없어.', en: 'None yet.' })}</span> : null}
+        </div>
+      </EditorGroup>
       <EditorGroup label={t({ ko: '프로필 위임 권한', en: 'Profile-delegated permissions' })} count={draft.delegatedPermissions.length}>
         <p className="text-sm text-muted-foreground">
           {t({ ko: '이 프로필에서 켜고 선택한 도구만 추가 권한을 사용해. 사용자의 페이지·직접 API 권한은 바뀌지 않아. 설정·관리 권한은 위임할 수 없어.', en: 'Only this profile’s enabled and selected tools can use these additional permissions. The user’s own pages and direct API permissions stay unchanged. Configuration and administration privileges cannot be delegated.' })}
@@ -165,6 +195,12 @@ export function ChatProfileToolsPanel({ open, draft, patch, defaults }: {
         preset={presetEditor?.preset ?? null}
         initial={presetEditor?.initial}
         onClose={() => setPresetEditor(null)}
+      />
+      <ChatSkillEditorModal
+        open={skillEditor}
+        skill={null}
+        onClose={() => setSkillEditor(false)}
+        onSaved={(created) => patch({ skillIds: [...draft.skillIds, created.id] })}
       />
     </div>
   )

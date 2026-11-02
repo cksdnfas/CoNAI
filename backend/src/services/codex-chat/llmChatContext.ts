@@ -25,6 +25,7 @@ import type { LoreHistoryMessage, SelectedLore } from './chatLorebook'
 import { booksForRequest, loreIndexText, READ_LORE_FILE_TOOL, selectRequestLore, type AttachedLoreBook, type ChatLore } from './chatLoreContext'
 import { rejectedLoreLine, SAVE_LORE_TOOL } from './chatLoreProposals'
 import { buildLinkedIndex, LINKED_TOOLS, placesForRequest } from './chatLinkedFiles'
+import { profileSkillIndex, USE_SKILL_TOOL } from './chatSkills'
 import { appendMinutes } from './chatMinutes'
 import { buildFlagDirective } from './chatFlags'
 import { generationPromptOf } from './chatToolReferences'
@@ -340,6 +341,11 @@ export function offersLinkedFiles(tools: ReadonlyArray<ChatCompletionTool>) {
   return tools.some((tool) => tool.function.name === LINKED_TOOLS.read)
 }
 
+/** Whether use_skill is among these tools (the profile's skill list goes with it). */
+export function offersSkills(tools: ReadonlyArray<ChatCompletionTool>) {
+  return tools.some((tool) => tool.function.name === USE_SKILL_TOOL)
+}
+
 /** Whether read_lore_file is among these tools. */
 export function offersLoreFileTool(tools: ReadonlyArray<ChatCompletionTool>) {
   return tools.some((tool) => tool.function.name === READ_LORE_FILE_TOOL)
@@ -375,19 +381,15 @@ export function rejectedLoreFor(threadId: number | null | undefined, tools: Read
  * Chat templates often allow system messages only at the start, so the note that the examples are not real lives in
  * the system prompt rather than around them. `lore` defaults to the profile's global books with no chat (a preview).
  */
-export function buildLeadingMessages(profile: ChatProfile, thread: Pick<CodexChatThreadRecord, 'summary'> | null, config: Pick<LlmChatContextConfig, 'summaryEnabled'>, withTools: boolean, lore: Pick<ChatLore, 'index' | 'constant'> = selectChatLore(profile), user: ChatUserPersona | null = null) {
+export function buildLeadingMessages(profile: ChatProfile, thread: Pick<CodexChatThreadRecord, 'summary'> | null, config: Pick<LlmChatContextConfig, 'summaryEnabled'>, withTools: boolean, lore: Pick<ChatLore, 'index' | 'constant'> = selectChatLore(profile), user: ChatUserPersona | null = null, skills = false) {
   const examples = buildExampleMessages(profile, user)
   const note = exampleNote(examples.length)
   const personaParts: Array<{ kind: ChatContextSectionKind; text: string }> = []
+  const guidance = fixedContextGuidance(profile, withTools, skills)
   const systemPrompt = [
     buildPersonaPrompt(profile, { user, onPart: (kind, text) => personaParts.push({ kind, text }) }),
     note,
-    withTools ? toolGuidance(profile.generationPresetIds.length > 0) : '',
-    REPLY_FORMAT_GUIDANCE,
-    REPLY_GUIDANCE,
-    buildChatStyleGuidance(profile.style, profile.name),
-    buildEmoticonGuidance(profile.style),
-    modelLanguageGuidance(profile),
+    guidance,
   ].filter(Boolean).join('\n\n')
   // The lore index, the "always on" entries and the summary follow the persona in the same system message: many chat
   // templates (Qwen's among them) reject a system message that is not the first one. Behind the persona, so the
@@ -399,7 +401,7 @@ export function buildLeadingMessages(profile: ChatProfile, thread: Pick<CodexCha
   const system = [systemPrompt, memory].filter(Boolean).join('\n\n')
   const result: ChatCompletionMessage[] = system ? [markContextParts({ role: 'system', content: system }, [
     ...personaParts,
-    { kind: 'guidance', text: [note, fixedContextGuidance(profile, withTools)].filter(Boolean).join('\n\n') },
+    { kind: 'guidance', text: [note, guidance].filter(Boolean).join('\n\n') },
     { kind: 'lore-index', text: lore.index },
     { kind: 'constant-lore', text: lore.constant ? `## 상시 항목\n${lore.constant}` : '' },
     { kind: 'summary', text: config.summaryEnabled && thread?.summary?.trim() ? `## 지금까지의 대화 요약\n${thread.summary.trim()}` : '' },
@@ -604,7 +606,7 @@ export type ChatContextMeta = {
 } & ChatDiagnosticsFields
 
 /** Source references carry hashes only; read-time diagnostics resolves each permitted current source separately. */
-export function promptContextSources(profile: ChatProfile, user: ChatUserPersona, withTools: boolean): ContextSource[] {
+export function promptContextSources(profile: ChatProfile, user: ChatUserPersona, withTools: boolean, skills = false): ContextSource[] {
   const render = (text: string) => fillCharacterPlaceholders(text, profile, user)
   return [
     ...contextSource('system-prompt', render(profile.systemPrompt)),
@@ -613,12 +615,13 @@ export function promptContextSources(profile: ChatProfile, user: ChatUserPersona
       return contextSource(section.kind === 'dialogue' ? 'example' : section.kind === 'post' ? 'last-instruction' : 'prompt-section', render(section.kind === 'post' ? section.content.trim() : section.content), section.id)
     }),
     ...contextSource('user-persona', userPersonaPrompt(user)),
-    ...contextSource('guidance', fixedContextGuidance(profile, withTools)),
+    ...contextSource('guidance', fixedContextGuidance(profile, withTools, skills)),
   ]
 }
 
-export function fixedContextGuidance(profile: ChatProfile, withTools: boolean) {
-  return [withTools ? toolGuidance(profile.generationPresetIds.length > 0) : '', REPLY_FORMAT_GUIDANCE, REPLY_GUIDANCE, buildChatStyleGuidance(profile.style, profile.name), buildEmoticonGuidance(profile.style), modelLanguageGuidance(profile)].filter(Boolean).join('\n\n')
+/** `skills`: use_skill is among the request's tools, so the profile's skill list goes with it. */
+export function fixedContextGuidance(profile: ChatProfile, withTools: boolean, skills = false) {
+  return [withTools ? toolGuidance(profile.generationPresetIds.length > 0) : '', skills ? profileSkillIndex(profile) : '', REPLY_FORMAT_GUIDANCE, REPLY_GUIDANCE, buildChatStyleGuidance(profile.style, profile.name), buildEmoticonGuidance(profile.style), modelLanguageGuidance(profile)].filter(Boolean).join('\n\n')
 }
 
 /** Helper instructions are referenced separately; they are not part of the primary reply's sections. */
@@ -653,7 +656,7 @@ export function buildContextMeta(profile: ChatProfile, thread: CodexChatThreadRe
       ...(resolveProfileModel(profile, 'translation') ? ['translation-user', 'translation-reply'].flatMap((id) => contextSource('translation-instruction', auxiliaryInstructionText(profile, user, id), id)) : []),
     ],
     sources: [
-      ...promptContextSources(profile, user, tools.some((tool) => !isChatOwnTool(tool.function.name))),
+      ...promptContextSources(profile, user, tools.some((tool) => !isChatOwnTool(tool.function.name)), offersSkills(tools)),
       ...contextSource('lore-index', lore.index), ...contextSource('constant-lore', lore.constant),
       ...contextSource('summary', summary),
       ...contextSource('author-note', resolveAuthorNote(thread, profile, user).text),
@@ -676,7 +679,7 @@ export function buildContextMeta(profile: ChatProfile, thread: CodexChatThreadRe
 function buildRequestContext(profile: ChatProfile, thread: CodexChatThreadRecord | null, messages: CodexChatMessageRecord[], config: Pick<LlmChatContextConfig, 'summaryEnabled'> & Partial<Pick<LlmChatContextConfig, 'contextTokens'>>, tools: ChatCompletionTool[], segments: ChatSummarySegment[] = [], books?: AttachedLoreBook[], judged?: JudgedContext | null, historySource?: ChatHistorySource) {
   const user = userPersonaForThread(thread)
   const lore = selectChatLore(profile, messages, user, { thread, books, historySource, toolOffered: offersLoreFileTool(tools), linkedOffered: offersLinkedFiles(tools), judged: judged?.loreKeys, semantic: judged?.semantic?.loreKeys })
-  const system = buildLeadingMessages(profile, thread, config, tools.some((tool) => !isChatOwnTool(tool.function.name)), lore, user)
+  const system = buildLeadingMessages(profile, thread, config, tools.some((tool) => !isChatOwnTool(tool.function.name)), lore, user, offersSkills(tools))
   const recalled = config.summaryEnabled ? recalledSegments(profile, segments, messages, { contextTokens: config.contextTokens ?? null }, judged?.recallKeep, judged?.semantic?.recall) : []
   const recall = recallText(recalled)
   const stateText = threadBlockStateText(profile, thread ?? { block_edits: null }, messages, undefined, historySource)

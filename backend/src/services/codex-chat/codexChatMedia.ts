@@ -95,6 +95,7 @@ export function countPendingChatJobs(threadId: number) {
 
 const PROPOSAL_TOOLS: Record<ChatProposal['kind'], string> = {
   display_block: 'propose_display_block',
+  skill: 'propose_skill',
   profile: 'propose_chat_profile',
   profile_update: 'propose_profile_update',
   profile_folder: 'manage_chat_profile_folders',

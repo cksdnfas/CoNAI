@@ -75,9 +75,12 @@ export function deleteClaudeSessions(threadId: number) {
   for (const runtime of ['claude', 'pi'] as const) fs.rmSync(claudeSessionDir(threadId, runtime), { recursive: true, force: true })
 }
 
-/** The session's fixed part, recorded on its first turn (Claude Code reuses it as is): guidance, then the persona. */
+/**
+ * The session's fixed part, recorded on its first turn (Claude Code reuses it as is): guidance, then the persona. The
+ * session has use_skill whenever the profile links a skill, so the skill list (empty without skills) always goes in.
+ */
 export function claudeSessionSystem(profile: ChatProfile, withTools: boolean, user: ReturnType<typeof userPersonaForThread>) {
-  return [fixedContextGuidance(profile, withTools), buildPersonaPrompt(profile, { dialogueAsText: true, user })].filter(Boolean).join('\n\n')
+  return [fixedContextGuidance(profile, withTools, true), buildPersonaPrompt(profile, { dialogueAsText: true, user })].filter(Boolean).join('\n\n')
 }
 
 const systemHashOf = (system: string) => createHash('sha1').update(system).digest('hex').slice(0, 12)

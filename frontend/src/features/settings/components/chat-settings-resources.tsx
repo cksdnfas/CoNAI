@@ -1,7 +1,7 @@
 import { useRef, useState, type ComponentProps } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { BookOpen, BookUser, FileUp, ImagePlus, LayoutTemplate, Link2, List, Plus, Rows3, Wrench } from 'lucide-react'
+import { BookOpen, BookUser, FileUp, ImagePlus, LayoutTemplate, Link2, List, Plus, Rows3, Sparkles, Wrench } from 'lucide-react'
 import { Chip } from '@/components/ui/chip'
 import { IconButton } from '@/components/ui/icon-button'
 import { ResourceRow, ResourceRowStat, ResourceRowStatus } from '@/components/ui/resource-row'
@@ -14,6 +14,7 @@ import {
   CHAT_BLOCKS_QUERY_KEY,
   CHAT_GENERATION_PRESETS_QUERY_KEY,
   CHAT_LOREBOOKS_QUERY_KEY,
+  CHAT_SKILLS_QUERY_KEY,
   CHAT_TOOL_PRESETS_QUERY_KEY,
   OWN_LOREBOOKS_QUERY_KEY,
   createChatBlock,
@@ -26,12 +27,14 @@ import {
   listChatBlocks,
   listChatGenerationPresets,
   listChatLorebooks,
+  listChatSkills,
   listChatToolPresets,
   listOwnLorebooks,
   type ChatGenerationPreset,
   type ChatLorebook,
   type OwnedChatLorebook,
   type ChatSharedBlock,
+  type ChatSkill,
   type ChatToolPreset,
 } from '@/lib/api-codex-chat'
 import { getErrorMessage } from '@/lib/error-message'
@@ -42,6 +45,7 @@ import { ChatBlockEditorModal } from './chat-block-editor-modal'
 import { readChatBlockFile } from './chat-block-file'
 import { ChatGenerationPresetEditorModal } from './chat-generation-preset-editor-modal'
 import { ChatJudgePresetGroup } from './chat-judge-preset-group'
+import { ChatSkillEditorModal } from './chat-skill-editor-modal'
 import { readChatGenerationPresetFile } from './chat-generation-preset-file'
 import { useChatAdminLinks } from '@/features/codex-chat/chat-admin-location'
 import { lorebookKey } from './chat-lorebook-editor-page'
@@ -55,6 +59,7 @@ const KIND_CLASS = {
   generation: 'text-resource-generation',
   block: 'text-resource-block',
   lorebook: 'text-resource-lorebook',
+  skill: 'text-resource-skill',
 } as const
 
 type Profiles = Array<{ id: number; name: string }>
@@ -76,8 +81,8 @@ function ResourceAside({ icon, value, tip, profiles }: { icon: ComponentProps<ty
 }
 
 /**
- * Tool presets, generation presets, judge presets, display blocks and lorebooks shared by the chat profiles: one kind
- * per tab in the chat workspace, all of them stacked in Settings › 채팅 (`tab="all"`).
+ * Tool presets, generation presets, skills, judge presets, display blocks and lorebooks shared by the chat profiles:
+ * one kind per tab in the chat workspace (skills with the presets), all of them stacked in Settings › 채팅 (`tab="all"`).
  */
 export function ChatSettingsResources({ tab = 'presets', active = true }: { tab?: 'presets' | 'blocks' | 'lorebooks' | 'all'; active?: boolean }) {
   const { t } = useI18n()
@@ -94,6 +99,7 @@ export function ChatSettingsResources({ tab = 'presets', active = true }: { tab?
   const presetImportRef = useRef<HTMLInputElement>(null)
   const [generationEditor, setGenerationEditor] = useState<{ preset: ChatGenerationPreset | null } | null>(null)
   const [judgeEditor, setJudgeEditor] = useState<{ preset: ChatJudgePreset | null } | null>(null)
+  const [skillEditor, setSkillEditor] = useState<{ skill: ChatSkill | null } | null>(null)
   const generationImportRef = useRef<HTMLInputElement>(null)
 
   // The assistant can open resources from any tab; otherwise only the visible tab needs its lists.
@@ -104,6 +110,7 @@ export function ChatSettingsResources({ tab = 'presets', active = true }: { tab?
   const presetsQuery = useQuery({ queryKey: CHAT_TOOL_PRESETS_QUERY_KEY, queryFn: listChatToolPresets, enabled: shows('presets') || wantsAllResources })
   const generationPresetsQuery = useQuery({ queryKey: CHAT_GENERATION_PRESETS_QUERY_KEY, queryFn: listChatGenerationPresets, enabled: shows('presets') || wantsAllResources })
   const judgePresetsQuery = useQuery({ queryKey: CHAT_JUDGE_PRESETS_QUERY_KEY, queryFn: listChatJudgePresets, enabled: shows('presets') || wantsAllResources })
+  const skillsQuery = useQuery({ queryKey: CHAT_SKILLS_QUERY_KEY, queryFn: listChatSkills, enabled: shows('presets') || wantsAllResources })
   const accountLorebooks = (ownLorebooksQuery.data ?? []).filter((book) => book.kind === 'account')
 
   // A connected chat opens the editors listed here (view); each editor registers what it may fill and save.
@@ -113,11 +120,12 @@ export function ChatSettingsResources({ tab = 'presets', active = true }: { tab?
     ...(judgePresetsQuery.isSuccess ? { judge_preset: judgePresetsQuery.data.map((preset) => ({ id: preset.id, name: preset.name })) } : {}),
     ...(blocksQuery.isSuccess ? { block: blocksQuery.data.map((shared) => ({ id: shared.id, name: shared.name })) } : {}),
     ...(presetsQuery.isSuccess ? { tool_preset: presetsQuery.data.map((preset) => ({ id: preset.id, name: preset.name })) } : {}),
+    ...(skillsQuery.isSuccess ? { skill: skillsQuery.data.map((skill) => ({ id: skill.id, name: skill.name })) } : {}),
   }
   useChatPageRegistration(active ? {
     kind: 'settings', title: t({ ko: '채팅 · 자원', en: 'Chat · Resources' }), resourceId: 'chat-resources', priority: 5, fields: [],
     data: { section: 'chat', view: 'resources', ...listed },
-    actions: [pageAction('resource.open', t({ ko: '자원 편집기 열기', en: 'Open resource editor' }), t({ ko: '로어북(lorebook)·생성 프리셋(generation_preset)·판단 프리셋(judge_preset)·표시 블록(block)·도구 프리셋(tool_preset) 편집기를 열어. id를 빼면 새로 만들기, 있으면 data의 목록 id. 로어북의 lorebookKind는 global 또는 account야.', en: 'Open an editor for a lorebook, generation preset, judge preset, display block or tool preset. Without id: a new one; with id: one from the lists in data. A lorebook’s lorebookKind is global or account.' }), pageObject({ kind: pageChoice(['lorebook', 'generation_preset', 'judge_preset', 'block', 'tool_preset']), id: pageNumber(1, undefined, true), lorebookKind: pageChoice(['global', 'account']) }, ['kind']))],
+    actions: [pageAction('resource.open', t({ ko: '자원 편집기 열기', en: 'Open resource editor' }), t({ ko: '로어북(lorebook)·생성 프리셋(generation_preset)·판단 프리셋(judge_preset)·표시 블록(block)·도구 프리셋(tool_preset)·스킬(skill) 편집기를 열어. id를 빼면 새로 만들기, 있으면 data의 목록 id. 로어북의 lorebookKind는 global 또는 account야.', en: 'Open an editor for a lorebook, generation preset, judge preset, display block, tool preset or skill. Without id: a new one; with id: one from the lists in data. A lorebook’s lorebookKind is global or account.' }), pageObject({ kind: pageChoice(['lorebook', 'generation_preset', 'judge_preset', 'block', 'tool_preset', 'skill']), id: pageNumber(1, undefined, true), lorebookKind: pageChoice(['global', 'account']) }, ['kind']))],
     apply: () => {},
     applyAction: (id, args, assertCurrent) => {
       assertCurrent()
@@ -137,6 +145,7 @@ export function ChatSettingsResources({ tab = 'presets', active = true }: { tab?
       } else if (kind === 'generation_preset') setGenerationEditor({ preset: find(generationPresetsQuery.data) })
       else if (kind === 'judge_preset') setJudgeEditor({ preset: find(judgePresetsQuery.data) })
       else if (kind === 'block') setBlockEditor({ shared: find(blocksQuery.data) })
+      else if (kind === 'skill') setSkillEditor({ skill: find(skillsQuery.data) })
       else setPresetEditor({ preset: find(presetsQuery.data) })
     },
   } : null, { preserveOnSearchChange: true })
@@ -223,6 +232,7 @@ export function ChatSettingsResources({ tab = 'presets', active = true }: { tab?
   const blocks = blocksQuery.data ?? []
   const presets = presetsQuery.data ?? []
   const generationPresets = generationPresetsQuery.data ?? []
+  const skills = skillsQuery.data ?? []
 
   const toolPresetsLabel = t({ ko: '도구 프리셋', en: 'Tool presets' })
   const generationPresetsLabel = t({ ko: '생성 프리셋', en: 'Generation presets' })
@@ -300,6 +310,32 @@ export function ChatSettingsResources({ tab = 'presets', active = true }: { tab?
           />
         ))}
         {generationPresetsQuery.isError ? <p className="py-3 text-sm text-destructive">{getErrorMessage(generationPresetsQuery.error, t({ ko: '생성 프리셋을 불러오지 못했어.', en: 'Could not load generation presets.' }))}</p> : null}
+      </RowGroup>
+
+      <RowGroup
+        headingClassName={KIND_CLASS.skill}
+        heading={t({ ko: '스킬', en: 'Skills' })}
+        count={skillsQuery.isSuccess ? skills.length : undefined}
+        actions={<IconButton size="icon-sm" variant="ghost" onClick={() => setSkillEditor({ skill: null })} label={t({ ko: '스킬 추가', en: 'Add skill' })}><Plus /></IconButton>}
+      >
+        {skillsQuery.isLoading ? <SettingsRowsSkeleton rows={1} /> : null}
+        {skillsQuery.isSuccess && skills.length === 0 ? <SettingsEmptyRow>{t({ ko: '아직 스킬이 없어', en: 'No skills yet' })}</SettingsEmptyRow> : null}
+        {skills.map((skill) => (
+          <ResourceRow
+            key={skill.id}
+            leading={<Sparkles className={KIND_CLASS.skill} />}
+            name={skill.name}
+            extra={(
+              <>
+                <Tip content={skill.description}><span className="min-w-0 truncate text-xs text-muted-foreground">{skill.description}</span></Tip>
+                <NotLinked profiles={skill.profiles} />
+              </>
+            )}
+            aside={skill.profiles.length > 0 ? <ResourceRowStat icon={Link2} tip={skill.profiles.map((profile) => profile.name).join(', ')}>{skill.profiles.length}</ResourceRowStat> : null}
+            onOpen={() => setSkillEditor({ skill })}
+          />
+        ))}
+        {skillsQuery.isError ? <p className="py-3 text-sm text-destructive">{getErrorMessage(skillsQuery.error, t({ ko: '스킬을 불러오지 못했어.', en: 'Could not load skills.' }))}</p> : null}
       </RowGroup>
 
       </div> : null}
@@ -411,6 +447,11 @@ export function ChatSettingsResources({ tab = 'presets', active = true }: { tab?
         onClose={() => setPresetEditor(null)}
         onDuplicate={(preset) => presetDuplicateMutation.mutate(preset)}
         duplicating={presetDuplicateMutation.isPending}
+      />
+      <ChatSkillEditorModal
+        open={skillEditor !== null}
+        skill={skillEditor?.skill ?? null}
+        onClose={() => setSkillEditor(null)}
       />
       <ChatGenerationPresetEditorModal
         open={generationEditor !== null}

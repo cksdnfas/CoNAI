@@ -4,6 +4,7 @@ import { asyncHandler } from '../middleware/asyncHandler'
 import { requireAdmin } from '../middleware/authMiddleware'
 import { ChatProfileStore } from '../services/codex-chat/chatProfiles'
 import { ChatSharedBlockStore, readBlockFile } from '../services/codex-chat/chatDisplayBlocks'
+import { ChatSkillStore, type ChatSkillInput } from '../services/codex-chat/chatSkills'
 import { ChatToolPresetStore, readToolPresetFile } from '../services/codex-chat/chatToolPresets'
 import { ChatJudgePresetStore, readJudgePresetFile } from '../services/codex-chat/chatJudgePresets'
 import { ChatJudgeLogStore } from '../services/codex-chat/chatJudgeLogs'
@@ -59,6 +60,34 @@ router.delete('/admin/blocks/:blockId', requireAdmin, (req: Request, res: Respon
   const blockId = parseId(req.params.blockId)
   if (blockId === null) { sendRouteBadRequest(res, 'Invalid block id'); return }
   res.json({ success: true, data: { deleted: ChatSharedBlockStore.delete(blockId) } })
+})
+
+/** Shared skills: `{ name, description, instructions }`. Profiles link them by id; an edit reaches every linked profile. */
+router.get('/admin/skills', requireAdmin, (_req: Request, res: Response) => {
+  res.json({ success: true, data: ChatSkillStore.list() })
+})
+
+router.post('/admin/skills', requireAdmin, (req: Request, res: Response) => {
+  try {
+    res.status(201).json({ success: true, data: ChatSkillStore.create((req.body ?? {}) as ChatSkillInput) })
+  } catch (error) { sendChatError(res, error) }
+})
+
+router.put('/admin/skills/:skillId', requireAdmin, (req: Request, res: Response) => {
+  const skillId = parseId(req.params.skillId)
+  if (skillId === null) { sendRouteBadRequest(res, 'Invalid skill id'); return }
+  try {
+    const body = (req.body ?? {}) as ChatSkillInput
+    const updated = ChatSkillStore.update(skillId, { name: body.name, description: body.description, instructions: body.instructions })
+    if (!updated) { res.status(404).json({ success: false, error: '스킬을 찾을 수 없어.' }); return }
+    res.json({ success: true, data: updated })
+  } catch (error) { sendChatError(res, error) }
+})
+
+router.delete('/admin/skills/:skillId', requireAdmin, (req: Request, res: Response) => {
+  const skillId = parseId(req.params.skillId)
+  if (skillId === null) { sendRouteBadRequest(res, 'Invalid skill id'); return }
+  res.json({ success: true, data: { deleted: ChatSkillStore.delete(skillId) } })
 })
 
 /**

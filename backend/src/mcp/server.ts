@@ -17,6 +17,7 @@ import { registerPluginAuthoringTools } from './tools/pluginAuthoringTools';
 import { registerWorkspaceTools } from './tools/workspaceTools';
 import { chatWorkspaces } from '../services/codex-chat/chatWorkspace';
 import { registerChatLinkedFileTools } from './tools/chatLinkedFileTools';
+import { registerChatSkillTools } from './tools/chatSkillTools';
 import { registerChatSettingsTools } from './tools/chatSettingsTools';
 import { registerPostTools } from './tools/postTools';
 import { registerEmoticonTools } from './tools/emoticonTools';
@@ -158,6 +159,7 @@ export function createMcpServer(context: McpRequestContext = { scopes: ALL_MCP_H
   registerSelected(registerChatAgentTools);
   registerSelected(registerChatLoreTools);
   registerSelected(registerChatLinkedFileTools);
+  registerSelected(registerChatSkillTools);
   registerSelected(registerChatSettingsTools);
   inCategory('chat_setup', () => registerSelected(registerChatSetupTools));
   registerSelected(registerChatPageTools);

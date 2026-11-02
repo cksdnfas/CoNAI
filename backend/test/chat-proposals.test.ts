@@ -901,15 +901,15 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
     assert.deepEqual(intersectChatScopes(['read', 'configure'], access(['read', 'configure'])), ['read', 'configure'])
     assert.ok(!(MCP_HTTP_SCOPES as readonly string[]).includes('configure'))
     assert.ok(!(ALL_MCP_HTTP_SCOPES as string[]).includes('configure'))
-    for (const tool of ['get_chat_setup_guide', 'list_chat_profiles', 'get_chat_profile', 'manage_chat_profile_folders', 'list_display_blocks', 'get_display_block', 'propose_display_block', 'propose_chat_profile', 'propose_profile_update', 'propose_profile_assets', 'get_asset_batch']) {
+    for (const tool of ['get_chat_setup_guide', 'list_chat_profiles', 'get_chat_profile', 'manage_chat_profile_folders', 'list_display_blocks', 'get_display_block', 'propose_display_block', 'list_chat_skills', 'propose_skill', 'propose_chat_profile', 'propose_profile_update', 'propose_profile_assets', 'get_asset_batch']) {
       assert.equal(getMcpToolScope(tool), 'configure', tool)
     }
     const without = await openChatMcpBridge({ accountId: null, accountType: 'admin' }, ['read'])
     const withScope = await openChatMcpBridge({ accountId: null, accountType: 'admin' }, ['configure'])
     try {
       assert.ok(!offered(without).some((tool) => tool.startsWith('propose_')))
-      assert.equal(offered(withScope).filter((tool) => tool.startsWith('propose_')).length, 4)
-      assert.equal(offered(withScope).length, 11)
+      assert.equal(offered(withScope).filter((tool) => tool.startsWith('propose_')).length, 5)
+      assert.equal(offered(withScope).length, 13)
     } finally { await without.close(); await withScope.close() }
   })
 
@@ -1097,6 +1097,53 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
       assert.equal(stale.isError, true)
       assert.match(read(stale), /ended|interrupted/)
     } finally { close(); await bridge.close() }
+  })
+
+  await t.test('skills: proposal cards, the system prompt list beside use_skill, loading and unlinking', async () => {
+    const { ChatSkillStore, skillResultText } = await import('../src/services/codex-chat/chatSkills')
+    const { buildChatPromptPreview } = await import('../src/services/codex-chat/llmChatContext')
+    const read = (result: { content?: unknown[] }) => String((result.content?.[0] as { text?: string }).text)
+    const live = new AbortController()
+    const open = async (replyId: string, scopes: Array<typeof CHAT_SCOPES[number]>) => {
+      const close = registerChatReply(replyContext(replyId), live.signal, () => ({ replyTo: null, recipients: ['user'] }))
+      return { close, bridge: await openChatMcpBridge({ accountId: null, accountType: 'admin' }, scopes, null, { chatContext: replyContext(replyId) }) }
+    }
+    const setup = await open('r-skill-propose', ['configure'])
+    const fields = { name: 'Picture request', description: 'Use when the user asks for a picture.', instructions: '1. Ask for the pose.\n2. Draw {{char}}.' }
+    let skillId = 0
+    try {
+      assert.equal(offered(setup.bridge).includes('use_skill'), false, 'no use_skill without a linked skill')
+      const proposed = ChatProposalStore.find(JSON.parse(read(await setup.bridge.call('propose_skill', fields))).proposalId)
+      assert.ok(proposed?.kind === 'skill' && proposed.skillId === null && proposed.linkProfileId === profile.id && proposed.before === undefined)
+      assert.equal(ChatSkillStore.list().length, 0, 'proposing saves nothing')
+      skillId = ChatSkillStore.create(fields).id
+      assert.throws(() => ChatSkillStore.create({ ...fields, name: ' picture  REQUEST ' }), /같은 이름/)
+      assert.match(read(await setup.bridge.call('propose_skill', { ...fields, name: 'picture request' })), /taken by skill/)
+      ChatProfileStore.update(profile.id, { skillIds: [skillId] })
+      const change = ChatProposalStore.find(JSON.parse(read(await setup.bridge.call('propose_skill', { skill_id: skillId, description: 'Use when the user wants an image.' }))).proposalId)
+      assert.ok(change?.kind === 'skill' && change.skillId === skillId && change.instructions === fields.instructions && change.before?.description === fields.description)
+      assert.equal(change.linkProfileId, null, 'no link offer while the profile links the skill')
+      assert.match(read(await setup.bridge.call('propose_skill', { skill_id: skillId })), /Nothing would change/)
+    } finally { setup.close(); await setup.bridge.close() }
+
+    const chat = await open('r-skill-use', ['read'])
+    try {
+      assert.ok(chat.bridge.tools.some((tool) => tool.function.name === 'use_skill'), 'a direct tool once a skill is linked')
+      const current = ChatProfileStore.find(profile.id)!
+      const system = String(buildChatPromptPreview(current, chat.bridge.tools)[0].content)
+      assert.match(system, /## Skills\n[^\n]*use_skill[^\n]*\n- Picture request: Use when the user asks for a picture\./)
+      assert.doesNotMatch(String(buildChatPromptPreview(current, [])[0].content), /## Skills/, 'the list goes only beside the tool')
+      const loaded = read(await chat.bridge.call('use_skill', { name: ' PICTURE request ' }))
+      assert.match(loaded, /^Skill "Picture request"/)
+      assert.ok(loaded.includes(`2. Draw ${current.name}.`), '{{char}} becomes the profile name')
+      assert.match(read(await chat.bridge.call('use_skill', { name: 'missing' })), /Your skills: "Picture request"/)
+    } finally { chat.close(); await chat.bridge.close() }
+
+    const long = 'a'.repeat(1500)
+    assert.match(skillResultText({ name: 'Long' }, long, 0, 500), /offset 100 for the rest/, 'cut to the tool output limit with where to go on')
+    assert.doesNotMatch(skillResultText({ name: 'Long' }, long, 1400, 500), /continues/)
+    ChatSkillStore.delete(skillId)
+    assert.deepEqual(ChatProfileStore.find(profile.id)!.skillIds, [], 'deleting a skill unlinks it')
   })
 
   await t.test('saved route: admin + owned thread, id rules, 404', async () => {

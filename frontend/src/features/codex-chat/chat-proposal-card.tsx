@@ -14,6 +14,7 @@ import { useI18n } from '@/i18n'
 import {
   CHAT_ADMIN_PROFILES_QUERY_KEY,
   CHAT_BLOCKS_QUERY_KEY,
+  CHAT_SKILLS_QUERY_KEY,
   CHAT_PROFILES_QUERY_KEY,
   CHAT_PROFILE_FOLDERS_QUERY_KEY,
   CHAT_PROFILE_LIBRARY_QUERY_KEY,
@@ -25,6 +26,8 @@ import {
   applyChatProposal,
   undoChatLoreProposal,
   createChatBlock,
+  createChatSkill,
+  updateChatSkill,
   dismissChatProposal,
   threadLorebooksQueryKey,
   chatProfileSaveInput,
@@ -39,6 +42,7 @@ import {
   type ChatProfile,
   type ChatProfileInput,
   type ChatSharedBlock,
+  type ChatSkill,
   type CodexChatToolCall,
 } from '@/lib/api-codex-chat'
 import { getErrorMessage } from '@/lib/error-message'
@@ -55,6 +59,7 @@ import { folderPath } from '@conai/shared'
 
 type Proposal = NonNullable<CodexChatToolCall['proposal']>
 type BlockProposal = Extract<Proposal, { kind: 'display_block' }>
+type SkillProposal = Extract<Proposal, { kind: 'skill' }>
 type ProfileProposal = Extract<Proposal, { kind: 'profile' }>
 type UpdateProposal = Extract<Proposal, { kind: 'profile_update' }>
 type LoreProposal = Extract<Proposal, { kind: 'lore' }>
@@ -64,6 +69,7 @@ import { TaskPlanCard } from './chat-task-ui'
 
 // The settings editors are large and only open on demand, so they stay out of the chat bundle until then.
 const ChatBlockEditorModal = lazy(() => import('@/features/settings/components/chat-block-editor-modal').then((module) => ({ default: module.ChatBlockEditorModal })))
+const ChatSkillEditorModal = lazy(() => import('@/features/settings/components/chat-skill-editor-modal').then((module) => ({ default: module.ChatSkillEditorModal })))
 const ChatProfileEditorModal = lazy(() => import('@/features/settings/components/chat-profile-editor').then((module) => ({ default: module.ChatProfileEditorModal })))
 
 const LONG_TEXT = 160
@@ -94,6 +100,7 @@ function ProposalCard({ proposal, threadId }: { proposal: Proposal; threadId?: n
   if (proposal.kind === 'profile_assets' || proposal.kind === 'character_assets') return <ChatAssetProposalCard proposal={proposal} threadId={threadId} />
   if (proposal.kind === 'character_library') return <ChatCharacterLibraryProposalCard proposal={proposal} threadId={threadId} />
   if (proposal.kind === 'display_block') return <BlockProposalCard proposal={proposal} threadId={threadId} />
+  if (proposal.kind === 'skill') return <SkillProposalCard proposal={proposal} threadId={threadId} />
   if (proposal.kind === 'profile') return <ProfileProposalCard proposal={proposal} threadId={threadId} />
   if (proposal.kind === 'lore') return <LoreProposalCard proposal={proposal} threadId={threadId} />
   if (proposal.kind === 'profile_update') return <ProfileUpdateCard proposal={proposal} threadId={threadId} />
@@ -109,6 +116,7 @@ function useProposalRefresh(threadId?: number) {
   return async () => {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: CHAT_BLOCKS_QUERY_KEY }),
+      queryClient.invalidateQueries({ queryKey: CHAT_SKILLS_QUERY_KEY }),
       queryClient.invalidateQueries({ queryKey: CHAT_ADMIN_PROFILES_QUERY_KEY }),
       queryClient.invalidateQueries({ queryKey: CHAT_PROFILES_QUERY_KEY }),
       queryClient.invalidateQueries({ queryKey: CHAT_PROFILE_FOLDERS_QUERY_KEY }),
@@ -237,6 +245,91 @@ function BlockProposalCard({ proposal, threadId }: { proposal: BlockProposal; th
   )
 }
 
+/** A text of a skill card: long text cut, the row expands it. */
+function SkillTextRow({ label, text }: { label: string; text: string }) {
+  const { t } = useI18n()
+  const [expanded, setExpanded] = useState(false)
+  const long = text.length > LONG_TEXT
+  return (
+    <div className="grid grid-cols-[6rem_minmax(0,1fr)] gap-x-3 text-xs">
+      <span className="pt-px text-muted-foreground">{label}</span>
+      <div className="min-w-0 break-words whitespace-pre-wrap">
+        {expanded || !long ? text : `${text.slice(0, LONG_TEXT)}…`}
+        {long ? <div><Button variant="link" size="xs" className="-ml-2" onClick={() => setExpanded((current) => !current)}>{expanded ? t({ ko: '접기', en: 'Collapse' }) : t({ ko: '펼치기', en: 'Expand' })}</Button></div> : null}
+      </div>
+    </div>
+  )
+}
+
+/** propose_skill: a new shared skill, or changes to one as before/after rows; saving may also link it to the profile. */
+function SkillProposalCard({ proposal, threadId }: { proposal: SkillProposal; threadId?: number }) {
+  const { t } = useI18n()
+  const { showSnackbar } = useSnackbar()
+  const admin = useIsAdmin()
+  const refresh = useProposalRefresh(threadId)
+  const [link, setLink] = useState(true)
+  const [editorOpen, setEditorOpen] = useState(false)
+  const [savedNow, setSavedNow] = useState(false)
+  const saved = savedNow || (proposal.savedId !== undefined && proposal.savedId !== null)
+  const canLink = proposal.linkProfileId !== null
+  const fields = { name: proposal.name, description: proposal.description, instructions: proposal.instructions }
+  const initial = useMemo(() => ({ name: proposal.name, description: proposal.description, instructions: proposal.instructions }), [proposal.name, proposal.description, proposal.instructions])
+  const labels = {
+    name: t({ ko: '이름', en: 'Name' }),
+    description: t({ ko: '언제 쓰는지', en: 'When to use' }),
+    instructions: t({ ko: '지시', en: 'Instructions' }),
+  }
+  const changed = (['name', 'description', 'instructions'] as const).filter((key) => !proposal.before || proposal.before[key] !== fields[key])
+
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      const skill = proposal.skillId === null ? await createChatSkill(fields) : await updateChatSkill(proposal.skillId, fields)
+      if (canLink && link) {
+        const profile = (await listChatAdminProfiles()).find((entry) => entry.id === proposal.linkProfileId)
+        if (profile && !profile.skillIds.includes(skill.id)) await updateChatProfile(profile.id, { skillIds: [...profile.skillIds, skill.id] })
+      }
+      await markChatProposalSaved(proposal.id, skill.id)
+      return skill
+    },
+    onSuccess: async () => {
+      setSavedNow(true)
+      await refresh()
+    },
+    onError: (error) => showSnackbar({ message: getErrorMessage(error, t({ ko: '저장하지 못했어.', en: 'Could not save.' })), tone: 'error' }),
+  })
+
+  // The editor created the skill itself; only the proposal's mark is left.
+  const handleEditorSaved = (created: ChatSkill) => {
+    setSavedNow(true)
+    markChatProposalSaved(proposal.id, created.id)
+      .then(refresh)
+      .catch((error: unknown) => showSnackbar({ message: getErrorMessage(error, t({ ko: '저장 표시를 남기지 못했어.', en: 'Could not mark it saved.' })), tone: 'error' }))
+  }
+
+  return (
+    <ProposalFrame>
+      <Header label={proposal.before ? t({ ko: '스킬 수정 제안', en: 'Skill update proposal' }) : t({ ko: '스킬 제안', en: 'Skill proposal' })} name={proposal.before?.name ?? proposal.name} />
+      <div className="space-y-1.5">
+        {proposal.before
+          ? changed.map((key) => <UpdateRow key={key} label={labels[key]} before={proposal.before![key]} after={fields[key]} />)
+          : changed.map((key) => <SkillTextRow key={key} label={labels[key]} text={fields[key]} />)}
+      </div>
+      <Footer saved={saved} savedLink="/chat/resources" admin={admin}>
+        {canLink ? (
+          <label className="flex cursor-pointer items-center gap-1.5 text-xs text-muted-foreground">
+            <Checkbox checked={link} onCheckedChange={(checked) => setLink(checked === true)} />
+            {t({ ko: '이 프로필에 연결', en: 'Link to this profile' })}
+          </label>
+        ) : null}
+        <span className="flex-1" />
+        {proposal.skillId === null ? <OpenEditorButton onClick={() => setEditorOpen(true)} disabled={saveMutation.isPending} /> : null}
+        <SaveButton pending={saveMutation.isPending} onClick={() => saveMutation.mutate()} />
+      </Footer>
+      {admin && editorOpen ? <Suspense fallback={null}><ChatSkillEditorModal open skill={null} initial={initial} onClose={() => setEditorOpen(false)} onSaved={handleEditorSaved} /></Suspense> : null}
+    </ProposalFrame>
+  )
+}
+
 function ProfileProposalCard({ proposal, threadId }: { proposal: ProfileProposal; threadId?: number }) {
   const { t } = useI18n()
   const { showSnackbar } = useSnackbar()
@@ -313,6 +406,7 @@ const UPDATE_LABELS: Record<string, { ko: string; en: string }> = {
   judgePresetId: { ko: '판단 프리셋', en: 'Judge preset' },
   lorebookIds: { ko: '로어북', en: 'Lorebooks' },
   blockIds: { ko: '표시 블록', en: 'Display blocks' },
+  skillIds: { ko: '스킬', en: 'Skills' },
   temperature: { ko: '온도', en: 'Temperature' },
   maxTokens: { ko: '최대 출력 토큰', en: 'Max output tokens' },
   contextTurns: { ko: '컨텍스트 턴', en: 'Context turns' },

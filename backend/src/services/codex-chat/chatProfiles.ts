@@ -11,6 +11,7 @@ import { ChatGenerationPresetStore, normalizeGenerationPresetIds } from './chatG
 import { contentRatingTier, LLM_CONNECTION_TYPES, MODEL_CONNECTION_TYPES, ModelSlotStore } from './modelSlots'
 import { ChatJudgePresetStore } from './chatJudgePresets'
 import { normalizeLinkedFiles, type LinkedFileLink } from './chatLinkedFiles'
+import { ChatSkillStore, normalizeSkillIds } from './chatSkills'
 import { WorkspaceService } from '../workspaceService'
 import { chatCharacterGroupPath, fileProfileAssetsUnderGroup, renameCharacterGroup, normalizeAvatarCrop, normalizeProfileAssetHash, type ChatAvatarCrop } from './chatProfileAssets'
 import { keptGreetingPosition, normalizeGreetingPosition, normalizeOpeningHistory, TEXT_MAX_LENGTH, type ChatOpeningMessage } from './chatOpeningHistory'
@@ -233,6 +234,8 @@ export type ChatProfile = {
   linkedFiles: LinkedFileLink[]
   /** The project workspaces it works in (1:1 and group chats, board calls); a chat adds to or turns off some (see WorkspaceService.effective). */
   workspaces: ProfileWorkspace[]
+  /** Shared skills (chat_skills) it may load with use_skill, in the order the system prompt lists them. */
+  skillIds: number[]
   /**
    * The judge preset (chat_judge_presets) that steers each turn; null judges nothing (the chat behaves as without a
    * judge). A preset that went missing reads as null.
@@ -354,6 +357,7 @@ type ProfileRow = CharacterProfileRow & {
   agent_description: string | null
   linked_files: string | null
   workspaces: string | null
+  skill_ids: string | null
   judge_preset_id: number | null
   judge_provider_name: string | null
   judge_model: string | null
@@ -516,6 +520,8 @@ function toProfile(row: ProfileRow, dependencies?: ProfileListDependencies): Cha
     agentDescription: row.agent_description ?? '',
     linkedFiles: normalizeLinkedFiles(row.linked_files),
     workspaces: normalizeProfileWorkspaces(storedJson(row.workspaces), false),
+    // Deleting a skill unlinks it everywhere, so the stored ids are live; reading the skills skips a missing one anyway.
+    skillIds: normalizeSkillIds(row.skill_ids),
     judgePresetId: dependencies ? row.judge_preset_id !== null && dependencies.judges.has(row.judge_preset_id) ? row.judge_preset_id : null : ChatJudgePresetStore.existing(row.judge_preset_id),
     judgeSlotId: slot(row.judge_slot_id),
     // Display blocks live in chat_display_blocks; the profile only links them (the style column's own list is legacy).
@@ -817,6 +823,7 @@ function toColumns(input: ChatProfileInput, options: { draft?: boolean; strictKe
     agent_description: input.agentDescription ?? '',
     linked_files: JSON.stringify(normalizeLinkedFiles(input.linkedFiles)),
     workspaces: workspaces.length ? JSON.stringify(workspaces) : null,
+    skill_ids: JSON.stringify(ChatSkillStore.existing(normalizeSkillIds(input.skillIds))),
     // Every engine can be judged (a Codex chat gets the directives and status fields only, see chatJudge).
     judge_preset_id: strict('judgePresetId') ? judgePresetId(input.judgePresetId) : input.judgePresetId ?? null,
     judge_provider_name: null,
@@ -843,7 +850,7 @@ const ADMIN_PROFILE_COLUMNS = `id, folder_id, revision, background_revision, nam
   summary_prompt, translation_instructions, translation_model_language, translation_display_language, suggest_enabled,
   model_slot_id, summary_slot_id, translation_slot_id, suggest_slot_id, suggest_profile_id, suggest_user_profile_id,
   chat_style, vision_enabled, content_rating_mode, content_rating_tier_id, page_assist, allow_lore_proposals,
-  agent_enabled, agent_description, linked_files, workspaces, judge_preset_id, judge_slot_id, is_enabled, sort_order, created_date, updated_date,
+  agent_enabled, agent_description, linked_files, workspaces, skill_ids, judge_preset_id, judge_slot_id, is_enabled, sort_order, created_date, updated_date,
   CASE WHEN background_image IS NOT NULL AND background_image != '' THEN 'present' ELSE NULL END AS background_image`
 
 export const ChatProfileStore = {

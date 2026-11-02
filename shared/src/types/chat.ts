@@ -144,6 +144,19 @@ export type ChatProposal = { id: number; dismissed?: boolean } & (
       savedId?: number | null
     }
   | {
+      /** propose_skill: a new shared skill (`skillId` null) or changes to one. Saving goes through the admin REST. */
+      kind: 'skill'
+      skillId: number | null
+      name: string
+      description: string
+      instructions: string
+      /** The skill as it was when proposed (changes only), for the before/after view. */
+      before?: { name: string; description: string; instructions: string }
+      /** Profile the card offers to link the skill to (the speaking profile, when it does not link it yet), or null. */
+      linkProfileId: number | null
+      savedId?: number | null
+    }
+  | {
       kind: 'profile'
       /** Normalized ChatProfileInput subset: name, tagline, systemPrompt, promptSections, greeting, alternateGreetings, openingHistory, greetingPosition, modelSlotId, lorebookIds, blockIds, style, authorNote. */
       input: Record<string, unknown>

@@ -87,6 +87,8 @@ export const TOOL_FEATURE_PERMISSIONS: Record<string, string | readonly string[]
   cancel_audio_order: ['audio.view', 'audio.edit'], retry_audio_order_job: ['audio.view', 'audio.edit', 'generation.execute'],
   chat_reply_to: [], room_call_member: [], task_propose: [], task_status: [], task_update: [], task_wait: [], task_finish: [], get_proposal_status: [], offer_choices: [], room_history_search: [], room_history_read: [], read_lore_file: [], save_lore: [], edit_lore_file: [],
   linked_list: 'files.view', linked_search: 'files.view', linked_read: 'files.view', linked_view: 'files.view', linked_write: ['files.view', 'files.edit'], linked_edit: ['files.view', 'files.edit'],
+  // The profile's own skills are part of its instructions, written by administrators only.
+  use_skill: [],
   // The chat's own settings card; saving rechecks the file store right for links and minutes, as the context tab does.
   get_chat_settings: [], propose_chat_settings: [],
   get_current_page: [], page_fill: [], page_act: [], read_page_data: [], propose_page_action: [],
@@ -95,7 +97,7 @@ export const TOOL_FEATURE_PERMISSIONS: Record<string, string | readonly string[]
   get_app_guide: [],
   get_chat_setup_guide: [], list_chat_profiles: [], get_chat_profile: [], list_display_blocks: [], get_display_block: [],
   manage_chat_profile_folders: [],
-  propose_display_block: [], propose_chat_profile: [], propose_profile_update: [], propose_profile_assets: [], get_asset_batch: [],
+  propose_display_block: [], list_chat_skills: [], propose_skill: [], propose_chat_profile: [], propose_profile_update: [], propose_profile_assets: [], get_asset_batch: [],
 };
 
 /**

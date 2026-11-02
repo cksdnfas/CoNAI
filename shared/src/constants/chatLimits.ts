@@ -25,6 +25,12 @@ export const CHAT_PROFILE_TEXT_LIMITS = {
   translationInstructions: 4000, summaryPrompt: 4000, extraParams: 20_000,
 } as const
 
+/**
+ * Shared chat skills: the name and "use when" text of each linked skill go into the system prompt, the instructions
+ * come through use_skill. `perProfile`: skills one profile links.
+ */
+export const CHAT_SKILL_LIMITS = { name: 80, description: 500, instructions: 20_000, perProfile: 20 } as const
+
 export const CHAT_PROFILE_DEFAULTS = {
   loreScanDepth: 4,
   loreTokenBudget: 1024,

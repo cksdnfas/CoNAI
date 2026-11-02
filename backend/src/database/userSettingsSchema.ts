@@ -533,6 +533,18 @@ export function createUserSettingsSchema(db: Database.Database): void {
     )
   `);
 
+  // Shared skills: task instructions chat profiles link by id (llm_chat_profiles.skill_ids) and load with use_skill.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS chat_skills (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      instructions TEXT NOT NULL DEFAULT '',
+      created_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_date DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
   // Tool presets: a named MCP scope + tool allowlist; chat profiles link one by id (llm_chat_profiles.tool_preset_id).
   db.exec(`
     CREATE TABLE IF NOT EXISTS chat_tool_presets (
@@ -1076,6 +1088,8 @@ export function createUserSettingsSchema(db: Database.Database): void {
     ['linked_files', 'TEXT'],
     // JSON [{ id, write }]: the project workspaces (workspace_projects, no foreign key) its 1:1 chats, group turns and board calls work in, and whether they may write.
     ['workspaces', 'TEXT'],
+    // JSON [id]: shared skills (chat_skills, no foreign key) whose names the system prompt lists for use_skill.
+    ['skill_ids', 'TEXT'],
     // The single default project this list replaced; migrated below, then left empty.
     ['workspace_id', 'TEXT'],
     ['workspace_write', 'INTEGER NOT NULL DEFAULT 0'],

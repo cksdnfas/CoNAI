@@ -90,6 +90,7 @@
   --color-resource-block: var(--resource-block);
   --color-resource-lorebook: var(--resource-lorebook);
   --color-resource-judge: var(--resource-judge);
+  --color-resource-skill: var(--resource-skill);
   --color-backdrop: var(--backdrop);
   --tracking-overline: var(--overline-tracking);
   --shadow-elevation-1: var(--elevation-1);
@@ -284,6 +285,7 @@
   --resource-block: #62bfae;
   --resource-lorebook: #a897e6;
   --resource-judge: #8fb8f0;
+  --resource-skill: #9ccc6a;
   --chat-diagnostics-instructions: #f95e14;
   --chat-diagnostics-lore: #ffb38f;
   --chat-diagnostics-examples: #a8a09c;
@@ -411,6 +413,7 @@
   --resource-block: #1f8a78;
   --resource-lorebook: #6d58c4;
   --resource-judge: #2f6fb8;
+  --resource-skill: #4f8a1f;
   --chat-diagnostics-window: #d1ccca;
   --chart-1: #2a78d6;
   --chart-2: #eb6834;
