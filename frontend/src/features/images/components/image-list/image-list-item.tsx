@@ -112,18 +112,22 @@ const ImageListItemComponent = memo(function ImageListItemComponent({
     <HistoryAudioResult sounds={image.audio} style={gridItemHeight || gridItemAspectRatio ? mediaFrameStyle : undefined} className="h-full" />
   ) : previewUrl && !hasPreviewError ? (
     mediaKind === 'video' ? (
-      // key: 가상화 레이아웃이 컴포넌트 인스턴스를 다른 미디어에 재활용해도 <video> DOM 이
-      // 함께 재활용되어 이전 프레임이 남는 일이 없도록, 미디어 identity 로 서브트리를 교체한다.
-      <ImageListVideoPreview
-        key={imageId}
-        image={image}
-        className="h-full w-full object-cover transition-opacity duration-150 group-hover:opacity-85"
-        style={mediaFrameStyle}
-        draggable={false}
-        onDragStart={preventNativeDrag}
-        onError={() => setHasPreviewError(true)}
-        suspendPlayback={blurPreview}
-      />
+      // 호버 딤은 포스터·영상 레이어가 아니라 묶음에 한 번 건다. 레이어마다 걸면 group-hover 가 숨긴 포스터의
+      // opacity-0 보다 우선해서, 정지 포스터가 재생 중인 영상 위에 반투명하게 겹친다.
+      <div className="transition-opacity duration-150 group-hover:opacity-85">
+        {/* key: 가상화 레이아웃이 컴포넌트 인스턴스를 다른 미디어에 재활용해도 <video> DOM 이
+            함께 재활용되어 이전 프레임이 남는 일이 없도록, 미디어 identity 로 서브트리를 교체한다. */}
+        <ImageListVideoPreview
+          key={imageId}
+          image={image}
+          className="h-full w-full object-cover"
+          style={mediaFrameStyle}
+          draggable={false}
+          onDragStart={preventNativeDrag}
+          onError={() => setHasPreviewError(true)}
+          suspendPlayback={blurPreview}
+        />
+      </div>
     ) : (
       <ImagePreviewMedia
         image={image}
