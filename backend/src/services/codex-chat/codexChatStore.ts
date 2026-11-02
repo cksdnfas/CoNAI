@@ -596,13 +596,6 @@ export const CodexChatStore = {
     return byTurn ? row.users + (row.first_role !== null && row.first_role !== 'user' ? 1 : 0) : row.messages
   },
 
-  /** Explicit historical range for summaries and orders; never includes alternatives/diagnostics or later turns. */
-  listContextRange(threadId: number, afterId: number, untilId = Number.MAX_SAFE_INTEGER) {
-    const rows = getUserSettingsDb().prepare(`SELECT ${CONTEXT_MESSAGE_COLUMNS} FROM codex_chat_messages WHERE thread_id = ? AND id > ? AND id <= ? ORDER BY id`)
-      .all(threadId, afterId, untilId) as StoredMessageRow[]
-    return readMessageRows(threadId, rows)
-  },
-
   /** One forward summary page, ending before the next user turn rather than cutting a turn in half. */
   listSummaryPage(source: ChatHistorySource, afterId: number, count: number, byTurn = true) {
     const db = getUserSettingsDb()
@@ -694,6 +687,21 @@ export const CodexChatStore = {
       FROM codex_chat_messages WHERE thread_id = ? AND id != ? AND id <= ? ORDER BY id DESC LIMIT ?`)
       .all(...args, horizon) as Array<Pick<CodexChatMessageRecord, 'role' | 'speaker_profile_id' | 'content' | 'context_meta'>>
     return { messages: messages.reverse(), messageCount: count }
+  },
+
+  /** Lore keyword frequency uses model-language text, filtering roles and blanks before taking its suffix. */
+  listRecentMessageTexts(threadId: number, limit: number) {
+    const rows = getUserSettingsDb().prepare(`SELECT content FROM codex_chat_messages
+      WHERE thread_id = ? AND role IN ('user', 'assistant') AND length(trim(content, ?)) > 0
+      ORDER BY id DESC LIMIT ?`).all(threadId, MESSAGE_WHITESPACE, limit) as Array<{ content: string }>
+    return rows.reverse().map((row) => row.content)
+  },
+
+  /** Departed group members still count as historical speakers, without reading their messages. */
+  listSpeakerProfileIds(threadId: number) {
+    const rows = getUserSettingsDb().prepare(`SELECT DISTINCT speaker_profile_id FROM codex_chat_messages
+      WHERE thread_id = ? AND speaker_profile_id IS NOT NULL`).all(threadId) as Array<{ speaker_profile_id: number }>
+    return rows.map((row) => row.speaker_profile_id)
   },
 
   /** After-reply judges need only the last nonblank original-language texts, not tools or attachments. */

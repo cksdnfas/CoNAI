@@ -38,6 +38,7 @@ import { ChatReferenceButton, ChatThumbOverlay } from './chat-reference'
 import { MENTION_CLASS, splitMentions } from './chat-mentions'
 import { chatToolLabel } from './chat-tool-catalog'
 import { ChatMessageIdContext } from './chat-display-block'
+import { codexChatHistoryQueryKey } from './codex-chat-context'
 
 const THUMB_CLASS = 'w-auto rounded-sm object-cover'
 /**
@@ -56,7 +57,6 @@ function fillsWidth(size: ThumbSize) {
 
 import { buildChatImageRecord } from './chat-image-record'
 import { parseServerDate } from '@/lib/server-time'
-export { buildChatImageRecord } from './chat-image-record'
 
 /**
  * The box a thumbnail occupies before it is drawn. With the image's dimensions known it is the exact size the image
@@ -261,7 +261,7 @@ function ChatFoundGrid({ items }: { items: ImageRecord[] }) {
 
 function historyQueryOptions(historyId: number, streamStatus: RuntimeStreamStatus) {
   return {
-    queryKey: ['codex-chat-history', historyId] as const,
+    queryKey: codexChatHistoryQueryKey(historyId),
     queryFn: () => requestJson<{ success: boolean; record: GenerationHistoryRecord }>(`/api/generation-history/${historyId}`, { cache: 'no-store' }),
     refetchInterval: (query: { state: { data?: { record: GenerationHistoryRecord } } }) => {
       const status = query.state.data?.record.generation_status

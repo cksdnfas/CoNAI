@@ -20,9 +20,9 @@ import { canUseChatProfile, resolveChatAccess } from './codexChatAccess'
 import { withGenerationOutcomes } from './codexChatMedia'
 import { CodexChatError, CodexChatService, runCodexOrderTurn, type CodexChatStreamEvent } from './codexChatService'
 import { CodexChatStore, type CodexChatMessageRecord, type CodexChatThreadRecord } from './codexChatStore'
-import { buildGroupLlmMessages, groupSummaryOn } from './groupChatContext'
+import { buildGroupLlmMessages, groupSummaryOn, withoutStaleWakes } from './groupChatContext'
 import { GroupChatService } from './groupChatService'
-import { appendUserDirective, buildChatMessages, resolveContextConfig, sendableMessages, splitTurns } from './llmChatContext'
+import { appendUserDirective, buildChatMessages, directContextTurns, resolveContextConfig, sendableMessages, splitTurns, unsummarizedMessages } from './llmChatContext'
 import { runLlmOrderTurn, type GroupReplyResult } from './llmChatService'
 import { withServerContextLimit } from './serverContextLimit'
 
@@ -104,11 +104,19 @@ export async function runChatOrder(requester: McpRequester, threadId: number, me
         buildInput: (reference) => [reference, '[Conversation record] The conversation as it took place in this chat. The last message is your reply the instructions are about.', summary, orderTranscript(window, nameOf), '[/Conversation record]', directive].filter(Boolean).join('\n\n'),
       })
     } else {
-      const attachmentTexts = await inlineTextsForChat(profile, requester.accountId, history)
-      const attachedImages = await loadAttachedImages(profile, chatProfileRequester(requester, context), history)
+      const room: CodexChatThreadRecord = summarized ? { ...thread, summary_enabled: 0 } : thread
+      const sized = group ? profile : withServerContextLimit(profile)
+      const config = resolveContextConfig(thread, sized)
+      if (summarized) config.summaryEnabled = false
+      const candidates = group
+        ? withoutStaleWakes(sendableMessages(unsummarizedMessages(history, room, { summaryEnabled: groupSummaryOn(room) }))).slice(-groupLimitsOf(thread).window)
+        : directContextTurns(history, thread, config).flat()
+      // Keep the entire suffix, including hidden wakes: their images still participate in newest-first image selection.
+      const attachmentHistory = candidates.length ? history.filter((message) => message.id >= candidates[0].id) : []
+      const attachmentTexts = await inlineTextsForChat(profile, requester.accountId, attachmentHistory)
+      const attachedImages = await loadAttachedImages(profile, chatProfileRequester(requester, context), attachmentHistory)
       const done = (call: Parameters<typeof chatOrderDone>[1]) => chatOrderDone(kind, call)
       if (group) {
-        const room: CodexChatThreadRecord = summarized ? { ...thread, summary_enabled: 0 } : thread
         const members = ChatGroupStore.members(threadId).flatMap((member) => ChatProfileStore.find(member.profile_id) ?? [])
         const maxTokens = ChatGroupStore.member(threadId, profile.id)?.max_tokens ?? thread.max_tokens ?? profile.maxTokens
         result = await runLlmOrderTurn({
@@ -120,9 +128,6 @@ export async function runChatOrder(requester: McpRequester, threadId: number, me
           }), directive),
         })
       } else {
-        const sized = withServerContextLimit(profile)
-        const config = resolveContextConfig(thread, sized)
-        if (summarized) config.summaryEnabled = false
         result = await runLlmOrderTurn({
           chatContext: context, requester, threadId, profile: sized, signal: run.signal, emit, done, generation: { maxTokens: config.maxTokens },
           buildMessages: (tools) => appendUserDirective(buildChatMessages({

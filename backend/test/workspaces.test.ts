@@ -269,6 +269,30 @@ test('project files share files while preserving revisions, execution boundaries
       await board.close()
     } finally { unbindBoard() }
   })
+  await t.test('a direct chat sends workspace and persona instructions in one leading system message', async s => {
+    const { LlmChatService } = await import('../src/services/codex-chat/llmChatService')
+    const configured = ChatProfileStore.create({
+      name: 'Workspace instructions', engine: 'llm', providerName: 'workspace-test',
+      systemPrompt: 'Keep the configured character.', summaryEnabled: false,
+      mcpEnabled: true, mcpScopes: ['read'], workspaces: [{ id: project.id, write: false }],
+    })
+    const room = CodexChatStore.createThread(null, 'Workspace instructions', 'llm', configured.id)
+    const bodies: Array<{ messages: Array<{ role: string; content: string }>; tools?: Array<{ function: { name: string } }> }> = []
+    s.mock.method(globalThis, 'fetch', async (_url: unknown, init?: RequestInit) => {
+      if (init?.method !== 'POST') return new Response('', { status: 404 })
+      bodies.push(JSON.parse(String(init.body)))
+      return Response.json({ choices: [{ message: { role: 'assistant', content: 'Ready.' }, finish_reason: 'stop' }], usage: { prompt_tokens: 50, completion_tokens: 3 } })
+    })
+    await LlmChatService.sendMessage(requester, CodexChatStore.findThreadById(room)!, 'Read the project instructions.', () => {})
+    assert.equal(CodexChatStore.latestMessage(room)?.status, 'completed')
+    assert.equal(bodies.length, 1)
+    assert.ok(bodies[0].tools?.some(tool => tool.function.name === 'workspace_read'))
+    const messages = bodies[0].messages
+    assert.equal(messages.filter(message => message.role === 'system').length, 1)
+    assert.equal(messages[0].role, 'system')
+    assert.match(messages[0].content, /Use Korean names\.[\s\S]*Keep the configured character\./)
+  })
+
   await t.test('with several projects each call names its project, access is per project and a revoked link is refused at once', async () => {
     const { workspaceInstructions } = await import('../src/services/codex-chat/chatWorkspace')
     const second = await service.create('bootstrap', 'Second project', 'Second guide')

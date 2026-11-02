@@ -88,6 +88,7 @@ import {
   codexChatOrderMutationKey,
   codexChatMediaQueryKey,
   codexChatThreadQueryKey,
+  isChatSummaryEnabled,
   PENDING_DRAFT_KEY,
   useCodexChat,
   useCodexChatLiveState,
@@ -724,7 +725,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
           if (isGroup && name === 'compact') throw new Error(t({ ko: '그룹 방에서는 쓸 수 없어.', en: 'Not available in group rooms.' }))
           if (name === 'compact') {
             // Codex folds its own memory; an LLM chat folds into its summary, which must then be on.
-            const summaryOff = !isCodexThread && (thread?.summary_enabled === null || thread?.summary_enabled === undefined ? profile?.summaryEnabled !== true : thread.summary_enabled !== 1)
+            const summaryOff = !isCodexThread && !isChatSummaryEnabled(thread?.summary_enabled, profile?.summaryEnabled)
             if (summaryOff && !await confirm({ title: t({ ko: '지금 요약', en: 'Summarize now' }), description: t({ ko: '이 채팅의 대화 요약이 켜져. 계속할까?', en: 'This turns the chat’s conversation summary on. Continue?' }), confirmLabel: t({ ko: '요약', en: 'Summarize' }) })) return
             await compactMutation.mutateAsync({ threadId: activeThreadId, enableSummary: !isCodexThread })
             showSnackbar({ message: isCodexThread ? t({ ko: '대화를 압축했어.', en: 'Chat compacted.' }) : t({ ko: '대화를 요약했어.', en: 'Chat summarized.' }) })
@@ -926,7 +927,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   // A direct LLM chat whose background summary failed: older turns may have left the request unsummarized.
   // A room's summary is its own switch; a direct chat's follows the profile unless set.
   const summaryFailed = Boolean(thread?.summary_error) && !isCodexThread
-    && (isGroup ? thread?.summary_enabled === 1 : thread?.summary_enabled === null || thread?.summary_enabled === undefined ? profile?.summaryEnabled === true : thread.summary_enabled === 1)
+    && (isGroup ? thread?.summary_enabled === 1 : isChatSummaryEnabled(thread?.summary_enabled, profile?.summaryEnabled))
   const warning = profileMissing
     ? t({ ko: '이 채팅의 프로필이 지워졌거나 꺼져 있어.', en: 'This chat’s profile was deleted or turned off.' })
     : codexUnavailable && !codexStatusQuery.isPending

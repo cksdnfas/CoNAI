@@ -770,7 +770,7 @@ function toColumns(input: ChatProfileInput, options: { draft?: boolean; strictKe
     model: engine === 'llm' ? null : text(input.model, MODEL_MAX_LENGTH) || null,
     llm_runtime: engine === 'llm' && input.llmRuntime === 'pi' ? 'pi' : null,
     reasoning_effort: input.reasoningEffort || null,
-    reasoning_budget_tokens: engine === 'llm' ? optionalNumber('reasoningBudgetTokens', CHAT_PROFILE_LIMITS.maxTokens, true) : null,
+    reasoning_budget_tokens: engine !== 'codex' ? optionalNumber('reasoningBudgetTokens', CHAT_PROFILE_LIMITS.maxTokens, true) : null,
     extra_params: extraParams || null,
     system_prompt: text(input.systemPrompt, TEXT_MAX_LENGTH),
     prompt_sections: JSON.stringify(normalizeSections(input.promptSections ?? [])),

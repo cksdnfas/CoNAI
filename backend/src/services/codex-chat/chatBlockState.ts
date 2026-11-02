@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto'
 import { chatBlockToneText } from '@conai/shared'
 import type { ChatProfile } from './chatProfiles'
 import { fieldRuleLines, type ChatBlockField, type ChatDisplayBlock } from './chatStyle'
@@ -254,10 +253,6 @@ export function blockStateContentText(blocks: ChatDisplayBlock[], state: Record<
     ...fieldRuleLines(block).map((line) => `Field rule: ${line}`),
   ].filter(Boolean).join('\n'))
   return parts.join('\n')
-}
-
-export function blockStateHash(text: string) {
-  return createHash('sha1').update(text).digest('hex').slice(0, 10)
 }
 
 /** Validates a hand edit's data: a JSON object, small enough to keep. Returns the reason when it is not. */

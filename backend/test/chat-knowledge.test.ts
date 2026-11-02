@@ -240,17 +240,25 @@ test('chat knowledge: linked search, file versions, connected history, group mem
 
   await t.test("group rooms: each member keeps its own lore spacing", () => {
     const room = ChatGroupStore.create(null, '로어 회의', [rina.id, kai.id], rina.id)
+    const former = ChatProfileStore.create({ name: '지난 참가자', engine: 'llm', providerName: 'conn' })
     const say = (role: 'user' | 'assistant', content: string, speaker?: number, replyId?: string) => CodexChatStore.addMessage({
       thread_id: room, role, content, tool_calls: [], status: 'completed', error: null,
       ...(speaker ? { speaker_profile_id: speaker } : {}), ...(replyId ? { routing: { replyId, replyTo: null, recipients: ['user'] } } : {}),
     })
+    say('assistant', '먼저 다녀올게.', former.id, 'g-former')
     say('user', '축제 장소를 정하자.')
-    proposeLore({ threadId: room, profileId: rina.id, kind: 'group', replyId: 'g-r1' }, { title: '축제 장소', content: '축제는 등대 광장에서 연다.' })
+    const rinaLore = proposeLore({ threadId: room, profileId: rina.id, kind: 'group', replyId: 'g-r1' }, { title: '축제 장소', keys: [former.name, '광장'], content: '축제는 등대 광장에서 연다.' })
+    assert.deepEqual(rinaLore.keys, ['광장'], 'historical speakers are excluded even when they are not current members')
     say('assistant', '등대 광장이 좋아.', rina.id, 'g-r1')
+    for (let index = 0; index < 25; index += 1) say('assistant', '등대 앞에서 준비하자.', kai.id)
     const kaiLore = proposeLore({ threadId: room, profileId: kai.id, kind: 'group', replyId: 'g-k1' }, { title: '축제 예산', content: '예산 상한은 120만 원이다.' })
     assert.equal(kaiLore.title, '축제 예산', "Rina's entry does not hold back Kai's")
     say('assistant', '예산은 120만 원.', kai.id, 'g-k1')
+    for (let index = 0; index < 25; index += 1) say('user', '\t\u3000\n')
     assert.throws(() => proposeLore({ threadId: room, profileId: rina.id, kind: 'group', replyId: 'g-r2' }, { title: '축제 날짜', content: '축제는 10월 18일.' }), /within the last 3 replies/)
+    CodexChatStore.addMessage({ thread_id: room, role: 'user', content: 'The night market is on October 18.', display_content: '이건 기억해줘: 야시장은 10월 18일이야.', tool_calls: [], status: 'completed', error: null })
+    const asked = proposeLore({ threadId: room, profileId: rina.id, kind: 'group', replyId: 'g-r3' }, { title: '야시장 날짜', keys: [former.name, '등대', '야시장'], content: '야시장은 10월 18일.' })
+    assert.deepEqual(asked.keys, ['야시장'], 'blank messages do not crowd out recent text or historical speaker exclusions')
   })
 
   await t.test('group rooms: only the latest wake of each automation stays in view; Codex members get the room summary for a gap', () => {

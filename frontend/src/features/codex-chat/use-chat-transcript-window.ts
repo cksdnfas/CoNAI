@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type UIEvent } from 'react'
-import type { CodexChatMessage } from '@/lib/api-codex-chat'
+import { CHAT_MESSAGE_PAGE_SIZE, type CodexChatMessage } from '@/lib/api-codex-chat'
 import type { CodexChatApi } from './codex-chat-context'
 
-const MESSAGE_PAGE_SIZE = 80
 const MESSAGE_FLASH_MS = 1600
 /** Chats left part-way up remember their position while switching between the list and transcript. */
 const readingPositions = new Map<number, { top: number; firstId: number | null }>()
@@ -33,7 +32,7 @@ export function useChatTranscriptWindow({ activeThreadId, messages, isTranscript
   const [historyWindow, setHistoryWindow] = useState<{ threadId: number | null; firstId: number | null }>({ threadId: null, firstId: null })
   const firstId = historyWindow.threadId === activeThreadId ? historyWindow.firstId : activeThreadId === null ? null : readingPositions.get(activeThreadId)?.firstId
   const firstIndex = messages.findIndex((message) => message.id === firstId)
-  const visibleCount = firstIndex >= 0 ? messages.length - firstIndex : MESSAGE_PAGE_SIZE
+  const visibleCount = firstIndex >= 0 ? messages.length - firstIndex : CHAT_MESSAGE_PAGE_SIZE
   const focusIndex = messageFocus ? messages.findIndex((message) => message.id === messageFocus.messageId) : -1
   const windowCount = focusIndex >= 0 ? Math.max(visibleCount, messages.length - focusIndex) : visibleCount
   const visibleMessages = useMemo(() => messages.slice(-windowCount), [messages, windowCount])
@@ -76,7 +75,7 @@ export function useChatTranscriptWindow({ activeThreadId, messages, isTranscript
     prependFirstRef.current = visibleMessages[0]?.id ?? null
     followBottomRef.current = false
     if (visibleCount < messages.length) {
-      setHistoryWindow({ threadId: activeThreadId, firstId: messages[Math.max(0, messages.length - visibleCount - MESSAGE_PAGE_SIZE)]?.id ?? null })
+      setHistoryWindow({ threadId: activeThreadId, firstId: messages[Math.max(0, messages.length - visibleCount - CHAT_MESSAGE_PAGE_SIZE)]?.id ?? null })
       return
     }
     try {

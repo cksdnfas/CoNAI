@@ -6,7 +6,7 @@ import type { ChatExecutionContext, ChatPageSnapshot, ChatProposal } from '@cona
 import { isCodexChatCreationTool } from '@conai/shared'
 import { ChatProposalStore, isChatProposalToolAvailable } from './chatProposals'
 import { beginDirectReply } from './chatReplies'
-import type { McpRequester } from '../../mcp/context'
+import { isChatOwnTool, type McpRequester } from '../../mcp/context'
 import type { LlmGenerationOptions } from '../llmGenerationOptions'
 import { profileGenerationOptions } from './chatProfiles'
 import { inlineTextsForChat, loadAttachedImages, withLatestMediaGeneration } from './chatAttachments'
@@ -334,7 +334,7 @@ async function runReply(turn: LlmTurn, requester: McpRequester, thread: CodexCha
   return streamReply(turn, requester, profile, async (tools, judged) => {
     const { history, attachmentTexts, attachedImages, generatedImages, continuation, reference, reactionMessages, extraTokens } = await prepare(tools)
     if (inSession) {
-      const sessionTurn = await buildClaudeSessionTurn({ requester, threadId: thread.id, profile, history, historySource: turn.historySource, page: turn.page, withTools: tools.length > 0, runtime: sessionRuntime ?? 'claude', judged, signal: turn.controller.signal })
+      const sessionTurn = await buildClaudeSessionTurn({ requester, threadId: thread.id, profile, history, historySource: turn.historySource, page: turn.page, withTools: tools.some(tool => !isChatOwnTool(tool.function.name)), runtime: sessionRuntime ?? 'claude', judged, signal: turn.controller.signal })
       turn.engineSession = sessionTurn.session
       turn.contextMeta = { ...sessionTurn.contextMeta, model: resolveProfileModel(profile, 'chat')?.model ?? null }
       return sessionTurn.messages
@@ -519,7 +519,11 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
     }
     if (!turn.engineSession && offeredTools.some(tool => tool.function.name === 'workspace_read')) {
       const instruction = workspaceInstructions(chatWorkspaces(requester, turn.threadId, profile.id))
-      if (instruction) built.unshift({ role: 'system', content: instruction })
+      if (instruction) {
+        const system = built.find(message => message.role === 'system')
+        if (system) system.content = `${instruction}\n\n${system.content}`
+        else built.unshift({ role: 'system', content: instruction })
+      }
     }
     // Record the completed session without capturing its private history or filesystem path.
     const engineSession = turn.engineSession ? {

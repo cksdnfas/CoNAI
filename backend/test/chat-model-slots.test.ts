@@ -110,9 +110,16 @@ test('model rows: connection ▸ models, legacy pairs, resolution, sync, deletio
     ChatProfileStore.delete(profile.id)
   })
 
-  await t.test('Claude profiles keep the CLI-only effort levels that API profiles refuse', () => {
-    const profile = ChatProfileStore.create({ name: 'Claude max', engine: 'claude', model: 'opus', reasoningEffort: 'max' })
+  await t.test('Claude profiles preserve their thinking budget and CLI-only effort levels', () => {
+    const profile = ChatProfileStore.create({ name: 'Claude max', engine: 'claude', model: 'opus', reasoningEffort: 'max', reasoningBudgetTokens: 4096 })
     assert.equal(profileGenerationOptions(profile).reasoningEffort, 'max')
+    assert.equal(profileGenerationOptions(ChatProfileStore.find(profile.id)!).reasoningBudgetTokens, 4096)
+    ChatProfileStore.update(profile.id, { systemPrompt: 'Updated instructions.' })
+    assert.equal(ChatProfileStore.find(profile.id)!.reasoningBudgetTokens, 4096)
+    ChatProfileStore.update(profile.id, { reasoningBudgetTokens: 8192 })
+    assert.equal(profileGenerationOptions(ChatProfileStore.find(profile.id)!).reasoningBudgetTokens, 8192)
+    ChatProfileStore.update(profile.id, { reasoningBudgetTokens: null })
+    assert.equal(ChatProfileStore.find(profile.id)!.reasoningBudgetTokens, null)
     ChatProfileStore.delete(profile.id)
     assert.throws(() => ChatProfileStore.create({ name: 'Claude none', engine: 'claude', model: 'opus', reasoningEffort: 'none' }), ChatProfileError)
     assert.throws(() => ChatProfileStore.create({ name: 'API xhigh', engine: 'llm', reasoningEffort: 'xhigh' }), ChatProfileError)

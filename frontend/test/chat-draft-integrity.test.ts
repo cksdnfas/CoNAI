@@ -13,14 +13,18 @@ async function useDom(t: TestContext) {
   for (const [key, value] of Object.entries(globals)) Object.defineProperty(globalThis, key, { configurable: true, value })
   const { act } = await import('react')
   const { createRoot } = await import('react-dom/client')
-  const { QueryClient } = await import('@tanstack/react-query')
+  const { QueryClient, notifyManager } = await import('@tanstack/react-query')
   const root = createRoot(dom.window.document.getElementById('root')!)
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity, gcTime: Infinity }, mutations: { retry: false } } })
   client.setQueryData(['runtime-language-settings'], { general: { language: 'en' } })
   t.after(async () => {
-    await act(async () => root.unmount())
-    for (const mutation of client.getMutationCache().getAll()) mutation.destroy()
-    client.clear()
+    await act(async () => {
+      root.unmount()
+      for (const mutation of client.getMutationCache().getAll()) mutation.destroy()
+      client.clear()
+      // Drain notifications on their own scheduler before removing the jsdom window.
+      await new Promise<void>(resolve => notifyManager.schedule(resolve))
+    })
     dom.window.close()
     for (const [key, descriptor] of previous) {
       if (descriptor) Object.defineProperty(globalThis, key, descriptor)

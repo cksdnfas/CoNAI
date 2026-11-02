@@ -11,7 +11,7 @@ import { ChatGroupStore } from './chatGroupStore'
 import { ChatProfileStore } from './chatProfiles'
 import { ChatProposalStore } from './chatProposals'
 import { userPersonaForThread } from './chatUserProfiles'
-import { CodexChatStore, type CodexChatMessageRecord } from './codexChatStore'
+import { CodexChatStore } from './codexChatStore'
 import { judgeGrantsLore } from './chatJudge'
 import { isChatOrderReply } from './chatOrderRuns'
 import { loadChatSettings } from './chatSettings'
@@ -116,13 +116,13 @@ export function usefulLoreKeys(keys: string[], names: Array<string | null | unde
 }
 
 /** Names that come up in every turn of the chat: the user's in this chat, then every profile that speaks in it. */
-function chatNames(threadId: number, profileId: number, messages: CodexChatMessageRecord[]) {
+function chatNames(threadId: number, profileId: number) {
   const thread = CodexChatStore.findThreadById(threadId)
   const speakers = new Set<number>([profileId])
   if (thread?.profile_id) speakers.add(thread.profile_id)
   for (const member of ChatGroupStore.members(threadId)) speakers.add(member.profile_id)
-  for (const message of messages) if (message.speaker_profile_id) speakers.add(message.speaker_profile_id)
-  return [thread ? userPersonaForThread(thread).name : null, ...[...speakers].map((id) => ChatProfileStore.find(id)?.name)]
+  for (const id of CodexChatStore.listSpeakerProfileIds(threadId)) if (id) speakers.add(id)
+  return [thread ? userPersonaForThread(thread).name : null, ...ChatProfileStore.listNames({ ids: [...speakers] }).map((profile) => profile.name)]
 }
 
 /**
@@ -132,14 +132,14 @@ function chatNames(threadId: number, profileId: number, messages: CodexChatMessa
  * entry does not hold back what another member learned.
  */
 export function loreProposedRecently(context: Pick<ChatExecutionContext, 'threadId' | 'kind' | 'profileId'>) {
-  const messages = CodexChatStore.listMessages(context.threadId)
-  const latestUser = messages.map((message) => message.role).lastIndexOf('user')
-  const user = latestUser >= 0 ? messages[latestUser] : null
+  const latestUser = CodexChatStore.latestUserMessageId(context.threadId)
+  const user = latestUser === null ? null : CodexChatStore.findMessage(context.threadId, latestUser)
   if (user && LORE_REQUEST_WORDS.test(`${user.content}\n${user.display_content ?? ''}`)) return false
-  const answered = context.kind === 'direct' && latestUser >= 0 ? messages.slice(0, latestUser) : messages
-  const replies = answered.filter((message) => message.role === 'assistant' && (context.kind !== 'group' || message.speaker_profile_id === context.profileId))
-  const recent = new Set(replies.slice(-LORE_PROPOSAL_SPACING).flatMap((message) => message.routing?.replyId ?? []))
-  return recent.size > 0 && ChatProposalStore.listForThread(context.threadId).some((row) => row.proposal.kind === 'lore' && recent.has(row.replyId))
+  const replies = CodexChatStore.listOutcomeMessages({ threadId: context.threadId }, LORE_PROPOSAL_SPACING,
+    context.kind === 'direct' ? latestUser ?? undefined : undefined,
+    context.kind === 'group' ? context.profileId : undefined)
+  const recent = new Set(replies.flatMap((message) => message.routing?.replyId ?? []))
+  return [...recent].some((replyId) => ChatProposalStore.forReply(context.threadId, replyId, 'lore').length > 0)
 }
 
 /** The file a proposal carries: a plain text file name (no folders) and UTF-8 text up to the limit. */
@@ -167,9 +167,8 @@ export function proposeLore(context: ChatExecutionContext, input: SaveLoreInput)
   const keys = [...new Set(((input.keys ?? []) as unknown[]).map((key) => (typeof key === 'string' ? key.trim() : '')).filter(Boolean))]
   if (keys.length > LORE_PROPOSAL_LIMITS.keys) throw new LoreProposalError(`At most ${LORE_PROPOSAL_LIMITS.keys} keys.`)
   if (keys.some((key) => key.length > LORE_PROPOSAL_LIMITS.key)) throw new LoreProposalError(`A key is over ${LORE_PROPOSAL_LIMITS.key} characters.`)
-  const messages = CodexChatStore.listMessages(context.threadId)
-  const recent = messages.filter((message) => (message.role === 'user' || message.role === 'assistant') && message.content.trim()).map((message) => message.content)
-  const useful = usefulLoreKeys(keys, chatNames(context.threadId, context.profileId, messages), recent)
+  const recent = CodexChatStore.listRecentMessageTexts(context.threadId, CHAT_COMMON_WINDOW)
+  const useful = usefulLoreKeys(keys, chatNames(context.threadId, context.profileId), recent)
   const content = typeof input.content === 'string' ? input.content.trim() : ''
   if (!content) throw new LoreProposalError('content is empty.')
   if (content.length > LORE_PROPOSAL_LIMITS.content) throw new LoreProposalError(`content is over ${LORE_PROPOSAL_LIMITS.content} characters.`)

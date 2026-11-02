@@ -3,7 +3,7 @@ import { MessageSquare } from 'lucide-react'
 import { EmptyState } from '@/components/ui/empty-state'
 import { LoadingState } from '@/components/ui/loading-state'
 import { useI18n } from '@/i18n'
-import { CHAT_PROFILES_QUERY_KEY, deleteCodexChatThread, getCodexChatStatus, getCodexChatThreadSummaries, listChatProfiles } from '@/lib/api-codex-chat'
+import { CHAT_PROFILES_QUERY_KEY, CHAT_STATUS_QUERY_KEY, deleteCodexChatThread, getCodexChatStatus, getCodexChatThreadSummaries, listChatProfiles } from '@/lib/api-codex-chat'
 import { CODEX_CHAT_THREADS_QUERY_KEY, useCodexChat } from './codex-chat-context'
 import { activeChatRoomOptions, useChatRoomPages } from './use-chat-room-directory'
 import { useChatThreadActions } from './use-chat-thread-actions'
@@ -19,7 +19,7 @@ export function CodexChatPage() {
   const chat = useCodexChat()
   const { updateListEntry, forgetThread } = useChatThreadActions(chat)
   const leaveChatPage = useLeaveCodexChatPage()
-  const statusQuery = useQuery({ queryKey: ['codex-chat-status'], queryFn: getCodexChatStatus, staleTime: 60_000, retry: false })
+  const statusQuery = useQuery({ queryKey: CHAT_STATUS_QUERY_KEY, queryFn: getCodexChatStatus, staleTime: 60_000, retry: false })
   // The chat list's own cache: the page adds no directory read of its own.
   const threadsQuery = useChatRoomPages(activeChatRoomOptions(''), Boolean(chat?.canUse))
   const profilesQuery = useQuery({ queryKey: CHAT_PROFILES_QUERY_KEY, queryFn: listChatProfiles, staleTime: 30_000, enabled: Boolean(chat?.canUse) })

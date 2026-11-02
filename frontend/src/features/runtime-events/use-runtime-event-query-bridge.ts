@@ -6,12 +6,13 @@ import { refreshChatGenerationQueries, refreshRuntimeQueryKeys, type ChatGenerat
 import type { CharactersChangedEventPayload, ChatThreadUpdatedEventPayload } from '@conai/shared'
 import { AUDIO_QUERY_KEY } from '@/lib/api-audio'
 import { CHARACTER_LIBRARY_QUERY_KEY, invalidateCharacterLibrary } from '@/lib/api-character-library'
-import { invalidateChatProfileViews, type CodexChatThreadDetail } from '@/lib/api-codex-chat'
+import { chatTaskQueryKey, invalidateChatProfileViews, type CodexChatThreadDetail } from '@/lib/api-codex-chat'
 import { CHAT_ROUTINES_QUERY_KEY } from '@/lib/api-chat-routines'
 import { PLUGINS_QUERY_KEY } from '@/lib/api-plugins'
 import { POSTS_QUERY_KEY, invalidatePostScopes } from '@/lib/api-posts'
 import { RUNTIME_JOB_QUERY_KEY } from '@/lib/use-runtime-job'
 import { refetchActiveChatQuery, scheduleChatDirectoryRefresh } from '@/features/codex-chat/chat-query-refresh'
+import { codexChatThreadQueryKey } from '@/features/codex-chat/codex-chat-context'
 
 /**
  * 런타임 이벤트 → react-query 캐시 반영 브리지.
@@ -348,14 +349,14 @@ export function useRuntimeEventQueryBridge() {
         const { threadId } = envelope.payload as { threadId: number }
         void scheduleChatDirectoryRefresh(queryClient)
         void refreshRuntimeQueryKeys(queryClient, [
-          ['codex-chat-task', threadId],
+          chatTaskQueryKey(threadId),
         ])
-        void refetchActiveChatQuery(queryClient, ['codex-chat-thread', threadId])
+        void refetchActiveChatQuery(queryClient, codexChatThreadQueryKey(threadId))
         return
       }
       case 'chat.thread.updated': {
         const { threadId, title } = envelope.payload as ChatThreadUpdatedEventPayload
-        const key = ['codex-chat-thread', threadId] as const
+        const key = codexChatThreadQueryKey(threadId)
         const state = queryClient.getQueryState<CodexChatThreadDetail>(key)
         if (typeof title === 'string' && state?.data && !state.isInvalidated && state.fetchStatus !== 'fetching') {
           queryClient.setQueryData<CodexChatThreadDetail>(key, (detail) => detail ? { ...detail, thread: { ...detail.thread, title } } : detail)

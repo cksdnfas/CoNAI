@@ -1,5 +1,5 @@
 import { createContext, useContext } from 'react'
-import type { ChatFlagSnapshot, ChatMediaAttachment, ChatOpeningMessage, CodexChatToolCall } from '@/lib/api-codex-chat'
+import type { ChatFlagSnapshot, ChatMediaAttachment, ChatOpeningMessage, CodexChatThread, CodexChatToolCall } from '@/lib/api-codex-chat'
 import type { StoredFileEntry, ChatMessageRouting, ChatReplyQuote, ChatChoiceProposal } from '@conai/shared'
 
 /** A post or comment put on the next message with 참조 (sent as a `post:` link line above the text). */
@@ -21,6 +21,10 @@ export function codexChatThreadQueryKey(threadId: number | null) {
 
 export function codexChatMediaQueryKey(threadId: number | null) {
   return ['codex-chat-media', threadId] as const
+}
+
+export function codexChatHistoryQueryKey(historyId: number) {
+  return ['codex-chat-history', historyId] as const
 }
 
 /** Compacting (summarizing) a chat, from the menu, /compact or the context view: the chat waits until it ends. */
@@ -57,6 +61,10 @@ export type CodexChatPendingChat = {
  */
 export function defaultThreadId(threads: Array<{ id: number; archived?: 0 | 1; automation?: unknown }>) {
   return (threads.find((thread) => !thread.archived && !thread.automation) ?? threads.find((thread) => !thread.archived) ?? threads[0])?.id ?? null
+}
+
+export function isChatSummaryEnabled(summaryEnabled: CodexChatThread['summary_enabled'] | undefined, profileSummaryEnabled: boolean | null | undefined) {
+  return summaryEnabled === null || summaryEnabled === undefined ? profileSummaryEnabled === true : summaryEnabled === 1
 }
 
 /** One group member's reply while it streams. */

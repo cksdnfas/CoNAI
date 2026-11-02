@@ -162,7 +162,7 @@ export async function getChatDiagnostics(requester: McpRequester, threadId: numb
 export async function exportChatDiagnostics(requester: McpRequester, threadId: number, messageId: number, alternative?: unknown) {
   const result = await getChatDiagnostics(requester, threadId, messageId, alternative)
   const thread = CodexChatStore.findThread(threadId, requester.accountId)
-  const message = CodexChatStore.listMessages(threadId).find((entry) => entry.id === messageId)
+  const message = CodexChatStore.findMessage(threadId, messageId)
   if (!thread || !message || scopeFor(requester.accountId, profileOf(thread, message)) !== result.scope) throw new ChatDiagnosticsError('진단 권한이 변경됐어.', 403)
   const owner = fileOwnerKey(requester.accountId)
   const date = backupDateOf(undefined)

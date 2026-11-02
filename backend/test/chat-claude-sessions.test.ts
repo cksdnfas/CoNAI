@@ -45,6 +45,34 @@ test('claude sessions: forked turns, input once, resets and cleanup', { timeout:
     assert.deepEqual(line.message.content, [{ type: 'text', text: 'new' }, { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: 'QUJD' } }])
   })
 
+  await t.test('mutable session notes restore earlier values and explicitly withdraw cleared instructions', async () => {
+    const { pendingAuthorNote, nextLoreSent } = await import('../src/services/codex-chat/chatSessionMemory')
+    const { userPersonaOf } = await import('../src/services/codex-chat/chatUserProfiles')
+    const profile = ChatProfileStore.draft({ name: 'Notes', engine: 'claude', model: 'haiku' })
+    const user = userPersonaOf(null)
+    let sent = new Set<string>(['remembered-lore-entry'])
+    const deliver = (author_note: string | null) => {
+      const pending = pendingAuthorNote({ author_note, author_note_depth: null }, profile, sent, user)
+      sent = new Set(nextLoreSent(sent, pending.keys))
+      return pending.text
+    }
+    assert.equal(deliver(null), '')
+    assert.match(deliver('Use a quiet tone.'), /Use a quiet tone\./)
+    const earlierKeys = [...sent]
+    assert.equal(deliver('Use a quiet tone.'), '')
+    assert.match(deliver('Use an urgent tone.'), /Use an urgent tone\./)
+    sent = new Set([...earlierKeys, ...sent])
+    assert.match(deliver('Use a quiet tone.'), /Use a quiet tone\./)
+    assert.match(deliver(null), /author's note.*cleared[\s\S]*Do not follow/i)
+    assert.equal(deliver(null), '')
+    assert.match(deliver('Use a quiet tone.'), /Use a quiet tone\./)
+    assert.ok(sent.has('remembered-lore-entry'), 'mutable references must not discard remembered lore')
+    const learned = Array.from({ length: 600 }, (_, index) => `new-lore-entry-${index}`)
+    sent = new Set(nextLoreSent(sent, learned))
+    assert.match(deliver(null), /author's note.*cleared[\s\S]*Do not follow/i)
+    assert.ok(sent.has(learned.at(-1)!), 'withdrawing a note preserves the newest remembered lore')
+  })
+
   await t.test('the past goes once, given input is not repeated, and a compaction, prompt change or rewrite starts over', async () => {
     const requester = { accountId: 1, accountType: 'admin' as const }
     const profile = ChatProfileStore.create({ name: '루나', engine: 'claude', model: 'haiku', systemPrompt: '너는 루나야.', authorNote: '분위기는 차분하게.' })

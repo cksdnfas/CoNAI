@@ -1,5 +1,6 @@
 import type { QueryClient } from '@tanstack/react-query'
 import type { RuntimeStreamStatus } from './runtime-event-fallback'
+import { codexChatHistoryQueryKey, codexChatMediaQueryKey, codexChatThreadQueryKey } from '../codex-chat/codex-chat-context'
 
 /** Live events drive updates; retain a slow watchdog and the original 3s disconnected fallback. */
 export function chatGenerationPollInterval(status: RuntimeStreamStatus) {
@@ -17,9 +18,9 @@ export type ChatGenerationRefresh = {
 export function refreshChatGenerationQueries(queryClient: QueryClient, result: ChatGenerationRefresh | ChatGenerationRefresh[]) {
   const results = Array.isArray(result) ? result : [result]
   return refreshRuntimeQueryKeys(queryClient, results.flatMap((entry) => [
-    ...(entry.threadId == null ? [] : [['codex-chat-thread', entry.threadId], ['codex-chat-media', entry.threadId]]),
+    ...(entry.threadId == null ? [] : [codexChatThreadQueryKey(entry.threadId), codexChatMediaQueryKey(entry.threadId)]),
     ...(entry.jobId == null ? [] : [['image-generation-history', 'codex-chat-job', entry.jobId]]),
-    ...(entry.historyId == null ? [] : [['codex-chat-history', entry.historyId]]),
+    ...(entry.historyId == null ? [] : [codexChatHistoryQueryKey(entry.historyId)]),
     ...(entry.compositeHash ? [['image-detail', entry.compositeHash]] : []),
   ]))
 }

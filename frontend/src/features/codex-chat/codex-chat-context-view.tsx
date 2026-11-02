@@ -20,7 +20,7 @@ import { LorebookBlock } from './chat-lorebook-block'
 import { LinkedFilesBlock } from './chat-linked-files-block'
 import { ChatProfileAvatar } from './chat-profile-avatar'
 import { ChatUserProfileRow } from './chat-user-profiles'
-import { CODEX_CHAT_THREADS_QUERY_KEY, codexChatCompactMutationKey, codexChatThreadQueryKey } from './codex-chat-context'
+import { CODEX_CHAT_THREADS_QUERY_KEY, codexChatCompactMutationKey, codexChatThreadQueryKey, isChatSummaryEnabled } from './codex-chat-context'
 import { applyChatThreadUpdate, runChatThreadDetailMutation } from './chat-query-refresh'
 import { CHAT_MODEL_OPTIONS_QUERY_KEY, listChatModelOptions } from '@/lib/api-codex-chat'
 import { parseServerDate } from '@/lib/server-time'
@@ -451,7 +451,7 @@ export function CodexChatContextView({ thread, profiles, segments, profileTurns,
   const summaryMode: SummaryMode = thread.summary_enabled === null ? 'profile' : thread.summary_enabled === 1 ? 'on' : 'off'
   const profileLabel = t({ ko: '프로필', en: 'Profile' })
   const effectiveMaxTokens = thread.max_tokens ?? profileMaxTokens
-  const summaryOn = thread.summary_enabled === null ? profileSummaryEnabled === true : thread.summary_enabled === 1
+  const summaryOn = isChatSummaryEnabled(thread.summary_enabled, profileSummaryEnabled)
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pb-4 *:shrink-0">

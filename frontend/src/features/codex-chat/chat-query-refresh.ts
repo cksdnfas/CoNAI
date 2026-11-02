@@ -1,5 +1,5 @@
 import type { QueryClient, QueryFilters, QueryKey } from '@tanstack/react-query'
-import { getCodexChatThread, mergeThreadBefore, mergeThreadTail, type CodexChatThread, type CodexChatThreadDetail } from '@/lib/api-codex-chat'
+import { CHAT_MESSAGE_PAGE_SIZE, getCodexChatThread, mergeThreadBefore, mergeThreadTail, type CodexChatThread, type CodexChatThreadDetail } from '@/lib/api-codex-chat'
 import { CODEX_CHAT_THREADS_QUERY_KEY, codexChatThreadQueryKey } from './codex-chat-context'
 
 /**
@@ -46,7 +46,7 @@ export async function applyChatThreadDetail(queryClient: QueryClient, detail: Co
       || !current.hasMoreBefore || before === undefined || before <= firstToRestore) break
     let page: CodexChatThreadDetail
     try {
-      page = await getCodexChatThread(detail.thread.id, 80, before)
+      page = await getCodexChatThread(detail.thread.id, CHAT_MESSAGE_PAGE_SIZE, before)
     } catch {
       // The write already landed: re-read the chat rather than leaving a partly restored range.
       void queryClient.invalidateQueries({ queryKey, exact: true, refetchType: 'active' })
@@ -78,7 +78,7 @@ export async function runChatThreadDetailMutation(queryClient: QueryClient, thre
     try {
       const changed = detail.changedMessage
       const previousContextRevision = detail.previousContextRevision
-      const fresh = await getCodexChatThread(threadId, 80)
+      const fresh = await getCodexChatThread(threadId, CHAT_MESSAGE_PAGE_SIZE)
       if (changed) {
         const page = fresh.messages.some((message) => message.id === changed.id)
           ? fresh : await getCodexChatThread(threadId, 1, changed.id + 1)

@@ -3,12 +3,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { chatGenerationPollInterval } from '@/features/runtime-events/chat-generation-query-updates'
 import { resolveStreamFallbackInterval } from '@/features/runtime-events/runtime-event-fallback'
 import { useRuntimeEventStream } from '@/features/runtime-events/use-runtime-event-stream'
-import { getCodexChatRunning, getCodexChatThread, listCodexChatThreads, mergeThreadBefore, mergeThreadTail, type CodexChatThreadDetail } from '@/lib/api-codex-chat'
+import { CHAT_MESSAGE_PAGE_SIZE, getCodexChatRunning, getCodexChatThread, listCodexChatThreads, mergeThreadBefore, mergeThreadTail, type CodexChatThreadDetail } from '@/lib/api-codex-chat'
 import { CODEX_CHAT_THREADS_QUERY_KEY, codexChatThreadQueryKey, defaultThreadId, type CodexChatApi } from './codex-chat-context'
 
 const RUNNING_POLL_MS = 2000
 const POLL_TAIL_MESSAGES = 40
-const MESSAGE_PAGE_SIZE = 80
 
 /** Own thread selection and server refresh policy for both the dock and the full chat page. */
 export function useChatThreadData({ selectedThreadId, settleSelection, keepDrafts }: Pick<CodexChatApi, 'selectedThreadId' | 'settleSelection' | 'keepDrafts'>, liveThreadId: number | null) {
@@ -50,7 +49,7 @@ export function useChatThreadData({ selectedThreadId, settleSelection, keepDraft
         const merged = latest ? mergeThreadTail(latest, tail) : tail
         if (merged) return merged
       }
-      let detail = await getCodexChatThread(id, MESSAGE_PAGE_SIZE, undefined, signal)
+      let detail = await getCodexChatThread(id, CHAT_MESSAGE_PAGE_SIZE, undefined, signal)
       // Loading earlier pages can finish while this request is on the wire, including after cancelling
       // the read that preceded it. Merge against the current cache, never the request-start snapshot.
       const latest = queryClient.getQueryData<CodexChatThreadDetail>(key)
@@ -62,7 +61,7 @@ export function useChatThreadData({ selectedThreadId, settleSelection, keepDraft
         const first = current?.historyLoaded && current.thread.context_revision === detail.thread.context_revision ? current.messages[0]?.id : undefined
         if (first === undefined || detail.messages[0].id <= first) break
         const before = detail.messages[0].id
-        const page = await getCodexChatThread(id, MESSAGE_PAGE_SIZE, before, signal)
+        const page = await getCodexChatThread(id, CHAT_MESSAGE_PAGE_SIZE, before, signal)
         const merged = mergeThreadBefore(detail, page, before)
         if (!merged) break
         detail = merged
@@ -82,7 +81,7 @@ export function useChatThreadData({ selectedThreadId, settleSelection, keepDraft
       if (!current?.hasMoreBefore || before === undefined) return null
       // Serialize against a refresh so it cannot overwrite a page just prepended.
       await queryClient.cancelQueries({ queryKey: key })
-      const page = await getCodexChatThread(id, MESSAGE_PAGE_SIZE, before)
+      const page = await getCodexChatThread(id, CHAT_MESSAGE_PAGE_SIZE, before)
       let first: number | null = null
       queryClient.setQueryData<CodexChatThreadDetail>(key, (latest) => {
         const merged = latest ? mergeThreadBefore(latest, page, before) : null

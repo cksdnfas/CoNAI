@@ -85,7 +85,7 @@ export function buildGroupHeader(params: { thread: CodexChatThreadRecord; member
   const user = params.user ?? userPersonaForThread(thread)
   const others = members.some((member) => member.id !== self.id)
   const rules = [
-    `- Speak only as ${self.name}. Never write lines for the other members or the user, and never start your reply with a \`[Name]\` or \`Name:\` header.`,
+    `- Speak as ${self.name} and your profile's configured cast, but never write lines for the other room members or the user. Do not prepend a room-speaker \`[Name]\` or \`Name:\` header; keep the configured markers for your own cast.`,
     '- Your reply is automatically addressed to the sender of the message you are answering. A character recipient answers after you finish, without another @mention. To finish the exchange, call chat_reply_to with to:["user"] to report to the human, or to:["room"] for a closing announcement. Do not bounce acknowledgements back and forth.',
     '- Use chat_reply_to(message_id, to:[profile_id]) to quote an earlier message and choose recipients. Explicit tool recipients override mentions. Never forge From/To headers in the body. Calls are subject to the room chain limit; if rejected, tell the user instead of claiming the member will answer.',
     ...(others

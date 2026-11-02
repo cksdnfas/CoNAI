@@ -4,7 +4,7 @@ import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
 import { CHAT_APPEARANCE_QUERY_KEY, CHAT_FLAGS_QUERY_KEY, createCodexChatThread, type CodexChatThread, getCodexChatStatus, getCodexChatThread, previewChatGreeting, interruptCodexChatThread, pickSnapshot, choiceSnapshot, readThreadFlagIds, streamCodexChatMessage, streamChatContinue, streamChatRewrite, type ChatFlag, type ChatMediaAttachment, type CodexChatMessage, type CodexChatStreamEvent, type CodexChatThreadDetail } from '@/lib/api-codex-chat'
 import { getErrorMessage } from '@/lib/error-message'
-import { CHAT_HEALTH_QUERY_KEY, CHAT_PROFILES_QUERY_KEY, CHAT_STATUS_QUERY_KEY, threadLorebooksQueryKey, type ChatProfileSummary } from '@/lib/api-codex-chat'
+import { CHAT_HEALTH_QUERY_KEY, CHAT_MESSAGE_PAGE_SIZE, CHAT_PROFILES_QUERY_KEY, CHAT_STATUS_QUERY_KEY, threadLorebooksQueryKey, type ChatProfileSummary } from '@/lib/api-codex-chat'
 import { summarizeChatError } from './chat-error-chip'
 import { postLink, type StoredFileEntry } from '@conai/shared'
 import type { CodexChatMediaItem } from '@/lib/api-codex-chat'
@@ -21,6 +21,7 @@ import {
   CodexChatDraftsContext,
   CodexChatLiveContext,
   CodexChatReferenceContext,
+  codexChatHistoryQueryKey,
   codexChatMediaQueryKey,
   codexChatThreadQueryKey,
   defaultThreadId,
@@ -131,7 +132,7 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
         if (media) break
         let hash = call.compositeHashes[0]
         if (!hash) for (const id of call.historyIds) {
-          const record = queryClient.getQueryData<{ record: GenerationHistoryRecord }>(['codex-chat-history', id])?.record
+          const record = queryClient.getQueryData<{ record: GenerationHistoryRecord }>(codexChatHistoryQueryKey(id))?.record
           const found = record?.actual_composite_hash ?? record?.composite_hash ?? Object.keys(detail?.media ?? {}).find((key) => detail?.media[key].historyId === id)
           if (found) { hash = found; break }
         }
@@ -628,7 +629,7 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
       // must not show next to the streamed one. The prepared chat stays on screen meanwhile.
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: CODEX_CHAT_THREADS_QUERY_KEY }),
-        queryClient.fetchQuery({ queryKey: codexChatThreadQueryKey(created.id), queryFn: () => getCodexChatThread(created.id, 80) }).catch(() => undefined),
+        queryClient.fetchQuery({ queryKey: codexChatThreadQueryKey(created.id), queryFn: () => getCodexChatThread(created.id, CHAT_MESSAGE_PAGE_SIZE) }).catch(() => undefined),
       ])
     } finally {
       startingRef.current = false

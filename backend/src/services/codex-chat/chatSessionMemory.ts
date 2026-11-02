@@ -4,7 +4,7 @@ import { REPLY_GUIDANCE } from './chatReplies'
 import type { ChatProfile } from './chatProfiles'
 import { loadChatSettings } from './chatSettings'
 import { OUTCOME_KEY, PAGE_VIEW_KEY } from './chatPageContext'
-import { blockStateHash, blockStateText } from './chatBlockState'
+import { blockStateText } from './chatBlockState'
 import { threadBlockState } from './chatBlockCheckpoint'
 import { authorNoteText, estimateTokens, fillCharacterPlaceholders, resolveAuthorNote, type ChatContextMeta } from './llmChatContext'
 import { contextSource, contextSections, limitContextMeta, loreDiagnostics, type ContextSource } from './chatContextDiagnostics'
@@ -26,6 +26,24 @@ import type { JudgedContext } from './chatJudgeContext'
 /** Lore keys remembered per chat; more than this only means some lore may be given again. */
 const LORE_SENT_MAX_KEYS = 500
 const AGENT_RESULTS_KEY = 'agent-results-through:'
+const MUTABLE_REFERENCE_LABELS = {
+  note: "author's note",
+  user: 'user persona',
+  state: 'display block state',
+  'rejected-lore': 'list of rejected lore proposals',
+}
+const MUTABLE_REFERENCE_PREFIXES = Object.keys(MUTABLE_REFERENCE_LABELS).map(kind => `${kind}:`)
+
+function pendingMutableReference(kind: keyof typeof MUTABLE_REFERENCE_LABELS, text: string, sent: Set<string>) {
+  const prefix = `${kind}:`
+  // Older sessions can retain several hashes for one category; only the last one describes their current input.
+  let previous: string | undefined
+  for (const key of sent) if (key.startsWith(prefix)) previous = key
+  const key = `${prefix}${text ? createHash('sha1').update(text).digest('hex').slice(0, 10) : 'none'}`
+  if ((!text && !previous) || previous === key) return { text: '', keys: [] as string[] }
+  const label = MUTABLE_REFERENCE_LABELS[kind]
+  return { text: text || `(The ${label} was cleared. Do not follow any earlier ${label}.)`, keys: [key] }
+}
 
 /** Session engines do not replay stored assistant messages. Deliver new external agent results on their next input. */
 export function pendingAgentResults(threadId: number, before: number, sent: Set<string>, options: { recap?: boolean } = {}) {
@@ -67,9 +85,7 @@ export function readLoreSent(value: string | null) {
  */
 export function pendingAuthorNote(thread: Pick<CodexChatThreadRecord, 'author_note' | 'author_note_depth'> | null, profile: ChatProfile, sent: Set<string>, user: ChatUserPersona) {
   const text = authorNoteText(resolveAuthorNote(thread, profile, user))
-  if (!text) return { text: '', keys: [] as string[] }
-  const key = `note:${createHash('sha1').update(text).digest('hex').slice(0, 10)}`
-  return sent.has(key) ? { text: '', keys: [] } : { text, keys: [key] }
+  return pendingMutableReference('note', text, sent)
 }
 
 const RECAP_MESSAGES = 40
@@ -115,14 +131,21 @@ export function pendingLoreIndex(text: string, sent: Set<string>) {
 }
 
 /**
- * The sent keys after this turn: an index given now supersedes every earlier one (and old pinned memories); the screen
- * and the card outcomes are "the latest one given", so a newer one replaces the older key.
+ * The sent keys after this turn: an index given now supersedes every earlier one (and old pinned memories);
+ * mutable references, the screen and outcomes retain only the latest value, unlike remembered lore entries.
  */
 export function nextLoreSent(sent: Set<string>, keys: string[]) {
   const superseded = keys.some((key) => key.startsWith(LORE_INDEX_KEY))
-  const replaces = [PAGE_VIEW_KEY, OUTCOME_KEY, AGENT_RESULTS_KEY].filter((prefix) => keys.some((key) => key.startsWith(prefix)))
+  const replaces = [...MUTABLE_REFERENCE_PREFIXES, PAGE_VIEW_KEY, OUTCOME_KEY, AGENT_RESULTS_KEY].filter((prefix) => keys.some((key) => key.startsWith(prefix)))
   const kept = [...sent].filter((key) => !(superseded && (key.startsWith(LORE_INDEX_KEY) || key.startsWith(OLD_MEMORY_KEY))) && !replaces.some((prefix) => key.startsWith(prefix)))
-  return [...kept, ...keys].slice(-LORE_SENT_MAX_KEYS)
+  const merged = [...kept, ...keys]
+  // Losing a mutable key would also lose the ability to withdraw its still-remembered value.
+  const mutable = new Set(MUTABLE_REFERENCE_PREFIXES.filter(prefix => merged.some(key => key.startsWith(prefix))))
+  let remaining = LORE_SENT_MAX_KEYS - mutable.size
+  return merged.reverse().filter(key => {
+    const prefix = MUTABLE_REFERENCE_PREFIXES.find(prefix => key.startsWith(prefix))
+    return prefix ? mutable.delete(prefix) : remaining-- > 0
+  }).reverse()
 }
 
 const REPLY_GUIDE_KEY = 'reply-guide:'
@@ -187,10 +210,7 @@ export function codexInputMeta(profile: ChatProfile, messages: CodexChatMessageR
  * profile changes or after a compaction. Codex's fixed instructions are frozen at thread start, so it cannot go there.
  */
 export function pendingUserPersona(user: ChatUserPersona, sent: Set<string>) {
-  const text = userPersonaPrompt(user)
-  if (!text) return { text: '', keys: [] as string[] }
-  const key = `user:${createHash('sha1').update(text).digest('hex').slice(0, 10)}`
-  return sent.has(key) ? { text: '', keys: [] } : { text, keys: [key] }
+  return pendingMutableReference('user', userPersonaPrompt(user), sent)
 }
 
 /**
@@ -200,9 +220,7 @@ export function pendingUserPersona(user: ChatUserPersona, sent: Set<string>) {
 export function pendingBlockState(thread: Pick<CodexChatThreadRecord, 'block_edits'> | null, profile: ChatProfile, messages: CodexChatMessageRecord[], sent: Set<string>, speakerId?: number, historySource?: ChatHistorySource) {
   const state = threadBlockState(profile, thread?.block_edits, messages, speakerId, historySource)
   const text = state ? blockStateText(profile.style.blocks, state) : ''
-  if (!text) return { text: '', keys: [] as string[] }
-  const key = `state:${blockStateHash(text)}`
-  return sent.has(key) ? { text: '', keys: [] } : { text, keys: [key] }
+  return pendingMutableReference('state', text, sent)
 }
 
 /**
@@ -211,7 +229,5 @@ export function pendingBlockState(thread: Pick<CodexChatThreadRecord, 'block_edi
  */
 export function pendingRejectedLore(threadId: number, profile: ChatProfile, sent: Set<string>) {
   const text = profile.allowLoreProposals ? rejectedLoreLine(threadId) : ''
-  if (!text) return { text: '', keys: [] as string[] }
-  const key = `rejected-lore:${createHash('sha1').update(text).digest('hex').slice(0, 10)}`
-  return sent.has(key) ? { text: '', keys: [] } : { text, keys: [key] }
+  return pendingMutableReference('rejected-lore', text, sent)
 }
