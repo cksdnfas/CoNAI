@@ -7,7 +7,7 @@ import { parseMcpMarkedFields } from '../comfyui/comfyWorkflowInputs';
 export const CHAT_NAI_REFERENCE_MAX_BYTES = 4 * 1024 * 1024;
 export const CHAT_NAI_PAYLOAD_MAX_BYTES = 8 * 1024 * 1024;
 
-function joinPrompt(parts: string[]) {
+export function joinPrompt(parts: string[]) {
   return parts.map((part) => part.trim().replace(/^,+|,+$/g, '').trim()).filter(Boolean).join(', ');
 }
 
