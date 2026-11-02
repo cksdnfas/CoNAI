@@ -86,7 +86,7 @@ export function KnowledgeReviewDialog({ post, action, issue, onClose }: { post: 
   )
 }
 
-/** Rounded for the pill; fractional weights keep one decimal only when rounding would hide them entirely. */
+/** Rounded for the count beside a key; fractional weights keep one decimal only when rounding would hide them entirely. */
 function voteCount(value: number) {
   const rounded = Math.round(value)
   return rounded === 0 && value > 0 ? Number(value.toFixed(1)) : rounded
@@ -132,24 +132,24 @@ export function PostVoteBar({ post }: { post: PostDetail }) {
         <IconButton variant="ghost" size="icon-sm" label={t({ ko: '평가 다시 불러오기', en: 'Retry feedback' })} onClick={() => void quality.refetch()}><RefreshCw /></IconButton>
       ) : <>
         <Tip content={noPermission}>
-          <span className="inline-flex">
-            <Button variant="subtle" disabled={!canVote} aria-pressed={own === 'up'} onClick={pressUp}
-              aria-label={t({ ko: '추천 {score}', en: 'Recommend, {score}' }, { score: stats ? Number(stats.up.toFixed(2)) : 0 })}
-              className="tabular-nums">
-              <ThumbsUp />{stats ? voteCount(stats.up) : null}
-            </Button>
+          <span className="inline-flex items-center gap-1">
+            <IconButton variant="subtle" disabled={!canVote} active={own === 'up'} onClick={pressUp}
+              label={t({ ko: '추천 {score}', en: 'Recommend, {score}' }, { score: stats ? Number(stats.up.toFixed(2)) : 0 })}>
+              <ThumbsUp />
+            </IconButton>
+            {stats ? <span aria-hidden className="text-xs tabular-nums text-muted-foreground">{voteCount(stats.up)}</span> : null}
           </span>
         </Tip>
         <Popover open={downOpen} onOpenChange={setDownOpen}>
           <Tip content={noPermission}>
-            <span className="inline-flex">
+            <span className="inline-flex items-center gap-1">
               <PopoverAnchor asChild>
-                <Button variant="subtle" disabled={!canVote} aria-pressed={own === 'down'} aria-haspopup="dialog" onClick={pressDown}
-                  aria-label={t({ ko: '비추천 {score}', en: 'Do not recommend, {score}' }, { score: stats ? Number(stats.down.toFixed(2)) : 0 })}
-                  className="tabular-nums">
-                  <ThumbsDown />{stats ? voteCount(stats.down) : null}
-                </Button>
+                <IconButton variant="subtle" disabled={!canVote} active={own === 'down'} aria-haspopup="dialog" onClick={pressDown}
+                  label={t({ ko: '비추천 {score}', en: 'Do not recommend, {score}' }, { score: stats ? Number(stats.down.toFixed(2)) : 0 })}>
+                  <ThumbsDown />
+                </IconButton>
               </PopoverAnchor>
+              {stats ? <span aria-hidden className="text-xs tabular-nums text-muted-foreground">{voteCount(stats.down)}</span> : null}
             </span>
           </Tip>
           <PopoverContent align="center" padding="md" className="w-80 space-y-3" aria-label={t({ ko: '비추천 이유', en: 'Reason for not recommending' })}>

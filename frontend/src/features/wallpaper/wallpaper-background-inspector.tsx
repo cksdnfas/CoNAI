@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { ImagePlus } from 'lucide-react'
 import { MediaCard } from '@/components/common/media-card'
-import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
 import { Select } from '@/components/ui/select'
 import { MediaLibraryPicker } from '@/components/media/media-library-picker'
 import { useI18n } from '@/i18n'
@@ -125,10 +125,9 @@ export function WallpaperBackgroundInspector({ layout, groups, onChangeBackgroun
                 media={<img src={buildApiUrl(`/api/images/${background.compositeHash}/thumbnail`)} alt="" className="aspect-video w-full object-cover" />}
               />
             ) : (
-              <Button type="button" variant="secondary" className="w-full" onClick={() => setIsPickerOpen(true)}>
-                <ImagePlus className="size-4" />
-                {background.kind === 'video' ? t({ ko: '라이브러리에서 영상 고르기', en: 'Pick a video from the library' }) : t({ ko: '라이브러리에서 이미지 고르기', en: 'Pick an image from the library' })}
-              </Button>
+              <IconButton variant="secondary" onClick={() => setIsPickerOpen(true)} label={background.kind === 'video' ? t({ ko: '라이브러리에서 영상 고르기', en: 'Pick a video from the library' }) : t({ ko: '라이브러리에서 이미지 고르기', en: 'Pick an image from the library' })}>
+                <ImagePlus />
+              </IconButton>
             )}
             {fitSegments(background.fit)}
           </>

@@ -1,6 +1,6 @@
 import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { Copy, Ellipsis, Eye, ListFilter, ListTree, Pencil, Play, Plus, RefreshCw, RotateCcw, Save, Server, Star, Trash2 } from 'lucide-react'
+import { Copy, Ellipsis, Eye, ListFilter, ListTree, Pencil, PencilLine, Play, Plus, RefreshCw, RotateCcw, Save, Server, Star, Trash2, type LucideIcon } from 'lucide-react'
 import { EmptyState } from '@/components/ui/empty-state'
 import { ActionContextMenu, ActionMenuButton, type ActionMenuEntry } from '@/components/ui/action-menu'
 import { Badge } from '@/components/ui/badge'
@@ -386,16 +386,16 @@ export function ComfyDropdownListsSection({ dropdownLists, isSubmitting = false,
   const customLists = useMemo(() => dropdownLists.filter((list) => !list.is_auto_collected), [dropdownLists])
   const autoLists = useMemo(() => dropdownLists.filter((list) => list.is_auto_collected), [dropdownLists])
   const visibleLists = activeTab === 'custom' ? customLists : autoLists
-  const tabs: Array<{ value: DropdownTab; label: string; count: number }> = [
-    { value: 'custom', label: t({ ko: '커스텀', en: 'Custom' }), count: customLists.length },
-    { value: 'auto', label: t({ ko: '자동수집', en: 'Auto collect' }), count: autoLists.length },
+  const tabs: Array<{ value: DropdownTab; label: string; icon: LucideIcon; count: number }> = [
+    { value: 'custom', label: t({ ko: '커스텀', en: 'Custom' }), icon: PencilLine, count: customLists.length },
+    { value: 'auto', label: t({ ko: '자동수집', en: 'Auto collect' }), icon: RefreshCw, count: autoLists.length },
   ]
 
   return (
     <section>
       {/* RowGroup's heading row, with text tabs beside the label. */}
       <div className="mb-1 flex min-h-8 items-center justify-between gap-3 border-b border-foreground/15">
-        <div className="flex min-w-0 items-center gap-4 self-stretch">
+        <div className="flex min-w-0 flex-1 items-center gap-4 self-stretch">
           <h3 className="flex shrink-0 items-center">
             <Text as="span" variant="overline">
               <SectionLabel icon={<ListFilter />}>{t({ ko: '드롭다운 목록', en: 'Dropdown lists' })}</SectionLabel>
@@ -403,11 +403,11 @@ export function ComfyDropdownListsSection({ dropdownLists, isSubmitting = false,
           </h3>
           <TextTabs
             value={activeTab}
-            items={tabs.map((tab) => ({ value: tab.value, label: tab.label, count: formatNumber(tab.count) }))}
+            items={tabs.map((tab) => ({ value: tab.value, label: tab.label, icon: tab.icon, count: formatNumber(tab.count) }))}
             onChange={setActiveTab}
             ariaLabel={t({ ko: '드롭다운 목록', en: 'Dropdown lists' })}
             hairline={false}
-            className="self-end"
+            className="flex-1 self-end"
           />
         </div>
         {activeTab === 'custom' ? (

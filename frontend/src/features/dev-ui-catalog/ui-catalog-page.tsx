@@ -346,7 +346,7 @@ export function UiCatalogPage() {
               {BUTTON_SIZES.map((size) => (
                 <Button key={size} variant={variant} size={size}>{size}</Button>
               ))}
-              <Button variant={variant}><Plus />With icon</Button>
+              <IconButton variant={variant} label="Icon only (label = tooltip)"><Plus /></IconButton>
               <Button variant={variant} disabled>Disabled</Button>
             </Row>
           ))}
@@ -553,7 +553,7 @@ export function UiCatalogPage() {
           <Row label="DropdownMenu / Popover">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="secondary"><MoreHorizontal />Menu</Button>
+                <IconButton variant="secondary" label="Menu"><MoreHorizontal /></IconButton>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" className="w-56">
                 <DropdownMenuLabel>Actions</DropdownMenuLabel>
@@ -597,7 +597,7 @@ export function UiCatalogPage() {
         </CatalogSection>
 
         <CatalogSection id="navigation" title="TextTabs / SegmentedControl / SegmentedTabBar">
-          <TextTabs value={catalogTab} onChange={setCatalogTab} items={[{ value: 'one', label: 'First' }, { value: 'two', label: 'Second', count: 3 }]}>
+          <TextTabs value={catalogTab} onChange={setCatalogTab} items={[{ value: 'one', label: 'First', icon: ImageIcon }, { value: 'two', label: 'Second', icon: Folder, count: 3 }]}>
             <TabsContent value="one"><Inset>First panel</Inset></TabsContent>
             <TabsContent value="two"><Inset>Second panel</Inset></TabsContent>
           </TextTabs>
@@ -756,7 +756,7 @@ export function UiCatalogPage() {
 
         <CatalogSection id="states" title="EmptyState / LoadingState / ErrorState">
           <div className="grid gap-4 md:grid-cols-2">
-            <EmptyState icon={ImageOff} title="이미지가 아직 없어" action={<Button size="sm"><Plus />폴더 추가</Button>} />
+            <EmptyState icon={ImageOff} title="이미지가 아직 없어" action={<IconButton size="icon-sm" variant="default" label="폴더 추가"><Plus /></IconButton>} />
             <EmptyState icon={Inbox} title="Default without action" />
             <EmptyState size="compact" icon={Inbox} title="Compact empty state" action={<Button size="xs" variant="secondary">Action</Button>} />
             <EmptyState size="compact" title="Compact, no icon" />

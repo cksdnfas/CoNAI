@@ -1,4 +1,5 @@
-import type { GenerationLayoutBuiltinBlock } from '@conai/shared'
+import { BookImage, Bookmark, BrainCircuit, Brush, Combine, Contact, Eye, FileOutput, FilePen, FolderOutput, Hash, History, ImageIcon, Images, Info, List, ListChecks, ListMusic, ListVideo, PenLine, Play, Puzzle, Server, SlidersHorizontal, SquarePen, Tags, TextCursorInput, Wand, Waves, Workflow, type LucideIcon } from 'lucide-react'
+import { isGenerationLayoutPluginBlock, type GenerationLayoutBlock, type GenerationLayoutBuiltinBlock } from '@conai/shared'
 import type { TranslationDictionary } from '@/i18n'
 
 export const GENERATION_LAYOUT_BLOCK_LABELS: Record<GenerationLayoutBuiltinBlock, TranslationDictionary> = {
@@ -36,4 +37,46 @@ export const GENERATION_LAYOUT_BLOCK_LABELS: Record<GenerationLayoutBuiltinBlock
   prompts: { ko: '추출한 프롬프트', en: 'Extracted prompts' },
   tagger: { ko: '오토 태그', en: 'Auto tags' },
   artist: { ko: '작가 추정', en: 'Artist' },
+}
+
+const GENERATION_LAYOUT_BLOCK_ICONS: Record<GenerationLayoutBuiltinBlock, LucideIcon> = {
+  prompt: PenLine,
+  characters: Contact,
+  settings: SlidersHorizontal,
+  images: Images,
+  references: BookImage,
+  vibes: Waves,
+  action: Wand,
+  result: ImageIcon,
+  recent: History,
+  model: BrainCircuit,
+  output: FileOutput,
+  workflow: Workflow,
+  fields: TextCursorInput,
+  workflows: List,
+  management: Server,
+  list: List,
+  outputs: FolderOutput,
+  runner: Play,
+  results: ListChecks,
+  queue: ListVideo,
+  preview: Eye,
+  saved: Bookmark,
+  generate: Wand,
+  takes: ListMusic,
+  editor: SquarePen,
+  media: ImageIcon,
+  related: Images,
+  meta: Info,
+  generation: Wand,
+  lora: Combine,
+  rewrite: FilePen,
+  prompts: Tags,
+  tagger: Hash,
+  artist: Brush,
+}
+
+/** A block's tab icon; a plugin's block shows the plugin piece. */
+export function generationLayoutBlockIcon(block: GenerationLayoutBlock): LucideIcon {
+  return isGenerationLayoutPluginBlock(block) ? Puzzle : GENERATION_LAYOUT_BLOCK_ICONS[block]
 }

@@ -3,7 +3,7 @@ import { VirtuosoMasonry, type ItemContent } from '@virtuoso.dev/masonry'
 import type { PostCategory, PostSummary } from '@conai/shared'
 import { EyeOff, FileClock, Images, MessageCircle, MessageSquare, Pin } from 'lucide-react'
 import { ActionContextMenu, type ActionMenuEntry } from '@/components/ui/action-menu'
-import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
 import { Badge } from '@/components/ui/badge'
 import { ToggleChip } from '@/components/ui/chip'
 import { ListRow } from '@/components/ui/list-row'
@@ -258,9 +258,12 @@ function SnsSlide({ post, categories, onOpen, onTag, onVisible, loadMedia }: Omi
           <div className="flex items-center gap-3">
             <TagRow tags={post.tags} onTag={onTag} />
             <span className="flex-1" />
-            <Button variant="ghost" size="sm" onClick={() => onOpen(post)} aria-label={t({ ko: '댓글', en: 'Comments' })}>
-              <MessageCircle />{post.commentCount}
-            </Button>
+            <span className="flex items-center gap-1">
+              <IconButton variant="ghost" size="icon-sm" onClick={() => onOpen(post)} label={t({ ko: '댓글 {count}', en: 'Comments {count}' }, { count: post.commentCount })}>
+                <MessageCircle />
+              </IconButton>
+              <span aria-hidden className="text-xs tabular-nums text-muted-foreground">{post.commentCount}</span>
+            </span>
           </div>
           <PostTopicSummary value={post.topicEvaluation} />
         </div>

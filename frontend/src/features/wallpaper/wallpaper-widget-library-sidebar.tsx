@@ -12,6 +12,8 @@ import {
   Grid2x2,
   ImageIcon,
   Images,
+  LayoutDashboard,
+  Layers,
   Layers3,
   Library,
   Lock,
@@ -223,8 +225,8 @@ export function WallpaperWidgetLibrarySidebar(props: WallpaperWidgetLibrarySideb
         onChange={setTab}
         ariaLabel={t({ ko: '위젯 패널', en: 'Widget panel' })}
         items={[
-          { value: 'widgets', label: t({ ko: '위젯', en: 'Widgets' }) },
-          { value: 'layers', label: t({ ko: '레이어', en: 'Layers' }), count: props.widgets.length || null },
+          { value: 'widgets', label: t({ ko: '위젯', en: 'Widgets' }), icon: LayoutDashboard },
+          { value: 'layers', label: t({ ko: '레이어', en: 'Layers' }), icon: Layers, count: props.widgets.length || null },
         ]}
       />
       {tab === 'widgets' ? <WidgetLibrary onAddWidget={props.onAddWidget} /> : <LayerList {...props} />}

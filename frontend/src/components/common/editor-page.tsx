@@ -1,5 +1,5 @@
-import { createContext, useContext, type ComponentType, type ReactNode } from 'react'
-import { ArrowLeft } from 'lucide-react'
+import { createContext, useContext, type ReactNode } from 'react'
+import { ArrowLeft, type LucideIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { SidebarItem, usePageSidebar } from '@/components/ui/sidebar'
@@ -18,7 +18,7 @@ const EditorNavLayoutContext = createContext<'column' | 'row'>('column')
 export type EditorSectionEntry<T extends string> = {
   value: T
   label: string
-  icon: ComponentType<{ className?: string }>
+  icon: LucideIcon
   /** A dot or mark at the right (input needed, filled by the assistant). */
   mark?: ReactNode
   disabled?: boolean
@@ -69,7 +69,7 @@ export function EditorSectionNav<T extends string>({ sections, value, onChange, 
 }) {
   const layout = useContext(EditorNavLayoutContext)
   if (layout === 'row') {
-    return <TextTabs value={value} onChange={onChange} ariaLabel={label} items={sections.map((entry) => ({ value: entry.value, label: <span className="inline-flex items-center gap-1.5">{entry.label}{entry.mark}</span> }))} />
+    return <TextTabs value={value} onChange={onChange} ariaLabel={label} items={sections.map((entry) => ({ value: entry.value, icon: entry.icon, label: entry.label, mark: entry.mark }))} />
   }
   return (
     <nav aria-label={label} className="space-y-3">

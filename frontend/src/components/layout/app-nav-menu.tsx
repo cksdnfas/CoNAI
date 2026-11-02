@@ -4,6 +4,7 @@ import { Link, useLocation } from 'react-router-dom'
 import { prefetchAppRoute } from '@/app/lazy-routes'
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { Tip } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import { isAppNavLinkActive, type AppNavGroup } from './app-navigation'
 
@@ -16,15 +17,20 @@ export function AppNavGroupMenu({ group }: { group: AppNavGroup }) {
   const links = group.links.filter((link) => !link.pinned)
   if (!links.length) return null
   const current = links.some((link) => isAppNavLinkActive(link.to, pathname))
+  const GroupIcon = group.icon
 
   return (
     <DropdownMenu modal={false}>
-      <DropdownMenuTrigger asChild>
-        <Button variant="ghost" data-pressed={current || undefined}>
-          {group.label}
-          <ChevronDown className="size-3.5" />
-        </Button>
-      </DropdownMenuTrigger>
+      <Tip content={group.label} side="bottom">
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" data-pressed={current || undefined}>
+            <GroupIcon />
+            {/* Like the pinned pages: the name from xl; narrower, only the group of the current page keeps it. */}
+            <span className={cn('sr-only xl:not-sr-only xl:whitespace-nowrap', current && 'md:not-sr-only md:whitespace-nowrap')}>{group.label}</span>
+            <ChevronDown className="size-3.5" />
+          </Button>
+        </DropdownMenuTrigger>
+      </Tip>
       <DropdownMenuContent align="start" className="w-56">
         {links.map((link, index) => {
           const active = isAppNavLinkActive(link.to, pathname)

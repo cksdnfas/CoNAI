@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react'
-import { AlignCenterHorizontal, AlignCenterVertical, AlignEndHorizontal, AlignEndVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, Eye, EyeOff, Lock, LockOpen, PaintRoller, Paintbrush } from 'lucide-react'
+import { AlignCenterHorizontal, AlignCenterVertical, AlignEndHorizontal, AlignEndVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, Eye, EyeOff, Lock, LockOpen, Move, PaintRoller, Paintbrush } from 'lucide-react'
 import { TextTabs } from '@/components/common/text-tabs'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
@@ -18,6 +18,7 @@ import type { WallpaperAlignMode } from './wallpaper-layout-utils'
 import { WallpaperWidgetTypeEditorFields, type WallpaperInspectorGroupOption } from './wallpaper-widget-inspector-editors'
 import type { WallpaperWidgetFrame, WallpaperWidgetInstance, WallpaperWidgetStyle } from './wallpaper-types'
 import { getWallpaperWidgetDefinition, getWallpaperWidgetDisplayTitle } from './wallpaper-widget-registry'
+import { getWallpaperWidgetIcon } from './wallpaper-widget-library-sidebar'
 
 export interface WallpaperWidgetPatch extends Partial<WallpaperWidgetFrame> {
   rotation?: number
@@ -262,9 +263,9 @@ export function WallpaperWidgetInspector({ selectedWidgets, groups, onPatchWidge
         onChange={setTab}
         ariaLabel={t({ ko: '위젯 설정', en: 'Widget settings' })}
         items={[
-          { value: 'layout', label: t({ ko: '배치', en: 'Layout' }) },
-          { value: 'style', label: t({ ko: '스타일', en: 'Style' }) },
-          ...(sameType ? [{ value: 'widget' as const, label: t(definition.title) }] : []),
+          { value: 'layout', label: t({ ko: '배치', en: 'Layout' }), icon: Move },
+          { value: 'style', label: t({ ko: '스타일', en: 'Style' }), icon: Paintbrush },
+          ...(sameType ? [{ value: 'widget' as const, label: t(definition.title), icon: getWallpaperWidgetIcon(widget.type) }] : []),
         ]}
       />
 

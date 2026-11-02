@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { FileText, FolderTree, Music, X } from 'lucide-react'
+import { Archive, AudioLines, FileText, FolderTree, Images, Music, Newspaper, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { CountBadge } from '@/components/ui/count-badge'
 import { IconButton } from '@/components/ui/icon-button'
@@ -56,10 +56,10 @@ export function PostAttachPicker({ initialTab, onClose, onInsert }: { initialTab
   const { t } = useI18n()
   const { canViewImages, canViewAudio, canUseFiles } = usePostPermissions()
   const tabs: Array<TextTabItem<AttachTab>> = [
-    ...(canViewImages ? [{ value: 'media' as const, label: t({ ko: '미디어', en: 'Media' }) }] : []),
-    ...(canViewAudio ? [{ value: 'audio' as const, label: t({ ko: '오디오', en: 'Audio' }) }] : []),
-    { value: 'post', label: t({ ko: '게시물', en: 'Posts' }) },
-    ...(canUseFiles ? [{ value: 'file' as const, label: t({ ko: '파일', en: 'Files' }) }] : []),
+    ...(canViewImages ? [{ value: 'media' as const, label: t({ ko: '미디어', en: 'Media' }), icon: Images }] : []),
+    ...(canViewAudio ? [{ value: 'audio' as const, label: t({ ko: '오디오', en: 'Audio' }), icon: AudioLines }] : []),
+    { value: 'post', label: t({ ko: '게시물', en: 'Posts' }), icon: Newspaper },
+    ...(canUseFiles ? [{ value: 'file' as const, label: t({ ko: '파일', en: 'Files' }), icon: Archive }] : []),
   ]
   const [tab, setTab] = useState<AttachTab>(tabs.some((item) => item.value === initialTab) ? initialTab : 'post')
   const [selected, setSelected] = useState<AttachItem[]>([])

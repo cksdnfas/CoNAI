@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState, type KeyboardEvent } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import { Check, CircleAlert, ExternalLink, Plus, RotateCcw } from 'lucide-react'
-import { TextTabs } from '@/components/common/text-tabs'
+import { Check, CircleAlert, ExternalLink, FileOutput, Keyboard, Plus, RotateCcw, Workflow } from 'lucide-react'
+import { TextTabs, type TextTabItem } from '@/components/common/text-tabs'
 import { Button } from '@/components/ui/button'
 import { EditorFooter } from '@/components/ui/editor-footer'
 import { IconButton } from '@/components/ui/icon-button'
@@ -45,9 +45,9 @@ export function AudioSettingsDialog({ open, onClose, canManage, focusWorkflowId 
   useEffect(() => {
     if (open && focusWorkflowId !== null && canManage) setTab('workflows')
   }, [open, focusWorkflowId, canManage])
-  const tabs: Array<{ value: AudioSettingsTab; label: string }> = [
-    ...(canManage ? [{ value: 'workflows' as const, label: t({ ko: '워크플로', en: 'Workflows' }) }, { value: 'export' as const, label: t({ ko: '내보내기', en: 'Export' }) }] : []),
-    { value: 'shortcuts', label: t({ ko: '단축키', en: 'Shortcuts' }) },
+  const tabs: Array<TextTabItem<AudioSettingsTab>> = [
+    ...(canManage ? [{ value: 'workflows' as const, label: t({ ko: '워크플로', en: 'Workflows' }), icon: Workflow }, { value: 'export' as const, label: t({ ko: '내보내기', en: 'Export' }), icon: FileOutput }] : []),
+    { value: 'shortcuts', label: t({ ko: '단축키', en: 'Shortcuts' }), icon: Keyboard },
   ]
   // Each tab saves its own thing (a workflow link, the export settings, shortcuts as they change), so each ends in its
   // own footer; it sits at the dialog's end like every editor footer.

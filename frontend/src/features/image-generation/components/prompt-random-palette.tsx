@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import { FolderHeart, List, Shuffle, Tags, type LucideIcon } from 'lucide-react'
 import { TextTabs } from '@/components/common/text-tabs'
 import { EmptyState } from '@/components/ui/empty-state'
 import { ListRow } from '@/components/ui/list-row'
@@ -16,6 +17,7 @@ import type { PromptWildcardTool } from './wildcard-inline-picker-helpers'
 export type PromptPaletteTab = 'all' | PromptRandomTokenSource
 
 export const PROMPT_PALETTE_TABS: PromptPaletteTab[] = ['all', 'wildcard', 'tag', 'my']
+const PALETTE_TAB_ICONS: Record<PromptPaletteTab, LucideIcon> = { all: List, wildcard: Shuffle, tag: Tags, my: FolderHeart }
 const PALETTE_LIST_LIMIT = 30
 const PEEK_LIMIT = 10
 
@@ -145,7 +147,7 @@ export function PromptRandomPalette({ tab, entries, recents, activeIndex, isLoad
       <div className="shrink-0" onMouseDown={(event) => event.preventDefault()}>
         <TextTabs
           value={tab}
-          items={PROMPT_PALETTE_TABS.map((paletteTab) => ({ value: paletteTab, label: labels[paletteTab] }))}
+          items={PROMPT_PALETTE_TABS.map((paletteTab) => ({ value: paletteTab, label: labels[paletteTab], icon: PALETTE_TAB_ICONS[paletteTab] }))}
           onChange={onChangeTab}
         />
       </div>

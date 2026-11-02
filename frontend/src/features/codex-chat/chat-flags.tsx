@@ -1,6 +1,6 @@
 import { createElement, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type RefObject } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Ban, Eye, EyeOff, Flag, GripVertical, Pencil, RotateCcw, Users } from 'lucide-react'
+import { Ban, Eye, EyeOff, Flag, GripVertical, Pencil, RotateCcw, Shapes, Smile, Users } from 'lucide-react'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Button } from '@/components/ui/button'
 import { useConfirm } from '@/components/ui/confirm-dialog'
@@ -239,7 +239,7 @@ function ChatFlagIconPicker({ value, name, onChange }: { value: string; name: st
       <PopoverContent align="start" padding="none" className="w-88 max-w-[calc(100vw-2rem)]">
         <TextTabs<PickerTab>
           value={tab}
-          items={[{ value: 'icon', label: t({ ko: '아이콘', en: 'Icons' }) }, { value: 'emoji', label: t({ ko: '이모지', en: 'Emoji' }) }]}
+          items={[{ value: 'icon', label: t({ ko: '아이콘', en: 'Icons' }), icon: Shapes }, { value: 'emoji', label: t({ ko: '이모지', en: 'Emoji' }), icon: Smile }]}
           onChange={setTab}
           stripClassName="px-3 pt-2"
         />

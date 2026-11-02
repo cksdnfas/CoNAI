@@ -759,10 +759,9 @@ function AgentResultCard({ agent, text, imageCount, children }: { agent: ChatAge
           <p className="truncate text-sm font-medium">{t({ ko: '위임 작업 · {title}', en: 'Delegated · {title}' }, { title: firstLineOf(text) || agent.name })}</p>
           <p className="truncate text-xs text-muted-foreground">{status}</p>
         </div>
-        {text ? <Button variant="ghost" size="xs" aria-expanded={open} aria-controls={open ? bodyId : undefined} onClick={() => setOpen(!open)}>
-          {open ? t({ ko: '접기', en: 'Fold' }) : t({ ko: '펼치기', en: 'Open' })}
+        {text ? <IconButton variant="ghost" size="icon-xs" aria-expanded={open} aria-controls={open ? bodyId : undefined} onClick={() => setOpen(!open)} label={open ? t({ ko: '접기', en: 'Fold' }) : t({ ko: '펼치기', en: 'Open' })}>
           <ChevronDown className={cn('transition-transform', open && 'rotate-180')} />
-        </Button> : null}
+        </IconButton> : null}
       </div>
       {open ? <div id={bodyId} className="border-t border-line px-3 py-2.5">{children}</div> : null}
     </div>

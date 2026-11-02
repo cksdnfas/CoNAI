@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
-import { AlertTriangle, Crop, Download, Expand, LayoutGrid, Loader2, Pause, Play, Save, Scan } from 'lucide-react'
+import { AlertTriangle, Clapperboard, Crop, Download, Expand, Grid3x3, LayoutGrid, Loader2, Pause, Play, Save, Scan } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { MediaCard } from '@/components/common/media-card'
 import { IconButton } from '@/components/ui/icon-button'
@@ -53,8 +53,8 @@ export function SpriteResultPanel({ build, output, onOutputChange, crop, onCropC
           hairline={false}
           className="shrink-0 grow"
           items={[
-            { value: 'frames', label: t({ ko: '프레임 재생', en: 'Frames' }) },
-            { value: 'sheet', label: t({ ko: '시트', en: 'Sheet' }) },
+            { value: 'frames', label: t({ ko: '프레임 재생', en: 'Frames' }), icon: Clapperboard },
+            { value: 'sheet', label: t({ ko: '시트', en: 'Sheet' }), icon: Grid3x3 },
           ]}
         />
         <div className="ml-auto flex items-center gap-2">

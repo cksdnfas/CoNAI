@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
-import { CopyPlus, Folder, Trash2, X } from 'lucide-react'
+import { CopyPlus, FileText, Folder, FolderOutput, Trash2, X } from 'lucide-react'
 import { SelectionActionBar } from '@/components/common/selection-action-bar'
 import { TextTabs } from '@/components/common/text-tabs'
 import { IconButton } from '@/components/ui/icon-button'
@@ -494,8 +494,8 @@ export function ModuleWorkflowOutputManagementPanel({
         onChange={setActiveTab}
         ariaLabel={t({ ko: '워크플로 생성물', en: 'Workflow outputs' })}
         items={[
-          { value: 'outputs', label: t('module-graph.components.module.workflow.output.management.panel.generated.outputs'), count: formatNumber(outputCollections.outputItems.length) },
-          { value: 'artifacts', label: t('module-graph.components.module.workflow.output.management.panel.text.and.intermediate.artifacts'), count: formatNumber(filteredTechnicalArtifacts.length) },
+          { value: 'outputs', label: t('module-graph.components.module.workflow.output.management.panel.generated.outputs'), icon: FolderOutput, count: formatNumber(outputCollections.outputItems.length) },
+          { value: 'artifacts', label: t('module-graph.components.module.workflow.output.management.panel.text.and.intermediate.artifacts'), icon: FileText, count: formatNumber(filteredTechnicalArtifacts.length) },
         ]}
         actions={selectedFolderRecord && onClearFolder ? (
           <span className="inline-flex h-6 max-w-48 items-center gap-1 rounded-sm bg-fill pr-0.5 pl-1.5 text-xs text-muted-foreground">

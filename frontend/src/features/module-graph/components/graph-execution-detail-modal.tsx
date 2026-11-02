@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from 'react'
+import { PackageCheck, ScrollText, Stethoscope, TextCursorInput } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { CodeBlock } from '@/components/ui/code-block'
@@ -58,10 +59,10 @@ export function GraphExecutionDetailModal({
   const { t, formatDateTime } = useI18n()
   const [tab, setTab] = useState<ExecutionDetailTab>(resultContent ? 'result' : 'diagnostics')
   const tabItems = [
-    ...(resultContent ? [{ value: 'result' as const, label: t({ ko: '결과', en: 'Result' }) }] : []),
-    ...(executionInputEntries.length > 0 ? [{ value: 'inputs' as const, label: t({ ko: '입력', en: 'Inputs' }), count: executionInputEntries.length }] : []),
-    { value: 'diagnostics' as const, label: t({ ko: '진단', en: 'Diagnostics' }) },
-    { value: 'logs' as const, label: t({ ko: '로그', en: 'Logs' }), count: executionDetail.logs.length },
+    ...(resultContent ? [{ value: 'result' as const, label: t({ ko: '결과', en: 'Result' }), icon: PackageCheck }] : []),
+    ...(executionInputEntries.length > 0 ? [{ value: 'inputs' as const, label: t({ ko: '입력', en: 'Inputs' }), icon: TextCursorInput, count: executionInputEntries.length }] : []),
+    { value: 'diagnostics' as const, label: t({ ko: '진단', en: 'Diagnostics' }), icon: Stethoscope },
+    { value: 'logs' as const, label: t({ ko: '로그', en: 'Logs' }), icon: ScrollText, count: executionDetail.logs.length },
   ]
 
   return (

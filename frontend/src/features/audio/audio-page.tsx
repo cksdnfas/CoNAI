@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from 'react'
 import { useInfiniteQuery, useQuery, useQueryClient, type InfiniteData } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
-import { AudioLines, ChevronDown, ChevronUp, Download, FolderInput, FolderPlus, MessageSquare, MoreHorizontal, Pencil, Plus, Trash2, Upload } from 'lucide-react'
+import { AudioLines, ChevronDown, ChevronUp, CircleCheck, CircleDashed, CirclePause, Download, FolderInput, FolderPlus, List, MessageSquare, MoreHorizontal, Pencil, Plus, Trash2, Upload } from 'lucide-react'
 import { PageToolbar } from '@/components/common/page-toolbar'
 import { PageWithSidebar } from '@/components/common/page-with-sidebar'
 import { RuntimeJobProgress } from '@/components/common/runtime-job-progress'
@@ -654,10 +654,10 @@ function AudioPageContent() {
   /* ---------------------------------------------------------------------------------------------- render */
 
   const tabs: Array<TextTabItem<ReviewTab>> = group ? [
-    { value: 'all', label: t({ ko: '전체', en: 'All' }), count: group.candidate_count },
-    { value: 'pending', label: t({ ko: '미검수', en: 'Unreviewed' }), count: group.pending_review_count },
-    { value: 'selected', label: t({ ko: '채택', en: 'Adopted' }), count: group.selected_count },
-    { value: 'rejected', label: t({ ko: '보류', en: 'Rejected' }), count: Math.max(0, group.candidate_count - group.selected_count - group.pending_review_count) },
+    { value: 'all', label: t({ ko: '전체', en: 'All' }), icon: List, count: group.candidate_count },
+    { value: 'pending', label: t({ ko: '미검수', en: 'Unreviewed' }), icon: CircleDashed, count: group.pending_review_count },
+    { value: 'selected', label: t({ ko: '채택', en: 'Adopted' }), icon: CircleCheck, count: group.selected_count },
+    { value: 'rejected', label: t({ ko: '보류', en: 'Rejected' }), icon: CirclePause, count: Math.max(0, group.candidate_count - group.selected_count - group.pending_review_count) },
   ] : []
   const inbox = group?.is_inbox === true
   // Where you are, after the page title: the project, then the folder and the effect (or 받은 파일) in it.

@@ -54,7 +54,7 @@ The public workflow route has its own access flow; being inside the shell does n
 `components/layout/app-navigation.ts` is the one navigation model: each built-in page's path, pinnable header key,
 menu group (라이브러리 · 만들기 · 확장, or none for `/access` and `/settings`), plus the
 enabled plugin pages, filtered by the account's page permissions (names and icons from `page-access-catalog.tsx`).
-The header shows the pinned pages and `AppNavGroupMenu` (`app-nav-menu.tsx`); below md `AppBottomNav`
+The header shows the pinned pages and `AppNavGroupMenu` (`app-nav-menu.tsx`; group icons in `GROUPS` of `app-navigation.ts`); below md `AppBottomNav`
 (`app-bottom-nav.tsx`) shows the first four pins and 전체 (`/access`, which lists the same groups). Settings and
 내 설정 are in the account menu. The pins are the shared `general.headerNavigation` page flags in
 `headerNavigationOrder` (tool flags show queue, search and account); before `HEADER_NAVIGATION_VERSION` 2 the page flags

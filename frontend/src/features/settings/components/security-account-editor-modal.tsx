@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { LoaderCircle, Trash2 } from 'lucide-react'
+import { KeyRound, LoaderCircle, Trash2, Users } from 'lucide-react'
 import { TextTabs } from '@/components/common/text-tabs'
 import { Badge } from '@/components/ui/badge'
 import { IconButton } from '@/components/ui/icon-button'
@@ -158,9 +158,9 @@ export function SecurityAccountEditorModal({
           onChange={setActiveSection}
           ariaLabel={t({ ko: '계정 편집 항목', en: 'Account sections' })}
           items={[
-            { value: 'group', label: t({ ko: '그룹', en: 'Group' }) },
-            { value: 'password', label: t({ ko: '비밀번호', en: 'Password' }) },
-            { value: 'danger', label: t({ ko: '삭제', en: 'Delete' }) },
+            { value: 'group', label: t({ ko: '그룹', en: 'Group' }), icon: Users },
+            { value: 'password', label: t({ ko: '비밀번호', en: 'Password' }), icon: KeyRound },
+            { value: 'danger', label: t({ ko: '삭제', en: 'Delete' }), icon: Trash2 },
           ]}
         />
 

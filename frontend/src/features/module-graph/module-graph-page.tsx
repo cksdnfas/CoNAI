@@ -4,6 +4,7 @@ import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRe
 import { useSearchParams } from 'react-router-dom'
 import { ReactFlowProvider, useReactFlow } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
+import { History, PackageCheck } from 'lucide-react'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { TextTabs } from '@/components/common/text-tabs'
 import { ErrorState } from '@/components/ui/error-state'
@@ -820,8 +821,8 @@ function ModuleWorkflowWorkspaceInner({ isWideLayout }: ModuleWorkflowWorkspaceP
         onChange={setResultsTab}
         ariaLabel={t({ ko: '결과', en: 'Results' })}
         items={[
-          { value: 'results', label: t({ ko: '결과', en: 'Results' }), count: resultsTotal !== undefined ? formatNumber(resultsTotal) : null },
-          { value: 'runs', label: t({ ko: '실행 기록', en: 'Runs' }), count: runCount ? formatNumber(runCount) : null },
+          { value: 'results', label: t({ ko: '결과', en: 'Results' }), icon: PackageCheck, count: resultsTotal !== undefined ? formatNumber(resultsTotal) : null },
+          { value: 'runs', label: t({ ko: '실행 기록', en: 'Runs' }), icon: History, count: runCount ? formatNumber(runCount) : null },
         ]}
         className="shrink-0"
       />

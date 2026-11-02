@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useLocation, useSearchParams } from 'react-router-dom'
 import type { PostCategory, PostKnowledgeReviewStatus, PostListLayout, PostSummary } from '@conai/shared'
-import { ArrowLeft, ChevronDown, ChevronRight, FolderPlus, LayoutGrid, Newspaper, Pencil, PenSquare, Rows3, Search, Smartphone, Trash2, Undo2, X } from 'lucide-react'
+import { ArrowLeft, BookOpen, ChevronDown, ChevronRight, EyeOff, FilePen, FolderPlus, LayoutGrid, Newspaper, Pencil, PenSquare, Rows3, Search, Smartphone, Trash2, Undo2, X, type LucideIcon } from 'lucide-react'
 import { PageToolbar } from '@/components/common/page-toolbar'
 import { PathBreadcrumbs } from '@/components/common/path-breadcrumbs'
 import { PageWithSidebar } from '@/components/common/page-with-sidebar'
@@ -411,9 +411,11 @@ export function PostsPage() {
     all: t({ ko: '전체', en: 'All' }), knowledge: t({ ko: '지식', en: 'Knowledge' }), draft: t({ ko: '초안', en: 'Drafts' }),
     trash: t({ ko: '휴지통', en: 'Trash' }), hidden: t({ ko: '숨김', en: 'Hidden' }),
   }
-  // The list tabs share the toolbar row with the title and the actions instead of a second row under it.
+  const tabIcons: Record<ListTab, LucideIcon> = { all: Newspaper, knowledge: BookOpen, draft: FilePen, trash: Trash2, hidden: EyeOff }
+  // The list tabs share the toolbar row with the title and the actions instead of a second row under it; outside search
+  // they take the row's free middle, so a folded strip unfolds again when the row widens.
   const listTabsNode = view === 'list' && listTabs.length > 1 ? (
-    <TextTabs value={tab} onChange={openTab} hairline={false} ariaLabel={t({ ko: '목록', en: 'List' })} items={listTabs.map((item) => ({ value: item, label: tabLabels[item] }))} />
+    <TextTabs value={tab} onChange={openTab} hairline={false} ariaLabel={t({ ko: '목록', en: 'List' })} className="flex-1" items={listTabs.map((item) => ({ value: item, label: tabLabels[item], icon: tabIcons[item] }))} />
   ) : null
   let toolbarStart
   let toolbarActions
@@ -445,7 +447,6 @@ export function PostsPage() {
         {tag ? (
           <Chip tone="primary" className="ml-1" removeLabel={t({ ko: '태그 필터 빼기', en: 'Clear tag filter' })} onRemove={() => openList({ tag: null })}>#{tag}</Chip>
         ) : null}
-        {listTabsNode}
       </>
     )
     toolbarActions = (
@@ -537,7 +538,7 @@ export function PostsPage() {
         storageKey="posts"
         sidebarLabel={t({ ko: '게시판', en: 'Posts' })}
         sidebar={sidebar}
-        toolbar={<PageToolbar sticky start={toolbarStart} actions={toolbarActions} />}
+        toolbar={<PageToolbar sticky start={toolbarStart} actions={toolbarActions}>{view === 'list' && !searchOpen ? listTabsNode : null}</PageToolbar>}
       >
         {listHeader}
         {content}

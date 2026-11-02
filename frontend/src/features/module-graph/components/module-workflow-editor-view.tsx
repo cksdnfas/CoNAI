@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
-import { ArrowLeft, Bug, FolderCog, LayoutGrid, Loader2, Maximize, PanelRight, Play, Plus, Redo2, Save, Undo2, X } from 'lucide-react'
+import { ArrowLeft, Box, Bug, FolderCog, History, LayoutGrid, Loader2, Maximize, PanelRight, Play, Plus, Redo2, Save, TextCursorInput, Undo2, X } from 'lucide-react'
 import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
 import { TextTabs } from '@/components/common/text-tabs'
 import { ActionMenuButton, type ActionMenuEntry } from '@/components/ui/action-menu'
@@ -149,9 +149,9 @@ export function ModuleWorkflowEditorView({
       onChange={setDockTab}
       ariaLabel={t({ ko: '편집기 패널', en: 'Editor panel' })}
       items={[
-        ...(selectionKey ? [{ value: 'node' as const, label: t({ ko: '노드', en: 'Node' }) }] : []),
-        { value: 'inputs', label: t({ ko: '입력', en: 'Inputs' }), count: inputsCount || null },
-        { value: 'runs', label: t({ ko: '실행', en: 'Runs' }), count: runsCount || null },
+        ...(selectionKey ? [{ value: 'node' as const, label: t({ ko: '노드', en: 'Node' }), icon: Box }] : []),
+        { value: 'inputs', label: t({ ko: '입력', en: 'Inputs' }), icon: TextCursorInput, count: inputsCount || null },
+        { value: 'runs', label: t({ ko: '실행', en: 'Runs' }), icon: History, count: runsCount || null },
       ]}
       actions={(
         <IconButton size="icon-xs" variant="ghost" onClick={toggleDock} label={t({ ko: '패널 닫기', en: 'Close panel' })}>

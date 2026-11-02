@@ -1,6 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Check, Layers, Pencil, Plus, RotateCcw, Star, Trash2, X } from 'lucide-react'
+import { Check, ImageIcon, Layers, LayoutTemplate, PaintBucket, Pencil, Plus, RotateCcw, Star, TextCursorInput, Trash2, Type, X, type LucideIcon } from 'lucide-react'
 import { TextTabs } from '@/components/common/text-tabs'
 import { Button } from '@/components/ui/button'
 import { useConfirm } from '@/components/ui/confirm-dialog'
@@ -454,6 +454,7 @@ function SlotOverlay({ file, appearance, onApply, onNew, onSaveSlots, onClose }:
 
 type AppearanceTab = 'text' | 'layout' | 'pictures' | 'background' | 'composer'
 const TABS: AppearanceTab[] = ['text', 'layout', 'pictures', 'background', 'composer']
+const TAB_ICONS: Record<AppearanceTab, LucideIcon> = { text: Type, layout: LayoutTemplate, pictures: ImageIcon, background: PaintBucket, composer: TextCursorInput }
 
 /** The open tab and slot overlay; held by whoever shows the content, so a popover that unmounts it keeps them. */
 function useAppearanceView() {
@@ -562,7 +563,7 @@ function ChatAppearanceContent({ threadId, style, layout, view: { slotsOpen, set
           </div>
           <TextTabs
             value={tab}
-            items={TABS.map((key) => ({ value: key, label: tabLabel[key] }))}
+            items={TABS.map((key) => ({ value: key, label: tabLabel[key], icon: TAB_ICONS[key] }))}
             onChange={setTab}
             ariaLabel={t({ ko: '채팅 모양 항목', en: 'Appearance sections' })}
             className="shrink-0"

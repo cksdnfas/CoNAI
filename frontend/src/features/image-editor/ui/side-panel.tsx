@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Contrast, Layers } from 'lucide-react'
 import { TextTabs } from '@/components/common/text-tabs'
 import { useI18n } from '@/i18n'
 import type { EditorEngine, EditorSnapshot } from '../engine/editor-engine'
@@ -18,8 +19,8 @@ export function SidePanel({ engine, snapshot, onImportImage }: { engine: EditorE
         <TextTabs<SideTab>
         value={tab}
         items={[
-          { value: 'layers', label: t({ ko: '레이어', en: 'Layers' }) },
-          { value: 'adjust', label: t({ ko: '보정', en: 'Adjust' }) },
+          { value: 'layers', label: t({ ko: '레이어', en: 'Layers' }), icon: Layers },
+          { value: 'adjust', label: t({ ko: '보정', en: 'Adjust' }), icon: Contrast },
         ]}
         onChange={(next) => {
           if (next !== 'adjust') engine.commitAdjust()

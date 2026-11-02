@@ -2,7 +2,7 @@ import { useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import type { PostDetail, PostKnowledgeLinks, PostReviewIssue } from '@conai/shared'
-import { Link as LinkIcon } from 'lucide-react'
+import { BookOpen, Link as LinkIcon, MessageCircle } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ErrorState } from '@/components/ui/error-state'
@@ -112,8 +112,8 @@ export function PostReactions({ post, topic, searchContext, commentDraft, setCom
       onChange={setPicked}
       ariaLabel={t({ ko: '반응', en: 'Responses' })}
       items={[
-        { value: 'comments', label: t({ ko: '댓글', en: 'Comments' }), count: post.commentCount || null },
-        { value: 'info', label: t({ ko: '문서 정보', en: 'Document' }), count: openIssues + pendingProposals || null },
+        { value: 'comments', label: t({ ko: '댓글', en: 'Comments' }), icon: MessageCircle, count: post.commentCount || null },
+        { value: 'info', label: t({ ko: '문서 정보', en: 'Document' }), icon: BookOpen, count: openIssues + pendingProposals || null },
       ]}
     >
       <TabsContent value="comments">

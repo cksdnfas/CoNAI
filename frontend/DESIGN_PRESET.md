@@ -268,7 +268,8 @@ buttons up one tone.
   `BottomDrawerSheet`. No floating frame, no pin.
 - `/chat` keeps its own full-height layout (list screen on phones, column from 768px) but uses SidebarColumn,
   `.page-bleed` and the gutter: header row, transcript and composer sit on `--page-gutter`.
-  `ChatWorkspaceLayout` owns the top TextTabs row: 대화 · 프로필 · 자원 · 루틴 · 판단 기록 · 내 설정. Only 대화 uses the
+  `ChatWorkspaceLayout` owns the top TextTabs row (each with its icon): 대화 · 프로필 · 자원 · AI 연결 · 루틴 · 판단 기록 ·
+  내 설정. Only 대화 uses the
   full-height conversation layout; the other routes are ordinary pages below that row. Non-admin accounts see 대화 and
   내 설정 only. Settings › 채팅 edits the same profiles/resources in place, with editors staying under `/settings`.
 - `TwoPane` / `TwoPaneToolbar` (`components/common/sidebar-layout`): the in-panel split (pickers inside a Modal,
@@ -443,10 +444,14 @@ A large editor (chat profile, appearance setting, lorebook) is a page with its o
 
 `outline` no longer exists. Icon-only buttons use `IconButton` (label = aria-label + tooltip).
 
-**Icon or words, never both.** An action key with an icon is an `IconButton` (primary CTAs included: `variant="default"`
-IconButton, its cost or count in the label/tooltip). A key without a fitting icon is a word-only Button (dialog footers:
-취소 · 저장). Rows that name a place or a value are not action keys and keep icon + name: navigation rows (`nav`,
-SidebarItem), menu items, field-style pickers (`variant="field"`) and chips that name user data.
+**Icon or words, never both.** Buttons inside a page never mix an icon with words. An action key with an icon is an
+`IconButton` (primary CTAs included: `variant="default"` IconButton, its cost or count in the label/tooltip). A key
+without a fitting icon is a word-only Button (dialog footers: 취소 · 저장); a spinner shown while it works is its busy
+state, not an icon. A count that belongs to an icon key (votes, comments) sits beside it as text. Menus and places may pair an icon with a
+name, since they name where you go or what you pick rather than act: the header's pages and group menus, tab strips
+(`TextTabs` items with `icon`), navigation rows (`nav`, SidebarItem), menu items, field-style pickers
+(`variant="field"`) and chips that name user data. When the width runs short, a menu drops its names and keeps the
+icons (the name moves to the tooltip and the accessible name) instead of wrapping its names to a second line.
 A tab strip and the actions of its content share one row: tabs on the left, IconButtons on the right
 (TextTabs `actions`, or a `justify-between` row), never a second row of buttons under the tabs.
 A folding section opens under its own trigger in reading order; never unfold rarely used settings above the main
@@ -469,8 +474,13 @@ Do not restyle buttons with `bg-*`, `border`, `rounded-*` or `shadow-*` override
 `Alert` has the same status set: `default destructive warning success info`.
 
 ### Tabs / search / horizontal scroll
-- Tabs: `TextTabs` (`components/common/text-tabs`) is the one underlined tab strip (`items` with `count?`, `actions?`,
-  `hairline?`, `TabsContent` children); `FieldTabs` for tabs inside a field frame; `SegmentedControl` for tray toggles.
+- Tabs: `TextTabs` (`components/common/text-tabs`) is the one underlined tab strip (`items` with `icon?` and `count?`,
+  `actions?`, `hairline?`, `TabsContent` children). Give every item of a strip an icon: when the names do not fit on
+  one line, the strip folds to icons alone (name in the tooltip; folded icons may wrap) and unfolds when the room comes
+  back. A folding strip takes the free width of its row (`flex-1` on the TextTabs or its wrapper, or a toolbar's middle
+  slot): sized to its own content, it would stay folded. A state mark goes in `mark`, which stays visible when folded.
+  Tabs named by user data with no icon of their own (a chat's status blocks) and the language picker (native language
+  names) keep their names and no icon; `FieldTabs` for tabs inside a field frame; `SegmentedControl` for tray toggles.
   Features never compose `TabsList` / `TabsTrigger` themselves (`[ds/tabs]`).
 - Search: `SearchField` / `ToolbarSearchField` (`components/common/search-field`); never place a Search icon over an
   `Input` by hand (`[ds/search]`).
@@ -536,8 +546,8 @@ use `Shuffle`; the page of every page (`/access`, 전체) uses `LayoutGrid`. Pag
 - Chips (`Badge` / `Chip`): small metadata pieces, not pill-round.
 - Top navigation: `theme-shell-header` (translucent + blur, `--line` bottom hairline); active state is the only orange.
   From md it holds the pinned pages (icon + name from xl; narrower only the current page keeps its name) and the
-  grouped menus 라이브러리 · 만들기 · 확장 (`AppNavGroupMenu`: name + one line per page, the group key tinted while its
-  page is open). Phones get `AppBottomNav` instead: the first four pinned pages and 전체 (`/access`), same glass with
+  grouped menus 라이브러리 · 만들기 · 확장 (`AppNavGroupMenu`: the group's icon with its name under the same xl rule, one
+  line per page, the group key tinted while its page is open). Phones get `AppBottomNav` instead: the first four pinned pages and 전체 (`/access`), same glass with
   the hairline on top (`.app-bottom-nav`). The right side keeps search, queue, chat and the account menu, which holds
   설정 (gear) and 내 설정.
 

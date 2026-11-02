@@ -1,6 +1,5 @@
 import { useEffect, type ComponentProps, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { ChevronDown } from 'lucide-react'
 import { stopAtPortalEdge } from '@/lib/portal-events'
 import { cn } from '@/lib/utils'
 import { useOverlayBackClose } from './use-overlay-back-close'
@@ -143,7 +142,6 @@ export function BottomDrawerSheet({
           <div className="pointer-events-none absolute inset-x-0 bottom-0 flex justify-center p-4 pb-[calc(env(safe-area-inset-bottom)+1rem)]">
             {footer !== undefined ? footer : (
               <Button type="button" size="sm" className="pointer-events-auto w-[30vw] min-w-[112px] max-w-[180px]" onClick={onClose}>
-                <ChevronDown className="h-4 w-4" />
                 {closeLabel}
               </Button>
             )}

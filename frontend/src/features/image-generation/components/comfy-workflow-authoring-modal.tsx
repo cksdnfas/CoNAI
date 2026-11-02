@@ -9,7 +9,7 @@ import {
   ReactFlowProvider,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { ArrowLeft, ChevronDown, ChevronUp, CircleCheck, CloudOff, LayoutGrid, Loader2, Save, Search, TriangleAlert, Upload, Workflow } from 'lucide-react'
+import { ArrowLeft, Braces, ChevronDown, ChevronUp, CircleCheck, CloudOff, LayoutGrid, Loader2, Save, Search, SlidersHorizontal, TriangleAlert, Upload, Workflow } from 'lucide-react'
 import { SaveConflictAlert, SaveConflictOverwriteButton } from '@/components/common/save-conflict-alert'
 import { TextTabs } from '@/components/common/text-tabs'
 import { useConfirm } from '@/components/ui/confirm-dialog'
@@ -254,20 +254,20 @@ export function ComfyWorkflowAuthoringModal({
         ) : null}
       </div>
       <span className="mx-1 h-4 w-px shrink-0 bg-line" />
-      <div className="flex h-full min-w-0 shrink items-end overflow-hidden">
+      <div className="flex h-full min-w-0 flex-1 items-end overflow-hidden">
         <TextTabs<ComfyWorkflowEditorTab>
           value={editorTab}
           onChange={setEditorTab}
           ariaLabel={t({ ko: '편집 화면', en: 'Editor view' })}
           hairline={false}
+          className="flex-1"
           items={[
-            { value: 'graph', label: t({ ko: '그래프', en: 'Graph' }) },
-            { value: 'json', label: 'JSON' },
-            { value: 'settings', label: t({ ko: '설정', en: 'Settings' }) },
+            { value: 'graph', label: t({ ko: '그래프', en: 'Graph' }), icon: Workflow },
+            { value: 'json', label: 'JSON', icon: Braces },
+            { value: 'settings', label: t({ ko: '설정', en: 'Settings' }), icon: SlidersHorizontal },
           ]}
         />
       </div>
-      <span className="min-w-1 flex-1" />
       {serverCheckIndicator}
       <input ref={fileInputRef} type="file" accept={WORKFLOW_FILE_ACCEPT} hidden onChange={(event) => { void handleFileUpload(event.target.files?.[0]); event.target.value = '' }} />
       <IconButton size="icon-sm" variant="ghost" className="shrink-0" onClick={openFilePicker} label={t({ ko: '워크플로 불러오기 (JSON·이미지·영상)', en: 'Load workflow (JSON, image, video)' })}>

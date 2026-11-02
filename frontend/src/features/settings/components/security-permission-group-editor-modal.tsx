@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { UserMinus, UserPlus } from 'lucide-react'
+import { ShieldCheck, UserMinus, UserPlus, Users } from 'lucide-react'
 import { TextTabs } from '@/components/common/text-tabs'
 import { Badge } from '@/components/ui/badge'
 import { EditorFooter } from '@/components/ui/editor-footer'
@@ -203,8 +203,8 @@ export function SecurityPermissionGroupEditorModal({
                 onChange={setTab}
                 ariaLabel={t({ ko: '권한 그룹 항목', en: 'Permission group sections' })}
                 items={[
-                  { value: 'permissions', label: t({ ko: '권한', en: 'Permissions' }), count: draft.permissionKeys.length },
-                  { value: 'members', label: t({ ko: '멤버', en: 'Members' }), count: members.length },
+                  { value: 'permissions', label: t({ ko: '권한', en: 'Permissions' }), icon: ShieldCheck, count: draft.permissionKeys.length },
+                  { value: 'members', label: t({ ko: '멤버', en: 'Members' }), icon: Users, count: members.length },
                 ]}
                 actions={(shownTab === 'permissions' ? !canEditPermissions : !canManageMembers) ? readOnlyBadge : undefined}
               />

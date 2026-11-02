@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils'
 import { GenerateActionDock } from '../components/generate-action-bar'
 import type { PluginLayoutBlock as PluginLayoutBlockContribution } from '@/features/plugins/plugin-generation'
 import { useGenerationLayoutBlockLabel, useGenerationLayoutSurface, useStackedPluginBlocks } from './generation-layout-context'
+import { generationLayoutBlockIcon } from './generation-layout-labels'
 import { moveLayoutBlock, removeLayoutColumn, resizeLayoutColumn, setLayoutBlockHidden, setLayoutColumnTabs } from './generation-layout-ops'
 import { useLayoutBlockDrag, type LayoutDropIndicator } from './use-layout-block-drag'
 
@@ -144,7 +145,7 @@ function ViewColumn({ column, hidden, blocks, pageFlow }: { column: GenerationLa
           <>
             <TextTabs<GenerationLayoutBlock>
               value={active}
-              items={body.map((block) => ({ value: block, label: blockLabel(block) }))}
+              items={body.map((block) => ({ value: block, label: blockLabel(block), icon: generationLayoutBlockIcon(block) }))}
               onChange={setPickedTab}
             />
             <div className="min-w-0">{blocks[active]}</div>
@@ -174,7 +175,7 @@ function ViewColumn({ column, hidden, blocks, pageFlow }: { column: GenerationLa
       <div className="flex min-h-0 flex-1 flex-col gap-4">
         <TextTabs<GenerationLayoutBlock>
           value={active}
-          items={body.map((block) => ({ value: block, label: blockLabel(block) }))}
+          items={body.map((block) => ({ value: block, label: blockLabel(block), icon: generationLayoutBlockIcon(block) }))}
           onChange={setPickedTab}
           className="shrink-0"
         />

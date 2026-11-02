@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Link2, Link2Off, Pencil, Trash2 } from 'lucide-react'
-import { TextTabs } from '@/components/common/text-tabs'
+import { CheckCheck, CircleMinus, Clock, Link2, Link2Off, List, Pencil, Trash2 } from 'lucide-react'
+import { TextTabs, type TextTabItem } from '@/components/common/text-tabs'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { EditorFooter } from '@/components/ui/editor-footer'
@@ -244,7 +244,7 @@ export function AudioCommentsDialog({ open, group, canEdit, onClose, onChanged }
     setDraft('')
     void run(() => createAudioComment(group.id, text))
   }
-  const tabs: Array<{ value: AudioCommentStatus | 'all'; label: string }> = [{ value: 'pending', label: t({ ko: '대기', en: 'Pending' }) }, { value: 'completed', label: t({ ko: '완료', en: 'Completed' }) }, { value: 'all', label: t({ ko: '전체', en: 'All' }) }]
+  const tabs: Array<TextTabItem<AudioCommentStatus | 'all'>> = [{ value: 'pending', label: t({ ko: '대기', en: 'Pending' }), icon: Clock }, { value: 'completed', label: t({ ko: '완료', en: 'Completed' }), icon: CheckCheck }, { value: 'all', label: t({ ko: '전체', en: 'All' }), icon: List }]
 
   return (
     <Modal open={open} title={t({ ko: '{name} 코멘트', en: '{name} comments' }, { name: group.name })} onClose={onClose} size="md" height="medium">
@@ -361,7 +361,7 @@ export function AudioCleanupDialog({ open, group, onClose, onDone }: { open: boo
   return (
     <Modal open={open} title={t({ ko: '후보 정리', en: 'Clean up takes' })} onClose={() => { if (!busy) onClose() }} size="md">
       <ModalBody>
-        <TextTabs value={scope} items={[{ value: 'unselected', label: t({ ko: '미채택만', en: 'Unselected only' }) }, { value: 'all', label: t({ ko: '전체', en: 'Everything' }) }]} onChange={setScope} />
+        <TextTabs value={scope} items={[{ value: 'unselected', label: t({ ko: '미채택만', en: 'Unselected only' }), icon: CircleMinus }, { value: 'all', label: t({ ko: '전체', en: 'Everything' }), icon: List }]} onChange={setScope} />
         <p className="text-sm">
           {plan.data
             ? t({ ko: '후보 {count}개가 휴지통으로 가.', en: '{count} takes go to the RecycleBin.' }, { count: plan.data.count })

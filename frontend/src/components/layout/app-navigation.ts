@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import type { LucideIcon } from 'lucide-react'
+import { Blocks, Library, Wand, type LucideIcon } from 'lucide-react'
 import { matchPath } from 'react-router-dom'
 import { normalizeHeaderNavigationOrder, type HeaderNavigationPageKey, type HeaderNavigationSettings, type PluginHeaderNavigationKey } from '@conai/shared'
 import { hasAuthPermission } from '@/features/auth/auth-permissions'
@@ -28,6 +28,7 @@ export interface AppNavLink {
 export interface AppNavGroup {
   id: AppNavGroupId
   label: string
+  icon: LucideIcon
   links: AppNavLink[]
 }
 
@@ -36,10 +37,10 @@ export const HEADER_NAVIGATION_QUERY_KEY = ['public-header-navigation-settings']
 
 type BuiltInHeaderKey = Exclude<HeaderNavigationPageKey, PluginHeaderNavigationKey>
 
-const GROUPS: Array<{ id: AppNavGroupId; label: TranslationDictionary }> = [
-  { id: 'library', label: { ko: '라이브러리', en: 'Library' } },
-  { id: 'create', label: { ko: '만들기', en: 'Create' } },
-  { id: 'extend', label: { ko: '확장', en: 'Extensions' } },
+const GROUPS: Array<{ id: AppNavGroupId; label: TranslationDictionary; icon: LucideIcon }> = [
+  { id: 'library', label: { ko: '라이브러리', en: 'Library' }, icon: Library },
+  { id: 'create', label: { ko: '만들기', en: 'Create' }, icon: Wand },
+  { id: 'extend', label: { ko: '확장', en: 'Extensions' }, icon: Blocks },
 ]
 
 /**
@@ -99,9 +100,10 @@ export function useAppNavigation() {
   const linkByKey = new Map([...builtIns.map(({ link }) => link), ...plugins].map((link) => [link.key, link]))
   const pinned = order.flatMap((key) => (pinnedKeys.has(key) ? linkByKey.get(key) ?? [] : []))
   const inGroup = (id: AppNavGroupId) => builtIns.filter(({ group }) => group === id).map(({ link }) => link)
-  const groups: AppNavGroup[] = GROUPS.map(({ id, label }) => ({
+  const groups: AppNavGroup[] = GROUPS.map(({ id, label, icon }) => ({
     id,
     label: t(label),
+    icon,
     // The plugin list leads 확장; the installed plugins' pages follow it.
     links: id === 'extend' ? [...inGroup(id), ...plugins] : inGroup(id),
   })).filter((group) => group.links.length > 0)

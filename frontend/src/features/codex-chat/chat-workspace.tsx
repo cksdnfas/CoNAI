@@ -1,4 +1,5 @@
 import { useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
+import { AlarmClock, Boxes, BrainCircuit, MessagesSquare, Scale, UserCog, UserRound, type LucideIcon } from 'lucide-react'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { TextTabs } from '@/components/common/text-tabs'
 import { hasAuthPermission } from '@/features/auth/auth-permissions'
@@ -9,6 +10,16 @@ import { cn } from '@/lib/utils'
 import { CHAT_WORKSPACE_PATHS } from './chat-admin-location'
 
 type WorkspaceTab = keyof typeof CHAT_WORKSPACE_PATHS
+
+const TAB_ICONS: Record<WorkspaceTab, LucideIcon> = {
+  chat: MessagesSquare,
+  profiles: UserRound,
+  resources: Boxes,
+  llm: BrainCircuit,
+  routines: AlarmClock,
+  judge: Scale,
+  mine: UserCog,
+}
 
 /** What the administrator screens need: the same permission their routes ask for. */
 const ADMIN_PERMISSION = 'page.settings.view'
@@ -63,7 +74,7 @@ function ChatWorkspace() {
       <TextTabs<WorkspaceTab>
         value={active}
         onChange={(tab) => navigate(CHAT_WORKSPACE_PATHS[tab])}
-        items={tabs.map((tab) => ({ value: tab, label: labels[tab] }))}
+        items={tabs.map((tab) => ({ value: tab, label: labels[tab], icon: TAB_ICONS[tab] }))}
         ariaLabel={t({ ko: '채팅 화면', en: 'Chat screens' })}
         hairline={false}
       />
