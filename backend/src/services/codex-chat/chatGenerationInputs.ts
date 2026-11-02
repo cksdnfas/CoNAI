@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import type { MarkedField } from '../../types/workflow'
 import { parseMcpMarkedFields } from '../comfyui/comfyWorkflowInputs'
-import { resolvePresetWorkflow, type ChatGenerationPreset } from './chatGenerationPresets'
+import { comfyAssetFields, resolvePresetWorkflow, type ChatGenerationPreset } from './chatGenerationPresets'
 
 /**
  * What a generation preset asks to be filled: the `generate_image` tool's input in `inline` presets, and the JSON the
@@ -11,7 +11,8 @@ import { resolvePresetWorkflow, type ChatGenerationPreset } from './chatGenerati
 
 export const SCENE_DESCRIPTION = 'What this moment shows, as comma-separated Danbooru-style tags: subject count, pose, action, expression, clothing, setting, lighting, camera angle. Do not add quality, artist or style tags and no negative tags; the preset already holds them.'
 
-export type PresetInputShape = { shape: Record<string, z.ZodTypeAny>; fill: string; workflowName: string | null; problem: string | null }
+/** `sceneField`: the filled text field holding the scene tags, where a character's appearance tags can go; null when none is filled. */
+export type PresetInputShape = { shape: Record<string, z.ZodTypeAny>; fill: string; workflowName: string | null; problem: string | null; sceneField: string | null }
 
 function fieldSchema(field: MarkedField, required: boolean): z.ZodTypeAny {
   const label = field.description ? `${field.label}: ${field.description}` : field.label
@@ -43,17 +44,19 @@ export function presetInputShape(preset: ChatGenerationPreset): PresetInputShape
     if (labels.length > 1) {
       shape.size = z.enum(labels as [string, ...string[]]).optional().describe(`Picture size: ${sizes.map((size) => `${size.label} (${size.width}×${size.height})`).join(', ')}. Default ${labels[0]}.`)
     }
-    return { shape, fill: labels.length > 1 ? 'Fill prompt and, when the composition calls for it, size.' : 'Fill only prompt.', workflowName: null, problem: null }
+    return { shape, fill: labels.length > 1 ? 'Fill prompt and, when the composition calls for it, size.' : 'Fill only prompt.', workflowName: null, problem: null, sceneField: 'prompt' }
   }
   const config = preset.comfyui
   const { workflow, problem } = config ? resolvePresetWorkflow(config) : { workflow: null, problem: '워크플로가 없어.' }
-  if (!config || !workflow) return { shape: {}, fill: '', workflowName: null, problem: problem ?? 'Workflow unavailable' }
-  const exposed = parseMcpMarkedFields(workflow).filter((field) => config.exposedFieldIds.includes(field.id) && field.id !== config.referenceField)
+  if (!config || !workflow) return { shape: {}, fill: '', workflowName: null, problem: problem ?? 'Workflow unavailable', sceneField: null }
+  const marked = parseMcpMarkedFields(workflow)
+  const exposed = marked.filter((field) => config.exposedFieldIds.includes(field.id) && field.id !== config.referenceField)
   const shape: Record<string, z.ZodTypeAny> = {}
   for (const field of exposed) {
     const covered = config.fixedInputs[field.id] !== undefined || field.default_value !== undefined
     shape[field.id] = fieldSchema(field, field.required === true && !covered)
   }
   const fill = exposed.length > 0 ? `Fill ${exposed.map((field) => `${field.id} (${field.label})`).join(', ')}.` : 'It takes no input.'
-  return { shape, fill, workflowName: workflow.name, problem: null }
+  const promptField = comfyAssetFields(config, marked).promptField
+  return { shape, fill, workflowName: workflow.name, problem: null, sceneField: promptField && shape[promptField] ? promptField : null }
 }

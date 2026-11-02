@@ -97,7 +97,8 @@ export function CharacterAppearanceEditor({ value, onChange, onAvatarChange, ref
   const nameMissing = !value.name.trim()
   const presetBlocked = !runs.preset ? t({ ko: '자산을 만들 수 있는 생성 프리셋이 없어', en: 'No generation preset can make assets' }) : null
   const nameBlocked = nameMissing ? t({ ko: '이름을 먼저 적어줘', en: 'Enter a name first' }) : null
-  const expressionBlocked = presetBlocked ?? nameBlocked ?? (mode === 'reference' && !value.referenceHash ? t({ ko: '기준 이미지를 먼저 정해줘', en: 'Set the reference image first' }) : null)
+  // Only an image-input ComfyUI workflow needs the reference; NAI draws from the appearance text when there is none.
+  const expressionBlocked = presetBlocked ?? nameBlocked ?? (mode === 'reference' && runs.preset?.kind === 'comfyui' && !value.referenceHash ? t({ ko: '기준 이미지를 먼저 정해줘', en: 'Set the reference image first' }) : null)
   const generating = editable && generation
   const draftBlocked = draftNeedsName ? nameBlocked : null
   // The library pick opens at a group given by id (a library setting's candidates); a profile's starts at its own folder.

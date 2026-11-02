@@ -42,8 +42,8 @@ const MAX_RUNS = 16
 /** Slot keys the editor uses for the single-image assets (expression slots use their emotion names). */
 export const REFERENCE_SLOT = '기준 이미지'
 export const BACKGROUND_SLOT = '배경'
-const SLOT_RECIPES: Record<'reference' | 'background', { slotKey: string; prompt: string }> = {
-  reference: { slotKey: REFERENCE_SLOT, prompt: 'solo, full body, simple background, character reference' },
+export const SLOT_RECIPES: Record<'reference' | 'background', { slotKey: string; prompt: string }> = {
+  reference: { slotKey: REFERENCE_SLOT, prompt: 'solo, full body, standing, looking at viewer, simple background, white background' },
   background: { slotKey: BACKGROUND_SLOT, prompt: 'scenery, background, no humans' },
 }
 const DEFAULT_EXPRESSION_PRESET = '기본 캐릭터 표정'

@@ -27,7 +27,7 @@ import { createRandomUuid } from '@/lib/random-uuid'
 import { cn } from '@/lib/utils'
 import { ChatAssetSubmissionError } from '@/lib/api-codex-chat'
 import { chatModelRows, ModelRowOptions } from './chat-model-role-select'
-import { refreshOwnerAssets } from './chat-profile-asset-runs'
+import { refreshOwnerAssets, SLOT_RECIPES } from './chat-profile-asset-runs'
 
 const terminal = (status: string) => ['completed', 'failed', 'cancelled'].includes(status)
 const activeAttempt = (attempt: ChatAssetBatch['slots'][number]['attempts'][number]) => !terminal(attempt.status)
@@ -146,8 +146,8 @@ export function ChatAssetBatchModal({ target, initialBatchId, referenceOnly = fa
         ...(expressions ? { expressionPresetId } : {}),
         ...(preset?.kind === 'comfyui' ? { promptField } : {}),
         slots: [
-          ...(referenceOnly || !current.referenceHash ? [{ slotKey: '기준 이미지', kind: 'reference' as const, prompt: 'solo, full body, simple background, character reference' }] : []),
-          ...(background && current.owner.kind === 'profile' ? [{ slotKey: '배경', kind: 'background' as const, prompt: 'scenery, background' }] : []),
+          ...(referenceOnly || !current.referenceHash ? [{ slotKey: '기준 이미지', kind: 'reference' as const, prompt: SLOT_RECIPES.reference.prompt }] : []),
+          ...(background && current.owner.kind === 'profile' ? [{ slotKey: '배경', kind: 'background' as const, prompt: SLOT_RECIPES.background.prompt }] : []),
           ...(full ? [{ slotKey: '전신', kind: 'full' as const, prompt: 'solo, full body' }] : []),
         ],
       }

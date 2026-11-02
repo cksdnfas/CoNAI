@@ -733,6 +733,22 @@ test('permissions: independent pages, features, migration, grants, scopes and ro
         ChatProfileStore.update(profile.id, { generationPresetIds: [nai.id, comfy.id] })
       }
     }
+    // Pictures of the speaker get the profile's appearance tags from the server; other pictures do not.
+    ChatProfileStore.update(profile.id, { appearance: 'silver hair, red eyes', delegatedPermissions: [] })
+    const selfContext = { threadId: CodexChatStore.createThread(adminId, 'self picture', 'llm', profile.id), profileId: profile.id, kind: 'direct' as const, replyId: 'linked-self' }
+    const stopSelf = registerChatReply(selfContext, controller.signal, () => ({ replyTo: null, recipients: ['user'] }))
+    const selfGrant = resolveChatProfileToolGrant(ChatProfileStore.find(profile.id)!, resolveChatAccess(adminId))
+    const selfBridge = await openChatMcpBridge({ accountId: adminId, accountType: 'admin' }, selfGrant.scopes, selfGrant.toolAllowlist, { chatContext: selfContext, generationPresetIds: [nai.id, comfy.id] })
+    try {
+      for (const tool of ['generate_image', 'generate_image_2']) {
+        for (const self of [true, false]) {
+          const result = await selfBridge.call(tool, { prompt: 'waving', include_self: self })
+          assert.notEqual(result.isError, true, JSON.stringify(result))
+          const job = GenerationQueueModel.findById(JSON.parse((result.content![0] as { text: string }).text).id)!
+          assert.equal(String(job.request_payload).includes('silver hair, red eyes, waving'), self, `${tool} include_self=${self}`)
+        }
+      }
+    } finally { stopSelf(); await selfBridge.close(); ChatProfileStore.update(profile.id, { appearance: '' }) }
     ChatProfileStore.update(profile.id, { delegatedPermissions: [] })
     const guestContext = { threadId: CodexChatStore.createThread(accountId, 'denied presets', 'llm', profile.id), profileId: profile.id, kind: 'direct' as const, replyId: 'linked-denied' }
     const stop = registerChatReply(guestContext, controller.signal, () => ({ replyTo: null, recipients: ['user'] }))

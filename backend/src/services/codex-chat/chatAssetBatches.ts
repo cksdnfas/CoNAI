@@ -108,10 +108,12 @@ function recipes(input: ChatAssetBatchInput): SlotRecipe[] {
 
 /**
  * The ComfyUI fields an asset batch writes: the slot prompt's text field (given, or found on its own) and the
- * reference's image field (none: a text-to-image workflow that draws from the appearance text alone). NAI: none.
+ * reference's image field (none: a text-to-image workflow that draws from the appearance text alone). NAI draws from
+ * the reference as a character reference when there is one, and from the appearance text alone otherwise; only a
+ * ComfyUI image field `needsReference`.
  */
 function assetFields(preset: ChatGenerationPreset, promptField?: string) {
-  if (preset.kind !== 'comfyui') return { promptField: undefined, referenceField: null as string | null, drawsReference: true }
+  if (preset.kind !== 'comfyui') return { promptField: undefined, referenceField: null as string | null, drawsReference: true, needsReference: false }
   if (!preset.comfyui) throw new ChatAssetError('ComfyUI 프리셋 설정을 찾을 수 없어.')
   const { workflow, problem } = resolvePresetWorkflow(preset.comfyui)
   if (!workflow) throw new ChatAssetError(problem ?? '워크플로를 찾을 수 없어.')
@@ -121,11 +123,14 @@ function assetFields(preset: ChatGenerationPreset, promptField?: string) {
   if (!chosen || !marked.some((entry) => entry.id === chosen && ['text', 'textarea'].includes(entry.type))) throw new ChatAssetError('슬롯 프롬프트를 넣을 텍스트 필드(promptField)를 생성 프리셋에서 골라줘.')
   if (!found.hasSeed) throw new ChatAssetError('자산 생성에는 워크플로의 시드 입력을 숫자 필드로 표시해줘.')
   if (found.referenceAmbiguous) throw new ChatAssetError('이미지 필드가 여러 개야. 생성 프리셋에서 기준 이미지 필드를 골라줘.')
-  return { promptField: chosen, referenceField: found.referenceField, drawsReference: Boolean(found.referenceField) }
+  return { promptField: chosen, referenceField: found.referenceField, drawsReference: Boolean(found.referenceField), needsReference: Boolean(found.referenceField) }
 }
 
 /** A slot that draws from the reference: not the reference itself and not a background (scenery, no character). */
 const followsReference = (slot: { kind: ChatAssetKind }) => slot.kind !== 'reference' && slot.kind !== 'background'
+
+/** Expressions become chat emoticons: one character, facing the viewer, on a plain background, whatever the preset draws. */
+const EXPRESSION_FRAMING = 'solo, upper body, looking at viewer, simple background, white background'
 
 /** Validate a creation proposal without writing a batch or job. */
 export function resolveChatAssetTarget(profileId: number, settingId?: number, batchId?: number, input?: unknown): ChatAssetOwner {
@@ -146,7 +151,7 @@ export function validateChatAssetBatchProposal(requester: McpRequester, profileI
   requireLocalProfileAssets(profileId, slots.every((slot) => slot.kind === 'background'))
   if (chatAssetOwner(profileId).kind === 'setting' && slots.some((slot) => slot.kind === 'background')) throw new ChatAssetError('외형 설정에는 배경 슬롯을 넣을 수 없어.')
   const fields = assetFields(preset, input.promptField)
-  if (fields.drawsReference && !profile.referenceHash && slots.some(followsReference) && !slots.some((slot) => slot.kind === 'reference')) throw new ChatAssetError('기준 이미지를 고르거나 기준 이미지 슬롯을 먼저 만들어줘.')
+  if (fields.needsReference && !profile.referenceHash && slots.some(followsReference) && !slots.some((slot) => slot.kind === 'reference')) throw new ChatAssetError('기준 이미지를 고르거나 기준 이미지 슬롯을 먼저 만들어줘.')
   return input
 }
 
@@ -171,7 +176,7 @@ export async function createChatAssetBatch(requester: McpRequester, profileId: C
     requireLocalProfileAssets(profileId, slots.every((slot) => slot.kind === 'background'))
     if (owner.kind === 'setting' && slots.some((slot) => slot.kind === 'background')) throw new ChatAssetError('외형 설정에는 배경 슬롯을 넣을 수 없어.')
     const fields = assetFields(preset, input.promptField)
-    if (fields.drawsReference && !profile.referenceHash && slots.some(followsReference) && !slots.some((slot) => slot.kind === 'reference')) throw new ChatAssetError('기준 이미지를 고르거나 기준 이미지 슬롯을 먼저 만들어줘.')
+    if (fields.needsReference && !profile.referenceHash && slots.some(followsReference) && !slots.some((slot) => slot.kind === 'reference')) throw new ChatAssetError('기준 이미지를 고르거나 기준 이미지 슬롯을 먼저 만들어줘.')
     const snapshot: Snapshot = { requestKey: input.idempotencyKey, request, preset, appearance: profile.appearance, referenceHash: profile.referenceHash, slots, promptField: fields.promptField, groupPath: `${chatCharacterGroupPath(profile.name)}/후보` }
     const batchId = Number(db.prepare('INSERT INTO chat_asset_batches(account_id, profile_id, setting_id, preset_id, snapshot) VALUES (?, ?, ?, ?, ?)').run(requester.accountId, owner.kind === 'profile' ? owner.id : null, owner.kind === 'setting' ? owner.id : null, preset.id, JSON.stringify(snapshot)).lastInsertRowid)
     const insert = db.prepare('INSERT INTO chat_asset_slots(batch_id, slot_key, kind, prompt) VALUES (?, ?, ?, ?)')
@@ -208,8 +213,8 @@ async function submitSlot(requester: McpRequester, row: BatchRow, slot: SlotRow,
   const drawsReference = fields.drawsReference && followsReference(slot)
   const referenceHash = drawsReference ? effectiveReference(row, slot) : null
   const recipe = snapshot.slots.find((entry) => entry.slotKey === slot.slot_key)!
-  if (drawsReference && !referenceHash) throw new ChatAssetError('기준 이미지를 먼저 골라줘.', 409)
-  const prompt = [snapshot.appearance, recipe.prompt].map((part) => part.trim()).filter(Boolean).join(', ')
+  if (fields.needsReference && drawsReference && !referenceHash) throw new ChatAssetError('기준 이미지를 먼저 골라줘.', 409)
+  const prompt = [snapshot.appearance, recipe.prompt, slot.kind === 'expression' ? EXPRESSION_FRAMING : ''].map((part) => part.trim()).filter(Boolean).join(', ')
   const args: Record<string, unknown> = { ...recipe.inputs, prompt, size: recipe.size }
   const input = await buildChatGenerationPresetJob(preset, args, { ...profile, referenceHash }, { forceReference: true, omitReference: !referenceHash })
   // The slot prompt follows the field's fixed text, whether the field is exposed to the model or fixed.

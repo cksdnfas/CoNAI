@@ -190,6 +190,14 @@ test('character asset batches: durable jobs, dependencies, review and approved a
     assert.equal(ChatProfileStore.find(fresh.id)!.referenceHash, null)
   })
 
+  await t.test('NAI expressions without a reference draw from the appearance alone, framed as emoticons', async () => {
+    const plain = ChatProfileStore.create({ name: '기준 없음', engine: 'codex', appearance: 'red hair' })
+    const made = await batches.createChatAssetBatch(requester, plain.id, { idempotencyKey: 'no-reference', presetId: preset.id, expressionPresetId: expressionPreset.id, expressions: ['기쁨'] })
+    assert.equal(made.slots[0].attempts.length, 1)
+    assert.equal(payload(made, '기쁨').character_refs, undefined)
+    assert.match(payload(made, '기쁨').prompt, /red hair, smile, happy, open mouth, solo, upper body, looking at viewer, simple background, white background/)
+  })
+
   await t.test('choosing refuses unrelated library hashes; tagger disabled returns no review', async () => {
     for (const key of ['기쁨', '슬픔', '배경', '아바타']) finish(batch, key)
     await assert.rejects(batches.chooseChatAssetSlot(requester, batch.id, '기쁨', other), /성공/)

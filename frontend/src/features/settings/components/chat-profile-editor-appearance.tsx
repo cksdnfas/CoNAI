@@ -3,7 +3,7 @@ import { characterOutfitIndex, composeCharacterAppearance } from '@conai/shared'
 import { Select } from '@/components/ui/select'
 import { ChatProfileAvatar } from '@/features/codex-chat/chat-profile-avatar'
 import { useI18n } from '@/i18n'
-import { CHAT_GENERATION_PRESETS_QUERY_KEY, ChatEditorResolution, clearChatProfileExpression, draftChatAppearance, listChatGenerationPresets, sameCharacterLink, setChatProfileExpression, type ChatProfile } from '@/lib/api-codex-chat'
+import { ChatEditorResolution, clearChatProfileExpression, draftChatAppearance, sameCharacterLink, setChatProfileExpression, type ChatProfile } from '@/lib/api-codex-chat'
 import { ErrorState } from '@/components/ui/error-state'
 import { LoadingState } from '@/components/ui/loading-state'
 import { useSnackbar } from '@/components/ui/snackbar-context'
@@ -49,13 +49,11 @@ export function ChatProfileAppearancePanel({ draft, patch, profile, dirty, onBus
   )
 }
 
-/** An `after` preset's prompt writer sees only the appearance text of the character (not the system prompt or sections). */
+/** Generation presets draw the character from the appearance text alone (not the system prompt or sections). */
 function useAppearanceWarning(draft: Draft, appearance: string | undefined) {
   const { t } = useI18n()
-  const generationPresetsQuery = useQuery({ queryKey: CHAT_GENERATION_PRESETS_QUERY_KEY, queryFn: listChatGenerationPresets, enabled: draft.mcpEnabled && draft.generationPresetIds.length > 0 })
-  const missing = draft.mcpEnabled && !appearance?.trim()
-    && (generationPresetsQuery.data ?? []).some((preset) => draft.generationPresetIds.includes(preset.id) && preset.prompting.timing === 'after')
-  return missing ? t({ ko: '답변이 끝난 뒤 그리는 이미지는 이 설명만 보고 캐릭터를 그려. 비어 있으니 직접 쓰거나 \'AI 초안\'으로 채워 줘.', en: 'After-reply pictures draw the character from this text alone. Write it, or fill it with “AI draft”.' }) : null
+  const missing = draft.mcpEnabled && !appearance?.trim() && draft.generationPresetIds.length > 0
+  return missing ? t({ ko: '생성 프리셋은 이 설명만 보고 캐릭터를 그려. 비어 있으니 직접 쓰거나 \'AI 초안\'으로 채워 줘.', en: 'Generation presets draw the character from this text alone. Write it, or fill it with “AI draft”.' }) : null
 }
 
 /** Other emoticon groups the profile's chats may use (a profile field in every link state). */
