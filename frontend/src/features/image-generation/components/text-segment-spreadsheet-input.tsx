@@ -19,10 +19,15 @@ export const DEFAULT_PROMPT_TEXTAREA_ROWS = 5
 
 /**
  * Offer "캐릭터 불러오기" on each row: a character library setting's appearance tags go into that row like a preset;
- * with `reference`, its reference image can go to one of `targets` too (chosen when confirming).
+ * with `reference`, its images can go to one of `targets` too (chosen when confirming); with `onLoadMore` the form
+ * takes several, the first into the target and each further one as a new entry.
  */
 export type PromptCharacterLoadOptions = {
-  reference?: { targets: CharacterSettingLoadTarget[]; onLoad: (target: CharacterSettingLoadTarget, image: SelectedImageDraft) => void } | null
+  reference?: {
+    targets: CharacterSettingLoadTarget[]
+    onLoad: (target: CharacterSettingLoadTarget, image: SelectedImageDraft) => void
+    onLoadMore?: (image: SelectedImageDraft) => void
+  } | null
 }
 
 type TextSegmentSpreadsheetInputProps = {
@@ -131,9 +136,11 @@ export function TextSegmentSpreadsheetInput({
                     label={t({ ko: '{row}행에 캐릭터 불러오기', en: 'Load a character into row {row}' }, { row: index + 1 })}
                     tooltipSide="left"
                     referenceTargets={characterLoad.reference?.targets ?? []}
-                    onLoad={({ appearance, reference, referenceTarget }) => {
+                    referenceMultiple={Boolean(characterLoad.reference?.onLoadMore)}
+                    onLoad={({ appearance, references: [first, ...rest], referenceTarget }) => {
                       if (appearance) handleRowChange(index, appendPromptRowText(rows[index] ?? '', appearance))
-                      if (reference && referenceTarget) characterLoad.reference?.onLoad(referenceTarget, reference)
+                      if (first && referenceTarget) characterLoad.reference?.onLoad(referenceTarget, first)
+                      if (characterLoad.reference?.onLoadMore) rest.forEach(characterLoad.reference.onLoadMore)
                     }}
                   />
                 ) : null}

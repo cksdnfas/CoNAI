@@ -136,6 +136,11 @@ test('character library: hierarchy, revisions, owner assets and lossless migrati
       assert.equal((await call(libraryRouter, '/settings', 'post', {}, { folderId: null, name: 'No image', [key]: null })).status, 403)
       assert.equal((await call(libraryRouter, '/settings/:settingId', 'patch', { settingId: String(setting.id) }, { revision: current.revision, [key]: null })).status, 403)
     }
+    assert.equal((await call(libraryRouter, '/settings/:settingId', 'patch', { settingId: String(setting.id) }, { revision: current.revision, references: [] })).status, 403)
+    assert.equal((await call(libraryRouter, '/settings/:settingId/references/catalog', 'post', { settingId: String(setting.id) }, { character: 'Miku', revision: current.revision })).status, 403)
+    const categoryOnly = await call(libraryRouter, '/settings', 'post', {}, { folderId: null, name: 'Categories only', referenceCategories: ['Official'] })
+    assert.equal(categoryOnly.status, 201)
+    assert.deepEqual(categoryOnly.body.data.referenceCategories, ['Official'])
     assert.equal((await call(libraryRouter, '/settings', 'post', {}, { folderId: null, name: 'No image' })).status, 201)
   })
 
@@ -196,6 +201,7 @@ test('character library: hierarchy, revisions, owner assets and lossless migrati
     assert.equal(after.revision, before.revision + 1)
     assert.equal(after.referenceHash, reference)
     assert.equal(after.avatarHash, candidate)
+    assert.equal(library.listCharacterSettings().items.find((item) => item.id === setting.id)?.expressionCount, 1)
     assert.deepEqual(after.avatarCrop, crop)
     assert.equal(EmoticonService.listEntries(after.expressionGroupId!).find((entry) => entry.keywords.includes('기쁨'))?.compositeHash, candidate)
     const absentHash = await call(chatProfileExpressionsRouter, '/:name', 'put', { settingId: String(setting.id), name: '기쁨' }, {})
@@ -219,6 +225,57 @@ test('character library: hierarchy, revisions, owner assets and lossless migrati
     await assert.rejects(batches.createChatAssetBatch(requester, owner, { idempotencyKey: 'background', presetId: preset.id, slots: [{ slotKey: 'background', kind: 'background', prompt: 'city' }] }), /배경/)
     assert.throws(() => batches.validateChatAssetBatchProposal(requester, owner, { idempotencyKey: 'background', presetId: preset.id, slots: [{ slotKey: 'background', kind: 'background', prompt: 'city' }] }), /배경/)
     assert.throws(() => batches.getChatAssetBatch(requester, batch.id, { kind: 'profile', id: setting.id }), /찾을/)
+  })
+
+  await t.test('removing a gallery category uncategorizes its images without removing assets', async () => {
+    const { referenceHash, avatarHash } = library.getCharacterSetting(setting.id)
+    const gallery = library.createCharacterSetting({
+      folderId: null, name: 'Gallery categories', referenceCategories: ['Official', 'Outfits'],
+      references: [{ hash: referenceHash!, category: 'Official' }, { hash: avatarHash!, category: 'Outfits' }],
+    })
+    const { chatMediaUsage } = await import('../src/services/codex-chat/chatCardAssets')
+    assert.ok(chatMediaUsage([referenceHash!]).profiles.includes('캐릭터 라이브러리 / Gallery categories'))
+    const result = await call(libraryRouter, '/settings/:settingId', 'patch', { settingId: String(gallery.id) }, {
+      revision: gallery.revision, referenceCategories: ['Outfits'],
+    })
+    assert.equal(result.status, 200)
+    assert.deepEqual(result.body.data.references, [{ hash: referenceHash, category: null }, { hash: avatarHash, category: 'Outfits' }])
+    assert.deepEqual(result.body.data.referenceCategories, ['Outfits'])
+    assert.equal(result.body.data.referenceCount, 2)
+    assert.deepEqual(library.getCharacterSetting(gallery.id, false).references, [])
+    const groupId = library.characterSettingRow(gallery.id).asset_group_id!
+    library.patchCharacterSetting(gallery.id, { revision: result.body.data.revision, references: [] })
+    assert.equal((images.db.prepare('SELECT COUNT(*) n FROM image_groups WHERE group_id = ?').get(groupId) as { n: number }).n, 2)
+    assert.throws(() => library.patchCharacterSetting(gallery.id, { revision: result.body.data.revision + 1, referenceCategories: ['A', 'a'] }), /분류 이름이 겹쳐/)
+    assert.throws(() => library.patchCharacterSetting(gallery.id, { revision: result.body.data.revision + 1, references: [{ hash: referenceHash, category: 'Gone' }] }), /분류가 없어/)
+  })
+
+  await t.test('duplicate gallery hashes refuse the whole write', async () => {
+    const hash = library.getCharacterSetting(setting.id).referenceHash!
+    const gallery = library.createCharacterSetting({ folderId: null, name: 'Unique gallery', references: [{ hash, category: null }] })
+    const result = await call(libraryRouter, '/settings/:settingId', 'patch', { settingId: String(gallery.id) }, {
+      revision: gallery.revision, name: 'Must not be saved', references: [{ hash, category: null }, { hash, category: null }],
+    })
+    assert.equal(result.status, 400)
+    assert.equal(library.getCharacterSetting(gallery.id).name, 'Unique gallery')
+    assert.equal(library.getCharacterSetting(gallery.id).revision, gallery.revision)
+    assert.deepEqual(library.getCharacterSetting(gallery.id).references, [{ hash, category: null }])
+  })
+
+  await t.test('stale gallery replacements preserve the current categories and image order', async () => {
+    const { referenceHash, avatarHash } = library.getCharacterSetting(setting.id)
+    const gallery = library.createCharacterSetting({ folderId: null, name: 'Gallery revision' })
+    const current = library.patchCharacterSetting(gallery.id, {
+      revision: gallery.revision, referenceCategories: ['Official'],
+      references: [{ hash: avatarHash!, category: null }, { hash: referenceHash!, category: 'Official' }],
+    })
+    const result = await call(libraryRouter, '/settings/:settingId', 'patch', { settingId: String(gallery.id) }, {
+      revision: gallery.revision, references: [], referenceCategories: [],
+    })
+    assert.equal(result.status, 409)
+    assert.equal(result.body.revision, current.revision)
+    assert.deepEqual(library.getCharacterSetting(gallery.id).references, current.references)
+    assert.deepEqual(library.getCharacterSetting(gallery.id).referenceCategories, ['Official'])
   })
 
   await t.test('MCP catalog reads and proposals preserve the human save boundary', async (sub) => {
@@ -246,8 +303,13 @@ test('character library: hierarchy, revisions, owner assets and lossless migrati
       assert.equal('appearance' in listing.settings.items[0], false)
       const current = data(await bridge.call('get_character_setting', { setting_id: setting.id }))
       assert.ok(current.expressions['기쁨'])
-      const proposed = data(await bridge.call('propose_character_library', { action: 'save_setting', setting_id: setting.id, revision: current.revision, input: { appearance: 'proposed only' } }))
+      const proposed = data(await bridge.call('propose_character_library', { action: 'save_setting', setting_id: setting.id, revision: current.revision, input: { appearance: 'proposed only', referenceCategories: ['Official'], references: [{ hash: current.referenceHash, category: 'Official' }] } }))
       assert.equal(ChatProposalStore.find(proposed.proposalId)?.kind, 'character_library')
+      assert.deepEqual(current.references, [])
+      const galleryProposal = ChatProposalStore.find(proposed.proposalId)
+      assert.ok(galleryProposal?.kind === 'character_library' && galleryProposal.action === 'save_setting')
+      assert.deepEqual(galleryProposal.input.references, [{ hash: current.referenceHash, category: 'Official' }])
+      assert.deepEqual(galleryProposal.input.referenceCategories, ['Official'])
       assert.equal(library.getCharacterSetting(setting.id).appearance, 'blue hair, red eyes')
       assert.equal((await bridge.call('propose_character_library', { action: 'save_setting', setting_id: setting.id, revision: current.revision - 1, input: { appearance: 'stale' } })).isError, true)
       const preset = ChatGenerationPresetStore.create({ name: 'Proposal assets', kind: 'nai', nai: { characterReference: 'none' } })

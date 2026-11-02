@@ -5,6 +5,9 @@ import { useI18n } from '@/i18n'
 import { fillCharacterAppearance, type CharacterFacetKey, type CharacterFolder, type CharacterLibraryFacets, type CharacterSettingFilters, type CharacterSettingPage, type CharacterSettingSort } from '@/lib/api-character-library'
 import { localizedTagName, type SettingDraft } from './character-library-shared'
 import type { CharacterSettingEditorState } from './use-character-setting-editor'
+import type { CharacterAppearanceTab } from '@/features/settings/components/character-appearance-editor'
+import { useImagePermissions } from '@/features/auth/use-image-permissions'
+import { editReferenceDraft, type ReferenceEdit } from './character-reference-draft'
 
 /** Tags per dimension the page data lists as filter choices (the most common first). */
 const FACET_CHOICE_LIMIT = 30
@@ -17,7 +20,7 @@ const FOLDER_LIMIT = 300
  * revisions) and the open editor, moves between folders and settings, fills the editor's draft without saving, and
  * saves, deletes or arranges folders through review cards with the person's own session.
  */
-export function useCharacterLibraryChatPage({ folders, folderId, path, subfolders, query, settingsPage, offset, editor, canEdit, openFolder, search, openSetting, newSetting, createFolder, renameFolder, moveFolder, sort, favoriteOnly, filters, facets, setListView, bulk }: {
+export function useCharacterLibraryChatPage({ folders, folderId, path, subfolders, query, settingsPage, offset, editor, canEdit, editorTab, fullEditor, setEditorTab, openFolder, search, openSetting, newSetting, createFolder, renameFolder, moveFolder, sort, favoriteOnly, filters, facets, setListView, bulk }: {
   sort: CharacterSettingSort
   favoriteOnly: boolean
   filters: CharacterSettingFilters
@@ -33,6 +36,9 @@ export function useCharacterLibraryChatPage({ folders, folderId, path, subfolder
   offset: number
   editor: CharacterSettingEditorState
   canEdit: boolean
+  editorTab: CharacterAppearanceTab
+  fullEditor: boolean
+  setEditorTab: (tab: CharacterAppearanceTab) => void
   openFolder: (folderId: number | null, offset?: number) => void
   search: (query: string, offset?: number) => void
   openSetting: (settingId: number) => void
@@ -42,6 +48,7 @@ export function useCharacterLibraryChatPage({ folders, folderId, path, subfolder
   moveFolder: (folder: CharacterFolder, parentId: number | null) => Promise<unknown>
 }) {
   const { t, language } = useI18n()
+  const { canViewImages } = useImagePermissions()
   const { base, draft, ready } = editor
   const targetSettingId = editor.target && 'settingId' in editor.target ? editor.target.settingId : null
   const byId = new Map(folders.map((folder) => [folder.id, folder]))
@@ -75,6 +82,7 @@ export function useCharacterLibraryChatPage({ folders, folderId, path, subfolder
     dirty: editor.dirty,
     fields: [],
     data: {
+      editor: { open: editor.open, mode: editor.open ? fullEditor ? 'full' : 'panel' : null, tab: editor.open && !fullEditor ? editorTab : null, busy: editor.busy },
       view: query ? 'search' : favoriteOnly || Object.keys(filters).length ? 'filtered' : 'folder',
       query,
       sort,
@@ -105,6 +113,8 @@ export function useCharacterLibraryChatPage({ folders, folderId, path, subfolder
         appearance: composeCharacterAppearance(draft),
         favorite: base?.favorite ?? false,
         referenceHash: draft.referenceHash,
+        references: canViewImages ? draft.references : [],
+        referenceCategories: draft.referenceCategories,
         avatarHash: draft.avatarHash,
         avatarCrop: draft.avatarCrop,
         expressionGroupId: base?.expressionGroupId ?? null,
@@ -117,7 +127,8 @@ export function useCharacterLibraryChatPage({ folders, folderId, path, subfolder
       pageAction('character.open_folder', t({ ko: '폴더 열기', en: 'Open folder' }), t({ ko: '폴더(0은 최상위)를 열어. offset으로 외형 설정 목록의 다음 쪽을 봐.', en: 'Open a folder (0: top level); offset pages through its settings.' }), pageObject({ folderId: folderChoice, offset: offsetSchema }, ['folderId'])),
       pageAction('character.search', t({ ko: '외형 설정 검색', en: 'Search settings' }), t({ ko: '라이브러리 전체에서 이름·태그·한국어 태그 이름으로 외형 설정을 찾아. 빈 검색어는 검색을 끝내.', en: 'Find settings by name, tag or Korean tag name across the library; an empty query ends the search.' }), pageObject({ query: pageText(200), offset: offsetSchema }, ['query'])),
       pageAction('character.filter', t({ ko: '목록 필터·정렬', en: 'Filter and sort' }), t({ ko: '정렬, 즐겨찾기만 보기, 태그 필터({차원: [태그]}, data.filterChoices에서 골라. 같은 차원은 하나라도, 차원끼리는 모두)를 바꿔. 필터와 즐겨찾기는 라이브러리 전체에서 찾아. 주어진 항목만 바뀌어.', en: 'Change the sort, favorites-only and tag filters ({dimension: [tags]} from data.filterChoices; any tag of a dimension, all dimensions). Filters look across the whole library; only given fields change.' }), pageObject({ sort: pageChoice(['name', 'updated', 'created', 'created_asc']), favoriteOnly: { type: 'boolean' }, filters: pageObject(Object.fromEntries(['copyright', 'character', 'subject', 'hairColor', 'hairLength', 'hairStyle', 'eyeColor', 'skinColor', 'species', 'outfit'].map((key) => [key, pageArray(pageText(200), 20)]))) })),
-      pageAction('character.open_setting', t({ ko: '외형 설정 열기', en: 'Open setting' }), t({ ko: '외형 설정을 편집기로 열어.', en: 'Open a setting in the editor.' }), pageObject({ settingId: pageNumber(1, undefined, true) }, ['settingId'])),
+      pageAction('character.open_setting', t({ ko: '외형 설정 열기', en: 'Open setting' }), t({ ko: '외형 설정을 상세 패널로 열어.', en: 'Open a setting in the detail panel.' }), pageObject({ settingId: pageNumber(1, undefined, true) }, ['settingId'])),
+      ...(editor.open && ready ? [pageAction('character.editor_tab', t({ ko: '상세 탭 열기', en: 'Open detail tab' }), t({ ko: '열린 외형 설정의 탭을 바꿔. 초안은 그대로 둬.', en: 'Switch the open setting’s tab without changing the draft.' }), pageObject({ tab: pageChoice(['tags', 'images', 'expressions', 'candidates']) }, ['tab']))] : []),
       ...(canEdit ? [
         pageAction('character.folder_create', t({ ko: '폴더 만들기', en: 'Create folder' }), t({ ko: '상위 폴더(0은 최상위) 안에 폴더를 만들어. 같은 이름의 형제 폴더는 거절돼.', en: 'Create a folder inside a parent (0: top level); duplicate sibling names are refused.' }), pageObject({ name: folderName, parentId: folderChoice }, ['name', 'parentId']), 'save'),
         ...(listedIds.length ? [
@@ -132,6 +143,15 @@ export function useCharacterLibraryChatPage({ folders, folderId, path, subfolder
         ] : []),
         ...(editor.open && ready ? [
           pageAction('character.draft', t({ ko: '외형 설정 초안 채우기', en: 'Fill setting draft' }), t({ ko: '열린 편집기의 주어진 항목만 채워. 저장하지 않아.', en: 'Fill only the given fields of the open editor; nothing is saved.' }), draftSchema),
+          ...(canViewImages ? [
+            pageAction('character.references_add', t({ ko: '참고 이미지 추가', en: 'Add reference images' }), t({ ko: '라이브러리 composite hash로 참고 이미지를 초안에 추가해. category는 기존 분류 이름이고, 비우면 미분류야. character.save로 저장해.', en: 'Add library composite hashes to the draft gallery. category is an existing name; empty means uncategorized. Save with character.save.' }), pageObject({ hashes: pageArray(pageText(128)), category: pageText() }, ['hashes'])),
+            pageAction('character.reference_category', t({ ko: '참고 이미지 분류 바꾸기', en: 'Categorize reference image' }), t({ ko: '참고 이미지 한 장의 분류를 바꿔. 빈 분류는 미분류야. 저장하지 않아.', en: 'Change a reference image’s category; empty means uncategorized. Nothing is saved.' }), pageObject({ hash: pageText(128), category: pageText() }, ['hash', 'category'])),
+            pageAction('character.reference_remove', t({ ko: '참고 이미지 빼기', en: 'Remove reference image' }), t({ ko: '갤러리 초안에서만 빼. 라이브러리의 이미지는 지우지 않아.', en: 'Remove from the gallery draft, not from the image library.' }), pageObject({ hash: pageText(128) }, ['hash'])),
+            pageAction('character.reference_set', t({ ko: '기준 이미지 정하기', en: 'Set main reference' }), t({ ko: '갤러리의 한 장을 기준 이미지로 정해. 저장하지 않아.', en: 'Use one gallery image as the main reference. Nothing is saved.' }), pageObject({ hash: pageText(128) }, ['hash'])),
+            pageAction('character.category_add', t({ ko: '이미지 분류 추가', en: 'Add image category' }), t({ ko: '갤러리에 분류 초안을 추가해. 같은 이름은 쓸 수 없어.', en: 'Add a draft gallery category. Names must be unique.' }), pageObject({ name: pageText() }, ['name'])),
+            pageAction('character.category_rename', t({ ko: '이미지 분류 이름 바꾸기', en: 'Rename image category' }), t({ ko: '분류와 그 안의 이미지 분류를 함께 바꿔. 저장하지 않아.', en: 'Rename a category and its images together. Nothing is saved.' }), pageObject({ name: pageText(), next: pageText() }, ['name', 'next'])),
+            pageAction('character.category_remove', t({ ko: '이미지 분류 빼기', en: 'Remove image category' }), t({ ko: '분류를 빼고 안의 이미지는 미분류로 둬. 저장하지 않아.', en: 'Remove a category; its images become uncategorized. Nothing is saved.' }), pageObject({ name: pageText() }, ['name'])),
+          ] : []),
           pageAction('character.fill', t({ ko: '외형 자동 채우기', en: 'Fill appearance' }), t({ ko: '열린 편집기의 항목을 Danbooru 캐릭터(character: 영문 태그나 정확한 한국어 이름), 기준 이미지 자동 태그(image) 또는 지금 태그 다시 분류(resort)로 채워. 의상 태그는 기본 의상에 들어가. 저장하지 않아.', en: 'Fill the open editor from a Danbooru character (character: tag or exact Korean name), the reference image tags (image) or a re-sort of the current tags (resort); outfit tags go to the default outfit. Nothing is saved.' }), pageObject({ source: pageChoice(['danbooru', 'image', 'resort']), character: pageText(200) }, ['source'])),
           pageAction('character.save', t({ ko: '외형 설정 저장', en: 'Save setting' }), t({ ko: '편집기의 현재 초안을 저장해. 기존 설정은 selected.revision 기준이고, 그사이 바뀌었으면 거절돼.', en: 'Save the editor draft as it is; an existing setting saves against selected.revision and is refused if it changed.' }), pageObject({}), 'save'),
           ...(base ? [pageAction('character.delete', t({ ko: '외형 설정 삭제', en: 'Delete setting' }), t({ ko: '열린 외형 설정을 지워. 연결된 프로필은 지금 값의 사본을 유지해.', en: 'Delete the open setting; linked profiles keep a copy of its values.' }), pageObject({}), 'save')] : []),
@@ -141,6 +161,7 @@ export function useCharacterLibraryChatPage({ folders, folderId, path, subfolder
     apply: () => {},
     applyAction: async (id, args, assertCurrent): Promise<WorkflowUndo | void> => {
       assertCurrent()
+      if (editor.isBusy() && !['character.search', 'character.filter'].includes(id)) throw new Error(t({ ko: '이미지 작업이나 저장이 끝난 뒤 다시 해줘.', en: 'Wait for the image operation or save to finish.' }))
       const folderArg = (value: ChatPageData | undefined) => (Number(value) > 0 ? Number(value) : null)
       if (id === 'character.open_folder') { openFolder(folderArg(args.folderId), Number(args.offset ?? 0)); return }
       if (id === 'character.search') { search(String(args.query ?? ''), Number(args.offset ?? 0)); return }
@@ -167,10 +188,21 @@ export function useCharacterLibraryChatPage({ folders, folderId, path, subfolder
       }
       if (!editor.open) throw new Error('외형 설정 편집기를 먼저 열어줘 (character.open_setting / character.new_setting).')
       if (!ready) throw new Error('외형 설정을 아직 불러오는 중이야. 잠시 뒤 다시 해줘.')
+      if (id === 'character.editor_tab') { setEditorTab(String(args.tab) as CharacterAppearanceTab); return }
       if (id === 'character.save') { await editor.save(); return }
       if (id === 'character.delete') { await editor.remove(false); return }
-      const next: Partial<SettingDraft> = {}
-      if (id === 'character.fill') {
+      let next: Partial<SettingDraft> = {}
+      const galleryEdit: ReferenceEdit | null = id === 'character.references_add' ? { kind: 'add', hashes: Array.isArray(args.hashes) ? args.hashes.map(String) : [], category: String(args.category ?? '') || null }
+        : id === 'character.reference_category' ? { kind: 'category', hash: String(args.hash), category: String(args.category) || null }
+          : id === 'character.reference_remove' ? { kind: 'remove', hash: String(args.hash) }
+            : id === 'character.reference_set' ? { kind: 'reference', hash: String(args.hash) }
+              : id === 'character.category_add' ? { kind: 'add-category', name: String(args.name) }
+                : id === 'character.category_rename' ? { kind: 'rename-category', name: String(args.name), next: String(args.next) }
+                  : id === 'character.category_remove' ? { kind: 'remove-category', name: String(args.name) } : null
+      if (galleryEdit) {
+        if (!canEdit || !canViewImages) throw new Error(t({ ko: '참고 이미지를 편집할 권한이 없어.', en: 'You do not have permission to edit reference images.' }))
+        next = editReferenceDraft(editor.draftRef.current, galleryEdit)
+      } else if (id === 'character.fill') {
         const current = editor.draftRef.current
         const source = String(args.source)
         const fill = source === 'danbooru' ? await fillCharacterAppearance({ source: 'danbooru', character: String(args.character ?? '').trim() || current.name })
@@ -193,7 +225,7 @@ export function useCharacterLibraryChatPage({ folders, folderId, path, subfolder
       if (input.avatarCrop !== undefined) { const crop = pageRecord(input.avatarCrop); next.avatarCrop = { x: Number(crop.x), y: Number(crop.y), scale: Number(crop.scale) } }
       const keys = Object.keys(next) as Array<keyof SettingDraft>
       if (!keys.length) throw new Error('채울 항목이 없어.')
-      const before = draft
+      const before = editor.draftRef.current
       editor.patch(next)
       return {
         isCurrent: () => keys.every((key) => JSON.stringify(editor.draftRef.current[key]) === JSON.stringify(next[key])),

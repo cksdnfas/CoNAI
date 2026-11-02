@@ -1,5 +1,5 @@
 import { keepPreviousData, useQuery, type QueryClient } from '@tanstack/react-query'
-import { emptyCharacterAppearanceSections } from '@conai/shared'
+import { emptyCharacterAppearanceSections, type CharacterReferenceImage } from '@conai/shared'
 import {
   CHARACTER_FOLDERS_QUERY_KEY,
   characterFacetsQueryKey,
@@ -31,16 +31,18 @@ export type SettingDraft = {
   sections: CharacterAppearanceSections
   outfits: CharacterOutfit[]
   referenceHash: string | null
+  references: CharacterReferenceImage[]
+  referenceCategories: string[]
   avatarHash: string | null
   avatarCrop: CharacterAvatarCrop | null
 }
-export const SETTING_DRAFT_KEYS = ['name', 'folderId', 'sections', 'outfits', 'referenceHash', 'avatarHash', 'avatarCrop'] as const satisfies ReadonlyArray<keyof SettingDraft>
+export const SETTING_DRAFT_KEYS = ['name', 'folderId', 'sections', 'outfits', 'referenceHash', 'references', 'referenceCategories', 'avatarHash', 'avatarCrop'] as const satisfies ReadonlyArray<keyof SettingDraft>
 
 export function emptySettingDraft(folderId: number | null): SettingDraft {
-  return { name: '', folderId, sections: emptyCharacterAppearanceSections(), outfits: [], referenceHash: null, avatarHash: null, avatarCrop: null }
+  return { name: '', folderId, sections: emptyCharacterAppearanceSections(), outfits: [], referenceHash: null, references: [], referenceCategories: [], avatarHash: null, avatarCrop: null }
 }
 export function settingDraftOf(setting: CharacterSetting): SettingDraft {
-  return { name: setting.name, folderId: setting.folderId, sections: setting.sections, outfits: setting.outfits, referenceHash: setting.referenceHash, avatarHash: setting.avatarHash, avatarCrop: setting.avatarCrop }
+  return { name: setting.name, folderId: setting.folderId, sections: setting.sections, outfits: setting.outfits, referenceHash: setting.referenceHash, references: setting.references, referenceCategories: setting.referenceCategories, avatarHash: setting.avatarHash, avatarCrop: setting.avatarCrop }
 }
 
 export { folderPath, folderSubtreeIds, sortFoldersByName, type LibraryFolder } from '@conai/shared'

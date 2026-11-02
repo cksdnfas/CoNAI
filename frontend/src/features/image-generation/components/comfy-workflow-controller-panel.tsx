@@ -490,7 +490,7 @@ export function ComfyWorkflowControllerPanel({
               label={t({ ko: '캐릭터 불러오기', en: 'Load character' })}
               textTargets={characterTextTargets}
               referenceTargets={characterImageTargets}
-              onLoad={({ appearance, textTargetId, reference, referenceTarget }) => {
+              onLoad={({ appearance, textTargetId, references: [reference], referenceTarget }) => {
                 if (appearance && textTargetId) {
                   const current = workflowDraft[textTargetId]
                   onFieldChange(textTargetId, appendPromptText(typeof current === 'string' || Array.isArray(current) ? current : '', appearance))

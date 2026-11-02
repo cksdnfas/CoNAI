@@ -22,7 +22,7 @@ export function OverlayCardHoverOnly({ shown = false, children }: { shown?: bool
  * the top corners, and `details` + `actions` unfold under the title on hover or focus (always on touch screens).
  * The picture is the open button; text layers let clicks through to it, so only real controls take their own clicks.
  */
-export function OverlayCard({ media, mediaClassName = 'aspect-[3/4]', label, title, subtitle, leading, meta, topStart, topEnd, details, actions, menu, selected, dimmed = false, onOpen, className, ...buttonProps }: {
+export function OverlayCard({ media, mediaClassName = 'aspect-[3/4]', label, title, subtitle, leading, meta, badges, topStart, topEnd, details, actions, menu, selected, current, dimmed = false, onOpen, className, ...buttonProps }: {
   /** Fills the media frame (img / mosaic / fallback). */
   media: ReactNode
   /** Frame size only (aspect), e.g. `aspect-4/3`. */
@@ -35,6 +35,8 @@ export function OverlayCard({ media, mediaClassName = 'aspect-[3/4]', label, tit
   leading?: ReactNode
   /** Right of the title (count, status). */
   meta?: ReactNode
+  /** Always-visible chips under the title and subtitle. */
+  badges?: ReactNode
   topStart?: ReactNode
   topEnd?: ReactNode
   /** Unfolds under the title: chips or a short line. */
@@ -44,25 +46,28 @@ export function OverlayCard({ media, mediaClassName = 'aspect-[3/4]', label, tit
   /** Right-click / long-press menu, also behind a ⋯ key in the top-right corner. */
   menu?: ActionMenuEntry[]
   selected?: boolean
+  current?: boolean
   dimmed?: boolean
   onOpen: () => void
   /** The card's layout in its grid only. */
   className?: string
-} & Pick<ComponentProps<'button'>, 'onDoubleClick' | 'draggable' | 'onDragStart' | 'onDragEnd'>) {
+} & Pick<ComponentProps<'button'>, 'onDoubleClick' | 'disabled' | 'draggable' | 'onDragStart' | 'onDragEnd'>) {
   const { t } = useI18n()
   const card = (
     <div
       data-slot="overlay-card"
       data-selected={selected ? 'true' : undefined}
+      data-current={current ? 'true' : undefined}
       className={cn(
         'group/overlay-card relative isolate min-w-0 overflow-hidden rounded-md bg-fill transition-shadow hover:shadow-elevation-2',
         'has-[>button:focus-visible]:outline-2 has-[>button:focus-visible]:outline-offset-2 has-[>button:focus-visible]:outline-ring',
         selected && 'ring-2 ring-primary ring-offset-2 ring-offset-background',
+        current && selected === undefined && 'outline-2 outline-primary/60 outline-offset-2',
         className,
       )}
     >
       <Panel asChild padding="none" tone="none" radius="none">
-        <button type="button" aria-label={label} aria-pressed={selected} onClick={onOpen} className={cn('relative block w-full cursor-pointer overflow-hidden outline-none', mediaClassName, dimmed && 'opacity-60 grayscale')} {...buttonProps}>
+        <button type="button" aria-label={label} aria-pressed={selected} aria-current={current ? 'true' : undefined} onClick={onOpen} className={cn('relative block w-full cursor-pointer overflow-hidden outline-none', mediaClassName, dimmed && 'opacity-60 grayscale')} {...buttonProps}>
           {media}
         </button>
       </Panel>
@@ -75,6 +80,7 @@ export function OverlayCard({ media, mediaClassName = 'aspect-[3/4]', label, tit
           </div>
           {meta ? <div className="flex shrink-0 items-center gap-1 text-xs text-white/85 tabular-nums [&_svg]:size-3.5">{meta}</div> : null}
         </div>
+        {badges ? <div className="mt-1.5 flex flex-wrap gap-1">{badges}</div> : null}
         {details || actions ? (
           <div className="invisible grid grid-rows-[0fr] transition duration-200 motion-reduce:transition-none group-focus-within/overlay-card:visible group-focus-within/overlay-card:grid-rows-[1fr] group-hover/overlay-card:visible group-hover/overlay-card:grid-rows-[1fr] pointer-coarse:visible pointer-coarse:grid-rows-[1fr]" style={{ transitionProperty: 'grid-template-rows, visibility' }}>
             <div className="min-h-0 overflow-hidden">

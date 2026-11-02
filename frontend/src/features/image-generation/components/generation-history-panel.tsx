@@ -28,6 +28,7 @@ import {
 } from './generation-history-panel-helpers'
 import { GenerationHistoryHeader } from './generation-history-header'
 import { GenerationHistoryRecoveryPanel } from './generation-history-recovery-panel'
+import { GenerationHistoryCardReuseActions, useGenerationHistoryReuse } from './generation-history-reuse-actions'
 import { useGenerationHistoryActions, useHistoryRecoveryAcknowledgement } from './use-generation-history-actions'
 import type { GenerationHistoryFeed } from './use-generation-history-feed'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -182,6 +183,18 @@ export function GenerationHistoryPanelView({ feed, serviceType, workflowId, publ
   }, [historyRecordMap, visibleHistoryRecordIds])
 
   const getHistoryItemId = useCallback((image: ImageRecord) => String(image.id), [])
+  // Copy prompt / load settings straight from a card: hover buttons and right-click on desktop, a ⋯ menu on touch.
+  const historyReuse = useGenerationHistoryReuse()
+  const renderHistoryReuseActions = (image: ImageRecord) => (
+    typeof image.generation_history_id === 'number'
+      ? <GenerationHistoryCardReuseActions historyId={image.generation_history_id} reuse={historyReuse} />
+      : null
+  )
+  const getHistoryItemMenu = (image: ImageRecord) => {
+    if (typeof image.generation_history_id !== 'number') return []
+    const { load, copy } = historyReuse.getMenuActions(image.generation_history_id)
+    return [load, copy]
+  }
   const handleClearSelectedHistory = useCallback(() => {
     setSelectedHistoryIds([])
   }, [])
@@ -284,6 +297,9 @@ export function GenerationHistoryPanelView({ feed, serviceType, workflowId, publ
                   allowGroupAssignAction: !isPublicView,
                   allowHistoryReuseActions: !isPublicView,
                 }}
+                // In selection mode the list shows overlays outside the hover row, where a click would also toggle the card.
+                renderItemOverlay={isPublicView || selectedHistoryIds.length > 0 ? undefined : renderHistoryReuseActions}
+                getItemMenu={isPublicView ? undefined : getHistoryItemMenu}
                 selectedIds={selectedHistoryIds}
                 onSelectedIdsChange={setSelectedHistoryIds}
                 minColumnWidth={220}

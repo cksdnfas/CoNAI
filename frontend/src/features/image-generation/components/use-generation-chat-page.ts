@@ -57,7 +57,7 @@ export function useNaiChatPage(form: NAIFormDraft, setForm: Dispatch<SetStateAct
       includeReference: { type: 'boolean' as const },
       ...(form.characterReferences.length ? { referenceIndex: pageNumber(0, form.characterReferences.length - 1, true) } : {}),
     } : {}),
-  }, ['target'], 'target prompt = main prompt; character = data.characters[characterIndex] (0-based); newCharacter = add a character with the tags. includeReference (default: when the setting has one) also sets its reference image as a character reference: omit referenceIndex to add a new reference row, or give referenceIndex (0-based) to replace that row\'s image (then the setting must have a reference). NAI does not tie references to characters (several character references blend), so the row never follows characterIndex.')
+  }, ['target'], 'target prompt = main prompt; character = data.characters[characterIndex] (0-based); newCharacter = add a character with the tags. includeReference (default: when the setting has a reference image) also sets its reference image (or the referenceHashes images) as a character reference: omit referenceIndex to add a new reference row, or give referenceIndex (0-based) to replace that row\'s image (then an image must go in). With several referenceHashes the first goes there and each further one becomes a new reference row. NAI does not tie references to characters (several character references blend), so the row never follows characterIndex.')
   const commit = useChatDraftTransaction(form, setForm)
   const promptPresets = resolveNaiPromptPresets(form)
   const sampling = resolveNaiSamplingSettings(form)
@@ -141,12 +141,12 @@ export function useNaiChatPage(form: NAIFormDraft, setForm: Dispatch<SetStateAct
         if (target === 'character' && (args.characterIndex === undefined || !form.characters[characterIndex ?? -1])) throw new Error(t({ ko: '캐릭터 번호(characterIndex)를 확인해줘.', en: 'Check characterIndex.' }))
         const referenceIndex = args.referenceIndex === undefined ? null : Number(args.referenceIndex)
         if (referenceIndex !== null && (args.includeReference === false || !form.characterReferences[referenceIndex])) throw new Error(t({ ko: '참조 번호(referenceIndex)를 확인해줘.', en: 'Check referenceIndex.' }))
-        const loaded = await characterSettings.load(args, characterSettings.referenceMode(referenceIndex !== null ? true : args.includeReference, characterReferences))
+        const loaded = await characterSettings.load(args, characterSettings.referenceMode(referenceIndex !== null ? true : args.includeReference, characterReferences), true)
         assertCurrent()
         if (target === 'prompt') next.prompt = characterSettings.text(args, form.prompt, loaded.appearance)
         else if (target === 'newCharacter') next.characters = appendNaiCharacterPrompt(form.characters, characterSettings.text(args, '', loaded.appearance))
         else next.characters = form.characters.map((character, index) => (index === characterIndex ? { ...character, prompt: characterSettings.text(args, character.prompt, loaded.appearance) } : character))
-        if (loaded.reference) next.characterReferences = placeNaiCharacterReference(next.characterReferences, referenceIndex, loaded.reference)
+        loaded.references.forEach((image, index) => { next.characterReferences = placeNaiCharacterReference(next.characterReferences, index === 0 ? referenceIndex : null, image) })
       }
       else if (id === 'nai.characters') {
         const characters = args.characters as unknown as NAIFormDraft['characters']

@@ -100,10 +100,20 @@ export function ChatCharacterLibraryProposalCard({ proposal, threadId }: { propo
 
   const byId = new Map((foldersQuery.data ?? []).map((folder) => [folder.id, folder]))
   const folderLabel = (folderId: number | null) => [t({ ko: '최상위', en: 'Top level' }), ...folderPath(byId, folderId).map((folder) => folder.name)].join(' / ')
+  const uncategorized = t({ ko: '미분류', en: 'Uncategorized' })
   const images = input ? [
     ...(input.referenceHash ? [{ name: t({ ko: '기준 이미지', en: 'Reference image' }), compositeHash: input.referenceHash, mimeType: null }] : []),
     ...(input.avatarHash && input.avatarHash !== input.referenceHash ? [{ name: t({ ko: '아바타', en: 'Avatar' }), compositeHash: input.avatarHash, mimeType: null }] : []),
+    ...(input.references ?? []).filter((image) => image.hash !== input.referenceHash && image.hash !== input.avatarHash).map((image) => ({ name: image.category ?? uncategorized, compositeHash: image.hash, mimeType: null })),
   ] : []
+  // The gallery is replaced whole, so the card says how many images it keeps and in which categories.
+  const referenceSummary = input?.references ? (() => {
+    const counts = new Map<string, number>()
+    for (const image of input.references) counts.set(image.category ?? uncategorized, (counts.get(image.category ?? uncategorized) ?? 0) + 1)
+    return input.references.length
+      ? `${t({ ko: '{count}장', en: '{count} images' }, { count: input.references.length })} (${[...counts].map(([category, count]) => `${category} ${count}`).join(' · ')})`
+      : t({ ko: '모두 빼기', en: 'Remove all' })
+  })() : null
   const preview = previewQuery.data
   const header = proposal.action === 'save_setting'
     ? (proposal.settingId === null ? t({ ko: '새 외형 설정 제안', en: 'New appearance setting' }) : t({ ko: '외형 설정 수정 제안', en: 'Appearance setting update' }))
@@ -124,6 +134,8 @@ export function ChatCharacterLibraryProposalCard({ proposal, threadId }: { propo
           {input.referenceHash === null ? <Row label={t({ ko: '기준 이미지', en: 'Reference image' })}>{t({ ko: '비우기', en: 'Clear' })}</Row> : null}
           {input.avatarHash === null ? <Row label={t({ ko: '아바타', en: 'Avatar' })}>{t({ ko: '비우기', en: 'Clear' })}</Row> : null}
           {input.avatarCrop ? <Row label={t({ ko: '아바타 자르기', en: 'Avatar crop' })}>{`${Math.round(input.avatarCrop.x)}%, ${Math.round(input.avatarCrop.y)}% · ×${input.avatarCrop.scale.toFixed(2)}`}</Row> : null}
+          {referenceSummary !== null ? <Row label={t({ ko: '참고 이미지', en: 'References' })}>{referenceSummary}</Row> : null}
+          {input.referenceCategories ? <Row label={t({ ko: '참고 분류', en: 'Reference categories' })}>{input.referenceCategories.length ? input.referenceCategories.join(', ') : t({ ko: '없음', en: 'None' })}</Row> : null}
         </div>
       ) : preview ? (
         <div className="space-y-1 text-xs text-muted-foreground">

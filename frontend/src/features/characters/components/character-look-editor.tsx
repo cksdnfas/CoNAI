@@ -1,16 +1,18 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { CHARACTER_APPEARANCE_SECTION_KEYS, CHAT_PROFILE_TEXT_LIMITS, composeCharacterAppearance, joinPromptParts, tokenizePrompt } from '@conai/shared'
-import { ArrowUpToLine, Copy, ExternalLink, ImageIcon, ListTree, Plus, Sparkles, Trash2, UserSearch, Wand2 } from 'lucide-react'
+import { ArrowUpToLine, Copy, ExternalLink, ImageIcon, ListTree, Pencil, Plus, Sparkles, Trash2, UserSearch, Wand2 } from 'lucide-react'
+import { NameDialog } from '@/components/common/entry-dialogs'
 import { ActionMenuButton } from '@/components/ui/action-menu'
+import { Button } from '@/components/ui/button'
+import { Chip, ToggleChip } from '@/components/ui/chip'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { EditorGroup } from '@/components/ui/editor-group'
 import { EmptyState } from '@/components/ui/empty-state'
-import { Field, FieldInfo } from '@/components/ui/field'
+import { FieldInfo } from '@/components/ui/field'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { Spinner } from '@/components/ui/loading-state'
 import { useSnackbar } from '@/components/ui/snackbar-context'
-import { Textarea } from '@/components/ui/textarea'
 import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { useI18n } from '@/i18n'
 import { draftCharacterAppearance, fillCharacterAppearance, type CharacterAppearanceFill, type CharacterAppearanceSections, type CharacterOutfit } from '@/lib/api-character-library'
@@ -19,6 +21,7 @@ import { buildDanbooruTagUrl } from '@/lib/danbooru-tag-links'
 import { getErrorMessage } from '@/lib/error-message'
 import type { CharacterSettingEditorState } from '../use-character-setting-editor'
 import { DanbooruCharacterPicker } from './danbooru-character-picker'
+import { appendPromptPiece, movePromptPiece, promptPieceTexts, removePromptPiece } from '../character-prompt-pieces'
 
 type SectionKey = (typeof CHARACTER_APPEARANCE_SECTION_KEYS)[number]
 
@@ -62,6 +65,8 @@ export function CharacterLookEditor({ editor, editable, generation, busy, onBusy
   const { draft, base } = editor
   const [picking, setPicking] = useState(false)
   const [filling, setFilling] = useState(false)
+  const [expanded, setExpanded] = useState<SectionKey[]>([])
+  const dragged = useRef<{ key: SectionKey; index: number } | null>(null)
   const controller = useRef<AbortController | null>(null)
   const reportBusy = useRef(onBusyChange)
   reportBusy.current = onBusyChange
@@ -69,6 +74,11 @@ export function CharacterLookEditor({ editor, editable, generation, busy, onBusy
 
   const setSection = (key: SectionKey, value: string) => editor.patch({ sections: { ...editor.draftRef.current.sections, [key]: value } })
   const setOutfits = (outfits: CharacterOutfit[]) => editor.patch({ outfits })
+  const moveTag = (from: SectionKey, to: SectionKey, index: number) => {
+    const current = editor.draftRef.current.sections
+    const moved = movePromptPiece(current[from], current[to], index)
+    editor.patch({ sections: { ...current, [from]: moved.source, [to]: moved.destination } })
+  }
 
   /** Put a fill over the draft: sections replaced, outfit tags into the default outfit (made when there is none). */
   const applyFill = (fill: Omit<CharacterAppearanceFill, 'name'> & { name?: string | null }) => {
@@ -117,8 +127,8 @@ export function CharacterLookEditor({ editor, editable, generation, busy, onBusy
 
   return (
     <EditorGroup
-      label={t({ ko: '외형 태그', en: 'Appearance tags' })}
-      info={t({ ko: '항목과 기본 의상을 합친 태그를 프로필과 이미지 생성이 읽어.', en: 'Profiles and generation read the sections plus the default outfit.' })}
+      label={t({ ko: '합친 태그', en: 'Combined tags' })}
+      info={t({ ko: '프로필과 이미지 생성이 읽는 값', en: 'What profiles and image generation read' })}
       actions={<>
         {filling ? <Spinner className="size-3.5" /> : null}
         {danbooruUrl ? <IconButton asChild variant="ghost" size="icon-sm" label={t({ ko: 'Danbooru에서 보기', en: 'Open on Danbooru' })}><a href={danbooruUrl} target="_blank" rel="noopener noreferrer"><ExternalLink /></a></IconButton> : null}
@@ -138,12 +148,48 @@ export function CharacterLookEditor({ editor, editable, generation, busy, onBusy
         ) : null}
       </>}
     >
-      <div className="grid gap-3 sm:grid-cols-2">
-        {CHARACTER_APPEARANCE_SECTION_KEYS.map((key) => (
-          <Field key={key} label={labels[key].label} info={labels[key].hint} className={key === 'identity' || key === 'other' ? 'sm:col-span-2' : undefined}>
-            <Textarea variant="settings" textSize="sm" autoGrow rows={1} readOnly={!editable} disabled={filling} maxLength={CHAT_PROFILE_TEXT_LIMITS.text} aria-invalid={Boolean(warning) || undefined} value={draft.sections[key]} onChange={(event) => setSection(key, event.target.value)} />
-          </Field>
+      <div className="rounded-md border border-line bg-background p-3 text-xs leading-relaxed break-words" aria-label={t({ ko: '합친 태그 미리보기', en: 'Combined tags preview' })}>
+        {composed || t({ ko: '아래 항목에 태그를 넣어줘.', en: 'Add tags to the sections below.' })}
+      </div>
+      <div className="space-y-1">
+        {CHARACTER_APPEARANCE_SECTION_KEYS.filter((key) => draft.sections[key].trim() || expanded.includes(key)).map((key) => (
+          <div key={key} className="grid grid-cols-[5rem_minmax(0,1fr)] items-start gap-2 py-1"
+            onDragOver={(event) => { if (editable && dragged.current) event.preventDefault() }}
+            onDrop={(event) => {
+              const source = dragged.current
+              dragged.current = null
+              if (!editable || filling || !source || source.key === key) return
+              event.preventDefault()
+              moveTag(source.key, key, source.index)
+            }}>
+            <span className="pt-1 text-xs text-muted-foreground">{labels[key].label}</span>
+            <PromptChips value={draft.sections[key]} label={labels[key].label} editable={editable} disabled={filling}
+              onChange={(value) => setSection(key, value)}
+              moveTargets={CHARACTER_APPEARANCE_SECTION_KEYS.filter((target) => target !== key).map((target) => ({ key: target, label: labels[target].label }))}
+              onMove={(index, target) => moveTag(key, target, index)}
+              onDragStart={(index) => { dragged.current = { key, index } }}
+              onDragEnd={() => { dragged.current = null }} />
+          </div>
         ))}
+        {CHARACTER_APPEARANCE_SECTION_KEYS.some((key) => !draft.sections[key].trim() && !expanded.includes(key)) ? (
+          <div className="grid grid-cols-[5rem_minmax(0,1fr)] items-start gap-2 py-1">
+            <span className="pt-1 text-xs text-muted-foreground">{t({ ko: '빈 항목', en: 'Empty sections' })}</span>
+            <div className="flex flex-wrap gap-1">
+              {CHARACTER_APPEARANCE_SECTION_KEYS.filter((key) => !draft.sections[key].trim() && !expanded.includes(key)).map((key) => (
+                <Button key={key} size="compact" variant="ghost" disabled={!editable || filling}
+                  onClick={() => setExpanded([...expanded, key])}
+                  onDragOver={(event) => { if (editable && dragged.current) event.preventDefault() }}
+                  onDrop={(event) => {
+                    const source = dragged.current
+                    dragged.current = null
+                    if (!editable || filling || !source) return
+                    event.preventDefault()
+                    moveTag(source.key, key, source.index)
+                  }}><Plus />{labels[key].label}</Button>
+              ))}
+            </div>
+          </div>
+        ) : null}
       </div>
       <OutfitList outfits={draft.outfits} editable={editable} disabled={filling} onChange={setOutfits} />
       {tooLong >= 0 ? <p role="alert" className="text-xs text-destructive">{t({ ko: '항목과 \'{outfit}\' 의상을 합친 태그가 {limit}자를 넘어서 저장되지 않아.', en: 'Sections plus the “{outfit}” outfit exceed {limit} characters and cannot be saved.' }, { outfit: draft.outfits[tooLong]?.name ?? t({ ko: '기본', en: 'Default' }), limit: CHAT_PROFILE_TEXT_LIMITS.text })}</p> : null}
@@ -160,9 +206,44 @@ export function CharacterLookEditor({ editor, editable, generation, busy, onBusy
   )
 }
 
+function PromptChips({ value, label, editable, disabled, onChange, onDragStart, onDragEnd, moveTargets, onMove }: {
+  value: string; label: string; editable: boolean; disabled: boolean; onChange: (value: string) => void
+  onDragStart?: (index: number) => void; onDragEnd?: () => void
+  moveTargets?: Array<{ key: SectionKey; label: string }>
+  onMove?: (index: number, target: SectionKey) => void
+}) {
+  const { t } = useI18n()
+  const [text, setText] = useState('')
+  const tags = promptPieceTexts(value)
+  const add = () => {
+    if (!editable || disabled || !text.trim()) return
+    onChange(appendPromptPiece(value, text))
+    setText('')
+  }
+  return <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+    {tags.map((tag, index) => <Chip key={`${index}:${tag}`} draggable={editable && !disabled && Boolean(onDragStart)}
+      onDragStart={(event) => { event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('text/plain', tag); onDragStart?.(index) }}
+      onDragEnd={onDragEnd}
+      onRemove={editable ? () => onChange(removePromptPiece(value, index)) : undefined}
+      removeDisabled={disabled} removeLabel={t({ ko: '{tag} 빼기', en: 'Remove {tag}' }, { tag })}>
+      <span className="truncate">{tag}</span>
+      {editable && onMove ? <ActionMenuButton size="icon-xs" label={t({ ko: '{tag} 옮기기', en: 'Move {tag}' }, { tag })} entries={(moveTargets ?? []).map((target) => ({
+        key: target.key, label: t({ ko: '{section}(으)로 옮기기', en: 'Move to {section}' }, { section: target.label }), disabled, onSelect: () => onMove(index, target.key),
+      }))} /> : null}
+    </Chip>)}
+    {editable ? <Input variant="bare" controlSize="compact" className="w-28 min-w-20 flex-1" aria-label={t({ ko: '{section} 태그 추가', en: 'Add {section} tags' }, { section: label })}
+      disabled={disabled} value={text} placeholder={t({ ko: '+ 태그', en: '+ tag' })} onChange={(event) => setText(event.target.value)}
+      onBlur={add} onKeyDown={(event) => { if (event.key === 'Enter' && !event.nativeEvent.isComposing) { event.preventDefault(); add() } }} /> : null}
+  </div>
+}
+
 /** The look's outfits: name and tags each; the first is the default one profiles and generation use. */
 function OutfitList({ outfits, editable, disabled, onChange }: { outfits: CharacterOutfit[]; editable: boolean; disabled: boolean; onChange: (outfits: CharacterOutfit[]) => void }) {
   const { t } = useI18n()
+  const [selected, setSelected] = useState(0)
+  const [renaming, setRenaming] = useState<string | null>(null)
+  const index = Math.min(selected, Math.max(0, outfits.length - 1))
+  const outfit = outfits[index]
   const update = (index: number, patch: Partial<CharacterOutfit>) => onChange(outfits.map((outfit, at) => (at === index ? { ...outfit, ...patch } : outfit)))
   return (
     <div className="space-y-3 border-t border-line pt-3">
@@ -171,22 +252,18 @@ function OutfitList({ outfits, editable, disabled, onChange }: { outfits: Charac
           {t({ ko: '의상', en: 'Outfits' })}
           <FieldInfo>{t({ ko: '맨 위가 기본 의상이야. 옷·액세서리 태그는 의상에 두면 갈아입힐 수 있어.', en: 'The first one is the default. Keep clothing tags in outfits to switch them.' })}</FieldInfo>
         </span>
-        {editable ? <IconButton size="icon-sm" variant="ghost" className="ml-auto" label={t({ ko: '의상 추가', en: 'Add outfit' })} disabled={disabled} onClick={() => onChange([...outfits, { name: t({ ko: '의상 {count}', en: 'Outfit {count}' }, { count: outfits.length + 1 }), tags: '' }])}><Plus /></IconButton> : null}
+        {editable && outfit ? <ActionMenuButton className="ml-auto" label={t({ ko: '의상 작업', en: 'Outfit actions' })} entries={[
+          { key: 'rename', label: t({ ko: '이름 바꾸기', en: 'Rename' }), icon: Pencil, disabled, onSelect: () => setRenaming(outfit.name) },
+          { key: 'default', label: t({ ko: '기본 의상으로', en: 'Make default' }), icon: ArrowUpToLine, disabled: disabled || index === 0, onSelect: () => { onChange([outfit, ...outfits.filter((_, at) => at !== index)]); setSelected(0) } },
+          { key: 'delete', label: t({ ko: '의상 지우기', en: 'Remove outfit' }), icon: Trash2, destructive: true, disabled, onSelect: () => { onChange(outfits.filter((_, at) => at !== index)); setSelected(Math.max(0, index - 1)) } },
+        ]} /> : null}
       </div>
-      {outfits.length ? outfits.map((outfit, index) => (
-        // Outfits have no id; their position is their identity while editing.
-        <div key={index} className="space-y-1.5">
-          <div className="flex items-center gap-2">
-            <Input variant="settings" controlSize="compact" className="max-w-60" aria-label={t({ ko: '의상 이름', en: 'Outfit name' })} readOnly={!editable} disabled={disabled} maxLength={CHAT_PROFILE_TEXT_LIMITS.name} value={outfit.name} onChange={(event) => update(index, { name: event.target.value })} />
-            {index === 0 ? <span className="text-xs text-primary-text">{t({ ko: '기본', en: 'Default' })}</span> : null}
-            {editable ? <>
-              {index > 0 ? <IconButton variant="ghost" size="icon-xs" className="ml-auto" label={t({ ko: '기본 의상으로', en: 'Make default' })} disabled={disabled} onClick={() => onChange([outfit, ...outfits.filter((_, at) => at !== index)])}><ArrowUpToLine /></IconButton> : <span className="ml-auto" />}
-              <IconButton variant="ghost" size="icon-xs" label={t({ ko: '의상 지우기', en: 'Remove outfit' })} disabled={disabled} onClick={() => onChange(outfits.filter((_, at) => at !== index))}><Trash2 /></IconButton>
-            </> : null}
-          </div>
-          <Textarea variant="settings" textSize="sm" autoGrow rows={1} readOnly={!editable} disabled={disabled} maxLength={CHAT_PROFILE_TEXT_LIMITS.text} aria-label={t({ ko: '{name} 태그', en: '{name} tags' }, { name: outfit.name })} value={outfit.tags} onChange={(event) => update(index, { tags: event.target.value })} />
-        </div>
-      )) : <EmptyState size="compact" title={t({ ko: '아직 의상이 없어', en: 'No outfits yet' })} />}
+      <div className="flex flex-wrap gap-1.5">
+        {outfits.map((entry, at) => <ToggleChip key={at} pressed={at === index} onClick={() => setSelected(at)}>{entry.name}{at === 0 ? <span>{t({ ko: '기본', en: 'Default' })}</span> : null}</ToggleChip>)}
+        {editable ? <IconButton size="icon-sm" variant="ghost" label={t({ ko: '의상 추가', en: 'Add outfit' })} disabled={disabled} onClick={() => { setSelected(outfits.length); onChange([...outfits, { name: t({ ko: '의상 {count}', en: 'Outfit {count}' }, { count: outfits.length + 1 }), tags: '' }]) }}><Plus /></IconButton> : null}
+      </div>
+      {outfit ? <PromptChips value={outfit.tags} label={outfit.name} editable={editable} disabled={disabled} onChange={(tags) => update(index, { tags })} /> : <EmptyState size="compact" title={t({ ko: '아직 의상이 없어', en: 'No outfits yet' })} />}
+      {renaming !== null ? <NameDialog open title={t({ ko: '의상 이름 바꾸기', en: 'Rename outfit' })} value={renaming} onChange={setRenaming} onSubmit={() => { if (renaming.trim()) { update(index, { name: renaming.trim() }); setRenaming(null) } }} onClose={() => setRenaming(null)} /> : null}
     </div>
   )
 }

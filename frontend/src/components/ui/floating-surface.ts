@@ -11,12 +11,23 @@ export const floatingSurfaceClassName = 'rounded-md bg-surface-high shadow-eleva
 export const floatingMotionClassName =
   'data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 motion-reduce:animate-none'
 
+/**
+ * Springy open: the panel pops from its transform origin; closing keeps the standard fade. `motion-safe:` because a
+ * plain `motion-reduce:animate-none` loses to the more specific `data-[state=…]:` animation classes.
+ */
+export const floatingPopMotionClassName =
+  'motion-safe:data-[state=open]:animate-menu-pop motion-safe:data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95'
+
+const floatingMenuLayoutClassName = 'z-floating min-w-40 overflow-x-hidden overflow-y-auto p-1 text-sm text-foreground outline-none'
+
 /** A menu panel (DropdownMenu, ActionMenu, context menu); add the primitive's max-height / transform-origin vars. */
-export const floatingMenuClassName = cn(
-  floatingSurfaceClassName,
-  'z-floating min-w-40 overflow-x-hidden overflow-y-auto p-1 text-sm text-foreground outline-none',
-  floatingMotionClassName,
-)
+export const floatingMenuClassName = cn(floatingSurfaceClassName, floatingMenuLayoutClassName, floatingMotionClassName)
+
+/** The same menu panel with the pop open; pair its items with floatingMenuItemPopClassName and a stepped animation delay. */
+export const floatingMenuPopClassName = cn(floatingSurfaceClassName, floatingMenuLayoutClassName, floatingPopMotionClassName)
+
+/** A menu item rising in after its pop panel opens. */
+export const floatingMenuItemPopClassName = 'animate-menu-item-pop motion-reduce:animate-none'
 
 /** One menu item: focus wash, muted 16px icons, disabled dim. */
 export const floatingMenuItemClassName = cn(

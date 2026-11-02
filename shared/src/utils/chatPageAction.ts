@@ -86,6 +86,9 @@ const nativeActionPermissions = {
   'character.new_setting': 'characters.edit', 'character.draft': 'characters.edit', 'character.save': 'characters.edit', 'character.delete': 'characters.edit',
   'character.folder_create': 'characters.edit', 'character.folder_rename': 'characters.edit', 'character.folder_move': 'characters.edit',
   'character.filter': 'characters.view', 'character.fill': 'characters.edit', 'character.favorite': 'characters.edit',
+  'character.editor_tab': 'characters.view',
+  'character.references_add': 'characters.edit', 'character.reference_category': 'characters.edit', 'character.reference_remove': 'characters.edit', 'character.reference_set': 'characters.edit',
+  'character.category_add': 'characters.edit', 'character.category_rename': 'characters.edit', 'character.category_remove': 'characters.edit',
   'character.bulk_move': 'characters.edit', 'character.bulk_delete': 'characters.edit',
   'character.catalog_search': 'prompts.view', 'character.catalog_import': 'characters.edit',
   'comfy.select': 'workflows.view', 'comfy.refresh': 'workflows.view', 'comfy.open_create': 'workflows.edit', 'comfy.open_edit': 'workflows.edit',
@@ -187,6 +190,7 @@ IN_PLACE_VIEW_ACTIONS.add('workspace.mkdir')
 for (const id of ['posts.comments_more', 'posts.comments_at']) { VIEW_ACTIONS.add(id); IN_PLACE_VIEW_ACTIONS.add(id) }
 COMMIT_ACTIONS.add('image_editor.save')
 for (const id of ['character.open_folder', 'character.search', 'character.open_setting', 'character.new_setting']) VIEW_ACTIONS.add(id)
+VIEW_ACTIONS.add('character.editor_tab'); IN_PLACE_VIEW_ACTIONS.add('character.editor_tab')
 for (const id of ['character.save', 'character.delete', 'character.folder_create', 'character.folder_rename', 'character.folder_move', 'character.bulk_move', 'character.bulk_delete', 'character.catalog_import', 'profile.character_save']) COMMIT_ACTIONS.add(id)
 for (const id of ['character.filter', 'character.catalog_search']) VIEW_ACTIONS.add(id)
 // A favorite mark only changes what the list highlights; it applies at once like a chat pin.

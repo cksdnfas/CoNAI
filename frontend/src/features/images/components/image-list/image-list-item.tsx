@@ -1,4 +1,5 @@
 import { memo, type DragEvent, type KeyboardEvent, type MouseEvent, type ReactNode, useContext, useEffect, useState } from 'react'
+import { ActionContextMenu, ActionMenuButton, type ActionMenuEntry } from '@/components/ui/action-menu'
 import { HistoryAudioResult, HistorySoundBar } from '@/features/audio/history-audio-result'
 import { ImagePreviewMedia } from '@/features/images/components/image-preview-media'
 import { ImagePreviewPlaceholder } from '@/features/images/components/image-preview-placeholder'
@@ -6,7 +7,6 @@ import { getImagePreviewStateLabel, resolveImagePreviewState } from '@/features/
 import { ImageEditAction } from '@/features/images/components/detail/image-edit-action'
 import { ChatDockReferenceButton, ChatImageListActionsContext, ChatThumbOverlay } from '@/features/codex-chat/chat-reference'
 import { useI18n } from '@/i18n'
-import { isFromOwnDom } from '@/lib/portal-events'
 import { cn } from '@/lib/utils'
 import type { ImageRecord } from '@/types/image'
 import type { ImageListActivateModifiers } from './image-list-types'
@@ -32,6 +32,8 @@ interface ImageListItemProps {
   onToggleSelect?: (image: ImageRecord, itemId: string, modifiers?: ImageListActivateModifiers) => void
   renderOverlay?: ReactNode
   renderPersistentOverlay?: ReactNode
+  /** Tile action menu: mouse right-click at the pointer, a ⋯ button on touch. */
+  menuEntries?: ActionMenuEntry[]
   showDefaultQuickActions?: boolean
   interactive?: boolean
   blurPreview?: boolean
@@ -65,6 +67,7 @@ const ImageListItemComponent = memo(function ImageListItemComponent({
   onToggleSelect,
   renderOverlay,
   renderPersistentOverlay,
+  menuEntries,
   showDefaultQuickActions = true,
   interactive = true,
   blurPreview = false,
@@ -147,8 +150,9 @@ const ImageListItemComponent = memo(function ImageListItemComponent({
   const soundBar = mediaKind !== 'audio' && image.audio?.length ? <HistorySoundBar sounds={image.audio} floating /> : null
 
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    // Keys typed in a modal a quick action opened bubble here through React; they belong to that modal.
-    if (!interactive || !isFromOwnDom(event)) {
+    // Only keys on the tile itself: a focused quick action / menu button, or a modal it opened (keys bubble here
+    // through React), handles its own Enter and Space.
+    if (!interactive || event.target !== event.currentTarget) {
       return
     }
 
@@ -174,12 +178,29 @@ const ImageListItemComponent = memo(function ImageListItemComponent({
       className="absolute right-2 top-2 z-30 flex items-center gap-2 opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-within:opacity-100"
       onMouseDown={(event) => event.stopPropagation()}
       onClick={(event) => event.stopPropagation()}
+      // Portals a quick action opens (the image editor) bubble here through React; keep them off the tile menu.
+      onPointerDown={(event) => event.stopPropagation()}
+      onContextMenu={(event) => event.stopPropagation()}
     >
       {hasRevealedQuickActions ? <ChatDockReferenceButton compositeHash={image.composite_hash} mimeType={image.mime_type ?? null} /> : null}
       {hasRevealedQuickActions ? <ImageEditAction image={image} /> : null}
       {renderOverlay}
     </div>
   ) : renderOverlay ? <div className="absolute right-2 top-2 z-30">{renderOverlay}</div> : null
+
+  // Touch has no hover or right-click, and its long-press selects: the tile menu sits on a ⋯ button there.
+  const touchMenu = menuEntries?.length && !selectionMode ? (
+    <div
+      className="absolute right-2 top-2 z-30 hidden pointer-coarse:block"
+      data-no-select-drag="true"
+      onMouseDown={(event) => event.stopPropagation()}
+      onClick={(event) => event.stopPropagation()}
+      onPointerDown={(event) => event.stopPropagation()}
+      onContextMenu={(event) => event.stopPropagation()}
+    >
+      <ActionMenuButton entries={menuEntries} label={t({ ko: '작업', en: 'Actions' })} variant="overlay" size="icon-sm" motion="pop" />
+    </div>
+  ) : null
 
   const tile = (
     <div
@@ -220,10 +241,12 @@ const ImageListItemComponent = memo(function ImageListItemComponent({
       </div>
       {renderPersistentOverlay || soundBar ? <div className="absolute inset-x-0 bottom-0 z-30 space-y-1 p-2">{soundBar}{renderPersistentOverlay}</div> : null}
       {quickActions}
+      {touchMenu}
       <div className="image-list-selection-frame pointer-events-none absolute inset-0 z-20 rounded-sm" />
     </div>
   )
-  return chatActions ? <ChatThumbOverlay actions={renderOverlay} actionsClassName="z-30">{tile}</ChatThumbOverlay> : tile
+  const menuTile = menuEntries ? <ActionContextMenu entries={menuEntries} mouseOnly motion="pop">{tile}</ActionContextMenu> : tile
+  return chatActions ? <ChatThumbOverlay actions={renderOverlay} actionsClassName="z-30">{menuTile}</ChatThumbOverlay> : menuTile
 })
 
 ImageListItemComponent.displayName = 'ImageListItem'

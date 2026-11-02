@@ -174,9 +174,12 @@ export function NaiGenerationEditorSections({
     }),
   ] : []
   const toReferencePlacement = (target: CharacterSettingLoadTarget, image: SelectedImageDraft) => ({ replaces: target.identity ?? null, image })
+  // A setting's further images (its gallery) each become a new reference row.
+  const addCharacterReferenceRow = (image: SelectedImageDraft) => handleLoadCharacterReference({ replaces: null, image })
   const characterReferenceLoad = supportsCharacterReference ? {
     targets: characterReferenceTargets,
     onLoad: (target: CharacterSettingLoadTarget, image: SelectedImageDraft) => handleLoadCharacterReference(toReferencePlacement(target, image)),
+    onLoadMore: addCharacterReferenceRow,
   } : null
 
   const prompt = (
@@ -213,10 +216,11 @@ export function NaiGenerationEditorSections({
                 icon="add"
                 label={t({ ko: '캐릭터 불러와서 추가', en: 'Add a character from the library' })}
                 referenceTargets={characterReferenceTargets}
-                onLoad={({ appearance, reference, referenceTarget }) => handleAddCharacterPrompt(
-                  appearance,
-                  reference && referenceTarget ? toReferencePlacement(referenceTarget, reference) : undefined,
-                )}
+                referenceMultiple
+                onLoad={({ appearance, references: [first, ...rest], referenceTarget }) => {
+                  handleAddCharacterPrompt(appearance, first && referenceTarget ? toReferencePlacement(referenceTarget, first) : undefined)
+                  rest.forEach(addCharacterReferenceRow)
+                }}
               />
               <IconButton
                 size="icon-sm"

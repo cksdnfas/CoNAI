@@ -330,24 +330,35 @@ class DanbooruBrowserService {
     return result;
   }
 
-  /**
-   * A character by tag name, alias or exact Korean name: its primary work and general tags scored at or above
-   * `DANBOORU_APPEARANCE_MIN_SCORE`, highest first. Null when the dictionary has no such character.
-   */
-  characterAppearance(rawName: string) {
+  private findCharacter(rawName: string) {
     if (!this.hasAvailableDb()) return null;
     const db = this.getDb();
     const normalized = normalizeQuery(rawName);
     const row = db.prepare(`
-      SELECT c.tag_id, c.name, tt.translated_name FROM characters c
+      SELECT c.tag_id, c.name, c.normalized_name, tt.translated_name FROM characters c
       LEFT JOIN tag_translations tt ON tt.tag_id = c.tag_id AND tt.locale = 'ko'
       WHERE c.tag_id = COALESCE(
         (SELECT tag_id FROM characters WHERE normalized_name = ? LIMIT 1),
         (SELECT a.target_tag_id FROM tag_aliases a JOIN characters ca ON ca.tag_id = a.target_tag_id WHERE a.alias_normalized_name = ? AND a.status = 'active' LIMIT 1),
         (SELECT t.tag_id FROM tag_translations t JOIN characters ct ON ct.tag_id = t.tag_id WHERE t.locale = 'ko' AND t.translated_name = ? ORDER BY ct.post_count DESC LIMIT 1)
       )
-    `).get(normalized, normalized, rawName.trim()) as { tag_id: number; name: string; translated_name: string | null } | undefined;
+    `).get(normalized, normalized, rawName.trim()) as CharacterRow | undefined;
+    return row ?? null;
+  }
+
+  async characterSampleImages(rawName: string) {
+    const row = this.findCharacter(rawName);
+    return row ? { tagId: row.tag_id, images: await this.characterImages.getRecords(row) } : null;
+  }
+
+  /**
+   * A character by tag name, alias or exact Korean name: its primary work and general tags scored at or above
+   * `DANBOORU_APPEARANCE_MIN_SCORE`, highest first. Null when the dictionary has no such character.
+   */
+  characterAppearance(rawName: string) {
+    const row = this.findCharacter(rawName);
     if (!row) return null;
+    const db = this.getDb();
     const copyright = db.prepare(`
       SELECT cp.name FROM character_copyright_links l JOIN copyrights cp ON cp.tag_id = l.copyright_tag_id
       WHERE l.character_tag_id = ? ORDER BY l.is_primary DESC, l.confidence DESC, cp.post_count DESC LIMIT 1

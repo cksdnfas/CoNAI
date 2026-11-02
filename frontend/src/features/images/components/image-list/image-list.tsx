@@ -57,6 +57,7 @@ export function ImageList({
   selectionAreaClass = 'image-list-selection-area',
   renderItemOverlay,
   renderItemPersistentOverlay,
+  getItemMenu,
   showDefaultQuickActions = true,
   shouldBlurItemPreview,
   onPreviewIntent,
@@ -361,6 +362,7 @@ export function ImageList({
               onEndReached={handleEndReached}
               renderItemOverlay={renderItemOverlay}
               renderItemPersistentOverlay={renderItemPersistentOverlay}
+              getItemMenu={getItemMenu}
               showDefaultQuickActions={showDefaultQuickActions}
               interactive={activationMode !== 'none' || selectionMode}
               shouldBlurItemPreview={shouldBlurItemPreview}
@@ -387,6 +389,7 @@ export function ImageList({
               onEndReached={handleEndReached}
               renderItemOverlay={renderItemOverlay}
               renderItemPersistentOverlay={renderItemPersistentOverlay}
+              getItemMenu={getItemMenu}
               showDefaultQuickActions={showDefaultQuickActions}
               interactive={activationMode !== 'none' || selectionMode}
               shouldBlurItemPreview={shouldBlurItemPreview}

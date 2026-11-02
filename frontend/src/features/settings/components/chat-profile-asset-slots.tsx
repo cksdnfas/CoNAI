@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react'
-import { useQueries, useQuery } from '@tanstack/react-query'
-import { AlertTriangle, MoreHorizontal, Plus, Square, Wand } from 'lucide-react'
+import { keepPreviousData, useQueries, useQuery } from '@tanstack/react-query'
+import { AlertTriangle, MoreHorizontal, Square, Wand } from 'lucide-react'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -15,7 +15,7 @@ import { useImageFeedSafety } from '@/features/images/components/image-list/use-
 import { useI18n } from '@/i18n'
 import { MODEL_SLOTS_QUERY_KEY, listModelSlots } from '@/lib/api-codex-chat'
 import { getGroupEmoticons, getGroupsHierarchyAll, groupEmoticonsQueryKey, GROUPS_HIERARCHY_ALL_QUERY_KEY } from '@/lib/api-groups'
-import { getImage, getImageDetailQueryKey } from '@/lib/api-images'
+import { getImage, getImageDetailQueryKey, getImagesBatch, IMAGE_BATCH_MAX_COUNT } from '@/lib/api-images'
 import { libraryThumbnailUrl } from '@/lib/api-sprite'
 import { cn } from '@/lib/utils'
 import { ChosenCheckBadge, ReviewChips, SlotVisionReview } from './chat-asset-batch-modal'
@@ -57,18 +57,20 @@ export function useCharacterGroups(source: CharacterGroupSource) {
 }
 
 /** Library images with the feed's safety rules (blur / hide by rating), plus a lightbox over them. */
-export function useSafeAssetImages(hashes: string[]) {
+export function useSafeAssetImages(hashes: string[], batch = false) {
   const { canViewImages } = useImagePermissions()
-  const unique = [...new Set(hashes)]
-  const images = useQueries({ queries: unique.map((hash) => ({ queryKey: getImageDetailQueryKey(hash), queryFn: ({ signal }: { signal: AbortSignal }) => getImage(hash, { signal }), enabled: canViewImages, retry: (count: number, error: Error) => error.message === 'Metadata not found' && count < 10, retryDelay: 3000 })) })
-  const safety = useImageFeedSafety({ items: images.flatMap((query) => (query.data ? [query.data] : [])) })
+  // Batches are keyed by the sorted set so reordering reuses them; the previous batch stays shown while an add or remove refetches.
+  const unique = batch ? [...new Set(hashes)].sort() : [...new Set(hashes)]
+  const groups = batch ? Array.from({ length: Math.ceil(unique.length / IMAGE_BATCH_MAX_COUNT) }, (_, index) => unique.slice(index * IMAGE_BATCH_MAX_COUNT, (index + 1) * IMAGE_BATCH_MAX_COUNT)) : unique.map((hash) => [hash])
+  const images = useQueries({ queries: groups.map((hashes) => ({ queryKey: batch ? ['chat-asset-images', hashes] : getImageDetailQueryKey(hashes[0]), queryFn: ({ signal }: { signal: AbortSignal }) => batch ? getImagesBatch(hashes, { signal }) : getImage(hashes[0], { signal }), placeholderData: batch ? keepPreviousData : undefined, enabled: canViewImages, retry: (count: number, error: Error) => error.message === 'Metadata not found' && count < 10, retryDelay: 3000 })) })
+  const safety = useImageFeedSafety({ items: images.flatMap((query) => query.data ? Array.isArray(query.data) ? query.data : [query.data] : []) })
   const visible = new Map(safety.visibleItems.map((image) => [image.composite_hash, image]))
   const [lightbox, setLightbox] = useState<number | null>(null)
   return {
     /** The image, or null while loading or when hidden by the safety settings. */
     render: (hash: string, className = 'size-full object-cover') => {
       const image = visible.get(hash)
-      if (!image) return images[unique.indexOf(hash)]?.isPending ? <span className="flex size-full items-center justify-center"><Spinner /></span> : null
+      if (!image) return images[Math.floor(unique.indexOf(hash) / (batch ? IMAGE_BATCH_MAX_COUNT : 1))]?.isPending ? <span className="flex size-full items-center justify-center"><Spinner /></span> : null
       return <><ChatProfileImage src={libraryThumbnailUrl(hash)} className={cn(className, safety.shouldBlurItemPreview(image) && 'blur-lg')} />{safety.renderItemPersistentOverlay(image)}</>
     },
     open: (hash: string) => { const index = safety.visibleItems.findIndex((image) => image.composite_hash === hash); if (index >= 0) setLightbox(index) },
@@ -205,14 +207,16 @@ export type ExpressionSlotInput = {
   onClear?: () => void
   /** The slot's own write is running. */
   busy: boolean
+  empty?: boolean
+  name: string
 }
 
 /**
  * The character's expressions as a row of slots, one per emotion of the expression list (plus emotions the group
- * already has). An empty slot makes its image with "+ 만들기", every empty one at once with "빈 칸 n개 만들기";
+ * already has). An empty slot separates its import menu from generation; empty slots can be generated together.
  * clicking a slot opens its candidates and its image menu below.
  */
-export function ExpressionSlots({ runs, groupSource, referenceHash, canGenerate, blockedReason, onSet, onClear, renderInput, editable = true }: {
+export function ExpressionSlots({ runs, groupSource, referenceHash, canGenerate, blockedReason, onSet, onClear, renderInput, onDropFile, onBusyChange, editable = true, generation = true }: {
   runs: AssetRuns
   groupSource: CharacterGroupSource
   referenceHash: string | null
@@ -223,8 +227,11 @@ export function ExpressionSlots({ runs, groupSource, referenceHash, canGenerate,
   onClear: (name: string) => Promise<void>
   /** The image menu of the open slot. */
   renderInput: (slot: ExpressionSlotInput) => ReactNode
+  onDropFile?: (name: string, file: File) => Promise<void>
+  onBusyChange: (busy: boolean) => void
   /** False: the slots only show (no generation, input or clearing). */
   editable?: boolean
+  generation?: boolean
 }) {
   const { t } = useI18n()
   const groups = useCharacterGroups(groupSource)
@@ -235,7 +242,7 @@ export function ExpressionSlots({ runs, groupSource, referenceHash, canGenerate,
   const images = useSafeAssetImages([...filled.values()].filter((hash): hash is string => Boolean(hash)))
   const emptyNames = names.filter((name) => !filled.get(name) && !runs.slotState(name).working && !runs.isPending(name) && runs.emotionNames.includes(name))
   const fillAll = () => { if (emptyNames.length) void runs.start({ kind: 'expressions', names: emptyNames }, true) }
-  const run = async (name: string, task: () => Promise<void>) => { setBusy(name); try { await task() } finally { setBusy(null) } }
+  const run = async (name: string, task: () => Promise<void>) => { setBusy(name); onBusyChange(true); try { await task() } finally { setBusy(null); onBusyChange(false) } }
 
   return (
     <section className="space-y-3">
@@ -243,38 +250,46 @@ export function ExpressionSlots({ runs, groupSource, referenceHash, canGenerate,
         <h3 className="text-sm font-semibold text-foreground">{t({ ko: '표정', en: 'Expressions' })}</h3>
         <span className="text-sm font-medium tabular-nums text-muted-foreground">{names.filter((name) => filled.get(name)).length}/{names.length}</span>
         <span className="flex-1" />
-        {editable ? <>
+        {editable && generation ? <>
           <AssetPresetPicker runs={runs} showExpressionMenu />
           <Tip content={blockedReason}>
             <span className="inline-flex" tabIndex={blockedReason ? 0 : -1}>
-              <IconButton variant="secondary" size="icon-sm" label={emptyNames.length ? t({ ko: '빈 칸 {count}개 만들기', en: 'Make {count} empty' }, { count: emptyNames.length }) : t({ ko: '빈 칸 없음', en: 'No empty slots' })} disabled={!canGenerate || !emptyNames.length} onClick={fillAll}>
-                <Wand />
-              </IconButton>
+              <Button variant="secondary" size="compact" disabled={!canGenerate || !emptyNames.length} onClick={fillAll}><Wand />
+                {t({ ko: '빈 칸 {count}개 생성', en: 'Generate {count} empty slots' }, { count: emptyNames.length })}
+              </Button>
             </span>
           </Tip>
         </> : null}
       </div>
-      <div className="grid grid-cols-4 gap-2 sm:grid-cols-8">
+      <div className="grid grid-cols-4 gap-2">
         {names.map((name) => {
           const hash = filled.get(name)
           const state = runs.slotState(name)
           const working = state.working || runs.isPending(name)
           return (
             <div key={name} className="min-w-0 space-y-1 text-center">
-              <div className={cn('relative aspect-[3/4] overflow-hidden rounded-md', hash ? 'bg-fill' : 'border border-dashed border-line', selected === name && 'ring-2 ring-primary ring-offset-2 ring-offset-background')}>
+              <div className={cn('relative aspect-[3/4] overflow-hidden rounded-md', hash ? 'bg-fill' : 'border border-dashed border-line', selected === name && 'ring-2 ring-primary ring-offset-2 ring-offset-background')}
+                onDragOver={(event) => { if (event.dataTransfer.types.includes('Files')) event.preventDefault() }}
+                onDrop={(event) => {
+                  if (event.dataTransfer.types.includes('Files') || event.dataTransfer.files.length) event.preventDefault()
+                  if (!editable || !onDropFile || busy) return
+                  const file = [...event.dataTransfer.files].find((file) => file.type.startsWith('image/'))
+                  if (file) { event.preventDefault(); setSelected(name); void run(name, () => onDropFile(name, file)) }
+                }}>
                 {/* eslint-disable-next-line no-restricted-syntax -- the slot itself is the control */}
                 <button type="button" className="absolute inset-0 cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring" aria-label={name} aria-expanded={selected === name} onClick={() => setSelected(selected === name ? null : name)} onDoubleClick={() => { if (hash) images.open(hash) }} />
                 {hash ? <div className="pointer-events-none size-full">{images.render(hash)}</div> : null}
-                {working ? <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-background/50"><Spinner /></span> : null}
-                {!working && state.failed ? <span className="pointer-events-none absolute left-1 top-1 text-warning"><AlertTriangle className="size-4" /></span> : null}
+                {working ? <span role="status" className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-1 bg-background/50 text-2xs"><Spinner />{t({ ko: '생성 중', en: 'Generating' })}</span> : null}
+                {!working && state.failed ? <span role="status" className="pointer-events-none absolute left-1 top-1 flex items-center gap-1 text-2xs text-warning"><AlertTriangle className="size-3" />{t({ ko: '생성 실패', en: 'Failed' })}</span> : null}
                 {state.candidates.length > 1 ? <Badge variant="overlay" size="xs" className="pointer-events-none absolute top-1 right-1 tabular-nums">{state.candidates.length}</Badge> : null}
                 {editable && !hash && !working ? (
-                  <span className="pointer-events-none absolute inset-0 flex items-center justify-center [&>*]:pointer-events-auto">
-                    <Tip content={blockedReason}>
+                  <span className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-1 [&>*]:pointer-events-auto">
+                    {renderInput({ name, empty: true, onPick: (hash) => { setSelected(name); void run(name, () => onSet(name, hash)) }, generateBlocked: null, busy: busy === name })}
+                    {generation ? <Tip content={blockedReason}>
                       <span className="inline-flex" tabIndex={blockedReason ? 0 : -1}>
-                        <Button size="xs" variant="ghost" disabled={!canGenerate || !runs.emotionNames.includes(name)} aria-label={t({ ko: '{name} 만들기', en: 'Make {name}' }, { name })} onClick={() => void runs.start({ kind: 'expressions', names: [name] }, true)}><Plus /></Button>
+                        <Button size="xs" variant="ghost" disabled={!canGenerate || !runs.emotionNames.includes(name)} aria-label={t({ ko: '{name} 생성', en: 'Generate {name}' }, { name })} onClick={() => { setSelected(name); void runs.start({ kind: 'expressions', names: [name] }, true) }}><Wand />{t({ ko: '생성', en: 'Generate' })}</Button>
                       </span>
-                    </Tip>
+                    </Tip> : null}
                   </span>
                 ) : null}
               </div>
@@ -291,8 +306,9 @@ export function ExpressionSlots({ runs, groupSource, referenceHash, canGenerate,
           currentHash={filled.get(selected) ?? null}
           referenceHash={referenceHash}
           actions={editable ? renderInput({
+            name: selected,
             onPick: (hash) => void run(selected, () => onSet(selected, hash)),
-            onGenerate: runs.emotionNames.includes(selected) ? () => void runs.start({ kind: 'expressions', names: [selected] }, !filled.get(selected)) : undefined,
+            onGenerate: generation && runs.emotionNames.includes(selected) ? () => void runs.start({ kind: 'expressions', names: [selected] }, !filled.get(selected)) : undefined,
             generateBlocked: blockedReason ?? (!canGenerate || runs.slotState(selected).working ? t({ ko: '지금은 만들 수 없어', en: 'Not available now' }) : null),
             onClear: filled.get(selected) ? () => void run(selected, () => onClear(selected)) : undefined,
             busy: busy === selected,

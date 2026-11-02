@@ -15,6 +15,11 @@ export type CharacterAppearanceSectionKey = 'identity' | 'hair' | 'eyes' | 'face
 export type CharacterAppearanceSections = Record<CharacterAppearanceSectionKey, string>
 /** One outfit of the look (its clothing and accessory tags); the first is the default one. */
 export type CharacterOutfit = { name: string; tags: string }
+/**
+ * One image of a setting's reference gallery (official art, outfits, poses, props…), a library composite hash. Its
+ * `category` is one of the setting's `referenceCategories` (the person's own names) or null (uncategorized).
+ */
+export type CharacterReferenceImage = { hash: string; category: string | null }
 
 /**
  * Filter dimensions of the library and the catalog, classified by the installed Danbooru dictionary: work, character,
@@ -65,6 +70,10 @@ export type CharacterSettingSummary = {
   copyrightTranslated: string | null
   /** Its outfits; the first is the default one. */
   outfitCount: number
+  /** Images in its reference gallery. */
+  referenceCount: number
+  /** Emotions that have an expression image. */
+  expressionCount: number
 }
 
 export type CharacterSetting = CharacterSettingSummary & {
@@ -78,6 +87,13 @@ export type CharacterSetting = CharacterSettingSummary & {
   /** A setting saved before sections existed reads its whole text as `other`. */
   sections: CharacterAppearanceSections
   outfits: CharacterOutfit[]
+  /**
+   * The reference gallery in its order; empty when the viewer lacks `images.view`. `referenceHash` (the image crops,
+   * auto tags and generation read) is usually one of them but need not be.
+   */
+  references: CharacterReferenceImage[]
+  /** The gallery's categories, named by the person, in display order. */
+  referenceCategories: string[]
   /** Emoticon group with one keyworded image per emotion; null until the first expression. */
   expressionGroupId: number | null
   /** Group holding this setting's generated asset candidates; null until the first generation. */
@@ -105,6 +121,10 @@ export type CharacterSettingCreateInput = {
   referenceHash?: string | null
   avatarHash?: string | null
   avatarCrop?: CharacterAvatarCrop | null
+  /** The whole gallery in order (hashes unique); each category must be null or one of the categories this write leaves. */
+  references?: CharacterReferenceImage[]
+  /** The whole category list (names unique, case-insensitive); removing a category leaves its images uncategorized. */
+  referenceCategories?: string[]
 }
 
 /** Only the given fields change. `revision` must equal the stored one, otherwise the save is refused with 409. */
@@ -133,6 +153,16 @@ export type CharacterAppearanceFillInput =
 /** `outfitTags` belong in an outfit; `name` is the Danbooru character's Korean or display name. */
 export type CharacterAppearanceFill = { sections: CharacterAppearanceSections; outfitTags: string; name: string | null }
 
+/**
+ * `POST /settings/:settingId/references/catalog`: add the installed Danbooru dictionary's sample images of a catalog
+ * character to the setting's reference gallery (uncategorized, after the ones it has), against `revision`. When the
+ * setting has no reference image yet, the first added image becomes it. Needs `characters.edit`, `images.view` and
+ * `images.upload`.
+ */
+export type CharacterCatalogReferenceImportInput = { character: string; revision: number }
+/** `dropped`: sample images that could not be read or stored. */
+export type CharacterCatalogReferenceImportResult = { setting: CharacterSetting; added: number; dropped: number }
+
 /** Several listed settings at once; a move is refused whole when a name is taken in the destination. */
 export type CharacterSettingBulkInput = { ids: number[] } & (
   | { action: 'favorite'; favorite: boolean }
@@ -159,6 +189,9 @@ export type CharacterLibraryExportEntry = {
   expressions: Array<{ hash: string; keywords: string[] }>
   /** The generated asset candidates. */
   candidates: string[]
+  /** The reference gallery and its categories; absent in bundles made before the gallery existed. */
+  references?: CharacterReferenceImage[]
+  referenceCategories?: string[]
 }
 export type CharacterLibraryExport = { format: 'conai.character-library'; version: 1; settings: CharacterLibraryExportEntry[] }
 /** `ids`, or a folder with everything under it (`null`: the whole library). */

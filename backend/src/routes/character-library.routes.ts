@@ -36,7 +36,7 @@ function handle(run: (req: Request, res: Response) => unknown | Promise<unknown>
   })
 }
 const visible = (req: Request, setting: ReturnType<typeof library.getCharacterSetting>) => ({
-  ...setting, ...(!images(req) ? { referenceHash: null, avatarHash: null } : {}),
+  ...setting, ...(!images(req) ? { referenceHash: null, avatarHash: null, references: [] } : {}),
   linkedProfiles: isRequesterAdmin(getRequester(req)) ? setting.linkedProfiles : [],
 })
 const visiblePreview = (req: Request, preview: ReturnType<typeof library.previewCharacterDelete>) => (
@@ -117,6 +117,10 @@ router.get('/settings/:settingId', view, handle((req) => visible(req, library.ge
 router.post('/settings/from-profile', edit, requireAdmin, handle((req) => visible(req, library.saveCharacterSettingFromProfile(req.body, images(req)))))
 router.post('/settings', edit, handle((req) => visible(req, library.createCharacterSetting(req.body, images(req))), 201))
 router.patch('/settings/:settingId', edit, handle((req) => visible(req, library.patchCharacterSetting(settingId(req), req.body, images(req)))))
+router.post('/settings/:settingId/references/catalog', edit, handle(async (req) => {
+  const result = await library.importCharacterCatalogReferences(settingId(req), req.body, images(req), requesterPermissionKeys(getRequester(req)).includes('images.upload'))
+  return { ...result, setting: visible(req, result.setting) }
+}))
 router.get('/settings/:settingId/delete-preview', edit, handle((req) => visiblePreview(req, library.previewCharacterDelete('setting', settingId(req)))))
 router.delete('/settings/:settingId', edit, handle((req) => library.deleteCharacterLibrary('setting', settingId(req), req.query.revision === undefined ? undefined : library.characterId(req.query.revision))))
 router.use('/settings/:settingId/asset-batches', edit, assetBatches)

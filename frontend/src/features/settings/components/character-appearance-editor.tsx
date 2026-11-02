@@ -13,6 +13,8 @@ import { ChatProfileImage } from '@/features/codex-chat/chat-profile-image'
 import { useI18n } from '@/i18n'
 import type { ChatAssetUploadTarget, ChatAvatarCrop } from '@/lib/api-codex-chat'
 import { getErrorMessage } from '@/lib/error-message'
+import { uploadChatProfileAsset } from '@/lib/api-codex-chat'
+import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { ChatProfileCandidateArchive } from './chat-profile-asset-groups'
 import { ChatProfileAssetInput } from './chat-profile-asset-input'
 import { REFERENCE_SLOT, type AssetRuns } from './chat-profile-asset-runs'
@@ -21,6 +23,7 @@ import { ChatProfileAvatarCrop } from './chat-profile-avatar-crop'
 
 /** The look fields an appearance editor reads; a chat profile draft and a library setting draft both carry them. */
 export type AppearanceValue = { name: string; appearance?: string; referenceHash?: string | null; avatarHash?: string | null; avatarCrop?: ChatAvatarCrop | null }
+export type CharacterAppearanceTab = 'tags' | 'images' | 'expressions' | 'candidates'
 
 /**
  * Everything a character looks like, for any owner (a chat profile or a character library setting), in two columns:
@@ -29,7 +32,7 @@ export type AppearanceValue = { name: string; appearance?: string; referenceHash
  * archive). Every image changes through the same "이미지 바꾸기" menu. The owner supplies its storage (upload target,
  * group ids, expression writes).
  */
-export function CharacterAppearanceEditor({ value, onChange, onAvatarChange, referenceUrl, avatar, hasAvatar, uploadTarget, groupSource, runs, busy, onBusyChange, draftAppearance, draftNeedsName = false, onSetExpression, onClearExpression, appearanceWarning = null, appearanceInvalid = false, appearanceNote = null, appearanceEditor, editable = true, generation = true, expressionsEditable = true, expressionsNote = null, aside, children }: {
+export function CharacterAppearanceEditor({ value, onChange, onAvatarChange, referenceUrl, avatar, hasAvatar, uploadTarget, groupSource, runs, busy, onBusyChange, draftAppearance, draftNeedsName = false, onSetExpression, onClearExpression, appearanceWarning = null, appearanceInvalid = false, appearanceNote = null, appearanceEditor, editable = true, generation = true, expressionsEditable = true, expressionsNote = null, tab, gallery, aside, children }: {
   value: AppearanceValue
   onChange: (patch: { appearance?: string; referenceHash?: string | null }) => void
   /** A picked or cropped avatar; null clears it. */
@@ -67,9 +70,13 @@ export function CharacterAppearanceEditor({ value, onChange, onAvatarChange, ref
   expressionsEditable?: boolean
   /** Shown instead of the expression slots when there is no group to show (a library setting's, unreadable or empty). */
   expressionsNote?: string | null
+  tab?: CharacterAppearanceTab
+  gallery?: ReactNode
   children?: ReactNode
 }) {
   const { t } = useI18n()
+  const { canViewImages } = useImagePermissions()
+  const imagesEditable = editable && canViewImages
   const confirm = useConfirm()
   const { showSnackbar } = useSnackbar()
   const [cropOpen, setCropOpen] = useState(false)
@@ -99,7 +106,6 @@ export function CharacterAppearanceEditor({ value, onChange, onAvatarChange, ref
   const nameBlocked = nameMissing ? t({ ko: '이름을 먼저 적어줘', en: 'Enter a name first' }) : null
   // Only an image-input ComfyUI workflow needs the reference; NAI draws from the appearance text when there is none.
   const expressionBlocked = presetBlocked ?? nameBlocked ?? (mode === 'reference' && runs.preset?.kind === 'comfyui' && !value.referenceHash ? t({ ko: '기준 이미지를 먼저 정해줘', en: 'Set the reference image first' }) : null)
-  const generating = editable && generation
   const draftBlocked = draftNeedsName ? nameBlocked : null
   // The library pick opens at a group given by id (a library setting's candidates); a profile's starts at its own folder.
   const libraryGroupId = 'candidateGroupId' in groupSource ? groupSource.candidateGroupId : null
@@ -118,15 +124,27 @@ export function CharacterAppearanceEditor({ value, onChange, onAvatarChange, ref
       showSnackbar({ message: getErrorMessage(error, t({ ko: '표정을 비우지 못했어.', en: 'Could not clear the expression.' })), tone: 'error' })
     }
   }
+  const dropExpression = async (name: string, file: File) => {
+    if (!uploadTarget || !imagesEditable || !generation || !expressionsEditable || busy) return
+    reportBusy.current(true)
+    try {
+      const target = typeof uploadTarget === 'function' ? await uploadTarget() : uploadTarget
+      const result = await uploadChatProfileAsset(file, target)
+      if (active.current) await setExpression(name, result.compositeHash)
+    } catch (error) {
+      if (active.current) showSnackbar({ message: getErrorMessage(error, t({ ko: '이미지를 가져오지 못했어.', en: 'Could not import the image.' })), tone: 'error' })
+    } finally { reportBusy.current(false) }
+  }
 
   const referenceWorking = reference.working || runs.isPending(REFERENCE_SLOT)
   return (
-    <div className="grid gap-x-8 gap-y-6 lg:grid-cols-[minmax(0,15rem)_minmax(0,1fr)]">
-      <div className="min-w-0 space-y-5">
-        <div className="relative aspect-[3/4] w-full max-w-60 overflow-hidden rounded-lg bg-fill">
+    <div className={tab ? 'min-w-0 space-y-5' : 'grid gap-x-8 gap-y-6 lg:grid-cols-[minmax(0,15rem)_minmax(0,1fr)]'}>
+      {!tab || tab === 'images' ? <div className="min-w-0 space-y-5">
+        <div className={tab ? 'flex items-start gap-3' : 'space-y-5'}>
+        <div className={tab ? 'relative aspect-[3/4] w-24 shrink-0 overflow-hidden rounded-lg bg-fill' : 'relative aspect-[3/4] w-full max-w-60 overflow-hidden rounded-lg bg-fill'}>
           <ChatProfileImage src={referenceUrl} fallback={<span className="flex size-full items-center justify-center pb-10 text-muted-foreground"><ImagePlus className="size-6" /></span>} />
           {referenceWorking ? <span className="absolute inset-0 flex items-center justify-center bg-background/50"><Spinner /></span> : null}
-          {editable ? (
+          {imagesEditable ? (
             <div className="absolute right-2 bottom-2">
               <ChatProfileAssetInput
                 target={uploadTarget}
@@ -136,6 +154,7 @@ export function CharacterAppearanceEditor({ value, onChange, onAvatarChange, ref
                 busy={busy}
                 variant="overlay"
                 size="compact"
+                iconOnly={Boolean(tab)}
                 onGenerate={generation ? () => void runs.start({ kind: 'reference' }, !value.referenceHash) : undefined}
                 generateLabel={t({ ko: '기준 이미지 새로 생성', en: 'Generate a reference image' })}
                 generateBlocked={presetBlocked ?? nameBlocked ?? (referenceWorking ? t({ ko: '만드는 중이야', en: 'Generating' }) : null)}
@@ -144,11 +163,12 @@ export function CharacterAppearanceEditor({ value, onChange, onAvatarChange, ref
             </div>
           ) : null}
         </div>
-        <EditorGroup label={t({ ko: '아바타', en: 'Avatar' })}>
+        <EditorGroup label={t({ ko: '기준 이미지 · 아바타', en: 'Reference image · avatar' })}>
+          {tab ? <p className="text-xs text-muted-foreground">{t({ ko: '아바타 자르기, 자동 태그, 표정 생성 참조에 쓰여. 아래 갤러리에서 바꿀 수 있어.', en: 'Used for avatar crops, auto tags and expressions. Choose one from the gallery below.' })}</p> : null}
           {/* The 15rem column is narrower than avatar + crop key, so the keys wrap below the avatar there. */}
           <div className="flex flex-wrap items-center gap-3">
             {avatar}
-            {editable ? (
+            {imagesEditable ? (
               <div className="flex min-w-0 flex-col items-start gap-1">
                 {referenceUrl && value.referenceHash ? <IconButton size="icon-sm" variant="secondary" label={t({ ko: '기준 이미지에서 자르기', en: 'Crop the reference' })} disabled={busy} onClick={() => setCropOpen(true)}><Crop /></IconButton> : null}
                 <ChatProfileAssetInput
@@ -166,11 +186,12 @@ export function CharacterAppearanceEditor({ value, onChange, onAvatarChange, ref
             ) : null}
           </div>
         </EditorGroup>
+        </div>
         {aside}
-      </div>
+      </div> : null}
 
       <div className="min-w-0 space-y-6">
-        {appearanceEditor ?? <EditorGroup
+        {!tab || tab === 'tags' ? appearanceEditor ?? <EditorGroup
           label={t({ ko: '외형 설명', en: 'Appearance' })}
           actions={editable && draftAppearance ? (
             <Tip content={draftBlocked}>
@@ -185,13 +206,13 @@ export function CharacterAppearanceEditor({ value, onChange, onAvatarChange, ref
           <Textarea variant="settings" disabled={appearance.isPending} readOnly={!editable} className="min-h-[120px]" rows={5} value={value.appearance ?? ''} maxLength={CHAT_PROFILE_TEXT_LIMITS.text} aria-invalid={appearanceInvalid || undefined} aria-label={t({ ko: '외형 설명', en: 'Appearance' })} onChange={(event) => onChange({ appearance: event.target.value })} />
           {appearanceWarning ? <p role="note" className="text-xs text-warning">{appearanceWarning}</p> : null}
           {appearanceNote ? <p className="text-xs text-muted-foreground">{appearanceNote}</p> : null}
-        </EditorGroup>}
+        </EditorGroup> : null}
 
-        {reference.working || reference.failed || reference.candidates.length ? (
+        {(!tab || tab === 'images') && (reference.working || reference.failed || reference.candidates.length) ? (
           <AssetCandidateTray runs={runs} slotKey={REFERENCE_SLOT} title={t({ ko: '기준 이미지 후보', en: 'Reference candidates' })} currentHash={value.referenceHash ?? null} referenceHash={null} />
         ) : null}
 
-        <div className="border-t border-line pt-4">
+        {!tab || tab === 'expressions' ? <div className={tab ? '' : 'border-t border-line pt-4'}>
           {expressionsNote ? <p className="text-sm text-muted-foreground">{expressionsNote}</p> : (
             <ExpressionSlots
               runs={runs}
@@ -209,6 +230,9 @@ export function CharacterAppearanceEditor({ value, onChange, onAvatarChange, ref
                   onBusyChange={onBusyChange}
                   busy={busy || slot.busy}
                   size="compact"
+                  label={slot.empty ? t({ ko: '올리기', en: 'Upload' }) : undefined}
+                  ariaLabel={slot.empty ? t({ ko: '{name} 올리기', en: 'Upload {name}' }, { name: slot.name }) : undefined}
+                  variant={slot.empty ? 'ghost' : 'secondary'}
                   onGenerate={slot.onGenerate}
                   generateLabel={t({ ko: '다시 만들기', en: 'Generate again' })}
                   generateBlocked={slot.generateBlocked}
@@ -216,16 +240,20 @@ export function CharacterAppearanceEditor({ value, onChange, onAvatarChange, ref
                   clearLabel={t({ ko: '비우기', en: 'Clear' })}
                 />
               )}
-              editable={generating && expressionsEditable}
+              editable={imagesEditable && generation && expressionsEditable}
+              generation={generation}
+              onDropFile={uploadTarget ? dropExpression : undefined}
+              onBusyChange={onBusyChange}
             />
           )}
-        </div>
+        </div> : null}
 
-        {children}
-        <div className="border-t border-line">
-          <ChatProfileCandidateArchive source={groupSource} generated={runs.candidateTotal} />
-        </div>
+        {!tab ? children : null}
+        {!tab || tab === 'candidates' ? <div className={tab ? '' : 'border-t border-line'}>
+          <ChatProfileCandidateArchive source={groupSource} generated={runs.candidateTotal} expanded={tab === 'candidates'} />
+        </div> : null}
       </div>
+      {gallery && (!tab || tab === 'images') ? <div className={tab ? 'min-w-0' : 'min-w-0 lg:col-span-2'}>{gallery}</div> : null}
 
       {cropOpen && referenceUrl ? <ChatProfileAvatarCrop src={referenceUrl} initial={value.avatarHash === value.referenceHash ? value.avatarCrop : null} onClose={() => setCropOpen(false)} onApply={(avatarCrop) => { onAvatarChange(value.referenceHash ?? null, avatarCrop); setCropOpen(false) }} /> : null}
     </div>

@@ -48,6 +48,8 @@ export function ensureCharacterLibrarySchema(db: Database.Database) {
   if (!columns.has('sections')) db.exec('ALTER TABLE character_settings ADD COLUMN sections TEXT')
   if (!columns.has('outfits')) db.exec("ALTER TABLE character_settings ADD COLUMN outfits TEXT NOT NULL DEFAULT '[]'")
   if (!columns.has('favorite')) db.exec('ALTER TABLE character_settings ADD COLUMN favorite INTEGER NOT NULL DEFAULT 0')
+  if (!columns.has('reference_images')) db.exec("ALTER TABLE character_settings ADD COLUMN reference_images TEXT NOT NULL DEFAULT '[]'")
+  if (!columns.has('reference_categories')) db.exec("ALTER TABLE character_settings ADD COLUMN reference_categories TEXT NOT NULL DEFAULT '[]'")
   db.exec('CREATE INDEX IF NOT EXISTS idx_character_settings_favorite ON character_settings(favorite) WHERE favorite = 1')
   // Settings from before the index (and ones without any tag, which are cheap to recheck) get indexed here.
   const unindexed = db.prepare('SELECT id, appearance, outfits FROM character_settings s WHERE NOT EXISTS (SELECT 1 FROM character_setting_tags t WHERE t.setting_id = s.id)').all() as Array<{ id: number; appearance: string; outfits: string }>

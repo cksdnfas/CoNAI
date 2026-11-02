@@ -3,6 +3,8 @@ import type {
   CharacterAppearanceDraftInput,
   CharacterAppearanceFill,
   CharacterAppearanceFillInput,
+  CharacterCatalogReferenceImportInput,
+  CharacterCatalogReferenceImportResult,
   CharacterLibraryExportInput,
   CharacterLibraryFacets,
   CharacterLibraryImportResult,
@@ -36,6 +38,7 @@ export type {
   CharacterFacetKey,
   CharacterLibraryFacets,
   CharacterOutfit,
+  CharacterReferenceImage,
   CharacterSettingFilters,
   CharacterSettingSort,
   CharacterFolder,
@@ -142,6 +145,10 @@ export function createCharacterSetting(input: CharacterSettingCreateInput) {
 /** Refused with 409 when `revision` is not the stored one (see `isCharacterRevisionConflict`). */
 export function updateCharacterSetting(settingId: number, patch: CharacterSettingPatch) {
   return requestApiData<CharacterSetting>(`${BASE}/settings/${settingId}`, { method: 'PATCH', headers: JSON_HEADERS, body: JSON.stringify(patch) })
+}
+/** Add a catalog character's dictionary sample images to the gallery (409 when `revision` is stale). */
+export function importCharacterCatalogReferences(settingId: number, input: CharacterCatalogReferenceImportInput) {
+  return requestApiData<CharacterCatalogReferenceImportResult>(`${BASE}/settings/${settingId}/references/catalog`, { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(input) }, { timeoutMs: 120000 })
 }
 export function getCharacterSettingDeletePreview(settingId: number) {
   return requestApiData<CharacterLibraryDeletePreview>(`${BASE}/settings/${settingId}/delete-preview`)

@@ -13,15 +13,16 @@ import { CollapsibleRow } from '@/components/ui/collapsible-row'
 import { useCharacterGroups, type CharacterGroupSource } from './chat-profile-asset-slots'
 
 /** Every generated asset candidate of the character (its candidates group), in the shared masonry and viewer. */
-export function ChatProfileCandidateArchive({ source, generated = 0 }: {
+export function ChatProfileCandidateArchive({ source, generated = 0, expanded = false }: {
   source: CharacterGroupSource
   /** Candidates this editor's runs have produced so far; a change re-reads a group given by id. */
   generated?: number
+  expanded?: boolean
 }) {
   const { t } = useI18n()
   const queryClient = useQueryClient()
   const { canViewImages } = useImagePermissions()
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(expanded)
   const { candidateGroupId, candidateCount } = useCharacterGroups(source)
   // A group given by id (library settings) reads its visible count on its own; one found by name has it from the group tree.
   const ownCount = canViewImages && candidateGroupId !== null && candidateCount === undefined

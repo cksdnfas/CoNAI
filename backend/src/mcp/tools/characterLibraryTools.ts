@@ -40,7 +40,7 @@ export function registerCharacterLibraryTools(server: McpServer, context: McpReq
     } catch (error) { return errorResult(error) }
   })
   server.registerTool('get_character_setting', {
-    description: 'Read one character appearance setting by setting_id: sections (identity, hair, eyes, face, body, skin, traits, other), outfits (first is the default), the composed appearance, favorite, image hashes, expression emotion-to-hash map, groups and revision. Images are hidden without images.view. Use the revision in propose_character_library to update it. If missing, list_character_library again.',
+    description: 'Read one character appearance setting by setting_id: sections (identity, hair, eyes, face, body, skin, traits, other), outfits (first is the default), the composed appearance, favorite, image hashes, ordered references ([{hash, category: string|null}]), person-named referenceCategories in display order, referenceCount, expressionCount, expression emotion-to-hash map, groups and revision. Images and references are hidden without images.view. Use the revision in propose_character_library to update it. If missing, list_character_library again.',
     inputSchema: z.object({ setting_id: id }).strict(),
   }, async ({ setting_id }) => runToolResult(() => {
     requireContextPermission(context, 'characters.view')
@@ -62,7 +62,7 @@ export function registerCharacterLibraryTools(server: McpServer, context: McpReq
     return patchCharacterFolder(value.folder_id, value.action === 'move' ? { parentId: value.parent_id } : { name: value.name })
   }))
   server.registerTool('propose_character_library', {
-    description: 'Attach a character-library review card to the active chat: save_setting creates/updates, delete_setting or delete_folder proposes deletion. Nothing is written before a person saves the card. Create input needs folderId (null=root) and name; updates/deletes need setting_id and its current revision. input uses REST camelCase fields: write the look as sections (given keys replace those sections) and/or outfits ([{name, tags}], the whole list, first = default), or a plain appearance text that the server sorts into them, never both. Returns proposalId and the card. On conflict read get_character_setting and propose again; missing folders require list_character_library.',
+    description: 'Attach a character-library review card to the active chat: save_setting creates/updates, delete_setting or delete_folder proposes deletion. Nothing is written before a person saves the card. Create input needs folderId (null=root) and name; updates/deletes need setting_id and its current revision. input uses REST camelCase fields: write the look as sections (given keys replace those sections) and/or outfits ([{name, tags}], the whole list, first = default), or a plain appearance text that the server sorts into them, never both. references ([{hash, category: string|null}]) replaces the ordered gallery, needs images.view and unique library image hashes; categories must be null or in the referenceCategories this write leaves. referenceCategories replaces the ordered person-named category list (names unique case-insensitively); removing a category uncategorizes its existing images, and categories alone need no images.view. Returns proposalId and the card. On conflict read get_character_setting and propose again; missing folders require list_character_library.',
     inputSchema: characterLibraryProposalSchema,
   }, async (input) => {
     try {

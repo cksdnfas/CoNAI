@@ -3,6 +3,7 @@ import { useMutation } from '@tanstack/react-query'
 import { ChevronDown, Folder, Image, Link, Trash2, Upload, Wand } from 'lucide-react'
 import { NameDialog } from '@/components/common/entry-dialogs'
 import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Spinner } from '@/components/ui/loading-state'
 import { useSnackbar } from '@/components/ui/snackbar-context'
@@ -44,7 +45,7 @@ export function useChatProfileAssetImport(onChange: (hash: string) => void, onBu
  * with the `target` (a profile's character name, or a library setting, resolved when the import starts so a new one
  * can be saved first); without a target only the library pick and the owner's own entries are offered.
  */
-export function ChatProfileAssetInput({ target, libraryGroupId = null, onChange, onBusyChange, uploadRef, busy = false, label, variant = 'secondary', size = 'sm', onGenerate, generateLabel, generateBlocked = null, onClear, clearLabel }: {
+export function ChatProfileAssetInput({ target, libraryGroupId = null, onChange, onBusyChange, uploadRef, busy = false, label, ariaLabel, iconOnly = false, variant = 'secondary', size = 'sm', onGenerate, generateLabel, generateBlocked = null, onClear, clearLabel }: {
   target: ChatAssetUploadTarget | (() => Promise<ChatAssetUploadTarget>) | null
   /** The group the library pick opens at (a library setting's candidates); otherwise a profile's own folder. */
   libraryGroupId?: number | null
@@ -54,6 +55,8 @@ export function ChatProfileAssetInput({ target, libraryGroupId = null, onChange,
   uploadRef?: RefObject<HTMLInputElement | null>
   /** The menu key's words (default 이미지 바꾸기). */
   label?: string
+  ariaLabel?: string
+  iconOnly?: boolean
   variant?: 'secondary' | 'ghost' | 'overlay'
   size?: 'sm' | 'compact'
   /** Adds "새로 생성". */
@@ -81,10 +84,10 @@ export function ChatProfileAssetInput({ target, libraryGroupId = null, onChange,
   return <>
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button size={size} variant={variant} disabled={busy || mutation.isPending}>
+        {iconOnly ? <IconButton size="icon-sm" variant={variant} label={ariaLabel ?? label ?? t({ ko: '이미지 바꾸기', en: 'Change image' })} disabled={busy || mutation.isPending}>{mutation.isPending ? <Spinner className="size-3.5" /> : <Image />}</IconButton> : <Button size={size} variant={variant} aria-label={ariaLabel} disabled={busy || mutation.isPending}>
           {label ?? t({ ko: '이미지 바꾸기', en: 'Change image' })}
           {mutation.isPending ? <Spinner className="size-3.5" /> : <ChevronDown />}
-        </Button>
+        </Button>}
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="min-w-52">
         <DropdownMenuItem disabled={disabled} onSelect={() => setPicker('library')}><Image />{t({ ko: '라이브러리에서 고르기', en: 'Choose from library' })}</DropdownMenuItem>

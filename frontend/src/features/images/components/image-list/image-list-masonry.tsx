@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, type ReactNode, type UIEvent } from 'react'
 import { VirtuosoMasonry, type ItemContent } from '@virtuoso.dev/masonry'
+import type { ActionMenuEntry } from '@/components/ui/action-menu'
 import type { ImageRecord } from '@/types/image'
 import type { ImageListActivateHandler, ImageListScrollMode, ImageListToggleSelectHandler } from './image-list-types'
 import { ImageListItem } from './image-list-item'
@@ -26,6 +27,7 @@ interface ImageListMasonryProps {
   onEndReached?: () => void
   renderItemOverlay?: (image: ImageRecord) => ReactNode
   renderItemPersistentOverlay?: (image: ImageRecord) => ReactNode
+  getItemMenu?: (image: ImageRecord) => ActionMenuEntry[]
   showDefaultQuickActions?: boolean
   interactive?: boolean
   shouldBlurItemPreview?: (image: ImageRecord) => boolean
@@ -43,6 +45,7 @@ interface ImageListMasonryContext {
   onToggleSelect?: ImageListToggleSelectHandler
   renderItemOverlay?: (image: ImageRecord) => ReactNode
   renderItemPersistentOverlay?: (image: ImageRecord) => ReactNode
+  getItemMenu?: (image: ImageRecord) => ActionMenuEntry[]
   showDefaultQuickActions?: boolean
   interactive?: boolean
   shouldBlurItemPreview?: (image: ImageRecord) => boolean
@@ -69,6 +72,7 @@ const MasonryItemContent: ItemContent<ImageRecord, ImageListMasonryContext> = ({
         onToggleSelect={context.onToggleSelect}
         renderOverlay={context.renderItemOverlay?.(image)}
         renderPersistentOverlay={context.renderItemPersistentOverlay?.(image)}
+        menuEntries={context.getItemMenu?.(image)}
         showDefaultQuickActions={context.showDefaultQuickActions}
         interactive={context.interactive}
         blurPreview={context.shouldBlurItemPreview?.(image) ?? false}
@@ -98,6 +102,7 @@ export function ImageListMasonry({
   onEndReached,
   renderItemOverlay,
   renderItemPersistentOverlay,
+  getItemMenu,
   showDefaultQuickActions,
   interactive,
   shouldBlurItemPreview,
@@ -184,6 +189,7 @@ export function ImageListMasonry({
     onToggleSelect,
     renderItemOverlay,
     renderItemPersistentOverlay,
+    getItemMenu,
     showDefaultQuickActions,
     interactive,
     shouldBlurItemPreview,
@@ -199,6 +205,7 @@ export function ImageListMasonry({
     onToggleSelect,
     renderItemOverlay,
     renderItemPersistentOverlay,
+    getItemMenu,
     showDefaultQuickActions,
     interactive,
     shouldBlurItemPreview,

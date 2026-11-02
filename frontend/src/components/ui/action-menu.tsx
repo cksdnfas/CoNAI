@@ -3,7 +3,14 @@ import { ContextMenu as ContextMenuPrimitive, DropdownMenu as DropdownMenuPrimit
 import { Check, MoreHorizontal } from 'lucide-react'
 import { stopAtPortalEdge } from '@/lib/portal-events'
 import { cn } from '@/lib/utils'
-import { floatingMenuClassName, floatingMenuItemClassName, floatingMenuItemDestructiveClassName, floatingMenuSeparatorClassName } from './floating-surface'
+import {
+  floatingMenuClassName,
+  floatingMenuItemClassName,
+  floatingMenuItemDestructiveClassName,
+  floatingMenuItemPopClassName,
+  floatingMenuPopClassName,
+  floatingMenuSeparatorClassName,
+} from './floating-surface'
 import { IconButton } from './icon-button'
 
 /**
@@ -21,8 +28,14 @@ export type ActionMenuAction = {
   checked?: boolean
 }
 export type ActionMenuEntry = ActionMenuAction | '-' | null | false
+/** `pop`: the panel springs open and its items rise in one after another (playful menus); default is the standard fade. */
+export type ActionMenuMotion = 'standard' | 'pop'
+
+const POP_ITEM_DELAY_MS = 70
+const POP_ITEM_STAGGER_MS = 50
 
 const surfaceClassName = cn(floatingMenuClassName, 'min-w-44')
+const popSurfaceClassName = cn(floatingMenuPopClassName, 'min-w-44')
 const itemClassName = floatingMenuItemClassName
 const destructiveClassName = floatingMenuItemDestructiveClassName
 const separatorClassName = floatingMenuSeparatorClassName
@@ -45,7 +58,7 @@ function hasActions(entries: ActionMenuEntry[]) {
 
 type Primitive = typeof DropdownMenuPrimitive | typeof ContextMenuPrimitive
 
-function Entries({ entries, primitive }: { entries: ActionMenuEntry[]; primitive: Primitive }) {
+function Entries({ entries, primitive, motion }: { entries: ActionMenuEntry[]; primitive: Primitive; motion: ActionMenuMotion }) {
   const { Item, Separator } = primitive
   const tidy = tidyActionEntries(entries)
   const anyChecked = tidy.some((entry) => entry !== '-' && entry.checked !== undefined)
@@ -53,7 +66,9 @@ function Entries({ entries, primitive }: { entries: ActionMenuEntry[]; primitive
     if (entry === '-') return <Separator key={`separator-${index}`} className={separatorClassName} />
     const Icon = entry.icon
     return (
-      <Item key={entry.key} disabled={entry.disabled} onSelect={entry.onSelect} className={cn(itemClassName, entry.destructive && destructiveClassName)}>
+      <Item key={entry.key} disabled={entry.disabled} onSelect={entry.onSelect}
+        className={cn(itemClassName, entry.destructive && destructiveClassName, motion === 'pop' && floatingMenuItemPopClassName)}
+        style={motion === 'pop' ? { animationDelay: `${POP_ITEM_DELAY_MS + index * POP_ITEM_STAGGER_MS}ms` } : undefined}>
         {anyChecked ? <Check className={cn('size-4', entry.checked ? 'text-primary-text' : 'invisible')} /> : Icon ? <Icon /> : null}
         {entry.label}
       </Item>
@@ -62,7 +77,7 @@ function Entries({ entries, primitive }: { entries: ActionMenuEntry[]; primitive
 }
 
 /** The ⋯ button that opens an action menu. Renders nothing when there is no action. */
-export function ActionMenuButton({ entries, label, size = 'icon-sm', variant = 'ghost', className, align = 'end', icon: Icon = MoreHorizontal, onOpenChange }: {
+export function ActionMenuButton({ entries, label, size = 'icon-sm', variant = 'ghost', className, align = 'end', icon: Icon = MoreHorizontal, motion = 'standard', onOpenChange }: {
   entries: ActionMenuEntry[]
   label: string
   size?: 'icon' | 'icon-xs' | 'icon-sm' | 'icon-lg'
@@ -70,6 +85,7 @@ export function ActionMenuButton({ entries, label, size = 'icon-sm', variant = '
   className?: string
   align?: 'start' | 'center' | 'end'
   icon?: React.ComponentType<{ className?: string }>
+  motion?: ActionMenuMotion
   onOpenChange?: (open: boolean) => void
 }) {
   if (!hasActions(entries)) return null
@@ -80,8 +96,8 @@ export function ActionMenuButton({ entries, label, size = 'icon-sm', variant = '
       </DropdownMenuPrimitive.Trigger>
       <DropdownMenuPrimitive.Portal>
         <DropdownMenuPrimitive.Content align={align} sideOffset={4} onClick={stopAtPortalEdge()}
-          className={cn(surfaceClassName, 'max-h-(--radix-dropdown-menu-content-available-height) origin-(--radix-dropdown-menu-content-transform-origin)')}>
-          <Entries entries={entries} primitive={DropdownMenuPrimitive} />
+          className={cn(motion === 'pop' ? popSurfaceClassName : surfaceClassName, 'max-h-(--radix-dropdown-menu-content-available-height) origin-(--radix-dropdown-menu-content-transform-origin)')}>
+          <Entries entries={entries} primitive={DropdownMenuPrimitive} motion={motion} />
         </DropdownMenuPrimitive.Content>
       </DropdownMenuPrimitive.Portal>
     </DropdownMenuPrimitive.Root>
@@ -92,25 +108,46 @@ export function ActionMenuButton({ entries, label, size = 'icon-sm', variant = '
  * Right-click (long-press on touch) on `children` opens the same entries at the pointer. `children` must be a single
  * element that takes a ref; with no action it is rendered as is.
  */
-export function ActionContextMenu({ entries, children, disabled = false, openOnClick = false, onOpenChange }: {
+export function ActionContextMenu({ entries, children, disabled = false, openOnClick = false, mouseOnly = false, motion = 'standard', onOpenChange }: {
   entries: ActionMenuEntry[]
   children: React.ReactElement
   disabled?: boolean
   /** A plain click opens the menu too (for items that have nothing else to open). */
   openOnClick?: boolean
+  /** Only a mouse right-click opens it; a touch or pen long-press stays with `children` (e.g. long-press selection). */
+  mouseOnly?: boolean
+  motion?: ActionMenuMotion
   onOpenChange?: (open: boolean) => void
 }) {
+  const pressPointerTypeRef = React.useRef('mouse')
   if (disabled || !hasActions(entries)) return children
   const openAtPointer = (event: React.MouseEvent<HTMLElement>) => {
     event.currentTarget.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: event.clientX, clientY: event.clientY }))
   }
+  // Radix skips its handlers for an event already default-prevented: this stops its touch long-press timer, and the
+  // contextmenu Android raises for the same long-press.
+  const keepTouchPress = (event: React.PointerEvent<HTMLElement>) => {
+    pressPointerTypeRef.current = event.pointerType
+    if (event.pointerType !== 'mouse') event.preventDefault()
+  }
+  const keepTouchContextMenu = (event: React.MouseEvent<HTMLElement>) => {
+    if (pressPointerTypeRef.current !== 'mouse') event.preventDefault()
+  }
+  // A keyboard menu key raises contextmenu without a press: forget the touch once it ends.
+  const endPress = () => {
+    pressPointerTypeRef.current = 'mouse'
+  }
   return (
     <ContextMenuPrimitive.Root onOpenChange={onOpenChange}>
-      <ContextMenuPrimitive.Trigger asChild onClick={openOnClick ? openAtPointer : undefined}>{children}</ContextMenuPrimitive.Trigger>
+      <ContextMenuPrimitive.Trigger asChild onClick={openOnClick ? openAtPointer : undefined}
+        onPointerDown={mouseOnly ? keepTouchPress : undefined} onContextMenu={mouseOnly ? keepTouchContextMenu : undefined}
+        onPointerUp={mouseOnly ? endPress : undefined} onPointerCancel={mouseOnly ? endPress : undefined}>
+        {children}
+      </ContextMenuPrimitive.Trigger>
       <ContextMenuPrimitive.Portal>
         <ContextMenuPrimitive.Content onClick={stopAtPortalEdge()}
-          className={cn(surfaceClassName, 'max-h-(--radix-context-menu-content-available-height) origin-(--radix-context-menu-content-transform-origin)')}>
-          <Entries entries={entries} primitive={ContextMenuPrimitive} />
+          className={cn(motion === 'pop' ? popSurfaceClassName : surfaceClassName, 'max-h-(--radix-context-menu-content-available-height) origin-(--radix-context-menu-content-transform-origin)')}>
+          <Entries entries={entries} primitive={ContextMenuPrimitive} motion={motion} />
         </ContextMenuPrimitive.Content>
       </ContextMenuPrimitive.Portal>
     </ContextMenuPrimitive.Root>

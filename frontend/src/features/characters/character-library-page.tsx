@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useEffectEvent, useRef, useState } from 'react'
 import { useLibraryLocation, positiveLibraryId as positiveId } from '@/components/common/use-library-location'
 import { LibraryFolderContent, libraryFolderView } from '@/components/common/library-folder-content'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
@@ -61,6 +61,9 @@ import { CharacterSettingEditorPage } from './components/character-setting-edito
 import { CharacterSettingSaveDialog } from './components/character-setting-save-dialog'
 import { useCharacterLibraryChatPage } from './use-character-library-chat-page'
 import { useCharacterSettingEditor, type SettingEditorTarget } from './use-character-setting-editor'
+import { useCharacterSettingGuard } from './use-character-setting-guard'
+import { CharacterSettingPanel } from './components/character-setting-panel'
+import type { CharacterAppearanceTab } from '@/features/settings/components/character-appearance-editor'
 
 type NameDialogState = { mode: 'create'; parentId: number | null; name: string } | { mode: 'rename'; folder: CharacterFolder; name: string }
 type MoveState = { kind: 'folder'; folder: CharacterFolder } | { kind: 'setting'; setting: CharacterSettingSummary }
@@ -68,8 +71,8 @@ type MoveState = { kind: 'folder'; folder: CharacterFolder } | { kind: 'setting'
 /**
  * 캐릭터: the appearance library and the Danbooru character catalog. The library's URL holds the open folder
  * (`folder`), the name search across the library (`q`), the page (`page`), the setting open in its editor page
- * (`setting`) and a new setting's draft (`new`: its folder id or `root`). An open editor replaces the list and its
- * tabs. Chat profiles are not part of this page (they live in the chat workspace and only borrow a look from here).
+ * (`setting`) and a new setting's draft (`new`: its folder id or `root`). `editor=full` expands the detail panel.
+ * Chat profiles are separate (they live in the chat workspace and only borrow a look from here).
  */
 registerTranslationCatalog(settingsCatalog)
 
@@ -138,7 +141,13 @@ function AppearanceLibraryPage() {
   const permissions = useFeaturePermissions()
   const canEdit = permissions.has('characters.edit')
   const [pageSize, setPageSizeState] = useState(readPageSize)
-  const { params: searchParams, folderId, query, page, searchText, setSearchText, update, openFolder, search } = useLibraryLocation(pageSize, ['setting', 'new'])
+  const { params: searchParams, folderId, query, page, searchText, setSearchText, update, openFolder: navigateFolder } = useLibraryLocation(pageSize, ['setting', 'new'])
+  const fullEditor = searchParams.get('editor') === 'full'
+  const tabParam = searchParams.get('tab')
+  const editorTab: CharacterAppearanceTab = tabParam === 'images' || tabParam === 'expressions' || tabParam === 'candidates' ? tabParam : 'tags'
+  const setEditorTab = (tab: CharacterAppearanceTab) => { if (!editor.isBusy()) update({ tab: tab === 'tags' ? null : tab, editor: null }, true) }
+  const search = (text: string, offset = 0, replace = false) => update({ q: text.trim() || null, page: offset > 0 ? String(Math.floor(offset / pageSize)) : null }, replace)
+  const openFolder = (id: number | null, offset = 0) => { if (!editor.isBusy()) navigateFolder(id, offset) }
   const sortParam = searchParams.get('sort') as CharacterSettingSort | null
   const sort: CharacterSettingSort = sortParam && SORTS.includes(sortParam) ? sortParam : 'name'
   const favoriteOnly = searchParams.get('fav') === '1'
@@ -170,9 +179,9 @@ function AppearanceLibraryPage() {
   const [moving, setMoving] = useState<MoveState | null>(null)
   /** A new setting's name and folder, asked before it is made and opened in its editor page. */
   const [creating, setCreating] = useState<{ folderId: number | null } | null>(null)
-  const openSetting = (id: number) => update({ setting: String(id), new: null })
-  const newSetting = (inFolder: number | null) => update({ setting: null, new: inFolder === null ? 'root' : String(inFolder) })
-  const closeEditor = () => update({ setting: null, new: null })
+  const openSetting = (id: number) => { if (!editor.isBusy()) update({ setting: String(id), new: null, editor: null }) }
+  const newSetting = (inFolder: number | null) => { if (!editor.isBusy()) update({ setting: null, new: inFolder === null ? 'root' : String(inFolder), editor: null }) }
+  const closeEditor = () => { if (!editor.isBusy()) update({ setting: null, new: null, editor: null }) }
 
   const foldersQuery = useCharacterFolders()
   const folders = foldersQuery.data ?? []
@@ -186,8 +195,15 @@ function AppearanceLibraryPage() {
   const editor = useCharacterSettingEditor({
     target,
     onCreated: (setting) => update({ setting: String(setting.id), new: null }, true),
-    onClose: closeEditor,
+    onClose: () => update({ setting: null, new: null, editor: null }),
   })
+  useCharacterSettingGuard(editor, canEdit)
+  const searchOpenEditor = useEffectEvent((text: string) => search(text, 0, true))
+  useEffect(() => {
+    if (!editor.open || searchText.trim() === query) return
+    const timer = window.setTimeout(() => searchOpenEditor(searchText), 300)
+    return () => window.clearTimeout(timer)
+  }, [editor.open, searchText, query])
 
   const onError = (error: unknown, fallback: string) => showSnackbar({ message: getErrorMessage(error, fallback), tone: 'error' })
   const createMutation = useMutation({
@@ -243,16 +259,20 @@ function AppearanceLibraryPage() {
       if (!ok) return
       const removed = folderSubtreeIds(folders, folder.id)
       await deleteCharacterFolder(folder.id)
+      const open = editor.baseRef.current
+      if (open?.folderId !== null && open?.folderId !== undefined && removed.has(open.folderId)) editor.closeIfDeleted([open.id])
       void refreshCharacterViews(queryClient, { folderIds: [folder.id, folder.parentId], settingIds: [], foldersChanged: true })
       if (folderId !== null && removed.has(folderId)) openFolder(folder.parentId)
     } catch (error) { onError(error, t({ ko: '폴더를 지우지 못했어.', en: 'Could not delete the folder.' })) }
   }
   const deleteSetting = async (setting: CharacterSettingSummary) => {
+    if (editor.isBusy()) return
     try {
       const preview = await getCharacterSettingDeletePreview(setting.id)
       const ok = await confirm({ title: t({ ko: '‘{name}’ 삭제', en: 'Delete ‘{name}’' }, { name: setting.name }), description: describeDeletion(preview) || undefined, confirmLabel: t({ ko: '삭제', en: 'Delete' }), tone: 'destructive' })
       if (!ok) return
       await deleteCharacterSetting(setting.id, setting.revision)
+      editor.closeIfDeleted([setting.id])
       void refreshCharacterViews(queryClient, { folderIds: [setting.folderId], settingIds: [setting.id] })
     } catch (error) {
       if (!isCharacterRevisionConflict(error)) { onError(error, t({ ko: '외형 설정을 지우지 못했어.', en: 'Could not delete the setting.' })); return }
@@ -262,8 +282,12 @@ function AppearanceLibraryPage() {
   }
 
   const bulkMutation = useMutation({
-    mutationFn: (input: CharacterSettingBulkInput) => bulkCharacterSettings(input),
+    mutationFn: (input: CharacterSettingBulkInput) => {
+      if (editor.isBusy()) throw new Error(t({ ko: '이미지 작업이나 저장이 끝난 뒤 다시 해줘.', en: 'Wait for the image operation or save to finish.' }))
+      return bulkCharacterSettings(input)
+    },
     onSuccess: (_, input) => {
+      if (input.action === 'delete') editor.closeIfDeleted(input.ids)
       const settings = input.ids.map((id) => selected.get(id) ?? settingsPage?.items.find((item) => item.id === id)).filter((item): item is CharacterSettingSummary => Boolean(item))
       void refreshCharacterViews(queryClient, { folderIds: [...settings.map((setting) => setting.folderId), ...(input.action === 'move' ? [input.folderId] : [])], settingIds: input.ids, foldersChanged: input.action !== 'favorite' })
       if (input.action !== 'favorite' || input.ids.length > 1) { setSelected(new Map()); setSelectMode(false) }
@@ -340,7 +364,7 @@ function AppearanceLibraryPage() {
   ]
 
   useCharacterLibraryChatPage({
-    folders, folderId, path, subfolders, query, settingsPage, offset: scope.offset, editor, canEdit,
+    folders, folderId, path, subfolders, query, settingsPage, offset: scope.offset, editor, canEdit, editorTab, fullEditor, setEditorTab,
     openFolder, search, openSetting, newSetting,
     createFolder: (parentId, name) => nameMutation.mutateAsync({ mode: 'create', parentId, name }),
     renameFolder: (folder, name) => nameMutation.mutateAsync({ mode: 'rename', folder, name }),
@@ -350,12 +374,14 @@ function AppearanceLibraryPage() {
   })
 
   const rootLabel = t({ ko: '외형 라이브러리', en: 'Appearance library' })
-  if (editor.open) {
-    return <CharacterSettingEditorPage editor={editor} folders={folders} canEdit={canEdit} admin={permissions.isAdmin} rootLabel={rootLabel} onOpenFolder={(id) => openFolder(id)} />
+  if (editor.open && fullEditor) {
+    return <CharacterSettingEditorPage editor={editor} folders={folders} canEdit={canEdit} admin={permissions.isAdmin} rootLabel={rootLabel} onOpenFolder={(id) => openFolder(id)} onOpenPanel={() => update({ editor: null })} />
   }
   const pageItems = settingsPage?.items ?? []
   const toolbar = (
+    // The page itself does not scroll (the list and the panel do), so a sticky toolbar would sit a header height too low.
     <PageToolbar
+      sticky={false}
       start={<>
         <CharacterViewSwitch />
         {query ? <Heading level={3} as="h1" className="truncate">{t({ ko: '‘{query}’ 검색 결과', en: 'Results for ‘{query}’' }, { query })}</Heading> : filtering ? <Heading level={3} as="h1" className="truncate">{t({ ko: '라이브러리 전체 · 필터 결과', en: 'Whole library · filtered' })}</Heading> : path.length ? (
@@ -398,6 +424,8 @@ function AppearanceLibraryPage() {
   return (
     <PageWithSidebar
       storageKey="characters"
+      className="h-[calc(var(--shell-content-height))] overflow-hidden"
+      contentClassName="flex min-h-0 flex-col"
       sidebarLabel={t('characterLibraryPage.folders')}
       sidebar={(
         <div className="space-y-3">
@@ -407,19 +435,23 @@ function AppearanceLibraryPage() {
       )}
       toolbar={toolbar}
     >
+      <div className="flex min-h-0 flex-1">
+      <div className={editor.open ? 'hidden min-h-0 min-w-0 flex-1 overflow-y-auto pr-4 pb-6 xl:block' : 'min-h-0 min-w-0 flex-1 overflow-y-auto pb-6'}>
       <LibraryFolderContent folderMissing={folderMissing} subfolders={filtering ? [] : subfolders} query={query} rootLabel={rootLabel} onOpen={openFolder} getMenu={folderMenu}>
           <RowGroup heading={t('characterLibraryPage.settings')} count={settingsPage?.total}>
             <CharacterSettingGrid
               errorTitle={t({ ko: '외형 설정을 불러오지 못했어', en: 'Could not load settings' })}
               query={settingsQuery}
               page={page}
-              columns={columns.columnCount}
+              columns={editor.open ? Math.min(columns.columnCount, 3) : columns.columnCount}
               onPageChange={(next) => update({ page: next > 0 ? String(next) : null })}
               renderSetting={(setting) => (
                 <CharacterSettingCard
                   key={setting.id}
                   setting={setting}
                   selected={selectMode ? selected.has(setting.id) : undefined}
+                  open={openSettingId === setting.id}
+                  disabled={editor.busy}
                   onOpen={() => (selectMode ? toggleSelected(setting) : openSetting(setting.id))}
                   onToggleFavorite={canEdit && !selectMode ? () => toggleFavorite(setting) : undefined}
                   onToggleSelect={canEdit ? () => { setSelectMode(true); toggleSelected(setting) } : undefined}
@@ -437,8 +469,11 @@ function AppearanceLibraryPage() {
             />
           </RowGroup>
       </LibraryFolderContent>
+      </div>
+      {editor.open ? <CharacterSettingPanel key={editor.session} editor={editor} folders={folders} items={pageItems} canEdit={canEdit} admin={permissions.isAdmin} tab={editorTab} onTabChange={setEditorTab} onOpen={openSetting} onClose={closeEditor} onExpand={() => update({ editor: 'full' })} onToggleFavorite={toggleFavorite} /> : null}
+      </div>
 
-      <ImageListColumnFloatingControl
+      {!editor.open ? <ImageListColumnFloatingControl
         value={columns.columnCount}
         defaultValue={columns.defaultColumnCount}
         min={columns.minColumnCount}
@@ -446,7 +481,7 @@ function AppearanceLibraryPage() {
         onChange={columns.setColumnCount}
         onReset={columns.resetColumnCount}
         aboveSelectionBar={selected.size > 0}
-      />
+      /> : null}
       {canEdit ? (
         <SelectionActionBar
           selectedCount={selected.size}

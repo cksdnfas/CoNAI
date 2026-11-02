@@ -187,6 +187,34 @@
       transform: scale(0.86);
     }
   }
+
+  /*
+   * Pop menu (ActionMenu motion="pop"): the panel springs from its origin, its items rise in one after another (delay
+   * per item). `backwards`, and no `to` on the items, so they end on their own values (a disabled item stays dimmed).
+   */
+  --animate-menu-pop: menu-pop 340ms cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
+  --animate-menu-item-pop: menu-item-pop 280ms cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
+
+  @keyframes menu-pop {
+    0% {
+      opacity: 0;
+      transform: scale(0.55);
+    }
+    45% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+
+  @keyframes menu-item-pop {
+    from {
+      opacity: 0;
+      transform: translateY(6px) scale(0.92);
+    }
+  }
 }
 
 :root {

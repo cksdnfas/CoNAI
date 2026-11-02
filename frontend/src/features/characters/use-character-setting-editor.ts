@@ -21,7 +21,7 @@ import { emptySettingDraft, refreshCharacterViews, SETTING_DRAFT_KEYS, settingDr
 export type SettingEditorTarget = { settingId: number } | { newIn: number | null } | null
 
 type DraftKey = keyof SettingDraft
-const IMAGE_KEYS: ReadonlySet<DraftKey> = new Set(['referenceHash', 'avatarHash', 'avatarCrop'])
+const IMAGE_KEYS: ReadonlySet<DraftKey> = new Set(['referenceHash', 'references', 'referenceCategories', 'avatarHash', 'avatarCrop'])
 const same = (left: unknown, right: unknown) => JSON.stringify(left) === JSON.stringify(right)
 
 /**
@@ -35,6 +35,10 @@ function mergeDraft(previous: SettingDraft, latest: SettingDraft, draft: Setting
     if (same(draft[key], previous[key])) continue
     ;(next as Record<DraftKey, unknown>)[key] = draft[key]
     if (!same(latest[key], previous[key]) && !same(latest[key], draft[key])) conflicts.push(key)
+  }
+  // The two gallery lists are coupled: a remote category removal must not silently invalidate a local image edit.
+  if (next.references.some((image) => image.category !== null && !next.referenceCategories.includes(image.category))) {
+    for (const key of ['references', 'referenceCategories'] as const) if (!conflicts.includes(key)) conflicts.push(key)
   }
   return { draft: next, conflicts }
 }
@@ -71,9 +75,13 @@ export function useCharacterSettingEditor({ target, onCreated, onClose }: {
   const draftRef = useRef(draft)
   draftRef.current = draft
   const deletedRef = useRef(false)
+  const targetRef = useRef(target)
+  targetRef.current = target
 
   const targetKey = !target ? '' : 'settingId' in target ? `setting:${target.settingId}` : `new:${target.newIn ?? 'root'}`
   const sessionRef = useRef(0)
+  const operationsRef = useRef({ session: 0, count: 0 })
+  const [operations, setOperations] = useState(operationsRef.current)
   const creatingRef = useRef<{ session: number; submitted: SettingDraft; promise: Promise<CharacterSetting> } | null>(null)
   const [loadedKey, setLoadedKey] = useState('')
   /** A draft the next load of its setting starts from (an undo bringing back edits made before a link change). */
@@ -113,6 +121,19 @@ export function useCharacterSettingEditor({ target, onCreated, onClose }: {
     }
   }
   const ready = target !== null && (settingId === null || base?.id === settingId)
+  const session = sessionRef.current
+  const isCurrent = () => sessionRef.current === session
+  const onBusyChange = (busy: boolean) => {
+    if (!isCurrent()) return
+    const count = operationsRef.current.session === session ? operationsRef.current.count : 0
+    operationsRef.current = { session, count: Math.max(0, count + (busy ? 1 : -1)) }
+    setOperations(operationsRef.current)
+  }
+  const runBusy = async <T,>(task: () => Promise<T>) => {
+    if (!isCurrent()) throw new Error(t({ ko: '편집 중인 외형 설정이 바뀌었어.', en: 'The open setting changed.' }))
+    onBusyChange(true)
+    try { return await task() } finally { onBusyChange(false) }
+  }
 
   /** Make `latest` the base with `next` as the draft, right away (later steps in the same task read the refs). */
   const adopt = (latest: CharacterSetting, next: SettingDraft) => {
@@ -125,6 +146,7 @@ export function useCharacterSettingEditor({ target, onCreated, onClose }: {
 
   /** Take a newer stored setting from this editor's own write: untouched fields follow it, edited ones stay. */
   const rebase = (latest: CharacterSetting, patch: Partial<SettingDraft> = {}) => {
+    if (!isCurrent() || baseRef.current?.id !== latest.id) return
     const previous = baseRef.current
     const merged = previous ? mergeDraft(settingDraftOf(previous), settingDraftOf(latest), draftRef.current).draft : settingDraftOf(latest)
     adopt(latest, { ...merged, ...patch })
@@ -147,6 +169,8 @@ export function useCharacterSettingEditor({ target, onCreated, onClose }: {
     sections: t({ ko: '외형 태그', en: 'appearance tags' }),
     outfits: t({ ko: '의상', en: 'outfits' }),
     referenceHash: t({ ko: '기준 이미지', en: 'reference image' }),
+    references: t({ ko: '참고 이미지', en: 'reference gallery' }),
+    referenceCategories: t({ ko: '이미지 분류', en: 'image categories' }),
     avatarHash: t({ ko: '아바타', en: 'avatar' }),
     avatarCrop: t({ ko: '아바타', en: 'avatar' }),
   })[key]
@@ -184,7 +208,7 @@ export function useCharacterSettingEditor({ target, onCreated, onClose }: {
       name: submitted.name.trim(),
       sections: submitted.sections,
       outfits: submitted.outfits,
-      ...(canViewImages ? { referenceHash: submitted.referenceHash, avatarHash: submitted.avatarHash, avatarCrop: submitted.avatarCrop } : {}),
+      ...(canViewImages ? { referenceHash: submitted.referenceHash, references: submitted.references, referenceCategories: submitted.referenceCategories, avatarHash: submitted.avatarHash, avatarCrop: submitted.avatarCrop } : {}),
     })
     const request = { session: sessionRef.current, submitted, promise }
     creatingRef.current = request
@@ -311,6 +335,18 @@ export function useCharacterSettingEditor({ target, onCreated, onClose }: {
     ready,
     /** Per opened new draft; with the setting id it names the assistant resource. */
     draftSerial,
+    session,
+    isCurrent,
+    busy: operations.session === session && operations.count > 0,
+    isBusy: () => operationsRef.current.session === sessionRef.current && operationsRef.current.count > 0,
+    onBusyChange,
+    closeIfDeleted: (ids: number[]) => {
+      const current = targetRef.current
+      if (current && 'settingId' in current && ids.includes(current.settingId)) {
+        deletedRef.current = true
+        onClose()
+      }
+    },
     loading: settingId !== null && !base && query.isPending,
     error: settingId !== null && !base && query.isError ? query.error : null,
     retry: () => void query.refetch(),
@@ -326,18 +362,22 @@ export function useCharacterSettingEditor({ target, onCreated, onClose }: {
     seed: (seedBase: CharacterSetting, seedDraft: SettingDraft) => setSeeded({ base: seedBase, draft: seedDraft }),
     dirty,
     /** Change some fields of the draft (nothing is saved). */
-    patch: (next: Partial<SettingDraft>) => setDraft((current) => ({ ...current, ...next })),
+    patch: (next: Partial<SettingDraft>) => {
+      if (!isCurrent()) return
+      draftRef.current = { ...draftRef.current, ...next }
+      setDraft(draftRef.current)
+    },
     rebase,
-    ensureSetting,
+    ensureSetting: () => runBusy(ensureSetting),
     canSave: draft.name.trim().length > 0 && !saveMutation.isPending && !deleteMutation.isPending,
     saving: saveMutation.isPending,
     deleting: deleteMutation.isPending,
-    save: () => saveMutation.mutateAsync(),
+    save: () => runBusy(() => saveMutation.mutateAsync()),
     /**
      * Store the draft's changes and stay open (a synced profile's save stores its setting first): only changed
      * fields with `revision`, the same once-retry and kept draft on a real conflict as `save`.
      */
-    commit: async () => {
+    commit: () => runBusy(async () => {
       const sourceSession = sessionRef.current
       const current = baseRef.current
       if (!current) throw new Error(t({ ko: '저장된 외형 설정이 아니야.', en: 'This setting is not saved.' }))
@@ -347,8 +387,8 @@ export function useCharacterSettingEditor({ target, onCreated, onClose }: {
         if (sessionRef.current === sourceSession) rebase(saved)
       }
       return saved
-    },
-    remove,
+    }),
+    remove: (ask: boolean) => runBusy(() => remove(ask)),
   }
 }
 

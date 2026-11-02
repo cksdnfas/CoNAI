@@ -345,7 +345,11 @@ buttons up one tone.
 - Floating surface (`components/ui/floating-surface`): `floatingSurfaceClassName` (surface-high, elevation-2, md radius)
   is the look of every hand-positioned menu, suggestion list, hover card and floating toolbar; Popover / DropdownMenu /
   ActionMenu build on it (`floatingMenuClassName`, `floatingMenuItemClassName`, `floatingMotionClassName`). Never
-  re-type `bg-surface-high shadow-elevation-2`.
+  re-type `bg-surface-high shadow-elevation-2`. `ActionMenuButton` / `ActionContextMenu` `motion="pop"`
+  (`floatingMenuPopClassName`) springs the panel open and staggers its items; keep it to quick card menus (generation
+  history cards), the standard fade stays the default. `ActionContextMenu mouseOnly` leaves touch long-press to the
+  element. `ImageList getItemMenu` uses both: mouse right-click at the pointer, a ⋯ button on touch, long-press still
+  selects.
 - `CodeBlock` (`components/ui/code-block`, `size` xs|2xs, `maxHeight` none|xs|sm|md|lg|screen, `fill`, `wrap`): mono
   `<pre>` for JSON / raw responses / logs / error details; field fill, scrolls inside itself. `fill={false}` when it
   already sits in a modal or framed group.

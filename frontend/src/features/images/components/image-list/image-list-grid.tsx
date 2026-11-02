@@ -1,5 +1,6 @@
 import { useMemo, type ReactNode } from 'react'
 import { VirtuosoGrid, type GridComputeItemKey, type GridItemContent } from 'react-virtuoso'
+import type { ActionMenuEntry } from '@/components/ui/action-menu'
 import type { ImageRecord } from '@/types/image'
 import type { ImageListActivateHandler, ImageListScrollMode, ImageListToggleSelectHandler } from './image-list-types'
 import { ImageListItem } from './image-list-item'
@@ -23,6 +24,7 @@ interface ImageListGridProps {
   onEndReached?: () => void
   renderItemOverlay?: (image: ImageRecord) => ReactNode
   renderItemPersistentOverlay?: (image: ImageRecord) => ReactNode
+  getItemMenu?: (image: ImageRecord) => ActionMenuEntry[]
   showDefaultQuickActions?: boolean
   interactive?: boolean
   shouldBlurItemPreview?: (image: ImageRecord) => boolean
@@ -40,6 +42,7 @@ interface ImageListGridContext {
   onToggleSelect?: ImageListToggleSelectHandler
   renderItemOverlay?: (image: ImageRecord) => ReactNode
   renderItemPersistentOverlay?: (image: ImageRecord) => ReactNode
+  getItemMenu?: (image: ImageRecord) => ActionMenuEntry[]
   showDefaultQuickActions?: boolean
   interactive?: boolean
   shouldBlurItemPreview?: (image: ImageRecord) => boolean
@@ -70,6 +73,7 @@ const ImageGridItemContent: GridItemContent<ImageRecord, ImageListGridContext> =
       onToggleSelect={context.onToggleSelect}
       renderOverlay={context.renderItemOverlay?.(image)}
       renderPersistentOverlay={context.renderItemPersistentOverlay?.(image)}
+      menuEntries={context.getItemMenu?.(image)}
       showDefaultQuickActions={context.showDefaultQuickActions}
       interactive={context.interactive}
       blurPreview={context.shouldBlurItemPreview?.(image) ?? false}
@@ -98,6 +102,7 @@ export function ImageListGrid({
   onEndReached,
   renderItemOverlay,
   renderItemPersistentOverlay,
+  getItemMenu,
   showDefaultQuickActions,
   interactive,
   shouldBlurItemPreview,
@@ -122,6 +127,7 @@ export function ImageListGrid({
     onToggleSelect,
     renderItemOverlay,
     renderItemPersistentOverlay,
+    getItemMenu,
     showDefaultQuickActions,
     interactive,
     shouldBlurItemPreview,
@@ -137,6 +143,7 @@ export function ImageListGrid({
     onToggleSelect,
     renderItemOverlay,
     renderItemPersistentOverlay,
+    getItemMenu,
     showDefaultQuickActions,
     interactive,
     shouldBlurItemPreview,

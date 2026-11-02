@@ -1,20 +1,21 @@
 import type { ReactNode } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { ChatProfileAvatar } from '@/features/codex-chat/chat-profile-avatar'
-import { CharacterAppearanceEditor } from '@/features/settings/components/character-appearance-editor'
+import { CharacterAppearanceEditor, type CharacterAppearanceTab } from '@/features/settings/components/character-appearance-editor'
 import type { AssetRuns } from '@/features/settings/components/chat-profile-asset-runs'
 import { clearChatProfileExpression, setChatProfileExpression } from '@/lib/api-codex-chat'
 import { refreshCharacterSettingAssets } from '@/lib/api-character-library'
 import { characterImageUrl } from '../character-library-shared'
 import type { CharacterSettingEditorState } from '../use-character-setting-editor'
 import { CharacterLookEditor } from './character-look-editor'
+import { CharacterReferenceGallery } from './character-reference-gallery'
 
 /**
  * The look of the setting an editor holds (reference, avatar, sectioned tags and outfits, expressions, candidates), bound to the
  * setting: imports, generation and expressions are the setting's. The library editor and a profile synced to the
- * setting both show it. Without `editable` it only shows; `generation` (administrators) adds imports and generation.
+ * setting both show it. Without `editable` it only shows; `generation` (administrators) adds generation.
  */
-export function CharacterSettingAppearanceEditor({ editor, runs, editable, generation, busy, onBusyChange, appearanceWarning = null, appearanceNote = null, aside, children }: {
+export function CharacterSettingAppearanceEditor({ editor, runs, editable, generation, busy, onBusyChange, appearanceWarning = null, appearanceNote = null, tab, aside, children }: {
   editor: CharacterSettingEditorState
   runs: AssetRuns
   editable: boolean
@@ -25,6 +26,7 @@ export function CharacterSettingAppearanceEditor({ editor, runs, editable, gener
   appearanceWarning?: string | null
   /** Who else a change reaches, under the appearance text. */
   appearanceNote?: ReactNode
+  tab?: CharacterAppearanceTab
   /** Under the avatar in the image column. */
   aside?: ReactNode
   children?: ReactNode
@@ -34,18 +36,23 @@ export function CharacterSettingAppearanceEditor({ editor, runs, editable, gener
   const avatarUrl = draft.avatarHash ? characterImageUrl(draft.avatarHash) : null
 
   const setExpression = async (name: string, hash: string) => {
-    const current = await editor.ensureSetting()
+    if (!generation || !editor.isCurrent()) return
+    const current = editor.baseRef.current ?? await editor.ensureSetting()
+    if (!editor.isCurrent()) return
     const result = await setChatProfileExpression({ kind: 'setting', id: current.id }, name, hash)
-    editor.rebase(await refreshCharacterSettingAssets(queryClient, current.id, [{ expressionGroupId: result.expressionGroupId }]))
+    const latest = await refreshCharacterSettingAssets(queryClient, current.id, [{ expressionGroupId: result.expressionGroupId }])
+    if (editor.isCurrent()) editor.rebase(latest)
   }
   const clearExpression = async (name: string) => {
-    if (!base) return
+    if (!generation || !base || !editor.isCurrent()) return
     const result = await clearChatProfileExpression({ kind: 'setting', id: base.id }, name)
-    editor.rebase(await refreshCharacterSettingAssets(queryClient, base.id, [result]))
+    const latest = await refreshCharacterSettingAssets(queryClient, base.id, [result])
+    if (editor.isCurrent()) editor.rebase(latest)
   }
 
   return (
     <CharacterAppearanceEditor
+      key={editor.session}
       value={draft}
       onChange={editor.patch}
       onAvatarChange={(avatarHash, avatarCrop) => editor.patch({ avatarHash, avatarCrop: avatarHash ? avatarCrop : null })}
@@ -64,6 +71,8 @@ export function CharacterSettingAppearanceEditor({ editor, runs, editable, gener
       onClearExpression={clearExpression}
       editable={editable}
       generation={generation}
+      tab={tab}
+      gallery={<CharacterReferenceGallery editor={editor} editable={editable} canUpload={generation} imageTabShown={tab === 'images'} busy={busy} onBusyChange={onBusyChange} />}
     >
       {children}
     </CharacterAppearanceEditor>

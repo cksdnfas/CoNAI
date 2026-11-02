@@ -106,6 +106,8 @@ test('character looks: dictionary sorting, legacy text, tag search and filters, 
   const legacyId = Number(db.prepare("INSERT INTO character_settings (folder_id, name, appearance, sections) VALUES (NULL, 'Legacy', 'red hair', NULL)").run().lastInsertRowid)
   ensureCharacterLibrarySchema(db)
   assert.equal(library.getCharacterSetting(legacyId).sections.other, 'red hair')
+  assert.deepEqual(library.getCharacterSetting(legacyId).references, [])
+  assert.deepEqual(library.getCharacterSetting(legacyId).referenceCategories, [])
   assert.deepEqual(ids({ query: 'red hair' }), [legacyId])
 
   // A taken name in the destination refuses the whole move: nothing moves.
@@ -132,5 +134,117 @@ test('character looks: dictionary sorting, legacy text, tag search and filters, 
   const copy = library.listCharacterSettings({ folderId: null, query: 'Miku (2)' }).items[0]
   assert.ok(copy?.favorite)
   assert.equal(library.getCharacterSetting(copy.id).appearance, recomposed.appearance)
+  // Version 1 bundles made before galleries existed remain valid.
+  delete exported.document.settings[0].references
+  delete exported.document.settings[0].referenceCategories
+  await writeZip(bundlePath, [{ name: library.CHARACTER_BUNDLE_DOCUMENT, data: Buffer.from(JSON.stringify(exported.document)) }])
+  assert.equal((await library.importCharacterLibrary({ folderId: null, bundlePath }, true, true)).createdSettings, 1)
   await assert.rejects(library.importCharacterLibrary({ folderId: null, bundlePath: dictionary }, true, true), /외형 묶음/)
+
+  await t.test('catalog gallery assets and ordered categories round-trip through bundles', async (sub) => {
+    const sharp = (await import('sharp')).default
+    const { BackgroundQueueService } = await import('../src/services/backgroundQueue')
+    const { MediaPostprocessCoordinator } = await import('../src/services/background-media/mediaPostprocessCoordinator')
+    const { skippedStage } = await import('../src/services/background-media/mediaProcessingTypes')
+    sub.mock.method(BackgroundQueueService, 'addMetadataExtractionTask', () => {})
+    sub.mock.method(MediaPostprocessCoordinator, 'triggerAutoTagProcessing', () => skippedStage('auto-tag', 'test'))
+    const gallery = library.createCharacterSetting({ folderId: null, name: 'Catalog gallery', referenceCategories: ['Official', 'Outfits'] })
+    const empty = await library.importCharacterCatalogReferences(gallery.id, { character: 'Hatsune Miku', revision: gallery.revision }, true, true)
+    assert.equal(empty.added, 0)
+    assert.equal(empty.setting.revision, gallery.revision)
+    await assert.rejects(library.importCharacterCatalogReferences(gallery.id, { character: 'unknown', revision: gallery.revision }, true, true), (error: unknown) => error instanceof library.CharacterLibraryError && error.status === 404)
+    await assert.rejects(library.importCharacterCatalogReferences(gallery.id, { character: 'Hatsune Miku', revision: gallery.revision }, true, false), /images.upload/)
+    const samples = path.join(root, 'database', 'character-images', 'hatsune_miku')
+    await fs.promises.mkdir(samples, { recursive: true })
+    await sharp({ create: { width: 16, height: 16, channels: 3, background: '#41aabc' } }).png().toFile(path.join(samples, '1.png'))
+    await sharp({ create: { width: 16, height: 16, channels: 3, background: '#bc4a80' } }).png().toFile(path.join(samples, '2.png'))
+    await fs.promises.writeFile(path.join(samples, '3.png'), 'invalid image')
+    danbooruBrowserService.close()
+    const filled = await library.importCharacterCatalogReferences(gallery.id, { character: 'Hatsune Miku', revision: gallery.revision }, true, true)
+    assert.equal(filled.added, 2)
+    assert.equal(filled.dropped, 1)
+    assert.equal(filled.setting.revision, gallery.revision + 1)
+    assert.equal(filled.setting.referenceHash, filled.setting.references[0].hash)
+    assert.deepEqual(filled.setting.references.map((entry) => entry.category), [null, null])
+    const repeated = await library.importCharacterCatalogReferences(gallery.id, { character: 'Hatsune Miku', revision: filled.setting.revision }, true, true)
+    assert.equal(repeated.added, 0)
+    assert.equal(repeated.setting.revision, filled.setting.revision)
+    await assert.rejects(library.importCharacterCatalogReferences(gallery.id, { character: 'Hatsune Miku', revision: gallery.revision }, true, true), (error: unknown) => error instanceof library.CharacterLibraryError && error.status === 409)
+    const categorized = library.patchCharacterSetting(gallery.id, {
+      revision: filled.setting.revision,
+      references: [{ ...filled.setting.references[1], category: 'Official' }, filled.setting.references[0]],
+    })
+    const bundle = library.exportCharacterLibrary({ ids: [gallery.id] }, true)
+    assert.equal(bundle.files.length, 2)
+    assert.deepEqual(bundle.document.settings[0].references, categorized.references)
+    assert.deepEqual(bundle.document.settings[0].referenceCategories, ['Official', 'Outfits'])
+    await writeZip(bundlePath, [{ name: library.CHARACTER_BUNDLE_DOCUMENT, data: Buffer.from(JSON.stringify(bundle.document)) }, ...bundle.files.map((file) => ({ name: file.name, file: file.path }))])
+    assert.equal((await library.importCharacterLibrary({ folderId: null, bundlePath }, true, true)).droppedImages, 0)
+    const copied = library.getCharacterSetting(library.listCharacterSettings({ query: 'Catalog gallery (2)' }).items[0].id)
+    assert.deepEqual(copied.references, categorized.references)
+    assert.deepEqual(copied.referenceCategories, ['Official', 'Outfits'])
+    assert.equal(copied.referenceCount, 2)
+    bundle.document.settings[0].references!.push({ hash: 'missing-gallery-image', category: 'Outfits' })
+    await writeZip(bundlePath, [{ name: library.CHARACTER_BUNDLE_DOCUMENT, data: Buffer.from(JSON.stringify(bundle.document)) }])
+    assert.equal((await library.importCharacterLibrary({ folderId: null, bundlePath }, true, true)).droppedImages, 1)
+    const partial = library.getCharacterSetting(library.listCharacterSettings({ query: 'Catalog gallery (3)' }).items[0].id)
+    assert.deepEqual(partial.references, categorized.references)
+
+    // Gallery eligibility must not erase a successful ingest or another asset-group placement.
+    const ineligibleHash = categorized.references[0].hash
+    bundle.document.settings[0].references = categorized.references
+    bundle.document.settings[0].expressions = [{ hash: ineligibleHash, keywords: ['sample'] }]
+    bundle.document.settings[0].candidates = [ineligibleHash]
+    images.db.prepare("UPDATE image_files SET mime_type = 'video/mp4' WHERE composite_hash = ?").run(ineligibleHash)
+    try {
+      await writeZip(bundlePath, [{ name: library.CHARACTER_BUNDLE_DOCUMENT, data: Buffer.from(JSON.stringify(bundle.document)) }, ...bundle.files.map((file) => ({ name: file.name, file: file.path }))])
+      const restored = await library.importCharacterLibrary({ folderId: null, bundlePath }, true, true)
+      assert.equal(restored.importedImages, 2)
+      assert.equal(restored.droppedImages, 0)
+      const mixed = library.getCharacterSetting(library.listCharacterSettings({ query: 'Catalog gallery (4)' }).items[0].id)
+      assert.deepEqual(mixed.references, [categorized.references[1]])
+      const { EmoticonService } = await import('../src/services/emoticonService')
+      assert.equal(EmoticonService.listEntries(mixed.expressionGroupId!)[0].compositeHash, ineligibleHash)
+      assert.ok(images.db.prepare('SELECT 1 FROM image_groups WHERE group_id = ? AND composite_hash = ?').get(mixed.candidateGroupId, ineligibleHash))
+    } finally {
+      images.db.prepare("UPDATE image_files SET mime_type = 'image/png' WHERE composite_hash = ?").run(ineligibleHash)
+    }
+  })
+
+  await t.test('deleted stored gallery images do not block catalog imports or reorder patches', async (sub) => {
+    const sharp = (await import('sharp')).default
+    const { ingestMedia, activeMediaFile } = await import('../src/services/codex-chat/chatCardAssets')
+    const { BackgroundQueueService } = await import('../src/services/backgroundQueue')
+    const { MediaPostprocessCoordinator } = await import('../src/services/background-media/mediaPostprocessCoordinator')
+    const { skippedStage } = await import('../src/services/background-media/mediaProcessingTypes')
+    sub.mock.method(BackgroundQueueService, 'addMetadataExtractionTask', () => {})
+    sub.mock.method(MediaPostprocessCoordinator, 'triggerAutoTagProcessing', () => skippedStage('auto-tag', 'test'))
+    const dictionaryDb = new Database(dictionary)
+    dictionaryDb.prepare("INSERT INTO characters VALUES (7, 'gallery_regression', 'gallery_regression', 1)").run()
+    dictionaryDb.close()
+    const samples = path.join(root, 'database', 'character-images', 'gallery_regression')
+    await fs.promises.mkdir(samples, { recursive: true })
+    await sharp({ create: { width: 19, height: 17, channels: 3, background: '#a622cb' } }).png().toFile(path.join(samples, '1.png'))
+    const deletedHash = (await ingestMedia(await sharp({ create: { width: 19, height: 17, channels: 3, background: '#25ab33' } }).png().toBuffer())).compositeHash
+    const gallery = library.createCharacterSetting({
+      folderId: null, name: 'Deleted gallery image', referenceCategories: ['Official'],
+      references: [{ hash: deletedHash, category: 'Official' }],
+    })
+    images.db.prepare('DELETE FROM image_files WHERE composite_hash = ?').run(deletedHash)
+    images.db.prepare('DELETE FROM media_metadata WHERE composite_hash = ?').run(deletedHash)
+    assert.equal(activeMediaFile(deletedHash), null)
+    const imported = await library.importCharacterCatalogReferences(gallery.id, { character: 'gallery_regression', revision: gallery.revision }, true, true)
+    assert.equal(imported.added, 1)
+    assert.equal(imported.dropped, 0)
+    const added = imported.setting.references[1]
+    assert.deepEqual(imported.setting.references, [{ hash: deletedHash, category: 'Official' }, { hash: added.hash, category: null }])
+    const groupId = library.characterSettingRow(gallery.id).asset_group_id!
+    assert.ok(images.db.prepare('SELECT 1 FROM image_groups WHERE group_id = ? AND composite_hash = ?').get(groupId, added.hash))
+    const reordered = [{ hash: added.hash, category: 'Official' }, { hash: deletedHash, category: null }]
+    const saved = library.patchCharacterSetting(gallery.id, { revision: imported.setting.revision, references: reordered })
+    assert.deepEqual(saved.references, reordered)
+    assert.equal(saved.revision, imported.setting.revision + 1)
+    assert.equal(activeMediaFile(deletedHash), null)
+    assert.equal(images.db.prepare('SELECT 1 FROM image_groups WHERE group_id = ? AND composite_hash = ?').get(groupId, deletedHash), undefined)
+  })
 })

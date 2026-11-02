@@ -1,7 +1,8 @@
-import { useCallback, useState } from 'react'
-import { Link, type Location } from 'react-router-dom'
+import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { CHAT_PROFILE_TEXT_LIMITS } from '@conai/shared'
-import { FolderInput, Link2, Trash2 } from 'lucide-react'
+import { FolderInput, Link2, Minimize2, Trash2 } from 'lucide-react'
+import { IconButton } from '@/components/ui/icon-button'
 import { EditorPage, EditorTitleInput } from '@/components/common/editor-page'
 import type { PathCrumb } from '@/components/common/path-breadcrumbs'
 import { ActionMenuButton } from '@/components/ui/action-menu'
@@ -12,7 +13,6 @@ import { ErrorState } from '@/components/ui/error-state'
 import { FloatingSaveBar } from '@/components/ui/floating-save-bar'
 import { ListRow } from '@/components/ui/list-row'
 import { LoadingState } from '@/components/ui/loading-state'
-import { useEditorPageGuard } from '@/features/settings/use-unsaved-settings-guard'
 import { useI18n } from '@/i18n'
 import type { CharacterFolder } from '@/lib/api-character-library'
 import { emptySettingDraft, folderPath, settingDraftOf } from '../character-library-shared'
@@ -21,33 +21,25 @@ import { useCharacterSettingRuns } from '../use-character-setting-runs'
 import { CharacterFolderPickerModal } from './character-folder-nav'
 import { CharacterSettingAppearanceEditor } from './character-setting-appearance'
 
-/** The open setting's address changes. */
-function leavesSetting(current: Location, next: Location) {
-  if (current.pathname !== next.pathname) return true
-  const before = new URLSearchParams(current.search)
-  const after = new URLSearchParams(next.search)
-  return before.get('setting') !== after.get('setting') || before.get('new') !== after.get('new')
-}
-
 /**
- * One appearance setting as a page (/characters?setting=<id>, a new draft at ?new=<folder>): the folder path back,
+ * One appearance setting expanded with `editor=full` (setting=<id> or new=<folder>): the folder path back,
  * the name as the heading with the synced-profile count, the images and the profiles synced to it on the left, the
  * appearance, expressions and candidates on the right, and the save bar while something is unsaved. Without
- * `characters.edit` it only shows; image generation, imports and expressions are for administrators.
+ * `characters.edit` it only shows; image generation is for administrators.
  */
-export function CharacterSettingEditorPage({ editor, folders, canEdit, admin, rootLabel, onOpenFolder }: {
+export function CharacterSettingEditorPage({ editor, folders, canEdit, admin, rootLabel, onOpenFolder, onOpenPanel }: {
   editor: CharacterSettingEditorState
   folders: CharacterFolder[]
   canEdit: boolean
   admin: boolean
   rootLabel: string
   onOpenFolder: (folderId: number | null) => void
+  onOpenPanel: () => void
 }) {
   const { t } = useI18n()
   const confirm = useConfirm()
-  const [assetImports, setAssetImports] = useState(0)
-  const busy = assetImports > 0
-  const onBusyChange = (next: boolean) => setAssetImports((count) => Math.max(0, count + (next ? 1 : -1)))
+  const busy = editor.busy
+  const onBusyChange = editor.onBusyChange
   const [pickingFolder, setPickingFolder] = useState(false)
   // A new setting starts without a name: mark it only after the user has typed in the field.
   const [nameTouched, setNameTouched] = useState(false)
@@ -55,18 +47,6 @@ export function CharacterSettingEditorPage({ editor, folders, canEdit, admin, ro
   const generation = canEdit && admin
   const runs = useCharacterSettingRuns(editor, generation)
   const dirty = canEdit && editor.dirty
-  const { baseRef, deletedRef } = editor
-  const allowLeave = useCallback((current: Location, next: Location) => {
-    if (current.pathname === next.pathname) {
-      const before = new URLSearchParams(current.search)
-      const after = new URLSearchParams(next.search)
-      if (deletedRef.current && !after.has('setting') && !after.has('new')) return true
-      if (before.has('new') && after.get('setting') === String(baseRef.current?.id) && before.get('view') === after.get('view')) return true
-    }
-    return false
-  }, [baseRef, deletedRef])
-  useEditorPageGuard(dirty, t({ ko: '외형 설정에 저장하지 않은 변경이 있어. 나가면 사라져.', en: 'This appearance setting has unsaved changes that will be lost.' }), leavesSetting, allowLeave)
-
   const byId = new Map(folders.map((folder) => [folder.id, folder]))
   const crumbs: PathCrumb[] = [
     { key: 'root', label: rootLabel, onClick: () => onOpenFolder(null) },
@@ -123,12 +103,12 @@ export function CharacterSettingEditorPage({ editor, folders, canEdit, admin, ro
         ? <EditorTitleInput value={draft.name} label={t({ ko: '외형 설정 이름', en: 'Setting name' })} placeholder={t({ ko: '이름 (기본, 수영복…)', en: 'Name (default, swimsuit…)' })} maxLength={CHAT_PROFILE_TEXT_LIMITS.name} readOnly={!canEdit} invalid={canEdit && nameTouched && !draft.name.trim()} onChange={(name) => { setNameTouched(true); editor.patch({ name }) }} />
         : t({ ko: '외형 설정', en: 'Appearance setting' })}
       status={status}
-      actions={actions}
+      actions={<><IconButton variant="ghost" size="icon-sm" label={t({ ko: '상세 패널로', en: 'Back to detail panel' })} disabled={busy} onClick={onOpenPanel}><Minimize2 /></IconButton>{actions}</>}
       onSave={canEdit ? save : undefined}
       saveBar={dirty || editor.saving ? (
         <FloatingSaveBar
           label={base ? t({ ko: '저장 안 한 변경', en: 'Unsaved changes' }) : t({ ko: '새 외형 설정', en: 'New setting' })}
-          saving={editor.saving}
+          saving={editor.saving || busy}
           canSave={editor.canSave && !busy}
           onSave={save}
           onDiscard={() => void revert()}

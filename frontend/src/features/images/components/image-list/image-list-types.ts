@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import type { ActionMenuEntry } from '@/components/ui/action-menu'
 import type { ImageViewModalAccessOptions, ImageViewSequenceTotal } from '@/features/images/components/detail/image-view-modal-context'
 import type { ImageRecord } from '@/types/image'
 
@@ -39,6 +40,8 @@ export interface ImageListProps {
   selectionAreaClass?: string
   renderItemOverlay?: (image: ImageRecord) => ReactNode
   renderItemPersistentOverlay?: (image: ImageRecord) => ReactNode
+  /** Per-tile action menu: a mouse right-click opens it at the pointer, touch gets a ⋯ button (long-press keeps selecting). */
+  getItemMenu?: (image: ImageRecord) => ActionMenuEntry[]
   showDefaultQuickActions?: boolean
   shouldBlurItemPreview?: (image: ImageRecord) => boolean
   onPreviewIntent?: (image: ImageRecord) => void

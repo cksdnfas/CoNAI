@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState, type ComponentProps } from 'react'
+import { useEffect, useId, useRef, useState, type ComponentProps } from 'react'
 import { composeCharacterAppearance } from '@conai/shared'
-import { UserRound, UserRoundPlus } from 'lucide-react'
+import { Star, UserRound, UserRoundPlus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Field } from '@/components/ui/field'
 import { IconButton } from '@/components/ui/icon-button'
@@ -15,9 +15,10 @@ import { CharacterSettingPickerDialog } from '@/features/characters/components/c
 import { useI18n } from '@/i18n'
 import type { CharacterSetting } from '@/lib/api-character-library'
 import { getErrorMessage } from '@/lib/error-message'
+import { cn } from '@/lib/utils'
 import { characterThumbnailUrl } from '@/features/characters/character-library-shared'
 import { ChatProfileImage } from '@/features/codex-chat/chat-profile-image'
-import { loadCharacterReferenceDraft } from '../character-setting-load'
+import { characterSettingImages, loadCharacterImageDraft } from '../character-setting-load'
 import type { SelectedImageDraft } from '../image-generation-shared'
 
 export type CharacterSettingLoadTarget = {
@@ -41,8 +42,11 @@ export type CharacterSettingLoad = {
   appearance: string
   /** The chosen `textTargets` entry; null when the caller gave none (it has one place). */
   textTargetId: string | null
-  /** The reference image, when the person chose to put it into `referenceTarget` (as chosen at confirm time). */
-  reference: SelectedImageDraft | null
+  /**
+   * The setting's images the person chose (its reference image or gallery images), in order: the first goes into
+   * `referenceTarget`, the rest (only with `referenceMultiple`) become new entries. Empty: tags only.
+   */
+  references: SelectedImageDraft[]
   referenceTarget: CharacterSettingLoadTarget | null
 }
 
@@ -57,17 +61,19 @@ type CharacterSettingLoadButtonProps = {
   textTargets?: CharacterSettingLoadTarget[]
   /** Where the reference image can go; one is a switch (on by default), several a choice. Empty: tags only. */
   referenceTargets?: CharacterSettingLoadTarget[]
+  /** The form takes several of the setting's images (the first into the chosen target, the rest as new entries). */
+  referenceMultiple?: boolean
   onLoad: (load: CharacterSettingLoad) => void
 }
 
-/** `outfitIndex`: which outfit goes with the sections (0: the default). */
-type ConfirmStep = { setting: CharacterSetting; textTargetId: string | null; referenceTarget: CharacterSettingLoadTarget | null; outfitIndex: number }
+/** `outfitIndex`: which outfit goes with the sections (0: the default); `imageHashes`: the chosen images in order. */
+type ConfirmStep = { setting: CharacterSetting; textTargetId: string | null; referenceTarget: CharacterSettingLoadTarget | null; outfitIndex: number; imageHashes: string[] }
 const appearanceOf = (setting: CharacterSetting, outfitIndex: number) => composeCharacterAppearance(setting, outfitIndex).trim()
 
 /**
  * "캐릭터 불러오기": pick a character library setting and copy its appearance tags (and, when chosen, its reference
- * image) into the form. Hidden without `characters.view`; the reference needs `images.view`. The values are copied
- * at that moment, so later library edits leave the form alone.
+ * or gallery images) into the form. Hidden without `characters.view`; images need `images.view`. The values are
+ * copied at that moment, so later library edits leave the form alone.
  */
 export function CharacterSettingLoadButton({
   label,
@@ -77,6 +83,7 @@ export function CharacterSettingLoadButton({
   disabled = false,
   textTargets,
   referenceTargets = [],
+  referenceMultiple = false,
   onLoad,
 }: CharacterSettingLoadButtonProps) {
   const { t } = useI18n()
@@ -86,6 +93,7 @@ export function CharacterSettingLoadButton({
   const [pickerOpen, setPickerOpen] = useState(false)
   const [step, setStep] = useState<ConfirmStep | null>(null)
   const [loading, setLoading] = useState(false)
+  const imagesCaptionId = useId()
   const onLoadRef = useRef(onLoad)
   useEffect(() => {
     onLoadRef.current = onLoad
@@ -94,20 +102,22 @@ export function CharacterSettingLoadButton({
   if (!has('characters.view')) return null
 
   const Icon = icon === 'add' ? UserRoundPlus : UserRound
-  const referenceOptionsOf = (setting: CharacterSetting) => (canViewImages && setting.referenceHash ? referenceTargets : [])
+  const imagesOf = (setting: CharacterSetting) => (canViewImages ? characterSettingImages(setting) : [])
+  const referenceOptionsOf = (setting: CharacterSetting) => (imagesOf(setting).length ? referenceTargets : [])
 
-  const finish = async ({ setting, textTargetId, referenceTarget, outfitIndex }: ConfirmStep) => {
+  const finish = async ({ setting, textTargetId, referenceTarget, outfitIndex, imageHashes }: ConfirmStep) => {
     const appearance = appearanceOf(setting, outfitIndex)
-    if (!appearance && !referenceTarget) {
+    const hashes = referenceTarget ? imageHashes : []
+    if (!appearance && !hashes.length) {
       showSnackbar({ message: t({ ko: '이 외형 설정엔 넣을 외형 태그가 없어.', en: 'This setting has no appearance tags to insert.' }), tone: 'info' })
       setStep(null)
       return
     }
     setLoading(true)
     try {
-      const reference = referenceTarget ? await loadCharacterReferenceDraft(setting) : null
-      // The form may have changed while the image loaded: write through the latest render's handler.
-      onLoadRef.current({ setting, appearance, textTargetId, reference, referenceTarget })
+      const references = await Promise.all(hashes.map((hash) => loadCharacterImageDraft(setting.name, hash)))
+      // The form may have changed while the images loaded: write through the latest render's handler.
+      onLoadRef.current({ setting, appearance, textTargetId, references, referenceTarget: references.length ? referenceTarget : null })
       setStep(null)
     } catch (error) {
       showSnackbar({ message: getErrorMessage(error, t({ ko: '레퍼런스 이미지를 불러오지 못했어.', en: 'Could not load the reference image.' })), tone: 'error' })
@@ -118,7 +128,9 @@ export function CharacterSettingLoadButton({
 
   const handlePick = (setting: CharacterSetting) => {
     const referenceOptions = referenceOptionsOf(setting)
-    const next = { setting, textTargetId: textTargets?.[0]?.id ?? null, referenceTarget: referenceOptions[0] ?? null, outfitIndex: 0 }
+    // The reference image goes in by default, as before the gallery; without one, the first gallery image.
+    const firstImage = imagesOf(setting)[0]
+    const next = { setting, textTargetId: textTargets?.[0]?.id ?? null, referenceTarget: referenceOptions[0] ?? null, outfitIndex: 0, imageHashes: firstImage ? [firstImage.hash] : [] }
     // Ask only when there is a choice to make: which field, which outfit, or whether the reference goes in too.
     if ((textTargets?.length ?? 0) > 1 || referenceOptions.length > 0 || setting.outfits.length > 1) setStep(next)
     else void finish(next)
@@ -130,6 +142,16 @@ export function CharacterSettingLoadButton({
     ? referenceOptions.find((option) => isSameTarget(option, step.referenceTarget as CharacterSettingLoadTarget)) ?? referenceOptions[0] ?? null
     : null
   const stepAppearance = step ? appearanceOf(step.setting, step.outfitIndex) : ''
+  const stepImages = step ? imagesOf(step.setting) : []
+  const toggleImage = (hash: string) => {
+    if (!step) return
+    const chosen = step.imageHashes.includes(hash)
+    // Keep the gallery's order whatever order they were clicked in, so the first chosen image is predictable.
+    const imageHashes = referenceMultiple
+      ? stepImages.map((image) => image.hash).filter((candidate) => (candidate === hash ? !chosen : step.imageHashes.includes(candidate)))
+      : chosen ? [] : [hash]
+    setStep({ ...step, imageHashes })
+  }
 
   return (
     <>
@@ -158,32 +180,59 @@ export function CharacterSettingLoadButton({
                 </Select>
               </Field>
             ) : null}
-            {step.setting.referenceHash && referenceOptions.length > 0 ? (
-              <div className="flex items-center gap-3">
-                <span className="size-16 shrink-0 overflow-hidden rounded-sm bg-muted">
-                  {/* A hidden, blocked or deleted reference keeps the placeholder instead of a broken image. */}
-                  <ChatProfileImage
-                    src={characterThumbnailUrl(step.setting.referenceHash)}
-                    fallback={<span className="flex size-full items-center justify-center text-muted-foreground"><UserRound className="size-6" /></span>}
+            {referenceOptions.length > 0 ? (
+              <div className="space-y-2">
+                {referenceOptions.length === 1 ? (
+                  <SwitchLine
+                    label={t({ ko: '레퍼런스 이미지도 넣기 · {target}', en: 'Also set reference images · {target}' }, { target: referenceOptions[0].label })}
+                    checked={chosenReference !== null}
+                    disabled={loading}
+                    onCheckedChange={(checked) => setStep({ ...step, referenceTarget: checked ? referenceOptions[0] : null })}
                   />
-                </span>
-                <div className="min-w-0 flex-1">
-                  {referenceOptions.length === 1 ? (
-                    <SwitchLine
-                      label={t({ ko: '레퍼런스 이미지도 넣기 · {target}', en: 'Also set the reference image · {target}' }, { target: referenceOptions[0].label })}
-                      checked={chosenReference !== null}
-                      disabled={loading}
-                      onCheckedChange={(checked) => setStep({ ...step, referenceTarget: checked ? referenceOptions[0] : null })}
-                    />
-                  ) : (
-                    <Field label={t({ ko: '레퍼런스 이미지를 넣을 칸', en: 'Set the reference image into' })}>
-                      <Select value={chosenReference?.id ?? ''} disabled={loading} onChange={(event) => setStep({ ...step, referenceTarget: referenceOptions.find((option) => option.id === event.target.value) ?? null })}>
-                        <option value="">{t({ ko: '넣지 않기', en: 'Do not set' })}</option>
-                        {referenceOptions.map((target) => <option key={target.id} value={target.id}>{target.label}</option>)}
-                      </Select>
-                    </Field>
-                  )}
-                </div>
+                ) : (
+                  <Field label={t({ ko: '레퍼런스 이미지를 넣을 칸', en: 'Set the reference image into' })}>
+                    <Select value={chosenReference?.id ?? ''} disabled={loading} onChange={(event) => setStep({ ...step, referenceTarget: referenceOptions.find((option) => option.id === event.target.value) ?? null })}>
+                      <option value="">{t({ ko: '넣지 않기', en: 'Do not set' })}</option>
+                      {referenceOptions.map((target) => <option key={target.id} value={target.id}>{target.label}</option>)}
+                    </Select>
+                  </Field>
+                )}
+                {chosenReference ? (
+                  <>
+                    <Text as="p" variant="caption" id={imagesCaptionId}>
+                      {referenceMultiple
+                        ? t({ ko: '넣을 이미지를 골라. 첫 장은 위 칸에, 나머지는 새 참조로 들어가.', en: 'Choose the images: the first goes into the slot above, the rest become new references.' })
+                        : t({ ko: '넣을 이미지 한 장을 골라.', en: 'Choose one image.' })}
+                    </Text>
+                    <div role="group" aria-labelledby={imagesCaptionId} className="flex flex-wrap gap-2">
+                      {stepImages.map((image, index) => {
+                        const chosen = step.imageHashes.includes(image.hash)
+                        // Several images can share a category, so the position tells them apart.
+                        const name = `${image.isReference ? t({ ko: '기준 이미지', en: 'Reference image' }) : image.category ?? t({ ko: '미분류', en: 'Uncategorized' })} ${index + 1}/${stepImages.length}`
+                        return (
+                          // eslint-disable-next-line no-restricted-syntax -- the thumbnail itself is the control
+                          <button
+                            key={image.hash}
+                            type="button"
+                            disabled={loading}
+                            aria-pressed={chosen}
+                            aria-label={name}
+                            title={name}
+                            onClick={() => toggleImage(image.hash)}
+                            className={cn('relative size-16 shrink-0 cursor-pointer overflow-hidden rounded-sm bg-muted outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed', chosen ? 'ring-2 ring-primary ring-offset-2 ring-offset-background' : 'opacity-60 hover:opacity-100')}
+                          >
+                            {/* A hidden, blocked or deleted image keeps the placeholder instead of a broken image. */}
+                            <ChatProfileImage
+                              src={characterThumbnailUrl(image.hash)}
+                              fallback={<span className="flex size-full items-center justify-center text-muted-foreground"><UserRound className="size-6" /></span>}
+                            />
+                            {image.isReference ? <span className="absolute top-0.5 left-0.5 rounded-sm bg-primary p-0.5 text-primary-foreground"><Star className="size-3 fill-current" /></span> : null}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </>
+                ) : null}
               </div>
             ) : null}
           </ModalBody>
