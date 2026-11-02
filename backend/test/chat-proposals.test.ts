@@ -1130,6 +1130,8 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
       const edited = ChatProposalStore.find(JSON.parse(read(await setup.bridge.call('propose_skill', { skill_id: skillId, edits: [{ old_text: 'Ask for the pose', new_text: 'Ask for the pose and the outfit' }] }))).proposalId)
       assert.ok(edited?.kind === 'skill' && edited.instructions.startsWith('1. Ask for the pose and the outfit.'), 'edits change part of the instructions')
       assert.equal((await setup.bridge.call('propose_skill', { skill_id: skillId, edits: [{ old_text: 'not in the skill', new_text: 'x' }] })).isError, true)
+      const sectionCard = ChatProposalStore.find(JSON.parse(read(await setup.bridge.call('propose_skill', { skill_id: skillId, sections: [{ section: 'models/nai', title: 'NAI', summary: 's', content: 'c' }] }))).proposalId)
+      assert.ok(sectionCard?.kind === 'skill' && sectionCard.sectionChanges?.[0]?.path === 'models/nai', 'section arguments pass the chat tool argument checks')
     } finally { setup.close(); await setup.bridge.close() }
 
     const chat = await open('r-skill-use', ['read'])
@@ -1177,9 +1179,9 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
     } finally { sectionsChat.close(); await sectionsChat.bridge.close() }
 
     const { proposal: sectionProposal } = buildSkillProposal({ skill_id: skillId, sections: [
-      { path: 'style', edits: [{ old_text: 'STYLE', new_text: 'LOOK' }] },
-      { path: 'models/new', title: ' New ', summary: 's', content: 'c' },
-      { path: 'models/comfy', remove: true },
+      { section: 'style', edits: [{ old_text: 'STYLE', new_text: 'LOOK' }] },
+      { section: 'models/new', title: ' New ', summary: 's', content: 'c' },
+      { section: 'models/comfy', remove: true },
     ] }, null)
     assert.ok(sectionProposal.kind === 'skill')
     assert.deepEqual(sectionProposal.sectionChanges, [

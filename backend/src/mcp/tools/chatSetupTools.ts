@@ -417,19 +417,19 @@ export function buildDisplayBlockProposal(args: DisplayBlockArgs, linkProfileId:
   return { proposal, warnings, block };
 }
 
-export type SkillSectionArgs = { path: string; title?: string; summary?: string; content?: string; edits?: TextEdit[]; new_path?: string; remove?: boolean };
+export type SkillSectionArgs = { section: string; title?: string; summary?: string; content?: string; edits?: TextEdit[]; new_path?: string; remove?: boolean };
 export type SkillProposalArgs = { skill_id?: number; name?: string; description?: string; category?: string; instructions?: string; edits?: TextEdit[]; sections?: SkillSectionArgs[]; link_to_profile?: boolean };
 
 /** One section argument of propose_skill as a section change against the skill's current sections. */
 function sectionChangeOf(arg: SkillSectionArgs, current: ChatSkillSectionFields[]): ChatSkillSectionChange {
-  const existing = current.find((section) => skillSectionPathKey(section.path) === skillSectionPathKey(arg.path));
+  const existing = current.find((section) => skillSectionPathKey(section.path) === skillSectionPathKey(arg.section));
   if (!existing) {
-    if (arg.remove || arg.edits?.length || arg.new_path !== undefined) throw new Error(`Section "${arg.path}" does not exist: to add it, give its title, summary and content.`);
-    return { action: 'add', path: arg.path, title: arg.title ?? '', summary: arg.summary ?? '', content: arg.content ?? '' };
+    if (arg.remove || arg.edits?.length || arg.new_path !== undefined) throw new Error(`Section "${arg.section}" does not exist: to add it, give its title, summary and content.`);
+    return { action: 'add', path: arg.section, title: arg.title ?? '', summary: arg.summary ?? '', content: arg.content ?? '' };
   }
   const before = { title: existing.title, summary: existing.summary, content: existing.content };
   if (arg.remove) return { action: 'remove', path: existing.path, before };
-  if (arg.edits?.length && arg.content !== undefined) throw new Error(`Section "${arg.path}": give either content or edits, not both.`);
+  if (arg.edits?.length && arg.content !== undefined) throw new Error(`Section "${arg.section}": give either content or edits, not both.`);
   const content = arg.edits?.length ? applyTextEdits(existing.content, arg.edits).text : arg.content;
   return { action: 'update', path: existing.path, newPath: arg.new_path, title: arg.title, summary: arg.summary, content, before };
 }
@@ -885,7 +885,8 @@ export function registerChatSetupTools(server: McpServer, context: McpRequestCon
       instructions: z.string().optional().describe('The whole new overview'),
       edits: z.array(z.object({ old_text: z.string().min(1), new_text: z.string(), replace_all: z.boolean().optional() })).optional().describe('With skill_id, instead of instructions: exact replacements in the current overview, applied in order; each old_text must match once unless replace_all'),
       sections: z.array(z.object({
-        path: z.string().describe('"name" or "group/name": letters, digits, ".", "_" or "-"; an existing path changes that section, a new one adds it'),
+        // "path" is a refused MCP argument name (server file paths), hence "section".
+        section: z.string().describe('The section path, "name" or "group/name": letters, digits, ".", "_" or "-"; an existing path changes that section, a new one adds it'),
         title: z.string().optional(),
         summary: z.string().optional().describe('One line for the table of contents: when to read this section'),
         content: z.string().optional().describe('The whole section text'),

@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { File } from 'lucide-react'
+import { File, LoaderCircle } from 'lucide-react'
 import { FieldTabs } from '@/components/common/field-tabs'
 import { SaveConflictAlert, SaveConflictOverwriteButton } from '@/components/common/save-conflict-alert'
 import { SegmentedControl } from '@/components/common/segmented-control'
@@ -102,13 +102,17 @@ export function TextDocumentEditor<T extends TextDocument>({ entry, store, onClo
   const dirty = file ? text !== null && text !== baseline : true
   const save = useMutation({
     mutationFn: ({ value, base }: { value: string; base?: string | null }) => store.save(file, value, base === undefined ? revision : base, fileName),
-    onSuccess: async (result, { value }) => {
+    onSuccess: (result, { value }) => {
       setFile(result.document)
       setSaved(result.document)
       setBaseline(value)
       setRevision(result.revision)
       setConflict(false)
-      await store.refresh()
+      showSnackbar({ message: t({ ko: '문서를 저장했어.', en: 'Document saved.' }) })
+      // The write is committed; list refresh must not delay it or report it as a failed save.
+      void store.refresh().catch((error: unknown) => {
+        showSnackbar({ tone: 'error', message: `${t({ ko: '문서는 저장했지만 목록을 갱신하지 못했어. 목록을 새로고침해줘.', en: 'The document was saved, but the list could not refresh. Refresh the list.' })} ${getErrorMessage(error, '')}` })
+      })
     },
     onError: (error) => {
       if (file && error instanceof ApiRequestError && error.status === 409) { setConflict(true); return }
@@ -223,7 +227,7 @@ export function TextDocumentEditor<T extends TextDocument>({ entry, store, onClo
   )
 
   return (
-    <Modal open title={file ? file.name : t({ ko: '새 문서', en: 'New document' })} onClose={() => onClose(saved)} size="xl" dirty={dirty && (file !== null || text !== '')} onSave={canSave ? submit : undefined}>
+    <Modal open title={file ? file.name : t({ ko: '새 문서', en: 'New document' })} onClose={() => { if (!save.isPending) onClose(saved) }} size="xl" sidePanelInset="var(--chat-dock-width, 0px)" dirty={save.isPending || (dirty && (file !== null || text !== ''))} onSave={canSave ? submit : undefined}>
       <ModalBody spacing="sm">
         {file ? null : (
           <div className="flex items-center gap-2">
@@ -247,7 +251,17 @@ export function TextDocumentEditor<T extends TextDocument>({ entry, store, onClo
       </ModalBody>
       <ModalFooter>
         <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">{store.location}</span>
-        <Button disabled={!canSave} onClick={submit}>{t({ ko: '저장', en: 'Save' })}</Button>
+        <span role="status" className="text-xs text-muted-foreground">
+          {save.isPending ? t({ ko: '저장 중…', en: 'Saving…' })
+            : conflict ? t({ ko: '저장 충돌 · 내용을 확인해줘', en: 'Save conflict · review your changes' })
+            : save.isError ? t({ ko: '저장 실패 · 다시 시도해줘', en: 'Save failed · try again' })
+            : dirty && text !== null ? t({ ko: '저장 안 한 변경', en: 'Unsaved changes' })
+            : saved ? t({ ko: '저장됨', en: 'Saved' }) : null}
+        </span>
+        <Button disabled={!canSave} onClick={submit}>
+          {save.isPending ? <LoaderCircle className="animate-spin" /> : null}
+          {save.isPending ? t({ ko: '저장 중…', en: 'Saving…' }) : t({ ko: '저장', en: 'Save' })}
+        </Button>
       </ModalFooter>
     </Modal>
   )

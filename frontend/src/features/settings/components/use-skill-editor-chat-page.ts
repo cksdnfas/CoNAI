@@ -15,7 +15,8 @@ const DATA_CONTENT = 1000
 /** Above the settings editors (20): the skill editor also opens on top of a generation preset or profile editor. */
 const SKILL_EDITOR_PRIORITY = 25
 
-type SectionChange = { action: 'add' | 'update' | 'remove'; path: string; newPath?: string; title?: string; summary?: string; content?: string }
+/** `section` is the section path: "path" is a refused MCP argument name (server file paths). */
+type SectionChange = { action: 'add' | 'update' | 'remove'; section: string; newPath?: string; title?: string; summary?: string; content?: string }
 
 /** A section path as saved, or an error naming what was given. */
 function validPath(value: string) {
@@ -30,7 +31,7 @@ function applySectionChanges(draft: SkillDraft, pane: string, changes: SectionCh
   let target = pane
   const indexOf = (path: string, except?: string) => sections.findIndex((section) => section.key !== except && sectionPathKey(section) === skillSectionPathKey(path))
   for (const change of changes) {
-    const path = validPath(change.path)
+    const path = validPath(change.section)
     const index = indexOf(path)
     if (change.action === 'add') {
       if (index >= 0) throw new Error(`${path}: 이미 있는 섹션이야. update로 고쳐.`)
@@ -107,15 +108,15 @@ export function useSkillEditorChatPage({ open, skill, draft, setDraft, problems,
     { id: 'section', label: t({ ko: '열린 항목 (빈 값 = 개요, 아니면 섹션 경로; 열린 섹션 전체는 data.openSection)', en: 'Open item (empty = overview, else a section path; the whole open section is data.openSection)' }), type: 'text', value: openSection?.path ?? '', viewOnly: true },
   ]
 
-  const sectionsAction = pageAction('skill.sections', t({ ko: '스킬 섹션 고치기', en: 'Edit skill sections' }), t({ ko: '섹션을 경로로 차례대로 add(새로)/update(바꿀 것만; newPath로 경로 변경)/remove 해. 저장하지 않아. path는 "이름" 또는 "그룹/이름"(한 단계). 새 섹션은 같은 그룹의 끝에 들어가. title은 제목, summary는 목차에 보이는 "언제 읽는지" 한 줄, content는 use_skill이 돌려주는 본문. data.sections 항목에 guidedBy가 있는 섹션의 경로를 바꾸거나(newPath) 지우면, 저장할 때 그 생성 프리셋들의 가이드가 끊겨 (끊길 곳은 data.brokenGuides). 먼저 물어보거나 가이드를 다시 고르라고 알려줘.', en: 'Add, update (only what changes; newPath renames) or remove sections by path, in order; nothing is saved. path is "name" or "group/name" (one level). A new section goes after the last one of its group. title is the heading, summary the table line saying when to read it, content what use_skill returns. Renaming (newPath) or removing a section whose data.sections entry has guidedBy breaks those generation presets\' guides once saved (data.brokenGuides lists them); ask first or tell the user to pick the guide again.' }), pageObject({
+  const sectionsAction = pageAction('skill.sections', t({ ko: '스킬 섹션 고치기', en: 'Edit skill sections' }), t({ ko: '섹션을 경로로 차례대로 add(새로)/update(바꿀 것만; newPath로 경로 변경)/remove 해. 저장하지 않아. section은 섹션 경로로 "이름" 또는 "그룹/이름"(한 단계). 새 섹션은 같은 그룹의 끝에 들어가. title은 제목, summary는 목차에 보이는 "언제 읽는지" 한 줄, content는 use_skill이 돌려주는 본문. data.sections 항목에 guidedBy가 있는 섹션의 경로를 바꾸거나(newPath) 지우면, 저장할 때 그 생성 프리셋들의 가이드가 끊겨 (끊길 곳은 data.brokenGuides). 먼저 물어보거나 가이드를 다시 고르라고 알려줘.', en: 'Add, update (only what changes; newPath renames) or remove sections by path, in order; nothing is saved. section is the section path, "name" or "group/name" (one level). A new section goes after the last one of its group. title is the heading, summary the table line saying when to read it, content what use_skill returns. Renaming (newPath) or removing a section whose data.sections entry has guidedBy breaks those generation presets\' guides once saved (data.brokenGuides lists them); ask first or tell the user to pick the guide again.' }), pageObject({
     changes: pageArray(pageObject({
       action: pageChoice(['add', 'update', 'remove']),
-      path: pageText(CHAT_SKILL_LIMITS.sectionPath),
+      section: pageText(CHAT_SKILL_LIMITS.sectionPath),
       newPath: pageText(CHAT_SKILL_LIMITS.sectionPath),
       title: pageText(CHAT_SKILL_LIMITS.sectionTitle),
       summary: pageText(CHAT_SKILL_LIMITS.sectionSummary),
       content: pageText(CHAT_SKILL_LIMITS.sectionContent),
-    }, ['action', 'path']), CHAT_SKILL_LIMITS.sections, 1),
+    }, ['action', 'section']), CHAT_SKILL_LIMITS.sections, 1),
   }, ['changes']))
 
   useSettingsEditorChatPage({

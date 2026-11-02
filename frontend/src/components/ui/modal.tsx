@@ -211,6 +211,11 @@ function Modal({ open, title, description, status, headerContent, leading, onClo
   }, [open, requestClose])
 
   const handleEscapeKeyDown = useCallback((event: KeyboardEvent) => {
+    // A side panel remains interactive: its Escape must not close the editor beside it.
+    if (sidePanelInset && event.target instanceof Node && !contentRef.current?.contains(event.target)) {
+      hideEscapeFromRadixDismiss(event)
+      return
+    }
     // Already consumed earlier in the capture phase (e.g. the image editor clearing a selection): Radix will not dismiss either.
     if (event.defaultPrevented) {
       return
@@ -218,7 +223,7 @@ function Modal({ open, title, description, status, headerContent, leading, onClo
 
     pendingEscapeRef.current = event
     hideEscapeFromRadixDismiss(event)
-  }, [])
+  }, [sidePanelInset])
 
   const handleOpenAutoFocus = useCallback((event: Event) => {
     // Keep a field that focused itself (autoFocus); otherwise focus the dialog itself so mobile keyboards stay closed.
