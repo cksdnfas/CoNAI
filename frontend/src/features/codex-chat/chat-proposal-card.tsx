@@ -28,6 +28,7 @@ import {
   createChatBlock,
   createChatSkill,
   updateChatSkill,
+  getChatAdminProfile,
   dismissChatProposal,
   threadLorebooksQueryKey,
   chatProfileSaveInput,
@@ -46,6 +47,7 @@ import {
   type CodexChatToolCall,
 } from '@/lib/api-codex-chat'
 import { getErrorMessage } from '@/lib/error-message'
+import { ApiRequestError } from '@/lib/api-request'
 import { ChatDisplayBlockView, parseBlockPayload } from './chat-display-block'
 import { codexChatThreadQueryKey } from './codex-chat-context'
 import { ChatPageProposalCard } from './chat-page-proposal-card'
@@ -283,9 +285,16 @@ function SkillProposalCard({ proposal, threadId }: { proposal: SkillProposal; th
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      const skill = proposal.skillId === null ? await createChatSkill(fields) : await updateChatSkill(proposal.skillId, fields)
-      if (canLink && link) {
-        const profile = (await listChatAdminProfiles()).find((entry) => entry.id === proposal.linkProfileId)
+      // A change sends only the fields the card changes, so edits made to the others since the proposal stay.
+      const patch: Partial<typeof fields> = {}
+      for (const key of changed) patch[key] = fields[key]
+      const skill = proposal.skillId === null ? await createChatSkill(fields) : await updateChatSkill(proposal.skillId, patch)
+      if (proposal.linkProfileId !== null && link) {
+        // A profile deleted since the proposal leaves the skill saved and unlinked.
+        const profile = await getChatAdminProfile(proposal.linkProfileId).catch((error: unknown) => {
+          if (error instanceof ApiRequestError && error.status === 404) return null
+          throw error
+        })
         if (profile && !profile.skillIds.includes(skill.id)) await updateChatProfile(profile.id, { skillIds: [...profile.skillIds, skill.id] })
       }
       await markChatProposalSaved(proposal.id, skill.id)

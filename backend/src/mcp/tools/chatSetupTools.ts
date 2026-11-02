@@ -1,11 +1,12 @@
 import type { McpServer } from '@modelcontextprotocol/server';
-import { CHAT_SKILL_LIMITS, CHAT_TRANSLATION_LANGUAGES, MAX_WORKSPACE_LINKS, isChatTranslationLanguage, type ChatProposal } from '@conai/shared';
+import { CHAT_PROFILE_DEFAULTS, CHAT_SKILL_LIMITS, CHAT_TRANSLATION_LANGUAGES, MAX_WORKSPACE_LINKS, isChatTranslationLanguage, type ChatProposal } from '@conai/shared';
 import { z } from 'zod';
 import { ChatProposalStore, type NewChatProposal } from '../../services/codex-chat/chatProposals';
 import { ChatProfileStore, CHAT_PROFILE_LIMITS, CHAT_PROFILE_TEXT_LIMITS, normalizeAlternateGreetings, normalizeSections, normalizeProfileScalarField, validateProfileText as limitedText, type ChatProfile } from '../../services/codex-chat/chatProfiles';
 import { normalizeGreetingPosition, normalizeOpeningHistory } from '../../services/codex-chat/chatOpeningHistory';
 import { ChatSharedBlockStore, PROFILE_MAX_BLOCKS } from '../../services/codex-chat/chatDisplayBlocks';
-import { checkSkillFields, ChatSkillStore } from '../../services/codex-chat/chatSkills';
+import { checkSkillFields, ChatSkillStore, skillChunk } from '../../services/codex-chat/chatSkills';
+import { applyTextEdits, type TextEdit } from '../../services/fileStoreService';
 import { ChatLorebookStore, LORE_RECURSION_MAX_DEPTH, PROFILE_MAX_LOREBOOKS } from '../../services/codex-chat/chatLorebook';
 import { ChatJudgePresetStore } from '../../services/codex-chat/chatJudgePresets';
 import { assertLinkedFiles, describeLinkedFiles, normalizeLinkedFiles, type LinkedFileLink } from '../../services/codex-chat/chatLinkedFiles';
@@ -156,7 +157,7 @@ function profileGuide() {
     `- appearance (max ${limits.text}): the character's look as image-prompt tags (hair, eyes, outfit…). Character image generation puts it in front of every asset prompt.`,
     '- model_slot: model id or `connection · model` label (the chat model). Omit to start on the default model.',
     `- lorebook_ids (max ${PROFILE_MAX_LOREBOOKS}) and block_ids (max ${PROFILE_MAX_BLOCKS}): link existing shared lorebooks / display blocks by id.`,
-    `- skill_ids (max ${CHAT_SKILL_LIMITS.perProfile}, a propose_profile_update patch key or a propose_chat_profile setting): link shared skills by id. The chat model sees each linked skill's name and description and loads its instructions with use_skill when a request fits. Write a new skill or change one with propose_skill (list_chat_skills shows them in full).`,
+    `- skill_ids (max ${CHAT_SKILL_LIMITS.perProfile}, a propose_profile_update patch key or a propose_chat_profile setting): link shared skills by id. The chat model sees each linked skill's name and description and loads its instructions with use_skill when a request fits. Write a new skill or change one with propose_skill (list_chat_skills lists them, get_chat_skill reads one).`,
     '- typeface: "sans" | "serif" | "mono".',
     '- settings: any other key below, e.g. {"translationSlotId": 3, "translationDisplayLanguage": "ko", "summaryEnabled": true}.',
     '',
@@ -416,19 +417,22 @@ export function buildDisplayBlockProposal(args: DisplayBlockArgs, linkProfileId:
   return { proposal, warnings, block };
 }
 
-export type SkillProposalArgs = { skill_id?: number; name?: string; description?: string; instructions?: string; link_to_profile?: boolean };
+export type SkillProposalArgs = { skill_id?: number; name?: string; description?: string; instructions?: string; edits?: TextEdit[]; link_to_profile?: boolean };
 
 /**
- * A new shared skill, or changes to `skill_id` (fields left out keep their value). The card offers to link it to the
- * speaking profile unless that profile links it already or `link_to_profile` is false.
+ * A new shared skill, or changes to `skill_id` (fields left out keep their value; `edits` replace exact text in its
+ * instructions instead of resending them whole). The card offers to link it to the speaking profile unless that
+ * profile links it already or `link_to_profile` is false.
  */
 export function buildSkillProposal(args: SkillProposalArgs, linkProfileId: number | null) {
   const current = args.skill_id === undefined ? null : ChatSkillStore.find(args.skill_id);
   if (args.skill_id !== undefined && !current) throw new Error(`Skill not found: ${args.skill_id}. list_chat_skills lists them.`);
+  if (args.edits?.length && !current) throw new Error('edits change an existing skill: give its skill_id.');
+  if (args.edits?.length && args.instructions !== undefined) throw new Error('Give either instructions or edits, not both.');
   const fields = checkSkillFields({
     name: args.name ?? current?.name,
     description: args.description ?? current?.description,
-    instructions: args.instructions ?? current?.instructions,
+    instructions: args.edits?.length && current ? applyTextEdits(current.instructions, args.edits).text : args.instructions ?? current?.instructions,
   }, current?.id ?? null, true);
   if (current && fields.name === current.name && fields.description === current.description && fields.instructions === current.instructions) {
     throw new Error('Nothing would change: every proposed value equals the current one.');
@@ -769,21 +773,46 @@ export function registerChatSetupTools(server: McpServer, context: McpRequestCon
 
   server.registerTool(
     'list_chat_skills',
-    { description: 'List the shared skills in full (id, name, description, instructions) with the profiles that link them. A profile links skills by id (skill_ids); its chat model loads one with use_skill when a request fits the description.', inputSchema: z.object({}) },
+    { description: 'List the shared skills: id, name, description (when to use it), instructions length and the profiles that link them. A profile links skills by id (skill_ids); its chat model loads one with use_skill when a request fits the description. Read one skill\'s instructions with get_chat_skill.', inputSchema: z.object({}) },
     async () => {
       try {
-        return textResult(ChatSkillStore.list().map(({ id, name, description, instructions, profiles }) => ({ id, name, description, instructions, profiles })));
+        return textResult(ChatSkillStore.list().map(({ id, name, description, instructions, profiles }) => ({ id, name, description, instructionsLength: instructions.length, profiles })));
+      } catch (error) { return errorResult(error); }
+    },
+  );
+
+  server.registerTool(
+    'get_chat_skill',
+    { description: 'Read one shared skill: name, description, linked profiles and its instructions. Long instructions come in parts; continue with the offset the result gives. Read the instructions before proposing edits to them.', inputSchema: z.object({
+      skill_id: z.number().int().positive(),
+      offset: z.number().int().min(0).optional().describe('Only to continue: the offset the previous result gave'),
+    }) },
+    async ({ skill_id, offset }) => {
+      try {
+        const skill = ChatSkillStore.find(skill_id);
+        if (!skill) throw new Error(`Skill not found: ${skill_id}. list_chat_skills lists them.`);
+        const header = [
+          `Skill #${skill.id} "${skill.name}"`,
+          `Description: ${skill.description}`,
+          `Linked profiles: ${skill.profiles.map((profile) => `#${profile.id} "${profile.name}"`).join(', ') || '(none)'}`,
+        ].join('\n');
+        // Plain text, not JSON: escaping would grow the part past the profile's tool output limit.
+        const outputLimit = (context.chatContext ? ChatProfileStore.find(context.chatContext.profileId)?.toolOutputLimit : undefined) ?? CHAT_PROFILE_DEFAULTS.toolOutputLimit;
+        const part = skillChunk(skill.instructions, offset ?? 0, outputLimit - header.length - 300);
+        const more = part.more ? `\n\n(More follows: call get_chat_skill with skill_id ${skill.id} and offset ${part.end}.)` : '';
+        return { content: [{ type: 'text' as const, text: `${header}\nInstructions (characters ${part.start}-${part.end} of ${skill.instructions.length}):\n\n${part.text}${more}` }] };
       } catch (error) { return errorResult(error); }
     },
   );
 
   server.registerTool(
     'propose_skill',
-    { description: `Propose a shared skill as a card under your reply: a new one, or changes to an existing one (skill_id; fields you leave out stay as they are). Nothing is saved until the user presses 저장. A skill is task instructions a chat profile loads with use_skill when a request matches; its chat model sees only the name and description until then. Write: name — short and unique (max ${CHAT_SKILL_LIMITS.name}); description — when to use it, one or two sentences starting with "Use when", concrete enough that a small model can match a request to it (max ${CHAT_SKILL_LIMITS.description}); instructions — the steps and rules to follow, as direct numbered orders, in English unless the user asks otherwise (max ${CHAT_SKILL_LIMITS.instructions}; {{char}} and {{user}} become the profile and user names). The card offers to link the skill to the profile you speak as.`, inputSchema: z.object({
+    { description: `Propose a shared skill as a card under your reply: a new one, or changes to an existing one (skill_id; fields you leave out stay as they are). Nothing is saved until the user presses 저장. A skill is task instructions a chat profile loads with use_skill when a request matches; its chat model sees only the name and description until then. Write: name — short and unique (max ${CHAT_SKILL_LIMITS.name}); description — when to use it, one or two sentences starting with "Use when", concrete enough that a small model can match a request to it (max ${CHAT_SKILL_LIMITS.description}); instructions — the steps and rules to follow, as direct numbered orders, in English unless the user asks otherwise (max ${CHAT_SKILL_LIMITS.instructions}; {{char}} and {{user}} become the profile and user names). To change part of an existing skill's instructions, read them with get_chat_skill and send edits instead of instructions. The card offers to link the skill to the profile you speak as.`, inputSchema: z.object({
       skill_id: z.number().int().positive().optional().describe('Change this existing skill (list_chat_skills shows ids); omit to propose a new one'),
       name: z.string().optional(),
       description: z.string().optional().describe('When to use the skill, starting with "Use when"'),
-      instructions: z.string().optional(),
+      instructions: z.string().optional().describe('The whole new instructions'),
+      edits: z.array(z.object({ old_text: z.string().min(1), new_text: z.string(), replace_all: z.boolean().optional() })).optional().describe('With skill_id, instead of instructions: exact replacements in the current instructions, applied in order; each old_text must match once unless replace_all'),
       link_to_profile: z.boolean().default(true).describe('Offer to link the saved skill to the profile you speak as'),
     }) },
     async (args) => {

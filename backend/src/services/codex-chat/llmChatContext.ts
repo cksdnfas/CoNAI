@@ -25,7 +25,7 @@ import type { LoreHistoryMessage, SelectedLore } from './chatLorebook'
 import { booksForRequest, loreIndexText, READ_LORE_FILE_TOOL, selectRequestLore, type AttachedLoreBook, type ChatLore } from './chatLoreContext'
 import { rejectedLoreLine, SAVE_LORE_TOOL } from './chatLoreProposals'
 import { buildLinkedIndex, LINKED_TOOLS, placesForRequest } from './chatLinkedFiles'
-import { profileSkillIndex, USE_SKILL_TOOL } from './chatSkills'
+import { profileSkillIndex, skillReminderText, USE_SKILL_TOOL } from './chatSkills'
 import { appendMinutes } from './chatMinutes'
 import { buildFlagDirective } from './chatFlags'
 import { generationPromptOf } from './chatToolReferences'
@@ -676,21 +676,22 @@ export function buildContextMeta(profile: ChatProfile, thread: CodexChatThreadRe
  * Shared by summary planning, the actual request and the profile preview. `segments`: the thread's summary segments,
  * read by the caller (recall comes from them; none without). `books`: the lore books, when the caller resolved them.
  */
-function buildRequestContext(profile: ChatProfile, thread: CodexChatThreadRecord | null, messages: CodexChatMessageRecord[], config: Pick<LlmChatContextConfig, 'summaryEnabled'> & Partial<Pick<LlmChatContextConfig, 'contextTokens'>>, tools: ChatCompletionTool[], segments: ChatSummarySegment[] = [], books?: AttachedLoreBook[], judged?: JudgedContext | null, historySource?: ChatHistorySource) {
+function buildRequestContext(profile: ChatProfile, thread: CodexChatThreadRecord | null, messages: CodexChatMessageRecord[], config: Pick<LlmChatContextConfig, 'summaryEnabled'> & Partial<Pick<LlmChatContextConfig, 'contextTokens'>>, tools: ChatCompletionTool[], segments: ChatSummarySegment[] = [], books?: AttachedLoreBook[], judged?: JudgedContext | null, historySource?: ChatHistorySource, skills = offersSkills(tools)) {
   const user = userPersonaForThread(thread)
   const lore = selectChatLore(profile, messages, user, { thread, books, historySource, toolOffered: offersLoreFileTool(tools), linkedOffered: offersLinkedFiles(tools), judged: judged?.loreKeys, semantic: judged?.semantic?.loreKeys })
-  const system = buildLeadingMessages(profile, thread, config, tools.some((tool) => !isChatOwnTool(tool.function.name)), lore, user, offersSkills(tools))
+  const system = buildLeadingMessages(profile, thread, config, tools.some((tool) => !isChatOwnTool(tool.function.name)), lore, user, skills)
   const recalled = config.summaryEnabled ? recalledSegments(profile, segments, messages, { contextTokens: config.contextTokens ?? null }, judged?.recallKeep, judged?.semantic?.recall) : []
   const recall = recallText(recalled)
   const stateText = threadBlockStateText(profile, thread ?? { block_edits: null }, messages, undefined, historySource)
   const blocks = depthBlocks(lore, profile.loreDepth, resolveAuthorNote(thread, profile, user), stateText, recall, rejectedLoreFor(thread?.id, tools))
-  const directive = [flagDirectiveFor(messages, profile, user), postHistoryText(profile, user)].filter(Boolean).join('\n\n')
+  const directive = [flagDirectiveFor(messages, profile, user), postHistoryText(profile, user), skills ? skillReminderText(profile) : ''].filter(Boolean).join('\n\n')
   const fixedTokens = estimateMessagesTokens(profile.id, system, tools) + estimateDepthBlocks(profile.id, blocks) + estimateTokens(profile.id, directive)
   return { system, blocks, directive, fixedTokens, lore, recalled, stateText }
 }
 
+/** A chat offers use_skill whenever the profile links a skill; the preview opens no chat, so it lists them by itself. */
 export function buildChatPromptPreview(profile: ChatProfile, tools: ChatCompletionTool[]) {
-  const { system, blocks } = buildRequestContext(profile, null, [], { summaryEnabled: false }, tools)
+  const { system, blocks } = buildRequestContext(profile, null, [], { summaryEnabled: false }, tools, [], undefined, null, undefined, profile.skillIds.length > 0)
   return [...system, ...insertDepthBlocks([], blocks)]
 }
 

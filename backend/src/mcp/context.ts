@@ -352,6 +352,7 @@ const TOOL_SCOPES: Record<string, McpHttpScope> = {
   get_display_block: 'configure',
   propose_display_block: 'configure',
   list_chat_skills: 'configure',
+  get_chat_skill: 'configure',
   propose_skill: 'configure',
   propose_chat_profile: 'configure',
   propose_profile_update: 'configure',

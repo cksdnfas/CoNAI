@@ -580,4 +580,29 @@ test('chat diagnostics: capture, read-time permissions, alternatives, branches a
       assert.ok(!keys('llm-test').includes('chat.diagnostics.view'), 'restart must not undo a later revocation')
     } finally { auth.close() }
   })
+
+  await t.test('skills: listed and reminded, loaded whole in the reply, kept as a mark for later requests', async (s) => {
+    const { ChatSkillStore } = await import('../src/services/codex-chat/chatSkills')
+    // Longer than a later request replays of a tool result, shorter than one use_skill part.
+    const skill = ChatSkillStore.create({ name: 'Picture request', description: 'Use when the user asks for a picture.', instructions: `1. Ask for the pose.\n${'Detail. '.repeat(700)}\n2. END_OF_SKILL` })
+    ChatProfileStore.update(profile.id, { skillIds: [skill.id] })
+    const sent: Array<{ messages: ChatCompletionMessage[]; tools?: Array<{ function: { name: string } }> }> = []
+    s.mock.method(globalThis, 'fetch', async (_url, init) => {
+      sent.push(JSON.parse(String(init?.body)))
+      const first = sent.length === 1
+      return Response.json({ choices: [{ message: first ? { content: '', tool_calls: [{ id: 'skill', type: 'function', function: { name: 'use_skill', arguments: '{"name":"picture request"}' } }] } : { content: 'drawn' }, finish_reason: first ? 'tool_calls' : 'stop' }], usage: { prompt_tokens: 10 } })
+    })
+    try {
+      await LlmChatService.sendMessage(requester, thread(), 'draw me', () => {})
+      const reply = CodexChatStore.listMessages(threadId).at(-1)!
+      assert.equal(reply.status, 'completed', reply.error ?? '')
+      assert.ok(sent[0].tools?.some((tool) => tool.function.name === 'use_skill'), 'offered without CoNAI tools')
+      assert.match(String(sent[0].messages[0].content), /## Skills\n.*\n- Picture request: Use when the user asks for a picture\./)
+      assert.match(String(sent[0].messages.at(-1)!.content), /matches one of your skills \("Picture request"\)/)
+      assert.ok(String(sent[1].messages.at(-1)!.content).includes('END_OF_SKILL'), 'the reply that loads it reads it whole')
+      const call = reply.tool_calls.find((entry) => entry.tool === 'use_skill')!
+      assert.doesNotMatch(call.output ?? '', /Detail\./, 'later requests replay a mark, never a cut copy')
+      assert.match(call.output ?? '', /Call use_skill again/)
+    } finally { ChatSkillStore.delete(skill.id) }
+  })
 })

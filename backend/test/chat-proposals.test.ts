@@ -901,7 +901,7 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
     assert.deepEqual(intersectChatScopes(['read', 'configure'], access(['read', 'configure'])), ['read', 'configure'])
     assert.ok(!(MCP_HTTP_SCOPES as readonly string[]).includes('configure'))
     assert.ok(!(ALL_MCP_HTTP_SCOPES as string[]).includes('configure'))
-    for (const tool of ['get_chat_setup_guide', 'list_chat_profiles', 'get_chat_profile', 'manage_chat_profile_folders', 'list_display_blocks', 'get_display_block', 'propose_display_block', 'list_chat_skills', 'propose_skill', 'propose_chat_profile', 'propose_profile_update', 'propose_profile_assets', 'get_asset_batch']) {
+    for (const tool of ['get_chat_setup_guide', 'list_chat_profiles', 'get_chat_profile', 'manage_chat_profile_folders', 'list_display_blocks', 'get_display_block', 'propose_display_block', 'list_chat_skills', 'get_chat_skill', 'propose_skill', 'propose_chat_profile', 'propose_profile_update', 'propose_profile_assets', 'get_asset_batch']) {
       assert.equal(getMcpToolScope(tool), 'configure', tool)
     }
     const without = await openChatMcpBridge({ accountId: null, accountType: 'admin' }, ['read'])
@@ -909,7 +909,7 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
     try {
       assert.ok(!offered(without).some((tool) => tool.startsWith('propose_')))
       assert.equal(offered(withScope).filter((tool) => tool.startsWith('propose_')).length, 5)
-      assert.equal(offered(withScope).length, 13)
+      assert.equal(offered(withScope).length, 14)
     } finally { await without.close(); await withScope.close() }
   })
 
@@ -1101,7 +1101,7 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
 
   await t.test('skills: proposal cards, the system prompt list beside use_skill, loading and unlinking', async () => {
     const { ChatSkillStore, skillResultText } = await import('../src/services/codex-chat/chatSkills')
-    const { buildChatPromptPreview } = await import('../src/services/codex-chat/llmChatContext')
+    const { buildChatPromptPreview, buildLeadingMessages } = await import('../src/services/codex-chat/llmChatContext')
     const read = (result: { content?: unknown[] }) => String((result.content?.[0] as { text?: string }).text)
     const live = new AbortController()
     const open = async (replyId: string, scopes: Array<typeof CHAT_SCOPES[number]>) => {
@@ -1124,6 +1124,12 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
       assert.ok(change?.kind === 'skill' && change.skillId === skillId && change.instructions === fields.instructions && change.before?.description === fields.description)
       assert.equal(change.linkProfileId, null, 'no link offer while the profile links the skill')
       assert.match(read(await setup.bridge.call('propose_skill', { skill_id: skillId })), /Nothing would change/)
+      const listed = JSON.parse(read(await setup.bridge.call('list_chat_skills', {})))
+      assert.deepEqual(Object.keys(listed[0]).sort(), ['description', 'id', 'instructionsLength', 'name', 'profiles'], 'the list leaves the instructions to get_chat_skill')
+      assert.match(read(await setup.bridge.call('get_chat_skill', { skill_id: skillId })), /Instructions \(characters 0-\d+ of \d+\):\n\n1\. Ask for the pose\./)
+      const edited = ChatProposalStore.find(JSON.parse(read(await setup.bridge.call('propose_skill', { skill_id: skillId, edits: [{ old_text: 'Ask for the pose', new_text: 'Ask for the pose and the outfit' }] }))).proposalId)
+      assert.ok(edited?.kind === 'skill' && edited.instructions.startsWith('1. Ask for the pose and the outfit.'), 'edits change part of the instructions')
+      assert.equal((await setup.bridge.call('propose_skill', { skill_id: skillId, edits: [{ old_text: 'not in the skill', new_text: 'x' }] })).isError, true)
     } finally { setup.close(); await setup.bridge.close() }
 
     const chat = await open('r-skill-use', ['read'])
@@ -1132,7 +1138,8 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
       const current = ChatProfileStore.find(profile.id)!
       const system = String(buildChatPromptPreview(current, chat.bridge.tools)[0].content)
       assert.match(system, /## Skills\n[^\n]*use_skill[^\n]*\n- Picture request: Use when the user asks for a picture\./)
-      assert.doesNotMatch(String(buildChatPromptPreview(current, [])[0].content), /## Skills/, 'the list goes only beside the tool')
+      assert.match(String(buildChatPromptPreview(current, [])[0].content), /## Skills/, 'a preview opens no chat, yet lists the linked skills')
+      assert.doesNotMatch(String(buildLeadingMessages(current, null, { summaryEnabled: false }, false)[0].content), /## Skills/, 'a request lists them only beside the tool')
       const loaded = read(await chat.bridge.call('use_skill', { name: ' PICTURE request ' }))
       assert.match(loaded, /^Skill "Picture request"/)
       assert.ok(loaded.includes(`2. Draw ${current.name}.`), '{{char}} becomes the profile name')

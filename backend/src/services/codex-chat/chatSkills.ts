@@ -147,26 +147,40 @@ export function profileSkillIndex(profile: { skillIds: number[] }) {
   if (skills.length === 0) return ''
   return [
     '## Skills',
-    `Skills are task instructions written by the administrator. When the user's request matches what a skill below is for, first call ${USE_SKILL_TOOL} with that skill's name, then follow the instructions it returns while you handle the request. Never guess what a skill says, and do not load one the request does not need.`,
+    `Skills are task instructions written by the administrator. When the user's request matches what a skill below is for, first call ${USE_SKILL_TOOL} with that skill's name, then follow the instructions it returns while you handle the request. Never guess what a skill says, and do not load one the request does not need. Load it again in every reply that needs it: instructions loaded in an earlier reply may no longer be in front of you.`,
     ...skills.map((skill) => `- ${skill.name}: ${skill.description.replace(/\s+/g, ' ')}`),
   ].join('\n')
+}
+
+/**
+ * One line for the end of a request, where small models look most, naming the skills and the rule to load one that
+ * fits; it goes beside the skill list, so '' without skills.
+ */
+export function skillReminderText(profile: { skillIds: number[] }) {
+  const names = ChatSkillStore.skillsOf(profile.skillIds).map((skill) => `"${skill.name}"`)
+  return names.length ? `If this request matches one of your skills (${names.join(', ')}), call ${USE_SKILL_TOOL} with that name first and follow what it returns.` : ''
+}
+
+/**
+ * The part of `text` from `offset` that fits in `room` characters (at least 100), never splitting a surrogate pair;
+ * `more` when text is left after it. A tool result cut by the output limit would otherwise drop the end silently.
+ */
+export function skillChunk(text: string, offset: number, room: number) {
+  const start = Math.min(offset, text.length)
+  let end = Math.min(text.length, start + Math.max(100, room))
+  if (end < text.length && /[\uD800-\uDBFF]/.test(text[end - 1] ?? '')) end -= 1
+  return { start, end, text: text.slice(start, end), more: end < text.length }
 }
 
 /** Room a use_skill result keeps for its header and continuation line within the profile's tool output limit. */
 const RESULT_FRAME = 400
 
-/**
- * What use_skill returns: the skill's instructions (already rendered), cut to fit `outputLimit` characters. A longer
- * skill ends with the offset to continue from, so the profile's tool output limit never silently drops its end.
- */
+/** What use_skill returns: the skill's instructions (already rendered), one part that fits `outputLimit` characters. */
 export function skillResultText(skill: Pick<ChatSkill, 'name'>, instructions: string, offset: number, outputLimit: number) {
-  const start = Math.min(offset, instructions.length)
-  let end = Math.min(instructions.length, start + Math.max(100, outputLimit - RESULT_FRAME))
-  // Never split a surrogate pair.
-  if (end < instructions.length && /[\uD800-\uDBFF]/.test(instructions[end - 1] ?? '')) end -= 1
-  const header = start === 0
+  const chunk = skillChunk(instructions, offset, outputLimit - RESULT_FRAME)
+  const header = chunk.start === 0
     ? `Skill "${skill.name}": the administrator's instructions for this kind of request. Follow them for the current request, together with your character's own instructions.`
-    : `Skill "${skill.name}", continued from offset ${start}.`
-  const more = end < instructions.length ? `\n\n(The skill continues. Call ${USE_SKILL_TOOL} with name "${skill.name}" and offset ${end} for the rest before you act on it.)` : ''
-  return `${header}\n\n${instructions.slice(start, end)}${more}`
+    : `Skill "${skill.name}", continued from offset ${chunk.start}.`
+  const more = chunk.more ? `\n\n(The skill continues. Call ${USE_SKILL_TOOL} with name "${skill.name}" and offset ${chunk.end} for the rest before you act on it.)` : ''
+  return `${header}\n\n${chunk.text}${more}`
 }

@@ -15,6 +15,7 @@ import { recallText } from './chatMemory'
 import { contextSource, limitContextMeta, contextPartsOf, markContextParts } from './chatContextDiagnostics'
 import { appendUserDirective, buildLeadingMessages, depthBlocks, flagDirectiveFor, insertDepthBlocks, offersLinkedFiles, offersLoreFileTool, offersSkills, recallFor, rejectedLoreFor, resolveAuthorNote, selectChatLore, sendableMessages, threadBlockStateText, toCompletionMessages, unsummarizedMessages, latestWindow } from './llmChatContext'
 import { booksForRequest, type AttachedLoreBook, type ChatLore } from './chatLoreContext'
+import { skillReminderText } from './chatSkills'
 import type { ChatSummarySegment } from './chatMemory'
 import type { JudgedContext } from './chatJudgeContext'
 import { usableBlockKeys } from './chatBlockState'
@@ -267,7 +268,7 @@ function buildGroupWindowMessages(params: GroupLlmContext, window: CodexChatMess
   const recall = recallText(recalled)
   const blocks = depthBlocks(lore, profile.loreDepth, resolveAuthorNote(thread, profile, user), stateText, recall, rejectedLoreFor(thread.id, params.tools))
   const reference = buildReplyContext(params.messages, params.routing, { group: true, historySource: params.history?.source, positions: params.history?.outline, maxChars: Math.max(256, Math.min(6000, Math.floor((profile.contextTokens ?? 24000) / 4))), visibleIds: new Set(window.map((message) => message.id)), nameOf: (message) => speakerName(message, names, user) })
-  const directive = [reference, hiddenHistoryNote(thread, total - window.length), flagDirectiveFor(params.messages, profile, user), postHistoryText(profile, user), mentionReminder(members, profile)].filter(Boolean).join('\n\n')
+  const directive = [reference, hiddenHistoryNote(thread, total - window.length), flagDirectiveFor(params.messages, profile, user), postHistoryText(profile, user), offersSkills(params.tools) ? skillReminderText(profile) : '', mentionReminder(members, profile)].filter(Boolean).join('\n\n')
   const result = appendUserDirective([...system, ...insertDepthBlocks(conversation, blocks)], directive)
   return { messages: result, lore, recalled, header }
 }

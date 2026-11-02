@@ -24,6 +24,7 @@ import { CodexChatStore, type ChatHistorySource, type CodexChatMessageRecord, ty
 import { buildGroupCodexInput, buildGroupHeader, groupMissedMessages, type GroupHistory } from './groupChatContext'
 import type { ChatCompletionMessage, ChatContentPart } from './llmChatCompletion'
 import { buildPersonaPrompt, fixedContextGuidance, flagDirectiveFor, postHistoryText, referenceBlock, resolveAuthorNote, type ChatContextMeta } from './llmChatContext'
+import { skillReminderText } from './chatSkills'
 
 /**
  * Claude Code direct chats keep their memory as a Claude Code session, like a Codex chat keeps its thread: each turn
@@ -141,7 +142,7 @@ export async function buildClaudeSessionTurn(params: {
     latest ? inlineTextsForChat(profile, requester.accountId, [latest]) : undefined,
   ])
   const body = latest ? chatContentWithAttachments(latest.content, latest.attachments, latest.mediaAttachments, attachmentTexts, images) : ''
-  const directive = [flagDirectiveFor(history, profile, user), postHistoryText(profile, user)].filter(Boolean).join('\n\n')
+  const directive = [flagDirectiveFor(history, profile, user), postHistoryText(profile, user), skillReminderText(profile)].filter(Boolean).join('\n\n')
   const text = [
     recap,
     agentResults.text,
@@ -231,7 +232,7 @@ export async function buildClaudeGroupSessionTurn(params: {
   const text = buildGroupCodexInput({
     thread, members, self: profile, messages, history: params.history, routing: params.routing, lastSeenMessageId: lastSeen, windowLimit: params.windowLimit,
     lore: [lore.index.text, lore.keyed, rejected.text, note.text, state.text, outcomes.text, generated.text].filter(Boolean).join('\n\n'),
-    directive: [flags, postHistoryText(profile, user)].filter(Boolean).join('\n\n'),
+    directive: [flags, postHistoryText(profile, user), skillReminderText(profile)].filter(Boolean).join('\n\n'),
     attachmentTexts, attachedImages, header: false,
   })
   const urls = [...shown.filter((message) => message.role === 'user').flatMap((message) => attachedImagesOf(message, attachedImages)), ...generated.urls]

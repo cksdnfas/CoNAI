@@ -18,6 +18,7 @@ import { chatWorkspaces, workspaceInstructions } from './chatWorkspace'
 import { applyChatInstructionHooks, hasPluginServerHook } from '../plugins/pluginServerRuntime'
 import { CATALOG_OPEN_TOOL, unwrapCatalogCall } from '../../mcp/toolCatalog'
 import { readMcpToolResult, truncateToolSummary } from './chatToolReferences'
+import { USE_SKILL_TOOL } from './chatSkills'
 import { ChatProfileStore, isVisionTool, sessionRuntimeOf, type ChatProfile } from './chatProfiles'
 import { translateReply, translateUserMessage } from './chatTranslation'
 import { hasTranslation, resolveProfileModel } from './chatModelRoles'
@@ -32,7 +33,7 @@ import { generatedImagesTokens, loadInlineGeneratedImages, withGeneratedImages }
 import { buildClaudeSessionTurn } from './claudeChatSessions'
 import type { EngineSession } from './claudeChatSessions'
 import type { CodexChatStreamEvent } from './codexChatService'
-import { resolveChatCompletionTarget, streamChatCompletion, type ChatCompletionMessage, type ChatCompletionTool } from './llmChatCompletion'
+import { resolveChatCompletionTarget, streamChatCompletion, toolsRefusedBy, type ChatCompletionMessage, type ChatCompletionTool } from './llmChatCompletion'
 import { ChatSummaryStore } from './chatMemory'
 import { appendUserDirective, buildChatMessages, cutToolOutput, directContextTurns, estimateMessagesTokens, estimateTokens, type ChatContextMeta, fillCharacterPlaceholders, fitChatContext, fitThreadSummary, fitWorkspaceRead, latestWindow, prefixUserContent, rawMessagesEstimate, recordPromptUsage, replyCapFor, resolveContextConfig, sendableMessages, stripThinking, summarizeAhead, summarizeAll, unsummarizedMessages, wrapUpRequest } from './llmChatContext'
 import { addressLabelFilter, restatement, roundSeparator } from './chatReplyText'
@@ -271,8 +272,10 @@ async function runToolCall(turn: LlmTurn, bridge: ChatMcpBridge, call: { id: str
   const pageRead = ['get_current_page', 'get_workflow_editor', 'list_workflow_modules', 'read_page_data'].includes(record.tool) && record.status === 'completed'
   // Opened tool schemas are for this reply; a later one opens them again rather than carrying them in every request.
   const catalogRead = record.tool === CATALOG_OPEN_TOOL && record.status === 'completed'
-  record.summary = pageRead ? '현재 요청에 연결한 페이지를 읽었어.' : catalogRead ? '도구 설명을 열람했어.' : record.pageOperation ? record.pageOperation.label : output ? truncateToolSummary(output) : null
-  record.output = pageRead ? '(Page/editor snapshot omitted; use the screen in the current request, or the page tools for what it does not show.)' : catalogRead ? '(Tool schemas omitted; open them again with open_tools when needed.)' : record.pageOperation ? `(Page operation done: ${record.pageOperation.label}. Screen snapshot omitted; use the screen in the current request.)` : cutToolOutput(output, STORED_TOOL_OUTPUT_LENGTH)
+  // So are a skill's instructions: a later request replays tool results cut short, which would read as the whole skill.
+  const skillName = record.tool === USE_SKILL_TOOL && record.status === 'completed' ? String((record.arguments as { name?: unknown } | null)?.name ?? '').trim() : null
+  record.summary = pageRead ? '현재 요청에 연결한 페이지를 읽었어.' : catalogRead ? '도구 설명을 열람했어.' : skillName !== null ? `Loaded skill "${skillName}".` : record.pageOperation ? record.pageOperation.label : output ? truncateToolSummary(output) : null
+  record.output = pageRead ? '(Page/editor snapshot omitted; use the screen in the current request, or the page tools for what it does not show.)' : catalogRead ? '(Tool schemas omitted; open them again with open_tools when needed.)' : skillName !== null ? `(Skill "${skillName}" was loaded for that reply; its instructions are not kept. Call ${USE_SKILL_TOOL} again in a reply that needs them.)` : record.pageOperation ? `(Page operation done: ${record.pageOperation.label}. Screen snapshot omitted; use the screen in the current request.)` : cutToolOutput(output, STORED_TOOL_OUTPUT_LENGTH)
   emit(turn, { type: 'tool', call: { ...record } })
   // The catalog pages at whole-schema boundaries; cutting JSON here makes the opened tools unusable.
   // A workspace read is shortened at a resumable offset instead, so a cut file never looks whole.
@@ -498,7 +501,10 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
       ...catalogued.filter((name) => judged !== null && judged.filterTools([{ type: 'function', function: { name, parameters: {} } }]).length === 0),
     ]
     const blocked = new Set(judged?.userInstructed ? [] : withheld)
-    const offeredTools = visible
+    // A model whose server refused tool definitions gets its requests without them for a while (see toolsRefusedBy):
+    // build them without tools as well, so no tool guidance, lore file, linked file or skill list names a missing tool.
+    const toolless = () => !turn.engineSession && toolsRefusedBy(target)
+    const offeredTools = toolless() ? [] : visible
     turn.offeredTools = offeredTools
     const built = await buildMessages(offeredTools, withSemanticContext(judged?.context ?? null, semantic))
     // Plugins listening to chat.instructions rewrite the system message (session engines do it where they build theirs).
@@ -538,7 +544,7 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
     const offeredNames = new Set([...offeredTools.map((tool) => tool.function.name), ...catalogued])
     const refreshTools = async () => {
       await bridge?.refresh()
-      offeredTools.splice(0, offeredTools.length, ...(bridge?.tools ?? []).filter(tool => profile.visionEnabled || !isVisionTool(tool.function.name)))
+      offeredTools.splice(0, offeredTools.length, ...(toolless() ? [] : (bridge?.tools ?? []).filter(tool => profile.visionEnabled || !isVisionTool(tool.function.name))))
       cataloguedSet.clear()
       for (const name of bridge?.catalogTools ?? []) if (profile.visionEnabled || !isVisionTool(name)) cataloguedSet.add(name)
       offeredNames.clear()
