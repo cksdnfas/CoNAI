@@ -95,7 +95,8 @@ function AppShellLayout() {
   const isCodexChatDockVisible = useCodexChatDockVisible()
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
+    // dvh, not vh: on phones 100vh also counts the browser toolbars, so full-height pages (the chat) would scroll by that much.
+    <div className="min-h-dvh bg-background text-foreground">
       <header className="theme-shell-header fixed inset-x-0 top-0 z-50">
         <div className="theme-shell-inner mx-auto flex w-full max-w-[1680px] items-center gap-3 sm:gap-4">
           <div className="flex min-w-0 flex-1 items-center gap-3 lg:gap-6">
