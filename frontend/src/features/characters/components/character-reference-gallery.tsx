@@ -1,5 +1,5 @@
 import { useEffect, useEffectEvent, useId, useRef, useState } from 'react'
-import { ArrowLeft, ArrowRight, ChevronDown, Crop, ImagePlus, Pencil, Plus, Star, Trash2, Upload, X } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Crop, Pencil, Plus, Star, Trash2, Upload, X } from 'lucide-react'
 import { OverlayCard } from '@/components/common/overlay-card'
 import { ActionMenuButton } from '@/components/ui/action-menu'
 import { Badge } from '@/components/ui/badge'
@@ -8,7 +8,6 @@ import { ToggleChip } from '@/components/ui/chip'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { ChatProfileAssetInput, useChatProfileAssetImport } from '@/features/settings/components/chat-profile-asset-input'
@@ -17,6 +16,7 @@ import { ChatProfileAvatarCrop } from '@/features/settings/components/chat-profi
 import { useI18n } from '@/i18n'
 import { uploadChatProfileAsset, type ChatAssetUploadTarget } from '@/lib/api-codex-chat'
 import { getErrorMessage } from '@/lib/error-message'
+import { cn } from '@/lib/utils'
 import { characterImageUrl } from '../character-library-shared'
 import { editReferenceDraft, type ReferenceEdit } from '../character-reference-draft'
 import type { CharacterSettingEditorState } from '../use-character-setting-editor'
@@ -75,7 +75,10 @@ export function CharacterReferenceGallery({ editor, editable, canUpload, imageTa
     } finally { onBusyChange(false) }
   }
   const paste = useEffectEvent((event: ClipboardEvent) => {
-    if (!uploadsAllowed || busy || importing.isPending || (!imageTabShown && !root.current?.contains(document.activeElement)) || (event.target instanceof Element && event.target.closest('input,textarea,[contenteditable="true"],[role="dialog"],[data-chat-dock]'))) return
+    const target = event.target instanceof Element ? event.target : null
+    // A paste into a field, the chat dock or a dialog opened over the gallery's own (the setting dialog) is not for it.
+    const dialog = target?.closest('[role="dialog"]')
+    if (!uploadsAllowed || busy || importing.isPending || (!imageTabShown && !root.current?.contains(document.activeElement)) || target?.closest('input,textarea,[contenteditable="true"],[data-chat-dock]') || (dialog && !dialog.contains(root.current))) return
     const files = [...(event.clipboardData?.files ?? [])].filter((file) => file.type.startsWith('image/'))
     if (files.length) { event.preventDefault(); void uploadFiles(files) }
   })
@@ -91,6 +94,7 @@ export function CharacterReferenceGallery({ editor, editable, canUpload, imageTa
   const shown = draft.references.filter((image) => !effectiveFilter || image.category === effectiveFilter.category)
   const disabled = busy || importing.isPending
   const openCategoryDialog = (previous: string | null) => { setCategoryError(false); setCategoryDialog({ previous, value: previous ?? '' }) }
+  const addButton = canEdit ? <ChatProfileAssetInput target={target} libraryGroupId={base?.candidateGroupId ?? null} label={t({ ko: '추가', en: 'Add' })} size="compact" busy={disabled} onChange={add} onBusyChange={onBusyChange} /> : null
 
   return <section ref={root} tabIndex={0} className="space-y-3" aria-label={t({ ko: '참고 이미지 갤러리', en: 'Reference gallery' })}
     onDragOver={(event) => { if (event.dataTransfer.types.includes('Files')) event.preventDefault() }}
@@ -99,14 +103,12 @@ export function CharacterReferenceGallery({ editor, editable, canUpload, imageTa
       if (!uploadsAllowed || disabled || !event.dataTransfer.files.length) return
       void uploadFiles([...event.dataTransfer.files])
     }}>
-    <div className="flex flex-wrap items-center gap-2">
+    {/* Under its own "참고 이미지" tab the tab names the gallery, so the key joins the category row instead of a heading. */}
+    {!imageTabShown ? <div className="flex flex-wrap items-center gap-2">
       <h3 className="text-sm font-semibold">{t({ ko: '참고 이미지', en: 'Reference images' })}</h3>
       <span className="text-xs text-muted-foreground">{t({ ko: '{count}장', en: '{count} images' }, { count: draft.references.length })}</span>
-      {canEdit ? <div className="ml-auto">
-        <ChatProfileAssetInput target={target} libraryGroupId={base?.candidateGroupId ?? null} label={t({ ko: '추가', en: 'Add' })} size="compact"
-          busy={disabled} onChange={add} onBusyChange={onBusyChange} />
-      </div> : null}
-    </div>
+      {addButton ? <div className="ml-auto">{addButton}</div> : null}
+    </div> : null}
     <div className="flex flex-wrap items-center gap-1.5">
       <ToggleChip size="sm" pressed={!effectiveFilter} onClick={() => setFilter(null)}>{t({ ko: '전체', en: 'All' })} {draft.references.length}</ToggleChip>
       {draft.referenceCategories.map((name) => <ToggleChip key={name} size="sm" pressed={effectiveFilter?.category === name} onClick={() => setFilter({ category: name })}>{name} {draft.references.filter((image) => image.category === name).length}</ToggleChip>)}
@@ -118,12 +120,8 @@ export function CharacterReferenceGallery({ editor, editable, canUpload, imageTa
           { key: 'delete', label: t({ ko: '분류 지우기 · 이미지는 미분류로', en: 'Delete category · keep images uncategorized' }), icon: Trash2, disabled, onSelect: () => { edit({ kind: 'remove-category', name: effectiveFilter.category! }); setFilter({ category: null }) } },
         ]} /> : null}
       </> : null}
+      {imageTabShown && addButton ? <div className="ml-auto">{addButton}</div> : null}
     </div>
-    {canEdit && !draft.referenceCategories.length ? <div className="flex flex-wrap gap-1.5">
-      {[t({ ko: '설정화', en: 'Model sheet' }), t({ ko: '의상', en: 'Outfit' }), t({ ko: '포즈', en: 'Pose' }), t({ ko: '소품', en: 'Props' })].map((name) => (
-        <Button key={name} variant="ghost" size="compact" disabled={disabled} onClick={() => { edit({ kind: 'add-category', name }); setFilter({ category: name }) }}><Plus />{name}</Button>
-      ))}
-    </div> : null}
     <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 8rem), 1fr))' }}>
       {shown.map((image) => <div key={image.hash} className="min-w-0"
         onDragOver={(event) => { if (canEdit && !disabled && dragged.current) event.preventDefault() }}
@@ -137,37 +135,34 @@ export function CharacterReferenceGallery({ editor, editable, canUpload, imageTa
           title={<Badge variant="overlay" size="xs" casing="sentence">{image.category ?? unclassified}</Badge>}
           media={images.render(image.hash)} onOpen={() => images.open(image.hash)}
           draggable={canEdit && !disabled} onDragStart={(event) => { dragged.current = image.hash; event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('text/plain', image.hash) }} onDragEnd={() => { dragged.current = null }}
-          topStart={image.hash === draft.referenceHash ? <Badge variant="overlay" size="xs"><Star />{t({ ko: '기준', en: 'Main' })}</Badge> : undefined}
-          actions={canEdit ? <div className="flex w-full flex-col">
-            <Button variant="overlay" size="xs" disabled={disabled || image.hash === draft.referenceHash} onClick={() => edit({ kind: 'reference', hash: image.hash })}><Star />{t({ ko: '기준으로', en: 'Use as main' })}</Button>
-            <Button variant="overlay" size="xs" disabled={disabled} onClick={() => setCropHash(image.hash)}><Crop />{t({ ko: '아바타로', en: 'Use as avatar' })}</Button>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild><Button variant="overlay" size="xs" disabled={disabled}>{t({ ko: '분류 바꾸기', en: 'Change category' })}<ChevronDown /></Button></DropdownMenuTrigger>
-              <DropdownMenuContent>
-                <DropdownMenuItem onSelect={() => edit({ kind: 'category', hash: image.hash, category: null })}>{unclassified}</DropdownMenuItem>
-                {draft.referenceCategories.map((name) => <DropdownMenuItem key={name} onSelect={() => edit({ kind: 'category', hash: image.hash, category: name })}>{name}</DropdownMenuItem>)}
-              </DropdownMenuContent>
-            </DropdownMenu>
-            <div className="flex">
-              <Button variant="overlay" size="xs" disabled={disabled || image.hash === draft.references[0]?.hash} aria-label={t({ ko: '참고 이미지 앞으로 옮기기', en: 'Move reference image earlier' })} onClick={() => {
-                const index = draft.references.findIndex((entry) => entry.hash === image.hash)
-                if (index > 0) edit({ kind: 'reorder', hash: image.hash, before: draft.references[index - 1].hash })
-              }}><ArrowLeft /></Button>
-              <Button variant="overlay" size="xs" disabled={disabled || image.hash === draft.references.at(-1)?.hash} aria-label={t({ ko: '참고 이미지 뒤로 옮기기', en: 'Move reference image later' })} onClick={() => {
-                const index = draft.references.findIndex((entry) => entry.hash === image.hash)
-                if (index >= 0 && index + 1 < draft.references.length) edit({ kind: 'reorder', hash: draft.references[index + 1].hash, before: image.hash })
-              }}><ArrowRight /></Button>
-            </div>
-            <Button variant="overlay" size="xs" disabled={disabled} onClick={() => edit({ kind: 'remove', hash: image.hash })}><X />{t({ ko: '빼기', en: 'Remove' })}</Button>
-          </div> : undefined} />
+          topStart={image.hash === draft.referenceHash || image.hash === draft.avatarHash ? <>
+            {image.hash === draft.referenceHash ? <Badge variant="overlay" size="xs"><Star />{t({ ko: '기준', en: 'Main' })}</Badge> : null}
+            {image.hash === draft.avatarHash ? <Badge variant="overlay" size="xs">{t({ ko: '아바타', en: 'Avatar' })}</Badge> : null}
+          </> : undefined}
+          menu={canEdit ? [
+            { key: 'main', label: t({ ko: '기준으로', en: 'Use as main' }), icon: Star, disabled: disabled || image.hash === draft.referenceHash, onSelect: () => edit({ kind: 'reference', hash: image.hash }) },
+            { key: 'avatar', label: t({ ko: '아바타로', en: 'Use as avatar' }), icon: Crop, disabled, onSelect: () => setCropHash(image.hash) },
+            '-',
+            ...[null, ...draft.referenceCategories].map((name) => ({ key: `category:${name ?? ''}`, label: t({ ko: '분류: {name}', en: 'Category: {name}' }, { name: name ?? unclassified }), checked: image.category === name, disabled, onSelect: () => edit({ kind: 'category', hash: image.hash, category: name }) })),
+            '-',
+            { key: 'earlier', label: t({ ko: '앞으로 옮기기', en: 'Move earlier' }), icon: ArrowLeft, disabled: disabled || image.hash === draft.references[0]?.hash, onSelect: () => {
+              const index = draft.references.findIndex((entry) => entry.hash === image.hash)
+              if (index > 0) edit({ kind: 'reorder', hash: image.hash, before: draft.references[index - 1].hash })
+            } },
+            { key: 'later', label: t({ ko: '뒤로 옮기기', en: 'Move later' }), icon: ArrowRight, disabled: disabled || image.hash === draft.references.at(-1)?.hash, onSelect: () => {
+              const index = draft.references.findIndex((entry) => entry.hash === image.hash)
+              if (index >= 0 && index + 1 < draft.references.length) edit({ kind: 'reorder', hash: draft.references[index + 1].hash, before: image.hash })
+            } },
+            '-',
+            { key: 'remove', label: t({ ko: '빼기', en: 'Remove' }), icon: X, destructive: true, disabled, onSelect: () => edit({ kind: 'remove', hash: image.hash }) },
+          ] : undefined} />
       </div>)}
-      {uploadsAllowed ? <div className="flex aspect-[3/4] flex-col items-center justify-center gap-2 rounded-md border border-dashed border-line p-2 text-center text-xs text-muted-foreground">
+      {uploadsAllowed ? <div className={cn('flex aspect-[3/4] flex-col items-center justify-center gap-2 rounded-md border border-dashed border-line p-2 text-center text-xs text-muted-foreground', !shown.length && 'col-span-full aspect-auto py-10')}>
         <Upload className="size-5" />
         <span>{t({ ko: '끌어다 놓기', en: 'Drop images here' })}<br />{t({ ko: 'Ctrl+V 붙여넣기', en: 'Ctrl+V to paste' })}</span>
       </div> : null}
     </div>
     {!shown.length && !canEdit ? <p className="text-xs text-muted-foreground">{t({ ko: '참고 이미지가 없어.', en: 'No reference images.' })}</p> : null}
-    <p className="flex items-start gap-1.5 text-xs text-muted-foreground"><ImagePlus className="size-3.5 shrink-0" />{t({ ko: '이미지는 라이브러리에 있는 이 설정의 이미지 그룹에 함께 보관돼.', en: 'Images are kept together in this setting’s image group in the library.' })}</p>
     {categoryDialog ? <Modal open size="sm" title={categoryDialog.previous === null ? t({ ko: '분류 추가', en: 'Add category' }) : t({ ko: '분류 이름 바꾸기', en: 'Rename category' })}
       onClose={() => { setCategoryError(false); setCategoryDialog(null) }}>
       <form onSubmit={(event) => {

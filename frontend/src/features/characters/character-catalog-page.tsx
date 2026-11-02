@@ -1,11 +1,10 @@
 import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react'
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useSearchParams } from 'react-router-dom'
 import { CHARACTER_APPEARANCE_SECTION_KEYS, CHAT_PROFILE_TEXT_LIMITS, composeCharacterAppearance, formatDanbooruTagForPrompt, joinPromptParts, type CharacterAppearanceSections, type ChatPageData } from '@conai/shared'
 import { BookOpen, Check, ChevronDown, ChevronLeft, ChevronRight, Copy, ExternalLink, Folder, Image as ImageIcon, Import, Library, Plus } from 'lucide-react'
 import { CharacterCard } from '@/components/common/character-card'
 import { OverlayCardHoverOnly } from '@/components/common/overlay-card'
-import { ListPager } from '@/components/common/list-pager'
 import { PageToolbar } from '@/components/common/page-toolbar'
 import { PageWithSidebar } from '@/components/common/page-with-sidebar'
 import { SearchField, ToolbarSearchField } from '@/components/common/search-field'
@@ -30,6 +29,7 @@ import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context
 import { pageAction, pageChoice, pageNumber, pageObject, pageText } from '@/features/codex-chat/page-action-helpers'
 import { ImageListColumnFloatingControl } from '@/features/images/components/image-list/image-list-column-floating-control'
 import { useImageListColumnPreference } from '@/features/images/components/image-list/image-list-column-preferences'
+import { LoadMoreSentinel } from '@/features/posts/post-attach-shared'
 import { useI18n, type AppLanguage } from '@/i18n'
 import { createCharacterSetting, fillCharacterAppearance, importCharacterCatalogReferences, type CharacterAppearanceFill, type CharacterFacetKey, type CharacterSettingFilters } from '@/lib/api-character-library'
 import { getDanbooruBrowserCharacters, getDanbooruBrowserSummary, getDanbooruCharacterFacets } from '@/lib/api-danbooru-browser'
@@ -38,12 +38,12 @@ import { copyTextToClipboard } from '@/lib/clipboard'
 import { getErrorMessage } from '@/lib/error-message'
 import { cn } from '@/lib/utils'
 import type { DanbooruBrowserCharacterRecord } from '@/types/danbooru-browser'
-import { folderPath, localizedTagName, refreshCharacterViews, useCharacterFolders } from './character-library-shared'
+import { folderPath, loadNextBatch, localizedTagName, refreshCharacterViews, useCharacterFolders } from './character-library-shared'
 import { CharacterFacetPanel } from './components/character-facet-panel'
 import { CharacterFolderPickerModal } from './components/character-folder-nav'
 import { useSectionLabels } from './components/character-look-editor'
 
-/** The dictionary's page size for characters (the server caps it there). */
+/** Characters per loaded batch (the dictionary's page size; the server caps it there). */
 const CATALOG_PAGE_SIZE = 30
 
 /** The catalog's dimensions narrow by every chosen tag, so one value per dimension keeps a choice meaningful. */
@@ -68,7 +68,8 @@ type CatalogImport = { character: DanbooruBrowserCharacterRecord; folderId: numb
 /**
  * 캐릭터 카탈로그: the installed Danbooru dictionary's characters (by work, appearance filters, most posts or name), each
  * with its dictionary sample images, work and frequent appearance tags, imported into the appearance library as a new
- * setting (sections and a default outfit). The URL holds `q`, `copyright`, `tags` (comma list), `sort` and `page`.
+ * setting (sections and a default outfit). The URL holds `q`, `copyright`, `tags` (comma list) and `sort`; the list
+ * loads in batches as it scrolls.
  */
 export function CharacterCatalogPage({ viewSwitch }: { viewSwitch: ReactNode }) {
   const { t, formatNumber, language } = useI18n()
@@ -84,7 +85,6 @@ export function CharacterCatalogPage({ viewSwitch }: { viewSwitch: ReactNode }) 
   const copyrightTagId = Number(params.get('copyright')) || null
   const tags = (params.get('tags') ?? '').split(',').filter(Boolean)
   const sort = params.get('sort') === 'name' ? 'name' as const : 'posts' as const
-  const page = Math.max(1, Number(params.get('page')) || 1)
   const [searchText, setSearchText] = useState(query)
   const [copyrightText, setCopyrightText] = useState('')
   const [open, setOpen] = useState<DanbooruBrowserCharacterRecord | null>(null)
@@ -100,21 +100,27 @@ export function CharacterCatalogPage({ viewSwitch }: { viewSwitch: ReactNode }) 
     const next = new URLSearchParams(current)
     next.set('view', 'catalog')
     for (const [key, value] of Object.entries(changes)) { if (value === null) next.delete(key); else next.set(key, value) }
-    if (!('page' in changes)) next.delete('page')
+    // An address from the paged catalog drops its page.
+    next.delete('page')
     return next
   })
 
   const summary = useQuery({ queryKey: ['danbooru-browser', 'summary'], queryFn: getDanbooruBrowserSummary })
   const facets = useQuery({ queryKey: ['danbooru-browser', 'character-facets'], queryFn: getDanbooruCharacterFacets, staleTime: Infinity })
-  const list = useQuery({
-    queryKey: ['danbooru-browser', 'catalog', query, copyrightTagId, tags.join(','), sort, page],
-    queryFn: () => getDanbooruBrowserCharacters({ query, page, limit: CATALOG_PAGE_SIZE, relatedTagLimit: 0, tags, sort, ...(copyrightTagId ? { copyrightTagId } : {}) }),
+  const list = useInfiniteQuery({
+    queryKey: ['danbooru-browser', 'catalog', query, copyrightTagId, tags.join(','), sort],
+    queryFn: ({ pageParam }) => getDanbooruBrowserCharacters({ query, page: pageParam, limit: CATALOG_PAGE_SIZE, relatedTagLimit: 0, tags, sort, ...(copyrightTagId ? { copyrightTagId } : {}) }),
+    initialPageParam: 1,
+    getNextPageParam: (last) => (last.pagination.page < last.pagination.totalPages ? last.pagination.page + 1 : undefined),
     placeholderData: keepPreviousData,
   })
-  const items = list.data?.items ?? []
-  // The dialog steps through the listed page; a character no longer listed (another page) has no neighbours.
+  const items = list.data?.pages.flatMap((batch) => batch.items) ?? []
+  const total = list.data?.pages[0]?.pagination.total ?? items.length
+  const loadMore = async () => (await loadNextBatch(list)).flatMap((batch) => batch.items)
+  // The assistant reads the latest loaded batch, as the paged catalog showed it; offset places it in the list.
+  const assistantItems = items.slice(-CATALOG_PAGE_SIZE)
+  // The dialog steps through the loaded characters (the next batch loads past the last); one no longer listed has no neighbours.
   const openIndex = open ? items.findIndex((item) => item.tagId === open.tagId) : -1
-  const pagination = list.data?.pagination
   const available = summary.data?.database.available ?? true
   const copyrights = (summary.data?.tree ?? []).filter((node) => node.section === 'characters' && node.filter?.copyrightTagId !== undefined)
   const shownCopyrights = copyrightText.trim() ? copyrights.filter((node) => `${node.label} ${node.translatedLabel ?? ''}`.toLowerCase().includes(copyrightText.trim().toLowerCase())) : copyrights
@@ -191,15 +197,16 @@ export function CharacterCatalogPage({ viewSwitch }: { viewSwitch: ReactNode }) 
       copyrightTagId: copyrightTagId ?? 0,
       tags,
       sort,
-      page,
-      totalPages: pagination?.totalPages ?? 1,
-      total: pagination?.total ?? 0,
-      characters: items.map((item) => ({ tagId: item.tagId, name: item.name, translatedName: item.translatedName ?? '', works: item.copyrights.map((copyright) => copyright.name), posts: item.worksCount })),
+      total,
+      hasMore: Boolean(list.hasNextPage),
+      offset: items.length - assistantItems.length,
+      characters: assistantItems.map((item) => ({ tagId: item.tagId, name: item.name, translatedName: item.translatedName ?? '', works: item.copyrights.map((copyright) => copyright.name), posts: item.worksCount })),
       filterChoices: (facets.data?.dimensions ?? []).map((dimension) => ({ key: dimension.key, tags: dimension.values.slice(0, 40).map((value) => value.tag) })),
     } as Record<string, ChatPageData>,
     actions: [
-      pageAction('character.catalog_search', t({ ko: '카탈로그 검색', en: 'Search the catalog' }), t({ ko: '이름(영문 태그·한국어), 작품 tag id(0은 전체), 외형 태그(쉼표, data.filterChoices), 정렬과 쪽으로 카탈로그를 봐.', en: 'Browse by name, work tag id (0: all), appearance tags (comma list from data.filterChoices), sort and page.' }), pageObject({ query: pageText(200), copyrightTagId: pageNumber(0, undefined, true), tags: pageText(2000), sort: pageChoice(['posts', 'name']), page: pageNumber(1, undefined, true) })),
-      ...(canImport ? [pageAction('character.catalog_import', t({ ko: '외형으로 가져오기', en: 'Import as a setting' }), t({ ko: 'data.characters의 캐릭터를 외형 라이브러리 폴더(0은 최상위)에 새 외형 설정으로 만들어. 이름을 비우면 카드에 보이는 이름을 써. includeSampleImages(기본: 가능하면 켬)는 사전의 샘플 이미지를 참고 이미지로 함께 넣어. 카탈로그 화면은 그대로 남아.', en: 'Create a setting from a listed character in a library folder (0: top level); an empty name uses the name shown on its card. includeSampleImages (default: on when possible) adds the dictionary sample images as reference images. The catalog stays open.' }), pageObject({ tagId: pageChoice(items.length ? items.map((item) => item.tagId) : [0]), folderId: pageNumber(0, undefined, true), name: pageText(60), includeSampleImages: { type: 'boolean' } }, ['tagId', 'folderId']), 'save')] : []),
+      pageAction('character.catalog_search', t({ ko: '카탈로그 검색', en: 'Search the catalog' }), t({ ko: '이름(영문 태그·한국어), 작품 tag id(0은 전체), 외형 태그(쉼표, data.filterChoices)와 정렬로 카탈로그를 봐. 목록은 첫 묶음부터 보여.', en: 'Browse by name, work tag id (0: all), appearance tags (comma list from data.filterChoices) and sort; the list starts from the first batch.' }), pageObject({ query: pageText(200), copyrightTagId: pageNumber(0, undefined, true), tags: pageText(2000), sort: pageChoice(['posts', 'name']) })),
+      ...(list.hasNextPage ? [pageAction('character.catalog_load_more', t({ ko: '카탈로그 더 불러오기', en: 'Load more characters' }), t({ ko: '목록의 다음 묶음을 불러와. data.characters는 마지막으로 불러온 묶음이고 offset은 그 첫 캐릭터의 위치야. hasMore가 false면 다 불러온 거야.', en: 'Load the next batch; data.characters is the latest loaded batch and offset is its first character’s position. hasMore false means everything is loaded.' }), pageObject({}))] : []),
+      ...(canImport ? [pageAction('character.catalog_import', t({ ko: '외형으로 가져오기', en: 'Import as a setting' }), t({ ko: 'data.characters의 캐릭터를 외형 라이브러리 폴더(0은 최상위)에 새 외형 설정으로 만들어. 이름을 비우면 카드에 보이는 이름을 써. includeSampleImages(기본: 가능하면 켬)는 사전의 샘플 이미지를 참고 이미지로 함께 넣어. 카탈로그 화면은 그대로 남아.', en: 'Create a setting from a listed character in a library folder (0: top level); an empty name uses the name shown on its card. includeSampleImages (default: on when possible) adds the dictionary sample images as reference images. The catalog stays open.' }), pageObject({ tagId: pageChoice(assistantItems.length ? assistantItems.map((item) => item.tagId) : [0]), folderId: pageNumber(0, undefined, true), name: pageText(60), includeSampleImages: { type: 'boolean' } }, ['tagId', 'folderId']), 'save')] : []),
     ],
     apply: () => {},
     applyAction: async (id, args, assertCurrent) => {
@@ -210,8 +217,12 @@ export function CharacterCatalogPage({ viewSwitch }: { viewSwitch: ReactNode }) 
           copyright: args.copyrightTagId !== undefined ? (Number(args.copyrightTagId) > 0 ? String(args.copyrightTagId) : null) : params.get('copyright'),
           tags: args.tags !== undefined ? String(args.tags).split(',').map((tag) => tag.trim()).filter(Boolean).join(',') || null : params.get('tags'),
           sort: args.sort !== undefined ? (args.sort === 'name' ? 'name' : null) : params.get('sort'),
-          page: args.page !== undefined && Number(args.page) > 1 ? String(args.page) : null,
         })
+        return
+      }
+      if (id === 'character.catalog_load_more') {
+        if (!list.hasNextPage) throw new Error('카탈로그 목록을 이미 다 불러왔어.')
+        await loadMore()
         return
       }
       if (id !== 'character.catalog_import') throw new Error('캐릭터 카탈로그에 없는 작업이야.')
@@ -274,7 +285,7 @@ export function CharacterCatalogPage({ viewSwitch }: { viewSwitch: ReactNode }) 
         <ErrorState title={t({ ko: '카탈로그를 불러오지 못했어', en: 'Could not load the catalog' })} error={list.error} onRetry={() => void list.refetch()} />
       ) : items.length ? (
         <section className="space-y-3">
-          <Text as="p" variant="caption">{t({ ko: '캐릭터 {count}명', en: '{count} characters' }, { count: formatNumber(pagination?.total ?? items.length) })}</Text>
+          <Text as="p" variant="caption">{t({ ko: '캐릭터 {count}명', en: '{count} characters' }, { count: formatNumber(total) })}</Text>
           <div className="grid gap-4" style={{ gridTemplateColumns: `repeat(${columns.columnCount}, minmax(0, 1fr))` }}>
             {items.map((item) => {
               const work = item.copyrights[0]
@@ -299,7 +310,12 @@ export function CharacterCatalogPage({ viewSwitch }: { viewSwitch: ReactNode }) 
               )
             })}
           </div>
-          <ListPager className="pt-3" hasPrevious={page > 1} hasNext={page < (pagination?.totalPages ?? 1)} onPrevious={() => update({ page: page > 2 ? String(page - 1) : null })} onNext={() => update({ page: String(page + 1) })} />
+          {list.isFetchNextPageError ? (
+            <ErrorState size="compact" title={t({ ko: '다음 캐릭터를 불러오지 못했어', en: 'Could not load more characters' })} error={list.error} onRetry={() => void list.fetchNextPage()} isRetrying={list.isFetchingNextPage} />
+          ) : <>
+            <LoadMoreSentinel rootMargin="800px" enabled={list.hasNextPage && !list.isFetchingNextPage} onVisible={() => void list.fetchNextPage({ cancelRefetch: false })} />
+            {list.isFetchingNextPage ? <LoadingState variant="inline" /> : null}
+          </>}
         </section>
       ) : <EmptyState icon={Library} title={t({ ko: '맞는 캐릭터가 없어', en: 'No matching characters' })} />}
 
@@ -307,7 +323,7 @@ export function CharacterCatalogPage({ viewSwitch }: { viewSwitch: ReactNode }) 
       {open ? (
         <CatalogCharacterModal
           character={open}
-          position={{ index: openIndex, count: items.length }}
+          position={{ index: openIndex, count: total }}
           canImport={canImport}
           canViewImages={canViewImages}
           canImportImages={withSamples(open)}
@@ -318,7 +334,15 @@ export function CharacterCatalogPage({ viewSwitch }: { viewSwitch: ReactNode }) 
           onImport={(input) => importFromScreen({ character: open, folderId: importFolderId, ...input })}
           onOpenSetting={(settingId) => { setOpen(null); setParams({ setting: String(settingId) }) }}
           onPrevious={openIndex > 0 ? () => setOpen(items[openIndex - 1]) : null}
-          onNext={openIndex >= 0 && openIndex < items.length - 1 ? () => setOpen(items[openIndex + 1]) : null}
+          onNext={openIndex >= 0 && openIndex < items.length - 1 ? () => setOpen(items[openIndex + 1])
+            : openIndex >= 0 && list.hasNextPage ? () => {
+              const from = open.tagId
+              void loadMore().then(
+                // Closed or moved on while the batch loaded: a late batch must not reopen or jump the dialog.
+                (loaded) => setOpen((current) => (current?.tagId === from && loaded[openIndex + 1] ? loaded[openIndex + 1] : current)),
+                (error: unknown) => showSnackbar({ message: getErrorMessage(error, t({ ko: '다음 캐릭터를 불러오지 못했어.', en: 'Could not load more characters.' })), tone: 'error' }),
+              )
+            } : null}
           onClose={() => setOpen(null)}
         />
       ) : null}

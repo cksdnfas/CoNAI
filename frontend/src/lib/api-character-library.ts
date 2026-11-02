@@ -1,4 +1,4 @@
-import type { QueryClient } from '@tanstack/react-query'
+import type { InfiniteData, QueryClient } from '@tanstack/react-query'
 import type {
   CharacterAppearanceDraftInput,
   CharacterAppearanceFill,
@@ -67,13 +67,13 @@ export type CharacterSettingScope = {
   sort?: CharacterSettingSort
 }
 export const CHARACTER_SETTINGS_PAGE_SIZE = 60
-/** Page sizes offered on the library page (the server allows up to 200). */
-export const CHARACTER_SETTINGS_PAGE_SIZES = [30, 60, 120, 200] as const
 
 export const CHARACTER_LIBRARY_QUERY_KEY = 'character-library'
 export const CHARACTER_FOLDERS_QUERY_KEY = [CHARACTER_LIBRARY_QUERY_KEY, 'folders'] as const
 const filtersKey = (filters?: CharacterSettingFilters) => (filters && Object.values(filters).some((tags) => tags?.length) ? JSON.stringify(filters) : '')
 export const characterSettingsQueryKey = (scope: CharacterSettingScope) => [CHARACTER_LIBRARY_QUERY_KEY, 'settings', scope.folder, scope.query, scope.offset, scope.limit, scope.favorite ? 1 : 0, filtersKey(scope.filters), scope.sort ?? 'name'] as const
+/** The library page's scrolled list: every loaded batch of one scope (`pages` keeps it apart from single pages). */
+export const characterSettingsPagesQueryKey = (scope: Omit<CharacterSettingScope, 'offset'>) => [CHARACTER_LIBRARY_QUERY_KEY, 'settings', scope.folder, scope.query, 'pages', scope.limit, scope.favorite ? 1 : 0, filtersKey(scope.filters), scope.sort ?? 'name'] as const
 /** Recounted by `invalidateCharacterLibrary` whenever a setting or folder changes. */
 export const characterFacetsQueryKey = (scope: Omit<CharacterSettingScope, 'offset' | 'limit' | 'sort'>) => [CHARACTER_LIBRARY_QUERY_KEY, 'facets', scope.folder, scope.query, scope.favorite ? 1 : 0, filtersKey(scope.filters)] as const
 export const characterSettingQueryKey = (settingId: number) => [CHARACTER_LIBRARY_QUERY_KEY, 'setting', settingId] as const
@@ -208,7 +208,9 @@ export function invalidateCharacterLibrary(queryClient: QueryClient, change: { f
       if (queryKey[1] !== 'settings') return false
       const folder = queryKey[2]
       if (typeof folder === 'number' && change.folderIds.has(folder)) return true
-      if ((state.data as CharacterSettingPage | undefined)?.items.some((item) => change.settingIds.has(item.id))) return true
+      const data = state.data as CharacterSettingPage | InfiniteData<CharacterSettingPage> | undefined
+      const pages = !data ? [] : 'pages' in data ? data.pages : [data]
+      if (pages.some((page) => page.items.some((item) => change.settingIds.has(item.id)))) return true
       return change.settingIds.size > 0 && (folder === 'root' || folder === 'all')
     },
   })

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { UserRound } from 'lucide-react'
+import { ListPager } from '@/components/common/list-pager'
 import { PathBreadcrumbs } from '@/components/common/path-breadcrumbs'
 import { SearchField } from '@/components/common/search-field'
 import { Button } from '@/components/ui/button'
@@ -96,9 +97,12 @@ function CharacterSettingPicker({ onOpenChange, onPick, title, confirmLabel, ini
               </div>
               <CharacterSettingGrid
                 errorTitle={t({ ko: '외형 설정을 불러오지 못했어', en: 'Could not load settings' })}
-                query={settingsQuery}
-                page={page}
-                onPageChange={(next) => setPaging({ key: scopeKey, page: next })}
+                items={settingsQuery.data?.items}
+                pending={settingsQuery.isPending}
+                error={settingsQuery.isError ? settingsQuery.error : null}
+                onRetry={() => void settingsQuery.refetch()}
+                retrying={settingsQuery.isFetching}
+                footer={<ListPager className="pt-3" hasPrevious={page > 0} hasNext={Boolean(settingsQuery.data?.hasMore)} onPrevious={() => setPaging({ key: scopeKey, page: page - 1 })} onNext={() => setPaging({ key: scopeKey, page: page + 1 })} />}
                 gridClassName="grid-cols-2 sm:grid-cols-3 lg:grid-cols-4"
                 renderSetting={(setting) => (
                   <CharacterSettingCard key={setting.id} setting={setting} selected={selectedId === setting.id} onOpen={() => setSelectedId(setting.id)} onDoubleClick={() => pick(setting.id)} />

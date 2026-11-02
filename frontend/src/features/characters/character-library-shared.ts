@@ -1,8 +1,9 @@
-import { keepPreviousData, useQuery, type QueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useInfiniteQuery, useQuery, type InfiniteData, type QueryClient, type UseInfiniteQueryResult } from '@tanstack/react-query'
 import { emptyCharacterAppearanceSections, type CharacterReferenceImage } from '@conai/shared'
 import {
   CHARACTER_FOLDERS_QUERY_KEY,
   characterFacetsQueryKey,
+  characterSettingsPagesQueryKey,
   characterSettingsQueryKey,
   getCharacterLibraryFacets,
   invalidateCharacterLibrary,
@@ -59,6 +60,30 @@ export function useCharacterFolders(enabled = true) {
 /** One page of settings; the previous page stays on screen while the next one loads. */
 export function useCharacterSettingsPage(scope: CharacterSettingScope, enabled = true) {
   return useQuery({ queryKey: characterSettingsQueryKey(scope), queryFn: ({ signal }) => listCharacterSettings(scope, signal), placeholderData: keepPreviousData, enabled })
+}
+
+/** A scrolled list of settings: batches of `limit` load one after another; the previous list stays while a new scope loads. */
+export function useCharacterSettingsPages(scope: Omit<CharacterSettingScope, 'offset'>, enabled = true) {
+  return useInfiniteQuery({
+    queryKey: characterSettingsPagesQueryKey(scope),
+    queryFn: ({ pageParam, signal }) => listCharacterSettings({ ...scope, offset: pageParam }, signal),
+    initialPageParam: 0,
+    getNextPageParam: (last, pages) => (last.hasMore ? pages.reduce((sum, page) => sum + page.items.length, 0) : undefined),
+    placeholderData: keepPreviousData,
+    enabled,
+  })
+}
+
+/**
+ * Load a scrolled list's next batch and resolve to every loaded batch; rejects when it fails, so the caller can say so.
+ * A refetch already running (a save refreshes the list) is joined instead of loading on, so then it asks once more.
+ */
+export async function loadNextBatch<TPage, TParam>(list: UseInfiniteQueryResult<InfiniteData<TPage, TParam>>) {
+  const before = list.data?.pages.length ?? 0
+  let result = await list.fetchNextPage({ cancelRefetch: false })
+  if (!result.isError && result.hasNextPage && (result.data?.pages.length ?? 0) <= before) result = await list.fetchNextPage({ cancelRefetch: false })
+  if (result.isError) throw result.error
+  return result.data?.pages ?? []
 }
 
 /** The filter dimensions of a scope with their counts (the previous ones stay while a new selection recounts). */

@@ -45,7 +45,7 @@ export function useChatProfileAssetImport(onChange: (hash: string) => void, onBu
  * with the `target` (a profile's character name, or a library setting, resolved when the import starts so a new one
  * can be saved first); without a target only the library pick and the owner's own entries are offered.
  */
-export function ChatProfileAssetInput({ target, libraryGroupId = null, onChange, onBusyChange, uploadRef, busy = false, label, ariaLabel, iconOnly = false, variant = 'secondary', size = 'sm', onGenerate, generateLabel, generateBlocked = null, onClear, clearLabel }: {
+export function ChatProfileAssetInput({ target, libraryGroupId = null, onChange, onBusyChange, uploadRef, uploadEntry = true, busy = false, label, ariaLabel, iconOnly = false, variant = 'secondary', size = 'sm', onGenerate, generateLabel, generateBlocked = null, onClear, clearLabel }: {
   target: ChatAssetUploadTarget | (() => Promise<ChatAssetUploadTarget>) | null
   /** The group the library pick opens at (a library setting's candidates); otherwise a profile's own folder. */
   libraryGroupId?: number | null
@@ -53,6 +53,8 @@ export function ChatProfileAssetInput({ target, libraryGroupId = null, onChange,
   onBusyChange: (busy: boolean) => void
   busy?: boolean
   uploadRef?: RefObject<HTMLInputElement | null>
+  /** False when the owner shows its own upload key (wired through `uploadRef`), so the menu does not repeat it. */
+  uploadEntry?: boolean
   /** The menu key's words (default 이미지 바꾸기). */
   label?: string
   ariaLabel?: string
@@ -91,7 +93,7 @@ export function ChatProfileAssetInput({ target, libraryGroupId = null, onChange,
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="min-w-52">
         <DropdownMenuItem disabled={disabled} onSelect={() => setPicker('library')}><Image />{t({ ko: '라이브러리에서 고르기', en: 'Choose from library' })}</DropdownMenuItem>
-        {target ? <DropdownMenuItem disabled={disabled} onSelect={() => fileRef.current?.click()}><Upload />{t({ ko: '파일 올리기', en: 'Upload a file' })}</DropdownMenuItem> : null}
+        {target && uploadEntry ? <DropdownMenuItem disabled={disabled} onSelect={() => fileRef.current?.click()}><Upload />{t({ ko: '파일 올리기', en: 'Upload a file' })}</DropdownMenuItem> : null}
         {target ? <>
           <DropdownMenuItem disabled={disabled} onSelect={() => setUrlOpen(true)}><Link />{t({ ko: 'URL로 가져오기', en: 'Import from URL' })}</DropdownMenuItem>
           <DropdownMenuItem disabled={disabled} onSelect={() => setPicker('files')}><Folder />{t({ ko: '파일 보관함에서', en: 'From the file store' })}</DropdownMenuItem>

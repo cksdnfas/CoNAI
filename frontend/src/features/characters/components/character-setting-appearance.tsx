@@ -15,7 +15,7 @@ import { CharacterReferenceGallery } from './character-reference-gallery'
  * setting: imports, generation and expressions are the setting's. The library editor and a profile synced to the
  * setting both show it. Without `editable` it only shows; `generation` (administrators) adds generation.
  */
-export function CharacterSettingAppearanceEditor({ editor, runs, editable, generation, busy, onBusyChange, appearanceWarning = null, appearanceNote = null, tab, aside, children }: {
+export function CharacterSettingAppearanceEditor({ editor, runs, editable, generation, busy, onBusyChange, appearanceWarning = null, tab, tabs, children }: {
   editor: CharacterSettingEditorState
   runs: AssetRuns
   editable: boolean
@@ -24,11 +24,9 @@ export function CharacterSettingAppearanceEditor({ editor, runs, editable, gener
   onBusyChange: (busy: boolean) => void
   /** Why the appearance text needs writing (a synced profile's after-reply pictures read only it); marks it invalid. */
   appearanceWarning?: string | null
-  /** Who else a change reaches, under the appearance text. */
-  appearanceNote?: ReactNode
   tab?: CharacterAppearanceTab
-  /** Under the avatar in the image column. */
-  aside?: ReactNode
+  /** The tab strip over the tab content (with `tab`). */
+  tabs?: ReactNode
   children?: ReactNode
 }) {
   const queryClient = useQueryClient()
@@ -57,7 +55,7 @@ export function CharacterSettingAppearanceEditor({ editor, runs, editable, gener
       onChange={editor.patch}
       onAvatarChange={(avatarHash, avatarCrop) => editor.patch({ avatarHash, avatarCrop: avatarHash ? avatarCrop : null })}
       referenceUrl={draft.referenceHash ? characterImageUrl(draft.referenceHash) : null}
-      avatar={<ChatProfileAvatar name={draft.name || '?'} imageUrl={avatarUrl} avatarCrop={draft.avatarHash ? draft.avatarCrop : null} engine="llm" className="size-[72px]" size="xl" />}
+      avatar={<ChatProfileAvatar name={draft.name || '?'} imageUrl={avatarUrl} avatarCrop={draft.avatarHash ? draft.avatarCrop : null} engine="llm" className={tab ? 'size-14' : 'size-[72px]'} size="xl" />}
       hasAvatar={Boolean(draft.avatarHash)}
       // An import only adds an image to a saved setting's draft; a new one is created first so the image has an owner.
       uploadTarget={generation ? (base ? { settingId: base.id } : async () => ({ settingId: (await editor.ensureSetting()).id })) : null}
@@ -65,13 +63,13 @@ export function CharacterSettingAppearanceEditor({ editor, runs, editable, gener
       runs={runs}
       busy={busy}
       onBusyChange={onBusyChange}
-      appearanceEditor={<CharacterLookEditor editor={editor} editable={editable} generation={generation} busy={busy} onBusyChange={onBusyChange} warning={appearanceWarning} note={appearanceNote} />}
-      aside={aside}
+      appearanceEditor={<CharacterLookEditor editor={editor} editable={editable} generation={generation} busy={busy} onBusyChange={onBusyChange} warning={appearanceWarning} />}
       onSetExpression={setExpression}
       onClearExpression={clearExpression}
       editable={editable}
       generation={generation}
       tab={tab}
+      tabs={tabs}
       gallery={<CharacterReferenceGallery editor={editor} editable={editable} canUpload={generation} imageTabShown={tab === 'images'} busy={busy} onBusyChange={onBusyChange} />}
     >
       {children}

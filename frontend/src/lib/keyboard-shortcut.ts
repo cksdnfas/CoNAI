@@ -11,16 +11,22 @@ export function isTypingTarget(event: { target: EventTarget | null }) {
   return target instanceof HTMLElement && (target.isContentEditable || target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT')
 }
 
-/** Any open dialog, drawer, viewer or full-screen editor owns the keyboard while it is up. */
-export function hasOpenDialog() {
+/** Open dialogs, drawers, viewers and full-screen editors; a dialog's own keys check for one opened over it (count > 1). */
+export function openDialogCount() {
+  let count = 0
   // Closed bottom drawers stay mounted with pointer-events off, so skip anything inert.
   for (const element of document.querySelectorAll<HTMLElement>('[role="dialog"], [role="alertdialog"], [aria-modal="true"]')) {
     if (element.dataset.state === 'closed' || window.getComputedStyle(element).pointerEvents === 'none') {
       continue
     }
-    return true
+    count += 1
   }
-  return false
+  return count
+}
+
+/** Any open dialog, drawer, viewer or full-screen editor owns the keyboard while it is up. */
+export function hasOpenDialog() {
+  return openDialogCount() > 0
 }
 
 /** Does the key press match a "Mod+Shift+K" chord? Mod is ⌘ on Apple devices and Ctrl elsewhere. */
@@ -56,6 +62,19 @@ export function useHotkey(keys: string, handler: (event: KeyboardEvent) => void,
   }, [enabled, keys])
 }
 
+/**
+ * Blur the focused text field so it commits what is typed (a tag input adds its text on blur) before a save reads the
+ * state. The returned function puts focus back after the save, unless something else took it meanwhile.
+ */
+export function commitFocusedField() {
+  const active = document.activeElement
+  const typing = active instanceof HTMLElement && isTypingTarget({ target: active }) ? active : null
+  typing?.blur()
+  return () => {
+    if (typing?.isConnected && (!document.activeElement || document.activeElement === document.body)) typing.focus({ preventScroll: true })
+  }
+}
+
 /** Save a page after the focused field commits; dialogs and the chat dock own their own shortcuts. */
 export function usePageSaveShortcut(onSave: (() => void) | undefined, saving = false) {
   const saveRef = useRef(onSave)
@@ -75,14 +94,12 @@ export function usePageSaveShortcut(onSave: (() => void) | undefined, saving = f
       if (event.defaultPrevented || (event.target instanceof Element && event.target.closest('[data-chat-dock]')) || hasOpenDialog()) return
       event.preventDefault()
       if (event.repeat || savingRef.current || timerRef.current !== null) return
-      const active = document.activeElement
-      const typing = active instanceof HTMLElement && isTypingTarget({ target: active }) ? active : null
-      typing?.blur()
+      const restoreFocus = commitFocusedField()
       timerRef.current = window.setTimeout(() => {
         timerRef.current = null
         if (!savingRef.current && !hasOpenDialog()) saveRef.current?.()
         // The blur only commits the field: typing continues there unless something else took focus.
-        if (typing?.isConnected && (!document.activeElement || document.activeElement === document.body)) typing.focus({ preventScroll: true })
+        restoreFocus()
       }, 0)
     }
     document.addEventListener('keydown', handleKeyDown)

@@ -369,7 +369,7 @@ Dialogs are for short jobs: a question, a name, a choice, a small form. An edito
   surface: viewer, media library, split editors). There is no free width.
 - Header: `title` says what the dialog does, `description` only carries the data it acts on (a count, a path, a name) or
   a consequence the user must know (what is deleted or kept), `status` holds a state chip (linked, synced). No switches, menus or buttons in the header; they go in
-  the body or the footer.
+  the body or the footer. An editor dialog may make its `title` the item's name field (`EditorTitleInput`), as editor pages do.
 - Footer (`EditorFooter`): Delete in words on the left (asks first), the editor's other actions, then on the right the
   unsaved status (`Ctrl S`), Cancel and the primary action as a verb (저장 · 만들기 · 불러오기). Footer keys are words
   without icons; everywhere else see "Icon or words, never both" below.
@@ -377,7 +377,9 @@ Dialogs are for short jobs: a question, a name, a choice, a small form. An edito
   section list), so the frame does not jump.
 
 ### Editor pages (`EditorPage`, `FloatingSaveBar`)
-A large editor (chat profile, appearance setting, lorebook) is a page with its own address, not a dialog.
+A large editor (chat profile, lorebook) is a page with its own address, not a dialog. The character library's
+appearance setting is the exception: it opens as an `xl` dialog over the library list (its address is the list's
+`setting` / `new` parameter), so the list keeps its scroll position and card size.
 - `EditorPage` (`components/common/editor-page`): the path back (`crumbs`), the title with `status` chips and `actions`
   (one `⋯` menu), an optional `nav` (`EditorSectionNav`: each section's icon and name, with a mark where input is
   needed; a drawer on a phone) and the `saveBar`. Ctrl/⌘ S (`usePageSaveShortcut`) commits the focused field, then
@@ -431,7 +433,8 @@ A large editor (chat profile, appearance setting, lorebook) is a page with its o
   focus (always on touch screens). `menu` adds the context menu and a ⋯ key.
 - Controls on the image are `variant="overlay"` Buttons / IconButtons and `Badge variant="overlay"`. A control that
   shows only on hover goes in `OverlayCardHoverOnly` (`shown` keeps it up), never an opacity class on the button.
-- Selection is a primary ring around the card. Use `MediaCard` for captions below the media and inline strip chips.
+- Selection, the open card and focus are a primary ring drawn inside the card edge, above the picture, so a scrolling
+  grid or dialog never clips them and the media never covers them. Use `MediaCard` for captions below the media and inline strip chips.
 
 ### Button variants
 | Variant | Use | Look |

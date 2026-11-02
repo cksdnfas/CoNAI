@@ -11,7 +11,7 @@ function leavesSetting(current: Location, next: Location) {
   return before.get('setting') !== after.get('setting') || before.get('new') !== after.get('new')
 }
 
-/** The panel and full editor share one draft and one guard; expanding never discards edits. */
+/** The setting dialog's unsaved draft asks before the URL leaves the setting (close, stepping to another, back). */
 export function useCharacterSettingGuard(editor: CharacterSettingEditorState, canEdit: boolean) {
   const { t } = useI18n()
   const { baseRef, deletedRef } = editor

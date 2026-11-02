@@ -15,12 +15,15 @@ const FACET_CHOICE_LIMIT = 30
 /** Folders listed (and accepted as choices); the open folder's path, its subfolders and the draft's folder come first. */
 const FOLDER_LIMIT = 300
 
+/** Settings listed (and accepted as choices): the latest loaded ones, as many as the paged list's largest page held. */
+const SETTING_LIMIT = 200
+
 /**
- * Connects 캐릭터 라이브러리 to a chat: it reads the open folder (path, subfolders, one page of settings with their
- * revisions) and the open editor, moves between folders and settings, fills the editor's draft without saving, and
- * saves, deletes or arranges folders through review cards with the person's own session.
+ * Connects 캐릭터 라이브러리 to a chat: it reads the open folder (path, subfolders, the loaded settings with their
+ * revisions, more on request) and the open editor, moves between folders and settings, fills the editor's draft without
+ * saving, and saves, deletes or arranges folders through review cards with the person's own session.
  */
-export function useCharacterLibraryChatPage({ folders, folderId, path, subfolders, query, settingsPage, offset, editor, canEdit, editorTab, fullEditor, setEditorTab, openFolder, search, openSetting, newSetting, createFolder, renameFolder, moveFolder, sort, favoriteOnly, filters, facets, setListView, bulk }: {
+export function useCharacterLibraryChatPage({ folders, folderId, path, subfolders, query, settings, loadMore, editor, canEdit, editorTab, setEditorTab, openFolder, search, openSetting, newSetting, createFolder, renameFolder, moveFolder, sort, favoriteOnly, filters, facets, setListView, bulk }: {
   sort: CharacterSettingSort
   favoriteOnly: boolean
   filters: CharacterSettingFilters
@@ -32,15 +35,16 @@ export function useCharacterLibraryChatPage({ folders, folderId, path, subfolder
   path: CharacterFolder[]
   subfolders: CharacterFolder[]
   query: string
-  settingsPage: CharacterSettingPage | undefined
-  offset: number
+  /** The settings loaded in the list so far (undefined until the first batch lands). */
+  settings: CharacterSettingPage | undefined
+  /** Loads the list's next batch; null when everything is loaded. */
+  loadMore: (() => Promise<unknown>) | null
   editor: CharacterSettingEditorState
   canEdit: boolean
   editorTab: CharacterAppearanceTab
-  fullEditor: boolean
   setEditorTab: (tab: CharacterAppearanceTab) => void
-  openFolder: (folderId: number | null, offset?: number) => void
-  search: (query: string, offset?: number) => void
+  openFolder: (folderId: number | null) => void
+  search: (query: string) => void
   openSetting: (settingId: number) => void
   newSetting: (folderId: number | null) => void
   createFolder: (parentId: number | null, name: string) => Promise<unknown>
@@ -56,10 +60,10 @@ export function useCharacterLibraryChatPage({ folders, folderId, path, subfolder
   const listedIds = [...new Set([...pinned.filter((id): id is number => id !== null && byId.has(id)), ...folders.map((folder) => folder.id)])].slice(0, FOLDER_LIMIT)
   const listed = listedIds.map((id) => byId.get(id)!)
   const folderChoice = { ...pageChoice([0, ...listedIds]), description: '0: the top level; one of data.folders' }
-  const offsetSchema = { ...pageNumber(0, undefined, true), description: 'First item of the settings page (multiples of the page size)' }
   const hashSchema = { ...pageText(128), description: 'Library composite hash; empty clears' }
   const folderName = pageText(CHAT_PROFILE_TEXT_LIMITS.name)
-  const listedSettingIds = settingsPage?.items.map((setting) => setting.id) ?? []
+  const listedSettings = settings?.items.slice(-SETTING_LIMIT) ?? []
+  const listedSettingIds = listedSettings.map((setting) => setting.id)
 
   const sectionText = pageText(CHAT_PROFILE_TEXT_LIMITS.text)
   const draftSchema = pageObject({
@@ -82,7 +86,7 @@ export function useCharacterLibraryChatPage({ folders, folderId, path, subfolder
     dirty: editor.dirty,
     fields: [],
     data: {
-      editor: { open: editor.open, mode: editor.open ? fullEditor ? 'full' : 'panel' : null, tab: editor.open && !fullEditor ? editorTab : null, busy: editor.busy },
+      editor: { open: editor.open, tab: editor.open ? editorTab : null, busy: editor.busy },
       view: query ? 'search' : favoriteOnly || Object.keys(filters).length ? 'filtered' : 'folder',
       query,
       sort,
@@ -93,11 +97,11 @@ export function useCharacterLibraryChatPage({ folders, folderId, path, subfolder
       subfolders: query ? [] : subfolders.slice(0, FOLDER_LIMIT).map((folder) => ({ id: folder.id, name: folder.name, settingCount: folder.settingCount })),
       folders: listed.map((folder) => ({ id: folder.id, name: folder.name, parentId: folder.parentId ?? 0 })),
       foldersTotal: folders.length,
-      settings: settingsPage ? {
-        offset,
-        total: settingsPage.total,
-        hasMore: settingsPage.hasMore,
-        items: settingsPage.items.map((setting) => ({ id: setting.id, name: setting.name, folderId: setting.folderId ?? 0, revision: setting.revision, favorite: setting.favorite, linkedProfileCount: setting.linkedProfileCount, hasReference: Boolean(setting.referenceHash), hasAvatar: Boolean(setting.avatarHash) })),
+      settings: settings ? {
+        total: settings.total,
+        hasMore: settings.hasMore,
+        offset: settings.items.length - listedSettings.length,
+        items: listedSettings.map((setting) => ({ id: setting.id, name: setting.name, folderId: setting.folderId ?? 0, revision: setting.revision, favorite: setting.favorite, linkedProfileCount: setting.linkedProfileCount, hasReference: Boolean(setting.referenceHash), hasAvatar: Boolean(setting.avatarHash) })),
       } : null,
       selected: !editor.open ? null : !ready ? { ready: false, id: targetSettingId } : {
         ready: true,
@@ -124,10 +128,11 @@ export function useCharacterLibraryChatPage({ folders, folderId, path, subfolder
       },
     } as Record<string, ChatPageData>,
     actions: [
-      pageAction('character.open_folder', t({ ko: '폴더 열기', en: 'Open folder' }), t({ ko: '폴더(0은 최상위)를 열어. offset으로 외형 설정 목록의 다음 쪽을 봐.', en: 'Open a folder (0: top level); offset pages through its settings.' }), pageObject({ folderId: folderChoice, offset: offsetSchema }, ['folderId'])),
-      pageAction('character.search', t({ ko: '외형 설정 검색', en: 'Search settings' }), t({ ko: '라이브러리 전체에서 이름·태그·한국어 태그 이름으로 외형 설정을 찾아. 빈 검색어는 검색을 끝내.', en: 'Find settings by name, tag or Korean tag name across the library; an empty query ends the search.' }), pageObject({ query: pageText(200), offset: offsetSchema }, ['query'])),
+      pageAction('character.open_folder', t({ ko: '폴더 열기', en: 'Open folder' }), t({ ko: '폴더(0은 최상위)를 열어. 외형 설정 목록은 첫 묶음부터 보여.', en: 'Open a folder (0: top level); its settings list starts from the first batch.' }), pageObject({ folderId: folderChoice }, ['folderId'])),
+      pageAction('character.search', t({ ko: '외형 설정 검색', en: 'Search settings' }), t({ ko: '라이브러리 전체에서 이름·태그·한국어 태그 이름으로 외형 설정을 찾아. 빈 검색어는 검색을 끝내.', en: 'Find settings by name, tag or Korean tag name across the library; an empty query ends the search.' }), pageObject({ query: pageText(200) }, ['query'])),
+      ...(loadMore ? [pageAction('character.load_more', t({ ko: '외형 설정 더 불러오기', en: 'Load more settings' }), t({ ko: '목록의 다음 묶음을 불러와. data.settings.items는 마지막으로 불러온 최대 {limit}개이고 offset은 그 첫 설정의 위치야. hasMore가 false면 다 불러온 거야.', en: 'Load the next batch; data.settings.items holds the latest {limit} loaded settings at most and offset is the first one’s position. hasMore false means everything is loaded.' }, { limit: SETTING_LIMIT }), pageObject({}))] : []),
       pageAction('character.filter', t({ ko: '목록 필터·정렬', en: 'Filter and sort' }), t({ ko: '정렬, 즐겨찾기만 보기, 태그 필터({차원: [태그]}, data.filterChoices에서 골라. 같은 차원은 하나라도, 차원끼리는 모두)를 바꿔. 필터와 즐겨찾기는 라이브러리 전체에서 찾아. 주어진 항목만 바뀌어.', en: 'Change the sort, favorites-only and tag filters ({dimension: [tags]} from data.filterChoices; any tag of a dimension, all dimensions). Filters look across the whole library; only given fields change.' }), pageObject({ sort: pageChoice(['name', 'updated', 'created', 'created_asc']), favoriteOnly: { type: 'boolean' }, filters: pageObject(Object.fromEntries(['copyright', 'character', 'subject', 'hairColor', 'hairLength', 'hairStyle', 'eyeColor', 'skinColor', 'species', 'outfit'].map((key) => [key, pageArray(pageText(200), 20)]))) })),
-      pageAction('character.open_setting', t({ ko: '외형 설정 열기', en: 'Open setting' }), t({ ko: '외형 설정을 상세 패널로 열어.', en: 'Open a setting in the detail panel.' }), pageObject({ settingId: pageNumber(1, undefined, true) }, ['settingId'])),
+      pageAction('character.open_setting', t({ ko: '외형 설정 열기', en: 'Open setting' }), t({ ko: '외형 설정을 상세 창으로 열어.', en: 'Open a setting in its detail dialog.' }), pageObject({ settingId: pageNumber(1, undefined, true) }, ['settingId'])),
       ...(editor.open && ready ? [pageAction('character.editor_tab', t({ ko: '상세 탭 열기', en: 'Open detail tab' }), t({ ko: '열린 외형 설정의 탭을 바꿔. 초안은 그대로 둬.', en: 'Switch the open setting’s tab without changing the draft.' }), pageObject({ tab: pageChoice(['tags', 'images', 'expressions', 'candidates']) }, ['tab']))] : []),
       ...(canEdit ? [
         pageAction('character.folder_create', t({ ko: '폴더 만들기', en: 'Create folder' }), t({ ko: '상위 폴더(0은 최상위) 안에 폴더를 만들어. 같은 이름의 형제 폴더는 거절돼.', en: 'Create a folder inside a parent (0: top level); duplicate sibling names are refused.' }), pageObject({ name: folderName, parentId: folderChoice }, ['name', 'parentId']), 'save'),
@@ -161,10 +166,15 @@ export function useCharacterLibraryChatPage({ folders, folderId, path, subfolder
     apply: () => {},
     applyAction: async (id, args, assertCurrent): Promise<WorkflowUndo | void> => {
       assertCurrent()
-      if (editor.isBusy() && !['character.search', 'character.filter'].includes(id)) throw new Error(t({ ko: '이미지 작업이나 저장이 끝난 뒤 다시 해줘.', en: 'Wait for the image operation or save to finish.' }))
+      if (editor.isBusy() && !['character.search', 'character.filter', 'character.load_more'].includes(id)) throw new Error(t({ ko: '이미지 작업이나 저장이 끝난 뒤 다시 해줘.', en: 'Wait for the image operation or save to finish.' }))
       const folderArg = (value: ChatPageData | undefined) => (Number(value) > 0 ? Number(value) : null)
-      if (id === 'character.open_folder') { openFolder(folderArg(args.folderId), Number(args.offset ?? 0)); return }
-      if (id === 'character.search') { search(String(args.query ?? ''), Number(args.offset ?? 0)); return }
+      if (id === 'character.open_folder') { openFolder(folderArg(args.folderId)); return }
+      if (id === 'character.search') { search(String(args.query ?? '')); return }
+      if (id === 'character.load_more') {
+        if (!loadMore) throw new Error('목록을 이미 다 불러왔어.')
+        await loadMore()
+        return
+      }
       if (id === 'character.open_setting') { openSetting(Number(args.settingId)); return }
       if (id === 'character.new_setting') { newSetting(folderArg(args.folderId)); return }
       if (id === 'character.filter') {

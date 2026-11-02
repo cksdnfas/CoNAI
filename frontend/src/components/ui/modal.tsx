@@ -9,6 +9,7 @@ import { stopAtPortalEdge } from '@/lib/portal-events'
 import { cn } from '@/lib/utils'
 import { useOverlayBackClose } from './use-overlay-back-close'
 import { lockBodyScroll } from '@/lib/body-scroll-lock'
+import { commitFocusedField } from '@/lib/keyboard-shortcut'
 import { useUnloadGuard } from '@/lib/use-unload-guard'
 
 interface ModalProps extends PropsWithChildren {
@@ -241,9 +242,17 @@ function Modal({ open, title, description, status, headerContent, leading, onClo
 
   const handleContentKeyDown = useCallback((event: ReactKeyboardEvent<HTMLDivElement>) => {
     if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === 's') {
+      // A dialog opened inside this one already took it: only the innermost dialog saves.
+      if (event.defaultPrevented) return
       // Always keep the browser's "save page" away from an open editor; save only when it can.
       event.preventDefault()
-      if (!event.repeat) onSaveRef.current?.()
+      if (event.repeat || !onSaveRef.current) return
+      // The focused field commits first, so the save gets what was typed in it.
+      const restoreFocus = commitFocusedField()
+      window.setTimeout(() => {
+        onSaveRef.current?.()
+        restoreFocus()
+      }, 0)
       return
     }
 

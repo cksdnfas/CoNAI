@@ -20,6 +20,7 @@ import { RowGroup } from '@/components/ui/row-group'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { CharacterFolderPickerModal, CharacterFolderSidebar } from '@/features/characters/components/character-folder-nav'
 import { CharacterSettingGrid } from '@/features/characters/components/character-setting-grid'
+import { ListPager } from '@/components/common/list-pager'
 import { characterThumbnailUrl, folderSubtreeIds } from '@/features/characters/character-library-shared'
 import { CHARACTER_SETTINGS_PAGE_SIZE } from '@/lib/api-character-library'
 import { useChatAdminLinks } from '@/features/codex-chat/chat-admin-location'
@@ -308,7 +309,8 @@ export function ChatSettingsProfiles() {
     >
       <LibraryFolderContent folderMissing={folderMissing} subfolders={subfolders} query={query} rootLabel={t({ ko: '최상위', en: 'Top level' })} onOpen={openFolder} getMenu={folderMenu}>
         <RowGroup heading={t({ ko: '프로필', en: 'Profiles' })} count={profilesQuery.data?.total}>
-          <CharacterSettingGrid query={profilesQuery} page={page} onPageChange={(next) => update({ page: next ? String(next) : null })}
+          <CharacterSettingGrid items={profilesQuery.data?.items} pending={profilesQuery.isPending} error={profilesQuery.isError ? profilesQuery.error : null} onRetry={() => void profilesQuery.refetch()} retrying={profilesQuery.isFetching}
+            footer={<ListPager className="pt-3" hasPrevious={page > 0} hasNext={Boolean(profilesQuery.data?.hasMore)} onPrevious={() => update({ page: page > 1 ? String(page - 1) : null })} onNext={() => update({ page: String(page + 1) })} />}
             errorTitle={t({ ko: '프로필을 불러오지 못했어', en: 'Could not load profiles' })}
             empty={<EmptyState icon={UserRound} title={query ? t({ ko: '맞는 프로필이 없어', en: 'No matching profiles' }) : t({ ko: '여기엔 프로필이 없어', en: 'No profiles here' })} />}
             renderSetting={(profile) => <div key={profile.id} className="min-w-0"

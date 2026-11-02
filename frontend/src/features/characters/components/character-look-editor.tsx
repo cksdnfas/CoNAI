@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { CHARACTER_APPEARANCE_SECTION_KEYS, CHAT_PROFILE_TEXT_LIMITS, composeCharacterAppearance, joinPromptParts, tokenizePrompt } from '@conai/shared'
 import { ArrowUpToLine, Copy, ExternalLink, ImageIcon, ListTree, Pencil, Plus, Sparkles, Trash2, UserSearch, Wand2 } from 'lucide-react'
 import { NameDialog } from '@/components/common/entry-dialogs'
@@ -48,14 +48,13 @@ const hasLook = (sections: CharacterAppearanceSections, outfits: CharacterOutfit
  * reference image's auto tags, an AI draft (administrators) or a re-sort of the current tags, all unsaved. Copy takes
  * the composed text profiles and generation read.
  */
-export function CharacterLookEditor({ editor, editable, generation, busy, onBusyChange, warning = null, note = null }: {
+export function CharacterLookEditor({ editor, editable, generation, busy, onBusyChange, warning = null }: {
   editor: CharacterSettingEditorState
   editable: boolean
   generation: boolean
   busy: boolean
   onBusyChange: (busy: boolean) => void
   warning?: string | null
-  note?: ReactNode
 }) {
   const { t } = useI18n()
   const confirm = useConfirm()
@@ -194,7 +193,6 @@ export function CharacterLookEditor({ editor, editable, generation, busy, onBusy
       <OutfitList outfits={draft.outfits} editable={editable} disabled={filling} onChange={setOutfits} />
       {tooLong >= 0 ? <p role="alert" className="text-xs text-destructive">{t({ ko: '항목과 \'{outfit}\' 의상을 합친 태그가 {limit}자를 넘어서 저장되지 않아.', en: 'Sections plus the “{outfit}” outfit exceed {limit} characters and cannot be saved.' }, { outfit: draft.outfits[tooLong]?.name ?? t({ ko: '기본', en: 'Default' }), limit: CHAT_PROFILE_TEXT_LIMITS.text })}</p> : null}
       {warning ? <p role="note" className="text-xs text-warning">{warning}</p> : null}
-      {note ? <p className="text-xs text-muted-foreground">{note}</p> : null}
       {picking ? (
         <DanbooruCharacterPicker
           initialQuery={draft.name}

@@ -60,9 +60,12 @@ export function OverlayCard({ media, mediaClassName = 'aspect-[3/4]', label, tit
       data-current={current ? 'true' : undefined}
       className={cn(
         'group/overlay-card relative isolate min-w-0 overflow-hidden rounded-md bg-fill transition-shadow hover:shadow-elevation-2',
-        'has-[>button:focus-visible]:outline-2 has-[>button:focus-visible]:outline-offset-2 has-[>button:focus-visible]:outline-ring',
-        selected && 'ring-2 ring-primary ring-offset-2 ring-offset-background',
-        current && selected === undefined && 'outline-2 outline-primary/60 outline-offset-2',
+        // Focus, selection and the open card are an inset ring on a layer above the picture, so a scrolling grid never
+        // clips them and the positioned media button never covers them (the card's own outline paints under it).
+        'after:pointer-events-none after:absolute after:inset-0 after:rounded-md',
+        'has-[>button:focus-visible]:after:ring-2 has-[>button:focus-visible]:after:ring-inset has-[>button:focus-visible]:after:ring-ring',
+        selected && 'after:ring-2 after:ring-inset after:ring-primary',
+        current && selected === undefined && 'after:ring-2 after:ring-inset after:ring-primary/60',
         className,
       )}
     >

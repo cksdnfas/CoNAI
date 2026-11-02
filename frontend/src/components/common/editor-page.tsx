@@ -25,7 +25,7 @@ export type EditorSectionEntry<T extends string> = {
 }
 
 /** The page heading as a field: the name is edited in place (a new item starts empty, showing its placeholder). */
-export function EditorTitleInput({ value, onChange, label, placeholder, maxLength, readOnly = false, invalid = false }: {
+export function EditorTitleInput({ value, onChange, label, placeholder, maxLength, readOnly = false, invalid = false, as: Heading = 'h1' }: {
   value: string
   onChange: (value: string) => void
   label: string
@@ -33,9 +33,11 @@ export function EditorTitleInput({ value, onChange, label, placeholder, maxLengt
   maxLength?: number
   readOnly?: boolean
   invalid?: boolean
+  /** `span` inside a heading that already exists (a dialog's title). */
+  as?: 'h1' | 'span'
 }) {
   return (
-    <h1 className="flex min-w-0 flex-1 basis-56">
+    <Heading className="flex min-w-0 flex-1 basis-56">
       <input
         value={value}
         onChange={(event) => onChange(event.target.value)}
@@ -50,7 +52,7 @@ export function EditorTitleInput({ value, onChange, label, placeholder, maxLengt
           'aria-invalid:ring-2 aria-invalid:ring-destructive/40',
         )}
       />
-    </h1>
+    </Heading>
   )
 }
 
