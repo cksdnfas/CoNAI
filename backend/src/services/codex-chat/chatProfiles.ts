@@ -85,10 +85,10 @@ export type ChatPromptSection = {
 }
 
 export const DEFAULT_CHAT_SUMMARY_PROMPT = [
-  '아래는 지금까지의 대화 요약과, 그 뒤에 이어진 대화야.',
-  '두 내용을 합쳐서 이후 대화에 필요한 정보만 남긴 새 요약을 써줘.',
-  '인물·관계·약속·설정·진행 중인 일·사용자의 선호, 그리고 이미지나 기록 ID처럼 다시 쓸 값은 빠뜨리지 마.',
-  '요약만 출력하고 다른 말은 붙이지 마.',
+  'Below are the summary of the conversation so far and the conversation that followed it.',
+  'Merge them into one new summary that keeps only what the rest of the conversation needs.',
+  "Keep the people, relationships, promises, settings, ongoing matters and the user's preferences, and values to reuse later such as image or record IDs.",
+  'Write the summary in the language the conversation uses. Output only the summary, nothing else.',
 ].join('\n')
 
 /** `llm`: an API LLM connection driven by CoNAI. `codex`: the server Codex CLI, which keeps its own context. */

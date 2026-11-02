@@ -10,8 +10,8 @@ import { resolveChatCompletionTarget, streamChatCompletion } from './llmChatComp
 import { serverContextLimit, summaryContextRoom } from './serverContextLimit'
 
 const TITLE_PROMPT = [
-  '아래는 채팅의 첫 대화야. 채팅 목록에서 이 채팅을 알아볼 수 있게, 대화 내용을 요약한 제목을 한 줄로 써.',
-  '대화에 쓰인 언어로 짧은 명사구로 쓰고, 따옴표·마침표·이모지·설명 없이 제목만 써.',
+  'Below is the first exchange of a chat. Write a one-line title that sums it up, so the chat can be recognised in the chat list.',
+  'Write a short noun phrase in the language the conversation uses: the title only, without quotes, a final period, emoji or explanation.',
 ].join('\n')
 
 /** The model's answer as a title: its first line, without a "제목:" label, heading marks, quotes or a closing period. */
@@ -46,7 +46,7 @@ export function titleAfterFirstReply(profile: ChatProfile, thread: Pick<CodexCha
     const controller = new AbortController()
     const generation = profileGenerationOptions(profile)
     const target = resolveChatCompletionTarget(model.providerName, { model: model.model })
-    const messages = [{ role: 'system' as const, content: TITLE_PROMPT }, { role: 'user' as const, content: `## 사용자\n${userText}\n\n## 답변\n${answer}` }]
+    const messages = [{ role: 'system' as const, content: TITLE_PROMPT }, { role: 'user' as const, content: `## User\n${userText}\n\n## Reply\n${answer}` }]
     const limit = await serverContextLimit(target)
     if (!isCurrent()) return
     const room = summaryContextRoom(limit, messages)

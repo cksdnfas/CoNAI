@@ -426,7 +426,7 @@ test('judge presets: no-judge parity, original text, tool steering, fallback, lo
     const firstChat = calls.find((call) => call.url.endsWith('/chat/completions'))!
     // The tool list stays the same every turn (the prompt cache); a withheld tool is named in the directive instead.
     assert.equal(toolNames(firstChat.body).includes('save_lore'), true, 'the tool list does not change with the verdict')
-    assert.match(lastUserText(firstChat.body), /이 도구를 쓰지 마: save_lore/, 'a confident no withholds save_lore')
+    assert.match(lastUserText(firstChat.body), /Do not use these tools in this reply: save_lore/, 'a confident no withholds save_lore')
     const judgeCall = calls.find((call) => call.url.endsWith('/v1/systemone'))!
     assert.equal(judgeCall.url, 'https://judge.invalid/v1/systemone')
     assert.deepEqual(judgeCall.body.questions.lore, { type: 'noul', instructions: 'Lasting fact?' })
@@ -465,9 +465,9 @@ test('judge presets: no-judge parity, original text, tool steering, fallback, lo
     await LlmChatService.sendMessage(requester, thread, '오늘 날씨 좋다', () => {}, undefined, [flag.id])
     const chats = calls.filter((call) => call.url.endsWith('/chat/completions'))
     const first = lastUserText(chats[0].body)
-    assert.match(first, /이 도구를 쓰지 마: save_lore/)
-    assert.match(first, /\[우선순위\]/, 'the judge says the flag wins')
-    assert.ok(first.indexOf('[사용자 지시') < first.indexOf('[판단]'))
+    assert.match(first, /Do not use these tools in this reply: save_lore/)
+    assert.match(first, /\[Priority\]/, 'the judge says the flag wins')
+    assert.ok(first.indexOf('[User instructions') < first.indexOf('[Judge]'))
     const toolResult = (chats[1].body.messages as any[]).find((message) => message.role === 'tool')
     assert.ok(toolResult, 'the tool call ran')
     assert.doesNotMatch(JSON.stringify(toolResult.content), /not available in this reply/)
@@ -504,7 +504,7 @@ test('judge presets: no-judge parity, original text, tool steering, fallback, lo
     const thread = threadOf(profile.id)
     await LlmChatService.sendMessage(requester, thread, '바다 사진 보여줘', () => {})
     const chat = calls.find((call) => call.url.endsWith('/chat/completions'))!
-    assert.ok(!lastUserText(chat.body).includes('[판단]'), 'no directive for a tool the profile cannot offer')
+    assert.doesNotMatch(lastUserText(chat.body), /\[판단\]|\[Judge\]/, 'no directive for a tool the profile cannot offer')
     assert.equal(ChatJudgeLogStore.list({ threadId: thread.id }).length, 0)
     assert.equal(calls.filter((call) => !call.url.endsWith('/chat/completions')).length, 0)
   })
@@ -547,7 +547,7 @@ test('judge presets: no-judge parity, original text, tool steering, fallback, lo
     let chats = 0
     route(s, (body) => (body.questions.lore ? { lore: { type: 'noul', noul: 0.5 } } : { 'follow-up': { type: 'noul', noul: 0.95 } }), (body) => {
       chats += 1
-      return reply(lastUserText(body).startsWith('[후속]') ? '아 그리고 하나 더!' : '좋아.')
+      return reply(lastUserText(body).startsWith('[Follow-up]') ? '아 그리고 하나 더!' : '좋아.')
     })
     const thread = threadOf(judged.id)
     const { wakeChatRoom } = await import('../src/services/codex-chat/chatRoomWake')

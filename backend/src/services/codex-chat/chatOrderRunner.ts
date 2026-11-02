@@ -41,7 +41,7 @@ function orderTranscript(window: CodexChatMessageRecord[], nameOf: (message: Cod
   return window.map((message) => {
     const calls = message.tool_calls.filter((call) => call.status === 'completed').map((call) => `${call.tool} ${JSON.stringify(call.arguments ?? {}).slice(0, TRANSCRIPT_TOOL_ARGUMENTS)}`)
     const media = [...new Set([...(message.mediaAttachments ?? []).map((item) => item.compositeHash), ...message.tool_calls.flatMap((call) => call.compositeHashes)])]
-    return [`[message_id=${message.id}] ${nameOf(message)}: ${message.content.trim()}`, ...calls.map((call) => `(도구: ${call})`), ...(media.length ? [`(이미지: ${media.map((hash) => `image:${hash}`).join(', ')})`] : [])].join('\n')
+    return [`[message_id=${message.id}] ${nameOf(message)}: ${message.content.trim()}`, ...calls.map((call) => `(tool: ${call})`), ...(media.length ? [`(images: ${media.map((hash) => `image:${hash}`).join(', ')})`] : [])].join('\n')
   }).join('\n\n')
 }
 
@@ -98,10 +98,10 @@ export async function runChatOrder(requester: McpRequester, threadId: number, me
       const window = group ? sendable.slice(-groupLimitsOf(thread).window) : splitTurns(sendable).slice(-resolveContextConfig(thread, profile).contextTurns).flat()
       const user = userPersonaForThread(thread)
       const nameOf = (message: CodexChatMessageRecord) => message.role === 'user' ? user.name : (group && message.speaker_profile_id ? ChatProfileStore.find(message.speaker_profile_id)?.name : profile.name) ?? '(나간 참가자)'
-      const summary = !summarized && thread.summary?.trim() ? `## 그 전의 요약\n${thread.summary.trim()}` : ''
+      const summary = !summarized && thread.summary?.trim() ? `## Summary of what came before\n${thread.summary.trim()}` : ''
       result = await runCodexOrderTurn({
         chatContext: context, requester, threadId, profile, target, window, signal: run.signal, emit,
-        buildInput: (reference) => [reference, '[대화 기록] 이 채팅에서 실제로 나눈 대화야. 마지막 메시지가 지시를 받은 네 답변이야.', summary, orderTranscript(window, nameOf), '[/대화 기록]', directive].filter(Boolean).join('\n\n'),
+        buildInput: (reference) => [reference, '[Conversation record] The conversation as it took place in this chat. The last message is your reply the instructions are about.', summary, orderTranscript(window, nameOf), '[/Conversation record]', directive].filter(Boolean).join('\n\n'),
       })
     } else {
       const attachmentTexts = await inlineTextsForChat(profile, requester.accountId, history)

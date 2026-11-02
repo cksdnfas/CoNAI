@@ -53,9 +53,9 @@ test('assistant agent: proposal outcomes, page operation records, task plan and 
     ChatProposalStore.markSaved(saved.id, 42)
     ChatProposalStore.markDismissed(dismissed.id)
     const note = proposalOutcomeNote(threadId)
-    assert.match(note, new RegExp(`#${saved.id} 새 프로필 "Sera": 저장됨 \\(id 42\\)`))
-    assert.match(note, new RegExp(`#${dismissed.id} .*무시됨`))
-    assert.match(note, new RegExp(`#${open.id} .*아직 대기`))
+    assert.match(note, new RegExp(`#${saved.id} 새 프로필 "Sera": saved \\(id 42\\)`))
+    assert.match(note, new RegExp(`#${dismissed.id} .*dismissed`))
+    assert.match(note, new RegExp(`#${open.id} .*still pending`))
   })
 
   await t.test('appearance can be proposed with a new profile', () => {

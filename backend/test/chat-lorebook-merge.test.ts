@@ -509,7 +509,7 @@ test('lorebook merge: chat book end of life (delete, keep, merge), duplicates, d
     assert.ok(deadlines.includes(1800000), 'the connection supplies the request deadline')
     assert.ok(!deadlines.includes(600000), 'the merge adds no shorter overall deadline')
     assert.equal(first.messages[0].content, '짧게 써.', 'the rewritten instruction replaces the default')
-    assert.match(first.messages[1].content, /^## A \(채팅 책\)\n제목: 먹물\n키워드: 고양이\n\n사흘째 안 보인다\.\n\n## B \(대상 책\)\n제목: 먹물\n키워드: 먹물\n\n검은 고양이\.$/)
+    assert.match(first.messages[1].content, /^## A \(chat book\)\nTitle: 먹물\nKeywords: 고양이\n\n사흘째 안 보인다\.\n\n## B \(target book\)\nTitle: 먹물\nKeywords: 먹물\n\n검은 고양이\.$/)
     assert.deepEqual(book(target.id).entries, before.entries, 'drafts are not saved')
     assert.equal(book(target.id).revision, before.revision)
     assert.equal(book(target.id).updatedDate, before.updatedDate)
@@ -601,11 +601,11 @@ test('lorebook merge: chat book end of life (delete, keep, merge), duplicates, d
     const thread = CodexChatStore.findThreadById(loreThread)!
     const request = (tools: Array<{ type: 'function'; function: { name: string } }>) => buildChatMessages({ profile: ChatProfileStore.find(profile.id)!, thread, messages: CodexChatStore.listMessages(loreThread), config: resolveContextConfig(thread, ChatProfileStore.find(profile.id)!), tools: tools as never })
     const sent = request([{ type: 'function', function: { name: 'save_lore' } }])
-    const line = '(거절된 로어 제안: 반지 — 다시 제안하지 마)'
+    const line = '(Lore proposals the user rejected: 반지 — do not propose them again)'
     const users = sent.filter((message) => message.role === 'user').map((message) => String(message.content))
-    assert.ok(users.some((content) => content.includes(`${line}\n[/참고 설정]`)), JSON.stringify(sent))
-    assert.ok(!sent.filter((message) => message.role === 'system').some((message) => String(message.content).includes('거절된 로어 제안')), 'never in the system prompt')
-    assert.ok(!JSON.stringify(request([])).includes('거절된 로어 제안'), 'only when save_lore is offered')
+    assert.ok(users.some((content) => content.includes(`${line}\n[/Reference]`)), JSON.stringify(sent))
+    assert.ok(!sent.filter((message) => message.role === 'system').some((message) => String(message.content).includes('Lore proposals the user rejected')), 'never in the system prompt')
+    assert.ok(!JSON.stringify(request([])).includes('Lore proposals the user rejected'), 'only when save_lore is offered')
   })
 
   await t.test('a profile can turn lore proposals off', async () => {
@@ -727,7 +727,7 @@ test('lorebook merge: chat book end of life (delete, keep, merge), duplicates, d
     // A replacement saved right away; undo brings the old entry back.
     const fog = proposalOf(await propose('a3', { title: '안개', keys: ['안개'], content: '안개 낀 날은 종을 친다.' }))
     const replaced = await propose('a4', { title: '안개', keys: ['안개'], content: '안개 낀 날은 뿔나팔을 분다.' })
-    assert.match(textOf(replaced), /같은 제목의 항목을 고쳤어/)
+    assert.match(textOf(replaced), /It updated the entry with the same title/)
     const replacement = proposalOf(replaced)
     assert.equal(replacement.replaces, OwnedLorebookStore.chatBookOf(threadId)!.entries[0].id)
     assert.equal(OwnedLorebookStore.chatBookOf(threadId)!.entries[0].content, '안개 낀 날은 뿔나팔을 분다.')

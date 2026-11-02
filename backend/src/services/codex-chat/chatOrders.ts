@@ -14,11 +14,11 @@ export type ChatOrderKind = (typeof CHAT_ORDER_KINDS)[number]
 
 /** What the model is asked to do about the reply, and the call that does it. */
 const ORDERS: Record<ChatOrderKind, { task: string; done: (call: Pick<ChatToolCall, 'tool'>) => boolean }> = {
-  image: { task: '그 답변의 장면을 이미지 생성 도구로 그려. 그 답변의 인물·옷차림·장소·분위기를 프롬프트에 담아.', done: (call) => drawsImage(call.tool) },
-  redraw: { task: '그 답변에 붙은 이미지를 이미지 생성 도구로 다시 그려. 같은 장면을 다른 구도나 표정으로 그려.', done: (call) => drawsImage(call.tool) },
-  audio: { task: '그 답변의 대사나 그 장면의 소리를 order_audio로 만들어.', done: (call) => call.tool === 'order_audio' },
-  lore: { task: '그 답변에서 나중에도 기억해 둘 사실을 골라 save_lore로 로어 항목을 남겨.', done: (call) => call.tool === 'save_lore' },
-  choices: { task: '그 답변의 상황에서 사용자가 고를 다음 행동 몇 가지를 offer_choices로 내.', done: (call) => call.tool === 'offer_choices' },
+  image: { task: 'Draw the scene of that reply with the image generation tool. Put the people, clothing, place and mood of that reply into the prompt.', done: (call) => drawsImage(call.tool) },
+  redraw: { task: 'Redraw the image attached to that reply with the image generation tool: the same scene with a different composition or expression.', done: (call) => drawsImage(call.tool) },
+  audio: { task: 'Make the spoken lines of that reply, or the sound of that scene, with order_audio.', done: (call) => call.tool === 'order_audio' },
+  lore: { task: 'Pick the facts in that reply worth remembering later and save them as lore entries with save_lore.', done: (call) => call.tool === 'save_lore' },
+  choices: { task: 'Offer a few next actions the user could choose in the situation of that reply, with offer_choices.', done: (call) => call.tool === 'offer_choices' },
 }
 
 const AUDIO_TOOLS = new Set(['order_audio', 'retry_audio_order_job'])
@@ -38,9 +38,9 @@ export function parseChatOrderKind(value: unknown): ChatOrderKind {
  */
 export function chatOrderDirective(kind: ChatOrderKind, messageId: number) {
   return [
-    `[사용자 지시: 바로 위 네 답변(message_id=${messageId})에 덧붙일 작업]`,
+    `[User instructions: a job on your reply right above (message_id=${messageId})]`,
     `- ${ORDERS[kind].task}`,
-    '이건 대화의 새 차례가 아니야. 답변 글은 새로 쓰지 말고 필요한 도구만 불러. 도구 결과는 그 답변에 바로 붙어.',
+    'This is not a new turn of the conversation. Do not write new reply text; call only the tools the job needs. Their results attach to that reply.',
   ].join('\n')
 }
 

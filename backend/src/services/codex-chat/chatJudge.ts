@@ -309,13 +309,13 @@ export type JudgedTurn = {
 }
 
 /** Said after the judge's lines when the user's message carries flags or picks. */
-const USER_FIRST_NOTE = '[우선순위] 위 [판단]이 [사용자 지시]·[사용자 선택]과 어긋나면 사용자 쪽을 따라. 사용자 지시가 쓰지 말라는 도구를 요구하면 그 도구를 써.'
+const USER_FIRST_NOTE = '[Priority] When a [Judge] line above conflicts with [User instructions] or [User picks], follow the user. If the user\'s instructions call for a tool a [Judge] line rules out, use that tool.'
 
 /** The judge's lines for the reply: its yes directives, the tools it withholds, and that the user's instructions win. */
 export function judgeDirectiveText(judged: JudgedTurn | null | undefined, withheld: Iterable<string> = []) {
   if (!judged) return ''
   const names = [...withheld]
-  const lines = [judged.directive, names.length > 0 ? `[판단] 이번 답변에서는 이 도구를 쓰지 마: ${names.join(', ')}` : ''].filter(Boolean)
+  const lines = [judged.directive, names.length > 0 ? `[Judge] Do not use these tools in this reply: ${names.join(', ')}` : ''].filter(Boolean)
   if (lines.length > 0 && judged.userInstructed) lines.push(USER_FIRST_NOTE)
   return lines.join('\n')
 }

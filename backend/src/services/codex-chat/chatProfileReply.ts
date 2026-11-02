@@ -20,7 +20,7 @@ export function buildChatProfileReplyMessages(params: {
   // Return the reply as written, without native chat translation or automatic memory updates.
   const leading = buildLeadingMessages({ ...profile, ...(params.translate ? {} : { translationSlotId: null }) }, null, { summaryEnabled: false }, false, lore, user)
   const turns = history ? parseExampleDialogue(history, profile, user) : null
-  const latest = history && !turns ? `${referenceBlock([`## 앞 대화\n${history}`])}\n\n${message}` : message
+  const latest = history && !turns ? `${referenceBlock([`## Earlier conversation\n${history}`])}\n\n${message}` : message
   const conversation = insertDepthBlocks([...(turns ?? []), { role: 'user', content: latest }], depthBlocks(lore, profile.loreDepth, resolveAuthorNote(null, profile, user)))
   return appendUserDirective([...leading, ...conversation], postHistoryText(profile, user))
 }

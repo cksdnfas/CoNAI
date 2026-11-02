@@ -17,7 +17,7 @@ import { loadChatSettings } from '../src/services/codex-chat/chatSettings'
 import { normalizeLorebook } from '../src/services/codex-chat/chatLorebook'
 import type { AttachedLoreBook } from '../src/services/codex-chat/chatLoreContext'
 
-const BLOCK = '[참고 설정]\n카이는 왼손잡이다.\n[/참고 설정]'
+const BLOCK = '[Reference]\n카이는 왼손잡이다.\n[/Reference]'
 
 /** `turns` user/assistant pairs: u1 a1 u2 a2 … */
 function conversation(turns: number): ChatCompletionMessage[] {
@@ -178,21 +178,21 @@ test('a request is: one system message (persona, then lore index + always-on ent
   // The persona prompt leads and does not change with the books or the summary: what a server cached stays valid.
   const persona = String(buildChatMessages({ profile, thread, messages, config: { ...config, summaryEnabled: false }, tools: [], books: [] })[0].content)
   assert.equal(result[0].content, `${persona}\n\n${[
-    '## 로어북 목차',
+    '## Lorebook index',
     '[이 채팅] 바다 약속 · 먹물 실종',
     '[항구 도시 설정] 항구',
-    '(본문은 키워드가 나오면 참고 설정으로 간다.)',
+    '(Entry bodies come in a [Reference] block when their keywords come up.)',
     '',
-    '## 상시 항목',
+    '## Always-on entries',
     '- 바다 약속: 카이는 내일 저녁 바다에서 반지를 받는다.',
     '',
-    '## 지금까지의 대화 요약',
+    '## Conversation summary so far',
     '둘은 친해졌다.',
   ].join('\n')}`, 'pinned memories on the thread are no longer read')
   assert.deepEqual([result[1].content, result[2].content], ['안녕', '반가워'])
   assert.deepEqual([result[3].content, result[4].content], ['[message_id=3; from=user]\n오늘 뭐 해?', '[message_id=4; from=assistant]\n산책'], 'turns up to the summary are left out')
   // A direct chat has no room tools, so no room id either.
-  assert.equal(result[5].content, '[message_id=5; from=user]\n같이 갈까?\n\n[사용자 지시: 이번 메시지에 적용]\n- 짧게 답해')
+  assert.equal(result[5].content, '[message_id=5; from=user]\n같이 갈까?\n\n[User instructions for this message]\n- 짧게 답해')
 })
 
 test('new chats and resets save the filled history around the greeting as ordinary conversation', async (t) => {
@@ -252,7 +252,7 @@ test('new chats and resets save the filled history around the greeting as ordina
     if (engine === 'llm') {
       const run = (options = config, current = thread) => buildChatMessages({ profile: saved, thread: current, messages: messages(), config: options, tools: [], books: [], user: userPersonaOf(user) })
       const sent = run()
-      assert.match(String(sent[0].content), /첫 user\/assistant 대화들은 말투와 형식을 보여주는 예시일 뿐/)
+      assert.match(String(sent[0].content), /first user\/assistant turns right after this system message are examples of tone and format only/)
       assert.deepEqual(sent.slice(1, 3).map(({ content }) => content), ['안녕', '반가워'])
       assert.deepEqual(sent.slice(3, 6).map(({ role, content }) => ({ role, content: String(content).split('\n').slice(1).join('\n') })), expected)
       assert.ok(!JSON.stringify(run({ ...config, contextTurns: 1 })).includes(expected[0].content), 'the saved opening scrolls out of the normal window')
@@ -432,13 +432,13 @@ test('new chats and resets save the filled history around the greeting as ordina
   })
 })
 
-test("a keyword entry of an attached book goes into [참고 설정] at the lore depth, not into the system messages", () => {
+test("a keyword entry of an attached book goes into [Reference] at the lore depth, not into the system messages", () => {
   const thread = { id: 9, summary: null, summary_until_message_id: null, context_turns: null, summary_enabled: null } as unknown as CodexChatThreadRecord
   const messages = [record(1, 'user', '먹물 봤어?'), record(2, 'assistant', '아니'), record(3, 'user', '찾아보자')]
   const config = { contextTurns: 20, contextTokens: null, replyReserveTokens: 2048, summaryEnabled: false, summaryTriggerTurns: 6, summaryPrompt: '요약해' }
   const result = buildChatMessages({ profile, thread, messages, config, tools: [], books })
   assert.ok(!JSON.stringify(result.filter((message) => message.role === 'system')).includes('사흘째'))
-  assert.deepEqual(userContents(result.slice(3)), ['[참고 설정]\n고양이 먹물이 사흘째 안 보인다.\n[/참고 설정]\n\n[message_id=1; from=user]\n먹물 봤어?', '[message_id=3; from=user]\n찾아보자'])
+  assert.deepEqual(userContents(result.slice(3)), ['[Reference]\n고양이 먹물이 사흘째 안 보인다.\n[/Reference]\n\n[message_id=1; from=user]\n먹물 봤어?', '[message_id=3; from=user]\n찾아보자'])
 })
 
 // ---- Author's note ---------------------------------------------------------------------------------------------
@@ -454,12 +454,12 @@ test("a chat's own note replaces the profile's default; the depth falls back to 
 
 test('lore and note share one block at the same depth, two blocks otherwise', () => {
   const lore = { keyed: '카이는 왼손잡이다.' }
-  assert.deepEqual(depthBlocks(lore, 4, { text: '비가 온다.', depth: 4 }), [{ depth: 4, block: '[참고 설정]\n카이는 왼손잡이다.\n\n## 작가 노트\n비가 온다.\n[/참고 설정]' }])
+  assert.deepEqual(depthBlocks(lore, 4, { text: '비가 온다.', depth: 4 }), [{ depth: 4, block: '[Reference]\n카이는 왼손잡이다.\n\n## Author\'s note\n비가 온다.\n[/Reference]' }])
   assert.deepEqual(depthBlocks(lore, 4, { text: '비가 온다.', depth: 0 }), [
-    { depth: 4, block: '[참고 설정]\n카이는 왼손잡이다.\n[/참고 설정]' },
-    { depth: 0, block: '[참고 설정]\n## 작가 노트\n비가 온다.\n[/참고 설정]' },
+    { depth: 4, block: '[Reference]\n카이는 왼손잡이다.\n[/Reference]' },
+    { depth: 0, block: '[Reference]\n## Author\'s note\n비가 온다.\n[/Reference]' },
   ])
-  assert.deepEqual(depthBlocks({ keyed: '' }, 4, { text: '비가 온다.', depth: 2 }), [{ depth: 2, block: '[참고 설정]\n## 작가 노트\n비가 온다.\n[/참고 설정]' }])
+  assert.deepEqual(depthBlocks({ keyed: '' }, 4, { text: '비가 온다.', depth: 2 }), [{ depth: 2, block: '[Reference]\n## Author\'s note\n비가 온다.\n[/Reference]' }])
   assert.deepEqual(depthBlocks({ keyed: '' }, 4, { text: '', depth: 2 }), [])
 })
 
@@ -468,5 +468,5 @@ test("the chat's note lands in the conversation at its depth", () => {
   const messages = [record(1, 'user', '처음'), record(2, 'assistant', '응'), record(3, 'user', '오늘 뭐 해?'), record(4, 'assistant', '산책'), record(5, 'user', '같이 갈까?')]
   const config = { contextTurns: 20, contextTokens: null, replyReserveTokens: 2048, summaryEnabled: false, summaryTriggerTurns: 6, summaryPrompt: '요약해' }
   const result = buildChatMessages({ profile: noteProfile, thread, messages, config, tools: [], books: [] })
-  assert.deepEqual(userContents(result.slice(3)), ['[message_id=1; from=user]\n처음', '[참고 설정]\n## 작가 노트\n비가 온다.\n[/참고 설정]\n\n[message_id=3; from=user]\n오늘 뭐 해?', '[message_id=5; from=user]\n같이 갈까?'])
+  assert.deepEqual(userContents(result.slice(3)), ['[message_id=1; from=user]\n처음', '[Reference]\n## Author\'s note\n비가 온다.\n[/Reference]\n\n[message_id=3; from=user]\n오늘 뭐 해?', '[message_id=5; from=user]\n같이 갈까?'])
 })

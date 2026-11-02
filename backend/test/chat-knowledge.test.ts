@@ -271,9 +271,9 @@ test('chat knowledge: linked search, file versions, connected history, group mem
       thread: { ...thread, summary_enabled: summaryOn ? 1 : 0, summary: '장소는 등대 광장, 예산은 120만 원.' },
       members, self: members[1], messages, lastSeenMessageId: lastSeen, windowLimit: 30, lore: '', directive: '',
     })
-    assert.match(input(true, null), /\[방 요약\]\n장소는 등대 광장/, 'a first turn gets it')
-    assert.doesNotMatch(input(false, null), /방 요약/, 'not when the room summary is off')
-    assert.doesNotMatch(input(true, messages[1].id), /방 요약/, 'nothing missed beyond the window: its own memory covers it')
+    assert.match(input(true, null), /\[Room summary\]\n장소는 등대 광장/, 'a first turn gets it')
+    assert.doesNotMatch(input(false, null), /Room summary/, 'not when the room summary is off')
+    assert.doesNotMatch(input(true, messages[1].id), /Room summary/, 'nothing missed beyond the window: its own memory covers it')
     assert.doesNotMatch(input(true, null), /회의 이어가\n/, 'the older wake is not in the transcript')
   })
 

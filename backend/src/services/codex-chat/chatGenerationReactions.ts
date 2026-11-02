@@ -114,7 +114,7 @@ export class ChatGenerationReactionService {
         return
       }
       const parts: ChatContentPart[] = []
-      const lines: string[] = ['[작업 결과]']
+      const lines: string[] = ['[Job results]']
       // The reaction model (the chat's own reaction row, else the profile's) decides which results it may be shown.
       const limit = profileContentLimit(thread.reaction_model_slot_id === null ? profile : { ...profile, modelSlotId: thread.reaction_model_slot_id })
       let withheld = 0
@@ -123,7 +123,7 @@ export class ChatGenerationReactionService {
         const images = db.prepare("SELECT composite_hash FROM api_generation_history WHERE queue_job_id = ? AND requested_by_account_id IS ? AND generation_status = 'completed' AND composite_hash IS NOT NULL ORDER BY id")
           .all(job.id, thread.account_id) as Array<{ composite_hash: string }>
         const sounds = images.length ? 0 : audioCandidatesByQueueJob([job.id]).get(job.id)?.length ?? 0
-        lines.push(`작업 #${job.id}: ${images.length ? `이미지 ${images.length}장 첨부됨` : sounds ? `오디오 후보 ${sounds}개 첨부됨 (오디오 탭에서 검수)` : `실패: ${failureMessageOf(job.status, job.status === 'completed' ? 'no_image' : job.failure_code, audioOrderJobs.has(job.id) ? 'audio' : 'image')}`}`)
+        lines.push(`Job #${job.id}: ${images.length ? `${images.length} image(s) attached` : sounds ? `${sounds} audio candidate(s) attached (reviewed in the audio tab)` : `failed: ${failureMessageOf(job.status, job.status === 'completed' ? 'no_image' : job.failure_code, audioOrderJobs.has(job.id) ? 'audio' : 'image')}`}`)
         if (!profile.visionEnabled) continue
         try { requireRequesterPermission(requester, 'images.view') } catch { continue }
         for (const image of images) {
@@ -135,7 +135,7 @@ export class ChatGenerationReactionService {
         }
       }
       // Said plainly, so the model does not describe pictures it was never shown.
-      if (withheld > 0) lines.push(`(이미지 ${withheld}장은 허용 등급을 넘어서 보여주지 않음. 내용을 추측하지 말 것)`)
+      if (withheld > 0) lines.push(`(${withheld} image(s) not shown because they exceed the allowed rating. Do not guess what they show.)`)
       // Loading previews yields to user requests; reserve only if the reaction still owns its pending record.
       if (!eligible()) { this.transition(replyId, 'pending', 'skipped'); return }
       const current = CodexChatStore.findThreadById(threadId)!

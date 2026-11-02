@@ -239,5 +239,5 @@ export function selectRecall(candidates: ChatSummarySegment[], query: string, bu
 }
 
 export function recallText(segments: ChatSummarySegment[]) {
-  return segments.length > 0 ? `## 관련된 지난 일\n${segments.map((segment) => segment.content.trim()).join('\n\n')}` : ''
+  return segments.length > 0 ? `## Related past events\n${segments.map((segment) => segment.content.trim()).join('\n\n')}` : ''
 }

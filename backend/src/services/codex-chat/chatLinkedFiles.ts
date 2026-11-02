@@ -165,11 +165,11 @@ function childrenOf(place: LinkedPlace) {
 }
 
 function mode(place: LinkedPlace) {
-  return place.write ? '쓰기' : '읽기'
+  return place.write ? 'write' : 'read'
 }
 
 /**
- * `## 연결 파일`: one line per place (`[label] 쓰기 · sub/(12) · newest.md · … · 외 N개`, a file as `[label] 읽기 · 파일`),
+ * `## Linked files`: one line per place (`[label] write · sub/(12) · newest.md · … · +N more`, a file as `[label] read · file`),
  * then how to open them. Names only, so it changes when files come or go, not when one is edited. Over
  * LINKED_INDEX_MAX_TOKENS the longest lines fall back to their item count. '' without places.
  */
@@ -177,12 +177,12 @@ export function buildLinkedIndex(places: LinkedPlace[], estimate: (text: string)
   if (places.length === 0) return ''
   const lines = places.map((place) => {
     if (place.entry.kind === 'file') {
-      const line = `[${place.label}] ${mode(place)} · 파일`
+      const line = `[${place.label}] ${mode(place)} · file`
       return { full: line, short: line }
     }
     const { folders, files, total } = childrenOf(place)
     if (total === 0) {
-      const line = `[${place.label}] ${mode(place)} · 비어 있음`
+      const line = `[${place.label}] ${mode(place)} · empty`
       return { full: line, short: line }
     }
     const names = [
@@ -191,14 +191,14 @@ export function buildLinkedIndex(places: LinkedPlace[], estimate: (text: string)
     ]
     const more = total - names.length
     return {
-      full: `[${place.label}] ${mode(place)} · ${names.join(' · ')}${more > 0 ? ` · 외 ${more}개` : ''}`,
-      short: `[${place.label}] ${mode(place)} · ${total}개 항목`,
+      full: `[${place.label}] ${mode(place)} · ${names.join(' · ')}${more > 0 ? ` · +${more} more` : ''}`,
+      short: `[${place.label}] ${mode(place)} · ${total} items`,
     }
   })
   const writable = places.some((place) => place.write)
-  const footer = `(이름만 있고 내용은 없어. 필요하면 ${LINKED_TOOLS.search}·${LINKED_TOOLS.list}·${LINKED_TOOLS.read}로 찾아 열고, 이미지는 ${LINKED_TOOLS.view}로 봐. 경로는 [이름]/하위경로${writable ? `. 쓰기 표시된 곳은 ${LINKED_TOOLS.write}·${LINKED_TOOLS.edit}로 쓰고 고쳐` : ''}.)`
+  const footer = `(Names only, not contents. Find and open them with ${LINKED_TOOLS.search}, ${LINKED_TOOLS.list} and ${LINKED_TOOLS.read}; look at images with ${LINKED_TOOLS.view}. Paths are [name]/sub/path.${writable ? ` In places marked write, write and edit with ${LINKED_TOOLS.write} and ${LINKED_TOOLS.edit}.` : ''})`
   const shown = lines.map((line) => line.full)
-  const text = () => ['## 연결 파일', ...shown, footer].join('\n')
+  const text = () => ['## Linked files', ...shown, footer].join('\n')
   const order = lines.map((_, index) => index).filter((index) => lines[index].full !== lines[index].short)
     .sort((a, b) => lines[b].full.length - lines[a].full.length)
   for (const index of order) {
@@ -245,7 +245,7 @@ function sizeLabel(bytes: number) {
 }
 
 function requireWritable(place: LinkedPlace) {
-  if (!place.write) throw new LinkedFileError(`[${place.label}] is linked read-only. Ask the user to allow writing there, or write somewhere marked 쓰기.`, 403)
+  if (!place.write) throw new LinkedFileError(`[${place.label}] is linked read-only. Ask the user to allow writing there, or write somewhere marked write.`, 403)
   if (isInsideLorebooks(place.owner, place.entry.id)) throw new LinkedFileError('Lorebook folders are not written through linked files; use save_lore.', 403)
 }
 
@@ -254,27 +254,27 @@ function requireWritable(place: LinkedPlace) {
 /** No path: every place. A folder path: its folders (with item counts) and files (size, last change). */
 export function listLinked(places: LinkedPlace[], value?: string) {
   if (!value?.trim()) {
-    if (places.length === 0) return '(연결된 파일이 없어.)'
+    if (places.length === 0) return '(No linked files.)'
     return places.map((place) => {
-      if (place.entry.kind === 'file') return `[${place.label}] ${mode(place)} · 파일 · ${sizeLabel(place.entry.size)}`
-      return `[${place.label}] ${mode(place)} · 폴더 · ${FileStoreService.list(place.owner, place.entry.id, 0, 1).total}개 항목`
+      if (place.entry.kind === 'file') return `[${place.label}] ${mode(place)} · file · ${sizeLabel(place.entry.size)}`
+      return `[${place.label}] ${mode(place)} · folder · ${FileStoreService.list(place.owner, place.entry.id, 0, 1).total} items`
     }).join('\n')
   }
   const resolved = splitLinkedPath(places, value)
   const entry = resolveEntry(resolved)
   if (!entry) throw new LinkedFileError(`Not found: ${resolved.display}`, 404)
-  if (entry.kind === 'file') return `${resolved.display} · 파일 · ${sizeLabel(entry.size)} · ${entry.updatedAt.slice(0, 16).replace('T', ' ')}`
+  if (entry.kind === 'file') return `${resolved.display} · file · ${sizeLabel(entry.size)} · ${entry.updatedAt.slice(0, 16).replace('T', ' ')}`
   const listing = FileStoreService.list(resolved.place.owner, entry.id, 0, 200)
-  if (listing.total === 0) return `${resolved.display}/ (비어 있음)`
+  if (listing.total === 0) return `${resolved.display}/ (empty)`
   const lines = listing.entries.map((child) => child.kind === 'folder'
     ? `${child.name}/ (${FileStoreService.list(resolved.place.owner, child.id, 0, 1).total})`
     : `${child.name} · ${sizeLabel(child.size)} · ${child.updatedAt.slice(0, 16).replace('T', ' ')}`)
-  return [`${resolved.display}/`, ...lines, ...(listing.total > listing.entries.length ? [`(외 ${listing.total - listing.entries.length}개)`] : [])].join('\n')
+  return [`${resolved.display}/`, ...lines, ...(listing.total > listing.entries.length ? [`(+${listing.total - listing.entries.length} more)`] : [])].join('\n')
 }
 
 /** Files and folders inside the linked places whose name or text holds every word (see searchStoredFiles). */
 export async function searchLinked(places: LinkedPlace[], query: string, limit = 20, signal?: AbortSignal) {
-  if (places.length === 0) return '(연결된 파일이 없어.)'
+  if (places.length === 0) return '(No linked files.)'
   const owner = places[0].owner
   // Searched inside the links only: a store-wide top list would push hits in the linked places out of it.
   const result = await searchStoredFiles(owner, query, 200, places.map((place) => place.entry.id), { semantic: true, signal })
@@ -285,8 +285,8 @@ export async function searchLinked(places: LinkedPlace[], query: string, limit =
     }
     return []
   }).slice(0, limit)
-  const status = `검색 상태: ${JSON.stringify(result.search)}\n`
-  if (hits.length === 0) return status + `(연결된 곳에서 "${query}"를 찾지 못했어.)`
+  const status = `Search status: ${JSON.stringify(result.search)}\n`
+  if (hits.length === 0) return status + `(Nothing matching "${query}" in the linked places.)`
   return status + hits.map(({ at, hit }) => `${at}${hit.entry.kind === 'folder' ? '/' : ''}${hit.location ? ` [${hit.location}]` : ''}${hit.read ? `\n  linked_read: ${JSON.stringify({ target: at, ...hit.read })}` : ''}${hit.extractionNote ? ` (${hit.extractionNote})` : ''}${hit.snippet ? `\n  …${hit.snippet.replace(/\s+/g, ' ').trim()}…` : ''}`).join('\n')
 }
 
@@ -300,12 +300,12 @@ export async function readLinked(places: LinkedPlace[], value: string, offset = 
   if (options.retry) await retryFileSearchIndex(resolved.place.owner, entry.id)
   const read = await FileStoreService.readText(resolved.place.owner, entry.id, offset, options.limit ?? READ_CHUNK_BYTES, options)
   return [
-    ...(read.extracted ? [`추출 문서 (${read.extractionState}); 읽기 위치는 추출된 UTF-8 본문의 바이트 기준이야.`, ...(read.note ? [read.note] : [])] : []),
+    ...(read.extracted ? [`Extracted document (${read.extractionState}); offsets count bytes of the extracted UTF-8 text.`, ...(read.note ? [read.note] : [])] : []),
     `[파일 ${resolved.display}]`,
     // The file cannot end the data block early.
     read.text.replace(/^﻿/, '').replace(/\[\/파일\]/g, '[/ 파일]'),
     '[/파일]',
-    ...(read.nextOffset !== null ? [`(${read.size}바이트 중 ${read.nextOffset}바이트까지 읽음. 이어 읽으려면 ${LINKED_TOOLS.read}(target=${JSON.stringify(resolved.display)}, offset=${read.nextOffset}, source=${read.extracted ? 'extracted' : 'original'}${read.revision ? `, revision=${JSON.stringify(read.revision)}` : ''}))`] : []),
+    ...(read.nextOffset !== null ? [`(Read up to byte ${read.nextOffset} of ${read.size}. To continue: ${LINKED_TOOLS.read}(target=${JSON.stringify(resolved.display)}, offset=${read.nextOffset}, source=${read.extracted ? 'extracted' : 'original'}${read.revision ? `, revision=${JSON.stringify(read.revision)}` : ''}))`] : []),
   ].join('\n')
 }
 
@@ -336,14 +336,14 @@ export function writeLinked(places: LinkedPlace[], value: string, text: string, 
   if (place.entry.kind === 'file') {
     if (!overwrite) throw new LinkedFileError(`[${place.label}] already exists; set overwrite to replace it, or change part of it with ${LINKED_TOOLS.edit}.`, 409)
     const saved = FileStoreService.updateText(place.owner, place.entry.id, text, { source })
-    return `${resolved.display}에 썼어 (${sizeLabel(saved.size)}).`
+    return `Wrote ${resolved.display} (${sizeLabel(saved.size)}).`
   }
   if (segments.length === 0) throw new LinkedFileError(`Give a file name inside [${place.label}], e.g. [${place.label}]/notes.md.`)
   let parentId = place.entry.id
   for (const folder of segments.slice(0, -1)) parentId = FileStoreService.ensureFolder(place.owner, parentId, folder).id
   try {
     const saved = FileStoreService.writeText(place.owner, parentId, segments[segments.length - 1], text, { create: !overwrite, source })
-    return `${resolved.display}에 썼어 (${sizeLabel(saved.size)}).`
+    return `Wrote ${resolved.display} (${sizeLabel(saved.size)}).`
   } catch (error) {
     if (error instanceof FileStoreError && error.status === 409 && !overwrite) {
       throw new LinkedFileError(`${resolved.display} already exists; set overwrite to replace it, or change part of it with ${LINKED_TOOLS.edit}.`, 409)
@@ -367,7 +367,7 @@ export function editLinked(places: LinkedPlace[], value: string, change: { appen
     replaced = edited.replaced
     return edited.text
   }, { source })
-  return `${resolved.display}을 고쳤어 (${sizeLabel(saved.size)}${change.edits ? `, ${replaced}군데 바꿈` : ''}).`
+  return `Edited ${resolved.display} (${sizeLabel(saved.size)}${change.edits ? `, ${replaced} replacement(s)` : ''}).`
 }
 
 // ---- The context tab ---------------------------------------------------------------------------------------

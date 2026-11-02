@@ -110,6 +110,6 @@ test('chat question cards: offer_choices, answers checked against the open card,
       { id: 0, icon: 'lucide:list-checks', name: '노을', content: '노을', pick: true, choice: { id: 1, question: '배경 분위기' } },
       { id: 0, icon: 'lucide:list-checks', name: '설경', content: '설경', pick: true, choice: { id: 1, question: '배경 분위기' } },
     ])
-    assert.equal(directive, '[사용자 선택: 상태창에서 고른 항목]\n- 검\n\n[선택지 답: 배경 분위기]\n- 노을\n- 설경')
+    assert.equal(directive, '[User picks from the status panel]\n- 검\n\n[Answer to the choice: 배경 분위기]\n- 노을\n- 설경')
   })
 })

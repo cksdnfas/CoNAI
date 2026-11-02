@@ -253,7 +253,7 @@ async function react(call: AgentCall, now = Date.now()) {
   try {
     if (!db.prepare("UPDATE chat_agent_calls SET reaction_state = 'running', reaction_attempts = reaction_attempts + 1 WHERE id = ? AND reaction_state = 'pending'").run(call.id).changes) return
     await wakeChatRoom({ requester: runAs.requester, threadId: call.caller_thread_id,
-      instruction: `${call.agent_name} 에이전트의 결과가 메시지 #${call.result_message_id}에 도착했어. ${jobsStillRunning ? '30분 대기 한도에 도달했으며 일부 생성 작업은 아직 실행 중이야. 완료됐다고 말하지 마.' : '생성 작업도 끝났어.'} 결과와 도구 산출물을 확인하고 필요한 반응을 해줘.`,
+      instruction: `The result of the agent ${call.agent_name} arrived in message #${call.result_message_id}. ${jobsStillRunning ? 'The 30-minute wait limit was reached and some generation jobs are still running; do not say they are finished.' : 'Its generation jobs are finished too.'} Check the result and the tool outputs, and react as needed.`,
       routing: { source: 'agent_result', id: call.id, name: call.agent_name }, recipients: [call.caller_profile_id], signal: controller.signal })
     db.prepare("UPDATE chat_agent_calls SET reaction_state = 'done' WHERE id = ?").run(call.id)
   } catch (error) {

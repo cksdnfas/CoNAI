@@ -115,7 +115,7 @@ test('lore context: books per request, the index, always-on entries, linked file
   /** The system message split at the lore index: the persona prompt before it, the lore (and summary) from it on. */
   const systemParts = (sent: Array<{ role: string; content: unknown }>) => {
     const system = String(sent[0].content)
-    const at = system.indexOf('## 로어북 목차')
+    const at = system.indexOf('## Lorebook index')
     return { persona: at < 0 ? system : system.slice(0, at), lore: at < 0 ? '' : system.slice(at) }
   }
 
@@ -125,14 +125,14 @@ test('lore context: books per request, the index, always-on entries, linked file
     assert.equal(sent.filter((message) => message.role === 'system').length, 1, 'one system message: Qwen-style templates reject a second')
     const second = systemParts(sent).lore
     assert.equal(second, [
-      '## 로어북 목차',
+      '## Lorebook index',
       '[이 채팅] 바다 약속 · 먹물 실종(자료)',
       '[내 취향] 단 음식 · 커피',
       '[카이] 왼손잡이 · 어린 시절(자료)',
       '[항구 도시 설정] 항구',
-      '(본문은 키워드가 나오면 참고 설정으로 간다.)',
+      '(Entry bodies come in a [Reference] block when their keywords come up.)',
       '',
-      '## 상시 항목',
+      '## Always-on entries',
       '- 바다 약속: 내일 저녁 바다에서 반지를 주기로 했다. 아직 모른다.',
       '- 단 음식: 사용자는 단 음식을 좋아한다.',
       '- 왼손잡이: 카이는 왼손잡이다.',
@@ -140,7 +140,7 @@ test('lore context: books per request, the index, always-on entries, linked file
     assert.ok(!JSON.stringify(sent).includes('다른 계정의 비밀'))
     assert.ok(!systemParts(sent).persona.includes('왼손잡이'), 'always-on entries left the persona prompt')
     // With read_lore_file offered, the index says how to read a file.
-    assert.match(systemParts(request(LORE_TOOL)).lore, /\(본문은 키워드가 나오면 참고 설정으로 간다\. 자료가 필요하면 read_lore_file\(책, 항목\)\)/)
+    assert.match(systemParts(request(LORE_TOOL)).lore, /\(Entry bodies come in a \[Reference\] block when their keywords come up\. For the file of an entry marked \(자료\), call read_lore_file\(book, title\)\.\)/)
   })
 
   await t.test('index caps: 40 titles a book, then the whole index, global books giving up their titles first', () => {
@@ -150,16 +150,16 @@ test('lore context: books per request, the index, always-on entries, linked file
     })
     const estimate = (text: string) => text.length
     const big = buildLoreIndex([book(1, '큰 책', 'global', LORE_INDEX_MAX_TITLES + 1), book(2, '작은 책', 'global', 2)], estimate, (text) => text, false)
-    assert.ok(big.includes(`[큰 책] ${LORE_INDEX_MAX_TITLES + 1}개 항목`))
+    assert.ok(big.includes(`[큰 책] ${LORE_INDEX_MAX_TITLES + 1} entries`))
     assert.ok(big.includes('[작은 책] 항목0 · 항목1'))
     const long = (index: number) => `아주 긴 항목 제목 ${index}번`
     const books = [book(1, '채팅', 'chat', 30, long), book(2, '계정', 'account', 30, long), book(3, '글로벌', 'global', 30, long)]
     const index = buildLoreIndex(books, estimate, (text) => text, false)
     assert.ok(estimate(index) <= lore.LORE_INDEX_MAX_TOKENS)
-    assert.ok(index.includes('[글로벌] 30개 항목'), 'global titles go first')
+    assert.ok(index.includes('[글로벌] 30 entries'), 'global titles go first')
     assert.ok(index.includes('[계정] 아주 긴 항목 제목 0번'), 'account titles stay while they fit')
     const tighter = buildLoreIndex([...books, book(4, '계정2', 'account', 30, long)], estimate, (text) => text, false)
-    assert.ok(tighter.includes('[글로벌] 30개 항목') && tighter.includes('[계정2] 30개 항목'), 'then account books, the later first')
+    assert.ok(tighter.includes('[글로벌] 30 entries') && tighter.includes('[계정2] 30 entries'), 'then account books, the later first')
     assert.ok(tighter.includes('[채팅] 아주 긴 항목 제목 0번'), "the chat's own book keeps its titles")
     assert.equal(buildLoreIndex([book(1, '빈 책', 'global', 0)], estimate, (text) => text, false), '', 'no enabled entries, no index')
   })
@@ -167,13 +167,13 @@ test('lore context: books per request, the index, always-on entries, linked file
   await t.test('a matched entry takes a small file along; a large one leaves a hint for the tool', () => {
     say('assistant', '응')
     say('user', '먹물 전단지 어디 붙였어? 그리고 어린 시절 얘기 해 줘.')
-    const reference = (sent: ReturnType<typeof request>) => sent.filter((message) => message.role === 'user').map((message) => String(message.content)).find((content) => content.startsWith('[참고 설정]')) ?? ''
+    const reference = (sent: ReturnType<typeof request>) => sent.filter((message) => message.role === 'user').map((message) => String(message.content)).find((content) => content.startsWith('[Reference]')) ?? ''
     const withTool = reference(request(LORE_TOOL))
-    assert.ok(withTool.includes('고양이 먹물이 사흘째 안 보인다.\n  자료 전단지.md: "검은 고양이 먹물을 찾습니다. 왼쪽 귀에 흰 점."'), withTool)
-    assert.ok(withTool.includes('바닷가 마을에서 자랐다.\n  (자료 있음: 어린시절.md; read_lore_file("카이", "어린 시절")로 읽기)'), withTool)
+    assert.ok(withTool.includes('고양이 먹물이 사흘째 안 보인다.\n  file 전단지.md: "검은 고양이 먹물을 찾습니다. 왼쪽 귀에 흰 점."'), withTool)
+    assert.ok(withTool.includes('바닷가 마을에서 자랐다.\n  (file: 어린시절.md; read it with read_lore_file("카이", "어린 시절"))'), withTool)
     assert.ok(!withTool.includes('바닷가 마을의 기억'), 'the large file stays out')
     const withoutTool = reference(request())
-    assert.ok(withoutTool.includes('바닷가 마을에서 자랐다.\n  (자료 있음: 어린시절.md)'), 'no tool, no call to suggest')
+    assert.ok(withoutTool.includes('바닷가 마을에서 자랐다.\n  (file: 어린시절.md)'), 'no tool, no call to suggest')
   })
 
   await t.test('a group room member gets the room\'s book and its own profile books', () => {
@@ -327,7 +327,7 @@ test('lore context: books per request, the index, always-on entries, linked file
     // A file longer than one call ends with where to go on.
     assert.equal(
       loreFileResultText({ book: '카이', title: '어린 시절', file: '자료/어린시절.md', text: '바닷가', offset: 0, nextOffset: 32000, size: 40000 }),
-      '[자료 자료/어린시절.md]\n바닷가\n[/자료]\n(파일 40000바이트 중 32000바이트까지 읽음. 이어 읽으려면 read_lore_file(book="카이", title="어린 시절", offset=32000))',
+      '[자료 자료/어린시절.md]\n바닷가\n[/자료]\n(Read up to byte 32000 of 40000. To continue: read_lore_file(book="카이", title="어린 시절", offset=32000))',
     )
 
     // Through the chat's MCP bridge: offered beside the room tools while a reply is running, with no scopes needed.

@@ -14,6 +14,7 @@ import {
 import { OwnedLorebookStore, readEntryFileText, type OwnedLorebook } from './chatLorebookFiles'
 import type { ChatProfile } from './chatProfiles'
 import type { CodexChatThreadRecord } from './codexChatStore'
+import { REFERENCE_BLOCK_START } from './llmChatCompletion'
 
 /**
  * The lorebooks one request carries, and how they reach the model:
@@ -21,7 +22,7 @@ import type { CodexChatThreadRecord } from './codexChatStore'
  *   ① the index — every attached book's entry titles, and the "always on" entries in full — in the second system
  *     message, beside the summary (changes only when a book or the summary does, so the persona prompt before it
  *     stays cached)
- *   ② keyword entries in `[참고 설정]` at lore depth, a small linked file along with its entry
+ *   ② keyword entries in `[Reference]` at lore depth, a small linked file along with its entry
  *   ③ a larger file through read_lore_file
  */
 
@@ -34,6 +35,8 @@ const LORE_FILE_REQUEST_MAX_BYTES = 4096
 export const READ_LORE_FILE_TOOL = 'read_lore_file'
 /** What the index and read_lore_file call the chat's own book. */
 export const CHAT_BOOK_LABEL = '이 채팅'
+export const LORE_INDEX_HEADING = '## Lorebook index'
+export const CONSTANT_LORE_HEADING = '## Always-on entries'
 
 export type AttachedLoreBook = {
   id: number
@@ -228,7 +231,7 @@ function keepRank(book: AttachedLoreBook) {
 }
 
 /**
- * `## 로어북 목차`: one line per book with enabled entries (`[label] title · title(자료) · …`, or `[label] N개 항목` past
+ * `## Lorebook index`: one line per book with enabled entries (`[label] title · title(자료) · …`, or `[label] N entries` past
  * LORE_INDEX_MAX_TITLES), then how the bodies arrive. Over LORE_INDEX_MAX_TOKENS, books fall back to their count —
  * global books first, then account books, the later ones first. '' when no book has an enabled entry.
  */
@@ -236,17 +239,18 @@ export function buildLoreIndex(books: AttachedLoreBook[], estimate: (text: strin
   const lines = books.flatMap((book) => {
     const entries = book.entries.filter((entry) => entry.enabled)
     const label = book.record ? `[${book.label}](기록)` : `[${book.label}]`
-    if (entries.length === 0) return book.record ? [{ book, short: `${label} 비어 있음`, full: `${label} 비어 있음` }] : []
+    if (entries.length === 0) return book.record ? [{ book, short: `${label} empty`, full: `${label} empty` }] : []
     const titles = entries.map((entry) => `${render(loreEntryTitle(entry)).replace(/\s+/g, ' ').trim()}${entry.file && book.folderId ? '(자료)' : ''}`)
-    const short = `${label} ${entries.length}개 항목`
+    const short = `${label} ${entries.length} entries`
     return [{ book, short, full: titles.length <= LORE_INDEX_MAX_TITLES ? `${label} ${titles.join(' · ')}` : short }]
   })
   if (lines.length === 0) return ''
   const shown = lines.map((line) => line.full)
+  const bodies = `Entry bodies come in a ${REFERENCE_BLOCK_START} block when their keywords come up.`
   const footer = toolOffered
-    ? `(본문은 키워드가 나오면 참고 설정으로 간다. 자료가 필요하면 ${READ_LORE_FILE_TOOL}(책, 항목))`
-    : '(본문은 키워드가 나오면 참고 설정으로 간다.)'
-  const text = (withGuidance = true) => ['## 로어북 목차', ...shown, ...(withGuidance ? [footer] : [])].join('\n')
+    ? `(${bodies} For the file of an entry marked (자료), call ${READ_LORE_FILE_TOOL}(book, title).)`
+    : `(${bodies})`
+  const text = (withGuidance = true) => [LORE_INDEX_HEADING, ...shown, ...(withGuidance ? [footer] : [])].join('\n')
   const order = lines.map((_, index) => index).filter((index) => lines[index].full !== lines[index].short)
     .sort((a, b) => keepRank(lines[a].book) - keepRank(lines[b].book) || b - a)
   for (const index of order) {
@@ -289,8 +293,8 @@ export function selectRequestLore(
     files: {
       inline: options.inlineFiles ?? true,
       hint: (file, entry) => options.toolOffered
-        ? `(자료 있음: ${file}; ${READ_LORE_FILE_TOOL}("${entry.book ?? ''}", "${entry.title.replace(/\s+/g, ' ')}")로 읽기)`
-        : `(자료 있음: ${file})`,
+        ? `(file: ${file}; read it with ${READ_LORE_FILE_TOOL}("${entry.book ?? ''}", "${entry.title.replace(/\s+/g, ' ')}"))`
+        : `(file: ${file})`,
     },
   })
   return { ...selected, index: buildLoreIndex(books, estimate, render, options.toolOffered), books, linked: options.linked ?? '' }
@@ -298,5 +302,5 @@ export function selectRequestLore(
 
 /** The lore part of the second system message: the index, the linked files, then the "always on" entries ('' for none). */
 export function loreIndexText(lore: Pick<ChatLore, 'index' | 'constant'> & { linked?: string }) {
-  return [lore.index, lore.linked ?? '', lore.constant ? `## 상시 항목\n${lore.constant}` : ''].filter(Boolean).join('\n\n')
+  return [lore.index, lore.linked ?? '', lore.constant ? `${CONSTANT_LORE_HEADING}\n${lore.constant}` : ''].filter(Boolean).join('\n\n')
 }

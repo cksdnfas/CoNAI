@@ -19,14 +19,14 @@ test('narration: a `$` line is narration up to its line break, `$$` is a literal
 })
 
 test('narration: the model reads tagged lines, other text is untouched', () => {
-  assert.equal(narrationForModel('$그때 문이 열렸다\n누구야?\n$$5'), '[나레이션] 그때 문이 열렸다\n누구야?\n$5')
+  assert.equal(narrationForModel('$그때 문이 열렸다\n누구야?\n$$5'), '[Narration] 그때 문이 열렸다\n누구야?\n$5')
   assert.equal(narrationForModel('그냥 말'), '그냥 말')
-  assert.equal(chatContentWithAttachments('$문이 열렸다\n누구야?'), '[나레이션] 문이 열렸다\n누구야?')
+  assert.equal(chatContentWithAttachments('$문이 열렸다\n누구야?'), '[Narration] 문이 열렸다\n누구야?')
 })
 
 test('narration: every chat style tells the model what a narration line is', () => {
   for (const roleplay of [true, false]) {
-    assert.match(buildChatStyleGuidance(normalizeChatStyle({ roleplay }), 'Yuna'), /\[나레이션\]/)
+    assert.match(buildChatStyleGuidance(normalizeChatStyle({ roleplay }), 'Yuna'), /\[Narration\]/)
   }
 })
 

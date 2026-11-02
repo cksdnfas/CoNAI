@@ -37,7 +37,7 @@ function describe(preset: ChatGenerationPreset, body: string) {
 /** The preset's writing guide for the model filling the tool; it reaches a running Codex session with the preset signature. */
 function withGuide(description: string, preset: ChatGenerationPreset) {
   const guide = presetGuideText(preset);
-  return guide ? `${description}\n\nPrompt guide (follow it when you fill the fields):\n${guide}` : description;
+  return guide ? `${description}\n\nPrompt guide for this preset. Follow it when you fill the fields; where it differs from a field description or the general generation rules, the guide wins:\n${guide}` : description;
 }
 
 function usesReference(preset: ChatGenerationPreset) {

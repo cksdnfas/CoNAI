@@ -5,7 +5,7 @@
 
 export type ChatNarrationPart = { narration: boolean; text: string }
 
-export const NARRATION_TAG = '[나레이션]'
+export const NARRATION_TAG = '[Narration]'
 
 export function isNarrationLine(line: string) {
   return line.startsWith('$') && !line.startsWith('$$')

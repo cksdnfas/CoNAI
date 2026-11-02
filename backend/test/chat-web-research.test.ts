@@ -259,12 +259,12 @@ test('chat web research: settings gate, isolated runs, page text', { timeout: 60
     try {
       const saved = JSON.stringify(await bridge.call('web_search', { query: 'Who keeps the lighthouse?', save_as: '[자료]/등대.md' }))
       assert.match(saved, /Kai keeps the lighthouse/)
-      assert.match(saved, /\[자료\]\/등대\.md에 썼어/)
+      assert.match(saved, /Wrote \[자료\]\/등대\.md/)
       const file = FileStoreService.findChild(me, notes.id, '등대.md')!
       assert.equal((await FileStoreService.readText(me, file.id)).text, '# Who keeps the lighthouse?\n\nKai keeps the lighthouse. Source: https://example.com\n')
       const taken = JSON.stringify(await bridge.call('web_search', { query: 'Who keeps the lighthouse?', save_as: '[자료]/등대.md' }))
-      assert.match(taken, /저장 못 함: .*already exists/, 'the answer still comes back')
-      assert.match(JSON.stringify(await bridge.call('web_search', { query: 'q2', save_as: '[책장]/x.md' })), /저장 못 함/)
+      assert.match(taken, /Not saved: .*already exists/, 'the answer still comes back')
+      assert.match(JSON.stringify(await bridge.call('web_search', { query: 'q2', save_as: '[책장]/x.md' })), /Not saved/)
     } finally {
       close()
       await bridge.close()

@@ -215,14 +215,18 @@ export function replyTranslationPrompt(profile: TranslationLanguages & { name?: 
   ].join('\n')
 }
 
+/** The app's fixed instructions are English; without this a small model may answer in their language. */
+const CONVERSATION_LANGUAGE_GUIDANCE = "Reply in the language the user writes in, unless the character's instructions set a language. The app's own instructions are in English for clarity only; they never choose the reply language."
+
 /**
- * What the chat model is told about its language when the profile translates: it writes in the model language, whatever
- * the language of the instructions or the greeting, so the reply comes to the translator as the profile expects.
+ * What the chat model is told about its language. When the profile translates, it writes in the model language,
+ * whatever the language of the instructions or the greeting, so the reply comes to the translator as the profile
+ * expects; otherwise it follows the user.
  */
 export function modelLanguageGuidance(profile: ModelRoleProfile & TranslationLanguages) {
-  if (!hasTranslation(profile)) return ''
+  if (!hasTranslation(profile)) return CONVERSATION_LANGUAGE_GUIDANCE
   const { model, display } = languagesOf(profile)
-  if (model === display) return ''
+  if (model === display) return CONVERSATION_LANGUAGE_GUIDANCE
   const language = languageName(model)
   return `Write every reply in ${language}, whatever language the instructions, the greeting or earlier messages use. The user's messages reach you in ${language}; the app translates your reply for the user.`
 }

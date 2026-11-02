@@ -791,7 +791,7 @@ async function finishTurn(turn: LlmTurn, profile: ChatProfile, status: CodexChat
   return message
 }
 
-const CONTINUE_DIRECTIVE = '[이어쓰기] 방금 네 답변이 길이 제한으로 중간에 끊겼어. 끊긴 바로 그 지점부터 이어서 써. 이미 쓴 부분은 반복하지 말고, 앞말 없이 다음 글자부터 바로 시작해.'
+const CONTINUE_DIRECTIVE = '[Continue] Your last reply was cut off by the length limit. Continue exactly where it stopped. Do not repeat what you already wrote and add no lead-in; start with the very next characters.'
 
 /**
  * All validation and rewrites happen synchronously while this thread is reserved. `continuing`: the reply being

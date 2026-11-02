@@ -154,7 +154,7 @@ type Member = { id: number; name: string }
 function stepsText(task: ChatTask, members: Member[] = []) {
   const mark = { todo: ' ', doing: '>', done: 'x', skipped: '-' }
   const who = (step: ChatTaskStep) => step.assignee === undefined ? '' : ` @${step.assignee === 'all' ? 'all' : members.find((member) => member.id === step.assignee)?.name ?? '?'}`
-  return task.steps.map((step, index) => `${index + 1}. [${mark[step.status]}] ${step.title}${who(step)}${step.approval ? ' (승인 필요)' : ''}${step.note ? ` — ${step.note}` : ''}`).join('\n')
+  return task.steps.map((step, index) => `${index + 1}. [${mark[step.status]}] ${step.title}${who(step)}${step.approval ? ' (needs approval)' : ''}${step.note ? ` — ${step.note}` : ''}`).join('\n')
 }
 
 /**

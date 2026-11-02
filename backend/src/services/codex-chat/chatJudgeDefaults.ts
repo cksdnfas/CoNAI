@@ -19,7 +19,7 @@ export const JUDGE_ITEM_DEFAULTS: Omit<ChatJudgeItem, 'id' | 'name' | 'stage' | 
   directive: '',
 }
 
-export const DEFAULT_FOLLOW_UP_DIRECTIVE = '[후속] 사용자는 아직 답하지 않았어. 방금 네 메시지에 자연스럽게 이어지는 짧은 메시지를 하나 더 보내. 덧붙이고 싶은 생각, 행동, 질문 같은 거야. 방금 한 말을 되풀이하지 마.'
+export const DEFAULT_FOLLOW_UP_DIRECTIVE = '[Follow-up] The user has not replied yet. Send one more short message that naturally follows your last one: a thought you want to add, an action or a question. Do not repeat what you just said.'
 
 export const JUDGE_FOLLOW_UP_DEFAULTS: ChatJudgeFollowUp = { maxConsecutive: 1, delaySeconds: 8, directive: '' }
 
@@ -44,7 +44,7 @@ const loreItem: ChatJudgeItem = {
   yesThreshold: 0.75,
   noThreshold: 0.35,
   tools: LORE_TOOLS,
-  directive: '[판단] 방금 대화에 오래 기억해 둘 사실이 나왔어. 이번 답변에서 save_lore로 로어 항목을 제안해.',
+  directive: '[Judge] The conversation just brought up a lasting fact worth remembering. Propose a lore entry with save_lore in this reply.',
 }
 
 const imageItem: ChatJudgeItem = {
@@ -61,7 +61,7 @@ const imageItem: ChatJudgeItem = {
   yesThreshold: 0.7,
   noThreshold: 0.3,
   tools: IMAGE_TOOLS,
-  directive: '[판단] 지금은 장면을 이미지로 보여주기 좋은 순간이야. 이번 답변에서 이미지 생성 도구를 써.',
+  directive: '[Judge] This is a good moment to show the scene as an image. Use the image generation tool in this reply.',
 }
 
 const followUpItem: ChatJudgeItem = {
@@ -95,7 +95,7 @@ const clarifyItem: ChatJudgeItem = {
   yesThreshold: 0.75,
   noThreshold: 0.35,
   tools: [],
-  directive: '[판단] 요청이 모호해. 바로 작업하지 말고 필요한 점을 한 가지만 먼저 물어봐.',
+  directive: '[Judge] The request is ambiguous. Do not start the work yet; first ask the one thing you most need to know.',
 }
 
 const assistantLoreItem: ChatJudgeItem = {
@@ -106,7 +106,7 @@ const assistantLoreItem: ChatJudgeItem = {
     yes: 'A durable preference, convention, project fact, or an explicit request to remember',
     no: 'A one-off task detail or ordinary conversation',
   },
-  directive: '[판단] 사용자가 앞으로도 기억할 선호나 사실을 말했어. 이번 답변에서 save_lore로 기록을 제안해.',
+  directive: '[Judge] The user stated a preference or fact to keep for later. Propose saving it with save_lore in this reply.',
 }
 
 export const DEFAULT_JUDGE_PRESETS: Array<{ name: string; items: ChatJudgeItem[]; followUp: ChatJudgeFollowUp; options: JudgeOptions }> = [

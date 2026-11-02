@@ -98,7 +98,7 @@ test('chat lore record book: create from the chat, save_lore and edit_lore_file 
     assert.deepEqual(OwnedLorebookStore.threadLinks(threadId), [book.id])
     assert.equal(OwnedLorebookStore.recordBookId(threadId), book.id)
     assert.equal(threadLorebooks(CodexChatStore.findThreadById(threadId)!, [ChatProfileStore.find(profile.id)!]).recordBookId, book.id)
-    assert.match(index(), /\[리나 기억\]\(기록\) 비어 있음/)
+    assert.match(index(), /\[리나 기억\]\(기록\) empty/)
     assert.throws(() => OwnedLorebookStore.createForThread(threadId, '리나 기억'), /같은 이름/)
   })
 

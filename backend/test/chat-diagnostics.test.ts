@@ -205,8 +205,8 @@ test('chat diagnostics: capture, read-time permissions, alternatives, branches a
         assert.ok(body.includes('내 사용자 페르소나'))
         assert.ok(body.includes('상태의 공개 규칙'))
         assert.ok(body.includes('공개된 플래그 본문'))
-        assert.ok(!body.includes('아래 값이 지금 장면의 사실이야'))
-        assert.ok(!body.includes('본문은 키워드가 나오면 참고 설정으로 간다'))
+        assert.ok(!body.includes('The values below are the facts of the scene now'))
+        assert.ok(!body.includes('Entry bodies come in a [Reference] block'))
         const stateText = result.texts?.find((source) => source.kind === 'state')
         assert.ok(stateText?.text?.includes('두 번째 규칙도 보여'))
         assert.ok(stateText?.text?.includes('"hp":2'))
@@ -220,10 +220,10 @@ test('chat diagnostics: capture, read-time permissions, alternatives, branches a
         assert.ok(body.includes('ADMIN_SYSTEM_PRIVATE'))
         assert.ok(body.includes('ADMIN_RAW_PRIVATE'))
         assert.ok(fileText.includes('ADMIN_RAW_PRIVATE'))
-        assert.ok(result.texts?.find((source) => source.kind === 'state')?.promptText?.includes('아래 값이 지금 장면의 사실이야'))
-        assert.ok(result.texts?.find((source) => source.kind === 'lore-index')?.promptText?.includes('본문은 키워드가 나오면 참고 설정으로 간다'))
+        assert.ok(result.texts?.find((source) => source.kind === 'state')?.promptText?.includes('The values below are the facts of the scene now'))
+        assert.ok(result.texts?.find((source) => source.kind === 'lore-index')?.promptText?.includes('Entry bodies come in a [Reference] block'))
       } else {
-        for (const hidden of ['ADMIN_SYSTEM_PRIVATE', 'ADMIN_SECTION_PRIVATE', 'ADMIN_POST_PRIVATE', 'ADMIN_RAW_PRIVATE', '아래 값이 지금 장면의 사실이야', '본문은 키워드가 나오면 참고 설정으로 간다']) {
+        for (const hidden of ['ADMIN_SYSTEM_PRIVATE', 'ADMIN_SECTION_PRIVATE', 'ADMIN_POST_PRIVATE', 'ADMIN_RAW_PRIVATE', 'The values below are the facts of the scene now', 'Entry bodies come in a [Reference] block']) {
           assert.ok(!body.includes(hidden), `${hidden} in ${expected} response`)
           assert.ok(!fileText.includes(hidden), `${hidden} in ${expected} export`)
         }
@@ -243,12 +243,12 @@ test('chat diagnostics: capture, read-time permissions, alternatives, branches a
   await t.test('state and lore-index keep public text at prompts scope and compare hashes against full prompt text', async () => {
     grants = [...diagnosticKeys]
     const prompts = await getChatDiagnostics(requester, threadId, answerId)
-    for (const [kind, guidance] of [['state', '아래 값이 지금 장면의 사실이야'], ['lore-index', '본문은 키워드가 나오면 참고 설정으로 간다']] as const) {
+    for (const [kind, guidance] of [['state', 'The values below are the facts of the scene now'], ['lore-index', 'Entry bodies come in a [Reference] block']] as const) {
       const source = prompts.texts?.find((entry) => entry.kind === kind)
       assert.ok(source?.text)
       assert.ok(source.promptText?.includes(guidance))
       assert.ok(!source.text.includes(guidance))
-      if (kind === 'state') assert.ok(!source.text.includes('## 현재 상태'))
+      if (kind === 'state') assert.ok(!source.text.includes('## Current state'))
       assert.notEqual(contextHash(source.text), source.hash, `${kind} public text must differ from the full prompt`)
       assert.equal(contextHash(source.promptText!), source.hash)
       assert.equal(source.changedSince, false, `${kind} unchanged full prompt must not be marked changed`)
@@ -480,7 +480,7 @@ test('chat diagnostics: capture, read-time permissions, alternatives, branches a
     for (const inline of [true, false]) {
       const result = selectLoreEntries({ lorebookIds: [], loreScanDepth: 4, loreTokenBudget: 100 }, [{ content: '반지' }], (text) => text.length, (text) => text,
         { entries: [{ key: loreEntryKey(1, linked), entry: linked, file: () => ({ name: 'test.md', text: '자료 본문', truncated: false }) }], files: { inline, hint: () => '자료 힌트' } })
-      assert.equal(result.text, inline ? '본문\n  자료 test.md: "자료 본문"' : '본문\n  자료 힌트')
+      assert.equal(result.text, inline ? '본문\n  file test.md: "자료 본문"' : '본문\n  자료 힌트')
       assert.equal(result.decisions.length, 1)
       assert.equal(result.decisions[0].reason, 'key:반지')
       assert.equal(result.decisions[0].file, inline ? 'inline' : 'hint')

@@ -204,7 +204,7 @@ test('chat setup: profile settings proposals and the chat settings card', { time
       assert.match(JSON.stringify(read.content), /장기 기억/)
     } finally { await full.close(); unregister() }
     const { CHAT_FEATURES_GUIDE } = await import('../src/mcp/tools/chatSettingsTools')
-    assert.match(CHAT_FEATURES_GUIDE, /나레이션/)
+    assert.match(CHAT_FEATURES_GUIDE, /\[Narration\]/)
     const page = { instanceId: 'page-1234567890', connectionId: 'conn-1234567890', path: '/settings', title: 'Settings', kind: 'settings' as const, resourceId: null, fields: [] }
     // An app page the account connected keeps them; public page text (anyone's) never reaches the chat's own settings.
     const paged = await openChatMcpBridge({ accountId: null, accountType: 'admin' }, ['read'], null, { chatContext: { ...context, page } })

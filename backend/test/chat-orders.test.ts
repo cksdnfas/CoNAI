@@ -92,7 +92,7 @@ test('chat orders: done on the reply itself, with the conversation up to it', { 
     const sent = textsOf(bodies[0]).join('\n')
     for (const turn of [4, 5, 6]) assert.match(sent, new RegExp(`질문 ${turn}`), `turn ${turn} is in the window`)
     assert.doesNotMatch(sent, /질문 3/, 'three context turns: earlier turns stay out')
-    assert.match(lastUser(bodies[0]), new RegExp(`\\[사용자 지시: 바로 위 네 답변\\(message_id=${target}\\)에 덧붙일 작업\\]\\n- .*offer_choices`))
+    assert.match(lastUser(bodies[0]), new RegExp(`\\[User instructions: a job on your reply right above \\(message_id=${target}\\)\\]\\n- .*offer_choices`))
     assert.equal(message.id, target)
     assert.deepEqual(message.tool_calls.map((call) => call.tool), ['offer_choices'], 'the call is the reply\'s own now')
     assert.equal(ChatProposalStore.forReply(threadId, `r${threadId}-6`, 'choice').length, 1, 'the card belongs to the reply')

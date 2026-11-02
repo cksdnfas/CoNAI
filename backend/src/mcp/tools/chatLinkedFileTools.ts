@@ -84,7 +84,7 @@ export function registerChatLinkedFileTools(server: McpServer, context: McpReque
   if (!session && !current.some((place) => place.write)) return;
 
   server.registerTool(LINKED_TOOLS.write, {
-    description: 'Write a new text document (Markdown, HTML, txt, JSON, CSV…; the extension picks the type) inside a linked folder marked 쓰기; folders on the path are made. A taken name is refused unless overwrite is true, which replaces the whole file. For a linked single file, overwrite replaces it. Up to 2 MB.',
+    description: 'Write a new text document (Markdown, HTML, txt, JSON, CSV…; the extension picks the type) inside a linked folder marked write; folders on the path are made. A taken name is refused unless overwrite is true, which replaces the whole file. For a linked single file, overwrite replaces it. Up to 2 MB.',
     inputSchema: z.object({
       target: pathField.describe('Where to write, e.g. [리나 일지]/2026-10-11.md'),
       text: z.string().max(MAX_TEXT_DOCUMENT_BYTES),
@@ -93,7 +93,7 @@ export function registerChatLinkedFileTools(server: McpServer, context: McpReque
   }, ({ target, text, overwrite }) => run(() => writeLinked(places(), target, text, overwrite ?? false, fileWriteSource(context))));
 
   server.registerTool(LINKED_TOOLS.edit, {
-    description: 'Change a text file in a place marked 쓰기 without resending it: append adds text at its end (start with a newline yourself if needed), edits replace exact text (each old_text must appear exactly once, copied from linked_read, unless replace_all; if any fails nothing is saved). Give either append or edits.',
+    description: 'Change a text file in a place marked write without resending it: append adds text at its end (start with a newline yourself if needed), edits replace exact text (each old_text must appear exactly once, copied from linked_read, unless replace_all; if any fails nothing is saved). Give either append or edits.',
     inputSchema: z.object({
       target: pathField,
       append: z.string().min(1).max(MAX_TEXT_DOCUMENT_BYTES).optional(),

@@ -132,14 +132,14 @@ function writerDirection(writer: SuggestionWriter, character: ChatProfile, user:
   if (writer.kind === 'user') {
     if (writer.profile.id === threadUserProfileId) return ''
     text = writer.profile.persona.trim()
-    heading = `## 추천 지시 (${writer.profile.name})`
+    heading = `## Suggestion direction (${writer.profile.name})`
   } else {
     const sections = writer.profile.promptSections
       .filter((section) => section.enabled && section.content.trim())
       .map((section) => (section.title ? `### ${section.title}\n${section.content}` : section.content))
     text = [writer.profile.systemPrompt, ...sections].map((part) => part.trim()).filter(Boolean).join('\n\n')
     // The chat's own profile as the writer: its card is about the character, not direction.
-    heading = writer.profile.id === character.id ? `## 캐릭터 설정 (${character.name})` : `## 추천 지시 (${writer.profile.name})`
+    heading = writer.profile.id === character.id ? `## Character profile (${character.name})` : `## Suggestion direction (${writer.profile.name})`
   }
   // {{char}} is the character the user talks to, {{user}} the user the options are written for.
   return text ? [heading, fillCharacterPlaceholders(text, character, user)].join('\n') : ''
@@ -148,7 +148,7 @@ function writerDirection(writer: SuggestionWriter, character: ChatProfile, user:
 /** The suggestion representative model's default prompt, as standing direction for every chat. */
 function suggestionDirection() {
   const prompt = ModelSlotStore.routePrompt('suggest')
-  return prompt ? `## 추천 지시\n${prompt}` : ''
+  return prompt ? `## Suggestion direction\n${prompt}` : ''
 }
 
 function readerText(message: CodexChatMessageRecord, keys: ReadonlySet<string>) {
@@ -226,8 +226,8 @@ export async function suggestReplies(profile: ChatProfile, thread: CodexChatThre
   const system = [
     SYSTEM_PROMPT,
     '',
-    '## 캐릭터',
-    `이름: ${profile.name}`,
+    '## Character',
+    `Name: ${profile.name}`,
     profile.tagline ? profile.tagline : '',
     userPersonaPrompt(user),
     suggestionDirection(),
@@ -241,7 +241,7 @@ export async function suggestReplies(profile: ChatProfile, thread: CodexChatThre
   try {
     const request = await fitAuxiliaryHistory(target, turns, history => [
       { role: 'system', content: system },
-      { role: 'user', content: `${history.join('\n\n')}\n\n---\n${user.name}이(가) 다음에 할 말 ${SUGGESTION_COUNT}개를 JSON 배열로.` },
+      { role: 'user', content: `${history.join('\n\n')}\n\n---\nNow write ${SUGGESTION_COUNT} things ${user.name} might say next, as a JSON array of strings.` },
     ])
     answer = await completeChat(request.target, request.messages,
       combined, { purpose: 'suggestion', profileId: writerProfile.id, threadId: thread.id })

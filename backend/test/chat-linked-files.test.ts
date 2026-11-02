@@ -75,11 +75,11 @@ test('chat linked files: links, index, tools stay inside the linked places, writ
 
   await t.test('the index names folders and files, never contents, newest dated note first', () => {
     const index = linked.buildLinkedIndex(places(), () => 1)
-    assert.match(index, /^## 연결 파일\n\[리나 일지\] 쓰기 · 2026-10-10\.md · 2026-10-09\.md\n\[세계관\] 읽기 · 인물\/\(1\) · 연표\.md\n\[장기기억 정리\.md\] 읽기 · 파일\n/)
+    assert.match(index, /^## Linked files\n\[리나 일지\] write · 2026-10-10\.md · 2026-10-09\.md\n\[세계관\] read · 인물\/\(1\) · 연표\.md\n\[장기기억 정리\.md\] read · file\n/)
     assert.doesNotMatch(index, /바다|등대지기|알레르기/, 'no contents')
-    assert.match(index, /linked_write·linked_edit/)
+    assert.match(index, /linked_write and linked_edit/)
     const short = linked.buildLinkedIndex(places(), () => 100_000)
-    assert.match(short, /\[리나 일지\] 쓰기 · 2개 항목/, 'over budget: counts only')
+    assert.match(short, /\[리나 일지\] write · 2 items/, 'over budget: counts only')
   })
 
   await t.test('the index travels with the lore index of an API request only beside the tools', () => {
@@ -87,13 +87,13 @@ test('chat linked files: links, index, tools stay inside the linked places, writ
     const current = ChatProfileStore.find(profile.id)!
     const request = (names: string[]) => buildChatMessages({ profile: current, thread, messages: [], config: resolveContextConfig(thread, current), tools: names.map((name) => ({ type: 'function', function: { name, description: '', parameters: {} } })) as never })
     const system = (names: string[]) => request(names).filter((message) => message.role === 'system').map((message) => String(message.content)).join('\n')
-    assert.match(system(['linked_read']), /## 연결 파일/)
-    assert.doesNotMatch(system([]), /## 연결 파일/)
+    assert.match(system(['linked_read']), /## Linked files/)
+    assert.doesNotMatch(system([]), /## Linked files/)
   })
 
   await t.test('paths stay inside the places; reading, listing and searching see only linked files', async () => {
     const list = linked.listLinked(places())
-    assert.match(list, /\[리나 일지\] 쓰기 · 폴더 · 2개 항목/)
+    assert.match(list, /\[리나 일지\] write · folder · 2 items/)
     assert.match(linked.listLinked(places(), '[세계관]'), /인물\/ \(1\)\n연표\.md/)
     assert.match(await linked.readLinked(places(), '[세계관]/인물/카이.md'), /^\[파일 \[세계관\]\/인물\/카이\.md\]\n카이는 등대지기다/)
     assert.match(await linked.readLinked(places(), '세계관/연표.md'), /항구가 열렸다/, 'brackets are optional')
@@ -106,7 +106,7 @@ test('chat linked files: links, index, tools stay inside the linked places, writ
   })
 
   await t.test('writing only where the link allows it; edits are exact or nothing', async () => {
-    assert.match(linked.writeLinked(places(), '[리나 일지]/2026-10/2026-10-11.md', '# 10월 11일\n공포영화.\n'), /썼어/)
+    assert.match(linked.writeLinked(places(), '[리나 일지]/2026-10/2026-10-11.md', '# 10월 11일\n공포영화.\n'), /Wrote/)
     assert.ok(FileStoreService.findChild(me, journal.id, '2026-10'), 'the folder on the way is made')
     assert.throws(() => linked.writeLinked(places(), '[리나 일지]/2026-10-09.md', 'x'), /already exists/)
     assert.throws(() => linked.writeLinked(places(), '[세계관]/새.md', 'x'), /read-only/)
@@ -114,7 +114,7 @@ test('chat linked files: links, index, tools stay inside the linked places, writ
     linked.editLinked(places(), '[리나 일지]/2026-10-09.md', { append: '노을이 예뻤다.\n' })
     assert.match(await linked.readLinked(places(), '[리나 일지]/2026-10-09.md'), /바다에 갔다\.\n노을이 예뻤다\./)
     assert.throws(() => linked.editLinked(places(), '[리나 일지]/2026-10-09.md', { edits: [{ old_text: '없는 말', new_text: 'x' }] }), /찾지 못했어/)
-    assert.match(linked.editLinked(places(), '[리나 일지]/2026-10-09.md', { edits: [{ old_text: '바다', new_text: '동해 바다' }] }), /1군데 바꿈/)
+    assert.match(linked.editLinked(places(), '[리나 일지]/2026-10-09.md', { edits: [{ old_text: '바다', new_text: '동해 바다' }] }), /1 replacement\(s\)/)
   })
 
   await t.test('the tools: offered with links (write only with a writable link), retained on an ordinary page, refused once unlinked', async () => {

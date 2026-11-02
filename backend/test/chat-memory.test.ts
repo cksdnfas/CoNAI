@@ -53,13 +53,13 @@ test('chat memory: pinned memories, summary segments, plot folding, recall', { t
     const body = String(init.body)
     requests.push(body)
     if (hold) { requestStarted?.(); await hold }
-    if (failPlot && body.includes('구간 요약')) return new Response('plot boom', { status: 500 })
+    if (failPlot && body.includes('stretch summaries')) return new Response('plot boom', { status: 500 })
     if (failNext) {
       failNext = false
       return new Response('boom', { status: 500 })
     }
     const keyword = /키워드:(\S+?)[.\\"]/.exec(body)?.[1] ?? '없음'
-    const content = body.includes('구간 요약') ? `줄거리 정리. ${FILLER}` : `${keyword}의 기억. ${FILLER}`
+    const content = body.includes('stretch summaries') ? `줄거리 정리. ${FILLER}` : `${keyword}의 기억. ${FILLER}`
     return Response.json({ choices: [{ message: { content }, finish_reason: 'stop' }] })
   })
 
@@ -86,11 +86,11 @@ test('chat memory: pinned memories, summary segments, plot folding, recall', { t
     assert.equal(sent[0].role, 'system')
     assert.notEqual(sent[1].role, 'system')
     const system = String(sent[0].content)
-    const at = system.indexOf('\n\n## 로어북 목차\n')
+    const at = system.indexOf('\n\n## Lorebook index\n')
     assert.ok(at > 0, 'the persona prompt comes first')
     const second = system.slice(at + 2)
-    assert.match(second, /^## 로어북 목차\n\[이 채팅\] 바다 약속 · 왼손잡이 · 먹물 실종\n/)
-    assert.ok(second.includes('\n\n## 상시 항목\n- 바다 약속: 사용자와 약속: 내일 바다\n- 왼손잡이: 카이는 왼손잡이'), second)
+    assert.match(second, /^## Lorebook index\n\[이 채팅\] 바다 약속 · 왼손잡이 · 먹물 실종\n/)
+    assert.ok(second.includes('\n\n## Always-on entries\n- 바다 약속: 사용자와 약속: 내일 바다\n- 왼손잡이: 카이는 왼손잡이'), second)
     assert.ok(!sentText(sent).includes('옛 고정 기억'), 'pinned memories left on the chat are not sent')
     assert.ok(!sentText(sent).includes('고양이 먹물'), 'a keyword entry waits for its keyword')
     assert.ok(!system.slice(0, at).includes('바다 약속'), 'the persona prompt stays as it was')
@@ -105,7 +105,7 @@ test('chat memory: pinned memories, summary segments, plot folding, recall', { t
     assert.match(segments[0].content, /^은하수정원의 기억/)
     assert.equal(thread().summary_until_message_id, segments[0].until_message_id)
     assert.equal(thread().summary, segments[0].content)
-    assert.ok(requests.at(-1)!.includes('앞선 내용'), 'a segment is summarized on its own, with the past as context')
+    assert.ok(requests.at(-1)!.includes('Earlier context'), 'a segment is summarized on its own, with the past as context')
   })
 
   await t.test('older segments fold into the plot once the summary outgrows its budget; the newest stay', async () => {
@@ -131,12 +131,12 @@ test('chat memory: pinned memories, summary segments, plot folding, recall', { t
     const sent = buildChatMessages({ profile, thread: current, messages, config: resolveContextConfig(current, profile), tools: [], segments })
     const system = sent.filter((message) => message.role === 'system')
     assert.ok(!sentText(system).includes('은하수정원의 기억'))
-    assert.ok(sentText(sent).includes('## 관련된 지난 일\\n은하수정원의 기억'))
+    assert.ok(sentText(sent).includes('## Related past events\\n은하수정원의 기억'))
     // The next exchange, about something else, recalls nothing.
     say('assistant', '응, 기억나.')
     say('user', '오늘 날씨 어때?')
     const unrelated = buildChatMessages({ profile, thread: thread(), messages: CodexChatStore.listMessages(threadId), config: resolveContextConfig(thread(), profile), tools: [], segments })
-    assert.ok(!sentText(unrelated).includes('관련된 지난 일'))
+    assert.ok(!sentText(unrelated).includes('Related past events'))
   })
 
   await t.test('a failed background summary is kept on the thread until one succeeds', async () => {
@@ -225,7 +225,7 @@ test('chat memory: pinned memories, summary segments, plot folding, recall', { t
     assert.ok(CodexChatStore.findThreadById(roomId)!.summary_error)
     failPlot = false
     // Right after the failure an automatic run leaves the plot alone and keeps the error.
-    const plotCalls = () => requests.filter((body) => body.includes('구간 요약')).length
+    const plotCalls = () => requests.filter((body) => body.includes('stretch summaries')).length
     const before = plotCalls()
     await summarizeAhead(roomId, profile, [])
     assert.equal(plotCalls(), before)

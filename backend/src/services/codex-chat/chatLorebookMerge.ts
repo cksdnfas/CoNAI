@@ -322,14 +322,14 @@ export function applyMergePreview(preview: MergePreview, owner: string, decision
 
 // ---- Drafts by a profile's model ------------------------------------------------------------------------------
 
-export const MERGE_DRAFT_INSTRUCTION = '두 항목을 하나로 합쳐. 이름은 그대로 쓰고, 두 쪽의 사실을 모두 남기고, 중복만 줄여. 합친 본문만 출력해.'
+export const MERGE_DRAFT_INSTRUCTION = 'Merge the two entries into one. Keep the names as they are, keep every fact from both and cut only the repetition. Write in the language of the entries and output only the merged body.'
 const MERGE_DRAFT_MAX_ENTRIES = 30
 const MERGE_INSTRUCTION_MAX_LENGTH = 2000
 
 export type MergeDraft = { entryId: string; content: string } | { entryId: string; error: string }
 
 function draftEntryText(entry: ChatLoreEntry) {
-  return [`제목: ${loreEntryTitle(entry)}`, loreEntryKeys(entry).length ? `키워드: ${loreEntryKeys(entry).join(', ')}` : '', '', entry.content.trim()].filter((line, index) => index === 2 || line).join('\n')
+  return [`Title: ${loreEntryTitle(entry)}`, loreEntryKeys(entry).length ? `Keywords: ${loreEntryKeys(entry).join(', ')}` : '', '', entry.content.trim()].filter((line, index) => index === 2 || line).join('\n')
 }
 
 /**
@@ -347,7 +347,7 @@ export async function draftMerge(sourceId: number, targetId: number, owner: stri
   // The person's instruction is the default rewritten, so it replaces it; empty falls back to the default.
   const instruction = typeof input.instruction === 'string' ? input.instruction.trim().slice(0, MERGE_INSTRUCTION_MAX_LENGTH) : ''
   const system = instruction || MERGE_DRAFT_INSTRUCTION
-  const sourceLabel = preview.source.kind === 'chat' ? '채팅 책' : '원본 책'
+  const sourceLabel = preview.source.kind === 'chat' ? 'chat book' : 'source book'
   const drafts: MergeDraft[] = []
   for (const item of duplicates) {
     if (signal?.aborted) {
@@ -355,7 +355,7 @@ export async function draftMerge(sourceId: number, targetId: number, owner: stri
       continue
     }
     try {
-      const content = await completeSummary(profile, system, `## A (${sourceLabel})\n${draftEntryText(item.entry)}\n\n## B (대상 책)\n${draftEntryText(item.duplicateOf as ChatLoreEntry)}`, signal)
+      const content = await completeSummary(profile, system, `## A (${sourceLabel})\n${draftEntryText(item.entry)}\n\n## B (target book)\n${draftEntryText(item.duplicateOf as ChatLoreEntry)}`, signal)
       drafts.push({ entryId: item.entry.id, content })
     } catch (error) {
       drafts.push({ entryId: item.entry.id, error: error instanceof Error ? error.message : String(error) })

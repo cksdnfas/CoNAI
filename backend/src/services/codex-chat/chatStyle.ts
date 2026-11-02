@@ -2,7 +2,7 @@
  * How a profile's chats look: typeface, roleplay text colours and the chat background. The model only follows a
  * text convention (the guidance below); the browser does the styling, so nothing the model writes runs as code.
  */
-import { CHAT_MAX_EMOTICON_GROUPS, type ChatBlockTone } from '@conai/shared'
+import { CHAT_MAX_EMOTICON_GROUPS, NARRATION_TAG, type ChatBlockTone } from '@conai/shared'
 
 export type ChatTypeface = 'sans' | 'serif' | 'mono'
 
@@ -173,14 +173,14 @@ function normalizeTone(value: unknown, values: string[]): ChatBlockTone | undefi
   })
 }
 
-/** A field's rule as one line for the model ('' when the rule says nothing), e.g. `affinity: 0~100, 한 번에 ±5까지`. */
+/** A field's rule as one line for the model ('' when the rule says nothing), e.g. `affinity: 0~100, at most ±5 per change`. */
 export function fieldRuleText(field: ChatBlockField) {
   if (!field.name) return ''
-  if (field.readonly) return `${field.name}: 고정값, 바꾸지 마`
+  if (field.readonly) return `${field.name}: fixed, do not change`
   const parts: string[] = []
   if (field.min !== null || field.max !== null) parts.push(`${field.min ?? ''}~${field.max ?? ''}`)
-  if (field.step !== null) parts.push(`한 번에 ±${field.step}까지`)
-  if (field.values.length > 0) parts.push(`${field.values.join(' | ')} 중 하나`)
+  if (field.step !== null) parts.push(`at most ±${field.step} per change`)
+  if (field.values.length > 0) parts.push(`one of ${field.values.join(' | ')}`)
   return parts.length > 0 ? `${field.name}: ${parts.join(', ')}` : ''
 }
 
@@ -286,7 +286,7 @@ const ROLEPLAY_GUIDANCE = [
   "*She looks up from the sketchbook and smiles.* \"Oh, you made it!\" 'A bit late, though…'",
 ].join('\n')
 
-const NARRATION_GUIDANCE = 'Lines in the user\'s message that start with [나레이션] are scene narration the user writes as the narrator: events and circumstances of the scene, not words or actions of the user\'s character. Take them as having happened and let the reply react to them; do not repeat or quote them.'
+const NARRATION_GUIDANCE = `Lines in the user's message that start with ${NARRATION_TAG} are scene narration the user writes as the narrator: events and circumstances of the scene, not words or actions of the user's character. Take them as having happened and let the reply react to them; do not repeat or quote them.`
 
 function buildBlocksGuidance(blocks: ChatDisplayBlock[]) {
   // A block without a template still shows (as a plain list of its fields), so it is offered to the model too.
@@ -296,8 +296,8 @@ function buildBlocksGuidance(blocks: ChatDisplayBlock[]) {
   }
   const fence = '```'
   return [
-    'Status blocks: the chat keeps a running state for each block below and shows it in a status panel. The current values come with the conversation under "현재 상태" (inside [참고 설정]); treat them as the facts of the scene and act consistently with them.',
-    'Show the values through behaviour, distance and warmth instead of stating them, and keep the character\'s personality and way of speaking; a "말투:" line is the present attitude on top of that voice. Values describe the present, not the whole history: a low or zero value does not mean there is no shared past, and what memories, summaries or lore record still happened. Read each field on its own.',
+    'Status blocks: the chat keeps a running state for each block below and shows it in a status panel. The current values come with the conversation under "Current state" (inside [Reference]); treat them as the facts of the scene and act consistently with them.',
+    'Show the values through behaviour, distance and warmth instead of stating them, and keep the character\'s personality and way of speaking; a "Tone:" line is the present attitude on top of that voice. Values describe the present, not the whole history: a low or zero value does not mean there is no shared past, and what memories, summaries or lore record still happened. Read each field on its own.',
     'To change values, write a fenced block (the fence name, then one JSON object) holding ONLY the fields that changed: leave unchanged fields out, set a field to null to remove it, write lists whole. Put it at the end of the reply, at most once per block, and leave it out when nothing changed. Values are plain text; never put HTML or Markdown in them.',
     ...usable.map((block) => [
       `- ${block.key}: ${block.instruction || 'update when the scene changes it'}`,

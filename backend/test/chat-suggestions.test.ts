@@ -98,9 +98,9 @@ test('suggestReplies: a user profile writer adds its description, unless it is t
   const requests = mockConnection(t, '["a"]')
   t.mock.method(ChatUserProfileStore, 'findById', (id: number) => (id === 7 ? { ...userWriter, accountId: null } : id === 1 ? { ...userWriter, id: 1, accountId: null } : null))
   await suggestReplies({ ...profile, suggestUserProfileId: 7 }, thread, [message(1, 'assistant', 'hi')], () => '유나')
-  assert.match(requests[0].messages[0].content, /## 추천 지시 \(나\)\n유나한테는 늘 장난스럽게 군다\./)
+  assert.match(requests[0].messages[0].content, /## Suggestion direction \(나\)\n유나한테는 늘 장난스럽게 군다\./)
   await suggestReplies({ ...profile, suggestUserProfileId: 1 }, thread, [message(1, 'assistant', 'hi')], () => '유나')
-  assert.doesNotMatch(requests[1].messages[0].content, /추천 지시/)
+  assert.doesNotMatch(requests[1].messages[0].content, /Suggestion direction/)
 })
 
 test('suggestReplies: a writer profile adds its prompt, placeholders filled, disabled sections left out', async (t) => {
@@ -110,7 +110,7 @@ test('suggestReplies: a writer profile adds its prompt, placeholders filled, dis
   assert.equal(requests[0].model, 'writer-model')
   assert.equal(requests[0].max_tokens, 1234, 'the chat override also applies to a linked auxiliary writer')
   const system = requests[0].messages[0].content
-  assert.match(system, /## 추천 지시 \(대필\)\n민수답게, 유나를 놀리는 쪽으로\./)
+  assert.match(system, /## Suggestion direction \(대필\)\n민수답게, 유나를 놀리는 쪽으로\./)
   assert.match(system, /### 말투\n짧게 끊어 말함\./)
   assert.doesNotMatch(system, /안 보임/)
   const { learnServerContextLimit } = await import('../src/services/codex-chat/serverContextLimit')
@@ -148,7 +148,7 @@ test('suggestReplies: asks the suggestion model with the persona and transcript,
   assert.deepEqual(suggestions, ['"비 많이 오네."', '*수건을 건넨다.*', '"뭐 먹을래?"'])
   assert.equal(requests.length, 1)
   assert.equal(requests[0].model, 'tiny')
-  assert.match(requests[0].messages[0].content, /이름: 유나/)
+  assert.match(requests[0].messages[0].content, /Name: 유나/)
   assert.match(requests[0].messages[0].content, /민수/)
   assert.match(requests[0].messages[0].content, /소꿉친구/)
   assert.match(requests[0].messages.at(-1)?.content ?? '', /유나: \*유나가 소파에 앉는다\.\*/)

@@ -13,7 +13,7 @@ export const PROPOSE_CHAT_SETTINGS_TOOL = 'propose_chat_settings';
  */
 export const CHAT_FEATURES_GUIDE = [
   'CHAT FEATURES the user can use (UI names in Korean, as the app shows them)',
-  '- Scene narration: a line of the user\'s message that starts with `$` is narration written as the narrator (events of the scene, not the user\'s character). `$$` at the start writes a literal `$`. The model receives such lines tagged [나레이션].',
+  '- Scene narration: a line of the user\'s message that starts with `$` is narration written as the narrator (events of the scene, not the user\'s character). `$$` at the start writes a literal `$`. The model receives such lines tagged [Narration].',
   '- Orders from a reply: a character reply\'s ⋯ menu has 이 장면 그리기, 이미지 다시 그리기 (a reply with an image), 목소리·소리 만들기, 로어로 남기기 and 다음 선택지 만들기 (1:1, last reply only). Each shows only when the profile can use that tool; the result is added to that reply, no new message. 여기서 분기 in the same menu starts a branch chat from that message.',
   '- File versions: when a reply creates or edits a file-store file, file chips appear under it; the name opens the file with its version history, ↶ undoes that reply\'s change. In the file store preview, the clock icon (버전 기록) shows diffs and 이 버전으로 되돌리기.',
   '- Record book: save_lore writes to one book per chat (pen mark in 컨텍스트 › 로어북). Default is the chat\'s own book; 📖+ → 새 로어북 만들기… makes an account book that becomes the record book; a linked book\'s ⋯ → 여기에 기록 / 이 채팅에 기록 switches. propose_chat_settings can change it too.',

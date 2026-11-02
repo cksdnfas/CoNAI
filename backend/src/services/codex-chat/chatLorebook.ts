@@ -673,9 +673,10 @@ export function selectLoreEntries(profile: LoreProfile, messages: ReadonlyArray<
     const content = render(item.entry.content)
     // The file is data: it stays as written, inside the reference block.
     const file = !item.entry.constant && item.entry.file && options.files ? item.file?.() ?? null : null
+    const inline = file ? `${content}\n  file ${file.name}: "${file.text.trim()}"` : ''
     const candidates = file && options.files
       ? [
-          options.files.inline && !file.truncated && estimate(file.text) <= LORE_FILE_INLINE_MAX_TOKENS ? `${content}\n  자료 ${file.name}: "${file.text.trim()}"` : '',
+          options.files.inline && !file.truncated && estimate(file.text) <= LORE_FILE_INLINE_MAX_TOKENS ? inline : '',
           `${content}\n  ${options.files.hint(file.name, { book: item.book, title: loreEntryTitle(item.entry) })}`,
         ].filter(Boolean)
       : [content]
@@ -689,7 +690,7 @@ export function selectLoreEntries(profile: LoreProfile, messages: ReadonlyArray<
       const decision = decisionOf(item, true, sticky.has(item.key) ? 'sticky' : item.entry.constant ? 'constant' : judgedIn.has(item.key) ? 'judge' : semanticIn.has(item.key) ? 'semantic' : via.has(item.key) ? 'recursive' : isRegexKeyword(matched[0]) ? 'regex' : `key:${matched[0]}`, matched)
       if (sticky.has(item.key)) decision.remaining = sticky.get(item.key)
       if (via.has(item.key)) decision.via = via.get(item.key)
-      if (file) decision.file = rendered === `${content}\n  자료 ${file.name}: "${file.text.trim()}"` ? 'inline' : 'hint'
+      if (file) decision.file = rendered === inline ? 'inline' : 'hint'
       decisions.push(decision)
       used += cost
       break

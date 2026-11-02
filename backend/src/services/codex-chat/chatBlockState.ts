@@ -229,19 +229,19 @@ export function foldGroupBlockState(members: ChatProfile[], messages: ReadonlyAr
 // How to read the values: shown through behaviour on top of the character's own voice, as the present rather than
 // the whole history (a low value is not "no shared past"), one field at a time.
 const STATE_READING_TEXT = [
-  '아래 값이 지금 장면의 사실이야(이전 답변에 쓴 값보다 우선). 바뀐 값만 같은 이름의 코드 블록에 써.',
-  '- 값을 대사로 읊지 말고 행동·거리감·말의 온도로 드러내. 성격과 말버릇은 그대로 두고, `말투:`는 그 위에 얹는 지금의 태도야.',
-  '- 값은 지금의 마음과 상황이야. 낮거나 0인 값도 함께한 과거나 관계가 없다는 뜻은 아니야. 기억·요약·설정에 남은 지난 일은 그대로 있었던 일이고, 값은 지금 그걸 어떻게 느끼는지야.',
-  '- 필드는 하나씩 따로 읽어. 한 값이 다른 필드의 뜻을 바꾸지 않아.',
+  'The values below are the facts of the scene now (they override values written in earlier replies). Write only the values that changed, in a code block named after the block.',
+  "- Show the values through behaviour, distance and warmth instead of stating them. Keep the character's personality and way of speaking; a `Tone:` line is the present attitude on top of that voice.",
+  '- Values are the present mood and situation. A low or zero value does not mean there is no shared past or relationship: what memories, summaries or lore record still happened, and the values say how it feels now.',
+  '- Read each field on its own; one value does not change the meaning of another field.',
 ].join('\n')
 
 /**
- * The state as the model reads it each request (inside `[참고 설정]`, beside the author's note): current values per
+ * The state as the model reads it each request (inside `[Reference]`, beside the author's note): current values per
  * block and the block's update rules.
  */
 export function blockStateText(blocks: ChatDisplayBlock[], state: Record<string, BlockData>) {
   const content = blockStateContentText(blocks, state)
-  return content ? ['## 현재 상태', STATE_READING_TEXT, content].join('\n') : ''
+  return content ? ['## Current state', STATE_READING_TEXT, content].join('\n') : ''
 }
 
 /** Public state values and rules, without the model's fixed instructions. */
@@ -249,9 +249,9 @@ export function blockStateContentText(blocks: ChatDisplayBlock[], state: Record<
   const parts = usableBlocks(blocks).map((block) => [
     `### ${block.key}`,
     JSON.stringify(state[block.key] ?? {}),
-    chatBlockToneText(block.fields, state[block.key] ?? {}) ? `말투: ${chatBlockToneText(block.fields, state[block.key] ?? {})}` : '',
-    block.rules ? `규칙: ${block.rules}` : '',
-    ...fieldRuleLines(block).map((line) => `필드 규칙: ${line}`),
+    chatBlockToneText(block.fields, state[block.key] ?? {}) ? `Tone: ${chatBlockToneText(block.fields, state[block.key] ?? {})}` : '',
+    block.rules ? `Rules: ${block.rules}` : '',
+    ...fieldRuleLines(block).map((line) => `Field rule: ${line}`),
   ].filter(Boolean).join('\n'))
   return parts.join('\n')
 }

@@ -306,7 +306,7 @@ export function pendingGenerationOutcomes(threadId: number, messages: CodexChatM
   const finished = jobIds.filter((jobId) => FINISHED_JOB_STATUSES.has(outcomes.get(jobId)?.status ?? '')).sort((left, right) => left - right)
   if (finished.length === 0) return { text: '', keys: [] as string[] }
   return {
-    text: ['## 생성 작업 결과 (지난 답장)', ...finished.map((jobId) => `- ${generationOutcomeNote(jobId, outcomes.get(jobId))}`)].join('\n'),
+    text: ['## Generation results (earlier replies)', ...finished.map((jobId) => `- ${generationOutcomeNote(jobId, outcomes.get(jobId))}`)].join('\n'),
     keys: finished.map((jobId) => `${OUTCOME_SENT_PREFIX}${jobId}`),
   }
 }

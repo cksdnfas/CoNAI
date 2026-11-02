@@ -168,5 +168,5 @@ export function userPersonaForThread(thread: Pick<CodexChatThreadRecord, 'accoun
 /** The user's section of a persona prompt: who they are to the character ('' for the plain user). */
 export function userPersonaPrompt(user: ChatUserPersona | null | undefined) {
   if (!user || (user.name === DEFAULT_USER_NAME && !user.persona)) return ''
-  return [`## 사용자`, `이름: ${user.name}`, user.persona].filter(Boolean).join('\n')
+  return [`## User`, `Name: ${user.name}`, user.persona].filter(Boolean).join('\n')
 }

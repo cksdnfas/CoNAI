@@ -53,7 +53,8 @@ export type ChatCompletionTarget = {
 }
 
 /** How conversation-time reference material (keyword lore, author's note) starts, in both engines' inputs. */
-export const REFERENCE_BLOCK_START = '[참고 설정]'
+export const REFERENCE_BLOCK_START = '[Reference]'
+export const REFERENCE_BLOCK_END = '[/Reference]'
 
 export type ChatCompletionResult = {
   content: string

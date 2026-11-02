@@ -341,5 +341,5 @@ export function rejectedLoreLine(threadId: number | null | undefined) {
   const titles = [...new Set(ChatProposalStore.dismissedOfKind(threadId, 'lore', REJECTED_LORE_TITLES)
     .map((proposal) => (proposal.kind === 'lore' ? proposal.title.replace(/\s+/g, ' ').trim() : ''))
     .filter(Boolean))].reverse()
-  return titles.length ? `(거절된 로어 제안: ${titles.join(', ')} — 다시 제안하지 마)` : ''
+  return titles.length ? `(Lore proposals the user rejected: ${titles.join(', ')} — do not propose them again)` : ''
 }

@@ -168,7 +168,7 @@ test('chat review items: lore conditions, card import report, post sections, att
     const continued = CodexChatStore.listMessages(id).find((message) => message.id === cut)!
     assert.equal(continued.content, '이야기는 이렇게 시작되었다.')
     assert.equal(continued.alternatives.length, 2, 'the cut reply stays as the other variant')
-    assert.ok(request.includes('[이어쓰기]'))
+    assert.ok(request.includes('[Continue]'))
     const meta = JSON.parse(continued.context_meta ?? 'null')
     assert.equal(meta?.promptTokens, 321)
     // Back to the cut variant: its own (empty) record, not the continuation's.
@@ -281,8 +281,8 @@ test('chat review items: lore conditions, card import report, post sections, att
     assert.equal(codexHistoryRecap(null, [], kai, user), '')
     assert.match(codexHistoryRecap(null, [line(1, 'assistant', '안녕!')], kai, user), /카이: 안녕!/, 'an assistant-only opening is real conversation too')
     const recap = codexHistoryRecap({ summary: '둘은 친구가 됐다.' }, [line(1, 'user', '바다 가자'), line(2, 'assistant', '좋아')], kai, user)
-    assert.match(recap, /^\[이전 기록\]/)
-    assert.ok(recap.includes('## 그 전의 요약\n둘은 친구가 됐다.') && recap.includes('사용자: 바다 가자\n\n카이: 좋아'))
+    assert.match(recap, /^\[Earlier conversation\]/)
+    assert.ok(recap.includes('## Summary of what came before\n둘은 친구가 됐다.') && recap.includes('사용자: 바다 가자\n\n카이: 좋아'))
   })
 
   await t.test('lore budget: always-on entries first, then the higher order; placed in order', () => {

@@ -214,11 +214,11 @@ test('stage 5: lore provenance, usage, undo, branches, greetings and tone', { ti
     assert.equal(chatBlockToneText(block.fields, { mood: '없음' }), '')
     const output = blockStateText([block], { status: { affinity: 0, mood: '슬픔' } })
     assert.ok(output.includes('{"affinity":0,"mood":"슬픔"}'))
-    assert.ok(output.includes('말투: 조심스럽게 말해 · 차분하게 말해'))
-    assert.ok(!blockStateText([block], { status: {} }).includes('말투: '))
+    assert.ok(output.includes('Tone: 조심스럽게 말해 · 차분하게 말해'))
+    assert.ok(!blockStateText([block], { status: {} }).includes('Tone: '))
     // A zero value is the present feeling, not a missing past; the values show through behaviour.
-    assert.match(output, /0인 값도 함께한 과거나 관계가 없다는 뜻은 아니야/)
-    assert.match(output, /행동·거리감·말의 온도로 드러내/)
+    assert.match(output, /A low or zero value does not mean there is no shared past or relationship/)
+    assert.match(output, /behaviour, distance and warmth/)
     assert.deepEqual(normalizeBlock(JSON.parse(JSON.stringify(block)))!.fields, block.fields)
   })
 
@@ -234,8 +234,8 @@ test('stage 5: lore provenance, usage, undo, branches, greetings and tone', { ti
     const withTone = request()
     const withoutTone = request({ ...stateProfile, style: { ...stateProfile.style, blocks: [{ ...block, fields: block.fields.map((field) => ({ ...field, tone: undefined })) }] } })
     assert.notEqual(withTone.meta.sources!.find((source) => source.kind === 'state')!.hash, withoutTone.meta.sources!.find((source) => source.kind === 'state')!.hash)
-    assert.ok(JSON.stringify(withTone.messages).includes('말투: 차분하게 말해'))
-    assert.ok(JSON.stringify(withTone.messages).includes('[참고 설정]'))
+    assert.ok(JSON.stringify(withTone.messages).includes('Tone: 차분하게 말해'))
+    assert.ok(JSON.stringify(withTone.messages).includes('[Reference]'))
   })
 
   await t.test('status checkpoints reuse appended history and invalidate on earlier edits and variants', async (s) => {

@@ -149,12 +149,12 @@ test('the profile picks the languages: messages go into the model language, repl
   assert.equal(requests.length, 2)
 })
 
-test('the chat model is told to write in the model language only when the profile translates', (t) => {
+test('the chat model writes in the model language only when the profile translates, else in the user\'s language', (t) => {
   mockTranslator(t, 'unused')
   assert.match(modelLanguageGuidance(translating), /Write every reply in English/)
   assert.match(modelLanguageGuidance({ ...translating, translationModelLanguage: 'ja' }), /Write every reply in Japanese/)
-  assert.equal(modelLanguageGuidance({ translationSlotId: null }), '')
-  assert.equal(modelLanguageGuidance({ ...translating, translationModelLanguage: 'ko', translationDisplayLanguage: 'ko' }), '')
+  assert.match(modelLanguageGuidance({ translationSlotId: null }), /Reply in the language the user writes in/)
+  assert.match(modelLanguageGuidance({ ...translating, translationModelLanguage: 'ko', translationDisplayLanguage: 'ko' }), /Reply in the language the user writes in/)
 })
 
 test('a translation that loses display-block fences, emoticon tokens or cast tags is dropped', async (t) => {
@@ -344,5 +344,5 @@ test('multi-select input translates a repeated question once and keeps its answe
   assert.equal(requests.length, 1)
   assert.equal(questions, 1)
   assert.equal(result.error, null)
-  assert.equal(buildFlagDirective(result.flags), '[선택지 답: What now?]\n- Go\n- Wait')
+  assert.equal(buildFlagDirective(result.flags), '[Answer to the choice: What now?]\n- Go\n- Wait')
 })

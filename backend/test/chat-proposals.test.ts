@@ -1198,7 +1198,7 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
       const started = proposalStatuses(pageThreadId, [proposed.id])[0]
       assert.equal(started.state, 'started', 'expiry must not invite replay of a started operation')
       assert.match(started.recovery ?? '', /check.*result.*before proposing again/i)
-      assert.match(proposalOutcomeNote(pageThreadId), /적용 시작.*결과/)
+      assert.match(proposalOutcomeNote(pageThreadId), /started, result unconfirmed/)
       assert.equal((await post(proposed.id, binding, 'page-applied')).status, 200, 'a checked application may finish after expiry')
       assert.equal(proposalStatuses(pageThreadId, [proposed.id])[0].state, 'saved')
       const expired = ChatProposalStore.add({ threadId: pageThreadId, profileId: pageProfile.id, kind: 'direct', replyId: 'expired-route' }, { kind: 'page_fields', page: target, changes: buildChatPageChanges(page, [{ fieldId: 'steps', value: 30 }]), expiresAt: Date.now() - 1 })

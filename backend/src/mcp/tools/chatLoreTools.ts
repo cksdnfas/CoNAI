@@ -126,7 +126,7 @@ export function loreFileResultText(result: Awaited<ReturnType<typeof readLoreFil
     result.text.replace(/\[\/자료\]/g, '[/ 자료]'),
     '[/자료]',
     result.nextOffset !== null
-      ? `(파일 ${result.size}바이트 중 ${result.nextOffset}바이트까지 읽음. 이어 읽으려면 ${READ_LORE_FILE_TOOL}(book=${JSON.stringify(result.book)}, title=${JSON.stringify(result.title)}, offset=${result.nextOffset}))`
+      ? `(Read up to byte ${result.nextOffset} of ${result.size}. To continue: ${READ_LORE_FILE_TOOL}(book=${JSON.stringify(result.book)}, title=${JSON.stringify(result.title)}, offset=${result.nextOffset}))`
       : '',
   ].filter((line, index) => index < 3 || line).join('\n');
 }
@@ -137,8 +137,8 @@ function allowsLoreProposals(profileId: number) {
 }
 
 /** What the model is told once its proposal is stored as a card, or saved right away (auto-save). */
-export const SAVE_LORE_DONE = '제안으로 올렸어. 사용자가 저장하면 들어가.';
-export const SAVE_LORE_SAVED = '로어북에 저장했어. 사용자가 되돌릴 수 있어.';
+export const SAVE_LORE_DONE = 'Proposed as a card under your reply; it is saved when the user presses 저장.';
+export const SAVE_LORE_SAVED = 'Saved to the lorebook; the user can undo it.';
 
 /**
  * Chat agents' lorebook tools, scoped like the room tools (no MCP scope needed). read_lore_file: offered in a chat
@@ -236,7 +236,7 @@ function registerSaveLore(server: McpServer, context: McpRequestContext): void {
         const proposal = await proposeTranslatedLore(chatContext, args, extra.mcpReq?.signal);
         const saved = proposal.kind === 'lore' && proposal.savedId !== undefined;
         const done = saved ? SAVE_LORE_SAVED : SAVE_LORE_DONE;
-        return { content: [{ type: 'text' as const, text: proposal.replaces ? `${done} (${saved ? '같은 제목의 항목을 고쳤어.' : '같은 제목의 항목을 고치는 제안이야.'})` : done }], structuredContent: { proposal } };
+        return { content: [{ type: 'text' as const, text: proposal.replaces ? `${done} (${saved ? 'It updated the entry with the same title.' : 'It updates the entry with the same title.'})` : done }], structuredContent: { proposal } };
       } catch (error) {
         return errorResult(error);
       }
@@ -258,7 +258,7 @@ function registerSaveLore(server: McpServer, context: McpRequestContext): void {
         if (!allowsLoreProposals(chatContext.profileId)) throw new Error('Lore proposals are turned off for this profile.');
         const chat: LoreChat = { threadId: chatContext.threadId, profileId: chatContext.profileId, accountId: context.requester?.accountId ?? null };
         const edited = editLoreFile(chat, args, fileWriteSource(context));
-        return { content: [{ type: 'text' as const, text: `자료를 고쳤어: [${edited.book}] ${edited.title} (${edited.file}, ${edited.size}바이트${edited.replaced !== undefined ? `, ${edited.replaced}군데 바꿈` : ''})` }] };
+        return { content: [{ type: 'text' as const, text: `Edited the file of [${edited.book}] ${edited.title} (${edited.file}, ${edited.size} bytes${edited.replaced !== undefined ? `, ${edited.replaced} replacement(s)` : ''})` }] };
       } catch (error) {
         return errorResult(error);
       }

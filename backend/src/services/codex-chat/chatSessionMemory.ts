@@ -8,7 +8,7 @@ import { blockStateHash, blockStateText } from './chatBlockState'
 import { threadBlockState } from './chatBlockCheckpoint'
 import { authorNoteText, estimateTokens, fillCharacterPlaceholders, resolveAuthorNote, type ChatContextMeta } from './llmChatContext'
 import { contextSource, contextSections, limitContextMeta, loreDiagnostics, type ContextSource } from './chatContextDiagnostics'
-import { booksForRequest, hasLoreFiles, loreIndexText, selectRequestLore } from './chatLoreContext'
+import { booksForRequest, hasLoreFiles, LORE_INDEX_HEADING, loreIndexText, selectRequestLore } from './chatLoreContext'
 import { buildLinkedIndex, placesForRequest } from './chatLinkedFiles'
 import { rejectedLoreLine } from './chatLoreProposals'
 import { userPersonaPrompt, type ChatUserPersona } from './chatUserProfiles'
@@ -87,10 +87,10 @@ export function codexHistoryRecap(thread: Pick<CodexChatThreadRecord, 'summary'>
   if (transcript.length > RECAP_CHARS) transcript = `…${transcript.slice(-RECAP_CHARS)}`
   const summary = thread?.summary?.trim()
   return [
-    '[이전 기록] 이 대화는 아래에서 이어져. 네 기억에는 없지만 실제로 나눈 대화야. 이어서 자연스럽게 답해.',
-    summary ? `## 그 전의 요약\n${summary}` : '',
-    `## 최근 대화\n${transcript}`,
-    '[/이전 기록]',
+    '[Earlier conversation] This conversation continues from what follows. You do not remember it, but it really took place. Carry on from it naturally.',
+    summary ? `## Summary of what came before\n${summary}` : '',
+    `## Recent messages\n${transcript}`,
+    '[/Earlier conversation]',
   ].filter(Boolean).join('\n\n')
 }
 
@@ -109,8 +109,8 @@ export function pendingLoreIndex(text: string, sent: Set<string>) {
   const key = `${LORE_INDEX_KEY}${text ? createHash('sha1').update(text).digest('hex').slice(0, 10) : 'none'}`
   if (sent.has(key)) return { text: '', keys: [] as string[] }
   const body = text
-    ? (replacing ? `${text}\n(로어북 목차와 상시 항목이 바뀌었어. 이전에 받은 목차·상시 항목·고정 기억 대신 이걸 따라.)` : text)
-    : '## 로어북 목차\n(붙은 로어북이 없어. 이전에 받은 목차·상시 항목·고정 기억은 따르지 마.)'
+    ? (replacing ? `${text}\n(The lorebook index and always-on entries changed. Follow these instead of any index, always-on entries or pinned memories given before.)` : text)
+    : `${LORE_INDEX_HEADING}\n(No lorebook is attached. Do not follow any index, always-on entries or pinned memories given before.)`
   return { text: body, keys: [key] }
 }
 

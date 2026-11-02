@@ -287,7 +287,7 @@ export function proposalOutcomeNote(threadId: number | null | undefined) {
   if (!rows.length) return ''
   const lines = rows.map(({ id, proposal }) => {
     const { state, savedId } = proposalState(proposal)
-    return `- #${id} ${proposalName(proposal)}: ${state === 'saved' ? `저장됨${savedId !== null ? ` (id ${savedId})` : ''}` : state === 'dismissed' ? '무시됨' : state === 'started' ? '적용 시작됨/결과 미확인. 다시 제안하기 전에 실제 결과를 확인해.' : state === 'expired' ? '만료됨/사용 불가. 페이지를 다시 읽고 새 검토 카드를 제안해.' : '아직 대기'}`
+    return `- #${id} ${proposalName(proposal)}: ${state === 'saved' ? `saved${savedId !== null ? ` (id ${savedId})` : ''}` : state === 'dismissed' ? 'dismissed' : state === 'started' ? 'started, result unconfirmed. Check the actual result before proposing it again.' : state === 'expired' ? 'expired, no longer usable. Read the page again and propose a new review card.' : 'still pending'}`
   })
   return ['[Your recent review cards and what the person did with them]', ...lines].join('\n')
 }

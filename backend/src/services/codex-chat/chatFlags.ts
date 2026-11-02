@@ -161,9 +161,9 @@ export function buildFlagDirective(flags: ChatFlagSnapshot[], fill: (text: strin
   const answers = new Map<string, string[]>()
   for (const flag of flags) if (flag.pick && flag.choice) answers.set(flag.choice.question, [...(answers.get(flag.choice.question) ?? []), flag.content.trim()])
   return [
-    lines.length > 0 ? `[사용자 지시: 이번 메시지에 적용]\n${lines.map((line) => `- ${line}`).join('\n')}` : '',
-    picks.length > 0 ? `[사용자 선택: 상태창에서 고른 항목]\n${picks.map((line) => `- ${line}`).join('\n')}` : '',
-    ...[...answers].map(([question, labels]) => `[선택지 답: ${question}]\n${labels.map((line) => `- ${line}`).join('\n')}`),
+    lines.length > 0 ? `[User instructions for this message]\n${lines.map((line) => `- ${line}`).join('\n')}` : '',
+    picks.length > 0 ? `[User picks from the status panel]\n${picks.map((line) => `- ${line}`).join('\n')}` : '',
+    ...[...answers].map(([question, labels]) => `[Answer to the choice: ${question}]\n${labels.map((line) => `- ${line}`).join('\n')}`),
   ].filter(Boolean).join('\n\n')
 }
 

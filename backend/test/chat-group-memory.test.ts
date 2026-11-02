@@ -51,7 +51,7 @@ test('group room memory: the room summary, what its members see, and recall', { 
     const body = String(init.body)
     requests.push(body)
     const keyword = /키워드:(\S+?)[.\\"]/.exec(body)?.[1] ?? '없음'
-    const content = body.includes('구간 요약') ? `줄거리 정리. ${FILLER}` : `${keyword}의 기억. ${FILLER}`
+    const content = body.includes('stretch summaries') ? `줄거리 정리. ${FILLER}` : `${keyword}의 기억. ${FILLER}`
     return Response.json({ choices: [{ message: { content }, finish_reason: 'stop' }] })
   })
   const stretch = (keyword: string) => {
@@ -66,7 +66,7 @@ test('group room memory: the room summary, what its members see, and recall', { 
     stretch('푸른등대')
     assert.equal(await summarizeGroupAhead(threadId, members, WINDOW), null)
     assert.equal(ChatSummaryStore.list(threadId).length, 0)
-    assert.ok(!sentTo(kai).includes('지금까지의 대화 요약'), 'no summary goes out while it is off')
+    assert.ok(!sentTo(kai).includes('Conversation summary so far'), 'no summary goes out while it is off')
   })
 
   await t.test('with the summary on, the oldest messages beyond the window fold under everyone\'s names', async () => {
@@ -80,7 +80,7 @@ test('group room memory: the room summary, what its members see, and recall', { 
     assert.equal(thread().summary_until_message_id, segment.until_message_id)
     // What the summary covers leaves every member's request; the summary stands in for it.
     const sent = sentTo(luna)
-    assert.ok(sent.includes('## 지금까지의 대화 요약\\n은하수정원의 기억'))
+    assert.ok(sent.includes('## Conversation summary so far\\n은하수정원의 기억'))
     assert.ok(!sent.includes('키워드:은하수정원'))
     assert.ok(sent.includes('키워드:푸른등대'))
   })
@@ -98,10 +98,10 @@ test('group room memory: the room summary, what its members see, and recall', { 
     assert.ok(usage.every((event) => event.thread_id === threadId && event.profile_id === kai.id), 'both segment and plot requests are attributed to the room and its summarizer')
     assert.ok(folded.some((segment) => segment.content.startsWith('은하수정원')))
     say(null, '은하수정원에서 했던 얘기 기억나?')
-    assert.ok(sentTo(kai).includes('## 관련된 지난 일\\n은하수정원의 기억'))
+    assert.ok(sentTo(kai).includes('## Related past events\\n은하수정원의 기억'))
     say(kai, '응, 기억나.')
     say(null, '오늘 날씨 어때?')
-    assert.ok(!sentTo(luna).includes('관련된 지난 일'))
+    assert.ok(!sentTo(luna).includes('Related past events'))
   })
 
   await t.test('the room needs an API LLM member to summarize; without one the failure is kept on the thread', async () => {

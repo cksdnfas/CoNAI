@@ -433,7 +433,7 @@ test('prompt preview uses the same author note and block state as a new direct r
   const actual = buildChatMessages({ profile, thread, messages: [], config: resolveContextConfig(thread, profile), tools: [] })
   assert.deepEqual(preview, actual)
   assert.ok(JSON.stringify(preview).includes('Keep the scene short.'))
-  assert.ok(JSON.stringify(preview).includes('현재 상태'))
+  assert.ok(JSON.stringify(preview).includes('Current state'))
 })
 
 test('tool calls a server left in the reply text are recovered only for offered tools', async () => {
@@ -590,7 +590,7 @@ test('a tool round that does not fit is retried with the tool result cut shorter
     { role: 'assistant', content: null, tool_calls: [{ id: 'c1', type: 'function', function: { name: 'read_lore_file', arguments: '{}' } }] },
     { role: 'tool', tool_call_id: 'c1', content: 'x'.repeat(40000) },
   ]
-  const cut = messages.map((message) => (message.role === 'tool' ? { ...message, content: `${'x'.repeat(4000)}\n…(잘림: 이 결과의 4000자까지만 보임)` } : message))
+  const cut = messages.map((message) => (message.role === 'tool' ? { ...message, content: `${'x'.repeat(4000)}\n…(cut: first 4000 characters shown)` } : message))
   profile.contextTokens = estimateMessagesTokens(profile.id, cut) + 100
   const fitted = fitChatContext(profile, messages, [], 100)
   assert.notEqual(fitted, messages)
@@ -664,7 +664,7 @@ test('the summary transcript leaves out the chat\'s own tools, quoted lore files
     tool_calls: [call('save_lore', '제안으로 올렸어.'), call('read_lore_file', '[자료 자료/일지.md] …'), call('room_history_read', '(기록 ID 50)'), call('chat_reply_to', 'ok'), call('submit_generation_job', 'job 12 queued')],
   } as unknown as CodexChatMessageRecord
   const line = lineOf(reply)
-  assert.equal(line, '카이: 금요일 밤이야.\n또 봐\n[도구 submit_generation_job: job 12 queued]')
+  assert.equal(line, '카이: 금요일 밤이야.\n또 봐\n[tool submit_generation_job: job 12 queued]')
   assert.equal(summaryTranscriptText('[카이; message_id=3; to=[1]] 안녕'), '안녕')
   // A reply that only used the chat's own tools leaves no line at all.
   assert.equal(lineOf({ ...reply, content: '', tool_calls: [call('save_lore', '제안으로 올렸어.')] } as CodexChatMessageRecord), '')
@@ -681,10 +681,10 @@ test('a generation is summarized by the scene the model asked for, and replays w
     tool_calls: [call('g', 'generate_image_3', { prompt: '1girl, smiling, cafe, window light', size: 'portrait' })],
   } as unknown as CodexChatMessageRecord
   // The summary keeps the scene: the job JSON says nothing about the picture.
-  assert.equal(lineOf(reply), '카이: 자, 봐봐.\n[이미지 생성: 1girl, smiling, cafe, window light]')
+  assert.equal(lineOf(reply), '카이: 자, 봐봐.\n[image generation: 1girl, smiling, cafe, window light]')
   // submit_generation_job carries its prompt in the payload; a call without any prompt falls back to its summary.
-  assert.match(lineOf({ ...reply, tool_calls: [call('s', 'submit_generation_job', { service_type: 'novelai', request_payload: { prompt: 'forest, night' } })] } as CodexChatMessageRecord), /\[이미지 생성: forest, night\]$/)
-  assert.match(lineOf({ ...reply, tool_calls: [call('s', 'submit_generation_job', {})] } as CodexChatMessageRecord), /\[도구 submit_generation_job: \{"id":12/)
+  assert.match(lineOf({ ...reply, tool_calls: [call('s', 'submit_generation_job', { service_type: 'novelai', request_payload: { prompt: 'forest, night' } })] } as CodexChatMessageRecord), /\[image generation: forest, night\]$/)
+  assert.match(lineOf({ ...reply, tool_calls: [call('s', 'submit_generation_job', {})] } as CodexChatMessageRecord), /\[tool submit_generation_job: \{"id":12/)
 
   // Without the outcome pass the model would read the submission's "queued" JSON forever.
   assert.equal(toCompletionMessages(reply)[1].content, queued)

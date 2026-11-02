@@ -40,7 +40,9 @@ export function presetInputShape(preset: ChatGenerationPreset): PresetInputShape
   if (preset.kind === 'nai') {
     const sizes = preset.nai?.sizes ?? []
     const labels = sizes.map((size) => size.label)
-    const shape: Record<string, z.ZodTypeAny> = { prompt: z.string().min(1).max(4000).describe(SCENE_DESCRIPTION) }
+    // A field description sits closer to the value than the tool's guide, so it must defer to the guide by itself.
+    const guided = Boolean(preset.prompting.guide || preset.prompting.guideFile?.path)
+    const shape: Record<string, z.ZodTypeAny> = { prompt: z.string().min(1).max(4000).describe(guided ? `${SCENE_DESCRIPTION} Where the preset's prompt guide says otherwise, follow the guide.` : SCENE_DESCRIPTION) }
     if (labels.length > 1) {
       shape.size = z.enum(labels as [string, ...string[]]).optional().describe(`Picture size: ${sizes.map((size) => `${size.label} (${size.width}×${size.height})`).join(', ')}. Default ${labels[0]}.`)
     }

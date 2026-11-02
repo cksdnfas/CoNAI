@@ -9,6 +9,7 @@ import { ChatGroupStore, groupLimitsOf } from './chatGroupStore'
 import { readReplyHistory } from './chatJudge'
 import { splitTurns } from './llmChatContext'
 import type { ChatCompletionMessage, ChatCompletionTool } from './llmChatCompletion'
+import { referenceBlock } from './llmChatContext'
 import { estimateMessagesTokens, replyReserveFor } from './llmChatContext'
 import { postHistoryText, buildContextMeta, recalledSegments, type ChatContextMeta } from './llmChatContext'
 import { recallText } from './chatMemory'
@@ -40,8 +41,8 @@ function transcriptLine(message: CodexChatMessageRecord, names: Map<number, stri
   const tools = message.tool_calls.map((call) => {
     // Another member's generation: the scene they asked for and what became of it, not the job JSON.
     const prompt = isCodexChatCreationTool(call.tool) ? generationPromptOf(call) : null
-    if (prompt) return `(이미지 생성: ${prompt.slice(0, OTHER_TOOL_NOTE_LENGTH)}${call.output && !call.output.startsWith('{') ? ` — ${call.output.slice(0, OTHER_TOOL_NOTE_LENGTH)}` : ''})`
-    return `(도구 ${call.tool}${call.summary ? `: ${call.summary.slice(0, OTHER_TOOL_NOTE_LENGTH)}` : ''})`
+    if (prompt) return `(image generation: ${prompt.slice(0, OTHER_TOOL_NOTE_LENGTH)}${call.output && !call.output.startsWith('{') ? ` — ${call.output.slice(0, OTHER_TOOL_NOTE_LENGTH)}` : ''})`
+    return `(tool ${call.tool}${call.summary ? `: ${call.summary.slice(0, OTHER_TOOL_NOTE_LENGTH)}` : ''})`
   })
   return [`[${speakerName(message, names, user)}; ${messageAddress(message)}] ${text}`.trim(), ...tools].join('\n')
 }
@@ -313,16 +314,16 @@ export function buildGroupCodexInput(params: {
   const { missed, shown } = groupMissedMessages(params.messages, self.id, lastSeenMessageId, windowLimit, params.history)
   // The room's summary fills the gap a member's own memory cannot: its first turn, or more missed than the window shows.
   const gap = lastSeenMessageId === null || missed.length > shown.length
-  const summary = gap && groupSummaryOn(thread) && thread.summary?.trim() ? `[방 요약]\n${thread.summary.trim()}\n[/방 요약]` : ''
+  const summary = gap && groupSummaryOn(thread) && thread.summary?.trim() ? `[Room summary]\n${thread.summary.trim()}\n[/Room summary]` : ''
   return [
     params.header === false ? '' : buildGroupHeader({ thread, members, self, user }),
     summary,
     hiddenHistoryNote(thread, missed.length - shown.length),
     buildReplyContext(params.messages, params.routing, { group: true, historySource: params.history?.source, positions: params.history?.outline, visibleIds: new Set(shown.map((message) => message.id)), nameOf: (message) => speakerName(message, names, user) }),
-    lore ? `[참고 설정]\n${lore}\n[/참고 설정]` : '',
-    `[${lastSeenMessageId === null ? '지금까지의 대화' : '네가 마지막으로 말한 뒤의 대화'}]\n${shown.map((message) => transcriptLine(message, names, user, params.attachmentTexts, params.attachedImages)).join('\n\n')}`,
+    referenceBlock([lore]),
+    `[${lastSeenMessageId === null ? 'Conversation so far' : 'Conversation since you last spoke'}]\n${shown.map((message) => transcriptLine(message, names, user, params.attachmentTexts, params.attachedImages)).join('\n\n')}`,
     directive,
-    [`이제 ${self.name}로서 답해.`, mentionReminder(members, self)].filter(Boolean).join(' '),
+    [`Now reply as ${self.name}.`, mentionReminder(members, self)].filter(Boolean).join(' '),
   ].filter(Boolean).join('\n\n')
 }
 

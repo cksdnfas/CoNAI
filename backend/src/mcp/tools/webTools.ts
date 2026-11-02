@@ -28,14 +28,14 @@ export function registerWebTools(server: McpServer, context: McpRequestContext):
   // The answer goes straight into a linked file, so the model need not write it out again; allowed where linked_write is.
   const saveAnswer = (target: string, query: string, answer: string) => {
     const chatContext = context.chatContext;
-    if (!chatContext || !isContextToolAllowed(context, LINKED_TOOLS.write)) return `(저장 못 함: 이 채팅에서는 ${LINKED_TOOLS.write}를 쓸 수 없어.)`;
+    if (!chatContext || !isContextToolAllowed(context, LINKED_TOOLS.write)) return `(Not saved: ${LINKED_TOOLS.write} is not available in this chat.)`;
     try {
       const thread = CodexChatStore.findThread(chatContext.threadId, context.requester?.accountId ?? null);
-      if (!thread) return '(저장 못 함: 채팅을 찾을 수 없어.)';
+      if (!thread) return '(Not saved: the chat was not found.)';
       const places = placesForRequest({ thread, profile: ChatProfileStore.find(chatContext.profileId) });
       return `(${writeLinked(places, target, `# ${query}\n\n${answer}\n`, false, fileWriteSource(context))})`;
     } catch (error) {
-      return `(저장 못 함: ${error instanceof Error ? error.message : String(error)})`;
+      return `(Not saved: ${error instanceof Error ? error.message : String(error)})`;
     }
   };
 
@@ -44,7 +44,7 @@ export function registerWebTools(server: McpServer, context: McpRequestContext):
     inputSchema: z.object({
       query: z.string().trim().min(1).max(1000).describe('The question, with the names, versions or dates that pin it down'),
       focus: z.string().trim().max(500).optional().describe('What the answer is for, so the research keeps to it'),
-      save_as: z.string().trim().min(1).max(500).optional().describe(`Also save the answer as a new file in a linked folder marked 쓰기, e.g. [자료]/topic.md (as ${LINKED_TOOLS.write} would; a taken name is not replaced)`),
+      save_as: z.string().trim().min(1).max(500).optional().describe(`Also save the answer as a new file in a linked folder marked write, e.g. [자료]/topic.md (as ${LINKED_TOOLS.write} would; a taken name is not replaced)`),
     }),
   }, ({ query, focus, save_as }, extra) => run(async () => {
     const answer = await researchWeb(context.requester ?? { accountId: null, accountType: null }, { query, focus }, {

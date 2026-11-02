@@ -43,7 +43,7 @@ export async function loadInlineAttachmentTexts(owner: string, messages: Readonl
     if (total >= INLINE_ATTACHMENTS_TOTAL_BYTES) break;
     try {
       const chunk = await FileStoreService.readText(owner, file.id, 0, Math.min(INLINE_ATTACHMENT_BYTES, Math.max(4, file.size)));
-      texts.set(file.id, [chunk.extracted ? `추출 문서 (${chunk.extractionState}); ${chunk.note ?? ''}` : '', chunk.text, chunk.nextOffset !== null ? `…(이후 생략, 추출 본문 ${chunk.size}바이트)` : ''].filter(Boolean).join('\n'));
+      texts.set(file.id, [chunk.extracted ? `Extracted document (${chunk.extractionState}); ${chunk.note ?? ''}` : '', chunk.text, chunk.nextOffset !== null ? `…(rest omitted; the text is ${chunk.size} bytes)` : ''].filter(Boolean).join('\n'));
       total += Buffer.byteLength(chunk.text);
     } catch {
       // Not readable as text: it stays metadata only.

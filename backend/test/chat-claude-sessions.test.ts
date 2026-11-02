@@ -74,7 +74,7 @@ test('claude sessions: forked turns, input once, resets and cleanup', { timeout:
     const first = await build()
     assert.equal(first.session.resumeId, null)
     assert.match(String(first.messages[0].content), /너는 루나야/)
-    assert.match(textOf(first.messages), /\[이전 기록\]/)
+    assert.match(textOf(first.messages), /\[Earlier conversation\]/)
     assert.match(textOf(first.messages), /안녕, 왔구나/)
     assert.match(textOf(first.messages), /분위기는 차분하게/)
     assert.match(textOf(first.messages), /오늘 뭐 했어\?/)
@@ -87,7 +87,7 @@ test('claude sessions: forked turns, input once, resets and cleanup', { timeout:
     add('user', '보여줘')
     const second = await build()
     assert.equal(second.session.resumeId, one)
-    assert.doesNotMatch(textOf(second.messages), /\[이전 기록\]/)
+    assert.doesNotMatch(textOf(second.messages), /\[Earlier conversation\]/)
     assert.doesNotMatch(textOf(second.messages), /분위기는 차분하게/, 'the note was given already')
     assert.match(textOf(second.messages), /보여줘/)
 
@@ -104,7 +104,7 @@ test('claude sessions: forked turns, input once, resets and cleanup', { timeout:
     ChatProfileStore.update(profile.id, { systemPrompt: '너는 이제 카이야.' })
     const changed = await build()
     assert.equal(changed.session.resumeId, null)
-    assert.match(textOf(changed.messages), /\[이전 기록\]/)
+    assert.match(textOf(changed.messages), /\[Earlier conversation\]/)
     changed.session.onDone(two, false)
     assert.equal((await build()).session.resumeId, two)
 
@@ -141,7 +141,7 @@ test('claude sessions: forked turns, input once, resets and cleanup', { timeout:
     const bounded = await buildClaudeSessionTurn({ ...params, history, historySource })
     assert.deepEqual(bounded.messages, expected.messages)
     assert.deepEqual(bounded.contextMeta, expected.contextMeta)
-    assert.match(String(bounded.messages[1].content), /\[이전 기록\]/)
+    assert.match(String(bounded.messages[1].content), /\[Earlier conversation\]/)
     assert.match(String(bounded.messages[1].content), /turn-0\b/)
     assert.equal(history.length, 4)
     const before = full.at(-1)!.id
@@ -186,7 +186,7 @@ test('claude sessions: forked turns, input once, resets and cleanup', { timeout:
     assert.equal(first.session.dir, claudeMemberSessionDir(roomId, luna.id))
     assert.match(String(first.messages[0].content), /너는 루나야[\s\S]*## Group chat room/)
     assert.doesNotMatch(textOf(first), /## Group chat room/, 'the room header is in the fixed part')
-    assert.match(textOf(first), /\[지금까지의 대화\][\s\S]*다들 안녕/)
+    assert.match(textOf(first), /\[Conversation so far\][\s\S]*다들 안녕/)
     assert.match(textOf(first), /분위기는 차분하게/)
     const one = '11111111-1111-4111-8111-111111111111'
     finish(first, luna.id, one)
@@ -204,7 +204,7 @@ test('claude sessions: forked turns, input once, resets and cleanup', { timeout:
     add('user', '루나는 오늘 뭐 했어?')
     const second = await build(luna.id)
     assert.equal(second.session.resumeId, one)
-    assert.match(textOf(second), /\[네가 마지막으로 말한 뒤의 대화\]/)
+    assert.match(textOf(second), /\[Conversation since you last spoke\]/)
     assert.doesNotMatch(textOf(second), /안녕, 다들/, 'its own reply is in its session already')
     assert.match(textOf(second), /루나 왔네[\s\S]*오늘 뭐 했어/)
     assert.doesNotMatch(textOf(second), /분위기는 차분하게/, 'the note was given already')
@@ -231,7 +231,7 @@ test('claude sessions: forked turns, input once, resets and cleanup', { timeout:
     const joined = await build(luna.id)
     assert.equal(joined.session.resumeId, null)
     assert.match(String(joined.messages[0].content), /미나/)
-    assert.match(textOf(joined), /\[지금까지의 대화\]/)
+    assert.match(textOf(joined), /\[Conversation so far\]/)
     finish(joined, luna.id, three)
     assert.equal((await build(luna.id)).session.resumeId, three)
 

@@ -22,7 +22,7 @@ import { buildEmoticonGuidance } from './chatEmoticons'
 import { buildChatStyleGuidance } from './chatStyle'
 import { attachedImagesOf, chatContentWithAttachments, type AttachedImages } from './chatAttachments'
 import type { LoreHistoryMessage, SelectedLore } from './chatLorebook'
-import { booksForRequest, loreIndexText, READ_LORE_FILE_TOOL, selectRequestLore, type AttachedLoreBook, type ChatLore } from './chatLoreContext'
+import { booksForRequest, CONSTANT_LORE_HEADING, loreIndexText, READ_LORE_FILE_TOOL, selectRequestLore, type AttachedLoreBook, type ChatLore } from './chatLoreContext'
 import { rejectedLoreLine, SAVE_LORE_TOOL } from './chatLoreProposals'
 import { buildLinkedIndex, LINKED_TOOLS, placesForRequest } from './chatLinkedFiles'
 import { profileSkillIndex, skillReminderText, USE_SKILL_TOOL } from './chatSkills'
@@ -32,7 +32,7 @@ import { generationPromptOf } from './chatToolReferences'
 import { CodexChatStore, type ChatHistorySource, type CodexChatMessageRecord, type CodexChatThreadRecord } from './codexChatStore'
 import { ChatSummaryStore, recallText, selectRecall, splitSegments, type ChatSummarySegment } from './chatMemory'
 import type { JudgedContext } from './chatJudgeContext'
-import { REFERENCE_BLOCK_START, resolveChatCompletionTarget, streamChatCompletion, type ChatCompletionMessage, type ChatCompletionTool, type ChatContentPart } from './llmChatCompletion'
+import { REFERENCE_BLOCK_END, REFERENCE_BLOCK_START, resolveChatCompletionTarget, streamChatCompletion, type ChatCompletionMessage, type ChatCompletionTool, type ChatContentPart } from './llmChatCompletion'
 import { inBackground } from '../llmRequestScheduler'
 import { rawMessagesEstimate as rawUsageEstimate, rawTokenEstimate } from '../llmUsage'
 import { ChatEstimateRatioStore } from './chatEstimateRatios'
@@ -54,7 +54,8 @@ export function replyReserveFor(contextTokens: number | null, maxTokens: number 
   return contextTokens === null ? cap : Math.min(cap, Math.max(DEFAULT_REPLY_RESERVE_TOKENS, Math.floor(contextTokens / 4)))
 }
 
-const EXAMPLE_NOTE = '바로 뒤에 이어지는 첫 user/assistant 대화들은 말투와 형식을 보여주는 예시일 뿐 실제로 나눈 대화가 아니야. 실제 대화는 그 다음부터야.'
+const EXAMPLE_NOTE = 'The first user/assistant turns right after this system message are examples of tone and format only, not a conversation that took place. The real conversation starts after them.'
+const SUMMARY_HEADING = '## Conversation summary so far'
 
 function exampleNote(examples: number) {
   return examples > 0 ? EXAMPLE_NOTE : ''
@@ -74,7 +75,7 @@ export const GENERATION_GUIDANCE = {
     'NovelAI requests must always use n_samples 1 (two or more samples cost paid Anlas). Submit separate jobs for more images.',
   ],
   preset: [
-    'To generate, call a generate_image tool right away (one tool per preset; pick by its description) and fill only the fields it asks for: the preset already holds the model, sizes, quality and style tags and the negative prompt, so never repeat those.',
+    'To generate, call a generate_image tool right away (one tool per preset; pick by its description) and fill only the fields it asks for. When the tool has a prompt guide, follow it: it overrides these defaults and the field descriptions. The preset already holds the model, sizes, quality and style tags and the negative prompt, so do not repeat those unless the guide asks for them.',
     GENERATION_ASYNC_GUIDANCE,
     'Generate only through the linked presets. Offered workflow read tools remain available for explanations and diagnostics, not for bypassing the presets.',
   ],
@@ -396,15 +397,15 @@ export function buildLeadingMessages(profile: ChatProfile, thread: Pick<CodexCha
   // prefix a server cached stays the same until they change.
   const memory = [
     loreIndexText(lore),
-    config.summaryEnabled && thread?.summary?.trim() ? `## 지금까지의 대화 요약\n${thread.summary.trim()}` : '',
+    config.summaryEnabled && thread?.summary?.trim() ? `${SUMMARY_HEADING}\n${thread.summary.trim()}` : '',
   ].filter(Boolean).join('\n\n')
   const system = [systemPrompt, memory].filter(Boolean).join('\n\n')
   const result: ChatCompletionMessage[] = system ? [markContextParts({ role: 'system', content: system }, [
     ...personaParts,
     { kind: 'guidance', text: [note, guidance].filter(Boolean).join('\n\n') },
     { kind: 'lore-index', text: lore.index },
-    { kind: 'constant-lore', text: lore.constant ? `## 상시 항목\n${lore.constant}` : '' },
-    { kind: 'summary', text: config.summaryEnabled && thread?.summary?.trim() ? `## 지금까지의 대화 요약\n${thread.summary.trim()}` : '' },
+    { kind: 'constant-lore', text: lore.constant ? `${CONSTANT_LORE_HEADING}\n${lore.constant}` : '' },
+    { kind: 'summary', text: config.summaryEnabled && thread?.summary?.trim() ? `${SUMMARY_HEADING}\n${thread.summary.trim()}` : '' },
   ])] : []
   return [...result, ...examples]
 }
@@ -420,10 +421,10 @@ export function loreBlock(lore: Pick<SelectedLore, 'keyed'>) {
   return lore.keyed ? referenceBlock([lore.keyed]) : ''
 }
 
-/** Conversation-time reference material (`[참고 설정]`), the same marks for both engines. */
+/** Conversation-time reference material (`[Reference]`), the same marks for both engines. */
 export function referenceBlock(parts: string[]) {
   const body = parts.map((part) => part.trim()).filter(Boolean).join('\n\n')
-  return body ? `${REFERENCE_BLOCK_START}\n${body}\n[/참고 설정]` : ''
+  return body ? `${REFERENCE_BLOCK_START}\n${body}\n${REFERENCE_BLOCK_END}` : ''
 }
 
 export type AuthorNote = { text: string; depth: number }
@@ -438,7 +439,7 @@ export function resolveAuthorNote(thread: Pick<CodexChatThreadRecord, 'author_no
 }
 
 export function authorNoteText(note: Pick<AuthorNote, 'text'>) {
-  return note.text ? `## 작가 노트\n${note.text}` : ''
+  return note.text ? `## Author's note\n${note.text}` : ''
 }
 
 /**
@@ -805,7 +806,7 @@ export function cutToolOutput(content: string, length: number) {
   } catch {
     // Plain text keeps the existing readable prefix and explicit cut marker.
   }
-  return `${content.slice(0, length)}\n…(잘림: 이 결과의 ${length}자까지만 보임)`
+  return `${content.slice(0, length)}\n…(cut: first ${length} characters shown)`
 }
 
 /**
@@ -1021,7 +1022,7 @@ function transcriptLine(message: CodexChatMessageRecord, speakerOf: (message: Co
   // A generation is remembered by the scene the model asked for: its result JSON names no picture.
   const tools = message.tool_calls.filter((call) => !CHAT_ROOM_TOOLS.has(call.tool)).map((call) => {
     const prompt = isCodexChatCreationTool(call.tool) ? generationPromptOf(call) : null
-    return prompt ? `[이미지 생성: ${prompt.slice(0, SUMMARY_TOOL_NOTE_LENGTH)}]` : `[도구 ${call.tool}: ${(call.summary ?? '').slice(0, SUMMARY_TOOL_NOTE_LENGTH)}]`
+    return prompt ? `[image generation: ${prompt.slice(0, SUMMARY_TOOL_NOTE_LENGTH)}]` : `[tool ${call.tool}: ${(call.summary ?? '').slice(0, SUMMARY_TOOL_NOTE_LENGTH)}]`
   })
   // Block fences are state, not conversation: the summary does without them.
   const text = summaryTranscriptText(message.role === 'assistant' ? stripBlockFences(message.content, blocksOf(message)) : chatContentWithAttachments(message.content, message.attachments, message.mediaAttachments))
@@ -1125,12 +1126,12 @@ function directFoldHistory(thread: CodexChatThreadRecord, profile: ChatProfile, 
 
 /** A stretch is summarized on its own: what came before is only there to keep names and threads straight. */
 const SEGMENT_PROMPT = [
-  "아래 '이어진 대화'만 요약해줘. '앞선 내용'은 흐름을 잡기 위한 참고용이니 다시 쓰지 마.",
-  '인물·관계·약속·설정·진행 중인 일·사용자의 선호, 그리고 이미지나 기록 ID처럼 다시 쓸 값은 빠뜨리지 마.',
-  '사람·장소·물건 이름은 대화에 나온 그대로 써.',
-  '요약만 출력하고 다른 말은 붙이지 마.',
+  'Summarize only the "New conversation" section below. "Earlier context" is there to keep the flow straight; do not summarize it again.',
+  "Keep the people, relationships, promises, settings, ongoing matters and the user's preferences, and values to reuse later such as image or record IDs.",
+  'Write the names of people, places and things exactly as the conversation does.',
+  'Write the summary in the language the conversation uses. Output only the summary, nothing else.',
 ].join('\n')
-const SEGMENT_PROMPT_SUFFIX = "이번에는 '이어진 대화'만 요약해. '앞선 내용'은 참고용이니 다시 쓰지 마. 이름은 대화에 나온 그대로 써."
+const SEGMENT_PROMPT_SUFFIX = 'This time summarize only the "New conversation" section; "Earlier context" is for reference, do not summarize it again. Write names exactly as the conversation does.'
 
 /** Active segments beyond this budget are folded into the plot, all but the newest KEEP_RECENT_SEGMENTS. */
 const DEFAULT_SUMMARY_BUDGET_TOKENS = 3000
@@ -1188,17 +1189,17 @@ async function summarizeSegment(profile: ChatProfile, config: LlmChatContextConf
   }
   const custom = profile.summaryPrompt.trim()
   const transcript = messages.map(lineOf).filter(Boolean).join('\n\n')
-  return completeSummary(profile, custom ? `${custom}\n\n${SEGMENT_PROMPT_SUFFIX}` : SEGMENT_PROMPT, `## 앞선 내용\n${context.join('\n\n') || '(없음)'}\n\n## 이어진 대화\n${transcript}`, signal, threadId)
+  return completeSummary(profile, custom ? `${custom}\n\n${SEGMENT_PROMPT_SUFFIX}` : SEGMENT_PROMPT, `## Earlier context\n${context.join('\n\n') || '(none)'}\n\n## New conversation\n${transcript}`, signal, threadId)
 }
 
 /** The plot rides along with every request, so it is told to stay one compact story rather than grow with each fold. */
-const PLOT_PROMPT_SUFFIX = '결과는 하나의 줄거리로 써. 목록보다 문단으로 쓰고, 오래된 일일수록 짧게 줄여. 이름은 그대로 써.'
+const PLOT_PROMPT_SUFFIX = 'Write the result as one storyline: paragraphs rather than lists, the older the events the shorter. Keep the names as written.'
 
 /**
  * The plot rewritten to take in `segments` (the oldest active ones), with the profile's summary prompt and allowance.
  */
 function summarizePlot(profile: ChatProfile, config: LlmChatContextConfig, plot: ChatSummarySegment | null, segments: ChatSummarySegment[], signal?: AbortSignal, threadId?: number) {
-  return completeSummary(profile, `${config.summaryPrompt}\n\n${PLOT_PROMPT_SUFFIX}`, `## 이전 요약\n${plot?.content.trim() || '(없음)'}\n\n## 이어진 대화 (구간 요약)\n${segments.map((segment) => segment.content.trim()).join('\n\n')}`, signal, threadId)
+  return completeSummary(profile, `${config.summaryPrompt}\n\n${PLOT_PROMPT_SUFFIX}`, `## Previous summary\n${plot?.content.trim() || '(none)'}\n\n## New conversation (stretch summaries)\n${segments.map((segment) => segment.content.trim()).join('\n\n')}`, signal, threadId)
 }
 
 /** The oldest of `segments` that fit one plot call beside the plot itself (at least one), so a long backlog goes in passes. */
