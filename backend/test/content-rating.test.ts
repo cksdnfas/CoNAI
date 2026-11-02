@@ -201,14 +201,11 @@ test('content rating ceilings: what a model may be shown', { timeout: 60000 }, a
     assert.equal((await call(teen, 'get_image_metadata', { composite_hash: safe })).prompt, 'redaction probe')
     assert.equal((await call(null, 'get_image_metadata', { composite_hash: sensitive })).prompt, 'redaction probe')
 
-    const found = (await call(teen, 'search_images', { search_text: 'redaction probe' })).images as Array<{ composite_hash: string; prompt: string; rating_restricted?: boolean }>
-    assert.equal(found.length, 2, 'restricted items stay in the results')
-    const hidden = found.find((image) => image.composite_hash === sensitive)!
-    assert.equal(hidden.rating_restricted, true)
-    assert.notEqual(hidden.prompt, 'redaction probe')
-    const shown = found.find((image) => image.composite_hash === safe)!
-    assert.equal(shown.rating_restricted, undefined)
-    assert.equal(shown.prompt, 'redaction probe')
+    const found = (await call(teen, 'search_images', { search_text: 'redaction probe' })).images as Array<{ composite_hash: string; prompt: string }>
+    assert.deepEqual(found.map((image) => image.composite_hash), [safe], 'a search leaves out media above the ceiling')
+    assert.equal(found[0].prompt, 'redaction probe')
+    const unlimited = (await call(null, 'search_images', { search_text: 'redaction probe' })).images as Array<{ composite_hash: string }>
+    assert.deepEqual(unlimited.map((image) => image.composite_hash).sort(), [safe, sensitive].sort())
   })
 
   await t.test('a connected screen hides the prompts and tags of media above the ceiling, the live snapshot kept', async () => {

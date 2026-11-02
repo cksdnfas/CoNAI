@@ -25,8 +25,10 @@ import { buildIdPageResponse, normalizeIdPage, type IdPage, type IdPageResponse 
  * - upload_date → first_seen_date
  * - 모든 기존 기능 유지
  */
-function getVisibleImageCondition() {
-  return ImageSafetyService.buildVisibleScoreCondition('im.rating_score');
+/** `ratingLimit`: a model's content rating ceiling (rating_tiers.id) whose search leaves out media above it. */
+function getVisibleImageCondition(ratingLimit: number | null = null) {
+  const visible = ImageSafetyService.buildVisibleScoreCondition('im.rating_score');
+  return ratingLimit === null ? visible : `${visible} AND ${ImageSafetyService.buildRatingCeilingCondition('im.rating_score', ratingLimit)}`;
 }
 
 function getReadyImageCondition() {
@@ -79,6 +81,7 @@ export class ImageSearchModel {
     sortBy: 'upload_date' | 'filename' | 'file_size' | 'width' | 'height' = 'upload_date',
     sortOrder: 'ASC' | 'DESC' = 'DESC',
     cursor?: { useCursor?: boolean; value?: string | number | null; compositeHash?: string; includeTotal?: boolean },
+    ratingLimit: number | null = null,
   ): Promise<{ images: any[], total: number; hasMore?: boolean; totalKnown?: boolean; nextCursorValue?: string | number | null; nextCursorHash?: string | null }> {
     // Sorting by file size is the only mode that needs `image_files` columns; every
     // other mode can state "has an active file" as an EXISTS and let the planner
@@ -95,7 +98,7 @@ export class ImageSearchModel {
       : '';
     const collapseRows = canDuplicateRows || fileJoinClause !== '';
 
-    const safeConditions = [...conditions, getVisibleImageCondition(), getReadyImageCondition()];
+    const safeConditions = [...conditions, getVisibleImageCondition(ratingLimit), getReadyImageCondition()];
     const whereClause = safeConditions.length > 0 ? `WHERE ${safeConditions.join(' AND ')}` : '';
     const offset = (page - 1) * limit;
 
@@ -112,7 +115,7 @@ export class ImageSearchModel {
         activeFileMode: wantsFileSizeSort ? 'join' : 'exists',
         promptIndexMode: 'always',
       });
-      const countConditions = [...countParts.conditions, getVisibleImageCondition(), getReadyImageCondition()];
+      const countConditions = [...countParts.conditions, getVisibleImageCondition(ratingLimit), getReadyImageCondition()];
       const countFileJoin = countParts.requiresFileJoin || wantsFileSizeSort
         ? "LEFT JOIN image_files if ON im.composite_hash = if.composite_hash AND if.file_status = 'active'"
         : '';
@@ -226,7 +229,8 @@ export class ImageSearchModel {
       model_name?: string;
       start_date?: string;
       end_date?: string;
-    }
+    },
+    ratingLimit: number | null = null,
   ): Promise<{ images: any[], total: number; hasMore: boolean; totalKnown: boolean; nextCursorValue?: string | number | null; nextCursorHash?: string | null }> {
     const page = searchParams.page || 1;
     const limit = searchParams.limit || 20;
@@ -255,7 +259,7 @@ export class ImageSearchModel {
     const orderedConditions = (queryBuilder.orderedConditions ?? queryBuilder.conditions)
       .map(mapAutoTagConditionAliases);
 
-    const safeConditions = [...conditions, getVisibleImageCondition(), getReadyImageCondition()];
+    const safeConditions = [...conditions, getVisibleImageCondition(ratingLimit), getReadyImageCondition()];
     const whereClause = safeConditions.length > 0 ? `WHERE ${safeConditions.join(' AND ')}` : '';
 
     // 총 개수 조회
@@ -286,7 +290,7 @@ export class ImageSearchModel {
       : '';
     const pageGroupClause = sortBy === 'file_size' ? 'GROUP BY im.composite_hash' : '';
 
-    const pageSafeConditions = [...orderedConditions, getVisibleImageCondition(), getReadyImageCondition()];
+    const pageSafeConditions = [...orderedConditions, getVisibleImageCondition(ratingLimit), getReadyImageCondition()];
     if (useCursor && searchParams.cursorValue !== undefined && searchParams.cursorHash) {
       const cursorDirection = sortOrder === 'ASC' ? '>' : '<';
       pageSafeConditions.push(`(${sortColumn} ${cursorDirection} ? OR (${sortColumn} = ? AND im.composite_hash ${cursorDirection} ?))`);

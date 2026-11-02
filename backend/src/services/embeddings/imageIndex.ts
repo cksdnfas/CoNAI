@@ -174,8 +174,12 @@ export function imageIndexCount() {
 
 export type ImageVectorHit = { compositeHash: string; score: number }
 
-/** Of these hashes, the ones the library shows now (rating tiers not hidden, post-processing done), in order. */
-function visibleOnly(hits: ImageVectorHit[], limit: number, exclude?: string): ImageVectorHit[] {
+/**
+ * Of these hashes, the ones the library shows now (rating tiers not hidden, post-processing done), in order; with
+ * `ratingLimit` (a model's ceiling tier id) only those within it.
+ */
+function visibleOnly(hits: ImageVectorHit[], limit: number, exclude?: string, ratingLimit: number | null = null): ImageVectorHit[] {
+  const ceiling = ratingLimit === null ? '' : `AND ${ImageSafetyService.buildRatingCeilingCondition('im.rating_score', ratingLimit)}`
   const out: ImageVectorHit[] = []
   for (let start = 0; start < hits.length && out.length < limit; start += IN_CHUNK) {
     const part = hits.slice(start, start + IN_CHUNK).filter((hit) => hit.compositeHash !== exclude)
@@ -183,6 +187,7 @@ function visibleOnly(hits: ImageVectorHit[], limit: number, exclude?: string): I
     const visible = new Set((db.prepare(`SELECT im.composite_hash FROM media_metadata im
       WHERE im.composite_hash IN (${part.map(() => '?').join(', ')})
         AND ${ImageSafetyService.buildVisibleScoreCondition('im.rating_score')}
+        ${ceiling}
         AND ${MediaPostprocessVisibilityService.buildReadyCondition('im')}`)
       .all(...part.map((hit) => hit.compositeHash)) as Array<{ composite_hash: string }>).map((row) => row.composite_hash))
     for (const hit of part) {
@@ -215,12 +220,12 @@ async function imageSpaceQuery(text: string, waitMs: number, signal?: AbortSigna
  * Images matching a text description, best first; null when image search is off or the model did not answer in
  * `waitMs` (a cold model loads in about 10 s).
  */
-export async function searchImagesByText(text: string, limit: number, options: { waitMs?: number; minScore?: number; signal?: AbortSignal } = {}): Promise<ImageVectorHit[] | null> {
+export async function searchImagesByText(text: string, limit: number, options: { waitMs?: number; minScore?: number; signal?: AbortSignal; ratingLimit?: number | null } = {}): Promise<ImageVectorHit[] | null> {
   if (!embeddingFeatureOn('imageSearch')) return null
   const query = await imageSpaceQuery(text, options.waitMs ?? 20_000, options.signal)
   if (!query) return null
   const hits = vectorStore.search(MEDIA_IMAGE_SPACE, IMAGE_EMBEDDING_MODEL_KEY, query, { limit: overfetch(limit), minScore: options.minScore ?? TEXT_MATCH_MIN_SCORE })
-  return visibleOnly(hits.map((hit) => ({ compositeHash: hit.sourceKey, score: hit.score })), limit)
+  return visibleOnly(hits.map((hit) => ({ compositeHash: hit.sourceKey, score: hit.score })), limit, undefined, options.ratingLimit ?? null)
 }
 
 /**
@@ -261,12 +266,12 @@ export type SimilarImageBasis = 'content' | 'style'
  * Images closest to one image: by what it shows (image vectors) or by its drawing style (Kaloscope style vectors).
  * Null when that image has no vector yet.
  */
-export function similarImagesByVector(compositeHash: string, basis: SimilarImageBasis, limit: number): ImageVectorHit[] | null {
+export function similarImagesByVector(compositeHash: string, basis: SimilarImageBasis, limit: number, ratingLimit: number | null = null): ImageVectorHit[] | null {
   const [space, modelKey] = basis === 'style' ? [MEDIA_STYLE_SPACE, MEDIA_STYLE_MODEL_KEY] : [MEDIA_IMAGE_SPACE, IMAGE_EMBEDDING_MODEL_KEY]
   const own = vectorStore.get(space, compositeHash, modelKey)[0]
   if (!own) return null
   const hits = vectorStore.search(space, modelKey, own.vector, { limit: overfetch(limit) + 1 })
-  return visibleOnly(hits.map((hit) => ({ compositeHash: hit.sourceKey, score: hit.score })), limit, compositeHash)
+  return visibleOnly(hits.map((hit) => ({ compositeHash: hit.sourceKey, score: hit.score })), limit, compositeHash, ratingLimit)
 }
 
 /** Which vector searches one image can take part in (the detail page shows a section for each). */

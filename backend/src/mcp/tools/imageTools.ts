@@ -34,11 +34,14 @@ const METADATA_TEXT_FIELDS = [
 /** Said in the descriptions of tools that hide text above the caller's content rating. */
 const RATING_RESTRICTED_NOTE = ' Items above the content rating this model may be shown keep their ids and sizes but carry rating_restricted: true with prompts, tags and metadata text hidden.';
 
+/** Said in the descriptions of searches that leave out media above the caller's content rating. */
+const RATING_EXCLUDED_NOTE = ' Media above the content rating this model may be shown (or not rated yet) is left out of the results.';
+
 export function registerImageTools(server: McpServer, context: McpRequestContext): void {
   // 이미지 고급 검색
   server.registerTool(
     'search_images',
-    { description: 'Search the media library (images, videos and animated GIFs) by prompt text, AI tool, model, dimensions, date range, group or media type. Each result says its media_type.' + RATING_RESTRICTED_NOTE, inputSchema: z.object({
+    { description: 'Search the media library (images, videos and animated GIFs) by prompt text, AI tool, model, dimensions, date range, group or media type. Each result says its media_type.' + RATING_EXCLUDED_NOTE, inputSchema: z.object({
       search_text: z.string().optional().describe('Search in positive prompts'),
       negative_text: z.string().optional().describe('Search in negative prompts'),
       ai_tool: z.string().optional().describe('Filter by AI tool (e.g., "ComfyUI", "NovelAI", "Stable Diffusion")'),
@@ -65,11 +68,13 @@ export function registerImageTools(server: McpServer, context: McpRequestContext
           page,
           limit,
           sort_by,
-          sort_order
+          sort_order,
+          undefined,
+          contextContentLimit(context)
         );
 
         // 응답 크기를 줄이기 위해 핵심 필드만 추출
-        const images = hideRatingRestrictedRows(context, result.images.map((img: any) => ({
+        const images = result.images.map((img: any) => ({
           composite_hash: img.composite_hash,
           media_type: img.mime_type?.startsWith('video/') ? 'video' : img.mime_type === 'image/gif' ? 'animated' : 'image',
           mime_type: img.mime_type ?? null,
@@ -86,7 +91,7 @@ export function registerImageTools(server: McpServer, context: McpRequestContext
           sampler: img.sampler,
           first_seen_date: img.first_seen_date,
           file_size: img.file_size,
-        })), ['prompt', 'negative_prompt']);
+        }));
 
         return textResult({
           images,
@@ -226,7 +231,7 @@ export function registerImageTools(server: McpServer, context: McpRequestContext
   // 자동 태그 기반 이미지 검색
   server.registerTool(
     'search_images_by_tags',
-    { description: 'Search images by booru-style tags from the automatic tagger (the WD tagger or PixAI, whichever Settings › 자동 › 태거 uses). Supports tag name search, character search, rating filter, and rating score range. For a plain-language description of what an image shows, use search_images_by_meaning.' + RATING_RESTRICTED_NOTE, inputSchema: z.object({
+    { description: 'Search images by booru-style tags from the automatic tagger (the WD tagger or PixAI, whichever Settings › 자동 › 태거 uses). Supports tag name search, character search, rating filter, and rating score range. For a plain-language description of what an image shows, use search_images_by_meaning.' + RATING_EXCLUDED_NOTE, inputSchema: z.object({
       tags: z.string().optional().describe('Comma-separated tag names to search (e.g. "long_hair, blue_eyes, school_uniform")'),
       min_tag_score: z.number().min(0).max(1).optional().describe('Minimum confidence score for tag matching (0-1)'),
       character: z.string().optional().describe('Character name to search for'),
@@ -298,9 +303,9 @@ export function registerImageTools(server: McpServer, context: McpRequestContext
           model_name: params.model_name,
         };
 
-        const result = await ImageSearchModel.searchByAutoTags(autoTagParams, basicSearchParams);
+        const result = await ImageSearchModel.searchByAutoTags(autoTagParams, basicSearchParams, contextContentLimit(context));
 
-        const images = hideRatingRestrictedRows(context, result.images.map((img: any) => ({
+        const images = result.images.map((img: any) => ({
           composite_hash: img.composite_hash,
           width: img.width,
           height: img.height,
@@ -310,7 +315,7 @@ export function registerImageTools(server: McpServer, context: McpRequestContext
           seed: img.seed,
           first_seen_date: img.first_seen_date,
           rating_score: img.rating_score,
-        })), ['prompt']);
+        }));
 
         return textResult({
           images,
@@ -327,16 +332,16 @@ export function registerImageTools(server: McpServer, context: McpRequestContext
   // 뜻(설명)으로 이미지 검색 — 이미지 임베딩
   server.registerTool(
     'search_images_by_meaning',
-    { description: 'Find library images by what they show, from a plain description ("a girl reading under a tree at dusk"), using image embeddings; best match first with similarity (cosine × 100, about 64+ is a match). Same as the library\'s 설명 (meaning) search tab. Needs image embeddings on (Settings › 자동 › 임베딩 › 이미지 임베딩); prompt words are better searched with search_images, booru tags with search_images_by_tags.' + RATING_RESTRICTED_NOTE, inputSchema: z.object({
+    { description: 'Find library images by what they show, from a plain description ("a girl reading under a tree at dusk"), using image embeddings; best match first with similarity (cosine × 100, about 64+ is a match). Same as the library\'s 설명 (meaning) search tab. Needs image embeddings on (Settings › 자동 › 임베딩 › 이미지 임베딩); prompt words are better searched with search_images, booru tags with search_images_by_tags.' + RATING_EXCLUDED_NOTE, inputSchema: z.object({
       text: z.string().trim().min(1).max(MEANING_QUERY_MAX_CHARS).describe('What the image shows, in plain words (English matches best)'),
       limit: z.number().int().min(1).max(VECTOR_TOOL_MAX_LIMIT).default(20).describe('Results to return'),
     }) },
     async ({ text, limit }, ctx) => {
       try {
         if (!embeddingFeatureOn('imageSearch')) return errorResult(IMAGE_SEARCH_OFF);
-        const hits = await searchImagesByText(text, limit, { signal: ctx?.mcpReq?.signal });
+        const hits = await searchImagesByText(text, limit, { signal: ctx?.mcpReq?.signal, ratingLimit: contextContentLimit(context) });
         if (!hits) return errorResult('The embedding model did not answer (the AI runtime may not be installed or is still loading). Try again in a moment.');
-        const images = hideRatingRestrictedRows(context, vectorHitSummaries(hits), ['prompt']);
+        const images = vectorHitSummaries(hits);
         return textResult({ images, total: images.length, query: text });
       } catch (error) {
         return errorResult(`Error searching by meaning: ${(error as Error).message}`);
@@ -347,7 +352,7 @@ export function registerImageTools(server: McpServer, context: McpRequestContext
   // 한 이미지와 내용·화풍이 비슷한 이미지 — 상세 화면의 내용 유사 / 화풍 유사
   server.registerTool(
     'find_similar_images',
-    { description: 'Images closest to one library image, best first with similarity (cosine × 100): basis "content" = shows similar things (image embeddings, needs image embeddings on), "style" = drawn in a similar style (Kaloscope style vectors, needs Kaloscope style vectors saved). These are the image detail page\'s 내용 유사 / 화풍 유사 sections. An image without that vector yet is reported as such.' + RATING_RESTRICTED_NOTE, inputSchema: z.object({
+    { description: 'Images closest to one library image, best first with similarity (cosine × 100): basis "content" = shows similar things (image embeddings, needs image embeddings on), "style" = drawn in a similar style (Kaloscope style vectors, needs Kaloscope style vectors saved). These are the image detail page\'s 내용 유사 / 화풍 유사 sections. An image without that vector yet is reported as such.' + RATING_EXCLUDED_NOTE, inputSchema: z.object({
       composite_hash: z.string().trim().regex(/^(?:[0-9a-f]{48}|[0-9a-f]{32})$/, 'composite_hash must be a library media hash').describe('The image to compare against'),
       basis: z.enum(['content', 'style']).describe('"content" (what it shows) or "style" (how it is drawn)'),
       limit: z.number().int().min(1).max(VECTOR_TOOL_MAX_LIMIT).default(20).describe('Results to return'),
@@ -359,13 +364,13 @@ export function registerImageTools(server: McpServer, context: McpRequestContext
           return errorResult(`Image with hash ${composite_hash} not found`);
         }
         if (basis === 'content' && !embeddingFeatureOn('imageSearch')) return errorResult(IMAGE_SEARCH_OFF);
-        const hits = similarImagesByVector(composite_hash, basis, limit);
+        const hits = similarImagesByVector(composite_hash, basis, limit, contextContentLimit(context));
         if (!hits) {
           return errorResult(basis === 'style'
             ? 'This image has no style vector yet (Kaloscope with style vectors on has to run on it first; Settings › 자동 › Kaloscope › 화풍 벡터 저장).'
             : 'This image has no image vector yet (it is still waiting to be indexed).');
         }
-        const images = hideRatingRestrictedRows(context, vectorHitSummaries(hits), ['prompt']);
+        const images = vectorHitSummaries(hits);
         return textResult({ images, total: images.length, basis, composite_hash });
       } catch (error) {
         return errorResult(`Error finding similar images: ${(error as Error).message}`);
