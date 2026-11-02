@@ -1,8 +1,8 @@
 import fs from 'fs';
 import path from 'path';
 import { spawn } from 'child_process';
-import ffmpegPath from 'ffmpeg-static';
 import type { VideoOptimizationSettings } from '@conai/shared';
+import { VideoProcessor } from './videoProcessor';
 
 export type VideoOptimizationRunOptions = Pick<VideoOptimizationSettings, 'crf' | 'audioBitrateKbps'> & {
   logLabel?: string;
@@ -44,10 +44,6 @@ export class VideoOptimizationService {
       this.activeEncoderCount -= 1;
       this.encoderWaiters.shift()?.();
     };
-  }
-
-  private static getFFmpegPath() {
-    return ffmpegPath || 'ffmpeg';
   }
 
   static isOptimizableVideoExtension(extension: string) {
@@ -110,6 +106,7 @@ export class VideoOptimizationService {
 
     try {
       const args = [
+        '-loglevel', 'error',
         '-i', inputPath,
         '-map', '0:v:0',
         '-map', '0:a?',
@@ -124,26 +121,44 @@ export class VideoOptimizationService {
         tempOutputPath,
       ];
 
-      await new Promise<void>((resolve, reject) => {
-        const ffmpeg = spawn(this.getFFmpegPath(), args);
-        let stderr = '';
+      // The bundled build decodes AV1 only with libaom, which rejects some streams (e.g. NVENC AV1),
+      // so the system FFmpeg is tried next, in the same order frame extraction uses.
+      const errors: string[] = [];
+      let transcoded = false;
+      for (const ffmpegCmd of VideoProcessor.listFFmpegPaths()) {
+        try {
+          await new Promise<void>((resolve, reject) => {
+            const ffmpeg = spawn(ffmpegCmd, args);
+            let stderr = '';
 
-        ffmpeg.stderr.on('data', (data) => {
-          stderr += data.toString();
-        });
+            ffmpeg.stderr.on('data', (data) => {
+              stderr = (stderr + data.toString()).slice(-4000);
+            });
 
-        ffmpeg.on('error', (error) => {
-          reject(new Error(`Failed to spawn FFmpeg: ${error.message}`));
-        });
+            ffmpeg.on('error', (error) => {
+              reject(new Error(`Failed to spawn FFmpeg: ${error.message}`));
+            });
 
-        ffmpeg.on('close', (code) => {
-          if (code !== 0) {
-            reject(new Error(`FFmpeg exited with code ${code}${stderr ? `: ${stderr}` : ''}`));
-            return;
-          }
-          resolve();
-        });
-      });
+            ffmpeg.on('close', (code) => {
+              if (code !== 0) {
+                // Decoders repeat one error per packet; the last lines carry the outcome.
+                const tail = stderr.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).slice(-3).join(' / ');
+                reject(new Error(`FFmpeg exited with code ${code}${tail ? `: ${tail}` : ''}`));
+                return;
+              }
+              resolve();
+            });
+          });
+          transcoded = true;
+          break;
+        } catch (error) {
+          errors.push(`${ffmpegCmd}: ${error instanceof Error ? error.message : String(error)}`);
+          await fs.promises.unlink(tempOutputPath).catch(() => undefined);
+        }
+      }
+      if (!transcoded) {
+        throw new Error(errors.join(' | '));
+      }
 
       await fs.promises.unlink(outputPath).catch(() => undefined);
       await fs.promises.rename(tempOutputPath, outputPath);
