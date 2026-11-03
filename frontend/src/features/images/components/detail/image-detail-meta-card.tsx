@@ -22,6 +22,7 @@ import { useImageViewModal } from '@/features/images/components/detail/image-vie
 import { useI18n } from '@/i18n'
 import { resolvePromptGroups } from '@/lib/api-prompts'
 import { getImageViewerSettings } from '@/lib/api-settings'
+import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { updateKaloscopeSettings } from '@/lib/api-settings-kaloscope'
 import { buildArtistPromptTagUrl } from '@/lib/artist-prompt-links'
 import { copyTextToClipboard } from '@/lib/clipboard'
@@ -183,6 +184,8 @@ function MetaSection({ title, actions, children }: { title: string; actions?: Re
  */
 export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
   const canConfigure = useAuthStatusQuery().data?.isAdmin === true
+  // Scoped viewers (a public workflow run) see the card without gallery access: no gallery search or viewer settings.
+  const { canViewImages } = useImagePermissions()
   const queryClient = useQueryClient()
   const imageViewModal = useImageViewModal()
   const { addScopedTextChip } = useHomeSearch()
@@ -228,6 +231,7 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
   const settingsQuery = useQuery({
     queryKey: ['image-viewer-settings'],
     queryFn: getImageViewerSettings,
+    enabled: canViewImages,
     staleTime: 60_000,
   })
 
@@ -373,15 +377,17 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
               <dt>{t({ ko: '모델', en: 'Model' })}</dt>
               <dd className="flex min-w-0 items-start gap-1 text-foreground">
                 <span className="min-w-0 break-words">{modelSearchValue}</span>
-                <IconButton
-                  size="icon-xs"
-                  variant="ghost"
-                  className="-my-0.5 shrink-0"
-                  onClick={() => handleAddModelSearchFilter(modelSearchValue)}
-                  label={t({ ko: '이 모델로 검색', en: 'Search this model' })}
-                >
-                  <Search />
-                </IconButton>
+                {canViewImages ? (
+                  <IconButton
+                    size="icon-xs"
+                    variant="ghost"
+                    className="-my-0.5 shrink-0"
+                    onClick={() => handleAddModelSearchFilter(modelSearchValue)}
+                    label={t({ ko: '이 모델로 검색', en: 'Search this model' })}
+                  >
+                    <Search />
+                  </IconButton>
+                ) : null}
               </dd>
             </>
           ) : null}
@@ -417,7 +423,7 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
             </>
           ) : undefined}
         >
-          <ExtractedPromptSections items={displayedPromptCards} variant="accent" onAddSearchFilter={handleAddExtractedPromptSearchFilter} />
+          <ExtractedPromptSections items={displayedPromptCards} variant="accent" onAddSearchFilter={canViewImages ? handleAddExtractedPromptSearchFilter : undefined} />
         </MetaSection>
       ) : null}
 
@@ -431,7 +437,7 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
               entries={autoPromptContent.generalEntries}
               collapsibleScores
               getTagHref={buildDanbooruTagUrl}
-              onAddSearchFilter={handleAddAutoPromptSearchFilter}
+              onAddSearchFilter={canViewImages ? handleAddAutoPromptSearchFilter : undefined}
               tagsHeaderAction={(
                 <IconButton
                   size="icon-xs"
@@ -469,7 +475,7 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
             collapsibleScores
             hideLabels
             getTagHref={(tag) => buildArtistPromptTagUrl(tag, artistLinkUrlTemplate)}
-            onAddSearchFilter={handleAddAutoPromptSearchFilter}
+            onAddSearchFilter={canViewImages ? handleAddAutoPromptSearchFilter : undefined}
           />
         </MetaSection>
       ) : null}

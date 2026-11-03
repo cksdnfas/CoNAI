@@ -8,8 +8,8 @@ import { requireAdmin } from '../middleware/authMiddleware';
 import { requireImagesView, requireImageAction } from '../middleware/imageAccess';
 import {
   applyHistoryAccessScope,
+  authorizeHistoryRecordOrBlock,
   buildHistoryQueryFilters,
-  canAccessHistoryRecord,
   parseHistoryPageScope,
 } from './generation-history/historyRouteHelpers';
 import {
@@ -25,9 +25,12 @@ import {
 } from './generation-history/mediaRouteHandlers';
 
 const router = express.Router();
+// One row's reads authorize per record (authorizeHistoryRecordOrBlock): published workflow runs need no images.view.
+const HISTORY_RECORD_READ_PATH = /^\/\d+(?:\/(?:file|thumbnail|image|request|audio\/[^/]+))?\/?$/;
 router.use((req, res, next) => {
-  if (req.method === 'GET' || req.method === 'HEAD') requireImagesView(req, res, next);
-  else if (req.path === '/download/batch') requireImagesView(req, res, next);
+  if ((req.method === 'GET' || req.method === 'HEAD') && HISTORY_RECORD_READ_PATH.test(req.path)) next();
+  else if (req.method === 'GET' || req.method === 'HEAD') requireImagesView(req, res, next);
+  else if (req.path === '/download/batch') next(); // authorized per record in handleHistoryBatchDownload
   else if (req.method === 'DELETE' && req.query.deleteFiles === 'true') requireImageAction('images.delete')(req, res, next);
   else requireImagesView(req, res, next);
 });
@@ -210,8 +213,7 @@ router.get(
       return;
     }
 
-    if (!canAccessHistoryRecord(req, record)) {
-      res.status(403).json({ success: false, error: 'Not allowed to access this generation history item' });
+    if (!authorizeHistoryRecordOrBlock(req, res, record)) {
       return;
     }
 
@@ -241,11 +243,7 @@ router.get(
       return;
     }
 
-    if (!canAccessHistoryRecord(req, record)) {
-      res.status(403).json({
-        success: false,
-        error: 'Not allowed to access this generation history item'
-      });
+    if (!authorizeHistoryRecordOrBlock(req, res, record)) {
       return;
     }
 

@@ -35,7 +35,8 @@ type SavedGeneratedMedia = {
 export class FileSaver {
   /** Resolve an output image format from explicit options or the source mime/path. */
   private static resolveOutputFormat(options?: GeneratedImageSaveOptions): ImageOutputFormat {
-    if (options?.format && options.format !== 'original') {
+    // The format becomes the file extension; queued payloads are untyped JSON, so only known formats pass.
+    if (options?.format === 'png' || options?.format === 'jpeg' || options?.format === 'webp') {
       return options.format;
     }
 

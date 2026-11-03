@@ -42,7 +42,8 @@ export type GenerationHistoryFeedOptions = {
  */
 export function useGenerationHistoryFeed({ refreshNonce, serviceType, workflowId, graphWorkflowId, publicWorkflowSlug, enabled = true }: GenerationHistoryFeedOptions) {
   const queryClient = useQueryClient()
-  const { canViewImages } = useImagePermissions()
+  // A published workflow page grants viewing its own results without the gallery permission.
+  const canViewResults = useImagePermissions().canViewImages || Boolean(publicWorkflowSlug)
   const authStatusQuery = useAuthStatusQuery()
   // SSE 가 살아 있으면 폴링을 끄고, 끊기면 아래 기존 refresh cadence 가 그대로 되살아난다.
   const { status: runtimeStreamStatus } = useRuntimeEventStream()
@@ -112,7 +113,7 @@ export function useGenerationHistoryFeed({ refreshNonce, serviceType, workflowId
 
       return page
     },
-    enabled: canViewImages && enabled && !authStatusQuery.isPending,
+    enabled: canViewResults && enabled && !authStatusQuery.isPending,
     // Keep every loaded page: the active-generation refetch has to restart at offset 0 so newly
     // completed generations appear, and selection/visible-count state is derived from all pages.
     getNextPageParam: (lastPage, _allPages, lastPageParam) => {
@@ -192,7 +193,8 @@ export function useGenerationHistoryFeed({ refreshNonce, serviceType, workflowId
     isAdmin,
     isPublicView,
     // Without image access the query never runs, so it is not loading either.
-    isHistoryLoading: authStatusQuery.isPending || (canViewImages && historyQuery.isPending),
+    isHistoryLoading: authStatusQuery.isPending || (canViewResults && historyQuery.isPending),
+    canViewResults,
   }
 }
 

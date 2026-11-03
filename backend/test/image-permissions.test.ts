@@ -163,11 +163,28 @@ test('permissions: independent pages, features, migration, grants, scopes and ro
     AuthPermissionGroup.updateCustomGroup(group.id, { name: group.name, permissionKeys: [] })
     try {
       assert.equal(await status('/api/image-editor/save-images?limit=0', accountId), 403)
-      assert.equal(await status('/api/public-workflows/paged-artifacts/artifacts?limit=0', accountId), 403)
+      // Publishing is the grant: no images.view or generation.execute, which would also open gallery/generation pages.
+      assert.equal(await status('/api/public-workflows/paged-artifacts/artifacts?limit=0', accountId), 400, 'published artifacts reach validation')
+      assert.equal(await status('/api/public-workflows/paged-artifacts/history', accountId), 200, 'own published runs are listed')
+      assert.equal(await status('/api/public-workflows/paged-artifacts/queue', accountId, 'POST'), 400, 'queueing reaches input validation')
+      const historyDb = user.getUserSettingsDb()
+      // Save options reach the output file name, so the public queue never keeps the caller's.
+      const queued = await fetch(origin + '/api/public-workflows/paged-artifacts/queue', { method: 'POST', headers: { 'x-test-account': String(accountId), 'Content-Type': 'application/json' }, body: JSON.stringify({ request_payload: { prompt_data: {}, imageSaveOptions: { format: 'x/../../../../escape' } } }) })
+      const queuedBody = await queued.json() as { record: { id: number } | null }
+      assert.equal(queued.status, 201)
+      const storedPayload = (historyDb.prepare('SELECT request_payload FROM generation_queue_jobs WHERE id = ?').get(queuedBody.record!.id) as { request_payload: string }).request_payload
+      assert.doesNotMatch(storedPayload, /escape/, 'client save options are replaced by the server settings')
+      historyDb.prepare('DELETE FROM generation_queue_jobs WHERE id = ?').run(queuedBody.record!.id)
+      const addRun = (ownerId: number) => Number(historyDb.prepare("INSERT INTO api_generation_history (service_type, workflow_id, requested_by_account_id, requested_by_account_type) VALUES ('comfyui', ?, ?, 'guest')").run(workflowId, ownerId).lastInsertRowid)
+      const ownRun = addRun(accountId)
+      assert.equal(await status(`/api/generation-history/${ownRun}/request`, accountId), 200, 'own published run is readable')
+      assert.equal(await status(`/api/generation-history/${addRun(accountId + 1000)}/request`, accountId), 403, 'another account run stays private')
+      WorkflowModel.update(workflowId, { is_public_page: false })
+      assert.equal(await status('/api/public-workflows/paged-artifacts/queue', accountId, 'POST'), 404, 'unpublishing withdraws the grant')
+      assert.equal(await status(`/api/generation-history/${ownRun}/request`, accountId), 403, 'unpublished runs need images.view again')
     } finally {
       AuthPermissionGroup.updateCustomGroup(group.id, { name: group.name, permissionKeys: ['images.view'] })
     }
-    WorkflowModel.update(workflowId, { is_public_page: false })
     assert.equal(await status('/api/public-workflows/paged-artifacts/artifacts?limit=2', adminId), 404)
   })
   await t.test('group merge needs edit AND delete; ordinary moves and deletes keep independent grants', async () => {

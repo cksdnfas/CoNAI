@@ -242,6 +242,8 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
   }, [compositeHash, queryClient])
 
   const { canViewImages } = useImagePermissions()
+  // A scoped detail endpoint (a public workflow run) authorizes this one image; gallery searches still need images.view.
+  const canViewDetail = canViewImages || Boolean(detailUrl)
   const authStatusQuery = useAuthStatusQuery()
   const appearanceQuery = useGlobalAppearanceSettingsQuery()
   const appSettingsQuery = useQuery({
@@ -263,7 +265,7 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
   const imageQuery = useQuery({
     queryKey: imageDetailQueryKey,
     queryFn: ({ signal }) => getImage(compositeHash, { signal }, imageDetailSource),
-    enabled: canViewImages && Boolean(compositeHash),
+    enabled: canViewDetail && Boolean(compositeHash),
     placeholderData: cachedInitialImage,
     staleTime: IMAGE_DETAIL_STALE_TIME_MS,
     // Recover missed completion events (including split API/worker runtimes) while this detail is open.
@@ -271,10 +273,10 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
   })
   const refetchImage = imageQuery.refetch
 
-  const image = canViewImages ? imageQuery.data : undefined
+  const image = canViewDetail ? imageQuery.data : undefined
   useImageDetailChatPage(image, presentation, activeImageAreaTab, setActiveImageAreaTab, modalNavigation ?? stepNavigation, accessOptions, () => setEditOpen(true), onDeleted)
   const mediaKind = image ? getImageListMediaKind(image) : null
-  const canLoadRelatedImages = mediaKind === 'image'
+  const canLoadRelatedImages = canViewImages && mediaKind === 'image'
   const isSecondaryContentReady = Boolean(image) && canLoadRelatedImages && isPrimaryMediaReady
   const canRunSimilarityInspection = isSimilarityInspectionRequested && Boolean(compositeHash) && isSecondaryContentReady
   const canRunStabilizedSimilarityInspection = canRunSimilarityInspection && stableSimilarityInspectionCompositeHash === compositeHash
@@ -616,7 +618,7 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
     </div>
   )
 
-  if (!canViewImages) return <ImagePermissionNotice />
+  if (!canViewDetail) return <ImagePermissionNotice />
 
   if (presentation === 'modal') {
     const activeTabIsCurrent = activeImageAreaTab === 'current'

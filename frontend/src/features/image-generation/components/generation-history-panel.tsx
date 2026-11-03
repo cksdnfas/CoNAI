@@ -53,7 +53,7 @@ type GenerationHistoryPanelViewProps = GenerationHistoryPanelProps & {
 
 /** History list body for a feed owned by the caller (the result area shares one feed with the stage). */
 export function GenerationHistoryPanelView({ feed, serviceType, workflowId, publicWorkflowSlug, splitPaneScroll = false, onBack, headerLeading, hideScopeActions = false }: GenerationHistoryPanelViewProps) {
-  const { canViewImages } = useImagePermissions()
+  const { canOpenDetailPage } = useImagePermissions()
   const { t, formatNumber } = useI18n()
   const { canExecuteGeneration } = useFeaturePermissions()
   const {
@@ -172,12 +172,13 @@ export function GenerationHistoryPanelView({ feed, serviceType, workflowId, publ
           : 'ComfyUI'
   const getHistoryImageHref = useCallback((image: ImageRecord) => {
     const record = historyRecordMap.get(String(image?.id ?? ''))
-    if (!record || !isHistoryRecordDownloadReady(record) || !image?.composite_hash) {
+    // The gallery detail page needs its own grant; public workflow viewers may only have the page's results.
+    if (!canOpenDetailPage || !record || !isHistoryRecordDownloadReady(record) || !image?.composite_hash) {
       return undefined
     }
 
     return `/images/${image.composite_hash}`
-  }, [historyRecordMap])
+  }, [canOpenDetailPage, historyRecordMap])
   useEffect(() => {
     setSelectedHistoryIds((current) => current.filter((id) => historyRecordMap.has(id) && visibleHistoryRecordIds.has(id)))
   }, [historyRecordMap, visibleHistoryRecordIds])
@@ -230,7 +231,7 @@ export function GenerationHistoryPanelView({ feed, serviceType, workflowId, publ
     acknowledgeRecoveryRecords,
   })
 
-  if (!canViewImages) return <ImagePermissionNotice />
+  if (!feed.canViewResults) return <ImagePermissionNotice />
 
   return (
     <section className={cn(splitPaneScroll ? 'flex min-h-0 flex-1 flex-col gap-4 overflow-hidden' : 'space-y-4')}>

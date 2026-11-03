@@ -16,7 +16,6 @@ import { refreshGenerationQueueViews } from './components/generation-queue-actio
 import { GenerationNarrowSplit, type GenerationNarrowView } from './components/generation-narrow-split'
 import { GenerationResultArea, type GenerationResultView } from './components/generation-result-area'
 import { ComfyWorkflowControllerPanel } from './components/comfy-workflow-controller-panel'
-import { useGenerationImageSaveOptions } from './components/use-generation-image-save-options'
 import { useComfyWorkflowDraft } from './components/use-comfy-workflow-draft'
 import { useComfyFieldValidation } from './components/use-comfy-field-validation'
 import { useHistorySettingsLoad } from './components/use-history-settings-load'
@@ -104,8 +103,6 @@ function PublicComfyWorkflowPageContent() {
     queryFn: () => getPublicGenerationWorkflow(slug),
     enabled: slug.trim().length > 0 && authStatusQuery.data?.hasCredentials === true && authStatusQuery.data?.authenticated === true,
   })
-
-  const { options: generationImageSaveOptions } = useGenerationImageSaveOptions(authStatusQuery.data?.hasCredentials === true && authStatusQuery.data?.authenticated === true)
 
   const workflow = workflowQuery.data ?? null
   const workflowFields = useMemo(() => (workflow?.marked_fields ?? []) as WorkflowMarkedField[], [workflow?.marked_fields])
@@ -216,9 +213,9 @@ function PublicComfyWorkflowPageContent() {
       const result = await queuePublicGenerationWorkflowJob(slug, {
         enqueue_count: registrationCount,
         request_summary: `${workflow.name} public queue job`,
+        // The server applies the publisher's image-save settings.
         request_payload: {
           prompt_data: promptData,
-          imageSaveOptions: generationImageSaveOptions,
         },
       })
 
@@ -314,6 +311,7 @@ function PublicComfyWorkflowPageContent() {
       serverRouting={false}
       queueMaxCount={publicQueueMaxCount}
       notice={queueLimitNotice}
+      requireExecutePermission={false}
       workflowDraft={workflowDraft}
       queueRegistrationCount={queueRegistrationCount}
       isGenerating={isQueueSubmitting}

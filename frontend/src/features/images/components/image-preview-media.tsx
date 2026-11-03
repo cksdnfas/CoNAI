@@ -31,7 +31,8 @@ export function ImagePreviewMedia({
   onError,
 }: ImagePreviewMediaProps) {
   const { canViewImages } = useImagePermissions()
-  if (!image || (!canViewImages && !isChatResultMedia(image))) {
+  // Items with their own authorized detail scope (chat results, public workflow runs) are reauthorized by the server.
+  if (!image || (!canViewImages && !isChatResultMedia(image) && !image.detail_url)) {
     return null
   }
 

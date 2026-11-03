@@ -1,4 +1,3 @@
-import { requirePermission } from '../middleware/authMiddleware';
 import { Router, type Request, type Response } from 'express';
 import { ZipArchive } from 'archiver';
 import fs from 'fs';
@@ -254,7 +253,7 @@ router.get('/:slug', asyncHandler(async (req: Request, res: Response) => {
 }));
 
 /** GET /api/public-workflows/:slug/artifacts */
-router.get('/:slug/artifacts', requireImagesView, asyncHandler(async (req: Request, res: Response) => {
+router.get('/:slug/artifacts', asyncHandler(async (req: Request, res: Response) => {
   const workflow = loadPublicArtifactWorkflow(req, res);
   if (!workflow) {
     return;
@@ -293,7 +292,7 @@ router.get('/:slug/artifacts', requireImagesView, asyncHandler(async (req: Reque
 }));
 
 /** GET /api/public-workflows/:slug/artifacts/archive */
-router.get('/:slug/artifacts/archive', requireImagesView, asyncHandler(async (req: Request, res: Response) => {
+router.get('/:slug/artifacts/archive', asyncHandler(async (req: Request, res: Response) => {
   const workflow = loadPublicArtifactWorkflow(req, res);
   if (!workflow) {
     return;
@@ -348,7 +347,7 @@ router.get('/:slug/artifacts/archive', requireImagesView, asyncHandler(async (re
 }));
 
 /** GET /api/public-workflows/:slug/artifacts/file */
-router.get('/:slug/artifacts/file', requireImagesView, asyncHandler(async (req: Request, res: Response) => {
+router.get('/:slug/artifacts/file', asyncHandler(async (req: Request, res: Response) => {
   const workflow = loadPublicArtifactWorkflow(req, res);
   if (!workflow) {
     return;
@@ -380,7 +379,9 @@ router.get('/:slug/artifacts/file', requireImagesView, asyncHandler(async (req: 
 }));
 
 /** GET /api/public-workflows/:slug/history */
-router.get('/:slug/history', requireImagesView, asyncHandler(async (req: Request, res: Response) => {
+// Publishing grants viewing the page's results; images.view would also open the gallery pages. The list stays
+// requester-scoped (applyHistoryAccessScope), and artifacts are the folder the publisher chose to show.
+router.get('/:slug/history', asyncHandler(async (req: Request, res: Response) => {
   const workflow = getPublicWorkflowOrNull(String(req.params.slug || ''));
   if (!workflow) {
     res.status(404).json({ success: false, error: 'Public workflow not found' });
@@ -451,8 +452,12 @@ router.delete('/:slug/history', asyncHandler(async (req: Request, res: Response)
   });
 }));
 
-/** POST /api/public-workflows/:slug/queue */
-router.post('/:slug/queue', requirePermission('generation.execute'), asyncHandler(async (req: Request, res: Response) => {
+/**
+ * POST /api/public-workflows/:slug/queue
+ * Publishing the workflow is the grant: any signed-in account may queue it, bounded by the per-role queue limit
+ * (0 forbids). The global generation.execute permission would also open the generation pages, so it is not required.
+ */
+router.post('/:slug/queue', asyncHandler(async (req: Request, res: Response) => {
   const workflow = getPublicWorkflowOrNull(String(req.params.slug || ''));
   if (!workflow) {
     res.status(404).json({ success: false, error: 'Public workflow not found' });
@@ -516,7 +521,9 @@ router.post('/:slug/queue', requirePermission('generation.execute'), asyncHandle
     throw error;
   }
 
-  if (normalizedRequestPayload.imageSaveOptions === undefined && imageSaveSettings.applyToWorkflowOutputs) {
+  // Save options always come from the publisher's settings: callers here hold no generation grant of their own.
+  delete normalizedRequestPayload.imageSaveOptions;
+  if (imageSaveSettings.applyToWorkflowOutputs) {
     normalizedRequestPayload.imageSaveOptions = {
       format: imageSaveSettings.defaultFormat,
       quality: imageSaveSettings.quality,

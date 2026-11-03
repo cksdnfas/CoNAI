@@ -3,7 +3,6 @@ import { useQuery } from '@tanstack/react-query'
 import { ArrowLeft } from 'lucide-react'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { IconButton } from '@/components/ui/icon-button'
-import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { ImagePermissionNotice } from '@/features/images/components/image-permission-notice'
 import { useImageFeedSafety } from '@/features/images/components/image-list/use-image-feed-safety'
 import { useI18n } from '@/i18n'
@@ -48,12 +47,12 @@ export function GenerationResultArea({
   recentStrip = 'bottom',
 }: GenerationResultAreaProps) {
   const { t } = useI18n()
-  const { canViewImages } = useImagePermissions()
+  const { canViewResults } = feed
   const { activeJob, activeJobCount } = useGenerationStageQueue({ serviceType, workflowId })
   const historySafetySettingsQuery = useQuery({
     queryKey: ['runtime-generation-history-settings'],
     queryFn: getRuntimeGenerationHistorySettings,
-    enabled: canViewImages && !feed.authStatusQuery.isPending,
+    enabled: canViewResults && !feed.authStatusQuery.isPending,
     staleTime: 60_000,
   })
   const applyRatingSafety = historySafetySettingsQuery.data?.applyRatingSafetyToGenerationHistory === true
@@ -116,7 +115,7 @@ export function GenerationResultArea({
 
   return (
     <section className={cn(splitPaneScroll ? 'flex min-h-0 flex-1 flex-col gap-3 overflow-hidden' : 'space-y-3')}>
-      {!canViewImages ? (
+      {!canViewResults ? (
         <>
           <div className="flex shrink-0 items-center gap-2">
             {backButton}

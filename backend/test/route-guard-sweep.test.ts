@@ -24,6 +24,8 @@ const OPEN_TO_ANY_ACCOUNT: Record<string, string> = {
   'POST /api/jobs/:jobId/cancel': 'own runtime job',
   'DELETE /api/public-workflows/:slug/history': 'own public workflow runs',
   'POST /api/public-workflows/:slug/cleanup-failed': 'own failed public workflow runs',
+  'POST /api/public-workflows/:slug/queue': 'published workflow, bounded by its per-role queue limit',
+  'POST /api/generation-history/download/batch': 'own runs only; non-published rows still need images.view',
   'POST /api/chat-proposals/:proposalId/apply': 'proposal in own chat, rechecked against the action it applies',
   'POST /api/chat-proposals/:proposalId/dismiss': 'proposal in own chat',
   'POST /api/chat-proposals/:proposalId/undo': 'proposal in own chat',

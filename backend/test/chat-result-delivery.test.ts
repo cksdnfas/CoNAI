@@ -21,6 +21,7 @@ test('delegated chat media is bound to stored results and live account/profile/t
   await main.initializeDatabase()
   const user = await import('../src/database/userSettingsDb')
   user.initializeUserSettingsDb()
+  ;(await import('../src/database/apiGenerationDb')).initializeApiGenerationDb()
   let db = user.getUserSettingsDb()
   const { invalidateConfiguredAuthCache } = await import('../src/services/auth/sessionAccess')
   const { invalidateResolvedAuthAccessCache } = await import('../src/services/authAccessControlService')

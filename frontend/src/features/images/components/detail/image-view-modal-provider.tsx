@@ -240,7 +240,7 @@ export function ImageViewModalProvider({ children }: PropsWithChildren) {
   useEffect(() => scheduleImageViewModalOverlayPreload(), [])
 
   useEffect(() => {
-    if (!canViewImages || !modalState.compositeHash || activeIndex < 0) {
+    if (!modalState.compositeHash || activeIndex < 0) {
       return
     }
 
@@ -249,6 +249,7 @@ export function ImageViewModalProvider({ children }: PropsWithChildren) {
 
     for (const neighborHash of neighborHashes) {
       const neighborImage = modalState.sourceItemsByHash[neighborHash]
+      if (!canViewImages && !neighborImage?.detail_url) continue
       warmImagePreviewSource(neighborImage)
       void queryClient.prefetchQuery({
         queryKey: getImageDetailQueryKey(neighborHash, neighborImage),
@@ -263,7 +264,6 @@ export function ImageViewModalProvider({ children }: PropsWithChildren) {
 
   /** Open the image view modal with an optional ordered navigation context. */
   const openImageView = useCallback((input: ImageViewModalOpenInput) => {
-    if (!canViewImages) return
     const compositeHashes = buildUniqueCompositeHashes(input.compositeHashes)
     const hasInputCompositeHash = compositeHashes.includes(input.compositeHash)
     const nextCompositeHashes = hasInputCompositeHash
@@ -272,6 +272,8 @@ export function ImageViewModalProvider({ children }: PropsWithChildren) {
     const nextCompositeHashIndexByHash = buildCompositeHashIndexByHash(nextCompositeHashes)
     const nextSourceItemsByHash = buildSourceItemsByHash(input.sourceItems)
     const activeInputImage = nextSourceItemsByHash[input.compositeHash]
+    // An item with its own authorized detail endpoint (e.g. a public workflow run) opens without gallery access.
+    if (!canViewImages && !activeInputImage?.detail_url) return
 
     void loadImageViewModalOverlay()
     warmImagePreviewSource(activeInputImage)
@@ -512,7 +514,7 @@ export function ImageViewModalProvider({ children }: PropsWithChildren) {
   return (
     <ImageViewModalContext.Provider value={contextValue}>
       {children}
-      {canViewImages && modalState.compositeHash ? (
+      {modalState.compositeHash && (canViewImages || activeSourceItem?.detail_url) ? (
         <Suspense fallback={null}>
           <ImageViewModalOverlayLazy
             compositeHash={modalState.compositeHash}

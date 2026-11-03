@@ -34,6 +34,8 @@ export type GenerateActionBarProps = {
   onGenerate: () => void
   /** Blocks both the button and the Ctrl/Cmd+Enter shortcut. */
   generateDisabled?: boolean
+  /** False when the target grants generation itself (a published workflow), so `generation.execute` is not needed. */
+  requireExecutePermission?: boolean
   /** Shows a spinner and blocks Generate plus the secondary actions. */
   isGenerating?: boolean
   /** Label while `isGenerating` ("큐 등록 중…"). Defaults to `generateLabel`. */
@@ -136,6 +138,7 @@ export function GenerateActionBar({
   generateSuffixHint,
   onGenerate,
   generateDisabled = false,
+  requireExecutePermission = true,
   isGenerating = false,
   generatingLabel,
   repeat,
@@ -153,7 +156,7 @@ export function GenerateActionBar({
   const isSticky = variant === 'sticky'
   const [menuOpen, setMenuOpen] = useState(false)
   const [pluginBusy, setPluginBusy] = useState(false)
-  const { canExecuteGeneration } = useFeaturePermissions()
+  const canExecuteGeneration = useFeaturePermissions().canExecuteGeneration || !requireExecutePermission
   const canGenerate = canExecuteGeneration && !generateDisabled && !isGenerating
   const shortcutHint = isMacPlatform() ? '⌘ Enter' : 'Ctrl+Enter'
 

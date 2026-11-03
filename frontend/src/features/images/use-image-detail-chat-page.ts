@@ -102,7 +102,7 @@ export function useImageDetailChatPage(image: ImageRecord | undefined, presentat
   const availabilityQuery = useQuery({
     queryKey: ['image-vector-similarity', image?.composite_hash ?? ''],
     queryFn: ({ signal }) => getImageVectorAvailability(image?.composite_hash ?? '', { signal }),
-    enabled: Boolean(image?.composite_hash),
+    enabled: permissions.canViewImages && Boolean(image?.composite_hash),
     staleTime: 60_000,
   })
   const loadedSimilar = useLoadedVectorSimilar(image?.composite_hash ?? undefined)

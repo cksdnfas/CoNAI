@@ -80,7 +80,7 @@ CoNAI는 로컬 계정과 권한 그룹으로 페이지 접근과 주요 작업�
 | `prompts.view` / `prompts.edit` | 프롬프트·그룹·프리셋 보기 / 추가·수정·삭제·가져오기 |
 | `characters.view` / `characters.edit` | 캐릭터 라이브러리 탐색·외형 설정 불러오기 / 폴더·설정 추가·수정·이동·삭제 |
 | `wildcards.view` / `wildcards.edit` | 와일드카드 보기·확장 / 추가·수정·삭제, LoRA 폴더 스캔 |
-| `generation.execute` | NAI·ComfyUI·워크플로 생성 실행 |
+| `generation.execute` | NAI·ComfyUI·워크플로 생성 실행. 공개 워크플로우 페이지의 큐 등록·결과 보기에는 `images.view`와 함께 필요하지 않습니다(공개 설정 자체가 허용이며, 워크플로우의 등급별 대기열 한도로 제한합니다). |
 | `workflows.view` / `workflows.edit` | 워크플로·그래프 보기 / 편집·예약 |
 | `files.view` / `files.edit` / `files.delete` | 공용 파일 보관함 보기 / 올리기·정리 / 삭제 |
 | `posts.view` / `posts.comment` / `posts.write` | 게시판 보기 / 댓글 / 글 쓰기 (자기 글·댓글 고치기·지우기 포함) |

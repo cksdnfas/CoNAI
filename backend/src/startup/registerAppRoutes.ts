@@ -255,7 +255,14 @@ export function registerAppRoutes(app: Express, options: RegisterAppRoutesOption
     const { tagger, kaloscope } = settingsService.loadSettings();
     res.json({ success: true, data: { tagger: { enabled: tagger.enabled }, kaloscope: { enabled: kaloscope.enabled } } });
   });
-  app.use('/api/runtime-media-settings', options.readOnlyLimiter, allowReadAccess([IMAGE_VIEW_PERMISSION]), runtimeMediaSettingsRoutes);
+  // A public workflow page shows its results without images.view; any signed-in viewer reads the result feed's
+  // rating-safety settings so the publisher's safety rules still apply there.
+  const resultSafetySettingPaths = ['/generation-history', '/rating-tiers'];
+  const runtimeMediaReadAccess = allowReadAccess([IMAGE_VIEW_PERMISSION]);
+  app.use('/api/runtime-media-settings', options.readOnlyLimiter, (req, res, next) => {
+    if (isReadMethod(req) && resultSafetySettingPaths.includes(req.path) && req.session?.authenticated === true) next();
+    else runtimeMediaReadAccess(req, res, next);
+  }, runtimeMediaSettingsRoutes);
   app.use('/api/settings', requireAdmin, settingsRoutes);
   app.use('/api/page-settings', pageSettingsRoutes);
   app.use('/api/generation-layouts', generationLayoutRoutes);

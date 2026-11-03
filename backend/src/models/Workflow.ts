@@ -339,4 +339,11 @@ export class WorkflowModel {
 
     return rows.map((row) => this.normalizeWorkflowRecord(row)).filter((row): row is WorkflowRecord => row !== null);
   }
+
+  /** Whether the workflow is currently published as a public page (same conditions as `findPublicBySlug`). */
+  static isPublicPage(id: number): boolean {
+    return !!userSettingsDb.prepare(`
+      SELECT 1 FROM workflows WHERE id = ? AND deleted_at IS NULL AND is_public_page = 1 AND is_active = 1
+    `).get(id);
+  }
 }
