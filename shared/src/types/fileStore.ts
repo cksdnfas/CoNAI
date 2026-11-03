@@ -1,6 +1,8 @@
 /** Shared instance file storage, independent of the image library. IDs survive moves and renames. */
 export interface StoredFileEntry {
   id: string;
+  /** Account-private chat upload, never a shared file-store entry. */
+  chatAttachment?: true;
   parentId: string | null;
   name: string;
   kind: 'file' | 'folder';

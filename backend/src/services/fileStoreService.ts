@@ -17,6 +17,7 @@ export class FileStoreError extends Error {
 export type FileRow = {
   id: string; owner_key: string; parent_id: string | null; name: string; name_key: string;
   kind: 'file' | 'folder'; mime_type: string | null; size: number; created_at: string; updated_at: string;
+  chat_owner_key?: string | null;
 };
 
 export const TEXT_EXTENSIONS = new Set(['.txt', '.md', '.markdown', '.json', '.jsonl', '.csv', '.tsv', '.yaml', '.yml', '.xml', '.html', '.htm', '.svg', '.css', '.js', '.mjs', '.cjs', '.jsx', '.ts', '.tsx', '.py', '.sh', '.sql', '.log', '.ini', '.toml', '.srt', '.vtt']);
@@ -37,6 +38,15 @@ export function fileOwnerKey(accountId: number | null): string {
   return accountId === null ? 'bootstrap' : `account:${accountId}`;
 }
 
+/** Internal scope for chat uploads; ordinary file-store actors never select this scope. */
+export function chatAttachmentOwner(accountId: number | null): string {
+  return `chat-attachment:${fileOwnerKey(accountId)}`;
+}
+
+function isChatAttachmentOwner(owner: string) {
+  return /^chat-attachment:(bootstrap|account:[1-9]\d*)$/.test(owner);
+}
+
 /** Judged by extension only; the uploader's MIME is never trusted. A missing extension counts as restricted. */
 export function isRestrictedFileName(name: string): boolean {
   const extension = path.extname(name).toLowerCase();
@@ -50,7 +60,7 @@ export function assertFileTypeAllowed(name: string, allowAnyType: boolean): void
 }
 
 export function toEntry(row: FileRow): StoredFileEntry {
-  return { id: row.id, parentId: row.parent_id, name: row.name, kind: row.kind, mimeType: row.mime_type,
+  return { id: row.id, ...(row.chat_owner_key ? { chatAttachment: true as const } : {}), parentId: row.parent_id, name: row.name, kind: row.kind, mimeType: row.mime_type,
     size: row.size, createdAt: `${row.created_at.replace(' ', 'T')}Z`, updatedAt: `${row.updated_at.replace(' ', 'T')}Z` };
 }
 
@@ -106,7 +116,8 @@ export function parseFileId(value: unknown, nullable = false): string | null {
 
 function requireRow(owner: string, id: string): FileRow {
   parseFileId(id);
-  const row = getUserSettingsDb().prepare('SELECT * FROM stored_file_entries WHERE id = ? AND deleted_at IS NULL').get(id) as FileRow | undefined;
+  const row = getUserSettingsDb().prepare(`SELECT * FROM stored_file_entries WHERE id = ? AND deleted_at IS NULL
+    AND (chat_owner_key IS NULL OR chat_owner_key = ?)`).get(id, isChatAttachmentOwner(owner) ? owner : null) as FileRow | undefined;
   if (!row) throw new FileStoreError('파일 또는 폴더를 찾을 수 없어.', 404);
   return row;
 }
@@ -117,8 +128,9 @@ function requireFolder(owner: string, id: string | null) {
 }
 
 function assertUnique(owner: string, parentId: string | null, name: string, exceptId = '') {
+  if (isChatAttachmentOwner(owner)) return;
   if (getUserSettingsDb().prepare(`SELECT 1 FROM stored_file_entries
-    WHERE parent_id IS ? AND name_key = ? AND id <> ? AND deleted_at IS NULL`).get(parentId, name.toLowerCase(), exceptId)) {
+    WHERE parent_id IS ? AND name_key = ? AND id <> ? AND deleted_at IS NULL AND chat_owner_key IS NULL`).get(parentId, name.toLowerCase(), exceptId)) {
     throw new FileStoreError(`같은 이름의 항목이 있어: ${name}`, 409);
   }
 }
@@ -137,11 +149,13 @@ function ancestors(owner: string, parentId: string | null): StoredFileEntry[] {
 }
 
 function insert(owner: string, parentId: string | null, name: string, kind: FileRow['kind'], id: string, size = 0, mime: string | null = null) {
+  const chatOwner = isChatAttachmentOwner(owner) ? owner : null;
+  if (chatOwner && (parentId !== null || kind !== 'file')) throw new FileStoreError('채팅 첨부는 폴더에 넣을 수 없어.');
   requireFolder(owner, parentId);
   if (ancestors(owner, parentId).length >= MAX_DEPTH) throw new FileStoreError('폴더는 최대 64단계까지 만들 수 있어.');
   assertUnique(owner, parentId, name);
-  getUserSettingsDb().prepare(`INSERT INTO stored_file_entries (id, owner_key, parent_id, name, name_key, kind, size, mime_type)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(id, owner, parentId, name, name.toLowerCase(), kind, size, mime);
+  getUserSettingsDb().prepare(`INSERT INTO stored_file_entries (id, owner_key, parent_id, name, name_key, kind, size, mime_type, chat_owner_key)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(id, owner, parentId, name, name.toLowerCase(), kind, size, mime, chatOwner);
   return toEntry(requireRow(owner, id));
 }
 
@@ -162,7 +176,7 @@ const textWriteListeners = new Set<(event: TextWriteEvent) => void>();
 
 /** A failing listener never fails the change itself; it is logged. */
 function notifyChange(change: FileStoreChange) {
-  if (change.entries.length === 0) return;
+  if (change.entries.length === 0 || isChatAttachmentOwner(change.owner)) return;
   publishRuntimeEvent({ name: 'files.changed', topic: 'files', visibility: 'all', payload: { action: change.action, ids: change.entries.map(entry => entry.id) } });
   for (const listener of changeListeners) {
     try { listener(change); }
@@ -176,6 +190,7 @@ function changedEntry(row: Pick<FileRow, 'id' | 'kind' | 'name' | 'parent_id'>, 
 }
 
 let purgeScheduled = false;
+let chatAttachmentCleanup: NodeJS.Timeout | undefined;
 function scheduleDeletedFilePurge() {
   if (purgeScheduled) return;
   const db = getUserSettingsDb();
@@ -203,7 +218,9 @@ export const FileStoreService = {
   attachmentsForThread(threadId: number, range?: { fromId: number; untilId: number }) {
     const rows = getUserSettingsDb().prepare(`SELECT e.*, a.message_id FROM chat_file_attachments a
       JOIN stored_file_entries e ON e.id = a.file_id AND e.deleted_at IS NULL
-      JOIN codex_chat_messages m ON m.id = a.message_id WHERE m.thread_id = ?
+      JOIN codex_chat_messages m ON m.id = a.message_id
+      JOIN codex_chat_threads t ON t.id = m.thread_id WHERE m.thread_id = ?
+      AND (e.chat_owner_key IS NULL OR e.chat_owner_key = 'chat-attachment:' || CASE WHEN t.account_id IS NULL THEN 'bootstrap' ELSE 'account:' || t.account_id END)
       ${range ? 'AND m.id BETWEEN ? AND ?' : ''} ORDER BY a.rowid`)
       .all(threadId, ...(range ? [range.fromId, range.untilId] : [])) as Array<FileRow & { message_id: number }>;
     const result = new Map<number, StoredFileEntry[]>();
@@ -219,7 +236,7 @@ export const FileStoreService = {
       const operator = previous ? '<' : '>';
       const direction = previous ? 'DESC' : 'ASC';
       const found = getUserSettingsDb().prepare(`SELECT * FROM stored_file_entries
-        WHERE parent_id IS ? AND kind = 'file' AND deleted_at IS NULL
+        WHERE parent_id IS ? AND kind = 'file' AND deleted_at IS NULL AND chat_owner_key IS NULL
         AND (name_key, id) ${operator} (?, ?) ORDER BY name_key ${direction}, id ${direction} LIMIT 1`)
         .get(row.parent_id, row.name_key, row.id) as FileRow | undefined;
       return found ? toEntry(found) : null;
@@ -231,14 +248,14 @@ export const FileStoreService = {
     requireFolder(owner, parentId);
     if (!Number.isSafeInteger(offset) || offset < 0 || !Number.isSafeInteger(limit) || limit < 1 || limit > 200) throw new FileStoreError('잘못된 목록 범위야.');
     const db = getUserSettingsDb();
-    const rows = db.prepare(`SELECT * FROM stored_file_entries WHERE parent_id IS ? AND deleted_at IS NULL
+    const rows = db.prepare(`SELECT * FROM stored_file_entries WHERE parent_id IS ? AND deleted_at IS NULL AND chat_owner_key IS NULL
       ORDER BY kind DESC, name_key, id LIMIT ? OFFSET ?`).all(parentId, limit, offset) as FileRow[];
-    const { total } = db.prepare('SELECT COUNT(*) AS total FROM stored_file_entries WHERE parent_id IS ? AND deleted_at IS NULL').get(parentId) as { total: number };
+    const { total } = db.prepare('SELECT COUNT(*) AS total FROM stored_file_entries WHERE parent_id IS ? AND deleted_at IS NULL AND chat_owner_key IS NULL').get(parentId) as { total: number };
     return { entries: rows.map(toEntry), breadcrumbs: ancestors(owner, parentId), total, offset, limit };
   },
 
   folders(owner: string) {
-    return (getUserSettingsDb().prepare(`SELECT * FROM stored_file_entries WHERE kind = 'folder' AND deleted_at IS NULL ORDER BY name_key, id`).all() as FileRow[]).map(toEntry);
+    return (getUserSettingsDb().prepare(`SELECT * FROM stored_file_entries WHERE kind = 'folder' AND deleted_at IS NULL AND chat_owner_key IS NULL ORDER BY name_key, id`).all() as FileRow[]).map(toEntry);
   },
 
   createFolder(owner: string, parentId: string | null, value: unknown) {
@@ -351,7 +368,7 @@ export const FileStoreService = {
 
   /** The live entry named `name` directly under `parentId`, or null. */
   findChild(owner: string, parentId: string | null, name: string): StoredFileEntry | null {
-    const row = getUserSettingsDb().prepare('SELECT * FROM stored_file_entries WHERE parent_id IS ? AND name_key = ? AND deleted_at IS NULL')
+    const row = getUserSettingsDb().prepare('SELECT * FROM stored_file_entries WHERE parent_id IS ? AND name_key = ? AND deleted_at IS NULL AND chat_owner_key IS NULL')
       .get(parentId, name.normalize('NFC').toLowerCase()) as FileRow | undefined;
     return row ? toEntry(row) : null;
   },
@@ -533,7 +550,7 @@ export const FileStoreService = {
 
   /** `a/b/c`: the names from below `ancestorId` down to `id`, or null when `id` is not (live) inside that folder. */
   relativePath(owner: string, ancestorId: string, id: string): string | null {
-    const lookup = getUserSettingsDb().prepare('SELECT parent_id, name FROM stored_file_entries WHERE id = ? AND deleted_at IS NULL');
+    const lookup = getUserSettingsDb().prepare('SELECT parent_id, name FROM stored_file_entries WHERE id = ? AND deleted_at IS NULL AND chat_owner_key IS NULL');
     const names: string[] = [];
     let current: string | null = id;
     while (current !== null && current !== ancestorId) {
@@ -562,6 +579,9 @@ export const FileStoreService = {
   /** Tombstones make interrupted filesystem deletion retryable without reviving a half-deleted file. */
   purgeDeleted(limit = 200) {
     const db = getUserSettingsDb();
+    db.prepare(`UPDATE stored_file_entries SET deleted_at = CURRENT_TIMESTAMP
+      WHERE chat_owner_key IS NOT NULL AND deleted_at IS NULL AND created_at < datetime('now', '-1 day')
+      AND NOT EXISTS (SELECT 1 FROM chat_file_attachments a WHERE a.file_id = stored_file_entries.id)`).run();
     const rows = db.prepare(`SELECT id, kind, owner_key FROM stored_file_entries e WHERE deleted_at IS NOT NULL
       AND NOT EXISTS (SELECT 1 FROM stored_file_entries child WHERE child.parent_id=e.id) LIMIT ?`).all(limit) as Array<{ id: string; kind: string; owner_key: string }>;
     let removed = 0;
@@ -595,6 +615,9 @@ export const FileStoreService = {
   migrateLayout() {
     const result = migrateFileStoreLayout();
     scheduleDeletedFilePurge();
+    chatAttachmentCleanup ??= setInterval(() => {
+      if (getUserSettingsDb().open) FileStoreService.purgeDeleted();
+    }, 60 * 60 * 1000).unref();
     return result;
   },
 

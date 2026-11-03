@@ -559,14 +559,14 @@ export const ModelSlotStore = {
 
   /**
    * A row id for a saved field: null for empty, else the row, which must exist and reach a connection of `kinds`
-   * (a connection that is gone passes, so a profile saved before it went keeps saving; so does a route reaching no
-   * model yet, which counts as unset until it does).
+   * rather than accepting an empty representative model as an assignment.
    */
   checked(slotId: unknown, kinds: readonly string[] = LLM_CONNECTION_TYPES): number | null {
     if (slotId === null || slotId === undefined || slotId === '') return null
     const id = ModelSlotStore.existing(slotId)
     if (id === null) throw new ChatProfileError('모델을 찾을 수 없어.')
     const target = ModelSlotStore.target(id)
+    if (!target?.model) throw new ChatProfileError('모델이 설정되지 않았어. 대표모델이 가리킬 모델을 먼저 골라줘.')
     const type = target ? ExternalApiProvider.findByName(target.providerName)?.provider_type : undefined
     if (type && !kinds.includes(type)) throw new ChatProfileError(kinds.includes('decision_typesafe') ? '판단에 쓸 수 없는 모델이야.' : '판단 모델은 채팅에 쓸 수 없어. LLM 연결의 모델을 골라줘.')
     return id

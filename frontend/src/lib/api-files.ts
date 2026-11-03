@@ -63,7 +63,7 @@ export function isRestrictedFileName(name: string) {
   return !extension || !DEFAULT_UPLOAD_EXTENSIONS.has(extension)
 }
 
-export async function uploadStoredFiles(parentId: string | null, files: File[], options: { allowAnyType?: boolean } = {}) {
+export async function uploadStoredFiles(parentId: string | null, files: File[], options: { allowAnyType?: boolean; chatThreadId?: number } = {}) {
   if (files.length === 0 || files.length > UPLOAD_LIMITS.maxFilesPerRequest) throw new Error('한 번에 1~20개 파일을 업로드할 수 있어. / Upload 1–20 files at a time.')
   if (files.some((file) => file.size > UPLOAD_LIMITS.maxFileBytes) || files.reduce((sum, file) => sum + file.size, 0) > UPLOAD_LIMITS.maxRequestBytes) {
     throw new Error('파일당 500MB, 한 번에 총 1GB까지 가능해. / Limit: 500 MB per file, 1 GB total.')
@@ -73,7 +73,7 @@ export async function uploadStoredFiles(parentId: string | null, files: File[], 
   if (restricted) throw new Error(`이 형식은 올릴 수 없어: ${restricted.name}. 텍스트·이미지·영상·오디오·문서만 가능해. / Restricted file type: ${restricted.name}.`)
   const body = new FormData()
   for (const file of files) body.append('files', file)
-  return requestApiData<StoredFileEntry[]>(`/api/files/upload?parentId=${parentId ?? ''}`, { method: 'POST', body })
+  return requestApiData<StoredFileEntry[]>(options.chatThreadId !== undefined ? `/api/codex-chat/attachments/upload?threadId=${options.chatThreadId}` : `/api/files/upload?parentId=${parentId ?? ''}`, { method: 'POST', body })
 }
 
 /** Retry derived content extraction without modifying the original file. */

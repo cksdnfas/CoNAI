@@ -270,10 +270,11 @@ export const ChatRoutineRunner = {
         }
         const message = clip(error instanceof Error ? error.message : error, 300)
         const failStreak = ((table().prepare('SELECT fail_streak FROM chat_routines WHERE id = ?').get(id) as { fail_streak: number } | undefined)?.fail_streak ?? 0) + 1
-        const stopped = failStreak >= FAIL_LIMIT
+        const onceFailed = routine.scheduleType === 'once' && !options.manual
+        const stopped = onceFailed || failStreak >= FAIL_LIMIT
         return ChatRoutineStore.update(id, {
           last_result: 'failed', last_run_at: startedAt, last_error: message, fail_streak: failStreak, run_count: routine.runCount + 1,
-          ...(stopped ? { status: 'error_stopped' as const, stop_reason: `${FAIL_LIMIT}번 연속 실패해서 멈췄어: ${message}`, next_run_at: null } : {}),
+          ...(stopped ? { status: 'error_stopped' as const, stop_reason: onceFailed ? `한 번 실행할 루틴이 실패해서 멈췄어. 실제 결과를 확인한 뒤 다시 실행해줘: ${message}` : `${FAIL_LIMIT}번 연속 실패해서 멈췄어: ${message}`, next_run_at: null } : {}),
         })
       }
 

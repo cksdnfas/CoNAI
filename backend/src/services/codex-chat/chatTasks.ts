@@ -18,7 +18,7 @@ import { withLlmUsageContext } from '../llmUsage'
 /** `choice`: the request body's answer to the chat's question card, unchecked (see readChoiceAnswer). */
 export type ChatSendOptions = { task?: ChatTaskRouting; routine?: ChatRoutineRouting; choice?: unknown; onDelivered?: (messageId: number) => void }
 
-type TaskRow = { id: number; thread_id: number; goal: string; steps: string; status: ChatTaskStatus; wait: ChatTaskWait | null; reason: string | null; budget: string; used: string; progress: string | null; stalled: number; active_since: string | null; created_at: string; updated_at: string }
+type TaskRow = { id: number; thread_id: number; goal: string; steps: string; status: ChatTaskStatus; wait: ChatTaskWait | null; wait_ids: string | null; reason: string | null; budget: string; used: string; progress: string | null; stalled: number; active_since: string | null; created_at: string; updated_at: string }
 
 const ensured = new WeakSet<Database.Database>()
 /** Created on first use like chat_proposals; the statements are idempotent. */
@@ -33,6 +33,7 @@ function table() {
         steps TEXT NOT NULL,
         status TEXT NOT NULL,
         wait TEXT,
+        wait_ids TEXT,
         reason TEXT,
         budget TEXT NOT NULL,
         used TEXT NOT NULL,
@@ -44,8 +45,9 @@ function table() {
       );
       CREATE INDEX IF NOT EXISTS idx_chat_tasks_thread ON chat_tasks (thread_id, id);
     `)
-    // Tables made before the active-time limit gain its column.
-    if (!(db.prepare('PRAGMA table_info(chat_tasks)').all() as Array<{ name: string }>).some((column) => column.name === 'active_since')) db.exec('ALTER TABLE chat_tasks ADD COLUMN active_since TEXT')
+    const columns = (db.prepare('PRAGMA table_info(chat_tasks)').all() as Array<{ name: string }>).map((column) => column.name)
+    if (!columns.includes('active_since')) db.exec('ALTER TABLE chat_tasks ADD COLUMN active_since TEXT')
+    if (!columns.includes('wait_ids')) db.exec('ALTER TABLE chat_tasks ADD COLUMN wait_ids TEXT')
     ensured.add(db)
   }
   return db
@@ -54,7 +56,7 @@ function table() {
 const LIVE: ChatTaskStatus[] = ['awaiting_plan', 'running', 'waiting', 'paused']
 const parse = <T>(value: string | null, fallback: T): T => { try { return value ? JSON.parse(value) as T : fallback } catch { return fallback } }
 function toTask(row: TaskRow): ChatTask {
-  return { id: row.id, threadId: row.thread_id, goal: row.goal, steps: parse<ChatTaskStep[]>(row.steps, []), status: row.status, wait: row.wait, reason: row.reason, budget: parse(row.budget, CHAT_TASK_DEFAULT_BUDGET), used: parse(row.used, { continuations: 0, images: 0 }), createdAt: row.created_at, updatedAt: row.updated_at }
+  return { id: row.id, threadId: row.thread_id, goal: row.goal, steps: parse<ChatTaskStep[]>(row.steps, []), status: row.status, wait: row.wait, waitIds: parse<number[]>(row.wait_ids, []), reason: row.reason, budget: parse(row.budget, CHAT_TASK_DEFAULT_BUDGET), used: parse(row.used, { continuations: 0, images: 0 }), createdAt: row.created_at, updatedAt: row.updated_at }
 }
 const clip = (value: unknown, max: number) => String(value ?? '').replace(/\s+/g, ' ').trim().slice(0, max)
 
@@ -81,6 +83,11 @@ export const ChatTaskStore = {
     const row = table().prepare('SELECT * FROM chat_tasks WHERE id = ?').get(id) as TaskRow | undefined
     return row ? toTask(row) : null
   },
+  requireActive(id: number): ChatTask {
+    const task = ChatTaskStore.find(id)
+    if (!task || (task.status !== 'running' && task.status !== 'waiting')) throw new Error('실행 중인 작업만 변경할 수 있어. 플랜 승인이나 사용자 재개가 필요해.')
+    return task
+  },
   /** The chat's task that is not finished yet, if any. */
   live(threadId: number): ChatTask | null {
     const row = table().prepare(`SELECT * FROM chat_tasks WHERE thread_id = ? AND status IN (${LIVE.map(() => '?').join(', ')}) ORDER BY id DESC LIMIT 1`).get(threadId, ...LIVE) as TaskRow | undefined
@@ -102,14 +109,14 @@ export const ChatTaskStore = {
     const row = table().prepare('SELECT * FROM chat_tasks WHERE thread_id = ? ORDER BY id DESC LIMIT 1').get(threadId) as TaskRow | undefined
     return row ? toTask(row) : null
   },
-  update(id: number, patch: Partial<Pick<ChatTask, 'steps' | 'status' | 'wait' | 'reason' | 'used' | 'budget'>>): ChatTask | null {
+  update(id: number, patch: Partial<Pick<ChatTask, 'steps' | 'status' | 'wait' | 'waitIds' | 'reason' | 'used' | 'budget'>>): ChatTask | null {
     const current = ChatTaskStore.find(id)
     if (!current) return null
     const next = { ...current, ...patch }
     // A request can finish while a runner is awaiting a reply. Never overwrite its newly recorded tokens.
     if (current.used.tokens !== undefined) next.used = { ...next.used, tokens: Math.max(current.used.tokens, next.used.tokens ?? 0) }
-    table().prepare("UPDATE chat_tasks SET steps = ?, status = ?, wait = ?, reason = ?, used = ?, budget = ?, updated_at = datetime('now') WHERE id = ?")
-      .run(JSON.stringify(next.steps), next.status, next.status === 'waiting' ? next.wait : null, next.reason, JSON.stringify(next.used), JSON.stringify(next.budget), id)
+    table().prepare("UPDATE chat_tasks SET steps = ?, status = ?, wait = ?, wait_ids = ?, reason = ?, used = ?, budget = ?, updated_at = datetime('now') WHERE id = ?")
+      .run(JSON.stringify(next.steps), next.status, next.status === 'waiting' ? next.wait : null, next.status === 'waiting' ? JSON.stringify(next.waitIds ?? []) : null, next.reason, JSON.stringify(next.used), JSON.stringify(next.budget), id)
     const task = ChatTaskStore.find(id)
     announce(task)
     return task
@@ -135,6 +142,41 @@ export const ChatTaskStore = {
   deleteForThread(threadId: number) {
     return table().prepare('DELETE FROM chat_tasks WHERE thread_id = ?').run(threadId).changes
   },
+}
+
+function waitTargetIds(task: ChatTask, wait: 'approval' | 'job', replyId: string | undefined, ids?: number[]) {
+  const db = table()
+  const selected = ids ?? ((wait === 'approval'
+    ? db.prepare("SELECT id FROM chat_proposals WHERE thread_id = ? AND reply_id = ? AND kind <> 'task_plan'").all(task.threadId, replyId ?? '')
+    : db.prepare('SELECT job_id AS id FROM chat_generation_links WHERE thread_id = ? AND reply_id = ?').all(task.threadId, replyId ?? '')) as Array<{ id: number }>).map((row) => row.id)
+  const targets = [...new Set(selected)]
+  if (!targets.length) throw new Error('기다릴 대상을 찾지 못했어. 도구 결과의 proposal_ids 또는 job_ids를 지정해줘.')
+  const json = JSON.stringify(targets)
+  const allowed = wait === 'approval'
+    ? db.prepare("SELECT id FROM chat_proposals WHERE thread_id = ? AND kind <> 'task_plan' AND id IN (SELECT value FROM json_each(?))").all(task.threadId, json)
+    : db.prepare(`SELECT j.id FROM generation_queue_jobs j JOIN codex_chat_threads t ON t.id = ?
+        WHERE j.id IN (SELECT value FROM json_each(?))
+          AND (j.requested_by_account_id IS t.account_id OR EXISTS (
+            SELECT 1 FROM chat_generation_links l WHERE l.job_id = j.id AND l.thread_id = t.id))`).all(task.threadId, json)
+  if (allowed.length !== targets.length) throw new Error('대기 대상이 없거나 이 채팅에서 확인할 수 없는 대상이야.')
+  return targets
+}
+
+function reconcileWait(taskId: number) {
+  const task = ChatTaskStore.find(taskId)
+  if (task?.status !== 'waiting' || (task.wait !== 'approval' && task.wait !== 'job')) return task
+  const ids = task.waitIds ?? []
+  const json = JSON.stringify(ids)
+  const rows = (task.wait === 'approval'
+    ? table().prepare('SELECT id, (saved = 1 OR dismissed = 1) AS ready FROM chat_proposals WHERE thread_id = ? AND id IN (SELECT value FROM json_each(?))').all(task.threadId, json)
+    : table().prepare("SELECT id, status IN ('completed', 'failed', 'cancelled') AS ready FROM generation_queue_jobs WHERE id IN (SELECT value FROM json_each(?))").all(json)) as Array<{ id: number; ready: number }>
+  if (!ids.length || rows.length !== ids.length) return ChatTaskStore.update(task.id, { status: 'paused', reason: '대기 대상을 확인할 수 없어 멈췄어. 실제 결과를 확인한 뒤 재개해줘.' })
+  if (rows.some((row) => !row.ready)) return task
+  const resumed = ChatTaskStore.update(task.id, { status: 'running', reason: null })
+  ChatTaskRunner.schedule(task.threadId, task.wait === 'approval'
+    ? '기다리던 카드가 모두 처리됐어. get_proposal_status로 저장·무시 결과를 확인해.'
+    : '기다리던 생성 작업이 모두 끝났어. 각 작업의 성공·실패·취소 결과를 확인해.')
+  return resumed
 }
 
 /** Images the chat's generation tools queued in this chat since the task began. */
@@ -209,11 +251,17 @@ const running = new Set<number>()
 
 export const ChatTaskRunner = {
   started: false,
+  recover() {
+    // Never replay an interrupted turn; waits can recover from durable outcomes without replaying their effects.
+    table().prepare("UPDATE chat_tasks SET status = 'paused', reason = '서버가 다시 시작돼서 멈췄어.', wait = NULL, wait_ids = NULL WHERE status = 'running'").run()
+    const rows = table().prepare("SELECT id FROM chat_tasks WHERE status = 'waiting' AND wait IN ('approval', 'job')").all() as Array<{ id: number }>
+    for (const row of rows) reconcileWait(row.id)
+  },
+
   start() {
     if (ChatTaskRunner.started) return
     ChatTaskRunner.started = true
-    // A task cannot be half way through a turn after a restart: stop and let the person resume it.
-    table().prepare("UPDATE chat_tasks SET status = 'paused', reason = '서버가 다시 시작돼서 멈췄어.', wait = NULL WHERE status IN ('running')").run()
+    ChatTaskRunner.recover()
     // In a room every member's reply ends this way; the continuation waits until the whole room is quiet.
     onChatReplyFinished((context: ChatExecutionContext) => {
       const task = ChatTaskStore.live(context.threadId)
@@ -226,10 +274,7 @@ export const ChatTaskRunner = {
         if (proposal.taskId === task.id && proposal.dismissed && task.status === 'awaiting_plan') ChatTaskStore.update(task.id, { status: 'cancelled', reason: '플랜을 무시했어.' })
         return
       }
-      if (task.status === 'waiting' && task.wait === 'approval') {
-        ChatTaskStore.update(task.id, { status: 'running', reason: null })
-        ChatTaskRunner.schedule(threadId, `카드 #${proposal.id}을(를) 사용자가 ${proposal.dismissed ? '무시했어' : '저장했어'}.`)
-      }
+      if (task.status === 'waiting' && task.wait === 'approval' && task.waitIds?.includes(proposal.id)) reconcileWait(task.id)
     })
     // The person's own message answers a task waiting for them, and a message sent with the page connected brings a
     // task waiting for the page back; the end of that reply then moves the task on.
@@ -240,21 +285,20 @@ export const ChatTaskRunner = {
     })
     subscribeToRuntimeEvents((record) => {
       if (record.name !== 'queue.job.status') return
-      const status = (record.payload as { status?: string })?.status
-      if (!['completed', 'failed', 'cancelled'].includes(status ?? '')) return
-      // A waiting task resumes once the generations it may be waiting on are done: those its chat started, and the
-      // account's started since the task last became active (asset batches and the like). Older or unrelated work of
-      // the account (a long workflow left running) does not hold it.
-      const rows = table().prepare("SELECT t.id, t.thread_id, c.account_id, COALESCE(t.active_since, t.created_at) AS since FROM chat_tasks t JOIN codex_chat_threads c ON c.id = t.thread_id WHERE t.status = 'waiting' AND t.wait = 'job'").all() as Array<{ id: number; thread_id: number; account_id: number | null; since: string }>
-      for (const row of rows) {
-        const busy = getUserSettingsDb().prepare(`SELECT COUNT(*) AS count FROM generation_queue_jobs j
-          WHERE j.status NOT IN ('completed', 'failed', 'cancelled')
-            AND (j.id IN (SELECT job_id FROM chat_generation_links WHERE thread_id = ?) OR (j.requested_by_account_id IS ? AND j.created_date >= ?))`).get(row.thread_id, row.account_id, row.since) as { count: number }
-        if (busy.count > 0) continue
-        ChatTaskStore.update(row.id, { status: 'running', reason: null })
-        ChatTaskRunner.schedule(row.thread_id, '기다리던 생성 작업이 모두 끝났어.')
-      }
+      const payload = record.payload as { job_id?: number; status?: string }
+      if (!['completed', 'failed', 'cancelled'].includes(payload?.status ?? '') || typeof payload?.job_id !== 'number') return
+      const rows = table().prepare(`SELECT id FROM chat_tasks WHERE status = 'waiting' AND wait = 'job'
+        AND EXISTS (SELECT 1 FROM json_each(chat_tasks.wait_ids) WHERE value = ?)`).all(payload.job_id) as Array<{ id: number }>
+      for (const row of rows) reconcileWait(row.id)
     })
+  },
+
+  wait(taskId: number, wait: ChatTaskWait, reason: string, replyId?: string, ids?: number[]) {
+    const task = ChatTaskStore.requireActive(taskId)
+    const waitIds = wait === 'approval' || wait === 'job' ? waitTargetIds(task, wait, replyId, ids) : []
+    ChatTaskStore.update(task.id, { status: 'waiting', wait, waitIds, reason })
+    // Completion may already have arrived before the model registered its wait.
+    return reconcileWait(task.id)!
   },
 
   /** Plan approved: the task starts. */
@@ -332,6 +376,8 @@ export const ChatTaskRunner = {
     // in a moment, before anything counts against the budget or the stall limit. Its end schedules a turn too.
     const { CodexChatService } = await import('./codexChatService')
     const { GroupChatService } = await import('./groupChatService')
+    task = ChatTaskStore.find(task.id)
+    if (!task || task.status !== 'running' || running.has(threadId)) return
     if (CodexChatService.isRunning(threadId) || GroupChatService.isRunning(threadId)) {
       if (!timers.has(threadId)) ChatTaskRunner.schedule(threadId, event, 1500)
       return
@@ -372,8 +418,11 @@ export const ChatTaskRunner = {
       if (/진행 중/.test(message)) {
         const back = turn?.heard ? task.steps.map((step, index) => index === current ? { ...step, heard: turn.heard!.slice(0, -1) } : step) : task.steps
         ChatTaskStore.update(task.id, { used: { ...task.used, continuations: Math.max(0, task.used.continuations - 1) }, steps: back })
-        if (!timers.has(threadId)) ChatTaskRunner.schedule(threadId, event, 1500)
-      } else ChatTaskStore.update(task.id, { status: 'paused', reason: `이어가지 못했어: ${clip(message, 200)}` })
+        if (ChatTaskStore.find(task.id)?.status === 'running' && !timers.has(threadId)) ChatTaskRunner.schedule(threadId, event, 1500)
+      } else {
+        const status = ChatTaskStore.find(task.id)?.status
+        if (status === 'running' || status === 'waiting') ChatTaskStore.update(task.id, { status: 'paused', reason: `이어가지 못했어: ${clip(message, 200)}` })
+      }
     } finally {
       running.delete(threadId)
     }

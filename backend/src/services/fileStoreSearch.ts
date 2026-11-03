@@ -97,7 +97,9 @@ function pendingExtractions(owner: string, onlyId?: string, limit = 8, force = f
   return getUserSettingsDb().prepare(`SELECT e.id, e.name, e.owner_key, ${FILE_REVISION} AS revision,
     t.revision AS cached_revision, COALESCE(t.retry_count, 0) AS retry_count, t.last_attempt
     FROM stored_file_entries e LEFT JOIN search_db.search_documents t ON t.source = 'file' AND t.source_id = e.id
-    WHERE e.kind = 'file' AND e.deleted_at IS NULL ${onlyId ? 'AND e.id = @id' : ''}
+    WHERE e.kind = 'file' AND e.deleted_at IS NULL
+      AND (e.chat_owner_key IS NULL ${onlyId ? 'OR e.chat_owner_key = @owner' : ''})
+      ${onlyId ? 'AND e.id = @id' : ''}
       ${force ? '' : `AND (t.source_id IS NULL OR t.revision <> ${FILE_REVISION}
         OR (t.extraction_state = 'error' AND t.retryable = 1 AND t.retry_after <= @now))`}
     ORDER BY e.updated_at ASC, e.id LIMIT @limit`).all({ owner, now: Date.now(), limit, ...(onlyId ? { id: onlyId } : {}) }) as PendingFile[];
@@ -201,7 +203,7 @@ export async function refreshFileSearchIndex(owner: string, onlyId?: string, opt
     // Immediate passes must not consume this owner's later retry deadline.
     const retry = db.prepare(`SELECT MIN(t.retry_after) AS due FROM search_db.search_documents t
       JOIN stored_file_entries e ON e.id = t.source_id
-      WHERE t.source = 'file' AND e.deleted_at IS NULL
+      WHERE t.source = 'file' AND e.deleted_at IS NULL AND e.chat_owner_key IS NULL
         AND t.extraction_state = 'error' AND t.retryable = 1 AND t.retry_after IS NOT NULL`).get() as { due: number | null };
     if (retry.due !== null) queueFileSearchRefresh(owner, retry.due);
   }
@@ -234,9 +236,9 @@ async function withSemanticRows(owner: string, query: string, limit: number, sco
   status.semantic = status.indexedFiles === 0 && status.searchableFiles > 0 ? 'not_indexed' : status.indexedFiles < status.searchableFiles || status.pendingDocuments > 0 ? 'partial' : 'ready';
   const db = getUserSettingsDb();
   const scope = scopeSql
-    ? new Set((db.prepare(`SELECT e.id FROM stored_file_entries e WHERE 1=1 ${scopeSql}`).all({ owner, within: params.within }) as Array<{ id: string }>).map((row) => row.id))
+    ? new Set((db.prepare(`SELECT e.id FROM stored_file_entries e WHERE e.chat_owner_key IS NULL ${scopeSql}`).all({ owner, within: params.within }) as Array<{ id: string }>).map((row) => row.id))
     : null;
-  const revisions = new Map((db.prepare(`SELECT e.id, (t.revision || ':' || t.content_hash) AS revision FROM stored_file_entries e JOIN search_db.search_documents t ON t.source = 'file' AND t.source_id = e.id WHERE e.deleted_at IS NULL AND t.revision = ${FILE_REVISION}`).all() as Array<{ id: string; revision: string }>).map(row => [row.id, row.revision]));
+  const revisions = new Map((db.prepare(`SELECT e.id, (t.revision || ':' || t.content_hash) AS revision FROM stored_file_entries e JOIN search_db.search_documents t ON t.source = 'file' AND t.source_id = e.id WHERE e.deleted_at IS NULL AND e.chat_owner_key IS NULL AND t.revision = ${FILE_REVISION}`).all() as Array<{ id: string; revision: string }>).map(row => [row.id, row.revision]));
   const best = new Map<string, { score: number; spanStart: number | null }>();
   for (const hit of vectorStore.search(SEMANTIC_SPACES.file, EMBEDDING_MODEL_KEY, vector, {})) {
     if ((scope && !scope.has(hit.sourceKey)) || hit.contentHash !== revisions.get(hit.sourceKey)) continue;
@@ -253,7 +255,7 @@ async function withSemanticRows(owner: string, query: string, limit: number, sco
       json_extract(j.value, '$.offset') AS read_offset, (t.revision || ':' || t.content_hash) AS read_revision, t.body_bytes AS read_size
       FROM json_each(?) j JOIN stored_file_entries e ON e.id = json_extract(j.value, '$.id')
       JOIN search_db.search_documents t ON t.source = 'file' AND t.source_id = e.id
-      WHERE e.deleted_at IS NULL`).all(JSON.stringify(missing.map(id => ({ id, offset: best.get(id)?.spanStart ?? 0 })))) as SearchRow[];
+      WHERE e.deleted_at IS NULL AND e.chat_owner_key IS NULL`).all(JSON.stringify(missing.map(id => ({ id, offset: best.get(id)?.spanStart ?? 0 })))) as SearchRow[];
     for (const row of found) {
       // Fetch only the UTF-8 window containing the preview, never every matching document's body.
       const bytes = readCachedFileBytes(owner, row.id, row.read_offset ?? 0, SNIPPET_LENGTH * 4 + 3);
@@ -298,7 +300,7 @@ export async function searchStoredFiles(owner: string, query: unknown, limit = 5
       length(CAST(substr(t.body, 1, MAX(${position} - ${SNIPPET_BEFORE}, 1) - 1) AS BLOB)) AS read_offset, ${position} AS hit_at, length(t.body) AS body_length,
       CASE WHEN ${position} > 0 THEN substr(t.body, max(${position} - ${SNIPPET_BEFORE}, 1), ${SNIPPET_LENGTH}) END AS excerpt
     FROM stored_file_entries e LEFT JOIN search_db.search_documents t ON t.source = 'file' AND t.source_id = e.id AND t.revision = ${FILE_REVISION}
-    WHERE e.deleted_at IS NULL AND ${every} ${scope}
+    WHERE e.deleted_at IS NULL AND e.chat_owner_key IS NULL AND ${every} ${scope}
     ORDER BY CASE WHEN ${nameOnly} THEN 0 ELSE 1 END, e.updated_at DESC, e.name_key
     LIMIT @limit`).all(params) as SearchRow[];
   const totals = db.prepare(`SELECT
@@ -310,7 +312,7 @@ export async function searchStoredFiles(owner: string, query: unknown, limit = 5
     SUM(CASE WHEN t.source_id IS NULL OR t.revision != ${FILE_REVISION} THEN 1 ELSE 0 END) AS pendingDocuments
     FROM stored_file_entries e LEFT JOIN search_db.search_documents t ON t.source = 'file' AND t.source_id = e.id
     LEFT JOIN vector_db.file_progress p ON p.source_key = e.id
-    WHERE e.kind = 'file' AND e.deleted_at IS NULL ${scope}`)
+    WHERE e.kind = 'file' AND e.deleted_at IS NULL AND e.chat_owner_key IS NULL ${scope}`)
     .get({ owner, model: EMBEDDING_MODEL_KEY, ...(within ? { within: params.within } : {}) }) as Record<string, number | null>;
   const search: FileSearchStatus = { mode: 'keyword', semantic: 'not_requested', keywordTermsLimited: allTerms.length > MAX_TERMS, indexedFiles: totals.indexedFiles ?? 0,
     searchableFiles: totals.searchableFiles ?? 0, partialDocuments: totals.partialDocuments ?? 0,
@@ -353,6 +355,7 @@ export async function searchStoredFiles(owner: string, query: unknown, limit = 5
 
 /** Internal bounded byte read; the derived document is selected by stable file ID. */
 export function readCachedFileBytes(owner: string, id: string, offset: number, count: number): Buffer {
+  FileStoreService.get(owner, id);
   const first = Math.floor(offset / FILE_READ_CHUNK_BYTES);
   const last = Math.floor((offset + count - 1) / FILE_READ_CHUNK_BYTES);
   const parts = getUserSettingsDb().prepare(`SELECT c.body FROM search_db.document_chunks c
@@ -365,6 +368,7 @@ export function readCachedFileBytes(owner: string, id: string, offset: number, c
 
 /** Binary documents expose the same paginated UTF-8 contract as text files. */
 export async function readExtractedDocument(owner: string, id: string, offset: number, limit: number, expectedRevision?: string): Promise<StoredFileText> {
+  FileStoreService.resolveFile(owner, id);
   await refreshFileSearchIndex(owner, id);
   const db = getUserSettingsDb();
   const row = db.prepare(`SELECT t.body_bytes, t.extraction_state, t.extraction_note, (t.revision || ':' || t.content_hash) AS revision

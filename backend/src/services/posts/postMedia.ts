@@ -36,7 +36,7 @@ export function extractMediaRefs(body: string): PostMediaRef[] {
 export function saveMediaRefs(postId: number, ownerType: 'post' | 'comment', ownerId: number, refs: PostMediaRef[], actor: PostActor) {
   const db = getUserSettingsDb();
   const ownerKey = fileOwnerKey(actor.accountId);
-  const fileExists = db.prepare(`SELECT 1 FROM stored_file_entries WHERE id = ? AND kind = 'file' AND deleted_at IS NULL`);
+  const fileExists = db.prepare(`SELECT 1 FROM stored_file_entries WHERE id = ? AND kind = 'file' AND deleted_at IS NULL AND chat_owner_key IS NULL`);
   // Existing embeds keep their original attribution when another account edits the post or comment.
   const previous = new Map((db.prepare(`SELECT ref, file_owner_key FROM post_media_refs WHERE owner_type = ? AND owner_id = ? AND kind = 'file'`)
     .all(ownerType, ownerId) as Array<{ ref: string; file_owner_key: string }>).map((row) => [row.ref, row.file_owner_key]));

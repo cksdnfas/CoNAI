@@ -4,7 +4,7 @@ import type { ChatAgentCallStatus, ChatAgentOnDone, ChatExecutionContext } from 
 import { getUserSettingsDb } from '../../database/userSettingsDb'
 import type { McpRequester } from '../../mcp/context'
 import { resolveAutomationRunAs } from '../automationRunAs'
-import { FileStoreService, fileOwnerKey } from '../fileStoreService'
+import { FileStoreService, chatAttachmentOwner, fileOwnerKey } from '../fileStoreService'
 import { canUseChatProfile, resolveChatAccess, resolveChatProfileToolGrant } from './codexChatAccess'
 import { BoardCallRooms } from '../posts/boardCallRooms'
 import { moveThreadFileChanges } from './chatFileChanges'
@@ -16,6 +16,7 @@ import { userPersonaForThread } from './chatUserProfiles'
 import { ChatWakeBusyError, ensureAutomationRoom, forgetAutomationRoom, isAgentRoom, wakeChatRoom } from './chatRoomWake'
 import { automationResults } from './chatAutomationResults'
 import { backupFileName } from './chatBackup'
+import { hasPrivateAttachmentContext, markPrivateAttachmentContext } from './chatAttachmentPrivacy'
 
 type AgentCall = {
   id: number; account_key: string; caller_thread_id: number; caller_profile_id: number
@@ -23,7 +24,7 @@ type AgentCall = {
   instruction: string; on_done: ChatAgentOnDone; status: ChatAgentCallStatus; error: string | null
   result_message_id: number | null; finished_at: string | null; expires_at: string | null; created_at: string
   reaction_state: 'pending' | 'running' | 'done'; reaction_attempts: number; log_file_id: string | null
-  publish_failed: number
+  publish_failed: number; private_attachments: number
 }
 
 const ensured = new WeakSet<Database.Database>()
@@ -46,6 +47,9 @@ function table() {
     CREATE INDEX IF NOT EXISTS chat_agent_calls_state ON chat_agent_calls(status, reaction_state);`)
     if (!(db.prepare('PRAGMA table_info(chat_agent_calls)').all() as Array<{ name: string }>).some(column => column.name === 'publish_failed')) {
       db.exec('ALTER TABLE chat_agent_calls ADD COLUMN publish_failed INTEGER NOT NULL DEFAULT 0')
+    }
+    if (!(db.prepare('PRAGMA table_info(chat_agent_calls)').all() as Array<{ name: string }>).some(column => column.name === 'private_attachments')) {
+      db.exec('ALTER TABLE chat_agent_calls ADD COLUMN private_attachments INTEGER NOT NULL DEFAULT 0')
     }
     // A first use inside a surrounding transaction can be rolled back along with CREATE TABLE.
     if (!db.inTransaction) ensured.add(db)
@@ -93,24 +97,35 @@ function requireAgent(requester: McpRequester, chat: ChatExecutionContext, profi
   return profile
 }
 
+function handedAttachments(requester: McpRequester, threadId: number, fileIds: string[] | undefined) {
+  const attachments = FileStoreService.validateAttachments(chatAttachmentOwner(requester.accountId), fileIds ?? [])
+  const attached = getUserSettingsDb().prepare(`SELECT 1 FROM chat_file_attachments a JOIN codex_chat_messages m ON m.id = a.message_id
+    WHERE m.thread_id = ? AND a.file_id = ?`)
+  for (const file of attachments) {
+    if (!file.chatAttachment || !attached.get(threadId, file.id)) throw new Error('호출한 채팅에 실제로 연결된 개인 첨부만 에이전트에게 넘길 수 있어.')
+  }
+  return attachments.map(file => file.id)
+}
+
 /** Admission is synchronous. The model receives a running id before any agent model invocation. No call/cost cap. */
 export function callChatAgent(requester: McpRequester, chat: ChatExecutionContext, input: {
-  agentProfileId: number; instruction: string; mediaHashes?: string[]; onDone?: ChatAgentOnDone
+  agentProfileId: number; instruction: string; mediaHashes?: string[]; fileIds?: string[]; onDone?: ChatAgentOnDone
 }) {
   requireActiveChatReply(chat)
   const agent = requireAgent(requester, chat, input.agentProfileId)
+  const fileIds = handedAttachments(requester, chat.threadId, input.fileIds)
   const instruction = input.instruction.trim()
   if (!instruction || instruction.length > 20_000) throw new Error('에이전트 지시는 1~20000자로 입력해줘.')
   if (input.onDone !== undefined && input.onDone !== 'notify' && input.onDone !== 'react') throw new Error('on_done must be notify or react.')
   const caller = ChatProfileStore.find(chat.profileId)
   if (!caller) throw new Error('호출한 프로필을 찾을 수 없어.')
   const id = Number(table().prepare(`INSERT INTO chat_agent_calls
-    (account_key, caller_thread_id, caller_profile_id, agent_profile_id, agent_name, caller_name, instruction, on_done, status, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'running', ?)`).run(requester.accountId === null ? 'bootstrap' : String(requester.accountId),
-    chat.threadId, chat.profileId, agent.id, agent.name, caller.name, instruction, input.onDone ?? 'notify', new Date().toISOString()).lastInsertRowid)
+    (account_key, caller_thread_id, caller_profile_id, agent_profile_id, agent_name, caller_name, instruction, on_done, status, created_at, private_attachments)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'running', ?, ?)`).run(requester.accountId === null ? 'bootstrap' : String(requester.accountId),
+    chat.threadId, chat.profileId, agent.id, agent.name, caller.name, instruction, input.onDone ?? 'notify', new Date().toISOString(), Number(hasPrivateAttachmentContext(chat.threadId))).lastInsertRowid)
   const controller = new AbortController()
   running.set(id, controller)
-  setImmediate(() => { void execute(id, requester, chat, input.mediaHashes, controller).catch(error => warn(id, error)) })
+  setImmediate(() => { void execute(id, requester, chat, input.mediaHashes, fileIds, controller).catch(error => warn(id, error)) })
   return { callId: id, status: 'running' as const }
 }
 
@@ -181,20 +196,22 @@ function finish(id: number, status: 'completed' | 'failed', error: string | null
   if (call) void processCall(call).catch(error => warn(id, error))
 }
 
-async function execute(id: number, requester: McpRequester, chat: ChatExecutionContext, mediaHashes: string[] | undefined, controller: AbortController) {
+async function execute(id: number, requester: McpRequester, chat: ChatExecutionContext, mediaHashes: string[] | undefined, fileIds: string[], controller: AbortController) {
   const signal = controller.signal
   try {
     signal.throwIfAborted()
     const call = find(id)!
     requireAgent(requester, chat, call.agent_profile_id)
     const room = await ensureAutomationRoom(requester, call.agent_profile_id, roomKey(id), `${call.agent_name} · 에이전트 #${id}`)
+    if (call.private_attachments) markPrivateAttachmentContext(room.id)
     table().prepare('UPDATE chat_agent_calls SET agent_thread_id = ?, agent_after_message_id = ? WHERE id = ?')
       .run(room.id, CodexChatStore.latestMessageId(room.id) ?? 0, id)
     // There is no person to watch this room; only the caller's on_done reaction is allowed.
     table().prepare('UPDATE codex_chat_threads SET reaction_enabled = 0 WHERE id = ?').run(room.id)
     signal.throwIfAborted()
+    handedAttachments(requester, chat.threadId, fileIds)
     const result = await wakeChatRoom({ requester, threadId: room.id, instruction: call.instruction,
-      routing: { source: 'agent', id, name: call.caller_name }, mediaHashes, signal })
+      routing: { source: 'agent', id, name: call.caller_name }, mediaHashes, fileIds, signal })
     signal.throwIfAborted()
     if (!result.replies.length || result.replies.some(reply => reply.status !== 'completed')) {
       throw new Error(result.replies.find(reply => reply.error)?.error ?? '에이전트가 작업을 완료하지 못했어.')
@@ -266,7 +283,7 @@ async function react(call: AgentCall, now = Date.now()) {
 async function cleanup(call: AgentCall) {
   const accountId = accountIdOf(call)
   if (!call.publish_failed && (call.status === 'completed' || call.status === 'failed') && call.result_message_id === null && CodexChatStore.findThread(call.caller_thread_id, accountId)) return
-  if (call.status === 'failed' && !call.log_file_id) {
+  if (call.status === 'failed' && !call.log_file_id && !call.private_attachments) {
     const owner = fileOwnerKey(accountId)
     const root = FileStoreService.ensureFolder(owner, null, '에이전트 작업 기록')
     const day = FileStoreService.ensureFolder(owner, root.id, call.finished_at!.slice(0, 10))

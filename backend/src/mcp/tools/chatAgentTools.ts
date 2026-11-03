@@ -4,6 +4,7 @@ import type { McpRequestContext } from '../context'
 import { isChatMcpSource } from '../context'
 import { callChatAgent, usableChatAgents } from '../../services/codex-chat/chatAgentCalls'
 import { errorResult, textResult } from '../toolResults'
+import { MAX_CHAT_ATTACHMENTS } from '../../services/fileStoreService'
 
 export function registerChatAgentTools(server: McpServer, context: McpRequestContext) {
   const chat = context.chatContext, requester = context.requester
@@ -17,12 +18,13 @@ export function registerChatAgentTools(server: McpServer, context: McpRequestCon
       agent_profile_id: z.number().int().positive(),
       instruction: z.string().trim().min(1).max(20_000),
       media_composite_hashes: z.array(z.string().min(1)).optional().describe('Optional media references to attach; normal chat media access checks apply.'),
+      file_ids: z.array(z.string().regex(/^[a-f0-9]{32}$/)).max(MAX_CHAT_ATTACHMENTS).optional().describe('Private files actually attached to this chat to hand to the same-account agent; no other files become readable.'),
       on_done: z.enum(['notify', 'react']).optional().default('notify'),
     }),
   }, async input => {
     try {
       return textResult(callChatAgent(requester, chat, { agentProfileId: input.agent_profile_id, instruction: input.instruction,
-        mediaHashes: input.media_composite_hashes, onDone: input.on_done }))
+        mediaHashes: input.media_composite_hashes, fileIds: input.file_ids, onDone: input.on_done }))
     } catch (error) { return errorResult(error) }
   })
 }

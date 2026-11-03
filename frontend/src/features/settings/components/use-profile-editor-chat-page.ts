@@ -330,7 +330,10 @@ export function useProfileEditorChatPage({ open, profile, draft, setDraft, dirty
       if (keys.includes('judgePresetId')) Object.assign(next, judgePresetPatch(filled.judgePresetId ?? null))
       // Explicit enabled flags win when a fill also picks a source; source pairings own all other dependent fields.
       for (const key of ['summaryEnabled', 'suggestEnabled'] as const) {
-        if (keys.includes(key)) next[key] = filled[key]
+        if (keys.includes(key)) {
+          next[key] = filled[key]
+          if (filled[key] === false) Object.assign(next, applyRoleChoice(key === 'summaryEnabled' ? 'summary' : 'suggest', 'off'))
+        }
       }
       const changedKeys = Object.keys(next) as (keyof Draft)[]
       setDraft((current) => ({ ...current, ...next }))

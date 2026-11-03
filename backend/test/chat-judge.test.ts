@@ -303,11 +303,10 @@ test('judge presets: no-judge parity, original text, tool steering, fallback, lo
 
   await t.test('a judge with no model of its own asks the judge representative model, whose row cannot be deleted while it points there', async () => {
     const { ModelSlotStore } = await import('../src/services/codex-chat/modelSlots')
-    const modelless = ChatJudgePresetStore.create({ name: '모델 없음', items: [] })
-    const profile = ChatProfileStore.create({ name: '기본 판단', engine: 'llm', providerName: 'chat', judgePresetId: modelless.id })
-    assert.equal(judgeSetupOf(profile), null, 'no model anywhere: no judge')
     const jev = ModelSlotStore.list().find((slot) => slot.kind === 'model' && slot.providerName === 'jev')!
     ModelSlotStore.setDefaultJudge(jev.id, true)
+    const modelless = ChatJudgePresetStore.create({ name: '대표모델 따름', items: [] })
+    const profile = ChatProfileStore.create({ name: '기본 판단', engine: 'llm', providerName: 'chat', judgePresetId: modelless.id })
     assert.equal(ModelSlotStore.defaultJudgeTarget()?.id, jev.id)
     assert.equal(judgeSetupOf(profile)?.providerName, 'jev')
     assert.throws(() => ModelSlotStore.delete(jev.id), /대표모델 판단/)
@@ -331,7 +330,7 @@ test('judge presets: no-judge parity, original text, tool steering, fallback, lo
     assert.equal(judgeSetupOf(judged)?.providerName, 'jev')
     assert.throws(() => ChatProfileStore.create({ name: 'bad', engine: 'llm', providerName: 'chat', judgePresetId: 99999 }), /판단 프리셋/)
     assert.throws(() => ChatProfileStore.create({ name: 'bad', engine: 'llm', providerName: 'chat', judgeProviderName: 'nope' }), /연결을 찾을 수 없어/)
-    const spare = ChatJudgePresetStore.create({ name: '임시', items: [] })
+    const spare = ChatJudgePresetStore.create({ name: '임시', providerName: 'jev', items: [] })
     const user = ChatProfileStore.create({ name: '임시 프로필', engine: 'llm', providerName: 'chat', judgePresetId: spare.id })
     assert.deepEqual(ChatJudgePresetStore.find(spare.id)?.profiles.map((entry) => entry.id), [user.id])
     assert.equal(ChatJudgePresetStore.delete(spare.id), true)

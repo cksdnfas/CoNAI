@@ -226,13 +226,131 @@ test('assistant agent: proposal outcomes, page operation records, task plan and 
       assert.equal(ChatTaskStore.find(taskId)?.status, 'waiting')
       ChatProposalStore.markSaved(card.id, 7)
       assert.equal(ChatTaskStore.find(taskId)?.status, 'running', 'saving the awaited card resumes the task')
-      assert.match(scheduled.at(-1)!, /저장했어/)
+      assert.match(scheduled.at(-1)!, /카드/)
 
+      assert.ok((await bridge.call('task_finish', { outcome: 'done', summary: '다 했어' })).isError, 'unfinished steps cannot be reported as done')
+      assert.equal(ChatTaskStore.find(taskId)?.status, 'running')
+      await bridge.call('task_update', { step: 2, status: 'done' })
+      await bridge.call('task_update', { step: 3, status: 'skipped', note: '이미지는 필요 없어' })
       const finished = await bridge.call('task_finish', { outcome: 'done', summary: '다 했어' })
       assert.ok(!finished.isError)
       assert.equal(ChatTaskStore.find(taskId)?.status, 'done')
       assert.equal(ChatTaskStore.live(threadId), null)
     } finally { stop(); await bridge.close() }
+  })
+
+  await t.test('waits reconcile targets completed before registration or during a restart', async (sub) => {
+    sub.mock.method(ChatTaskRunner, 'schedule', () => {})
+    const db = dbModule.getUserSettingsDb()
+    for (const wait of ['approval', 'job'] as const) {
+      const thread = CodexChatStore.createThread(null, `missed ${wait}`, 'llm', profile.id)
+      const context = { ...reply(`missed-${wait}`), threadId: thread }
+      const task = ChatTaskStore.create(thread, '대기 복구', [{ title: '결과 확인' }])
+      ChatTaskRunner.approve(task.id)
+      const stop = registerChatReply(context, controller.signal, () => ({ replyTo: null, recipients: ['user'] }))
+      const bridge = await openChatMcpBridge({ accountId: null, accountType: 'admin' }, ['read', 'configure'], null, { chatContext: context })
+      const createTarget = () => {
+        if (wait === 'approval') return ChatProposalStore.add(context, { kind: 'profile', input: { name: 'Awaited' } }).id
+        const id = Number(db.prepare("INSERT INTO generation_queue_jobs (service_type, status, request_payload) VALUES ('novelai', 'queued', '{}')").run().lastInsertRowid)
+        db.prepare('INSERT INTO chat_generation_links (job_id, thread_id, reply_id) VALUES (?, ?, ?)').run(id, thread, context.replyId)
+        return id
+      }
+      const complete = (id: number) => {
+        if (wait === 'approval') ChatProposalStore.markSaved(id, 7, { notify: false })
+        else db.prepare("UPDATE generation_queue_jobs SET status = 'completed' WHERE id = ?").run(id)
+      }
+      try {
+        const finished = createTarget()
+        complete(finished)
+        const key = wait === 'approval' ? 'proposal_ids' : 'job_ids'
+        assert.ok(!(await bridge.call('task_wait', { for: wait, reason: '결과 대기', [key]: [finished] })).isError)
+        assert.equal(ChatTaskStore.find(task.id)?.status, 'running', 'an already finished target does not strand the task')
+
+        const pending = createTarget()
+        assert.ok(!(await bridge.call('task_wait', { for: wait, reason: '결과 대기', [key]: [pending] })).isError)
+        assert.equal(ChatTaskStore.find(task.id)?.status, 'waiting')
+        assert.ok(!(await bridge.call('task_update', { step: 1, status: 'done' })).isError)
+        assert.ok((await bridge.call('task_finish', { outcome: 'done', summary: '끝' })).isError)
+        complete(pending)
+        ChatTaskRunner.recover()
+        assert.equal(ChatTaskStore.find(task.id)?.status, 'running', 'restart recovery reads persisted target outcomes without another event')
+
+        ChatTaskStore.update(task.id, { status: 'waiting', wait, waitIds: [] })
+        ChatTaskRunner.recover()
+        assert.equal(ChatTaskStore.find(task.id)?.status, 'paused', 'legacy waits with no target require explicit recovery, not a guessed replay')
+      } finally { stop(); await bridge.close() }
+    }
+  })
+
+  await t.test('waits bind only selected cards or this reply’s jobs and reject foreign targets', async (sub) => {
+    sub.mock.method(ChatTaskRunner, 'schedule', () => {})
+    const { publishRuntimeEvent } = await import('../src/services/runtime-events/runtimeEventBus')
+    const db = dbModule.getUserSettingsDb()
+    const thread = CodexChatStore.createThread(null, 'bound waits', 'llm', profile.id)
+    const other = CodexChatStore.createThread(null, 'other waits', 'llm', profile.id)
+    const context = { ...reply('bound-waits'), threadId: thread }
+    const task = ChatTaskStore.create(thread, '정확한 대상', [{ title: '확인' }])
+    ChatTaskRunner.approve(task.id)
+    const stop = registerChatReply(context, controller.signal, () => ({ replyTo: null, recipients: ['user'] }))
+    const bridge = await openChatMcpBridge({ accountId: null, accountType: 'admin' }, ['read', 'configure'], null, { chatContext: context })
+    try {
+      const first = ChatProposalStore.add(context, { kind: 'profile', input: { name: 'First' } })
+      const second = ChatProposalStore.add(context, { kind: 'profile', input: { name: 'Second' } })
+      const unrelated = ChatProposalStore.add(context, { kind: 'profile', input: { name: 'Unrelated' } })
+      const foreign = ChatProposalStore.add({ ...context, threadId: other }, { kind: 'profile', input: { name: 'Foreign' } })
+      assert.ok((await bridge.call('task_wait', { for: 'approval', reason: '카드', proposal_ids: [foreign.id] })).isError)
+      assert.equal(ChatTaskStore.find(task.id)?.status, 'running')
+      assert.ok(!(await bridge.call('task_wait', { for: 'approval', reason: '카드', proposal_ids: [first.id, second.id] })).isError)
+      ChatProposalStore.markSaved(unrelated.id, 1)
+      assert.equal(ChatTaskStore.find(task.id)?.status, 'waiting')
+      ChatProposalStore.markSaved(first.id, 2)
+      assert.equal(ChatTaskStore.find(task.id)?.status, 'waiting', 'every selected card must resolve')
+      ChatProposalStore.markDismissed(second.id)
+      assert.equal(ChatTaskStore.find(task.id)?.status, 'running')
+
+      const insert = db.prepare("INSERT INTO generation_queue_jobs (service_type, status, request_payload, requested_by_account_id) VALUES ('novelai', 'queued', '{}', ?)")
+      const selectedJob = Number(insert.run(null).lastInsertRowid)
+      const unrelatedJob = Number(insert.run(null).lastInsertRowid)
+      const foreignJob = Number(insert.run(77).lastInsertRowid)
+      db.prepare('INSERT INTO chat_generation_links (job_id, thread_id, reply_id) VALUES (?, ?, ?)').run(selectedJob, thread, context.replyId)
+      db.prepare('INSERT INTO chat_generation_links (job_id, thread_id, reply_id) VALUES (?, ?, ?)').run(unrelatedJob, thread, 'another-reply')
+      assert.ok((await bridge.call('task_wait', { for: 'job', reason: '생성', job_ids: [foreignJob] })).isError)
+      assert.ok(!(await bridge.call('task_wait', { for: 'job', reason: '생성' })).isError)
+      db.prepare("UPDATE generation_queue_jobs SET status = 'completed' WHERE id = ?").run(selectedJob)
+      publishRuntimeEvent({ name: 'queue.job.status', topic: 'generation-queue', payload: { job_id: selectedJob, status: 'completed' } })
+      assert.equal(ChatTaskStore.find(task.id)?.status, 'running', 'unrelated jobs from the same account and chat do not hold this wait')
+    } finally { ChatTaskRunner.cancel(thread); stop(); await bridge.close() }
+  })
+
+  await t.test('model task tools and pending continuations preserve the person’s pause', async (sub) => {
+    sub.mock.method(ChatTaskRunner, 'schedule', () => {})
+    const sent = sub.mock.method(CodexChatService, 'sendMessage', async () => {})
+    const thread = CodexChatStore.createThread(null, 'paused task', 'llm', profile.id)
+    const context = { ...reply('paused-task'), threadId: thread }
+    const task = ChatTaskStore.create(thread, '중단 보호', [{ title: '수행' }])
+    ChatTaskRunner.approve(task.id)
+    const stop = registerChatReply(context, controller.signal, () => ({ replyTo: null, recipients: ['user'] }))
+    const bridge = await openChatMcpBridge({ accountId: null, accountType: 'admin' }, ['read', 'configure'], null, { chatContext: context })
+    try {
+      ChatTaskRunner.pause(thread)
+      assert.ok((await bridge.call('task_wait', { for: 'user', reason: '질문' })).isError)
+      assert.ok((await bridge.call('task_update', { step: 1, status: 'done' })).isError)
+      assert.ok((await bridge.call('task_finish', { outcome: 'failed', summary: '끝' })).isError)
+      assert.equal(ChatTaskStore.find(task.id)?.status, 'paused')
+      assert.equal(ChatTaskStore.find(task.id)?.steps[0].status, 'todo')
+
+      ChatTaskRunner.resume(thread)
+      const pending = ChatTaskRunner.continue(thread, '재개')
+      ChatTaskRunner.pause(thread)
+      await pending
+      assert.equal(sent.mock.callCount(), 0, 'a pause during continuation preparation prevents the next send')
+      assert.equal(ChatTaskStore.find(task.id)?.used.continuations, 0)
+
+      ChatTaskRunner.cancel(thread)
+      const proposed = ChatTaskStore.create(thread, '아직 미승인', [{ title: '검토' }])
+      assert.ok((await bridge.call('task_finish', { outcome: 'failed', summary: '끝' })).isError)
+      assert.equal(ChatTaskStore.find(proposed.id)?.status, 'awaiting_plan')
+    } finally { ChatTaskRunner.cancel(thread); stop(); await bridge.close() }
   })
 
   await t.test('dismissing a plan cancels it', async () => {

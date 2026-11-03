@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { CHAT_TASK_LIMITS, resolveMemberName, type ChatTask, type ChatTaskAssignee } from '@conai/shared'
 import type { McpRequestContext } from '../context'
 import { ChatProposalStore } from '../../services/codex-chat/chatProposals'
-import { ChatTaskStore } from '../../services/codex-chat/chatTasks'
+import { ChatTaskRunner, ChatTaskStore } from '../../services/codex-chat/chatTasks'
 import { proposalStatuses } from '../../services/codex-chat/chatPageContext'
 import { placesForRequest } from '../../services/codex-chat/chatLinkedFiles'
 import { ChatProfileStore } from '../../services/codex-chat/chatProfiles'
@@ -17,7 +17,7 @@ type Member = { id: number; name: string }
 /** A step's assignee by name for the model (`all`: every member). */
 const assigneeName = (assignee: ChatTaskAssignee, members: Member[]) => assignee === 'all' ? 'all' : members.find((member) => member.id === assignee)?.name ?? `#${assignee}`
 const view = (task: ChatTask, members: Member[] = []) => ({
-  id: task.id, goal: task.goal, status: task.status, wait: task.wait, reason: task.reason,
+  id: task.id, goal: task.goal, status: task.status, wait: task.wait, waitIds: task.waitIds ?? [], reason: task.reason,
   steps: task.steps.map(({ assignee, heard: _heard, ...step }, index) => ({ step: index + 1, ...step, ...(assignee !== undefined ? { assignee: assigneeName(assignee, members) } : {}) })),
   budget: task.budget, used: task.used,
 })
@@ -107,22 +107,23 @@ export function registerChatTaskTools(server: McpServer, context: McpRequestCont
     step: z.number().int().positive(), status: z.enum(['doing', 'done', 'skipped']), note: z.string().max(CHAT_TASK_LIMITS.note).optional(),
   }) }, async ({ step, status, note }) => {
     try {
-      const task = live()
-      if (task.status === 'awaiting_plan') throw new Error('플랜이 아직 승인되지 않았어.')
+      const task = ChatTaskStore.requireActive(live().id)
       if (step > task.steps.length) throw new Error(`단계는 1~${task.steps.length}야.`)
       const steps = task.steps.map((entry, index) => index === step - 1 ? { ...entry, status, ...(note ? { note } : {}) } : status === 'doing' && entry.status === 'doing' ? { ...entry, status: 'todo' as const } : entry)
       return result(view(ChatTaskStore.update(task.id, { steps })!, members()))
     } catch (error) { return failure(error) }
   })
 
-  server.registerTool('task_wait', { description: 'Pause the current task until something outside your reply happens: approval (a card you made must be saved), job (generation still running), page (the person must reopen or reconnect the page), user (you need the person\'s answer). The app resumes you when it happens (user: when the person answers in the chat; page: when the person sends with the page connected, or resumes). Call it, then end your reply.', inputSchema: z.object({
+  server.registerTool('task_wait', { description: 'Wait for selected review cards (approval), generation jobs (job), a page reconnection (page), or the person\'s answer (user). Supply proposal_ids or job_ids from tool results; omitted ids select only non-plan cards or linked jobs from this reply. For jobs from an earlier reply or a saved asset card, supply job_ids explicitly. The app checks current outcomes immediately and resumes after every selected target resolves; unrelated work does not hold or resume this task. Call it, then end your reply. A user pause cannot be changed by this tool.', inputSchema: z.object({
     // A room has no page connection to wait for.
     for: group ? z.enum(['approval', 'job', 'user']) : z.enum(['approval', 'job', 'page', 'user']), reason: z.string().max(CHAT_TASK_LIMITS.note),
-  }) }, async ({ for: wait, reason }) => {
+    proposal_ids: z.array(z.number().int().positive()).min(1).optional(),
+    job_ids: z.array(z.number().int().positive()).min(1).optional(),
+  }) }, async ({ for: wait, reason, proposal_ids, job_ids }) => {
     try {
       const task = live()
-      if (task.status === 'awaiting_plan') throw new Error('플랜이 아직 승인되지 않았어.')
-      return result(view(ChatTaskStore.update(task.id, { status: 'waiting', wait, reason })!, members()))
+      if ((proposal_ids !== undefined && wait !== 'approval') || (job_ids !== undefined && wait !== 'job')) throw new Error('대기 종류에 맞는 대상 ID만 지정해줘.')
+      return result(view(ChatTaskRunner.wait(task.id, wait, reason, chat.replyId, proposal_ids ?? job_ids), members()))
     } catch (error) { return failure(error) }
   })
 
@@ -130,7 +131,8 @@ export function registerChatTaskTools(server: McpServer, context: McpRequestCont
     outcome: z.enum(['done', 'failed']), summary: z.string().max(CHAT_TASK_LIMITS.note),
   }) }, async ({ outcome, summary }) => {
     try {
-      const task = live()
+      const task = ChatTaskStore.requireActive(live().id)
+      if (outcome === 'done' && (task.status === 'waiting' || task.steps.some((step) => step.status !== 'done' && step.status !== 'skipped'))) throw new Error('대기 중이거나 끝나지 않은 단계가 있어. 결과를 확인하고 단계를 정리한 뒤 완료해줘.')
       return result(view(ChatTaskStore.update(task.id, { status: outcome, reason: summary })!, members()))
     } catch (error) { return failure(error) }
   })

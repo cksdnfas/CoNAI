@@ -29,6 +29,8 @@ export type ChatTask = {
   steps: ChatTaskStep[]
   status: ChatTaskStatus
   wait: ChatTaskWait | null
+  /** Exact review-card or generation-job ids for the current wait; absent on older records. */
+  waitIds?: number[]
   /** Why it waits, paused or ended, in the person's words. */
   reason: string | null
   budget: ChatTaskBudget

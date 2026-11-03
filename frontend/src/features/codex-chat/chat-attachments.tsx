@@ -11,6 +11,7 @@ import { FilePicker } from '@/features/files/file-browser'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { useI18n } from '@/i18n'
 import { storedFileDownloadUrl } from '@/lib/api-files'
+import { buildApiUrl } from '@/lib/api-url'
 import { formatFileSize } from '@/lib/format-size'
 import { isFromOwnDom } from '@/lib/portal-events'
 import type { CodexChatApi } from './codex-chat-context'
@@ -18,7 +19,7 @@ import { ChatMediaAttachments, ChatMediaPicker } from './chat-media-picker'
 import { ChatPostRefChip } from './chat-post-cards'
 
 /** The composer's 첨부 key: upload, private stored files, or references to app media. */
-export function ChatAttachButton({ chat, disabled }: { chat: CodexChatApi; disabled: boolean }) {
+export function ChatAttachButton({ chat, disabled, allowPrivateUploads }: { chat: CodexChatApi; disabled: boolean; allowPrivateUploads: boolean }) {
   const { t } = useI18n()
   const auth = useAuthStatusQuery()
   const input = useRef<HTMLInputElement>(null)
@@ -27,8 +28,8 @@ export function ChatAttachButton({ chat, disabled }: { chat: CodexChatApi; disab
   const permissions = auth.data?.permissionKeys ?? []
   const canPickFiles = permissions.includes('files.view')
   const canPickMedia = useImagePermissions().canViewImages
-  if (!canPickFiles && !canPickMedia) return null
-  const canUpload = canPickFiles && permissions.includes('files.edit')
+  const canUpload = allowPrivateUploads && (permissions.includes('chat.use') || permissions.includes('chat.agent.use'))
+  if (!canUpload && !canPickFiles && !canPickMedia) return null
   const isDisabled = disabled || chat.attachmentsUploading
 
   return (
@@ -76,7 +77,7 @@ function nameCapture(file: File, index: number, count: number) {
 export function useChatFileDrop(chat: CodexChatApi, disabled: boolean) {
   const auth = useAuthStatusQuery()
   const permissions = auth.data?.permissionKeys ?? []
-  const enabled = !disabled && !chat.attachmentsUploading && permissions.includes('files.view') && permissions.includes('files.edit')
+  const enabled = !disabled && !chat.attachmentsUploading && (permissions.includes('chat.use') || permissions.includes('chat.agent.use'))
   const [dragging, setDragging] = useState(false)
   const depth = useRef(0)
   const upload = (files: File[]) => { void chat.uploadAttachments(files.map((file, index) => nameCapture(file, index, files.length))) }
@@ -163,7 +164,7 @@ export function ChatFileLinks({ files = [] }: { files?: StoredFileEntry[] }) {
       {files.map((file) => (
         <Tip key={file.id} content={t({ ko: '{name} 다운로드', en: 'Download {name}' }, { name: file.name })}>
           <Button asChild variant="subtle" size="sm">
-            <a href={storedFileDownloadUrl(file.id)} download>
+            <a href={file.chatAttachment ? buildApiUrl(`/api/codex-chat/attachments/${file.id}/download`) : storedFileDownloadUrl(file.id)} download>
               <File className="size-3.5 shrink-0" />
               <span className="max-w-56 truncate">{file.name}</span>
               <span className="text-2xs text-muted-foreground">{formatFileSize(file.size)}</span>

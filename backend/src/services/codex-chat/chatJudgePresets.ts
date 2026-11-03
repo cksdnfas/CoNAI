@@ -4,6 +4,7 @@ import { chatProfileOrderSql } from './chatProfileOrder'
 import { ChatProfileError } from './chatProfileError'
 import { LLM_CONNECTION_TYPES, MODEL_CONNECTION_TYPES, ModelSlotStore } from './modelSlots'
 import { JUDGE_FOLLOW_UP_DEFAULTS, JUDGE_ITEM_DEFAULTS, JUDGE_OPTION_DEFAULTS, type JudgeOptions } from './chatJudgeDefaults'
+import { isJudgeConnectionReady } from '../judge/judgeEngine'
 
 /**
  * Judge presets (see @conai/shared chatJudge): profiles and group rooms reference one by id, so tuning a preset reaches
@@ -213,8 +214,15 @@ function toPreset(row: PresetRow): ChatJudgePreset {
   }
 }
 
+export function assertJudgeModel(slotId: number | null) {
+  const target = ModelSlotStore.target(slotId ?? ModelSlotStore.routeId('judge'))
+  if (!target || !isJudgeConnectionReady(target.providerName, target.model)) {
+    throw new ChatProfileError('사용할 판단 모델이 없어. 모델을 선택하거나 AI 연결에서 판단 대표모델을 설정해 줘.')
+  }
+}
+
 function toColumns(input: ChatJudgePresetInput, draft = false) {
-  return {
+  const columns = {
     name: presetName(input.name),
     // The pair columns are the older form of the model rows; a save clears them.
     provider_name: null,
@@ -227,6 +235,8 @@ function toColumns(input: ChatJudgePresetInput, draft = false) {
     follow_up: JSON.stringify(normalizeFollowUp(input.followUp)),
     options: JSON.stringify(normalizeJudgeOptions({ room: input.room, context: input.context, fields: input.fields, assets: input.assets })),
   }
+  if (!draft) assertJudgeModel(columns.model_slot_id)
+  return columns
 }
 
 export const ChatJudgePresetStore = {
@@ -261,22 +271,26 @@ export const ChatJudgePresetStore = {
   },
 
   create(input: ChatJudgePresetInput) {
-    const columns = toColumns(input)
-    const names = Object.keys(columns)
-    const result = getUserSettingsDb().prepare(`INSERT INTO chat_judge_presets (${names.join(', ')}) VALUES (${names.map((name) => `@${name}`).join(', ')})`).run(columns)
-    return ChatJudgePresetStore.find(Number(result.lastInsertRowid)) as ChatJudgePreset
+    return getUserSettingsDb().transaction(() => {
+      const columns = toColumns(input)
+      const names = Object.keys(columns)
+      const result = getUserSettingsDb().prepare(`INSERT INTO chat_judge_presets (${names.join(', ')}) VALUES (${names.map((name) => `@${name}`).join(', ')})`).run(columns)
+      return ChatJudgePresetStore.find(Number(result.lastInsertRowid)) as ChatJudgePreset
+    })()
   },
 
   update(presetId: number, patch: ChatJudgePresetInput) {
-    const current = ChatJudgePresetStore.find(presetId)
-    if (!current) return null
-    const merged: ChatJudgePresetInput = { ...current, ...Object.fromEntries(Object.entries(patch).filter(([, value]) => value !== undefined)) }
-    // A legacy pair in the patch replaces the current row unless the patch names a row too.
-    if (patch.providerName && patch.modelSlotId === undefined) delete merged.modelSlotId
-    if (patch.escalationProviderName && patch.escalationSlotId === undefined) delete merged.escalationSlotId
-    const columns = toColumns(merged)
-    getUserSettingsDb().prepare(`UPDATE chat_judge_presets SET ${Object.keys(columns).map((name) => `${name} = @${name}`).join(', ')}, updated_date = CURRENT_TIMESTAMP WHERE id = @id`).run({ ...columns, id: presetId })
-    return ChatJudgePresetStore.find(presetId)
+    return getUserSettingsDb().transaction(() => {
+      const current = ChatJudgePresetStore.find(presetId)
+      if (!current) return null
+      const merged: ChatJudgePresetInput = { ...current, ...Object.fromEntries(Object.entries(patch).filter(([, value]) => value !== undefined)) }
+      // A legacy pair in the patch replaces the current row unless the patch names a row too.
+      if (patch.providerName && patch.modelSlotId === undefined) delete merged.modelSlotId
+      if (patch.escalationProviderName && patch.escalationSlotId === undefined) delete merged.escalationSlotId
+      const columns = toColumns(merged)
+      getUserSettingsDb().prepare(`UPDATE chat_judge_presets SET ${Object.keys(columns).map((name) => `${name} = @${name}`).join(', ')}, updated_date = CURRENT_TIMESTAMP WHERE id = @id`).run({ ...columns, id: presetId })
+      return ChatJudgePresetStore.find(presetId)
+    })()
   },
 
   /** Profiles and rooms that referenced it go back to judging nothing (exactly as without a judge). */

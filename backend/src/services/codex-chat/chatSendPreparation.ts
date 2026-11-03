@@ -3,6 +3,7 @@ import type { ChatProfile } from './chatProfiles'
 import type { CodexChatThreadRecord } from './codexChatStore'
 import type { ChatSendOptions } from './chatTasks'
 import { validateChatAttachments } from './chatAttachments'
+import { requirePrivateAttachmentRun } from './chatAttachmentPrivacy'
 import { validateChatMediaAttachments } from './chatMediaAttachments'
 import { ChatFlagStore, parseFlagIds, parsePicks } from './chatFlags'
 import { readChoiceAnswer } from './chatChoices'
@@ -21,6 +22,7 @@ export function prepareChatSend(
   if (choice && 'error' in choice) throw new ErrorType(choice.error, 409)
   const page = choice?.withoutPage ? undefined : parseChatPageContext(pageContext, requester)
   const attachments = validateChatAttachments(requester, fileIds)
+  requirePrivateAttachmentRun(requester, { threadId: thread.id, profileId: profile.id, kind: thread.kind, page }, attachments.some(file => file.chatAttachment))
   const mediaAttachments = validateChatMediaAttachments(requester, mediaHashes, attachments.length)
   const flags = [...ChatFlagStore.resolve(requester, parseFlagIds(flagIds)), ...parsePicks(picks), ...(choice?.flags ?? [])]
   const trimmed = text.trim()

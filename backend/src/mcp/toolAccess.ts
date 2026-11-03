@@ -86,7 +86,7 @@ export const TOOL_FEATURE_PERMISSIONS: Record<string, string | readonly string[]
   list_audio_workflows: 'audio.view', get_audio_order: 'audio.view',
   order_audio: ['audio.view', 'audio.edit', 'generation.execute'], wait_audio_order: 'audio.view',
   cancel_audio_order: ['audio.view', 'audio.edit'], retry_audio_order_job: ['audio.view', 'audio.edit', 'generation.execute'],
-  chat_reply_to: [], room_call_member: [], task_propose: [], task_status: [], task_update: [], task_wait: [], task_finish: [], get_proposal_status: [], offer_choices: [], room_history_search: [], room_history_read: [], read_lore_file: [], save_lore: [], edit_lore_file: [],
+  read_chat_attachment: [], chat_reply_to: [], room_call_member: [], task_propose: [], task_status: [], task_update: [], task_wait: [], task_finish: [], get_proposal_status: [], offer_choices: [], room_history_search: [], room_history_read: [], read_lore_file: [], save_lore: [], edit_lore_file: [],
   linked_list: 'files.view', linked_search: 'files.view', linked_read: 'files.view', linked_view: 'files.view', linked_write: ['files.view', 'files.edit'], linked_edit: ['files.view', 'files.edit'],
   // The profile's own skills are part of its instructions, written by administrators only.
   use_skill: [],
@@ -183,6 +183,8 @@ function keyHoldsTool(context: McpRequestContext, toolName: string): boolean {
  */
 export function isContextToolAllowed(context: McpRequestContext, toolName: string, accountChecks = true): boolean {
   const publicPage = isPublicChatPage(context);
+  if (toolName === 'read_chat_attachment' && (!context.requester || !isChatMcpSource(context.source) || !context.chatContext
+    || publicPage || BoardCallRooms.runFor(context.chatContext.threadId, context.chatContext.profileId) !== null)) return false;
   if (toolName === 'call_agent' && (!context.chatContext || context.scopes.length === 0
     || (context.toolAllowlist && !context.toolAllowlist.includes(toolName))
     || publicPage

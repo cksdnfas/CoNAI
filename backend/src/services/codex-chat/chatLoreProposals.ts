@@ -16,6 +16,7 @@ import { judgeGrantsLore } from './chatJudge'
 import { isChatOrderReply } from './chatOrderRuns'
 import { loadChatSettings } from './chatSettings'
 import { bilingualLore, normalizeLoreTranslation, loreTextHash } from './loreTranslation'
+import { hasPrivateAttachmentContext } from './chatAttachmentPrivacy'
 
 /**
  * save_lore: the model proposes an entry for the chat's record book (a linked account book chosen for it, else the
@@ -90,8 +91,9 @@ function isSaved(proposal: LoreProposal) {
   return proposal.savedId !== undefined
 }
 
-/** Whether save_lore in this chat saves right away: the chat's own switch, else the chat settings. */
+/** Private attachment context requires review; otherwise use the chat's switch, then the shared setting. */
 export function loreAutoSaveOn(threadId: number) {
+  if (hasPrivateAttachmentContext(threadId)) return false
   const own = CodexChatStore.findThreadById(threadId)?.lore_auto_save
   return own === 0 || own === 1 ? own === 1 : loadChatSettings().loreAutoSave
 }

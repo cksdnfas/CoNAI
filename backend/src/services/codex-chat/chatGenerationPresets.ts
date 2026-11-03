@@ -322,7 +322,7 @@ function resolveGuideSkill(link: { skillId: number; path: string }): ChatPresetG
 
 /** Where a guide file (the older way to attach a guide) is (`a/b/c.md` from the store root); null once it is gone. */
 function guideFileAt(fileId: string): { path: string | null; updatedAt: string | null } {
-  const lookup = getUserSettingsDb().prepare('SELECT parent_id, name, updated_at FROM stored_file_entries WHERE id = ? AND deleted_at IS NULL')
+  const lookup = getUserSettingsDb().prepare('SELECT parent_id, name, updated_at FROM stored_file_entries WHERE id = ? AND deleted_at IS NULL AND chat_owner_key IS NULL')
   const file = lookup.get(fileId) as { parent_id: string | null; name: string; updated_at: string } | undefined
   if (!file) return { path: null, updatedAt: null }
   const names = [file.name]

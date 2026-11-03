@@ -113,8 +113,8 @@ export async function runChatOrder(requester: McpRequester, threadId: number, me
         : directContextTurns(history, thread, config).flat()
       // Keep the entire suffix, including hidden wakes: their images still participate in newest-first image selection.
       const attachmentHistory = candidates.length ? history.filter((message) => message.id >= candidates[0].id) : []
-      const attachmentTexts = await inlineTextsForChat(profile, requester.accountId, attachmentHistory)
-      const attachedImages = await loadAttachedImages(profile, chatProfileRequester(requester, context), attachmentHistory)
+      const attachmentTexts = await inlineTextsForChat(profile, requester.accountId, attachmentHistory, context)
+      const attachedImages = await loadAttachedImages(profile, chatProfileRequester(requester, context), attachmentHistory, context)
       const done = (call: Parameters<typeof chatOrderDone>[1]) => chatOrderDone(kind, call)
       if (group) {
         const members = ChatGroupStore.members(threadId).flatMap((member) => ChatProfileStore.find(member.profile_id) ?? [])

@@ -75,10 +75,12 @@ import { CharacterLibraryError, characterId, characterSettingRow } from '../serv
 import { requesterPermissionKeys } from '../middleware/featureAccess'
 import chatLorebooksRouter from './codex-chat-lorebooks.routes'
 import chatAdminPresetsRouter from './codex-chat-admin-presets.routes'
+import chatAttachmentsRouter from './chat-attachments.routes'
 
 const MESSAGE_MAX_LENGTH = 20000
 
 const router = express.Router()
+router.use('/attachments', chatAttachmentsRouter)
 
 /** Mutations keep their legacy full response unless the caller opts into the normal tail contract. */
 function mutationTail(req: Request, res: Response): number | undefined | null {

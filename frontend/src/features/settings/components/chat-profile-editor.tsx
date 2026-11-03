@@ -66,6 +66,7 @@ import {
 } from '@/lib/api-codex-chat'
 import { getCodexGenerationModels } from '@/lib/api-image-generation-queue'
 import { getClaudeModels } from '@/lib/api-agent-cli'
+import { CHAT_JUDGE_PRESETS_QUERY_KEY, listChatJudgePresets } from '@/lib/api-chat-judge'
 import { getErrorMessage } from '@/lib/error-message'
 import { cn } from '@/lib/utils'
 import { CHAT_MAX_EMOTICON_GROUPS, CHAT_PROFILE_DEFAULTS, CHAT_PROFILE_TEXT_LIMITS, CHAT_TRANSLATION_DEFAULTS, type CharacterSetting, type ChatProfileCharacterLinkInput } from '@conai/shared'
@@ -78,6 +79,7 @@ import type { Draft, PatchDraft } from './chat-profile-editor-fields'
 import { ChatProfileLookPanel } from './chat-profile-editor-look'
 import { ChatProfileMemoryPanel } from './chat-profile-editor-memory'
 import { ChatProfileModelPanel } from './chat-profile-editor-model'
+import { useJudgeModelState } from './chat-judge-connection-select'
 import { ChatProfileToolsPanel } from './chat-profile-editor-tools'
 import { ChatProfilePreviewModal } from './chat-profile-preview-modal'
 import { ProfileAssistContext, useProfileAssist, useProfileEditorChatPage, type ProfileEditorSection } from './use-profile-editor-chat-page'
@@ -800,7 +802,10 @@ function ProfileEditor({ layout, open, profile, setProfile, draft, setDraft, dir
 
   const slotsQuery = useQuery({ queryKey: MODEL_SLOTS_QUERY_KEY, queryFn: listModelSlots, enabled: open })
   const slots = slotsQuery.data ?? []
-  const slotsSettled = slotsQuery.isSuccess || slotsQuery.isError
+  const slotsSettled = slotsQuery.isSuccess
+  const judgePresetsQuery = useQuery({ queryKey: CHAT_JUDGE_PRESETS_QUERY_KEY, queryFn: listChatJudgePresets, enabled: open && draft.judgePresetId !== null })
+  const judgePreset = judgePresetsQuery.data?.find((preset) => preset.id === draft.judgePresetId)
+  const judgeState = useJudgeModelState(open && draft.judgePresetId !== null, draft.judgeSlotId ?? judgePreset?.modelSlotId ?? null)
   // Reply suggestions can be written by a chat profile (this one too, once saved) or one of the editor's user profiles;
   // one that is off or has no working model is listed greyed out.
   const profilesQuery = useQuery({ queryKey: CHAT_ADMIN_PROFILES_QUERY_KEY, queryFn: listChatAdminProfiles, enabled: open })
@@ -918,7 +923,9 @@ function ProfileEditor({ layout, open, profile, setProfile, draft, setDraft, dir
 
   const backgroundUrl = draftProfileAssetUrl(draft, profile, 'background')
   const nameMissing = draft.name.trim().length === 0
-  const connectionMissing = isLlm && !draft.modelSlotId && defaultSlot === null
+  const chatSlot = draft.modelSlotId === null ? defaultSlot : slots.find((slot) => slot.id === draft.modelSlotId)
+  const connectionMissing = (isLlm && (!slotsQuery.isSuccess || !chatSlot?.model || chatSlot.ready === false))
+    || (draft.judgePresetId !== null && (!judgePreset || !judgeState.ready))
   const canSave = !nameMissing && !connectionMissing && !assetBusy && !saveMutation.isPending && !deleteMutation.isPending
   useImperativeHandle(ref, () => ({ save: () => { if (canSave) saveMutation.mutate() } }))
   const incompleteLabel = t({ ko: '입력 필요', en: 'Needs input' })

@@ -345,7 +345,9 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   const orderingMessageId = ordering?.messageId ?? null
   const orderingKind = ordering?.kind ?? null
   const isBusy = isStreaming || serverRunning || alternativeMutation.isPending || commandPending || isCompacting || isOrdering
-  const fileDrop = useChatFileDrop(chat, isBusy || activeThreadId === null)
+  const attachmentRoom = activeThread ?? selectedRoomQuery.data?.[0]
+  const allowPrivateUploads = Boolean(attachmentRoom && attachmentRoom.automation !== 'board')
+  const fileDrop = useChatFileDrop(chat, isBusy || activeThreadId === null || !allowPrivateUploads)
   const replacingMessageId = liveTurn?.threadId === activeThreadId ? liveTurn.replacingMessageId : threadQuery.data?.running?.replacingMessageId
   const messages: CodexChatMessage[] = useMemo(() => (threadQuery.data?.messages ?? []).filter((message) => message.id !== replacingMessageId), [threadQuery.data?.messages, replacingMessageId])
   const media = threadQuery.data?.media
@@ -1019,7 +1021,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
         {/* The tools under the text, worded so whether each is on reads at a glance; send stays at the end. */}
         <div className="mt-1 flex items-end gap-2">
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
-          <ChatAttachButton chat={chat} disabled={isBusy || activeThreadId === null} />
+          <ChatAttachButton chat={chat} disabled={isBusy || activeThreadId === null} allowPrivateUploads={allowPrivateUploads} />
           {!isGroup && profile?.pageAssist ? <ChatPageConnectButton disabled={isBusy} /> : null}
           {flags.length > 0 ? <ChatFlagButton buttonRef={flagButtonRef} count={activeFlagIds.length} open={flagTrayOpen} disabled={!canToggleFlags} onToggle={() => setFlagTrayOpen((open) => !open)} /> : null}
           {profile?.suggestEnabled ? <ChatSuggestButton buttonRef={suggestButtonRef} open={suggestions.open} loading={suggestions.loading} disabled={isBusy || activeThreadId === null} onToggle={suggestions.toggle} /> : null}

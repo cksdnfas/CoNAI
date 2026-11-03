@@ -9,7 +9,7 @@ import { summarizeChatError } from './chat-error-chip'
 import { postLink, type StoredFileEntry } from '@conai/shared'
 import type { CodexChatMediaItem } from '@/lib/api-codex-chat'
 import type { GenerationHistoryRecord } from '@/lib/api-image-generation-types'
-import { FILES_QUERY_KEY, uploadStoredFiles } from '@/lib/api-files'
+import { uploadStoredFiles } from '@/lib/api-files'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { useChatPage } from './chat-page-context'
 import { refetchActiveChatQuery, scheduleChatDirectoryRefresh } from './chat-query-refresh'
@@ -243,24 +243,24 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
       return
     }
     const startedIn = resolveThread(selectedRef.current)
+    if (startedIn === null) return
     uploadBusyRef.current = true
     setAttachmentsUploading(true)
     try {
-      const entries = await uploadStoredFiles(null, files)
+      const entries = await uploadStoredFiles(null, files, { chatThreadId: startedIn })
       // Another chat opened meanwhile: the files wait in the chat they were picked for.
       if (resolveThread(selectedRef.current) === startedIn) addAttachments(entries)
       else if (startedIn !== null) {
         const stash = stashRef.current.get(startedIn) ?? { attachments: [], media: [], posts: [], reply: null, picks: [] }
         stashRef.current.set(startedIn, { ...stash, attachments: [...new Map([...stash.attachments, ...entries].map((file) => [file.id, file])).values()] })
       }
-      await queryClient.invalidateQueries({ queryKey: FILES_QUERY_KEY })
     } catch (error) {
       showSnackbar({ tone: 'error', message: getErrorMessage(error, t({ ko: '업로드 실패', en: 'Upload failed' })) })
     } finally {
       uploadBusyRef.current = false
       setAttachmentsUploading(false)
     }
-  }, [addAttachments, queryClient, resolveThread, showSnackbar, t])
+  }, [addAttachments, resolveThread, showSnackbar, t])
 
   const statusQuery = useQuery({ queryKey: CHAT_STATUS_QUERY_KEY, queryFn: getCodexChatStatus, staleTime: 60_000, retry: false })
   const canUse = statusQuery.data?.canUse === true

@@ -52,7 +52,7 @@ function validateFiles(actor:PostActor,body:string,targetPostId:number|null,sour
   const refs=extractMediaRefs(body);
   for (const ref of refs) {
     if (ref.kind !== 'file') continue;
-    const own = db().prepare("SELECT 1 FROM stored_file_entries WHERE id = ? AND kind = 'file' AND deleted_at IS NULL").get(ref.ref);
+    const own = db().prepare("SELECT 1 FROM stored_file_entries WHERE id = ? AND kind = 'file' AND deleted_at IS NULL AND chat_owner_key IS NULL").get(ref.ref);
     const previous = targetPostId ? db().prepare("SELECT 1 FROM post_media_refs WHERE post_id = ? AND owner_type = 'post' AND owner_id = ? AND kind = 'file' AND ref = ?").get(targetPostId,targetPostId,ref.ref) : null;
     if (previous) continue;
     if (own) { requireKey(actor, 'files.view'); continue; }

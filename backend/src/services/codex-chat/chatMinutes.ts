@@ -3,6 +3,7 @@ import { FileStoreService, fileOwnerKey } from '../fileStoreService'
 import { ChatGroupStore } from './chatGroupStore'
 import { LinkedFileError, threadLinkedFiles } from './chatLinkedFiles'
 import { ChatProfileStore } from './chatProfiles'
+import { hasPrivateAttachmentContext } from './chatAttachmentPrivacy'
 
 /**
  * Minutes: a chat (a 1:1 LLM chat or a room) whose summary is on may keep each new summary stretch as a record in a
@@ -35,6 +36,9 @@ export const ChatMinutesStore = {
   set(threadId: number, folderId: unknown) {
     const thread = threadRow(threadId)
     if (!thread) throw new LinkedFileError('채팅을 찾을 수 없어.', 404)
+    if (folderId !== null && hasPrivateAttachmentContext(threadId)) {
+      throw new LinkedFileError('개인 첨부를 사용한 채팅에서는 공용 회의록을 켤 수 없어. 회의록은 일시 중지 상태야.', 403)
+    }
     if (folderId !== null && (typeof folderId !== 'string' || !minutesFolders(thread).some((view) => view.id === folderId))) {
       throw new LinkedFileError('회의록은 쓰기로 연결한 폴더에만 남길 수 있어.')
     }
@@ -58,6 +62,7 @@ const clockOf = (date: Date) => `${pad(date.getHours())}:${pad(date.getMinutes()
  */
 export function appendMinutes(threadId: number, stretch: { content: string; firstAt: string; lastAt: string }) {
   try {
+    if (hasPrivateAttachmentContext(threadId)) return
     const thread = threadRow(threadId)
     if (!thread?.minutes_folder_id) return
     const folder = minutesFolders(thread).find((view) => view.id === thread.minutes_folder_id)

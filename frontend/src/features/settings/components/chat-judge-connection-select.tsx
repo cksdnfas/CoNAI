@@ -25,12 +25,26 @@ export function JudgeModelSelect({ enabled, slotId, emptyLabel, llmOnly = false,
   const known = rows.some((slot) => slot.id === slotId)
 
   return (
-    <Select variant="settings" aria-label={ariaLabel} value={value} disabled={!slotsQuery.isSuccess && slotId !== null} onChange={(event) => onChange(event.target.value ? Number(event.target.value.slice(5)) : null)}>
+    <Select variant="settings" aria-label={ariaLabel} value={value} disabled={!enabled || !slotsQuery.isSuccess} onChange={(event) => onChange(event.target.value ? Number(event.target.value.slice(5)) : null)}>
       <option value="">{emptyLabel}</option>
       <ModelRowOptions slots={rows} part="judge" />
       {slotId !== null && !known && slotsQuery.isSuccess ? <option value={value} disabled>{t({ ko: '모델 #{id}', en: 'Model #{id}' }, { id: slotId })}</option> : null}
     </Select>
   )
+}
+
+/** Resolve the selected judge or its default without treating an empty route as a configured model. */
+export function useJudgeModelState(enabled: boolean, slotId: number | null) {
+  const { t } = useI18n()
+  const query = useQuery({ queryKey: MODEL_SLOTS_QUERY_KEY, queryFn: listModelSlots, enabled })
+  const slot = query.data?.find((entry) => slotId === null ? entry.isDefaultJudge : entry.id === slotId)
+  const ready = query.isSuccess && Boolean(slot?.model) && slot?.ready !== false
+  const error = query.isError
+    ? t({ ko: '모델 목록을 불러오지 못했어. AI 연결을 확인해 줘.', en: 'Could not load models. Check AI connections.' })
+    : query.isSuccess && !ready
+      ? t({ ko: '사용할 판단 모델이 없어. 모델을 선택하거나 AI 연결에서 판단 대표모델을 설정해 줘.', en: 'No usable judge model. Select a model or configure the judge representative in AI connections.' })
+      : null
+  return { ready, error }
 }
 
 /** The judge representative model (Settings › LLM › 연결 › 대표모델); undefined until the list loads. */

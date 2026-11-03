@@ -60,6 +60,8 @@ export async function wakeChatRoom(params: {
   chainLimit?: number | null
   signal?: AbortSignal
   mediaHashes?: string[]
+  /** Server-validated attachments explicitly handed to a delegated run. */
+  fileIds?: string[]
   /** Group rooms: address the profile that delegated this work, rather than every member. */
   recipients?: number[]
   /** Host-only receipt, called after the direct room stores the input, before generation. */
@@ -90,9 +92,9 @@ export async function wakeChatRoom(params: {
   let draining = false, followUpTimedOut = false
   try {
     if (isGroup) {
-      await GroupChatService.sendMessage(requester, threadId, text, () => {}, undefined, undefined, params.mediaHashes, undefined, undefined, { routine: params.routing, chainLimit: params.chainLimit, recipients: params.recipients })
+      await GroupChatService.sendMessage(requester, threadId, text, () => {}, params.fileIds, undefined, params.mediaHashes, undefined, undefined, { routine: params.routing, chainLimit: params.chainLimit, recipients: params.recipients })
     } else {
-      const primary = await CodexChatService.sendMessage(requester, threadId, text, () => {}, undefined, undefined, undefined, params.mediaHashes, undefined, undefined, { routine: params.routing, onDelivered: params.onDelivered })
+      const primary = await CodexChatService.sendMessage(requester, threadId, text, () => {}, params.fileIds, undefined, undefined, params.mediaHashes, undefined, undefined, { routine: params.routing, onDelivered: params.onDelivered })
       if (params.routing.source === 'plugin' && primary?.status === 'completed' && !params.signal?.aborted) {
         params.onPrimaryComplete?.()
         draining = true
@@ -190,6 +192,11 @@ export function automationRoomKinds(accountId: number | null): Map<number, ChatA
 /** Also used at the proposal persistence boundary, without trusting model-supplied context flags. */
 export function isAgentRoom(threadId: number) {
   return !!roomsTable().prepare("SELECT 1 FROM chat_automation_rooms WHERE thread_id = ? AND room_key LIKE 'agent:%'").get(threadId)
+}
+
+/** The persistent board destination, including between runs when BoardCallRooms is not bound. */
+export function isBoardRoom(threadId: number) {
+  return !!roomsTable().prepare("SELECT 1 FROM chat_automation_rooms WHERE thread_id = ? AND room_key LIKE 'posts:board:%'").get(threadId)
 }
 
 /** A chat's notification default when the owner never switched it: plugin and agent rooms stay quiet, every other chat notifies. */

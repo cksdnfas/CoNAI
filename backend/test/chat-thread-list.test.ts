@@ -621,7 +621,7 @@ test('chat list: previews, pin/archive/rename, branch origin', { timeout: 60000 
     const { ChatSharedBlockStore } = await import('../src/services/codex-chat/chatDisplayBlocks')
     const db = dbModule.getUserSettingsDb()
     const slot = ModelSlotStore.routeId('chat')
-    const judge = ChatJudgePresetStore.create({ name: 'List judge' })
+    const judge = ChatJudgePresetStore.create({ name: 'List judge', modelSlotId: slot })
     const generation = ChatGenerationPresetStore.create({ name: 'List generation', kind: 'nai' })
     const a = ChatSharedBlockStore.create({ name: 'First state', block: { key: 'liststate', template: 'first' } })
     const b = ChatSharedBlockStore.create({ name: 'Second state', block: { key: 'liststate', template: 'second' } })

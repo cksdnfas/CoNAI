@@ -96,7 +96,7 @@ test('judge beyond turn items: group rooms, status fields, lore and recall, expr
   })
 
   await t.test('preset sections fall back to their defaults and rooms reference a preset until it is deleted', () => {
-    const spare = ChatJudgePresetStore.create({ name: '부분', room: { route: { enabled: false } } as never, fields: { threshold: 5 } as never })
+    const spare = ChatJudgePresetStore.create({ name: '부분', providerName: 'jev', room: { route: { enabled: false } } as never, fields: { threshold: 5 } as never })
     assert.equal(spare.room.route.enabled, false)
     assert.equal(spare.room.next.enabled, true)
     assert.equal(spare.room.next.continueThreshold, JUDGE_OPTION_DEFAULTS.room.next.continueThreshold)

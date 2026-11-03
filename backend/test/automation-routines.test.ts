@@ -275,6 +275,29 @@ test('automation routines: run-as schedules, timing, chat wakes, routines and no
     assert.equal(stopped.nextRunAt, null)
   })
 
+  await t.test('a failed scheduled one-time routine stops for explicit recovery', async (sub) => {
+    const off = ChatProfileStore.create({ name: 'Once off', engine: 'llm', providerName: 'test', model: 'off', isEnabled: false })
+    const room = CodexChatStore.createThread(1, 'once failure', 'llm', off.id)
+    const due = new Date(Date.now() - 1000).toISOString()
+    const routine = ChatRoutineStore.create({ ...normalizeChatRoutineInput({ name: 'Once failure', target: 'room', threadId: room, message: 'm', scheduleType: 'once', runAt: due }, 1), status: 'active', next_run_at: due })
+    const fire = ChatRoutineRunner.fire
+    let pending: ReturnType<typeof fire> | undefined
+    sub.mock.method(ChatRoutineRunner, 'fire', (...args: Parameters<typeof fire>) => {
+      const result = fire(...args)
+      if (args[0] === routine.id) pending = result
+      return result
+    })
+    await ChatRoutineRunner.poll()
+    assert.ok(pending)
+    await pending
+    const failed = ChatRoutineStore.find(routine.id)!
+    assert.equal(failed.lastResult, 'failed')
+    assert.equal(failed.status, 'error_stopped', 'a consumed once schedule must not stay active with no next run')
+    assert.equal(failed.nextRunAt, null)
+    assert.equal(failed.runCount, 1)
+    assert.ok(failed.stopReason)
+  })
+
   await t.test('a one-time routine ends after its run, but not after a manual one', async () => {
     const once = ChatRoutineStore.create({ ...normalizeChatRoutineInput({ name: 'Once', target: 'dedicated', profileId: mina.id, message: 'm', scheduleType: 'once', runAt: new Date(Date.now() + 3600_000).toISOString() }, 1), status: 'active' })
     await ChatRoutineRunner.fire(once.id, { manual: true })

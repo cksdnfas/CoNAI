@@ -18,6 +18,7 @@ import { flagDirectiveFor, fillCharacterPlaceholders, estimateTokens, fixedConte
 import { loadChatSettings } from './chatSettings'
 import { openChatMcpBridge } from './chatMcpBridge'
 import { readChatRequestCapture } from './chatRequestCaptures'
+import { requireSharedChatExport } from './chatAttachmentPrivacy'
 
 export class ChatDiagnosticsError extends Error {
   constructor(message: string, readonly status = 400) { super(message) }
@@ -158,9 +159,12 @@ export async function getChatDiagnostics(requester: McpRequester, threadId: numb
     ...(scope === 'view' ? {} : { texts }), ...(scope === 'prompts' ? { raw: readChatRequestCapture(messageId, index) } : {}) }
 }
 
-/** Export the same redacted response into this requester's own store. */
+/** Shared-store exports must never publish private attachment captures or derived context. */
 export async function exportChatDiagnostics(requester: McpRequester, threadId: number, messageId: number, alternative?: unknown) {
+  if (!CodexChatStore.findThread(threadId, requester.accountId)) throw new ChatDiagnosticsError('채팅을 찾을 수 없어.', 404)
+  requireSharedChatExport(threadId, 'diagnostics')
   const result = await getChatDiagnostics(requester, threadId, messageId, alternative)
+  requireSharedChatExport(threadId, 'diagnostics')
   const thread = CodexChatStore.findThread(threadId, requester.accountId)
   const message = CodexChatStore.findMessage(threadId, messageId)
   if (!thread || !message || scopeFor(requester.accountId, profileOf(thread, message)) !== result.scope) throw new ChatDiagnosticsError('진단 권한이 변경됐어.', 403)

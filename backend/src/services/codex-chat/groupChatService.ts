@@ -1,4 +1,5 @@
 import { validateChatMediaAttachments } from './chatMediaAttachments'
+import { requirePrivateAttachmentRun } from './chatAttachmentPrivacy'
 import { deletingThreads } from './chatThreadReservation'
 import { randomUUID } from 'crypto'
 import { chatExecutionRoot } from './chatExecutionRoot'
@@ -241,6 +242,7 @@ async function replyAs(run: GroupRun, requester: McpRequester, profile: ChatProf
   const source = sourceMessageId === replacingMessageId ? null : CodexChatStore.findMessage(run.threadId, sourceMessageId) ?? null
   const replyId = randomUUID()
   const context: ChatExecutionContext = { threadId: run.threadId, profileId: profile.id, kind: 'group', replyId, rootExecutionId: chatExecutionRoot(run.threadId, sourceMessageId) }
+  requirePrivateAttachmentRun(requester, context)
   const active: ActiveReply = { controller, text: '', toolCalls: new Map(), routing: automaticReplyRouting(thread, source, replyId) }
   let explicitlyRouted = false
   run.active.set(profile.id, active)
@@ -340,8 +342,8 @@ async function replyAs(run: GroupRun, requester: McpRequester, profile: ChatProf
     // A Claude or pi member continues its own session of the room, which keeps the pictures it was shown.
     const sessionRuntime = sessionRuntimeOf(profile)
     const [attachmentTexts, attachedImages] = await Promise.all([
-      sessionRuntime ? undefined : inlineTextsForChat(profile, requester.accountId, attachmentMessages),
-      sessionRuntime ? undefined : loadAttachedImages(profile, mediaRequester, attachmentMessages),
+      sessionRuntime ? undefined : inlineTextsForChat(profile, requester.accountId, attachmentMessages, context),
+      sessionRuntime ? undefined : loadAttachedImages(profile, mediaRequester, attachmentMessages, context),
     ])
     if (profile.engine === 'codex') {
       message = await runCodexGroupReply({
@@ -589,6 +591,7 @@ export const GroupChatService = {
     const thread = requireGroup(requester, threadId)
     assertGroupChatAvailable(requester)
     const attachments = validateChatAttachments(requester, fileIds)
+    requirePrivateAttachmentRun(requester, { threadId, profileId: thread.profile_id!, kind: 'group' }, attachments.some(file => file.chatAttachment))
     const mediaAttachments = validateChatMediaAttachments(requester, mediaHashes, attachments.length)
     const flags = [...ChatFlagStore.resolve(requester, parseFlagIds(flagIds)), ...parsePicks(picks)]
     const trimmed = text.trim()

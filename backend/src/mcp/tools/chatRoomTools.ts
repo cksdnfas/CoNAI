@@ -12,6 +12,12 @@ import { buildReplyContext } from '../../services/codex-chat/chatReplyContext';
 import { type HistorySearchStatus, connectedThreadIds, HISTORY_SEARCH_LIMIT, searchChatHistory, sharesKnowledge } from '../../services/codex-chat/chatHistorySearch';
 import type { McpRequestContext } from '../context';
 import { errorResult, textResult } from '../toolResults';
+import { FileStoreService, chatAttachmentOwner } from '../../services/fileStoreService';
+import { profileSeesImages } from '../../services/codex-chat/chatProfiles';
+import { contextContentLimit } from '../../services/codex-chat/chatContentRating';
+import { CONTENT_RATING_BLOCKED, storedFileAllowed } from '../../services/contentRating';
+import { previewImage } from '../../services/imagePreview';
+import { MEDIA_FRAMES_MAX, FRAMES_PER_SHEET_MAX, extractMediaFrames, frameSheets } from '../../services/mediaFrames';
 
 const MESSAGE_TEXT_LIMIT = 2000;
 
@@ -50,6 +56,41 @@ export function offersChatReplyTo(context: McpRequestContext) {
  * and search and read the chat's history and that of the chats connected to it (see chatHistorySearch).
  */
 export function registerChatRoomTools(server: McpServer, context: McpRequestContext): void {
+  server.registerTool('read_chat_attachment', {
+    description: 'Read an account-private file actually attached to the current chat. mode=text reads UTF-8 or extracted PDF/XLSX with byte offsets; follow nextOffset until null. mode=image previews a still image; mode=frames samples video/animation, with optional count, frames_per_image and start_seconds/end_seconds. Vision follows the profile setting and content rating. Cannot read other chats, shared files or another account.',
+    inputSchema: z.object({
+      file_id: z.string().regex(/^[a-f0-9]{32}$/), mode: z.enum(['text', 'image', 'frames']).default('text'),
+      offset: z.number().int().min(0).default(0), limit: z.number().int().min(4).max(32000).default(16000), revision: z.string().optional(),
+      count: z.number().int().min(1).max(MEDIA_FRAMES_MAX).optional(), frames_per_image: z.number().int().min(1).max(FRAMES_PER_SHEET_MAX).optional(),
+      start_seconds: z.number().min(0).optional(), end_seconds: z.number().positive().optional(),
+    }),
+  }, async ({ file_id, mode, offset, limit, revision, count, frames_per_image, start_seconds, end_seconds }) => {
+    try {
+      const thread = requireRoom(context, context.chatContext?.threadId ?? 0);
+      const attached = getUserSettingsDb().prepare(`SELECT 1 FROM chat_file_attachments a JOIN codex_chat_messages m ON m.id = a.message_id
+        WHERE m.thread_id = ? AND a.file_id = ?`).get(thread.id, file_id);
+      const owner = chatAttachmentOwner(thread.account_id);
+      if (!attached) throw new Error('Attachment not found in this chat.');
+      const { entry, filePath } = FileStoreService.resolveFile(owner, file_id);
+      if (!entry.chatAttachment) throw new Error('Attachment not found in this chat.');
+      if (mode !== 'text') {
+        const profile = ChatProfileStore.find(context.chatContext!.profileId);
+        if (!profile || !profileSeesImages(profile)) throw new Error('Image viewing is off for this chat profile.');
+        if (!await storedFileAllowed(file_id, contextContentLimit(context))) throw new Error(CONTENT_RATING_BLOCKED);
+        if (mode === 'image') {
+          if (!entry.mimeType?.startsWith('image/')) throw new Error('Not an image file.');
+          return { content: [{ type: 'image' as const, data: await previewImage(filePath), mimeType: 'image/jpeg' }] };
+        }
+        const frames = await extractMediaFrames(filePath, entry.mimeType, { count, start: start_seconds, end: end_seconds });
+        const sheets = await frameSheets(frames.frames, frames_per_image);
+        return { content: [
+          { type: 'text' as const, text: JSON.stringify({ kind: frames.kind, duration: frames.duration, totalFrames: frames.totalFrames, frames: frames.frames.map(({ index, time }) => ({ index, time })) }) },
+          ...sheets.map(sheet => ({ type: 'image' as const, data: sheet.data, mimeType: 'image/jpeg' })),
+        ] };
+      }
+      return textResult(await FileStoreService.readText(owner, file_id, offset, limit, { revision }));
+    } catch (error) { return errorResult(error); }
+  });
   if (offersChatReplyTo(context)) registerChatReplyTo(server, context);
   registerRoomTools(server, context);
 }

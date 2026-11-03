@@ -133,12 +133,11 @@ export function roleChoice(draft: Draft, role: ModelRole, slots: ModelSlot[], ca
 export function applyRoleChoice(role: ModelRole, choice: RoleChoice): Partial<Draft> {
   if (choice.startsWith('profile:')) return { ...roleSlotPatch(role, null), ...roleEnabledPatch(role, true), suggestProfileId: Number(choice.slice(8)), suggestUserProfileId: null }
   if (choice.startsWith('user:')) return { ...roleSlotPatch(role, null), ...roleEnabledPatch(role, true), suggestProfileId: null, suggestUserProfileId: Number(choice.slice(5)) }
-  // Any other source drops the writer (off keeps it, like the row, so switching back on restores it).
+  // Changing or disabling the source releases the previous assignment.
   const noWriter: Partial<Draft> = role === 'suggest' ? { suggestProfileId: null, suggestUserProfileId: null } : {}
   if (choice.startsWith('slot:')) return { ...roleSlotPatch(role, Number(choice.slice(5))), ...roleEnabledPatch(role, true), ...noWriter }
   if (choice === 'inherit') return { ...roleSlotPatch(role, null), ...roleEnabledPatch(role, true), ...noWriter }
-  // Off keeps a summary / suggestion row so switching it back on restores it; translation has no flag, so it is cleared.
-  return role === 'translation' ? roleSlotPatch(role, null) : roleEnabledPatch(role, false)
+  return { ...roleSlotPatch(role, null), ...roleEnabledPatch(role, false), ...noWriter }
 }
 
 /** One select that picks where a role's model comes from. */

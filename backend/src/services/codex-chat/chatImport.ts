@@ -1,7 +1,7 @@
 import type { ChatRecipient, ChatToolCall } from '@conai/shared'
 import { getUserSettingsDb } from '../../database/userSettingsDb'
 import type { McpRequester } from '../../mcp/context'
-import { FileStoreService, fileOwnerKey } from '../fileStoreService'
+import { fileOwnerKey } from '../fileStoreService'
 import { parseBlockEdits } from './chatBlockState'
 import { ChatFlagStore } from './chatFlags'
 import { ChatUserProfileStore } from './chatUserProfiles'
@@ -12,6 +12,8 @@ import { ChatProfileStore } from './chatProfiles'
 import { CodexChatStore, parseMessageRouting } from './codexChatStore'
 import { validateChatMediaAttachments } from './chatMediaAttachments'
 import { MEDIA_HASH_PATTERN } from './chatMediaLinks'
+import { validateChatAttachments } from './chatAttachments'
+import { markPrivateAttachmentContext } from './chatAttachmentPrivacy'
 
 export const CHAT_IMPORT_MAX_BYTES = 32 * 1024 * 1024
 const MAX_MESSAGES = 20_000
@@ -141,7 +143,7 @@ export function importChatThread(requester: McpRequester, raw: Buffer, target: C
   const owner = fileOwnerKey(requester.accountId)
   const ownsFile = (id: unknown) => {
     if (typeof id !== 'string') return false
-    try { FileStoreService.validateAttachments(owner, [id]); return true } catch { return false }
+    try { validateChatAttachments(requester, [id]); return true } catch { return false }
   }
   // Library media goes through the same check as attaching it by hand: access, visibility, still there.
   const mediaSeen = new Map<string, ReturnType<typeof validateChatMediaAttachments>[number] | null>()
@@ -163,6 +165,7 @@ export function importChatThread(requester: McpRequester, raw: Buffer, target: C
   db.transaction(() => {
     // The new chat's greeting gives way to the imported transcript.
     CodexChatStore.clearThread(created.id, '')
+    if (file.privateAttachments === true) markPrivateAttachmentContext(created.id)
     const ids = new Map<number, number>()
     const insert = db.prepare(`INSERT INTO codex_chat_messages (thread_id, role, content, display_content, tool_calls, status, error, flags, finish_reason,
       media_attachments, alternatives, active_alternative, created_date, speaker_profile_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)

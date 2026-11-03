@@ -8,6 +8,7 @@ import { ChatSummaryStore } from './chatMemory'
 import { ChatProfileStore } from './chatProfiles'
 import { ChatUserProfileStore } from './chatUserProfiles'
 import { CodexChatService } from './codexChatService'
+import { hasPrivateAttachmentContext, requireSharedChatExport } from './chatAttachmentPrivacy'
 
 /** The file store folder chat backups go to, one subfolder per day. */
 export const CHAT_BACKUP_FOLDER = '채팅 백업'
@@ -29,6 +30,7 @@ export function exportChatJson(requester: McpRequester, threadId: number, option
   return {
     format: 'conai-chat',
     version: 1,
+    ...(hasPrivateAttachmentContext(threadId) ? { privateAttachments: true } : {}),
     exportedAt: new Date().toISOString(),
     profileName: profile?.name ?? null,
     thread: detail.thread,
@@ -85,6 +87,7 @@ export function backupFileName(title: string, threadId: number) {
 /** Save a chat file into the requester's file store: `채팅 백업/<date>/<title> (#id).json`. */
 export function backupChatToFiles(requester: McpRequester, threadId: number, date: string, options: { readOnlyLorebooks?: boolean } = {}) {
   const file = exportChatJson(requester, threadId, options)
+  requireSharedChatExport(threadId)
   const owner = fileOwnerKey(requester.accountId)
   const root = FileStoreService.ensureFolder(owner, null, CHAT_BACKUP_FOLDER)
   const day = FileStoreService.ensureFolder(owner, root.id, date)

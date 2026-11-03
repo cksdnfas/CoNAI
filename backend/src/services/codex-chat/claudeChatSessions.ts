@@ -1,4 +1,5 @@
 import type { JudgedContext } from './chatJudgeContext'
+import { requirePrivateAttachmentRun } from './chatAttachmentPrivacy'
 import { chatWorkspaces, workspaceInstructions, workspaceRuntimeKey } from './chatWorkspace'
 import { applyChatInstructionHooks } from '../plugins/pluginServerRuntime'
 import fs from 'fs'
@@ -111,6 +112,8 @@ export async function buildClaudeSessionTurn(params: {
   signal?: AbortSignal
 }): Promise<{ messages: ChatCompletionMessage[]; session: EngineSession; contextMeta: ChatContextMeta }> {
   const { requester, threadId, profile, history } = params
+  const attachmentContext = { threadId, profileId: profile.id, kind: 'direct' as const, page: params.page }
+  requirePrivateAttachmentRun(requester, attachmentContext)
   const runtime = params.runtime ?? 'claude'
   const thread = CodexChatStore.findThreadById(threadId) ?? null
   const user = userPersonaForThread(thread)
@@ -138,8 +141,8 @@ export async function buildClaudeSessionTurn(params: {
   const mediaRequester = chatProfileRequester(requester, { threadId, profileId: profile.id, kind: 'direct', page: params.page })
   const [generated, images, attachmentTexts] = await Promise.all([
     pendingGeneratedImages(profile, mediaRequester, threadId, sent),
-    latest ? loadAttachedImages(profile, mediaRequester, [latest]) : null,
-    latest ? inlineTextsForChat(profile, requester.accountId, [latest]) : undefined,
+    latest ? loadAttachedImages(profile, mediaRequester, [latest], attachmentContext) : null,
+    latest ? inlineTextsForChat(profile, requester.accountId, [latest], attachmentContext) : undefined,
   ])
   const body = latest ? chatContentWithAttachments(latest.content, latest.attachments, latest.mediaAttachments, attachmentTexts, images) : ''
   const directive = [flagDirectiveFor(history, profile, user), postHistoryText(profile, user), skillReminderText(profile)].filter(Boolean).join('\n\n')
@@ -206,6 +209,8 @@ export async function buildClaudeGroupSessionTurn(params: {
   signal?: AbortSignal
 }): Promise<{ messages: ChatCompletionMessage[]; session: EngineSession; contextMeta: ChatContextMeta }> {
   const { requester, thread, members, profile, messages } = params
+  const attachmentContext = { threadId: thread.id, profileId: profile.id, kind: 'group' as const }
+  requirePrivateAttachmentRun(requester, attachmentContext)
   const runtime = params.runtime ?? 'claude'
   const user = userPersonaForThread(thread)
   const system = await applyChatInstructionHooks([claudeSessionSystem(profile, params.withTools, user), buildGroupHeader({ thread, members, self: profile, user })].join('\n\n'), { engine: runtime, threadId: thread.id, group: true, profile: { id: profile.id, name: profile.name } }, requester, params.signal)
@@ -225,8 +230,8 @@ export async function buildClaudeGroupSessionTurn(params: {
   const mediaRequester = chatProfileRequester(requester, { threadId: thread.id, profileId: profile.id, kind: 'group' })
   const [generated, attachmentTexts, attachedImages] = await Promise.all([
     pendingGeneratedImages(profile, mediaRequester, thread.id, sent),
-    params.attachmentTexts ?? inlineTextsForChat(profile, requester.accountId, shown),
-    params.attachedImages === undefined ? loadAttachedImages(profile, mediaRequester, shown) : params.attachedImages,
+    params.attachmentTexts ?? inlineTextsForChat(profile, requester.accountId, shown, attachmentContext),
+    params.attachedImages === undefined ? loadAttachedImages(profile, mediaRequester, shown, attachmentContext) : params.attachedImages,
   ])
   const flags = flagDirectiveFor(messages, profile, user)
   const text = buildGroupCodexInput({

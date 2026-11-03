@@ -291,7 +291,7 @@ async function pendingFiles(limit: number): Promise<IndexItem[]> {
     FROM stored_file_entries e
     JOIN search_db.search_documents t ON t.source = 'file' AND t.source_id = e.id
     LEFT JOIN vector_db.file_progress p ON p.source_key = e.id
-    WHERE e.kind = 'file' AND e.deleted_at IS NULL AND t.revision = ${FILE_REVISION} AND t.extraction_state IN ('ready', 'partial') AND t.body_bytes > 0
+    WHERE e.kind = 'file' AND e.deleted_at IS NULL AND e.chat_owner_key IS NULL AND t.revision = ${FILE_REVISION} AND t.extraction_state IN ('ready', 'partial') AND t.body_bytes > 0
       AND (p.source_key IS NULL OR p.revision IS NOT (t.revision || ':' || t.content_hash) OR p.model_key != @model OR p.complete = 0)
     ORDER BY COALESCE(p.updated_at, 0), e.id LIMIT @limit`).all({ model: EMBEDDING_MODEL_KEY, limit }) as Array<{ id: string; owner_key: string; name: string; body_bytes: number; revision: string }>
   return rows.map((row) => ({ space: SEMANTIC_SPACES.file, sourceKey: row.id, ownerKey: row.owner_key, hash: row.revision, text: '', fileBytes: row.body_bytes, title: row.name, maxChunks: CHUNK_BATCH }))

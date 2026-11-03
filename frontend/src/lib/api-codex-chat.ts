@@ -886,6 +886,8 @@ export interface CodexChatThread {
   lore_auto_save?: 0 | 1 | null
   /** The writable linked folder each new summary stretch is also kept in (회의록/<date>.md); null: none. */
   minutes_folder_id?: string | null
+  /** Private attachment context pauses shared minutes, even when a folder remains selected. */
+  minutes_paused?: boolean
   codex_thread_id: string | null
   title: string
   engine: ChatEngine

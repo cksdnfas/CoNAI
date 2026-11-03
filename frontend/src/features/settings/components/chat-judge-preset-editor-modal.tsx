@@ -30,7 +30,7 @@ import {
 import { CHAT_ADMIN_PROFILES_QUERY_KEY, CHAT_PROFILES_QUERY_KEY, listChatProfiles } from '@/lib/api-codex-chat'
 import { ChatRoomPicker } from '@/features/codex-chat/chat-room-picker'
 import { getErrorMessage } from '@/lib/error-message'
-import { JudgeModelSelect, useDefaultJudgeLabel } from './chat-judge-connection-select'
+import { JudgeModelSelect, useDefaultJudgeLabel, useJudgeModelState } from './chat-judge-connection-select'
 import { SettingsAdvancedSwitch, useSettingsAdvanced } from './settings-advanced'
 import { ChatJudgeItemPane, itemTestSummary } from './chat-judge-item-editor'
 import { JudgeAssetsPane, JudgeContextPane, JudgeFieldsPane, JudgeRoomPane, judgeScopesOn, type JudgeScopes } from './chat-judge-scope-sections'
@@ -163,6 +163,7 @@ export function ChatJudgePresetEditorModal({ open, preset, initial, onClose, onD
   const patchFollowUp = (patch: Partial<ChatJudgeFollowUp>) => setDraft((current) => ({ ...current, followUp: { ...current.followUp, ...patch } }))
 
   const nameMissing = draft.name.trim().length === 0
+  const judgeState = useJudgeModelState(open, draft.modelSlotId)
   const dirty = JSON.stringify(draft) !== JSON.stringify(preset ? draftOf(preset) : { ...EMPTY, ...initial })
   // A connected chat reads the preset and fills its name; the questions themselves stay with the person.
   useSettingsEditorChatPage({
@@ -173,7 +174,7 @@ export function ChatJudgePresetEditorModal({ open, preset, initial, onClose, onD
     fields: [{ id: 'name', label: t({ ko: '이름', en: 'Name' }), type: 'text', value: draft.name }],
     data: { items: draft.items.map((item) => ({ id: item.id, name: item.name, enabled: item.enabled, stage: item.stage, kind: item.kind })), selected: { name: draft.name, items: draft.items.length } },
     apply: (patch) => { if (patch.name !== undefined) setDraft((current) => ({ ...current, name: String(patch.name) })) },
-    save: nameMissing ? undefined : () => saveMutation.mutateAsync(),
+    save: nameMissing || !judgeState.ready ? undefined : () => saveMutation.mutateAsync(),
   })
   const beforeItems = draft.items.filter((item) => item.stage === 'before')
   const afterItems = draft.items.filter((item) => item.stage === 'after')
@@ -189,7 +190,7 @@ export function ChatJudgePresetEditorModal({ open, preset, initial, onClose, onD
       </Select>
       {testMutation.isPending
         ? <IconButton size="icon-sm" variant="ghost" onClick={() => testAbort.current?.abort()} label={t({ ko: '멈추기', en: 'Stop' })}><Square /></IconButton>
-        : <IconButton size="icon-sm" variant="ghost" disabled={!testThreadId || draft.items.length === 0 || (draft.modelSlotId === null && !preset?.profiles.length)} onClick={() => testMutation.mutate()} label={t({ ko: '테스트 실행', en: 'Run test' })}><Play /></IconButton>}
+        : <IconButton size="icon-sm" variant="ghost" disabled={!testThreadId || draft.items.length === 0 || !judgeState.ready} onClick={() => testMutation.mutate()} label={t({ ko: '테스트 실행', en: 'Run test' })}><Play /></IconButton>}
     </div>
   )
 
@@ -254,7 +255,7 @@ export function ChatJudgePresetEditorModal({ open, preset, initial, onClose, onD
   ]
   const openItem = pane.startsWith('item:') ? draft.items.find((item) => `item:${item.id}` === pane) : undefined
   const users = [...(preset?.profiles.map((profile) => profile.name) ?? []), ...(preset?.rooms.map((room) => room.title || `#${room.id}`) ?? [])]
-  const canSave = !nameMissing && !saveMutation.isPending && (dirty || !preset)
+  const canSave = !nameMissing && judgeState.ready && !saveMutation.isPending && (dirty || !preset)
 
   return (
     <Modal
@@ -292,6 +293,7 @@ export function ChatJudgePresetEditorModal({ open, preset, initial, onClose, onD
                     emptyLabel={defaultJudgeLabel}
                     onChange={(modelSlotId) => setDraft({ ...draft, modelSlotId })}
                   />
+                  {judgeState.error ? <p role="alert" className="text-xs text-destructive">{judgeState.error}</p> : null}
                 </Field>
               </div>
               {asksLlmWhenUnsure ? <Field label={t({ ko: '애매할 때 다시 물을 LLM', en: 'LLM asked again when unsure' })}>

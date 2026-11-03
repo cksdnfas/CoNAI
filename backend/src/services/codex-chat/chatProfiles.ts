@@ -9,7 +9,7 @@ import { ChatProfileError, ChatRevisionConflict } from './chatProfileError'
 import { AuthPermissionGroup } from '../../models/AuthPermissionGroup'
 import { ChatGenerationPresetStore, normalizeGenerationPresetIds } from './chatGenerationPresets'
 import { contentRatingTier, LLM_CONNECTION_TYPES, MODEL_CONNECTION_TYPES, ModelSlotStore } from './modelSlots'
-import { ChatJudgePresetStore } from './chatJudgePresets'
+import { assertJudgeModel, ChatJudgePresetStore } from './chatJudgePresets'
 import { normalizeLinkedFiles, type LinkedFileLink } from './chatLinkedFiles'
 import { ChatSkillStore, normalizeSkillIds } from './chatSkills'
 import { WorkspaceService } from '../workspaceService'
@@ -685,6 +685,10 @@ function normalizeDelegatedPermissions(value: unknown): string[] {
 function toColumns(input: ChatProfileInput, options: { draft?: boolean; strictKeys?: Set<string> } = {}) {
   const strict = (key: string) => !options.strictKeys || options.strictKeys.has(key)
   input = Object.fromEntries(Object.entries(input).map(([key, value]) => [key, value === undefined || !strict(key) ? value : normalizeProfileScalarField(key, value)])) as ChatProfileInput
+  // Explicitly turning a role off releases its assignment, including legacy pairs sent by older clients.
+  if (strict('summaryEnabled') && input.summaryEnabled === false) input = { ...input, summarySlotId: null, summaryProviderName: null, summaryModel: null }
+  if (strict('suggestEnabled') && input.suggestEnabled === false) input = { ...input, suggestSlotId: null, suggestProviderName: null, suggestModel: null, suggestProfileId: null, suggestUserProfileId: null }
+  if (strict('judgePresetId') && input.judgePresetId === null) input = { ...input, judgeSlotId: null, judgeProviderName: null, judgeModel: null }
   const optionalNumber = (key: keyof ChatProfileInput, range: { min: number; max?: number }, integer: boolean) => {
     const value = input[key]
     if (value === undefined) return null
@@ -834,9 +838,12 @@ function toColumns(input: ChatProfileInput, options: { draft?: boolean; strictKe
     is_enabled: input.isEnabled === false ? 0 : 1,
     sort_order: optionalNumber('sortOrder', { min: -1_000_000, max: 1_000_000 }, true) ?? 0,
   }
-  // All input is valid before the first model insert. The caller's transaction owns rows and profile together.
+  // The caller's transaction owns model rows and the profile, including effective-judge validation below.
   if (!options.draft) for (const pair of pending) {
     (columns as Record<string, unknown>)[pair.column] = ModelSlotStore.ensure(pair.providerName, pair.model, { kinds: pair.kinds })
+  }
+  if (!options.draft && columns.judge_preset_id !== null && ['judgePresetId', 'judgeSlotId', 'judgeProviderName', 'judgeModel'].some(strict)) {
+    assertJudgeModel(columns.judge_slot_id ?? ChatJudgePresetStore.find(columns.judge_preset_id)?.modelSlotId ?? null)
   }
   return columns
 }

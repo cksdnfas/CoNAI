@@ -77,6 +77,42 @@ test('model rows: connection ▸ models, legacy pairs, resolution, sync, deletio
     assert.equal(primaryModelOf('conn-b'), 'conn-b-default')
   })
 
+  await t.test('disabled roles release assignments and unconfigured judges cannot be registered', (s) => {
+    const model = ModelSlotStore.ensure('conn-b', 'optional-role')!
+    const profile = ChatProfileStore.create({
+      name: 'optional roles', engine: 'llm', summaryEnabled: true, summarySlotId: model,
+      suggestEnabled: true, suggestSlotId: model,
+    })
+    s.after(() => {
+      ChatProfileStore.delete(profile.id)
+      ModelSlotStore.delete(model)
+    })
+    const disabled = ChatProfileStore.update(profile.id, { summaryEnabled: false, suggestEnabled: false })!
+    assert.equal(disabled.summarySlotId, null)
+    assert.equal(disabled.suggestSlotId, null)
+    assert.deepEqual(ModelSlotStore.find(model)!.profiles, [])
+    assert.equal(ModelSlotStore.delete(model), true, 'turning roles off releases their model without another confirmation')
+    ChatProfileStore.delete(profile.id)
+
+    const emptyJudge = ModelSlotStore.routeId('judge')!
+    assert.throws(() => ChatJudgePresetStore.create({ name: 'no judge', items: [] }), /판단 모델/)
+    assert.throws(() => ChatJudgePresetStore.create({ name: 'empty route', modelSlotId: emptyJudge }), /모델/)
+    assert.throws(() => ChatProfileStore.create({ name: 'empty chat', modelSlotId: emptyJudge }), /모델/)
+    const preset = ChatJudgePresetStore.create({ name: 'configured', modelSlotId: rowOf('conn-a', 'conn-a-default') })
+    assert.throws(() => ChatJudgePresetStore.update(preset.id, { modelSlotId: null }), /판단 모델/)
+    assert.equal(ChatJudgePresetStore.find(preset.id)!.modelSlotId, preset.modelSlotId, 'failed changes preserve the configured model')
+    const judged = ChatProfileStore.create({ name: 'judged role', engine: 'codex', judgePresetId: preset.id, judgeSlotId: preset.modelSlotId })
+    assert.equal(ChatProfileStore.update(judged.id, { judgePresetId: null })!.judgeSlotId, null)
+    ChatProfileStore.delete(judged.id)
+    ModelSlotStore.updateRoute(emptyJudge, { targetSlotId: preset.modelSlotId })
+    const inherited = ChatJudgePresetStore.create({ name: 'default judge' })
+    assert.equal(inherited.modelSlotId, null, 'a configured default can be inherited')
+    ModelSlotStore.updateRoute(emptyJudge, { targetSlotId: null })
+    assert.throws(() => ChatProfileStore.create({ name: 'unconfigured preset', engine: 'codex', judgePresetId: inherited.id }), /판단 모델/)
+    ChatJudgePresetStore.delete(inherited.id)
+    ChatJudgePresetStore.delete(preset.id)
+  })
+
   await t.test('untouched legacy values survive partial saves; new oversized text is refused', () => {
     const profile = ChatProfileStore.create({ name: 'legacy text', providerName: 'conn-a', systemPrompt: 'full prompt' })
     const authorNote = 'x'.repeat(5000)

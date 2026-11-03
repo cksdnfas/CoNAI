@@ -577,8 +577,8 @@ test('trusted plugins run a server module with their own data, hooks and tools',
     const configuredCalls = calls
     assert.deepEqual(await turn(), emptyTurn, 'a model without a preset still cannot judge a turn')
     assert.equal(calls, configuredCalls)
-    ModelSlotStore.setDefaultJudge(judgeRow, false)
     ChatProfileStore.update(profile.id, { judgePresetId: judgePreset.id })
+    ModelSlotStore.setDefaultJudge(judgeRow, false)
     assert.deepEqual(await turn(), emptyTurn, 'a preset without a model does not call a provider either')
     ChatProfileStore.update(profile.id, { judgeSlotId: decisionRow })
     judgeAnswers = { offer: { type: 'noul', noul: 0.95 }, withhold: { type: 'noul', noul: 0.05 }, note: { type: 'noul', noul: 0.95 }, follow: { type: 'noul', noul: 0.95 } }

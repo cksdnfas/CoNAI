@@ -1,4 +1,5 @@
 import { prepareChatSend } from './chatSendPreparation'
+import { requirePrivateAttachmentRun } from './chatAttachmentPrivacy'
 import { deletingThreads } from './chatThreadReservation'
 import { requestChatModel, withChatTokenModel } from './llmChatContext'
 import { addChatOpening } from './chatGreeting'
@@ -311,8 +312,8 @@ async function runReply(turn: LlmTurn, requester: McpRequester, thread: CodexCha
       ? latestWindow(withoutStaleWakes(sendableMessages(unsummarizedMessages(history, current, { summaryEnabled: groupSummaryOn(current) }))), groupLimitsOf(current).window)
       : directContextTurns(history, current, config).flat()
     const [attachmentTexts, attachedImages, generatedImages] = await Promise.all([
-      inSession ? undefined : inlineTextsForChat(turn.reaction ? { ...profile, mcpEnabled: false } : profile, requester.accountId, attachmentMessages),
-      inSession ? null : loadAttachedImages(profile, mediaRequester, attachmentMessages),
+      inSession ? undefined : inlineTextsForChat(turn.reaction ? { ...profile, mcpEnabled: false } : profile, requester.accountId, attachmentMessages, turn.chatContext ?? turn.delivery?.context),
+      inSession ? null : loadAttachedImages(profile, mediaRequester, attachmentMessages, turn.chatContext ?? turn.delivery?.context),
       // The chat's latest pictures, for presets that let the chat model see them (a reaction carries its own).
       turn.reaction || inSession ? [] : loadInlineGeneratedImages(profile, mediaRequester, thread.id),
     ])
@@ -453,6 +454,7 @@ async function replySemanticContext(threadId: number, profile: ChatProfile, mess
 
 async function streamReply(turn: LlmTurn, requester: McpRequester, profile: ChatProfile, buildMessages: (tools: ChatCompletionTool[], judged: JudgedContext | null) => ChatCompletionMessage[] | Promise<ChatCompletionMessage[]>, generation: Partial<LlmGenerationOptions> = {}, prepare?: (tools: ChatCompletionTool[]) => Promise<unknown>) {
   requireProfileAccess(requester, profile)
+  requirePrivateAttachmentRun(requester, turn.chatContext ?? turn.delivery?.context)
   if (turn.research) requireResearchProfile(profile)
   const target = resolveChatCompletionTarget(chatConnectionOf(profile), { model: requestChatModel(profile)?.model ?? null, generation: { ...profileGenerationOptions(profile), ...generation } })
   if (target.transport === 'claude-code' && !resolveChatAccess(requester.accountId).claude) throw new LlmChatError('Claude Code를 사용할 권한이 없어.', 403)

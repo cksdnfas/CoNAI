@@ -1,4 +1,5 @@
 import { prepareChatSend } from './chatSendPreparation'
+import { hasPrivateAttachmentContext, requirePrivateAttachmentRun } from './chatAttachmentPrivacy'
 import { deletingThreads } from './chatThreadReservation'
 import type { ChatExecutionContext } from '@conai/shared'
 import { isCodexChatCreationTool } from '@conai/shared'
@@ -654,6 +655,7 @@ async function startSession(requester: McpRequester, scopes: ChatScope[], toolAl
 }
 
 async function ensureSession(requester: McpRequester, scopes: ChatScope[], toolAllowlist: string[] | null, generationPresetIds: number[] = [], chatContext?: ChatExecutionContext) {
+  requirePrivateAttachmentRun(requester, chatContext)
   const key = sessionKey(requester, scopes, toolAllowlist, generationPresetIds, chatContext)
   const existing = sessions.get(key)
   if (existing?.client.isAlive) {
@@ -1210,7 +1212,7 @@ export const CodexChatService = {
   updateListState(requester: McpRequester, threadId: number, patch: { title?: string; pinned?: boolean; archived?: boolean; notify?: boolean }) {
     requireThread(requester, threadId)
     CodexChatStore.updateListState(threadId, patch)
-    return requireThread(requester, threadId)
+    return CodexChatService.getThreadRecord(requester, threadId)
   },
 
   /**
@@ -1277,14 +1279,14 @@ export const CodexChatService = {
     } : startingThreads.has(threadId) ? { text: '', toolCalls: [] } : null
   },
 
-  /** Read only the authorized thread row when no transcript or derived state is needed. */
+  /** Authorized thread settings and the effective minutes status, without loading the transcript. */
   getThreadRecord(requester: McpRequester, threadId: number) {
-    return requireThread(requester, threadId)
+    return { ...requireThread(requester, threadId), minutes_paused: hasPrivateAttachmentContext(threadId) }
   },
 
   /** The transcript, a reply still running, and the media kind of every image it references (for players). */
   getThread(requester: McpRequester, threadId: number, tail?: number) {
-    const thread = requireThread(requester, threadId)
+    const thread = CodexChatService.getThreadRecord(requester, threadId)
     const selected = CodexChatStore.listMessages(threadId, { tail })
     const messageCount = tail === undefined ? selected.length : CodexChatStore.messageCount(threadId)
     const partial = selected.length > 0 && messageCount > selected.length
@@ -1477,9 +1479,9 @@ export const CodexChatService = {
         const recap = freshCodexThread ? codexHistoryRecap(current, history.filter((entry) => entry.id < userMessageId), profile, user, historySource, userMessageId) : ''
         const agentResults = pendingAgentResults(threadId, userMessageId, sent, { recap: freshCodexThread || Boolean(recap) })
         const mediaRequester = chatProfileRequester(requester, turn.delivery.context)
-        const images = await loadAttachedImages(profile, mediaRequester, [{ attachments, mediaAttachments }])
+        const images = await loadAttachedImages(profile, mediaRequester, [{ attachments, mediaAttachments }], turn.delivery.context)
         const generated = await pendingGeneratedImages(profile, mediaRequester, threadId, sent)
-        const input = [recap, reference, agentResults.text, replyGuide.text, buildReplyContext(history, routing, { historySource }), pageReference.text, cards.text, chatContentWithAttachments(modelText ?? trimmed, attachments, withMediaGeneration(mediaAttachments, profile, mediaRequester), await inlineTextsForChat(profile, requester.accountId, [{ attachments }]), images), directive, generated.text].filter(Boolean).join('\n\n')
+        const input = [recap, reference, agentResults.text, replyGuide.text, buildReplyContext(history, routing, { historySource }), pageReference.text, cards.text, chatContentWithAttachments(modelText ?? trimmed, attachments, withMediaGeneration(mediaAttachments, profile, mediaRequester), await inlineTextsForChat(profile, requester.accountId, [{ attachments }], turn.delivery.context), images), directive, generated.text].filter(Boolean).join('\n\n')
         const keys = [...persona.keys, ...lore.index.keys, ...lore.keyedKeys, ...rejected.keys, ...note.keys, ...state.keys, ...outcomes.keys, ...replyGuide.keys, ...pageReference.keys, ...cards.keys, ...generated.keys, ...agentResults.keys]
         turn.contextMeta = codexInputMeta(profile, [userMessage], lore, input, keys, [
           ...contextSource('user-persona', persona.text), ...contextSource('lore-index', lore.index.keys.length ? lore.selected.index : ''), ...contextSource('constant-lore', lore.index.keys.length ? lore.selected.constant : ''),

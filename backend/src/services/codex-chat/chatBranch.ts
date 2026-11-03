@@ -28,6 +28,7 @@ export function branchChatThread(thread: CodexChatThreadRecord, untilMessageId: 
     const title = `${(thread.title || '새 채팅').slice(0, TITLE_MAX_LENGTH - BRANCH_TITLE_SUFFIX.length)}${BRANCH_TITLE_SUFFIX}`
     const branchId = Number(db.prepare(`INSERT INTO codex_chat_threads (title, branched_from_thread_id, branched_at_message_id, branch_purpose, ${COPIED_THREAD_COLUMNS.join(', ')})
       SELECT ?, ?, ?, ?, ${COPIED_THREAD_COLUMNS.join(', ')} FROM codex_chat_threads WHERE id = ?`).run(title, thread.id, untilMessageId, purpose, thread.id).lastInsertRowid)
+    db.prepare('INSERT INTO chat_private_attachment_contexts (thread_id) SELECT ? FROM chat_private_attachment_contexts WHERE thread_id = ?').run(branchId, thread.id)
 
     // Messages in order, so the copies keep it; ids map old → new for everything that points at a message.
     const ids = new Map<number, number>()

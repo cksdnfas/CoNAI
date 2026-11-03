@@ -20,7 +20,7 @@ import type { CodexModelOption } from '@/lib/api-image-generation-queue'
 import { cn } from '@/lib/utils'
 import { CHAT_PROFILE_LIMITS, CHAT_PROFILE_TEXT_LIMITS, CHAT_TRANSLATION_LANGUAGES, type ChatTranslationLanguage, type ClaudeModelOption } from '@conai/shared'
 import { ClaudeEffortSelect, ClaudeModelSelect } from './claude-model-select'
-import { JudgeModelSelect, useDefaultJudgeLabel, useModelLabel } from './chat-judge-connection-select'
+import { JudgeModelSelect, useDefaultJudgeLabel, useJudgeModelState, useModelLabel } from './chat-judge-connection-select'
 import { applyRoleChoice, chatModelRows, ModelRoleSelect, roleChoice, slotCeiling, type SuggestWriters } from './chat-model-role-select'
 import { enginePatch, judgePresetPatch, numberOrNull, type Draft, type PatchDraft } from './chat-profile-editor-fields'
 import { SwitchLine } from '@/components/ui/switch-line'
@@ -54,7 +54,7 @@ function RoleRow({ label, icon, select, children }: { label: string; icon?: Reac
   )
 }
 
-/** The judge preset (none: chat as without a judge) and, unfolded, a judge model of this profile's own. */
+/** The preset and effective judge stay visible, including a model retained by an older profile. */
 function JudgeRole({ draft, patch }: { draft: Draft; patch: PatchDraft }) {
   const { t } = useI18n()
   const presetsQuery = useQuery({ queryKey: CHAT_JUDGE_PRESETS_QUERY_KEY, queryFn: listChatJudgePresets })
@@ -62,6 +62,7 @@ function JudgeRole({ draft, patch }: { draft: Draft; patch: PatchDraft }) {
   const preset = presets.find((item) => item.id === draft.judgePresetId)
   const presetModel = useModelLabel(true, preset?.modelSlotId ?? null)
   const defaultJudge = useDefaultJudgeLabel()
+  const judgeState = useJudgeModelState(true, draft.judgeSlotId ?? preset?.modelSlotId ?? null)
   const label = t({ ko: '판단', en: 'Judge' })
   const select = (
     <Select
@@ -76,19 +77,22 @@ function JudgeRole({ draft, patch }: { draft: Draft; patch: PatchDraft }) {
     </Select>
   )
   return (
-    <RoleRow label={label} icon={<Scale className="size-4 text-resource-judge" aria-hidden="true" />} select={select}>
-      {draft.judgePresetId !== null ? (
-        <Field label={t({ ko: '판단 모델', en: 'Judge model' })}>
+    <div>
+      <RoleRow label={label} icon={<Scale className="size-4 text-resource-judge" aria-hidden="true" />} select={select} />
+      {draft.judgePresetId !== null || draft.judgeSlotId !== null ? (
+        <div className="pb-2 md:pl-5.5"><Field label={t({ ko: '판단 모델', en: 'Judge model' })}>
           <JudgeModelSelect
-            enabled
+            enabled={draft.judgePresetId !== null}
             ariaLabel={t({ ko: '판단 모델', en: 'Judge model' })}
             slotId={draft.judgeSlotId}
-            emptyLabel={presetModel ? t({ ko: '프리셋 따름 · {name}', en: 'Preset’s · {name}' }, { name: presetModel }) : preset && preset.modelSlotId === null ? defaultJudge : t({ ko: '프리셋 따름', en: 'Preset’s' })}
+            emptyLabel={presetModel ? t({ ko: '프리셋 따름 · {name}', en: 'Preset’s · {name}' }, { name: presetModel }) : !preset || preset.modelSlotId === null ? defaultJudge : t({ ko: '프리셋 따름', en: 'Preset’s' })}
             onChange={(judgeSlotId) => patch({ judgeSlotId })}
           />
-        </Field>
+          {judgeState.error ? <p role="alert" className="text-xs text-destructive">{judgeState.error}</p> : null}
+          {draft.judgePresetId === null ? <Button size="sm" variant="ghost" onClick={() => patch({ judgeSlotId: null })}>{t({ ko: '남아 있는 판단 모델 할당 해제', en: 'Release retained judge model' })}</Button> : null}
+        </Field></div>
       ) : null}
-    </RoleRow>
+    </div>
   )
 }
 
@@ -102,7 +106,7 @@ function TranslationLanguageSelect({ value, onChange, ariaLabel }: { value: Chat
 }
 
 /**
- * The highest rating tier of media the model is shown, for a model that sees images. An API LLM profile can follow
+ * The highest rating tier of media and descriptive text the model is shown. An API LLM profile can follow
  * its chat model row's ceiling; Codex and Claude Code have no row, so they set their own.
  */
 function ContentRatingField({ draft, patch, slots }: { draft: Draft; patch: PatchDraft; slots: ModelSlot[] }) {
@@ -111,7 +115,7 @@ function ContentRatingField({ draft, patch, slots }: { draft: Draft; patch: Patc
   const isLlm = draft.engine === 'llm'
   const chatSlot = slots.find((slot) => slot.id === draft.modelSlotId) ?? slots.find((slot) => slot.isDefault)
   return (
-    <Field className="md:w-1/2" label={t({ ko: '허용 등급', en: 'Content rating' })} info={t({ ko: '이 등급을 넘는 이미지·영상은 모델에 보내지 않아.', en: 'Images and videos above this rating are never sent to the model.' })}>
+    <Field className="md:w-1/2" label={t({ ko: '허용 등급', en: 'Content rating' })} info={t({ ko: '이미지 보기 여부와 관계없이 적용돼. 이 등급을 넘는 이미지·영상과 그 프롬프트·태그·메타데이터를 모델에 보내지 않아.', en: 'Applies even when image viewing is off. Media above this rating and its prompts, tags and metadata are withheld from the model.' })}>
       <ContentRatingSelect
         ariaLabel={t({ ko: '허용 등급', en: 'Content rating' })}
         value={isLlm && draft.contentRatingMode === 'model' ? 'model' : draft.contentRatingTierId}
@@ -210,20 +214,34 @@ export function ChatProfileModelPanel({ draft, patch, defaults, slots, slotsRead
   })()
 
   /** The select for one role, wired to the draft. */
-  const roleSelect = (role: ModelRole, ariaLabel: string) => role === 'chat' && slotsReady && !chatModelRows(slots).some((slot) => slot.kind === 'model') ? (
-    <EmptyState size="compact" title={t({ ko: '연결된 모델이 없어', en: 'No connected models' })} action={<Button onClick={openConnections}>{t({ ko: 'AI 연결 열기', en: 'Open AI connections' })}</Button>} />
-  ) : (
-    <ModelRoleSelect
-      role={role}
-      value={roleChoice(draft, role, slots, hasLlmContext, slotsReady)}
-      slots={slots}
-      slotsReady={slotsReady}
-      canInherit={hasLlmContext}
-      writers={role === 'suggest' ? suggestWriters : undefined}
-      ariaLabel={ariaLabel}
-      onChange={(choice) => patch(applyRoleChoice(role, choice))}
-    />
-  )
+  const roleSelect = (role: ModelRole, ariaLabel: string) => {
+    const choice = roleChoice(draft, role, slots, hasLlmContext, slotsReady)
+    const retained = choice === 'off' ? roleChoice({ ...draft, summaryEnabled: true, suggestEnabled: true }, role, slots, hasLlmContext, slotsReady) : null
+    const assigned = retained?.startsWith('slot:') || retained?.startsWith('profile:') || retained?.startsWith('user:')
+    return role === 'chat' && slotsReady && !chatModelRows(slots).some((slot) => slot.kind === 'model') ? (
+      <EmptyState size="compact" title={t({ ko: '연결된 모델이 없어', en: 'No connected models' })} action={<Button onClick={openConnections}>{t({ ko: 'AI 연결 열기', en: 'Open AI connections' })}</Button>} />
+    ) : (
+      <div className="space-y-2">
+        <ModelRoleSelect
+          role={role}
+          value={choice}
+          slots={slots}
+          slotsReady={slotsReady}
+          canInherit={hasLlmContext}
+          writers={role === 'suggest' ? suggestWriters : undefined}
+          ariaLabel={ariaLabel}
+          onChange={(choice) => patch(applyRoleChoice(role, choice))}
+        />
+        {assigned && retained ? (
+          <div className="space-y-1">
+            <p className="text-xs text-muted-foreground">{t({ ko: '꺼진 역할에 이전 할당이 남아 있어.', en: 'This disabled role still has an earlier assignment.' })}</p>
+            <ModelRoleSelect role={role} value={retained} slots={slots} slotsReady={false} canInherit={hasLlmContext} writers={suggestWriters} ariaLabel={t({ ko: '남아 있는 할당', en: 'Retained assignment' })} onChange={() => {}} />
+            <Button size="sm" variant="ghost" onClick={() => patch(applyRoleChoice(role, 'off'))}>{t({ ko: '할당 해제', en: 'Release assignment' })}</Button>
+          </div>
+        ) : null}
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-4">
@@ -269,7 +287,6 @@ export function ChatProfileModelPanel({ draft, patch, defaults, slots, slotsRead
             </div>
             <TokenFields draft={draft} patch={patch} serverDefault={serverDefault} />
             <SwitchLine label={t({ ko: '이미지를 볼 수 있는 모델', en: 'Model can see images' })} checked={draft.visionEnabled} onCheckedChange={(visionEnabled) => patch({ visionEnabled })} />
-            {draft.visionEnabled ? <ContentRatingField draft={draft} patch={patch} slots={slots} /> : null}
             {extraParamsError ? <p className="text-xs text-destructive">{t({ ko: '추가 파라미터(고급 설정)에 오류가 있어: {error}', en: 'Extra parameters (advanced settings) have an error: {error}' }, { error: extraParamsError })}</p> : null}
           </>
         ) : draft.engine === 'claude' ? (<>
@@ -287,7 +304,6 @@ export function ChatProfileModelPanel({ draft, patch, defaults, slots, slotsRead
           </div>
           <TokenFields draft={draft} patch={patch} serverDefault={serverDefault} />
           <SwitchLine label={t({ ko: '이미지 첨부와 조회', en: 'Image attachments and viewing' })} checked={draft.visionEnabled} onCheckedChange={(visionEnabled) => patch({ visionEnabled })} />
-          {draft.visionEnabled ? <ContentRatingField draft={draft} patch={patch} slots={slots} /> : null}
         </>
         ) : (<>
           <div className="grid gap-3 md:grid-cols-2">
@@ -299,17 +315,15 @@ export function ChatProfileModelPanel({ draft, patch, defaults, slots, slotsRead
             </Field>
           </div>
           <TokenFields draft={draft} patch={patch} serverDefault={serverDefault} />
-          {/* Codex models always see images. */}
-          <ContentRatingField draft={draft} patch={patch} slots={slots} />
         </>
         )}
+        <ContentRatingField draft={draft} patch={patch} slots={slots} />
       </EditorGroup>
 
       <EditorGroup label={t({ ko: '역할', en: 'Roles' })}>
         <div>
-          {!selfCompacting ? (
-            <RoleRow label={t({ ko: '요약', en: 'Summary' })} select={roleSelect('summary', t({ ko: '요약 모델', en: 'Summary model' }))} />
-          ) : null}
+          <RoleRow label={t({ ko: '요약', en: 'Summary' })} select={roleSelect('summary', t({ ko: '요약 모델', en: 'Summary model' }))} />
+          {selfCompacting ? <p className="pb-2 text-xs text-muted-foreground">{t({ ko: '1:1 대화 압축은 엔진이 대화 모델로 처리해. 여기서 고른 모델은 별도 요약·외형 초안 같은 보조 작업에 쓰여.', en: 'The engine compacts direct chats with the chat model. This selection is used for separate summaries and helpers such as appearance drafts.' })}</p> : null}
           <RoleRow label={t({ ko: '번역', en: 'Translation' })} select={roleSelect('translation', t({ ko: '번역 모델', en: 'Translation model' }))}>
             {translationOn ? (
               <>

@@ -1,7 +1,8 @@
 import { getUserSettingsDb } from '../../database/userSettingsDb'
 import { publishRuntimeEvent } from '../runtime-events/runtimeEventBus'
 import { CHAT_THREAD_TITLE_MAX_LENGTH as TITLE_MAX_LENGTH, type StoredFileEntry, type ChatMessageRouting, type ChatFileChange } from '@conai/shared'
-import { FileStoreService, fileOwnerKey } from '../fileStoreService'
+import { FileStoreService, chatAttachmentOwner } from '../fileStoreService'
+import { requirePrivateAttachmentDestination } from './chatAttachmentPrivacy'
 import { parseBlockEdits, type BlockEdit } from './chatBlockState'
 import { parseFlagSnapshots, type ChatFlagSnapshot } from './chatFlags'
 import { parseChatMediaAttachments, type ChatMediaAttachment } from './chatMediaAttachments'
@@ -1007,7 +1008,8 @@ export const CodexChatStore = {
     const saved = db.transaction(() => {
       const thread = CodexChatStore.findThreadById(message.thread_id)
       if (!thread) throw new Error('Chat thread not found')
-      const attachments = FileStoreService.validateAttachments(fileOwnerKey(thread.account_id), fileIds)
+      const attachments = FileStoreService.validateAttachments(chatAttachmentOwner(thread.account_id), fileIds)
+      if (attachments.some(file => file.chatAttachment)) requirePrivateAttachmentDestination(thread.id)
       const result = db.prepare(`
         INSERT INTO codex_chat_messages (thread_id, role, content, display_content, tool_calls, status, error, speaker_profile_id, flags, finish_reason, media_attachments) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
