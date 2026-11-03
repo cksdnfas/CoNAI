@@ -17,6 +17,7 @@ import type { Rect } from './spritePixels'
 import { findLibraryMedia, requireLibraryImage, requireLibraryVideo, saveSpriteOutputToLibrary, type SpriteGroupTarget } from './spriteLibrary'
 import { runSpriteTask } from './spriteWorkerClient'
 import { spriteSheetSettings, type RenderSpec } from './spriteTasks'
+import { resolveSourceNormalizationOptions, type SourceNormalizationOptions, type SourceNormalizationReport } from './spriteSourceNormalize'
 
 /**
  * Sprite operations shared by the REST routes and the MCP tools: start runtime jobs, look up build workspaces with
@@ -365,13 +366,15 @@ export interface NormalizeJobSheet {
 export interface NormalizeJobParams {
   sheets: NormalizeJobSheet[]
   options: Partial<NormalizationOptions>
+  sources?: { hashes: string[]; options: SourceNormalizationOptions }
   save?: SpriteGroupTarget | null
   requester: SpriteRequester
 }
 
 export interface NormalizeJobResult {
   workspaceId: string
-  sheets: Array<{ source: string; outputFilename: string; width: number; height: number; compositeHash?: string; warnings: unknown }>
+  zipFileName: string
+  sheets: Array<{ source: string; outputFilename: string; width: number; height: number; compositeHash?: string; warnings: unknown; report?: SourceNormalizationReport }>
   failures: Array<{ source: string; relative_path: string; error: string }>
   common: unknown
 }
@@ -380,9 +383,10 @@ async function runNormalize(params: NormalizeJobParams, ctx: RuntimeJobContext<u
   const options: NormalizationOptions = { ...NORMALIZATION_DEFAULTS, ...params.options }
   const bulk = params.sheets.length > MAX_NORMALIZATION_SHEETS
   const used = new Map<string, number>()
-  const sources = params.sheets.map((sheet) => {
-    const media = requireLibraryImage(sheet.imageHash)
-    const stem = path.parse(media.name).name || sheet.imageHash.slice(0, 12)
+  const inputs = params.sources ? params.sources.hashes.map((hash) => ({ imageHash: hash, options: withSheetDefaults({ columns: 1, rows: 1, frameCount: 1 }) })) : params.sheets
+  const sources = inputs.map((sheet) => {
+    const media = params.sources?.options.input === 'last_frame' ? requireSourceNormalizationVideo(sheet.imageHash) : requireLibraryImage(sheet.imageHash)
+    const stem = params.sources ? fileStem(media.name, sheet.imageHash.slice(0, 12)) : path.parse(media.name).name || sheet.imageHash.slice(0, 12)
     const count = (used.get(stem) ?? 0) + 1
     used.set(stem, count)
     return { filePath: media.filePath, sourceName: media.name, outputStem: `${stem}${count > 1 ? `-${count}` : ''}-normalized`, relativePath: null, options: sheet.options }
@@ -390,10 +394,12 @@ async function runNormalize(params: NormalizeJobParams, ctx: RuntimeJobContext<u
   const workspace = createSpriteWorkspace('normalize', params.requester)
   try {
     const settings = params.save ? { kind: 'sprite-normalized', version: 1, options, createdAt: new Date().toISOString() } : undefined
-    const result = await runSpriteTask('normalize', { workDir: workspace.dir, sources, options, bulk, settings }, { signal: ctx.signal, onProgress: progressReporter(ctx) })
+    const result = params.sources
+      ? await runSpriteTask('sourceNormalize', { workDir: workspace.dir, sources, options: params.sources.options }, { signal: ctx.signal, onProgress: progressReporter(ctx) })
+      : await runSpriteTask('normalize', { workDir: workspace.dir, sources, options, bulk, settings }, { signal: ctx.signal, onProgress: progressReporter(ctx) })
     const sheets: NormalizeJobResult['sheets'] = []
     ctx.throwIfCancelled()
-    if (params.save) ctx.flush({ phase: 'save', total: params.sheets.length, processed: result.failures.length, succeeded: 0, failed: result.failures.length })
+    if (params.save) ctx.flush({ phase: 'save', total: result.sheets.length + result.failures.length, processed: result.failures.length, succeeded: 0, failed: result.failures.length })
     for (const sheet of result.sheets) {
       ctx.throwIfCancelled()
       let compositeHash: string | undefined
@@ -401,13 +407,14 @@ async function runNormalize(params: NormalizeJobParams, ctx: RuntimeJobContext<u
         const extension = path.extname(sheet.outputFilename).slice(1)
         compositeHash = (await saveSpriteOutputToLibrary({ bytes: fs.readFileSync(sheet.file), extension, mimeType: `image/${extension}`, group: params.save })).compositeHash
       }
-      sheets.push({ source: String(sheet.metadata.source), outputFilename: sheet.outputFilename, width: sheet.width, height: sheet.height, compositeHash, warnings: sheet.metadata.warnings })
+      sheets.push({ source: String(sheet.metadata.source), outputFilename: sheet.outputFilename, width: sheet.width, height: sheet.height, compositeHash, warnings: sheet.metadata.warnings, ...(sheet.metadata.report ? { report: sheet.metadata.report as SourceNormalizationReport } : {}) })
       if (params.save) ctx.report({ processed: sheets.length + result.failures.length, succeeded: sheets.length })
     }
     ctx.throwIfCancelled()
     return {
       workspaceId: workspace.id,
       sheets,
+      zipFileName: path.basename(result.zipFile),
       failures: result.failures,
       common: result.manifest.common_output_cell_size ? { cellSize: result.manifest.common_output_cell_size, anchor: result.manifest.common_output_anchor } : null,
     }
@@ -522,6 +529,23 @@ export function startNormalizeJob(params: NormalizeJobParams): RuntimeJobRecord 
 export function startAnimationJob(params: AnimationJobParams): RuntimeJobRecord {
   requireLibraryImage(params.sheetHash)
   return RuntimeJobRunner.start('sprite-animation', params, { requestedByAccountId: params.requester.accountId })
+}
+
+function requireSourceNormalizationVideo(hash: string) {
+  const media = findLibraryMedia(hash)
+  if (!media) throw new SpriteError('라이브러리에서 영상을 찾을 수 없습니다.', 404)
+  if (!media.mimeType.startsWith('video/')) throw new SpriteError('마지막 프레임 정규화는 영상 파일만 지원합니다. 애니메이션 GIF/WebP는 지원하지 않습니다.')
+  return media
+}
+
+export function startSourceNormalizeJob(params: { hashes: string[]; options: Partial<SourceNormalizationOptions>; save?: SpriteGroupTarget | null; requester: SpriteRequester }): RuntimeJobRecord {
+  if (!Array.isArray(params.hashes) || params.hashes.length < 1 || params.hashes.length > MAX_BULK_NORMALIZATION_SHEETS) {
+    throw new SpriteError(`한 번에 1개에서 ${MAX_BULK_NORMALIZATION_SHEETS}개의 원본을 처리할 수 있습니다.`)
+  }
+  const options = resolveSourceNormalizationOptions(params.options)
+  params.hashes.forEach(options.input === 'last_frame' ? requireSourceNormalizationVideo : requireLibraryImage)
+  const input: NormalizeJobParams = { sheets: [], options: {}, sources: { hashes: params.hashes, options }, save: params.save, requester: params.requester }
+  return RuntimeJobRunner.start('sprite-normalize', input, { requestedByAccountId: params.requester.accountId, total: params.hashes.length })
 }
 
 /** Wait for a job to end, polling the job table (works for subprocess and in-process jobs alike). */

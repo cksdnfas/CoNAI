@@ -112,7 +112,7 @@ export const CHAT_PAGE_KIND_TOOLS: Partial<Record<string, ReadonlySet<string>>> 
   comfyui: GENERATION_PAGE_TOOLS, workflow_runner: GENERATION_PAGE_TOOLS,
   wallpaper: new Set(['list_wallpapers']),
   extension: new Set(['list_plugin_pages', 'run_plugin_action', 'get_plugin_action', 'cancel_plugin_action']),
-  sprite: new Set(['get_video_info', 'get_sprite_job', 'extract_sprite_sheet', 'extract_sprite_sheets_batch', 'normalize_sprite_sheets', 'create_sprite_animation', 'download_sprite_frames']),
+  sprite: new Set(['get_video_info', 'get_sprite_job', 'extract_sprite_sheet', 'extract_sprite_sheets_batch', 'normalize_sprite_sheets', 'normalize_sprite_sources', 'create_sprite_animation', 'download_sprite_frames']),
   audio: new Set([
     'list_audio_projects', 'list_audio_groups', 'list_audio_candidates', 'get_audio_candidate', 'list_audio_group_comments',
     'create_audio_project', 'update_audio_project', 'create_audio_group', 'update_audio_group', 'move_audio_candidates', 'import_audio',
@@ -283,6 +283,7 @@ const TOOL_SCOPES: Record<string, McpHttpScope> = {
   extract_sprite_sheet: 'generate',
   extract_sprite_sheets_batch: 'generate',
   normalize_sprite_sheets: 'generate',
+  normalize_sprite_sources: 'generate',
   create_sprite_animation: 'generate',
   resize_images: 'generate',
   generate_comfyui: 'generate',

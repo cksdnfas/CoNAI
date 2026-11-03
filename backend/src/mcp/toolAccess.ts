@@ -53,6 +53,7 @@ export const TOOL_FEATURE_PERMISSIONS: Record<string, string | readonly string[]
   get_video_info: 'images.view', get_sprite_job: 'images.view', download_sprite_frames: 'images.view',
   extract_sprite_sheet: ['images.edit', 'images.upload'], extract_sprite_sheets_batch: ['images.edit', 'images.upload'],
   normalize_sprite_sheets: ['images.edit', 'images.upload'], create_sprite_animation: ['images.edit', 'images.upload'],
+  normalize_sprite_sources: ['images.edit', 'images.upload'],
   resize_images: ['images.edit', 'images.upload'],
   list_files: 'files.view', get_file_info: 'files.view', read_file_text: 'files.view', search_files: 'files.view',
   list_file_versions: 'files.view', read_file_version: 'files.view', restore_file_version: ['files.view', 'files.edit'],

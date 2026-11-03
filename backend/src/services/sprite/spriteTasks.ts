@@ -2,13 +2,14 @@ import fs from 'fs'
 import path from 'path'
 import { buildSpriteFrames, loadBuildFrameAsync, readBuildMeta, renderSheet, writeFramesZip, writeZip, type BuildProgress, type SpriteBuildMeta, type SpriteZipEntry } from './spriteBuild'
 import { decodeImage, encodePreviewPng, encodeStill, spriteOptionsXmp } from './spriteEncode'
-import { probeVideo } from './spriteFfmpeg'
+import { ffmpegBinary, probeVideo, runTool } from './spriteFfmpeg'
 import { buildSpriteAnimation, type AnimationOptions } from './spriteAnimation'
 import { normalizeSpriteSheets, normalizeSpriteSheetsBulk, type NormalizationOptions, type NormalizationSheetOptions, type NormalizedSheet } from './spriteNormalize'
-import { validateImageOutput, type SheetLayout, type SpriteExtractOptions, type SpriteImageFormat, type SpriteVideoInfo } from './spriteOptions'
+import { MAX_IMAGE_PIXELS, validateImageOutput, type SheetLayout, type SpriteExtractOptions, type SpriteImageFormat, type SpriteVideoInfo } from './spriteOptions'
 import { SpriteError } from './spriteErrors'
 import type { Rect } from './spritePixels'
 import { pillowLanczosResize } from '../imageBatchResize/pillowResample'
+import { normalizeSourceImage, type SourceNormalizationOptions } from './spriteSourceNormalize'
 
 /**
  * The heavy sprite operations as plain async functions over files. They never touch the databases, so the same code
@@ -233,6 +234,52 @@ export async function normalizeTask(payload: NormalizeTaskPayload, ctx: TaskCont
   return { sheets, manifest: result.manifest, failures: result.failures, zipFile }
 }
 
+export interface SourceNormalizeTaskPayload {
+  workDir: string
+  sources: Array<{ filePath: string; sourceName: string; outputStem: string }>
+  options: SourceNormalizationOptions
+}
+
+export async function sourceNormalizeTask(payload: SourceNormalizeTaskPayload, ctx: TaskContext): Promise<NormalizeTaskResult> {
+  const sheets: NormalizeTaskResult['sheets'] = []
+  const failures: NormalizeTaskResult['failures'] = []
+  const entries: SpriteZipEntry[] = []
+  for (let index = 0; index < payload.sources.length; index += 1) {
+    ctx.signal.throwIfAborted()
+    const source = payload.sources[index]
+    try {
+      let input = source.filePath
+      if (payload.options.input === 'last_frame') {
+        const video = await probeVideo(input, ctx.signal)
+        if (video.width * video.height > MAX_IMAGE_PIXELS) throw new SpriteError('영상 프레임이 픽셀 처리 한도를 넘습니다.')
+        input = path.join(payload.workDir, `${index + 1}-last-frame.png`)
+        await runTool(ffmpegBinary(), ['-v', 'error', '-y', '-sseof', '-1', '-i', source.filePath, '-map', '0:v:0', '-update', '1', input], { timeoutMs: 120_000, signal: ctx.signal, captureStdout: false })
+      }
+      const outputs = normalizeSourceImage(await decodeImage(input), payload.options)
+      for (const output of outputs) {
+        ctx.signal.throwIfAborted()
+        const outputFilename = `${source.outputStem}-${output.kind}.png`
+        const file = path.join(payload.workDir, `${index + 1}-${output.kind}.png`)
+        const metadata = { kind: 'sprite-source-normalized', source: source.sourceName, output: outputFilename, options: payload.options, report: output.report, warnings: output.report.passed ? [] : ['배경 테두리 또는 남은 근사색 검사 실패: 모션 생성에 사용하기 전에 확인하세요.'] }
+        await fs.promises.writeFile(file, await encodeStill(output.frame, 'png', 100, spriteOptionsXmp(metadata)))
+        const metadataFilename = `${source.outputStem}-${output.kind}.json`
+        sheets.push({ file, outputFilename, metadataFilename, width: output.frame.width, height: output.frame.height, metadata })
+        entries.push({ name: outputFilename, file }, { name: metadataFilename, data: Buffer.from(JSON.stringify(metadata, null, 2)) })
+      }
+    } catch (error) {
+      ctx.signal.throwIfAborted()
+      failures.push({ source: source.sourceName, relative_path: source.sourceName, error: error instanceof Error ? error.message : String(error) })
+    }
+    ctx.progress({ phase: 'normalize', processed: index + 1, total: payload.sources.length, label: source.sourceName })
+    await ctx.yieldEvery?.()
+  }
+  const manifest = { kind: 'sprite-source-normalization', sheets: sheets.map((sheet) => sheet.metadata), failures }
+  entries.push({ name: 'normalization-manifest.json', data: Buffer.from(JSON.stringify(manifest, null, 2)) })
+  const zipFile = path.join(payload.workDir, 'normalized-sources.zip')
+  await writeZip(zipFile, entries, ctx.signal)
+  return { sheets, failures, manifest, zipFile }
+}
+
 export interface AnimationTaskPayload {
   sheetPath: string
   options: AnimationOptions
@@ -282,6 +329,7 @@ export const SPRITE_TASKS = {
   render: renderTask,
   framesZip: framesZipTask,
   normalize: normalizeTask,
+  sourceNormalize: sourceNormalizeTask,
   animation: animationTask,
   resizeImage: resizeImageTask,
   preview: previewTask,

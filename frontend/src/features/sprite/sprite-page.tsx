@@ -9,11 +9,12 @@ import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
 import { SpriteAnimationTab } from './sprite-animation-tab'
 import { SpriteExtractTab } from './sprite-extract-tab'
 import { SpriteNormalizeTab } from './sprite-normalize-tab'
+import { SpriteSourceNormalizeTab } from './sprite-source-normalize-tab'
 
-type SpriteTab = 'extract' | 'normalize' | 'animation'
+type SpriteTab = 'extract' | 'normalize' | 'animation' | 'source'
 
 function parseTab(value: string | null): SpriteTab {
-  return value === 'normalize' || value === 'animation' ? value : 'extract'
+  return value === 'normalize' || value === 'animation' || value === 'source' ? value : 'extract'
 }
 
 /** /sprite — sprite sheets from library videos, sheet normalisation and sheet → animation. `?video=<hash>` preselects. */
@@ -42,7 +43,7 @@ export function SpritePage() {
     }, { replace: true })
   }, [setSearchParams, videoHash])
 
-  // All three stay mounted so switching tabs keeps each form and result; each tab has its own layout presets. Like the
+  // Tabs stay mounted so switching keeps each form and result. Like the
   // generation page, the row does not stick: the workspace below scrolls on its own.
   return (
     <GenerationLayoutProvider>
@@ -58,6 +59,7 @@ export function SpritePage() {
             ariaLabel={t({ ko: '스프라이트 메뉴', en: 'Sprite sections' })}
             items={[
               { value: 'extract', label: t({ ko: '추출', en: 'Extract' }) },
+              { value: 'source', label: t({ ko: '원본 정규화', en: 'Source normalize' }) },
               { value: 'normalize', label: t({ ko: '정규화', en: 'Normalize' }) },
               { value: 'animation', label: t({ ko: '애니메이션', en: 'Animation' }) },
             ]}
@@ -75,6 +77,9 @@ export function SpritePage() {
       </div>
       <div className={tab === 'normalize' ? undefined : 'hidden'}>
         <SpriteNormalizeTab active={tab === 'normalize'} />
+      </div>
+      <div className={tab === 'source' ? undefined : 'hidden'}>
+        <SpriteSourceNormalizeTab active={tab === 'source'} />
       </div>
       <div className={tab === 'animation' ? undefined : 'hidden'}>
         <SpriteAnimationTab active={tab === 'animation'} />

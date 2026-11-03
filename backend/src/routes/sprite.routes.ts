@@ -22,6 +22,7 @@ import {
   startExtractBatchJob,
   startExtractJob,
   startNormalizeJob,
+  startSourceNormalizeJob,
   workspaceDownload,
   type SpriteRequester,
 } from '../services/sprite/spriteService'
@@ -233,6 +234,12 @@ router.post('/normalize', requirePermission(EDIT), requireUploadWhenSaving, hand
 router.post('/animation', requirePermission(EDIT), requireUploadWhenSaving, handle(async (req, res) => {
   const body = req.body ?? {}
   const job = startAnimationJob({ sheetHash: String(body.sheetHash ?? ''), options: body.options ?? {}, save: saveTarget(body.save), requester: requester(req) })
+  res.status(202).json(successResponse(job))
+}))
+
+router.post('/normalize-sources', requirePermission(EDIT), requireUploadWhenSaving, handle(async (req, res) => {
+  const body = req.body ?? {}
+  const job = startSourceNormalizeJob({ hashes: body.hashes, options: body.options ?? {}, save: saveTarget(body.save), requester: requester(req) })
   res.status(202).json(successResponse(job))
 }))
 

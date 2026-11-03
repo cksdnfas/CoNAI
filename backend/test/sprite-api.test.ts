@@ -349,7 +349,7 @@ test('sprite REST + MCP: permissions, ownership, library save and artifacts', { 
     }
     assert.deepEqual(await names(readerId), ['download_sprite_frames', 'get_sprite_job', 'get_video_info'])
     assert.deepEqual(await names(editorId), ['download_sprite_frames', 'get_sprite_job', 'get_video_info'], 'builders need images.upload too')
-    assert.deepEqual(await names(makerId), ['create_sprite_animation', 'download_sprite_frames', 'extract_sprite_sheet', 'extract_sprite_sheets_batch', 'get_sprite_job', 'get_video_info', 'normalize_sprite_sheets'])
+    assert.deepEqual(await names(makerId), ['create_sprite_animation', 'download_sprite_frames', 'extract_sprite_sheet', 'extract_sprite_sheets_batch', 'get_sprite_job', 'get_video_info', 'normalize_sprite_sheets', 'normalize_sprite_sources'])
     assert.ok(!(await names(makerId, 'codex-chat')).includes('wait_sprite_job'), 'chat replies never block on a job')
 
     const maker = await connect(makerId)
@@ -382,6 +382,50 @@ test('sprite REST + MCP: permissions, ownership, library save and artifacts', { 
       assert.equal(extracted.status, 'completed', JSON.stringify(extracted))
       assert.equal(extracted.composite_hashes.length, 1)
       assert.equal(extracted.result.frameCount, 4)
+      const sourceImage = text(await maker.client.callTool({ name: 'normalize_sprite_sources', arguments: {
+        composite_hashes: extracted.composite_hashes, key_color: '#123456', work_size: 32, canvas_size: 64,
+        bottom_margin: 2, group_path: 'sprite-test/sources', wait_seconds: 60,
+      } }))
+      assert.equal(sourceImage.status, 'completed', JSON.stringify(sourceImage))
+      assert.equal(sourceImage.composite_hashes.length, 2)
+      assert.deepEqual(sourceImage.result.sheets.map((sheet: any) => [sheet.width, sheet.height]), [[32, 32], [64, 64]])
+      assert.deepEqual(sourceImage.result.sheets[1].report, { borderExact: true, nearKeyCount: 0, passed: true })
+      assert.ok(sourceImage.zip_download?.download_url)
+      const unavailableZip = t.mock.method(McpArtifactService, 'createSpriteFramesDescriptor', async () => { throw new Error('ZIP cleaned up while opening it') })
+      try {
+        const completedWithoutZip = text(await maker.client.callTool({ name: 'get_sprite_job', arguments: { job_id: sourceImage.job_id } }))
+        assert.equal(completedWithoutZip.status, 'completed')
+        assert.deepEqual(completedWithoutZip.composite_hashes, sourceImage.composite_hashes)
+        assert.equal(completedWithoutZip.zip_download, null)
+      } finally {
+        unavailableZip.mock.restore()
+      }
+      for (const extension of ['gif', 'webp']) {
+        const animated = await saveSpriteOutputToLibrary({
+          bytes: fs.readFileSync(path.join(__dirname, `fixtures/av-golden/sprite/animation/sheet_a.${extension}`)),
+          extension, mimeType: `image/${extension}`, group: { groupPath: 'sprite-test/inputs' },
+        })
+        const unsupported = await maker.client.callTool({ name: 'normalize_sprite_sources', arguments: {
+          composite_hashes: [animated.compositeHash], input: 'last_frame', wait_seconds: 0,
+        } })
+        assert.equal(unsupported.isError, true, `${extension} must be rejected before starting a last-frame job`)
+        assert.match(JSON.stringify(unsupported.content), /GIF\/WebP/)
+      }
+      const pose = text(await maker.client.callTool({ name: 'normalize_sprite_sources', arguments: {
+        composite_hashes: [videoHash], input: 'last_frame', canvas_size: 64, scale: 0.75, offset_x: 2, offset_y: -1,
+        group_path: 'sprite-test/sources', wait_seconds: 60,
+      } }))
+      assert.equal(pose.status, 'completed', JSON.stringify(pose))
+      assert.equal(pose.composite_hashes.length, 1)
+      assert.deepEqual(pose.result.sheets[0].report, { borderExact: true, nearKeyCount: 0, passed: true })
+      const delivery = text(await maker.client.callTool({ name: 'normalize_sprite_sheets', arguments: {
+        sheets: [{ composite_hash: extracted.composite_hashes[0], columns: extracted.result.sheet.columns, rows: extracted.result.sheet.rows, frame_count: 4 }],
+        mode: 'delivery', delivery: { frame_size: [64, 64], body_height: 24, bottom_margin: 4, scale_by_frame: true },
+        wait_seconds: 60,
+      } }))
+      assert.equal(delivery.status, 'completed', JSON.stringify(delivery))
+      assert.equal(delivery.composite_hashes.length, 1)
+      assert.equal(delivery.result.sheets[0].width, extracted.result.sheet.columns * 64)
       const denied = await other.client.callTool({ name: 'get_sprite_job', arguments: { job_id: extracted.job_id } })
       assert.equal(denied.isError, true)
       const download = text(await maker.client.callTool({ name: 'download_sprite_frames', arguments: { build_id: extracted.build_id } }))

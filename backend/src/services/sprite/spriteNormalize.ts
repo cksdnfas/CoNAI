@@ -1,7 +1,8 @@
 import { SpriteError } from './spriteErrors'
 import { encodeStill } from './spriteEncode'
 import { MAX_IMAGE_PIXELS, MAX_SHEET_DIMENSION, MAX_SPRITE_FRAMES, validateImageOutput, type SpriteImageFormat } from './spriteOptions'
-import { alphaBounds, cropFrame, pasteCell, type RgbaFrame } from './spritePixels'
+import { alphaBounds, cropFrame, pasteCell, roundHalfEven, type RgbaFrame } from './spritePixels'
+import { pillowLanczosResize } from '../imageBatchResize/pillowResample'
 
 /**
  * Anchor-preserving sprite sheet normalisation ("여백 정규화", `build_normalized_sprite_archive` and the bulk variant).
@@ -13,7 +14,7 @@ export const MAX_NORMALIZATION_SHEETS = 16
 export const MAX_BULK_NORMALIZATION_SHEETS = 500
 export const MAX_NORMALIZATION_TOTAL_PIXELS = 64 * 1024 * 1024
 
-export type NormalizationMode = 'per_sheet' | 'group'
+export type NormalizationMode = 'per_sheet' | 'group' | 'delivery'
 export type AnchorPolicy = 'center' | 'bottom_center' | 'custom'
 export type ReadOrder = 'row_major' | 'column_major'
 
@@ -30,6 +31,7 @@ export interface NormalizationSheetOptions {
 
 export interface NormalizationOptions {
   mode: NormalizationMode
+  delivery?: DeliveryCellOptions
   alphaThreshold: number
   /** D5: the web default 2 (the original MCP defaulted to 0). */
   padding: number
@@ -37,6 +39,20 @@ export interface NormalizationOptions {
   anchorPolicy: AnchorPolicy
   outputFormat: SpriteImageFormat
   outputQuality: number
+}
+
+export interface DeliveryCellOptions {
+  frameWidth: number
+  frameHeight: number
+  bodyHeight: number
+  bottomMargin: number
+  pivot: 'feet' | 'center'
+  footBand: number
+  pivotAlphaThreshold: number
+  scaleByFrame: boolean
+  referenceHeight?: number
+  referenceHeightEnd?: number
+  referenceHeightCurve?: number[]
 }
 
 export const NORMALIZATION_DEFAULTS: NormalizationOptions = {
@@ -94,7 +110,23 @@ function framePosition(index: number, columns: number, rows: number, order: Read
 }
 
 export function validateNormalizationOptions(options: NormalizationOptions): { format: SpriteImageFormat; quality: number } {
-  if (options.mode !== 'per_sheet' && options.mode !== 'group') throw new SpriteError('지원하지 않는 정규화 모드입니다.')
+  if (!['per_sheet', 'group', 'delivery'].includes(options.mode)) throw new SpriteError('지원하지 않는 정규화 모드입니다.')
+  if (options.mode === 'delivery') {
+    const d = options.delivery
+    if (!d || ![d.frameWidth, d.frameHeight].every((v) => Number.isSafeInteger(v) && v > 0)
+      || !Number.isFinite(d.bodyHeight) || d.bodyHeight <= 0
+      || !Number.isSafeInteger(d.bottomMargin) || d.bottomMargin < 0
+      || !Number.isSafeInteger(d.footBand) || d.footBand < 0
+      || !Number.isInteger(d.pivotAlphaThreshold) || d.pivotAlphaThreshold < 1 || d.pivotAlphaThreshold > 255
+      || !['feet', 'center'].includes(d.pivot) || typeof d.scaleByFrame !== 'boolean') {
+      throw new SpriteError('납품 셀 크기·몸 높이·여백·발 기준점 옵션을 확인하세요.')
+    }
+    for (const value of [d.referenceHeight, d.referenceHeightEnd]) {
+      if (value !== undefined && (!Number.isFinite(value) || value <= 0)) throw new SpriteError('기준 높이는 양수여야 합니다.')
+    }
+    if (d.referenceHeightCurve !== undefined && (!Array.isArray(d.referenceHeightCurve) || !d.referenceHeightCurve.length
+      || d.referenceHeightCurve.some((v) => !Number.isFinite(v) || v <= 0))) throw new SpriteError('기준 높이 곡선은 양수 배열이어야 합니다.')
+  }
   if (!(options.alphaThreshold >= 1 && options.alphaThreshold <= 255)) throw new SpriteError('알파 임계값은 1에서 255 사이여야 합니다.')
   if (!(options.padding >= 0 && options.padding <= 512)) throw new SpriteError('안전 패딩은 0에서 512px 사이여야 합니다.')
   if (!(options.outputSpacing >= 0 && options.outputSpacing <= 64)) throw new SpriteError('출력 프레임 간격은 0에서 64px 사이여야 합니다.')
@@ -123,7 +155,7 @@ function prepareSheet(source: NormalizationSource, options: NormalizationOptions
   }
   const frameWidth = contentWidth / sheetOptions.columns
   const frameHeight = contentHeight / sheetOptions.rows
-  const inputAnchor = anchorFor(frameWidth, frameHeight, options.anchorPolicy, sheetOptions)
+  const inputAnchor: [number, number] = options.mode === 'delivery' ? [0, 0] : anchorFor(frameWidth, frameHeight, options.anchorPolicy, sheetOptions)
   const frames: RgbaFrame[] = []
   const bounds: Array<Bounds | null> = []
   const edgeFrames: number[] = []
@@ -185,10 +217,60 @@ function sameRegion(a: RgbaFrame, aBounds: Bounds, b: RgbaFrame, bBounds: Bounds
   return true
 }
 
+function deliveryCell(prepared: PreparedSheet, index: number, d: DeliveryCellOptions): RgbaFrame {
+  const bounds = prepared.bounds[index]
+  const first = prepared.bounds[0]
+  if (!bounds || !first) throw new SpriteError(`Empty frame ${!first ? 1 : index + 1}: delivery normalization requires visible content.`)
+  const [left, top, right, bottom] = bounds
+  const cropWidth = right - left, cropHeight = bottom - top
+  const reference = d.referenceHeight ?? first[3] - first[1]
+  const end = d.referenceHeightEnd ?? reference
+  const position = index / Math.max(1, prepared.frames.length - 1)
+  let frameReference = reference + (end - reference) * position
+  const curve = d.referenceHeightCurve
+  if (curve && curve.length > 1) {
+    const at = position * (curve.length - 1)
+    const low = Math.min(Math.floor(at), curve.length - 2)
+    frameReference = curve[low] + (curve[low + 1] - curve[low]) * (at - low)
+  }
+  const scale = d.bodyHeight / (d.scaleByFrame ? cropHeight : frameReference)
+  const width = Math.max(1, roundHalfEven(cropWidth * scale))
+  const height = Math.max(1, roundHalfEven(cropHeight * scale))
+  const frame = prepared.frames[index]
+  let x: number, y: number
+  if (d.pivot === 'center') {
+    x = roundHalfEven(d.frameWidth / 2 + (left - (first[0] + first[2]) / 2) * scale)
+    y = roundHalfEven(d.frameHeight / 2 + (top - (first[1] + first[3]) / 2) * scale)
+  } else {
+    const core = alphaBounds(frame, d.pivotAlphaThreshold)
+    if (!core) throw new SpriteError(`Frame ${index + 1}: no opaque pixels at pivot_alpha_threshold.`)
+    let minX = frame.width, maxX = -1
+    for (let fy = Math.max(0, core[3] - 1 - d.footBand); fy < core[3]; fy += 1) {
+      for (let fx = 0; fx < frame.width; fx += 1) {
+        if (frame.data[(fy * frame.width + fx) * 4 + 3] >= d.pivotAlphaThreshold) {
+          minX = Math.min(minX, fx); maxX = Math.max(maxX, fx)
+        }
+      }
+    }
+    x = roundHalfEven(d.frameWidth / 2 - ((minX + maxX + 1) / 2 - left) * scale)
+    y = d.frameHeight - d.bottomMargin - height
+  }
+  if (x < 0 || y < 0 || x + width > d.frameWidth || y + height > d.frameHeight
+    || !Number.isFinite(x + y + width + height)) {
+    throw new SpriteError(`Frame ${index + 1} exceeds delivery canvas ${d.frameWidth}×${d.frameHeight}: ${prepared.source.sourceName}. Increase the cell or reduce body height.`)
+  }
+  const cell: RgbaFrame = { width: d.frameWidth, height: d.frameHeight, data: new Uint8Array(d.frameWidth * d.frameHeight * 4) }
+  const scaled = pillowLanczosResize(cropFrame(frame, { x: left, y: top, width: cropWidth, height: cropHeight }), width, height)
+  pasteCell(cell.data, cell.width, scaled, x, y)
+  return cell
+}
+
 async function renderSheet(prepared: PreparedSheet, options: NormalizationOptions, image: { format: SpriteImageFormat; quality: number }, union: Bounds, outputFilename: string): Promise<{ bytes: Buffer; sheet: RgbaFrame; metadata: Record<string, unknown> }> {
   const outputWidth = union[2] - union[0]
   const outputHeight = union[3] - union[1]
-  const outputAnchor: [number, number] = [-union[0], -union[1]]
+  const outputAnchor: [number, number] = options.mode === 'delivery'
+    ? [outputWidth / 2, options.delivery!.pivot === 'center' ? outputHeight / 2 : outputHeight - options.delivery!.bottomMargin]
+    : [-union[0], -union[1]]
   const sheetOptions = prepared.source.options
   const outputRows = Math.ceil(sheetOptions.frameCount / sheetOptions.outputColumns)
   const sheetWidth = sheetOptions.outputColumns * outputWidth + (sheetOptions.outputColumns - 1) * options.outputSpacing
@@ -203,10 +285,12 @@ async function renderSheet(prepared: PreparedSheet, options: NormalizationOption
   const drawX = outputAnchor[0] - prepared.inputAnchor[0]
   const drawY = outputAnchor[1] - prepared.inputAnchor[1]
   prepared.frames.forEach((frame, index) => {
-    const cell: RgbaFrame = { width: outputWidth, height: outputHeight, data: new Uint8Array(outputWidth * outputHeight * 4) }
-    pasteClipped(cell, frame, drawX, drawY)
+    const cell: RgbaFrame = options.mode === 'delivery'
+      ? deliveryCell(prepared, index, options.delivery!)
+      : { width: outputWidth, height: outputHeight, data: new Uint8Array(outputWidth * outputHeight * 4) }
+    if (options.mode !== 'delivery') pasteClipped(cell, frame, drawX, drawY)
     const bounds = prepared.bounds[index]
-    if (bounds) {
+    if (bounds && options.mode !== 'delivery') {
       const target: Bounds = [drawX + bounds[0], drawY + bounds[1], drawX + bounds[2], drawY + bounds[3]]
       if (target[0] < 0 || target[1] < 0 || target[2] > outputWidth || target[3] > outputHeight || !sameRegion(frame, bounds, cell, target)) {
         throw new SpriteError('정규화 검증 중 원본 픽셀 손실을 감지했습니다.')
@@ -220,6 +304,7 @@ async function renderSheet(prepared: PreparedSheet, options: NormalizationOption
     source: prepared.source.sourceName,
     output: outputFilename,
     mode: options.mode,
+    ...(options.mode === 'delivery' ? { delivery: options.delivery } : {}),
     input_grid: {
       columns: sheetOptions.columns,
       rows: sheetOptions.rows,
@@ -236,7 +321,7 @@ async function renderSheet(prepared: PreparedSheet, options: NormalizationOption
       read_order: 'row_major',
     },
     output_cell_size: [outputWidth, outputHeight],
-    anchor_policy: options.anchorPolicy,
+    anchor_policy: options.mode === 'delivery' ? options.delivery!.pivot : options.anchorPolicy,
     input_anchor: [...prepared.inputAnchor],
     output_anchor: [...outputAnchor],
     alpha_threshold: options.alphaThreshold,
@@ -272,7 +357,7 @@ export async function normalizeSpriteSheets(sources: NormalizationSource[], opti
   const common = options.mode === 'group' ? unionRelativeBounds(prepared, options.padding) : null
   const sheets: NormalizedSheet[] = []
   for (const sheet of prepared) {
-    const union = common ?? unionRelativeBounds([sheet], options.padding)
+    const union: Bounds = options.mode === 'delivery' ? [0, 0, options.delivery!.frameWidth, options.delivery!.frameHeight] : common ?? unionRelativeBounds([sheet], options.padding)
     const outputFilename = `${sheet.source.outputStem}.${image.format}`
     const metadataFilename = `${sheet.source.outputStem}.json`
     const rendered = await renderSheet(sheet, options, image, union, outputFilename)
@@ -375,7 +460,7 @@ export async function normalizeSpriteSheetsBulk(
     try {
       source = await load(renderList[index])
       const prepared = prepareSheet(source, options)
-      const union = common ?? unionRelativeBounds([prepared], options.padding)
+      const union: Bounds = options.mode === 'delivery' ? [0, 0, options.delivery!.frameWidth, options.delivery!.frameHeight] : common ?? unionRelativeBounds([prepared], options.padding)
       const [outputFilename, metadataFilename] = batchNames(source, image.format)
       const rendered = await renderSheet(prepared, options, image, union, outputFilename)
       rendered.metadata.metadata_file = metadataFilename

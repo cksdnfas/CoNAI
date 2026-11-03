@@ -136,6 +136,7 @@ const TOOLS: Record<string, { group: ChatToolGroupId; label: Copy; ko: string }>
   extract_sprite_sheet: { group: 'sprite-ops', label: { ko: '스프라이트 시트 추출', en: 'Extract sprite sheet' }, ko: '영상에서 프레임을 뽑아 배경색을 빼고 시트로 만들어 라이브러리에 저장해.' },
   extract_sprite_sheets_batch: { group: 'sprite-ops', label: { ko: '스프라이트 일괄 추출', en: 'Batch extract sprites' }, ko: '여러 영상을 같은 설정으로 시트로 만들어 저장해.' },
   normalize_sprite_sheets: { group: 'sprite-ops', label: { ko: '스프라이트 정규화', en: 'Normalize sprite sheets' }, ko: '시트의 프레임을 같은 셀 크기와 기준점으로 맞춰 저장해.' },
+  normalize_sprite_sources: { group: 'sprite-ops', label: { ko: '스프라이트 원본 정규화', en: 'Normalize sprite sources' }, ko: '원본 이미지나 영상 마지막 프레임을 지정색 배경의 불투명 작업·캔버스 이미지로 맞춰 저장해.' },
   create_sprite_animation: { group: 'sprite-ops', label: { ko: '스프라이트 애니메이션', en: 'Sprite animation' }, ko: '시트를 WebP·GIF·MP4 애니메이션으로 만들어 저장해.' },
   resolve_image_group_path: { group: 'image-groups', label: { ko: '그룹 경로 찾기·만들기', en: 'Resolve group path' }, ko: '"프로젝트/효과" 같은 경로를 그룹으로 바꿔. 없으면 만들 수도 있어.' },
   add_images_to_group: { group: 'image-groups', label: { ko: '그룹에 이미지 추가', en: 'Add images to group' }, ko: '이미지를 그룹에 넣어. 다른 그룹 소속은 그대로 둬.' },

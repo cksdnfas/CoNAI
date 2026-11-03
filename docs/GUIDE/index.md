@@ -34,6 +34,7 @@ CoNAI는 이미지·영상·생성물 관리를 기반으로 지식을 축적하
 - [채팅 (Codex · API LLM)](./CHAT.md)
 - [ComfyUI 생성](./COMFYUI_GENERATION.md)
 - [워크플로우 편집](./WORKFLOW_EDITOR.md)
+- [스프라이트와 원본 정규화](./SPRITE.md)
 - [MCP 가이드](./MCP_GUIDE.md)
 
 ## 설정과 운영

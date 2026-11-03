@@ -92,7 +92,8 @@ router.get('/mcp/artifacts/:artifactId', async (req: Request, res: Response) => 
 
   res.setHeader('Content-Type', artifact.mimeType);
   res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(artifact.fileName)}`);
-  res.sendFile(artifact.absolutePath);
+  // The signed, resolved artifact may live under a hidden runtime directory.
+  res.sendFile(artifact.absolutePath, { dotfiles: 'allow' });
 });
 
 /**

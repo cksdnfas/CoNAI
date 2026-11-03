@@ -4,7 +4,7 @@ import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context
 import { useChatDraftTransaction } from '@/features/codex-chat/use-chat-draft-transaction'
 import { pageAction, pageArray, pageChoice, pageNumber, pageObject, pageText } from '@/features/codex-chat/page-action-helpers'
 import { useI18n } from '@/i18n'
-import type { SpriteAnchorPolicy, SpriteAnimationOptions, SpriteBatchItem, SpriteExtractResult, SpriteNormalizeOptions, SpriteNormalizeSheet, SpriteVideoInfo } from '@/lib/api-sprite'
+import { SPRITE_DELIVERY_DEFAULTS, type SpriteAnchorPolicy, type SpriteAnimationOptions, type SpriteBatchItem, type SpriteExtractResult, type SpriteNormalizeOptions, type SpriteNormalizeResult, type SpriteNormalizeSheet, type SpriteSourceNormalizeOptions, type SpriteVideoInfo } from '@/lib/api-sprite'
 import { MAX_KEY_COLORS, MAX_SHEET_DIMENSION, MAX_SPRITE_FRAMES, normalizeHex, toExtractOptions, withDespill, type ExtractForm, type OutputForm, type SaveForm } from './sprite-options'
 
 const HASH = /^[0-9a-f]{32,48}$/i
@@ -209,7 +209,7 @@ export function useSpriteNormalizeChatPage({ active, sheets, setSheets, selected
     return { isCurrent: undo.isCurrent, restore: () => { undo.restore(); setSelected(selected) } }
   }
   const fields: ChatPageField[] = [
-    { id: 'mode', label: t({ ko: '모드 (per_sheet = 시트별, group = 묶음 공통 셀 크기)', en: 'Mode (per_sheet = each sheet, group = one shared cell size)' }), type: 'select', value: options.mode, options: ['per_sheet', 'group'] },
+    { id: 'mode', label: t({ ko: '모드 (per_sheet / group / delivery 고정 납품 셀)', en: 'Mode (per_sheet / group / delivery fixed cells)' }), type: 'select', value: options.mode, options: ['per_sheet', 'group', 'delivery'] },
     { id: 'anchorPolicy', label: t({ ko: '기준점', en: 'Anchor' }), type: 'select', value: options.anchorPolicy, options: ['center', 'bottom_center', 'custom'] },
     { id: 'padding', label: t({ ko: '여백', en: 'Padding' }), type: 'number', value: options.padding, min: 0, max: 512, integer: true },
     { id: 'outputSpacing', label: t({ ko: '출력 간격', en: 'Output spacing' }), type: 'number', value: options.outputSpacing, min: 0, max: 64, integer: true },
@@ -217,6 +217,19 @@ export function useSpriteNormalizeChatPage({ active, sheets, setSheets, selected
     { id: 'outputFormat', label: t({ ko: '형식', en: 'Format' }), type: 'select', value: options.outputFormat, options: ['png', 'webp'] },
     { id: 'outputQuality', label: t({ ko: 'WebP 품질', en: 'WebP quality' }), type: 'number', value: options.outputQuality, min: 1, max: 100, integer: true },
   ]
+  const delivery = options.delivery ?? SPRITE_DELIVERY_DEFAULTS
+  if (options.mode === 'delivery') fields.push(
+    ...(['frameWidth', 'frameHeight', 'bodyHeight', 'bottomMargin', 'footBand', 'pivotAlphaThreshold'] as const).map((key): ChatPageField => ({
+      id: `delivery.${key}`, label: key, type: 'number', value: delivery[key],
+      min: key === 'bottomMargin' || key === 'footBand' ? 0 : 1,
+      ...(key === 'pivotAlphaThreshold' ? { max: 255 } : {}), integer: key !== 'bodyHeight',
+    })),
+    { id: 'delivery.pivot', label: 'Pivot (feet / center)', type: 'select', value: delivery.pivot, options: ['feet', 'center'] },
+    { id: 'delivery.scaleByFrame', label: 'Scale each frame (ignores reference heights)', type: 'boolean', value: delivery.scaleByFrame },
+    { id: 'delivery.referenceHeight', label: 'Reference height (empty = first frame)', type: 'text', value: delivery.referenceHeight === undefined ? '' : String(delivery.referenceHeight) },
+    { id: 'delivery.referenceHeightEnd', label: 'End reference height (linear)', type: 'text', value: delivery.referenceHeightEnd === undefined ? '' : String(delivery.referenceHeightEnd) },
+    { id: 'delivery.referenceHeightCurve', label: 'Reference height curve (comma separated, evenly spaced)', type: 'text', value: delivery.referenceHeightCurve?.join(', ') ?? '' },
+  )
   const sheetSchema = pageObject({
     hash: { type: 'string', maxLength: 48 },
     columns: pageNumber(1, 64, true), rows: pageNumber(1, 64, true), frameCount: pageNumber(1, MAX_SPRITE_FRAMES, true), inputSpacing: pageNumber(0, 64, true),
@@ -258,7 +271,14 @@ export function useSpriteNormalizeChatPage({ active, sheets, setSheets, selected
     apply: (patch) => setOptions((current) => {
       const next = { ...current }
       for (const [key, value] of Object.entries(patch)) {
-        if (key === 'mode') next.mode = value === 'group' ? 'group' : 'per_sheet'
+        if (key === 'mode') next.mode = value as SpriteNormalizeOptions['mode']
+        else if (key.startsWith('delivery.')) {
+          const field = key.slice('delivery.'.length)
+          const valueForField = field === 'pivot' ? String(value) : field === 'scaleByFrame' ? Boolean(value)
+            : field === 'referenceHeightCurve' ? (String(value).trim() ? String(value).split(',').map(Number) : undefined)
+            : (field === 'referenceHeight' || field === 'referenceHeightEnd') && String(value).trim() === '' ? undefined : Number(value)
+          next.delivery = { ...(next.delivery ?? SPRITE_DELIVERY_DEFAULTS), [field]: valueForField }
+        }
         else if (key === 'anchorPolicy') next.anchorPolicy = String(value) as SpriteAnchorPolicy
         else if (key === 'outputFormat') next.outputFormat = value === 'webp' ? 'webp' : 'png'
         else if (key in next) (next as Record<string, unknown>)[key] = Number(value)
@@ -299,6 +319,91 @@ export function useSpriteNormalizeChatPage({ active, sheets, setSheets, selected
       if (id === 'sprite.download') { await run(false); return }
       if (id === 'sprite.run') { await run(true); return }
       throw new Error('스프라이트 정규화 화면에 없는 작업이야.')
+    },
+  } : null)
+}
+
+export function useSpriteSourceNormalizeChatPage({ active, hashes, setHashes, options, setOptions, groupPath, setGroupPath, running, canRun, canSave, run, cancel, result }: {
+  active: boolean
+  hashes: string[]
+  setHashes: (hashes: string[]) => void
+  options: SpriteSourceNormalizeOptions
+  setOptions: Dispatch<SetStateAction<SpriteSourceNormalizeOptions>>
+  groupPath: string
+  setGroupPath: (path: string) => void
+  running: boolean
+  canRun: boolean
+  canSave: boolean
+  run: (save: boolean) => Promise<void>
+  cancel: () => unknown
+  result: SpriteNormalizeResult | null
+}) {
+  const commitHashes = useChatDraftTransaction(hashes, setHashes)
+  const fields: ChatPageField[] = [
+    { id: 'input', label: 'Source type', type: 'select', value: options.input, options: ['image', 'last_frame'] },
+    { id: 'keyColor', label: 'Opaque key colour (#RRGGBB)', type: 'text', value: options.keyColor },
+    { id: 'tolerance', label: 'RGB distance tolerance', type: 'number', value: options.tolerance, min: 0 },
+    { id: 'canvasSize', label: 'Canvas size', type: 'number', value: options.canvasSize, min: 1, integer: true },
+    { id: 'groupPath', label: 'Save group path (empty = 스프라이트)', type: 'text', value: groupPath },
+  ]
+  if (options.input === 'image') fields.push(
+    { id: 'workSize', label: 'Work size', type: 'number', value: options.workSize, min: 1, integer: true },
+    { id: 'bottomMargin', label: 'Bottom margin (bottom anchor only)', type: 'number', value: options.bottomMargin, min: 0, integer: true },
+    { id: 'anchor', label: 'Canvas anchor', type: 'select', value: options.anchor, options: ['bottom', 'center'] },
+    { id: 'keep', label: 'Outputs to keep', type: 'select', value: options.keep, options: ['both', 'work', 'canvas'] },
+  )
+  else fields.push(
+    { id: 'scale', label: 'Uniform scale (0 < s <= 1)', type: 'number', value: options.scale, min: 0, max: 1 },
+    { id: 'offsetX', label: 'X offset (rejects visible clipping)', type: 'number', value: options.offsetX, integer: true },
+    { id: 'offsetY', label: 'Y offset (rejects visible clipping)', type: 'number', value: options.offsetY, integer: true },
+  )
+  const actions: ChatPageAction[] = running
+    ? [pageAction('sprite.stop', 'Cancel normalization', 'Stop the running sprite task. Completed library saves remain.')]
+    : [
+      pageAction('sprite.add_sources', 'Add sources', 'Add library hashes matching the selected source type.', pageObject({ hashes: hashList(500) }, ['hashes'])),
+      pageAction('sprite.remove_sources', 'Remove sources', 'Remove selected hashes; all clears the selection.', pageObject({ hashes: hashList(500), all: { type: 'boolean' } })),
+      ...(canRun ? [pageAction('sprite.download', 'Download ZIP', 'Normalize selected sources without saving, then download PNGs and reports.')] : []),
+      ...(canRun && canSave ? [pageAction('sprite.run', 'Save normalized sources', 'Normalize the selected images or video last frames into opaque PNGs and save in the chosen group.', pageObject({}), 'save')] : []),
+    ]
+  useChatPageRegistration(active ? {
+    kind: 'sprite', title: 'Sprites · Source normalization', resourceId: 'source', fields, actions,
+    data: {
+      tab: 'source', selected: hashes.slice(0, 40), sourceCount: hashes.length, running,
+      ...(result ? {
+        outputs: result.sheets.slice(0, 40).map((sheet) => ({ name: sheet.outputFilename, hash: sheet.compositeHash ?? null, ...(sheet.report ? { report: { ...sheet.report } } : {}) })),
+        outputCount: result.sheets.length,
+        failures: result.failures.slice(0, 20).map((failure) => ({ source: failure.source, error: failure.error })),
+      } : {}),
+    },
+    apply: (patch) => {
+      if (patch.input !== undefined && patch.input !== options.input) setHashes([])
+      if (patch.groupPath !== undefined) setGroupPath(String(patch.groupPath))
+      setOptions((current) => {
+        const next = { ...current }
+        for (const [key, value] of Object.entries(patch)) {
+          if (!(key in next)) continue
+          ;(next as unknown as Record<string, unknown>)[key] = ['input', 'keyColor', 'anchor', 'keep'].includes(key) ? String(value) : Number(value)
+        }
+        return next
+      })
+    },
+    applyAction: async (id, args, assertCurrent) => {
+      assertCurrent()
+      if (id === 'sprite.add_sources') {
+        const added = (Array.isArray(args.hashes) ? args.hashes : []).map(String)
+        if (added.some((hash) => !HASH.test(hash))) throw new Error('Invalid library hash.')
+        const next = [...new Set([...hashes, ...added])]
+        if (next.length > 500) throw new Error('A sprite normalization batch supports at most 500 sources.')
+        return commitHashes(next)
+      }
+      if (id === 'sprite.remove_sources') {
+        const drop = (Array.isArray(args.hashes) ? args.hashes : []).map(String)
+        return commitHashes(args.all ? [] : hashes.filter((hash) => !drop.includes(hash)))
+      }
+      if (id === 'sprite.stop') { await cancel(); return }
+      if (id === 'sprite.download') { await run(false); return }
+      if (id === 'sprite.run') { await run(true); return }
+      throw new Error('Unknown source normalization action.')
     },
   } : null)
 }

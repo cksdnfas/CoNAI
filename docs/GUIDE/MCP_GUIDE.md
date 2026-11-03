@@ -456,8 +456,45 @@ ComfyUI 시드(`seed`·`noise_seed`)는 실행마다 새로 뽑힙니다. marked
 | `download_sprite_frames` | 끝난 추출의 프레임 ZIP 다운로드 링크(약 1시간 보관) | `read` | `images.view` |
 | `extract_sprite_sheet` | 구간·간격/개수로 프레임 추출, 지정색 제거(디스필 선택), 자동 크롭·리사이즈·배치 | `generate` | `images.edit` + `images.upload` |
 | `extract_sprite_sheets_batch` | 같은 옵션으로 영상 여러 개를 각각 시트로(작업 ID 반환, `zip: true`면 ZIP도) | `generate` | `images.edit` + `images.upload` |
-| `normalize_sprite_sheets` | 기준점을 지키며 시트들의 셀 크기를 맞춤(시트별 / 묶음 공통) | `generate` | `images.edit` + `images.upload` |
+| `normalize_sprite_sheets` | 기준점 보존(시트별 / 묶음 공통) 또는 고정 납품 셀·몸 높이·발/중앙 기준점으로 정규화 | `generate` | `images.edit` + `images.upload` |
+| `normalize_sprite_sources` | 원본 이미지·영상 마지막 프레임을 지정색 불투명 작업/캔버스 PNG로 정규화 | `generate` | `images.edit` + `images.upload` |
 | `create_sprite_animation` | 시트를 WebP(기본)·GIF·MP4 애니메이션으로 | `generate` | `images.edit` + `images.upload` |
+
+`normalize_sprite_sources`는 `composite_hashes`(1–500개), `input: "image" | "last_frame"`을 받습니다.
+`key_color`는 임의의 `#RRGGBB`(기본 `#FF00FF`), `tolerance`는 RGB 거리(기본 40)입니다.
+이미지는 `work_size`(1024), `canvas_size`(1600), `anchor: "bottom" | "center"`, `bottom_margin`(0),
+`keep: "both" | "work" | "canvas"`를 지정합니다. 영상 마지막 프레임은 작업 크기를 거치지 않고 캔버스에
+정규화하며 `scale`(0 초과 1 이하, 중앙 축소), `offset_x`, `offset_y`를 받습니다. 보이는 내용을 자르는 이동은 오류입니다.
+`save` 기본값은 true이며 `group_id` 또는 `group_path`로 저장 위치를 고릅니다.
+`get_sprite_job` 결과의 `sheets[].report`는 `borderExact`, `nearKeyCount`, `passed`를 반환합니다.
+`nearKeyCount`는 스냅 허용치와 무관하게 정확한 지정색이 아닌 픽셀 중 RGB 거리 40 이내를 셉니다.
+`last_frame`은 `video/*` 영상만 받으며 애니메이션 GIF/WebP는 지원하지 않습니다.
+검사 실패 출력도 확인할 수 있도록 보관하고 경고를 표시합니다. 원본은 변경하지 않습니다.
+`zip_download`에는 PNG와 개별 검사 JSON이 포함됩니다. 배경은 투명화하지 않습니다.
+
+`normalize_sprite_sheets`의 기존 호출은 그대로 동작합니다. 새 `mode: "delivery"`는 아래 `delivery` 객체를 사용합니다.
+
+```json
+{
+  "mode": "delivery",
+  "delivery": {
+    "frame_size": [256, 256],
+    "body_height": 200,
+    "bottom_margin": 8,
+    "pivot": "feet",
+    "foot_band": 3,
+    "pivot_alpha_threshold": 200,
+    "scale_by_frame": false
+  }
+}
+```
+
+`sheets`에는 기존과 같이 해시·열·행·프레임 수를 넣습니다. 선택적인 `delivery.reference_height`는 첫 프레임의
+몸 높이를 대신하고, `reference_height_end`는 끝까지 선형 보간합니다. `reference_height_curve`는 균등 시점의
+양수 높이 배열이며 두 점 이상일 때 선형 보간보다 우선합니다. 한 점이면 기준 높이·끝 기준 높이를 사용합니다. `scale_by_frame: true`는 각각의 몸 높이를 사용합니다.
+`pivot: "center"`는 첫 프레임 박스 중심을 셀 중앙에 놓고 이후 프레임의 이동을 유지합니다.
+`feet`는 낮은 불투명 발 픽셀의 X 중심을 셀 하단 중앙에 맞춥니다. 셀을 넘으면 자르지 않고 프레임 번호와 함께 오류를 반환합니다.
+리샘플링은 premultiplied alpha LANCZOS입니다. [화면 사용법과 배경 검사](./SPRITE.md)를 참고하세요.
 
 - 지정색은 최대 8개입니다. 디스필은 색 1개일 때만 켤 수 있고, 마젠타 `#FF00FF`는 원래 도구와 같은 알고리즘입니다.
 - 한 영상의 추출은 최대 256장입니다. 간격으로 계산한 요청 장수를 중복 프레임 제거 전에 검사하며, 화면 미리보기도 같은 제한을 사용합니다. 개수 추출은 선택한 구간에 실제로 있는 프레임 수를 넘을 수 없습니다.

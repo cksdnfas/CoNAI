@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { CopyCheck, Download, LayoutGrid, Loader2, Save, X } from 'lucide-react'
 import { MediaCard } from '@/components/common/media-card'
 import { IconButton } from '@/components/ui/icon-button'
+import { Input } from '@/components/ui/input'
+import { SwitchLine } from '@/components/ui/switch-line'
 import { ListRow } from '@/components/ui/list-row'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { SliderRow } from '@/components/ui/slider-row'
@@ -14,7 +16,7 @@ import { getImageListDisplayName } from '@/features/images/components/image-list
 import { useI18n } from '@/i18n'
 import { triggerBrowserDownload } from '@/lib/api-client'
 import { getImagesBatch } from '@/lib/api-images'
-import { libraryMediaFileUrl, libraryThumbnailUrl, spriteResultDownloadUrl, startSpriteNormalize, type SpriteAnchorPolicy, type SpriteNormalizeOptions, type SpriteNormalizeResult, type SpriteNormalizeSheet } from '@/lib/api-sprite'
+import { SPRITE_DELIVERY_DEFAULTS, libraryMediaFileUrl, libraryThumbnailUrl, spriteResultDownloadUrl, startSpriteNormalize, type SpriteAnchorPolicy, type SpriteDeliveryOptions, type SpriteNormalizeOptions, type SpriteNormalizeResult, type SpriteNormalizeSheet } from '@/lib/api-sprite'
 import { getErrorMessage } from '@/lib/error-message'
 import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
 import { useRuntimeJob } from '@/lib/use-runtime-job'
@@ -34,7 +36,7 @@ interface SheetEntry {
   options: SpriteNormalizeSheet['options']
 }
 
-const DEFAULT_OPTIONS: SpriteNormalizeOptions = { mode: 'per_sheet', alphaThreshold: 20, padding: 2, outputSpacing: 0, anchorPolicy: 'bottom_center', outputFormat: 'png', outputQuality: 90 }
+const DEFAULT_OPTIONS: SpriteNormalizeOptions = { mode: 'per_sheet', delivery: SPRITE_DELIVERY_DEFAULTS, alphaThreshold: 20, padding: 2, outputSpacing: 0, anchorPolicy: 'bottom_center', outputFormat: 'png', outputQuality: 90 }
 
 function sheetProblem(sheet: SheetEntry) {
   const { columns, rows, frameCount, inputSpacing, customAnchorX, customAnchorY } = sheet.options
@@ -103,6 +105,8 @@ export function SpriteNormalizeTab({ active }: { active: boolean }) {
   }
 
   const current = sheets.find((sheet) => sheet.hash === selected) ?? null
+  const delivery = options.delivery ?? SPRITE_DELIVERY_DEFAULTS
+  const updateDelivery = (patch: Partial<SpriteDeliveryOptions>) => setOptions((current) => ({ ...current, delivery: { ...(current.delivery ?? SPRITE_DELIVERY_DEFAULTS), ...patch } }))
   const updateSheet = (hash: string, patch: Partial<SheetEntry['options']>) => setSheets((list) => list.map((sheet) => sheet.hash === hash ? { ...sheet, options: { ...sheet.options, ...patch } } : sheet))
   const applyToSameSize = () => {
     if (!current) return
@@ -195,11 +199,30 @@ export function SpriteNormalizeTab({ active }: { active: boolean }) {
 
       <SpriteSection title={t({ ko: '정규화', en: 'Normalization' })}>
         <div className="flex flex-wrap gap-2">
-          <SegmentedControl size="sm" value={options.mode} onChange={(mode) => setOptions({ ...options, mode: mode as SpriteNormalizeOptions['mode'] })} items={[{ value: 'per_sheet', label: t({ ko: '시트별', en: 'Per sheet' }) }, { value: 'group', label: t({ ko: '묶음 공통', en: 'Shared' }) }]} ariaLabel={t({ ko: '모드', en: 'Mode' })} />
-          <SegmentedControl size="sm" value={options.anchorPolicy} onChange={(anchor) => setOptions({ ...options, anchorPolicy: anchor as SpriteAnchorPolicy })} items={[{ value: 'center', label: t({ ko: '가운데', en: 'Centre' }) }, { value: 'bottom_center', label: t({ ko: '아래 가운데', en: 'Bottom centre' }) }, { value: 'custom', label: t({ ko: '직접', en: 'Custom' }) }]} ariaLabel={t({ ko: '기준점', en: 'Anchor' })} />
+          <SegmentedControl size="sm" value={options.mode} onChange={(mode) => setOptions({ ...options, mode: mode as SpriteNormalizeOptions['mode'] })} items={[{ value: 'per_sheet', label: t({ ko: '시트별', en: 'Per sheet' }) }, { value: 'group', label: t({ ko: '묶음 공통', en: 'Shared' }) }, { value: 'delivery', label: t({ ko: '고정 납품 셀', en: 'Delivery cells' }) }]} ariaLabel={t({ ko: '모드', en: 'Mode' })} />
+          {options.mode !== 'delivery' ? <SegmentedControl size="sm" value={options.anchorPolicy} onChange={(anchor) => setOptions({ ...options, anchorPolicy: anchor as SpriteAnchorPolicy })} items={[{ value: 'center', label: t({ ko: '가운데', en: 'Centre' }) }, { value: 'bottom_center', label: t({ ko: '아래 가운데', en: 'Bottom centre' }) }, { value: 'custom', label: t({ ko: '직접', en: 'Custom' }) }]} ariaLabel={t({ ko: '기준점', en: 'Anchor' })} /> : null}
         </div>
+        {options.mode === 'delivery' ? <>
+          <div className="grid grid-cols-2 gap-2">
+            {([
+              ['frameWidth', t({ ko: '셀 너비', en: 'Cell width' }), 1],
+              ['frameHeight', t({ ko: '셀 높이', en: 'Cell height' }), 1],
+              ['bodyHeight', t({ ko: '몸 높이', en: 'Body height' }), 1],
+              ['bottomMargin', t({ ko: '하단 여백', en: 'Bottom margin' }), 0],
+              ['footBand', t({ ko: '발 밴드', en: 'Foot band' }), 0],
+              ['pivotAlphaThreshold', t({ ko: '발 알파 임계값', en: 'Pivot alpha threshold' }), 1],
+            ] as const).map(([key, label, min]) => <MiniField key={key} label={label}><NumberStepperInput value={delivery[key]} min={min} max={key === 'pivotAlphaThreshold' ? 255 : undefined} step={1} onValueCommit={(value) => updateDelivery({ [key]: Number(value) })} /></MiniField>)}
+            <MiniField label={t({ ko: '기준 높이 (비우면 첫 프레임)', en: 'Reference height (empty: first frame)' })}><Input type="number" value={delivery.referenceHeight ?? ''} onChange={(event) => updateDelivery({ referenceHeight: event.target.value === '' ? undefined : Number(event.target.value) })} /></MiniField>
+            <MiniField label={t({ ko: '끝 기준 높이 (선형 보간)', en: 'End reference height (linear)' })}><Input type="number" value={delivery.referenceHeightEnd ?? ''} onChange={(event) => updateDelivery({ referenceHeightEnd: event.target.value === '' ? undefined : Number(event.target.value) })} /></MiniField>
+          </div>
+          <MiniField label={t({ ko: '기준 높이 곡선 (쉼표 구분, 균등 간격)', en: 'Reference height curve (comma separated, evenly spaced)' })}>
+            <Input key={(delivery.referenceHeightCurve ?? []).join(',')} defaultValue={(delivery.referenceHeightCurve ?? []).join(', ')} onBlur={(event) => updateDelivery({ referenceHeightCurve: event.target.value.trim() ? event.target.value.split(',').map(Number) : undefined })} />
+          </MiniField>
+          <SegmentedControl size="sm" value={delivery.pivot} onChange={(value) => updateDelivery({ pivot: value as SpriteDeliveryOptions['pivot'] })} items={[{ value: 'feet', label: t({ ko: '딛는 발', en: 'Planted feet' }) }, { value: 'center', label: t({ ko: '첫 프레임 중앙', en: 'First-frame centre' }) }]} ariaLabel={t({ ko: '납품 기준점', en: 'Delivery pivot' })} />
+          <SwitchLine checked={delivery.scaleByFrame} onCheckedChange={(checked) => updateDelivery({ scaleByFrame: checked })} label={t({ ko: '프레임마다 몸 높이 맞추기 (기준 높이 무시)', en: 'Scale each frame (ignore reference heights)' })} />
+        </> : null}
         <div className="grid grid-cols-2 gap-2">
-          <MiniField label={t({ ko: '여백', en: 'Padding' })}><NumberStepperInput value={options.padding} min={0} max={512} step={1} onValueCommit={(value) => setOptions({ ...options, padding: Math.max(0, Number(value) || 0) })} /></MiniField>
+          {options.mode !== 'delivery' ? <MiniField label={t({ ko: '여백', en: 'Padding' })}><NumberStepperInput value={options.padding} min={0} max={512} step={1} onValueCommit={(value) => setOptions({ ...options, padding: Math.max(0, Number(value) || 0) })} /></MiniField> : null}
           <MiniField label={t({ ko: '출력 간격', en: 'Out spacing' })}><NumberStepperInput value={options.outputSpacing} min={0} max={64} step={1} onValueCommit={(value) => setOptions({ ...options, outputSpacing: Math.max(0, Number(value) || 0) })} /></MiniField>
           <MiniField label={t({ ko: '알파 임계값', en: 'Alpha' })}><NumberStepperInput value={options.alphaThreshold} min={1} max={255} step={1} onValueCommit={(value) => setOptions({ ...options, alphaThreshold: Math.max(1, Math.min(255, Number(value) || 20)) })} /></MiniField>
           <MiniField label={t({ ko: '형식', en: 'Format' })}>

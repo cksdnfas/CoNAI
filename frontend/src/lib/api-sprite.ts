@@ -131,7 +131,8 @@ export interface SpriteNormalizeSheet {
 }
 
 export interface SpriteNormalizeOptions {
-  mode: 'per_sheet' | 'group'
+  mode: 'per_sheet' | 'group' | 'delivery'
+  delivery?: SpriteDeliveryOptions
   alphaThreshold: number
   padding: number
   outputSpacing: number
@@ -140,9 +141,48 @@ export interface SpriteNormalizeOptions {
   outputQuality: number
 }
 
+export interface SpriteDeliveryOptions {
+  frameWidth: number
+  frameHeight: number
+  bodyHeight: number
+  bottomMargin: number
+  pivot: 'feet' | 'center'
+  footBand: number
+  pivotAlphaThreshold: number
+  scaleByFrame: boolean
+  referenceHeight?: number
+  referenceHeightEnd?: number
+  referenceHeightCurve?: number[]
+}
+
+export const SPRITE_DELIVERY_DEFAULTS: SpriteDeliveryOptions = {
+  frameWidth: 256, frameHeight: 256, bodyHeight: 200, bottomMargin: 0, pivot: 'feet',
+  footBand: 3, pivotAlphaThreshold: 200, scaleByFrame: false,
+}
+
+export interface SpriteSourceNormalizeOptions {
+  input: 'image' | 'last_frame'
+  keyColor: string
+  tolerance: number
+  workSize: number
+  canvasSize: number
+  bottomMargin: number
+  anchor: 'bottom' | 'center'
+  keep: 'both' | 'work' | 'canvas'
+  scale: number
+  offsetX: number
+  offsetY: number
+}
+
+export interface SpriteSourceNormalizeReport {
+  borderExact: boolean
+  nearKeyCount: number
+  passed: boolean
+}
+
 export interface SpriteNormalizeResult {
   workspaceId: string
-  sheets: Array<{ source: string; outputFilename: string; width: number; height: number; compositeHash?: string; warnings: unknown }>
+  sheets: Array<{ source: string; outputFilename: string; width: number; height: number; compositeHash?: string; warnings: unknown; report?: SpriteSourceNormalizeReport }>
   failures: Array<{ source: string; relative_path: string; error: string }>
   common: { cellSize: unknown; anchor: unknown } | null
 }
@@ -224,6 +264,10 @@ export function saveSpriteBuild(buildId: string, render: SpriteRender, group?: S
 
 export function startSpriteNormalize(input: { sheets: SpriteNormalizeSheet[]; options: Partial<SpriteNormalizeOptions>; save?: SpriteGroupTarget | boolean | null }) {
   return requestApiData<RuntimeJobRecord<SpriteNormalizeResult>>('/api/sprite/normalize', json(input))
+}
+
+export function startSpriteSourceNormalize(input: { hashes: string[]; options: SpriteSourceNormalizeOptions; save?: SpriteGroupTarget | boolean | null }) {
+  return requestApiData<RuntimeJobRecord<SpriteNormalizeResult>>('/api/sprite/normalize-sources', json(input))
 }
 
 export function startSpriteAnimation(input: { sheetHash: string; options: SpriteAnimationOptions; save?: SpriteGroupTarget | boolean | null }) {

@@ -12,6 +12,7 @@ import {
   startExtractBatchJob,
   startExtractJob,
   startNormalizeJob,
+  startSourceNormalizeJob,
   waitForRuntimeJob,
   type ExtractBatchItem,
   type SpriteRequester,
@@ -142,7 +143,11 @@ async function jobDownloads(context: McpRequestContext, job: RuntimeJobRecord, r
     };
   }
   const hashes = outputHashes(result);
-  return hashes.length ? { downloads: await Promise.all(hashes.map(async (hash) => ({ composite_hash: hash, download: await mediaDownload(context, hash) }))) } : {};
+  return {
+    ...(hashes.length ? { downloads: await Promise.all(hashes.map(async (hash) => ({ composite_hash: hash, download: await mediaDownload(context, hash) }))) } : {}),
+    ...(typeof result.workspaceId === 'string' && typeof result.zipFileName === 'string' && context.baseUrl
+      ? { zip_download: await McpArtifactService.createSpriteFramesDescriptor(result.workspaceId, result.zipFileName, context.baseUrl, context.requester).catch(() => null) } : {}),
+  };
 }
 
 async function describeJob(context: McpRequestContext, job: RuntimeJobRecord) {
@@ -244,7 +249,7 @@ export function registerSpriteTools(server: McpServer, context: McpRequestContex
 
   server.registerTool(
     'normalize_sprite_sheets',
-    { description: 'Normalise library sprite sheets: re-cut each frame to a common cell size around an anchor (bottom center by default) so frames line up. per_sheet sizes each sheet on its own, group gives all sheets one cell size. Saves the sheets to the library by default.', inputSchema: z.object({
+    { description: 'Normalise library sprite sheets. per_sheet (default) and group preserve pixels around the original anchor. delivery uses fixed cells, body-height scaling and feet/first-frame-centre pivots; requires delivery options, errors rather than clipping. Saves to the library by default.', inputSchema: z.object({
       sheets: z.array(z.object({
         composite_hash: hashSchema,
         columns: z.number().int().min(1).max(256),
@@ -256,7 +261,19 @@ export function registerSpriteTools(server: McpServer, context: McpRequestContex
         custom_anchor_x: z.number().min(0).optional().describe("Anchor X in input cell pixels (anchor_policy 'custom')"),
         custom_anchor_y: z.number().min(0).optional().describe("Anchor Y in input cell pixels (anchor_policy 'custom')"),
       })).min(1).max(500),
-      mode: z.enum(['per_sheet', 'group']).optional().describe('Default per_sheet'),
+      mode: z.enum(['per_sheet', 'group', 'delivery']).optional().describe('Default per_sheet; delivery requires delivery options'),
+      delivery: z.object({
+        frame_size: z.tuple([z.number().int().positive(), z.number().int().positive()]).describe('[width, height] of each output cell'),
+        body_height: z.number().positive(),
+        bottom_margin: z.number().int().nonnegative().optional(),
+        pivot: z.enum(['feet', 'center']).optional().describe('Default feet; center keeps offsets from the first frame box centre'),
+        foot_band: z.number().int().nonnegative().optional().describe('Lowest opaque rows used for planted-foot X (default 3)'),
+        pivot_alpha_threshold: z.number().int().min(1).max(255).optional().describe('Default 200'),
+        scale_by_frame: z.boolean().optional().describe('Scale each frame by its own box height instead of reference heights'),
+        reference_height: z.number().positive().optional(),
+        reference_height_end: z.number().positive().optional().describe('Linear interpolation from reference_height'),
+        reference_height_curve: z.array(z.number().positive()).min(1).optional().describe('Evenly spaced reference heights; two or more points override linear interpolation, one point uses reference_height/end'),
+      }).optional(),
       alpha_threshold: z.number().int().min(0).max(255).optional().describe('Alpha counted as visible (default 20)'),
       padding: z.number().int().min(0).max(256).optional().describe('Transparent padding around the content (default 2)'),
       output_spacing: z.number().int().min(0).max(64).optional().describe('Pixels between output cells (default 0)'),
@@ -274,6 +291,14 @@ export function registerSpriteTools(server: McpServer, context: McpRequestContex
         const requester = requesterOf(context);
         const options = Object.fromEntries(Object.entries({
           mode: args.mode,
+          delivery: args.delivery ? {
+            frameWidth: args.delivery.frame_size[0], frameHeight: args.delivery.frame_size[1],
+            bodyHeight: args.delivery.body_height, bottomMargin: args.delivery.bottom_margin ?? 0,
+            pivot: args.delivery.pivot ?? 'feet', footBand: args.delivery.foot_band ?? 3,
+            pivotAlphaThreshold: args.delivery.pivot_alpha_threshold ?? 200, scaleByFrame: args.delivery.scale_by_frame ?? false,
+            referenceHeight: args.delivery.reference_height, referenceHeightEnd: args.delivery.reference_height_end,
+            referenceHeightCurve: args.delivery.reference_height_curve,
+          } : undefined,
           alphaThreshold: args.alpha_threshold,
           padding: args.padding,
           outputSpacing: args.output_spacing,
@@ -302,6 +327,41 @@ export function registerSpriteTools(server: McpServer, context: McpRequestContex
       } catch (error) {
         return errorResult(error);
       }
+    },
+  );
+
+  server.registerTool(
+    'normalize_sprite_sources',
+    { description: 'Normalize library source images into opaque key-colour PNGs for motion generation, NOT transparent sprites. Flattens alpha, snaps near-key pixels, pads square without stretching, LANCZOS resizes and expands onto a canvas. last_frame takes each video’s final frame directly to the canvas, with centred uniform scale and non-clipping offsets. Uses the sprite job/progress/cancel pipeline. Returns saved hashes, per-output borderExact/nearKeyCount/passed reports and ZIP download; originals are untouched.', inputSchema: z.object({
+      composite_hashes: z.array(hashSchema).min(1).max(500),
+      input: z.enum(['image', 'last_frame']).optional().describe('Default image; last_frame requires video/* media, not animated GIF/WebP'),
+      key_color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional().describe('Opaque background colour; default #FF00FF, any #RRGGBB'),
+      tolerance: z.number().nonnegative().optional().describe('Euclidean RGB snap distance (default 40)'),
+      work_size: z.number().int().positive().optional().describe('Default 1024; image mode only'),
+      canvas_size: z.number().int().positive().optional().describe('Default 1600'),
+      bottom_margin: z.number().int().nonnegative().optional().describe('Image bottom anchor only; default 0'),
+      anchor: z.enum(['bottom', 'center']).optional().describe('Image canvas placement, default bottom'),
+      keep: z.enum(['both', 'work', 'canvas']).optional().describe('Default both; last_frame always returns canvas only'),
+      scale: z.number().positive().max(1).optional().describe('Last-frame uniform scale, centred (default 1)'),
+      offset_x: z.number().int().optional().describe('Last-frame horizontal offset; rejects visible clipping'),
+      offset_y: z.number().int().optional().describe('Last-frame vertical offset; rejects visible clipping'),
+      save: z.boolean().optional().describe('Save PNGs to library (default true)'),
+      group_id: groupIdSchema,
+      group_path: groupPathSchema,
+      wait_seconds: waitSchema,
+    }) },
+    async (args) => {
+      try {
+        const options = Object.fromEntries(Object.entries({
+          input: args.input, keyColor: args.key_color, tolerance: args.tolerance,
+          workSize: args.work_size, canvasSize: args.canvas_size, bottomMargin: args.bottom_margin,
+          anchor: args.anchor, keep: args.keep, scale: args.scale, offsetX: args.offset_x, offsetY: args.offset_y,
+        }).filter(([, value]) => value !== undefined));
+        return await startAndWait(context, () => startSourceNormalizeJob({
+          hashes: args.composite_hashes, options, requester: requesterOf(context),
+          save: args.save === false ? null : groupTarget(args.group_id, args.group_path),
+        }), args.wait_seconds);
+      } catch (error) { return errorResult(error); }
     },
   );
 

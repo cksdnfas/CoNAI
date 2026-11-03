@@ -14,6 +14,72 @@ import { NORMALIZATION_DEFAULTS, normalizeSpriteSheets, normalizeSpriteSheetsBul
 import { intervalModeIndices, resolveExtractOptions, type SpriteExtractOptions, type SpriteExtractOptionsInput, type SpriteVideoInfo } from '../src/services/sprite/spriteOptions'
 import { despillFrame, despillKeyKind, type RgbaFrame } from '../src/services/sprite/spritePixels'
 import { PORT_CASES, resolveCaseInput, rgbaSha256 } from './fixtures/sprite-port/generate'
+import { normalizeSourceImage } from '../src/services/sprite/spriteSourceNormalize'
+
+test('source normalization snaps a non-magenta key and expands opaque pixels on the bottom baseline', () => {
+  const data = new Uint8Array(6 * 4 * 4)
+  for (let i = 0; i < data.length; i += 4) data.set([0, 255, 255, 255], i)
+  data.set([30, 180, 190, 255], 0)
+  data.set([1, 254, 254, 255], 4)
+  data.set([255, 0, 255, 0], (1 * 6 + 1) * 4)
+  data.set([255, 0, 0, 255], (2 * 6 + 2) * 4)
+  data.set([255, 0, 0, 128], (2 * 6 + 3) * 4)
+  const outputs = normalizeSourceImage({ width: 6, height: 4, data }, { keyColor: '#00FFFF', workSize: 6, canvasSize: 10, bottomMargin: 1 })
+  const [work, expanded] = outputs
+  const pixel = (frame: RgbaFrame, x: number, y: number) => [...frame.data.slice((y * frame.width + x) * 4, (y * frame.width + x) * 4 + 4)]
+  assert.deepEqual(pixel(work.frame, 0, 2), [0, 255, 255, 255], 'hue-ring drift snaps to cyan')
+  assert.deepEqual(pixel(work.frame, 1, 2), [0, 255, 255, 255], 'RGB-distance drift snaps')
+  assert.deepEqual(pixel(work.frame, 2, 4), [255, 0, 0, 255], 'square padding is bottom aligned')
+  assert.deepEqual(pixel(expanded.frame, 4, 7), [255, 0, 0, 255], 'work image is centred horizontally, one pixel above canvas bottom')
+  assert.deepEqual(pixel(expanded.frame, 5, 7), [128, 127, 127, 255], 'alpha is flattened onto cyan')
+  assert.deepEqual(expanded.report, { borderExact: true, nearKeyCount: 0, passed: true })
+  assert.ok(outputs.every((output) => output.frame.data.every((value, index) => index % 4 !== 3 || value === 255)))
+  assert.throws(() => normalizeSourceImage({ width: 6, height: 4, data }, { input: 'last_frame', canvasSize: 6, keyColor: '#00FFFF', offsetX: 4 }), /자릅니다/)
+})
+
+test('source diagnostics count near-key pixels within distance 40 independently of snap tolerance', () => {
+  const data = new Uint8Array(64 * 64 * 4)
+  for (let i = 0; i < data.length; i += 4) data.set([255, 0, 255, 255], i)
+  for (let y = 24; y < 40; y += 1) {
+    for (let x = 24; x < 40; x += 1) data.set([240, 20, 240, 255], (y * 64 + x) * 4)
+  }
+  const outputs = normalizeSourceImage({ width: 64, height: 64, data }, { tolerance: 20, workSize: 64, canvasSize: 96 })
+  for (const output of outputs) assert.deepEqual(output.report, { borderExact: true, nearKeyCount: 256, passed: false })
+})
+
+test('delivery cells use opaque planted feet, preserve scale, and reject overflow', async () => {
+  const data = new Uint8Array(10 * 10 * 4)
+  for (let i = 0; i < data.length; i += 4) data.set([0, 255, 0, 0], i)
+  for (let y = 2; y < 8; y += 1) {
+    for (let x = 2; x < 6; x += 1) data.set([255, 0, 0, 255], (y * 10 + x) * 4)
+  }
+  data.set([255, 0, 0, 30], (7 * 10 + 8) * 4)
+  const source: NormalizationSource = {
+    image: { width: 10, height: 10, data }, sourceName: 'feet', outputStem: 'feet',
+    options: { columns: 1, rows: 1, frameCount: 1, inputSpacing: 0, outputColumns: 1, readOrder: 'row_major', customAnchorX: 0, customAnchorY: 0 },
+  }
+  const options = {
+    ...NORMALIZATION_DEFAULTS, mode: 'delivery' as const,
+    delivery: { frameWidth: 10, frameHeight: 12, bodyHeight: 6, bottomMargin: 1, pivot: 'feet' as const, footBand: 0, pivotAlphaThreshold: 200, scaleByFrame: false },
+  }
+  const result = (await normalizeSpriteSheets([source], options)).sheets[0].sheet
+  assert.deepEqual([result.width, result.height], [10, 12])
+  const pixel = (x: number, y: number) => [...result.data.slice((y * 10 + x) * 4, (y * 10 + x) * 4 + 4)]
+  assert.deepEqual(pixel(3, 5), [255, 0, 0, 255])
+  assert.deepEqual(pixel(6, 10), [255, 0, 0, 255])
+  assert.deepEqual(pixel(9, 10), [255, 0, 0, 30])
+  assert.deepEqual(pixel(5, 11), [0, 0, 0, 0])
+  const singleCurve = (await normalizeSpriteSheets([source], { ...options, delivery: {
+    ...options.delivery, referenceHeight: 6, referenceHeightEnd: 12, referenceHeightCurve: [120],
+  } })).sheets[0].sheet
+  assert.deepEqual([...singleCurve.data.slice((5 * 10 + 3) * 4, (5 * 10 + 3) * 4 + 4)], [255, 0, 0, 255],
+    'a single curve point must fall back to the reference heights, not change the body scale')
+  const scaled = (await normalizeSpriteSheets([source], { ...options, delivery: { ...options.delivery, bodyHeight: 3 } })).sheets[0].sheet
+  for (let i = 0; i < scaled.data.length; i += 4) {
+    if (scaled.data[i + 3]) assert.deepEqual([...scaled.data.slice(i, i + 3)], [255, 0, 0], 'transparent green must not fringe into the red silhouette')
+  }
+  await assert.rejects(normalizeSpriteSheets([source], { ...options, delivery: { ...options.delivery, frameWidth: 4 } }), /frame 1.*delivery canvas/i)
+})
 
 /**
  * The sprite port against the golden outputs of the original video-sprite-extractor (fixtures/av-golden) and the

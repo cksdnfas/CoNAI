@@ -291,6 +291,8 @@ Save 선택기와 워크플로 산출물(비공개·공개) 목록은 `directory
 
 스프라이트의 프레임 선택과 256장 제한은 `shared/src/utils/spriteSampling.ts`가 화면과 서버에 같은 계산을 제공한다. 제한은 중복 프레임 제거 전에 적용한다. 대기 작업을 취소해도 앞 작업이 끝나기 전에는 다음 작업이 진입하지 않는다. 영상 정보는 파일 상태가 같을 때 5분·최대 64개까지 재사용하고 워커에 전달한다. 추출 시 메타데이터를 포함한 시트를 한 번 만들며, 같은 출력 설정의 저장·미리보기는 그 파일을 재사용한다.
 
+원본 정규화의 픽셀 규칙은 `backend/src/services/sprite/spriteSourceNormalize.ts`에 있다. 알파 평탄화·지정색 거리/색상각 스냅·정사각 패딩·LANCZOS·불투명 캔버스 배치와 검사 보고를 담당한다. `spriteTasks.ts`의 `sourceNormalize`는 영상 마지막 프레임 추출과 파일별 순차 처리를 워커에서 실행한다. `/api/sprite/normalize-sources`와 MCP `normalize_sprite_sources`는 `spriteService.ts`의 같은 `sprite-normalize` 작업·라이브러리 저장·취소 경로를 사용한다. 화면은 `frontend/src/features/sprite/sprite-source-normalize-tab.tsx`, 페이지 어댑터는 `use-sprite-chat-page.ts`이며 원본 정규화와 시트 정규화는 정규화 레이아웃을 공유한다. `spriteNormalize.ts`의 선택적 `mode: delivery`는 고정 셀·몸 높이·발/첫 프레임 중앙 기준점·기준 높이 보간을 지원하고, 기존 `per_sheet`/`group` 픽셀 보존 경로와 분리된다. 사용법은 `docs/GUIDE/SPRITE.md`, 도구 계약은 `docs/GUIDE/MCP_GUIDE.md`에 있다.
+
 정규화는 16개 이하의 전체 성공 정책과 대량 처리의 개별 실패 정책을 유지한다. 대량 그룹 처리는 공통 경계만 남겨 둔 뒤 시트를 다시 읽고, 각 결과를 파일에 기록해 원시 이미지가 목록에 쌓이지 않게 한다. 시트 ZIP도 파일을 지연 읽기하며, 취소나 파일 누락은 다운로드 가능한 부분 ZIP으로 처리하지 않는다. 파일함과 서버 폴더는 `file-preview-shared.tsx`의 아이콘·미디어 표시·이동 UI 및 `renderPreviewWebp`를 공유하되 소유권, 읽기 범위, 편집·버전·복원 권한은 기존 경로에서 검사한다.
 
 스프라이트 워커 진입점은 추출·정규화뿐 아니라 재렌더·프레임 ZIP·프레임 미리보기·이미지 크기 변경에도 한 실행 슬롯과 최대 200개 대기를 적용한다. 대기 중 취소한 요청은 실행하지 않으며 사용 중인 작업 폴더는 정리에서 보호한다. 미리보기의 프레임 읽기는 비동기이고 프레임 ZIP은 인코딩 결과를 임시 파일로 기록해 이미지를 모두 메모리에 쌓지 않는다. HTTP 다운로드는 파일 오류와 연결 종료를 처리하고, 요청용 파일은 전송이 끝난 뒤 정리한다.

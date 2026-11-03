@@ -133,6 +133,7 @@ const nativeActionPermissions = {
   // Sprite tabs: list and form edits are drafts; runs that save to the library are review cards.
   'sprite.add_videos': 'images.edit', 'sprite.remove_videos': 'images.edit', 'sprite.preview': 'images.edit', 'sprite.run': 'images.upload', 'sprite.stop': 'images.edit', 'sprite.download_zip': 'images.view',
   'sprite.add_sheets': 'images.edit', 'sprite.remove_sheets': 'images.edit', 'sprite.sheet': 'images.edit', 'sprite.download': 'images.edit',
+  'sprite.add_sources': 'images.edit', 'sprite.remove_sources': 'images.edit',
   'audio.project': 'audio.view', 'audio.search': 'audio.view', 'audio.generate': 'generation.execute',
   // Upload page: re-reading, converting and downloading stay on screen; adding to the library is a review card.
   'upload.reextract': 'images.upload', 'upload.convert': 'images.upload', 'upload.download': 'images.upload', 'upload.library': 'images.upload',
