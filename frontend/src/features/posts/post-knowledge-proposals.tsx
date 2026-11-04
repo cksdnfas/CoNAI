@@ -4,13 +4,14 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tansta
 import type { PostDetail, PostKnowledgeSource } from '@conai/shared'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { EditorFooter } from '@/components/ui/editor-footer'
 import { Checkbox } from '@/components/ui/checkbox'
 import { ErrorState } from '@/components/ui/error-state'
 import { Field } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { ListRow } from '@/components/ui/list-row'
 import { LoadingState } from '@/components/ui/loading-state'
-import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
+import { Modal, ModalBody } from '@/components/ui/modal'
 import { Section } from '@/components/ui/section'
 import { Select } from '@/components/ui/select'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -63,7 +64,7 @@ export function KnowledgeProposalEditor({ post, mode, onClose }: { post: PostDet
         <Field label={t({ ko: '제안 이유', en: 'Proposal reason' })}><Textarea rows={2} maxLength={2000} value={reason} onChange={(event) => setReason(event.target.value)} /></Field>
         {mode === 'create' ? <Field label={t({ ko: '승인 후 상태', en: 'Status after approval' })}><Select value={status} onChange={(event) => setStatus(event.target.value as 'draft' | 'published')}><option value="draft">{t({ ko: '초안', en: 'Draft' })}</option><option value="published">{t({ ko: '발행', en: 'Published' })}</option></Select></Field> : null}
       </ModalBody>
-      <ModalFooter><Button variant="ghost" onClick={onClose}>{t({ ko: '취소', en: 'Cancel' })}</Button><Button disabled={!title.trim() || save.isPending} onClick={() => save.mutate(crypto.randomUUID())}>{t({ ko: '검토할 제안 저장', en: 'Save proposal for review' })}</Button></ModalFooter>
+      <EditorFooter onSave={() => save.mutate(crypto.randomUUID())} canSave={Boolean(title.trim())} saving={save.isPending} />
     </Modal>
   )
 }
@@ -108,11 +109,9 @@ export function KnowledgeProposalReview({ proposalId, onClose }: { proposalId: s
           {data.status === 'pending' && data.canReject ? <Field label={t({ ko: '거절 이유', en: 'Rejection reason' })}><Textarea rows={2} value={rejectReason} maxLength={2000} onChange={(event) => setRejectReason(event.target.value)} /></Field> : null}
         </> : null}
       </ModalBody>
-      <ModalFooter>
-        <Button variant="ghost" onClick={onClose}>{t({ ko: '닫기', en: 'Close' })}</Button>
+      <EditorFooter onSave={data?.status === 'pending' && data.canApply ? () => apply.mutate() : undefined} canSave={ready && !conflict && !reject.isPending} saving={apply.isPending}>
         {data?.status === 'pending' && data.canReject ? <Button variant="destructive" disabled={!rejectReason.trim() || reject.isPending || apply.isPending} onClick={() => reject.mutate()}>{t({ ko: '제안 거절', en: 'Reject proposal' })}</Button> : null}
-        {data?.status === 'pending' && data.canApply ? <Button disabled={!ready || Boolean(conflict) || apply.isPending || reject.isPending} onClick={() => apply.mutate()}>{t({ ko: '확인한 변경 반영', en: 'Apply reviewed changes' })}</Button> : null}
-      </ModalFooter>
+      </EditorFooter>
     </Modal>
   )
 }

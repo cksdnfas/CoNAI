@@ -523,7 +523,7 @@ export function LlmConnectionEditorModal({
         onSave={save}
         canSave={canSave}
         saving={isSaving}
-        saveLabel={isEditMode ? t('llmConnectionsTab.saveConnection') : t('llmConnectionsTab.createAndSaveConnection')}
+        saveLabel={isEditMode ? undefined : t({ ko: '만들기', en: 'Create' })}
       >
         <SettingsAdvancedSwitch />
         {isEditMode ? (

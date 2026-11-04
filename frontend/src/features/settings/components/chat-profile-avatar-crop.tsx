@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
-import { Button } from '@/components/ui/button'
-import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
+import { EditorFooter } from '@/components/ui/editor-footer'
+import { Modal, ModalBody } from '@/components/ui/modal'
 import { Slider } from '@/components/ui/slider'
 import { ChatProfileImage } from '@/features/codex-chat/chat-profile-image'
 import { useI18n } from '@/i18n'
@@ -43,9 +43,6 @@ export function ChatProfileAvatarCrop({ src, initial, onApply, onClose }: {
       </div>
       <Slider min={1} max={4} step={0.01} value={[crop.scale]} onValueChange={([scale]) => setCrop((value) => ({ ...value, scale }))} aria-label={t({ ko: '확대', en: 'Zoom' })} />
     </ModalBody>
-    <ModalFooter>
-      <Button size="sm" variant="ghost" onClick={onClose}>{t({ ko: '취소', en: 'Cancel' })}</Button>
-      <Button size="sm" disabled={!aspect} onClick={() => onApply(crop)}>{t({ ko: '적용', en: 'Apply' })}</Button>
-    </ModalFooter>
+    <EditorFooter onSave={() => onApply(crop)} canSave={Boolean(aspect)} saveLabel={t({ ko: '적용', en: 'Apply' })} />
   </Modal>
 }

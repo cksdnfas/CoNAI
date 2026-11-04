@@ -768,7 +768,7 @@ export function WildcardEditorModal({
           saveSubmit
           canSave={canSave}
           saving={isSubmitting}
-          saveLabel={mode === 'create' ? t(wildcardEditorKey('create.item')) : t(wildcardEditorKey('save.changes'))}
+          saveLabel={mode === 'create' ? t({ ko: '만들기', en: 'Create' }) : t({ ko: '저장', en: 'Save' })}
         />
       </form>
     </Modal>

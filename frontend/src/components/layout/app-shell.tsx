@@ -36,6 +36,18 @@ const GenerationQueueHeaderWidgetLazy = lazy(async () => {
 /** Below Tailwind `sm` the search and chat keys fold into the account menu so the page keys get the room. */
 const FULL_HEADER_MIN_WIDTH_PX = 640
 
+/**
+ * Address parameters that open a modal over the page (`profile`, `lorebook`) or jump within it (`group`, `setting`)
+ * do not change which page is scrolled, so the scroll position survives them instead of resetting to the top.
+ */
+const OVERLAY_SEARCH_PARAMS = ['profile', 'lorebook', 'group', 'setting'] as const
+function scrollRestorationKey(location: { pathname: string; search: string }) {
+  const params = new URLSearchParams(location.search)
+  for (const key of OVERLAY_SEARCH_PARAMS) params.delete(key)
+  const query = params.toString()
+  return query ? `${location.pathname}?${query}` : location.pathname
+}
+
 function DeferredGenerationQueueHeaderWidget() {
   const [shouldRender, setShouldRender] = useState(false)
 
@@ -175,7 +187,7 @@ function AppShellLayout() {
 
       <HomeSearchDrawer active={shouldShowHeaderSearch} />
       <CommandPaletteLauncher />
-      {shouldUseGlobalScrollRestoration ? <ScrollRestoration getKey={(location) => `${location.pathname}${location.search}`} /> : null}
+      {shouldUseGlobalScrollRestoration ? <ScrollRestoration getKey={scrollRestorationKey} /> : null}
     </div>
   )
 }

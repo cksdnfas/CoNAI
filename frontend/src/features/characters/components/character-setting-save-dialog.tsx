@@ -2,10 +2,10 @@ import { useState } from 'react'
 import { CHAT_PROFILE_TEXT_LIMITS } from '@conai/shared'
 import { ChevronDown, Folder } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { EditorFooter } from '@/components/ui/editor-footer'
 import { Field, FieldGroup } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
-import { Spinner } from '@/components/ui/loading-state'
-import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
+import { Modal, ModalBody } from '@/components/ui/modal'
 import { useI18n } from '@/i18n'
 import { folderPath, useCharacterFolders } from '../character-library-shared'
 import { CharacterFolderPickerModal } from './character-folder-nav'
@@ -44,10 +44,7 @@ export function CharacterSettingSaveDialog({ title, initialName, initialFolderId
             </Field>
           </div>
         </ModalBody>
-        <ModalFooter>
-          <span className="flex-1" />
-          <Button type="submit" disabled={busy || !name.trim()}>{busy ? <Spinner className="size-3" /> : null}{submitLabel ?? t({ ko: '저장', en: 'Save' })}</Button>
-        </ModalFooter>
+        <EditorFooter saveSubmit canSave={Boolean(name.trim())} saving={busy} saveLabel={submitLabel} />
       </form>
       {picking ? (
         <CharacterFolderPickerModal

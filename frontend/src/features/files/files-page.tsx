@@ -4,7 +4,7 @@ import { useSearchParams } from 'react-router-dom'
 import { FolderKanban, Plus } from 'lucide-react'
 import { PageWithSidebar } from '@/components/common/page-with-sidebar'
 import { PageToolbar } from '@/components/common/page-toolbar'
-import { IconButton } from '@/components/ui/icon-button'
+import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
 import { LoadingState } from '@/components/ui/loading-state'
 import { SidebarNav } from '@/components/ui/sidebar'
@@ -43,7 +43,7 @@ function WorkspaceLanding({ onProject, onCreate, onStore, onSystem }: { onProjec
         <EmptyState
           icon={FolderKanban}
           title={t({ ko: '아직 작업 공간이 없어', en: 'No workspaces yet' })}
-          action={onCreate ? <IconButton label={t({ ko: '새 작업 공간', en: 'New workspace' })} onClick={onCreate}><Plus /></IconButton> : undefined}
+          action={onCreate ? <Button size="sm" onClick={onCreate}><Plus />{t({ ko: '새 작업 공간', en: 'New workspace' })}</Button> : undefined}
         />
       )}
     </PageWithSidebar>

@@ -2,7 +2,6 @@ import { useLayoutEffect, useMemo, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Copy, Download } from 'lucide-react'
 import { ToggleChip } from '@/components/ui/chip'
-import { useConfirm } from '@/components/ui/confirm-dialog'
 import { EditorFooter } from '@/components/ui/editor-footer'
 import { EditorGroup } from '@/components/ui/editor-group'
 import { Field } from '@/components/ui/field'
@@ -19,7 +18,6 @@ import {
   CHAT_SCOPES,
   CHAT_TOOL_PRESETS_QUERY_KEY,
   createChatToolPreset,
-  deleteChatToolPreset,
   updateChatToolPreset,
   type ChatScope,
   type ChatToolPreset,
@@ -29,6 +27,7 @@ import { getErrorMessage } from '@/lib/error-message'
 import { ChatToolPicker, useChatToolGroups } from './chat-tool-picker'
 import { downloadChatToolPresetFile } from './chat-tool-preset-file'
 import { CHAT_DOCK_INSET } from './use-settings-editor-chat-page'
+import { useChatResourceDelete } from './use-chat-resource-actions'
 
 const EMPTY: ChatToolPresetInput = { name: '', scopes: ['read'], toolAllowlist: null }
 
@@ -48,7 +47,6 @@ export function ChatToolPresetEditorModal({ open, preset, initial, onClose, onSa
   duplicating?: boolean
 }) {
   const { t } = useI18n()
-  const confirm = useConfirm()
   const { showSnackbar } = useSnackbar()
   const queryClient = useQueryClient()
   const [draft, setDraft] = useState<ChatToolPresetInput>(EMPTY)
@@ -75,24 +73,7 @@ export function ChatToolPresetEditorModal({ open, preset, initial, onClose, onSa
     },
     onError: (error) => showSnackbar({ message: getErrorMessage(error, t({ ko: '저장하지 못했어.', en: 'Could not save.' })), tone: 'error' }),
   })
-  const deleteMutation = useMutation({
-    mutationFn: () => deleteChatToolPreset(preset?.id ?? 0),
-    onSuccess: async () => {
-      await refresh()
-      onClose()
-    },
-    onError: (error) => showSnackbar({ message: getErrorMessage(error, t({ ko: '삭제하지 못했어.', en: 'Could not delete.' })), tone: 'error' }),
-  })
-
-  const handleDelete = async () => {
-    const confirmed = await confirm({
-      title: t({ ko: '도구 프리셋 삭제', en: 'Delete tool preset' }),
-      description: t({ ko: '이 도구 프리셋을 지울까?', en: 'Delete this tool preset?' }),
-      confirmLabel: t({ ko: '삭제', en: 'Delete' }),
-      tone: 'destructive',
-    })
-    if (confirmed) deleteMutation.mutate()
-  }
+  const deleteMutation = useChatResourceDelete(onClose)
 
   const toggleScope = (scope: ChatScope) => {
     const pressed = draft.scopes.includes(scope)
@@ -142,7 +123,7 @@ export function ChatToolPresetEditorModal({ open, preset, initial, onClose, onSa
         </EditorGroup>
       </ModalBody>
       <EditorFooter
-        onDelete={preset ? () => void handleDelete() : undefined}
+        onDelete={preset ? () => deleteMutation.mutate({ kind: 'tool', resource: preset }) : undefined}
         deleting={deleteMutation.isPending}
         onSave={() => saveMutation.mutate()}
         canSave={canSave}

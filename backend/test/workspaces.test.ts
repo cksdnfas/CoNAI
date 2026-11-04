@@ -552,6 +552,9 @@ test('project files share files while preserving revisions, execution boundaries
     const database = new Database(':memory:')
     try {
       database.pragma('foreign_keys = OFF')
+      // The schema also backfills private chat attachments, so the chat tables it reads must exist (as in user.db).
+      database.exec(`CREATE TABLE codex_chat_threads (id INTEGER PRIMARY KEY, account_id INTEGER);
+        CREATE TABLE codex_chat_messages (id INTEGER PRIMARY KEY, thread_id INTEGER NOT NULL, tool_calls TEXT, alternatives TEXT);`)
       ensureFileStoreSchema(database)
       database.exec('DROP INDEX idx_stored_files_shared_name')
       const insert = database.prepare("INSERT INTO stored_file_entries(id,owner_key,parent_id,name,name_key,kind) VALUES(?,?,?,?,?,'folder')")

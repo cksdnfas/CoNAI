@@ -1,7 +1,7 @@
 import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
 import type { ReactNode } from 'react'
-import { ImageIcon, ImagePlus, MoreHorizontal, Save, Trash2 } from 'lucide-react'
+import { ImageIcon, ImagePlus, MoreHorizontal, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
@@ -96,7 +96,6 @@ export function NaiAssetRow({
                 <span className="grid" tabIndex={saveDisabled && saveTitle ? 0 : undefined}>
                   <PopoverClose asChild>
                     <Button type="button" variant="ghost" size="sm" className="justify-start" onClick={onSave} disabled={!canUpdateWorkflows || !canViewImages || saveDisabled}>
-                      <Save />
                       {t({ ko: '라이브러리에 저장', en: 'Save to library' })}
                     </Button>
                   </PopoverClose>

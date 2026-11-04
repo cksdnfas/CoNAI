@@ -5,10 +5,11 @@ import { HierarchyPicker } from '@/components/common/hierarchy-picker'
 import { SearchField } from '@/components/common/search-field'
 import type { ActionMenuEntry } from '@/components/ui/action-menu'
 import { Button } from '@/components/ui/button'
+import { EditorFooter } from '@/components/ui/editor-footer'
 import { EmptyState } from '@/components/ui/empty-state'
 import { ErrorState } from '@/components/ui/error-state'
 import { IconButton } from '@/components/ui/icon-button'
-import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
+import { Modal, ModalBody } from '@/components/ui/modal'
 import { usePageSidebar } from '@/components/ui/sidebar'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useI18n } from '@/i18n'
@@ -132,10 +133,7 @@ export function CharacterFolderPickerModal({ title, folders, value, excludeIds, 
           rootLabel={t({ ko: '최상위', en: 'Top level' })}
         />
       </ModalBody>
-      <ModalFooter>
-        <span className="flex-1" />
-        <Button type="button" disabled={busy || picked === value} onClick={() => onPick(picked)}>{submitLabel ?? t({ ko: '여기로 옮기기', en: 'Move here' })}</Button>
-      </ModalFooter>
+      <EditorFooter onSave={() => onPick(picked)} canSave={picked !== value} saving={busy} saveLabel={submitLabel ?? t({ ko: '여기로 옮기기', en: 'Move here' })} />
     </Modal>
   )
 }

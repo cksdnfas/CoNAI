@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
-import { KeyRound, LoaderCircle, Trash2, Users } from 'lucide-react'
+import { KeyRound, Trash2, Users } from 'lucide-react'
 import { TextTabs } from '@/components/common/text-tabs'
 import { Badge } from '@/components/ui/badge'
-import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { useI18n } from '@/i18n'
@@ -233,27 +232,23 @@ export function SecurityAccountEditorModal({
                   placeholder={account.username}
                 />
               </Field>
-              <IconButton
-                variant="destructive-ghost"
-                size="icon-lg"
-                label={t({ ko: '계정 삭제', en: 'Delete account' })}
-                onClick={() => void submitDelete()}
-                disabled={isDeletingAccount || deleteConfirmText.trim() !== account.username}
-              >
-                {isDeletingAccount ? <LoaderCircle className="animate-spin" /> : <Trash2 />}
-              </IconButton>
             </div>
           ) : (
             <p className="text-sm text-muted-foreground">{t({ ko: '레거시 관리자 계정은 여기서 못 지워.', en: 'Legacy admin accounts cannot be deleted here.' })}</p>
           )
         ) : null}
       </div>
-      {activeSection === 'danger' ? null : (
+      {activeSection === 'danger' ? <EditorFooter
+        onDelete={canDeleteAccount ? () => void submitDelete() : undefined}
+        deleteLabel={t({ ko: '계정 삭제', en: 'Delete account' })}
+        deleteDisabled={deleteConfirmText.trim() !== account.username}
+        deleting={isDeletingAccount}
+        saving={isDeletingAccount}
+      /> : (
         <EditorFooter
           onSave={activeSection === 'group' ? () => void submitGroupChange() : () => void submitPasswordChange()}
           canSave={activeSection === 'group' ? groupChanged : canChangeLegacyAdminPassword && passwordTyped}
           saving={activeSection === 'group' ? isUpdatingGroup : isUpdatingPassword}
-          saveLabel={activeSection === 'group' ? t({ ko: '그룹 저장', en: 'Save group' }) : t({ ko: '비밀번호 변경', en: 'Change password' })}
         />
       )}
     </Modal>

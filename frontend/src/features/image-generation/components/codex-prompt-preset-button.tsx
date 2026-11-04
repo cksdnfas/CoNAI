@@ -1,11 +1,11 @@
 import { useState, type FormEvent } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { Save } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { Field } from '@/components/ui/field'
+import { BookmarkPlus } from 'lucide-react'
 import { IconButton } from '@/components/ui/icon-button'
+import { EditorFooter } from '@/components/ui/editor-footer'
+import { Field } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
-import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
+import { Modal, ModalBody } from '@/components/ui/modal'
 import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { useSnackbar } from '@/components/ui/snackbar-context'
@@ -28,7 +28,7 @@ export function CodexPromptPresetButton({ prompt, negativePrompt }: { prompt: st
   const [kind, setKind] = useState<'positive' | 'negative'>('positive')
   const [saving, setSaving] = useState(false)
   const value = normalizeTextSegmentSpreadsheetText(kind === 'positive' ? prompt : negativePrompt).trim()
-  const label = t({ ko: '프롬프트 프리셋 저장', en: 'Save prompt preset' })
+  const label = t({ ko: '프롬프트 프리셋으로 저장', en: 'Save as prompt preset' })
 
   if (!hasAuthPermission(permissions, 'prompts.edit')) {
     return null
@@ -56,8 +56,8 @@ export function CodexPromptPresetButton({ prompt, negativePrompt }: { prompt: st
   }
 
   return <>
-    <IconButton variant="ghost" size="icon-sm" label={label} disabled={!prompt.trim() && !negativePrompt.trim()} onClick={() => { setKind(prompt.trim() ? 'positive' : 'negative'); setOpen(true) }}>
-      <Save />
+    <IconButton type="button" variant="ghost" size="icon-sm" label={label} disabled={!prompt.trim() && !negativePrompt.trim()} onClick={() => { setKind(prompt.trim() ? 'positive' : 'negative'); setOpen(true) }}>
+      <BookmarkPlus />
     </IconButton>
     <Modal open={open} title={label} onClose={() => { if (!saving) setOpen(false) }} size="md">
       <form onSubmit={(event) => void save(event)}>
@@ -71,10 +71,7 @@ export function CodexPromptPresetButton({ prompt, negativePrompt }: { prompt: st
           </Field>
           <Field label={t({ ko: '저장 내용', en: 'Content' })}><Textarea value={value} readOnly rows={6} /></Field>
         </ModalBody>
-        <ModalFooter>
-          <Button type="button" variant="secondary" disabled={saving} onClick={() => setOpen(false)}>{t({ ko: '취소', en: 'Cancel' })}</Button>
-          <Button type="submit" disabled={saving || !name.trim() || !value}>{saving ? t({ ko: '저장 중…', en: 'Saving…' }) : t({ ko: '저장', en: 'Save' })}</Button>
-        </ModalFooter>
+        <EditorFooter saveSubmit canSave={Boolean(name.trim() && value)} saving={saving} />
       </form>
     </Modal>
   </>

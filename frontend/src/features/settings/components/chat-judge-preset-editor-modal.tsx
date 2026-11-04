@@ -3,7 +3,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { JUDGE_OPTION_DEFAULTS, type ChatJudgeFollowUp, type ChatJudgeItem, type ChatJudgeTestTurn } from '@conai/shared'
 import { Copy, Download, LoaderCircle, Play, Plus, Square } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { useConfirm } from '@/components/ui/confirm-dialog'
 import { EditorFooter } from '@/components/ui/editor-footer'
 import { EditorPaneHeader, EditorSplit, type EditorNavGroup } from '@/components/ui/editor-split'
 import { Field } from '@/components/ui/field'
@@ -20,7 +19,6 @@ import { useI18n } from '@/i18n'
 import {
   CHAT_JUDGE_PRESETS_QUERY_KEY,
   createChatJudgePreset,
-  deleteChatJudgePreset,
   downloadChatJudgePresetFile,
   testChatJudgePreset,
   updateChatJudgePreset,
@@ -36,6 +34,7 @@ import { ChatJudgeItemPane, itemTestSummary } from './chat-judge-item-editor'
 import { JudgeAssetsPane, JudgeContextPane, JudgeFieldsPane, JudgeRoomPane, judgeScopesOn, type JudgeScopes } from './chat-judge-scope-sections'
 import { CHAT_DOCK_INSET, useSettingsEditorChatPage } from './use-settings-editor-chat-page'
 import { ChatFilledLabel } from '@/features/codex-chat/chat-page-context'
+import { useChatResourceDelete } from './use-chat-resource-actions'
 
 type PresetDraft = Required<Omit<ChatJudgePresetInput, 'providerName' | 'model' | 'escalationProviderName' | 'escalationModel'>>
 
@@ -74,7 +73,6 @@ export function ChatJudgePresetEditorModal({ open, preset, initial, onClose, onD
   duplicating?: boolean
 }) {
   const { t } = useI18n()
-  const confirm = useConfirm()
   const advanced = useSettingsAdvanced()
   const defaultJudgeLabel = useDefaultJudgeLabel(open)
   const { showSnackbar } = useSnackbar()
@@ -114,14 +112,7 @@ export function ChatJudgePresetEditorModal({ open, preset, initial, onClose, onD
     },
     onError: (error) => showSnackbar({ message: getErrorMessage(error, t({ ko: '저장하지 못했어.', en: 'Could not save.' })), tone: 'error' }),
   })
-  const deleteMutation = useMutation({
-    mutationFn: () => deleteChatJudgePreset(preset?.id ?? 0),
-    onSuccess: async () => {
-      await refresh()
-      onClose()
-    },
-    onError: (error) => showSnackbar({ message: getErrorMessage(error, t({ ko: '삭제하지 못했어.', en: 'Could not delete.' })), tone: 'error' }),
-  })
+  const deleteMutation = useChatResourceDelete(onClose)
   const testMutation = useMutation({
     mutationFn: () => {
       testAbort.current?.abort()
@@ -138,19 +129,6 @@ export function ChatJudgePresetEditorModal({ open, preset, initial, onClose, onD
       showSnackbar({ message: getErrorMessage(error, t({ ko: '테스트하지 못했어.', en: 'Could not test.' })), tone: 'error' })
     },
   })
-
-  const handleDelete = async () => {
-    const using = (preset?.profiles.length ?? 0) + (preset?.rooms.length ?? 0)
-    const confirmed = await confirm({
-      title: t({ ko: '판단 프리셋 삭제', en: 'Delete judge preset' }),
-      description: using > 0
-        ? t({ ko: '프로필·그룹 방 {count}개가 이 프리셋을 써. 지우면 판단 없이 동작해.', en: '{count} profiles and rooms use it. They will chat without a judge.' }, { count: using })
-        : t({ ko: '이 판단 프리셋을 지울까?', en: 'Delete this judge preset?' }),
-      confirmLabel: t({ ko: '삭제', en: 'Delete' }),
-      tone: 'destructive',
-    })
-    if (confirmed) deleteMutation.mutate()
-  }
 
   const patchItem = (id: string, patch: Partial<ChatJudgeItem>) => setDraft((current) => ({ ...current, items: current.items.map((item) => (item.id === id ? { ...item, ...patch } : item)) }))
   /** Before-reply items are the judgment items; after-reply ones are the follow-up's conditions. */
@@ -358,7 +336,7 @@ export function ChatJudgePresetEditorModal({ open, preset, initial, onClose, onD
         {pane === 'assets' ? <JudgeAssetsPane value={draft} onChange={patchScopes} /> : null}
       </EditorSplit>
       <EditorFooter
-        onDelete={preset ? () => void handleDelete() : undefined}
+        onDelete={preset ? () => deleteMutation.mutate({ kind: 'judge', resource: preset }) : undefined}
         deleteLabel={t({ ko: '프리셋 삭제', en: 'Delete preset' })}
         deleting={deleteMutation.isPending}
         onSave={() => saveMutation.mutate()}

@@ -38,7 +38,7 @@ import {
   type WatcherRuntimeState,
 } from './fileWatcher/watcherRuntimeStatus';
 import { createExcludePatternMatcher } from './folderScan/excludePatternUtils';
-import { resolveWatcherReadyTimeoutMs, sleep, waitForChokidarReady } from './watcherLifecycleUtils';
+import { resolveWatcherReadyTimeoutMs, restartWatcherAfterDelay, waitForChokidarReady } from './watcherLifecycleUtils';
 
 const isVerboseScanDebugEnabled = process.env.CONAI_VERBOSE_SCAN_DEBUG === 'true';
 
@@ -61,6 +61,7 @@ interface WatcherEntry {
   eventCount: number;
   retryAttempts: number;
   isRetrying?: boolean;  // 재시도 진행 중 플래그 (중복 재시도 방지)
+  retryTimer?: ReturnType<typeof setTimeout>;
 }
 
 interface WatcherRetryState {
@@ -333,6 +334,7 @@ async function waitForWatcherReady(
 export class FileWatcherService {
   // 워처 레지스트리 (folderId → WatcherEntry)
   private static watcherRegistry = new Map<number, WatcherEntry>();
+  private static pendingRestarts = new Map<number, AbortController>();
 
   // 처리 중인 폴더 (폴더 단위 락킹)
   private static scanState: FileWatcherScanState = {
@@ -654,6 +656,8 @@ export class FileWatcherService {
    * 워처 중지
    */
   static async stopWatcher(folderId: number): Promise<void> {
+    this.pendingRestarts.get(folderId)?.abort();
+    this.pendingRestarts.delete(folderId);
     const entry = this.watcherRegistry.get(folderId);
     if (!entry) {
       removeWatcherRuntimeStatus(folderId);
@@ -661,6 +665,8 @@ export class FileWatcherService {
       return;
     }
 
+    clearTimeout(entry.retryTimer);
+    entry.retryTimer = undefined;
     try {
       await entry.watcher.close();
       entry.state = 'stopped';
@@ -679,9 +685,9 @@ export class FileWatcherService {
    */
   static async restartWatcher(folderId: number, retryState?: WatcherRetryState): Promise<void> {
     console.warn(`⚠️  Restarting watcher: folderId=${folderId}`);
-    await this.stopWatcher(folderId);
-    await sleep(1000);
-    await this.startWatcher(folderId, retryState);
+    await restartWatcherAfterDelay(this.pendingRestarts, folderId, 1000,
+      () => this.stopWatcher(folderId),
+      (signal) => this.startWatcher(folderId, retryState, signal));
   }
 
   /**
@@ -721,7 +727,9 @@ export class FileWatcherService {
     };
     const folderName = entry.folderName;
 
-    setTimeout(async () => {
+    entry.retryTimer = setTimeout(async () => {
+      entry.retryTimer = undefined;
+      if (this.watcherRegistry.get(folderId) !== entry) return;
       try {
         await this.restartWatcher(folderId, retryState);
         const restartedEntry = this.watcherRegistry.get(folderId);
@@ -729,8 +737,8 @@ export class FileWatcherService {
           restartedEntry.retryAttempts = 0;
           restartedEntry.isRetrying = false;
           this.syncRuntimeStatus(restartedEntry);
+          console.warn(`✅ Watcher recovered: ${folderName}`);
         }
-        console.warn(`✅ Watcher recovered: ${folderName}`);
       } catch (error) {
         console.error(`  ❌ 워처 재시작 실패: ${folderName}`, error);
         const failedEntry = this.watcherRegistry.get(folderId);
@@ -757,7 +765,7 @@ export class FileWatcherService {
    * 모든 워처 중지
    */
   static async stopAll(): Promise<void> {
-    const folderIds = Array.from(this.watcherRegistry.keys());
+    const folderIds = new Set([...this.watcherRegistry.keys(), ...this.pendingRestarts.keys()]);
     for (const folderId of folderIds) {
       await this.stopWatcher(folderId);
     }

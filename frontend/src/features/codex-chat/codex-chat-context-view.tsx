@@ -346,11 +346,16 @@ function SummarySegmentEditor({ threadId, segment, label, muted }: { threadId: n
         muted={muted}
         className="min-h-0 resize-y"
         aria-label={label}
+        onKeyDown={(event) => {
+          if (event.nativeEvent.isComposing) return
+          if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); setDraft(segment.content) }
+          if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); if (!mutation.isPending && draft.trim()) mutation.mutate() }
+        }}
       />
       {dirty ? (
         <div className="flex justify-end gap-2">
-          <Button size="sm" variant="ghost" onClick={() => setDraft(segment.content)}>{t({ ko: '되돌리기', en: 'Revert' })}</Button>
-          <Button size="sm" onClick={() => mutation.mutate()} disabled={mutation.isPending || !draft.trim()}>{t({ ko: '저장', en: 'Save' })}</Button>
+          <Button type="button" size="xs" variant="ghost" onClick={() => setDraft(segment.content)}>{t({ ko: '되돌리기', en: 'Revert' })}</Button>
+          <Button type="button" size="xs" variant="default" onClick={() => mutation.mutate()} disabled={mutation.isPending || !draft.trim()}>{t({ ko: '저장', en: 'Save' })}</Button>
         </div>
       ) : null}
     </div>

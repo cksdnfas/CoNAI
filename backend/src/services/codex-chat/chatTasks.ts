@@ -248,6 +248,9 @@ const STALL_LIMIT = 3
 const ACTIVE_LIMIT_MS = 3 * 60 * 60_000
 const timers = new Map<number, NodeJS.Timeout>()
 const running = new Set<number>()
+const subscriptions: Array<() => void> = []
+// Requests may schedule before subscriptions start; only explicit shutdown blocks new continuations.
+let stopped = false
 
 export const ChatTaskRunner = {
   started: false,
@@ -261,13 +264,14 @@ export const ChatTaskRunner = {
   start() {
     if (ChatTaskRunner.started) return
     ChatTaskRunner.started = true
+    stopped = false
     ChatTaskRunner.recover()
     // In a room every member's reply ends this way; the continuation waits until the whole room is quiet.
-    onChatReplyFinished((context: ChatExecutionContext) => {
+    subscriptions.push(onChatReplyFinished((context: ChatExecutionContext) => {
       const task = ChatTaskStore.live(context.threadId)
       if (task?.status === 'running') ChatTaskRunner.schedule(task.threadId, '이전 답변이 끝났어.')
-    })
-    onProposalResolved((threadId, proposal) => {
+    }))
+    subscriptions.push(onProposalResolved((threadId, proposal) => {
       const task = ChatTaskStore.live(threadId)
       if (!task) return
       if (proposal.kind === 'task_plan') {
@@ -275,22 +279,30 @@ export const ChatTaskRunner = {
         return
       }
       if (task.status === 'waiting' && task.wait === 'approval' && task.waitIds?.includes(proposal.id)) reconcileWait(task.id)
-    })
+    }))
     // The person's own message answers a task waiting for them, and a message sent with the page connected brings a
     // task waiting for the page back; the end of that reply then moves the task on.
-    onChatUserSend((threadId, withPage) => {
+    subscriptions.push(onChatUserSend((threadId, withPage) => {
       const task = ChatTaskStore.live(threadId)
       if (task?.status !== 'waiting' || !(task.wait === 'user' || (task.wait === 'page' && withPage))) return
       ChatTaskStore.update(task.id, { status: 'running', reason: null })
-    })
-    subscribeToRuntimeEvents((record) => {
+    }))
+    subscriptions.push(subscribeToRuntimeEvents((record) => {
       if (record.name !== 'queue.job.status') return
       const payload = record.payload as { job_id?: number; status?: string }
       if (!['completed', 'failed', 'cancelled'].includes(payload?.status ?? '') || typeof payload?.job_id !== 'number') return
       const rows = table().prepare(`SELECT id FROM chat_tasks WHERE status = 'waiting' AND wait = 'job'
         AND EXISTS (SELECT 1 FROM json_each(chat_tasks.wait_ids) WHERE value = ?)`).all(payload.job_id) as Array<{ id: number }>
       for (const row of rows) reconcileWait(row.id)
-    })
+    }))
+  },
+
+  stop() {
+    stopped = true
+    ChatTaskRunner.started = false
+    for (const timer of timers.values()) clearTimeout(timer)
+    timers.clear()
+    for (const unsubscribe of subscriptions.splice(0)) unsubscribe()
   },
 
   wait(taskId: number, wait: ChatTaskWait, reason: string, replyId?: string, ids?: number[]) {
@@ -362,6 +374,7 @@ export const ChatTaskRunner = {
    * so it need not wait long for the reply that ended; one that still finds a reply running tries again later.
    */
   schedule(threadId: number, event: string, delayMs = 200) {
+    if (stopped) return
     clearTimeout(timers.get(threadId))
     const timer = setTimeout(() => { timers.delete(threadId); void ChatTaskRunner.continue(threadId, event) }, delayMs)
     timer.unref?.()
@@ -369,7 +382,7 @@ export const ChatTaskRunner = {
   },
 
   async continue(threadId: number, event: string) {
-    if (running.has(threadId)) return
+    if (stopped || running.has(threadId)) return
     let task = ChatTaskStore.live(threadId)
     if (!task || task.status !== 'running') return
     // A reply still running (the person's own, or one that just ended and has not let go yet) goes first: try again
@@ -377,7 +390,7 @@ export const ChatTaskRunner = {
     const { CodexChatService } = await import('./codexChatService')
     const { GroupChatService } = await import('./groupChatService')
     task = ChatTaskStore.find(task.id)
-    if (!task || task.status !== 'running' || running.has(threadId)) return
+    if (stopped || !task || task.status !== 'running' || running.has(threadId)) return
     if (CodexChatService.isRunning(threadId) || GroupChatService.isRunning(threadId)) {
       if (!timers.has(threadId)) ChatTaskRunner.schedule(threadId, event, 1500)
       return

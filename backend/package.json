@@ -17,8 +17,8 @@
     "test:prompt-syntax": "tsx --test test/prompt-random-token.test.ts test/prompt-suggest.test.ts",
     "test:migrations": "tsx --test test/migration-baseline.test.ts",
     "test:image-permissions": "tsx --test test/image-permissions.test.ts",
-    "test:permissions": "tsx --test test/image-permissions.test.ts test/chat-result-delivery.test.ts test/chat-private-attachments.test.ts test/admin-route-guards.test.ts test/generation-layouts.test.ts test/route-guard-sweep.test.ts test/system-folders.test.ts test/comfy-input-security.test.ts test/graph-api-input-security.test.ts test/graph-execution-input-security.test.ts test/graph-image-authority.test.ts test/mcp-queue-image-access.test.ts test/workflow-canvas-access.test.ts",
-    "test:media-integrity": "tsx --test test/image-metadata-edit-concurrency.test.ts test/workflow-input-retention.test.ts test/graph-input-lifecycle.test.ts",
+    "test:permissions": "tsx --test test/image-permissions.test.ts test/chat-result-delivery.test.ts test/chat-private-attachments.test.ts test/admin-route-guards.test.ts test/generation-layouts.test.ts test/route-guard-sweep.test.ts test/system-folders.test.ts test/comfy-input-security.test.ts test/graph-api-input-security.test.ts test/graph-execution-input-security.test.ts test/graph-image-authority.test.ts test/mcp-queue-image-access.test.ts test/workflow-canvas-access.test.ts test/image-query-input-security.test.ts",
+    "test:media-integrity": "tsx --test test/image-metadata-edit-concurrency.test.ts test/workflow-input-retention.test.ts test/graph-input-lifecycle.test.ts test/graph-node-scheduler.test.ts",
     "copy:migrations": "copyfiles -u 1 \"src/database/migrations/**/*.sql\" dist/",
     "start": "node dist/backend/src/index.js",
     "db:migrate": "tsx src/database/migrate.ts"

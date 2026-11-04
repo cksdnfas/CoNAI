@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { LoaderCircle } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
+import { GroupModalFooter } from './group-modal-parts'
 import { EmptyState } from '@/components/ui/empty-state'
 import { FieldGroup } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
@@ -14,7 +15,6 @@ import type { GroupWithHierarchy } from '@/types/group'
 import { useI18n } from '@/i18n'
 import { GroupColorDot } from './group-color-dot'
 import { GroupLocationPicker } from './group-location-picker'
-import { GroupModalFooter } from './group-modal-parts'
 
 const RECENT_GROUPS_KEY = 'conai:groups:recent-assign:v1'
 const RECENT_GROUP_LIMIT = 5
@@ -196,21 +196,14 @@ export function GroupAssignModal({
           ) : null}
         </ModalBody>
 
-        <GroupModalFooter
-          busy={busy}
-          start={newGroupName === null ? (
+        <GroupModalFooter busy={busy} start={newGroupName === null ? (
             <Button type="button" variant="ghost" onClick={() => setNewGroupName('')} disabled={busy}>
               {t({ ko: '새 그룹', en: 'New group' })}
             </Button>
-          ) : null}
-        >
-          <Button type="submit" className="max-w-56" disabled={busy || !selectedGroup}>
+          ) : null}>
+          <Button type="submit" size="sm" variant="default" className="max-w-56" disabled={busy || !selectedGroup}>
             {isSubmitting ? <LoaderCircle className="animate-spin" /> : null}
-            <span className="truncate">
-              {selectedGroup
-                ? t({ ko: '‘{name}’에 추가', en: 'Add to ‘{name}’' }, { name: selectedGroup.name })
-                : t({ ko: '추가', en: 'Add' })}
-            </span>
+            <span className="truncate">{selectedGroup ? t({ ko: '‘{name}’에 추가', en: 'Add to ‘{name}’' }, { name: selectedGroup.name }) : t({ ko: '추가', en: 'Add' })}</span>
           </Button>
         </GroupModalFooter>
       </form>

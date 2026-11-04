@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
 import { FolderOpen } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Button } from '@/components/ui/button'
+import { EditorFooter } from '@/components/ui/editor-footer'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Field, FieldInfo } from '@/components/ui/field'
 import { Inset } from '@/components/ui/inset'
-import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
+import { Modal, ModalBody } from '@/components/ui/modal'
 import { useI18n } from '@/i18n'
 import type { LoraFileData, LoraScanRequest } from '@/lib/api-wildcards'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
@@ -306,14 +306,7 @@ export function LoraAutoCollectModal({ open, isSubmitting = false, onClose, onSu
           {t({ ko: '기존 자동 수집 LoRA는 지우고 새로 만들어.', en: 'Existing auto-collected LoRA entries are replaced.' })}
         </p>
 
-        <ModalFooter>
-          <Button type="button" variant="secondary" onClick={onClose} disabled={isSubmitting || isPreparingFiles}>
-            {t({ ko: '취소', en: 'Cancel' })}
-          </Button>
-          <Button type="button" onClick={() => void handleSubmit()} disabled={isSubmitting || isPreparingFiles || selectedSourceFiles.length === 0}>
-            {isSubmitting ? t({ ko: '수집 중…', en: 'Collecting…' }) : t({ ko: '자동 수집 실행', en: 'Run auto-collection' })}
-          </Button>
-        </ModalFooter>
+        <EditorFooter onSave={() => void handleSubmit()} canSave={selectedSourceFiles.length > 0} saving={isSubmitting || isPreparingFiles} saveLabel={t({ ko: '자동 수집 실행', en: 'Run auto-collection' })} />
       </ModalBody>
     </Modal>
   )

@@ -1,21 +1,20 @@
-import { useEffect, useImperativeHandle, useRef, useState, type Dispatch, type Ref, type SetStateAction } from 'react'
+import { useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, type Dispatch, type ReactNode, type Ref, type SetStateAction } from 'react'
 import { chatDraftEqual } from '@/features/codex-chat/chat-draft-equal'
 import { useLocation, useNavigate, useSearchParams, type Location } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { BookOpen, ChevronDown, ChevronLeft, ChevronRight, Eye, FileText, Image as ImageIcon, Palette, Sparkles, Trash2, UserRound, Wrench } from 'lucide-react'
-import { EditorPage, EditorSectionNav, type EditorSectionEntry } from '@/components/common/editor-page'
-import { useChatAdminCrumbs, useChatAdminLinks } from '@/features/codex-chat/chat-admin-location'
+import { BookOpen, ChevronDown, ChevronLeft, ChevronRight, Copy, Eye, FileText, FolderInput, Image as ImageIcon, Palette, Sparkles, Trash2, UserRound, Wrench } from 'lucide-react'
+import { EditorTitleInput } from '@/components/common/editor-page'
+import { useChatAdminLinks } from '@/features/codex-chat/chat-admin-location'
 import { ActionMenuButton } from '@/components/ui/action-menu'
 import { AvatarButton } from '@/components/ui/avatar-button'
 import { Button } from '@/components/ui/button'
+import { EditorFooter } from '@/components/ui/editor-footer'
 import { Chip } from '@/components/ui/chip'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
-import { EditorFooter } from '@/components/ui/editor-footer'
 import { EditorGroup } from '@/components/ui/editor-group'
 import { EmptyState } from '@/components/ui/empty-state'
 import { ErrorState } from '@/components/ui/error-state'
-import { FloatingSaveBar } from '@/components/ui/floating-save-bar'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { LoadingState } from '@/components/ui/loading-state'
@@ -47,7 +46,6 @@ import {
   emoticonGroupsAfterServerChange,
   sameCharacterLink,
   createChatProfile,
-  deleteChatProfile,
   getChatAdminProfile,
   getChatProfileDefaults,
   isChatRevisionConflict,
@@ -63,6 +61,7 @@ import {
   type ChatAssetKind,
   type ChatProfileDefaults,
   type ChatProfileInput,
+  type ModelSlot,
 } from '@/lib/api-codex-chat'
 import { getCodexGenerationModels } from '@/lib/api-image-generation-queue'
 import { getClaudeModels } from '@/lib/api-agent-cli'
@@ -85,9 +84,11 @@ import { ChatProfilePreviewModal } from './chat-profile-preview-modal'
 import { ProfileAssistContext, useProfileAssist, useProfileEditorChatPage, type ProfileEditorSection } from './use-profile-editor-chat-page'
 import { useProfileCharacterLink } from './use-profile-character-link'
 import { CHAT_DOCK_INSET } from './use-settings-editor-chat-page'
+import { useChatProfileActions } from './use-chat-profile-actions'
+import { profileModelLine } from './chat-profile-model-line'
 
-/** What a new profile's page starts from: a copy, a card import or a proposal (kept in the history entry). */
-export type ChatProfileEditorPageState = { draft?: ChatProfileInput; copyOf?: number; initialFolderId?: number | null }
+/** A copy or card import kept in the editor's history entry. */
+export type ChatProfileEditorState = { draft?: ChatProfileInput; copyOf?: number; initialFolderId?: number | null }
 
 export function buildDraft(profile: ChatProfileInput | null, defaults: ChatProfileDefaults | undefined, initialFolderId: number | null = null): Draft {
   return {
@@ -306,11 +307,11 @@ export function rebaseAppearancePatch(base: Draft, current: Draft, patch: Partia
  * Who may chat with this profile, as one line: everyone with the engine's permission, or members of the picked groups.
  * Administrators always may, so picking only Administrators keeps the profile to them.
  */
-function useAudience(draft: Draft) {
+function useAudience(draft: Draft | null) {
   const { t } = useI18n()
   const groupsQuery = useQuery({ queryKey: ['auth-permission-groups', 'all'], queryFn: listAuthPermissionGroups, staleTime: 60_000, retry: false })
   const groups = (groupsQuery.data ?? []).filter((group) => group.groupKey === 'admin' || !group.systemGroup)
-  const picked = draft.allowedGroupKeys
+  const picked = draft?.allowedGroupKeys ?? []
   const nameOf = (key: string) => (key === 'admin' ? t({ ko: '관리자', en: 'Administrators' }) : groups.find((group) => group.groupKey === key)?.name ?? key)
   const summary = picked.length === 0 ? t({ ko: '모두', en: 'Everyone' }) : picked.length === 1 ? nameOf(picked[0]) : t({ ko: '그룹 {count}개', en: '{count} groups' }, { count: picked.length })
   return { groups, picked, nameOf, summary }
@@ -398,10 +399,18 @@ type ProfileEditorProps = {
   draftLink?: ChatProfileCharacterLinkInput
   defaults: ChatProfileDefaults | undefined
   onClose: () => void
+  pageLocation?: Location
+  onSaved?: (profile: ChatProfile, allowNavigation: (path: string, navigate: () => void) => void) => void
+  onCopy?: (draft: ChatProfileInput, copyOf: number) => void
+  /** Conversation editors stay open after saving; proposal cards keep their save-and-close flow. */
+  stayOpen?: boolean
+  /** Route loading/error states belong to this same dialog, not another overlay. */
+  placeholder?: ReactNode
+  onDirtyChange?: (dirty: boolean) => void
 }
 
 /** One editor's profile and draft, kept while the server defaults load, fail or retry. */
-export function useProfileEditorDraft({ open, profile: initialProfile, initialDraft, initialFolderId = null, draftLink, defaults }: Pick<ProfileEditorProps, 'open' | 'profile' | 'initialDraft' | 'initialFolderId' | 'draftLink' | 'defaults'>) {
+export function useProfileEditorDraft({ open, profile: initialProfile, initialDraft, initialFolderId = null, draftLink, defaults, draftKey }: Pick<ProfileEditorProps, 'open' | 'profile' | 'initialDraft' | 'initialFolderId' | 'draftLink' | 'defaults'> & { draftKey?: unknown }) {
   const queryClient = useQueryClient()
   const cached = initialProfile && queryClient.getQueryData<ChatProfile[]>(CHAT_ADMIN_PROFILES_QUERY_KEY)?.find((entry) => entry.id === initialProfile.id && entry.revision === initialProfile.revision)
   // Proposal modals can pass a profile with proposed fields overlaid; its cached record is the actual base.
@@ -409,7 +418,8 @@ export function useProfileEditorDraft({ open, profile: initialProfile, initialDr
   const defaultsQuery = useQuery({ queryKey: CHAT_PROFILE_DEFAULTS_QUERY_KEY, queryFn: getChatProfileDefaults, enabled: open && !defaults, staleTime: Infinity })
   const currentDefaults = defaults ?? defaultsQuery.data
   const [profile, setProfile] = useState(initialBase)
-  const editorSession = useRef({ open: false, id: initialProfile?.id ?? null })
+  const [session, setSession] = useState(0)
+  const editorSession = useRef({ open: false, id: initialProfile?.id ?? null, draftKey })
   const [draft, setDraft] = useState<Draft | null>(() => {
     const built = initialProfile || currentDefaults ? buildDraft(initialProfile ?? initialDraft ?? null, currentDefaults, initialFolderId) : null
     return built && profile && draftLink !== undefined ? { ...built, characterLink: draftLink } : built
@@ -419,10 +429,12 @@ export function useProfileEditorDraft({ open, profile: initialProfile, initialDr
     // Hydration and session resets must share one writer: a reset must not clear a draft after hydration consumed its trigger.
     const previousDefaults = draftDefaults.current
     let reset = false
-    if (open && (!editorSession.current.open || editorSession.current.id !== (initialProfile?.id ?? null))) {
-      // A new page moving to the id it just created is still the same editor and draft.
-      if (!editorSession.current.open || initialProfile?.id !== profile?.id) {
+    const changedDraft = editorSession.current.draftKey !== draftKey
+    if (open && (!editorSession.current.open || changedDraft || editorSession.current.id !== (initialProfile?.id ?? null))) {
+      // A new profile moving to the id it just created is still the same editor and draft.
+      if (!editorSession.current.open || changedDraft || initialProfile?.id !== profile?.id) {
         reset = true
+        if (editorSession.current.open) setSession((value) => value + 1)
         setProfile(initialBase)
         const built = initialProfile || currentDefaults ? buildDraft(initialProfile ?? initialDraft ?? null, currentDefaults, initialFolderId) : null
         setDraft(built && initialProfile && draftLink !== undefined ? { ...built, characterLink: draftLink } : built)
@@ -435,8 +447,8 @@ export function useProfileEditorDraft({ open, profile: initialProfile, initialDr
       })
     }
     draftDefaults.current = currentDefaults
-    editorSession.current = { open, id: initialProfile?.id ?? null }
-  }, [currentDefaults, initialDraft, initialFolderId, open, initialProfile, initialBase, draftLink, profile])
+    editorSession.current = { open, id: initialProfile?.id ?? null, draftKey }
+  }, [currentDefaults, initialDraft, initialFolderId, open, initialProfile, initialBase, draftLink, profile, draftKey])
 
   // A new profile has no baseline until the server defaults load (buildDraft needs one of the two).
   const baseline = profile || currentDefaults ? buildDraft(profile ?? initialDraft ?? null, currentDefaults, initialFolderId) : null
@@ -444,6 +456,7 @@ export function useProfileEditorDraft({ open, profile: initialProfile, initialDr
   // Unsaved edits of a synced library setting's look (held by the editor below).
   const [settingDirty, setSettingDirty] = useState(false)
   return {
+    session,
     defaultsQuery,
     currentDefaults,
     profile,
@@ -465,39 +478,67 @@ function DefaultsState({ query }: { query: ReturnType<typeof useProfileEditorDra
   </> : <LoadingState variant="inline" />
 }
 
-/**
- * Create or edit one chat profile in a dialog: a chat's proposal card opens it over the conversation. The profile list
- * opens the same editor as a page (ChatProfileEditorPage). Keeps one dialog (and its focus trap) while the server
- * defaults load, fail or retry.
- */
+/** Shared by the URL-backed library editor and in-place conversation/proposal editors. */
 export function ChatProfileEditorModal(props: ProfileEditorProps) {
   const { t } = useI18n()
-  const state = useProfileEditorDraft(props)
-  const editor = useRef<{ save: () => void }>(null)
+  const [copy, setCopy] = useState<ChatProfileEditorState | null>(null)
+  const source = copy ? { ...props, profile: null, initialDraft: copy.draft, copyOf: copy.copyOf, draftLink: undefined } : props
+  const state = useProfileEditorDraft({ ...source, open: props.open && !props.placeholder, draftKey: copy })
+  const { draft, profile } = state
+  const ready = !props.placeholder && draft !== null
+  const dirty = props.open && ready && (state.dirty || state.settingDirty)
+  const audience = useAudience(draft)
+  const slotsQuery = useQuery({ queryKey: MODEL_SLOTS_QUERY_KEY, queryFn: listModelSlots, enabled: props.open && ready })
+  const editor = useRef<ProfileEditorHandle>(null)
+  const [busy, setBusy] = useState(false)
+  const { onDirtyChange } = props
+  useLayoutEffect(() => {
+    onDirtyChange?.(dirty)
+    return () => onDirtyChange?.(false)
+  }, [dirty, onDirtyChange])
   return (
     <Modal
       open={props.open}
       onClose={props.onClose}
-      dirty={state.dirty || (props.open && state.settingDirty)}
-      onSave={state.draft ? () => editor.current?.save() : undefined}
-      title={state.profile ? t({ ko: '프로필 편집', en: 'Edit profile' }) : t({ ko: '프로필 추가', en: 'Add profile' })}
+      closeOnBack={!props.pageLocation}
+      dirty={!props.pageLocation && dirty}
+      onSave={ready ? () => editor.current?.save() : undefined}
+      title={ready ? <EditorTitleInput as="span" value={draft.name} label={t({ ko: '프로필 이름', en: 'Profile name' })} placeholder={t({ ko: '이름', en: 'Name' })} maxLength={CHAT_PROFILE_TEXT_LIMITS.name} onChange={(name) => state.setDraft((current) => ({ ...current, name }))} /> : t({ ko: '채팅 프로필', en: 'Chat profile' })}
+      leading={ready ? <ChatProfileAvatar name={draft.name || '?'} avatar={draft.avatar} imageUrl={draftProfileAssetUrl(draft, profile, 'avatar')} avatarCrop={draft.avatarHash ? draft.avatarCrop : null} engine={draft.engine} size="xl" className="size-10" /> : undefined}
+      description={ready ? profileModelLine(draft, slotsQuery.data ?? [], t) : undefined}
+      status={ready ? <>
+        {profile ? null : <Chip tone="muted" size="sm">{t({ ko: '아직 저장 안 한 새 프로필', en: 'New, not saved yet' })}</Chip>}
+        {draft.isEnabled ? null : <Chip tone="muted" size="sm">{t({ ko: '꺼짐', en: 'Off' })}</Chip>}
+        {audience.picked.length ? <Chip tone="muted" size="sm">{t({ ko: '{who}만 사용', en: 'Only {who}' }, { who: audience.summary })}</Chip> : null}
+      </> : undefined}
+      actions={ready ? <ActionMenuButton label={t({ ko: '프로필 작업', en: 'Profile actions' })} entries={[
+        { key: 'preview', label: t({ ko: '프롬프트 미리보기', en: 'Prompt preview' }), icon: Eye, onSelect: () => editor.current?.preview() },
+        profile ? { key: 'copy', label: t({ ko: '복제', en: 'Duplicate' }), icon: Copy, disabled: busy, onSelect: () => editor.current?.copy() } : null,
+        { key: 'move', label: t({ ko: '다른 폴더로 옮기기', en: 'Move to…' }), icon: FolderInput, disabled: busy, onSelect: () => editor.current?.move() },
+        profile ? '-' : null,
+        profile ? { key: 'delete', label: t({ ko: '삭제', en: 'Delete' }), icon: Trash2, destructive: true, disabled: busy, onSelect: () => editor.current?.remove() } : null,
+      ]} /> : undefined}
       size="xl"
       height="tall"
       sidePanelInset={CHAT_DOCK_INSET}
     >
-      {state.draft ? <ProfileEditor
-        key={props.profile?.id ?? 'new'}
+      {ready ? <ProfileEditor
+        key={state.session}
         ref={editor}
-        layout="modal"
-        {...props}
-        profile={state.profile}
+        {...source}
+        onCopy={props.onCopy ?? ((draft, copyOf) => setCopy({ draft, copyOf }))}
+        profile={profile}
         setProfile={state.setProfile}
-        draft={state.draft}
+        draft={draft}
         setDraft={state.setDraft}
         dirty={state.dirty}
         onSettingDirtyChange={state.setSettingDirty}
+        onBusyChange={setBusy}
+        audience={audience}
+        slots={slotsQuery.data ?? []}
+        slotsSettled={slotsQuery.isSuccess}
         defaults={state.currentDefaults}
-      /> : <ModalBody><DefaultsState query={state.defaultsQuery} /></ModalBody>}
+      /> : <ModalBody>{props.placeholder ?? <DefaultsState query={state.defaultsQuery} />}</ModalBody>}
     </Modal>
   )
 }
@@ -510,68 +551,40 @@ function leavesProfile(current: Location, next: Location) {
   return before.get('profile') !== after.get('profile') || before.get('section') !== after.get('section')
 }
 
-/**
- * One chat profile as a page (/chat/profiles?profile=<id|new>, or the same inside Settings › 채팅): the way back to the
- * list, the name with its state, the sections with what each holds on the left, and the save bar while something is
- * unsaved. A new profile's page may start from a copy or an import (the history entry's state) and moves to its own id
- * once saved.
- */
-export function ChatProfileEditorPage() {
+/** URL-backed dialog over either host's mounted list, retaining folder/search/page. */
+export function ChatProfileRouteModal() {
   const { t } = useI18n()
   const navigate = useNavigate()
   const location = useLocation()
   const links = useChatAdminLinks()
-  const crumbs = useChatAdminCrumbs('profiles')
   const [params] = useSearchParams()
   const raw = params.get('profile')
   const invalid = raw !== 'new' && (!raw || !/^\d+$/.test(raw) || !Number.isSafeInteger(Number(raw)) || Number(raw) < 1)
   const id = invalid || raw === 'new' ? null : Number(raw)
-  const pageState = (location.state ?? null) as ChatProfileEditorPageState | null
+  const pageState = (location.state ?? null) as ChatProfileEditorState | null
   const profilesQuery = useQuery({ queryKey: CHAT_ADMIN_PROFILES_QUERY_KEY, queryFn: listChatAdminProfiles })
   const found = id === null ? null : profilesQuery.data?.find((entry) => entry.id === id) ?? null
   const back = () => navigate(links.profiles(true))
-  if (invalid || (id !== null && !found)) {
-    return (
-      <EditorPage crumbs={crumbs} title={t({ ko: '채팅 프로필', en: 'Chat profile' })}>
-        {!invalid && profilesQuery.isPending ? <LoadingState variant="inline" /> : !invalid && profilesQuery.isError
-          ? <ErrorState title={t({ ko: '프로필을 불러오지 못했어', en: 'Could not load the profile' })} error={profilesQuery.error} onRetry={() => void profilesQuery.refetch()} />
-          : <EmptyState icon={UserRound} title={t({ ko: '프로필을 찾지 못했어', en: 'Profile not found' })} action={<Button variant="secondary" size="sm" onClick={back}>{t({ ko: '프로필 목록', en: 'Profile list' })}</Button>} />}
-      </EditorPage>
-    )
-  }
+  const placeholder = invalid || (id !== null && !found)
+    ? !invalid && profilesQuery.isPending ? <LoadingState variant="inline" /> : !invalid && profilesQuery.isError
+      ? <ErrorState title={t({ ko: '프로필을 불러오지 못했어', en: 'Could not load the profile' })} error={profilesQuery.error} onRetry={() => void profilesQuery.refetch()} />
+      : <EmptyState icon={UserRound} title={t({ ko: '프로필을 찾지 못했어', en: 'Profile not found' })} action={<Button variant="secondary" size="sm" onClick={back}>{t({ ko: '프로필 목록', en: 'Profile list' })}</Button>} />
+    : undefined
   const initialFolderId = pageState?.initialFolderId !== undefined ? pageState.initialFolderId : !params.get('q')?.trim() && Number(params.get('folder')) > 0 ? Number(params.get('folder')) : null
-  return <ProfileEditorPageBody profile={found} initialFolderId={initialFolderId} initialDraft={id === null ? pageState?.draft : undefined} copyOf={id === null ? pageState?.copyOf : undefined} onClose={back} />
-}
-
-function ProfileEditorPageBody({ profile, initialDraft, initialFolderId, copyOf, onClose }: { profile: ChatProfile | null; initialDraft?: ChatProfileInput; initialFolderId?: number | null; copyOf?: number; onClose: () => void }) {
-  const { t } = useI18n()
-  const navigate = useNavigate()
-  const location = useLocation()
-  const links = useChatAdminLinks()
-  const crumbs = useChatAdminCrumbs('profiles')
-  const state = useProfileEditorDraft({ open: true, profile, initialDraft, initialFolderId, defaults: undefined })
-  if (!state.draft) {
-    return <EditorPage crumbs={crumbs} title={t({ ko: '새 프로필', en: 'New profile' })}><DefaultsState query={state.defaultsQuery} /></EditorPage>
-  }
   return (
-    <ProfileEditor
-      layout="page"
+    <ChatProfileEditorModal
       open
-      profile={state.profile}
-      setProfile={state.setProfile}
-      draft={state.draft}
-      setDraft={state.setDraft}
-      dirty={state.dirty}
-      onSettingDirtyChange={state.setSettingDirty}
-      initialDraft={initialDraft}
+      placeholder={placeholder}
+      profile={found}
+      initialDraft={id === null ? pageState?.draft : undefined}
       initialFolderId={initialFolderId}
-      copyOf={copyOf}
-      defaults={state.currentDefaults}
-      onClose={onClose}
+      copyOf={id === null ? pageState?.copyOf : undefined}
+      defaults={undefined}
+      onClose={back}
       pageLocation={location}
-      // A new profile's page moves to its id (the same editor stays, so nothing in progress is lost).
+      onCopy={(draft, copyOf) => navigate(links.profile('new'), { state: { draft: { ...draft, folderId: initialFolderId }, copyOf, initialFolderId } })}
       onSaved={(saved, allowNavigation) => {
-        if (!profile) {
+        if (id === null) {
           const path = links.profile(saved.id)
           allowNavigation(path, () => navigate(path, { replace: true }))
         }
@@ -580,25 +593,29 @@ function ProfileEditorPageBody({ profile, initialDraft, initialFolderId, copyOf,
   )
 }
 
-function ProfileEditor({ layout, open, profile, setProfile, draft, setDraft, dirty: profileDirty, onSettingDirtyChange, initialDraft, initialFolderId, copyOf, defaults, onClose, onSaved, pageLocation, ref }: ProfileEditorProps & {
-  layout: 'modal' | 'page'
+type ProfileEditorHandle = { save: () => void; preview: () => void; copy: () => void; move: () => void; remove: () => void }
+
+function ProfileEditor({ open, profile, setProfile, draft, setDraft, dirty: profileDirty, onSettingDirtyChange, initialDraft, initialFolderId, copyOf, defaults, onClose, onSaved, onCopy, pageLocation, stayOpen, audience, slots, slotsSettled, onBusyChange, ref }: ProfileEditorProps & {
   draft: Draft
   setDraft: Dispatch<SetStateAction<Draft>>
   setProfile: Dispatch<SetStateAction<ChatProfile | null>>
   dirty: boolean
   onSettingDirtyChange: (dirty: boolean) => void
-  /** The page stays open after a save; the dialog closes instead. */
-  onSaved?: (profile: ChatProfile, allowNavigation: (path: string, navigate: () => void) => void) => void
-  pageLocation?: Location
-  ref?: Ref<{ save: () => void }>
+  onBusyChange: (busy: boolean) => void
+  audience: Audience
+  slots: ModelSlot[]
+  slotsSettled: boolean
+  ref: Ref<ProfileEditorHandle>
 }) {
   const { t } = useI18n()
   const confirm = useConfirm()
   const links = useChatAdminLinks()
-  const crumbs = useChatAdminCrumbs('profiles')
   const { showSnackbar } = useSnackbar()
   const queryClient = useQueryClient()
-  const page = layout === 'page'
+  const routed = Boolean(pageLocation)
+  const actions = useChatProfileActions()
+  const [moving, setMoving] = useState(false)
+  const foldersQuery = useQuery({ queryKey: CHAT_PROFILE_FOLDERS_QUERY_KEY, queryFn: listChatProfileFolders, enabled: open && moving })
   const locationRef = useRef(pageLocation)
   locationRef.current = pageLocation
   const draftRef = useRef(draft)
@@ -625,7 +642,6 @@ function ProfileEditor({ layout, open, profile, setProfile, draft, setDraft, dir
   const [previewDraft, setPreviewDraft] = useState<(ChatProfileInput & { id?: number }) | null>(null)
   const creatingRef = useRef<{ submitted: Draft; promise: Promise<ChatProfile>; saveRequested: boolean } | null>(null)
   const patch = (next: Partial<Draft>) => setDraft((current) => ({ ...current, ...next }))
-  const audience = useAudience(draft)
   const refreshProfiles = (lorebooksChanged = false) => Promise.all([
     queryClient.invalidateQueries({ queryKey: CHAT_PROFILE_FOLDERS_QUERY_KEY }),
     queryClient.invalidateQueries({ queryKey: CHAT_PROFILE_LIBRARY_QUERY_KEY }),
@@ -778,7 +794,7 @@ function ProfileEditor({ layout, open, profile, setProfile, draft, setDraft, dir
       if (!creation!.saveRequested) showSnackbar({ message: t({ ko: '프로필을 저장했어.', en: 'Profile saved.' }), tone: 'info' })
     }
     await refreshProfiles(!profile && updated.lorebookIds.length > 0)
-    if (!profile && page && mounted.current && isCurrentPage(pageLocation, updated.id)) {
+    if (!profile && routed && mounted.current && isCurrentPage(pageLocation, updated.id)) {
       cacheProfile(updated)
       onSaved?.(updated, allowNavigation)
     }
@@ -793,16 +809,13 @@ function ProfileEditor({ layout, open, profile, setProfile, draft, setDraft, dir
   const dirty = profileDirty || link.dirty
   const settingDirtyRef = useRef(link.dirty)
   settingDirtyRef.current = link.dirty
-  const { mounted, allowNavigation } = useEditorPageGuard(page && dirty, t({ ko: '프로필에 저장하지 않은 변경이 있어. 나가면 사라져.', en: 'This profile has unsaved changes that will be lost.' }), leavesProfile)
+  const { mounted, allowNavigation } = useEditorPageGuard(open && routed && dirty, t({ ko: '프로필에 저장하지 않은 변경이 있어. 나가면 사라져.', en: 'This profile has unsaved changes that will be lost.' }), leavesProfile)
   useEffect(() => {
     onSettingDirtyChange(link.dirty)
     return () => onSettingDirtyChange(false)
   }, [link.dirty, onSettingDirtyChange])
   const isLlm = draft.engine === 'llm'
 
-  const slotsQuery = useQuery({ queryKey: MODEL_SLOTS_QUERY_KEY, queryFn: listModelSlots, enabled: open })
-  const slots = slotsQuery.data ?? []
-  const slotsSettled = slotsQuery.isSuccess
   const judgePresetsQuery = useQuery({ queryKey: CHAT_JUDGE_PRESETS_QUERY_KEY, queryFn: listChatJudgePresets, enabled: open && draft.judgePresetId !== null })
   const judgePreset = judgePresetsQuery.data?.find((preset) => preset.id === draft.judgePresetId)
   const judgeState = useJudgeModelState(open && draft.judgePresetId !== null, draft.judgeSlotId ?? judgePreset?.modelSlotId ?? null)
@@ -875,10 +888,10 @@ function ProfileEditor({ layout, open, profile, setProfile, draft, setDraft, dir
         || (previous.length > 0 && savedProfile.name !== profile?.name))
       if (!mounted.current || !isCurrentPage(sourceLocation, savedProfile.id)) return
       showSnackbar({ message: t({ ko: '저장했어.', en: 'Saved.' }), tone: 'info' })
-      if (!page && JSON.stringify(draftRef.current) === JSON.stringify(submitted) && !settingDirtyRef.current) { onClose(); return }
+      if (!routed && !stayOpen && JSON.stringify(draftRef.current) === JSON.stringify(submitted) && !settingDirtyRef.current) { onClose(); return }
       const changedLink = Boolean(sourceBase && !sameCharacterLink(submitted.characterLink, sourceBase.characterLink ?? null))
       if (!adoptOwnProfile(savedProfile, { kind: 'save', submitted, keys: Object.keys(submitted) as Array<keyof Draft>, linkChanged: changedLink }, sourceBase)) return
-      if (page) cacheProfile(savedProfile)
+      cacheProfile(savedProfile)
       onSaved?.(savedProfile, allowNavigation)
     },
     onError: (error) => showSnackbar({ message: getErrorMessage(error, t({ ko: '저장하지 못했어.', en: 'Could not save.' })), tone: error instanceof ChatEditorResolution ? 'info' : 'error' }),
@@ -886,26 +899,45 @@ function ProfileEditor({ layout, open, profile, setProfile, draft, setDraft, dir
   const deleteMutation = useMutation({
     mutationFn: async () => {
       const sourceLocation = pageLocation
-      await deleteChatProfile(profile?.id ?? 0)
-      return sourceLocation
+      const removed = profile ? await actions.remove(profile) : false
+      return { sourceLocation, removed }
     },
-    onSuccess: async (sourceLocation) => {
+    onSuccess: async ({ sourceLocation, removed }) => {
+      if (!removed) return
+      if (mounted.current && isCurrentPage(sourceLocation)) {
+        if (routed) allowNavigation(links.profiles(true), onClose)
+        else onClose()
+      }
       await refreshProfiles(Boolean(profile?.lorebookIds.length))
-      if (!mounted.current || !isCurrentPage(sourceLocation)) return
-      if (page) allowNavigation(links.profiles(true), onClose)
-      else onClose()
     },
     onError: (error) => showSnackbar({ message: getErrorMessage(error, t({ ko: '삭제하지 못했어.', en: 'Could not delete.' })), tone: 'error' }),
   })
-  const handleDelete = async () => {
-    const confirmed = await confirm({
-      title: t({ ko: '프로필 삭제', en: 'Delete profile' }),
-      description: t({ ko: '이 프로필을 지울까? 이 프로필로 한 채팅은 남지만 더 보낼 수는 없어.', en: 'Delete this profile? Its chats stay but can no longer send.' }),
-      confirmLabel: t({ ko: '삭제', en: 'Delete' }),
-      tone: 'destructive',
-    })
-    if (confirmed) deleteMutation.mutate()
-  }
+  const copyMutation = useMutation({
+    mutationFn: async () => ({ draft: await actions.copy(profile!), source: pageLocation }),
+    onSuccess: async ({ draft: copied, source }) => {
+      if (!routed && (profileDirty || settingDirtyRef.current) && !await confirm({
+        title: t({ ko: '변경을 버리고 복제할까?', en: 'Discard changes and duplicate?' }),
+        description: t({ ko: '저장된 프로필을 복제해. 저장하지 않은 변경은 사라져.', en: 'Duplicates the saved profile. Unsaved changes will be lost.' }),
+        confirmLabel: t({ ko: '복제', en: 'Duplicate' }),
+      })) return
+      if (mounted.current && isCurrentPage(source)) onCopy?.(copied, profile!.id)
+    },
+    onError: (error) => showSnackbar({ message: getErrorMessage(error, t({ ko: '복제하지 못했어.', en: 'Could not duplicate.' })), tone: 'error' }),
+  })
+  const moveMutation = useMutation({
+    mutationFn: async (folderId: number | null) => {
+      const source = profile!
+      return { saved: await actions.move(source, folderId), source, submitted: draft, location: pageLocation }
+    },
+    onSuccess: async ({ saved, source, submitted, location }) => {
+      if (mounted.current && isCurrentPage(location)) {
+        adoptOwnProfile(saved, { kind: 'save', submitted, keys: ['folderId'], linkChanged: false }, source)
+        setMoving(false)
+      }
+      await refreshProfiles()
+    },
+    onError: (error) => showSnackbar({ message: getErrorMessage(error, t({ ko: '옮기지 못했어.', en: 'Could not move.' })), tone: 'error' }),
+  })
   const handleRevert = async () => {
     const confirmed = await confirm({
       title: t({ ko: '변경 되돌리기', en: 'Revert changes' }),
@@ -924,18 +956,23 @@ function ProfileEditor({ layout, open, profile, setProfile, draft, setDraft, dir
   const backgroundUrl = draftProfileAssetUrl(draft, profile, 'background')
   const nameMissing = draft.name.trim().length === 0
   const chatSlot = draft.modelSlotId === null ? defaultSlot : slots.find((slot) => slot.id === draft.modelSlotId)
-  const connectionMissing = (isLlm && (!slotsQuery.isSuccess || !chatSlot?.model || chatSlot.ready === false))
+  const connectionMissing = (isLlm && (!slotsSettled || !chatSlot?.model || chatSlot.ready === false))
     || (draft.judgePresetId !== null && (!judgePreset || !judgeState.ready))
-  const canSave = !nameMissing && !connectionMissing && !assetBusy && !saveMutation.isPending && !deleteMutation.isPending
-  useImperativeHandle(ref, () => ({ save: () => { if (canSave) saveMutation.mutate() } }))
+  const busy = assetBusy || saveMutation.isPending || deleteMutation.isPending || moveMutation.isPending || copyMutation.isPending
+  const canSave = !nameMissing && !connectionMissing && !busy
+  useLayoutEffect(() => {
+    onBusyChange(busy)
+    return () => onBusyChange(false)
+  }, [busy, onBusyChange])
+  useImperativeHandle(ref, () => ({
+    save: () => { if (canSave) saveMutation.mutate() },
+    preview: () => setPreviewDraft({ ...draft, id: profile?.id }),
+    copy: () => { if (!busy && profile) copyMutation.mutate() },
+    move: () => { if (!busy) setMoving(true) },
+    remove: () => { if (!busy && profile) deleteMutation.mutate() },
+  }))
   const incompleteLabel = t({ ko: '입력 필요', en: 'Needs input' })
 
-  // What each section holds, one line under its name in the section list.
-  const modelLine = draft.engine === 'codex' ? `Codex · ${draft.model || t({ ko: '기본 모델', en: 'default model' })}`
-    : draft.engine === 'claude' ? `Claude Code · ${draft.model || 'sonnet'}`
-      : draft.modelSlotId !== null ? slots.find((slot) => slot.id === draft.modelSlotId)?.label ?? t({ ko: '모델 없음', en: 'No model' })
-        // A representative model's own label already starts with 대표, so only a plain default model gets the prefix.
-        : defaultSlot ? (defaultSlot.kind === 'route' ? defaultSlot.label : t({ ko: '기본 모델 · {label}', en: 'Default · {label}' }, { label: defaultSlot.label })) : t({ ko: '모델 없음', en: 'No model' })
   const sections: Array<{ value: ProfileEditorSection; label: string; icon: typeof UserRound; incomplete?: boolean }> = [
     { value: 'basic', label: t({ ko: '기본 정보', en: 'Basics' }), icon: UserRound, incomplete: nameMissing },
     { value: 'character', label: t({ ko: '캐릭터', en: 'Character' }), icon: FileText },
@@ -964,7 +1001,7 @@ function ProfileEditor({ layout, open, profile, setProfile, draft, setDraft, dir
       <ChatProfileCharacterPanel open={open} draft={draft} patch={patch} onPreview={() => setPreviewDraft({ ...draft, id: profile?.id })} profile={profile} />
     ) : null}
     {section === 'appearance' ? (
-      <ChatProfileAppearancePanel draft={draft} patch={(next) => setDraft((current) => rebaseAppearancePatch(draft, current, next))} profile={profile} dirty={!page && dirty} onBusyChange={onAssetBusyChange} busy={assetBusy} runs={runs} ensureProfile={ensureProfile} onProfileChange={adoptOwnProfile} link={link} />
+      <ChatProfileAppearancePanel draft={draft} patch={(next) => setDraft((current) => rebaseAppearancePatch(draft, current, next))} profile={profile} dirty={!routed && dirty} onBusyChange={onAssetBusyChange} busy={assetBusy} runs={runs} ensureProfile={ensureProfile} onProfileChange={adoptOwnProfile} link={link} />
     ) : null}
     {section === 'model' ? (
       <ChatProfileModelPanel
@@ -984,71 +1021,12 @@ function ProfileEditor({ layout, open, profile, setProfile, draft, setDraft, dir
   </>
   const preview = previewDraft ? <ChatProfilePreviewModal open draft={previewDraft} onClose={() => setPreviewDraft(null)} /> : null
 
-  if (page) {
-    const navSections: Array<EditorSectionEntry<ProfileEditorSection>> = sections.map((entry) => ({ value: entry.value, label: entry.label, icon: entry.icon, mark: mark(entry), disabled: assetBusy && entry.value !== section }))
-    return (
-      <ProfileAssistContext.Provider value={assist}>
-        <EditorPage
-          crumbs={crumbs}
-          title={draft.name.trim() || profile?.name || t({ ko: '새 프로필', en: 'New profile' })}
-          status={<>
-            {profile ? null : <Chip tone="muted" size="sm">{t({ ko: '아직 저장 안 한 새 프로필', en: 'New, not saved yet' })}</Chip>}
-            {/* Only what is off or restricted: the normal state (in use, open to everyone) needs no mark. */}
-            {draft.isEnabled ? null : <Chip tone="muted" size="sm">{t({ ko: '꺼짐', en: 'Off' })}</Chip>}
-            {audience.picked.length ? <Chip tone="muted" size="sm">{t({ ko: '{who}만 사용', en: 'Only {who}' }, { who: audience.summary })}</Chip> : null}
-          </>}
-          actions={(
-            <ActionMenuButton
-              label={t({ ko: '프로필 작업', en: 'Profile actions' })}
-              entries={[
-                { key: 'preview', label: t({ ko: '프롬프트 미리보기', en: 'Prompt preview' }), icon: Eye, onSelect: () => setPreviewDraft({ ...draft, id: profile?.id }) },
-                profile ? '-' : null,
-                profile ? { key: 'delete', label: t({ ko: '삭제', en: 'Delete' }), icon: Trash2, destructive: true, disabled: assetBusy || deleteMutation.isPending, onSelect: () => void handleDelete() } : null,
-              ]}
-            />
-          )}
-          nav={(
-            <EditorSectionNav
-              sections={navSections}
-              value={section}
-              onChange={go}
-              label={t({ ko: '프로필 편집 항목', en: 'Profile sections' })}
-              header={(
-                <div className="flex min-w-0 items-center gap-2.5 px-2.5 pt-1">
-                  <ChatProfileAvatar name={draft.name || '?'} avatar={draft.avatar} imageUrl={draftProfileAssetUrl(draft, profile, 'avatar')} avatarCrop={draft.avatarHash ? draft.avatarCrop : null} engine={draft.engine} size="sm" />
-                  <span className="truncate text-xs text-muted-foreground">{modelLine}</span>
-                </div>
-              )}
-            />
-          )}
-          navLabel={t({ ko: '프로필 편집 항목', en: 'Profile sections' })}
-          storageKey="chat-profile-editor"
-          onSave={() => { if (canSave) saveMutation.mutate() }}
-          saveBar={dirty || saveMutation.isPending ? (
-            <FloatingSaveBar
-              label={profile ? t({ ko: '저장 안 한 변경', en: 'Unsaved changes' }) : t({ ko: '새 프로필', en: 'New profile' })}
-              saving={saveMutation.isPending}
-              canSave={canSave}
-              onSave={() => saveMutation.mutate()}
-              onDiscard={() => void handleRevert()}
-            >
-              {nameMissing ? <span className="text-xs text-muted-foreground">{t({ ko: '이름을 적어야 저장할 수 있어', en: 'Needs a name to save' })}</span>
-                : connectionMissing ? <span className="text-xs text-muted-foreground">{t({ ko: '모델을 골라야 저장할 수 있어', en: 'Needs a model to save' })}</span> : null}
-            </FloatingSaveBar>
-          ) : null}
-        >
-          <div className="min-w-0 space-y-4">{panel}</div>
-          {preview}
-        </EditorPage>
-      </ProfileAssistContext.Provider>
-    )
-  }
-
   return (
     <>
       <ProfileAssistContext.Provider value={assist}>
+      <ModalBody spacing="none">
       <div className="grid gap-x-6 md:grid-cols-[10.5rem_minmax(0,1fr)]">
-        <nav aria-label={t({ ko: '프로필 편집 항목', en: 'Profile sections' })} className={cn('self-start md:sticky md:top-0 md:block', !showingList && 'max-md:hidden')}>
+        <nav aria-label={t({ ko: '프로필 편집 항목', en: 'Profile sections' })} className={cn('self-start md:sticky md:top-0 md:block md:border-r md:border-line md:pr-3', !showingList && 'max-md:hidden')}>
           <ul className="space-y-0.5 max-md:divide-y max-md:divide-line">
             {sections.map((entry) => (
               <li key={entry.value}>
@@ -1074,16 +1052,14 @@ function ProfileEditor({ layout, open, profile, setProfile, draft, setDraft, dir
           {panel}
         </div>
       </div>
+      </ModalBody>
       </ProfileAssistContext.Provider>
-      <EditorFooter
-        onDelete={profile ? () => void handleDelete() : undefined}
-        deleteDisabled={assetBusy}
-        deleting={deleteMutation.isPending}
-        onSave={() => saveMutation.mutate()}
-        canSave={canSave}
-        saving={saveMutation.isPending}
-      />
+      <EditorFooter onSave={() => saveMutation.mutate()} canSave={canSave && (dirty || !profile)} saving={saveMutation.isPending} onRevert={() => void handleRevert()} canRevert={dirty && !busy}>
+        {nameMissing ? <span className="text-xs text-muted-foreground">{t({ ko: '이름을 적어야 저장할 수 있어', en: 'Needs a name to save' })}</span>
+          : connectionMissing ? <span className="text-xs text-muted-foreground">{t({ ko: '모델을 골라야 저장할 수 있어', en: 'Needs a model to save' })}</span> : null}
+      </EditorFooter>
       {preview}
+      {moving ? <CharacterFolderPickerModal title={t({ ko: '폴더 고르기', en: 'Choose folder' })} folders={foldersQuery.data ?? []} value={draft.folderId} busy={moveMutation.isPending || foldersQuery.isPending} onPick={(folderId) => { if (profile) moveMutation.mutate(folderId); else { patch({ folderId }); setMoving(false) } }} onClose={() => setMoving(false)} /> : null}
     </>
   )
 }

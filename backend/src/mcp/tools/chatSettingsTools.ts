@@ -27,7 +27,8 @@ export const CHAT_FEATURES_GUIDE = [
 
 /**
  * The chat's own settings: read them and propose changes as a card the chat's owner saves. Offered in every chat
- * (scope-free like the room tools), only behind the tool catalog (`chat`), never as direct definitions.
+ * (scope-free like the room tools), behind the tool catalog (`chat`) when the chat has one and as direct definitions
+ * when it has too few app tools for a catalog.
  */
 export function registerChatSettingsTools(server: McpServer, context: McpRequestContext): void {
   if (!context.chatContext) return;

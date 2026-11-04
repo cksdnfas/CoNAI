@@ -369,7 +369,9 @@ export function pruneKnowledgeEvaluationEvidence():void {
   db().transaction(()=>{
     db().prepare("DELETE FROM post_knowledge_search_receipts WHERE datetime(expires_at)<=datetime('now')").run();
     db().prepare("UPDATE post_knowledge_uses SET snapshot_body=NULL,evidence_expired=1 WHERE evidence_expired=0 AND datetime(expires_at)<=datetime('now')").run();
-    db().prepare("UPDATE post_knowledge_use_assessments SET payload_json=json_set(payload_json,'$.evidence',json('[]')) WHERE use_id IN (SELECT id FROM post_knowledge_uses WHERE evidence_expired=1) AND json_valid(payload_json)").run();
+    db().prepare(`UPDATE post_knowledge_use_assessments SET payload_json=json_set(payload_json,'$.evidence',json('[]'))
+      WHERE use_id IN (SELECT id FROM post_knowledge_uses WHERE evidence_expired=1) AND json_valid(payload_json)
+      AND payload_json!=json_set(payload_json,'$.evidence',json('[]'))`).run();
     db().prepare("UPDATE post_evaluation_requests SET raw_response=NULL WHERE raw_response IS NOT NULL AND datetime(raw_response_expires_at)<=datetime('now')").run();
     db().prepare("UPDATE post_evaluation_requests SET failure_diagnostic_json=NULL WHERE failure_diagnostic_json IS NOT NULL AND datetime(failure_diagnostic_expires_at)<=datetime('now')").run();
     db().prepare("DELETE FROM post_knowledge_searches WHERE datetime(created_at)<=datetime('now',?)").run(`-${loadPostsSettings().knowledge.privateRetentionDays} days`);

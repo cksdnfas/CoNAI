@@ -31,8 +31,8 @@ current screen state. See `components/layout/app-shell.tsx`; these providers are
 | `/images/:compositeHash`, `/images/:compositeHash/metadata` | `features/images`, `features/metadata` | `page.image-detail.view`, `page.metadata-editor.view` |
 | `/upload` | `features/upload` | `page.upload.view` |
 | `/chat` | `features/codex-chat` (대화) | `page.chat.view` |
-| `/chat/profiles` (`?profile=<id\|new>`, `folder`, `q`, `page`) | `features/codex-chat` reuses settings profile editors | `page.chat.view` + `page.settings.view` |
-| `/chat/resources?tab=presets\|blocks\|lorebooks` (`&lorebook=<key>`) | `features/codex-chat` reuses settings resource editors | `page.chat.view` + `page.settings.view` |
+| `/chat/profiles` (`?profile=<id\|new>` opens a modal over the list; `folder`, `q`, `page` stay) | `features/codex-chat` reuses settings profile editors | `page.chat.view` + `page.settings.view` |
+| `/chat/resources?tab=presets\|blocks\|lorebooks` (`&lorebook=<key>` opens a modal over the lorebook list; other params stay) | `features/codex-chat` reuses settings resource editors | `page.chat.view` + `page.settings.view` |
 | `/chat/llm` (`?group=connections\|dashboard` for assistant context) | `features/codex-chat` reuses settings LLM connections and usage | `page.chat.view` + `page.settings.view` |
 | `/chat/routines`, `/chat/judge` | `features/codex-chat` (루틴 / 판단 기록) | `page.chat.view` + `page.settings.view` |
 | `/chat/mine` | `features/codex-chat` reuses `ChatSettingsMine` (내 설정) | `page.chat.view` |
@@ -73,8 +73,11 @@ right-side contextual settings sheet reuse it. `SettingsAdvanced` is local to it
 remain independent of page disclosure state. Generation's `nai`, `comfyui`, `pacing`, `schedules` anchors are stable;
 connection controllers and dialogs are imported from image-generation without duplicating their API operations.
 Settings › 채팅 keeps 기본, 기억, 도구 사용, 웹 검색, 진단, 프로필, 프리셋, 표시 블록, 로어북, 루틴, 판단 기록 and
-공용 플래그 in place. Profile and lorebook editors stay under `/settings?section=chat&profile=<id|new>` and
-`/settings?section=chat&lorebook=<key>`, using `chat-admin-location.ts` host-aware links. Settings › AI 연결 contains
+공용 플래그 in place. `/settings?section=chat&profile=<id|new>` opens the profile modal over the mounted Settings list;
+`/settings?section=chat&lorebook=<key>` opens the lorebook modal over its mounted list, using `chat-admin-location.ts`
+host-aware links. Closing removes only `lorebook`; saving `new` / `new-account` replaces it with the saved key while
+keeping the modal and any later draft edits open. Both hosts use the shared navigation guard and `closeOnBack={false}`.
+Settings › AI 연결 contains
 only AI 연결·모델 슬롯, AI 사용량 and AI 프롬프트; pi codemode belongs to chat's 도구 사용, diagnostics to 진단.
 `/chat/llm` reuses `LlmConnectionsTab` and `LlmUsageDashboard` without workflow prompt presets or a duplicate page title.
 `chat-admin-location.ts` also keeps AI connections and usage's judge link in the current workspace/Settings host.
@@ -100,7 +103,11 @@ Chat and the appearance library are independent features. `/characters` offers o
 profiles live at `/chat/profiles` and may optionally borrow a library look in the editor's 외형 section (unlinked by default).
 The profile list uses the same sidebar/toolbar/card-grid frame and generalized folder navigation/path helpers as
 appearance settings, but reads its own admin-only profile folder tree. `chat-settings-profiles.tsx` queries SQL pages
-by `folder`, `q`, `page`; `profile` opens the editor without discarding that location. Moves use revision-checked profile
+by `folder`, `q`, `page`; `profile` opens `ChatProfileRouteModal` over the mounted list without discarding that location.
+Closing and browser back use the shared unsaved-change guard (`closeOnBack={false}`); saving a new profile replaces
+its URL with the saved id while keeping the dialog open. Conversation menus open the same `ChatProfileEditorModal`
+in place for accounts with `page.settings.view`. Card hover and context menus share copy/move/delete actions.
+Moves use revision-checked profile
 updates; scoped reorder preserves other pages and folders. `chat-profile-groups.tsx` provides shared folder headings
 and ordering for profile selectors, using only server-authorized directory paths.
 
@@ -157,6 +164,10 @@ live catalog at `/#/dev/ui`. Use `components/ui`; the `[ds/*]` lint guards in `e
   `settings.default_model` / `default_judge` / `mcp_server` / `mcp_server_draft` / `usage_period` on `/chat/llm`.
   `settings.chat_options` stays on `/settings` for memory, tool use, web search and diagnostics.
   `backend/src/services/codex-chat/chatPageContext.ts` rechecks access and restricts personal settings to account-owned actions.
+- The open profile modal retains `useProfileEditorChatPage` / `ProfileAssistContext`, with priority over its mounted
+  library adapter. The chat dock remains usable beside it; draft links, synced-look checks and reviewed saves are unchanged.
+- The lorebook modal retains `useSettingsEditorChatPage` at priority 20 over the mounted resource list's priority 5;
+  `lorebook.entries` and reviewed `resource.save` keep the same draft, revision-conflict and permission boundaries.
 - The header's 채팅 설정 sheet covers enabled, lore auto-save/selection count, tool round limit, pi codemode, web engine,
   diagnostics enabled/raw capture/per-chat retention on `/chat`, its management screens and `/chat/mine`. Web model, daily search
   limit and lorebook second-key language stay Settings-only (`shared/src/constants/pageSettings.ts`).

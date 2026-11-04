@@ -1,13 +1,11 @@
 import { useMemo, useState } from 'react'
-import { LoaderCircle } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { EditorFooter } from '@/components/ui/editor-footer'
 import { Modal, ModalBody } from '@/components/ui/modal'
 import { useI18n } from '@/i18n'
 import type { GroupCountMaps } from '@/features/groups/group-count-utils'
 import { collectGroupSubtreeIds } from '@/features/groups/group-option-utils'
 import type { GroupWithHierarchy } from '@/types/group'
 import { GroupLocationPicker } from './group-location-picker'
-import { GroupModalFooter } from './group-modal-parts'
 
 interface GroupMoveDialogProps {
   open: boolean
@@ -56,12 +54,7 @@ export function GroupMoveDialog({ open, targets, allGroups, countMaps, isMoving 
         />
       </ModalBody>
 
-      <GroupModalFooter busy={isMoving}>
-        <Button type="button" onClick={() => onConfirm(parentId)} disabled={isMoving || unchanged || targets.length === 0}>
-          {isMoving ? <LoaderCircle className="animate-spin" /> : null}
-          {t({ ko: '여기로 옮기기', en: 'Move here' })}
-        </Button>
-      </GroupModalFooter>
+      <EditorFooter onSave={() => onConfirm(parentId)} canSave={!unchanged && targets.length > 0} saving={isMoving} saveLabel={t({ ko: '여기로 옮기기', en: 'Move here' })} />
     </Modal>
   )
 }

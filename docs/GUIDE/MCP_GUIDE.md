@@ -201,8 +201,8 @@ stdio:
 | --- | --- |
 | `get_prompt_group_structure` | 그룹 계층, 프롬프트 수, 미분류 수 조회 |
 | `get_prompts_in_group` | 그룹 페이지 조회 (`group_id=0`은 미분류, 기본 50/최대 100개). `query`·`sort_by`·`sort_order` 지원. `include_total=false`는 정확한 `total`을 생략하며 `has_more`·`next_page`로 계속 조회 |
-| `batch_create_groups` | 하나 또는 여러 그룹 생성 (`groups` 배열) |
-| `move_prompts_between_groups` | 프롬프트 그룹 배정·이동 (지정 ID 1–100개 또는 원본 그룹 지정, 대상 0은 미분류) |
+| `batch_create_groups` | 하나 또는 여러 그룹 생성 (`groups` 배열). 프롬프트 화면과 같이 `LoRA` 그룹 이름과 Danbooru 자동 그룹 아래의 생성은 거부하며, 거부된 그룹은 `results`에 `error`로 표시하고 나머지는 계속 만듦 (전부 거부되면 오류 결과) |
+| `move_prompts_between_groups` | 프롬프트 그룹 배정·이동 (지정 ID 1–100개 또는 원본 그룹 지정, 대상 0은 미분류). 원본 그룹 지정은 그 그룹의 프롬프트를 모두 옮김. `LoRA`·Danbooru 자동 그룹으로 옮기는 요청은 거부하고, 그 안에 있는 프롬프트는 옮기지 않고 `fail_count`와 `first_error`로 알림 |
 | `backup_prompt_data` | 프롬프트/그룹/설정 JSON 백업 생성 |
 | `restore_prompt_data` | 백업에서 프롬프트 데이터 복원 |
 | `list_backups` | 백업 파일 목록 조회 |
@@ -547,7 +547,7 @@ ComfyUI 시드(`seed`·`noise_seed`)는 실행마다 새로 뽑힙니다. marked
 
 - `propose_*` 도구는 답변 아래에 카드를 보여 줄 뿐 아무것도 저장하지 않습니다. 사용자가 카드에서 **저장**을 눌러야 반영됩니다.
 - 제안 도구는 진행 중인 채팅 답변 안에서만 쓸 수 있습니다.
-- 이 채팅 자체의 설정은 범위와 관계없이 `get_chat_settings`(연결 계정 로어북·기록할 곳·연결 파일·회의록 폴더 조회)와 `propose_chat_settings`(변경 카드, 채팅 주인이 저장)로 다룹니다. 도구 목차가 있는 채팅에서만, 페이지·게시판 호출 답변이 아닐 때만 제공되며 외부 MCP 클라이언트에는 없습니다.
+- 이 채팅 자체의 설정은 범위와 관계없이 `get_chat_settings`(연결 계정 로어북·기록할 곳·연결 파일·회의록 폴더 조회)와 `propose_chat_settings`(변경 카드, 채팅 주인이 저장)로 다룹니다. 도구 목차가 있는 채팅에서는 그 안에서, 앱 도구가 적어 목차가 없는 채팅에서는 도구 목록에 바로 제공됩니다. 공개 페이지·게시판 호출 답변에는 없고 외부 MCP 클라이언트에도 없습니다.
 
 ### 리소스 조회
 
@@ -795,7 +795,7 @@ claude mcp list
 | --- | --- |
 | `get_unclassified_prompts` | `get_prompts_in_group`에 `group_id: 0` |
 | `create_prompt_group` | `batch_create_groups`에 `groups: [{ group_name, ... }]` |
-| `assign_prompts_to_group` | `move_prompts_between_groups`에 `prompt_ids`, `target_group_id` (결과: `moved_count`, `fail_count`, `total`) |
+| `assign_prompts_to_group` | `move_prompts_between_groups`에 `prompt_ids`, `target_group_id` (결과: `moved_count`, `fail_count`, `total`, 거부된 항목이 있으면 `first_error`) |
 | `wait_sprite_job` | `get_sprite_job`에 `wait_seconds` (기존 기본 대기는 120초이므로 명시적으로 전달) |
 
 `get_sprite_job`은 대기를 생략하면 즉시 상태를 반환합니다. 대기는 외부 MCP 최대 600초, 채팅 최대 30초입니다. 단건 그룹 생성 결과는 `results[0]`에서 확인합니다.

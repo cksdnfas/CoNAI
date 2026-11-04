@@ -64,16 +64,21 @@ export function getMcpGenerationRoutingRules() {
   };
 }
 
-/** Resolve the active servers and tags currently available for one workflow scope. */
-export function getMcpGenerationRoutingOptions(workflowId?: number | null): McpGenerationRoutingOptions {
-  const activeServers = ComfyUIServerModel.findActiveServers();
+/** Resolve workflow routing once; native consumers retain endpoints, MCP receives only the public summary. */
+export function getGenerationRoutingServers(workflowId?: number | null) {
   const allLinkedServers = workflowId
     ? WorkflowServerModel.findServersByWorkflow(workflowId, false) as ComfyUIServerRecord[]
     : [];
   const hasExplicitServerLinks = Boolean(workflowId && allLinkedServers.length > 0);
   const eligibleServers = hasExplicitServerLinks
     ? WorkflowServerModel.findServersByWorkflow(workflowId as number, true) as ComfyUIServerRecord[]
-    : activeServers;
+    : ComfyUIServerModel.findActiveServers();
+  return { hasExplicitServerLinks, eligibleServers };
+}
+
+/** Resolve the active servers and tags currently available for one workflow scope. */
+export function getMcpGenerationRoutingOptions(workflowId?: number | null): McpGenerationRoutingOptions {
+  const { hasExplicitServerLinks, eligibleServers } = getGenerationRoutingServers(workflowId);
   const autoServers = eligibleServers.filter((server) => server.backend_type !== 'modal');
   const tagServers = new Map<string, ComfyUIServerRecord[]>();
 

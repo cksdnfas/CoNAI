@@ -1,10 +1,9 @@
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { FilePen, FilePlus, Undo2 } from 'lucide-react'
+import { FilePen, FilePlus } from 'lucide-react'
 import type { ChatFileChange, StoredFileEntry } from '@conai/shared'
 import { Button } from '@/components/ui/button'
 import { useConfirm } from '@/components/ui/confirm-dialog'
-import { IconButton } from '@/components/ui/icon-button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Tip } from '@/components/ui/tooltip'
 import { FilePreview } from '@/features/files/file-preview'
@@ -56,7 +55,7 @@ export function ChatFileChangeChips({ changes, threadId, replyId }: { changes?: 
               <Button variant="ghost" size="xs" className="min-w-0" disabled={change.folder === null} onClick={() => void open(change)}><span className="truncate font-mono text-2xs">{change.name}</span></Button>
             </Tip>
             {!change.undone && change.folder !== null && threadId !== undefined && replyId
-              ? <IconButton variant="ghost" size="icon-xs" disabled={undo.isPending} label={change.created ? t({ ko: '만든 파일 지우기', en: 'Remove the file it made' }) : t({ ko: '이 답변 전으로 되돌리기', en: 'Undo to before this reply' })} onClick={() => void run(change)}><Undo2 /></IconButton>
+              ? <Button type="button" variant={change.created ? 'destructive-ghost' : 'ghost'} size="xs" disabled={undo.isPending} onClick={() => void run(change)}>{change.created ? t({ ko: '만든 파일 지우기', en: 'Remove the file it made' }) : t({ ko: '이 답변 전으로 되돌리기', en: 'Undo to before this reply' })}</Button>
               : null}
           </span>
         )

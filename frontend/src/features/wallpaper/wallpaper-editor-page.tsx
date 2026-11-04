@@ -20,7 +20,6 @@ import {
   MoreHorizontal,
   Plus,
   Redo2,
-  Save,
   SendToBack,
   Trash2,
   Undo2,
@@ -46,6 +45,7 @@ import { useSnackbar } from '@/components/ui/snackbar-context'
 import { PageToolbar } from '@/components/common/page-toolbar'
 import { PageWithSidebar } from '@/components/common/page-with-sidebar'
 import { Button } from '@/components/ui/button'
+import { FloatingSaveBar } from '@/components/ui/floating-save-bar'
 import { ActionMenuButton } from '@/components/ui/action-menu'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
@@ -58,7 +58,7 @@ import { getWallpaperRuntimeSettings, updateAppearanceSettings } from '@/lib/api
 import { getAppSettings } from '@/lib/api-settings-general'
 import { subscribeOwnPageSettingsSave } from '@/features/settings/use-settings-revision'
 import { copyTextToClipboard } from '@/lib/clipboard'
-import { isTypingTarget } from '@/lib/keyboard-shortcut'
+import { isTypingTarget, usePageSaveShortcut } from '@/lib/keyboard-shortcut'
 import { triggerBlobDownload } from '@/lib/api-client'
 import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
 import { getGraphWorkflowSchedules } from '@/lib/api-module-graph'
@@ -571,6 +571,11 @@ export function WallpaperEditorPage() {
     replaceCanvas(cloneWallpaperPresetToDraft(nextPreset), nextPreset.id, t({ ko: "'{name}'을 열었어.", en: "Opened '{name}'." }, { name: nextPreset.name }))
   }
 
+  const handleRevertPreset = async () => {
+    if (!activePreset || wallpaperPresetMutation.isPending) return
+    if (await confirmDiscardEdits(t({ ko: '변경 되돌리기', en: 'Revert changes' }), t({ ko: '되돌리기', en: 'Revert' }))) await handleLoadPreset(activePreset.id)
+  }
+
   const handleMakeLive = async () => {
     if (!effectiveActivePresetId || hasUnsavedPresetChanges) return
     await syncWallpaperPresetState(undefined, effectiveActivePresetId, t({ ko: "'{name}'을 라이브 월페이퍼로 지정했어.", en: "'{name}' is now the live wallpaper." }, { name: activePreset?.name ?? '' }))
@@ -801,10 +806,20 @@ export function WallpaperEditorPage() {
     if (next) setZoom(next)
   }
 
-  // Keyboard: undo/redo, save, delete, nudge, duplicate, cut/copy/paste, styles, select all, layer order, zoom.
+  usePageSaveShortcut(() => {
+    if (isAdmin && wallpaperRevisionRef.current) runPresetAction(handleSavePreset())
+  }, wallpaperPresetMutation.isPending)
+
+  // Keyboard: undo/redo, save as new, delete, nudge, duplicate, cut/copy/paste, styles, select all, layer order, zoom.
   // The handler is rebuilt every render and read through a ref, so the listener never runs a stale closure.
   const handleEditorKeyDown = (event: KeyboardEvent) => {
     if (event.defaultPrevented) return
+    // Save as new works from any control, the name field included, like the plain save; only a dialog over the page owns it.
+    if ((event.ctrlKey || event.metaKey) && event.shiftKey && !event.altKey && event.code === 'KeyS') {
+      event.preventDefault()
+      if (!event.repeat && isAdmin && !wallpaperPresetMutation.isPending && !document.querySelector('[role="dialog"]')) runPresetAction(handleSavePreset({ saveAsNew: true }))
+      return
+    }
     const target = event.target as HTMLElement | null
     // Focused controls own their keys: arrows move a slider or a segmented choice, not the selection.
     if (isTypingTarget(event) || target?.closest('[role="slider"],[role="radio"],[role="tab"],[role="menu"],[role="listbox"],[role="option"]')) {
@@ -820,7 +835,6 @@ export function WallpaperEditorPage() {
     if (mod && event.altKey && event.code === 'KeyV' && styleClipboard) { event.preventDefault(); pasteSelectionStyle(); return }
 
     if (mod && !event.altKey) {
-      if (event.code === 'KeyS') { event.preventDefault(); if (isAdmin && !wallpaperPresetMutation.isPending) runPresetAction(handleSavePreset({ saveAsNew: event.shiftKey })); return }
       if (key === 'z' && !event.shiftKey) { event.preventDefault(); undoLayoutEdit(); return }
       if ((key === 'z' && event.shiftKey) || key === 'y') { event.preventDefault(); redoLayoutEdit(); return }
       if (key === 'a') { event.preventDefault(); setSelectedIds(layoutPreset.widgets.map((widget) => widget.id)); return }
@@ -856,8 +870,16 @@ export function WallpaperEditorPage() {
   editorKeyDownRef.current = handleEditorKeyDown
   useEffect(() => {
     const listener = (event: KeyboardEvent) => editorKeyDownRef.current(event)
+    // Save-as-new claims its modifier before the shared page-save shortcut.
+    const saveAsNew = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.code === 'KeyS') editorKeyDownRef.current(event)
+    }
     window.addEventListener('keydown', listener)
-    return () => window.removeEventListener('keydown', listener)
+    window.addEventListener('keydown', saveAsNew, true)
+    return () => {
+      window.removeEventListener('keydown', listener)
+      window.removeEventListener('keydown', saveAsNew, true)
+    }
   }, [])
 
   // A connected chat reads the whole draft and edits it (draft operations the person can undo); saving, deleting a
@@ -1018,7 +1040,7 @@ export function WallpaperEditorPage() {
     },
   })
 
-  const unsavedLabel = t({ ko: '저장 안 된 변경', en: 'Unsaved changes' })
+  const unsavedLabel = t({ ko: '저장 안 한 변경', en: 'Unsaved changes' })
   const allSelectedLocked = selectedWidgets.length > 0 && selectedWidgets.every((widget) => widget.locked)
   const isLivePreset = Boolean(activePreset) && effectiveActivePresetId === effectiveLivePresetId
   const toolbar = (
@@ -1083,9 +1105,6 @@ export function WallpaperEditorPage() {
           {activePreset && hasUnsavedPresetChanges ? (
             <span className="ml-1 size-2 shrink-0 rounded-full bg-primary" role="status" aria-label={unsavedLabel} title={unsavedLabel} />
           ) : null}
-          <IconButton size="icon-sm" className="ml-1" label={t({ ko: '저장', en: 'Save' })} disabled={!isAdmin || !wallpaperRevisionRef.current || wallpaperPresetMutation.isPending} onClick={() => runPresetAction(handleSavePreset())} aria-busy={wallpaperPresetMutation.isPending || undefined}>
-            <Save />
-          </IconButton>
         </>
       )}
     >
@@ -1361,6 +1380,7 @@ export function WallpaperEditorPage() {
             }}
           />
         ) : null}
+        {(!activePreset && wallpaperEditorSettingsQuery.isFetchedAfterMount) || hasUnsavedPresetChanges || wallpaperPresetMutation.isPending ? <FloatingSaveBar label={unsavedLabel} saving={wallpaperPresetMutation.isPending} canSave={isAdmin && Boolean(wallpaperRevisionRef.current)} onSave={() => runPresetAction(handleSavePreset())} onDiscard={activePreset ? () => runPresetAction(handleRevertPreset()) : undefined} /> : null}
         <WallpaperTemplateModal
           open={isTemplateModalOpen}
           onClose={() => setIsTemplateModalOpen(false)}

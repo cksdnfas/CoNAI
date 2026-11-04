@@ -69,8 +69,15 @@ export function publishRuntimeEvent(input: PublishRuntimeEventInput): number {
 
 /** Subscribe to in-process runtime events. Returns the unsubscribe handle. */
 export function subscribeToRuntimeEvents(listener: RuntimeEventListener): () => void {
-  emitter.on(RUNTIME_EVENT_CHANNEL, listener)
+  const guarded: RuntimeEventListener = (record) => {
+    try {
+      listener.call(emitter, record)
+    } catch (error) {
+      console.warn('⚠️ Runtime event subscriber failed:', error instanceof Error ? error.message : error)
+    }
+  }
+  emitter.on(RUNTIME_EVENT_CHANNEL, guarded)
   return () => {
-    emitter.off(RUNTIME_EVENT_CHANNEL, listener)
+    emitter.off(RUNTIME_EVENT_CHANNEL, guarded)
   }
 }

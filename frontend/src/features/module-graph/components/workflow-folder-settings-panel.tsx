@@ -1,6 +1,7 @@
-import { FolderInput, FolderPlus, PenSquare, Save, Trash2 } from 'lucide-react'
+import { PenSquare } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { IconButton } from '@/components/ui/icon-button'
+import { Button } from '@/components/ui/button'
 import { Heading } from '@/components/ui/heading'
 import { Inset } from '@/components/ui/inset'
 import { Input } from '@/components/ui/input'
@@ -130,19 +131,16 @@ export function WorkflowFolderSettingsPanel({
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            <IconButton label={t({ ko: '할당 저장', en: 'Save assignment' })} onClick={() => void onAssignWorkflowFolder(workflowFolderId)}>
-              <Save className="h-4 w-4" />
-            </IconButton>
+            {onDeleteWorkflow ? (
+              <Button size="sm" variant="destructive-ghost" onClick={() => void onDeleteWorkflow()}>{t({ ko: '삭제', en: 'Delete' })}</Button>
+            ) : null}
             {onEditWorkflow ? (
               <IconButton variant="secondary" onClick={onEditWorkflow} label={t({ ko: '편집 열기', en: 'Open editor' })}>
                 <PenSquare className="h-4 w-4" />
               </IconButton>
             ) : null}
-            {onDeleteWorkflow ? (
-              <IconButton variant="destructive" onClick={() => void onDeleteWorkflow()} label={t({ ko: '워크플로우 삭제', en: 'Delete workflow' })}>
-                <Trash2 className="h-4 w-4" />
-              </IconButton>
-            ) : null}
+            <span className="flex-1" />
+            <Button type="button" size="xs" variant="default" onClick={() => void onAssignWorkflowFolder(workflowFolderId)}>{t({ ko: '저장', en: 'Save' })}</Button>
           </div>
 
           <Inset padding="sm" className="space-y-3">
@@ -150,12 +148,8 @@ export function WorkflowFolderSettingsPanel({
             <Input value={childFolderName} onChange={(event) => setChildFolderName(event.target.value)} placeholder={t({ ko: '새 폴더 이름', en: 'New folder name' })} />
             <Textarea rows={3} value={childFolderDescription} onChange={(event) => setChildFolderDescription(event.target.value)} placeholder={t({ ko: '설명 (선택)', en: 'Description (optional)' })} />
             <div className="flex flex-wrap gap-2">
-              <IconButton variant="secondary" onClick={() => void handleCreateChildFolder(false)} disabled={!childFolderName.trim()} label={t({ ko: '폴더 생성', en: 'Create folder' })}>
-                <FolderPlus className="h-4 w-4" />
-              </IconButton>
-              <IconButton variant="secondary" onClick={() => void handleCreateChildFolder(true)} disabled={!childFolderName.trim()} label={t({ ko: '폴더 만들고 이 워크플로 할당', en: 'Create folder and assign this workflow' })}>
-                <FolderInput className="h-4 w-4" />
-              </IconButton>
+              <Button size="sm" variant="secondary" onClick={() => void handleCreateChildFolder(true)} disabled={!childFolderName.trim()}>{t({ ko: '만들고 할당', en: 'Create and assign' })}</Button>
+              <Button size="sm" variant="default" onClick={() => void handleCreateChildFolder(false)} disabled={!childFolderName.trim()}>{t({ ko: '만들기', en: 'Create' })}</Button>
             </div>
           </Inset>
         </div>
@@ -185,12 +179,9 @@ export function WorkflowFolderSettingsPanel({
               </div>
 
               <div className="flex flex-wrap gap-2">
-                <IconButton label={t({ ko: '폴더 저장', en: 'Save folder' })} onClick={() => selectedFolder && void onUpdateFolder(selectedFolder.id, { name: folderName.trim(), description: folderDescription.trim() || null, parent_id: folderParentId })} disabled={!selectedFolder || !folderName.trim()}>
-                  <Save className="h-4 w-4" />
-                </IconButton>
-                <IconButton variant="destructive" onClick={() => selectedFolder && void onDeleteFolder(selectedFolder.id)} disabled={!selectedFolder} label={t({ ko: '폴더 삭제', en: 'Delete folder' })}>
-                  <Trash2 className="h-4 w-4" />
-                </IconButton>
+                <Button size="sm" variant="destructive-ghost" onClick={() => selectedFolder && void onDeleteFolder(selectedFolder.id)} disabled={!selectedFolder}>{t({ ko: '삭제', en: 'Delete' })}</Button>
+                <span className="flex-1" />
+                <Button type="button" size="xs" variant="default" onClick={() => selectedFolder && void onUpdateFolder(selectedFolder.id, { name: folderName.trim(), description: folderDescription.trim() || null, parent_id: folderParentId })} disabled={!selectedFolder || !folderName.trim()}>{t({ ko: '저장', en: 'Save' })}</Button>
               </div>
             </div>
           ) : null}
@@ -199,9 +190,7 @@ export function WorkflowFolderSettingsPanel({
             <Text as="div" variant="label">{t({ ko: '폴더 생성', en: 'Create folder' })}</Text>
             <Input value={childFolderName} onChange={(event) => setChildFolderName(event.target.value)} placeholder={t({ ko: '새 폴더 이름', en: 'New folder name' })} />
             <Textarea rows={3} value={childFolderDescription} onChange={(event) => setChildFolderDescription(event.target.value)} placeholder={t({ ko: '설명 (선택)', en: 'Description (optional)' })} />
-            <IconButton variant="secondary" onClick={() => void handleCreateChildFolder(false)} disabled={!childFolderName.trim()} label={t({ ko: '폴더 생성', en: 'Create folder' })}>
-              <FolderPlus className="h-4 w-4" />
-            </IconButton>
+            <Button size="sm" variant="default" onClick={() => void handleCreateChildFolder(false)} disabled={!childFolderName.trim()}>{t({ ko: '만들기', en: 'Create' })}</Button>
           </Inset>
         </div>
       )}

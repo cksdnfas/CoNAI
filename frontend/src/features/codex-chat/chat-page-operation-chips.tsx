@@ -1,6 +1,6 @@
-import { AppWindow, ArrowUpRight, PencilLine, Undo2 } from 'lucide-react'
+import { AppWindow, ArrowUpRight, PencilLine } from 'lucide-react'
 import type { ChatPageOperation } from '@conai/shared'
-import { IconButton } from '@/components/ui/icon-button'
+import { Button } from '@/components/ui/button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
@@ -57,7 +57,7 @@ export function ChatPageOperationChips({ calls }: { calls: CodexChatToolCall[] }
             <Icon className="size-3 shrink-0" />
             <span className="min-w-0 truncate">{navigate ? destination(operation.label) : operation.label}</span>
             {operation.tier === 'draft' && entry?.undo && entry.state === 'done'
-              ? <IconButton variant="ghost" size="icon-xs" label={t({ ko: '되돌리기', en: 'Undo' })} onClick={() => undo(operation)}><Undo2 /></IconButton>
+              ? <Button variant="ghost" size="xs" onClick={() => undo(operation)}>{t({ ko: '되돌리기', en: 'Revert' })}</Button>
               : null}
           </span>
         )

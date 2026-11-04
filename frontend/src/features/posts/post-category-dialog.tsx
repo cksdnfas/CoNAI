@@ -1,10 +1,10 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import type { PostCategory } from '@conai/shared'
-import { Button } from '@/components/ui/button'
+import { EditorFooter } from '@/components/ui/editor-footer'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { Input } from '@/components/ui/input'
-import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
+import { Modal, ModalBody } from '@/components/ui/modal'
 import { Select } from '@/components/ui/select'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
@@ -71,17 +71,9 @@ export function PostCategoryDialog({ category, parentId, categories, onClose, on
             ))}
           </Select>
         </ModalBody>
-        <ModalFooter>
-          {category ? (
-            <Button type="button" variant="destructive-ghost" disabled={busy} onClick={async () => {
+        <EditorFooter saveSubmit canSave={Boolean(name.trim()) && !busy} saving={save.isPending} deleting={remove.isPending} onDelete={category ? async () => {
               if (await confirm({ title: t({ ko: '"{name}" 카테고리를 지울까?', en: 'Delete "{name}"?' }, { name: category.name }), description: t({ ko: '글과 하위 카테고리가 없을 때만 지울 수 있어.', en: 'Only empty categories can be deleted.' }), tone: 'destructive' })) remove.mutate()
-            }}>
-              {t({ ko: '지우기', en: 'Delete' })}
-            </Button>
-          ) : null}
-          <span className="flex-1" />
-          <Button type="submit" disabled={!name.trim() || busy}>{t({ ko: '저장', en: 'Save' })}</Button>
-        </ModalFooter>
+        } : undefined} />
       </form>
     </Modal>
   )

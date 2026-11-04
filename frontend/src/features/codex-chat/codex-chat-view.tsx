@@ -5,7 +5,7 @@ import { resolveChatPortrait } from '@conai/shared'
 import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useIsMutating, useMutation, useQueries, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query'
-import { Activity, AlarmClock, ALargeSmall, ArrowLeft, ArrowUp, ChevronLeft, ChevronRight, Cpu, Download, Eraser, Flag, FoldVertical, Image as ImageIcon, LayoutGrid, ListChecks, Maximize2, Minimize2, MoreHorizontal, Plus, RotateCw, SlidersHorizontal, Square, Target, Trash2, TriangleAlert, UserPlus, X } from 'lucide-react'
+import { Activity, AlarmClock, ALargeSmall, ArrowLeft, ArrowUp, ChevronLeft, ChevronRight, Cpu, Download, Eraser, Flag, FoldVertical, Image as ImageIcon, LayoutGrid, ListChecks, Maximize2, Minimize2, MoreHorizontal, Plus, RotateCw, SlidersHorizontal, Square, SquarePen, Target, Trash2, TriangleAlert, UserPlus, X } from 'lucide-react'
 import { Chip } from '@/components/ui/chip'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
@@ -17,6 +17,8 @@ import { ErrorState } from '@/components/ui/error-state'
 import { LoadingState, Spinner } from '@/components/ui/loading-state'
 import { Modal, ModalBody } from '@/components/ui/modal'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
+import { hasAuthPermission } from '@/features/auth/auth-permissions'
+import { useUnsavedSettingsGuard } from '@/features/settings/use-unsaved-settings-guard'
 import { useI18n } from '@/i18n'
 import { ChatPageConnectButton, ChatPageConnectionNotice } from './chat-page-context'
 import { ChatTaskStrip } from './chat-task-ui'
@@ -25,6 +27,8 @@ import { ChatChoiceDock, ChatChoiceStatesContext, chatChoiceStates, findOpenChoi
 import {
   CHAT_APPEARANCE_QUERY_KEY,
   CHAT_PROFILES_QUERY_KEY,
+  getChatAdminProfile,
+  type ChatProfile,
   chatProfileAssetUrl,
   chatProfileEmoticonsQueryKey,
   listChatProfileEmoticons,
@@ -111,6 +115,7 @@ const CodexChatContextView = lazy(async () => ({ default: (await import('./codex
 const CodexEngineContextView = lazy(async () => ({ default: (await import('./codex-chat-context-view')).CodexEngineContextView }))
 const GroupContextView = lazy(async () => ({ default: (await import('./codex-chat-context-view')).GroupContextView }))
 const CodexChatGallery = lazy(async () => ({ default: (await import('./codex-chat-gallery')).CodexChatGallery }))
+const ChatProfileEditorModal = lazy(async () => ({ default: (await import('@/features/settings/components/chat-profile-editor')).ChatProfileEditorModal }))
 
 /** Longer names leave the composer hint generic, so it stays on one line in narrow panels without cutting the name. */
 const COMPOSER_HINT_NAME_MAX = 10
@@ -180,7 +185,40 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   const [flagManagerOpen, setFlagManagerOpen] = useState(false)
   const [routineOpen, setRoutineOpen] = useState(false)
   const routineThreadIds = useRoutineThreadIds()
-  const isAdmin = useAuthStatusQuery().data?.isAdmin === true
+  const auth = useAuthStatusQuery().data
+  const isAdmin = auth?.isAdmin === true
+  const canManageProfiles = hasAuthPermission(auth?.permissionKeys, 'page.settings.view')
+  const [editorProfile, setEditorProfile] = useState<ChatProfile | null>(null)
+  const editorDirty = useRef(false)
+  const [hasEditorChanges, setHasEditorChanges] = useState(false)
+  const editorLeavePending = useRef<Promise<boolean> | null>(null)
+  const onEditorDirtyChange = useCallback((dirty: boolean) => { editorDirty.current = dirty; setHasEditorChanges(dirty) }, [])
+  const confirmEditorLeave = useCallback(() => {
+    if (!editorDirty.current) return Promise.resolve(true)
+    if (editorLeavePending.current) return editorLeavePending.current
+    const pending = confirm({
+      title: t({ ko: '저장 안 한 변경이 있어', en: 'You have unsaved changes' }),
+      confirmLabel: t({ ko: '버리기', en: 'Discard' }),
+      cancelLabel: t({ ko: '계속 편집', en: 'Keep editing' }),
+      tone: 'destructive',
+    }).then((discard) => {
+      if (discard) { editorDirty.current = false; setHasEditorChanges(false) }
+      return discard
+    }).finally(() => { editorLeavePending.current = null })
+    editorLeavePending.current = pending
+    return pending
+  }, [confirm, t])
+  const { registerPanelCloseGuard } = chat
+  useEffect(() => layout === 'panel' && editorProfile ? registerPanelCloseGuard(confirmEditorLeave) : undefined, [layout, editorProfile, registerPanelCloseGuard, confirmEditorLeave])
+  const leavesEditor = useCallback((current: { pathname: string }, next: { pathname: string }) => editorDirty.current && current.pathname !== next.pathname, [])
+  useUnsavedSettingsGuard(Boolean(editorProfile) && hasEditorChanges, t({ ko: '프로필에 저장하지 않은 변경이 있어. 나가면 사라져.', en: 'This profile has unsaved changes that will be lost.' }), leavesEditor)
+  const profileEditorMutation = useMutation({
+    mutationFn: getChatAdminProfile,
+    onSuccess: async (next) => {
+      if (next.id !== editorProfile?.id && await confirmEditorLeave()) setEditorProfile(next)
+    },
+    onError: (error) => showSnackbar({ message: getErrorMessage(error, t({ ko: '프로필을 불러오지 못했어.', en: 'Could not load the profile.' })), tone: 'error' }),
+  })
   /** A new chat (one profile) or room (several, the first representing it) waiting for the user to say who they are in it. */
   const [pendingStart, setPendingStart] = useState<number[] | null>(null)
   const [searchOpen, setSearchOpen] = useState(false)
@@ -772,11 +810,11 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
     void chat.send(activeThreadId)
   }
 
-  const handleDelete = async () => {
-    if (activeThreadId === null) {
+  // The open chat from its menu, or any chat from its list row: both go through the delete dialog (backup, lorebook).
+  const handleDelete = async (threadId: number | null = activeThreadId) => {
+    if (threadId === null) {
       return
     }
-    const threadId = activeThreadId
     const books = await queryClient.fetchQuery({ queryKey: threadLorebooksQueryKey(threadId), queryFn: () => getThreadLorebooks(threadId), staleTime: 0 }).catch(() => null)
     setDeleteTarget({ threadId, book: books?.chatBook && books.chatBook.entries.length > 0 ? books.chatBook : null })
   }
@@ -809,7 +847,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
     {/* The page layout's list screen already sits on --page-gutter; only the panel adds its own inset. The side column carries the search in its own header row. */}
     {dense ? null : <div className={cn('pb-2 pt-3', layout === 'panel' && 'px-3')}><ChatSearchInput value={searchText} onChange={setSearchText} /></div>}
     <div ref={dense ? undefined : restoreChatListScroll} onScroll={dense ? undefined : (event) => { chatListScrollTop = event.currentTarget.scrollTop }} className={cn('min-h-0 flex-1 overflow-y-auto', !dense && layout === 'panel' && 'px-1')}>
-      <ChatThreadList query={searchText} profilesById={profilesById} activeThreadId={activeThreadId} runningThreadIds={runningThreadIds} routineThreadIds={routineThreadIds} dense={dense} onSelect={openThread} onUpdate={updateListEntry} onBulk={runBulk} />
+      <ChatThreadList query={searchText} profilesById={profilesById} activeThreadId={activeThreadId} runningThreadIds={runningThreadIds} routineThreadIds={routineThreadIds} dense={dense} onSelect={openThread} onUpdate={updateListEntry} onBulk={runBulk} onDelete={(threadId) => void handleDelete(threadId)} />
       {searchText.trim() ? <ChatSearchResults query={searchText} disabled={false} onPick={pickSearchResult} /> : null}
     </div>
   </>
@@ -904,6 +942,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
       {statusItem}
       {inviteItem}
       <DropdownMenuItem onSelect={() => { if (dockView) setView('chat'); else appearanceOpenRef.current = true; setAppearanceOpen(true) }}><ALargeSmall />{t({ ko: '채팅 모양', en: 'Chat appearance' })}</DropdownMenuItem>
+      {canManageProfiles && profile ? <DropdownMenuItem disabled={profileEditorMutation.isPending} onSelect={() => profileEditorMutation.mutate(profile.id)}><SquarePen />{t({ ko: '프로필 편집', en: 'Edit profile' })}</DropdownMenuItem> : null}
       {isGroup ? null : <DropdownMenuItem disabled={!thread || isBusy} onSelect={() => void runCommand('/compact')}><FoldVertical />{isCodexThread ? t({ ko: '압축', en: 'Compact' }) : t({ ko: '지금 요약', en: 'Summarize now' })}</DropdownMenuItem>}
       <DropdownMenuItem onSelect={() => setExportOpen(true)}><Download />{t({ ko: '내보내기', en: 'Export' })}</DropdownMenuItem>
       <DropdownMenuSeparator />
@@ -1115,6 +1154,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   ) : null
 
   const dialogs = <>
+    {canManageProfiles && editorProfile ? <Suspense fallback={null}><ChatProfileEditorModal key={editorProfile.id} open stayOpen profile={editorProfile} defaults={undefined} onDirtyChange={onEditorDirtyChange} onClose={() => setEditorProfile(null)} /></Suspense> : null}
     <ChatExportDialog threadId={activeThreadId} open={exportOpen} onClose={() => setExportOpen(false)} />
     <ChatFlagManagerModal open={flagManagerOpen} onClose={() => setFlagManagerOpen(false)} />
     {isAdmin && activeThreadId !== null ? <ChatRoutineEditor open={routineOpen} routine={null} presetThreadId={activeThreadId} onClose={() => setRoutineOpen(false)} /> : null}

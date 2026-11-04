@@ -1299,14 +1299,17 @@ router.get('/threads/:threadId/export', requireChatAccess, (req: Request, res: R
       res.type('application/json').send(JSON.stringify(file, null, 2))
     } else {
       const detail = CodexChatService.getThread(requester, threadId)
-      const profile = detail.thread.profile_id ? ChatProfileStore.find(detail.thread.profile_id) : null
+      const speakerIds = detail.thread.kind === 'group'
+        ? [...new Set(detail.messages.map(message => message.speaker_profile_id).filter((id): id is number => id !== null))]
+        : []
+      const names = new Map(ChatProfileStore.listNames({
+        ids: [...(detail.thread.profile_id ? [detail.thread.profile_id] : []), ...speakerIds],
+      }).map(profile => [profile.id, profile.name]))
       res.setHeader('Content-Disposition', `attachment; filename="chat-${threadId}.md"`)
       res.setHeader('X-Content-Type-Options', 'nosniff')
       res.setHeader('Cache-Control', 'private, no-store')
-      const speakers = new Map(detail.thread.kind === 'group'
-        ? [...new Set(detail.messages.map((message) => message.speaker_profile_id).filter((id): id is number => id !== null))].map((id) => [id, ChatProfileStore.find(id)?.name ?? '(나간 참가자)'] as const)
-        : [])
-      res.type('text/markdown').send(exportChatMarkdown(detail.thread, detail.messages, CodexChatService.listThreadMedia(requester, threadId), profile?.name ?? '어시스턴트', `${req.protocol}://${req.get('host')}`, speakers))
+      const speakers = new Map(speakerIds.map(id => [id, names.get(id) ?? '(나간 참가자)'] as const))
+      res.type('text/markdown').send(exportChatMarkdown(detail.thread, detail.messages, CodexChatService.listThreadMedia(requester, threadId), names.get(detail.thread.profile_id ?? 0) ?? '어시스턴트', `${req.protocol}://${req.get('host')}`, speakers))
     }
   } catch (error) { sendChatError(res, error) }
 })

@@ -3,10 +3,11 @@ import { useQuery } from '@tanstack/react-query'
 import { Folder, FolderInput, FolderOpen } from 'lucide-react'
 import { HierarchyPicker } from '@/components/common/hierarchy-picker'
 import { Button } from '@/components/ui/button'
+import { EditorFooter } from '@/components/ui/editor-footer'
 import { Field } from '@/components/ui/field'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
-import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
+import { Modal, ModalBody } from '@/components/ui/modal'
 import { normalizeGroupPathInput, useGenerationTargetGroupPath } from '@/features/groups/generation-target-group-store'
 import { getGroupsHierarchyAll, GROUPS_HIERARCHY_ALL_QUERY_KEY } from '@/lib/api-groups'
 import type { GroupWithHierarchy } from '@/types/group'
@@ -187,17 +188,11 @@ function GenerationTargetGroupModal({
             </div>
           ) : null}
 
-          <ModalFooter>
+          <EditorFooter saveSubmit canSave={!tooDeep} saveLabel={t({ ko: '적용', en: 'Apply' })}>
             <Button type="button" variant="ghost" onClick={() => onApply('')}>
               {t({ ko: '지정 해제', en: 'Clear' })}
             </Button>
-            <Button type="button" variant="secondary" onClick={onClose}>
-              {t({ ko: '취소', en: 'Cancel' })}
-            </Button>
-            <Button type="submit" disabled={tooDeep}>
-              {t({ ko: '적용', en: 'Apply' })}
-            </Button>
-          </ModalFooter>
+          </EditorFooter>
         </ModalBody>
       </form>
     </Modal>

@@ -2,6 +2,7 @@ import type { ComponentProps, ComponentType, MouseEvent, ReactNode } from 'react
 import { Pencil } from 'lucide-react'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
+import { ActionContextMenu, ActionMenuButton, type ActionMenuEntry } from './action-menu'
 import { IconButton } from './icon-button'
 import { Tip } from './tooltip'
 
@@ -15,6 +16,8 @@ interface ResourceRowProps extends Omit<ComponentProps<'div'>, 'title'> {
   aside?: ReactNode
   /** Controls at the row end (switch, star…). Clicks here do not open the row. */
   trailing?: ReactNode
+  /** The same actions from a right-click on the row or its hover menu. */
+  menu?: ActionMenuEntry[]
   /** Opens the editor: the whole row is clickable and ends in a pencil. */
   onOpen?: () => void
   openLabel?: string
@@ -29,15 +32,15 @@ interface ResourceRowProps extends Omit<ComponentProps<'div'>, 'title'> {
  * controls, edit. Hairline between rows at content width, hover wash a little wider. Stack rows directly (no
  * `space-y-*`) in a `RowGroup`.
  */
-function ResourceRow({ leading, name, extra, aside, trailing, onOpen, openLabel, dimmed = false, dropTarget = false, className, children, onClick, ...props }: ResourceRowProps) {
+function ResourceRow({ leading, name, extra, aside, trailing, menu, onOpen, openLabel, dimmed = false, dropTarget = false, className, children, onClick, ...props }: ResourceRowProps) {
   const { t } = useI18n()
   const stop = (event: MouseEvent) => event.stopPropagation()
 
-  return (
+  const row = (
     <div
       data-slot="resource-row"
       className={cn(
-        'group relative -mx-2 flex min-h-11 items-center gap-3 rounded-sm px-2 py-1.5 transition-colors',
+        'group/resource-row relative -mx-2 flex min-h-11 items-center gap-3 rounded-sm px-2 py-1.5 transition-colors',
         'before:pointer-events-none before:absolute before:inset-x-2 before:top-0 before:border-t before:border-line first:before:hidden',
         onOpen && 'cursor-pointer hover:bg-fill',
         dimmed && 'opacity-55',
@@ -65,9 +68,18 @@ function ResourceRow({ leading, name, extra, aside, trailing, onOpen, openLabel,
           {aside}
         </span>
       ) : null}
-      {trailing ? (
+      {trailing || menu?.length ? (
         <span data-slot="resource-row-trailing" className="flex shrink-0 items-center gap-1" onClick={stop}>
           {trailing}
+          {menu?.length ? (
+            <ActionMenuButton
+              entries={menu}
+              size="icon-sm"
+              variant="ghost"
+              label={t({ ko: '작업', en: 'Actions' })}
+              className="opacity-0 transition-opacity motion-reduce:transition-none group-hover/resource-row:opacity-100 group-focus-within/resource-row:opacity-100 pointer-coarse:opacity-100 data-[state=open]:opacity-100"
+            />
+          ) : null}
         </span>
       ) : null}
       {onOpen ? (
@@ -86,6 +98,7 @@ function ResourceRow({ leading, name, extra, aside, trailing, onOpen, openLabel,
       ) : null}
     </div>
   )
+  return menu?.length ? <ActionContextMenu entries={menu}>{row}</ActionContextMenu> : row
 }
 
 /** A state beside the name that needs attention (not linked, missing, failed): a small status chip with a dot. `tip` says what exactly. */

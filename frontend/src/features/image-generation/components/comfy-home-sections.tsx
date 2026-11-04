@@ -10,7 +10,8 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Field } from '@/components/ui/field'
-import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
+import { Modal, ModalBody } from '@/components/ui/modal'
+import { EditorFooter } from '@/components/ui/editor-footer'
 import { IconButton } from '@/components/ui/icon-button'
 import { RowGroup } from '@/components/ui/row-group'
 import { Switch } from '@/components/ui/switch'
@@ -302,17 +303,13 @@ function CustomDropdownListEditorModal({ open, isSubmitting = false, initialList
           <Textarea rows={10} value={itemsText} onChange={(event) => setItemsText(event.target.value)} placeholder={t({ ko: '항목을 줄바꿈 또는 쉼표로 입력', en: 'Enter items separated by new lines or commas' })} readOnly={readOnly} />
         </Field>
 
-        <ModalFooter className="justify-between">
+        <EditorFooter
+          onSave={!readOnly ? () => void handleSubmit() : undefined}
+          canSave={Boolean(name.trim()) && items.length > 0}
+          saving={isSubmitting}
+        >
           <div className="text-xs text-muted-foreground">{t({ ko: '{count}개 항목', en: '{count} items' }, { count: formatNumber(items.length) })}</div>
-          <div className="flex gap-2">
-            <Button type="button" variant="secondary" onClick={onClose} disabled={isSubmitting}>{readOnly ? t({ ko: '닫기', en: 'Close' }) : t({ ko: '취소', en: 'Cancel' })}</Button>
-            {!readOnly ? (
-              <Button type="button" onClick={() => void handleSubmit()} disabled={isSubmitting || !name.trim() || items.length === 0}>
-                {t({ ko: '저장', en: 'Save' })}
-              </Button>
-            ) : null}
-          </div>
-        </ModalFooter>
+        </EditorFooter>
       </ModalBody>
     </Modal>
   )
@@ -363,12 +360,7 @@ function ComfyDropdownAutoCollectModal({ open, isSubmitting = false, onClose, on
           </IconButton>
         </div>
 
-        <ModalFooter>
-          <Button type="button" variant="secondary" onClick={onClose} disabled={isSubmitting}>{t({ ko: '취소', en: 'Cancel' })}</Button>
-          <Button type="button" onClick={() => void handleSubmit()} disabled={isSubmitting}>
-            {t({ ko: '자동수집 실행', en: 'Run auto collect' })}
-          </Button>
-        </ModalFooter>
+        <EditorFooter onSave={() => void handleSubmit()} saving={isSubmitting} saveLabel={t({ ko: '자동수집 실행', en: 'Run auto collect' })} />
       </ModalBody>
     </Modal>
   )

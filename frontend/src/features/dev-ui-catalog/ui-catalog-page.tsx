@@ -841,7 +841,7 @@ export function UiCatalogPage() {
           <ToggleRow variant="detail"><Checkbox defaultChecked />Remember choice</ToggleRow>
           <Tip content="Tooltips render above modals"><Button variant="secondary" size="sm">Hover me</Button></Tip>
           <ModalFooter>
-            <Button variant="secondary" onClick={() => setModalOpen(false)}>취소</Button>
+            <Button variant="ghost" onClick={() => setModalOpen(false)}>취소</Button>
             <Button onClick={() => void askConfirm('default')}>Nested confirm</Button>
           </ModalFooter>
         </ModalBody>

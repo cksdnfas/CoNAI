@@ -235,7 +235,7 @@ test('workflow LLM nodes: model resolution, chat-path requests, usage, new nodes
     const withoutLore = buildChatProfileReplyMessages({ profile, message: '바다 가자', history: null, userName: null, useLorebooks: false })
     assert.ok(!withoutLore.some((message) => textOf(message).includes('SEA_LORE_TEXT')))
     const freeHistory = buildChatProfileReplyMessages({ profile, message: 'hi', history: 'just notes', userName: null, useLorebooks: false })
-    assert.match(textOf(freeHistory[freeHistory.length - 1]), /앞 대화\njust notes/)
+    assert.match(textOf(freeHistory[freeHistory.length - 1]), /## Earlier conversation\njust notes/)
 
     answer = '좋아!'
     const ctx = context()

@@ -1,5 +1,6 @@
 import type { ChangeEvent, ReactNode, RefObject } from 'react'
-import { Check, Download, Pencil, Star, Trash2, Upload, X } from 'lucide-react'
+import { Download, Pencil, Star, Upload } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { useI18n } from '@/i18n'
@@ -192,23 +193,21 @@ export function WallpaperSavedEasingPresetsSection({
                     className="min-w-0 flex-1"
                   />
                   <div className="flex shrink-0 items-center gap-0.5">
-                    <IconButton
-                      size="icon-xs"
-                      variant="ghost"
-                      onClick={() => onRenamePreset(preset.id)}
-                      disabled={!editingPresetName.trim() || isDuplicateName}
-                      label={t({ ko: '이름 저장', en: 'Save name' })}
-                    >
-                      <Check className="h-3.5 w-3.5" />
-                    </IconButton>
-                    <IconButton
-                      size="icon-xs"
+                    <Button
+                      size="xs"
                       variant="ghost"
                       onClick={onCancelEditingPreset}
-                      label={t({ ko: '이름 편집 취소', en: 'Cancel name edit' })}
                     >
-                      <X className="h-3.5 w-3.5" />
-                    </IconButton>
+                      {t({ ko: '취소', en: 'Cancel' })}
+                    </Button>
+                    <Button
+                      size="xs"
+                      variant="default"
+                      onClick={() => onRenamePreset(preset.id)}
+                      disabled={!editingPresetName.trim() || isDuplicateName}
+                    >
+                      {t({ ko: '저장', en: 'Save' })}
+                    </Button>
                   </div>
                 </div>
                 <div className="rounded-sm bg-surface-lowest px-2 py-1.5">
@@ -246,14 +245,14 @@ export function WallpaperSavedEasingPresetsSection({
                     >
                       <Pencil className="h-3.5 w-3.5" />
                     </IconButton>
-                    <IconButton
-                      size="icon-xs"
-                      variant="ghost"
+                    <Button
+                      type="button"
+                      size="xs"
+                      variant="destructive-ghost"
                       onClick={() => onRemovePreset(preset.id)}
-                      label={t({ ko: '프리셋 삭제', en: 'Delete preset' })}
                     >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </IconButton>
+                      {t({ ko: '삭제', en: 'Delete' })}
+                    </Button>
                   </>
                 )}
               />

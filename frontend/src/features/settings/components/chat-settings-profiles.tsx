@@ -1,5 +1,5 @@
 import { useRef, useState, type DragEvent } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useLibraryLocation } from '@/components/common/use-library-location'
 import { LibraryFolderContent, libraryFolderView } from '@/components/common/library-folder-content'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -11,6 +11,7 @@ import { PageWithSidebar } from '@/components/common/page-with-sidebar'
 import { PathBreadcrumbs } from '@/components/common/path-breadcrumbs'
 import { ToolbarSearchField } from '@/components/common/search-field'
 import { ActionMenuButton, type ActionMenuEntry } from '@/components/ui/action-menu'
+import { Button } from '@/components/ui/button'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Heading } from '@/components/ui/heading'
@@ -42,8 +43,6 @@ import {
   updateChatProfileFolder,
   deleteChatProfileFolder,
   chatProfileAssetUrl,
-  getChatAdminProfile,
-  listChatProfileNames,
   listModelSlots,
   reorderChatProfiles,
   updateChatProfile,
@@ -51,37 +50,14 @@ import {
   type ChatProfile,
   type ChatProfileInput,
   type ChatProfileFolder,
-  type ModelSlot,
 } from '@/lib/api-codex-chat'
 import { getErrorMessage } from '@/lib/error-message'
-import { type ChatProfileEditorPageState } from './chat-profile-editor'
+import { ChatProfileRouteModal, type ChatProfileEditorState } from './chat-profile-editor'
+import { useChatProfileActions } from './use-chat-profile-actions'
 import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
 import { pageAction, pageArray, pageChoice, pageNumber, pageObject, pageText } from '@/features/codex-chat/page-action-helpers'
 import { ChatCardImportReportModal } from './chat-card-import-report'
-
-/** An API LLM profile's model row: its own, else the chat representative model it falls back to. */
-function profileModelRow(profile: ChatProfile, slots: ModelSlot[]) {
-  if (profile.engine !== 'llm') return undefined
-  return slots.find((item) => item.id === profile.modelSlotId) ?? slots.find((item) => item.isDefault)
-}
-
-/** `connection · model` (through `대표 · name` when the profile picked a representative model), else the engine and its model. */
-export function profileModelLine(profile: ChatProfile, slots: ModelSlot[], t: ReturnType<typeof useI18n>['t']) {
-  const slot = profileModelRow(profile, slots)
-  const reaches = slot?.kind === 'route' ? ` (${slot.model ? `${slot.providerLabel} · ${slot.model}` : t({ ko: '비어 있음', en: 'empty' })})` : ''
-  if (slot) return `${slot.label}${reaches}${profile.llmRuntime === 'pi' ? ' · pi' : ''}`
-  if (profile.engine === 'claude') return `Claude Code · ${profile.model || 'sonnet'}`
-  if (profile.engine === 'codex') return `Codex · ${profile.model || t({ ko: '기본 모델', en: 'default model' })}`
-  return t({ ko: '모델 없음', en: 'No model' })
-}
-
-/** Short chip text for the row: the model, else the engine. The full line is its tooltip. */
-export function profileModelChip(profile: ChatProfile, slots: ModelSlot[]) {
-  const slot = profileModelRow(profile, slots)
-  if (slot) return slot.model || slot.label
-  if (profile.engine === 'claude') return 'Claude Code'
-  return profile.engine === 'codex' ? 'Codex' : '—'
-}
+import { profileModelChip, profileModelLine } from './chat-profile-model-line'
 
 /** The one tool chip of a profile: the allowed-tool count, else just "tools". */
 export function profileToolChip(profile: ChatProfile, t: ReturnType<typeof useI18n>['t']) {
@@ -89,25 +65,13 @@ export function profileToolChip(profile: ChatProfile, t: ReturnType<typeof useI1
   return t({ ko: '도구', en: 'Tools' })
 }
 
-/**
- * A copy of a profile to open in the editor: every setting, under a name not taken yet. A profile that wrote its own
- * reply suggestions leaves that to the copy's default; nothing is saved until the editor saves.
- */
-function copyDraft(profile: ChatProfile, profiles: Array<{ name: string }>, t: ReturnType<typeof useI18n>['t']): ChatProfileInput {
-  const base = t({ ko: '{name} 사본', en: '{name} copy' }, { name: profile.name })
-  const taken = new Set(profiles.map((entry) => entry.name))
-  let name = base
-  for (let count = 2; taken.has(name); count += 1) name = `${base} ${count}`
-  return { ...profile, name, suggestProfileId: profile.suggestProfileId === profile.id ? null : profile.suggestProfileId }
-}
-
 type FolderName = { name: string; parentId: number | null; folder?: ChatProfileFolder }
 type MoveTarget = { kind: 'folder'; folder: ChatProfileFolder } | { kind: 'profile'; profile: ChatProfile }
 
 /**
  * The chat profiles (Codex and API LLM) in their chat order, with their folders: what the list needs wherever it is
- * drawn (the workspace's cards, Settings › 채팅's rows). A profile opens in its editor page (?profile=<id>) in the
- * same host; a new one, a copy or a card import opens a new profile's page with that draft. `active` is whether
+ * drawn (the workspace's cards, Settings › 채팅's rows). A profile opens in its editor modal (?profile=<id>) in the
+ * same host; a new one, a copy or a card import opens a new profile's modal with that draft. `active` is whether
  * this list owns the page snapshot for a connected chat (Settings keeps several groups mounted).
  */
 export function useChatProfileLibrary({ active = true }: { active?: boolean } = {}) {
@@ -117,8 +81,9 @@ export function useChatProfileLibrary({ active = true }: { active?: boolean } = 
   const navigate = useNavigate()
   const links = useChatAdminLinks()
   const confirm = useConfirm()
+  const actions = useChatProfileActions()
   const { folderId, query, page, searchText, setSearchText, update, openFolder, creationFolderId } = useLibraryLocation(CHARACTER_SETTINGS_PAGE_SIZE, ['profile'])
-  const openEditor = (profile: ChatProfile | null, state?: ChatProfileEditorPageState) => {
+  const openEditor = (profile: ChatProfile | null, state?: ChatProfileEditorState) => {
     navigate(links.profile(profile?.id ?? 'new'), { state: profile ? state : { ...state, initialFolderId: creationFolderId, ...(state?.draft ? { draft: { ...state.draft, folderId: creationFolderId } } : {}) } })
   }
   const [nameDialog, setNameDialog] = useState<FolderName | null>(null)
@@ -144,7 +109,7 @@ export function useChatProfileLibrary({ active = true }: { active?: boolean } = 
   const moveMutation = useMutation({
     mutationFn: async ({ target, to }: { target: MoveTarget; to: number | null }) => {
       if (target.kind === 'folder') await updateChatProfileFolder(target.folder.id, { parentId: to })
-      else await updateChatProfile(target.profile.id, { folderId: to }, target.profile.revision)
+      else await actions.move(target.profile, to)
     },
     onSuccess: async () => { setMoving(null); await refresh() },
     onError: (error) => { void refresh(); onError(error) },
@@ -176,9 +141,13 @@ export function useChatProfileLibrary({ active = true }: { active?: boolean } = 
   const healthOf = useChatHealth()
 
   const copy = async (profile: ChatProfile) => {
-    const [full, names] = await Promise.all([getChatAdminProfile(profile.id), listChatProfileNames()])
-    openEditor(null, { draft: copyDraft(full, names, t), copyOf: profile.id })
+    openEditor(null, { draft: await actions.copy(profile), copyOf: profile.id })
   }
+  const deleteMutation = useMutation({
+    mutationFn: actions.remove,
+    onSuccess: async (removed) => { if (removed) { await refresh(); await queryClient.invalidateQueries({ queryKey: CHAT_LOREBOOKS_QUERY_KEY }) } },
+    onError,
+  })
   const folderMenu = (folder: ChatProfileFolder): ActionMenuEntry[] => [
     { key: 'create', label: t({ ko: '하위 폴더 추가', en: 'Add subfolder' }), icon: FolderPlus, onSelect: () => setNameDialog({ name: '', parentId: folder.id }) },
     { key: 'rename', label: t({ ko: '이름 바꾸기', en: 'Rename' }), icon: Pencil, onSelect: () => setNameDialog({ name: folder.name, parentId: folder.parentId, folder }) },
@@ -186,10 +155,12 @@ export function useChatProfileLibrary({ active = true }: { active?: boolean } = 
     { key: 'delete', label: t({ ko: '폴더 삭제', en: 'Delete folder' }), icon: Trash2, destructive: true, onSelect: () => void removeFolder(folder).catch(onError) },
   ]
   const profileMenu = (profile: ChatProfile): ActionMenuEntry[] => [
-    { key: 'open', label: t({ ko: '편집', en: 'Edit' }), icon: SquarePen, onSelect: () => openEditor(profile) },
-    { key: 'copy', label: t({ ko: '복사', en: 'Copy' }), icon: Copy, onSelect: () => void copy(profile).catch(onError) },
-    { key: 'move', label: t({ ko: '폴더로 옮기기', en: 'Move to folder' }), icon: FolderInput, onSelect: () => setMoving({ kind: 'profile', profile }) },
+    { key: 'open', label: t({ ko: '열기', en: 'Open' }), icon: SquarePen, onSelect: () => openEditor(profile) },
+    { key: 'copy', label: t({ ko: '복제', en: 'Duplicate' }), icon: Copy, onSelect: () => void copy(profile).catch(onError) },
+    { key: 'move', label: t({ ko: '다른 폴더로 옮기기', en: 'Move to…' }), icon: FolderInput, onSelect: () => setMoving({ kind: 'profile', profile }) },
     { key: 'enable', label: profile.isEnabled ? t({ ko: '사용 끄기', en: 'Disable' }) : t({ ko: '사용 켜기', en: 'Enable' }), icon: Power, disabled: toggleMutation.isPending, onSelect: () => toggleMutation.mutate(profile) },
+    '-',
+    { key: 'delete', label: t({ ko: '삭제', en: 'Delete' }), icon: Trash2, destructive: true, disabled: deleteMutation.isPending, onSelect: () => deleteMutation.mutate(profile) },
   ]
 
   const [dragId, setDragId] = useState<number | null>(null)
@@ -282,6 +253,7 @@ export function useChatProfileLibrary({ active = true }: { active?: boolean } = 
 
 /** The workspace's 프로필: folders on the left, the profiles as cards. */
 export function ChatSettingsProfiles() {
+  const [params] = useSearchParams()
   const library = useChatProfileLibrary()
   const {
     t, folders, foldersQuery, folderId, query, page, searchText, setSearchText, update, openFolder, creationFolderId,
@@ -302,7 +274,7 @@ export function ChatSettingsProfiles() {
               if (file) importMutation.mutate(file)
             }} />
             <IconButton size="icon-sm" variant="ghost" disabled={importMutation.isPending} onClick={() => importRef.current?.click()} label={t({ ko: '캐릭터 카드 가져오기', en: 'Import character card' })}><FileUp /></IconButton>
-            <IconButton size="icon-sm" label={t({ ko: '새 프로필', en: 'New profile' })} onClick={() => openEditor(null)}><Plus /></IconButton>
+            <Button size="sm" onClick={() => openEditor(null)}><Plus />{t({ ko: '새 프로필', en: 'New profile' })}</Button>
           </>}>
         <ToolbarSearchField value={searchText} onChange={setSearchText} placeholder={t({ ko: '프로필 이름 검색', en: 'Search profiles by name' })} />
       </PageToolbar>}
@@ -330,8 +302,8 @@ export function ChatSettingsProfiles() {
                   : profile.characterLink?.synced ? <Badge variant="overlay" size="sm"><Link2 />{t({ ko: '동기화', en: 'Synced' })}</Badge> : undefined}
                 details={<span className="truncate text-xs text-white/75">{profileModelLine(profile, slots, t)}{profile.mcpEnabled ? ` · ${profile.mcpScopes.map((scope) => getChatScopeCopy(scope, t).label).join(' · ')}` : ''}</span>}
                 actions={<>
-                  <IconButton variant="overlay" size="icon-sm" label={t({ ko: '편집', en: 'Edit' })} onClick={() => openEditor(profile)}><SquarePen /></IconButton>
-                  <IconButton variant="overlay" size="icon-sm" label={t({ ko: '복사', en: 'Copy' })} onClick={() => void copy(profile).catch(onError)}><Copy /></IconButton>
+                  <IconButton variant="overlay" size="icon-sm" label={t({ ko: '열기', en: 'Open' })} onClick={() => openEditor(profile)}><SquarePen /></IconButton>
+                  <IconButton variant="overlay" size="icon-sm" label={t({ ko: '복제', en: 'Duplicate' })} onClick={() => void copy(profile).catch(onError)}><Copy /></IconButton>
                 </>}
               />
           </div>}
@@ -339,6 +311,7 @@ export function ChatSettingsProfiles() {
         </RowGroup>
       </LibraryFolderContent>
       <ChatProfileLibraryDialogs library={library} />
+      {params.has('profile') ? <ChatProfileRouteModal /> : null}
     </PageWithSidebar>
   )
 }

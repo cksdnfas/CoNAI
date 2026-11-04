@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from 'react'
-import { LocateFixed, Trash2, X } from 'lucide-react'
+import { LocateFixed, X } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Field, FieldGroup } from '@/components/ui/field'
 import { IconButton } from '@/components/ui/icon-button'
@@ -189,9 +190,9 @@ export function ComfyWorkflowMarkedFieldEditor({ field, dropdownListNames, canLo
         <IconButton size="icon-sm" variant="ghost" disabled={!canLocate} onClick={onLocate} label={t({ ko: '그래프에서 보기', en: 'Show in graph' })}>
           <LocateFixed />
         </IconButton>
-        <IconButton size="icon-sm" variant="destructive-ghost" onClick={onRemove} label={t({ ko: '필드 삭제', en: 'Remove field' })}>
-          <Trash2 />
-        </IconButton>
+        <Button size="sm" variant="destructive-ghost" onClick={onRemove} aria-label={t({ ko: '필드 삭제', en: 'Remove field' })}>
+          {t({ ko: '삭제', en: 'Delete' })}
+        </Button>
       </div>
 
       <div className="grid grid-cols-2 gap-3">

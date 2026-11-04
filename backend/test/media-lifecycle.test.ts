@@ -56,6 +56,120 @@ function insertFile(db: Database.Database, hash: string | null, filePath: string
   `).run(hash, filePath, folderId, status, verified).lastInsertRowid)
 }
 
+test('stopped file watchers stay stopped through pending and in-flight recovery', async (t) => {
+  const { db } = await booted
+  const { EventEmitter } = await import('node:events')
+  const chokidar: typeof import('chokidar').default = require('chokidar').default
+  const { FileWatcherService } = await import('../src/services/fileWatcherService')
+  const folderPath = path.join(root, 'watcher-recovery')
+  fs.mkdirSync(folderPath)
+  const folderId = Number(db.prepare('INSERT INTO watched_folders (folder_path, folder_name, is_active) VALUES (?, ?, 1)')
+    .run(folderPath, 'recovery test').lastInsertRowid)
+  const watchers: Array<InstanceType<typeof EventEmitter>> = []
+  const watch = t.mock.method(chokidar, 'watch', () => {
+    const watcher = Object.assign(new EventEmitter(), { close: async () => {} })
+    watchers.push(watcher)
+    queueMicrotask(() => watcher.emit('ready'))
+    return watcher as unknown as ReturnType<typeof chokidar.watch>
+  })
+  t.after(async () => {
+    await FileWatcherService.stopAll()
+    t.mock.timers.reset()
+  })
+  await FileWatcherService.startWatcher(folderId)
+  t.mock.timers.enable({ apis: ['setTimeout'] })
+  watchers[0].emit('error', new Error('recoverable watcher failure'))
+  await FileWatcherService.stopWatcher(folderId)
+  t.mock.timers.tick(5_000)
+  await new Promise((resolve) => setImmediate(resolve))
+  t.mock.timers.tick(1_000)
+  await new Promise((resolve) => setImmediate(resolve))
+  assert.equal(watch.mock.callCount(), 1, 'stopping a watcher cancels scheduled recovery')
+
+  await FileWatcherService.startWatcher(folderId)
+  const restarting = FileWatcherService.restartWatcher(folderId)
+  await new Promise((resolve) => setImmediate(resolve))
+  await FileWatcherService.stopAll()
+  t.mock.timers.tick(1_000)
+  await restarting
+  assert.equal(watch.mock.callCount(), 2, 'shutdown cancels recovery already waiting to reopen')
+  assert.equal(FileWatcherService.getWatcherStatus(folderId), null)
+})
+
+test('backup watcher shutdown cancels a restart waiting to reopen its source', async (t) => {
+  await booted
+  const { EventEmitter } = await import('node:events')
+  const chokidar: typeof import('chokidar').default = require('chokidar').default
+  const { BackupSourceWatcherService } = await import('../src/services/backupSourceWatcherService')
+  const { BackupSourceService } = await import('../src/services/backupSourceService')
+  const sourcePath = path.join(root, 'backup-restart')
+  fs.mkdirSync(sourcePath)
+  const sourceId = await BackupSourceService.addSource({ source_path: sourcePath, target_folder_name: 'backup-restart' })
+  const watch = t.mock.method(chokidar, 'watch', () => {
+    const watcher = Object.assign(new EventEmitter(), { close: async () => {} })
+    queueMicrotask(() => watcher.emit('ready'))
+    return watcher as unknown as ReturnType<typeof chokidar.watch>
+  })
+  t.after(async () => {
+    await BackupSourceWatcherService.stopAll()
+    t.mock.timers.reset()
+  })
+  await BackupSourceWatcherService.startWatcher(sourceId)
+  t.mock.timers.enable({ apis: ['setTimeout'] })
+  const restarting = BackupSourceWatcherService.restartWatcher(sourceId)
+  await new Promise((resolve) => setImmediate(resolve))
+  await BackupSourceWatcherService.stopAll()
+  t.mock.timers.tick(300)
+  await restarting
+  assert.equal(watch.mock.callCount(), 1, 'shutdown must not allow a delayed restart to reopen the source')
+  assert.equal((await BackupSourceService.getSource(sourceId))?.watcher_status, 'stopped')
+})
+
+test('background processing shutdown drains its active write and cancels scheduled follow-up batches', async (t) => {
+  const { db } = await booted
+  const { BackgroundProcessorService } = await import('../src/services/backgroundProcessorService')
+  const missing = path.join(root, 'shutdown-missing.png')
+  insertFile(db, null, missing)
+  let release!: () => void
+  let entered!: () => void
+  const gate = new Promise<void>((resolve) => { release = resolve })
+  const started = new Promise<void>((resolve) => { entered = resolve })
+  const access = fs.promises.access
+  let checks = 0
+  t.mock.method(fs.promises, 'access', async (file, mode) => {
+    if (String(file) !== missing) return access(file, mode)
+    checks++
+    entered()
+    await gate
+    throw Object.assign(new Error('missing test file'), { code: 'ENOENT' })
+  })
+  t.mock.timers.enable({ apis: ['setTimeout'] })
+  BackgroundProcessorService.triggerHashGeneration()
+  const running = BackgroundProcessorService.processUnhashedImages()
+  try {
+    await started
+    let drained = false
+    const stopping = BackgroundProcessorService.stopAndDrain().then(() => { drained = true })
+    await new Promise((resolve) => setImmediate(resolve))
+    assert.equal(drained, false)
+    release()
+    await Promise.all([running, stopping])
+    assert.equal(db.prepare('SELECT 1 FROM image_files WHERE original_file_path = ?').get(missing), undefined)
+    insertFile(db, null, missing)
+    BackgroundProcessorService.triggerHashGeneration()
+    t.mock.timers.tick(60_000)
+    await new Promise((resolve) => setImmediate(resolve))
+    await new Promise((resolve) => setImmediate(resolve))
+    assert.equal(checks, 1, 'neither a pre-shutdown timer nor a new trigger may restart processing')
+    BackgroundProcessorService.start()
+  } finally {
+    release()
+    await running
+    t.mock.timers.reset()
+    db.prepare('DELETE FROM image_files WHERE original_file_path = ?').run(missing)
+  }
+})
+
 test('thumbnail paths resolve inside the temp dir whatever separators they were stored with', async () => {
   const { resolveThumbnailAbsolutePath } = await import('../src/utils/thumbnailGenerator')
   const tempDir = path.join(root, 'resolve-temp')
@@ -187,6 +301,7 @@ test('full rescan reconciles only its unchanged baseline and serializes watcher 
   await Promise.race([discoveryStarted, fullScan.then(() => { throw new Error('scan finished before discovery') })])
   writeFile(watched)
   const watcherScan = FolderScanService.scanFolder(folderId, false, { candidateFiles: [watched], quietIfNoChanges: true })
+  t.after(async () => { resume(); await Promise.all([fullScan, watcherScan]) })
   await new Promise<void>((resolve) => setImmediate(resolve))
   assert.equal(db.prepare('SELECT id FROM image_files WHERE original_file_path = ?').get(watched), undefined)
   insertFile(db, null, external)
@@ -197,7 +312,14 @@ test('full rescan reconciles only its unchanged baseline and serializes watcher 
   await FastRegistrationService.processFastRegistration([unchanged], folderId, result, { quietIfIdle: true, verifyUnchanged: true })
   const verified = (db.prepare('SELECT last_verified_date FROM image_files WHERE id = ?').get(unchangedId) as { last_verified_date: string }).last_verified_date
   assert.equal(verified, '2099-01-01T00:00:00.002Z', 'repeated verifications cannot restore the baseline revision')
+  const { AutoScanScheduler } = await import('../src/services/autoScanScheduler')
+  let drained = false
+  const draining = AutoScanScheduler.stopAndDrain().then(() => { drained = true })
+  await new Promise<void>((resolve) => setImmediate(resolve))
+  assert.equal(drained, false, 'shutdown must wait for queued scans and their reconciliation writes')
   resume()
+  await draining
+  BackgroundProcessorService.start()
   const fullResult = await fullScan
   await watcherScan
 
@@ -208,6 +330,31 @@ test('full rescan reconciles only its unchanged baseline and serializes watcher 
   assert.equal(status(external), 'active', 'a row registered after the baseline is not reconciled')
   assert.equal(status(unchanged), 'active', 'an unchanged watcher verification from another process protects its row')
   assert.equal(status(watched), 'active', 'the queued watcher scan registers its newly created file')
+})
+
+test('model thumbnail caches follow a changed server endpoint even when model metadata is identical', async (t) => {
+  await booted
+  const axios = require('axios') as typeof import('axios').default
+  const sharp = (await import('sharp')).default
+  const { ComfyUIServerModel } = await import('../src/models/ComfyUIServer')
+  const { resolveComfyModelThumbnail } = await import('../src/services/comfyModelThumbnailService')
+  let endpoint = 'http://thumbnail-before.invalid'
+  t.mock.method(ComfyUIServerModel, 'findDefaultActive', () => ({ id: 98765, endpoint, backend_type: 'comfyui' }))
+  const png = await sharp({ create: { width: 4, height: 4, channels: 3, background: '#ff0000' } }).png().toBuffer()
+  const previews: string[] = []
+  t.mock.method(axios, 'get', async (url: string, options: { baseURL: string }) => {
+    if (!url.includes('/preview/')) return { data: [{ name: 'same.safetensors', pathIndex: 0, modified: 1, size: 100 }] }
+    previews.push(options.baseURL)
+    return options.baseURL === 'http://thumbnail-before.invalid'
+      ? { status: 404, headers: {}, data: Buffer.alloc(0) }
+      : { status: 200, headers: { 'content-type': 'image/png' }, data: png }
+  })
+  const input = { folder: 'checkpoints', value: 'same.safetensors' }
+  assert.equal((await resolveComfyModelThumbnail(input)).status, 'missing')
+  endpoint = 'http://thumbnail-after.invalid'
+  assert.equal((await resolveComfyModelThumbnail(input)).status, 'ok')
+  assert.equal((await resolveComfyModelThumbnail(input)).status, 'ok')
+  assert.deepEqual(previews, ['http://thumbnail-before.invalid', 'http://thumbnail-after.invalid'])
 })
 
 test('concurrent thumbnail generation publishes once, cleans failed output and recovers after temp cleanup', async (t) => {

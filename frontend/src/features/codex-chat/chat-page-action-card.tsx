@@ -31,6 +31,6 @@ export function ChatPageActionCard({ proposal }: { proposal: PageActionProposal 
       {hasArguments ? <div><p className="mb-1 font-medium">{t({ ko: '적용할 내용', en: 'Proposed contents' })}</p><CodeBlock maxHeight="sm">{JSON.stringify(proposal.arguments, null, 2)}</CodeBlock></div> : null}
     </div>
     {error || problem ? <p className="text-xs text-muted-foreground" role={error ? 'alert' : undefined}>{error || problem}</p> : null}
-    {!handled || canUndo ? <Button size="xs" variant={canUndo ? 'secondary' : 'default'} disabled={busy || !!problem} onClick={() => void run()}>{t(canUndo ? { ko: '작업 되돌리기', en: 'Undo operation' } : proposal.action.effect === 'save' ? { ko: '검토한 내용 저장', en: 'Save reviewed contents' } : { ko: '작업 적용', en: 'Apply operation' })}</Button> : <p className="text-xs text-muted-foreground">{t(state === 'undone' ? { ko: '작업을 되돌렸어.', en: 'Operation undone.' } : proposal.dismissed ? { ko: '무시한 제안이야.', en: 'Proposal dismissed.' } : { ko: '적용한 제안이야.', en: 'Proposal applied.' })}</p>}
+    {!handled || canUndo ? <Button size="xs" variant={canUndo ? 'ghost' : 'default'} disabled={busy || !!problem} onClick={() => void run()}>{t(canUndo ? { ko: '되돌리기', en: 'Revert' } : proposal.action.effect === 'save' ? { ko: '저장', en: 'Save' } : { ko: '적용', en: 'Apply' })}</Button> : <p className="text-xs text-muted-foreground">{t(state === 'undone' ? { ko: '작업을 되돌렸어.', en: 'Operation undone.' } : proposal.dismissed ? { ko: '무시한 제안이야.', en: 'Dismissed.' } : { ko: '이 작업을 적용했어.', en: 'Applied.' })}</p>}
   </ProposalFrame>
 }

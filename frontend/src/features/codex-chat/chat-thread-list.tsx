@@ -1,12 +1,13 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { Archive, ArchiveRestore, CheckCheck, ChevronDown, ChevronRight, GitBranch, Trash2, X } from 'lucide-react'
 import { SegmentedControl } from '@/components/common/segmented-control'
+import { EditorFooter } from '@/components/ui/editor-footer'
 import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { ListRow } from '@/components/ui/list-row'
 import { Panel } from '@/components/ui/panel'
-import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
+import { Modal, ModalBody } from '@/components/ui/modal'
 import { RowGroup } from '@/components/ui/row-group'
 import { useI18n } from '@/i18n'
 import type { ChatProfileSummary, CodexChatThreadSummary } from '@/lib/api-codex-chat'
@@ -44,7 +45,7 @@ function compareChatThreads(a: CodexChatThreadSummary, b: CodexChatThreadSummary
  * Several chats are picked with "Select" in the row menu; while any is picked the faces turn into checks, a row click
  * ticks it, and a floating bar archives or deletes them (Esc lets go).
  */
-export function ChatThreadList({ query = '', profilesById, activeThreadId, runningThreadIds, routineThreadIds, dense = false, onSelect, onUpdate, onBulk }: {
+export function ChatThreadList({ query = '', profilesById, activeThreadId, runningThreadIds, routineThreadIds, dense = false, onSelect, onUpdate, onBulk, onDelete }: {
   query?: string
   profilesById: Map<number, ChatProfileSummary>
   activeThreadId: number | null
@@ -57,6 +58,8 @@ export function ChatThreadList({ query = '', profilesById, activeThreadId, runni
   onUpdate: (threadId: number, patch: ChatListPatch) => void
   /** Archive, unarchive or delete the picked chats; resolves true when all of them went through. */
   onBulk: (threadIds: number[], action: ChatBulkAction, backupDate?: string) => Promise<boolean>
+  /** Delete one chat from its row: the owner opens its delete dialog (backup and lorebook choices), as the chat menu does. */
+  onDelete: (threadId: number) => void
 }) {
   const { t, formatNumber } = useI18n()
   const drafts = useCodexChatDrafts()
@@ -140,7 +143,7 @@ export function ChatThreadList({ query = '', profilesById, activeThreadId, runni
     nested={nested} dense={dense} checked={picked.has(entry.id)} selecting={selecting} active={entry.id === activeThreadId}
     running={runningThreadIds.has(entry.id)} routine={routineThreadIds?.has(entry.id) ?? false}
     down={entry.kind === 'group' ? groupDown(entry.member_profile_ids ?? []) : healthOf(entry.profile_id)}
-    onSelect={onSelect} onUpdate={onUpdate} onTogglePick={togglePick} onRename={rename}
+    onSelect={onSelect} onUpdate={onUpdate} onTogglePick={togglePick} onRename={rename} onDelete={onDelete}
   />
 
   /** A folding row ("kept branches 2", "archive 5"): shows or hides what follows it. */
@@ -281,10 +284,7 @@ export function ChatThreadList({ query = '', profilesById, activeThreadId, runni
           onKeyDown={(event) => { if (event.key === 'Enter' && !event.nativeEvent.isComposing) saveRename() }}
         />
       </ModalBody>
-      <ModalFooter>
-        <Button variant="ghost" size="sm" onClick={() => setRenaming(null)}>{t({ ko: '취소', en: 'Cancel' })}</Button>
-        <Button size="sm" disabled={!renameTitle} onClick={saveRename}>{t({ ko: '저장', en: 'Save' })}</Button>
-      </ModalFooter>
+      <EditorFooter onSave={saveRename} canSave={Boolean(renameTitle)} />
     </Modal>
   </>
 }

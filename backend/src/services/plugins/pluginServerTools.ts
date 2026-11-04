@@ -22,7 +22,9 @@ let invoker: Invoker | null = null
 type ProfileRun = PluginProfileRunIdentity & { pluginId: string; accountId: number | null; tools: string[] }
 const profileRuns = new Map<number, ProfileRun>()
 export function validatePluginProfileTools(pluginId: string, names: string[] = []) {
-  if (new Set(names).size !== names.length || names.some(name => !pluginServerTools().some(tool => tool.pluginId === pluginId && tool.localName === name))) {
+  if (names.length === 0) return
+  const registered = new Set([...tools.values()].filter(tool => tool.pluginId === pluginId).map(tool => tool.localName))
+  if (new Set(names).size !== names.length || names.some(name => !registered.has(name))) {
     throw new PluginError('pluginTools에는 이 플러그인의 현재 등록 도구 이름만 중복 없이 넣어줘.', 400)
   }
 }

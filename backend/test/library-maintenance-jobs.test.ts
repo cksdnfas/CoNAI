@@ -496,6 +496,41 @@ test('duplicate runtime execution preserves the active owner and cancellation si
   assert.equal(RuntimeJobRunner.ownsJob(job.jobId), false)
 })
 
+test('runtime shutdown waits for cancelled handlers to finish their final database writes', async () => {
+  await booted
+  const { RuntimeJobRunner, RuntimeJobStore, registerRuntimeJobHandlers } = await import('../src/services/runtimeJobs')
+  let release!: () => void
+  const gate = new Promise<void>((resolve) => { release = resolve })
+  let signal!: AbortSignal
+  let finished = false
+  RuntimeJobRunner.register({
+    kind: 'auto-tag-reset',
+    handler: async (ctx) => {
+      signal = ctx.signal
+      await gate
+      ctx.flush({ processed: 1 })
+      finished = true
+      ctx.throwIfCancelled()
+    },
+  })
+  const job = RuntimeJobRunner.start('auto-tag-reset', {})
+  try {
+    let drained = false
+    const shutdown = RuntimeJobRunner.shutdownAndDrain().then((count) => { drained = true; return count })
+    await new Promise((resolve) => setImmediate(resolve))
+    assert.equal(signal.aborted, true)
+    assert.equal(drained, false, 'the caller must not close the database while a handler is pending')
+    release()
+    assert.equal(await shutdown, 1)
+    assert.equal(finished, true)
+    assert.equal(RuntimeJobStore.get(job.jobId)?.status, 'failed', 'interrupted jobs retain shutdown recovery state')
+  } finally {
+    release()
+    await new Promise((resolve) => setImmediate(resolve))
+    registerRuntimeJobHandlers()
+  }
+})
+
 test('runtime execution cannot reclaim another worker or terminal jobs, including startup recovery', async () => {
   await booted
   const { RuntimeJobRunner, RuntimeJobStore, registerRuntimeJobHandlers } = await import('../src/services/runtimeJobs')

@@ -4,10 +4,10 @@ import { SettingsSwitchRow } from '@/components/ui/settings-switch-row'
 import { CHAT_SETTINGS_GROUPS, CHAT_SETTINGS_OPTION_GROUPS, type ChatSettingsGroup } from '@/features/codex-chat/chat-admin-location'
 import { ChatSettingsRoutines } from '@/features/codex-chat/chat-routines'
 import { useI18n } from '@/i18n'
-import { ChatLorebookEditorPage } from './chat-lorebook-editor-page'
+import { ChatLorebookEditorModal } from './chat-lorebook-editor-modal'
 import { useChatOptionsPageRegistration } from './chat-options-page'
 import { ChatDiagnosticsSettings, ChatMemorySettings, ChatToolSettings, ChatWebSettings, useChatOptions } from './chat-options-settings'
-import { ChatProfileEditorPage } from './chat-profile-editor'
+import { ChatProfileRouteModal } from './chat-profile-editor'
 import { ChatProfilesCompact } from './chat-profiles-compact'
 import { ChatSettingsJudge } from './chat-settings-judge'
 import { ChatSettingsMine } from './chat-settings-mine'
@@ -18,13 +18,14 @@ import { SettingsRowsSkeleton } from './settings-rows'
 
 /**
  * Settings › 채팅: everything the chat workspace manages, edited here without leaving Settings. The lists are the
- * workspace's own components; a profile or lorebook opens as its editor page under /settings (?profile=, ?lorebook=).
+ * workspace's own components; profiles and lorebooks open as modals over the lists (?profile=, ?lorebook=).
  */
 export function ChatSettingsTab() {
   const [params] = useSearchParams()
-  if (params.has('profile')) return <ChatProfileEditorPage />
-  if (params.has('lorebook')) return <ChatLorebookEditorPage />
-  return <ChatSettingsGroups current={params.get('group') ?? CHAT_SETTINGS_GROUPS[0]} />
+  return <>
+    <ChatSettingsGroups current={params.has('lorebook') ? 'lorebooks' : params.has('profile') ? 'profiles' : params.get('group') ?? CHAT_SETTINGS_GROUPS[0]} />
+    {params.has('lorebook') ? <ChatLorebookEditorModal /> : params.has('profile') ? <ChatProfileRouteModal /> : null}
+  </>
 }
 
 /** One scrolling page: all groups stay mounted, and only the addressed group's assistant adapter owns the page snapshot. */

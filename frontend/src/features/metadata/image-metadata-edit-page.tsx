@@ -2,15 +2,15 @@ import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { ImagePermissionNotice } from '@/features/images/components/image-permission-notice'
 import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, Copy, Download, Save } from 'lucide-react'
+import { ArrowLeft, Copy, Download } from 'lucide-react'
 import { useParams } from 'react-router-dom'
 import { PageToolbar } from '@/components/common/page-toolbar'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { CollapsibleRow } from '@/components/ui/collapsible-row'
 import { IconButton } from '@/components/ui/icon-button'
+import { FloatingSaveBar } from '@/components/ui/floating-save-bar'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useSnackbar } from '@/components/ui/snackbar-context'
-import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
 import { pageAction } from '@/features/codex-chat/page-action-helpers'
@@ -20,6 +20,7 @@ import { useImageSourceBack } from '@/features/images/image-source-navigation'
 import { getDownloadName, getImageDetailRenderUrl } from '@/features/images/components/detail/image-detail-utils'
 import { useUnsavedSettingsGuard } from '@/features/settings/use-unsaved-settings-guard'
 import { copyTextToClipboard } from '@/lib/clipboard'
+import { usePageSaveShortcut } from '@/lib/keyboard-shortcut'
 import { downloadExistingImageWithRewrittenMetadata, getImage, saveImageMetadata } from '@/lib/api-images'
 import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
 import { cn } from '@/lib/utils'
@@ -153,10 +154,6 @@ export function ImageMetadataEditPage() {
     },
   } : null)
 
-  if (!compositeHash) {
-    return null
-  }
-
   const handleCopyHash = async () => {
     if (!image?.composite_hash) {
       return
@@ -197,6 +194,22 @@ export function ImageMetadataEditPage() {
     saveMutation.mutate(draft)
   }
 
+  const handleDiscard = async () => {
+    if (!image || busy) return
+    const confirmed = await confirm({
+      title: t({ ko: '변경 되돌리기', en: 'Revert changes' }),
+      description: t({ ko: '저장 안 한 변경을 버리고 불러온 메타데이터로 되돌릴까?', en: 'Discard unsaved changes and restore the loaded metadata?' }),
+      confirmLabel: t({ ko: '되돌리기', en: 'Revert' }),
+    })
+    if (confirmed) setDraft(createRewriteDraftFromImage(image))
+  }
+
+  usePageSaveShortcut(canEditMetadata && isEditableImage ? handleSave : undefined, busy)
+
+  if (!compositeHash) {
+    return null
+  }
+
   // Same arrangement as the image page: a flat top row, the image on the page background, the fields in a column
   // behind one vertical hairline (below it on narrow screens).
   const gridClassName = cn('grid', isDesktopPageLayout ? 'grid-cols-[minmax(0,1fr)_minmax(420px,0.8fr)]' : 'grid-cols-1')
@@ -224,14 +237,6 @@ export function ImageMetadataEditPage() {
             <IconButton size="icon-sm" variant="ghost" onClick={handleDownload} disabled={!canEditMetadata || !draft || busy || !isEditableImage || Boolean(draftValidationError)} label={t({ ko: '다운로드', en: 'Download' })}>
               <Download className="size-4" />
             </IconButton>
-            <Tip content={draft && isEditableImage && !hasUnsavedChanges ? t({ ko: '바뀐 게 없어', en: 'No changes to save' }) : null}>
-              {/* The span carries the tooltip: a disabled button gets no pointer events. */}
-              <span className="inline-flex" tabIndex={draft && isEditableImage && !hasUnsavedChanges ? 0 : undefined}>
-                <IconButton size="icon-sm" label={t({ ko: '저장', en: 'Save' })} onClick={handleSave} disabled={!canSave}>
-                  <Save />
-                </IconButton>
-              </span>
-            </Tip>
           </>
         )}
       />
@@ -306,6 +311,9 @@ export function ImageMetadataEditPage() {
             ) : null}
           </div>
         </div>
+      ) : null}
+      {hasUnsavedChanges || saveMutation.isPending ? (
+        <FloatingSaveBar label={t({ ko: '저장 안 한 변경', en: 'Unsaved changes' })} saving={saveMutation.isPending} canSave={canSave} onSave={handleSave} onDiscard={() => void handleDiscard()} />
       ) : null}
     </div>
   )

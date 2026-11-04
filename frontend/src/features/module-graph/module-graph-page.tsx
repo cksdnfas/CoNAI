@@ -652,6 +652,7 @@ function ModuleWorkflowWorkspaceInner({ isWideLayout }: ModuleWorkflowWorkspaceP
           workflowName={workflowName}
           onWorkflowNameChange={setWorkflowName}
           isDirty={isDirty}
+          isNew={selectedGraphId === null}
           isSavingGraph={isSavingGraph}
           isExecuting={executingGraphId !== null}
           nodesCount={nodes.length}
@@ -730,6 +731,9 @@ function ModuleWorkflowWorkspaceInner({ isWideLayout }: ModuleWorkflowWorkspaceP
           onFitView={() => void reactFlow.fitView({ ...GRAPH_FIT_VIEW_OPTIONS, duration: 200 })}
           onWorkflowDebugModeToggle={() => setWorkflowDebugMode((enabled) => !enabled)}
           onTestRun={() => void handleTestRunCurrentGraph()}
+          onRevert={selectedGraphId !== null ? () => {
+            void handleLoadGraph({ id: selectedGraphId } as GraphWorkflowSummaryRecord, { openEditor: true })
+          } : undefined}
           onSave={() => {
             if (selectedGraphId === null) {
               setIsWorkflowSaveModalOpen(true)

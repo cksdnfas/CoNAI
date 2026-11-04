@@ -9,7 +9,9 @@ import {
   ReactFlowProvider,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { ArrowLeft, Braces, ChevronDown, ChevronUp, CircleCheck, CloudOff, LayoutGrid, Loader2, Save, Search, SlidersHorizontal, TriangleAlert, Upload, Workflow } from 'lucide-react'
+import { ArrowLeft, Braces, ChevronDown, ChevronUp, CircleCheck, CloudOff, LayoutGrid, Loader2, LoaderCircle, Search, SlidersHorizontal, TriangleAlert, Upload, Workflow } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { ModalFooter } from '@/components/ui/modal'
 import { SaveConflictAlert, SaveConflictOverwriteButton } from '@/components/common/save-conflict-alert'
 import { TextTabs } from '@/components/common/text-tabs'
 import { useConfirm } from '@/components/ui/confirm-dialog'
@@ -93,7 +95,7 @@ function AuthoringSearchBox({ query, count, index, placeholder, onQueryChange, o
 
 /**
  * Full-screen ComfyUI workflow editor (create and edit), under the app header and beside a docked chat panel.
- * Top bar: name, graph / JSON / settings tabs, upload and save. The graph tab pairs the canvas with a field panel:
+ * Top bar: name, graph / JSON / settings tabs and upload; footer: Cancel and Save. The graph tab pairs the canvas with a field panel:
  * picking an input on the canvas selects its field, and the selected field's node is ringed on the canvas.
  */
 export function ComfyWorkflowAuthoringModal({
@@ -270,12 +272,9 @@ export function ComfyWorkflowAuthoringModal({
       </div>
       {serverCheckIndicator}
       <input ref={fileInputRef} type="file" accept={WORKFLOW_FILE_ACCEPT} hidden onChange={(event) => { void handleFileUpload(event.target.files?.[0]); event.target.value = '' }} />
-      <IconButton size="icon-sm" variant="ghost" className="shrink-0" onClick={openFilePicker} label={t({ ko: '워크플로 불러오기 (JSON·이미지·영상)', en: 'Load workflow (JSON, image, video)' })}>
-        <Upload />
-      </IconButton>
-      <IconButton size="icon-sm" className="shrink-0" label={saveLabel} onClick={() => void handleSave()} disabled={isSaving} aria-busy={isSaving || undefined}>
-        {isSaving ? <Loader2 className="animate-spin" /> : <Save />}
-      </IconButton>
+      <Button size="sm" variant="ghost" className="shrink-0" onClick={openFilePicker} aria-label={t({ ko: '워크플로 불러오기 (JSON·이미지·영상)', en: 'Load workflow (JSON, image, video)' })}>
+        {t({ ko: '불러오기', en: 'Load' })}
+      </Button>
     </div>
   )
 
@@ -332,9 +331,9 @@ export function ComfyWorkflowAuthoringModal({
   ) : (
     <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
       {jsonError ? <div className="text-sm text-muted-foreground">{jsonError}</div> : null}
-      <IconButton size="icon-sm" variant="secondary" label={t({ ko: 'JSON 불러오기', en: 'Load JSON' })} onClick={openFilePicker}>
-        <Upload className="size-4" />
-      </IconButton>
+      <Button size="sm" variant="default" aria-label={t({ ko: 'JSON 불러오기', en: 'Load JSON' })} onClick={openFilePicker}>
+        {t({ ko: '불러오기', en: 'Load' })}
+      </Button>
     </div>
   )
 
@@ -440,6 +439,19 @@ export function ComfyWorkflowAuthoringModal({
         ) : (
           <ComfyWorkflowAuthoringSettings draft={draft} roleLimitGroups={roleLimitGroups} onPatch={patchDraft} />
         )}
+      </div>
+      <div
+        // eslint-disable-next-line shadcn/no-arbitrary-values -- The standalone fullscreen footer must clear the device safe area.
+        className="shrink-0 px-4 pb-[max(1rem,env(safe-area-inset-bottom))]"
+      >
+        <ModalFooter separated>
+          <span className="flex-1" />
+          <Button type="button" size="sm" variant="ghost" disabled={isSaving} onClick={() => void requestClose()}>{t({ ko: '취소', en: 'Cancel' })}</Button>
+          <Button type="button" size="sm" variant="default" onClick={() => void handleSave()} disabled={isSaving} aria-busy={isSaving || undefined}>
+            {isSaving ? <LoaderCircle className="animate-spin" /> : null}
+            {saveLabel}
+          </Button>
+        </ModalFooter>
       </div>
     </div>,
     document.body,

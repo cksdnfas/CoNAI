@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { PostAssessmentAuditEntry, PostAssessmentQuality, PostDetail } from '@conai/shared'
 import { Button } from '@/components/ui/button'
+import { EditorFooter } from '@/components/ui/editor-footer'
 import { Field } from '@/components/ui/field'
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
 import { Select } from '@/components/ui/select'
@@ -40,7 +41,7 @@ export function AssessmentModerationDialog({ post, entry, action, onClose }: { p
       {action === 'correct' ? <Field label={t({ ko: '변경할 품질 의견', en: 'Corrected quality feedback' })}><Select value={quality} onChange={(event) => setQuality(event.target.value as PostAssessmentQuality)}>{Object.entries(qualityLabels).map(([value, label]) => <option key={value} value={value}>{t(label)}</option>)}</Select></Field> : null}
       <Field label={t({ ko: '변경 이유', en: 'Reason for the change' })}><Textarea rows={3} maxLength={2000} value={reason} onChange={(event) => setReason(event.target.value)} /></Field>
     </ModalBody>
-    <ModalFooter><Button variant="ghost" onClick={onClose}>{t({ ko: '취소', en: 'Cancel' })}</Button><Button variant={action === 'invalidate' ? 'destructive' : 'default'} disabled={!reason.trim() || save.isPending} onClick={() => save.mutate(crypto.randomUUID())}>{title}</Button></ModalFooter>
+    {action === 'invalidate' ? <ModalFooter><Button variant="ghost" onClick={onClose}>{t({ ko: '취소', en: 'Cancel' })}</Button><Button variant="destructive" disabled={!reason.trim() || save.isPending} onClick={() => save.mutate(crypto.randomUUID())}>{title}</Button></ModalFooter> : <EditorFooter onSave={() => save.mutate(crypto.randomUUID())} canSave={Boolean(reason.trim())} saving={save.isPending} />}
   </Modal>
 }
 

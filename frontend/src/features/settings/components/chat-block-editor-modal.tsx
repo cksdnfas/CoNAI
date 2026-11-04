@@ -1,7 +1,6 @@
 import { useLayoutEffect, useRef, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Copy, Download } from 'lucide-react'
-import { useConfirm } from '@/components/ui/confirm-dialog'
 import { EditorFooter } from '@/components/ui/editor-footer'
 import { Field } from '@/components/ui/field'
 import { IconButton } from '@/components/ui/icon-button'
@@ -14,7 +13,6 @@ import {
   CHAT_BLOCKS_QUERY_KEY,
   CHAT_PROFILES_QUERY_KEY,
   createChatBlock,
-  deleteChatBlock,
   updateChatBlock,
   type ChatDisplayBlock,
   type ChatSharedBlock,
@@ -22,6 +20,7 @@ import {
 import { getErrorMessage } from '@/lib/error-message'
 import { BLOCK_KEY_PATTERN, ChatBlockEditor, starterBlock } from './chat-block-editor'
 import { downloadChatBlockFile } from './chat-block-file'
+import { useChatResourceDelete } from './use-chat-resource-actions'
 import { CHAT_DOCK_INSET, useSettingsEditorChatPage } from './use-settings-editor-chat-page'
 import { ChatFilledLabel } from '@/features/codex-chat/chat-page-context'
 import { pageAction, pageArray, pageNumber, pageObject, pageText } from '@/features/codex-chat/page-action-helpers'
@@ -41,7 +40,6 @@ export function ChatBlockEditorModal({ open, shared, initialName, initialBlock, 
   duplicating?: boolean
 }) {
   const { t } = useI18n()
-  const confirm = useConfirm()
   const { showSnackbar } = useSnackbar()
   const queryClient = useQueryClient()
   const [name, setName] = useState('')
@@ -77,27 +75,7 @@ export function ChatBlockEditorModal({ open, shared, initialName, initialBlock, 
     },
     onError: (error) => showSnackbar({ message: getErrorMessage(error, t({ ko: '저장하지 못했어.', en: 'Could not save.' })), tone: 'error' }),
   })
-  const deleteMutation = useMutation({
-    mutationFn: () => deleteChatBlock(shared?.id ?? 0),
-    onSuccess: async () => {
-      await refresh()
-      onClose()
-    },
-    onError: (error) => showSnackbar({ message: getErrorMessage(error, t({ ko: '삭제하지 못했어.', en: 'Could not delete.' })), tone: 'error' }),
-  })
-
-  const handleDelete = async () => {
-    const linked = shared?.profiles.length ?? 0
-    const confirmed = await confirm({
-      title: t({ ko: '표시 블록 삭제', en: 'Delete display block' }),
-      description: linked > 0
-        ? t({ ko: '프로필 {count}개에서 쓰는 중이야. 지우면 연결도 같이 풀려.', en: 'Used by {count} profiles. Deleting also unlinks it from them.' }, { count: linked })
-        : t({ ko: '이 표시 블록을 지울까?', en: 'Delete this display block?' }),
-      confirmLabel: t({ ko: '삭제', en: 'Delete' }),
-      tone: 'destructive',
-    })
-    if (confirmed) deleteMutation.mutate()
-  }
+  const deleteMutation = useChatResourceDelete(onClose)
 
   const keyValid = BLOCK_KEY_PATTERN.test(block.key)
   const dirty = opened !== null && JSON.stringify({ name, block }) !== JSON.stringify(opened)
@@ -122,7 +100,7 @@ export function ChatBlockEditorModal({ open, shared, initialName, initialBlock, 
         <ChatBlockEditor key={session} block={block} onChange={setBlock} />
       </ModalBody>
       <EditorFooter
-        onDelete={shared ? () => void handleDelete() : undefined}
+        onDelete={shared ? () => deleteMutation.mutate({ kind: 'block', resource: shared }) : undefined}
         deleting={deleteMutation.isPending}
         onSave={() => saveMutation.mutate()}
         canSave={canSave}

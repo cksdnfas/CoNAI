@@ -140,6 +140,12 @@ export async function runReadyGraphNodes(params: RunReadyGraphNodesParams) {
   const runningNodes = new Map<string, Promise<void>>()
   let firstError: unknown = null
 
+  const failNode = (nodeId: string, error: unknown) => {
+    if (firstError !== null) return
+    firstError = error
+    params.abort(resolveAbortReasonForError(error, nodeId))
+  }
+
   const drain = async () => {
     const inFlight = Array.from(runningNodes.values())
     if (inFlight.length === 0) {
@@ -211,13 +217,12 @@ export async function runReadyGraphNodes(params: RunReadyGraphNodesParams) {
           },
           (error) => {
             // reject 를 여기서 흡수해야 Promise.race 가 형제를 버려두고 빠져나가지 않는다.
-            if (firstError === null) {
-              firstError = error
-              params.abort(resolveAbortReasonForError(error, nodeId))
-            }
+            failNode(nodeId, error)
             params.onNodeSettled?.(nodeId, error)
           },
         )
+        // 완료 알림의 로그 저장도 실패할 수 있다. 최초 오류를 보존하고 형제 드레인은 끝까지 수행한다.
+        .catch((error) => failNode(nodeId, error))
         .finally(() => {
           // 스로틀 상태는 모듈 전역이라 abort 경로에서 반납이 빠지면 이후 모든 실행이 굶는다.
           if (throttleLane) {

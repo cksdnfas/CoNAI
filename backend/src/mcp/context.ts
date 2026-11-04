@@ -384,8 +384,8 @@ export const CHAT_VISION_BUILTIN_TOOLS = new Set(['view_media_frames']);
 
 /**
  * The chat's own settings (linked lorebooks, record book, linked files, minutes) and how its features work: offered in
- * every chat regardless of scopes like the room tools, but not listed directly (the tool catalog keeps them under
- * `chat`), since they matter only when the person asks.
+ * every chat regardless of scopes like the room tools. A chat whose tool catalog exists keeps them in it (under `chat`),
+ * since they matter only when the person asks; without a catalog (too few app tools) they are listed directly.
  */
 export const CHAT_SETTINGS_TOOLS = new Set(['get_chat_settings', 'propose_chat_settings']);
 

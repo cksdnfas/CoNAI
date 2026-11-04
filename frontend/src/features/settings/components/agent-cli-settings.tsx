@@ -48,7 +48,7 @@ function ClaudeLoginDialog({ open, onClose, onSucceeded }: { open: boolean; onCl
           <Button asChild><a href={state.verificationUrl} target="_blank" rel="noopener noreferrer">{t({ ko: '인증 페이지 열기', en: 'Open authentication page' })}</a></Button>
           <form className="flex gap-2" onSubmit={(event) => { event.preventDefault(); if (code.trim()) submit.mutate(code.trim()) }}>
             <Input type="password" value={code} onChange={(event) => setCode(event.target.value)} autoComplete="off" aria-label={t({ ko: '인증 코드', en: 'Authorization code' })} placeholder={t({ ko: '코드가 나오면 붙여넣어', en: 'Paste the code if one shows' })} />
-            <Button type="submit" disabled={!code.trim() || submit.isPending}>{t({ ko: '확인', en: 'Submit' })}</Button>
+            <Button type="submit" disabled={!code.trim() || submit.isPending}>{t({ ko: '로그인', en: 'Sign in' })}</Button>
           </form>
         </> : !error && state?.status !== 'failed' ? <p className="text-sm text-muted-foreground">{t({ ko: '로그인 준비 중…', en: 'Preparing sign-in…' })}</p> : null}
         {error || state?.status === 'failed' ? <>

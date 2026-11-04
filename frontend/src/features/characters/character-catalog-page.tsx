@@ -2,7 +2,7 @@ import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react'
 import { keepPreviousData, useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useSearchParams } from 'react-router-dom'
 import { CHARACTER_APPEARANCE_SECTION_KEYS, CHAT_PROFILE_TEXT_LIMITS, composeCharacterAppearance, formatDanbooruTagForPrompt, joinPromptParts, type CharacterAppearanceSections, type ChatPageData } from '@conai/shared'
-import { BookOpen, Check, ChevronDown, ChevronLeft, ChevronRight, Copy, ExternalLink, Folder, Image as ImageIcon, Import, Library, Plus } from 'lucide-react'
+import { BookOpen, Check, ChevronDown, ChevronLeft, ChevronRight, Copy, ExternalLink, Folder, Image as ImageIcon, Import, Library } from 'lucide-react'
 import { CharacterCard } from '@/components/common/character-card'
 import { OverlayCardHoverOnly } from '@/components/common/overlay-card'
 import { PageToolbar } from '@/components/common/page-toolbar'
@@ -10,6 +10,7 @@ import { PageWithSidebar } from '@/components/common/page-with-sidebar'
 import { SearchField, ToolbarSearchField } from '@/components/common/search-field'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { EditorFooter } from '@/components/ui/editor-footer'
 import { Chip, ToggleChip } from '@/components/ui/chip'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Field, FieldGroup } from '@/components/ui/field'
@@ -18,7 +19,7 @@ import { SwitchLine } from '@/components/ui/switch-line'
 import { IconButton } from '@/components/ui/icon-button'
 import { ErrorState } from '@/components/ui/error-state'
 import { LoadingState } from '@/components/ui/loading-state'
-import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
+import { Modal, ModalBody } from '@/components/ui/modal'
 import { Select } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useSnackbar } from '@/components/ui/snackbar-context'
@@ -538,7 +539,7 @@ function CatalogCharacterModal({ character, position, canImport, canViewImages, 
           </div>
         </div>
       </ModalBody>
-      <ModalFooter>
+      <EditorFooter onSave={canImport && importedSettingId === null ? () => submit(false) : undefined} canSave={!importBlocked} saveLabel={t({ ko: '가져오기', en: 'Import' })}>
         {position.count > 1 && position.index >= 0 ? (
           <div className="flex items-center gap-1">
             <IconButton size="icon-sm" variant="ghost" label={t({ ko: '이전 캐릭터', en: 'Previous character' })} disabled={!onPrevious} onClick={() => onPrevious?.()}><ChevronLeft /></IconButton>
@@ -546,18 +547,16 @@ function CatalogCharacterModal({ character, position, canImport, canViewImages, 
             <IconButton size="icon-sm" variant="ghost" label={t({ ko: '다음 캐릭터', en: 'Next character' })} disabled={!onNext} onClick={() => onNext?.()}><ChevronRight /></IconButton>
           </div>
         ) : null}
-        <span className="flex-1" />
         {!canImport ? (
           <Button variant="ghost" size="sm" onClick={() => void copy()}><Copy />{t({ ko: '태그 복사', en: 'Copy tags' })}</Button>
         ) : importedSettingId !== null ? (
-          <Button size="sm" onClick={() => onOpenSetting(importedSettingId)}>{t({ ko: '가져온 외형 열기', en: 'Open the imported setting' })}</Button>
+          <Button variant="ghost" size="sm" onClick={() => onOpenSetting(importedSettingId)}>{t({ ko: '가져온 외형 열기', en: 'Open the imported setting' })}</Button>
         ) : (
           <>
             <Button variant="ghost" size="sm" disabled={importBlocked} onClick={() => submit(true)}>{t({ ko: '가져와서 열기', en: 'Import and open' })}</Button>
-            <Button size="sm" disabled={importBlocked} onClick={() => submit(false)}><Plus />{t({ ko: '가져오기', en: 'Import' })}</Button>
           </>
         )}
-      </ModalFooter>
+      </EditorFooter>
       {pickingFolder ? (
         <CharacterFolderPickerModal
           title={t({ ko: '폴더 고르기', en: 'Choose folder' })}

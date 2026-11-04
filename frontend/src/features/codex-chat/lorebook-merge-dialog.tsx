@@ -4,12 +4,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Pencil, Sparkles, TriangleAlert } from 'lucide-react'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { EmptyState } from '@/components/ui/empty-state'
-import { Button } from '@/components/ui/button'
+import { EditorFooter } from '@/components/ui/editor-footer'
 import { Field } from '@/components/ui/field'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { Spinner } from '@/components/ui/loading-state'
-import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
+import { Modal, ModalBody } from '@/components/ui/modal'
 import { Select } from '@/components/ui/select'
 import { SettingRow } from '@/components/ui/setting-row'
 import { useSnackbar } from '@/components/ui/snackbar-context'
@@ -250,7 +250,7 @@ function MergeBody({ sourceId, targetId: fixedTargetId, entryIds, deleteSource, 
           </>
         ) : null}
       </ModalBody>
-      <ModalFooter separated className="mt-4">
+      <EditorFooter onSave={() => mergeMutation.mutate()} canSave={Boolean(preview) && changing > 0 && !emptyMerged} saving={mergeMutation.isPending} saveLabel={t({ ko: '병합 ({count})', en: 'Merge ({count})' }, { count: changing })}>
         {duplicates.length > 0 && profiles.length > 0 ? (
           <>
             <IconButton size="icon-sm" variant="ghost" disabled={profileId === null || draftMutation.isPending || mergeMutation.isPending} onClick={() => draftMutation.mutate()} label={t({ ko: '{name}에게 맡기기', en: 'Ask {name}' }, { name: draftProfile?.name ?? '' })}>
@@ -264,12 +264,7 @@ function MergeBody({ sourceId, targetId: fixedTargetId, entryIds, deleteSource, 
             ) : null}
           </>
         ) : null}
-        <span className="flex-1" />
-        <Button size="sm" disabled={!preview || changing === 0 || emptyMerged || mergeMutation.isPending} onClick={() => mergeMutation.mutate()}>
-          {mergeMutation.isPending ? <Spinner className="size-3.5" /> : null}
-          {t({ ko: '병합 ({count})', en: 'Merge ({count})' }, { count: changing })}
-        </Button>
-      </ModalFooter>
+      </EditorFooter>
     </>
   )
 }

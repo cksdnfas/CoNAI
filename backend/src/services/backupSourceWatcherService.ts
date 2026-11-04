@@ -8,7 +8,7 @@ import { VideoOptimizationService } from './videoOptimizationService';
 import { WebPConversionService } from './webpConversionService';
 import { BackupSource, BackupSourceService, ensureBackupTargetDirectory, normalizeBackupComparePath } from './backupSourceService';
 import { clampWatcherPollingIntervalMs } from './fileWatcher/fileWatcherPathUtils';
-import { sleep, waitForChokidarReady } from './watcherLifecycleUtils';
+import { restartWatcherAfterDelay, sleep, waitForChokidarReady } from './watcherLifecycleUtils';
 
 const isVerboseBackupWatcherLoggingEnabled = process.env.CONAI_VERBOSE_SCAN_DEBUG === 'true';
 
@@ -141,6 +141,7 @@ async function collectExistingSupportedFiles(rootPath: string, recursive: boolea
 
 export class BackupSourceWatcherService {
   private static watcherRegistry = new Map<number, BackupWatcherEntry>();
+  private static pendingRestarts = new Map<number, AbortController>();
   private static pendingImports = new Set<string>();
   private static activeTasks = new Set<Promise<unknown>>();
   // 초기 임포트는 오래 걸릴 수 있으므로 이 간격마다 소스 활성 여부를 다시 읽는다.
@@ -192,6 +193,7 @@ export class BackupSourceWatcherService {
     signal?.throwIfAborted();
 
     const source = await BackupSourceService.getSource(sourceId);
+    signal?.throwIfAborted();
     if (!source || source.is_active !== 1) {
       throw new Error(`백업 소스를 찾을 수 없거나 비활성화됨: ${sourceId}`);
     }
@@ -276,6 +278,8 @@ export class BackupSourceWatcherService {
 
   /** Stop a watcher for one backup source. */
   static async stopWatcher(sourceId: number): Promise<void> {
+    this.pendingRestarts.get(sourceId)?.abort();
+    this.pendingRestarts.delete(sourceId);
     const entry = this.watcherRegistry.get(sourceId);
     if (!entry) {
       BackupSourceService.updateWatcherState(sourceId, 'stopped', null);
@@ -289,7 +293,7 @@ export class BackupSourceWatcherService {
 
   /** Close every watcher, then drain imports that already own filesystem work. */
   static async stopAll(): Promise<void> {
-    const sourceIds = [...this.watcherRegistry.keys()];
+    const sourceIds = [...new Set([...this.watcherRegistry.keys(), ...this.pendingRestarts.keys()])];
     await Promise.allSettled(sourceIds.map((sourceId) => this.stopWatcher(sourceId)));
     await Promise.allSettled([...this.activeTasks]);
   }
@@ -303,9 +307,9 @@ export class BackupSourceWatcherService {
 
   /** Restart a watcher for one backup source. */
   static async restartWatcher(sourceId: number): Promise<void> {
-    await this.stopWatcher(sourceId);
-    await sleep(300);
-    await this.startWatcher(sourceId);
+    await restartWatcherAfterDelay(this.pendingRestarts, sourceId, 300,
+      () => this.stopWatcher(sourceId),
+      (signal) => this.startWatcher(sourceId, signal));
   }
 
   private static buildPendingImportKey(sourceId: number, filePath: string): string {

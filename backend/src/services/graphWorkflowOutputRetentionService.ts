@@ -6,6 +6,7 @@ const RETENTION_PRUNE_DEBOUNCE_MS = 1_500
 
 const pendingRetentionPrunes = new Map<number, number>()
 let retentionPruneTimer: ReturnType<typeof setTimeout> | null = null
+let retentionPruneWork: Promise<void> | null = null
 
 function yieldToEventLoop() {
   return new Promise<void>((resolve) => setTimeout(resolve, 0))
@@ -56,17 +57,30 @@ export async function pruneGraphWorkflowOutputRetention(workflowId: number, rete
 }
 
 async function flushPendingRetentionPrunes() {
-  const entries = Array.from(pendingRetentionPrunes.entries())
-  pendingRetentionPrunes.clear()
-
-  for (const [workflowId, retentionLimit] of entries) {
-    try {
-      await pruneGraphWorkflowOutputRetention(workflowId, retentionLimit)
-    } catch (error) {
-      console.warn('[GraphWorkflowOutputRetention] Failed to prune graph workflow outputs:', error instanceof Error ? error.message : error)
+  while (pendingRetentionPrunes.size > 0) {
+    const entries = Array.from(pendingRetentionPrunes.entries())
+    pendingRetentionPrunes.clear()
+    for (const [workflowId, retentionLimit] of entries) {
+      try {
+        await pruneGraphWorkflowOutputRetention(workflowId, retentionLimit)
+      } catch (error) {
+        console.warn('[GraphWorkflowOutputRetention] Failed to prune graph workflow outputs:', error instanceof Error ? error.message : error)
+      }
+      await yieldToEventLoop()
     }
+  }
+}
 
-    await yieldToEventLoop()
+function runRetentionPrunes() {
+  return retentionPruneWork ??= flushPendingRetentionPrunes().finally(() => { retentionPruneWork = null })
+}
+
+/** Call after graph execution stops, before temporary files and database connections are closed. */
+export async function drainGraphWorkflowOutputRetention() {
+  while (retentionPruneTimer || retentionPruneWork || pendingRetentionPrunes.size > 0) {
+    if (retentionPruneTimer) clearTimeout(retentionPruneTimer)
+    retentionPruneTimer = null
+    await runRetentionPrunes()
   }
 }
 
@@ -79,6 +93,6 @@ export function requestGraphWorkflowOutputRetentionPrune(workflowId: number, ret
 
   retentionPruneTimer = setTimeout(() => {
     retentionPruneTimer = null
-    void flushPendingRetentionPrunes()
+    void runRetentionPrunes()
   }, RETENTION_PRUNE_DEBOUNCE_MS)
 }

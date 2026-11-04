@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useLocation, useSearchParams } from 'react-router-dom'
 import type { PostCategory, PostKnowledgeReviewStatus, PostListLayout, PostSummary } from '@conai/shared'
-import { ArrowLeft, BookOpen, ChevronDown, ChevronRight, EyeOff, FilePen, FolderPlus, LayoutGrid, Newspaper, Pencil, PenSquare, Rows3, Search, Smartphone, Trash2, Undo2, X, type LucideIcon } from 'lucide-react'
+import { ArrowLeft, BookOpen, ChevronDown, ChevronRight, EyeOff, FilePen, FolderPlus, LayoutGrid, Newspaper, Pencil, Plus, Rows3, Search, Smartphone, Trash2, Undo2, X, type LucideIcon } from 'lucide-react'
 import { PageToolbar } from '@/components/common/page-toolbar'
 import { PathBreadcrumbs } from '@/components/common/path-breadcrumbs'
 import { PageWithSidebar } from '@/components/common/page-with-sidebar'
@@ -357,7 +357,7 @@ export function PostsPage() {
     <SidebarNav aria-label={t({ ko: '게시판', en: 'Posts' })}>
       <SidebarItem icon={Newspaper} label={t({ ko: '모든 글', en: 'All posts' })} active={view === 'list' && !categoryId && !tag} onClick={() => filterCategory(null)} />
       {categories.length || permissions.isAdmin ? <SidebarGroupLabel actions={permissions.isAdmin ? (
-        <IconButton size="icon-xs" variant="ghost" label={t({ ko: '새 카테고리', en: 'New category' })} onClick={() => setCategoryDialog({ category: null, parentId: null })}><FolderPlus /></IconButton>
+        <Button size="compact" variant="ghost" aria-label={t({ ko: '새 카테고리', en: 'New category' })} onClick={() => setCategoryDialog({ category: null, parentId: null })}><Plus />{t({ ko: '추가', en: 'Add' })}</Button>
       ) : undefined}>{t({ ko: '카테고리', en: 'Categories' })}</SidebarGroupLabel> : null}
       {shownCategories.map(({ category, depth }) => {
         const folded = collapsedCategories.has(category.id)
@@ -453,7 +453,7 @@ export function PostsPage() {
       <>
         {!proposalsView ? <ActionMenuButton size="icon" icon={LayoutIcon} entries={layoutEntries} label={t({ ko: '목록 모양', en: 'Layout' })} /> : null}
         {!searchOpen && !proposalsView ? <IconButton variant="ghost" label={t({ ko: '검색', en: 'Search' })} onClick={() => setSearchOpen(true)}><Search /></IconButton> : null}
-        {permissions.canWrite ? <IconButton label={t({ ko: '새 글', en: 'New post' })} onClick={() => update({ edit: 'new', post: null })}><PenSquare /></IconButton> : null}
+        {permissions.canWrite ? <Button size="sm" onClick={() => update({ edit: 'new', post: null })}><Plus />{t({ ko: '새 글', en: 'New post' })}</Button> : null}
       </>
     )
   } else {
@@ -513,7 +513,7 @@ export function PostsPage() {
   } else if (listQuery.isError) {
     content = <ErrorState title={t({ ko: '글 목록을 불러오지 못했어.', en: 'Could not load posts.' })} error={listQuery.error} onRetry={() => void listQuery.refetch()} />
   } else if (posts.length === 0) {
-    content = <EmptyState icon={searchOpen && searchQuery ? Search : tab === 'trash' ? Trash2 : Newspaper} title={searchOpen && searchQuery ? t({ ko: '찾은 글이 없어', en: 'No matching posts' }) : tab === 'trash' ? t({ ko: '휴지통이 비었어', en: 'The trash is empty' }) : t({ ko: '아직 글이 없어', en: 'No posts yet' })} action={!(searchOpen && searchQuery) && tab !== 'trash' && permissions.canWrite ? <IconButton size="icon-sm" label={t({ ko: '새 글', en: 'New post' })} onClick={() => update({ edit: 'new', post: null })}><PenSquare /></IconButton> : undefined} />
+    content = <EmptyState icon={searchOpen && searchQuery ? Search : tab === 'trash' ? Trash2 : Newspaper} title={searchOpen && searchQuery ? t({ ko: '찾은 글이 없어', en: 'No matching posts' }) : tab === 'trash' ? t({ ko: '휴지통이 비었어', en: 'The trash is empty' }) : t({ ko: '아직 글이 없어', en: 'No posts yet' })} action={!(searchOpen && searchQuery) && tab !== 'trash' && permissions.canWrite ? <Button size="sm" onClick={() => update({ edit: 'new', post: null })}><Plus />{t({ ko: '새 글', en: 'New post' })}</Button> : undefined} />
   } else {
     const listProps = tab === 'trash' ? { posts, categories, onOpen: () => undefined, onTag: filterTag, menu: trashMenu, menuOnClick: true } : { posts, categories, onOpen: openPost, onTag: filterTag }
     content = (

@@ -104,3 +104,25 @@ test('a missing model only blocks that model', () => {
   assert.equal(healthBlocksModel(getConnectionHealth('lmstudio'), 'qwen-b'), true)
   assert.equal(healthBlocksModel(null, 'qwen-b'), false)
 })
+
+test('provider connection checks release unused response bodies on success and rejection', async (t) => {
+  const { ExternalApiService } = await import('../src/services/externalApiService')
+  let status = 200
+  let cancelled = 0
+  t.mock.method(globalThis, 'fetch', async () => new Response(new ReadableStream({
+    cancel() { cancelled++ },
+  }), { status }))
+  const providers = [
+    { providerName: 'civitai', apiKey: 'test' },
+    { providerName: 'openai', providerType: 'llm_openai_compatible' as const, baseUrl: 'http://provider.test/v1' },
+    { providerName: 'ollama', providerType: 'llm_ollama' as const, baseUrl: 'http://provider.test' },
+  ]
+  for (const code of [200, 401]) {
+    status = code
+    for (const provider of providers) {
+      const before = cancelled
+      assert.equal(await ExternalApiService.testConnection(provider), code === 200)
+      assert.equal(cancelled, before + 1, `${provider.providerName} must release its unread body`)
+    }
+  }
+})

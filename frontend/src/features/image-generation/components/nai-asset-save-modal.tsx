@@ -1,10 +1,10 @@
 import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
-import { Button } from '@/components/ui/button'
+import { EditorFooter } from '@/components/ui/editor-footer'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Field } from '@/components/ui/field'
-import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
+import { Modal, ModalBody } from '@/components/ui/modal'
 import { useI18n } from '@/i18n'
 
 type NaiAssetSaveModalProps = {
@@ -53,16 +53,7 @@ export function NaiAssetSaveModal({
           />
         </Field>
 
-        <ModalFooter>
-          <Button type="button" variant="secondary" onClick={onClose} disabled={isSaving}>
-            {t('image-generation.components.nai.asset.save.modal.cancel')}
-          </Button>
-          <Button type="button" onClick={onSave} disabled={!canUpdateWorkflows || !canViewImages || isSaving || name.trim().length === 0}>
-            {isSaving
-              ? t('image-generation.components.nai.asset.save.modal.saving.with.action', { action: effectiveSubmitLabel })
-              : effectiveSubmitLabel}
-          </Button>
-        </ModalFooter>
+        <EditorFooter onSave={onSave} canSave={canUpdateWorkflows && canViewImages && name.trim().length > 0} saving={isSaving} saveLabel={effectiveSubmitLabel} />
       </ModalBody>
     </Modal>
   )

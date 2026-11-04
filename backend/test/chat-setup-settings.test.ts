@@ -184,21 +184,21 @@ test('chat setup: profile settings proposals and the chat settings card', { time
     assert.equal(ChatProposalStore.find(card.id)?.kind, 'chat_settings')
   })
 
-  await t.test('chat settings tools: only behind a tool catalog, never direct, never on a public page', async () => {
+  await t.test('chat settings tools: direct when the chat has too few app tools for a catalog, catalogued otherwise, never on a public page', async () => {
     const controller = new AbortController()
     const context: ChatExecutionContext = { threadId, profileId: profile.id, kind: 'direct', replyId: 'settings-tools' }
     const unregister = registerChatReply(context, controller.signal, () => ({ replyTo: null, recipients: ['user'] }))
     const names = (bridge: { tools: Array<{ function: { name: string } }>; catalogTools: Set<string> }) => [...bridge.tools.map((tool) => tool.function.name), ...bridge.catalogTools]
-    // A chat with no app tools has no catalog: the settings tools would be direct definitions on every request, so they are left out.
+    // A chat with no app tools has no catalog to hold them, so they are listed directly and stay reachable.
     const bare = await openChatMcpBridge({ accountId: null, accountType: 'admin' }, [], null, { chatContext: context })
     try {
-      assert.ok(!names(bare).includes('get_chat_settings'), 'no direct definition without a catalog')
-      assert.ok(!bare.tools.some((tool) => tool.function.name === 'propose_chat_settings'))
+      assert.ok(bare.tools.some((tool) => tool.function.name === 'get_chat_settings') && bare.tools.some((tool) => tool.function.name === 'propose_chat_settings'), 'direct definitions without a catalog')
+      assert.equal(bare.catalogTools.size, 0)
     } finally { await bare.close() }
     const full = await openChatMcpBridge({ accountId: null, accountType: 'admin' }, ['read', 'generate', 'organize'], null, { chatContext: context })
     try {
       assert.ok(full.catalogTools.has('get_chat_settings') && full.catalogTools.has('propose_chat_settings'), 'catalogued, whatever the profile tool list')
-      assert.ok(!full.tools.some((tool) => tool.function.name === 'get_chat_settings'), 'never listed directly')
+      assert.ok(!full.tools.some((tool) => tool.function.name === 'get_chat_settings'), 'not listed directly once a catalog exists')
       const read = await full.call('get_chat_settings', {})
       assert.ok(!read.isError, JSON.stringify(read.content))
       assert.match(JSON.stringify(read.content), /장기 기억/)

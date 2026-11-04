@@ -69,11 +69,11 @@ export function buildComplexFilterAutoTagCondition(
 
     if (condition.min_score !== undefined) {
       params.push(condition.min_score);
-      conditions.push(`${buildAutoTagRatingExpr('im', condition.rating_type as 'general' | 'sensitive' | 'questionable' | 'explicit')} >= ?`);
+      conditions.push(`${buildAutoTagRatingExpr('im', condition.rating_type)} >= ?`);
     }
     if (condition.max_score !== undefined) {
       params.push(condition.max_score);
-      conditions.push(`${buildAutoTagRatingExpr('im', condition.rating_type as 'general' | 'sensitive' | 'questionable' | 'explicit')} <= ?`);
+      conditions.push(`${buildAutoTagRatingExpr('im', condition.rating_type)} <= ?`);
     }
 
     return conditions.length > 0 ? conditions.join(' AND ') : null;

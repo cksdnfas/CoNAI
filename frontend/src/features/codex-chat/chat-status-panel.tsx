@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject } from 'react'
-import { Activity, Check, ChevronDown, ChevronUp, GripVertical, Minimize2, PanelRight, PanelRightClose, Pencil, PictureInPicture2, RotateCcw, X } from 'lucide-react'
+import { Activity, ChevronDown, ChevronUp, GripVertical, Minimize2, PanelRight, PanelRightClose, Pencil, PictureInPicture2, RotateCcw } from 'lucide-react'
 import type { ChatPortraitSignal } from '@conai/shared'
 import { ChatProfileImage } from './chat-profile-image'
 import { Badge } from '@/components/ui/badge'
@@ -160,8 +160,8 @@ function BlockEditor({ data, busy, onSave, onCancel }: { data: Record<string, un
       }} />
       {error ? <p className="text-xs text-destructive">{error}</p> : null}
       <div className="flex justify-end gap-1">
-        <IconButton size="icon-xs" variant="ghost" label={t({ ko: '취소', en: 'Cancel' })} disabled={busy} onClick={onCancel}><X /></IconButton>
-        <IconButton size="icon-xs" variant="ghost" label={t({ ko: '저장', en: 'Save' })} disabled={busy} onClick={() => void save()}><Check /></IconButton>
+        <Button size="xs" variant="ghost" disabled={busy} onClick={onCancel}>{t({ ko: '취소', en: 'Cancel' })}</Button>
+        <Button size="xs" variant="default" disabled={busy} onClick={() => void save()}>{t({ ko: '저장', en: 'Save' })}</Button>
       </div>
     </div>
   )

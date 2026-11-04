@@ -9,22 +9,20 @@ import { parseModuleDefinition } from '../services/graph-workflow-executor/share
 
 const router = Router();
 
-/** Open one local folder path in the host operating system file explorer. */
-function openFolderInHostExplorer(folderPath: string) {
-  if (process.platform === 'win32') {
-    const child = spawn('explorer.exe', [folderPath], { detached: true, stdio: 'ignore' });
-    child.unref();
-    return;
-  }
-
-  if (process.platform === 'darwin') {
-    const child = spawn('open', [folderPath], { detached: true, stdio: 'ignore' });
-    child.unref();
-    return;
-  }
-
-  const child = spawn('xdg-open', [folderPath], { detached: true, stdio: 'ignore' });
-  child.unref();
+/**
+ * Open one local folder path in the host operating system file explorer. Rejects when the opener cannot start (a
+ * Linux or Docker host without xdg-open): a child's unhandled 'error' event would end the whole server process.
+ */
+function openFolderInHostExplorer(folderPath: string): Promise<void> {
+  const command = process.platform === 'win32' ? 'explorer.exe' : process.platform === 'darwin' ? 'open' : 'xdg-open';
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, [folderPath], { detached: true, stdio: 'ignore' });
+    child.once('error', (error) => reject(new Error(`This server cannot open a folder window (${command}): ${error.message}`)));
+    child.once('spawn', () => {
+      child.unref();
+      resolve();
+    });
+  });
 }
 
 /** Run one npm install inside a custom node folder and capture the command output. */
@@ -199,7 +197,7 @@ router.post('/:key/open-folder', requireAdmin, asyncHandler(async (req: Request,
     });
   }
 
-  openFolderInHostExplorer(customNodeRecord.folderPath);
+  await openFolderInHostExplorer(customNodeRecord.folderPath);
   return res.json({
     success: true,
     data: {

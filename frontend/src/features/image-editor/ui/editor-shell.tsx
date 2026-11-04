@@ -37,6 +37,7 @@ import {
   X,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { ModalFooter } from '@/components/ui/modal'
 import { IconButton } from '@/components/ui/icon-button'
 import { SliderRow } from '@/components/ui/slider-row'
 import { Tip } from '@/components/ui/tooltip'
@@ -444,8 +445,9 @@ export function EditorShell({ engine, snapshot, stageRef, rootRef, fileName, mas
   const ready = snapshot.status === 'ready'
 
   const saveButton = (
-    <Button size="sm" className="shrink-0" disabled={!ready || saving} onClick={onSave}>
-      {saving ? t({ ko: '저장 중…', en: 'Saving…' }) : t({ ko: '저장', en: 'Save' })}
+    <Button type="button" size="sm" className="shrink-0" disabled={!ready || saving} onClick={onSave}>
+      {saving ? <LoaderCircle className="animate-spin" /> : null}
+      {t({ ko: '저장', en: 'Save' })}
     </Button>
   )
 
@@ -470,6 +472,8 @@ export function EditorShell({ engine, snapshot, stageRef, rootRef, fileName, mas
       // eslint-disable-next-line no-restricted-syntax -- a full-screen workspace, not a dialog box: Modal's frame and padding do not apply
       className="nokey fixed inset-0 z-modal flex flex-col bg-surface-lowest text-foreground outline-none"
     >
+      {/* The work area (header, stage and the layer sheet over it) ends above the phone tools and the commit footer. */}
+      <div className="relative flex min-h-0 flex-1 flex-col">
       <header className="flex h-13 shrink-0 items-center gap-3 border-b border-line bg-background pr-3 pl-1.5">
         <IconButton variant="ghost" label={t({ ko: '닫기 (Esc)', en: 'Close (Esc)' })} onClick={onRequestClose}>
           <X className="size-[18px]" />
@@ -479,14 +483,14 @@ export function EditorShell({ engine, snapshot, stageRef, rootRef, fileName, mas
           {snapshot.width > 0 ? <span className="shrink-0 text-xs text-muted-foreground max-md:hidden">{snapshot.width} × {snapshot.height}</span> : null}
         </div>
         {engine ? (
-          <div className="flex min-w-0 items-center gap-3 max-md:hidden">
-            <span className="h-6 w-px bg-line" />
+          // A narrow window scrolls the tool options sideways instead of letting them run under the undo / redo keys.
+          <div className="scroll-x theme-nav-scroll flex min-w-0 items-center gap-3 max-md:hidden">
+            <span className="h-6 w-px shrink-0 bg-line" />
             <ToolOptions engine={engine} snapshot={snapshot} onCopy={onCopy} />
           </div>
         ) : null}
         <div className="flex-1 max-md:hidden" />
         {historyButtons}
-        {saveButton}
       </header>
 
       <div className="flex min-h-0 flex-1">
@@ -574,6 +578,7 @@ export function EditorShell({ engine, snapshot, stageRef, rootRef, fileName, mas
           </aside>
         </div>
       ) : null}
+      </div>
 
       {engine ? (
         <div className="shrink-0 border-t border-line bg-background md:hidden">
@@ -605,6 +610,17 @@ export function EditorShell({ engine, snapshot, stageRef, rootRef, fileName, mas
           </nav>
         </div>
       ) : null}
+
+      <div
+        // eslint-disable-next-line shadcn/no-arbitrary-values -- The standalone fullscreen footer must clear the device safe area.
+        className="shrink-0 px-4 pb-[max(1rem,env(safe-area-inset-bottom))]"
+      >
+        <ModalFooter separated>
+          <span className="flex-1" />
+          <Button type="button" size="sm" variant="ghost" onClick={onRequestClose} disabled={saving}>{t({ ko: '취소', en: 'Cancel' })}</Button>
+          {saveButton}
+        </ModalFooter>
+      </div>
 
       {/* Tablets (md–lg): the layer button lives at the top right of the stage. */}
       {engine ? (

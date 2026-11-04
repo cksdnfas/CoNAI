@@ -263,17 +263,20 @@ function pendingMessages(limit: number, threadIds = historyThreadIds()): IndexIt
   return rows.map((row) => ({ space: SEMANTIC_SPACES.message, sourceKey: String(row.id), ownerKey: `thread:${row.thread_id}`, hash: row.fp, text: row.content.slice(0, MESSAGE_MAX_CHARS), title: null, maxChunks: MESSAGE_MAX_CHUNKS }))
 }
 
-/** Every book's cached entries (account and chat books cache theirs from lorebook.json). */
-function allLoreEntries() {
-  const rows = getUserSettingsDb().prepare('SELECT id, entries FROM chat_lorebooks').all() as Array<{ id: number; entries: string }>
+/** Cached entries, restricted before loading bodies for an on-demand chat request. */
+function allLoreEntries(bookIds?: ReadonlySet<number>) {
+  const db = getUserSettingsDb()
+  const rows = (bookIds
+    ? db.prepare('SELECT id, entries FROM chat_lorebooks WHERE id IN (SELECT value FROM json_each(?)) ORDER BY id').all(JSON.stringify([...bookIds]))
+    : db.prepare('SELECT id, entries FROM chat_lorebooks').all()) as Array<{ id: number; entries: string }>
   return rows.flatMap((row) => normalizeLorebook(row.entries).filter(loreEntryEmbeddable).map((entry) => ({ bookId: row.id, entry })))
 }
 
 function pendingLore(limit: number, bookIds?: ReadonlySet<number>): IndexItem[] {
+  if (bookIds?.size === 0) return []
   const known = vectorStore.contentHashes(SEMANTIC_SPACES.lore, EMBEDDING_MODEL_KEY)
   const items: IndexItem[] = []
-  for (const { bookId, entry } of allLoreEntries()) {
-    if (bookIds && !bookIds.has(bookId)) continue
+  for (const { bookId, entry } of allLoreEntries(bookIds)) {
     const sourceKey = loreEntryVectorKey(bookId, entry.id)
     const document = loreEntryDocument(entry)
     if (known.get(sourceKey) === document.hash) continue

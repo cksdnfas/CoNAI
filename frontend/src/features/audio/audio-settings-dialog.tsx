@@ -156,7 +156,7 @@ function WorkflowTab({ focusWorkflowId }: { focusWorkflowId: number | null }) {
         onSave={() => void save()}
         canSave={complete}
         saving={busy}
-        saveLabel={workflow.binding ? t({ ko: '저장 후 검사', en: 'Save and check' }) : t({ ko: '연결', en: 'Link' })}
+        saveLabel={workflow.binding ? t({ ko: '저장', en: 'Save' }) : t({ ko: '연결', en: 'Link' })}
       />
     ) : null}
     </>

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { CopyCheck, Download, LayoutGrid, Loader2, Save, X } from 'lucide-react'
+import { Download, LayoutGrid, LoaderCircle, X } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { MediaCard } from '@/components/common/media-card'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
@@ -176,7 +177,7 @@ export function SpriteNormalizeTab({ active }: { active: boolean }) {
       </SpriteSection>
 
       {current ? (
-        <SpriteSection title={current.name} actions={<IconButton variant="ghost" size="icon-sm" label={t({ ko: '같은 크기 시트에 적용', en: 'Apply to sheets of the same size' })} onClick={applyToSameSize}><CopyCheck /></IconButton>}>
+        <SpriteSection title={current.name} actions={<Button type="button" variant="ghost" size="sm" onClick={applyToSameSize}>{t({ ko: '같은 크기 시트에 적용', en: 'Apply to sheets of the same size' })}</Button>}>
           <div className="grid grid-cols-2 gap-2">
             <MiniField label={t({ ko: '열', en: 'Columns' })}><NumberStepperInput value={current.options.columns} min={1} max={64} step={1} onValueCommit={(value) => updateSheet(current.hash, { columns: Math.max(1, Number(value) || 1) })} /></MiniField>
             <MiniField label={t({ ko: '행', en: 'Rows' })}><NumberStepperInput value={current.options.rows} min={1} max={64} step={1} onValueCommit={(value) => updateSheet(current.hash, { rows: Math.max(1, Number(value) || 1) })} /></MiniField>
@@ -237,9 +238,10 @@ export function SpriteNormalizeTab({ active }: { active: boolean }) {
           {problems ? t({ ko: '확인 필요 {count}개', en: '{count} need a check' }, { count: problems }) : null}
         </span>
         <IconButton variant="ghost" size="icon-sm" disabled={!canRun} label={t({ ko: 'ZIP으로 받기', en: 'Download ZIP' })} onClick={() => void run(false)}><Download /></IconButton>
-        <IconButton disabled={!canRun || !has('images.upload')} onClick={() => void run(true)} aria-busy={running || undefined} label={running ? t({ ko: '저장 중', en: 'Saving' }) : t({ ko: '라이브러리에 저장', en: 'Save to library' })}>
-          {running ? <Loader2 className="animate-spin" /> : <Save />}
-        </IconButton>
+        <Button size="sm" variant="default" disabled={!canRun || !has('images.upload')} onClick={() => void run(true)} aria-busy={running || undefined}>
+          {running ? <LoaderCircle className="animate-spin" /> : null}
+          {t({ ko: '저장', en: 'Save' })}
+        </Button>
       </SpriteActionBar>
     </div>
   )

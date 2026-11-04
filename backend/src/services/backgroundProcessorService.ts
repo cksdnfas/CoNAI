@@ -63,6 +63,9 @@ function yieldToHttpRequests(): Promise<void> {
 /** Batch lifecycle and backward-compatible public facade for media processing. */
 export class BackgroundProcessorService {
   private static processing = false;
+  private static stopped = false;
+  private static activeBatches = new Set<Promise<ProcessingResult>>();
+  private static timers = new Set<ReturnType<typeof setTimeout>>();
   private static lockRetryScheduled = false;
   private static consecutiveFailedBatches = 0;
   private static readonly BATCH_SIZE = 50;
@@ -81,8 +84,41 @@ export class BackgroundProcessorService {
     return SavedMediaOrchestrator.process(filePath, options);
   }
 
+  static start(): void {
+    this.stopped = false;
+  }
+
+  static async stopAndDrain(): Promise<void> {
+    this.stopped = true;
+    for (const timer of this.timers) clearTimeout(timer);
+    this.timers.clear();
+    await Promise.allSettled(this.activeBatches);
+    this.processing = false;
+    this.lockRetryScheduled = false;
+  }
+
+  private static schedule(work: () => void | Promise<unknown>, delayMs: number): void {
+    if (this.stopped) return;
+    const timer = setTimeout(() => {
+      this.timers.delete(timer);
+      if (!this.stopped) {
+        void Promise.resolve().then(work).catch((error) => console.error('❌ Scheduled background processing failed:', error));
+      }
+    }, delayMs);
+    this.timers.add(timer);
+  }
+
   /** Process one bounded batch and reschedule without blocking request handling. */
-  static async processUnhashedImages(options: BackgroundProcessorOptions = {}): Promise<ProcessingResult> {
+  static processUnhashedImages(options: BackgroundProcessorOptions = {}): Promise<ProcessingResult> {
+    if (this.stopped) return Promise.resolve({ processed: 0, duplicates: 0, errors: 0, unique: 0 });
+    const batch = this.processBatch(options);
+    this.activeBatches.add(batch);
+    const cleanup = () => { this.activeBatches.delete(batch); };
+    void batch.then(cleanup, cleanup);
+    return batch;
+  }
+
+  private static async processBatch(options: BackgroundProcessorOptions): Promise<ProcessingResult> {
     if (SystemMaintenanceLockService.isExclusiveActive()) {
       if (this.hasUnprocessedFiles()) {
         this.scheduleHashGenerationAfterMaintenanceLock(options);
@@ -234,9 +270,9 @@ export class BackgroundProcessorService {
           console.log('📋 More images to process, scheduling next batch...');
         }
 
-        setTimeout(() => {
+        this.schedule(() => {
           this.processing = false;
-          void this.processUnhashedImages(options);
+          return this.processUnhashedImages(options);
         }, nextBatchDelay);
       } else {
         this.processing = false;
@@ -259,6 +295,7 @@ export class BackgroundProcessorService {
   }
 
   static triggerHashGeneration(options: BackgroundProcessorOptions = {}): void {
+    if (this.stopped) return;
     if (SystemMaintenanceLockService.isExclusiveActive()) {
       if (this.hasUnprocessedFiles()) {
         this.scheduleHashGenerationAfterMaintenanceLock(options);
@@ -272,9 +309,7 @@ export class BackgroundProcessorService {
       }
 
       console.log('🚀 Triggering background hash generation...');
-      setTimeout(() => {
-        void this.processUnhashedImages(options);
-      }, 2000);
+      this.schedule(() => this.processUnhashedImages(options), 2000);
     }
   }
 
@@ -284,7 +319,7 @@ export class BackgroundProcessorService {
     }
 
     this.lockRetryScheduled = true;
-    setTimeout(() => {
+    this.schedule(() => {
       this.lockRetryScheduled = false;
       this.triggerHashGeneration({ ...options, quietIfIdle: true });
     }, this.LOCK_RETRY_DELAY_MS);

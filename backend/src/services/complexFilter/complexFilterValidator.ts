@@ -1,4 +1,5 @@
 import { FilterCondition, FilterValidationResult, ComplexFilter } from '@conai/shared';
+import { AUTO_TAG_RATING_TYPES, isAutoTagRatingType } from '../autoTagSqlShared';
 
 export function validateComplexFilter(filter: ComplexFilter): FilterValidationResult {
   const errors: string[] = [];
@@ -59,8 +60,12 @@ function validateConditions(conditions: FilterCondition[], groupName: string): s
       errors.push(`${groupName} group, condition ${index + 1}: min_score cannot be greater than max_score`);
     }
 
-    if (condition.type === 'auto_tag_rating' && !condition.rating_type) {
-      errors.push(`${groupName} group, condition ${index + 1}: rating_type is required for auto_tag_rating`);
+    if (condition.type === 'auto_tag_rating') {
+      if (!condition.rating_type) {
+        errors.push(`${groupName} group, condition ${index + 1}: rating_type is required for auto_tag_rating`);
+      } else if (!isAutoTagRatingType(condition.rating_type)) {
+        errors.push(`${groupName} group, condition ${index + 1}: rating_type must be one of ${AUTO_TAG_RATING_TYPES.join(', ')}`);
+      }
     }
   });
 

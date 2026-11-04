@@ -101,10 +101,14 @@ export function ModuleGraphWorkspaceModals({
         </p>
         <ModalFooter separated className="mt-4">
           <Tip content={t({ ko: '안의 항목은 상위 폴더로 옮겨', en: 'Contents move up a level' })}>
-            <Button type="button" variant="secondary" onClick={() => onConfirmDeleteFolder('move_children')}>
+            <Button type="button" variant="destructive-ghost" onClick={() => onConfirmDeleteFolder('move_children')}>
               {t({ ko: '폴더만 삭제', en: 'Delete folder only' })}
             </Button>
           </Tip>
+          <span className="flex-1" />
+          <Button type="button" variant="ghost" onClick={onCloseFolderDelete}>
+            {t({ ko: '취소', en: 'Cancel' })}
+          </Button>
           <Tip content={t({ ko: '안의 폴더·워크플로우까지 지워', en: 'Child folders and workflows go too' })}>
             <Button type="button" variant="destructive" onClick={() => onConfirmDeleteFolder('delete_tree')}>
               {t({ ko: '내용 포함 삭제', en: 'Delete with contents' })}

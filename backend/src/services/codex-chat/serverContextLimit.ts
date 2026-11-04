@@ -104,8 +104,11 @@ export async function serverContextLimit(target: ChatCompletionTarget): Promise<
   const running = pending.get(key)
   if (running) return running
   const request = lookup(target).catch(() => null).then((tokens) => {
-    known.set(key, { tokens, until: Date.now() + CACHE_MS })
     pending.delete(key)
+    // A refusal during discovery describes the actual request, not a model listing's advertised size.
+    const latest = known.get(key)
+    if (latest && latest !== cached && Date.now() < latest.until) return latest.tokens
+    known.set(key, { tokens, until: Date.now() + CACHE_MS })
     return tokens
   })
   pending.set(key, request)

@@ -67,6 +67,7 @@ type RegisteredHandler = RuntimeJobHandlerOptions<any, unknown>
 
 /** 이 프로세스가 실행 중인 잡의 abort 컨트롤러. 없으면 취소는 DB 플래그 경로로만 전파된다. */
 const localControllers = new Map<string, AbortController>()
+const activeJobs = new Set<Promise<void>>()
 const registry = new Map<RuntimeJobKind, RegisteredHandler>()
 
 let maintenanceHandle: ReturnType<typeof setInterval> | null = null
@@ -180,7 +181,15 @@ function createJobContext<TParams>(jobId: string, params: TParams, controller: A
 }
 
 /** Run one registered handler to completion inside this process. */
-async function executeJob(job: RuntimeJobRecord, registered: RegisteredHandler, params: unknown): Promise<void> {
+function executeJob(job: RuntimeJobRecord, registered: RegisteredHandler, params: unknown): Promise<void> {
+  const execution = runJob(job, registered, params)
+  activeJobs.add(execution)
+  const cleanup = () => { activeJobs.delete(execution) }
+  void execution.then(cleanup, cleanup)
+  return execution
+}
+
+async function runJob(job: RuntimeJobRecord, registered: RegisteredHandler, params: unknown): Promise<void> {
   if (!RuntimeJobStore.markRunning(job.jobId, resolveOwnerRole())) {
     return
   }
@@ -425,5 +434,12 @@ export class RuntimeJobRunner {
     localControllers.clear()
 
     return RuntimeJobStore.markOwnedJobsInterrupted(ownedJobIds)
+  }
+
+  /** Keep the database open through cancellation cleanup and final progress writes. */
+  static async shutdownAndDrain(): Promise<number> {
+    const interrupted = this.shutdown()
+    await Promise.allSettled(activeJobs)
+    return interrupted
   }
 }

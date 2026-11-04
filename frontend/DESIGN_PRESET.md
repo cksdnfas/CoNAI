@@ -309,10 +309,12 @@ buttons up one tone.
   `selected` is the picked / multi-select wash, `current` is where you are in a navigation list (the sidebar's fill +
   2px primary bar, e.g. the open chat thread); with
   `asChild` a `<button>` / `<a>` / `<li>` child becomes the row (lint allows `<ListRow asChild><button/></ListRow>`).
-- `ResourceRow` (`leading?`, `name`, `extra?`, `meta?`, `trailing?`, `onOpen?`, `openLabel?`): one named thing in a list
+- `ResourceRow` (`leading?`, `name`, `extra?`, `meta?`, `trailing?`, `menu?`, `onOpen?`, `openLabel?`): one named thing in a list
   (preset, profile, lorebook…). Name + extras over one muted meta line; `onOpen` makes the whole row clickable and shows
   the pencil on hover (always on touch). Clicks in `trailing` do not open the row. Colour the leading icon with
   `text-resource-*` (tool / generation / block / lorebook) and wrap a state that needs attention in `ResourceRowStatus`.
+  A nonempty `menu` (`ActionMenuEntry[]`) shares actions between right-click / touch long-press and the trailing `…`,
+  revealed by this row's hover or focus (always visible on coarse pointers).
   Settings lists whose rows open an editor (folders, LLM models/connections/presets, accounts, permission groups) use
   it instead of a column table; flag only what is off or failing (inactive, watcher error, not used), never the normal
   state. Keep a table (`DataTable`) only where values are compared down columns (usage, stats, file lists).
@@ -368,8 +370,11 @@ Dialogs are for short jobs: a question, a name, a choice, a small form. An edito
   `md` 36rem (one to six fields), `lg` 56rem (choosing from a list or tree, one-column editors), `xl` 72rem (a work
   surface: viewer, media library, split editors). There is no free width.
 - Header: `title` says what the dialog does, `description` only carries the data it acts on (a count, a path, a name) or
-  a consequence the user must know (what is deleted or kept), `status` holds a state chip (linked, synced). No switches, menus or buttons in the header; they go in
-  the body or the footer. An editor dialog may make its `title` the item's name field (`EditorTitleInput`), as editor pages do.
+  a consequence the user must know (what is deleted or kept), `status` holds a state chip (linked, synced). `actions` is the
+  one place for controls that act on the dialog's item itself (a favorite toggle, the item's `…` menu: move, copy, delete), at
+  the header's right before ✕ — the same spot a list card or editor page gives them, so nobody hunts for them in a footer corner.
+  No switches or form inputs in the header; they go in the body. An editor dialog may make its `title` the item's name field
+  (`EditorTitleInput`), as editor pages do.
 - Footer (`EditorFooter`): Delete in words on the left (asks first), the editor's other actions, then on the right the
   unsaved status (`Ctrl S`), Cancel and the primary action as a verb (저장 · 만들기 · 불러오기). Footer keys are words
   without icons; everywhere else see "Icon or words, never both" below.
@@ -377,9 +382,10 @@ Dialogs are for short jobs: a question, a name, a choice, a small form. An edito
   section list), so the frame does not jump.
 
 ### Editor pages (`EditorPage`, `FloatingSaveBar`)
-A large editor (chat profile, lorebook) is a page with its own address, not a dialog. The character library's
-appearance setting is the exception: it opens as an `xl` dialog over the library list (its address is the list's
-`setting` / `new` parameter), so the list keeps its scroll position and card size.
+An editor opened from a list (chat profile, appearance setting, lorebook) is an `xl` / `tall` dialog over that list, addressed
+by the list's `profile` / `setting` / `lorebook` parameter, so the list keeps its scroll position and card size and the item's
+actions stay in the dialog header. Only a document or canvas editor with no list behind it (post, wallpaper) is a page with
+its own address.
 - `EditorPage` (`components/common/editor-page`): the path back (`crumbs`), the title with `status` chips and `actions`
   (one `⋯` menu), an optional `nav` (`EditorSectionNav`: each section's icon and name, with a mark where input is
   needed; a drawer on a phone) and the `saveBar`. Ctrl/⌘ S (`usePageSaveShortcut`) commits the focused field, then
@@ -451,10 +457,33 @@ appearance setting is the exception: it opens as an `xl` dialog over the library
 
 `outline` no longer exists. Icon-only buttons use `IconButton` (label = aria-label + tooltip).
 
-**Icon or words, never both.** Buttons inside a page never mix an icon with words. An action key with an icon is an
-`IconButton` (primary CTAs included: `variant="default"` IconButton, its cost or count in the label/tooltip). A key
+**Icon or words, never both.** Buttons inside a page never mix an icon with words, with one exception: the single
+primary create action of a page toolbar, a sidebar/section header or an empty state is a labelled Button that may lead
+with `Plus` / `Upload`, because an unlabeled "+" squeezed among tooltip icons is what people miss first. Page toolbars and
+empty states: `size="sm"`, default variant, the full name (`새 글`, `파일 업로드`), last in the row with the tooltip icons
+and the `…` menu to its left. Section and sidebar headers: `size="compact" variant="ghost"` reading `추가`, the full name as
+`aria-label`. One per row; the row's other creates stay IconButtons, and a dialog body keeps its primary key in the footer.
+Every other action key with an icon is an `IconButton` (generation CTAs included: `variant="default"` IconButton,
+its cost or count in the label/tooltip). A key
 without a fitting icon is a word-only Button (dialog footers: 취소 · 저장); a spinner shown while it works is its busy
-state, not an icon. A count that belongs to an icon key (votes, comments) sits beside it as text. Menus and places may pair an icon with a
+state, not an icon.
+
+**Commit keys are always words.** 저장 · 취소 · 되돌리기 · 적용 · 만들기 · 불러오기 · 닫기 (as a key, not the header ✕)
+and an editor's or dialog's delete never become icon-only, never carry a decorative icon, and look the same everywhere:
+- One verb per meaning: persisting edits is 저장 (never 확인 / 완료 / ✓); dropping unsaved edits is 되돌리기; leaving
+  without committing is 취소 when there is something to commit, 닫기 when there is not (a notice is dismissed with 닫기);
+  적용 only puts something into a draft that is saved later. An action that does more than that keeps its own verb —
+  저장하고 다시 생성, 덮어쓰기, 관리자 원본으로, 제안 버리기, 재검토 요청 — never flattened to 저장 / 되돌리기 / 취소, and
+  the visible word carries the meaning (not only a hover `title`).
+- Order and look: delete (`destructive-ghost`) on the left, then other actions, then 되돌리기 and 취소 (`ghost`) and the
+  primary (`default`) last on the right — `EditorFooter` (`onRevert`) in dialogs, `FloatingSaveBar` (`onDiscard`) on
+  pages, `ModalFooter` in the same order for plain dialogs. A page's bar shows whenever there is something to save
+  (a new unsaved draft too) and its Ctrl/⌘ S hint is wired (`usePageSaveShortcut`).
+- Inline edits (a rename field, a comment or status line) end in `xs` word keys 취소 · 저장; Enter saves, Esc cancels.
+- A key that opens a save dialog (프리셋으로 저장, 모듈로 저장) is a tool, not a commit: an `IconButton` with the full name
+  as its label, the same in every generator.
+- Tools that are not commits stay icons: copy, export, canvas undo/redo, resetting a parameter group, a canvas tool's own
+  apply / cancel inside its tool strip, chip ✕, the dialog header ✕. A count that belongs to an icon key (votes, comments) sits beside it as text. Menus and places may pair an icon with a
 name, since they name where you go or what you pick rather than act: the header's pages and group menus, tab strips
 (`TextTabs` items with `icon`), navigation rows (`nav`, SidebarItem), menu items, field-style pickers
 (`variant="field"`) and chips that name user data. When the width runs short, a menu drops its names and keeps the

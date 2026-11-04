@@ -648,11 +648,12 @@ export function selectLoreEntries(profile: LoreProfile, messages: ReadonlyArray<
     const foldedScan = scanned.toLowerCase()
     // The secondary condition reads the chat and the chosen entries together.
     const combined = `${recent}\n${scanned}`
+    const foldedCombined = combined.toLowerCase()
     const added: KeyedLoreEntry[] = []
     pending = pending.filter((item) => {
       const { key, entry } = item
       const matched = loreEntryKeys(entry).filter((word) => keywordMatches(word, entry, scanned, foldedScan))
-      if (!matched.length || !loreEntryMatches(entry, combined, combined.toLowerCase())) return true
+      if (!matched.length || !loreEntryMatches(entry, combined, foldedCombined)) return true
       unmatched -= 1
       if (options.skip?.(key)) { decisions.push(decisionOf(item, false, 'codex-sent', matched)); return false }
       const source = sources.find(({ text }) => keywordMatches(matched[0], entry, text, text.toLowerCase()))

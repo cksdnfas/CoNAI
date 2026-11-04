@@ -4,10 +4,9 @@ import { UserRound } from 'lucide-react'
 import { ListPager } from '@/components/common/list-pager'
 import { PathBreadcrumbs } from '@/components/common/path-breadcrumbs'
 import { SearchField } from '@/components/common/search-field'
-import { Button } from '@/components/ui/button'
+import { EditorFooter } from '@/components/ui/editor-footer'
 import { EmptyState } from '@/components/ui/empty-state'
-import { Spinner } from '@/components/ui/loading-state'
-import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
+import { Modal, ModalBody } from '@/components/ui/modal'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
 import { useI18n } from '@/i18n'
@@ -113,16 +112,7 @@ function CharacterSettingPicker({ onOpenChange, onPick, title, confirmLabel, ini
           </div>
         </ModalBody>
       )}
-      <ModalFooter>
-        <span className="flex-1" />
-        <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>{t({ ko: '취소', en: 'Cancel' })}</Button>
-        {canView ? (
-          <Button type="button" disabled={selectedId === null || confirm.isPending} onClick={() => { if (selectedId !== null) pick(selectedId) }}>
-            {confirm.isPending ? <Spinner className="size-3" /> : null}
-            {confirmLabel ?? t({ ko: '선택', en: 'Select' })}
-          </Button>
-        ) : null}
-      </ModalFooter>
+      <EditorFooter onSave={canView ? () => { if (selectedId !== null) pick(selectedId) } : undefined} canSave={selectedId !== null} saving={confirm.isPending} saveLabel={confirmLabel ?? t({ ko: '선택', en: 'Select' })} />
     </Modal>
   )
 }

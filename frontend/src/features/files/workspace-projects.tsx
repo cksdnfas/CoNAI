@@ -5,10 +5,10 @@ import type { WorkspaceSummary } from '@conai/shared'
 import { SearchField } from '@/components/common/search-field'
 import { Button } from '@/components/ui/button'
 import { ErrorState } from '@/components/ui/error-state'
-import { IconButton } from '@/components/ui/icon-button'
 import { ListRow } from '@/components/ui/list-row'
 import { LoadingState } from '@/components/ui/loading-state'
-import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
+import { Modal, ModalBody } from '@/components/ui/modal'
+import { EditorFooter } from '@/components/ui/editor-footer'
 import { SidebarGroupLabel, SidebarItem } from '@/components/ui/sidebar'
 import { SwitchLine } from '@/components/ui/switch-line'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
@@ -39,7 +39,7 @@ export function WorkspaceSidebarGroup({ activeId, onOpen, onCreate }: { activeId
   const { projects, hasMore, loadMore, query } = useWorkspaceProjects()
   return (
     <>
-      <SidebarGroupLabel actions={onCreate ? <IconButton size="icon-xs" variant="ghost" label={t({ ko: '새 작업 공간', en: 'New workspace' })} onClick={onCreate}><Plus /></IconButton> : undefined}>
+      <SidebarGroupLabel actions={onCreate ? <Button size="compact" variant="ghost" aria-label={t({ ko: '새 작업 공간', en: 'New workspace' })} onClick={onCreate}><Plus />{t({ ko: '추가', en: 'Add' })}</Button> : undefined}>
         {t({ ko: '작업 공간', en: 'Workspaces' })}
       </SidebarGroupLabel>
       {projects.map((project) => <SidebarItem key={project.id} icon={FolderKanban} label={project.name} active={project.id === activeId} onClick={() => onOpen(project.id)} />)}
@@ -107,10 +107,7 @@ export function WorkspaceProjectPicker({ open, onClose, projectId, write, writeL
         </div>
         {writeLabel !== null && selected !== null ? <SwitchLine label={writeLabel} checked={allowWrite} onCheckedChange={setAllowWrite} /> : null}
       </ModalBody>
-      <ModalFooter>
-        <span className="flex-1" />
-        <Button disabled={busy || (noneLabel === null && selected === null)} onClick={() => void onConnect(selected, selected !== null && writeLabel !== null && allowWrite)}>{t({ ko: '연결', en: 'Connect' })}</Button>
-      </ModalFooter>
+      <EditorFooter onSave={() => void onConnect(selected, selected !== null && writeLabel !== null && allowWrite)} canSave={noneLabel !== null || selected !== null} saving={busy} saveLabel={t({ ko: '연결', en: 'Connect' })} />
     </Modal>
   )
 }

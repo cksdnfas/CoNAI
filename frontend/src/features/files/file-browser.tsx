@@ -20,7 +20,8 @@ import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { LoadingState } from '@/components/ui/loading-state'
 import { ListRow } from '@/components/ui/list-row'
-import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
+import { Modal, ModalBody } from '@/components/ui/modal'
+import { EditorFooter } from '@/components/ui/editor-footer'
 import { SidebarNav } from '@/components/ui/sidebar'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { SendToAudioDialog, useCanSendToAudio } from '@/features/audio/send-to-audio-dialog'
@@ -352,11 +353,6 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, pickFolde
           <FolderPlus />
         </IconButton>
       ) : null}
-      {canUpload ? (
-        <IconButton variant="ghost" label={t({ ko: '파일 업로드', en: 'Upload files' })} disabled={busy} onClick={() => uploadInput.current?.click()}>
-          <Upload />
-        </IconButton>
-      ) : null}
       <ActionMenuButton
         size="icon"
         label={t({ ko: '더 보기', en: 'More' })}
@@ -365,6 +361,15 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, pickFolde
           { key: 'refresh', label: t({ ko: '새로고침', en: 'Refresh' }), icon: RefreshCw, disabled: busy, onSelect: () => void refresh() },
         ]}
       />
+      {/* The picker dialog already has its primary key (첨부) in the footer: upload stays a quiet icon there. */}
+      {canUpload ? isPicker ? (
+        <IconButton size="icon" variant="ghost" disabled={busy} label={t({ ko: '파일 업로드', en: 'Upload files' })} onClick={() => uploadInput.current?.click()}><Upload /></IconButton>
+      ) : (
+        <Button size="sm" disabled={busy} onClick={() => uploadInput.current?.click()}>
+          <Upload />
+          {t({ ko: '파일 업로드', en: 'Upload files' })}
+        </Button>
+      ) : null}
     </>
   )
 
@@ -480,16 +485,16 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, pickFolde
             </div>
             {body}
           </ModalBody>
-          <ModalFooter>
-            <span className="flex-1" />
-            <Button disabled={chosen.length === 0 || busy} onClick={() => onPick(chosen)}>
-              {pickLabel
+          <EditorFooter
+            onSave={() => onPick(chosen)}
+            canSave={chosen.length > 0}
+            saving={busy}
+            saveLabel={pickLabel
                 ? pickLabel(chosen.length)
                 : chosen.length > 0
                   ? t({ ko: '{count}개 첨부', en: 'Attach {count}' }, { count: chosen.length })
                   : t({ ko: '첨부', en: 'Attach' })}
-            </Button>
-          </ModalFooter>
+          />
         </>
       ) : (
         <PageWithSidebar

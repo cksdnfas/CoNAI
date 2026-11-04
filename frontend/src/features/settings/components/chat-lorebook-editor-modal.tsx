@@ -1,22 +1,22 @@
-import { useEffect, useRef, useState } from 'react'
-import { useNavigate, useSearchParams, type Location } from 'react-router-dom'
+import { useImperativeHandle, useLayoutEffect, useRef, useState, type Ref } from 'react'
+import { useLocation, useNavigate, useSearchParams, type Location } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { BookOpen, Languages, RefreshCw, Trash2 } from 'lucide-react'
+import { BookOpen, BookUser, Download, Languages, RefreshCw, Trash2 } from 'lucide-react'
 import { loreKeyLanguageLabel, sortLoreKeysByLanguage } from '@conai/shared'
-import { EditorPage } from '@/components/common/editor-page'
+import { EditorTitleInput } from '@/components/common/editor-page'
 import { ActionMenuButton } from '@/components/ui/action-menu'
 import { Button } from '@/components/ui/button'
-import { IconButton } from '@/components/ui/icon-button'
+import { EditorFooter } from '@/components/ui/editor-footer'
 import { Chip } from '@/components/ui/chip'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { EmptyState } from '@/components/ui/empty-state'
 import { ErrorState } from '@/components/ui/error-state'
-import { Field, FieldInfo } from '@/components/ui/field'
-import { FloatingSaveBar } from '@/components/ui/floating-save-bar'
-import { Input } from '@/components/ui/input'
+import { FieldInfo } from '@/components/ui/field'
 import { LoadingState } from '@/components/ui/loading-state'
+import { Modal, ModalBody } from '@/components/ui/modal'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { SwitchLine } from '@/components/ui/switch-line'
+import { Text } from '@/components/ui/text'
 import { useI18n } from '@/i18n'
 import {
   CHAT_ADMIN_PROFILES_QUERY_KEY,
@@ -26,8 +26,6 @@ import {
   chatLorebookQueryKey,
   createChatLorebook,
   createOwnLorebook,
-  deleteChatLorebook,
-  deleteOwnLorebook,
   getChatLorebook,
   getOwnLorebook,
   importChatLorebook,
@@ -44,16 +42,31 @@ import {
 } from '@/lib/api-codex-chat'
 import { ApiRequestError } from '@/lib/api-request'
 import { getErrorMessage } from '@/lib/error-message'
-import { useChatAdminCrumbs, useChatAdminLinks } from '@/features/codex-chat/chat-admin-location'
+import { useChatAdminLinks } from '@/features/codex-chat/chat-admin-location'
 import { ChatFilledLabel } from '@/features/codex-chat/chat-page-context'
 import { pageAction, pageArray, pageChoice, pageObject, pageText } from '@/features/codex-chat/page-action-helpers'
 import { useEditorPageGuard } from '../use-unsaved-settings-guard'
 import { ChatLorebookEditor, lacksLanguageKeys, newLoreEntry, useLoreKeyLanguage } from './chat-profile-lorebook'
 import { ChatLoreKeyFillDialog } from './chat-lore-key-fill-dialog'
-import { useSettingsEditorChatPage } from './use-settings-editor-chat-page'
+import { downloadChatLorebookFile } from './chat-lorebook-file'
+import { useChatResourceDelete } from './use-chat-resource-actions'
+import { CHAT_DOCK_INSET, useSettingsEditorChatPage } from './use-settings-editor-chat-page'
 
 type Book = ChatLorebook | OwnedChatLorebook
 type BookDraft = { name: string; entries: ChatLoreEntry[] }
+type EditorDraft = BookDraft & { lorebook: Book | null; connectsChats: boolean }
+type EditorActivity = { busy: boolean; importing: boolean }
+type LorebookEditorHandle = {
+  rename: (name: string) => void
+  save: () => void
+  close: () => void
+  fill: () => void
+  exportFile: () => void
+  updateFile: () => void
+  remove: () => void
+}
+
+const storedConnects = (book: Book | null) => book?.connectsChats !== false
 
 export function mergeBookDraft(previous: Book, latest: Book, draft: BookDraft) {
   const nameEdited = draft.name !== previous.name
@@ -69,7 +82,7 @@ export function latestBookConflicts(latest: Book, draft: BookDraft, conflicts: {
   return { name: conflicts.name ? latest.name : draft.name, entries: latestLoreEntryConflicts(draft.entries, latest.entries, conflicts.entries) }
 }
 
-/** The `?lorebook=` of a book's editor page: a shared book by id, an account book as `account-<id>`, or a new one of either kind. */
+/** The `?lorebook=` of a book's editor modal: a shared book by id, an account book as `account-<id>`, or a new one of either kind. */
 export function lorebookKey(target: Pick<Book, 'id' | 'kind'> | 'new' | 'new-account') {
   return typeof target === 'string' ? target : target.kind === 'account' ? `account-${target.id}` : String(target.id)
 }
@@ -92,72 +105,138 @@ function leavesLorebook(current: Location, next: Location) {
 }
 
 /**
- * One lorebook as a page (채팅 › 로어북 › ?lorebook=<key>, or the same inside Settings › 채팅): a shared (global) book,
- * or one of the signed-in account's own (a 로어북/ folder in its file store). Saving reaches every profile that links it.
+ * A URL-backed modal over either host's lorebook list. Saving reaches every profile that links the book.
  */
-export function ChatLorebookEditorPage() {
+export function ChatLorebookEditorModal() {
   const { t } = useI18n()
   const navigate = useNavigate()
+  const location = useLocation()
   const links = useChatAdminLinks()
-  const crumbs = useChatAdminCrumbs('lorebooks')
   const [params] = useSearchParams()
   const raw = params.get('lorebook')
+  const created = useRef<string | null>(null)
+  const [session, setSession] = useState({ address: raw, key: 0 })
+  const [draft, setDraft] = useState<EditorDraft | null>(null)
+  const [activity, setActivity] = useState<EditorActivity>({ busy: false, importing: false })
+  const editor = useRef<LorebookEditorHandle>(null)
+  const keyLanguage = useLoreKeyLanguage()
+  const listParams = new URLSearchParams(params)
+  listParams.delete('lorebook')
+  const listSearch = listParams.toString()
+  const listPath = `${location.pathname}${listSearch ? `?${listSearch}` : ''}`
+  const back = () => navigate(listPath)
   const target = parseLorebookKey(raw)
   const sharedQuery = useQuery({ queryKey: chatLorebookQueryKey(target?.id ?? 0), queryFn: ({ signal }) => getChatLorebook(target!.id!, signal), enabled: target?.kind === 'global' && target.id !== null })
   const ownQuery = useQuery({ queryKey: ownLorebookQueryKey(target?.id ?? 0), queryFn: ({ signal }) => getOwnLorebook(target!.id!, signal), enabled: target?.kind === 'account' && target.id !== null })
   const query = target?.kind === 'account' ? ownQuery : sharedQuery
   const found = !target || target.id === null ? null : query.data ?? null
   const notFound = query.error instanceof ApiRequestError && query.error.status === 404
-  if (!target || (target.id !== null && !found)) {
-    return (
-      <EditorPage crumbs={crumbs} title={t({ ko: '로어북', en: 'Lorebook' })}>
+  const ready = target !== null && (target.id === null || found !== null)
+  if (session.address !== raw) {
+    const adoptingCreated = created.current !== null && raw === created.current
+    setSession({ address: raw, key: adoptingCreated ? session.key : session.key + 1 })
+    created.current = null
+    if (!adoptingCreated) setDraft(null)
+  } else if (ready && !draft) {
+    // Detail refreshes do not replace a draft already opened at this address.
+    setDraft({ lorebook: found, name: found?.name ?? '', entries: found?.entries ?? [], connectsChats: storedConnects(found) })
+  }
+  const current = ready ? draft : null
+  const lorebook = current?.lorebook ?? null
+  const owned = (lorebook?.kind ?? target?.kind) === 'account'
+  const dirty = current !== null && (current.name !== (lorebook?.name ?? '') || (owned && current.connectsChats !== storedConnects(lorebook)) || current.entries.length !== (lorebook?.entries.length ?? 0) || current.entries.some((entry, index) => entry !== lorebook?.entries[index] && JSON.stringify(entry) !== JSON.stringify(lorebook?.entries[index])))
+  const missing = current && keyLanguage ? current.entries.filter((entry) => lacksLanguageKeys(entry, keyLanguage)) : []
+  const linkedProfiles = lorebook?.profiles.length ?? 0
+  return (
+    <Modal
+      open size="xl" height="tall" sidePanelInset={CHAT_DOCK_INSET} closeOnBack={false}
+      dirty={dirty} onClose={() => { if (current) editor.current?.close(); else back() }}
+      onSave={current ? () => editor.current?.save() : undefined}
+      title={current ? <div className="flex min-w-0 flex-1 items-center gap-2">
+        <EditorTitleInput as="span" value={current.name} label={t({ ko: '로어북 이름', en: 'Lorebook name' })} placeholder={owned ? t({ ko: '새 계정 로어북', en: 'New account lorebook' }) : t({ ko: '새 로어북', en: 'New lorebook' })} maxLength={80} invalid={!current.name.trim()} readOnly={activity.importing} onChange={(name) => editor.current?.rename(name)} />
+        <ChatFilledLabel fieldId="name"><span className="sr-only">{t({ ko: '이름', en: 'Name' })}</span></ChatFilledLabel>
+      </div> : t({ ko: '로어북', en: 'Lorebook' })}
+      leading={current ? owned ? <BookUser /> : <BookOpen /> : undefined}
+      status={current ? <>
+        <Chip tone="muted" size="sm">{owned ? t({ ko: '내 계정 로어북', en: 'Account lorebook' }) : t({ ko: '공용 로어북', en: 'Shared lorebook' })}</Chip>
+        <Chip tone="muted" size="sm">{t({ ko: '항목 {count}개', en: '{count} entries' }, { count: current.entries.length })}</Chip>
+        <Chip tone="muted" size="sm">{keyLanguage ? t({ ko: '키워드 · EN + {language}', en: 'Keywords · EN + {language}' }, { language: loreKeyLanguageLabel(keyLanguage) }) : t({ ko: '키워드 · EN', en: 'Keywords · EN' })}</Chip>
+        {linkedProfiles ? <Chip tone="primary" size="sm">{t({ ko: '프로필 {count}개에서 사용', en: 'Used by {count} profiles' }, { count: linkedProfiles })}</Chip> : null}
+      </> : undefined}
+      actions={current ? <ActionMenuButton label={t({ ko: '로어북 작업', en: 'Lorebook actions' })} entries={[
+        keyLanguage ? { key: 'fill', label: missing.length ? t({ ko: '빠진 {language} 키 채우기 {count}', en: 'Fill missing {language} keywords ({count})' }, { language: loreKeyLanguageLabel(keyLanguage), count: missing.length }) : t({ ko: '빠진 {language} 키 없음', en: 'No {language} keywords missing' }, { language: loreKeyLanguageLabel(keyLanguage) }), icon: Languages, disabled: missing.length === 0 || activity.busy, onSelect: () => editor.current?.fill() } : null,
+        { key: 'export', label: t({ ko: '내보내기', en: 'Export' }), icon: Download, disabled: activity.importing, onSelect: () => editor.current?.exportFile() },
+        lorebook && !owned ? { key: 'file', label: t({ ko: '파일로 업데이트', en: 'Update from file' }), icon: RefreshCw, disabled: activity.busy, onSelect: () => editor.current?.updateFile() } : null,
+        lorebook ? '-' : null,
+        lorebook ? { key: 'delete', label: t({ ko: '삭제', en: 'Delete' }), icon: Trash2, destructive: true, disabled: activity.busy, onSelect: () => editor.current?.remove() } : null,
+      ]} /> : undefined}
+    >
+      {current ? <LorebookEditor
+        key={session.key}
+        ref={editor}
+        draft={current}
+        setDraft={(update) => setDraft((draft) => draft ? update(draft) : draft)}
+        owned={owned}
+        dirty={dirty}
+        keyLanguage={keyLanguage}
+        missing={missing}
+        onActivityChange={setActivity}
+        listPath={listPath}
+        onSaved={(saved, allowNavigation) => {
+          if (target!.id !== null) return
+          const address = lorebookKey(saved)
+          const path = links.lorebook(address)
+          // Router navigation is transitional; keep the current session until the created address actually lands.
+          created.current = address
+          allowNavigation(path, () => navigate(path, { replace: true }))
+        }}
+      /> : <ModalBody>
         {target && query.isPending ? <LoadingState variant="inline" /> : target && query.isError && !notFound
           ? <ErrorState title={t({ ko: '로어북을 불러오지 못했어', en: 'Could not load the lorebook' })} error={query.error} onRetry={() => void query.refetch()} />
-          : <EmptyState icon={BookOpen} title={t({ ko: '로어북을 찾지 못했어', en: 'Lorebook not found' })} action={<Button variant="secondary" size="sm" onClick={() => navigate(links.resources('lorebooks'))}>{t({ ko: '로어북 목록', en: 'Lorebook list' })}</Button>} />}
-      </EditorPage>
-    )
-  }
-  // The stored book is read once per address: later detail refreshes never replace the entries being edited.
-  return <LorebookEditor key={raw} initial={found} kind={target.kind} />
+          : <EmptyState icon={BookOpen} title={t({ ko: '로어북을 찾지 못했어', en: 'Lorebook not found' })} action={<Button variant="secondary" size="sm" onClick={back}>{t({ ko: '로어북 목록', en: 'Lorebook list' })}</Button>} />}
+      </ModalBody>}
+    </Modal>
+  )
 }
 
-function LorebookEditor({ initial, kind }: { initial: Book | null; kind: 'global' | 'account' }) {
+function LorebookEditor({ ref, draft, setDraft, owned, dirty, keyLanguage, missing, onActivityChange, listPath, onSaved }: {
+  ref: Ref<LorebookEditorHandle>
+  draft: EditorDraft
+  setDraft: (update: (current: EditorDraft) => EditorDraft) => void
+  owned: boolean
+  dirty: boolean
+  keyLanguage: string | null
+  missing: ChatLoreEntry[]
+  onActivityChange: (activity: EditorActivity) => void
+  listPath: string
+  onSaved: (saved: Book, allowNavigation: ReturnType<typeof useEditorPageGuard>['allowNavigation']) => void
+}) {
   const { t } = useI18n()
   const confirm = useConfirm()
   const navigate = useNavigate()
   const { showSnackbar } = useSnackbar()
   const queryClient = useQueryClient()
-  /** The stored book the draft started from (null: a new one). */
-  const [lorebook, setLorebook] = useState(initial)
-  const [name, setName] = useState(initial?.name ?? '')
-  const [entries, setEntries] = useState<ChatLoreEntry[]>(initial?.entries ?? [])
-  /** Account books only: whether chats sharing this book can search each other's talk. */
-  const [connectsChats, setConnectsChats] = useState(initial?.connectsChats !== false)
+  const { lorebook, name, entries, connectsChats } = draft
   const [fillOpen, setFillOpen] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
   const importing = useRef(false)
-  const keyLanguage = useLoreKeyLanguage()
-  const owned = (lorebook?.kind ?? kind) !== 'global'
   const entriesRef = useRef(entries)
   entriesRef.current = entries
   const nameRef = useRef(name)
   nameRef.current = name
   const connectsRef = useRef(connectsChats)
   connectsRef.current = connectsChats
-  const storedConnects = (book: Book | null) => book?.connectsChats !== false
   const folderId = lorebook && 'folderId' in lorebook ? lorebook.folderId : null
-  const links = useChatAdminLinks()
-  const crumbs = useChatAdminCrumbs('lorebooks')
-  const listPath = links.resources('lorebooks')
   const back = () => navigate(listPath)
+  const { mounted, allowNavigation } = useEditorPageGuard(dirty, t({ ko: '로어북에 저장하지 않은 변경이 있어. 나가면 사라져.', en: 'This lorebook has unsaved changes that will be lost.' }), leavesLorebook)
   const takeSaved = (book: Book, submitted: { name: string; entries: ChatLoreEntry[]; connectsChats: boolean }) => {
-    setLorebook(book)
-    setName((current) => current === submitted.name ? book.name : current)
-    setEntries((current) => current === submitted.entries ? book.entries : current)
-    setConnectsChats((current) => current === submitted.connectsChats ? storedConnects(book) : current)
+    setDraft((current) => ({
+      lorebook: book,
+      name: current.name === submitted.name ? book.name : current.name,
+      entries: current.entries === submitted.entries ? book.entries : current.entries,
+      connectsChats: current.connectsChats === submitted.connectsChats ? storedConnects(book) : current.connectsChats,
+    }))
   }
-
-  const missing = keyLanguage ? entries.filter((entry) => lacksLanguageKeys(entry, keyLanguage)) : []
 
   const refresh = async () => {
     await Promise.all([
@@ -205,9 +284,7 @@ function LorebookEditor({ initial, kind }: { initial: Book | null; kind: 'global
             const resolved = latestBookConflicts(latest, merged.draft, merged.conflicts)
             nameRef.current = resolved.name
             entriesRef.current = resolved.entries
-            setLorebook(latest)
-            setName(resolved.name)
-            setEntries(resolved.entries)
+            setDraft((current) => ({ ...current, lorebook: latest, ...resolved }))
             throw new ChatEditorResolution(t({ ko: '최신 로어북을 불러왔어.', en: 'Loaded the latest lorebook.' }), error)
           }
           const overwrite = await confirm({
@@ -224,10 +301,7 @@ function LorebookEditor({ initial, kind }: { initial: Book | null; kind: 'global
         nameRef.current = submitted.name
         entriesRef.current = submitted.entries
         connectsRef.current = submitted.connectsChats
-        setLorebook(latest)
-        setName(submitted.name)
-        setEntries(submitted.entries)
-        setConnectsChats(submitted.connectsChats)
+        setDraft(() => ({ lorebook: latest, ...submitted }))
         return { saved: await write(latest, submitted), submitted }
       }
     },
@@ -236,18 +310,14 @@ function LorebookEditor({ initial, kind }: { initial: Book | null; kind: 'global
       if (!mounted.current) return
       if (!saved) { allowNavigation(listPath, back); return }
       takeSaved(saved, submitted)
+      queryClient.setQueryData(owned ? ownLorebookQueryKey(saved.id) : chatLorebookQueryKey(saved.id), saved)
       showSnackbar({ message: t({ ko: '저장했어.', en: 'Saved.' }), tone: 'info' })
+      onSaved(saved, allowNavigation)
     },
     onError: (error) => showSnackbar({ message: getErrorMessage(error, t({ ko: '저장하지 못했어.', en: 'Could not save.' })), tone: error instanceof ChatEditorResolution ? 'info' : 'error' }),
   })
-  const deleteMutation = useMutation({
-    mutationFn: () => (owned ? deleteOwnLorebook(lorebook?.id ?? 0) : deleteChatLorebook(lorebook?.id ?? 0)),
-    onSuccess: async () => {
-      await refresh()
-      if (!mounted.current) return
-      allowNavigation(listPath, back)
-    },
-    onError: (error) => showSnackbar({ message: getErrorMessage(error, t({ ko: '삭제하지 못했어.', en: 'Could not delete.' })), tone: 'error' }),
+  const deleteMutation = useChatResourceDelete(() => {
+    if (mounted.current) allowNavigation(listPath, back)
   })
   // A newer file replaces the shared book's entries; the editor takes the stored result.
   const fileMutation = useMutation({
@@ -255,28 +325,17 @@ function LorebookEditor({ initial, kind }: { initial: Book | null; kind: 'global
     onSuccess: async (updated) => {
       await queryClient.invalidateQueries({ queryKey: CHAT_LOREBOOKS_QUERY_KEY })
       if (!mounted.current) return
-      setLorebook(updated)
-      setName(updated.name)
-      setEntries(updated.entries)
+      setDraft((current) => ({ ...current, lorebook: updated, name: updated.name, entries: updated.entries }))
       showSnackbar({ message: t({ ko: '{name} 업데이트했어. 항목 {count}개.', en: 'Updated {name}: {count} entries.' }, { name: updated.name, count: updated.entries.length }), tone: 'info' })
     },
     onError: (error) => showSnackbar({ message: getErrorMessage(error, t({ ko: '파일로 업데이트하지 못했어.', en: 'Could not update from the file.' })), tone: 'error' }),
     onSettled: () => { importing.current = false },
   })
 
-  const dirty = name !== (lorebook?.name ?? '') || (owned && connectsChats !== storedConnects(lorebook)) || entries.length !== (lorebook?.entries.length ?? 0) || entries.some((entry, index) => entry !== lorebook?.entries[index] && JSON.stringify(entry) !== JSON.stringify(lorebook?.entries[index]))
   const canSave = Boolean(name.trim()) && !saveMutation.isPending && !fileMutation.isPending && !deleteMutation.isPending && (dirty || !lorebook)
   const assertImportFinished = () => {
     if (importing.current || fileMutation.isPending) throw new Error(t({ ko: '파일 업데이트가 끝난 뒤 편집해줘.', en: 'Wait for the file update before editing.' }))
   }
-  const { mounted, allowNavigation } = useEditorPageGuard(dirty, t({ ko: '로어북에 저장하지 않은 변경이 있어. 나가면 사라져.', en: 'This lorebook has unsaved changes that will be lost.' }), leavesLorebook)
-  // Keep later edits on the new route until saved or discarded; remounting before then would lose them.
-  useEffect(() => {
-    if (dirty || !lorebook || initial !== null || saveMutation.isPending || fileMutation.isPending) return
-    const path = links.lorebook(lorebookKey(lorebook))
-    queryClient.setQueryData(owned ? ownLorebookQueryKey(lorebook.id) : chatLorebookQueryKey(lorebook.id), lorebook)
-    allowNavigation(path, () => navigate(path, { replace: true }))
-  }, [dirty, lorebook, initial, owned, saveMutation.isPending, fileMutation.isPending, allowNavigation, navigate, queryClient, links])
   // A connected chat reads the book, adds or replaces entries (draft) and asks to save it with a card.
   useSettingsEditorChatPage({
     open: true,
@@ -296,8 +355,11 @@ function LorebookEditor({ initial, kind }: { initial: Book | null; kind: 'global
     },
     apply: (patch) => {
       assertImportFinished()
-      if (patch.name !== undefined) setName(String(patch.name))
-      if (owned && patch.connectsChats !== undefined) setConnectsChats(patch.connectsChats === true)
+      setDraft((current) => ({
+        ...current,
+        ...(patch.name !== undefined ? { name: String(patch.name) } : {}),
+        ...(owned && patch.connectsChats !== undefined ? { connectsChats: patch.connectsChats === true } : {}),
+      }))
     },
     actions: fileMutation.isPending ? [] : [pageAction('lorebook.entries', t({ ko: '로어북 항목 채우기', en: 'Fill lorebook entries' }), t({ ko: '항목을 뒤에 더하거나(append) 전부 바꿔(replace). 저장하지 않아. keys는 이 단어가 대화에 나오면 content가 들어가는 영어 키워드, localKeys는 같은 키워드를 keyLanguage(로어북 추가 언어)로 쓴 것, constant는 항상 넣기. exclude/preventRecursion은 재귀 스캔에서 안 걸림/안 부름.', en: 'Append entries or replace them all; nothing is saved. keys are English keywords that trigger the content when they appear in the chat, localKeys the same keywords in keyLanguage (the lorebooks’ other language); constant always includes it. exclude/preventRecursion: not triggered by / not triggering others in recursive scans.' }), pageObject({
       mode: pageChoice(['append', 'replace']),
@@ -313,24 +375,12 @@ function LorebookEditor({ initial, kind }: { initial: Book | null; kind: 'global
         return sortLoreKeysByLanguage({ ...newLoreEntry(base.length + index), title: entry.title ?? '', keys: entry.keys, localKeys: entry.localKeys ?? [], content: entry.content, ...(entry.language ? { language: entry.language } : {}), ...(entry.translation ? { translation: entry.translation } : {}), constant: entry.constant === true, enabled: entry.enabled !== false, ...(entry.excludeRecursion ? { excludeRecursion: true } : {}), ...(entry.preventRecursion ? { preventRecursion: true } : {}) }, entry.language ? null : keyLanguage)
       })
       const next = [...base, ...added]
-      setEntries(next)
-      return { isCurrent: () => !importing.current && entriesRef.current === next, restore: () => { assertImportFinished(); setEntries(before) } }
+      setDraft((current) => ({ ...current, entries: next }))
+      return { isCurrent: () => !importing.current && entriesRef.current === next, restore: () => { assertImportFinished(); setDraft((current) => ({ ...current, entries: before })) } }
     },
     save: canSave ? () => { assertImportFinished(); return saveMutation.mutateAsync() } : undefined,
   })
 
-  const handleDelete = async () => {
-    const linked = lorebook?.profiles.length ?? 0
-    const confirmed = await confirm({
-      title: t({ ko: '로어북 삭제', en: 'Delete lorebook' }),
-      description: linked > 0
-        ? t({ ko: '프로필 {count}개에서 쓰는 중이야. 지우면 연결도 같이 풀려.', en: 'Used by {count} profiles. Deleting also unlinks it from them.' }, { count: linked })
-        : t({ ko: '이 로어북을 지울까?', en: 'Delete this lorebook?' }),
-      confirmLabel: t({ ko: '삭제', en: 'Delete' }),
-      tone: 'destructive',
-    })
-    if (confirmed) deleteMutation.mutate()
-  }
   const handleRevert = async () => {
     const confirmed = await confirm({
       title: t({ ko: '변경 되돌리기', en: 'Revert changes' }),
@@ -339,52 +389,28 @@ function LorebookEditor({ initial, kind }: { initial: Book | null; kind: 'global
       cancelLabel: t({ ko: '계속 편집', en: 'Keep editing' }),
       tone: 'destructive',
     })
-    if (confirmed) { setName(lorebook?.name ?? ''); setEntries(lorebook?.entries ?? []); setConnectsChats(storedConnects(lorebook)) }
+    if (confirmed) setDraft((current) => ({ ...current, name: lorebook?.name ?? '', entries: lorebook?.entries ?? [], connectsChats: storedConnects(lorebook) }))
   }
 
   const save = () => { if (canSave) saveMutation.mutate() }
-  const linkedProfiles = lorebook?.profiles.length ?? 0
+  const busy = saveMutation.isPending || fileMutation.isPending || deleteMutation.isPending
+  useLayoutEffect(() => {
+    onActivityChange({ busy, importing: fileMutation.isPending })
+  }, [busy, fileMutation.isPending, onActivityChange])
+  useImperativeHandle(ref, () => ({
+    rename: (name) => { if (!importing.current) setDraft((current) => ({ ...current, name })) },
+    save,
+    close: () => allowNavigation(listPath, back),
+    fill: () => setFillOpen(true),
+    exportFile: () => downloadChatLorebookFile(name, entries),
+    updateFile: () => fileRef.current?.click(),
+    remove: () => { if (lorebook) void deleteMutation.mutate({ kind: 'lorebook', resource: lorebook }) },
+  }))
 
   return (
-    <EditorPage
-      crumbs={crumbs}
-      title={name.trim() || lorebook?.name || (owned ? t({ ko: '새 계정 로어북', en: 'New account lorebook' }) : t({ ko: '새 로어북', en: 'New lorebook' }))}
-      status={<>
-        <Chip tone="muted" size="sm">{owned ? t({ ko: '내 계정 로어북', en: 'Account lorebook' }) : t({ ko: '공용 로어북', en: 'Shared lorebook' })}</Chip>
-        {linkedProfiles ? <Chip tone="primary" size="sm">{t({ ko: '프로필 {count}개에서 사용', en: 'Used by {count} profiles' }, { count: linkedProfiles })}</Chip> : null}
-      </>}
-      actions={<>
-        {keyLanguage ? (
-          <IconButton size="icon-sm" variant="ghost" label={missing.length ? t({ ko: '빠진 {language} 키 채우기 {count}', en: 'Fill missing {language} keywords ({count})' }, { language: loreKeyLanguageLabel(keyLanguage), count: missing.length }) : t({ ko: '빠진 {language} 키 없음', en: 'No {language} keywords missing' }, { language: loreKeyLanguageLabel(keyLanguage) })} disabled={missing.length === 0 || fileMutation.isPending} onClick={() => setFillOpen(true)}>
-            <Languages />
-          </IconButton>
-        ) : null}
-        <ActionMenuButton
-          label={t({ ko: '로어북 작업', en: 'Lorebook actions' })}
-          entries={[
-            lorebook && !owned ? { key: 'file', label: t({ ko: '파일로 업데이트', en: 'Update from file' }), icon: RefreshCw, disabled: fileMutation.isPending || saveMutation.isPending || deleteMutation.isPending, onSelect: () => fileRef.current?.click() } : null,
-            '-',
-            lorebook ? { key: 'delete', label: t({ ko: '삭제', en: 'Delete' }), icon: Trash2, destructive: true, disabled: deleteMutation.isPending || saveMutation.isPending || fileMutation.isPending, onSelect: () => void handleDelete() } : null,
-          ]}
-        />
-      </>}
-      onSave={save}
-      saveBar={dirty || saveMutation.isPending ? (
-        <FloatingSaveBar
-          label={lorebook ? t({ ko: '저장 안 한 변경', en: 'Unsaved changes' }) : t({ ko: '새 로어북', en: 'New lorebook' })}
-          saving={saveMutation.isPending}
-          canSave={canSave}
-          onSave={save}
-          onDiscard={fileMutation.isPending ? undefined : () => void handleRevert()}
-        >
-          {name.trim() ? null : <span className="text-xs text-muted-foreground">{t({ ko: '이름을 적어야 저장할 수 있어', en: 'Needs a name to save' })}</span>}
-        </FloatingSaveBar>
-      ) : null}
-    >
+    <>
+      <ModalBody>
       <fieldset disabled={fileMutation.isPending} className="contents" aria-busy={fileMutation.isPending || undefined}>
-        <Field label={<ChatFilledLabel fieldId="name">{t({ ko: '이름', en: 'Name' })}</ChatFilledLabel>}>
-          <Input variant="settings" value={name} maxLength={80} onChange={(event) => setName(event.target.value)} />
-        </Field>
         {owned ? (
           <SwitchLine
             label={<ChatFilledLabel fieldId="connectsChats">
@@ -392,12 +418,16 @@ function LorebookEditor({ initial, kind }: { initial: Book | null; kind: 'global
               <FieldInfo>{t({ ko: '켜면 이 책을 함께 쓰는 채팅끼리 지난 대화를 서로 찾아 읽어. 세계관처럼 설정만 나눠 쓰는 책은 꺼 두면 로어만 들어가고 대화는 섞이지 않아.', en: 'On: chats sharing this book can search each other’s past talk. Turn it off for a setting book shared by separate chats: they get the lore, never each other’s talk.' })}</FieldInfo>
             </ChatFilledLabel>}
             checked={connectsChats}
-            onCheckedChange={setConnectsChats}
+            onCheckedChange={(connectsChats) => setDraft((current) => ({ ...current, connectsChats }))}
           />
         ) : null}
-        <ChatLorebookEditor entries={entries} onChange={(next) => { if (!importing.current) setEntries(next) }} filePlace={owned ? { kind: 'owned', folderId } : { kind: 'global' }} keyLanguage={keyLanguage} />
+        <ChatLorebookEditor entries={entries} onChange={(entries) => { if (!importing.current) setDraft((current) => ({ ...current, entries })) }} filePlace={owned ? { kind: 'owned', folderId } : { kind: 'global' }} keyLanguage={keyLanguage} />
       </fieldset>
-      {keyLanguage ? <ChatLoreKeyFillDialog open={fillOpen} language={keyLanguage} entries={missing} onClose={() => setFillOpen(false)} onApply={(keys) => { if (!importing.current) setEntries((current) => current.map((entry) => keys[entry.id] ? { ...entry, localKeys: [...new Set([...(entry.localKeys ?? []), ...keys[entry.id]])].slice(0, 20) } : entry)) }} /> : null}
+      </ModalBody>
+      <EditorFooter onSave={save} canSave={canSave} saving={saveMutation.isPending} onRevert={() => void handleRevert()} canRevert={dirty && !busy}>
+        {!name.trim() ? <Text variant="caption" tone="muted" aria-live="polite">{t({ ko: '이름을 적어야 저장할 수 있어', en: 'Needs a name to save' })}</Text> : null}
+      </EditorFooter>
+      {keyLanguage ? <ChatLoreKeyFillDialog open={fillOpen} language={keyLanguage} entries={missing} onClose={() => setFillOpen(false)} onApply={(keys) => { if (!importing.current) setDraft((current) => ({ ...current, entries: current.entries.map((entry) => keys[entry.id] ? { ...entry, localKeys: [...new Set([...(entry.localKeys ?? []), ...keys[entry.id]])].slice(0, 20) } : entry) })) }} /> : null}
       <input ref={fileRef} type="file" accept=".json,.lorebook,.png,application/json,image/png" className="hidden" aria-label={t({ ko: '로어북 파일', en: 'Lorebook file' })} onChange={async (event) => {
         const file = event.target.files?.[0]
         event.target.value = ''
@@ -412,6 +442,6 @@ function LorebookEditor({ initial, kind }: { initial: Book | null; kind: 'global
         importing.current = true
         fileMutation.mutate(file)
       }} />
-    </EditorPage>
+    </>
   )
 }

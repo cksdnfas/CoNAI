@@ -60,6 +60,10 @@ export function createProductionGracefulShutdownDependencies(): GracefulShutdown
       return RuntimeEventBroadcaster.shutdown();
     },
     stopGenerationQueue: async () => {
+      const { ChatTaskRunner } = await import('../services/codex-chat/chatTasks');
+      ChatTaskRunner.stop();
+      const { ChatRoutineRunner } = await import('../services/codex-chat/chatRoutines');
+      ChatRoutineRunner.stop();
       const { ChatAgentRunner } = await import('../services/codex-chat/chatAgentCalls');
       ChatAgentRunner.stop();
       const { ChatGenerationReactionService } = await import('../services/codex-chat/chatGenerationReactions');
@@ -72,10 +76,14 @@ export function createProductionGracefulShutdownDependencies(): GracefulShutdown
       await closePluginServers();
       const { GenerationQueueService } = await import('../services/generationQueueService');
       await GenerationQueueService.stopAndDrain();
+      const { GeneratedVideoOptimizationService } = await import('../services/generatedVideoOptimizationService');
+      await GeneratedVideoOptimizationService.stopAndDrain();
     },
     stopGraphWorkflowExecutionQueue: async () => {
       const { GraphWorkflowExecutionQueue } = await import('../services/graphWorkflowExecutionQueue');
       await GraphWorkflowExecutionQueue.stop();
+      const { drainGraphWorkflowOutputRetention } = await import('../services/graphWorkflowOutputRetentionService');
+      await drainGraphWorkflowOutputRetention();
     },
     stopGraphWorkflowScheduleService: async () => {
       const { GraphWorkflowScheduleService } = await import('../services/graphWorkflowScheduleService');
@@ -103,7 +111,7 @@ export function createProductionGracefulShutdownDependencies(): GracefulShutdown
     },
     stopAutoScanScheduler: async () => {
       const { AutoScanScheduler } = await import('../services/autoScanScheduler');
-      AutoScanScheduler.stop();
+      await AutoScanScheduler.stopAndDrain();
     },
     stopAutoTagScheduler: async () => {
       const { autoTagScheduler } = await import('../services/autoTagScheduler');
@@ -141,7 +149,7 @@ export function createProductionGracefulShutdownDependencies(): GracefulShutdown
       DatabaseMaintenanceScheduler.stop();
       shutdownKnowledgeEvaluationRuntime();
       shutdownPostTopicEvaluationRuntime();
-      const interrupted = RuntimeJobRunner.shutdown();
+      const interrupted = await RuntimeJobRunner.shutdownAndDrain();
       // The abort above stops a running backup at its next page step; let it close its handles before the
       // connections are closed.
       await waitForDatabaseBackup();
@@ -314,6 +322,17 @@ export function createGracefulShutdownCoordinator(options: GracefulShutdownOptio
       );
     }
 
+    await runCleanupStep(
+      dependencies.shutdownRuntimeJobs,
+      (interruptedJobCount) => {
+        if (interruptedJobCount > 0) {
+          logger.log(`✅ Runtime jobs marked as interrupted (${interruptedJobCount})`);
+        }
+      },
+      '⚠️  Error closing runtime jobs:',
+      logger,
+    );
+
     if (shouldOwnTempFileLifecycle) {
       await runCleanupStep(
         dependencies.cleanupTempFiles,
@@ -331,17 +350,6 @@ export function createGracefulShutdownCoordinator(options: GracefulShutdownOptio
         logger,
       );
     }
-
-    await runCleanupStep(
-      dependencies.shutdownRuntimeJobs,
-      (interruptedJobCount) => {
-        if (interruptedJobCount > 0) {
-          logger.log(`✅ Runtime jobs marked as interrupted (${interruptedJobCount})`);
-        }
-      },
-      '⚠️  Error closing runtime jobs:',
-      logger,
-    );
 
     await runCleanupStep(
       dependencies.shutdownRuntimeEventStreams,

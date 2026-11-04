@@ -24,7 +24,7 @@ export function ChatCardImportReportModal({ report, onClose }: { report: ChatCar
         ))}
       </ModalBody>
       <ModalFooter>
-        <Button size="sm" onClick={onClose}>{t({ ko: '확인', en: 'OK' })}</Button>
+        <Button size="sm" variant="ghost" onClick={onClose}>{t({ ko: '닫기', en: 'Close' })}</Button>
       </ModalFooter>
     </Modal>
   )

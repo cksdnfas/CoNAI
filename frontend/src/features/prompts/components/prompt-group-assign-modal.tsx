@@ -2,8 +2,8 @@ import { Folder, FolderOpen } from 'lucide-react'
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { HierarchyPicker } from '@/components/common/hierarchy-picker'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Button } from '@/components/ui/button'
-import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
+import { EditorFooter } from '@/components/ui/editor-footer'
+import { Modal, ModalBody } from '@/components/ui/modal'
 import { buildPromptGroupOptionItems } from '@/features/prompts/prompt-group-option-utils'
 import type { PromptGroupRecord } from '@/types/prompt'
 import { useI18n } from '@/i18n'
@@ -86,14 +86,7 @@ export function PromptGroupAssignModal({
             />
           </div>
 
-          <ModalFooter>
-            <Button type="button" variant="secondary" onClick={onClose} disabled={isSubmitting}>
-              {t({ ko: '취소', en: 'Cancel' })}
-            </Button>
-            <Button type="submit" disabled={isSubmitting || groupOptions.length === 0}>
-              {isSubmitting ? t('prompts.components.prompt.group.assign.modal.applying') : t('prompts.components.prompt.group.assign.modal.assign.group')}
-            </Button>
-          </ModalFooter>
+          <EditorFooter saveSubmit canSave={groupOptions.length > 0} saving={isSubmitting} saveLabel={t({ ko: '저장', en: 'Save' })} />
         </ModalBody>
       </form>
     </Modal>

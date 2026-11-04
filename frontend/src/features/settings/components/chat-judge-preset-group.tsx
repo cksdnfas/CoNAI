@@ -1,18 +1,20 @@
 import { useRef } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { FileUp, Link2, ListChecks, Plus, Scale } from 'lucide-react'
+import { Copy, Download, FileUp, Link2, ListChecks, Pencil, Plus, Scale, Trash2 } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { ResourceRow, ResourceRowStat, ResourceRowStatus } from '@/components/ui/resource-row'
 import { RowGroup } from '@/components/ui/row-group'
 import { SettingsEmptyRow, SettingsRowsSkeleton } from './settings-rows'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
-import { CHAT_JUDGE_PRESETS_QUERY_KEY, createChatJudgePreset, importChatJudgePresets, listChatJudgePresets, type ChatJudgePreset } from '@/lib/api-chat-judge'
+import { CHAT_JUDGE_PRESETS_QUERY_KEY, createChatJudgePreset, downloadChatJudgePresetFile, importChatJudgePresets, listChatJudgePresets, type ChatJudgePreset } from '@/lib/api-chat-judge'
 import { CHAT_ADMIN_PROFILES_QUERY_KEY } from '@/lib/api-codex-chat'
 import { getErrorMessage } from '@/lib/error-message'
 import { ChatJudgePresetEditorModal } from './chat-judge-preset-editor-modal'
 import { useDefaultJudge } from './chat-judge-connection-select'
 import { readChatToolPresetFile } from './chat-tool-preset-file'
+import { useChatResourceDelete } from './use-chat-resource-actions'
 
 /** Chat › 프리셋 (and Settings › 채팅 › 프리셋): the judge presets (questions a decision model answers about chat turns, group rooms, status fields and assets). */
 export function ChatJudgePresetGroup({ editor, setEditor, visible }: { editor: { preset: ChatJudgePreset | null } | null; setEditor: (editor: { preset: ChatJudgePreset | null } | null) => void; visible: boolean }) {
@@ -22,6 +24,7 @@ export function ChatJudgePresetGroup({ editor, setEditor, visible }: { editor: {
   const { showSnackbar } = useSnackbar()
   const queryClient = useQueryClient()
   const importRef = useRef<HTMLInputElement>(null)
+  const deleteMutation = useChatResourceDelete()
   const presetsQuery = useQuery({ queryKey: CHAT_JUDGE_PRESETS_QUERY_KEY, queryFn: listChatJudgePresets, enabled })
   const presets = presetsQuery.data ?? []
 
@@ -64,7 +67,7 @@ export function ChatJudgePresetGroup({ editor, setEditor, visible }: { editor: {
               if (file) importMutation.mutate(file)
             }} />
             <IconButton size="icon-sm" variant="ghost" disabled={importMutation.isPending} onClick={() => importRef.current?.click()} label={t({ ko: 'JSON에서 가져오기', en: 'Import from JSON' })}><FileUp /></IconButton>
-            <IconButton size="icon-sm" variant="ghost" onClick={() => setEditor({ preset: null })} label={t({ ko: '판단 프리셋 추가', en: 'Add judge preset' })}><Plus /></IconButton>
+            <Button size="compact" variant="ghost" onClick={() => setEditor({ preset: null })} aria-label={t({ ko: '판단 프리셋 추가', en: 'Add judge preset' })}><Plus />{t({ ko: '추가', en: 'Add' })}</Button>
           </div>
         )}
       >
@@ -93,6 +96,13 @@ export function ChatJudgePresetGroup({ editor, setEditor, visible }: { editor: {
               </>
             )}
             onOpen={() => setEditor({ preset })}
+            menu={[
+              { key: 'open', label: t({ ko: '열기', en: 'Open' }), icon: Pencil, onSelect: () => setEditor({ preset }) },
+              { key: 'duplicate', label: t({ ko: '복제', en: 'Duplicate' }), icon: Copy, disabled: duplicateMutation.isPending, onSelect: () => duplicateMutation.mutate(preset) },
+              { key: 'export', label: t({ ko: 'JSON으로 내보내기', en: 'Export as JSON' }), icon: Download, disabled: !preset.name.trim(), onSelect: () => downloadChatJudgePresetFile(preset) },
+              '-',
+              { key: 'delete', label: t({ ko: '삭제', en: 'Delete' }), icon: Trash2, destructive: true, disabled: deleteMutation.isPending, onSelect: () => deleteMutation.mutate({ kind: 'judge', resource: preset }) },
+            ]}
           />
         ))}
         {presetsQuery.isError ? <p className="py-3 text-sm text-destructive">{getErrorMessage(presetsQuery.error, t({ ko: '판단 프리셋을 불러오지 못했어.', en: 'Could not load judge presets.' }))}</p> : null}

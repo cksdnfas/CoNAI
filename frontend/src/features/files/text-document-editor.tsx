@@ -1,16 +1,17 @@
 import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { File, LoaderCircle } from 'lucide-react'
+import { File } from 'lucide-react'
 import { FieldTabs } from '@/components/common/field-tabs'
 import { SaveConflictAlert, SaveConflictOverwriteButton } from '@/components/common/save-conflict-alert'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { Button } from '@/components/ui/button'
+import { EditorFooter } from '@/components/ui/editor-footer'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { EmptyState } from '@/components/ui/empty-state'
 import { ErrorState } from '@/components/ui/error-state'
 import { Input } from '@/components/ui/input'
 import { LoadingState } from '@/components/ui/loading-state'
-import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
+import { Modal, ModalBody } from '@/components/ui/modal'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
 import { pageAction, pageArray, pageFreeText, pageNumber, pageObject, pageText } from '@/features/codex-chat/page-action-helpers'
@@ -227,7 +228,7 @@ export function TextDocumentEditor<T extends TextDocument>({ entry, store, onClo
   )
 
   return (
-    <Modal open title={file ? file.name : t({ ko: '새 문서', en: 'New document' })} onClose={() => { if (!save.isPending) onClose(saved) }} size="xl" sidePanelInset="var(--chat-dock-width, 0px)" dirty={save.isPending || (dirty && (file !== null || text !== ''))} onSave={canSave ? submit : undefined}>
+    <Modal open title={file ? file.name : t({ ko: '새 문서', en: 'New document' })} onClose={() => { if (!save.isPending) onClose(saved) }} size="xl" sidePanelInset="var(--chat-dock-width, 0px)" dirty={dirty && (file !== null || text !== '')} onSave={canSave ? submit : undefined}>
       <ModalBody spacing="sm">
         {file ? null : (
           <div className="flex items-center gap-2">
@@ -249,20 +250,9 @@ export function TextDocumentEditor<T extends TextDocument>({ entry, store, onClo
         ) : null}
         {content}
       </ModalBody>
-      <ModalFooter>
-        <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">{store.location}</span>
-        <span role="status" className="text-xs text-muted-foreground">
-          {save.isPending ? t({ ko: '저장 중…', en: 'Saving…' })
-            : conflict ? t({ ko: '저장 충돌 · 내용을 확인해줘', en: 'Save conflict · review your changes' })
-            : save.isError ? t({ ko: '저장 실패 · 다시 시도해줘', en: 'Save failed · try again' })
-            : dirty && text !== null ? t({ ko: '저장 안 한 변경', en: 'Unsaved changes' })
-            : saved ? t({ ko: '저장됨', en: 'Saved' }) : null}
-        </span>
-        <Button disabled={!canSave} onClick={submit}>
-          {save.isPending ? <LoaderCircle className="animate-spin" /> : null}
-          {save.isPending ? t({ ko: '저장 중…', en: 'Saving…' }) : t({ ko: '저장', en: 'Save' })}
-        </Button>
-      </ModalFooter>
+      <EditorFooter onSave={submit} canSave={canSave} saving={save.isPending}>
+        <span className="min-w-0 truncate text-xs text-muted-foreground">{store.location}</span>
+      </EditorFooter>
     </Modal>
   )
 }

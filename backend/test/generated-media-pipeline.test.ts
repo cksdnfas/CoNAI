@@ -157,4 +157,51 @@ test('generated previews precede enrichment and video copies preserve the origin
       transcode.mock.restore();
     }
   });
+
+  await t.test('shutdown drains the active video copy without claiming queued work', async () => {
+    const hashes = ['da'.repeat(32), 'db'.repeat(32)];
+    const original = path.join(root, 'uploads', 'shutdown.mp4');
+    const queuedOriginal = path.join(root, 'uploads', 'shutdown-queued.mp4');
+    fs.writeFileSync(original, Buffer.alloc(128, 4));
+    fs.copyFileSync(original, queuedOriginal);
+    const folder = main.db.prepare('SELECT id FROM watched_folders LIMIT 1').get() as { id: number };
+    for (const [index, hash] of hashes.entries()) {
+      main.db.prepare('INSERT INTO media_metadata (composite_hash) VALUES (?)').run(hash);
+      main.db.prepare(`INSERT INTO image_files (composite_hash, original_file_path, folder_id, file_size, file_type, mime_type, file_status)
+        VALUES (?, ?, ?, 128, 'video', 'video/mp4', 'active')`).run(hash, index === 0 ? original : queuedOriginal, folder.id);
+    }
+    let release!: () => void;
+    let entered!: () => void;
+    const barrier = new Promise<void>((resolve) => { release = resolve; });
+    const started = new Promise<void>((resolve) => { entered = resolve; });
+    const transcode = t.mock.method(VideoOptimizationService, 'transcodeToMp4', async (_source: string, target: string) => {
+      entered();
+      await barrier;
+      await fs.promises.mkdir(path.dirname(target), { recursive: true });
+      await fs.promises.writeFile(target, Buffer.alloc(32));
+      return { outputPath: target, fileSize: 32, mimeType: 'video/mp4' };
+    });
+    try {
+      await optimization.enqueue(hashes[0], original);
+      await started;
+      await optimization.enqueue(hashes[1], queuedOriginal);
+      let drained = false;
+      const stopping = optimization.stopAndDrain().then(() => { drained = true; });
+      await new Promise((resolve) => setImmediate(resolve));
+      assert.equal(drained, false, 'shutdown must wait for the active write');
+      release();
+      await stopping;
+      assert.ok(optimization.getPlaybackPath(hashes[0]));
+      await optimization.enqueue(hashes[1], queuedOriginal);
+      await new Promise((resolve) => setImmediate(resolve));
+      const queued = main.db.prepare('SELECT status, attempts FROM generated_video_optimizations WHERE composite_hash = ?').get(hashes[1]);
+      assert.deepEqual(queued, { status: 'pending', attempts: 0 });
+      assert.equal(transcode.mock.callCount(), 1);
+      assert.deepEqual(fs.readFileSync(original), Buffer.alloc(128, 4));
+    } finally {
+      release();
+      await waitFor(() => !(main.db.prepare("SELECT 1 FROM generated_video_optimizations WHERE status = 'processing'").get()));
+      transcode.mock.restore();
+    }
+  });
 });

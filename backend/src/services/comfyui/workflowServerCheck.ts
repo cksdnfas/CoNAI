@@ -1,6 +1,6 @@
 import { ComfyUIServerModel } from '../../models/ComfyUIServer';
 import { WorkflowModel } from '../../models/Workflow';
-import { getMcpGenerationRoutingOptions } from '../generation-queue/generationJobRouting';
+import { getGenerationRoutingServers } from '../generation-queue/generationJobRouting';
 import type { ComfyUIServerRecord } from '../../types/comfyuiServer';
 import { comboChoices, fetchComfyNodeInfo, isRecord, specOf, specOptions, type ComfyObjectInfoNode } from './uiWorkflowConversion';
 
@@ -38,9 +38,7 @@ function isLink(value: unknown): value is [string, number] {
 /** The non-modal servers this workflow may run on: its linked servers, or every active one for a new or unlinked workflow. */
 function checkServers(workflowId?: number | null): ComfyUIServerRecord[] {
   const servers = workflowId && WorkflowModel.findById(workflowId)
-    ? getMcpGenerationRoutingOptions(workflowId).eligible_servers
-      .map((server) => ComfyUIServerModel.findById(server.id))
-      .filter((server): server is ComfyUIServerRecord => Boolean(server))
+    ? getGenerationRoutingServers(workflowId).eligibleServers
     : ComfyUIServerModel.findActiveServers();
   return servers.filter((server) => server.backend_type !== 'modal').slice(0, MAX_CHECK_SERVERS);
 }

@@ -88,6 +88,10 @@ export class PromptCollectionService {
     return PromptCollectionMutationService.assignPromptToGroup(promptId, groupId, type);
   }
 
+  static async movePromptsToGroup(promptIds: number[], groupId: number | null, type: 'positive' | 'negative' | 'auto' = 'positive') {
+    return PromptCollectionMutationService.movePromptsToGroup(promptIds, groupId, type);
+  }
+
   static async getGroupStatistics(type: 'positive' | 'negative' | 'auto' = 'positive') {
     return PromptCollectionQueryService.getGroupStatistics(type);
   }

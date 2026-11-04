@@ -1,13 +1,11 @@
 import { useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { RotateCcw } from 'lucide-react'
 import { PAGE_SETTINGS_SCOPES, pageSettingsPatch, pageSettingRow, type PageSettingField, type PageSettingValue, type PageSettingsScopeId, type PageSettingsSnapshot } from '@conai/shared'
 import { usePageSettings } from '@/components/common/page-settings-context'
 import { Sheet } from '@/components/ui/sheet'
 import { EditorFooter } from '@/components/ui/editor-footer'
 import { Button } from '@/components/ui/button'
-import { IconButton } from '@/components/ui/icon-button'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { SettingRow } from '@/components/ui/setting-row'
 import { SettingsSwitchRow } from '@/components/ui/settings-switch-row'
@@ -139,15 +137,14 @@ function SettingsEditor({ scope, scopes, title, onSelect, onClose, inline = fals
       : query.isPending ? <p className="py-6">{t({ ko: '설정 불러오는 중…', en: 'Loading settings…' })}</p> : null}
     {error || query.error ? <p role="alert" className="mt-4 text-sm text-destructive">{error ?? query.error?.message}</p> : null}
   </>
-  if (inline) return <div>{body}<div className="mt-4 flex justify-end gap-2"><Button variant="ghost" disabled={saving} onClick={() => void reload()}>{t({ ko: '최신 설정 불러오기', en: 'Reload settings' })}</Button><Button disabled={!dirty || saving || !snapshot} onClick={onSave}>{t({ ko: '저장', en: 'Save' })}</Button></div></div>
+  if (inline) return <div>{body}<div className="mt-4 flex justify-end gap-2"><Button type="button" variant="ghost" disabled={!dirty || saving} onClick={() => void reload()}>{t({ ko: '되돌리기', en: 'Revert' })}</Button><Button type="button" disabled={!dirty || saving || !snapshot} onClick={onSave}>{t({ ko: '저장', en: 'Save' })}</Button></div></div>
   return <Sheet open title={title} description={t({ ko: '공용 설정 · 저장하면 모든 사용자에게 적용돼.', en: 'Shared settings · changes apply to all users.' })} onClose={() => { if (!savingRef.current) onClose() }} dirty={dirty} onSave={dirty && !saving ? onSave : undefined} sidePanelInset="var(--chat-dock-width, 0px)">
     <div className="divide-y divide-line">
       {scopes.map((id) => <section key={id} className="py-2"><h2><Button variant="ghost" size="sm" onClick={() => void select(id)} aria-expanded={scope === id}>{t(PAGE_SETTINGS_SCOPES[id].label)}</Button></h2>
         {id === scope ? body : null}
       </section>)}
     </div>
-    <EditorFooter onSave={onSave} canSave={dirty && Boolean(snapshot)} saving={saving}>
-      <IconButton label={t({ ko: '최신 설정 불러오기', en: 'Reload settings' })} variant="ghost" disabled={saving} onClick={() => void reload()}><RotateCcw /></IconButton>
+    <EditorFooter onSave={onSave} canSave={dirty && Boolean(snapshot)} saving={saving} onRevert={() => void reload()} canRevert={dirty}>
       {admin ? <Button asChild variant="ghost" size="sm"><Link to={`/settings?section=${destination.section}&group=${destination.group}`} onClick={(event) => { if (saving) event.preventDefault() }}>{t({ ko: '설정에서 모두 보기', en: 'View all in settings' })}</Link></Button> : null}
     </EditorFooter>
   </Sheet>

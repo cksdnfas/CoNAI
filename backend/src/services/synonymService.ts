@@ -20,96 +20,39 @@ export class SynonymService {
   ): Promise<{ success: boolean; mergedCount: number; mainPromptId: number }> {
     try {
       const normalizedMain = normalizeSearchTerm(mainPrompt);
-
-      // 1. 메인 프롬프트가 존재하는지 확인, 없으면 생성
-      let mainPromptId: number;
-      const mainRecord = await this.findPromptByNormalizedText(normalizedMain, type);
-
-      if (mainRecord) {
-        mainPromptId = mainRecord.id;
-      } else {
-        // 메인 프롬프트 생성
-        if (type === 'positive') {
-          mainPromptId = await PromptCollectionModel.addOrIncrement(normalizedMain);
-        } else if (type === 'auto') {
-          mainPromptId = await PromptCollectionModel.addOrIncrementAuto(normalizedMain);
-        } else {
-          mainPromptId = await PromptCollectionModel.addOrIncrementNegative(normalizedMain);
-        }
-      }
-
-      let mergedCount = 0;
-      const processedSynonyms: string[] = [];
-
-      // 2. 각 동의어를 처리
-      for (const synonym of synonyms) {
-        const normalizedSynonym = normalizeSearchTerm(synonym);
-
-        // 동의어가 메인 프롬프트와 같으면 스킵
-        if (normalizedSynonym.toLowerCase() === normalizedMain.toLowerCase()) {
-          continue;
+      const tableName = this.getTableName(type);
+      return db.transaction(() => {
+        const find = db.prepare(`SELECT id, usage_count FROM ${tableName} WHERE prompt = ? COLLATE NOCASE`);
+        const merge = db.prepare(`UPDATE ${tableName} SET usage_count = usage_count + ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`);
+        const mainRecord = find.get(normalizedMain) as { id: number } | undefined;
+        let mainPromptId = mainRecord?.id;
+        if (mainPromptId === undefined) {
+          if (type === 'positive') mainPromptId = PromptCollectionModel.addOrIncrement(normalizedMain);
+          else if (type === 'auto') mainPromptId = PromptCollectionModel.addOrIncrementAuto(normalizedMain);
+          else mainPromptId = PromptCollectionModel.addOrIncrementNegative(normalizedMain);
         }
 
-        // 동의어가 이미 존재하는지 확인
-        const synonymRecord = await this.findPromptByNormalizedText(normalizedSynonym, type);
-
-        if (synonymRecord) {
-          // 기존 동의어의 사용 횟수를 메인 프롬프트에 추가
-          await this.mergeUsageCount(mainPromptId, synonymRecord.usage_count, type);
-
-          // 기존 동의어 삭제 (동의어의 group_id는 무시됨 - 메인 프롬프트의 group_id가 우선)
-          await PromptCollectionModel.delete(synonymRecord.id, type);
-          mergedCount++;
-
-          console.log(`🔄 Merged synonym "${synonymRecord.prompt}" (group_id: ${synonymRecord.group_id}) into main prompt "${normalizedMain}"`);
+        let mergedCount = 0;
+        const processedSynonyms: string[] = [];
+        const mainKey = normalizedMain.toLowerCase();
+        for (const synonym of synonyms) {
+          const normalizedSynonym = normalizeSearchTerm(synonym);
+          if (normalizedSynonym.toLowerCase() === mainKey) continue;
+          const record = find.get(normalizedSynonym) as { id: number; usage_count: number } | undefined;
+          if (record) {
+            merge.run(record.usage_count, mainPromptId);
+            PromptCollectionModel.delete(record.id, type);
+            mergedCount++;
+          }
+          processedSynonyms.push(normalizedSynonym);
         }
-
-        processedSynonyms.push(normalizedSynonym);
-      }
-
-      // 3. 메인 프롬프트에 동의어 목록 설정
-      await PromptCollectionModel.setSynonyms(mainPromptId, processedSynonyms, type);
-
-      // 그룹 ID는 동의어와 별개 기능이므로 자동 설정하지 않음
-
-      return {
-        success: true,
-        mergedCount,
-        mainPromptId
-      };
-
+        PromptCollectionModel.setSynonyms(mainPromptId, processedSynonyms, type);
+        return { success: true, mergedCount, mainPromptId };
+      }).immediate();
     } catch (error) {
       console.error('Error in setSynonymsAndMerge:', error);
       throw error;
     }
-  }
-
-  /**
-   * 정규화된 텍스트로 프롬프트 찾기
-   */
-  private static async findPromptByNormalizedText(
-    normalizedText: string,
-    type: 'positive' | 'negative' | 'auto'
-  ): Promise<any | null> {
-    const tableName = this.getTableName(type);
-
-    const row = db.prepare(`SELECT * FROM ${tableName} WHERE prompt = ? COLLATE NOCASE`).get(normalizedText) as any | undefined;
-    return row || null;
-  }
-
-  /**
-   * 사용 횟수 병합
-   */
-  private static async mergeUsageCount(
-    mainPromptId: number,
-    additionalCount: number,
-    type: 'positive' | 'negative' | 'auto'
-  ): Promise<void> {
-    const tableName = this.getTableName(type);
-
-    db.prepare(`UPDATE ${tableName}
-       SET usage_count = usage_count + ?, updated_at = CURRENT_TIMESTAMP
-       WHERE id = ?`).run(additionalCount, mainPromptId);
   }
 
   /**

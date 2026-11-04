@@ -1,10 +1,10 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Copy, Eye, EyeOff, Plus, RefreshCw, Trash2 } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { EditorFooter } from '@/components/ui/editor-footer'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
-import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
+import { Modal, ModalBody } from '@/components/ui/modal'
 import { RowGroup } from '@/components/ui/row-group'
 import { SettingRow } from '@/components/ui/setting-row'
 import { useSnackbar } from '@/components/ui/snackbar-context'
@@ -176,10 +176,7 @@ export function McpHttpSettingsCard() {
                 {groups.map((group) => <option key={group.groupKey} value={group.groupKey}>{group.name}</option>)}
               </Select>
             </label>
-            <ModalFooter>
-              <Button type="button" variant="secondary" onClick={() => setNewKeyName(null)}>{t({ ko: '취소', en: 'Cancel' })}</Button>
-              <Button type="submit" disabled={!newKeyName?.trim() || !newKeyGroup || busy}>{t({ ko: '추가', en: 'Add' })}</Button>
-            </ModalFooter>
+            <EditorFooter saveSubmit canSave={Boolean(newKeyName?.trim() && newKeyGroup)} saving={busy} saveLabel={t({ ko: '만들기', en: 'Create' })} />
           </ModalBody>
         </form>
       </Modal>

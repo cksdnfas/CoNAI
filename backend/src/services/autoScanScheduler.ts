@@ -37,6 +37,14 @@ export class AutoScanScheduler {
   private static phase3Timer: NodeJS.Timeout | null = null;
   private static isRunning = false;
   private static isPhase2Running = false;
+  private static activeRuns = new Set<Promise<void>>();
+
+  private static track(task: Promise<void>): Promise<void> {
+    const running = task.catch((error) => console.error('❌ Auto-scan scheduled task failed:', error));
+    this.activeRuns.add(running);
+    void running.then(() => { this.activeRuns.delete(running); });
+    return running;
+  }
 
   /**
    * 스케줄러 시작
@@ -48,8 +56,9 @@ export class AutoScanScheduler {
       return;
     }
 
+    BackgroundProcessorService.start();
     // 매 1분마다 실행
-    this.cronTask = cron.schedule('* * * * *', async () => {
+    const runScan = async () => {
       if (this.isRunning) {
         return;
       }
@@ -69,7 +78,8 @@ export class AutoScanScheduler {
       } finally {
         this.isRunning = false;
       }
-    });
+    };
+    this.cronTask = cron.schedule('* * * * *', () => this.track(runScan()));
 
     // Phase 2 백그라운드 처리 스케줄러 (초 단위로 동작)
     // 사용자 설정 제거 -> 1초로 고정
@@ -101,8 +111,8 @@ export class AutoScanScheduler {
     // 첫 배치는 기동 직후 워처 초기화·정적 리소스 로딩과 겹치지 않게 잠시 미룬다.
     // setTimeout/setInterval 핸들은 stop() 의 clearInterval 로 함께 정리된다.
     this.phase2Timer = setTimeout(() => {
-      runPhase2();
-      this.phase2Timer = setInterval(runPhase2, phase2IntervalMs);
+      void this.track(runPhase2());
+      this.phase2Timer = setInterval(() => this.track(runPhase2()), phase2IntervalMs);
     }, PHASE2_STARTUP_DELAY_MS);
 
     // Phase 3 파일 검증 스케줄러 (초 단위로 동작, 활성화 시만)
@@ -129,7 +139,7 @@ export class AutoScanScheduler {
         };
 
         // 주기적 실행
-        this.phase3Timer = setInterval(runVerification, verificationIntervalMs);
+        this.phase3Timer = setInterval(() => this.track(runVerification()), verificationIntervalMs);
 
         console.log(`🔍 File verification scheduler enabled (${verificationIntervalSeconds}s)`);
       } else {
@@ -177,5 +187,12 @@ export class AutoScanScheduler {
     console.log('🔄 자동 스캔 스케줄러 재시작 중...');
     this.stop();
     this.start();
+  }
+
+  static async stopAndDrain(): Promise<void> {
+    this.stop();
+    await BackgroundProcessorService.stopAndDrain();
+    await Promise.all(this.activeRuns);
+    await FolderScanService.drain();
   }
 }

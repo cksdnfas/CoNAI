@@ -21,7 +21,10 @@ export const CHAT_BACKUP_FOLDER = '채팅 백업'
  */
 export function exportChatJson(requester: McpRequester, threadId: number, options: { readOnlyLorebooks?: boolean } = {}) {
   const detail = CodexChatService.getThread(requester, threadId)
-  const profile = detail.thread.profile_id ? ChatProfileStore.find(detail.thread.profile_id) : null
+  const members = detail.thread.kind === 'group' ? ChatGroupStore.members(threadId) : undefined
+  const names = new Map(ChatProfileStore.listNames({
+    ids: [...(detail.thread.profile_id ? [detail.thread.profile_id] : []), ...(members?.map(member => member.profile_id) ?? [])],
+  }).map(profile => [profile.id, profile.name]))
   const book = options.readOnlyLorebooks ? OwnedLorebookStore.chatBookReadOnly(threadId) : OwnedLorebookStore.chatBookOf(threadId)
   const owner = fileOwnerKey(requester.accountId)
   const findBook = (id: number) => options.readOnlyLorebooks ? OwnedLorebookStore.findReadOnly(id, owner) : OwnedLorebookStore.find(id, owner)
@@ -32,13 +35,13 @@ export function exportChatJson(requester: McpRequester, threadId: number, option
     version: 1,
     ...(hasPrivateAttachmentContext(threadId) ? { privateAttachments: true } : {}),
     exportedAt: new Date().toISOString(),
-    profileName: profile?.name ?? null,
+    profileName: names.get(detail.thread.profile_id ?? 0) ?? null,
     thread: detail.thread,
     messages: detail.messages,
     media: detail.media,
     summarySegments: ChatSummaryStore.list(threadId),
     // A room's members, so an import can find them by id and name.
-    members: detail.thread.kind === 'group' ? ChatGroupStore.members(threadId).map((member) => ({ id: member.profile_id, name: ChatProfileStore.find(member.profile_id)?.name ?? null })) : undefined,
+    members: members?.map(member => ({ id: member.profile_id, name: names.get(member.profile_id) ?? null })),
     lorebook: book && book.entries.length > 0 ? { entries: book.entries.map((entry) => ({ ...entry, file: null, fileId: null })) } : undefined,
     links: {
       flags: ChatFlagStore.resolve(requester, flagIds).map(({ id, name }) => ({ id, name })),

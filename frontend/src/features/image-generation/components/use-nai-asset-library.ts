@@ -109,9 +109,7 @@ export function useNaiAssetLibrary({
       ? t('image-generation.components.use.nai.asset.library.save.vibe')
       : t('image-generation.components.use.nai.asset.library.save.character.reference')
 
-  const assetSaveSubmitLabel = assetSaveTarget?.mode === 'edit'
-    ? t('image-generation.components.use.nai.asset.library.edit')
-    : t('image-generation.components.use.nai.asset.library.save')
+  const assetSaveSubmitLabel = t({ ko: '저장', en: 'Save' })
 
   /** Encode one vibe image into the payload required by the NAI API and stored vibe assets. */
   const handleEncodeVibe = async (

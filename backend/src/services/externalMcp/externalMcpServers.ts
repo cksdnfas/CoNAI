@@ -347,22 +347,27 @@ export function externalMcpServerViews(): ExternalMcpServerView[] {
  * Every tool chats can be offered now: enabled servers whose list is known (a server that dropped its connection
  * keeps its last list; a call reconnects), minus the tools switched off.
  */
-export function externalMcpTools(): ExternalMcpTool[] {
-  const result: ExternalMcpTool[] = []
+function* availableExternalMcpTools(): Generator<ExternalMcpTool> {
   for (const server of loadExternalMcpServers()) {
     if (!server.enabled) continue
     const connection = connections.get(server.id)
     if (!connection || connection.signature !== connectionSignature(server)) continue
     for (const tool of connection.tools) {
       if (server.disabledTools.includes(tool.remoteName)) continue
-      result.push({ ...tool, serverId: server.id, serverName: server.name, scope: server.scope })
+      yield { ...tool, serverId: server.id, serverName: server.name, scope: server.scope }
     }
   }
-  return result
+}
+
+export function externalMcpTools(): ExternalMcpTool[] {
+  return [...availableExternalMcpTools()]
 }
 
 export function findExternalMcpTool(name: string) {
-  return name.startsWith(EXTERNAL_TOOL_PREFIX) ? externalMcpTools().find((tool) => tool.name === name) ?? null : null
+  if (name.startsWith(EXTERNAL_TOOL_PREFIX)) {
+    for (const tool of availableExternalMcpTools()) if (tool.name === name) return tool
+  }
+  return null
 }
 
 /** Changes with the offered tools (Codex sessions read their tool list once, so a change needs a new session). */

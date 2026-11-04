@@ -1,13 +1,14 @@
 import { useMemo, useRef, useState, type ChangeEvent, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react'
-import { CopyPlus, Save, Scissors, Trash2 } from 'lucide-react'
+import { CopyPlus, Scissors, Trash2 } from 'lucide-react'
 import { SegmentedTabBar } from '@/components/common/segmented-tab-bar'
 import { Button } from '@/components/ui/button'
+import { EditorFooter } from '@/components/ui/editor-footer'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { useI18n } from '@/i18n'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { Field } from '@/components/ui/field'
-import { Modal, ModalFooter } from '@/components/ui/modal'
+import { Modal } from '@/components/ui/modal'
 import { cn } from '@/lib/utils'
 import type { WallpaperAnimationEasing, WallpaperAnimationEasingPreset } from './wallpaper-types'
 import {
@@ -527,9 +528,7 @@ export function WallpaperEasingPicker({ value, fallbackPreset = 'easeOutCubic', 
                               }
                             }}
                           />
-                          <IconButton variant="secondary" onClick={handleSavePreset} disabled={!presetName.trim()} label={t({ ko: '프리셋 저장', en: 'Save preset' })}>
-                            <Save className="h-4 w-4" />
-                          </IconButton>
+                          <Button type="button" size="sm" variant="secondary" onClick={handleSavePreset} disabled={!presetName.trim()}>{t({ ko: '프리셋 저장', en: 'Save preset' })}</Button>
                         </div>
                       </Field>
                     </div>
@@ -540,14 +539,7 @@ export function WallpaperEasingPicker({ value, fallbackPreset = 'easeOutCubic', 
             </div>
           )}
 
-          <ModalFooter>
-            <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
-              {t({ ko: '취소', en: 'Cancel' })}
-            </Button>
-            <Button type="button" onClick={handleApplySelection}>
-              {t({ ko: '저장', en: 'Save' })}
-            </Button>
-          </ModalFooter>
+          <EditorFooter onSave={handleApplySelection} saveLabel={t({ ko: '적용', en: 'Apply' })} />
         </div>
       </Modal>
     </>

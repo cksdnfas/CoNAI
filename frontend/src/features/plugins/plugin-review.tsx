@@ -114,17 +114,14 @@ export function PluginReviewModal({ open, onClose, proposals, requests, initialK
       </ModalBody>
       {current ? (
         <ModalFooter>
+          {current.proposal ? <Button type="button" variant="destructive-ghost" disabled={working} onClick={() => onDiscard(current.proposal)}>{t({ ko: '제안 버리기', en: 'Discard proposal' })}</Button> : null}
           <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">{current.proposal ? location?.(current.proposal) ?? '' : ''}</span>
+          {current.request ? <Button type="button" variant="ghost" disabled={working} onClick={() => void actions.run(current.request.id, 'cancel')}>{t({ ko: '요청 취소', en: 'Cancel request' })}</Button> : null}
+          <Button type="button" variant="ghost" disabled={working} onClick={onClose}>{t({ ko: '닫기', en: 'Close' })}</Button>
           {current.request ? (
-            <>
-              <Button variant="secondary" disabled={working} onClick={() => void actions.run(current.request.id, 'cancel')}>{t({ ko: '취소', en: 'Cancel' })}</Button>
-              <Button disabled={working} onClick={() => void actions.run(current.request.id, 'apply')}>{t({ ko: '적용', en: 'Apply' })}</Button>
-            </>
+              <Button variant="default" disabled={working} onClick={() => void actions.run(current.request.id, 'apply')}>{t({ ko: '실행', en: 'Run' })}</Button>
           ) : (
-            <>
-              <Button variant="secondary" disabled={working} onClick={() => onDiscard(current.proposal)}>{t({ ko: '버리기', en: 'Discard' })}</Button>
-              <Button disabled={working || closed} onClick={() => void onApply(current.proposal)}>{t({ ko: '적용', en: 'Apply' })}</Button>
-            </>
+              <Button variant="default" disabled={working || closed} onClick={() => void onApply(current.proposal)}>{proposalKind(current.proposal) === 'media' ? t({ ko: '실행', en: 'Run' }) : t({ ko: '저장', en: 'Save' })}</Button>
           )}
         </ModalFooter>
       ) : null}

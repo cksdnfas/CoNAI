@@ -55,7 +55,11 @@ const { pathToFileURL } = require('node:url');
     outer: for (const sheet of sheets) {
       // Retain exact upper-cell references, not guessed column semantics. This keeps labels/units
       // next to later cell values even when a long sheet is split into embedding windows.
-      const top = sheet.data.map((row, index) => ({ row, index })).filter(x => x.row.some(v => v != null && String(v).trim())).slice(0, 3);
+      const top = [];
+      for (const [index, row] of sheet.data.entries()) {
+        if (row.some(v => v != null && String(v).trim())) top.push({ row, index });
+        if (top.length === 3) break;
+      }
       for (const [index, row] of sheet.data.entries()) {
         if (body.length >= w.maxChars) { partial = true; break outer; }
         const cells = row.flatMap((value, col) => {

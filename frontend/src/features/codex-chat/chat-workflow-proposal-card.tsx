@@ -28,6 +28,6 @@ export function ChatWorkflowProposalCard({ proposal }: { proposal: WorkflowPageP
     <div className="flex flex-wrap items-center gap-2">
       {state === 'undone' ? <span className="text-xs text-muted-foreground">{t({ ko: '워크플로 초안을 되돌렸어.', en: 'Workflow draft undone.' })}</span>
         : handled && !applied ? <span className="text-xs text-muted-foreground">{t(proposal.dismissed ? { ko: '무시한 제안이야.', en: 'Proposal dismissed.' } : { ko: '이전에 적용한 제안이야.', en: 'Previously applied.' })}</span>
-          : <Button size="xs" variant={applied ? 'secondary' : 'default'} disabled={busy || !!unavailable} onClick={() => void run()}>{t(applied ? { ko: '워크플로 되돌리기', en: 'Undo workflow' } : { ko: '워크플로 적용', en: 'Apply workflow' })}</Button>}    </div>
+          : <Button size="xs" variant={applied ? 'ghost' : 'default'} disabled={busy || !!unavailable} onClick={() => void run()}>{t(applied ? { ko: '되돌리기', en: 'Revert' } : { ko: '적용', en: 'Apply' })}</Button>}    </div>
   </ProposalFrame>
 }

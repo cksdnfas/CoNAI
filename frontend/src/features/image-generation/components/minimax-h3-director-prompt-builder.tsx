@@ -7,6 +7,7 @@ import { Text } from '@/components/ui/text'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Modal, ModalFooter } from '@/components/ui/modal'
+import { EditorFooter } from '@/components/ui/editor-footer'
 import { useI18n } from '@/i18n'
 import { Field } from '@/components/ui/field'
 import {
@@ -163,7 +164,8 @@ export function MiniMaxH3DirectorPromptBuilder({
           )}>
             <Copy className="h-4 w-4" />
           </IconButton>
-          <Button type="button" onClick={() => setPreviewOpen(false)}>{t({ ko: '완료', en: 'Done' })}</Button>
+          <span className="flex-1" />
+          <Button type="button" variant="ghost" onClick={() => setPreviewOpen(false)}>{t({ ko: '닫기', en: 'Close' })}</Button>
         </ModalFooter>
       </div>
     </Modal>
@@ -186,10 +188,7 @@ export function MiniMaxH3DirectorPromptBuilder({
           <span className="text-sm text-muted-foreground">{t({ ko: '샷 번호', en: 'Shot number' })}</span>
           <Input autoFocus value={shotNumberDraft ?? ''} onChange={(event) => setShotNumberDraft(event.target.value)} />
         </label>
-        <ModalFooter>
-          <Button type="button" variant="secondary" onClick={() => setShotNumberDraft(null)}>{t({ ko: '취소', en: 'Cancel' })}</Button>
-          <Button type="submit" disabled={!shotNumberDraft?.trim()}>{t({ ko: '추가', en: 'Add' })}</Button>
-        </ModalFooter>
+        <EditorFooter saveSubmit canSave={Boolean(shotNumberDraft?.trim())} saveLabel={t({ ko: '추가', en: 'Add' })} />
       </form>
     </Modal>
   </>

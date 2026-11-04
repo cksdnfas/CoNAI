@@ -57,7 +57,6 @@ export function NaiAuthModal({
         onSave={onSubmit}
         canSave={!submitDisabled}
         saving={isSubmitting}
-        saveLabel={isSubmitting ? t('image-generation.components.nai.auth.modal.connecting') : t('image-generation.components.nai.auth.modal.save.token')}
       />
     </Modal>
   )

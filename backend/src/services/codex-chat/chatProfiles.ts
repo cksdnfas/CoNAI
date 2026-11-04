@@ -962,6 +962,12 @@ export const ChatProfileStore = {
     return row ? toProfile(row) : null
   },
 
+  /** Tool rebinding checks this live flag without loading prompts, assets or model dependencies. */
+  pageAssistEnabled(profileId: number): boolean | undefined {
+    const row = getUserSettingsDb().prepare('SELECT page_assist FROM llm_chat_profiles WHERE id = ?').get(profileId) as Pick<ProfileRow, 'page_assist'> | undefined
+    return row ? row.page_assist === 1 : undefined
+  },
+
   create(input: ChatProfileInput, copyOf?: ChatProfile): ChatProfile {
     const db = getUserSettingsDb(), nested = db.inTransaction
     const result = db.transaction(() => {

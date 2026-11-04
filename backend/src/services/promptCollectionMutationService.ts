@@ -4,6 +4,7 @@ import { SynonymService } from './synonymService';
 import { isProtectedLoRAGroup } from './promptCollectionProtection';
 import { PromptGroupModel } from '../models/PromptGroup';
 import { db } from '../database/init';
+import { getPromptCollectionTableName } from '../utils/promptTables';
 
 export class PromptCollectionMutationError extends Error {
   constructor(message: string, readonly status: 400 | 409 = 409) { super(message); }
@@ -77,34 +78,70 @@ export class PromptCollectionMutationService {
     return db.transaction(() => [...new Set(ids)].filter((id) => this.deletePromptInTransaction(id, type)))();
   }
 
+  /** A group that prompts may be assigned to or taken from by hand: not the protected LoRA group, not one Danbooru manages. */
+  static async assertAssignableGroup(groupId: number, type: 'positive' | 'negative' | 'auto' = 'positive'): Promise<void> {
+    const group = await PromptGroupService.getGroupById(groupId, type);
+    if (isProtectedLoRAGroup(group)) {
+      throw new Error('LoRA group is protected');
+    }
+    if (PromptGroupService.isDanbooruManagedGroupId(groupId, type)) {
+      throw new Error('Danbooru auto-groups are managed automatically');
+    }
+  }
+
+  /** Why prompts in this group cannot be taken out by hand; null when they can. */
+  private static async sourceRefusal(groupId: number, type: 'positive' | 'negative' | 'auto'): Promise<string | null> {
+    if (isProtectedLoRAGroup(await PromptGroupService.getGroupById(groupId, type))) return 'LoRA prompts are protected';
+    return PromptGroupService.isDanbooruManagedGroupId(groupId, type) ? 'Danbooru auto-group prompts are managed automatically' : null;
+  }
+
   static async assignPromptToGroup(promptId: number, groupId: number | null, type: 'positive' | 'negative' | 'auto' = 'positive'): Promise<boolean> {
     try {
       const prompt = await PromptCollectionModel.findById(promptId, type);
       if (prompt?.group_id) {
-        const currentGroup = await PromptGroupService.getGroupById(prompt.group_id, type);
-        if (isProtectedLoRAGroup(currentGroup)) {
-          throw new Error('LoRA prompts are protected');
-        }
-        if (PromptGroupService.isDanbooruManagedGroupId(prompt.group_id, type)) {
-          throw new Error('Danbooru auto-group prompts are managed automatically');
-        }
+        const refusal = await this.sourceRefusal(prompt.group_id, type);
+        if (refusal) throw new Error(refusal);
       }
 
-      if (groupId !== null) {
-        const targetGroup = await PromptGroupService.getGroupById(groupId, type);
-        if (isProtectedLoRAGroup(targetGroup)) {
-          throw new Error('LoRA group is protected');
-        }
-        if (PromptGroupService.isDanbooruManagedGroupId(groupId, type)) {
-          throw new Error('Danbooru auto-groups are managed automatically');
-        }
-      }
+      if (groupId !== null) await this.assertAssignableGroup(groupId, type);
 
       return await PromptCollectionModel.setGroupId(promptId, groupId, type);
     } catch (error) {
       console.error('Error assigning prompt to group:', error);
       throw error;
     }
+  }
+
+  /**
+   * Moves many prompts in one transaction under the rules of assignPromptToGroup, checking each group once instead of
+   * once per prompt: a refused target throws, prompts sitting in the LoRA group or a Danbooru-managed group stay put,
+   * and unknown ids count as failed.
+   */
+  static async movePromptsToGroup(
+    promptIds: number[],
+    groupId: number | null,
+    type: 'positive' | 'negative' | 'auto' = 'positive',
+  ): Promise<{ moved: number; failed: number; firstError?: string }> {
+    if (groupId !== null) await this.assertAssignableGroup(groupId, type);
+    const ids = [...new Set(promptIds)];
+    if (ids.length === 0) return { moved: 0, failed: 0 };
+
+    const table = getPromptCollectionTableName(type);
+    const rows = db.prepare(`SELECT id, group_id FROM ${table} WHERE id IN (SELECT value FROM json_each(?))`)
+      .all(JSON.stringify(ids)) as Array<{ id: number; group_id: number | null }>;
+    const refused = new Map<number, string>();
+    for (const sourceId of new Set(rows.flatMap((row) => row.group_id === null ? [] : [row.group_id]))) {
+      const refusal = await this.sourceRefusal(sourceId, type);
+      if (refusal) refused.set(sourceId, refusal);
+    }
+    const movable = rows.filter((row) => row.group_id === null || !refused.has(row.group_id));
+    db.transaction(() => { for (const row of movable) PromptCollectionModel.setGroupId(row.id, groupId, type); })();
+
+    return {
+      moved: movable.length,
+      failed: ids.length - movable.length,
+      ...(refused.size > 0 ? { firstError: refused.values().next().value as string } : {}),
+    };
   }
 
   static async batchAssignPromptsToGroup(
@@ -131,15 +168,7 @@ export class PromptCollectionMutationService {
         tableName = 'negative_prompt_collection';
       }
 
-      if (groupId !== null) {
-        const targetGroup = await PromptGroupService.getGroupById(groupId, type);
-        if (isProtectedLoRAGroup(targetGroup)) {
-          throw new Error('LoRA group is protected');
-        }
-        if (PromptGroupService.isDanbooruManagedGroupId(groupId, type)) {
-          throw new Error('Danbooru auto-groups are managed automatically');
-        }
-      }
+      if (groupId !== null) await this.assertAssignableGroup(groupId, type);
 
       for (const promptText of prompts) {
         const trimmedPrompt = promptText.trim();

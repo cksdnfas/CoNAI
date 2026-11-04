@@ -1,7 +1,9 @@
 import { useRef, useState, type ComponentProps } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { BookOpen, BookUser, FileUp, ImagePlus, LayoutTemplate, Link2, List, Plus, Rows3, Wrench } from 'lucide-react'
+import { BookOpen, BookUser, Copy, Download, FileUp, ImagePlus, LayoutTemplate, Link2, List, Pencil, Plus, Rows3, Trash2, Wrench } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import type { ActionMenuEntry } from '@/components/ui/action-menu'
 import { Chip } from '@/components/ui/chip'
 import { IconButton } from '@/components/ui/icon-button'
 import { ResourceRow, ResourceRowStat, ResourceRowStatus } from '@/components/ui/resource-row'
@@ -41,17 +43,20 @@ import { CHAT_JUDGE_PRESETS_QUERY_KEY, listChatJudgePresets, type ChatJudgePrese
 import { useChatPage, useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
 import { pageAction, pageChoice, pageNumber, pageObject } from '@/features/codex-chat/page-action-helpers'
 import { ChatBlockEditorModal } from './chat-block-editor-modal'
-import { readChatBlockFile } from './chat-block-file'
+import { downloadChatBlockFile, readChatBlockFile } from './chat-block-file'
+import { BLOCK_KEY_PATTERN } from './chat-block-editor'
 import { ChatGenerationPresetEditorModal } from './chat-generation-preset-editor-modal'
 import { ChatJudgePresetGroup } from './chat-judge-preset-group'
 import { ChatSkillEditorModal } from './chat-skill-editor-modal'
 import { ChatSkillResourceGroup, type ChatSkillEditorTarget } from './chat-skill-resource-group'
-import { readChatGenerationPresetFile } from './chat-generation-preset-file'
+import { downloadChatGenerationPresetFile, readChatGenerationPresetFile } from './chat-generation-preset-file'
 import { useChatAdminLinks } from '@/features/codex-chat/chat-admin-location'
-import { lorebookKey } from './chat-lorebook-editor-page'
+import { lorebookKey } from './chat-lorebook-editor-modal'
+import { downloadChatLorebookFile } from './chat-lorebook-file'
 import { ChatToolPresetEditorModal } from './chat-tool-preset-editor-modal'
-import { readChatToolPresetFile } from './chat-tool-preset-file'
+import { downloadChatToolPresetFile, readChatToolPresetFile } from './chat-tool-preset-file'
 import { SettingsEmptyRow, SettingsRowsSkeleton } from './settings-rows'
+import { useChatResourceDelete } from './use-chat-resource-actions'
 
 /** Label + icon colour of each kind: the group label and the rows' icons share the hue so a long list reads by colour. */
 const KIND_CLASS = {
@@ -87,7 +92,7 @@ export function ChatSettingsResources({ tab = 'presets', active = true }: { tab?
   const { t } = useI18n()
   const { showSnackbar } = useSnackbar()
   const queryClient = useQueryClient()
-  // A lorebook opens in its own editor page of the same host (?lorebook=…).
+  // A lorebook opens over this list in the same host (?lorebook=…).
   const navigate = useNavigate()
   const links = useChatAdminLinks()
   const shows = (kind: 'presets' | 'blocks' | 'lorebooks') => tab === 'all' || tab === kind
@@ -100,6 +105,7 @@ export function ChatSettingsResources({ tab = 'presets', active = true }: { tab?
   const [judgeEditor, setJudgeEditor] = useState<{ preset: ChatJudgePreset | null } | null>(null)
   const [skillEditor, setSkillEditor] = useState<ChatSkillEditorTarget | null>(null)
   const generationImportRef = useRef<HTMLInputElement>(null)
+  const deleteMutation = useChatResourceDelete()
 
   // The assistant can open resources from any tab; otherwise only the visible tab needs its lists.
   const wantsAllResources = useChatPage()?.enabled === true
@@ -239,6 +245,13 @@ export function ChatSettingsResources({ tab = 'presets', active = true }: { tab?
   // The account's own books may be denied (no chat permission); the shared list still gets a count.
   const lorebookCount = lorebooksQuery.isSuccess ? lorebooks.length + accountLorebooks.length : undefined
 
+  const lorebookMenu = (lorebook: ChatLorebook): ActionMenuEntry[] => [
+    { key: 'open', label: t({ ko: '열기', en: 'Open' }), icon: Pencil, onSelect: () => navigate(links.lorebook(lorebookKey(lorebook))) },
+    { key: 'export', label: t({ ko: '내보내기', en: 'Export' }), icon: Download, onSelect: () => downloadChatLorebookFile(lorebook.name, lorebook.entries) },
+    '-',
+    { key: 'delete', label: t({ ko: '삭제', en: 'Delete' }), icon: Trash2, destructive: true, disabled: deleteMutation.isPending, onSelect: () => deleteMutation.mutate({ kind: 'lorebook', resource: lorebook }) },
+  ]
+
   return (
     <div className="space-y-8">
       {shows('presets') ? <div className="scroll-mt-36 space-y-8" data-settings-group="presets" data-setting-id="chat.presets">
@@ -254,7 +267,7 @@ export function ChatSettingsResources({ tab = 'presets', active = true }: { tab?
               if (file) presetImportMutation.mutate(file)
             }} />
             <IconButton size="icon-sm" variant="ghost" disabled={presetImportMutation.isPending} onClick={() => presetImportRef.current?.click()} label={t({ ko: 'JSON에서 가져오기', en: 'Import from JSON' })}><FileUp /></IconButton>
-            <IconButton size="icon-sm" variant="ghost" onClick={() => setPresetEditor({ preset: null })} label={t({ ko: '도구 프리셋 추가', en: 'Add tool preset' })}><Plus /></IconButton>
+            <Button size="compact" variant="ghost" onClick={() => setPresetEditor({ preset: null })} aria-label={t({ ko: '도구 프리셋 추가', en: 'Add tool preset' })}><Plus />{t({ ko: '추가', en: 'Add' })}</Button>
           </div>
         )}
       >
@@ -269,6 +282,13 @@ export function ChatSettingsResources({ tab = 'presets', active = true }: { tab?
               ? <ResourceAside icon={Wrench} value={t({ ko: '전체', en: 'All' })} tip={t({ ko: '모든 도구', en: 'Every tool' })} />
               : <ResourceAside icon={Wrench} value={preset.toolAllowlist.length} tip={t({ ko: '도구 {count}', en: '{count} tools' }, { count: preset.toolAllowlist.length })} />}
             onOpen={() => setPresetEditor({ preset })}
+            menu={[
+              { key: 'open', label: t({ ko: '열기', en: 'Open' }), icon: Pencil, onSelect: () => setPresetEditor({ preset }) },
+              { key: 'duplicate', label: t({ ko: '복제', en: 'Duplicate' }), icon: Copy, disabled: presetDuplicateMutation.isPending, onSelect: () => presetDuplicateMutation.mutate(preset) },
+              { key: 'export', label: t({ ko: 'JSON으로 내보내기', en: 'Export as JSON' }), icon: Download, disabled: !preset.name.trim(), onSelect: () => downloadChatToolPresetFile(preset) },
+              '-',
+              { key: 'delete', label: t({ ko: '삭제', en: 'Delete' }), icon: Trash2, destructive: true, disabled: deleteMutation.isPending, onSelect: () => deleteMutation.mutate({ kind: 'tool', resource: preset }) },
+            ]}
           />
         ))}
         {presetsQuery.isError ? <p className="py-3 text-sm text-destructive">{getErrorMessage(presetsQuery.error, t({ ko: '도구 프리셋을 불러오지 못했어.', en: 'Could not load tool presets.' }))}</p> : null}
@@ -286,7 +306,7 @@ export function ChatSettingsResources({ tab = 'presets', active = true }: { tab?
               if (file) generationImportMutation.mutate(file)
             }} />
             <IconButton size="icon-sm" variant="ghost" disabled={generationImportMutation.isPending} onClick={() => generationImportRef.current?.click()} label={t({ ko: 'JSON에서 가져오기', en: 'Import from JSON' })}><FileUp /></IconButton>
-            <IconButton size="icon-sm" variant="ghost" onClick={() => setGenerationEditor({ preset: null })} label={t({ ko: '생성 프리셋 추가', en: 'Add generation preset' })}><Plus /></IconButton>
+            <Button size="compact" variant="ghost" onClick={() => setGenerationEditor({ preset: null })} aria-label={t({ ko: '생성 프리셋 추가', en: 'Add generation preset' })}><Plus />{t({ ko: '추가', en: 'Add' })}</Button>
           </div>
         )}
       >
@@ -305,6 +325,13 @@ export function ChatSettingsResources({ tab = 'presets', active = true }: { tab?
             )}
             aside={preset.profiles.length > 0 ? <ResourceRowStat icon={Link2} tip={preset.profiles.map((profile) => profile.name).join(', ')}>{preset.profiles.length}</ResourceRowStat> : null}
             onOpen={() => setGenerationEditor({ preset })}
+            menu={[
+              { key: 'open', label: t({ ko: '열기', en: 'Open' }), icon: Pencil, onSelect: () => setGenerationEditor({ preset }) },
+              { key: 'duplicate', label: t({ ko: '복제', en: 'Duplicate' }), icon: Copy, disabled: generationDuplicateMutation.isPending, onSelect: () => generationDuplicateMutation.mutate(preset) },
+              { key: 'export', label: t({ ko: 'JSON으로 내보내기', en: 'Export as JSON' }), icon: Download, disabled: !preset.name.trim(), onSelect: () => downloadChatGenerationPresetFile(preset) },
+              '-',
+              { key: 'delete', label: t({ ko: '삭제', en: 'Delete' }), icon: Trash2, destructive: true, disabled: deleteMutation.isPending, onSelect: () => deleteMutation.mutate({ kind: 'generation', resource: preset }) },
+            ]}
           />
         ))}
         {generationPresetsQuery.isError ? <p className="py-3 text-sm text-destructive">{getErrorMessage(generationPresetsQuery.error, t({ ko: '생성 프리셋을 불러오지 못했어.', en: 'Could not load generation presets.' }))}</p> : null}
@@ -328,7 +355,7 @@ export function ChatSettingsResources({ tab = 'presets', active = true }: { tab?
               if (file) blockImportMutation.mutate(file)
             }} />
             <IconButton size="icon-sm" variant="ghost" disabled={blockImportMutation.isPending} onClick={() => blockImportRef.current?.click()} label={t({ ko: 'JSON에서 가져오기', en: 'Import from JSON' })}><FileUp /></IconButton>
-            <IconButton size="icon-sm" variant="ghost" onClick={() => setBlockEditor({ shared: null })} label={t({ ko: '표시 블록 추가', en: 'Add display block' })}><Plus /></IconButton>
+            <Button size="compact" variant="ghost" onClick={() => setBlockEditor({ shared: null })} aria-label={t({ ko: '표시 블록 추가', en: 'Add display block' })}><Plus />{t({ ko: '추가', en: 'Add' })}</Button>
           </div>
         )}
       >
@@ -347,6 +374,13 @@ export function ChatSettingsResources({ tab = 'presets', active = true }: { tab?
             )}
             aside={<ResourceAside icon={Rows3} value={shared.block.fields.length} tip={t({ ko: '필드 {count}', en: '{count} fields' }, { count: shared.block.fields.length })} profiles={shared.profiles} />}
             onOpen={() => setBlockEditor({ shared })}
+            menu={[
+              { key: 'open', label: t({ ko: '열기', en: 'Open' }), icon: Pencil, onSelect: () => setBlockEditor({ shared }) },
+              { key: 'duplicate', label: t({ ko: '복제', en: 'Duplicate' }), icon: Copy, disabled: blockDuplicateMutation.isPending, onSelect: () => blockDuplicateMutation.mutate(shared) },
+              { key: 'export', label: t({ ko: 'JSON으로 내보내기', en: 'Export as JSON' }), icon: Download, disabled: !BLOCK_KEY_PATTERN.test(shared.block.key), onSelect: () => downloadChatBlockFile(shared.name.trim() || shared.block.key, shared.block) },
+              '-',
+              { key: 'delete', label: t({ ko: '삭제', en: 'Delete' }), icon: Trash2, destructive: true, disabled: deleteMutation.isPending, onSelect: () => deleteMutation.mutate({ kind: 'block', resource: shared }) },
+            ]}
           />
         ))}
         {blocksQuery.isError ? <p className="py-3 text-sm text-destructive">{getErrorMessage(blocksQuery.error, t({ ko: '표시 블록을 불러오지 못했어.', en: 'Could not load display blocks.' }))}</p> : null}
@@ -367,7 +401,7 @@ export function ChatSettingsResources({ tab = 'presets', active = true }: { tab?
             }} />
             <IconButton size="icon-sm" variant="ghost" disabled={lorebookImportMutation.isPending} onClick={() => lorebookImportRef.current?.click()} label={t({ ko: '로어북 가져오기', en: 'Import lorebook' })}><FileUp /></IconButton>
             <IconButton size="icon-sm" variant="ghost" onClick={() => navigate(links.lorebook(lorebookKey('new-account')))} label={t({ ko: '계정 로어북 추가', en: 'Add account lorebook' })}><BookUser /></IconButton>
-            <IconButton size="icon-sm" variant="ghost" onClick={() => navigate(links.lorebook(lorebookKey('new')))} label={t({ ko: '로어북 추가', en: 'Add lorebook' })}><Plus /></IconButton>
+            <Button size="compact" variant="ghost" onClick={() => navigate(links.lorebook(lorebookKey('new')))} aria-label={t({ ko: '로어북 추가', en: 'Add lorebook' })}><Plus />{t({ ko: '추가', en: 'Add' })}</Button>
           </div>
         )}
       >
@@ -386,6 +420,7 @@ export function ChatSettingsResources({ tab = 'presets', active = true }: { tab?
             )}
             aside={<ResourceAside icon={List} value={lorebook.entries.length} tip={t({ ko: '항목 {count}', en: '{count} entries' }, { count: lorebook.entries.length })} profiles={lorebook.profiles} />}
             onOpen={() => navigate(links.lorebook(lorebookKey(lorebook)))}
+            menu={lorebookMenu(lorebook)}
           />
         ))}
         {accountLorebooks.map((lorebook) => (
@@ -401,6 +436,7 @@ export function ChatSettingsResources({ tab = 'presets', active = true }: { tab?
             )}
             aside={<ResourceAside icon={List} value={lorebook.entries.length} tip={t({ ko: '항목 {count}', en: '{count} entries' }, { count: lorebook.entries.length })} profiles={lorebook.profiles} />}
             onOpen={() => navigate(links.lorebook(lorebookKey(lorebook)))}
+            menu={lorebookMenu(lorebook)}
           />
         ))}
         {lorebooksQuery.isError ? <p className="py-3 text-sm text-destructive">{getErrorMessage(lorebooksQuery.error, t({ ko: '로어북을 불러오지 못했어.', en: 'Could not load lorebooks.' }))}</p> : null}

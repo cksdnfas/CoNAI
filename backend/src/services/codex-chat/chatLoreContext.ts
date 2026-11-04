@@ -84,17 +84,19 @@ export function booksForRequest({ thread, profile, profileOwner, extraBookIds = 
     const links = OwnedLorebookStore.threadLinks(thread.id)
     const record = links.length > 0 ? OwnedLorebookStore.recordBookId(thread.id) : null
     for (const id of links) {
+      if (seen.has(id)) continue
       const book = OwnedLorebookStore.find(id, owner)
       if (book?.kind === 'account') add({ ...ownedBook(book, owner, 'thread'), ...(id === record ? { record: true } : {}) })
     }
   }
   if (!thread && owner) {
     for (const id of extraBookIds) {
+      if (seen.has(id)) continue
       const book = OwnedLorebookStore.find(id, owner)
       if (book?.kind === 'account') add(ownedBook(book, owner, 'thread'))
     }
   }
-  const ids = profile.lorebookIds
+  const ids = profile.lorebookIds.filter(id => !seen.has(id))
   if (ids.length > 0) {
     const rows = getUserSettingsDb().prepare(`SELECT id, revision, name, kind, owner_key, entries FROM chat_lorebooks WHERE id IN (${ids.map(() => '?').join(', ')})`)
       .all(...ids) as Array<{ id: number; revision: number; name: string; kind: ChatLorebookKind | null; owner_key: string | null; entries: string }>
@@ -240,9 +242,10 @@ export function buildLoreIndex(books: AttachedLoreBook[], estimate: (text: strin
     const entries = book.entries.filter((entry) => entry.enabled)
     const label = book.record ? `[${book.label}](기록)` : `[${book.label}]`
     if (entries.length === 0) return book.record ? [{ book, short: `${label} empty`, full: `${label} empty` }] : []
-    const titles = entries.map((entry) => `${render(loreEntryTitle(entry)).replace(/\s+/g, ' ').trim()}${entry.file && book.folderId ? '(자료)' : ''}`)
     const short = `${label} ${entries.length} entries`
-    return [{ book, short, full: titles.length <= LORE_INDEX_MAX_TITLES ? `${label} ${titles.join(' · ')}` : short }]
+    if (entries.length > LORE_INDEX_MAX_TITLES) return [{ book, short, full: short }]
+    const titles = entries.map((entry) => `${render(loreEntryTitle(entry)).replace(/\s+/g, ' ').trim()}${entry.file && book.folderId ? '(자료)' : ''}`)
+    return [{ book, short, full: `${label} ${titles.join(' · ')}` }]
   })
   if (lines.length === 0) return ''
   const shown = lines.map((line) => line.full)

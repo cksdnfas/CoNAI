@@ -1,7 +1,8 @@
 import { createContext, useContext, type ComponentProps, type ReactNode } from 'react'
-import { FolderCheck, FolderPlus, LoaderCircle, Save, Trash2 } from 'lucide-react'
+import { FolderCheck, LoaderCircle } from 'lucide-react'
 import { SegmentedControl, type SegmentedControlItem } from '@/components/common/segmented-control'
 import { Badge } from '@/components/ui/badge'
+import { EditorFooter } from '@/components/ui/editor-footer'
 import { IconButton } from '@/components/ui/icon-button'
 import { ResourceRowStatus } from '@/components/ui/resource-row'
 import { textVariants } from '@/components/ui/text'
@@ -277,15 +278,12 @@ export function SettingsResourceCreateActionRow({
     <>
       {validationMessage ? <p className="text-sm text-primary-text">{validationMessage}</p> : null}
 
-      <div className="flex flex-wrap justify-between gap-2">
+      <EditorFooter onSave={onSubmit} canSave={canSubmit} saving={isSubmitting} saveLabel={submitLabel}>
         <IconButton size="icon-sm" variant="secondary" disabled={!canValidate || isValidating} onClick={onValidate} label={validateLabel}>
           {isValidating ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <FolderCheck className="h-4 w-4" />}
         </IconButton>
 
-        <IconButton size="icon-sm" disabled={!canSubmit || isSubmitting} onClick={onSubmit} label={submitLabel}>
-          {isSubmitting ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <FolderPlus className="h-4 w-4" />}
-        </IconButton>
-      </div>
+      </EditorFooter>
     </>
   )
 }
@@ -314,6 +312,7 @@ interface SettingsResourceFooterActionsProps {
   primaryLabel?: string
   onPrimary: () => void
   primaryDisabled?: boolean
+  saving?: boolean
 }
 
 /** Render shared footer actions for destructive and primary settings card actions. */
@@ -324,18 +323,11 @@ export function SettingsResourceFooterActions({
   primaryLabel,
   onPrimary,
   primaryDisabled = false,
+  saving = false,
 }: SettingsResourceFooterActionsProps) {
   const { t } = useI18n()
 
   return (
-    <div className="flex flex-wrap justify-between gap-2">
-      <IconButton size="icon-sm" variant="destructive-ghost" disabled={dangerDisabled} onClick={onDanger} label={dangerLabel}>
-        <Trash2 className="h-4 w-4" />
-      </IconButton>
-
-      <IconButton size="icon-sm" disabled={primaryDisabled} onClick={onPrimary} label={primaryLabel ?? t({ ko: '저장', en: 'Save' })}>
-        {primaryDisabled ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-      </IconButton>
-    </div>
+    <EditorFooter onDelete={onDanger} deleteLabel={dangerLabel} deleteDisabled={dangerDisabled} onSave={onPrimary} canSave={!primaryDisabled} saving={saving} saveLabel={primaryLabel ?? t({ ko: '저장', en: 'Save' })} />
   )
 }

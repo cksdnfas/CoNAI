@@ -23,6 +23,7 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { ErrorState } from '@/components/ui/error-state'
 import { Heading } from '@/components/ui/heading'
 import { LoadingState } from '@/components/ui/loading-state'
+import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { RowGroup } from '@/components/ui/row-group'
 import { useSnackbar } from '@/components/ui/snackbar-context'
@@ -350,10 +351,11 @@ function AppearanceLibraryPage() {
     { key: 'delete', label: t({ ko: '폴더 삭제', en: 'Delete folder' }), icon: Trash2, destructive: true, onSelect: () => void deleteFolder(folder) },
   ] : []
   const settingMenu = (setting: CharacterSettingSummary): ActionMenuEntry[] => [
-    { key: 'open', label: canEdit ? t({ ko: '편집', en: 'Edit' }) : t({ ko: '열기', en: 'Open' }), icon: SquarePen, onSelect: () => openSetting(setting.id) },
-    { key: 'copy', label: t({ ko: '외형 태그 복사', en: 'Copy appearance tags' }), icon: Copy, onSelect: () => void copyTags(setting) },
-    canEdit ? { key: 'select', label: selected.has(setting.id) ? t({ ko: '선택 해제', en: 'Deselect' }) : t({ ko: '선택', en: 'Select' }), icon: CheckSquare, onSelect: () => { setSelectMode(true); toggleSelected(setting) } } : null,
+    { key: 'open', label: t({ ko: '열기', en: 'Open' }), icon: SquarePen, onSelect: () => openSetting(setting.id) },
+    canEdit ? { key: 'favorite', label: setting.favorite ? t({ ko: '즐겨찾기 해제', en: 'Unfavorite' }) : t({ ko: '즐겨찾기', en: 'Favorite' }), icon: setting.favorite ? StarOff : Star, disabled: bulkMutation.isPending, onSelect: () => toggleFavorite(setting) } : null,
     canEdit ? { key: 'move', label: t({ ko: '다른 폴더로 옮기기', en: 'Move to…' }), icon: FolderInput, onSelect: () => setMoving({ kind: 'setting', setting }) } : null,
+    { key: 'copy', label: t({ ko: '태그 복사', en: 'Copy tags' }), icon: Copy, onSelect: () => void copyTags(setting) },
+    canEdit ? { key: 'select', label: selected.has(setting.id) ? t({ ko: '선택 해제', en: 'Deselect' }) : t({ ko: '선택', en: 'Select' }), icon: CheckSquare, onSelect: () => { setSelectMode(true); toggleSelected(setting) } } : null,
     canEdit ? '-' : null,
     canEdit ? { key: 'delete', label: t({ ko: '삭제', en: 'Delete' }), icon: Trash2, destructive: true, onSelect: () => void deleteSetting(setting) } : null,
   ]
@@ -406,7 +408,7 @@ function AppearanceLibraryPage() {
             ]}
           />
           {currentFolder && !query && !filtering && canEdit ? <ActionMenuButton entries={folderMenu(currentFolder)} label={t({ ko: '폴더 작업', en: 'Folder actions' })} /> : null}
-          {canEdit ? <IconButton size="icon-sm" label={t({ ko: '새 외형 설정', en: 'New appearance setting' })} onClick={() => setCreating({ folderId: query || filtering ? null : folderId })}><Plus /></IconButton> : null}
+          {canEdit ? <Button size="sm" onClick={() => setCreating({ folderId: query || filtering ? null : folderId })}><Plus />{t({ ko: '새 외형 설정', en: 'New appearance setting' })}</Button> : null}
           <input ref={importInput} type="file" accept=".zip,application/zip" hidden onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ''; if (file) void importFile(file) }} />
         </>
       )}

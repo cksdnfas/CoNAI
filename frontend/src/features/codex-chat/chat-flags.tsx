@@ -1,6 +1,6 @@
 import { createElement, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type RefObject } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Ban, Eye, EyeOff, Flag, GripVertical, Pencil, RotateCcw, Shapes, Smile, Users } from 'lucide-react'
+import { Ban, Eye, EyeOff, Flag, GripVertical, Pencil, Shapes, Smile, Users } from 'lucide-react'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Button } from '@/components/ui/button'
 import { useConfirm } from '@/components/ui/confirm-dialog'
@@ -277,7 +277,7 @@ function ChatFlagIconPicker({ value, name, onChange }: { value: string; name: st
               </div>
               <form className="flex gap-1.5" onSubmit={(event) => { event.preventDefault(); const emoji = typed.trim(); if (emoji) pick(emoji) }}>
                 <Input variant="settings" value={typed} maxLength={16} onChange={(event) => setTyped(event.target.value)} placeholder={t({ ko: '다른 이모지 입력', en: 'Type another emoji' })} aria-label={t({ ko: '이모지 입력', en: 'Emoji' })} />
-                <Button type="submit" size="sm" variant="secondary" disabled={!typed.trim()}>{t({ ko: '적용', en: 'Use' })}</Button>
+                <Button type="submit" size="sm" variant="default" disabled={!typed.trim()}>{t({ ko: '적용', en: 'Apply' })}</Button>
               </form>
             </>
           )}
@@ -376,7 +376,7 @@ export function ChatFlagEditorModal({ open, flag, onClose }: { open: boolean; fl
           <IconButton size="icon-sm" variant="ghost" disabled={deleteMutation.isPending || flag.hidden} onClick={() => void handleDelete()} label={t({ ko: '나한테서 숨기기', en: 'Hide for me' })}><EyeOff /></IconButton>
         ) : null}
         {flag && ownCopy && flag.edited ? (
-          <IconButton size="icon-sm" variant="ghost" disabled={resetMutation.isPending} onClick={() => resetMutation.mutate()} label={t({ ko: '관리자 원본으로 되돌리기', en: 'Back to the original' })}><RotateCcw /></IconButton>
+          <Button type="button" size="sm" variant="ghost" disabled={resetMutation.isPending} onClick={() => resetMutation.mutate()}>{t({ ko: '관리자 원본으로', en: 'Restore admin original' })}</Button>
         ) : null}
       </EditorFooter>
     </Modal>

@@ -13,6 +13,7 @@ import { MediaPostprocessVisibilityService } from '../../services/mediaPostproce
 import { resolveSearchTotal } from '../../services/aggregateCache';
 import '../groupsAggregateVersion';
 import { buildIdPageResponse, normalizeIdPage, type IdPage, type IdPageResponse } from '../../utils/idPage';
+import { sqlSortDirection } from '../../utils/sqlSort';
 
 /**
  * 이미지 검색 모델 (새 구조 기반)
@@ -83,6 +84,7 @@ export class ImageSearchModel {
     cursor?: { useCursor?: boolean; value?: string | number | null; compositeHash?: string; includeTotal?: boolean },
     ratingLimit: number | null = null,
   ): Promise<{ images: any[], total: number; hasMore?: boolean; totalKnown?: boolean; nextCursorValue?: string | number | null; nextCursorHash?: string | null }> {
+    sortOrder = sqlSortDirection(sortOrder);
     // Sorting by file size is the only mode that needs `image_files` columns; every
     // other mode can state "has an active file" as an EXISTS and let the planner
     // drive from media_metadata's date index instead of scanning every active file.
@@ -235,7 +237,7 @@ export class ImageSearchModel {
     const page = searchParams.page || 1;
     const limit = searchParams.limit || 20;
     const sortBy = searchParams.sortBy || 'upload_date';
-    const sortOrder = searchParams.sortOrder || 'DESC';
+    const sortOrder = sqlSortDirection(searchParams.sortOrder);
     const offset = (page - 1) * limit;
     const useCursor = searchParams.pagination === 'cursor';
     const shouldCountTotal = !useCursor || searchParams.includeTotal !== false;

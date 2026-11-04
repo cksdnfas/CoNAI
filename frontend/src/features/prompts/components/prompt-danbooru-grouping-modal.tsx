@@ -1,10 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Button } from '@/components/ui/button'
+import { EditorFooter } from '@/components/ui/editor-footer'
 import { EditorGroup } from '@/components/ui/editor-group'
 import { LoadingState } from '@/components/ui/loading-state'
-import { Modal, ModalFooter } from '@/components/ui/modal'
+import { Modal } from '@/components/ui/modal'
 import { SettingsSwitchRow } from '@/components/ui/settings-switch-row'
 import { applyDanbooruPromptGrouping, getDanbooruPromptGroupingPreview } from '@/lib/api-prompts'
 import type { DanbooruPromptGroupingTypeResult } from '@/types/prompt'
@@ -137,12 +137,7 @@ export function PromptDanbooruGroupingModal({ open, onClose, onInfo, onError }: 
       </div>
 
       {preview ? (
-        <ModalFooter separated className="mt-4">
-          <span className="flex-1" />
-          <Button type="button" onClick={() => applyMutation.mutate()} disabled={applyMutation.isPending || !isDanbooruDbAvailable || preview.totals.matchedPrompts === 0}>
-            {applyMutation.isPending ? t({ ko: '적용 중…', en: 'Applying…' }) : t({ ko: '자동 그룹 구성 적용', en: 'Apply auto grouping' })}
-          </Button>
-        </ModalFooter>
+        <EditorFooter onSave={() => applyMutation.mutate()} canSave={isDanbooruDbAvailable && preview.totals.matchedPrompts > 0} saving={applyMutation.isPending} saveLabel={t({ ko: '자동 그룹 구성 저장', en: 'Save auto grouping' })} />
       ) : null}
     </Modal>
   )

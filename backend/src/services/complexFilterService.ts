@@ -19,6 +19,7 @@ import { peekSearchTotal, resolveSearchTotal, type AggregateScope } from './aggr
 // Hidden-group totals key on the DB-backed group version.
 import '../models/groupsAggregateVersion';
 import { buildIdPageResponse, normalizeIdPage, type IdPage, type IdPageResponse } from '../utils/idPage';
+import { sqlSortDirection } from '../utils/sqlSort';
 import type { ImageVectorHit } from './embeddings/imageIndex';
 
 /**
@@ -127,7 +128,7 @@ export class ComplexFilterService {
     const page = pagination?.page || 1;
     const limit = pagination?.limit || 25;
     let sortBy = pagination?.sortBy || 'first_seen_date';
-    const sortOrder = pagination?.sortOrder || 'DESC';
+    const sortOrder = sqlSortDirection(pagination?.sortOrder);
     const offset = (page - 1) * limit;
 
     // 날짜 필드 매핑 (레거시 호환성)

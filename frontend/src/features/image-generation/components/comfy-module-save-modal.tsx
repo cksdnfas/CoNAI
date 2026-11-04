@@ -1,10 +1,10 @@
 import { useMemo } from 'react'
-import { Button } from '@/components/ui/button'
+import { EditorFooter } from '@/components/ui/editor-footer'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Field } from '@/components/ui/field'
-import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
+import { Modal, ModalBody } from '@/components/ui/modal'
 import { Text } from '@/components/ui/text'
 import { useI18n } from '@/i18n'
 import type { ModuleDefinitionRecord } from '@/lib/api-module-graph'
@@ -106,14 +106,7 @@ export function ComfyModuleSaveModal({
           )}
         </div>
 
-        <ModalFooter>
-          <Button type="button" variant="secondary" onClick={onClose} disabled={isSaving}>
-            {t({ ko: '취소', en: 'Cancel' })}
-          </Button>
-          <Button type="button" onClick={onSave} disabled={isSaving || moduleName.trim().length === 0}>
-            {isSaving ? t({ ko: '저장 중…', en: 'Saving…' }) : t({ ko: '저장', en: 'Save' })}
-          </Button>
-        </ModalFooter>
+        <EditorFooter onSave={onSave} canSave={moduleName.trim().length > 0} saving={isSaving} />
       </ModalBody>
     </Modal>
   )

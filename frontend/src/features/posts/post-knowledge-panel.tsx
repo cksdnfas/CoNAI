@@ -3,11 +3,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { PostAssessmentQuality, PostDetail, PostReviewIssue } from '@conai/shared'
 import { RefreshCw, ThumbsDown, ThumbsUp } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { EditorFooter } from '@/components/ui/editor-footer'
 import { IconButton } from '@/components/ui/icon-button'
 import { ToggleChip } from '@/components/ui/chip'
 import { Field } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
-import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
+import { Modal, ModalBody } from '@/components/ui/modal'
 import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Textarea } from '@/components/ui/textarea'
@@ -57,7 +58,7 @@ export function KnowledgeMetadataEditor({ post, onClose }: { post: PostDetail; o
   return (
     <Modal open onClose={onClose} title={t({ ko: '문서 출처', en: 'Document sources' })} size="lg" dirty={JSON.stringify(sources) !== JSON.stringify(post.knowledgeSources ?? [])} onSave={() => { if (!save.isPending) save.mutate() }}>
       <ModalBody><KnowledgeSourcesEditor sources={sources} onChange={setSources} /></ModalBody>
-      <ModalFooter><Button variant="ghost" onClick={onClose}>{t({ ko: '닫기', en: 'Close' })}</Button><Button disabled={save.isPending} onClick={() => save.mutate()}>{t({ ko: '저장', en: 'Save' })}</Button></ModalFooter>
+      <EditorFooter onSave={() => save.mutate()} saving={save.isPending} />
     </Modal>
   )
 }
@@ -81,7 +82,7 @@ export function KnowledgeReviewDialog({ post, action, issue, onClose }: { post: 
         <Field label={action === 'resolve_issue' ? t({ ko: '해결 근거', en: 'Resolution evidence' }) : t({ ko: '이유', en: 'Reason' })}><Textarea rows={3} maxLength={2000} value={reason} onChange={(event) => setReason(event.target.value)} /></Field>
         <Field label={t({ ko: '본문 인용 (선택)', en: 'Quote (optional)' })}><Textarea rows={2} maxLength={2000} value={quote} onChange={(event) => setQuote(event.target.value)} /></Field>
       </ModalBody>
-      <ModalFooter><Button variant="ghost" onClick={onClose}>{t({ ko: '취소', en: 'Cancel' })}</Button><Button disabled={!reason.trim() || save.isPending} onClick={() => save.mutate()}>{title}</Button></ModalFooter>
+      <EditorFooter onSave={() => save.mutate()} canSave={Boolean(reason.trim())} saving={save.isPending} saveLabel={title} />
     </Modal>
   )
 }

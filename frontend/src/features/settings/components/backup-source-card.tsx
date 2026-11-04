@@ -171,7 +171,7 @@ export function BackupSourceCard({
           }
           void handleAction(() => onDelete(source.id))
         }}
-        primaryLabel={isBusy ? t({ ko: '처리 중…', en: 'Processing…' }) : t({ ko: '백업 소스 저장', en: 'Save backup source' })}
+        saving={isBusy}
         primaryDisabled={isBusy}
         onPrimary={() =>
           void handleAction(() =>

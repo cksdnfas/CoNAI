@@ -1,7 +1,6 @@
 import { Navigate, useSearchParams } from 'react-router-dom'
 import { SegmentedControl } from '@/components/common/segmented-control'
-import { ChatLorebookEditorPage } from '@/features/settings/components/chat-lorebook-editor-page'
-import { ChatProfileEditorPage } from '@/features/settings/components/chat-profile-editor'
+import { ChatLorebookEditorModal } from '@/features/settings/components/chat-lorebook-editor-modal'
 import { ChatSettingsJudge } from '@/features/settings/components/chat-settings-judge'
 import { ChatSettingsMine } from '@/features/settings/components/chat-settings-mine'
 import { ChatSettingsProfiles } from '@/features/settings/components/chat-settings-profiles'
@@ -17,20 +16,18 @@ import { ChatSettingsRoutines } from './chat-routines'
 registerTranslationCatalog(settingsCatalog)
 registerTranslationCatalog(charactersCatalog)
 
-/** 프로필: the profile folders and cards, or one profile's editor page (?profile=<id|new>). */
+/** 프로필: the mounted library with a URL-backed editor modal (?profile=<id|new>). */
 export function ChatProfilesScreen() {
-  const [params] = useSearchParams()
-  return params.has('profile') ? <ChatProfileEditorPage /> : <ChatSettingsProfiles />
+  return <ChatSettingsProfiles />
 }
 
-/** 자원: tool, generation and judge presets, display blocks and lorebooks (one kind at a time; ?tab=). A lorebook opens as its editor page. */
+/** 자원: one kind per ?tab=, with ?lorebook= opening a modal over the mounted list. */
 export function ChatResourcesScreen() {
   const { t } = useI18n()
   const [params, setParams] = useSearchParams()
   // Routines were once a tab of this screen.
   if (params.get('tab') === 'routines') return <Navigate to={CHAT_WORKSPACE_PATHS.routines} replace />
   const tab = parseChatResourceTab(params.get('tab'))
-  if (tab === 'lorebooks' && params.has('lorebook')) return <ChatLorebookEditorPage />
   const labels: Record<ChatResourceTab, string> = {
     presets: t({ ko: '프리셋', en: 'Presets' }),
     blocks: t({ ko: '표시 블록', en: 'Display blocks' }),
@@ -47,6 +44,7 @@ export function ChatResourcesScreen() {
         items={(Object.keys(labels) as ChatResourceTab[]).map((value) => ({ value, label: labels[value] }))}
       />
       <ChatSettingsResources tab={tab} />
+      {tab === 'lorebooks' && params.has('lorebook') ? <ChatLorebookEditorModal /> : null}
     </div>
   )
 }

@@ -275,7 +275,6 @@ export function WorkspaceBrowser({ projectId, dir, onNavigate, onProject, onCrea
       />
       {searchOpen ? null : <IconButton variant="ghost" label={t({ ko: '검색', en: 'Search' })} onClick={() => setSearchOpen(true)}><Search /></IconButton>}
       {canWrite ? <IconButton variant="ghost" label={t({ ko: '새 폴더', en: 'New folder' })} disabled={busy} onClick={() => setNameDialog({ name: '' })}><FolderPlus /></IconButton> : null}
-      {canWrite ? <IconButton variant="ghost" label={t({ ko: '텍스트 문서 가져오기', en: 'Import text documents' })} disabled={busy} onClick={() => uploadInput.current?.click()}><Upload /></IconButton> : null}
       <ActionMenuButton
         size="icon"
         label={t({ ko: '더 보기', en: 'More' })}
@@ -285,6 +284,7 @@ export function WorkspaceBrowser({ projectId, dir, onNavigate, onProject, onCrea
           { key: 'refresh', label: t({ ko: '새로고침', en: 'Refresh' }), icon: RefreshCw, disabled: busy, onSelect: () => void refresh() },
         ]}
       />
+      {canWrite ? <Button size="sm" disabled={busy} aria-label={t({ ko: '텍스트 문서 가져오기', en: 'Import text documents' })} onClick={() => uploadInput.current?.click()}><Upload />{t({ ko: '가져오기', en: 'Import' })}</Button> : null}
     </>
   )
   const segments = dir ? dir.split('/') : []

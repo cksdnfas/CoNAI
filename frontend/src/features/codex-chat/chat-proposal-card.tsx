@@ -1,7 +1,7 @@
 import { lazy, Suspense, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { FileText, SquarePen, Undo2 } from 'lucide-react'
+import { FileText, SquarePen } from 'lucide-react'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -775,7 +775,7 @@ function LoreProposalCard({ proposal, threadId }: { proposal: LoreProposal; thre
       {saved || dismissed ? (
         <ProposalFooter status className="justify-between">
           <span>{undone || proposal.undone ? t({ ko: '되돌렸어', en: 'Undone' }) : saved ? t({ ko: '저장됨', en: 'Saved' }) : t({ ko: '무시함', en: 'Dismissed' })}</span>
-          {saved && (proposal.replaces || proposal.undoAfter) && !undone && !proposal.undone ? <IconButton size="icon-xs" variant="ghost" disabled={busy} label={t({ ko: '저장 되돌리기', en: 'Undo save' })} onClick={() => undoMutation.mutate()}><Undo2 /></IconButton> : null}
+          {saved && (proposal.replaces || proposal.undoAfter) && !undone && !proposal.undone ? <Button size="xs" variant="ghost" disabled={busy} onClick={() => undoMutation.mutate()}>{t({ ko: '되돌리기', en: 'Revert' })}</Button> : null}
         </ProposalFooter>
       ) : (
         <ProposalFooter>

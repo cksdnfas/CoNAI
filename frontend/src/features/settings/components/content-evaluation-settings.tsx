@@ -2,12 +2,13 @@ import { useState, type ReactNode } from 'react'
 import { Pencil, Plus } from 'lucide-react'
 import { TOPIC_EVALUATION_LIMITS, type ContentEvaluationSettings, type ContentEvaluationTopic } from '@conai/shared'
 import { Button } from '@/components/ui/button'
+import { EditorFooter } from '@/components/ui/editor-footer'
 import { Field } from '@/components/ui/field'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
-import { Modal, ModalFooter } from '@/components/ui/modal'
+import { Modal } from '@/components/ui/modal'
 import { RowGroup } from '@/components/ui/row-group'
 import { SettingRow } from '@/components/ui/setting-row'
 import { ErrorState } from '@/components/ui/error-state'
@@ -131,7 +132,7 @@ export function ContentEvaluationSettingsRows({ draft, onPatch, isSaving, dirty,
           <Field label={<ChatFilledLabel fieldId="description">{t({ ko: '판단 기준', en: 'Criteria' })}</ChatFilledLabel>}><Textarea value={editing.description} maxLength={1000} rows={5} onChange={event => setEditing({ ...editing, description: event.target.value })} /></Field>
           <SwitchLine label={<ChatFilledLabel fieldId="enabled">{t({ ko: '평가 사용', en: 'Enable topic' })}</ChatFilledLabel>} checked={editing.enabled} disabled={!editing.enabled && active - (originalEnabled ? 1 : 0) >= 20} onCheckedChange={enabled => setEditing({ ...editing, enabled })} />
           {duplicate ? <p role="alert" className="text-xs text-destructive">{t({ ko: '같은 이름의 주제가 있어.', en: 'A topic already uses this name.' })}</p> : null}
-          <ModalFooter>{topics.some(topic => topic.id === editing.id) ? <Button variant="ghost" onClick={disable}>{t({ ko: '사용 중지', en: 'Disable' })}</Button> : null}<Button disabled={!valid || isSaving} onClick={apply}>{t({ ko: '변경 적용', en: 'Apply changes' })}</Button></ModalFooter>
+          <EditorFooter onSave={apply} canSave={valid && !isSaving} saveLabel={t({ ko: '적용', en: 'Apply' })}>{topics.some(topic => topic.id === editing.id) ? <Button variant="ghost" onClick={disable}>{t({ ko: '사용 중지', en: 'Disable' })}</Button> : null}</EditorFooter>
         </div> : null}
       </Modal>
     </div>

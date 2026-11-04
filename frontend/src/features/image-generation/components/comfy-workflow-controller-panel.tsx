@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { ArrowLeft, Save, Server } from 'lucide-react'
+import { ArrowLeft, BookmarkPlus, Server } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -381,8 +381,8 @@ export function ComfyWorkflowControllerPanel({
   }
   const saveModuleLabel = t({ ko: '모듈로 저장', en: 'Save as module' })
   const saveModuleAction = onOpenModuleSave ? (
-    <GenerateActionBarIconButton label={saveModuleLabel} onClick={onOpenModuleSave} disabled={isGenerating}>
-      <Save />
+    <GenerateActionBarIconButton type="button" label={saveModuleLabel} onClick={onOpenModuleSave} disabled={isGenerating}>
+      <BookmarkPlus />
     </GenerateActionBarIconButton>
   ) : null
   const resetLabel = t({ ko: '워크플로우 설정 초기화', en: 'Reset workflow settings' })

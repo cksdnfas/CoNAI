@@ -120,7 +120,9 @@ export function ActionContextMenu({ entries, children, disabled = false, openOnC
   onOpenChange?: (open: boolean) => void
 }) {
   const pressPointerTypeRef = React.useRef('mouse')
-  if (disabled || !hasActions(entries)) return children
+  if (!hasActions(entries)) return children
+  // `disabled` keeps the Root mounted (the trigger just stops opening): swapping the wrapper would remount `children`
+  // and drop keyboard focus, e.g. when a list enters selection mode from its focused row.
   const openAtPointer = (event: React.MouseEvent<HTMLElement>) => {
     event.currentTarget.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: event.clientX, clientY: event.clientY }))
   }
@@ -139,7 +141,7 @@ export function ActionContextMenu({ entries, children, disabled = false, openOnC
   }
   return (
     <ContextMenuPrimitive.Root onOpenChange={onOpenChange}>
-      <ContextMenuPrimitive.Trigger asChild onClick={openOnClick ? openAtPointer : undefined}
+      <ContextMenuPrimitive.Trigger asChild disabled={disabled} onClick={openOnClick && !disabled ? openAtPointer : undefined}
         onPointerDown={mouseOnly ? keepTouchPress : undefined} onContextMenu={mouseOnly ? keepTouchContextMenu : undefined}
         onPointerUp={mouseOnly ? endPress : undefined} onPointerCancel={mouseOnly ? endPress : undefined}>
         {children}

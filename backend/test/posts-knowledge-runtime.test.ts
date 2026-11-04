@@ -62,6 +62,24 @@ test('knowledge runtime: authenticated evidence, observed outcomes, atomic propo
     await fs.promises.rm(root,{recursive:true,force:true,maxRetries:3,retryDelay:50});
   });
 
+  await t.test('evidence retention clears expired private text once and leaves live evidence intact',()=>{
+    const post=document('Evidence retention');
+    const expiredExecution=execution('expired-evidence'),liveExecution=execution('live-evidence');
+    const expired=read(post,expiredExecution.context),live=read(post,liveExecution.context);
+    assess(expired,expiredExecution.context,'expired-evidence');
+    assess(live,liveExecution.context,'live-evidence');
+    db.prepare("UPDATE post_knowledge_uses SET expires_at='2000-01-01T00:00:00.000Z' WHERE id=?").run(expired.useId);
+    const evidence=(useId:string)=>JSON.parse((db.prepare('SELECT payload_json FROM post_knowledge_use_assessments WHERE use_id=?').get(useId) as {payload_json:string}).payload_json).evidence;
+    evaluation.pruneKnowledgeEvaluationEvidence();
+    assert.deepEqual(db.prepare('SELECT snapshot_body,evidence_expired FROM post_knowledge_uses WHERE id=?').get(expired.useId),{snapshot_body:null,evidence_expired:1});
+    assert.deepEqual(evidence(expired.useId),[]);
+    assert.equal(evidence(live.useId)[0].quote,'A');
+    const changes=()=> (db.prepare('SELECT total_changes() AS count').get() as {count:number}).count;
+    const before=changes();
+    evaluation.pruneKnowledgeEvaluationEvidence();
+    assert.equal(changes()-before,0,'already-cleared evidence must not be rewritten on every queue sweep');
+  });
+
   await t.test('read tokens bind account, execution, model and exact returned intervals; old versions retain their identity',()=>{
     const post=document('Read evidence'),{context}=execution('evidence-reply'),reference=read(post,context);
     assert.equal(reference.contentVersion,1);

@@ -1,11 +1,12 @@
 import { useRef, useState } from 'react'
 import type { PluginInstallResult, PluginSourceInput, PluginSourceProvider, PluginSourceReview } from '@conai/shared'
 import { Button } from '@/components/ui/button'
+import { EditorFooter } from '@/components/ui/editor-footer'
 import { DisclosureButton } from '@/components/ui/disclosure-button'
 import { Field } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { ListRow } from '@/components/ui/list-row'
-import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
+import { Modal, ModalBody } from '@/components/ui/modal'
 import { Select } from '@/components/ui/select'
 import { Text } from '@/components/ui/text'
 import { CHAT_DOCK_INSET } from '@/features/settings/components/use-settings-editor-chat-page'
@@ -115,12 +116,9 @@ export function PluginSourceInstall({ state }: { state: ReturnType<typeof usePlu
         </PluginPackageReviewSummary> : null}
         {review && state.pluginId && review.pluginId !== state.pluginId ? <Text role="status" tone="warning">{t({ ko: '저장소의 플러그인 ID가 {next}(으)로 바뀌었어. 적용하면 {current}을 업데이트하지 않고 새 플러그인으로 설치해.', en: 'The repository plugin ID is now {next}. Applying installs a new plugin instead of updating {current}.' }, { next: review.pluginId, current: state.pluginId })}</Text> : null}
       </ModalBody>
-      <ModalFooter>
-        <Button variant="ghost" disabled={busy} onClick={state.close}>{t({ ko: '닫기', en: 'Close' })}</Button>
-        <span className="flex-1" />
+      <EditorFooter onSave={() => void state.install().catch(() => undefined)} canSave={Boolean(review) && !busy} saving={busy} saveLabel={t({ ko: '설치', en: 'Install' })}>
         <Button variant="secondary" disabled={busy || !input.url.trim()} onClick={() => void state.prepare().catch(() => undefined)}>{t({ ko: '검토', en: 'Review' })}</Button>
-        <Button disabled={busy || !review} onClick={() => void state.install().catch(() => undefined)}>{t({ ko: '검토한 패키지 적용', en: 'Apply reviewed package' })}</Button>
-      </ModalFooter>
+      </EditorFooter>
     </> : null}
   </Modal>
 }

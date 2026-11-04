@@ -72,7 +72,6 @@ export function LlmPresetEditorModal({ state, isSaving, isDeleting, onClose, onT
         onSave={save}
         canSave={canSave}
         saving={isSaving}
-        saveLabel={preset ? t('llmConnectionsTab.savePreset') : t({ ko: '{fieldLabel} 저장', en: 'Save {fieldLabel}' }, { fieldLabel: t(section.fieldLabel) })}
       />
     </Modal>
   )

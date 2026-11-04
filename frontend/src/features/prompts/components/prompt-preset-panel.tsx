@@ -15,6 +15,7 @@ import { ListRow } from '@/components/ui/list-row'
 import { RowGroup } from '@/components/ui/row-group'
 import { SidebarGroupLabel, SidebarNav } from '@/components/ui/sidebar'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -398,9 +399,10 @@ export function PromptPresetPanel({ toolbarProps }: { toolbarProps: PromptPageTo
     <SidebarNav>
       <SidebarGroupLabel
         actions={canCreatePresets ? (
-          <IconButton size="icon-xs" variant="ghost" onClick={() => setEditorState({ mode: 'create', defaultParentId: selectedPresetId })} label={t('prompts.components.prompt.preset.panel.add.preset')}>
+          <Button type="button" variant="ghost" size="compact" onClick={() => setEditorState({ mode: 'create', defaultParentId: selectedPresetId })} aria-label={t('prompts.components.prompt.preset.panel.add.preset')}>
             <Plus />
-          </IconButton>
+            {t({ ko: '추가', en: 'Add' })}
+          </Button>
         ) : undefined}
       >
         {t('prompts.components.prompt.preset.panel.presets')}

@@ -1,7 +1,8 @@
 import { useRef, useState } from 'react'
 import { useMutation, type UseQueryResult } from '@tanstack/react-query'
-import { Activity, FileUp, Link2, Plus, Rows3, Search, Sparkles } from 'lucide-react'
+import { Activity, Download, FileUp, Link2, Pencil, Plus, Rows3, Search, Sparkles, Trash2 } from 'lucide-react'
 import { SearchField } from '@/components/common/search-field'
+import { Button } from '@/components/ui/button'
 import { Chip } from '@/components/ui/chip'
 import { EmptyState } from '@/components/ui/empty-state'
 import { IconButton } from '@/components/ui/icon-button'
@@ -13,6 +14,7 @@ import { useI18n } from '@/i18n'
 import { importChatSkillFile, type ChatSkillSnapshot, type ChatSkillSummary } from '@/lib/api-codex-chat'
 import { getErrorMessage } from '@/lib/error-message'
 import { SettingsEmptyRow, SettingsRowsSkeleton } from './settings-rows'
+import { useChatResourceDelete, useChatSkillExport } from './use-chat-resource-actions'
 
 /** What the skill editor opens: a stored skill by id, or a new one (optionally prefilled, e.g. from an imported file). */
 export type ChatSkillEditorTarget = { skillId: number | null; initial?: ChatSkillSnapshot; imported?: { warnings: string[] } }
@@ -29,6 +31,8 @@ export function ChatSkillResourceGroup({ query, onOpen }: { query: UseQueryResul
   const { showSnackbar } = useSnackbar()
   const importRef = useRef<HTMLInputElement>(null)
   const [search, setSearch] = useState('')
+  const deleteMutation = useChatResourceDelete()
+  const exportMutation = useChatSkillExport()
   // Nothing is saved yet: the editor opens on the draft, and saving there creates the skill.
   const importMutation = useMutation({
     mutationFn: importChatSkillFile,
@@ -66,6 +70,12 @@ export function ChatSkillResourceGroup({ query, onOpen }: { query: UseQueryResul
         </>
       )}
       onOpen={() => onOpen({ skillId: skill.id })}
+      menu={[
+        { key: 'open', label: t({ ko: '열기', en: 'Open' }), icon: Pencil, onSelect: () => onOpen({ skillId: skill.id }) },
+        { key: 'export', label: t({ ko: 'Agent Skills ZIP으로 내보내기', en: 'Export as Agent Skills ZIP' }), icon: Download, disabled: exportMutation.isPending, onSelect: () => exportMutation.mutate(skill) },
+        skill.source !== 'plugin' ? '-' : null,
+        skill.source !== 'plugin' && { key: 'delete', label: t({ ko: '삭제', en: 'Delete' }), icon: Trash2, destructive: true, disabled: deleteMutation.isPending, onSelect: () => deleteMutation.mutate({ kind: 'skill', resource: skill }) },
+      ]}
     />
   )
 
@@ -82,7 +92,7 @@ export function ChatSkillResourceGroup({ query, onOpen }: { query: UseQueryResul
             if (file) importMutation.mutate(file)
           }} />
           <IconButton size="icon-sm" variant="ghost" disabled={importMutation.isPending} onClick={() => importRef.current?.click()} label={t({ ko: '스킬 가져오기 (Agent Skills .zip / SKILL.md)', en: 'Import skill (Agent Skills .zip / SKILL.md)' })}><FileUp /></IconButton>
-          <IconButton size="icon-sm" variant="ghost" onClick={() => onOpen({ skillId: null })} label={t({ ko: '스킬 추가', en: 'Add skill' })}><Plus /></IconButton>
+          <Button size="compact" variant="ghost" onClick={() => onOpen({ skillId: null })} aria-label={t({ ko: '스킬 추가', en: 'Add skill' })}><Plus />{t({ ko: '추가', en: 'Add' })}</Button>
         </div>
       )}
     >

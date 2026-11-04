@@ -3,12 +3,12 @@ import { ChatProfileOptions } from '@/features/codex-chat/chat-profile-groups'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { Sparkles } from 'lucide-react'
 import { loreKeyLanguageLabel } from '@conai/shared'
-import { Button } from '@/components/ui/button'
+import { EditorFooter } from '@/components/ui/editor-footer'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Chip } from '@/components/ui/chip'
 import { IconButton } from '@/components/ui/icon-button'
 import { Spinner } from '@/components/ui/loading-state'
-import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
+import { Modal, ModalBody } from '@/components/ui/modal'
 import { Select } from '@/components/ui/select'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
@@ -92,7 +92,7 @@ export function ChatLoreKeyFillDialog({ open, language, entries, onApply, onClos
           </div>
         ) : null}
       </ModalBody>
-      <ModalFooter separated className="mt-4">
+      <EditorFooter onSave={() => { onApply(Object.fromEntries(chosen.map((entry) => [entry.id, result[entry.id]]))); onClose() }} canSave={chosen.length > 0} saveLabel={t({ ko: '적용', en: 'Apply' })}>
         <IconButton size="icon-sm" variant="ghost" disabled={profileId === null || entries.length === 0 || fillMutation.isPending} onClick={() => fillMutation.mutate()} label={t({ ko: '{name}에게 맡기기', en: 'Ask {name}' }, { name: profiles.find((profile) => profile.id === profileId)?.name ?? '' })}>
           {fillMutation.isPending ? <Spinner className="size-3.5" /> : <Sparkles />}
         </IconButton>
@@ -102,11 +102,7 @@ export function ChatLoreKeyFillDialog({ open, language, entries, onApply, onClos
           </Select>
         ) : null}
         {profilesQuery.isSuccess && profiles.length === 0 ? <span className="text-xs text-muted-foreground">{t({ ko: '맡길 프로필이 없어', en: 'No profile to ask' })}</span> : null}
-        <span className="flex-1" />
-        <Button size="sm" disabled={chosen.length === 0} onClick={() => { onApply(Object.fromEntries(chosen.map((entry) => [entry.id, result[entry.id]]))); onClose() }}>
-          {t({ ko: '{count}개 항목에 넣기', en: 'Add to {count} entries' }, { count: chosen.length })}
-        </Button>
-      </ModalFooter>
+      </EditorFooter>
     </Modal>
   )
 }

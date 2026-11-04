@@ -1,7 +1,5 @@
 import { useMemo } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
-import type { PathCrumb } from '@/components/common/path-breadcrumbs'
-import { useI18n } from '@/i18n'
+import { useLocation } from 'react-router-dom'
 
 /** The chat workspace: /chat is the conversations, the other screens manage what the chats draw on (administrators). */
 export const CHAT_WORKSPACE_PATHS = {
@@ -53,8 +51,14 @@ export function chatAdminLinks(host: ChatAdminHost, current?: URLSearchParams) {
     resources: (tab: ChatResourceTab = 'presets') => settings ? withParams('/settings', { section: 'chat', group: tab }) : withParams(CHAT_WORKSPACE_PATHS.resources, { tab }),
     llm: (group?: 'connections' | 'dashboard') => settings ? withParams('/settings', { section: 'llm', ...(group ? { group } : {}) }) : withParams(CHAT_WORKSPACE_PATHS.llm, group ? { group } : {}),
     judge: () => settings ? withParams('/settings', { section: 'chat', group: 'judge' }) : CHAT_WORKSPACE_PATHS.judge,
-    /** A lorebook's editor page: a shared book by id, an account book as `account-<id>`, or `new` / `new-account`. */
-    lorebook: (key: string) => settings ? withParams('/settings', { section: 'chat', lorebook: key }) : withParams(CHAT_WORKSPACE_PATHS.resources, { tab: 'lorebooks', lorebook: key }),
+    /** A lorebook modal over its list, retaining the host's other list parameters. */
+    lorebook: (key: string) => {
+      const next = new URLSearchParams(current)
+      if (settings) next.delete('group')
+      next.set(settings ? 'section' : 'tab', settings ? 'chat' : 'lorebooks')
+      next.set('lorebook', key)
+      return `${settings ? '/settings' : CHAT_WORKSPACE_PATHS.resources}?${next}`
+    },
   }
 }
 
@@ -62,21 +66,4 @@ export function chatAdminLinks(host: ChatAdminHost, current?: URLSearchParams) {
 export function useChatAdminLinks() {
   const { pathname, search } = useLocation()
   return useMemo(() => chatAdminLinks(chatAdminHostOf(pathname), new URLSearchParams(search)), [pathname, search])
-}
-
-/** The path above an editor page (the last crumb is where its back arrow goes): Settings › 채팅 › the list, or just the list in the workspace. */
-export function useChatAdminCrumbs(screen: 'profiles' | 'lorebooks'): PathCrumb[] {
-  const { t } = useI18n()
-  const navigate = useNavigate()
-  const links = useChatAdminLinks()
-  const list: PathCrumb = screen === 'profiles'
-    ? { key: 'profiles', label: t({ ko: '프로필', en: 'Profiles' }), onClick: () => navigate(links.profiles(true)) }
-    : { key: 'lorebooks', label: t({ ko: '로어북', en: 'Lorebooks' }), onClick: () => navigate(links.resources('lorebooks')) }
-  if (links.host === 'settings') return [
-    { key: 'settings', label: t({ ko: '설정', en: 'Settings' }), onClick: () => navigate('/settings') },
-    { key: 'chat', label: t({ ko: '채팅', en: 'Chat' }), onClick: () => navigate('/settings?section=chat') },
-    list,
-  ]
-  // The workspace's tab row above already names the chat; the list is the only step back.
-  return [list]
 }

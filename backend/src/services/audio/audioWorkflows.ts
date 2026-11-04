@@ -1,9 +1,8 @@
 import axios from 'axios';
 import { getAudioDb } from '../../database/audioDb';
-import { ComfyUIServerModel } from '../../models/ComfyUIServer';
 import { WorkflowModel } from '../../models/Workflow';
 import type { MarkedField, WorkflowRecord } from '../../types/workflow';
-import { getMcpGenerationRoutingOptions } from '../generation-queue/generationJobRouting';
+import { getGenerationRoutingServers } from '../generation-queue/generationJobRouting';
 import { AudioServiceError } from './audioService';
 
 /**
@@ -380,11 +379,9 @@ async function checkServer(
 
 /** The non-modal servers this workflow may run on (its links, or every active server when it has none). */
 export function audioWorkflowServers(workflowId: number): Array<{ id: number; name: string; endpoint: string }> {
-  const options = getMcpGenerationRoutingOptions(workflowId);
-  return options.eligible_servers
+  const { eligibleServers } = getGenerationRoutingServers(workflowId);
+  return eligibleServers
     .filter((server) => server.backend_type !== 'modal')
-    .map((server) => ComfyUIServerModel.findById(server.id))
-    .filter((server): server is NonNullable<typeof server> => Boolean(server))
     .map((server) => ({ id: server.id, name: server.name, endpoint: server.endpoint }));
 }
 

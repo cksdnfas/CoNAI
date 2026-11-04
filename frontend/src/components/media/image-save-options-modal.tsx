@@ -1,9 +1,9 @@
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
+import { EditorFooter } from '@/components/ui/editor-footer'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Select } from '@/components/ui/select'
 import { Field } from '@/components/ui/field'
-import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
+import { Modal, ModalBody } from '@/components/ui/modal'
 import { ToggleRow } from '@/components/ui/toggle-row'
 import { useI18n } from '@/i18n'
 import { calculateImageSaveOutputSize, resolveImageSaveFormat, type ImageSaveSourceInfo } from '@/lib/image-save-output'
@@ -109,14 +109,7 @@ export function ImageSaveOptionsModal({
           </Field>
         </div>
 
-        <ModalFooter>
-          <Button type="button" variant="secondary" onClick={onClose} disabled={isSaving}>
-            {t({ ko: '취소', en: 'Cancel' })}
-          </Button>
-          <Button type="button" onClick={onConfirm} disabled={isSaving}>
-            {isSaving ? t({ ko: '적용 중…', en: 'Applying…' }) : t({ ko: '적용', en: 'Apply' })}
-          </Button>
-        </ModalFooter>
+        <EditorFooter onSave={onConfirm} saving={isSaving} />
       </ModalBody>
     </Modal>
   )

@@ -1,7 +1,8 @@
 import { formatFileSize } from '@/lib/format-size'
 import { useRef, useState, type FocusEvent, type RefObject } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ExternalLink, Globe, ImageDown, ImageOff, Maximize2, Plus, RefreshCw, Trash2, TriangleAlert, Undo2 } from 'lucide-react'
+import { ExternalLink, Globe, ImageDown, ImageOff, Maximize2, Plus, RefreshCw, Trash2, TriangleAlert } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { IconButton } from '@/components/ui/icon-button'
 import { Modal, ModalBody } from '@/components/ui/modal'
@@ -362,7 +363,7 @@ export function ChatProfileMediaRow({ draft, patch, localize, lastTextarea, open
           {source ? <IconButton size="icon-sm" variant="ghost" label={t({ ko: '원본 열기', en: 'Open original' })} onClick={() => window.open(source, '_blank', 'noopener,noreferrer')}><ExternalLink /></IconButton> : null}
           {state === 'web' ? <IconButton size="icon-sm" variant="ghost" disabled={localize.pending} label={t({ ko: '이것만 받기', en: 'Save this one' })} onClick={() => refetch(current)}><ImageDown /></IconButton> : null}
           {source && (state === 'fail' || state === 'broken' || state === 'suspect') ? <IconButton size="icon-sm" variant="ghost" disabled={localize.pending} label={t({ ko: '다시 받기', en: 'Fetch again' })} onClick={() => refetch(current)}><RefreshCw /></IconButton> : null}
-          {current.kind === 'media' && source ? <IconButton size="icon-sm" variant="ghost" label={t({ ko: '원래 링크로 되돌리기', en: 'Restore the original link' })} onClick={() => revert(current)}><Undo2 /></IconButton> : null}
+          {current.kind === 'media' && source ? <Button type="button" size="sm" variant="ghost" onClick={() => revert(current)}>{t({ ko: '원래 링크로 되돌리기', en: 'Restore the original link' })}</Button> : null}
           <IconButton size="icon-sm" variant="destructive-ghost" label={t({ ko: '텍스트에서 빼기', en: 'Remove from the text' })} onClick={() => remove(current)}><Trash2 /></IconButton>
         </div>
       </div>

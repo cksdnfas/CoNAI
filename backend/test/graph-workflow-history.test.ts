@@ -80,4 +80,14 @@ test('graph workflow history: own columns, legacy rows moved, separate from Comf
 
   const otherGraph = await GenerationHistoryService.getHistoryByGraphWorkflow(8, {})
   assert.equal(otherGraph.total, 0)
+
+  await t.test('graph shutdown drains scheduled retention before database teardown', async () => {
+    const retention = await import('../src/services/graphWorkflowOutputRetentionService')
+    const { createProductionGracefulShutdownDependencies } = await import('../src/startup/gracefulShutdown')
+    retention.requestGraphWorkflowOutputRetentionPrune(7)
+    assert.equal(retention.getGraphWorkflowOutputRetentionState(7).pending_prune, true)
+    await createProductionGracefulShutdownDependencies().stopGraphWorkflowExecutionQueue()
+    assert.equal(retention.getGraphWorkflowOutputRetentionState(7).pending_prune, false)
+    assert.equal(retention.getGraphWorkflowOutputRetentionState(7).pending_prune_count, 0)
+  })
 })

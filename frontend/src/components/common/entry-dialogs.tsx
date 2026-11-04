@@ -1,6 +1,6 @@
-import { Button } from '@/components/ui/button'
+import { EditorFooter } from '@/components/ui/editor-footer'
 import { Input } from '@/components/ui/input'
-import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
+import { Modal, ModalBody } from '@/components/ui/modal'
 import { Select } from '@/components/ui/select'
 import { useI18n } from '@/i18n'
 
@@ -26,10 +26,7 @@ export function NameDialog({ open, title, value, onChange, onSubmit, onClose, bu
         <ModalBody>
           <Input variant="settings" autoFocus aria-label={label ?? t({ ko: '이름', en: 'Name' })} value={value} maxLength={maxLength} onChange={(event) => onChange(event.target.value)} />
         </ModalBody>
-        <ModalFooter>
-          <span className="flex-1" />
-          <Button type="submit" disabled={busy || !value.trim()}>{submitLabel ?? t({ ko: '저장', en: 'Save' })}</Button>
-        </ModalFooter>
+        <EditorFooter saveSubmit canSave={Boolean(value.trim())} saving={busy} saveLabel={submitLabel} />
       </form>
     </Modal>
   )
@@ -57,10 +54,7 @@ export function MoveDialog({ open, value, onChange, folders, rootLabel, onSubmit
           {folders.map((folder) => <option key={folder.value} value={folder.value} disabled={folder.disabled}>{folder.label}</option>)}
         </Select>
       </ModalBody>
-      <ModalFooter>
-        <span className="flex-1" />
-        <Button disabled={busy} onClick={onSubmit}>{t({ ko: '이동', en: 'Move' })}</Button>
-      </ModalFooter>
+      <EditorFooter onSave={onSubmit} saving={busy} saveLabel={t({ ko: '이동', en: 'Move' })} />
     </Modal>
   )
 }

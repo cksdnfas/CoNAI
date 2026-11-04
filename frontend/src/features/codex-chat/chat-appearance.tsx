@@ -1,6 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Check, ImageIcon, Layers, LayoutTemplate, PaintBucket, Pencil, Plus, RotateCcw, Star, TextCursorInput, Trash2, Type, X, type LucideIcon } from 'lucide-react'
+import { ImageIcon, Layers, LayoutTemplate, PaintBucket, Pencil, RotateCcw, Star, TextCursorInput, Type, X, type LucideIcon } from 'lucide-react'
 import { TextTabs } from '@/components/common/text-tabs'
 import { Button } from '@/components/ui/button'
 import { useConfirm } from '@/components/ui/confirm-dialog'
@@ -27,7 +27,7 @@ import {
 import { getErrorMessage } from '@/lib/error-message'
 import { cn } from '@/lib/utils'
 import { ChatMarkdown } from './chat-markdown'
-import { popChipAddClassName, popChipClassName } from './chat-pop-chip'
+import { popChipClassName } from './chat-pop-chip'
 
 export type ChatAvatarSize = 'none' | 'sm' | 'md' | 'lg'
 export type ChatSpacing = 'tight' | 'normal' | 'relaxed'
@@ -408,10 +408,7 @@ function SlotOverlay({ file, appearance, onApply, onNew, onSaveSlots, onClose }:
           </button>
         ))}
         {file.slots.length < CHAT_APPEARANCE_LIMITS.slots ? (
-          // eslint-disable-next-line no-restricted-syntax -- see above
-          <button type="button" style={delay(file.slots.length + 1)} onClick={onNew} aria-label={t({ ko: '지금 모양을 새 슬롯으로', en: 'Save as a new slot' })} className={popChipAddClassName('size-9 animate-chat-flag-pop motion-reduce:animate-chat-flag-fade')}>
-            <Plus className="size-4" />
-          </button>
+          <Button type="button" size="sm" variant="default" onClick={onNew} title={t({ ko: '지금 모양을 새 슬롯으로', en: 'Save as a new slot' })}>{t({ ko: '만들기', en: 'Create' })}</Button>
         ) : null}
       </div>
       {active ? (
@@ -422,12 +419,12 @@ function SlotOverlay({ file, appearance, onApply, onNew, onSaveSlots, onClose }:
                 <Star className={cn('size-4', active.id === file.defaultSlotId && 'fill-primary text-primary-text')} />
               </IconButton>
               <IconButton size="icon-sm" variant="ghost" label={t({ ko: '이름 바꾸기', en: 'Rename' })} onClick={() => setRenaming(active.name)}><Pencil className="size-4" /></IconButton>
-              <IconButton size="icon-sm" variant="ghost" label={t({ ko: '슬롯 지우기', en: 'Delete slot' })} onClick={() => void (async () => {
+              <Button type="button" size="sm" variant="destructive-ghost" onClick={() => void (async () => {
                 if (!await confirm({ title: t({ ko: '슬롯 지우기', en: 'Delete slot' }), description: t({ ko: '"{name}" 슬롯을 지울까?', en: 'Delete the "{name}" slot?' }, { name: active.name }), confirmLabel: t({ ko: '지우기', en: 'Delete' }), tone: 'destructive' })) return
                 await onSaveSlots({ defaultSlotId: file.defaultSlotId === active.id ? null : file.defaultSlotId, slots: file.slots.filter((slot) => slot.id !== active.id) })
               })()}>
-                <Trash2 className="size-4" />
-              </IconButton>
+                {t({ ko: '삭제', en: 'Delete' })}
+              </Button>
             </>
           ) : (
             <>
@@ -443,7 +440,8 @@ function SlotOverlay({ file, appearance, onApply, onNew, onSaveSlots, onClose }:
                 }}
                 className="h-8 w-36"
               />
-              <IconButton size="icon-sm" variant="ghost" label={t({ ko: '확인', en: 'Done' })} onClick={commitRename}><Check className="size-4" /></IconButton>
+              <Button type="button" size="xs" variant="ghost" onClick={() => setRenaming(null)}>{t({ ko: '취소', en: 'Cancel' })}</Button>
+              <Button type="button" size="xs" variant="default" onClick={commitRename}>{t({ ko: '저장', en: 'Save' })}</Button>
             </>
           )}
         </div>
@@ -547,9 +545,6 @@ function ChatAppearanceContent({ threadId, style, layout, view: { slotsOpen, set
             </span>
           </span>
           <span className="flex shrink-0 items-center gap-1">
-            <Button variant={dirty ? 'secondary' : 'ghost'} size="xs" disabled={!dirty || threadId === null} onClick={save}>
-              {activeSlot || !dirty ? t({ ko: '저장', en: 'Save' }) : t({ ko: '새 슬롯', en: 'New slot' })}
-            </Button>
             <IconButton size="icon-sm" variant="ghost" active={slotsOpen} aria-expanded={slotsOpen} disabled={threadId === null} onClick={() => setSlotsOpen((current) => !current)} label={t({ ko: '슬롯', en: 'Slots' })}>
               <Layers className={cn('transition-transform duration-300 ease-out motion-reduce:transition-none', slotsOpen && '-rotate-45 scale-110')} />
             </IconButton>
@@ -702,6 +697,10 @@ function ChatAppearanceContent({ threadId, style, layout, view: { slotsOpen, set
               </RowGroup>
             ) : null}
           </div>
+        </div>
+        <div className="flex shrink-0 justify-end gap-2 border-t border-line px-4 py-3" inert={slotsOpen || undefined}>
+          {onClose ? <Button size="sm" variant="ghost" onClick={onClose}>{t({ ko: '닫기', en: 'Close' })}</Button> : null}
+          <Button size="sm" variant="default" disabled={!dirty || threadId === null} onClick={save}>{t({ ko: '저장', en: 'Save' })}</Button>
         </div>
         {slotsOpen ? <SlotOverlay file={file} appearance={appearance} onApply={apply} onNew={() => void saveAsNew()} onSaveSlots={persistSlots} onClose={() => setSlotsOpen(false)} /> : null}
     </>

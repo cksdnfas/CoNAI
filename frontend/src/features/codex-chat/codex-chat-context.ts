@@ -109,7 +109,9 @@ export interface CodexChatApi {
   canUse: boolean
   isPanelOpen: boolean
   openPanel: () => void
-  closePanel: () => void
+  closePanel: () => Promise<boolean>
+  /** In-place editors may decline a panel close initiated outside the chat view. */
+  registerPanelCloseGuard: (guard: () => Promise<boolean>) => () => void
   view: CodexChatView
   setView: (view: CodexChatView) => void
   /** `undefined` follows the latest saved chat. */

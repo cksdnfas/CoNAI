@@ -18,6 +18,7 @@ test('assistant agent: proposal outcomes, page operation records, task plan and 
   const authModule = await import('../src/database/authDb')
   authModule.initializeAuthDb()
   t.after(async () => {
+    ChatTaskRunner.stop()
     authModule.getAuthDb().close()
     dbModule.closeUserSettingsDb()
     ;(await import('../src/database/init')).closeDatabase()
@@ -44,6 +45,35 @@ test('assistant agent: proposal outcomes, page operation records, task plan and 
   const threadId = CodexChatStore.createThread(null, 'agent chat', 'llm', profile.id)
   const controller = new AbortController()
   const reply = (replyId: string): ChatExecutionContext => ({ threadId, profileId: profile.id, kind: 'direct', replyId })
+
+  await t.test('shutdown stops queued task continuations and detaches resume events until restart', async (sub) => {
+    const { createProductionGracefulShutdownDependencies } = await import('../src/startup/gracefulShutdown')
+    const { notifyChatUserSend } = await import('../src/services/codex-chat/chatSendEvents')
+    let calls = 0
+    sub.mock.method(CodexChatService, 'sendMessage', async () => { calls++ })
+    sub.mock.timers.enable({ apis: ['setTimeout'] })
+    ChatTaskRunner.start()
+    const thread = CodexChatStore.createThread(null, 'shutdown task', 'llm', profile.id)
+    const task = ChatTaskStore.create(thread, 'Shutdown', [{ title: 'Pending work' }])
+    ChatTaskStore.update(task.id, { status: 'running' })
+    ChatTaskRunner.schedule(thread, 'queued', 100)
+    try {
+      await createProductionGracefulShutdownDependencies().stopGenerationQueue()
+      sub.mock.timers.tick(100)
+      await ChatTaskRunner.continue(thread, 'late completion')
+      await new Promise<void>(resolve => setImmediate(resolve))
+      assert.equal(calls, 0, 'shutdown must not start another model request')
+      ChatTaskStore.update(task.id, { status: 'waiting', wait: 'user' })
+      notifyChatUserSend(thread, false)
+      assert.equal(ChatTaskStore.find(task.id)?.status, 'waiting')
+      ChatTaskRunner.start()
+      notifyChatUserSend(thread, false)
+      assert.equal(ChatTaskStore.find(task.id)?.status, 'running')
+    } finally {
+      ChatTaskRunner.pause(thread)
+      ChatTaskRunner.start()
+    }
+  })
 
   await t.test('the next request hears what happened to recent cards', () => {
     assert.equal(proposalOutcomeNote(threadId), '')

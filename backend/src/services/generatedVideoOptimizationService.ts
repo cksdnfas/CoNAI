@@ -19,15 +19,24 @@ type OptimizationJob = {
 
 /** Originals remain canonical. A durable, leased job builds an optional playback copy. */
 export class GeneratedVideoOptimizationService {
-  private static running = false;
+  private static activeDrain: Promise<void> | undefined;
+  private static stopped = false;
   private static timer: ReturnType<typeof setInterval> | undefined;
   private static readonly LEASE_MS = 5 * 60_000;
 
   static start(): void {
     if (this.timer) return;
+    this.stopped = false;
     this.timer = setInterval(() => this.kick(), 5_000);
     this.timer.unref();
     this.kick();
+  }
+
+  static async stopAndDrain(): Promise<void> {
+    this.stopped = true;
+    clearInterval(this.timer);
+    this.timer = undefined;
+    await this.activeDrain;
   }
 
   static async enqueue(compositeHash: string, sourcePath: string): Promise<void> {
@@ -42,7 +51,10 @@ export class GeneratedVideoOptimizationService {
   }
 
   private static kick(): void {
-    void this.drain().catch((error) => console.warn('Generated video optimization worker failed:', error));
+    if (this.stopped || this.activeDrain) return;
+    this.activeDrain = this.drain()
+      .catch((error) => console.warn('Generated video optimization worker failed:', error))
+      .finally(() => { this.activeDrain = undefined; });
   }
 
   /** Only called after the caller has checked the media's access and active original file. */
@@ -59,25 +71,19 @@ export class GeneratedVideoOptimizationService {
   }
 
   private static async drain(): Promise<void> {
-    if (this.running || SystemMaintenanceLockService.isExclusiveActive()) return;
-    this.running = true;
-    try {
-      while (!SystemMaintenanceLockService.isExclusiveActive()) {
-        const now = Date.now();
-        db.prepare(`UPDATE generated_video_optimizations SET status = 'failed', last_error = 'Worker interrupted after final attempt'
+    while (!this.stopped && !SystemMaintenanceLockService.isExclusiveActive()) {
+      const now = Date.now();
+      db.prepare(`UPDATE generated_video_optimizations SET status = 'failed', last_error = 'Worker interrupted after final attempt'
           WHERE status = 'processing' AND lease_until <= ? AND attempts >= 3`).run(now);
-        const job = db.prepare(`UPDATE generated_video_optimizations
+      const job = db.prepare(`UPDATE generated_video_optimizations
           SET status = 'processing', attempts = attempts + 1, lease_until = ?
           WHERE composite_hash = (
             SELECT composite_hash FROM generated_video_optimizations
             WHERE status IN ('pending', 'processing') AND lease_until <= ? AND attempts < 3
             ORDER BY lease_until LIMIT 1
           ) RETURNING *`).get(now + this.LEASE_MS, now) as OptimizationJob | undefined;
-        if (!job) break;
-        await this.process(job);
-      }
-    } finally {
-      this.running = false;
+      if (!job) break;
+      await this.process(job);
     }
   }
 

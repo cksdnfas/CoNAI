@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { CHAT_PROFILE_TEXT_LIMITS, bothSidesSpeak, rawTokenEstimate, splitExampleDialogue } from '@conai/shared'
-import { ArrowDown, ArrowUp, Eye, EyeOff, ImageDown, MessageSquare, MessagesSquare, Plus, Trash2 } from 'lucide-react'
+import { ArrowDown, ArrowUp, Eye, EyeOff, ImageDown, MessageSquare, MessagesSquare, Plus } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { useConfirm } from '@/components/ui/confirm-dialog'
@@ -54,10 +55,10 @@ function dropEmpty(base: Draft, key: OpenItem): Partial<Draft> {
   return {}
 }
 
-/** Delete, just before Done in an editor's footer. */
+/** The inline editor's delete key, beside its close key. */
 function RemoveButton({ label, onClick }: { label?: string; onClick: () => void }) {
   const { t } = useI18n()
-  return <IconButton size="icon-sm" variant="destructive-ghost" onClick={onClick} label={label ?? t({ ko: '삭제', en: 'Delete' })}><Trash2 /></IconButton>
+  return <Button type="button" size="sm" variant="destructive-ghost" onClick={onClick} title={label}>{t({ ko: '삭제', en: 'Delete' })}</Button>
 }
 
 /** Off/on and order within its zone, in a section card's editor. */

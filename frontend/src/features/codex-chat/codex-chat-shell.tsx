@@ -282,9 +282,8 @@ export function CodexChatDock() {
         <CodexChatViewLazy
           layout="panel"
           onClose={closePanel}
-          onExpand={canOpenChatPage ? () => {
-            closePanel()
-            navigate(CODEX_CHAT_ROUTE)
+          onExpand={canOpenChatPage ? async () => {
+            if (await chat.closePanel()) navigate(CODEX_CHAT_ROUTE)
           } : undefined}
         />
       </Suspense>

@@ -123,18 +123,12 @@ export class ImageStatsModel {
       return this.cloneAutoTagStats(this.autoTagStatsCache.value);
     }
 
-    // 1. 기본 통계
-    const totalRow = db.prepare('SELECT COUNT(*) as count FROM media_metadata').get() as any;
-    const taggedRow = db.prepare(`
-      SELECT COUNT(*) as count
-      FROM media_metadata
-      WHERE auto_tags IS NOT NULL
-    `).get() as any;
-    const untaggedRow = db.prepare(`
-      SELECT COUNT(*) as count
-      FROM media_metadata
-      WHERE auto_tags IS NULL
-    `).get() as any;
+    // 1. 기본 통계. Two subqueries on purpose: each is answered from an index (the tagged count from the partial
+    // idx_auto_tag_stats_tagged), while a single COUNT(auto_tags) pass reads every row of the table.
+    const totals = db.prepare(`
+      SELECT (SELECT COUNT(*) FROM media_metadata) AS total,
+             (SELECT COUNT(*) FROM media_metadata WHERE auto_tags IS NOT NULL) AS tagged
+    `).get() as { total: number; tagged: number };
 
     // 2. Rating 분포 조회 (가장 높은 rating 기준)
     const ratingRow = db.prepare(buildRatingDistributionQuery('1 = 1')).get() as any;
@@ -172,9 +166,9 @@ export class ImageStatsModel {
 
     // 최종 결과 반환
     const stats: AutoTagStats = {
-      total_images: totalRow.count || 0,
-      tagged_images: taggedRow.count || 0,
-      untagged_images: untaggedRow.count || 0,
+      total_images: totals.total,
+      tagged_images: totals.tagged,
+      untagged_images: totals.total - totals.tagged,
       rating_distribution: {
         general: ratingRow?.general || 0,
         sensitive: ratingRow?.sensitive || 0,

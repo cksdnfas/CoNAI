@@ -50,6 +50,11 @@ export class FolderScanService {
   private static readonly MISSING_RECONCILE_WRITE_BATCH_SIZE = 500;
   private static readonly folderScans = new Map<number, Promise<void>>();
 
+  /** Producers must be stopped first; each tail includes earlier scans queued for that folder. */
+  static async drain(): Promise<void> {
+    while (this.folderScans.size > 0) await Promise.all(this.folderScans.values());
+  }
+
   /** Capture active rows before discovery, without retaining the library in JS memory. */
   private static async captureReconcileBaseline(folderId: number): Promise<void> {
     const maxId = (db.prepare('SELECT MAX(id) AS id FROM image_files WHERE folder_id = ?')

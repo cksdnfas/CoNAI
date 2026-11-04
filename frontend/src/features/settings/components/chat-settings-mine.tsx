@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { Plus } from 'lucide-react'
 import { SETTINGS_ROW_BY_ID, type ChatPageData } from '@conai/shared'
-import { IconButton } from '@/components/ui/icon-button'
+import { Button } from '@/components/ui/button'
 import { RowGroup } from '@/components/ui/row-group'
 import { ChatFlagEditorModal, ChatFlagRows, useChatFlagRoom, useChatFlags } from '@/features/codex-chat/chat-flags'
 import { ChatUserProfileEditorModal, ChatUserProfileRows, useChatUserProfiles } from '@/features/codex-chat/chat-user-profiles'
@@ -101,9 +101,10 @@ export function ChatSettingsMine({ flagsOnly = false, active = true }: { flagsOn
         heading={<ChatFilledLabel fieldId="mine.persona" />}
         count={userProfilesQuery.isSuccess ? userProfiles.length : undefined}
         actions={(
-          <IconButton size="icon-sm" variant="ghost" disabled={userProfiles.length >= CHAT_USER_PROFILE_LIMITS.perAccount} onClick={() => setUserProfileEditor({ profile: null })} label={t({ ko: '사용자 프로필 추가', en: 'Add user profile' })}>
+          <Button size="compact" variant="ghost" disabled={userProfiles.length >= CHAT_USER_PROFILE_LIMITS.perAccount} onClick={() => setUserProfileEditor({ profile: null })} aria-label={t({ ko: '사용자 프로필 추가', en: 'Add user profile' })}>
             <Plus />
-          </IconButton>
+            {t({ ko: '추가', en: 'Add' })}
+          </Button>
         )}
       >
         {userProfilesQuery.isLoading ? <SettingsRowsSkeleton rows={1} /> : null}
@@ -121,9 +122,10 @@ export function ChatSettingsMine({ flagsOnly = false, active = true }: { flagsOn
         heading={<ChatFilledLabel fieldId={isAdmin ? 'chat.flags' : 'mine.flags'} />}
         count={flagsQuery.isSuccess ? flags.length : undefined}
         actions={(
-          <IconButton size="icon-sm" variant="ghost" disabled={!canAddFlag} onClick={() => setFlagEditor({ flag: null })} label={t({ ko: '플래그 추가', en: 'Add flag' })}>
+          <Button size="compact" variant="ghost" disabled={!canAddFlag} onClick={() => setFlagEditor({ flag: null })} aria-label={t({ ko: '플래그 추가', en: 'Add flag' })}>
             <Plus />
-          </IconButton>
+            {t({ ko: '추가', en: 'Add' })}
+          </Button>
         )}
       >
         {flagsQuery.isLoading ? <SettingsRowsSkeleton rows={1} /> : null}

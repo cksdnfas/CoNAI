@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
-import { AlertTriangle, Clapperboard, Crop, Download, Expand, Grid3x3, LayoutGrid, Loader2, Pause, Play, Save, Scan } from 'lucide-react'
+import { AlertTriangle, Clapperboard, Crop, Download, Expand, Grid3x3, LayoutGrid, LoaderCircle, Pause, Play, Scan } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { MediaCard } from '@/components/common/media-card'
 import { IconButton } from '@/components/ui/icon-button'
@@ -63,9 +63,10 @@ export function SpriteResultPanel({ build, output, onOutputChange, crop, onCropC
             setEditingCrop(!editingCrop)
           }}><Crop /></IconButton>
           <DownloadPopover buildId={build.buildId} output={output} onOutputChange={onOutputChange} render={render} crop={crop} disabled={tooLarge} />
-          <IconButton variant="ghost" size="icon-sm" disabled={!canSave || saving || tooLarge} onClick={onSave} label={t({ ko: '라이브러리에 저장', en: 'Save to library' })}>
-            {saving ? <Loader2 className="animate-spin" /> : <Save />}
-          </IconButton>
+          <Button variant="default" size="sm" disabled={!canSave || saving || tooLarge} onClick={onSave}>
+            {saving ? <LoaderCircle className="animate-spin" /> : null}
+            {t({ ko: '저장', en: 'Save' })}
+          </Button>
         </div>
       </div>
 

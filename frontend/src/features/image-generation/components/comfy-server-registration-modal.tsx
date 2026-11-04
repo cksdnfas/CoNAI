@@ -1,8 +1,9 @@
 import { Button } from '@/components/ui/button'
+import { EditorFooter } from '@/components/ui/editor-footer'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Field } from '@/components/ui/field'
-import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
+import { Modal, ModalBody } from '@/components/ui/modal'
 import { Switch } from '@/components/ui/switch'
 import { ToggleRow } from '@/components/ui/toggle-row'
 import { useI18n } from '@/i18n'
@@ -32,7 +33,7 @@ export function ComfyServerRegistrationModal({
 }: ComfyServerRegistrationModalProps) {
   const { t } = useI18n()
   const title = mode === 'edit' ? t({ ko: 'ComfyUI 서버 수정', en: 'Edit ComfyUI server' }) : t({ ko: 'ComfyUI 서버 등록', en: 'Register ComfyUI server' })
-  const submitLabel = mode === 'edit' ? t({ ko: '서버 저장', en: 'Save server' }) : t({ ko: '서버 등록', en: 'Register server' })
+  const submitLabel = mode === 'edit' ? t({ ko: '저장', en: 'Save' }) : t({ ko: '등록', en: 'Register' })
   const canSelectRepresentative = form.backendType !== 'modal'
 
   return (
@@ -89,17 +90,11 @@ export function ComfyServerRegistrationModal({
           </ToggleRow>
         ) : null}
 
-        <ModalFooter>
+        <EditorFooter onSave={onSubmit} canSave={form.name.trim().length > 0 && form.endpoint.trim().length > 0} saving={isSubmitting} saveLabel={submitLabel}>
           <Button type="button" variant="ghost" onClick={onReset} disabled={isSubmitting}>
             {t({ ko: '초기화', en: 'Reset' })}
           </Button>
-          <Button type="button" variant="secondary" onClick={onClose} disabled={isSubmitting}>
-            {t({ ko: '취소', en: 'Cancel' })}
-          </Button>
-          <Button type="button" onClick={onSubmit} disabled={isSubmitting || form.name.trim().length === 0 || form.endpoint.trim().length === 0}>
-            {isSubmitting ? t({ ko: '저장 중…', en: 'Saving…' }) : submitLabel}
-          </Button>
-        </ModalFooter>
+        </EditorFooter>
       </ModalBody>
     </Modal>
   )

@@ -2,7 +2,7 @@ import { Fragment, useEffect, useMemo, useRef, useState, type KeyboardEvent, typ
 import { useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { PostBotRun, PostComment, PostDetail, PostMentionableProfile } from '@conai/shared'
-import { Check, CornerDownRight, Eye, EyeOff, MessageSquareReply, Pencil, Send, Trash2, X } from 'lucide-react'
+import { CornerDownRight, Eye, EyeOff, MessageSquareReply, Pencil, Send, Trash2, X } from 'lucide-react'
 import { ActionContextMenu, ActionMenuButton, type ActionMenuEntry } from '@/components/ui/action-menu'
 import { Button } from '@/components/ui/button'
 import { ListRow } from '@/components/ui/list-row'
@@ -285,8 +285,8 @@ function CommentRow({ comment, quoted, mentionNames, canReply, onReply, onMentio
                   if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); saveEdit() }
                   if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); setEditing(null) }
                 }} />
-              <IconButton size="icon-sm" variant="ghost" label={t({ ko: '취소', en: 'Cancel' })} onClick={() => setEditing(null)}><X /></IconButton>
-              <IconButton size="icon-sm" variant="ghost" label={t({ ko: '저장', en: 'Save' })} disabled={!editing.trim() || save.isPending} onClick={saveEdit}><Check /></IconButton>
+              <Button type="button" size="xs" variant="ghost" onClick={() => setEditing(null)}>{t({ ko: '취소', en: 'Cancel' })}</Button>
+              <Button type="button" size="xs" variant="default" disabled={!editing.trim() || save.isPending} onClick={saveEdit}>{t({ ko: '저장', en: 'Save' })}</Button>
             </div>
           ) : (
             <PostMarkdown text={comment.body} mentions={mentionNames} className="text-sm [&_.post-media]:max-w-xs" />

@@ -80,7 +80,7 @@ function ConfirmDialog({ open, title, description, confirmLabel, cancelLabel, to
 
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
             <AlertDialogPrimitive.Cancel asChild>
-              <Button type="button" variant="secondary">{cancelLabel ?? t({ ko: '취소', en: 'Cancel' })}</Button>
+              <Button type="button" variant="ghost">{cancelLabel ?? t({ ko: '취소', en: 'Cancel' })}</Button>
             </AlertDialogPrimitive.Cancel>
             <AlertDialogPrimitive.Action asChild>
               <Button

@@ -1,5 +1,6 @@
-import { KeyRound, Palette, Shield, UserPlus, Users } from 'lucide-react'
+import { KeyRound, Palette, Plus, Shield, Users } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Chip } from '@/components/ui/chip'
 import { IconButton } from '@/components/ui/icon-button'
 import { useI18n } from '@/i18n'
@@ -39,9 +40,10 @@ export function SecurityPermissionGroupListCard({
           <IconButton size="icon-sm" variant="ghost" onClick={onOpenGroupColors} label={t('securityGroupColorEditorModal.permissionGroupColors')}>
             <Palette className="h-4 w-4" />
           </IconButton>
-          <IconButton size="icon-sm" variant="ghost" onClick={onCreate} label={t({ ko: '그룹 추가', en: 'Add group' })}>
-            <UserPlus className="h-4 w-4" />
-          </IconButton>
+          <Button size="compact" variant="ghost" onClick={onCreate} aria-label={t({ ko: '그룹 추가', en: 'Add group' })}>
+            <Plus />
+            {t({ ko: '추가', en: 'Add' })}
+          </Button>
         </>
       )}
     >

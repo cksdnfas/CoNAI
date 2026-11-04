@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Download, Link2, Lock, Plus, Save } from 'lucide-react'
+import { Link2, Lock, Plus, Save } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { CHAT_DELEGATABLE_PERMISSION_KEYS, PERMISSION_CATALOG } from '@conai/shared'
 import { ToggleChip } from '@/components/ui/chip'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
@@ -83,7 +84,7 @@ export function ChatProfileToolsPanel({ open, draft, patch, defaults, skills }: 
                 <DropdownMenu>
                   <Tip content={t({ ko: '도구 프리셋 불러오기', en: 'Load a tool preset' })}>
                     <DropdownMenuTrigger asChild>
-                      <IconButton size="icon-sm" variant="ghost" disabled={presets.length === 0} label={t({ ko: '도구 프리셋 불러오기', en: 'Load a tool preset' })} tooltip={false}><Download /></IconButton>
+                      <Button size="sm" variant="ghost" disabled={presets.length === 0}>{t({ ko: '불러오기', en: 'Load' })}</Button>
                     </DropdownMenuTrigger>
                   </Tip>
                   <DropdownMenuContent align="end" className="min-w-48">

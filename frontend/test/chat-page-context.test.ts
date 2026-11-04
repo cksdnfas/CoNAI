@@ -11,6 +11,399 @@ function clearTestQueryClient(client: import('@tanstack/react-query').QueryClien
   client.clear()
 }
 
+test('resource row context and overflow menus run actions without opening the editor', async (t) => {
+  const dom = new JSDOM('<div id="root"></div>', { url: 'http://localhost/', pretendToBeVisual: true })
+  const globals = {
+    window: dom.window, document: dom.window.document, navigator: dom.window.navigator,
+    localStorage: dom.window.localStorage, sessionStorage: dom.window.sessionStorage,
+    Event: dom.window.Event, MouseEvent: dom.window.MouseEvent, CustomEvent: dom.window.CustomEvent, DOMRect: dom.window.DOMRect,
+    HTMLElement: dom.window.HTMLElement, HTMLInputElement: dom.window.HTMLInputElement,
+    Element: dom.window.Element, Node: dom.window.Node, NodeFilter: dom.window.NodeFilter,
+    MutationObserver: dom.window.MutationObserver, getComputedStyle: dom.window.getComputedStyle.bind(dom.window),
+    requestAnimationFrame: dom.window.requestAnimationFrame.bind(dom.window),
+    cancelAnimationFrame: dom.window.cancelAnimationFrame.bind(dom.window), IS_REACT_ACT_ENVIRONMENT: true,
+  }
+  const previous = Object.keys(globals).map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)] as const)
+  for (const [key, value] of Object.entries(globals)) Object.defineProperty(globalThis, key, { configurable: true, value })
+  const { act, createElement: h } = await import('react')
+  const { createRoot } = await import('react-dom/client')
+  const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query')
+  const { I18nProvider } = await import('../src/i18n')
+  const { TooltipProvider } = await import('../src/components/ui/tooltip')
+  const { ResourceRow } = await import('../src/components/ui/resource-row')
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity, gcTime: Infinity }, mutations: { gcTime: Infinity } } })
+  client.setQueryData(['runtime-language-settings'], { general: { language: 'en' } })
+  t.mock.method(globalThis, 'fetch', async () => Response.json({ success: true, data: [] }))
+  let opened = 0
+  const selected: string[] = []
+  const menu = [
+    { key: 'open', label: 'Open', onSelect: () => { opened += 1 } },
+    { key: 'duplicate', label: 'Duplicate', disabled: true, onSelect: () => selected.push('duplicate') },
+    { key: 'export', label: 'Export as JSON', onSelect: () => selected.push('export') },
+    '-' as const,
+    { key: 'delete', label: 'Delete', destructive: true, onSelect: () => selected.push('delete') },
+  ]
+  const root = createRoot(document.getElementById('root')!)
+  const render = (entries = menu) => root.render(h(QueryClientProvider, { client }, h(I18nProvider, null,
+    h(TooltipProvider, null, h(ResourceRow, { name: 'Shared preset', onOpen: () => { opened += 1 }, menu: entries })),
+  )))
+  const items = () => [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')]
+  try {
+    await act(async () => render())
+    const row = document.querySelector<HTMLElement>('[data-slot="resource-row"]')!
+    await act(async () => row.click())
+    await act(async () => document.querySelector<HTMLButtonElement>('button[aria-label="Edit"]')!.click())
+    assert.equal(opened, 2, 'the row and pencil each open once')
+
+    await act(async () => row.dispatchEvent(new dom.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 })))
+    assert.equal(opened, 2, 'right-click does not open the editor')
+    assert.deepEqual(items().map(item => item.textContent), ['Open', 'Duplicate', 'Export as JSON', 'Delete'])
+    await act(async () => items().find(item => item.textContent === 'Duplicate')!.click())
+    assert.deepEqual(selected, [], 'disabled actions do not run')
+    await act(async () => items().find(item => item.textContent === 'Export as JSON')!.click())
+    assert.deepEqual(selected, ['export'])
+    assert.equal(opened, 2)
+
+    const overflow = document.querySelector<HTMLButtonElement>('button[aria-label="Actions"]')!
+    await act(async () => {
+      overflow.dispatchEvent(new dom.window.MouseEvent('pointerdown', { bubbles: true, cancelable: true, button: 0 }))
+      overflow.click()
+    })
+    assert.deepEqual(items().map(item => item.textContent), ['Open', 'Duplicate', 'Export as JSON', 'Delete'])
+    assert.equal(opened, 2, 'overflow clicks stay in the trailing slot')
+    await act(async () => items().find(item => item.textContent === 'Delete')!.click())
+    assert.deepEqual(selected, ['export', 'delete'])
+    assert.equal(opened, 2, 'portal item clicks do not reach the row')
+
+    await act(async () => render([]))
+    assert.equal(document.querySelector('button[aria-label="Actions"]'), null)
+    await act(async () => document.querySelector<HTMLElement>('[data-slot="resource-row"]')!.click())
+    assert.equal(opened, 3, 'rows without a menu keep their click behavior')
+  } finally {
+    await act(async () => root.unmount())
+    clearTestQueryClient(client)
+    dom.window.close()
+    for (const [key, descriptor] of previous) {
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor)
+      else Reflect.deleteProperty(globalThis, key)
+    }
+  }
+})
+
+test('shared resource deletion confirms names before pending and protects cancellation and read-only resources', async (t) => {
+  const dom = new JSDOM('<div id="root"></div>', { url: 'http://localhost/', pretendToBeVisual: true })
+  const globals = {
+    window: dom.window, document: dom.window.document, navigator: dom.window.navigator,
+    localStorage: dom.window.localStorage, sessionStorage: dom.window.sessionStorage,
+    Event: dom.window.Event, CustomEvent: dom.window.CustomEvent, HTMLElement: dom.window.HTMLElement,
+    HTMLInputElement: dom.window.HTMLInputElement, HTMLTextAreaElement: dom.window.HTMLTextAreaElement,
+    Element: dom.window.Element, Node: dom.window.Node,
+    NodeFilter: dom.window.NodeFilter, MutationObserver: dom.window.MutationObserver,
+    getComputedStyle: dom.window.getComputedStyle.bind(dom.window),
+    requestAnimationFrame: dom.window.requestAnimationFrame.bind(dom.window),
+    cancelAnimationFrame: dom.window.cancelAnimationFrame.bind(dom.window), IS_REACT_ACT_ENVIRONMENT: true,
+  }
+  const previous = Object.keys(globals).map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)] as const)
+  for (const [key, value] of Object.entries(globals)) Object.defineProperty(globalThis, key, { configurable: true, value })
+  const { act, createElement: h } = await import('react')
+  const { createRoot } = await import('react-dom/client')
+  const { QueryClient, QueryClientProvider, notifyManager } = await import('@tanstack/react-query')
+  const { I18nProvider } = await import('../src/i18n')
+  const { Button } = await import('../src/components/ui/button')
+  const { ConfirmProvider } = await import('../src/components/ui/confirm-dialog')
+  const { SnackbarContext } = await import('../src/components/ui/snackbar-context')
+  const { useChatResourceDelete } = await import('../src/features/settings/components/use-chat-resource-actions')
+  const { CHAT_GENERATION_PRESETS_QUERY_KEY, CHAT_STATUS_QUERY_KEY, chatLorebookQueryKey, ownLorebookQueryKey } = await import('../src/lib/api-codex-chat')
+  const { createMemoryRouter, RouterProvider, useSearchParams } = await import('react-router-dom')
+  const { TooltipProvider } = await import('../src/components/ui/tooltip')
+  const { UnsavedSettingsGuardProvider } = await import('../src/features/settings/use-unsaved-settings-guard')
+  const { ChatLorebookEditorModal } = await import('../src/features/settings/components/chat-lorebook-editor-modal')
+  type Target = Parameters<ReturnType<typeof useChatResourceDelete>['mutate']>[0]
+  const book: import('../src/lib/api-codex-chat').ChatLorebook = {
+    id: 7, revision: '1', name: 'Named lorebook', kind: 'global', entries: [], profiles: [], createdDate: '', updatedDate: '',
+  }
+  const generation: import('../src/lib/api-codex-chat').ChatGenerationPreset = {
+    id: 8, name: 'In-use preset', instruction: '', kind: 'nai', nai: null, comfyui: null,
+    prompting: { timing: 'inline', guide: '', guideSkill: null, previousImages: 0 },
+    profiles: [{ id: 1, name: 'Linked profile' }], createdDate: '', updatedDate: '',
+  }
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity, gcTime: Infinity }, mutations: { gcTime: Infinity } } })
+  client.setQueryData(['runtime-language-settings'], { general: { language: 'en' } })
+  const requests: Array<{ url: string; method: string | undefined }> = []
+  const messages: string[] = []
+  let resolveRemoval!: (response: Response) => void
+  const removal = new Promise<Response>(resolve => { resolveRemoval = resolve })
+  let resolveDeleted!: () => void
+  const deleted = new Promise<void>(resolve => { resolveDeleted = resolve })
+  const fetchMock = t.mock.method(globalThis, 'fetch', async (url, options) => {
+    requests.push({ url: String(url), method: options?.method })
+    if (options?.method === 'DELETE') return removal
+    throw new Error('Usage unavailable')
+  })
+  function Harness({ target }: { target: Target }) {
+    const deletion = useChatResourceDelete(resolveDeleted)
+    return h(Button, { id: 'remove', disabled: deletion.isPending, onClick: () => { void deletion.mutate(target) } }, 'Delete resource')
+  }
+  const root = createRoot(document.getElementById('root')!)
+  const render = (target: Target) => root.render(h(QueryClientProvider, { client }, h(I18nProvider, null,
+    h(SnackbarContext.Provider, { value: { showSnackbar: ({ message }) => { messages.push(String(message)) }, closeSnackbar() {} } },
+      h(ConfirmProvider, null, h(Harness, { target }))),
+  )))
+  const remove = () => document.querySelector<HTMLButtonElement>('#remove')!
+  const confirm = () => document.querySelector<HTMLElement>('[role="alertdialog"]')
+  const button = (label: string) => [...document.querySelectorAll<HTMLButtonElement>('[role="alertdialog"] button')].find(node => node.textContent === label)!
+  const click = async (node: HTMLElement) => act(async () => {
+    node.click()
+    await new Promise<void>(resolve => notifyManager.schedule(resolve))
+  })
+  try {
+    await act(async () => render({ kind: 'lorebook', resource: book }))
+    await click(remove())
+    assert.match(confirm()!.textContent!, /Named lorebook/)
+    assert.equal(remove().disabled, false, 'confirmation must not mark deletion pending')
+    assert.equal(requests.length, 0)
+    await click(button('Cancel'))
+    assert.equal(confirm(), null)
+    assert.equal(requests.length, 0, 'cancellation never deletes')
+
+    await click(remove())
+    await click(button('Delete'))
+    assert.equal(remove().disabled, true, 'only a confirmed API deletion is pending')
+    assert.deepEqual(requests, [{ url: '/api/codex-chat/admin/lorebooks/7', method: 'DELETE' }])
+    await act(async () => {
+      resolveRemoval(Response.json({ success: true, data: { deleted: true } }))
+      await deleted
+      await new Promise<void>(resolve => notifyManager.schedule(resolve))
+    })
+    assert.equal(remove().disabled, false)
+
+    await act(async () => render({ kind: 'generation', resource: generation }))
+    await click(remove())
+    assert.equal(confirm(), null, 'an in-use generation preset is refused before confirmation')
+    assert.match(messages.at(-1)!, /Unlink it there first/)
+    assert.equal(remove().disabled, false)
+
+    await act(async () => render({ kind: 'skill', resource: { id: 4, name: 'Plugin skill', source: 'plugin', profiles: [] } }))
+    await click(remove())
+    assert.equal(confirm(), null, 'plugin skills cannot be deleted')
+    assert.equal(requests.length, 1, 'refused resources do not fetch or delete')
+
+    client.setQueryData(CHAT_GENERATION_PRESETS_QUERY_KEY, [{
+      ...generation, name: 'Guide preset',
+      prompting: { ...generation.prompting, guideSkill: { skillId: 4, path: 'guide.md' } },
+    }])
+    const skill: Target = { kind: 'skill', resource: { id: 4, name: 'User skill', source: 'user', profiles: [] } }
+    await act(async () => render(skill))
+    await click(remove())
+    assert.match(confirm()!.textContent!, /Guide preset/)
+    assert.equal(requests.length, 1, 'loaded usage data must be reused')
+    assert.equal(remove().disabled, false)
+    await click(button('Cancel'))
+    client.removeQueries({ queryKey: CHAT_GENERATION_PRESETS_QUERY_KEY })
+    await click(remove())
+    assert.equal(confirm(), null)
+    assert.equal(remove().disabled, false, 'a failed preflight never starts deletion')
+    assert.equal(messages.at(-1), 'Usage unavailable')
+    assert.equal(requests.filter(request => request.method === 'DELETE').length, 1)
+
+    fetchMock.mock.restore()
+    function LorebookScreen() {
+      const [params] = useSearchParams()
+      return h(UnsavedSettingsGuardProvider, null, params.has('lorebook') ? h(ChatLorebookEditorModal) : null)
+    }
+    for (const host of [
+      { path: '/chat/resources', search: '?tab=lorebooks&q=world', account: false },
+      { path: '/settings', search: '?section=chat&group=lorebooks&q=world', account: true },
+    ]) {
+      const stored = { ...book, kind: host.account ? 'account' as const : 'global' as const, connectsChats: true, folderId: 'book-7', threadId: null }
+      client.setQueryData(host.account ? ownLorebookQueryKey(7) : chatLorebookQueryKey(7), stored)
+      client.setQueryData(CHAT_STATUS_QUERY_KEY, { loreKeyLanguage: null })
+      let removed = false
+      const modalFetch = t.mock.method(globalThis, 'fetch', async (url, options) => {
+        if (options?.method === 'DELETE') {
+          assert.equal(String(url), host.account ? '/api/codex-chat/lorebooks/7' : '/api/codex-chat/admin/lorebooks/7')
+          removed = true
+          return Response.json({ success: true, data: { deleted: true } })
+        }
+        return removed
+          ? Response.json({ success: false, error: 'Not found' }, { status: 404 })
+          : Response.json({ success: true, data: stored })
+      })
+      const router = createMemoryRouter([{ path: host.path, element: h(LorebookScreen) }], {
+        initialEntries: [`${host.path}${host.search}&lorebook=${host.account ? 'account-7' : '7'}`],
+      })
+      try {
+        await act(async () => root.render(h(QueryClientProvider, { client }, h(I18nProvider, null,
+          h(SnackbarContext.Provider, { value: { showSnackbar() {}, closeSnackbar() {} } },
+            h(TooltipProvider, null, h(ConfirmProvider, null, h(RouterProvider, { router }))))))))
+        await act(async () => {
+          const input = document.querySelector<HTMLInputElement>('input[aria-label="Lorebook name"]')!
+          Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, 'value')!.set!.call(input, 'Unsaved name')
+          input.dispatchEvent(new dom.window.Event('input', { bubbles: true }))
+        })
+        assert.equal([...document.querySelectorAll<HTMLButtonElement>('button')].find(node => node.textContent === 'Save')!.disabled, false)
+        await act(async () => {
+          const actions = document.querySelector<HTMLButtonElement>('button[aria-label="Lorebook actions"]')!
+          actions.dispatchEvent(new dom.window.MouseEvent('pointerdown', { bubbles: true, cancelable: true, button: 0 }))
+        })
+        await click([...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(node => node.textContent === 'Delete')!)
+        assert.match(confirm()!.textContent!, /Named lorebook/)
+        await click(button('Delete'))
+        assert.equal(removed, true)
+        assert.equal(router.state.location.pathname + router.state.location.search, host.path + host.search, 'deletion returns to the current host list')
+        assert.equal(document.querySelector('[role="dialog"]'), null, 'successful deletion closes the lorebook modal')
+        assert.equal(confirm(), null, 'deletion bypasses the dirty-draft prompt')
+      } finally {
+        await act(async () => root.render(null))
+        router.dispose()
+        modalFetch.mock.restore()
+      }
+    }
+  } finally {
+    await act(async () => {
+      root.unmount()
+      clearTestQueryClient(client)
+      await new Promise<void>(resolve => notifyManager.schedule(resolve))
+    })
+    dom.window.close()
+    for (const [key, descriptor] of previous) {
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor)
+      else Reflect.deleteProperty(globalThis, key)
+    }
+  }
+})
+
+test('profile loading keeps one overlay and a dirty close preserves the draft until discard', async (t) => {
+  const dom = new JSDOM('<button id="opener">Open</button><div id="root"></div>', { url: 'http://localhost/', pretendToBeVisual: true })
+  const globals = {
+    window: dom.window, document: dom.window.document, navigator: dom.window.navigator,
+    localStorage: dom.window.localStorage, sessionStorage: dom.window.sessionStorage, Event: dom.window.Event,
+    HTMLElement: dom.window.HTMLElement, HTMLInputElement: dom.window.HTMLInputElement,
+    HTMLTextAreaElement: dom.window.HTMLTextAreaElement, Element: dom.window.Element,
+    Node: dom.window.Node, NodeFilter: dom.window.NodeFilter, CustomEvent: dom.window.CustomEvent,
+    MutationObserver: dom.window.MutationObserver, getComputedStyle: dom.window.getComputedStyle.bind(dom.window),
+    requestAnimationFrame: dom.window.requestAnimationFrame.bind(dom.window),
+    cancelAnimationFrame: dom.window.cancelAnimationFrame.bind(dom.window), IS_REACT_ACT_ENVIRONMENT: true,
+  }
+  const previous = Object.keys(globals).map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)] as const)
+  for (const [key, value] of Object.entries(globals)) Object.defineProperty(globalThis, key, { configurable: true, value })
+  const { act, createElement: h } = await import('react')
+  const { createRoot } = await import('react-dom/client')
+  const { MemoryRouter } = await import('react-router-dom')
+  const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query')
+  const { I18nProvider } = await import('../src/i18n')
+  const { ConfirmProvider } = await import('../src/components/ui/confirm-dialog')
+  const { TooltipProvider } = await import('../src/components/ui/tooltip')
+  const { SnackbarContext } = await import('../src/components/ui/snackbar-context')
+  const { ImagePermissionsContext, resolveImagePermissions } = await import('../src/features/auth/use-image-permissions')
+  const { ChatProfileEditorModal } = await import('../src/features/settings/components/chat-profile-editor')
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity, gcTime: Infinity }, mutations: { gcTime: Infinity } } })
+  client.setQueryData(['auth-status'], { authenticated: true, hasCredentials: true, accountId: 1, permissionKeys: ['page.settings.view'] })
+  client.setQueryData(['runtime-language-settings'], { general: { language: 'en' } })
+  t.mock.method(globalThis, 'fetch', async () => Response.json({ success: true, data: [] }))
+  const push = t.mock.method(dom.window.history, 'pushState')
+  const back = t.mock.method(dom.window.history, 'back', () => {})
+  const defaults = { style: { emoticonGroupIds: [] } } as import('../src/lib/api-codex-chat').ChatProfileDefaults
+  const initialDraft = { name: 'Unsaved copy', engine: 'codex' as const }
+  let closed = 0
+  const root = createRoot(document.getElementById('root')!)
+  const render = (placeholder?: string) => root.render(h(QueryClientProvider, { client }, h(MemoryRouter, null,
+    h(I18nProvider, null, h(SnackbarContext.Provider, { value: { showSnackbar() {}, closeSnackbar() {} } },
+      h(ImagePermissionsContext.Provider, { value: resolveImagePermissions([], false) },
+        h(TooltipProvider, null, h(ConfirmProvider, null, h(ChatProfileEditorModal, {
+          open: true, profile: null, initialDraft, defaults: placeholder ? undefined : defaults, placeholder, onClose: () => { closed++ },
+        })))))))))
+  const button = (label: string) => [...document.querySelectorAll<HTMLButtonElement>('button')].find(node => node.textContent === label)!
+  try {
+    document.getElementById('opener')!.focus()
+    await act(async () => render('Loading'))
+    const dialog = document.querySelector('[role="dialog"]')!
+    assert.ok(dialog)
+    assert.equal(push.mock.callCount(), 1)
+    await act(async () => render())
+    assert.equal(document.querySelector('[role="dialog"]'), dialog, 'hydration must not replace the focused dialog')
+    assert.equal(document.querySelector<HTMLInputElement>('input[aria-label="Name"]')!.value, 'Unsaved copy')
+    for (const placeholder of ['Load failed', 'Profile not found', undefined]) {
+      await act(async () => render(placeholder))
+      assert.equal(document.querySelector('[role="dialog"]'), dialog)
+    }
+    assert.equal(push.mock.callCount(), 1, 'body changes must not push more back-close entries')
+    assert.equal(back.mock.callCount(), 0, 'body changes must not rewind browser history')
+    await act(async () => document.querySelector<HTMLButtonElement>('button[aria-label="Close"]')!.click())
+    assert.ok(document.querySelector('[role="alertdialog"]'))
+    await act(async () => button('Keep editing').click())
+    assert.equal(closed, 0)
+    assert.equal(document.querySelector<HTMLInputElement>('input[aria-label="Name"]')!.value, 'Unsaved copy')
+    await act(async () => document.querySelector<HTMLButtonElement>('button[aria-label="Close"]')!.click())
+    await act(async () => button('Discard').click())
+    assert.equal(closed, 1)
+  } finally {
+    // Radix releases focus in a deferred unmount event; keep this DOM's globals until that work has finished.
+    const released = Promise.all([...document.querySelectorAll('[role="dialog"], [role="alertdialog"]')].map(node =>
+      new Promise<void>(resolve => node.addEventListener('focusScope.autoFocusOnUnmount', () => resolve(), { once: true }))))
+    await act(async () => { root.unmount(); await released })
+    clearTestQueryClient(client)
+    dom.window.close()
+    for (const [key, descriptor] of previous) {
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor)
+      else Reflect.deleteProperty(globalThis, key)
+    }
+  }
+})
+
+test('panel close waits for its editor guard and leaves the panel open on cancellation', async (t) => {
+  const dom = new JSDOM('<div id="root"></div>', { url: 'http://localhost/' })
+  const globals = { window: dom.window, document: dom.window.document, navigator: dom.window.navigator, IS_REACT_ACT_ENVIRONMENT: true }
+  const previous = Object.keys(globals).map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)] as const)
+  for (const [key, value] of Object.entries(globals)) Object.defineProperty(globalThis, key, { configurable: true, value })
+  const { act, createElement: h, useLayoutEffect } = await import('react')
+  const { createRoot } = await import('react-dom/client')
+  const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query')
+  const { I18nProvider } = await import('../src/i18n')
+  const { SnackbarContext } = await import('../src/components/ui/snackbar-context')
+  const { CodexChatProvider } = await import('../src/features/codex-chat/codex-chat-provider')
+  const { useCodexChat } = await import('../src/features/codex-chat/codex-chat-context')
+  const { CHAT_STATUS_QUERY_KEY } = await import('../src/lib/api-codex-chat')
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity, gcTime: Infinity } } })
+  client.setQueryData(['auth-status'], { authenticated: true, accountId: 1, permissionKeys: ['page.chat.view'] })
+  client.setQueryData(['runtime-language-settings'], { general: { language: 'en' } })
+  client.setQueryData(CHAT_STATUS_QUERY_KEY, { canUse: true })
+  t.mock.method(globalThis, 'fetch', async () => Response.json({ success: true, data: [] }))
+  let chat!: NonNullable<ReturnType<typeof useCodexChat>>
+  function Consumer() {
+    const value = useCodexChat()!
+    useLayoutEffect(() => { chat = value }, [value])
+    return null
+  }
+  const root = createRoot(document.getElementById('root')!)
+  try {
+    await act(async () => root.render(h(QueryClientProvider, { client }, h(I18nProvider, null,
+      h(SnackbarContext.Provider, { value: { showSnackbar() {}, closeSnackbar() {} } }, h(CodexChatProvider, null, h(Consumer)))))))
+    await act(async () => chat.openPanel())
+    let answer!: (discard: boolean) => void
+    const unregister = chat.registerPanelCloseGuard(() => new Promise<boolean>(resolve => { answer = resolve }))
+    const closing = chat.closePanel()
+    assert.equal(chat.isPanelOpen, true)
+    await act(async () => { answer(false); assert.equal(await closing, false) })
+    assert.equal(chat.isPanelOpen, true)
+    const confirmed = chat.closePanel()
+    await act(async () => { answer(true); assert.equal(await confirmed, true) })
+    assert.equal(chat.isPanelOpen, false)
+    unregister()
+    await act(async () => chat.openPanel())
+    await act(async () => { assert.equal(await chat.closePanel(), true) })
+    assert.equal(chat.isPanelOpen, false)
+  } finally {
+    await act(async () => root.unmount())
+    clearTestQueryClient(client)
+    dom.window.close()
+    for (const [key, descriptor] of previous) {
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor)
+      else Reflect.deleteProperty(globalThis, key)
+    }
+  }
+})
+
 test('warm and delayed-default profile drafts become ready without dirtying untouched new profiles', async (t) => {
   const dom = new JSDOM('<div id="root"></div>', { url: 'http://localhost/' })
   const globals = { window: dom.window, document: dom.window.document, navigator: dom.window.navigator, IS_REACT_ACT_ENVIRONMENT: true }
@@ -85,9 +478,138 @@ test('warm and delayed-default profile drafts become ready without dirtying unto
   }
 })
 
+test('lorebook creation preserves in-flight edits and one dialog across deferred navigation and loading', async (t) => {
+  const dom = new JSDOM('<button id="opener">Open</button><div id="root"></div>', { url: 'http://localhost/', pretendToBeVisual: true })
+  const globals = {
+    window: dom.window, document: dom.window.document, navigator: dom.window.navigator,
+    localStorage: dom.window.localStorage, sessionStorage: dom.window.sessionStorage, Event: dom.window.Event,
+    HTMLElement: dom.window.HTMLElement, HTMLInputElement: dom.window.HTMLInputElement,
+    HTMLTextAreaElement: dom.window.HTMLTextAreaElement, Element: dom.window.Element,
+    Node: dom.window.Node, NodeFilter: dom.window.NodeFilter, CustomEvent: dom.window.CustomEvent,
+    MutationObserver: dom.window.MutationObserver, getComputedStyle: dom.window.getComputedStyle.bind(dom.window),
+    requestAnimationFrame: dom.window.requestAnimationFrame.bind(dom.window),
+    cancelAnimationFrame: dom.window.cancelAnimationFrame.bind(dom.window), IS_REACT_ACT_ENVIRONMENT: true,
+  }
+  const previous = Object.keys(globals).map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)] as const)
+  for (const [key, value] of Object.entries(globals)) Object.defineProperty(globalThis, key, { configurable: true, value })
+  const { act, createElement: h } = await import('react')
+  const { createRoot } = await import('react-dom/client')
+  const { createMemoryRouter, RouterProvider, useSearchParams } = await import('react-router-dom')
+  const { QueryClient, QueryClientProvider, notifyManager } = await import('@tanstack/react-query')
+  const { I18nProvider } = await import('../src/i18n')
+  const { ConfirmProvider } = await import('../src/components/ui/confirm-dialog')
+  const { TooltipProvider } = await import('../src/components/ui/tooltip')
+  const { SnackbarContext } = await import('../src/components/ui/snackbar-context')
+  const { UnsavedSettingsGuardProvider } = await import('../src/features/settings/use-unsaved-settings-guard')
+  const { ChatLorebookEditorModal } = await import('../src/features/settings/components/chat-lorebook-editor-modal')
+  const { CHAT_STATUS_QUERY_KEY, chatLorebookQueryKey, getChatLorebook } = await import('../src/lib/api-codex-chat')
+  const { chatAdminLinks } = await import('../src/features/codex-chat/chat-admin-location')
+  function deferred<T>() {
+    let resolve!: (value: T) => void
+    const promise = new Promise<T>(done => { resolve = done })
+    return { promise, resolve }
+  }
+  const creation = deferred<Response>(), detail = deferred<Response>()
+  const navigating = deferred<void>(), navigation = deferred<void>()
+  const submitted = { id: 7, kind: 'account' as const, name: 'Submitted', entries: [], profiles: [], revision: '1', connectsChats: true, folderId: 'book-7' }
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity, gcTime: Infinity }, mutations: { gcTime: Infinity } } })
+  client.setQueryData(['runtime-language-settings'], { general: { language: 'en' } })
+  client.setQueryData(CHAT_STATUS_QUERY_KEY, { loreKeyLanguage: null })
+  t.mock.method(globalThis, 'fetch', async (url, options) => {
+    if (String(url) === '/api/codex-chat/lorebooks' && options?.method === 'POST') return creation.promise
+    if (String(url) === '/api/codex-chat/admin/lorebooks/42') return detail.promise
+    throw new Error(`Unexpected request: ${options?.method ?? 'GET'} ${url}`)
+  })
+  function Screen() {
+    const [params] = useSearchParams()
+    return h(UnsavedSettingsGuardProvider, null, params.has('lorebook') ? h(ChatLorebookEditorModal) : null)
+  }
+  const router = createMemoryRouter([{
+    path: '/settings', element: h(Screen), hydrateFallbackElement: h('div'),
+    loader: ({ request }) => {
+      if (new URL(request.url).searchParams.get('lorebook') === 'account-7') {
+        navigating.resolve()
+        return navigation.promise
+      }
+      return null
+    },
+  }], { initialEntries: ['/settings?section=chat&group=lorebooks&q=world&lorebook=new-account'] })
+  const root = createRoot(document.getElementById('root')!)
+  const nameInput = () => document.querySelector<HTMLInputElement>('input[aria-label="Lorebook name"]')!
+  const button = (label: string) => [...document.querySelectorAll<HTMLButtonElement>('button')].find(node => node.textContent === label)!
+  const changeName = (value: string) => {
+    const input = nameInput()
+    Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, 'value')!.set!.call(input, value)
+    input.dispatchEvent(new dom.window.Event('input', { bubbles: true }))
+  }
+  try {
+    document.getElementById('opener')!.focus()
+    await act(async () => root.render(h(QueryClientProvider, { client }, h(I18nProvider, null,
+      h(SnackbarContext.Provider, { value: { showSnackbar() {}, closeSnackbar() {} } },
+        h(TooltipProvider, null, h(ConfirmProvider, null, h(RouterProvider, { router }))))))))
+    const dialog = document.querySelector('[role="dialog"]')!
+    const input = nameInput()
+    const body = dialog.querySelector('fieldset')
+    await act(async () => changeName('Submitted'))
+    assert.equal(button('Save').disabled, false)
+    await act(async () => button('Save').click())
+    await act(async () => changeName('Typed during save'))
+    await act(async () => {
+      creation.resolve(Response.json({ success: true, data: submitted }))
+      await navigating.promise
+    })
+    assert.equal(nameInput().value, 'Typed during save', 'pending URL replacement must not discard later edits')
+    assert.equal(nameInput(), input, 'creation must not remount the editor before navigation lands')
+    assert.equal(dialog.querySelector('fieldset'), body, 'creation must keep the editor body mounted')
+    await act(async () => {
+      const landed = new Promise<void>(resolve => {
+        const unsubscribe = router.subscribe(state => {
+          if (new URLSearchParams(state.location.search).get('lorebook') === 'account-7') { unsubscribe(); resolve() }
+        })
+      })
+      navigation.resolve()
+      await landed
+    })
+    assert.equal(nameInput(), input, 'adopting the created key must not remount the editor')
+    assert.equal(dialog.querySelector('fieldset'), body, 'adopting the created key must keep the editor body mounted')
+    assert.equal(nameInput().value, 'Typed during save')
+    assert.equal(document.querySelector('[role="dialog"]'), dialog)
+    assert.equal(new URLSearchParams(router.state.location.search).get('q'), 'world')
+    assert.equal(new URLSearchParams(router.state.location.search).get('group'), null)
+    assert.equal(chatAdminLinks('settings').resources('lorebooks'), '/settings?section=chat&group=lorebooks')
+    await act(async () => document.querySelector<HTMLButtonElement>('button[aria-label="Close"]')!.click())
+    await act(async () => button('Discard').click())
+    await act(async () => router.navigate('/settings?section=chat&lorebook=42'))
+    const loadingDialog = document.querySelector('[role="dialog"]')!
+    await act(async () => {
+      detail.resolve(Response.json({ success: true, data: { ...submitted, id: 42, kind: 'global' } }))
+      await client.fetchQuery({ queryKey: chatLorebookQueryKey(42), queryFn: () => getChatLorebook(42) })
+      await new Promise<void>(resolve => notifyManager.schedule(resolve))
+    })
+    assert.equal(document.querySelector('[role="dialog"]'), loadingDialog, 'loading must not replace the dialog')
+    await act(async () => router.navigate('/settings?section=chat&lorebook=new'))
+    assert.equal(document.querySelector('[role="dialog"]'), loadingDialog, 'changing books must replace only editor content')
+    assert.equal(nameInput().getAttribute('aria-invalid'), 'true')
+    assert.equal(button('Save').disabled, true)
+    assert.match(document.querySelector('[aria-live="polite"]')!.textContent!, /Needs a name to save/)
+  } finally {
+    navigation.resolve()
+    const released = Promise.all([...document.querySelectorAll('[role="dialog"], [role="alertdialog"]')].map(node =>
+      new Promise<void>(resolve => node.addEventListener('focusScope.autoFocusOnUnmount', () => resolve(), { once: true }))))
+    await act(async () => { root.unmount(); await released })
+    router.dispose()
+    clearTestQueryClient(client)
+    dom.window.close()
+    for (const [key, descriptor] of previous) {
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor)
+      else Reflect.deleteProperty(globalThis, key)
+    }
+  }
+})
+
 test('editor merges preserve unrelated drafts and do not misidentify their own asset changes', async () => {
   const { buildDraft, mergeProfileDraft, mergeProfileConflict, mergeOwnProfileDraft, latestProfileConflicts, profileAssetDraft, profileSettingNeedsRefresh, rebaseProfileDraft, rebaseAppearancePatch } = await import('../src/features/settings/components/chat-profile-editor')
-  const { mergeBookDraft, latestBookConflicts } = await import('../src/features/settings/components/chat-lorebook-editor-page')
+  const { mergeBookDraft, latestBookConflicts } = await import('../src/features/settings/components/chat-lorebook-editor-modal')
   type Profile = import('../src/lib/api-codex-chat').ChatProfile
   type Book = import('../src/lib/api-codex-chat').ChatLorebook
   type Applied = import('../src/lib/api-codex-chat').ChatAssetApplyResult

@@ -166,6 +166,7 @@ function parseModelList(value: unknown) {
 
 function buildCacheKey(input: {
   serverId: number;
+  serverEndpoint: string;
   folder: string;
   modelName: string;
   pathIndex: number;
@@ -388,6 +389,7 @@ export async function resolveComfyModelThumbnail(input: ComfyModelThumbnailResol
   const normalizedModelName = normalizeComfyModelOptionPath(model.name);
   const cacheKey = buildCacheKey({
     serverId: server.id,
+    serverEndpoint: server.endpoint,
     folder,
     modelName: normalizedModelName,
     pathIndex: model.pathIndex,

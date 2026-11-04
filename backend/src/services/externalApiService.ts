@@ -131,17 +131,19 @@ export class ExternalApiService {
    * Test Civitai API connection.
    */
   static async testCivitaiConnection(apiKey: string): Promise<boolean> {
-    try {
-      const response = await fetch('https://civitai.com/api/v1/models?limit=1', {
-        headers: {
-          'Authorization': `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-        },
-      });
+    return this.testHttpConnection('https://civitai.com/api/v1/models?limit=1', {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    }, 'Civitai');
+  }
 
+  private static async testHttpConnection(url: string, headers: Record<string, string>, label: string): Promise<boolean> {
+    try {
+      const response = await fetch(url, { method: 'GET', headers });
+      await response.body?.cancel();
       return response.ok;
     } catch (error) {
-      console.error('Civitai connection test failed:', error);
+      console.error(`${label} connection test failed:`, error);
       return false;
     }
   }
@@ -150,53 +152,21 @@ export class ExternalApiService {
    * Test one OpenAI-compatible endpoint such as LM Studio or a remote provider.
    */
   static async testOpenAiCompatibleConnection(baseUrl: string, apiKey?: string | null): Promise<boolean> {
-    try {
-      const requestUrl = this.buildProviderUrl(baseUrl, '/models');
-      if (!requestUrl) {
-        return false;
-      }
-
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-      };
-      if (apiKey && apiKey.trim()) {
-        headers.Authorization = `Bearer ${apiKey.trim()}`;
-      }
-
-      const response = await fetch(requestUrl, {
-        method: 'GET',
-        headers,
-      });
-
-      return response.ok;
-    } catch (error) {
-      console.error('OpenAI-compatible connection test failed:', error);
-      return false;
-    }
+    const requestUrl = this.buildProviderUrl(baseUrl, '/models');
+    if (!requestUrl) return false;
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (apiKey && apiKey.trim()) headers.Authorization = `Bearer ${apiKey.trim()}`;
+    return this.testHttpConnection(requestUrl, headers, 'OpenAI-compatible');
   }
 
   /**
    * Test one Ollama endpoint.
    */
   static async testOllamaConnection(baseUrl: string): Promise<boolean> {
-    try {
-      const requestUrl = this.buildProviderUrl(baseUrl, '/api/tags');
-      if (!requestUrl) {
-        return false;
-      }
-
-      const response = await fetch(requestUrl, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-
-      return response.ok;
-    } catch (error) {
-      console.error('Ollama connection test failed:', error);
-      return false;
-    }
+    const requestUrl = this.buildProviderUrl(baseUrl, '/api/tags');
+    return requestUrl
+      ? this.testHttpConnection(requestUrl, { 'Content-Type': 'application/json' }, 'Ollama')
+      : false;
   }
 
   /**

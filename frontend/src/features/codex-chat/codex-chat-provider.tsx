@@ -668,7 +668,16 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
 
   const clearMessageFocus = useCallback(() => setMessageFocus(null), [])
   const openPanel = useCallback(() => setIsPanelOpen(true), [])
-  const closePanel = useCallback(() => setIsPanelOpen(false), [])
+  const panelCloseGuard = useRef<(() => Promise<boolean>) | null>(null)
+  const registerPanelCloseGuard = useCallback((guard: () => Promise<boolean>) => {
+    panelCloseGuard.current = guard
+    return () => { if (panelCloseGuard.current === guard) panelCloseGuard.current = null }
+  }, [])
+  const closePanel = useCallback(async () => {
+    if (panelCloseGuard.current && !await panelCloseGuard.current()) return false
+    setIsPanelOpen(false)
+    return true
+  }, [])
 
   const api = useMemo<CodexChatApi>(() => ({
     draftReply,
@@ -677,6 +686,7 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
     isPanelOpen,
     openPanel,
     closePanel,
+    registerPanelCloseGuard,
     view,
     setView,
     selectedThreadId,
@@ -719,7 +729,7 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
     messageFocus,
     focusMessage,
     clearMessageFocus,
-  }), [draftReply, setDraftReply, canUse, clearMessageFocus, closePanel, setDraft, keepDrafts, focusMessage, isPanelOpen, isStartingChat, currentLiveTurn, currentDrafts, messageFocus, openPanel, picks, togglePick, removePick, choice, toggleChoice, clearChoice, selectThread, settleSelection, selectedThreadId, listOpen, showList, send, regenerate, continueReply, editMessage, pendingChat, prepareChat, selectPendingGreeting, togglePendingFlag, sendPending, stop, view, draftAttachments, draftMediaAttachments, setMediaAttachments, removeMediaAttachment, toggleMediaAttachment, draftPostRefs, togglePostReference, attachmentsUploading, addAttachments, removeAttachment, uploadAttachments])
+  }), [draftReply, setDraftReply, canUse, clearMessageFocus, closePanel, registerPanelCloseGuard, setDraft, keepDrafts, focusMessage, isPanelOpen, isStartingChat, currentLiveTurn, currentDrafts, messageFocus, openPanel, picks, togglePick, removePick, choice, toggleChoice, clearChoice, selectThread, settleSelection, selectedThreadId, listOpen, showList, send, regenerate, continueReply, editMessage, pendingChat, prepareChat, selectPendingGreeting, togglePendingFlag, sendPending, stop, view, draftAttachments, draftMediaAttachments, setMediaAttachments, removeMediaAttachment, toggleMediaAttachment, draftPostRefs, togglePostReference, attachmentsUploading, addAttachments, removeAttachment, uploadAttachments])
 
   const referencePanelOpen = canUse && isPanelOpen
   const referenceApi = useMemo<CodexChatReferenceApi>(() => ({ panelOpen: referencePanelOpen, draftMediaAttachments, toggleMediaAttachment, draftPostRefs, togglePostReference, focusMessage }), [referencePanelOpen, draftMediaAttachments, toggleMediaAttachment, draftPostRefs, togglePostReference, focusMessage])

@@ -1,10 +1,10 @@
 import { useEffect, useId, useRef, useState, type ComponentProps } from 'react'
 import { composeCharacterAppearance } from '@conai/shared'
 import { Star, UserRound, UserRoundPlus } from 'lucide-react'
-import { Button } from '@/components/ui/button'
 import { Field } from '@/components/ui/field'
 import { IconButton } from '@/components/ui/icon-button'
-import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
+import { Modal, ModalBody } from '@/components/ui/modal'
+import { EditorFooter } from '@/components/ui/editor-footer'
 import { Select } from '@/components/ui/select'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { SwitchLine } from '@/components/ui/switch-line'
@@ -236,13 +236,7 @@ export function CharacterSettingLoadButton({
               </div>
             ) : null}
           </ModalBody>
-          <ModalFooter>
-            <span className="flex-1" />
-            <Button type="button" variant="ghost" disabled={loading} onClick={() => setStep(null)}>{t({ ko: '취소', en: 'Cancel' })}</Button>
-            <Button type="button" disabled={loading} aria-busy={loading || undefined} onClick={() => void finish({ ...step, referenceTarget: chosenReference })}>
-              {t({ ko: '불러오기', en: 'Load' })}
-            </Button>
-          </ModalFooter>
+          <EditorFooter onSave={() => void finish({ ...step, referenceTarget: chosenReference })} saving={loading} saveLabel={t({ ko: '불러오기', en: 'Load' })} />
         </Modal>
       ) : null}
     </>

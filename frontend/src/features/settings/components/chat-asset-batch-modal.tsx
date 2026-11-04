@@ -2,11 +2,12 @@ import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, Check, ImageOff, Plus, RefreshCw, ScanEye, Square, Wand, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { EditorFooter } from '@/components/ui/editor-footer'
 import { Chip, ToggleChip } from '@/components/ui/chip'
 import { Field } from '@/components/ui/field'
 import { IconButton } from '@/components/ui/icon-button'
 import { Spinner } from '@/components/ui/loading-state'
-import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
+import { Modal, ModalBody } from '@/components/ui/modal'
 import { CHAT_DOCK_INSET } from './use-settings-editor-chat-page'
 import { MediaCard } from '@/components/common/media-card'
 import { Select } from '@/components/ui/select'
@@ -298,7 +299,7 @@ export function ChatAssetBatchModal({ target, initialBatchId, referenceOnly = fa
         })}
       </div>
     </ModalBody>
-    <ModalFooter separated className="mt-4"><Button size="sm" disabled={!selected || busy} onClick={() => apply.mutate()}>{apply.isPending ? <Spinner /> : null}{t({ ko: '적용 {count}', en: 'Apply {count}' }, { count: selected })}</Button></ModalFooter>
+    <EditorFooter onSave={() => apply.mutate()} canSave={Boolean(selected) && !busy} saving={apply.isPending}><span className="text-xs tabular-nums text-muted-foreground">{t({ ko: '{count}개 선택', en: '{count} selected' }, { count: selected })}</span></EditorFooter>
     <MediaLightbox items={safety.visibleItems} index={lightboxIndex} onIndexChange={setLightboxIndex} onClose={() => setLightboxIndex(null)} />
   </Modal>
 }

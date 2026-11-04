@@ -388,7 +388,7 @@ export function AudioSidebar({
                   onClick={() => startDraft({ kind: 'effect', folderId: null })}
                   {...dropProps('loose', hasEffect, (event) => moveDragged(event, null))}
                 />
-                <IconButton variant="ghost" size="icon-xs" label={t({ ko: '그룹 추가', en: 'Add group' })} onClick={() => startDraft({ kind: 'folder' })}><FolderPlus /></IconButton>
+                <IconButton variant="ghost" size="icon-sm" label={t({ ko: '그룹 추가', en: 'Add group' })} onClick={() => startDraft({ kind: 'folder' })}><FolderPlus /></IconButton>
               </div>
             ) : null}
           </>
@@ -419,8 +419,8 @@ export function AudioSidebarFooter({ canEdit, onNewProject, onOpenSettings }: { 
   const { t } = useI18n()
   return (
     <>
-      {canEdit ? <IconButton variant="ghost" size="icon-sm" label={t({ ko: '새 프로젝트', en: 'New project' })} onClick={onNewProject}><FolderPlus /></IconButton> : null}
       <IconButton variant="ghost" size="icon-sm" label={t({ ko: '오디오 설정', en: 'Audio settings' })} onClick={onOpenSettings}><SlidersHorizontal /></IconButton>
+      {canEdit ? <Button variant="ghost" size="compact" onClick={onNewProject}><Plus />{t({ ko: '새 프로젝트', en: 'New project' })}</Button> : null}
     </>
   )
 }

@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
 import { RotateCcw } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { EditorFooter } from '@/components/ui/editor-footer'
 import { Input } from '@/components/ui/input'
 import { Field } from '@/components/ui/field'
 import { IconButton } from '@/components/ui/icon-button'
-import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
+import { Modal, ModalBody } from '@/components/ui/modal'
 import { useI18n } from '@/i18n'
 import { DEFAULT_ARTIST_LINK_URL_TEMPLATE } from '@/lib/settings-defaults'
 
@@ -45,20 +45,12 @@ export function ArtistPromptLinkSettingsModal({ open, initialTemplate, isSaving 
           />
         </Field>
 
-        <ModalFooter className="justify-between">
+        <EditorFooter onSave={() => onSave(draft.trim() || DEFAULT_ARTIST_LINK_URL_TEMPLATE)} saving={isSaving}>
           <IconButton variant="ghost" onClick={() => setDraft(DEFAULT_ARTIST_LINK_URL_TEMPLATE)} label={t('images.components.image.list.image.list.column.floating.control.reset.to.default')}>
             <RotateCcw className="h-4 w-4" />
           </IconButton>
 
-          <div className="flex items-center gap-2">
-            <Button type="button" variant="secondary" onClick={onClose}>
-              {t({ ko: '취소', en: 'Cancel' })}
-            </Button>
-            <Button type="button" onClick={() => onSave(draft.trim() || DEFAULT_ARTIST_LINK_URL_TEMPLATE)} disabled={isSaving}>
-              {t({ ko: '저장', en: 'Save' })}
-            </Button>
-          </div>
-        </ModalFooter>
+        </EditorFooter>
       </ModalBody>
     </Modal>
   )

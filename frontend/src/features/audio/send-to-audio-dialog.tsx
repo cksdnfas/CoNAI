@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react'
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
 import { Field } from '@/components/ui/field'
-import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
+import { Modal, ModalBody } from '@/components/ui/modal'
+import { EditorFooter } from '@/components/ui/editor-footer'
 import { Select } from '@/components/ui/select'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Tip } from '@/components/ui/tooltip'
@@ -88,13 +89,18 @@ export function SendToAudioDialog({ files, onClose }: { files: Array<{ id: strin
           {groups.hasNextPage ? <Button variant="ghost" size="sm" disabled={groups.isFetching} onClick={() => void groups.fetchNextPage()}>{t({ ko: '효과음 더 불러오기', en: 'Load more effects' })}</Button> : null}
         </Field>
       </ModalBody>
-      <ModalFooter separated className="mt-4">
+      <EditorFooter
+        onSave={() => void send()}
+        canSave={Boolean(projectId)}
+        saving={busy}
+        saveLabel={t({ ko: '{count}개 보내기', en: 'Send {count}' }, { count: files?.length ?? 0 })}
+      >
         <Tip content={projects.isSuccess && projectItems.length === 0 ? t({ ko: '오디오 탭에서 프로젝트를 먼저 만들어줘.', en: 'Create a project in the Audio tab first.' }) : null}>
           <span className="inline-flex" tabIndex={projects.isSuccess && projectItems.length === 0 ? 0 : undefined}>
-            <Button disabled={busy || !projectId} onClick={() => void send()}>{t({ ko: '{count}개 보내기', en: 'Send {count}' }, { count: files?.length ?? 0 })}</Button>
+            {projects.isSuccess && projectItems.length === 0 ? t({ ko: '먼저 프로젝트를 만들어줘.', en: 'Create a project first.' }) : null}
           </span>
         </Tip>
-      </ModalFooter>
+      </EditorFooter>
     </Modal>
   )
 }

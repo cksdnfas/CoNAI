@@ -90,7 +90,8 @@ export function usePageSaveShortcut(onSave: (() => void) | undefined, saving = f
   useEffect(() => {
     if (!enabled) return
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (!(event.ctrlKey || event.metaKey) || event.altKey || (event.key.toLowerCase() !== 's' && event.code !== 'KeyS')) return
+      // Shift+Mod+S is "save as" where a page offers it; this plain save never takes it over.
+      if (!(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey || (event.key.toLowerCase() !== 's' && event.code !== 'KeyS')) return
       if (event.defaultPrevented || (event.target instanceof Element && event.target.closest('[data-chat-dock]')) || hasOpenDialog()) return
       event.preventDefault()
       if (event.repeat || savingRef.current || timerRef.current !== null) return

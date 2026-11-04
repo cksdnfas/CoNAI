@@ -137,10 +137,10 @@ function SurfaceLayoutControls({ surface, wide }: { surface: GenerationLayoutSur
         <RotateCcw />
       </IconButton>
       <span className="mx-1 h-5 w-px bg-line" aria-hidden />
-      <Button type="button" variant="ghost" size="sm" disabled={layout.saving} onClick={layout.cancelEditing}>
+      <Button type="button" variant="ghost" size="xs" disabled={layout.saving} onClick={layout.cancelEditing}>
         {t({ ko: '취소', en: 'Cancel' })}
       </Button>
-      <Button type="button" size="sm" disabled={layout.saving} onClick={layout.save}>
+      <Button type="button" size="xs" disabled={layout.saving} onClick={layout.save}>
         {t({ ko: '저장', en: 'Save' })}
       </Button>
 

@@ -9,7 +9,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { IconButton } from '@/components/ui/icon-button'
 import { SidebarGroupLabel, SidebarItem, SidebarNav } from '@/components/ui/sidebar'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tip } from '@/components/ui/tooltip'
@@ -57,9 +56,6 @@ export function PromptSidebar({
       <SidebarGroupLabel
         actions={(
           <>
-            <IconButton size="icon-xs" variant="ghost" onClick={() => onCreateGroup?.()} disabled={!onCreateGroup} label={t('prompts.components.prompt.sidebar.add.group')}>
-              <Plus />
-            </IconButton>
             <DropdownMenu>
               <Tip content={moreLabel}>
                 <DropdownMenuTrigger asChild>
@@ -92,6 +88,10 @@ export function PromptSidebar({
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
+            <Button type="button" variant="ghost" size="compact" onClick={() => onCreateGroup?.()} disabled={!onCreateGroup} aria-label={t('prompts.components.prompt.sidebar.add.group')}>
+              <Plus />
+              {t({ ko: '추가', en: 'Add' })}
+            </Button>
           </>
         )}
       >

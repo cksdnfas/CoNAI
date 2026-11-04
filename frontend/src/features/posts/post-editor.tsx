@@ -8,6 +8,7 @@ import { FieldTabs } from '@/components/common/field-tabs'
 import type { PlainTextEditorHandle } from '@/components/common/plain-text-editor'
 import { SaveConflictAlert } from '@/components/common/save-conflict-alert'
 import { Button } from '@/components/ui/button'
+import { FloatingSaveBar } from '@/components/ui/floating-save-bar'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Chip } from '@/components/ui/chip'
 import { useConfirm } from '@/components/ui/confirm-dialog'
@@ -24,6 +25,7 @@ import { useEditorPageGuard } from '@/features/settings/use-unsaved-settings-gua
 import { invalidatePostScope, createPost, getPost, updatePost } from '@/lib/api-posts'
 import { ApiRequestError } from '@/lib/api-request'
 import { getErrorMessage } from '@/lib/error-message'
+import { usePageSaveShortcut } from '@/lib/keyboard-shortcut'
 import { replaceExactText, type ExactTextEdit } from '@/lib/exact-text-edits'
 import { PostAttachPicker, type AttachTab } from './post-attach-picker'
 import { mediaHashesOf, PostMarkdown } from './post-markdown'
@@ -213,6 +215,23 @@ export function PostEditor({ post, categories, defaultCategoryId, onSaved, onCan
   const dirty = base
     ? title !== base.title || body !== base.body || categoryId !== base.categoryId || tags.join('\u0000') !== base.tags.join('\u0000') || status !== base.status || commentMode !== base.commentMode || (isAdmin && pinned !== base.pinned)
     : Boolean(title.trim() || body.trim())
+  usePageSaveShortcut(() => { if (title.trim()) save.mutate() }, save.isPending)
+  const revert = async () => {
+    if (!base || save.isPending || !await confirm({
+      title: t({ ko: '변경 되돌리기', en: 'Revert changes' }),
+      description: t({ ko: '저장하지 않은 변경을 되돌리고 저장된 글을 불러올까?', en: 'Discard unsaved changes and restore the saved post?' }),
+      confirmLabel: t({ ko: '되돌리기', en: 'Revert' }),
+      tone: 'destructive',
+    })) return
+    setTitle(base.title)
+    setBody(base.body)
+    setCategoryId(base.categoryId)
+    setTags(base.tags)
+    setStatus(base.status)
+    setCommentMode(base.commentMode)
+    setPinned(base.pinned)
+    setBodyOffset(0)
+  }
   useEditorPageGuard(dirty, t({ ko: '글에 저장하지 않은 변경이 있어. 나가면 사라져.', en: 'This post has unsaved changes that will be lost.' }), leavesPostEditor, allowLeave)
   const cancel = async () => {
     if (dirty && !(await confirm({
@@ -364,8 +383,8 @@ export function PostEditor({ post, categories, defaultCategoryId, onSaved, onCan
         ) : null}
         <span className="flex-1" />
         <Button variant="ghost" onClick={() => void cancel()} disabled={save.isPending}>{t({ ko: '취소', en: 'Cancel' })}</Button>
-        <Button onClick={() => save.mutate()} disabled={!title.trim() || save.isPending}>{t({ ko: '저장', en: 'Save' })}</Button>
       </div>
+      {!base || dirty || save.isPending ? <FloatingSaveBar label={t({ ko: '저장 안 한 변경', en: 'Unsaved changes' })} saving={save.isPending} canSave={Boolean(title.trim())} onSave={() => save.mutate()} onDiscard={base ? () => void revert() : undefined} /> : null}
 
       {picker ? <PostAttachPicker initialTab={picker} onClose={() => setPicker(null)} onInsert={(lines) => { setPicker(null); insert(lines) }} /> : null}
     </div>

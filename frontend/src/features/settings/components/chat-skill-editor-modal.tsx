@@ -22,8 +22,6 @@ import {
   CHAT_SKILLS_QUERY_KEY,
   chatSkillQueryKey,
   createChatSkill,
-  deleteChatSkill,
-  downloadChatSkillExport,
   getChatSkill,
   isChatRevisionConflict,
   listChatGenerationPresets,
@@ -34,6 +32,7 @@ import {
 } from '@/lib/api-codex-chat'
 import { PLUGINS_QUERY_KEY, listPlugins } from '@/lib/api-plugins'
 import { getErrorMessage } from '@/lib/error-message'
+import { useChatResourceDelete, useChatSkillExport } from './use-chat-resource-actions'
 import {
   EMPTY_SKILL,
   draftSnapshot,
@@ -168,34 +167,8 @@ export function ChatSkillEditorModal({ open, skillId, initial, imported, onClose
       showSnackbar({ message: getErrorMessage(error, t({ ko: '저장하지 못했어.', en: 'Could not save.' })), tone: 'error' })
     },
   })
-  const deleteMutation = useMutation({
-    mutationFn: () => deleteChatSkill(base?.id ?? 0),
-    onSuccess: async () => {
-      await refresh()
-      onClose()
-    },
-    onError: (error) => showSnackbar({ message: getErrorMessage(error, t({ ko: '삭제하지 못했어.', en: 'Could not delete.' })), tone: 'error' }),
-  })
-  const exportMutation = useMutation({
-    mutationFn: () => downloadChatSkillExport(base?.id ?? 0, base?.name ?? ''),
-    onError: (error) => showSnackbar({ message: getErrorMessage(error, t({ ko: '내보내지 못했어.', en: 'Could not export.' })), tone: 'error' }),
-  })
-
-  const handleDelete = async () => {
-    const guides = guidedBy(null)
-    const confirmed = await confirm({
-      title: t({ ko: '스킬 삭제', en: 'Delete skill' }),
-      description: [
-        base && base.profiles.length > 0
-          ? t({ ko: '이 스킬을 지우면 연결한 프로필 {count}개에서도 빠져.', en: 'Deleting this skill also unlinks it from {count} profiles.' }, { count: base.profiles.length })
-          : t({ ko: '이 스킬을 지울까?', en: 'Delete this skill?' }),
-        guides.length > 0 ? t({ ko: '생성 프리셋 {names}의 가이드도 찾을 수 없게 돼.', en: 'The guide of generation presets {names} will be gone too.' }, { names: guides.join(', ') }) : '',
-      ].filter(Boolean).join(' '),
-      confirmLabel: t({ ko: '삭제', en: 'Delete' }),
-      tone: 'destructive',
-    })
-    if (confirmed) deleteMutation.mutate()
-  }
+  const deleteMutation = useChatResourceDelete(onClose)
+  const exportMutation = useChatSkillExport()
   const loadLatest = async (latest: ChatSkill) => {
     const confirmed = await confirm({
       title: t({ ko: '최신 내용 불러오기', en: 'Load the latest' }),
@@ -431,7 +404,7 @@ export function ChatSkillEditorModal({ open, skillId, initial, imported, onClose
     >
       {body()}
       <EditorFooter
-        onDelete={base && !readOnly ? () => void handleDelete() : undefined}
+        onDelete={base && !readOnly ? () => deleteMutation.mutate({ kind: 'skill', resource: base }) : undefined}
         deleting={deleteMutation.isPending}
         onSave={readOnly ? undefined : save}
         canSave={canSave}
@@ -439,7 +412,7 @@ export function ChatSkillEditorModal({ open, skillId, initial, imported, onClose
         saveLabel={base ? undefined : t({ ko: '만들기', en: 'Create' })}
       >
         {base ? (
-          <IconButton size="icon-sm" variant="ghost" disabled={exportMutation.isPending} onClick={() => exportMutation.mutate()} label={dirty ? t({ ko: 'Agent Skills ZIP으로 내보내기 (저장된 내용)', en: 'Export as Agent Skills ZIP (saved contents)' }) : t({ ko: 'Agent Skills ZIP으로 내보내기', en: 'Export as Agent Skills ZIP' })}>
+          <IconButton size="icon-sm" variant="ghost" disabled={exportMutation.isPending} onClick={() => exportMutation.mutate(base)} label={dirty ? t({ ko: 'Agent Skills ZIP으로 내보내기 (저장된 내용)', en: 'Export as Agent Skills ZIP (saved contents)' }) : t({ ko: 'Agent Skills ZIP으로 내보내기', en: 'Export as Agent Skills ZIP' })}>
             <Download />
           </IconButton>
         ) : null}

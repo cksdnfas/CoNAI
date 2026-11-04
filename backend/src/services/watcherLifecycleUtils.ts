@@ -23,6 +23,29 @@ export function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+export async function restartWatcherAfterDelay(
+  pending: Map<number, AbortController>,
+  id: number,
+  delayMs: number,
+  stop: () => Promise<void>,
+  start: (signal: AbortSignal) => Promise<void>,
+): Promise<void> {
+  // stop cancels older restarts; register this one before awaiting the close.
+  const closing = stop();
+  const controller = new AbortController();
+  pending.set(id, controller);
+  try {
+    await closing;
+    await sleep(delayMs);
+    if (controller.signal.aborted) return;
+    await start(controller.signal);
+  } catch (error) {
+    if (!controller.signal.aborted) throw error;
+  } finally {
+    if (pending.get(id) === controller) pending.delete(id);
+  }
+}
+
 export async function waitForChokidarReady(options: WaitForChokidarReadyOptions): Promise<void> {
   const { watcher, signal, timeoutMs = DEFAULT_WATCHER_READY_TIMEOUT_MS, timeoutMessage, onReady, onError } = options;
 

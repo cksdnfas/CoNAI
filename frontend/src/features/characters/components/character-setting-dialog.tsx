@@ -5,13 +5,13 @@ import { ChevronLeft, ChevronRight, Copy, FolderInput, Image, Link2, Smile, Spar
 import { EditorTitleInput } from '@/components/common/editor-page'
 import { TextTabs } from '@/components/common/text-tabs'
 import { ActionMenuButton } from '@/components/ui/action-menu'
-import { Button } from '@/components/ui/button'
+import { EditorFooter } from '@/components/ui/editor-footer'
 import { Chip } from '@/components/ui/chip'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { ErrorState } from '@/components/ui/error-state'
 import { IconButton } from '@/components/ui/icon-button'
 import { LoadingState } from '@/components/ui/loading-state'
-import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
+import { Modal, ModalBody } from '@/components/ui/modal'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { ChatProfileAvatar } from '@/features/codex-chat/chat-profile-avatar'
@@ -60,7 +60,7 @@ export function CharacterSettingDialog({ editor, folders, items, total, onLoadMo
   const confirm = useConfirm()
   const { showSnackbar } = useSnackbar()
   const [moving, setMoving] = useState(false)
-  const footer = useRef<HTMLDivElement | null>(null)
+  const footer = useRef<HTMLSpanElement | null>(null)
   const { base, draft, busy } = editor
   const save = () => { if (canEdit && editor.dirty && editor.canSave && !busy) void editor.save().catch(() => undefined) }
   const work = base?.copyright ? localizedTagName(language, base.copyright, base.copyrightTranslated) : ''
@@ -124,32 +124,31 @@ export function CharacterSettingDialog({ editor, folders, items, total, onLoadMo
       leading={editor.ready ? <ChatProfileAvatar name={draft.name || '?'} imageUrl={draft.avatarHash ? characterImageUrl(draft.avatarHash) : null} avatarCrop={draft.avatarCrop} engine="llm" size="xl" className="size-10" /> : undefined}
       description={editor.ready ? [work, t({ ko: '의상 {count}벌', en: '{count} outfits' }, { count: draft.outfits.length })].filter(Boolean).join(' · ') : undefined}
       status={synced ? <Chip tone="primary" size="sm"><Link2 />{t({ ko: '프로필 {count}개와 동기화', en: 'Synced with {count} profiles' }, { count: synced })}</Chip> : undefined}
-      onSave={canEdit ? save : undefined}
-      onClose={onClose}
-    >
-      {/* Per setting: its runs, counts and pickers start fresh while the dialog, its footer and focus stay. */}
-      <CharacterSettingBody key={editor.session} editor={editor} canEdit={canEdit} admin={admin} tab={tab} onTabChange={onTabChange} />
-      <ModalFooter ref={footer} separated>
-        {index >= 0 ? <>
-          <IconButton variant="ghost" size="icon-sm" label={t({ ko: '이전 설정', en: 'Previous setting' })} disabled={busy || index === 0} onClick={() => void step(-1)}><ChevronLeft /></IconButton>
-          <span className="min-w-14 text-center text-xs text-muted-foreground tabular-nums">{index + 1} / {total}</span>
-          <IconButton variant="ghost" size="icon-sm" label={t({ ko: '다음 설정', en: 'Next setting' })} disabled={busy || (atEnd && !onLoadMore)} onClick={() => void step(1)}><ChevronRight /></IconButton>
-        </> : null}
+      actions={editor.ready ? <>
         {canEdit && base ? <IconButton variant="ghost" size="icon-sm" active={base.favorite} disabled={busy} label={base.favorite ? t({ ko: '즐겨찾기 해제', en: 'Unfavorite' }) : t({ ko: '즐겨찾기', en: 'Favorite' })} onClick={() => onToggleFavorite(base)}><Star className={base.favorite ? 'fill-current' : undefined} /></IconButton> : null}
-        {editor.ready ? <ActionMenuButton label={t({ ko: '외형 설정 작업', en: 'Setting actions' })} entries={[
+        <ActionMenuButton label={t({ ko: '외형 설정 작업', en: 'Setting actions' })} entries={[
           canEdit ? { key: 'move', label: t({ ko: '다른 폴더로 옮기기', en: 'Move to…' }), icon: FolderInput, disabled: busy, onSelect: () => setMoving(true) } : null,
           { key: 'copy', label: t({ ko: '태그 복사', en: 'Copy tags' }), icon: Copy, onSelect: () => void copy() },
           canEdit && base ? '-' : null,
           // Failures are already reported by the editor (preview and delete snackbars).
           canEdit && base ? { key: 'delete', label: t({ ko: '삭제', en: 'Delete' }), icon: Trash2, destructive: true, disabled: busy || editor.deleting, onSelect: () => void editor.remove(true).catch(() => undefined) } : null,
-        ]} /> : null}
-        <span className="flex-1" />
+        ]} />
+      </> : undefined}
+      onSave={canEdit ? save : undefined}
+      onClose={onClose}
+    >
+      {/* Per setting: its runs, counts and pickers start fresh while the dialog, its footer and focus stay. */}
+      <CharacterSettingBody key={editor.session} editor={editor} canEdit={canEdit} admin={admin} tab={tab} onTabChange={onTabChange} />
+      <EditorFooter onSave={canEdit && editor.ready ? save : undefined} canSave={editor.dirty && editor.canSave && !busy} saving={editor.saving} onRevert={canEdit && editor.ready ? () => void revert() : undefined} canRevert={editor.dirty && !busy}>
+        <span ref={footer} className="contents">{index >= 0 ? <>
+          <IconButton variant="ghost" size="icon-sm" label={t({ ko: '이전 설정', en: 'Previous setting' })} disabled={busy || index === 0} onClick={() => void step(-1)}><ChevronLeft /></IconButton>
+          <span className="min-w-14 text-center text-xs text-muted-foreground tabular-nums">{index + 1} / {total}</span>
+          <IconButton variant="ghost" size="icon-sm" label={t({ ko: '다음 설정', en: 'Next setting' })} disabled={busy || (atEnd && !onLoadMore)} onClick={() => void step(1)}><ChevronRight /></IconButton>
+        </> : null}</span>
         {canEdit && editor.ready ? <>
           <span className="hidden text-xs text-muted-foreground sm:inline" aria-live="polite">{editor.dirty ? t({ ko: '저장 안 한 변경 · {keys}', en: 'Unsaved changes · {keys}' }, { keys: formatShortcut('Mod+S') }) : t({ ko: '저장됨', en: 'Saved' })}</span>
-          <Button size="sm" variant="ghost" disabled={!editor.dirty || busy || editor.saving} onClick={() => void revert()}>{t({ ko: '되돌리기', en: 'Revert' })}</Button>
-          <Button size="sm" disabled={!editor.dirty || !editor.canSave || busy} aria-busy={editor.saving} onClick={save}>{t({ ko: '저장', en: 'Save' })}</Button>
         </> : null}
-      </ModalFooter>
+      </EditorFooter>
       {moving ? <CharacterFolderPickerModal title={t({ ko: '폴더 고르기', en: 'Choose folder' })} folders={folders} value={draft.folderId} submitLabel={t({ ko: '선택', en: 'Select' })} onPick={(folderId) => { editor.patch({ folderId }); setMoving(false) }} onClose={() => setMoving(false)} /> : null}
     </Modal>
   )

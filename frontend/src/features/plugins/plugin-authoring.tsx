@@ -1,14 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useLocation, useSearchParams } from 'react-router-dom'
-import { Code, FilePlus, Plus, RefreshCw, Save, Trash2, Upload } from 'lucide-react'
+import { Code, FilePlus, Plus, RefreshCw, Upload } from 'lucide-react'
 import type { ChatPageAction, ChatPageData, PluginDraft, PluginPackageReview } from '@conai/shared'
 import { Button } from '@/components/ui/button'
+import { EditorFooter } from '@/components/ui/editor-footer'
 import { IconButton } from '@/components/ui/icon-button'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Input } from '@/components/ui/input'
 import { ListRow } from '@/components/ui/list-row'
-import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
+import { Modal, ModalBody } from '@/components/ui/modal'
 import { RowGroup } from '@/components/ui/row-group'
 import { ResourceRow } from '@/components/ui/resource-row'
 import { useConfirm } from '@/components/ui/confirm-dialog'
@@ -89,7 +90,7 @@ export function PluginAuthoring({ page }: { page?: PluginManagementPage }) {
         <Input aria-label={t({ ko: '플러그인 이름', en: 'Plugin name' })} placeholder={t({ ko: '플러그인 이름', en: 'Plugin name' })} value={name} onChange={event => setName(event.target.value)} />
         {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
       </ModalBody>
-      <ModalFooter><Button disabled={busy || !pluginId} onClick={() => void run(() => create(pluginId, name))}>{t({ ko: '초안 만들기', en: 'Create draft' })}</Button></ModalFooter>
+      <EditorFooter canSave={Boolean(pluginId)} saving={busy} onSave={() => void run(() => create(pluginId, name))} saveLabel={t({ ko: '만들기', en: 'Create' })} />
     </Modal>
     {selected && draft.data ? <PluginDraftEditor key={selected} initial={draft.data} remoteRevision={draft.data.revision} onClose={() => open(null)} /> : null}
     {selected && draft.error ? <p role="alert" className="text-sm text-destructive">{getErrorMessage(draft.error, t({ ko: '초안을 읽지 못했어.', en: 'Could not load draft.' }))} <Button variant="ghost" onClick={() => open(null)}>{t({ ko: '닫기', en: 'Close' })}</Button></p> : null}
@@ -261,20 +262,17 @@ function PluginDraftEditor({ initial, remoteRevision, onClose }: { initial: Plug
           <div className="mb-2 flex items-center gap-2">
             <span className="min-w-0 flex-1 truncate font-mono text-xs">{selectedFile || t({ ko: '파일을 선택해줘', en: 'Select a file' })}{dirty ? ' *' : ''}</span>
             <IconButton variant="ghost" size="icon-sm" disabled={busy || dirty} label={t({ ko: '최신 소스 읽기', en: 'Reload source' })} onClick={() => void run(() => load(document?.target ?? 'plugin.json'))}><RefreshCw /></IconButton>
-            <IconButton variant="ghost" size="icon-sm" disabled={busy || dirty || !selectedFile} label={t({ ko: '초안 파일 삭제', en: 'Delete draft file' })} onClick={() => void run(removeFile)}><Trash2 /></IconButton>
-            <IconButton size="icon-sm" variant="secondary" label={t({ ko: '파일 저장', en: 'Save file' })} disabled={busy || !dirty} onClick={() => void run(save)}><Save /></IconButton>
+            <Button variant="destructive-ghost" size="sm" disabled={busy || dirty || !selectedFile} onClick={() => void run(removeFile)}>{t({ ko: '파일 삭제', en: 'Delete file' })}</Button>
           </div>
           {document ? <PlainTextEditor value={document.text} onChange={changeText} fileName={document.target} heightClassName="h-[45vh] min-h-40" /> : null}
         </div>
       </div>
       {review ? <PluginPackageReviewSummary review={review} /> : null}
     </ModalBody>
-    <ModalFooter>
-      <Button variant="destructive-ghost" disabled={busy} onClick={() => void run(removeDraft)}>{t({ ko: '초안 삭제', en: 'Delete draft' })}</Button>
-      <span className="flex-1" />
+    <EditorFooter onDelete={() => void run(removeDraft)} deleteLabel={t({ ko: '초안 삭제', en: 'Delete draft' })} deleteDisabled={busy} onSave={() => void run(save)} canSave={dirty && !busy} saving={busy}>
       <Button variant="ghost" disabled={busy || dirty} onClick={() => void run(download)}>{t({ ko: 'ZIP 내보내기', en: 'Export ZIP' })}</Button>
       <Button variant="secondary" disabled={busy || dirty} onClick={() => void run(prepare)}>{t({ ko: '검증 및 설치 검토', en: 'Validate and review' })}</Button>
-      {review ? <Button disabled={busy || dirty} onClick={() => void run(install)}>{t({ ko: '검토한 패키지 적용', en: 'Apply reviewed package' })}</Button> : null}
-    </ModalFooter>
+      {review ? <Button variant="secondary" disabled={busy || dirty} onClick={() => void run(install)}>{t({ ko: '설치', en: 'Install' })}</Button> : null}
+    </EditorFooter>
   </Modal>
 }

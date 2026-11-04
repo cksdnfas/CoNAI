@@ -1,7 +1,8 @@
 import { useRef, useState } from 'react'
-import { Download, FolderOpen, Upload } from 'lucide-react'
+import { Download, FolderOpen } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
+import { EditorFooter } from '@/components/ui/editor-footer'
 import { Select } from '@/components/ui/select'
 import { Modal } from '@/components/ui/modal'
 import { useI18n } from '@/i18n'
@@ -111,8 +112,8 @@ export function MiniMaxH3DirectorPackPanel({ value, onChange, allowFiles, allowP
             {allowFiles ? <option value="files">{t({ ko: '참조 파일', en: 'Reference files' })}</option> : null}
             {allowPrompt ? <option value="prompt">{t({ ko: '프롬프트', en: 'Prompt' })}</option> : null}
           </Select>
-          <IconButton size="icon-sm" variant="secondary" disabled={busy} onClick={save} label={t({ ko: '팩 저장 (DaSiWa JSON)', en: 'Save pack (DaSiWa JSON)' })}><Download className="h-4 w-4" /></IconButton>
-          <IconButton size="icon-sm" variant="secondary" disabled={busy} onClick={() => packInput.current?.click()} label={t({ ko: '팩 불러오기 (미디어 파일은 안 들어 있어서 직접 연결해)', en: 'Load pack (media files are not embedded; attach them yourself)' })}><Upload className="h-4 w-4" /></IconButton>
+          <IconButton size="icon-sm" variant="secondary" disabled={busy} onClick={save} label={t({ ko: '팩 내보내기 (DaSiWa JSON)', en: 'Export pack (DaSiWa JSON)' })}><Download className="h-4 w-4" /></IconButton>
+          <Button size="sm" variant="ghost" disabled={busy} onClick={() => packInput.current?.click()} aria-label={t({ ko: '팩 불러오기 (미디어 파일은 안 들어 있어서 직접 연결해)', en: 'Load pack (media files are not embedded; attach them yourself)' })}>{t({ ko: '불러오기', en: 'Load' })}</Button>
           <input ref={packInput} type="file" accept="application/json,.json" hidden onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ''; if (file) void loadFile(file) }} />
         </div>
         {pack ? <div className="space-y-3">
@@ -124,10 +125,10 @@ export function MiniMaxH3DirectorPackPanel({ value, onChange, allowFiles, allowP
           </> : null}
           <div className="flex items-center gap-2">
             <Select aria-label={t({ ko: '불러오기 방식', en: 'Import mode' })} disabled={busy} value={append ? 'append' : 'overwrite'} onChange={(event) => setAppend(event.target.value === 'append')}><option value="overwrite">{t({ ko: '덮어쓰기', en: 'Overwrite' })}</option><option value="append">{t({ ko: '추가', en: 'Append' })}</option></Select>
-            <Button type="button" disabled={busy} onClick={() => void apply()}>{busy ? t({ ko: '적용 중…', en: 'Applying…' }) : t({ ko: '적용', en: 'Apply' })}</Button>
           </div>
         </div> : null}
         {message ? <div role="status" className="text-sm break-words">{message}</div> : null}
+        <EditorFooter onSave={pack ? () => void apply() : undefined} saving={busy} saveLabel={t({ ko: '적용', en: 'Apply' })} />
       </div>
     </Modal>
   </>

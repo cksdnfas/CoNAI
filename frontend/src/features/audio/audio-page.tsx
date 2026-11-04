@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from 'react'
 import { useInfiniteQuery, useQuery, useQueryClient, type InfiniteData } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
-import { AudioLines, ChevronDown, ChevronUp, CircleCheck, CircleDashed, CirclePause, Download, FolderInput, FolderPlus, List, MessageSquare, MoreHorizontal, Pencil, Plus, Trash2, Upload } from 'lucide-react'
+import { AudioLines, ChevronDown, ChevronUp, CircleCheck, CircleDashed, CirclePause, Download, FolderInput, List, MessageSquare, MoreHorizontal, Pencil, Plus, Trash2, Upload } from 'lucide-react'
 import { PageToolbar } from '@/components/common/page-toolbar'
 import { PageWithSidebar } from '@/components/common/page-with-sidebar'
 import { RuntimeJobProgress } from '@/components/common/runtime-job-progress'
@@ -851,7 +851,7 @@ function AudioPageContent() {
         <EmptyState
           icon={AudioLines}
           title={t({ ko: '아직 프로젝트가 없어', en: 'No projects yet' })}
-          action={permissions.canEdit ? <IconButton label={t({ ko: '새 프로젝트', en: 'New project' })} onClick={() => setDialog('project-new')}><FolderPlus /></IconButton> : undefined}
+          action={permissions.canEdit ? <Button size="sm" onClick={() => setDialog('project-new')}><Plus />{t({ ko: '새 프로젝트', en: 'New project' })}</Button> : undefined}
         />
       ) : !group && project && projectGroupsQuery.isSuccess && effects.length === 0 && !groupId ? (
         <EmptyState
@@ -1064,7 +1064,7 @@ function NewEffectButton({ onCreate }: { onCreate: (name: string) => Promise<boo
     if (created) setName(null)
   }
   return <>
-    <IconButton label={t({ ko: '효과음 추가', en: 'Add effect' })} onClick={() => setName('')}><Plus /></IconButton>
+    <Button size="sm" onClick={() => setName('')}><Plus />{t({ ko: '효과음 추가', en: 'Add effect' })}</Button>
     {name !== null ? (
       <NameDialog
         open

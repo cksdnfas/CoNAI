@@ -3,11 +3,11 @@ import { ArrowLeft, ArrowRight, Crop, Pencil, Plus, Star, Trash2, Upload, X } fr
 import { OverlayCard } from '@/components/common/overlay-card'
 import { ActionMenuButton } from '@/components/ui/action-menu'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
+import { EditorFooter } from '@/components/ui/editor-footer'
 import { ToggleChip } from '@/components/ui/chip'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
-import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
+import { Modal, ModalBody } from '@/components/ui/modal'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { ChatProfileAssetInput, useChatProfileAssetImport } from '@/features/settings/components/chat-profile-asset-input'
@@ -178,10 +178,7 @@ export function CharacterReferenceGallery({ editor, editable, canUpload, imageTa
           <Input autoFocus aria-label={t({ ko: '분류 이름', en: 'Category name' })} aria-invalid={categoryError || undefined} aria-describedby={categoryError ? categoryErrorId : undefined} value={categoryDialog.value} onChange={(event) => { setCategoryError(false); setCategoryDialog({ ...categoryDialog, value: event.target.value }) }} />
           {categoryError ? <p id={categoryErrorId} role="alert" className="text-xs text-destructive">{t({ ko: '분류 이름을 확인해줘. 비어 있거나 같은 이름은 쓸 수 없어.', en: 'Check the category name. It cannot be empty or duplicate another name.' })}</p> : null}
         </ModalBody>
-        <ModalFooter>
-          <Button type="button" variant="ghost" onClick={() => { setCategoryError(false); setCategoryDialog(null) }}>{t({ ko: '취소', en: 'Cancel' })}</Button>
-          <Button type="submit">{t({ ko: '저장', en: 'Save' })}</Button>
-        </ModalFooter>
+        <EditorFooter saveSubmit saveLabel={t({ ko: '적용', en: 'Apply' })} />
       </form>
     </Modal> : null}
     {cropHash ? <ChatProfileAvatarCrop src={characterImageUrl(cropHash)} initial={draft.avatarHash === cropHash ? draft.avatarCrop : null}

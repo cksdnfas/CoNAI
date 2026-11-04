@@ -3,6 +3,7 @@ import { Badge } from '@/components/ui/badge'
 import { EmptyState } from '@/components/ui/empty-state'
 import { ErrorState } from '@/components/ui/error-state'
 import { OverlayCard } from '@/components/common/overlay-card'
+import type { ActionMenuEntry } from '@/components/ui/action-menu'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useI18n } from '@/i18n'
 import type { GroupWithHierarchy } from '@/types/group'
@@ -17,6 +18,7 @@ interface GroupRootOverviewProps {
   sourceKey: 'custom' | 'folders'
   loadCoverImages: (groupId: number) => Promise<ImageRecord[]>
   onOpenGroup: (groupId: number) => void
+  getGroupMenu: (group: GroupWithHierarchy) => ActionMenuEntry[]
   isLoading?: boolean
   error?: unknown
   onRetry?: () => void
@@ -29,6 +31,7 @@ export function GroupRootOverview({
   sourceKey,
   loadCoverImages,
   onOpenGroup,
+  getGroupMenu,
   isLoading = false,
   error = null,
   onRetry,
@@ -60,6 +63,7 @@ export function GroupRootOverview({
               <OverlayCard
                 key={group.id}
                 onOpen={() => onOpenGroup(group.id)}
+                menu={getGroupMenu(group)}
                 mediaClassName="aspect-4/3"
                 media={<GroupCoverMosaic groupId={group.id} sourceKey={sourceKey} imageCount={totalCount} loadCoverImages={loadCoverImages} className="size-full" />}
                 label={group.name}

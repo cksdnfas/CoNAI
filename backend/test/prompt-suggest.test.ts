@@ -25,6 +25,31 @@ async function boot() {
 
 const hash = (n: number) => n.toString(16).padStart(48, '0')
 
+test('synonym merges roll back counts and removed prompts when the final write fails', async () => {
+  const { db } = await boot()
+  const { SynonymService } = await import('../src/services/synonymService')
+  for (const [type, table] of [
+    ['positive', 'prompt_collection'], ['negative', 'negative_prompt_collection'], ['auto', 'auto_prompt_collection'],
+  ] as const) {
+    const insert = db.prepare(`INSERT INTO ${table} (prompt, usage_count, synonyms) VALUES (?, ?, ?)`)
+    const main = Number(insert.run('atomic main', 10, '["old alias"]').lastInsertRowid)
+    const alias = Number(insert.run('atomic alias', 3, null).lastInsertRowid)
+    db.exec(`CREATE TEMP TRIGGER reject_synonym_write BEFORE UPDATE OF synonyms ON ${table}
+      WHEN NEW.id = ${main} BEGIN SELECT RAISE(ABORT, 'injected synonym write failure'); END`)
+    try {
+      await assert.rejects(SynonymService.setSynonymsAndMerge('atomic main', ['atomic alias'], type), /injected synonym write failure/)
+      assert.deepEqual(db.prepare(`SELECT usage_count, synonyms FROM ${table} WHERE id = ?`).get(main), { usage_count: 10, synonyms: '["old alias"]' })
+      assert.deepEqual(db.prepare(`SELECT prompt, usage_count FROM ${table} WHERE id = ?`).get(alias), { prompt: 'atomic alias', usage_count: 3 })
+    } finally {
+      db.exec('DROP TRIGGER reject_synonym_write')
+    }
+    const merged = await SynonymService.setSynonymsAndMerge('atomic main', ['atomic alias'], type)
+    assert.equal(merged.mergedCount, 1)
+    assert.deepEqual(db.prepare(`SELECT usage_count, synonyms FROM ${table} WHERE id = ?`).get(main), { usage_count: 13, synonyms: '["atomic alias"]' })
+    assert.equal(db.prepare(`SELECT id FROM ${table} WHERE id = ?`).get(alias), undefined)
+  }
+})
+
 test('my prompts rank exact, then prefix, then contains, each by usage', async () => {
   const { db } = await boot()
   const { PromptSuggestService } = await import('../src/services/promptSuggestService')
@@ -288,4 +313,19 @@ test('prompt group mutations preserve LoRA protection for case variants and desc
     group_name: '  lOrA  ', parent_id: parentId, display_order: 0,
   })
   assert.ok(db.prepare('SELECT 1 FROM prompt_groups WHERE id = ?').get(parentId))
+})
+
+test('large prompt group deletion unclassifies descendants without exceeding SQLite bindings', async () => {
+  const { db } = await boot()
+  const { PromptGroupService } = await import('../src/services/promptGroupService')
+  const insert = db.prepare('INSERT INTO prompt_groups (group_name, parent_id) VALUES (?, ?)')
+  const parent = Number(insert.run('bulk deletion root', null).lastInsertRowid)
+  let last = parent
+  db.transaction(() => {
+    for (let i = 0; i < 33000; i++) last = Number(insert.run(`bulk deletion child ${i}`, parent).lastInsertRowid)
+  })()
+  const prompt = Number(db.prepare("INSERT INTO prompt_collection (prompt, group_id) VALUES ('bulk deletion retained prompt', ?)").run(last).lastInsertRowid)
+  assert.equal(await PromptGroupService.deleteGroup(parent), true)
+  assert.deepEqual(db.prepare('SELECT group_id FROM prompt_collection WHERE id = ?').get(prompt), { group_id: null })
+  assert.deepEqual(db.prepare('SELECT COUNT(*) AS count FROM prompt_groups WHERE id = ? OR parent_id = ?').get(parent, parent), { count: 0 })
 })

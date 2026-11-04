@@ -18,8 +18,10 @@ interface ModalProps extends PropsWithChildren {
   title: ReactNode
   /** One muted line under the title: where the thing lives and what the action affects. */
   description?: ReactNode
-  /** A state chip after the title (linked, synced…). Controls never go in the header. */
+  /** A state chip after the title (linked, synced…). Item controls go in `actions`, never here. */
   status?: ReactNode
+  /** Actions on the dialog's item itself (favorite, a ⋯ menu), at the header's right before ✕. */
+  actions?: ReactNode
   /** Tabs or a search under the title; stays in view while the body scrolls. */
   headerContent?: ReactNode
   /** Visual before the title, e.g. a cover thumbnail. */
@@ -135,7 +137,7 @@ function preventOutsideDismiss(event: Event) {
  * Esc closes only the top-most dialog, and only when nothing handled the keydown first (`defaultPrevented`), whether in
  * the capture phase (image editor) or in content bubble handlers (inputs that revert their draft on Esc).
  */
-function Modal({ open, title, description, status, headerContent, leading, onClose, size, closeOnBack = true, height = 'auto', dirty = false, onSave, sidePanelInset, placement = 'center', children }: ModalProps) {
+function Modal({ open, title, description, status, actions, headerContent, leading, onClose, size, closeOnBack = true, height = 'auto', dirty = false, onSave, sidePanelInset, placement = 'center', children }: ModalProps) {
   const fixedHeight = height !== 'auto'
   // Phones: a short dialog rises as a bottom sheet; a picker or work surface takes the whole screen.
   const sheet = size === 'sm' || size === 'md'
@@ -334,6 +336,7 @@ function Modal({ open, title, description, status, headerContent, leading, onClo
                       </DialogPrimitive.Description>
                     ) : null}
                   </div>
+                  {actions ? <div className="flex shrink-0 items-center gap-1">{actions}</div> : null}
                   <IconButton size="icon-sm" variant="ghost" className="-mr-1 shrink-0" onClick={requestClose} label={t({ ko: '닫기', en: 'Close' })}>
                     <X className="h-4 w-4" />
                   </IconButton>

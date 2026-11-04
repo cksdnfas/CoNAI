@@ -5,6 +5,7 @@ import path from 'path';
 import { PromptCollectionModel } from '../../models/PromptCollection';
 import { PromptGroupModel } from '../../models/PromptGroup';
 import { PromptGroupService } from '../../services/promptGroupService';
+import { PromptCollectionService } from '../../services/promptCollectionService';
 import { runtimePaths } from '../../config/runtimePaths';
 import { errorResult, textResult } from '../toolResults';
 
@@ -109,30 +110,35 @@ export function registerPromptOrganizationTools(server: McpServer): void {
     }) },
     async ({ groups, type }) => {
       try {
-        const results = groups.map(group => {
+        // Through the service, as the prompt screen does: it refuses the protected LoRA name and Danbooru-managed parents.
+        // A refusal is reported on its own group, so the groups made before it are not hidden behind a bare error.
+        const results: Array<{ group_name: string; group_id?: number; is_new?: boolean; error?: string }> = [];
+        for (const group of groups) {
           const existing = PromptGroupModel.findByName(group.group_name, type);
-          const groupId = PromptGroupModel.create(
-            {
-              group_name: group.group_name,
-              display_order: group.display_order,
-              is_visible: group.is_visible,
-              parent_id: group.parent_id ?? null,
-            },
-            type
-          );
-          return {
-            group_name: group.group_name,
-            group_id: groupId,
-            is_new: !existing,
-          };
-        });
+          try {
+            const groupId = await PromptGroupService.createGroup(
+              {
+                group_name: group.group_name,
+                display_order: group.display_order,
+                is_visible: group.is_visible,
+                parent_id: group.parent_id ?? null,
+              },
+              type
+            );
+            results.push({ group_name: group.group_name, group_id: groupId, is_new: !existing });
+          } catch (error) {
+            results.push({ group_name: group.group_name, error: (error as Error).message });
+          }
+        }
+        const failed = results.filter(r => r.error !== undefined).length;
 
         return textResult({
           results,
           created: results.filter(r => r.is_new).length,
-          existing: results.filter(r => !r.is_new).length,
+          existing: results.filter(r => r.is_new === false).length,
+          failed,
           type,
-        });
+        }, failed === results.length ? { isError: true } : {});
       } catch (error) {
         return errorResult(`Error: ${(error as Error).message}`);
       }
@@ -154,31 +160,24 @@ export function registerPromptOrganizationTools(server: McpServer): void {
         }
 
         const actualTargetId = target_group_id === 0 ? null : target_group_id;
-        let movedCount = 0;
-        let failCount = 0;
+        let promptIds: number[] = [];
 
         if (prompt_ids && prompt_ids.length > 0) {
-          for (const promptId of prompt_ids) {
-            const result = PromptCollectionModel.setGroupId(promptId, actualTargetId, type);
-            if (result) movedCount++;
-            else failCount++;
-          }
+          promptIds = prompt_ids;
         } else if (source_group_id !== undefined) {
           // source 그룹의 모든 프롬프트 조회 후 이동
           const sourceId = source_group_id === 0 ? null : source_group_id;
-          const { prompts, total } = await PromptGroupService.getPromptsInGroup(sourceId, type, 1, 10000);
-
-          for (const prompt of prompts) {
-            const result = PromptCollectionModel.setGroupId(prompt.id, actualTargetId, type);
-            if (result) movedCount++;
-            else failCount++;
-          }
+          promptIds = PromptCollectionModel.getPromptsByGroupId(sourceId, type).map((prompt) => prompt.id as number);
         }
 
+        // The prompt screen's rules apply here too: the protected LoRA group and the groups Danbooru manages.
+        const { moved, failed, firstError } = await PromptCollectionService.movePromptsToGroup(promptIds, actualTargetId, type);
+
         return textResult({
-          moved_count: movedCount,
-          fail_count: failCount,
-          total: movedCount + failCount,
+          moved_count: moved,
+          fail_count: failed,
+          ...(firstError ? { first_error: firstError } : {}),
+          total: moved + failed,
           source_group_id: source_group_id ?? null,
           target_group_id,
           type,

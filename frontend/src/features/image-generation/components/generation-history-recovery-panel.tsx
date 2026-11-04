@@ -1,5 +1,6 @@
 import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
-import { RotateCcw, X } from 'lucide-react'
+import { RotateCcw } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { IconButton } from '@/components/ui/icon-button'
 import { Text } from '@/components/ui/text'
@@ -53,9 +54,9 @@ export function GenerationHistoryRecoveryPanel({
           >
             <RotateCcw className={cn('h-4 w-4', isRetryingRunRecovery && 'animate-spin')} />
           </IconButton>
-          <IconButton size="icon-sm" variant="ghost" onClick={handleAcknowledgeRunRecovery} label={t({ ko: '확인', en: 'Dismiss' })}>
-            <X />
-          </IconButton>
+          <Button type="button" size="sm" variant="ghost" onClick={handleAcknowledgeRunRecovery}>
+            {t({ ko: '닫기', en: 'Close' })}
+          </Button>
         </div>
       </div>
 

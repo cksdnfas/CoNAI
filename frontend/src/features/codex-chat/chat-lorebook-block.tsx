@@ -9,7 +9,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { IconButton } from '@/components/ui/icon-button'
 import { EditorFooter } from '@/components/ui/editor-footer'
 import { Input } from '@/components/ui/input'
-import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
+import { Modal, ModalBody } from '@/components/ui/modal'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Tip } from '@/components/ui/tooltip'
 import { SwitchLine } from '@/components/ui/switch-line'
@@ -364,11 +364,8 @@ function NewLorebookDialog({ saving, onSave, onClose }: { saving: boolean; onSav
       }}>
         <ModalBody>
           <Input autoFocus value={name} maxLength={80} onChange={(event) => setName(event.target.value)} placeholder={t({ ko: '예: 리나 기억', en: 'e.g. Lina memories' })} aria-label={t({ ko: '로어북 이름', en: 'Lorebook name' })} />
-          <ModalFooter>
-            <Button type="button" variant="secondary" onClick={onClose}>{t({ ko: '취소', en: 'Cancel' })}</Button>
-            <Button type="submit" disabled={saving || !name.trim()}>{t({ ko: '만들기', en: 'Create' })}</Button>
-          </ModalFooter>
         </ModalBody>
+        <EditorFooter saveSubmit canSave={Boolean(name.trim())} saving={saving} saveLabel={t({ ko: '만들기', en: 'Create' })} />
       </form>
     </Modal>
   )

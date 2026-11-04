@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { CheckCheck, CircleMinus, Clock, Link2, Link2Off, List, Pencil, Trash2 } from 'lucide-react'
+import { CheckCheck, CircleMinus, Clock, Link2, Link2Off, List, Pencil } from 'lucide-react'
 import { TextTabs, type TextTabItem } from '@/components/common/text-tabs'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -244,6 +244,12 @@ export function AudioCommentsDialog({ open, group, canEdit, onClose, onChanged }
     setDraft('')
     void run(() => createAudioComment(group.id, text))
   }
+  const saveEditing = (comment: AudioComment) => {
+    if (!editing) return
+    const text = editing.text.trim()
+    setEditing(null)
+    if (text && text !== comment.text) void run(() => updateAudioComment(group.id, comment.id, text))
+  }
   const tabs: Array<TextTabItem<AudioCommentStatus | 'all'>> = [{ value: 'pending', label: t({ ko: '대기', en: 'Pending' }), icon: Clock }, { value: 'completed', label: t({ ko: '완료', en: 'Completed' }), icon: CheckCheck }, { value: 'all', label: t({ ko: '전체', en: 'All' }), icon: List }]
 
   return (
@@ -262,22 +268,26 @@ export function AudioCommentsDialog({ open, group, canEdit, onClose, onChanged }
               />
               <div className="min-w-0 flex-1 space-y-1">
                 {editing?.id === comment.id ? (
-                  <Textarea
-                    variant="settings"
-                    autoFocus
-                    rows={2}
-                    value={editing.text}
-                    onChange={(event) => setEditing({ id: comment.id, text: event.target.value })}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
-                        event.preventDefault()
-                        const text = editing.text.trim()
-                        setEditing(null)
-                        if (text && text !== comment.text) void run(() => updateAudioComment(group.id, comment.id, text))
-                      }
-                      if (event.key === 'Escape') setEditing(null)
-                    }}
-                  />
+                  <div className="space-y-2">
+                    <Textarea
+                      variant="settings"
+                      autoFocus
+                      rows={2}
+                      value={editing.text}
+                      onChange={(event) => setEditing({ id: comment.id, text: event.target.value })}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
+                          event.preventDefault()
+                          saveEditing(comment)
+                        }
+                        if (event.key === 'Escape') setEditing(null)
+                      }}
+                    />
+                    <div className="flex justify-end gap-2">
+                      <Button type="button" variant="ghost" size="xs" onClick={() => setEditing(null)}>{t({ ko: '취소', en: 'Cancel' })}</Button>
+                      <Button type="button" variant="default" size="xs" onClick={() => saveEditing(comment)}>{t({ ko: '저장', en: 'Save' })}</Button>
+                    </div>
+                  </div>
                 ) : (
                   <p className={cn('text-sm whitespace-pre-wrap break-words', comment.status === 'completed' && 'text-muted-foreground')}>{comment.text}</p>
                 )}
@@ -289,7 +299,7 @@ export function AudioCommentsDialog({ open, group, canEdit, onClose, onChanged }
               {canEdit ? (
                 <div className="flex shrink-0 gap-0.5">
                   <IconButton variant="ghost" size="icon-xs" label={t({ ko: '수정', en: 'Edit' })} onClick={() => setEditing({ id: comment.id, text: comment.text })}><Pencil /></IconButton>
-                  <IconButton variant="ghost" size="icon-xs" label={t({ ko: '삭제', en: 'Delete' })} onClick={() => void run(() => deleteAudioComment(group.id, comment.id))}><Trash2 /></IconButton>
+                  <Button variant="destructive-ghost" size="xs" onClick={() => void run(() => deleteAudioComment(group.id, comment.id))}>{t({ ko: '삭제', en: 'Delete' })}</Button>
                 </div>
               ) : null}
             </li>
@@ -318,7 +328,8 @@ export function AudioCommentsDialog({ open, group, canEdit, onClose, onChanged }
               }
             }}
           />
-          <Button size="sm" disabled={!draft.trim()} onClick={send}>{t({ ko: '남기기', en: 'Post' })}</Button>
+          <Button type="button" size="sm" variant="ghost" onClick={onClose}>{t({ ko: '닫기', en: 'Close' })}</Button>
+          <Button type="button" size="sm" variant="default" disabled={!draft.trim()} onClick={send}>{t({ ko: '남기기', en: 'Post' })}</Button>
         </ModalFooter>
       ) : null}
     </Modal>
@@ -370,6 +381,8 @@ export function AudioCleanupDialog({ open, group, onClose, onDone }: { open: boo
         </p>
       </ModalBody>
       <ModalFooter separated className="mt-4">
+        <span className="flex-1" />
+        <Button variant="ghost" disabled={busy} onClick={onClose}>{t({ ko: '취소', en: 'Cancel' })}</Button>
         <Button variant="destructive" disabled={busy || !plan.data || plan.data.count === 0} onClick={() => void run()}>{t({ ko: '정리', en: 'Clean up' })}</Button>
       </ModalFooter>
     </Modal>

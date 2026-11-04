@@ -22,10 +22,18 @@ export const AUTO_TAG_MODEL_JSON_PATHS = [
   '$.kaloscope.model'
 ] as const;
 
-export function buildAutoTagRatingExpr(
-  alias: string,
-  ratingType: 'general' | 'sensitive' | 'questionable' | 'explicit'
-): string {
+export const AUTO_TAG_RATING_TYPES = ['general', 'sensitive', 'questionable', 'explicit'] as const;
+export type AutoTagRatingType = (typeof AUTO_TAG_RATING_TYPES)[number];
+
+export function isAutoTagRatingType(value: unknown): value is AutoTagRatingType {
+  return AUTO_TAG_RATING_TYPES.some((type) => type === value);
+}
+
+export function buildAutoTagRatingExpr(alias: string, ratingType: AutoTagRatingType): string {
+  // The type is spliced into a JSON path literal; a filter condition's `rating_type` is only typed, never checked, on its way here.
+  if (!isAutoTagRatingType(ratingType)) {
+    throw new Error(`Unknown auto-tag rating type: ${String(ratingType)}`);
+  }
   return `COALESCE(json_extract(${alias}.auto_tags, '$.rating.${ratingType}'), json_extract(${alias}.auto_tags, '$.tagger.rating.${ratingType}'))`;
 }
 

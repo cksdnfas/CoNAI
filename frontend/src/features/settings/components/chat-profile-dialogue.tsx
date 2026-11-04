@@ -53,7 +53,7 @@ export function PromptBubble({ onClick, children, ...speaker }: Speaker & { onCl
   )
 }
 
-/** A message edited in place on its speaker's side: its text, then `lead` on the left and `tools`, variables, `remove` and Done on the right. */
+/** A message edited in place on its speaker's side; closing keeps its changes in the profile draft. */
 export function PromptBubbleEditor({ text, label, placeholder, assisted = false, lead, tools, remove, onTextChange, onClose, ...speaker }: Speaker & {
   text: string
   label: string
@@ -78,7 +78,7 @@ export function PromptBubbleEditor({ text, label, placeholder, assisted = false,
             {tools}
             <PromptMacroMenu textarea={textarea} value={text} onChange={onTextChange} />
             {remove}
-            <Button size="compact" onClick={onClose}>{t({ ko: '완료', en: 'Done' })}</Button>
+            <Button size="compact" variant="ghost" onClick={onClose}>{t({ ko: '닫기', en: 'Close' })}</Button>
           </div>
         </div>
       </PromptEditFrame>

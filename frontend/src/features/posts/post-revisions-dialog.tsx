@@ -1,13 +1,13 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { PostDetail, PostRevision } from '@conai/shared'
-import { Button } from '@/components/ui/button'
+import { EditorFooter } from '@/components/ui/editor-footer'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { ListRow } from '@/components/ui/list-row'
 import { EmptyState } from '@/components/ui/empty-state'
 import { ErrorState } from '@/components/ui/error-state'
 import { LoadingState } from '@/components/ui/loading-state'
-import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
+import { Modal, ModalBody } from '@/components/ui/modal'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
 import { POSTS_QUERY_KEY, invalidatePostScope, getPostRevision, listPostRevisionSummaries, updatePost } from '@/lib/api-posts'
@@ -81,13 +81,10 @@ export function PostRevisionsDialog({ post, onClose }: { post: PostDetail; onClo
         </article>
         </div>
       </ModalBody>
-      <ModalFooter>
-        <Button variant="ghost" size="sm" onClick={onClose}>{t({ ko: '닫기', en: 'Close' })}</Button>
-        <Button size="sm" disabled={!picked || restore.isPending} onClick={async () => {
+      <EditorFooter canSave={Boolean(picked)} saving={restore.isPending} saveLabel={t({ ko: '복원', en: 'Restore' })} onSave={async () => {
           if (!picked) return
           if (await confirm({ title: t({ ko: '{revision}판으로 되돌릴까?', en: 'Restore version {revision}?' }, { revision: picked.revision }), description: t({ ko: '제목과 본문이 이 판으로 바뀌고, 지금 판은 이전 판에 남아.', en: 'The title and text change back; the current version is kept here.' }) })) restore.mutate(picked)
-        }}>{t({ ko: '이 판으로 되돌리기', en: 'Restore this version' })}</Button>
-      </ModalFooter>
+        }} />
     </Modal>
   )
 }

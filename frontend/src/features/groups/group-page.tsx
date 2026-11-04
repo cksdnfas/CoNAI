@@ -1,6 +1,6 @@
 import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { ImagePermissionNotice } from '@/features/images/components/image-permission-notice'
-import { CheckCheck, FolderInput, FolderMinus, FolderPlus, ListChecks, Pencil, Play, Plus, RotateCcw, Trash2 } from 'lucide-react'
+import { CheckCheck, FolderInput, FolderMinus, FolderOpen, FolderPlus, ListChecks, Pencil, Play, Plus, RotateCcw, Trash2 } from 'lucide-react'
 import type { ActionMenuEntry } from '@/components/ui/action-menu'
 import { SelectionActionBar } from '@/components/common/selection-action-bar'
 import { GroupDeleteDialog } from './components/group-delete-dialog'
@@ -10,6 +10,7 @@ import type { GroupWithHierarchy } from '@/types/group'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ErrorState } from '@/components/ui/error-state'
+import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -254,11 +255,13 @@ export function GroupPage() {
   const showManageView = isCustomSource && !selectedGroupId && isManagingGroups
 
   const getGroupMenu = (group: GroupWithHierarchy): ActionMenuEntry[] => [
-    { key: 'edit', label: t({ ko: '편집', en: 'Edit' }), icon: Pencil, onSelect: () => openEditGroup(group) },
-    { key: 'subgroup', label: t({ ko: '하위 그룹 추가', en: 'Add subgroup' }), icon: FolderPlus, onSelect: () => openCreateSubgroup(group.id) },
-    { key: 'move', label: t({ ko: '다른 위치로 옮기기', en: 'Move to…' }), icon: FolderInput, onSelect: () => openMoveGroups([group.id]) },
+    { key: 'open', label: t({ ko: '열기', en: 'Open' }), icon: FolderOpen, onSelect: () => handleOpenGroup(group.id) },
+    isCustomSource ? { key: 'subgroup', label: t({ ko: '하위 그룹 추가', en: 'Add subgroup' }), icon: FolderPlus, onSelect: () => openCreateSubgroup(group.id) } : null,
+    isCustomSource ? { key: 'edit', label: t({ ko: '그룹 편집', en: 'Edit group' }), icon: Pencil, onSelect: () => openEditGroup(group) } : null,
+    isCustomSource ? { key: 'move', label: t({ ko: '다른 위치로 옮기기', en: 'Move to…' }), icon: FolderInput, onSelect: () => openMoveGroups([group.id]) } : null,
+    isCustomSource && group.auto_collect_enabled ? { key: 'auto-collect', label: t({ ko: '자동수집 실행', en: 'Run auto-collect' }), icon: Play, disabled: autoCollectJob.isStarting || autoCollectJob.isRunning, onSelect: () => { void runAutoCollect(group.id) } } : null,
     '-',
-    canDeleteImages ? { key: 'delete', label: t({ ko: '그룹 삭제', en: 'Delete group' }), icon: Trash2, destructive: true, onSelect: () => openDeleteGroups([group.id]) } : null,
+    isCustomSource && canDeleteImages ? { key: 'delete', label: t({ ko: '그룹 삭제', en: 'Delete group' }), icon: Trash2, destructive: true, onSelect: () => openDeleteGroups([group.id]) } : null,
   ]
 
   // Drag-out payload: the whole selection when the held tile is part of it, otherwise just that tile.
@@ -296,7 +299,7 @@ export function GroupPage() {
       onSelectSource={handleSelectSource}
       onSelectGroup={handleOpenGroup}
       onDropImages={isCustomSource && isWideLayout ? handleDropImages : undefined}
-      getGroupMenu={isCustomSource ? getGroupMenu : undefined}
+      getGroupMenu={getGroupMenu}
     />
   )
 
@@ -325,9 +328,7 @@ export function GroupPage() {
           >
             <ListChecks />
           </IconButton>
-          <IconButton label={t('groups.group.page.new.group')} variant="ghost" size="icon-sm" onClick={handleOpenCreateModal}>
-            <Plus />
-          </IconButton>
+          <Button size="sm" onClick={handleOpenCreateModal}><Plus />{t('groups.group.page.new.group')}</Button>
         </>
       ) : (
         <IconButton
@@ -406,6 +407,7 @@ export function GroupPage() {
               sourceKey={selectedSource.key}
               loadCoverImages={selectedSource.loadCoverImages}
               onOpenGroup={handleOpenGroup}
+              getGroupMenu={getGroupMenu}
               isLoading={groupsQuery.isLoading}
               error={groupsQuery.isError && allGroups.length === 0 ? groupsQuery.error : null}
               onRetry={() => void groupsQuery.refetch()}

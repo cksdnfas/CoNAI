@@ -8,10 +8,10 @@ import { Tip } from './tooltip'
 
 /**
  * The footer of an editor modal: Delete (red text, no fill) on the left, then the editor's other actions, and on the
- * right the unsaved-changes status, Cancel (closes the way ✕ does, asking first with unsaved edits) and Save, both in
- * words. Without a save it ends in Close.
+ * right the unsaved-changes status, Revert, Cancel (closes the way ✕ does, asking first with unsaved edits) and Save,
+ * all in words. Without a save it ends in Close.
  */
-export function EditorFooter({ onDelete, deleteLabel, deleteDisabled = false, deleteTip, deleting = false, children, onSave, saveSubmit = false, canSave = true, saving = false, saveLabel, cancel = true }: {
+export function EditorFooter({ onDelete, deleteLabel, deleteDisabled = false, deleteTip, deleting = false, children, onRevert, canRevert = true, onSave, saveSubmit = false, canSave = true, saving = false, saveLabel, cancel = true }: {
   /** Left out: no delete (a new item, or one that cannot be deleted). */
   onDelete?: () => void
   deleteLabel?: string
@@ -20,6 +20,9 @@ export function EditorFooter({ onDelete, deleteLabel, deleteDisabled = false, de
   deleting?: boolean
   /** Other actions (export, duplicate, test…): secondary buttons, or icon buttons for repeated small tools. */
   children?: ReactNode
+  /** Drops the unsaved edits back to the saved state (the caller asks first); sits beside Cancel. */
+  onRevert?: () => void
+  canRevert?: boolean
   onSave?: () => void
   /** Inside a form: Save is its submit button (the form's onSubmit saves), so Enter in a field saves too. */
   saveSubmit?: boolean
@@ -38,7 +41,7 @@ export function EditorFooter({ onDelete, deleteLabel, deleteDisabled = false, de
       {onDelete ? (
         <Tip content={deleteTip}>
           <span>
-            <Button size="sm" variant="destructive-ghost" onClick={onDelete} disabled={deleteDisabled || deleting || saving}>
+            <Button type="button" size="sm" variant="destructive-ghost" onClick={onDelete} disabled={deleteDisabled || deleting || saving}>
               {deleting ? <LoaderCircle className="animate-spin" /> : null}
               {deleteLabel ?? t({ ko: '삭제', en: 'Delete' })}
             </Button>
@@ -52,8 +55,13 @@ export function EditorFooter({ onDelete, deleteLabel, deleteDisabled = false, de
           {t({ ko: '저장 안 한 변경 · {keys}', en: 'Unsaved changes · {keys}' }, { keys: formatShortcut('Mod+S') })}
         </span>
       ) : null}
+      {onRevert ? (
+        <Button type="button" size="sm" variant="ghost" onClick={onRevert} disabled={!canRevert || saving}>
+          {t({ ko: '되돌리기', en: 'Revert' })}
+        </Button>
+      ) : null}
       {modal && cancel ? (
-        <Button size="sm" variant="ghost" onClick={modal.requestClose} disabled={saving}>
+        <Button type="button" size="sm" variant="ghost" onClick={modal.requestClose} disabled={saving}>
           {commits ? t({ ko: '취소', en: 'Cancel' }) : t({ ko: '닫기', en: 'Close' })}
         </Button>
       ) : null}

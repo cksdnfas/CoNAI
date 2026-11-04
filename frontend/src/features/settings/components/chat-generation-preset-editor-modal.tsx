@@ -4,7 +4,6 @@ import { Copy, Download, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Chip, ToggleChip } from '@/components/ui/chip'
-import { useConfirm } from '@/components/ui/confirm-dialog'
 import { EditorFooter } from '@/components/ui/editor-footer'
 import { Field, FieldInfo } from '@/components/ui/field'
 import { IconButton } from '@/components/ui/icon-button'
@@ -32,7 +31,6 @@ import {
   CHAT_ADMIN_PROFILES_QUERY_KEY,
   CHAT_GENERATION_PRESETS_QUERY_KEY,
   createChatGenerationPreset,
-  deleteChatGenerationPreset,
   updateChatGenerationPreset,
   type ChatComfyPresetConfig,
   type ChatGenerationPreset,
@@ -46,6 +44,7 @@ import { EditorGroup } from '@/components/ui/editor-group'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Text } from '@/components/ui/text'
 import { downloadChatGenerationPresetFile } from './chat-generation-preset-file'
+import { useChatResourceDelete } from './use-chat-resource-actions'
 import { EMPTY_PROMPTING, PresetPromptingFields, promptingInputOf } from './chat-generation-preset-prompting'
 import { CHAT_DOCK_INSET, useSettingsEditorChatPage } from './use-settings-editor-chat-page'
 import { ChatFilledLabel } from '@/features/codex-chat/chat-page-context'
@@ -302,7 +301,6 @@ export function ChatGenerationPresetEditorModal({ open, preset, onClose, onDupli
   duplicating?: boolean
 }) {
   const { t } = useI18n()
-  const confirm = useConfirm()
   const { showSnackbar } = useSnackbar()
   const queryClient = useQueryClient()
   const [draft, setDraft] = useState<ChatGenerationPresetInput>(() => emptyDraft('nai'))
@@ -331,29 +329,7 @@ export function ChatGenerationPresetEditorModal({ open, preset, onClose, onDupli
     },
     onError: (error) => showSnackbar({ message: getErrorMessage(error, t({ ko: '저장하지 못했어.', en: 'Could not save.' })), tone: 'error' }),
   })
-  const deleteMutation = useMutation({
-    mutationFn: () => deleteChatGenerationPreset(preset?.id ?? 0),
-    onSuccess: async () => {
-      await refresh()
-      onClose()
-    },
-    onError: (error) => showSnackbar({ message: getErrorMessage(error, t({ ko: '삭제하지 못했어.', en: 'Could not delete.' })), tone: 'error' }),
-  })
-
-  const handleDelete = async () => {
-    const linked = preset?.profiles.length ?? 0
-    if (linked > 0) {
-      showSnackbar({ message: t({ ko: '프로필 {count}개가 쓰는 중이야. 먼저 그 프로필에서 연결을 풀어줘.', en: 'Used by {count} profiles. Unlink it there first.' }, { count: linked }), tone: 'error' })
-      return
-    }
-    const confirmed = await confirm({
-      title: t({ ko: '생성 프리셋 삭제', en: 'Delete generation preset' }),
-      description: t({ ko: '이 생성 프리셋을 지울까?', en: 'Delete this generation preset?' }),
-      confirmLabel: t({ ko: '삭제', en: 'Delete' }),
-      tone: 'destructive',
-    })
-    if (confirmed) deleteMutation.mutate()
-  }
+  const deleteMutation = useChatResourceDelete(onClose)
 
   const nameMissing = draft.name.trim().length === 0
   const dirty = JSON.stringify(draft) !== JSON.stringify(initial)
@@ -397,7 +373,7 @@ export function ChatGenerationPresetEditorModal({ open, preset, onClose, onDupli
         {draft.kind === 'comfyui' && draft.comfyui ? <ComfyPresetFields config={draft.comfyui} onChange={(comfyui) => setDraft({ ...draft, comfyui })} /> : null}
       </ModalBody>
       <EditorFooter
-        onDelete={preset ? () => void handleDelete() : undefined}
+        onDelete={preset ? () => deleteMutation.mutate({ kind: 'generation', resource: preset }) : undefined}
         deleting={deleteMutation.isPending}
         onSave={() => saveMutation.mutate()}
         canSave={canSave}

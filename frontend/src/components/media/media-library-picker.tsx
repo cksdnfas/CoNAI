@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import { X } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { EditorFooter } from '@/components/ui/editor-footer'
 import { FieldInfo } from '@/components/ui/field'
 import { IconButton } from '@/components/ui/icon-button'
-import { Modal, ModalFooter } from '@/components/ui/modal'
+import { Modal } from '@/components/ui/modal'
 import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { getImageListDisplayName } from '@/features/images/components/image-list/image-list-utils'
 import { useI18n } from '@/i18n'
@@ -52,13 +52,12 @@ export function MediaLibraryPicker({ initial, maxCount, onPick, onClose, title, 
         setSelected(new Map(ids.flatMap((id) => available.has(id) ? [[id, available.get(id)!] as const] : [])))
       }}
     />
-    <ModalFooter>
+    <EditorFooter onSave={() => onPick([...selected.values()])} canSave={canViewImages && selected.size <= maxCount && (allowEmpty || selected.size > 0)} saveLabel={applyLabel ?? t({ ko: '선택', en: 'Select' })}>
       <span className="mr-auto flex items-center gap-1 text-sm text-muted-foreground">
         {t({ ko: '{count}개 선택', en: '{count} selected' }, { count: selected.size })}
         {note ? <FieldInfo>{note}</FieldInfo> : null}
       </span>
       <IconButton variant="ghost" disabled={!selected.size} label={t({ ko: '선택 해제', en: 'Clear selection' })} onClick={() => setSelected(new Map())}><X /></IconButton>
-      <Button disabled={!canViewImages || selected.size > maxCount || (!allowEmpty && !selected.size)} onClick={() => onPick([...selected.values()])}>{applyLabel ?? t({ ko: '선택', en: 'Select' })}</Button>
-    </ModalFooter>
+    </EditorFooter>
   </Modal>
 }

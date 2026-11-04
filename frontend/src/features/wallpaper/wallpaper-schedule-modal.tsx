@@ -3,11 +3,11 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { CalendarClock, Plus, Trash2 } from 'lucide-react'
 import { EmptyState } from '@/components/ui/empty-state'
 import type { WallpaperSchedule, WallpaperScheduleEntry } from '@conai/shared'
-import { Button } from '@/components/ui/button'
+import { EditorFooter } from '@/components/ui/editor-footer'
 import { ToggleChip } from '@/components/ui/chip'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
-import { Modal, ModalFooter } from '@/components/ui/modal'
+import { Modal } from '@/components/ui/modal'
 import { Select } from '@/components/ui/select'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { SwitchLine } from '@/components/ui/switch-line'
@@ -132,10 +132,7 @@ export function WallpaperScheduleModal({ onClose, presets, schedule, revision, o
           </Tip>
         </div>
       </div>
-      <ModalFooter separated className="mt-4">
-        <Button type="button" variant="ghost" onClick={onClose}>{t({ ko: '취소', en: 'Cancel' })}</Button>
-        <Button type="button" disabled={!dirty || saveMutation.isPending} onClick={() => saveMutation.mutate()}>{t({ ko: '저장', en: 'Save' })}</Button>
-      </ModalFooter>
+      <EditorFooter onSave={() => saveMutation.mutate()} canSave={dirty} saving={saveMutation.isPending} />
     </Modal>
   )
 }

@@ -83,7 +83,7 @@ export function PromptAdder({ label, choices, disabled = false, onAdd }: { label
         setExpanded(false)
       }}
     >
-      <IconButton variant="ghost" size="icon-sm" label={label} disabled={disabled} aria-expanded={choices ? expanded : undefined} onClick={() => (choices ? setExpanded(!expanded) : onAdd(''))}><Plus /></IconButton>
+      <Button variant="ghost" size="compact" disabled={disabled} aria-expanded={choices ? expanded : undefined} onClick={() => (choices ? setExpanded(!expanded) : onAdd(''))}><Plus />{label}</Button>
       {choices && expanded ? choices.map((choice, index) => (
         <Button key={choice.value} variant="secondary" size="sm" autoFocus={index === 0} onClick={() => { setExpanded(false); onAdd(choice.value) }}>{choice.label}</Button>
       )) : null}
@@ -167,7 +167,7 @@ export function PromptCard({ itemKey, title, text,maxLength = CHAT_PROFILE_TEXT_
               {tools}
               <PromptMacroMenu textarea={textarea} value={text} onChange={onTextChange} />
               {remove}
-              <Button size="compact" onClick={() => setEditing(false)}>{t({ ko: '완료', en: 'Done' })}</Button>
+              <Button type="button" size="compact" variant="ghost" onClick={() => setEditing(false)}>{t({ ko: '닫기', en: 'Close' })}</Button>
             </div>
           </div>
         </PromptEditFrame>

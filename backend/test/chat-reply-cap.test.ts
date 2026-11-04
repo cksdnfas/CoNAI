@@ -4,11 +4,29 @@ import { test } from 'node:test'
 import { ChatProfileStore } from '../src/services/codex-chat/chatProfiles'
 import { streamChatCompletion, type ChatCompletionMessage, type ChatCompletionTarget } from '../src/services/codex-chat/llmChatCompletion'
 import { estimateMessagesTokens, fitChatContext, recordPromptUsage, replyCapFor, replyReserveFor, withChatTokenModel } from '../src/services/codex-chat/llmChatContext'
-import { replyRoomFromRefusal } from '../src/services/codex-chat/serverContextLimit'
+import { cachedServerContextLimit, learnServerContextLimit, replyRoomFromRefusal, serverContextLimit } from '../src/services/codex-chat/serverContextLimit'
 import { mockModelRows } from './modelRowMocks'
 import { parseNumberDraft } from '../../frontend/src/lib/number-shorthand'
 
 const STRATA_REFUSAL = '{"error":{"message":"litellm.BadRequestError: OpenAIException - prompt (15191 tokens) + max tokens (50000) exceeds the context (65000); requests are never truncated. Send a smaller max_tokens (at most 49801 here), or add \\"fit_max_tokens\\": true to the model\'s strata-<model>.json to shorten it to the room left (#545). Received Model Group=strata-a\\nAvailable Model Group Fallbacks=None","type":"invalid_request_error","param":null,"code":"400"}}'
+
+test('context discovery preserves a newer limit learned while the lookup was pending', async (t) => {
+  const response = Promise.withResolvers<Response>()
+  let calls = 0
+  t.mock.method(globalThis, 'fetch', () => {
+    calls += 1
+    return response.promise
+  })
+  const target: ChatCompletionTarget = { providerName: 'context-discovery-race', displayName: 'Test', endpoint: 'http://unused.invalid/v1/chat/completions', apiKey: null, model: 'm', generation: {}, promptCacheMarks: false }
+  const first = serverContextLimit(target)
+  const second = serverContextLimit(target)
+  learnServerContextLimit(target, 'context length (8192 tokens)')
+  response.resolve(Response.json({ default_generation_settings: { n_ctx: 32768 } }))
+  assert.deepEqual(await Promise.all([first, second]), [8192, 8192])
+  assert.equal(cachedServerContextLimit(target), 8192)
+  assert.equal(await serverContextLimit(target), 8192)
+  assert.equal(calls, 1)
+})
 
 test('the room a refusal names: Strata (with and without "at most") and vLLM', () => {
   assert.equal(replyRoomFromRefusal(STRATA_REFUSAL), 49801)

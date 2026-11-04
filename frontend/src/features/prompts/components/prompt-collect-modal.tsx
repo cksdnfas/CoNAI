@@ -1,9 +1,9 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Button } from '@/components/ui/button'
+import { EditorFooter } from '@/components/ui/editor-footer'
 import { Textarea } from '@/components/ui/textarea'
 import { Field } from '@/components/ui/field'
-import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
+import { Modal, ModalBody } from '@/components/ui/modal'
 import { useI18n } from '@/i18n'
 
 interface PromptCollectModalProps {
@@ -66,14 +66,7 @@ export function PromptCollectModal({ open, isSubmitting = false, onClose, onSubm
             <Textarea rows={6} value={negativePrompt} onChange={(event) => setNegativePrompt(event.target.value)} placeholder={t('prompts.components.prompt.collect.modal.enter.the.negative.prompt.here')} />
           </Field>
 
-          <ModalFooter>
-            <Button type="button" variant="secondary" onClick={onClose} disabled={isSubmitting}>
-              {t({ ko: '취소', en: 'Cancel' })}
-            </Button>
-            <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? t('prompts.components.prompt.collect.modal.collecting') : t('prompts.components.prompt.collect.modal.run.collect')}
-            </Button>
-          </ModalFooter>
+          <EditorFooter saveSubmit saving={isSubmitting} saveLabel={t('prompts.components.prompt.collect.modal.run.collect')} />
         </ModalBody>
       </form>
     </Modal>

@@ -3,6 +3,10 @@ import { ImageSafetyService } from '../../services/imageSafetyService';
 import { MediaPostprocessVisibilityService } from '../../services/mediaPostprocessVisibilityService';
 import type { FileType } from '../../types/image';
 import { buildInGroupsSql } from '../../utils/groupExclusion';
+import { sqlSortDirection } from '../../utils/sqlSort';
+
+/** The column named by an HTTP caller is spliced into ORDER BY, so only these ever reach the SQL. */
+const FILE_QUERY_SORT_COLUMNS = ['first_seen_date', 'width', 'height', 'scan_date', 'file_size'] as const;
 
 function getVisibleMediaMetadataCondition() {
   return ImageSafetyService.buildVisibleScoreCondition('mm.rating_score');
@@ -166,8 +170,8 @@ export class MediaMetadataFileQueries {
   }): { items: any[]; total: number } {
     const page = options.page || 1;
     const limit = options.limit || 20;
-    const sortBy = options.sortBy || 'first_seen_date';
-    const sortOrder = options.sortOrder || 'DESC';
+    const sortBy = FILE_QUERY_SORT_COLUMNS.find((column) => column === options.sortBy) ?? 'first_seen_date';
+    const sortOrder = sqlSortDirection(options.sortOrder);
     const offset = (page - 1) * limit;
     const visibleCondition = getVisibleMediaMetadataCondition();
     const readyCondition = getReadyMediaMetadataCondition();
@@ -216,7 +220,7 @@ export class MediaMetadataFileQueries {
     excludeGroupIds?: number[];
   }): { items: any[]; total: number; hasMore: boolean } {
     const limit = options.limit || 50;
-    const sortOrder = options.sortOrder || 'DESC';
+    const sortOrder = sqlSortDirection(options.sortOrder);
     const cursorDate = options.cursorDate;
     const cursorHash = options.cursorHash;
     const excludeGroupIds = options.excludeGroupIds ?? [];

@@ -4,7 +4,8 @@ import { CircleHelp, UserPlus } from 'lucide-react'
 import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Field } from '@/components/ui/field'
-import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
+import { Modal, ModalBody } from '@/components/ui/modal'
+import { EditorFooter } from '@/components/ui/editor-footer'
 import { Heading } from '@/components/ui/heading'
 import { IconButton } from '@/components/ui/icon-button'
 import { Text } from '@/components/ui/text'
@@ -267,14 +268,7 @@ export function LoginPage() {
               <Input type="password" value={guestPassword} onChange={(event) => setGuestPassword(event.target.value)} autoComplete="new-password" />
             </Field>
 
-            <ModalFooter>
-              <Button type="button" variant="ghost" onClick={() => setIsGuestModalOpen(false)} disabled={guestSignupMutation.isPending}>
-                {t({ ko: '취소', en: 'Cancel' })}
-              </Button>
-              <Button type="submit" disabled={guestSignupMutation.isPending || guestUsername.trim().length === 0 || guestPassword.length === 0}>
-                {guestSignupMutation.isPending ? t('loginPage.creating') : t('loginPage.createAndStart')}
-              </Button>
-            </ModalFooter>
+            <EditorFooter saveSubmit canSave={guestUsername.trim().length > 0 && guestPassword.length > 0} saving={guestSignupMutation.isPending} saveLabel={t('loginPage.createAndStart')} />
           </ModalBody>
         </form>
       </Modal>

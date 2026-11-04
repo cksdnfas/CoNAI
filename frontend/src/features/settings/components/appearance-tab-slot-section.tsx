@@ -1,5 +1,4 @@
-import { Check, Paintbrush, Save } from 'lucide-react'
-import { IconButton } from '@/components/ui/icon-button'
+import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ListRow } from '@/components/ui/list-row'
 import { useI18n } from '@/i18n'
@@ -62,10 +61,10 @@ export function AppearanceTabSlotSection({
             trailing={(
               <>
                 <span className="hidden text-xs sm:inline">{formatSlotTimestamp(slot.updatedAt, locale, t('appearanceTabUtils.noSaveHistory'))}</span>
-                <IconButton
-                  size="icon-sm"
-                  variant="ghost"
-                  label={t({ ko: '불러오기', en: 'Load' })}
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
                   disabled={!slotTheme || isSaving}
                   onClick={() => {
                     if (!slotTheme) return
@@ -75,12 +74,12 @@ export function AppearanceTabSlotSection({
                     })
                   }}
                 >
-                  <Paintbrush className="h-4 w-4" />
-                </IconButton>
-                <IconButton
-                  size="icon-sm"
-                  variant="ghost"
-                  label={overwriteLabel}
+                  {t({ ko: '불러오기', en: 'Load' })}
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
                   disabled={isSaving}
                   onClick={() => {
                     const nextPresetSlots = appearanceDraft.presetSlots.map((candidate) =>
@@ -96,8 +95,8 @@ export function AppearanceTabSlotSection({
                     onSavePresetSlots(nextPresetSlots)
                   }}
                 >
-                  {isEmptySlot ? <Save className="h-4 w-4" /> : <Check className="h-4 w-4" />}
-                </IconButton>
+                  {overwriteLabel}
+                </Button>
               </>
             )}
           >

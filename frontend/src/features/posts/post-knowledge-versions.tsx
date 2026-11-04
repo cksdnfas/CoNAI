@@ -1,12 +1,12 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { PostDetail } from '@conai/shared'
-import { Button } from '@/components/ui/button'
+import { EditorFooter } from '@/components/ui/editor-footer'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { ErrorState } from '@/components/ui/error-state'
 import { ListRow } from '@/components/ui/list-row'
 import { LoadingState } from '@/components/ui/loading-state'
-import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
+import { Modal, ModalBody } from '@/components/ui/modal'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
 import { POSTS_QUERY_KEY, invalidatePostScope, listPostKnowledgeVersions, restorePostKnowledgeVersion } from '@/lib/api-posts'
@@ -37,7 +37,7 @@ export function PostKnowledgeVersionsDialog({ post, onClose }: { post: PostDetai
         {picked ? <article className="min-w-0 space-y-5"><h2 className="text-lg font-semibold">{picked.title}</h2><PostMediaContext.Provider value={mediaContext}><PostMarkdown text={picked.body} /></PostMediaContext.Provider><KnowledgeSources sources={picked.sources} /></article> : null}
         </div>
       </ModalBody>
-      <ModalFooter><Button variant="ghost" onClick={onClose}>{t({ ko: '닫기', en: 'Close' })}</Button>{post.canEdit ? <Button disabled={!picked || picked.contentVersion === post.knowledge?.contentVersion || restore.isPending} onClick={async () => { if (await confirm({ title: t({ ko: '선택한 내용 판으로 복원할까?', en: 'Restore the selected content version?' }), description: t({ ko: '제목·본문·출처를 함께 복원해. 검증은 다시 확인해야 해.', en: 'The title, text and sources restore together. Verification needs a new review.' }) })) restore.mutate() }}>{t({ ko: '이 내용 판 복원', en: 'Restore this content version' })}</Button> : null}</ModalFooter>
+      <EditorFooter canSave={Boolean(picked) && picked?.contentVersion !== post.knowledge?.contentVersion} saving={restore.isPending} saveLabel={t({ ko: '복원', en: 'Restore' })} onSave={post.canEdit ? async () => { if (await confirm({ title: t({ ko: '선택한 내용 판으로 복원할까?', en: 'Restore the selected content version?' }), description: t({ ko: '제목·본문·출처를 함께 복원해. 검증은 다시 확인해야 해.', en: 'The title, text and sources restore together. Verification needs a new review.' }) })) restore.mutate() } : undefined} />
     </Modal>
   )
 }

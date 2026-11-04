@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
-import { Headphones, Pause, Play, RotateCcw, Save, X } from 'lucide-react'
+import { Headphones, LoaderCircle, Pause, Play, X } from 'lucide-react'
 import { IconButton } from '@/components/ui/icon-button'
 import { Button } from '@/components/ui/button'
 import { floatingSurfaceClassName } from '@/components/ui/floating-surface'
@@ -319,15 +319,16 @@ export function AudioEditorPanel({ candidate, canEdit, onClose, onSaved, classNa
         <IconButton variant="secondary" size="icon-sm" disabled={duration <= 0} label={playing ? t({ ko: '일시정지', en: 'Pause' }) : t({ ko: '재생', en: 'Play' })} onClick={togglePlayback}>{playing ? <Pause /> : <Play />}</IconButton>
         <Button variant="ghost" size="xs" disabled={duration <= 0 || Boolean(problem)} onClick={playRegion}>{t({ ko: '구간 재생', en: 'Play region' })}</Button>
         {canEdit ? <IconButton variant="secondary" size="icon-sm" label={t({ ko: '편집 미리듣기', en: 'Preview edit' })} disabled={Boolean(problem) || busy !== null} onClick={() => void playPreview()}><Headphones /></IconButton> : null}
-        <IconButton variant="ghost" size="icon-sm" label={t({ ko: '되돌리기', en: 'Reset' })} disabled={!changed} onClick={() => setParams(defaultParams(duration))}><RotateCcw /></IconButton>
+        <Button variant="ghost" size="sm" disabled={!changed} onClick={() => setParams(defaultParams(duration))}>{t({ ko: '되돌리기', en: 'Revert' })}</Button>
         <span className="flex-1" />
         <Tip content={t({ ko: '결과 길이', en: 'Result length' })}>
           <span className="font-mono text-xs text-muted-foreground" tabIndex={0}>{length > 0 ? `${length.toFixed(2)}s` : '—'}</span>
         </Tip>
         {canEdit ? (
-          <IconButton size="icon-sm" label={t({ ko: '편집본 저장', en: 'Save edit' })} disabled={Boolean(problem) || !changed || busy !== null} onClick={() => void save()}>
-            <Save />
-          </IconButton>
+          <Button size="sm" variant="default" disabled={Boolean(problem) || !changed || busy !== null} onClick={() => void save()}>
+            {busy === 'save' ? <LoaderCircle className="animate-spin" /> : null}
+            {t({ ko: '저장', en: 'Save' })}
+          </Button>
         ) : null}
       </div>
 

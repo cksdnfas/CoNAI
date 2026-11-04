@@ -2,7 +2,8 @@ import { FileUp, Folder, FolderPlus, Plus, UserRound } from 'lucide-react'
 import { ListPager } from '@/components/common/list-pager'
 import { PathBreadcrumbs } from '@/components/common/path-breadcrumbs'
 import { SearchField } from '@/components/common/search-field'
-import { ActionMenuButton } from '@/components/ui/action-menu'
+import { ActionContextMenu, ActionMenuButton } from '@/components/ui/action-menu'
+import { Button } from '@/components/ui/button'
 import { Chip } from '@/components/ui/chip'
 import { EmptyState } from '@/components/ui/empty-state'
 import { IconButton } from '@/components/ui/icon-button'
@@ -14,12 +15,13 @@ import { ChatHealthDot, ChatHealthTip } from '@/features/codex-chat/chat-health'
 import { ChatProfileAvatar } from '@/features/codex-chat/chat-profile-avatar'
 import { getChatScopeCopy } from '@/features/codex-chat/chat-scope-copy'
 import { getErrorMessage } from '@/lib/error-message'
-import { ChatProfileLibraryDialogs, profileModelChip, profileModelLine, profileToolChip, useChatProfileLibrary } from './chat-settings-profiles'
+import { ChatProfileLibraryDialogs, profileToolChip, useChatProfileLibrary } from './chat-settings-profiles'
+import { profileModelChip, profileModelLine } from './chat-profile-model-line'
 import { SettingsRowsSkeleton } from './settings-rows'
 
 /**
  * Settings › 채팅 › 프로필: the same chat profile library as the workspace, drawn as rows so it sits among the other
- * settings. Everything (folders, search, enable, copy, move, card import, the editor page) works here, inside Settings.
+ * settings. Everything (folders, search, enable, copy, move, card import, the editor modal) works here, inside Settings.
  */
 export function ChatProfilesCompact({ active }: { active: boolean }) {
   const library = useChatProfileLibrary({ active })
@@ -43,7 +45,7 @@ export function ChatProfilesCompact({ active }: { active: boolean }) {
             if (file) importMutation.mutate(file)
           }} />
           <IconButton size="icon-sm" variant="ghost" disabled={importMutation.isPending} onClick={() => importRef.current?.click()} label={t({ ko: '캐릭터 카드 가져오기', en: 'Import character card' })}><FileUp /></IconButton>
-          <IconButton size="icon-sm" variant="ghost" onClick={() => openEditor(null)} label={t({ ko: '새 프로필', en: 'New profile' })}><Plus /></IconButton>
+          <Button size="compact" variant="ghost" aria-label={t({ ko: '새 프로필', en: 'New profile' })} onClick={() => openEditor(null)}><Plus />{t({ ko: '추가', en: 'Add' })}</Button>
         </>}
       >
         <div className="space-y-2 pb-2">
@@ -72,8 +74,7 @@ export function ChatProfilesCompact({ active }: { active: boolean }) {
           {profiles.map((profile) => {
             const down = healthOf(profile.id)
             return (
-              <ResourceRow
-                key={profile.id}
+              <ActionContextMenu key={profile.id} entries={profileMenu(profile)}><ResourceRow
                 dimmed={!profile.isEnabled}
                 leading={<ChatHealthDot down={down}><ChatProfileAvatar name={profile.name} avatar={profile.avatar} profile={profile} engine={profile.engine} size="sm" /></ChatHealthDot>}
                 name={profile.name}
@@ -88,7 +89,7 @@ export function ChatProfilesCompact({ active }: { active: boolean }) {
                   <ActionMenuButton entries={profileMenu(profile)} label={t({ ko: '프로필 작업', en: 'Profile actions' })} />
                 </>}
                 onOpen={() => openEditor(profile)}
-              />
+              /></ActionContextMenu>
             )
           })}
         </>}

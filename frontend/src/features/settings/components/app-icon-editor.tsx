@@ -2,8 +2,9 @@ import { useEffect, useRef, useState } from 'react'
 import { FlipHorizontal, LoaderCircle, RotateCcw, RotateCw } from 'lucide-react'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { Button } from '@/components/ui/button'
+import { EditorFooter } from '@/components/ui/editor-footer'
 import { IconButton } from '@/components/ui/icon-button'
-import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
+import { Modal, ModalBody } from '@/components/ui/modal'
 import { Slider } from '@/components/ui/slider'
 import { useI18n } from '@/i18n'
 import { APP_NAME } from '@/lib/app-metadata'
@@ -180,13 +181,7 @@ export function AppIconEditor({ source, isSaving, registerBlocked = false, onReg
         </div>
         {loadError || saveError ? <div role="alert" className="text-sm text-destructive">{loadError ?? saveError}</div> : null}
       </ModalBody>
-      <ModalFooter>
-        <Button variant="ghost" disabled={isSaving} onClick={onClose}>{t({ ko: '취소', en: 'Cancel' })}</Button>
-        <Button disabled={registerDisabled} onClick={register} aria-busy={isSaving || undefined}>
-          {isSaving ? <LoaderCircle className="size-4 animate-spin" aria-hidden /> : null}
-          {isSaving ? t({ ko: '등록 중', en: 'Registering' }) : t({ ko: '등록', en: 'Register' })}
-        </Button>
-      </ModalFooter>
+      <EditorFooter onSave={register} canSave={!registerDisabled} saving={isSaving} />
     </Modal>
   )
 }

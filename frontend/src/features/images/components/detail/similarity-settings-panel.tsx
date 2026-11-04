@@ -185,7 +185,7 @@ export function SimilaritySettingsPanel({
             </div>
 
             <div className="flex justify-end gap-2">
-              <Button size="sm" variant="secondary" onClick={onToggle}>
+              <Button size="sm" variant="ghost" onClick={onToggle}>
                 {t({ ko: '닫기', en: 'Close' })}
               </Button>
               <Button size="sm" onClick={onApply} disabled={isSaving}>

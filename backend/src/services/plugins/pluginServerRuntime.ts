@@ -49,6 +49,7 @@ let started = false
 /** A server state changed: plugin lists refetch. No plugin id, so disabled plugins stay hidden from non-administrators. */
 const announceServerState = () => publishRuntimeEvent({ name: 'plugin.server.changed', topic: 'plugins', visibility: 'all', payload: {} })
 let stopEvents: (() => void) | null = null
+let stopPluginChanges: (() => void) | null = null
 
 // The worker's side: `conai` for the module, and the message loop. Plain CommonJS run with `eval`, so no build step
 // has to ship a separate file; it reaches better-sqlite3 through the absolute path the host resolved.
@@ -424,13 +425,14 @@ export function startPluginServers() {
   stopEvents = subscribeToRuntimeEvents(record => {
     if (record.name === 'queue.job.created' || record.name === 'queue.job.status') notifyGenerationHooks(record.name, record.payload as QueueJobEventPayload)
   })
-  onPluginChanged(id => syncPluginServer(id))
+  stopPluginChanges = onPluginChanged(syncPluginServer)
   for (const plugin of listPlugins()) if (plugin.manifest.server) void syncPluginServer(plugin.manifest.id)
 }
 
 export async function closePluginServers() {
   started = false
   stopEvents?.(); stopEvents = null
+  stopPluginChanges?.(); stopPluginChanges = null
   await Promise.all(syncing.values())
   await Promise.all([...servers.values()].map(stopWorker))
   servers.clear()

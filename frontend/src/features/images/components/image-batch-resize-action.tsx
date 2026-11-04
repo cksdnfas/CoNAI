@@ -5,11 +5,11 @@ import { ImageUpscale, Link2, Link2Off } from 'lucide-react'
 import { SelectionBarAction } from '@/components/common/selection-action-bar'
 import { RuntimeJobProgress } from '@/components/common/runtime-job-progress'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Button } from '@/components/ui/button'
+import { EditorFooter } from '@/components/ui/editor-footer'
 import { Field } from '@/components/ui/field'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
-import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
+import { Modal, ModalBody } from '@/components/ui/modal'
 import { Select } from '@/components/ui/select'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
@@ -174,11 +174,7 @@ export function ImageBatchResizeAction({ compositeHashes, referenceSize }: Image
               <Input value={groupPath} onChange={(event) => setGroupPath(event.target.value)} placeholder={DEFAULT_GROUP_PATH} disabled={busy} />
             </Field>
             {resize.job && resize.isRunning ? <RuntimeJobProgress job={resize.job} cancel={resize.cancel} isCancelling={resize.isCancelling} /> : null}
-            <ModalFooter>
-              <Button type="submit" disabled={busy || compositeHashes.length === 0}>
-                {t({ ko: '크기 변경', en: 'Resize' })}
-              </Button>
-            </ModalFooter>
+            <EditorFooter saveSubmit canSave={compositeHashes.length > 0} saving={busy} saveLabel={t({ ko: '크기 변경', en: 'Resize' })} />
           </ModalBody>
         </form>
       </Modal>

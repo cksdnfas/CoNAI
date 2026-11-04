@@ -208,6 +208,23 @@ test('a failing invalidation subscriber cannot retain stale media caches or skip
   }
 })
 
+test('a failing runtime subscriber cannot suppress later invalidation and completion listeners', async () => {
+  const { publishRuntimeEvent, subscribeToRuntimeEvents } = await import('../src/services/runtime-events/runtimeEventBus')
+  const seen: number[] = []
+  const stopFailing = subscribeToRuntimeEvents(() => { throw new Error('runtime subscriber failed') })
+  const stopObserving = subscribeToRuntimeEvents(event => { seen.push(event.id) })
+  try {
+    const first = publishRuntimeEvent({ name: 'queue.job.status', topic: 'generation-queue', payload: { job_id: -1, status: 'completed' } })
+    assert.deepEqual(seen, [first])
+    stopObserving()
+    publishRuntimeEvent({ name: 'queue.job.status', topic: 'generation-queue', payload: { job_id: -1, status: 'completed' } })
+    assert.deepEqual(seen, [first], 'unsubscribing must remove the protected listener')
+  } finally {
+    stopFailing()
+    stopObserving()
+  }
+})
+
 test('group caches follow membership and group writes made outside the models', async () => {
   const db = await seed()
   const { AggregateCache } = await import('../src/services/aggregateCache')

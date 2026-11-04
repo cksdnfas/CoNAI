@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react'
-import { Check, Download, Eye, Images, Pencil, RotateCcw, Undo2, Upload } from 'lucide-react'
+import { Download, Eye, Images, Pencil, RotateCcw, Upload } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { Spinner } from '@/components/ui/loading-state'
 import { SettingRow } from '@/components/ui/setting-row'
@@ -127,12 +128,8 @@ export function AppearanceTab({
             <div className="min-w-0 truncate text-sm text-foreground">{importPreviewFileName}</div>
           </div>
           <div className="flex shrink-0 gap-1">
-            <IconButton size="icon-sm" variant="secondary" label={t({ ko: '되돌리기', en: 'Revert' })} onClick={onRevertImportPreview}>
-              <Undo2 />
-            </IconButton>
-            <IconButton size="icon-sm" label={t({ ko: '적용', en: 'Apply' })} onClick={onApplyImportPreview} disabled={draftLocked}>
-              <Check />
-            </IconButton>
+            <Button size="sm" variant="ghost" onClick={onRevertImportPreview}>{t({ ko: '되돌리기', en: 'Revert' })}</Button>
+            <Button size="sm" variant="default" onClick={onApplyImportPreview} disabled={draftLocked}>{t({ ko: '적용', en: 'Apply' })}</Button>
           </div>
         </div>
       ) : null}

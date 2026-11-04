@@ -193,9 +193,9 @@ export class PromptGroupService {
       }
 
       const groupIds = this.getGroupDescendantIds(id, type);
-      const protectedGroup = groupIds
-        .map((groupId) => PromptGroupModel.findById(groupId, type))
-        .find((group) => isProtectedLoRAGroup(group));
+      const groups = db.prepare(`SELECT group_name FROM ${getTableName(type)} WHERE id IN (SELECT value FROM json_each(?))`)
+        .all(JSON.stringify(groupIds)) as Array<{ group_name: string }>;
+      const protectedGroup = groups.find(isProtectedLoRAGroup);
       if (protectedGroup) {
         throw new Error('LoRA group is protected');
       }
@@ -380,8 +380,8 @@ export class PromptGroupService {
     }
 
     const tableName = getPromptTableName(type);
-    const placeholders = groupIds.map(() => '?').join(',');
-    const info = db.prepare(`UPDATE ${tableName} SET group_id = ?, updated_at = CURRENT_TIMESTAMP WHERE group_id IN (${placeholders})`).run(newGroupId, ...groupIds);
+    const info = db.prepare(`UPDATE ${tableName} SET group_id = ?, updated_at = CURRENT_TIMESTAMP WHERE group_id IN (SELECT value FROM json_each(?))`)
+      .run(newGroupId, JSON.stringify(groupIds));
     return info.changes;
   }
 
@@ -394,8 +394,7 @@ export class PromptGroupService {
     }
 
     const tableName = getTableName(type);
-    const placeholders = groupIds.map(() => '?').join(',');
-    const info = db.prepare(`DELETE FROM ${tableName} WHERE id IN (${placeholders})`).run(...groupIds);
+    const info = db.prepare(`DELETE FROM ${tableName} WHERE id IN (SELECT value FROM json_each(?))`).run(JSON.stringify(groupIds));
     return info.changes;
   }
 

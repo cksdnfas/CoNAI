@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { Download, Loader2, Save, X } from 'lucide-react'
+import { Download, LoaderCircle, X } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
@@ -102,7 +103,10 @@ export function SpriteSourceNormalizeTab({ active }: { active: boolean }) {
       <SpriteActionBar>
         <span className="flex-1" />
         <IconButton variant="ghost" size="icon-sm" disabled={!canRun} label={t({ ko: 'ZIP으로 받기', en: 'Download ZIP' })} onClick={() => void run(false)}><Download /></IconButton>
-        <IconButton disabled={!canRun || !has('images.upload')} label={t({ ko: '라이브러리에 저장', en: 'Save to library' })} onClick={() => void run(true)}>{running ? <Loader2 className="animate-spin" /> : <Save />}</IconButton>
+        <Button size="sm" variant="default" disabled={!canRun || !has('images.upload')} onClick={() => void run(true)}>
+          {running ? <LoaderCircle className="animate-spin" /> : null}
+          {t({ ko: '저장', en: 'Save' })}
+        </Button>
       </SpriteActionBar>
     </div>
   )

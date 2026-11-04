@@ -4,13 +4,14 @@ import { History, TriangleAlert } from 'lucide-react'
 import type { WorkspaceBatchResult, WorkspaceProject } from '@conai/shared'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
+import { EditorFooter } from '@/components/ui/editor-footer'
 import { EmptyState } from '@/components/ui/empty-state'
 import { ErrorState } from '@/components/ui/error-state'
 import { Field } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { ListRow } from '@/components/ui/list-row'
 import { LoadingState } from '@/components/ui/loading-state'
-import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
+import { Modal, ModalBody } from '@/components/ui/modal'
 import { ResourceRowStatus } from '@/components/ui/resource-row'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Textarea } from '@/components/ui/textarea'
@@ -101,10 +102,7 @@ export function WorkspaceProjectDialog({ open, project, canEdit, onClose, onSave
         </Field>
       </ModalBody>
       {canEdit ? (
-        <ModalFooter>
-          <span className="flex-1" />
-          <Button disabled={!canSave} onClick={() => save.mutate(undefined)}>{base ? t({ ko: '저장', en: 'Save' }) : t({ ko: '만들기', en: 'Create' })}</Button>
-        </ModalFooter>
+        <EditorFooter onSave={() => save.mutate(undefined)} canSave={canSave} saving={save.isPending} saveLabel={base ? t({ ko: '저장', en: 'Save' }) : t({ ko: '만들기', en: 'Create' })} />
       ) : null}
     </Modal>
   )

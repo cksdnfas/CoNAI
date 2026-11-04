@@ -4,13 +4,14 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Crown, UserMinus, UserPlus, Users } from 'lucide-react'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Button } from '@/components/ui/button'
+import { EditorFooter } from '@/components/ui/editor-footer'
 import { Checkbox } from '@/components/ui/checkbox'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { Field } from '@/components/ui/field'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { Spinner } from '@/components/ui/loading-state'
-import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
+import { Modal, ModalBody } from '@/components/ui/modal'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Select } from '@/components/ui/select'
@@ -253,11 +254,7 @@ export function GroupInviteDialog({ open, mode, profiles, userProfiles = [], onC
           </Field>
         ) : null}
       </ModalBody>
-      <ModalFooter>
-        <Button onClick={() => mutation.mutate()} disabled={picked.length === 0 || mutation.isPending}>
-          {mode?.kind === 'create' ? t({ ko: '그룹 만들기', en: 'Create group' }) : t({ ko: '초대', en: 'Invite' })}
-        </Button>
-      </ModalFooter>
+      <EditorFooter onSave={() => mutation.mutate()} canSave={picked.length > 0} saving={mutation.isPending} saveLabel={mode?.kind === 'create' ? t({ ko: '만들기', en: 'Create' }) : t({ ko: '초대', en: 'Invite' })} />
     </Modal>
   )
 }

@@ -170,7 +170,7 @@ export function WatchedFolderCard({
           }
           void handleAction(() => onDelete(folder.id))
         }}
-        primaryLabel={isBusy ? t({ ko: '처리 중…', en: 'Processing…' }) : t({ ko: '폴더 설정 저장', en: 'Save folder settings' })}
+        saving={isBusy}
         primaryDisabled={isBusy}
         onPrimary={() =>
           void handleAction(() =>

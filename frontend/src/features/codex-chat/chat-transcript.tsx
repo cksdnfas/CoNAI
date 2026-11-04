@@ -1,5 +1,6 @@
 import { Component, Fragment, memo, useMemo, useRef, useState, type MouseEvent, type ReactNode } from 'react'
-import { Bookmark, Check, ChevronLeft, ChevronRight, Ellipsis, GitBranch, Image as ImageIcon, Languages, ListChecks, LoaderCircle, type LucideIcon, Mic, Paintbrush, Pencil, RefreshCw, Reply, StepForward, X } from 'lucide-react'
+import { Bookmark, ChevronLeft, ChevronRight, Ellipsis, GitBranch, Image as ImageIcon, Languages, ListChecks, LoaderCircle, type LucideIcon, Mic, Paintbrush, Pencil, RefreshCw, Reply, StepForward } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import type { ChatMessageRouting } from '@conai/shared'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { IconButton } from '@/components/ui/icon-button'
@@ -78,8 +79,8 @@ function ChatMessageEditor({ message, busy, onSave, onCancel, reply = false }: {
       if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); save() }
     }} />
     <div className="flex justify-end gap-1">
-      <IconButton size="icon-xs" variant="ghost" label={t({ ko: '취소', en: 'Cancel' })} disabled={busy} onClick={onCancel}><X /></IconButton>
-      <IconButton size="icon-xs" variant="ghost" label={reply ? t({ ko: '저장', en: 'Save' }) : t({ ko: '저장하고 다시 생성', en: 'Save and regenerate' })} disabled={busy || (!content.trim() && !message.attachments?.length && !message.mediaAttachments?.length)} onClick={save}><Check /></IconButton>
+      <Button type="button" size="xs" variant="ghost" disabled={busy} onClick={onCancel}>{t({ ko: '취소', en: 'Cancel' })}</Button>
+      <Button type="button" size="xs" variant="default" disabled={busy || (!content.trim() && !message.attachments?.length && !message.mediaAttachments?.length)} onClick={save}>{reply ? t({ ko: '저장', en: 'Save' }) : t({ ko: '저장하고 다시 생성', en: 'Save and regenerate' })}</Button>
     </div>
   </div>
 }

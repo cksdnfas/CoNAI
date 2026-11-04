@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
-import { ChevronDown, LoaderCircle } from 'lucide-react'
+import { ChevronDown } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
+import { EditorFooter } from '@/components/ui/editor-footer'
 import { Input } from '@/components/ui/input'
 import { Modal, ModalBody } from '@/components/ui/modal'
 import { buildGroupCountMaps, getGroupHierarchyTotalCount } from '@/features/groups/group-count-utils'
@@ -11,7 +12,7 @@ import type { GroupMutationInput, GroupRecord, GroupWithHierarchy } from '@/type
 import { AutoCollectChipEditor, type AutoCollectEditorState } from './auto-collect-chip-editor'
 import { GroupCoverMosaic } from './group-cover-mosaic'
 import { GroupLocationPicker } from './group-location-picker'
-import { GroupColorSwatches, GroupModalFooter, GroupModalRow, GroupModalSection, GroupModalSwitchRow } from './group-modal-parts'
+import { GroupColorSwatches, GroupModalRow, GroupModalSection, GroupModalSwitchRow } from './group-modal-parts'
 import { useI18n } from '@/i18n'
 
 interface GroupEditorModalProps {
@@ -248,19 +249,7 @@ export function GroupEditorModal({
           ) : null}
         </ModalBody>
 
-        <GroupModalFooter
-          busy={isSubmitting}
-          start={mode === 'edit' && onDelete ? (
-            <Button type="button" variant="destructive-ghost" onClick={onDelete} disabled={isSubmitting}>
-              {t({ ko: '그룹 삭제', en: 'Delete group' })}
-            </Button>
-          ) : null}
-        >
-          <Button type="submit" disabled={!canSave}>
-            {isSubmitting ? <LoaderCircle className="animate-spin" /> : null}
-            {mode === 'create' ? t({ ko: '만들기', en: 'Create' }) : t({ ko: '저장', en: 'Save' })}
-          </Button>
-        </GroupModalFooter>
+        <EditorFooter saveSubmit canSave={canSave} saving={isSubmitting} onDelete={mode === 'edit' ? onDelete : undefined} deleteDisabled={isSubmitting} saveLabel={mode === 'create' ? t({ ko: '만들기', en: 'Create' }) : undefined} />
       </form>
     </Modal>
   )

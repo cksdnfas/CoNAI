@@ -15,7 +15,8 @@ import { useSnackbar } from '@/components/ui/snackbar-context'
 import { InlineMediaPreview } from '@/features/images/components/inline-media-preview'
 import { ImageList } from '@/features/images/components/image-list/image-list'
 import { getImageListDisplayName, getImageListItemId, getImageListPreviewUrl } from '@/features/images/components/image-list/image-list-utils'
-import { Modal, ModalFooter } from '@/components/ui/modal'
+import { Modal } from '@/components/ui/modal'
+import { EditorFooter } from '@/components/ui/editor-footer'
 import { useI18n } from '@/i18n'
 import { useDropZoneState } from '@/features/upload/use-drop-zone-state'
 import { listGenerationSaveImages } from '@/lib/api-image-generation-history'
@@ -557,12 +558,14 @@ export function ImageAttachmentPickerButton({
                   return hash ? items.find((item) => item.composite_hash === hash) ?? (current?.composite_hash === hash ? current : null) : null
                 })}
               />
-              <ModalFooter>
+              <EditorFooter
+                onSave={() => void handleImportExistingImage(selectedLibraryImage, true)}
+                canSave={canViewImages && Boolean(selectedLibraryImage)}
+                saving={isImporting}
+                saveLabel={t({ ko: '불러오기', en: 'Load' })}
+              >
                 <span className="mr-auto min-w-0 truncate text-sm text-muted-foreground">{selectedLibraryImage ? getImageListDisplayName(selectedLibraryImage) : t({ ko: '이미지 한 장을 골라줘.', en: 'Choose one image.' })}</span>
-                <Button disabled={!canViewImages || isImporting || !selectedLibraryImage} aria-busy={isImporting || undefined} onClick={() => void handleImportExistingImage(selectedLibraryImage, true)}>
-                  {t({ ko: '선택', en: 'Select' })}
-                </Button>
-              </ModalFooter>
+              </EditorFooter>
             </>
           ) : null}
 

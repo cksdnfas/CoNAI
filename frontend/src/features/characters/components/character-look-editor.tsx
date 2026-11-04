@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { CHARACTER_APPEARANCE_SECTION_KEYS, CHAT_PROFILE_TEXT_LIMITS, composeCharacterAppearance, joinPromptParts, tokenizePrompt } from '@conai/shared'
 import { ArrowUpToLine, Copy, ExternalLink, ImageIcon, ListTree, Pencil, Plus, Sparkles, Trash2, UserSearch, Wand2 } from 'lucide-react'
 import { NameDialog } from '@/components/common/entry-dialogs'
-import { ActionMenuButton } from '@/components/ui/action-menu'
+import { ActionContextMenu, ActionMenuButton, type ActionMenuEntry } from '@/components/ui/action-menu'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Chip, ToggleChip } from '@/components/ui/chip'
 import { useConfirm } from '@/components/ui/confirm-dialog'
@@ -72,7 +73,7 @@ export function CharacterLookEditor({ editor, editable, generation, busy, onBusy
   useEffect(() => () => { if (controller.current) { controller.current.abort(); controller.current = null; reportBusy.current(false) } }, [])
 
   const setSection = (key: SectionKey, value: string) => editor.patch({ sections: { ...editor.draftRef.current.sections, [key]: value } })
-  const setOutfits = (outfits: CharacterOutfit[]) => editor.patch({ outfits })
+  const setOutfits = (update: (outfits: CharacterOutfit[]) => CharacterOutfit[]) => editor.patch({ outfits: update(editor.draftRef.current.outfits) })
   const moveTag = (from: SectionKey, to: SectionKey, index: number) => {
     const current = editor.draftRef.current.sections
     const moved = movePromptPiece(current[from], current[to], index)
@@ -218,50 +219,116 @@ function PromptChips({ value, label, editable, disabled, onChange, onDragStart, 
     onChange(appendPromptPiece(value, text))
     setText('')
   }
+  const moveEntries = (index: number): ActionMenuEntry[] => onMove ? (moveTargets ?? []).map((target) => ({
+    key: target.key, label: t({ ko: '{section}(으)로 옮기기', en: 'Move to {section}' }, { section: target.label }), disabled, onSelect: () => onMove(index, target.key),
+  })) : []
+  const remove = (index: number) => onChange(removePromptPiece(value, index))
   return <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-    {tags.map((tag, index) => <Chip key={`${index}:${tag}`} draggable={editable && !disabled && Boolean(onDragStart)}
-      onDragStart={(event) => { event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('text/plain', tag); onDragStart?.(index) }}
-      onDragEnd={onDragEnd}
-      onRemove={editable ? () => onChange(removePromptPiece(value, index)) : undefined}
-      removeDisabled={disabled} removeLabel={t({ ko: '{tag} 빼기', en: 'Remove {tag}' }, { tag })}>
-      <span className="truncate">{tag}</span>
-      {editable && onMove ? <ActionMenuButton size="icon-xs" label={t({ ko: '{tag} 옮기기', en: 'Move {tag}' }, { tag })} entries={(moveTargets ?? []).map((target) => ({
-        key: target.key, label: t({ ko: '{section}(으)로 옮기기', en: 'Move to {section}' }, { section: target.label }), disabled, onSelect: () => onMove(index, target.key),
-      }))} /> : null}
-    </Chip>)}
+    {tags.map((tag, index) => <ActionContextMenu key={`${index}:${tag}`} disabled={!editable} entries={[
+      ...moveEntries(index),
+      '-',
+      { key: 'remove', label: t({ ko: '빼기', en: 'Remove' }), destructive: true, disabled, onSelect: () => remove(index) },
+    ]}>
+      <span className="group/tag inline-flex max-w-full min-w-0">
+        <Chip draggable={editable && !disabled && Boolean(onDragStart)}
+          onDragStart={(event) => { event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('text/plain', tag); onDragStart?.(index) }}
+          onDragEnd={onDragEnd}
+          onRemove={editable ? () => remove(index) : undefined}
+          removeDisabled={disabled} removeLabel={t({ ko: '{tag} 빼기', en: 'Remove {tag}' }, { tag })}>
+          <span className="truncate">{tag}</span>
+          {/* Shown on hover or focus (always on touch); right-click has the same moves. */}
+          {editable && onMove ? <span className="inline-flex opacity-0 transition-opacity motion-reduce:transition-none group-hover/tag:opacity-100 group-focus-within/tag:opacity-100 pointer-coarse:opacity-100 has-[[data-state=open]]:opacity-100">
+            <ActionMenuButton size="icon-xs" label={t({ ko: '{tag} 옮기기', en: 'Move {tag}' }, { tag })} entries={moveEntries(index)} />
+          </span> : null}
+        </Chip>
+      </span>
+    </ActionContextMenu>)}
     {editable ? <Input variant="bare" controlSize="compact" className="w-28 min-w-20 flex-1" aria-label={t({ ko: '{section} 태그 추가', en: 'Add {section} tags' }, { section: label })}
       disabled={disabled} value={text} placeholder={t({ ko: '+ 태그', en: '+ tag' })} onChange={(event) => setText(event.target.value)}
       onBlur={add} onKeyDown={(event) => { if (event.key === 'Enter' && !event.nativeEvent.isComposing) { event.preventDefault(); add() } }} /> : null}
   </div>
 }
 
-/** The look's outfits: name and tags each; the first is the default one profiles and generation use. */
-function OutfitList({ outfits, editable, disabled, onChange }: { outfits: CharacterOutfit[]; editable: boolean; disabled: boolean; onChange: (outfits: CharacterOutfit[]) => void }) {
+/**
+ * The look's outfits: name and tags each; the first is the default one profiles and generation use. The picked outfit
+ * is renamed, made default or removed in the row under the chips; right-click on a chip does the same for that one.
+ */
+function OutfitList({ outfits, editable, disabled, onChange }: { outfits: CharacterOutfit[]; editable: boolean; disabled: boolean; onChange: (update: (outfits: CharacterOutfit[]) => CharacterOutfit[]) => void }) {
   const { t } = useI18n()
+  const confirm = useConfirm()
   const [selected, setSelected] = useState(0)
-  const [renaming, setRenaming] = useState<string | null>(null)
+  const [renaming, setRenaming] = useState<{ at: number; name: string } | null>(null)
+  const nameBefore = useRef('')
   const index = Math.min(selected, Math.max(0, outfits.length - 1))
   const outfit = outfits[index]
-  const update = (index: number, patch: Partial<CharacterOutfit>) => onChange(outfits.map((outfit, at) => (at === index ? { ...outfit, ...patch } : outfit)))
+  const defaultLabel = t({ ko: '기본', en: 'Default' })
+  // Profiles and generation always wear an outfit once there is one, so the last one stays.
+  const removable = outfits.length > 1
+  const update = (at: number, patch: Partial<CharacterOutfit>) => onChange((current) => current.map((entry, i) => (i === at ? { ...entry, ...patch } : entry)))
+  const makeDefault = (at: number) => {
+    onChange((current) => current[at] ? [current[at], ...current.filter((_, i) => i !== at)] : current)
+    setSelected(index === at ? 0 : index < at ? index + 1 : index)
+  }
+  const remove = async (at: number) => {
+    const target = outfits[at]
+    if (!target || !removable) return
+    if (target.tags.trim() && !await confirm({
+      title: t({ ko: '‘{name}’ 의상 지우기', en: 'Remove the “{name}” outfit' }, { name: target.name }),
+      description: t({ ko: '이 의상의 태그도 같이 빠져. 저장하기 전까지는 되돌릴 수 있어.', en: 'Its tags go with it. Nothing is saved yet.' }),
+      confirmLabel: t({ ko: '지우기', en: 'Remove' }),
+      tone: 'destructive',
+    })) return
+    // By name (unique per setting): a background write may have rebuilt the draft objects while the question was open.
+    const name = target.name.trim().toLowerCase()
+    let removed = false
+    onChange((current) => {
+      const next = current.filter((entry) => entry.name.trim().toLowerCase() !== name)
+      removed = next.length < current.length && next.length > 0
+      return removed ? next : current
+    })
+    if (removed && at <= index) setSelected(Math.max(0, index - 1))
+  }
+  const add = () => {
+    setSelected(outfits.length)
+    onChange((current) => [...current, { name: t({ ko: '의상 {count}', en: 'Outfit {count}' }, { count: current.length + 1 }), tags: '' }])
+  }
+  const entriesOf = (at: number): ActionMenuEntry[] => [
+    { key: 'rename', label: t({ ko: '이름 바꾸기', en: 'Rename' }), icon: Pencil, disabled, onSelect: () => setRenaming({ at, name: outfits[at]?.name ?? '' }) },
+    { key: 'default', label: t({ ko: '기본 의상으로', en: 'Make default' }), icon: ArrowUpToLine, disabled: disabled || at === 0, onSelect: () => makeDefault(at) },
+    '-',
+    { key: 'delete', label: t({ ko: '의상 지우기', en: 'Remove outfit' }), icon: Trash2, destructive: true, disabled: disabled || !removable, onSelect: () => void remove(at) },
+  ]
   return (
     <div className="space-y-3 border-t border-line pt-3">
-      <div className="flex items-center gap-2">
-        <span className="flex items-center gap-1 text-sm font-semibold">
-          {t({ ko: '의상', en: 'Outfits' })}
-          <FieldInfo>{t({ ko: '맨 위가 기본 의상이야. 옷·액세서리 태그는 의상에 두면 갈아입힐 수 있어.', en: 'The first one is the default. Keep clothing tags in outfits to switch them.' })}</FieldInfo>
-        </span>
-        {editable && outfit ? <ActionMenuButton className="ml-auto" label={t({ ko: '의상 작업', en: 'Outfit actions' })} entries={[
-          { key: 'rename', label: t({ ko: '이름 바꾸기', en: 'Rename' }), icon: Pencil, disabled, onSelect: () => setRenaming(outfit.name) },
-          { key: 'default', label: t({ ko: '기본 의상으로', en: 'Make default' }), icon: ArrowUpToLine, disabled: disabled || index === 0, onSelect: () => { onChange([outfit, ...outfits.filter((_, at) => at !== index)]); setSelected(0) } },
-          { key: 'delete', label: t({ ko: '의상 지우기', en: 'Remove outfit' }), icon: Trash2, destructive: true, disabled, onSelect: () => { onChange(outfits.filter((_, at) => at !== index)); setSelected(Math.max(0, index - 1)) } },
-        ]} /> : null}
+      <span className="flex items-center gap-1 text-sm font-semibold">
+        {t({ ko: '의상', en: 'Outfits' })}
+        <FieldInfo>{t({ ko: '맨 위가 기본 의상이야. 옷·액세서리 태그는 의상에 두면 갈아입힐 수 있어.', en: 'The first one is the default. Keep clothing tags in outfits to switch them.' })}</FieldInfo>
+      </span>
+      <div className="flex flex-wrap items-center gap-1.5">
+        {outfits.map((entry, at) => (
+          <ActionContextMenu key={at} entries={entriesOf(at)} disabled={!editable}>
+            <ToggleChip pressed={at === index} onClick={() => setSelected(at)}>
+              <span className="truncate">{entry.name}</span>
+              {at === 0 && entry.name.trim() !== defaultLabel ? <Badge variant="secondary" size="xs">{defaultLabel}</Badge> : null}
+            </ToggleChip>
+          </ActionContextMenu>
+        ))}
+        {editable ? <Button size="compact" variant="ghost" disabled={disabled} onClick={add}>{t({ ko: '의상 추가', en: 'Add outfit' })}</Button> : null}
       </div>
-      <div className="flex flex-wrap gap-1.5">
-        {outfits.map((entry, at) => <ToggleChip key={at} pressed={at === index} onClick={() => setSelected(at)}>{entry.name}{at === 0 ? <span>{t({ ko: '기본', en: 'Default' })}</span> : null}</ToggleChip>)}
-        {editable ? <IconButton size="icon-sm" variant="ghost" label={t({ ko: '의상 추가', en: 'Add outfit' })} disabled={disabled} onClick={() => { setSelected(outfits.length); onChange([...outfits, { name: t({ ko: '의상 {count}', en: 'Outfit {count}' }, { count: outfits.length + 1 }), tags: '' }]) }}><Plus /></IconButton> : null}
-      </div>
+      {editable && outfit ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <Input controlSize="compact" className="w-48 min-w-0" aria-label={t({ ko: '의상 이름', en: 'Outfit name' })} disabled={disabled} value={outfit.name} maxLength={CHAT_PROFILE_TEXT_LIMITS.name}
+            onFocus={() => { nameBefore.current = outfit.name }}
+            onChange={(event) => update(index, { name: event.target.value })}
+            // A cleared name goes back to the one it had: profiles pick outfits by name.
+            onBlur={() => { if (!outfit.name.trim()) update(index, { name: nameBefore.current }) }}
+            onKeyDown={(event) => { if (event.key === 'Enter' && !event.nativeEvent.isComposing) { event.preventDefault(); event.currentTarget.blur() } }} />
+          {index > 0 ? <Button size="compact" variant="ghost" disabled={disabled} onClick={() => makeDefault(index)}>{t({ ko: '기본으로', en: 'Make default' })}</Button> : null}
+          <Button size="compact" variant="destructive-ghost" disabled={disabled || !removable} onClick={() => void remove(index)}>{t({ ko: '지우기', en: 'Remove' })}</Button>
+        </div>
+      ) : null}
       {outfit ? <PromptChips value={outfit.tags} label={outfit.name} editable={editable} disabled={disabled} onChange={(tags) => update(index, { tags })} /> : <EmptyState size="compact" title={t({ ko: '아직 의상이 없어', en: 'No outfits yet' })} />}
-      {renaming !== null ? <NameDialog open title={t({ ko: '의상 이름 바꾸기', en: 'Rename outfit' })} value={renaming} onChange={setRenaming} onSubmit={() => { if (renaming.trim()) { update(index, { name: renaming.trim() }); setRenaming(null) } }} onClose={() => setRenaming(null)} /> : null}
+      {renaming !== null ? <NameDialog open title={t({ ko: '의상 이름 바꾸기', en: 'Rename outfit' })} value={renaming.name} onChange={(name) => setRenaming({ ...renaming, name })} onSubmit={() => { if (renaming.name.trim()) { update(renaming.at, { name: renaming.name.trim() }); setRenaming(null) } }} onClose={() => setRenaming(null)} /> : null}
     </div>
   )
 }

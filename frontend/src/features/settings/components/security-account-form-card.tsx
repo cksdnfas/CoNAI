@@ -1,5 +1,5 @@
-import { KeyRound, ShieldCheck } from 'lucide-react'
-import { IconButton } from '@/components/ui/icon-button'
+import { LoaderCircle } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useI18n } from '@/i18n'
 import { RowGroup } from '@/components/ui/row-group'
@@ -83,9 +83,10 @@ export function SecurityAccountFormCard({
             />
           </SettingRow>
           <div className="flex justify-end pt-3">
-            <IconButton size="icon-sm" label={isSubmittingSetup ? t({ ko: '생성 중…', en: 'Creating…' }) : t({ ko: '생성', en: 'Create' })} onClick={onSubmitSetup} disabled={isSetupDisabled}>
-              <ShieldCheck className="h-4 w-4" />
-            </IconButton>
+            <Button size="sm" variant="default" onClick={onSubmitSetup} disabled={isSetupDisabled}>
+              {isSubmittingSetup ? <LoaderCircle className="animate-spin" /> : null}
+              {t({ ko: '만들기', en: 'Create' })}
+            </Button>
           </div>
         </>
       ) : (
@@ -121,9 +122,10 @@ export function SecurityAccountFormCard({
             />
           </SettingRow>
           <div className="flex justify-end pt-3">
-            <IconButton size="icon-sm" variant="secondary" label={isSubmittingUpdate ? t({ ko: '저장 중…', en: 'Saving…' }) : t({ ko: '저장', en: 'Save' })} onClick={onSubmitUpdate} disabled={isUpdateDisabled}>
-              <KeyRound className="h-4 w-4" />
-            </IconButton>
+            <Button size="sm" variant="default" onClick={onSubmitUpdate} disabled={isUpdateDisabled}>
+              {isSubmittingUpdate ? <LoaderCircle className="animate-spin" /> : null}
+              {t({ ko: '저장', en: 'Save' })}
+            </Button>
           </div>
         </>
       )}

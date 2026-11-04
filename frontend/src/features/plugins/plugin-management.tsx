@@ -274,6 +274,7 @@ export function PluginManagement({ assistantPage, pageContext }: { assistantPage
             </ModalBody>
             {isAdmin ? (
               <ModalFooter>
+                <Button variant="destructive-ghost" size="sm" disabled={busy} onClick={() => void remove(opened)}>{t({ ko: '제거', en: 'Remove' })}</Button>
                 <Button variant="secondary" size="sm" disabled={busy} onClick={() => void run(async () => {
                   const draft = await createPluginDraft({ requestId: createRandomUuid(), pluginId: opened.manifest.id, fromInstalled: true })
                   await cache.invalidateQueries({ queryKey: PLUGIN_DRAFTS_QUERY_KEY })
@@ -282,9 +283,9 @@ export function PluginManagement({ assistantPage, pageContext }: { assistantPage
                   setParams((previous) => { const next = new URLSearchParams(previous); next.set('draft', draft.id); return next })
                 })}>{t({ ko: '소스 수정', en: 'Edit source' })}</Button>
                 <Button variant="ghost" size="sm" disabled={busy} onClick={() => void run(() => downloadPluginPackage(`${opened.manifest.id}-${opened.manifest.version}.zip`, { pluginId: opened.manifest.id }))}>{t({ ko: 'ZIP 내보내기', en: 'Export ZIP' })}</Button>
-                <Button variant="destructive" size="sm" disabled={busy} onClick={() => void remove(opened)}>{t({ ko: '제거', en: 'Remove' })}</Button>
-                <span className="flex-1" />
                 <SwitchLine label={t({ ko: '켜짐', en: 'Enabled' })} checked={opened.enabled} disabled={busy} onCheckedChange={(value) => void setEnabled(opened, value)} />
+                <span className="flex-1" />
+                <Button variant="ghost" size="sm" onClick={() => setDetail(null)}>{t({ ko: '닫기', en: 'Close' })}</Button>
               </ModalFooter>
             ) : null}
           </>

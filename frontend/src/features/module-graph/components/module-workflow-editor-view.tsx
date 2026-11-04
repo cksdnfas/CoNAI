@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
-import { ArrowLeft, Box, Bug, FolderCog, History, LayoutGrid, Loader2, Maximize, PanelRight, Play, Plus, Redo2, Save, TextCursorInput, Undo2, X } from 'lucide-react'
+import { ArrowLeft, Box, Bug, FolderCog, History, LayoutGrid, Loader2, Maximize, PanelRight, Play, Plus, Redo2, TextCursorInput, Undo2, X } from 'lucide-react'
 import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
 import { TextTabs } from '@/components/common/text-tabs'
 import { ActionMenuButton, type ActionMenuEntry } from '@/components/ui/action-menu'
 import { IconButton } from '@/components/ui/icon-button'
+import { FloatingSaveBar } from '@/components/ui/floating-save-bar'
 import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover'
 import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
+import { usePageSaveShortcut } from '@/lib/keyboard-shortcut'
 import { cn } from '@/lib/utils'
 import type { WorkflowValidationIssue } from '../module-graph-types'
 import { WorkflowValidationIndicator } from './workflow-validation-indicator'
@@ -36,6 +38,7 @@ interface ModuleWorkflowEditorViewProps {
   workflowName: string
   onWorkflowNameChange: (value: string) => void
   isDirty: boolean
+  isNew: boolean
   isSavingGraph: boolean
   isExecuting: boolean
   nodesCount: number
@@ -66,18 +69,20 @@ interface ModuleWorkflowEditorViewProps {
   onWorkflowDebugModeToggle: () => void
   onTestRun: () => void
   onSave: () => void
+  onRevert?: () => void
 }
 
 /**
  * The node editor fills the screen under the app header (like the ComfyUI workflow editor): one bar (back, name,
- * add node, undo/redo, checks, test run, ⋯ for layout / debug / settings, save), the canvas, and a dock on the right (a bottom sheet on
- * narrow screens) with node / inputs / runs tabs.
+ * add node, undo/redo, checks, test run, ⋯ for layout / debug / settings), the canvas with a floating save bar, and a dock
+ * on the right (a bottom sheet on narrow screens) with node / inputs / runs tabs.
  */
 export function ModuleWorkflowEditorView({
   isWideLayout,
   workflowName,
   onWorkflowNameChange,
   isDirty,
+  isNew,
   isSavingGraph,
   isExecuting,
   nodesCount,
@@ -105,6 +110,7 @@ export function ModuleWorkflowEditorView({
   onWorkflowDebugModeToggle,
   onTestRun,
   onSave,
+  onRevert,
 }: ModuleWorkflowEditorViewProps) {
   const { canUpdateWorkflows, canExecuteGeneration } = useFeaturePermissions()
   const { t } = useI18n()
@@ -231,43 +237,46 @@ export function ModuleWorkflowEditorView({
           {settingsPanel}
         </PopoverContent>
       </Popover>
-      <IconButton size="icon-sm" label={isSavingGraph ? t({ ko: '저장 중', en: 'Saving' }) : t({ ko: '저장', en: 'Save' })} onClick={onSave} disabled={!canUpdateWorkflows || isSavingGraph || nodesCount === 0} aria-busy={isSavingGraph || undefined} aria-keyshortcuts="Control+S">
-        {isSavingGraph ? <Loader2 className="animate-spin" /> : <Save />}
-      </IconButton>
     </div>
   )
 
-  // Ctrl+S saves from anywhere in the editor.
-  const onSaveRef = useRef(onSave)
-  useEffect(() => {
-    onSaveRef.current = onSave
-  })
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
-        event.preventDefault()
-        onSaveRef.current()
-      }
-    }
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [])
+  const saveBar = isNew || isDirty || isSavingGraph ? (
+    <div className="pointer-events-none absolute inset-x-(--page-gutter) bottom-4 z-30">
+      <div className="pointer-events-auto">
+        <FloatingSaveBar
+          label={t({ ko: '저장 안 한 변경', en: 'Unsaved changes' })}
+          saving={isSavingGraph}
+          canSave={canUpdateWorkflows && nodesCount > 0}
+          onSave={onSave}
+          onDiscard={onRevert}
+        />
+      </div>
+    </div>
+  ) : null
+
+  // The bar floats over the canvas bottom, so the canvas zoom keys and minimap move up above it instead of hiding under it.
+  const canvasClassName = cn('relative min-h-0', saveBar && '[&_.bottom]:!mb-20')
+
+  const noop = () => {}
+  // Ctrl+S stays on the editor even when there is nothing it can save yet, so the browser's "save page" never opens.
+  usePageSaveShortcut(canUpdateWorkflows && nodesCount > 0 ? onSave : noop, isSavingGraph)
 
   if (!isWideLayout) {
     // Phone: the editor takes the whole screen between the app header and the bottom tabs; the dock is a bottom sheet.
     return (
       <div className="fixed inset-x-0 bottom-(--shell-bottom-inset) top-(--theme-shell-header-height) z-[45] flex flex-col bg-background">
         {bar}
-        <div className="relative min-h-0 flex-1">
+        <div className={cn(canvasClassName, 'flex-1')}>
           {graphCanvas}
           {isDockOpen ? (
             // eslint-disable-next-line shadcn/no-arbitrary-values -- Device safe-area inset keeps the editor dock clear of the home indicator.
-            <div className="absolute inset-x-0 bottom-0 flex max-h-[55%] min-h-[40%] flex-col rounded-t-lg bg-surface-container shadow-elevation-2 pb-[env(safe-area-inset-bottom)]">
+            <div className={cn('absolute inset-x-0 bottom-0 flex max-h-[55%] min-h-[40%] flex-col rounded-t-lg bg-surface-container shadow-elevation-2', saveBar ? 'pb-[calc(env(safe-area-inset-bottom)+5rem)]' : 'pb-[env(safe-area-inset-bottom)]')}>
               <div className="mx-auto mt-1.5 h-1 w-9 shrink-0 rounded-full bg-foreground/20" aria-hidden />
               {dockTabs}
               {dockBody}
             </div>
           ) : null}
+          {saveBar}
         </div>
         {workflowSaveModal}
       </div>
@@ -281,7 +290,10 @@ export function ModuleWorkflowEditorView({
     >
       {bar}
       <div className={cn('grid min-h-0 flex-1', isDockOpen ? 'grid-cols-[minmax(0,1fr)_minmax(300px,360px)]' : 'grid-cols-1')}>
-        <div className="relative min-h-0 min-w-0">{graphCanvas}</div>
+        <div className={cn(canvasClassName, 'min-w-0')}>
+          {graphCanvas}
+          {saveBar}
+        </div>
         {isDockOpen ? (
           <aside aria-label={t({ ko: '편집기 패널', en: 'Editor panel' })} className="flex min-h-0 flex-col border-l border-line">
             {dockTabs}

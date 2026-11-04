@@ -5,7 +5,8 @@ import { Button } from '@/components/ui/button'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
-import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
+import { Modal, ModalBody } from '@/components/ui/modal'
+import { EditorFooter } from '@/components/ui/editor-footer'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
 import { MediaLibraryPicker } from '@/components/media/media-library-picker'
@@ -150,10 +151,7 @@ function PresetNameDialog({ onClose, onSave }: { onClose: () => void; onSave: (n
       <form onSubmit={(event) => void submit(event)}>
         <ModalBody>
           <Input autoFocus value={name} maxLength={80} onChange={(event) => setName(event.target.value)} placeholder={t({ ko: '예: 게임A · 걷기', en: 'e.g. Game A · walk' })} aria-label={t({ ko: '프리셋 이름', en: 'Preset name' })} />
-          <ModalFooter>
-            <Button type="button" variant="secondary" onClick={onClose}>{t({ ko: '취소', en: 'Cancel' })}</Button>
-            <Button type="submit" disabled={busy || !name.trim()}>{t({ ko: '저장', en: 'Save' })}</Button>
-          </ModalFooter>
+          <EditorFooter saveSubmit canSave={Boolean(name.trim())} saving={busy} />
         </ModalBody>
       </form>
     </Modal>
