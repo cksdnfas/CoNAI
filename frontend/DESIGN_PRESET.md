@@ -137,6 +137,7 @@ Do not turn every observed combination into a new variant. Keep existing API def
 | Button / IconButton `text-destructive hover:text-destructive` | Existing `variant="destructive-ghost"`; destructive fill → `variant="destructive"`. Muted ghost overrides are redundant. |
 | IconButton `text-primary bg-primary/15`, other selected washes | `active={selected}` on ghost/subtle/secondary; overlay controls use `variant="overlay"`. `active` is a toggle, not a generic success indicator. |
 | IconButton `rounded-full`, Button `rounded-*`, font/gap tweaks | Normalize to existing square/soft-square sizes. Avatar controls use AvatarButton. Do not make a circle variant for incidental drift. |
+| A toolbar key rendered only while its action is possible (`{canX ? <IconButton …/> : null}`), or a hand-built `<Tip><span tabIndex={0}>` around a disabled key | Always render the slot and pass `disabled`; the reason goes in `label`. A disabled IconButton with a tooltip renders its own focusable wrapper, so neighbours never shift and the reason stays readable. Hide only for missing permission. |
 | Button breadcrumb `font-semibold` on current location | Ghost + `aria-current="location"`; normal `size="sm"` padding. |
 | Button rich multiline clickable card / row, `p-0`, `rounded-none` | MediaCard / ListRow `asChild interactive`, not a stripped Button. Preserve the media background/padded-caption invariant below. |
 | Badge `normal-case tracking-normal` | `casing="sentence"` when the value is a user name, not a status label. |

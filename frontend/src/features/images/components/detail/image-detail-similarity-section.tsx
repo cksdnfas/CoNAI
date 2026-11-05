@@ -303,7 +303,7 @@ export function ImageDetailSimilaritySection({
   const imageSimilarityActions = (
     <div className="flex flex-wrap items-center justify-end gap-2">
       {!similarImagesRequested && onRequestSimilarImages ? (
-        <IconButton variant="ghost" size="icon-sm" onClick={onRequestSimilarImages} label={t({ ko: '유사 이미지 검사: 그림이 비슷한 이미지를 찾아', en: 'Check similar images: find visually similar images' })}>
+        <IconButton variant="ghost" size="icon-sm" onClick={onRequestSimilarImages} label={t({ ko: '그림이 비슷한 이미지 찾기', en: 'Find visually similar images' })}>
           <ScanSearch />
         </IconButton>
       ) : null}
@@ -331,7 +331,7 @@ export function ImageDetailSimilaritySection({
   const promptSimilarityActions = (
     <div className="flex flex-wrap items-center justify-end gap-2">
       {!promptSimilarImagesRequested && onRequestPromptSimilarImages ? (
-        <IconButton variant="ghost" size="icon-sm" onClick={onRequestPromptSimilarImages} label={t({ ko: '텍스트 유사 이미지 검사: 프롬프트가 비슷한 이미지를 찾아', en: 'Check text-similar images: find images with similar prompts' })}>
+        <IconButton variant="ghost" size="icon-sm" onClick={onRequestPromptSimilarImages} label={t({ ko: '프롬프트가 비슷한 이미지 찾기', en: 'Find images with similar prompts' })}>
           <ScanSearch />
         </IconButton>
       ) : null}

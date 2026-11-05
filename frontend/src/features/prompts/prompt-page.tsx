@@ -455,7 +455,7 @@ function PromptPageContent() {
 
     const confirmed = await confirm({
       title: t({ ko: '프롬프트 삭제', en: 'Delete prompts' }),
-      description: t({ ko: '선택한 {count}개 프롬프트를 영구 삭제할까? 되돌릴 수 없어. 보호되거나 사용 중인 항목이 있으면 전체 삭제가 취소돼.', en: 'Permanently delete {count} selected prompts? This cannot be undone. If any item is protected or in use, the entire deletion is cancelled.' }, { count: formatNumber(selectedPromptItems.length) }),
+      description: t({ ko: '선택한 프롬프트 {count}개가 삭제돼. 되돌릴 수 없어.', en: '{count} selected prompts will be deleted. This cannot be undone.' }, { count: formatNumber(selectedPromptItems.length) }),
       confirmLabel: t({ ko: '삭제', en: 'Delete' }),
       tone: 'destructive',
     })

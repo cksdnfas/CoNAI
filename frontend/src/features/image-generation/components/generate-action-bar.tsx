@@ -165,7 +165,7 @@ export function GenerateActionBar({
   })
 
   const actionLabel = !canExecuteGeneration ? t({ ko: '생성 권한 필요', en: 'Generation permission required' }) : isGenerating ? (generatingLabel ?? generateLabel) : generateLabel
-  const repeatHint = t({ ko: '반복: 한 번 누를 때 큐에 넣을 작업 수', en: 'Repeat: jobs to queue per click' })
+  const repeatHint = t({ ko: '한 번에 생성할 작업 수 정하기', en: 'Set how many jobs to queue per click' })
   const resolvedResetLabel = resetLabel ?? t({ ko: '초기화', en: 'Reset' })
   const messageClassName = messageTone === 'error'
     ? 'text-destructive-soft-foreground'

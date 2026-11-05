@@ -591,7 +591,6 @@ test('lorebook creation preserves in-flight edits and one dialog across deferred
     assert.equal(document.querySelector('[role="dialog"]'), loadingDialog, 'changing books must replace only editor content')
     assert.equal(nameInput().getAttribute('aria-invalid'), 'true')
     assert.equal(button('Save').disabled, true)
-    assert.match(document.querySelector('[aria-live="polite"]')!.textContent!, /Needs a name to save/)
   } finally {
     navigation.resolve()
     const released = Promise.all([...document.querySelectorAll('[role="dialog"], [role="alertdialog"]')].map(node =>

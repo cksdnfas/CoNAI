@@ -1,6 +1,6 @@
 import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { ImagePermissionNotice } from '@/features/images/components/image-permission-notice'
-import { CheckCheck, FolderInput, FolderMinus, FolderOpen, FolderPlus, ListChecks, Pencil, Play, Plus, RotateCcw, Trash2 } from 'lucide-react'
+import { FolderInput, FolderMinus, FolderOpen, FolderPlus, ListChecks, Pencil, Play, Plus, RotateCcw, Trash2 } from 'lucide-react'
 import type { ActionMenuEntry } from '@/components/ui/action-menu'
 import { SelectionActionBar } from '@/components/common/selection-action-bar'
 import { GroupDeleteDialog } from './components/group-delete-dialog'
@@ -61,6 +61,7 @@ export function GroupPage() {
   const [searchParams] = useSearchParams()
   const [editorState, setEditorState] = useState<GroupEditorState | null>(null)
   const [selectedGroupImageIds, setSelectedGroupImageIds] = useState<string[]>([])
+  const selectedGroupImageIdSet = new Set(selectedGroupImageIds)
   const [visibleGroupImageIds, setVisibleGroupImageIds] = useState<string[]>([])
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false)
   const [downloadScope, setDownloadScope] = useState<'group' | 'selection' | null>(null)
@@ -284,8 +285,6 @@ export function GroupPage() {
     handleDropImagesToGroup(targetGroupId, groupNameById.get(targetGroupId) ?? '', compositeHashes)
   }, [groupNameById, handleDropImagesToGroup])
 
-  const allVisibleSelected = visibleGroupImageIds.length > 0 && visibleGroupImageIds.every((id) => selectedGroupImageIds.includes(id))
-  const selectAllLabel = allVisibleSelected ? t({ ko: '선택 해제', en: 'Clear selection' }) : t({ ko: '모두 선택', en: 'Select all' })
 
   const sidebar = (
     <GroupExplorerSidebarPanel
@@ -317,7 +316,7 @@ export function GroupPage() {
             <Play />
           </IconButton>
           <IconButton
-            label={isManagingGroups ? t({ ko: '그룹 관리 끝내기', en: 'Done managing groups' }) : t({ ko: '그룹 관리 (여러 개 삭제·이동)', en: 'Manage groups (delete or move many)' })}
+            label={isManagingGroups ? t({ ko: '그룹 관리 끝내기', en: 'Done managing groups' }) : t({ ko: '그룹 관리', en: 'Manage groups' })}
             variant="ghost"
             size="icon-sm"
             active={isManagingGroups}
@@ -471,17 +470,6 @@ export function GroupPage() {
                 maxColumnCount={maxGroupColumnCount}
                 onColumnCountChange={setGroupColumnCount}
                 onColumnCountReset={resetGroupColumnCount}
-                toolbarActions={visibleGroupImageIds.length > 0 ? (
-                  <IconButton
-                    label={selectAllLabel}
-                    variant="ghost"
-                    size="icon-sm"
-                    active={allVisibleSelected}
-                    onClick={() => setSelectedGroupImageIds(allVisibleSelected ? [] : visibleGroupImageIds)}
-                  >
-                    <CheckCheck />
-                  </IconButton>
-                ) : undefined}
                 selectable={true}
                 selectedIds={selectedGroupImageIds}
                 onSelectedIdsChange={setSelectedGroupImageIds}
@@ -536,6 +524,7 @@ export function GroupPage() {
         onDownload={handleOpenSelectionDownloadModal}
         onClear={() => setSelectedGroupImageIds([])}
         loadedCount={visibleGroupImageIds.length}
+        allLoadedSelected={visibleGroupImageIds.length > 0 && visibleGroupImageIds.every((id) => selectedGroupImageIdSet.has(id))}
         onSelectAllLoaded={() => setSelectedGroupImageIds(visibleGroupImageIds)}
       />
 

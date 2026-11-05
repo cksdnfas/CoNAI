@@ -1,12 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
-import { FolderOpen } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { EditorFooter } from '@/components/ui/editor-footer'
-import { IconButton } from '@/components/ui/icon-button'
+import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Field, FieldInfo } from '@/components/ui/field'
-import { Inset } from '@/components/ui/inset'
 import { Modal, ModalBody } from '@/components/ui/modal'
 import { useI18n } from '@/i18n'
 import type { LoraFileData, LoraScanRequest } from '@/lib/api-wildcards'
@@ -246,35 +244,34 @@ export function LoraAutoCollectModal({ open, isSubmitting = false, onClose, onSu
 
         <input ref={inputRef} type="file" className="hidden" multiple onChange={(event) => void handleFileChange(event)} />
 
-        <Inset className="space-y-3">
+        <div className="space-y-3">
           <div className="flex flex-wrap items-center gap-3">
-            <IconButton
+            <Button
+              variant="secondary"
+              size="sm"
               onClick={handlePickFolder}
               disabled={isSubmitting || isPreparingFiles}
-              label={selectedFiles.length > 0 ? t({ ko: 'LoRA {count}개 선택됨', en: '{count} LoRA files selected' }, { count: formatNumber(selectedFiles.length) }) : t({ ko: 'LoRA 폴더 선택', en: 'Select LoRA folder' })}
             >
-              <FolderOpen className="h-4 w-4" />
-            </IconButton>
+              {t({ ko: '폴더 고르기', en: 'Choose folder' })}
+            </Button>
+            <span className="text-sm tabular-nums text-muted-foreground">{t({ ko: 'LoRA {count}개 선택됨', en: '{count} LoRA files selected' }, { count: formatNumber(selectedFiles.length) })}</span>
             <FieldInfo>{t({ ko: '폴더 안의 .safetensors, 같은 이름의 .txt, 공용 txt를 읽어 자동 수집 LoRA 트리를 다시 만들어.', en: 'Reads .safetensors, same-name .txt and the shared txt in the folder, then rebuilds the auto-collected LoRA tree.' })}</FieldInfo>
             {isPreparingFiles ? <div className="text-sm text-muted-foreground">{t({ ko: '폴더 구조 읽는 중…', en: 'Reading folder structure…' })}</div> : null}
           </div>
 
           {selectedFiles.length > 0 ? (
-            <div className="rounded-sm bg-success-soft p-3 text-sm text-success-soft-foreground">
-              <div className="font-medium">{t({ ko: 'LoRA 파일 {count}개를 찾았어.', en: 'Found {count} LoRA files.' }, { count: formatNumber(selectedFiles.length) })}</div>
-              <ul className="mt-2 list-disc space-y-1 pl-5">
-                {previewSummary.map((file) => (
-                  <li key={`${file.folderName}/${file.loraName}`}>
-                    <span className="font-medium">{file.loraName}</span>
-                    <span className="opacity-80"> · {file.folderName || 'root'}</span>
-                    {file.promptLines.length > 0 ? <span className="opacity-80"> · {t({ ko: '프롬프트 {count}줄', en: '{count} prompt lines' }, { count: formatNumber(file.promptLines.length) })}</span> : null}
-                  </li>
-                ))}
-                {selectedFiles.length > previewSummary.length ? <li>{t({ ko: '외 {count}개 더 있어.', en: '{count} more.' }, { count: formatNumber(selectedFiles.length - previewSummary.length) })}</li> : null}
-              </ul>
-            </div>
+            <ul className="list-disc space-y-1 pl-5 text-sm">
+              {previewSummary.map((file) => (
+                <li key={`${file.folderName}/${file.loraName}`}>
+                  <span className="font-medium">{file.loraName}</span>
+                  <span className="opacity-80"> · {file.folderName || 'root'}</span>
+                  {file.promptLines.length > 0 ? <span className="opacity-80"> · {t({ ko: '프롬프트 {count}줄', en: '{count} prompt lines' }, { count: formatNumber(file.promptLines.length) })}</span> : null}
+                </li>
+              ))}
+              {selectedFiles.length > previewSummary.length ? <li>{t({ ko: '외 {count}개 더 있어.', en: '{count} more.' }, { count: formatNumber(selectedFiles.length - previewSummary.length) })}</li> : null}
+            </ul>
           ) : null}
-        </Inset>
+        </div>
 
         <div className="grid gap-4 md:grid-cols-2">
           <Field label={t({ ko: '기본 LoRA weight', en: 'Default LoRA weight' })}>
@@ -302,11 +299,7 @@ export function LoraAutoCollectModal({ open, isSubmitting = false, onClose, onSu
           </Field>
         </div>
 
-        <p className="text-sm text-warning">
-          {t({ ko: '기존 자동 수집 LoRA는 지우고 새로 만들어.', en: 'Existing auto-collected LoRA entries are replaced.' })}
-        </p>
-
-        <EditorFooter onSave={() => void handleSubmit()} canSave={selectedSourceFiles.length > 0} saving={isSubmitting || isPreparingFiles} saveLabel={t({ ko: '자동 수집 실행', en: 'Run auto-collection' })} />
+        <EditorFooter onSave={() => void handleSubmit()} canSave={selectedSourceFiles.length > 0} saving={isSubmitting || isPreparingFiles} saveLabel={t({ ko: '다시 만들기', en: 'Rebuild' })} />
       </ModalBody>
     </Modal>
   )

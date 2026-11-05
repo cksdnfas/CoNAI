@@ -57,8 +57,8 @@ export function FilePreview({ entry, onClose, onNavigate, onEdit, history: openH
   return <Modal open title={entry.name} onClose={onClose} size="xl" sidePanelInset="var(--chat-dock-width, 0px)" headerContent={<div className="flex items-center gap-1">
     <FilePreviewNavigation previous={neighbors.data?.previous} next={neighbors.data?.next} onNavigate={onNavigate} />
     <span className="flex-1 text-xs text-muted-foreground">{formatFileSize(entry.size)}</span>
-    {versioned ? <IconButton variant="ghost" size="icon-sm" active={history} label={t({ ko: '버전 기록', en: 'Version history' })} onClick={() => setHistory(!history)}><History /></IconButton> : null}
-    {onEdit && versioned ? <IconButton variant="ghost" size="icon-sm" label={t({ ko: '편집', en: 'Edit' })} onClick={() => onEdit(entry)}><SquarePen /></IconButton> : null}
+    <IconButton variant="ghost" size="icon-sm" active={versioned && history} disabled={!versioned} label={versioned ? t({ ko: '버전 기록', en: 'Version history' }) : t({ ko: '이 파일은 버전 기록을 지원하지 않아', en: 'Version history is unavailable for this file' })} onClick={() => setHistory(!history)}><History /></IconButton>
+    {onEdit ? <IconButton variant="ghost" size="icon-sm" disabled={!versioned} label={versioned ? t({ ko: '편집', en: 'Edit' }) : t({ ko: '편집할 수 있는 크기의 텍스트 파일만 열 수 있어', en: 'Only text files within the editor size limit can be edited' })} onClick={() => onEdit(entry)}><SquarePen /></IconButton> : null}
     {deniedEntryId !== entry.id && (canViewImages || (!entry.mimeType?.startsWith('image/') && !entry.mimeType?.startsWith('video/'))) ? <IconButton asChild variant="ghost" size="icon-sm" label={t({ ko: '다운로드', en: 'Download' })}><a href={storedFileDownloadUrl(entry.id)} download><Download /></a></IconButton> : null}
   </div>}>{history && versioned
     ? <ModalBody><FileRevisionsPanel key={entry.id} entry={entry} canRestore={canWrite} onRestored={(saved) => { setHistory(false); onNavigate(saved) }} /></ModalBody>

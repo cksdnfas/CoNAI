@@ -83,12 +83,8 @@ export function PluginPage() {
   const canProject = canFiles
   const fileCount = files ? files.split(',').filter(Boolean).length : 0
   const contextButtons = <>
-    {canProject ? (projectId
-      ? <Button variant="subtle" size="sm" onClick={() => setProjectPicker(true)}><FolderKanban />{project.data?.name ?? '…'}<span className="text-muted-foreground">· {t(write ? { ko: '편집 가능', en: 'Editable' } : { ko: '읽기 전용', en: 'Read only' })}</span><ChevronDown /></Button>
-      : <IconButton variant="ghost" label={t({ ko: '프로젝트 연결', en: 'Connect project' })} onClick={() => setProjectPicker(true)}><FolderKanban /></IconButton>) : null}
-    {canFiles ? (fileCount
-      ? <Button variant="subtle" size="sm" onClick={() => setPicker(true)}><Files />{t({ ko: '파일 {count}개', en: '{count} files' }, { count: fileCount })}<ChevronDown /></Button>
-      : <IconButton variant="ghost" label={t({ ko: '파일 고르기', en: 'Choose files' })} onClick={() => setPicker(true)}><Files /></IconButton>) : null}
+    {canProject ? <Button variant="field" size="field" onClick={() => setProjectPicker(true)}><FolderKanban />{projectId ? project.data?.name ?? '…' : t({ ko: '프로젝트 없음', en: 'No project' })}{projectId ? <span className="text-muted-foreground">· {t(write ? { ko: '편집 가능', en: 'Editable' } : { ko: '읽기 전용', en: 'Read only' })}</span> : null}<ChevronDown /></Button> : null}
+    {canFiles ? <Button variant="field" size="field" onClick={() => setPicker(true)}><Files />{t({ ko: '파일 {count}개', en: '{count} files' }, { count: fileCount })}<ChevronDown /></Button> : null}
   </>
   return <div className="pb-6">
     <PageToolbar

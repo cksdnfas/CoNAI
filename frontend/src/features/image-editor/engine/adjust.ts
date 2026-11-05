@@ -1,4 +1,4 @@
-import { context2d, createCanvas, type Rect } from './raster'
+import { context2d, type Rect } from './raster'
 
 /** Colour adjustments; sliders run −100…100 (hue −180…180°), 0 = unchanged. */
 export type Adjustments = {
@@ -50,9 +50,9 @@ function filterFor(value: Adjustments) {
  * Write `source` with the adjustments into `target`, inside `rect` (and `clip`, when given).
  * Pixels of `target` outside the clip are left as they are; transparency is kept.
  */
-export function renderAdjusted(source: HTMLCanvasElement, target: HTMLCanvasElement, rect: Rect, value: Adjustments, clip: Path2D | null) {
-  const work = createCanvas(rect.width, rect.height)
+export function renderAdjusted(source: HTMLCanvasElement, target: HTMLCanvasElement, rect: Rect, value: Adjustments, clip: Path2D | null, work: HTMLCanvasElement, rule: CanvasFillRule = 'nonzero') {
   const workContext = context2d(work)
+  workContext.clearRect(0, 0, work.width, work.height)
   workContext.filter = filterFor(value)
   workContext.drawImage(source, rect.x, rect.y, rect.width, rect.height, 0, 0, rect.width, rect.height)
   workContext.filter = 'none'
@@ -71,7 +71,7 @@ export function renderAdjusted(source: HTMLCanvasElement, target: HTMLCanvasElem
 
   const context = context2d(target)
   context.save()
-  if (clip) context.clip(clip)
+  if (clip) context.clip(clip, rule)
   context.clearRect(rect.x, rect.y, rect.width, rect.height)
   context.drawImage(work, rect.x, rect.y)
   context.restore()

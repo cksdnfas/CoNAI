@@ -2,10 +2,11 @@ import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { useNavigate } from 'react-router-dom'
 import { useMemo, useRef, useState, type DragEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AudioLines, Download, FilePlus, Folder, FolderInput, FolderPlus, LayoutGrid, List, Pencil, Puzzle, RefreshCw, Search, Trash2, Upload, X } from 'lucide-react'
+import { AudioLines, Download, FilePlus, Folder, FolderInput, FolderPlus, LayoutGrid, List, Pencil, Puzzle, RefreshCw, Search, Trash2, Upload } from 'lucide-react'
 import type { FileSearchStatus, StoredFileEntry, StoredFileSearchHit } from '@conai/shared'
 import { PageWithSidebar } from '@/components/common/page-with-sidebar'
 import { PageToolbar } from '@/components/common/page-toolbar'
+import { PageToolbarSearch } from '@/components/common/page-toolbar-search'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { SelectionActionBar, SelectionBarAction } from '@/components/common/selection-action-bar'
 import { ListPager } from '@/components/common/list-pager'
@@ -17,7 +18,6 @@ import { useConfirm } from '@/components/ui/confirm-dialog'
 import { EmptyState } from '@/components/ui/empty-state'
 import { ErrorState } from '@/components/ui/error-state'
 import { IconButton } from '@/components/ui/icon-button'
-import { Input } from '@/components/ui/input'
 import { LoadingState } from '@/components/ui/loading-state'
 import { ListRow } from '@/components/ui/list-row'
 import { Modal, ModalBody } from '@/components/ui/modal'
@@ -74,7 +74,7 @@ function SearchHits({ hits, terms, truncated, search, onOpen, onRetry, retrying 
       <p className="text-xs text-muted-foreground">
         {truncated ? t({ ko: '결과 {count}개 이상', en: '{count}+ results' }, { count: hits.length }) : t({ ko: '결과 {count}개', en: '{count} results' }, { count: hits.length })}
       </p>
-      {search ? <p className="text-xs text-muted-foreground" role="status">
+      {search && (['disabled', 'unavailable', 'partial', 'not_indexed'].includes(search.semantic) || search.keywordTermsLimited || search.unsupportedFiles + search.pendingDocuments + search.partialDocuments + search.failedDocuments > 0) ? <p className="text-xs text-muted-foreground" role="status">
         {search.mode === 'hybrid' ? t({ ko: '키워드 + 의미 검색', en: 'Keyword + semantic search' }) : t({ ko: '키워드 검색', en: 'Keyword search' })}
         {search.semantic === 'disabled' ? ` · ${t({ ko: '의미 검색 꺼짐', en: 'Semantic search is off' })}` : null}
         {search.semantic === 'unavailable' ? ` · ${t({ ko: '의미 검색이 응답하지 않아 키워드 결과만 표시', en: 'Semantic search unavailable; showing keyword matches' })}` : null}
@@ -311,7 +311,7 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, pickFolde
   const remove = async (ids: string[] = selected) => {
     const confirmed = await confirm({
       title: t({ ko: '선택한 항목을 삭제할까?', en: 'Delete selected items?' }),
-      description: t({ ko: '원본 파일이 삭제돼. 빈 폴더만 삭제할 수 있고, 채팅에서 참조 중인 파일은 보호돼.', en: 'Original files will be deleted. Folders must be empty; files attached to chats are protected.' }),
+      description: t({ ko: '선택한 항목과 원본 파일을 삭제해. 빈 폴더가 아니거나 채팅에서 쓰는 파일은 남겨. 삭제한 항목은 되돌릴 수 없어.', en: 'Delete selected items and original files, keeping non-empty folders and files used in chats. Deleted items cannot be restored.' }),
       tone: 'destructive',
     })
     if (confirmed) mutation.mutate(() => deleteStoredFiles(ids))
@@ -332,7 +332,6 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, pickFolde
 
   const actions = (
     <>
-      {!isPicker && !browsingSystem ? <IconButton variant="ghost" label={t({ ko: '플러그인으로 열기', en: 'Open with plugin' })} disabled={busy || selected.length > 20 || selection.some((entry) => entry.kind !== 'file')} onClick={() => navigateToExtension(`/extensions${selected.length ? `?files=${encodeURIComponent(selected.join(','))}` : ''}`)}><Puzzle /></IconButton> : null}
       <SegmentedControl
         size="xs"
         value={viewMode}
@@ -343,27 +342,28 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, pickFolde
           { value: 'list', label: <List className="size-3.5" />, ariaLabel: t({ ko: '자세히 보기', en: 'Details' }) },
         ]}
       />
-      {canSearch && !searchOpen ? (
-        <IconButton variant="ghost" label={t({ ko: '검색', en: 'Search' })} onClick={() => setSearchOpen(true)}>
+      {canSearch ? (
+        <IconButton size="icon-sm" variant="ghost" active={searchOpen} label={t({ ko: '검색', en: 'Search' })} onClick={() => searchOpen ? closeSearch() : setSearchOpen(true)}>
           <Search />
         </IconButton>
       ) : null}
       {canOrganize ? (
-        <IconButton variant="ghost" label={t({ ko: '새 폴더', en: 'New folder' })} disabled={busy} onClick={() => setNameDialog({ name: '' })}>
+        <IconButton size="icon-sm" variant="ghost" label={t({ ko: '새 폴더', en: 'New folder' })} disabled={busy} onClick={() => setNameDialog({ name: '' })}>
           <FolderPlus />
         </IconButton>
       ) : null}
       <ActionMenuButton
-        size="icon"
+        size="icon-sm"
         label={t({ ko: '더 보기', en: 'More' })}
         entries={[
+          !isPicker && !browsingSystem && { key: 'plugin', label: t({ ko: '플러그인으로 열기', en: 'Open with plugin' }), icon: Puzzle, disabled: busy || selected.length > 20 || selection.some((entry) => entry.kind !== 'file'), onSelect: () => navigateToExtension(`/extensions${selected.length ? `?files=${encodeURIComponent(selected.join(','))}` : ''}`) },
           canUpload && !isPicker && { key: 'new-document', label: t({ ko: '새 문서', en: 'New document' }), icon: FilePlus, disabled: busy, onSelect: () => setEditor({ entry: null }) },
           { key: 'refresh', label: t({ ko: '새로고침', en: 'Refresh' }), icon: RefreshCw, disabled: busy, onSelect: () => void refresh() },
         ]}
       />
       {/* The picker dialog already has its primary key (첨부) in the footer: upload stays a quiet icon there. */}
       {canUpload ? isPicker ? (
-        <IconButton size="icon" variant="ghost" disabled={busy} label={t({ ko: '파일 업로드', en: 'Upload files' })} onClick={() => uploadInput.current?.click()}><Upload /></IconButton>
+        <IconButton size="icon-sm" variant="ghost" disabled={busy} label={t({ ko: '파일 업로드', en: 'Upload files' })} onClick={() => uploadInput.current?.click()}><Upload /></IconButton>
       ) : (
         <Button size="sm" disabled={busy} onClick={() => uploadInput.current?.click()}>
           <Upload />
@@ -381,21 +381,7 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, pickFolde
   )
 
   const searchField = (
-    <div className="flex min-w-0 flex-1 items-center gap-1">
-      <Search className="size-4 shrink-0 text-muted-foreground" />
-      <Input
-        autoFocus
-        variant="settings"
-        className="min-w-0 flex-1"
-        aria-label={t({ ko: '파일 이름이나 내용 검색', en: 'Search file names and text' })}
-        value={searchInput}
-        onChange={(event) => setSearchInput(event.target.value)}
-        onKeyDown={(event) => { if (event.key === 'Escape') closeSearch() }}
-      />
-      <IconButton variant="ghost" size="icon-sm" label={t({ ko: '검색 닫기', en: 'Close search' })} onClick={closeSearch}>
-        <X />
-      </IconButton>
-    </div>
+    <PageToolbarSearch value={searchInput} onChange={setSearchInput} onClose={closeSearch} placeholder={t({ ko: '파일 이름이나 내용 검색', en: 'Search file names and text' })} />
   )
 
   const sidebar = (

@@ -93,8 +93,8 @@ export function MiniMaxH3DirectorPromptBuilder({
           ariaLabel={t({ ko: '프롬프트 모드', en: 'Prompt mode' })}
           value={state.prompt_mode}
           items={[
-            { value: 'simple', label: t({ ko: '간단', en: 'Simple' }), ariaLabel: t({ ko: '간단: 프롬프트 한 칸에 전부 적기', en: 'Simple: write the whole prompt in one box' }) },
-            { value: 'structured', label: t({ ko: '구조화', en: 'Structured' }), ariaLabel: t({ ko: '구조화: 항목별로 나눠 적으면 합쳐 줘', en: 'Structured: fill sections that get merged' }) },
+            { value: 'simple', label: t({ ko: '간단', en: 'Simple' }) },
+            { value: 'structured', label: t({ ko: '구조화', en: 'Structured' }) },
           ]}
           onChange={setPromptMode}
         />

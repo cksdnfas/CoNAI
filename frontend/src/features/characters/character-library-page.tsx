@@ -341,14 +341,18 @@ function AppearanceLibraryPage() {
     return next
   })
 
+  const folderManagementMenu = (folder: CharacterFolder | null, disabled = false): ActionMenuEntry[] => [
+    { key: 'rename', label: t({ ko: '이름 바꾸기', en: 'Rename' }), icon: Pencil, run: (target: CharacterFolder) => setNameDialog({ mode: 'rename', folder: target, name: target.name }) },
+    { key: 'move', label: t({ ko: '다른 위치로 옮기기', en: 'Move to…' }), icon: FolderInput, run: (target: CharacterFolder) => setMoving({ kind: 'folder', folder: target }) },
+    { key: 'delete', label: t({ ko: '폴더 삭제', en: 'Delete folder' }), icon: Trash2, destructive: true, run: (target: CharacterFolder) => void deleteFolder(target) },
+  ].map(({ run, ...entry }) => ({ ...entry, disabled: disabled || !folder, onSelect: folder ? () => run(folder) : () => undefined }))
+
   const folderMenu = (folder: CharacterFolder): ActionMenuEntry[] => canEdit ? [
     { key: 'subfolder', label: t({ ko: '하위 폴더 추가', en: 'Add subfolder' }), icon: FolderPlus, onSelect: () => setNameDialog({ mode: 'create', parentId: folder.id, name: '' }) },
     { key: 'setting', label: t({ ko: '외형 설정 추가', en: 'Add appearance setting' }), icon: Plus, onSelect: () => setCreating({ folderId: folder.id }) },
-    { key: 'rename', label: t({ ko: '이름 바꾸기', en: 'Rename' }), icon: Pencil, onSelect: () => setNameDialog({ mode: 'rename', folder, name: folder.name }) },
-    { key: 'move', label: t({ ko: '다른 위치로 옮기기', en: 'Move to…' }), icon: FolderInput, onSelect: () => setMoving({ kind: 'folder', folder }) },
     { key: 'export', label: t({ ko: '폴더 내보내기', en: 'Export folder' }), icon: Download, onSelect: () => void exportSettings({ folderId: folder.id }, folder.name) },
     '-',
-    { key: 'delete', label: t({ ko: '폴더 삭제', en: 'Delete folder' }), icon: Trash2, destructive: true, onSelect: () => void deleteFolder(folder) },
+    ...folderManagementMenu(folder),
   ] : []
   const settingMenu = (setting: CharacterSettingSummary): ActionMenuEntry[] => [
     { key: 'open', label: t({ ko: '열기', en: 'Open' }), icon: SquarePen, onSelect: () => openSetting(setting.id) },
@@ -405,9 +409,10 @@ function AppearanceLibraryPage() {
               canEdit ? { key: 'new-folder', label: t({ ko: '새 폴더', en: 'New folder' }), icon: FolderPlus, onSelect: () => setNameDialog({ mode: 'create', parentId: query || filtering ? null : folderId, name: '' }) } : null,
               { key: 'export', label: query || filtering || folderId === null ? t({ ko: '라이브러리 전체 내보내기', en: 'Export the whole library' }) : t({ ko: '이 폴더 내보내기', en: 'Export this folder' }), icon: Download, onSelect: () => void exportSettings({ folderId: query || filtering ? null : folderId }, currentFolder && !query && !filtering ? currentFolder.name : rootLabel) },
               canEdit ? { key: 'import', label: t({ ko: '외형 묶음 ZIP 가져오기', en: 'Import a settings bundle' }), icon: Upload, onSelect: () => importInput.current?.click() } : null,
+              '-',
+              ...(canEdit ? folderManagementMenu(currentFolder ?? null, Boolean(query) || filtering) : []),
             ]}
           />
-          {currentFolder && !query && !filtering && canEdit ? <ActionMenuButton entries={folderMenu(currentFolder)} label={t({ ko: '폴더 작업', en: 'Folder actions' })} /> : null}
           {canEdit ? <Button size="sm" onClick={() => setCreating({ folderId: query || filtering ? null : folderId })}><Plus />{t({ ko: '새 외형 설정', en: 'New appearance setting' })}</Button> : null}
           <input ref={importInput} type="file" accept=".zip,application/zip" hidden onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ''; if (file) void importFile(file) }} />
         </>

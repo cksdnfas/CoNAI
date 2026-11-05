@@ -15,9 +15,8 @@ import { useHomeScrollRestoration } from '@/features/home/use-home-scroll-restor
 import { useHomeHiddenGroupIds } from '@/features/home/home-hidden-groups'
 import { buildHomeSearchString, readHomeSortParam, readSearchChipsParam, type HomeSortOrder } from '@/features/home/home-search-url'
 import { useI18n } from '@/i18n'
-import { useConfirm } from '@/components/ui/confirm-dialog'
 import { addImagesToGroup, getGroupsHierarchyAll, GROUPS_HIERARCHY_ALL_QUERY_KEY } from '@/lib/api-groups'
-import { withChatMediaDeleteWarning } from '@/features/images/chat-media-delete-warning'
+import { useConfirmImageDelete } from '@/features/images/chat-media-delete-warning'
 import { removeBulkDeletedImagesFromListCaches } from '@/features/images/image-list-cache'
 import { useImageDeleteUndo } from '@/features/images/use-image-delete-undo'
 import { deleteImagesBulk, downloadImageSelection, getImages, getImagesCount, searchImagesComplex } from '@/lib/api-images'
@@ -42,7 +41,7 @@ type HomeImagesPageParam = number | {
 export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOptions) {
   const queryClient = useQueryClient()
   const { t, formatNumber } = useI18n()
-  const confirm = useConfirm()
+  const confirmDelete = useConfirmImageDelete()
   const notifyImageDeleted = useImageDeleteUndo()
   const authStatusQuery = useAuthStatusQuery()
   const { appliedChips } = useHomeSearch()
@@ -387,12 +386,7 @@ export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOpti
     }
 
     const selectedCount = formatNumber(selectedCompositeHashes.length)
-    const confirmed = await confirm({
-      title: t({ ko: '선택 항목 삭제', en: 'Delete selected items' }),
-      description: await withChatMediaDeleteWarning(t({ ko: '선택한 {count}개 항목을 삭제할까? 삭제 보호가 켜져 있으면 휴지통으로 보내고 되돌릴 수 있어. 꺼져 있으면 영구 삭제돼.', en: 'Delete {count} selected items? With deletion protection on, files move to the Recycle Bin and can be undone. Otherwise they are permanently deleted.' }, { count: selectedCount }), selectedCompositeHashes, t),
-      confirmLabel: t({ ko: '삭제', en: 'Delete' }),
-      tone: 'destructive',
-    })
+    const confirmed = await confirmDelete(selectedCompositeHashes, t({ ko: '선택한 {count}개 삭제', en: 'Delete {count} selected items' }, { count: selectedCount }))
     if (!confirmed) {
       return
     }

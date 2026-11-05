@@ -17,7 +17,8 @@ type IconButtonProps = Omit<React.ComponentProps<typeof Button>, 'size' | 'aria-
 }
 
 /** Render a square icon-only Button whose `label` becomes its aria-label and tooltip. */
-function IconButton({ label, size = 'icon', tooltip = true, tooltipSide, type = 'button', active, ...props }: IconButtonProps) {
+function IconButton({ label, size = 'icon', tooltip = true, tooltipSide, type = 'button', active, disabled, className, ...props }: IconButtonProps) {
+  const disabledTip = Boolean(disabled && tooltip && label)
   const button = (
     <Button
       type={type}
@@ -25,11 +26,18 @@ function IconButton({ label, size = 'icon', tooltip = true, tooltipSide, type = 
       aria-label={label}
       aria-pressed={active}
       data-pressed={active ? 'true' : undefined}
+      disabled={disabled}
+      className={className}
       {...props}
     />
   )
 
-  return tooltip ? <Tip content={label} side={tooltipSide}>{button}</Tip> : button
+  const trigger = disabledTip ? (
+    <span tabIndex={0} aria-disabled="true" className="inline-flex shrink-0 rounded-sm outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40">
+      {button}
+    </span>
+  ) : button
+  return tooltip ? <Tip content={label} side={tooltipSide}>{trigger}</Tip> : button
 }
 
 export { IconButton }

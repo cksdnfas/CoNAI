@@ -1,5 +1,6 @@
 import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { Suspense, lazy, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Paintbrush } from 'lucide-react'
 import { ImageSaveOptionsModal } from '@/components/media/image-save-options-modal'
@@ -37,6 +38,7 @@ function editedFileName(image?: ImageRecord) {
 
 /** Edit an image and save the result into the library as a new image, in the same groups as the original. */
 export function ImageEditAction({ image, variant = 'secondary', open, onOpenChange }: ImageEditActionProps) {
+  const navigate = useNavigate()
   const { canCreateImageCopies } = useImagePermissions()
   const queryClient = useQueryClient()
   const { showSnackbar } = useSnackbar()
@@ -75,9 +77,9 @@ export function ImageEditAction({ image, variant = 'secondary', open, onOpenChan
       // Same place as the original: every manual group it is in (auto groups collect by their own rules).
       const groups = (image?.groups ?? []).filter((group) => group.collection_type !== 'auto')
       await Promise.all(groups.map((group) => addImagesToGroup(group.id, [uploaded.composite_hash as string])))
-      return { fileName: uploaded.original_name || uploaded.filename, groupCount: groups.length, groupIds: groups.map((group) => group.id) }
+      return { hash: uploaded.composite_hash, fileName: uploaded.original_name || uploaded.filename, groupCount: groups.length, groupIds: groups.map((group) => group.id) }
     },
-    onSuccess: async ({ fileName, groupCount, groupIds }) => {
+    onSuccess: async ({ hash, fileName, groupCount, groupIds }) => {
       setIsEditorOpen(false)
       setPendingResult(null)
       setPendingInfo(null)
@@ -86,6 +88,7 @@ export function ImageEditAction({ image, variant = 'secondary', open, onOpenChan
           ? t({ ko: '편집본을 라이브러리에 저장했어: {fileName} · 그룹 {count}개', en: 'Saved the edit to the library: {fileName} · {count} groups' }, { fileName, count: groupCount })
           : t({ ko: '편집본을 라이브러리에 저장했어: {fileName}', en: 'Saved the edit to the library: {fileName}' }, { fileName }),
         tone: 'info',
+        action: { label: t({ ko: '열기', en: 'Open' }), onClick: () => navigate(`/images/${encodeURIComponent(hash)}`) },
       })
       const hierarchy = queryClient.getQueryData<GroupWithHierarchy[]>(GROUPS_HIERARCHY_ALL_QUERY_KEY) ?? []
       const parents = new Map(hierarchy.map((group) => [group.id, group.parent_id]))
@@ -120,7 +123,6 @@ export function ImageEditAction({ image, variant = 'secondary', open, onOpenChan
       setImageSaveOptions(effectiveSettings)
       setPendingInfo(await loadImageSaveSourceInfo({ source: result.source, sourceMimeType: 'image/png' }))
       setPendingResult(result.source)
-      setIsEditorOpen(false)
       return
     }
     // Errors propagate so the editor stays open with the edit intact.

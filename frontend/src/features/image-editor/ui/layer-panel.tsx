@@ -2,6 +2,9 @@ import { useEffect, useRef, useState, type DragEvent } from 'react'
 import { Eye, EyeOff, ImagePlus, Lock, LockOpen, MoreHorizontal, Plus, Type } from 'lucide-react'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
+import { ListRow } from '@/components/ui/list-row'
+import { Button } from '@/components/ui/button'
+import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
 import { SliderRow } from '@/components/ui/slider-row'
 import {
   DropdownMenu,
@@ -63,10 +66,11 @@ function LayerRow({
   const draggable = layer.kind === 'paint' && !renaming
 
   return (
+    <ListRow asChild interactive selected={active}>
     <div
-      role="button"
+      role="option"
       tabIndex={0}
-      aria-pressed={active}
+      aria-selected={active}
       draggable={draggable}
       onDragStart={onDragStart}
       onDragOver={onDragOver}
@@ -75,10 +79,6 @@ function LayerRow({
       onKeyDown={(event) => {
         if (event.key === 'Enter' && event.target === event.currentTarget) engine.setActiveLayer(layer.id)
       }}
-      className={cn(
-        'flex h-13 cursor-default items-center gap-2.5 pr-2 pl-3 outline-none focus-visible:bg-surface-high',
-        active ? 'bg-primary/12' : 'hover:bg-surface-container',
-      )}
     >
       <LayerThumb engine={engine} layer={layer} />
       {renaming ? (
@@ -143,6 +143,7 @@ function LayerRow({
         </>
       ) : null}
     </div>
+    </ListRow>
   )
 }
 
@@ -152,6 +153,7 @@ export function LayerActions({ engine, snapshot, onImportImage }: { engine: Edit
   const paintLayers = snapshot.layers.filter((layer) => layer.kind === 'paint')
   const active = paintLayers.find((layer) => layer.id === snapshot.activeLayerId) ?? null
   const activeIndexFromTop = active ? paintLayers.indexOf(active) : -1
+  const [rename, setRename] = useState<{ id: string; name: string } | null>(null)
 
   return (
     <>
@@ -168,6 +170,16 @@ export function LayerActions({ engine, snapshot, onImportImage }: { engine: Edit
           </IconButton>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
+          <DropdownMenuItem disabled={!active} onSelect={() => active && setRename({ id: active.id, name: active.name })}>
+            {t({ ko: '이름 바꾸기', en: 'Rename' })}
+          </DropdownMenuItem>
+          <DropdownMenuItem disabled={!active || activeIndexFromTop <= 0} onSelect={() => active && engine.moveLayer(active.id, paintLayers.length - activeIndexFromTop)}>
+            {t({ ko: '위로', en: 'Move up' })}
+          </DropdownMenuItem>
+          <DropdownMenuItem disabled={!active || activeIndexFromTop >= paintLayers.length - 1} onSelect={() => active && engine.moveLayer(active.id, paintLayers.length - activeIndexFromTop - 2)}>
+            {t({ ko: '아래로', en: 'Move down' })}
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
           <DropdownMenuItem disabled={!active} onSelect={() => active && engine.duplicateLayer(active.id)}>
             {t({ ko: '복제', en: 'Duplicate' })}
           </DropdownMenuItem>
@@ -183,6 +195,21 @@ export function LayerActions({ engine, snapshot, onImportImage }: { engine: Edit
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
+      <Modal open={rename !== null} onClose={() => setRename(null)} title={t({ ko: '이름 바꾸기', en: 'Rename' })} size="sm">
+        <form onSubmit={(event) => {
+          event.preventDefault()
+          if (rename?.name.trim()) engine.renameLayer(rename.id, rename.name)
+          setRename(null)
+        }}>
+          <ModalBody>
+            <Input autoFocus aria-label={t({ ko: '레이어 이름', en: 'Layer name' })} value={rename?.name ?? ''} onChange={(event) => setRename((current) => current && { ...current, name: event.target.value })} />
+          </ModalBody>
+          <ModalFooter>
+            <Button type="button" variant="ghost" onClick={() => setRename(null)}>{t({ ko: '취소', en: 'Cancel' })}</Button>
+            <Button type="submit" disabled={!rename?.name.trim()}>{t({ ko: '적용', en: 'Apply' })}</Button>
+          </ModalFooter>
+        </form>
+      </Modal>
     </>
   )
 }
@@ -195,16 +222,15 @@ export function LayerPanel({ engine, snapshot }: { engine: EditorEngine; snapsho
   const paintLayers = snapshot.layers.filter((layer) => layer.kind === 'paint')
   const floating = snapshot.layers.find((layer) => layer.kind === 'floating')
   const maskActive = snapshot.tool === 'mask' || snapshot.tool === 'mask-eraser'
-  const active = paintLayers.find((layer) => layer.id === snapshot.activeLayerId) ?? null
+  const active = floating ? null : maskActive ? snapshot.mask : paintLayers.find((layer) => layer.id === snapshot.activeLayerId) ?? null
 
   /** Rows are listed top first; the engine counts from the bottom. */
   const toEngineIndex = (indexFromTop: number) => paintLayers.length - 1 - indexFromTop
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="min-h-0 flex-1 overflow-y-auto pt-1">
+      <div role="listbox" aria-label={t({ ko: '레이어', en: 'Layers' })} className="min-h-0 flex-1 overflow-y-auto pt-1">
         {snapshot.mask ? <LayerRow engine={engine} layer={snapshot.mask} active={maskActive} /> : null}
-        {snapshot.mask ? <div className="mx-3 border-t border-line" /> : null}
         {floating ? <LayerRow engine={engine} layer={floating} active /> : null}
         {paintLayers.map((layer, index) => (
           <LayerRow
@@ -229,27 +255,27 @@ export function LayerPanel({ engine, snapshot }: { engine: EditorEngine; snapsho
         ))}
       </div>
 
-      {active && !maskActive ? (
         <div className="shrink-0 border-t border-line px-4 py-3.5">
           <SliderRow
           label={t({ ko: '불투명도', en: 'Opacity' })}
           ariaLabel={t({ ko: '레이어 불투명도', en: 'Layer opacity' })}
           min={0}
           max={100}
-          value={Math.round(active.opacity * 100)}
-          readout={`${Math.round(active.opacity * 100)}%`}
+          disabled={!active}
+          value={Math.round((active?.opacity ?? 1) * 100)}
+          readout={`${Math.round((active?.opacity ?? 1) * 100)}%`}
           onChange={(value) => {
+            if (!active) return
             if (opacityStartRef.current === null) opacityStartRef.current = active.opacity
             engine.previewLayerOpacity(active.id, value / 100)
           }}
           onCommit={() => {
             const from = opacityStartRef.current
             opacityStartRef.current = null
-            if (from !== null) engine.commitLayerOpacity(active.id, from)
+            if (from !== null && active) engine.commitLayerOpacity(active.id, from)
           }}
           />
         </div>
-      ) : null}
     </div>
   )
 }

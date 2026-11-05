@@ -45,7 +45,7 @@ export function ChatComposerNarrationBackdrop({ textareaRef, text }: { textareaR
   }, [textareaRef, text])
   return (
     <div aria-hidden="true" className="pointer-events-none absolute -inset-x-1.5 inset-y-0 overflow-hidden">
-      <div ref={innerRef} className="whitespace-pre-wrap break-words px-1.5 py-1.5 text-sm text-foreground">
+      <div ref={innerRef} className="whitespace-pre-wrap break-words px-1.5 py-1 text-sm text-foreground">
         {text.split('\n').map((line, index) => isNarrationLine(line)
           ? <div key={index} className="-mx-1.5 rounded-sm px-1.5" style={{ color: NARRATION_COLOR, background: `color-mix(in srgb, ${NARRATION_COLOR} 12%, transparent)` }}><span className="opacity-45">$</span>{line.slice(1)}</div>
           : <div key={index}>{line || '​'}</div>)}

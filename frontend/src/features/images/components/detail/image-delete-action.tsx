@@ -2,14 +2,13 @@ import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { Trash2 } from 'lucide-react'
 import type { ActionMenuAction } from '@/components/ui/action-menu'
-import { useConfirm } from '@/components/ui/confirm-dialog'
 import { IconButton } from '@/components/ui/icon-button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { removeDeletedImagesFromListCaches } from '@/features/images/image-list-cache'
 import { useImageDeleteUndo } from '@/features/images/use-image-delete-undo'
 import { useI18n } from '@/i18n'
-import { withChatMediaDeleteWarning } from '@/features/images/chat-media-delete-warning'
+import { useConfirmImageDelete } from '@/features/images/chat-media-delete-warning'
 import { deleteImagesBulk } from '@/lib/api-images'
 import type { ImageRecord } from '@/types/image'
 
@@ -76,18 +75,13 @@ export function useImageDeletion(image: ImageRecord | undefined, onDeleted?: (co
 /** The same deletion as a ⋯ menu entry (destructive, confirm first); null without the permission. */
 export function useImageDeleteMenuAction(image: ImageRecord | undefined, onDeleted?: (compositeHash: string) => void): (ActionMenuAction & { label: string }) | null {
   const { canDeleteImages, compositeHash, isDeleting, deleteImage } = useImageDeletion(image, onDeleted)
-  const confirm = useConfirm()
+  const confirmDelete = useConfirmImageDelete()
   const { showSnackbar } = useSnackbar()
   const { t } = useI18n()
   if (!canDeleteImages || !compositeHash) return null
   const handleDelete = async () => {
     if (isDeleting) return
-    const confirmed = await confirm({
-      title: t({ ko: '이미지 삭제', en: 'Delete image' }),
-      description: await withChatMediaDeleteWarning(t({ ko: '이 이미지를 삭제할까? 삭제 보호가 켜져 있으면 휴지통으로 보내고 되돌릴 수 있어. 꺼져 있으면 영구 삭제돼.', en: 'Delete this image? With deletion protection on, files move to the Recycle Bin and can be undone. Otherwise they are permanently deleted.' }), [compositeHash], t),
-      confirmLabel: t({ ko: '삭제', en: 'Delete' }),
-      tone: 'destructive',
-    })
+    const confirmed = await confirmDelete([compositeHash], t({ ko: '이미지 삭제', en: 'Delete image' }))
     if (!confirmed) return
     try { await deleteImage() }
     catch (error) { showSnackbar({ message: error instanceof Error ? error.message : t({ ko: '이미지를 지우지 못했어.', en: 'Could not delete the image.' }), tone: 'error' }) }

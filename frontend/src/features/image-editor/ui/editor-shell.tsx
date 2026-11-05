@@ -7,11 +7,12 @@ import {
   Brush,
   BrushCleaning,
   Check,
-  Contrast,
+  Blend,
   Copy,
   Crop,
   Eraser,
   FlipHorizontal2,
+  FlipVertical2,
   Hand,
   Highlighter,
   Italic,
@@ -21,14 +22,20 @@ import {
   Minus,
   MoreHorizontal,
   PaintBucket,
+  Palette,
   PenLine,
   Pipette,
   Plus,
   Redo2,
   RotateCw,
+  RotateCcw,
+  Scaling,
+  SquarePlus,
+  SquareMinus,
   Scan,
   Scissors,
   SquareDashed,
+  SquareDashedMousePointer,
   SquareX,
   Trash2,
   Type,
@@ -41,6 +48,7 @@ import { ModalFooter } from '@/components/ui/modal'
 import { IconButton } from '@/components/ui/icon-button'
 import { SliderRow } from '@/components/ui/slider-row'
 import { Tip } from '@/components/ui/tooltip'
+import { floatingSurfaceClassName } from '@/components/ui/floating-surface'
 import { useOverlayBackClose } from '@/components/ui/use-overlay-back-close'
 import {
   DropdownMenu,
@@ -53,9 +61,10 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
-import type { CropRatio, EditorEngine, EditorSnapshot, EditorTool } from '../engine/editor-engine'
+import { MAX_BRUSH_SIZE, type CropRatio, type EditorEngine, type EditorSnapshot, type EditorTool } from '../engine/editor-engine'
 import { ensureFont, TEXT_FONTS, type TextStyle } from '../engine/text'
 import { SidePanel } from './side-panel'
+import { EditorDialogs } from './editor-dialogs'
 
 type Translate = ReturnType<typeof useI18n>['t']
 
@@ -83,11 +92,11 @@ const TOOL_GROUPS: ToolDef[][] = [
 
 const CROP_RATIOS: CropRatio[] = ['free', 'original', '1:1', '2:3', '3:2', '3:4', '4:3', '9:16', '16:9']
 
-/** Brush size slider runs on a square-root scale so small sizes stay easy to pick. */
-const MAX_BRUSH = 500
-const sizeToSlider = (size: number, max = MAX_BRUSH) => Math.round(Math.sqrt(size / max) * 1000)
-const sliderToSize = (value: number, max = MAX_BRUSH) => Math.max(1, Math.round((value / 1000) ** 2 * max))
 const MAX_FONT = 400
+const BRUSH_SIZE_MAPPING = {
+  toSlider: (value: number) => Math.sqrt(value / MAX_BRUSH_SIZE) * 1000,
+  fromSlider: (position: number) => Math.max(1, Math.round((position / 1000) ** 2 * MAX_BRUSH_SIZE)),
+}
 
 function visibleGroups(maskEnabled: boolean, aiEnabled: boolean) {
   return TOOL_GROUPS.map((group) => group.filter((item) => (maskEnabled || !item.mask) && (aiEnabled || !item.ai))).filter((group) => group.length > 0)
@@ -104,6 +113,7 @@ function ToolButton({ engine, snapshot, item, size }: { engine: EditorEngine; sn
       tooltipSide="right"
       className="shrink-0 [&_svg]:size-[18px]"
       onClick={() => engine.setTool(item.tool)}
+      onDoubleClick={() => { if (item.tool === 'hand') engine.fitToView() }}
     >
       {item.icon}
     </IconButton>
@@ -113,10 +123,36 @@ function ToolButton({ engine, snapshot, item, size }: { engine: EditorEngine; sn
 function ColorChip({ engine, snapshot }: { engine: EditorEngine; snapshot: EditorSnapshot }) {
   const { t } = useI18n()
   const label = snapshot.tool === 'text' ? t({ ko: '글자 색', en: 'Text color' }) : t({ ko: '브러시 색', en: 'Brush color' })
-  return <ColorSwatch label={label} color={snapshot.brushColor} onChange={(color) => engine.setBrushColor(color)} />
+  return (
+    <div className="flex items-center">
+      <ColorSwatch label={label} color={snapshot.brushColor} onChange={(color) => engine.setBrushColor(color, false)} onCommit={(color) => engine.setBrushColor(color)} />
+      {snapshot.recentColors.length ? (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <IconButton size="icon-xs" variant="ghost" label={t({ ko: '최근 색', en: 'Recent colors' })}><Palette className="size-3.5" /></IconButton>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent>
+            {snapshot.recentColors.map((color) => (
+              <DropdownMenuItem key={color} onSelect={() => engine.setBrushColor(color)}>
+                <span className="size-4 shrink-0 rounded-sm" style={{ backgroundColor: color }} />{color}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ) : null}
+    </div>
+  )
 }
 
-function ColorSwatch({ label, color, onChange, small = false }: { label: string; color: string; onChange: (color: string) => void; small?: boolean }) {
+function ColorSwatch({ label, color, onChange, onCommit, small = false }: { label: string; color: string; onChange: (color: string) => void; onCommit?: (color: string) => void; small?: boolean }) {
+  const inputRef = useRef<HTMLInputElement>(null)
+  useEffect(() => {
+    const input = inputRef.current
+    if (!input || !onCommit) return
+    const commit = () => onCommit(input.value)
+    input.addEventListener('change', commit)
+    return () => input.removeEventListener('change', commit)
+  }, [onCommit])
   return (
     <Tip content={label} side="right">
       <label className={cn('relative flex shrink-0 cursor-pointer items-center justify-center', small ? 'size-8' : 'size-10')}>
@@ -124,7 +160,7 @@ function ColorSwatch({ label, color, onChange, small = false }: { label: string;
           className={cn('block rounded-full ring-1 ring-foreground/35 ring-offset-2 ring-offset-background', small ? 'size-4.5' : 'size-5.5')}
           style={{ background: color }}
         />
-        <input type="color" value={color} aria-label={label} className="absolute inset-0 cursor-pointer opacity-0" onChange={(event) => onChange(event.target.value)} />
+        <input ref={inputRef} type="color" value={color} aria-label={label} className="absolute inset-0 cursor-pointer opacity-0" onChange={(event) => onChange(event.target.value)} onBlur={(event) => onCommit?.(event.target.value)} />
       </label>
     </Tip>
   )
@@ -164,15 +200,17 @@ function TextOptions({ engine, snapshot }: { engine: EditorEngine; snapshot: Edi
   ]
   return (
     <div className="flex items-center gap-4 max-md:gap-2">
+      <ColorChip engine={engine} snapshot={snapshot} />
       <FontPicker engine={engine} style={style} />
       <SliderRow
         layout="inline"
         label={t({ ko: '크기', en: 'Size' })}
-        value={sizeToSlider(style.fontSize, MAX_FONT)}
-        min={1}
-        max={1000}
-        readout={String(style.fontSize)}
-        onChange={(value) => engine.setTextStyle({ fontSize: Math.max(6, sliderToSize(value, MAX_FONT)) })}
+        value={style.fontSize}
+        min={6}
+        max={MAX_FONT}
+        editable
+        unit="px"
+        onChange={(value) => engine.setTextStyle({ fontSize: value })}
       />
       <div className="flex shrink-0 items-center gap-0.5">
         <IconButton size="icon-sm" variant="ghost" active={style.bold} label={t({ ko: '굵게', en: 'Bold' })} onClick={() => engine.setTextStyle({ bold: !style.bold })}>
@@ -194,7 +232,8 @@ function TextOptions({ engine, snapshot }: { engine: EditorEngine; snapshot: Edi
           value={style.strokeWidth}
           min={0}
           max={40}
-          readout={String(style.strokeWidth)}
+          editable
+          unit="px"
           onChange={(value) => engine.setTextStyle({ strokeWidth: value })}
         />
         <ColorSwatch small label={t({ ko: '외곽선 색', en: 'Outline color' })} color={style.stroke} onChange={(color) => engine.setTextStyle({ stroke: color })} />
@@ -218,14 +257,17 @@ function ToolOptions({ engine, snapshot, onCopy }: { engine: EditorEngine; snaps
   if (brushLike) {
     return (
       <div className="flex items-center gap-5">
+        {tool === 'brush' ? <ColorChip engine={engine} snapshot={snapshot} /> : null}
         <SliderRow
           layout="inline"
           label={t({ ko: '크기', en: 'Size' })}
-          value={sizeToSlider(snapshot.brushSize)}
+          value={snapshot.brushSize}
           min={1}
-          max={1000}
-          readout={String(snapshot.brushSize)}
-          onChange={(value) => engine.setBrushSize(sliderToSize(value))}
+          max={MAX_BRUSH_SIZE}
+          valueMapping={BRUSH_SIZE_MAPPING}
+          editable
+          unit="px"
+          onChange={(value) => engine.setBrushSize(value)}
         />
         {tool !== 'ai-erase' ? (
           <IconButton
@@ -253,7 +295,7 @@ function ToolOptions({ engine, snapshot, onCopy }: { engine: EditorEngine; snaps
         ) : (
           <div className="flex items-center gap-0.5">
             <IconButton size="icon-sm" variant="ghost" label={t({ ko: '마스크 반전', en: 'Invert mask' })} onClick={() => engine.invertMask()}>
-              <Contrast className="size-4" />
+              <Blend className="size-4" />
             </IconButton>
             <IconButton size="icon-sm" variant="ghost" label={t({ ko: '마스크 비우기', en: 'Clear mask' })} onClick={() => engine.clearMask()}>
               <SquareX className="size-4" />
@@ -267,6 +309,15 @@ function ToolOptions({ engine, snapshot, onCopy }: { engine: EditorEngine; snaps
   if (tool === 'select' || tool === 'lasso') {
     return (
       <div className="flex items-center gap-0.5">
+        <IconButton size="icon-sm" variant="ghost" label={t({ ko: '전체 선택 (Ctrl+A)', en: 'Select all (Ctrl+A)' })} onClick={() => engine.selectAll()}>
+          <SquareDashedMousePointer className="size-4" />
+        </IconButton>
+        <IconButton size="icon-sm" variant="ghost" disabled={noSelection} label={t({ ko: '선택 반전', en: 'Invert selection' })} onClick={() => engine.invertSelection()}>
+          <Blend className="size-4" />
+        </IconButton>
+        <IconButton size="icon-sm" variant="ghost" disabled={noSelection} label={t({ ko: '선택 영역 채우기 (Alt+Backspace)', en: 'Fill selection (Alt+Backspace)' })} onClick={() => engine.fillSelection()}>
+          <PaintBucket className="size-4" />
+        </IconButton>
         <IconButton size="icon-sm" variant="ghost" disabled={noSelection} label={t({ ko: '복사 (Ctrl+C)', en: 'Copy (Ctrl+C)' })} onClick={() => onCopy(engine.copySelection())}>
           <Copy className="size-4" />
         </IconButton>
@@ -279,10 +330,10 @@ function ToolOptions({ engine, snapshot, onCopy }: { engine: EditorEngine; snaps
         {snapshot.mask ? (
           <>
             <IconButton size="icon-sm" variant="ghost" disabled={noSelection} label={t({ ko: '선택 영역을 마스크로', en: 'Selection to mask' })} onClick={() => engine.fillMaskFromSelection()}>
-              <PaintBucket className="size-4" />
+              <SquarePlus className="size-4" />
             </IconButton>
             <IconButton size="icon-sm" variant="ghost" disabled={noSelection} label={t({ ko: '선택 영역 마스크 빼기', en: 'Remove selection from mask' })} onClick={() => engine.fillMaskFromSelection(true)}>
-              <BrushCleaning className="size-4" />
+              <SquareMinus className="size-4" />
             </IconButton>
           </>
         ) : null}
@@ -359,12 +410,12 @@ function FloatingActions({ engine, snapshot }: { engine: EditorEngine; snapshot:
   if (!visible) return null
   const text = snapshot.textEditing
   return (
-    <div ref={ref} className="absolute top-0 left-0 z-10 flex gap-0.5 rounded-md bg-surface-container p-0.5 shadow-elevation-2">
+    <div ref={ref} className={cn(floatingSurfaceClassName, 'absolute top-0 left-0 z-10 flex gap-0.5 p-0.5')}>
       <IconButton
         size="icon-sm"
         variant="ghost"
-        label={text ? t({ ko: '확정 (Ctrl+Enter)', en: 'Apply (Ctrl+Enter)' }) : t({ ko: '확정 (Enter)', en: 'Apply (Enter)' })}
-        onClick={() => engine.confirmPending()}
+        label={text ? t({ ko: '적용 (Ctrl+Enter)', en: 'Apply (Ctrl+Enter)' }) : t({ ko: '적용 (Enter)', en: 'Apply (Enter)' })}
+        onClick={() => text ? engine.commitTextEdit() : engine.commitFloating()}
       >
         <Check className="size-4" />
       </IconButton>
@@ -380,18 +431,46 @@ function FloatingActions({ engine, snapshot }: { engine: EditorEngine; snapshot:
   )
 }
 
-/** "지우는 중" under the area an AI erase is working on, with a cancel button. */
-function AiErasePill({ engine, visible }: { engine: EditorEngine; visible: boolean }) {
+/** Apply/clear the accumulated AI mask; keep cancellation available while running. */
+function AiErasePill({ engine, snapshot }: { engine: EditorEngine; snapshot: EditorSnapshot }) {
   const { t } = useI18n()
+  const visible = snapshot.aiErasing || snapshot.aiMaskPending
   const ref = usePinnedBelow(engine, visible, () => engine.aiEraseScreenBox())
   if (!visible) return null
   return (
-    <div ref={ref} role="status" className="absolute top-0 left-0 z-10 flex h-8 items-center gap-2 rounded-md bg-surface-container pr-0.5 pl-2.5 text-xs shadow-elevation-2">
-      <LoaderCircle className="size-3.5 animate-spin" />
-      <span>{t({ ko: '지우는 중', en: 'Erasing' })}</span>
+    <div ref={ref} role="status" className={cn(floatingSurfaceClassName, 'absolute top-0 left-0 z-10 flex h-8 items-center gap-2 pr-0.5 pl-2.5 text-xs')}>
+      {snapshot.aiErasing ? <LoaderCircle className="size-3.5 animate-spin" /> : (
+        <IconButton size="icon-xs" variant="ghost" label={t({ ko: '적용 (Enter)', en: 'Apply (Enter)' })} onClick={() => void engine.runAiErase()}>
+          <Check className="size-3.5" />
+        </IconButton>
+      )}
+      <span>{snapshot.aiErasing ? t({ ko: '지우는 중', en: 'Erasing' }) : t({ ko: 'AI 지우기', en: 'AI erase' })}</span>
       <IconButton size="icon-xs" variant="ghost" label={t({ ko: '취소 (Esc)', en: 'Cancel (Esc)' })} onClick={() => engine.cancelAiErase()}>
         <X className="size-3.5" />
       </IconButton>
+    </div>
+  )
+}
+
+function CropActions({ engine, visible }: { engine: EditorEngine; visible: boolean }) {
+  const { t } = useI18n()
+  const ref = usePinnedBelow(engine, visible, () => engine.cropScreenBox())
+  const sizeRef = useRef<HTMLSpanElement | null>(null)
+  useEffect(() => {
+    if (!visible) return
+    const update = () => {
+      const size = engine.cropSize()
+      if (sizeRef.current && size) sizeRef.current.textContent = `${size.width} × ${size.height}`
+    }
+    update()
+    return engine.subscribeFrame(update)
+  }, [engine, visible])
+  if (!visible) return null
+  return (
+    <div ref={ref} className={cn(floatingSurfaceClassName, 'absolute top-0 left-0 z-10 flex items-center gap-1 p-0.5')}>
+      <span ref={sizeRef} className="px-2 text-xs tabular-nums" />
+      <IconButton size="icon-sm" variant="ghost" label={t({ ko: '적용 (Enter)', en: 'Apply (Enter)' })} onClick={() => engine.applyCrop()}><Check className="size-4" /></IconButton>
+      <IconButton size="icon-sm" variant="ghost" label={t({ ko: '취소 (Esc)', en: 'Cancel (Esc)' })} onClick={() => engine.cancelCrop()}><X className="size-4" /></IconButton>
     </div>
   )
 }
@@ -445,9 +524,8 @@ export function EditorShell({ engine, snapshot, stageRef, rootRef, fileName, mas
   const ready = snapshot.status === 'ready'
 
   const saveButton = (
-    <Button type="button" size="sm" className="shrink-0" disabled={!ready || saving} onClick={onSave}>
-      {saving ? <LoaderCircle className="animate-spin" /> : null}
-      {t({ ko: '저장', en: 'Save' })}
+    <Button type="button" size="sm" className="shrink-0" disabled={!ready || saving || !snapshot.dirty || snapshot.aiErasing || snapshot.aiMaskPending} onClick={onSave}>
+      {saving ? t({ ko: '저장 중…', en: 'Saving…' }) : t({ ko: '저장', en: 'Save' })}
     </Button>
   )
 
@@ -528,7 +606,8 @@ export function EditorShell({ engine, snapshot, stageRef, rootRef, fileName, mas
               <div className="absolute inset-0 flex items-center justify-center text-sm text-destructive">{t({ ko: '이미지를 불러오지 못했어', en: 'Could not load the image' })}</div>
             ) : null}
             {engine ? <FloatingActions engine={engine} snapshot={snapshot} /> : null}
-            {engine ? <AiErasePill engine={engine} visible={snapshot.aiErasing} /> : null}
+            {engine ? <AiErasePill engine={engine} snapshot={snapshot} /> : null}
+            {engine ? <CropActions engine={engine} visible={snapshot.cropping} /> : null}
           </div>
 
           {engine ? (
@@ -536,11 +615,15 @@ export function EditorShell({ engine, snapshot, stageRef, rootRef, fileName, mas
               <IconButton size="icon-xs" variant="ghost" label={t({ ko: '축소 (Ctrl+-)', en: 'Zoom out (Ctrl+-)' })} onClick={() => engine.zoomBy(0.8)}>
                 <Minus className="size-3.5" />
               </IconButton>
-              <Tip content={t({ ko: '100% (Ctrl+1)', en: '100% (Ctrl+1)' })}>
-                <Button variant="ghost" size="xs" className="min-w-11 tabular-nums" onClick={() => engine.zoomTo(1)}>
-                  {Math.round(snapshot.zoom * 100)}%
-                </Button>
-              </Tip>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="xs" className="min-w-11">{Math.round(snapshot.zoom * 100)}%</Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent>
+                  <DropdownMenuItem onSelect={() => engine.fitToView()}>{t({ ko: '맞춤', en: 'Fit' })}</DropdownMenuItem>
+                  {[50, 100, 200, 400].map((zoom) => <DropdownMenuItem key={zoom} onSelect={() => engine.zoomTo(zoom / 100)}>{zoom}%</DropdownMenuItem>)}
+                </DropdownMenuContent>
+              </DropdownMenu>
               <IconButton size="icon-xs" variant="ghost" label={t({ ko: '확대 (Ctrl+=)', en: 'Zoom in (Ctrl+=)' })} onClick={() => engine.zoomBy(1.25)}>
                 <Plus className="size-3.5" />
               </IconButton>
@@ -552,6 +635,15 @@ export function EditorShell({ engine, snapshot, stageRef, rootRef, fileName, mas
               </IconButton>
               <IconButton size="icon-xs" variant="ghost" label={t({ ko: '좌우 뒤집기', en: 'Flip horizontally' })} onClick={() => engine.flip('x')}>
                 <FlipHorizontal2 className="size-3.5" />
+              </IconButton>
+              <IconButton size="icon-xs" variant="ghost" label={t({ ko: '왼쪽으로 90° 회전', en: 'Rotate left 90°' })} onClick={() => engine.rotate(false)}>
+                <RotateCcw className="size-3.5" />
+              </IconButton>
+              <IconButton size="icon-xs" variant="ghost" label={t({ ko: '상하 뒤집기', en: 'Flip vertically' })} onClick={() => engine.flip('y')}>
+                <FlipVertical2 className="size-3.5" />
+              </IconButton>
+              <IconButton size="icon-xs" variant="ghost" label={t({ ko: '이미지 크기', en: 'Image size' })} onClick={() => engine.setResizeOpen(true)}>
+                <Scaling className="size-3.5" />
               </IconButton>
               <div className="flex-1" />
               <CursorReadout engine={engine} />
@@ -586,7 +678,6 @@ export function EditorShell({ engine, snapshot, stageRef, rootRef, fileName, mas
             <div className="scroll-x theme-nav-scroll flex min-w-0 flex-1 items-center">
               <ToolOptions engine={engine} snapshot={snapshot} onCopy={onCopy} />
             </div>
-            {snapshot.tool === 'brush' || snapshot.tool === 'text' ? <ColorChip engine={engine} snapshot={snapshot} /> : null}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <IconButton size="icon-lg" variant="ghost" label={t({ ko: '보기와 변형', en: 'View and transform' })}>
@@ -599,6 +690,9 @@ export function EditorShell({ engine, snapshot, stageRef, rootRef, fileName, mas
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onSelect={() => engine.rotate(true)}>{t({ ko: '90° 회전', en: 'Rotate 90°' })}</DropdownMenuItem>
                 <DropdownMenuItem onSelect={() => engine.flip('x')}>{t({ ko: '좌우 뒤집기', en: 'Flip horizontally' })}</DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => engine.rotate(false)}>{t({ ko: '왼쪽으로 90° 회전', en: 'Rotate left 90°' })}</DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => engine.flip('y')}>{t({ ko: '상하 뒤집기', en: 'Flip vertically' })}</DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => engine.setResizeOpen(true)}>{t({ ko: '이미지 크기', en: 'Image size' })}</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
             <IconButton size="icon-lg" variant="ghost" active={layersOpen} label={t({ ko: '레이어', en: 'Layers' })} onClick={() => setLayersOpen((value) => !value)}>
@@ -616,11 +710,19 @@ export function EditorShell({ engine, snapshot, stageRef, rootRef, fileName, mas
         className="shrink-0 px-4 pb-[max(1rem,env(safe-area-inset-bottom))]"
       >
         <ModalFooter separated>
+          {engine ? (
+            <>
+              <Button size="sm" variant={snapshot.comparing ? 'secondary' : 'ghost'} aria-pressed={snapshot.comparing} onClick={() => engine.setCompare(!snapshot.comparing)}>{t({ ko: '원본 비교 (\\)', en: 'Compare original (\\)' })}</Button>
+              <Button size="sm" variant="ghost" onClick={() => engine.setShortcutsOpen(true)}>{t({ ko: '단축키 (?)', en: 'Shortcuts (?)' })}</Button>
+            </>
+          ) : null}
           <span className="flex-1" />
+          {snapshot.dirty ? <span className="text-xs text-muted-foreground">{t({ ko: '저장하지 않은 변경 · Ctrl S', en: 'Unsaved changes · Ctrl S' })}</span> : null}
           <Button type="button" size="sm" variant="ghost" onClick={onRequestClose} disabled={saving}>{t({ ko: '취소', en: 'Cancel' })}</Button>
           {saveButton}
         </ModalFooter>
       </div>
+      {engine ? <EditorDialogs engine={engine} snapshot={snapshot} /> : null}
 
       {/* Tablets (md–lg): the layer button lives at the top right of the stage. */}
       {engine ? (

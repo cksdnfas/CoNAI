@@ -62,8 +62,8 @@ function LoreSelectionLimitRow({ value, disabled, onChange }: { value: number; d
   const label = t(SETTINGS_ROW_BY_ID['chat.loreSelectionLimit'].label)
   return (
     <SettingRow label={<ChatFilledLabel fieldId="chat.loreSelectionLimit" />} info={t({
-      ko: '판단 모델과 플러그인(AI 어항 등)이 지금 상황에 맞는 로어를 고를 때, 키워드가 가장 잘 맞는 순서로 이 개수까지만 넣어. 항상 적용 로어는 따로 들어가고 이 개수에 세지 않아.',
-      en: 'When the judge model or a plugin (such as AI Aquarium) picks lore for the current situation, it keeps at most this many keyword entries, best matches first. Always-on entries go in separately and are not counted.',
+      ko: '항상 적용 로어를 제외하고, 키워드가 잘 맞는 로어를 이 개수까지 넣어.',
+      en: 'Include up to this many best-matching keyword entries, excluding always-on lore.',
     })}>
       <NumberStepperInput variant="settings" className="w-24" min={LORE_SELECTION_LIMITS.min} max={LORE_SELECTION_LIMITS.max} precision={0} value={value}
         aria-label={label} disabled={disabled}
@@ -85,15 +85,15 @@ export function ChatToolSettings() {
     <RowGroup heading={t({ ko: '도구 사용', en: 'Tool use' })}>
       {settings ? <>
         <SettingRow label={<ChatFilledLabel fieldId="chat.toolRoundLimit" />} info={t({
-          ko: '한 답변에서 모델이 도구를 부르고 결과를 받는 왕복의 최대 횟수야. 모든 프로필과 실행 방식(CoNAI 직접·pi·Claude Code), 플러그인 실행·조사, 웹 검색, pi codemode 스크립트 하나의 호출 수가 이 값을 따라. 닿으면 도구를 거두고 지금까지 한 일로 답해. Codex는 자체 반복을 써서 한도가 없어.',
-          en: 'The most model ↔ tool round trips one reply may take. Every profile and runtime (CoNAI direct, pi, Claude Code), plugin runs and research, web search and one pi codemode script\'s calls follow it. At the limit the tools go and the model answers with what it has. Codex runs its own loop without this cap.',
+          ko: 'Codex를 제외한 답변·조사의 도구 왕복과 pi 스크립트의 호출 수를 제한해.',
+          en: 'Limit tool round trips per reply or research run and calls per pi script, except Codex.',
         })}>
           <NumberStepperInput variant="settings" className="w-24" min={TOOL_ROUND_LIMITS.min} max={TOOL_ROUND_LIMITS.max} precision={0} value={settings.toolRoundLimit}
             aria-label={label} disabled={settingsMutation.isPending}
             onValueCommit={(value) => { const toolRoundLimit = Number(value); if (Number.isInteger(toolRoundLimit) && toolRoundLimit !== settings.toolRoundLimit) settingsMutation.mutate({ toolRoundLimit }) }} />
         </SettingRow>
         <SettingsSwitchRow label={<ChatFilledLabel fieldId="chat.piCodemode" />} checked={settings.piCodemode} disabled={settingsMutation.isPending}
-          info={t({ ko: '모든 pi 프로필의 채팅에서 모델이 짧은 스크립트로 CoNAI 도구 여러 개를 한 번에 부르고 필요한 결과만 받아. 스크립트 하나는 도구를 위의 도구 호출 반복 한도만큼 불러. 작은 모델은 스크립트를 잘 못 쓸 수 있어.', en: 'In every pi profile\'s chats, the model can call several CoNAI tools in one short script and get back only what it needs. One script makes as many tool calls as the tool round limit above. Small models may not write scripts well.' })}
+          info={t({ ko: 'pi가 짧은 스크립트로 여러 도구를 부르며, 작은 모델은 잘 못 쓸 수 있어.', en: 'Let pi call multiple tools through short scripts, which smaller models may struggle with.' })}
           onCheckedChange={(piCodemode) => settingsMutation.mutate({ piCodemode })} />
       </> : settingsQuery.isError ? null : <SettingsRowsSkeleton rows={2} />}
     </RowGroup>

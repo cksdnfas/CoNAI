@@ -155,7 +155,7 @@ export function AppearanceTab({
           >
             <SettingRow
               label={t({ ko: '앱 마크', en: 'App mark' })}
-              info={t({ ko: 'PC 파일이나 내부 이미지를 골라 편집한 뒤 등록해줘. 20MB 이하의 PNG, JPG, WebP, GIF, AVIF를 지원하고 투명 배경을 유지해. 등록하면 모든 사용자의 상단 마크에 바로 적용돼. 움직이는 이미지는 한 장으로 저장돼.', en: 'Choose a local file or an app library image, edit it, and register it. PNG, JPG, WebP, GIF, and AVIF up to 20 MB are supported, with transparency preserved. Registration applies the mark to everyone immediately. Animated images are saved as a still image.' })}
+              info={t({ ko: '이미지를 편집해 등록하면 모든 사용자의 앱 마크가 바로 바뀌어.', en: 'Edit and register an image to change the app mark for everyone immediately.' })}
             >
               <img
                 src={editorProps.appearanceDraft.appIconDataUrl || APP_ICON_SRC}

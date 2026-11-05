@@ -1,8 +1,11 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
+import { EmptyState } from '@/components/ui/empty-state'
 import { ToggleChip } from '@/components/ui/chip'
 import { Text } from '@/components/ui/text'
 import { useI18n } from '@/i18n'
+import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
 import type { CharacterFacetKey, CharacterLibraryFacets, CharacterSettingFilters } from '@/lib/api-character-library'
 import { localizedTagName } from '../character-library-shared'
 
@@ -47,9 +50,10 @@ export function CharacterFacetPanel({ facets, filters, onChange, loading }: {
 }) {
   const { t, formatNumber, language } = useI18n()
   const labels = useFacetLabels()
+  const { isAdmin } = useFeaturePermissions()
   const [expanded, setExpanded] = useState<ReadonlySet<CharacterFacetKey>>(new Set())
   if (loading && !facets) return null
-  if (facets && !facets.available) return <p className="text-xs text-muted-foreground">{t({ ko: 'Danbooru 사전을 설치하면 머리색·눈색·작품 같은 필터가 생겨.', en: 'Install the Danbooru dictionary for hair, eye and work filters.' })}</p>
+  if (facets && !facets.available) return <EmptyState size="compact" title={t({ ko: '필터에 필요한 사전이 없어', en: 'The filter dictionary is not installed' })} action={isAdmin ? <Button asChild size="sm"><Link to="/prompts?tab=danbooru">{t({ ko: '사전 설치', en: 'Install dictionary' })}</Link></Button> : undefined} />
   if (!facets?.dimensions.length) return null
   return (
     <div className="space-y-3 border-t border-line pt-3">

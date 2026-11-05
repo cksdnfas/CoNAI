@@ -11,7 +11,7 @@ import { Tip } from './tooltip'
  * right the unsaved-changes status, Revert, Cancel (closes the way ✕ does, asking first with unsaved edits) and Save,
  * all in words. Without a save it ends in Close.
  */
-export function EditorFooter({ onDelete, deleteLabel, deleteDisabled = false, deleteTip, deleting = false, children, onRevert, canRevert = true, onSave, saveSubmit = false, canSave = true, saving = false, saveLabel, cancel = true }: {
+export function EditorFooter({ onDelete, deleteLabel, deleteDisabled = false, deleteTip, deleting = false, children, onRevert, canRevert = true, onSave, saveSubmit = false, canSave = true, saving = false, saveLabel, saveTip, cancel = true }: {
   /** Left out: no delete (a new item, or one that cannot be deleted). */
   onDelete?: () => void
   deleteLabel?: string
@@ -30,6 +30,7 @@ export function EditorFooter({ onDelete, deleteLabel, deleteDisabled = false, de
   saving?: boolean
   /** The verb of the primary action when it is not a plain save ("만들기", "불러오기"). */
   saveLabel?: string
+  saveTip?: ReactNode
   /** Cancel / Close key; on by default inside a modal. */
   cancel?: boolean
 }) {
@@ -66,10 +67,14 @@ export function EditorFooter({ onDelete, deleteLabel, deleteDisabled = false, de
         </Button>
       ) : null}
       {commits ? (
-        <Button size="sm" variant="default" type={saveSubmit ? 'submit' : 'button'} onClick={saveSubmit ? undefined : onSave} disabled={!canSave || saving}>
-          {saving ? <LoaderCircle className="animate-spin" /> : null}
-          {saveLabel ?? t({ ko: '저장', en: 'Save' })}
-        </Button>
+        <Tip content={saveTip}>
+          <span tabIndex={saveTip && (!canSave || saving) ? 0 : undefined} aria-disabled={saveTip && (!canSave || saving) ? true : undefined} aria-label={!canSave || saving ? typeof saveTip === 'string' ? saveTip : saveLabel ?? t({ ko: '저장', en: 'Save' }) : undefined} className="inline-flex shrink-0 rounded-sm outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40">
+            <Button size="sm" variant="default" type={saveSubmit ? 'submit' : 'button'} onClick={saveSubmit ? undefined : onSave} disabled={!canSave || saving}>
+              {saving ? <LoaderCircle className="animate-spin" /> : null}
+              {saveLabel ?? t({ ko: '저장', en: 'Save' })}
+            </Button>
+          </span>
+        </Tip>
       ) : null}
     </ModalFooter>
   )

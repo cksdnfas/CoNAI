@@ -9,6 +9,8 @@ interface SliderRowProps {
   min: number
   max: number
   step?: number
+  /** Map domain values to slider positions; editable values and min/max stay in domain units. step is in slider units. */
+  valueMapping?: { toSlider: (value: number) => number; fromSlider: (position: number) => number }
   onChange: (value: number) => void
   /** Fires once when a drag ends (one undo step per drag). A typed `editable` value goes to `onChange` only. */
   onCommit?: (value: number) => void
@@ -37,6 +39,7 @@ function SliderRow({
   min,
   max,
   step = 1,
+  valueMapping,
   onChange,
   onCommit,
   readout,
@@ -57,14 +60,14 @@ function SliderRow({
       <span className={cn('shrink-0 truncate text-xs text-muted-foreground', !inline && (labelClassName ?? 'w-18'))}>{label}</span>
       <Slider
         className={cn(inline ? 'w-28 md:w-32' : 'min-w-0 flex-1', mixed && 'opacity-45')}
-        value={[value]}
-        min={min}
-        max={max}
+        value={[valueMapping ? valueMapping.toSlider(value) : value]}
+        min={valueMapping ? valueMapping.toSlider(min) : min}
+        max={valueMapping ? valueMapping.toSlider(max) : max}
         step={step}
         disabled={disabled}
         aria-label={name}
-        onValueChange={([next]) => onChange(next ?? value)}
-        onValueCommit={onCommit ? ([next]) => onCommit(next ?? value) : undefined}
+        onValueChange={([next]) => onChange(next === undefined ? value : valueMapping ? valueMapping.fromSlider(next) : next)}
+        onValueCommit={onCommit ? ([next]) => onCommit(next === undefined ? value : valueMapping ? valueMapping.fromSlider(next) : next) : undefined}
       />
       {editable ? (
         <SliderValueInput value={value} min={min} max={max} unit={unit} mixed={mixed} label={name} disabled={disabled} onCommit={onChange} />

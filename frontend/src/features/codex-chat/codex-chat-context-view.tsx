@@ -401,7 +401,7 @@ function SummaryBlock({ thread, segments, summaryOn }: { thread: CodexChatThread
       <div className="flex items-center gap-2 pb-2 pt-4">
         <span className="flex-1 text-sm">{t({ ko: '요약', en: 'Summary' })}</span>
         {thread.summary_updated_date ? <span className="text-xs text-muted-foreground">{formatDateTime(parseServerDate(thread.summary_updated_date))}</span> : null}
-        {segments.length > 0 ? <IconButton variant="ghost" size="icon-sm" onClick={() => void clearSummary()} disabled={clearMutation.isPending} label={t({ ko: '요약 지우기', en: 'Clear summary' })}><Eraser /></IconButton> : null}
+        <IconButton variant="ghost" size="icon-sm" onClick={() => void clearSummary()} disabled={segments.length === 0 || clearMutation.isPending} label={t({ ko: '요약 지우기', en: 'Clear summary' })}><Eraser /></IconButton>
         <IconButton variant="secondary" size="icon-sm" onClick={() => summarizeMutation.mutate()} disabled={summarizeMutation.isPending} label={summarizeMutation.isPending ? t({ ko: '요약 중…', en: 'Summarizing…' }) : t({ ko: '지금 요약', en: 'Summarize now' })}>
           {summarizeMutation.isPending ? <LoaderCircle className="animate-spin" /> : <ScrollText />}
         </IconButton>

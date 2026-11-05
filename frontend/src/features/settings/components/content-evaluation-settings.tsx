@@ -92,7 +92,7 @@ export function ContentEvaluationSettingsRows({ draft, onPatch, isSaving, dirty,
     ? <ErrorState error={error} onRetry={onReload} />
     : <SettingsRowsSkeleton rows={5} />
   const seed = () => onPatch({ topics: [
-    { id: 'education', name: t({ ko: '교육', en: 'Education' }), description: t({ ko: '학습, 수업, 교수법, 교육 자료를 직접 다루는 정도. 단순히 교육이라는 단어가 등장하는 것만으로 높은 관련도를 주지 않는다.', en: 'Substantive discussion of learning, teaching, pedagogy, and educational materials. A passing mention alone is not high relevance.' }), enabled: true },
+    { id: 'education', name: t({ ko: '교육', en: 'Education' }), description: t({ ko: '학습, 수업, 교수법, 교육 자료를 직접 다루는 정도야. 교육이라는 단어만 나와서는 높은 관련도를 주지 않아.', en: 'Substantive discussion of learning, teaching, pedagogy, and educational materials. A passing mention alone is not high relevance.' }), enabled: true },
     { id: 'ai', name: 'AI', description: t({ ko: '인공지능 기술, 활용, 연구를 중심적으로 다루는 정도.', en: 'How centrally the content discusses artificial intelligence technology, applications, or research.' }), enabled: true },
     { id: 'llm', name: 'LLM', description: t({ ko: '대규모 언어 모델의 원리, 학습, 추론, 활용을 직접 다루는 정도.', en: 'Substantive discussion of large language models, training, inference, principles, or applications.' }), enabled: true },
   ] })

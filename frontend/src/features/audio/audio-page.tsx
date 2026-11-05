@@ -696,18 +696,16 @@ function AudioPageContent() {
   const exportBusy = exporting || Boolean(exportJobId)
   const toolbarActions = group ? (
     <>
-      {!inbox ? (
-        <span className="relative inline-flex">
-          <IconButton variant="ghost" label={t({ ko: '코멘트', en: 'Comments' })} onClick={() => setDialog('comments')}><MessageSquare /></IconButton>
-          {group.pending_comment_count > 0 ? <CountBadge corner="top-right" count={group.pending_comment_count} /> : null}
-        </span>
-      ) : null}
-      {permissions.canEdit ? <IconButton variant="ghost" label={t({ ko: '업로드', en: 'Upload' })} onClick={() => uploadInputRef.current?.click()}><Upload /></IconButton> : null}
-      <IconButton variant="ghost" label={t({ ko: '채택본 내보내기', en: 'Export adopted takes' })} disabled={exportBusy} onClick={() => void runExport({ groupId: group.id })}><Download /></IconButton>
+      <span className="relative inline-flex">
+        <IconButton size="icon-sm" variant="ghost" disabled={inbox} label={inbox ? t({ ko: '받은 파일에는 코멘트를 남길 수 없어', en: 'Comments are unavailable in the inbox' }) : t({ ko: '코멘트', en: 'Comments' })} onClick={() => setDialog('comments')}><MessageSquare /></IconButton>
+        {group.pending_comment_count > 0 ? <CountBadge corner="top-right" count={group.pending_comment_count} /> : null}
+      </span>
+      {permissions.canEdit ? <IconButton size="icon-sm" variant="ghost" label={t({ ko: '업로드', en: 'Upload' })} onClick={() => uploadInputRef.current?.click()}><Upload /></IconButton> : null}
+      <IconButton size="icon-sm" variant="ghost" label={exportBusy ? t({ ko: '내보내는 중이야', en: 'Export is in progress' }) : t({ ko: '채택본 내보내기', en: 'Export adopted takes' })} disabled={exportBusy} onClick={() => void runExport({ groupId: group.id })}><Download /></IconButton>
       {permissions.canEdit ? (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <IconButton variant="ghost" label={t({ ko: '더 보기', en: 'More' })}><MoreHorizontal /></IconButton>
+            <IconButton size="icon-sm" variant="ghost" label={t({ ko: '더 보기', en: 'More' })}><MoreHorizontal /></IconButton>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             {!inbox ? <DropdownMenuItem onSelect={() => setDialog('group-edit')}><Pencil />{t({ ko: '효과음 수정', en: 'Edit effect' })}</DropdownMenuItem> : null}

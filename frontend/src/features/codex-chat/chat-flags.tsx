@@ -231,10 +231,9 @@ function ChatFlagIconPicker({ value, name, onChange }: { value: string; name: st
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        {/* eslint-disable-next-line no-restricted-syntax -- the icon itself is the control, sized like the input beside it */}
-        <button type="button" aria-label={t({ ko: '아이콘 고르기', en: 'Choose icon' })} className="flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-md border border-line bg-surface-low text-foreground outline-none transition-colors hover:bg-surface-high focus-visible:ring-3 focus-visible:ring-ring/40">
+        <Button type="button" variant="field" size="field-icon" aria-label={t({ ko: '아이콘 고르기', en: 'Choose icon' })}>
           <ChatFlagIcon icon={value} name={name || '?'} className="size-5 text-xl" />
-        </button>
+        </Button>
       </PopoverTrigger>
       <PopoverContent align="start" padding="none" className="w-88 max-w-[calc(100vw-2rem)]">
         <TextTabs<PickerTab>

@@ -16,7 +16,6 @@ import { LoadingState } from '@/components/ui/loading-state'
 import { Modal, ModalBody } from '@/components/ui/modal'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { SwitchLine } from '@/components/ui/switch-line'
-import { Text } from '@/components/ui/text'
 import { useI18n } from '@/i18n'
 import {
   CHAT_ADMIN_PROFILES_QUERY_KEY,
@@ -424,9 +423,7 @@ function LorebookEditor({ ref, draft, setDraft, owned, dirty, keyLanguage, missi
         <ChatLorebookEditor entries={entries} onChange={(entries) => { if (!importing.current) setDraft((current) => ({ ...current, entries })) }} filePlace={owned ? { kind: 'owned', folderId } : { kind: 'global' }} keyLanguage={keyLanguage} />
       </fieldset>
       </ModalBody>
-      <EditorFooter onSave={save} canSave={canSave} saving={saveMutation.isPending} onRevert={() => void handleRevert()} canRevert={dirty && !busy}>
-        {!name.trim() ? <Text variant="caption" tone="muted" aria-live="polite">{t({ ko: '이름을 적어야 저장할 수 있어', en: 'Needs a name to save' })}</Text> : null}
-      </EditorFooter>
+      <EditorFooter onSave={save} canSave={canSave} saving={saveMutation.isPending} onRevert={() => void handleRevert()} canRevert={dirty && !busy} saveTip={!name.trim() ? t({ ko: '이름을 적어야 저장할 수 있어', en: 'Needs a name to save' }) : undefined} />
       {keyLanguage ? <ChatLoreKeyFillDialog open={fillOpen} language={keyLanguage} entries={missing} onClose={() => setFillOpen(false)} onApply={(keys) => { if (!importing.current) setDraft((current) => ({ ...current, entries: current.entries.map((entry) => keys[entry.id] ? { ...entry, localKeys: [...new Set([...(entry.localKeys ?? []), ...keys[entry.id]])].slice(0, 20) } : entry) })) }} /> : null}
       <input ref={fileRef} type="file" accept=".json,.lorebook,.png,application/json,image/png" className="hidden" aria-label={t({ ko: '로어북 파일', en: 'Lorebook file' })} onChange={async (event) => {
         const file = event.target.files?.[0]

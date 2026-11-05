@@ -1,13 +1,13 @@
 import { useMemo, useRef, useState, type DragEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { BookOpen, FilePlus, FileText, Folder, FolderInput, FolderKanban, FolderPlus, History, LayoutGrid, List, Pencil, Puzzle, RefreshCw, Search, Trash2, Upload, X } from 'lucide-react'
+import { BookOpen, FilePlus, FileText, Folder, FolderInput, FolderKanban, FolderPlus, History, LayoutGrid, List, Pencil, Puzzle, RefreshCw, Search, Trash2, Upload } from 'lucide-react'
 import type { WorkspaceEntry, WorkspaceOperation, WorkspaceProject } from '@conai/shared'
 import { PageWithSidebar } from '@/components/common/page-with-sidebar'
 import { PageToolbar } from '@/components/common/page-toolbar'
 import { PathBreadcrumbs } from '@/components/common/path-breadcrumbs'
 import { SegmentedControl } from '@/components/common/segmented-control'
-import { SearchField } from '@/components/common/search-field'
+import { PageToolbarSearch } from '@/components/common/page-toolbar-search'
 import { SelectionActionBar, SelectionBarAction } from '@/components/common/selection-action-bar'
 import { ListPager } from '@/components/common/list-pager'
 import { MoveDialog, NameDialog } from '@/components/common/entry-dialogs'
@@ -261,8 +261,6 @@ export function WorkspaceBrowser({ projectId, dir, onNavigate, onProject, onCrea
 
   const actions = (
     <>
-      <IconButton variant="ghost" label={t({ ko: '작업 공간 지침', en: 'Workspace guidelines' })} disabled={!project.data} onClick={() => setProjectOpen(true)}><BookOpen /></IconButton>
-      <IconButton variant="ghost" label={t({ ko: '플러그인으로 열기', en: 'Open with plugin' })} onClick={() => navigateTo(`/extensions?project=${projectId}`)}><Puzzle /></IconButton>
       <SegmentedControl
         size="xs"
         value={viewMode}
@@ -273,12 +271,14 @@ export function WorkspaceBrowser({ projectId, dir, onNavigate, onProject, onCrea
           { value: 'list', label: <List className="size-3.5" />, ariaLabel: t({ ko: '자세히 보기', en: 'Details' }) },
         ]}
       />
-      {searchOpen ? null : <IconButton variant="ghost" label={t({ ko: '검색', en: 'Search' })} onClick={() => setSearchOpen(true)}><Search /></IconButton>}
-      {canWrite ? <IconButton variant="ghost" label={t({ ko: '새 폴더', en: 'New folder' })} disabled={busy} onClick={() => setNameDialog({ name: '' })}><FolderPlus /></IconButton> : null}
+      <IconButton size="icon-sm" variant="ghost" active={searchOpen} label={t({ ko: '검색', en: 'Search' })} onClick={() => searchOpen ? closeSearch() : setSearchOpen(true)}><Search /></IconButton>
+      {canWrite ? <IconButton size="icon-sm" variant="ghost" label={t({ ko: '새 폴더', en: 'New folder' })} disabled={busy} onClick={() => setNameDialog({ name: '' })}><FolderPlus /></IconButton> : null}
       <ActionMenuButton
-        size="icon"
+        size="icon-sm"
         label={t({ ko: '더 보기', en: 'More' })}
         entries={[
+          { key: 'guidelines', label: t({ ko: '작업 공간 지침', en: 'Workspace guidelines' }), icon: BookOpen, disabled: !project.data, onSelect: () => setProjectOpen(true) },
+          { key: 'plugin', label: t({ ko: '플러그인으로 열기', en: 'Open with plugin' }), icon: Puzzle, onSelect: () => navigateTo(`/extensions?project=${projectId}`) },
           canWrite && { key: 'new-document', label: t({ ko: '새 문서', en: 'New document' }), icon: FilePlus, disabled: busy, onSelect: () => setEditor({ entry: null }) },
           { key: 'changes', label: t({ ko: '변경 내역', en: 'Change history' }), icon: History, onSelect: () => setChangesOpen(true) },
           { key: 'refresh', label: t({ ko: '새로고침', en: 'Refresh' }), icon: RefreshCw, disabled: busy, onSelect: () => void refresh() },
@@ -295,10 +295,7 @@ export function WorkspaceBrowser({ projectId, dir, onNavigate, onProject, onCrea
     />
   )
   const searchField = (
-    <div className="flex min-w-0 flex-1 items-center gap-1">
-      <SearchField autoFocus value={searchInput} onChange={setSearchInput} placeholder={t({ ko: '문서 이름이나 내용 검색', en: 'Search document names and text' })} onKeyDown={(event) => { if (event.key === 'Escape') closeSearch() }} />
-      <IconButton variant="ghost" size="icon-sm" label={t({ ko: '검색 닫기', en: 'Close search' })} onClick={closeSearch}><X /></IconButton>
-    </div>
+    <PageToolbarSearch value={searchInput} onChange={setSearchInput} onClose={closeSearch} placeholder={t({ ko: '문서 이름이나 내용 검색', en: 'Search document names and text' })} />
   )
   const sidebar = (
     <SidebarNav aria-label={t({ ko: '폴더', en: 'Folders' })}>

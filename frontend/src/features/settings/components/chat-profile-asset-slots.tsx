@@ -3,7 +3,6 @@ import { keepPreviousData, useQueries, useQuery } from '@tanstack/react-query'
 import { AlertTriangle, MoreHorizontal, Square, Wand } from 'lucide-react'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { Spinner } from '@/components/ui/loading-state'
 import { Select } from '@/components/ui/select'
@@ -252,13 +251,7 @@ export function ExpressionSlots({ runs, groupSource, referenceHash, canGenerate,
         <span className="flex-1" />
         {editable && generation ? <>
           <AssetPresetPicker runs={runs} showExpressionMenu />
-          <Tip content={blockedReason}>
-            <span className="inline-flex" tabIndex={blockedReason ? 0 : -1}>
-              <Button variant="secondary" size="compact" disabled={!canGenerate || !emptyNames.length} onClick={fillAll}><Wand />
-                {t({ ko: '빈 칸 {count}개 생성', en: 'Generate {count} empty slots' }, { count: emptyNames.length })}
-              </Button>
-            </span>
-          </Tip>
+          <IconButton variant="secondary" size="icon-sm" disabled={!canGenerate || !emptyNames.length} onClick={fillAll} label={[t({ ko: '빈 칸 {count}개 생성', en: 'Generate {count} empty slots' }, { count: emptyNames.length }), blockedReason].filter(Boolean).join(' · ')}><Wand /></IconButton>
         </> : null}
       </div>
       <div className="grid grid-cols-4 gap-2">
@@ -285,11 +278,7 @@ export function ExpressionSlots({ runs, groupSource, referenceHash, canGenerate,
                 {editable && !hash && !working ? (
                   <span className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-1 [&>*]:pointer-events-auto">
                     {renderInput({ name, empty: true, onPick: (hash) => { setSelected(name); void run(name, () => onSet(name, hash)) }, generateBlocked: null, busy: busy === name })}
-                    {generation ? <Tip content={blockedReason}>
-                      <span className="inline-flex" tabIndex={blockedReason ? 0 : -1}>
-                        <Button size="xs" variant="ghost" disabled={!canGenerate || !runs.emotionNames.includes(name)} aria-label={t({ ko: '{name} 생성', en: 'Generate {name}' }, { name })} onClick={() => { setSelected(name); void runs.start({ kind: 'expressions', names: [name] }, true) }}><Wand />{t({ ko: '생성', en: 'Generate' })}</Button>
-                      </span>
-                    </Tip> : null}
+                    {generation ? <IconButton size="icon-xs" variant="ghost" disabled={!canGenerate || !runs.emotionNames.includes(name)} label={[t({ ko: '{name} 생성', en: 'Generate {name}' }, { name }), blockedReason].filter(Boolean).join(' · ')} onClick={() => { setSelected(name); void runs.start({ kind: 'expressions', names: [name] }, true) }}><Wand /></IconButton> : null}
                   </span>
                 ) : null}
               </div>

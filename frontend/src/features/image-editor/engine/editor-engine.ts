@@ -20,6 +20,7 @@ import {
   type Rect,
 } from './raster'
 import { StrokeSession, type StrokeMode, type StrokePoint } from './stroke'
+import { clampDocumentSize } from './resize'
 import {
   createTextObject,
   DEFAULT_TEXT_STYLE,
@@ -50,7 +51,8 @@ export type EditorTool =
 /** Runs AI erase on the server: image and mask crops in, the filled crop out. */
 export type InpaintHandler = (image: Blob, mask: Blob, signal: AbortSignal) => Promise<Blob>
 
-export type EditorNotice = 'locked' | 'no-selection' | 'empty' | 'ai-busy' | 'ai-failed'
+export type EditorNotice = 'locked' | 'no-selection' | 'empty' | 'ai-unavailable' | 'ai-failed' | 'transparent' | 'rasterized'
+export const MAX_BRUSH_SIZE = 1000
 
 export type CropRatio = 'free' | 'original' | '1:1' | '2:3' | '3:2' | '3:4' | '4:3' | '9:16' | '16:9'
 
@@ -94,6 +96,11 @@ export type EditorSnapshot = {
   textEditing: boolean
   aiEraseAvailable: boolean
   aiErasing: boolean
+  aiMaskPending: boolean
+  comparing: boolean
+  recentColors: string[]
+  shortcutsOpen: boolean
+  resizeOpen: boolean
   /** The colour adjustment being previewed, and on which layer. */
   adjust: { layerId: string; value: Adjustments } | null
 }
@@ -110,13 +117,13 @@ export type EditorExport = { source: Blob; mask?: Blob }
 
 type DocPoint = { x: number; y: number }
 
-type Selection = { path: Path2D; bounds: Rect }
+type Selection = { path: Path2D; bounds: Rect; rule?: CanvasFillRule }
 
-type Floating = { image: FabricImage; name: string }
+type Floating = { image: FabricImage; name: string; source: RasterLayer | null; selection: Selection | null }
 
 type TextEdit = { object: IText; layer: RasterLayer | null; previous: TextSpec | null; base: TextSpec }
 
-type AdjustSession = { layer: RasterLayer; source: HTMLCanvasElement; rect: Rect; clip: Path2D | null; value: Adjustments; comparing: boolean }
+type AdjustSession = { layer: RasterLayer; source: HTMLCanvasElement; work: HTMLCanvasElement; rect: Rect; clip: Path2D | null; rule: CanvasFillRule; value: Adjustments; comparing: boolean }
 
 type AiJob = { controller: AbortController; region: Rect }
 
@@ -171,6 +178,15 @@ export class EditorEngine {
   private maskLayer: RasterLayer | null = null
   private activeLayerId: string | null = null
   private tool: EditorTool = 'brush'
+  private previousCropTool: EditorTool = 'brush'
+  private previousPaintTool: EditorTool = 'brush'
+  private recentColors: string[] = []
+  private shortcutsOpen = false
+  private resizeOpen = false
+  private comparing = false
+  private compareHeld = false
+  private originalPreview: FabricImage | null = null
+  private originalLayerId: string | null = null
   private brushSize = 24
   private brushOpacity = 1
   private brushColor = '#ffffff'
@@ -179,10 +195,14 @@ export class EditorEngine {
   private textStyle: TextStyle = { ...DEFAULT_TEXT_STYLE }
   private textEdit: TextEdit | null = null
   private adjust: AdjustSession | null = null
+  private emptyAdjustTarget: { layerId: string; version: number; selection: Selection | null } | null = null
   private adjustDirty = false
   private inpaintHandler: InpaintHandler | null = null
   private aiMask: RasterLayer | null = null
   private aiJob: AiJob | null = null
+  private aiPainted: Rect | null = null
+  private lastStrokeEnd: StrokePoint | null = null
+  private selectionMove: { start: DocPoint; center: DocPoint | null } | null = null
   private status: EditorSnapshot['status'] = 'idle'
   private error: string | null = null
   private loadToken = 0
@@ -298,7 +318,16 @@ export class EditorEngine {
 
   /** The area an AI erase is working on, in stage coordinates. */
   aiEraseScreenBox() {
-    return this.aiJob ? this.toScreenBox(this.aiJob.region) : null
+    const region = this.aiJob?.region ?? this.aiPainted
+    return region ? this.toScreenBox(region) : null
+  }
+
+  cropScreenBox() {
+    return this.cropBox ? this.toScreenBox(this.cropRect()) : null
+  }
+
+  cropSize() {
+    return this.cropBox ? clampRect(this.cropRect(), this.width, this.height) : null
   }
 
   private toScreenBox(rect: Rect) {
@@ -340,9 +369,9 @@ export class EditorEngine {
       mask: this.maskLayer ? info(this.maskLayer) : null,
       activeLayerId: this.activeLayerId,
       zoom: this.zoom,
-      canUndo: this.history.canUndo,
+      canUndo: Boolean(this.floating) || this.history.canUndo,
       canRedo: this.history.canRedo,
-      dirty: this.history.dirty,
+      dirty: this.isDirty,
       hasSelection: Boolean(this.selection),
       floating: Boolean(this.floating),
       cropRatio: this.cropRatio,
@@ -360,6 +389,11 @@ export class EditorEngine {
       textEditing: Boolean(this.textEdit),
       aiEraseAvailable: Boolean(this.inpaintHandler),
       aiErasing: Boolean(this.aiJob),
+      aiMaskPending: Boolean(this.aiPainted),
+      comparing: this.comparing || this.compareHeld,
+      recentColors: this.recentColors,
+      shortcutsOpen: this.shortcutsOpen,
+      resizeOpen: this.resizeOpen,
       adjust: this.adjust ? { layerId: this.adjust.layer.id, value: this.adjust.value } : null,
     }
   }
@@ -386,11 +420,11 @@ export class EditorEngine {
       const height = source.naturalHeight
       this.resetDocument(width, height)
       const original = RasterLayer.fromSource('paint', this.names.original, source, width, height)
-      original.locked = true
       original.syncImage()
-      const first = RasterLayer.blank('paint', `${this.names.layer} 1`, width, height)
-      this.layers = [original, first]
-      this.activeLayerId = first.id
+      this.layers = [original]
+      this.activeLayerId = original.id
+      this.originalLayerId = original.id
+      this.originalPreview = new FabricImage(source, { left: 0, top: 0, originX: 'left', originY: 'top', selectable: false, evented: false, objectCaching: false })
       this.maskLayer = input.maskEnabled ? createMaskLayer(width, height, maskSource) : null
       this.restack()
       this.fitToView()
@@ -426,6 +460,9 @@ export class EditorEngine {
     this.endCrop()
     this.selection = null
     this.history.clear()
+    this.lastStrokeEnd = null
+    this.comparing = false
+    this.compareHeld = false
     this.width = width
     this.height = height
     this.strokeBackup = createCanvas(width, height)
@@ -439,6 +476,8 @@ export class EditorEngine {
     if (tool === this.tool) return
     if ((tool === 'mask' || tool === 'mask-eraser') && !this.maskLayer) return
     if (tool === 'ai-erase' && !this.inpaintHandler) return
+    if (tool === 'crop') this.previousCropTool = this.tool
+    if (this.tool === 'brush' || this.tool === 'eraser' || this.tool === 'mask' || this.tool === 'mask-eraser') this.previousPaintTool = this.tool
     if (tool !== 'crop') this.endCrop()
     this.commitFloating()
     this.commitTextEdit()
@@ -451,7 +490,7 @@ export class EditorEngine {
   }
 
   setBrushSize(size: number) {
-    this.brushSize = Math.max(1, Math.min(1000, Math.round(size)))
+    this.brushSize = Math.max(1, Math.min(MAX_BRUSH_SIZE, Math.round(size)))
     this.overlayDirty = true
     this.emit()
   }
@@ -461,8 +500,9 @@ export class EditorEngine {
     this.emit()
   }
 
-  setBrushColor(color: string) {
+  setBrushColor(color: string, commit = true) {
     this.brushColor = color
+    if (commit) this.recentColors = [color, ...this.recentColors.filter((entry) => entry !== color)].slice(0, 8)
     const edit = this.textEdit
     if (edit) {
       edit.base = { ...edit.base, fill: color }
@@ -500,6 +540,32 @@ export class EditorEngine {
     if (this.spacePan === active) return
     this.spacePan = active
     this.applyToolCursor()
+  }
+
+  setShortcutsOpen(open: boolean) {
+    this.shortcutsOpen = open
+    this.emit()
+  }
+
+  setResizeOpen(open: boolean) {
+    this.resizeOpen = open
+    this.emit()
+  }
+
+  setCompare(active: boolean, held = false) {
+    if (held) this.compareHeld = active
+    else this.comparing = active
+    this.stageDirty = true
+    this.overlayDirty = true
+    this.emit()
+  }
+
+  get hasOriginalLayer() {
+    return this.layers.some((layer) => layer.id === this.originalLayerId)
+  }
+
+  selectOriginal() {
+    if (this.originalLayerId && this.hasOriginalLayer) this.setActiveLayer(this.originalLayerId)
   }
 
   private get isBrushTool() {
@@ -602,7 +668,15 @@ export class EditorEngine {
     let redrawn = false
     if (this.stageDirty) {
       this.stageDirty = false
-      this.canvas.renderAll()
+      if ((this.comparing || this.compareHeld) && this.originalPreview) {
+        const objects = this.canvas.getObjects()
+        const visible = objects.map((object) => object.visible)
+        objects.forEach((object) => { if (object !== this.backdrop) object.visible = false })
+        this.canvas.add(this.originalPreview)
+        this.canvas.renderAll()
+        this.canvas.remove(this.originalPreview)
+        objects.forEach((object, index) => { object.visible = visible[index]! })
+      } else this.canvas.renderAll()
       redrawn = true
     }
     const scene = this.overlayScene()
@@ -627,7 +701,8 @@ export class EditorEngine {
   }
 
   private overlayScene(): OverlayScene {
-    const showBrush = this.hover && this.isBrushTool && !this.spacePan && !this.panning && !this.pinch
+    const comparing = this.comparing || this.compareHeld
+    const showBrush = !comparing && this.hover && this.isBrushTool && !this.spacePan && !this.panning && !this.pinch
     return {
       brush: showBrush && this.hover
         ? {
@@ -637,10 +712,10 @@ export class EditorEngine {
             tone: this.tool === 'mask' || this.tool === 'mask-eraser' ? 'mask' : this.tool === 'ai-erase' ? 'ai' : this.tool === 'eraser' ? 'erase' : 'paint',
           }
         : null,
-      busy: this.aiJob?.region ?? null,
-      selection: this.selection?.path ?? null,
-      lasso: this.lassoTrail,
-      crop: this.cropBox ? this.cropRect() : null,
+      busy: comparing ? null : this.aiJob?.region ?? null,
+      selection: comparing ? null : this.selection?.path ?? null,
+      lasso: comparing ? null : this.lassoTrail,
+      crop: !comparing && this.cropBox ? this.cropRect() : null,
       documentSize: { width: this.width, height: this.height },
     }
   }
@@ -718,6 +793,7 @@ export class EditorEngine {
 
   private handlePointerDown(event: PointerEvent) {
     if (this.status !== 'ready') return
+    if (this.comparing || this.compareHeld) return
     if (event.pointerType === 'touch') {
       this.touches.set(event.pointerId, this.viewportPoint(event))
       if (this.touches.size >= 2) {
@@ -763,6 +839,9 @@ export class EditorEngine {
       this.capture(event)
       this.dragStart = point
       this.dragPointerId = event.pointerId
+      if (this.tool === 'select' && this.selection && this.strokeBuffer && context2d(this.strokeBuffer).isPointInPath(this.selection.path, point.x, point.y, this.selection.rule)) {
+        this.selectionMove = { start: point, center: null }
+      }
       if (this.tool === 'lasso') this.lassoTrail = [point]
     }
   }
@@ -788,6 +867,7 @@ export class EditorEngine {
     if (this.stroke && this.stroke.pointerId === event.pointerId) {
       const samples = typeof event.getCoalescedEvents === 'function' ? event.getCoalescedEvents() : []
       this.stroke.session.addPoints((samples.length > 0 ? samples : [event]).map((sample) => this.strokePoint(sample)))
+      this.lastStrokeEnd = this.strokePoint(event)
     } else if (this.dragStart && this.dragPointerId === event.pointerId) {
       this.updateDrag(this.hover, event.shiftKey)
     }
@@ -848,26 +928,31 @@ export class EditorEngine {
   // ---------------------------------------------------------------- strokes
 
   private strokeTarget(): RasterLayer | null {
-    if (this.tool === 'mask' || this.tool === 'mask-eraser') return this.maskLayer
     if (this.tool === 'ai-erase') return this.ensureAiMask()
-    const layer = this.activeLayer()
-    if (!layer || layer.locked || !layer.visible) return null
-    return layer
+    const layer = this.selectionTarget()
+    return this.canEditLayer(layer) ? layer : null
   }
 
   private beginStroke(event: PointerEvent) {
-    if (this.tool === 'ai-erase' && this.aiJob) {
-      this.emitNotice('ai-busy')
-      return
-    }
+    this.capture(event)
+    const point = this.strokePoint(event)
+    this.startStroke(event.shiftKey && this.lastStrokeEnd ? [this.lastStrokeEnd, point] : [point], event.pointerId)
+  }
+
+  drawLine(from: DocPoint, to: DocPoint) {
+    if (!this.isBrushTool || this.status !== 'ready' || this.stroke) return
+    this.startStroke([from, to], -1)
+    this.endStroke()
+  }
+
+  private startStroke(points: StrokePoint[], pointerId: number) {
+    if (this.tool === 'ai-erase' && this.aiJob) return
     this.commitAdjust()
     const layer = this.strokeTarget()
     if (!layer || !this.strokeBackup || !this.strokeBuffer) {
-      this.emitNotice('locked')
       return
     }
     this.rasterizeText(layer)
-    this.capture(event)
     const mode: StrokeMode = this.tool === 'eraser' || this.tool === 'mask-eraser' ? 'erase' : 'paint'
     const aiErase = layer === this.aiMask
     const session = new StrokeSession(
@@ -881,9 +966,11 @@ export class EditorEngine {
       },
       this.strokeBackup,
       this.strokeBuffer,
+      this.selection,
     )
-    session.addPoints([this.strokePoint(event)])
-    this.stroke = { session, layer, pointerId: event.pointerId }
+    session.addPoints(points)
+    this.lastStrokeEnd = points.at(-1) ?? null
+    this.stroke = { session, layer, pointerId }
     this.requestFrame()
   }
 
@@ -894,9 +981,9 @@ export class EditorEngine {
     const result = stroke.session.finish()
     this.stageDirty = true
     if (stroke.layer === this.aiMask) {
-      // AI erase strokes are a request, not an edit: they leave no history and clear when the result lands.
       stroke.layer.touch()
-      if (result) void this.runAiErase(result.rect)
+      if (result) this.aiPainted = unionRect(this.aiPainted, result.rect)
+      this.emit()
     } else if (result) {
       this.pushRasterPatch(stroke.layer, result.rect, result.before, result.after)
     }
@@ -911,16 +998,18 @@ export class EditorEngine {
     this.requestFrame()
   }
 
-  private pushRasterPatch(layer: RasterLayer, rect: Rect, before: HTMLCanvasElement, after: HTMLCanvasElement) {
+  private pushRasterPatch(layer: RasterLayer, rect: Rect, before: HTMLCanvasElement, after: HTMLCanvasElement, text?: { before: TextSpec | null; after: TextSpec | null }) {
     layer.touch()
     this.history.push({
       bytes: canvasBytes(before) + canvasBytes(after),
       undo: () => {
         putRegion(layer.canvas, before, rect)
+        if (text) layer.text = text.before
         layer.touch()
       },
       redo: () => {
         putRegion(layer.canvas, after, rect)
+        if (text) layer.text = text.after
         layer.touch()
       },
     })
@@ -950,7 +1039,7 @@ export class EditorEngine {
 
   // ---------------------------------------------------------------- eyedropper
 
-  private pickColor(point: DocPoint) {
+  pickColor(point: DocPoint) {
     const x = Math.floor(point.x)
     const y = Math.floor(point.y)
     if (x < 0 || y < 0 || x >= this.width || y >= this.height) return
@@ -963,14 +1052,36 @@ export class EditorEngine {
       context.drawImage(layer.canvas, x, y, 1, 1, 0, 0, 1, 1)
     }
     const [r = 0, g = 0, b = 0, a = 0] = context.getImageData(0, 0, 1, 1).data
-    if (a === 0) return
+    if (a === 0) {
+      this.emitNotice('transparent')
+      return
+    }
     this.setBrushColor(`#${[r, g, b].map((value) => value.toString(16).padStart(2, '0')).join('')}`)
+    if (this.tool === 'eyedropper') this.setTool(this.previousPaintTool)
   }
 
   // ---------------------------------------------------------------- drag tools (select, lasso, crop)
 
   private updateDrag(point: DocPoint, constrain: boolean) {
     if (!this.dragStart) return
+    const move = this.selectionMove
+    if (move) {
+      if (!move.center) {
+        if (Math.hypot(point.x - move.start.x, point.y - move.start.y) * this.zoom <= 3) return
+        if (!this.liftSelection()) {
+          this.cancelDrag()
+          return
+        }
+        move.center = this.floating ? { x: this.floating.image.left, y: this.floating.image.top } : null
+      }
+      if (this.floating && move.center) {
+        this.floating.image.set({ left: move.center.x + point.x - move.start.x, top: move.center.y + point.y - move.start.y })
+        this.floating.image.setCoords()
+        this.stageDirty = true
+        this.emit()
+      }
+      return
+    }
     if (this.tool === 'lasso' && this.lassoTrail) {
       this.lassoTrail.push(point)
       return
@@ -984,6 +1095,12 @@ export class EditorEngine {
   }
 
   private endDrag(point: DocPoint, constrain: boolean) {
+    if (this.selectionMove) {
+      this.updateDrag(point, constrain)
+      this.selectionMove = null
+      this.cancelDrag()
+      return
+    }
     const start = this.dragStart
     this.dragStart = null
     this.dragPointerId = null
@@ -1005,6 +1122,7 @@ export class EditorEngine {
   }
 
   private cancelDrag() {
+    this.selectionMove = null
     this.dragStart = null
     this.dragPointerId = null
     this.lassoTrail = null
@@ -1065,6 +1183,83 @@ export class EditorEngine {
     this.setSelectionRect({ x: 0, y: 0, width: this.width, height: this.height }, true)
   }
 
+  invertSelection() {
+    if (!this.selection) return this.selectAll()
+    const path = new Path2D()
+    path.rect(0, 0, this.width, this.height)
+    path.addPath(this.selection.path)
+    this.selection = { path, bounds: { x: 0, y: 0, width: this.width, height: this.height }, rule: 'evenodd' }
+    this.overlayDirty = true
+    this.emit()
+  }
+
+  nudge(dx: number, dy: number) {
+    if (this.floating) {
+      const image = this.floating.image
+      image.set({ left: image.left + dx, top: image.top + dy })
+      image.setCoords()
+      this.stageDirty = true
+    } else if (this.selection) {
+      const path = new Path2D()
+      path.addPath(this.selection.path, new DOMMatrix().translate(dx, dy))
+      this.selection = { ...this.selection, path, bounds: { ...this.selection.bounds, x: this.selection.bounds.x + dx, y: this.selection.bounds.y + dy } }
+    }
+    this.overlayDirty = true
+    this.emit()
+  }
+
+  liftSelection() {
+    this.commitFloating()
+    this.commitTextEdit()
+    this.commitAdjust()
+    const selection = this.selection
+    if (!selection) return false
+    const source = this.selectionTarget()
+    if (!this.canEditLayer(source)) return false
+    const piece = this.selectedPixels(source)
+    if (!piece) return false
+    this.startFloating(piece, selection.bounds, source, selection)
+    this.clearSelection()
+    return true
+  }
+
+  fillSelection() {
+    const layer = this.selectionTarget()
+    if (!this.selection) return this.emitNotice('no-selection')
+    if (!this.canEditLayer(layer)) return
+    this.commitAdjust()
+    this.rasterizeText(layer)
+    const before = copyRegion(layer.canvas, this.selection.bounds)
+    layer.context.save()
+    layer.context.fillStyle = layer.kind === 'mask' ? MASK_COLOR : this.brushColor
+    layer.context.fill(this.selection.path, this.selection.rule)
+    layer.context.restore()
+    this.commitRegionEdit(layer, this.selection.bounds, before)
+  }
+
+  private canEditLayer(layer: RasterLayer | null): layer is RasterLayer {
+    if (!layer || layer.locked || !layer.visible) {
+      this.emitNotice('locked', layer?.id)
+      return false
+    }
+    return true
+  }
+
+  private selectedPixels(layer: RasterLayer) {
+    const bounds = this.selection?.bounds ?? { x: 0, y: 0, width: this.width, height: this.height }
+    const piece = createCanvas(bounds.width, bounds.height)
+    const context = context2d(piece)
+    context.translate(-bounds.x, -bounds.y)
+    if (this.selection) context.clip(this.selection.path, this.selection.rule)
+    context.drawImage(layer.canvas, 0, 0)
+    const pixels = context.getImageData(0, 0, piece.width, piece.height).data
+    for (let index = 3; index < pixels.length; index += 4) {
+      if (pixels[index]) return piece
+    }
+    this.emitNotice('empty')
+    return null
+  }
+
   clearSelection() {
     if (!this.selection) return
     this.selection = null
@@ -1080,17 +1275,18 @@ export class EditorEngine {
 
   /** Erase the selected pixels of the target layer. */
   deleteSelection() {
+    if (this.floating) return this.discardFloating()
     const selection = this.selection
     const layer = this.selectionTarget()
     if (!selection) return this.emitNotice('no-selection')
-    if (!layer || layer.locked) return this.emitNotice('locked')
+    if (!this.canEditLayer(layer) || !this.selectedPixels(layer)) return
     this.commitAdjust()
     this.rasterizeText(layer)
     const before = copyRegion(layer.canvas, selection.bounds)
     const context = layer.context
     context.save()
     context.globalCompositeOperation = 'destination-out'
-    context.fill(selection.path)
+    context.fill(selection.path, selection.rule)
     context.restore()
     this.commitRegionEdit(layer, selection.bounds, before)
   }
@@ -1100,13 +1296,13 @@ export class EditorEngine {
     const selection = this.selection
     const mask = this.maskLayer
     if (!selection) return this.emitNotice('no-selection')
-    if (!mask) return
+    if (!this.canEditLayer(mask)) return
     const before = copyRegion(mask.canvas, selection.bounds)
     const context = mask.context
     context.save()
     context.globalCompositeOperation = clear ? 'destination-out' : 'source-over'
     context.fillStyle = MASK_COLOR
-    context.fill(selection.path)
+    context.fill(selection.path, selection.rule)
     context.restore()
     this.commitRegionEdit(mask, selection.bounds, before)
   }
@@ -1136,33 +1332,25 @@ export class EditorEngine {
 
   /** Copy the selected pixels of the active layer (or the whole layer without a selection). */
   copySelection() {
-    const layer = this.activeLayer()
+    const layer = this.selectionTarget()
     if (!layer) return null
     const bounds = this.selection?.bounds ?? { x: 0, y: 0, width: this.width, height: this.height }
-    const piece = createCanvas(bounds.width, bounds.height)
-    const context = context2d(piece)
-    if (this.selection) {
-      context.translate(-bounds.x, -bounds.y)
-      context.clip(this.selection.path)
-      context.drawImage(layer.canvas, 0, 0)
-    } else {
-      context.drawImage(layer.canvas, 0, 0)
-    }
+    const piece = this.selectedPixels(layer)
+    if (!piece) return null
     this.clipboard = { canvas: piece, x: bounds.x, y: bounds.y }
     return piece
   }
 
   cutSelection() {
+    this.commitFloating()
     if (!this.selection) {
       this.emitNotice('no-selection')
       return null
     }
-    const layer = this.activeLayer()
-    if (!layer || layer.locked) {
-      this.emitNotice('locked')
-      return null
-    }
+    const layer = this.selectionTarget()
+    if (!this.canEditLayer(layer)) return null
     const piece = this.copySelection()
+    if (!piece) return null
     this.deleteSelection()
     return piece
   }
@@ -1193,7 +1381,7 @@ export class EditorEngine {
 
   // ---------------------------------------------------------------- floating piece
 
-  private startFloating(piece: HTMLCanvasElement, at: DocPoint) {
+  private startFloating(piece: HTMLCanvasElement, at: DocPoint, source: RasterLayer | null = null, selection: Selection | null = null) {
     this.commitFloating()
     this.commitTextEdit()
     this.commitAdjust()
@@ -1207,10 +1395,20 @@ export class EditorEngine {
       objectCaching: false,
       lockScalingFlip: true,
       imageSmoothing: this.zoom < 2,
+      opacity: source?.image.opacity ?? 1,
       ...CONTROL_STYLE,
     })
     image.setControlVisible('mtr', true)
-    this.floating = { image, name: `${this.names.paste} ${pasteCount}` }
+    if (source && selection) {
+      // Only the stage preview has a hole; source pixels and clipboard stay untouched until Apply.
+      const preview = cloneCanvas(source.canvas)
+      const context = context2d(preview)
+      context.globalCompositeOperation = 'destination-out'
+      context.fill(selection.path, selection.rule)
+      source.image.setElement(preview)
+      source.syncImage()
+    }
+    this.floating = { image, name: source?.name ?? `${this.names.paste} ${pasteCount}`, source, selection }
     this.canvas.add(image)
     this.canvas.setActiveObject(image)
     this.applyToolCursor()
@@ -1218,22 +1416,39 @@ export class EditorEngine {
     this.emit()
   }
 
-  /** Bake the floating piece into a new layer above the active one. */
+  /** A lift returns to its source; an external/internal paste creates a new layer. */
   commitFloating() {
     const floating = this.floating
     if (!floating) return
     this.floating = null
     this.canvas.discardActiveObject()
     this.canvas.remove(floating.image)
-    const layer = RasterLayer.blank('paint', floating.name, this.width, this.height)
+    const layer = floating.source ?? RasterLayer.blank('paint', floating.name, this.width, this.height)
+    const rect = { x: 0, y: 0, width: this.width, height: this.height }
+    const before = floating.source ? cloneCanvas(layer.canvas) : null
+    const textBefore = layer.text
     const context = layer.context
+    if (floating.source && floating.selection) {
+      context.save()
+      context.globalCompositeOperation = 'destination-out'
+      context.fill(floating.selection.path, floating.selection.rule)
+      context.restore()
+      layer.image.setElement(layer.canvas)
+      layer.syncImage()
+      layer.text = null
+    }
     const [a, b, c, d, e, f] = floating.image.calcTransformMatrix()
     context.setTransform(a, b, c, d, e, f)
     context.imageSmoothingQuality = 'high'
     const element = floating.image.getElement()
     context.drawImage(element, -element.width / 2, -element.height / 2)
     context.setTransform(1, 0, 0, 1, 0, 0)
-    this.insertLayer(layer, this.activeIndex() + 1)
+    if (before) {
+      this.pushRasterPatch(layer, rect, before, cloneCanvas(layer.canvas), { before: textBefore, after: null })
+      this.stageDirty = true
+      if (textBefore) this.emitNotice('rasterized', layer.name)
+      if (layer.kind === 'paint') this.activeLayerId = layer.id
+    } else this.insertLayer(layer, this.activeIndex() + 1)
     this.applyToolCursor()
   }
 
@@ -1243,6 +1458,10 @@ export class EditorEngine {
     this.floating = null
     this.canvas.discardActiveObject()
     this.canvas.remove(floating.image)
+    if (floating.source) {
+      floating.source.image.setElement(floating.source.canvas)
+      floating.source.syncImage()
+    }
     this.applyToolCursor()
     this.stageDirty = true
     this.emit()
@@ -1325,12 +1544,13 @@ export class EditorEngine {
     }
   }
 
-  private setCropRect(rect: Rect) {
+  setCropRect(rect: Rect) {
     if (!this.cropBox || rect.width < 1 || rect.height < 1) return
     this.cropBox.set({ left: rect.x, top: rect.y, width: rect.width, height: rect.height, scaleX: 1, scaleY: 1 })
     this.cropBox.setCoords()
     this.stageDirty = true
     this.overlayDirty = true
+    this.emit()
   }
 
   /** Fold scaling into width/height and keep the box inside the document. */
@@ -1364,16 +1584,17 @@ export class EditorEngine {
   applyCrop() {
     const rect = this.cropBox ? clampRect(this.cropRect(), this.width, this.height) : null
     if (!rect) return
+    const changed = this.cropChanged
     this.endCrop()
-    this.transformDocument(rect.width, rect.height, (canvas) => copyRegion(canvas, rect))
-    this.tool = 'brush'
+    if (changed) this.transformDocument(rect.width, rect.height, (canvas) => copyRegion(canvas, rect))
+    this.tool = this.previousCropTool
     this.applyToolCursor()
     this.emit()
   }
 
   cancelCrop() {
     this.endCrop()
-    this.tool = 'brush'
+    this.tool = this.previousCropTool
     this.applyToolCursor()
     this.emit()
   }
@@ -1386,6 +1607,21 @@ export class EditorEngine {
 
   flip(axis: 'x' | 'y') {
     this.transformDocument(this.width, this.height, (canvas) => flipCanvas(canvas, axis))
+  }
+
+  resizeDocument(width: number, height: number) {
+    const size = clampDocumentSize(width, height)
+    if (!size) return
+    width = size.width
+    height = size.height
+    if (width === this.width && height === this.height) return
+    this.transformDocument(width, height, (source) => {
+      const output = createCanvas(width, height)
+      const context = context2d(output)
+      context.imageSmoothingQuality = 'high'
+      context.drawImage(source, 0, 0, width, height)
+      return output
+    })
   }
 
   /** Replace every layer's pixels through `map`; one undo step restores all of them. */
@@ -1412,7 +1648,7 @@ export class EditorEngine {
     }
     apply(after, { width: nextWidth, height: nextHeight }, false)
     this.history.push({
-      bytes: after.reduce((sum, canvas) => sum + canvasBytes(canvas), 0),
+      bytes: [...before, ...after].reduce((sum, canvas) => sum + canvasBytes(canvas), 0),
       undo: () => apply(before, previous, true),
       redo: () => apply(after, { width: nextWidth, height: nextHeight }, false),
     })
@@ -1421,14 +1657,16 @@ export class EditorEngine {
   }
 
   private setDocumentSize(width: number, height: number) {
+    this.cancelAiErase()
+    this.dropAiMask()
     const resized = width !== this.width || height !== this.height
     this.width = width
     this.height = height
     this.backdrop.set({ width, height })
     if (resized) {
+      this.lastStrokeEnd = null
       this.strokeBackup = createCanvas(width, height)
       this.strokeBuffer = createCanvas(width, height)
-      this.dropAiMask()
     }
     this.selection = null
     this.stageDirty = true
@@ -1522,6 +1760,7 @@ export class EditorEngine {
   }
 
   removeLayer(id: string) {
+    this.commitFloating()
     const index = this.layers.findIndex((layer) => layer.id === id)
     if (index < 0 || this.layers.length <= 1) return
     this.commitAdjust()
@@ -1538,7 +1777,7 @@ export class EditorEngine {
       this.restack()
     }
     remove()
-    this.history.push({ bytes: 64, undo: restore, redo: remove })
+    this.history.push({ bytes: canvasBytes(layer.canvas), undo: restore, redo: remove })
     this.emit()
   }
 
@@ -1560,8 +1799,10 @@ export class EditorEngine {
   renameLayer(id: string, name: string) {
     const layer = this.findLayer(id)
     const trimmed = name.trim()
-    if (!layer || !trimmed) return
+    if (!layer || !trimmed || layer.name === trimmed) return
+    const before = layer.name
     layer.name = trimmed
+    this.history.push({ bytes: (before.length + trimmed.length) * 2, undo: () => { layer.name = before }, redo: () => { layer.name = trimmed } })
     this.emit()
   }
 
@@ -1575,7 +1816,6 @@ export class EditorEngine {
       this.requestFrame()
     }
     apply(visible)()
-    this.history.push({ bytes: 64, undo: apply(!visible), redo: apply(visible) })
     this.emit()
   }
 
@@ -1612,6 +1852,7 @@ export class EditorEngine {
 
   /** Merge the active layer into the one below it. */
   mergeDown() {
+    this.commitFloating()
     const index = this.activeIndex()
     const upper = this.layers[index]
     const lower = this.layers[index - 1]
@@ -1643,7 +1884,7 @@ export class EditorEngine {
       this.restack()
     }
     merge()
-    this.history.push({ bytes: canvasBytes(before) * 2, undo: unmerge, redo: merge })
+    this.history.push({ bytes: canvasBytes(before) + canvasBytes(after) + canvasBytes(upper.canvas), undo: unmerge, redo: merge })
     this.emit()
   }
 
@@ -1667,7 +1908,7 @@ export class EditorEngine {
       this.restack()
     }
     apply()
-    this.history.push({ bytes: canvasBytes(flat.canvas), undo: revert, redo: apply })
+    this.history.push({ bytes: canvasBytes(flat.canvas) + previous.reduce((sum, layer) => sum + canvasBytes(layer.canvas), 0), undo: revert, redo: apply })
     this.emit()
   }
 
@@ -1689,7 +1930,7 @@ export class EditorEngine {
 
   undo() {
     if (this.stroke) return
-    this.discardFloating()
+    if (this.floating) return this.discardFloating()
     this.commitTextEdit()
     this.commitAdjust()
     if (this.history.undo()) {
@@ -1701,7 +1942,7 @@ export class EditorEngine {
 
   redo() {
     if (this.stroke) return
-    this.discardFloating()
+    if (this.floating) return
     this.commitTextEdit()
     this.commitAdjust()
     if (this.history.redo()) {
@@ -1725,6 +1966,10 @@ export class EditorEngine {
       this.applyCrop()
       return true
     }
+    if (this.aiPainted && !this.aiJob) {
+      void this.runAiErase()
+      return true
+    }
     return false
   }
 
@@ -1739,7 +1984,7 @@ export class EditorEngine {
       this.commitTextEdit()
       return true
     }
-    if (this.aiJob) {
+    if (this.aiJob || this.aiPainted) {
       this.cancelAiErase()
       return true
     }
@@ -1790,10 +2035,11 @@ export class EditorEngine {
   }
 
   async export(): Promise<EditorExport> {
+    this.endStroke()
     this.commitFloating()
     this.commitTextEdit()
     this.commitAdjust()
-    this.endCrop()
+    if (this.cropBox) this.applyCrop()
     const source = await canvasToBlob(this.composite())
     const maskCanvas = this.maskImage()
     const mask = maskCanvas ? await canvasToBlob(maskCanvas) : undefined
@@ -1801,7 +2047,12 @@ export class EditorEngine {
   }
 
   get isDirty() {
-    return this.history.dirty || Boolean(this.floating || this.textEdit || this.adjust)
+    return this.history.dirty || Boolean(this.floating || this.textEdit || this.adjust || this.cropChanged || this.aiPainted || this.aiJob)
+  }
+
+  private get cropChanged() {
+    const rect = this.cropSize()
+    return Boolean(rect && (rect.x !== 0 || rect.y !== 0 || rect.width !== this.width || rect.height !== this.height))
   }
 
   // ---------------------------------------------------------------- text
@@ -1971,6 +2222,7 @@ export class EditorEngine {
     const spec = layer.text
     if (!spec) return
     layer.text = null
+    this.emitNotice('rasterized', layer.name)
     this.history.push({
       bytes: 64,
       undo: () => {
@@ -1993,21 +2245,27 @@ export class EditorEngine {
     if (this.status !== 'ready') return false
     const value = { ...(this.adjust?.value ?? NEUTRAL_ADJUSTMENTS), ...patch }
     if (!this.adjust) {
-      const layer = this.activeLayer()
-      if (!layer || layer.locked || !layer.visible) {
-        this.emitNotice('locked')
-        return false
-      }
       this.commitFloating()
       this.commitTextEdit()
       this.cancelStroke()
+      const layer = this.activeLayer()
+      if (!this.canEditLayer(layer)) return false
+      const empty = this.emptyAdjustTarget
+      if (empty?.layerId === layer.id && empty.version === layer.version && empty.selection === this.selection) return false
+      if (!this.selectedPixels(layer)) {
+        this.emptyAdjustTarget = { layerId: layer.id, version: layer.version, selection: this.selection }
+        return false
+      }
+      this.emptyAdjustTarget = null
       this.rasterizeText(layer)
       const full = { x: 0, y: 0, width: this.width, height: this.height }
       this.adjust = {
         layer,
         source: cloneCanvas(layer.canvas),
+        work: createCanvas((this.selection?.bounds ?? full).width, (this.selection?.bounds ?? full).height),
         rect: this.selection?.bounds ?? full,
         clip: this.selection?.path ?? null,
+        rule: this.selection?.rule ?? 'nonzero',
         value,
         comparing: false,
       }
@@ -2022,7 +2280,7 @@ export class EditorEngine {
   private renderAdjustPreview() {
     const session = this.adjust
     if (!session) return
-    renderAdjusted(session.source, session.layer.canvas, session.rect, session.value, session.clip)
+    renderAdjusted(session.source, session.layer.canvas, session.rect, session.value, session.clip, session.work, session.rule)
     this.stageDirty = true
   }
 
@@ -2082,6 +2340,7 @@ export class EditorEngine {
   }
 
   private dropAiMask() {
+    this.aiPainted = null
     if (!this.aiMask) return
     this.canvas.remove(this.aiMask.image)
     this.aiMask = null
@@ -2089,6 +2348,7 @@ export class EditorEngine {
   }
 
   private clearAiMask() {
+    this.aiPainted = null
     const mask = this.aiMask
     if (!mask) return
     mask.context.clearRect(0, 0, mask.canvas.width, mask.canvas.height)
@@ -2097,7 +2357,9 @@ export class EditorEngine {
   }
 
   /** Send the painted area (with surroundings) to the server and lay the filled pixels on the AI erase layer. */
-  private async runAiErase(painted: Rect) {
+  async runAiErase() {
+    const painted = this.aiPainted
+    if (!painted || this.aiJob || this.stroke) return
     const handler = this.inpaintHandler
     const mask = this.aiMask
     if (!handler || !mask) return
@@ -2164,7 +2426,11 @@ export class EditorEngine {
       this.applyAiPatch(patch, region)
     } catch (error) {
       if (controller.signal.aborted || this.disposed) return
-      this.emitNotice('ai-failed', error instanceof Error ? error.message : String(error))
+      // The inpaint handler throws ApiRequestError; the engine stays free of app imports.
+      if (error instanceof Error && 'code' in error && error.code === 'MissingDependency') {
+        this.setInpaintHandler(null)
+        this.emitNotice('ai-unavailable')
+      } else this.emitNotice('ai-failed')
     } finally {
       if (this.aiJob?.controller === controller) {
         this.aiJob = null
@@ -2194,9 +2460,8 @@ export class EditorEngine {
   /** Stop the running AI erase and drop its strokes. */
   cancelAiErase() {
     const job = this.aiJob
-    if (!job) return
     this.aiJob = null
-    job.controller.abort()
+    job?.controller.abort()
     this.clearAiMask()
     this.overlayDirty = true
     this.emit()

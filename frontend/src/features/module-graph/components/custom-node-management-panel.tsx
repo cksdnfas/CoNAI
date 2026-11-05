@@ -9,7 +9,6 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { IconButton } from '@/components/ui/icon-button'
 import { Heading } from '@/components/ui/heading'
 import { cn } from '@/lib/utils'
-import { Inset } from '@/components/ui/inset'
 import { Section } from '@/components/ui/section'
 import { Text } from '@/components/ui/text'
 import { Input } from '@/components/ui/input'
@@ -244,16 +243,13 @@ export function CustomNodeManagementPanel({ onModulesChanged }: CustomNodeManage
 
   return (
     <div className="space-y-4">
-      <Inset className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="min-w-0">
-          <Text as="div" variant="overline">{t({ ko: '커스텀 노드 디렉터리', en: 'Custom Nodes Directory' })}</Text>
-          <div className="mt-1 break-all text-sm text-foreground">{customNodesQuery.data?.customNodesDir ?? 'user/custom_nodes'}</div>
-        </div>
-
-        <IconButton variant="secondary" label={t({ ko: '재스캔', en: 'Rescan' })} onClick={() => void rescanMutation.mutateAsync()} disabled={rescanMutation.isPending}>
+      <Section heading={t({ ko: '커스텀 노드 디렉터리', en: 'Custom Nodes Directory' })} actions={
+        <IconButton size="icon-sm" variant="ghost" label={t({ ko: '재스캔', en: 'Rescan' })} onClick={() => void rescanMutation.mutateAsync()} disabled={rescanMutation.isPending}>
           <RefreshCw className={cn(rescanMutation.isPending && 'animate-spin')} />
         </IconButton>
-      </Inset>
+      }>
+        <ListRow><span className="break-all">{customNodesQuery.data?.customNodesDir ?? 'user/custom_nodes'}</span></ListRow>
+      </Section>
 
       {customNodesQuery.isLoading ? (
         <LoadingState variant="inline" label={t({ ko: '커스텀 노드 폴더를 읽고 있어.', en: 'Reading the custom node folders.' })} />
@@ -411,11 +407,7 @@ export function CustomNodeManagementPanel({ onModulesChanged }: CustomNodeManage
               <PanelCardHeader title={t({ ko: '단건 테스트', en: 'Single test' })} meta={selectedTestNode?.manifest.name} />
 
               {selectedNodeSourceQuery.data ? (
-                <Inset padding="sm" className="space-y-3">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="text-sm font-medium text-foreground">{t({ ko: '소스 정보', en: 'Source info' })}</div>
-                    <Badge variant="outline">{selectedNodeSourceQuery.data.sourceHash.slice(0, 12)}</Badge>
-                  </div>
+                <Section heading={t({ ko: '소스 정보', en: 'Source info' })} actions={<Badge variant="outline">{selectedNodeSourceQuery.data.sourceHash.slice(0, 12)}</Badge>}>
                   <div className="grid gap-2.5 md:grid-cols-2">
                     <StatTile label={t({ ko: '폴더', en: 'Folder' })} value={selectedNodeSourceQuery.data.folderPath} valueClassName="break-all" />
                     <StatTile label="manifest" value={selectedNodeSourceQuery.data.manifestPath} valueClassName="break-all" />
@@ -456,7 +448,7 @@ export function CustomNodeManagementPanel({ onModulesChanged }: CustomNodeManage
                     <Textarea variant="settings" rows={8} value={installResultText} readOnly />
                   ) : null}
                   <Textarea variant="settings" rows={8} value={stringifyPrettyJson(selectedNodeSourceQuery.data.manifest)} readOnly />
-                </Inset>
+                </Section>
               ) : null}
 
               <Field label={t({ ko: '테스트 입력 JSON', en: 'Test input JSON' })}>
@@ -473,8 +465,7 @@ export function CustomNodeManagementPanel({ onModulesChanged }: CustomNodeManage
               </Button>
 
               {previewableImageOutputs.length > 0 ? (
-                <Inset padding="sm" className="space-y-2.5">
-                  <div className="text-sm font-medium text-foreground">{t({ ko: '이미지 미리보기', en: 'Image preview' })}</div>
+                <Section heading={t({ ko: '이미지 미리보기', en: 'Image preview' })}>
                   <div className="grid gap-3 md:grid-cols-2">
                     {previewableImageOutputs.map((output) => (
                       <div key={output.key} className="space-y-2">
@@ -483,7 +474,7 @@ export function CustomNodeManagementPanel({ onModulesChanged }: CustomNodeManage
                       </div>
                     ))}
                   </div>
-                </Inset>
+                </Section>
               ) : null}
 
               {filePathOutputs.length > 0 ? (
@@ -502,16 +493,15 @@ export function CustomNodeManagementPanel({ onModulesChanged }: CustomNodeManage
               ) : null}
 
               {testResultData?.logs.length ? (
-                <Inset padding="sm" className="space-y-2">
-                  <div className="text-sm font-medium text-foreground">{t({ ko: '실행 로그', en: 'Execution logs' })}</div>
-                  <div className="space-y-1 text-sm text-muted-foreground">
+                <Section heading={t({ ko: '실행 로그', en: 'Execution logs' })}>
+                  <div>
                     {testResultData.logs.map((logItem, index) => (
-                      <div key={`${index}:${logItem.message}`}>
+                      <ListRow key={`${index}:${logItem.message}`}>
                         <span className="font-medium text-foreground">[{logItem.level ?? 'info'}]</span> {logItem.message}
-                      </div>
+                      </ListRow>
                     ))}
                   </div>
-                </Inset>
+                </Section>
               ) : null}
 
               <Field label={t({ ko: '테스트 결과', en: 'Test result' })}>

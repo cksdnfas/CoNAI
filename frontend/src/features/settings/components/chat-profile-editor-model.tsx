@@ -141,7 +141,7 @@ function TokenFields({ draft, patch, serverDefault }: { draft: Draft; patch: Pat
         {isLlm ? (
           <Field
             label={t({ ko: '최대 컨텍스트', en: 'Max context' })}
-            info={t({ ko: '요청 하나가 넣을 수 있는 전체 토큰(입력+출력). 비우면 서버가 알려준 크기를 쓰고, 서버도 모르면 크기를 추측하지 않아. 정하면 서버 크기와 둘 중 작은 값을 써. pi는 알려진 크기에서 세션을 압축하고, 크기를 모르면 자동 압축을 하지 않아.', en: 'All tokens one request may hold (input + output). Empty uses the size the server reports without guessing when unknown. When set, the smaller of it and the server size counts. Pi folds its session at the known size; automatic compaction is off when unknown.' })}
+            info={t({ ko: '입력과 출력을 합친 한도이며, 비우면 서버가 알려준 크기를 써.', en: 'Limit input and output together; leave empty to use the server-reported size.' })}
           >
             <NumberStepperInput variant="settings" allowEmpty shorthand step={1024} {...CHAT_PROFILE_LIMITS.contextTokens} value={draft.contextTokens} placeholder={t({ ko: '서버 크기', en: 'Server size' })} onValueCommit={(value) => patch({ contextTokens: numberOrNull(value) })} />
           </Field>
@@ -153,7 +153,7 @@ function TokenFields({ draft, patch, serverDefault }: { draft: Draft; patch: Pat
         ) : null}
         <Field
           label={t({ ko: '최대 출력 토큰', en: 'Max output tokens' })}
-          info={t({ ko: '추론과 답변을 합친 상한. 비우면 서버 기본값을 써. 직접 API는 남은 컨텍스트에 맞춰 줄이고, pi는 정한 값을 그대로 보내 서버가 실제 여유를 검사해. 채팅 헤더의 컨텍스트에서 따로 정하면 그쪽이 우선이야.', en: 'Ceiling for reasoning and answer combined. Empty keeps the server default. Direct API fits it to remaining context; Pi sends the configured value and the provider validates the available room. A per-chat value under Context in the header takes precedence.' })}
+          info={t({ ko: '추론과 답변을 합친 한도이며, 비우면 서버 기본값을 써.', en: 'Limit reasoning and answer together; leave empty for the server default.' })}
         >
           <div className="flex items-center gap-2">
             {isLlm && thinkingMayFillCap(draft.reasoningEffort, draft.maxTokens) ? (
@@ -323,7 +323,6 @@ export function ChatProfileModelPanel({ draft, patch, defaults, slots, slotsRead
       <EditorGroup label={t({ ko: '역할', en: 'Roles' })}>
         <div>
           <RoleRow label={t({ ko: '요약', en: 'Summary' })} select={roleSelect('summary', t({ ko: '요약 모델', en: 'Summary model' }))} />
-          {selfCompacting ? <p className="pb-2 text-xs text-muted-foreground">{t({ ko: '1:1 대화 압축은 엔진이 대화 모델로 처리해. 여기서 고른 모델은 별도 요약·외형 초안 같은 보조 작업에 쓰여.', en: 'The engine compacts direct chats with the chat model. This selection is used for separate summaries and helpers such as appearance drafts.' })}</p> : null}
           <RoleRow label={t({ ko: '번역', en: 'Translation' })} select={roleSelect('translation', t({ ko: '번역 모델', en: 'Translation model' }))}>
             {translationOn ? (
               <>
@@ -337,7 +336,7 @@ export function ChatProfileModelPanel({ draft, patch, defaults, slots, slotsRead
                 </div>
                 <Field
                   label={t({ ko: '번역 지시', en: 'Translation notes' })}
-                  info={t({ ko: '답변을 표시 언어로 옮길 때 번역 모델이 따르는 메모. 말투, 호칭, 고유명사 번역표 등. {{char}}·{{user}}는 이름으로 바뀌어. 캐릭터 이름은 비워도 알려 줘. 내 메시지 번역에는 쓰지 않아.', en: 'Notes the translation model follows when it puts replies into the display language: voice, forms of address, a glossary. {{char}} and {{user}} become the names. The character’s name is passed even when empty. Not used for your own messages.' })}
+                  info={t({ ko: '답변 번역에 쓸 말투·호칭·고유명사를 적어줘.', en: 'Set the voice, forms of address and names for translating replies.' })}
                 >
                   <Textarea variant="settings" autoGrow rows={3} maxLength={CHAT_PROFILE_TEXT_LIMITS.translationInstructions} value={draft.translationInstructions} placeholder={t({ ko: '말투 · 호칭 · 고유명사', en: 'Voice · address · names' })} onChange={(event) => patch({ translationInstructions: event.target.value })} />
                 </Field>

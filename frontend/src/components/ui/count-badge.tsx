@@ -9,6 +9,7 @@ const countBadgeVariants = cva(
       tone: {
         primary: 'bg-primary text-primary-foreground',
         destructive: 'bg-destructive text-destructive-foreground',
+        warning: 'bg-warning text-warning-foreground',
       },
       size: {
         /** 14px: on a small (icon-sm) key. */

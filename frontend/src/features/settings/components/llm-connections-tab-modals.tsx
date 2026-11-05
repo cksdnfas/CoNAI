@@ -216,7 +216,7 @@ function LlmConnectionFormFields({
               <SettingRow label={t({ ko: '동시 요청', en: 'Concurrent requests' })}>
                 <div className="flex items-center gap-2">
                 {sharedSlot ? (
-                  <Tip content={t({ ko: '이 연결로 대화와 판단·번역을 같이 하는 프로필이 있어: {names}. 동시 요청 1이면 서로 캐시를 밀어내서 답변마다 프롬프트를 처음부터 다시 읽어. 서버를 슬롯 2개 이상으로 띄우고 여기 숫자를 맞춰.', en: 'Profiles send both their reply and their judge or translation here: {names}. With one request at a time they push each other out of the cache, so every reply reads its whole prompt again. Run the server with two or more slots and match this number.' }, { names: sharedServer.map((profile) => profile.name).join(', ') })} side="top">
+                  <Tip content={t({ ko: '대화와 판단·번역이 겹치는 {names} 프로필은 서버 슬롯과 동시 요청을 2개 이상으로 맞춰줘.', en: 'For profiles sharing reply and judge/translation connections ({names}), match server slots and concurrent requests at two or more.' }, { names: sharedServer.map((profile) => profile.name).join(', ') })} side="top">
                     <span className="text-warning" aria-label={t({ ko: '대화와 판단이 같은 슬롯을 써', en: 'Reply and judge share one slot' })}><TriangleAlert className="size-4" aria-hidden /></span>
                   </Tip>
                 ) : null}

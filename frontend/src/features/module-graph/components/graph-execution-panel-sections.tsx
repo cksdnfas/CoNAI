@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { FileText } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
 import { MediaCard } from '@/components/common/media-card'
 import { CodeBlock } from '@/components/ui/code-block'
 import { Text } from '@/components/ui/text'
@@ -64,15 +64,14 @@ export function ExecutionOutputGroupCard({
             overlay={<ArtifactPreviewHoverOverlay />}
           />
         ) : (
-          <Button
-            type="button"
+          <IconButton
+            size="icon-sm"
             variant="secondary"
             onClick={() => setModalType('text')}
-            className="h-[9.5rem] w-full"
+            label={t({ ko: '텍스트 보기', en: 'View text' })}
           >
             <FileText aria-hidden />
-            {t({ ko: '텍스트 컨텐츠', en: 'Text content' })}
-          </Button>
+          </IconButton>
         )}
       </div>
 

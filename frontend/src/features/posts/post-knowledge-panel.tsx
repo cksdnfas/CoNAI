@@ -12,7 +12,6 @@ import { Modal, ModalBody } from '@/components/ui/modal'
 import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Textarea } from '@/components/ui/textarea'
-import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import { POSTS_QUERY_KEY, invalidatePostScope, cancelPostVote, getPostQuality, getPostsSettings, reviewPost, updatePostKnowledge, votePost } from '@/lib/api-posts'
 import { getErrorMessage } from '@/lib/error-message'
@@ -132,27 +131,23 @@ export function PostVoteBar({ post }: { post: PostDetail }) {
       {quality.isError ? (
         <IconButton variant="ghost" size="icon-sm" label={t({ ko: '평가 다시 불러오기', en: 'Retry feedback' })} onClick={() => void quality.refetch()}><RefreshCw /></IconButton>
       ) : <>
-        <Tip content={noPermission}>
-          <span className="inline-flex items-center gap-1">
-            <IconButton variant="subtle" disabled={!canVote} active={own === 'up'} onClick={pressUp}
-              label={t({ ko: '추천 {score}', en: 'Recommend, {score}' }, { score: stats ? Number(stats.up.toFixed(2)) : 0 })}>
-              <ThumbsUp />
-            </IconButton>
-            {stats ? <span aria-hidden className="text-xs tabular-nums text-muted-foreground">{voteCount(stats.up)}</span> : null}
-          </span>
-        </Tip>
+        <div className="flex items-center gap-1">
+          <IconButton variant="subtle" disabled={!canVote} active={own === 'up'} onClick={pressUp}
+            label={noPermission ?? t({ ko: '추천 {score}', en: 'Recommend, {score}' }, { score: stats ? Number(stats.up.toFixed(2)) : 0 })}>
+            <ThumbsUp />
+          </IconButton>
+          {stats ? <span aria-hidden className="text-xs tabular-nums text-muted-foreground">{voteCount(stats.up)}</span> : null}
+        </div>
         <Popover open={downOpen} onOpenChange={setDownOpen}>
-          <Tip content={noPermission}>
-            <span className="inline-flex items-center gap-1">
-              <PopoverAnchor asChild>
-                <IconButton variant="subtle" disabled={!canVote} active={own === 'down'} aria-haspopup="dialog" onClick={pressDown}
-                  label={t({ ko: '비추천 {score}', en: 'Do not recommend, {score}' }, { score: stats ? Number(stats.down.toFixed(2)) : 0 })}>
-                  <ThumbsDown />
-                </IconButton>
-              </PopoverAnchor>
-              {stats ? <span aria-hidden className="text-xs tabular-nums text-muted-foreground">{voteCount(stats.down)}</span> : null}
-            </span>
-          </Tip>
+          <div className="flex items-center gap-1">
+            <PopoverAnchor asChild>
+              <IconButton variant="subtle" disabled={!canVote} active={own === 'down'} aria-haspopup="dialog" onClick={pressDown}
+                label={noPermission ?? t({ ko: '비추천 {score}', en: 'Do not recommend, {score}' }, { score: stats ? Number(stats.down.toFixed(2)) : 0 })}>
+                <ThumbsDown />
+              </IconButton>
+            </PopoverAnchor>
+            {stats ? <span aria-hidden className="text-xs tabular-nums text-muted-foreground">{voteCount(stats.down)}</span> : null}
+          </div>
           <PopoverContent align="center" padding="md" className="w-80 space-y-3" aria-label={t({ ko: '비추천 이유', en: 'Reason for not recommending' })}>
             <div className="flex flex-wrap gap-1.5">
               {DOWN_REASONS.map((item) => (

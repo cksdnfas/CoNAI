@@ -2,8 +2,8 @@ import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
 import type { ReactNode } from 'react'
 import { ImageIcon, ImagePlus, MoreHorizontal, Trash2 } from 'lucide-react'
-import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
+import { Button } from '@/components/ui/button'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Tip } from '@/components/ui/tooltip'
@@ -81,34 +81,21 @@ export function NaiAssetRow({
             <MoreHorizontal />
           </IconButton>
         </PopoverTrigger>
-        <PopoverContent align="end" padding="md" className="w-64 space-y-3">
-          {menuFields ? <div className="space-y-3">{menuFields}</div> : null}
-          <div className="-mx-1 grid">
-            <PopoverClose asChild>
-              <Button type="button" variant="ghost" size="sm" className="justify-start" onClick={onReplaceImage}>
-                <ImagePlus />
-                {t({ ko: '이미지 교체', en: 'Replace image' })}
-              </Button>
-            </PopoverClose>
-            {onSave ? (
-              // A disabled button swallows hover, so the span carries the "why disabled" tooltip.
-              <Tip content={saveDisabled ? saveTitle : undefined} side="left">
-                <span className="grid" tabIndex={saveDisabled && saveTitle ? 0 : undefined}>
-                  <PopoverClose asChild>
-                    <Button type="button" variant="ghost" size="sm" className="justify-start" onClick={onSave} disabled={!canUpdateWorkflows || !canViewImages || saveDisabled}>
-                      {t({ ko: '라이브러리에 저장', en: 'Save to library' })}
-                    </Button>
-                  </PopoverClose>
-                </span>
-              </Tip>
-            ) : null}
-            <PopoverClose asChild>
-              <Button type="button" variant="destructive-ghost" size="sm" className="justify-start" onClick={onRemove}>
-                <Trash2 />
-                {t('image-generation.components.nai.common.remove')}
-              </Button>
-            </PopoverClose>
-          </div>
+        <PopoverContent align="end" padding="md" className="w-64">
+          {menuFields ? <div className="mb-3 space-y-3">{menuFields}</div> : null}
+          <PopoverClose asChild>
+            <Button variant="ghost" size="sm" className="w-full justify-start" onClick={onReplaceImage}><ImagePlus />{t({ ko: '이미지 교체', en: 'Replace image' })}</Button>
+          </PopoverClose>
+          {onSave ? <Tip content={saveDisabled ? saveTitle : undefined} side="left">
+            <span className="grid" tabIndex={saveDisabled && saveTitle ? 0 : undefined}>
+              <PopoverClose asChild>
+                <Button variant="ghost" size="sm" className="w-full justify-start" onClick={onSave} disabled={!canUpdateWorkflows || !canViewImages || saveDisabled}>{t({ ko: '라이브러리에 저장', en: 'Save to library' })}</Button>
+              </PopoverClose>
+            </span>
+          </Tip> : null}
+          <PopoverClose asChild>
+            <Button variant="destructive-ghost" size="sm" className="w-full justify-start" onClick={onRemove}><Trash2 />{t('image-generation.components.nai.common.remove')}</Button>
+          </PopoverClose>
         </PopoverContent>
       </Popover>
     </div>

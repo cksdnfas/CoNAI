@@ -8,7 +8,7 @@ import {
   saveDownloadBlob,
   type SingleMediaDownloadSource,
 } from '@/lib/download-utils'
-import { requestApiData, requestJson } from '@/lib/api-request'
+import { ApiRequestError, requestApiData, requestJson } from '@/lib/api-request'
 import type { ApiResponse, ImageListPayload, ImageRecord } from '@/types/image'
 import type { SimilaritySortBy, SimilaritySortOrder } from '@conai/shared'
 import type { PromptSimilarityQueryResult, SimilarityQueryResult } from '@/types/similarity'
@@ -635,8 +635,8 @@ export async function inpaintImageRegion(image: Blob, mask: Blob, signal?: Abort
     signal,
   })
   if (!response.ok) {
-    const body = await response.json().catch(() => null) as { error?: string } | null
-    throw new Error(body?.error || `Request failed: ${response.status}`)
+    const body = await response.json().catch(() => null) as { error?: string; errorType?: string } | null
+    throw new ApiRequestError(body?.error || `Request failed: ${response.status}`, response.status, body?.errorType)
   }
   return response.blob()
 }

@@ -631,7 +631,7 @@ function NaiSeedField({ seed, onSeedChange }: { seed: string, onSeedChange: (val
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-3">
         <span id={labelId} className="shrink-0 text-sm font-medium whitespace-nowrap text-foreground">{seedLabel}</span>
-        <Tip content={t({ ko: '매번 랜덤: 켜면 생성할 때마다 새 시드를 써', en: 'Random each time: a new seed on every generation' })}>
+        <Tip content={t({ ko: '생성할 때마다 새 시드 쓰기', en: 'Use a new seed for every generation' })}>
           <Switch
             size="sm"
             aria-label={t({ ko: '매번 랜덤', en: 'Random each time' })}

@@ -44,15 +44,24 @@ export function useEditorShortcuts({
 
     const ownsEvent = (event: Event) => {
       const target = event.target
+      if (target instanceof Element && target.closest('[data-chat-dock]')) return false
       if (!(target instanceof Node)) return true
       return target === document.body || Boolean(rootRef.current?.contains(target))
     }
+    let spacePanHeld = false
+    let compareHeld = false
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (!ownsEvent(event) || event.defaultPrevented) return
       const typing = isTypingTarget(event)
       const key = event.key.toLowerCase()
       const mod = event.ctrlKey || event.metaKey
+      const target = event.target instanceof Element ? event.target : null
+      const navigationKey = key.startsWith('arrow') || ['home', 'end', 'pageup', 'pagedown'].includes(key)
+      if (navigationKey && target?.closest('[role="slider"], [role="menu"], [role^="menuitem"], [role="tab"], [role="tablist"], [role="listbox"], [role="combobox"]')) return
+      if (!mod && key === 'enter' && target?.closest('button, a[href], [role="option"], [role^="menuitem"], [role="tab"]')) return
+      // Space pans even after a toolbar button retained focus; menu/option/tab activation stays native.
+      if (!mod && key === ' ' && target?.closest('[role="option"], [role^="menuitem"], [role="tab"]')) return
       const consume = () => {
         event.preventDefault()
         event.stopPropagation()
@@ -83,6 +92,29 @@ export function useEditorShortcuts({
         return
       }
       if (typing) return
+
+      if (key === '\\') {
+        consume()
+        compareHeld = true
+        engine.setCompare(true, true)
+        return
+      }
+      if (key === '?') {
+        consume()
+        engine.setShortcutsOpen(true)
+        return
+      }
+      if (key.startsWith('arrow')) {
+        consume()
+        const step = event.shiftKey ? 10 : 1
+        engine.nudge(key === 'arrowleft' ? -step : key === 'arrowright' ? step : 0, key === 'arrowup' ? -step : key === 'arrowdown' ? step : 0)
+        return
+      }
+      if (event.altKey && key === 'backspace') {
+        consume()
+        engine.fillSelection()
+        return
+      }
 
       if (mod) {
         if (key === 'z') {
@@ -123,6 +155,7 @@ export function useEditorShortcuts({
 
       if (key === ' ') {
         consume()
+        spacePanHeld = true
         engine.setSpacePan(true)
         return
       }
@@ -163,16 +196,42 @@ export function useEditorShortcuts({
     }
 
     const handleKeyUp = (event: KeyboardEvent) => {
-      if (event.key === ' ') engine.setSpacePan(false)
+      if (event.key === ' ' && spacePanHeld) {
+        event.preventDefault()
+        event.stopPropagation()
+        spacePanHeld = false
+        engine.setSpacePan(false)
+      }
+      if (event.key === '\\' && compareHeld) {
+        compareHeld = false
+        engine.setCompare(false, true)
+      }
     }
-    const handleBlur = () => engine.setSpacePan(false)
+    // React and portaled dialogs handle keys first; the viewer listens on window.
+    // This also contains save-options keys, whose portal is outside rootRef.
+    const containUnhandled = (event: KeyboardEvent) => {
+      const target = event.target instanceof Element ? event.target : null
+      if (target?.closest('[data-chat-dock]')) return
+      const portaledControl = target?.closest('[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"]')
+      if (ownsEvent(event) || portaledControl) event.stopPropagation()
+    }
+    const handleBlur = () => {
+      spacePanHeld = false
+      compareHeld = false
+      engine.setSpacePan(false)
+      engine.setCompare(false, true)
+    }
 
     document.addEventListener('keydown', handleKeyDown, true)
     document.addEventListener('keyup', handleKeyUp, true)
+    document.addEventListener('keydown', containUnhandled)
+    document.addEventListener('keyup', containUnhandled)
     window.addEventListener('blur', handleBlur)
     return () => {
       document.removeEventListener('keydown', handleKeyDown, true)
       document.removeEventListener('keyup', handleKeyUp, true)
+      document.removeEventListener('keydown', containUnhandled)
+      document.removeEventListener('keyup', containUnhandled)
       window.removeEventListener('blur', handleBlur)
     }
   }, [engine, maskEnabled, open, rootRef])

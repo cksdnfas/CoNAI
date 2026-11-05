@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useLocation, useSearchParams } from 'react-router-dom'
 import type { PostCategory, PostKnowledgeReviewStatus, PostListLayout, PostSummary } from '@conai/shared'
-import { ArrowLeft, BookOpen, ChevronDown, ChevronRight, EyeOff, FilePen, FolderPlus, LayoutGrid, Newspaper, Pencil, Plus, Rows3, Search, Smartphone, Trash2, Undo2, X, type LucideIcon } from 'lucide-react'
+import { ArrowLeft, BookOpen, ChevronDown, ChevronRight, EyeOff, FilePen, FolderPlus, LayoutGrid, Newspaper, Pencil, Plus, Rows3, Search, Smartphone, Trash2, Undo2, type LucideIcon } from 'lucide-react'
 import { PageToolbar } from '@/components/common/page-toolbar'
+import { PageToolbarSearch } from '@/components/common/page-toolbar-search'
 import { PathBreadcrumbs } from '@/components/common/path-breadcrumbs'
 import { PageWithSidebar } from '@/components/common/page-with-sidebar'
 import { ActionContextMenu, ActionMenuButton, type ActionMenuEntry } from '@/components/ui/action-menu'
@@ -12,7 +13,6 @@ import { Chip, ToggleChip } from '@/components/ui/chip'
 import { EmptyState } from '@/components/ui/empty-state'
 import { ErrorState } from '@/components/ui/error-state'
 import { IconButton } from '@/components/ui/icon-button'
-import { Input } from '@/components/ui/input'
 import { LoadingState, Spinner } from '@/components/ui/loading-state'
 import { SidebarGroupLabel, SidebarItem, SidebarNav } from '@/components/ui/sidebar'
 import { TextTabs } from '@/components/common/text-tabs'
@@ -85,6 +85,7 @@ export function PostsPage() {
 
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchInput, setSearchInput] = useState('')
+  const searchReplacementRef = useRef(false)
   const searchQuery = useDebouncedValue(searchInput.trim())
   const [categoryDialog, setCategoryDialog] = useState<CategoryDialog>(null)
   const [permanentDeletePost, setPermanentDeletePost] = useState<PostSummary | null>(null)
@@ -422,19 +423,22 @@ export function PostsPage() {
   if (view === 'list') {
     toolbarStart = searchOpen ? (
       <div className="flex min-w-0 flex-1 items-center gap-1">
-        <Search className="size-4 shrink-0 text-muted-foreground" />
-        <Input autoFocus variant="settings" className="min-w-0 flex-1" aria-label={t({ ko: '글 검색', en: 'Search posts' })} value={searchInput} list="post-tag-options"
+        <PageToolbarSearch aria-label={t({ ko: '글 검색', en: 'Search posts' })} value={searchInput} list="post-tag-options"
           placeholder={knowledgeSearchHint ?? t({ ko: '검색 · #태그', en: 'Search · #tag' })}
-          onChange={(event) => {
-            // Picking a suggestion replaces the whole text at once: take it as the tag right away.
-            if ((event.nativeEvent as InputEvent).inputType === 'insertReplacementText' && pickTag(event.target.value)) return
-            setSearchInput(event.target.value)
+          onChange={(value) => {
+            const replacement = searchReplacementRef.current
+            searchReplacementRef.current = false
+            if (replacement && pickTag(value)) return
+            setSearchInput(value)
           }}
-          onKeyDown={(event) => { if (event.key === 'Escape') closeSearch(); if (event.key === 'Enter' && !event.nativeEvent.isComposing) pickTag(searchInput) }} />
+          onClose={closeSearch}
+          onChangeCapture={(event) => {
+            searchReplacementRef.current = (event.nativeEvent as InputEvent).inputType === 'insertReplacementText'
+          }}
+          onSubmit={() => { pickTag(searchInput) }} />
         <datalist id="post-tag-options">
           {searchInput.trim().startsWith('#') ? tagNames.map((name) => <option key={name} value={`#${name}`} />) : null}
         </datalist>
-        <IconButton variant="ghost" size="icon-sm" label={t({ ko: '검색 닫기', en: 'Close search' })} onClick={closeSearch}><X /></IconButton>
         {/* On phones the search field needs the row; the tabs come back when search closes. */}
         {listTabsNode ? <div className="hidden shrink-0 md:block">{listTabsNode}</div> : null}
       </div>
@@ -451,8 +455,8 @@ export function PostsPage() {
     )
     toolbarActions = (
       <>
-        {!proposalsView ? <ActionMenuButton size="icon" icon={LayoutIcon} entries={layoutEntries} label={t({ ko: '목록 모양', en: 'Layout' })} /> : null}
-        {!searchOpen && !proposalsView ? <IconButton variant="ghost" label={t({ ko: '검색', en: 'Search' })} onClick={() => setSearchOpen(true)}><Search /></IconButton> : null}
+        {!proposalsView ? <ActionMenuButton size="icon-sm" icon={LayoutIcon} entries={layoutEntries} label={t({ ko: '목록 모양', en: 'Layout' })} /> : null}
+        {!proposalsView ? <IconButton size="icon-sm" variant="ghost" active={searchOpen} label={t({ ko: '검색', en: 'Search' })} onClick={() => searchOpen ? closeSearch() : setSearchOpen(true)}><Search /></IconButton> : null}
         {permissions.canWrite ? <Button size="sm" onClick={() => update({ edit: 'new', post: null })}><Plus />{t({ ko: '새 글', en: 'New post' })}</Button> : null}
       </>
     )

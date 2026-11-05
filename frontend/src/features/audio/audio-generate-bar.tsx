@@ -7,6 +7,8 @@ import { Chip } from '@/components/ui/chip'
 import { Field } from '@/components/ui/field'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
+import { Panel } from '@/components/ui/panel'
+import { Textarea } from '@/components/ui/textarea'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Select } from '@/components/ui/select'
@@ -336,8 +338,8 @@ export function AudioGenerateBar({ group, draft, autoFocus = false, canGenerate,
   // A composer: the prompt with one row of parameter chips under it; each chip opens its own small field.
   return (
     <form className="border-b border-line pb-4" onSubmit={(event) => void submit(event)}>
-      <div className="rounded-lg border border-line transition-colors focus-within:border-primary/55">
-        <textarea
+      <Panel treatment="composer" padding="sm" radius="md">
+        <Textarea variant="inline"
           autoFocus={autoFocus}
           rows={2}
           maxLength={8000}
@@ -352,9 +354,8 @@ export function AudioGenerateBar({ group, draft, autoFocus = false, canGenerate,
               void submit()
             }
           }}
-          className="block w-full resize-y bg-transparent px-3 pt-2 pb-1 text-sm text-foreground outline-none placeholder:text-muted-foreground"
         />
-        <div className="flex items-center gap-0.5 px-1.5 pb-1.5">
+        <div className="flex items-center gap-0.5">
           <ParamChip
             tip={lengthTip}
             ariaLabel={t({ ko: '길이 {value}초', en: 'Length {value} s' }, { value: prefs.seconds })}
@@ -385,7 +386,7 @@ export function AudioGenerateBar({ group, draft, autoFocus = false, canGenerate,
             <Wand />
           </IconButton>
         </div>
-      </div>
+      </Panel>
     </form>
   )
 }

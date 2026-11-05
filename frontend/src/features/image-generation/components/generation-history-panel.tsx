@@ -354,19 +354,22 @@ export function GenerationHistoryPanelView({ feed, serviceType, workflowId, publ
         statusText={selectionStatusText}
         trailingActions={(
           <>
-            {selectedRetryableHistoryRecords.length > 0 ? (
-              <IconButton
-                size="icon-sm"
-                variant="secondary"
-                onClick={() => void handleRetrySelectedHistoryRecords()}
-                disabled={!canExecuteGeneration || isRetryingRunRecovery}
-                label={isRetryingRunRecovery ? t({ ko: '재실행 등록 중', en: 'Queueing rerun' }) : t({ ko: '선택 재실행', en: 'Rerun selected' })}
-                data-no-select-drag="true"
-              >
-                <RotateCcw className={cn(isRetryingRunRecovery && 'animate-spin')} />
-              </IconButton>
-            ) : null}
-
+            <IconButton
+              size="icon-sm"
+              variant="secondary"
+              onClick={() => void handleRetrySelectedHistoryRecords()}
+              disabled={!canExecuteGeneration || isRetryingRunRecovery || selectedRetryableHistoryRecords.length === 0}
+              label={!canExecuteGeneration
+                ? t({ ko: '생성 권한이 필요해', en: 'Generation permission is required' })
+                : isRetryingRunRecovery
+                  ? t({ ko: '재실행 등록 중', en: 'Queueing rerun' })
+                  : selectedRetryableHistoryRecords.length === 0
+                    ? t({ ko: '다시 실행할 수 있는 선택 항목이 없어', en: 'No selected items can be rerun' })
+                    : t({ ko: '선택 재실행', en: 'Rerun selected' })}
+              data-no-select-drag="true"
+            >
+              <RotateCcw className={cn(isRetryingRunRecovery && 'animate-spin')} />
+            </IconButton>
             {!isPublicView && isAdmin ? (
               <IconButton
                 size="icon-sm"

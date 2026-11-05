@@ -58,6 +58,11 @@ const EMPTY_SNAPSHOT: EditorSnapshot = {
   textEditing: false,
   aiEraseAvailable: false,
   aiErasing: false,
+  aiMaskPending: false,
+  comparing: false,
+  recentColors: [],
+  shortcutsOpen: false,
+  resizeOpen: false,
   adjust: null,
 }
 
@@ -139,10 +144,28 @@ function ImageEditorSurface({ sourceUrl, sourceFileName, maskUrl, enableMaskEdit
   useEffect(() => {
     if (!engine) return
     return engine.onNotice((notice, detail) => {
-      if (notice === 'locked') showSnackbar({ message: t({ ko: '잠겼거나 숨긴 레이어에는 그릴 수 없어', en: 'That layer is locked or hidden' }), tone: 'info' })
+      if (notice === 'locked') {
+        const current = engine.getSnapshot()
+        const layer = current.mask?.id === detail ? current.mask : current.layers.find((item) => item.id === detail)
+        if (!layer) return
+        const hidden = !layer.visible
+        const name = layer.kind === 'mask' ? t({ ko: '마스크', en: 'Mask' }) : layer.name
+        showSnackbar({
+          message: hidden
+            ? t({ ko: '“{name}” 레이어가 숨겨져 있어', en: 'Layer “{name}” is hidden' }, { name })
+            : t({ ko: '“{name}” 레이어가 잠겨 있어', en: 'Layer “{name}” is locked' }, { name }),
+          action: {
+            label: hidden ? t({ ko: '보이기', en: 'Show' }) : t({ ko: '잠금 풀기', en: 'Unlock' }),
+            onClick: () => hidden ? engine.setLayerVisible(layer.id, true) : engine.setLayerLocked(layer.id, false),
+          },
+        })
+      }
       else if (notice === 'no-selection') showSnackbar({ message: t({ ko: '먼저 영역을 선택해', en: 'Select an area first' }), tone: 'info' })
-      else if (notice === 'ai-busy') showSnackbar({ message: t({ ko: '지우는 중이야. 끝나면 다시 칠해', en: 'Still erasing — paint again when it finishes' }), tone: 'info' })
-      else if (notice === 'ai-failed') showSnackbar({ message: detail || t({ ko: 'AI 지우기에 실패했어', en: 'AI erase failed' }), tone: 'error' })
+      else if (notice === 'empty') showSnackbar({ message: t({ ko: '빈 레이어야', en: 'This layer is empty' }), action: engine.hasOriginalLayer ? { label: t({ ko: '원본 선택', en: 'Select Original' }), onClick: () => engine.selectOriginal() } : undefined })
+      else if (notice === 'ai-unavailable') showSnackbar({ message: t({ ko: 'AI 지우기에 필요한 기능이 설치되지 않았어. 이번에는 꺼둘게', en: 'AI erase dependencies are missing. Disabled for this session.' }) })
+      else if (notice === 'ai-failed') showSnackbar({ message: t({ ko: 'AI 지우기에 실패했어', en: 'AI erase failed' }), tone: 'error' })
+      else if (notice === 'transparent') showSnackbar({ message: t({ ko: '투명한 픽셀이야', en: 'That pixel is transparent' }) })
+      else if (notice === 'rasterized') showSnackbar({ message: t({ ko: '“{name}” 텍스트를 픽셀로 바꿨어. 실행 취소로 되돌릴 수 있어', en: 'Rasterized text “{name}”. Undo restores it.' }, { name: detail ?? '' }) })
     })
   }, [engine, showSnackbar, t])
 
@@ -178,7 +201,7 @@ function ImageEditorSurface({ sourceUrl, sourceFileName, maskUrl, enableMaskEdit
 
   /** Resolves true once onSave finished; a connected chat's reviewed save reports false as a failure. */
   const handleSave = useCallback(async () => {
-    if (!engine || savingRef.current || engine.getSnapshot().status !== 'ready') return false
+    if (!engine || savingRef.current || engine.getSnapshot().status !== 'ready' || !engine.isDirty || engine.getSnapshot().aiErasing || engine.getSnapshot().aiMaskPending) return false
     savingRef.current = true
     setSaving(true)
     try {
@@ -216,6 +239,7 @@ function ImageEditorSurface({ sourceUrl, sourceFileName, maskUrl, enableMaskEdit
     if (!engine) return
     const handlePaste = (event: ClipboardEvent) => {
       const target = event.target
+      if (target instanceof Node && target !== document.body && !rootRef.current?.contains(target)) return
       if (target instanceof HTMLElement && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) return
       const file = Array.from(event.clipboardData?.items ?? []).find((item) => item.type.startsWith('image/'))?.getAsFile()
       event.preventDefault()

@@ -520,24 +520,10 @@ export function useChatPageRegistration(input: (Omit<Editor, 'instanceId' | 'pat
 export function ChatPageConnectButton({ disabled }: { disabled: boolean }) {
   const page = useChatPage()
   const { t } = useI18n()
-  if (!page?.available) return null
-  const label = t(page.driving ? { ko: '페이지 조작 중', en: 'Operating the page' } : page.enabled ? { ko: '페이지 연결 켜짐', en: 'Page linked' } : { ko: '페이지 연결', en: 'Link page' })
-  return <IconButton variant="ghost" size="icon-sm" active={page.enabled} disabled={disabled} onClick={page.toggle} label={label}><Monitor className={page.driving ? 'animate-pulse motion-reduce:animate-none' : undefined} /></IconButton>
-}
-
-export function ChatPageConnectionNotice() {
-  const page = useChatPage()
-  const { t } = useI18n()
-  if (!page?.snapshot) return null
-  const inputCount = page.snapshot.fields.filter((field) => field.editable !== false).length
-  const workflow = page.snapshot.workflow
-  const actionCount = page.snapshot.actions?.length ?? 0
-  // The page's name only; what the chat can read and change sits in the tooltip.
-  const details = [
-    workflow ? t({ ko: '노드 {nodes} · 연결 {edges}', en: '{nodes} nodes · {edges} edges' }, { nodes: workflow.nodes.length, edges: workflow.edges.length }) : inputCount ? t({ ko: '입력 {count}', en: '{count} inputs' }, { count: inputCount }) : '',
-    actionCount ? t({ ko: '작업 {count}', en: '{count} operations' }, { count: actionCount }) : !inputCount && !workflow ? t({ ko: '읽기만', en: 'Read only' }) : '',
-  ].filter(Boolean).join(' · ')
-  return <Tip content={details} side="top" align="start"><p className="mb-2 flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground"><Monitor aria-label={t({ ko: '연결된 페이지', en: 'Connected page' })} className="size-3.5 shrink-0" /><span className="truncate">{page.snapshot.title}</span></p></Tip>
+  const label = !page?.available
+    ? t({ ko: '이 페이지는 연결 안 돼', en: 'This page cannot be linked' })
+    : [t(page.driving ? { ko: '페이지 조작 중', en: 'Operating the page' } : page.enabled ? { ko: '페이지 연결 켜짐', en: 'Page linked' } : { ko: '페이지 연결', en: 'Link page' }), page.snapshot?.title].filter(Boolean).join(' · ')
+  return <IconButton variant="ghost" size="icon-sm" active={page?.enabled ?? false} disabled={disabled || !page?.available} onClick={page?.toggle} label={label}><Monitor className={page?.driving ? 'animate-pulse motion-reduce:animate-none' : undefined} /></IconButton>
 }
 
 /** A thin sweeping line along the top of the app while the chat operates the connected screen. */

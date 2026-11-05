@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils'
 
 interface SelectionBarActionProps extends Omit<ComponentProps<typeof Button>, 'children' | 'size' | 'aria-label'> {
   icon: ComponentType<{ className?: string }>
+  active?: boolean
   /** Tooltip and accessible name (the button shows only its icon). */
   label: string
 }
@@ -73,7 +74,7 @@ export function SelectionActionBar({
         )}
       >
         <div className={cn('min-w-0', description ? 'flex min-w-[10rem] flex-1 flex-col leading-tight' : 'font-semibold')}>
-          <span className="font-semibold">{summary ?? t({ ko: '{count}개 선택됨', en: '{count} selected' }, { count: formatNumber(selectedCount) })}</span>
+          <span className="inline-block min-w-24 font-semibold tabular-nums">{summary ?? t({ ko: '{count}개 선택됨', en: '{count} selected' }, { count: formatNumber(selectedCount) })}</span>
           {description ? <span className="text-xs text-muted-foreground">{description}</span> : null}
         </div>
 

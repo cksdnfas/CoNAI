@@ -1,5 +1,7 @@
 import { useRef, useState, type ReactNode } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
+import { Link } from 'react-router-dom'
+import { Button } from '@/components/ui/button'
 import { ChevronRight, FolderDown, LockKeyhole, ScanText } from 'lucide-react'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { Chip } from '@/components/ui/chip'
@@ -275,7 +277,7 @@ export function ChatContextInfo({ meta, previous, threadId, messageId, alternati
                 {details.map(([label, value]) => <div key={label} className="contents"><dt className="text-muted-foreground">{label}</dt><dd className="min-w-0 break-words tabular-nums">{value}</dd></div>)}
               </dl>
             </> : diagnosticsQuery.isFetching ? <p className="text-muted-foreground" role="status">{t({ ko: '불러오는 중…', en: 'Loading…' })}</p> : diagnosticsQuery.isError ? <p role="alert" className="text-destructive">{getErrorMessage(diagnosticsQuery.error, t({ ko: '진단을 불러오지 못했어.', en: 'Could not load diagnostics.' }))}</p> : diagnosticsQuery.data ? <>
-              {selectedTab === 'raw' && diagnosticsQuery.data.scope === 'prompts' && diagnosticsQuery.data.raw == null ? <p className="text-muted-foreground">{t({ ko: '이 답변에 저장된 요청 원문이 없어. 원문 기록이 꺼져 있었거나 보관 한도로 삭제됐을 수 있어. 설정의 채팅 공통 설정 → 진단 → 원문 기록을 켜면 이후 답변부터 저장돼.', en: 'No raw request is saved for this reply. Capture may have been disabled, or the retention limit may have removed it. Enable Capture raw requests under shared chat settings → Diagnostics to save future replies.' })}</p> : null}
+              {selectedTab === 'raw' && diagnosticsQuery.data.scope === 'prompts' && diagnosticsQuery.data.raw == null ? <div className="flex flex-wrap items-center gap-2"><span className="text-muted-foreground">{t({ ko: '원문 기록이 없어', en: 'No raw request saved' })}</span><Button asChild variant="ghost" size="xs"><Link to="/settings?section=chat&group=diagnostics">{t({ ko: '설정 › 진단', en: 'Settings › Diagnostics' })}</Link></Button></div> : null}
               {selectedTab === 'content' && visibleTexts.length === 0 ? <p className="text-muted-foreground">{t({ ko: '이 답변에 표시할 본문 기록이 없어.', en: 'No content records are available for this reply.' })}</p> : null}
               {[...new Set(visibleTexts.map((source) => source.kind))].map((kind) => {
                 const entries = visibleTexts.filter((source) => source.kind === kind)

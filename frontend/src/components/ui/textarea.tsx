@@ -20,6 +20,9 @@ const textareaVariants = cva(
       autoGrow: { true: 'max-h-96 min-h-16 [field-sizing:content]', false: '' },
       /** De-emphasised but still editable text (e.g. summary stretches folded into the plot). */
       muted: { true: 'text-muted-foreground', false: '' },
+      /** A mirrored text layer supplies narration colours while the textarea keeps its caret and selection. */
+      textOverlay: { true: 'text-transparent caret-foreground', false: '' },
+      placeholderTone: { destructive: 'placeholder:text-destructive' },
     },
     defaultVariants: {
       variant: 'default',
@@ -29,8 +32,8 @@ const textareaVariants = cva(
 
 /** Render a reusable textarea control with shared surface variants. */
 const Textarea = React.forwardRef<HTMLTextAreaElement, React.ComponentProps<'textarea'> & VariantProps<typeof textareaVariants>>(
-  ({ className, variant, mono, textSize, assisted, autoGrow, muted, ...props }, ref) => {
-    return <textarea ref={ref} data-slot="textarea" className={cn(textareaVariants({ variant, mono, textSize, assisted, autoGrow, muted }), className)} {...props} />
+  ({ className, variant, mono, textSize, assisted, autoGrow, muted, textOverlay, placeholderTone, rows, style, ...props }, ref) => {
+    return <textarea ref={ref} data-slot="textarea" rows={rows} style={variant === 'inline' && rows ? { minHeight: `calc(${rows}lh + var(--spacing) * 2)`, ...style } : style} className={cn(textareaVariants({ variant, mono, textSize, assisted, autoGrow, muted, textOverlay, placeholderTone }), className)} {...props} />
   },
 )
 

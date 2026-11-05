@@ -2,7 +2,9 @@ import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { BookUser, Link2, Unlink } from 'lucide-react'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { ActionMenuButton } from '@/components/ui/action-menu'
+import { Chip } from '@/components/ui/chip'
+import { Text } from '@/components/ui/text'
 import { Button } from '@/components/ui/button'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { useSnackbar } from '@/components/ui/snackbar-context'
@@ -135,39 +137,22 @@ export function ChatProfileCharacterLinkBar({ link, profileName, dirty, busy, on
   }
 
   const settingId = link.link.settingId
-  const openButton = <Button type="button" size="sm" variant="ghost" onClick={() => void openInLibrary(settingId)}>{t({ ko: '라이브러리에서 열기', en: 'Open in library' })}</Button>
-  if (link.synced) {
-    return (
-      <Alert variant="info" role="status">
-        <Link2 />
-        <AlertTitle>{t({ ko: '라이브러리와 동기화 중', en: 'Synced with the library' })}</AlertTitle>
-        <AlertDescription>
-          <p>{t({ ko: '‘{label}’ · 프로필 {count}개에 함께 반영돼', en: '‘{label}’ · edits reach {count} profiles' }, { label, count })}</p>
-          <div className="flex flex-wrap gap-1">
-            <Button type="button" size="sm" variant="secondary" disabled={disabled || !link.setting.ready} onClick={link.detach}>{t({ ko: '동기화 끊기', en: 'Stop syncing' })}</Button>
-            <Button type="button" size="sm" variant="ghost" disabled={disabled} onClick={() => setPicking(true)}>{t({ ko: '다른 설정 불러오기', en: 'Load another setting' })}</Button>
-            {openButton}
-          </div>
-        </AlertDescription>
-        {dialogs}
-      </Alert>
-    )
-  }
   return (
-    <Alert role="status">
-      <Unlink />
-      <AlertTitle>{t({ ko: '동기화 끊김', en: 'Not synced' })}</AlertTitle>
-      <AlertDescription>
-        <p>{t({ ko: '원본 ‘{label}’', en: 'Origin ‘{label}’' }, { label })}</p>
-        {link.originError ? <p className="text-destructive">{getErrorMessage(link.originError, t({ ko: '원본 외형 설정을 불러오지 못했어.', en: 'Could not load the origin setting.' }))}</p> : null}
-        <div className="flex flex-wrap gap-1">
-          {link.canEdit ? <Button type="button" size="sm" variant="secondary" disabled={disabled || !link.origin} onClick={() => void overwrite()}>{t({ ko: '원본에 덮어쓰기', en: 'Overwrite origin' })}</Button> : null}
-          <Button type="button" size="sm" variant="ghost" disabled={disabled || !link.origin} onClick={link.revert}>{t({ ko: '원본으로 되돌리기', en: 'Back to origin' })}</Button>
-          {link.canEdit ? <Button type="button" size="sm" variant="ghost" disabled={disabled} onClick={() => setCreating(true)}>{t({ ko: '새 설정으로 저장', en: 'Store as new setting' })}</Button> : null}
-          {openButton}
-        </div>
-      </AlertDescription>
+    <div className="flex min-w-0 flex-wrap items-center gap-2">
+      <Chip size="sm" tone="muted" className="min-w-0" title={link.synced ? t({ ko: '프로필 {count}개에 함께 반영돼', en: 'Edits reach {count} profiles' }, { count }) : undefined}>
+        {link.synced ? <Link2 /> : <Unlink />}
+        <span className="truncate">{t(link.synced ? { ko: '라이브러리 동기화 · {label}', en: 'Library sync · {label}' } : { ko: '동기화 꺼짐 · {label}', en: 'Sync off · {label}' }, { label })}</span>
+      </Chip>
+      <ActionMenuButton label={t({ ko: '라이브러리 동기화 메뉴', en: 'Library sync menu' })} entries={[
+        link.synced && { key: 'detach', label: t({ ko: '끊기', en: 'Disconnect' }), disabled: disabled || !link.setting.ready, onSelect: link.detach },
+        link.synced && { key: 'load', label: t({ ko: '다른 설정', en: 'Another setting' }), disabled, onSelect: () => setPicking(true) },
+        { key: 'open', label: t({ ko: '열기', en: 'Open' }), onSelect: () => void openInLibrary(settingId) },
+        !link.synced && link.canEdit && { key: 'overwrite', label: t({ ko: '덮어쓰기', en: 'Overwrite' }), disabled: disabled || !link.origin, onSelect: () => void overwrite() },
+        !link.synced && { key: 'revert', label: t({ ko: '원본으로 되돌리기', en: 'Back to origin' }), disabled: disabled || !link.origin, onSelect: link.revert },
+        !link.synced && link.canEdit && { key: 'create', label: t({ ko: '새 설정으로 저장', en: 'Store as new setting' }), disabled, onSelect: () => setCreating(true) },
+      ]} />
+      {link.originError ? <Text role="alert" variant="caption" tone="destructive" className="w-full">{t({ ko: '원본 외형을 불러오지 못했어.', en: 'Could not load the origin look.' })}</Text> : null}
       {dialogs}
-    </Alert>
+    </div>
   )
 }

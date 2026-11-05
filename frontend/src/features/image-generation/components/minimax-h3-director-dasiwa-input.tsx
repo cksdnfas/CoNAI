@@ -467,7 +467,7 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
           replaceLabel={t({ ko: '미디어 교체', en: 'Replace media' })}
           deleteLabel={t({ ko: '삭제', en: 'Delete' })}
           menuLabel={t({ ko: '{name} 메뉴', en: '{name} menu' }, { name: label })}
-          onToggleMenu={() => setMenuItemId((current) => current === item.id ? null : item.id)}
+          onMenuOpenChange={(open) => setMenuItemId((current) => open ? item.id : current === item.id ? null : current)}
           onRequestReplace={() => requestReplacement(item.id)}
           onDelete={() => removeTimelineItem(item.id)}
           onReplaceFile={(file) => void replaceTimelineItem(item.id, file)}

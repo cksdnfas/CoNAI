@@ -3,8 +3,7 @@ import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent 
 import { HierarchyPicker } from '@/components/common/hierarchy-picker'
 import { SaveConflictAlert, SaveConflictOverwriteButton } from '@/components/common/save-conflict-alert'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { AnchoredPopup } from '@/components/ui/anchored-popup'
-import { Button } from '@/components/ui/button'
+import { ActionMenuButton } from '@/components/ui/action-menu'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
@@ -257,25 +256,27 @@ function buildWildcardTemplatePayload(format: WildcardJsonFormat, activeTool: Wi
 }
 
 function WildcardJsonFormatMenu({
-  simpleLabel,
-  fullLabel,
+  label,
+  icon: Icon,
+  toolLabel,
+  disabled = false,
   onSelect,
 }: {
-  simpleLabel: string
-  fullLabel: string
+  label: string
+  icon: typeof Download
+  toolLabel: string
+  disabled?: boolean
   onSelect: (format: WildcardJsonFormat) => void
 }) {
+  const { t } = useI18n()
+  if (disabled) {
+    return <IconButton variant="ghost" size="icon-sm" disabled label={t(wildcardEditorKey('no.items.to.export'))}><Icon /></IconButton>
+  }
   return (
-    <div className="min-w-[156px] p-1.5" data-no-select-drag="true">
-      <Button type="button" variant="ghost" size="sm" className="w-full justify-start" onClick={() => onSelect('simple')} data-no-select-drag="true">
-        <FileJson className="h-4 w-4" />
-        {simpleLabel}
-      </Button>
-      <Button type="button" variant="ghost" size="sm" className="w-full justify-start" onClick={() => onSelect('full')} data-no-select-drag="true">
-        <FileJson className="h-4 w-4" />
-        {fullLabel}
-      </Button>
-    </div>
+    <ActionMenuButton label={label} icon={Icon} entries={[
+      { key: 'simple', label: t({ ko: '간단 · {tool}만 내보내기', en: 'Simple · export {tool} only' }, { tool: toolLabel }), icon: FileJson, onSelect: () => onSelect('simple') },
+      { key: 'full', label: t({ ko: '전체', en: 'Full' }), icon: FileJson, onSelect: () => onSelect('full') },
+    ]} />
   )
 }
 
@@ -303,10 +304,6 @@ function WildcardItemDraftEditor({
   const activeDrafts = drafts[activeTool]
   const activeToolLabel = wildcardToolLabels[activeTool]
   const fileInputRef = useRef<HTMLInputElement | null>(null)
-  const templateMenuAnchorRef = useRef<HTMLSpanElement | null>(null)
-  const exportMenuAnchorRef = useRef<HTMLSpanElement | null>(null)
-  const [templateMenuOpen, setTemplateMenuOpen] = useState(false)
-  const [exportMenuOpen, setExportMenuOpen] = useState(false)
 
   const handleAddDraft = () => {
     onChangeDrafts(activeTool, [...activeDrafts, createWildcardItemDraft()])
@@ -341,16 +338,6 @@ function WildcardItemDraftEditor({
     void onImportJsonFile(file)
   }
 
-  const handleDownloadTemplate = (format: WildcardJsonFormat) => {
-    onDownloadTemplate(format)
-    setTemplateMenuOpen(false)
-  }
-
-  const handleExportJson = (format: WildcardJsonFormat) => {
-    onExportJson(format)
-    setExportMenuOpen(false)
-  }
-
   return (
     <SettingsSegmentedTable
       value={activeTool}
@@ -379,28 +366,8 @@ function WildcardItemDraftEditor({
             <FileUp className="h-4 w-4" />
           </IconButton>
 
-          <span ref={templateMenuAnchorRef} className="relative inline-flex">
-            <IconButton
-              size="icon-sm"
-              variant="ghost"
-              onClick={() => setTemplateMenuOpen((current) => !current)}
-              label={t(wildcardEditorKey('download.json.template'))}
-            >
-              <Download className="h-4 w-4" />
-            </IconButton>
-          </span>
-
-          <span ref={exportMenuAnchorRef} className="relative inline-flex">
-            <IconButton
-              size="icon-sm"
-              variant="ghost"
-              onClick={() => setExportMenuOpen((current) => !current)}
-              disabled={exportDisabled}
-              label={t(wildcardEditorKey('export.json'))}
-            >
-              <FileDown className="h-4 w-4" />
-            </IconButton>
-          </span>
+          <WildcardJsonFormatMenu icon={Download} toolLabel={activeToolLabel} label={t(wildcardEditorKey('download.json.template'))} onSelect={onDownloadTemplate} />
+          <WildcardJsonFormatMenu icon={FileDown} toolLabel={activeToolLabel} label={t(wildcardEditorKey('export.json'))} disabled={exportDisabled} onSelect={onExportJson} />
 
           <IconButton
             size="icon-sm"
@@ -411,17 +378,6 @@ function WildcardItemDraftEditor({
             <Plus className="h-4 w-4" />
           </IconButton>
 
-          <AnchoredPopup open={templateMenuOpen} anchorRef={templateMenuAnchorRef} onClose={() => setTemplateMenuOpen(false)} align="end" side="bottom" layer="floating" closeOnBack>
-            <WildcardJsonFormatMenu simpleLabel={t(wildcardEditorKey('simple.format'))} fullLabel={t(wildcardEditorKey('full.format'))} onSelect={handleDownloadTemplate} />
-          </AnchoredPopup>
-
-          <AnchoredPopup open={exportMenuOpen} anchorRef={exportMenuAnchorRef} onClose={() => setExportMenuOpen(false)} align="end" side="bottom" layer="floating" closeOnBack>
-            <WildcardJsonFormatMenu
-              simpleLabel={t(wildcardEditorKey('export.tool'), { tool: activeToolLabel })}
-              fullLabel={t(wildcardEditorKey('export.all'))}
-              onSelect={handleExportJson}
-            />
-          </AnchoredPopup>
         </div>
       }
       minWidthClassName="min-w-[640px]"

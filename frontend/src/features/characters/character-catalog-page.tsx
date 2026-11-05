@@ -24,6 +24,7 @@ import { Select } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Text } from '@/components/ui/text'
+import { RowGroup } from '@/components/ui/row-group'
 import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
 import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
@@ -486,13 +487,7 @@ function CatalogCharacterModal({ character, position, canImport, canViewImages, 
             {canImport ? (preview.isPending ? <LoadingState variant="inline" /> : preview.isError ? (
               <ErrorState title={t({ ko: '외형 태그를 읽지 못했어', en: 'Could not read the appearance tags' })} error={preview.error} onRetry={() => void preview.refetch()} />
             ) : (
-              <section className="space-y-3">
-                <div className="flex min-h-8 flex-wrap items-center gap-x-2 gap-y-1">
-                  <h3 className="text-sm font-semibold text-foreground">{t({ ko: '가져올 외형 태그', en: 'Tags to import' })}</h3>
-                  {rows.length ? <span className="text-xs text-muted-foreground">{t({ ko: '누르면 빠지고, 다시 누르면 들어가', en: 'Click to leave one out, again to keep it' })}</span> : null}
-                  <span className="flex-1" />
-                  <Button variant="ghost" size="sm" disabled={!composed} onClick={() => void copy()}><Copy />{t({ ko: '태그 복사', en: 'Copy tags' })}</Button>
-                </div>
+              <RowGroup heading={t({ ko: '가져올 외형 태그', en: 'Tags to import' })} actions={<IconButton variant="ghost" size="icon-sm" label={t({ ko: '태그 복사', en: 'Copy tags' })} disabled={!composed} onClick={() => void copy()}><Copy /></IconButton>}>
                 {rows.length ? (
                   <dl className="grid grid-cols-[5.5rem_minmax(0,1fr)] gap-x-3 gap-y-2">
                     {rows.map((row) => (
@@ -508,7 +503,7 @@ function CatalogCharacterModal({ character, position, canImport, canViewImages, 
                     ))}
                   </dl>
                 ) : <Text as="p" variant="muted">{t({ ko: '자주 쓰인 외형 태그가 없어.', en: 'No frequent appearance tags.' })}</Text>}
-              </section>
+              </RowGroup>
             )) : null}
 
             {canImport && canImportImages ? (
@@ -519,7 +514,6 @@ function CatalogCharacterModal({ character, position, canImport, canViewImages, 
                   disabled={importedSettingId !== null}
                   onCheckedChange={(checked) => choose({ withImages: checked })}
                 />
-                <Text as="p" variant="caption">{t({ ko: '이미지 탭의 미분류 참고 이미지로 들어가고, 첫 장이 기준 이미지가 돼.', en: 'They join the uncategorized references; the first becomes the reference image.' })}</Text>
               </div>
             ) : null}
 
@@ -548,7 +542,7 @@ function CatalogCharacterModal({ character, position, canImport, canViewImages, 
           </div>
         ) : null}
         {!canImport ? (
-          <Button variant="ghost" size="sm" onClick={() => void copy()}><Copy />{t({ ko: '태그 복사', en: 'Copy tags' })}</Button>
+          <IconButton variant="ghost" size="icon-sm" label={t({ ko: '태그 복사', en: 'Copy tags' })} onClick={() => void copy()}><Copy /></IconButton>
         ) : importedSettingId !== null ? (
           <Button variant="ghost" size="sm" onClick={() => onOpenSetting(importedSettingId)}>{t({ ko: '가져온 외형 열기', en: 'Open the imported setting' })}</Button>
         ) : (

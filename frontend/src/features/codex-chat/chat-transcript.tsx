@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import type { ChatMessageRouting } from '@conai/shared'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { IconButton } from '@/components/ui/icon-button'
+import { Panel } from '@/components/ui/panel'
 import { Tip } from '@/components/ui/tooltip'
 import { Textarea } from '@/components/ui/textarea'
 import { useI18n } from '@/i18n'
@@ -115,11 +116,10 @@ class MessageErrorBoundary extends Component<{ message: CodexChatMessage; childr
   }
 }
 
-const ChatMessageRow = memo(function ChatMessageRow({ message, last, previousContext, segments, flash, media, actions, speakerOf, agentSpeakerOf, mentions, userSpeaker = null, ...look }: MessageLook & {
-  message: CodexChatMessage; last: boolean; previousContext: ChatContextMeta | null; segments: ChatSummarySegment[]; flash: boolean; media?: Record<string, CodexChatMediaInfo>; actions: MessageActions
+const ChatMessageRow = memo(function ChatMessageRow({ message, previousContext, segments, flash, media, actions, speakerOf, agentSpeakerOf, mentions, userSpeaker = null, ...look }: MessageLook & {
+  message: CodexChatMessage; previousContext: ChatContextMeta | null; segments: ChatSummarySegment[]; flash: boolean; media?: Record<string, CodexChatMediaInfo>; actions: MessageActions
 }) {
   const { t } = useI18n()
-  // The last message keeps its action bar; an earlier one opens it with a click or tap on the message.
   const [barOpen, setBarOpen] = useState(false)
   // Chats with a translation model keep both texts; the reader's (display_content) shows first.
   const [showOriginal, setShowOriginal] = useState(false)
@@ -150,11 +150,11 @@ const ChatMessageRow = memo(function ChatMessageRow({ message, last, previousCon
   const routing = speakerOf ? message.routing : isUser && message.routing?.replyTo ? { ...message.routing, recipients: [] } : null
   // A reply to the user is the default in a room; only another addressee is named.
   const recipientLabel = routing?.recipients.filter((id) => isUser || id !== 'user').map((id) => typeof id === 'number' ? (speakerOf?.(id)?.name ?? look.speaker?.name ?? '') : id === 'user' ? userSpeaker?.name ?? t({ ko: '사용자', en: 'User' }) : t({ ko: '방 전체', en: 'Room' })).filter(Boolean).join(', ')
-  const showBar = last || barOpen || menuOpen
+  const showBar = barOpen || menuOpen
   const toggleBar = (event: MouseEvent<HTMLDivElement>) => {
     // A popup the bar opened lives in a body portal; its clicks still bubble here through React and must not fold it away.
     if (!isFromOwnDom(event)) return
-    if (last || actions.editingId === message.id || (event.target as HTMLElement).closest(MESSAGE_CONTROLS)) return
+    if (actions.editingId === message.id || (event.target as HTMLElement).closest(MESSAGE_CONTROLS)) return
     // Display blocks live in a shadow root; their pick / set targets only show up in the composed path.
     if (event.nativeEvent.composedPath().some((node) => node instanceof HTMLElement && (node.dataset.pick !== undefined || node.dataset.set !== undefined))) return
     // Selecting text ends in a click too; that must not fold or open the bar.
@@ -164,7 +164,7 @@ const ChatMessageRow = memo(function ChatMessageRow({ message, last, previousCon
   const inputNotice = isUser && message.error ? <p role="status" className="mt-1 text-xs text-muted-foreground">{message.error}</p> : null
   if (isUser && message.routing?.task) return <div data-message-id={message.id}><ChatTaskEventLine routing={message.routing.task} />{inputNotice}</div>
   if (isUser && message.routing?.routine) return <div data-message-id={message.id}><ChatRoutineEventLine routing={message.routing.routine} text={message.display_content ?? message.content} />{inputNotice}</div>
-  return <div data-message-id={message.id} onClick={toggleBar} className={cn('group/message -mx-2 rounded-md px-2 transition-colors duration-500', flash && 'bg-primary/10')}>
+  return <div data-message-id={message.id} onClick={toggleBar} className={cn('group/message relative -mx-2 rounded-md px-2 transition-colors duration-500', flash && 'bg-primary/10')}>
     {isUser
       ? <>{actions.editingId === message.id
         ? <ChatMessageEditor message={message} busy={actions.busy} onSave={actions.onEdit} onCancel={() => actions.onEditingChange(null)} />
@@ -172,10 +172,11 @@ const ChatMessageRow = memo(function ChatMessageRow({ message, last, previousCon
       : actions.editingId === message.id
         ? <ChatMessageEditor message={message} busy={actions.busy} onSave={actions.onEditReply} onCancel={() => actions.onEditingChange(null)} reply />
         : <ChatMessageIdContext.Provider value={message.id}><CodexChatAssistantMessage content={content} routing={routing} recipientLabel={recipientLabel} toolCalls={message.tool_calls} threadId={message.thread_id} fileChanges={message.fileChanges} replyId={message.routing?.replyId} onRetry={lastReply && actions.canRewrite && !actions.busy ? () => actions.onRegenerate(message.id) : undefined} status={message.status} error={message.error} finishReason={message.finish_reason ?? null} media={media} {...look} createdAt={message.created_date} agent={agent} speaker={agentSpeaker ?? (speakerOf ? speakerOf(message.speaker_profile_id) : look.speaker)} /></ChatMessageIdContext.Provider>}
-    {/* A folded bar takes no room but stays in the tab order, and shows while a key lands on one of its buttons.
+    {/* The floating bar stays in the tab order, and shows while a key lands on one of its buttons.
         Reply, regenerate and the answer switch stay on the bar; edits and the rarer actions sit under ⋯ with their names. */}
     {inputNotice}
-    <div data-message-bar className={cn('mt-1 flex flex-wrap items-center gap-x-1', isUser && 'justify-end', !showBar && 'sr-only focus-within:not-sr-only')}>
+    {actions.editingId !== message.id ? <div data-message-bar className={cn('absolute top-0 z-10 max-w-full', isUser && look.appearance.userPlacement === 'right' ? 'left-2' : 'right-2', !showBar && 'pointer-events-none opacity-0 group-hover/message:pointer-events-auto group-hover/message:opacity-100 group-focus-within/message:pointer-events-auto group-focus-within/message:opacity-100')}>
+    <Panel treatment="floating" padding="toolbar"><div className="flex flex-wrap items-center gap-x-1">
       <IconButton size="icon-xs" variant="ghost" label={t({ ko: '답장', en: 'Reply' })} onClick={() => actions.onReply(message)}><Reply /></IconButton>
       {showRewriteTools && !isUser ? <>
         {lastReply ? <IconButton size="icon-xs" variant="ghost" disabled={actions.busy} label={t({ ko: '다시 생성', en: 'Regenerate' })} onClick={() => actions.onRegenerate(message.id)}><RefreshCw /></IconButton> : null}
@@ -205,7 +206,8 @@ const ChatMessageRow = memo(function ChatMessageRow({ message, last, previousCon
       {/* The order working on this reply shows its spinner on the bar. */}
       {ordering ? <IconButton size="icon-xs" variant="ghost" disabled label={t(CHAT_ORDERS.find((entry) => entry.kind === ordering)?.label ?? { ko: '작업 중', en: 'Working' })}><LoaderCircle className="animate-spin" /></IconButton> : null}
       {!isUser && contextMeta ? <ChatContextInfo key={message.active_alternative} meta={contextMeta} previous={previousContext} threadId={message.thread_id} messageId={message.id} alternative={message.active_alternative} segments={segments} /> : null}
-    </div>
+    </div></Panel>
+    </div> : null}
   </div>
 })
 
@@ -233,9 +235,9 @@ export const ChatSavedMessages = memo(function ChatSavedMessages({ messages, con
   const divider = <div role="separator" className="flex items-center gap-3 text-xs text-muted-foreground"><span className="h-px flex-1 bg-line" />{t({ ko: '여기까지 요약됨', en: 'Summarized up to here' })}<span className="h-px flex-1 bg-line" /></div>
   return <>
     {summaryUntilId !== null && messages[0]?.id > summaryUntilId ? divider : null}
-    {messages.map((message, index) => <Fragment key={message.id}>
+    {messages.map((message) => <Fragment key={message.id}>
       <MessageErrorBoundary message={message}>
-        <ChatMessageRow message={message} last={index === messages.length - 1} previousContext={previousContexts.get(message.id) ?? null} segments={segments} flash={flashMessageId === message.id} media={media} actions={actions} {...look} />
+        <ChatMessageRow message={message} previousContext={previousContexts.get(message.id) ?? null} segments={segments} flash={flashMessageId === message.id} media={media} actions={actions} {...look} />
       </MessageErrorBoundary>
       {message.id === summaryUntilId ? divider : null}
     </Fragment>)}

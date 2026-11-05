@@ -268,23 +268,25 @@ function DownloadPopover({ buildId, output, onOutputChange, render, crop, disabl
       <PopoverTrigger asChild>
         <IconButton variant="ghost" size="icon-sm" label={t({ ko: '다운로드', en: 'Download' })}><Download /></IconButton>
       </PopoverTrigger>
-      <PopoverContent align="end" className="flex w-72 flex-col gap-3">
-        <SegmentedControl
-          size="sm"
-          fullWidth
-          value={output.format}
-          items={[{ value: 'png', label: 'PNG' }, { value: 'webp', label: 'WebP' }]}
-          onChange={(format) => onOutputChange({ ...output, format: format as OutputForm['format'] })}
-          ariaLabel={t({ ko: '형식', en: 'Format' })}
-        />
-        {output.format === 'webp' ? <SliderRow label={t({ ko: '품질', en: 'Quality' })} value={output.quality} min={1} max={100} onChange={(quality) => onOutputChange({ ...output, quality })} /> : null}
-        <div className="flex flex-col gap-1">
-          <Button variant="ghost" className="justify-start" disabled={disabled} onClick={() => triggerBrowserDownload(spriteSheetUrl(buildId, render, true))}>
-            <LayoutGrid />{t({ ko: '시트 받기', en: 'Download sheet' })}
-          </Button>
-          <Button variant="ghost" className="justify-start" onClick={() => triggerBrowserDownload(spriteFramesZipUrl(buildId, { crop, format: output.format, quality: output.quality }))}>
-            <Download />{t({ ko: '프레임 ZIP 받기', en: 'Download frames ZIP' })}
-          </Button>
+      <PopoverContent align="end" className="w-72">
+        <div className="flex flex-col gap-3">
+          <SegmentedControl
+            size="sm"
+            fullWidth
+            value={output.format}
+            items={[{ value: 'png', label: 'PNG' }, { value: 'webp', label: 'WebP' }]}
+            onChange={(format) => onOutputChange({ ...output, format: format as OutputForm['format'] })}
+            ariaLabel={t({ ko: '형식', en: 'Format' })}
+          />
+          {output.format === 'webp' ? <SliderRow label={t({ ko: '품질', en: 'Quality' })} value={output.quality} min={1} max={100} onChange={(quality) => onOutputChange({ ...output, quality })} /> : null}
+          <div className="flex flex-col gap-1">
+            <Button variant="ghost" className="w-full justify-start" disabled={disabled} onClick={() => triggerBrowserDownload(spriteSheetUrl(buildId, render, true))}>
+              <LayoutGrid />{t({ ko: '시트 받기', en: 'Download sheet' })}
+            </Button>
+            <Button variant="ghost" className="w-full justify-start" onClick={() => triggerBrowserDownload(spriteFramesZipUrl(buildId, { crop, format: output.format, quality: output.quality }))}>
+              <Download />{t({ ko: '프레임 ZIP 받기', en: 'Download frames ZIP' })}
+            </Button>
+          </div>
         </div>
       </PopoverContent>
     </Popover>

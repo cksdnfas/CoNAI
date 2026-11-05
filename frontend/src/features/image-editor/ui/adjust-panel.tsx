@@ -44,7 +44,8 @@ export function AdjustPanel({ engine, snapshot }: { engine: EditorEngine; snapsh
           <SliderRow
             key={item.key}
             className="h-12 shrink-0"
-            label={t(item.label)}
+            label={<span onDoubleClick={() => { if (!blocked) change({ [item.key]: 0 }) }}>{t(item.label)}</span>}
+            ariaLabel={t(item.label)}
             min={-item.range}
             max={item.range}
             disabled={blocked}
@@ -76,7 +77,7 @@ export function AdjustPanel({ engine, snapshot }: { engine: EditorEngine; snapsh
 
       <div className="flex shrink-0 justify-end gap-2 border-t border-line px-4 py-3">
         <Button variant="ghost" size="sm" disabled={!pending} onClick={() => engine.cancelAdjust()}>
-          {t({ ko: '초기화', en: 'Reset' })}
+          {t({ ko: '되돌리기', en: 'Revert' })}
         </Button>
         <Button variant="secondary" size="sm" disabled={!pending} onClick={() => engine.commitAdjust()}>
           {t({ ko: '적용', en: 'Apply' })}

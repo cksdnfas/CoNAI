@@ -17,8 +17,9 @@ interface ImageSelectionBarProps {
   onDownload?: () => void
   onDownloadSelect?: (type: ImageDownloadType) => Promise<void> | void
   onClear?: () => void
-  /** Number of loaded items; "select all loaded" shows while the selection is smaller. */
+  /** Number of loaded items used by the select-all toggle. */
   loadedCount?: number
+  allLoadedSelected?: boolean
   onSelectAllLoaded?: () => void
 }
 
@@ -38,6 +39,7 @@ export function ImageSelectionBar({
   onDownloadSelect,
   onClear,
   loadedCount,
+  allLoadedSelected = false,
   onSelectAllLoaded,
 }: ImageSelectionBarProps) {
   const [isOpen, setIsOpen] = useState(false)
@@ -59,16 +61,18 @@ export function ImageSelectionBar({
   return (
     <SelectionActionBar
       selectedCount={selectedCount}
-      description={statusText ?? downloadStatusText}
+      description={statusText}
       onClear={onClear}
       responsiveActions
       actions={(
         <>
-          {onSelectAllLoaded && loadedCount !== undefined && selectedCount < loadedCount ? (
+          {onSelectAllLoaded && loadedCount !== undefined ? (
             <SelectionBarAction
               icon={CheckCheck}
-              label={t({ ko: '불러온 항목 모두 선택', en: 'Select all loaded' })}
-              onClick={onSelectAllLoaded}
+              active={allLoadedSelected}
+              disabled={loadedCount === 0}
+              label={allLoadedSelected ? t({ ko: '선택 해제', en: 'Clear selection' }) : t({ ko: '불러온 항목 모두 선택', en: 'Select all loaded' })}
+              onClick={allLoadedSelected ? onClear : onSelectAllLoaded}
             />
           ) : null}
 
@@ -78,7 +82,7 @@ export function ImageSelectionBar({
             <span ref={containerRef} className="relative inline-flex">
               <SelectionBarAction
                 icon={Download}
-                label={downloadLabel}
+                label={downloadStatusText ? `${downloadLabel} · ${downloadStatusText}` : downloadLabel}
                 variant="default"
                 onClick={() => {
                   if (onDownloadSelect) {

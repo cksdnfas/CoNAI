@@ -100,13 +100,13 @@ export function DataRematchSection() {
     const confirmed = await confirm(dataRematchOptions.hash
       ? {
           title: t({ ko: '해시 재생성', en: 'Regenerate hashes' }),
-          description: t({ ko: '모든 이미지의 해시를 다시 계산해. 그룹·자동 폴더 그룹·모델 정보·임시 링크·생성 기록과의 연결은 옮겨지지 않고 끊어지고, 되돌릴 수 없어. 시작할까?', en: 'Every image hash is recalculated. Links to groups, auto-folder groups, model info, temporary links and generation history are not carried over but removed, and this cannot be undone. Start?' }),
+          description: t({ ko: '그룹·자동 폴더 그룹·모델 정보·임시 링크·생성 기록 연결이 끊겨. 되돌릴 수 없어.', en: 'Links to groups, auto-folder groups, model info, temporary links and generation history are lost. This cannot be undone.' }),
           confirmLabel: t({ ko: '해시 재생성', en: 'Regenerate hashes' }),
           tone: 'destructive',
         }
       : {
           title: t({ ko: '데이터 재매칭', en: 'Data rematch' }),
-          description: t({ ko: '선택한 항목을 전체 라이브러리에 대해 다시 만들어. 항목이 많으면 한동안 걸려. 시작할까?', en: 'The selected items are rebuilt for the whole library. With many items this takes a while. Start?' }),
+          description: t({ ko: '전체 라이브러리의 선택한 데이터를 덮어써.', en: 'Overwrite the selected data across the library.' }),
           confirmLabel: t({ ko: '시작', en: 'Start' }),
         })
     if (!confirmed) {

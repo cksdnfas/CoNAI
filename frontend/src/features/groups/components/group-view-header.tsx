@@ -1,15 +1,9 @@
-import { Bot, ChevronLeft, ChevronRight, Download, Ellipsis, FolderInput, FolderPlus, Pencil, Play, Trash2 } from 'lucide-react'
+import { Bot, ChevronLeft, Download, FolderInput, FolderPlus, Pencil, Play, Trash2 } from 'lucide-react'
 import { PageToolbar } from '@/components/common/page-toolbar'
-import { Button } from '@/components/ui/button'
+import { PathBreadcrumbs } from '@/components/common/path-breadcrumbs'
+import { ActionMenuButton } from '@/components/ui/action-menu'
 import { Chip } from '@/components/ui/chip'
 import { CountSummary } from '@/components/ui/count-summary'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
 import { IconButton } from '@/components/ui/icon-button'
 import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
@@ -113,38 +107,12 @@ export function GroupViewHeader({
           </IconButton>
         </>
       ) : null}
-      <DropdownMenu>
-        <Tip content={t({ ko: '더보기', en: 'More' })}>
-          <DropdownMenuTrigger asChild>
-            <Button type="button" variant="ghost" size="icon-sm" aria-label={t({ ko: '더보기', en: 'More' })}>
-              <Ellipsis />
-            </Button>
-          </DropdownMenuTrigger>
-        </Tip>
-        <DropdownMenuContent align="end">
-          <DropdownMenuItem onSelect={onDownload} disabled={isDownloadPending}>
-            <Download />
-            {isDownloadPending ? t('groups.components.group.detail.header.card.preparing') : t('groups.components.group.detail.header.card.download')}
-          </DropdownMenuItem>
-          {isCustomSource ? (
-            <>
-              <DropdownMenuItem onSelect={onMove}>
-                <FolderInput />
-                {t({ ko: '다른 위치로 옮기기', en: 'Move to…' })}
-              </DropdownMenuItem>
-              {canDelete ? (
-                <>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem variant="destructive" onSelect={onDelete} disabled={isDeletePending}>
-                    <Trash2 />
-                    {t({ ko: '그룹 삭제', en: 'Delete group' })}
-                  </DropdownMenuItem>
-                </>
-              ) : null}
-            </>
-          ) : null}
-        </DropdownMenuContent>
-      </DropdownMenu>
+      <ActionMenuButton label={t({ ko: '더 보기', en: 'More' })} entries={[
+        { key: 'download', icon: Download, onSelect: onDownload, disabled: isDownloadPending, label: isDownloadPending ? t('groups.components.group.detail.header.card.preparing') : t('groups.components.group.detail.header.card.download') },
+        isCustomSource && { key: 'move', icon: FolderInput, onSelect: onMove, label: t({ ko: '다른 위치로 옮기기', en: 'Move to…' }) },
+        '-',
+        isCustomSource && canDelete && { key: 'delete', icon: Trash2, onSelect: onDelete, disabled: isDeletePending, destructive: true, label: t({ ko: '그룹 삭제', en: 'Delete group' }) },
+      ]} />
     </div>
   )
 
@@ -168,21 +136,11 @@ export function GroupViewHeader({
       {nameHeading}
     </div>
   ) : (
-    <nav aria-label={t({ ko: '그룹 경로', en: 'Group path' })} className="flex min-w-0 items-center gap-1">
-      <Button type="button" variant="ghost" size="sm" className="shrink-0" onClick={onOpenRoot}>
-        {rootLabel}
-      </Button>
-      {ancestors.map((item) => (
-        <span key={item.id} className="flex min-w-0 items-center gap-1">
-          <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
-          <Button type="button" variant="ghost" size="sm" className="max-w-40 truncate" onClick={() => onOpenGroup(item.id)}>
-            {item.name}
-          </Button>
-        </span>
-      ))}
-      <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
-      {nameHeading}
-    </nav>
+    <div className="flex min-w-0 items-center gap-1">
+      <PathBreadcrumbs ariaLabel={t({ ko: '그룹 경로', en: 'Group path' })} items={[{ key: 'root', label: rootLabel, onClick: onOpenRoot }, ...pathItems.map((item) => ({ key: String(item.id), label: item.name, onClick: () => onOpenGroup(item.id) }))]} />
+      <GroupColorDot color={color} size="md" />
+      <h1 className="sr-only">{name}</h1>
+    </div>
   )
 
   return (

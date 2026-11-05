@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChevronDown, ChevronUp, Circle, CircleCheck, CircleDot, CircleMinus, CircleStop, Pause, Play, Users } from 'lucide-react'
 import { CHAT_TASK_DEFAULT_BUDGET, CHAT_TASK_LIMITS, type ChatProposal, type ChatRoutineRouting, type ChatTask, type ChatTaskAssignee, type ChatTaskRouting, type ChatTaskStep, type ChatTaskSummary } from '@conai/shared'
@@ -9,6 +9,7 @@ import { DisclosureButton } from '@/components/ui/disclosure-button'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { Spinner } from '@/components/ui/loading-state'
+import { Text } from '@/components/ui/text'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
@@ -186,7 +187,7 @@ function TaskBudgetResume({ task, busy, onResume }: { task: ChatTask; busy: bool
 }
 
 /** The bar above the composer: current step, progress, the step list folded under it, pause/resume and stop. */
-export function ChatTaskStrip({ threadId }: { threadId: number }) {
+export function ChatTaskStrip({ threadId, warning, fallback = null }: { threadId: number; warning?: string | null; fallback?: ReactNode }) {
   const { t } = useI18n()
   const confirm = useConfirm()
   const [stepsOpen, setStepsOpen] = useState(false)
@@ -201,7 +202,7 @@ export function ChatTaskStrip({ threadId }: { threadId: number }) {
       void queryClient.invalidateQueries({ queryKey: chatTaskQueryKey(threadId) })
     },
   })
-  if (!task || !LIVE.has(task.status)) return null
+  if (!task || !LIVE.has(task.status)) return fallback
   const index = currentStep(task.steps)
   const done = task.steps.filter((step) => step.status === 'done' || step.status === 'skipped').length
   const canResume = task.status === 'paused' || (task.status === 'waiting' && (task.wait === 'user' || task.wait === 'page'))
@@ -211,7 +212,7 @@ export function ChatTaskStrip({ threadId }: { threadId: number }) {
       {stepsOpen ? <div className="mb-2 border-b border-line pb-2"><StepList steps={task.steps} current={index} task={task} /></div> : null}
       <div className="mb-2 flex min-w-0 items-center gap-2.5 text-xs">
         {index >= 0 && task.steps[index].assignee !== undefined ? <Assignee assignee={task.steps[index].assignee} compact /> : null}
-        <span className="min-w-0 truncate font-semibold">{index >= 0 ? task.steps[index].title : task.goal}</span>
+        <span className="min-w-0 truncate font-semibold" title={warning ?? undefined}>{warning ? <Text as="span" variant="caption" tone="warning" role="status">{warning}</Text> : index >= 0 ? task.steps[index].title : task.goal}</span>
         <StateChip task={task} />
         <span className="h-0.5 min-w-10 flex-1 overflow-hidden rounded-full bg-muted"><span className="block h-full bg-primary transition" style={{ transitionProperty: 'width', width: `${Math.round((done / Math.max(1, task.steps.length)) * 100)}%` }} /></span>
         <span className="shrink-0 font-mono text-muted-foreground tabular-nums">{done}/{task.steps.length}</span>

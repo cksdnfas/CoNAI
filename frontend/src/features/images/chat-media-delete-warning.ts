@@ -1,8 +1,11 @@
 import type { useI18n } from '@/i18n'
 import { useI18n as useI18nContext } from '@/i18n'
+import { createElement } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { useConfirm } from '@/components/ui/confirm-dialog'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { getChatMediaUsage } from '@/lib/api-codex-chat'
+import { getAppSettings } from '@/lib/api-settings-general'
 
 type Translate = ReturnType<typeof useI18n>['t']
 
@@ -32,12 +35,47 @@ export async function withChatMediaDeleteWarning(description: string, compositeH
   return warning ? `${description}\n\n${warning}` : description
 }
 
+function ImageDeleteDescription({ compositeHashes }: { compositeHashes: string[] }) {
+  const { t, language } = useI18nContext()
+  const auth = useAuthStatusQuery().data
+  const protectedDelete = useQuery({
+    queryKey: ['app-settings'],
+    queryFn: getAppSettings,
+    enabled: (query) => auth?.isAdmin === true && query.state.data === undefined,
+    retry: false,
+  }).data?.general.deleteProtection.enabled
+  const description = protectedDelete === true
+    ? t({ ko: '휴지통으로 보내고 되돌릴 수 있어.', en: 'Moves to the Recycle Bin and can be undone.' })
+    : protectedDelete === false
+      ? t({ ko: '영구 삭제돼. 되돌릴 수 없어.', en: 'Permanently deleted. This cannot be undone.' })
+      : t({ ko: '보호 설정에 따라 영구 삭제될 수 있어.', en: 'Deletion may be permanent depending on the protection setting.' })
+  const hashes = compositeHashes.slice(0, 500)
+  const warning = useQuery({
+    queryKey: ['chat-media-delete-usage', auth?.accountId ?? null, auth?.accountType ?? null, language, hashes],
+    queryFn: () => chatMediaDeleteWarning(hashes, t),
+    staleTime: 30_000,
+  }).data
+  return createElement('span', { 'aria-live': 'polite' }, warning ? `${description}\n\n${warning}` : description)
+}
+
+/** Open immediately; cached protection and asynchronous admin/usage queries update the mounted description. */
+export function useConfirmImageDelete() {
+  const confirm = useConfirm()
+  const { t } = useI18nContext()
+  return (compositeHashes: string[], title: string) => confirm({
+      title,
+      description: createElement(ImageDeleteDescription, { compositeHashes }),
+      confirmLabel: t({ ko: '삭제', en: 'Delete' }),
+      tone: 'destructive',
+    })
+}
+
 export function useChatMediaDeleteDescription(compositeHashes: string[], enabled: boolean) {
   const { t, language } = useI18nContext()
   const auth = useAuthStatusQuery().data
   const description = t({
-    ko: '이미지를 삭제해. 보호 설정에 따라 영구 삭제될 수 있고, 채팅 프로필이나 메시지에 쓰인 이미지는 채팅에서 사라져.',
-    en: 'Delete the images; deletion may be permanent. Images used by chat profiles or messages will disappear from chat.',
+    ko: '이미지를 삭제해. 보호 설정에 따라 영구 삭제될 수 있어.',
+    en: 'Delete the images. Deletion may be permanent depending on the protection setting.',
   })
   const hashes = compositeHashes.slice(0, 500)
   return useQuery({

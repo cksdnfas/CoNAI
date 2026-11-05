@@ -23,6 +23,7 @@
     "test:module-graph": "tsx --tsconfig tsconfig.test.json --test test/module-graph-loading.test.ts test/workflow-chat-adapter.test.tsx",
     "test:chat-integrity": "tsx --tsconfig tsconfig.test.json --test test/chat-draft-integrity.test.ts test/chat-tail-integrity.test.ts",
     "test:editor-conflicts": "tsx --tsconfig tsconfig.test.json --test test/post-editor-conflict.test.tsx test/native-editor-conflicts.test.ts test/workflow-save-conflicts.test.ts test/comfy-draft-integrity.test.tsx test/text-document-save.test.tsx",
+    "test:image-editor": "tsx --tsconfig tsconfig.test.json --test test/image-editor-shortcuts.test.ts",
     "lint": "eslint .",
     "preview": "vite preview"
   },

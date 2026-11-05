@@ -5,6 +5,7 @@ import { PageToolbar } from '@/components/common/page-toolbar'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { IconButton } from '@/components/ui/icon-button'
+import { Button } from '@/components/ui/button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import {
   downloadConvertedWebP,
@@ -461,20 +462,20 @@ function UploadPageContent() {
       >
         <RotateCcw />
       </IconButton>
-      <IconButton
-        size="icon-sm"
-        className="ml-1"
+      <Button
+        size="sm"
+        className="ml-1 min-w-40"
         onClick={() => void handleUpload()}
         disabled={uploadFiles.length === 0 || isUploading}
         aria-busy={isUploading || undefined}
-        label={isUploading
+      >
+        <Upload />
+        {isUploading
           ? t('uploadPageSections.uploading')
           : uploadFiles.length > 0
             ? t({ ko: '업로드 · {count}', en: 'Upload · {count}' }, { count: formatNumber(uploadFiles.length) })
             : t({ ko: '업로드', en: 'Upload' })}
-      >
-        <Upload />
-      </IconButton>
+      </Button>
     </>
   )
 
@@ -503,7 +504,7 @@ function UploadPageContent() {
             disabled={!extractFile || extractBusy}
             label={activeExtractAction !== null && activeExtractAction !== 'prompt'
               ? t('uploadPageSections.extracting')
-              : t({ ko: '추출 실행: 태그·작가를 다시 뽑아봐', en: 'Run extraction: tags and artists' })}
+              : t({ ko: '태그·작가 추출하기', en: 'Extract tags and artists' })}
           >
             <ScanSearch />
           </IconButton>
@@ -531,8 +532,8 @@ function UploadPageContent() {
             semantics="tabs"
             ariaLabel={t({ ko: '업로드 방식', en: 'Upload mode' })}
             items={[
-              { value: 'library', label: t({ ko: '라이브러리에 저장', en: 'Save to library' }), ariaLabel: t({ ko: '라이브러리에 저장: 올린 파일을 라이브러리에 넣어', en: 'Save to library: upload files into the library' }) },
-              { value: 'inspect', label: t({ ko: '메타데이터만 보기', en: 'Metadata only' }), ariaLabel: t({ ko: '메타데이터만 보기: 저장 없이 이미지 정보만 확인해', en: 'Metadata only: inspect an image without saving it' }) },
+              { value: 'library', label: t({ ko: '라이브러리에 저장', en: 'Save to library' }) },
+              { value: 'inspect', label: t({ ko: '메타데이터만 보기', en: 'Metadata only' }) },
             ]}
           />
         )}

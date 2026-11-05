@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState, type ComponentProps } from 'react'
 import { composeCharacterAppearance } from '@conai/shared'
 import { Star, UserRound, UserRoundPlus } from 'lucide-react'
-import { Field } from '@/components/ui/field'
+import { Field, FieldInfo } from '@/components/ui/field'
 import { IconButton } from '@/components/ui/icon-button'
 import { Modal, ModalBody } from '@/components/ui/modal'
 import { EditorFooter } from '@/components/ui/editor-footer'
@@ -199,11 +199,14 @@ export function CharacterSettingLoadButton({
                 )}
                 {chosenReference ? (
                   <>
-                    <Text as="p" variant="caption" id={imagesCaptionId}>
-                      {referenceMultiple
-                        ? t({ ko: '넣을 이미지를 골라. 첫 장은 위 칸에, 나머지는 새 참조로 들어가.', en: 'Choose the images: the first goes into the slot above, the rest become new references.' })
-                        : t({ ko: '넣을 이미지 한 장을 골라.', en: 'Choose one image.' })}
-                    </Text>
+                    <div className="flex items-center gap-1">
+                      <Text as="span" variant="label" id={imagesCaptionId}>{t({ ko: '참조 이미지 선택', en: 'Choose reference images' })}</Text>
+                      <FieldInfo>
+                        {referenceMultiple
+                          ? t({ ko: '넣을 이미지를 골라. 첫 장은 위 칸에, 나머지는 새 참조로 들어가.', en: 'Choose the images: the first goes into the slot above, the rest become new references.' })
+                          : t({ ko: '넣을 이미지 한 장을 골라.', en: 'Choose one image.' })}
+                      </FieldInfo>
+                    </div>
                     <div role="group" aria-labelledby={imagesCaptionId} className="flex flex-wrap gap-2">
                       {stepImages.map((image, index) => {
                         const chosen = step.imageHashes.includes(image.hash)

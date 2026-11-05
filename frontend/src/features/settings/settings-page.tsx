@@ -9,6 +9,7 @@ import { PageWithSidebar } from '@/components/common/page-with-sidebar'
 import { HEADER_NAVIGATION_QUERY_KEY } from '@/components/layout/app-navigation'
 import { Button } from '@/components/ui/button'
 import { ErrorState } from '@/components/ui/error-state'
+import { EmptyState } from '@/components/ui/empty-state'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { reextractAllImageMetadata, updateGenerationThrottleSettings, updateImageSaveSettings, updateMetadataSettings, updateThumbnailSettings, updateVideoOptimizationSettings, type MetadataReextractAllResult } from '@/lib/api-settings'
 import { useRuntimeJobAction } from '@/lib/use-runtime-job'
@@ -542,17 +543,7 @@ export function SettingsPage() {
     return (
       <div className="space-y-4">
         <PageToolbar title={t('pageAccessCatalog.settings')} />
-        <div role="status" className="flex items-start gap-3">
-          <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-primary-text" />
-          <div className="min-w-0 flex-1 space-y-3">
-            <div className="text-sm font-semibold text-foreground">
-              {t({ ko: '설정은 관리자만 변경할 수 있어.', en: 'Only administrators can change settings.' })}
-            </div>
-            <Button asChild size="sm" variant="secondary">
-              <Link to="/access">{t('appShell.availablePages')}</Link>
-            </Button>
-          </div>
-        </div>
+        <EmptyState role="status" icon={ShieldAlert} title={t({ ko: '설정은 관리자만 변경할 수 있어.', en: 'Only administrators can change settings.' })} action={<Button asChild size="sm" variant="secondary"><Link to="/access">{t('appShell.availablePages')}</Link></Button>} />
       </div>
     )
   }

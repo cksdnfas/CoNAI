@@ -159,13 +159,9 @@ export function CharacterAppearanceEditor({ value, onChange, onAvatarChange, ref
   const appearanceBlock = appearanceEditor ?? <EditorGroup
           label={t({ ko: '외형 설명', en: 'Appearance' })}
           actions={editable && draftAppearance ? (
-            <Tip content={draftBlocked}>
-              <span className="inline-flex" tabIndex={draftBlocked ? 0 : -1}>
-                <IconButton size="icon-sm" variant="ghost" label={t({ ko: 'AI 초안', en: 'AI draft' })} disabled={busy || appearance.isPending || Boolean(draftBlocked)} onClick={() => void writeAppearance()}>
-                  {appearance.isPending ? <Spinner className="size-3.5" /> : <Sparkles />}
-                </IconButton>
-              </span>
-            </Tip>
+            <IconButton size="icon-sm" variant="ghost" label={draftBlocked ?? t({ ko: 'AI 초안', en: 'AI draft' })} disabled={busy || appearance.isPending || Boolean(draftBlocked)} onClick={() => void writeAppearance()}>
+              {appearance.isPending ? <Spinner className="size-3.5" /> : <Sparkles />}
+            </IconButton>
           ) : undefined}
         >
           <Textarea variant="settings" disabled={appearance.isPending} readOnly={!editable} className="min-h-[120px]" rows={5} value={value.appearance ?? ''} maxLength={CHAT_PROFILE_TEXT_LIMITS.text} aria-invalid={appearanceInvalid || undefined} aria-label={t({ ko: '외형 설명', en: 'Appearance' })} onChange={(event) => onChange({ appearance: event.target.value })} />

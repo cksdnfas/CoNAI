@@ -89,7 +89,7 @@ export function useNaiImageEditorBridge({
     }))
   }
 
-  /** Receive the editor result, close the editor, and either apply it directly or open the save-options modal. */
+  /** Keep the editor mounted beneath save options until the result is applied. */
   const handleSaveImageEditor = async (result: ImageEditorResult) => {
     const payload = {
       sourceImageDataUrl: await readBlobAsDataUrl(result.source),
@@ -99,7 +99,6 @@ export function useNaiImageEditorBridge({
       setEditorSaveOptions(imageSaveSettings)
       setPendingImageEditorSaveInfo(await loadImageSaveSourceInfo({ source: payload.sourceImageDataUrl, sourceMimeType: 'image/png' }))
       setPendingImageEditorSave(payload)
-      setIsImageEditorOpen(false)
       return
     }
 
@@ -114,6 +113,7 @@ export function useNaiImageEditorBridge({
     }
 
     await applyImageEditorSaveOutput(pendingImageEditorSave, editorSaveOptions)
+    setIsImageEditorOpen(false)
     setPendingImageEditorSave(null)
     setPendingImageEditorSaveInfo(null)
   }

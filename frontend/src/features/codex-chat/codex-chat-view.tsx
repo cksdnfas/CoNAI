@@ -7,9 +7,12 @@ import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRe
 import { useIsMutating, useMutation, useQueries, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query'
 import { Activity, AlarmClock, ALargeSmall, ArrowLeft, ArrowUp, ChevronLeft, ChevronRight, Cpu, Download, Eraser, Flag, FoldVertical, Image as ImageIcon, LayoutGrid, ListChecks, Maximize2, Minimize2, MoreHorizontal, Plus, RotateCw, SlidersHorizontal, Square, SquarePen, Target, Trash2, TriangleAlert, UserPlus, X } from 'lucide-react'
 import { Chip } from '@/components/ui/chip'
+import { CountBadge } from '@/components/ui/count-badge'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { IconButton } from '@/components/ui/icon-button'
+import { Panel } from '@/components/ui/panel'
+import { Textarea } from '@/components/ui/textarea'
 import { pageGutterStyle, SidebarColumn } from '@/components/common/sidebar-layout'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Tip } from '@/components/ui/tooltip'
@@ -20,7 +23,7 @@ import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { hasAuthPermission } from '@/features/auth/auth-permissions'
 import { useUnsavedSettingsGuard } from '@/features/settings/use-unsaved-settings-guard'
 import { useI18n } from '@/i18n'
-import { ChatPageConnectButton, ChatPageConnectionNotice } from './chat-page-context'
+import { ChatPageConnectButton } from './chat-page-context'
 import { ChatTaskStrip } from './chat-task-ui'
 import { chatHealthLine, useChatHealth, useChatHealthRecheck } from './chat-health'
 import { ChatChoiceDock, ChatChoiceStatesContext, chatChoiceStates, findOpenChoice } from './chat-choice'
@@ -101,7 +104,6 @@ import {
 import { CodexChatAssistantMessage, type ChatSpeaker } from './codex-chat-message'
 import { ChatSavedMessages } from './chat-transcript'
 import { Button } from '@/components/ui/button'
-import { Text } from '@/components/ui/text'
 import { CHAT_COMMANDS, ChatCommandList } from './chat-commands'
 import { ChatExportDialog, ChatSearchInput, ChatSearchResults } from './chat-search-export'
 import { GROUP_MEMBER_MAX, GroupAvatarStack, GroupInviteDialog, GroupMembersPopover, GroupTurnStatus, MentionList, type GroupInviteMode } from './chat-group'
@@ -828,7 +830,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   const backButton = canOpenList
     ? <IconButton variant="ghost" size="icon-sm" onClick={() => setListOpen(true)} label={t({ ko: '채팅 목록', en: 'Chats' })}><ArrowLeft /></IconButton>
     : pendingProfile && (layout === 'panel' || !hasSideList)
-      ? <IconButton variant="ghost" size="icon-sm" onClick={() => selectThread(null)} label={t({ ko: '새 채팅', en: 'New chat' })}><ArrowLeft /></IconButton>
+      ? <IconButton variant="ghost" size="icon-sm" onClick={() => selectThread(null)} label={t({ ko: '뒤로', en: 'Back' })}><ArrowLeft /></IconButton>
       : null
   const openThread = (threadId: number) => (threadId === activeThreadId ? setListOpen(false) : selectThread(threadId))
   const liveThreadId = liveTurn?.threadId
@@ -953,9 +955,12 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
       <DropdownMenuItem variant="destructive" disabled={isBusy || deleteMutation.isPending} onSelect={() => void handleDelete()}><Trash2 />{t({ ko: '삭제', en: 'Delete' })}</DropdownMenuItem>
     </DropdownMenuContent>
   </DropdownMenu></span></ChatAppearancePopover>
+  // A room's summary has its own switch; a direct chat follows the profile unless set.
+  const summaryFailed = Boolean(thread?.summary_error) && !isCodexThread
+    && (isGroup ? thread?.summary_enabled === 1 : isChatSummaryEnabled(thread?.summary_enabled, profile?.summaryEnabled))
   // The context stays one press away in the header, beside ⋯.
   const headerActions = displayThread ? (
-    <IconButton variant="ghost" size="icon-sm" active={activeView === 'context'} onClick={() => toggleView('context')} label={t({ ko: '컨텍스트', en: 'Context' })}><SlidersHorizontal /></IconButton>
+    <Tip content={summaryFailed ? t({ ko: '요약하지 못했어. 오래된 대화가 빠질 수 있어: {error}', en: 'Summary failed; older turns may be left out: {error}' }, { error: thread?.summary_error ?? '' }) : t({ ko: '컨텍스트', en: 'Context' })}><span className="relative inline-flex"><IconButton variant="ghost" size="icon-sm" active={activeView === 'context'} onClick={() => toggleView('context')} label={t(summaryFailed ? { ko: '컨텍스트 · 요약 실패', en: 'Context · Summary failed' } : { ko: '컨텍스트', en: 'Context' })} tooltip={false}><SlidersHorizontal /></IconButton>{summaryFailed ? <CountBadge tone="warning" corner="top-right" /> : null}</span></Tip>
   ) : null
   const statusStrip = hasPanel && statusData && !wideStatus ? <ChatStatusStrip data={statusData} activeKey={activeStatusKey} onActiveKey={setStatusKey} open={stripOpen} onOpenChange={setStripPanelOpen} /> : null
   const statusAside = hasPanel && statusData && wideStatus && panelOpen && statusLayout.mode === 'docked'
@@ -965,11 +970,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
     ? <ChatStatusFloating data={statusData} activeKey={activeStatusKey} onActiveKey={setStatusKey} layout={statusLayout} onLayout={setStatusLayout} onDock={() => setStatusLayout({ mode: 'docked' })} onHide={hidePanel} containerRef={statusAreaRef} />
     : null
 
-  // A direct LLM chat whose background summary failed: older turns may have left the request unsummarized.
-  // A room's summary is its own switch; a direct chat's follows the profile unless set.
-  const summaryFailed = Boolean(thread?.summary_error) && !isCodexThread
-    && (isGroup ? thread?.summary_enabled === 1 : isChatSummaryEnabled(thread?.summary_enabled, profile?.summaryEnabled))
-  const warning = profileMissing
+  const blockingWarning = profileMissing
     ? t({ ko: '이 채팅의 프로필이 지워졌거나 꺼져 있어.', en: 'This chat’s profile was deleted or turned off.' })
     : codexUnavailable && !codexStatusQuery.isPending
       ? codexStatus?.installed
@@ -977,6 +978,8 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
         : t({ ko: 'Codex가 설치돼 있지 않아.', en: 'Codex is not installed.' })
       : null
 
+  const warning = blockingWarning ?? (connectionDown ? chatHealthLine(connectionDown, t) : null)
+  const composerStatus = warning ? <p role="status" className="mb-2 flex items-center gap-1.5 text-xs text-warning"><TriangleAlert className="size-3.5 shrink-0" />{warning}</p> : turnStatus
   const draftQuote = chat.draftReply?.threadId === activeThreadId ? chat.draftReply.quote : null
   const draftMembers = speakerProfiles.filter((entry) => threadQuery.data?.group?.memberIds.includes(entry.id))
   const draftTarget = draftQuote ? messages.find((message) => message.id === draftQuote.messageId) : null
@@ -995,22 +998,12 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
     <div className={cn('relative w-full shrink-0 pb-4 pt-2', layout === 'page' ? cn('mx-auto px-(--page-gutter)', CHAT_WIDTH_CLASS[appearance.width]) : 'px-3')}>
       {showCommands ? <ChatCommandList id={commandListId} commands={matchingCommands} selected={selectedCommand} onSelect={pickCommand} /> : null}
       {showMentions ? <MentionList id={mentionListId} options={mentionMatches} selected={selectedMention} onSelect={pickMention} /> : null}
-      {turnStatus}
+      {activeThreadId !== null ? <ChatTaskStrip threadId={activeThreadId} warning={blockingWarning} fallback={composerStatus} /> : composerStatus}
       {draftQuote ? <div className="flex items-start gap-1" role="region" aria-label={t({ ko: '답장 대상', en: 'Reply target' })}>
         <ChatReplyPreview quote={draftQuote} recipientLabel={draftRecipientLabel} className="flex-1" />
         <IconButton variant="ghost" size="icon-xs" label={t({ ko: '답장 취소', en: 'Cancel reply' })} onClick={() => setDraftReply(null)}><X /></IconButton>
       </div> : null}
-      {warning ? <p className="mb-2 flex items-center gap-1.5 text-xs text-warning"><TriangleAlert className="size-3.5 shrink-0" />{warning}</p> : null}
-      {summaryFailed ? (
-        <Tip content={thread?.summary_error} side="top">
-          <Button variant="ghost" size="content" onClick={() => setView('context')} className="mb-2">
-            <TriangleAlert className="size-3.5 shrink-0 text-warning" /><Text as="span" variant="caption" tone="warning">{t({ ko: '요약하지 못했어. 오래된 대화가 빠질 수 있어.', en: 'Summary failed; older turns may be left out.' })}</Text>
-          </Button>
-        </Tip>
-      ) : null}
       <ChatDraftAttachments chat={chat} canReadText={profile?.canReadFileText === true} />
-      {activeThreadId !== null ? <ChatTaskStrip threadId={activeThreadId} /> : null}
-      {!isGroup && profile?.pageAssist ? <ChatPageConnectionNotice /> : null}
       {openChoice && closedChoiceId !== openChoice.id && activeThreadId !== null ? (
         <ChatChoiceDock card={openChoice} selected={choiceDraft?.labels ?? []} disabled={sendBlocked || profileMissing || codexUnavailable || Boolean(connectionDown)} onPick={pickChoice} onClose={() => setClosedChoiceId(openChoice.id)} />
       ) : null}
@@ -1038,10 +1031,10 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
           onClose={closeFlagTray}
         />
       ) : null}
-      <div {...fileDrop.dropHandlers} style={narrationColorStyle(profile?.style.roleplay ? profile.style.colors.narration : null)} className={cn('rounded-lg border border-line px-3 pb-2 pt-1.5 focus-within:border-primary/55', narrating && caretOnNarration(draft, caret) && 'focus-within:border-narration-edge', backgroundUrl && 'bg-background/85 backdrop-blur-sm', fileDrop.dragging && 'border-primary focus-within:border-primary')}>
+      <Panel treatment="composer" padding="sm" radius="md" backdrop={Boolean(backgroundUrl)} {...fileDrop.dropHandlers} style={narrationColorStyle(profile?.style.roleplay ? profile.style.colors.narration : null)} data-narrating={narrating && caretOnNarration(draft, caret)} data-drag-active={fileDrop.dragging}>
         <div className="relative min-w-0">
         {narrating ? <ChatComposerNarrationBackdrop textareaRef={composerRef} text={draft} /> : null}
-        <textarea
+        <Textarea variant="inline" textOverlay={narrating} placeholderTone={connectionDown ? 'destructive' : undefined}
           ref={composerRef}
           value={draft}
           onChange={(event) => { setDraft(event.target.value); setCaret(event.target.selectionStart); setCommandIndex(0); setMentionIndex(0) }}
@@ -1054,7 +1047,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
           aria-autocomplete="list"
           aria-controls={showCommands ? commandListId : showMentions ? mentionListId : undefined}
           aria-activedescendant={showCommands ? `${commandListId}-${selectedCommand}` : showMentions ? `${mentionListId}-${selectedMention}` : undefined}
-          className={cn('relative block min-h-0 w-full resize-none bg-transparent py-1.5 text-sm text-foreground caret-foreground outline-none placeholder:text-muted-foreground', connectionDown && 'placeholder:text-destructive', narrating && 'text-transparent')}
+          className="relative block"
         />
         </div>
         {/* The tools under the text, worded so whether each is on reads at a glance; send stays at the end. */}
@@ -1080,7 +1073,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
           </IconButton>
         )}
         </div>
-      </div>
+      </Panel>
       </div>
     </div>
     ) }}

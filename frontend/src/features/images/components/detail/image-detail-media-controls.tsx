@@ -205,11 +205,9 @@ export function ImageDetailTransformControls({
           <IconButton {...toolbarButtonProps} onClick={onRotateRight} label={t('images.components.detail.image.detail.media.rotate.right')}>
             <RotateCw className="h-4 w-4" />
           </IconButton>
-          {!isDefaultView ? (
-            <IconButton {...toolbarButtonProps} onClick={onResetView} label={t('images.components.detail.image.detail.media.reset')}>
-              <Undo2 className="h-4 w-4" />
-            </IconButton>
-          ) : null}
+          <IconButton {...toolbarButtonProps} onClick={onResetView} label={t('images.components.detail.image.detail.media.reset')} disabled={isDefaultView}>
+            <Undo2 className="h-4 w-4" />
+          </IconButton>
           <IconButton {...toolbarButtonProps} onClick={onToggleControlsCollapsed} label={t('images.components.detail.image.detail.media.collapse.controls')}>
             <ArrowRightToLine className="h-4 w-4" />
           </IconButton>

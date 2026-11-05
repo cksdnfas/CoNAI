@@ -80,6 +80,7 @@ const buttonVariants = cva(
         content: "h-auto min-h-6 gap-1 px-2 py-1 text-xs font-normal whitespace-normal break-words text-left",
         /** Field-height trigger whose label may run to two lines (variant="field"). */
         field: "h-auto min-h-9 gap-3 px-3 py-2",
+        "field-icon": "size-10 p-0 justify-center",
         sm: "h-8 gap-2 rounded-sm px-3 has-[>svg]:px-3",
         lg: "h-10 rounded-sm px-6 has-[>svg]:px-4",
         /** Touch-first worded key in a bottom-docked bar: 44px on phones, `default` (36px) from sm up. */

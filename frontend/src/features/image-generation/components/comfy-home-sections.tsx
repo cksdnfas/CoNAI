@@ -14,8 +14,8 @@ import { Modal, ModalBody } from '@/components/ui/modal'
 import { EditorFooter } from '@/components/ui/editor-footer'
 import { IconButton } from '@/components/ui/icon-button'
 import { RowGroup } from '@/components/ui/row-group'
+import { ListRow } from '@/components/ui/list-row'
 import { Switch } from '@/components/ui/switch'
-import { Text } from '@/components/ui/text'
 import { TextTabs } from '@/components/common/text-tabs'
 import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
@@ -385,24 +385,8 @@ export function ComfyDropdownListsSection({ dropdownLists, isSubmitting = false,
 
   return (
     <section>
-      {/* RowGroup's heading row, with text tabs beside the label. */}
-      <div className="mb-1 flex min-h-8 items-center justify-between gap-3 border-b border-foreground/15">
-        <div className="flex min-w-0 flex-1 items-center gap-4 self-stretch">
-          <h3 className="flex shrink-0 items-center">
-            <Text as="span" variant="overline">
-              <SectionLabel icon={<ListFilter />}>{t({ ko: '드롭다운 목록', en: 'Dropdown lists' })}</SectionLabel>
-            </Text>
-          </h3>
-          <TextTabs
-            value={activeTab}
-            items={tabs.map((tab) => ({ value: tab.value, label: tab.label, icon: tab.icon, count: formatNumber(tab.count) }))}
-            onChange={setActiveTab}
-            ariaLabel={t({ ko: '드롭다운 목록', en: 'Dropdown lists' })}
-            hairline={false}
-            className="flex-1 self-end"
-          />
-        </div>
-        {activeTab === 'custom' ? (
+      <RowGroup heading={<SectionLabel icon={<ListFilter />}>{t({ ko: '드롭다운 목록', en: 'Dropdown lists' })}</SectionLabel>} actions={
+        activeTab === 'custom' ? (
           <IconButton size="icon-sm" variant="ghost" onClick={() => setIsCustomModalOpen(true)} disabled={!canUpdateWorkflows} label={t({ ko: '목록 추가', en: 'Add list' })}>
             <Plus />
           </IconButton>
@@ -410,38 +394,46 @@ export function ComfyDropdownListsSection({ dropdownLists, isSubmitting = false,
           <IconButton size="icon-sm" variant="ghost" onClick={() => setIsAutoModalOpen(true)} disabled={!isAdmin} label={t({ ko: '자동수집', en: 'Auto collect' })}>
             <RefreshCw />
           </IconButton>
-        )}
-      </div>
-
-      {visibleLists.length > 0 ? visibleLists.map((list) => {
-        const details = [
-          list.description,
-          list.source_path ? t({ ko: '소스 {path}', en: 'Source {path}' }, { path: list.source_path }) : null,
-          list.items.slice(0, 6).join(', ') || null,
-        ].filter(Boolean)
-        const entries: ActionMenuEntry[] = [
-          !list.is_auto_collected && { key: 'delete', icon: Trash2, label: t({ ko: '삭제', en: 'Delete' }), destructive: true, disabled: !canUpdateWorkflows || isSubmitting, onSelect: () => void onDeleteList(list.id) },
-        ]
-        return (
-          <ActionContextMenu key={list.id} entries={entries}>
-            <div className="flex min-h-11 items-center gap-2 border-b border-line last:border-b-0">
-              <Tip content={details.length > 0 ? <span className="whitespace-pre-line">{details.join('\n')}</span> : null} align="start">
-                <span className="min-w-0 truncate text-sm font-medium text-foreground">{list.name}</span>
-              </Tip>
-              <span className="shrink-0 text-2xs tabular-nums text-muted-foreground">{formatNumber(list.items.length)}</span>
-              <span className="flex-1" />
-              {list.is_auto_collected ? (
-                <IconButton size="icon-sm" variant="ghost" onClick={() => setViewingAutoList(list)} label={t({ ko: '보기', en: 'View' })}><Eye /></IconButton>
-              ) : (
-                <>
-                  <IconButton size="icon-sm" variant="ghost" onClick={() => setEditingCustomList(list)} disabled={!canUpdateWorkflows || isSubmitting} label={t({ ko: '수정', en: 'Edit' })}><Pencil /></IconButton>
-                  <ActionMenuButton entries={entries} icon={Ellipsis} label={t({ ko: '더 보기', en: 'More' })} />
-                </>
-              )}
-            </div>
-          </ActionContextMenu>
         )
-      }) : <EmptyListRow />}
+      }>
+        <TextTabs
+          value={activeTab}
+          items={tabs.map((tab) => ({ value: tab.value, label: tab.label, icon: tab.icon, count: formatNumber(tab.count) }))}
+          onChange={setActiveTab}
+          ariaLabel={t({ ko: '드롭다운 목록', en: 'Dropdown lists' })}
+          hairline={false}
+        />
+
+        {visibleLists.length > 0 ? visibleLists.map((list) => {
+          const details = [
+            list.description,
+            list.source_path ? t({ ko: '소스 {path}', en: 'Source {path}' }, { path: list.source_path }) : null,
+            list.items.slice(0, 6).join(', ') || null,
+          ].filter(Boolean)
+          const entries: ActionMenuEntry[] = [
+            !list.is_auto_collected && { key: 'delete', icon: Trash2, label: t({ ko: '삭제', en: 'Delete' }), destructive: true, disabled: !canUpdateWorkflows || isSubmitting, onSelect: () => void onDeleteList(list.id) },
+          ]
+          return (
+            <ActionContextMenu key={list.id} entries={entries}>
+              <ListRow>
+                <Tip content={details.length > 0 ? <span className="whitespace-pre-line">{details.join('\n')}</span> : null} align="start">
+                  <span className="min-w-0 truncate text-sm font-medium text-foreground">{list.name}</span>
+                </Tip>
+                <span className="shrink-0 text-2xs tabular-nums text-muted-foreground">{formatNumber(list.items.length)}</span>
+                <span className="flex-1" />
+                {list.is_auto_collected ? (
+                  <IconButton size="icon-sm" variant="ghost" onClick={() => setViewingAutoList(list)} label={t({ ko: '보기', en: 'View' })}><Eye /></IconButton>
+                ) : (
+                  <>
+                    <IconButton size="icon-sm" variant="ghost" onClick={() => setEditingCustomList(list)} disabled={!canUpdateWorkflows || isSubmitting} label={t({ ko: '수정', en: 'Edit' })}><Pencil /></IconButton>
+                    <ActionMenuButton entries={entries} icon={Ellipsis} label={t({ ko: '더 보기', en: 'More' })} />
+                  </>
+                )}
+              </ListRow>
+            </ActionContextMenu>
+          )
+        }) : <EmptyListRow />}
+      </RowGroup>
 
       <CustomDropdownListEditorModal
         open={isCustomModalOpen}

@@ -6,6 +6,7 @@ import { usePageSettings } from '@/components/common/page-settings-context'
 import { Sheet } from '@/components/ui/sheet'
 import { EditorFooter } from '@/components/ui/editor-footer'
 import { Button } from '@/components/ui/button'
+import { LoadingState } from '@/components/ui/loading-state'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { SettingRow } from '@/components/ui/setting-row'
 import { SettingsSwitchRow } from '@/components/ui/settings-switch-row'
@@ -128,13 +129,13 @@ function SettingsEditor({ scope, scopes, title, onSelect, onClose, inline = fals
   const onSave = () => { void save().catch(() => {}) }
   const destination = pageSettingRow(scope, definition.fields[0])
   const body = <>
-    {scope === 'embedding' || scope === 'tagger' || scope === 'kaloscope' ? <p className="my-3 text-sm text-muted-foreground">{t({ ko: '활성화하면 모델을 내려받거나 색인·분석 작업이 시작될 수 있어.', en: 'Enabling can download models or start indexing and analysis.' })}</p> : null}
+    {snapshot && snapshot.values.enabled === false && (scope === 'embedding' || scope === 'tagger' || scope === 'kaloscope') ? <p className="my-3 text-sm text-muted-foreground">{t({ ko: '켜면 모델 다운로드나 색인·분석이 시작될 수 있어.', en: 'Enabling may download models or start indexing and analysis.' })}</p> : null}
     {snapshot ? scope === 'video-optimization'
       ? <VideoOptimizationTab videoOptimizationDraft={values as unknown as VideoOptimizationSettings} onPatchVideoOptimization={(changes) => apply(changes as Record<string, PageSettingValue>)} hasChanges={dirty} />
       : <div className="mt-4 space-y-4">{fieldRuns(definition.fields).map((run) => <RowGroup key={run[0].id} heading={run[0].heading ? t(run[0].heading) : undefined}>
         {run.map((field) => <SettingField key={field.id} scope={scope} field={field} value={values[field.id]} disabled={saving} onChange={(value) => apply({ [field.id]: value })} />)}
       </RowGroup>)}</div>
-      : query.isPending ? <p className="py-6">{t({ ko: '설정 불러오는 중…', en: 'Loading settings…' })}</p> : null}
+      : query.isPending ? <LoadingState label={t({ ko: '설정 불러오는 중…', en: 'Loading settings…' })} /> : null}
     {error || query.error ? <p role="alert" className="mt-4 text-sm text-destructive">{error ?? query.error?.message}</p> : null}
   </>
   if (inline) return <div>{body}<div className="mt-4 flex justify-end gap-2"><Button type="button" variant="ghost" disabled={!dirty || saving} onClick={() => void reload()}>{t({ ko: '되돌리기', en: 'Revert' })}</Button><Button type="button" disabled={!dirty || saving || !snapshot} onClick={onSave}>{t({ ko: '저장', en: 'Save' })}</Button></div></div>

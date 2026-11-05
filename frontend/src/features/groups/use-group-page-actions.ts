@@ -18,7 +18,7 @@ import {
 } from '@/lib/api-groups'
 import { useRuntimeJobAction } from '@/lib/use-runtime-job'
 import type { RuntimeJobRecord } from '@/types/runtime-job'
-import { withChatMediaDeleteWarning } from '@/features/images/chat-media-delete-warning'
+import { useConfirmImageDelete } from '@/features/images/chat-media-delete-warning'
 import { removeBulkDeletedImagesFromListCaches } from '@/features/images/image-list-cache'
 import { useImageDeleteUndo } from '@/features/images/use-image-delete-undo'
 import { deleteImagesBulk } from '@/lib/api-images'
@@ -90,6 +90,7 @@ export function useGroupPageActions({
   const { t, formatNumber } = useI18n()
   const queryClient = useQueryClient()
   const confirm = useConfirm()
+  const confirmDelete = useConfirmImageDelete()
   const notifyImageDeleted = useImageDeleteUndo()
   const { canDeleteImages } = useImagePermissions()
   const [groupDialog, setGroupDialog] = useState<GroupBulkDialogState | null>(null)
@@ -471,12 +472,7 @@ export function useGroupPageActions({
       return
     }
 
-    const confirmed = await confirm({
-      title: t({ ko: '선택 항목 삭제', en: 'Delete selected items' }),
-      description: await withChatMediaDeleteWarning(t({ ko: '선택한 {count}개 항목을 삭제할까? 삭제 보호가 켜져 있으면 휴지통으로 보내고 되돌릴 수 있어. 꺼져 있으면 영구 삭제돼.', en: 'Delete {count} selected items? With deletion protection on, files move to the Recycle Bin and can be undone. Otherwise they are permanently deleted.' }, { count: formatNumber(selectedGroupCompositeHashes.length) }), selectedGroupCompositeHashes, t),
-      confirmLabel: t({ ko: '삭제', en: 'Delete' }),
-      tone: 'destructive',
-    })
+    const confirmed = await confirmDelete(selectedGroupCompositeHashes, t({ ko: '선택한 {count}개 삭제', en: 'Delete {count} selected items' }, { count: formatNumber(selectedGroupCompositeHashes.length) }))
     if (!confirmed) {
       return
     }

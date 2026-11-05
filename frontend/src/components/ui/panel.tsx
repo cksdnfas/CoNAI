@@ -49,6 +49,11 @@ const panelVariants = cva('min-w-0', {
     treatment: {
       drop: 'overflow-hidden border-2 border-dashed border-outline-input hover:border-primary/30 data-[drag-active=true]:border-primary data-[drag-active=true]:bg-primary/6 data-[drag-active=true]:hover:bg-primary/6',
       floating: floatingSurfaceClassName,
+      composer: 'relative bg-field transition-shadow focus-within:ring-2 focus-within:ring-primary/15 data-[narrating=true]:focus-within:ring-narration-edge data-[drag-active=true]:ring-2 data-[drag-active=true]:ring-primary/50',
+    },
+    backdrop: {
+      true: 'bg-background/85 backdrop-blur-sm',
+      false: '',
     },
   },
   compoundVariants: [
@@ -84,14 +89,14 @@ type PanelProps = ComponentProps<'div'> & VariantProps<typeof panelVariants> & {
 }
 
 /** Render a tonal panel: the building block for ad-hoc boxes that are not a full Section. */
-function Panel({ className, tone, padding, radius, stack, interactive, treatment, asChild = false, ...props }: PanelProps) {
+function Panel({ className, tone, padding, radius, stack, interactive, treatment, backdrop, asChild = false, ...props }: PanelProps) {
   const Comp = asChild ? Slot.Root : 'div'
 
   return (
     <Comp
       data-slot="panel"
       data-surface={treatment === 'floating' ? 'high' : PANEL_SURFACE[tone ?? 'low']}
-      className={cn(panelVariants({ tone, padding, radius, stack, interactive, treatment }), className)}
+      className={cn(panelVariants({ tone, padding, radius, stack, interactive, treatment, backdrop }), className)}
       {...props}
     />
   )

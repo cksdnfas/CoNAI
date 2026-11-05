@@ -553,7 +553,7 @@ export function CodexGenerationPanel({
 
   const editorBlocks: Record<CodexEditorBlock, ReactNode> = {
     model: (
-      <Tip content={t({ ko: 'Codex 실행 모델: 프롬프트를 해석하고 이미지를 만드는 에이전트 모델', en: 'Codex agent model: the agent that reads the prompt and makes the image' })}>
+      <Tip content={t({ ko: '프롬프트를 해석하고 이미지를 만들 모델 고르기', en: 'Choose the model that reads the prompt and makes the image' })}>
         <div>
           <CodexModelSelect
             value={codexForm.model}
@@ -606,7 +606,7 @@ export function CodexGenerationPanel({
     ),
     images: (
       <Section variant="settings" heading={t({ ko: '이미지', en: 'Images' })} className="@container">
-        <Tip content={t({ ko: '이미지 사용 방식: 참조로만 쓸지, 원본을 직접 편집할지', en: 'Image usage: reference only, or edit the source directly' })}>
+        <Tip content={t({ ko: '참조로 쓸지 원본을 편집할지 고르기', en: 'Choose whether to reference or edit the source image' })}>
           <Select aria-label={t({ ko: '이미지 사용 방식', en: 'Image usage' })} value={codexForm.imageMode} onChange={(event) => setCodexForm((current) => ({ ...current, imageMode: event.target.value === 'edit' ? 'edit' : 'reference', maskImage: undefined, strictPreservation: false }))}>
             <option value="reference">{t({ ko: '새 이미지 생성 · 참조 (t2i)', en: 'New image · reference (t2i)' })}</option>
             <option value="edit">{t({ ko: '원본 이미지 편집 (i2i)', en: 'Edit source image (i2i)' })}</option>

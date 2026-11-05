@@ -3,6 +3,7 @@ import { Download, LoaderCircle, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
+import { FieldInfo } from '@/components/ui/field'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { RuntimeJobProgress } from '@/components/common/runtime-job-progress'
@@ -98,7 +99,10 @@ export function SpriteSourceNormalizeTab({ active }: { active: boolean }) {
           </MiniField>
         </> : null}
         <MiniField label={t({ ko: '저장 그룹 경로 (기본: 스프라이트)', en: 'Save group path (default: 스프라이트)' })}><Input value={groupPath} onChange={(event) => setGroupPath(event.target.value)} /></MiniField>
-        <p className="text-xs text-muted-foreground">{t({ ko: '투명화하지 않고 지정색 위에 불투명 PNG로 저장해. 테두리 검사 실패는 결과에 표시돼.', en: 'Saves opaque PNGs on the key colour, not transparent sprites. Failed border checks are flagged in the results.' })}</p>
+        <div className="flex items-center gap-1 text-xs text-muted-foreground">
+          <span>{t({ ko: '저장 방식', en: 'Save format' })}</span>
+          <FieldInfo>{t({ ko: '투명화하지 않고 지정색 위에 불투명 PNG로 저장해. 테두리 검사 실패는 결과에 표시돼.', en: 'Saves opaque PNGs on the key colour, not transparent sprites. Failed border checks are flagged in the results.' })}</FieldInfo>
+        </div>
       </SpriteSection>
       <SpriteActionBar>
         <span className="flex-1" />

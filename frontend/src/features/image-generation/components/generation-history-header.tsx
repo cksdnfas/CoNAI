@@ -3,9 +3,10 @@ import { Tip } from '@/components/ui/tooltip'
 import type { ReactNode } from 'react'
 import { ArrowLeft, ListX, RefreshCw, Trash2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
+import { CountBadge } from '@/components/ui/count-badge'
+import { ActionMenuButton } from '@/components/ui/action-menu'
 import { Heading } from '@/components/ui/heading'
 import { IconButton } from '@/components/ui/icon-button'
-import { Spinner } from '@/components/ui/loading-state'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 
@@ -97,42 +98,21 @@ export function GenerationHistoryHeader({
             <Tip content={scopeSummary} className="whitespace-pre-line">
               <Badge variant="outline" className="tabular-nums" tabIndex={0} aria-label={scopeSummary}>{historyTotalLabel}</Badge>
             </Tip>
-            {isRefreshing ? <Spinner size="sm" label={t({ ko: '새로고침 중…', en: 'Refreshing…' })} /> : null}
           </div>
         </div>
       )}
 
       <div className="flex shrink-0 flex-wrap items-center gap-1">
-        {inFlightHistoryCount > 0 ? <Badge variant="info">{t({ ko: '작업 진행 중', en: 'Jobs in progress' })}</Badge> : null}
-        {hideScopeActions ? null : (
-        <>
-        <IconButton
-          size="icon-sm"
-          variant="ghost"
-          onClick={() => void handleClearHistory()}
-          disabled={isClearingHistory || historyRecordCount === 0}
-          label={isClearingHistory
-            ? t({ ko: '히스토리 비우는 중', en: 'Clearing history' })
-            : isPublicView
-              ? t({ ko: '내 히스토리 비우기', en: 'Clear my history' })
-              : t({ ko: '히스토리 비우기', en: 'Clear history' })}
-        >
-          {isClearingHistory ? <Spinner /> : <ListX />}
-        </IconButton>
-        <IconButton
-          size="icon-sm"
-          variant="ghost"
-          onClick={handleCleanupFailed}
-          disabled={isCleaningFailed || cleanupFailedHistoryCount === 0}
-          label={isCleaningFailed ? t('image-generation.components.generation.history.panel.cleaning.failed.items') : t('image-generation.components.generation.history.panel.clean.failed.items')}
-        >
-          <Trash2 />
-        </IconButton>
-        </>
-        )}
-        <IconButton size="icon-sm" variant="ghost" onClick={() => void refreshHistory({ watchForNewRows: true })} label={t('image-generation.components.generation.history.panel.refresh.history')}>
-          <RefreshCw className={cn(isFetching && 'animate-spin')} />
-        </IconButton>
+        {hideScopeActions ? null : <ActionMenuButton label={t({ ko: '더 보기', en: 'More' })} entries={[
+          { key: 'clear', icon: ListX, label: isClearingHistory ? t({ ko: '히스토리 비우는 중', en: 'Clearing history' }) : isPublicView ? t({ ko: '내 히스토리 비우기', en: 'Clear my history' }) : t({ ko: '히스토리 비우기', en: 'Clear history' }), disabled: isClearingHistory || historyRecordCount === 0, onSelect: () => void handleClearHistory() },
+          { key: 'clean-failed', icon: Trash2, label: isCleaningFailed ? t('image-generation.components.generation.history.panel.cleaning.failed.items') : t('image-generation.components.generation.history.panel.clean.failed.items'), disabled: isCleaningFailed || cleanupFailedHistoryCount === 0, onSelect: () => void handleCleanupFailed() },
+        ]} />}
+        <span className="relative inline-flex">
+          <IconButton size="icon-sm" variant="ghost" onClick={() => void refreshHistory({ watchForNewRows: true })} label={t('image-generation.components.generation.history.panel.refresh.history')}>
+            <RefreshCw className={cn((isFetching || isRefreshing) && 'animate-spin')} />
+          </IconButton>
+          {inFlightHistoryCount > 0 ? <CountBadge size="xs" corner="top-right" count={inFlightHistoryCount} label={t({ ko: '진행 중인 작업 {count}개', en: '{count} jobs in progress' }, { count: inFlightHistoryCount })} /> : null}
+        </span>
       </div>
     </div>
   )

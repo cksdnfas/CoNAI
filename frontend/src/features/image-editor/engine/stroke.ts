@@ -36,12 +36,14 @@ export class StrokeSession {
   private readonly style: StrokeStyle
   private readonly backup: HTMLCanvasElement
   private readonly buffer: HTMLCanvasElement
+  private readonly selection: { path: Path2D; rule?: CanvasFillRule } | null
 
-  constructor(layer: RasterLayer, style: StrokeStyle, backup: HTMLCanvasElement, buffer: HTMLCanvasElement) {
+  constructor(layer: RasterLayer, style: StrokeStyle, backup: HTMLCanvasElement, buffer: HTMLCanvasElement, selection: { path: Path2D; rule?: CanvasFillRule } | null = null) {
     this.layer = layer
     this.style = style
     this.backup = backup
     this.buffer = buffer
+    this.selection = selection
     const backupContext = context2d(backup)
     backupContext.globalCompositeOperation = 'copy'
     backupContext.drawImage(layer.canvas, 0, 0)
@@ -81,6 +83,7 @@ export class StrokeSession {
 
     const context = this.layer.context
     context.save()
+    if (this.selection) context.clip(this.selection.path, this.selection.rule)
     context.globalAlpha = 1
     context.globalCompositeOperation = 'source-over'
     context.clearRect(rect.x, rect.y, rect.width, rect.height)

@@ -213,7 +213,7 @@ function WorkflowReservationsPanelContent() {
   const handleDeleteSchedule = async (scheduleId: number) => {
     const confirmed = await confirm({
       title: t({ ko: '예약 작업 삭제', en: 'Delete reservation job' }),
-      description: t({ ko: '이 예약 작업을 정말 삭제할까? 연결된 queued 예약 실행도 함께 정리될 수 있어.', en: 'Delete this reservation job? Linked queued reservation runs may be cleaned up too.' }),
+      description: t({ ko: '이 예약 작업을 삭제할까? 연결된 대기 중 실행도 함께 삭제될 수 있어.', en: 'Delete this scheduled job? Its waiting runs may also be removed.' }),
       confirmLabel: t({ ko: '삭제', en: 'Delete' }),
       tone: 'destructive',
     })

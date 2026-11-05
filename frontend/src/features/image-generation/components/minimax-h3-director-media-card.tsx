@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState, type DragEvent, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react'
-import { Film, ImageIcon, Music2, RefreshCw, Trash2 } from 'lucide-react'
+import { Film, ImageIcon, MoreHorizontal, Music2, RefreshCw, Trash2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { floatingSurfaceClassName } from '@/components/ui/floating-surface'
+import { IconButton } from '@/components/ui/icon-button'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Tip } from '@/components/ui/tooltip'
 import { buildWorkflowInputAssetUrl, type WorkflowInputAssetRef } from '@/lib/api-workflow-input-assets'
 import { cn } from '@/lib/utils'
@@ -26,7 +26,7 @@ type MiniMaxH3DirectorMediaCardProps = {
   replaceLabel: string
   deleteLabel: string
   menuLabel: string
-  onToggleMenu: () => void
+  onMenuOpenChange: (open: boolean) => void
   onRequestReplace: () => void
   onDelete: () => void
   onReplaceFile: (file: File) => void
@@ -127,7 +127,7 @@ export function MiniMaxH3DirectorMediaCard({
   replaceLabel,
   deleteLabel,
   menuLabel,
-  onToggleMenu,
+  onMenuOpenChange,
   onRequestReplace,
   onDelete,
   onReplaceFile,
@@ -196,7 +196,7 @@ export function MiniMaxH3DirectorMediaCard({
     }
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault()
-      onToggleMenu()
+      onMenuOpenChange(!menuOpen)
     }
   }
 
@@ -270,7 +270,7 @@ export function MiniMaxH3DirectorMediaCard({
         if (disabled || suppressClickRef.current || isInteractiveTarget(event.target)) {
           return
         }
-        onToggleMenu()
+        onMenuOpenChange(!menuOpen)
       }}
       className={cn(
         // Tonal card on the lane tray; states read as rings instead of a recoloured outline.
@@ -293,16 +293,17 @@ export function MiniMaxH3DirectorMediaCard({
         </div>
       ) : null}
 
-      {menuOpen && !disabled ? (
-        <div data-minimax-interactive="true" data-surface="high" role="menu" aria-label={menuLabel} className={cn('absolute inset-x-2 top-11 z-20 overflow-hidden p-1', floatingSurfaceClassName)}>
-          <Button type="button" variant="nav" size="compact" role="menuitem" onClick={(event) => { event.stopPropagation(); onRequestReplace() }}>
-            <RefreshCw />{replaceLabel}
-          </Button>
-          <Button type="button" variant="destructive-ghost" size="compact" role="menuitem" className="w-full justify-start" onClick={(event) => { event.stopPropagation(); onDelete() }}>
-            <Trash2 />{deleteLabel}
-          </Button>
+      <DropdownMenu open={menuOpen && !disabled} onOpenChange={(open) => { if (!disabled) onMenuOpenChange(open) }}>
+        <div data-minimax-interactive="true" className="absolute top-2 right-2">
+          <DropdownMenuTrigger asChild>
+            <IconButton variant="overlay" size="icon-sm" label={menuLabel} disabled={disabled}><MoreHorizontal /></IconButton>
+          </DropdownMenuTrigger>
         </div>
-      ) : null}
+        <DropdownMenuContent data-minimax-interactive="true" aria-label={menuLabel} align="end">
+          <DropdownMenuItem onSelect={onRequestReplace}><RefreshCw />{replaceLabel}</DropdownMenuItem>
+          <DropdownMenuItem variant="destructive" onSelect={onDelete}><Trash2 />{deleteLabel}</DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </div>
   )
 }

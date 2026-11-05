@@ -6,7 +6,6 @@ import { useQuery } from '@tanstack/react-query'
 import { CountSummary } from '@/components/ui/count-summary'
 import { EmptyState } from '@/components/ui/empty-state'
 import { ErrorState } from '@/components/ui/error-state'
-import { LoadingState } from '@/components/ui/loading-state'
 import { PageToolbar } from '@/components/common/page-toolbar'
 import { Section } from '@/components/ui/section'
 import { Button } from '@/components/ui/button'
@@ -135,6 +134,7 @@ export function HomePage() {
   const deleteDescription = useChatMediaDeleteDescription(selectedCompositeHashes, canDeleteImages && chatPage?.enabled === true)
   const navigate = useNavigate()
   const chatOpenableHashes = chatCanReadImages ? visibleImages.slice(0, 100).map((image) => image.composite_hash ?? '').filter(Boolean) : []
+  const selectedImageIdSet = new Set(selectedIds)
   // The chat gets the scopes the search drawer shows: 설명 (meaning) only while image search is on.
   const viewerSettingsQuery = useQuery({ queryKey: ['image-viewer-settings'], queryFn: getImageViewerSettings, staleTime: 60_000, enabled: canViewHome && !isAnonymousSession })
   const canSearchByMeaning = viewerSettingsQuery.data?.search?.imageSearch === true
@@ -258,18 +258,10 @@ export function HomePage() {
           <div className="flex items-center gap-3 text-sm">
             {/* The one count on Home: the real total ("계산 중" until the deferred count arrives). */}
             <CountSummary {...feedCountState} unit={COUNT_UNITS.images} />
-            {imagesQuery.isRefetching && !imagesQuery.isFetchingNextPage ? (
-              <LoadingState variant="inline" spinnerSize="sm" label={t({ ko: '새로고침 중…', en: 'Refreshing…' })} />
-            ) : null}
           </div>
         ) : undefined}
         actions={(
           <>
-            {!isAnonymousSession && appliedChips.length > 0 ? (
-              <IconButton size="icon-sm" variant="ghost" label={t({ ko: '필터 모두 지우기', en: 'Clear all filters' })} onClick={clearAppliedChips}>
-                <X className="size-4" />
-              </IconButton>
-            ) : null}
             <HomeSortMenu value={sortOrder} onChange={setSortOrder} meaningOrder={isMeaningSearch} />
             {!isAnonymousSession ? (
               <HomeGalleryOptionsMenu
@@ -285,7 +277,10 @@ export function HomePage() {
         )}
       >
         {!isAnonymousSession && appliedChips.length > 0 ? (
-          <SearchChipStrip chips={appliedChips} onCycleOperator={cycleAppliedChipOperator} onRemove={removeAppliedChip} />
+          <div className="flex min-w-0 items-center gap-1">
+            <SearchChipStrip chips={appliedChips} onCycleOperator={cycleAppliedChipOperator} onRemove={removeAppliedChip} />
+            <IconButton size="icon-sm" variant="ghost" label={t({ ko: '필터 모두 지우기', en: 'Clear all filters' })} onClick={clearAppliedChips}><X /></IconButton>
+          </div>
         ) : null}
       </PageToolbar>
 
@@ -412,6 +407,7 @@ export function HomePage() {
             onDownloadSelect={handleDownloadSelected}
             onClear={() => setSelectedIds([])}
             loadedCount={visibleImages.length}
+            allLoadedSelected={visibleImages.length > 0 && visibleImages.every((image) => selectedImageIdSet.has(getHomeImageSelectionId(image)))}
             onSelectAllLoaded={() => setSelectedIds(visibleImages.map(getHomeImageSelectionId))}
           />
 

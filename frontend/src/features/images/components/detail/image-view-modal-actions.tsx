@@ -1,6 +1,6 @@
 import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { ExternalLink, RefreshCcw, X } from 'lucide-react'
+import { Download, ExternalLink, RefreshCcw, X } from 'lucide-react'
 import { ActionMenuButton, type ActionMenuEntry } from '@/components/ui/action-menu'
 import { IconButton } from '@/components/ui/icon-button'
 import { useI18n } from '@/i18n'
@@ -86,11 +86,9 @@ export function ImageViewModalActions({
         </IconButton>
       ) : null}
       {/* The record is refetched every time the viewer opens (staleTime 0); a manual refresh only helps while it is still processing. */}
-      {controls.image?.is_processing ? (
-        <IconButton size="icon-sm" variant="overlay" onClick={controls.refresh} disabled={controls.isRefreshing} label={t('images.components.detail.image.view.modal.actions.refresh')}>
-          <RefreshCcw className={controls.isRefreshing ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} />
-        </IconButton>
-      ) : null}
+      <IconButton size="icon-sm" variant="overlay" onClick={controls.refresh} disabled={controls.isRefreshing || !controls.image?.is_processing} label={controls.image?.is_processing ? t('images.components.detail.image.view.modal.actions.refresh') : t({ ko: '처리 중인 이미지가 없어', en: 'No image is being processed' })}>
+        <RefreshCcw className={controls.isRefreshing ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} />
+      </IconButton>
     </>
   )
 
@@ -103,7 +101,7 @@ export function ImageViewModalActions({
 
   const groupAssignButton = allowGroupAssignAction ? <ImageGroupAssignAction image={controls.image} variant="overlay" /> : null
   const editButton = allowEditAction && permissions.canEditImages ? <ImageEditAction image={controls.image} variant="overlay" open={controls.editOpen} onOpenChange={controls.onEditOpenChange} /> : null
-  const downloadButton = controls.downloadUrl ? <ImageDownloadTriggerButton image={controls.image} variant="overlay" /> : null
+  const downloadButton = controls.downloadUrl ? <ImageDownloadTriggerButton image={controls.image} variant="overlay" /> : <IconButton size="icon-sm" variant="overlay" disabled label={t({ ko: '다운로드할 파일이 없어', en: 'No file is available to download' })}><Download /></IconButton>
   // Secondary actions share one ⋯ menu so the toolbar over the photo stays short.
   const moreEntries: ActionMenuEntry[] = [
     allowEditAction && permissions.canEditMetadata ? metadataEditAction : null,
