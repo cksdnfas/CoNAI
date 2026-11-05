@@ -47,7 +47,7 @@ test('mcp posts and file version tools', { timeout: 120000 }, async (t) => {
   const KEYS = ['posts.view', 'posts.write', 'posts.comment', 'files.view', 'files.edit']
   const writerId = addAccount('writer', KEYS)
   const otherId = addAccount('other', KEYS)
-  const adminId = addAccount('admin', [...KEYS, 'posts.evaluate'], 'admin')
+  const adminId = addAccount('admin', [...KEYS, 'posts.evaluate', 'images.view', 'images.upload', 'images.edit'], 'admin')
   invalidateConfiguredAuthCache()
 
   const { createMcpServer } = await import('../src/mcp/server')
@@ -61,6 +61,12 @@ test('mcp posts and file version tools', { timeout: 120000 }, async (t) => {
   const { ChatProfileStore } = await import('../src/services/codex-chat/chatProfiles')
   const { CodexChatStore } = await import('../src/services/codex-chat/codexChatStore')
   const { FileStoreService, fileOwnerKey } = await import('../src/services/fileStoreService')
+  const { BackgroundQueueService } = await import('../src/services/backgroundQueue')
+  const { MediaPostprocessCoordinator } = await import('../src/services/background-media/mediaPostprocessCoordinator')
+  const { skippedStage } = await import('../src/services/background-media/mediaProcessingTypes')
+  // Library imports queue metadata extraction and auto-tagging, which would outlive the scratch databases.
+  t.mock.method(BackgroundQueueService, 'addMetadataExtractionTask', () => {})
+  t.mock.method(MediaPostprocessCoordinator, 'triggerAutoTagProcessing', () => skippedStage('auto-tag', 'test'))
   type Requester = { accountId: number; accountType: 'guest' | 'admin' }
   const connect = async (requester: Requester) => {
     const mcp = createMcpServer({ scopes: [...ALL_MCP_HTTP_SCOPES], source: 'http', requester, keyId: `test-key:${requester.accountId}` })
@@ -194,6 +200,165 @@ test('mcp posts and file version tools', { timeout: 120000 }, async (t) => {
       assert.ok(isContextToolAllowed(context, 'post_comment_edit'), 'a call may still fix its own answer')
     } finally {
       release()
+    }
+  })
+
+  await t.test('binary files enforce upload policy, refuse collisions and stay out of text history', async () => {
+    const { validateMcpRequestBody, validateMcpToolArguments } = await import('../src/mcp/requestSecurity')
+    const { chatAttachmentOwner } = await import('../src/services/fileStoreService')
+    const { refreshFileSearchIndex } = await import('../src/services/fileStoreSearch')
+    const bytes = Buffer.from([0, 255, 128, 17])
+    const args = { name: '바이너리.png', data_url: `data:application/octet-stream;base64,${bytes.toString('base64')}` }
+    const folder = ok(await call(writer, 'create_file_folder', { name: 'binary-policy' }))
+    const file = ok(await call(writer, 'write_binary_file', { ...args, parent_id: folder.id }))
+    assert.equal(file.mimeType, 'image/png', 'the extension, not application/octet-stream, determines media rating eligibility')
+    assert.deepEqual(fs.readFileSync(FileStoreService.resolveFile(fileOwnerKey(otherId), file.id).filePath), bytes)
+    assert.equal((await call(writer, 'write_binary_file', { ...args, parent_id: folder.id })).isError, true)
+    const replaced = ok(await call(writer, 'write_binary_file', { ...args, parent_id: folder.id, overwrite: true }))
+    assert.equal(replaced.id, file.id)
+    assert.deepEqual(ok(await call(writer, 'list_file_versions', { file_id: file.id })).versions, [])
+    assert.equal((await call(writer, 'read_file_text', { file_id: file.id })).isError, true)
+    await refreshFileSearchIndex(fileOwnerKey(writerId), file.id)
+    const indexed = user.getUserSettingsDb().prepare("SELECT extraction_state, body FROM search_db.search_documents WHERE source = 'file' AND source_id = ?").get(file.id) as { extraction_state: string; body: string }
+    assert.equal(indexed.extraction_state, 'unsupported')
+    assert.equal(indexed.body, '')
+    assert.equal((await call(writer, 'write_binary_file', { ...args, name: 'blocked.exe' })).isError, true)
+    ok(await call(admin, 'write_binary_file', { ...args, name: 'allowed.exe' }))
+    assert.equal((await call(writer, 'write_binary_file', { ...args, data_url: 'data:application/octet-stream;base64,!!!!' })).isError, true)
+    const download = ok(await call(other, 'get_file_download', { file_id: file.id }))
+    assert.equal(download.download_path, `/api/files/${file.id}/download`)
+    assert.equal(download.requires_login, true)
+    const privateSource = path.join(root, 'private-binary.part')
+    fs.writeFileSync(privateSource, bytes)
+    const [privateFile] = FileStoreService.upload(chatAttachmentOwner(writerId), null, [{ path: privateSource, originalname: 'private.png', size: bytes.length, mimetype: 'image/png' } as Express.Multer.File])
+    assert.equal((await call(writer, 'get_file_download', { file_id: privateFile.id })).isError, true)
+    assert.equal((await call(admin, 'import_files_to_library', { file_ids: [privateFile.id], group_path: 'Never private' })).data.items[0].status, 'error')
+    assert.throws(() => validateMcpToolArguments(args), /Unsupported MCP media MIME/)
+    const { callPluginAppTool } = await import('../src/services/plugins/pluginAppBridge')
+    for (const mime of ['application/pdf', 'image/png']) {
+      const reply = await callPluginAppTool({ scopes: ['organize'], requester: { accountId: writerId, accountType: 'guest' } }, 'write_binary_file', {
+        name: mime === 'application/pdf' ? 'plugin-document.pdf' : 'plugin-image.png', data_url: `data:${mime};base64,${bytes.toString('base64')}`,
+      }) as { isError?: boolean; content: Array<{ text: string }> }
+      assert.notEqual(reply.isError, true, reply.content[0]?.text)
+    }
+    let accepted = false
+    validateMcpRequestBody({ method: 'POST', body: { jsonrpc: '2.0', method: 'tools/call', params: { name: 'write_binary_file', arguments: args } } } as never, {
+      status: () => { throw new Error('Binary file request was rejected') },
+    } as never, () => { accepted = true })
+    assert.equal(accepted, true)
+    const { registerChatReply } = await import('../src/services/codex-chat/chatReplyRegistry')
+    ;(await import('../src/services/codex-chat/chatSettings')).updateChatSettings({ enabled: true })
+    AuthPermissionGroup.addAccountMembership(AuthPermissionGroup.createCustomGroup({ name: 'binary-chat', permissionKeys: ['chat.use'] }).id, adminId)
+    const chat = { ...chatContext(), source: 'llm-chat' as const }
+    const closeReply = registerChatReply(chat.chatContext, new AbortController().signal, () => ({ replyId: chat.chatContext.replyId, replyTo: null, recipients: ['user'] }))
+    const chatServer = createMcpServer({ ...chat, toolCatalog: false })
+    const chatClient = new Client({ name: 'binary-chat-test', version: '1' })
+    const [chatTransport, serverTransport] = InMemoryTransport.createLinkedPair()
+    try {
+      await Promise.all([chatServer.connect(serverTransport), chatClient.connect(chatTransport)])
+      ok(await call(chatClient, 'write_binary_file', { ...args, name: 'chat-binary.png' }))
+    } finally { closeReply(); await chatClient.close(); await chatServer.close() }
+    const release = BoardCallRooms.bind(threadId, 99, profile.id)
+    try {
+      for (const name of ['write_binary_file', 'copy_library_media_to_files', 'import_files_to_library', 'get_file_download']) assert.equal(isContextToolAllowed(chatContext(), name), false, name)
+    } finally { release() }
+  })
+
+  await t.test('library originals round trip through shared files into an explicit group without importing non-media', async () => {
+    const sharp = (await import('sharp')).default
+    const { findLibraryMedia } = await import('../src/services/sprite/spriteLibrary')
+    const { GroupPathService } = await import('../src/services/groupPathService')
+    const { ImageGroupModel } = await import('../src/models/Group')
+    const { ImageSafetyService } = await import('../src/services/imageSafetyService')
+    const { RatingScoreModel } = await import('../src/models/RatingScore')
+    const { BackgroundQueueService } = await import('../src/services/backgroundQueue')
+    const media = await sharp({ create: { width: 3, height: 2, channels: 3, background: '#123456' } }).png().toBuffer()
+    const folder = ok(await call(admin, 'create_file_folder', { name: 'media-round-trip' }))
+    const original = ok(await call(admin, 'write_binary_file', { parent_id: folder.id, name: 'original.png', data_url: `data:image/png;base64,${media.toString('base64')}` }))
+    const doc = ok(await call(admin, 'write_text_file', { parent_id: folder.id, name: 'not-media.txt', text: 'not an image' }))
+    const imported = ok(await call(admin, 'import_files_to_library', { file_ids: [original.id, doc.id], group_path: 'File round trip/Originals' }))
+    const hash = imported.items[0].composite_hash
+    assert.match(hash, /^[a-f0-9]{32}(?:[a-f0-9]{16})?$/)
+    assert.equal(imported.items[1].status, 'skipped')
+    assert.ok(ImageGroupModel.isImageInGroup(imported.group_id, hash))
+    assert.deepEqual(fs.readFileSync(findLibraryMedia(hash)!.filePath), media)
+    assert.equal(await BackgroundQueueService.trackMetadataExtractionTask(findLibraryMedia(hash)!.filePath, hash), true)
+    const copied = ok(await call(admin, 'copy_library_media_to_files', { composite_hashes: [hash], parent_id: folder.id }))
+    assert.equal(copied.items[0].status, 'copied', JSON.stringify(copied.items))
+    const copiedId = copied.items[0].file_id
+    assert.deepEqual(fs.readFileSync(FileStoreService.resolveFile(fileOwnerKey(otherId), copiedId).filePath), media)
+    const target = GroupPathService.resolveOrCreate('File round trip/Returned').groupId
+    const returned = ok(await call(admin, 'import_files_to_library', { file_ids: [copiedId], group_id: target }))
+    assert.equal(returned.items[0].composite_hash, hash)
+    assert.ok(ImageGroupModel.isImageInGroup(target, hash))
+    assert.deepEqual(fs.readFileSync(FileStoreService.resolveFile(fileOwnerKey(adminId), original.id).filePath), media)
+    const metadata = main.db.prepare('SELECT rating_score FROM media_metadata WHERE composite_hash = ?').get(hash) as { rating_score: number | null }
+    const hidden = RatingScoreModel.getAllTiers().at(-1)!
+    RatingScoreModel.updateTier(hidden.id, { feed_visibility: 'hide' })
+    main.db.prepare('UPDATE media_metadata SET rating_score = ? WHERE composite_hash = ?').run(hidden.min_score, hash)
+    try {
+      assert.ok(ImageSafetyService.isHidden(hidden.min_score))
+      const skipped = ok(await call(admin, 'copy_library_media_to_files', { composite_hashes: [hash], parent_id: null }))
+      assert.equal(skipped.items[0].status, 'skipped')
+      assert.equal(skipped.items[0].file_id, undefined)
+    } finally {
+      main.db.prepare('UPDATE media_metadata SET rating_score = ? WHERE composite_hash = ?').run(metadata.rating_score, hash)
+      RatingScoreModel.updateTier(hidden.id, { feed_visibility: hidden.feed_visibility })
+    }
+  })
+
+  await t.test('library copies require the account image-view permission even when its chat profile delegates it', async () => {
+    const { registerChatReply } = await import('../src/services/codex-chat/chatReplyRegistry')
+    const accountId = addAccount('delegated-copy', ['files.view', 'files.edit', 'chat.use'])
+    const delegated = ChatProfileStore.create({
+      name: 'Delegated file copy', engine: 'llm', providerName: 'conn', mcpEnabled: true,
+      mcpScopes: ['organize'], toolAllowlist: ['copy_library_media_to_files'], delegatedPermissions: ['images.view'],
+    })
+    const chat = { threadId: CodexChatStore.createThread(accountId, 'delegated copy', 'llm', delegated.id), profileId: delegated.id, kind: 'direct' as const, replyId: 'delegated-copy-reply' }
+    const stop = registerChatReply(chat, new AbortController().signal, () => ({ replyTo: null, recipients: ['user'] }))
+    const server = createMcpServer({ scopes: ['organize'], source: 'llm-chat', requester: { accountId, accountType: 'guest' }, chatContext: chat, toolCatalog: false })
+    const client = new Client({ name: 'delegated-copy-test', version: '1' })
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
+    try {
+      await Promise.all([server.connect(serverTransport), client.connect(clientTransport)])
+      assert.ok((await names(client)).includes('copy_library_media_to_files'), 'the delegated grant reaches the normal tool boundary')
+      const args = { composite_hashes: ['a'.repeat(48)] }
+      const refused = await call(client, 'copy_library_media_to_files', args)
+      assert.equal(refused.isError, true, 'delegated images.view cannot authorize exporting a library original')
+      assert.match(refused.text, /images.view/)
+      AuthPermissionGroup.addAccountMembership(AuthPermissionGroup.createCustomGroup({ name: 'own-copy-images', permissionKeys: ['images.view'] }).id, accountId)
+      assert.equal(ok(await call(client, 'copy_library_media_to_files', args)).items[0].status, 'skipped', 'own permission allows lookup of the missing item')
+    } finally { stop(); await client.close(); await server.close() }
+  })
+
+  await t.test('library imports validate bytes before creating groups or copying unsupported stored files', async () => {
+    const folder = ok(await call(admin, 'create_file_folder', { name: 'import-validation' }))
+    const fake = ok(await call(admin, 'write_binary_file', { name: 'disguised.png', parent_id: folder.id, data_url: `data:application/octet-stream;base64,${Buffer.from('not an image').toString('base64')}` }))
+    const doc = ok(await call(admin, 'write_text_file', { name: 'ordinary.txt', parent_id: folder.id, text: 'not media' }))
+    const groupsBefore = main.db.prepare('SELECT COUNT(*) AS count FROM groups').get()
+    const mediaBefore = main.db.prepare('SELECT COUNT(*) AS count FROM image_files').get()
+    const imported = ok(await call(admin, 'import_files_to_library', { file_ids: [folder.id, doc.id, fake.id], group_path: 'Import validation/No empty group' }))
+    assert.equal(imported.group_id, null)
+    assert.deepEqual(imported.items.map((item: { status: string }) => item.status), ['skipped', 'skipped', 'error'])
+    assert.deepEqual(main.db.prepare('SELECT COUNT(*) AS count FROM groups').get(), groupsBefore)
+    assert.deepEqual(main.db.prepare('SELECT COUNT(*) AS count FROM image_files').get(), mediaBefore)
+  })
+
+  await t.test('binary overwrite refuses chat and post references without changing their originals', async () => {
+    const bytes = Buffer.from([0, 1, 2, 255])
+    const data_url = `data:application/octet-stream;base64,${bytes.toString('base64')}`
+    const chatFile = ok(await call(writer, 'write_binary_file', { name: 'chat-protected.png', data_url }))
+    CodexChatStore.addMessage({
+      thread_id: threadId, role: 'user', content: 'Keep this original', display_content: null,
+      tool_calls: [], status: 'completed', error: null, flags: [], mediaAttachments: [], routing: undefined,
+    }, [chatFile.id])
+    const postFile = ok(await call(writer, 'write_binary_file', { name: 'post-protected.png', data_url }))
+    ok(await call(writer, 'posts_create', { title: 'Protected original', body: `![original](file:${postFile.id})` }))
+    for (const file of [chatFile, postFile]) {
+      const overwritten = await call(writer, 'write_binary_file', { name: file.name, data_url: 'data:application/octet-stream;base64,cmVwbGFjZWQ=', overwrite: true })
+      assert.equal(overwritten.isError, true)
+      assert.deepEqual(fs.readFileSync(FileStoreService.resolveFile(fileOwnerKey(writerId), file.id).filePath), bytes)
+      assert.deepEqual(ok(await call(writer, 'list_file_versions', { file_id: file.id })).versions, [])
     }
   })
 

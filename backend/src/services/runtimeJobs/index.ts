@@ -15,6 +15,7 @@ import { registerSpriteJobHandlers } from '../sprite/spriteService'
 import { registerAudioExportJobHandlers } from '../audio/audioExportJob'
 import { registerAudioLegacyImportJobHandlers } from '../audio/audioLegacyImportJob'
 import { registerImageBatchResizeJobHandlers } from '../imageBatchResize/imageBatchResizeService'
+import { registerMediaEditJobHandlers } from '../mediaEdit/mediaEditService'
 import { initializeKnowledgeEvaluationRuntime, registerKnowledgeEvaluationHandler } from '../posts/knowledge/knowledgeEvaluation'
 import { initializePostTopicEvaluationRuntime, registerPostTopicEvaluationHandler } from '../posts/postTopicEvaluation'
 
@@ -57,6 +58,7 @@ export function registerRuntimeJobHandlers(): void {
   registerAudioExportJobHandlers()
   registerAudioLegacyImportJobHandlers()
   registerImageBatchResizeJobHandlers()
+  registerMediaEditJobHandlers()
   registerKnowledgeEvaluationHandler()
   registerPostTopicEvaluationHandler()
 }

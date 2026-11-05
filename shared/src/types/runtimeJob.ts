@@ -32,6 +32,7 @@ export type RuntimeJobKind =
   | 'audio-export'
   | 'audio-legacy-import'
   | 'image-batch-resize'
+  | 'media-edit'
   | 'plugin-media'
   | 'plugin-action'
   | 'plugin-llm'
@@ -68,6 +69,7 @@ export const RUNTIME_JOB_KINDS: readonly RuntimeJobKind[] = [
   'audio-export',
   'audio-legacy-import',
   'image-batch-resize',
+  'media-edit',
   'plugin-media',
   'plugin-action',
   'plugin-llm',

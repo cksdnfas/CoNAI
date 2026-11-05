@@ -101,7 +101,7 @@ function serializeResult(result: unknown, jobId: string, kind: RuntimeJobKind): 
 
   const byteLength = Buffer.byteLength(serialized, 'utf8')
   if (byteLength > RUNTIME_JOB_RESULT_MAX_BYTES) {
-    if ((kind === 'sprite-normalize' || kind === 'plugin-action' || kind === 'plugin-llm')) return JSON.stringify(storeRuntimeJobResult(jobId, serialized))
+    if ((kind === 'sprite-normalize' || kind === 'plugin-action' || kind === 'plugin-llm' || kind === 'media-edit')) return JSON.stringify(storeRuntimeJobResult(jobId, serialized))
     return JSON.stringify({ truncated: true, byte_length: byteLength })
   }
 
@@ -234,7 +234,7 @@ export class RuntimeJobStore {
     const row = db.prepare('SELECT * FROM runtime_jobs WHERE job_id = ?').get(jobId) as RuntimeJobRow | undefined
     if (!row) return null
     const job = mapRow(row)
-    if (options.includeResultFile && (job.kind === 'sprite-normalize' || job.kind === 'plugin-action' || job.kind === 'plugin-llm')) job.result = readRuntimeJobResult(jobId, job.result)
+    if (options.includeResultFile && (job.kind === 'sprite-normalize' || job.kind === 'plugin-action' || job.kind === 'plugin-llm' || job.kind === 'media-edit')) job.result = readRuntimeJobResult(jobId, job.result)
     return job
   }
 
@@ -404,9 +404,9 @@ export class RuntimeJobStore {
       WHERE job_id = ?
         AND status IN ('queued', 'running')
       `).run(serialized, ...values, jobId)
-      if (!updated.changes && (current.kind === 'sprite-normalize' || current.kind === 'plugin-action' || current.kind === 'plugin-llm')) removeRuntimeJobResult(jobId)
+      if (!updated.changes && (current.kind === 'sprite-normalize' || current.kind === 'plugin-action' || current.kind === 'plugin-llm' || current.kind === 'media-edit')) removeRuntimeJobResult(jobId)
     } catch (error) {
-      if ((current.kind === 'sprite-normalize' || current.kind === 'plugin-action' || current.kind === 'plugin-llm')) removeRuntimeJobResult(jobId)
+      if ((current.kind === 'sprite-normalize' || current.kind === 'plugin-action' || current.kind === 'plugin-llm' || current.kind === 'media-edit')) removeRuntimeJobResult(jobId)
       throw error
     }
   }

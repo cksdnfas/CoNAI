@@ -6,7 +6,7 @@ import type { NextFunction, Request, RequestHandler, Response } from 'express';
 import { UPLOAD_LIMITS } from '@conai/shared';
 import { runtimePaths } from '../config/runtimePaths';
 
-const ALLOWED_MIME_TYPES = [
+export const ALLOWED_MIME_TYPES = [
   'image/jpeg',
   'image/png',
   'image/webp',

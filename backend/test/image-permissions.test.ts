@@ -780,6 +780,42 @@ test('permissions: independent pages, features, migration, grants, scopes and ro
       assert.equal((await denied.call('generate_image', { prompt: 'no chat grant' })).isError, true)
     } finally { stop(); await denied.close(); AuthPermissionGroup.updateCustomGroup(group.id, { name: group.name, permissionKeys: ['images.view'] }) }
   })
+  await t.test('library write tools enforce feature grants and group assignment at call time', async () => {
+    const { requireMcpToolAccess } = await import('../src/mcp/toolAccess')
+    const id = Number(auth.prepare("INSERT INTO auth_accounts (username, password_hash, account_type) VALUES ('library-tool-user', 'unused', 'guest')").run().lastInsertRowid)
+    const grants = AuthPermissionGroup.createCustomGroup({ name: 'library-tool-grants', permissionKeys: ['images.upload'] })
+    AuthPermissionGroup.addAccountMembership(grants.id, id)
+    const context = () => ({ scopes: ['organize'] as ['organize'], source: 'http' as const, requester: { accountId: id, accountType: 'admin' as const } })
+    assert.doesNotThrow(() => requireMcpToolAccess(context(), 'upload_image'))
+    for (const params of [{ group_id: 1 }, { group_path: 'Not created' }]) {
+      assert.throws(() => requireMcpToolAccess(context(), 'upload_image', params), /permission|권한/i)
+    }
+    for (const name of ['update_image_metadata', 'tag_images', 'delete_images', 'restore_deleted_images']) {
+      assert.throws(() => requireMcpToolAccess(context(), name), /permission|권한/i)
+    }
+    AuthPermissionGroup.updateCustomGroup(grants.id, { name: grants.name, permissionKeys: ['images.upload', 'images.edit', 'images.delete'] })
+    for (const name of ['upload_image', 'update_image_metadata', 'tag_images', 'delete_images', 'restore_deleted_images']) {
+      assert.doesNotThrow(() => requireMcpToolAccess(context(), name, { group_path: 'Chosen group' }))
+      assert.throws(() => requireMcpToolAccess({ ...context(), scopes: ['read'] }, name), /Unknown|permitted/)
+    }
+    AuthPermissionGroup.updateCustomGroup(grants.id, { name: grants.name, permissionKeys: ['images.upload'] })
+    assert.throws(() => requireMcpToolAccess(context(), 'delete_images'), /permission|권한/i)
+    assert.throws(() => requireMcpToolAccess(context(), 'upload_image', { group_id: 1 }), /permission|권한/i)
+    AuthPermissionGroup.updateCustomGroup(grants.id, { name: grants.name, permissionKeys: ['chat.use', 'images.upload'] })
+    const { ChatProfileStore } = await import('../src/services/codex-chat/chatProfiles')
+    const { CodexChatStore } = await import('../src/services/codex-chat/codexChatStore')
+    const { registerChatReply } = await import('../src/services/codex-chat/chatReplyRegistry')
+    const profile = ChatProfileStore.create({ name: 'Library uploader', engine: 'llm', providerName: 'fixture', mcpEnabled: true, mcpScopes: ['organize'] })
+    const chatContext = { threadId: CodexChatStore.createThread(id, 'library upload', 'llm', profile.id), profileId: profile.id, kind: 'direct' as const, replyId: 'library-upload' }
+    const stop = registerChatReply(chatContext, new AbortController().signal, () => ({ replyTo: null, recipients: ['user'] }))
+    const sharp = (await import('sharp')).default
+    const png = await sharp({ create: { width: 1, height: 1, channels: 3, background: '#123456' } }).png().toBuffer()
+    try {
+      const chat = { ...context(), source: 'llm-chat' as const, chatContext }
+      assert.doesNotThrow(() => requireMcpToolAccess(chat, 'upload_image', { data_url: `data:image/png;base64,${png.toString('base64')}` }), 'incoming uploads do not require images.view')
+      assert.throws(() => requireMcpToolAccess(chat, 'upload_image', { data_url: 'data:image/png;base64,bm90LXB uZw==' }), /base64|MIME|match/)
+    } finally { stop() }
+  })
   await t.test('an after preset asks during the reply and queues the written prompt under the same grant once it ends', async (sub) => {
     const { ChatProfileStore } = await import('../src/services/codex-chat/chatProfiles')
     const { ChatGenerationPresetStore } = await import('../src/services/codex-chat/chatGenerationPresets')

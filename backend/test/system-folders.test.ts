@@ -357,6 +357,118 @@ test('administrators browse server folders and manage the RecycleBin safely', { 
     assert.equal(fs.existsSync(other), false)
   })
 
+  await t.test('MCP uploads reject mismatched or undecodable media without creating library files or rows', async (t) => {
+    const { createMcpServer } = await import('../src/mcp/server')
+    const { Client, InMemoryTransport } = await import('@modelcontextprotocol/client')
+    const server = createMcpServer({ scopes: ['organize'], source: 'http', requester: { accountId: adminId, accountType: 'admin' } })
+    const client = new Client({ name: 'library-upload-validation', version: '1' })
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)])
+    t.after(async () => { await client.close(); await server.close() })
+    const sharp = (await import('sharp')).default
+    const jpeg = await sharp({ create: { width: 3, height: 2, channels: 3, background: '#246810' } }).jpeg().toBuffer()
+    const beforeFiles = (await fs.promises.readdir(uploads, { recursive: true })).sort()
+    const rows = main.db.prepare('SELECT id, original_file_path, composite_hash, file_status FROM image_files ORDER BY id')
+    const beforeRows = rows.all()
+    for (const [mimeType, bytes] of [
+      ['image/png', jpeg],
+      ['image/png', Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.from('not a PNG')])],
+      ['image/heic', jpeg],
+    ] as const) {
+      const result = await client.callTool({ name: 'upload_image', arguments: { data_url: `data:${mimeType};base64,${bytes.toString('base64')}` } })
+      assert.equal(result.isError, true, `Invalid ${mimeType} upload must be rejected`)
+      assert.deepEqual((await fs.promises.readdir(uploads, { recursive: true })).sort(), beforeFiles)
+      assert.deepEqual(rows.all(), beforeRows)
+    }
+  })
+
+  await t.test('MCP library writes upload to a chosen group, edit, tag and round-trip only the selected deletion', async (t) => {
+    const { settingsService } = await import('../src/services/settingsService')
+    const settings = settingsService.loadSettings()
+    t.mock.method(settingsService, 'loadSettings', () => ({
+      ...settings,
+      general: { ...settings.general, deleteProtection: { ...settings.general.deleteProtection, enabled: true } },
+      tagger: { ...settings.tagger, autoTagOnUpload: false },
+      kaloscope: { ...settings.kaloscope, enabled: false, autoTagOnUpload: false },
+    }))
+    const { GroupPathService } = await import('../src/services/groupPathService')
+    const { createMcpServer } = await import('../src/mcp/server')
+    const { Client, InMemoryTransport } = await import('@modelcontextprotocol/client')
+    const server = createMcpServer({ scopes: ['read', 'organize'], source: 'http', baseUrl: origin, requester: { accountId: adminId, accountType: 'admin' } })
+    const client = new Client({ name: 'library-undo', version: '1' })
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)])
+    t.after(async () => { await client.close(); await server.close() })
+    const sharp = (await import('sharp')).default
+    const bytes = await sharp({ create: { width: 13, height: 9, channels: 3, background: '#753159' } }).png().toBuffer()
+    const upload = await client.callTool({ name: 'upload_image', arguments: {
+      data_url: `data:image/png;base64,${bytes.toString('base64')}`, name: 'mcp-library-undo.png', group_path: 'MCP undo group',
+    } })
+    assert.notEqual(upload.isError, true, JSON.stringify(upload))
+    const uploaded = JSON.parse((upload.content as Array<{ text: string }>)[0].text)
+    const hash = uploaded.composite_hash as string
+    assert.match(hash, /^[a-f0-9]{48}$/)
+    const groupId = GroupPathService.resolve('MCP undo group', { create: false })!.groupId
+    assert.equal(uploaded.group_id, groupId)
+    const storedFile = () => (main.db.prepare("SELECT original_file_path FROM image_files WHERE composite_hash = ? AND file_status = 'active'").get(hash) as { original_file_path: string }).original_file_path
+    assert.match(path.basename(storedFile()), /mcp-library-undo\.png$/)
+    assert.deepEqual(fs.readFileSync(storedFile()), bytes)
+    const { BackgroundQueueService } = await import('../src/services/backgroundQueue')
+    assert.equal(await BackgroundQueueService.trackMetadataExtractionTask(storedFile(), hash), true)
+    const download = await client.callTool({ name: 'get_media_download', arguments: { composite_hashes: [hash] } })
+    assert.match(JSON.parse((download.content as Array<{ text: string }>)[0].text).items[0].artifact.download_url, /\/download\/original$/)
+    const edited = await client.callTool({ name: 'update_image_metadata', arguments: {
+      composite_hash: hash, metadataPatch: { prompt: 'MCP undo prompt', negative_prompt: null, model: 'fixture', steps: 12, sampler: 'Euler' },
+    } })
+    assert.notEqual(edited.isError, true, JSON.stringify(edited))
+    const summary = JSON.parse((edited.content as Array<{ text: string }>)[0].text)
+    assert.equal(summary.prompt, 'MCP undo prompt')
+    assert.equal(summary.model_name, 'fixture')
+    assert.equal(summary.steps, 12)
+    assert.equal(summary.original_file_path, undefined)
+    const { imageTaggerService } = await import('../src/services/imageTaggerService')
+    t.mock.method(imageTaggerService, 'analyze', async () => ({ tagger: {
+      success: true, model: 'fixture', general: { mcp_library_tag: 0.875 }, character: {},
+      rating: { general: 1, sensitive: 0, questionable: 0, explicit: 0 },
+    } }))
+    const tagged = await client.callTool({ name: 'tag_images', arguments: { composite_hashes: [hash, 'f'.repeat(48), hash] } })
+    assert.notEqual(tagged.isError, true)
+    const tags = JSON.parse((tagged.content as Array<{ text: string }>)[0].text)
+    assert.equal(tags.success_count, 1)
+    assert.equal(tags.fail_count, 1)
+    assert.equal(tags.results[0].auto_tags.tagger.general.mcp_library_tag, 0.875)
+    assert.equal(typeof tags.results[0].rating_score, 'number')
+    const file = storedFile()
+    const deleted = await client.callTool({ name: 'delete_images', arguments: { composite_hashes: [hash, hash, 'f'.repeat(48)] } })
+    assert.notEqual(deleted.isError, true)
+    const details = JSON.parse((deleted.content as Array<{ text: string }>)[0].text).details
+    assert.equal(details.deleted, 1)
+    assert.equal(details.failed, 1)
+    assert.equal(details.recycleBinEntries.length, 1)
+    assert.equal(fs.existsSync(file), false)
+    assert.equal(main.db.prepare('SELECT 1 FROM media_metadata WHERE composite_hash = ?').get(hash), undefined)
+    const restored = await client.callTool({ name: 'restore_deleted_images', arguments: { names: details.recycleBinEntries } })
+    assert.notEqual(restored.isError, true)
+    assert.deepEqual(JSON.parse((restored.content as Array<{ text: string }>)[0].text), {
+      done: [{ name: details.recycleBinEntries[0] }], failed: [],
+    })
+    assert.deepEqual(await sharp(file).raw().toBuffer(), await sharp(bytes).raw().toBuffer())
+    assert.equal((main.db.prepare('SELECT prompt FROM media_metadata WHERE composite_hash = ?').get(hash) as { prompt: string }).prompt, 'MCP undo prompt')
+    assert.ok(main.db.prepare('SELECT 1 FROM image_groups WHERE group_id = ? AND composite_hash = ?').get(groupId, hash))
+    const unrelated = path.join(uploads, 'mcp-not-a-library-image.txt')
+    fs.writeFileSync(unrelated, 'unrelated')
+    const name = path.basename(await recycle.deleteFile(unrelated, true, 'workflow-output') as string)
+    const refused = await client.callTool({ name: 'restore_deleted_images', arguments: { names: [name] } })
+    assert.equal(JSON.parse((refused.content as Array<{ text: string }>)[0].text).failed.length, 1)
+    assert.equal(fs.existsSync(unrelated), false)
+    t.mock.method(settingsService, 'loadSettings', () => ({
+      ...settings, general: { ...settings.general, deleteProtection: { ...settings.general.deleteProtection, enabled: false } },
+    }))
+    const unsafeDelete = await client.callTool({ name: 'delete_images', arguments: { composite_hashes: [hash] } })
+    assert.equal(unsafeDelete.isError, true)
+    assert.equal(fs.existsSync(file), true, 'a restorable-only tool never permanently deletes when protection is off')
+  })
+
   await t.test('administrators can recover files with warnings when library reattachment is impossible, while Undo stays strict', async (t) => {
     const { settingsService } = await import('../src/services/settingsService')
     const settings = settingsService.loadSettings()

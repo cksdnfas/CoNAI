@@ -40,6 +40,8 @@ export const TOOL_FEATURE_PERMISSIONS: Record<string, string | readonly string[]
   get_generation_routing_options: 'workflows.view', get_generation_history_request: 'images.view',
   refresh_artifact_download: 'images.view', get_media_download: 'images.view',
   search_images: 'images.view', get_image_metadata: 'images.view', get_generation_history: 'images.view',
+  upload_image: 'images.upload', update_image_metadata: 'images.edit', tag_images: 'images.edit',
+  delete_images: 'images.delete', restore_deleted_images: 'images.delete',
   search_images_by_tags: 'images.view', search_images_by_meaning: 'images.view', find_similar_images: 'images.view', view_images: 'images.view', view_media_frames: [], list_emoticons: 'images.view',
   list_emoticon_groups: 'images.view', list_image_groups: 'images.view', get_image_groups: 'images.view', get_image_group: 'images.view',
   add_images_to_group: 'images.edit', remove_images_from_group: 'images.edit', move_images_between_groups: 'images.edit',
@@ -55,7 +57,16 @@ export const TOOL_FEATURE_PERMISSIONS: Record<string, string | readonly string[]
   normalize_sprite_sheets: ['images.edit', 'images.upload'], create_sprite_animation: ['images.edit', 'images.upload'],
   normalize_sprite_sources: ['images.edit', 'images.upload'],
   resize_images: ['images.edit', 'images.upload'],
+  save_video_frame: ['images.edit', 'images.upload'],
+  crop_images: ['images.edit', 'images.upload'],
+  convert_images: ['images.edit', 'images.upload'],
+  clip_video: ['images.edit', 'images.upload'],
+  get_media_edit_job: ['images.edit', 'images.upload'],
   list_files: 'files.view', get_file_info: 'files.view', read_file_text: 'files.view', search_files: 'files.view',
+  get_file_download: 'files.view',
+  write_binary_file: ['files.view', 'files.edit'],
+  copy_library_media_to_files: ['files.view', 'files.edit', 'images.view'],
+  import_files_to_library: ['files.view', 'images.upload', 'images.edit'],
   list_file_versions: 'files.view', read_file_version: 'files.view', restore_file_version: ['files.view', 'files.edit'],
   posts_categories: 'posts.view', posts_search: 'posts.view', posts_read: 'posts.view',
   posts_assess: ['posts.view', 'posts.evaluate'], posts_propose_knowledge: ['posts.view', 'posts.write'],
@@ -107,6 +118,7 @@ export const TOOL_FEATURE_PERMISSIONS: Record<string, string | readonly string[]
  * default project workspace; see placesForRequest and chatWorkspace), the way the lorebook does.
  */
 const BOARD_CALL_BLOCKED_TOOLS = new Set(['run_plugin_action', 'get_plugin_action', 'cancel_plugin_action', 'list_plugin_pages', 'list_files', 'get_file_info', 'read_file_text', 'search_files', 'write_text_file', 'update_file_text', 'edit_file_text', 'create_file_folder', 'rename_file', 'move_files', 'delete_files', 'edit_lore_file', 'room_history_search', 'room_history_read', 'list_file_versions', 'read_file_version', 'restore_file_version']);
+for (const name of ['write_binary_file', 'copy_library_media_to_files', 'import_files_to_library', 'get_file_download']) BOARD_CALL_BLOCKED_TOOLS.add(name);
 /** Posts tools a board-call turn never gets: comments it answers are other people's text, and these cannot be taken back easily. */
 const BOARD_CALL_BLOCKED_POST_TOOLS = new Set(['posts_delete', 'posts_restore_revision', 'post_comment_delete']);
 
@@ -256,7 +268,9 @@ export function requireMcpToolAccess(context: McpRequestContext, toolName: strin
     if (execution !== 'queued') {
       if (execution === 'reply') requireActiveChatReply(context.chatContext);
       const pluginPageAction = (toolName === 'page_act' || toolName === 'propose_page_action') && currentMcpChatPage(context)?.kind === 'extension';
-      validateMcpToolArguments(params, () => requireRequesterPermission(context.requester, 'images.view'), pluginPageAction || findExternalMcpTool(toolName) !== null || findPluginServerTool(toolName) !== null);
+      // upload_image carries its own media payload: it needs images.upload (checked below), not images.view.
+      const onManagedMedia = toolName === 'upload_image' ? undefined : () => requireRequesterPermission(context.requester, 'images.view');
+      validateMcpToolArguments(params, onManagedMedia, pluginPageAction || findExternalMcpTool(toolName) !== null || findPluginServerTool(toolName) !== null, { toolName });
     }
   }
   // A chat may add its administrator-delegated domain keys; external keys still use only their permission group.
@@ -268,6 +282,7 @@ export function requireMcpToolAccess(context: McpRequestContext, toolName: strin
       throw new Error('Administrator access required: only administrators can switch the live wallpaper or save its schedule, as in the wallpaper editor. list_wallpapers still reads the current state.');
     }
     if (toolName === 'resolve_image_group_path') requireContextPermission(context, params.create === false ? 'images.view' : 'images.edit');
+    if (toolName === 'upload_image' && (params.group_id || params.group_path)) requireContextPermission(context, 'images.edit');
     if (toolName === 'move_image_groups' && params.preview !== true && params.merge_token) requireContextPermission(context, 'images.delete');
     if (toolName === 'add_images_to_group' || getMcpToolScope(toolName) === 'generate' || isChatGenerationTool(toolName)) {
       if (params.group_id || params.group_path) requireContextPermission(context, 'images.edit');

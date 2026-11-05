@@ -1,12 +1,11 @@
 import fs from 'fs'
 import path from 'path'
-import { resolveUploadsPath, runtimePaths } from '../../config/runtimePaths'
+import { resolveUploadsPath } from '../../config/runtimePaths'
 import { GroupModel } from '../../models/Group'
 import { ImageFileModel } from '../../models/Image/ImageFileModel'
-import { BackgroundProcessorService } from '../backgroundProcessorService'
-import { assignGeneratedMediaToGroup } from '../generationTargetGroupService'
 import { GroupPathService } from '../groupPathService'
-import { generateDatedRandomFilename, getDateFolder } from '../../utils/mediaStoragePaths'
+import { LibraryIngestError, saveMediaBytesToLibrary } from '../libraryMediaIngest'
+import { parseLibraryMediaDataUrl } from '../libraryMediaDataUrl'
 import { SpriteError } from './spriteErrors'
 import { readSpriteOptionsXmp } from './spriteEncode'
 
@@ -73,21 +72,12 @@ export function resolveSpriteGroup(target: SpriteGroupTarget = {}): number {
 /** Write one output into the library like other in-app results and file it under the target group. */
 export async function saveSpriteOutputToLibrary(input: { bytes: Buffer; extension: string; mimeType: string; group?: SpriteGroupTarget }): Promise<{ compositeHash: string; groupId: number }> {
   const groupId = resolveSpriteGroup(input.group)
-  const isVideo = input.mimeType.startsWith('video/')
-  const directory = path.join(runtimePaths.uploadsDir, ...(isVideo ? ['videos', 'API'] : ['API', 'images']), getDateFolder())
-  await fs.promises.mkdir(directory, { recursive: true })
-  const filePath = path.join(directory, generateDatedRandomFilename(input.extension))
-  await fs.promises.writeFile(filePath, input.bytes)
-  const processed = await BackgroundProcessorService.processSavedMediaFile(filePath, { mimeType: input.mimeType, metadataMode: 'background', quiet: true })
-  if (!processed.compositeHash) throw new SpriteError('라이브러리에 저장하지 못했습니다.', 500)
-  assignGeneratedMediaToGroup(groupId, [processed.compositeHash])
-  return { compositeHash: processed.compositeHash, groupId }
-}
-
-const DATA_URL = /^data:(video\/[a-z0-9.+-]+|image\/gif|image\/webp);base64,([\s\S]+)$/i
-const VIDEO_EXTENSIONS: Record<string, string> = {
-  'video/mp4': 'mp4', 'video/webm': 'webm', 'video/quicktime': 'mov', 'video/x-matroska': 'mkv', 'video/x-msvideo': 'avi',
-  'image/gif': 'gif', 'image/webp': 'webp',
+  try {
+    return { compositeHash: await saveMediaBytesToLibrary({ bytes: input.bytes, extension: input.extension, mimeType: input.mimeType, groupId }), groupId }
+  } catch (error) {
+    if (error instanceof LibraryIngestError) throw new SpriteError(error.message, error.status)
+    throw error
+  }
 }
 
 /**
@@ -95,13 +85,17 @@ const VIDEO_EXTENSIONS: Record<string, string> = {
  * uploaded into the library first, under "스프라이트/원본 영상", so the source stays visible and reusable.
  */
 export async function ingestVideoDataUrl(dataUrl: string): Promise<string> {
-  const match = DATA_URL.exec(dataUrl.trim())
-  if (!match) throw new SpriteError('영상 data URL 형식을 확인하세요 (video/*, image/gif, image/webp).')
-  const mimeType = match[1].toLowerCase()
-  const extension = VIDEO_EXTENSIONS[mimeType]
-  if (!extension) throw new SpriteError(`지원하지 않는 영상 형식입니다: ${mimeType}`)
-  const saved = await saveSpriteOutputToLibrary({ bytes: Buffer.from(match[2], 'base64'), extension, mimeType, group: { groupPath: SPRITE_SOURCE_GROUP_PATH } })
-  return saved.compositeHash
+  try {
+    const media = parseLibraryMediaDataUrl(dataUrl.trim())
+    if (!media.mimeType.startsWith('video/') && !['image/gif', 'image/webp'].includes(media.mimeType)) {
+      throw new SpriteError('영상 data URL 형식을 확인하세요 (video/*, image/gif, image/webp).')
+    }
+    const saved = await saveSpriteOutputToLibrary({ ...media, group: { groupPath: SPRITE_SOURCE_GROUP_PATH } })
+    return saved.compositeHash
+  } catch (error) {
+    if (error instanceof LibraryIngestError) throw new SpriteError(error.message, error.status)
+    throw error
+  }
 }
 
 /** The settings a saved sprite output was made with (embedded XMP), or null for other media. */

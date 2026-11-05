@@ -93,7 +93,7 @@ export async function probeLibraryVideo(compositeHash: string): Promise<SpriteVi
 
 /** One sprite job runs at a time (ffmpeg + pixel work); later ones wait in order, visible as phase "waiting". */
 let lane: Promise<void> = Promise.resolve()
-async function inLane<T>(ctx: RuntimeJobContext<unknown>, run: () => Promise<T>): Promise<T> {
+export async function inLane<T>(ctx: RuntimeJobContext<unknown>, run: () => Promise<T>, waitingMessage = '앞선 스프라이트 작업을 기다리는 중'): Promise<T> {
   const previous = lane
   let release!: () => void
   const finished = new Promise<void>((resolve) => { release = resolve })
@@ -104,7 +104,7 @@ async function inLane<T>(ctx: RuntimeJobContext<unknown>, run: () => Promise<T>)
   ctx.signal.addEventListener('abort', cancelWait, { once: true })
   try {
     ctx.throwIfCancelled()
-    ctx.flush({ phase: 'waiting', message: '앞선 스프라이트 작업을 기다리는 중' })
+    ctx.flush({ phase: 'waiting', message: waitingMessage })
     await Promise.race([previous, cancelled])
     ctx.throwIfCancelled()
     return await run()

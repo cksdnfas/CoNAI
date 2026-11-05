@@ -2,6 +2,7 @@ import type { NextFunction, Request, Response } from 'express';
 import { findExternalMcpTool } from '../services/externalMcp/externalMcpServers';
 import { findPluginServerTool } from '../services/plugins/pluginServerTools';
 import { unwrapCatalogCall } from './toolCatalog';
+import { MAX_UPLOAD_FILE_SIZE_BYTES } from '../middleware/upload';
 
 export const MCP_DECODED_MEDIA_LIMIT_BYTES = 50 * 1024 * 1024;
 export const MCP_HTTP_JSON_LIMIT_MB = 70;
@@ -37,6 +38,17 @@ function decodeBase64Payload(payload: string): Buffer {
   return decoded;
 }
 
+/** File uploads accept any MIME; the file-store service authorizes the name's extension on commit. */
+export function decodeFileStoreDataUrl(value: string): { bytes: Buffer; mimeType: string } {
+  const match = /^data:([a-z0-9!#$&^_.+-]+\/[a-z0-9!#$&^_.+-]+);base64,([\s\S]*)$/i.exec(value);
+  if (!match) throw new McpRequestValidationError('Use a base64 data_url with a MIME type, then retry write_binary_file.', 400, -32602);
+  const payload = match[2].replace(/\s/g, '');
+  const size = Math.floor(payload.length * 3 / 4) - (payload.endsWith('==') ? 2 : payload.endsWith('=') ? 1 : 0);
+  if (size > MAX_UPLOAD_FILE_SIZE_BYTES) throw new McpRequestValidationError(`File size exceeds the ${MAX_UPLOAD_FILE_SIZE_BYTES} byte upload limit.`, 413, -32003);
+  const bytes = payload ? decodeBase64Payload(payload) : Buffer.alloc(0);
+  return { bytes, mimeType: match[1].toLowerCase() };
+}
+
 function detectMediaFamilies(data: Buffer): Set<'image' | 'video' | 'audio'> {
   const families = new Set<'image' | 'video' | 'audio'>();
   const ascii = (start: number, end: number) => data.subarray(start, end).toString('ascii');
@@ -65,9 +77,13 @@ function detectMediaFamilies(data: Buffer): Set<'image' | 'video' | 'audio'> {
 }
 
 // `outside`: arguments for an external MCP server's tool, where a path names something on that server, not ours.
-function inspectValue(value: unknown, state: { decodedBytes: number; onManagedMedia?: () => void; outside?: boolean }, depth = 0, chat = false, structured = false): void {
+function inspectValue(value: unknown, state: { decodedBytes: number; onManagedMedia?: () => void; outside?: boolean; fileDataUrl?: string }, depth = 0, chat = false, structured = false): void {
   if (depth > 40) throw new McpRequestValidationError('MCP input nesting is too deep.', 400, -32602);
   if (typeof value === 'string') {
+    if (state.fileDataUrl !== undefined && value === state.fileDataUrl) {
+      decodeFileStoreDataUrl(value);
+      return;
+    }
     if (!value.startsWith('data:')) {
       // Composite node fields may encode an object as JSON; its path keys are still untrusted.
       if (chat && structured && /^[\s]*[\[{]/.test(value)) {
@@ -125,8 +141,11 @@ function inspectValue(value: unknown, state: { decodedBytes: number; onManagedMe
 }
 
 /** The same filesystem/media boundary for in-process chat tools and HTTP MCP. */
-export function validateMcpToolArguments(args: unknown, onManagedMedia?: () => void, outside = false): void {
-  inspectValue(args, { decodedBytes: 0, onManagedMedia, outside }, 0, true);
+export function validateMcpToolArguments(args: unknown, onManagedMedia?: () => void, outside = false, options: { toolName?: string; requestBody?: unknown } = {}): void {
+  const call = options.toolName ? unwrapCatalogCall(options.toolName, args) : undefined;
+  const toolArgs = call?.arguments as Record<string, unknown> | undefined;
+  const fileDataUrl = call?.tool === 'write_binary_file' && typeof toolArgs?.data_url === 'string' ? toolArgs.data_url : undefined;
+  inspectValue(options.requestBody ?? args, { decodedBytes: 0, onManagedMedia, outside, fileDataUrl }, 0, options.requestBody === undefined);
 }
 
 /** Validate decoded media totals and reject client-supplied server filesystem paths. */
@@ -141,7 +160,7 @@ export function validateMcpRequestBody(req: Request, res: Response, next: NextFu
     const call = typeof name === 'string' ? unwrapCatalogCall(name, req.body.params?.arguments) : undefined;
     // Page actions are checked again against the live page and its registered schema before execution.
     const ownPaths = call && (findExternalMcpTool(call.tool) !== null || findPluginServerTool(call.tool) !== null || call.tool === 'page_act' || call.tool === 'propose_page_action');
-    inspectValue(req.body, { decodedBytes: 0, outside: !!ownPaths });
+    validateMcpToolArguments(req.body.params?.arguments, undefined, !!ownPaths, { toolName: name, requestBody: req.body });
     next();
   } catch (error) {
     const validationError = error instanceof McpRequestValidationError

@@ -135,6 +135,16 @@ function assertUnique(owner: string, parentId: string | null, name: string, exce
   }
 }
 
+function assertUnreferenced(file: Pick<FileRow, 'id' | 'name'>, action: '삭제할' | '덮어쓸') {
+  const db = getUserSettingsDb();
+  if (db.prepare('SELECT 1 FROM chat_file_attachments WHERE file_id = ?').get(file.id)) {
+    throw new FileStoreError(`채팅에서 참조 중인 파일은 ${action} 수 없어: ${file.name}`, 409);
+  }
+  if (db.prepare("SELECT 1 FROM post_media_refs WHERE kind = 'file' AND ref = ? UNION ALL SELECT 1 FROM post_knowledge_media_refs WHERE kind = 'file' AND ref = ? LIMIT 1").get(file.id, file.id)) {
+    throw new FileStoreError(`게시물에서 쓰는 파일은 ${action} 수 없어: ${file.name}`, 409);
+  }
+}
+
 function ancestors(owner: string, parentId: string | null): StoredFileEntry[] {
   const result: StoredFileEntry[] = [];
   const seen = new Set<string>();
@@ -266,17 +276,39 @@ export const FileStoreService = {
   },
 
   /** The caller owns staged files; failed transactions remove all newly allocated blobs. */
-  upload(owner: string, parentId: string | null, files: Express.Multer.File[], allowAnyType = false) {
+  upload(owner: string, parentId: string | null, files: Express.Multer.File[], allowAnyType = false, replace?: { id: string; source?: FileWriteSource | null }) {
+    if (replace && files.length !== 1) throw new FileStoreError('교체할 파일 하나만 선택해줘.');
     ensureFileStoreDirectories();
     ensureFileOwnerDirectory(owner);
     const allocated: string[] = [];
+    let kept: string | null = null;
     let entries: StoredFileEntry[];
     try {
       entries = getUserSettingsDb().transaction(() => files.map((file) => {
         const name = uploadedName(file.originalname);
         assertFileTypeAllowed(name, allowAnyType);
+        const size = fs.statSync(file.path).size;
+        if (replace) {
+          const previous = requireRow(owner, replace.id);
+          if (previous.kind !== 'file' || previous.parent_id !== parentId || previous.name_key !== name.toLowerCase()) {
+            throw new FileStoreError('파일이 옮겨졌거나 이름이 바뀌었어. 다시 열어줘.', 409);
+          }
+          assertUnreferenced(previous, '덮어쓸');
+          // Only an earlier editable text gets a text version; media and binary bytes never do.
+          if (TEXT_EXTENSIONS.has(path.extname(name).toLowerCase()) && previous.size <= MAX_TEXT_DOCUMENT_BYTES) {
+            try {
+              this.readEditableText(owner, previous.id);
+              kept = FileStoreRevisions.keep(owner, previous, storedFilePath(owner, previous.id), replace.source ?? null);
+            } catch (error) { if (!(error instanceof FileStoreError) || error.status !== 415) throw error; }
+          }
+          getUserSettingsDb().prepare('UPDATE stored_file_entries SET size = ?, mime_type = ?, rating_score = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+            .run(size, /^[a-zA-Z0-9.+-]+\/[a-zA-Z0-9.+-]+$/.test(file.mimetype) ? file.mimetype : 'application/octet-stream', previous.id);
+          getUserSettingsDb().prepare("DELETE FROM search_db.search_documents WHERE source = 'file' AND source_id = ?").run(previous.id);
+          fs.renameSync(file.path, storedFilePath(owner, previous.id));
+          return toEntry(requireRow(owner, previous.id));
+        }
         const id = crypto.randomBytes(16).toString('hex');
-        const entry = insert(owner, parentId, name, 'file', id, file.size,
+        const entry = insert(owner, parentId, name, 'file', id, size,
           /^[a-zA-Z0-9.+-]+\/[a-zA-Z0-9.+-]+$/.test(file.mimetype) ? file.mimetype : 'application/octet-stream');
         const target = storedFilePath(owner, id);
         // The DB ID is reserved in this transaction, and staging shares the destination volume.
@@ -287,7 +319,13 @@ export const FileStoreService = {
       })).immediate();
     } catch (error) {
       for (const target of allocated) fs.rmSync(target, { force: true });
+      if (kept) fs.rmSync(kept, { force: true });
       throw error;
+    }
+    if (replace) {
+      FileStoreRevisions.setWriter(replace.id, replace.source ?? null);
+      if (kept) FileStoreRevisions.trim(owner, replace.id);
+      fs.rmSync(fileStoreThumbnailPath(replace.id), { force: true });
     }
     notifyChange({ owner, action: 'write', entries: entries.map((entry) => ({ id: entry.id, kind: entry.kind, name: entry.name, parentId: entry.parentId })) });
     return entries;
@@ -345,12 +383,7 @@ export const FileStoreService = {
         if (row.kind === 'folder' && db.prepare('SELECT 1 FROM stored_file_entries WHERE parent_id = ? AND deleted_at IS NULL').get(id)) {
           throw new FileStoreError('폴더를 비운 다음 삭제해줘.', 409);
         }
-        if (db.prepare('SELECT 1 FROM chat_file_attachments WHERE file_id = ?').get(id)) {
-          throw new FileStoreError(`채팅에서 참조 중인 파일은 삭제할 수 없어: ${row.name}`, 409);
-        }
-        if (db.prepare("SELECT 1 FROM post_media_refs WHERE kind = 'file' AND ref = ? UNION ALL SELECT 1 FROM post_knowledge_media_refs WHERE kind = 'file' AND ref = ? LIMIT 1").get(id, id)) {
-          throw new FileStoreError(`게시물에서 쓰는 파일은 삭제할 수 없어: ${row.name}`, 409);
-        }
+        assertUnreferenced(row, '삭제할');
         rows.push(row);
       }
       for (const id of ids) db.prepare('UPDATE stored_file_entries SET deleted_at = CURRENT_TIMESTAMP WHERE id = ?').run(id);

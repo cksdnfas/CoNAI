@@ -52,12 +52,15 @@ const CONTENTS_PRIMARY_TOOLS = new Set([
   'search_prompts', 'list_prompt_presets', 'search_wildcards', 'preview_random_prompt',
   'list_workflows', 'get_workflow_details', 'submit_generation_job', 'get_generation_job', 'generate_nai',
   'search_images', 'search_images_by_tags', 'search_images_by_meaning', 'find_similar_images', 'get_image_metadata',
+  'upload_image',
   'list_files', 'search_files', 'read_file_text', 'write_text_file', 'edit_file_text',
+  'write_binary_file',
   'posts_search', 'posts_read', 'posts_assess', 'posts_propose_knowledge', 'posts_create', 'post_comment',
   'list_image_groups', 'add_images_to_group', 'create_image_group',
   'list_audio_projects', 'list_audio_groups', 'list_audio_candidates', 'order_audio',
   'get_chat_setup_guide', 'propose_chat_profile', 'propose_profile_update',
   'extract_sprite_sheet', 'extract_sprite_sheets_batch',
+  'save_video_frame',
   'list_plugin_drafts', 'create_plugin_draft', 'edit_plugin_draft', 'prepare_plugin_install', 'check_plugin_updates',
 ]);
 const CONTENTS_WHOLE_CATEGORY = 4;

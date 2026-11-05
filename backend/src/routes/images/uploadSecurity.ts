@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { runtimePaths } from '../../config/runtimePaths';
 import type { NextFunction, Request, RequestHandler, Response } from 'express';
 import {
   MAX_MULTIPLE_UPLOAD_FILES,
@@ -191,7 +192,7 @@ async function readUploadHeader(filePath: string): Promise<Buffer> {
   }
 }
 
-async function validateImageUpload(file: Express.Multer.File): Promise<void> {
+async function validateImageUpload(file: Pick<Express.Multer.File, 'path' | 'mimetype'>): Promise<void> {
   const header = await readUploadHeader(file.path);
   const detectedMimeType = IMAGE_SIGNATURE_MIME_TYPES.find((candidate) => candidate.matches(header))?.mimeType ?? null;
   if (!detectedMimeType || detectedMimeType !== file.mimetype.toLowerCase()) {
@@ -204,7 +205,7 @@ async function validateImageUpload(file: Express.Multer.File): Promise<void> {
   }
 }
 
-async function validateVideoUpload(file: Express.Multer.File): Promise<void> {
+async function validateVideoUpload(file: Pick<Express.Multer.File, 'path' | 'mimetype'>): Promise<void> {
   const allowedFormats = VIDEO_FORMAT_ALIASES[file.mimetype.toLowerCase()];
   if (!allowedFormats) {
     throw new UploadValidationError(`Unsupported video type: ${file.mimetype}`);
@@ -218,7 +219,7 @@ async function validateVideoUpload(file: Express.Multer.File): Promise<void> {
 }
 
 /** Validate decoded media and declared MIME before any library file is created. */
-export async function validateUploadedMediaFile(file: Express.Multer.File): Promise<void> {
+export async function validateUploadedMediaFile(file: Pick<Express.Multer.File, 'path' | 'mimetype'>): Promise<void> {
   if (!file.path) {
     throw new UploadValidationError('Temporary upload path is missing', 400);
   }
@@ -242,6 +243,19 @@ export async function validateUploadedMediaFile(file: Express.Multer.File): Prom
   }
 
   throw new UploadValidationError(`Unsupported file type: ${file.mimetype}`);
+}
+
+/** Stage in-memory uploads only for the same signature and decoder checks as multipart uploads. */
+export async function validateUploadedMediaBytes(bytes: Buffer, mimeType: string): Promise<void> {
+  await fs.promises.mkdir(runtimePaths.tempDir, { recursive: true });
+  const directory = await fs.promises.mkdtemp(path.join(runtimePaths.tempDir, 'media-upload-validation-'));
+  const filePath = path.join(directory, 'media');
+  try {
+    await fs.promises.writeFile(filePath, bytes);
+    await validateUploadedMediaFile({ path: filePath, mimetype: mimeType });
+  } finally {
+    await fs.promises.rm(directory, { recursive: true, force: true });
+  }
 }
 
 /** Identify image-router requests that carry staged upload payloads. */

@@ -241,6 +241,18 @@ ComfyUI 시드(`seed`·`noise_seed`)는 실행마다 새로 뽑힙니다. marked
 | `search_images_by_meaning` | 그림 내용을 문장으로 설명해 뜻이 가까운 이미지 검색(라이브러리 설명 검색과 같음). 이미지 임베딩이 켜져 있어야 함 |
 | `find_similar_images` | 이미지 하나와 내용(`content`, 이미지 임베딩) 또는 화풍(`style`, Kaloscope 화풍 벡터)이 비슷한 이미지 검색 |
 
+### 이미지 라이브러리 관리
+
+웹 UI의 업로드·메타데이터 수정·자동 태깅·삭제와 같은 서비스를 그대로 사용합니다. 도구 범위는 모두 `organize`입니다.
+
+| Tool | 용도 | 계정 권한 |
+| --- | --- | --- |
+| `upload_image` | base64 이미지·영상 `data_url`을 라이브러리에 추가(웹 업로드와 같은 형식 허용 목록·시그니처·디코딩 검사). 이름과 그룹 ID/경로 선택 가능. 새 항목은 후처리가 끝날 때까지 `processing`이라 `get_image_metadata`·`get_media_download`는 잠시 뒤 다시 호출 | `images.upload`, 그룹 지정 시 `images.edit` |
+| `update_image_metadata` | 정지 이미지의 프롬프트·네거티브·모델·스텝·샘플러 수정(`null`은 지우기). `revision_conflict`가 나면 `get_image_metadata`로 다시 읽고 수정 | `images.edit` |
+| `tag_images` | 이미지·영상 최대 100개 자동 태깅. 항목별 태그·등급과 실패 반환 | `images.edit` |
+| `delete_images` | 사용자가 명시적으로 요청한 이미지·영상 최대 500개를 휴지통으로 이동. 복원용 `recycleBinEntries` 반환. 삭제 보호(휴지통)가 꺼져 있으면 거부 | `images.delete` |
+| `restore_deleted_images` | 삭제 결과의 `recycleBinEntries`를 `names`로 전달해 최대 1,000개 복원. 새 파일을 덮어쓰지 않고 항목별 실패 반환 | `images.delete` |
+
 ### 이미지 그룹 정리
 
 프롬프트 그룹과 별개인 **커스텀 이미지 그룹**을 관리합니다. 감시폴더나 실제 파일 경로를 이동하는 기능은 아닙니다.
@@ -372,10 +384,14 @@ ComfyUI 시드(`seed`·`noise_seed`)는 실행마다 새로 뽑힙니다. marked
 | `move_files` | 폴더로 옮기기 (폴더는 내용과 함께) | `organize` |
 | `delete_files` | 파일·빈 폴더 삭제 (채팅에 첨부된 파일은 보호) | `organize` |
 | `restore_file_version` | 이전 버전으로 되돌리기 (지금 내용은 버전으로 남음) | `organize` |
+| `get_file_download` | 보관함 파일의 로그인 필요 다운로드 경로 조회 (공개 링크 아님, 이미지·영상 원본은 `images.view`도 필요) | `read` |
+| `write_binary_file` | base64 `data_url`을 어떤 MIME이든 보관함에 저장. 저장 MIME과 허용 확장자 정책은 `name`의 확장자로 정하며 웹 업로드와 같은 크기 한도. `overwrite`면 같은 ID로 교체하되 채팅 첨부·게시글이 참조하는 파일은 거부 | `organize` |
+| `copy_library_media_to_files` | 라이브러리 원본 최대 50개를 보관함 폴더로 복사 (숨김 등급·접근 불가 항목 제외, 계정 본인의 `images.view` 필요) | `organize` |
+| `import_files_to_library` | 보관함 이미지·애니메이션·영상 최대 50개를 지정 그룹으로 복사 등록 (웹 업로드와 같은 시그니처·디코딩 검사, 미디어 외 파일 제외) | `organize` |
 
-- 문서 쓰기 도구는 텍스트 확장자(.md, .html, .txt, .json, .csv, .yaml 등)만, 2MB까지 씁니다. 고쳐도 파일 ID가 그대로라 채팅 첨부와 링크가 유지됩니다.
+- 문서 쓰기 도구는 텍스트 확장자(.md, .html, .txt, .json, .csv, .yaml 등)만, 2MB까지 씁니다. 고쳐도 파일 ID가 그대로라 채팅 첨부와 링크가 유지됩니다. 바이너리 파일은 `write_binary_file`로 저장하며 텍스트 버전을 만들지 않습니다.
 - 게시판 호출에 답하는 턴에서는 보관함 도구(버전 도구 포함)가 모두 빠지고, 페이지가 연결된 턴에서는 쓰기·정리 도구와 파일 내용·버전을 읽는 도구가 빠집니다.
-- 쓰기·정리 도구는 계정에 권한이 추가로 필요합니다: 문서 쓰기·고치기와 `create_file_folder`·`rename_file`·`move_files`·`restore_file_version`은 `files.edit`, `delete_files`는 `files.delete`. 이름 변경으로 실행파일 등 제한 확장자를 붙이는 건 관리자만 됩니다.
+- 쓰기·정리 도구는 계정에 권한이 추가로 필요합니다: 문서 쓰기·고치기와 `create_file_folder`·`rename_file`·`move_files`·`restore_file_version`·`write_binary_file`·`copy_library_media_to_files`는 `files.edit`, `delete_files`는 `files.delete`, `import_files_to_library`는 `images.upload`+`images.edit`. 이름 변경이나 바이너리 저장으로 실행파일 등 제한 확장자를 붙이는 건 관리자만 됩니다.
 - MCP·웹 UI·HTTP API 모두 같은 공용 보관함을 다룹니다. 계정별 보관함 선택과 소유권 제한은 없으며 요청 계정의 기능 권한은 매 호출 검사합니다.
 
 ### 게시판
@@ -442,6 +458,23 @@ ComfyUI 시드(`seed`·`noise_seed`)는 실행마다 새로 뽑힙니다. marked
 - 효과음·폴더·프로젝트 삭제는 계정·프로필이 허용한 경우 일반 페이지 연결 중에도 사용할 수 있습니다. 사용자 요청의 대상·영향을 확인하고 `confirm_name`으로 현재 이름을 검증합니다.
 - 채팅에서 `order_audio`로 주문하면 생성이 끝나는 대로 앱이 후보를 답변에 붙입니다. 채팅 봇은 주문을 기다리거나 다시 조회할 필요가 없습니다.
 - 생성은 생성 쪽에 **음향 종류**로 등록되고 음향 설정에서 역할(프롬프트·길이·seed)이 연결된 워크플로로만 됩니다.
+
+### 미디어 편집
+
+라이브러리 이미지·영상을 가공해 **새 라이브러리 항목**으로 저장합니다. 원본은 바꾸지 않습니다. 결과 그룹은 도구별 기본 경로(아래 표)이며 `group_id` 또는 `group_path`로 바꿀 수 있습니다. 일정 시간(`wait_seconds`, 기본 60초, 채팅은 최대 30초) 안에 끝나면 결과 해시와 다운로드 링크를 바로 돌려주고, 길어지면 `job_id`를 돌려줍니다. 편집 작업은 스프라이트 작업과 같은 줄에서 한 번에 하나씩 실행됩니다.
+
+| Tool | 용도 | 기본 그룹 | 도구 범위 | 계정 권한 |
+| --- | --- | --- | --- | --- |
+| `resize_images` | 이미지 최대 500개를 지정 크기(width×height)로 리사이즈해 PNG·WebP로 저장. 영상·애니메이션은 건너뜀 | 크기 변경 | `generate` | `images.edit` + `images.upload` |
+| `save_video_frame` | 영상·움직이는 이미지의 특정 시각(`at_seconds`, 최대 16개)·프레임 번호(`frame_index`)·`position: first\|middle\|last` 프레임을 PNG(기본)·WebP로 저장 | 영상 캡처 | `generate` | `images.edit` + `images.upload` |
+| `crop_images` | 정지 이미지 최대 500개를 원본 픽셀 좌표 `rect: {x, y, width, height}`로 잘라 PNG로 저장(EXIF 회전 적용 후 기준). 영상·애니메이션은 항목별 오류 | 이미지 자르기 | `generate` | `images.edit` + `images.upload` |
+| `convert_images` | 정지 이미지 최대 500개를 PNG·WebP·JPEG로 저장(`quality` 기본 90, JPEG 투명 영역 배경 `background` 기본 `#ffffff`) | 이미지 변환 | `generate` | `images.edit` + `images.upload` |
+| `clip_video` | 영상 구간(`start_seconds`~`end_seconds`)을 MP4·WebM·GIF·WebP로 저장(`format` 기본 원본 컨테이너, `fps`·`width` 선택). 같은 컨테이너의 구간만 바꾸면 스트림 복사 | 영상 편집 | `generate` | `images.edit` + `images.upload` |
+| `get_media_edit_job` | 편집 작업의 진행률·저장 해시·다운로드·항목별 오류 조회와 대기(`wait_seconds`), `cancel: true`로 취소 | - | `read` | `images.edit` + `images.upload` |
+
+- 결과 픽셀이 원본과 같으면(무손실 변환, 전체 영역 자르기) 새 항목을 만들지 않고 `identical`로 원본 해시를 돌려줍니다.
+- 새 항목은 후처리가 끝나기 전까지 다운로드 링크가 `null`일 수 있습니다. 끝난 뒤 `get_media_edit_job` 또는 `get_media_download`로 다시 받습니다.
+- WebP 클립은 라이브러리에서 `animated`가 아니라 `image`로 분류됩니다(GIF는 `animated`).
 
 ### 스프라이트
 

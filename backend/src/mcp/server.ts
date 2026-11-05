@@ -2,6 +2,7 @@ import { McpServer } from '@modelcontextprotocol/server';
 import { registerPromptTools } from './tools/promptTools';
 import { registerGenerationTools } from './tools/generationTools';
 import { registerImageTools } from './tools/imageTools';
+import { registerImageLibraryTools } from './tools/imageLibraryTools';
 import { registerImageGroupTools } from './tools/imageGroupTools';
 import { registerResourceTools } from './tools/resourceTools';
 import { registerPromptOrganizationTools } from './tools/promptOrganizationTools';
@@ -32,6 +33,7 @@ import { registerChatChoiceTools } from './tools/chatChoiceTools';
 import { registerChatAgentTools } from './tools/chatAgentTools';
 import { registerSpriteTools } from './tools/spriteTools';
 import { registerImageResizeTools } from './tools/imageResizeTools';
+import { registerMediaEditTools } from './tools/mediaEditTools';
 import { registerAudioTools } from './tools/audioTools';
 import { registerAudioGenerationTools } from './tools/audioGenerationTools';
 import { registerAudioEditExportTools } from './tools/audioEditExportTools';
@@ -137,7 +139,9 @@ export function createMcpServer(context: McpRequestContext = { scopes: ALL_MCP_H
   });
   inCategory('images', () => {
     registerSelected(registerImageTools);
+    registerSelected(registerImageLibraryTools);
     registerSelected(registerImageResizeTools);
+    registerSelected(registerMediaEditTools);
   });
   inCategory('files', () => registerSelected(registerFileStoreTools));
   inCategory('files', () => registerSelected(registerWorkspaceTools));

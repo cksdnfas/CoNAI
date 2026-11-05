@@ -32,7 +32,7 @@ export async function callPluginAppTool(context: McpRequestContext, name: string
   if (!pluginAppToolScope(name)) throw new PluginError(`플러그인 실행 문맥에서 지원하지 않는 앱 도구야: ${name}`, 400)
   const native = { ...context, source: 'plugin' as const, chatContext: undefined, generationPresetIds: [], toolAllowlist: [name] }
   requireMcpToolAccess(native, name, args)
-  validateMcpToolArguments(args, () => requireRequesterImagePermission(native.requester), findPluginServerTool(name) !== null)
+  validateMcpToolArguments(args, () => requireRequesterImagePermission(native.requester), findPluginServerTool(name) !== null, { toolName: name })
   return withPluginAppClient(native, [name], client => client.callTool({ name, arguments: args }, { timeout: NO_TOOL_DEADLINE, signal }))
 }
 
