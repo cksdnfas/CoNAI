@@ -15,7 +15,7 @@ export { IMAGE_VIEW_PERMISSION } from './constants/imagePermissions';
 export { PERMISSION_CATALOG, PERMISSION_KEYS, CHAT_DELEGATABLE_PERMISSION_KEYS, PAGE_PERMISSION_RULES, withPagePermissions, type PermissionKey, type PermissionSection, type PagePermissionKey } from './constants/permissions';
 
 // Version info
-export const VERSION = '26.10.10';
+export const VERSION = '26.11.05';
 
 export * from './utils/minimaxDirectorResolution';
 export * from './types/fileStore';
