@@ -596,6 +596,13 @@ export interface CodexChatThread {
   summary_enabled: 0 | 1 | null
   reaction_enabled: 0 | 1
   reaction_model_slot_id: number | null
+  /**
+   * Direct chats: the chat's own model instead of the profile's (null follows it) — a model slot for LLM profiles, a
+   * model id for Claude Code and Codex — and the label of the model it answers with while it overrides.
+   */
+  chat_model_slot_id: number | null
+  chat_model: string | null
+  chat_model_label: string | null
   max_tokens: number | null
   summary: string | null
   summary_until_message_id: number | null
@@ -750,6 +757,16 @@ export interface ChatGroupRunningReply {
   toolCalls: CodexChatToolCall[]
 }
 
+/** A chat's (or a room member's) own model: a slot for LLM profiles, a model id for Claude Code and Codex, and its label. */
+export interface ChatModelOverride {
+  slotId: number | null
+  model: string | null
+  label: string | null
+}
+
+/** Setting or clearing (null) that model: `chatModelSlotId` for LLM profiles, `chatModel` for Claude Code and Codex. */
+export type ChatModelOverridePatch = { chatModelSlotId?: number | null; chatModel?: string | null }
+
 /** A group room: members in order, the representative (answers unaddressed messages) and its limits. */
 export interface ChatGroupInfo {
   memberIds: number[]
@@ -762,6 +779,8 @@ export interface ChatGroupInfo {
   /** Reply token cap of the room (null: each profile's own) and each member's override of it, by profile id. */
   maxTokens: number | null
   memberMaxTokens: Record<string, number | null>
+  /** Each member's model in this room instead of its profile's, by profile id (absent or nulls: the profile's). */
+  memberChatModels: Record<string, ChatModelOverride>
   /** The judge preset that picks who answers unaddressed messages and whether the room goes on (null: none). */
   judgePresetId: number | null
 }
@@ -937,7 +956,7 @@ export function editChatBlock(threadId: number, key: string, data: Record<string
   })
 }
 
-export function updateCodexChatThreadContext(threadId: number, patch: { loreAutoSave?: boolean | null; contextTurns?: number | null; maxTokens?: number | null; summaryEnabled?: boolean | null; summary?: string | null; authorNote?: string | null; authorNoteDepth?: number | null; userProfileId?: number | null; lorebookIds?: number[]; loreRecordBookId?: number | null; linkedFiles?: LinkedFileLink[]; minutesFolderId?: string | null; reactionEnabled?: boolean; reactionModelSlotId?: number | null }) {
+export function updateCodexChatThreadContext(threadId: number, patch: { loreAutoSave?: boolean | null; contextTurns?: number | null; maxTokens?: number | null; summaryEnabled?: boolean | null; summary?: string | null; authorNote?: string | null; authorNoteDepth?: number | null; userProfileId?: number | null; lorebookIds?: number[]; loreRecordBookId?: number | null; linkedFiles?: LinkedFileLink[]; minutesFolderId?: string | null; reactionEnabled?: boolean; reactionModelSlotId?: number | null } & ChatModelOverridePatch) {
   return requestApiData<CodexChatThread>(`/api/codex-chat/threads/${threadId}/context`, { method: 'PATCH', headers: JSON_HEADERS, body: JSON.stringify(patch) })
 }
 
@@ -1044,8 +1063,8 @@ export function updateGroupChat(threadId: number, patch: { representativeId?: nu
   return requestApiData<CodexChatThreadDetail>(`/api/codex-chat/threads/${threadId}/group?tail=${CHAT_MESSAGE_PAGE_SIZE}`, { method: 'PATCH', headers: JSON_HEADERS, body: JSON.stringify(patch) })
 }
 
-/** One member's reply token cap in the room (null follows the room's cap, then the profile's). */
-export function updateGroupChatMember(threadId: number, profileId: number, patch: { maxTokens?: number | null }) {
+/** One member's reply token cap in the room (null follows the room's cap, then the profile's) and its model in the room (null: the profile's). */
+export function updateGroupChatMember(threadId: number, profileId: number, patch: { maxTokens?: number | null } & ChatModelOverridePatch) {
   return requestApiData<CodexChatThreadDetail>(`/api/codex-chat/threads/${threadId}/members/${profileId}?tail=${CHAT_MESSAGE_PAGE_SIZE}`, { method: 'PATCH', headers: JSON_HEADERS, body: JSON.stringify(patch) })
 }
 

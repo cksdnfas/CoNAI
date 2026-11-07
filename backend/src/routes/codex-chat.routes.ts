@@ -37,6 +37,7 @@ import { deleteChatThread, type ThreadLorebookOption } from '../services/codex-c
 import { ModelSlotStore } from '../services/codex-chat/modelSlots'
 import { downChatProfiles } from '../services/codex-chat/chatConnectionHealth'
 import { effectiveModelOf, modelLabelOf } from '../services/codex-chat/chatModelRoles'
+import { chatModelOptions, validateChatModelPatch, warmClaudeChatModel } from '../services/codex-chat/chatModelOverride'
 import { CodexChatStore, type ChatThreadSummary } from '../services/codex-chat/codexChatStore'
 import { attachJobResults } from '../services/codex-chat/codexChatMedia'
 import { chatResultMediaMap, resolveChatResultMedia } from '../services/codex-chat/chatResultMediaAccess'
@@ -539,7 +540,7 @@ router.post('/threads/:threadId/members', requireChatAccess, (req: Request, res:
   }
 })
 
-/** PATCH /api/codex-chat/threads/:threadId/members/:profileId — `{ maxTokens }`: this member's reply cap in the room (null follows the room, then the profile). */
+/** PATCH /api/codex-chat/threads/:threadId/members/:profileId — this member's reply cap and chat model (null inherits). */
 router.patch('/threads/:threadId/members/:profileId', requireChatAccess, (req: Request, res: Response) => {
   const threadId = parseThreadId(req, res)
   const profileId = parseId(req.params.profileId)
@@ -549,7 +550,7 @@ router.patch('/threads/:threadId/members/:profileId', requireChatAccess, (req: R
   if (tail === null) return
   try {
     const body = (req.body ?? {}) as Record<string, unknown>
-    res.json({ success: true, data: mutationDetail(req, GroupChatService.updateMember(requesterFrom(req), threadId, profileId, { maxTokens: body.maxTokens }, tail), tail) })
+    res.json({ success: true, data: mutationDetail(req, GroupChatService.updateMember(requesterFrom(req), threadId, profileId, { maxTokens: body.maxTokens, chatModelSlotId: body.chatModelSlotId, chatModel: body.chatModel }, tail), tail) })
   } catch (error) {
     sendChatError(res, error)
   }
@@ -614,7 +615,7 @@ router.post('/threads', requireChatAccess, (req: Request, res: Response) => {
   }
 })
 
-/** PATCH /api/codex-chat/threads/:threadId/context — LLM chats: turn window, reply token cap and summary on/off (null follows the profile), summary text. */
+/** PATCH /api/codex-chat/threads/:threadId/context — direct chat model, shared notes, and LLM context/summary settings (null inherits). */
 router.patch('/threads/:threadId/context', requireChatAccess, (req: Request, res: Response) => {
   const threadId = parseThreadId(req, res)
   if (threadId === null) return
@@ -623,6 +624,9 @@ router.patch('/threads/:threadId/context', requireChatAccess, (req: Request, res
     const thread = CodexChatService.getThreadRecord(requesterFrom(req), threadId)
     if (CodexChatService.isRunning(threadId)) throw new CodexChatError('이전 답변이 아직 진행 중이야.', 409)
     if (GroupChatService.isRunning(threadId)) throw new CodexChatError('이전 답변이 아직 진행 중이야.', 409)
+    const changingModel = body.chatModelSlotId !== undefined || body.chatModel !== undefined
+    if (changingModel && thread.kind === 'group') throw new CodexChatError('그룹 방의 대화 모델은 참가자별로 설정해줘.')
+    const chatModelPatch = changingModel ? validateChatModelPatch(thread.profile_id === null ? null : ChatProfileStore.find(thread.profile_id), body) : {}
     // The author's note applies to every kind of chat; the window and summary settings only to direct LLM chats.
     if (body.authorNote !== undefined && body.authorNote !== null && typeof body.authorNote !== 'string') {
       sendRouteBadRequest(res, 'authorNote must be a string or null')
@@ -719,6 +723,7 @@ router.patch('/threads/:threadId/context', requireChatAccess, (req: Request, res
         else ChatUserProfileStore.setThreadUserProfile(threadId, ChatUserProfileStore.requireOwn(getRequesterAccountId(req), userProfileId)?.id ?? null)
       }
       CodexChatStore.updateThreadContext(threadId, {
+        ...chatModelPatch,
         contextTurns, maxTokens, summaryEnabled: body.summaryEnabled as boolean | null | undefined,
         reactionEnabled: body.reactionEnabled as boolean | undefined, reactionModelSlotId,
         authorNote: typeof body.authorNote === 'string' ? body.authorNote.slice(0, AUTHOR_NOTE_MAX_LENGTH) : (body.authorNote as null | undefined),
@@ -742,6 +747,7 @@ router.patch('/threads/:threadId/context', requireChatAccess, (req: Request, res
         ChatSummaryStore.replaceAll(threadId, summary || null, summary ? thread.summary_until_message_id : null)
       }
     }).immediate()
+    warmClaudeChatModel(thread.profile_id, chatModelPatch)
     res.json({ success: true, data: CodexChatService.getThreadRecord(requesterFrom(req), threadId) })
   } catch (error) {
     sendChatError(res, error)
@@ -816,7 +822,7 @@ router.post('/threads/:threadId/suggest', requireChatAccess, asyncHandler(async 
   res.on('close', onClose)
   try {
     const { thread, messages } = CodexChatService.getThread(requesterFrom(req), threadId)
-    const profile = thread.profile_id ? ChatProfileStore.find(thread.profile_id) : null
+    const profile = thread.profile_id ? ChatProfileStore.find(thread.profile_id, thread.id) : null
     if (!profile) throw new ChatSuggestError('이 대화에는 프로필이 없어서 추천할 수 없어.', 409)
     const nameOf = (message: { speaker_profile_id: number | null }) => (message.speaker_profile_id ? ChatProfileStore.find(message.speaker_profile_id)?.name : null) ?? profile.name
     const suggestions = await suggestReplies(profile, thread, messages, nameOf, controller.signal)
@@ -1669,7 +1675,7 @@ router.get('/user-profiles', requireChatAccess, (req: Request, res: Response) =>
 
 /** GET /api/codex-chat/model-options — the models a user profile can write reply suggestions with (any chat user). */
 router.get('/model-options', requireChatAccess, (_req: Request, res: Response) => {
-  res.json({ success: true, data: ModelSlotStore.list({ usage: false }).filter((slot) => slot.providerType !== 'decision_typesafe').map((slot) => ({ id: slot.id, kind: slot.kind, routeKey: slot.routeKey, providerName: slot.providerName, providerLabel: slot.providerLabel, label: slot.label, model: slot.model, ready: slot.model !== '' && isChatTargetReady(slot.providerName, slot.model) })) })
+  res.json({ success: true, data: chatModelOptions().map((slot) => ({ id: slot.id, kind: slot.kind, routeKey: slot.routeKey, providerName: slot.providerName, providerLabel: slot.providerLabel, label: slot.label, model: slot.model, ready: slot.model !== '' && isChatTargetReady(slot.providerName, slot.model) })) })
 })
 
 router.post('/user-profiles', requireChatAccess, (req: Request, res: Response) => {

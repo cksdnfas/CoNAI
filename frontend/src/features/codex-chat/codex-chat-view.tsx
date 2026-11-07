@@ -856,10 +856,12 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   // Context stays in the header, the rest of the chat's actions sit under ⋯; a second press on a view closes it again.
   // The look and the other views share the wide page's one column, so opening one folds the other.
   const toggleView = (next: 'context' | 'gallery') => { setAppearanceOpen(false); setView(activeView === next ? 'chat' : next) }
-  // A 1:1 chat's model and library look beside its name on the page (the side panel has no room for them).
+  // A 1:1 chat's model (its own one when it overrides the profile's) and library look beside its name on the page (the side panel has no room for them).
+  const chatModelLabel = thread?.chat_model_label ?? null
+  const roomModelLabel = chatModelLabel ?? profile?.modelLabel ?? ''
   const roomChips = layout === 'page' && displayThread && !isGroup && profile ? (
     <span className="hidden min-w-0 items-center gap-1.5 lg:flex">
-      {profile.modelLabel ? <Chip size="sm" tone="muted" className="min-w-0 shrink" title={profile.modelLabel}><Cpu /><span className="truncate">{profile.modelLabel}</span></Chip> : null}
+      {roomModelLabel ? <Chip size="sm" tone="muted" className="min-w-0 shrink" title={chatModelLabel ? t({ ko: '{model} · 이 채팅에만 적용돼', en: '{model} · applies to this chat only' }, { model: chatModelLabel }) : roomModelLabel}><Cpu /><span className="truncate">{roomModelLabel}</span></Chip> : null}
       {profile.characterLink ? <Chip size="sm" tone="muted" className="min-w-0 shrink" title={[...profile.characterLink.path, profile.characterLink.settingName].join(' › ')}><ImageIcon /><span className="truncate">{t({ ko: '외형: {name}', en: 'Look: {name}' }, { name: profile.characterLink.settingName })}</span></Chip> : null}
     </span>
   ) : null
@@ -1094,8 +1096,8 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
     : <Suspense fallback={null}>{isGroup
       ? <GroupContextView thread={thread} group={group} profilesById={profilesById} segments={threadQuery.data?.summarySegments ?? []} />
       : isCodexThread
-        ? <CodexEngineContextView thread={thread} profiles={loreProfiles} noteDefaults={noteDefaults} />
-        : <CodexChatContextView thread={thread} profiles={loreProfiles} segments={threadQuery.data?.summarySegments ?? []} profileTurns={profile?.contextTurns ?? null} profileMaxTokens={profile?.maxTokens ?? null} profileReasoningBudget={profile?.reasoningBudgetTokens ?? null} profileSummaryEnabled={profile?.summaryEnabled ?? null} noteDefaults={noteDefaults} />}</Suspense>
+        ? <CodexEngineContextView thread={thread} profiles={loreProfiles} profileEngine={profile?.engine ?? thread.engine} profileModelLabel={profile?.modelLabel ?? ''} noteDefaults={noteDefaults} />
+        : <CodexChatContextView thread={thread} profiles={loreProfiles} profileEngine={profile?.engine ?? thread.engine} profileModelLabel={profile?.modelLabel ?? ''} segments={threadQuery.data?.summarySegments ?? []} profileTurns={profile?.contextTurns ?? null} profileMaxTokens={profile?.maxTokens ?? null} profileReasoningBudget={profile?.reasoningBudgetTokens ?? null} profileSummaryEnabled={profile?.summaryEnabled ?? null} noteDefaults={noteDefaults} />}</Suspense>
   let body: ReactNode
   if (activeThreadId === null) {
     // The unsaved new chat shows its greeting and the composer; otherwise there is no chat yet: the picker.

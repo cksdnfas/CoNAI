@@ -33,7 +33,7 @@ function collectScopedChatResultMedia(requester: McpRequester, thread: CodexChat
     try {
       if (!canRequesterViewImages(chatProfileRequester(requester, { threadId: thread.id, profileId, kind: thread.kind }))) continue
     } catch { continue }
-    const profile = ChatProfileStore.find(profileId)
+    const profile = ChatProfileStore.find(profileId, thread.id)
     if (!profile?.isEnabled) continue
     const evidence = readChatResultMediaEvidence(requester, thread.id, profileId, group.map((message) => message.routing!.replyId!))
     const media = collectCodexChatMedia(group.map((message) => ({

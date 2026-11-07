@@ -13,6 +13,7 @@ import { ChatProposalStore } from './chatProposals'
 import { forgetReplyFileChanges, forgetThreadFileChanges } from './chatFileChanges'
 import { notifySemanticChange } from '../embeddings/semanticSignal'
 import { cancelAgentCallsForThread } from './chatAgentCalls'
+import type { ChatModelPatch } from './chatModelOverride'
 
 export type { ChatToolCall as CodexChatToolCall } from '@conai/shared'
 import type { ChatToolCall as CodexChatToolCall } from '@conai/shared'
@@ -57,6 +58,8 @@ export type CodexChatThreadRecord = {
   max_tokens: number | null
   reaction_enabled: 0 | 1
   reaction_model_slot_id: number | null
+  chat_model_slot_id: number | null
+  chat_model: string | null
   /** JSON ids of the chat flags switched on in this chat. */
   flag_ids: string | null
   /** JSON hand edits of the display block state (see chatBlockState). */
@@ -437,8 +440,10 @@ export const CodexChatStore = {
     return Number(result.lastInsertRowid)
   },
 
-  updateThreadContext(threadId: number, patch: { contextTurns?: number | null; summaryEnabled?: boolean | null; authorNote?: string | null; authorNoteDepth?: number | null; maxTokens?: number | null; reactionEnabled?: boolean; reactionModelSlotId?: number | null; loreAutoSave?: boolean | null }) {
+  updateThreadContext(threadId: number, patch: ChatModelPatch & { contextTurns?: number | null; summaryEnabled?: boolean | null; authorNote?: string | null; authorNoteDepth?: number | null; maxTokens?: number | null; reactionEnabled?: boolean; reactionModelSlotId?: number | null; loreAutoSave?: boolean | null }) {
     const db = getUserSettingsDb()
+    if (patch.chatModelSlotId !== undefined) db.prepare('UPDATE codex_chat_threads SET chat_model_slot_id = ? WHERE id = ?').run(patch.chatModelSlotId, threadId)
+    if (patch.chatModel !== undefined) db.prepare('UPDATE codex_chat_threads SET chat_model = ? WHERE id = ?').run(patch.chatModel, threadId)
     if (patch.loreAutoSave !== undefined) {
       db.prepare('UPDATE codex_chat_threads SET lore_auto_save = ? WHERE id = ?').run(patch.loreAutoSave === null ? null : patch.loreAutoSave ? 1 : 0, threadId)
     }

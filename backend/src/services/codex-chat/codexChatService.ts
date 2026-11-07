@@ -6,6 +6,7 @@ import { isCodexChatCreationTool } from '@conai/shared'
 import { beginDirectReply, requireReplyTarget } from './chatReplies'
 import { buildReplyContext } from './chatReplyContext'
 import { createHash, randomUUID } from 'crypto'
+import { hasChatModelOverride, withChatModelLabel } from './chatModelOverride'
 import fs from 'fs'
 import path from 'path'
 import type { ChatResearchExecution } from './chatResearch'
@@ -210,10 +211,11 @@ function resolveCodexRun(session: Session, profile: ChatProfile) {
   const model = profile.model || session.configModel || null
   const selectedModel = model ? session.catalog.models.find((entry) => entry.id === model) : session.catalog.models.find((entry) => entry.isDefault)
   const supported = selectedModel?.supportedReasoningEfforts
-  if (profile.reasoningEffort && supported && !supported.includes(profile.reasoningEffort)) {
+  const unsupported = profile.reasoningEffort && supported && !supported.includes(profile.reasoningEffort)
+  if (unsupported && !hasChatModelOverride(profile)) {
     throw new CodexChatError('이 프로필의 추론 강도를 선택한 모델이 지원하지 않아. 프로필 설정에서 바꿔줘.')
   }
-  const effort = profile.reasoningEffort
+  const effort = unsupported ? selectedModel?.defaultReasoningEffort ?? null : profile.reasoningEffort
     || (session.configEffort && (!supported || supported.includes(session.configEffort)) ? session.configEffort : null)
     || selectedModel?.defaultReasoningEffort
     || null
@@ -478,7 +480,7 @@ function recordCodexUsage(session: Session, codexThreadId: string, last: LlmToke
   recordLlmUsage({
     ...active?.usage,
     replyId: active?.delivery?.context.replyId ?? active?.usage?.replyId,
-    purpose: 'chat', engine: 'codex', providerName: 'codex', model: active?.usage?.model ?? ((profileId ? ChatProfileStore.find(profileId)?.model : null) || ''),
+    purpose: 'chat', engine: 'codex', providerName: 'codex', model: active?.usage?.model ?? ((profileId ? ChatProfileStore.find(profileId, chatThread?.id ?? member?.thread_id)?.model : null) || ''),
     profileId, threadId: chatThread?.id ?? member?.thread_id ?? active?.usage?.threadId ?? active?.chatThreadId ?? null, tokens, latencyMs: 0, ok: true,
   })
 }
@@ -684,8 +686,8 @@ function assertChatAvailable(requester: McpRequester) {
 }
 
 /** The enabled Codex profile a Codex chat runs with, when this account may use it. */
-function requireCodexProfile(profileId: number | null, requester: McpRequester) {
-  const profile = profileId === null ? null : ChatProfileStore.find(profileId)
+function requireCodexProfile(profileId: number | null, requester: McpRequester, threadId?: number) {
+  const profile = profileId === null ? null : ChatProfileStore.find(profileId, threadId)
   if (!profile || profile.engine !== 'codex') {
     throw new CodexChatError('이 채팅의 프로필이 지워졌어.', 409)
   }
@@ -986,7 +988,8 @@ export async function runCodexOrderTurn(params: {
   const codexThreadId = await ensureCodexThread(session, null, profile, () => {}, params.signal)
   let outcome: GroupReplyResult | null = null
   const turn: TurnState = {
-    usage: { ...currentLlmUsageContext(), threadId, replyId: params.chatContext.replyId },
+    usage: { ...currentLlmUsageContext(), threadId, replyId: params.chatContext.replyId,
+      ...(hasChatModelOverride(profile) ? { model: profile.model } : {}) },
     chatThreadId: threadId,
     codexThreadId,
     turnId: null,
@@ -1108,7 +1111,7 @@ export const CodexChatService = {
     let session: Session | null = null
     let codexThreadId: string | null = null
     try {
-      const profile = requireCodexProfile(thread.profile_id, requester)
+      const profile = requireCodexProfile(thread.profile_id, requester, thread.id)
       const { scopes, toolAllowlist } = resolveChatProfileToolGrant(profile, resolveChatAccess(requester.accountId))
       session = await ensureSession(requester, scopes, toolAllowlist, profile.generationPresetIds, { threadId, profileId: profile.id, kind: 'direct' })
       controller.signal.throwIfAborted()
@@ -1201,7 +1204,7 @@ export const CodexChatService = {
     if (thread.kind !== 'direct') throw new CodexChatError('그룹 방 분기는 방 기능으로 처리해.', 409)
     const id = branchChatThread(thread, messageId, purpose)
     if (id === null) throw new CodexChatError('메시지를 찾을 수 없어.', 404)
-    return requireThread(requester, id)
+    return withChatModelLabel(requireThread(requester, id))
   },
 
   listThreads(requester: McpRequester) {
@@ -1262,7 +1265,7 @@ export const CodexChatService = {
         addChatOpening(id, profile, userPersonaOf(user), greetingIndex)
       }
       if (flags.length) ChatFlagStore.setThreadFlags(id, flags.map((flag) => flag.id))
-      return requireThread(requester, id)
+      return withChatModelLabel(requireThread(requester, id))
     })()
   },
 
@@ -1281,7 +1284,7 @@ export const CodexChatService = {
 
   /** Authorized thread settings and the effective minutes status, without loading the transcript. */
   getThreadRecord(requester: McpRequester, threadId: number) {
-    return { ...requireThread(requester, threadId), minutes_paused: hasPrivateAttachmentContext(threadId) }
+    return { ...withChatModelLabel(requireThread(requester, threadId)), minutes_paused: hasPrivateAttachmentContext(threadId) }
   },
 
   /** The transcript, a reply still running, and the media kind of every image it references (for players). */
@@ -1382,7 +1385,7 @@ export const CodexChatService = {
       return LlmChatService.sendMessage(requester, thread, text, listener, fileIds, flagIds, picks, mediaHashes, replyToMessageId, pageContext, options)
     }
     assertChatAvailable(requester)
-    const profile = requireCodexProfile(thread.profile_id, requester)
+    const profile = requireCodexProfile(thread.profile_id, requester, thread.id)
     const { attachments, mediaAttachments, flags, trimmed, page, routing } = prepareChatSend(requester, thread, profile, text,
       { fileIds, flagIds, picks, mediaHashes, replyToMessageId, pageContext, options }, CodexChatError)
     if (CodexChatService.isRunning(threadId)) {

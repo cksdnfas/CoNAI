@@ -54,9 +54,9 @@ export type SuggestionRunner =
  * The linked writer, or null when none applies: a chat profile that went missing or is off (the profile itself always
  * counts), a user profile of another account (`accountId` given) or one without a model.
  */
-export function suggestionWriterOf(profile: ChatProfile, accountId?: number | null): SuggestionWriter | null {
+export function suggestionWriterOf(profile: ChatProfile, accountId?: number | null, threadId?: number): SuggestionWriter | null {
   if (profile.suggestProfileId) {
-    const writer = profile.suggestProfileId === profile.id ? profile : ChatProfileStore.find(profile.suggestProfileId)
+    const writer = profile.suggestProfileId === profile.id ? profile : ChatProfileStore.find(profile.suggestProfileId, threadId)
     return writer && (writer === profile || writer.isEnabled) ? { kind: 'profile', profile: writer } : null
   }
   if (profile.suggestUserProfileId) {
@@ -84,9 +84,9 @@ function writerRunner(writer: SuggestionWriter): SuggestionRunner | null {
  * Who writes a profile's suggestions, or null when they are off or nothing can answer. Throws when the chosen
  * connection cannot be used (missing, or no model). `accountId`: the chat's account (a user profile writes only there).
  */
-export function suggestionRunnerOf(profile: ChatProfile, accountId?: number | null): SuggestionRunner | null {
+export function suggestionRunnerOf(profile: ChatProfile, accountId?: number | null, threadId?: number): SuggestionRunner | null {
   if (!profile.suggestEnabled) return null
-  const writer = suggestionWriterOf(profile, accountId)
+  const writer = suggestionWriterOf(profile, accountId, threadId)
   if (writer) return writerRunner(writer)
   const resolved = resolveProfileModel(profile, 'suggest')
   if (resolved) {
@@ -207,7 +207,7 @@ export function parseSuggestions(text: string): string[] {
 export async function suggestReplies(profile: ChatProfile, thread: CodexChatThreadRecord, messages: CodexChatMessageRecord[], nameOf: (message: CodexChatMessageRecord) => string, signal?: AbortSignal) {
   let runner: SuggestionRunner | null
   try {
-    runner = suggestionRunnerOf(profile, thread.account_id)
+    runner = suggestionRunnerOf(profile, thread.account_id, thread.id)
   } catch (error) {
     throw new ChatSuggestError(`추천 모델 연결을 쓸 수 없어: ${error instanceof Error ? error.message : String(error)}`, 409)
   }
@@ -253,7 +253,7 @@ export async function suggestReplies(profile: ChatProfile, thread: CodexChatThre
   const suggestions = parseSuggestions(answer)
   if (suggestions.length === 0) throw new ChatSuggestError('모델이 쓸 만한 추천을 주지 않았어. 다시 뽑아봐.', 502)
   const translator = thread.kind === 'group'
-    ? translatorOf(ChatGroupStore.members(thread.id).flatMap(member => ChatProfileStore.find(member.profile_id) ?? []))
+    ? translatorOf(ChatGroupStore.members(thread.id).flatMap(member => ChatProfileStore.find(member.profile_id, thread.id) ?? []))
     : profile
   const display = translator ? await translateDisplayFields(translator, { suggestions }, ['suggestions.*'], combined, { threadId: thread.id }) : null
   if (signal?.aborted) throw new ChatSuggestError('추천을 멈췄어.', 499)

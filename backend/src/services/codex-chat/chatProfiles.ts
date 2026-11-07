@@ -21,6 +21,8 @@ import { characterChanged } from '../characterLibrary'
 import { attachMainImagesDatabase } from '../../database/userSettingsBootstrap'
 import { checkedProfileFolder } from './chatProfileFolders'
 import { chatProfileFolderRankSql, chatProfileOrderSql, nextProfileSortOrder } from './chatProfileOrder'
+import { applyChatModelOverride, hasChatModelOverride } from './chatModelOverride'
+import { cachedClaudeModels, warmClaudeModels } from '../claudeCli'
 
 /** A project workspace a profile works in, and whether it may write there. */
 export type ProfileWorkspace = { id: string; write: boolean }
@@ -613,10 +615,16 @@ export function profileGenerationOptions(profile: ChatProfile): LlmGenerationOpt
   } catch {
     extraParams = null
   }
+  let reasoningEffort = isLlmReasoningEffort(profile.reasoningEffort) || (profile.engine === 'claude' && isClaudeReasoningEffort(profile.reasoningEffort)) ? profile.reasoningEffort : null
+  if (profile.engine === 'claude' && hasChatModelOverride(profile) && isClaudeReasoningEffort(reasoningEffort)) {
+    const model = cachedClaudeModels()?.models.find(entry => entry.id === profile.model || entry.resolvedModel === profile.model)
+    if (!model) warmClaudeModels()
+    if (!model || !model.supportedEffortLevels.includes(reasoningEffort)) reasoningEffort = null
+  }
   return {
     temperature: profile.temperature,
     maxTokens: profile.maxTokens,
-    reasoningEffort: isLlmReasoningEffort(profile.reasoningEffort) || (profile.engine === 'claude' && isClaudeReasoningEffort(profile.reasoningEffort)) ? profile.reasoningEffort : null,
+    reasoningEffort,
     reasoningBudgetTokens: profile.reasoningBudgetTokens,
     extraParams,
   }
@@ -957,9 +965,10 @@ export const ChatProfileStore = {
     }))
   },
 
-  find(profileId: number): ChatProfile | null {
+  find(profileId: number, threadId?: number): ChatProfile | null {
     const row = getUserSettingsDb().prepare(`SELECT p.*, ${CHARACTER_PROFILE_COLUMNS} FROM llm_chat_profiles p LEFT JOIN character_settings s ON s.id = p.character_setting_id WHERE p.id = ?`).get(profileId) as ProfileRow | undefined
-    return row ? toProfile(row) : null
+    const profile = row ? toProfile(row) : null
+    return profile && threadId !== undefined ? applyChatModelOverride(threadId, profile) : profile
   },
 
   /** Tool rebinding checks this live flag without loading prompts, assets or model dependencies. */

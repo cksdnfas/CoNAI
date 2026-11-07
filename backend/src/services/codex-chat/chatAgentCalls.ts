@@ -156,7 +156,7 @@ async function publish(call: AgentCall, signal: AbortSignal) {
   const replies = repliesOf(call)
   const content = call.status === 'failed' ? `${call.agent_name} 에이전트 작업 실패: ${call.error ?? '작업을 완료하지 못했어.'}` : replies.map(reply => reply.content).filter(Boolean).join('\n\n')
   const profileId = thread.kind === 'group' ? call.caller_profile_id : thread.profile_id ?? call.caller_profile_id
-  const profile = ChatProfileStore.find(profileId)
+  const profile = ChatProfileStore.find(profileId, thread.id)
   const replyId = `agent-result:${call.id}`
   const parts = call.status === 'completed' ? replies : [{ content, display_content: null }]
   const displayed = (await Promise.all(parts.map(async reply => reply.display_content?.trim() ? reply.display_content

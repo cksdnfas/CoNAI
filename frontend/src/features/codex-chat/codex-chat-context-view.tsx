@@ -13,7 +13,7 @@ import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Textarea } from '@/components/ui/textarea'
 import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
-import { editChatSummarySegment, getThreadLinkedFiles, summarizeCodexChatThread, threadLinkedFilesQueryKey, thinkingMayFillCap, updateCodexChatThreadContext, updateGroupChat, updateGroupChatMember, type ChatGroupInfo, type ChatProfileSummary, type ChatSummarySegment, type CodexChatThread } from '@/lib/api-codex-chat'
+import { editChatSummarySegment, getThreadLinkedFiles, summarizeCodexChatThread, threadLinkedFilesQueryKey, thinkingMayFillCap, updateCodexChatThreadContext, updateGroupChat, updateGroupChatMember, type ChatEngine, type ChatGroupInfo, type ChatModelOverride, type ChatModelOverridePatch, type ChatProfileSummary, type ChatSummarySegment, type CodexChatThread } from '@/lib/api-codex-chat'
 import { cn } from '@/lib/utils'
 import { getErrorMessage } from '@/lib/error-message'
 import { LorebookBlock } from './chat-lorebook-block'
@@ -25,6 +25,71 @@ import { applyChatThreadUpdate, runChatThreadDetailMutation } from './chat-query
 import { CHAT_MODEL_OPTIONS_QUERY_KEY, listChatModelOptions } from '@/lib/api-codex-chat'
 import { parseServerDate } from '@/lib/server-time'
 import { ChatModelOptionItems } from './chat-model-option-items'
+import { ChatModelOverrideSelect } from './chat-model-override-select'
+
+/** A direct chat's own model; the profile keeps its own. */
+function ChatModelRow({ thread, engine, profileModelLabel }: { thread: CodexChatThread; engine: ChatEngine; profileModelLabel: string }) {
+  const { t } = useI18n()
+  const queryClient = useQueryClient()
+  const { showSnackbar } = useSnackbar()
+  const mutation = useMutation({
+    mutationFn: (patch: ChatModelOverridePatch) => updateCodexChatThreadContext(thread.id, patch),
+    onSuccess: (updated) => applyChatThreadUpdate(queryClient, updated),
+    onError: (error) => showSnackbar({ message: getErrorMessage(error, t({ ko: '저장하지 못했어.', en: 'Could not save.' })), tone: 'error' }),
+  })
+  const label = t({ ko: '대화 모델', en: 'Chat model' })
+  return (
+    <SettingRow label={label} info={t({ ko: '이 채팅에서만 쓰는 모델이야. 프로필은 그대로고, 다음 요청부터 적용돼.', en: 'The model for this chat only; the profile stays as it is. Applies from the next request.' })}>
+      <ChatModelOverrideSelect
+        engine={engine}
+        value={{ slotId: thread.chat_model_slot_id, model: thread.chat_model }}
+        profileModelLabel={profileModelLabel}
+        onChange={(patch) => mutation.mutateAsync(patch)}
+        disabled={mutation.isPending}
+        aria-label={label}
+      />
+    </SettingRow>
+  )
+}
+
+/** One member's model in a room; each row saves on its own, so it stays disabled only while its own save runs. */
+function MemberChatModelRow({ threadId, member, value, onSaved, onError }: {
+  threadId: number
+  member: ChatProfileSummary
+  value: Pick<ChatModelOverride, 'slotId' | 'model'>
+  onSaved: () => void
+  onError: (error: unknown) => void
+}) {
+  const { t } = useI18n()
+  const queryClient = useQueryClient()
+  const mutation = useMutation({
+    mutationFn: (patch: ChatModelOverridePatch) => runChatThreadDetailMutation(queryClient, threadId, () => updateGroupChatMember(threadId, member.id, patch)),
+    onSuccess: onSaved,
+    onError,
+  })
+  return (
+    <SettingRow label={<MemberLabel member={member} />}>
+      <ChatModelOverrideSelect
+        engine={member.engine}
+        value={value}
+        profileModelLabel={member.modelLabel}
+        onChange={(patch) => mutation.mutateAsync(patch)}
+        disabled={mutation.isPending}
+        aria-label={t({ ko: '{name}의 대화 모델', en: 'Chat model for {name}' }, { name: member.name })}
+      />
+    </SettingRow>
+  )
+}
+
+/** A room member's row label: avatar and @name. */
+function MemberLabel({ member }: { member: ChatProfileSummary }) {
+  return (
+    <span className="flex items-center gap-2">
+      <ChatProfileAvatar name={member.name} avatar={member.avatar} profile={member} engine={member.engine} size="sm" />
+      <span className="truncate">@{member.name}</span>
+    </span>
+  )
+}
 
 /** Per-chat opt-in, using the same public model slots as reply suggestions. */
 function GenerationReactionSettings({ thread }: { thread: CodexChatThread }) {
@@ -155,8 +220,9 @@ export function AuthorNoteBlock({ thread, defaults }: { thread: CodexChatThread;
 }
 
 /**
- * A group room's context: the room's author's note and reply token caps — one for the room, then one per LLM member
- * that overrides it (members keep their own windows and memories). A Codex member has no hard cap, so it is not listed.
+ * A group room's context: the room's author's note, each member's model in this room (its profile keeps its own) and
+ * reply token caps — one for the room, then one per LLM member that overrides it (members keep their own windows and
+ * memories). A Codex member has no hard cap, so it gets no cap row.
  */
 export function GroupContextView({ thread, group, profilesById, segments }: {
   thread: CodexChatThread
@@ -183,7 +249,8 @@ export function GroupContextView({ thread, group, profilesById, segments }: {
     onSuccess: applied,
     onError,
   })
-  const llmMembers = (group?.memberIds ?? []).flatMap((id) => profilesById.get(id) ?? []).filter((member) => member.engine !== 'codex')
+  const members = (group?.memberIds ?? []).flatMap((id) => profilesById.get(id) ?? [])
+  const llmMembers = members.filter((member) => member.engine !== 'codex')
   const roomLabel = t({ ko: '방', en: 'Room' })
   const profileLabel = t({ ko: '프로필', en: 'Profile' })
   const capLabel = t({ ko: '최대 출력 토큰', en: 'Max output tokens' })
@@ -198,6 +265,22 @@ export function GroupContextView({ thread, group, profilesById, segments }: {
       <LinkedFilesBlock threadId={thread.id} group={thread.kind === 'group'} />
       {group ? (
         <>
+          {members.length > 0 ? (
+            <SettingRow
+              label={t({ ko: '대화 모델', en: 'Chat model' })}
+              info={t({ ko: '이 방에서 참가자마다 쓰는 모델이야. 프로필은 그대로고, 다음 요청부터 적용돼.', en: "Each member's model in this room; their profiles stay as they are. Applies from the next request." })}
+            />
+          ) : null}
+          {members.map((member) => (
+            <MemberChatModelRow
+              key={member.id}
+              threadId={thread.id}
+              member={member}
+              value={group.memberChatModels[String(member.id)] ?? { slotId: null, model: null }}
+              onSaved={applied}
+              onError={onError}
+            />
+          ))}
           <SettingRow label={capLabel}>
             <NumberStepperInput
               allowEmpty
@@ -219,15 +302,7 @@ export function GroupContextView({ thread, group, profilesById, segments }: {
             const own = group.memberMaxTokens[String(member.id)] ?? null
             const effective = own ?? fallback
             return (
-              <SettingRow
-                key={member.id}
-                label={(
-                  <span className="flex items-center gap-2">
-                    <ChatProfileAvatar name={member.name} avatar={member.avatar} profile={member} engine={member.engine} size="sm" />
-                    <span className="truncate">@{member.name}</span>
-                  </span>
-                )}
-              >
+              <SettingRow key={member.id} label={<MemberLabel member={member} />}>
                 <div className="flex items-center gap-2">
                   {effective !== null && member.reasoningBudgetTokens !== null && effective <= member.reasoningBudgetTokens ? (
                     <Tip content={t({ ko: '추론 토큰 예산({budget})보다 작아서 답변 없이 끊길 수 있어', en: 'At or under the reasoning budget ({budget}): the reply may be cut before it starts' }, { budget: member.reasoningBudgetTokens })} side="top">
@@ -433,10 +508,13 @@ function SummaryBlock({ thread, segments, summaryOn }: { thread: CodexChatThread
  * One LLM chat's context: its author's note, lorebooks, turn window, reply token cap and summary switch (all can
  * follow the profile), and the summary itself — the plot, the stretches after it, and the stretches the plot took in.
  */
-export function CodexChatContextView({ thread, profiles, segments, profileTurns, profileMaxTokens, profileReasoningBudget, profileSummaryEnabled, noteDefaults }: {
+export function CodexChatContextView({ thread, profiles, profileEngine, profileModelLabel, segments, profileTurns, profileMaxTokens, profileReasoningBudget, profileSummaryEnabled, noteDefaults }: {
   thread: CodexChatThread
   /** The chat's profile (for the lorebook block's merge and promote). */
   profiles: Array<{ id: number; name: string }>
+  /** The profile's engine and model, which the chat's own model picks against. */
+  profileEngine: ChatEngine
+  profileModelLabel: string
   /** The summary by stretch, the plot first (see ChatSummarySegment). */
   segments: ChatSummarySegment[]
   profileTurns: number | null
@@ -465,6 +543,7 @@ export function CodexChatContextView({ thread, profiles, segments, profileTurns,
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pb-4 *:shrink-0">
       <ChatUserProfileRow thread={thread} />
+      <ChatModelRow thread={thread} engine={profileEngine} profileModelLabel={profileModelLabel} />
       <AuthorNoteBlock key={thread.id} thread={thread} defaults={noteDefaults} />
       <GenerationReactionSettings thread={thread} />
       <LorebookBlock threadId={thread.id} loreAutoSave={thread.lore_auto_save} profiles={profiles} />
@@ -524,8 +603,14 @@ export function CodexChatContextView({ thread, profiles, segments, profileTurns,
   )
 }
 
-/** One Codex chat's context: its author's note, then its memory as Codex reports it (how full, what it used) and folding it now. */
-export function CodexEngineContextView({ thread, profiles, noteDefaults }: { thread: CodexChatThread; profiles: Array<{ id: number; name: string }>; noteDefaults: AuthorNoteDefaults }) {
+/** One Codex chat's context: its model and author's note, then its memory as Codex reports it (how full, what it used) and folding it now. */
+export function CodexEngineContextView({ thread, profiles, profileEngine, profileModelLabel, noteDefaults }: {
+  thread: CodexChatThread
+  profiles: Array<{ id: number; name: string }>
+  profileEngine: ChatEngine
+  profileModelLabel: string
+  noteDefaults: AuthorNoteDefaults
+}) {
   const { t, formatNumber, formatDateTime } = useI18n()
   const { showSnackbar } = useSnackbar()
   const queryClient = useQueryClient()
@@ -541,6 +626,7 @@ export function CodexEngineContextView({ thread, profiles, noteDefaults }: { thr
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pb-4 *:shrink-0">
       <ChatUserProfileRow thread={thread} />
+      <ChatModelRow thread={thread} engine={profileEngine} profileModelLabel={profileModelLabel} />
       <AuthorNoteBlock key={thread.id} thread={thread} defaults={noteDefaults} />
       <LorebookBlock threadId={thread.id} loreAutoSave={thread.lore_auto_save} profiles={profiles} />
       <LinkedFilesBlock threadId={thread.id} group={thread.kind === 'group'} />

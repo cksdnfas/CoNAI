@@ -174,8 +174,8 @@ function requireProfileAccess(requester: McpRequester, profile: ChatProfile) {
   if (!current?.isEnabled || current.engine !== profile.engine) throw new LlmChatError('프로필 사용 설정이 변경됐어.', 409)
 }
 
-function requireUsableProfile(profileId: number | null, requester: McpRequester) {
-  const profile = profileId === null ? null : ChatProfileStore.find(profileId)
+function requireUsableProfile(profileId: number | null, requester: McpRequester, threadId?: number) {
+  const profile = profileId === null ? null : ChatProfileStore.find(profileId, threadId)
   if (!profile || (profile.engine !== 'llm' && profile.engine !== 'claude')) {
     throw new LlmChatError('이 채팅의 프로필이 지워졌어.', 409)
   }
@@ -341,7 +341,7 @@ async function runReply(turn: LlmTurn, requester: McpRequester, thread: CodexCha
       return sessionTurn.messages
     }
     if (turn.reaction && thread.kind === 'group') {
-      const members = ChatGroupStore.members(thread.id).flatMap((member) => ChatProfileStore.find(member.profile_id) ?? [])
+      const members = ChatGroupStore.members(thread.id).flatMap((member) => ChatProfileStore.find(member.profile_id, thread.id) ?? [])
       const messages = buildGroupLlmMessages({ profile, thread, members, messages: history, history: turn.groupHistory, routing: turn.delivery!.routing,
         windowLimit: groupLimitsOf(thread).window, tools: [], maxTokens: config.maxTokens, withTools: false, extraTokens: estimateMessagesTokens(profile.id, [turn.reaction.result]),
         segments: thread.summary_enabled === 1 ? ChatSummaryStore.list(thread.id) : undefined, attachmentTexts, attachedImages,
@@ -887,7 +887,7 @@ function startReply(requester: McpRequester, thread: CodexChatThreadRecord, prof
  */
 function writeFollowUp(requester: McpRequester, threadId: number, profileId: number, directive: string, signal: AbortSignal) {
   const thread = CodexChatStore.findThreadById(threadId)
-  const profile = ChatProfileStore.find(profileId)
+  const profile = ChatProfileStore.find(profileId, threadId)
   if (!thread || thread.profile_id !== profileId || !profile?.isEnabled || (profile.engine !== 'llm' && profile.engine !== 'claude') || busy(threadId) || signal.aborted) return Promise.resolve(null)
   const onAbort = () => LlmChatService.skipReaction(threadId)
   signal.addEventListener('abort', onAbort, { once: true })
@@ -1013,7 +1013,7 @@ export const LlmChatService = {
    */
   async sendMessage(requester: McpRequester, thread: CodexChatThreadRecord, text: string, listener: (event: CodexChatStreamEvent) => void, fileIds?: unknown, flagIds?: unknown, picks?: unknown, mediaHashes?: unknown, replyToMessageId?: unknown, pageContext?: unknown, options: ChatSendOptions = {}) {
     assertLlmChatAvailable(requester)
-    const profile = requireUsableProfile(thread.profile_id, requester)
+    const profile = requireUsableProfile(thread.profile_id, requester, thread.id)
     const { page, attachments, mediaAttachments, flags, trimmed, routing } = prepareChatSend(requester, thread, profile, text,
       { fileIds, flagIds, picks, mediaHashes, replyToMessageId, pageContext, options }, LlmChatError)
     LlmChatService.skipReaction(thread.id)
@@ -1042,7 +1042,7 @@ export const LlmChatService = {
 
   async rewriteMessage(requester: McpRequester, thread: CodexChatThreadRecord, messageId: number, content: string | undefined, listener: (event: CodexChatStreamEvent) => void) {
     assertLlmChatAvailable(requester)
-    const profile = requireUsableProfile(thread.profile_id, requester)
+    const profile = requireUsableProfile(thread.profile_id, requester, thread.id)
     cancelJudgeFollowUp(thread.id)
     if (busy(thread.id)) throw new LlmChatError('이전 답변이 아직 진행 중이야.', 409)
     const message = CodexChatStore.findMessage(thread.id, messageId)
@@ -1068,7 +1068,7 @@ export const LlmChatService = {
   /** Carry on the last reply where it was cut: the result (old text + new) becomes a new variant of it. */
   continueReply(requester: McpRequester, thread: CodexChatThreadRecord, messageId: number, listener: (event: CodexChatStreamEvent) => void) {
     assertLlmChatAvailable(requester)
-    const profile = requireUsableProfile(thread.profile_id, requester)
+    const profile = requireUsableProfile(thread.profile_id, requester, thread.id)
     cancelJudgeFollowUp(thread.id)
     if (busy(thread.id)) throw new LlmChatError('이전 답변이 아직 진행 중이야.', 409)
     const message = CodexChatStore.latestMessage(thread.id)
@@ -1107,7 +1107,7 @@ export const LlmChatService = {
 
   async summarize(requester: McpRequester, thread: CodexChatThreadRecord) {
     assertLlmChatAvailable(requester)
-    const profile = requireUsableProfile(thread.profile_id, requester)
+    const profile = requireUsableProfile(thread.profile_id, requester, thread.id)
     if (busy(thread.id)) throw new LlmChatError('이전 답변이 아직 진행 중이야.', 409)
     const summary = await summarizeAll(thread.id, profile)
     if (summary === null) {

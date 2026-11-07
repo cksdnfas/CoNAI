@@ -48,7 +48,7 @@ function generationProfile(context: McpRequestContext, toolName: string, args: R
   requireMcpToolAccess(context, toolName, args);
   if (!reference) return null;
   requireRequesterPermission(context.requester, 'images.view');
-  return context.chatContext ? ChatProfileStore.find(context.chatContext.profileId) : null;
+  return context.chatContext ? ChatProfileStore.find(context.chatContext.profileId, context.chatContext.threadId) : null;
 }
 
 /** `inline`: the chat model fills the preset's fields now, and the job is queued at once. */

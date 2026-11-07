@@ -198,12 +198,12 @@ export type ChatProposal = { id: number; dismissed?: boolean } & (
   | {
       /**
        * propose_chat_settings: this chat's own settings (linked account lorebooks, record book, linked files, minutes
-       * folder). The chat's owner saves it (POST /api/chat-proposals/:id/apply) with the context tab's rules.
+       * folder, direct/member chat models). The chat's owner saves it (POST /api/chat-proposals/:id/apply) with the context tab's rules.
        */
       kind: 'chat_settings'
       /** Only the keys that change. */
-      patch: { lorebookIds?: number[]; loreRecordBookId?: number | null; linkedFiles?: Array<{ id: string; write: boolean }>; minutesFolderId?: string | null }
-      before: { lorebookIds?: number[]; loreRecordBookId?: number | null; linkedFiles?: Array<{ id: string; write: boolean }>; minutesFolderId?: string | null }
+      patch: { lorebookIds?: number[]; loreRecordBookId?: number | null; linkedFiles?: Array<{ id: string; write: boolean }>; minutesFolderId?: string | null; chatModelSlotId?: number | null; chatModel?: string | null; memberChatModels?: Record<string, { chatModelSlotId?: number | null; chatModel?: string | null }> }
+      before: { lorebookIds?: number[]; loreRecordBookId?: number | null; linkedFiles?: Array<{ id: string; write: boolean }>; minutesFolderId?: string | null; chatModelSlotId?: number | null; chatModel?: string | null; memberChatModels?: Record<string, { chatModelSlotId?: number | null; chatModel?: string | null }> }
       /** Each changed key as it reads on the card (names, not ids). */
       display: Record<string, { before: string; after: string }>
       saved?: boolean

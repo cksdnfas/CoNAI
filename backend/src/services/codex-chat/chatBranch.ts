@@ -10,7 +10,7 @@ const TITLE_MAX_LENGTH = 60
 
 /** Thread settings a branch keeps: who talks and how. Codex state and usage start empty. */
 const COPIED_THREAD_COLUMNS = ['account_id', 'engine', 'profile_id', 'kind', 'context_turns', 'summary_enabled', 'author_note', 'author_note_depth',
-  'max_tokens', 'flag_ids', 'user_profile_id', 'group_chain_limit', 'group_window_limit', 'lorebook_ids', 'lore_auto_save', 'lore_record_book_id', 'linked_files'] as const
+  'max_tokens', 'chat_model_slot_id', 'chat_model', 'flag_ids', 'user_profile_id', 'group_chain_limit', 'group_window_limit', 'lorebook_ids', 'lore_auto_save', 'lore_record_book_id', 'linked_files'] as const
 
 const COPIED_MESSAGE_COLUMNS = ['role', 'content', 'display_content', 'tool_calls', 'status', 'error', 'speaker_profile_id', 'flags', 'finish_reason',
   'media_attachments', 'alternatives', 'active_alternative', 'context_meta', 'created_date'] as const
@@ -51,11 +51,11 @@ export function branchChatThread(thread: CodexChatThreadRecord, untilMessageId: 
       copyFiles.run(copyId, row.id)
     }
 
-    // A room's members come along with their order and reply caps. Their place in the conversation (and Codex
+    // A room's members come along with their order, models and reply caps. Their place in the conversation (and Codex
     // memory) does not: a Codex member then gets the room's recent past on its first turn, like a newcomer.
     if (thread.kind === 'group') {
-      db.prepare(`INSERT INTO chat_group_members (thread_id, profile_id, member_order, max_tokens)
-        SELECT ?, profile_id, member_order, max_tokens FROM chat_group_members WHERE thread_id = ?`).run(branchId, thread.id)
+      db.prepare(`INSERT INTO chat_group_members (thread_id, profile_id, member_order, max_tokens, chat_model_slot_id, chat_model)
+        SELECT ?, profile_id, member_order, max_tokens, chat_model_slot_id, chat_model FROM chat_group_members WHERE thread_id = ?`).run(branchId, thread.id)
     }
 
     const edits = parseBlockEdits(thread.block_edits).filter((edit) => edit.afterMessageId <= untilMessageId)

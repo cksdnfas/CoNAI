@@ -74,7 +74,7 @@ export function registerChatRoomTools(server: McpServer, context: McpRequestCont
       const { entry, filePath } = FileStoreService.resolveFile(owner, file_id);
       if (!entry.chatAttachment) throw new Error('Attachment not found in this chat.');
       if (mode !== 'text') {
-        const profile = ChatProfileStore.find(context.chatContext!.profileId);
+        const profile = ChatProfileStore.find(context.chatContext!.profileId, thread.id);
         if (!profile || !profileSeesImages(profile)) throw new Error('Image viewing is off for this chat profile.');
         if (!await storedFileAllowed(file_id, contextContentLimit(context))) throw new Error(CONTENT_RATING_BLOCKED);
         if (mode === 'image') {

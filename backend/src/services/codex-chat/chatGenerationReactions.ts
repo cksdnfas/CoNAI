@@ -92,10 +92,10 @@ export class ChatGenerationReactionService {
     }).immediate()
     const thread = CodexChatStore.findThreadById(threadId)
     const profileId = thread?.kind === 'group' ? source?.speaker_profile_id : thread?.profile_id
-    const profile = profileId ? ChatProfileStore.find(profileId) : null
+    const profile = profileId ? ChatProfileStore.find(profileId, threadId) : null
     const eligible = () => {
       const current = CodexChatStore.findThreadById(threadId)
-      const currentProfile = profileId ? ChatProfileStore.find(profileId) : null
+      const currentProfile = profileId ? ChatProfileStore.find(profileId, threadId) : null
       return Boolean(current && source && current.reaction_enabled === 1 && currentProfile?.isEnabled && currentProfile.engine === 'llm'
         && CodexChatStore.findMessage(threadId, source.id)?.routing?.replyId === replyId
         && (current.kind === 'group' ? ChatGroupStore.member(threadId, currentProfile.id) : current.engine === 'llm' && current.profile_id === currentProfile.id)
@@ -139,7 +139,7 @@ export class ChatGenerationReactionService {
       // Loading previews yields to user requests; reserve only if the reaction still owns its pending record.
       if (!eligible()) { this.transition(replyId, 'pending', 'skipped'); return }
       const current = CodexChatStore.findThreadById(threadId)!
-      const currentProfile = ChatProfileStore.find(profile.id)!
+      const currentProfile = ChatProfileStore.find(profile.id, threadId)!
       const claimed = db.transaction(() => db.prepare("UPDATE chat_generation_reactions SET state = 'running', attempts = attempts + 1, updated_at = CURRENT_TIMESTAMP WHERE reply_id = ? AND state = 'pending'").run(replyId).changes > 0).immediate()
       if (!claimed) return
       const result: ChatCompletionMessage = { role: 'user', content: parts.length ? [{ type: 'text', text: lines.join('\n') }, ...parts] : lines.join('\n') }

@@ -38,6 +38,8 @@ const SLOT_REFERENCES: Array<[string, string]> = [
   ['chat_judge_presets', 'escalation_slot_id'],
   ['chat_user_profiles', 'model_slot_id'],
   ['codex_chat_threads', 'reaction_model_slot_id'],
+  ['codex_chat_threads', 'chat_model_slot_id'],
+  ['chat_group_members', 'chat_model_slot_id'],
 ];
 
 function parseConfig(value: string | null): Record<string, unknown> | null {

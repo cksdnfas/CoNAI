@@ -90,7 +90,7 @@ export function useRouteName() {
 
 /** How many things use a row (workflow nodes included). */
 export function slotUseCount(slot: ModelSlot, workflowNodes = 0) {
-  return slot.routes.length + slot.profiles.length + slot.judgePresets.length + slot.userProfiles + slot.chats + (slot.contentEvaluations ?? 0) + workflowNodes
+  return slot.routes.length + slot.profiles.length + slot.judgePresets.length + slot.userProfiles + slot.chats + (slot.chatModels ?? 0) + (slot.contentEvaluations ?? 0) + workflowNodes
 }
 
 /** Uses that hold a model row in place: all but the chat representative model, which moves to another model when its row goes. */
@@ -110,6 +110,7 @@ function useUsageLines(slot: ModelSlot | null, workflowNodes: number) {
     slot.judgePresets.length > 0 ? `${t({ ko: '판단 프리셋', en: 'Judge presets' })}: ${slot.judgePresets.map((preset) => preset.name).join(', ')}` : null,
     slot.userProfiles > 0 ? t({ ko: '사용자 프로필 {count}', en: '{count} user profiles' }, { count: slot.userProfiles }) : null,
     slot.chats > 0 ? t({ ko: '채팅 반응 {count}', en: '{count} chat reactions' }, { count: slot.chats }) : null,
+    (slot.chatModels ?? 0) > 0 ? t({ ko: '채팅 모델 {count}', en: '{count} chat models' }, { count: slot.chatModels ?? 0 }) : null,
     (slot.contentEvaluations ?? 0) > 0 ? t({ ko: '게시판 평가', en: 'Board evaluations' }) : null,
     workflowNodes > 0 ? t({ ko: '워크플로 노드 {count}', en: '{count} workflow nodes' }, { count: workflowNodes }) : null,
   ].filter((line): line is string => line !== null)

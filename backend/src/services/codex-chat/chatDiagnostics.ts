@@ -26,7 +26,7 @@ export class ChatDiagnosticsError extends Error {
 
 function profileOf(thread: CodexChatThreadRecord, message: CodexChatMessageRecord) {
   const id = thread.kind === 'group' ? message.speaker_profile_id : thread.profile_id
-  return id ? ChatProfileStore.find(id) : null
+  return id ? ChatProfileStore.find(id, thread.id) : null
 }
 
 function scopeFor(accountId: number | null, profile: ChatProfile | null): ChatDiagnosticsScope {
@@ -84,7 +84,7 @@ export async function getChatDiagnostics(requester: McpRequester, threadId: numb
   if (scope !== 'view' && profile && meta.version === 2) {
     const user = userPersonaForThread(thread)
     const render = (text: string) => fillCharacterPlaceholders(text, profile, user)
-    const profiles = thread.kind === 'group' ? ChatGroupStore.members(threadId).flatMap((member) => ChatProfileStore.find(member.profile_id) ?? []) : [profile]
+    const profiles = thread.kind === 'group' ? ChatGroupStore.members(threadId).flatMap((member) => ChatProfileStore.find(member.profile_id, threadId) ?? []) : [profile]
     const books = [...new Map(profiles.flatMap((member) => booksForRequest({ thread, profile: member })).map((book) => [book.id, book])).values()]
     const segments = ChatSummaryStore.list(threadId)
     const push = (source: ContextSource, text: string | undefined, extra: { bookId?: number; entryId?: string } = {}, displayText = text) => {

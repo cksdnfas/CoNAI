@@ -80,7 +80,7 @@ export async function judgeNext(params: { thread: CodexChatThreadRecord; members
   const candidates = params.members.filter((member) => member.id !== params.message.speaker_profile_id)
   if (!setup || !setup.preset.room.next.enabled || candidates.length === 0) return null
   const settings = setup.preset.room.next
-  const speaker = params.message.speaker_profile_id === null ? null : ChatProfileStore.find(params.message.speaker_profile_id)
+  const speaker = params.message.speaker_profile_id === null ? null : ChatProfileStore.find(params.message.speaker_profile_id, params.thread.id)
   const all = speaker && !params.members.some((member) => member.id === speaker.id) ? [...params.members, speaker] : params.members
   const state = roomState(params.thread, all, params.messages, setup.preset.room.window)
   const user = state.room.user

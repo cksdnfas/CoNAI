@@ -31,7 +31,7 @@ export function profileContentLimit(profile: ContentRatingProfile, role: ModelRo
  */
 export function contextContentLimit(context: McpRequestContext): ContentRatingLimit {
   if (context.contentRatingLimit !== undefined) return context.contentRatingLimit
-  const profile = context.chatContext ? ChatProfileStore.find(context.chatContext.profileId) : null
+  const profile = context.chatContext ? ChatProfileStore.find(context.chatContext.profileId, context.chatContext.threadId) : null
   return profile ? profileContentLimit(profile) : null
 }
 

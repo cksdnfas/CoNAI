@@ -791,6 +791,8 @@ export function createUserSettingsSchema(db: Database.Database): void {
     ['author_note_depth', 'INTEGER'],
     ['reaction_enabled', 'INTEGER NOT NULL DEFAULT 0'],
     ['reaction_model_slot_id', 'INTEGER'],
+    ['chat_model_slot_id', 'INTEGER'],
+    ['chat_model', 'TEXT'],
     // This chat's reply length cap in tokens (null: the profile's max tokens).
     ['max_tokens', 'INTEGER'],
     // JSON ids of the chat flags switched on in this chat.
@@ -1061,6 +1063,9 @@ export function createUserSettingsSchema(db: Database.Database): void {
   // Group members: this member's reply token cap in the room (null: the room's cap, then the profile's).
   if (!hasColumn('chat_group_members', 'max_tokens')) {
     db.exec('ALTER TABLE chat_group_members ADD COLUMN max_tokens INTEGER');
+  }
+  for (const [column, type] of [['chat_model_slot_id', 'INTEGER'], ['chat_model', 'TEXT']]) {
+    if (!hasColumn('chat_group_members', column)) db.exec(`ALTER TABLE chat_group_members ADD COLUMN ${column} ${type}`);
   }
   const chatProfileColumns: Array<[string, string]> = [
     ['revision', 'INTEGER NOT NULL DEFAULT 0'],

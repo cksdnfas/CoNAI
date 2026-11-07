@@ -1,5 +1,6 @@
 import { getUserSettingsDb } from '../../database/userSettingsDb'
 import { CodexChatStore } from './codexChatStore'
+import type { ChatModelPatch } from './chatModelOverride'
 
 export const GROUP_MEMBER_MAX = 6
 export const GROUP_LIMITS = {
@@ -24,6 +25,8 @@ export type ChatGroupMember = {
   codex_lore_sent: string | null
   /** This member's reply token cap in the room (null: the room's cap, then the profile's). */
   max_tokens: number | null
+  chat_model_slot_id: number | null
+  chat_model: string | null
   joined_date: string
 }
 
@@ -105,6 +108,12 @@ export const ChatGroupStore = {
   /** One member's reply token cap in this room (null follows the room, then the profile). */
   setMemberMaxTokens(threadId: number, profileId: number, maxTokens: number | null) {
     getUserSettingsDb().prepare('UPDATE chat_group_members SET max_tokens = ? WHERE thread_id = ? AND profile_id = ?').run(maxTokens, threadId, profileId)
+  },
+
+  setMemberChatModel(threadId: number, profileId: number, patch: ChatModelPatch) {
+    const db = getUserSettingsDb()
+    if (patch.chatModelSlotId !== undefined) db.prepare('UPDATE chat_group_members SET chat_model_slot_id = ? WHERE thread_id = ? AND profile_id = ?').run(patch.chatModelSlotId, threadId, profileId)
+    if (patch.chatModel !== undefined) db.prepare('UPDATE chat_group_members SET chat_model = ? WHERE thread_id = ? AND profile_id = ?').run(patch.chatModel, threadId, profileId)
   },
 
   setLastSeen(threadId: number, profileId: number, messageId: number) {

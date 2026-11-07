@@ -55,7 +55,10 @@ export interface ModelSlot {
   judgePresets: Array<{ id: number; name: string }>
   contentEvaluations?: number
   userProfiles: number
+  /** Chats whose completion reactions use the row. */
   chats: number
+  /** Chats using the row as their own chat model or a room member's; absent from older servers. */
+  chatModels?: number
   createdDate: string
   updatedDate: string
   /** Read-only: its connection can be used. */

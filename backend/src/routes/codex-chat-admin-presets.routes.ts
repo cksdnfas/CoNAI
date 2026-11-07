@@ -356,7 +356,7 @@ router.post('/admin/judge-presets/test', requireAdmin, asyncHandler(async (req: 
     res.status(404).json({ success: false, error: '테스트할 대화를 찾을 수 없어. 내 1:1 채팅만 고를 수 있어.' })
     return
   }
-  const profile = ChatProfileStore.find(thread.profile_id)
+  const profile = ChatProfileStore.find(thread.profile_id, thread.id)
   if (!profile) { res.status(404).json({ success: false, error: '이 대화의 프로필이 지워졌어.' }); return }
   try {
     const presetId = parseId(body.presetId)

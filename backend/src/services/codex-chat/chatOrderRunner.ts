@@ -48,7 +48,7 @@ function orderTranscript(window: CodexChatMessageRecord[], nameOf: (message: Cod
 /** The speaker of the reply: a room's member that wrote it, a direct chat's profile; checked like a reply of theirs. */
 function orderProfile(requester: McpRequester, thread: CodexChatThreadRecord, target: CodexChatMessageRecord): ChatProfile {
   const profileId = thread.kind === 'group' ? target.speaker_profile_id : thread.profile_id
-  const profile = profileId == null ? null : ChatProfileStore.find(profileId)
+  const profile = profileId == null ? null : ChatProfileStore.find(profileId, thread.id)
   if (!profile?.isEnabled || !canUseChatProfile(resolveChatAccess(requester.accountId), profile) || (thread.kind === 'group' && !ChatGroupStore.member(thread.id, profile.id))) {
     throw new ChatFlagError('이 답변을 쓴 캐릭터가 지금 응답할 수 없어.', 409)
   }
@@ -117,7 +117,7 @@ export async function runChatOrder(requester: McpRequester, threadId: number, me
       const attachedImages = await loadAttachedImages(profile, chatProfileRequester(requester, context), attachmentHistory, context)
       const done = (call: Parameters<typeof chatOrderDone>[1]) => chatOrderDone(kind, call)
       if (group) {
-        const members = ChatGroupStore.members(threadId).flatMap((member) => ChatProfileStore.find(member.profile_id) ?? [])
+        const members = ChatGroupStore.members(threadId).flatMap((member) => ChatProfileStore.find(member.profile_id, threadId) ?? [])
         const maxTokens = ChatGroupStore.member(threadId, profile.id)?.max_tokens ?? thread.max_tokens ?? profile.maxTokens
         result = await runLlmOrderTurn({
           chatContext: context, requester, threadId, profile, signal: run.signal, emit, done, generation: { maxTokens },

@@ -234,7 +234,7 @@ async function savedReply(row: DeferredGenerationRow) {
 async function runDeferred(row: DeferredGenerationRow) {
   const context = JSON.parse(row.context) as McpRequestContext
   const thread = CodexChatStore.findThreadById(row.thread_id)
-  const profile = context.chatContext ? ChatProfileStore.find(context.chatContext.profileId) : null
+  const profile = context.chatContext ? ChatProfileStore.find(context.chatContext.profileId, context.chatContext.threadId) : null
   const preset = ChatGenerationPresetStore.find(row.preset_id)
   if (!thread || !profile || !preset) throw new DeferredSkip('채팅이나 프리셋이 없어졌어.')
   const { requireMcpToolAccess } = await import('../../mcp/toolAccess')

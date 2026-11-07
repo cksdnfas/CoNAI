@@ -66,7 +66,7 @@ export class LoreProposalError extends Error {
 export type SaveLoreInput = { title?: unknown; keys?: unknown; content?: unknown; constant?: unknown; file?: unknown; language?: import('@conai/shared').BilingualLore['language']; translation?: import('@conai/shared').LoreTranslation | null }
 
 export async function proposeTranslatedLore(context: ChatExecutionContext, input: SaveLoreInput, signal?: AbortSignal) {
-  const profile = ChatProfileStore.find(context.profileId)
+  const profile = ChatProfileStore.find(context.profileId, context.threadId)
   if (!profile || typeof input.title !== 'string' || typeof input.content !== 'string' || !Array.isArray(input.keys)) return proposeLore(context, input)
   if (context.replyId && ChatProposalStore.forReply(context.threadId, context.replyId, 'lore').length) return proposeLore(context, input)
   // A proposal the spacing rule refuses anyway is refused before paying for its translation.

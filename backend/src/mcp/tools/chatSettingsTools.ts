@@ -6,6 +6,10 @@ import { errorResult, textResult } from '../toolResults';
 
 export const GET_CHAT_SETTINGS_TOOL = 'get_chat_settings';
 export const PROPOSE_CHAT_SETTINGS_TOOL = 'propose_chat_settings';
+const chatModelFields = {
+  chatModelSlotId: z.union([z.number(), z.literal('')]).nullable().optional(),
+  chatModel: z.string().nullable().optional(),
+};
 
 /**
  * How the chat's user-side features work, for a model asked "how do I…" inside a chat. The screens are named as the
@@ -13,6 +17,7 @@ export const PROPOSE_CHAT_SETTINGS_TOOL = 'propose_chat_settings';
  */
 export const CHAT_FEATURES_GUIDE = [
   'CHAT FEATURES the user can use (UI names in Korean, as the app shows them)',
+  '- Chat model: 컨텍스트 changes only this chat\'s model (in a group, each member separately), never the shared profile or engine. get_chat_settings shows the effective label, the profile\'s own label and selectable API LLM slots. propose_chat_settings uses chatModelSlotId for API LLM or chatModel for a Claude Code/Codex model name; null (or an empty name) follows the profile again. In rooms use memberChatModels keyed by profile id, with those same fields. The user must save the card; member changes apply to that member\'s next reply.',
   '- Scene narration: a line of the user\'s message that starts with `$` is narration written as the narrator (events of the scene, not the user\'s character). `$$` at the start writes a literal `$`. The model receives such lines tagged [Narration].',
   '- Orders from a reply: a character reply\'s ⋯ menu has 이 장면 그리기, 이미지 다시 그리기 (a reply with an image), 목소리·소리 만들기, 로어로 남기기 and 다음 선택지 만들기 (1:1, last reply only). Each shows only when the profile can use that tool; the result is added to that reply, no new message. 여기서 분기 in the same menu starts a branch chat from that message.',
   '- File versions: when a reply creates or edits a file-store file, file chips appear under it; the name opens the file with its version history, ↶ undoes that reply\'s change. In the file store preview, the clock icon (버전 기록) shows diffs and 이 버전으로 되돌리기.',
@@ -33,7 +38,7 @@ export const CHAT_FEATURES_GUIDE = [
 export function registerChatSettingsTools(server: McpServer, context: McpRequestContext): void {
   if (!context.chatContext) return;
   server.registerTool(GET_CHAT_SETTINGS_TOOL, {
-    description: 'Read this chat\'s own settings: linked account lorebooks and the record book (where save_lore writes), linked file-store folders and files (its own and its profiles\'), the minutes folder and the folders it could use.',
+    description: 'Read this chat\'s own settings: its chat model (or each member\'s model in a room), effective and profile labels, selectable API LLM slots; linked account lorebooks and the record book (where save_lore writes), linked file-store folders and files (its own and its profiles\'), the minutes folder and the folders it could use. Claude Code/Codex use a model name, not a slot; CLI model catalogs are not listed.',
     inputSchema: z.object({}),
   }, async () => {
     try {
@@ -43,8 +48,10 @@ export function registerChatSettingsTools(server: McpServer, context: McpRequest
     }
   });
   server.registerTool(PROPOSE_CHAT_SETTINGS_TOOL, {
-    description: 'Propose changes to this chat\'s own settings as a before/after card; nothing changes until the user presses 저장. Give only what changes: lorebook_ids (the full list of the owner\'s account lorebooks linked to this chat), record_book_id (one of those, or null for this chat\'s own book), linked_files (the full list of the chat\'s own links: [{ id, write }], ids from list_files / search_files / get_chat_settings; folders, text files, PDFs or XLSX documents (PDF/XLSX content is read-only), not inside 로어북/), minutes_folder_id (a folder linked with write: true, or null to stop). get_chat_settings shows current values and choices.',
+    description: 'Propose changes to this chat\'s own settings as a before/after card; nothing changes until the user presses 저장. Give only what changes: chatModelSlotId (direct API LLM chat, a selectable slot id), chatModel (direct Claude Code/Codex chat, model name), or memberChatModels (group only, object keyed by profile id containing chatModelSlotId or chatModel). Null or an empty name restores the profile model; never edits the shared profile or switches engines. Other keys: lorebook_ids (the full list of the owner\'s account lorebooks linked to this chat), record_book_id (one of those, or null for this chat\'s own book), linked_files (the full list of the chat\'s own links: [{ id, write }], ids from list_files / search_files / get_chat_settings; folders, text files, PDFs or XLSX documents (PDF/XLSX content is read-only), not inside 로어북/), minutes_folder_id (a folder linked with write: true, or null to stop). get_chat_settings shows current values and choices.',
     inputSchema: z.object({
+      ...chatModelFields,
+      memberChatModels: z.record(z.string(), z.object(chatModelFields)).optional(),
       lorebook_ids: z.array(z.number().int().positive()).max(20).optional(),
       record_book_id: z.number().int().positive().nullable().optional(),
       linked_files: z.array(z.object({ id: z.string().regex(/^[a-f0-9]{32}$/), write: z.boolean().default(false) })).max(20).optional(),

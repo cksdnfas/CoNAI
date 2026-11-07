@@ -485,6 +485,9 @@ const UPDATE_LABELS: Record<string, { ko: string; en: string }> = {
   workspace: { ko: '작업 공간', en: 'Workspace' },
   loreRecordBookId: { ko: '기록할 곳', en: 'Record book' },
   minutesFolderId: { ko: '회의록', en: 'Minutes' },
+  chatModelSlotId: { ko: '대화 모델', en: 'Chat model' },
+  chatModel: { ko: '대화 모델', en: 'Chat model' },
+  memberChatModels: { ko: '참가자 대화 모델', en: "Members' chat models" },
 }
 
 const LANGUAGE_LABELS: Record<string, string> = { ko: '한국어', en: 'English', ja: '日本語', zh: '简体中文' }
@@ -661,7 +664,7 @@ function ProfileFolderProposalCard({ proposal, threadId }: { proposal: Extract<P
   </ProposalFrame>
 }
 
-/** This chat's own settings (lorebook links, record book, linked files, minutes): the chat's owner saves it here. */
+/** This chat's own settings (lorebook links, record book, linked files, minutes, the chat's or members' chat models): the chat's owner saves it here. */
 function ChatSettingsCard({ proposal, threadId }: { proposal: ChatSettingsProposal; threadId?: number }) {
   const { t } = useI18n()
   const { showSnackbar } = useSnackbar()

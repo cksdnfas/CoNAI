@@ -8,6 +8,8 @@ type CodexModelSelectProps = {
   value: string
   onChange: (value: string) => void
   models: CodexModelOption[] | undefined
+  /** What an empty value means instead of the CLI default (its option and the free-text hint). */
+  emptyLabel?: string
   variant?: 'default' | 'settings'
   disabled?: boolean
   className?: string
@@ -15,14 +17,14 @@ type CodexModelSelectProps = {
 }
 
 /** Codex agent model dropdown; falls back to a free-text field (committed on blur) while the server can't list models. */
-export function CodexModelSelect({ value, onChange, models, variant = 'default', disabled, className, 'aria-label': ariaLabel }: CodexModelSelectProps) {
+export function CodexModelSelect({ value, onChange, models, emptyLabel, variant = 'default', disabled, className, 'aria-label': ariaLabel }: CodexModelSelectProps) {
   const { t } = useI18n()
   const [draft, setDraft] = useState<string | null>(null)
   useEffect(() => setDraft(null), [value])
   const defaultModel = models?.find((model) => model.isDefault)
-  const defaultLabel = defaultModel
+  const defaultLabel = emptyLabel ?? (defaultModel
     ? t({ ko: `기본값 (${defaultModel.label})`, en: `Default (${defaultModel.label})` })
-    : t({ ko: '기본값', en: 'Default' })
+    : t({ ko: '기본값', en: 'Default' }))
 
   if (!models || models.length === 0) {
     return (

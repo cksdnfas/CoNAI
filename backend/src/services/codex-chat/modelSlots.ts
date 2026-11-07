@@ -85,6 +85,8 @@ export type ModelSlot = {
   userProfiles: number
   /** Chats whose completion reaction uses it. */
   chats: number
+  /** Direct chats and room members whose chat model uses it. */
+  chatModels: number
   contentEvaluations?: number
   createdDate: string
   updatedDate: string
@@ -132,6 +134,7 @@ type Usage = {
   judgePresets: Map<number, ModelSlot['judgePresets']>
   userProfiles: Map<number, number>
   chats: Map<number, number>
+  chatModels: Map<number, number>
   contentEvaluations: Map<number, number>
 }
 
@@ -149,7 +152,7 @@ function count(map: Map<number, number>, key: number | null) {
 /** Every reference to every row, read once per listing. */
 function collectUsage(ids?: number[]): Usage {
   const db = getUserSettingsDb()
-  const usage: Usage = { profiles: new Map(), judgePresets: new Map(), userProfiles: new Map(), chats: new Map(), contentEvaluations: new Map() }
+  const usage: Usage = { profiles: new Map(), judgePresets: new Map(), userProfiles: new Map(), chats: new Map(), chatModels: new Map(), contentEvaluations: new Map() }
   if (ids?.length === 0) return usage
   const selected = (column: string) => ids ? `${column} IN (${ids.join(',') || 'NULL'})` : `${column} IS NOT NULL`
   const profiles = db.prepare(`
@@ -174,9 +177,11 @@ function collectUsage(ids?: number[]): Usage {
   for (const [table, column, counts] of [
     ['chat_user_profiles', 'model_slot_id', usage.userProfiles],
     ['codex_chat_threads', 'reaction_model_slot_id', usage.chats],
+    ['codex_chat_threads', 'chat_model_slot_id', usage.chatModels],
+    ['chat_group_members', 'chat_model_slot_id', usage.chatModels],
     ['content_evaluation_settings', 'model_slot_id', usage.contentEvaluations],
   ] as const) {
-    for (const row of db.prepare(`SELECT ${column} AS id, COUNT(*) AS count FROM ${table} WHERE ${selected(column)} GROUP BY ${column}`).all() as Array<{ id: number; count: number }>) counts.set(row.id, row.count)
+    for (const row of db.prepare(`SELECT ${column} AS id, COUNT(*) AS count FROM ${table} WHERE ${selected(column)} GROUP BY ${column}`).all() as Array<{ id: number; count: number }>) counts.set(row.id, (counts.get(row.id) ?? 0) + row.count)
   }
   // Board knowledge evaluations keep their judge in the posts settings file.
   count(usage.contentEvaluations, loadPostsSettings().knowledge.judgeSlotId)
@@ -260,6 +265,7 @@ function toSlot(row: SlotRow, rows: Map<number, SlotRow>, usage: Usage, connecti
     judgePresets: usage.judgePresets.get(row.id) ?? [],
     userProfiles: usage.userProfiles.get(row.id) ?? 0,
     chats: usage.chats.get(row.id) ?? 0,
+    chatModels: usage.chatModels.get(row.id) ?? 0,
     contentEvaluations: usage.contentEvaluations.get(row.id) ?? 0,
     createdDate: row.created_date,
     updatedDate: row.updated_date,
@@ -271,8 +277,8 @@ function holdingRoutes(slot: { routes?: ModelSlot['routes'] }) {
   return (slot.routes ?? []).filter((route) => route.key !== 'chat')
 }
 
-export function isSlotUsed(slot: Pick<ModelSlot, 'isDefaultJudge' | 'profiles' | 'judgePresets' | 'userProfiles' | 'chats' | 'contentEvaluations'> & { routes?: ModelSlot['routes'] }) {
-  return slot.isDefaultJudge || holdingRoutes(slot).length > 0 || slot.profiles.length > 0 || slot.judgePresets.length > 0 || slot.userProfiles > 0 || slot.chats > 0 || (slot.contentEvaluations ?? 0) > 0
+export function isSlotUsed(slot: Pick<ModelSlot, 'isDefaultJudge' | 'profiles' | 'judgePresets' | 'userProfiles' | 'chats' | 'chatModels' | 'contentEvaluations'> & { routes?: ModelSlot['routes'] }) {
+  return slot.isDefaultJudge || holdingRoutes(slot).length > 0 || slot.profiles.length > 0 || slot.judgePresets.length > 0 || slot.userProfiles > 0 || slot.chats > 0 || slot.chatModels > 0 || (slot.contentEvaluations ?? 0) > 0
 }
 
 /** "대표모델 대화 · 세라, 미나 · 판단 프리셋 기본 · 사용자 프로필 2" — who holds a row, for refusals. */
@@ -283,6 +289,7 @@ function describeUse(slot: ModelSlot) {
     slot.judgePresets.length > 0 ? `판단 프리셋 ${slot.judgePresets.map((preset) => preset.name).join(', ')}` : null,
     slot.userProfiles > 0 ? `사용자 프로필 ${slot.userProfiles}` : null,
     slot.chats > 0 ? `채팅 반응 ${slot.chats}` : null,
+    slot.chatModels > 0 ? `채팅 모델 ${slot.chatModels}` : null,
     (slot.contentEvaluations ?? 0) > 0 ? '콘텐츠 평가' : null,
   ].filter(Boolean).join(' · ')
 }
@@ -420,6 +427,7 @@ function assertConsumerKinds(ids: number[], type: string) {
   for (const row of db.prepare(`SELECT name FROM llm_chat_profiles WHERE ${columns.map((column) => `${column} IN (${inIds})`).join(' OR ')}`).all() as Array<{ name: string }>) uses.push(row.name)
   for (const row of db.prepare(`SELECT id, name FROM chat_user_profiles WHERE model_slot_id IN (${inIds})`).all() as Array<{ id: number; name: string }>) uses.push(`사용자 프로필 ${row.name} (#${row.id})`)
   for (const row of db.prepare(`SELECT id FROM codex_chat_threads WHERE reaction_model_slot_id IN (${inIds})`).all() as Array<{ id: number }>) uses.push(`채팅 반응 #${row.id}`)
+  for (const row of db.prepare(`SELECT id FROM codex_chat_threads WHERE chat_model_slot_id IN (${inIds}) UNION SELECT thread_id AS id FROM chat_group_members WHERE chat_model_slot_id IN (${inIds})`).all() as Array<{ id: number }>) uses.push(`채팅 모델 #${row.id}`)
   for (const row of db.prepare(`SELECT name FROM chat_judge_presets WHERE escalation_slot_id IN (${inIds}) ${judgeAllowed ? '' : `OR model_slot_id IN (${inIds})`}`).all() as Array<{ name: string }>) uses.push(`판단 프리셋 ${row.name}`)
   const routes = db.prepare(`SELECT * FROM llm_model_slots WHERE id IN (${inIds}) AND is_route = 1`).all() as SlotRow[]
   for (const row of routes) if (routeKeyOf(row) && (!judgeAllowed || routeKeyOf(row) !== 'judge')) uses.push(`대표모델 ${routeNameOf(row)}`)

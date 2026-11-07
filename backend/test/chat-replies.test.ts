@@ -248,6 +248,8 @@ test('message replies: storage, delivery, context, and generation ownership', { 
 
   await t.test('a concurrent member finishing first cannot consume another member’s call; replies return without mentions', async (s) => {
     const room = createRoom()
+    const { ModelSlotStore } = await import('../src/services/codex-chat/modelSlots')
+    const nextModel = ModelSlotStore.ensure('test', 'B-next')!
     let finishA!: () => void
     let finishC!: () => void
     const aGate = new Promise<void>((resolve) => { finishA = resolve })
@@ -260,7 +262,7 @@ test('message replies: storage, delivery, context, and generation ownership', { 
     s.mock.method(globalThis, 'fetch', async (_url, init) => {
       const request = JSON.parse(String(init?.body))
       if (request.model === 'C') { await cGate; return response('C finished independently.') }
-      if (request.model === 'B') { bCalls += 1; bInput = JSON.stringify(request.messages); return response('Here is the requested result.') }
+      if (request.model === 'B-next') { bCalls += 1; bInput = JSON.stringify(request.messages); return response('Here is the requested result.') }
       aCalls += 1
       if (aCalls === 1) return response('Please draw the blue bird.', { name: 'room_call_member', args: { room_id: room.id, names: ['B'] } })
       if (aCalls === 2) { finishC(); await aGate; return response('B, the request is ready.') }
@@ -268,7 +270,12 @@ test('message replies: storage, delivery, context, and generation ownership', { 
       return response('The result is ready for you.')
     })
     await GroupChatService.sendMessage(requester, room.id, '@A @C begin', (event) => {
-      if (event.type === 'done' && event.message.speaker_profile_id === c.id) { bCallsWhenCFinished = bCalls; finishA() }
+      if (event.type === 'done' && event.message.speaker_profile_id === c.id) {
+        bCallsWhenCFinished = bCalls
+        GroupChatService.updateMember(requester, room.id, a.id, { maxTokens: 1024 })
+        GroupChatService.updateMember(requester, room.id, b.id, { chatModelSlotId: nextModel })
+        finishA()
+      }
     })
     const messages = CodexChatStore.listMessages(room.id)
     const firstA = messages.find((message) => message.speaker_profile_id === a.id)!
@@ -276,6 +283,7 @@ test('message replies: storage, delivery, context, and generation ownership', { 
     const finalA = messages.at(-1)!
     assert.equal(bCallsWhenCFinished, 0)
     assert.equal(bCalls, 1)
+    assert.equal(ChatProfileStore.find(b.id)!.modelSlotId, b.modelSlotId)
     assert.ok(bInput.includes('Please draw the blue bird.'))
     assert.equal(replyB.routing?.replyTo?.messageId, firstA.id)
     assert.deepEqual(replyB.routing?.recipients, [a.id])

@@ -41,6 +41,129 @@ test('chat list: previews, pin/archive/rename, branch origin', { timeout: 60000 
   const say = (threadId: number, role: 'user' | 'assistant', content: string, extra: Record<string, unknown> = {}) =>
     CodexChatStore.addMessage({ thread_id: threadId, role, content, tool_calls: [], status: 'completed', error: null, ...extra })
 
+  await t.test('HTTP chat model overrides are scoped copies, and missing slots restore the profile model', async (s) => {
+    const childProcess = (await import('node:child_process')).default
+    const { EventEmitter } = await import('node:events')
+    const { PassThrough } = await import('node:stream')
+    const cli = await import('../src/services/claudeCli')
+    const { profileGenerationOptions } = await import('../src/services/codex-chat/chatProfiles')
+    const { applyChatModelOverride } = await import('../src/services/codex-chat/chatModelOverride')
+    const probes: Array<InstanceType<typeof EventEmitter> & { stdout: InstanceType<typeof PassThrough>; stdin: InstanceType<typeof PassThrough> }> = []
+    s.mock.method(childProcess, 'spawn', () => {
+      const child = Object.assign(new EventEmitter(), { stdout: new PassThrough(), stdin: new PassThrough() })
+      probes.push(child)
+      return child as unknown as import('node:child_process').ChildProcess
+    })
+    s.after(() => { for (const probe of probes) probe.emit('close') })
+    const express = (await import('express')).default
+    const router = (await import('../src/routes/codex-chat.routes')).default
+    const { ChatGroupStore } = await import('../src/services/codex-chat/chatGroupStore')
+    const { ModelSlotStore } = await import('../src/services/codex-chat/modelSlots')
+    const { effectiveModelOf, resolveProfileModel } = await import('../src/services/codex-chat/chatModelRoles')
+    const { profileContentLimit } = await import('../src/services/codex-chat/chatContentRating')
+    const { branchChatThread } = await import('../src/services/codex-chat/chatBranch')
+    const slot = ModelSlotStore.ensure('test', 'override-model')!
+    const ownSlot = ModelSlotStore.ensure('test', 'profile-model')!
+    const profiles = [
+      ChatProfileStore.create({ name: 'override direct', engine: 'llm', modelSlotId: ownSlot, summaryEnabled: true }),
+      ChatProfileStore.create({ name: 'override pi', engine: 'llm', llmRuntime: 'pi', modelSlotId: ownSlot }),
+      ChatProfileStore.create({ name: 'override claude', engine: 'claude', model: 'sonnet', reasoningEffort: 'max' }),
+      ChatProfileStore.create({ name: 'override codex', engine: 'codex', model: 'original-codex' }),
+    ]
+    const before = profiles.map(p => ChatProfileStore.find(p.id))
+    const app = express()
+    app.use(express.json())
+    app.use((req, _res, next) => {
+      req.session = { accountId: 1, accountType: 'admin' } as typeof req.session
+      next()
+    })
+    app.use('/api/codex-chat', router)
+    const server = app.listen(0, '127.0.0.1')
+    await new Promise<void>(resolve => server.once('listening', resolve))
+    try {
+      const base = `http://127.0.0.1:${(server.address() as import('node:net').AddressInfo).port}/api/codex-chat/threads`
+      const patch = async (suffix: string, body: object, status = 200) => {
+        const response = await fetch(`${base}/${suffix}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+        const result = await response.json() as any
+        assert.equal(response.status, status, JSON.stringify(result))
+        return result.data
+      }
+      const room = ChatGroupStore.create(1, 'override room', profiles.map(p => p.id), profiles[0].id)
+      const otherRoom = ChatGroupStore.create(1, 'other room', profiles.map(p => p.id), profiles[0].id)
+      await patch(`${room}/context`, { chatModelSlotId: slot }, 400)
+      for (const p of profiles) {
+        const id = CodexChatStore.createThread(1, 'override chat', p.engine === 'codex' ? 'codex' : 'llm', p.id)
+        const other = CodexChatStore.createThread(1, 'other chat', p.engine === 'codex' ? 'codex' : 'llm', p.id)
+        const expected = p.engine === 'llm' ? 'override-model' : p.engine === 'claude' ? 'haiku' : 'chosen-model'
+        const choice = p.engine === 'llm' ? { chatModelSlotId: slot } : { chatModel: `  ${expected}  ` }
+        const clear = p.engine === 'llm' ? { chatModelSlotId: null } : { chatModel: '' }
+        const record = await patch(`${id}/context`, choice)
+        assert.equal(record.chat_model_slot_id, p.engine === 'llm' ? slot : null)
+        assert.equal(record.chat_model, p.engine === 'llm' ? null : expected)
+        assert.equal(record.chat_model_label, p.engine === 'llm' ? 'test · override-model' : `${p.engine === 'codex' ? 'Codex' : 'Claude Code'} · ${expected}`)
+        assert.equal(effectiveModelOf(ChatProfileStore.find(p.id, id)!), expected)
+        assert.equal(effectiveModelOf(ChatProfileStore.find(p.id, other)!), p.engine === 'llm' ? 'profile-model' : p.model)
+        if (p.engine === 'claude') {
+          assert.equal(probes.length, 1, 'context save starts discovery without waiting for its answer')
+          assert.equal(profileGenerationOptions(p).reasoningEffort, 'max')
+          assert.equal(profileGenerationOptions(ChatProfileStore.find(p.id, id)!).reasoningEffort, null, 'unknown Haiku support uses its default')
+          probes[0].emit('error', new Error('catalog temporarily unavailable'))
+          await cli.getClaudeModels()
+          assert.equal(profileGenerationOptions(ChatProfileStore.find(p.id, id)!).reasoningEffort, null)
+          assert.equal(probes.length, 1, 'after a load found no list, overridden turns wait for a foreground request')
+        }
+        const detail = await patch(`${room}/members/${p.id}`, choice)
+        if (p.engine === 'claude') {
+          assert.equal(probes.length, 2, 'member save asks again without waiting')
+          probes[1].stdout.emit('data', Buffer.from(JSON.stringify({ type: 'control_response', response: {
+            subtype: 'success', request_id: 'models', response: { models: [
+              { value: 'haiku', supportedEffortLevels: [] }, { value: 'opus', supportedEffortLevels: ['max'] },
+            ] },
+          } }) + '\n'))
+          await cli.getClaudeModels()
+          assert.equal(profileGenerationOptions(ChatProfileStore.find(p.id, room)!).reasoningEffort, null)
+          const opus = applyChatModelOverride({ id, kind: 'direct', profile_id: p.id, chat_model: 'opus', chat_model_slot_id: null }, p)
+          assert.equal(profileGenerationOptions(opus).reasoningEffort, 'max')
+          assert.equal(profileGenerationOptions(p).reasoningEffort, 'max', 'non-overrides retain their effort')
+        }
+        assert.equal(detail.group.memberChatModels[p.id].label, record.chat_model_label)
+        assert.equal(effectiveModelOf(ChatProfileStore.find(p.id, room)!), expected)
+        assert.equal(effectiveModelOf(ChatProfileStore.find(p.id, otherRoom)!), p.engine === 'llm' ? 'profile-model' : p.model)
+        assert.equal((await patch(`${id}/context`, clear)).chat_model_label, null)
+        assert.equal((await patch(`${room}/members/${p.id}`, clear)).group.memberChatModels[p.id].label, null)
+        await patch(`${id}/context`, { chatModelSlotId: null, chatModel: '' })
+        await patch(`${room}/members/${p.id}`, { chatModelSlotId: '', chatModel: null })
+        await patch(`${id}/context`, p.engine === 'llm' ? { chatModel: 'wrong-kind' } : { chatModelSlotId: slot }, 400)
+      }
+      const p = profiles[0]
+      const id = CodexChatStore.createThread(1, 'fallback', 'llm', p.id)
+      await patch(`${id}/context`, { chatModelSlotId: slot })
+      await patch(`${room}/members/${p.id}`, { chatModelSlotId: slot })
+      assert.equal(resolveProfileModel(ChatProfileStore.find(p.id, id)!, 'summary')?.model, 'override-model')
+      assert.equal(profileContentLimit(ChatProfileStore.find(p.id, id)!), ModelSlotStore.contentRatingTierId(slot))
+      const messageId = say(id, 'user', 'branch here')
+      const branch = branchChatThread(CodexChatStore.findThreadById(id)!, messageId)!
+      assert.equal(effectiveModelOf(ChatProfileStore.find(p.id, branch)!), 'override-model')
+      assert.equal(ModelSlotStore.find(slot)!.chats, 0)
+      assert.equal(ModelSlotStore.find(slot)!.chatModels, 3)
+      assert.throws(() => ModelSlotStore.delete(slot), /채팅 모델 3/)
+      dbModule.getUserSettingsDb().prepare('DELETE FROM llm_model_slots WHERE id = ?').run(slot)
+      assert.equal(effectiveModelOf(ChatProfileStore.find(p.id, id)!), 'profile-model')
+      assert.equal(effectiveModelOf(ChatProfileStore.find(p.id, room)!), 'profile-model')
+      assert.equal(CodexChatService.getThreadRecord(requester, id).chat_model_label, null)
+      assert.deepEqual(profiles.map(p => ChatProfileStore.find(p.id)), before)
+      const deleted = ChatProfileStore.create({ name: 'deleted model owner', engine: 'claude', model: 'sonnet' })
+      const orphan = CodexChatStore.createThread(1, 'orphan', 'llm', deleted.id)
+      await patch(`${orphan}/context`, { chatModel: 'opus' })
+      ChatProfileStore.delete(deleted.id)
+      const cleared = await patch(`${orphan}/context`, { chatModel: '', chatModelSlotId: null })
+      assert.equal(cleared.chat_model, null)
+      assert.equal(cleared.chat_model_label, null)
+    } finally {
+      await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()))
+    }
+  })
+
   await t.test('tail and single-message reads keep older quotes but never resolve a quote into another chat', () => {
     const id = newThread()
     const earlier = say(id, 'user', 'earlier')

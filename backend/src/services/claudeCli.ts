@@ -127,7 +127,7 @@ export async function updateClaudeCli() {
     const prefix = process.env.CLAUDE_NPM_PREFIX?.trim()
     const result = await run(npm.command, [...npm.prefixArgs, 'install', '-g', ...(prefix ? ['--prefix', prefix] : []), '--no-audit', '--no-fund', `${PACKAGE}@latest`], 600000, npm.shell)
     if (result.code !== 0) throw new Error('Claude Code 설치/업데이트에 실패했어. 서버의 npm 설치 권한과 네트워크를 확인해줘.')
-  } finally { updating = false; latestCache = null; modelCache = null; signedIn = null }
+  } finally { updating = false; latestCache = null; modelCache = null; backgroundLoadBlocked = false; signedIn = null }
   return getClaudeVersion()
 }
 
@@ -193,14 +193,34 @@ async function loadClaudeModels(): Promise<ClaudeModelList> {
   } finally { release() }
 }
 
-/** Only a live answer is cached, so an install, update or sign-in shows up on the next request. */
-export async function getClaudeModels(): Promise<ClaudeModelList> {
-  if (modelCache && modelCache.expiresAt > Date.now()) return modelCache.value
+export function cachedClaudeModels(): ClaudeModelList | null {
+  return modelCache && modelCache.expiresAt > Date.now() ? modelCache.value : null
+}
+
+/** Set while the last load found no list: turns stop starting the CLI until a foreground request, an update or a sign-in. */
+let backgroundLoadBlocked = false
+
+/** Only a live answer is cached, so an install, update or sign-in shows up on the next foreground request. */
+function loadModelList(): Promise<ClaudeModelList> {
+  const cached = cachedClaudeModels()
+  if (cached) return Promise.resolve(cached)
   modelsInFlight ??= loadClaudeModels().then((value) => {
     modelCache = value.source === 'cli' ? { value, expiresAt: Date.now() + MODEL_LIST_TTL_MS } : null
+    backgroundLoadBlocked = value.source !== 'cli'
     return value
   }).finally(() => { modelsInFlight = null })
   return modelsInFlight
+}
+
+/** A foreground request (the settings list, a saved chat model) always asks the CLI again when nothing is cached. */
+export async function getClaudeModels(): Promise<ClaudeModelList> {
+  backgroundLoadBlocked = false
+  return loadModelList()
+}
+
+/** Fills the cache for later turns without waiting; after a load found no list, it waits for a foreground request. */
+export function warmClaudeModels() {
+  if (!backgroundLoadBlocked) void loadModelList()
 }
 
 export function getClaudeLogin(): ClaudeLoginState { return { ...state } }
@@ -243,7 +263,7 @@ export async function startClaudeLogin() {
   child.stdin.on('error', () => {})
   const finish = (status: ClaudeLoginState['status'], message: string | null) => {
     clearTimeout(waitTimer); timeout.clear()
-    if (login === session) { state = { status, message, verificationUrl: null, expiresAt: null }; login = null; modelCache = null }
+    if (login === session) { state = { status, message, verificationUrl: null, expiresAt: null }; login = null; modelCache = null; backgroundLoadBlocked = false }
     ready()
   }
   child.once('error', () => finish('failed', 'Claude Code 로그인을 실행하지 못했어. CLI 설치를 확인해줘.'))

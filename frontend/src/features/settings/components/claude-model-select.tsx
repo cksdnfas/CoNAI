@@ -8,11 +8,16 @@ type ClaudeModelSelectProps = {
   value: string
   onChange: (value: string) => void
   models: ClaudeModelOption[] | undefined
+  /** What an empty value means instead of the CLI default: the free-text hint and an empty option that always stays listed. */
+  emptyLabel?: string
+  variant?: 'default' | 'settings'
+  disabled?: boolean
+  className?: string
   'aria-label'?: string
 }
 
 /** Claude Code model dropdown from the server CLI's list; a free-text field (committed on blur) while it can't list them. */
-export function ClaudeModelSelect({ value, onChange, models, 'aria-label': ariaLabel }: ClaudeModelSelectProps) {
+export function ClaudeModelSelect({ value, onChange, models, emptyLabel, variant = 'settings', disabled, className, 'aria-label': ariaLabel }: ClaudeModelSelectProps) {
   const { t } = useI18n()
   const [draft, setDraft] = useState<string | null>(null)
   useEffect(() => setDraft(null), [value])
@@ -20,7 +25,7 @@ export function ClaudeModelSelect({ value, onChange, models, 'aria-label': ariaL
   if (!models || models.length === 0) {
     return (
       <Input
-        variant="settings"
+        variant={variant}
         value={draft ?? value}
         onChange={(event) => setDraft(event.target.value)}
         onBlur={() => {
@@ -30,8 +35,10 @@ export function ClaudeModelSelect({ value, onChange, models, 'aria-label': ariaL
           if (event.key === 'Enter') event.currentTarget.blur()
         }}
         maxLength={200}
-        placeholder="sonnet"
+        placeholder={emptyLabel ?? 'sonnet'}
+        disabled={disabled}
         aria-label={ariaLabel}
+        className={className}
       />
     )
   }
@@ -43,8 +50,8 @@ export function ClaudeModelSelect({ value, onChange, models, 'aria-label': ariaL
   const hasCustomValue = value !== '' && !models.some((model) => model.id === value)
 
   return (
-    <Select variant="settings" value={value} onChange={(event) => onChange(event.target.value)} aria-label={ariaLabel}>
-      {value === '' ? <option value="">{t({ ko: '기본값 (sonnet)', en: 'Default (sonnet)' })}</option> : null}
+    <Select variant={variant} value={value} onChange={(event) => onChange(event.target.value)} disabled={disabled} aria-label={ariaLabel} className={className}>
+      {emptyLabel !== undefined ? <option value="">{emptyLabel}</option> : value === '' ? <option value="">{t({ ko: '기본값 (sonnet)', en: 'Default (sonnet)' })}</option> : null}
       {hasCustomValue ? <option value={value}>{value}</option> : null}
       {aliases.length > 0 ? (
         <optgroup label={t({ ko: '최신 버전', en: 'Latest' })}>

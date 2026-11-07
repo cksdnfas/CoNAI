@@ -17,6 +17,7 @@ import { GROUP_LIMITS, GROUP_MEMBER_MAX, ChatGroupStore, groupLimitsOf } from '.
 import { ChatProfileStore, sessionRuntimeOf, type ChatProfile } from './chatProfiles'
 import { translateReply, translateUserMessage, translatorOf } from './chatTranslation'
 import { hasTranslation, resolveProfileModel } from './chatModelRoles'
+import { chatModelLabel, validateChatModelPatch, warmClaudeChatModel, withChatModelLabel } from './chatModelOverride'
 import { stripEchoedAddresses } from '@conai/shared'
 import { ChatUserProfileStore, userPersonaForThread, type ChatUserProfile } from './chatUserProfiles'
 import { loadChatSettings } from './chatSettings'
@@ -117,7 +118,7 @@ function replyCapOf(value: unknown) {
 /** Member profiles that still exist, in room order. */
 function memberProfiles(threadId: number) {
   return ChatGroupStore.members(threadId).flatMap((member) => {
-    const profile = ChatProfileStore.find(member.profile_id)
+    const profile = ChatProfileStore.find(member.profile_id, threadId)
     return profile ? [profile] : []
   })
 }
@@ -534,7 +535,7 @@ export const GroupChatService = {
     const title = (typeof input.title === 'string' ? input.title.trim() : '') || ordered.map((profile) => profile.name).join(', ')
     const threadId = ChatGroupStore.create(requester.accountId, title.slice(0, TITLE_MAX_LENGTH), ordered.map((profile) => profile.id), representativeId)
     if (user) ChatUserProfileStore.setThreadUserProfile(threadId, user.id)
-    return requireGroup(requester, threadId)
+    return withChatModelLabel(requireGroup(requester, threadId))
   },
 
   /** Change who the user is in the room (null: the plain user); the name must not collide with a member's. */
@@ -558,7 +559,7 @@ export const GroupChatService = {
     const thread = requireGroup(requester, threadId)
     const detail = CodexChatService.getThread(requester, threadId, tail)
     const limits = groupLimitsOf(thread)
-    const memberProfiles = ChatGroupStore.members(threadId).flatMap((member) => ChatProfileStore.find(member.profile_id) ?? [])
+    const memberProfiles = ChatGroupStore.members(threadId).flatMap((member) => ChatProfileStore.find(member.profile_id, threadId) ?? [])
     return {
       ...detail,
       // Each member's display blocks are its own: folded from its replies (and the edits made on them).
@@ -574,6 +575,10 @@ export const GroupChatService = {
         // Reply token caps: the room's (null: each profile's own) and each member's override of it.
         maxTokens: thread.max_tokens,
         memberMaxTokens: Object.fromEntries(ChatGroupStore.members(threadId).map((member) => [member.profile_id, member.max_tokens])),
+        memberChatModels: Object.fromEntries(ChatGroupStore.members(threadId).map((member) => [member.profile_id, {
+          slotId: member.chat_model_slot_id, model: member.chat_model,
+          label: chatModelLabel(memberProfiles.find(profile => profile.id === member.profile_id) ?? null),
+        }])),
         // The judge preset that picks who answers and whether the room goes on (null: none; a deleted one reads as none).
         judgePresetId: ChatJudgePresetStore.existing(thread.judge_preset_id),
       },
@@ -638,7 +643,7 @@ export const GroupChatService = {
     if (!message) throw new CodexChatError('메시지를 찾을 수 없어.', 404)
 
     if (content === undefined) {
-      const speaker = message.speaker_profile_id ? ChatProfileStore.find(message.speaker_profile_id) : null
+      const speaker = message.speaker_profile_id ? ChatProfileStore.find(message.speaker_profile_id, threadId) : null
       if (message.role !== 'assistant' || CodexChatStore.latestMessageId(threadId) !== messageId) throw new CodexChatError('마지막 답변만 다시 생성할 수 있어.', 409)
       if (!speaker || !memberProfiles(threadId).some((member) => member.id === speaker.id)) throw new CodexChatError('이 답변을 쓴 참가자가 방에 없어.', 409)
       if (speaker.engine === 'codex') throw new CodexChatError('Codex 참가자의 답변은 다시 생성할 수 없어.', 409)
@@ -694,7 +699,7 @@ export const GroupChatService = {
     const thread = requireGroup(requester, threadId)
     const id = branchChatThread(thread, messageId, purpose)
     if (id === null) throw new CodexChatError('메시지를 찾을 수 없어.', 404)
-    return requireGroup(requester, id)
+    return withChatModelLabel(requireGroup(requester, id))
   },
 
   /**
@@ -706,7 +711,7 @@ export const GroupChatService = {
     if (GroupChatService.isRunning(threadId)) throw new CodexChatError('이전 답변이 아직 진행 중이야.', 409)
     const message = CodexChatStore.findMessage(threadId, messageId)
     if (!message || message.role !== 'assistant') throw new CodexChatError('답변을 찾을 수 없어.', 404)
-    const speaker = message.speaker_profile_id ? ChatProfileStore.find(message.speaker_profile_id) : null
+    const speaker = message.speaker_profile_id ? ChatProfileStore.find(message.speaker_profile_id, threadId) : null
     if (!speaker || speaker.engine === 'codex') throw new CodexChatError('Codex 참가자의 답변은 고칠 수 없어.', 409)
     if (!content.trim()) throw new CodexChatError('답변 내용을 입력해줘.')
     CodexChatStore.editAssistantMessage(threadId, messageId, content.trim())
@@ -783,13 +788,15 @@ export const GroupChatService = {
     return GroupChatService.getThread(requester, threadId, tail)
   },
 
-  /** One member's reply token cap in this room (null follows the room's cap, then the profile's). */
-  updateMember(requester: McpRequester, threadId: number, profileId: number, patch: { maxTokens?: unknown }, tail?: number) {
+  /** One member's chat model and reply cap; neither writes the shared profile. */
+  updateMember(requester: McpRequester, threadId: number, profileId: number, patch: { maxTokens?: unknown; chatModelSlotId?: unknown; chatModel?: unknown }, tail?: number) {
     requireGroup(requester, threadId)
     if (!ChatGroupStore.member(threadId, profileId)) throw new CodexChatError('이 방의 참가자가 아니야.', 404)
-    if (patch.maxTokens !== undefined) {
-      ChatGroupStore.setMemberMaxTokens(threadId, profileId, replyCapOf(patch.maxTokens))
-    }
+    const model = validateChatModelPatch(ChatProfileStore.find(profileId), patch)
+    const maxTokens = patch.maxTokens === undefined ? undefined : replyCapOf(patch.maxTokens)
+    if (maxTokens !== undefined) ChatGroupStore.setMemberMaxTokens(threadId, profileId, maxTokens)
+    ChatGroupStore.setMemberChatModel(threadId, profileId, model)
+    warmClaudeChatModel(profileId, model)
     return GroupChatService.getThread(requester, threadId, tail)
   },
 
