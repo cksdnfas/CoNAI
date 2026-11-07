@@ -149,6 +149,7 @@ export function GenerationResultStage({
   const imageViewModal = useImageViewModal()
   const {
     scrollRef: stripRef,
+    scrollByPage,
     canScrollLeft,
     canScrollRight,
     isDragging,
@@ -305,14 +306,26 @@ export function GenerationResultStage({
           })}
         </div>
         {canScrollLeft ? (
-          <div className="pointer-events-none absolute inset-y-0 left-0 z-10 flex items-center bg-gradient-to-r from-background via-background/90 to-transparent pr-4 pl-1 text-foreground/45">
+          <button
+            type="button"
+            tabIndex={-1}
+            aria-label={t({ ko: '이전 페이지', en: 'Previous page' })}
+            onClick={() => scrollByPage(-1)}
+            className="absolute inset-y-0 left-0 z-10 flex cursor-pointer items-center bg-gradient-to-r from-background via-background/90 to-transparent pr-4 pl-1 text-foreground/45 hover:text-foreground"
+          >
             <ChevronLeft className="h-4 w-4" />
-          </div>
+          </button>
         ) : null}
         {canScrollRight ? (
-          <div className="pointer-events-none absolute inset-y-0 right-0 z-10 flex items-center bg-gradient-to-l from-background via-background/90 to-transparent pl-4 pr-1 text-foreground/55">
+          <button
+            type="button"
+            tabIndex={-1}
+            aria-label={t({ ko: '다음 페이지', en: 'Next page' })}
+            onClick={() => scrollByPage(1)}
+            className="absolute inset-y-0 right-0 z-10 flex cursor-pointer items-center bg-gradient-to-l from-background via-background/90 to-transparent pl-4 pr-1 text-foreground/55 hover:text-foreground"
+          >
             <ChevronRight className="h-4 w-4" />
-          </div>
+          </button>
         ) : null}
         </div>
         {onShowHistory ? (

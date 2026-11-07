@@ -126,8 +126,15 @@ export function useHorizontalDragScroll(watchKey: unknown) {
     event.stopPropagation()
   }
 
+  /** Scroll one visible page (the strip's width) left or right. */
+  const scrollByPage = (direction: -1 | 1) => {
+    const scrollElement = scrollRef.current
+    scrollElement?.scrollBy({ left: direction * scrollElement.clientWidth, behavior: 'smooth' })
+  }
+
   return {
     scrollRef,
+    scrollByPage,
     canScrollLeft,
     canScrollRight,
     isDragging,
