@@ -1,4 +1,5 @@
 import { formatFileSize } from '@/lib/format-size'
+import { copyTextToClipboard } from '@/lib/clipboard'
 import { useRef, useState, type FocusEvent, type RefObject } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ExternalLink, Globe, ImageDown, ImageOff, Maximize2, Plus, RefreshCw, Trash2, TriangleAlert } from 'lucide-react'
@@ -278,7 +279,7 @@ export function ChatProfileMediaRow({ draft, patch, localize, lastTextarea, open
       // insertText keeps the caret, the undo history and React's onChange, so the draft field updates itself.
       if (document.execCommand('insertText', false, markdown)) return
     }
-    void navigator.clipboard?.writeText(markdown).catch(() => undefined)
+    void copyTextToClipboard(markdown).catch(() => undefined)
     showSnackbar({ message: t({ ko: '넣을 칸을 먼저 눌러줘. 링크는 복사해뒀어.', en: 'Click the field to insert into first. The link is copied.' }), tone: 'info' })
   }
 

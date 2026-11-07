@@ -12,6 +12,7 @@ import { Modal, ModalBody } from '@/components/ui/modal'
 import { useI18n } from '@/i18n'
 import { chatAssetUrl, chatEmoticonUrl, chatMediaUrl, type ChatDisplayBlock } from '@/lib/api-codex-chat'
 import { cn } from '@/lib/utils'
+import { copyTextToClipboard } from '@/lib/clipboard'
 import { buildApiUrl } from '@/lib/api-url'
 import { BlockChangeChips, ChatDisplayBlocksContext, parseBlockPayload, useChatDisplayBlock } from './chat-display-block'
 import { isolatedChatPreview } from './chat-preview'
@@ -68,7 +69,7 @@ function CodeBlock({ language, code }: { language: string | null; code: string }
           variant="ghost"
           label={copied ? t({ ko: '복사했어', en: 'Copied' }) : t({ ko: '복사', en: 'Copy' })}
           onClick={() => {
-            void navigator.clipboard?.writeText(code).then(() => {
+            void copyTextToClipboard(code).then(() => {
               setCopied(true)
               window.setTimeout(() => setCopied(false), 1500)
             }, () => undefined)

@@ -9,6 +9,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Modal, ModalFooter } from '@/components/ui/modal'
 import { EditorFooter } from '@/components/ui/editor-footer'
 import { useI18n } from '@/i18n'
+import { copyTextToClipboard } from '@/lib/clipboard'
 import { Field } from '@/components/ui/field'
 import {
   buildMiniMaxH3DirectorPrompt,
@@ -158,7 +159,7 @@ export function MiniMaxH3DirectorPromptBuilder({
       <div className="space-y-3">
         <Textarea rows={18} readOnly value={preview} aria-label={t({ ko: '최종 프롬프트', en: 'Final prompt' })} mono textSize="xs" />
         <ModalFooter>
-          <IconButton variant="secondary" label={t({ ko: '프롬프트 복사', en: 'Copy prompt' })} onClick={() => void navigator.clipboard.writeText(preview).then(
+          <IconButton variant="secondary" label={t({ ko: '프롬프트 복사', en: 'Copy prompt' })} onClick={() => void copyTextToClipboard(preview).then(
             () => onStatus(t({ ko: '프롬프트를 복사했어.', en: 'Prompt copied.' })),
             () => onStatus(t({ ko: '프롬프트 복사에 실패했어.', en: 'Failed to copy prompt.' })),
           )}>

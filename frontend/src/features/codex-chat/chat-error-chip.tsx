@@ -5,6 +5,7 @@ import { IconButton } from '@/components/ui/icon-button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
+import { copyTextToClipboard } from '@/lib/clipboard'
 
 type TranslateFn = ReturnType<typeof useI18n>['t']
 
@@ -59,7 +60,7 @@ export function ChatErrorChip({ error }: { error: string | null }) {
             variant="ghost"
             label={t({ ko: '복사', en: 'Copy' })}
             onClick={() => {
-              void navigator.clipboard?.writeText(detail).then(
+              void copyTextToClipboard(detail).then(
                 () => showSnackbar({ message: t({ ko: '복사했어.', en: 'Copied.' }) }),
                 () => undefined,
               )
