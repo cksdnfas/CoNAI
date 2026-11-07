@@ -33,7 +33,7 @@ export function registerResourceTools(server: McpServer): void {
   // 커스텀 드롭다운 아이템 검색
   server.registerTool(
     'search_custom_dropdown_items',
-    { description: 'Search items within a specific custom dropdown list by keyword. Useful for finding specific LoRA models, preprocessors, checkpoints, etc.', inputSchema: z.object({
+    { description: 'Find items in a custom dropdown list (e.g. LoRA, checkpoints); returns items, total and page. If the list is missing, choose its name with list_custom_dropdown_lists.', inputSchema: z.object({
       list_name: z.string().describe('Name of the dropdown list to search in'),
       query: z.string().optional().describe('Search keyword to filter items (case-insensitive). If omitted, returns all items with pagination.'),
       page: z.number().int().min(1).default(1).describe('Page number'),
@@ -156,9 +156,9 @@ export function registerResourceTools(server: McpServer): void {
   // 랜덤 프롬프트 미리보기 (생성 화면의 미리보기와 같은 해석기)
   server.registerTool(
     'preview_random_prompt',
-    { description: 'Expand a prompt\'s random syntax into sample prompts with the same resolver generation uses: wildcards (++name++, __name__, __name|2__), Danbooru tag groups (__tag:group__), my prompt groups (__my:group__), chains and weight ranges. Each sample is an independent draw and the real generation draws again, so use it to check what a prompt can produce, not to predict the next image.', inputSchema: z.object({
-      text: z.string().trim().min(1).max(8000).describe('Prompt text containing random syntax'),
-      tool: z.enum(['comfyui', 'nai', 'codex', 'general']).describe('Engine whose wildcard variants to use (comfyui, nai, codex; general = shared items)'),
+    { description: 'Preview random prompt expansion with the generation resolver; returns samples and used wildcards. Each sample and actual generation draws independently, so this checks possibilities, not the next image.', inputSchema: z.object({
+      text: z.string().trim().min(1).max(8000).describe('Random syntax: ++name++, __name__, __name|2__, Danbooru __tag:group__, prompt groups __my:group__, chains and weight ranges.'),
+      tool: z.enum(['comfyui', 'nai', 'codex', 'general']).describe('Engine wildcard variants; general uses shared items.'),
       count: z.number().int().min(1).max(10).default(3).describe('Number of samples'),
       prompt_kind: z.enum(['positive', 'negative']).default('positive').describe('Which prompt field; __my:group__ picks from positive or negative prompt groups accordingly'),
     }) },

@@ -58,7 +58,7 @@ export function registerEmoticonTools(server: McpServer, context: McpRequestCont
 
   server.registerTool(
     'list_emoticons',
-    { description: 'List the images of a custom group with their emoticon keywords. Keywords marked explicit=false come from the file name. Includes file name and top auto tags to help choose keywords; use view_images to look at the images. Images above the content rating this model may be shown carry rating_restricted: true with their auto tags hidden.', inputSchema: z.object({
+    { description: 'List group images, keywords, filenames and top tags; explicit=false means filename-derived keywords. Above the model content rating, rating_restricted hides tags. Use view_images to inspect; if the group is missing, list_image_groups.', inputSchema: z.object({
       group_id: groupIdSchema,
       group_path: groupPathSchema,
       offset: z.number().int().min(0).default(0),
@@ -92,12 +92,12 @@ export function registerEmoticonTools(server: McpServer, context: McpRequestCont
 
   server.registerTool(
     'set_emoticon_keywords',
-    { description: 'Set the keywords of images in a group (several per image; the first is the main one). keywords: null restores the file-name keyword, [] removes all. A keyword can belong to one image per group: clashing items are skipped and reported. Keep words short and natural (e.g. 웃음, 부끄러움, thumbs up).', inputSchema: z.object({
+    { description: 'Set group image emoticon keywords; returns per-item results. Each keyword belongs to one image per group: clashes are skipped. Choose distinct keywords and retry only clashing items.', inputSchema: z.object({
       group_id: groupIdSchema,
       group_path: groupPathSchema,
       items: z.array(z.object({
         composite_hash: z.string().trim().min(1),
-        keywords: z.array(z.string().trim().min(1).max(40)).max(12).nullable(),
+        keywords: z.array(z.string().trim().min(1).max(40)).max(12).nullable().describe('Short natural words; first is main. null restores filename-derived keyword; [] removes all.'),
       })).min(1).max(200),
     }) },
     ({ group_id, group_path, items }) => {
@@ -112,7 +112,7 @@ export function registerEmoticonTools(server: McpServer, context: McpRequestCont
 
   server.registerTool(
     'set_emoticon_group',
-    { description: 'Turn a custom group into a chat emoticon group (or back). Chat profiles can only link emoticon groups.', inputSchema: z.object({
+    { description: 'Enable/disable a custom group for chat emoticons; returns its new state. Profiles can link only enabled groups. If missing, select a group from list_image_groups.', inputSchema: z.object({
       group_id: groupIdSchema,
       group_path: groupPathSchema,
       enabled: z.boolean(),
@@ -130,9 +130,9 @@ export function registerEmoticonTools(server: McpServer, context: McpRequestCont
 
   server.registerTool(
     'view_images',
-    { description: `Look at up to ${VIEW_MAX_IMAGES} images: library images by composite_hash and/or shared stored files by file_id. Returns small previews (first frame of animations). Only works when your model can see images.`, inputSchema: z.object({
-      composite_hashes: z.array(z.string().trim().min(1)).max(VIEW_MAX_IMAGES).optional(),
-      file_ids: z.array(z.string().regex(/^[a-f0-9]{32}$/)).max(VIEW_MAX_IMAGES).optional(),
+    { description: 'View small image previews, using the first frame for animations; requires a vision model. Returns per-image errors for unavailable sources; select another source rather than retrying an inaccessible image.', inputSchema: z.object({
+      composite_hashes: z.array(z.string().trim().min(1)).max(VIEW_MAX_IMAGES).optional().describe(`Library images; provide hashes and/or file_ids, at most ${VIEW_MAX_IMAGES} combined`),
+      file_ids: z.array(z.string().regex(/^[a-f0-9]{32}$/)).max(VIEW_MAX_IMAGES).optional().describe('Shared stored image files; may combine with library hashes'),
     }) },
     async ({ composite_hashes = [], file_ids = [] }) => {
       if (composite_hashes.length + file_ids.length === 0) return errorResult(new Error('Give composite_hashes or file_ids'));
@@ -168,13 +168,13 @@ export function registerEmoticonTools(server: McpServer, context: McpRequestCont
 
   server.registerTool(
     'view_media_frames',
-    { description: `Watch a video or an animated GIF/WebP as still frames: a library item by composite_hash or a shared stored file by file_id. Takes up to ${MEDIA_FRAMES_MAX} frames spread evenly over the whole clip or over start_seconds..end_seconds and tiles them, numbered, into pictures of up to ${FRAMES_PER_SHEET_MAX} frames; the frame times come as text. Narrow the range, or use fewer frames per picture, to look closer at a moment. Only works when your model can see images.`, inputSchema: z.object({
-      composite_hash: z.string().trim().min(1).optional(),
-      file_id: z.string().regex(/^[a-f0-9]{32}$/).optional(),
-      count: z.number().int().min(1).max(MEDIA_FRAMES_MAX).optional().describe(`Frames to take (default ${MEDIA_FRAMES_DEFAULT})`),
+    { description: 'View video or animated GIF/WebP as numbered frame sheets with time labels; requires a vision model. Narrow the range or reduce frames_per_image for detail. On range/source errors, correct the range or select an available source.', inputSchema: z.object({
+      composite_hash: z.string().trim().min(1).optional().describe('Library media; use exactly one of composite_hash or file_id; requires images.view'),
+      file_id: z.string().regex(/^[a-f0-9]{32}$/).optional().describe('Shared stored media file; use instead of composite_hash'),
+      count: z.number().int().min(1).max(MEDIA_FRAMES_MAX).optional().describe(`Frames spread evenly over the clip or selected range (default ${MEDIA_FRAMES_DEFAULT})`),
       frames_per_image: z.number().int().min(1).max(FRAMES_PER_SHEET_MAX).optional().describe(`Frames tiled into one picture (default ${FRAMES_PER_SHEET_DEFAULT}); 1 sends each frame alone and larger`),
-      start_seconds: z.number().min(0).optional(),
-      end_seconds: z.number().positive().optional(),
+      start_seconds: z.number().min(0).optional().describe('Range start in seconds; omit for clip start'),
+      end_seconds: z.number().positive().optional().describe('Range end in seconds; omit for clip end'),
     }) },
     async ({ composite_hash, file_id, count, frames_per_image, start_seconds, end_seconds }) => {
       try {

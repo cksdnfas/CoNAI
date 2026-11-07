@@ -20,7 +20,17 @@ export { buildChatGenerationPresetJob, CHAT_NAI_REFERENCE_MAX_BYTES, CHAT_NAI_PA
  * the scene, so the tags never sit in the model's context. Offered only to a speaker that has appearance tags.
  */
 const SELF_FIELD = 'include_self';
-const SELF_DESCRIPTION = 'true when you, the speaking character, are in the picture: the server adds your saved appearance tags, so write only this moment (pose, expression, action, changed clothing, setting), not your usual looks. false when you are not in it.';
+const SELF_DESCRIPTION = 'Whether the speaking character appears. If true, saved appearance is added: write only pose, expression, action, changed clothing and setting, not usual looks.';
+
+/** The speaker's appearance goes to the characters entries marked self, else (include_self) before the scene field. */
+function withSpeakerAppearance(context: McpRequestContext, args: Record<string, unknown>, selfField: string | null) {
+  const characters = Array.isArray(args.characters) ? args.characters as Array<Record<string, unknown>> : [];
+  if (characters.some((entry) => entry.self === true)) {
+    const appearance = speakerAppearance(context);
+    return { ...args, characters: characters.map(({ self, ...entry }) => (self === true ? { ...entry, prompt: joinPrompt([appearance, String(entry.prompt ?? '')]) } : entry)) };
+  }
+  return selfField && args[SELF_FIELD] === true ? { ...args, [selfField]: joinPrompt([speakerAppearance(context), String(args[selfField] ?? '')]) } : args;
+}
 
 function speakerAppearance(context: McpRequestContext) {
   return context.chatContext ? ChatProfileStore.find(context.chatContext.profileId)?.appearance.trim() ?? '' : '';
@@ -30,7 +40,7 @@ function describe(preset: ChatGenerationPreset, body: string) {
   return [
     `Generate an image with the preset "${preset.name}"${preset.instruction ? `: ${preset.instruction}` : ''}.`,
     body,
-    'The server adds the preset\'s fixed settings and the app attaches the finished image to your reply by itself: do not wait for or poll the job, just continue your reply.',
+    'Returns a queued job; fixed preset settings apply. The app attaches the finished image: continue your reply, do not wait or poll.',
   ].join(' ');
 }
 
@@ -53,7 +63,7 @@ function generationProfile(context: McpRequestContext, toolName: string, args: R
 
 /** `inline`: the chat model fills the preset's fields now, and the job is queued at once. */
 function registerInlinePreset(server: McpServer, context: McpRequestContext, preset: ChatGenerationPreset, toolName: string, hasAppearance: boolean) {
-  const { shape, fill, workflowName, problem, sceneField } = presetInputShape(preset);
+  const { shape, fill, workflowName, problem, sceneField } = presetInputShape(preset, { self: hasAppearance });
   if (problem) {
     // Registered anyway so the model learns why instead of finding no generation tool at all.
     server.registerTool(toolName, { description: describe(preset, `Currently unavailable: ${problem}`), inputSchema: z.object({}) }, async () => errorResult(problem));
@@ -68,8 +78,7 @@ function registerInlinePreset(server: McpServer, context: McpRequestContext, pre
     async (args: Record<string, unknown>) => {
       try {
         const profile = generationProfile(context, toolName, args, reference);
-        const input = selfField && args[SELF_FIELD] === true ? { ...args, [selfField]: joinPrompt([speakerAppearance(context), String(args[selfField] ?? '')]) } : args;
-        return textResult(await enqueueMcpGenerationJob(context, await buildChatGenerationPresetJob(preset, input, profile), toolName, preset.kind === 'nai' && reference ? { maxPayloadBytes: CHAT_NAI_PAYLOAD_MAX_BYTES } : {}));
+        return textResult(await enqueueMcpGenerationJob(context, await buildChatGenerationPresetJob(preset, withSpeakerAppearance(context, args, selfField), profile), toolName, preset.kind === 'nai' && reference ? { maxPayloadBytes: CHAT_NAI_PAYLOAD_MAX_BYTES } : {}));
       } catch (error) {
         return errorResult(`Generation job error: ${(error as Error).message}`);
       }
@@ -86,7 +95,7 @@ function registerAfterPreset(server: McpServer, context: McpRequestContext, pres
   }
   server.registerTool(
     toolName,
-    { description: `Ask for a picture of this reply with the preset "${preset.name}"${preset.instruction ? `: ${preset.instruction}` : ''}. The picture's prompt is written from your finished reply after you end it, and the app attaches the image to the reply by itself. Call it at most once per moment, then just continue writing; never describe the picture or say it is finished.`, inputSchema: z.object({ focus: z.string().max(500).optional().describe('Optional: which moment of your reply to show, in a few words, when it is not the obvious one.') }) },
+    { description: `Request a picture with preset "${preset.name}"${preset.instruction ? `: ${preset.instruction}` : ''}; returns requested status. Generated from your finished reply and attached automatically. Once per moment; continue writing without waiting or polling. Never describe the picture or claim it is finished.`, inputSchema: z.object({ focus: z.string().max(500).optional().describe('Which moment of your reply to show, if not obvious.') }) },
     async (args: Record<string, unknown>) => {
       try {
         requireMcpToolAccess(context, toolName, args);

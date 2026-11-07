@@ -95,51 +95,55 @@ export function registerMediaEditTools(server: McpServer, context: McpRequestCon
     } catch (error) { return errorResult(error) }
   }
   server.registerTool('save_video_frame', {
-    description: 'Capture full-resolution frames of a library video or animated GIF/WebP and save NEW PNG (default) or WebP library images in group "영상 캡처". Choose up to 16 timestamps and/or first, middle, last, or a zero-based frame_index (default first). Last seeks near EOF and decodes the final frames. Returns saved entries with seconds, composite_hash and download; long runs return job_id for get_media_edit_job. On failure choose an available source or an earlier time/index; do not restart a pending job.',
+    description: 'Save full-resolution video/animation frames as new library images; returns times, hashes/downloads or job_id for get_media_edit_job. Do not restart pending jobs. On failure, use an available source or earlier time/index.',
     inputSchema: z.object({
-      composite_hash: hash, at_seconds: z.array(z.number().min(0)).min(1).max(16).optional(),
-      position: z.enum(['first', 'middle', 'last']).optional(),
+      composite_hash: hash, at_seconds: z.array(z.number().min(0)).min(1).max(16).optional().describe('Timestamps in seconds; may combine with position or frame_index'),
+      position: z.enum(['first', 'middle', 'last']).optional().describe('Defaults to first when no selector is given; last captures the final decoded frame'),
       frame_index: z.number().int().min(0).optional().describe('Zero-based decoded frame index'),
       format: z.enum(['png', 'webp']).default('png'), ...target,
+      group_path: target.group_path.describe('Output group path, created if missing; excludes group_id; default group "영상 캡처"'),
     }).refine(onlyOneGroup, 'Use group_id or group_path, not both'),
   }, ({ composite_hash, at_seconds, position, frame_index, format, group_id, group_path, wait_seconds }) =>
     run({ operation: 'save_video_frame', compositeHash: composite_hash, atSeconds: at_seconds, position, frameIndex: frame_index, format, groupId: group_id, groupPath: group_path }, wait_seconds))
 
   server.registerTool('crop_images', {
-    description: 'Crop 1..500 library still images using rect {x,y,width,height} in EXIF-oriented source pixels and save NEW PNG library images in group "이미지 자르기". Originals are untouched; videos and animations are skipped. Pixel-identical outputs are reported in identical with the source hash, without duplicate files or group changes. Returns saved hashes/downloads and per-source skips/errors, or a job_id for get_media_edit_job. Rectangles must fit each oriented source; fix a reported rectangle or source before retrying only failed items.',
+    description: 'Crop still images to new PNGs; originals stay and animations/videos are skipped. Identical pixels reuse the source hash without regrouping. Returns hashes/downloads, skips/errors or job_id for get_media_edit_job. Fix rectangles/sources and retry only failures, not pending jobs.',
     inputSchema: z.object({
       composite_hashes: hashes,
-      rect: z.object({ x: z.number().int().min(0), y: z.number().int().min(0), width: z.number().int().positive(), height: z.number().int().positive() }),
+      rect: z.object({ x: z.number().int().min(0), y: z.number().int().min(0), width: z.number().int().positive(), height: z.number().int().positive() }).describe('EXIF-oriented source pixels; must fit every source'),
       ...target,
+      group_path: target.group_path.describe('Output group path, created if missing; excludes group_id; default group "이미지 자르기"'),
     }).refine(onlyOneGroup, 'Use group_id or group_path, not both'),
   }, ({ composite_hashes, rect, group_id, group_path, wait_seconds }) =>
     run({ operation: 'crop_images', compositeHashes: composite_hashes, rect, groupId: group_id, groupPath: group_path }, wait_seconds))
 
   server.registerTool('convert_images', {
-    description: 'Convert 1..500 EXIF-oriented library still images to PNG, WebP or JPEG, saving NEW items in group "이미지 변환"; originals are untouched and videos/animations are skipped. quality is 1..100 (default 90; lossless PNG ignores it). JPEG flattens transparency onto background (#RRGGBB, default white #ffffff); PNG/WebP retain alpha. Pixel-identical outputs are reported in identical with the source hash, without duplicate files or group changes. Returns saved hashes/downloads and per-source skips/errors, or job_id for get_media_edit_job. Correct unsupported or unavailable inputs and retry only failed items.',
+    description: 'Convert still images to new library items; originals stay and videos/animations are skipped. Identical pixels reuse the source hash without regrouping. Returns hashes/downloads, skips/errors or job_id for get_media_edit_job. Correct inputs and retry only failures, not pending jobs.',
     inputSchema: z.object({
-      composite_hashes: hashes, format: z.enum(['png', 'webp', 'jpeg']),
-      quality: z.number().int().min(1).max(100).default(90),
-      background: z.string().regex(/^#[0-9a-fA-F]{6}$/).default('#ffffff'), ...target,
+      composite_hashes: hashes, format: z.enum(['png', 'webp', 'jpeg']).describe('EXIF orientation is applied; PNG/WebP retain alpha, JPEG flattens onto background'),
+      quality: z.number().int().min(1).max(100).default(90).describe('Ignored for lossless PNG'),
+      background: z.string().regex(/^#[0-9a-fA-F]{6}$/).default('#ffffff').describe('JPEG transparency background'), ...target,
+      group_path: target.group_path.describe('Output group path, created if missing; excludes group_id; default group "이미지 변환"'),
     }).refine(onlyOneGroup, 'Use group_id or group_path, not both'),
   }, ({ composite_hashes, format, quality, background, group_id, group_path, wait_seconds }) =>
     run({ operation: 'convert_images', compositeHashes: composite_hashes, format, quality, background, groupId: group_id, groupPath: group_path }, wait_seconds))
 
   server.registerTool('clip_video', {
-    description: 'Save a library video range start_seconds..end_seconds as a NEW library item in group "영상 편집". format is mp4/webm/gif/webp (default source container); optional fps and width preserve aspect. Same-container range-only video edits stream-copy (keyframe-aligned boundaries); other edits re-encode. GIF/WebP are animated images without audio. Returns hashes/downloads and stream_copy, or job_id for get_media_edit_job. If the range is invalid, use get_video_info and correct it; wait on pending jobs instead of restarting.',
+    description: 'Save a video range as a new item; returns hashes/downloads and stream_copy, or job_id for get_media_edit_job. Range-only same-container edits use keyframe-aligned stream-copy; others re-encode. Invalid range: check get_video_info. Wait on pending jobs, do not restart.',
     inputSchema: z.object({
       composite_hash: hash, start_seconds: z.number().min(0), end_seconds: z.number().positive(),
-      format: z.enum(['mp4', 'webm', 'gif', 'webp']).optional(),
-      fps: z.number().positive().optional(), width: z.number().int().min(1).max(16384).optional(),
+      format: z.enum(['mp4', 'webm', 'gif', 'webp']).optional().describe('Default source container; GIF/WebP are animated images without audio'),
+      fps: z.number().positive().optional().describe('Output frames per second'), width: z.number().int().min(1).max(16384).optional().describe('Output pixels; preserves aspect ratio'),
       ...target,
+      group_path: target.group_path.describe('Output group path, created if missing; excludes group_id; default group "영상 편집"'),
     }).refine(onlyOneGroup, 'Use group_id or group_path, not both')
       .refine((input) => input.end_seconds > input.start_seconds, 'end_seconds must be greater than start_seconds'),
   }, ({ composite_hash, start_seconds, end_seconds, format, fps, width, group_id, group_path, wait_seconds }) =>
     run({ operation: 'clip_video', compositeHash: composite_hash, startSeconds: start_seconds, endSeconds: end_seconds, format, fps, width, groupId: group_id, groupPath: group_path }, wait_seconds))
 
   server.registerTool('get_media_edit_job', {
-    description: 'Read or wait for your save_video_frame, crop_images, convert_images or clip_video runtime job. Returns progress, saved hashes/downloads and per-item failures. Set cancel=true to request cancellation; completed saves remain. On failure correct the reported input and retry only failed items; do not restart running jobs.',
-    inputSchema: z.object({ job_id: z.string().uuid(), wait_seconds: z.number().min(0).max(120).default(0), cancel: z.boolean().default(false) }),
+    description: 'Read or wait for a media-edit job; returns progress, saved hashes/downloads and per-item failures. Correct reported inputs and retry only failed items; do not restart running jobs.',
+    inputSchema: z.object({ job_id: z.string().uuid(), wait_seconds: z.number().min(0).max(120).default(0).describe('Seconds to wait; chat maximum 30'), cancel: z.boolean().default(false).describe('Request cancellation; completed saves remain') }),
   }, async ({ job_id, wait_seconds, cancel }) => {
     try {
       const ownership = RuntimeJobStore.getOwnership(job_id)

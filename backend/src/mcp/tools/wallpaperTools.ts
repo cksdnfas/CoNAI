@@ -44,7 +44,7 @@ const clockSchema = (what: string) => z.string().regex(WALLPAPER_SCHEDULE_TIME).
 export function registerWallpaperTools(server: McpServer): void {
   server.registerTool(
     'list_wallpapers',
-    { description: 'List the saved live wallpapers (id, name, last update, widget count, canvas), which one is live, the time schedule, and which wallpaper the live page shows now (by schedule, live pick, or first saved; a runtime key, ?preset link or Lively/Wallpaper Engine pick can still pin another). Widgets, background and look are edited on the connected wallpaper page, not here.', inputSchema: z.object({}) },
+    { description: 'Get saved wallpaper summaries, live selection, schedule and current scheduled/live/fallback pick; runtime keys, ?preset links or host picks may override it. Edit appearance on the connected wallpaper page.', inputSchema: z.object({}) },
     () => {
       try {
         return textResult(wallpaperState(settingsService.loadSettings().appearance));
@@ -56,7 +56,7 @@ export function registerWallpaperTools(server: McpServer): void {
 
   server.registerTool(
     'set_live_wallpaper',
-    { description: 'Administrators: make a saved wallpaper the live one (as "set live" in the wallpaper editor). An enabled schedule still wins inside its time windows. Open live pages pick the change up on their next settings refresh (within about 5 minutes) or on reload. Returns the new state like list_wallpapers.', inputSchema: z.object({
+    { description: 'Admin: set the live wallpaper; returns updated state. The schedule still takes precedence; open pages refresh within about 5 minutes or on reload. If the ID is missing, choose one from list_wallpapers.', inputSchema: z.object({
       preset_id: z.string().trim().min(1).describe('Saved wallpaper id from list_wallpapers'),
     }) },
     ({ preset_id }) => {
@@ -70,14 +70,14 @@ export function registerWallpaperTools(server: McpServer): void {
 
   server.registerTool(
     'save_wallpaper_schedule',
-    { description: 'Administrators: replace the whole wallpaper time schedule (as the schedule dialog of the wallpaper editor). Each window shows a saved wallpaper on the given weekdays between start and end; end before start wraps past midnight and belongs to the day it started; start equal to end is the whole day. Where windows overlap, the upper (earlier) entry wins. Outside every window the live wallpaper shows. Send entries: [] to clear it. Returns the new state like list_wallpapers.', inputSchema: z.object({
+    { description: 'Admin: replace the wallpaper schedule; returns updated state. Outside windows the live wallpaper shows. If a saved wallpaper is missing, refresh IDs with list_wallpapers before resubmitting.', inputSchema: z.object({
       enabled: z.boolean().describe('false keeps the windows but always shows the live wallpaper'),
       entries: z.array(z.object({
         preset_id: z.string().trim().min(1).describe('Saved wallpaper id from list_wallpapers'),
         days: z.array(z.number().int().min(0).max(6)).max(7).optional().describe('0 = Sunday … 6 = Saturday; omitted or [] = every day'),
         start: clockSchema('Window start'),
-        end: clockSchema('Window end'),
-      })).max(48),
+        end: clockSchema('Window end').describe('HH:MM local time; before start wraps past midnight on the starting weekday; equal to start means all day'),
+      })).max(48).describe('Complete replacement; [] clears. Each window shows preset_id on its weekdays; earlier entries win overlaps.'),
     }) },
     ({ enabled, entries }) => {
       try {

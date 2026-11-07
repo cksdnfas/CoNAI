@@ -10,7 +10,7 @@ import { forwardedToolInputSchema } from '../forwardedToolSchema';
 export function registerPluginServerTools(server: McpServer, context: McpRequestContext): void {
   for (const tool of pluginServerTools()) {
     server.registerTool(tool.name, {
-      description: `${tool.description || tool.localName} (Plugin tool from ${tool.pluginId}.)`,
+      description: `${tool.description || tool.localName} (Plugin: ${tool.pluginId}.)`,
       inputSchema: forwardedToolInputSchema(tool.inputSchema),
     }, async (args: unknown, extra: unknown) => {
       const signal = (extra as { mcpReq?: { signal?: AbortSignal } } | undefined)?.mcpReq?.signal;

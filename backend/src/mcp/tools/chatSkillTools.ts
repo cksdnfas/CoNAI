@@ -24,11 +24,11 @@ export function registerChatSkillTools(server: McpServer, context: McpRequestCon
   const linkedSkills = () => ChatSkillStore.linked(ChatProfileStore.find(chatContext.profileId)?.skillIds ?? []);
   if (context.source !== 'codex-chat' && linkedSkills().length === 0) return;
   server.registerTool(USE_SKILL_TOOL, {
-    description: 'Load one of your skills. The Skills list in your instructions names each skill and says when it applies. Call it with the name first: it returns the overview and, when the skill has sections, their table of contents. Then call it again with section to load only the sections the request needs. If you do not know which skill or section holds what you need, search with query. Follow what you load.',
+    description: 'Load a linked skill when its Skills-list trigger fits; follow loaded instructions. Read its overview/table first, then only needed sections. If unsure which skill/section, search with query; if a path is missing, reload the table.',
     inputSchema: z.object({
       name: z.string().trim().min(1).max(CHAT_SKILL_LIMITS.name).optional().describe('The skill name exactly as the Skills list shows it (leave it out only to search all your skills with query)'),
       section: z.string().trim().min(1).max(CHAT_SKILL_LIMITS.sectionPath * CHAT_SKILL_LIMITS.sections).optional().describe('A section path from the table of contents; several separated by commas; "group/" lists that group'),
-      query: z.string().trim().min(1).max(200).optional().describe('Words to find in the text of your skills (with name: that skill only)'),
+      query: z.string().trim().min(1).max(200).optional().describe('Search skill text; with name searches only that skill. Do not combine with section.'),
       offset: z.number().int().min(0).optional().describe('Only to continue a long result: the offset the previous result gave'),
     }),
   }, async ({ name, section, query, offset }) => {

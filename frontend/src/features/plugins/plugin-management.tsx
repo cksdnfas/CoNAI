@@ -137,7 +137,7 @@ export function PluginManagement({ assistantPage, pageContext }: { assistantPage
     },
     actions: [
       pageAction('plugin_source.check', t({ ko: '업데이트 확인', en: 'Check for updates' }), 'Check all linked public Git repositories for updates. Installs nothing.'),
-      pageAction('plugin_source.review', t({ ko: 'Git 패키지 검토', en: 'Review Git package' }), 'Open and review a linked plugin by pluginId, or a public HTTPS repository given as host/owner/repo without the scheme (e.g. github.com/owner/repo) with optional provider, ref and folder (the plugin folder in the repository). Installs nothing. Omit provider for github.com, gitlab.com or codeberg.org.', pageObject({
+      pageAction('plugin_source.review', t({ ko: 'Git 패키지 검토', en: 'Review Git package' }), 'Review a linked plugin (pluginId) or a public Git repository (host/owner/repo without scheme, e.g. github.com/owner/repo; provider only for hosts other than github.com, gitlab.com, codeberg.org; optional ref and folder). Installs nothing.', pageObject({
         pluginId: pageText(48), repository: pageText(2000), provider: pageChoice(['github', 'gitlab', 'gitea']), ref: pageText(200), folder: pageText(200),
       })),
       ...(sourceInstall.input && sourceInstall.review ? [pageAction('plugin_source.install', t({ ko: '검토한 패키지 적용', en: 'Apply reviewed package' }), 'Install exactly the displayed Git package review. A new package stays disabled; an enabled update restarts its code.', undefined, 'save')] : []),

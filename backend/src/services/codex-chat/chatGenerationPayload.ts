@@ -35,6 +35,11 @@ export async function buildChatGenerationPresetJob(preset: ChatGenerationPreset,
       const item = { image: `data:${file.mimeType};base64,${buffer.toString('base64')}`, type: 'character', strength: 0.6, fidelity: 1 };
       characterRefs = referenceMode === 'append' ? [...characterRefs, item] : [item];
     }
+    // Characters the chat model wrote replace the preset's fixed ones; positions count only when it gave some.
+    const written = Array.isArray(args.characters) && args.characters.length > 0 ? args.characters as Array<Record<string, unknown>> : null;
+    const characters = written
+      ? written.map((entry) => ({ prompt: String(entry.prompt ?? ''), uc: String(entry.uc ?? ''), center_x: typeof entry.center_x === 'number' ? entry.center_x : 0.5, center_y: typeof entry.center_y === 'number' ? entry.center_y : 0.5 }))
+      : config.characters;
     const payload: Record<string, unknown> = {
       prompt: joinPrompt([config.promptPrefix, String(args.prompt ?? ''), config.promptSuffix]),
       negative_prompt: config.negativePrompt || undefined,
@@ -47,8 +52,8 @@ export async function buildChatGenerationPresetJob(preset: ChatGenerationPreset,
       steps: config.steps,
       scale: config.scale,
       n_samples: 1,
-      use_coords: config.useCoords,
-      characters: config.characters.length > 0 ? config.characters : undefined,
+      use_coords: written ? written.some((entry) => entry.center_x !== undefined || entry.center_y !== undefined) : config.useCoords,
+      characters: characters.length > 0 ? characters : undefined,
       vibes: config.vibes.length > 0 ? config.vibes : undefined,
       character_refs: characterRefs.length > 0 ? characterRefs : undefined,
       variety_plus: config.varietyPlus,

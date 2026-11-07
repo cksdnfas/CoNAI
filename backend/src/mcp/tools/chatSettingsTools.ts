@@ -7,8 +7,8 @@ import { errorResult, textResult } from '../toolResults';
 export const GET_CHAT_SETTINGS_TOOL = 'get_chat_settings';
 export const PROPOSE_CHAT_SETTINGS_TOOL = 'propose_chat_settings';
 const chatModelFields = {
-  chatModelSlotId: z.union([z.number(), z.literal('')]).nullable().optional(),
-  chatModel: z.string().nullable().optional(),
+  chatModelSlotId: z.union([z.number(), z.literal('')]).nullable().optional().describe('API LLM model slot from get_chat_settings; null or "" follows the profile. Direct chat, or one memberChatModels entry.'),
+  chatModel: z.string().nullable().optional().describe('Claude Code/Codex model name, not a slot; null or empty follows the profile. Direct chat, or one memberChatModels entry.'),
 };
 
 /**
@@ -38,7 +38,7 @@ export const CHAT_FEATURES_GUIDE = [
 export function registerChatSettingsTools(server: McpServer, context: McpRequestContext): void {
   if (!context.chatContext) return;
   server.registerTool(GET_CHAT_SETTINGS_TOOL, {
-    description: 'Read this chat\'s own settings: its chat model (or each member\'s model in a room), effective and profile labels, selectable API LLM slots; linked account lorebooks and the record book (where save_lore writes), linked file-store folders and files (its own and its profiles\'), the minutes folder and the folders it could use. Claude Code/Codex use a model name, not a slot; CLI model catalogs are not listed.',
+    description: 'Read this chat\'s model overrides, effective/profile labels, selectable API LLM slots, lorebooks/record book, own/profile file links and minutes-folder choices. CLI model catalogs are not listed. Use these values for propose_chat_settings.',
     inputSchema: z.object({}),
   }, async () => {
     try {
@@ -48,14 +48,14 @@ export function registerChatSettingsTools(server: McpServer, context: McpRequest
     }
   });
   server.registerTool(PROPOSE_CHAT_SETTINGS_TOOL, {
-    description: 'Propose changes to this chat\'s own settings as a before/after card; nothing changes until the user presses 저장. Give only what changes: chatModelSlotId (direct API LLM chat, a selectable slot id), chatModel (direct Claude Code/Codex chat, model name), or memberChatModels (group only, object keyed by profile id containing chatModelSlotId or chatModel). Null or an empty name restores the profile model; never edits the shared profile or switches engines. Other keys: lorebook_ids (the full list of the owner\'s account lorebooks linked to this chat), record_book_id (one of those, or null for this chat\'s own book), linked_files (the full list of the chat\'s own links: [{ id, write }], ids from list_files / search_files / get_chat_settings; folders, text files, PDFs or XLSX documents (PDF/XLSX content is read-only), not inside 로어북/), minutes_folder_id (a folder linked with write: true, or null to stop). get_chat_settings shows current values and choices.',
+    description: 'Propose only changed settings for this chat as a before/after card; the user must press 저장. Never changes shared profiles or engines. Read get_chat_settings for current values and valid choices before proposing or correcting a rejected value.',
     inputSchema: z.object({
       ...chatModelFields,
-      memberChatModels: z.record(z.string(), z.object(chatModelFields)).optional(),
-      lorebook_ids: z.array(z.number().int().positive()).max(20).optional(),
-      record_book_id: z.number().int().positive().nullable().optional(),
-      linked_files: z.array(z.object({ id: z.string().regex(/^[a-f0-9]{32}$/), write: z.boolean().default(false) })).max(20).optional(),
-      minutes_folder_id: z.string().regex(/^[a-f0-9]{32}$/).nullable().optional(),
+      memberChatModels: z.record(z.string(), z.object(chatModelFields)).optional().describe('Group only: model overrides keyed by member profile id; apply to that member\'s next reply.'),
+      lorebook_ids: z.array(z.number().int().positive()).max(20).optional().describe('Full replacement list of the owner\'s account lorebooks linked to this chat.'),
+      record_book_id: z.number().int().positive().nullable().optional().describe('One of lorebook_ids; null uses this chat\'s own book for save_lore.'),
+      linked_files: z.array(z.object({ id: z.string().regex(/^[a-f0-9]{32}$/), write: z.boolean().default(false) })).max(20).optional().describe('Full replacement list of chat-owned links, not profile links. IDs from list_files/search_files/get_chat_settings; folders, text, images, PDF or XLSX, outside 로어북/. PDF/XLSX content is read-only.'),
+      minutes_folder_id: z.string().regex(/^[a-f0-9]{32}$/).nullable().optional().describe('Folder linked with write:true; null stops minutes.'),
     }),
   }, async (args) => {
     try {

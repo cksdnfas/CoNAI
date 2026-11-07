@@ -29,7 +29,7 @@ export function useChatCharacterSettingInsertion() {
     actions: (targets: Record<string, ChatPageSchema>, required: string[], description: string) => canView ? [pageAction(
       'character_setting.insert',
       t({ ko: '캐릭터 외형 불러오기', en: 'Load character appearance' }),
-      `Copy a character library setting (find settingId with list_character_library) into this form: its appearance tags (sections plus outfit: outfitIndex in its outfits, 0 = default) go into target like a preset row (append adds them on a new line; replace replaces the input), its images optionally too. By default the image is its reference image when it has one; referenceHashes picks images in order from get_character_setting (referenceHash and references[].hash), and needs the form's image argument. A copy: later library edits do not change the form. ${description}`,
+      `Insert a character library setting's appearance tags into target (settingId from list_character_library; outfitIndex picks an outfit, 0 = default; mode append adds a line, replace overwrites). Images: by default its reference image when it has one; referenceHashes picks images from get_character_setting in order. The form keeps a copy. ${description}`,
       pageObject({ settingId: pageNumber(1, undefined, true), outfitIndex: pageNumber(0, undefined, true), ...targets, ...(canViewImages ? { referenceHashes: pageArray(pageText(200), 128, 1) } : {}), mode: pageChoice(['append', 'replace']) }, ['settingId', ...required]),
     )] : [],
     /** Map an `includeReference` argument onto what the form can take. */

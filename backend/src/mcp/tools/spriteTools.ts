@@ -197,8 +197,8 @@ export function registerSpriteTools(server: McpServer, context: McpRequestContex
 
   server.registerTool(
     'extract_sprite_sheet',
-    { description: 'Extract frames from a library video into a sprite sheet: pick frames by interval or count, remove a key-colour background (magenta by default, optional despill), auto crop, resize and lay out. Saves the sheet to the library by default and returns its composite_hash with a download link; long runs return a job_id for get_sprite_job.', inputSchema: z.object({
-      composite_hash: hashSchema.optional().describe('Library video hash'),
+    { description: 'Extract video frames into a sprite sheet with background removal, crop and resize. Returns a saved hash/download or job_id for get_sprite_job. On frame/range errors, check get_video_info and adjust options.', inputSchema: z.object({
+      composite_hash: hashSchema.optional().describe('Library video hash; use exactly one of composite_hash or data_url'),
       data_url: z.string().optional().describe('Video as a base64 data URL (video/*, image/gif, image/webp) when it is not in the library yet; it is uploaded to group "스프라이트/원본 영상" first'),
       options: extractOptionsSchema,
       frame_indices: z.array(z.number().int().min(0)).min(1).max(256).optional().describe('Exact source frame numbers (strictly increasing); overrides interval/count sampling'),
@@ -228,7 +228,7 @@ export function registerSpriteTools(server: McpServer, context: McpRequestContex
 
   server.registerTool(
     'extract_sprite_sheets_batch',
-    { description: 'Extract one sprite sheet per library video with the same options and save each to the library. Returns a job_id; poll get_sprite_job. The finished job lists items in request order, each pairing video_hash (and its library video_name) with sheet_hash and a download link, or with the error; zip_download (only with zip: true) holds every sheet plus a manifest.', inputSchema: z.object({
+    { description: 'Extract and save one sheet per video using shared options. Returns job_id for get_sprite_job; finished items pair source hash/name with sheet hash/download or error in request order. Retry only failed sources after correcting their errors.', inputSchema: z.object({
       composite_hashes: z.array(hashSchema).min(1).max(100).describe('Library video hashes (1..100, no duplicates)'),
       options: extractOptionsSchema,
       group_id: groupIdSchema,
@@ -249,7 +249,7 @@ export function registerSpriteTools(server: McpServer, context: McpRequestContex
 
   server.registerTool(
     'normalize_sprite_sheets',
-    { description: 'Normalise library sprite sheets. per_sheet (default) and group preserve pixels around the original anchor. delivery uses fixed cells, body-height scaling and feet/first-frame-centre pivots; requires delivery options, errors rather than clipping. Saves to the library by default.', inputSchema: z.object({
+    { description: 'Normalise sprite sheets; returns saved hashes/downloads or job_id for get_sprite_job. Delivery rejects clipping rather than losing pixels: adjust cell size, scale or pivot on failure.', inputSchema: z.object({
       sheets: z.array(z.object({
         composite_hash: hashSchema,
         columns: z.number().int().min(1).max(256),
@@ -261,7 +261,7 @@ export function registerSpriteTools(server: McpServer, context: McpRequestContex
         custom_anchor_x: z.number().min(0).optional().describe("Anchor X in input cell pixels (anchor_policy 'custom')"),
         custom_anchor_y: z.number().min(0).optional().describe("Anchor Y in input cell pixels (anchor_policy 'custom')"),
       })).min(1).max(500),
-      mode: z.enum(['per_sheet', 'group', 'delivery']).optional().describe('Default per_sheet; delivery requires delivery options'),
+      mode: z.enum(['per_sheet', 'group', 'delivery']).optional().describe('Default per_sheet; per_sheet/group preserve pixels around the original anchor; delivery requires fixed-cell, body-height and pivot options in delivery'),
       delivery: z.object({
         frame_size: z.tuple([z.number().int().positive(), z.number().int().positive()]).describe('[width, height] of each output cell'),
         body_height: z.number().positive(),
@@ -332,9 +332,9 @@ export function registerSpriteTools(server: McpServer, context: McpRequestContex
 
   server.registerTool(
     'normalize_sprite_sources',
-    { description: 'Normalize library source images into opaque key-colour PNGs for motion generation, NOT transparent sprites. Flattens alpha, snaps near-key pixels, pads square without stretching, LANCZOS resizes and expands onto a canvas. last_frame takes each video’s final frame directly to the canvas, with centred uniform scale and non-clipping offsets. Uses the sprite job/progress/cancel pipeline. Returns saved hashes, per-output borderExact/nearKeyCount/passed reports and ZIP download; originals are untouched.', inputSchema: z.object({
+    { description: 'Make opaque key-colour motion sources, not transparent sprites; originals stay. Returns hashes, borderExact/nearKeyCount/passed reports and ZIP, or job_id for get_sprite_job. On clipping, reduce scale or offsets.', inputSchema: z.object({
       composite_hashes: z.array(hashSchema).min(1).max(500),
-      input: z.enum(['image', 'last_frame']).optional().describe('Default image; last_frame requires video/* media, not animated GIF/WebP'),
+      input: z.enum(['image', 'last_frame']).optional().describe('Default image: flatten alpha, snap near-key pixels, square-pad without stretching, LANCZOS resize and expand to canvas. last_frame: final video frame directly to canvas; video/* only, not GIF/WebP.'),
       key_color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional().describe('Opaque background colour; default #FF00FF, any #RRGGBB'),
       tolerance: z.number().nonnegative().optional().describe('Euclidean RGB snap distance (default 40)'),
       work_size: z.number().int().positive().optional().describe('Default 1024; image mode only'),
@@ -367,7 +367,7 @@ export function registerSpriteTools(server: McpServer, context: McpRequestContex
 
   server.registerTool(
     'create_sprite_animation',
-    { description: 'Turn a library sprite sheet into an animation (WebP by default, GIF or MP4) by playing its cells in row order. Saves it to the library by default.', inputSchema: z.object({
+    { description: 'Animate sprite-sheet cells in row order; returns a saved hash/download or job_id for get_sprite_job. If the grid is invalid, correct columns, rows and frame_count before retrying.', inputSchema: z.object({
       composite_hash: hashSchema.describe('Library sprite sheet hash'),
       columns: z.number().int().min(1).max(256),
       rows: z.number().int().min(1).max(256),
@@ -403,7 +403,7 @@ export function registerSpriteTools(server: McpServer, context: McpRequestContex
 
   server.registerTool(
     'get_sprite_job',
-    { description: 'Get the status of a sprite job (extract, batch, normalise, animation). A completed job lists its saved composite_hashes. With wait_seconds it waits for the job to finish first (up to 30 in chat), so one call replaces repeated checks.', inputSchema: z.object({ job_id: z.string().uuid(), wait_seconds: z.number().min(0).max(600).optional().describe('Seconds to wait for the job to finish before answering (default 0; external max 600, chat max 30)') }) },
+    { description: 'Get or wait for a sprite job; returns status, progress, results and saved hashes/downloads. Wait instead of repeated checks. If missing, verify the returned job_id; do not restart a pending job.', inputSchema: z.object({ job_id: z.string().uuid(), wait_seconds: z.number().min(0).max(600).optional().describe('Seconds to wait for the job to finish before answering (default 0; external max 600, chat max 30)') }) },
     async ({ job_id, wait_seconds }) => {
       try {
         const job = requireSpriteJob(job_id, requesterOf(context));
@@ -417,8 +417,8 @@ export function registerSpriteTools(server: McpServer, context: McpRequestContex
 
   server.registerTool(
     'download_sprite_frames',
-    { description: 'Package the frames of a finished extract_sprite_sheet build (build_id, kept about 1 hour) as a ZIP of single-frame images and return a download link.', inputSchema: z.object({
-      build_id: z.string().uuid(),
+    { description: 'Download extracted sprite frames as a ZIP; requires Streamable HTTP. If the build expired, extract again to obtain a new build_id.', inputSchema: z.object({
+      build_id: z.string().uuid().describe('Finished extract_sprite_sheet build ID; kept about 1 hour'),
       format: z.enum(['png', 'webp']).optional().describe('Frame image format (default png)'),
       quality: z.number().int().min(1).max(100).optional().describe('WebP quality (default 90)'),
       crop: z.object({ x: z.number().int().min(0), y: z.number().int().min(0), width: z.number().int().positive(), height: z.number().int().positive() }).optional()

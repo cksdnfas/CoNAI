@@ -13,11 +13,11 @@ export function registerCharacterLibraryTools(server: McpServer, context: McpReq
   const id = z.number().int().positive().safe()
   const canViewImages = () => context.requester ? requesterPermissionKeys(context.requester).includes('images.view') : context.keyGroup !== undefined ? keyGroupPermissionKeys(context.keyGroup).includes('images.view') : true
   server.registerTool('list_character_library', {
-    description: 'Browse character appearance settings by folder, or search names, tags and Korean tag names across the library. folder_id null means top level; omitted means all settings. favorite, filters ({dimension: [tags]}: any tag of a dimension, all dimensions) and sort narrow the list; include_facets adds the dimensions with tag counts to choose filters from (needs the Danbooru dictionary). Returns path, direct folders and a paged settings summary (no tags). Use get_character_setting for the selected id. If a folder is missing, browse from the top again.',
+    description: 'Browse/search character settings; returns path, direct folders and paged summaries without tags. Use get_character_setting for a selected ID. If a folder is missing, browse from the top again.',
     inputSchema: z.object({
-      folder_id: id.nullable().optional(), query: z.string().optional(), favorite: z.boolean().optional(),
-      filters: z.partialRecord(z.enum(CHARACTER_FACET_KEYS as [CharacterFacetKey, ...CharacterFacetKey[]]), z.array(z.string())).optional(),
-      sort: z.enum(['name', 'updated', 'created', 'created_asc']).optional(), include_facets: z.boolean().optional(),
+      folder_id: id.nullable().optional().describe('null: top-level settings; omitted: all settings'), query: z.string().optional().describe('Search names, tags and Korean tag names'), favorite: z.boolean().optional(),
+      filters: z.partialRecord(z.enum(CHARACTER_FACET_KEYS as [CharacterFacetKey, ...CharacterFacetKey[]]), z.array(z.string())).optional().describe('Any tag within each dimension, all supplied dimensions'),
+      sort: z.enum(['name', 'updated', 'created', 'created_asc']).optional(), include_facets: z.boolean().optional().describe('Include dimensions and tag counts for filtering; needs the Danbooru dictionary'),
       limit: z.number().int().min(1).max(200).optional(), offset: z.number().int().nonnegative().optional(),
     }).strict(),
   }, async ({ folder_id, include_facets, limit, offset, sort, ...scope }) => runToolResult(() => {
@@ -31,8 +31,13 @@ export function registerCharacterLibraryTools(server: McpServer, context: McpReq
     }
   }))
   server.registerTool('fill_character_appearance', {
-    description: 'Draft a look in setting sections without saving: source danbooru takes a character tag name or exact Korean name (its frequent appearance/outfit tags), image takes a library composite hash (its auto tags; an untagged image is tagged now), text sorts given tags. Returns sections, outfitTags and the Danbooru name. Put the result into propose_character_library save_setting (sections, outfits) or the open page draft. Danbooru and image sources need the Danbooru dictionary to sort tags.',
-    inputSchema: z.object({ source: z.enum(['danbooru', 'image', 'text']), character: z.string().optional(), image_hash: z.string().optional(), text: z.string().optional() }).strict(),
+    description: 'Draft appearance without saving; returns sections, outfitTags and Danbooru name for propose_character_library or a page draft. If dictionary lookup fails, install the Danbooru dictionary or use text.',
+    inputSchema: z.object({
+      source: z.enum(['danbooru', 'image', 'text']).describe('danbooru/image need the Danbooru dictionary to sort appearance/outfit tags; text sorts supplied tags'),
+      character: z.string().optional().describe('Required for danbooru: character tag or exact Korean name; uses frequent appearance/outfit tags'),
+      image_hash: z.string().optional().describe('Required for image: library composite hash; uses auto tags and tags an untagged image now; needs images.view'),
+      text: z.string().optional().describe('Required for text: tags to sort'),
+    }).strict(),
   }, async ({ source, character, image_hash, text }) => {
     try {
       requireContextPermission(context, 'characters.view')
@@ -40,7 +45,7 @@ export function registerCharacterLibraryTools(server: McpServer, context: McpReq
     } catch (error) { return errorResult(error) }
   })
   server.registerTool('get_character_setting', {
-    description: 'Read one character appearance setting by setting_id: sections (identity, hair, eyes, face, body, skin, traits, other), outfits (first is the default), the composed appearance, favorite, image hashes, ordered references ([{hash, category: string|null}]), person-named referenceCategories in display order, referenceCount, expressionCount, expression emotion-to-hash map, groups and revision. Images and references are hidden without images.view. Use the revision in propose_character_library to update it. If missing, list_character_library again.',
+    description: 'Read a setting\'s appearance, outfits, ordered references/categories, expressions, groups and revision. Images/references need images.view. Use the revision in propose_character_library; if missing, list_character_library again.',
     inputSchema: z.object({ setting_id: id }).strict(),
   }, async ({ setting_id }) => runToolResult(() => {
     requireContextPermission(context, 'characters.view')
@@ -50,11 +55,11 @@ export function registerCharacterLibraryTools(server: McpServer, context: McpReq
     return { ...setting, expressions: images && setting.expressionGroupId ? Object.fromEntries(EmoticonService.listEntries(setting.expressionGroupId).flatMap((entry) => entry.keywords.map((emotion) => [emotion, entry.compositeHash]))) : {} }
   }))
   server.registerTool('manage_character_folders', {
-    description: 'Create, rename or move a character-library folder immediately. Create takes name and optional parent_id (null=root); rename takes folder_id and name; move takes folder_id and parent_id. Returns the folder. Cycles and duplicate sibling names are rejected: browse current folders and choose another destination/name.',
+    description: 'Create, rename or move a character folder immediately; returns the folder. On cycles or duplicate sibling names, browse list_character_library and choose another destination/name.',
     inputSchema: z.discriminatedUnion('action', [
-      z.object({ action: z.literal('create'), parent_id: id.nullable().optional(), name: z.string().trim().min(1) }).strict(),
+      z.object({ action: z.literal('create'), parent_id: id.nullable().optional().describe('null or omitted: root'), name: z.string().trim().min(1) }).strict(),
       z.object({ action: z.literal('rename'), folder_id: id, name: z.string().trim().min(1) }).strict(),
-      z.object({ action: z.literal('move'), folder_id: id, parent_id: id.nullable() }).strict(),
+      z.object({ action: z.literal('move'), folder_id: id, parent_id: id.nullable().describe('null: root') }).strict(),
     ]),
   }, async (value) => runToolResult(() => {
     requireContextPermission(context, 'characters.edit')
@@ -62,7 +67,7 @@ export function registerCharacterLibraryTools(server: McpServer, context: McpReq
     return patchCharacterFolder(value.folder_id, value.action === 'move' ? { parentId: value.parent_id } : { name: value.name })
   }))
   server.registerTool('propose_character_library', {
-    description: 'Attach a character-library review card to the active chat: save_setting creates/updates, delete_setting or delete_folder proposes deletion. Nothing is written before a person saves the card. Create input needs folderId (null=root) and name; updates/deletes need setting_id and its current revision. input uses REST camelCase fields: write the look as sections (given keys replace those sections) and/or outfits ([{name, tags}], the whole list, first = default), or a plain appearance text that the server sorts into them, never both. references ([{hash, category: string|null}]) replaces the ordered gallery, needs images.view and unique library image hashes; categories must be null or in the referenceCategories this write leaves. referenceCategories replaces the ordered person-named category list (names unique case-insensitively); removing a category uncategorizes its existing images, and categories alone need no images.view. Returns proposalId and the card. On conflict read get_character_setting and propose again; missing folders require list_character_library.',
+    description: 'Attach a character create/update/delete review card to the active chat; returns proposalId and card. Nothing is written until a person saves it. On conflict, reread get_character_setting and propose again; missing folders: list_character_library.',
     inputSchema: characterLibraryProposalSchema,
   }, async (input) => {
     try {

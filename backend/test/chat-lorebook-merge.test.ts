@@ -698,7 +698,7 @@ test('lorebook merge: chat book end of life (delete, keep, merge), duplicates, d
       const close = registerChatReply(context(replyId), controller.signal, () => ({ replyTo: null, recipients: ['user'] }))
       const bridge = await openChatMcpBridge({ accountId: null, accountType: 'admin' }, [], null, { chatContext: context(replyId) })
       try {
-        assert.match(bridge.tools.find((tool) => tool.function.name === 'save_lore')!.function.description ?? '', /saved right away/)
+        assert.match(bridge.tools.find((tool) => tool.function.name === 'save_lore')!.function.description ?? '', /Saves immediately/)
         return await bridge.call('save_lore', input)
       } finally {
         close(); await bridge.close(); say('assistant', '응.', replyId)

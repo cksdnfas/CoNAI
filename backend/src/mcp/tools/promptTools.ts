@@ -33,10 +33,10 @@ export function registerPromptTools(server: McpServer): void {
   // 프롬프트 검색
   server.registerTool(
     'search_prompts',
-    { description: 'Search saved prompts AND the installed Danbooru tag dictionary together by default. Use this for tag names, artists and characters, not image search. Danbooru character results include copyrights and related tags (with translations and scores) for composing prompts. The prompts/total fields describe saved prompts; danbooru contains separately paginated dictionary results and availability. Dictionary names can be used as prompt text, but their IDs are not saved prompt IDs.', inputSchema: z.object({
+    { description: 'Find saved prompts and Danbooru tags/artists/characters, not images. Returns prompts/total and separate danbooru pages/status; dictionary IDs are not saved prompt IDs. If the dictionary is unavailable, use stored prompts or install it in Settings.', inputSchema: z.object({
       query: z.string().describe('Search keyword; Danbooru supports tag names with spaces or underscores and Korean translations'),
-      source: z.enum(['all', 'stored', 'danbooru']).default('all').describe('Search both sources by default, or only saved prompts / installed Danbooru DB'),
-      danbooru_section: z.enum(['all', 'tags', 'artists', 'characters']).default('all').describe('Dictionary section; characters includes related tags and copyrights'),
+      source: z.enum(['all', 'stored', 'danbooru']).default('all').describe('all searches saved prompts and the installed Danbooru dictionary together'),
+      danbooru_section: z.enum(['all', 'tags', 'artists', 'characters']).default('all').describe('characters includes copyrights and related tags with translations/scores; names can be used as prompt text'),
       related_tag_limit: z.number().int().min(0).max(100).default(30).describe('Maximum related tags per character'),
       type: z.enum(['positive', 'negative', 'auto']).default('positive').describe('Saved prompt type; does not filter Danbooru tags'),
       page: z.number().int().min(1).default(1).describe('Page number'),
@@ -95,7 +95,7 @@ export function registerPromptTools(server: McpServer): void {
   // 프롬프트 그룹 목록 조회
   server.registerTool(
     'list_prompt_groups',
-    { description: 'List all prompt groups with prompt counts. Supports positive, negative, and auto-generated prompt types.', inputSchema: z.object({
+    { description: 'List prompt groups with counts; use get_prompts_in_group to read their prompts.', inputSchema: z.object({
       type: z.enum(['positive', 'negative', 'auto']).default('positive').describe('Prompt group type'),
       include_hidden: z.boolean().default(false).describe('Include hidden groups'),
     }) },

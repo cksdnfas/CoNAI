@@ -306,7 +306,7 @@ async function enqueueGenerationJob(context: McpRequestContext, input: McpGenera
 export function registerGenerationJobTools(server: McpServer, context: McpRequestContext): void {
   server.registerTool(
     'get_codex_generation_options',
-    { description: 'Get the Codex image-generation schema and CLI agent models for submit_generation_job(service_type="codex"). Supports image as the edit canvas, separate ordered role-tagged references, and opt-in preserve="strict" for masked infill. Size is requested, not guaranteed; strict mode rejects output size changes. Models may be incomplete; custom IDs are accepted. History retains prompts and reference descriptors, not image bytes or attachment paths.', inputSchema: z.object({}) },
+    { description: 'Get the Codex request schema, model suggestions, attachment limits and size policy before submitting a Codex job. Includes editing, references and strict infill examples. If a model is unlisted, a custom ID is accepted.', inputSchema: z.object({}) },
     async () => textResult({
       ...await getCodexModelSuggestions(),
       request_schema: z.toJSONSchema(codexGenerationRequestSchema),
@@ -321,7 +321,7 @@ export function registerGenerationJobTools(server: McpServer, context: McpReques
 
   server.registerTool(
     'get_generation_history_request',
-    { description: 'Read saved prompts, model and request settings, including Codex ordered reference roles/labels/descriptors and strict preservation. Image bytes and attachment paths are omitted: reattach every source, mask and reference when reusing. Size is requested, not guaranteed; results report measured dimensions. Pruned requests may only retain result prompts. A result above this model\'s content rating carries rating_restricted: true with prompts and payload hidden.', inputSchema: z.object({ history_id: z.number().int().positive() }) },
+    { description: 'Read saved generation settings and measured result dimensions; pruned requests may retain only prompts. Reattach sources, masks and references when reusing: bytes and paths are omitted. rating_restricted hides prompts/payload. If missing, find another ID in get_generation_history.', inputSchema: z.object({ history_id: z.number().int().positive() }) },
     async ({ history_id }) => {
       const record = HistoryQueryRepository.findAllWithMetadata({ ids: [history_id], limit: 1 })[0];
       if (!record) return errorResult('Generation history not found');
@@ -334,13 +334,13 @@ export function registerGenerationJobTools(server: McpServer, context: McpReques
 
   server.registerTool(
     'submit_generation_job',
-    { description: `Submit a durable asynchronous generation job and return immediately with a job ID. For NovelAI (service_type="novelai") pass request_payload directly, no lookups needed: { prompt (required; comma-separated Danbooru-style tags), negative_prompt, quality_toggle (boolean, default false; append model quality tags), uc_preset ("none"|"heavy"|"light"|"human_focus", default "none"; prepend a model UC preset), model (default "nai-diffusion-4-5-curated"; also nai-diffusion-4-5-full, nai-diffusion-5-curated, nai-diffusion-5-full, nai-diffusion-5-full-medium = V5 Full economy mode with steps 14, k_euler_ancestral and the Heavy UC fixed, so negative prompts are ignored), width/height (multiples of 64: 832x1216 portrait, 1216x832 landscape, 1024x1024 square), steps (1-50, default 28), scale (0-30, default 5), sampler (default k_euler_ancestral; only k_euler, k_euler_ancestral, k_dpmpp_2s_ancestral, k_dpmpp_2m, k_dpmpp_2m_sde, k_dpmpp_sde), noise_schedule (karras|native|exponential|polyexponential), seed, n_samples (keep 1), characters: [{ prompt, uc, center_x, center_y }] for per-character prompts, action ("generate" or "img2img"), image (source image base64 data URL), enhance ("1x"|"1.5x"|"max"; requires action "img2img" and image, Max requires V5; default strength 0.5 and noise 0) }. Unsupported model quality tags/UC presets fail clearly. The server rejects a NovelAI payload without prompt or with an unknown model, sampler, noise_schedule, uc_preset or out-of-range number before anything is sent: fix the named fields instead of resubmitting the same payload. V5 does not support Vibe Transfer. ${isChatMcpSource(context.source) ? 'The app attaches the result to your reply by itself; do not wait for or poll the job. ' : 'After submitting, call wait_generation_job with the returned job id instead of polling get_generation_job. '}For Codex, get_codex_generation_options documents all UI-equivalent parameters including model, reference generation, editing, masks and save options. For ComfyUI: omit server_id and server_tag for automatic queue distribution, provide server_id for one fixed server, or provide server_tag for exact-tag routing.`, inputSchema: z.object({
+    { description: `Queue durable generation; returns a job ID immediately. NovelAI: keep n_samples=1 to avoid extra Anlas cost. ${isChatMcpSource(context.source) ? 'Results attach to your reply automatically; do not wait or poll. ' : 'Use wait_generation_job, not polling. '}On validation failure, fix the named fields before resubmitting.`, inputSchema: z.object({
       service_type: z.enum(['comfyui', 'novelai', 'codex']),
-      workflow_id: z.number().int().positive().optional(),
-      server_id: z.number().int().positive().optional().describe('ComfyUI only. Target one active workflow-eligible server. Cannot be combined with server_tag.'),
+      workflow_id: z.number().int().positive().optional().describe('Required for ComfyUI; get_workflow_details provides marked-field inputs.'),
+      server_id: z.number().int().positive().optional().describe('ComfyUI only: one active workflow-eligible server. Excludes server_tag; omit both for automatic queue distribution.'),
       server_tag: z.string().trim().min(1).max(64).optional().describe('ComfyUI only. Route to an active workflow-eligible server with this exact normalized tag. Cannot be combined with server_id.'),
       inputs: z.record(z.string(), z.unknown()).optional().describe(`ComfyUI marked-field inputs, or a NovelAI/Codex payload alias. ${COMFY_SEED_RULE}`),
-      request_payload: z.record(z.string(), z.unknown()).optional().describe('NovelAI/Codex generation parameters. NovelAI: prompt, negative_prompt, quality_toggle (false), uc_preset (none/heavy/light/human_focus), model, width, height, steps, scale, sampler, seed, n_samples (1), characters, action, image (base64 data URL), enhance (1x/1.5x/max, img2img + image only), strength, noise. V5 does not support vibes. Codex (get_codex_generation_options): model, prompt, negative_prompt, operation, image (PNG/JPEG/WebP canonical base64; reference in generate, sole canvas in edit/infill; legacy forms normalized), mask (matching PNG; white edit, black protect, gray blend), references [{role: reference|style|material|scale|item, label?, data_url}], preserve ("strict", infill only, opaque mask with black pixels), size (advisory request; strict overrides with source size), count and imageSaveOptions. At most 5 attachments including source/mask.'),
+      request_payload: z.record(z.string(), z.unknown()).optional().describe('Required for NovelAI/Codex unless supplied via inputs. Codex: schema in get_codex_generation_options. NovelAI needs no lookup: prompt (required, comma-separated Danbooru-style tags), negative_prompt; quality_toggle (default false): true appends model quality tags; uc_preset=none (none/heavy/light/human_focus) prepends model UC tags; unsupported quality/UC presets fail. model=nai-diffusion-4-5-curated; also nai-diffusion-4-5-full, nai-diffusion-5-curated, nai-diffusion-5-full, nai-diffusion-5-full-medium (economy: fixed 14 steps, k_euler_ancestral, Heavy UC; ignores negative_prompt and character uc). width/height: multiples of 64 (832x1216 portrait, 1216x832 landscape, 1024x1024 square); steps=28 (1..50), scale=5 (0..30); sampler=k_euler_ancestral (also k_euler, k_dpmpp_2s_ancestral, k_dpmpp_2m, k_dpmpp_2m_sde, k_dpmpp_sde); noise_schedule: karras/native/exponential/polyexponential; n_samples: keep 1. characters: [{prompt, uc, center_x, center_y}], each character\'s own look/pose tags (prompt keeps shared scene tags). center_x/center_y: 0.1..0.9, default 0.5; uc: per-character negative tags. action: generate/img2img; image: source base64 data URL; enhance: 1x/1.5x/max, requires img2img + image, max requires V5; strength (img2img default 0.3, enhance 0.5), noise=0. V5 does not support Vibe Transfer.'),
       group_id: z.number().int().positive().optional(),
       group_path: mcpGroupPathSchema,
       priority: z.number().int().min(0).max(100000).default(100),
@@ -357,7 +357,7 @@ export function registerGenerationJobTools(server: McpServer, context: McpReques
 
   server.registerTool(
     'get_generation_routing_options',
-    { description: 'Explain ComfyUI queue routing rules and list the active automatic, fixed-server, and tag targets currently available, optionally scoped to one workflow.', inputSchema: z.object({
+    { description: 'Get ComfyUI queue routing rules, eligible targets and submission examples. If the workflow is missing or deleted, choose another from list_workflows.', inputSchema: z.object({
       workflow_id: z.number().int().positive().optional().describe('Optional workflow ID. When supplied, explicit workflow-server links constrain the returned targets.'),
     }) },
     async ({ workflow_id }) => {
@@ -390,7 +390,7 @@ export function registerGenerationJobTools(server: McpServer, context: McpReques
 
   server.registerTool(
     'get_generation_job',
-    { description: 'Get one durable generation job, its workflow availability, history IDs, and completed artifacts. A job with a result above the content rating this model may be shown carries rating_restricted: true with its request_summary hidden.', inputSchema: z.object({ job_id: z.number().int().positive() }) },
+    { description: `Get job status, workflow availability, history IDs and artifacts. Above the model content rating, rating_restricted hides request_summary. ${isChatMcpSource(context.source) ? 'Results attach automatically; do not wait or poll.' : 'For unfinished work, use wait_generation_job instead of polling.'} If missing, check the submitted ID.`, inputSchema: z.object({ job_id: z.number().int().positive() }) },
     async ({ job_id }) => {
       const job = await describeJob(job_id, context);
       return job
@@ -401,7 +401,7 @@ export function registerGenerationJobTools(server: McpServer, context: McpReques
 
   server.registerTool(
     'wait_generation_job',
-    { description: 'Wait until a generation job finishes (completed, failed or cancelled) or the timeout passes, then return it with its history IDs. Use this after submit_generation_job instead of calling get_generation_job repeatedly; call it again if finished is false. A job with a result above the content rating this model may be shown carries rating_restricted: true with its request_summary hidden.', inputSchema: z.object({
+    { description: 'Wait for job completion or timeout; returns status, history IDs and artifacts. Use instead of polling; repeat if finished=false. Above the model content rating, rating_restricted hides request_summary. If missing, check the submitted ID.', inputSchema: z.object({
       job_id: z.number().int().positive(),
       timeout_seconds: z.number().int().min(5).max(180).default(90).describe('Longest wait before returning an unfinished job'),
     }) },
@@ -415,7 +415,7 @@ export function registerGenerationJobTools(server: McpServer, context: McpReques
 
   server.registerTool(
     'get_generation_artifacts',
-    { description: 'Get downloadable artifacts for one generation job. Calling it again issues fresh signed download URLs.', inputSchema: z.object({ job_id: z.number().int().positive() }) },
+    { description: `Get a job's artifacts with fresh signed download URLs. ${isChatMcpSource(context.source) ? 'Results attach automatically; do not wait or poll.' : 'If still running, use wait_generation_job.'} If missing, check the submitted job ID.`, inputSchema: z.object({ job_id: z.number().int().positive() }) },
     async ({ job_id }) => {
       const job = await describeJob(job_id, context);
       return job
@@ -426,7 +426,7 @@ export function registerGenerationJobTools(server: McpServer, context: McpReques
 
   server.registerTool(
     'refresh_artifact_download',
-    { description: 'Issue a fresh signed download URL from a stable MCP artifact ID.', inputSchema: z.object({ artifact_id: z.string().min(1) }) },
+    { description: 'Refresh a signed download URL using a stable artifact ID; requires Streamable HTTP. If unavailable, obtain a current artifact ID from the source job.', inputSchema: z.object({ artifact_id: z.string().min(1) }) },
     async ({ artifact_id }) => {
       if (!context.baseUrl) {
         return errorResult('Artifact downloads require the Streamable HTTP transport');
@@ -449,7 +449,7 @@ export function registerGenerationJobTools(server: McpServer, context: McpReques
 
   server.registerTool(
     'cancel_generation_job',
-    { description: 'Request cancellation for one generation job.', inputSchema: z.object({ job_id: z.number().int().positive() }) },
+    { description: 'Request generation cancellation and return the job state. If cancellation fails, inspect get_generation_job before taking further action.', inputSchema: z.object({ job_id: z.number().int().positive() }) },
     async ({ job_id }) => {
       try {
         requireMcpResourceOwner(context, GenerationQueueModel.findListRecordById(job_id));

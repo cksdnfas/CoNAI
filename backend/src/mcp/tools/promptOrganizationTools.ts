@@ -35,7 +35,7 @@ export function registerPromptOrganizationTools(server: McpServer): void {
 
   server.registerTool(
     'get_prompt_group_structure',
-    { description: 'Get the complete prompt group structure including hierarchy, prompt counts, and unclassified count. Use this first to understand the current organization before making changes. Supports positive, negative, and auto prompt types.', inputSchema: z.object({
+    { description: 'Get prompt group hierarchy and counts before reorganizing. Use get_prompts_in_group to inspect a selected group.', inputSchema: z.object({
       type: z.enum(['positive', 'negative', 'auto']).default('positive').describe('Prompt type'),
       include_hidden: z.boolean().default(true).describe('Include hidden groups'),
     }) },
@@ -56,7 +56,7 @@ export function registerPromptOrganizationTools(server: McpServer): void {
 
   server.registerTool(
     'get_prompts_in_group',
-    { description: 'Read one bounded page of prompts in a group. Use group_id=0 for unclassified. Follow next_page with the same filters. include_total=false skips the exact contains-search count; total is then omitted.', inputSchema: z.object({
+    { description: 'Read a page of group prompts with has_more/next_page; follow next_page using the same filters. If the group is wrong, select it from get_prompt_group_structure.', inputSchema: z.object({
       group_id: z.number().int().min(0).describe('Group ID (0 for Unclassified)'),
       type: z.enum(['positive', 'negative', 'auto']).default('positive').describe('Prompt type'),
       page: z.number().int().min(1).default(1).describe('Page number'),
@@ -64,7 +64,7 @@ export function registerPromptOrganizationTools(server: McpServer): void {
       query: z.string().default('').describe('Literal contains search'),
       sort_by: z.enum(['usage_count', 'created_at', 'prompt']).default('usage_count'),
       sort_order: z.enum(['ASC', 'DESC']).default('DESC'),
-      include_total: z.boolean().default(true).describe('Request the exact total; disable on subsequent pages when it is already known'),
+      include_total: z.boolean().default(true).describe('Request exact contains-search total; false omits total and skips counting, useful on subsequent pages'),
     }) },
     async ({ group_id, type, page, limit, query, sort_by, sort_order, include_total }) => {
       try {
@@ -99,13 +99,13 @@ export function registerPromptOrganizationTools(server: McpServer): void {
 
   server.registerTool(
     'batch_create_groups',
-    { description: 'Create one or more prompt groups (use a one-item groups array for a single group). Each group name must be unique. Returns created/existing group IDs. Supports positive, negative, and auto prompt types.', inputSchema: z.object({
+    { description: 'Create prompt groups; returns created/existing IDs and per-group errors. Protected LoRA/Danbooru-managed destinations may refuse changes; correct reported names/parents and retry only failures.', inputSchema: z.object({
       groups: z.array(z.object({
         group_name: z.string().min(1).describe('Group name'),
         display_order: z.number().int().optional().describe('Display order'),
         is_visible: z.boolean().default(true).describe('Visibility'),
         parent_id: z.number().int().optional().describe('Parent group ID'),
-      })).min(1).max(50).describe('Groups to create (max 50)'),
+      })).min(1).max(50).describe('Groups to create; existing names return their IDs'),
       type: z.enum(['positive', 'negative', 'auto']).default('positive').describe('Prompt type'),
     }) },
     async ({ groups, type }) => {
@@ -147,9 +147,9 @@ export function registerPromptOrganizationTools(server: McpServer): void {
 
   server.registerTool(
     'move_prompts_between_groups',
-    { description: 'Assign or move prompts to a group. Provide specific prompt_ids OR source_group_id to move all prompts from that group. Use target_group_id=0 for Unclassified. Supports positive, negative, and auto prompt types.', inputSchema: z.object({
-      prompt_ids: z.array(z.number().int()).min(1).max(100).optional().describe('Specific prompt IDs to assign or move (1-100)'),
-      source_group_id: z.number().int().min(0).optional().describe('Source group ID to move ALL prompts from (0 for Unclassified)'),
+    { description: 'Assign/move prompts to a group; returns moved/failed counts and the first error. Protected LoRA/Danbooru groups may refuse changes; inspect the error and choose an allowed target.', inputSchema: z.object({
+      prompt_ids: z.array(z.number().int()).min(1).max(100).optional().describe('Specific prompt IDs; takes precedence over source_group_id; supply one selector'),
+      source_group_id: z.number().int().min(0).optional().describe('Move all source prompts when prompt_ids is omitted; 0 means Unclassified'),
       target_group_id: z.number().int().min(0).describe('Target group ID (0 for Unclassified)'),
       type: z.enum(['positive', 'negative', 'auto']).default('positive').describe('Prompt type'),
     }) },
@@ -192,7 +192,7 @@ export function registerPromptOrganizationTools(server: McpServer): void {
 
   server.registerTool(
     'backup_prompt_data',
-    { description: 'Create a full JSON backup of all prompt data (groups + prompts + settings) for all three types (positive, negative, auto). Saves to the backups directory.', inputSchema: z.object({
+    { description: 'Back up all prompt groups and prompts for positive, negative and auto types to JSON; returns filename and counts. If the filename is invalid, omit it to generate one.', inputSchema: z.object({
       filename: z.string().optional().describe('Custom backup filename (auto-generated if omitted)'),
     }) },
     async ({ filename }) => {
@@ -239,7 +239,7 @@ export function registerPromptOrganizationTools(server: McpServer): void {
 
   server.registerTool(
     'restore_prompt_data',
-    { description: 'Restore prompt data from a JSON backup file. This restores group structures and prompt-group assignments. Existing prompts are updated, missing prompts are created.', inputSchema: z.object({
+    { description: 'Restore prompt groups, assignments and settings from a backup; updates existing prompts and creates missing ones. Returns per-type counts. If missing/invalid, choose a valid file from list_backups.', inputSchema: z.object({
       filename: z.string().describe('Backup filename (in the backups directory)'),
     }) },
     async ({ filename }) => {

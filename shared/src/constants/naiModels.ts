@@ -34,6 +34,11 @@ export const NAI_ACTION_IDS = ['generate', 'img2img', 'infill'] as const
 /** Inpainting strength the web UI starts from: the masked area is redrawn fully (img2img keeps its own lower default). */
 export const NAI_INFILL_DEFAULT_STRENGTH = 1
 
+/** Models that take structured per-character prompts (V4 and later). */
+export function supportsNaiCharacterPrompts(model: string | null | undefined): boolean {
+  return (model ?? '').includes('nai-diffusion-4') || isNaiV5Model(model)
+}
+
 /** V5 family (Full, Curated, economy mode), including their inpainting variants. */
 export function isNaiV5Model(model: string | null | undefined): boolean {
   return (model ?? '').includes('nai-diffusion-5')

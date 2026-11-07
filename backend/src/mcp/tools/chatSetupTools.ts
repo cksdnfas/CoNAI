@@ -682,7 +682,7 @@ function profileAssetsGuide(context: McpRequestContext) {
 /** Chat setup tools (scope `configure`, chat accounts with admin rights only): read the setup, propose changes as cards. */
 export function registerChatSetupTools(server: McpServer, context: McpRequestContext): void {
   server.registerTool('manage_chat_profile_folders', {
-    description: 'Administrator-only profile folder tree, separate from appearance folders. List reads immediately. Create, rename, move and delete attach review cards to the active chat, without changing folders. An administrator saves the card, including headless deletion (profiles and children move up, never deleted). Stale cards require a fresh proposal. Profile updates accept patch.folderId (null = top level).',
+    description: 'Administrator-only profile folders, separate from appearance folders. List returns the tree; mutations return review cards for administrator approval. Deletion moves children/profiles up, never deletes them. Stale cards need a new proposal.',
     inputSchema: z.union([z.object({ action: z.literal('list') }).strict(), profileFolderMutationSchema]),
   }, async (args) => {
     try {
@@ -693,8 +693,10 @@ export function registerChatSetupTools(server: McpServer, context: McpRequestCon
       return textResult({ proposalId: proposal.id, note: PROPOSAL_NOTE }, { structuredContent: { proposal } });
     } catch (error) { return errorResult(error); }
   });
-  server.registerTool('get_asset_batch', { description: 'Read a character asset batch: each slot with its status (waiting, queued, processing, completed, failed, blocked), chosen candidate and candidates with review results (expression match, hair/eye match with the reference, judge pick). Without batch_id: the newest batch of the profile (default: your speaking profile), or of its linked setting when synced (a synced profile\'s own background batches are read by batch_id). Use batch_id to inspect a particular batch. Follow generation and choose candidates for propose_profile_assets(action=apply, picks).', inputSchema: z.object({
-    batch_id: z.number().int().positive().optional(), profile_id: z.number().int().positive().optional(), setting_id: z.number().int().positive().optional(),
+  server.registerTool('get_asset_batch', { description: 'Read asset-batch slot status, chosen candidates, review results and failures. Use candidates in propose_profile_assets(action=apply, picks); if the latest batch is absent, check the target or supply a known batch_id.', inputSchema: z.object({
+    batch_id: z.number().int().positive().optional().describe('Specific batch; omit for the target\'s newest. Required for a synced profile\'s own background batch.'),
+    profile_id: z.number().int().positive().optional().describe('Default: speaking profile, or its linked setting when synced. Do not combine with setting_id.'),
+    setting_id: z.number().int().positive().optional().describe('Library setting instead of profile_id.'),
   }) }, async ({ batch_id, profile_id, setting_id }) => {
     try {
       if (!context.chatContext || !context.requester) throw new Error(NO_CHAT_ERROR);
@@ -716,9 +718,12 @@ export function registerChatSetupTools(server: McpServer, context: McpRequestCon
       });
     } catch (error) { return errorResult(error); }
   });
-  server.registerTool('propose_profile_assets', { description: 'Propose character asset generation (action=create), or application of chosen batch candidates (action=apply), as separate approval cards. Choose profile_id OR setting_id; omitted means your speaking profile. setting_id produces a character_assets card and forbids background slots. Read get_chat_setup_guide(topic=profile_assets) for preset IDs and ComfyUI prompt fields. Administrators approve each card; proposing starts no jobs and changes no data. Create input uses presetId, expressionPresetId, optional expressions and slots; ComfyUI needs promptField. Apply takes batch_id and optional picks. On stale candidates, read get_asset_batch again before proposing.', inputSchema: z.object({
-    action: z.enum(['create', 'apply']).optional(), profile_id: z.number().int().positive().optional(), setting_id: z.number().int().positive().optional(),
-    input: chatAssetBatchInputSchema.omit({ idempotencyKey: true }).optional(), batch_id: z.number().int().positive().optional(),
+  server.registerTool('propose_profile_assets', { description: 'Return separate administrator approval cards for asset generation and applying candidates; proposing starts no jobs or writes. Read get_chat_setup_guide(profile_assets) first. Synced targets affect all linked profiles; stale picks require get_asset_batch again.', inputSchema: z.object({
+    action: z.enum(['create', 'apply']).optional().describe('Default create; apply uses batch_id and optional picks.'),
+    profile_id: z.number().int().positive().optional().describe('Default: speaking profile. Choose this or setting_id, not both; synced appearance targets its library setting.'),
+    setting_id: z.number().int().positive().optional().describe('Target a library setting with a character_assets card; background slots are forbidden.'),
+    input: chatAssetBatchInputSchema.omit({ idempotencyKey: true }).optional().describe('Create input; input.promptField: the text field slot prompts go into (default: the preset\'s own). See get_chat_setup_guide(profile_assets).'),
+    batch_id: z.number().int().positive().optional().describe('Batch to apply.'),
     picks: z.record(z.string().max(40), z.string().max(200)).optional().describe('apply only: slotKey → compositeHash of a candidate from get_asset_batch to choose for that slot.'),
     avatarCrop: z.object({ x: z.number(), y: z.number(), scale: z.number().positive() }).nullable().optional(),
   }) }, async (args) => {
@@ -730,7 +735,7 @@ export function registerChatSetupTools(server: McpServer, context: McpRequestCon
   });
   server.registerTool(
     'get_chat_setup_guide',
-    { description: 'Read the reference for writing a chat display block (status card: JSON shape, limits, template syntax, runtime behavior), a chat profile (every proposable setting with its range, where the others are set by hand, available models, judge presets, rating tiers, lorebooks, shared blocks and skills), character assets, or how the chat\'s user-side features work (features: narration lines, reply orders, file versions, minutes, record book, linked files, web research, outside MCP tools). Read it once before proposing.', inputSchema: z.object({ topic: z.enum(['display_block', 'profile', 'profile_assets', 'features']) }) },
+    { description: 'Read chat setup formats, limits and available choices, or user-facing feature instructions. Read the relevant topic before proposing; use it to correct rejected setup values.', inputSchema: z.object({ topic: z.enum(['display_block', 'profile', 'profile_assets', 'features']).describe('display_block: status-card syntax; profile: settings and available IDs; profile_assets: presets/prompt fields; features: chat UI usage.') }) },
     async ({ topic }) => {
       try {
         return { content: [{ type: 'text' as const, text: topic === 'display_block' ? DISPLAY_BLOCK_GUIDE : topic === 'profile_assets' ? profileAssetsGuide(context) : topic === 'features' ? CHAT_FEATURES_GUIDE : profileGuide() }] };
@@ -752,7 +757,7 @@ export function registerChatSetupTools(server: McpServer, context: McpRequestCon
 
   server.registerTool(
     'get_chat_profile',
-    { description: 'Read the setup of a chat profile in full: prompts, sections, greetings, author note, model rows per role, judge, model params, context and summary, translation languages, suggestions, vision and content rating ceiling, lore recursion, linked files, linked lorebooks and blocks, style. Defaults to the profile you are speaking as. Tool grants and connection details are never included.', inputSchema: z.object({ profile_id: z.number().int().positive().optional() }) },
+    { description: 'Read a profile\'s full prompts, model/context settings, linked resources and style, excluding tool grants and connection details. Use before proposing updates; if not found, select an ID with list_chat_profiles.', inputSchema: z.object({ profile_id: z.number().int().positive().optional().describe('Default: the profile you speak as.') }) },
     async ({ profile_id }) => {
       try {
         const id = profile_id ?? context.chatContext?.profileId;
@@ -796,7 +801,7 @@ export function registerChatSetupTools(server: McpServer, context: McpRequestCon
 
   server.registerTool(
     'propose_display_block',
-    { description: 'Propose a new shared display block (status card) as a card under your reply. Nothing is saved until the user presses 저장. get_chat_setup_guide(display_block) has the block format; read it unless you already know it. The block is validated and normalized; warnings are returned.', inputSchema: z.object({
+    { description: 'Return a review card, normalized block and warnings for a new shared status card; only the user\'s 저장 saves it. Read get_chat_setup_guide(display_block) for the format or to correct rejected fields.', inputSchema: z.object({
       name: z.string().optional().describe('Name of the shared block (defaults to its key)'),
       block: z.record(z.string(), z.unknown()).describe('{ key, instruction, example, template, css, rules, summary, fields }'),
       link_to_profile: z.boolean().default(true).describe('Offer to link the saved block to the profile you speak as'),
@@ -813,8 +818,8 @@ export function registerChatSetupTools(server: McpServer, context: McpRequestCon
 
   server.registerTool(
     'list_chat_skills',
-    { description: 'List the shared skills: id, name, description (when to use it), category, source (user, import or plugin; plugin skills change only with their plugin), overview length, section count and the profiles that link them. A profile links skills by id (skill_ids); its chat model loads one with use_skill when a request fits the description. query keeps the skills whose name, description, category or a section\'s path, title or summary holds every word. Read one skill with get_chat_skill.', inputSchema: z.object({
-      query: z.string().trim().min(1).max(200).optional(),
+    { description: 'List shared skills with IDs, summaries, categories, source, overview length, section counts and linked profiles. Plugin skills change only with their plugin. Read one with get_chat_skill; broaden query if no match.', inputSchema: z.object({
+      query: z.string().trim().min(1).max(200).optional().describe('Every word must match the name, description, category or a section path/title/summary.'),
     }) },
     async ({ query }) => {
       try {
@@ -827,7 +832,7 @@ export function registerChatSetupTools(server: McpServer, context: McpRequestCon
 
   server.registerTool(
     'get_chat_skill',
-    { description: 'Read one shared skill: name, description, category, linked profiles, its table of sections and its overview; with section, that section\'s text instead. Long text comes in parts; continue with the offset the result gives. Read what you change before proposing edits to it.', inputSchema: z.object({
+    { description: 'Read a shared skill\'s metadata, overview and section table, or selected section text. Follow returned offsets. Read before proposing edits; if missing, select from list_chat_skills.', inputSchema: z.object({
       skill_id: z.number().int().positive(),
       section: z.string().trim().min(1).max(CHAT_SKILL_LIMITS.sectionPath + 1).optional().describe('A section path from the table of sections, or "group/" to list a folded group'),
       offset: z.number().int().min(0).optional().describe('Only to continue: the offset the previous result gave'),
@@ -877,23 +882,23 @@ export function registerChatSetupTools(server: McpServer, context: McpRequestCon
 
   server.registerTool(
     'propose_skill',
-    { description: `Propose a shared skill as a card under your reply: a new one, or changes to an existing one (skill_id; fields you leave out stay as they are). Nothing is saved until the user presses 저장. A skill is task instructions a chat profile loads with use_skill when a request matches; its chat model sees only the name and description until then, then the overview with a table of the sections, and loads only the sections it needs. Write: name — short and unique (max ${CHAT_SKILL_LIMITS.name}); description — what it is for and when to use it, one or two sentences starting with "Use when", concrete enough that a small model can match a request to it (max ${CHAT_SKILL_LIMITS.description}); instructions — the overview: the common steps and rules as direct numbered orders, and which section to read for what (max ${CHAT_SKILL_LIMITS.instructions}); sections — details that only some requests need, one topic each (e.g. one per model or workflow: "models/nai-v4"), each with a title, a one-line summary of when to read it, and the content (max ${CHAT_SKILL_LIMITS.sections} sections, ${CHAT_SKILL_LIMITS.sectionContent} characters each). Write in English unless the user asks otherwise; {{char}} and {{user}} become the profile and user names. To change part of an existing skill, read it with get_chat_skill and send edits (overview) or the changed sections only. The card offers to link the skill to the profile you speak as.`, inputSchema: z.object({
+    { description: 'Return a review card to create or update shared task instructions; only the user\'s 저장 saves it. Read get_chat_skill before edits; omitted fields/sections stay unchanged. Plugin skills must change through their plugin.', inputSchema: z.object({
       skill_id: z.number().int().positive().optional().describe('Change this existing skill (list_chat_skills shows ids); omit to propose a new one'),
-      name: z.string().optional(),
-      description: z.string().optional().describe('When to use the skill, starting with "Use when"'),
+      name: z.string().optional().describe(`Short, unique name; max ${CHAT_SKILL_LIMITS.name} characters.`),
+      description: z.string().optional().describe(`Purpose and trigger in 1–2 concrete sentences starting "Use when"; max ${CHAT_SKILL_LIMITS.description} characters. Models initially see only name and description.`),
       category: z.string().optional().describe('A library group for the administrator (the chat model never sees it)'),
-      instructions: z.string().optional().describe('The whole new overview'),
+      instructions: z.string().optional().describe(`Whole overview: numbered common steps/rules and when to load each section with use_skill; max ${CHAT_SKILL_LIMITS.instructions} characters. English unless requested otherwise; {{char}}/{{user}} expand to profile/user names.`),
       edits: z.array(z.object({ old_text: z.string().min(1), new_text: z.string(), replace_all: z.boolean().optional() })).optional().describe('With skill_id, instead of instructions: exact replacements in the current overview, applied in order; each old_text must match once unless replace_all'),
       sections: z.array(z.object({
         // "path" is a refused MCP argument name (server file paths), hence "section".
         section: z.string().describe('The section path, "name" or "group/name": letters, digits, ".", "_" or "-"; an existing path changes that section, a new one adds it'),
         title: z.string().optional(),
         summary: z.string().optional().describe('One line for the table of contents: when to read this section'),
-        content: z.string().optional().describe('The whole section text'),
+        content: z.string().optional().describe(`Whole section text; max ${CHAT_SKILL_LIMITS.sectionContent} characters. English unless requested otherwise; {{char}}/{{user}} expand to profile/user names.`),
         edits: z.array(z.object({ old_text: z.string().min(1), new_text: z.string(), replace_all: z.boolean().optional() })).optional().describe('For an existing section, instead of content: exact replacements'),
         new_path: z.string().optional().describe('Move an existing section to this path'),
         remove: z.boolean().optional().describe('Remove this existing section'),
-      })).optional().describe('Only the sections to add, change or remove; the others stay as they are'),
+      })).optional().describe(`Only changed sections; one topic each, with title, summary and content for new sections. Others stay unchanged. Max ${CHAT_SKILL_LIMITS.sections} sections in the skill.`),
       link_to_profile: z.boolean().default(true).describe('Offer to link the saved skill to the profile you speak as'),
     }) },
     async (args) => {
@@ -908,7 +913,7 @@ export function registerChatSetupTools(server: McpServer, context: McpRequestCon
 
   server.registerTool(
     'propose_chat_profile',
-    { description: 'Propose a NEW chat profile as a card under your reply. Nothing is saved until the user presses 저장. get_chat_setup_guide(profile) lists limits, model slots, lorebooks and blocks: read it when you need one of them (a wrong value is refused with the allowed ones).', inputSchema: z.object({
+    { description: 'Return a review card and warnings for a new chat profile; only the user\'s 저장 saves it. Read get_chat_setup_guide(profile) for valid settings and resource IDs, including after a rejected value.', inputSchema: z.object({
       name: z.string(),
       tagline: z.string().optional(),
       system_prompt: z.string(),
@@ -937,9 +942,9 @@ export function registerChatSetupTools(server: McpServer, context: McpRequestCon
 
   server.registerTool(
     'propose_profile_update',
-    { description: `Propose changes to an existing chat profile (default: the one you speak as) as a before/after card. Nothing is saved until the user presses 저장. patch keys (camelCase or snake_case): ${PROPOSABLE_KEYS.join(', ')}. get_chat_setup_guide(profile) gives each key's meaning, range and the ids to use. ${NOT_PROPOSABLE}`, inputSchema: z.object({
-      profile_id: z.number().int().positive().optional(),
-      patch: z.record(z.string(), z.unknown()),
+    { description: 'Return a before/after review card for profile changes; only the user\'s 저장 saves it. Grants and engine/access controls are not proposable. Read get_chat_setup_guide(profile) for valid values or to correct a rejection.', inputSchema: z.object({
+      profile_id: z.number().int().positive().optional().describe('Default: the profile you speak as.'),
+      patch: z.record(z.string(), z.unknown()).describe(`Changed fields only; camelCase or snake_case: ${PROPOSABLE_KEYS.join(', ')}. folderId:null means top level. ${NOT_PROPOSABLE}`),
     }) },
     async (args) => {
       try {

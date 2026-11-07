@@ -32,16 +32,16 @@ const METADATA_TEXT_FIELDS = [
 ];
 
 /** Said in the descriptions of tools that hide text above the caller's content rating. */
-const RATING_RESTRICTED_NOTE = ' Items above the content rating this model may be shown keep their ids and sizes but carry rating_restricted: true with prompts, tags and metadata text hidden.';
+const RATING_RESTRICTED_NOTE = ' Above the model content rating, rating_restricted hides prompts/tags/metadata text, not IDs or sizes.';
 
 /** Said in the descriptions of searches that leave out media above the caller's content rating. */
-const RATING_EXCLUDED_NOTE = ' Media above the content rating this model may be shown (or not rated yet) is left out of the results.';
+const RATING_EXCLUDED_NOTE = ' Unrated media and media above the model content rating are excluded.';
 
 export function registerImageTools(server: McpServer, context: McpRequestContext): void {
   // 이미지 고급 검색
   server.registerTool(
     'search_images',
-    { description: 'Search the media library (images, videos and animated GIFs) by prompt text, AI tool, model, dimensions, date range, group or media type. Each result says its media_type.' + RATING_EXCLUDED_NOTE, inputSchema: z.object({
+    { description: 'Search library metadata; returns paged media summaries with hashes and media_type. For visual subject matter use search_images_by_meaning.' + RATING_EXCLUDED_NOTE, inputSchema: z.object({
       search_text: z.string().optional().describe('Search in positive prompts'),
       negative_text: z.string().optional().describe('Search in negative prompts'),
       ai_tool: z.string().optional().describe('Filter by AI tool (e.g., "ComfyUI", "NovelAI", "Stable Diffusion")'),
@@ -107,7 +107,7 @@ export function registerImageTools(server: McpServer, context: McpRequestContext
 
   server.registerTool(
     'get_media_download',
-    { description: 'Download links for library media originals (saved sprite sheets, animations, any image or video) by composite hash. Links expire after about 15 minutes; call again for fresh ones.', inputSchema: z.object({
+    { description: 'Get original library media download links; requires Streamable HTTP and permitted content ratings. Links expire in about 15 minutes; call again to refresh. If missing, confirm the hash with search_images.', inputSchema: z.object({
       composite_hashes: z.array(z.string().trim().regex(/^(?:[0-9a-f]{48}|[0-9a-f]{32})$/, 'composite_hash must be a library media hash')).min(1).max(50),
     }) },
     async ({ composite_hashes }) => {
@@ -131,7 +131,7 @@ export function registerImageTools(server: McpServer, context: McpRequestContext
   // 이미지 메타데이터 상세 조회
   server.registerTool(
     'get_image_metadata',
-    { description: 'Get detailed metadata for a specific image by its composite hash. auto_tags holds the automatic analysis: tagger (model, booru-style general/character/rating tags with confidence; the PixAI tagger, model "pixai-v1", adds artist and meta tags) and kaloscope (likely artists with scores).' + RATING_RESTRICTED_NOTE, inputSchema: z.object({
+    { description: 'Get library metadata, including auto_tags tagger confidence and Kaloscope artist scores. If missing, confirm the hash with search_images.' + RATING_RESTRICTED_NOTE, inputSchema: z.object({
       composite_hash: z.string().describe('The 48-character composite hash of the image'),
       include_heavy_fields: z.boolean().default(false).describe('Include histogram and raw metadata fields'),
     }) },
@@ -154,7 +154,7 @@ export function registerImageTools(server: McpServer, context: McpRequestContext
   // 이미지 생성 이력 조회
   server.registerTool(
     'get_generation_history',
-    { description: 'Get image generation history records. Supports filtering by service type (comfyui/novelai) and generation status.' + RATING_RESTRICTED_NOTE, inputSchema: z.object({
+    { description: 'Get paged generation history summaries and artifacts. Use get_generation_history_request for reusable settings.' + RATING_RESTRICTED_NOTE, inputSchema: z.object({
       service_type: z.enum(['comfyui', 'novelai', 'codex']).optional().describe('Filter by service type'),
       generation_status: z.enum(['pending', 'processing', 'completed', 'failed']).optional().describe('Filter by generation status'),
       history_id: z.number().int().positive().optional().describe('Return one history record by ID'),
@@ -231,7 +231,7 @@ export function registerImageTools(server: McpServer, context: McpRequestContext
   // 자동 태그 기반 이미지 검색
   server.registerTool(
     'search_images_by_tags',
-    { description: 'Search images by booru-style tags from the automatic tagger (the WD tagger or PixAI, whichever Settings › 자동 › 태거 uses). Supports tag name search, character search, rating filter, and rating score range. For a plain-language description of what an image shows, use search_images_by_meaning.' + RATING_EXCLUDED_NOTE, inputSchema: z.object({
+    { description: 'Search automatic booru-style tags; returns paged image summaries. Use search_images_by_meaning for plain descriptions. Correct reported filter errors before retrying.' + RATING_EXCLUDED_NOTE, inputSchema: z.object({
       tags: z.string().optional().describe('Comma-separated tag names to search (e.g. "long_hair, blue_eyes, school_uniform")'),
       min_tag_score: z.number().min(0).max(1).optional().describe('Minimum confidence score for tag matching (0-1)'),
       character: z.string().optional().describe('Character name to search for'),
@@ -332,7 +332,7 @@ export function registerImageTools(server: McpServer, context: McpRequestContext
   // 뜻(설명)으로 이미지 검색 — 이미지 임베딩
   server.registerTool(
     'search_images_by_meaning',
-    { description: 'Find library images by what they show, from a plain description ("a girl reading under a tree at dusk"), using image embeddings; best match first with similarity (cosine × 100, about 64+ is a match). Same as the library\'s 설명 (meaning) search tab. Needs image embeddings on (Settings › 자동 › 임베딩 › 이미지 임베딩); prompt words are better searched with search_images, booru tags with search_images_by_tags.' + RATING_EXCLUDED_NOTE, inputSchema: z.object({
+    { description: 'Find images by visual meaning, ranked by similarity (cosine × 100; about 64+ matches). Use search_images for prompt text. If disabled, ask an admin to enable 이미지 임베딩 in Settings › 자동 › 임베딩.' + RATING_EXCLUDED_NOTE, inputSchema: z.object({
       text: z.string().trim().min(1).max(MEANING_QUERY_MAX_CHARS).describe('What the image shows, in plain words (English matches best)'),
       limit: z.number().int().min(1).max(VECTOR_TOOL_MAX_LIMIT).default(20).describe('Results to return'),
     }) },
@@ -352,9 +352,9 @@ export function registerImageTools(server: McpServer, context: McpRequestContext
   // 한 이미지와 내용·화풍이 비슷한 이미지 — 상세 화면의 내용 유사 / 화풍 유사
   server.registerTool(
     'find_similar_images',
-    { description: 'Images closest to one library image, best first with similarity (cosine × 100): basis "content" = shows similar things (image embeddings, needs image embeddings on), "style" = drawn in a similar style (Kaloscope style vectors, needs Kaloscope style vectors saved). These are the image detail page\'s 내용 유사 / 화풍 유사 sections. An image without that vector yet is reported as such.' + RATING_EXCLUDED_NOTE, inputSchema: z.object({
+    { description: 'Find similar library images, ranked by similarity (cosine × 100). Missing vector: wait for image indexing or run Kaloscope with style vectors enabled, according to basis.' + RATING_EXCLUDED_NOTE, inputSchema: z.object({
       composite_hash: z.string().trim().regex(/^(?:[0-9a-f]{48}|[0-9a-f]{32})$/, 'composite_hash must be a library media hash').describe('The image to compare against'),
-      basis: z.enum(['content', 'style']).describe('"content" (what it shows) or "style" (how it is drawn)'),
+      basis: z.enum(['content', 'style']).describe('content: similar subject matter, requires image embeddings enabled; style: similar drawing style, requires saved Kaloscope style vectors'),
       limit: z.number().int().min(1).max(VECTOR_TOOL_MAX_LIMIT).default(20).describe('Results to return'),
     }) },
     async ({ composite_hash, basis, limit }) => {

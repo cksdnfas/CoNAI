@@ -17,16 +17,16 @@ export const characterReferenceCategoriesSchema = z.array(characterLibraryName)
 export const characterReferencesSchema = z.array(z.object({ hash: z.string().min(1), category: characterLibraryName.nullable() }).strict())
   .refine((references) => new Set(references.map((reference) => reference.hash)).size === references.length, '같은 이미지를 참고 갤러리에 두 번 넣을 수 없어.')
 export const characterSettingFields = {
-  folderId: characterLibraryId.nullable(),
-  name: characterLibraryName,
-  appearance: lookText.optional(),
-  sections: characterSectionsSchema.optional(),
-  outfits: characterOutfitsSchema.optional(),
+  folderId: characterLibraryId.nullable().describe('Required when creating; null means root'),
+  name: characterLibraryName.describe('Required when creating'),
+  appearance: lookText.optional().describe('Plain appearance text to sort; cannot combine with sections or outfits'),
+  sections: characterSectionsSchema.optional().describe('Given keys replace those sections; cannot combine with appearance'),
+  outfits: characterOutfitsSchema.optional().describe('Replaces the whole list; first is default; cannot combine with appearance'),
   referenceHash: z.string().nullable().optional(),
   avatarHash: z.string().nullable().optional(),
   avatarCrop: z.object({ x: z.number(), y: z.number(), scale: z.number().positive() }).nullable().optional(),
-  references: characterReferencesSchema.optional(),
-  referenceCategories: characterReferenceCategoriesSchema.optional(),
+  references: characterReferencesSchema.optional().describe('Replaces ordered gallery; unique library hashes, needs images.view; category must be null or in the resulting referenceCategories'),
+  referenceCategories: characterReferenceCategoriesSchema.optional().describe('Replaces ordered person-named categories; names unique case-insensitively. Removing a category uncategorizes existing images; categories alone need no images.view.'),
 }
 export const characterSettingCreateSchema = z.object(characterSettingFields).strict()
 export const characterSettingPatchSchema = characterSettingCreateSchema.partial().extend({ revision: characterLibraryId }).strict()

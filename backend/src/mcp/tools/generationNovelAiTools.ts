@@ -4,7 +4,7 @@ import { NAI_SAMPLER_IDS, NAI_UC_PRESET_IDS } from '@conai/shared';
 import { getToken } from '../../utils/nai/auth';
 import { mcpGroupPathSchema } from './mcpTargetGroup';
 import { enqueueMcpGenerationJob, waitForMcpGenerationJob } from './generationJobTools';
-import { assertChatNaiSampleCount, type McpRequestContext } from '../context';
+import { assertChatNaiSampleCount, isChatMcpSource, type McpRequestContext } from '../context';
 import { canRequesterViewImages } from '../../middleware/imageAccess';
 import { errorResult, textResult } from '../toolResults';
 
@@ -15,7 +15,7 @@ export function registerNovelAiGenerationTools(server: McpServer, context: McpRe
   // NovelAI 이미지 생성
   server.registerTool(
     'generate_nai',
-    { description: 'Generate with NovelAI and wait up to 3 minutes for the result. It queues the same job as submit_generation_job(service_type="novelai"); prefer that with wait_generation_job.', inputSchema: z.object({
+    { description: `Generate with NovelAI; waits up to 3 minutes, then returns history IDs or job_id. ${isChatMcpSource(context.source) ? 'Results attach automatically; do not wait or poll.' : 'Use wait_generation_job if pending.'} Prefer submit_generation_job for async work. If authentication fails, reconnect the token in the web UI.`, inputSchema: z.object({
       prompt: z.string().describe('Positive prompt for image generation'),
       negative_prompt: z.string().default('').describe('Negative prompt'),
       quality_toggle: z.boolean().default(false).describe('Append the selected model quality tags to the positive prompt'),
@@ -35,7 +35,7 @@ export function registerNovelAiGenerationTools(server: McpServer, context: McpRe
       scale: z.number().min(0).max(30).default(5.0).describe('CFG scale'),
       sampler: z.enum(NAI_SAMPLER_IDS).default('k_euler_ancestral').describe('Sampler name'),
       seed: z.number().int().optional().describe('Random seed (auto-generated if not provided)'),
-      n_samples: z.number().int().min(1).max(4).default(1).describe('Number of images to generate'),
+      n_samples: z.number().int().min(1).max(4).default(1).describe('Keep 1: multiple samples cost extra Anlas and are rejected in chat/plugins.'),
       transparent_background: z.boolean().default(false).describe('Add the NAI V5 prompt tags that request an alpha channel'),
       group_id: z.number().int().optional().describe('Optional group ID to assign generated images to'),
       group_path: mcpGroupPathSchema,

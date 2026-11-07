@@ -878,7 +878,7 @@ function AudioPageContent() {
             blocks={{
               generate: !inbox && (group.description || permissions.canEdit) ? (
                 <div className="space-y-3">
-                  {!inbox && group.description ? <EffectDescription key={group.id} text={group.description} /> : null}
+                  {!inbox && group.description ? <EffectDescription key={`description:${group.id}`} text={group.description} /> : null}
                   {!inbox && permissions.canEdit ? (
                     <AudioGenerateBar
                       key={group.id}

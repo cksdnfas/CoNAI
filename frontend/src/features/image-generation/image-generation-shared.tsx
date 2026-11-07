@@ -325,10 +325,7 @@ export function shouldUseNaiCharacterPositions(form: Pick<NAIFormDraft, 'charact
   return canUseNaiCharacterPositions(form.characters.length) && !form.characterPositionAiChoice
 }
 
-/** Check whether the selected NAI model supports structured character prompts. */
-export function supportsNaiCharacterPrompts(model: string) {
-  return model.includes('nai-diffusion-4') || model.includes('nai-diffusion-5')
-}
+export { supportsNaiCharacterPrompts } from '@conai/shared'
 
 /** Check whether the selected NAI model can generate an alpha channel from prompt tags. */
 export function supportsNaiTransparentBackground(model: string) {

@@ -23,14 +23,14 @@ export function registerChatChoiceTools(server: McpServer, context: McpRequestCo
   const scopes = profile && context.requester ? resolveChatProfileToolGrant(profile, resolveChatAccess(context.requester.accountId)).scopes : context.scopes
   if (scopes.length === 0 && !chat.page && !context.generationPresetIds?.length && !ChatTaskStore.live(chat.threadId)) return
 
-  server.registerTool('offer_choices', { description: 'Ask the person to pick from ready answers, shown above the composer: they click one (several if multiple) or type their own, and it arrives as their next message. Use it when a request is ambiguous between a few concrete options, or when they must choose how to go on because you cannot do it as things stand. Call it once, last in your reply, then end the reply; keep the reply text short and do not repeat the options.', inputSchema: z.object({
+  server.registerTool('offer_choices', { description: 'Show choices above the composer for ambiguity or a blocked next step; the choice or typed answer becomes the next user message. Returns a choice card. Call once, last, then end your reply; keep text short and do not repeat options.', inputSchema: z.object({
     question: z.string().min(1).max(CHAT_CHOICE_LIMITS.question).describe('In the person\'s language'),
     options: z.array(z.object({
       label: z.string().min(1).max(CHAT_CHOICE_LIMITS.label).describe('As the person would say it; sent as their message'),
       detail: z.string().max(CHAT_CHOICE_LIMITS.detail).optional().describe('One short line on what it does'),
       without_page: z.boolean().optional().describe('Only with a page connected: send this answer without its page context. Ordinary page connections already preserve granted tools; do not ask to disconnect just to use them'),
     })).min(CHAT_CHOICE_LIMITS.minOptions).max(CHAT_CHOICE_LIMITS.maxOptions),
-    multiple: z.boolean().optional(),
+    multiple: z.boolean().optional().describe('Allow several options instead of one.'),
   }) }, async ({ question, options, multiple }) => {
     try {
       if (!chat.replyId) throw new Error('Choices need an active chat reply.')

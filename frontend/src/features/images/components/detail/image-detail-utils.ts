@@ -232,7 +232,6 @@ export function getImageArtistPromptSection(image: ImageRecord) {
   }
 
   return {
-    label: 'artist',
     tags: getDisplayTags(image.auto_tags?.kaloscope?.taglist, entries),
     entries,
   }

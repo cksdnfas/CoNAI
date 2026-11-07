@@ -32,9 +32,9 @@ export function WDTaggerResultBlock({ result, title, onAddSearchFilter }: WDTagg
 
     try {
       await copyTextToClipboard(generalCopyText)
-      showSnackbar({ message: t({ ko: 'General 태그를 복사했어.', en: 'General tags copied.' }), tone: 'info' })
+      showSnackbar({ message: t({ ko: '일반 태그를 복사했어.', en: 'General tags copied.' }), tone: 'info' })
     } catch {
-      showSnackbar({ message: t({ ko: 'General 태그 복사에 실패했어.', en: 'General tag copy failed.' }), tone: 'error' })
+      showSnackbar({ message: t({ ko: '일반 태그 복사에 실패했어.', en: 'General tag copy failed.' }), tone: 'error' })
     }
   }
 
@@ -58,6 +58,7 @@ export function WDTaggerResultBlock({ result, title, onAddSearchFilter }: WDTagg
           <div className="grid gap-3 grid-cols-1">
             <CharacterPromptSection entries={characterEntries} />
             <GeneralPromptSection
+              label={t({ ko: '일반 태그', en: 'General tags' })}
               tags={displayedGeneralTags}
               entries={generalEntries}
               collapsibleScores
@@ -68,7 +69,7 @@ export function WDTaggerResultBlock({ result, title, onAddSearchFilter }: WDTagg
                   size="icon-xs"
                   variant="ghost"
                   onClick={() => void handleCopyGeneralTags()}
-                  label={t({ ko: 'General 태그 복사', en: 'Copy general tags' })}
+                  label={t({ ko: '일반 태그 복사', en: 'Copy general tags' })}
                 >
                   <Copy className="h-3.5 w-3.5" />
                 </IconButton>

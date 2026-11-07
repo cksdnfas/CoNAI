@@ -215,7 +215,8 @@ async function submitSlot(requester: McpRequester, row: BatchRow, slot: SlotRow,
   const recipe = snapshot.slots.find((entry) => entry.slotKey === slot.slot_key)!
   if (fields.needsReference && drawsReference && !referenceHash) throw new ChatAssetError('기준 이미지를 먼저 골라줘.', 409)
   const prompt = [snapshot.appearance, recipe.prompt, slot.kind === 'expression' ? EXPRESSION_FRAMING : ''].map((part) => part.trim()).filter(Boolean).join(', ')
-  const args: Record<string, unknown> = { ...recipe.inputs, prompt, size: recipe.size }
+  // NAI slots use only prompt and size, as before; unvalidated recipe inputs must not become NAI characters.
+  const args: Record<string, unknown> = { ...(preset.kind === 'nai' ? {} : recipe.inputs), prompt, size: recipe.size }
   const input = await buildChatGenerationPresetJob(preset, args, { ...profile, referenceHash }, { forceReference: true, omitReference: !referenceHash })
   // The slot prompt follows the field's fixed text, whether the field is exposed to the model or fixed.
   if (preset.comfyui && fields.promptField && 'inputs' in input && input.inputs) {

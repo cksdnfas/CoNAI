@@ -57,7 +57,7 @@ function imageSummary(context: McpRequestContext, image: ImageMetadataRecord) {
 export function registerImageLibraryTools(server: McpServer, context: McpRequestContext): void {
   server.registerTool(
     'upload_image',
-    { description: 'Save a new image or video from a base64 data_url into the library, optionally with a name and either group_id or group_path (missing path groups are created). Uses the same allowed MIME types, signature and decoder validation as HTTP uploads. Requires images.upload, plus images.edit when assigning a group. Returns composite_hash, group_id, status (processing or ready) and a download descriptor when HTTP downloads and viewing are available. While status is processing, get_image_metadata/get_media_download may temporarily report not found: retry those lookups shortly, do not re-upload. On an unsupported or invalid format, send a valid supported image/video data URL.', inputSchema: z.object({
+    { description: 'Save media to the library; requires images.upload and images.edit for grouping. Returns hash, status and optional download. If processing, retry get_image_metadata/get_media_download, not upload; temporary not-found is expected. Invalid format: supply a supported image/video data URL.', inputSchema: z.object({
       data_url: z.string().regex(/^data:(?:image|video)\/[a-z0-9.+-]+;base64,[\s\S]+$/i).describe('Base64 image/* or video/* data URL; request security enforces the 50 MiB decoded media limit'),
       name: z.string().trim().min(1).regex(/^[^\\/:*?"<>|\u0000-\u001f\u007f]+$/).optional().describe('Optional filename, normalized by the library filename helper; the extension is chosen from the MIME type'),
       group_id: z.number().int().positive().optional().describe('Existing custom image group ID; omit both group fields to leave the upload ungrouped'),
@@ -93,9 +93,9 @@ export function registerImageLibraryTools(server: McpServer, context: McpRequest
 
   server.registerTool(
     'update_image_metadata',
-    { description: 'Save the same metadataPatch as the image metadata editor: prompt, negative_prompt, model, steps and sampler; null clears a field, omitted fields are unchanged. Only static images support this operation. Rewrites the stored file and database through the library metadata service and returns the saved image summary. On revision_conflict (409), re-read get_image_metadata and reconcile the patch before retrying; never blindly retry a stale save.', inputSchema: z.object({
+    { description: 'Update a static library image\'s embedded and stored metadata; returns the saved summary. On revision_conflict (409), reread get_image_metadata and reconcile the patch before retrying.', inputSchema: z.object({
       composite_hash: compositeHashSchema,
-      metadataPatch: metadataPatchSchema.describe('The UI metadata patch object, not a complete metadata record; automatic tags are managed by tag_images'),
+      metadataPatch: metadataPatchSchema.describe('Partial metadata patch: null clears a field; omitted fields stay unchanged. Automatic tags use tag_images.'),
     }) },
     async ({ composite_hash, metadataPatch }) => {
       try {
@@ -117,8 +117,8 @@ export function registerImageLibraryTools(server: McpServer, context: McpRequest
 
   server.registerTool(
     'tag_images',
-    { description: 'Run the configured library auto-tagger on 1..100 image/video composite_hashes, processing duplicate hashes once. Persists automatic tags and the calculated rating through the same service as batch-tag in the UI; returns tags/rating per item and individual failures without aborting the batch. Hidden or model-rating-restricted tag text is not returned. For failed items, fix the reported missing file or tagger configuration, then retry only those hashes.', inputSchema: z.object({
-      composite_hashes: z.array(compositeHashSchema).min(1).max(100).describe('Up to 100 library hashes, matching the unprocessed tagging route default batch size'),
+    { description: 'Save automatic tags and ratings for library media; returns per-item results/errors. Hidden or model-rating-restricted tags are withheld. Fix reported file/tagger issues, then retry only failed hashes.', inputSchema: z.object({
+      composite_hashes: z.array(compositeHashSchema).min(1).max(100).describe('Library image/video hashes; duplicates are processed once'),
     }) },
     async ({ composite_hashes }) => {
       const results = [];
@@ -147,7 +147,7 @@ export function registerImageLibraryTools(server: McpServer, context: McpRequest
 
   server.registerTool(
     'delete_images',
-    { description: 'Only on the user’s explicit request, move the selected library images/videos (all physical copies of each hash) to the restorable recycle bin using the UI deletion service. Accepts 1..500 composite_hashes and returns deleted/failed counts, errors and recycleBinEntries. Pass those exact entries as names to restore_deleted_images to undo. Refuses deletion when recycle-bin protection is disabled; enable it in Settings first. Retry only failed targets after inspecting the errors.', inputSchema: z.object({
+    { description: 'Only on explicit user request, recycle all copies of selected media. Returns counts, errors and recycleBinEntries for restore_deleted_images. If recycle-bin protection is off, enable it in Settings; otherwise inspect errors and retry only failed targets.', inputSchema: z.object({
       composite_hashes: compositeHashesSchema.describe('Library hashes explicitly selected by the user for deletion; duplicates are processed once'),
     }) },
     async ({ composite_hashes }) => {
@@ -182,8 +182,8 @@ export function registerImageLibraryTools(server: McpServer, context: McpRequest
 
   server.registerTool(
     'restore_deleted_images',
-    { description: 'Undo a user-requested library deletion using the exact recycleBinEntries returned by delete_images. Accepts those identifiers as names (1..1000 per call), not hashes or filesystem paths. Uses the same strict library restore service as the UI: restores files and library associations without overwriting newer files; unrelated recycle-bin entries are refused. Returns done names and per-entry failures. On conflicts inspect the newer item before retrying; split larger identifier lists into batches.', inputSchema: z.object({
-      names: z.array(z.string().min(1)).min(1).max(1000).describe('Exact recycle-bin entry names from delete_images.details.recycleBinEntries'),
+    { description: 'Undo user-requested deletion, restoring files and library associations without overwriting newer files. Returns done names and per-entry failures; unrelated recycle entries are refused. Inspect the newer item before retrying conflicts.', inputSchema: z.object({
+      names: z.array(z.string().min(1)).min(1).max(1000).describe('Exact delete_images.details.recycleBinEntries identifiers, not hashes or paths; split larger lists into batches'),
     }) },
     async ({ names }) => {
       try {

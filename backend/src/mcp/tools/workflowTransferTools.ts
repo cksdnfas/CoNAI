@@ -8,7 +8,7 @@ import { errorResult, textResult } from '../toolResults';
 export function registerWorkflowTransferTools(server: McpServer): void {
   server.registerTool(
     'export_workflow_definition',
-    { description: 'Export one workflow as a portable CoNAI definition.', inputSchema: z.object({ workflow_id: z.number().int().positive() }) },
+    { description: 'Export a portable CoNAI workflow definition for import_workflow_definition. If the ID is missing or hard-deleted, choose another from list_workflows.', inputSchema: z.object({ workflow_id: z.number().int().positive() }) },
     async ({ workflow_id }) => {
       const workflow = WorkflowModel.findByIdIncludingDeleted(workflow_id);
       if (!workflow) {
@@ -24,7 +24,7 @@ export function registerWorkflowTransferTools(server: McpServer): void {
 
   server.registerTool(
     'import_workflow_definition',
-    { description: 'Import a portable CoNAI workflow definition (the export_workflow_definition shape: name, workflow_json, marked_fields, …). workflow_json may be the ComfyUI API format or a ComfyUI editor ("Save") workflow; an editor workflow is converted to the API format with a registered ComfyUI server first (literal seeds the editor had on "fixed" stay fixed), and the import fails with the reason when it cannot be converted.', inputSchema: z.object({ workflow: z.record(z.string(), z.unknown()) }) },
+    { description: 'Import a CoNAI definition or ComfyUI editor ("Save") workflow; returns id/name. Editor conversion needs a registered ComfyUI server and preserves fixed seeds. On conversion failure, correct the reported issue or supply API-format JSON.', inputSchema: z.object({ workflow: z.record(z.string(), z.unknown()).describe('export_workflow_definition.workflow shape; requires name and workflow_json (JSON string, API or editor format); optional marked_fields array/JSON string and workflow settings. Name must be unused.') }) },
     async ({ workflow }) => {
       try {
         const name = typeof workflow.name === 'string' ? workflow.name.trim() : '';
@@ -61,7 +61,7 @@ export function registerWorkflowTransferTools(server: McpServer): void {
 
   server.registerTool(
     'restore_deleted_workflow',
-    { description: 'Restore a soft-deleted workflow. Historical hard-deleted workflows cannot be restored without an exported definition.', inputSchema: z.object({ workflow_id: z.number().int().positive() }) },
+    { description: 'Restore a soft-deleted workflow; returns restored status. If hard-deleted, use import_workflow_definition with an exported definition instead.', inputSchema: z.object({ workflow_id: z.number().int().positive() }) },
     async ({ workflow_id }) => {
       if (!WorkflowModel.restore(workflow_id)) {
         const reference = HistoryQueryRepository.findWorkflowReference(workflow_id);

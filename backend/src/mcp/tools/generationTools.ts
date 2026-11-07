@@ -68,9 +68,9 @@ function registerWorkflowListTools(server: McpServer): void {
   // 워크플로우 목록 조회
   server.registerTool(
     'list_workflows',
-    { description: 'List the ComfyUI image workflows registered in the system. Audio workflows are ordered from the audio workspace (list_audio_workflows / order_audio); pass kind="audio" or "all" to see them here.', inputSchema: z.object({
+    { description: 'List ComfyUI workflows with IDs, status and marked-field summaries. Use get_workflow_details for generation inputs; order audio via order_audio.', inputSchema: z.object({
       active_only: z.boolean().default(false).describe('Show only active workflows'),
-      kind: z.enum(['image', 'audio', 'all']).default('image').describe('Which workflows to list: image (default), audio, or all'),
+      kind: z.enum(['image', 'audio', 'all']).default('image').describe('Workflow kind to include'),
     }) },
     async ({ active_only, kind }) => {
       try {
@@ -207,7 +207,7 @@ function registerComfyGenerationTools(server: McpServer, context: McpRequestCont
   const inputSchema = {
     workflow_id: z.number().int().describe('Workflow ID to use'),
     server_id: z.number().int().optional().describe('Optional server for this synchronous compatibility call. Omitting it selects one default/linked server; it does not use automatic queue distribution. Use submit_generation_job for auto or tag routing.'),
-    inputs: z.record(z.string(), z.unknown()).optional().describe('Workflow inputs keyed by marked field ID. Partial MiniMax H3 Director objects and media data URLs are supported.'),
+    inputs: z.record(z.string(), z.unknown()).optional().describe(`Workflow inputs keyed by marked field ID. Supports partial MiniMax H3 Director objects and media data URLs. ${COMFY_SEED_RULE}`),
     prompt_data: z.record(z.string(), z.unknown()).optional().describe('Legacy alias for inputs.'),
     group_id: z.number().int().optional().describe('Optional group ID to assign generated outputs to'),
     group_path: mcpGroupPathSchema,
@@ -215,7 +215,7 @@ function registerComfyGenerationTools(server: McpServer, context: McpRequestCont
 
   server.registerTool(
     'generate_comfyui',
-    { description: `Compatibility synchronous ComfyUI generation. Prefer submit_generation_job for durable work that may exceed the HTTP connection lifetime. ${COMFY_SEED_RULE}`, inputSchema: z.object(inputSchema) },
+    { description: 'Generate synchronously with ComfyUI; returns saved history IDs and outputs. Prefer submit_generation_job for durable work. On input errors, read get_workflow_details before retrying.', inputSchema: z.object(inputSchema) },
     async ({ workflow_id, server_id, inputs, prompt_data, group_id, group_path }) => {
       try {
         const workflow = resolveUsableWorkflow(workflow_id);
@@ -239,9 +239,9 @@ function registerComfyGenerationTools(server: McpServer, context: McpRequestCont
 
   server.registerTool(
     'generate_comfyui_all_servers',
-    { description: 'Compatibility synchronous generation on all active ComfyUI servers. Prefer submit_generation_job for durable work.', inputSchema: z.object({
+    { description: 'Generate synchronously on every active ComfyUI server; returns per-server outputs/errors. Prefer submit_generation_job for durable work. Inspect failures before retrying to avoid duplicate outputs.', inputSchema: z.object({
       workflow_id: z.number().int().describe('Workflow ID to use'),
-      inputs: z.record(z.string(), z.unknown()).optional().describe('Workflow inputs keyed by marked field ID.'),
+      inputs: z.record(z.string(), z.unknown()).optional().describe(`Workflow inputs keyed by marked field ID. ${COMFY_SEED_RULE}`),
       prompt_data: z.record(z.string(), z.unknown()).optional().describe('Legacy alias for inputs.'),
       group_id: z.number().int().optional().describe('Optional group ID to assign generated outputs to'),
       group_path: mcpGroupPathSchema,
@@ -295,7 +295,7 @@ function registerWorkflowDetailTools(server: McpServer): void {
   // 워크플로우 상세 조회
   server.registerTool(
     'get_workflow_details',
-    { description: 'Get detailed information about a specific ComfyUI workflow, including its marked fields (parameters required for generation). Workflows are stored in the ComfyUI API format; a ComfyUI editor ("Save") workflow is converted to it when it is registered or imported.', inputSchema: z.object({
+    { description: 'Get a ComfyUI workflow\'s marked-field schema, input template, invocation and routing options. If missing or deleted, choose another from list_workflows.', inputSchema: z.object({
       workflow_id: z.number().int().describe('Workflow ID to get details for'),
     }) },
     async ({ workflow_id }) => {
@@ -359,9 +359,9 @@ function registerWorkflowDetailTools(server: McpServer): void {
 
   server.registerTool(
     'check_comfy_workflow',
-    { description: `Check a ComfyUI workflow against the ComfyUI servers that may run it, without saving or running anything: missing node types or models, values out of range, and nodes that never reach an output. Give workflow_id for a registered workflow (checked against its linked servers), or workflow_json for a draft; a ComfyUI editor ("Save") workflow is converted to the API format first, the same way registering it would. ${COMFY_SEED_RULE}`, inputSchema: z.object({
-      workflow_id: z.number().int().positive().optional().describe('A registered ComfyUI workflow to check'),
-      workflow_json: z.string().max(CHECK_WORKFLOW_JSON_MAX).optional().describe('A workflow draft (API format, or a ComfyUI editor workflow to convert first)'),
+    { description: 'Check ComfyUI server compatibility without saving or running: returns missing nodes/models, invalid values and unused nodes. Fix reported issues before generation; if no servers were checked, configure an eligible active server.', inputSchema: z.object({
+      workflow_id: z.number().int().positive().optional().describe('Registered workflow checked against linked servers; use instead of workflow_json'),
+      workflow_json: z.string().max(CHECK_WORKFLOW_JSON_MAX).optional().describe(`Draft API JSON or ComfyUI editor ("Save") workflow to convert first; use instead of workflow_id. ${COMFY_SEED_RULE}`),
       include_converted: z.boolean().optional().describe('Also return the converted API workflow JSON when a ComfyUI editor workflow was converted'),
     }) },
     async ({ workflow_id, workflow_json, include_converted }) => {

@@ -71,12 +71,15 @@ test('comfy chat authoring: seed rule, check_comfy_workflow, editor operations',
   }
   const text = (result: Awaited<ReturnType<InstanceType<typeof Client>['callTool']>>) => (result.content as Array<{ text?: string }>).map((part) => part.text ?? '').join('')
 
-  // External MCP: the tool lists directly, with the seed rule in the generation tool descriptions.
+  // External MCP: the tool lists directly, with the seed rule in the input schemas.
   const http = await connect({ scopes: ALL_MCP_HTTP_SCOPES })
   try {
     const tools = (await http.client.listTools()).tools
     const describe = (name: string) => tools.find((tool) => tool.name === name)?.description ?? ''
-    for (const name of ['generate_comfyui', 'check_comfy_workflow']) assert.ok(describe(name).includes(COMFY_SEED_RULE), `${name} explains the seed rule`)
+    for (const [name, field] of [['generate_comfyui', 'inputs'], ['check_comfy_workflow', 'workflow_json']]) {
+      const schema = tools.find((tool) => tool.name === name)?.inputSchema as { properties?: Record<string, { description?: string }> } | undefined
+      assert.ok(schema?.properties?.[field]?.description?.includes(COMFY_SEED_RULE), `${name} explains the seed rule`)
+    }
     assert.ok(JSON.stringify(tools.find((tool) => tool.name === 'submit_generation_job')?.inputSchema).includes('conai_fixed_seeds'), 'submit_generation_job inputs explain the seed rule')
     assert.match(describe('import_workflow_definition'), /editor \("Save"\) workflow/)
 

@@ -6,8 +6,8 @@ import { ChatProposalStore } from './chatProposals'
 import { requireActiveChatReply } from './chatReplyRegistry'
 
 export const characterLibraryProposalSchema = z.discriminatedUnion('action', [
-  z.object({ action: z.literal('save_setting'), setting_id: z.number().int().positive().nullable().optional(), revision: z.number().int().positive().optional(), input: characterSettingCreateSchema.partial() }).strict(),
-  z.object({ action: z.literal('delete_setting'), setting_id: z.number().int().positive(), revision: z.number().int().positive() }).strict(),
+  z.object({ action: z.literal('save_setting'), setting_id: z.number().int().positive().nullable().optional().describe('Omit/null to create; existing ID to update, with current revision'), revision: z.number().int().positive().optional().describe('Current revision from get_character_setting; required for updates'), input: characterSettingCreateSchema.partial().describe('REST camelCase fields; omitted fields stay unchanged when updating') }).strict(),
+  z.object({ action: z.literal('delete_setting'), setting_id: z.number().int().positive(), revision: z.number().int().positive().describe('Current revision from get_character_setting') }).strict(),
   z.object({ action: z.literal('delete_folder'), folder_id: z.number().int().positive() }).strict(),
 ])
 /** Proposals validate the same input and optimistic revision as REST; only a human card save writes it. */

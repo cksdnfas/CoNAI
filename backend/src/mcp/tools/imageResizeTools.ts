@@ -39,9 +39,9 @@ function describeJob(job: RuntimeJobRecord | null) {
 export function registerImageResizeTools(server: McpServer, context: McpRequestContext = { scopes: [] }) {
   server.registerTool(
     'resize_images',
-    { description: 'Resize library images to exactly width×height (Lanczos, transparency kept) and save each result as a NEW library image in a group (default "크기 변경"). Originals stay as they are; videos and animated images are skipped. Returns the new composite_hashes when it finishes within the wait, otherwise the job_id.', inputSchema: z.object({
+    { description: 'Stretch still images to exactly width×height with Lanczos and alpha; aspect ratio is not preserved. Saves new items; originals stay, videos/animations are skipped. Returns hashes or pending job_id; do not restart pending jobs. Correct reported input errors before retrying.', inputSchema: z.object({
       composite_hashes: z.array(z.string().trim().regex(/^[0-9a-f]{32,48}$/i, 'composite_hash must be a library media hash')).min(1).max(500)
-        .describe('Library image hashes (1..500, no duplicates)'),
+        .describe('Library image hashes; no duplicates'),
       width: z.number().int().min(1).max(16384).describe('Output width in pixels'),
       height: z.number().int().min(1).max(16384).describe('Output height in pixels (width×height ≤ 67,108,864)'),
       format: z.enum(['png', 'webp']).optional().describe('Output format (default png)'),

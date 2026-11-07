@@ -6,8 +6,8 @@ import { textResult } from '../toolResults'
 /** Access the same prompt library as the generation UI, under the existing MCP read/organize scopes. */
 export function registerPromptPresetTools(server: McpServer) {
   server.registerTool('list_prompt_presets', { description: 'List saved prompt presets and their complete text for reuse in any generation prompt.', inputSchema: z.object({}) }, async () => textResult(PromptPresetModel.findAllWithItems()))
-  server.registerTool('create_prompt_preset', { description: 'Save a named prompt preset in the same library used by the UI. Save positive and negative prompts as separate presets. Existing names are rejected, never overwritten.', inputSchema: z.object({
-    name: z.string().trim().min(1),
+  server.registerTool('create_prompt_preset', { description: 'Save a prompt preset; returns the saved preset and items. Save positive and negative prompts separately. On name conflict, choose another name; existing presets are never overwritten.', inputSchema: z.object({
+    name: z.string().trim().min(1).describe('Unused preset name'),
     description: z.string().optional(),
     parent_id: z.number().int().positive().optional(),
     items: z.array(z.object({ description: z.string().trim().min(1), value: z.string().trim().min(1) })).min(1),

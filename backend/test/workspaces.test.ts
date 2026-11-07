@@ -305,7 +305,7 @@ test('project files share files while preserving revisions, execution boundaries
     try {
       const list = bridge.tools.find(tool => tool.function.name === 'workspace_list')!
       assert.match(JSON.stringify(list.function.parameters), /"project"/, 'the tool asks for the project')
-      assert.match(list.function.description!, /Second project/, 'and lists the connected ones')
+      assert.match(JSON.stringify(list.function.parameters), /Second project/, 'and lists connected projects in its input guidance')
       assert.equal((await bridge.call('workspace_list', {})).isError, true, 'a call without a project is refused')
       const unknown = await bridge.call('workspace_list', { project: 'nope' })
       assert.equal(unknown.isError, true)

@@ -765,6 +765,13 @@ test('permissions: independent pages, features, migration, grants, scopes and ro
           assert.equal(String(job.request_payload).includes('silver hair, red eyes, waving'), self, `${tool} include_self=${self}`)
         }
       }
+      // Per-character prompts reach the NAI payload, and the speaker's appearance goes to the entry marked self.
+      const split = await selfBridge.call('generate_image', { prompt: '2girls, park', include_self: false, characters: [{ prompt: 'waving', self: true, center_x: 0.3, center_y: 0.5 }, { prompt: 'black hair' }] })
+      assert.notEqual(split.isError, true, JSON.stringify(split))
+      const splitPayload = JSON.parse(String(GenerationQueueModel.findById(JSON.parse((split.content![0] as { text: string }).text).id)!.request_payload))
+      assert.deepEqual(splitPayload.characters, [{ prompt: 'silver hair, red eyes, waving', uc: '', center_x: 0.3, center_y: 0.5 }, { prompt: 'black hair', uc: '', center_x: 0.5, center_y: 0.5 }])
+      assert.equal(splitPayload.use_coords, true)
+      assert.equal(splitPayload.prompt.includes('silver hair'), false)
     } finally { stopSelf(); await selfBridge.close(); ChatProfileStore.update(profile.id, { appearance: '' }) }
     ChatProfileStore.update(profile.id, { delegatedPermissions: [] })
     const guestContext = { threadId: CodexChatStore.createThread(accountId, 'denied presets', 'llm', profile.id), profileId: profile.id, kind: 'direct' as const, replyId: 'linked-denied' }

@@ -13,13 +13,13 @@ export function registerChatAgentTools(server: McpServer, context: McpRequestCon
   const agents = usableChatAgents(requester, chat).slice(0, 20)
   if (!agents.length) return
   server.registerTool('call_agent', {
-    description: `Delegate an instruction to a profile agent in a fresh hidden room. Returns immediately; its result will be posted here. notify only posts; react also wakes this room after generated media finishes. Agents cannot delegate again or create review cards. Available agents (id, name, agentDescription): ${JSON.stringify(agents)}`,
+    description: 'Delegate to a profile agent in a fresh hidden room. Returns immediately; results post here, do not poll. Agents cannot delegate or create review cards. If a target is refused, choose an available agent.',
     inputSchema: z.object({
-      agent_profile_id: z.number().int().positive(),
+      agent_profile_id: z.number().int().positive().describe(`Available agents (id, name, agentDescription): ${JSON.stringify(agents)}`),
       instruction: z.string().trim().min(1).max(20_000),
       media_composite_hashes: z.array(z.string().min(1)).optional().describe('Optional media references to attach; normal chat media access checks apply.'),
       file_ids: z.array(z.string().regex(/^[a-f0-9]{32}$/)).max(MAX_CHAT_ATTACHMENTS).optional().describe('Private files actually attached to this chat to hand to the same-account agent; no other files become readable.'),
-      on_done: z.enum(['notify', 'react']).optional().default('notify'),
+      on_done: z.enum(['notify', 'react']).optional().default('notify').describe('notify: post results only; react: also wake this room after generated media finishes.'),
     }),
   }, async input => {
     try {

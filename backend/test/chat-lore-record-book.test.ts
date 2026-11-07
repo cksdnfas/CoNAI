@@ -176,20 +176,22 @@ test('chat lore record book: create from the chat, save_lore and edit_lore_file 
     const offered = async () => {
       const bridge = await openChatMcpBridge({ accountId: null, accountType: 'admin' }, [], null, { chatContext: context('desc') })
       try {
+        const save = bridge.tools.find((tool) => tool.function.name === 'save_lore')!.function
         return {
-          save: bridge.tools.find((tool) => tool.function.name === 'save_lore')!.function.description ?? '',
+          save: save.description ?? '',
+          keyGuidance: (save.parameters as { properties: { keys: { description: string } } }).properties.keys.description,
           edit: bridge.tools.some((tool) => tool.function.name === 'edit_lore_file'),
         }
       } finally { await bridge.close() }
     }
     updateChatSettings({ loreKeyLanguage: 'ko' })
     const plain = await offered()
-    assert.match(plain.save, /in English and also in 한국어/)
+    assert.match(plain.keyGuidance, /in English and also in 한국어/)
     assert.match(plain.save, /this chat's own lorebook/)
-    assert.doesNotMatch(plain.save, /long-term memory/, 'the wider rule only for a record book')
+    assert.doesNotMatch(plain.save, /consequential events/, 'the wider rule only for a record book')
     assert.equal(plain.edit, false, 'no file to change: no edit_lore_file')
     updateChatSettings({ loreKeyLanguage: null })
-    assert.match((await offered()).save, /in English only/)
+    assert.match((await offered()).keyGuidance, /in English only/)
 
     const journal = OwnedLorebookStore.createForThread(threadId, '일지')
     const materials = FileStoreService.ensureFolder(me, journal.folderId, '자료')
@@ -197,7 +199,7 @@ test('chat lore record book: create from the chat, save_lore and edit_lore_file 
     OwnedLorebookStore.update(journal.id, me, { entries: [{ id: 'j', title: '10월 일지', keys: ['diary'], content: '10월의 일.', file: '자료/10월.md' }] })
     const recorded = await offered()
     assert.match(recorded.save, /"일지", this chat's record book/)
-    assert.match(recorded.save, /long-term memory/)
+    assert.match(recorded.save, /consequential events/)
     assert.equal(recorded.edit, true)
   })
 

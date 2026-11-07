@@ -65,7 +65,7 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 export function registerAudioGenerationTools(server: McpServer, context: McpRequestContext): void {
   const chat = isChatMcpSource(context.source);
 
-  server.registerTool('list_audio_workflows', { description: 'List the ComfyUI workflows bound for audio generation, with which marked fields carry the prompt, length and seed, the default one, and the last server compatibility check (including the longest length the servers accept).', inputSchema: z.object({}) },
+  server.registerTool('list_audio_workflows', { description: 'List audio ComfyUI workflow IDs/names, active/default/bound flags, and last compatibility check with maximum seconds. If unavailable or incompatible, have an administrator check the workflow binding/servers.', inputSchema: z.object({}) },
     () => run(() => listAudioWorkflows().map((workflow) => ({
       workflow_id: workflow.id,
       name: workflow.name,
@@ -77,12 +77,12 @@ export function registerAudioGenerationTools(server: McpServer, context: McpRequ
       compat_checked_at: workflow.binding?.compat_checked_at ?? null,
     }))));
 
-  server.registerTool('order_audio', { description: `Generate sound-effect candidates into one audio group: count (1-50) separate jobs with seeds seed, seed+1, ... (random base when omitted). Write the prompt in English as a sound description (e.g. "soft footstep on fresh snow, single step, close mic, dry"). ${chat ? 'The app attaches the finished candidates to your reply by itself; do not wait for or poll the order.' : 'Then call wait_audio_order with the returned order_id.'} A person reviews (adopts/rejects) the results in the web app.`, inputSchema: z.object({
+  server.registerTool('order_audio', { description: `Generate sound candidates in an audio group; returns an order with jobs for human review. ${chat ? 'Results attach automatically; do not wait or poll.' : 'Use wait_audio_order with order_id.'} If incompatible, check list_audio_workflows.`, inputSchema: z.object({
     audio_group_id: z.string().trim().min(1).max(64).describe('Target audio group id (list_audio_groups)'),
     text: z.string().trim().min(1).max(8000).describe('Sound description prompt in English; start from the group\'s representative prompt (list_audio_groups `prompt`), not its description'),
     seconds: z.number().min(0.1).max(1200).default(3).describe('Length in seconds'),
-    count: z.number().int().min(1).max(50).default(4),
-    seed: z.number().int().min(-1).max(Number.MAX_SAFE_INTEGER).optional().describe('Base seed; omit or -1 for random'),
+    count: z.number().int().min(1).max(50).default(4).describe('Separate candidate jobs.'),
+    seed: z.number().int().min(-1).max(Number.MAX_SAFE_INTEGER).optional().describe('Base seed; jobs use seed, seed+1, ...; omit or -1 for a random base.'),
     workflow_id: z.number().int().positive().optional().describe('Audio workflow; omit for the default one'),
     server_tag: z.string().trim().min(1).max(64).optional().describe('Route to servers with this exact routing tag'),
     request_key: z.string().trim().min(8).max(128).optional().describe('Retry key: the same key and request return the original order; a different request conflicts'),

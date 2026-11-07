@@ -35,7 +35,7 @@ export function normalizeChatPageSchema(input: unknown, depth = 0): ChatPageSche
   const raw = input as ChatPageSchema
   if (!raw || depth > 8 || !['string', 'number', 'boolean', 'object', 'array'].includes(raw.type)) throw new Error('작업 입력 정의가 올바르지 않아.')
   const schema: ChatPageSchema = { type: raw.type }
-  if (raw.description !== undefined) { if (typeof raw.description !== 'string' || raw.description.length > 500) throw new Error('작업 설명이 너무 길어.'); schema.description = raw.description }
+  if (raw.description !== undefined) { if (typeof raw.description !== 'string') throw new Error('작업 설명이 올바르지 않아.'); schema.description = raw.description }
   for (const key of ['minimum', 'maximum', 'maxLength', 'minItems', 'maxItems'] as const) {
     if (raw[key] !== undefined) { if (!Number.isFinite(raw[key]) || (key !== 'minimum' && key !== 'maximum' && raw[key]! < 0)) throw new Error('작업 입력 범위가 올바르지 않아.'); schema[key] = raw[key] }
   }
@@ -266,7 +266,7 @@ export function normalizeChatPageActions(path: string, input: unknown): ChatPage
   if (!Array.isArray(input)) throw new Error('페이지 작업 목록이 올바르지 않아.')
   const ids = new Set<string>()
   return input.map((raw: ChatPageAction) => {
-    if (!chatPageActionAllowed(path, raw?.id) || ids.has(raw.id) || typeof raw.label !== 'string' || !raw.label || raw.label.length > 160 || typeof raw.description !== 'string' || raw.description.length > 1000 || !['draft', 'save'].includes(raw.effect)) throw new Error('등록되지 않았거나 잘못된 페이지 작업이야.')
+    if (!chatPageActionAllowed(path, raw?.id) || ids.has(raw.id) || typeof raw.label !== 'string' || !raw.label || raw.label.length > 160 || typeof raw.description !== 'string' || !['draft', 'save'].includes(raw.effect)) throw new Error('등록되지 않았거나 잘못된 페이지 작업이야.')
     ids.add(raw.id)
     const tier = chatPageActionTier(raw.id, raw)
     if ((raw.effect === 'save') !== (tier === 'commit' || tier === 'direct')) throw new Error('작업의 저장 범위가 올바르지 않아.')

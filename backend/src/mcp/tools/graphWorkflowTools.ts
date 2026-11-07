@@ -136,7 +136,7 @@ export function registerGraphWorkflowTools(server: McpServer, context: McpReques
 
   server.registerTool(
     'get_graph_workflow_details',
-    { description: 'Get the explicit MCP input schema for a user-built workflow from /generation?tab=workflows. Image and mask inputs take a library image ref { "composite_hash": "…" } (see value_format), never a file or data URL.', inputSchema: z.object({ workflow_id: z.number().int().describe('Graph workflow ID') }) },
+    { description: 'Get a graph workflow\'s exposed input schema, defaults and invocation template. Image/mask value_format uses library hash references. If missing, select an ID from list_graph_workflows.', inputSchema: z.object({ workflow_id: z.number().int().describe('Graph workflow ID') }) },
     async ({ workflow_id }) => {
       try {
         const workflow = GraphWorkflowModel.findById(workflow_id)
@@ -166,9 +166,9 @@ export function registerGraphWorkflowTools(server: McpServer, context: McpReques
 
   server.registerTool(
     'execute_graph_workflow',
-    { description: 'Execute a user-built workflow synchronously. Works over both stateless HTTP MCP and standalone stdio MCP.', inputSchema: z.object({
+    { description: 'Execute a graph workflow synchronously; returns execution status, final results and available artifacts. On input errors, read get_graph_workflow_details and correct values before retrying.', inputSchema: z.object({
       workflow_id: z.number().int().describe('Graph workflow ID'),
-      input_values: z.record(z.string(), z.unknown()).default({}).describe('Values keyed by exposed input ID. Omitted inputs use workflow defaults.'),
+      input_values: z.record(z.string(), z.unknown()).default({}).describe('Values keyed by exposed input ID; omitted inputs use defaults. Image/mask values must be {composite_hash: "library hash"}, never files or data URLs.'),
       group_id: z.number().int().positive().optional().describe('Default image group for final results. A final-result node with its own group path overrides it.'),
       group_path: mcpGroupPathSchema,
     }) },
@@ -191,7 +191,7 @@ export function registerGraphWorkflowTools(server: McpServer, context: McpReques
 
   server.registerTool(
     'get_graph_workflow_execution',
-    { description: 'Get status, final results, and artifacts for a graph workflow execution.', inputSchema: z.object({ execution_id: z.number().int().describe('Graph workflow execution ID') }) },
+    { description: 'Get graph execution status, final results and available artifacts. If missing, verify the execution_id returned by execute_graph_workflow.', inputSchema: z.object({ execution_id: z.number().int().describe('Graph workflow execution ID') }) },
     async ({ execution_id }) => {
       try {
         const result = await compactGraphExecution(execution_id, context)

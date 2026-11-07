@@ -64,11 +64,11 @@ export function registerChatTaskTools(server: McpServer, context: McpRequestCont
   }
   const members = (): Member[] => group ? ChatGroupStore.members(chat.threadId).flatMap((member) => ChatProfileStore.find(member.profile_id) ?? []) : []
   const stepInput = group
-    ? z.object({ title: z.string().max(CHAT_TASK_LIMITS.stepTitle), approval: z.boolean().optional(), assignee: z.string().max(80).optional().describe('Who does this step: a member\'s name, or "all" (every member once, in room order). Default: you.') })
-    : z.object({ title: z.string().max(CHAT_TASK_LIMITS.stepTitle), approval: z.boolean().optional() })
+    ? z.object({ title: z.string().max(CHAT_TASK_LIMITS.stepTitle), approval: z.boolean().optional().describe('True if this step ends in a card the person must save.'), assignee: z.string().max(80).optional().describe('Who does this step: a member\'s name, or "all" (every member once, in room order). Default: you.') })
+    : z.object({ title: z.string().max(CHAT_TASK_LIMITS.stepTitle), approval: z.boolean().optional().describe('True if this step ends in a card the person must save.') })
   const proposeDescription = group
-    ? 'Propose a multi-step task for this room as a plan card, each step with the member who does it. Use it when the person asks for work that takes several turns (e.g. "plan the autumn event and draft the plan document in the linked folder"). Nothing runs until the person approves the card; after that the app wakes each step\'s member in turn (an "all" step wakes every member once, in room order). Steps that end in a card the person must save get approval: true. One task per room.'
-    : 'Propose a multi-step task for this chat as a plan card. Use it when the person asks for something that takes several turns (e.g. "make a new character profile with images", "draft a plan document in the linked folder"). Nothing runs until the person approves the card; after that the app keeps sending you the next turn automatically. Steps that end in a card the person must save get approval: true. One task per chat.'
+    ? 'Return a plan card for requested multi-turn work; end your reply. Only approval starts it; the app then wakes assigned members in order. One task per room: finish or have the user stop an existing task before proposing another.'
+    : 'Return a plan card for requested multi-turn work; end your reply. Only approval starts it; the app then sends turns automatically. One task per chat: finish or have the user stop an existing task before proposing another.'
 
   server.registerTool('task_propose', { description: proposeDescription, inputSchema: z.object({
     goal: z.string().max(CHAT_TASK_LIMITS.goal),
@@ -88,8 +88,8 @@ export function registerChatTaskTools(server: McpServer, context: McpRequestCont
     } catch (error) { return failure(error) }
   })
 
-  server.registerTool('get_proposal_status', { description: 'Read what the person did with this chat\'s review cards: saved (with the new id), dismissed, or still open. Give proposal_ids, or leave them out for the latest cards.', inputSchema: z.object({
-    proposal_ids: z.array(z.number().int().positive()).max(20).optional(),
+  server.registerTool('get_proposal_status', { description: 'Read this chat\'s review-card outcomes: saved (with new id), dismissed or still open. For an ongoing task waiting on approval, use task_wait rather than polling.', inputSchema: z.object({
+    proposal_ids: z.array(z.number().int().positive()).max(20).optional().describe('Specific cards; omit for the latest cards.'),
   }) }, async ({ proposal_ids }) => {
     try { return result({ proposals: proposalStatuses(chat.threadId, proposal_ids) }) } catch (error) { return failure(error) }
   })
@@ -103,8 +103,8 @@ export function registerChatTaskTools(server: McpServer, context: McpRequestCont
     try { return result(view(live(), members())) } catch (error) { return failure(error) }
   })
 
-  server.registerTool('task_update', { description: 'Mark one step of the current task: doing, done or skipped, with a short note.', inputSchema: z.object({
-    step: z.number().int().positive(), status: z.enum(['doing', 'done', 'skipped']), note: z.string().max(CHAT_TASK_LIMITS.note).optional(),
+  server.registerTool('task_update', { description: 'Update a current task step; returns task state. If the step is invalid or task inactive, inspect task_status before correcting.', inputSchema: z.object({
+    step: z.number().int().positive().describe('One-based step number.'), status: z.enum(['doing', 'done', 'skipped']), note: z.string().max(CHAT_TASK_LIMITS.note).optional(),
   }) }, async ({ step, status, note }) => {
     try {
       const task = ChatTaskStore.requireActive(live().id)
@@ -114,11 +114,12 @@ export function registerChatTaskTools(server: McpServer, context: McpRequestCont
     } catch (error) { return failure(error) }
   })
 
-  server.registerTool('task_wait', { description: 'Wait for selected review cards (approval), generation jobs (job), a page reconnection (page), or the person\'s answer (user). Supply proposal_ids or job_ids from tool results; omitted ids select only non-plan cards or linked jobs from this reply. For jobs from an earlier reply or a saved asset card, supply job_ids explicitly. The app checks current outcomes immediately and resumes after every selected target resolves; unrelated work does not hold or resume this task. Call it, then end your reply. A user pause cannot be changed by this tool.', inputSchema: z.object({
+  server.registerTool('task_wait', { description: 'Suspend the task and return its state; end your reply, do not poll. The app checks outcomes now and resumes only when all selected targets resolve; unrelated work has no effect. Cannot override a user pause; the user must resume it.', inputSchema: z.object({
     // A room has no page connection to wait for.
-    for: group ? z.enum(['approval', 'job', 'user']) : z.enum(['approval', 'job', 'page', 'user']), reason: z.string().max(CHAT_TASK_LIMITS.note),
-    proposal_ids: z.array(z.number().int().positive()).min(1).optional(),
-    job_ids: z.array(z.number().int().positive()).min(1).optional(),
+    for: (group ? z.enum(['approval', 'job', 'user']) : z.enum(['approval', 'job', 'page', 'user'])).describe('approval: review cards; job: generation; page: reconnection; user: answer.'),
+    reason: z.string().max(CHAT_TASK_LIMITS.note),
+    proposal_ids: z.array(z.number().int().positive()).min(1).optional().describe('approval only: IDs from results; omit for non-plan cards from this reply only.'),
+    job_ids: z.array(z.number().int().positive()).min(1).optional().describe('job only: IDs from results; omit for linked jobs from this reply only. Earlier-reply or saved asset-card jobs require explicit IDs.'),
   }) }, async ({ for: wait, reason, proposal_ids, job_ids }) => {
     try {
       const task = live()

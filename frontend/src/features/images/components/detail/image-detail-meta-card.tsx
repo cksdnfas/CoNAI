@@ -433,6 +433,7 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
             <RatingPromptSection entries={autoPromptContent.ratingEntries} />
             <CharacterPromptSection entries={autoPromptContent.characterEntries} />
             <GeneralPromptSection
+              label={t({ ko: '일반 태그', en: 'General tags' })}
               tags={autoPromptContent.generalTags}
               entries={autoPromptContent.generalEntries}
               collapsibleScores
@@ -469,11 +470,10 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
           ) : null}
         >
           <ArtistPromptSection
-            label={artistPromptSection.label}
+            label={t({ ko: '아티스트', en: 'Artist' })}
             tags={artistPromptSection.tags}
             entries={artistPromptSection.entries}
             collapsibleScores
-            hideLabels
             getTagHref={(tag) => buildArtistPromptTagUrl(tag, artistLinkUrlTemplate)}
             onAddSearchFilter={canViewImages ? handleAddAutoPromptSearchFilter : undefined}
           />
