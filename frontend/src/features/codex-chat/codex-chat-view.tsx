@@ -101,7 +101,7 @@ import {
   useCodexChatLiveState,
   type CodexChatApi,
 } from './codex-chat-context'
-import { CodexChatAssistantMessage, type ChatSpeaker } from './codex-chat-message'
+import { ChatLightboxProvider, CodexChatAssistantMessage, type ChatSpeaker } from './codex-chat-message'
 import { ChatSavedMessages } from './chat-transcript'
 import { Button } from '@/components/ui/button'
 import { CHAT_COMMANDS, ChatCommandList } from './chat-commands'
@@ -895,7 +895,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
     : <CodexChatAssistantMessage key={`${side}-${index}`} content={message.content} toolCalls={[]} appearance={appearance} speaker={speaker} />))
 
   const transcript = (
-    <ChatBlockChangesContext.Provider value={blockChanges}><ChatChoiceStatesContext.Provider value={choiceStates}><div ref={scrollRef} className="relative min-h-0 flex-1 overflow-y-auto" onScroll={onTranscriptScroll}>
+    <ChatBlockChangesContext.Provider value={blockChanges}><ChatChoiceStatesContext.Provider value={choiceStates}><ChatLightboxProvider threadId={activeThreadId}><div ref={scrollRef} className="relative min-h-0 flex-1 overflow-y-auto" onScroll={onTranscriptScroll}>
       <div ref={observeTranscript} className={cn('mx-auto flex flex-col pb-6', layout === 'page' ? cn(CHAT_WIDTH_CLASS[appearance.width], 'px-(--page-gutter) pt-2') : 'px-4 pt-3')} style={{ ...chatTranscriptStyle(appearance, profile?.style), gap: `${CHAT_MESSAGE_GAP_PX[appearance.messageGap]}px` }}>
         {visibleMessages.length < messages.length || hasMoreBefore ? <Button variant="ghost" size="sm" disabled={loadingEarlier} onClick={() => void showEarlierMessages()}>{earlierError ? t({ ko: '이전 메시지 다시 불러오기', en: 'Retry earlier messages' }) : t({ ko: '이전 메시지', en: 'Earlier messages' })}</Button> : null}
         {pendingChat?.greeting ? <>
@@ -918,7 +918,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
           return replySpeaker ? <CodexChatAssistantMessage key={reply.routing?.replyId ?? reply.profileId} content={reply.text} routing={reply.routing} toolCalls={reply.toolCalls} streaming appearance={appearance} speaker={replySpeaker} /> : null
         })}
       </div>
-    </div></ChatChoiceStatesContext.Provider></ChatBlockChangesContext.Provider>
+    </div></ChatLightboxProvider></ChatChoiceStatesContext.Provider></ChatBlockChangesContext.Provider>
   )
 
   const hidePanel = () => { if (hasPortrait) updateAppearance({ portrait: false }); setStatusLayout({ open: false }); setStripOpen(false) }

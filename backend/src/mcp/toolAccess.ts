@@ -113,12 +113,11 @@ export const TOOL_FEATURE_PERMISSIONS: Record<string, string | readonly string[]
 };
 
 /**
- * A turn answering a posts board call reads posts and comments other people wrote: whatever they ask, it must not
- * reach the caller's private file store. Only what its profile designates stays open (the profile's linked files and
- * default project workspace; see placesForRequest and chatWorkspace), the way the lorebook does.
+ * A turn answering a posts board call reads posts and comments other people wrote, so plugin actions, lore edits and
+ * the room's own history stay closed. The shared file store is open as in any chat (an owner-run instance policy);
+ * linked files and the project workspace still follow the profile (see placesForRequest and chatWorkspace).
  */
-const BOARD_CALL_BLOCKED_TOOLS = new Set(['run_plugin_action', 'get_plugin_action', 'cancel_plugin_action', 'list_plugin_pages', 'list_files', 'get_file_info', 'read_file_text', 'search_files', 'write_text_file', 'update_file_text', 'edit_file_text', 'create_file_folder', 'rename_file', 'move_files', 'delete_files', 'edit_lore_file', 'room_history_search', 'room_history_read', 'list_file_versions', 'read_file_version', 'restore_file_version']);
-for (const name of ['write_binary_file', 'copy_library_media_to_files', 'import_files_to_library', 'get_file_download']) BOARD_CALL_BLOCKED_TOOLS.add(name);
+const BOARD_CALL_BLOCKED_TOOLS = new Set(['run_plugin_action', 'get_plugin_action', 'cancel_plugin_action', 'list_plugin_pages', 'edit_lore_file', 'room_history_search', 'room_history_read']);
 /** Posts tools a board-call turn never gets: comments it answers are other people's text, and these cannot be taken back easily. */
 const BOARD_CALL_BLOCKED_POST_TOOLS = new Set(['posts_delete', 'posts_restore_revision', 'post_comment_delete']);
 

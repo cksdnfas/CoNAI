@@ -2,7 +2,7 @@ import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { useNavigate } from 'react-router-dom'
 import { useMemo, useRef, useState, type DragEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AudioLines, Download, FilePlus, Folder, FolderInput, FolderPlus, LayoutGrid, List, Pencil, Puzzle, RefreshCw, Search, Trash2, Upload } from 'lucide-react'
+import { AudioLines, Download, FilePlus, Folder, FolderInput, FolderPlus, LayoutGrid, List, Pencil, Puzzle, RefreshCw, Reply, Search, Trash2, Upload } from 'lucide-react'
 import type { FileSearchStatus, StoredFileEntry, StoredFileSearchHit } from '@conai/shared'
 import { PageWithSidebar } from '@/components/common/page-with-sidebar'
 import { PageToolbar } from '@/components/common/page-toolbar'
@@ -26,6 +26,8 @@ import { SidebarNav } from '@/components/ui/sidebar'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { SendToAudioDialog, useCanSendToAudio } from '@/features/audio/send-to-audio-dialog'
 import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
+import { useChatDockedBesidePage } from '@/features/codex-chat/chat-reference'
+import { useCodexChatReference } from '@/features/codex-chat/codex-chat-context'
 import { pageAction, pageArray, pageChoice, pageObject, pageText } from '@/features/codex-chat/page-action-helpers'
 import { useChatPageDataPermissions } from '@/features/codex-chat/use-chat-page-permissions'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
@@ -186,6 +188,11 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, pickFolde
   const checked = isPicker ? chosen.map((entry) => entry.id) : selected
   const selection = entries.filter((entry) => selected.includes(entry.id))
   const audioSelection = selection.length > 0 && selection.every((entry) => entry.kind === 'file' && mediaKind(entry) === 'audio')
+  // "채팅에 참조": files go on the docked chat's next message, the same reference as the paperclip's "보관함에서 고르기".
+  const chatDocked = useChatDockedBesidePage()
+  const chatReference = useCodexChatReference()
+  const chatRef = !isPicker && chatDocked ? chatReference : null
+  const selectedFiles = selection.filter((entry) => entry.kind === 'file')
   const refresh = () => queryClient.invalidateQueries({ queryKey: FILES_QUERY_KEY })
   const mutation = useMutation({
     mutationFn: (action: () => Promise<unknown>) => action(),
@@ -323,6 +330,9 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, pickFolde
   const rowEntries = (entry: StoredFileEntry): ActionMenuEntry[] => [
     entry.kind === 'file' && canSendAudio && mediaKind(entry) === 'audio' && { key: 'audio', label: t({ ko: '오디오로 보내기', en: 'Send to Audio' }), icon: AudioLines, onSelect: () => setAudioSend([entry]) },
     entry.kind === 'file' && { key: 'download', label: t({ ko: '다운로드', en: 'Download' }), icon: Download, onSelect: () => download(entry) },
+    entry.kind === 'file' && chatRef && (chatRef.draftAttachments.some((file) => file.id === entry.id)
+      ? { key: 'chat-reference', label: t({ ko: '채팅 참조 빼기', en: 'Remove chat reference' }), icon: Reply, onSelect: () => chatRef.removeAttachment(entry.id) }
+      : { key: 'chat-reference', label: t({ ko: '채팅에 참조', en: 'Reference in chat' }), icon: Reply, onSelect: () => chatRef.addAttachments([entry]) }),
     '-',
     canOrganize && { key: 'rename', label: t({ ko: '이름 변경', en: 'Rename' }), icon: Pencil, disabled: busy, onSelect: () => setNameDialog({ id: entry.id, name: entry.name }) },
     canOrganize && { key: 'move', label: t({ ko: '이동', en: 'Move' }), icon: FolderInput, disabled: busy, onSelect: () => { setSelected([entry.id]); setMoveTarget(parentId ?? ''); setMoveOpen(true) } },
@@ -498,8 +508,9 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, pickFolde
           selectedCount={selected.length}
           onClear={() => setSelected([])}
           responsiveActions
-          actions={canOrganize || canDelete || (canSendAudio && audioSelection) ? (
+          actions={canOrganize || canDelete || (canSendAudio && audioSelection) || (chatRef && selectedFiles.length > 0) ? (
             <>
+              {chatRef && selectedFiles.length > 0 ? <SelectionBarAction icon={Reply} label={t({ ko: '채팅에 참조', en: 'Reference in chat' })} onClick={() => { chatRef.addAttachments(selectedFiles); setSelected([]) }} /> : null}
               {canSendAudio && audioSelection ? <SelectionBarAction icon={AudioLines} label={t({ ko: '오디오로 보내기', en: 'Send to Audio' })} disabled={busy} onClick={() => setAudioSend(selection)} /> : null}
               {canOrganize ? <SelectionBarAction icon={Pencil} label={t({ ko: '이름 변경', en: 'Rename' })} disabled={selection.length !== 1 || busy} onClick={() => setNameDialog({ id: selection[0].id, name: selection[0].name })} /> : null}
               {canOrganize ? <SelectionBarAction icon={FolderInput} label={t({ ko: '이동', en: 'Move' })} disabled={busy} onClick={() => { setMoveTarget(parentId ?? ''); setMoveOpen(true) }} /> : null}

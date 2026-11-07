@@ -371,7 +371,7 @@ ComfyUI 시드(`seed`·`noise_seed`)는 실행마다 새로 뽑힙니다. marked
 | Tool | 용도 | 도구 범위 |
 | --- | --- | --- |
 | `list_files` | 폴더 내용 조회 | `read` |
-| `get_file_info` | 파일·폴더 정보 조회 | `read` |
+| `get_file_info` | 파일·폴더 정보 조회. 이미지 파일에 `include_image_metadata: true`를 주면 라이브러리에 가져오지 않고 파일에 담긴 생성 정보(프롬프트·모델·LoRA·샘플러·시드·NovelAI 원본 파라미터)를 함께 읽음(`images.view`와 콘텐츠 등급 제한 적용) | `read` |
 | `read_file_text` | UTF-8 텍스트 파일을 나눠 읽기 | `read` |
 | `search_files` | 이름·내용으로 파일 찾기 (띄어 쓴 단어 모두 포함, `"문장"`은 그대로) | `read` |
 | `list_file_versions` | 텍스트 파일의 이전 버전 목록(최대 30개)과 누가 언제 바꿨는지 | `read` |
@@ -390,7 +390,7 @@ ComfyUI 시드(`seed`·`noise_seed`)는 실행마다 새로 뽑힙니다. marked
 | `import_files_to_library` | 보관함 이미지·애니메이션·영상 최대 50개를 지정 그룹으로 복사 등록 (웹 업로드와 같은 시그니처·디코딩 검사, 미디어 외 파일 제외) | `organize` |
 
 - 문서 쓰기 도구는 텍스트 확장자(.md, .html, .txt, .json, .csv, .yaml 등)만, 2MB까지 씁니다. 고쳐도 파일 ID가 그대로라 채팅 첨부와 링크가 유지됩니다. 바이너리 파일은 `write_binary_file`로 저장하며 텍스트 버전을 만들지 않습니다.
-- 게시판 호출에 답하는 턴에서는 보관함 도구(버전 도구 포함)가 모두 빠지고, 페이지가 연결된 턴에서는 쓰기·정리 도구와 파일 내용·버전을 읽는 도구가 빠집니다.
+- 게시판 호출에 답하는 턴에서도 보관함 도구(버전 도구 포함)를 일반 채팅과 같이 쓸 수 있고, 페이지가 연결된 턴에서는 쓰기·정리 도구와 파일 내용·버전을 읽는 도구가 빠집니다.
 - 쓰기·정리 도구는 계정에 권한이 추가로 필요합니다: 문서 쓰기·고치기와 `create_file_folder`·`rename_file`·`move_files`·`restore_file_version`·`write_binary_file`·`copy_library_media_to_files`는 `files.edit`, `delete_files`는 `files.delete`, `import_files_to_library`는 `images.upload`+`images.edit`. 이름 변경이나 바이너리 저장으로 실행파일 등 제한 확장자를 붙이는 건 관리자만 됩니다.
 - MCP·웹 UI·HTTP API 모두 같은 공용 보관함을 다룹니다. 계정별 보관함 선택과 소유권 제한은 없으며 요청 계정의 기능 권한은 매 호출 검사합니다.
 

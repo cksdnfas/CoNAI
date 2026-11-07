@@ -732,7 +732,7 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
   }), [draftReply, setDraftReply, canUse, clearMessageFocus, closePanel, registerPanelCloseGuard, setDraft, keepDrafts, focusMessage, isPanelOpen, isStartingChat, currentLiveTurn, currentDrafts, messageFocus, openPanel, picks, togglePick, removePick, choice, toggleChoice, clearChoice, selectThread, settleSelection, selectedThreadId, listOpen, showList, send, regenerate, continueReply, editMessage, pendingChat, prepareChat, selectPendingGreeting, togglePendingFlag, sendPending, stop, view, draftAttachments, draftMediaAttachments, setMediaAttachments, removeMediaAttachment, toggleMediaAttachment, draftPostRefs, togglePostReference, attachmentsUploading, addAttachments, removeAttachment, uploadAttachments])
 
   const referencePanelOpen = canUse && isPanelOpen
-  const referenceApi = useMemo<CodexChatReferenceApi>(() => ({ panelOpen: referencePanelOpen, draftMediaAttachments, toggleMediaAttachment, draftPostRefs, togglePostReference, focusMessage }), [referencePanelOpen, draftMediaAttachments, toggleMediaAttachment, draftPostRefs, togglePostReference, focusMessage])
+  const referenceApi = useMemo<CodexChatReferenceApi>(() => ({ panelOpen: referencePanelOpen, draftMediaAttachments, toggleMediaAttachment, draftPostRefs, togglePostReference, draftAttachments, addAttachments, removeAttachment, focusMessage }), [referencePanelOpen, draftMediaAttachments, toggleMediaAttachment, draftPostRefs, togglePostReference, draftAttachments, addAttachments, removeAttachment, focusMessage])
 
   return (
     <CodexChatContext.Provider value={api}>

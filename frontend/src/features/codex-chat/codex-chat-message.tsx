@@ -2,7 +2,7 @@ import { useRuntimeEventStream } from '@/features/runtime-events/use-runtime-eve
 import { chatGenerationPollInterval } from '@/features/runtime-events/chat-generation-query-updates'
 import type { RuntimeStreamStatus } from '@/features/runtime-events/runtime-event-fallback'
 import { useImagePermissions } from '@/features/auth/use-image-permissions'
-import { memo, useCallback, useContext, useEffect, useId, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
+import { createContext, memo, useCallback, useContext, useEffect, useId, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { useQueries, useQuery } from '@tanstack/react-query'
 import { AlertTriangle, Ban, Check, ChevronDown, ChevronLeft, ChevronRight, CircleX, ImageOff, RefreshCw, Repeat, Scissors, SquareCheck, Wrench, X } from 'lucide-react'
 import { isCodexChatGenerationTool, stripEchoedAddresses, withChatGenerationProgress } from '@conai/shared'
@@ -219,6 +219,51 @@ function referenceAction(item: ImageRecord) {
   return <ChatReferenceButton compositeHash={item.composite_hash} mimeType={item.mime_type ?? null} />
 }
 
+type ChatLightboxShown = { owner: symbol; items: ImageRecord[]; index: number }
+type ChatLightboxApi = { show: (owner: symbol, items: ImageRecord[], index: number) => void; sync: (owner: symbol, items: ImageRecord[]) => void }
+const ChatLightboxContext = createContext<ChatLightboxApi | null>(null)
+
+/**
+ * The transcript's one image viewer. A reply streams in one message and shows again in its saved message once it ends
+ * (often right as its images finish), so a viewer owned by the message closed with the streamed copy; held here it
+ * stays open on the same image. The opening message keeps the list current while mounted; after that the last list
+ * stays. Another thread closes it.
+ */
+export function ChatLightboxProvider({ threadId, children }: { threadId: number | null; children: ReactNode }) {
+  const [shown, setShown] = useState<ChatLightboxShown | null>(null)
+  const [shownThreadId, setShownThreadId] = useState(threadId)
+  if (shownThreadId !== threadId) {
+    setShownThreadId(threadId)
+    setShown(null)
+  }
+  const [api] = useState<ChatLightboxApi>(() => ({
+    show: (owner, items, index) => setShown({ owner, items, index }),
+    sync: (owner, items) => setShown((current) => {
+      if (current?.owner !== owner || current.items === items) return current
+      // Stay on the shown image when results before it finish; if it left the list, keep the list it was in.
+      const hash = current.items[current.index]?.composite_hash
+      const index = items.findIndex((item) => item.composite_hash === hash)
+      return index < 0 ? current : { owner, items, index }
+    }),
+  }))
+  return (
+    <ChatLightboxContext.Provider value={api}>
+      {children}
+      <MediaLightbox items={shown?.items ?? []} index={shown?.index ?? null} onIndexChange={(index) => setShown((current) => current && { ...current, index })} onClose={() => setShown(null)} renderActions={referenceAction} />
+    </ChatLightboxContext.Provider>
+  )
+}
+
+/** Opens `items` at an index in the transcript's viewer, and keeps them current there while they are shown. */
+function useChatLightbox(items: ImageRecord[]) {
+  const host = useContext(ChatLightboxContext)
+  const [owner] = useState(() => Symbol('chat-lightbox'))
+  useEffect(() => {
+    host?.sync(owner, items)
+  }, [host, owner, items])
+  return (index: number) => host?.show(owner, items, index)
+}
+
 /**
  * Images the reply looked up (search, metadata, history listing…): square thumbnails, three across in the panel and
  * six across where the transcript is wide, six per page with ‹ › beyond that, so a long search result never stretches
@@ -227,7 +272,7 @@ function referenceAction(item: ImageRecord) {
 function ChatFoundGrid({ items }: { items: ImageRecord[] }) {
   const { t } = useI18n()
   const [page, setPage] = useState(0)
-  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
+  const openLightbox = useChatLightbox(items)
   if (items.length === 0) {
     return null
   }
@@ -241,7 +286,7 @@ function ChatFoundGrid({ items }: { items: ImageRecord[] }) {
     <div className="@container [contain-intrinsic-inline-size:36rem]">
       <div className="grid grid-cols-3 gap-1 @min-[36rem]:grid-cols-6">
         {items.slice(start, start + FOUND_PAGE_SIZE).map((image, offset) => (
-          <ChatFoundTile key={image.composite_hash} image={image} onOpen={() => setLightboxIndex(start + offset)} />
+          <ChatFoundTile key={image.composite_hash} image={image} onOpen={() => openLightbox(start + offset)} />
         ))}
       </div>
       <div className="mt-1 flex items-center gap-0.5 text-xs text-muted-foreground">
@@ -254,7 +299,6 @@ function ChatFoundGrid({ items }: { items: ImageRecord[] }) {
           </>
         ) : null}
       </div>
-      <MediaLightbox items={items} index={lightboxIndex} onIndexChange={setLightboxIndex} onClose={() => setLightboxIndex(null)} renderActions={referenceAction} />
     </div>
   )
 }
@@ -502,7 +546,6 @@ function CodexChatToolMedia({ calls, size = 'md', layout = 'grid', media: provid
   const messageId = useContext(ChatMessageIdContext)
   const media = providedMedia
   const canShowHash = (hash: string) => canViewImages || (messageId !== null && media?.[hash]?.resultMediaUrl?.includes(`/messages/${messageId}/media/`))
-  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
   // Jobs that were still queued when the message was stored, resolved to their history row on this client.
   const { status: streamStatus } = useRuntimeEventStream()
   const [resolvedJobs, setResolvedJobs] = useState<Record<number, number>>({})
@@ -547,9 +590,10 @@ function CodexChatToolMedia({ calls, size = 'md', layout = 'grid', media: provid
     }),
     ...compositeHashes.map((hash) => buildChatImageRecord(hash, undefined, media?.[hash])),
   ]
+  const showInLightbox = useChatLightbox(lightboxItems)
   const openLightbox = (compositeHash: string) => {
     const index = lightboxItems.findIndex((item) => item.composite_hash === compositeHash)
-    setLightboxIndex(index >= 0 ? index : null)
+    if (index >= 0) showInLightbox(index)
   }
 
   const count = historyIds.length + compositeHashes.length + pendingJobIds.length + failedJobs.length + deferredCalls.length
@@ -576,7 +620,6 @@ function CodexChatToolMedia({ calls, size = 'md', layout = 'grid', media: provid
     <>
       {masonry ? <ChatMediaMasonry tiles={tiles} size={size} /> : count > 0 ? <div className={cn('gap-2', layout === 'column' ? 'flex flex-col items-start' : 'flex flex-wrap')}>{tiles}</div> : null}
       <ChatFoundGrid items={foundItems} />
-      <MediaLightbox items={lightboxItems} index={lightboxIndex} onIndexChange={setLightboxIndex} onClose={() => setLightboxIndex(null)} renderActions={referenceAction} />
     </>
   )
 }

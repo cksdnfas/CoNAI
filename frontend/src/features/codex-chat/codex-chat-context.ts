@@ -191,6 +191,9 @@ export type CodexChatReferenceApi = {
   toggleMediaAttachment: (item: ChatMediaAttachment) => void
   draftPostRefs: ChatPostReference[]
   togglePostReference: (item: ChatPostReference) => void
+  draftAttachments: StoredFileEntry[]
+  addAttachments: (files: StoredFileEntry[]) => void
+  removeAttachment: (id: string) => void
   focusMessage: (messageId: number) => void
 }
 

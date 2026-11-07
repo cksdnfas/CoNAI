@@ -191,12 +191,12 @@ test('mcp posts and file version tools', { timeout: 120000 }, async (t) => {
     }
   })
 
-  await t.test('board-call turns never get destructive post tools or file versions', () => {
+  await t.test('board-call turns never get destructive post tools', () => {
     const context = chatContext()
     for (const name of ['posts_delete', 'posts_restore_revision', 'post_comment_delete', 'list_file_versions', 'restore_file_version']) assert.ok(isContextToolAllowed(context, name), name)
     const release = BoardCallRooms.bind(threadId, 99, profile.id)
     try {
-      for (const name of ['posts_delete', 'posts_restore_revision', 'post_comment_delete', 'list_file_versions', 'read_file_version', 'restore_file_version']) assert.equal(isContextToolAllowed(context, name), false, name)
+      for (const name of ['posts_delete', 'posts_restore_revision', 'post_comment_delete']) assert.equal(isContextToolAllowed(context, name), false, name)
       assert.ok(isContextToolAllowed(context, 'post_comment_edit'), 'a call may still fix its own answer')
     } finally {
       release()
@@ -258,10 +258,6 @@ test('mcp posts and file version tools', { timeout: 120000 }, async (t) => {
       await Promise.all([chatServer.connect(serverTransport), chatClient.connect(chatTransport)])
       ok(await call(chatClient, 'write_binary_file', { ...args, name: 'chat-binary.png' }))
     } finally { closeReply(); await chatClient.close(); await chatServer.close() }
-    const release = BoardCallRooms.bind(threadId, 99, profile.id)
-    try {
-      for (const name of ['write_binary_file', 'copy_library_media_to_files', 'import_files_to_library', 'get_file_download']) assert.equal(isContextToolAllowed(chatContext(), name), false, name)
-    } finally { release() }
   })
 
   await t.test('library originals round trip through shared files into an explicit group without importing non-media', async () => {
@@ -276,6 +272,12 @@ test('mcp posts and file version tools', { timeout: 120000 }, async (t) => {
     const folder = ok(await call(admin, 'create_file_folder', { name: 'media-round-trip' }))
     const original = ok(await call(admin, 'write_binary_file', { parent_id: folder.id, name: 'original.png', data_url: `data:image/png;base64,${media.toString('base64')}` }))
     const doc = ok(await call(admin, 'write_text_file', { parent_id: folder.id, name: 'not-media.txt', text: 'not an image' }))
+    // Embedded generation info is read from the stored file in place, under the image permission like its original.
+    const described = ok(await call(admin, 'get_file_info', { file_id: original.id, include_image_metadata: true }))
+    assert.equal(described.width, 3)
+    assert.equal(described.ai_metadata.prompts.prompt, null, 'a plain PNG carries no generation info')
+    assert.match((await call(other, 'get_file_info', { file_id: original.id, include_image_metadata: true })).text, /images\.view/)
+    assert.equal((await call(admin, 'get_file_info', { file_id: doc.id, include_image_metadata: true })).isError, true)
     const imported = ok(await call(admin, 'import_files_to_library', { file_ids: [original.id, doc.id], group_path: 'File round trip/Originals' }))
     const hash = imported.items[0].composite_hash
     assert.match(hash, /^[a-f0-9]{32}(?:[a-f0-9]{16})?$/)

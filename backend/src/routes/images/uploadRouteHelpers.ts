@@ -281,24 +281,30 @@ export function buildExtractedImagePreview(
     height: imageInfo.height || aiInfo.height || null,
     file_size: file.size,
     mime_type: file.mimetype,
-    ai_metadata: {
-      ai_tool: aiInfo.ai_tool || null,
-      model_name: aiInfo.model || null,
-      lora_models: Array.isArray(aiInfo.lora_models) ? aiInfo.lora_models : null,
-      generation_params: {
-        steps: aiInfo.steps ?? null,
-        cfg_scale: aiInfo.cfg_scale ?? aiInfo.scale ?? null,
-        sampler: aiInfo.sampler ?? null,
-        seed: aiInfo.seed ?? null,
-        scheduler: aiInfo.scheduler ?? null,
-      },
-      prompts: {
-        prompt: aiInfo.prompt || aiInfo.positive_prompt || null,
-        negative_prompt: aiInfo.negative_prompt || null,
-        character_prompt_text: aiInfo.character_prompt_text || null,
-      },
-      raw_nai_parameters: parseMaybeJson(aiInfo.raw_nai_parameters),
+    ai_metadata: extractedAiMetadata(metadata),
+  };
+}
+
+/** The generation info embedded in an image file (prompts, model, sampler…), as the metadata-only routes return it. */
+export function extractedAiMetadata(metadata: Awaited<ReturnType<typeof ImageProcessor.extractMetadata>>) {
+  const aiInfo = (metadata.ai_info || {}) as Record<string, any>;
+  return {
+    ai_tool: aiInfo.ai_tool || null,
+    model_name: aiInfo.model || null,
+    lora_models: Array.isArray(aiInfo.lora_models) ? aiInfo.lora_models : null,
+    generation_params: {
+      steps: aiInfo.steps ?? null,
+      cfg_scale: aiInfo.cfg_scale ?? aiInfo.scale ?? null,
+      sampler: aiInfo.sampler ?? null,
+      seed: aiInfo.seed ?? null,
+      scheduler: aiInfo.scheduler ?? null,
     },
+    prompts: {
+      prompt: aiInfo.prompt || aiInfo.positive_prompt || null,
+      negative_prompt: aiInfo.negative_prompt || null,
+      character_prompt_text: aiInfo.character_prompt_text || null,
+    },
+    raw_nai_parameters: parseMaybeJson(aiInfo.raw_nai_parameters),
   };
 }
 

@@ -105,7 +105,7 @@ const CHARACTER_PAGE_TOOLS = new Set(['list_character_library', 'get_character_s
 export const CHAT_PAGE_KIND_TOOLS: Partial<Record<string, ReadonlySet<string>>> = {
   library: IMAGE_PAGE_TOOLS, image_detail: IMAGE_PAGE_TOOLS, metadata: IMAGE_PAGE_TOOLS, groups: IMAGE_PAGE_TOOLS,
   prompt_search: PROMPT_PAGE_TOOLS, presets: PROMPT_PAGE_TOOLS, wildcards: PROMPT_PAGE_TOOLS,
-  files: new Set(['list_files', 'search_files', 'get_file_info', 'read_file_text', 'list_file_versions', 'read_file_version']),
+  files: new Set(['list_files', 'search_files', 'get_file_info', 'read_file_text', 'list_file_versions', 'read_file_version', 'view_images']),
   posts: new Set(['posts_categories', 'posts_search', 'posts_read', 'posts_tags', 'posts_revisions']),
   nai: GENERATION_PAGE_TOOLS,
   codex: new Set([...GENERATION_PAGE_TOOLS, 'get_codex_generation_options']),

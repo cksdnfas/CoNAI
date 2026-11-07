@@ -32,7 +32,7 @@ export const TOOL_CATEGORIES: Record<ToolCategoryId, string> = {
   generation: 'Generation: NovelAI, ComfyUI workflows, servers, routing, jobs',
   workflows: 'Graph workflows and definitions: list, inspect, run, export/import',
   prompts: 'Saved prompts and Danbooru tags/artists/characters (including related tags), prompt groups, presets, wildcards, dropdown lists, backups',
-  files: 'Shared file store: list, search, read/write/edit text docs, folders, rename, move, delete, versions',
+  files: 'Shared file store: list, search, read/write/edit text docs, image generation metadata, folders, rename, move, delete, versions (look at stored images with view_images file_ids)',
   posts: 'Posts board and knowledge: search, read, evidence-based assessments, propose knowledge changes for human review, posts and comments, earlier versions',
   audio: 'Sound effects (오디오): projects, effects (groups), folders (UI 그룹), takes, review/memos, comments, orders, edits, export',
   sprite: 'Sprites: video info, sheet extraction, normalize, animations, frames',
