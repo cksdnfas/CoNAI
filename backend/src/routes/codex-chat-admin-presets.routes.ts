@@ -194,6 +194,13 @@ router.get('/admin/model-slots', requireAdmin, (_req: Request, res: Response) =>
   res.json({ success: true, data: ModelSlotStore.list().map((slot) => ({ ...slot, ready: slot.model === '' ? false : slot.providerType === 'decision_typesafe' ? isJudgeConnectionReady(slot.providerName, slot.model) : isChatTargetReady(slot.providerName, slot.model), sharedServer: shared.get(slot.providerName) ?? [] })) })
 })
 
+/** One replacement compatible with every consumer of all rows being removed. */
+router.post('/admin/model-slots/replacement-candidates', requireAdmin, (req: Request, res: Response) => {
+  try {
+    res.json({ success: true, data: { slotIds: ModelSlotStore.replacementCandidates(req.body?.slotIds) } })
+  } catch (error) { sendChatError(res, error) }
+})
+
 /** Adds one model to a connection (returns the existing row when it is already there). */
 router.post('/admin/model-slots', requireAdmin, (req: Request, res: Response) => {
   try {
@@ -203,10 +210,10 @@ router.post('/admin/model-slots', requireAdmin, (req: Request, res: Response) =>
   } catch (error) { sendChatError(res, error) }
 })
 
-/** Sets a connection's models to exactly the given list (the checklist of the connection editor); rows in use are never dropped. */
+/** Sets a connection's models to exactly the given list; configured uses require a replacement or explicit blank. */
 router.put('/admin/connections/:providerName/models', requireAdmin, (req: Request, res: Response) => {
   try {
-    res.json({ success: true, data: ModelSlotStore.syncConnection(req.params.providerName, (req.body ?? {}).models) })
+    res.json({ success: true, data: ModelSlotStore.syncConnection(req.params.providerName, (req.body ?? {}).models, req.body?.replacementSlotId) })
   } catch (error) { sendChatError(res, error) }
 })
 
@@ -261,7 +268,7 @@ router.delete('/admin/model-slots/:slotId', requireAdmin, (req: Request, res: Re
   const slotId = parseId(req.params.slotId)
   if (slotId === null) { sendRouteBadRequest(res, 'Invalid model slot id'); return }
   try {
-    res.json({ success: true, data: { deleted: ModelSlotStore.delete(slotId) } })
+    res.json({ success: true, data: { deleted: ModelSlotStore.delete(slotId, req.body?.replacementSlotId) } })
   } catch (error) { sendChatError(res, error) }
 })
 

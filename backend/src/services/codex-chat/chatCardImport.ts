@@ -148,6 +148,7 @@ export async function importChatCard(buffer: Buffer, modelSlotId: number | null)
     importReport: report,
     authorNote: authorNote || undefined,
     name, avatar, referenceHash: original?.compositeHash ?? null, avatarHash: original?.compositeHash ?? null, engine: 'llm', modelSlotId, mcpEnabled: false,
+    reactionEnabled: false, reactionSlotId: null,
     tagline: text(data.tagline, CHAT_PROFILE_TEXT_LIMITS.tagline) || text(data.creator_notes, CHAT_PROFILE_TEXT_LIMITS.tagline) || tags.slice(0, CHAT_PROFILE_TEXT_LIMITS.tagline),
     systemPrompt: localized(systemPrompt),
     promptSections: sections.map((section) => ({ ...section, content: localized(section.content) })),

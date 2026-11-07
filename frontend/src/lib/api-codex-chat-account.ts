@@ -9,11 +9,11 @@ export const MODEL_USAGE_QUERY_KEY = ['codex-chat-model-usage'] as const
 
 export type ModelRole = 'chat' | 'summary' | 'translation' | 'suggest'
 
-/** What a profile uses a model row for: one of its roles, or its judge. */
-export type ModelUseRole = ModelRole | 'judge'
-
 /** The built-in representative models, one per part. */
-export type ModelRouteKey = ModelUseRole
+export type ModelRouteKey = ModelRole | 'judge'
+
+/** What a profile uses a model row for: one of its roles, its judge, or its completion reactions. */
+export type ModelUseRole = ModelRouteKey | 'reaction'
 
 /**
  * One model an LLM connection serves (`kind: 'model'`, listed under its connection in Settings → LLM) or a
@@ -55,9 +55,20 @@ export interface ModelSlot {
   judgePresets: Array<{ id: number; name: string }>
   contentEvaluations?: number
   userProfiles: number
-  /** Chats whose completion reactions use the row. */
+  /** Saved workflow nodes naming this row directly: real users, moved to the replacement (or cleared) when it goes. */
+  workflowNodes?: number
+  /** The built-in judge route: consumers left with no usable model of their own or default judge (e.g. after a blank removal). */
+  unconfiguredConsumers?: {
+    judgePresets: Array<{ id: number; name: string }>
+    userProfiles?: number
+    contentEvaluations: number
+    routes: Array<{ id: number; name: string }>
+  }
+  /**
+   * Informational only: chats overriding their completion reaction / chat model (or a room member's) with the row. They
+   * never hold a row; removing it sends those chats back to their profile's setting.
+   */
   chats: number
-  /** Chats using the row as their own chat model or a room member's; absent from older servers. */
   chatModels?: number
   createdDate: string
   updatedDate: string
@@ -76,9 +87,15 @@ export function listModelSlots() {
   return requestApiData<ModelSlot[]>('/api/codex-chat/admin/model-slots')
 }
 
-/** Sets a connection's models to exactly `models`, in order; a model still in use is never dropped (the call fails instead). */
-export function syncConnectionModels(providerName: string, models: string[]) {
-  return requestApiData<ModelSlot[]>(`/api/codex-chat/admin/connections/${encodeURIComponent(providerName)}/models`, { method: 'PUT', headers: JSON_HEADERS, body: JSON.stringify({ models }) })
+/**
+ * What takes over the rows being removed: another row's id, or null to leave their users blank (those roles and features
+ * turn off). Left out when no row has a user; the server then refuses to remove a row that has one.
+ */
+export type ModelReplacement = { replacementSlotId?: number | null }
+
+/** Sets a connection's models to exactly `models`, in order; dropped rows in use move to `replacementSlotId` (or blank). */
+export function syncConnectionModels(providerName: string, models: string[], replacement: ModelReplacement = {}) {
+  return requestApiData<ModelSlot[]>(`/api/codex-chat/admin/connections/${encodeURIComponent(providerName)}/models`, { method: 'PUT', headers: JSON_HEADERS, body: JSON.stringify({ models, ...replacement }) })
 }
 
 /** Changes a row's model; everything that references the row follows. */
@@ -101,8 +118,13 @@ export function updateModelRoute(routeId: number, patch: ModelRouteInput) {
   return requestApiData<ModelSlot>(`/api/codex-chat/admin/model-routes/${routeId}`, { method: 'PUT', headers: JSON_HEADERS, body: JSON.stringify(patch) })
 }
 
-export function deleteModelSlot(slotId: number) {
-  return requestApiData<{ deleted: boolean }>(`/api/codex-chat/admin/model-slots/${slotId}`, { method: 'DELETE' })
+export function deleteModelSlot(slotId: number, replacement: ModelReplacement = {}) {
+  return requestApiData<{ deleted: boolean }>(`/api/codex-chat/admin/model-slots/${slotId}`, { method: 'DELETE', headers: JSON_HEADERS, body: JSON.stringify(replacement) })
+}
+
+/** The rows the server accepts as the single replacement when removing all of `slotIds` (never one of them). */
+export function listReplacementCandidates(slotIds: number[]) {
+  return requestApiData<{ slotIds: number[] }>('/api/codex-chat/admin/model-slots/replacement-candidates', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ slotIds }) })
 }
 
 export function getModelUsage() {

@@ -13,7 +13,7 @@ import { AgentCliSettings } from './agent-cli-settings'
 import { ExternalMcpSettings } from './external-mcp-settings'
 import { useLlmConnectionsChatPage, type ExternalMcpDraftSeed } from './use-llm-connections-chat-page'
 import { LlmConnectionEditorModal, LlmConnectionListItem } from './llm-connections-tab-modals'
-import { ConnectionModelEditorModal, ConnectionModelRow, ModelRouteEditorModal, ModelRouteRow, modelAffectsJudge, useRefreshModelRows, type ModelRouteModalState } from './llm-connection-models'
+import { ConnectionModelEditorModal, ConnectionModelRow, ModelRouteEditorModal, ModelRouteRow, UnconfiguredConsumersAlert, modelAffectsJudge, useRefreshModelRows, type ModelRouteModalState } from './llm-connection-models'
 import type { LlmConnectionModalState } from './llm-connections-tab-utils'
 
 /**
@@ -117,6 +117,7 @@ export function LlmConnectionsTab() {
         )}
       </RowGroup>
 
+      <div className="space-y-3">
       <RowGroup
         heading={t({ ko: '대표모델', en: 'Representative models' })}
         count={slotsQuery.isSuccess ? routes.length : undefined}
@@ -130,6 +131,8 @@ export function LlmConnectionsTab() {
           <ModelRouteRow key={slot.id} slot={slot} workflowNodes={nodesOf(slot.id)} onOpen={(next) => setRouteModalState({ mode: 'edit', slot: next })} />
         ))}
       </RowGroup>
+      <UnconfiguredConsumersAlert slot={routes.find((slot) => slot.routeKey === 'judge')} />
+      </div>
 
       <ExternalMcpSettings seed={mcpSeed} onSeedClose={() => setMcpSeed(null)} />
 

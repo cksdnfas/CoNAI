@@ -28,6 +28,7 @@ export type ModelRoleProfile = {
   summarySlotId?: number | null
   translationSlotId?: number | null
   suggestSlotId?: number | null
+  reactionSlotId?: number | null
 }
 
 function slotIdOf(profile: ModelRoleProfile, role: ModelRole) {
@@ -36,6 +37,7 @@ function slotIdOf(profile: ModelRoleProfile, role: ModelRole) {
     case 'summary': return profile.summarySlotId
     case 'translation': return profile.translationSlotId
     case 'suggest': return profile.suggestSlotId
+    case 'reaction': return profile.reactionSlotId
   }
 }
 
@@ -73,6 +75,7 @@ export function resolveProfileModel(profile: ModelRoleProfile, role: ModelRole):
   const slot = ModelSlotStore.target(slotId)
   if (slot) return fromTarget(slot, 'slot')
   if (role === 'translation' || profile.engine === 'codex') return null
+  if (role === 'reaction') return inherit()
   const routeId = ModelSlotStore.routeId(role)
   if (!ModelSlotStore.followsChat(routeId)) {
     const route = ModelSlotStore.target(routeId)

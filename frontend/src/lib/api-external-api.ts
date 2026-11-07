@@ -73,12 +73,16 @@ export async function updateExternalApiProvider(providerName: string, input: Omi
   return response.data
 }
 
-/** Deletes a connection; a 409 (still used by models or profiles) throws with the user names appended to the message. */
-export async function deleteExternalApiProvider(providerName: string) {
+/**
+ * Deletes a connection; its model rows in use move to `replacementSlotId` (null: left blank). Without one, a 409 (still
+ * used by models or profiles) throws with the user names appended to the message.
+ */
+export async function deleteExternalApiProvider(providerName: string, replacement: { replacementSlotId?: number | null } = {}) {
   const response = await fetch(buildApiUrl(`/api/external-api/providers/${encodeURIComponent(providerName)}`), {
     method: 'DELETE',
     credentials: 'include',
-    headers: { Accept: 'application/json' },
+    headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+    body: JSON.stringify(replacement),
   })
   const payload = (await response.json().catch(() => null)) as {
     success?: boolean

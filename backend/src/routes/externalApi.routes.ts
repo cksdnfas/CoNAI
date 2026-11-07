@@ -229,7 +229,7 @@ router.delete('/providers/:name', asyncHandler(async (req: Request, res: Respons
 
   // A connection whose models are still used would leave those profiles / judges failing at request time.
   const references = modelReferencesOfConnection(name);
-  if (references.models.length > 0) {
+  if (req.body?.replacementSlotId === undefined && references.models.length > 0) {
     res.status(409).json({
       success: false,
       error: `이 연결의 모델을 쓰는 곳이 있어: ${references.models.join(', ')}`,
@@ -238,8 +238,18 @@ router.delete('/providers/:name', asyncHandler(async (req: Request, res: Respons
     return;
   }
 
-  const deleted = ExternalApiProvider.delete(name);
-  if (deleted) deleteModelsOfConnection(name);
+  let deleted: boolean;
+  try {
+    deleted = getUserSettingsDb().transaction(() => {
+      if (!ExternalApiProvider.findByName(name)) return false;
+      deleteModelsOfConnection(name, req.body?.replacementSlotId);
+      return ExternalApiProvider.delete(name);
+    })();
+  } catch (error) {
+    if (!(error instanceof ChatProfileError)) throw error;
+    res.status(409).json({ success: false, error: error.message });
+    return;
+  }
 
   if (!deleted) {
     res.status(404).json({

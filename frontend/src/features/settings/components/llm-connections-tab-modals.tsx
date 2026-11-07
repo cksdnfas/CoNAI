@@ -16,7 +16,7 @@ import {
   type ExternalApiProviderRecord,
   type ExternalApiProviderType,
 } from '@/lib/api-external-api'
-import { MODEL_SLOTS_QUERY_KEY, listModelSlots, syncConnectionModels } from '@/lib/api-codex-chat'
+import { MODEL_SLOTS_QUERY_KEY, listModelSlots, syncConnectionModels, type ModelReplacement } from '@/lib/api-codex-chat'
 import { useI18n } from '@/i18n'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { Field } from '@/components/ui/field'
@@ -28,7 +28,7 @@ import { SwitchLine } from '@/components/ui/switch-line'
 import { Tip } from '@/components/ui/tooltip'
 import { ResourceRow, ResourceRowStatus } from '@/components/ui/resource-row'
 import { SettingsSwitchRow } from '@/components/ui/settings-switch-row'
-import { ConnectionModelChecklist, type ConnectionModelsDraft } from './llm-connection-models'
+import { ConnectionModelChecklist, slotHoldCount, useModelRemoval, type ConnectionModelsDraft } from './llm-connection-models'
 import { SettingsAdvancedSwitch, useSettingsAdvanced } from './settings-advanced'
 import {
   LLM_PROVIDER_OPTIONS,
@@ -353,10 +353,11 @@ export function LlmConnectionEditorModal({
   }
   const addEndpointModel = (model: string) => setModelDraft((current) => (current.models.includes(model) ? current : { ...current, models: [...current.models, model] }))
 
-  /** After the connection itself is saved: its models become exactly the checked ones. */
-  const saveModels = async (providerName: string) => {
-    await syncConnectionModels(providerName, modelDraft.models)
+  /** After the connection itself is saved: its models become exactly the checked ones, dropped rows in use moving to `replacement`. */
+  const saveModels = async (providerName: string, replacement: ModelReplacement = {}) => {
+    await syncConnectionModels(providerName, modelDraft.models, replacement)
   }
+  const removal = useModelRemoval()
 
   const createMutation = useMutation({
     mutationFn: async () => {
@@ -385,11 +386,13 @@ export function LlmConnectionEditorModal({
   })
 
   const updateMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (replacement: ModelReplacement) => {
       if (!provider) {
         return
       }
 
+      // The model sync is the part the server may refuse (rows in use): run it first so a refusal saves nothing.
+      await saveModels(provider.provider_name, replacement)
       await updateExternalApiProvider(provider.provider_name, {
         display_name: draft.displayName,
         provider_type: draft.providerType,
@@ -398,18 +401,19 @@ export function LlmConnectionEditorModal({
         additional_config: buildAdditionalConfig(draft, provider.additional_config),
         is_enabled: draft.isEnabled,
       })
-      await saveModels(provider.provider_name)
     },
     onSuccess: async () => {
       showSnackbar({ message: t('llmConnectionsTab.llmConnectionSaved'), tone: 'info' })
       await onChanged()
       onClose()
     },
-    onError: (error) => {
+    onError: async (error) => {
       showSnackbar({
         message: error instanceof Error ? error.message : t('llmConnectionsTab.failedToSaveLlmConnection'),
         tone: 'error',
       })
+      // The models may have been saved before the connection failed: show what is stored now.
+      await onChanged()
     },
   })
 
@@ -445,12 +449,12 @@ export function LlmConnectionEditorModal({
   })
 
   const deleteMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (replacement: ModelReplacement) => {
       if (!provider) {
         return
       }
 
-      await deleteExternalApiProvider(provider.provider_name)
+      await deleteExternalApiProvider(provider.provider_name, replacement)
     },
     onSuccess: async () => {
       showSnackbar({ message: t('llmConnectionsTab.llmConnectionDeleted'), tone: 'info' })
@@ -469,7 +473,31 @@ export function LlmConnectionEditorModal({
   const savedDraft = provider ? buildProviderDraft(provider) : buildEmptyDraft()
   const dirty = isOpen && (modelsChanged || JSON.stringify(draft) !== JSON.stringify(savedDraft))
   const canSave = draft.providerName.trim().length > 0 && draft.baseUrl.trim().length > 0 && (dirty || !isEditMode) && !isSaving
-  const save = () => (isEditMode ? updateMutation.mutate() : createMutation.mutate())
+  const save = async () => {
+    if (!isEditMode) {
+      createMutation.mutate()
+      return
+    }
+    // Unchecked rows something holds need a replacement (or a deliberate blank) first.
+    const replacement = await removal.choose(saved.filter((slot) => !modelDraft.models.includes(slot.model)))
+    if (replacement) updateMutation.mutate(replacement)
+  }
+  const remove = async () => {
+    if (!provider) return
+    // Rows in use: the replacement dialog is the confirmation; otherwise the plain one.
+    if (saved.some((slot) => slotHoldCount(slot) > 0)) {
+      const replacement = await removal.choose(saved)
+      if (replacement) deleteMutation.mutate(replacement)
+      return
+    }
+    const confirmed = await confirm({
+      title: t({ ko: '연결 삭제', en: 'Delete connection' }),
+      description: t({ ko: "연결 '{providerName}' 을(를) 삭제할까?", en: "Delete connection '{providerName}'?" }, { providerName: provider.provider_name }),
+      confirmLabel: t({ ko: '삭제', en: 'Delete' }),
+      tone: 'destructive',
+    })
+    if (confirmed) deleteMutation.mutate({})
+  }
 
   return (
     <Modal
@@ -479,7 +507,7 @@ export function LlmConnectionEditorModal({
       size="lg"
       height="tall"
       dirty={dirty}
-      onSave={canSave ? save : undefined}
+      onSave={canSave ? () => void save() : undefined}
     >
       <ModalBody>
         <div className="space-y-4">
@@ -509,18 +537,10 @@ export function LlmConnectionEditorModal({
       </ModalBody>
 
       <EditorFooter
-        onDelete={provider ? () => void (async () => {
-          const confirmed = await confirm({
-            title: t({ ko: '연결 삭제', en: 'Delete connection' }),
-            description: t({ ko: "연결 '{providerName}' 을(를) 삭제할까?", en: "Delete connection '{providerName}'?" }, { providerName: provider.provider_name }),
-            confirmLabel: t({ ko: '삭제', en: 'Delete' }),
-            tone: 'destructive',
-          })
-          if (confirmed) deleteMutation.mutate()
-        })() : undefined}
+        onDelete={provider ? () => void remove() : undefined}
         deleteLabel={t('llmConnectionsTab.deleteConnection')}
         deleting={deleteMutation.isPending}
-        onSave={save}
+        onSave={() => void save()}
         canSave={canSave}
         saving={isSaving}
         saveLabel={isEditMode ? undefined : t({ ko: '만들기', en: 'Create' })}
@@ -538,6 +558,7 @@ export function LlmConnectionEditorModal({
           </IconButton>
         ) : null}
       </EditorFooter>
+      {removal.dialog}
     </Modal>
   )
 }

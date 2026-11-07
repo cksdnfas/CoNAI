@@ -40,7 +40,7 @@ const NO_CHAT_ERROR = 'Proposals need an active chat reply.';
  */
 const PROPOSABLE_KEYS = [
   'name', 'folderId', 'tagline', 'systemPrompt', 'promptSections', 'greeting', 'alternateGreetings', 'openingHistory', 'greetingPosition', 'authorNote', 'appearance',
-  'modelSlotId', 'summarySlotId', 'translationSlotId', 'suggestSlotId', 'judgeSlotId', 'judgePresetId', 'lorebookIds', 'blockIds', 'skillIds',
+  'modelSlotId', 'summarySlotId', 'translationSlotId', 'suggestSlotId', 'reactionSlotId', 'reactionEnabled', 'judgeSlotId', 'judgePresetId', 'lorebookIds', 'blockIds', 'skillIds',
   'temperature', 'maxTokens', 'contextTurns', 'contextTokens', 'toolOutputLimit',
   'summaryEnabled', 'summaryTriggerTurns', 'summaryPrompt',
   'translationModelLanguage', 'translationDisplayLanguage', 'translationInstructions',
@@ -67,6 +67,8 @@ const KEY_ALIASES: Record<string, ProposableKey> = {
   translation_slot_id: 'translationSlotId',
   suggest_slot: 'suggestSlotId',
   suggest_slot_id: 'suggestSlotId',
+  reaction_slot_id: 'reactionSlotId',
+  reaction_enabled: 'reactionEnabled',
   judge_slot: 'judgeSlotId',
   judge_slot_id: 'judgeSlotId',
   judge_preset_id: 'judgePresetId',
@@ -162,7 +164,8 @@ function profileGuide() {
     '- settings: any other key below, e.g. {"translationSlotId": 3, "translationDisplayLanguage": "ko", "summaryEnabled": true}.',
     '',
     'Other settings (propose_profile_update patch keys, or propose_chat_profile settings; snake_case also accepted). Numbers outside the range are clamped as the editor does; null clears where noted.',
-    '- Models per role: modelSlotId (chat), summarySlotId, translationSlotId (null: no translation), suggestSlotId (null: the chat model), judgeSlotId (judge model, TypeSafe rows allowed; null: the judge preset\'s own) — a model id, `connection · model` label or row id.',
+    '- Models per role: modelSlotId (chat), summarySlotId, translationSlotId (null: no translation), suggestSlotId and reactionSlotId (null: the chat model), judgeSlotId (judge model, TypeSafe rows allowed; null: the judge preset\'s own) — a model id, `connection · model` label or row id.',
+    '- reactionEnabled: default completion reactions for this profile; each chat may override it. removedModelRoles is read-only and identifies features disabled by a model removal.',
     '- judgePresetId: a judge preset that steers each turn (null: no judge). Editor › 모델 › 역할 › 판단.',
     `- temperature (${CHAT_PROFILE_LIMITS.temperature.min}-${CHAT_PROFILE_LIMITS.temperature.max}, null: server default), maxTokens (at least ${CHAT_PROFILE_LIMITS.maxTokens.min}, null: server default; direct API fits to remaining context, Pi sends the configured ceiling), contextTurns (at least ${CHAT_PROFILE_LIMITS.contextTurns.min}), contextTokens (최대 컨텍스트, at least ${CHAT_PROFILE_LIMITS.contextTokens.min}; API LLM direct and pi; the smaller of it and the server's own size counts; null: the server's size, no token cap or Pi automatic compaction when unknown), reasoningBudgetTokens (null: not sent; API LLM reasoning_budget_tokens, Claude Code thinking budget), toolOutputLimit (${CHAT_PROFILE_LIMITS.toolOutputLimit.min}-${CHAT_PROFILE_LIMITS.toolOutputLimit.max} characters of one tool result). The tool round limit is app-wide (Settings › 채팅 › 자원 › 도구 사용), not a profile field.`,
     `- summaryEnabled (true/false), summaryTriggerTurns (at least ${CHAT_PROFILE_LIMITS.summaryTriggerTurns.min}: fold older turns once this many left the window), summaryPrompt (max ${limits.summaryPrompt}, empty: the default). Codex profiles keep their own context (no summary).`,
@@ -320,6 +323,7 @@ function normalizeProposedField(key: ProposableKey, value: unknown, fieldContext
     case 'modelSlotId':
     case 'summarySlotId':
     case 'translationSlotId':
+    case 'reactionSlotId':
     case 'suggestSlotId': return resolveSlot(key, value);
     case 'judgeSlotId': return resolveSlot(key, value, { judge: true });
     case 'judgePresetId': return judgePreset(value);
@@ -334,6 +338,7 @@ function normalizeProposedField(key: ProposableKey, value: unknown, fieldContext
     case 'summaryTriggerTurns':
     case 'loreRecursionDepth':
     case 'summaryEnabled':
+    case 'reactionEnabled':
     case 'suggestEnabled':
     case 'visionEnabled':
     case 'agentEnabled':
@@ -594,6 +599,9 @@ function profileSummary(profile: ChatProfile) {
     isEnabled: profile.isEnabled,
     model: modelLabelOf(profile),
     modelSlotId: profile.modelSlotId,
+    reactionEnabled: profile.reactionEnabled,
+    reactionSlotId: profile.reactionSlotId,
+    removedModelRoles: profile.removedModelRoles,
     blockIds: profile.blockIds,
     lorebookIds: profile.lorebookIds,
     systemPromptLength: profile.systemPrompt.length,
@@ -624,6 +632,9 @@ export function profileSetupView(profile: ChatProfile, owner: string | null = nu
     summarySlotId: profile.summarySlotId,
     translationSlotId: profile.translationSlotId,
     suggestSlotId: profile.suggestSlotId,
+    reactionSlotId: profile.reactionSlotId,
+    reactionEnabled: profile.reactionEnabled,
+    removedModelRoles: profile.removedModelRoles,
     judgeSlotId: profile.judgeSlotId,
     judgePresetId: profile.judgePresetId,
     lorebookIds: profile.lorebookIds,

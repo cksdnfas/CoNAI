@@ -68,10 +68,20 @@ test('generation reactions: opt-in, one-shot recovery, user precedence and speak
   })
 
   await t.test('default off and old links after enabling make zero model requests', async (s) => {
+    const legacyOn = threadOf(false)
+    const legacyOff = threadOf(false)
+    db().prepare('UPDATE codex_chat_threads SET reaction_enabled = 1 WHERE id = ?').run(legacyOn.id)
+    db().exec('ALTER TABLE codex_chat_threads DROP COLUMN reaction_enabled_override')
+    dbModule.closeUserSettingsDb()
+    dbModule.initializeUserSettingsDb()
+    assert.equal(CodexChatStore.findThreadById(legacyOn.id)!.reaction_enabled, 1)
+    assert.equal(CodexChatStore.findThreadById(legacyOff.id)!.reaction_enabled, null)
+    CodexChatStore.deleteThread(legacyOn.id)
+    CodexChatStore.deleteThread(legacyOff.id)
     let calls = 0
     s.mock.method(globalThis, 'fetch', async (_url: unknown, init?: RequestInit) => { if (!init?.method || init.method === 'GET') return new Response('', { status: 404 }); calls++; return replyResponse('완성됐어.') })
     const thread = threadOf(false)
-    assert.equal(thread.reaction_enabled, 0)
+    assert.equal(thread.reaction_enabled, null)
     const linked = attach(thread)
     await reactions.reconcile(thread.id)
     CodexChatStore.updateThreadContext(thread.id, { reactionEnabled: true })
@@ -79,6 +89,45 @@ test('generation reactions: opt-in, one-shot recovery, user precedence and speak
     assert.equal(calls, 0)
     assert.equal(state(linked.replyId), undefined)
     assert.equal(db().prepare('SELECT reaction_target FROM chat_generation_links WHERE job_id = ?').get(linked.jobIds[0])!.reaction_target, 0)
+  })
+
+  await t.test('profile reactions inherit defaults, honor nullable chat overrides, and resolve missing models safely', async (s) => {
+    const reactionSlot = ModelSlotStore.ensure('test', 'profile-reaction')!
+    const overrideSlot = ModelSlotStore.ensure('test', 'chat-reaction')!
+    const chatSlot = ModelSlotStore.ensure('test', 'chat-override')!
+    const reacting = ChatProfileStore.create({ name: 'default reactions', providerName: 'test', model: 'default-chat',
+      reactionEnabled: true, reactionSlotId: reactionSlot })
+    const models: string[] = []
+    s.mock.method(globalThis, 'fetch', async (_url: unknown, init?: RequestInit) => {
+      if (!init?.method || init.method === 'GET') return new Response('', { status: 404 })
+      models.push(JSON.parse(String(init.body)).model)
+      return replyResponse('Done.')
+    })
+    const thread = threadOf(false, 'llm', reacting.id)
+    const run = async () => {
+      const linked = attach(thread, ['completed'], reacting.id)
+      await reactions.reconcile(thread.id)
+      return linked
+    }
+    assert.equal(thread.reaction_enabled, null)
+    await run()
+    assert.deepEqual(models, ['profile-reaction'])
+    CodexChatStore.updateThreadContext(thread.id, { reactionModelSlotId: overrideSlot })
+    await run()
+    assert.deepEqual(models, ['profile-reaction', 'chat-reaction'])
+    CodexChatStore.updateThreadContext(thread.id, { reactionEnabled: false })
+    const off = await run()
+    assert.equal(state(off.replyId), undefined)
+    assert.equal(models.length, 2)
+    CodexChatStore.updateThreadContext(thread.id, { reactionEnabled: null, reactionModelSlotId: 999999 })
+    await run()
+    assert.equal(models.at(-1), 'profile-reaction')
+    ChatProfileStore.update(reacting.id, { reactionSlotId: null, reactionEnabled: false })
+    CodexChatStore.updateThreadContext(thread.id, { reactionEnabled: true, chatModelSlotId: chatSlot })
+    await run()
+    assert.equal(models.at(-1), 'chat-override')
+    CodexChatStore.deleteThread(thread.id)
+    ChatProfileStore.delete(reacting.id)
   })
 
   await t.test('all jobs must end: one reaction, one result block, no tools or user row, with diagnostics and owner event', async (s) => {

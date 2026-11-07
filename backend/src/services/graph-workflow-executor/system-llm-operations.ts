@@ -31,6 +31,14 @@ export function normalizeOptionalId(value: unknown) {
   return number !== null && Number.isSafeInteger(number) && number > 0 ? number : null
 }
 
+export function workflowModelSlotId(node: GraphWorkflowNode, inputs: Record<string, unknown>) {
+  const id = normalizeOptionalId(inputs.model_slot_id)
+  if (id === null && node.input_values?.model_slot_removed === true) {
+    throw new Error('모델이 삭제되어 이 노드의 모델 설정이 비어 있어. 모델을 다시 골라줘.')
+  }
+  return id
+}
+
 function resolveOptionalJsonText(value: unknown) {
   if (typeof value === 'string') {
     return value.trim().length > 0 ? value : null
@@ -63,7 +71,7 @@ export async function executeCallLlmNode(
   // The model row (★ default when empty) or a chat profile picks the model; the node's temperature / output limit /
   // reasoning, when filled, win. Graphs saved before rows still name a bare connection (+ model).
   const profileId = normalizeOptionalId(resolvedInputs.profile_id)
-  const modelSlotId = normalizeOptionalId(resolvedInputs.model_slot_id)
+  const modelSlotId = workflowModelSlotId(node, resolvedInputs)
   const prompt = normalizeOptionalString(resolvedInputs.prompt) ?? ''
   const systemPrompt = normalizeOptionalString(resolvedInputs.system_prompt)
   const contextValue = normalizeOptionalString(resolvedInputs.context)

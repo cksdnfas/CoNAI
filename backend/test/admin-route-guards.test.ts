@@ -67,6 +67,32 @@ test('maintenance routes are admin-only and search history is per account', { ti
   AuthPermissionGroup.addAccountMembership(group.id, otherId)
   invalidateConfiguredAuthCache()
 
+  await t.test('model replacement candidates are admin-only and offered replacements work through HTTP deletion', async () => {
+    const { ModelSlotStore, deleteModelsOfConnection } = await import('../src/services/codex-chat/modelSlots')
+    const { ChatProfileStore } = await import('../src/services/codex-chat/chatProfiles')
+    const { ExternalApiProvider } = await import('../src/models/ExternalApiProvider')
+    ExternalApiProvider.create({ provider_name: 'candidate-http', display_name: 'Candidates', provider_type: 'llm_ollama', base_url: 'http://unused.invalid' })
+    const old = ModelSlotStore.ensure('candidate-http', 'old')!
+    const replacement = ModelSlotStore.ensure('candidate-http', 'replacement')!
+    const profile = ChatProfileStore.create({ name: 'HTTP replacement', modelSlotId: old })
+    const url = '/api/codex-chat/admin/model-slots/replacement-candidates'
+    assert.equal((await call(url, 0, 'POST', { slotIds: [old] })).status, 401)
+    assert.equal((await call(url, guestId, 'POST', { slotIds: [old] })).status, 403)
+    assert.equal((await call(url, adminId, 'POST', { slotIds: ['invalid'] })).status, 400)
+    const candidates = await call(url, adminId, 'POST', { slotIds: [old] })
+    assert.equal(candidates.status, 200)
+    assert.equal(candidates.body.success, true)
+    assert.ok(candidates.body.data.slotIds.includes(replacement))
+    assert.ok(!candidates.body.data.slotIds.includes(old))
+    const removed = await call(`/api/codex-chat/admin/model-slots/${old}`, adminId, 'DELETE', { replacementSlotId: replacement })
+    assert.equal(removed.status, 200)
+    assert.deepEqual(removed.body, { success: true, data: { deleted: true } })
+    assert.equal(ChatProfileStore.find(profile.id)!.modelSlotId, replacement)
+    ChatProfileStore.delete(profile.id)
+    deleteModelsOfConnection('candidate-http')
+    ExternalApiProvider.delete('candidate-http')
+  })
+
   await t.test('moving resource editors keeps administrator access; personal settings cannot run shared actions', async () => {
     const { requireChatPageAccess, requireChatPageActionAccess } = await import('../src/services/codex-chat/chatPageContext')
     const guest = { accountId: guestId, accountType: 'guest' as const }

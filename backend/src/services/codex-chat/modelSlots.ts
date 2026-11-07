@@ -6,6 +6,8 @@ import { ChatProfileError } from './chatProfileError'
 import { TYPESAFE_DEFAULT_MODEL } from '../judge/typesafeClient'
 import { publishRuntimeEvent } from '../runtime-events/runtimeEventBus'
 import { loadPostsSettings } from '../posts/postsSettings'
+import { loadContentEvaluationSettings, updateContentEvaluationSettings } from '../contentEvaluation/definitionStore'
+import { replaceWorkflowModelReferences, workflowNodeRefs } from './modelUsage'
 
 /**
  * The models of the LLM connections and the representative models (대표모델) that route to them.
@@ -18,15 +20,15 @@ import { loadPostsSettings } from '../posts/postsSettings'
  * nodes reference rows of either kind by id and resolve them at request time. The table and the code keep the older
  * "slot" name; `is_default` / `is_default_judge` mirror the chat and judge routes' targets for older readers.
  */
-export type ModelRole = 'chat' | 'summary' | 'translation' | 'suggest'
+export type ModelRole = 'chat' | 'summary' | 'translation' | 'suggest' | 'reaction'
 
-export const MODEL_ROLES: readonly ModelRole[] = ['chat', 'summary', 'translation', 'suggest']
+export const MODEL_ROLES: readonly ModelRole[] = ['chat', 'summary', 'translation', 'suggest', 'reaction']
 
 /** What a profile uses a row for: one of its model roles, or its judge. */
 export type ModelUseRole = ModelRole | 'judge'
 
 /** The built-in routes, one per part. */
-export type RouteKey = ModelUseRole
+export type RouteKey = Exclude<ModelUseRole, 'reaction'>
 
 export const ROUTE_KEYS: readonly RouteKey[] = ['chat', 'summary', 'translation', 'suggest', 'judge']
 
@@ -88,6 +90,13 @@ export type ModelSlot = {
   /** Direct chats and room members whose chat model uses it. */
   chatModels: number
   contentEvaluations?: number
+  workflowNodes: number
+  /** On the judge route: consumers with no usable configured/default model, including blanked named routes. */
+  unconfiguredConsumers?: {
+    judgePresets: Array<{ id: number; name: string }>
+    contentEvaluations: number
+    routes: Array<{ id: number; name: string }>
+  }
   createdDate: string
   updatedDate: string
 }
@@ -101,6 +110,7 @@ export const ROLE_SLOT_COLUMNS: Record<ModelRole, string> = {
   summary: 'summary_slot_id',
   translation: 'translation_slot_id',
   suggest: 'suggest_slot_id',
+  reaction: 'reaction_slot_id',
 }
 
 /** A route's own "no ceiling" (null on a route follows its target's). */
@@ -127,7 +137,7 @@ type SlotRow = {
   updated_date: string
 }
 
-type ProfileUseRow = { id: number; name: string; engine: string | null; model_slot_id: number | null; summary_slot_id: number | null; translation_slot_id: number | null; suggest_slot_id: number | null; judge_slot_id: number | null }
+type ProfileUseRow = { id: number; name: string; engine: string | null; model_slot_id: number | null; summary_slot_id: number | null; translation_slot_id: number | null; suggest_slot_id: number | null; reaction_slot_id: number | null; judge_slot_id: number | null }
 
 type Usage = {
   profiles: Map<number, ModelSlot['profiles']>
@@ -136,6 +146,7 @@ type Usage = {
   chats: Map<number, number>
   chatModels: Map<number, number>
   contentEvaluations: Map<number, number>
+  workflowNodes: Map<number, number>
 }
 
 function push<T>(map: Map<number, T[]>, key: number | null, value: T) {
@@ -152,12 +163,13 @@ function count(map: Map<number, number>, key: number | null) {
 /** Every reference to every row, read once per listing. */
 function collectUsage(ids?: number[]): Usage {
   const db = getUserSettingsDb()
-  const usage: Usage = { profiles: new Map(), judgePresets: new Map(), userProfiles: new Map(), chats: new Map(), chatModels: new Map(), contentEvaluations: new Map() }
+  const usage: Usage = { profiles: new Map(), judgePresets: new Map(), userProfiles: new Map(), chats: new Map(), chatModels: new Map(), contentEvaluations: new Map(), workflowNodes: new Map() }
   if (ids?.length === 0) return usage
+  usage.workflowNodes = workflowNodeRefs().slots
   const selected = (column: string) => ids ? `${column} IN (${ids.join(',') || 'NULL'})` : `${column} IS NOT NULL`
   const profiles = db.prepare(`
-    SELECT id, name, engine, model_slot_id, summary_slot_id, translation_slot_id, suggest_slot_id, judge_slot_id FROM llm_chat_profiles
-    WHERE ${['model_slot_id', 'summary_slot_id', 'translation_slot_id', 'suggest_slot_id', 'judge_slot_id'].map(selected).join(' OR ')}
+    SELECT id, name, engine, model_slot_id, summary_slot_id, translation_slot_id, suggest_slot_id, reaction_slot_id, judge_slot_id FROM llm_chat_profiles
+    WHERE ${[...Object.values(ROLE_SLOT_COLUMNS), 'judge_slot_id'].map(selected).join(' OR ')}
     ORDER BY sort_order ASC, id ASC
   `).all() as ProfileUseRow[]
   for (const profile of profiles) {
@@ -186,6 +198,21 @@ function collectUsage(ids?: number[]): Usage {
   // Board knowledge evaluations keep their judge in the posts settings file.
   count(usage.contentEvaluations, loadPostsSettings().knowledge.judgeSlotId)
   return usage
+}
+
+function unconfiguredConsumers(rows: Map<number, SlotRow>): NonNullable<ModelSlot['unconfiguredConsumers']> {
+  const db = getUserSettingsDb()
+  const missing = (id: number | null) => id === null || !rows.has(id) || reachedId(rows.get(id)!, rows) === null
+  const judgeId = [...rows.values()].find((row) => routeKeyOf(row) === 'judge')?.id ?? null
+  const judgePresets = (db.prepare('SELECT id, name, model_slot_id FROM chat_judge_presets').all() as Array<{ id: number; name: string; model_slot_id: number | null }>)
+    .filter((preset) => missing(preset.model_slot_id ?? judgeId)).map(({ id, name }) => ({ id, name }))
+  const evaluation = loadContentEvaluationSettings()
+  const knowledge = loadPostsSettings().knowledge
+  const contentEvaluations = Number(evaluation.topics.some((topic) => topic.enabled) && missing(evaluation.modelSlotId ?? judgeId))
+    + Number(knowledge.enabled && knowledge.autoEvaluationEnabled && !knowledge.judgeProvider && missing(knowledge.judgeSlotId ?? judgeId))
+  const routes = [...rows.values()].filter((row) => row.is_route === 1 && routeKeyOf(row) === null && missing(row.id))
+    .map((row) => ({ id: row.id, name: routeNameOf(row) }))
+  return { judgePresets, contentEvaluations, routes }
 }
 
 function connectionOf(providerName: string) {
@@ -267,6 +294,7 @@ function toSlot(row: SlotRow, rows: Map<number, SlotRow>, usage: Usage, connecti
     chats: usage.chats.get(row.id) ?? 0,
     chatModels: usage.chatModels.get(row.id) ?? 0,
     contentEvaluations: usage.contentEvaluations.get(row.id) ?? 0,
+    workflowNodes: usage.workflowNodes.get(row.id) ?? 0,
     createdDate: row.created_date,
     updatedDate: row.updated_date,
   }
@@ -277,8 +305,8 @@ function holdingRoutes(slot: { routes?: ModelSlot['routes'] }) {
   return (slot.routes ?? []).filter((route) => route.key !== 'chat')
 }
 
-export function isSlotUsed(slot: Pick<ModelSlot, 'isDefaultJudge' | 'profiles' | 'judgePresets' | 'userProfiles' | 'chats' | 'chatModels' | 'contentEvaluations'> & { routes?: ModelSlot['routes'] }) {
-  return slot.isDefaultJudge || holdingRoutes(slot).length > 0 || slot.profiles.length > 0 || slot.judgePresets.length > 0 || slot.userProfiles > 0 || slot.chats > 0 || slot.chatModels > 0 || (slot.contentEvaluations ?? 0) > 0
+export function isSlotUsed(slot: Pick<ModelSlot, 'isDefaultJudge' | 'profiles' | 'judgePresets' | 'userProfiles' | 'chats' | 'chatModels' | 'contentEvaluations'> & { routes?: ModelSlot['routes']; workflowNodes?: number }) {
+  return slot.isDefaultJudge || holdingRoutes(slot).length > 0 || slot.profiles.length > 0 || slot.judgePresets.length > 0 || slot.userProfiles > 0 || (slot.contentEvaluations ?? 0) > 0 || (slot.workflowNodes ?? 0) > 0
 }
 
 /** "대표모델 대화 · 세라, 미나 · 판단 프리셋 기본 · 사용자 프로필 2" — who holds a row, for refusals. */
@@ -288,9 +316,8 @@ function describeUse(slot: ModelSlot) {
     slot.profiles.length > 0 ? slot.profiles.map((profile) => profile.name).join(', ') : null,
     slot.judgePresets.length > 0 ? `판단 프리셋 ${slot.judgePresets.map((preset) => preset.name).join(', ')}` : null,
     slot.userProfiles > 0 ? `사용자 프로필 ${slot.userProfiles}` : null,
-    slot.chats > 0 ? `채팅 반응 ${slot.chats}` : null,
-    slot.chatModels > 0 ? `채팅 모델 ${slot.chatModels}` : null,
     (slot.contentEvaluations ?? 0) > 0 ? '콘텐츠 평가' : null,
+    slot.workflowNodes > 0 ? `워크플로우 노드 ${slot.workflowNodes}` : null,
   ].filter(Boolean).join(' · ')
 }
 
@@ -417,7 +444,7 @@ function publishJudgeChange() {
 }
 
 /** Changing a shared target must not turn a live chat role into a decision-only (or non-model) connection. */
-function assertConsumerKinds(ids: number[], type: string) {
+function assertConsumerKinds(ids: number[], type: string, workflow = workflowNodeRefs()) {
   if (LLM_CONNECTION_TYPES.includes(type) || !ids.length) return
   const db = getUserSettingsDb()
   const inIds = ids.join(',')
@@ -426,8 +453,6 @@ function assertConsumerKinds(ids: number[], type: string) {
   const columns = [...Object.values(ROLE_SLOT_COLUMNS), ...(!judgeAllowed ? ['judge_slot_id'] : [])]
   for (const row of db.prepare(`SELECT name FROM llm_chat_profiles WHERE ${columns.map((column) => `${column} IN (${inIds})`).join(' OR ')}`).all() as Array<{ name: string }>) uses.push(row.name)
   for (const row of db.prepare(`SELECT id, name FROM chat_user_profiles WHERE model_slot_id IN (${inIds})`).all() as Array<{ id: number; name: string }>) uses.push(`사용자 프로필 ${row.name} (#${row.id})`)
-  for (const row of db.prepare(`SELECT id FROM codex_chat_threads WHERE reaction_model_slot_id IN (${inIds})`).all() as Array<{ id: number }>) uses.push(`채팅 반응 #${row.id}`)
-  for (const row of db.prepare(`SELECT id FROM codex_chat_threads WHERE chat_model_slot_id IN (${inIds}) UNION SELECT thread_id AS id FROM chat_group_members WHERE chat_model_slot_id IN (${inIds})`).all() as Array<{ id: number }>) uses.push(`채팅 모델 #${row.id}`)
   for (const row of db.prepare(`SELECT name FROM chat_judge_presets WHERE escalation_slot_id IN (${inIds}) ${judgeAllowed ? '' : `OR model_slot_id IN (${inIds})`}`).all() as Array<{ name: string }>) uses.push(`판단 프리셋 ${row.name}`)
   const routes = db.prepare(`SELECT * FROM llm_model_slots WHERE id IN (${inIds}) AND is_route = 1`).all() as SlotRow[]
   for (const row of routes) if (routeKeyOf(row) && (!judgeAllowed || routeKeyOf(row) !== 'judge')) uses.push(`대표모델 ${routeNameOf(row)}`)
@@ -435,7 +460,110 @@ function assertConsumerKinds(ids: number[], type: string) {
     if (db.prepare(`SELECT 1 FROM content_evaluation_settings WHERE model_slot_id IN (${inIds}) LIMIT 1`).get()
       || ids.includes(loadPostsSettings().knowledge.judgeSlotId ?? 0)) uses.push('콘텐츠 평가')
   }
+  if (ids.some((id) => (judgeAllowed ? workflow.llmSlots : workflow.slots).has(id))) uses.push('워크플로우 노드')
   if (uses.length) throw new ChatProfileError(`이 연결 종류는 현재 사용하는 곳과 호환되지 않아: ${[...new Set(uses)].join(', ')}`)
+}
+
+function clearOverrides(ids: number[]) {
+  if (!ids.length) return
+  const db = getUserSettingsDb()
+  for (const [table, column] of [
+    ['codex_chat_threads', 'reaction_model_slot_id'],
+    ['codex_chat_threads', 'chat_model_slot_id'],
+    ['chat_group_members', 'chat_model_slot_id'],
+  ]) db.prepare(`UPDATE ${table} SET ${column} = NULL WHERE ${column} IN (${ids.join(',')})`).run()
+}
+
+/** Shared, read-only validation for candidates and removal, including indirect consumers of the chat route. */
+function replacementFor(ids: number[], value: unknown, rows = allRows(), workflow = workflowNodeRefs()) {
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || ids.includes(value)) throw new ChatProfileError('대체 모델을 다시 골라줘.')
+  const replacement = ModelSlotStore.checked(value, MODEL_CONNECTION_TYPES)
+  const target = ModelSlotStore.target(replacement)
+  if (!target || ids.includes(target.id)) throw new ChatProfileError('삭제하지 않는 대체 모델을 골라줘.')
+  const type = ExternalApiProvider.findByName(target.providerName)?.provider_type
+  if (!type || !MODEL_CONNECTION_TYPES.includes(type)) throw new ChatProfileError('대체 모델의 연결을 찾을 수 없어.')
+  const consumers = [...new Set([...ids, ...[...rows.values()].filter((row) => {
+    const reached = reachedId(row, rows)
+    return reached !== null && ids.includes(reached)
+  }).map((row) => row.id)])]
+  assertConsumerKinds(consumers, type, workflow)
+  return { replacement, targetId: target.id, consumers, type }
+}
+
+/** All callers own one transaction around reference changes and the actual deletion. */
+function removeRows(slots: ModelSlot[], replacementSlotId: unknown, verb = '지울') {
+  if (!slots.length) return
+  const db = getUserSettingsDb()
+  const ids = slots.map((slot) => slot.id)
+  const inIds = ids.join(',')
+  const blocked = slots.filter(isSlotUsed)
+  if (replacementSlotId === undefined && blocked.length) {
+    throw new ChatProfileError(`쓰는 곳이 있어서 ${verb} 수 없어: ${verb === '뺄'
+      ? blocked.map((slot) => `${slot.model} (${describeUse(slot)})`).join(', ')
+      : blocked.map(describeUse).join(', ')}`)
+  }
+  const routes = db.prepare(`SELECT * FROM llm_model_slots WHERE target_slot_id IN (${inIds}) AND is_route = 1 AND route_key IS NOT 'chat'`).all() as SlotRow[]
+  let replacement: number | null = null
+  let routeReplacement: number | null = null
+  if (replacementSlotId !== undefined && replacementSlotId !== null) {
+    const validated = replacementFor(ids, replacementSlotId)
+    replacement = validated.replacement
+    routeReplacement = validated.targetId
+    if (!LLM_CONNECTION_TYPES.includes(validated.type)) clearOverrides(validated.consumers)
+  }
+  // Clearing a route's target also clears its consumers instead of silently enabling a fallback feature.
+  const affected = replacementSlotId === null ? [...ids, ...routes.map((route) => route.id)] : ids
+  const inAffected = affected.join(',')
+  const roleColumns: Record<ModelUseRole, string> = { ...ROLE_SLOT_COLUMNS, judge: 'judge_slot_id' }
+  const profiles = db.prepare(`SELECT id, removed_model_roles, ${Object.values(roleColumns).join(',')}
+    FROM llm_chat_profiles WHERE ${Object.values(roleColumns).map((column) => `${column} IN (${inAffected})`).join(' OR ')}`).all() as
+    Array<Record<string, unknown> & { id: number; removed_model_roles: string | null }>
+  for (const profile of profiles) {
+    const removed = new Set<ModelUseRole>(JSON.parse(profile.removed_model_roles ?? '[]'))
+    const changes: Record<string, unknown> = {}
+    for (const [role, column] of Object.entries(roleColumns) as Array<[ModelUseRole, string]>) {
+      if (!affected.includes(profile[column] as number)) continue
+      changes[column] = replacement
+      if (replacement !== null) { removed.delete(role); continue }
+      removed.add(role)
+      if (role === 'chat') changes.is_enabled = 0
+      if (role === 'summary') changes.summary_enabled = 0
+      if (role === 'suggest') {
+        changes.suggest_enabled = 0
+        changes.suggest_profile_id = null
+        changes.suggest_user_profile_id = null
+      }
+      if (role === 'reaction') changes.reaction_enabled = 0
+      if (role === 'judge') changes.judge_preset_id = null
+    }
+    changes.removed_model_roles = removed.size ? JSON.stringify([...removed]) : null
+    db.prepare(`UPDATE llm_chat_profiles SET ${Object.keys(changes).map((key) => `${key} = @${key}`).join(', ')}, updated_date = datetime('now') WHERE id = @id`).run({ ...changes, id: profile.id })
+  }
+  for (const [table, column] of [
+    ['chat_judge_presets', 'model_slot_id'],
+    ['chat_judge_presets', 'escalation_slot_id'],
+    ['chat_user_profiles', 'model_slot_id'],
+  ]) db.prepare(`UPDATE ${table} SET ${column} = ? WHERE ${column} IN (${inAffected})`).run(replacement)
+  const evaluation = loadContentEvaluationSettings()
+  if (evaluation.modelSlotId !== null && affected.includes(evaluation.modelSlotId)) {
+    updateContentEvaluationSettings({ ...evaluation, expectedRevision: evaluation.revision, modelSlotId: replacement })
+  }
+  // The schema migrated legacy file references into this same database.
+  const knowledge = loadPostsSettings().knowledge
+  if (knowledge.judgeSlotId !== null && affected.includes(knowledge.judgeSlotId)) {
+    db.prepare('UPDATE posts_knowledge_model SET model_slot_id = ?, provider_name = NULL, model = NULL WHERE id = 1').run(replacement)
+  }
+  clearOverrides(affected)
+  replaceWorkflowModelReferences(affected, replacement)
+  for (const route of routes) {
+    const key = routeKeyOf(route)
+    if (key) pointRoute(key, routeReplacement)
+    else db.prepare('UPDATE llm_model_slots SET target_slot_id = ?, updated_date = datetime(\'now\') WHERE id = ?').run(routeReplacement, route.id)
+  }
+  const chat = routeRow('chat')
+  if (routeReplacement !== null && chat?.target_slot_id != null && ids.includes(chat.target_slot_id)) pointRoute('chat', routeReplacement)
+  db.prepare(`DELETE FROM llm_model_slots WHERE id IN (${inIds})`).run()
+  settleChatRoute()
 }
 
 export function assertConnectionTypeChange(providerName: string, type: string) {
@@ -446,9 +574,26 @@ export function assertConnectionTypeChange(providerName: string, type: string) {
     return id !== null && rows.get(id)?.provider_name === providerName
   }).map((row) => row.id)
   assertConsumerKinds(ids, type)
+  if (!LLM_CONNECTION_TYPES.includes(type)) clearOverrides(ids)
 }
 
 export const ModelSlotStore = {
+  replacementCandidates(slotIds: unknown): number[] {
+    if (!Array.isArray(slotIds) || slotIds.some((id) => typeof id !== 'number' || !Number.isSafeInteger(id) || id <= 0)) throw new ChatProfileError('삭제할 모델 목록을 다시 골라줘.')
+    const ids = [...new Set(slotIds)] as number[]
+    if (!ids.length) return []
+    const rows = allRows()
+    for (const id of ids) {
+      const row = rows.get(id)
+      if (!row) throw new ChatProfileError('모델을 찾을 수 없어.')
+      if (routeKeyOf(row) !== null) throw new ChatProfileError('기본 대표모델은 지울 수 없어.')
+    }
+    const workflow = workflowNodeRefs()
+    return [...rows.keys()].filter((id) => {
+      try { replacementFor(ids, id, rows, workflow); return true }
+      catch (error) { if (error instanceof ChatProfileError) return false; throw error }
+    })
+  },
   /** A request-local, synchronous read batch; never retained across writes or async work. */
   withReadSnapshot<T>(read: () => T): T {
     if (readSnapshot) return read()
@@ -472,7 +617,10 @@ export const ModelSlotStore = {
     const usage = collectUsage(options.usage === false ? [] : undefined)
     const connections = new Map<string, { label: string; type: string | null }>()
     const routes = reverseRoutes(rows)
-    return [...rows.values()].sort(listOrder).map((row) => toSlot(row, rows, usage, connections, routes))
+    const slots = [...rows.values()].sort(listOrder).map((row) => toSlot(row, rows, usage, connections, routes))
+    const judge = slots.find((slot) => slot.routeKey === 'judge')
+    if (judge && options.usage !== false) judge.unconfiguredConsumers = unconfiguredConsumers(rows)
+    return slots
   },
 
   find(slotId: number) {
@@ -612,22 +760,16 @@ export const ModelSlotStore = {
 
   /**
    * Make a connection's rows exactly `models` (in that order): missing ones are added, the rest removed. A row still in
-   * use is never removed; the whole change is refused instead, naming who uses it.
+   * use requires an explicit replacement (null clears and disables affected roles).
    */
-  syncConnection(providerName: unknown, models: unknown) {
+  syncConnection(providerName: unknown, models: unknown, replacementSlotId?: unknown) {
     const connection = modelConnectionName(providerName)
     if (!Array.isArray(models)) throw new ChatProfileError('모델 목록이 필요해.')
     const wanted = [...new Set(models.map(modelName))]
     const db = getUserSettingsDb()
     db.transaction(() => {
       const current = ModelSlotStore.ofConnection(connection)
-      const blocked = current.filter((slot) => !wanted.includes(slot.model) && isSlotUsed(slot))
-      if (blocked.length > 0) {
-        throw new ChatProfileError(`쓰는 곳이 있어서 뺄 수 없어: ${blocked.map((slot) => `${slot.model} (${describeUse(slot)})`).join(', ')}`)
-      }
-      for (const slot of current) {
-        if (!wanted.includes(slot.model)) db.prepare('DELETE FROM llm_model_slots WHERE id = ?').run(slot.id)
-      }
+      removeRows(current.filter((slot) => !wanted.includes(slot.model)), replacementSlotId, '뺄')
       for (const model of wanted) {
         if (findRowId(connection, model) === null) insertRow(connection, model)
       }
@@ -637,6 +779,7 @@ export const ModelSlotStore = {
       ids.forEach((id, index) => db.prepare('UPDATE llm_model_slots SET sort_order = ? WHERE id = ?').run(orders[index], id))
       settleChatRoute()
     })()
+    publishJudgeChange()
     return ModelSlotStore.ofConnection(connection)
   },
 
@@ -709,7 +852,13 @@ export const ModelSlotStore = {
         const target = routeTarget(input.targetSlotId, key)
         if (target !== null) {
           const provider = ModelSlotStore.target(target)?.providerName
-          if (provider) assertConsumerKinds([routeId], ExternalApiProvider.findByName(provider)!.provider_type)
+          if (provider) {
+            const type = ExternalApiProvider.findByName(provider)!.provider_type
+            const rows = allRows()
+            const consumers = [routeId, ...[...rows.values()].filter((entry) => key === 'chat' && followsChatRow(entry)).map((entry) => entry.id)]
+            assertConsumerKinds(consumers, type)
+            if (!LLM_CONNECTION_TYPES.includes(type)) clearOverrides(consumers)
+          }
         }
         if (key) pointRoute(key, target)
         else db.prepare('UPDATE llm_model_slots SET target_slot_id = ? WHERE id = ?').run(target, routeId)
@@ -723,20 +872,20 @@ export const ModelSlotStore = {
   },
 
   /**
-   * Removes an unused model row or named route (refused while anything references it; built-in routes stay).
+   * Removes a model row or named route; configured consumers require an explicit replacement. Built-in routes stay.
    * The chat route moves to the first LLM row left when its model goes.
    */
-  delete(slotId: number) {
-    const slot = ModelSlotStore.find(slotId)
-    if (!slot) return false
-    if (slot.routeKey !== null) throw new ChatProfileError('기본 대표모델은 지울 수 없어.')
-    if (isSlotUsed(slot)) throw new ChatProfileError(`쓰는 곳이 있어서 지울 수 없어: ${describeUse(slot)}`)
+  delete(slotId: number, replacementSlotId?: unknown) {
     const db = getUserSettingsDb()
-    return db.transaction(() => {
-      const deleted = db.prepare('DELETE FROM llm_model_slots WHERE id = ?').run(slotId).changes > 0
-      settleChatRoute()
-      return deleted
+    const deleted = db.transaction(() => {
+      const slot = ModelSlotStore.find(slotId)
+      if (!slot) return false
+      if (slot.routeKey !== null) throw new ChatProfileError('기본 대표모델은 지울 수 없어.')
+      removeRows([slot], replacementSlotId)
+      return true
     })()
+    if (deleted) publishJudgeChange()
+    return deleted
   },
 }
 
@@ -751,12 +900,11 @@ export function modelReferencesOfConnection(providerName: string): { models: str
   return { models: ModelSlotStore.ofConnection(providerName).filter(isSlotUsed).map((slot) => `${slot.model} (${describeUse(slot)})`) }
 }
 
-/** Drop a deleted connection's rows (all unused, see modelReferencesOfConnection). */
-export function deleteModelsOfConnection(providerName: string) {
+/** Drop a connection's rows and rewrite their references in the caller's transaction. */
+export function deleteModelsOfConnection(providerName: string, replacementSlotId?: unknown) {
   const db = getUserSettingsDb()
   db.transaction(() => {
-    db.prepare('DELETE FROM llm_model_slots WHERE is_route = 0 AND provider_name = ?').run(providerName)
-    settleChatRoute()
+    removeRows(ModelSlotStore.ofConnection(providerName), replacementSlotId)
   })()
 }
 

@@ -8,7 +8,7 @@ import { ChatSharedBlockStore, normalizeBlockIds } from './chatDisplayBlocks'
 import { ChatProfileError, ChatRevisionConflict } from './chatProfileError'
 import { AuthPermissionGroup } from '../../models/AuthPermissionGroup'
 import { ChatGenerationPresetStore, normalizeGenerationPresetIds } from './chatGenerationPresets'
-import { contentRatingTier, LLM_CONNECTION_TYPES, MODEL_CONNECTION_TYPES, ModelSlotStore } from './modelSlots'
+import { contentRatingTier, LLM_CONNECTION_TYPES, MODEL_CONNECTION_TYPES, MODEL_ROLES, ROLE_SLOT_COLUMNS, ModelSlotStore, type ModelUseRole } from './modelSlots'
 import { assertJudgeModel, ChatJudgePresetStore } from './chatJudgePresets'
 import { normalizeLinkedFiles, type LinkedFileLink } from './chatLinkedFiles'
 import { ChatSkillStore, normalizeSkillIds } from './chatSkills'
@@ -198,6 +198,9 @@ export type ChatProfile = {
    * With no model of its own (`suggestSlotId`) it uses the chat's (a Codex profile: its Codex model, in a one-shot run).
    */
   suggestEnabled: boolean
+  reactionEnabled: boolean
+  reactionSlotId: number | null
+  removedModelRoles: ModelUseRole[]
   /**
    * Model rows (llm_model_slots, a connection's model) per role. Chat null: the default row. Summary / suggestions
    * null: the chat's model. Translation null: no translation (when set, user messages go to the chat model in its
@@ -271,7 +274,7 @@ export type LegacyModelPairs = {
   judgeModel?: string | null
 }
 
-export type ChatProfileInput = Partial<Omit<ChatProfile, 'id' | 'revision' | 'backgroundRevision' | 'createdDate' | 'updatedDate' | 'characterLink' | 'characterExpressionGroupId'>> & { characterLink?: ChatProfileCharacterLinkInput } & LegacyModelPairs
+export type ChatProfileInput = Partial<Omit<ChatProfile, 'id' | 'revision' | 'backgroundRevision' | 'createdDate' | 'updatedDate' | 'characterLink' | 'characterExpressionGroupId' | 'removedModelRoles'>> & { characterLink?: ChatProfileCharacterLinkInput } & LegacyModelPairs
 
 /** Each role's slot field and the legacy pair keys that stand for it. */
 const LEGACY_PAIR_KEYS: Array<[keyof ChatProfileInput, keyof LegacyModelPairs, keyof ChatProfileInput]> = [
@@ -346,6 +349,9 @@ type ProfileRow = CharacterProfileRow & {
   summary_slot_id: number | null
   translation_slot_id: number | null
   suggest_slot_id: number | null
+  reaction_slot_id: number | null
+  reaction_enabled: number
+  removed_model_roles: string | null
   suggest_profile_id: number | null
   suggest_user_profile_id: number | null
   chat_style: string | null
@@ -506,6 +512,9 @@ function toProfile(row: ProfileRow, dependencies?: ProfileListDependencies): Cha
     translationModelLanguage: isChatTranslationLanguage(row.translation_model_language) ? row.translation_model_language : CHAT_TRANSLATION_DEFAULTS.modelLanguage,
     translationDisplayLanguage: isChatTranslationLanguage(row.translation_display_language) ? row.translation_display_language : CHAT_TRANSLATION_DEFAULTS.displayLanguage,
     suggestEnabled: row.suggest_enabled === 1,
+    reactionEnabled: row.reaction_enabled === 1,
+    reactionSlotId: slot(row.reaction_slot_id),
+    removedModelRoles: (parseJsonArray(row.removed_model_roles) ?? []).filter((role): role is ModelUseRole => [...MODEL_ROLES, 'judge'].includes(role as ModelUseRole)),
     // A row that no longer exists reads as unset (the next save clears the column).
     modelSlotId: slot(row.model_slot_id),
     summarySlotId: slot(row.summary_slot_id),
@@ -578,7 +587,7 @@ export function normalizeProfileScalarField(key: string, value: unknown): unknow
       integer: key !== 'temperature', nullable: ['temperature', 'maxTokens', 'contextTokens'].includes(key),
     })
   }
-  if (['summaryEnabled', 'suggestEnabled', 'visionEnabled', 'allowLoreProposals', 'agentEnabled', 'mcpEnabled', 'pageAssist', 'isEnabled'].includes(key)) return validateProfileFlag(key, value)
+  if (['summaryEnabled', 'suggestEnabled', 'reactionEnabled', 'visionEnabled', 'allowLoreProposals', 'agentEnabled', 'mcpEnabled', 'pageAssist', 'isEnabled'].includes(key)) return validateProfileFlag(key, value)
   if (Object.prototype.hasOwnProperty.call(PROFILE_SCALAR_TEXT_LIMITS, key)) return validateProfileText(key, value, PROFILE_SCALAR_TEXT_LIMITS[key], { required: key === 'name' })
   return value
 }
@@ -818,6 +827,8 @@ function toColumns(input: ChatProfileInput, options: { draft?: boolean; strictKe
     translation_model_language: isChatTranslationLanguage(input.translationModelLanguage) ? input.translationModelLanguage : null,
     translation_display_language: isChatTranslationLanguage(input.translationDisplayLanguage) ? input.translationDisplayLanguage : null,
     suggest_enabled: input.suggestEnabled ? 1 : 0,
+    reaction_enabled: input.reactionEnabled ? 1 : 0,
+    reaction_slot_id: roleSlot('reaction_slot_id', input.reactionSlotId, null, null),
     suggest_provider_name: null,
     suggest_model: null,
     model_slot_id: modelSlotId,
@@ -863,7 +874,7 @@ const ADMIN_PROFILE_COLUMNS = `id, folder_id, revision, background_revision, nam
   alternate_greetings, opening_history, greeting_position, temperature, max_tokens, mcp_enabled, mcp_scopes,
   allowed_group_keys, delegated_permissions, generation_preset_ids, context_turns, context_tokens, summary_enabled, summary_trigger_turns,
   summary_prompt, translation_instructions, translation_model_language, translation_display_language, suggest_enabled,
-  model_slot_id, summary_slot_id, translation_slot_id, suggest_slot_id, suggest_profile_id, suggest_user_profile_id,
+  model_slot_id, summary_slot_id, translation_slot_id, suggest_slot_id, reaction_slot_id, reaction_enabled, removed_model_roles, suggest_profile_id, suggest_user_profile_id,
   chat_style, vision_enabled, content_rating_mode, content_rating_tier_id, page_assist, allow_lore_proposals,
   agent_enabled, agent_description, linked_files, workspaces, skill_ids, judge_preset_id, judge_slot_id, is_enabled, sort_order, created_date, updated_date,
   CASE WHEN background_image IS NOT NULL AND background_image != '' THEN 'present' ELSE NULL END AS background_image`
@@ -922,7 +933,7 @@ export const ChatProfileStore = {
     // The public directory never sends prompts, greetings, linked-file contents or inline images.
     // Presence sentinels retain the legacy asset URLs without hydrating the base64 payloads.
     const projection = options.directory ? `id, folder_id, revision, background_revision, name, tagline, engine, model, llm_runtime, model_slot_id, summary_slot_id,
-      translation_slot_id, suggest_slot_id, suggest_profile_id, suggest_user_profile_id, suggest_enabled,
+      translation_slot_id, suggest_slot_id, reaction_slot_id, reaction_enabled, removed_model_roles, suggest_profile_id, suggest_user_profile_id, suggest_enabled,
       reasoning_effort, reasoning_budget_tokens, temperature, max_tokens, context_turns, context_tokens, summary_enabled,
       lore_depth, author_note, appearance, avatar_hash, avatar_crop, background_hash, reference_hash, chat_style, block_ids,
       mcp_enabled, mcp_scopes, tool_allowlist, allowed_group_keys, generation_preset_ids, allow_lore_proposals, agent_enabled, agent_description, page_assist, is_enabled, sort_order, created_date, updated_date,
@@ -939,7 +950,7 @@ export const ChatProfileStore = {
     `).all({ folderId: options.folderId ?? null, query: options.query ?? '', limit: options.limit ?? -1, offset: options.offset ?? 0 }) as ProfileRow[]
     if (!rows.length) return []
     const slots = new Set(ModelSlotStore.existingIds(rows.flatMap((row) =>
-      [row.model_slot_id, row.summary_slot_id, row.translation_slot_id, row.suggest_slot_id, row.judge_slot_id].filter((id): id is number => id !== null))))
+      [row.model_slot_id, row.summary_slot_id, row.translation_slot_id, row.suggest_slot_id, row.reaction_slot_id, row.judge_slot_id].filter((id): id is number => id !== null))))
     const judgeIds = [...new Set(rows.flatMap((row) => row.judge_preset_id ? [row.judge_preset_id] : []))]
     const judges = new Set(ChatJudgePresetStore.existingIds(judgeIds))
     const generationPresets = new Set(ChatGenerationPresetStore.existing([...new Set(rows.flatMap((row) => normalizeGenerationPresetIds(row.generation_preset_ids)))]))
@@ -1045,6 +1056,14 @@ export const ChatProfileStore = {
     if (patch.background !== undefined && patch.background !== current.background && (patch.backgroundHash === undefined || patch.backgroundHash === current.backgroundHash)) merged.backgroundHash = null
     const strictKeys = new Set(Object.entries(patch).filter(([, value]) => value !== undefined).map(([key]) => key))
     const columns = toColumns(merged, { strictKeys })
+    const removedModelRoles = current.removedModelRoles.filter((role) => {
+      const column = role === 'judge' ? 'judge_slot_id' : ROLE_SLOT_COLUMNS[role]
+      const enabled = role === 'chat' ? patch.isEnabled : role === 'summary' ? patch.summaryEnabled
+        : role === 'suggest' ? patch.suggestEnabled : role === 'reaction' ? patch.reactionEnabled
+          : role === 'judge' ? patch.judgePresetId != null : false
+      return (columns as Record<string, unknown>)[column] == null && !enabled
+    })
+    ;(columns as Record<string, unknown>).removed_model_roles = removedModelRoles.length ? JSON.stringify(removedModelRoles) : null
     // Unedited scalar content is not a new write: retain its exact stored representation, including legacy excess.
     for (const key of [...Object.keys(PROFILE_SCALAR_TEXT_LIMITS), ...Object.keys(CHAT_PROFILE_LIMITS), 'extraParams', 'reasoningBudgetTokens', 'sortOrder', 'promptSections', 'alternateGreetings', 'openingHistory']) {
       if (strictKeys.has(key)) continue

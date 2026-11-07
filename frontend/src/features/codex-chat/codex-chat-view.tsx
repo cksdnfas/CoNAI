@@ -1097,7 +1097,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
       ? <GroupContextView thread={thread} group={group} profilesById={profilesById} segments={threadQuery.data?.summarySegments ?? []} />
       : isCodexThread
         ? <CodexEngineContextView thread={thread} profiles={loreProfiles} profileEngine={profile?.engine ?? thread.engine} profileModelLabel={profile?.modelLabel ?? ''} noteDefaults={noteDefaults} />
-        : <CodexChatContextView thread={thread} profiles={loreProfiles} profileEngine={profile?.engine ?? thread.engine} profileModelLabel={profile?.modelLabel ?? ''} segments={threadQuery.data?.summarySegments ?? []} profileTurns={profile?.contextTurns ?? null} profileMaxTokens={profile?.maxTokens ?? null} profileReasoningBudget={profile?.reasoningBudgetTokens ?? null} profileSummaryEnabled={profile?.summaryEnabled ?? null} noteDefaults={noteDefaults} />}</Suspense>
+        : <CodexChatContextView thread={thread} profiles={loreProfiles} profileEngine={profile?.engine ?? thread.engine} profileModelLabel={profile?.modelLabel ?? ''} segments={threadQuery.data?.summarySegments ?? []} profileTurns={profile?.contextTurns ?? null} profileMaxTokens={profile?.maxTokens ?? null} profileReasoningBudget={profile?.reasoningBudgetTokens ?? null} profileSummaryEnabled={profile?.summaryEnabled ?? null} profileReaction={profile} noteDefaults={noteDefaults} />}</Suspense>
   let body: ReactNode
   if (activeThreadId === null) {
     // The unsaved new chat shows its greeting and the composer; otherwise there is no chat yet: the picker.

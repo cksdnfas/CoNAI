@@ -3,6 +3,8 @@ import path from 'path';
 import { DEFAULT_POSTS_SETTINGS, DEFAULT_POSTS_KNOWLEDGE_SETTINGS, POSTS_SAFETY_LIMITS, type PostListLayout, type PostsSafetySettings, type PostsSettings, type PostsKnowledgeSettings, type PostsTopicEvaluationSettings } from '@conai/shared';
 import { runtimePaths } from '../../config/runtimePaths';
 import { writeJsonFileAtomic } from '../../utils/jsonFile';
+import { getUserSettingsDb } from '../../database/userSettingsDb';
+import type Database from 'better-sqlite3';
 
 const POSTS_SETTINGS_FILE_PATH = path.join(runtimePaths.basePath, 'config', 'posts.json');
 const LAYOUTS: readonly PostListLayout[] = ['feed', 'cards', 'sns'];
@@ -60,6 +62,20 @@ export function normalizePostsSettings(value: unknown, fallback: PostsSettings =
 
 let cached: PostsSettings | null = null;
 let cachedStamp: string | null = null;
+function readPostsSettingsFile(): PostsSettings {
+  let stored: unknown = null;
+  try { stored = JSON.parse(fs.readFileSync(POSTS_SETTINGS_FILE_PATH, 'utf8')); } catch { /* first run */ }
+  return normalizePostsSettings(stored);
+}
+
+/** Called only by schema initialization, never by a settings read under a read transaction. */
+export function migratePostsKnowledgeModel(db: Database.Database): void {
+  if (db.prepare('SELECT 1 FROM posts_knowledge_model WHERE id = 1').get()) return;
+  const knowledge = readPostsSettingsFile().knowledge;
+  db.prepare('INSERT INTO posts_knowledge_model(id, model_slot_id, provider_name, model) VALUES(1, ?, ?, ?)')
+    .run(knowledge.judgeSlotId, knowledge.judgeProvider, knowledge.judgeModel);
+}
+
 function settingsStamp(): string | null {
   try {
     const stat = fs.statSync(POSTS_SETTINGS_FILE_PATH);
@@ -70,12 +86,14 @@ function settingsStamp(): string | null {
 export function loadPostsSettings(): PostsSettings {
   const stamp = settingsStamp();
   if (!cached || stamp !== cachedStamp) {
-    let stored: unknown = null;
-    try { stored = JSON.parse(fs.readFileSync(POSTS_SETTINGS_FILE_PATH, 'utf8')); } catch { /* first run */ }
-    cached = normalizePostsSettings(stored);
+    cached = readPostsSettingsFile();
     cachedStamp = stamp;
   }
-  return structuredClone(cached);
+  const db = getUserSettingsDb();
+  const model = db.prepare('SELECT model_slot_id, provider_name, model FROM posts_knowledge_model WHERE id = 1').get() as
+    { model_slot_id: number | null; provider_name: string | null; model: string | null };
+  return { ...structuredClone(cached), knowledge: { ...cached.knowledge,
+    judgeSlotId: model.model_slot_id, judgeProvider: model.provider_name, judgeModel: model.model } };
 }
 
 /** Merge a partial patch (safety merges field by field) and save. */
@@ -86,7 +104,10 @@ export function updatePostsSettings(patch: unknown): PostsSettings {
     knowledge: { ...current.knowledge, ...(input.knowledge && typeof input.knowledge === 'object' ? input.knowledge : {}) },
     topicEvaluation: { ...current.topicEvaluation, ...(input.topicEvaluation && typeof input.topicEvaluation === 'object' ? input.topicEvaluation : {}) } };
   const next = normalizePostsSettings(merged, current);
-  writeJsonFileAtomic(POSTS_SETTINGS_FILE_PATH, next);
+  const { judgeSlotId, judgeProvider, judgeModel, ...knowledge } = next.knowledge;
+  writeJsonFileAtomic(POSTS_SETTINGS_FILE_PATH, { ...next, knowledge });
+  getUserSettingsDb().prepare('UPDATE posts_knowledge_model SET model_slot_id = ?, provider_name = ?, model = ? WHERE id = 1')
+    .run(judgeSlotId, judgeProvider, judgeModel);
   cached = next;
   cachedStamp = settingsStamp();
   return loadPostsSettings();

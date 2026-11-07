@@ -206,8 +206,6 @@ async function execute(id: number, requester: McpRequester, chat: ChatExecutionC
     if (call.private_attachments) markPrivateAttachmentContext(room.id)
     table().prepare('UPDATE chat_agent_calls SET agent_thread_id = ?, agent_after_message_id = ? WHERE id = ?')
       .run(room.id, CodexChatStore.latestMessageId(room.id) ?? 0, id)
-    // There is no person to watch this room; only the caller's on_done reaction is allowed.
-    table().prepare('UPDATE codex_chat_threads SET reaction_enabled = 0 WHERE id = ?').run(room.id)
     signal.throwIfAborted()
     handedAttachments(requester, chat.threadId, fileIds)
     const result = await wakeChatRoom({ requester, threadId: room.id, instruction: call.instruction,

@@ -306,26 +306,18 @@ export function GenerationResultStage({
           })}
         </div>
         {canScrollLeft ? (
-          <button
-            type="button"
-            tabIndex={-1}
-            aria-label={t({ ko: '이전 페이지', en: 'Previous page' })}
-            onClick={() => scrollByPage(-1)}
-            className="absolute inset-y-0 left-0 z-10 flex cursor-pointer items-center bg-gradient-to-r from-background via-background/90 to-transparent pr-4 pl-1 text-foreground/45 hover:text-foreground"
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </button>
+          <div className="pointer-events-none absolute inset-y-0 left-0 z-10 flex items-center bg-gradient-to-r from-background via-background/90 to-transparent pr-3 pl-0.5">
+            <IconButton size="icon-xs" variant="ghost" tabIndex={-1} tooltip={false} label={t({ ko: '이전 페이지', en: 'Previous page' })} onClick={() => scrollByPage(-1)} className="pointer-events-auto">
+              <ChevronLeft />
+            </IconButton>
+          </div>
         ) : null}
         {canScrollRight ? (
-          <button
-            type="button"
-            tabIndex={-1}
-            aria-label={t({ ko: '다음 페이지', en: 'Next page' })}
-            onClick={() => scrollByPage(1)}
-            className="absolute inset-y-0 right-0 z-10 flex cursor-pointer items-center bg-gradient-to-l from-background via-background/90 to-transparent pl-4 pr-1 text-foreground/55 hover:text-foreground"
-          >
-            <ChevronRight className="h-4 w-4" />
-          </button>
+          <div className="pointer-events-none absolute inset-y-0 right-0 z-10 flex items-center bg-gradient-to-l from-background via-background/90 to-transparent pl-3 pr-0.5">
+            <IconButton size="icon-xs" variant="ghost" tabIndex={-1} tooltip={false} label={t({ ko: '다음 페이지', en: 'Next page' })} onClick={() => scrollByPage(1)} className="pointer-events-auto">
+              <ChevronRight />
+            </IconButton>
+          </div>
         ) : null}
         </div>
         {onShowHistory ? (

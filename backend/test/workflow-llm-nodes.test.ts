@@ -85,6 +85,40 @@ test('workflow LLM nodes: model resolution, chat-path requests, usage, new nodes
   })
   const node = { id: 'n1', module_id: 1, position: { x: 0, y: 0 } }
   const definition = { name: 'test node' } as never
+  await t.test('direct workflow model references require replacement and blank nodes cannot silently use defaults', async () => {
+    const old = ModelSlotStore.ensure('olla', 'workflow-removal-old')!
+    const replacement = ModelSlotStore.ensure('olla', 'workflow-removal-new')!
+    const moduleId = (db.prepare("SELECT id FROM module_definitions WHERE internal_fixed_values LIKE '%\"system.call_llm\"%'").get() as { id: number }).id
+    const graph = { nodes: [{ ...node, module_id: moduleId, input_values: { model_slot_id: old, prompt: 'test removal' } }], edges: [], preserved: 'unchanged' }
+    const id = Number(db.prepare('INSERT INTO graph_workflows(name, graph_json) VALUES(?, ?)').run('removal regression', JSON.stringify(graph)).lastInsertRowid)
+    const stored = () => db.prepare('SELECT graph_json, revision FROM graph_workflows WHERE id = ?').get(id) as { graph_json: string; revision: number }
+    const before = stored()
+    assert.equal(ModelSlotStore.find(old)!.workflowNodes, 1)
+    assert.throws(() => ModelSlotStore.delete(old), /워크플로우 노드/)
+    assert.ok(ModelSlotStore.replacementCandidates([old]).includes(replacement))
+    assert.ok(!ModelSlotStore.replacementCandidates([old]).includes(jev))
+    db.exec(`CREATE TEMP TRIGGER fail_workflow_removal BEFORE DELETE ON llm_model_slots WHEN OLD.id = ${old}
+      BEGIN SELECT RAISE(ABORT, 'workflow rollback'); END`)
+    assert.throws(() => ModelSlotStore.delete(old, replacement), /workflow rollback/)
+    db.exec('DROP TRIGGER fail_workflow_removal')
+    assert.deepEqual(stored(), before)
+    ModelSlotStore.delete(old, replacement)
+    const replaced = JSON.parse(stored().graph_json)
+    assert.equal(replaced.preserved, 'unchanged')
+    assert.equal(replaced.nodes[0].input_values.model_slot_id, replacement)
+    assert.ok(stored().revision > before.revision)
+    await executeCallLlmNode(context(), replaced.nodes[0], definition, replaced.nodes[0].input_values)
+    assert.equal(lastRequest().model, 'workflow-removal-new')
+    ModelSlotStore.delete(replacement, null)
+    const blank = JSON.parse(stored().graph_json).nodes[0]
+    assert.equal(blank.input_values.model_slot_id, null)
+    const calls = requests.length
+    await assert.rejects(executeCallLlmNode(context(), blank, definition, blank.input_values), /모델이 삭제/)
+    assert.equal(requests.length, calls)
+    await executeCallLlmNode(context(), blank, definition, { ...blank.input_values, model_slot_id: qwen })
+    assert.equal(lastRequest().model, 'qwen3')
+    db.prepare('DELETE FROM graph_workflows WHERE id = ?').run(id)
+  })
   const png = await sharp({ create: { width: 8, height: 8, channels: 3, background: '#3366cc' } }).png().toBuffer()
   const pngDataUrl = `data:image/png;base64,${png.toString('base64')}`
 

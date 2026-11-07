@@ -8,7 +8,6 @@ import { IconButton } from '@/components/ui/icon-button'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { SettingRow } from '@/components/ui/setting-row'
 import { Select } from '@/components/ui/select'
-import { Switch } from '@/components/ui/switch'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Textarea } from '@/components/ui/textarea'
 import { Tip } from '@/components/ui/tooltip'
@@ -91,20 +90,42 @@ function MemberLabel({ member }: { member: ChatProfileSummary }) {
   )
 }
 
-/** Per-chat opt-in, using the same public model slots as reply suggestions. */
-function GenerationReactionSettings({ thread }: { thread: CodexChatThread }) {
+/**
+ * The chat's own completion reactions over the profile's default: on/off and the model, each following the profile
+ * while null. `profile` is the 1:1 chat's profile (its default is shown); group rooms leave it out.
+ */
+function GenerationReactionSettings({ thread, profile }: { thread: CodexChatThread; profile?: Pick<ChatProfileSummary, 'reactionEnabled' | 'reactionSlotId'> | null }) {
   const { t } = useI18n()
   const queryClient = useQueryClient()
   const { showSnackbar } = useSnackbar()
   const models = useQuery({ queryKey: CHAT_MODEL_OPTIONS_QUERY_KEY, queryFn: listChatModelOptions, staleTime: 60_000 })
   const mutation = useMutation({
-    mutationFn: (patch: { reactionEnabled?: boolean; reactionModelSlotId?: number | null }) => updateCodexChatThreadContext(thread.id, patch),
+    mutationFn: (patch: { reactionEnabled?: boolean | null; reactionModelSlotId?: number | null }) => updateCodexChatThreadContext(thread.id, patch),
     onSuccess: (updated) => applyChatThreadUpdate(queryClient, updated),
     onError: (error) => showSnackbar({ message: getErrorMessage(error, t({ ko: '저장하지 못했어.', en: 'Could not save.' })), tone: 'error' }),
   })
+  const label = t({ ko: '완료 반응', en: 'Completion reaction' })
+  const profileLabel = t({ ko: '프로필', en: 'Profile' })
+  const mode: SummaryMode = thread.reaction_enabled === null ? 'profile' : thread.reaction_enabled === 1 ? 'on' : 'off'
+  const profileEnabled = profile?.reactionEnabled
+  const profileSlotId = profile?.reactionSlotId
+  const profileModel = profileSlotId === undefined ? null
+    : profileSlotId === null ? t({ ko: '대화 모델', en: 'chat model' })
+      : models.data?.find((model) => model.id === profileSlotId)?.label ?? t({ ko: '모델 #{id}', en: 'Model #{id}' }, { id: profileSlotId })
   return (
-    <SettingRow label={t({ ko: '완료 반응', en: 'Completion reaction' })}>
-      <div className="flex items-center gap-3">
+    <SettingRow label={label}>
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        <SegmentedControl
+          size="xs"
+          value={mode}
+          onChange={(next) => mutation.mutate({ reactionEnabled: next === 'profile' ? null : next === 'on' })}
+          items={[
+            { value: 'profile', label: profileEnabled === undefined ? profileLabel : `${profileLabel} (${profileEnabled ? t({ ko: '켬', en: 'on' }) : t({ ko: '끔', en: 'off' })})` },
+            { value: 'on', label: t({ ko: '켬', en: 'On' }) },
+            { value: 'off', label: t({ ko: '끔', en: 'Off' }) },
+          ]}
+          ariaLabel={label}
+        />
         <Select
           className="w-48"
           value={thread.reaction_model_slot_id === null ? '' : String(thread.reaction_model_slot_id)}
@@ -112,10 +133,9 @@ function GenerationReactionSettings({ thread }: { thread: CodexChatThread }) {
           disabled={mutation.isPending}
           aria-label={t({ ko: '완료 반응 모델', en: 'Completion reaction model' })}
         >
-          <option value="">{t({ ko: '대화 모델', en: 'Chat model' })}</option>
+          <option value="">{profileModel ? t({ ko: '프로필 설정 따름 · {model}', en: 'Profile setting · {model}' }, { model: profileModel }) : t({ ko: '프로필 설정 따름', en: 'Follow profile setting' })}</option>
           <ChatModelOptionItems models={models.data ?? []} part="chat" />
         </Select>
-        <Switch checked={thread.reaction_enabled === 1} onCheckedChange={(reactionEnabled) => mutation.mutate({ reactionEnabled })} disabled={mutation.isPending} aria-label={t({ ko: '완료 반응', en: 'Completion reaction' })} />
       </div>
     </SettingRow>
   )
@@ -508,7 +528,7 @@ function SummaryBlock({ thread, segments, summaryOn }: { thread: CodexChatThread
  * One LLM chat's context: its author's note, lorebooks, turn window, reply token cap and summary switch (all can
  * follow the profile), and the summary itself — the plot, the stretches after it, and the stretches the plot took in.
  */
-export function CodexChatContextView({ thread, profiles, profileEngine, profileModelLabel, segments, profileTurns, profileMaxTokens, profileReasoningBudget, profileSummaryEnabled, noteDefaults }: {
+export function CodexChatContextView({ thread, profiles, profileEngine, profileModelLabel, segments, profileTurns, profileMaxTokens, profileReasoningBudget, profileSummaryEnabled, profileReaction, noteDefaults }: {
   thread: CodexChatThread
   /** The chat's profile (for the lorebook block's merge and promote). */
   profiles: Array<{ id: number; name: string }>
@@ -522,6 +542,8 @@ export function CodexChatContextView({ thread, profiles, profileEngine, profileM
   profileMaxTokens: number | null
   profileReasoningBudget: number | null
   profileSummaryEnabled: boolean | null
+  /** The profile's completion reaction default, shown beside the chat's own. */
+  profileReaction?: Pick<ChatProfileSummary, 'reactionEnabled' | 'reactionSlotId'> | null
   noteDefaults: AuthorNoteDefaults
 }) {
   const { t } = useI18n()
@@ -545,7 +567,7 @@ export function CodexChatContextView({ thread, profiles, profileEngine, profileM
       <ChatUserProfileRow thread={thread} />
       <ChatModelRow thread={thread} engine={profileEngine} profileModelLabel={profileModelLabel} />
       <AuthorNoteBlock key={thread.id} thread={thread} defaults={noteDefaults} />
-      <GenerationReactionSettings thread={thread} />
+      <GenerationReactionSettings thread={thread} profile={profileReaction} />
       <LorebookBlock threadId={thread.id} loreAutoSave={thread.lore_auto_save} profiles={profiles} />
       <LinkedFilesBlock threadId={thread.id} group={thread.kind === 'group'} />
       <SettingRow label={t({ ko: '참고할 최근 턴 수', en: 'Recent turns sent' })}>

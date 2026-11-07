@@ -56,7 +56,7 @@ export type CodexChatThreadRecord = {
   author_note_depth: number | null
   /** This chat's reply length cap in tokens (null: the profile's max tokens). */
   max_tokens: number | null
-  reaction_enabled: 0 | 1
+  reaction_enabled: 0 | 1 | null
   reaction_model_slot_id: number | null
   chat_model_slot_id: number | null
   chat_model: string | null
@@ -420,7 +420,7 @@ export const CodexChatStore = {
 
   findThread(threadId: number, accountId: number | null) {
     return getUserSettingsDb().prepare(`
-      SELECT * FROM codex_chat_threads WHERE id = ? AND account_id IS ?
+      SELECT *, reaction_enabled_override AS reaction_enabled FROM codex_chat_threads WHERE id = ? AND account_id IS ?
     `).get(threadId, accountId) as CodexChatThreadRecord | undefined
   },
   hasNonPluginUserMessages(threadId: number) {
@@ -430,7 +430,7 @@ export const CodexChatStore = {
   },
 
   findThreadById(threadId: number) {
-    return getUserSettingsDb().prepare('SELECT * FROM codex_chat_threads WHERE id = ?').get(threadId) as CodexChatThreadRecord | undefined
+    return getUserSettingsDb().prepare('SELECT *, reaction_enabled_override AS reaction_enabled FROM codex_chat_threads WHERE id = ?').get(threadId) as CodexChatThreadRecord | undefined
   },
 
   createThread(accountId: number | null, title: string, engine: ChatEngine = 'codex', profileId: number | null = null) {
@@ -440,7 +440,7 @@ export const CodexChatStore = {
     return Number(result.lastInsertRowid)
   },
 
-  updateThreadContext(threadId: number, patch: ChatModelPatch & { contextTurns?: number | null; summaryEnabled?: boolean | null; authorNote?: string | null; authorNoteDepth?: number | null; maxTokens?: number | null; reactionEnabled?: boolean; reactionModelSlotId?: number | null; loreAutoSave?: boolean | null }) {
+  updateThreadContext(threadId: number, patch: ChatModelPatch & { contextTurns?: number | null; summaryEnabled?: boolean | null; authorNote?: string | null; authorNoteDepth?: number | null; maxTokens?: number | null; reactionEnabled?: boolean | null; reactionModelSlotId?: number | null; loreAutoSave?: boolean | null }) {
     const db = getUserSettingsDb()
     if (patch.chatModelSlotId !== undefined) db.prepare('UPDATE codex_chat_threads SET chat_model_slot_id = ? WHERE id = ?').run(patch.chatModelSlotId, threadId)
     if (patch.chatModel !== undefined) db.prepare('UPDATE codex_chat_threads SET chat_model = ? WHERE id = ?').run(patch.chatModel, threadId)
@@ -448,7 +448,7 @@ export const CodexChatStore = {
       db.prepare('UPDATE codex_chat_threads SET lore_auto_save = ? WHERE id = ?').run(patch.loreAutoSave === null ? null : patch.loreAutoSave ? 1 : 0, threadId)
     }
     if (patch.reactionEnabled !== undefined) {
-      db.prepare('UPDATE codex_chat_threads SET reaction_enabled = ? WHERE id = ?').run(patch.reactionEnabled ? 1 : 0, threadId)
+      db.prepare('UPDATE codex_chat_threads SET reaction_enabled_override = ? WHERE id = ?').run(patch.reactionEnabled === null ? null : patch.reactionEnabled ? 1 : 0, threadId)
     }
     if (patch.reactionModelSlotId !== undefined) {
       db.prepare('UPDATE codex_chat_threads SET reaction_model_slot_id = ? WHERE id = ?').run(patch.reactionModelSlotId, threadId)
@@ -485,7 +485,7 @@ export const CodexChatStore = {
   },
 
   findThreadByCodexId(codexThreadId: string) {
-    return getUserSettingsDb().prepare('SELECT * FROM codex_chat_threads WHERE codex_thread_id = ?').get(codexThreadId) as CodexChatThreadRecord | undefined
+    return getUserSettingsDb().prepare('SELECT *, reaction_enabled_override AS reaction_enabled FROM codex_chat_threads WHERE codex_thread_id = ?').get(codexThreadId) as CodexChatThreadRecord | undefined
   },
 
   setCodexUsage(codexThreadId: string, usage: { contextTokens: number | null; contextWindow: number | null; inputTokens: number; cachedInputTokens: number; outputTokens: number }) {

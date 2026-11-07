@@ -11,7 +11,8 @@ import { isProfileAssetHidden } from './chatProfileAssets'
 import { onChatReplyFinished } from './chatReplyRegistry'
 import { isChatOrderRunning } from './chatOrderRuns'
 import { CodexChatStore } from './codexChatStore'
-import { ChatProfileStore } from './chatProfiles'
+import { ChatProfileStore, type ChatProfile } from './chatProfiles'
+import { ModelSlotStore } from './modelSlots'
 import { ChatGroupStore } from './chatGroupStore'
 import { GroupChatService } from './groupChatService'
 import { LlmChatService } from './llmChatService'
@@ -23,6 +24,11 @@ import { inBackground } from '../llmRequestScheduler'
 type ReactionState = 'pending' | 'running' | 'done' | 'skipped' | 'failed'
 type Candidate = { reply_id: string; thread_id: number }
 type Job = { id: number; status: 'completed' | 'failed' | 'cancelled'; failure_code: string | null; requested_by_account_id: number | null }
+
+function reactionProfile(profile: ChatProfile, override: number | null): ChatProfile {
+  const slotId = [override, profile.reactionSlotId].find((id) => ModelSlotStore.target(id) !== null)
+  return slotId == null ? profile : { ...profile, modelSlotId: slotId }
+}
 
 /** Durable, one-shot reactions. Only links opted in at submission can enter this queue. */
 export class ChatGenerationReactionService {
@@ -96,7 +102,7 @@ export class ChatGenerationReactionService {
     const eligible = () => {
       const current = CodexChatStore.findThreadById(threadId)
       const currentProfile = profileId ? ChatProfileStore.find(profileId, threadId) : null
-      return Boolean(current && source && current.reaction_enabled === 1 && currentProfile?.isEnabled && currentProfile.engine === 'llm'
+      return Boolean(current && source && (current.reaction_enabled === null ? currentProfile?.reactionEnabled : current.reaction_enabled === 1) && currentProfile?.isEnabled && currentProfile.engine === 'llm'
         && CodexChatStore.findMessage(threadId, source.id)?.routing?.replyId === replyId
         && (current.kind === 'group' ? ChatGroupStore.member(threadId, currentProfile.id) : current.engine === 'llm' && current.profile_id === currentProfile.id)
         && (CodexChatStore.latestUserMessageId(threadId) ?? 0) <= source.id
@@ -116,7 +122,7 @@ export class ChatGenerationReactionService {
       const parts: ChatContentPart[] = []
       const lines: string[] = ['[Job results]']
       // The reaction model (the chat's own reaction row, else the profile's) decides which results it may be shown.
-      const limit = profileContentLimit(thread.reaction_model_slot_id === null ? profile : { ...profile, modelSlotId: thread.reaction_model_slot_id })
+      const limit = profileContentLimit(reactionProfile(profile, thread.reaction_model_slot_id))
       let withheld = 0
       const audioOrderJobs = audioOrderGroupsByQueueJob(jobs.map((job) => job.id))
       for (const job of jobs) {
@@ -143,7 +149,7 @@ export class ChatGenerationReactionService {
       const claimed = db.transaction(() => db.prepare("UPDATE chat_generation_reactions SET state = 'running', attempts = attempts + 1, updated_at = CURRENT_TIMESTAMP WHERE reply_id = ? AND state = 'pending'").run(replyId).changes > 0).immediate()
       if (!claimed) return
       const result: ChatCompletionMessage = { role: 'user', content: parts.length ? [{ type: 'text', text: lines.join('\n') }, ...parts] : lines.join('\n') }
-      const message = await LlmChatService.react(requester, current, current.reaction_model_slot_id === null ? currentProfile : { ...currentProfile, modelSlotId: current.reaction_model_slot_id }, {
+      const message = await LlmChatService.react(requester, current, reactionProfile(currentProfile, current.reaction_model_slot_id), {
         result,
         skip: () => { this.transition(replyId, 'running', 'skipped') },
         persist: (save) => db.transaction(() => {

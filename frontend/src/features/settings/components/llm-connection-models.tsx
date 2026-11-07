@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { FileText, Link2, Lock, Plus, RefreshCw, Route } from 'lucide-react'
+import { FileText, Link2, Plus, RefreshCw, Route, TriangleAlert } from 'lucide-react'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { EditorGroup } from '@/components/ui/editor-group'
 import { EditorFooter } from '@/components/ui/editor-footer'
@@ -8,7 +10,7 @@ import { Field } from '@/components/ui/field'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { ListRow } from '@/components/ui/list-row'
-import { Modal, ModalBody } from '@/components/ui/modal'
+import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
 import { ResourceRow, ResourceRowStat, ResourceRowStatus } from '@/components/ui/resource-row'
 import { Select } from '@/components/ui/select'
 import { useSnackbar } from '@/components/ui/snackbar-context'
@@ -25,8 +27,11 @@ import {
   createModelRoute,
   deleteModelSlot,
   listChatConnectionModels,
+  listModelSlots,
+  listReplacementCandidates,
   updateModelRoute,
   updateModelSlot,
+  type ModelReplacement,
   type ModelRouteKey,
   type ModelSlot,
   type ModelUseRole,
@@ -79,6 +84,7 @@ function useRoleLabels(): Record<ModelUseRole, string> {
     translation: t({ ko: '번역', en: 'Translation' }),
     suggest: t({ ko: '답장 추천', en: 'Suggestions' }),
     judge: t({ ko: '판단', en: 'Judge' }),
+    reaction: t({ ko: '완료 반응', en: 'Completion reaction' }),
   }
 }
 
@@ -88,32 +94,176 @@ export function useRouteName() {
   return (slot: Pick<ModelSlot, 'routeKey' | 'routeName'>) => (slot.routeKey ? roles[slot.routeKey] : slot.routeName ?? '')
 }
 
-/** How many things use a row (workflow nodes included). */
+/**
+ * How many things use a row (workflow nodes included). Chats' own picks (`chats`, `chatModels`) are not uses: removing
+ * the row sends those chats back to their profile's setting.
+ */
 export function slotUseCount(slot: ModelSlot, workflowNodes = 0) {
-  return slot.routes.length + slot.profiles.length + slot.judgePresets.length + slot.userProfiles + slot.chats + (slot.chatModels ?? 0) + (slot.contentEvaluations ?? 0) + workflowNodes
+  return slot.routes.length + slot.profiles.length + slot.judgePresets.length + slot.userProfiles + (slot.contentEvaluations ?? 0) + workflowNodes
 }
 
-/** Uses that hold a model row in place: all but the chat representative model, which moves to another model when its row goes. */
-function slotHoldCount(slot: ModelSlot, workflowNodes = 0) {
-  return slotUseCount(slot, workflowNodes) - slot.routes.filter((route) => route.key === 'chat').length
+/** Representative models holding a row: all but the chat one, which moves to another model when its row goes. */
+const holdingRoutes = (slot: ModelSlot) => slot.routes.filter((route) => route.key !== 'chat')
+
+/** Configuration that needs a replacement (or a deliberate blank) before the row goes, workflow nodes naming it included. */
+export function slotHoldCount(slot: ModelSlot) {
+  return holdingRoutes(slot).length + slot.profiles.length + slot.judgePresets.length + slot.userProfiles + (slot.contentEvaluations ?? 0) + (slot.workflowNodes ?? 0) + (slot.isDefaultJudge ? 1 : 0)
 }
 
-/** "대표모델: 대화\n세라 (대화, 요약)\n판단 프리셋: 기본\n워크플로 노드 2" — who uses a row, one kind per line. */
-function useUsageLines(slot: ModelSlot | null, workflowNodes: number) {
+/**
+ * "대표모델: 대화\n세라 (대화, 요약)\n판단 프리셋: 기본\n워크플로 노드 2" — who uses a row, one kind per line;
+ * `holdersOnly`: just what slotHoldCount counts.
+ */
+function useDescribeUse() {
   const { t } = useI18n()
   const roles = useRoleLabels()
   const routeName = useRouteName()
-  if (!slot) return []
-  return [
-    slot.routes.length > 0 ? `${t({ ko: '대표모델', en: 'Representative' })}: ${slot.routes.map((route) => routeName({ routeKey: route.key, routeName: route.name })).join(', ')}` : null,
-    slot.profiles.length > 0 ? slot.profiles.map((profile) => `${profile.name} (${profile.roles.map((role) => roles[role]).join(', ')})`).join(' · ') : null,
-    slot.judgePresets.length > 0 ? `${t({ ko: '판단 프리셋', en: 'Judge presets' })}: ${slot.judgePresets.map((preset) => preset.name).join(', ')}` : null,
-    slot.userProfiles > 0 ? t({ ko: '사용자 프로필 {count}', en: '{count} user profiles' }, { count: slot.userProfiles }) : null,
-    slot.chats > 0 ? t({ ko: '채팅 반응 {count}', en: '{count} chat reactions' }, { count: slot.chats }) : null,
-    (slot.chatModels ?? 0) > 0 ? t({ ko: '채팅 모델 {count}', en: '{count} chat models' }, { count: slot.chatModels ?? 0 }) : null,
-    (slot.contentEvaluations ?? 0) > 0 ? t({ ko: '게시판 평가', en: 'Board evaluations' }) : null,
-    workflowNodes > 0 ? t({ ko: '워크플로 노드 {count}', en: '{count} workflow nodes' }, { count: workflowNodes }) : null,
+  return (slot: ModelSlot | null, workflowNodes = 0, holdersOnly = false) => {
+    if (!slot) return []
+    const routes = holdersOnly ? holdingRoutes(slot) : slot.routes
+    return [
+      routes.length > 0 ? `${t({ ko: '대표모델', en: 'Representative' })}: ${routes.map((route) => routeName({ routeKey: route.key, routeName: route.name })).join(', ')}` : null,
+      holdersOnly && slot.isDefaultJudge ? t({ ko: '기본 판단 모델', en: 'Default judge' }) : null,
+      slot.profiles.length > 0 ? slot.profiles.map((profile) => `${profile.name} (${profile.roles.map((role) => roles[role]).join(', ')})`).join(' · ') : null,
+      slot.judgePresets.length > 0 ? `${t({ ko: '판단 프리셋', en: 'Judge presets' })}: ${slot.judgePresets.map((preset) => preset.name).join(', ')}` : null,
+      slot.userProfiles > 0 ? t({ ko: '사용자 프로필 {count}', en: '{count} user profiles' }, { count: slot.userProfiles }) : null,
+      (slot.contentEvaluations ?? 0) > 0 ? t({ ko: '게시판 평가', en: 'Board evaluations' }) : null,
+      (holdersOnly ? slot.workflowNodes ?? 0 : workflowNodes) > 0 ? t({ ko: '워크플로 노드 {count}', en: '{count} workflow nodes' }, { count: holdersOnly ? slot.workflowNodes ?? 0 : workflowNodes }) : null,
+    ].filter((line): line is string => line !== null)
+  }
+}
+
+/**
+ * Consumers left with no usable model (e.g. after a model was removed and left blank), as listed on the judge
+ * representative model: named so the admin can pick models for them again.
+ */
+export function UnconfiguredConsumersAlert({ slot }: { slot: ModelSlot | null | undefined }) {
+  const { t } = useI18n()
+  const consumers = slot?.unconfiguredConsumers
+  if (!consumers) return null
+  const lines = [
+    consumers.judgePresets.length > 0 ? `${t({ ko: '판단 프리셋', en: 'Judge presets' })}: ${consumers.judgePresets.map((preset) => preset.name).join(', ')}` : null,
+    consumers.contentEvaluations > 0 ? t({ ko: '게시판·주제 평가 {count}', en: '{count} board/topic evaluations' }, { count: consumers.contentEvaluations }) : null,
+    consumers.routes.length > 0 ? `${t({ ko: '대표모델', en: 'Representative models' })}: ${consumers.routes.map((route) => route.name).join(', ')}` : null,
+    (consumers.userProfiles ?? 0) > 0 ? t({ ko: '사용자 프로필 {count}', en: '{count} user profiles' }, { count: consumers.userProfiles ?? 0 }) : null,
   ].filter((line): line is string => line !== null)
+  if (lines.length === 0) return null
+  return (
+    <Alert variant="warning">
+      <TriangleAlert aria-hidden />
+      <AlertDescription>
+        <p>{t({ ko: '쓸 모델이 없어서 꺼진 곳이 있어. 판단 대표모델을 정하거나 각 설정에서 모델을 다시 골라.', en: 'Some settings have no usable model and are off. Point the judge representative model somewhere or pick a model in each setting.' })}</p>
+        <ul className="mt-1 space-y-0.5">{lines.map((line) => <li key={line} className="break-words">{line}</li>)}</ul>
+      </AlertDescription>
+    </Alert>
+  )
+}
+
+function useUsageLines(slot: ModelSlot | null, workflowNodes: number) {
+  return useDescribeUse()(slot, workflowNodes)
+}
+
+/** Rows per connection, in list order. */
+function connectionGroups(rows: ModelSlot[]) {
+  const groups: Array<{ key: string; label: string; rows: ModelSlot[] }> = []
+  for (const row of rows) {
+    const group = groups.find((entry) => entry.key === row.providerName)
+    if (group) group.rows.push(row)
+    else groups.push({ key: row.providerName, label: row.providerLabel, rows: [row] })
+  }
+  return groups
+}
+
+type RemovalRequest = { rows: ModelSlot[]; resolve: (choice: ModelReplacement | null) => void }
+
+/**
+ * Before model rows go: rows nothing holds go as they are (`{}`); otherwise a dialog lists who holds them and asks for
+ * a replacement row or a deliberate blank. `choose` resolves null when the admin cancels. Render `dialog`.
+ */
+export function useModelRemoval() {
+  const [request, setRequest] = useState<RemovalRequest | null>(null)
+  const choose = (rows: ModelSlot[]) => (rows.some((row) => slotHoldCount(row) > 0)
+    ? new Promise<ModelReplacement | null>((resolve) => setRequest({ rows, resolve }))
+    : Promise.resolve<ModelReplacement | null>({}))
+  const settle = (choice: ModelReplacement | null) => {
+    request?.resolve(choice)
+    setRequest(null)
+  }
+  return { choose, dialog: <ModelReplacementDialog request={request} onSettle={settle} /> }
+}
+
+function ModelReplacementDialog({ request, onSettle }: { request: RemovalRequest | null; onSettle: (choice: ModelReplacement | null) => void }) {
+  const { t } = useI18n()
+  const describe = useDescribeUse()
+  const rows = request?.rows ?? []
+  const slotIds = rows.map((row) => row.id)
+  const slotsQuery = useQuery({ queryKey: MODEL_SLOTS_QUERY_KEY, queryFn: listModelSlots, enabled: request !== null })
+  // The server decides which rows may take over (the same checks the removal runs).
+  const candidatesQuery = useQuery({
+    queryKey: ['codex-chat-model-replacement-candidates', ...slotIds],
+    queryFn: () => listReplacementCandidates(slotIds),
+    enabled: request !== null,
+    staleTime: 0,
+    gcTime: 0,
+  })
+  const [choice, setChoice] = useState('')
+  useEffect(() => { if (request) setChoice('') }, [request])
+  const allowed = new Set(candidatesQuery.data?.slotIds ?? [])
+  const candidates = (slotsQuery.data ?? []).filter((slot) => allowed.has(slot.id))
+  const routes = candidates.filter((slot) => slot.kind === 'route')
+  const groups = connectionGroups(candidates.filter((slot) => slot.kind === 'model'))
+  const label = t({ ko: '대신 쓸 모델', en: 'Replacement model' })
+  const confirm = () => onSettle({ replacementSlotId: choice === 'blank' ? null : Number(choice) })
+
+  return (
+    <Modal open={request !== null} onClose={() => onSettle(null)} title={t({ ko: '쓰는 곳이 있는 모델 삭제', en: 'Delete a model in use' })} size="md">
+      <ModalBody spacing="sm">
+        <p className="text-sm text-muted-foreground">{t({ ko: '아래 설정이 이 모델을 쓰고 있어. 대신 쓸 모델을 고르거나 비워 둬.', en: 'The settings below use this model. Pick a model to take over, or leave them blank.' })}</p>
+        {rows.filter((row) => slotHoldCount(row) > 0).map((row) => (
+          <EditorGroup key={row.id} label={row.label}>
+            <ul className="space-y-1 text-sm">{describe(row, 0, true).map((line) => <li key={line} className="break-words">{line}</li>)}</ul>
+          </EditorGroup>
+        ))}
+        <Field label={label} info={t({ ko: '채팅에서 따로 고른 모델은 이 선택과 관계없이 프로필 설정으로 돌아가.', en: 'Chats that picked this model themselves go back to their profile’s setting either way.' })}>
+          <Select variant="settings" value={choice} aria-label={label} disabled={!slotsQuery.isSuccess || !candidatesQuery.isSuccess} onChange={(event) => setChoice(event.target.value)}>
+            <option value="" disabled>{t({ ko: '선택', en: 'Select' })}</option>
+            <option value="blank">{t({ ko: '비워 두기', en: 'Leave blank' })}</option>
+            {routes.length > 0 ? (
+              <optgroup label={t({ ko: '대표모델', en: 'Representative models' })}>
+                {routes.map((slot) => <option key={slot.id} value={String(slot.id)} disabled={slot.ready === false}>{slot.model ? `${slot.label} (${slot.model})` : slot.label}</option>)}
+              </optgroup>
+            ) : null}
+            {groups.map((group) => (
+              <optgroup key={group.key} label={group.label}>
+                {group.rows.map((slot) => <option key={slot.id} value={String(slot.id)} disabled={slot.ready === false}>{slot.label}</option>)}
+              </optgroup>
+            ))}
+          </Select>
+        </Field>
+        {candidatesQuery.isError ? (
+          <Alert variant="destructive">
+            <TriangleAlert aria-hidden />
+            <AlertDescription>{candidatesQuery.error instanceof Error ? candidatesQuery.error.message : t({ ko: '대신 쓸 모델 목록을 불러오지 못했어.', en: 'Could not load the replacement models.' })}</AlertDescription>
+          </Alert>
+        ) : null}
+        {choice === 'blank' ? (
+          <Alert variant="warning">
+            <TriangleAlert aria-hidden />
+            <AlertDescription>
+              <p>{t({ ko: '비워 두면 이 모델을 쓰던 프로필 역할과 기능이 모델 없이 남아서 꺼져. 대화 모델이 비는 프로필은 프로필 자체가 꺼져.', en: 'Left blank, the profile roles and features using this model keep no model and turn off. A profile left without its chat model is turned off itself.' })}</p>
+              <p>{t({ ko: '꺼진 프로필과 역할은 프로필 목록과 편집기에 경고로 보여. 다시 모델을 고르면 돼.', en: 'Affected profiles show a warning in the profile list and editor until a model is picked again.' })}</p>
+            </AlertDescription>
+          </Alert>
+        ) : null}
+      </ModalBody>
+      <ModalFooter>
+        <Button type="button" size="sm" variant="ghost" onClick={() => onSettle(null)}>{t({ ko: '취소', en: 'Cancel' })}</Button>
+        <Button type="button" size="sm" variant="destructive" disabled={!choice} onClick={confirm}>
+          {choice === 'blank' ? t({ ko: '비우고 삭제', en: 'Delete and leave blank' }) : t({ ko: '바꾸고 삭제', en: 'Replace and delete' })}
+        </Button>
+      </ModalFooter>
+    </Modal>
+  )
 }
 
 /** One model under its connection: the model id and who uses it. */
@@ -160,7 +310,8 @@ export function ConnectionModelEditorModal({ slot, workflowNodes, onClose }: { s
     staleTime: 60_000,
   })
   const lines = useUsageLines(slot, workflowNodes)
-  const used = slot !== null && slotHoldCount(slot, workflowNodes) > 0
+  const used = slot !== null && slotHoldCount(slot) > 0
+  const removal = useModelRemoval()
 
   const saveMutation = useMutation({
     mutationFn: () => updateModelSlot(slot?.id ?? 0, { model: model.trim(), contentRatingTierId: ratingTierId }),
@@ -172,7 +323,7 @@ export function ConnectionModelEditorModal({ slot, workflowNodes, onClose }: { s
     onError: (error) => showSnackbar({ message: error instanceof Error ? error.message : t({ ko: '저장하지 못했어.', en: 'Could not save.' }), tone: 'error' }),
   })
   const deleteMutation = useMutation({
-    mutationFn: () => deleteModelSlot(slot?.id ?? 0),
+    mutationFn: (replacement: ModelReplacement) => deleteModelSlot(slot?.id ?? 0, replacement),
     onSuccess: async () => {
       showSnackbar({ message: t({ ko: '지웠어.', en: 'Deleted.' }), tone: 'info' })
       await refresh({ judgeChanged: affectsJudge() })
@@ -180,6 +331,11 @@ export function ConnectionModelEditorModal({ slot, workflowNodes, onClose }: { s
     },
     onError: (error) => showSnackbar({ message: error instanceof Error ? error.message : t({ ko: '지우지 못했어.', en: 'Could not delete.' }), tone: 'error' }),
   })
+  const remove = async () => {
+    if (!slot) return
+    const replacement = await removal.choose([slot])
+    if (replacement) deleteMutation.mutate(replacement)
+  }
   const busy = saveMutation.isPending || deleteMutation.isPending
   const changed = slot !== null && (model.trim() !== slot.model || ratingTierId !== slot.contentRatingTierId)
   // TypeSafe judges only read text.
@@ -212,15 +368,16 @@ export function ConnectionModelEditorModal({ slot, workflowNodes, onClose }: { s
         ) : null}
       </ModalBody>
       <EditorFooter
-        onDelete={() => deleteMutation.mutate()}
+        onDelete={() => void remove()}
         deleteLabel={t({ ko: '모델 삭제', en: 'Delete model' })}
-        deleteDisabled={used || busy}
-        deleteTip={used ? <span className="whitespace-pre-line">{`${t({ ko: '쓰는 곳이 있어서 지울 수 없어', en: 'In use, so it cannot be deleted' })}\n${lines.join('\n')}`}</span> : null}
+        deleteDisabled={busy}
+        deleteTip={used ? <span className="whitespace-pre-line">{`${t({ ko: '쓰는 곳이 있어. 지울 때 대신 쓸 모델을 골라.', en: 'In use: deleting asks for a model to take over.' })}\n${lines.join('\n')}`}</span> : null}
         deleting={deleteMutation.isPending}
         onSave={() => saveMutation.mutate()}
         canSave={Boolean(model.trim()) && changed && !busy}
         saving={saveMutation.isPending}
       />
+      {removal.dialog}
     </Modal>
   )
 }
@@ -318,15 +475,11 @@ export function ModelRouteEditorModal({ state, slots, workflowNodes, onClose }: 
     setRatingTierId(slot?.contentRatingTierId ?? null)
   }, [state, slot])
 
-  const models = slots.filter((entry) => entry.kind === 'model' && entry.providerType !== null && (routeTakesTypesafe(key) || entry.providerType !== 'decision_typesafe'))
-  const groups: Array<{ key: string; label: string; rows: ModelSlot[] }> = []
-  for (const model of models) {
-    const group = groups.find((entry) => entry.key === model.providerName)
-    if (group) group.rows.push(model)
-    else groups.push({ key: model.providerName, label: model.providerLabel, rows: [model] })
-  }
+  const groups = connectionGroups(slots.filter((entry) => entry.kind === 'model' && entry.providerType !== null && (routeTakesTypesafe(key) || entry.providerType !== 'decision_typesafe')))
   const lines = useUsageLines(slot, workflowNodes)
   const used = slot !== null && slotUseCount(slot, workflowNodes) > 0
+  const held = slot !== null && slotHoldCount(slot) > 0
+  const removal = useModelRemoval()
   const allowsEmpty = key !== null && (FOLLOWS_CHAT_KEYS.includes(key) || EMPTY_KEYS.includes(key))
   const targetId = target ? Number(target) : null
 
@@ -347,7 +500,7 @@ export function ModelRouteEditorModal({ state, slots, workflowNodes, onClose }: 
     onError: (error) => showSnackbar({ message: error instanceof Error ? error.message : t({ ko: '저장하지 못했어.', en: 'Could not save.' }), tone: 'error' }),
   })
   const deleteMutation = useMutation({
-    mutationFn: () => deleteModelSlot(slot?.id ?? 0),
+    mutationFn: (replacement: ModelReplacement) => deleteModelSlot(slot?.id ?? 0, replacement),
     onSuccess: async () => {
       showSnackbar({ message: t({ ko: '지웠어.', en: 'Deleted.' }), tone: 'info' })
       await refresh({ judgeChanged: modelAffectsJudge(slot) })
@@ -355,6 +508,11 @@ export function ModelRouteEditorModal({ state, slots, workflowNodes, onClose }: 
     },
     onError: (error) => showSnackbar({ message: error instanceof Error ? error.message : t({ ko: '지우지 못했어.', en: 'Could not delete.' }), tone: 'error' }),
   })
+  const remove = async () => {
+    if (!slot) return
+    const replacement = await removal.choose([slot])
+    if (replacement) deleteMutation.mutate(replacement)
+  }
   const busy = saveMutation.isPending || deleteMutation.isPending
   const changed = slot === null
     ? name.trim() !== '' || target !== ''
@@ -373,6 +531,7 @@ export function ModelRouteEditorModal({ state, slots, workflowNodes, onClose }: 
       onSave={save}
     >
       <ModalBody spacing="sm">
+        {key === 'judge' ? <UnconfiguredConsumersAlert slot={slot} /> : null}
         {key === null ? (
           <Field label={t({ ko: '이름', en: 'Name' })}>
             <Input variant="settings" value={name} maxLength={40} onChange={(event) => setName(event.target.value)} />
@@ -411,15 +570,16 @@ export function ModelRouteEditorModal({ state, slots, workflowNodes, onClose }: 
         ) : null}
       </ModalBody>
       <EditorFooter
-        onDelete={slot && key === null ? () => deleteMutation.mutate() : undefined}
+        onDelete={slot && key === null ? () => void remove() : undefined}
         deleteLabel={t({ ko: '대표모델 삭제', en: 'Delete representative model' })}
-        deleteDisabled={used || busy}
-        deleteTip={used ? <span className="whitespace-pre-line">{`${t({ ko: '쓰는 곳이 있어서 지울 수 없어', en: 'In use, so it cannot be deleted' })}\n${lines.join('\n')}`}</span> : null}
+        deleteDisabled={busy}
+        deleteTip={held ? <span className="whitespace-pre-line">{`${t({ ko: '쓰는 곳이 있어. 지울 때 대신 쓸 모델을 골라.', en: 'In use: deleting asks for a model to take over.' })}\n${lines.join('\n')}`}</span> : null}
         deleting={deleteMutation.isPending}
         onSave={() => saveMutation.mutate()}
         canSave={Boolean(save)}
         saving={saveMutation.isPending}
       />
+      {removal.dialog}
     </Modal>
   )
 }
@@ -429,7 +589,7 @@ export type ConnectionModelsDraft = { models: string[] }
 
 /**
  * The connection editor's model checklist: what the server lists, plus the connection's saved rows and models typed in.
- * A saved row that something holds stays checked (locked, with its use count).
+ * A saved row that something holds shows who; unchecking it asks for a replacement when the editor saves.
  */
 export function ConnectionModelChecklist({ value, listed, saved, loading, onRefresh, onChange }: {
   value: ConnectionModelsDraft
@@ -442,6 +602,7 @@ export function ConnectionModelChecklist({ value, listed, saved, loading, onRefr
   onChange: (next: ConnectionModelsDraft) => void
 }) {
   const { t } = useI18n()
+  const describe = useDescribeUse()
   const [typed, setTyped] = useState('')
   const all = [...new Set([...saved.map((slot) => slot.model), ...value.models, ...listed])]
   const toggle = (model: string, checked: boolean) => {
@@ -473,10 +634,10 @@ export function ConnectionModelChecklist({ value, listed, saved, loading, onRefr
           <ListRow
             key={model}
             size="sm"
-            leading={<Checkbox id={id} checked={checked} disabled={holds > 0} onCheckedChange={(next) => toggle(model, next === true)} />}
-            trailing={holds > 0 ? (
-              <Tip content={t({ ko: '쓰는 곳이 있어서 뺄 수 없어', en: 'In use, so it stays' })}>
-                <span className="inline-flex items-center gap-1 text-xs text-muted-foreground tabular-nums"><Lock className="size-3" aria-hidden />{holds}</span>
+            leading={<Checkbox id={id} checked={checked} onCheckedChange={(next) => toggle(model, next === true)} />}
+            trailing={row && holds > 0 ? (
+              <Tip content={<span className="whitespace-pre-line">{`${t({ ko: '쓰는 곳이 있어. 빼면 저장할 때 대신 쓸 모델을 골라.', en: 'In use: unchecking asks for a model to take over on save.' })}\n${describe(row, 0, true).join('\n')}`}</span>}>
+                <span className="inline-flex items-center gap-1 text-xs text-muted-foreground tabular-nums"><Link2 className="size-3" aria-hidden />{holds}</span>
               </Tip>
             ) : null}
           >

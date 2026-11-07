@@ -53,7 +53,7 @@ export function linkChatGeneration(context: ChatExecutionContext | undefined, jo
   const db = getUserSettingsDb()
   const reacts = isChatOrderReply(context.threadId, context.replyId) ? 0 : 1
   db.prepare(`INSERT OR IGNORE INTO chat_generation_links (job_id, thread_id, reply_id, reaction_target)
-    VALUES (?, ?, ?, COALESCE((SELECT CASE WHEN ? = 1 AND t.reaction_enabled = 1 AND p.engine = 'llm' AND (t.kind = 'group' OR t.engine = 'llm') THEN 1 ELSE 0 END
+    VALUES (?, ?, ?, COALESCE((SELECT CASE WHEN ? = 1 AND COALESCE(t.reaction_enabled_override, p.reaction_enabled) = 1 AND p.engine = 'llm' AND (t.kind = 'group' OR t.engine = 'llm') THEN 1 ELSE 0 END
     FROM codex_chat_threads t JOIN llm_chat_profiles p ON p.id = ? WHERE t.id = ?), 0))`)
     .run(jobId, context.threadId, context.replyId, reacts, context.profileId, context.threadId)
   bindKnowledgeGenerationOperation(context,jobId)

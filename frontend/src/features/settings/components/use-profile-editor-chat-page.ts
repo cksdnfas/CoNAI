@@ -29,13 +29,14 @@ const DRAFT_KEYS = {
   summaryEnabled: 'model', summarySlotId: 'model', summaryTriggerTurns: 'model', summaryPrompt: 'model',
   translationSlotId: 'model', translationModelLanguage: 'model', translationDisplayLanguage: 'model', translationInstructions: 'model',
   suggestEnabled: 'model', suggestSlotId: 'model', suggestProfileId: 'model', judgePresetId: 'model', judgeSlotId: 'model',
+  reactionEnabled: 'model', reactionSlotId: 'model',
   contextTurns: 'model', loreRecursionDepth: 'memory', allowLoreProposals: 'memory', linkedFiles: 'memory', workspaces: 'memory',
   toolOutputLimit: 'tools', agentDescription: 'tools', skillIds: 'tools',
 } as const satisfies Partial<Record<keyof Draft, ProfileEditorSection>>
 type DraftKey = keyof typeof DRAFT_KEYS
 
 /** Keys a page value of 0 clears (the action schema has no null): a role's model row, a picked id or an optional cap. */
-const ZERO_CLEARS = new Set<DraftKey>(['folderId', 'summarySlotId', 'translationSlotId', 'suggestSlotId', 'judgeSlotId', 'judgePresetId', 'suggestProfileId', 'contentRatingTierId', 'contextTokens', 'maxTokens', 'reasoningBudgetTokens'])
+const ZERO_CLEARS = new Set<DraftKey>(['folderId', 'summarySlotId', 'translationSlotId', 'suggestSlotId', 'judgeSlotId', 'reactionSlotId', 'judgePresetId', 'suggestProfileId', 'contentRatingTierId', 'contextTokens', 'maxTokens', 'reasoningBudgetTokens'])
 const LANGUAGES = CHAT_TRANSLATION_LANGUAGES.map((language) => language.id)
 
 /** A filled page value as the draft holds it: 0 (or −1 for temperature) for "unset", linked files with their write flag. */
@@ -177,6 +178,7 @@ export function useProfileEditorChatPage({ open, profile, draft, setDraft, dirty
       translationSlotId: { ...pageChoice([0, ...slots.map((slot) => slot.id)]), description: '0: off' },
       suggestSlotId: { ...pageChoice([0, ...slots.map((slot) => slot.id)]), description: '0: suggestions representative model (follows chat when unset)' },
       judgeSlotId: { ...pageChoice([0, ...slots.map((slot) => slot.id)]), description: '0: preset\'s' },
+      reactionSlotId: { ...pageChoice([0, ...slots.map((slot) => slot.id)]), description: '0: the chat model' },
     } : {}),
     summaryTriggerTurns: pageNumber(CHAT_PROFILE_LIMITS.summaryTriggerTurns.min, undefined, true),
     summaryPrompt: pageText(CHAT_PROFILE_TEXT_LIMITS.summaryPrompt),
@@ -184,6 +186,7 @@ export function useProfileEditorChatPage({ open, profile, draft, setDraft, dirty
     translationDisplayLanguage: pageChoice(LANGUAGES),
     translationInstructions: pageText(CHAT_PROFILE_TEXT_LIMITS.translationInstructions),
     suggestEnabled: { type: 'boolean' },
+    reactionEnabled: { type: 'boolean', description: 'Completion reactions in its chats by default (a chat can override)' },
     suggestProfileId: { ...pageNumber(0, undefined, true), description: '0: none' },
     judgePresetId: { ...pageNumber(0, undefined, true), description: '0: none' },
     contextTurns: pageNumber(CHAT_PROFILE_LIMITS.contextTurns.min, undefined, true),
@@ -218,6 +221,7 @@ export function useProfileEditorChatPage({ open, profile, draft, setDraft, dirty
         summaryEnabled: draft.summaryEnabled, summarySlotId: draft.summarySlotId, summaryTriggerTurns: draft.summaryTriggerTurns, summaryPrompt: brief(draft.summaryPrompt),
         translationSlotId: draft.translationSlotId, translationModelLanguage: draft.translationModelLanguage, translationDisplayLanguage: draft.translationDisplayLanguage, translationInstructions: brief(draft.translationInstructions),
         suggestEnabled: draft.suggestEnabled, suggestSlotId: draft.suggestSlotId, suggestProfileId: draft.suggestProfileId, judgePresetId: draft.judgePresetId, judgeSlotId: draft.judgeSlotId,
+        reactionEnabled: draft.reactionEnabled, reactionSlotId: draft.reactionSlotId, removedModelRoles: profile?.removedModelRoles ?? [],
         contextTurns: draft.contextTurns, loreRecursionDepth: draft.loreRecursionDepth, allowLoreProposals: draft.allowLoreProposals,
         linkedFiles: draft.linkedFiles.map((link) => ({ id: link.id, write: link.write })), workspaces: draft.workspaces, skillIds: draft.skillIds, toolOutputLimit: draft.toolOutputLimit,
         agentEnabled: draft.agentEnabled, agentDescription: draft.agentDescription,

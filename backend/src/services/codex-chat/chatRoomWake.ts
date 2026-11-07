@@ -158,6 +158,7 @@ export async function ensureAutomationRoom(requester: McpRequester, profileId: n
   const { CodexChatError, CodexChatService } = await chatServices()
   if (!profile) throw new CodexChatError(`캐릭터를 찾을 수 없어: ${profileId}`, 404)
   const thread = CodexChatService.createThread(requester, profileId)
+  CodexChatStore.updateThreadContext(thread.id, { reactionEnabled: false })
   CodexChatStore.updateListState(thread.id, { title: title.trim() || `${profile.name} 루틴` })
   db.prepare(`INSERT INTO chat_automation_rooms (account_key, room_key, thread_id) VALUES (?, ?, ?)
     ON CONFLICT(account_key, room_key) DO UPDATE SET thread_id = excluded.thread_id`).run(accountKey(requester.accountId), key, thread.id)

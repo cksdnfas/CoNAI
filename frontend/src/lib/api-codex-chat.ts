@@ -12,7 +12,7 @@ import { JSON_HEADERS, requestRevisionChecked } from './api-codex-chat-core'
 import type { ChatScope } from './api-codex-chat-core'
 import type { ChatBlocksState, ChatDisplayBlock, ChatTypeface } from './api-codex-chat-resources'
 import type { ChatLorebookKind, OwnedChatLorebook } from './api-codex-chat-lorebooks'
-import type { ChatFlagSnapshot, ChatOrderKind } from './api-codex-chat-account'
+import type { ChatFlagSnapshot, ChatOrderKind, ModelUseRole } from './api-codex-chat-account'
 
 // The rest of this API lives in the api-codex-chat-* modules; importers keep using this one path.
 export * from './api-codex-chat-resources'
@@ -267,6 +267,9 @@ export interface ChatProfileSummary extends ChatProfileAssetFields, ChatProfileF
   /** Context defaults a chat can override (LLM profiles). */
   contextTurns: number
   summaryEnabled: boolean
+  /** Completion reactions by default and their row (null: the chat model); absent from older servers. */
+  reactionEnabled?: boolean
+  reactionSlotId?: number | null
   /** LLM profiles: reply token cap (null: the server's default), reasoning effort ('' not sent) and budget, both counted in the cap. */
   maxTokens: number | null
   reasoningEffort: CodexReasoningEffort | ''
@@ -464,6 +467,11 @@ export interface ChatProfile extends ChatProfileAssetFields, ChatProfileAgentSet
   suggestUserProfileId: number | null
   /** Read-only: as a suggestion writer, its model is set and its connection works. */
   suggestWriterReady?: boolean
+  /** Completion reactions by default in its chats (a chat can turn them on or off), with this row (null: the chat model). */
+  reactionEnabled: boolean
+  reactionSlotId: number | null
+  /** Read-only: roles whose model was deleted and left blank, so they are off (chat: the profile is off). */
+  removedModelRoles?: ModelUseRole[]
   /** LLM: the model can look at images (view_images). */
   visionEnabled: boolean
   /** Ceiling on the rating of media the model is shown: its model row's, or `contentRatingTierId` (Codex / Claude Code: always its own). */
@@ -503,7 +511,7 @@ export interface ChatCardImportReport {
 }
 
 /** `background`: a new image (data URL), null to remove it, left out to keep the current one. */
-export type ChatProfileInput = Partial<Omit<ChatProfile, 'id' | 'folderPath' | 'libraryReferenceHash' | 'revision' | 'backgroundRevision' | 'expressionGroupId' | 'createdDate' | 'updatedDate' | 'backgroundVersion' | 'suggestWriterReady' | 'assetVersion' | 'hasAvatar' | 'avatarThumbnailUrl' | 'characterLink'>> & {
+export type ChatProfileInput = Partial<Omit<ChatProfile, 'id' | 'folderPath' | 'libraryReferenceHash' | 'revision' | 'backgroundRevision' | 'expressionGroupId' | 'createdDate' | 'updatedDate' | 'backgroundVersion' | 'suggestWriterReady' | 'removedModelRoles' | 'assetVersion' | 'hasAvatar' | 'avatarThumbnailUrl' | 'characterLink'>> & {
   background?: string | null
   /** The library link to set (null removes it; left out keeps it). While synced the appearance fields are not sent. */
   characterLink?: ChatProfileCharacterLinkInput
@@ -594,7 +602,8 @@ export interface CodexChatThread {
   /** Overrides of the profile (null follows it). */
   context_turns: number | null
   summary_enabled: 0 | 1 | null
-  reaction_enabled: 0 | 1
+  /** Completion reactions and their model row; null follows the profile. */
+  reaction_enabled: 0 | 1 | null
   reaction_model_slot_id: number | null
   /**
    * Direct chats: the chat's own model instead of the profile's (null follows it) — a model slot for LLM profiles, a
@@ -956,7 +965,7 @@ export function editChatBlock(threadId: number, key: string, data: Record<string
   })
 }
 
-export function updateCodexChatThreadContext(threadId: number, patch: { loreAutoSave?: boolean | null; contextTurns?: number | null; maxTokens?: number | null; summaryEnabled?: boolean | null; summary?: string | null; authorNote?: string | null; authorNoteDepth?: number | null; userProfileId?: number | null; lorebookIds?: number[]; loreRecordBookId?: number | null; linkedFiles?: LinkedFileLink[]; minutesFolderId?: string | null; reactionEnabled?: boolean; reactionModelSlotId?: number | null } & ChatModelOverridePatch) {
+export function updateCodexChatThreadContext(threadId: number, patch: { loreAutoSave?: boolean | null; contextTurns?: number | null; maxTokens?: number | null; summaryEnabled?: boolean | null; summary?: string | null; authorNote?: string | null; authorNoteDepth?: number | null; userProfileId?: number | null; lorebookIds?: number[]; loreRecordBookId?: number | null; linkedFiles?: LinkedFileLink[]; minutesFolderId?: string | null; reactionEnabled?: boolean | null; reactionModelSlotId?: number | null } & ChatModelOverridePatch) {
   return requestApiData<CodexChatThread>(`/api/codex-chat/threads/${threadId}/context`, { method: 'PATCH', headers: JSON_HEADERS, body: JSON.stringify(patch) })
 }
 

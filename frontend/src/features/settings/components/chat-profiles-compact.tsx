@@ -1,4 +1,4 @@
-import { FileUp, Folder, FolderPlus, Plus, UserRound } from 'lucide-react'
+import { FileUp, Folder, FolderPlus, Plus, TriangleAlert, UserRound } from 'lucide-react'
 import { ListPager } from '@/components/common/list-pager'
 import { PathBreadcrumbs } from '@/components/common/path-breadcrumbs'
 import { SearchField } from '@/components/common/search-field'
@@ -16,7 +16,7 @@ import { ChatProfileAvatar } from '@/features/codex-chat/chat-profile-avatar'
 import { getChatScopeCopy } from '@/features/codex-chat/chat-scope-copy'
 import { getErrorMessage } from '@/lib/error-message'
 import { ChatProfileLibraryDialogs, profileToolChip, useChatProfileLibrary } from './chat-settings-profiles'
-import { profileModelChip, profileModelLine } from './chat-profile-model-line'
+import { profileModelChip, profileModelLine, removedModelNotices } from './chat-profile-model-line'
 import { SettingsRowsSkeleton } from './settings-rows'
 
 /**
@@ -82,6 +82,11 @@ export function ChatProfilesCompact({ active }: { active: boolean }) {
                   <Tip content={down ? <ChatHealthTip down={down} /> : profileModelLine(profile, slots, t)}>
                     <span className="min-w-0"><Chip size="sm" tone={down ? 'destructive' : 'muted'} className="max-w-48"><span className="truncate">{profileModelChip(profile, slots)}</span></Chip></span>
                   </Tip>
+                  {profile.removedModelRoles?.length ? (
+                    <Tip content={<span className="whitespace-pre-line">{removedModelNotices(profile.removedModelRoles, t).join('\n')}</span>}>
+                      <span><Chip size="sm" tone="warning"><TriangleAlert />{t({ ko: '삭제된 모델', en: 'Deleted model' })}</Chip></span>
+                    </Tip>
+                  ) : null}
                   {profile.mcpEnabled ? <Tip content={profile.mcpScopes.map((scope) => getChatScopeCopy(scope, t).label).join(' · ')}><span><Chip size="sm" tone="muted">{profileToolChip(profile, t)}</Chip></span></Tip> : null}
                 </>}
                 trailing={<>

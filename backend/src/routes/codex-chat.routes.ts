@@ -143,6 +143,9 @@ function toPublicProfile(profile: ChatProfile, accountId: number | null, canView
     isEnabled: profile.isEnabled,
     contextTurns: profile.contextTurns,
     summaryEnabled: profile.summaryEnabled,
+    reactionEnabled: profile.reactionEnabled,
+    reactionSlotId: profile.reactionSlotId,
+    removedModelRoles: profile.removedModelRoles,
     maxTokens: profile.maxTokens,
     reasoningEffort: profile.reasoningEffort,
     reasoningBudgetTokens: profile.reasoningBudgetTokens,
@@ -644,8 +647,8 @@ router.patch('/threads/:threadId/context', requireChatAccess, (req: Request, res
     const userProfileId = parseUserProfileIdField(body.userProfileId)
     if (userProfileId === 'invalid') { sendRouteBadRequest(res, 'userProfileId must be a number or null'); return }
     const windowKeys = ['contextTurns', 'summaryEnabled', 'summary', 'maxTokens', 'minutesFolderId'] as const
-    if (body.reactionEnabled !== undefined && typeof body.reactionEnabled !== 'boolean') {
-      sendRouteBadRequest(res, 'reactionEnabled must be a boolean')
+    if (body.reactionEnabled !== undefined && body.reactionEnabled !== null && typeof body.reactionEnabled !== 'boolean') {
+      sendRouteBadRequest(res, 'reactionEnabled must be a boolean or null')
       return
     }
     let reactionModelSlotId: number | null | undefined
@@ -725,7 +728,7 @@ router.patch('/threads/:threadId/context', requireChatAccess, (req: Request, res
       CodexChatStore.updateThreadContext(threadId, {
         ...chatModelPatch,
         contextTurns, maxTokens, summaryEnabled: body.summaryEnabled as boolean | null | undefined,
-        reactionEnabled: body.reactionEnabled as boolean | undefined, reactionModelSlotId,
+        reactionEnabled: body.reactionEnabled as boolean | null | undefined, reactionModelSlotId,
         authorNote: typeof body.authorNote === 'string' ? body.authorNote.slice(0, AUTHOR_NOTE_MAX_LENGTH) : (body.authorNote as null | undefined),
         authorNoteDepth, loreAutoSave: body.loreAutoSave as boolean | null | undefined,
       })

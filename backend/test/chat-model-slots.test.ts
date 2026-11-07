@@ -26,7 +26,7 @@ test('model rows: connection ▸ models, legacy pairs, resolution, sync, deletio
   const { ExternalApiProvider } = await import('../src/models/ExternalApiProvider')
   const { ChatProfileStore, ChatProfileError, profileGenerationOptions } = await import('../src/services/codex-chat/chatProfiles')
   const { ChatJudgePresetStore } = await import('../src/services/codex-chat/chatJudgePresets')
-  const { ModelSlotStore, assertConnectionTypeChange, modelReferencesOfConnection, deleteModelsOfConnection, primaryModelOf } = await import('../src/services/codex-chat/modelSlots')
+  const { ModelSlotStore, isSlotUsed, assertConnectionTypeChange, modelReferencesOfConnection, deleteModelsOfConnection, primaryModelOf } = await import('../src/services/codex-chat/modelSlots')
   const { resolveProfileModel, hasTranslation, modelLabelOf } = await import('../src/services/codex-chat/chatModelRoles')
   const { buildModelUsage } = await import('../src/services/codex-chat/modelUsage')
   const { migrateLlmModelRows } = await import('../src/database/llmModelRowsMigration')
@@ -37,6 +37,175 @@ test('model rows: connection ▸ models, legacy pairs, resolution, sync, deletio
   }
   const rowOf = (providerName: string, model: string) => ModelSlotStore.ensure(providerName, model, { create: false })
   const configOf = (name: string) => JSON.parse((db.prepare('SELECT additional_config FROM external_api_providers WHERE provider_name = ?').get(name) as { additional_config: string }).additional_config)
+
+  await t.test('replacement candidates agree with atomic removal for routes, escalation and the chat default', () => {
+    const old = ModelSlotStore.ensure('conn-b', 'candidate-old')!
+    const other = ModelSlotStore.ensure('conn-b', 'candidate-other')!
+    const replacement = ModelSlotStore.ensure('conn-b', 'candidate-new')!
+    const decision = ModelSlotStore.ensure('jev', 'candidate-judge')!
+    const named = ModelSlotStore.createRoute({ name: 'candidate holder', targetSlotId: old })!
+    const candidateRoute = ModelSlotStore.createRoute({ name: 'candidate replacement', targetSlotId: replacement })!
+    const preset = ChatJudgePresetStore.create({ name: 'candidate escalation', modelSlotId: decision, escalationSlotId: old })
+    const profile = ChatProfileStore.create({ name: 'candidate consumer', modelSlotId: named.id, reactionEnabled: false, reactionSlotId: old })
+    assert.equal(ChatProfileStore.update(profile.id, { reactionEnabled: false })!.reactionSlotId, old)
+    const previousChat = ModelSlotStore.defaultTarget()!.id
+    ModelSlotStore.setDefault(old)
+    const ids = [old, other]
+    const candidates = ModelSlotStore.replacementCandidates(ids)
+    assert.ok(candidates.includes(replacement))
+    assert.ok(candidates.includes(candidateRoute.id))
+    assert.ok(!candidates.includes(old) && !candidates.includes(other) && !candidates.includes(decision))
+    const rollback = new Error('rollback successful candidate')
+    for (const candidate of ModelSlotStore.list().map((slot) => slot.id)) {
+      let removed = false
+      try {
+        db.transaction(() => {
+          ModelSlotStore.syncConnection('conn-b', ModelSlotStore.ofConnection('conn-b').filter((slot) => !ids.includes(slot.id)).map((slot) => slot.model), candidate)
+          removed = true
+          assert.equal(ModelSlotStore.defaultTarget()!.id, ModelSlotStore.target(candidate)!.id)
+          throw rollback
+        })()
+      } catch (error) {
+        if (error !== rollback && !(error instanceof ChatProfileError)) throw error
+      }
+      assert.equal(removed, candidates.includes(candidate), `candidate ${candidate} and removal disagree`)
+    }
+    assert.equal(ChatProfileStore.find(profile.id)!.reactionSlotId, old, 'candidate checks and rolled-back removals cannot alter settings')
+    ModelSlotStore.setDefault(previousChat)
+    ChatProfileStore.update(profile.id, { modelSlotId: replacement, reactionSlotId: replacement })
+    assert.ok(!ModelSlotStore.replacementCandidates([old]).includes(decision), 'judge-preset escalation alone requires an LLM')
+    ChatJudgePresetStore.update(preset.id, { escalationSlotId: null })
+    assert.ok(ModelSlotStore.replacementCandidates([old]).includes(decision), 'a named route with no LLM consumers accepts a decision target')
+    assert.throws(() => db.transaction(() => {
+      ModelSlotStore.delete(old, decision)
+      assert.equal(ModelSlotStore.target(named.id)!.id, decision)
+      throw rollback
+    })(), (error) => error === rollback)
+    ChatJudgePresetStore.update(preset.id, { escalationSlotId: old })
+    ChatProfileStore.update(profile.id, { modelSlotId: named.id, reactionSlotId: old })
+    ModelSlotStore.setDefault(old)
+    ModelSlotStore.delete(old, candidateRoute.id)
+    assert.equal(ModelSlotStore.defaultTarget()!.id, replacement)
+    assert.equal(ModelSlotStore.target(named.id)!.id, replacement)
+    assert.equal(ChatJudgePresetStore.find(preset.id)!.escalationSlotId, candidateRoute.id)
+    ModelSlotStore.setDefault(previousChat)
+    ChatProfileStore.delete(profile.id)
+    ChatJudgePresetStore.delete(preset.id)
+    ModelSlotStore.delete(named.id)
+    ModelSlotStore.delete(candidateRoute.id)
+    ModelSlotStore.delete(other)
+    ModelSlotStore.delete(replacement)
+    ModelSlotStore.delete(decision)
+  })
+
+  await t.test('chat overrides never hold a removed model and fall back to the profile', async () => {
+    const { CodexChatStore } = await import('../src/services/codex-chat/codexChatStore')
+    const own = rowOf('conn-a', 'conn-a-default')!
+    const custom = ModelSlotStore.ensure('conn-b', 'temporary-override')!
+    const profile = ChatProfileStore.create({ name: 'override fallback', modelSlotId: own })
+    const thread = CodexChatStore.createThread(null, 'override', 'llm', profile.id)
+    CodexChatStore.updateThreadContext(thread, { chatModelSlotId: custom, reactionModelSlotId: custom })
+    db.prepare('INSERT INTO chat_group_members(thread_id, profile_id, chat_model_slot_id) VALUES(?, ?, ?)').run(thread, profile.id, custom)
+    assert.equal(isSlotUsed(ModelSlotStore.find(custom)!), false)
+    assert.equal(ModelSlotStore.delete(custom), true)
+    assert.equal(CodexChatStore.findThreadById(thread)!.chat_model_slot_id, null)
+    assert.equal(CodexChatStore.findThreadById(thread)!.reaction_model_slot_id, null)
+    assert.equal(ChatProfileStore.find(profile.id, thread)!.modelSlotId, own)
+    assert.equal(db.prepare('SELECT chat_model_slot_id FROM chat_group_members WHERE thread_id = ?').get(thread)!.chat_model_slot_id, null)
+    const changing = ModelSlotStore.ensure('conn-b', 'changing-override')!
+    const route = ModelSlotStore.createRoute({ name: 'override only', targetSlotId: changing })!
+    CodexChatStore.updateThreadContext(thread, { chatModelSlotId: route.id, reactionModelSlotId: route.id })
+    const judge = ModelSlotStore.ensure('jev', 'override-judge')!
+    ModelSlotStore.updateRoute(route.id, { targetSlotId: judge })
+    assert.equal(CodexChatStore.findThreadById(thread)!.chat_model_slot_id, null)
+    assert.equal(CodexChatStore.findThreadById(thread)!.reaction_model_slot_id, null)
+    ModelSlotStore.delete(route.id)
+    ModelSlotStore.delete(changing)
+    ModelSlotStore.delete(judge)
+    CodexChatStore.deleteThread(thread)
+    ChatProfileStore.delete(profile.id)
+  })
+
+  await t.test('replacement rewrites configured roles and routes atomically', async () => {
+    const { loadPostsSettings, updatePostsSettings } = await import('../src/services/posts/postsSettings')
+    const { loadContentEvaluationSettings, updateContentEvaluationSettings } = await import('../src/services/contentEvaluation/definitionStore')
+    const { ChatUserProfileStore } = await import('../src/services/codex-chat/chatUserProfiles')
+    const old = ModelSlotStore.ensure('conn-b', 'replace-old')!
+    const replacement = ModelSlotStore.ensure('conn-b', 'replace-new')!
+    const route = ModelSlotStore.createRoute({ name: 'replacement route', targetSlotId: old })!
+    const profile = ChatProfileStore.create({ name: 'replacement roles', modelSlotId: old, reactionEnabled: true, reactionSlotId: old })
+    const preset = ChatJudgePresetStore.create({ name: 'replacement judge', modelSlotId: old, escalationSlotId: old })
+    const user = ChatUserProfileStore.create(null, { name: 'replacement user', modelSlotId: old })
+    updatePostsSettings({ knowledge: { judgeSlotId: old } })
+    const evaluation = loadContentEvaluationSettings()
+    updateContentEvaluationSettings({ ...evaluation, expectedRevision: evaluation.revision, modelSlotId: old })
+    assert.throws(() => ModelSlotStore.delete(old, old), /모델/)
+    const incompatible = ModelSlotStore.ensure('jev', 'incompatible-replacement')!
+    assert.throws(() => ModelSlotStore.delete(old, incompatible), /호환/)
+    ModelSlotStore.delete(incompatible)
+    db.exec(`CREATE TEMP TRIGGER fail_removal BEFORE DELETE ON llm_model_slots WHEN OLD.id = ${old}
+      BEGIN SELECT RAISE(ABORT, 'test removal rollback'); END`)
+    assert.throws(() => ModelSlotStore.delete(old, replacement), /test removal rollback/)
+    db.exec('DROP TRIGGER fail_removal')
+    assert.equal(ChatProfileStore.find(profile.id)!.modelSlotId, old)
+    assert.equal(loadPostsSettings().knowledge.judgeSlotId, old)
+    assert.equal(loadContentEvaluationSettings().modelSlotId, old)
+    assert.equal(ModelSlotStore.delete(old, replacement), true)
+    assert.equal(ChatProfileStore.find(profile.id)!.modelSlotId, replacement)
+    assert.equal(ChatProfileStore.find(profile.id)!.reactionSlotId, replacement)
+    assert.equal(ModelSlotStore.target(route.id)!.id, replacement)
+    assert.equal(ChatJudgePresetStore.find(preset.id)!.modelSlotId, replacement)
+    assert.equal(ChatJudgePresetStore.find(preset.id)!.escalationSlotId, replacement)
+    assert.equal(ChatUserProfileStore.find(null, user.id)!.modelSlotId, replacement)
+    assert.equal(loadContentEvaluationSettings().modelSlotId, replacement)
+    assert.equal(loadPostsSettings().knowledge.judgeSlotId, replacement)
+    const kept = rowOf('conn-a', 'conn-a-default')!
+    ModelSlotStore.syncConnection('conn-b', ModelSlotStore.ofConnection('conn-b').filter((slot) => slot.id !== replacement).map((slot) => slot.model), kept)
+    assert.equal(ChatProfileStore.find(profile.id)!.modelSlotId, kept)
+    assert.equal(loadPostsSettings().knowledge.judgeSlotId, kept)
+    ExternalApiProvider.create({ provider_name: 'remove-connection', display_name: 'Remove connection', provider_type: 'llm_ollama', base_url: 'http://unused.invalid' })
+    const removedConnectionSlot = ModelSlotStore.ensure('remove-connection', 'model')!
+    ChatProfileStore.update(profile.id, { modelSlotId: removedConnectionSlot })
+    db.transaction(() => {
+      deleteModelsOfConnection('remove-connection', kept)
+      ExternalApiProvider.delete('remove-connection')
+    })()
+    assert.equal(ChatProfileStore.find(profile.id)!.modelSlotId, kept)
+    ChatProfileStore.delete(profile.id)
+    ChatJudgePresetStore.delete(preset.id)
+    ChatUserProfileStore.delete(null, user.id)
+    updatePostsSettings({ knowledge: { judgeSlotId: null } })
+    const latest = loadContentEvaluationSettings()
+    updateContentEvaluationSettings({ ...latest, expectedRevision: latest.revision, modelSlotId: null })
+    ModelSlotStore.delete(route.id)
+  })
+
+  await t.test('blank removal disables affected profile roles and flags them until repaired', async () => {
+    const old = ModelSlotStore.ensure('conn-b', 'blank-old')!
+    const preset = ChatJudgePresetStore.create({ name: 'blank judge', modelSlotId: old })
+    const route = ModelSlotStore.createRoute({ name: 'blank route', targetSlotId: old })!
+    const profile = ChatProfileStore.create({ name: 'blank roles', modelSlotId: old, summaryEnabled: true, summarySlotId: old,
+      suggestEnabled: true, suggestSlotId: old, reactionEnabled: true, reactionSlotId: old, translationSlotId: old,
+      judgePresetId: preset.id, judgeSlotId: old })
+    assert.equal(ModelSlotStore.delete(old, null), true)
+    const blank = ChatProfileStore.find(profile.id)!
+    assert.equal(blank.isEnabled, false)
+    assert.equal(blank.summaryEnabled, false)
+    assert.equal(blank.suggestEnabled, false)
+    assert.equal(blank.reactionEnabled, false)
+    assert.equal(blank.judgePresetId, null)
+    assert.deepEqual([...blank.removedModelRoles].sort(), ['chat', 'judge', 'reaction', 'suggest', 'summary', 'translation'])
+    const unconfigured = ModelSlotStore.list().find((slot) => slot.routeKey === 'judge')!.unconfiguredConsumers!
+    assert.ok(unconfigured.judgePresets.some((entry) => entry.id === preset.id))
+    assert.ok(unconfigured.routes.some((entry) => entry.id === route.id))
+    assert.deepEqual(ChatProfileStore.update(profile.id, { tagline: 'still blank' })!.removedModelRoles, blank.removedModelRoles)
+    assert.deepEqual(ChatProfileStore.update(profile.id, { modelSlotId: rowOf('conn-a', 'conn-a-default'), summaryEnabled: true,
+      suggestEnabled: true, reactionEnabled: true, translationSlotId: rowOf('conn-a', 'conn-a-default'),
+      judgePresetId: preset.id, judgeSlotId: rowOf('conn-a', 'conn-a-default') })!.removedModelRoles, [])
+    ChatProfileStore.delete(profile.id)
+    ChatJudgePresetStore.delete(preset.id)
+    ModelSlotStore.delete(route.id)
+  })
 
   await t.test('profile validation never persists legacy model rows or truncated JSON on failure', () => {
     const before = db.prepare('SELECT * FROM llm_model_slots ORDER BY id').all()

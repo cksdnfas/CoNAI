@@ -16,6 +16,7 @@ import { splitExampleDialogue } from '@conai/shared';
 import { normalizeOpeningHistory, OPENING_HISTORY_MAX_ENTRIES, type ChatOpeningMessage } from '../services/codex-chat/chatOpeningHistory';
 import { migrateLoreEntryIds } from '../services/codex-chat/chatLorebookIds';
 import { ensureGraphWorkflowRevisionSchema } from './graphWorkflowRevisionSchema';
+import { migratePostsKnowledgeModel } from '../services/posts/postsSettings';
 
 /** Bootstrap core user-settings tables, indexes, and simple column backfills. */
 export function createUserSettingsSchema(db: Database.Database): void {
@@ -35,6 +36,11 @@ export function createUserSettingsSchema(db: Database.Database): void {
     name TEXT PRIMARY KEY,
     completed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   )`);
+  // Model references belong to the same transaction as model removal; other posts settings remain in posts.json.
+  db.exec(`CREATE TABLE IF NOT EXISTS posts_knowledge_model (
+    id INTEGER PRIMARY KEY CHECK(id = 1), model_slot_id INTEGER, provider_name TEXT, model TEXT
+  )`);
+  migratePostsKnowledgeModel(db);
 
   // 1. Workflows table (stores ComfyUI workflows)
   db.exec(`
@@ -834,6 +840,18 @@ export function createUserSettingsSchema(db: Database.Database): void {
       db.exec(`ALTER TABLE codex_chat_threads ADD COLUMN ${columnName} ${definition}`);
     }
   }
+  if (!hasColumn('codex_chat_threads', 'reaction_enabled_override')) {
+    db.exec('ALTER TABLE codex_chat_threads ADD COLUMN reaction_enabled_override INTEGER');
+    db.exec('UPDATE codex_chat_threads SET reaction_enabled_override = 1 WHERE reaction_enabled = 1');
+  }
+  if (!db.prepare("SELECT 1 FROM chat_settings_migrations WHERE name = 'automation_reactions_off_v1'").get()) {
+    db.transaction(() => {
+      if (db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'chat_automation_rooms'").get()) {
+        db.exec('UPDATE codex_chat_threads SET reaction_enabled_override = 0 WHERE id IN (SELECT thread_id FROM chat_automation_rooms)');
+      }
+      db.prepare('INSERT INTO chat_settings_migrations(name) VALUES (?)').run('automation_reactions_off_v1');
+    })();
+  }
   // The owner's read mark: replies after it count as unread. Chats from before it existed start fully read.
   if (!hasColumn('codex_chat_threads', 'last_read_message_id')) {
     db.exec('ALTER TABLE codex_chat_threads ADD COLUMN last_read_message_id INTEGER');
@@ -1133,6 +1151,9 @@ export function createUserSettingsSchema(db: Database.Database): void {
     ['summary_slot_id', 'INTEGER'],
     ['translation_slot_id', 'INTEGER'],
     ['suggest_slot_id', 'INTEGER'],
+    ['reaction_slot_id', 'INTEGER'],
+    ['reaction_enabled', 'INTEGER NOT NULL DEFAULT 0'],
+    ['removed_model_roles', 'TEXT'],
     // Another chat profile (or this one) that writes the reply suggestions with its model and prompt; null: the role above.
     ['suggest_profile_id', 'INTEGER'],
     // Or a user profile (chat_user_profiles) that writes them with its own model and description.

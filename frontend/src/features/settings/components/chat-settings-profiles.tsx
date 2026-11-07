@@ -57,7 +57,7 @@ import { useChatProfileActions } from './use-chat-profile-actions'
 import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
 import { pageAction, pageArray, pageChoice, pageNumber, pageObject, pageText } from '@/features/codex-chat/page-action-helpers'
 import { ChatCardImportReportModal } from './chat-card-import-report'
-import { profileModelChip, profileModelLine } from './chat-profile-model-line'
+import { profileModelChip, profileModelLine, removedModelNotices } from './chat-profile-model-line'
 
 /** The one tool chip of a profile: the allowed-tool count, else just "tools". */
 export function profileToolChip(profile: ChatProfile, t: ReturnType<typeof useI18n>['t']) {
@@ -297,7 +297,9 @@ export function ChatSettingsProfiles() {
                 mediaSrc={profile.libraryReferenceHash ? characterThumbnailUrl(profile.libraryReferenceHash) : profile.avatarThumbnailUrl ?? (profile.hasAvatar ? chatProfileAssetUrl(profile.id, 'avatar', profile.assetVersion) : profile.avatar)}
                 crop={profile.libraryReferenceHash ? null : profile.avatarCrop}
                 leading={<ChatHealthDot down={healthOf(profile.id)}><ChatProfileAvatar name={profile.name} avatar={profile.avatar} profile={profile} engine={profile.engine} size="md" className="ring-2 ring-white/85" /></ChatHealthDot>}
-                subtitle={healthOf(profile.id) ? <span className="text-destructive-soft-foreground">{t({ ko: '연결 끊김', en: 'Connection down' })}</span> : [profileModelChip(profile, slots), profile.mcpEnabled ? profileToolChip(profile, t) : null].filter(Boolean).join(' · ')}
+                subtitle={healthOf(profile.id) ? <span className="text-destructive-soft-foreground">{t({ ko: '연결 끊김', en: 'Connection down' })}</span>
+                  : profile.removedModelRoles?.length ? <span className="text-warning-soft-foreground">{removedModelNotices(profile.removedModelRoles, t).join(' ')}</span>
+                  : [profileModelChip(profile, slots), profile.mcpEnabled ? profileToolChip(profile, t) : null].filter(Boolean).join(' · ')}
                 topStart={!profile.isEnabled ? <Badge variant="overlay" size="sm"><Power />{t({ ko: '꺼짐', en: 'Disabled' })}</Badge>
                   : profile.characterLink?.synced ? <Badge variant="overlay" size="sm"><Link2 />{t({ ko: '동기화', en: 'Synced' })}</Badge> : undefined}
                 details={<span className="truncate text-xs text-white/75">{profileModelLine(profile, slots, t)}{profile.mcpEnabled ? ` · ${profile.mcpScopes.map((scope) => getChatScopeCopy(scope, t).label).join(' · ')}` : ''}</span>}

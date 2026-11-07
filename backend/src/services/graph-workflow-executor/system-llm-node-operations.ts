@@ -16,7 +16,7 @@ import { ModelSlotStore } from '../codex-chat/modelSlots'
 import { askJudge, choiceQuestion, resolveJudgeConnection, yesNoQuestion } from '../judge/judgeEngine'
 import { parseImageDataUrl } from '../llmProviderService'
 import { buildRuntimeArtifact, completeSystemNode } from './system-module-artifacts'
-import { normalizeOptionalId, normalizeOptionalNumber, runNodeLlmRequest } from './system-llm-operations'
+import { normalizeOptionalId, normalizeOptionalNumber, runNodeLlmRequest, workflowModelSlotId } from './system-llm-operations'
 import { requireWorkflowProfile, runWorkflowLlmText } from './workflow-llm-runtime'
 import {
   normalizeOptionalString,
@@ -55,7 +55,7 @@ export async function executeTranslateTextNode(
   const choice = normalizeOptionalString(resolvedInputs.target_language) ?? '한국어'
   const language = TRANSLATION_LANGUAGES[choice] ?? choice
   const profileId = normalizeOptionalId(resolvedInputs.profile_id)
-  const modelSlotId = normalizeOptionalId(resolvedInputs.model_slot_id)
+  const modelSlotId = workflowModelSlotId(node, resolvedInputs)
   const requesterAccountId = context.requestedByAccountId ?? null
   const profile = profileId !== null ? requireWorkflowProfile(profileId, requesterAccountId) : null
   logRequestStarted(context, node, moduleDefinition, operationKey, { profileId, modelSlotId, language })
@@ -94,7 +94,7 @@ export async function executeJudgeTextNode(
   const threshold = Math.min(1, Math.max(0, normalizeOptionalNumber(resolvedInputs.threshold) ?? 0.5))
 
   // The judge model: the picked row (LLM or TypeSafe, or a representative model), else the judge representative model.
-  const modelSlotId = normalizeOptionalId(resolvedInputs.model_slot_id)
+  const modelSlotId = workflowModelSlotId(node, resolvedInputs)
   const row = modelSlotId !== null ? ModelSlotStore.target(modelSlotId) : ModelSlotStore.defaultJudgeTarget()
   if (!row) {
     throw new Error(modelSlotId !== null
@@ -151,7 +151,7 @@ export async function executeChatProfileReplyNode(
   if (!message) throw new Error('메시지가 비어 있어')
   const requesterAccountId = context.requestedByAccountId ?? null
   const profile = requireWorkflowProfile(profileId, requesterAccountId)
-  const modelSlotId = normalizeOptionalId(resolvedInputs.model_slot_id)
+  const modelSlotId = workflowModelSlotId(node, resolvedInputs)
   const messages = buildChatProfileReplyMessages({
     profile,
     message,
@@ -183,7 +183,7 @@ export async function executeDraftAppearanceTagsNode(
 ) {
   const operationKey = 'system.draft_appearance_tags'
   const profileId = normalizeOptionalId(resolvedInputs.profile_id)
-  const modelSlotId = normalizeOptionalId(resolvedInputs.model_slot_id)
+  const modelSlotId = workflowModelSlotId(node, resolvedInputs)
   const requesterAccountId = context.requestedByAccountId ?? null
   const profile = profileId !== null ? requireWorkflowProfile(profileId, requesterAccountId) : null
 

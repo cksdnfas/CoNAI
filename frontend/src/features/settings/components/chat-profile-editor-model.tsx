@@ -15,13 +15,16 @@ import { CodexReasoningSelect } from '@/features/image-generation/components/cod
 import { useChatAdminLinks } from '@/features/codex-chat/chat-admin-location'
 import { useI18n } from '@/i18n'
 import { CHAT_JUDGE_PRESETS_QUERY_KEY, listChatJudgePresets } from '@/lib/api-chat-judge'
-import { thinkingMayFillCap, type ChatProfileDefaults, type ChatProfileInput, type ModelRole, type ModelSlot } from '@/lib/api-codex-chat'
+import { thinkingMayFillCap, type ChatProfileDefaults, type ChatProfileInput, type ModelRole, type ModelSlot, type ModelUseRole } from '@/lib/api-codex-chat'
 import type { CodexModelOption } from '@/lib/api-image-generation-queue'
 import { cn } from '@/lib/utils'
 import { CHAT_PROFILE_LIMITS, CHAT_PROFILE_TEXT_LIMITS, CHAT_TRANSLATION_LANGUAGES, type ChatTranslationLanguage, type ClaudeModelOption } from '@conai/shared'
 import { ClaudeEffortSelect, ClaudeModelSelect } from './claude-model-select'
 import { JudgeModelSelect, useDefaultJudgeLabel, useJudgeModelState, useModelLabel } from './chat-judge-connection-select'
-import { applyRoleChoice, chatModelRows, ModelRoleSelect, roleChoice, slotCeiling, type SuggestWriters } from './chat-model-role-select'
+import { applyRoleChoice, chatModelRows, ModelRoleSelect, ModelRowOptions, roleChoice, slotCeiling, type SuggestWriters } from './chat-model-role-select'
+import { Switch } from '@/components/ui/switch'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { removedModelNotices } from './chat-profile-model-line'
 import { enginePatch, judgePresetPatch, numberOrNull, type Draft, type PatchDraft } from './chat-profile-editor-fields'
 import { SwitchLine } from '@/components/ui/switch-line'
 import { ContentRatingSelect, useCeilingLabel } from './content-rating-select'
@@ -94,6 +97,24 @@ function JudgeRole({ draft, patch }: { draft: Draft; patch: PatchDraft }) {
       ) : null}
     </div>
   )
+}
+
+/** Completion reactions for the profile's chats by default (a chat can override both): on/off and a row, empty for the chat model. */
+function ReactionRole({ draft, patch, slots, slotsReady }: { draft: Draft; patch: PatchDraft; slots: ModelSlot[]; slotsReady: boolean }) {
+  const { t } = useI18n()
+  const rows = chatModelRows(slots)
+  const value = draft.reactionSlotId === null ? '' : `slot:${draft.reactionSlotId}`
+  const select = (
+    <div className="flex items-center gap-3">
+      <Select variant="settings" value={value} aria-label={t({ ko: '완료 반응 모델', en: 'Completion reaction model' })} disabled={!slotsReady} onChange={(event) => patch({ reactionSlotId: event.target.value ? Number(event.target.value.slice(5)) : null })}>
+        <option value="">{t({ ko: '대화 모델 그대로', en: 'Same as chat' })}</option>
+        <ModelRowOptions slots={rows} part="chat" />
+        {value && !rows.some((slot) => value === `slot:${slot.id}`) ? <option value={value} disabled>{t({ ko: '모델 #{id}', en: 'Model #{id}' }, { id: value.slice(5) })}</option> : null}
+      </Select>
+      <Switch checked={draft.reactionEnabled} onCheckedChange={(reactionEnabled) => patch({ reactionEnabled })} aria-label={t({ ko: '완료 반응', en: 'Completion reaction' })} />
+    </div>
+  )
+  return <RoleRow label={t({ ko: '완료 반응', en: 'Completion reaction' })} select={select} />
 }
 
 /** One of the languages the translation works between. */
@@ -178,10 +199,12 @@ function TokenFields({ draft, patch, serverDefault }: { draft: Draft; patch: Pat
 }
 
 /** The engine and its model, then the roles other models play (summary, translation, suggestions, judge). */
-export function ChatProfileModelPanel({ draft, patch, defaults, slots, slotsReady, suggestWriters, codexModels, claudeModels }: {
+export function ChatProfileModelPanel({ draft, patch, defaults, slots, slotsReady, suggestWriters, codexModels, claudeModels, removedRoles }: {
   draft: Draft
   patch: PatchDraft
   defaults: ChatProfileDefaults | undefined
+  /** The saved profile's roles whose model was deleted and left blank. */
+  removedRoles?: readonly ModelUseRole[]
   /** The connections' models (Settings → LLM). */
   slots: ModelSlot[]
   slotsReady: boolean
@@ -194,6 +217,7 @@ export function ChatProfileModelPanel({ draft, patch, defaults, slots, slotsRead
   const navigate = useNavigate()
   const links = useChatAdminLinks()
   const openConnections = () => navigate(links.llm())
+  const removedNotices = removedModelNotices(removedRoles, t)
   const isLlm = draft.engine === 'llm'
   const hasLlmContext = draft.engine !== 'codex'
   // Codex, Claude and pi fold their own sessions with the chat model.
@@ -245,6 +269,15 @@ export function ChatProfileModelPanel({ draft, patch, defaults, slots, slotsRead
 
   return (
     <div className="space-y-4">
+      {removedNotices.length ? (
+        <Alert variant="warning">
+          <TriangleAlert aria-hidden />
+          <AlertDescription>
+            {removedNotices.map((notice) => <p key={notice}>{notice}</p>)}
+            <p>{t({ ko: '아래에서 모델을 다시 골라줘.', en: 'Pick a model again below.' })}</p>
+          </AlertDescription>
+        </Alert>
+      ) : null}
       <EditorGroup>
         <SegmentedControl
           size="sm"
@@ -345,6 +378,8 @@ export function ChatProfileModelPanel({ draft, patch, defaults, slots, slotsRead
           </RoleRow>
           <RoleRow label={t({ ko: '답장 추천', en: 'Reply suggestions' })} select={roleSelect('suggest', t({ ko: '답장 추천 모델', en: 'Reply suggestion model' }))} />
           <JudgeRole draft={draft} patch={patch} />
+          {/* Codex and Claude Code profiles never send completion reactions. */}
+          {isLlm ? <ReactionRole draft={draft} patch={patch} slots={slots} slotsReady={slotsReady} /> : null}
         </div>
       </EditorGroup>
 

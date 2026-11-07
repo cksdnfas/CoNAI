@@ -2,7 +2,7 @@ import { useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, type
 import { chatDraftEqual } from '@/features/codex-chat/chat-draft-equal'
 import { useLocation, useNavigate, useSearchParams, type Location } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { BookOpen, ChevronDown, ChevronLeft, ChevronRight, Copy, Eye, FileText, FolderInput, Image as ImageIcon, Palette, Sparkles, Trash2, UserRound, Wrench } from 'lucide-react'
+import { BookOpen, ChevronDown, ChevronLeft, ChevronRight, Copy, Eye, FileText, FolderInput, Image as ImageIcon, Palette, Sparkles, Trash2, TriangleAlert, UserRound, Wrench } from 'lucide-react'
 import { EditorTitleInput } from '@/components/common/editor-page'
 import { useChatAdminLinks } from '@/features/codex-chat/chat-admin-location'
 import { ActionMenuButton } from '@/components/ui/action-menu'
@@ -85,7 +85,7 @@ import { ProfileAssistContext, useProfileAssist, useProfileEditorChatPage, type 
 import { useProfileCharacterLink } from './use-profile-character-link'
 import { CHAT_DOCK_INSET } from './use-settings-editor-chat-page'
 import { useChatProfileActions } from './use-chat-profile-actions'
-import { profileModelLine } from './chat-profile-model-line'
+import { profileModelLine, removedModelNotices } from './chat-profile-model-line'
 
 /** A copy or card import kept in the editor's history entry. */
 export type ChatProfileEditorState = { draft?: ChatProfileInput; copyOf?: number; initialFolderId?: number | null }
@@ -145,6 +145,8 @@ export function buildDraft(profile: ChatProfileInput | null, defaults: ChatProfi
     suggestSlotId: profile?.suggestSlotId ?? null,
     suggestProfileId: profile?.suggestProfileId ?? null,
     suggestUserProfileId: profile?.suggestUserProfileId ?? null,
+    reactionEnabled: profile?.reactionEnabled ?? false,
+    reactionSlotId: profile?.reactionSlotId ?? null,
     visionEnabled: profile?.visionEnabled ?? false,
     contentRatingMode: profile?.contentRatingMode ?? 'model',
     contentRatingTierId: profile?.contentRatingTierId ?? null,
@@ -509,6 +511,11 @@ export function ChatProfileEditorModal(props: ProfileEditorProps) {
       status={ready ? <>
         {profile ? null : <Chip tone="muted" size="sm">{t({ ko: '아직 저장 안 한 새 프로필', en: 'New, not saved yet' })}</Chip>}
         {draft.isEnabled ? null : <Chip tone="muted" size="sm">{t({ ko: '꺼짐', en: 'Off' })}</Chip>}
+        {profile?.removedModelRoles?.length ? (
+          <Tip content={<span className="whitespace-pre-line">{removedModelNotices(profile.removedModelRoles, t).join('\n')}</span>}>
+            <span><Chip tone="warning" size="sm"><TriangleAlert />{t({ ko: '삭제된 모델', en: 'Deleted model' })}</Chip></span>
+          </Tip>
+        ) : null}
         {audience.picked.length ? <Chip tone="muted" size="sm">{t({ ko: '{who}만 사용', en: 'Only {who}' }, { who: audience.summary })}</Chip> : null}
       </> : undefined}
       actions={ready ? <ActionMenuButton label={t({ ko: '프로필 작업', en: 'Profile actions' })} entries={[
@@ -1013,6 +1020,7 @@ function ProfileEditor({ open, profile, setProfile, draft, setDraft, dirty: prof
         suggestWriters={suggestWriters}
         codexModels={codexModelsQuery.data?.data.models}
         claudeModels={claudeModelsQuery.data?.models}
+        removedRoles={profile?.removedModelRoles}
       />
     ) : null}
     {section === 'memory' ? <ChatProfileMemoryPanel draft={draft} patch={patch} lorebooks={linkableLorebooks} /> : null}

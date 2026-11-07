@@ -108,7 +108,18 @@ function ChatAudioCard({ groupId, candidates, waiting, failed }: { groupId: stri
                 {playing ? <Pause className="fill-current" /> : <Play className="fill-current" />}
               </IconButton>
               <div className="min-w-0">
-                <WaveformThumb candidateId={candidate.id} fileHash={candidate.file_hash} progress={progress} className="h-5" />
+                <WaveformThumb
+                  candidateId={candidate.id}
+                  fileHash={candidate.file_hash}
+                  progress={progress}
+                  duration={player.key === candidate.id && player.duration > 0 ? player.duration : candidate.file.duration ?? 0}
+                  onToggle={() => audioPlayer.toggle(candidate.id)}
+                  onSeek={(seconds) => {
+                    if (audioPlayer.state.key === candidate.id && audioPlayer.state.playing) audioPlayer.seek(seconds)
+                    else audioPlayer.play(candidate.id, { start: seconds })
+                  }}
+                  className="h-5"
+                />
                 <p className="truncate font-mono text-2xs text-muted-foreground">{typeof seed === 'number' ? `seed ${seed}` : candidate.name}</p>
               </div>
               <span className="font-mono text-2xs text-muted-foreground">{formatSeconds(candidate.file.duration)}</span>

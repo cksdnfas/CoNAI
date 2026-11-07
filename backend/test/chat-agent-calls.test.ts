@@ -218,6 +218,27 @@ test('profile agents: admission, no recursion, expiry logs and unread isolation'
     assert.equal(chatUnreadCount(1), before + 2)
   })
 
+  await t.test('all automation room kinds suppress profile reactions, including migrated rooms', async () => {
+    ChatProfileStore.update(agent.id, { reactionEnabled: true })
+    const roomIds: number[] = []
+    for (const kind of ['agent', 'routine', 'workflow', 'plugin', 'posts:board']) {
+      const room = await ensureAutomationRoom(requester, agent.id, `${kind}:reaction-off`, kind)
+      assert.equal(room.reaction_enabled, 0)
+      roomIds.push(room.id)
+    }
+    db.prepare(`UPDATE codex_chat_threads SET reaction_enabled_override = NULL WHERE id IN (${roomIds.join(',')})`).run()
+    db.prepare("DELETE FROM chat_settings_migrations WHERE name = 'automation_reactions_off_v1'").run()
+    CodexChatStore.updateThreadContext(threadId, { reactionEnabled: true })
+    const { createUserSettingsSchema } = await import('../src/database/userSettingsSchema')
+    createUserSettingsSchema(db)
+    for (const id of roomIds) assert.equal(CodexChatStore.findThreadById(id)!.reaction_enabled, 0)
+    assert.equal(CodexChatStore.findThreadById(threadId)!.reaction_enabled, 1, 'ordinary chats retain their explicit override')
+    assert.ok(db.prepare("SELECT 1 FROM chat_settings_migrations WHERE name = 'automation_reactions_off_v1'").get())
+    CodexChatStore.updateThreadContext(threadId, { reactionEnabled: null })
+    ChatProfileStore.update(agent.id, { reactionEnabled: false })
+    for (const id of roomIds) CodexChatStore.deleteThread(id)
+  })
+
   await t.test('direct and group results wait for the caller reply; reactions follow the result exactly once', async child => {
     const { GroupChatService } = await import('../src/services/codex-chat/groupChatService')
     const busy = new Set<number>()

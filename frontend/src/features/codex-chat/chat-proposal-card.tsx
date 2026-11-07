@@ -457,6 +457,8 @@ const UPDATE_LABELS: Record<string, { ko: string; en: string }> = {
   translationSlotId: { ko: '번역 모델', en: 'Translation model' },
   suggestSlotId: { ko: '추천 모델', en: 'Suggestion model' },
   judgeSlotId: { ko: '판단 모델', en: 'Judge model' },
+  reactionSlotId: { ko: '완료 반응 모델', en: 'Completion reaction model' },
+  reactionEnabled: { ko: '완료 반응', en: 'Completion reaction' },
   judgePresetId: { ko: '판단 프리셋', en: 'Judge preset' },
   lorebookIds: { ko: '로어북', en: 'Lorebooks' },
   blockIds: { ko: '표시 블록', en: 'Display blocks' },

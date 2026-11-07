@@ -7,7 +7,7 @@ import { resolveProfileModel } from './chatModelRoles'
 import { ChatProfileStore, type ChatProfile } from './chatProfiles'
 import { ModelSlotStore, type ModelRole } from './modelSlots'
 
-export type ContentRatingProfile = Pick<ChatProfile, 'engine' | 'model' | 'modelSlotId' | 'summarySlotId' | 'translationSlotId' | 'suggestSlotId' | 'contentRatingMode' | 'contentRatingTierId'>
+export type ContentRatingProfile = Pick<ChatProfile, 'engine' | 'model' | 'modelSlotId' | 'summarySlotId' | 'translationSlotId' | 'suggestSlotId' | 'contentRatingMode' | 'contentRatingTierId'> & Pick<Partial<ChatProfile>, 'reactionSlotId'>
 
 /** A model row's ceiling (see contentRating.ts); no row: none. */
 export function slotContentLimit(slotId: number | null | undefined): ContentRatingLimit {

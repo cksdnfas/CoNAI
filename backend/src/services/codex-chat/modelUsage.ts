@@ -17,7 +17,8 @@ const MODEL_NODE_ROLES: Record<string, ModelRole> = {
   'system.draft_appearance_tags': 'summary',
 }
 
-type NodeRefs = { slots: Map<number, number>; profiles: Map<string, number> }
+type NodeRefs = { slots: Map<number, number>; llmSlots: Map<number, number>; profiles: Map<string, number> }
+type ModelNode = { module_id: number; input_values?: Record<string, unknown> }
 
 function positiveId(value: unknown) {
   const id = Number(value)
@@ -28,31 +29,64 @@ function add<K>(map: Map<K, number>, key: K) {
   map.set(key, (map.get(key) ?? 0) + 1)
 }
 
-/** Saved graph-workflow model nodes by the row or profile they name; the graphs are JSON documents, so they are parsed. */
-function workflowNodeRefs(): NodeRefs {
+/** Only registered model operations own model_slot_id; preserve all other graph data when rewriting one. */
+function* workflowModelNodes() {
   const db = getUserSettingsDb()
-  const refs: NodeRefs = { slots: new Map(), profiles: new Map() }
-  const roleByModule = new Map<number, ModelRole>()
+  const operations = new Map<number, { role: ModelRole; judge: boolean }>()
   for (const row of db.prepare('SELECT id, internal_fixed_values FROM module_definitions WHERE internal_fixed_values LIKE ?').all('%"system.%') as Array<{ id: number; internal_fixed_values: string | null }>) {
     let operationKey: unknown
     try { operationKey = JSON.parse(row.internal_fixed_values ?? '{}')?.operation_key } catch { continue }
-    if (typeof operationKey === 'string' && MODEL_NODE_ROLES[operationKey]) roleByModule.set(row.id, MODEL_NODE_ROLES[operationKey])
+    if (typeof operationKey === 'string' && MODEL_NODE_ROLES[operationKey]) operations.set(row.id, { role: MODEL_NODE_ROLES[operationKey], judge: operationKey === 'system.judge_text' })
   }
-  if (roleByModule.size === 0) return refs
-  for (const row of db.prepare("SELECT graph_json FROM graph_workflows WHERE graph_json LIKE '%model_slot_id%' OR graph_json LIKE '%profile_id%'").iterate() as Iterable<{ graph_json: string }>) {
-    let nodes: unknown
-    try { nodes = JSON.parse(row.graph_json)?.nodes } catch { continue }
-    if (!Array.isArray(nodes)) continue
-    for (const node of nodes) {
-      const role = node ? roleByModule.get(Number(node.module_id)) : undefined
-      if (!role) continue
+  if (!operations.size) return
+  for (const row of db.prepare("SELECT id, graph_json FROM graph_workflows WHERE graph_json LIKE '%model_slot_id%' OR graph_json LIKE '%profile_id%'").iterate() as Iterable<{ id: number; graph_json: string }>) {
+    let graph: { nodes: ModelNode[] }
+    try { graph = JSON.parse(row.graph_json) } catch { continue }
+    if (!Array.isArray(graph?.nodes)) continue
+    const nodes = graph.nodes.flatMap((node) => {
+      const operation = node ? operations.get(Number(node.module_id)) : undefined
+      return operation ? [{ node, ...operation }] : []
+    })
+    yield { id: row.id, graph, nodes }
+  }
+}
+
+/** Saved graph-workflow model nodes by the row or profile they name. */
+export function workflowNodeRefs(): NodeRefs {
+  const refs: NodeRefs = { slots: new Map(), llmSlots: new Map(), profiles: new Map() }
+  for (const { nodes } of workflowModelNodes()) {
+    for (const { node, role, judge } of nodes) {
       const slotId = positiveId(node.input_values?.model_slot_id)
       const profileId = positiveId(node.input_values?.profile_id)
-      if (slotId !== null) add(refs.slots, slotId)
-      else if (profileId !== null) add(refs.profiles, `${profileId}:${role}`)
+      if (slotId !== null) {
+        add(refs.slots, slotId)
+        if (!judge) add(refs.llmSlots, slotId)
+      } else if (profileId !== null && node.input_values?.model_slot_removed !== true) add(refs.profiles, `${profileId}:${role}`)
     }
   }
   return refs
+}
+
+/** Called inside the model-removal transaction; the graph revision trigger invalidates stale editor saves. */
+export function replaceWorkflowModelReferences(ids: number[], replacement: number | null) {
+  const removed = new Set(ids)
+  const updates: Array<[string, number]> = []
+  for (const { id, graph, nodes } of workflowModelNodes()) {
+    let changed = false
+    for (const { node } of nodes) {
+      const values = node.input_values
+      if (!values || !removed.has(positiveId(values.model_slot_id) ?? 0)) continue
+      values.model_slot_id = replacement
+      // Null ordinarily means "use the default"; explicit removal instead requires choosing a model again.
+      if (replacement === null) values.model_slot_removed = true
+      else delete values.model_slot_removed
+      changed = true
+    }
+    if (changed) updates.push([JSON.stringify(graph), id])
+  }
+  // better-sqlite3 disallows writes while the graph iterator is active.
+  const update = getUserSettingsDb().prepare('UPDATE graph_workflows SET graph_json = ? WHERE id = ?')
+  for (const values of updates) update.run(...values)
 }
 
 /** Where each model row is used by saved workflow nodes (the rest of a row's usage comes with the row itself). */
