@@ -131,11 +131,11 @@ export function parseLayoutPrompt(prompt, size) {
 
 /** Marked-field roles the plugin fills; each maps to the id of one of the workflow's Marked Fields (or ''). */
 export const FIELD_ROLES = [
-  { id: 'prompt', label: '레이아웃 프롬프트', hint: 'JSON 문자열을 넣는 칸 · 필수', required: true },
-  { id: 'negative', label: '네거티브 프롬프트', hint: '선택' },
-  { id: 'width', label: '너비', hint: '캔버스 크기 · 선택' },
-  { id: 'height', label: '높이', hint: '캔버스 크기 · 선택' },
-  { id: 'seed', label: '시드', hint: '비우면 매번 새 시드' },
+  { id: 'prompt', label: '레이아웃 프롬프트', required: true },
+  { id: 'negative', label: '네거티브 프롬프트' },
+  { id: 'width', label: '너비' },
+  { id: 'height', label: '높이' },
+  { id: 'seed', label: '시드' },
 ]
 
 const textLike = (field) => field.type === 'text' || field.type === 'textarea'

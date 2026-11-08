@@ -17,13 +17,13 @@
 .region-row .caption.empty { color: var(--conai-muted-foreground); font-style: italic }
 .region-row button { min-height: 28px; width: 28px; padding: 0 }
 
-.stage { display: flex; flex-direction: column; align-items: center; gap: 10px }
+.stage { display: flex; flex-direction: column; align-items: center; gap: 10px; min-height: 0 }
 .stage-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; width: 100% }
 .tool { display: flex; align-items: center; gap: 8px; min-height: 32px; margin: 0; padding: 0 10px; border-radius: var(--conai-radius-md); background: var(--conai-fill); font-size: 12px; cursor: pointer }
 .tool select, .tool input:not([type=checkbox]) { display: inline-block; width: auto; margin: 0; background: transparent }
 .tool input[type=checkbox] { width: 24px; height: 24px; margin: 0 }
-.cvwrap { display: flex; justify-content: center; width: 100% }
-.cv { position: relative; overflow: hidden; border-radius: 4px; background-color: #0e0e0e; background-size: cover; background-position: center; cursor: crosshair; user-select: none; touch-action: none;
+.cvwrap { display: flex; flex: 1; align-items: center; justify-content: center; width: 100%; min-height: 320px; container-type: size }
+.cv { width: min(100cqw, 100cqh * var(--ratio-n, 1)); aspect-ratio: var(--ratio, 1); position: relative; overflow: hidden; border-radius: 4px; background-color: #0e0e0e; background-size: cover; background-position: center; cursor: crosshair; user-select: none; touch-action: none;
   --grid: rgb(229 226 225 / .05); background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px); background-size: 10% 10% }
 .cv.has-image { background-image: var(--image); background-size: cover }
 .cv.select-tool { cursor: default }

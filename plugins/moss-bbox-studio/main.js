@@ -13,7 +13,6 @@ const color = (index) => REGION_COLORS[index % REGION_COLORS.length]
 const HASH = /^[a-f0-9]{32}$/i
 const TERMINAL = new Set(['completed', 'failed', 'cancelled'])
 const STATUS_LABEL = { queued: '대기 중', dispatching: '보내는 중', running: '생성 중', completed: '완료', failed: '실패', cancelled: '취소됨' }
-const CANVAS_MAX_HEIGHT = 560
 const MAX_STORED_JOBS = 8
 
 const state = {
@@ -83,8 +82,8 @@ const hasContent = () => state.draft.items.length > 0 || state.draft.summary.tri
 function renderCanvasFrame() {
   const [width, height] = state.draft.size
   const canvas = $('canvas')
-  canvas.style.width = `min(100%, ${Math.round((CANVAS_MAX_HEIGHT * width) / height)}px)`
-  canvas.style.aspectRatio = `${width} / ${height}`
+  canvas.style.setProperty('--ratio', `${width} / ${height}`)
+  canvas.style.setProperty('--ratio-n', String(width / height))
   const image = state.source && state.showImage
   canvas.classList.toggle('has-image', Boolean(image))
   canvas.style.setProperty('--image', image ? `url("${state.source.url}")` : 'none')
@@ -128,12 +127,12 @@ function renderCoords() {
 function renderInspector() {
   const host = $('inspector')
   const item = state.draft.items[state.sel]
-  if (!item) { host.innerHTML = '<p class="muted">영역을 고르거나 캔버스에 새로 그려줘.</p>'; return }
+  if (!item) { host.innerHTML = ''; return }
   host.innerHTML = `
     <div class="selected-title" style="--c:${color(state.sel)}"><span class="number">${state.sel + 1}</span><p class="conai-overline">선택한 영역</p></div>
     <div class="conai-segmented" role="group" aria-label="영역 종류">${KINDS.map((kind) => `<button type="button" data-kind="${kind.id}" aria-pressed="${item.label === kind.id}">${kind.label}</button>`).join('')}</div>
-    <label class="field-gap">영역 프롬프트<textarea rows="6" data-field="caption" placeholder="이 영역에 뭐가 있어야 하는지 써줘">${esc(item.caption)}</textarea></label>
-    ${item.label === 'text' ? `<label>그릴 글자<input data-field="text" value="${esc(item.text)}" placeholder="화면에 보일 글자 그대로"></label>` : ''}
+    <label class="field-gap">영역 프롬프트<textarea rows="6" data-field="caption">${esc(item.caption)}</textarea></label>
+    ${item.label === 'text' ? `<label>그릴 글자<input data-field="text" value="${esc(item.text)}"></label>` : ''}
     <p class="coords" data-coords></p>
     <div class="order"><button type="button" data-move="-1">아래로</button><button type="button" data-move="1">위로</button></div>`
   renderCoords()
@@ -198,17 +197,14 @@ function renderSetup() {
   $('view-setup').innerHTML = `<div class="setup">
     <section>
       <label>사용할 워크플로우<select id="workflow-select"><option value="">선택 안 함</option>${state.workflows.map((item) => `<option value="${item.id}"${item.id === state.setup.workflowId ? ' selected' : ''}>${esc(item.name)} (#${item.id})</option>`).join('')}</select></label>
-      <p class="muted hint">ComfyUI 탭에 등록한 워크플로우 중에서 골라. 프롬프트를 받는 칸이 Marked Field로 열려 있어야 해. 서버는 자동 분산으로 정해져.</p>
       <p class="conai-overline field-gap">검사 결과</p>
-      <ul class="checks">${current ? (issues.length ? issues.map((issue) => `<li><span class="badge warn">확인</span><span>${esc(issue)}</span></li>`).join('') : '<li><span class="badge ok">통과</span><span>생성에 필요한 칸이 모두 연결돼 있어.</span></li>') : '<li class="muted">워크플로우를 고르면 연결 상태를 검사해.</li>'}
+      <ul class="checks">${current ? (issues.length ? issues.map((issue) => `<li><span class="badge warn">확인</span><span>${esc(issue)}</span></li>`).join('') : '<li><span class="badge ok">통과</span><span>생성에 필요한 칸이 모두 연결돼 있어.</span></li>') : ''}
         ${current && !mapping.width ? '<li><span class="badge warn">참고</span><span>크기 칸이 없어서 워크플로우에 고정된 크기로 생성돼. 캔버스 크기가 이와 다르면 박스 위치가 어긋나.</span></li>' : ''}</ul>
       <div class="toolbar field-gap"><button type="button" id="reload-workflows">워크플로우 다시 불러오기</button></div>
     </section>
     <section>
       <p class="conai-overline">입력 칸 연결</p>
-      ${current ? FIELD_ROLES.map((role) => `<div class="maprow"><div class="role"><b>${role.label}</b><span>${role.hint}</span></div><label><select data-role="${role.id}" aria-label="${role.label} 칸"><option value="">연결 안 함</option>${compatible(role).map((field) => option(field, mapping[role.id])).join('')}</select></label><span class="badge ${mapping[role.id] ? 'ok' : ''}">${mapping[role.id] ? '연결됨' : role.required ? '필수' : '선택'}</span></div>`).join('') : '<p class="muted">워크플로우를 먼저 골라줘.</p>'}
-      <p class="muted hint">이름과 형식으로 먼저 채워 둔 값이야. 틀리면 바꿔줘. 시드를 연결하지 않으면 워크플로우의 시드 설정을 따라.</p>
-    </section></div>`
+      ${current ? FIELD_ROLES.map((role) => `<div class="maprow"><div class="role"><b>${role.label}</b></div><label><select data-role="${role.id}" aria-label="${role.label} 칸"><option value="">연결 안 함</option>${compatible(role).map((field) => option(field, mapping[role.id])).join('')}</select></label><span class="badge ${mapping[role.id] ? 'ok' : ''}">${mapping[role.id] ? '연결됨' : role.required ? '필수' : '선택'}</span></div>`).join('') : ''}    </section></div>`
 }
 
 function renderResults() {

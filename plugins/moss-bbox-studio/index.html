@@ -19,7 +19,6 @@
     <p class="conai-overline">영역 <span id="region-count"></span></p>
     <ul id="layers" class="layers"></ul>
     <button type="button" id="add-region">+ 영역 추가</button>
-    <p class="muted hint">번호가 클수록 위에 그려져. 순서는 선택한 영역에서 바꿔.</p>
   </aside>
   <section class="conai-pane stage" aria-label="캔버스">
     <div class="stage-bar">
@@ -31,13 +30,12 @@
       <label class="tool" id="img-toggle" hidden><input type="checkbox" id="show-img" checked> 원본 이미지 보기</label>
     </div>
     <div class="cvwrap"><div id="canvas" class="cv"></div></div>
-    <p class="muted hint">빈 곳을 끌어 영역을 그리고, 박스를 끌어 옮겨. 모서리 네모로 크기를 바꿔. 이미지 파일을 놓으면 가져와.</p>
   </section>
   <aside class="conai-sidebar end insp" aria-label="프롬프트">
     <section>
       <p class="conai-overline">메인 프롬프트</p>
-      <textarea id="summary" rows="5" aria-label="메인 프롬프트" placeholder="장면 전체의 분위기와 스타일을 적어줘"></textarea>
-      <label>메타 태그 <input id="meta" placeholder="illustration, anime" aria-label="메타 태그"></label>
+      <textarea id="summary" rows="5" aria-label="메인 프롬프트"></textarea>
+      <label>메타 태그 <input id="meta" aria-label="메타 태그"></label>
     </section>
     <section id="inspector"></section>
     <section id="negative-box" hidden>
@@ -51,7 +49,7 @@
 
 <footer class="genbar" id="genbar">
   <label class="tool">워크플로우 <span id="wf-name" class="wf-name"></span></label>
-  <label class="tool">시드 <input type="number" id="seed" min="0" placeholder="비우면 새 시드" aria-label="시드"></label>
+  <label class="tool">시드 <input type="number" id="seed" min="0" aria-label="시드"></label>
   <span class="conai-spacer"></span>
   <span class="badge" id="size-badge"></span>
   <button type="button" id="generate" class="primary">생성 요청</button>
@@ -61,10 +59,8 @@
 
 <dialog id="import-dialog" aria-labelledby="import-title">
   <h2 id="import-title">이미지 가져오기</h2>
-  <p class="muted">MOSS-Image로 만든 이미지의 프롬프트(JSON)에서 영역을 읽어 와. 영역은 고치고 다시 생성할 수 있어.</p>
   <label>이미지 파일 <input type="file" id="file" accept="image/*"></label>
-  <label>라이브러리 이미지 해시 <input id="hash-input" maxlength="32" placeholder="32자리 해시" autocomplete="off"></label>
-  <p class="muted hint">이미지 상세의 ⋯ 메뉴에서 “MOSS BBox Studio에서 열기”로도 가져올 수 있어.</p>
+  <label>라이브러리 이미지 해시 <input id="hash-input" maxlength="32" autocomplete="off"></label>
   <div class="toolbar"><button type="button" id="import-hash" class="primary">해시로 가져오기</button><button type="button" id="import-close" class="ghost">닫기</button></div>
 </dialog>
 </body></html>
