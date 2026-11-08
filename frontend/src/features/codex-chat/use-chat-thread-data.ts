@@ -10,13 +10,13 @@ const RUNNING_POLL_MS = 2000
 const POLL_TAIL_MESSAGES = 40
 
 /** Own thread selection and server refresh policy for both the dock and the full chat page. */
-export function useChatThreadData({ selectedThreadId, settleSelection, keepDrafts }: Pick<CodexChatApi, 'selectedThreadId' | 'settleSelection' | 'keepDrafts'>, liveThreadId: number | null) {
+export function useChatThreadData({ selectedThreadId, settleSelection, keepDrafts }: Pick<CodexChatApi, 'selectedThreadId' | 'settleSelection' | 'keepDrafts'>, liveThreads: Readonly<Record<number, unknown>>) {
   const queryClient = useQueryClient()
   const { status: streamStatus } = useRuntimeEventStream()
   const threadsQuery = useQuery({
     queryKey: CODEX_CHAT_THREADS_QUERY_KEY,
     queryFn: listCodexChatThreads,
-    refetchInterval: (query) => resolveStreamFallbackInterval(streamStatus, query.state.data?.some((entry) => entry.running && entry.id !== liveThreadId) ? RUNNING_POLL_MS * 2 : false),
+    refetchInterval: (query) => resolveStreamFallbackInterval(streamStatus, query.state.data?.some((entry) => entry.running && !(entry.id in liveThreads)) ? RUNNING_POLL_MS * 2 : false),
   })
   const threads = useMemo(() => threadsQuery.data ?? [], [threadsQuery.data])
   const activeThreadId = selectedThreadId === undefined ? defaultThreadId(threads) : selectedThreadId
@@ -70,7 +70,7 @@ export function useChatThreadData({ selectedThreadId, settleSelection, keepDraft
       return current && current.thread.context_revision > detail.thread.context_revision ? current : detail
     },
     enabled: activeThreadId !== null,
-    refetchInterval: (query) => (query.state.data?.running && liveThreadId !== activeThreadId ? RUNNING_POLL_MS : query.state.data?.pendingJobs ? chatGenerationPollInterval(streamStatus) : false),
+    refetchInterval: (query) => (query.state.data?.running && (activeThreadId === null || !(activeThreadId in liveThreads)) ? RUNNING_POLL_MS : query.state.data?.pendingJobs ? chatGenerationPollInterval(streamStatus) : false),
   })
   const loadingRef = useRef<{ threadId: number; promise: Promise<number | null> } | null>(null)
   const older = useMutation({

@@ -238,7 +238,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   const hasSideList = useMinWidth(768)
   const { selectThread, listOpen, setListOpen, view, setView, messageFocus, clearMessageFocus, prepareChat, isStartingChat, editMessage, regenerate, continueReply } = chat
   const { dropThread, forgetThread, updateListEntry: updateEntry } = useChatThreadActions(chat)
-  const liveTurn = useCodexChatLiveState()
+  const liveStates = useCodexChatLiveState()
 
   const profilesQuery = useQuery({ queryKey: CHAT_PROFILES_QUERY_KEY, queryFn: listChatProfiles, staleTime: 30_000 })
   const profiles = useMemo(() => profilesQuery.data ?? [], [profilesQuery.data])
@@ -272,7 +272,8 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   }, [startWith, userProfiles])
 
   const keepPagedDrafts = usePagedChatDraftRetention(chat.currentDrafts, chat.keepDrafts)
-  const { threadsQuery, threads, activeThreadId, activeThread, threadQuery, thread, displayThread, loadEarlier, preserveHistory, loadingEarlier, earlierError, hasMoreBefore } = useChatThreadData({ ...chat, keepDrafts: keepPagedDrafts }, liveTurn?.threadId ?? null)
+  const { threadsQuery, threads, activeThreadId, activeThread, threadQuery, thread, displayThread, loadEarlier, preserveHistory, loadingEarlier, earlierError, hasMoreBefore } = useChatThreadData({ ...chat, keepDrafts: keepPagedDrafts }, liveStates)
+  const liveTurn = activeThreadId === null ? null : liveStates[activeThreadId] ?? null
   const selectedRoomQuery = useChatRoomSummaries(activeThreadId === null ? [] : [activeThreadId], activeThread === null)
   // The new chat being prepared (not saved yet) stands in for a chat until its first message saves it.
   const pendingChat = activeThreadId === null ? chat.pendingChat : null
@@ -346,10 +347,8 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   const healthOf = useChatHealth()
   const healthRecheck = useChatHealthRecheck()
 
-  // One reply streams at a time. A stream in another chat still blocks sending and rewriting here (isBusy), but only
-  // this chat's own reply makes it "replying" (the stop button, its server state).
+  // Every chat streams on its own: a reply in another chat never holds this one.
   const isStreaming = liveTurn !== null
-  const streamingHere = liveTurn?.threadId === activeThreadId
   // Compacting this chat (here or from the context view) holds it like a reply; a Codex compaction also reads as
   // "running" on the server, which is not a reply to show or stop.
   const compactMutation = useMutation({
@@ -361,7 +360,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
     },
   })
   const isCompacting = useIsMutating({ mutationKey: codexChatCompactMutationKey(activeThreadId) }) > 0
-  const serverRunning = Boolean(threadQuery.data?.running) && !streamingHere && !isCompacting
+  const serverRunning = Boolean(threadQuery.data?.running) && !isStreaming && !isCompacting
   const alternativeMutation = useMutation({
     mutationFn: ({ id, index }: { id: number; index: number }) => runChatThreadDetailMutation(queryClient, activeThreadId as number, () => selectChatAlternative(activeThreadId as number, id, index)),
     onSuccess: async (detail) => {
@@ -388,7 +387,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   const attachmentRoom = activeThread ?? selectedRoomQuery.data?.[0]
   const allowPrivateUploads = Boolean(attachmentRoom && attachmentRoom.automation !== 'board')
   const fileDrop = useChatFileDrop(chat, isBusy || activeThreadId === null || !allowPrivateUploads)
-  const replacingMessageId = liveTurn?.threadId === activeThreadId ? liveTurn.replacingMessageId : threadQuery.data?.running?.replacingMessageId
+  const replacingMessageId = liveTurn ? liveTurn.replacingMessageId : threadQuery.data?.running?.replacingMessageId
   const messages: CodexChatMessage[] = useMemo(() => (threadQuery.data?.messages ?? []).filter((message) => message.id !== replacingMessageId), [threadQuery.data?.messages, replacingMessageId])
   const media = threadQuery.data?.media
   const runningFromServer = serverRunning ? threadQuery.data?.running ?? null : null
@@ -593,16 +592,15 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
     return { id: entry.id, expressionGroupId: entry.expressionGroupId, referenceHash: entry.referenceHash, avatarHash: entry.avatarHash, expressions, emotion }
   }), [speakerProfiles, emoticonsById, isGroup, memberBlocks, blocksState])
   const portraitMessages = useMemo(() => {
-    const live = liveTurn?.threadId === activeThreadId ? liveTurn : null
-    if (live && (isGroup ? live.portraitProfileId !== null : live.hasText)) {
-      return [{ role: 'assistant', content: ' ', speaker_profile_id: isGroup ? live.portraitProfileId : profile?.id }]
+    if (liveTurn && (isGroup ? liveTurn.portraitProfileId !== null : liveTurn.hasText)) {
+      return [{ role: 'assistant', content: ' ', speaker_profile_id: isGroup ? liveTurn.portraitProfileId : profile?.id }]
     }
     const replies = isGroup ? serverReplies : null
     const current = replies
       ? replies.filter((reply) => reply.text).map((reply) => ({ role: 'assistant', content: reply.text, speaker_profile_id: reply.profileId }))
       : runningFromServer?.text ? [{ role: 'assistant', content: runningFromServer.text, speaker_profile_id: profile?.id }] : []
     return current
-  }, [activeThreadId, isGroup, liveTurn, profile?.id, runningFromServer, serverReplies])
+  }, [isGroup, liveTurn, profile?.id, runningFromServer, serverReplies])
   const portraitSignal = useMemo(() => resolveChatPortrait(portraitMessages.length ? [...messages, ...portraitMessages] : messages, portraitProfiles, profile?.id ?? null), [messages, portraitMessages, portraitProfiles, profile?.id])
   const portraitProfile = portraitSignal ? profilesById.get(portraitSignal.profileId) : null
   const hasPortrait = canViewImages && portraitSignal !== null && !!portraitProfile && isTranscript && thread !== null
@@ -730,7 +728,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   const profileMissing = thread !== null ? (isGroup ? !memberProfiles.some((member) => member.isEnabled) : !profile || !profile.isEnabled) : pendingProfile !== null && !pendingProfile.usable
   const codexUnavailable = isCodexThread && !codexStatus?.available
   // Group rooms: the user may cut in while members are still answering.
-  const sendBlocked = isGroup ? alternativeMutation.isPending || commandPending || isCompacting || (isStreaming && !streamingHere) : isBusy
+  const sendBlocked = isGroup ? alternativeMutation.isPending || commandPending || isCompacting : isBusy
 
   const runCommand = async (text: string) => {
     if (isBusy) return
@@ -833,10 +831,9 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
       ? <IconButton variant="ghost" size="icon-sm" onClick={() => selectThread(null)} label={t({ ko: '뒤로', en: 'Back' })}><ArrowLeft /></IconButton>
       : null
   const openThread = (threadId: number) => (threadId === activeThreadId ? setListOpen(false) : selectThread(threadId))
-  const liveThreadId = liveTurn?.threadId
   const runningThreadIds = new Set<number>([
     ...threads.filter((entry) => entry.running).map((entry) => entry.id),
-    ...(liveThreadId !== undefined ? [liveThreadId] : []),
+    ...Object.keys(liveStates).map(Number),
     ...(serverRunning && activeThreadId !== null ? [activeThreadId] : []),
   ])
   // Pin, archive and rename show at once; the server's answer (or a refetch on failure) settles it.
@@ -879,7 +876,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
     : isGroup
       ? group ? <DropdownMenuItem disabled={isBusy || group.memberIds.length >= GROUP_MEMBER_MAX} onSelect={() => setInvite({ kind: 'add', threadId: activeThreadId, memberIds: group.memberIds })}><UserPlus />{t({ ko: '참가자 초대', en: 'Invite members' })}</DropdownMenuItem> : null
       : profile?.usable ? <DropdownMenuItem onSelect={() => setInvite({ kind: 'create', baseProfileId: profile.id })}><UserPlus />{t({ ko: '그룹방으로 만들기', en: 'Make a group room' })}</DropdownMenuItem> : null
-  const liveGroupTurn = isGroup && liveTurn?.threadId === activeThreadId ? liveTurn : null
+  const liveGroupTurn = isGroup ? liveTurn : null
   const turnStatus = isCompacting ? (
     <div role="status" className="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
       <Spinner size="sm" />{t({ ko: '대화 압축 중…', en: 'Compacting…' })}
@@ -1060,7 +1057,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
           {flags.length > 0 ? <ChatFlagButton buttonRef={flagButtonRef} count={activeFlagIds.length} open={flagTrayOpen} disabled={!canToggleFlags} onToggle={() => setFlagTrayOpen((open) => !open)} /> : null}
           {profile?.suggestEnabled ? <ChatSuggestButton buttonRef={suggestButtonRef} open={suggestions.open} loading={suggestions.loading} disabled={isBusy || activeThreadId === null} onToggle={suggestions.toggle} /> : null}
         </div>
-        {(streamingHere || serverRunning) && !(isGroup && canSend) ? (
+        {(isStreaming || serverRunning) && !(isGroup && canSend) ? (
           <IconButton variant="secondary" size="icon-sm" onClick={() => activeThreadId !== null && chat.stop(activeThreadId)} label={t({ ko: '중단', en: 'Stop' })}>
             <Square />
           </IconButton>

@@ -7,8 +7,8 @@ import { ChatPortrait } from './chat-status-panel'
 import { useChatPortrait } from './use-chat-portrait'
 
 export function ChatStreamingMessage({ threadId, ...props }: Omit<ComponentProps<typeof ChatLiveMessage>, 'turn'> & { threadId: number | null }) {
-  const turn = useCodexChatLiveTurn()
-  return turn?.threadId === threadId ? <ChatLiveMessage {...props} turn={turn} /> : null
+  const turn = useCodexChatLiveTurn(threadId)
+  return turn ? <ChatLiveMessage {...props} turn={turn} /> : null
 }
 
 export function ChatStreamingPortrait({ threadId, messages, fallback, profiles, profilesById, defaultProfileId }: {

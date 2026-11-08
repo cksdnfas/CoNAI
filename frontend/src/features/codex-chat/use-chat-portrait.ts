@@ -3,8 +3,7 @@ import { useCodexChatLiveTurn } from './codex-chat-context'
 
 /** Stored history is independent of streamed frames; the compiler caches it on messages/profiles/default id. */
 export function useChatPortrait(threadId: number | null, messages: readonly ChatPortraitMessage[], fallback: readonly ChatPortraitMessage[], profiles: readonly ChatPortraitProfile[], defaultProfileId: number | null) {
-  const turn = useCodexChatLiveTurn()
-  const active = turn?.threadId === threadId ? turn : null
+  const active = useCodexChatLiveTurn(threadId)
   const live = active?.replies
     ? active.replies.filter((reply) => reply.text).map((reply) => ({ role: 'assistant', content: reply.text, speaker_profile_id: reply.profileId }))
     : active?.text ? [{ role: 'assistant', content: active.text, speaker_profile_id: defaultProfileId }] : fallback

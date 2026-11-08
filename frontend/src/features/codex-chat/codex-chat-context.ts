@@ -149,7 +149,7 @@ export interface CodexChatApi {
    * The reply streaming right now, read when needed (event handlers). Components that show it use
    * useCodexChatLiveTurn: it changes with every token, and the rest of the API must not re-render the app shell then.
    */
-  currentLiveTurn: () => CodexChatLiveTurn | null
+  currentLiveTurn: (threadId: number) => CodexChatLiveTurn | null
   currentDrafts: () => Record<number, string>
   draftAttachments: StoredFileEntry[]
   draftMediaAttachments: ChatMediaAttachment[]
@@ -208,10 +208,11 @@ export function useCodexChatDrafts() {
   return useContext(CodexChatDraftsContext)
 }
 
-/** The streaming reply on its own context: only what renders it re-renders per token. */
-export const CodexChatLiveContext = createContext<CodexChatLiveTurn | null>(null)
-export function useCodexChatLiveTurn() {
-  return useContext(CodexChatLiveContext)
+/** The streaming replies (one per chat) on their own context: only what renders them re-renders per token. */
+export const CodexChatLiveContext = createContext<Readonly<Record<number, CodexChatLiveTurn>>>({})
+export function useCodexChatLiveTurn(threadId: number | null) {
+  const turns = useContext(CodexChatLiveContext)
+  return threadId === null ? null : turns[threadId] ?? null
 }
 
 /** Only turn/speaker transitions, never text frames; the shell and stored transcript subscribe here. */
@@ -219,7 +220,7 @@ export type CodexChatLiveState = {
   threadId: number; replacingMessageId?: number; speakerIds: string; queueIds: string
   portraitProfileId: number | null; hasText: boolean
 }
-export const CodexChatLiveStateContext = createContext<CodexChatLiveState | null>(null)
+export const CodexChatLiveStateContext = createContext<Readonly<Record<number, CodexChatLiveState>>>({})
 export function useCodexChatLiveState() {
   return useContext(CodexChatLiveStateContext)
 }

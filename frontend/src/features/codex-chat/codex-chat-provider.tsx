@@ -158,21 +158,28 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
   const attachmentEpoch = useRef(0)
   /** Attachments, reply and picks of the chats not open now (see switchComposer). */
   const stashRef = useRef(new Map<number, ComposerStash>())
-  const [liveTurn, setLiveTurn] = useState<CodexChatLiveTurn | null>(null)
-  const liveTurnRef = useRef<CodexChatLiveTurn | null>(null)
-  liveTurnRef.current = liveTurn
-  const currentLiveTurn = useCallback(() => liveTurnRef.current, [])
+  // Every chat streams on its own: the turns being streamed, by chat.
+  const [liveTurns, setLiveTurns] = useState<Record<number, CodexChatLiveTurn>>({})
+  const liveTurnsRef = useRef(liveTurns)
+  liveTurnsRef.current = liveTurns
+  const currentLiveTurn = useCallback((threadId: number) => liveTurnsRef.current[threadId] ?? null, [])
+  const patchLiveTurn = useCallback((threadId: number, change: (current: CodexChatLiveTurn | null) => CodexChatLiveTurn | null) => setLiveTurns((turns) => {
+    const current = turns[threadId] ?? null
+    const next = change(current)
+    if (next === current) return turns
+    if (next) return { ...turns, [threadId]: next }
+    const rest = { ...turns }
+    delete rest[threadId]
+    return rest
+  }), [])
   const [messageFocus, setMessageFocus] = useState<CodexChatApi['messageFocus']>(null)
   const [isStartingChat, setIsStartingChat] = useState(false)
   const [pendingChat, setPendingChat] = useState<CodexChatPendingChat | null>(null)
   const pendingRef = useRef(pendingChat)
-  const streamAbortRef = useRef<AbortController | null>(null)
+  /** The reply streaming in each chat; `settled` resolves when it has wound down, so a group room message can cut in after it. */
+  const streamsRef = useRef(new Map<number, { controller: AbortController; settled: Promise<void> }>())
   /** A new chat is being saved (a double click must not save two). */
   const startingRef = useRef(false)
-  /** The chat the stream belongs to: only a message in that same room may cut in. */
-  const streamThreadRef = useRef<number | null>(null)
-  /** Settles when the streamed reply has wound down, so a group room message can cut in after it. */
-  const activeReplyRef = useRef<Promise<void> | null>(null)
 
   attachmentsRef.current = draftAttachments
   mediaAttachmentsRef.current = draftMediaAttachments
@@ -265,7 +272,10 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
   const statusQuery = useQuery({ queryKey: CHAT_STATUS_QUERY_KEY, queryFn: getCodexChatStatus, staleTime: 60_000, retry: false })
   const canUse = statusQuery.data?.canUse === true
 
-  useEffect(() => () => streamAbortRef.current?.abort(), [])
+  useEffect(() => {
+    const streams = streamsRef.current
+    return () => streams.forEach(({ controller }) => controller.abort())
+  }, [])
 
   /**
    * Moving to another chat puts the composer's attachments, reply and picks aside for the chat being left and brings
@@ -369,21 +379,22 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
     // The chat's switched-on flags go with a new message (a rewrite replays the ones stored on the message).
     const flags = rewrite ? [] : (queryClient.getQueryData<ChatFlag[]>(CHAT_FLAGS_QUERY_KEY) ?? []).filter((flag) => readThreadFlagIds(cachedThread).includes(flag.id))
     const shownFlags = [...flags, ...picked.map(pickSnapshot), ...(chosen ? chosen.labels.map((label) => choiceSnapshot(label, { id: chosen.proposalId, question: chosen.question })) : [])]
-    if (streamAbortRef.current) {
+    const running = streamsRef.current.get(threadId)
+    if (running) {
       // In a group room the user may cut in: the server stops the room's reply when the new message arrives, so stop
-      // reading the old stream and let it wind down first.
-      if (!isGroup || rewrite || streamThreadRef.current !== threadId) return false
-      streamAbortRef.current.abort()
-      await activeReplyRef.current
-      if (streamAbortRef.current) return false
+      // reading the old stream and let it wind down first. Other chats' streams are not touched.
+      if (!isGroup || rewrite) return false
+      running.controller.abort()
+      await running.settled
+      if (streamsRef.current.has(threadId)) return false
     }
     let settle: () => void = () => {}
-    activeReplyRef.current = new Promise((resolve) => { settle = resolve })
+    const settled = new Promise<void>((resolve) => { settle = resolve })
 
     const sentThreadId = threadId
     const controller = new AbortController()
-    streamAbortRef.current = controller
-    streamThreadRef.current = sentThreadId
+    streamsRef.current.set(sentThreadId, { controller, settled })
+    const isCurrent = () => streamsRef.current.get(sentThreadId)?.controller === controller
     if (!rewrite) {
       setDraftReply(null)
       setDraft(sentThreadId, '')
@@ -398,7 +409,7 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
       // Any message answers or sets aside the open card.
       setChoice(null)
     }
-    setLiveTurn({ threadId: sentThreadId, userText: text, userRouting: replyingTo ? { replyTo: replyingTo.quote, recipients: [] } : undefined, flags: shownFlags, attachments, mediaAttachments, text: '', reasoning: '', toolCalls: new Map(), replies: isGroup ? [] : undefined })
+    patchLiveTurn(sentThreadId, () => ({ threadId: sentThreadId, userText: text, userRouting: replyingTo ? { replyTo: replyingTo.quote, recipients: [] } : undefined, flags: shownFlags, attachments, mediaAttachments, text: '', reasoning: '', toolCalls: new Map(), replies: isGroup ? [] : undefined }))
     let accepted = false
 
     // Preserve event order (including replacement text and member completion), but publish at most once per frame.
@@ -409,8 +420,8 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
       frame = null
       const changes = pending
       pending = []
-      if (changes.length && streamAbortRef.current === controller && !controller.signal.aborted) {
-        setLiveTurn((current) => changes.reduce((value, change) => change(value), current))
+      if (changes.length && isCurrent() && !controller.signal.aborted) {
+        patchLiveTurn(sentThreadId, (current) => changes.reduce((value, change) => change(value), current))
       }
     }
     const updateLiveTurn = (change: (current: CodexChatLiveTurn | null) => CodexChatLiveTurn | null) => {
@@ -479,7 +490,7 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
 
     try {
       const onEvent = (event: CodexChatStreamEvent) => {
-        if (streamAbortRef.current !== controller || controller.signal.aborted) return
+        if (!isCurrent() || controller.signal.aborted) return
         if (event.type === 'user') {
           accepted = true
           // A refetch mid-reply (a generation job, a reaction) brings the stored message in anyway; keeping the live copy
@@ -581,15 +592,14 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
       ])
       // A failed reply may have found the connection down, a working one may have brought it back (not awaited).
       void queryClient.invalidateQueries({ queryKey: CHAT_HEALTH_QUERY_KEY })
-      if (streamAbortRef.current === controller) {
-        streamAbortRef.current = null
-        streamThreadRef.current = null
-        setLiveTurn(null)
+      if (isCurrent()) {
+        streamsRef.current.delete(sentThreadId)
+        patchLiveTurn(sentThreadId, () => null)
       }
       settle()
     }
     return accepted
-  }, [capturePage, queryClient, showSnackbar, t, setDraftReply, setDraft, setChoice])
+  }, [capturePage, queryClient, showSnackbar, t, setDraftReply, setDraft, setChoice, patchLiveTurn])
 
   const send = useCallback(async (threadId: number, text?: string) => { await reply(threadId, undefined, text) }, [reply])
 
@@ -738,8 +748,8 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
     <CodexChatContext.Provider value={api}>
       <CodexChatDraftsContext.Provider value={drafts}>
         <CodexChatReferenceContext.Provider value={referenceApi}>
-          <ChatLiveStateProvider turn={liveTurn}>
-            <CodexChatLiveContext.Provider value={liveTurn}>{children}</CodexChatLiveContext.Provider>
+          <ChatLiveStateProvider turns={liveTurns}>
+            <CodexChatLiveContext.Provider value={liveTurns}>{children}</CodexChatLiveContext.Provider>
           </ChatLiveStateProvider>
         </CodexChatReferenceContext.Provider>
       </CodexChatDraftsContext.Provider>

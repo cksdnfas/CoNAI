@@ -1316,7 +1316,7 @@ test('event and polling reads preserve prepended pages and newer local history',
       let data!: ReturnType<typeof useChatThreadData>
       const selection = { selectedThreadId: 1, settleSelection() {}, keepDrafts() {} }
       function Reader() {
-        const current = useChatThreadData(selection, 1)
+        const current = useChatThreadData(selection, { 1: true })
         useLayoutEffect(() => { data = current }, [current])
         return null
       }
@@ -1429,6 +1429,58 @@ test('transcript prepending preserves scroll and an unloaded message focus resto
   assert.equal(transcript.flashMessageId, 20)
 })
 
+test('a reply streaming in one chat does not block sending in another chat', { timeout: 10000 }, async t => {
+  const dom = new JSDOM('<div id="root"></div>', { url: 'http://localhost/', pretendToBeVisual: true })
+  const globals = { window: dom.window, document: dom.window.document, navigator: dom.window.navigator, IS_REACT_ACT_ENVIRONMENT: true }
+  const previous = Object.keys(globals).map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)] as const)
+  for (const [key, value] of Object.entries(globals)) Object.defineProperty(globalThis, key, { configurable: true, value })
+  const { act, createElement: h, useLayoutEffect } = await import('react')
+  const { createRoot } = await import('react-dom/client')
+  const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query')
+  const { I18nProvider } = await import('../src/i18n')
+  const { SnackbarContext } = await import('../src/components/ui/snackbar-context')
+  const { CodexChatProvider } = await import('../src/features/codex-chat/codex-chat-provider')
+  const { useCodexChat, codexChatThreadQueryKey } = await import('../src/features/codex-chat/codex-chat-context')
+  const { CHAT_STATUS_QUERY_KEY } = await import('../src/lib/api-codex-chat')
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity, gcTime: Infinity } } })
+  client.setQueryData(['auth-status'], { authenticated: true, hasCredentials: true, accountId: 1, permissionKeys: ['chat.use'] })
+  client.setQueryData(['runtime-language-settings'], { general: { language: 'en' } })
+  client.setQueryData(CHAT_STATUS_QUERY_KEY, { canUse: true })
+  for (const id of [1, 2]) client.setQueryData(codexChatThreadQueryKey(id), { thread: { id, kind: 'direct', flag_ids: '[]' }, messages: [], media: {}, running: null })
+  const root = createRoot(document.getElementById('root')!)
+  t.after(async () => {
+    await act(async () => root.unmount())
+    clearTestQueryClient(client)
+    dom.window.close()
+    for (const [key, descriptor] of previous) {
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor)
+      else Reflect.deleteProperty(globalThis, key)
+    }
+  })
+  let api!: NonNullable<ReturnType<typeof useCodexChat>>
+  function Reader() {
+    const chat = useCodexChat()!
+    useLayoutEffect(() => { api = chat }, [chat])
+    return null
+  }
+  const requested: string[] = []
+  t.mock.method(globalThis, 'fetch', async (url: string | URL | Request, init?: RequestInit) => {
+    requested.push(String(url))
+    return new Response(new ReadableStream<Uint8Array>({
+      start(controller) { init?.signal?.addEventListener('abort', () => controller.error(new DOMException('aborted', 'AbortError')), { once: true }) },
+    }), { status: 200 })
+  })
+  await act(async () => root.render(h(QueryClientProvider, { client }, h(I18nProvider, null,
+    h(SnackbarContext.Provider, { value: { showSnackbar() {}, closeSnackbar() {} } }, h(CodexChatProvider, null, h(Reader)))))))
+  const tick = () => new Promise<void>(resolve => setImmediate(resolve))
+  await act(async () => { void api.send(1, 'first'); await tick() })
+  await act(async () => { void api.send(2, 'second'); await tick() })
+  assert.equal(requested.length, 2)
+  assert.match(requested[1], /\/threads\/2\/messages$/)
+  assert.equal(api.currentLiveTurn(1)?.userText, 'first')
+  assert.equal(api.currentLiveTurn(2)?.userText, 'second')
+})
+
 test('streamed deltas publish once per frame, final text wins, and unmount cancels pending frames', { timeout: 10000 }, async t => {
   const dom = new JSDOM('<div id="root"></div>', { url: 'http://localhost/', pretendToBeVisual: true })
   const globals = { window: dom.window, document: dom.window.document, navigator: dom.window.navigator, IS_REACT_ACT_ENVIRONMENT: true }
@@ -1466,7 +1518,7 @@ test('streamed deltas publish once per frame, final text wins, and unmount cance
   const texts: Array<string | null> = []
   function Reader() {
     const chat = useCodexChat()!
-    const live = useCodexChatLiveTurn()
+    const live = useCodexChatLiveTurn(1)
     useLayoutEffect(() => { api = chat; texts.push(live?.text ?? null) }, [chat, live])
     return null
   }
@@ -1514,13 +1566,13 @@ test('streamed deltas publish once per frame, final text wins, and unmount cance
   await directoryRead
   client.setQueryData<CodexChatThreadDetail>(codexChatThreadQueryKey(1), current => current ? { ...current, thread: { ...current.thread, kind: 'group' } } : current)
   await act(async () => { sending = api.send(1, 'group hello'); await tick() })
-  assert.equal(api.currentLiveTurn()?.userText, 'group hello')
+  assert.equal(api.currentLiveTurn(1)?.userText, 'group hello')
   await act(async () => {
     sendEvents([{ type: 'user', message: { id: 3, role: 'user', content: 'group hello', tool_calls: [] } }])
     await tick()
   })
   assert.equal(client.getQueryData<CodexChatThreadDetail>(codexChatThreadQueryKey(1))?.messages.at(-1)?.content, 'group hello')
-  assert.equal(api.currentLiveTurn()?.userText, '', 'the stored group message replaces the live bubble without waiting for a frame')
+  assert.equal(api.currentLiveTurn(1)?.userText, '','the stored group message replaces the live bubble without waiting for a frame')
   assert.equal(frames.size, 0)
   await act(async () => { output.close(); await sending })
   await act(async () => { sending = api.send(1, 'again'); await tick(); sendEvents([{ type: 'delta', text: 'pending' }]); await tick() })
