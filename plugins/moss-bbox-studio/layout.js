@@ -129,18 +129,73 @@ export function parseLayoutPrompt(prompt, size) {
   return { draft, skipped }
 }
 
-/** Marked-field roles the plugin fills; each maps to the id of one of the workflow's Marked Fields (or ''). */
+/** Aspect ratios offered when the workflow's ratio field does not list its own options. */
+export const RATIOS = ['9:16', '2:3', '3:4', '1:1', '4:3', '3:2', '16:9', '21:9']
+
+/** "9:16", "16x9 (wide)" → 0.5625, 1.777…; null when the text holds no ratio. */
+export function parseRatio(value) {
+  const match = /(\d+(?:\.\d+)?)\s*[:x×/]\s*(\d+(?:\.\d+)?)/i.exec(String(value ?? ''))
+  const ratio = match ? Number(match[1]) / Number(match[2]) : 0
+  return Number.isFinite(ratio) && ratio > 0 ? ratio : null
+}
+
+/** A size of `megapixels` at `ratio` (width ÷ height), each side a multiple of 16. */
+export function sizeFromRatio(ratio, megapixels) {
+  const width = Math.sqrt(megapixels * 1e6 * ratio)
+  return [snapSize(width), snapSize(width / ratio)]
+}
+
+export const megapixelsOf = (size) => Math.round((size[0] * size[1]) / 1e4) / 100
+
+/** Marked-field roles the plugin fills; each maps to the id of one of the workflow's Marked Fields (or ''). `size` roles apply to one size mode. */
 export const FIELD_ROLES = [
   { id: 'prompt', label: '레이아웃 프롬프트', required: true },
   { id: 'negative', label: '네거티브 프롬프트' },
-  { id: 'width', label: '너비' },
-  { id: 'height', label: '높이' },
   { id: 'seed', label: '시드' },
+  { id: 'width', label: '너비', size: 'size' },
+  { id: 'height', label: '높이', size: 'size' },
+  { id: 'ratio', label: '종횡비', size: 'ratio' },
+  { id: 'megapixels', label: '메가픽셀', size: 'ratio' },
 ]
+
+/** `sizeMode` says how the workflow takes its size: 'size' = width and height fields, 'ratio' = an aspect ratio and a megapixel field. */
+export const emptyMapping = () => ({ sizeMode: 'size', prompt: '', negative: '', seed: '', width: '', height: '', ratio: '', megapixels: '' })
+
+export const rolesFor = (mapping) => FIELD_ROLES.filter((role) => !role.size || role.size === mapping.sizeMode)
+
+/** Fields of a workflow that can take a role's value. */
+export function compatibleFields(fields, roleId) {
+  const accepted = roleId === 'prompt' || roleId === 'negative' ? ['text', 'textarea'] : roleId === 'ratio' ? ['select', 'text', 'textarea', 'number'] : ['number']
+  return (fields ?? []).filter((field) => accepted.includes(field.type))
+}
+
+/** The aspect ratios the editor offers: the ratio field's own select options when it has some, else the common ones. */
+export function ratioChoices(field) {
+  const own = field?.type === 'select' && Array.isArray(field.options) ? field.options : null
+  const values = own ?? RATIOS
+  return values.map((value) => ({ value: String(value), ratio: parseRatio(value) })).filter((choice) => choice.ratio !== null)
+}
+
+/** The choice closest to a canvas, or null when none is within 3 %. */
+export function nearestRatio(choices, size) {
+  const target = size[0] / size[1]
+  const best = choices.reduce((found, choice) => (!found || Math.abs(choice.ratio - target) < Math.abs(found.ratio - target) ? choice : found), null)
+  return best && Math.abs(best.ratio - target) / target <= 0.03 ? best : null
+}
+
+/** What the ratio field receives for a canvas: a select option, "9:16" text or a decimal number; null when a select has no matching option. */
+export function ratioValue(field, size) {
+  if (field?.type === 'number') return Math.round((size[0] / size[1]) * 1e4) / 1e4
+  const own = nearestRatio(ratioChoices(field), size)
+  if (field?.type === 'select') return own?.value ?? null
+  return (own ?? nearestRatio(ratioChoices(null), size))?.value ?? null
+}
 
 const textLike = (field) => field.type === 'text' || field.type === 'textarea'
 const numeric = (field) => field.type === 'number'
 const named = (field, pattern) => pattern.test(`${field.id} ${field.label ?? ''}`)
+const RATIO_NAME = /aspect|ratio|종횡|비율/i
+const MEGAPIXEL_NAME = /mega|pixel|\bmp\b|메가/i
 
 /** Pick a likely field for each role by its type, id and label. The user can change every choice. */
 export function guessFieldMapping(fields) {
@@ -154,35 +209,53 @@ export function guessFieldMapping(fields) {
   }
   const texts = list.filter(textLike)
   const negative = pick(texts, /negative|네거티브|\buc\b/i)
-  const positives = texts.filter((field) => field.id !== negative && !named(field, /negative|네거티브/i))
-  return {
+  const positives = texts.filter((field) => field.id !== negative && !named(field, /negative|네거티브/i) && !named(field, RATIO_NAME))
+  const mapping = {
+    ...emptyMapping(),
     prompt: pick(positives, /layout|json|레이아웃/i, /positive|prompt|프롬프트/i) || positives[0]?.id || '',
     negative,
     width: pick(list.filter(numeric), /width|너비|가로/i),
     height: pick(list.filter(numeric), /height|높이|세로/i),
     seed: pick(list.filter(numeric), /seed|시드/i),
+    ratio: pick(compatibleFields(list, 'ratio'), RATIO_NAME),
+    megapixels: pick(list.filter(numeric), MEGAPIXEL_NAME),
   }
+  if (mapping.ratio && mapping.megapixels && !(mapping.width && mapping.height)) mapping.sizeMode = 'ratio'
+  return mapping
 }
 
-/** Problems that stop a generation request, as short Korean sentences. */
-export function mappingIssues(fields, mapping) {
-  const ids = new Set((fields ?? []).map((field) => field.id))
+/** True when the workflow gets the canvas size, in whichever mode is chosen. */
+export const sizeConnected = (mapping) => (mapping.sizeMode === 'ratio' ? Boolean(mapping.ratio && mapping.megapixels) : Boolean(mapping.width && mapping.height))
+
+/** Problems that stop a generation request, as short Korean sentences. `size` is the canvas, to check that a ratio field has a matching option. */
+export function mappingIssues(fields, mapping, size) {
+  const list = fields ?? []
+  const ids = new Set(list.map((field) => field.id))
+  const roles = rolesFor(mapping)
   const issues = []
   if (!mapping.prompt || !ids.has(mapping.prompt)) issues.push('레이아웃 프롬프트를 받을 칸을 골라줘.')
-  for (const role of FIELD_ROLES) {
+  for (const role of roles) {
     if (mapping[role.id] && !ids.has(mapping[role.id])) issues.push(`${role.label} 칸이 워크플로우에 없어. 다시 골라줘.`)
   }
-  const used = FIELD_ROLES.map((role) => mapping[role.id]).filter(Boolean)
+  const used = roles.map((role) => mapping[role.id]).filter(Boolean)
   if (new Set(used).size !== used.length) issues.push('한 칸을 두 곳에 연결할 수 없어.')
+  const ratioField = list.find((field) => field.id === mapping.ratio)
+  if (mapping.sizeMode === 'ratio' && ratioField && size && ratioValue(ratioField, size) === null) issues.push('캔버스 비율에 맞는 종횡비 선택지가 워크플로우에 없어. 편집기에서 종횡비를 골라줘.')
   return issues
 }
 
 /** The `prompt_data` of a queue request: values keyed by Marked Field id. A blank seed is left out so each run draws a new one. */
-export function buildPromptData(mapping, { draft, negative = '', seed = '' }) {
+export function buildPromptData(mapping, { draft, negative = '', seed = '', fields = [] }) {
   const data = { [mapping.prompt]: stringifyLayout(draft) }
   if (mapping.negative && text(negative)) data[mapping.negative] = text(negative)
-  if (mapping.width) data[mapping.width] = draft.size[0]
-  if (mapping.height) data[mapping.height] = draft.size[1]
+  if (mapping.sizeMode === 'ratio') {
+    const ratio = mapping.ratio ? ratioValue(fields.find((field) => field.id === mapping.ratio), draft.size) : null
+    if (ratio !== null) data[mapping.ratio] = ratio
+    if (mapping.megapixels) data[mapping.megapixels] = megapixelsOf(draft.size)
+  } else {
+    if (mapping.width) data[mapping.width] = draft.size[0]
+    if (mapping.height) data[mapping.height] = draft.size[1]
+  }
   const parsedSeed = Number(seed)
   if (mapping.seed && String(seed).trim() !== '' && Number.isInteger(parsedSeed) && parsedSeed >= 0) data[mapping.seed] = parsedSeed
   return data

@@ -22,25 +22,19 @@
   </aside>
   <section class="conai-pane stage" aria-label="캔버스">
     <div class="stage-bar">
-      <div class="conai-segmented" id="tools" role="group" aria-label="도구">
-        <button type="button" data-tool="select">선택</button>
-        <button type="button" data-tool="draw">그리기</button>
-      </div>
-      <label class="tool">크기 <select id="size" aria-label="캔버스 크기"></select></label>
-      <label class="tool" id="img-toggle" hidden><input type="checkbox" id="show-img" checked> 원본 이미지 보기</label>
+      <div class="size-ctl" id="size-ctl"></div>
+      <label class="tool" id="img-toggle" hidden><input type="checkbox" id="show-img" checked> 원본 이미지</label>
     </div>
     <div class="cvwrap"><div id="canvas" class="cv"></div></div>
   </section>
   <aside class="conai-sidebar end insp" aria-label="프롬프트">
-    <section>
-      <p class="conai-overline">메인 프롬프트</p>
-      <textarea id="summary" rows="5" aria-label="메인 프롬프트"></textarea>
-      <label>메타 태그 <input id="meta" aria-label="메타 태그"></label>
+    <section class="panel">
+      <label>메인 프롬프트<textarea id="summary"></textarea></label>
+      <label>메타 태그<input id="meta"></label>
     </section>
-    <section id="inspector"></section>
-    <section id="negative-box" hidden>
-      <p class="conai-overline">네거티브 프롬프트</p>
-      <textarea id="negative" rows="3" aria-label="네거티브 프롬프트"></textarea>
+    <section class="panel" id="inspector" hidden></section>
+    <section class="panel" id="negative-box" hidden>
+      <label>네거티브 프롬프트<textarea id="negative"></textarea></label>
     </section>
   </aside>
 </div>
@@ -48,8 +42,8 @@
 <div id="view-setup" class="conai-pane" hidden></div>
 
 <footer class="genbar" id="genbar">
-  <label class="tool">워크플로우 <span id="wf-name" class="wf-name"></span></label>
-  <label class="tool">시드 <input type="number" id="seed" min="0" aria-label="시드"></label>
+  <button type="button" id="wf-open" class="ghost">워크플로우 <span id="wf-name" class="wf-name"></span></button>
+  <label class="seed">시드 <input type="number" id="seed" min="0"></label>
   <span class="conai-spacer"></span>
   <span class="badge" id="size-badge"></span>
   <button type="button" id="generate" class="primary">생성 요청</button>

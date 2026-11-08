@@ -186,8 +186,8 @@ export function PowerLoraLoaderInput({
               // Hairline row; the toggle carries the on/off state.
               'grid items-center border-b border-line last:border-b-0',
               isCompact
-                ? 'grid-cols-[auto_minmax(0,1fr)_48px_auto] gap-2 py-1'
-                : 'grid-cols-[auto_minmax(0,1fr)_88px_auto] gap-3 py-2',
+                ? 'grid-cols-[auto_minmax(0,1fr)_auto_auto] gap-2 py-1'
+                : 'grid-cols-[auto_minmax(0,1fr)_auto_auto] gap-3 py-2',
             )}
           >
             <PowerLoraRowToggle
@@ -211,7 +211,7 @@ export function PowerLoraLoaderInput({
               value={typeof entry.strength === 'number' ? String(entry.strength) : ''}
               aria-label={t('image-generation.components.power.lora.loader.input.value.weight', { label: item.label })}
               controlSize="compact"
-              className={cn('text-left', isCompact ? 'w-11' : 'w-18')}
+              className={cn('min-w-0', isCompact ? 'w-26' : 'w-32')}
               onValueCommit={(nextValue) => {
                 const parsedStrength = Number(nextValue)
                 onChange({

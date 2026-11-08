@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import {
-  addRegion, buildLayout, buildPromptData, guessFieldMapping, mappingIssues, newDraft, parseLayoutPrompt, stringifyLayout,
+  addRegion, buildLayout, buildPromptData, guessFieldMapping, mappingIssues, newDraft, parseLayoutPrompt, parseRatio, ratioValue, sizeFromRatio, stringifyLayout,
 } from '../../plugins/moss-bbox-studio/layout.js'
 
 // MOSS-Image USERGUIDE: on a 1536×1024 canvas the editable draft box [176,224,800,864] (xyxy, from the top-left)
@@ -55,7 +55,7 @@ test('marked fields are matched by role and the request carries only what is con
     { id: 'f5', label: 'Seed', type: 'number' },
   ]
   const mapping = guessFieldMapping(fields)
-  assert.deepEqual(mapping, { prompt: 'f2', negative: 'f1', width: 'f3', height: 'f4', seed: 'f5' })
+  assert.deepEqual(mapping, { sizeMode: 'size', prompt: 'f2', negative: 'f1', width: 'f3', height: 'f4', seed: 'f5', ratio: '', megapixels: '' })
   assert.deepEqual(mappingIssues(fields, mapping), [])
   assert.deepEqual(mappingIssues(fields, { ...mapping, prompt: 'gone' }).length, 2)
 
@@ -65,4 +65,25 @@ test('marked fields are matched by role and the request carries only what is con
   assert.equal(data.f3, 1024)
   assert.equal(buildPromptData(mapping, { draft, seed: '42' }).f5, 42)
   assert.equal('f5' in buildPromptData(mapping, { draft, seed: '-1' }), false)
+})
+
+test('a workflow that takes an aspect ratio and megapixels gets those instead of width and height', () => {
+  const fields = [
+    { id: 'p', label: 'Layout prompt', type: 'textarea' },
+    { id: 'r', label: 'Aspect ratio', type: 'select', options: ['1:1 (square)', '9:16 (portrait)', '16:9 (wide)'] },
+    { id: 'm', label: 'Megapixels', type: 'number' },
+  ]
+  const mapping = guessFieldMapping(fields)
+  assert.deepEqual([mapping.sizeMode, mapping.prompt, mapping.ratio, mapping.megapixels], ['ratio', 'p', 'r', 'm'])
+  assert.deepEqual(mappingIssues(fields, mapping, [1088, 1920]), [])
+
+  const draft = newDraft([1088, 1920])
+  const data = buildPromptData(mapping, { draft, fields })
+  assert.deepEqual(data, { p: stringifyLayout(draft), r: '9:16 (portrait)', m: 2.09 })
+  assert.equal(mappingIssues(fields, mapping, [1024, 1536]).length, 1, 'a canvas no option fits is reported')
+  assert.deepEqual(sizeFromRatio(parseRatio('9:16 (portrait)') as number, 2.09), [1088, 1920])
+
+  const textRatio = [{ id: 'r', label: 'Ratio', type: 'text' }]
+  assert.equal(ratioValue(textRatio[0], [1920, 1088]), '16:9')
+  assert.equal(ratioValue({ id: 'r', type: 'number' }, [1024, 1024]), 1)
 })

@@ -2,8 +2,9 @@
 // No server module: settings and the draft live in api.storage, everything else goes through native /api routes.
 import { connectPlugin } from './conai-plugin.js'
 import {
-  FIELD_ROLES, KINDS, REGION_COLORS, SIZE_PRESETS, addRegion, buildLayout, buildPromptData, cloneDraft, describeDraft, guessFieldMapping,
-  kindId, mappingIssues, moveRegion, newDraft, normalizeBox, parseLayoutPrompt, snapSize, stringifyLayout,
+  KINDS, REGION_COLORS, SIZE_PRESETS, addRegion, buildLayout, buildPromptData, cloneDraft, compatibleFields, describeDraft, emptyMapping,
+  guessFieldMapping, kindId, mappingIssues, megapixelsOf, moveRegion, nearestRatio, newDraft, normalizeBox, parseLayoutPrompt, parseRatio,
+  ratioChoices, rolesFor, sizeConnected, sizeFromRatio, snapSize, stringifyLayout,
 } from './layout.js'
 
 const $ = (id) => document.getElementById(id)
@@ -19,12 +20,11 @@ const state = {
   tab: 'editor',
   draft: newDraft(),
   sel: -1,
-  tool: 'select',
   source: null,
   previous: null,
   showImage: true,
   workflows: [],
-  setup: { workflowId: null, mapping: { prompt: '', negative: '', width: '', height: '', seed: '' } },
+  setup: { workflowId: null, mapping: emptyMapping() },
   negative: '',
   seed: '',
   jobs: [],
@@ -74,7 +74,12 @@ const guard = (task) => async (...args) => { try { await task(...args) } catch (
 
 const workflow = () => state.workflows.find((item) => item.id === state.setup.workflowId) ?? null
 const workflowFields = () => workflow()?.marked_fields ?? []
-const setupIssues = () => (workflow() ? mappingIssues(workflowFields(), state.setup.mapping) : ['사용할 워크플로우를 골라줘.'])
+const setupIssues = () => (workflow() ? mappingIssues(workflowFields(), state.setup.mapping, state.draft.size) : ['사용할 워크플로우를 골라줘.'])
+const ICON = {
+  up: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>',
+  down: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M19 12l-7 7-7-7"/></svg>',
+  trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>',
+}
 const hasContent = () => state.draft.items.length > 0 || state.draft.summary.trim() !== ''
 
 // ---- editor rendering -------------------------------------------------------------------------------------------
@@ -87,22 +92,38 @@ function renderCanvasFrame() {
   const image = state.source && state.showImage
   canvas.classList.toggle('has-image', Boolean(image))
   canvas.style.setProperty('--image', image ? `url("${state.source.url}")` : 'none')
-  canvas.classList.toggle('select-tool', state.tool === 'select')
   $('size-badge').textContent = `${width}×${height}`
-  const options = SIZE_PRESETS.map((preset) => ({ value: `${preset.size[0]}x${preset.size[1]}`, label: `${preset.id} · ${preset.size[0]}×${preset.size[1]}` }))
-  const current = `${width}x${height}`
-  if (!options.some((option) => option.value === current)) options.unshift({ value: current, label: `${width}×${height} (이미지 크기)` })
-  $('size').innerHTML = options.map((option) => `<option value="${option.value}">${esc(option.label)}</option>`).join('')
-  $('size').value = current
+  renderSizeControl()
   $('img-toggle').hidden = !state.source
   $('show-img').checked = state.showImage
 }
+
+const ratioField = () => workflowFields().find((field) => field.id === state.setup.mapping.ratio)
+
+/** The size controls follow how the workflow takes its size: width and height, or an aspect ratio and megapixels. */
+function renderSizeControl() {
+  const [width, height] = state.draft.size
+  if (state.setup.mapping.sizeMode === 'ratio') {
+    const choices = ratioChoices(ratioField())
+    const current = nearestRatio(choices, state.draft.size)
+    $('size-ctl').innerHTML = `<select id="size-ratio" aria-label="종횡비">${current ? '' : '<option value="" selected>직접</option>'}${choices.map((choice) => `<option value="${esc(choice.value)}"${choice === current ? ' selected' : ''}>${esc(choice.value)}</option>`).join('')}</select>
+      <input type="number" id="size-mp" min="0.1" step="0.1" value="${megapixelsOf(state.draft.size)}" aria-label="메가픽셀"><span class="sep">MP</span><span class="result">${width}×${height}</span>`
+    return
+  }
+  const current = `${width}x${height}`
+  const options = SIZE_PRESETS.map((preset) => ({ value: `${preset.size[0]}x${preset.size[1]}`, label: preset.id }))
+  if (!options.some((option) => option.value === current)) options.unshift({ value: current, label: '직접' })
+  $('size-ctl').innerHTML = `<select id="size-preset" aria-label="비율">${options.map((option) => `<option value="${option.value}"${option.value === current ? ' selected' : ''}>${esc(option.label)}</option>`).join('')}</select>
+    <input type="number" id="size-w" min="64" step="16" value="${width}" aria-label="너비"><span class="sep">×</span><input type="number" id="size-h" min="64" step="16" value="${height}" aria-label="높이">`
+}
+
+const HANDLES = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w']
 
 function renderBoxes() {
   $('canvas').innerHTML = state.draft.items.map((item, index) => {
     const [x0, y0, x1, y1] = item.box
     const kind = KINDS.find((entry) => entry.id === item.label)?.label ?? ''
-    return `<div class="bx${index === state.sel ? ' selected' : ''}" tabindex="0" data-index="${index}" style="--c:${color(index)};left:${x0 * 100}%;top:${y0 * 100}%;width:${(x1 - x0) * 100}%;height:${(y1 - y0) * 100}%"><span class="tag">${index + 1} · ${esc(kind)}</span>${index === state.sel ? '<span class="handle" data-handle="1"></span>' : ''}</div>`
+    return `<div class="bx${index === state.sel ? ' selected' : ''}" tabindex="0" data-index="${index}" style="--c:${color(index)};left:${x0 * 100}%;top:${y0 * 100}%;width:${(x1 - x0) * 100}%;height:${(y1 - y0) * 100}%"><span class="tag">${index + 1} · ${esc(kind)}</span>${index === state.sel ? HANDLES.map((handle) => `<span class="handle" data-handle="${handle}"></span>`).join('') : ''}</div>`
   }).join('')
 }
 
@@ -110,31 +131,35 @@ function renderRegionList() {
   $('region-count').textContent = `${state.draft.items.length}개`
   $('layers').innerHTML = state.draft.items.map((item, index) => {
     const kind = KINDS.find((entry) => entry.id === item.label)?.label ?? ''
-    return `<li class="region-row${index === state.sel ? ' selected' : ''}" tabindex="0" data-index="${index}" style="--c:${color(index)}"><span class="number">${index + 1}</span><span class="text"><span class="kind">${esc(kind)}</span><span class="caption${item.caption ? '' : ' empty'}">${esc(item.caption || '아직 비어 있어')}</span></span><button type="button" class="ghost" data-remove="${index}" aria-label="영역 ${index + 1} 삭제">✕</button></li>`
+    return `<li class="region-row${index === state.sel ? ' selected' : ''}" tabindex="0" data-index="${index}" style="--c:${color(index)}"><span class="number">${index + 1}</span><span class="text"><span class="kind">${esc(kind)}</span><span class="caption${item.caption ? '' : ' empty'}">${esc(item.caption || '아직 비어 있어')}</span></span><button type="button" class="conai-icon-button sm" data-remove="${index}" aria-label="영역 ${index + 1} 삭제" title="삭제">${ICON.trash}</button></li>`
   }).join('')
 }
 
-function coordsText(index) {
-  const bbox = buildLayout(state.draft).items[index]?.bbox
-  return bbox ? `y ${bbox[0]} ~ ${bbox[2]} · x ${bbox[1]} ~ ${bbox[3]}` : ''
-}
-
+/** The selected box in canvas pixels from the top-left corner, as the position fields show it. */
 function renderCoords() {
-  const element = $('inspector').querySelector('[data-coords]')
-  if (element) element.textContent = coordsText(state.sel)
+  const item = state.draft.items[state.sel]
+  if (!item) return
+  const [width, height] = state.draft.size
+  const [x0, y0, x1, y1] = item.box
+  const values = { x: x0 * width, y: y0 * height, w: (x1 - x0) * width, h: (y1 - y0) * height }
+  $('inspector').querySelectorAll('[data-geo]').forEach((input) => { if (document.activeElement !== input) input.value = Math.round(values[input.dataset.geo]) })
 }
 
 function renderInspector() {
   const host = $('inspector')
   const item = state.draft.items[state.sel]
+  host.hidden = !item
   if (!item) { host.innerHTML = ''; return }
   host.innerHTML = `
-    <div class="selected-title" style="--c:${color(state.sel)}"><span class="number">${state.sel + 1}</span><p class="conai-overline">선택한 영역</p></div>
-    <div class="conai-segmented" role="group" aria-label="영역 종류">${KINDS.map((kind) => `<button type="button" data-kind="${kind.id}" aria-pressed="${item.label === kind.id}">${kind.label}</button>`).join('')}</div>
-    <label class="field-gap">영역 프롬프트<textarea rows="6" data-field="caption">${esc(item.caption)}</textarea></label>
+    <div class="region-head" style="--c:${color(state.sel)}">
+      <span class="number">${state.sel + 1}</span>
+      <div class="conai-segmented" role="group" aria-label="영역 종류">${KINDS.map((kind) => `<button type="button" data-kind="${kind.id}" aria-pressed="${item.label === kind.id}">${kind.label}</button>`).join('')}</div>
+      <button type="button" class="conai-icon-button sm" data-move="1" aria-label="위로 올리기" title="위로 올리기 (위에 그려짐)">${ICON.up}</button>
+      <button type="button" class="conai-icon-button sm" data-move="-1" aria-label="아래로 내리기" title="아래로 내리기">${ICON.down}</button>
+    </div>
+    <label>영역 프롬프트<textarea data-field="caption">${esc(item.caption)}</textarea></label>
     ${item.label === 'text' ? `<label>그릴 글자<input data-field="text" value="${esc(item.text)}"></label>` : ''}
-    <p class="coords" data-coords></p>
-    <div class="order"><button type="button" data-move="-1">아래로</button><button type="button" data-move="1">위로</button></div>`
+    <div class="geo">${[['x', 'X'], ['y', 'Y'], ['w', '너비'], ['h', '높이']].map(([key, label]) => `<label>${label}<input type="number" data-geo="${key}" step="1"></label>`).join('')}</div>`
   renderCoords()
 }
 
@@ -182,7 +207,6 @@ function renderEditor() {
   $('summary').value = state.draft.summary
   $('meta').value = state.draft.meta.join(', ')
   renderCanvasFrame(); renderBoxes(); renderRegionList(); renderInspector(); renderJson(); renderBanner(); renderGenBar()
-  document.querySelectorAll('#tools [data-tool]').forEach((button) => button.setAttribute('aria-pressed', String(button.dataset.tool === state.tool)))
 }
 
 // ---- setup / results rendering ----------------------------------------------------------------------------------
@@ -193,18 +217,23 @@ function renderSetup() {
   const mapping = state.setup.mapping
   const issues = current ? setupIssues() : []
   const option = (field, selected) => `<option value="${esc(field.id)}"${field.id === selected ? ' selected' : ''}>${esc(field.label || field.id)} (${esc(field.id)})</option>`
-  const compatible = (role) => fields.filter((field) => (role.id === 'prompt' || role.id === 'negative' ? ['text', 'textarea'].includes(field.type) : field.type === 'number'))
+  const row = (role) => `<div class="maprow"><div class="role"><b>${role.label}</b></div><label><select data-role="${role.id}" aria-label="${role.label} 칸"><option value="">연결 안 함</option>${compatibleFields(fields, role.id).map((field) => option(field, mapping[role.id])).join('')}</select></label><span class="badge ${mapping[role.id] ? 'ok' : ''}">${mapping[role.id] ? '연결됨' : role.required ? '필수' : '선택'}</span></div>`
+  const roles = rolesFor(mapping)
+  const modes = [['size', '너비·높이'], ['ratio', '종횡비·메가픽셀']]
   $('view-setup').innerHTML = `<div class="setup">
     <section>
       <label>사용할 워크플로우<select id="workflow-select"><option value="">선택 안 함</option>${state.workflows.map((item) => `<option value="${item.id}"${item.id === state.setup.workflowId ? ' selected' : ''}>${esc(item.name)} (#${item.id})</option>`).join('')}</select></label>
       <p class="conai-overline field-gap">검사 결과</p>
       <ul class="checks">${current ? (issues.length ? issues.map((issue) => `<li><span class="badge warn">확인</span><span>${esc(issue)}</span></li>`).join('') : '<li><span class="badge ok">통과</span><span>생성에 필요한 칸이 모두 연결돼 있어.</span></li>') : ''}
-        ${current && !mapping.width ? '<li><span class="badge warn">참고</span><span>크기 칸이 없어서 워크플로우에 고정된 크기로 생성돼. 캔버스 크기가 이와 다르면 박스 위치가 어긋나.</span></li>' : ''}</ul>
+        ${current && !sizeConnected(mapping) ? '<li><span class="badge warn">참고</span><span>크기 칸이 없어서 워크플로우에 고정된 크기로 생성돼. 캔버스 크기가 이와 다르면 박스 위치가 어긋나.</span></li>' : ''}</ul>
       <div class="toolbar field-gap"><button type="button" id="reload-workflows">워크플로우 다시 불러오기</button></div>
     </section>
     <section>
       <p class="conai-overline">입력 칸 연결</p>
-      ${current ? FIELD_ROLES.map((role) => `<div class="maprow"><div class="role"><b>${role.label}</b></div><label><select data-role="${role.id}" aria-label="${role.label} 칸"><option value="">연결 안 함</option>${compatible(role).map((field) => option(field, mapping[role.id])).join('')}</select></label><span class="badge ${mapping[role.id] ? 'ok' : ''}">${mapping[role.id] ? '연결됨' : role.required ? '필수' : '선택'}</span></div>`).join('') : ''}    </section></div>`
+      ${current ? `${roles.filter((role) => !role.size).map(row).join('')}
+      <div class="maphead"><p class="conai-overline">크기</p><div class="conai-segmented" role="group" aria-label="크기 연결 방식">${modes.map(([id, label]) => `<button type="button" data-size-mode="${id}" aria-pressed="${mapping.sizeMode === id}">${label}</button>`).join('')}</div></div>
+      ${roles.filter((role) => role.size).map(row).join('')}` : ''}
+    </section></div>`
 }
 
 function renderResults() {
@@ -329,7 +358,7 @@ async function generate(seedOverride) {
       workflow_id: current.id,
       workflow_name: current.name,
       request_summary: `MOSS BBox Studio · 영역 ${draft.items.length}개`,
-      request_payload: { prompt_data: buildPromptData(state.setup.mapping, { draft, negative: state.negative, seed }) },
+      request_payload: { prompt_data: buildPromptData(state.setup.mapping, { draft, negative: state.negative, seed, fields: workflowFields() }) },
     }
     const result = await call('/api/generation-queue', jsonInit('POST', body))
     const id = result.record?.id
@@ -381,14 +410,14 @@ function stopPolling() { clearInterval(pollTimer); pollTimer = null }
 async function loadWorkflows() {
   const { data } = await call('/api/workflows?active=true&kind=image')
   state.workflows = (data ?? []).map((item) => ({ id: item.id, name: item.name, marked_fields: Array.isArray(item.marked_fields) ? item.marked_fields : [] }))
-  if (state.setup.workflowId && !workflow()) state.setup = { workflowId: null, mapping: { prompt: '', negative: '', width: '', height: '', seed: '' } }
+  if (state.setup.workflowId && !workflow()) state.setup = { workflowId: null, mapping: emptyMapping() }
 }
 
 function chooseWorkflow(id) {
   state.setup.workflowId = id || null
-  state.setup.mapping = id ? guessFieldMapping(workflowFields()) : { prompt: '', negative: '', width: '', height: '', seed: '' }
+  state.setup.mapping = id ? guessFieldMapping(workflowFields()) : emptyMapping()
   void saveSetup()
-  renderSetup(); renderGenBar(); publish()
+  renderSetup(); renderGenBar(); renderSizeControl(); publish()
   if (id) notify(setupIssues().length ? '워크플로우를 골랐어. 아래 연결을 확인해줘.' : '워크플로우를 골랐어. 편집기에서 생성할 수 있어.')
 }
 
@@ -402,34 +431,43 @@ function bindEditor() {
     return [clamp((event.clientX - rect.left) / rect.width, 0, 1), clamp((event.clientY - rect.top) / rect.height, 0, 1)]
   }
 
+  // Dragging a box moves it, its handles resize it, and dragging on empty canvas draws a new one; a plain click on empty canvas deselects.
   canvas.addEventListener('pointerdown', (event) => {
     const [x, y] = fractions(event)
     const box = event.target.closest('.bx')
-    if (box && state.tool === 'select') {
+    if (box) {
       const index = Number(box.dataset.index)
-      const resize = Boolean(event.target.dataset.handle) && index === state.sel
+      const handle = index === state.sel ? event.target.dataset.handle : undefined
       if (index !== state.sel) select(index)
-      drag = { mode: resize ? 'resize' : 'move', index, x, y, box: [...state.draft.items[index].box] }
-    } else if (state.tool === 'draw') {
-      state.draft.items.push({ label: 'object', caption: '', text: '', box: [x, y, x, y] })
-      state.sel = state.draft.items.length - 1
-      drag = { mode: 'draw', index: state.sel, x, y, box: [x, y, x, y] }
-      renderBoxes(); renderRegionList(); renderInspector()
-    } else return
+      drag = { mode: handle ? 'resize' : 'move', handle, index, x, y, box: [...state.draft.items[index].box] }
+    } else drag = { mode: 'draw', index: -1, x, y }
     canvas.setPointerCapture(event.pointerId)
   })
 
   canvas.addEventListener('pointermove', (event) => {
     if (!drag) return
     const [x, y] = fractions(event)
+    if (drag.mode === 'draw' && drag.index < 0) {
+      if (Math.hypot(x - drag.x, y - drag.y) < 0.01) return
+      state.draft.items.push({ label: 'object', caption: '', text: '', box: [drag.x, drag.y, drag.x, drag.y] })
+      state.sel = drag.index = state.draft.items.length - 1
+      renderRegionList(); renderInspector()
+    }
     const item = state.draft.items[drag.index]
-    const [x0, y0, x1, y1] = drag.box
     if (drag.mode === 'move') {
+      const [x0, y0, x1, y1] = drag.box
       const width = x1 - x0, height = y1 - y0
       const left = clamp(x0 + x - drag.x, 0, 1 - width), top = clamp(y0 + y - drag.y, 0, 1 - height)
       item.box = [left, top, left + width, top + height]
     } else if (drag.mode === 'resize') {
-      item.box = [x0, y0, clamp(x1 + x - drag.x, x0 + 0.03, 1), clamp(y1 + y - drag.y, y0 + 0.03, 1)]
+      const [x0, y0, x1, y1] = drag.box
+      const dx = x - drag.x, dy = y - drag.y, least = 0.03
+      item.box = [
+        drag.handle.includes('w') ? clamp(x0 + dx, 0, x1 - least) : x0,
+        drag.handle.includes('n') ? clamp(y0 + dy, 0, y1 - least) : y0,
+        drag.handle.includes('e') ? clamp(x1 + dx, x0 + least, 1) : x1,
+        drag.handle.includes('s') ? clamp(y1 + dy, y0 + least, 1) : y1,
+      ]
     } else {
       item.box = [Math.min(drag.x, x), Math.min(drag.y, y), Math.max(drag.x, x), Math.max(drag.y, y)]
     }
@@ -441,8 +479,9 @@ function bindEditor() {
     const { mode, index } = drag
     drag = null
     if (mode === 'draw') {
+      if (index < 0) { if (state.sel >= 0) select(-1); return }
       const box = normalizeBox(state.draft.items[index].box)
-      if (!box) { state.draft.items.splice(index, 1); state.sel = state.draft.items.length - 1 } else { state.draft.items[index].box = box; state.tool = 'select' }
+      if (!box) { state.draft.items.splice(index, 1); state.sel = state.draft.items.length - 1 } else state.draft.items[index].box = box
       changed()
       $('inspector').querySelector('[data-field="caption"]')?.focus()
     } else changed({ light: true })
@@ -472,16 +511,17 @@ function bindEditor() {
   })
 
   $('add-region').addEventListener('click', () => { state.sel = addRegion(state.draft); changed() })
-  $('tools').addEventListener('click', (event) => {
-    const tool = event.target.closest('[data-tool]')?.dataset.tool
-    if (!tool) return
-    state.tool = tool
-    document.querySelectorAll('#tools [data-tool]').forEach((button) => button.setAttribute('aria-pressed', String(button.dataset.tool === tool)))
-    renderCanvasFrame()
-  })
-  $('size').addEventListener('change', (event) => {
-    const [width, height] = event.target.value.split('x').map(Number)
-    state.draft.size = [width, height]
+  $('size-ctl').addEventListener('change', (event) => {
+    const { id, value } = event.target
+    const [width, height] = state.draft.size
+    const number = Number(value)
+    let size = null
+    if (id === 'size-preset') size = value.split('x').map(Number)
+    else if (id === 'size-w' && number > 0) size = [snapSize(number), height]
+    else if (id === 'size-h' && number > 0) size = [width, snapSize(number)]
+    else if (id === 'size-ratio' && value) size = sizeFromRatio(parseRatio(value), megapixelsOf(state.draft.size))
+    else if (id === 'size-mp' && number > 0) size = sizeFromRatio(nearestRatio(ratioChoices(ratioField()), state.draft.size)?.ratio ?? width / height, number)
+    if (size) state.draft.size = size
     changed()
   })
   $('show-img').addEventListener('change', (event) => { state.showImage = event.target.checked; renderCanvasFrame() })
@@ -501,6 +541,14 @@ function bindEditor() {
     if (!field) return
     state.draft.items[state.sel][field] = event.target.value
     changed({ light: true })
+  })
+  $('inspector').addEventListener('change', (event) => {
+    if (!event.target.dataset.geo) return
+    const [width, height] = state.draft.size
+    const read = (key) => Number($('inspector').querySelector(`[data-geo="${key}"]`).value)
+    const box = normalizeBox([read('x') / width, read('y') / height, (read('x') + read('w')) / width, (read('y') + read('h')) / height])
+    if (box) state.draft.items[state.sel].box = box
+    changed()
   })
 
   $('banner').addEventListener('click', (event) => {
@@ -527,6 +575,7 @@ function bindEditor() {
 function bindChrome() {
   $('tabs').addEventListener('click', (event) => { const tab = event.target.closest('[data-tab]')?.dataset.tab; if (tab) showTab(tab) })
   $('generate').addEventListener('click', guard(async () => { await generate() }))
+  $('wf-open').addEventListener('click', () => showTab('setup'))
   $('import-open').addEventListener('click', () => { $('hash-input').value = ''; $('import-dialog').showModal() })
   $('import-close').addEventListener('click', () => $('import-dialog').close())
   $('import-hash').addEventListener('click', guard(async () => { await importFromHash($('hash-input').value.trim()); $('import-dialog').close() }))
@@ -546,12 +595,22 @@ function bindChrome() {
     if (role) {
       state.setup.mapping[role] = event.target.value
       void saveSetup()
-      renderSetup(); renderGenBar(); publish()
+      renderSetup(); renderGenBar(); renderSizeControl(); publish()
     }
   }))
   $('view-setup').addEventListener('click', guard(async (event) => {
+    const mode = event.target.closest('[data-size-mode]')?.dataset.sizeMode
+    if (mode) {
+      const mapping = state.setup.mapping
+      mapping.sizeMode = mode
+      const guess = guessFieldMapping(workflowFields())
+      for (const role of rolesFor(mapping).filter((item) => item.size)) mapping[role.id] ||= guess[role.id]
+      void saveSetup()
+      renderSetup(); renderGenBar(); renderSizeControl(); publish()
+      return
+    }
     if (event.target.id !== 'reload-workflows') return
-    await loadWorkflows(); renderSetup(); renderGenBar(); publish()
+    await loadWorkflows(); renderSetup(); renderGenBar(); renderSizeControl(); publish()
     notify('워크플로우 목록을 다시 불러왔어.')
   }))
   $('view-results').addEventListener('click', guard(async (event) => {
@@ -612,14 +671,14 @@ if (savedDraft?.draft?.items) {
   state.seed = String(savedDraft.seed ?? '')
   state.sel = state.draft.items.length ? 0 : -1
 }
-if (savedSetup?.mapping) state.setup = { workflowId: savedSetup.workflowId ?? null, mapping: { ...state.setup.mapping, ...savedSetup.mapping } }
+if (savedSetup?.mapping) state.setup = { workflowId: savedSetup.workflowId ?? null, mapping: { ...emptyMapping(), ...savedSetup.mapping } }
 if (Array.isArray(savedJobs)) state.jobs = savedJobs.filter((job) => Number.isInteger(job?.id) && Array.isArray(job.hashes) && Array.isArray(job.size))
 
 try { await loadWorkflows() } catch (error) { notify(`워크플로우를 불러오지 못했어: ${error.message}`, true) }
 if (state.setup.workflowId && !workflow()) chooseWorkflow(null)
 
 renderEditor(); renderTabs(); publish()
-if (!workflow()) { if (!$('status').classList.contains('error')) notify('연결 설정에서 생성에 쓸 워크플로우를 먼저 골라줘.') } else notify('영역을 그리고 프롬프트를 써줘.')
+if (!workflow() && !$('status').classList.contains('error')) notify('연결 설정에서 생성에 쓸 워크플로우를 먼저 골라줘.')
 
 api.events.on('queue.job.status', (event) => {
   const jobId = event?.payload?.job_id ?? event?.job_id

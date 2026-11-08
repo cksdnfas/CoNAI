@@ -4,8 +4,12 @@
 .banner .conai-spacer { flex: 1 }
 
 .conai-sidebar { gap: 0 }
-.insp { --conai-sidebar-width: 300px; overflow-y: auto }
-.insp section + section { margin-top: 18px }
+.insp { --conai-sidebar-width: 340px; overflow-y: auto }
+.panel { display: grid; gap: 4px; margin: 0; padding: 14px 4px 16px }
+.panel + .panel { border-top: 1px solid var(--conai-line) }
+.panel label { margin: 6px 0 0 }
+.panel textarea { field-sizing: fixed; height: 120px; resize: none }
+.panel label > textarea, .panel label > input { margin-top: 6px }
 .layers { list-style: none; margin: 0 0 10px; padding: 0; display: grid; gap: 2px }
 .region-row { display: grid; grid-template-columns: 22px minmax(0, 1fr) 28px; align-items: center; gap: 6px; min-height: 44px; padding: 4px var(--conai-text-inset) 4px 6px; border-left: 2px solid var(--c); border-radius: var(--conai-radius-md); cursor: pointer }
 .region-row:hover, .region-row.hover { background: var(--conai-fill) }
@@ -18,33 +22,48 @@
 .region-row button { min-height: 28px; width: 28px; padding: 0 }
 
 .stage { display: flex; flex-direction: column; align-items: center; gap: 10px; min-height: 0 }
-.stage-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; width: 100% }
+.stage-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; width: 100% }
+.size-ctl { display: flex; align-items: center; gap: 6px; flex-wrap: wrap }
+.size-ctl select, .size-ctl input { width: auto; margin: 0 }
+.size-ctl input[type=number] { width: 84px }
+.size-ctl .sep { color: var(--conai-muted-foreground) }
+.size-ctl .result { margin-left: 4px; font-size: 12px; color: var(--conai-muted-foreground); font-variant-numeric: tabular-nums }
 .tool { display: flex; align-items: center; gap: 8px; min-height: 32px; margin: 0; padding: 0 10px; border-radius: var(--conai-radius-md); background: var(--conai-fill); font-size: 12px; cursor: pointer }
 .tool select, .tool input:not([type=checkbox]) { display: inline-block; width: auto; margin: 0; background: transparent }
-.tool input[type=checkbox] { width: 24px; height: 24px; margin: 0 }
+.tool input[type=checkbox] { width: 16px; height: 16px; margin: 0 }
 .cvwrap { display: flex; flex: 1; align-items: center; justify-content: center; width: 100%; min-height: 320px; container-type: size }
 .cv { width: min(100cqw, 100cqh * var(--ratio-n, 1)); aspect-ratio: var(--ratio, 1); position: relative; overflow: hidden; border-radius: 4px; background-color: #0e0e0e; background-size: cover; background-position: center; cursor: crosshair; user-select: none; touch-action: none;
   --grid: rgb(229 226 225 / .05); background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px); background-size: 10% 10% }
 .cv.has-image { background-image: var(--image); background-size: cover }
-.cv.select-tool { cursor: default }
 .bx { position: absolute; border: 2px solid var(--c); background: color-mix(in srgb, var(--c) 12%, transparent); cursor: move }
-.bx.selected { background: color-mix(in srgb, var(--c) 26%, transparent); box-shadow: 0 0 0 1px var(--c); z-index: 2 }
+.bx.selected { background: color-mix(in srgb, var(--c) 22%, transparent); box-shadow: 0 0 0 1px var(--c); z-index: 2 }
 .bx.dim { opacity: .35 }
 .bx .tag { position: absolute; top: 0; left: 0; max-width: 100%; padding: 1px 6px; overflow: hidden; border-radius: 0 0 3px 0; background: var(--c); color: #111; font-size: 11px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; pointer-events: none }
-.bx .handle { position: absolute; right: -6px; bottom: -6px; width: 14px; height: 14px; border-radius: 2px; background: var(--c); cursor: nwse-resize }
+.bx .handle { position: absolute; width: 10px; height: 10px; margin: -5px 0 0 -5px; border: 1px solid #111; border-radius: 2px; background: var(--c) }
+.bx .handle[data-handle=nw] { top: 0; left: 0; cursor: nwse-resize }
+.bx .handle[data-handle=n] { top: 0; left: 50%; cursor: ns-resize }
+.bx .handle[data-handle=ne] { top: 0; left: 100%; cursor: nesw-resize }
+.bx .handle[data-handle=e] { top: 50%; left: 100%; cursor: ew-resize }
+.bx .handle[data-handle=se] { top: 100%; left: 100%; cursor: nwse-resize }
+.bx .handle[data-handle=s] { top: 100%; left: 50%; cursor: ns-resize }
+.bx .handle[data-handle=sw] { top: 100%; left: 0; cursor: nesw-resize }
+.bx .handle[data-handle=w] { top: 50%; left: 0; cursor: ew-resize }
 .bx:focus-visible { outline: 2px solid var(--conai-foreground); outline-offset: 2px }
 .cv.dropping { outline: 2px dashed var(--conai-primary); outline-offset: -4px }
 
-.selected-title { display: flex; align-items: center; gap: 8px; margin-bottom: 8px }
-.selected-title .number { font-weight: 700; color: var(--c) }
-.selected-title .conai-overline { margin: 0 }
-.coords { margin: 6px 0 0; font-size: 12px; color: var(--conai-muted-foreground); font-variant-numeric: tabular-nums }
-.order { display: flex; gap: 6px; margin-top: 10px }
+.region-head { display: flex; align-items: center; gap: 8px }
+.region-head .number { flex: none; display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: var(--c); color: #111; font-size: 12px; font-weight: 700 }
+.region-head .conai-segmented { flex: 1; min-width: 0 }
+.region-head .conai-segmented > button { flex: 1; padding: 0 6px }
+.geo { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin-top: 6px }
+.geo label { margin: 0; font-size: 11px; color: var(--conai-muted-foreground) }
+.geo input { margin-top: 4px; padding: 5px 6px; font-variant-numeric: tabular-nums }
 .field-gap { margin-top: 12px }
 
 .genbar { display: flex; align-items: center; flex: none; flex-wrap: wrap; gap: 10px; padding: 10px var(--conai-text-inset); border-top: 1px solid var(--conai-line) }
 .wf-name { font-weight: 600 }
-.genbar label.tool > input:not([type=checkbox]):not([type=radio]):not([type=range]) { width: 150px; min-height: 30px; margin: 0 }
+.genbar .seed { display: flex; align-items: center; gap: 8px; margin: 0 }
+.genbar .seed > input:not([type=checkbox]):not([type=radio]):not([type=range]) { width: 130px; margin: 0 }
 details.json { flex: none; border-top: 1px solid var(--conai-line) }
 details.json summary { padding: 8px var(--conai-text-inset); color: var(--conai-muted-foreground); font-size: 13px; cursor: pointer }
 details.json pre { max-height: 220px; margin: 0; padding: 0 var(--conai-text-inset) 12px; overflow: auto; font: 12px/1.55 var(--conai-font-mono); white-space: pre-wrap; overflow-wrap: anywhere }
@@ -56,8 +75,9 @@ details.json pre { max-height: 220px; margin: 0; padding: 0 var(--conai-text-ins
 .maprow:first-of-type { border-top: 0 }
 .maprow label { margin: 0 }
 .maprow .role b { display: block; font-size: 13px }
-.maprow .role span { font-size: 12px; color: var(--conai-muted-foreground) }
 .maprow select { margin: 0 }
+.maphead { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 18px 0 6px }
+.maphead .conai-overline { margin: 0 }
 .checks { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; font-size: 13px }
 .checks li { display: flex; align-items: baseline; gap: 8px }
 
