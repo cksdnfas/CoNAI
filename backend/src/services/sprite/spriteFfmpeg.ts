@@ -22,7 +22,19 @@ export type ProcessRunResult = MediaProcessResult
 export async function runTool(command: string, args: string[], options: { timeoutMs: number; signal?: AbortSignal; captureStdout?: boolean }): Promise<ProcessRunResult> {
   const label = commandLabel(command)
   const candidates = ['ffmpeg', 'ffprobe'].includes(label) ? [command, label] : [command]
-  try { return await runMediaProcess(candidates, args, options) }
+  try {
+    try { return await runMediaProcess(candidates, args, options) }
+    catch (error) {
+      // These transforms overwrite temporary outputs. A bundled decoder may reject AV1 that the system build reads.
+      if (label !== 'ffmpeg' || !(error instanceof MediaProcessError) || error.reason !== 'exit' || error.command === label) throw error
+      try { return await runMediaProcess([label], args, options) }
+      catch (fallbackError) {
+        // Portable installs may have only the bundled binary; keep its actual processing diagnostic.
+        if (fallbackError instanceof MediaProcessError && fallbackError.reason === 'spawn') throw error
+        throw fallbackError
+      }
+    }
+  }
   catch (error) {
     if (!(error instanceof MediaProcessError)) throw error
     if (error.reason === 'cancelled') throw new SpriteError('작업이 취소되었습니다.')

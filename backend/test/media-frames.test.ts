@@ -81,6 +81,65 @@ test('a video splits into frames spread over its running time', async (t) => {
   assert.deepEqual(ranged.frames.map((frame) => frame.time), [1.25, 1.75])
 })
 
+test('frame capture falls back after a bundled decoder failure without retrying cancellation or timeout', async (t) => {
+  const childProcess = (await import('node:child_process')).default
+  const { EventEmitter } = await import('node:events')
+  const { PassThrough } = await import('node:stream')
+  const { captureVideoFrame } = await import('../src/services/mediaEdit/mediaEditFfmpeg')
+  const { ffmpegBinary, runTool } = await import('../src/services/sprite/spriteFfmpeg')
+  const spawn = childProcess.spawn
+  const source = await writeGif()
+  const output = path.join(root, 'fallback-frame.png')
+  const calls: string[] = []
+  let failure: 'exit' | 'cancel' | 'timeout' = 'exit'
+  let systemAvailable = true
+  let controller = new AbortController()
+  t.mock.method(childProcess, 'spawn', (command: string, args: string[], options: Parameters<typeof spawn>[2]) => {
+    calls.push(command)
+    // Exercise the real output pipeline without requiring a system FFmpeg in CI.
+    if (command === 'ffmpeg' && systemAvailable) return spawn(ffmpegBinary(), args, options)
+    const child = Object.assign(new EventEmitter(), {
+      stdout: new PassThrough(), stderr: new PassThrough(),
+      kill: () => { queueMicrotask(() => child.emit('close', null)); return true },
+    })
+    queueMicrotask(() => {
+      if (command === 'ffmpeg') child.emit('error', Object.assign(new Error('spawn ffmpeg ENOENT'), { code: 'ENOENT' }))
+      else if (failure === 'cancel') controller.abort()
+      else if (failure === 'exit') {
+        child.stderr.end('Failed to decode frame: Bitstream not supported by this decoder\n')
+        child.emit('close', 69)
+      }
+    })
+    return child as ReturnType<typeof spawn>
+  })
+
+  assert.equal(await captureVideoFrame(source, { frameIndex: 0 }, output), 0)
+  assert.deepEqual(calls, [ffmpegBinary(), 'ffmpeg'])
+  const red = await dominant(await fs.promises.readFile(output))
+  assert.ok(red[0] > 200 && red[1] < 50 && red[2] < 50, 'fallback saves the actual first frame')
+
+  calls.length = 0
+  systemAvailable = false
+  await assert.rejects(captureVideoFrame(source, { frameIndex: 0 }, output), /Failed to decode frame: Bitstream not supported by this decoder/)
+  assert.deepEqual(calls, [ffmpegBinary(), 'ffmpeg'], 'a missing system binary preserves the original decoding error')
+  systemAvailable = true
+
+  calls.length = 0
+  failure = 'cancel'
+  await assert.rejects(runTool(ffmpegBinary(), [], { timeoutMs: 30_000, signal: controller.signal }), /취소/)
+  assert.deepEqual(calls, [ffmpegBinary()], 'cancelled work never starts a replacement process')
+
+  calls.length = 0
+  failure = 'timeout'
+  controller = new AbortController()
+  t.mock.timers.enable({ apis: ['setTimeout'] })
+  const timedOut = runTool(ffmpegBinary(), [], { timeoutMs: 30_000, signal: controller.signal })
+  const rejected = assert.rejects(timedOut, /시간/)
+  t.mock.timers.tick(30_000)
+  await rejected
+  assert.deepEqual(calls, [ffmpegBinary()], 'timed-out work never starts a replacement process')
+})
+
 test('sheet layout keeps the picture close to square', () => {
   assert.equal(frames.sheetColumns(4, 16 / 9), 2)
   assert.equal(frames.sheetColumns(3, 16 / 9), 1)
