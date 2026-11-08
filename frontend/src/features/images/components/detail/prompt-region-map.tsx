@@ -3,19 +3,26 @@ import { cn } from '@/lib/utils'
 import type { ImageRecord } from '@/types/image'
 import { useActivePromptRegion, useSetActivePromptRegion } from './prompt-region-highlight-context'
 
+const PROMPT_REGION_MAP_MAX_HEIGHT = '20rem'
+
 /** Thumbnail with every layout region outlined; the pointer on a box selects that region like its prompt card does. */
 export function PromptRegionMap({ image, layout }: { image: ImageRecord; layout: LayoutPrompt }) {
   const activeRegion = useActivePromptRegion()
   const setActiveRegion = useSetActivePromptRegion()
   const source = image.thumbnail_url ?? image.image_url
-  const aspectRatio = image.width && image.height ? `${image.width} / ${image.height}` : undefined
+  const ratio = image.width && image.height ? image.width / image.height : null
 
-  if (!source || !aspectRatio) {
+  if (!source || !ratio) {
     return null
   }
 
+  // Fill the column width, but never taller than the max height, so every aspect ratio gets the largest size that fits.
   return (
-    <div className="relative w-28 overflow-hidden rounded-sm bg-surface-lowest" style={{ aspectRatio }} aria-hidden>
+    <div
+      className="relative mx-auto overflow-hidden rounded-sm bg-surface-lowest"
+      style={{ aspectRatio: ratio, width: `min(100%, calc(${PROMPT_REGION_MAP_MAX_HEIGHT} * ${ratio}))` }}
+      aria-hidden
+    >
       <img src={source} alt="" className="absolute inset-0 h-full w-full object-cover opacity-70" draggable={false} />
       {layout.regions.map((region) => {
         const rect = getLayoutRegionRect(layout, region, image.width, image.height)

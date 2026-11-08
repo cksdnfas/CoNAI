@@ -44,8 +44,8 @@ export interface ExtractedPromptCardItem {
   accentColor?: string
 }
 
-/** How a layout (bbox) prompt is shown: per region as text, per region as tag chips, or the raw JSON. */
-export type LayoutPromptView = 'regions' | 'chips' | 'raw'
+/** How a layout (bbox) prompt is shown: per region as tag chips, or the raw JSON. */
+export type LayoutPromptView = 'chips' | 'raw'
 
 interface ExtractedPromptCardLabels {
   positivePrompt: string
@@ -438,7 +438,6 @@ function buildLayoutPromptCards(layout: LayoutPrompt, view: LayoutPromptView, la
     return [{ id: 'positive-prompt', title: labels.positivePrompt, text: layout.formatted, tone: 'positive' }] satisfies ExtractedPromptCardItem[]
   }
 
-  const asChips = view === 'chips'
   const cards: ExtractedPromptCardItem[] = []
 
   if (layout.summaryCaption || layout.meta.length > 0) {
@@ -449,7 +448,8 @@ function buildLayoutPromptCards(layout: LayoutPrompt, view: LayoutPromptView, la
       text: summaryCaption,
       tone: 'positive',
       badges: [...layout.meta, ...(layout.canvas ? [layout.canvas] : [])],
-      ...(asChips ? { actionScope: 'positive' as const, actionTerms: getPromptTermItems(summaryCaption) } : {}),
+      actionScope: 'positive',
+      actionTerms: getPromptTermItems(summaryCaption),
     })
   }
 
@@ -464,7 +464,8 @@ function buildLayoutPromptCards(layout: LayoutPrompt, view: LayoutPromptView, la
       tone: 'character',
       regionIndex: region.index,
       accentColor: getLayoutRegionColor(region.index),
-      ...(asChips ? { actionScope: 'positive' as const, actionTerms: terms } : {}),
+      actionScope: 'positive',
+      actionTerms: terms,
     })
   })
 
@@ -503,7 +504,7 @@ export function getImageExtractedPromptCards(
   const layoutPrompt = positiveText ? parseLayoutPrompt(positiveText) : null
 
   if (layoutPrompt) {
-    cards.push(...buildLayoutPromptCards(layoutPrompt, options?.layoutView ?? 'regions', labels, translate))
+    cards.push(...buildLayoutPromptCards(layoutPrompt, options?.layoutView ?? 'chips', labels, translate))
   } else if (positiveText) {
     cards.push({
       id: 'positive-prompt',

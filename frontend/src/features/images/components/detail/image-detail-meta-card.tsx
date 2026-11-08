@@ -197,7 +197,7 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
   const [promptGroupingOptions, setPromptGroupingOptions] = useState<PromptGroupingDisplayOptions>(() => loadPromptGroupingOptions())
   const [isPromptGroupingOptionsOpen, setIsPromptGroupingOptionsOpen] = useState(false)
   const [isArtistPromptSettingsOpen, setIsArtistPromptSettingsOpen] = useState(false)
-  const [layoutView, setLayoutView] = useState<LayoutPromptView>('regions')
+  const [layoutView, setLayoutView] = useState<LayoutPromptView>('chips')
   const activePromptRegion = useActivePromptRegion()
   const setActivePromptRegion = useSetActivePromptRegion()
   const layoutPrompt = useMemo(() => getImageLayoutPrompt(image), [image])
@@ -415,7 +415,6 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
                 <SegmentedControl
                   value={layoutView}
                   items={[
-                    { value: 'regions', label: t({ ko: '영역별', en: 'Regions' }) },
                     { value: 'chips', label: t({ ko: '칩', en: 'Chips' }) },
                     { value: 'raw', label: t({ ko: '전체', en: 'Full' }) },
                   ]}
