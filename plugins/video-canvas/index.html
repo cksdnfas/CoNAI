@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>영상 캔버스</title>
+  <link rel="stylesheet" href="conai-plugin.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="conai-app">
+  <header class="conai-header">
+    <h1 class="conai-title">영상 캔버스</h1>
+    <select id="projects" aria-label="프로젝트"></select>
+    <button id="new-project" class="conai-icon-button" title="프로젝트 만들기" aria-label="프로젝트 만들기">＋</button>
+    <span id="revision" class="muted"></span><span class="conai-spacer"></span>
+    <button id="check-all">전체 체크</button><button id="arrange">정렬</button><button id="generate" class="primary">선택한 컷 생성</button>
+  </header>
+  <div id="launch" class="launch-panel" hidden></div>
+  <p id="message" role="status" aria-live="polite" class="muted"></p>
+  <div class="conai-split workspace">
+    <aside class="conai-sidebar" aria-label="가져오기">
+      <h2 class="conai-group-head">가져오기</h2>
+      <nav class="conai-nav">
+        <button class="conai-nav-item" data-import="image">이미지 <span class="conai-nav-count">라이브러리</span></button>
+        <button class="conai-nav-item" data-import="video">비디오 <span class="conai-nav-count">라이브러리</span></button>
+        <button class="conai-nav-item" data-import="audio">오디오 <span class="conai-nav-count">후보</span></button>
+        <button class="conai-nav-item" data-import="bundle">레퍼런스 번들 <span class="conai-nav-count">RefMod</span></button>
+      </nav>
+      <h2 class="conai-group-head">만들기</h2>
+      <nav class="conai-nav">
+        <button id="add-cut" class="conai-nav-item">영상 컷</button>
+        <button id="extract-selected" class="conai-nav-item">프레임 추출</button>
+      </nav>
+      <h2 class="conai-group-head">이 프로젝트</h2>
+      <dl id="counts" class="conai-kv"></dl>
+      <button id="profiles">생성 프로필</button>
+      <p class="muted">소재는 앱에서 만든 것을 가져와 연결해. 캔버스에서는 소재를 만들지 않아.</p>
+      <button id="assistant-panel" class="ghost">어시스턴트 변경</button>
+    </aside>
+    <main id="canvas" class="canvas" aria-label="노드 캔버스" tabindex="0">
+      <div id="stage"><svg id="edges" aria-hidden="true"></svg><div id="nodes"></div></div>
+      <div class="canvas-controls">
+        <span class="muted">연결선</span>
+        <div class="conai-segmented" aria-label="연결선 표시">
+          <button data-edges="all" aria-pressed="true">전체</button><button data-edges="selected" aria-pressed="false">선택만</button><button data-edges="off" aria-pressed="false">끄기</button>
+        </div>
+        <button id="zoom-out" class="conai-icon-button" aria-label="축소">−</button>
+        <span id="zoom">100%</span><button id="zoom-in" class="conai-icon-button" aria-label="확대">＋</button><button id="fit">맞춤</button>
+      </div>
+    </main>
+    <aside id="inspector" class="conai-sidebar end inspector" aria-label="소재·컷 설정"><p class="conai-empty">소재나 컷을 골라줘.</p></aside>
+  </div>
+  <dialog id="modal"><div id="dialog-body"></div><form method="dialog"><button>닫기</button></form></dialog>
+  <script type="module" src="main.js"></script>
+</body>
+</html>

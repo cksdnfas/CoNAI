@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "nodemon --watch src --ext ts,json --ignore 'database/**' --ignore 'uploads/**' --ignore '**/*.db' --signal SIGTERM --exec tsx src/index.ts",
     "build": "tsc && npm run copy:migrations && npm run copy:plugin-sdk && npm run build:bundled-plugins",
-    "build:bundled-plugins": "node ../scripts/build-plugin.mjs --bundled moss-bbox-studio",
+    "build:bundled-plugins": "node ../scripts/build-plugin.mjs --bundled moss-bbox-studio && node ../scripts/build-plugin.mjs --bundled video-canvas",
     "copy:plugin-sdk": "copyfiles -f \"../plugins/sdk/conai-plugin.js\" \"../plugins/sdk/conai-plugin.css\" dist/plugin-sdk",
     "typecheck": "tsc --noEmit",
     "test:chat-agent": "tsx --test test/chat-agent-calls.test.ts",
