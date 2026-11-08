@@ -29,8 +29,15 @@ export type ComfyDropdownApiCollectResult = {
   createdLists: number;
   deletedLists: number;
   apiPaths: string[];
+  failedPaths: Array<{ apiPath: string; error: string }>;
   sourcePath: string;
 };
+
+export class ComfyDropdownApiCollectError extends Error {
+  constructor(message: string, readonly result: ComfyDropdownApiCollectResult) {
+    super(message);
+  }
+}
 
 function decodeUnicodeEscapeSequences(value: string) {
   let decoded = value;
@@ -161,7 +168,7 @@ function getModelFolderDisplayName(rootFolder: string, modelOptionPath: string) 
 }
 
 /** Build per-folder lists from API-returned model names while preserving ComfyUI option values. */
-export function buildComfyModelFoldersFromApiBatches(batches: ApiModelFileBatch[]) {
+export function buildComfyModelFoldersFromApiBatches(batches: Pick<ApiModelFileBatch, 'rootFolder' | 'files'>[]) {
   const folderMap = new Map<string, ComfyUIModelFolderScanInput>();
   const fileSetByFolder = new Map<string, Set<string>>();
 
@@ -255,27 +262,54 @@ function buildAutoCollectedDropdownLists(modelFolders: ComfyUIModelFolderScanInp
 /** Fetch model paths from the representative ComfyUI server and replace generated auto lists. */
 export async function collectAndReplaceComfyModelDropdownListsFromDefaultServer(input: { apiPaths?: unknown } = {}): Promise<ComfyDropdownApiCollectResult> {
   const apiPaths = normalizeComfyModelApiPaths(input.apiPaths);
-  const batches = await Promise.all(apiPaths.map((apiPath) => fetchDefaultServerModelFiles(apiPath)));
-  const modelFolders = buildComfyModelFoldersFromApiBatches(batches);
-  const lists = buildAutoCollectedDropdownLists(modelFolders, AUTO_COLLECT_SOURCE_PATH);
+  const outcomes = await Promise.allSettled(apiPaths.map((apiPath) => fetchDefaultServerModelFiles(apiPath)));
+  const batches: ApiModelFileBatch[] = [];
+  const failedPaths: ComfyDropdownApiCollectResult['failedPaths'] = [];
 
-  const deletedLists = CustomDropdownListModel.deleteAutoCollected();
-  let createdLists = 0;
-
-  for (const list of lists) {
-    try {
-      CustomDropdownListModel.create(list);
-      createdLists++;
-    } catch (error) {
-      console.error(`Error creating ComfyUI auto-collected dropdown list ${list.name}:`, error);
+  for (const [index, outcome] of outcomes.entries()) {
+    if (outcome.status === 'fulfilled') {
+      batches.push(outcome.value);
+    } else {
+      failedPaths.push({
+        apiPath: apiPaths[index],
+        error: outcome.reason instanceof Error ? outcome.reason.message : String(outcome.reason),
+      });
     }
   }
 
-  return {
-    scannedFolders: apiPaths.length,
-    createdLists,
-    deletedLists,
+  const result: ComfyDropdownApiCollectResult = {
+    scannedFolders: batches.length,
+    createdLists: 0,
+    deletedLists: 0,
     apiPaths,
+    failedPaths,
     sourcePath: AUTO_COLLECT_SOURCE_PATH,
   };
+
+  if (batches.length === 0) {
+    return result;
+  }
+
+  const successfulRoots = Array.from(new Set(batches.map((batch) => batch.rootFolder)));
+  const failedRoots = new Set(failedPaths.map((failure) => getRootFolderFromApiPath(failure.apiPath)));
+
+  try {
+    const replacement = CustomDropdownListModel.replaceAutoCollectedForRoots(
+      successfulRoots,
+      (existingLists) => {
+        // Old lists identify only a root, so a failed peer of that root requires retaining its previous union.
+        const retainedBatches = successfulRoots.filter((rootFolder) => failedRoots.has(rootFolder)).map((rootFolder) => ({
+          rootFolder,
+          files: existingLists.filter((list) => list.name === rootFolder
+            || list.name === buildMergedComfyDropdownListName(rootFolder)
+            || list.name.startsWith(`${rootFolder}/`)).flatMap((list) => list.items),
+        }));
+        const modelFolders = buildComfyModelFoldersFromApiBatches([...batches, ...retainedBatches]);
+        return buildAutoCollectedDropdownLists(modelFolders, AUTO_COLLECT_SOURCE_PATH);
+      },
+    );
+    return { ...result, ...replacement };
+  } catch (error) {
+    throw new ComfyDropdownApiCollectError(error instanceof Error ? error.message : String(error), result);
+  }
 }

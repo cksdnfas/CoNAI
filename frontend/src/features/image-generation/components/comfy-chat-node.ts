@@ -1,4 +1,4 @@
-import { applyMiniMaxDirectorResolutionBounds, copyChatPageData, validateChatPageArguments, type ChatPageData, type ChatPageSchema } from '@conai/shared'
+import { applyMiniMaxDirectorResolutionBounds, copyChatPageData, MINIMAX_H3_REFMOD_MAX_SLOTS, validateChatPageArguments, type ChatPageData, type ChatPageSchema } from '@conai/shared'
 import { pageArray, pageChoice, pageNumber, pageObject, pageText, pageRecord } from '@/features/codex-chat/page-action-helpers'
 import type { WorkflowMarkedField } from '@/lib/api-image-generation-types'
 import { createRandomUuid } from '@/lib/random-uuid'
@@ -9,8 +9,10 @@ const resolution = pageObject({ aspect: pageChoice(MINIMAX_H3_DIRECTOR_ASPECT_OP
 const prompt = pageObject({ mode: pageChoice(['simple', 'structured']), simple_prompt: pageText(), imd: pageText(), soundscape: pageText(), music: pageText(), subject_definitions: pageText(), summary: pageText(), retention_analysis: pageText(), detailed_description: pageText() })
 const postprocess = pageObject({ simple: pageObject({ enabled: { type: 'boolean' } }), model: pageObject({ enabled: { type: 'boolean' }, model_name: pageText(300) }), rtx: pageObject({ enabled: { type: 'boolean' }, denoise: { type: 'boolean' }, denoise_quality: pageChoice(['Low', 'Medium', 'High', 'Ultra']), deblur: { type: 'boolean' }, deblur_quality: pageChoice(['Low', 'Medium', 'High', 'Ultra']), upscale: pageChoice(['Off', 'VSR', 'High Bitrate']), upscale_quality: pageChoice(['Low', 'Medium', 'High', 'Ultra']), resize_type: pageChoice(['Keep Ratio', 'Manual', 'Preset Ratio', 'Same Size', 'Scale']), scale: pageNumber(1, 4), megapixels: pageNumber(0.01, 64) }) })
 const timelineItems = pageArray(pageObject({ id: pageText(100), enabled: { type: 'boolean' }, slot: pageNumber(0, 8, true), start: pageNumber(0, 60), duration: pageNumber(0.1, 60), trim_start: pageNumber(0, 3600), trim_end: pageNumber(0, 3600), prompt: pageText(), remove: { type: 'boolean' } }, ['id']), 32)
+// Merged by slot; `remove` drops that slot. Rows are consumed only in REF2VA.
+const refmods = pageArray(pageObject({ slot: pageNumber(1, MINIMAX_H3_REFMOD_MAX_SLOTS, true), name: pageText(500), enabled: { type: 'boolean' }, strength: pageNumber(0, 1), description: pageText(), remove: { type: 'boolean' } }, ['slot']), MINIMAX_H3_REFMOD_MAX_SLOTS)
 const promptBlocks = pageArray(pageObject({ id: pageText(100), text: pageText(), enabled: { type: 'boolean' }, start: pageNumber(0, 60), duration: pageNumber(0.1, 60) }, ['text', 'start', 'duration']), 64)
-export const COMFY_NODE_PATCH_SCHEMA = pageObject({ mode: pageChoice([...MINIMAX_H3_DIRECTOR_MODES]), width: pageNumber(32, 8192, true), height: pageNumber(32, 8192, true), duration: pageNumber(1, 60, true), frame_rate: pageNumber(0.1, 240), ref_image_size: pageChoice(['match', 'max']), prompt, resolution, postprocess, timelineItems, promptBlocks, loras: pageArray(pageObject({ key: pageText(100), lora: pageText(300), on: { type: 'boolean' }, strength: pageNumber(-100, 100) }, ['key', 'lora', 'on', 'strength']), 64) })
+export const COMFY_NODE_PATCH_SCHEMA = pageObject({ mode: pageChoice([...MINIMAX_H3_DIRECTOR_MODES]), width: pageNumber(32, 8192, true), height: pageNumber(32, 8192, true), duration: pageNumber(1, 60, true), frame_rate: pageNumber(0.1, 240), ref_image_size: pageChoice(['match', 'max']), prompt, resolution, postprocess, refmods, timelineItems, promptBlocks, loras: pageArray(pageObject({ key: pageText(100), lora: pageText(300), on: { type: 'boolean' }, strength: pageNumber(-100, 100) }, ['key', 'lora', 'on', 'strength']), 64) })
 
 export function comfyNodeChatSchema(field: WorkflowMarkedField, value: unknown): ChatPageSchema {
   if (field.node_editor === 'power_lora_loader_rgthree') return pageObject({ loras: COMFY_NODE_PATCH_SCHEMA.properties!.loras }, ['loras'])
@@ -19,7 +21,7 @@ export function comfyNodeChatSchema(field: WorkflowMarkedField, value: unknown):
   const properties = structuredClone(Object.fromEntries(Object.entries(COMFY_NODE_PATCH_SCHEMA.properties!).filter(([key]) => {
     if (key === 'loras') return false
     if (key === 'prompt') return visible.includes('prompt') && !isMiniMaxH3DirectorInputLink(node.builder_state) && !isMiniMaxH3DirectorInputLink(node.prompt)
-    if (['resolution', 'postprocess', 'timelineItems', 'promptBlocks'].includes(key)) return visible.includes('timeline_data') && !isMiniMaxH3DirectorInputLink(node.timeline_data) && !field.node_hidden_controls?.includes(key)
+    if (['resolution', 'postprocess', 'refmods', 'timelineItems', 'promptBlocks'].includes(key)) return visible.includes('timeline_data') && !isMiniMaxH3DirectorInputLink(node.timeline_data) && !field.node_hidden_controls?.includes(key)
     return visible.includes(key) && !isMiniMaxH3DirectorInputLink(node[key])
   })))
   for (const hidden of field.node_hidden_controls ?? []) {
@@ -44,7 +46,7 @@ export function comfyNodeChatData(field: WorkflowMarkedField, value: unknown): C
   const { timeline } = parseMiniMaxH3DirectorTimeline(node.timeline_data)
   const builder = normalizeMiniMaxH3DirectorBuilderState(node.builder_state, timeline, typeof node.mode === 'string' ? node.mode : 'FL2VA', typeof node.duration === 'number' ? node.duration : 5, typeof node.prompt === 'string' ? node.prompt : '')
   return copyChatPageData({ ...base, mode: node.mode, width: node.width, height: node.height, duration: node.duration, frame_rate: node.frame_rate, ref_image_size: node.ref_image_size,
-    prompt: { mode: builder.prompt_mode, simple_prompt: builder.simple_prompt, imd: builder.imd, soundscape: builder.soundscape, music: builder.music, subject_definitions: builder.ref.subject_definitions, summary: builder.ref.summary, retention_analysis: builder.ref.retention_analysis, detailed_description: builder.ref.detailed_description }, resolution: timeline.resolution ?? {}, postprocess: timeline.postprocess ?? {},
+    prompt: { mode: builder.prompt_mode, simple_prompt: builder.simple_prompt, imd: builder.imd, soundscape: builder.soundscape, music: builder.music, subject_definitions: builder.ref.subject_definitions, summary: builder.ref.summary, retention_analysis: builder.ref.retention_analysis, detailed_description: builder.ref.detailed_description }, resolution: timeline.resolution ?? {}, postprocess: timeline.postprocess ?? {}, refmods: timeline.refmods ?? [],
     timelineItems: timeline.items.map((item) => ({ id: item.id, type: item.type, name: /^(?:data:|blob:|https?:)/i.test(item.value) ? item.type : item.value.split(/[\\/]/).pop() ?? '', enabled: item.enabled, slot: item.slot, start: item.start, duration: item.duration })), promptBlocks: timeline.prompt_blocks.map((item) => ({ id: item.id, text: item.text, enabled: item.enabled, start: item.start, duration: item.duration })), issues: validateMiniMaxH3DirectorNodeValue(node).map((issue) => issue.ko) })
 }
 
@@ -67,6 +69,20 @@ export function applyComfyChatNode(field: WorkflowMarkedField, value: unknown, i
     const p = pageRecord(patch.postprocess)
     timeline.postprocess = { simple: { enabled: false, ...timeline.postprocess?.simple, ...(p.simple ? pageRecord(p.simple) : {}) }, model: { enabled: false, model_name: '', ...timeline.postprocess?.model, ...(p.model ? pageRecord(p.model) : {}) }, rtx: { ...timeline.postprocess?.rtx, ...(p.rtx ? pageRecord(p.rtx) : {}) } } as MiniMaxH3DirectorTimeline['postprocess']
   }
+  if (Array.isArray(patch.refmods) && patch.refmods.length > 0) {
+    const seen = new Set<number>()
+    let rows = [...(timeline.refmods ?? [])]
+    for (const raw of patch.refmods as ChatPageData[]) {
+      const { slot: rawSlot, remove, ...values } = pageRecord(raw); const slot = Number(rawSlot)
+      if (seen.has(slot)) throw new Error('RefMod 슬롯이 중복됐어.')
+      seen.add(slot)
+      const current = rows.find((row) => row.slot === slot)
+      if (remove) rows = rows.filter((row) => row.slot !== slot)
+      else if (current) rows = rows.map((row) => row.slot === slot ? { ...row, ...values } as typeof row : row)
+      else rows.push({ slot, name: '', enabled: true, strength: 1, description: '', ...values } as typeof rows[number])
+    }
+    timeline.refmods = rows
+  }
   if (patch.timelineItems) {
     const seen = new Set<string>()
     for (const raw of patch.timelineItems as ChatPageData[]) {
@@ -85,7 +101,7 @@ export function applyComfyChatNode(field: WorkflowMarkedField, value: unknown, i
     const refs = Object.fromEntries(Object.entries(p).filter(([key]) => ['subject_definitions', 'summary', 'retention_analysis', 'detailed_description', 'soundscape', 'music'].includes(key)))
     builder = { ...builder, ...p, prompt_mode: (p.mode ?? builder.prompt_mode) as 'simple' | 'structured', mode: (basic.mode ?? builder.mode) as typeof builder.mode, ref: { ...builder.ref, ...refs } } as typeof builder
   }
-  const updatesTimeline = ['resolution', 'postprocess', 'timelineItems', 'promptBlocks'].some((key) => patch[key] !== undefined)
+  const updatesTimeline = ['resolution', 'postprocess', 'refmods', 'timelineItems', 'promptBlocks'].some((key) => patch[key] !== undefined)
   const built = buildMiniMaxH3DirectorNodeValue(node, basic, updatesTimeline ? timeline : undefined, undefined, builder)
   const next = updatesTimeline || basic.width !== undefined || basic.height !== undefined ? applyMiniMaxDirectorResolutionBounds(built, field.node_numeric_bounds) : built
   const issues = validateMiniMaxH3DirectorNodeValue(next).filter((issue) => issue.code !== 'selected-model-connection')

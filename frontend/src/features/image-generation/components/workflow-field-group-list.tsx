@@ -12,6 +12,8 @@ type WorkflowFieldGroupListProps = {
   onRefreshOptions?: () => Promise<void> | void
   /** Per-field validation messages from the last generate attempt. */
   fieldIssues?: Record<string, string>
+  /** Explicitly selected ComfyUI server, for server-specific option sources such as the RefMod library. */
+  comfyServerId?: number
   onChange: (fieldId: string, value: WorkflowFieldDraftValue) => void
   onImageChange: (fieldId: string, image?: SelectedImageDraft) => Promise<void> | void
 }
@@ -24,6 +26,7 @@ export function WorkflowFieldGroupList({
   isRefreshingOptions = false,
   onRefreshOptions,
   fieldIssues,
+  comfyServerId,
   onChange,
   onImageChange,
 }: WorkflowFieldGroupListProps) {
@@ -41,6 +44,7 @@ export function WorkflowFieldGroupList({
           isRefreshingOptions={isRefreshingOptions}
           onRefreshOptions={onRefreshOptions}
           issueMessage={fieldIssues?.[field.id]}
+          comfyServerId={comfyServerId}
           onChange={(value) => onChange(field.id, value)}
           onImageChange={(image) => onImageChange(field.id, image)}
         />
@@ -58,6 +62,7 @@ export function WorkflowFieldGroupList({
         isRefreshingOptions={isRefreshingOptions}
         onRefreshOptions={onRefreshOptions}
         fieldIssues={fieldIssues}
+        comfyServerId={comfyServerId}
         onChange={onChange}
         onImageChange={onImageChange}
       />

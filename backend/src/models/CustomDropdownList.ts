@@ -165,13 +165,30 @@ export class CustomDropdownListModel {
     return result.count;
   }
 
-  /**
-   * 모든 자동 수집 목록 삭제 (대표 서버 API 재수집용)
-   */
-  static deleteAutoCollected(): number {
-    const info = userSettingsDb.prepare(
-      'DELETE FROM custom_dropdown_lists WHERE is_auto_collected = 1'
-    ).run();
-    return info.changes;
+  static replaceAutoCollectedForRoots(
+    rootFolders: string[],
+    buildLists: (existingLists: CustomDropdownListWithParsedItems[]) => CustomDropdownListCreateData[],
+  ): { deletedLists: number; createdLists: number } {
+    return userSettingsDb.transaction(() => {
+      const rootConditions = rootFolders.map(() => '(name = ? OR name = ? OR instr(name, ?) = 1)').join(' OR ');
+      const rows = userSettingsDb.prepare(`
+        SELECT * FROM custom_dropdown_lists
+        WHERE is_auto_collected = 1 AND (${rootConditions})
+      `).all(...rootFolders.flatMap((root) => [root, `${root} (통합)`, `${root}/`])) as CustomDropdownListRecord[];
+      const lists = buildLists(rows.map((row) => ({
+        ...row,
+        items: JSON.parse(row.items) as string[],
+        is_auto_collected: true,
+      })));
+
+      for (const row of rows) {
+        this.delete(row.id);
+      }
+      for (const list of lists) {
+        this.create(list);
+      }
+
+      return { deletedLists: rows.length, createdLists: lists.length };
+    })();
   }
 }

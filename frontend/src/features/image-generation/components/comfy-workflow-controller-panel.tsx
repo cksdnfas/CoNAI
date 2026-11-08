@@ -514,6 +514,7 @@ export function ComfyWorkflowControllerPanel({
               isRefreshingOptions={isRefreshingDropdownLists}
               onRefreshOptions={onRefreshDropdownLists}
               fieldIssues={fieldIssues}
+              comfyServerId={selectedServer?.id}
               onChange={onFieldChange}
               onImageChange={onImageChange}
             />

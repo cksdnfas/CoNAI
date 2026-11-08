@@ -184,31 +184,22 @@ product_photo.safetensors
 
 ### 자동수집 목록
 
-ComfyUI 모델 폴더를 선택하면 CoNAI가 알려진 모델 파일 확장자를 스캔해 목록을 만듭니다.
+대표 ComfyUI 서버의 모델 API에서 파일 목록을 읽어 통합 목록과 하위 폴더별 드롭다운 목록을 만듭니다.
 
-대상 예:
+기본 API 경로:
 
-- checkpoints
-- clip
-- clip_vision
-- controlnet
-- diffusion_models
-- embeddings
-- ipadapter
-- style_models
-- text_encoders
-- unet
-- upscale_models
-- vae
+- `/models/checkpoints`
+- `/models/diffusion_models`
+- `/models/unet_gguf`
+- `/models/loras`
 
-LoRA 폴더는 자동수집 대상에서 제외됩니다. 필요한 경우 커스텀 목록으로 관리합니다.
+일부 경로가 없거나 요청에 실패해도 나머지 경로의 수집은 계속됩니다. 완료 알림에 수집 결과와 실패한 경로·오류 원인을 함께 표시합니다.
 
-옵션:
+성공한 경로의 목록만 갱신하며, 실패한 경로·이번에 요청하지 않은 경로의 기존 목록과 직접 만든 목록은 보존합니다. 성공한 경로가 빈 목록을 반환하면 해당 경로의 오래된 자동수집 목록은 제거합니다. 모든 경로가 실패하면 기존 목록을 바꾸지 않고 오류를 알립니다.
 
-| 옵션 | 설명 |
-| --- | --- |
-| 하위 폴더 통합 | 하위 폴더를 하나의 목록으로 합침 |
-| 통합 + 개별 생성 | 통합 목록과 폴더별 목록을 함께 생성 |
+구버전 자동 목록도 이름이 `checkpoints`·`checkpoints/SD15`처럼 소속 모델 폴더를 식별할 수 있으면 성공한 폴더와 함께 갱신합니다. `SD15`처럼 소속 모델 폴더를 알 수 없는 목록은 보존합니다.
+
+같은 모델 폴더를 여러 API 경로에서 조회할 때 그중 하나라도 실패하면, 기존 항목을 보존하면서 성공한 경로의 결과를 합칩니다.
 
 ## 워크플로우 실행
 
@@ -241,6 +232,18 @@ DaSiWa 계열 MiniMax H3 Director 노드가 포함된 워크플로우는 전용 
 - 최신 노드 입력 규격과 기존 프롬프트 형식 호환
 
 워크플로우 편집에서 전용 필드 노출 여부를 정한 뒤 생성 화면에서 미디어와 프롬프트를 구성합니다. 서버에는 해당 MiniMax H3 Director 커스텀 노드가 설치되어 있어야 합니다.
+
+### RefMod (REF2VA)
+
+RefMod는 ComfyUI의 `models/refmods/` 폴더에 저장된 MiniMax H3 참조 번들(`.safetensors`)입니다. REF2VA 모드에서는 Director 입력에 **RefMod** 패널이 나타나고, 서버의 RefMod 목록에서 파일을 골라 최대 8개 슬롯에 넣을 수 있습니다.
+
+- 행마다 사용 여부, 강도(0–1), 설명을 정합니다. 설명을 쓰면 파일에 들어 있는 설명 대신 사용됩니다.
+- 프롬프트에 `<RefMod N>`(N은 슬롯 번호)을 쓰면 실행 시 DaSiWa 노드가 실제 `<Picture N>`·`<Video N>`·`<Audio N>` 라벨로 바꿉니다.
+- 목록은 대표(기본) ComfyUI 서버의 `models/refmods`에서 읽습니다. DaSiWa 팩이 없는 서버에서는 "RefMod를 사용할 수 없어"로 표시됩니다.
+- 다른 모드로 바꾸면 패널은 숨겨지고 선택은 그대로 보존됩니다. 워크플로 편집의 숨김 컨트롤에 `refmods`를 넣으면 패널을 끌 수 있습니다.
+- 페이지 어시스턴트와 MCP(`list_comfy_refmods`, Director 입력의 `refmods`)도 같은 행을 읽고 수정합니다.
+
+RefMod를 CoNAI에서 만들려면 DaSiWa의 **MiniMaxH3 Create RefMod**(`DaSiWaH3RefModExport`) 노드와 VAE를 연결한 워크플로를 등록하고 Director 필드를 마킹합니다. 실행 시 CoNAI가 `request_id`를 새로 채우고, 비어 있는 `timeline_data`에 Director 스냅샷을 복사합니다. 생성 결과는 ComfyUI의 `models/refmods/`에 저장되며 이미지 출력은 없습니다. 서버 간 RefMod 파일 복사·동기화는 CoNAI 범위 밖이므로 별도 도구를 사용하세요.
 
 실행 전 검증:
 

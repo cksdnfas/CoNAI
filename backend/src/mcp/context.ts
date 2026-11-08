@@ -94,7 +94,7 @@ export const CHAT_PAGE_TOOLS = new Set(['get_current_page', 'page_fill', 'page_a
 const WORKFLOW_EDITOR_TOOLS = new Set(['get_workflow_editor', 'list_workflow_modules', 'workflow_edit']);
 const IMAGE_PAGE_TOOLS = new Set(['search_images', 'search_images_by_tags', 'search_images_by_meaning', 'find_similar_images', 'get_image_metadata', 'get_generation_history', 'get_generation_history_request', 'list_image_groups', 'get_image_groups', 'get_image_group', 'list_group_resources']);
 const PROMPT_PAGE_TOOLS = new Set(['search_prompts', 'get_most_used_prompts', 'list_prompt_groups', 'get_prompt_group_structure', 'get_prompts_in_group', 'list_prompt_presets', 'search_wildcards', 'preview_random_prompt']);
-const GENERATION_PAGE_TOOLS = new Set(['get_generation_job', 'get_generation_artifacts', 'get_generation_history', 'get_generation_history_request', 'get_generation_routing_options', 'list_workflows', 'get_workflow_details', 'list_comfyui_servers', 'list_graph_workflows', 'get_graph_workflow_details', 'get_graph_workflow_execution']);
+const GENERATION_PAGE_TOOLS = new Set(['get_generation_job', 'get_generation_artifacts', 'get_generation_history', 'get_generation_history_request', 'get_generation_routing_options', 'list_workflows', 'get_workflow_details', 'list_comfyui_servers', 'list_comfy_refmods', 'list_graph_workflows', 'get_graph_workflow_details', 'get_graph_workflow_execution']);
 const CHARACTER_PAGE_TOOLS = new Set(['list_character_library', 'get_character_setting', 'fill_character_appearance', 'propose_character_library']);
 
 /**
@@ -248,6 +248,7 @@ const TOOL_SCOPES: Record<string, McpHttpScope> = {
   restore_file_version: 'organize',
   list_workflows: 'read',
   list_comfyui_servers: 'read',
+  list_comfy_refmods: 'read',
   get_generation_routing_options: 'read',
   get_codex_generation_options: 'read',
   get_generation_history_request: 'read',

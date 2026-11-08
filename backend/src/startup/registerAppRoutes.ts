@@ -269,7 +269,11 @@ export function registerAppRoutes(app: Express, options: RegisterAppRoutesOption
   app.use('/api/workflow-input-assets', options.uploadLimiter, requireAuth, workflowInputAssetRoutes);
   app.use('/api/workflows', options.readOnlyLimiter, requireReadAccess('workflows.view'), workflowRoutes);
   app.use('/api/public-workflows', requireAuth, publicWorkflowRoutes);
-  app.use('/api/comfyui-servers', requireReadAccess('workflows.view'), comfyuiServerRoutes);
+  app.use('/api/comfyui-servers', (req, res, next) => {
+    // The RefMod library backs the Director form, which generation-only accounts also use on published workflow pages.
+    if (isReadMethod(req) && req.path === '/refmods') requireAuth(req, res, () => allowAnonymousAnyPermission(['generation.execute', 'workflows.view'])(req, res, next));
+    else requireReadAccess('workflows.view')(req, res, next);
+  }, comfyuiServerRoutes);
   app.use('/api/custom-dropdown-lists', (req, res, next) => {
     // Bitmap URLs are also consumed by published workflows without global workflow-data access.
     if (isReadMethod(req) && req.path === '/comfy-model-thumbnail') optionalAuth(req, res, next);

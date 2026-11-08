@@ -48,6 +48,7 @@ const MINIMAX_H3_DIRECTOR_CONTROL_OPTIONS = [
   { key: 'postprocess.model', ko: '업스케일 모델 사용', en: 'Upscale model toggle' },
   { key: 'postprocess.model.model_name', ko: '업스케일 모델 선택', en: 'Upscale model selection' },
   { key: 'postprocess.rtx', ko: 'RTX Upscaler & Refiner', en: 'RTX Upscaler & Refiner' },
+  { key: 'refmods', ko: 'RefMod', en: 'RefMod' },
 ] as const
 
 const FIELD_TYPE_OPTIONS: Array<{ value: WorkflowMarkedField['type'], ko: string, en: string }> = [

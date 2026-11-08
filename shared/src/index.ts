@@ -18,6 +18,7 @@ export { PERMISSION_CATALOG, PERMISSION_KEYS, CHAT_DELEGATABLE_PERMISSION_KEYS, 
 export const VERSION = '26.11.05';
 
 export * from './utils/minimaxDirectorResolution';
+export * from './types/minimaxRefMod';
 export * from './types/fileStore';
 export * from './types/workspace';
 export * from './types/posts';

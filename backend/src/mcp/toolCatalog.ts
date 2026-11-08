@@ -29,7 +29,7 @@ export const TOOL_CATEGORIES: Record<ToolCategoryId, string> = {
   image_groups: 'Image groups: list, create, edit, add/move/remove images, auto-collect',
   emoticons: 'Emoticons: list, view, keywords, groups',
   wallpaper: 'Live wallpapers: list saved ones and the schedule, switch the live one, save the time schedule (widgets are edited on the wallpaper page)',
-  generation: 'Generation: NovelAI, ComfyUI workflows, servers, routing, jobs',
+  generation: 'Generation: NovelAI, ComfyUI workflows, servers, RefMod library, routing, jobs',
   workflows: 'Graph workflows and definitions: list, inspect, run, export/import',
   prompts: 'Saved prompts and Danbooru tags/artists/characters (including related tags), prompt groups, presets, wildcards, dropdown lists, backups',
   files: 'Shared file store: list, search, read/write/edit text docs, image generation metadata, folders, rename, move, delete, versions (look at stored images with view_images file_ids)',

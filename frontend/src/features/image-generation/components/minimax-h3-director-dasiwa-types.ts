@@ -1,5 +1,5 @@
 import type { WorkflowInputAssetRef } from '@/lib/api-workflow-input-assets'
-import { MINIMAX_H3_DIRECTOR_RESOLUTION_PRESETS } from '@conai/shared'
+import { MINIMAX_H3_DIRECTOR_RESOLUTION_PRESETS, type MiniMaxH3RefModRow } from '@conai/shared'
 
 // MiniMax H3 Director (DaSiWa) node constants and state types. Logic lives in
 // minimax-h3-director-dasiwa-utils.ts, which re-exports everything here.
@@ -172,6 +172,8 @@ export type MiniMaxH3DirectorTimeline = {
   builder_state?: Record<string, unknown>
   resolution?: MiniMaxH3DirectorResolutionState
   postprocess?: MiniMaxH3DirectorPostprocessState
+  /** DaSiWa RefMod slots; consumed only in REF2VA and kept as-is in other modes. */
+  refmods?: MiniMaxH3RefModRow[]
   [key: string]: unknown
 }
 

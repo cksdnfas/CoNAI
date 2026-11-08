@@ -38,12 +38,13 @@ type WorkflowFieldDisclosureCardProps = {
   onRefreshOptions?: () => Promise<void> | void
   /** Validation message from the last generate attempt; marks the field invalid while set. */
   issueMessage?: string
+  comfyServerId?: number
   onChange: (value: WorkflowFieldDraftValue) => void
   onImageChange: (image?: SelectedImageDraft) => Promise<void> | void
 }
 
 /** Render one runtime workflow field inside a collapsible card. */
-export function WorkflowFieldDisclosureCard({ field, value, grouped = false, loraOptions, isRefreshingOptions = false, onRefreshOptions, issueMessage, onChange, onImageChange }: WorkflowFieldDisclosureCardProps) {
+export function WorkflowFieldDisclosureCard({ field, value, grouped = false, loraOptions, isRefreshingOptions = false, onRefreshOptions, issueMessage, comfyServerId, onChange, onImageChange }: WorkflowFieldDisclosureCardProps) {
   const { t } = useI18n()
   const [isExpanded, setIsExpanded] = useState(field.default_collapsed !== true)
   const fieldLabel = formatWorkflowFieldLabel(field)
@@ -112,6 +113,7 @@ export function WorkflowFieldDisclosureCard({ field, value, grouped = false, lor
             onRefreshOptions={onRefreshOptions}
             invalid={isInvalid}
             errorMessageId={errorMessageId}
+            comfyServerId={comfyServerId}
             onChange={onChange}
             onImageChange={onImageChange}
           />
@@ -130,6 +132,7 @@ type WorkflowNodeFieldDisclosureCardProps = {
   isRefreshingOptions?: boolean
   onRefreshOptions?: () => Promise<void> | void
   fieldIssues?: Record<string, string>
+  comfyServerId?: number
   onChange: (fieldId: string, value: WorkflowFieldDraftValue) => void
   onImageChange: (fieldId: string, image?: SelectedImageDraft) => Promise<void> | void
 }
@@ -144,6 +147,7 @@ export function WorkflowNodeFieldDisclosureCard({
   isRefreshingOptions = false,
   onRefreshOptions,
   fieldIssues,
+  comfyServerId,
   onChange,
   onImageChange,
 }: WorkflowNodeFieldDisclosureCardProps) {
@@ -182,6 +186,7 @@ export function WorkflowNodeFieldDisclosureCard({
             isRefreshingOptions={isRefreshingOptions}
             onRefreshOptions={onRefreshOptions}
             issueMessage={fieldIssues?.[field.id]}
+            comfyServerId={comfyServerId}
             onChange={(value) => onChange(field.id, value)}
             onImageChange={(image) => onImageChange(field.id, image)}
           />

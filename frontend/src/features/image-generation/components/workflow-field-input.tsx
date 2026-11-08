@@ -24,6 +24,8 @@ type WorkflowFieldInputProps = {
   invalid?: boolean
   /** Id of the inline validation message rendered next to the field. */
   errorMessageId?: string
+  /** Explicitly selected ComfyUI server for server-specific option sources (RefMod library). */
+  comfyServerId?: number
   onChange: (value: WorkflowFieldDraftValue) => void
   onImageChange: (image?: SelectedImageDraft) => Promise<void> | void
 }
@@ -41,7 +43,7 @@ function isWorkflowNodeDraftValue(value: WorkflowFieldDraftValue): value is Reco
 }
 
 /** Render a single marked-field editor for a ComfyUI workflow. */
-export function WorkflowFieldInput({ field, value, hideLabel = false, loraOptions, isRefreshingOptions = false, onRefreshOptions, invalid = false, errorMessageId, onChange, onImageChange }: WorkflowFieldInputProps) {
+export function WorkflowFieldInput({ field, value, hideLabel = false, loraOptions, isRefreshingOptions = false, onRefreshOptions, invalid = false, errorMessageId, comfyServerId, onChange, onImageChange }: WorkflowFieldInputProps) {
   const { t } = useI18n()
   const fieldLabel = field.required ? `${field.label} *` : field.label
   const wrapField = (children: ReactNode) => {
@@ -78,6 +80,7 @@ export function WorkflowFieldInput({ field, value, hideLabel = false, loraOption
         visibleFields={field.node_visible_fields}
         hiddenControls={field.node_hidden_controls}
         numericBounds={field.node_numeric_bounds}
+        comfyServerId={comfyServerId}
         onChange={onChange}
       />
     ))

@@ -215,6 +215,7 @@ stdio:
 | --- | --- |
 | `list_workflows` | 등록된 ComfyUI 워크플로우 조회 (기본은 이미지 워크플로, `kind: "audio"`·`"all"`로 음향 포함) |
 | `list_comfyui_servers` | 등록된 ComfyUI 서버 조회 |
+| `list_comfy_refmods` | 서버의 `models/refmods` RefMod 목록 조회(`workflow_id`·`server_id` 선택). 이름을 MiniMax H3 Director 입력의 `refmods[].name`에 사용 (REF2VA 전용, DaSiWa 팩 미설치 서버는 오류) |
 | `get_workflow_details` | 워크플로우 상세와 marked fields 조회 (시드 필드에는 `seed_rule` 표시) |
 | `check_comfy_workflow` | 등록된 워크플로(`workflow_id`)나 초안(`workflow_json`, 일반 workflow는 먼저 API 형식으로 변환)을 저장·실행 없이 서버 검사 |
 | `generate_comfyui` | 특정 ComfyUI 서버에서 생성 |

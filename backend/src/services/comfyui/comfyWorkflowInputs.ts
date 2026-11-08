@@ -9,7 +9,12 @@ import { isComfySeedJsonPath } from './seedControl'
 import { isChatMcpSource, type McpRequestContext } from '../../mcp/context'
 import { validateMcpToolArguments } from '../../mcp/requestSecurity'
 import { requireContextPermission, requireRequesterPermission } from '../../middleware/featureAccess'
-import { isProtectedWorkflowKey } from '@conai/shared'
+import {
+  isProtectedWorkflowKey,
+  MINIMAX_H3_REFMOD_MAX_SLOTS,
+  normalizeMiniMaxH3RefModRows,
+  validateMiniMaxH3RefModRows,
+} from '@conai/shared'
 
 const MINIMAX_DIRECTOR_EDITOR = 'minimax_h3_director_dasiwa'
 const MINIMAX_META_KEY = '__conai_minimax_h3_director'
@@ -25,6 +30,7 @@ const FRIENDLY_MINIMAX_KEYS = new Set([
   'postprocess',
   'media',
   'assets',
+  'refmods',
 ])
 
 type MiniMaxMediaInput = {
@@ -283,6 +289,31 @@ function normalizeMiniMaxValue(field: MarkedField, provided: unknown) {
   const media = Array.isArray(incoming.media)
     ? incoming.media.filter((item): item is MiniMaxMediaInput => isRecord(item))
     : null
+  // Explicit input is always checked; rows stored in the saved timeline only matter in REF2VA,
+  // where the DaSiWa node reads them (other modes keep them hidden, as the Director UI does).
+  const rawRefmods = incoming.refmods !== undefined
+    ? incoming.refmods
+    : value.mode === 'REF2VA' ? timeline.refmods : undefined
+  if (rawRefmods !== undefined) {
+    if (!Array.isArray(rawRefmods) || !rawRefmods.every(isRecord)) {
+      throw new Error(`${field.label || field.id}.refmods must be an array of { slot, name, enabled, strength, description } objects`)
+    }
+    const rows = normalizeMiniMaxH3RefModRows(rawRefmods)
+    const issues = validateMiniMaxH3RefModRows(rows)
+    if (issues.length > 0) {
+      const messages = issues.map((issue) => {
+        switch (issue.code) {
+          case 'too-many-rows': return `at most ${issue.max} rows are allowed`
+          case 'invalid-slot': return `slot ${issue.slot} must be an integer from 1 to ${MINIMAX_H3_REFMOD_MAX_SLOTS}`
+          case 'duplicate-slot': return `duplicate slot ${issue.slot}`
+          case 'missing-name': return `slot ${issue.slot} requires a name from list_comfy_refmods`
+          case 'invalid-strength': return `slot ${issue.slot} strength must be from 0 to 1 (received ${issue.strength})`
+        }
+      })
+      throw new Error(`${field.label || field.id}.refmods: ${messages.join('; ')}`)
+    }
+    timeline.refmods = rows
+  }
   const timelineItems = media ? media.map(createMiniMaxMediaItem) : Array.isArray(timeline.items) ? timeline.items : []
   timeline.items = timelineItems
   timeline.builder_state = builder
@@ -343,7 +374,7 @@ export function createMcpComfyService(server: ComfyUIServerRecord) {
   })
 }
 
-export function resolveMcpComfyServer(workflowId: number, requestedServerId?: number) {
+export function resolveMcpComfyServer(workflowId?: number, requestedServerId?: number) {
   if (requestedServerId !== undefined) {
     const server = ComfyUIServerModel.findById(requestedServerId)
     if (!server) throw new Error(`ComfyUI server ${requestedServerId} not found`)
@@ -351,7 +382,7 @@ export function resolveMcpComfyServer(workflowId: number, requestedServerId?: nu
     return server
   }
 
-  for (const linked of WorkflowServerModel.findServersByWorkflow(workflowId, true)) {
+  for (const linked of workflowId === undefined ? [] : WorkflowServerModel.findServersByWorkflow(workflowId, true)) {
     const linkedServerId = Number(linked.server_id ?? linked.id)
     const server = Number.isInteger(linkedServerId) ? ComfyUIServerModel.findById(linkedServerId) : null
     if (server?.is_active) return server
@@ -421,6 +452,22 @@ function miniMaxInputSchema(field: MarkedField) {
         type: 'array',
         description: 'Mode contract: I2VA uses one start image at slot=0; FL2VA uses one start image at slot=0 and one end image at slot=1; L2VA uses one end image at slot=1. Prefer composite_hash for media already managed by CoNAI.',
         item_properties: ['id', 'type', 'slot', 'order', 'enabled', 'duration', 'trim_start', 'trim_end', 'source_width', 'source_height', 'file_name', 'data_url', 'mime_type', 'composite_hash'],
+      },
+      refmods: {
+        type: 'array',
+        maxItems: MINIMAX_H3_REFMOD_MAX_SLOTS,
+        description: 'REF2VA only. Use names returned by list_comfy_refmods and unique slots 1–8. Prompts may use <RefMod N> aliases for those slots.',
+        items: {
+          type: 'object',
+          required: ['slot', 'name'],
+          properties: {
+            slot: { type: 'integer', minimum: 1, maximum: MINIMAX_H3_REFMOD_MAX_SLOTS, description: 'Must be unique across RefMod rows.' },
+            name: { type: 'string', description: 'Name from list_comfy_refmods: path under models/refmods without extension, using / separators.' },
+            strength: { type: 'number', minimum: 0, maximum: 1, default: 1 },
+            enabled: { type: 'boolean', default: true },
+            description: { type: 'string', default: '' },
+          },
+        },
       },
       timeline_data: { type: 'string|object', description: 'Raw CoNAI timeline format; friendly media/resolution keys are preferred.' },
       builder_state: { type: 'string|object', description: 'Raw CoNAI prompt builder format; friendly prompt keys are preferred.' },

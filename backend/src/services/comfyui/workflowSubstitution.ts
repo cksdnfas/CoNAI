@@ -2,6 +2,8 @@ import type { MarkedField } from '../../types/workflow';
 import { normalizeWorkflowNumericPromptValues } from '../workflowNumericFieldPolicy';
 import { randomizeComfyWorkflowSeeds } from './seedControl';
 import { parseJsonRecord } from '../../utils/json';
+import { randomUUID } from 'node:crypto';
+import { MINIMAX_H3_REFMOD_EXPORT_CLASS_TYPE } from '@conai/shared';
 
 const MINIMAX_DIRECTOR_MODES = new Set([
   'T2VA',
@@ -199,6 +201,21 @@ function configureMiniMaxDirectorPostprocess(workflow: Record<string, any>): voi
   }
 }
 
+function wireMiniMaxH3RefModExports(workflow: Record<string, any>): void {
+  const nodes = Object.values(workflow);
+  const exports = nodes.filter((node) => node?.class_type === MINIMAX_H3_REFMOD_EXPORT_CLASS_TYPE);
+  if (exports.length === 0) return;
+  const directors = nodes.filter((node) => node?.class_type === 'MiniMaxH3Director');
+  const directorTimeline = directors.length === 1 ? directors[0].inputs?.timeline_data : undefined;
+  for (const node of exports) {
+    const inputs = node.inputs ??= {};
+    if (!Array.isArray(inputs.request_id)) inputs.request_id = randomUUID();
+    const timeline = inputs.timeline_data;
+    const emptyTimeline = timeline == null || (typeof timeline === 'string' && /^\s*(\{\s*\})?\s*$/.test(timeline));
+    if (emptyTimeline && typeof directorTimeline === 'string') inputs.timeline_data = directorTimeline;
+  }
+}
+
 export function substituteComfyPromptData(
   workflowJson: string,
   markedFields: MarkedField[],
@@ -236,6 +253,7 @@ export function substituteComfyPromptData(
   configureMiniMaxDirectorPostprocess(workflow);
   pruneMiniMaxDirectorModeOutputs(workflow);
   randomizeComfyWorkflowSeeds(workflow, pinnedJsonPaths);
+  wireMiniMaxH3RefModExports(workflow);
 
   return workflow;
 }

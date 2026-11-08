@@ -53,6 +53,7 @@ import { MiniMaxH3DirectorPostprocessPanel } from './minimax-h3-director-postpro
 import { MiniMaxH3DirectorPromptBuilder } from './minimax-h3-director-prompt-builder'
 import { MiniMaxH3DirectorResolutionPanel } from './minimax-h3-director-resolution-panel'
 import { MiniMaxH3DirectorPackPanel } from './minimax-h3-director-pack-panel'
+import { MiniMaxH3DirectorRefModPanel } from './minimax-h3-director-refmod-panel'
 import {
   fitsMiniMaxDirectorMedia, getMiniMaxDirectorFreeSlot, getMiniMaxDirectorMediaLane as getMediaLane,
   hasMiniMaxDirectorAudio, retargetMiniMaxDirectorVideo, sortMiniMaxDirectorMedia,
@@ -66,6 +67,8 @@ type MiniMaxH3DirectorDasiwaInputProps = {
   visibleFields?: string[]
   hiddenControls?: string[]
   numericBounds?: WorkflowNodeNumericBounds
+  /** Explicitly selected ComfyUI server whose RefMod library should be offered. */
+  comfyServerId?: number
   onChange: (value: Record<string, unknown>) => void
   renderInputPort?: (inputKey: MiniMaxH3DirectorGraphInputKey) => ReactNode
 }
@@ -77,7 +80,7 @@ function formatMediaTypeLabel(type: MiniMaxH3DirectorMediaType, index: number) {
 }
 
 /** Render DaSiWa MiniMax H3 Director inputs as a CoNAI-native reference board. */
-export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenControls, numericBounds, onChange, renderInputPort }: MiniMaxH3DirectorDasiwaInputProps) {
+export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenControls, numericBounds, comfyServerId, onChange, renderInputPort }: MiniMaxH3DirectorDasiwaInputProps) {
   const { t } = useI18n()
   const visualInputRef = useRef<HTMLInputElement>(null)
   const videoInputRef = useRef<HTMLInputElement>(null)
@@ -141,6 +144,10 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
 
   const updatePostprocess = (nextPostprocess: typeof postprocess) => {
     emit({}, { ...timeline, postprocess: nextPostprocess })
+  }
+
+  const updateRefmods = (refmods: NonNullable<MiniMaxH3DirectorTimeline['refmods']>) => {
+    emit({}, { ...timeline, refmods })
   }
 
   const changeMode = (nextMode: MiniMaxH3DirectorMode) => {
@@ -788,8 +795,8 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
           <AlertTitle>{t({ ko: 'Director 입력 확인', en: 'Check Director inputs' })}</AlertTitle>
           <AlertDescription>
             <ul className="list-disc space-y-1 pl-4">
-              {issues.slice(0, 6).map((issue) => (
-                <li key={`${issue.code}-${issue.itemId ?? issue.field ?? ''}`}>
+              {issues.slice(0, 6).map((issue, index) => (
+                <li key={`${issue.code}-${issue.itemId ?? issue.field ?? ''}-${index}`}>
                   {issue.itemId ? (
                     <Button type="button" variant="link" size="content" className="text-left whitespace-normal" onClick={(event) => { event.stopPropagation(); setMenuItemId(issue.itemId ?? null) }}>
                       {t({ ko: issue.ko, en: issue.en })}
@@ -912,6 +919,11 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
           () => audioInputRef.current?.click(),
         )}
       </div>
+      ) : null}
+
+      {/* RefMods are only consumed in REF2VA; other modes keep the saved rows untouched and hidden. */}
+      {isReferenceMediaMode && !isMiniMaxH3DirectorInputLink(nodeValue.timeline_data) && !hiddenControls?.includes('refmods') ? (
+        <MiniMaxH3DirectorRefModPanel rows={timeline.refmods ?? []} serverId={comfyServerId} onChange={updateRefmods} />
       ) : null}
 
       </> : null}

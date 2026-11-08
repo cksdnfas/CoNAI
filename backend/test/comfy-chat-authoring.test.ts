@@ -144,4 +144,98 @@ test('comfy chat authoring: seed rule, check_comfy_workflow, editor operations',
   assert.ok(authorGuide.includes('comfy.check') && authorGuide.includes('fixedSeeds') && authorGuide.includes(COMFY_SEED_RULE), 'the editor guide covers conversion, the check, fixed seeds and the seed rule')
   const form = normalizeChatPageSnapshot({ instanceId: 'page-form', connectionId: 'connection-form', path: '/generation', title: 'ComfyUI · Test', kind: 'comfyui', resourceId: '1', fields: [{ id: 'seed', label: 'Seed', type: 'number', value: '', allowEmpty: true }], data: { seedFields: ['seed'] } })
   assert.ok(chatPageReference(form).includes('data.seedFields') && chatPageReference(form).includes(COMFY_SEED_RULE), 'the generation form guide explains seed fields')
+
+  await t.test('MiniMax RefMods: validated Director rows, export snapshots and library discovery', async (t) => {
+    const { normalizeMcpWorkflowInputs, createMcpComfyService } = await import('../src/services/comfyui/comfyWorkflowInputs')
+    const { ComfyUIServerModel, WorkflowServerModel } = await import('../src/models/ComfyUIServer')
+    const field = {
+      id: 'director', label: 'Director', type: 'node', node_editor: 'minimax_h3_director_dasiwa', jsonPath: '1.inputs',
+      default_value: { mode: 'REF2VA', duration: 5, frame_rate: 24, timeline_data: '{"items":[]}' },
+    } as never
+    const normalize = (value: Record<string, unknown>) => normalizeMcpWorkflowInputs([field], { director: value }).director
+    const invalid = [{ slot: 1, name: 'hero' }, { slot: 1, name: 'duplicate' }, { slot: 2, name: 'style', strength: 1.5 }]
+    assert.throws(() => normalize({ refmods: invalid }), /duplicate slot 1.*strength.*0.*1/i)
+    assert.throws(() => normalize({ timeline_data: JSON.stringify({ refmods: invalid }) }), /duplicate slot 1.*strength.*0.*1/i)
+    const value = normalize({ refmods: [{ slot: '2', name: ' group/hero ', strength: '0.6' }, { slot: 8, name: 'style', enabled: false }] })
+    assert.deepEqual(JSON.parse(value.timeline_data).refmods, [
+      { slot: 2, name: 'group/hero', enabled: true, strength: 0.6, description: '' },
+      { slot: 8, name: 'style', enabled: false, strength: 1, description: '' },
+    ])
+    assert.equal(value.refmods, undefined)
+    assert.equal(JSON.parse(normalize({}).timeline_data).refmods, undefined, 'omitting RefMods preserves existing Director behavior')
+    assert.throws(() => normalize({ refmods: ['group/hero'] }), /array of \{ slot, name/)
+    const hiddenRow = JSON.stringify({ items: [], refmods: [{ slot: 1, name: '' }] })
+    assert.deepEqual(JSON.parse(normalize({ mode: 'T2VA', timeline_data: hiddenRow }).timeline_data).refmods, [{ slot: 1, name: '' }], 'rows hidden outside REF2VA are kept, not validated')
+    assert.throws(() => normalize({ mode: 'REF2VA', timeline_data: hiddenRow }), /slot 1 requires a name/)
+
+    const { createServer } = await import('node:http')
+    const express = (await import('express')).default
+    let upstreamStatus = 200
+    const upstream = createServer((req, res) => {
+      assert.equal(req.url, '/dasiwa/refmods')
+      res.writeHead(upstreamStatus, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify([
+        { name: 'group/hero', kind: 'image', kinds: ['image', 'invalid'], members: [{ kind: 'image', description: 'Hero' }], concept: 'identity', description: 'Hero bundle', tokens: 12, mtime: 123 },
+        { name: 'invalid', kind: 'invalid' }, null,
+      ]))
+    })
+    await new Promise<void>((resolve) => upstream.listen(0, '127.0.0.1', resolve))
+    t.after(() => new Promise<void>((resolve, reject) => upstream.close((error) => error ? reject(error) : resolve())))
+    const address = upstream.address() as import('node:net').AddressInfo
+    const serverId = ComfyUIServerModel.create({ name: 'DaSiWa', endpoint: `http://127.0.0.1:${address.port}`, is_active: true, is_default: true })
+    const serverRecord = ComfyUIServerModel.findById(serverId)!
+    const comfy = createMcpComfyService(serverRecord)
+    const workflow = {
+      1: { class_type: 'MiniMaxH3Director', inputs: { timeline_data: '{"items":[{"id":"old"}]}' } },
+      2: { class_type: 'DaSiWaH3RefModExport', inputs: { timeline_data: ' {} ', request_id: 'cached' } },
+      3: { class_type: 'DaSiWaH3RefModExport', inputs: { timeline_data: ['1', 0], request_id: ['1', 1] } },
+      4: { class_type: 'DaSiWaH3RefModExport', inputs: { timeline_data: '{"items":[{"id":"custom"}]}', request_id: '' } },
+    }
+    const submitted = comfy.substitutePromptData(JSON.stringify(workflow), [field], { director: value })
+    assert.equal(submitted[2].inputs.timeline_data, value.timeline_data, 'export uses the final substituted Director snapshot')
+    assert.match(submitted[2].inputs.request_id, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i)
+    assert.notEqual(comfy.substitutePromptData(JSON.stringify(workflow), [field], { director: value })[2].inputs.request_id, submitted[2].inputs.request_id)
+    assert.deepEqual(submitted[3].inputs, workflow[3].inputs, 'linked inputs are preserved')
+    assert.equal(submitted[4].inputs.timeline_data, workflow[4].inputs.timeline_data, 'explicit snapshots are preserved')
+    for (const directors of [{}, { 1: workflow[1], 5: workflow[1] }]) {
+      const ambiguous = comfy.substitutePromptData(JSON.stringify({ ...directors, 2: workflow[2] }), [], {})
+      assert.equal(ambiguous[2].inputs.timeline_data, ' {} ', 'zero or multiple Directors do not infer a snapshot')
+    }
+
+    const app = express()
+    app.use('/api/comfyui-servers', (await import('../src/routes/comfyuiServers')).comfyuiServerRoutes)
+    const proxy = app.listen(0, '127.0.0.1')
+    await new Promise<void>((resolve) => proxy.once('listening', resolve))
+    t.after(() => new Promise<void>((resolve, reject) => proxy.close((error) => error ? reject(error) : resolve())))
+    const proxyAddress = proxy.address() as import('node:net').AddressInfo
+    const url = `http://127.0.0.1:${proxyAddress.port}/api/comfyui-servers/refmods`
+    const expected = { server_id: serverId, server_name: 'DaSiWa', entries: [
+      { name: 'group/hero', kind: 'image', kinds: ['image'], members: [{ kind: 'image', description: 'Hero' }], concept: 'identity', description: 'Hero bundle', tokens: 12, mtime: 123 },
+    ] }
+    const workflowId = WorkflowModel.create({ name: 'RefMod library', workflow_json: JSON.stringify(workflow), marked_fields: [], api_endpoint: 'http://unused.invalid' } as never)
+    WorkflowServerModel.linkServer(workflowId, serverId)
+    const mcp = await connect({ scopes: ['read'] })
+    t.after(() => mcp.close())
+    for (const query of ['', `?serverId=${serverId}`, `?workflowId=${workflowId}`]) {
+      const response = await fetch(`${url}${query}`)
+      assert.equal(response.status, 200)
+      assert.deepEqual(await response.json(), { success: true, data: expected })
+    }
+    const tools = (await mcp.client.listTools()).tools
+    assert.ok(tools.some((tool) => tool.name === 'list_comfy_refmods'))
+    const library = await mcp.client.callTool({ name: 'list_comfy_refmods', arguments: { workflow_id: workflowId } })
+    assert.notEqual(library.isError, true, text(library))
+    assert.deepEqual(JSON.parse(text(library)), expected)
+    for (const status of [404, 500]) {
+      upstreamStatus = status
+      const response = await fetch(url)
+      assert.equal(response.status, status === 404 ? 404 : 502)
+      const failure = await response.json() as { success: boolean; error: string }
+      assert.equal(failure.success, false)
+      assert.match(failure.error, status === 404 ? /DaSiWa.*not installed/i : /RefMod.*500/i)
+      const result = await mcp.client.callTool({ name: 'list_comfy_refmods', arguments: { server_id: serverId } })
+      assert.equal(result.isError, true)
+      assert.match(text(result), status === 404 ? /DaSiWa.*not installed/i : /RefMod.*500/i)
+    }
+  })
 })

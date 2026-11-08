@@ -1,4 +1,10 @@
-import { resolveMiniMaxDirectorCanvas, MINIMAX_H3_DIRECTOR_RESOLUTION_PRESETS } from '@conai/shared'
+import {
+  normalizeMiniMaxH3RefModRows,
+  resolveMiniMaxDirectorCanvas,
+  validateMiniMaxH3RefModRows,
+  MINIMAX_H3_DIRECTOR_RESOLUTION_PRESETS,
+  type MiniMaxH3RefModIssue,
+} from '@conai/shared'
 import {
   WORKFLOW_INPUT_ASSET_REF_KIND,
   type WorkflowInputAssetRef,
@@ -490,7 +496,7 @@ export function parseMiniMaxH3DirectorTimeline(value: unknown): { timeline: Mini
         }))
       : []
 
-    const { builder_state: rawBuilderState, ...timelineSource } = parsed
+    const { builder_state: rawBuilderState, refmods: rawRefmods, ...timelineSource } = parsed
     const resolution = normalizeMiniMaxH3DirectorResolution(parsed.resolution)
     const postprocess = normalizeMiniMaxH3DirectorPostprocess(parsed.postprocess)
     return {
@@ -501,6 +507,7 @@ export function parseMiniMaxH3DirectorTimeline(value: unknown): { timeline: Mini
         prompt_blocks: promptBlocks,
         resolution,
         postprocess,
+        ...(Array.isArray(rawRefmods) ? { refmods: normalizeMiniMaxH3RefModRows(rawRefmods) } : {}),
         ...(isRecord(rawBuilderState) ? { builder_state: rawBuilderState } : {}),
       },
       error: null,
@@ -683,6 +690,21 @@ function getSelectedDuration(item: MiniMaxH3DirectorTimelineItem) {
   return trimEnd - trimStart
 }
 
+function toRefModIssue(issue: MiniMaxH3RefModIssue): MiniMaxH3DirectorIssue {
+  switch (issue.code) {
+    case 'too-many-rows':
+      return { code: 'refmod-too-many-rows', field: 'timeline', ko: `RefMod는 최대 ${issue.max}개까지 사용할 수 있어.`, en: `At most ${issue.max} RefMods can be used.` }
+    case 'invalid-slot':
+      return { code: `refmod-invalid-slot-${String(issue.slot)}`, field: 'timeline', ko: 'RefMod 슬롯은 1~8 정수여야 해.', en: 'RefMod slots must be integers from 1 to 8.' }
+    case 'duplicate-slot':
+      return { code: `refmod-duplicate-slot-${issue.slot}`, field: 'timeline', ko: `RefMod ${issue.slot} 슬롯이 중복됐어.`, en: `RefMod slot ${issue.slot} is used more than once.` }
+    case 'missing-name':
+      return { code: `refmod-missing-name-${issue.slot}`, field: 'timeline', ko: `RefMod ${issue.slot}에 사용할 RefMod를 골라줘.`, en: `Choose a RefMod for slot ${issue.slot}.` }
+    case 'invalid-strength':
+      return { code: `refmod-invalid-strength-${issue.slot}`, field: 'timeline', ko: `RefMod ${issue.slot} 강도는 0~1 범위여야 해.`, en: `RefMod ${issue.slot} strength must be from 0 to 1.` }
+  }
+}
+
 /** Validate Director inputs against the current DaSiWa Director contract. */
 export function validateMiniMaxH3DirectorNodeValue(value: unknown): MiniMaxH3DirectorIssue[] {
   const nodeValue = normalizeMiniMaxH3DirectorNodeValue(value)
@@ -757,6 +779,8 @@ export function validateMiniMaxH3DirectorNodeValue(value: unknown): MiniMaxH3Dir
   if (staticMode === null || staticMode !== 'REF2VA') {
     return issues
   }
+
+  issues.push(...validateMiniMaxH3RefModRows(parsedTimeline.timeline.refmods ?? []).map(toRefModIssue))
 
   const imageItems = activeItems.filter((item) => item.type === 'image')
   const videoItems = activeItems.filter((item) => item.type === 'video')

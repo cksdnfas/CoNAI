@@ -132,7 +132,7 @@ export function PowerLoraLoaderInput({
       const response = await scanGenerationComfyUIModelDropdownLists({ apiPaths: DEFAULT_COMFY_MODEL_API_PATHS })
       await queryClient.invalidateQueries({ queryKey: ['image-generation-custom-dropdown-lists'] })
       await fallbackDropdownListsQuery.refetch()
-      showSnackbar({ message: response.data.message || t({ ko: '자동수집 목록을 갱신했어.', en: 'Refreshed the auto-collect list.' }), tone: 'info' })
+      showSnackbar({ message: response.data.message || t({ ko: '자동수집 목록을 갱신했어.', en: 'Refreshed the auto-collect list.' }), tone: response.data.failedPaths.length > 0 ? 'error' : 'info' })
     } catch (error) {
       showSnackbar({ message: error instanceof Error ? error.message : t({ ko: '자동수집 목록 생성에 실패했어.', en: 'Failed to create the auto-collect list.' }), tone: 'error' })
     } finally {

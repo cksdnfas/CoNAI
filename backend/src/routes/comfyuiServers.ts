@@ -8,8 +8,10 @@ import { buildUnprobedModalRuntimeStatus } from '../services/comfyui/runtimeStat
 import { getComfyUIServerRuntimeStatuses } from '../services/comfyui/runtimeStatusService';
 import { ComfyUIServerResponse, ComfyUIServerCreateData, ComfyUIServerUpdateData, type ComfyUIBackendType } from '../types/comfyuiServer';
 import { asyncHandler } from '../middleware/asyncHandler';
-import { sendRouteBadRequest } from './routeValidation';
+import { parsePositiveIntegerQuery, sendRouteBadRequest } from './routeValidation';
 import { GENERATION_QUEUE_ROUTING_TAG_PATTERN, normalizeGenerationQueueRoutingTag } from '../services/generationQueueRouting';
+import { resolveMcpComfyServer } from '../services/comfyui/comfyWorkflowInputs';
+import { fetchMiniMaxH3RefModLibrary, MiniMaxH3RefModLibraryError } from '../services/comfyui/refmodLibrary';
 
 const router = Router();
 const INVALID_SERVER_ID_ERROR = 'Invalid server ID';
@@ -180,6 +182,27 @@ router.get('/status', asyncHandler(async (req: Request, res: Response) => {
       success: false,
       error: 'Failed to get runtime statuses'
     } as ComfyUIServerResponse);
+  }
+}));
+
+router.get('/refmods', asyncHandler(async (req: Request, res: Response) => {
+  const workflowId = parsePositiveIntegerQuery(req.query.workflowId === '' ? undefined : req.query.workflowId, 0, { error: 'workflowId must be a positive integer' });
+  const serverId = parsePositiveIntegerQuery(req.query.serverId === '' ? undefined : req.query.serverId, 0, { error: 'serverId must be a positive integer' });
+  if (!workflowId.ok) return sendRouteBadRequest(res, workflowId.error);
+  if (!serverId.ok) return sendRouteBadRequest(res, serverId.error);
+
+  let server;
+  try {
+    server = resolveMcpComfyServer(workflowId.value || undefined, serverId.value || undefined);
+  } catch (error) {
+    return res.status(404).json({ success: false, error: (error as Error).message });
+  }
+  try {
+    const entries = await fetchMiniMaxH3RefModLibrary(server);
+    return res.json({ success: true, data: { server_id: server.id, server_name: server.name, entries } });
+  } catch (error) {
+    return res.status(error instanceof MiniMaxH3RefModLibraryError ? error.statusCode : 502)
+      .json({ success: false, error: (error as Error).message });
   }
 }));
 

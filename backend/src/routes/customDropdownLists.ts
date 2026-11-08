@@ -3,7 +3,11 @@ import { requireAdmin, requirePermission } from '../middleware/authMiddleware';
 import { Router, Request, Response } from 'express';
 import { routeParam } from './routeParam';
 import { CustomDropdownListModel } from '../models/CustomDropdownList';
-import { collectAndReplaceComfyModelDropdownListsFromDefaultServer } from '../services/comfyDropdownAutoCollectionService';
+import {
+  collectAndReplaceComfyModelDropdownListsFromDefaultServer,
+  ComfyDropdownApiCollectError,
+  type ComfyDropdownApiCollectResult,
+} from '../services/comfyDropdownAutoCollectionService';
 import { resolveComfyModelThumbnail } from '../services/comfyModelThumbnailService';
 import { streamCacheableFile } from './images/query-file-response-helpers';
 import { asyncHandler } from '../middleware/asyncHandler';
@@ -14,6 +18,10 @@ interface ApiResponse {
   success: boolean;
   data?: any;
   error?: string;
+}
+
+function formatCollectionFailures(failedPaths: ComfyDropdownApiCollectResult['failedPaths']) {
+  return failedPaths.map(({ apiPath, error }) => `${apiPath}: ${error}`).join('\n');
 }
 
 
@@ -341,30 +349,43 @@ router.post('/scan-comfyui-models', requireAdmin, asyncHandler(async (req: Reque
     const result = await collectAndReplaceComfyModelDropdownListsFromDefaultServer({
       apiPaths: req.body?.apiPaths ?? req.body?.modelApiPaths ?? req.body?.paths,
     });
+    const failureDetails = formatCollectionFailures(result.failedPaths);
+
+    if (result.scannedFolders === 0) {
+      return res.status(502).json({
+        success: false,
+        data: result,
+        error: `ComfyUI 모델을 수집하지 못했습니다.\n${failureDetails}`,
+      } as ApiResponse);
+    }
+
+    const outcomeMessage = result.deletedLists > 0
+      ? `${result.createdLists}개 목록이 업데이트되었습니다.`
+      : `${result.createdLists}개 목록이 생성되었습니다.`;
 
     const response: ApiResponse = {
       success: true,
       data: {
-        scannedFolders: result.scannedFolders,
-        createdLists: result.createdLists,
-        deletedLists: result.deletedLists,
-        apiPaths: result.apiPaths,
-        sourcePath: result.sourcePath,
+        ...result,
         isRescan: result.deletedLists > 0,
         mergeSubfolders: true,
         createBoth: true,
-        message: result.deletedLists > 0
-          ? `${result.createdLists}개 목록이 업데이트되었습니다.`
-          : `${result.createdLists}개 목록이 생성되었습니다.`
+        message: `${result.scannedFolders}개 API 경로 수집 완료. ${outcomeMessage}${failureDetails ? `\n수집 실패:\n${failureDetails}` : ''}`,
       }
     };
 
     return res.json(response);
   } catch (error) {
     console.error('Error processing ComfyUI models:', error);
+    const result = error instanceof ComfyDropdownApiCollectError ? error.result : undefined;
+    const failureDetails = formatCollectionFailures(result?.failedPaths ?? []);
     const response: ApiResponse = {
       success: false,
-      error: error instanceof Error ? error.message : 'Failed to process ComfyUI models'
+      data: result ?? { failedPaths: [] },
+      error: [
+        error instanceof Error ? error.message : 'Failed to process ComfyUI models',
+        failureDetails,
+      ].filter(Boolean).join('\n'),
     };
     return res.status(500).json(response);
   }

@@ -1,5 +1,7 @@
+import type { MiniMaxH3RefModLibraryEntry } from '@conai/shared'
 import { buildApiUrl } from './api-client'
 import { requestJson } from './api-image-generation-request'
+import { ApiRequestError } from './api-request'
 import { appendDirectoryListingParams, type DirectoryListingParams, type DirectoryPage } from './api-directory-listing'
 import type {
   ComfyUIServer,
@@ -288,6 +290,28 @@ export async function getGenerationWorkflowServers(workflowId: number) {
   return response.data
 }
 
+export type ComfyRefModLibraryResult =
+  | { status: 'ok'; serverId: number; serverName: string; entries: MiniMaxH3RefModLibraryEntry[] }
+  /** The resolved server has no ComfyUI-DaSiWa-Nodes RefMod library. */
+  | { status: 'unavailable'; message: string }
+  | { status: 'error'; message: string }
+
+/** Load the MiniMax H3 RefMod library of a ComfyUI server; the server resolves the default or linked server when omitted. */
+export async function getComfyRefModLibrary(params: { workflowId?: number; serverId?: number } = {}): Promise<ComfyRefModLibraryResult> {
+  const searchParams = new URLSearchParams()
+  if (params.workflowId !== undefined) searchParams.set('workflowId', String(params.workflowId))
+  if (params.serverId !== undefined) searchParams.set('serverId', String(params.serverId))
+  try {
+    const response = await requestJson<{ success: boolean; data: { server_id: number; server_name: string; entries: MiniMaxH3RefModLibraryEntry[] } }>(
+      `/api/comfyui-servers/refmods${searchParams.size > 0 ? `?${searchParams.toString()}` : ''}`,
+    )
+    return { status: 'ok', serverId: response.data.server_id, serverName: response.data.server_name, entries: response.data.entries }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    return error instanceof ApiRequestError && error.status === 404 ? { status: 'unavailable', message } : { status: 'error', message }
+  }
+}
+
 /** Load saved custom dropdown lists used by ComfyUI workflows. */
 export async function getGenerationCustomDropdownLists() {
   const response = await requestJson<CustomDropdownListResponse>('/api/custom-dropdown-lists')
@@ -335,7 +359,7 @@ export async function deleteGenerationCustomDropdownList(listId: number) {
 export async function scanGenerationComfyUIModelDropdownLists(payload: {
   apiPaths: string[]
 }) {
-  return requestJson<{ success: boolean; data: { scannedFolders: number; createdLists: number; deletedLists?: number; apiPaths?: string[]; sourcePath?: string; message: string } }>('/api/custom-dropdown-lists/scan-comfyui-models', {
+  return requestJson<{ success: boolean; data: { scannedFolders: number; createdLists: number; deletedLists?: number; apiPaths?: string[]; sourcePath?: string; failedPaths: Array<{ apiPath: string; error: string }>; message: string } }>('/api/custom-dropdown-lists/scan-comfyui-models', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

@@ -29,6 +29,7 @@ import { COMFY_SEED_RULE } from '../../services/comfyui/seedControl';
 import { checkComfyWorkflowOnServers } from '../../services/comfyui/workflowServerCheck';
 import { ComfyUiWorkflowConversionError, describeComfyUiWorkflowConversionFailure, resolveApiWorkflowJson } from '../../services/comfyui/uiWorkflowConversion';
 import { errorResult, textResult } from '../toolResults';
+import { fetchMiniMaxH3RefModLibrary } from '../../services/comfyui/refmodLibrary';
 
 export function registerGenerationTools(server: McpServer, context: McpRequestContext): void {
   registerWorkflowListTools(server);
@@ -114,6 +115,23 @@ function registerWorkflowListTools(server: McpServer): void {
         const servers = ComfyUIServerModel.findAll(active_only);
 
         return textResult(servers);
+      } catch (error) {
+        return errorResult(`Error: ${(error as Error).message}`);
+      }
+    }
+  );
+
+  server.registerTool(
+    'list_comfy_refmods',
+    { description: 'List the MiniMax H3 RefMod library on a ComfyUI server with the DaSiWa pack. Put returned names in Director refmods[].name (REF2VA only); <RefMod N> aliases are allowed in the prompt, where N is the assigned slot. Defaults to a workflow-linked server, then the default active server.', inputSchema: z.object({
+      workflow_id: z.number().int().positive().optional().describe('Workflow whose linked server to use'),
+      server_id: z.number().int().positive().optional().describe('Explicit ComfyUI server ID; overrides workflow selection'),
+    }) },
+    async ({ workflow_id, server_id }) => {
+      try {
+        const serverRecord = resolveMcpComfyServer(workflow_id, server_id);
+        const entries = await fetchMiniMaxH3RefModLibrary(serverRecord);
+        return textResult({ server_id: serverRecord.id, server_name: serverRecord.name, entries });
       } catch (error) {
         return errorResult(`Error: ${(error as Error).message}`);
       }
