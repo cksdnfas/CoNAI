@@ -5,12 +5,13 @@ import { collectWorkflowNodeDraftIssues, hasWorkflowFieldValue, isValidWorkflowN
 import type { WorkflowFieldDraftValue } from '../image-generation-shared'
 import { revealFirstInvalidField } from './focus-invalid-field'
 import { WORKFLOW_FIELD_INVALID_SELECTOR } from './workflow-field-disclosure-card'
+import type { MiniMaxH3DirectorValidationOptions } from './minimax-h3-director-dasiwa-utils'
 
 /** Collect all invalid field messages before a private or public queue request. */
-export function collectComfyFieldIssues(fields: WorkflowMarkedField[], draft: Record<string, WorkflowFieldDraftValue>, t: ReturnType<typeof useI18n>['t']) {
+export function collectComfyFieldIssues(fields: WorkflowMarkedField[], draft: Record<string, WorkflowFieldDraftValue>, t: ReturnType<typeof useI18n>['t'], directorOptions?: MiniMaxH3DirectorValidationOptions) {
   const fieldIssues: Record<string, string> = {}
   const summaries: string[] = []
-  const nodeIssues = new Map(collectWorkflowNodeDraftIssues(fields, draft).map((entry) => [entry.field.id, entry.issue] as const))
+  const nodeIssues = new Map(collectWorkflowNodeDraftIssues(fields, draft, directorOptions).map((entry) => [entry.field.id, entry.issue] as const))
   for (const field of fields) {
     const value = draft[field.id]
     const nodeIssue = nodeIssues.get(field.id)
@@ -29,8 +30,8 @@ export function collectComfyFieldIssues(fields: WorkflowMarkedField[], draft: Re
   return { fieldIssues, summaries }
 }
 
-/** Mark and focus all offending fields while keeping the existing summarized snackbar. */
-export function useComfyFieldValidation(workflowId: number | null, fields: WorkflowMarkedField[], draft: Record<string, WorkflowFieldDraftValue>, showSnackbar: (input: { message: string; tone: 'info' | 'error' }) => void) {
+/** Mark and focus all offending fields; the summarizing snackbar is skipped when the caller's alert already shows the problem. */
+export function useComfyFieldValidation(workflowId: number | null, fields: WorkflowMarkedField[], draft: Record<string, WorkflowFieldDraftValue>, showSnackbar: (input: { message: string; tone: 'info' | 'error' }) => void, directorOptions?: MiniMaxH3DirectorValidationOptions) {
   const { t } = useI18n()
   const [fieldIssues, setFieldIssues] = useState<Record<string, string>>({})
   const [revealNonce, setRevealNonce] = useState(0)
@@ -49,11 +50,12 @@ export function useComfyFieldValidation(workflowId: number | null, fields: Workf
     })
   }, [])
   const clearFieldIssues = useCallback(() => setFieldIssues({}), [])
-  const validate = () => {
-    const result = collectComfyFieldIssues(fields, draft, t)
+  const validate = ({ announce = true }: { announce?: boolean } = {}) => {
+    const result = collectComfyFieldIssues(fields, draft, t, directorOptions)
     setFieldIssues(result.fieldIssues)
     if (result.summaries.length === 0) return true
     setRevealNonce((current) => current + 1)
+    if (!announce) return false
     const extraCount = result.summaries.length - 1
     showSnackbar({
       message: extraCount > 0

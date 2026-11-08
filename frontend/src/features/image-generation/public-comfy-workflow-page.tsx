@@ -329,7 +329,7 @@ function PublicComfyWorkflowPageContent() {
       onRefreshDropdownLists={handleRefreshDropdownLists}
       onResetDraft={() => void handleResetDraft()}
       onGenerateSelected={() => void handleQueueSubmit()}
-      onRevealFieldIssues={() => { validate() }}
+      onRevealFieldIssues={() => { validate({ announce: false }) }}
     />
   ) : null
 

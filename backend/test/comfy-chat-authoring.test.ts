@@ -171,7 +171,38 @@ test('comfy chat authoring: seed rule, check_comfy_workflow, editor operations',
     const { createServer } = await import('node:http')
     const express = (await import('express')).default
     let upstreamStatus = 200
+    let submittedExport: Record<string, any> | undefined
+    let uploadCount = 0
+    const exportHistory = {
+      'refmod-prompt': { prompt: [], outputs: { '4': { dasiwa_refmod_export: [{ name: 'group/hero', members: [], counts: { image: 2, video: 0, audio: 0 }, warnings: [], message: 'Saved' }] } }, status: { completed: true, status_str: 'success' } },
+    }
     const upstream = createServer((req, res) => {
+      if (req.url === '/upload/image') {
+        uploadCount++
+        req.resume()
+        req.on('end', () => { res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ name: `uploaded-${uploadCount}.png` })) })
+        return
+      }
+      if (req.url === '/object_info/VAELoader') {
+        res.setHeader('Content-Type', 'application/json')
+        res.end(JSON.stringify({ VAELoader: { input: { required: { vae_name: [['video.vae', 'audio.vae']] } } } }))
+        return
+      }
+      if (req.url === '/prompt') {
+        let body = ''
+        req.on('data', (chunk) => { body += chunk })
+        req.on('end', () => {
+          submittedExport = JSON.parse(body).prompt
+          res.setHeader('Content-Type', 'application/json')
+          res.end(JSON.stringify({ prompt_id: 'refmod-prompt' }))
+        })
+        return
+      }
+      if (req.url === '/history/refmod-prompt') {
+        res.setHeader('Content-Type', 'application/json')
+        res.end(JSON.stringify(exportHistory))
+        return
+      }
       assert.equal(req.url, '/dasiwa/refmods')
       res.writeHead(upstreamStatus, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify([
@@ -197,13 +228,32 @@ test('comfy chat authoring: seed rule, check_comfy_workflow, editor operations',
     assert.notEqual(comfy.substitutePromptData(JSON.stringify(workflow), [field], { director: value })[2].inputs.request_id, submitted[2].inputs.request_id)
     assert.deepEqual(submitted[3].inputs, workflow[3].inputs, 'linked inputs are preserved')
     assert.equal(submitted[4].inputs.timeline_data, workflow[4].inputs.timeline_data, 'explicit snapshots are preserved')
+    const filtered = comfy.substitutePromptData(JSON.stringify(workflow), [field], { director: {
+      ...value, mode: 'I2VA', timeline_data: JSON.stringify({
+        items: [
+          { id: 'first', type: 'image', slot: 0, value: 'uploaded.png' },
+          { id: 'disabled', type: 'image', slot: 0, enabled: false },
+          { id: 'last', type: 'image', slot: 1 },
+          { id: 'sound', type: 'audio' },
+        ],
+        refmods: [{ slot: 2, name: 'group/hero' }], extra: 'kept',
+      }),
+    } })
+    assert.deepEqual(JSON.parse(filtered[2].inputs.timeline_data), {
+      items: [{ id: 'first', type: 'image', slot: 0, value: 'uploaded.png' }],
+      refmods: [{ slot: 2, name: 'group/hero' }], extra: 'kept',
+    })
     for (const directors of [{}, { 1: workflow[1], 5: workflow[1] }]) {
       const ambiguous = comfy.substitutePromptData(JSON.stringify({ ...directors, 2: workflow[2] }), [], {})
       assert.equal(ambiguous[2].inputs.timeline_data, ' {} ', 'zero or multiple Directors do not infer a snapshot')
     }
 
     const app = express()
+    app.use(express.json())
+    app.use((await import('express-session')).default({ secret: 'refmod-test-session', resave: false, saveUninitialized: false }))
     app.use('/api/comfyui-servers', (await import('../src/routes/comfyuiServers')).comfyuiServerRoutes)
+    app.use('/api/refmods', (await import('../src/routes/refmods')).default)
+    app.use('/api/workflows', (await import('../src/routes/workflows/templates.routes')).default)
     const proxy = app.listen(0, '127.0.0.1')
     await new Promise<void>((resolve) => proxy.once('listening', resolve))
     t.after(() => new Promise<void>((resolve, reject) => proxy.close((error) => error ? reject(error) : resolve())))
@@ -226,6 +276,201 @@ test('comfy chat authoring: seed rule, check_comfy_workflow, editor operations',
     const library = await mcp.client.callTool({ name: 'list_comfy_refmods', arguments: { workflow_id: workflowId } })
     assert.notEqual(library.isError, true, text(library))
     assert.deepEqual(JSON.parse(text(library)), expected)
+
+    const { captureRefModRecords, listRefModRecords, linkRefModRecords, completeRefModRecords, resolveRefModRecordMedia, failRefModRecords, recoverInterruptedRefModRecords } = await import('../src/services/comfyui/refmodRecords')
+    const { buildRefModExportTemplate } = await import('../src/services/comfyui/refmodExportTemplate')
+    const { GenerationHistoryService, attachHistoryAudioResults } = await import('../src/services/generationHistoryService')
+    const { HistoryQueryRepository } = await import('../src/repositories/history/HistoryQueryRepository')
+    const { runtimePaths } = await import('../src/config/runtimePaths')
+    const { db } = await import('../src/database/init')
+    const template = buildRefModExportTemplate({ vaeNames: ['video.vae', 'audio.vae'] })
+    const templateJson = JSON.parse(template.workflow_json)
+    assert.deepEqual(Object.keys(templateJson), ['1', '2', '3', '4'])
+    assert.deepEqual(templateJson[4].inputs.vae, ['2', 0])
+    assert.deepEqual(templateJson[4].inputs.audio_vae, ['3', 0])
+    assert.equal(templateJson[1].inputs.mode, 'REF2VA')
+    assert.equal(templateJson[4].inputs.timeline_data, '')
+    assert.ok(!JSON.stringify(templateJson[4]).includes('["1",'), 'Director is only a value carrier, not an executed ancestor')
+    assert.deepEqual(template.marked_fields!.filter((entry) => entry.jsonPath.endsWith('.vae_name')).map((entry) => entry.options), [['video.vae', 'audio.vae'], ['video.vae', 'audio.vae']])
+    assert.ok(template.marked_fields![0].node_hidden_controls!.includes('postprocess.rtx'))
+    assert.deepEqual(template.marked_fields![0].node_visible_fields, ['mode', 'timeline_data'], 'creation templates expose source media lanes')
+    assert.equal(buildRefModExportTemplate().marked_fields!.find((entry) => entry.id === 'audio_vae')!.type, 'text')
+
+    const created = await fetch(`http://127.0.0.1:${proxyAddress.port}/api/workflows/templates/minimax-h3-refmod-export`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ server_id: serverId }),
+    })
+    assert.equal(created.status, 200)
+    const templateId = ((await created.json()) as { data: { id: number } }).data.id
+    assert.equal(WorkflowModel.findById(templateId)!.name, 'MiniMax H3 RefMod 생성')
+    assert.equal(WorkflowServerModel.findServersByWorkflow(templateId)[0].server_id, serverId)
+
+    const source = await (await import('sharp')).default({ create: { width: 2, height: 2, channels: 3, background: '#123456' } }).png().toBuffer()
+    const hash = 'c'.repeat(48)
+    await fs.promises.mkdir(runtimePaths.uploadsDir, { recursive: true })
+    const libraryPath = path.join(runtimePaths.uploadsDir, 'refmod-library.png')
+    await fs.promises.writeFile(libraryPath, source)
+    const folderId = (db.prepare('SELECT id FROM watched_folders ORDER BY id LIMIT 1').get() as { id: number }).id
+    db.prepare('INSERT INTO media_metadata (composite_hash) VALUES (?)').run(hash)
+    db.prepare("INSERT INTO image_files (composite_hash, original_file_path, folder_id, file_size, mime_type) VALUES (?, ?, ?, ?, 'image/png')").run(hash, 'refmod-library.png', folderId, source.length)
+    const director = {
+      ...templateJson[1].inputs,
+      timeline_data: JSON.stringify({ items: [
+        { id: 'copy', type: 'image', order: 0, prompt: 'Copied portrait', source_width: 512, source_height: 768, trim_start: 0, trim_end: 2, source_duration: 2 },
+        { id: 'library', type: 'image', order: 1, prompt: 'Library portrait' },
+        { id: 'disabled', type: 'audio', enabled: false },
+      ] }),
+      __conai_minimax_h3_director: { assets: {
+        copy: { fileName: 'portrait.html', dataUrl: `data:image/png;base64,${source.toString('base64')}` },
+        library: { composite_hash: hash, fileName: 'original-library.png', mimeType: 'text/html' },
+      } },
+    }
+    const capture = () => captureRefModRecords({
+      workflowJson: template.workflow_json, markedFields: template.marked_fields!,
+      promptData: { director, name: 'requested-name', description: 'Portrait bundle', concept_type: 'identity' },
+      serverId, workflowId: templateId,
+    })
+    for (const [mimeType, bytes] of [
+      ['image/png', Buffer.from('<html><script>alert(1)</script></html>')],
+      ['image/svg+xml', Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" onload="alert(1)"/>')],
+      ['text/html', source],
+      ['audio/wav', source],
+    ] as const) {
+      const unsafeDirector = { ...director, __conai_minimax_h3_director: { assets: {
+        ...director.__conai_minimax_h3_director.assets,
+        copy: { fileName: 'unsafe.html', dataUrl: `data:${mimeType};base64,${bytes.toString('base64')}` },
+      } } }
+      await assert.rejects(captureRefModRecords({
+        workflowJson: template.workflow_json, markedFields: template.marked_fields!,
+        promptData: { director: unsafeDirector }, serverId, workflowId: templateId,
+      }), /media|type|content/i)
+    }
+    const handles = await capture()
+    const pending = listRefModRecords(serverId)[0]
+    assert.equal(pending.status, 'pending')
+    assert.equal(pending.name, 'requested-name')
+    assert.equal(pending.description, 'Portrait bundle')
+    assert.equal(pending.concept_type, 'identity')
+    assert.deepEqual(pending.members.map((member) => [member.index, member.kind, member.description, member.composite_hash]), [[0, 'image', 'Copied portrait', null], [1, 'image', 'Library portrait', hash]])
+    assert.equal(pending.members[0].source_width, 512)
+    assert.equal(pending.members[0].mime_type, 'image/png')
+    assert.equal(pending.members[1].mime_type, 'image/png', 'library MIME is not controlled by the submitted asset')
+    assert.equal(pending.members[1].file_name, 'original-library.png')
+    const retainedPath = resolveRefModRecordMedia(pending.id, 0)!.filePath
+    assert.deepEqual(await fs.promises.readFile(retainedPath), source)
+    assert.deepEqual(await fs.promises.readdir(path.dirname(retainedPath)), ['0.png'], 'library sources are referenced, not copied')
+    assert.equal(resolveRefModRecordMedia(pending.id, 1)!.filePath, libraryPath)
+    const historyId = await GenerationHistoryService.createComfyUIHistory({ workflowId: templateId, workflowName: template.name, serverId })
+    linkRefModRecords(handles, { historyId })
+    const saved = completeRefModRecords(handles, exportHistory, 'refmod-prompt')[0]
+    assert.equal(saved.status, 'saved')
+    assert.equal(saved.name, 'group/hero')
+    assert.equal(HistoryQueryRepository.findById(historyId)!.generation_status, 'completed')
+    assert.deepEqual(HistoryQueryRepository.findDisplayFailedIds({ ids: [historyId] }), [], 'saved RefMods survive delete-failed-history selection')
+    const emptyHistoryId = await GenerationHistoryService.createComfyUIHistory({ workflowId: templateId, workflowName: template.name, serverId })
+    ;(await import('../src/services/historyCommandService')).HistoryCommandService.updateStatus(emptyHistoryId, 'completed')
+    assert.deepEqual(HistoryQueryRepository.findDisplayFailedIds({ ids: [emptyHistoryId] }), [emptyHistoryId], 'missing-output histories remain selectable')
+    const historyRow = attachHistoryAudioResults(HistoryQueryRepository.findAllWithMetadata({ ids: [historyId] }))[0]
+    assert.equal(historyRow.refmod_results![0].name, 'group/hero')
+    assert.equal(historyRow.refmod_name, 'group/hero', 'no-image history rows expose the RefMod display result')
+    assert.equal(historyRow.refmod_record_id, saved.id)
+    const enriched = await (await fetch(url)).json() as any
+    assert.equal(enriched.data.entries[0].conai.id, saved.id)
+    const enrichedMcp = await mcp.client.callTool({ name: 'list_comfy_refmods', arguments: { server_id: serverId } })
+    assert.equal(JSON.parse(text(enrichedMcp)).entries[0].conai.id, saved.id)
+    const mediaUrl = `http://127.0.0.1:${proxyAddress.port}${saved.members[0].media_url}`
+    const mediaResponse = await fetch(mediaUrl)
+    assert.equal(mediaResponse.status, 200)
+    assert.equal(mediaResponse.headers.get('content-type'), 'image/png')
+    assert.equal(mediaResponse.headers.get('content-security-policy'), 'sandbox')
+    assert.equal(mediaResponse.headers.get('x-content-type-options'), 'nosniff')
+    assert.deepEqual(Buffer.from(await mediaResponse.arrayBuffer()), source)
+    assert.equal((await fetch(mediaUrl, { headers: { 'If-None-Match': mediaResponse.headers.get('etag')! } })).status, 304)
+    const libraryMediaUrl = `http://127.0.0.1:${proxyAddress.port}${saved.members[1].media_url}`
+    db.prepare("UPDATE media_metadata SET postprocess_status = 'pending' WHERE composite_hash = ?").run(hash)
+    assert.equal((await fetch(libraryMediaUrl)).status, 404, 'library processing visibility is enforced')
+    db.prepare("UPDATE media_metadata SET postprocess_status = 'ready' WHERE composite_hash = ?").run(hash)
+    const libraryMedia = await fetch(libraryMediaUrl)
+    assert.equal(libraryMedia.status, 200)
+    assert.equal(libraryMedia.headers.get('content-type'), 'image/png')
+    await libraryMedia.arrayBuffer()
+    await failRefModRecords(handles, new Error('Late failure after successful export'))
+    assert.equal(listRefModRecords(serverId).find((record) => record.id === saved.id)!.status, 'saved')
+    assert.equal(fs.existsSync(retainedPath), true, 'late failures cannot remove successfully retained sources')
+
+    const generationMcp = await connect({ scopes: ['read', 'generate'] })
+    try {
+      const result = await generationMcp.client.callTool({ name: 'generate_comfyui', arguments: {
+        workflow_id: templateId, server_id: serverId, inputs: { director: { ...director, builder_state: {} }, video_vae: 'video.vae', audio_vae: 'audio.vae' },
+      } })
+      assert.notEqual(result.isError, true, text(result))
+      const receipt = JSON.parse(text(result))
+      assert.equal(receipt.success, true)
+      assert.equal(receipt.outputCount, 0)
+      assert.equal(receipt.refmod_name, 'group/hero')
+      assert.equal(uploadCount, 2, 'only enabled members are uploaded')
+      assert.deepEqual(JSON.parse(submittedExport!['4'].inputs.timeline_data).items.map((item: any) => item.value), ['uploaded-1.png', 'uploaded-2.png'])
+    } finally {
+      await generationMcp.close()
+    }
+    const queueExecution = await (await import('../src/services/comfyGenerationExecutor')).executeComfyGeneration({
+      comfyService: comfy, workflow: submittedExport!,
+    })
+    assert.equal(queueExecution.representativeImage, null)
+    assert.equal(queueExecution.savedImageCount, 0)
+    assert.deepEqual(queueExecution.history, exportHistory, 'queue executor carries the export receipt despite having no image output')
+    const failedHandles = await capture()
+    const failedPath = resolveRefModRecordMedia(failedHandles[0].id, 0)!.filePath
+    await failRefModRecords(failedHandles, new Error('Cancelled by user'))
+    assert.equal(listRefModRecords(serverId)[0].status, 'failed')
+    assert.equal(fs.existsSync(failedPath), false)
+
+    const linkedWorkflow = JSON.parse(template.workflow_json)
+    Object.assign(linkedWorkflow[4].inputs, { timeline_data: ['1', 0], name: ['1', 1], description: ['1', 2], concept_type: ['1', 3] })
+    const linkedRecords = await captureRefModRecords({
+      workflowJson: JSON.stringify(linkedWorkflow), markedFields: template.marked_fields!,
+      promptData: { director }, serverId, workflowId: templateId,
+    })
+    linkRefModRecords(linkedRecords, { workflow: linkedWorkflow })
+    assert.equal(listRefModRecords(serverId)[0].members.length, 2, 'linked timelines retain the Director sources without replacing the link')
+    assert.equal(listRefModRecords(serverId)[0].name, null)
+    assert.equal(listRefModRecords(serverId)[0].concept_type, 'generic')
+    const linkedPath = resolveRefModRecordMedia(linkedRecords[0].id, 0)!.filePath
+
+    const audioPath = path.join(root, 'refmod-tone.wav')
+    ;(await import('node:child_process')).execFileSync((await import('ffmpeg-static')).default!, [
+      '-v', 'error', '-f', 'lavfi', '-i', 'sine=frequency=440:duration=0.1', '-ac', '1', '-ar', '22050', audioPath,
+    ], { windowsHide: true })
+    const audioBytes = await fs.promises.readFile(audioPath)
+    const audioDirector = {
+      ...director, timeline_data: JSON.stringify({ items: [{ id: 'sound', type: 'audio' }] }),
+      __conai_minimax_h3_director: { assets: { sound: { fileName: 'sound.html', dataUrl: `data:audio/wav;base64,${audioBytes.toString('base64')}` } } },
+    }
+    const audioRecords = await captureRefModRecords({
+      workflowJson: template.workflow_json, markedFields: template.marked_fields!,
+      promptData: { director: audioDirector }, serverId, workflowId: templateId,
+    })
+    const audioResponse = await fetch(`http://127.0.0.1:${proxyAddress.port}/api/refmods/${audioRecords[0].id}/media/0`, { headers: { Range: 'bytes=0-15' } })
+    assert.equal(audioResponse.status, 206)
+    assert.equal(audioResponse.headers.get('content-type'), 'audio/wav')
+    assert.deepEqual(Buffer.from(await audioResponse.arrayBuffer()), audioBytes.subarray(0, 16))
+    await recoverInterruptedRefModRecords()
+    const interrupted = listRefModRecords(serverId).find((record) => record.id === linkedRecords[0].id)!
+    assert.equal(interrupted.status, 'failed')
+    assert.match(interrupted.error!, /interrupted/)
+    assert.equal(fs.existsSync(linkedPath), false)
+    assert.equal(listRefModRecords(serverId).find((record) => record.id === saved.id)!.status, 'saved')
+    const privateFailure = await capture()
+    await failRefModRecords(privateFailure, new Error(`EACCES: copyfile '${path.join(root, 'secret-file.png')}'`))
+    const recordResponse = await fetch(`http://127.0.0.1:${proxyAddress.port}/api/refmods?serverId=${serverId}`)
+    const recordText = await recordResponse.text()
+    assert.equal(recordResponse.status, 200)
+    assert.ok(!recordText.includes('secret-file.png') && !recordText.includes(root), 'instance-shared errors never expose filesystem details')
+    const deleted = await fetch(`http://127.0.0.1:${proxyAddress.port}/api/refmods/${saved.id}`, { method: 'DELETE' })
+    assert.equal(deleted.status, 200)
+    assert.match(((await deleted.json()) as { message: string }).message, /ComfyUI server.*not deleted/)
+    assert.equal(fs.existsSync(retainedPath), false)
+    assert.equal(fs.existsSync(libraryPath), true)
+
     for (const status of [404, 500]) {
       upstreamStatus = status
       const response = await fetch(url)

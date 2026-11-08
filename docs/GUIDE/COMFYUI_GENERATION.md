@@ -243,7 +243,15 @@ RefMod는 ComfyUI의 `models/refmods/` 폴더에 저장된 MiniMax H3 참조 번
 - 다른 모드로 바꾸면 패널은 숨겨지고 선택은 그대로 보존됩니다. 워크플로 편집의 숨김 컨트롤에 `refmods`를 넣으면 패널을 끌 수 있습니다.
 - 페이지 어시스턴트와 MCP(`list_comfy_refmods`, Director 입력의 `refmods`)도 같은 행을 읽고 수정합니다.
 
-RefMod를 CoNAI에서 만들려면 DaSiWa의 **MiniMaxH3 Create RefMod**(`DaSiWaH3RefModExport`) 노드와 VAE를 연결한 워크플로를 등록하고 Director 필드를 마킹합니다. 실행 시 CoNAI가 `request_id`를 새로 채우고, 비어 있는 `timeline_data`에 Director 스냅샷을 복사합니다. 생성 결과는 ComfyUI의 `models/refmods/`에 저장되며 이미지 출력은 없습니다. 서버 간 RefMod 파일 복사·동기화는 CoNAI 범위 밖이므로 별도 도구를 사용하세요.
+### RefMod 만들기
+
+ComfyUI 탭의 워크플로 목록 머리글에서 **RefMod 생성 워크플로 추가**를 누르면 "MiniMax H3 RefMod 생성" 워크플로가 등록됩니다(워크플로 편집 권한 필요). 구성은 Director(참조 입력용, REF2VA) + 영상/음성 VAE 로더 + DaSiWa **MiniMaxH3 Create RefMod**(`DaSiWaH3RefModExport`) 노드이고, 서버를 지정해 등록하면 VAE 선택지가 그 서버의 목록으로 채워집니다. 직접 만든 워크플로도 같은 노드가 들어 있으면 똑같이 동작합니다.
+
+- 이 워크플로는 RefMod만 만들므로 Director에 모델 연결이 없어도 실행됩니다. 패널에 "RefMod를 만들기만 해" 안내가 뜹니다.
+- Director에 이미지·영상·음성을 넣고 각 미디어의 설명(프롬프트)을 쓰면 그 설명이 RefMod 멤버 설명이 됩니다. 이름을 비우면 DaSiWa가 자동 이름을 붙입니다.
+- 실행 시 CoNAI가 `request_id`를 새로 채우고 Director 스냅샷(업로드된 활성 미디어만)을 export 노드에 복사합니다. 결과는 ComfyUI의 `models/refmods/`에 저장되고 이미지 출력은 없으며, 기록 탭에는 "RefMod 저장: 이름"으로 표시됩니다.
+
+CoNAI는 이때 넣은 원본을 자체 보관합니다. 라이브러리 이미지는 참조로, 업로드한 파일은 복사본으로 남기고 멤버별 종류·설명·트림 구간·크기·길이를 기록합니다. RefMod 패널에서 CoNAI가 만든 항목을 고르면 **원본 보기**로 이미지·영상·음성을 그대로 볼 수 있고, 패널 머리글의 **CoNAI에서 만든 RefMod**에서 전체 목록을 보고 빈 슬롯에 넣을 수 있습니다. **기록 삭제**는 CoNAI의 레코드와 복사본만 지우며 ComfyUI 서버의 `.safetensors`는 남습니다. ComfyUI 화면에서 직접 만든 RefMod에는 원본 정보가 없어 DaSiWa가 저장한 멤버 설명만 보입니다. 서버 간 RefMod 파일 복사·동기화는 CoNAI 범위 밖이므로 별도 도구를 사용하세요.
 
 실행 전 검증:
 
@@ -251,6 +259,8 @@ RefMod를 CoNAI에서 만들려면 DaSiWa의 **MiniMaxH3 Create RefMod**(`DaSiWa
 - required 필드는 비어 있으면 안 됩니다.
 - 일반 ComfyUI 서버는 연결 테스트가 성공해야 합니다.
 - 태그 실행은 해당 태그의 사용 가능한 서버가 있어야 합니다.
+
+실행을 막는 항목은 입력 폼 맨 위의 **실행 준비 필요** 알림 하나로 모아 보여 줍니다. Director 입력 문제도 이 알림에 함께 나오며 Director 안에 같은 목록을 따로 띄우지 않습니다. 폼을 스크롤하면 알림이 스크롤 영역 상단에 고정되어 따라오고, 위로 올리면 원래 자리에 있습니다. **문제 필드로 이동**을 누르면 알림은 그대로 두고 문제 필드로 스크롤하며 해당 필드를 표시합니다.
 
 ## 결과 보기
 

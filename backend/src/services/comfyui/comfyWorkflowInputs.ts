@@ -410,6 +410,12 @@ export async function prepareMcpComfyWorkflow(params: {
     requireContextPermission(params.context, 'images.view')
   }
   const comfyService = createMcpComfyService(params.server)
+  const { captureRefModRecords, failRefModRecords, linkRefModRecords } = await import('./refmodRecords')
+  const refmodRecords = await captureRefModRecords({
+    workflowJson: params.workflow.workflow_json, markedFields, promptData,
+    serverId: params.server.id, workflowId: params.workflow.id,
+  })
+  try {
   const preparedPromptData = await prepareComfyPromptData(comfyService, markedFields, promptData, {
     uploadNameBase: `mcp_workflow_${params.workflow.id}`,
   })
@@ -428,7 +434,12 @@ export async function prepareMcpComfyWorkflow(params: {
     markedFields,
     resolvedPromptData,
   )
-  return { comfyService, markedFields, substitutedWorkflow }
+  linkRefModRecords(refmodRecords, { workflow: substitutedWorkflow })
+  return { comfyService, markedFields, substitutedWorkflow, refmodRecords }
+  } catch (error) {
+    await failRefModRecords(refmodRecords, error)
+    throw error
+  }
 }
 
 function miniMaxInputSchema(field: MarkedField) {

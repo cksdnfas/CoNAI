@@ -44,6 +44,7 @@ export interface AudioFileRecord {
 }
 
 export interface AudioProbe {
+  format: string;
   duration: number | null;
   sampleRate: number | null;
   channels: number | null;
@@ -105,8 +106,9 @@ export async function probeAudioFile(filePath: string): Promise<AudioProbe> {
   const stdout = await new Promise<string>((resolve, reject) => {
     execFile(ffprobePath(), [
       '-v', 'error',
+      '-protocol_whitelist', 'file,pipe',
       '-select_streams', 'a:0',
-      '-show_entries', 'stream=codec_name,sample_rate,channels:format=duration',
+      '-show_entries', 'stream=codec_name,sample_rate,channels:format=duration,format_name',
       '-of', 'json',
       filePath,
     ], { timeout: FFPROBE_TIMEOUT_MS, windowsHide: true, maxBuffer: 1024 * 1024 }, (error, out) => {
@@ -114,7 +116,7 @@ export async function probeAudioFile(filePath: string): Promise<AudioProbe> {
       else resolve(out);
     });
   });
-  let data: { streams?: Array<{ codec_name?: string; sample_rate?: string; channels?: number }>; format?: { duration?: string } };
+  let data: { streams?: Array<{ codec_name?: string; sample_rate?: string; channels?: number }>; format?: { duration?: string; format_name?: string } };
   try { data = JSON.parse(stdout); } catch { throw new AudioStoreError('오디오 파일을 읽을 수 없어.'); }
   const stream = data.streams?.[0];
   if (!stream) throw new AudioStoreError('오디오 스트림이 없는 파일이야.');
@@ -123,6 +125,7 @@ export async function probeAudioFile(filePath: string): Promise<AudioProbe> {
     return Number.isFinite(parsed) ? parsed : null;
   };
   return {
+    format: data.format?.format_name ?? '',
     duration: number(data.format?.duration),
     sampleRate: number(stream.sample_rate),
     channels: number(stream.channels),

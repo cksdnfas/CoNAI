@@ -38,6 +38,7 @@ RUNTIME_RECYCLE_BIN_DIR=E:/CoNAI/RecycleBin
 | `user/files` | 매우 높음 | 공용 파일함 원본과 텍스트 버전 |
 | `user/workspaces` | 매우 높음 | 프로젝트 지침·문서·작업본. 프로젝트와 변경 기록은 DB에도 저장 |
 | `user/RecycleBin` | 높음 | 삭제 보호 흐름에서 보관되는 파일 |
+| `user/refmods` | 높음 | CoNAI에서 만든 MiniMax H3 RefMod의 원본 참조 복사본(레코드는 DB). ComfyUI의 `models/refmods` 번들 자체는 포함하지 않음 |
 | `user/models` | 중간 | 자동 태그/추출 모델 |
 | `user/logs` | 중간 | 문제 해결용 로그 |
 | `user/temp` | 낮음 | 변환/생성/처리 중 임시 파일 |

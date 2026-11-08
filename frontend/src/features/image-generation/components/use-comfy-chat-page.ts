@@ -6,7 +6,9 @@ import { useChatDraftTransaction } from '@/features/codex-chat/use-chat-draft-tr
 import { pageAction, pageChoice, pageFreeText, pageObject } from '@/features/codex-chat/page-action-helpers'
 import { useChatPagePermissions } from '@/features/codex-chat/use-chat-page-permissions'
 import { IMAGE_GENERATION_TARGET_GROUP_KEY, useGenerationTargetGroupPath } from '@/features/groups/generation-target-group-store'
+import { useQuery } from '@tanstack/react-query'
 import type { WorkflowMarkedField } from '@/lib/api-image-generation-types'
+import { comfyRefModLibraryQueryKey, getComfyRefModLibrary } from '@/lib/api-image-generation-workflows'
 import { uploadWorkflowInputAsset, deleteWorkflowInputAsset } from '@/lib/api-workflow-input-assets'
 import { getImageDraftRevision, type WorkflowFieldDraftValue } from '../image-generation-shared'
 import { applyComfyChatNode, comfyNodeChatData, COMFY_NODE_PATCH_SCHEMA } from './comfy-chat-node'
@@ -21,7 +23,9 @@ import type { GenerationHistoryRecord } from '@/lib/api-image-generation-types'
 
 type Options = { enabled?: boolean; workflows?: Array<{ id: number; name: string }>; loraOptions?: string[]; onSelect?: (id: number) => void; onOpenCreate?: () => void; onOpenEdit?: (id: number, assertCurrent: () => void) => Promise<void>; onRefresh?: () => Promise<void>; generate: () => Promise<GenerationSubmitResult>; records: GenerationHistoryRecord[]; queueCount: number; replaceDraft: (draft: Record<string, WorkflowFieldDraftValue>) => void
   /** The normal page's server route ('auto' | 'tag:<tag>' | 'server:<id>'); its runs also use the target group. */
-  route?: string }
+  route?: string
+  /** The workflow only saves a RefMod: its Director needs no model connection. */
+  refModExportOnly?: boolean }
 const SEED_JSON_PATH = /\.inputs\.(seed|noise_seed)$/
 const protectedField = (field: WorkflowMarkedField) => isPrivateChatPageKey(`${field.id}.${field.label}.${field.jsonPath}`)
 function mediaName(value: WorkflowFieldDraftValue | undefined) { return value && typeof value === 'object' && !Array.isArray(value) && 'fileName' in value ? String(value.fileName) : '' }
@@ -70,7 +74,10 @@ export function useComfyChatPage(workflow: { id: number; name: string; assistant
   const workflowChoices = options.workflows?.slice(0, 512) ?? []
   // Seeds the backend rolls per run unless this field gives one (backend comfyui/seedControl): empty or -1 = new seed each run.
   const seedFields = safe.filter((field) => field.type === 'number' && SEED_JSON_PATH.test(field.jsonPath))
-  const chatNodes = nodeFields.map((field) => comfyNodeChatData(field, draft[field.id]))
+  // Read-only view of the RefMod library the Director panel already loaded for this route (never fetched here).
+  const refModServerId = options.route?.startsWith('server:') ? Number(options.route.slice('server:'.length)) : undefined
+  const refModLibrary = useQuery({ queryKey: comfyRefModLibraryQueryKey(refModServerId), queryFn: () => getComfyRefModLibrary({ serverId: refModServerId }), enabled: false, staleTime: Infinity }).data
+  const chatNodes = nodeFields.map((field) => comfyNodeChatData(field, draft[field.id], { refModExportOnly: options.refModExportOnly, refModLibrary: refModLibrary?.status === 'ok' ? refModLibrary.entries : undefined }))
   useChatPageRegistration(options.enabled !== false ? {
     kind: 'comfyui', title: workflow ? t({ ko: 'ComfyUI · {name}', en: 'ComfyUI · {name}' }, { name: workflow.name }).slice(0, 160) : 'ComfyUI', resourceId: workflow ? String(workflow.id) : 'comfy-picker', fields, localRevision: JSON.stringify([getImageDraftRevision(draft), marked, workflow?.assistant_revision]),
     data: { recentRuns: runs.recentRuns, generating: runs.generating, workflows: workflowChoices.map((item) => ({ id: item.id, name: item.name })), seedFields: seedFields.map((field) => field.id), nodes: chatNodes, media: media.candidates, presets: presets.candidates,

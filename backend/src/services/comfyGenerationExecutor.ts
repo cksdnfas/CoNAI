@@ -4,7 +4,8 @@ import { APIImageProcessor } from './APIImageProcessor'
 import { COMFYUI_EXECUTION_CANCELLED_MESSAGE, ComfyUIService } from './comfyuiService'
 import { moveFileIntoWorkflowArtifacts, writeWorkflowArtifactDirectoryThumbnail } from './workflowArtifactService'
 import type { GeneratedImageSaveOptions } from '../utils/fileSaver'
-import type { WorkflowRecord } from '../types/workflow'
+import type { WorkflowRecord, ComfyUIHistoryResponse } from '../types/workflow'
+import { hasMiniMaxH3RefModExportNode } from '@conai/shared'
 import type { GenerationQueueLiveProgress } from '../types/generationQueue'
 import type { CollectedComfyOutput } from './comfyui/outputCollector'
 
@@ -58,6 +59,7 @@ export interface ComfyGenerationSavedArtifact {
 
 export interface ExecuteComfyGenerationResult {
   promptId: string
+  history?: ComfyUIHistoryResponse
   attemptedImageCount: number
   savedImageCount: number
   attemptedArtifactCount: number
@@ -150,6 +152,8 @@ export async function executeComfyGeneration(
     onAudioOutputs,
   } = input
   const normalizedWorkflow = normalizeCoNaiArtifactFileOutputNodes(workflow)
+  const refmodExport = hasMiniMaxH3RefModExportNode(normalizedWorkflow)
+  let refmodHistory: ComfyUIHistoryResponse | undefined
   if (outputSink && comfyService.isModalBackend()) {
     throw new Error('Audio orders cannot run on a Modal ComfyUI backend')
   }
@@ -223,6 +227,8 @@ export async function executeComfyGeneration(
         signal,
         onlyFinalOutput: !isArtifactWorkflow,
         audioOutputs: Boolean(outputSink),
+        refmodExport,
+        onHistory: refmodExport ? (history) => { refmodHistory = history } : undefined,
       })
     for (const output of collectedOutputs) pendingTempPaths.add(output.tempPath)
   } catch (error) {
@@ -246,6 +252,7 @@ export async function executeComfyGeneration(
       const sinkResult = await outputSink(collectedOutputs, promptId)
       return {
         promptId,
+        history: refmodHistory,
         attemptedImageCount: 0,
         savedImageCount: 0,
         attemptedArtifactCount: 0,
@@ -379,6 +386,7 @@ export async function executeComfyGeneration(
 
   return {
     promptId,
+    history: refmodHistory,
     attemptedImageCount: isArtifactWorkflow ? 0 : collectedOutputs.length - audioOutputs.length,
     savedImageCount,
     attemptedArtifactCount: isArtifactWorkflow ? collectedOutputs.length : 0,

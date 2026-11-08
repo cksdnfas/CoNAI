@@ -12,11 +12,19 @@ import { BackgroundProcessorService } from './backgroundProcessorService';
 import { HistoryCommandService } from './historyCommandService';
 import { audioResultsByQueueJob } from './audio/audioJobCandidates';
 import type { GeneratedImageSaveOptions } from '../utils/fileSaver';
+import { refModRecordsByHistory } from './comfyui/refmodRecords';
 
 const SLOW_GENERATION_POSTPROCESS_MS = 3000;
 
 /** ComfyUI runs may also (or only) have made sounds (audio store, keyed by the queue job): list them to play. */
 export function attachHistoryAudioResults(records: GenerationHistoryListRecord[]): GenerationHistoryListRecord[] {
+  const refmods = refModRecordsByHistory(records.filter((record) => record.service_type === 'comfyui' && record.id != null).map((record) => record.id!));
+  records = records.map((record) => {
+    const results = refmods.get(record.id!);
+    if (!results) return record;
+    const saved = results.find((result) => result.status === 'saved');
+    return { ...record, refmod_results: results, refmod_record_id: saved?.id ?? null, refmod_name: saved?.name ?? null };
+  });
   const jobIds = records
     .filter((record) => record.service_type === 'comfyui' && typeof record.queue_job_id === 'number')
     .map((record) => record.queue_job_id as number);

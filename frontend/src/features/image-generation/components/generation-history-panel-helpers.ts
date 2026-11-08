@@ -209,6 +209,7 @@ function buildHistoryImageRecord(record: GenerationHistoryResponse['records'][nu
     postprocess_status: record.postprocess_status,
     mime_type: record.actual_mime_type ?? (!hasLinkedImage && audio.length ? record.audio_results?.[0]?.mime_type ?? 'audio/*' : null),
     audio: audio.length ? audio : null,
+    refmod_name: hasLinkedImage ? null : record.refmod_name ?? null,
     width: record.actual_width ?? null,
     height: record.actual_height ?? null,
     rating_score: record.rating_score ?? null,

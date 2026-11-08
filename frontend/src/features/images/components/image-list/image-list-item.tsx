@@ -100,7 +100,7 @@ const ImageListItemComponent = memo(function ImageListItemComponent({
     hasPreviewUrl: Boolean(previewUrl),
     hasPreviewError,
   })
-  const placeholderLabel = getImagePreviewStateLabel(previewState, t('images.components.image.preview.state.no.preview'), {
+  const placeholderLabel = image.refmod_name ? t({ ko: 'RefMod 저장: {name}', en: 'RefMod saved: {name}' }, { name: image.refmod_name }) : getImagePreviewStateLabel(previewState, t('images.components.image.preview.state.no.preview'), {
     empty: t('images.components.image.preview.state.no.preview'),
     processing: t('images.components.image.preview.state.active'),
     failed: t('images.components.image.preview.state.failed'),

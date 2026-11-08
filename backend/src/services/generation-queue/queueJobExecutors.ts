@@ -7,6 +7,7 @@ import { GenerationHistoryService } from '../generationHistoryService'
 import { BackgroundProcessorService } from '../backgroundProcessorService'
 import { createComfyUIService } from '../comfyuiService'
 import { prepareComfyPromptData, validateComfyPromptData } from '../prepareComfyPromptData'
+import { captureRefModRecords, completeRefModRecords, failRefModRecords, linkRefModRecords } from '../comfyui/refmodRecords'
 import { resolveWorkflowPromptValues } from '../workflowPromptValueResolver'
 import { executeComfyGeneration, isComfyGenerationCancelledError } from '../comfyGenerationExecutor'
 import { resolveComfyAbandonedCancelResult } from '../comfyuiService'
@@ -210,6 +211,12 @@ async function executeComfyUiJob(job: GenerationQueueJobRecord, assignedServer: 
       requireRequesterPermission(requester, 'images.view')
     }
   }
+  const refmodRecords = await captureRefModRecords({
+    workflowJson: workflow.workflow_json, markedFields, promptData: payload.promptData,
+    serverId: assignedServer?.id ?? job.assigned_server_id ?? null,
+    workflowId: workflow.id, queueJobId: job.id,
+  })
+  try {
   const preparedPromptData = await prepareComfyPromptData(comfyService, markedFields, payload.promptData)
   const parsedPromptData = resolveWorkflowPromptValues(markedFields, preparedPromptData, 'comfyui', {
     modelPathSeparator: comfyService.isModalBackend() ? 'posix' : 'windows',
@@ -237,7 +244,9 @@ async function executeComfyUiJob(job: GenerationQueueJobRecord, assignedServer: 
     console.error(`⚠️ Failed to create ComfyUI queue history for job ${job.id}:`, historyError)
   }
 
+  linkRefModRecords(refmodRecords, { historyId, workflow: substitutedWorkflow })
   updateQueueRequestDebugMeta(job, {
+    ...(refmodRecords.length ? { refmod_record_id: refmodRecords[0].id, refmod_record_ids: refmodRecords.map((record) => record.id) } : {}),
     history_id: historyId ?? null,
     workflow_id: workflow.id,
     workflow_name: workflow.name,
@@ -343,6 +352,7 @@ async function executeComfyUiJob(job: GenerationQueueJobRecord, assignedServer: 
       // PJ-2: 응답 파싱과 같은 tick 에서 핸들 + running 전이를 한 번의 UPDATE 로 커밋한다.
       onPromptAccepted: (promptId) => {
         acceptedPromptId = promptId
+        linkRefModRecords(refmodRecords, { promptId })
         GenerationQueueModel.markProviderAccepted(job.id, promptId)
         publishQueueJobEvent('queue.job.status', GenerationQueueModel.findListRecordById(job.id), {
           previousStatus: 'dispatching',
@@ -374,7 +384,18 @@ async function executeComfyUiJob(job: GenerationQueueJobRecord, assignedServer: 
       },
     })
 
-    if (audioOrderJob) {
+    if (refmodRecords.length && (context.signal?.aborted || isQueueCancelRequested(job.id))) throw new Error(GENERATION_QUEUE_CANCELLATION_MESSAGE)
+    const savedRefmods = completeRefModRecords(refmodRecords, result.history, result.promptId)
+    if (savedRefmods.length) updateQueueRequestDebugMeta(job, {
+      refmod_record_id: savedRefmods[0].id, refmod_name: savedRefmods[0].name,
+      refmod_record_ids: savedRefmods.map((record) => record.id),
+      refmod_names: savedRefmods.map((record) => record.name),
+      history_id: historyId ?? null, result_prompt_id: result.promptId,
+    })
+
+    if (savedRefmods.length && !result.representativeImage && result.savedArtifactCount === 0 && !audioOrderJob) {
+      // A RefMod bundle is a durable result even though the export node emits no image.
+    } else if (audioOrderJob) {
       const stored = result.sinkResult as { order_id: string; candidate_ids: string[] }
       updateQueueRequestDebugMeta(job, {
         result_prompt_id: result.promptId,
@@ -513,6 +534,10 @@ async function executeComfyUiJob(job: GenerationQueueJobRecord, assignedServer: 
     throw error
   } finally {
     clearGenerationQueueLiveProgress(job.id)
+  }
+  } catch (error) {
+    await failRefModRecords(refmodRecords, error)
+    throw error
   }
 }
 

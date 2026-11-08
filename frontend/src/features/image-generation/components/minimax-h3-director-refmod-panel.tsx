@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
   getActiveMiniMaxH3RefModRows,
@@ -6,7 +7,7 @@ import {
   type MiniMaxH3RefModLibraryEntry,
   type MiniMaxH3RefModRow,
 } from '@conai/shared'
-import { Plus, RefreshCw, Trash2 } from 'lucide-react'
+import { History, Plus, RefreshCw, Trash2 } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Field, FieldInfo } from '@/components/ui/field'
@@ -17,23 +18,26 @@ import { Switch } from '@/components/ui/switch'
 import { Text } from '@/components/ui/text'
 import { Textarea } from '@/components/ui/textarea'
 import { useI18n } from '@/i18n'
-import { getComfyRefModLibrary } from '@/lib/api-image-generation-workflows'
+import { comfyRefModLibraryQueryKey, getComfyRefModLibrary } from '@/lib/api-image-generation-workflows'
+import { MiniMaxH3RefModRecordsDialog, RefModSourcesDisclosure } from './minimax-h3-refmod-sources'
 
-const REFMOD_LIBRARY_QUERY_KEY = ['comfy-refmod-library'] as const
 const K = 'image-generation.components.minimax.h3.director.refmod.panel'
 
 type MiniMaxH3DirectorRefModPanelProps = {
   rows: MiniMaxH3RefModRow[]
   /** Explicitly selected ComfyUI server; omitted for auto/tag routing, where the default server's library is shown. */
   serverId?: number
+  /** The workflow only creates a RefMod (DaSiWa export node). */
+  exportOnly?: boolean
   onChange: (rows: MiniMaxH3RefModRow[]) => void
 }
 
 /** REF2VA RefMod slots: saved MiniMax H3 reference bundles from the ComfyUI server's DaSiWa library. */
-export function MiniMaxH3DirectorRefModPanel({ rows, serverId, onChange }: MiniMaxH3DirectorRefModPanelProps) {
+export function MiniMaxH3DirectorRefModPanel({ rows, serverId, exportOnly = false, onChange }: MiniMaxH3DirectorRefModPanelProps) {
   const { t } = useI18n()
+  const [isRecordsOpen, setIsRecordsOpen] = useState(false)
   // Shared across Director instances and remounts; the library only changes when RefMods are exported, so it refreshes on demand.
-  const library = useQuery({ queryKey: [...REFMOD_LIBRARY_QUERY_KEY, serverId ?? 'default'], queryFn: () => getComfyRefModLibrary({ serverId }), staleTime: Infinity })
+  const library = useQuery({ queryKey: comfyRefModLibraryQueryKey(serverId), queryFn: () => getComfyRefModLibrary({ serverId }), staleTime: Infinity })
   const result = library.data
   const entries = result?.status === 'ok' ? result.entries : []
   const entryByName = new Map(entries.map((entry) => [entry.name, entry]))
@@ -47,6 +51,17 @@ export function MiniMaxH3DirectorRefModPanel({ rows, serverId, onChange }: MiniM
   const addRow = () => {
     if (!canAdd || freeSlot === null) return
     onChange([...rows, { slot: freeSlot, name: '', enabled: true, strength: 1, description: '' }])
+  }
+  // A record picked from the browser fills the first empty slot, or opens a new one.
+  const emptyRow = orderedRows.find(({ row }) => !row.name)
+  // Records are scoped to the server the library resolved; until it has, nothing can be listed or picked.
+  const canPickRecord = result?.status === 'ok' && (Boolean(emptyRow) || (freeSlot !== null && rows.length < MINIMAX_H3_REFMOD_MAX_SLOTS))
+  const pickRecord = (name: string) => {
+    if (!canPickRecord) return
+    if (emptyRow) patchRow(emptyRow.index, { name, enabled: true })
+    else if (freeSlot !== null && rows.length < MINIMAX_H3_REFMOD_MAX_SLOTS) onChange([...rows, { slot: freeSlot, name, enabled: true, strength: 1, description: '' }])
+    // A bundle saved after the library loaded is not listed yet.
+    if (!entryByName.has(name)) void library.refetch()
   }
   const formatEntry = (entry: MiniMaxH3RefModLibraryEntry) => [
     entry.name,
@@ -64,6 +79,9 @@ export function MiniMaxH3DirectorRefModPanel({ rows, serverId, onChange }: MiniM
           {rows.length > 0 ? <Badge variant="secondary" size="sm">{t(`${K}.active.count`, { active: activeCount, total: rows.length })}</Badge> : null}
         </div>
         <div className="flex items-center gap-1">
+          <IconButton size="icon-sm" variant="ghost" disabled={result?.status !== 'ok'} onClick={() => setIsRecordsOpen(true)} label={t(`${K}.records.open`)}>
+            <History className="h-4 w-4" />
+          </IconButton>
           <IconButton size="icon-sm" variant="ghost" disabled={library.isFetching} aria-busy={library.isFetching} onClick={() => void library.refetch()} label={t(`${K}.refresh`)}>
             <RefreshCw className="h-4 w-4" />
           </IconButton>
@@ -73,6 +91,7 @@ export function MiniMaxH3DirectorRefModPanel({ rows, serverId, onChange }: MiniM
         </div>
       </div>
 
+      {exportOnly ? <Text variant="caption" role="note">{t(`${K}.export.only`)}</Text> : null}
       {library.isPending ? <Text variant="caption" role="status">{t(`${K}.loading`)}</Text> : null}
       {result?.status === 'unavailable' ? (
         <Alert variant="warning">
@@ -113,10 +132,13 @@ export function MiniMaxH3DirectorRefModPanel({ rows, serverId, onChange }: MiniM
                 </div>
 
                 {entry ? (
-                  <div className="flex flex-wrap items-center gap-1">
-                    {entry.kinds.map((kind) => <Badge key={kind} variant="secondary" size="sm">{kind}</Badge>)}
-                    <Badge variant="outline" size="sm">{entry.concept}</Badge>
-                    {entry.tokens !== null ? <Text as="span" variant="caption">{t(`${K}.tokens`, { count: entry.tokens })}</Text> : null}
+                  <div>
+                    <div className="flex flex-wrap items-center gap-1">
+                      {entry.kinds.map((kind) => <Badge key={kind} variant="secondary" size="sm">{kind}</Badge>)}
+                      <Badge variant="outline" size="sm">{entry.concept}</Badge>
+                      {entry.tokens !== null ? <Text as="span" variant="caption">{t(`${K}.tokens`, { count: entry.tokens })}</Text> : null}
+                    </div>
+                    <RefModSourcesDisclosure key={entry.name} record={entry.conai} members={entry.members} />
                   </div>
                 ) : row.name && result?.status === 'ok' ? (
                   <Badge variant="warning" size="sm">{t(`${K}.missing`)}</Badge>
@@ -146,6 +168,16 @@ export function MiniMaxH3DirectorRefModPanel({ rows, serverId, onChange }: MiniM
             )
           })}
         </div>
+      ) : null}
+
+      {result?.status === 'ok' ? (
+        <MiniMaxH3RefModRecordsDialog
+          open={isRecordsOpen}
+          serverId={result.serverId}
+          canPick={canPickRecord}
+          onPick={pickRecord}
+          onClose={() => setIsRecordsOpen(false)}
+        />
       ) : null}
     </div>
   )

@@ -1,12 +1,15 @@
 import type { AuthAccountType } from './authAccount';
 import type { GenerationAudioResult } from '../services/audio/audioJobCandidates';
 
-import type { GenerationStatus, ServiceType } from '@conai/shared';
+import type { GenerationStatus, ServiceType, MiniMaxH3RefModRecord } from '@conai/shared';
 
 export type { GenerationStatus, ServiceType };
 
 export interface GenerationHistoryRecord {
   id?: number;
+  refmod_results?: MiniMaxH3RefModRecord[];
+  refmod_record_id?: number | null;
+  refmod_name?: string | null;
 
   service_type: ServiceType;
   generation_status: GenerationStatus;

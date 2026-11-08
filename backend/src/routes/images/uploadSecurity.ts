@@ -8,6 +8,7 @@ import {
 } from '../../middleware/upload';
 import { ImageProcessor } from '../../services/imageProcessor';
 import { VideoProcessor } from '../../services/videoProcessor';
+import { probeAudioFile } from '../../services/audio/audioStore';
 import { logger } from '../../utils/logger';
 
 const MULTIPART_OVERHEAD_ALLOWANCE_BYTES = 10 * 1024 * 1024;
@@ -38,6 +39,13 @@ const VIDEO_FORMAT_ALIASES: Record<string, readonly string[]> = {
   'video/webm': ['matroska', 'webm'],
   'video/x-matroska': ['matroska', 'webm'],
   'video/x-msvideo': ['avi'],
+};
+
+const AUDIO_FORMAT_ALIASES: Record<string, readonly string[]> = {
+  'audio/wav': ['wav'], 'audio/flac': ['flac'], 'audio/mpeg': ['mp3'],
+  'audio/ogg': ['ogg'], 'audio/aac': ['aac'],
+  'audio/mp4': ['mov', 'mp4', 'm4a', '3gp', '3g2', 'mj2'],
+  'audio/webm': ['matroska', 'webm'],
 };
 
 export class UploadValidationError extends Error {
@@ -232,6 +240,16 @@ export async function validateUploadedMediaFile(file: Pick<Express.Multer.File, 
 
     if (file.mimetype.toLowerCase().startsWith('video/')) {
       await validateVideoUpload(file);
+      return;
+    }
+    if (file.mimetype.toLowerCase().startsWith('audio/')) {
+      const allowedFormats = AUDIO_FORMAT_ALIASES[file.mimetype.toLowerCase()];
+      if (!allowedFormats) throw new UploadValidationError('Unsupported audio type');
+      const metadata = await probeAudioFile(file.path);
+      const formats = metadata.format.toLowerCase().split(',');
+      if (!allowedFormats.some((format) => formats.includes(format))) {
+        throw new UploadValidationError('Uploaded audio content does not match declared type');
+      }
       return;
     }
   } catch (error) {

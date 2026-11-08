@@ -16,6 +16,7 @@ import { pageSettingsRoutes } from '../routes/page-settings.routes';
 import { generationLayoutRoutes } from '../routes/generation-layouts.routes';
 import { workflowRoutes } from '../routes/workflows';
 import { comfyuiServerRoutes } from '../routes/comfyuiServers';
+import refmodRoutes from '../routes/refmods';
 import { customDropdownListRoutes } from '../routes/customDropdownLists';
 import { customNodeRoutes } from '../routes/customNodes.routes';
 import { moduleDefinitionRoutes } from '../routes/moduleDefinitions';
@@ -269,6 +270,7 @@ export function registerAppRoutes(app: Express, options: RegisterAppRoutesOption
   app.use('/api/workflow-input-assets', options.uploadLimiter, requireAuth, workflowInputAssetRoutes);
   app.use('/api/workflows', options.readOnlyLimiter, requireReadAccess('workflows.view'), workflowRoutes);
   app.use('/api/public-workflows', requireAuth, publicWorkflowRoutes);
+  app.use('/api/refmods', requireAuth, refmodRoutes);
   app.use('/api/comfyui-servers', (req, res, next) => {
     // The RefMod library backs the Director form, which generation-only accounts also use on published workflow pages.
     if (isReadMethod(req) && req.path === '/refmods') requireAuth(req, res, () => allowAnonymousAnyPermission(['generation.execute', 'workflows.view'])(req, res, next));

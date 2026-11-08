@@ -2,12 +2,14 @@ import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
 import { FeaturePermissionNotice } from '@/features/auth/feature-permission-notice'
 import { Fragment, useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { hasMiniMaxH3RefModExportNode } from '@conai/shared'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import type { CustomDropdownList, GenerationHistoryRecord, GenerationWorkflow, GenerationWorkflowDetail } from '@/lib/api-image-generation-types'
 import {
   createGenerationWorkflow,
+  createMiniMaxH3RefModExportWorkflow,
   comfyUIServersQueryKey,
   deleteGenerationWorkflow,
   getGenerationComfyUIServers,
@@ -53,6 +55,10 @@ import { useComfyChatPage } from './use-generation-chat-page'
 import { clampComfyQueueRegistrationCount, useComfyGenerationActions } from './use-comfy-generation-actions'
 import { useComfyModuleSave } from './use-comfy-module-save'
 import { useComfyServerController } from './use-comfy-server-controller'
+
+const workflowDetailQueryKey = (workflowId: number | null) => ['image-generation-workflow-detail', workflowId] as const
+// Module-level so the query keeps its derived flag instead of re-parsing the graph on every render.
+const selectRefModExportOnly = (workflow: GenerationWorkflowDetail) => hasMiniMaxH3RefModExportNode(workflow.workflow_json)
 
 type ComfyGenerationPanelProps = {
   onHistoryRefresh: () => void
@@ -113,6 +119,7 @@ function ComfyGenerationPanelContent({
   const { showSnackbar } = useSnackbar()
   const { t } = useI18n()
   const confirm = useConfirm()
+  const queryClient = useQueryClient()
   const [queueRegistrationCount, setQueueRegistrationCount] = useState('1')
   const [isAuthoringModalOpen, setIsAuthoringModalOpen] = useState(false)
   const authStatus = useAuthStatusQuery().data
@@ -189,6 +196,18 @@ function ComfyGenerationPanelContent({
   }, [buildDropdownSelectOptions, dropdownListByName])
 
   const selectedWorkflowFields = useMemo(() => resolveWorkflowFields(selectedWorkflow), [resolveWorkflowFields, selectedWorkflow])
+  // The list carries no graph; only a workflow with a Director field loads its detail to learn whether it merely saves a RefMod.
+  const hasDirectorField = selectedWorkflowFields.some((field) => field.node_editor === 'minimax_h3_director_dasiwa')
+  const refModExportQuery = useQuery({
+    queryKey: workflowDetailQueryKey(selectedWorkflowId),
+    queryFn: () => getGenerationWorkflow(selectedWorkflowId!),
+    enabled: selectedWorkflowId !== null && hasDirectorField,
+    select: selectRefModExportOnly,
+  })
+  const refModExportOnly = hasDirectorField && refModExportQuery.data === true
+  // Unknown until the detail arrives: the readiness alert holds back the model-connection issue meanwhile, and a failed load is shown there.
+  const refModExportPending = hasDirectorField && refModExportQuery.isLoading
+  const refModExportError = hasDirectorField && refModExportQuery.isError ? getErrorMessage(refModExportQuery.error, '') : null
   const { workflowDraft, setWorkflowDraft, workflowDraftOwnerId, persistDraft, resetDraft } = useComfyWorkflowDraft(draftStorageOwner, selectedWorkflow, selectedWorkflowFields)
   const { handleOpenModuleSave, moduleSaveModalProps } = useComfyModuleSave({
     workflowById,
@@ -241,6 +260,7 @@ function ComfyGenerationPanelContent({
     connectedServers,
     comfyServerTests,
     imageSaveOptions: generationImageSaveOptions,
+    refModExportOnly,
     onHistoryRefresh,
     showSnackbar,
   })
@@ -313,7 +333,7 @@ function ComfyGenerationPanelContent({
   useComfyChatPage(selectedWorkflow, selectedWorkflowFields, workflowDraft, workflowDraftOwnerId, handleWorkflowFieldChange, {
     enabled: !isAuthoringModalOpen, workflows: workflowsQuery.data ?? [], loraOptions, onSelect: onSelectedWorkflowChange,
     generate: handleGenerateSelected, records: historyRecords, queueCount: clampComfyQueueRegistrationCount(queueRegistrationCount),
-    route: selectedTarget,
+    route: selectedTarget, refModExportOnly,
     replaceDraft: (next) => { if (!persistDraft(next)) throw new Error('워크플로우 초안이 바뀌었어.'); setWorkflowDraft(next); clearWorkflowFieldIssues() },
     onOpenCreate: () => { setWorkflowEditorState(null); setIsAuthoringModalOpen(true) },
     onOpenEdit: async (id, assertCurrent) => { const workflow = await getGenerationWorkflow(id); assertCurrent(); setWorkflowEditorState({ workflow }); setIsAuthoringModalOpen(true) },
@@ -334,7 +354,24 @@ function ComfyGenerationPanelContent({
   }, [onSelectedWorkflowChange])
 
 
+  const [isAddingRefModExportWorkflow, setIsAddingRefModExportWorkflow] = useState(false)
+  const handleAddRefModExportWorkflow = async () => {
+    if (isAddingRefModExportWorkflow) return
+    setIsAddingRefModExportWorkflow(true)
+    try {
+      const { id } = await createMiniMaxH3RefModExportWorkflow(selectedTarget.startsWith('server:') ? Number(selectedTarget.slice('server:'.length)) : undefined)
+      await workflowsQuery.refetch()
+      onSelectedWorkflowChange(id)
+      showSnackbar({ message: t({ ko: 'RefMod 생성 워크플로를 추가했어.', en: 'Added the RefMod creation workflow.' }), tone: 'info' })
+    } catch (error) {
+      showSnackbar({ message: getErrorMessage(error, t({ ko: 'RefMod 생성 워크플로를 추가하지 못했어.', en: 'Could not add the RefMod creation workflow.' })), tone: 'error' })
+    } finally {
+      setIsAddingRefModExportWorkflow(false)
+    }
+  }
+
   const handleAuthoringSaved = async (workflowId: number) => {
+    void queryClient.invalidateQueries({ queryKey: workflowDetailQueryKey(workflowId) })
     await Promise.all([workflowsQuery.refetch(), dropdownListsQuery.refetch()])
     setWorkflowEditorState(null)
     onSelectedWorkflowChange(workflowId)
@@ -475,6 +512,8 @@ function ComfyGenerationPanelContent({
                   selectedWorkflowId={activeWorkflowId}
                   onSelectWorkflow={handleOpenWorkflow}
                   onCreateWorkflow={handleOpenCreateWorkflow}
+                  onAddRefModExportWorkflow={() => void handleAddRefModExportWorkflow()}
+                  isAddingRefModExportWorkflow={isAddingRefModExportWorkflow}
                   onSaveModule={handleOpenModuleSave}
                   onEditWorkflow={(workflowId) => void handleEditWorkflow(workflowId)}
                   onCopyWorkflow={(workflowId) => void handleCopyWorkflow(workflowId)}
@@ -514,6 +553,9 @@ function ComfyGenerationPanelContent({
             loraOptions={loraOptions}
             isRefreshingDropdownLists={isRefreshingDropdownLists}
             fieldIssues={workflowFieldIssues}
+            refModExportOnly={refModExportOnly}
+            refModExportPending={refModExportPending}
+            refModExportError={refModExportError}
             splitPaneScroll={splitPaneScroll}
             compactActionBarContentTargetId={compactActionBarContentTargetId}
             blockLayout={blockLayout}

@@ -3,8 +3,10 @@ import {
   MINIMAX_H3_REFMOD_LIBRARY_PATH,
   parseMiniMaxH3RefModLibraryEntry,
   type MiniMaxH3RefModLibraryEntry,
+  type MiniMaxH3RefModLibraryItem,
 } from '@conai/shared';
 import type { ComfyUIServerRecord } from '../../types/comfyuiServer';
+import { savedRefModRecordsByName } from './refmodRecords';
 
 export class MiniMaxH3RefModLibraryError extends Error {
   constructor(message: string, readonly statusCode: 404 | 502) {
@@ -13,7 +15,7 @@ export class MiniMaxH3RefModLibraryError extends Error {
   }
 }
 
-export async function fetchMiniMaxH3RefModLibrary(server: ComfyUIServerRecord): Promise<MiniMaxH3RefModLibraryEntry[]> {
+export async function fetchMiniMaxH3RefModLibrary(server: ComfyUIServerRecord): Promise<MiniMaxH3RefModLibraryItem[]> {
   // Modal backends expose no ComfyUI REST routes; probing would only wake a container.
   if (server.backend_type === 'modal') {
     throw new MiniMaxH3RefModLibraryError(`RefMod library is not available on Modal server "${server.name}"; use a standard ComfyUI server.`, 404);
@@ -25,8 +27,10 @@ export async function fetchMiniMaxH3RefModLibrary(server: ComfyUIServerRecord): 
       headers: { Accept: 'application/json' },
     });
     if (!Array.isArray(response.data)) throw new Error('Expected a JSON array from the RefMod library');
+    const records = savedRefModRecordsByName(server.id);
     return response.data.map(parseMiniMaxH3RefModLibraryEntry)
-      .filter((entry): entry is MiniMaxH3RefModLibraryEntry => entry !== null);
+      .filter((entry): entry is MiniMaxH3RefModLibraryEntry => entry !== null)
+      .map((entry) => records.has(entry.name) ? { ...entry, conai: records.get(entry.name)! } : entry);
   } catch (error) {
     if (axios.isAxiosError(error) && error.response?.status === 404) {
       throw new MiniMaxH3RefModLibraryError(`DaSiWa pack is not installed on ComfyUI server "${server.name}" (${MINIMAX_H3_REFMOD_LIBRARY_PATH} returned 404).`, 404);

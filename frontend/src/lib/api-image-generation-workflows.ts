@@ -1,4 +1,4 @@
-import type { MiniMaxH3RefModLibraryEntry } from '@conai/shared'
+import { MINIMAX_H3_REFMOD_EXPORT_TEMPLATE_KEY, type MiniMaxH3RefModLibraryItem, type MiniMaxH3RefModRecord, type MiniMaxH3RefModRecordMember } from '@conai/shared'
 import { buildApiUrl } from './api-client'
 import { requestJson } from './api-image-generation-request'
 import { ApiRequestError } from './api-request'
@@ -290,8 +290,17 @@ export async function getGenerationWorkflowServers(workflowId: number) {
   return response.data
 }
 
+/** All servers' RefMod libraries; invalidate this after a RefMod record changes. */
+export const COMFY_REFMOD_LIBRARY_QUERY_ROOT = ['comfy-refmod-library'] as const
+export const COMFY_REFMOD_RECORDS_QUERY_ROOT = ['comfy-refmod-records'] as const
+
+/** One server's library (omitted = the default server); shared by the Director RefMod panel and the page assistant. */
+export function comfyRefModLibraryQueryKey(serverId?: number) {
+  return [...COMFY_REFMOD_LIBRARY_QUERY_ROOT, serverId ?? 'default'] as const
+}
+
 export type ComfyRefModLibraryResult =
-  | { status: 'ok'; serverId: number; serverName: string; entries: MiniMaxH3RefModLibraryEntry[] }
+  | { status: 'ok'; serverId: number; serverName: string; entries: MiniMaxH3RefModLibraryItem[] }
   /** The resolved server has no ComfyUI-DaSiWa-Nodes RefMod library. */
   | { status: 'unavailable'; message: string }
   | { status: 'error'; message: string }
@@ -302,7 +311,7 @@ export async function getComfyRefModLibrary(params: { workflowId?: number; serve
   if (params.workflowId !== undefined) searchParams.set('workflowId', String(params.workflowId))
   if (params.serverId !== undefined) searchParams.set('serverId', String(params.serverId))
   try {
-    const response = await requestJson<{ success: boolean; data: { server_id: number; server_name: string; entries: MiniMaxH3RefModLibraryEntry[] } }>(
+    const response = await requestJson<{ success: boolean; data: { server_id: number; server_name: string; entries: MiniMaxH3RefModLibraryItem[] } }>(
       `/api/comfyui-servers/refmods${searchParams.size > 0 ? `?${searchParams.toString()}` : ''}`,
     )
     return { status: 'ok', serverId: response.data.server_id, serverName: response.data.server_name, entries: response.data.entries }
@@ -310,6 +319,40 @@ export async function getComfyRefModLibrary(params: { workflowId?: number; serve
     const message = error instanceof Error ? error.message : String(error)
     return error instanceof ApiRequestError && error.status === 404 ? { status: 'unavailable', message } : { status: 'error', message }
   }
+}
+
+export function comfyRefModRecordsQueryKey(serverId?: number) {
+  return [...COMFY_REFMOD_RECORDS_QUERY_ROOT, serverId ?? 'all'] as const
+}
+
+/** RefMods created through CoNAI workflow runs (newest first), with their retained source media. */
+export async function getMiniMaxH3RefModRecords(serverId?: number) {
+  const response = await requestJson<{ success: boolean; data: MiniMaxH3RefModRecord[] }>(`/api/refmods${serverId !== undefined ? `?serverId=${serverId}` : ''}`)
+  return response.data
+}
+
+/** Remove CoNAI's record and retained source copies; the bundle on the ComfyUI server is kept. */
+export async function deleteMiniMaxH3RefModRecord(recordId: number) {
+  return requestJson<MutationResponse>(`/api/refmods/${recordId}`, {
+    method: 'DELETE',
+  })
+}
+
+/** Stream URL of one retained RefMod source (image, video or audio). */
+export function buildMiniMaxH3RefModMediaUrl(member: Pick<MiniMaxH3RefModRecordMember, 'media_url'>) {
+  return buildApiUrl(member.media_url)
+}
+
+/** Register the shipped RefMod-creation workflow template; returns the new workflow id. */
+export async function createMiniMaxH3RefModExportWorkflow(serverId?: number) {
+  const response = await requestJson<{ success: boolean; data: { id: number } }>(`/api/workflows/templates/${MINIMAX_H3_REFMOD_EXPORT_TEMPLATE_KEY}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(serverId !== undefined ? { server_id: serverId } : {}),
+  })
+  return response.data
 }
 
 /** Load saved custom dropdown lists used by ComfyUI workflows. */

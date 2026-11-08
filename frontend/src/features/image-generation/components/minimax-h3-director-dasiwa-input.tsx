@@ -69,6 +69,8 @@ type MiniMaxH3DirectorDasiwaInputProps = {
   numericBounds?: WorkflowNodeNumericBounds
   /** Explicitly selected ComfyUI server whose RefMod library should be offered. */
   comfyServerId?: number
+  /** The workflow only saves a RefMod (DaSiWa export node): no model connection is needed. */
+  refModExportOnly?: boolean
   onChange: (value: Record<string, unknown>) => void
   renderInputPort?: (inputKey: MiniMaxH3DirectorGraphInputKey) => ReactNode
 }
@@ -80,7 +82,7 @@ function formatMediaTypeLabel(type: MiniMaxH3DirectorMediaType, index: number) {
 }
 
 /** Render DaSiWa MiniMax H3 Director inputs as a CoNAI-native reference board. */
-export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenControls, numericBounds, comfyServerId, onChange, renderInputPort }: MiniMaxH3DirectorDasiwaInputProps) {
+export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenControls, numericBounds, comfyServerId, refModExportOnly = false, onChange, renderInputPort }: MiniMaxH3DirectorDasiwaInputProps) {
   const { t } = useI18n()
   const visualInputRef = useRef<HTMLInputElement>(null)
   const videoInputRef = useRef<HTMLInputElement>(null)
@@ -117,7 +119,7 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
   const visualItems = displayedItems.filter((item) => item.type === 'image')
   const videoItems = displayedItems.filter((item) => getMediaLane(item) === 'video')
   const audioItems = mode === null || mode === 'REF2VA' ? displayedItems.filter(hasMiniMaxDirectorAudio) : []
-  const issues = useMemo(() => validateMiniMaxH3DirectorNodeValue(value), [value])
+  const issues = useMemo(() => validateMiniMaxH3DirectorNodeValue(value, { refModExportOnly }), [refModExportOnly, value])
   const issueItemIds = useMemo(() => new Set(issues.flatMap((issue) => issue.itemId ? [issue.itemId] : [])), [issues])
   const invalidFields = useMemo(() => new Set(issues.flatMap((issue) => issue.field ? [issue.field] : [])), [issues])
 
@@ -923,7 +925,7 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
 
       {/* RefMods are only consumed in REF2VA; other modes keep the saved rows untouched and hidden. */}
       {isReferenceMediaMode && !isMiniMaxH3DirectorInputLink(nodeValue.timeline_data) && !hiddenControls?.includes('refmods') ? (
-        <MiniMaxH3DirectorRefModPanel rows={timeline.refmods ?? []} serverId={comfyServerId} onChange={updateRefmods} />
+        <MiniMaxH3DirectorRefModPanel rows={timeline.refmods ?? []} serverId={comfyServerId} exportOnly={refModExportOnly} onChange={updateRefmods} />
       ) : null}
 
       </> : null}

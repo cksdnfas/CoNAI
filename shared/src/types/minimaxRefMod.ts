@@ -38,6 +38,65 @@ export type MiniMaxH3RefModLibraryEntry = {
   mtime: number
 }
 
+/**
+ * CoNAI's own record of a RefMod created through a CoNAI workflow run: the source media that went into
+ * each member is retained (copied, or referenced from the library) so the bundle can be inspected later.
+ */
+export type MiniMaxH3RefModRecordStatus = 'pending' | 'saved' | 'failed'
+
+export type MiniMaxH3RefModRecordMember = {
+  /** Position in the export snapshot (timeline order). */
+  index: number
+  kind: MiniMaxH3RefModKind
+  description: string
+  /** Original file name as the user provided it. */
+  file_name: string
+  mime_type: string | null
+  /** Streams the retained source through CoNAI (`/api/refmods/:id/media/:index`). */
+  media_url: string
+  /** Library media reused instead of copied, when the source came from the CoNAI library. */
+  composite_hash: string | null
+  media_mode: 'video' | 'audio' | 'video_audio' | null
+  trim_start: number | null
+  trim_end: number | null
+  source_width: number | null
+  source_height: number | null
+  source_duration: number | null
+}
+
+export type MiniMaxH3RefModRecord = {
+  id: number
+  /** Saved bundle name under models/refmods (null until ComfyUI reports it). */
+  name: string | null
+  server_id: number
+  workflow_id: number | null
+  status: MiniMaxH3RefModRecordStatus
+  concept_type: string
+  description: string
+  error: string | null
+  created_at: string
+  members: MiniMaxH3RefModRecordMember[]
+}
+
+/** Library entry as CoNAI serves it: DaSiWa metadata plus CoNAI's own record when the bundle was made here. */
+export type MiniMaxH3RefModLibraryItem = MiniMaxH3RefModLibraryEntry & { conai?: MiniMaxH3RefModRecord }
+
+export const MINIMAX_H3_REFMOD_EXPORT_TEMPLATE_KEY = 'minimax-h3-refmod-export'
+
+/** True when an API-format ComfyUI workflow (object or JSON string) contains a DaSiWa RefMod export node. */
+export function hasMiniMaxH3RefModExportNode(workflow: unknown): boolean {
+  let graph = workflow
+  if (typeof graph === 'string') {
+    try {
+      graph = JSON.parse(graph)
+    } catch {
+      return false
+    }
+  }
+  if (!isRecord(graph)) return false
+  return Object.values(graph).some((node) => isRecord(node) && node.class_type === MINIMAX_H3_REFMOD_EXPORT_CLASS_TYPE)
+}
+
 export type MiniMaxH3RefModIssue =
   | { code: 'too-many-rows'; max: number }
   | { code: 'invalid-slot'; slot: unknown }

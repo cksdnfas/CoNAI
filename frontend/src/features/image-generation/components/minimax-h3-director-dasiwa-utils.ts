@@ -705,8 +705,13 @@ function toRefModIssue(issue: MiniMaxH3RefModIssue): MiniMaxH3DirectorIssue {
   }
 }
 
+export type MiniMaxH3DirectorValidationOptions = {
+  /** The workflow only saves a RefMod (DaSiWa export node), so the Director runs without a connected model. */
+  refModExportOnly?: boolean
+}
+
 /** Validate Director inputs against the current DaSiWa Director contract. */
-export function validateMiniMaxH3DirectorNodeValue(value: unknown): MiniMaxH3DirectorIssue[] {
+export function validateMiniMaxH3DirectorNodeValue(value: unknown, options: MiniMaxH3DirectorValidationOptions = {}): MiniMaxH3DirectorIssue[] {
   const nodeValue = normalizeMiniMaxH3DirectorNodeValue(value)
   const issues: MiniMaxH3DirectorIssue[] = []
   const timelineLinked = isMiniMaxH3DirectorInputLink(nodeValue.timeline_data)
@@ -728,7 +733,7 @@ export function validateMiniMaxH3DirectorNodeValue(value: unknown): MiniMaxH3Dir
 
   const staticMode = isMiniMaxH3DirectorInputLink(nodeValue.mode) ? null : nodeValue.mode
   const selectedModelInput = staticMode === 'REF2VA' ? nodeValue.ref2va_model : staticMode ? nodeValue.fl2va_model : null
-  if (staticMode && !isMiniMaxH3DirectorInputLink(selectedModelInput)) {
+  if (staticMode && !options.refModExportOnly && !isMiniMaxH3DirectorInputLink(selectedModelInput)) {
     issues.push({
       code: 'selected-model-connection',
       ko: `워크플로 수정 필요: ${nodeValue.mode} 모델 연결이 없어.`,

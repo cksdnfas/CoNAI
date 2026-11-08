@@ -1,6 +1,6 @@
 import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { Copy, Ellipsis, Eye, ListFilter, ListTree, Pencil, PencilLine, Play, Plus, RefreshCw, RotateCcw, Save, Server, Star, Trash2, type LucideIcon } from 'lucide-react'
+import { Copy, Ellipsis, Eye, ListFilter, ListTree, PackagePlus, Pencil, PencilLine, Play, Plus, RefreshCw, RotateCcw, Save, Server, Star, Trash2, type LucideIcon } from 'lucide-react'
 import { EmptyState } from '@/components/ui/empty-state'
 import { ActionContextMenu, ActionMenuButton, type ActionMenuEntry } from '@/components/ui/action-menu'
 import { Badge } from '@/components/ui/badge'
@@ -39,6 +39,10 @@ type WorkflowListSectionProps = {
   selectedWorkflowId: string
   onSelectWorkflow: (workflowId: number) => void
   onCreateWorkflow: () => void
+  /** Register the shipped RefMod-creation workflow template. */
+  onAddRefModExportWorkflow: () => void
+  /** The template request is in flight. */
+  isAddingRefModExportWorkflow?: boolean
   onSaveModule: (workflowId: number) => void
   onEditWorkflow: (workflowId: number) => void
   onCopyWorkflow: (workflowId: number) => void
@@ -50,6 +54,8 @@ export function ComfyWorkflowListSection({
   selectedWorkflowId,
   onSelectWorkflow,
   onCreateWorkflow,
+  onAddRefModExportWorkflow,
+  isAddingRefModExportWorkflow = false,
   onSaveModule,
   onEditWorkflow,
   onCopyWorkflow,
@@ -63,9 +69,16 @@ export function ComfyWorkflowListSection({
       heading={<SectionLabel icon={<ListTree />}>{t({ ko: 'ComfyUI 워크플로', en: 'ComfyUI workflows' })}</SectionLabel>}
       count={workflows.length}
       actions={(
-        <IconButton size="icon-sm" variant="ghost" onClick={onCreateWorkflow} disabled={!canUpdateWorkflows} label={t({ ko: '워크플로우 등록', en: 'Add workflow' })}>
-          <Plus />
-        </IconButton>
+        <>
+          {canUpdateWorkflows ? (
+            <IconButton size="icon-sm" variant="ghost" disabled={isAddingRefModExportWorkflow} aria-busy={isAddingRefModExportWorkflow} onClick={onAddRefModExportWorkflow} label={t({ ko: 'RefMod 생성 워크플로 추가', en: 'Add RefMod creation workflow' })}>
+              <PackagePlus />
+            </IconButton>
+          ) : null}
+          <IconButton size="icon-sm" variant="ghost" onClick={onCreateWorkflow} disabled={!canUpdateWorkflows} label={t({ ko: '워크플로우 등록', en: 'Add workflow' })}>
+            <Plus />
+          </IconButton>
+        </>
       )}
     >
       {workflows.length > 0 ? workflows.map((workflow) => {

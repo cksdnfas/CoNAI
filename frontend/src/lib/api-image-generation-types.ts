@@ -144,6 +144,8 @@ export interface GenerationHistoryRecord {
 
   /** Sounds a ComfyUI run saved, with or without a picture (audio workspace candidates of its queue job). */
   audio_results?: GenerationHistoryAudioResult[]
+  /** Bundle name a MiniMax H3 RefMod export run saved on the ComfyUI server (such a run has no picture). */
+  refmod_name?: string | null
 }
 
 export interface GenerationHistoryAudioResult {

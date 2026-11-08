@@ -483,7 +483,11 @@ export class HistoryQueryRepository {
         gh.generation_status = 'failed'
         OR (qj.status IN ('failed', 'cancelled') AND NOT ${hasRenderableResultMedia})
         OR (gh.generation_status = 'completed' AND NOT ${hasActiveResultFile})
-      )`;
+      )
+      AND (gh.generation_status = 'failed' OR NOT EXISTS (
+        SELECT 1 FROM minimax_refmod_records refmod
+        WHERE refmod.history_id = gh.id AND refmod.status = 'saved'
+      ))`;
 
     const rows = apiGenDb.prepare(sql).all(...params) as Array<{ id: number; queue_job_id: number | null; generation_status: GenerationStatus }>;
     const soundJobs = audioCandidatesByQueueJob(rows.flatMap((row) => (row.generation_status !== 'failed' && row.queue_job_id !== null ? [row.queue_job_id] : [])));

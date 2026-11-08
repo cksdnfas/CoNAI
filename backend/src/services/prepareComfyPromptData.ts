@@ -3,7 +3,7 @@ import path from 'path'
 import { resolveUploadsPath } from '../config/runtimePaths'
 import { type MarkedField } from '../types/workflow'
 import { normalizeBase64ImageData } from '../utils/base64ImageData'
-import { ComfyUIService } from './comfyuiService'
+import type { ComfyUIService } from './comfyuiService'
 import { ImageUploadService } from './imageUploadService'
 import { MEDIA_HASH_PATTERN } from './codex-chat/chatMediaLinks'
 import { getTrustedGraphMedia } from './graph-workflow-executor/trustedGraphMedia'
@@ -98,7 +98,7 @@ export function validateComfyPromptData(
   return usesLibrary
 }
 
-function getComfyMediaUploadInput(value: unknown): ComfyMediaUploadInput | null {
+export function getComfyMediaUploadInput(value: unknown): ComfyMediaUploadInput | null {
   if (!value) {
     return null
   }
@@ -326,7 +326,7 @@ function normalizeMiniMaxBuilderState(value: Record<string, any>, timeline: Reco
   return builder
 }
 
-function getMiniMaxDirectorActiveItems(mode: unknown, timeline: Record<string, any>) {
+export function getMiniMaxDirectorActiveItems(mode: unknown, timeline: Record<string, any>) {
   const items = Array.isArray(timeline.items) ? timeline.items : []
   const ordered = items
     .map((item, index) => ({ item, index }))

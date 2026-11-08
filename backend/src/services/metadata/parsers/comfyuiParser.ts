@@ -104,6 +104,7 @@ export class ComfyUIParser {
     const clipTextEncodeNodes: Array<{ nodeId: string; text: string }> = [];
     let samplerNode: any = null;
     let checkpointNode: any = null;
+    let unetNode: any = null;
     let emptyLatentNode: any = null;
 
     for (const nodeId in workflow) {
@@ -134,8 +135,13 @@ export class ComfyUIParser {
         checkpointNode = node;
       }
 
-      // Extract dimensions
-      if (classType === 'EmptyLatentImage' && inputs) {
+      // Diffusion-model-only loaders (Flux, MOSS-Image, ...) have no checkpoint node.
+      if (classType === 'UNETLoader' && inputs?.unet_name) {
+        unetNode = node;
+      }
+
+      // Extract dimensions (EmptyLatentImage, EmptySD3LatentImage, EmptyFlux2LatentImage, ...)
+      if (typeof classType === 'string' && /^Empty\w*Latent/.test(classType) && inputs) {
         emptyLatentNode = node;
       }
     }
@@ -204,6 +210,8 @@ export class ComfyUIParser {
     if (checkpointNode?.inputs?.ckpt_name) {
       const ckptName = checkpointNode.inputs.ckpt_name;
       aiInfo.model = Array.isArray(ckptName) ? ckptName[0] : ckptName;
+    } else if (typeof unetNode?.inputs?.unet_name === 'string') {
+      aiInfo.model = unetNode.inputs.unet_name;
     }
 
     // Process dimensions
@@ -521,6 +529,20 @@ export class ComfyUIParser {
 
     if (normalizedClassType.includes('string switch')) {
       return this.resolveStringSwitchNode(workflow, inputs, visited);
+    }
+
+    // Core ComfyUI pass-through node: MOSS-Image's template routes the final prompt through it.
+    if (classType === 'PreviewAny') {
+      return this.resolveValue(workflow, inputs?.source, new Set(visited));
+    }
+
+    if (classType === 'ComfySwitchNode') {
+      const [selected, alternate] = this.resolveValue(workflow, inputs?.switch, new Set(visited))
+        ? [inputs?.on_true, inputs?.on_false]
+        : [inputs?.on_false, inputs?.on_true];
+      const resolved = this.resolveValue(workflow, selected, new Set(visited));
+      // An LLM-expanded branch (TextGenerate) is not stored in the saved prompt JSON, so the other branch is the only recorded text.
+      return this.isPresentScalar(resolved) ? resolved : this.resolveValue(workflow, alternate, new Set(visited));
     }
 
     if (classType === 'KSampler Config (rgthree)') {

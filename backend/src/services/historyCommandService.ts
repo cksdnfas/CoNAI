@@ -151,6 +151,9 @@ export class HistoryCommandService {
 
   static update(id: number, data: Partial<GenerationHistoryRecord>): void {
     const computedFields = [
+      'refmod_results',
+      'refmod_record_id',
+      'refmod_name',
       'actual_composite_hash',
       'actual_width',
       'actual_height',

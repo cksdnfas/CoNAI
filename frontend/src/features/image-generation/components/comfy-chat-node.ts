@@ -1,5 +1,5 @@
-import { applyMiniMaxDirectorResolutionBounds, copyChatPageData, MINIMAX_H3_REFMOD_MAX_SLOTS, validateChatPageArguments, type ChatPageData, type ChatPageSchema } from '@conai/shared'
-import { pageArray, pageChoice, pageNumber, pageObject, pageText, pageRecord } from '@/features/codex-chat/page-action-helpers'
+import { applyMiniMaxDirectorResolutionBounds, copyChatPageData, MINIMAX_H3_REFMOD_MAX_SLOTS, validateChatPageArguments, type ChatPageData, type ChatPageSchema, type MiniMaxH3RefModLibraryItem, type MiniMaxH3RefModRow } from '@conai/shared'
+import { pageArray, pageChoice, pageFreeText, pageNumber, pageObject, pageText, pageRecord } from '@/features/codex-chat/page-action-helpers'
 import type { WorkflowMarkedField } from '@/lib/api-image-generation-types'
 import { createRandomUuid } from '@/lib/random-uuid'
 import { buildPowerLoraNodeItemsFromInputs, isPowerLoraLoaderEntryValue } from './power-lora-loader-utils'
@@ -36,7 +36,22 @@ export function comfyNodeChatSchema(field: WorkflowMarkedField, value: unknown):
   return pageObject(properties)
 }
 
-export function comfyNodeChatData(field: WorkflowMarkedField, value: unknown): ChatPageData {
+type ComfyNodeChatContext = {
+  refModExportOnly?: boolean
+  /** The RefMod library already loaded for this page's server, if any; CoNAI-made entries add a `sources` summary. */
+  refModLibrary?: MiniMaxH3RefModLibraryItem[]
+}
+
+function describeRefModRows(rows: MiniMaxH3RefModRow[], library: MiniMaxH3RefModLibraryItem[] | undefined) {
+  if (!library?.length) return rows
+  const recordByName = new Map(library.flatMap((entry) => entry.conai ? [[entry.name, entry.conai] as const] : []))
+  return rows.map((row) => {
+    const record = recordByName.get(row.name)
+    return record ? { ...row, sources: record.members.map((member) => ({ kind: member.kind, description: pageFreeText(member.description) })) } : row
+  })
+}
+
+export function comfyNodeChatData(field: WorkflowMarkedField, value: unknown, context: ComfyNodeChatContext = {}): ChatPageData {
   const base = { fieldId: field.id, label: field.label, editor: field.node_editor ?? '', schema: comfyNodeChatSchema(field, value) }
   if (field.node_editor === 'power_lora_loader_rgthree') {
     const node = value && typeof value === 'object' ? value as Record<string, unknown> : {}
@@ -46,8 +61,9 @@ export function comfyNodeChatData(field: WorkflowMarkedField, value: unknown): C
   const { timeline } = parseMiniMaxH3DirectorTimeline(node.timeline_data)
   const builder = normalizeMiniMaxH3DirectorBuilderState(node.builder_state, timeline, typeof node.mode === 'string' ? node.mode : 'FL2VA', typeof node.duration === 'number' ? node.duration : 5, typeof node.prompt === 'string' ? node.prompt : '')
   return copyChatPageData({ ...base, mode: node.mode, width: node.width, height: node.height, duration: node.duration, frame_rate: node.frame_rate, ref_image_size: node.ref_image_size,
-    prompt: { mode: builder.prompt_mode, simple_prompt: builder.simple_prompt, imd: builder.imd, soundscape: builder.soundscape, music: builder.music, subject_definitions: builder.ref.subject_definitions, summary: builder.ref.summary, retention_analysis: builder.ref.retention_analysis, detailed_description: builder.ref.detailed_description }, resolution: timeline.resolution ?? {}, postprocess: timeline.postprocess ?? {}, refmods: timeline.refmods ?? [],
-    timelineItems: timeline.items.map((item) => ({ id: item.id, type: item.type, name: /^(?:data:|blob:|https?:)/i.test(item.value) ? item.type : item.value.split(/[\\/]/).pop() ?? '', enabled: item.enabled, slot: item.slot, start: item.start, duration: item.duration })), promptBlocks: timeline.prompt_blocks.map((item) => ({ id: item.id, text: item.text, enabled: item.enabled, start: item.start, duration: item.duration })), issues: validateMiniMaxH3DirectorNodeValue(node).map((issue) => issue.ko) })
+    prompt: { mode: builder.prompt_mode, simple_prompt: builder.simple_prompt, imd: builder.imd, soundscape: builder.soundscape, music: builder.music, subject_definitions: builder.ref.subject_definitions, summary: builder.ref.summary, retention_analysis: builder.ref.retention_analysis, detailed_description: builder.ref.detailed_description }, resolution: timeline.resolution ?? {}, postprocess: timeline.postprocess ?? {}, refmods: describeRefModRows(timeline.refmods ?? [], context.refModLibrary),
+    timelineItems: timeline.items.map((item) => ({ id: item.id, type: item.type, name: /^(?:data:|blob:|https?:)/i.test(item.value) ? item.type : item.value.split(/[\\/]/).pop() ?? '', enabled: item.enabled, slot: item.slot, start: item.start, duration: item.duration })), promptBlocks: timeline.prompt_blocks.map((item) => ({ id: item.id, text: item.text, enabled: item.enabled, start: item.start, duration: item.duration })), issues: validateMiniMaxH3DirectorNodeValue(node, { refModExportOnly: context.refModExportOnly }).map((issue) => issue.ko),
+    ...(context.refModExportOnly ? { refModExportOnly: true } : {}) })
 }
 
 export function applyComfyChatNode(field: WorkflowMarkedField, value: unknown, input: ChatPageData, loraOptions: string[] = []): Record<string, unknown> {

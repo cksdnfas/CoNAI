@@ -2,6 +2,7 @@ import type Database from 'better-sqlite3';
 import { ensureFileStoreSchema } from './fileStoreSchema';
 import { ensurePostsSchema } from './postsSchema';
 import { ensureChatAssetSchema } from './chatAssetSchema';
+import { ensureRefModRecordsSchema } from './refmodRecordsSchema';
 import { ensureBuiltinSystemModules as ensureBuiltinSystemModulesInDb } from './userSettingsBuiltinModules';
 
 function hasColumn(db: Database.Database, tableName: string, columnName: string): boolean {
@@ -51,6 +52,7 @@ function ensureModuleDefinitionCompatibilityIndexes(db: Database.Database): void
 
 /** Schema pieces that live outside createUserSettingsSchema, plus invariants re-checked on every startup. */
 export function ensureUserSettingsCompatibility(db: Database.Database): void {
+  ensureRefModRecordsSchema(db);
   ensureChatAssetSchema(db);
   ensureFileStoreSchema(db);
   ensurePostsSchema(db);

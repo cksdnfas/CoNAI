@@ -4,6 +4,7 @@ import { randomizeComfyWorkflowSeeds } from './seedControl';
 import { parseJsonRecord } from '../../utils/json';
 import { randomUUID } from 'node:crypto';
 import { MINIMAX_H3_REFMOD_EXPORT_CLASS_TYPE } from '@conai/shared';
+import { getMiniMaxDirectorActiveItems } from '../prepareComfyPromptData';
 
 const MINIMAX_DIRECTOR_MODES = new Set([
   'T2VA',
@@ -212,7 +213,13 @@ function wireMiniMaxH3RefModExports(workflow: Record<string, any>): void {
     if (!Array.isArray(inputs.request_id)) inputs.request_id = randomUUID();
     const timeline = inputs.timeline_data;
     const emptyTimeline = timeline == null || (typeof timeline === 'string' && /^\s*(\{\s*\})?\s*$/.test(timeline));
-    if (emptyTimeline && typeof directorTimeline === 'string') inputs.timeline_data = directorTimeline;
+    if (emptyTimeline && typeof directorTimeline === 'string') {
+      const snapshot = JSON.parse(directorTimeline);
+      inputs.timeline_data = JSON.stringify({
+        ...snapshot,
+        items: getMiniMaxDirectorActiveItems(directors[0].inputs?.mode, snapshot),
+      });
+    }
   }
 }
 

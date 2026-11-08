@@ -11,6 +11,7 @@ import {
   MINIMAX_H3_DIRECTOR_DURATION_MIN_SECONDS,
   validateMiniMaxH3DirectorNodeValue,
   type MiniMaxH3DirectorIssue,
+  type MiniMaxH3DirectorValidationOptions,
 } from './components/minimax-h3-director-dasiwa-utils'
 
 const NAI_FORM_DRAFT_STORAGE_KEY = 'conai:image-generation:nai-form-draft:v1'
@@ -326,6 +327,7 @@ export type WorkflowNodeDraftIssue = {
 export function collectWorkflowNodeDraftIssues(
   fields: WorkflowMarkedField[],
   draft: Record<string, WorkflowFieldDraftValue>,
+  directorOptions?: MiniMaxH3DirectorValidationOptions,
 ): WorkflowNodeDraftIssue[] {
   return fields.flatMap((field) => {
     if (field.type !== 'node' || field.node_editor !== 'minimax_h3_director_dasiwa') {
@@ -334,7 +336,7 @@ export function collectWorkflowNodeDraftIssues(
 
     const value = draft[field.id]
     return isWorkflowNodeDraftValue(value)
-      ? validateMiniMaxH3DirectorNodeValue(value).map((issue) => ({ field, issue }))
+      ? validateMiniMaxH3DirectorNodeValue(value, directorOptions).map((issue) => ({ field, issue }))
       : [{
           field,
           issue: {

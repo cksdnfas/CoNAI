@@ -187,6 +187,12 @@ type ComfyWorkflowControllerPanelProps = {
   isRefreshingDropdownLists?: boolean
   /** Per-field messages from the last failed generate validation. */
   fieldIssues?: Record<string, string>
+  /** The workflow only saves a RefMod (DaSiWa export node): the Director runs without a model connection. */
+  refModExportOnly?: boolean
+  /** Whether the workflow only saves a RefMod is still loading; the model-connection issue waits for it. */
+  refModExportPending?: boolean
+  /** Loading the workflow detail that decides `refModExportOnly` failed. */
+  refModExportError?: string | null
   splitPaneScroll?: boolean
   compactActionBarContentTargetId?: string
   /** Wide page: render the form and `result` as the shared block layout instead of a single scroll column. */
@@ -231,6 +237,9 @@ export function ComfyWorkflowControllerPanel({
   loraOptions,
   isRefreshingDropdownLists = false,
   fieldIssues,
+  refModExportOnly = false,
+  refModExportPending = false,
+  refModExportError = null,
   splitPaneScroll = false,
   compactActionBarContentTargetId,
   blockLayout,
@@ -280,8 +289,8 @@ export function ComfyWorkflowControllerPanel({
     [workflowDraft, workflowFields],
   )
   const workflowNodeIssues = useMemo(
-    () => collectWorkflowNodeDraftIssues(workflowFields, workflowDraft),
-    [workflowDraft, workflowFields],
+    () => collectWorkflowNodeDraftIssues(workflowFields, workflowDraft, { refModExportOnly: refModExportOnly || refModExportPending }),
+    [refModExportOnly, refModExportPending, workflowDraft, workflowFields],
   )
   const queueRegistrationNumber = Number(queueRegistrationCount)
   const queueRegistrationCountValid = Number.isInteger(queueRegistrationNumber) && queueRegistrationNumber >= 1 && queueRegistrationNumber <= queueMaxCount
@@ -318,7 +327,15 @@ export function ComfyWorkflowControllerPanel({
       issues.push(t({ ko: '큐 등록 개수는 1부터 {max} 사이의 정수여야 해.', en: 'Queue count must be an integer between 1 and {max}.' }, { max: queueMaxCount }))
     }
 
+    if (refModExportError !== null) {
+      issues.push(t(
+        { ko: '워크플로 정보를 불러오지 못해 RefMod 생성 전용인지 확인하지 못했어: {message}', en: 'Could not load the workflow to check whether it only creates a RefMod: {message}' },
+        { message: refModExportError },
+      ))
+    }
+
     if (workflowNodeIssues.length > 0) {
+      // A one-line summary: the Director lists all of its problems in its own panel.
       const firstIssue = workflowNodeIssues[0]
       issues.push(t(
         { ko: '{label}: {message}', en: '{label}: {message}' },
@@ -327,8 +344,8 @@ export function ComfyWorkflowControllerPanel({
     }
 
     return issues
-  }, [missingRequiredFields, queueMaxCount, queueRegistrationCountValid, routingCanGenerate, selectedTag, selectedTarget, serverRouting, servers.length, t, workflowFields.length, workflowNodeIssues])
-  const canGenerateSelected = routingCanGenerate && missingRequiredFields.length === 0 && workflowNodeIssues.length === 0 && queueRegistrationCountValid
+  }, [missingRequiredFields, queueMaxCount, queueRegistrationCountValid, refModExportError, routingCanGenerate, selectedTag, selectedTarget, serverRouting, servers.length, t, workflowFields.length, workflowNodeIssues])
+  const canGenerateSelected = routingCanGenerate && missingRequiredFields.length === 0 && workflowNodeIssues.length === 0 && queueRegistrationCountValid && !refModExportPending
   const targetOptions = useMemo<WorkflowTargetOption[]>(() => {
     if (servers.length === 0) {
       return [{ value: 'auto', label: t({ ko: '서버 없음', en: 'No servers' }) }]
@@ -471,21 +488,24 @@ export function ComfyWorkflowControllerPanel({
       ) : null}
 
       {readinessIssues.length > 0 ? (
-        <Alert variant="destructive">
-          <AlertTitle>{t({ ko: '실행 준비 필요', en: 'Run readiness needs attention' })}</AlertTitle>
-          <AlertDescription>
-            <ul className="list-disc space-y-1 pl-4">
-              {readinessIssues.map((issue) => (
-                <li key={issue}>{issue}</li>
-              ))}
-            </ul>
-            {onRevealFieldIssues && (missingRequiredFields.length > 0 || workflowNodeIssues.length > 0) ? (
-              <Button type="button" size="sm" variant="secondary" className="mt-2" onClick={onRevealFieldIssues}>
-                {t({ ko: '문제 필드로 이동', en: 'Go to invalid field' })}
-              </Button>
-            ) : null}
-          </AlertDescription>
-        </Alert>
+        // From md up it pins to the top of whichever container scrolls so the reason Generate is blocked stays in view; on phones it stays in the flow so it never covers the form.
+        <div className={cn('md:sticky md:z-sticky', splitPaneScroll || blockLayout ? 'md:top-0' : 'md:top-[calc(var(--theme-shell-header-height)+0.5rem)]')}>
+          <Alert variant="destructive">
+            <AlertTitle>{t({ ko: '실행 준비 필요', en: 'Run readiness needs attention' })}</AlertTitle>
+            <AlertDescription>
+              <ul className="list-disc space-y-1 pl-4">
+                {readinessIssues.map((issue) => (
+                  <li key={issue}>{issue}</li>
+                ))}
+              </ul>
+              {onRevealFieldIssues && (missingRequiredFields.length > 0 || workflowNodeIssues.length > 0) ? (
+                <Button type="button" size="sm" variant="secondary" className="mt-2" onClick={onRevealFieldIssues}>
+                  {t({ ko: '문제 필드로 이동', en: 'Go to invalid field' })}
+                </Button>
+              ) : null}
+            </AlertDescription>
+          </Alert>
+        </div>
       ) : null}
 
       <section className="space-y-3">
@@ -515,6 +535,7 @@ export function ComfyWorkflowControllerPanel({
               onRefreshOptions={onRefreshDropdownLists}
               fieldIssues={fieldIssues}
               comfyServerId={selectedServer?.id}
+              refModExportOnly={refModExportOnly}
               onChange={onFieldChange}
               onImageChange={onImageChange}
             />

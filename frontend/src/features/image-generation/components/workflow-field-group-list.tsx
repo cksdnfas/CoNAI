@@ -14,6 +14,8 @@ type WorkflowFieldGroupListProps = {
   fieldIssues?: Record<string, string>
   /** Explicitly selected ComfyUI server, for server-specific option sources such as the RefMod library. */
   comfyServerId?: number
+  /** The workflow only saves a RefMod: the Director runs without a model connection. */
+  refModExportOnly?: boolean
   onChange: (fieldId: string, value: WorkflowFieldDraftValue) => void
   onImageChange: (fieldId: string, image?: SelectedImageDraft) => Promise<void> | void
 }
@@ -27,6 +29,7 @@ export function WorkflowFieldGroupList({
   onRefreshOptions,
   fieldIssues,
   comfyServerId,
+  refModExportOnly,
   onChange,
   onImageChange,
 }: WorkflowFieldGroupListProps) {
@@ -45,6 +48,7 @@ export function WorkflowFieldGroupList({
           onRefreshOptions={onRefreshOptions}
           issueMessage={fieldIssues?.[field.id]}
           comfyServerId={comfyServerId}
+          refModExportOnly={refModExportOnly}
           onChange={(value) => onChange(field.id, value)}
           onImageChange={(image) => onImageChange(field.id, image)}
         />
@@ -63,6 +67,7 @@ export function WorkflowFieldGroupList({
         onRefreshOptions={onRefreshOptions}
         fieldIssues={fieldIssues}
         comfyServerId={comfyServerId}
+        refModExportOnly={refModExportOnly}
         onChange={onChange}
         onImageChange={onImageChange}
       />

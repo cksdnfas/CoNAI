@@ -30,6 +30,7 @@ import { checkComfyWorkflowOnServers } from '../../services/comfyui/workflowServ
 import { ComfyUiWorkflowConversionError, describeComfyUiWorkflowConversionFailure, resolveApiWorkflowJson } from '../../services/comfyui/uiWorkflowConversion';
 import { errorResult, textResult } from '../toolResults';
 import { fetchMiniMaxH3RefModLibrary } from '../../services/comfyui/refmodLibrary';
+import { completeRefModRecords, failRefModRecords, linkRefModRecords } from '../../services/comfyui/refmodRecords';
 
 export function registerGenerationTools(server: McpServer, context: McpRequestContext): void {
   registerWorkflowListTools(server);
@@ -146,15 +147,19 @@ async function saveMcpComfyOutputs(params: {
   groupId?: number;
   requester?: McpRequestContext['requester'];
   context?: McpRequestContext;
+  signal?: AbortSignal;
 }) {
-  const { comfyService, substitutedWorkflow } = await prepareMcpComfyWorkflow({
+  const { comfyService, substitutedWorkflow, refmodRecords } = await prepareMcpComfyWorkflow({
     workflow: params.workflow,
     server: params.server,
     suppliedInputs: params.suppliedInputs,
     context: params.context,
   });
 
-  const historyId = await GenerationHistoryService.createComfyUIHistory({
+  let historyId: number | undefined;
+  try {
+  if (refmodRecords.length) params.signal?.throwIfAborted();
+  historyId = await GenerationHistoryService.createComfyUIHistory({
     workflowId: params.workflow.id,
     workflowName: params.workflow.name,
     groupId: params.groupId,
@@ -163,8 +168,10 @@ async function saveMcpComfyOutputs(params: {
     requestedByAccountType: params.requester?.accountType ?? undefined,
   });
 
-  try {
-    const result = await comfyService.generateImages(params.workflow, substitutedWorkflow);
+    linkRefModRecords(refmodRecords, { historyId });
+    const result = await comfyService.generateImages(params.workflow, substitutedWorkflow,
+      (promptId) => linkRefModRecords(refmodRecords, { promptId }),
+      refmodRecords.length ? params.signal : undefined);
     HistoryCommandService.update(historyId, { generation_status: 'processing' as const });
 
     const historyIds: number[] = [historyId];
@@ -198,12 +205,15 @@ async function saveMcpComfyOutputs(params: {
       else failedSaveCount += 1;
     }
 
-    if (savedPaths.length === 0) {
+    if (refmodRecords.length) params.signal?.throwIfAborted();
+    const savedRefmods = completeRefModRecords(refmodRecords, result.history, result.promptId);
+    if (savedPaths.length === 0 && savedRefmods.length === 0) {
       HistoryCommandService.recordError(historyId, 'ComfyUI generation finished but no output file was returned');
     }
 
     return {
-      success: savedPaths.length > 0,
+      success: savedPaths.length > 0 || savedRefmods.length > 0,
+      ...(savedRefmods.length ? { refmod_record_id: savedRefmods[0].id, refmod_name: savedRefmods[0].name, refmods: savedRefmods } : {}),
       historyId,
       historyIds,
       promptId: result.promptId,
@@ -213,10 +223,11 @@ async function saveMcpComfyOutputs(params: {
       serverId: params.server.id,
       server: params.server.name,
       workflow: params.workflow.name,
-      error: savedPaths.length > 0 ? undefined : 'No generated output could be saved',
+      error: savedPaths.length > 0 || savedRefmods.length > 0 ? undefined : 'No generated output could be saved',
     };
   } catch (error) {
-    HistoryCommandService.recordError(historyId, error instanceof Error ? error.message : 'Unknown ComfyUI generation error');
+    await failRefModRecords(refmodRecords, error);
+    if (historyId) HistoryCommandService.recordError(historyId, error instanceof Error ? error.message : 'Unknown ComfyUI generation error');
     throw error;
   }
 }
@@ -234,7 +245,7 @@ function registerComfyGenerationTools(server: McpServer, context: McpRequestCont
   server.registerTool(
     'generate_comfyui',
     { description: 'Generate synchronously with ComfyUI; returns saved history IDs and outputs. Prefer submit_generation_job for durable work. On input errors, read get_workflow_details before retrying.', inputSchema: z.object(inputSchema) },
-    async ({ workflow_id, server_id, inputs, prompt_data, group_id, group_path }) => {
+    async ({ workflow_id, server_id, inputs, prompt_data, group_id, group_path }, extra) => {
       try {
         const workflow = resolveUsableWorkflow(workflow_id);
         if (!workflow.is_active) throw new Error(`Workflow with ID ${workflow_id} is inactive`);
@@ -247,6 +258,7 @@ function registerComfyGenerationTools(server: McpServer, context: McpRequestCont
           groupId: targetGroupId,
           requester: context.requester,
           context,
+          signal: extra.mcpReq.signal,
         });
         return textResult(await replaceOutputPathsWithArtifacts(result, context));
       } catch (error) {
@@ -264,7 +276,7 @@ function registerComfyGenerationTools(server: McpServer, context: McpRequestCont
       group_id: z.number().int().optional().describe('Optional group ID to assign generated outputs to'),
       group_path: mcpGroupPathSchema,
     }) },
-    async ({ workflow_id, inputs, prompt_data, group_id, group_path }) => {
+    async ({ workflow_id, inputs, prompt_data, group_id, group_path }, extra) => {
       try {
         const workflow = resolveUsableWorkflow(workflow_id);
         if (!workflow.is_active) throw new Error(`Workflow with ID ${workflow_id} is inactive`);
@@ -281,6 +293,7 @@ function registerComfyGenerationTools(server: McpServer, context: McpRequestCont
               groupId: targetGroupId,
               requester: context.requester,
               context,
+              signal: extra.mcpReq.signal,
             });
             return await replaceOutputPathsWithArtifacts(result, context);
           } catch (error) {

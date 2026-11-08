@@ -39,21 +39,22 @@ type WorkflowFieldDisclosureCardProps = {
   /** Validation message from the last generate attempt; marks the field invalid while set. */
   issueMessage?: string
   comfyServerId?: number
+  refModExportOnly?: boolean
   onChange: (value: WorkflowFieldDraftValue) => void
   onImageChange: (image?: SelectedImageDraft) => Promise<void> | void
 }
 
 /** Render one runtime workflow field inside a collapsible card. */
-export function WorkflowFieldDisclosureCard({ field, value, grouped = false, loraOptions, isRefreshingOptions = false, onRefreshOptions, issueMessage, comfyServerId, onChange, onImageChange }: WorkflowFieldDisclosureCardProps) {
+export function WorkflowFieldDisclosureCard({ field, value, grouped = false, loraOptions, isRefreshingOptions = false, onRefreshOptions, issueMessage, comfyServerId, refModExportOnly, onChange, onImageChange }: WorkflowFieldDisclosureCardProps) {
   const { t } = useI18n()
   const [isExpanded, setIsExpanded] = useState(field.default_collapsed !== true)
   const fieldLabel = formatWorkflowFieldLabel(field)
-  const hasNodeIssues = field.type === 'node'
-    && field.node_editor === 'minimax_h3_director_dasiwa'
+  const isDirectorField = field.type === 'node' && field.node_editor === 'minimax_h3_director_dasiwa'
+  const hasNodeIssues = isDirectorField
     && typeof value === 'object'
     && value !== null
     && !Array.isArray(value)
-    && validateMiniMaxH3DirectorNodeValue(value).length > 0
+    && validateMiniMaxH3DirectorNodeValue(value, { refModExportOnly }).length > 0
   const isInvalid = Boolean(issueMessage)
   const errorMessageId = buildWorkflowFieldErrorId(field.id)
 
@@ -114,6 +115,7 @@ export function WorkflowFieldDisclosureCard({ field, value, grouped = false, lor
             invalid={isInvalid}
             errorMessageId={errorMessageId}
             comfyServerId={comfyServerId}
+            refModExportOnly={refModExportOnly}
             onChange={onChange}
             onImageChange={onImageChange}
           />
@@ -133,6 +135,7 @@ type WorkflowNodeFieldDisclosureCardProps = {
   onRefreshOptions?: () => Promise<void> | void
   fieldIssues?: Record<string, string>
   comfyServerId?: number
+  refModExportOnly?: boolean
   onChange: (fieldId: string, value: WorkflowFieldDraftValue) => void
   onImageChange: (fieldId: string, image?: SelectedImageDraft) => Promise<void> | void
 }
@@ -148,6 +151,7 @@ export function WorkflowNodeFieldDisclosureCard({
   onRefreshOptions,
   fieldIssues,
   comfyServerId,
+  refModExportOnly,
   onChange,
   onImageChange,
 }: WorkflowNodeFieldDisclosureCardProps) {
@@ -162,7 +166,7 @@ export function WorkflowNodeFieldDisclosureCard({
       return count
     }
 
-    return count + validateMiniMaxH3DirectorNodeValue(value).length
+    return count + validateMiniMaxH3DirectorNodeValue(value, { refModExportOnly }).length
   }, 0)
   const hasFieldIssues = fields.some((field) => Boolean(fieldIssues?.[field.id]))
 
@@ -187,6 +191,7 @@ export function WorkflowNodeFieldDisclosureCard({
             onRefreshOptions={onRefreshOptions}
             issueMessage={fieldIssues?.[field.id]}
             comfyServerId={comfyServerId}
+            refModExportOnly={refModExportOnly}
             onChange={(value) => onChange(field.id, value)}
             onImageChange={(image) => onImageChange(field.id, image)}
           />

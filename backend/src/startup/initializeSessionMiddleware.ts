@@ -4,6 +4,7 @@ import session, { type Store as SessionStore } from 'express-session';
 import { initializeAuthDb, getAuthDb } from '../database/authDb';
 import { initializeUserSettingsDb } from '../database/userSettingsDb';
 import { initializeAudioDb } from '../database/audioDb';
+import { recoverInterruptedRefModRecords } from '../services/comfyui/refmodRecords';
 import { FileStoreService } from '../services/fileStoreService';
 import { reconcileLorebookFolders } from '../services/codex-chat/chatLorebookFiles';
 import { resolveSessionSecret } from '../utils/sessionSecret';
@@ -50,6 +51,7 @@ export async function initializeSessionMiddleware(
 ): Promise<void> {
   initializeAuthDb();
   initializeUserSettingsDb();
+  await recoverInterruptedRefModRecords();
   initializeAudioDb();
   const { moved } = FileStoreService.migrateLayout();
   if (moved) console.log(`[file-store] Moved ${moved} legacy item(s) into shared storage.`);

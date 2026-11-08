@@ -152,6 +152,7 @@ export interface ComfyUIHistoryItem {
     files?: ComfyUIOutputFile[];
     /** SaveAudio / SaveAudioAdvanced outputs (audio orders, and generation-tab runs that also make a sound). */
     audio?: ComfyUIOutputFile[];
+    dasiwa_refmod_export?: Array<{ name: string; members?: unknown[]; counts?: Record<string, number>; warnings?: unknown[]; message?: string }>;
   }>;
   status: {
     status_str: string;

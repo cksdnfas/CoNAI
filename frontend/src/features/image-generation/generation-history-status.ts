@@ -24,10 +24,19 @@ export function hasHistoryAudioResult(record: GenerationHistoryRecord) {
   return !record.actual_composite_hash && (record.audio_results?.length ?? 0) > 0
 }
 
+/** A RefMod export run: it saved a RefMod bundle on the ComfyUI server instead of a picture. */
+export function hasHistoryRefModResult(record: GenerationHistoryRecord) {
+  return !record.actual_composite_hash && Boolean(record.refmod_name)
+}
+
+function hasHistoryNonImageResult(record: GenerationHistoryRecord) {
+  return hasHistoryAudioResult(record) || hasHistoryRefModResult(record)
+}
+
 export function isHistoryMissingLinkedResult(record: GenerationHistoryRecord) {
   return record.generation_status === 'completed'
     && !record.actual_composite_hash
-    && !hasHistoryAudioResult(record)
+    && !hasHistoryNonImageResult(record)
     && (!record.composite_hash || record.result_file_status !== 'active')
 }
 
@@ -41,7 +50,7 @@ export function resolveHistoryDisplayStatus(record: GenerationHistoryRecord): Ge
     return 'failed'
   }
 
-  if ((record.queue_status === 'failed' || record.queue_status === 'cancelled') && !record.actual_composite_hash && !hasHistoryAudioResult(record)) {
+  if ((record.queue_status === 'failed' || record.queue_status === 'cancelled') && !record.actual_composite_hash && !hasHistoryNonImageResult(record)) {
     return 'failed'
   }
 
@@ -53,7 +62,7 @@ export function resolveHistoryDisplayStatus(record: GenerationHistoryRecord): Ge
     return 'failed'
   }
 
-  return record.actual_composite_hash || hasHistoryAudioResult(record) ? 'completed' : 'processing'
+  return record.actual_composite_hash || hasHistoryNonImageResult(record) ? 'completed' : 'processing'
 }
 
 export type HistoryRunRecoveryState = 'active' | 'completed' | 'retryable-failed' | 'retryable-cancelled' | 'failed-no-retry'

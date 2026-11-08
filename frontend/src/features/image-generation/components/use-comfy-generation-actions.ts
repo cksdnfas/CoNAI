@@ -57,6 +57,7 @@ export function useComfyGenerationActions({
   connectedServers,
   comfyServerTests,
   imageSaveOptions,
+  refModExportOnly = false,
   onHistoryRefresh,
   showSnackbar,
 }: {
@@ -69,6 +70,8 @@ export function useComfyGenerationActions({
   connectedServers: ServerLike[]
   comfyServerTests: Record<number, ComfyServerTestLike>
   imageSaveOptions?: GenerationImageSaveOptions
+  /** The workflow only saves a RefMod, so its Director needs no model connection. */
+  refModExportOnly?: boolean
   onHistoryRefresh: () => void
   showSnackbar: (input: { message: string; tone: 'info' | 'error' }) => void
 }) {
@@ -77,24 +80,24 @@ export function useComfyGenerationActions({
   const [isComfyGenerating, setIsComfyGenerating] = useState(false)
   const { requestPath: targetGroupPath } = useGenerationTargetGroupPath(IMAGE_GENERATION_TARGET_GROUP_KEY)
   const selectedWorkflowId = selectedWorkflow?.id ?? null
-  const { fieldIssues, clearFieldIssue, clearFieldIssues, validate } = useComfyFieldValidation(selectedWorkflowId, selectedWorkflowFields, workflowDraft, showSnackbar)
+  const { fieldIssues, clearFieldIssue, clearFieldIssues, validate } = useComfyFieldValidation(selectedWorkflowId, selectedWorkflowFields, workflowDraft, showSnackbar, { refModExportOnly })
 
   /**
    * Validate the currently selected workflow fields before any generation request.
    * Every offending field is marked in place; the snackbar only summarizes the first one.
    */
-  const validateComfyGeneration = () => {
+  const validateComfyGeneration = (options?: { announce?: boolean }) => {
     if (!selectedWorkflow) {
       showSnackbar({ message: t({ ko: '먼저 ComfyUI 워크플로우를 선택해줘.', en: 'Select a ComfyUI workflow first.' }), tone: 'error' })
       return false
     }
 
-    return validate()
+    return validate(options)
   }
 
-  /** Mark and focus the invalid fields without submitting (used while Generate is disabled). */
+  /** Mark and focus the invalid fields without submitting (used while Generate is disabled); the readiness alert already explains why. */
   const revealComfyFieldIssues = () => {
-    validateComfyGeneration()
+    validateComfyGeneration({ announce: false })
   }
 
   /** Build the shared request payload for one ComfyUI queue job. */
