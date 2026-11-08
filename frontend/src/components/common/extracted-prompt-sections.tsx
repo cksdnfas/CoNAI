@@ -59,6 +59,8 @@ interface ExtractedPromptCardProps {
   item: ExtractedPromptCardItem
   variant?: ExtractedPromptSectionsVariant
   onAddSearchFilter?: (scope: ExtractedPromptActionScope, tag: string) => void
+  isRegionActive?: boolean
+  onRegionHover?: (index: number | null) => void
 }
 
 function getPromptAccentClassName(tone: ExtractedPromptCardItem['tone']) {
@@ -141,7 +143,7 @@ function ExtractedPromptGroupedBody({ sections, actionScope, onAddSearchFilter }
   )
 }
 
-function ExtractedPromptCard({ item, variant = 'card', onAddSearchFilter }: ExtractedPromptCardProps) {
+function ExtractedPromptCard({ item, variant = 'card', onAddSearchFilter, isRegionActive = false, onRegionHover }: ExtractedPromptCardProps) {
   const { showSnackbar } = useSnackbar()
   const { t } = useI18n()
   const [expanded, setExpanded] = useState(true)
@@ -156,6 +158,16 @@ function ExtractedPromptCard({ item, variant = 'card', onAddSearchFilter }: Extr
   }
 
   const isAccent = variant === 'accent'
+  const regionIndex = item.regionIndex
+  const regionHoverProps = regionIndex !== undefined && onRegionHover
+    ? {
+        tabIndex: 0,
+        onMouseEnter: () => onRegionHover(regionIndex),
+        onMouseLeave: () => onRegionHover(null),
+        onFocus: () => onRegionHover(regionIndex),
+        onBlur: () => onRegionHover(null),
+      }
+    : undefined
   const content = item.groupedSections?.length ? (
     <ExtractedPromptGroupedBody sections={item.groupedSections} actionScope={item.actionScope} onAddSearchFilter={onAddSearchFilter} />
   ) : item.actionScope && item.actionTerms?.length ? (
@@ -165,7 +177,10 @@ function ExtractedPromptCard({ item, variant = 'card', onAddSearchFilter }: Extr
   )
 
   return (
-    <section className={isAccent ? 'space-y-1.5' : 'overflow-hidden rounded-sm bg-surface-lowest'}>
+    <section
+      className={cn(isAccent ? 'space-y-1.5' : 'overflow-hidden rounded-sm bg-surface-lowest', isRegionActive && 'bg-fill')}
+      {...regionHoverProps}
+    >
       <div className={cn('flex items-center gap-2', isAccent ? '-ml-1' : 'px-4 pt-3 pb-1')}>
         <IconButton
           size="icon-xs"
@@ -178,7 +193,7 @@ function ExtractedPromptCard({ item, variant = 'card', onAddSearchFilter }: Extr
           <ChevronDown className={cn('h-4 w-4 transition-transform', expanded ? 'rotate-0' : '-rotate-90')} />
         </IconButton>
 
-        <div className={cn('min-w-0 font-semibold', isAccent ? 'text-xs' : 'text-sm')} style={getPromptToneStyle(item.tone)}>{item.title}</div>
+        <div className={cn('min-w-0 font-semibold', isAccent ? 'text-xs' : 'text-sm')} style={item.accentColor ? { color: item.accentColor } : getPromptToneStyle(item.tone)}>{item.title}</div>
 
         <div className="ml-auto flex items-center gap-2">
           {(item.badges ?? []).map((badge) => (
@@ -199,7 +214,12 @@ function ExtractedPromptCard({ item, variant = 'card', onAddSearchFilter }: Extr
 
       {expanded ? (
         isAccent ? (
-          <div className={cn('border-l-2 pl-3 text-sm whitespace-pre-wrap break-words', getPromptAccentClassName(item.tone))}>{content}</div>
+          <div
+            className={cn('border-l-2 pl-3 text-sm whitespace-pre-wrap break-words', getPromptAccentClassName(item.tone))}
+            style={item.accentColor ? { borderColor: item.accentColor } : undefined}
+          >
+            {content}
+          </div>
         ) : (
           <div className="px-4 pt-2 pb-4 text-base text-foreground whitespace-pre-wrap break-words">{content}</div>
         )
@@ -213,10 +233,15 @@ export function ExtractedPromptSections({
   items,
   variant = 'card',
   onAddSearchFilter,
+  activeRegionIndex = null,
+  onRegionHover,
 }: {
   items: ExtractedPromptCardItem[]
   variant?: ExtractedPromptSectionsVariant
   onAddSearchFilter?: (scope: ExtractedPromptActionScope, tag: string) => void
+  /** Layout prompt cards: the highlighted region, and a callback fired as the pointer or focus moves between region cards. */
+  activeRegionIndex?: number | null
+  onRegionHover?: (index: number | null) => void
 }) {
   if (items.length === 0) {
     return null
@@ -225,7 +250,14 @@ export function ExtractedPromptSections({
   return (
     <div className={variant === 'accent' ? 'space-y-5' : 'space-y-3'}>
       {items.map((item) => (
-        <ExtractedPromptCard key={item.id} item={item} variant={variant} onAddSearchFilter={onAddSearchFilter} />
+        <ExtractedPromptCard
+          key={item.id}
+          item={item}
+          variant={variant}
+          onAddSearchFilter={onAddSearchFilter}
+          isRegionActive={item.regionIndex !== undefined && item.regionIndex === activeRegionIndex}
+          onRegionHover={onRegionHover}
+        />
       ))}
     </div>
   )

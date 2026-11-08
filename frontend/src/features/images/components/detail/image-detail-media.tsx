@@ -15,6 +15,7 @@ import {
 import { EnhancedVideoPlayer } from './enhanced-video-player'
 import { ImageDetailMediaFrame } from './image-detail-media-frame'
 import { ImageDetailMediaToolbar } from './image-detail-media-toolbar'
+import { PromptRegionOverlay } from './prompt-region-overlay'
 import { renderPixelPreviewSample } from './image-detail-pixel-preview'
 import {
   getPixelPreviewProfile,
@@ -283,6 +284,7 @@ function InteractiveImageDetailMedia({
             shouldRenderPixelPreview={shouldRenderPixelPreview}
             isPixelPreviewReady={isPixelPreviewReady}
             applyingLabel={t({ ko: '적용 중', en: 'Applying' })}
+            overlay={<PromptRegionOverlay image={image} />}
             onPrimaryImageLoad={handlePrimaryImageLoad}
             onRenderError={() => setHasRenderError(true)}
           />

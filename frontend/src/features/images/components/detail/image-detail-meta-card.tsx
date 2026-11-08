@@ -27,8 +27,10 @@ import { updateKaloscopeSettings } from '@/lib/api-settings-kaloscope'
 import { buildArtistPromptTagUrl } from '@/lib/artist-prompt-links'
 import { copyTextToClipboard } from '@/lib/clipboard'
 import { buildDanbooruTagUrl } from '@/lib/danbooru-tag-links'
-import { buildGroupedPromptSections, formatGroupedPromptText, getImageExtractedPromptCards, getImagePromptTermItems, type ExtractedPromptActionScope, type PromptGroupingDisplayOptions } from '@/lib/image-extracted-prompts'
+import { buildGroupedPromptSections, formatGroupedPromptText, getImageExtractedPromptCards, getImageLayoutPrompt, getImagePromptTermItems, type ExtractedPromptActionScope, type LayoutPromptView, type PromptGroupingDisplayOptions } from '@/lib/image-extracted-prompts'
 import type { ImageRecord } from '@/types/image'
+import { useActivePromptRegion, useSetActivePromptRegion } from './prompt-region-highlight-context'
+import { PromptRegionMap } from './prompt-region-map'
 import { ArtistPromptLinkSettingsModal } from './artist-prompt-link-settings-modal'
 import { DetailSettingsFlyout } from './detail-settings-flyout'
 import { getDownloadName, getImageArtistPromptSection, getImageAutoPromptContent, getImageAutoPromptCopyText, getImageGenerationParamItems, parseImageTimestamp } from './image-detail-utils'
@@ -195,7 +197,11 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
   const [promptGroupingOptions, setPromptGroupingOptions] = useState<PromptGroupingDisplayOptions>(() => loadPromptGroupingOptions())
   const [isPromptGroupingOptionsOpen, setIsPromptGroupingOptionsOpen] = useState(false)
   const [isArtistPromptSettingsOpen, setIsArtistPromptSettingsOpen] = useState(false)
-  const extractedPromptCards = useMemo(() => getImageExtractedPromptCards(image, t), [image, t])
+  const [layoutView, setLayoutView] = useState<LayoutPromptView>('regions')
+  const activePromptRegion = useActivePromptRegion()
+  const setActivePromptRegion = useSetActivePromptRegion()
+  const layoutPrompt = useMemo(() => getImageLayoutPrompt(image), [image])
+  const extractedPromptCards = useMemo(() => getImageExtractedPromptCards(image, t, { layoutView }), [image, layoutView, t])
 
   const handlePromptDisplayModeChange = (nextMode: PromptDisplayMode) => {
     setPromptDisplayMode(nextMode)
@@ -403,27 +409,50 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
       {extractedPromptCards.length > 0 ? (
         <MetaSection
           title={t({ ko: '프롬프트', en: 'Prompt' })}
-          actions={canTogglePromptGrouping ? (
+          actions={layoutPrompt || canTogglePromptGrouping ? (
             <>
-              <SegmentedControl
-                value={promptDisplayMode}
-                items={[
-                  { value: 'plain', label: t('images.components.detail.image.detail.meta.card.plain') },
-                  { value: 'grouped', label: t('images.components.detail.image.detail.meta.card.group') },
-                ]}
-                onChange={(nextMode) => handlePromptDisplayModeChange(nextMode as PromptDisplayMode)}
-                size="xs"
-              />
-              <PromptGroupingOptionsFlyout
-                isOpen={isPromptGroupingOptionsOpen}
-                options={promptGroupingOptions}
-                onToggle={() => setIsPromptGroupingOptionsOpen((current) => !current)}
-                onChange={handlePromptGroupingOptionsChange}
-              />
+              {layoutPrompt ? (
+                <SegmentedControl
+                  value={layoutView}
+                  items={[
+                    { value: 'regions', label: t({ ko: '영역별', en: 'Regions' }) },
+                    { value: 'chips', label: t({ ko: '칩', en: 'Chips' }) },
+                    { value: 'raw', label: t({ ko: '전체', en: 'Full' }) },
+                  ]}
+                  onChange={(nextView) => setLayoutView(nextView as LayoutPromptView)}
+                  size="xs"
+                />
+              ) : null}
+              {canTogglePromptGrouping ? (
+                <>
+                  <SegmentedControl
+                    value={promptDisplayMode}
+                    items={[
+                      { value: 'plain', label: t('images.components.detail.image.detail.meta.card.plain') },
+                      { value: 'grouped', label: t('images.components.detail.image.detail.meta.card.group') },
+                    ]}
+                    onChange={(nextMode) => handlePromptDisplayModeChange(nextMode as PromptDisplayMode)}
+                    size="xs"
+                  />
+                  <PromptGroupingOptionsFlyout
+                    isOpen={isPromptGroupingOptionsOpen}
+                    options={promptGroupingOptions}
+                    onToggle={() => setIsPromptGroupingOptionsOpen((current) => !current)}
+                    onChange={handlePromptGroupingOptionsChange}
+                  />
+                </>
+              ) : null}
             </>
           ) : undefined}
         >
-          <ExtractedPromptSections items={displayedPromptCards} variant="accent" onAddSearchFilter={canViewImages ? handleAddExtractedPromptSearchFilter : undefined} />
+          {layoutPrompt && layoutView !== 'raw' ? <PromptRegionMap image={image} layout={layoutPrompt} /> : null}
+          <ExtractedPromptSections
+            items={displayedPromptCards}
+            variant="accent"
+            onAddSearchFilter={canViewImages ? handleAddExtractedPromptSearchFilter : undefined}
+            activeRegionIndex={activePromptRegion}
+            onRegionHover={setActivePromptRegion}
+          />
         </MetaSection>
       ) : null}
 

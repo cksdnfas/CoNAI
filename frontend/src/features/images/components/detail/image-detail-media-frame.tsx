@@ -1,5 +1,5 @@
 import { LoaderCircle } from 'lucide-react'
-import type { CSSProperties, RefObject, SyntheticEvent as ReactSyntheticEvent } from 'react'
+import type { CSSProperties, ReactNode, RefObject, SyntheticEvent as ReactSyntheticEvent } from 'react'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 
@@ -18,6 +18,8 @@ interface ImageDetailMediaFrameProps {
   shouldRenderPixelPreview: boolean
   isPixelPreviewReady: boolean
   applyingLabel: string
+  /** Drawn over the image itself, so it follows the same fit, zoom and rotation. */
+  overlay?: ReactNode
   onPrimaryImageLoad: (event: ReactSyntheticEvent<HTMLImageElement>) => void
   onRenderError: () => void
 }
@@ -32,6 +34,7 @@ export function ImageDetailMediaFrame({
   shouldRenderPixelPreview,
   isPixelPreviewReady,
   applyingLabel,
+  overlay,
   onPrimaryImageLoad,
   onRenderError,
 }: ImageDetailMediaFrameProps) {
@@ -59,6 +62,7 @@ export function ImageDetailMediaFrame({
           style={{ imageRendering: 'pixelated' }}
         />
       ) : null}
+      {overlay}
       {shouldRenderPixelPreview && !isPixelPreviewReady ? (
         <Badge variant="overlay" className="pointer-events-none absolute top-2 right-2">
           <LoaderCircle className="animate-spin" />

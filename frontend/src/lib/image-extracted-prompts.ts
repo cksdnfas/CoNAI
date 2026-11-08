@@ -3,6 +3,7 @@ import { shellCatalog } from '@/i18n/resources/shell'
 import type { TranslationInput, TranslationParams } from '@/i18n'
 import type { ImageAiRawNaiParameters, ImageRecord } from '@/types/image'
 import type { PromptGroupResolveItem } from '@/types/prompt'
+import { getLayoutRegionColor, parseLayoutPrompt, type LayoutPrompt } from '@/lib/layout-prompt'
 
 export interface ExtractedPromptActionTerm {
   display: string
@@ -38,7 +39,13 @@ export interface ExtractedPromptCardItem {
   actionTerms?: ExtractedPromptActionTerm[]
   badges?: string[]
   groupedSections?: ExtractedPromptGroupedSection[]
+  /** Layout (bbox) prompts: the region this card describes, so hovering it can mark the region on the image. */
+  regionIndex?: number
+  accentColor?: string
 }
+
+/** How a layout (bbox) prompt is shown: per region as text, per region as tag chips, or the raw JSON. */
+export type LayoutPromptView = 'regions' | 'chips' | 'raw'
 
 interface ExtractedPromptCardLabels {
   positivePrompt: string
@@ -306,13 +313,23 @@ function getPromptGroupingKind(
   return visiblePath.length <= 1 ? 'root' : 'child'
 }
 
+function getImagePositivePromptText(image: ImageRecord) {
+  return getTrimmedText(image.ai_metadata?.prompts?.prompt) ?? getRawPositivePrompt(image.ai_metadata?.raw_nai_parameters)
+}
+
+/** The image's layout (bbox) prompt, or null for ordinary prompts. */
+export function getImageLayoutPrompt(image: ImageRecord) {
+  return parseLayoutPrompt(getImagePositivePromptText(image))
+}
+
 export function getImagePromptTermItems(image: ImageRecord, type: 'positive' | 'negative') {
   const rawNaiParameters = image.ai_metadata?.raw_nai_parameters
-  const promptText = type === 'positive'
-    ? getTrimmedText(image.ai_metadata?.prompts?.prompt) ?? getRawPositivePrompt(rawNaiParameters)
-    : getTrimmedText(image.ai_metadata?.prompts?.negative_prompt) ?? getRawNegativePrompt(rawNaiParameters)
+  if (type === 'positive') {
+    // A layout prompt is JSON, not tags: splitting it on commas and brackets only produces fragments.
+    return getImageLayoutPrompt(image) ? [] : getPromptTermItems(getImagePositivePromptText(image))
+  }
 
-  return getPromptTermItems(promptText)
+  return getPromptTermItems(getTrimmedText(image.ai_metadata?.prompts?.negative_prompt) ?? getRawNegativePrompt(rawNaiParameters))
 }
 
 export function getImageLoraModels(image: ImageRecord) {
@@ -406,10 +423,59 @@ export function formatGroupedPromptText(sections: ExtractedPromptGroupedSection[
     .join('\n\n')
 }
 
+function getLayoutRegionKindLabel(label: string, translate?: TranslateText) {
+  const text = (ko: string, en: string) => (translate ? translate({ ko, en }) : ko)
+  if (label === 'character') return text('인물', 'Character')
+  if (label === 'object') return text('오브젝트', 'Object')
+  if (label === 'text') return text('텍스트', 'Text')
+  return label
+}
+
+function buildLayoutPromptCards(layout: LayoutPrompt, view: LayoutPromptView, labels: ExtractedPromptCardLabels, translate?: TranslateText) {
+  const text = (ko: string, en: string) => (translate ? translate({ ko, en }) : ko)
+
+  if (view === 'raw') {
+    return [{ id: 'positive-prompt', title: labels.positivePrompt, text: layout.formatted, tone: 'positive' }] satisfies ExtractedPromptCardItem[]
+  }
+
+  const asChips = view === 'chips'
+  const cards: ExtractedPromptCardItem[] = []
+
+  if (layout.summaryCaption || layout.meta.length > 0) {
+    const summaryCaption = layout.summaryCaption ?? ''
+    cards.push({
+      id: 'layout-main',
+      title: text('메인 프롬프트', 'Main prompt'),
+      text: summaryCaption,
+      tone: 'positive',
+      badges: [...layout.meta, ...(layout.canvas ? [layout.canvas] : [])],
+      ...(asChips ? { actionScope: 'positive' as const, actionTerms: getPromptTermItems(summaryCaption) } : {}),
+    })
+  }
+
+  layout.regions.forEach((region) => {
+    const body = region.text ? `${region.caption}\n${text('텍스트', 'Text')}: "${region.text}"` : region.caption
+    const textTerm = region.text ? toPromptActionTerm(`"${region.text}"`, region.text) : null
+    const terms = [...getPromptTermItems(region.caption), ...(textTerm ? [textTerm] : [])]
+    cards.push({
+      id: `layout-region-${region.index + 1}`,
+      title: `${region.index + 1} · ${getLayoutRegionKindLabel(region.label, translate)}`,
+      text: body,
+      tone: 'character',
+      regionIndex: region.index,
+      accentColor: getLayoutRegionColor(region.index),
+      ...(asChips ? { actionScope: 'positive' as const, actionTerms: terms } : {}),
+    })
+  })
+
+  return cards
+}
+
 /** Build reusable extracted prompt card data from an image record. */
 export function getImageExtractedPromptCards(
   image: ImageRecord,
   translate?: TranslateText,
+  options?: { layoutView?: LayoutPromptView },
 ) {
   const rawNaiParameters = image.ai_metadata?.raw_nai_parameters
   const { positivePrompt: positiveText, negativePrompt: negativeText, characterPrompts: characterTexts } = getImageExtractedPromptSummary(image)
@@ -434,7 +500,11 @@ export function getImageExtractedPromptCards(
     })
   }
 
-  if (positiveText) {
+  const layoutPrompt = positiveText ? parseLayoutPrompt(positiveText) : null
+
+  if (layoutPrompt) {
+    cards.push(...buildLayoutPromptCards(layoutPrompt, options?.layoutView ?? 'regions', labels, translate))
+  } else if (positiveText) {
     cards.push({
       id: 'positive-prompt',
       title: labels.positivePrompt,

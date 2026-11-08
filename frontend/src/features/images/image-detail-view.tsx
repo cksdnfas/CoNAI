@@ -26,6 +26,7 @@ import { ImageDetailMetaCard } from './components/detail/image-detail-meta-card'
 import { ImageDetailSimilaritySection } from './components/detail/image-detail-similarity-section'
 import { ImageDetailVectorSimilaritySection } from './components/detail/image-detail-vector-similarity-section'
 import { SimilarImageScoreOverlay } from './components/detail/similarity-score-overlay'
+import { PromptRegionHighlightProvider } from './components/detail/prompt-region-highlight-provider'
 import { getImageListMediaKind } from './components/image-list/image-list-utils'
 import {
   getDownloadName,
@@ -156,7 +157,15 @@ interface ImageDetailViewProps {
 }
 
 /** Render the shared image detail body so page and modal presentations stay aligned. */
-export function ImageDetailView({ compositeHash, presentation = 'page', initialImage = null, renderHeader, modalNavigation, stepNavigation, accessOptions, onDeleted }: ImageDetailViewProps) {
+export function ImageDetailView(props: ImageDetailViewProps) {
+  return (
+    <PromptRegionHighlightProvider resetKey={props.compositeHash}>
+      <ImageDetailViewBody {...props} />
+    </PromptRegionHighlightProvider>
+  )
+}
+
+function ImageDetailViewBody({ compositeHash, presentation = 'page', initialImage = null, renderHeader, modalNavigation, stepNavigation, accessOptions, onDeleted }: ImageDetailViewProps) {
   const { t } = useI18n()
   const canUseSplitPaneScroll = useMinWidth(1280)
   // The modal may share the screen with the docked chat: its own width picks the layout, not the viewport's.
