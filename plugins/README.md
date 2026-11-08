@@ -13,6 +13,8 @@ This directory contains the shared SDK and four installable development examples
 | `chat-instructions` | A trusted server module, persistent rules, chat hooks and an MCP tool. |
 | `generation-helper` | A generation layout block that reads and fills the screen's form, a button next to Generate and the generation queue hooks. |
 
+`moss-bbox-studio` is an official feature plugin rather than an example. It ships inside the app build: `backend`'s `build:bundled-plugins` runs `node scripts/build-plugin.mjs --bundled <name>` (add a name there for another official plugin), the SEA/portable builds copy `bundled-plugins/` next to the app, and the server installs it at startup, off by default. Official packages can be turned on and off only; removal and any ZIP, Git or editor install over the same ID are refused, and an app update replaces them in place keeping the on/off state and data. It is: a MOSS-Image layout (bounding box) editor that builds the JSON prompt, queues it on a registered ComfyUI workflow through its Marked Fields, and reads layouts back from existing images. It also shows the `opensImages` page and `api.launch`, below.
+
 Build an example with `node scripts/build-plugin.mjs text-editor`, then upload `build-output/plugins/text-editor.zip` at `/#/settings?section=plugins` and enable it as an administrator.
 
 Personal packages belong in `local-plugins/<plugin-name>/`, excluded from Git and Docker build contexts. Build them explicitly with `node scripts/build-plugin.mjs --local <plugin-name>`; ZIPs go to `build-output/local-plugins/`. Keep package-specific documentation and tests under `local-plugins/` too. These local sources need a separate personal backup; a repository clone does not include them. Public examples and host tests must not depend on personal packages.
@@ -72,6 +74,20 @@ Administrators can install and update a plugin from a public HTTPS repository on
 | `DELETE /api/plugins/:pluginId/source` | Unlink only; the plugin stays |
 
 Administrator plugin lists and install responses carry `InstalledPlugin.source`. A ZIP or editor install over a linked plugin keeps the link and reports `modified: true`; removing the plugin drops it. Updates are never applied automatically; the `check_plugin_updates` MCP tool only checks. Host upgrade required; no SDK or manifest change.
+
+### Opening a page with an image
+
+A page with `"opensImages": true` is listed in the ⋯ menu of an image's detail view (still images, page and viewer) as "<page title>에서 열기". Choosing it navigates to `/ext/<pluginId>/<pageId>?image=<compositeHash>`. The host accepts only a 32-character hexadecimal hash, ignores `?image=` for pages without `opensImages`, and passes it to the page once, in the connect message. The SDK exposes it as `api.launch`:
+
+```js
+const api = await connectPlugin(handlers);
+if (api.supports('launch.image') && api.launch?.image) {
+  const hash = api.launch.image.compositeHash; // an identifier, not a grant
+  const detail = await (await api.app.fetch(`/api/images/${hash}`)).json(); // normal account permissions apply
+}
+```
+
+`api.launch` is `null` when the page is opened another way and on hosts without the feature. The hash grants nothing: reading the image, its metadata or media uses the same native routes and account permissions as any other call. No approval, revision or retry semantics change. Requires a host and SDK that list `launch.image` in `api.host.features`; older hosts reject a manifest that uses `opensImages`.
 
 ### Package files
 

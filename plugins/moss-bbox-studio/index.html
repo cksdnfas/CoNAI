@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>MOSS BBox Studio</title><link rel="stylesheet" href="conai-plugin.css"><link rel="stylesheet" href="style.css"><script type="module" src="main.js"></script></head>
+<body class="conai-app">
+<header class="conai-header">
+  <h1 class="conai-title">MOSS BBox Studio</h1>
+  <nav class="conai-tabs" id="tabs" aria-label="화면">
+    <button type="button" data-tab="editor">편집기</button>
+    <button type="button" data-tab="results">결과 <span id="job-count"></span></button>
+    <button type="button" data-tab="setup">연결 설정</button>
+  </nav>
+  <span class="conai-spacer"></span>
+  <button type="button" id="import-open">이미지 가져오기</button>
+  <button type="button" id="new-draft" class="ghost">새로 시작</button>
+</header>
+<div id="banner" class="banner" hidden></div>
+
+<div id="view-editor" class="conai-split">
+  <aside class="conai-sidebar" aria-label="영역 목록">
+    <p class="conai-overline">영역 <span id="region-count"></span></p>
+    <ul id="layers" class="layers"></ul>
+    <button type="button" id="add-region">+ 영역 추가</button>
+    <p class="muted hint">번호가 클수록 위에 그려져. 순서는 선택한 영역에서 바꿔.</p>
+  </aside>
+  <section class="conai-pane stage" aria-label="캔버스">
+    <div class="stage-bar">
+      <div class="conai-segmented" id="tools" role="group" aria-label="도구">
+        <button type="button" data-tool="select">선택</button>
+        <button type="button" data-tool="draw">그리기</button>
+      </div>
+      <label class="tool">크기 <select id="size" aria-label="캔버스 크기"></select></label>
+      <label class="tool" id="img-toggle" hidden><input type="checkbox" id="show-img" checked> 원본 이미지 보기</label>
+    </div>
+    <div class="cvwrap"><div id="canvas" class="cv"></div></div>
+    <p class="muted hint">빈 곳을 끌어 영역을 그리고, 박스를 끌어 옮겨. 모서리 네모로 크기를 바꿔. 이미지 파일을 놓으면 가져와.</p>
+  </section>
+  <aside class="conai-sidebar end insp" aria-label="프롬프트">
+    <section>
+      <p class="conai-overline">메인 프롬프트</p>
+      <textarea id="summary" rows="5" aria-label="메인 프롬프트" placeholder="장면 전체의 분위기와 스타일을 적어줘"></textarea>
+      <label>메타 태그 <input id="meta" placeholder="illustration, anime" aria-label="메타 태그"></label>
+    </section>
+    <section id="inspector"></section>
+    <section id="negative-box" hidden>
+      <p class="conai-overline">네거티브 프롬프트</p>
+      <textarea id="negative" rows="3" aria-label="네거티브 프롬프트"></textarea>
+    </section>
+  </aside>
+</div>
+<div id="view-results" class="conai-pane" hidden></div>
+<div id="view-setup" class="conai-pane" hidden></div>
+
+<footer class="genbar" id="genbar">
+  <label class="tool">워크플로우 <span id="wf-name" class="wf-name"></span></label>
+  <label class="tool">시드 <input type="number" id="seed" min="0" placeholder="비우면 새 시드" aria-label="시드"></label>
+  <span class="conai-spacer"></span>
+  <span class="badge" id="size-badge"></span>
+  <button type="button" id="generate" class="primary">생성 요청</button>
+</footer>
+<details class="json" id="json-box"><summary>모델로 보낼 JSON 미리보기</summary><pre id="json" tabindex="0"></pre></details>
+<p id="status" role="status" class="status">연결 중…</p>
+
+<dialog id="import-dialog" aria-labelledby="import-title">
+  <h2 id="import-title">이미지 가져오기</h2>
+  <p class="muted">MOSS-Image로 만든 이미지의 프롬프트(JSON)에서 영역을 읽어 와. 영역은 고치고 다시 생성할 수 있어.</p>
+  <label>이미지 파일 <input type="file" id="file" accept="image/*"></label>
+  <label>라이브러리 이미지 해시 <input id="hash-input" maxlength="32" placeholder="32자리 해시" autocomplete="off"></label>
+  <p class="muted hint">이미지 상세의 ⋯ 메뉴에서 “MOSS BBox Studio에서 열기”로도 가져올 수 있어.</p>
+  <div class="toolbar"><button type="button" id="import-hash" class="primary">해시로 가져오기</button><button type="button" id="import-close" class="ghost">닫기</button></div>
+</dialog>
+</body></html>

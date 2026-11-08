@@ -10,6 +10,7 @@ import { useImageDeleteMenuAction } from './image-delete-action'
 import { ImageEditAction } from './image-edit-action'
 import { ImageGroupAssignAction } from './image-group-assign-action'
 import { useImageMetadataEditMenuAction } from './image-metadata-edit-action'
+import { useImagePluginMenuActions } from './image-plugin-action'
 import { useImageSpriteMenuAction } from './image-sprite-action'
 
 interface ImageDetailActionsProps {
@@ -43,10 +44,12 @@ export function ImageDetailActions({ downloadUrl, image, editOpen, onEditOpenCha
   const metadataAction = useImageMetadataEditMenuAction(image)
   const spriteAction = useImageSpriteMenuAction(image)
   const deleteAction = useImageDeleteMenuAction(image, onDeleted)
+  const pluginActions = useImagePluginMenuActions(image)
   const moreEntries: ActionMenuEntry[] = [
     metadataAction,
     similarity?.available ? { key: 'similarity', icon: ScanSearch, label: t({ ko: '유사/중복 검사', en: 'Check similar/duplicates' }), onSelect: similarity.onRequest } : null,
     spriteAction,
+    ...pluginActions,
     '-',
     deleteAction,
   ]

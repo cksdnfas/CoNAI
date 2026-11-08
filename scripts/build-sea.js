@@ -178,6 +178,7 @@ try {
 
 copyUserGuides(path.join(PKG_OUTPUT_DIR, 'docs', 'GUIDE'));
 fs.copySync(path.join(ROOT_DIR, 'backend', 'dist', 'plugin-sdk'), path.join(PKG_OUTPUT_DIR, 'plugin-sdk'));
+fs.copySync(path.join(ROOT_DIR, 'backend', 'dist', 'bundled-plugins'), path.join(PKG_OUTPUT_DIR, 'bundled-plugins'));
 
 // Step 8: Copy frontend assets
 console.log('Step 8: Packaging frontend assets...');

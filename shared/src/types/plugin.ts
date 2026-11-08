@@ -23,7 +23,11 @@ export type PluginPage = {
   menu?: boolean
   /** Header menu and launcher icon; absent: the puzzle icon. */
   icon?: PluginPageIcon
+  /** true: the image detail view offers "open in this plugin"; the page then reads the image as `api.launch.image`. */
+  opensImages?: boolean
 }
+/** What a page was opened with besides files: the library image whose detail view opened it. */
+export type PluginLaunch = { image: { compositeHash: string } }
 /** One of the plugin's pages shown inline as a block of the listed layout surfaces. */
 export type PluginGenerationBlock = { id: string; page: string; surfaces: GenerationLayoutSurface[]; height?: number }
 /** A button next to Generate on the listed surfaces; the server module's `generation.action` hook answers it. */
@@ -80,7 +84,11 @@ export type PluginSource = {
   /** The last check found a commit other than `commit`. */
   updateAvailable: boolean
 }
-export type InstalledPlugin = { manifest: PluginManifest; enabled: boolean; installedAt: string; server?: PluginServerStatus; source?: PluginSource }
+export type InstalledPlugin = {
+  manifest: PluginManifest; enabled: boolean; installedAt: string; server?: PluginServerStatus; source?: PluginSource
+  /** An official package that ships inside the app: it can be turned on and off, not removed or replaced by an install. */
+  bundled?: boolean
+}
 /** What installing from Git would change. Reviewing installs nothing; apply `reviewId` with `digest` before `expiresAt`. */
 export type PluginSourceReview = {
   reviewId: string; expiresAt: number

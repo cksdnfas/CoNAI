@@ -37,4 +37,4 @@ export function pluginNativeApiHeaders(input: Record<string, string> = {}): Head
 
 /** No plugin-specific deadline; callers may set one and can always cancel. */
 export const PLUGIN_REQUEST_TIMEOUT_MS = 0
-export const PLUGIN_SDK_FEATURES = ['app.fetch', 'app.cancel', 'app.wait', 'media.open', 'preview', 'storage', 'events', 'navigation', 'request.abort', 'errors.structured', 'llm.asset', 'llm.profile', 'llm.judge', 'llm.decide', 'llm.measure', 'llm.room', 'llm.forgetRooms', 'llm.discard', 'page.form'] as const
+export const PLUGIN_SDK_FEATURES = ['app.fetch', 'app.cancel', 'app.wait', 'media.open', 'preview', 'storage', 'events', 'navigation', 'request.abort', 'errors.structured', 'llm.asset', 'llm.profile', 'llm.judge', 'llm.decide', 'llm.measure', 'llm.room', 'llm.forgetRooms', 'llm.discard', 'page.form', 'launch.image'] as const

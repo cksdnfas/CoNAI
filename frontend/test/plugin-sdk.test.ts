@@ -80,6 +80,7 @@ test('plugin SDK preserves cancellation, structured errors, binary uploads and r
 
   await t.test('a page outside a layout has no context; form reads and fills go to the host', async () => {
     assert.equal(api.context, null)
+    assert.equal(api.launch, null)
     let incoming = once(channel.port1, 'message')
     const form = api.page.form()
     const [read] = await incoming

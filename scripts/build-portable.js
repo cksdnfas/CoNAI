@@ -356,6 +356,7 @@ if (ffmpegCopied === 0) {
 
 copyUserGuides(path.join(appDir, 'docs', 'GUIDE'));
 fs.copySync(path.join(BACKEND_DIST, 'plugin-sdk'), path.join(appDir, 'plugin-sdk'));
+fs.copySync(path.join(BACKEND_DIST, 'bundled-plugins'), path.join(appDir, 'bundled-plugins'));
 
 // Step 6: Copy Python scripts and dependencies
 console.log('Step 6: Copying Python scripts...');

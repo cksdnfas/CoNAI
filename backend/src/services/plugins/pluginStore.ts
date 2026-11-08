@@ -54,6 +54,8 @@ export function pluginDb(): Database.Database {
     if (!(db.prepare('PRAGMA table_info(plugin_llm_requests)').all() as Array<{ name: string }>).some(column => column.name === 'delivery')) db.exec('ALTER TABLE plugin_llm_requests ADD COLUMN delivery TEXT')
     // The administrator who turned a plugin on: its server module's own calls (timers, startup) run as them.
     if (!(db.prepare('PRAGMA table_info(plugins)').all() as Array<{ name: string }>).some(column => column.name === 'enabled_by')) db.exec('ALTER TABLE plugins ADD COLUMN enabled_by INTEGER')
+    // Official packages that ship inside the app build: only an app update replaces them, and they can't be removed.
+    if (!(db.prepare('PRAGMA table_info(plugins)').all() as Array<{ name: string }>).some(column => column.name === 'bundled')) db.exec('ALTER TABLE plugins ADD COLUMN bundled INTEGER NOT NULL DEFAULT 0')
     initialized.add(db)
   }
   return db

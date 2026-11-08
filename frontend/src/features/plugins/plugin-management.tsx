@@ -194,6 +194,7 @@ export function PluginManagement({ assistantPage, pageContext }: { assistantPage
               extra={(
                 <>
                   <Chip size="sm" tone="muted" mono>{manifest.version}</Chip>
+                  {plugin.bundled ? <Chip size="sm">{t({ ko: '공식', en: 'Official' })}</Chip> : null}
                   {isAdmin && plugin.source?.updateAvailable ? <Chip size="sm">{t({ ko: '업데이트', en: 'Update' })}</Chip> : null}
                   {plugin.server?.state === 'error' ? <ResourceRowStatus tone="destructive" tip={plugin.server.error}>{t({ ko: '서버 오류', en: 'Server error' })}</ResourceRowStatus> : null}
                 </>
@@ -221,6 +222,7 @@ export function PluginManagement({ assistantPage, pageContext }: { assistantPage
           <>
             <ModalBody spacing="lg">
               {opened.manifest.description ? <p className="text-sm">{opened.manifest.description}</p> : null}
+              {opened.bundled ? <p className="text-sm text-muted-foreground">{t({ ko: '앱에 포함된 공식 플러그인이야. 켜고 끌 수만 있고, 앱을 업데이트하면 함께 바뀌어.', en: 'An official plugin that ships with the app. You can turn it on or off; it updates with the app.' })}</p> : null}
               {isAdmin && opened.source ? <RowGroup heading={t({ ko: 'Git 연결', en: 'Git source' })}>
                 <ListRow size="sm"><span className="shrink-0 text-xs text-muted-foreground">{t({ ko: '저장소 주소', en: 'Repository URL' })}</span><span className="min-w-0 break-all text-sm">{opened.source.url}</span></ListRow>
                 <ListRow size="sm"><span className="shrink-0 text-xs text-muted-foreground">{t({ ko: '브랜치·태그', en: 'Branch / tag' })}</span><span className="min-w-0 break-all font-mono text-xs">{opened.source.ref}</span></ListRow>
@@ -274,14 +276,14 @@ export function PluginManagement({ assistantPage, pageContext }: { assistantPage
             </ModalBody>
             {isAdmin ? (
               <ModalFooter>
-                <Button variant="destructive-ghost" size="sm" disabled={busy} onClick={() => void remove(opened)}>{t({ ko: '제거', en: 'Remove' })}</Button>
-                <Button variant="secondary" size="sm" disabled={busy} onClick={() => void run(async () => {
+                {opened.bundled ? null : <Button variant="destructive-ghost" size="sm" disabled={busy} onClick={() => void remove(opened)}>{t({ ko: '제거', en: 'Remove' })}</Button>}
+                {opened.bundled ? null : <Button variant="secondary" size="sm" disabled={busy} onClick={() => void run(async () => {
                   const draft = await createPluginDraft({ requestId: createRandomUuid(), pluginId: opened.manifest.id, fromInstalled: true })
                   await cache.invalidateQueries({ queryKey: PLUGIN_DRAFTS_QUERY_KEY })
                   setDetail(null)
                   // The editor follows ?draft= on whichever page holds this list.
                   setParams((previous) => { const next = new URLSearchParams(previous); next.set('draft', draft.id); return next })
-                })}>{t({ ko: '소스 수정', en: 'Edit source' })}</Button>
+                })}>{t({ ko: '소스 수정', en: 'Edit source' })}</Button>}
                 <Button variant="ghost" size="sm" disabled={busy} onClick={() => void run(() => downloadPluginPackage(`${opened.manifest.id}-${opened.manifest.version}.zip`, { pluginId: opened.manifest.id }))}>{t({ ko: 'ZIP 내보내기', en: 'Export ZIP' })}</Button>
                 <SwitchLine label={t({ ko: '켜짐', en: 'Enabled' })} checked={opened.enabled} disabled={busy} onCheckedChange={(value) => void setEnabled(opened, value)} />
                 <span className="flex-1" />

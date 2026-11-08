@@ -44,6 +44,9 @@ export async function startRuntimeSideEffectServices(
     // Generation presets that still link a guide file move it into a skill (no-op once none does).
     const { migratePresetGuideFiles } = await import('../services/codex-chat/chatGenerationPresets')
     try { migratePresetGuideFiles() } catch (error) { console.warn('⚠️ Moving generation preset guide files into skills failed:', error instanceof Error ? error.message : error) }
+    // Official plugins that ship with this build are installed or updated before anything reads the plugin list.
+    const { syncBundledPlugins } = await import('../services/plugins/pluginBundled')
+    await syncBundledPlugins()
     // Plugins' skills follow their packages from here on (install, update, on/off, removal).
     const { syncAllPluginSkills } = await import('../services/codex-chat/chatPluginSkills')
     syncAllPluginSkills()

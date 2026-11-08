@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ChevronDown, Files, FolderKanban, RefreshCw, TriangleAlert } from 'lucide-react'
 import { EmptyState } from '@/components/ui/empty-state'
-import { copyChatPageData, type ChatPageData, type GenerationLayoutSurface, type PluginInstance, type PluginSnapshot, type PluginWorkspaceProposal, type PluginMediaProposal, type StoredFileEntry } from '@conai/shared'
+import { copyChatPageData, type ChatPageData, type GenerationLayoutSurface, type PluginInstance, type PluginLaunch, type PluginSnapshot, type PluginWorkspaceProposal, type PluginMediaProposal, type StoredFileEntry } from '@conai/shared'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
@@ -33,6 +33,8 @@ import { fetchPluginNative, pluginNativeResponse } from './plugin-native-api'
 import { createRuntimeEventStream } from '@/lib/runtime-event-stream'
 import { useCodexChat } from '@/features/codex-chat/codex-chat-context'
 import { getCodexChatThread } from '@/lib/api-codex-chat'
+/** A library image's composite hash: 32 hex characters. */
+const LIBRARY_HASH_PATTERN = /^[a-f0-9]{32}$/i
 const proposalRoute = (proposal: PluginProposal) => 'source' in proposal ? proposal.source === 'media' ? 'media-proposals' : 'workspace-proposals' : 'proposals'
 function appResultSummary(result: unknown) {
   return JSON.stringify(result, (_key, value: unknown) => {
@@ -60,6 +62,9 @@ export function PluginPage() {
   const [params, setParams] = useSearchParams()
   const files = params.get('files') ?? ''
   const projectId = params.get('project') ?? ''
+  // The image detail view opens image-aware pages with the library image's hash; anything else is ignored.
+  const imageParam = params.get('image') ?? ''
+  const imageHash = LIBRARY_HASH_PATTERN.test(imageParam) ? imageParam.toLowerCase() : ''
   const write = hasAuthPermission(auth.data?.permissionKeys, 'files.edit')
   const [projectPicker, setProjectPicker] = useState(false)
   const [hasDraft, setHasDraft] = useState(false)
@@ -92,7 +97,7 @@ export function PluginPage() {
       start={<div className="flex min-w-0 flex-wrap items-center gap-1">{contextButtons}</div>}
       actions={<IconButton variant="ghost" label={t({ ko: '다시 열기', en: 'Reopen' })} onClick={() => { void (async () => { if (await discardDraft()) setReload(value => value + 1) })() }}><RefreshCw /></IconButton>}
     />
-    {files || projectId || page.accepts.length === 0 ? <PluginConnection key={`${pluginId}/${pageId}/${files}/${projectId}/${write}/${reload}`} pluginId={pluginId} pageId={pageId} fileIds={files} projectId={projectId} write={write} onDirty={setHasDraft} /> : <EmptyState icon={Files} title={t({ ko: '열린 파일이 없어', en: 'No files open' })} action={canFiles ? <IconButton label={t({ ko: '파일 고르기', en: 'Choose files' })} onClick={() => setPicker(true)}><Files /></IconButton> : undefined} />}
+    {files || projectId || page.accepts.length === 0 ? <PluginConnection key={`${pluginId}/${pageId}/${files}/${projectId}/${imageHash}/${write}/${reload}`} pluginId={pluginId} pageId={pageId} fileIds={files} projectId={projectId} write={write} imageHash={page.opensImages ? imageHash : ''} onDirty={setHasDraft} /> : <EmptyState icon={Files} title={t({ ko: '열린 파일이 없어', en: 'No files open' })} action={canFiles ? <IconButton label={t({ ko: '파일 고르기', en: 'Choose files' })} onClick={() => setPicker(true)}><Files /></IconButton> : undefined} />}
     <WorkspaceProjectPicker
       open={projectPicker}
       onClose={() => setProjectPicker(false)}
@@ -113,7 +118,7 @@ export function PluginPage() {
 /** Shown inside a generation layout instead of on its own page: fixed height, no chat registration, reads the screen's form. */
 export type PluginEmbed = { surface: GenerationLayoutSurface; height: number }
 
-export function PluginConnection({ pluginId, pageId, fileIds, projectId, write, onDirty, embed }: { pluginId: string; pageId: string; fileIds: string; projectId: string; write: boolean; onDirty: (value: boolean) => void; embed?: PluginEmbed }) {
+export function PluginConnection({ pluginId, pageId, fileIds, projectId, write, imageHash = '', onDirty, embed }: { pluginId: string; pageId: string; fileIds: string; projectId: string; write: boolean; imageHash?: string; onDirty: (value: boolean) => void; embed?: PluginEmbed }) {
   const [instance, setInstance] = useState<PluginInstance | null>(null)
   const [error, setError] = useState('')
   useEffect(() => {
@@ -127,10 +132,10 @@ export function PluginConnection({ pluginId, pageId, fileIds, projectId, write, 
     window.addEventListener('pagehide', onHide)
     return () => { disposed = true; window.removeEventListener('pagehide', onHide); if (active) void closePlugin(active.id) }
   }, [pluginId, pageId, fileIds, projectId, write])
-  return error ? <ErrorState description={error} /> : instance ? <PluginFrame instance={instance} onDirty={onDirty} embed={embed} /> : <LoadingState />
+  return error ? <ErrorState description={error} /> : instance ? <PluginFrame instance={instance} onDirty={onDirty} embed={embed} launch={imageHash ? { image: { compositeHash: imageHash } } : null} /> : <LoadingState />
 }
 
-function PluginFrame({ instance, onDirty, embed }: { instance: PluginInstance; onDirty: (value: boolean) => void; embed?: PluginEmbed }) {
+function PluginFrame({ instance, onDirty, embed, launch }: { instance: PluginInstance; onDirty: (value: boolean) => void; embed?: PluginEmbed; launch: PluginLaunch | null }) {
   const chat = useCodexChat()
   const hostPage = useChatPage()
   const { t } = useI18n()
@@ -401,7 +406,7 @@ function PluginFrame({ instance, onDirty, embed }: { instance: PluginInstance; o
         } else respond(result)
       }).catch((reason: unknown) => { controller.abort(); respond(reason, true) }).finally(() => { if (!streaming) finish() })
     }
-    frame.current?.contentWindow?.postMessage({ type: 'conai-plugin-connect', version: 1, features: PLUGIN_SDK_FEATURES, nativeApiRoots: PLUGIN_NATIVE_API_ROOTS, files: instance.files, workspace: instance.workspace, actions: instance.page.actions, language: document.documentElement.lang || 'ko', theme: hostTheme(), context: embed ? { kind: 'generation-block', surface: embed.surface } : null }, '*', [connection.port2])
+    frame.current?.contentWindow?.postMessage({ type: 'conai-plugin-connect', version: 1, features: PLUGIN_SDK_FEATURES, nativeApiRoots: PLUGIN_NATIVE_API_ROOTS, files: instance.files, workspace: instance.workspace, actions: instance.page.actions, language: document.documentElement.lang || 'ko', theme: hostTheme(), context: embed ? { kind: 'generation-block', surface: embed.surface } : null, launch }, '*', [connection.port2])
   }
   const apply = async (proposal: PluginProposal) => {
     setBusy(true); setError('')

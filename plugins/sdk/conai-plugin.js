@@ -122,6 +122,8 @@ export function connectPlugin(handlers = {}) {
       api.server = (body, options) => api.request('server.request', { body }, options)
       /** Where the page is shown: null on its own page, `{ kind: 'generation-block', surface }` inside a generation layout. */
       api.context = event.data.context || null
+      /** What opened the page besides files: `{ image: { compositeHash } }` from an image's detail view (`opensImages` pages), else null. */
+      api.launch = event.data.launch || null
       /** Inside a layout block: the screen's form (`{ title, fields }`, or null) and filling some of its inputs by field id. */
       api.page = {
         form: options => api.request('page.form.get', {}, options),
