@@ -161,6 +161,63 @@ export const FIELD_ROLES = [
 /** `sizeMode` says how the workflow takes its size: 'size' = width and height fields, 'ratio' = an aspect ratio and a megapixel field. */
 export const emptyMapping = () => ({ sizeMode: 'size', prompt: '', negative: '', seed: '', width: '', height: '', ratio: '', megapixels: '' })
 
+/** `options` holds the values the user set for the workflow's other fields, keyed by Marked Field id; a field not in it keeps the workflow's own value. */
+export const emptySetup = () => ({ workflowId: null, mapping: emptyMapping(), options: {} })
+
+/** The select value that makes the server pick one of the list's items at random (the generation tab offers it too). */
+export const RANDOM_OPTION = '__random__'
+
+/** A select whose choices live in a custom dropdown list takes that list's items, as the generation tab does. */
+export function withDropdownOptions(fields, lists) {
+  const itemsByName = new Map((lists ?? []).map((list) => [list.name, list.items]))
+  return (fields ?? []).map((field) => {
+    const items = field.dropdown_list_name ? itemsByName.get(field.dropdown_list_name) : null
+    return items ? { ...field, type: 'select', options: items.filter((item) => typeof item === 'string' && item.trim() !== '') } : field
+  })
+}
+
+/** What a select offers: its own options, led by "random" when they come from a dropdown list. */
+export const selectChoices = (field) => [...(field.dropdown_list_name ? [RANDOM_OPTION] : []), ...(field.options ?? []).map(String)]
+
+const OPTION_TYPES = ['select', 'number', 'text', 'textarea']
+
+/** The workflow's fields the editor lets the user adjust: every one the plugin does not fill itself. `fixed` ones (a LoRA stack, an input image) keep the workflow's own value. */
+export function splitOptionFields(fields, mapping) {
+  const used = new Set(rolesFor(mapping).map((role) => mapping[role.id]).filter(Boolean))
+  const rest = (fields ?? []).filter((field) => !used.has(field.id))
+  return { adjustable: rest.filter((field) => OPTION_TYPES.includes(field.type)), fixed: rest.filter((field) => !OPTION_TYPES.includes(field.type)) }
+}
+
+/** The value shown for a field: the user's, else the workflow's own default. */
+export const optionValue = (field, options) => (Object.hasOwn(options, field.id) ? options[field.id] : field.default_value ?? '')
+
+/** The user's values after one field is set. A blank or non-numeric entry in a number or select field drops the value so the workflow's own applies; a text field may be emptied on purpose. */
+export function setOptionValue(options, field, raw) {
+  const next = { ...options }
+  const entry = String(raw ?? '')
+  if (field.type === 'text' || field.type === 'textarea') next[field.id] = entry
+  else if (entry.trim() === '' || (field.type === 'number' && !Number.isFinite(Number(entry)))) delete next[field.id]
+  else next[field.id] = field.type === 'number' ? Number(entry) : entry
+  return next
+}
+
+/** Why a value cannot be used for a field, as a Korean sentence; '' when it can. */
+export function optionProblem(field, raw) {
+  const entry = String(raw ?? '')
+  const name = field.label || field.id
+  if (field.type === 'number') {
+    const value = Number(entry)
+    if (entry.trim() === '' || !Number.isFinite(value)) return `${name} 값은 숫자여야 해.`
+    if ((typeof field.min === 'number' && value < field.min) || (typeof field.max === 'number' && value > field.max)) return `${name} 값은 ${field.min ?? '제한 없음'}~${field.max ?? '제한 없음'} 사이여야 해.`
+  }
+  if (field.type === 'select' && field.options?.length && !selectChoices(field).includes(entry)) {
+    // The published snapshot omits a long list's items, so name the ones that contain the entry.
+    const near = selectChoices(field).filter((choice) => choice.toLowerCase().includes(entry.toLowerCase())).slice(0, 20)
+    return `${name}에 없는 선택지야. ${near.length ? `비슷한 선택지: ${near.join(' | ')}` : '화면의 선택지에서 골라줘.'}`
+  }
+  return ''
+}
+
 export const rolesFor = (mapping) => FIELD_ROLES.filter((role) => !role.size || role.size === mapping.sizeMode)
 
 /** Fields of a workflow that can take a role's value. */
@@ -208,8 +265,8 @@ export function guessFieldMapping(fields) {
     return ''
   }
   const texts = list.filter(textLike)
-  const negative = pick(texts, /negative|네거티브|\buc\b/i)
-  const positives = texts.filter((field) => field.id !== negative && !named(field, /negative|네거티브/i) && !named(field, RATIO_NAME))
+  const negative = pick(texts, /negative|네거티브|부정|\buc\b/i)
+  const positives = texts.filter((field) => field.id !== negative && !named(field, /negative|네거티브|부정/i) && !named(field, RATIO_NAME))
   const mapping = {
     ...emptyMapping(),
     prompt: pick(positives, /layout|json|레이아웃/i, /positive|prompt|프롬프트/i) || positives[0]?.id || '',
@@ -244,8 +301,8 @@ export function mappingIssues(fields, mapping, size) {
   return issues
 }
 
-/** The `prompt_data` of a queue request: values keyed by Marked Field id. A blank seed is left out so each run draws a new one. */
-export function buildPromptData(mapping, { draft, negative = '', seed = '', fields = [] }) {
+/** The `prompt_data` of a queue request: values keyed by Marked Field id. A blank seed is left out so each run draws a new one; fields the user did not touch are left to the workflow. */
+export function buildPromptData(mapping, { draft, negative = '', seed = '', fields = [], options = {} }) {
   const data = { [mapping.prompt]: stringifyLayout(draft) }
   if (mapping.negative && text(negative)) data[mapping.negative] = text(negative)
   if (mapping.sizeMode === 'ratio') {
@@ -258,6 +315,7 @@ export function buildPromptData(mapping, { draft, negative = '', seed = '', fiel
   }
   const parsedSeed = Number(seed)
   if (mapping.seed && String(seed).trim() !== '' && Number.isInteger(parsedSeed) && parsedSeed >= 0) data[mapping.seed] = parsedSeed
+  for (const field of splitOptionFields(fields, mapping).adjustable) if (Object.hasOwn(options, field.id)) data[field.id] = options[field.id]
   return data
 }
 

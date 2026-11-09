@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import {
-  addRegion, buildLayout, buildPromptData, guessFieldMapping, mappingIssues, newDraft, parseLayoutPrompt, parseRatio, ratioValue, sizeFromRatio, stringifyLayout,
+  addRegion, buildLayout, buildPromptData, guessFieldMapping, mappingIssues, newDraft, optionProblem, parseLayoutPrompt, parseRatio, ratioValue, setOptionValue,
+  sizeFromRatio, splitOptionFields, stringifyLayout, withDropdownOptions,
 } from '../../plugins/moss-bbox-studio/layout.js'
 
 // MOSS-Image USERGUIDE: on a 1536×1024 canvas the editable draft box [176,224,800,864] (xyxy, from the top-left)
@@ -86,4 +87,36 @@ test('a workflow that takes an aspect ratio and megapixels gets those instead of
   const textRatio = [{ id: 'r', label: 'Ratio', type: 'text' }]
   assert.equal(ratioValue(textRatio[0], [1920, 1088]), '16:9')
   assert.equal(ratioValue({ id: 'r', type: 'number' }, [1024, 1024]), 1)
+})
+
+test('a select that takes its choices from a dropdown list sends the list text, and untouched fields are left to the workflow', () => {
+  const lists = [{ name: '종횡비', items: ['1:1 (Square)', '4:3 (Standard)', '16:9 (Widescreen)'] }]
+  const fields = withDropdownOptions([
+    { id: 'p', label: '긍정프롬', type: 'textarea' },
+    { id: 'n', label: '부정프롬', type: 'textarea' },
+    { id: 'r', label: '종횡비', type: 'select', dropdown_list_name: '종횡비' },
+    { id: 'm', label: 'Megapixels', type: 'number', min: 1, max: 4 },
+    { id: 'steps', label: '스텝', type: 'number', min: 2, max: 10 },
+    { id: 'lora', label: '로라', type: 'node' },
+  ], lists)
+  const mapping = guessFieldMapping(fields)
+  assert.deepEqual([mapping.sizeMode, mapping.prompt, mapping.negative, mapping.ratio, mapping.megapixels], ['ratio', 'p', 'n', 'r', 'm'])
+  const draft = newDraft([1536, 1152])
+  assert.equal(buildPromptData(mapping, { draft, fields }).r, '4:3 (Standard)')
+
+  const { adjustable, fixed } = splitOptionFields(fields, mapping)
+  assert.deepEqual(adjustable.map((field: { id: string }) => field.id), ['steps'])
+  assert.deepEqual(fixed.map((field: { id: string }) => field.id), ['lora'])
+  assert.equal('steps' in buildPromptData(mapping, { draft, fields }), false)
+
+  const steps = adjustable[0]
+  const options = setOptionValue({}, steps, '6')
+  assert.equal(buildPromptData(mapping, { draft, fields, options }).steps, 6)
+  assert.deepEqual(setOptionValue(options, steps, ''), {}, 'a blank entry hands the field back to the workflow')
+  assert.match(optionProblem(steps, '99'), /2~10/)
+  assert.equal(optionProblem(steps, '6'), '')
+  assert.match(optionProblem(fields[2], '4:3'), /4:3 \(Standard\)/, 'a refused select value names the choices that contain it')
+
+  const negative = fields[1]
+  assert.deepEqual(setOptionValue({}, negative, ''), { n: '' }, 'a text field can be emptied on purpose')
 })

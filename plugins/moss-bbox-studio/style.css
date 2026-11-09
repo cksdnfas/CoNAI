@@ -9,7 +9,9 @@
 .panel + .panel { border-top: 1px solid var(--conai-line) }
 .panel label { margin: 6px 0 0 }
 .panel textarea { field-sizing: fixed; height: 120px; resize: none }
-.panel label > textarea, .panel label > input { margin-top: 6px }
+.panel label > textarea, .panel label > input, .panel label > select { margin-top: 6px }
+.options-head { display: flex; align-items: center; justify-content: space-between; gap: 8px }
+.options-head .conai-overline { margin: 0 }
 .layers { list-style: none; margin: 0 0 10px; padding: 0; display: grid; gap: 2px }
 .region-row { display: grid; grid-template-columns: 22px minmax(0, 1fr) 28px; align-items: center; gap: 6px; min-height: 44px; padding: 4px var(--conai-text-inset) 4px 6px; border-left: 2px solid var(--c); border-radius: var(--conai-radius-md); cursor: pointer }
 .region-row:hover, .region-row.hover { background: var(--conai-fill) }

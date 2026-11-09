@@ -2,9 +2,10 @@
 // No server module: settings and the draft live in api.storage, everything else goes through native /api routes.
 import { connectPlugin } from './conai-plugin.js'
 import {
-  KINDS, REGION_COLORS, SIZE_PRESETS, addRegion, buildLayout, buildPromptData, cloneDraft, compatibleFields, describeDraft, emptyMapping,
-  guessFieldMapping, kindId, mappingIssues, megapixelsOf, moveRegion, nearestRatio, newDraft, normalizeBox, parseLayoutPrompt, parseRatio,
-  ratioChoices, rolesFor, sizeConnected, sizeFromRatio, snapSize, stringifyLayout,
+  KINDS, RANDOM_OPTION, REGION_COLORS, SIZE_PRESETS, addRegion, buildLayout, buildPromptData, cloneDraft, compatibleFields, describeDraft, emptyMapping,
+  emptySetup, guessFieldMapping, kindId, mappingIssues, megapixelsOf, moveRegion, nearestRatio, newDraft, normalizeBox, optionProblem, optionValue,
+  parseLayoutPrompt, parseRatio, ratioChoices, rolesFor, selectChoices, setOptionValue, sizeConnected, sizeFromRatio, snapSize, splitOptionFields,
+  stringifyLayout, withDropdownOptions,
 } from './layout.js'
 
 const $ = (id) => document.getElementById(id)
@@ -24,7 +25,7 @@ const state = {
   previous: null,
   showImage: true,
   workflows: [],
-  setup: { workflowId: null, mapping: emptyMapping() },
+  setup: emptySetup(),
   negative: '',
   seed: '',
   jobs: [],
@@ -75,6 +76,7 @@ const guard = (task) => async (...args) => { try { await task(...args) } catch (
 const workflow = () => state.workflows.find((item) => item.id === state.setup.workflowId) ?? null
 const workflowFields = () => workflow()?.marked_fields ?? []
 const setupIssues = () => (workflow() ? mappingIssues(workflowFields(), state.setup.mapping, state.draft.size) : ['사용할 워크플로우를 골라줘.'])
+const optionField = (id) => splitOptionFields(workflowFields(), state.setup.mapping).adjustable.find((field) => field.id === id)
 const ICON = {
   up: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>',
   down: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M19 12l-7 7-7-7"/></svg>',
@@ -181,6 +183,42 @@ function renderBanner() {
   banner.innerHTML = parts.join('')
 }
 
+function optionControl(field) {
+  const value = optionValue(field, state.setup.options)
+  const attrs = `data-option="${esc(field.id)}" aria-label="${esc(field.label || field.id)}"`
+  if (field.type === 'select' && field.options?.length) {
+    const current = String(value)
+    const choices = selectChoices(field)
+    // The control always shows what the workflow will use: a stored default the list lacks, or no value at all, gets its own entry.
+    if (current === '') choices.unshift('')
+    else if (!choices.includes(current)) choices.unshift(current)
+    return `<select ${attrs}>${choices.map((choice) => `<option value="${esc(choice)}"${choice === current ? ' selected' : ''}>${choice === RANDOM_OPTION ? '무작위' : choice === '' ? '워크플로우 값' : esc(choice)}</option>`).join('')}</select>`
+  }
+  if (field.type === 'number') {
+    const bound = (name) => (typeof field[name] === 'number' ? ` ${name}="${field[name]}"` : '')
+    return `<input type="number" ${attrs} value="${esc(value)}"${bound('min')}${bound('max')} step="${typeof field.step === 'number' ? field.step : 'any'}">`
+  }
+  if (field.type === 'textarea') return `<textarea ${attrs}>${esc(value)}</textarea>`
+  return `<input ${attrs} value="${esc(value)}">`
+}
+
+const syncOptionsReset = () => {
+  const button = $('options-reset')
+  if (button) button.disabled = !splitOptionFields(workflowFields(), state.setup.mapping).adjustable.some((field) => Object.hasOwn(state.setup.options, field.id))
+}
+
+/** Every workflow field the plugin does not fill itself (checkpoint, steps, CFG…), so the workflow can be tuned here. */
+function renderOptions() {
+  const host = $('options-box')
+  const { adjustable, fixed } = splitOptionFields(workflowFields(), state.setup.mapping)
+  host.hidden = !adjustable.length && !fixed.length
+  if (host.hidden) { host.innerHTML = ''; return }
+  host.innerHTML = `<div class="options-head"><p class="conai-overline">워크플로우 옵션</p><button type="button" class="ghost" id="options-reset">기본값으로</button></div>
+    ${adjustable.map((field) => `<label>${esc(field.label || field.id)}${optionControl(field)}</label>`).join('')}
+    ${fixed.length ? `<p class="hint">이 화면에서 고칠 수 없는 칸(${esc(fixed.map((field) => field.label || field.id).join(', '))})은 워크플로우에 저장된 값으로 생성돼.</p>` : ''}`
+  syncOptionsReset()
+}
+
 function renderGenBar() {
   const current = workflow()
   $('wf-name').textContent = current ? current.name : '선택 안 함'
@@ -260,6 +298,24 @@ function showTab(tab) {
 
 // ---- state changes ----------------------------------------------------------------------------------------------
 
+// The host rejects a page snapshot with an array over 512 entries and republishes on every edit, so a long list shows its size; set_option names matching choices when a value is not one of them.
+const PUBLISHED_CHOICE_LIMIT = 100
+
+/** What a connected chat sees of the adjustable workflow fields: id, current value and the choices or range it may use. */
+const describeOptions = () => splitOptionFields(workflowFields(), state.setup.mapping).adjustable.map((field) => {
+  const choices = field.type === 'select' && field.options?.length ? selectChoices(field) : null
+  return {
+    id: field.id,
+    label: field.label || field.id,
+    type: field.type,
+    value: optionValue(field, state.setup.options),
+    changed: Object.hasOwn(state.setup.options, field.id),
+    ...(choices && choices.length <= PUBLISHED_CHOICE_LIMIT ? { choices } : {}),
+    ...(choices && choices.length > PUBLISHED_CHOICE_LIMIT ? { choiceCount: choices.length } : {}),
+    ...(field.type === 'number' ? { min: field.min, max: field.max } : {}),
+  }
+})
+
 function publish() {
   api.publish({
     revision: String(state.revision),
@@ -268,7 +324,7 @@ function publish() {
       ...describeDraft(state.draft),
       selectedRegion: state.sel >= 0 ? state.sel + 1 : null,
       imageSource: state.source ? { kind: state.source.kind, name: state.source.name, compositeHash: state.source.hash ?? null } : null,
-      workflow: workflow() ? { id: workflow().id, name: workflow().name, issues: setupIssues() } : null,
+      workflow: workflow() ? { id: workflow().id, name: workflow().name, issues: setupIssues(), options: describeOptions() } : null,
       jobs: state.jobs.slice(0, 5).map((job) => ({ id: job.id, status: job.status, resultHashes: job.hashes })),
     },
   })
@@ -358,7 +414,7 @@ async function generate(seedOverride) {
       workflow_id: current.id,
       workflow_name: current.name,
       request_summary: `MOSS BBox Studio · 영역 ${draft.items.length}개`,
-      request_payload: { prompt_data: buildPromptData(state.setup.mapping, { draft, negative: state.negative, seed, fields: workflowFields() }) },
+      request_payload: { prompt_data: buildPromptData(state.setup.mapping, { draft, negative: state.negative, seed, fields: workflowFields(), options: state.setup.options }) },
     }
     const result = await call('/api/generation-queue', jsonInit('POST', body))
     const id = result.record?.id
@@ -388,18 +444,21 @@ async function loadResults(job) {
 const pollJobs = guard(async () => {
   const waiting = state.jobs.filter(jobNeedsWork)
   if (!waiting.length) { stopPolling(); return }
-  const { records } = await call('/api/generation-queue?mine=true&service_type=comfyui')
-  for (const job of waiting) {
-    const record = (records ?? []).find((item) => item.id === job.id)
-    if (record) {
-      job.status = record.status
-      if (record.failure_message) job.error = record.failure_message
-    }
+  // Each job is read on its own: the queue list pages finished jobs oldest-first, so a finished job would drop out of it.
+  const results = await Promise.allSettled(waiting.map((job) => call(`/api/generation-queue/${job.id}`)))
+  let failure = null
+  for (const [index, result] of results.entries()) {
+    const job = waiting[index]
+    if (result.status === 'rejected') { failure ??= result.reason; continue }
+    const record = result.value.data
+    job.status = record.status
+    if (record.failure_message) job.error = record.failure_message
     if (job.status === 'completed') await loadResults(job)
   }
   void saveJobs()
   renderTabs(); publish()
   if (state.tab === 'results') renderResults()
+  if (failure) throw failure
 })
 
 function startPolling() { if (!pollTimer) pollTimer = setInterval(() => { void pollJobs() }, 4000) }
@@ -408,16 +467,39 @@ function stopPolling() { clearInterval(pollTimer); pollTimer = null }
 // ---- workflows --------------------------------------------------------------------------------------------------
 
 async function loadWorkflows() {
-  const { data } = await call('/api/workflows?active=true&kind=image')
-  state.workflows = (data ?? []).map((item) => ({ id: item.id, name: item.name, marked_fields: Array.isArray(item.marked_fields) ? item.marked_fields : [] }))
-  if (state.setup.workflowId && !workflow()) state.setup = { workflowId: null, mapping: emptyMapping() }
+  // A select's choices usually live in a custom dropdown list, not in the field; without them a ratio like "4:3" would be sent where the list says "4:3 (Standard)".
+  const [{ data }, { data: lists }] = await Promise.all([call('/api/workflows?active=true&kind=image'), call('/api/custom-dropdown-lists')])
+  state.workflows = (data ?? []).map((item) => ({ id: item.id, name: item.name, marked_fields: withDropdownOptions(Array.isArray(item.marked_fields) ? item.marked_fields : [], lists) }))
+  if (state.setup.workflowId && !workflow()) state.setup = emptySetup()
+}
+
+/** Redraw everything a connection change touches: the setup tab and the editor parts that depend on the workflow. */
+function setupChanged() {
+  renderSetup(); renderGenBar(); renderOptions(); renderSizeControl(); publish()
+}
+
+/** A changed option alters what a request sends, so it counts as an edit of the draft for review cards. */
+function optionsChanged() {
+  state.revision += 1
+  void saveSetup()
+  syncOptionsReset()
+  publish()
+}
+
+/** Set one option from the panel or the assistant; throws why a value cannot be used. */
+function applyOption(field, entry) {
+  const problem = entry.trim() === '' ? '' : optionProblem(field, entry)
+  if (problem) throw new Error(problem)
+  state.setup.options = setOptionValue(state.setup.options, field, entry)
+  optionsChanged()
 }
 
 function chooseWorkflow(id) {
   state.setup.workflowId = id || null
   state.setup.mapping = id ? guessFieldMapping(workflowFields()) : emptyMapping()
+  state.setup.options = {}
   void saveSetup()
-  renderSetup(); renderGenBar(); renderSizeControl(); publish()
+  setupChanged()
   if (id) notify(setupIssues().length ? '워크플로우를 골랐어. 아래 연결을 확인해줘.' : '워크플로우를 골랐어. 편집기에서 생성할 수 있어.')
 }
 
@@ -530,6 +612,20 @@ function bindEditor() {
   $('negative').addEventListener('input', (event) => { state.negative = event.target.value; scheduleDraftSave() })
   $('seed').addEventListener('input', (event) => { state.seed = event.target.value; scheduleDraftSave() })
 
+  $('options-box').addEventListener('change', (event) => {
+    const field = optionField(event.target.dataset.option)
+    if (!field) return
+    try { applyOption(field, event.target.value) } catch (error) { notify(error.message, true) }
+    // Show what the workflow will use now: the kept value, or the earlier one when this entry was refused or blank.
+    event.target.value = optionValue(field, state.setup.options)
+  })
+  $('options-box').addEventListener('click', (event) => {
+    if (event.target.id !== 'options-reset') return
+    state.setup.options = {}
+    renderOptions()
+    optionsChanged()
+  })
+
   $('inspector').addEventListener('click', (event) => {
     const kind = event.target.closest('[data-kind]')?.dataset.kind
     if (kind) { state.draft.items[state.sel].label = kindId(kind); changed(); return }
@@ -595,7 +691,7 @@ function bindChrome() {
     if (role) {
       state.setup.mapping[role] = event.target.value
       void saveSetup()
-      renderSetup(); renderGenBar(); renderSizeControl(); publish()
+      setupChanged()
     }
   }))
   $('view-setup').addEventListener('click', guard(async (event) => {
@@ -606,11 +702,11 @@ function bindChrome() {
       const guess = guessFieldMapping(workflowFields())
       for (const role of rolesFor(mapping).filter((item) => item.size)) mapping[role.id] ||= guess[role.id]
       void saveSetup()
-      renderSetup(); renderGenBar(); renderSizeControl(); publish()
+      setupChanged()
       return
     }
     if (event.target.id !== 'reload-workflows') return
-    await loadWorkflows(); renderSetup(); renderGenBar(); renderSizeControl(); publish()
+    await loadWorkflows(); setupChanged()
     notify('워크플로우 목록을 다시 불러왔어.')
   }))
   $('view-results').addEventListener('click', guard(async (event) => {
@@ -656,6 +752,12 @@ const actions = {
     state.draft.size = [width, height]
     changed()
   },
+  'moss-bbox-studio.set_option': ({ id, value }) => {
+    const field = optionField(String(id))
+    if (!field) throw new Error(`조정할 수 있는 워크플로우 옵션 "${id}"가 없어. 페이지 데이터의 workflow.options에 있는 id를 써줘.`)
+    applyOption(field, String(value ?? ''))
+    renderOptions()
+  },
   'moss-bbox-studio.import_image': async ({ compositeHash }) => { await importFromHash(String(compositeHash)) },
   'moss-bbox-studio.generate': async ({ seed } = {}) => { await generate(seed === undefined ? undefined : String(seed)) },
 }
@@ -671,13 +773,13 @@ if (savedDraft?.draft?.items) {
   state.seed = String(savedDraft.seed ?? '')
   state.sel = state.draft.items.length ? 0 : -1
 }
-if (savedSetup?.mapping) state.setup = { workflowId: savedSetup.workflowId ?? null, mapping: { ...emptyMapping(), ...savedSetup.mapping } }
+if (savedSetup?.mapping) state.setup = { workflowId: savedSetup.workflowId ?? null, mapping: { ...emptyMapping(), ...savedSetup.mapping }, options: savedSetup.options ?? {} }
 if (Array.isArray(savedJobs)) state.jobs = savedJobs.filter((job) => Number.isInteger(job?.id) && Array.isArray(job.hashes) && Array.isArray(job.size))
 
 try { await loadWorkflows() } catch (error) { notify(`워크플로우를 불러오지 못했어: ${error.message}`, true) }
 if (state.setup.workflowId && !workflow()) chooseWorkflow(null)
 
-renderEditor(); renderTabs(); publish()
+renderEditor(); renderOptions(); renderTabs(); publish()
 if (!workflow() && !$('status').classList.contains('error')) notify('연결 설정에서 생성에 쓸 워크플로우를 먼저 골라줘.')
 
 api.events.on('queue.job.status', (event) => {

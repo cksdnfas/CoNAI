@@ -87,6 +87,17 @@ export function createGenerationQueueReadRoutes() {
     }
   }))
 
+  /**
+   * GET /api/generation-queue/:id
+   * One job's current state. The list endpoint lists finished jobs oldest-first behind a page limit, so a client
+   * following its own job cannot find it there once it has finished.
+   */
+  router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
+    const resolvedJob = resolveAccessibleQueueJob(req, res)
+    if (!resolvedJob) return
+    res.json({ success: true, data: resolvedJob.job })
+  }))
+
   /** GET /api/generation-queue/:id/request-debug */
 
   router.get('/:id/request-debug', asyncHandler(async (req: Request, res: Response) => {

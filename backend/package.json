@@ -15,7 +15,7 @@
     "test:documents": "tsx --test test/document-search.test.ts",
     "test:comfy-dropdown-auto-collection": "tsx --test test/comfy-dropdown-auto-collection.test.ts",
     "test:posts-knowledge": "tsx --test test/posts.test.ts test/posts-knowledge-runtime.test.ts test/chat-semantic.test.ts test/mcp-posts-files-tools.test.ts",
-    "test:queue": "tsx --test test/queueInputBackfill.test.ts test/nai-request-validation.test.ts",
+    "test:queue": "tsx --test test/queueInputBackfill.test.ts test/nai-request-validation.test.ts test/queue-job-read-route.test.ts",
     "test:prompt-syntax": "tsx --test test/prompt-random-token.test.ts test/prompt-suggest.test.ts",
     "test:migrations": "tsx --test test/migration-baseline.test.ts",
     "test:image-permissions": "tsx --test test/image-permissions.test.ts",
