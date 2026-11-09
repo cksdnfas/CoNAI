@@ -1,4 +1,4 @@
-import { buildChatImageRecord } from './chat-image-record'
+import { buildChatImageRecord, buildChatLibraryImageRecord } from './chat-image-record'
 import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { createContext, useCallback, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
@@ -174,17 +174,18 @@ function ChatReferenceChip({ item, sourceMessageId, media }: { item: ChatMediaAt
   const chat = useCodexChatReference()
   const viewer = useImageViewModal()
   const isVideo = item.mimeType?.startsWith('video/') === true
-  const image = buildChatImageRecord(item.compositeHash, undefined, media)
+  // Readers with gallery access use the library; the others open it through the chat's own by-hash routes.
+  const image = canViewImages || media?.resultMediaUrl ? buildChatImageRecord(item.compositeHash, undefined, media) : buildChatLibraryImageRecord(item.compositeHash, item.mimeType)
   // The library thumbnail by hash: the record's history route only appears once the thread's media map arrives, so it would load twice.
-  const thumbnailUrl = buildApiUrl(`/api/images/${encodeURIComponent(item.compositeHash)}/thumbnail`)
+  const thumbnailUrl = canViewImages && !media?.resultMediaUrl ? buildApiUrl(`/api/images/${encodeURIComponent(item.compositeHash)}/thumbnail`) : image.thumbnail_url ?? ''
   const fileUrl = image.image_url ?? ''
   // A video without its poster yet answers with the video itself, which <img> cannot draw; the icon stands in until a later mount.
   const [thumbnailFailed, setThumbnailFailed] = useState(false)
-  const hoverPreview = useMediaHoverPreview(canViewImages ? { src: thumbnailUrl, fullSrc: isVideo ? null : fileUrl, videoSrc: isVideo ? fileUrl : null, caption: item.name } : null)
+  const hoverPreview = useMediaHoverPreview({ src: thumbnailUrl, fullSrc: isVideo ? null : fileUrl, videoSrc: isVideo ? fileUrl : null, caption: item.name })
   const canJump = sourceMessageId !== undefined && chat !== null
   const open = () => {
     if (canJump) chat.focusMessage(sourceMessageId)
-    else if (canViewImages) viewer?.openImageView({ compositeHash: item.compositeHash, sourceItems: [image] })
+    else viewer?.openImageView({ compositeHash: item.compositeHash, sourceItems: [image] })
   }
   return (
     <>
@@ -195,11 +196,11 @@ function ChatReferenceChip({ item, sourceMessageId, media }: { item: ChatMediaAt
         label={canJump
           ? t({ ko: '참조 이미지: 이 이미지가 나온 메시지로 이동', en: 'Referenced image: go to the message with this image' })
           : t({ ko: '참조 이미지: {name}', en: 'Referenced image: {name}' }, { name: item.name })}
-        disabled={!canJump && (!canViewImages || !viewer)}
+        disabled={!canJump && !viewer}
         onClick={open}
         {...hoverPreview.triggerProps}
       >
-        {canViewImages && !thumbnailFailed
+        {!thumbnailFailed
           ? <img src={thumbnailUrl} alt="" loading="lazy" draggable={false} className="size-full object-cover" onError={() => setThumbnailFailed(true)} />
           : <ImageIcon className="size-3.5 shrink-0" />}
         {isVideo ? <span className="absolute bottom-0.5 right-0.5 rounded-sm bg-backdrop/50"><Play className="size-2.5 fill-white text-white" /></span> : null}
@@ -216,12 +217,11 @@ function ChatReferenceChip({ item, sourceMessageId, media }: { item: ChatMediaAt
  */
 export function ChatReferenceChips({ items = [], threadId }: { items?: ChatMediaAttachment[]; threadId: number | null }) {
   const { t } = useI18n()
-  const { canViewImages } = useImagePermissions()
   const [expanded, setExpanded] = useState(false)
   const mediaQuery = useQuery({
     queryKey: codexChatMediaQueryKey(threadId),
     queryFn: () => getCodexChatThreadMedia(threadId as number),
-    enabled: canViewImages && threadId !== null && items.length > 0,
+    enabled: threadId !== null && items.length > 0,
     staleTime: 30_000,
   })
   if (!items.length) return null

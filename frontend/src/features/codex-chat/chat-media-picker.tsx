@@ -13,6 +13,7 @@ import type { ChatMediaAttachment } from '@/lib/api-codex-chat'
 import { getImage, getImageDetailQueryKey } from '@/lib/api-images'
 import { cn } from '@/lib/utils'
 import type { ImageRecord } from '@/types/image'
+import { buildChatLibraryImageRecord } from './chat-image-record'
 
 /** Chat supplies attachment wording and permits clearing all attachments; browsing is shared app-wide. */
 export function ChatMediaPicker(props: Pick<MediaLibraryPickerProps, 'initial' | 'maxCount' | 'onPick' | 'onClose'>) {
@@ -37,10 +38,11 @@ export function ChatMediaAttachments({ items = [], onRemove }: {
   if (!items.length) return null
   return <div className={cn('flex flex-wrap gap-2', onRemove ? 'mb-2' : 'mt-2 justify-end')}>
     {items.map((item) => {
-      const image: ImageRecord | undefined = canViewImages ? visible.get(item.compositeHash) : undefined
+      // Readers without gallery access open the media through the chat's by-hash routes.
+      const image: ImageRecord | undefined = canViewImages ? visible.get(item.compositeHash) : buildChatLibraryImageRecord(item.compositeHash, item.mimeType)
       return <div key={item.compositeHash} className="relative flex w-24 flex-col overflow-hidden rounded-sm bg-surface-high">
         <MediaCard className="w-full" mediaClassName="flex h-20 w-full items-center justify-center" disabled={!image || !viewer} aria-label={item.name} onClick={() => viewer?.openImageView({ compositeHash: item.compositeHash, sourceItems: image ? [image] : [] })}
-          media={image ? <img src={buildApiUrl(`/api/images/${encodeURIComponent(item.compositeHash)}/thumbnail`)} alt={item.name} loading="lazy" className={cn('size-full object-cover', safety.shouldBlurItemPreview(image) && 'blur-md')} /> : <ImageOff className="size-5 text-muted-foreground" />}
+          media={image ? <img src={canViewImages ? buildApiUrl(`/api/images/${encodeURIComponent(item.compositeHash)}/thumbnail`) : image.thumbnail_url ?? ''} alt={item.name} loading="lazy" className={cn('size-full object-cover', canViewImages && safety.shouldBlurItemPreview(image) && 'blur-md')} /> : <ImageOff className="size-5 text-muted-foreground" />}
         />
         <Tip content={item.name}><span className="truncate px-1 py-1 text-2xs">{item.name}</span></Tip>
         {onRemove ? <IconButton variant="secondary" size="icon-xs" className="absolute right-0.5 top-0.5" label={t({ ko: '첨부 빼기', en: 'Remove attachment' })} onClick={() => onRemove(item.compositeHash)}><X /></IconButton> : null}

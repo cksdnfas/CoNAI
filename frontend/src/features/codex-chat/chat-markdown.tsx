@@ -124,7 +124,7 @@ function MarkdownImage({ src, alt }: ComponentProps<'img'>) {
   const { canViewImages } = useImagePermissions()
   const emoticons = useContext(ChatEmoticonsContext)
   const source = typeof src === 'string' ? src : ''
-  const appMedia = source.startsWith(EMOTE_SCHEME) || source.startsWith(STICKER_SCHEME) || ['/api/images/', '/api/generation-history/', '/api/files/', '/api/codex-chat/media/', '/api/codex-chat/assets/', '/api/codex-chat/profiles/', '/uploads/', '/temp/', '/save/'].some((prefix) => source.startsWith(buildApiUrl(prefix)))
+  const appMedia = source.startsWith(EMOTE_SCHEME) || source.startsWith(STICKER_SCHEME) || ['/api/images/', '/api/generation-history/', '/api/files/', '/api/codex-chat/assets/', '/api/codex-chat/profiles/', '/uploads/', '/temp/', '/save/'].some((prefix) => source.startsWith(buildApiUrl(prefix)))
   if (!canViewImages && appMedia) return <span>{alt ?? ''}</span>
   const sticker = source.startsWith(STICKER_SCHEME)
   if (emoticons && (sticker || source.startsWith(EMOTE_SCHEME))) {

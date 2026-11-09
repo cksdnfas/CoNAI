@@ -495,15 +495,17 @@ function MediaLightboxOverlay({ items, index, onIndexChange, onClose, renderActi
 export function MediaLightbox({ items, index, onIndexChange, onClose, renderActions }: MediaLightboxProps) {
   const { canViewImages } = useImagePermissions()
   const imageViewModal = useImageViewModal()
-  const detailOpen = canViewImages && Boolean(imageViewModal?.activeCompositeHash)
   const clampedIndex = index === null ? 0 : Math.min(Math.max(index, 0), items.length - 1)
+  // An item with its own authorized detail endpoint (a chat result, a workflow run) opens its detail without gallery access.
+  const canShowDetail = canViewImages || Boolean(items[clampedIndex]?.detail_url)
+  const detailOpen = canShowDetail && Boolean(imageViewModal?.activeCompositeHash)
   const open = (canViewImages || isChatResultMedia(items[clampedIndex])) && index !== null && items.length > 0
   const { handOff } = useOverlayBackClose({ open: open && !detailOpen, onClose })
 
   /** Show `items[target]` in the image modal, paging through this same list. */
   const showInDetail = useCallback((target: number) => {
     const compositeHash = items[target]?.composite_hash
-    if (!canViewImages || !compositeHash || !imageViewModal) {
+    if (!canShowDetail || !compositeHash || !imageViewModal) {
       return false
     }
 
@@ -516,7 +518,7 @@ export function MediaLightbox({ items, index, onIndexChange, onClose, renderActi
       accessOptions: { allowDetailNavigation: false },
     })
     return true
-  }, [canViewImages, imageViewModal, items])
+  }, [canShowDetail, imageViewModal, items])
 
   // Opened while the image modal is showing: the modal moves to the item and the lightbox stays shut.
   useEffect(() => {
@@ -531,7 +533,7 @@ export function MediaLightbox({ items, index, onIndexChange, onClose, renderActi
     return null
   }
 
-  const canOpenDetail = canViewImages && Boolean(items[clampedIndex]?.composite_hash && imageViewModal)
+  const canOpenDetail = canShowDetail && Boolean(items[clampedIndex]?.composite_hash && imageViewModal)
   const openDetail = () => {
     if (showInDetail(clampedIndex)) {
       handOff()

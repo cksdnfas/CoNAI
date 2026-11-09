@@ -24,6 +24,8 @@ import { EmoticonService } from '../services/emoticonService'
 import { serveThumbnailOrOriginal, streamCacheableFile, streamRangeFile } from './images/query-file-helpers'
 import { ImageFileModel } from '../models/Image/ImageFileModel'
 import { MediaMetadataModel } from '../models/Image/MediaMetadataModel'
+import { MediaMetadataFileQueries } from '../models/Image/MediaMetadataFileQueries'
+import { enrichImageWithFileView } from './images/utils'
 import { canUseChatProfile, resolveChatAccess, resolveChatProfileToolGrant } from '../services/codex-chat/codexChatAccess'
 import { CHAT_VISION_BUILTIN_TOOLS, getMcpToolScope } from '../mcp/context'
 import { openChatMcpBridge } from '../services/codex-chat/chatMcpBridge'
@@ -289,12 +291,22 @@ router.get('/profiles/:profileId/emoticons/:compositeHash', requireChatAccess, r
   await streamCacheableFile(req, res, file.path, file.mimeType ?? 'application/octet-stream')
 }))
 
+/** Full image detail for a chat's viewer; the caller has already authorized the media, and every URL stays on a chat route. */
+function sendChatImageDetail(res: Response, compositeHash: string, urls: { scopeKey: string; detailUrl: string; thumbnailUrl: string; imageUrl: string }) {
+  const image = MediaMetadataFileQueries.findByHashWithFile(compositeHash, { includeHidden: true, includePending: true })
+  if (!image) {
+    res.status(404).json({ success: false, error: 'Not found' })
+    return
+  }
+  res.json({ success: true, data: { ...enrichImageWithFileView(image), detail_scope_key: urls.scopeKey, detail_url: urls.detailUrl, thumbnail_url: urls.thumbnailUrl, image_url: urls.imageUrl } })
+}
+
 /**
  * GET /api/codex-chat/media/:file — library media linked from chat text (`media:<hash>.<ext>`; the extension is
- * ignored). Requires images.view while retaining the existing chat safety
- * policy and without waiting for postprocessing. The id is the pixel identity, so the response is cached for good.
+ * ignored). Every chat user may open media by hash here (the chat is the grant, not images.view), without waiting for
+ * postprocessing. The id is the pixel identity, so the response is cached for good.
  */
-router.get('/media/:file', requireChatAccess, requireImagesView, asyncHandler(async (req: Request, res: Response) => {
+router.get('/media/:file', requireChatAccess, asyncHandler(async (req: Request, res: Response) => {
   const file = activeMediaFile(String(req.params.file ?? '').replace(/\.[a-z0-9]{2,5}$/, ''))
   if (!file) {
     res.status(404).json({ success: false, error: 'Not found' })
@@ -306,7 +318,7 @@ router.get('/media/:file', requireChatAccess, requireImagesView, asyncHandler(as
 }))
 
 /** GET /api/codex-chat/media/:hash/thumbnail — the library thumbnail (a poster frame for video and animations). */
-router.get('/media/:compositeHash/thumbnail', requireChatAccess, requireImagesView, asyncHandler(async (req: Request, res: Response) => {
+router.get('/media/:compositeHash/thumbnail', requireChatAccess, asyncHandler(async (req: Request, res: Response) => {
   const compositeHash = String(req.params.compositeHash ?? '')
   const metadata = MEDIA_HASH_PATTERN.test(compositeHash) ? MediaMetadataModel.findByHash(compositeHash) : null
   const file = metadata ? ImageFileModel.findActiveByHash(compositeHash)[0] : undefined
@@ -316,6 +328,18 @@ router.get('/media/:compositeHash/thumbnail', requireChatAccess, requireImagesVi
   }
   await serveThumbnailOrOriginal(req, res, compositeHash, metadata, file)
 }))
+
+/** GET /api/codex-chat/media/:hash/image — the detail of any library media a chat shows by hash. */
+router.get('/media/:compositeHash/image', requireChatAccess, (req: Request, res: Response) => {
+  const compositeHash = String(req.params.compositeHash ?? '')
+  const file = MEDIA_HASH_PATTERN.test(compositeHash) ? activeMediaFile(compositeHash) : null
+  if (!file) {
+    res.status(404).json({ success: false, error: 'Not found' })
+    return
+  }
+  const base = `/api/codex-chat/media/${compositeHash}`
+  sendChatImageDetail(res, compositeHash, { scopeKey: `chat-media:${compositeHash}`, detailUrl: `${base}/image`, thumbnailUrl: `${base}/thumbnail`, imageUrl: `${base}.${path.extname(file.path).slice(1) || 'bin'}` })
+})
 
 /** GET /api/codex-chat/assets/:name — an image copied in from a character card before card media went to the library. */
 router.get('/assets/:name', requireChatAccess, requireImagesView, asyncHandler(async (req: Request, res: Response) => {
@@ -1380,12 +1404,17 @@ router.get('/threads/:threadId/messages/:messageId/media/:compositeHash/:variant
   const messageId = parseId(req.params.messageId)
   const compositeHash = String(req.params.compositeHash ?? '')
   const variant = req.params.variant
-  const result = threadId !== null && messageId !== null && MEDIA_HASH_PATTERN.test(compositeHash) && (variant === 'file' || variant === 'thumbnail')
+  const result = threadId !== null && messageId !== null && MEDIA_HASH_PATTERN.test(compositeHash) && (variant === 'file' || variant === 'thumbnail' || variant === 'image')
     ? resolveChatResultMedia(requesterFrom(req), threadId, messageId, compositeHash) : null
   const metadata = result ? MediaMetadataModel.findByHash(compositeHash) : null
   const file = metadata ? activeMediaFile(compositeHash) : null
   if (!result || !metadata || !file) {
     res.status(404).json({ success: false, error: 'Not found' })
+    return
+  }
+  if (variant === 'image') {
+    const base = `/api/codex-chat/threads/${threadId}/messages/${messageId}/media/${compositeHash}`
+    sendChatImageDetail(res, compositeHash, { scopeKey: base, detailUrl: `${base}/image`, thumbnailUrl: `${base}/thumbnail`, imageUrl: `${base}/file` })
     return
   }
   const thumbnail = variant === 'thumbnail' && metadata.thumbnail_path ? path.join(runtimePaths.tempDir, metadata.thumbnail_path) : null

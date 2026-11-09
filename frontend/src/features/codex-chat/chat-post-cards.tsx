@@ -5,7 +5,7 @@ import { IconButton } from '@/components/ui/icon-button'
 import { usePostPermissions } from '@/features/posts/use-post-permissions'
 import { parsePostLink, postRoute, type PostRef } from '@/features/posts/post-links'
 import { useI18n } from '@/i18n'
-import type { CodexChatToolCall } from '@/lib/api-codex-chat'
+import { chatMediaThumbnailUrl, type CodexChatToolCall } from '@/lib/api-codex-chat'
 import { getPost, POSTS_QUERY_KEY } from '@/lib/api-posts'
 import { buildApiUrl } from '@/lib/api-url'
 
@@ -89,7 +89,9 @@ export function ChatPostCards({ calls, text }: { calls: CodexChatToolCall[]; tex
     <div className="flex flex-col gap-1.5">
       {cards.map(({ ref, post }) => {
         const cover = post.media.find((item) => item.kind === 'media' || item.kind === 'group')
-        const coverUrl = cover && permissions.canViewImages ? buildApiUrl(cover.kind === 'media' ? `/api/images/${cover.ref}/thumbnail` : `/api/groups/${cover.ref}/thumbnail`) : null
+        const coverUrl = !cover ? null
+          : cover.kind === 'media' ? (permissions.canViewImages ? buildApiUrl(`/api/images/${cover.ref}/thumbnail`) : chatMediaThumbnailUrl(cover.ref))
+            : permissions.canViewImages ? buildApiUrl(`/api/groups/${cover.ref}/thumbnail`) : null
         return (
           <Link
             key={ref.postId}

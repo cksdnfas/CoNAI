@@ -117,6 +117,14 @@ test('delegated chat media is bound to stored results and live account/profile/t
     assert.equal(response.headers.get('cache-control'), 'private, no-store')
     assert.deepEqual(Buffer.from(await response.arrayBuffer()), bytes)
   }
+  const detailImage = await get(base + '/image')
+  const detailBody = await detailImage.json() as { data: { composite_hash: string; detail_url: string; image_url: string } }
+  assert.equal(detailImage.status, 200, 'a result shown in the thread opens its detail without images.view')
+  assert.equal(detailBody.data.composite_hash, hash)
+  assert.equal(detailBody.data.detail_url, base + '/image')
+  assert.equal(detailBody.data.image_url, base + '/file')
+  assert.equal(await status(base + '/image', stranger), 404)
+  assert.equal(await status(base.replace(hash, unreturned) + '/image'), 404, 'a result URL still proves the reply, unlike the by-hash chat route')
   const range = await get(base + '/file', owner, { Range: 'bytes=0-3' })
   assert.equal(range.status, 206)
   assert.equal(await range.text(), 'chat')
@@ -138,7 +146,10 @@ test('delegated chat media is bound to stored results and live account/profile/t
   const viewed = await invoke(threadId, 'native-view', 'view_images', { composite_hashes: [viewedHash] })
   assert.ok(viewed.content?.some((part) => (part as { type?: string }).type === 'image'))
   assert.equal(await status(`/api/codex-chat/threads/${threadId}/messages/${viewedMessage}/media/${viewedHash}/file`), 200)
-  for (const url of [`/api/images/${hash}/file`, `/api/images/${hash}/thumbnail`, `/api/images/search`, `/api/codex-chat/media/${hash}.png`, '/api/generation-history?service_type=novelai']) assert.equal(await status(url), 403, url)
+  for (const url of [`/api/images/${hash}/file`, `/api/images/${hash}/thumbnail`, `/api/images/search`, '/api/generation-history?service_type=novelai']) assert.equal(await status(url), 403, url)
+  // The chat is the grant: any library media opens by hash inside chat routes, though the gallery stays closed.
+  for (const url of [`/api/codex-chat/media/${unreturned}.png`, `/api/codex-chat/media/${unreturned}/thumbnail`, `/api/codex-chat/media/${unreturned}/image`]) assert.equal(await status(url), 200, url)
+  assert.equal(await status(`/api/codex-chat/media/${unreturned}/image`, 0), 401)
   assert.equal(await status(base + '/file', stranger), 404)
   assert.equal(await status(base + '/file', 0), 401)
   assert.equal(await status(base.replace(hash, unreturned) + '/file'), 404)
