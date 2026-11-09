@@ -420,6 +420,18 @@ test('permissions: independent pages, features, migration, grants, scopes and ro
     }
     assert.equal(await status('/api/workflow-input-assets', accountId, 'POST'), 403)
     assert.equal(await status(assets[0].url, accountId, 'DELETE'), 403)
+    // A published workflow page grants its own inputs; an unknown or unpublished slug grants nothing.
+    const db = user.getUserSettingsDb()
+    db.prepare("INSERT INTO workflows (name, workflow_json, is_public_page, public_slug) VALUES ('shared-h3', '{}', 1, 'shared-h3'), ('hidden-h3', '{}', 0, 'hidden-h3')").run()
+    AuthPermissionGroup.updateCustomGroup(group.id, { name: group.name, permissionKeys: [] })
+    assert.equal(await status('/api/workflow-input-assets?publicWorkflow=shared-h3', accountId, 'POST'), 400, 'upload reaches the handler (no file sent)')
+    assert.equal(await status(assets[0].url + '?publicWorkflow=shared-h3', accountId), 200, 'preview of an uploaded input')
+    assert.equal(await status(assets[0].url + '?publicWorkflow=shared-h3', accountId, 'DELETE'), 200)
+    for (const slug of ['hidden-h3', 'missing']) {
+      assert.equal(await status(`/api/workflow-input-assets?publicWorkflow=${slug}`, accountId, 'POST'), 403, slug)
+      assert.equal(await status(`${assets[1].url}?publicWorkflow=${slug}`, accountId), 403, slug)
+    }
+    AuthPermissionGroup.updateCustomGroup(group.id, { name: group.name, permissionKeys: ['images.view'] })
   })
   await t.test('HTTP history and private-file records retain ownership with images.view', async () => {
     const db = user.getUserSettingsDb()

@@ -2,10 +2,11 @@ import { requirePermission } from '../middleware/authMiddleware';
 import { requireImagesView } from '../middleware/imageAccess';
 import fs from 'fs';
 import path from 'path';
-import { Router, type Request, type Response } from 'express';
+import { Router, type Request, type RequestHandler, type Response } from 'express';
 import multer from 'multer';
 import { runtimePaths } from '../config/runtimePaths';
 import { asyncHandler } from '../middleware/asyncHandler';
+import { WorkflowModel } from '../models/Workflow';
 import { streamRangeFile } from './images/query-file-response-helpers';
 import {
   markWorkflowInputAssetForDeletion,
@@ -52,6 +53,20 @@ const uploadWorkflowInputAsset = multer({
   },
 }).single('file');
 
+/**
+ * A published workflow's page grants its own inputs, as its queue route does: a request scoped to an existing
+ * public workflow (?publicWorkflow=slug) skips the feature permission, which would otherwise also open the
+ * generation and gallery pages. Without a valid slug the feature permission applies unchanged.
+ */
+const orPublicWorkflow = (guard: RequestHandler): RequestHandler => (req, res, next) => {
+  const slug = req.query.publicWorkflow;
+  if (typeof slug === 'string' && WorkflowModel.findPublicBySlug(slug.trim().toLowerCase())) {
+    next();
+    return;
+  }
+  guard(req, res, next);
+};
+
 /** Convert multipart parser errors into bounded API responses. */
 function parseWorkflowInputAsset(req: Request, res: Response, next: (error?: unknown) => void) {
   uploadWorkflowInputAsset(req, res, (error) => {
@@ -65,7 +80,7 @@ function parseWorkflowInputAsset(req: Request, res: Response, next: (error?: unk
   });
 }
 
-router.post('/', requirePermission('generation.execute'), parseWorkflowInputAsset, asyncHandler(async (req: Request, res: Response) => {
+router.post('/', orPublicWorkflow(requirePermission('generation.execute')), parseWorkflowInputAsset, asyncHandler(async (req: Request, res: Response) => {
   if (!req.file) {
     return res.status(400).json({ success: false, error: 'A media file is required' });
   }
@@ -83,7 +98,7 @@ router.post('/', requirePermission('generation.execute'), parseWorkflowInputAsse
   }
 }));
 
-router.get('/:assetId', requireImagesView, asyncHandler(async (req: Request, res: Response) => {
+router.get('/:assetId', orPublicWorkflow(requireImagesView), asyncHandler(async (req: Request, res: Response) => {
   const assetId = String(req.params.assetId || '');
   const absolutePath = resolveWorkflowInputAssetPath(assetId);
   if (!absolutePath || !fs.existsSync(absolutePath)) {
@@ -97,7 +112,7 @@ router.get('/:assetId', requireImagesView, asyncHandler(async (req: Request, res
   return streamRangeFile(req, res, absolutePath, mimeType);
 }));
 
-router.delete('/:assetId', requirePermission('generation.execute'), (req: Request, res: Response) => {
+router.delete('/:assetId', orPublicWorkflow(requirePermission('generation.execute')), (req: Request, res: Response) => {
   const removed = markWorkflowInputAssetForDeletion(String(req.params.assetId || ''));
   return res.json({ success: true, data: { removed } });
 });
