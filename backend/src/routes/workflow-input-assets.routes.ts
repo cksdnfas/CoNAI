@@ -2,11 +2,11 @@ import { requirePermission } from '../middleware/authMiddleware';
 import { requireImagesView } from '../middleware/imageAccess';
 import fs from 'fs';
 import path from 'path';
-import { Router, type Request, type RequestHandler, type Response } from 'express';
+import { Router, type Request, type Response } from 'express';
 import multer from 'multer';
 import { runtimePaths } from '../config/runtimePaths';
 import { asyncHandler } from '../middleware/asyncHandler';
-import { WorkflowModel } from '../models/Workflow';
+import { orPublicWorkflow } from '../middleware/publicWorkflowScope';
 import { streamRangeFile } from './images/query-file-response-helpers';
 import {
   markWorkflowInputAssetForDeletion,
@@ -52,20 +52,6 @@ const uploadWorkflowInputAsset = multer({
     callback(new Error('Only image, video, and audio files are supported'));
   },
 }).single('file');
-
-/**
- * A published workflow's page grants its own inputs, as its queue route does: a request scoped to an existing
- * public workflow (?publicWorkflow=slug) skips the feature permission, which would otherwise also open the
- * generation and gallery pages. Without a valid slug the feature permission applies unchanged.
- */
-const orPublicWorkflow = (guard: RequestHandler): RequestHandler => (req, res, next) => {
-  const slug = req.query.publicWorkflow;
-  if (typeof slug === 'string' && WorkflowModel.findPublicBySlug(slug.trim().toLowerCase())) {
-    next();
-    return;
-  }
-  guard(req, res, next);
-};
 
 /** Convert multipart parser errors into bounded API responses. */
 function parseWorkflowInputAsset(req: Request, res: Response, next: (error?: unknown) => void) {

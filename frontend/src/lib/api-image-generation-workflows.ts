@@ -2,6 +2,7 @@ import { MINIMAX_H3_REFMOD_EXPORT_TEMPLATE_KEY, type MiniMaxH3RefModLibraryItem,
 import { buildApiUrl } from './api-client'
 import { requestJson } from './api-image-generation-request'
 import { ApiRequestError } from './api-request'
+import { withPublicWorkflowScope } from './public-workflow-scope'
 import { appendDirectoryListingParams, type DirectoryListingParams, type DirectoryPage } from './api-directory-listing'
 import type {
   ComfyUIServer,
@@ -312,7 +313,7 @@ export async function getComfyRefModLibrary(params: { workflowId?: number; serve
   if (params.serverId !== undefined) searchParams.set('serverId', String(params.serverId))
   try {
     const response = await requestJson<{ success: boolean; data: { server_id: number; server_name: string; entries: MiniMaxH3RefModLibraryItem[] } }>(
-      `/api/comfyui-servers/refmods${searchParams.size > 0 ? `?${searchParams.toString()}` : ''}`,
+      withPublicWorkflowScope('/api/comfyui-servers/refmods', searchParams),
     )
     return { status: 'ok', serverId: response.data.server_id, serverName: response.data.server_name, entries: response.data.entries }
   } catch (error) {
@@ -327,7 +328,7 @@ export function comfyRefModRecordsQueryKey(serverId?: number) {
 
 /** RefMods created through CoNAI workflow runs (newest first), with their retained source media. */
 export async function getMiniMaxH3RefModRecords(serverId?: number) {
-  const response = await requestJson<{ success: boolean; data: MiniMaxH3RefModRecord[] }>(`/api/refmods${serverId !== undefined ? `?serverId=${serverId}` : ''}`)
+  const response = await requestJson<{ success: boolean; data: MiniMaxH3RefModRecord[] }>(withPublicWorkflowScope('/api/refmods', new URLSearchParams(serverId !== undefined ? { serverId: String(serverId) } : {})))
   return response.data
 }
 

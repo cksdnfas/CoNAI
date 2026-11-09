@@ -427,6 +427,11 @@ test('permissions: independent pages, features, migration, grants, scopes and ro
     assert.equal(await status('/api/workflow-input-assets?publicWorkflow=shared-h3', accountId, 'POST'), 400, 'upload reaches the handler (no file sent)')
     assert.equal(await status(assets[0].url + '?publicWorkflow=shared-h3', accountId), 200, 'preview of an uploaded input')
     assert.equal(await status(assets[0].url + '?publicWorkflow=shared-h3', accountId, 'DELETE'), 200)
+    // The Director's RefMod library and records back the same form (no ComfyUI server is configured here: 404, not 403).
+    assert.notEqual(await status('/api/comfyui-servers/refmods?publicWorkflow=shared-h3', accountId), 403)
+    assert.equal(await status('/api/refmods?publicWorkflow=shared-h3', accountId), 200)
+    assert.equal(await status('/api/comfyui-servers/refmods?publicWorkflow=hidden-h3', accountId), 403)
+    assert.equal(await status('/api/refmods?publicWorkflow=hidden-h3', accountId), 403)
     for (const slug of ['hidden-h3', 'missing']) {
       assert.equal(await status(`/api/workflow-input-assets?publicWorkflow=${slug}`, accountId, 'POST'), 403, slug)
       assert.equal(await status(`${assets[1].url}?publicWorkflow=${slug}`, accountId), 403, slug)

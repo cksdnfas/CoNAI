@@ -60,6 +60,7 @@ import { runtimeEventStreamRoutes } from '../routes/events/event-stream.routes';
 import spriteRoutes from '../routes/sprite.routes';
 import { mcpRoutes } from '../mcp';
 import { errorHandler } from '../middleware/errorHandler';
+import { orPublicWorkflow } from '../middleware/publicWorkflowScope';
 import {
   allowAnonymousAnyPermission,
   optionalAuth,
@@ -273,7 +274,8 @@ export function registerAppRoutes(app: Express, options: RegisterAppRoutesOption
   app.use('/api/refmods', requireAuth, refmodRoutes);
   app.use('/api/comfyui-servers', (req, res, next) => {
     // The RefMod library backs the Director form, which generation-only accounts also use on published workflow pages.
-    if (isReadMethod(req) && req.path === '/refmods') requireAuth(req, res, () => allowAnonymousAnyPermission(['generation.execute', 'workflows.view'])(req, res, next));
+    // Published workflow pages reach it with their slug even when the viewer holds neither permission.
+    if (isReadMethod(req) && req.path === '/refmods') requireAuth(req, res, () => orPublicWorkflow(allowAnonymousAnyPermission(['generation.execute', 'workflows.view']))(req, res, next));
     else requireReadAccess('workflows.view')(req, res, next);
   }, comfyuiServerRoutes);
   app.use('/api/custom-dropdown-lists', (req, res, next) => {
