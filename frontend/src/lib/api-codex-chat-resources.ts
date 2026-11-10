@@ -231,7 +231,7 @@ export interface ChatSkill extends ChatSkillBase {
 /** A list row: no overview or section text, only their lengths. */
 export interface ChatSkillSummary extends ChatSkillBase {
   instructionsLength: number
-  sections: Array<Pick<ChatSkillSection, 'path' | 'title' | 'summary' | 'loadCount' | 'lastLoadedAt'> & { length: number }>
+  sections: Array<Pick<ChatSkillSection, 'path' | 'title' | 'summary' | 'loadCount' | 'lastLoadedAt'> & { length: number; tokens: number }>
 }
 
 /** A skill's own contents: what a draft, a preview, a stored version and an import carry. */

@@ -50,7 +50,7 @@ export type ChatSkill = ChatSkillBase & {
 /** A library row: the texts' lengths instead of the texts. */
 export type ChatSkillSummary = ChatSkillBase & {
   instructionsLength: number
-  sections: Array<Pick<ChatSkillSection, 'path' | 'title' | 'summary' | 'loadCount' | 'lastLoadedAt'> & { length: number }>
+  sections: Array<Pick<ChatSkillSection, 'path' | 'title' | 'summary' | 'loadCount' | 'lastLoadedAt'> & { length: number; tokens: number }>
 }
 
 /** What a save writes and a version keeps. */
@@ -312,10 +312,10 @@ export const ChatSkillStore = {
       length(instructions) AS instructions_length FROM chat_skills ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY name COLLATE NOCASE ASC, id ASC`)
       .all(...patterns.flatMap((pattern) => Array(6).fill(pattern))) as Array<Omit<SkillRow, 'instructions'> & { instructions_length: number }>
     const sections = new Map<number, ChatSkillSummary['sections']>()
-    const sectionRows = db.prepare('SELECT skill_id, path, title, summary, length(content) AS length, load_count, last_loaded_at FROM chat_skill_sections ORDER BY skill_id, position, id').all() as Array<{ skill_id: number; path: string; title: string; summary: string; length: number; load_count: number; last_loaded_at: string | null }>
+    const sectionRows = db.prepare('SELECT skill_id, path, title, summary, length(content) AS length, tokens, load_count, last_loaded_at FROM chat_skill_sections ORDER BY skill_id, position, id').all() as Array<{ skill_id: number; path: string; title: string; summary: string; length: number; tokens: number; load_count: number; last_loaded_at: string | null }>
     for (const row of sectionRows) {
       const list = sections.get(row.skill_id) ?? []
-      list.push({ path: row.path, title: row.title, summary: row.summary, length: row.length, loadCount: row.load_count, lastLoadedAt: row.last_loaded_at })
+      list.push({ path: row.path, title: row.title, summary: row.summary, length: row.length, tokens: row.tokens, loadCount: row.load_count, lastLoadedAt: row.last_loaded_at })
       sections.set(row.skill_id, list)
     }
     const profiles = linkedProfiles()
@@ -543,13 +543,15 @@ function saveSnapshot(current: ChatSkill, next: ChatSkillSnapshot) {
 /**
  * `## Skills` for the system prompt: how to use them, then one `- name: when to use it` line per usable linked skill.
  * It changes only when a skill or the profile's links do. '' without skills, and only beside the use_skill tool.
+ * `session`: an engine that keeps its own memory (Claude Code, pi, Codex) still holds what earlier replies loaded, so
+ * the model judges whether that text is still there instead of loading it in every reply.
  */
-export function profileSkillIndex(profile: { skillIds: number[] }) {
+export function profileSkillIndex(profile: { skillIds: number[] }, session = false) {
   const skills = ChatSkillStore.linked(profile.skillIds)
   if (skills.length === 0) return ''
   return [
     '## Skills',
-    `Skills are task instructions written by the administrator. When the user's request matches what a skill below is for, first call ${USE_SKILL_TOOL} with that skill's name: it returns the skill's overview and, when the skill has sections, their table of contents. Then load only the sections the request needs (${USE_SKILL_TOOL} with section) and follow what you loaded while you handle the request. Never guess what a skill says, and do not load one the request does not need. Load it again in every reply that needs it: instructions loaded in an earlier reply may no longer be in front of you.`,
+    `Skills are task instructions written by the administrator. When the user's request matches what a skill below is for, first call ${USE_SKILL_TOOL} with that skill's name: it returns the skill's overview and, when the skill has sections, their table of contents. Then load only the sections the request needs (${USE_SKILL_TOOL} with section) and follow what you loaded while you handle the request. Never guess what a skill says, and do not load one the request does not need. ${session ? 'What you loaded earlier in this chat stays in your memory: use it from there, and load it again only when you can no longer see its text.' : 'Load it again in every reply that needs it: instructions loaded in an earlier reply may no longer be in front of you.'}`,
     ...skills.map(skillIndexLine),
   ].join('\n')
 }
@@ -561,11 +563,14 @@ export function skillIndexLine(skill: { name: string; description: string }) {
 
 /**
  * One line for the end of a request, where small models look most, naming the skills and the rule to load one that
- * fits; it goes beside the skill list, so '' without skills.
+ * fits; it goes beside the skill list, so '' without skills. `session`: as in profileSkillIndex.
  */
-export function skillReminderText(profile: { skillIds: number[] }) {
+export function skillReminderText(profile: { skillIds: number[] }, session = false) {
   const names = ChatSkillStore.linked(profile.skillIds).map((skill) => `"${skill.name}"`)
-  return names.length ? `If this request matches one of your skills (${names.join(', ')}), call ${USE_SKILL_TOOL} with that name first and follow what it returns.` : ''
+  if (names.length === 0) return ''
+  return session
+    ? `If this request matches one of your skills (${names.join(', ')}), follow it: from what you loaded earlier in this chat while you can still see it, otherwise call ${USE_SKILL_TOOL} with that name first.`
+    : `If this request matches one of your skills (${names.join(', ')}), call ${USE_SKILL_TOOL} with that name first and follow what it returns.`
 }
 
 /** How a use_skill call reads in a later request's replayed history (its result is not kept). */
@@ -587,12 +592,13 @@ export function skillChunk(text: string, offset: number, room: number) {
   return { start, end, text: text.slice(start, end), more: end < text.length }
 }
 
-export type ContentsEntry = Pick<ChatSkillSectionFields, 'path' | 'title' | 'summary'> & { tokens: number }
+/** `included`: where the model already has the section's text (a tool's description), named instead of its size. */
+export type ContentsEntry = Pick<ChatSkillSectionFields, 'path' | 'title' | 'summary'> & { tokens: number; included?: string }
 
 export const contentsEntries = (sections: ChatSkillSectionFields[]): ContentsEntry[] =>
   sections.map((section) => ({ path: section.path, title: section.title, summary: section.summary, tokens: rawTokenEstimate(section.content) }))
 
-const contentsLine = (entry: ContentsEntry) => `- ${entry.path} — ${entry.title}${entry.summary ? `: ${entry.summary.replace(/\s+/g, ' ')}` : ''} (~${entry.tokens} tokens)`
+const contentsLine = (entry: ContentsEntry) => `- ${entry.path} — ${entry.title}${entry.summary ? `: ${entry.summary.replace(/\s+/g, ' ')}` : ''} (${entry.included ? `already in ${entry.included}; load it only if you cannot see it there` : `~${entry.tokens} tokens`})`
 
 /**
  * The table of contents under a skill's overview: one line per section (path, title, when to read it, rough size).

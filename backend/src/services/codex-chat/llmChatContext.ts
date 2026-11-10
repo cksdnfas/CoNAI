@@ -620,9 +620,9 @@ export function promptContextSources(profile: ChatProfile, user: ChatUserPersona
   ]
 }
 
-/** `skills`: use_skill is among the request's tools, so the profile's skill list goes with it. */
-export function fixedContextGuidance(profile: ChatProfile, withTools: boolean, skills = false) {
-  return [withTools ? toolGuidance(profile.generationPresetIds.length > 0) : '', skills ? profileSkillIndex(profile) : '', REPLY_FORMAT_GUIDANCE, REPLY_GUIDANCE, buildChatStyleGuidance(profile.style, profile.name), buildEmoticonGuidance(profile.style), modelLanguageGuidance(profile)].filter(Boolean).join('\n\n')
+/** `skills`: use_skill is among the request's tools, so the profile's skill list goes with it. `session`: as in profileSkillIndex. */
+export function fixedContextGuidance(profile: ChatProfile, withTools: boolean, skills = false, session = false) {
+  return [withTools ? toolGuidance(profile.generationPresetIds.length > 0) : '', skills ? profileSkillIndex(profile, session) : '', REPLY_FORMAT_GUIDANCE, REPLY_GUIDANCE, buildChatStyleGuidance(profile.style, profile.name), buildEmoticonGuidance(profile.style), modelLanguageGuidance(profile)].filter(Boolean).join('\n\n')
 }
 
 /** Helper instructions are referenced separately; they are not part of the primary reply's sections. */

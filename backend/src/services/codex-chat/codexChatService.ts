@@ -301,7 +301,7 @@ async function probeCodexCliNow(runtime: ReturnType<typeof prepareChatRuntime>) 
  * Codex session always has use_skill), then the profile's prompt.
  */
 export function buildCodexInstructions(profile: ChatProfile) {
-  return [developerInstructions(profile.generationPresetIds.length > 0), profileSkillIndex(profile), buildChatStyleGuidance(profile.style, profile.name), buildEmoticonGuidance(profile.style), buildPersonaPrompt(profile, { dialogueAsText: true })].filter(Boolean).join('\n\n')
+  return [developerInstructions(profile.generationPresetIds.length > 0), profileSkillIndex(profile, true), buildChatStyleGuidance(profile.style, profile.name), buildEmoticonGuidance(profile.style), buildPersonaPrompt(profile, { dialogueAsText: true })].filter(Boolean).join('\n\n')
 }
 
 /** Developer instructions are fixed when a Codex thread starts or resumes, so plugin hooks apply then. */

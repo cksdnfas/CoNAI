@@ -9,12 +9,14 @@ import { IconButton } from '@/components/ui/icon-button'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { Select } from '@/components/ui/select'
 import { SettingRow } from '@/components/ui/setting-row'
+import { Text } from '@/components/ui/text'
 import { Textarea } from '@/components/ui/textarea'
 import { ChatFilledLabel } from '@/features/codex-chat/chat-page-context'
 import { useI18n } from '@/i18n'
 import { CHAT_PRESET_PREVIOUS_IMAGES_MAX, CHAT_SKILLS_QUERY_KEY, listChatSkills, type ChatPresetPrompting, type ChatPresetPromptingInput } from '@/lib/api-codex-chat'
 import { sectionGroups } from './chat-skill-draft'
 import { ChatSkillEditorModal } from './chat-skill-editor-modal'
+import { useTokenLabel } from './chat-skill-editor-panes'
 
 export const EMPTY_PROMPTING: ChatPresetPromptingInput = { timing: 'inline', guide: '', guideSkill: null, previousImages: 0 }
 
@@ -30,9 +32,11 @@ type GuideSkill = ChatPresetPromptingInput['guideSkill']
 /**
  * 가이드: one section of a shared skill, or a whole group of them (`group/`, all its sections in order). Pick the skill,
  * then the section; a link whose skill or section is gone shows as missing. The pen opens that skill's editor.
+ * Under them: the guide's rough size and how often it is sent, which `timing` decides.
  */
-function GuideSkillSelect({ value, onChange }: { value: GuideSkill; onChange: (value: GuideSkill) => void }) {
+function GuideSkillSelect({ value, timing, onChange }: { value: GuideSkill; timing: ChatPresetPromptingInput['timing']; onChange: (value: GuideSkill) => void }) {
   const { t } = useI18n()
+  const tokenLabel = useTokenLabel()
   const skillsQuery = useQuery({ queryKey: CHAT_SKILLS_QUERY_KEY, queryFn: listChatSkills })
   // A skill chosen before any of its sections (or one without sections yet).
   const [pendingSkillId, setPendingSkillId] = useState<number | null>(null)
@@ -48,6 +52,11 @@ function GuideSkillSelect({ value, onChange }: { value: GuideSkill; onChange: (v
   ])
   const pathListed = value ? targets.some((target) => skillSectionPathKey(target.path) === skillSectionPathKey(value.path)) : false
   const missingPath = Boolean(value) && skill !== undefined && !pathListed
+  // A group guide is all of its sections.
+  const guideKey = value ? skillSectionPathKey(value.path) : ''
+  const guideTokens = skill && pathListed
+    ? skill.sections.filter((section) => (guideKey.endsWith('/') ? skillSectionPathKey(section.path).startsWith(guideKey) : skillSectionPathKey(section.path) === guideKey)).reduce((sum, section) => sum + section.tokens, 0)
+    : null
 
   return (
     <div className="flex min-w-0 flex-wrap items-center gap-1.5">
@@ -94,6 +103,13 @@ function GuideSkillSelect({ value, onChange }: { value: GuideSkill; onChange: (v
       ) : null}
       {skill ? <IconButton size="icon-sm" variant="ghost" label={t({ ko: '스킬 편집기 열기', en: 'Open the skill editor' })} onClick={() => setEditing(true)}><SquarePen /></IconButton> : null}
       {skillId !== null ? <IconButton size="icon-sm" variant="ghost" label={t({ ko: '연결 풀기', en: 'Unlink' })} onClick={() => { setPendingSkillId(null); onChange(null) }}><X /></IconButton> : null}
+      {guideTokens !== null ? (
+        <Text variant="caption" className="basis-full text-right">
+          {timing === 'after'
+            ? t({ ko: '{tokens} 토큰 · 그림을 만들 때만 읽어', en: '{tokens} tokens · read only when a picture is made' }, { tokens: tokenLabel(guideTokens) })
+            : t({ ko: '{tokens} 토큰 · 이 프리셋을 연결한 프로필의 모든 요청에 실려', en: '{tokens} tokens · sent with every request of a profile that links this preset' }, { tokens: tokenLabel(guideTokens) })}
+        </Text>
+      ) : null}
       {editing && skill ? <ChatSkillEditorModal open skillId={skill.id} onClose={() => setEditing(false)} /> : null}
     </div>
   )
@@ -116,7 +132,7 @@ export function PresetPromptingFields({ value, onChange }: { value: ChatPresetPr
           </div>
         </SettingRow>
         <SettingRow label={t({ ko: '가이드', en: 'Guide' })} info={t({ ko: '프롬프트를 쓸 때 따를 스킬 섹션이야. "그룹/"을 고르면 그 그룹의 섹션을 순서대로 전부 읽어.', en: 'The skill section the prompt writer follows. A "group/" choice reads all of that group’s sections in order.' })}>
-          <GuideSkillSelect value={value.guideSkill} onChange={(guideSkill) => patch({ guideSkill })} />
+          <GuideSkillSelect value={value.guideSkill} timing={value.timing} onChange={(guideSkill) => patch({ guideSkill })} />
         </SettingRow>
         <SettingRow label={<ChatFilledLabel fieldId="previousImages">{t({ ko: '이전 이미지 참고', en: 'Earlier pictures shown' })}</ChatFilledLabel>} info={t({ ko: '이 채팅에서 최근에 만든 이미지를 이만큼 보여줘. 이미지를 못 보는 모델에는 안 보내.', en: "Shows this many of the chat's latest pictures. Not sent to models that cannot see images." })}>
           <NumberStepperInput

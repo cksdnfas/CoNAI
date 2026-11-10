@@ -8,7 +8,8 @@ import { requireActiveChatReply } from '../../services/codex-chat/chatReplyRegis
 import { chatGenerationToolName, type McpRequestContext } from '../context';
 import { enqueueMcpGenerationJob } from './generationJobTools';
 import { ChatProfileStore } from '../../services/codex-chat/chatProfiles';
-import { requireMcpToolAccess } from '../toolAccess';
+import { skillGuide } from '../../services/codex-chat/chatSkills';
+import { isContextToolAllowed, requireMcpToolAccess } from '../toolAccess';
 import { requireRequesterPermission } from '../../middleware/featureAccess';
 import { errorResult, textResult } from '../toolResults';
 
@@ -48,6 +49,20 @@ function describe(preset: ChatGenerationPreset, body: string) {
 function withGuide(description: string, preset: ChatGenerationPreset) {
   const guide = presetGuideText(preset);
   return guide ? `${description}\n\nPrompt guide for this preset. Follow it when you fill the fields; where it differs from a field description or the general generation rules, the guide wins:\n${guide}` : description;
+}
+
+/**
+ * The sections of skill `skillId` (a section path, or `group/`) that a generation tool of this chat already carries in
+ * its description as the preset's prompt guide (withGuide). use_skill names that tool beside them in a table of
+ * contents, so the model can tell the text is there instead of loading it a second time.
+ */
+export function presetGuidesInTools(context: McpRequestContext, skillId: number): Array<{ path: string; tool: string }> {
+  return ChatGenerationPresetStore.resolve(context.generationPresetIds ?? []).flatMap((preset, index) => {
+    const link = preset.prompting.guideSkill;
+    const tool = chatGenerationToolName(index);
+    if (!link || link.skillId !== skillId || preset.prompting.timing === 'after' || !isContextToolAllowed(context, tool) || presetInputShape(preset).problem || skillGuide(skillId, link.path).text === null) return [];
+    return [{ path: link.path, tool }];
+  });
 }
 
 function usesReference(preset: ChatGenerationPreset) {

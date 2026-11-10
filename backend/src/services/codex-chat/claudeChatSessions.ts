@@ -82,7 +82,7 @@ export function deleteClaudeSessions(threadId: number) {
  * session has use_skill whenever the profile links a skill, so the skill list (empty without skills) always goes in.
  */
 export function claudeSessionSystem(profile: ChatProfile, withTools: boolean, user: ReturnType<typeof userPersonaForThread>) {
-  return [fixedContextGuidance(profile, withTools, true), buildPersonaPrompt(profile, { dialogueAsText: true, user })].filter(Boolean).join('\n\n')
+  return [fixedContextGuidance(profile, withTools, true, true), buildPersonaPrompt(profile, { dialogueAsText: true, user })].filter(Boolean).join('\n\n')
 }
 
 const systemHashOf = (system: string) => createHash('sha1').update(system).digest('hex').slice(0, 12)
@@ -145,7 +145,7 @@ export async function buildClaudeSessionTurn(params: {
     latest ? inlineTextsForChat(profile, requester.accountId, [latest], attachmentContext) : undefined,
   ])
   const body = latest ? chatContentWithAttachments(latest.content, latest.attachments, latest.mediaAttachments, attachmentTexts, images) : ''
-  const directive = [flagDirectiveFor(history, profile, user), postHistoryText(profile, user), skillReminderText(profile)].filter(Boolean).join('\n\n')
+  const directive = [flagDirectiveFor(history, profile, user), postHistoryText(profile, user), skillReminderText(profile, true)].filter(Boolean).join('\n\n')
   const text = [
     recap,
     agentResults.text,
@@ -237,7 +237,7 @@ export async function buildClaudeGroupSessionTurn(params: {
   const text = buildGroupCodexInput({
     thread, members, self: profile, messages, history: params.history, routing: params.routing, lastSeenMessageId: lastSeen, windowLimit: params.windowLimit,
     lore: [lore.index.text, lore.keyed, rejected.text, note.text, state.text, outcomes.text, generated.text].filter(Boolean).join('\n\n'),
-    directive: [flags, postHistoryText(profile, user), skillReminderText(profile)].filter(Boolean).join('\n\n'),
+    directive: [flags, postHistoryText(profile, user), skillReminderText(profile, true)].filter(Boolean).join('\n\n'),
     attachmentTexts, attachedImages, header: false,
   })
   const urls = [...shown.filter((message) => message.role === 'user').flatMap((message) => attachedImagesOf(message, attachedImages)), ...generated.urls]

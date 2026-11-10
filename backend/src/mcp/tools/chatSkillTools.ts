@@ -11,6 +11,7 @@ import { userPersonaForThread } from '../../services/codex-chat/chatUserProfiles
 import { CodexChatStore } from '../../services/codex-chat/codexChatStore';
 import type { McpRequestContext } from '../context';
 import { errorResult } from '../toolResults';
+import { presetGuidesInTools } from './chatGenerationTools';
 
 /**
  * use_skill: one of the speaking profile's skills (see chatSkills), by the name the system prompt's skill list shows —
@@ -63,17 +64,27 @@ export function registerChatSkillTools(server: McpServer, context: McpRequestCon
       const skill = ChatSkillStore.outline(named.id);
       if (!skill) throw new Error(`Skill "${named.name}" is gone.`);
       const first = (offset ?? 0) === 0;
+      // The table names a section a generation tool already carries as its preset's guide; loading it stays the model's call.
+      const table = () => {
+        const guides = presetGuidesInTools(context, skill.id);
+        if (guides.length === 0) return skill.contents;
+        const inGuide = (path: string, guide: string) => guide.endsWith('/') ? skillSectionPathKey(path).startsWith(skillSectionPathKey(guide)) : skillSectionPathKey(path) === skillSectionPathKey(guide);
+        return skill.contents.map((entry) => {
+          const guide = guides.find((item) => inGuide(entry.path, item.path));
+          return guide ? { ...entry, included: `the description of ${guide.tool}` } : entry;
+        });
+      };
 
       if (section === undefined) {
         if (first) ChatSkillStore.recordLoad(skill.id, []);
-        return text(skillResultText(skill, fill(skillOverviewText(skill.name, skill.instructions, skill.contents, profile.toolOutputLimit)), offset ?? 0, profile.toolOutputLimit));
+        return text(skillResultText(skill, fill(skillOverviewText(skill.name, skill.instructions, table(), profile.toolOutputLimit)), offset ?? 0, profile.toolOutputLimit));
       }
       const paths = section.split(',').map((path) => path.trim()).filter(Boolean);
       const known = () => skill.contents.map((item) => `"${item.path}"`).join(', ') || '(none: load the skill without section)';
       const group = paths.find((path) => path.endsWith('/'));
       if (group !== undefined) {
         if (paths.length > 1) throw new Error('List one group ("group/") at a time, without other paths.');
-        const contents = skillContents(skill.name, skill.contents, Number.MAX_SAFE_INTEGER, group.slice(0, -1));
+        const contents = skillContents(skill.name, table(), Number.MAX_SAFE_INTEGER, group.slice(0, -1));
         if (!contents) throw new Error(`Skill "${skill.name}" has no group "${group}". Its sections: ${known()}.`);
         return text(skillResultText(skill, fill(contents), offset ?? 0, profile.toolOutputLimit, group));
       }

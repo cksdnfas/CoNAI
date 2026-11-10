@@ -1142,6 +1142,12 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
       assert.match(system, /## Skills\n[^\n]*use_skill[^\n]*\n- Picture request: Use when the user asks for a picture\./)
       assert.match(String(buildChatPromptPreview(current, [])[0].content), /## Skills/, 'a preview opens no chat, yet lists the linked skills')
       assert.doesNotMatch(String(buildLeadingMessages(current, null, { summaryEnabled: false }, false)[0].content), /## Skills/, 'a request lists them only beside the tool')
+      // An API reply keeps nothing of an earlier load; an engine with its own memory judges what it still has.
+      const { buildCodexInstructions } = await import('../src/services/codex-chat/codexChatService')
+      const { claudeSessionSystem } = await import('../src/services/codex-chat/claudeChatSessions')
+      const { userPersonaForThread } = await import('../src/services/codex-chat/chatUserProfiles')
+      assert.match(system, /Load it again in every reply that needs it/)
+      for (const session of [buildCodexInstructions(current), claudeSessionSystem(current, false, userPersonaForThread(null))]) assert.match(session, /## Skills\n[^\n]*load it again only when you can no longer see its text/)
       const loaded = read(await chat.bridge.call('use_skill', { name: ' PICTURE request ' }))
       assert.match(loaded, /^Skill "Picture request"/)
       assert.ok(loaded.includes(`2. Draw ${current.name}.`), '{{char}} becomes the profile name')
@@ -1177,6 +1183,16 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
       assert.match(read(await sectionsChat.bridge.call('use_skill', { query: 'comfyui' })), /skill "Picture request" section "models\/comfy"/)
       assert.equal(ChatSkillStore.find(skillId)!.sections.find((section) => section.path === 'models/nai')!.loadCount, 1, 'loads are counted per section')
     } finally { sectionsChat.close(); await sectionsChat.bridge.close() }
+
+    // A section a generation tool already carries as its preset's guide is named in the table, not sized for loading.
+    const { ChatGenerationPresetStore } = await import('../src/services/codex-chat/chatGenerationPresets')
+    const guided = ChatGenerationPresetStore.create({ name: 'Guided', kind: 'nai', prompting: { guideSkill: { skillId, path: 'models/nai' } } })
+    const closeGuided = registerChatReply(replyContext('r-skill-guide'), live.signal, () => ({ replyTo: null, recipients: ['user'] }))
+    const guidedBridge = await openChatMcpBridge({ accountId: null, accountType: 'admin' }, ['read', 'generate'], null, { chatContext: replyContext('r-skill-guide'), generationPresetIds: [guided.id] })
+    try {
+      assert.match(guidedBridge.tools.find((tool) => tool.function.name === 'generate_image')?.function.description ?? '', /NAI_RULES/, 'the guide rides in the tool description')
+      assert.match(read(await guidedBridge.call('use_skill', { name: 'Picture request' })), /- models\/nai — NAI: Use for NAI presets\. \(already in the description of generate_image; [^\n]*\)\n- models\/comfy — Comfy: Use for ComfyUI presets\. \(~\d+ tokens\)/)
+    } finally { closeGuided(); await guidedBridge.close(); ChatGenerationPresetStore.delete(guided.id) }
 
     const { proposal: sectionProposal } = buildSkillProposal({ skill_id: skillId, sections: [
       { section: 'style', edits: [{ old_text: 'STYLE', new_text: 'LOOK' }] },
