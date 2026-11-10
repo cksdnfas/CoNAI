@@ -29,8 +29,6 @@ import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
 import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
 import { pageAction, pageChoice, pageNumber, pageObject, pageText } from '@/features/codex-chat/page-action-helpers'
-import { ImageListColumnFloatingControl } from '@/features/images/components/image-list/image-list-column-floating-control'
-import { useImageListColumnPreference } from '@/features/images/components/image-list/image-list-column-preferences'
 import { LoadMoreSentinel } from '@/features/posts/post-attach-shared'
 import { useI18n, type AppLanguage } from '@/i18n'
 import { createCharacterSetting, fillCharacterAppearance, importCharacterCatalogReferences, type CharacterAppearanceFill, type CharacterFacetKey, type CharacterSettingFilters } from '@/lib/api-character-library'
@@ -44,6 +42,7 @@ import { folderPath, loadNextBatch, localizedTagName, refreshCharacterViews, use
 import { CharacterFacetPanel } from './components/character-facet-panel'
 import { CharacterFolderPickerModal } from './components/character-folder-nav'
 import { useSectionLabels } from './components/character-look-editor'
+import { characterCardGridClassName } from './components/character-setting-grid'
 
 /** Characters per loaded batch (the dictionary's page size; the server caps it there). */
 const CATALOG_PAGE_SIZE = 30
@@ -97,8 +96,7 @@ export function CharacterCatalogPage({ viewSwitch }: { viewSwitch: ReactNode }) 
   const foldersQuery = useCharacterFolders()
   // A folder missing from the cached list (made in another tab just now) is never named as the top level.
   const folderName = (folderId: number | null) => folderId === null ? t({ ko: '최상위', en: 'Top level' }) : foldersQuery.data?.find((folder) => folder.id === folderId)?.name ?? t({ ko: '고른 폴더', en: 'the chosen folder' })
-  const columns = useImageListColumnPreference('catalog')
-  const update = (changes: Record<string, string | null>) => setParams((current) => {
+  const update =(changes: Record<string, string | null>) => setParams((current) => {
     const next = new URLSearchParams(current)
     next.set('view', 'catalog')
     for (const [key, value] of Object.entries(changes)) { if (value === null) next.delete(key); else next.set(key, value) }
@@ -282,13 +280,13 @@ export function CharacterCatalogPage({ viewSwitch }: { viewSwitch: ReactNode }) 
       {!available ? (
         <EmptyState icon={Library} title={t({ ko: 'Danbooru 사전이 설치되어 있지 않아', en: 'No Danbooru dictionary is installed' })} action={<Button asChild size="sm"><Link to="/prompts?tab=danbooru">{t({ ko: '프롬프트에서 설치', en: 'Install in Prompts' })}</Link></Button>} />
       ) : list.isPending ? (
-        <div className="grid gap-4 pt-2" style={{ gridTemplateColumns: `repeat(${columns.columnCount}, minmax(0, 1fr))` }}>{Array.from({ length: 6 }).map((_, index) => <Skeleton key={index} radius="sm" className="aspect-[3/4] w-full" />)}</div>
+        <div className={cn(characterCardGridClassName, 'pt-2')}>{Array.from({ length: 6 }).map((_, index) => <Skeleton key={index} radius="sm" className="aspect-[3/4] w-full" />)}</div>
       ) : list.isError && !list.data ? (
         <ErrorState title={t({ ko: '카탈로그를 불러오지 못했어', en: 'Could not load the catalog' })} error={list.error} onRetry={() => void list.refetch()} />
       ) : items.length ? (
         <section className="space-y-3">
           <Text as="p" variant="caption">{t({ ko: '캐릭터 {count}명', en: '{count} characters' }, { count: formatNumber(total) })}</Text>
-          <div className="grid gap-4" style={{ gridTemplateColumns: `repeat(${columns.columnCount}, minmax(0, 1fr))` }}>
+          <div className={characterCardGridClassName}>
             {items.map((item) => {
               const work = item.copyrights[0]
               const name = catalogName(item, language)
@@ -321,7 +319,6 @@ export function CharacterCatalogPage({ viewSwitch }: { viewSwitch: ReactNode }) 
         </section>
       ) : <EmptyState icon={Library} title={t({ ko: '맞는 캐릭터가 없어', en: 'No matching characters' })} />}
 
-      <ImageListColumnFloatingControl value={columns.columnCount} defaultValue={columns.defaultColumnCount} min={columns.minColumnCount} max={columns.maxColumnCount} onChange={columns.setColumnCount} onReset={columns.resetColumnCount} />
       {open ? (
         <CatalogCharacterModal
           character={open}

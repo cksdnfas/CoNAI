@@ -442,6 +442,10 @@ its own address.
   shows only on hover goes in `OverlayCardHoverOnly` (`shown` keeps it up), never an opacity class on the button.
 - Selection, the open card and focus are a primary ring drawn inside the card edge, above the picture, so a scrolling
   grid or dialog never clips them and the media never covers them. Use `MediaCard` for captions below the media and inline strip chips.
+- Character card grids (appearance library and its picker, catalog, chat profiles) use `characterCardGridClassName`
+  (`features/characters/components/character-setting-grid`): `auto-fill` columns at least 11rem wide, never fewer than
+  two, sized by the grid's own width. Do not set their columns by viewport breakpoint or a per-person column picker
+  (the image lists keep theirs).
 
 ### Button variants
 | Variant | Use | Look |

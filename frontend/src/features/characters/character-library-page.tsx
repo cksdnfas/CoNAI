@@ -10,8 +10,6 @@ import { CheckCheck, CheckSquare, Copy, Download, FolderInput, FolderPlus, Penci
 import { NameDialog } from '@/components/common/entry-dialogs'
 import { SelectionActionBar, SelectionBarAction } from '@/components/common/selection-action-bar'
 import { Select } from '@/components/ui/select'
-import { ImageListColumnFloatingControl } from '@/features/images/components/image-list/image-list-column-floating-control'
-import { useImageListColumnPreference } from '@/features/images/components/image-list/image-list-column-preferences'
 import { copyTextToClipboard } from '@/lib/clipboard'
 import { PageToolbar } from '@/components/common/page-toolbar'
 import { PageWithSidebar } from '@/components/common/page-with-sidebar'
@@ -153,7 +151,6 @@ function AppearanceLibraryPage() {
     ...(changes.filters !== undefined ? { f: hasActiveFilters(changes.filters) ? JSON.stringify(changes.filters) : null } : {}),
     page: null,
   })
-  const columns = useImageListColumnPreference('characters')
   /** Settings chosen for a bulk action, kept across scopes; `selectMode` makes a card click choose instead of open. */
   const [selected, setSelected] = useState<ReadonlyMap<number, CharacterSettingSummary>>(new Map())
   const [selectMode, setSelectMode] = useState(false)
@@ -444,7 +441,6 @@ function AppearanceLibraryPage() {
               onRetry={() => void settingsQuery.refetch()}
               retrying={settingsQuery.isFetching}
               footer={listFooter}
-              columns={columns.columnCount}
               renderSetting={(setting) => (
                 <CharacterSettingCard
                   key={setting.id}
@@ -471,15 +467,6 @@ function AppearanceLibraryPage() {
       </LibraryFolderContent>
       {editor.open ? <CharacterSettingDialog editor={editor} folders={folders} items={listed} total={settingsTotal ?? listed.length} onLoadMore={loadMore} canEdit={canEdit} admin={permissions.isAdmin} tab={editorTab} onTabChange={setEditorTab} onOpen={openSetting} onClose={closeEditor} onToggleFavorite={toggleFavorite} /> : null}
 
-      <ImageListColumnFloatingControl
-        value={columns.columnCount}
-        defaultValue={columns.defaultColumnCount}
-        min={columns.minColumnCount}
-        max={columns.maxColumnCount}
-        onChange={columns.setColumnCount}
-        onReset={columns.resetColumnCount}
-        aboveSelectionBar={selected.size > 0}
-      />
       {canEdit ? (
         <SelectionActionBar
           selectedCount={selected.size}

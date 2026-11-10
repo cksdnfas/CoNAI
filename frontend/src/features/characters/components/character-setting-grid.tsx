@@ -4,10 +4,16 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 
 /**
+ * The character card grid (appearance settings, catalog, chat profiles). Cards per row follow the width the grid really
+ * has (sidebar, docked chat, dialog), not the window, so a card keeps room for its name; never fewer than two per row.
+ */
+export const characterCardGridClassName = 'grid grid-cols-[repeat(auto-fill,minmax(min(11rem,calc(50%_-_0.5rem)),1fr))] gap-4'
+
+/**
  * Settings as a card grid with its loading and error states and the empty state; `footer` carries the paging (previous /
  * next in the pickers, the load-more sentinel on the library page).
  */
-export function CharacterSettingGrid<T>({ items, pending, error, onRetry, retrying = false, footer, renderSetting, empty, gridClassName, columns, errorTitle }: {
+export function CharacterSettingGrid<T>({ items, pending, error, onRetry, retrying = false, footer, renderSetting, empty, errorTitle }: {
   /** Undefined until the first load lands. */
   items: T[] | undefined
   pending: boolean
@@ -18,20 +24,16 @@ export function CharacterSettingGrid<T>({ items, pending, error, onRetry, retryi
   footer?: ReactNode
   renderSetting: (setting: T) => ReactNode
   empty: ReactNode
-  gridClassName?: string
-  /** Cards per row chosen by the person (overrides the responsive default). */
-  columns?: number
   errorTitle: string
 }) {
-  const grid = cn('grid gap-4 pt-2', columns ? undefined : gridClassName ?? 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6')
-  const style = columns ? { gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` } : undefined
+  const grid = cn(characterCardGridClassName, 'pt-2')
   return <>
     {pending ? (
-      <div className={grid} style={style}>{Array.from({ length: 6 }).map((_, index) => <Skeleton key={index} radius="sm" className="aspect-[3/4] w-full" />)}</div>
+      <div className={grid}>{Array.from({ length: 6 }).map((_, index) => <Skeleton key={index} radius="sm" className="aspect-[3/4] w-full" />)}</div>
     ) : error && !items ? (
       <ErrorState title={errorTitle} error={error} onRetry={onRetry} isRetrying={retrying} />
     ) : items?.length ? (
-      <div className={grid} style={style}>{items.map(renderSetting)}</div>
+      <div className={grid}>{items.map(renderSetting)}</div>
     ) : empty}
     {footer}
   </>

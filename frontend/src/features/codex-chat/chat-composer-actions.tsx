@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { Flag, Monitor, Paperclip, Pin, Plus, Sparkles, Wrench, type LucideIcon } from 'lucide-react'
 import type { ChatToolDirectiveSnapshot } from '@conai/shared'
 import { IconButton } from '@/components/ui/icon-button'
+import { ListRow } from '@/components/ui/list-row'
 import { Tip } from '@/components/ui/tooltip'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { useI18n } from '@/i18n'
@@ -10,10 +11,9 @@ import { cn } from '@/lib/utils'
 import { ChatAttachButton, ChatAttachDialogs, ChatAttachMenu, useChatAttach } from './chat-attachments'
 import { ChatFlagButton } from './chat-flags'
 import { ChatPageConnectButton, useChatPage } from './chat-page-context'
-import { popChipAddClassName, popChipClassName } from './chat-pop-chip'
 import { ChatSuggestButton, type ReplySuggestions } from './chat-suggestions'
 import { ChatToolsButton, ChatToolsChip, ChatToolsTray, chatToolPickLabel, useChatComposerTools } from './chat-composer-tools'
-import { usePopTray, useTrayDismiss } from './chat-tray'
+import { useTrayDismiss } from './chat-tray'
 import type { ChatComposerToolsTarget } from '@/lib/api-codex-chat'
 import type { ChatToolSelection, CodexChatApi } from './codex-chat-context'
 
@@ -28,10 +28,6 @@ const ITEM_ICON: Record<ItemId, LucideIcon> = { attach: Paperclip, page: Monitor
 
 const PINS_STORAGE_PREFIX = 'conai.chat.composer-pins.'
 const NO_SELECTION: ChatToolSelection = { pick: null, keep: false }
-// The stack rises over transcript text, so its switched-on chips and keys are the primary tint over a solid surface (the flag tray's are see-through).
-const STACK_ON_TINT = 'bg-linear-to-b from-primary/15 to-primary/15'
-const STACK_CHIP_ON_CLASS = `bg-surface-container ${STACK_ON_TINT}`
-const STACK_PIN_ON_CLASS = `bg-background ${STACK_ON_TINT}`
 
 function readPins(key: string): ItemId[] {
   try {
@@ -118,7 +114,6 @@ export function ChatComposerActions({ chat, selectionKey, toolsTarget, trayHost,
   }, [selectionKey])
 
   const stackShown = stackOpen && collapsed
-  const stack = usePopTray(stackShown, available.length)
   useTrayDismiss({ open: stackShown, trayRef: stackRef, buttonRef: plusRef, onClose: () => setStackOpen(false) })
   // Opened from the keyboard, the stack takes focus on its first key: it sits before the composer in the tab order, not after +.
   const focusStackOnOpen = useRef(false)
@@ -128,7 +123,7 @@ export function ChatComposerActions({ chat, selectionKey, toolsTarget, trayHost,
     if (!focusStackOnOpen.current || !first) return
     focusStackOnOpen.current = false
     first.focus()
-  }, [stackShown, stack.shown])
+  }, [stackShown])
 
   const label: Record<ItemId, string> = {
     attach: t({ ko: '첨부', en: 'Attach' }),
@@ -193,7 +188,7 @@ export function ChatComposerActions({ chat, selectionKey, toolsTarget, trayHost,
           variant="ghost"
           size="icon-sm"
           aria-expanded={stackShown}
-          aria-controls={stack.shown ? stackId : undefined}
+          aria-controls={stackShown ? stackId : undefined}
           onClick={(event) => { const next = !stackOpen; closeTrays(); focusStackOnOpen.current = next && event.detail === 0; setStackOpen(next) }}
           label={stackShown ? t({ ko: '입력 도구 닫기', en: 'Hide composer tools' }) : t({ ko: '입력 도구 열기', en: 'Show composer tools' })}
         >
@@ -201,40 +196,30 @@ export function ChatComposerActions({ chat, selectionKey, toolsTarget, trayHost,
         </IconButton>
       ) : null}
       {trayHost ? createPortal(<>
-      {collapsed && stack.shown ? (
-        <div ref={stackRef} id={stackId} role="group" aria-label={t({ ko: '입력 도구', en: 'Composer tools' })} className={cn('absolute bottom-full left-0 z-10 flex max-w-full flex-col-reverse items-start gap-1.5 px-3 pb-1.5 pt-2', stack.closing && 'pointer-events-none')}>
-          {available.map((id, index) => {
-            const { className, style } = stack.motion(index)
+      {stackShown ? (
+        // One solid panel like the tools and suggestions trays: loose chips could not be read over the transcript's text.
+        <div ref={stackRef} id={stackId} role="group" aria-label={t({ ko: '입력 도구', en: 'Composer tools' })} className="absolute bottom-full left-0 z-10 mb-1.5 flex w-72 max-w-full animate-in flex-col-reverse fade-in-0 zoom-in-95 rounded-lg border border-line bg-background/90 p-1 shadow-lg backdrop-blur-md motion-reduce:animate-none">
+          {available.map((id) => {
             const Icon = ITEM_ICON[id]
             const pinned = pins.includes(id)
-            const chip = (
-              // eslint-disable-next-line no-restricted-syntax -- a pop chip that springs in; Button's fills and sizes do not fit
-              <button
-                type="button"
-                disabled={disabled[id]}
-                aria-pressed={id === 'page' ? on.page : undefined}
-                onClick={id === 'attach' ? undefined : () => pressChip(id)}
-                className={popChipClassName(on[id], cn('h-9 min-w-0 shrink gap-2 pl-3 pr-3.5 text-sm disabled:cursor-not-allowed disabled:opacity-50', on[id] && STACK_CHIP_ON_CLASS))}
-              >
-                <Icon className="size-4 shrink-0" aria-hidden />
-                <span className="whitespace-nowrap font-semibold">{label[id]}</span>
-                {state[id] ? <span className="min-w-0 truncate text-xs font-normal text-muted-foreground">{state[id]}</span> : null}
-              </button>
+            const row = (
+              <ListRow asChild interactive size="sm" selected={on[id]} leading={<Icon className="size-4" aria-hidden />}>
+                <button type="button" disabled={disabled[id]} aria-pressed={id === 'page' ? on.page : undefined} onClick={id === 'attach' ? undefined : () => pressChip(id)}>
+                  <span className="shrink-0 font-semibold">{label[id]}</span>
+                  {state[id] ? <span className="min-w-0 truncate text-xs text-muted-foreground">{state[id]}</span> : null}
+                </button>
+              </ListRow>
             )
             return (
-              <div key={id} style={style} className={cn('flex max-w-full items-center gap-1.5', className)}>
-                {id === 'attach' ? <ChatAttachMenu attach={attach} side="right" returnFocusRef={anchorFor('attach', attachKeyRef)} onPick={closeTrays}>{chip}</ChatAttachMenu> : chip}
+              <div key={id} className="flex items-center gap-1">
+                {/* Alone in its cell, the row is a last row: no hairline that would stop short of the pin. */}
+                <div className="min-w-0 flex-1">
+                  {id === 'attach' ? <ChatAttachMenu attach={attach} side="right" returnFocusRef={anchorFor('attach', attachKeyRef)} onPick={closeTrays}>{row}</ChatAttachMenu> : row}
+                </div>
                 <Tip content={pinned ? t({ ko: '고정 해제', en: 'Unpin' }) : t({ ko: '입력줄에 고정', en: 'Pin to the row' })} side="right">
-                  {/* eslint-disable-next-line no-restricted-syntax -- the round pin key of a pop-chip tray */}
-                  <button
-                    type="button"
-                    aria-pressed={pinned}
-                    aria-label={t({ ko: '{item} 고정', en: 'Pin {item}' }, { item: label[id] })}
-                    onClick={() => togglePin(id)}
-                    className={pinned ? popChipClassName(true, cn('size-9 justify-center', STACK_PIN_ON_CLASS)) : popChipAddClassName('size-9 bg-background')}
-                  >
-                    <Pin className={cn('size-4', pinned && 'fill-current')} />
-                  </button>
+                  <IconButton variant="ghost" size="icon-sm" tooltip={false} active={pinned} label={t({ ko: '{item} 고정', en: 'Pin {item}' }, { item: label[id] })} onClick={() => togglePin(id)}>
+                    <Pin className={pinned ? 'fill-current' : undefined} />
+                  </IconButton>
                 </Tip>
               </div>
             )

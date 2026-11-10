@@ -20,11 +20,17 @@ import { codexChatComposerToolsQueryKey } from './codex-chat-context'
 const PRESET_KIND_LABEL: Record<ChatComposerPreset['kind'], string> = { nai: 'NAI', comfyui: 'ComfyUI' }
 const NO_PRESETS: ChatComposerPreset[] = []
 const NO_TOOLS: ChatToolInfo[] = []
+const NO_GROUPS: ChatToolGroup[] = []
+/**
+ * Off: the tray offers the profile's generation presets only. The server still sends the chat's tools and still takes
+ * a tool directive, so turning this on is all it takes to list them by group again.
+ */
+const LIST_CHAT_TOOLS = false
 
 /**
- * What the chat offers for directing a message: its profile's generation presets, and its tools as the tray lists them
- * (the chat's own tools, which no scope offers, are not on the list). Asked once per chat (the new chat being prepared
- * by its profile) and kept. No presets and no listed tools: the composer has no tools item.
+ * What the chat offers for directing a message: its profile's generation presets and, while LIST_CHAT_TOOLS is on, its
+ * tools as the tray lists them (the chat's own tools, which no scope offers, are not on the list). Asked once per chat
+ * (the new chat being prepared by its profile) and kept. Nothing to list: the composer has no tools item.
  */
 export function useChatComposerTools(target: ChatComposerToolsTarget | null) {
   const { t } = useI18n()
@@ -35,7 +41,7 @@ export function useChatComposerTools(target: ChatComposerToolsTarget | null) {
   })
   return useMemo(() => {
     const presets = data?.presets ?? NO_PRESETS
-    const groups = scopeRepeatedGroups(groupChatTools(data?.tools ?? NO_TOOLS, t), (scope) => getChatScopeCopy(scope, t).label)
+    const groups = LIST_CHAT_TOOLS ? scopeRepeatedGroups(groupChatTools(data?.tools ?? NO_TOOLS, t), (scope) => getChatScopeCopy(scope, t).label) : NO_GROUPS
     return { presets, groups, available: presets.length > 0 || groups.length > 0 }
   }, [data, t])
 }
@@ -117,6 +123,7 @@ function ChatToolsTrayBody({ presets, groups, pick, keep, buttonRef, onPick, onK
 
   const shownPresets = presets.filter((preset) => matchesChatTool({ search: { keys: [preset.name, PRESET_KIND_LABEL[preset.kind]], prose: [preset.instruction] } }, query))
   const shownGroups = groups.map((group) => ({ ...group, tools: group.tools.filter((tool) => matchesChatTool(tool, query)) })).filter((group) => group.tools.length > 0)
+  const toolCount = groups.reduce((sum, group) => sum + group.tools.length, 0)
   const choose = (next: ChatToolDirectiveSnapshot) => onPick(sameDirective(pick, next) ? null : next)
   const row = (key: string, next: ChatToolDirectiveSnapshot, name: string, description: string, kind?: string) => {
     const on = sameDirective(pick, next)
@@ -134,7 +141,7 @@ function ChatToolsTrayBody({ presets, groups, pick, keep, buttonRef, onPick, onK
   return (
     <div ref={trayRef} role="group" aria-label={t({ ko: '도구 고르기', en: 'Choose a tool' })} className="absolute bottom-full left-0 z-10 mb-1.5 flex max-h-80 w-[22rem] max-w-full animate-in flex-col overflow-hidden fade-in-0 zoom-in-95 rounded-lg border border-line bg-background/90 shadow-lg backdrop-blur-md motion-reduce:animate-none">
       <div className="border-b border-line p-1.5">
-        <SearchField autoFocus value={query} onChange={setQuery} placeholder={t({ ko: '프리셋·도구 검색', en: 'Search presets and tools' })} />
+        <SearchField autoFocus value={query} onChange={setQuery} placeholder={toolCount > 0 ? t({ ko: '프리셋·도구 검색', en: 'Search presets and tools' }) : t({ ko: '프리셋 검색', en: 'Search presets' })} />
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto p-1">
         {shownPresets.length > 0 ? (
@@ -149,14 +156,14 @@ function ChatToolsTrayBody({ presets, groups, pick, keep, buttonRef, onPick, onK
             {group.tools.map((tool) => row(`tool:${tool.name}`, { tool: tool.name }, tool.label, tool.description))}
           </div>
         ))}
-        {shownPresets.length === 0 && shownGroups.length === 0 ? <EmptyState size="compact" title={t({ ko: '맞는 프리셋이나 도구가 없어', en: 'No matching preset or tool' })} /> : null}
+        {shownPresets.length === 0 && shownGroups.length === 0 ? <EmptyState size="compact" title={toolCount > 0 ? t({ ko: '맞는 프리셋이나 도구가 없어', en: 'No matching preset or tool' }) : t({ ko: '맞는 프리셋이 없어', en: 'No matching preset' })} /> : null}
       </div>
       <div className="flex items-center justify-between gap-3 border-t border-line px-2.5 py-1.5 text-xs text-muted-foreground">
         <label className="flex cursor-pointer items-center gap-2 text-foreground">
           <Checkbox checked={keep} onCheckedChange={(checked) => onKeep(checked === true)} />
           {t({ ko: '보낸 뒤에도 유지', en: 'Keep after sending' })}
         </label>
-        <span className="tabular-nums">{t({ ko: '프리셋 {presets} · 도구 {tools}', en: 'Presets {presets} · Tools {tools}' }, { presets: presets.length, tools: groups.reduce((sum, group) => sum + group.tools.length, 0) })}</span>
+        <span className="tabular-nums">{toolCount > 0 ? t({ ko: '프리셋 {presets} · 도구 {tools}', en: 'Presets {presets} · Tools {tools}' }, { presets: presets.length, tools: toolCount }) : t({ ko: '프리셋 {presets}', en: 'Presets {presets}' }, { presets: presets.length })}</span>
       </div>
     </div>
   )

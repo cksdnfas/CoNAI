@@ -1,6 +1,6 @@
 import { useMemo, useState, useSyncExternalStore } from 'react'
 
-export type ImageListColumnPreferenceScope = 'home' | 'group' | 'history' | 'characters' | 'catalog'
+export type ImageListColumnPreferenceScope = 'home' | 'group' | 'history'
 
 /** Phones and wide screens keep separate column choices: 4 columns at 390px makes thumbnails unreadable. */
 export type ImageListViewportClass = 'narrow' | 'wide'
@@ -16,8 +16,6 @@ export const DEFAULT_IMAGE_LIST_COLUMN_PREFERENCES: Record<ImageListColumnPrefer
   home: 4,
   group: 4,
   history: 4,
-  characters: 6,
-  catalog: 6,
 }
 
 function clampImageListColumnPreference(value: number, fallback: number) {

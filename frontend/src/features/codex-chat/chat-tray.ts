@@ -2,7 +2,7 @@ import { useEffect, useEffectEvent, useState, type CSSProperties, type RefObject
 
 /*
  * What the composer's trays share: the pop chips' spring-in and drop-back motion, and how a tray is dismissed.
- * The flag tray and the + stack both rise over the composer as pop chips (see chat-pop-chip.ts).
+ * The flag tray rises over the composer as pop chips (see chat-pop-chip.ts); the + stack and the other trays are panels.
  */
 
 export const POP_STAGGER_MS = 45

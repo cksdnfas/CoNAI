@@ -44,8 +44,8 @@ export function ChatAttachDialogs({ chat, attach }: { chat: CodexChatApi; attach
 }
 
 /**
- * The 첨부 menu under its trigger (the key, or the chip of the + stack). `onPick` runs once an entry is chosen.
- * `returnFocusRef` is where focus goes when the menu closes, for a trigger that goes away with it (the stack's chip).
+ * The 첨부 menu under its trigger (the key, or the row of the + stack). `onPick` runs once an entry is chosen.
+ * `returnFocusRef` is where focus goes when the menu closes, for a trigger that goes away with it (the stack's row).
  */
 export function ChatAttachMenu({ attach, side = 'top', onPick, returnFocusRef, children }: { attach: ChatAttach; side?: 'top' | 'right'; onPick?: () => void; returnFocusRef?: RefObject<HTMLElement | null>; children: ReactElement }) {
   const { t } = useI18n()

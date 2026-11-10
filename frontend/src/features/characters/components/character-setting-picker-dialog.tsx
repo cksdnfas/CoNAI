@@ -101,9 +101,7 @@ function CharacterSettingPicker({ onOpenChange, onPick, title, confirmLabel, ini
                 error={settingsQuery.isError ? settingsQuery.error : null}
                 onRetry={() => void settingsQuery.refetch()}
                 retrying={settingsQuery.isFetching}
-                footer={<ListPager className="pt-3" hasPrevious={page > 0} hasNext={Boolean(settingsQuery.data?.hasMore)} onPrevious={() => setPaging({ key: scopeKey, page: page - 1 })} onNext={() => setPaging({ key: scopeKey, page: page + 1 })} />}
-                gridClassName="grid-cols-2 sm:grid-cols-3 lg:grid-cols-4"
-                renderSetting={(setting) => (
+                footer={<ListPager className="pt-3" hasPrevious={page > 0} hasNext={Boolean(settingsQuery.data?.hasMore)} onPrevious={() => setPaging({ key: scopeKey, page: page - 1 })} onNext={() => setPaging({ key: scopeKey, page: page + 1 })} />}                renderSetting={(setting) => (
                   <CharacterSettingCard key={setting.id} setting={setting} selected={selectedId === setting.id} onOpen={() => setSelectedId(setting.id)} onDoubleClick={() => pick(setting.id)} />
                 )}
                 empty={<EmptyState size="compact" icon={UserRound} title={query ? t({ ko: '맞는 외형 설정이 없어', en: 'No matching settings' }) : t({ ko: '여기엔 외형 설정이 없어', en: 'No appearance settings here' })} />}
