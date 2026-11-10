@@ -21,6 +21,7 @@ import { ChatUserProfileError } from '../services/codex-chat/chatUserProfiles'
 import { ChatAppearanceError } from '../services/codex-chat/chatAppearance'
 import { ChatSuggestError } from '../services/codex-chat/chatSuggestions'
 import { CharacterLibraryError } from '../services/characterLibrary'
+import { ChatToolDirectiveError } from '../services/codex-chat/chatToolDirective'
 
 /** Request parsing, access checks and error responses shared by the /api/codex-chat routers. */
 
@@ -51,8 +52,8 @@ export function sendChatError(res: Response, error: unknown) {
     res.status(error.status).json({ success: false, error: error.message, ...(error.code ? { code: error.code } : {}), ...(error.revision !== undefined ? { revision: error.revision } : {}) })
     return
   }
-  if (error instanceof ChatDiagnosticsError || error instanceof ChatPageContextError || error instanceof CodexChatError || error instanceof LlmChatError || error instanceof FileStoreError || error instanceof ChatReplyError || error instanceof ChatSuggestError || error instanceof LorebookError || error instanceof LinkedFileError || error instanceof ChatFileChangeError) {
-    res.status(error.status).json({ success: false, error: error.message })
+  if (error instanceof ChatToolDirectiveError || error instanceof ChatDiagnosticsError || error instanceof ChatPageContextError || error instanceof CodexChatError || error instanceof LlmChatError || error instanceof FileStoreError || error instanceof ChatReplyError || error instanceof ChatSuggestError || error instanceof LorebookError || error instanceof LinkedFileError || error instanceof ChatFileChangeError) {
+    res.status(error.status).json({ success: false, error: error.message, ...(error instanceof ChatToolDirectiveError && error.code ? { code: error.code } : {}) })
     return
   }
   if (error instanceof ChatProfileError) {

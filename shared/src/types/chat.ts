@@ -12,6 +12,9 @@ import type { PostKnowledgeTaskPurpose } from './postKnowledgeRuntime'
 /** Native chat title storage limit; also used by plugin room title validation/composition. */
 export const CHAT_THREAD_TITLE_MAX_LENGTH = 60
 
+export type ChatToolDirective = { presetId: number } | { tool: string }
+export type ChatToolDirectiveSnapshot = { presetId: number; name: string } | { tool: string }
+
 /** A recipient is a member profile, the human, or a room announcement (no automatic reply). */
 export type ChatRecipient = number | 'user' | 'room'
 
@@ -66,6 +69,8 @@ export type ChatExecutionContext = {
   knowledgeOutputLimit?: number
   /** Captured only from an authorized server-side human order. Never a model/browser-supplied execution field. */
   knowledgeTaskPurpose?: PostKnowledgeTaskPurpose
+  /** Server-validated turn selection. Changes exposure only, never tool authorization. */
+  directTool?: string
   /** Validated, opted-in browser state for this reply only; never grants server-side authority. */
   page?: ChatPageSnapshot
 }

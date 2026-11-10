@@ -9,9 +9,10 @@ import { ChatFlagStore, parseFlagIds, parsePicks } from './chatFlags'
 import { readChoiceAnswer } from './chatChoices'
 import { parseChatPageContext } from './chatPageContext'
 import { userReplyRouting } from './chatReplies'
+import { resolveChatToolDirective } from './chatComposerTools'
 
 /** Read-only preparation shared by the engines. No task/page state changes before delivery. */
-export function prepareChatSend(
+export async function prepareChatSend(
   requester: McpRequester, thread: CodexChatThreadRecord, profile: ChatProfile, text: string,
   input: { fileIds?: unknown; flagIds?: unknown; picks?: unknown; mediaHashes?: unknown; replyToMessageId?: unknown; pageContext?: unknown; options: ChatSendOptions },
   ErrorType: new (message: string, status?: number) => Error,
@@ -28,5 +29,6 @@ export function prepareChatSend(
   const trimmed = text.trim()
   if (!trimmed && attachments.length === 0 && mediaAttachments.length === 0) throw new ErrorType('메시지를 입력해줘.')
   const routing = { ...userReplyRouting(thread, replyToMessageId), ...(options.task ? { task: options.task } : {}), ...(options.routine ? { routine: options.routine } : {}) }
-  return { page, attachments, mediaAttachments, flags, trimmed, routing }
+  const toolDirective = await resolveChatToolDirective(requester, thread, profile, options.toolDirective, page)
+  return { page, attachments, mediaAttachments, flags, trimmed, routing, toolDirective }
 }

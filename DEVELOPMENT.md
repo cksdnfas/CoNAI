@@ -38,6 +38,8 @@
 
 ## 채팅과 페이지 어시스턴트
 
+`GET /api/codex-chat/composer-tools?threadId=…` 또는 `?profileId=…`는 소유한 채팅/사용 가능한 프로필의 실제 MCP 등록을 카탈로그 없이 조회해 `{ presets: [{ id, name, instruction, kind }], tools: [{ name, description, scope }] }`를 반환한다(그룹은 빈 목록). 메시지 전송의 선택적 `toolDirective: { presetId } | { tool }`는 같은 턴 권한으로 검증하며, 해당 도구를 직접 노출하고 이번 턴만 사용할 지시를 덧붙인다. 사용자 메시지에는 프리셋 이름을 포함한 스냅샷을 저장한다. 재생성·수정은 현재 권한으로 다시 확인하고 사라진 선택은 실행하지 않는다. 관리자 도구 목록과 호출 시 권한 재검사는 바꾸지 않는다.
+
 ### 프로필 기능 권한 위임
 
 프로필의 `delegatedPermissions`는 `llm_chat_profiles.delegated_permissions`에 저장하며 기본값은 빈 배열이다. `CHAT_DELEGATABLE_PERMISSION_KEYS`는 공용 기능 카탈로그에서 계정·채팅·설정 권한을 제외한다. `chatProfilePermissions.ts`는 활성 계정, 현재 프로필 공개 범위와 도구 사용, 대화 소유권·참가자를 확인한 requester를 만들고 `featureAccess.ts`의 서버 전용 WeakMap에 현재 권한 해석을 결합한다. 직렬화하거나 복사한 requester에는 위임이 따라가지 않으며 `page.*` 권한을 파생하지 않는다.

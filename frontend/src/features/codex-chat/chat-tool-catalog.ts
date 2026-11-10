@@ -223,17 +223,22 @@ export type ChatToolEntry = {
 
 export type ChatToolGroup = { id: ChatToolGroupId; scope: ChatScope; label: string; tools: ChatToolEntry[] }
 
+/** Outside MCP servers' tools (x_<server>_<tool>) and plugin tools (p_<plugin>_<tool>); the catalog does not know them. */
+function outsideToolKind(name: string): 'external' | 'plugins' | null {
+  return TOOLS[name] ? null : name.startsWith('x_') ? 'external' : name.startsWith('p_') ? 'plugins' : null
+}
+
 /** The server's tools (chat scopes only) as groups under each scope, in catalog order; unknown tools close each scope. */
 export function groupChatTools(tools: ChatToolInfo[], t: TranslateFn): ChatToolGroup[] {
   const groups = new Map<string, ChatToolGroup>()
   for (const group of GROUPS) groups.set(group.id, { id: group.id, scope: group.scope, label: t(group.label), tools: [] })
   const other = new Map<ChatScope, ChatToolGroup>()
-  // Outside MCP servers' tools (x_<server>_<tool>) and plugin tools (p_<plugin>_<tool>) under the scope each was given.
+  // Outside tools under the scope each was given.
   const external = new Map<ChatScope, ChatToolGroup>()
   const plugins = new Map<ChatScope, ChatToolGroup>()
   for (const tool of tools) {
     if (tool.scope === null) continue
-    const kind = TOOLS[tool.name] ? null : tool.name.startsWith('x_') ? 'external' : tool.name.startsWith('p_') ? 'plugins' : null
+    const kind = outsideToolKind(tool.name)
     if (kind) {
       const groups = kind === 'external' ? external : plugins
       let group = groups.get(tool.scope)
@@ -241,11 +246,11 @@ export function groupChatTools(tools: ChatToolInfo[], t: TranslateFn): ChatToolG
         group = { id: kind, scope: tool.scope, label: kind === 'external' ? t({ ko: '외부 MCP', en: 'External MCP' }) : t({ ko: '플러그인', en: 'Plugins' }), tools: [] }
         groups.set(tool.scope, group)
       }
-      group.tools.push({ name: tool.name, scope: tool.scope, label: tool.name.slice(2), description: tool.description, search: { keys: [tool.name], prose: [tool.description] } })
+      group.tools.push({ name: tool.name, scope: tool.scope, label: chatToolLabel(tool.name, t), description: tool.description, search: { keys: [tool.name], prose: [tool.description] } })
       continue
     }
     const entry = TOOLS[tool.name]
-    const label = entry ? t(entry.label) : tool.name
+    const label = chatToolLabel(tool.name, t)
     const description = entry ? t({ ko: entry.ko, en: tool.description || entry.label.en }) : tool.description
     const search = { keys: entry ? [tool.name, entry.label.ko, entry.label.en] : [tool.name], prose: entry ? [entry.ko, tool.description] : [tool.description] }
     const target = entry && groups.get(entry.group)?.scope === tool.scope ? groups.get(entry.group) : null
@@ -273,10 +278,17 @@ export function groupChatTools(tools: ChatToolInfo[], t: TranslateFn): ChatToolG
   return ordered
 }
 
-/** The picker label of one tool, for summaries outside the picker. */
+/** The picker label of one tool, for summaries outside the picker (an outside tool without its x_/p_ prefix, as the picker shows it). */
 export function chatToolLabel(name: string, t: TranslateFn) {
   const entry = TOOLS[name]
-  return entry ? t(entry.label) : name
+  if (entry) return t(entry.label)
+  return outsideToolKind(name) ? name.slice(2) : name
+}
+
+/** Groups with a label that repeats under another scope get the scope added, so each reads as its own. */
+export function scopeRepeatedGroups(groups: ChatToolGroup[], scopeLabel: (scope: ChatScope) => string): ChatToolGroup[] {
+  const repeated = new Set(groups.map((group) => group.label).filter((label, index, labels) => labels.indexOf(label) !== index))
+  return groups.map((group) => repeated.has(group.label) ? { ...group, label: `${group.label} · ${scopeLabel(group.scope)}` } : group)
 }
 
 /** Whether a picker search finds this tool (Korean-aware: spacing, 초성 on names and labels, half-typed syllables). */
@@ -332,10 +344,9 @@ function fixedEntry(tool: FixedTool, t: TranslateFn): JudgeToolEntry {
  * other group of the server's tools. A group label that repeats under another scope gets the scope added.
  */
 export function judgeToolGroups(groups: ChatToolGroup[], t: TranslateFn, scopeLabel: (scope: ChatScope) => string): JudgeToolGroup[] {
-  const repeated = new Set(groups.map((group) => group.label).filter((label, index, labels) => labels.indexOf(label) !== index))
-  const serverGroups = groups.map((group): JudgeToolGroup => ({
+  const serverGroups = scopeRepeatedGroups(groups, scopeLabel).map((group): JudgeToolGroup => ({
     id: `${group.scope}:${group.id}`,
-    label: repeated.has(group.label) ? `${group.label} · ${scopeLabel(group.scope)}` : group.label,
+    label: group.label,
     tools: [
       ...(group.id === 'image-gen' ? IMAGE_GEN_PATTERNS.map((tool) => fixedEntry(tool, t)) : []),
       ...group.tools.map((tool) => ({ name: tool.name, label: tool.label, description: tool.description, search: tool.search, pattern: false })),

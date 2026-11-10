@@ -10,7 +10,7 @@ import { loadChatSettings } from './chatSettings'
 type ChatPermissionBinding = Pick<ChatExecutionContext, 'threadId' | 'profileId' | 'kind' | 'page'>
 
 /** Only call with a server-established chat binding, never with an unverified browser profile id. */
-export function chatProfileRequester(requester: McpRequester, chat: ChatPermissionBinding): McpRequester {
+export function chatProfileRequester(requester: McpRequester, chat: ChatPermissionBinding, profilePreview = false): McpRequester {
   const accountId = requester.accountId
   const { threadId, profileId, kind } = chat
   const publicPage = chat.page?.path.startsWith('/public/') === true
@@ -20,8 +20,8 @@ export function chatProfileRequester(requester: McpRequester, chat: ChatPermissi
     if (!profile?.mcpEnabled || !profile.delegatedPermissions.length
       || !canUseChatProfile(resolveChatAccess(accountId), profile)) return []
     const thread = CodexChatStore.findThread(threadId, accountId)
-    if (!thread || thread.kind !== kind
-      || (kind === 'group' ? !ChatGroupStore.member(threadId, profileId) : thread.profile_id !== profileId)) return []
+    if (!(profilePreview && threadId === 0 && kind === 'direct') && (!thread || thread.kind !== kind
+      || (kind === 'group' ? !ChatGroupStore.member(threadId, profileId) : thread.profile_id !== profileId))) return []
     return profile.delegatedPermissions.filter((key) => (CHAT_DELEGATABLE_PERMISSION_KEYS as readonly string[]).includes(key))
   })
 }
@@ -32,6 +32,6 @@ export function chatMcpRequester(context: McpRequestContext): McpRequester | und
   if (!requester) return undefined
   const plain = { accountId: requester.accountId, accountType: requester.accountType }
   return isChatMcpSource(context.source) && context.chatContext && !isPublicChatPage(context)
-    ? chatProfileRequester(plain, context.chatContext)
+    ? chatProfileRequester(plain, context.chatContext, context.profilePreview)
     : plain
 }

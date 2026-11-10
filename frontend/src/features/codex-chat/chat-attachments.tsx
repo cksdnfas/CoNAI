@@ -1,5 +1,5 @@
 import { useImagePermissions } from '@/features/auth/use-image-permissions'
-import { useRef, useState, type ClipboardEvent, type DragEvent } from 'react'
+import { useRef, useState, type ClipboardEvent, type DragEvent, type ReactElement, type RefObject } from 'react'
 import { EyeOff, File, FolderOpen, Images, Paperclip, Upload, X } from 'lucide-react'
 import type { StoredFileEntry } from '@conai/shared'
 import { Button } from '@/components/ui/button'
@@ -18,9 +18,8 @@ import type { CodexChatApi } from './codex-chat-context'
 import { ChatMediaAttachments, ChatMediaPicker } from './chat-media-picker'
 import { ChatPostRefChip } from './chat-post-cards'
 
-/** The composer's 첨부 key: upload, private stored files, or references to app media. */
-export function ChatAttachButton({ chat, disabled, allowPrivateUploads }: { chat: CodexChatApi; disabled: boolean; allowPrivateUploads: boolean }) {
-  const { t } = useI18n()
+/** What 첨부 offers this account in this chat (upload, private stored files, references to app media) and the pickers it opens. */
+export function useChatAttach(allowPrivateUploads: boolean) {
   const auth = useAuthStatusQuery()
   const input = useRef<HTMLInputElement>(null)
   const [pickerOpen, setPickerOpen] = useState(false)
@@ -29,34 +28,55 @@ export function ChatAttachButton({ chat, disabled, allowPrivateUploads }: { chat
   const canPickFiles = permissions.includes('files.view')
   const canPickMedia = useImagePermissions().canViewImages
   const canUpload = allowPrivateUploads && (permissions.includes('chat.use') || permissions.includes('chat.agent.use'))
-  if (!canUpload && !canPickFiles && !canPickMedia) return null
-  const isDisabled = disabled || chat.attachmentsUploading
+  return { input, pickerOpen, setPickerOpen, mediaPickerOpen, setMediaPickerOpen, canUpload, canPickFiles, canPickMedia, available: canUpload || canPickFiles || canPickMedia }
+}
+export type ChatAttach = ReturnType<typeof useChatAttach>
 
+/** The upload input and the two pickers. Mounted for as long as 첨부 is on offer, whichever key (or chip) opens its menu. */
+export function ChatAttachDialogs({ chat, attach }: { chat: CodexChatApi; attach: ChatAttach }) {
   return (
     <>
-      <input ref={input} type="file" multiple className="hidden" onChange={(event) => { void chat.uploadAttachments(Array.from(event.target.files ?? [])); event.target.value = '' }} />
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <IconButton variant="ghost" size="icon-sm" disabled={isDisabled} label={t({ ko: '첨부', en: 'Attach' })}><Paperclip /></IconButton>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" side="top">
-          {canUpload ? <DropdownMenuItem onSelect={() => input.current?.click()}>
-            <Upload />
-            {t({ ko: '새 파일 올리기', en: 'Upload new files' })}
-          </DropdownMenuItem> : null}
-          {canPickFiles ? <DropdownMenuItem onSelect={() => setPickerOpen(true)}>
-            <FolderOpen />
-            {t({ ko: '보관함에서 고르기', en: 'Choose from files' })}
-          </DropdownMenuItem> : null}
-          {canPickMedia ? <DropdownMenuItem onSelect={() => setMediaPickerOpen(true)}>
-            <Images />
-            {t({ ko: '앱 미디어에서 고르기', en: 'Choose app media' })}
-          </DropdownMenuItem> : null}
-        </DropdownMenuContent>
-      </DropdownMenu>
-      {pickerOpen ? <FilePicker onClose={() => setPickerOpen(false)} onPick={(entries) => { chat.addAttachments(entries); setPickerOpen(false) }} /> : null}
-      {mediaPickerOpen ? <ChatMediaPicker initial={chat.draftMediaAttachments} maxCount={20 - chat.draftAttachments.length} onClose={() => setMediaPickerOpen(false)} onPick={(items) => { if (chat.setMediaAttachments(items)) setMediaPickerOpen(false) }} /> : null}
+      <input ref={attach.input} type="file" multiple className="hidden" onChange={(event) => { void chat.uploadAttachments(Array.from(event.target.files ?? [])); event.target.value = '' }} />
+      {attach.pickerOpen ? <FilePicker onClose={() => attach.setPickerOpen(false)} onPick={(entries) => { chat.addAttachments(entries); attach.setPickerOpen(false) }} /> : null}
+      {attach.mediaPickerOpen ? <ChatMediaPicker initial={chat.draftMediaAttachments} maxCount={20 - chat.draftAttachments.length} onClose={() => attach.setMediaPickerOpen(false)} onPick={(items) => { if (chat.setMediaAttachments(items)) attach.setMediaPickerOpen(false) }} /> : null}
     </>
+  )
+}
+
+/**
+ * The 첨부 menu under its trigger (the key, or the chip of the + stack). `onPick` runs once an entry is chosen.
+ * `returnFocusRef` is where focus goes when the menu closes, for a trigger that goes away with it (the stack's chip).
+ */
+export function ChatAttachMenu({ attach, side = 'top', onPick, returnFocusRef, children }: { attach: ChatAttach; side?: 'top' | 'right'; onPick?: () => void; returnFocusRef?: RefObject<HTMLElement | null>; children: ReactElement }) {
+  const { t } = useI18n()
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>{children}</DropdownMenuTrigger>
+      <DropdownMenuContent align="start" side={side} onCloseAutoFocus={returnFocusRef ? (event) => { event.preventDefault(); returnFocusRef.current?.focus() } : undefined}>
+        {attach.canUpload ? <DropdownMenuItem onSelect={() => { attach.input.current?.click(); onPick?.() }}>
+          <Upload />
+          {t({ ko: '새 파일 올리기', en: 'Upload new files' })}
+        </DropdownMenuItem> : null}
+        {attach.canPickFiles ? <DropdownMenuItem onSelect={() => { attach.setPickerOpen(true); onPick?.() }}>
+          <FolderOpen />
+          {t({ ko: '보관함에서 고르기', en: 'Choose from files' })}
+        </DropdownMenuItem> : null}
+        {attach.canPickMedia ? <DropdownMenuItem onSelect={() => { attach.setMediaPickerOpen(true); onPick?.() }}>
+          <Images />
+          {t({ ko: '앱 미디어에서 고르기', en: 'Choose app media' })}
+        </DropdownMenuItem> : null}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
+/** The composer's 첨부 key. */
+export function ChatAttachButton({ attach, disabled, buttonRef }: { attach: ChatAttach; disabled: boolean; buttonRef?: RefObject<HTMLButtonElement | null> }) {
+  const { t } = useI18n()
+  return (
+    <ChatAttachMenu attach={attach}>
+      <IconButton ref={buttonRef} variant="ghost" size="icon-sm" disabled={disabled} label={t({ ko: '첨부', en: 'Attach' })}><Paperclip /></IconButton>
+    </ChatAttachMenu>
   )
 }
 

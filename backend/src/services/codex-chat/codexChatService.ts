@@ -1,4 +1,5 @@
 import { prepareChatSend } from './chatSendPreparation'
+import { toolDirectiveText } from './chatToolDirective'
 import { hasPrivateAttachmentContext, requirePrivateAttachmentRun } from './chatAttachmentPrivacy'
 import { deletingThreads } from './chatThreadReservation'
 import type { ChatExecutionContext } from '@conai/shared'
@@ -148,6 +149,8 @@ type Session = {
   catalog: Awaited<ReturnType<typeof getCodexModelSuggestions>>
   /** Codex threads loaded in this process. */
   loadedThreads: Set<string>
+  /** The selected non-preset tool currently exposed by this process's MCP connection. */
+  directTool?: string
   activeTurns: Map<string, TurnState>
   /** Manual compactions waiting for Codex to finish, by Codex thread id. */
   compactions: Map<string, { resolve: () => void; reject: (error: Error) => void }>
@@ -646,6 +649,7 @@ async function startSession(requester: McpRequester, scopes: ChatScope[], toolAl
     configEffort,
     catalog,
     loadedThreads: new Set(),
+    directTool: chatContext?.directTool,
     activeTurns: new Map(),
     compactions: new Map(),
     idleTimer: null,
@@ -662,6 +666,12 @@ async function ensureSession(requester: McpRequester, scopes: ChatScope[], toolA
   const existing = sessions.get(key)
   if (existing?.client.isAlive) {
     clearIdleTimer(existing)
+    if (chatContext && existing.directTool !== chatContext.directTool) {
+      setCodexChatExecution(existing.token, chatContext)
+      // Refresh the loaded thread's MCP definitions without replacing its process or conversation memory.
+      await existing.client.request('config/mcpServer/reload', undefined, THREAD_REQUEST_TIMEOUT_MS)
+      existing.directTool = chatContext.directTool
+    }
     return existing
   }
 
@@ -1386,7 +1396,7 @@ export const CodexChatService = {
     }
     assertChatAvailable(requester)
     const profile = requireCodexProfile(thread.profile_id, requester, thread.id)
-    const { attachments, mediaAttachments, flags, trimmed, page, routing } = prepareChatSend(requester, thread, profile, text,
+    const { attachments, mediaAttachments, flags, trimmed, page, routing, toolDirective } = await prepareChatSend(requester, thread, profile, text,
       { fileIds, flagIds, picks, mediaHashes, replyToMessageId, pageContext, options }, CodexChatError)
     if (CodexChatService.isRunning(threadId)) {
       throw new CodexChatError('이전 답변이 아직 진행 중이야.', 409)
@@ -1399,7 +1409,8 @@ export const CodexChatService = {
       // The model reads the message in English; the reader keeps their own words. Translated while the session starts.
       const translating = translateUserMessage(profile, trimmed, flags, controller.signal, { threadId })
       translating.catch(() => undefined)
-      const session = await ensureSession(requester, scopes, toolAllowlist, profile.generationPresetIds, { threadId, profileId: profile.id, kind: 'direct', page })
+      const directTool = toolDirective && 'tool' in toolDirective.snapshot ? toolDirective.tool : undefined
+      const session = await ensureSession(requester, scopes, toolAllowlist, profile.generationPresetIds, { threadId, profileId: profile.id, kind: 'direct', page, directTool })
       controller.signal.throwIfAborted()
       const run = resolveCodexRun(session, profile)
       // Keep a new memory uncommitted until turn/start accepts its first input, including the opening recap.
@@ -1426,7 +1437,7 @@ export const CodexChatService = {
       const modelText = translated.content
       controller.signal.throwIfAborted()
       if (session.activeTurns.has(codexThreadId)) throw new CodexChatError('이전 답변이 아직 진행 중이야.', 409)
-      const userMessageId = CodexChatStore.addMessage({ thread_id: threadId, role: 'user', ...translated, tool_calls: [], status: 'completed', mediaAttachments, routing }, attachments.map((file) => file.id))
+      const userMessageId = CodexChatStore.addMessage({ thread_id: threadId, role: 'user', ...translated, toolDirective: toolDirective?.snapshot, tool_calls: [], status: 'completed', mediaAttachments, routing }, attachments.map((file) => file.id))
       rememberChatPage(requester, page, threadId)
       if (!options.task && !options.routine) notifyChatUserSend(threadId, Boolean(page))
       options.onDelivered?.(userMessageId)
@@ -1454,6 +1465,7 @@ export const CodexChatService = {
       recordQuotedBoardKnowledge({ requester, chatContext: turn.delivery.context, source: 'codex-chat', scopes })
       const knowledgePage = page ? knowledgePageForExecution({ requester, chatContext: turn.delivery.context, source: 'codex-chat', scopes }, page) : undefined
       turn.delivery.context.page = knowledgePage
+      if (directTool) turn.delivery.context.directTool = directTool
       setCodexChatExecution(session.token, turn.delivery.context)
 
         // Codex keeps every turn's input in its memory, so lore already given since the last compaction (same entry,
@@ -1477,7 +1489,7 @@ export const CodexChatService = {
           console.warn('[codex-chat] judge failed:', error instanceof Error ? error.message : error)
           return null
         })
-        const directive = [buildFlagDirective(translated.flags, (value) => fillCharacterPlaceholders(value, profile, user)), postHistoryText(profile, user), judgeDirectiveText(turn.judged)].filter(Boolean).join('\n\n')
+        const directive = [buildFlagDirective(translated.flags, (value) => fillCharacterPlaceholders(value, profile, user)), postHistoryText(profile, user), judgeDirectiveText(turn.judged), toolDirectiveText(toolDirective)].filter(Boolean).join('\n\n')
         const reference = referenceBlock([persona.text, lore.index.text, lore.keyed, rejected.text, note.text, state.text, outcomes.text])
         const recap = freshCodexThread ? codexHistoryRecap(current, history.filter((entry) => entry.id < userMessageId), profile, user, historySource, userMessageId) : ''
         const agentResults = pendingAgentResults(threadId, userMessageId, sent, { recap: freshCodexThread || Boolean(recap) })

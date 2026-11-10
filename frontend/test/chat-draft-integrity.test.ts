@@ -120,6 +120,89 @@ test('a new chat sends the references and images picked while it was prepared, w
   assert.ok(screens.slice(prepared).every(screen => screen.pending || screen.selected !== null), 'no frame between the prepared and the saved chat shows the new-chat picker')
 })
 
+test('a picked tool goes with the first message of a new chat, stays only when kept, and is dropped only when the server refuses the tool', { timeout: 10000 }, async t => {
+  const { root, client } = await useDom(t)
+  const { act, createElement: h, useLayoutEffect } = await import('react')
+  const { QueryClientProvider } = await import('@tanstack/react-query')
+  const { I18nProvider } = await import('../src/i18n')
+  const { SnackbarContext } = await import('../src/components/ui/snackbar-context')
+  const { CodexChatProvider } = await import('../src/features/codex-chat/codex-chat-provider')
+  const { PENDING_DRAFT_KEY, codexChatComposerToolsQueryKey, useCodexChat } = await import('../src/features/codex-chat/codex-chat-context')
+  const { CHAT_STATUS_QUERY_KEY } = await import('../src/lib/api-codex-chat')
+  client.setQueryData(['auth-status'], { authenticated: true, hasCredentials: true, accountId: 1, permissionKeys: ['chat.use'] })
+  client.setQueryData(CHAT_STATUS_QUERY_KEY, { canUse: true })
+  const bodies: Array<{ toolDirective?: unknown }> = []
+  let refuse: { error: string; code?: string } | null = null
+  t.mock.method(globalThis, 'fetch', async (url: string | URL | Request, init?: RequestInit) => {
+    const path = String(url)
+    if (path.endsWith('/profiles/7/greeting')) return json({ index: 0, text: 'Hi', greetings: ['Hi'], userProfileId: null, before: [], after: [] })
+    if (path.endsWith('/api/codex-chat/threads') && init?.method === 'POST') return json({ id: 5, kind: 'direct', profile_id: 7, title: '', flag_ids: null })
+    if (path.includes('/threads/5?tail=80')) return json({ thread: { id: 5, kind: 'direct', profile_id: 7, flag_ids: null }, messages: [], media: {}, running: null })
+    if (path.endsWith('/threads/5/messages')) {
+      bodies.push(JSON.parse(String(init?.body)))
+      if (refuse) return new Response(JSON.stringify({ success: false, ...refuse }), { status: 400, headers: { 'Content-Type': 'application/json' } })
+      return new Response(new ReadableStream({ start(controller) { controller.close() } }), { status: 200 })
+    }
+    return json([])
+  })
+  let api!: NonNullable<ReturnType<typeof useCodexChat>>
+  function Reader() {
+    const chat = useCodexChat()!
+    useLayoutEffect(() => { api = chat }, [chat])
+    return null
+  }
+  await act(async () => root.render(h(QueryClientProvider, { client }, h(I18nProvider, null,
+    h(SnackbarContext.Provider, { value: { showSnackbar() {}, closeSnackbar() {} } }, h(CodexChatProvider, null, h(Reader)))))))
+
+  // Picked while the chat is still being prepared: it rides with the opening message (the name stays client-side).
+  await act(async () => { api.prepareChat(7); await tick() })
+  await act(async () => { api.setToolPick(PENDING_DRAFT_KEY, { presetId: 3, name: 'Scene' }) })
+  await act(async () => { await api.sendPending('draw') })
+  assert.deepEqual(bodies.at(-1)?.toolDirective, { presetId: 3 })
+  assert.equal(api.toolSelections[5], undefined, 'a pick meant for one message is gone once it is sent')
+  assert.equal(api.toolSelections[PENDING_DRAFT_KEY], undefined)
+
+  // Kept: it goes with every message and survives a reload (saved for the account in this browser).
+  await act(async () => { api.setToolKeep(5, true); api.setToolPick(5, { tool: 'search_images' }) })
+  await act(async () => { await api.send(5, 'again') })
+  assert.deepEqual(bodies.at(-1)?.toolDirective, { tool: 'search_images' })
+  assert.deepEqual(api.toolSelections[5]?.pick, { tool: 'search_images' })
+  assert.deepEqual(JSON.parse(window.localStorage.getItem('conai.chat.tool-selections.1')!), { 5: { tool: 'search_images' } })
+
+  // Turned away for some other reason (a 4xx about the message): a kept pick stays.
+  refuse = { error: 'The message is too long.' }
+  await act(async () => { await api.send(5, 'once more') })
+  assert.equal(bodies.length, 3)
+  assert.deepEqual(api.toolSelections[5]?.pick, { tool: 'search_images' })
+  assert.deepEqual(JSON.parse(window.localStorage.getItem('conai.chat.tool-selections.1')!), { 5: { tool: 'search_images' } })
+
+  // The same for a pick meant for one message: it comes back with the text.
+  await act(async () => { api.setToolKeep(5, false) })
+  await act(async () => { await api.send(5, 'and again') })
+  assert.deepEqual(api.toolSelections[5]?.pick, { tool: 'search_images' })
+
+  // Refused as unavailable: the pick goes, even a kept one, and the list that offered it is read again.
+  await act(async () => { api.setToolKeep(5, true) })
+  client.setQueryData(codexChatComposerToolsQueryKey({ threadId: 5 }), { presets: [], tools: [] })
+  refuse = { error: 'The tool is not available here.', code: 'tool_directive_unavailable' }
+  await act(async () => { await api.send(5, 'last try') })
+  assert.equal(api.toolSelections[5]?.pick ?? null, null)
+  assert.equal(window.localStorage.getItem('conai.chat.tool-selections.1'), null)
+  assert.equal(client.getQueryState(codexChatComposerToolsQueryKey({ threadId: 5 }))?.isInvalidated, true)
+})
+
+test('the tool picker lists only tools a scope offers, and names a plugin or outside tool the same wherever it shows', async () => {
+  const { chatToolLabel, groupChatTools } = await import('../src/features/codex-chat/chat-tool-catalog')
+  const t = ((copy: { en: string }) => copy.en) as Parameters<typeof groupChatTools>[1]
+  // The chat's own tools come with no scope: nothing to list, so a profile with only those has no tools item.
+  assert.deepEqual(groupChatTools([{ name: 'get_chat_settings', description: '', scope: null }, { name: 'use_skill', description: '', scope: null }], t), [])
+  const [outside, plugins] = groupChatTools([{ name: 'p_acme_draw', description: 'Draws', scope: 'generate' }, { name: 'x_srv_lookup', description: 'Looks up', scope: 'read' }], t).sort((a, b) => a.id.localeCompare(b.id))
+  assert.equal(outside.tools[0].label, 'srv_lookup')
+  assert.equal(plugins.tools[0].label, 'acme_draw')
+  assert.equal(chatToolLabel('p_acme_draw', t), plugins.tools[0].label)
+  assert.equal(chatToolLabel('x_srv_lookup', t), outside.tools[0].label)
+})
+
 test('a saved chat setting is never reverted by a read sent before the save, and that read is sent again', { timeout: 10000 }, async () => {
   const { QueryClient, QueryObserver } = await import('@tanstack/react-query')
   const { applyChatThreadUpdate } = await import('../src/features/codex-chat/chat-query-refresh')

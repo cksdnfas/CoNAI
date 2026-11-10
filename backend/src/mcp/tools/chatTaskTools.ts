@@ -38,6 +38,7 @@ function writesLinkedFiles(context: McpRequestContext) {
   if (!chat || chat.page) return false
   try {
     const thread = CodexChatStore.findThread(chat.threadId, context.requester?.accountId ?? null)
+    if (context.profilePreview) return placesForRequest({ thread: { id: 0, account_id: context.requester?.accountId ?? null }, profile: ChatProfileStore.find(chat.profileId) }).some(place => place.write)
     return thread ? placesForRequest({ thread, profile: ChatProfileStore.find(chat.profileId) }).some((place) => place.write) : false
   } catch { return false }
 }

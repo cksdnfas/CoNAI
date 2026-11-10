@@ -153,7 +153,9 @@ export function registerChatLoreTools(server: McpServer, context: McpRequestCont
   if (allowsLoreProposals(chat.profileId)) registerSaveLore(server, context);
   if (context.source !== 'codex-chat') {
     try {
-      if (!hasLoreFiles(attachedBooks(chat))) return;
+      const profile = context.profilePreview ? ChatProfileStore.find(chat.profileId) : null;
+      const books = profile ? booksForRequest({ thread: null, profile, profileOwner: fileOwnerKey(chat.accountId) }) : attachedBooks(chat);
+      if (!hasLoreFiles(books)) return;
     } catch {
       return;
     }

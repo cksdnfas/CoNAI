@@ -7,7 +7,7 @@ import type { ChatAssetVisionReview, ChatAssetBatch, ChatAssetBatchInput, ChatAs
 export type { ChatAssetBatch, ChatAssetBatchInput, ChatAssetKind, ChatAssetReview, ChatAssetVisionReview, ChatAssetCandidate, ChatAssetAttempt, ChatAssetApplyInput, ChatAssetApplyResult, ChatAssetOwner } from '@conai/shared'
 import type { ChatJudgeDiagnostics, ChatFileChange, ChatProfileAgentSettings } from '@conai/shared'
 export type { ChatSkillSectionChange, ChatSkillSectionFields } from '@conai/shared'
-import type { ChatStreamEvent, ChatTranslationLanguage, CodexReasoningEffort, StoredFileEntry, ChatMessageRouting, ChatPageSnapshot, ChatProposal, ChatTask, ChatChoiceAnswer } from '@conai/shared'
+import type { ChatStreamEvent, ChatTranslationLanguage, CodexReasoningEffort, StoredFileEntry, ChatMessageRouting, ChatPageSnapshot, ChatProposal, ChatTask, ChatChoiceAnswer, ChatToolDirective, ChatToolDirectiveSnapshot } from '@conai/shared'
 import { JSON_HEADERS, requestRevisionChecked } from './api-codex-chat-core'
 import type { ChatScope } from './api-codex-chat-core'
 import type { ChatBlocksState, ChatDisplayBlock, ChatTypeface } from './api-codex-chat-resources'
@@ -707,6 +707,8 @@ export interface CodexChatMessage {
   context_meta?: string | null
   /** User messages: the chat flags that were on when it was sent. */
   flags?: ChatFlagSnapshot[]
+  /** User messages: the generation preset or tool the message told the chat to use. */
+  toolDirective?: ChatToolDirectiveSnapshot
   /** Replies: the text files their tools wrote, each with an undo. */
   fileChanges?: ChatFileChange[]
   created_date: string
@@ -943,6 +945,37 @@ export interface ChatProfilePreview {
 
 export function listChatTools() {
   return requestApiData<ChatToolInfo[]>('/api/codex-chat/admin/tools', { cache: 'no-store' })
+}
+
+/** A generation preset a chat can be told to use for its next message. */
+export interface ChatComposerPreset {
+  id: number
+  name: string
+  /** What the preset is for; shown as a tooltip only. */
+  instruction: string
+  kind: 'nai' | 'comfyui'
+}
+
+/** What a chat offers to direct a message: its profile's generation presets, and its tools. Both empty: nothing to offer. */
+export interface ChatComposerTools {
+  presets: ChatComposerPreset[]
+  tools: ChatToolInfo[]
+}
+
+/** Exactly one: the saved chat, or (while the chat is not saved yet) its profile. */
+export type ChatComposerToolsTarget = { threadId: number } | { profileId: number }
+
+export function getChatComposerTools(target: ChatComposerToolsTarget) {
+  const query = 'threadId' in target ? `threadId=${target.threadId}` : `profileId=${target.profileId}`
+  return requestApiData<ChatComposerTools>(`/api/codex-chat/composer-tools?${query}`)
+}
+
+/** The error `code` of a message the server turned away because the picked preset or tool is not available in that chat. */
+export const TOOL_DIRECTIVE_UNAVAILABLE = 'tool_directive_unavailable'
+
+/** What the request body carries of a picked directive (the server takes the id or tool name; the preset name is for the transcript). */
+export function toolDirectiveRequest(directive: ChatToolDirectiveSnapshot): ChatToolDirective {
+  return 'presetId' in directive ? { presetId: directive.presetId } : { tool: directive.tool }
 }
 
 export function previewChatProfile(draft: ChatProfileInput & { id?: number }) {
@@ -1213,8 +1246,8 @@ export function interruptCodexChatThread(threadId: number) {
  * Send a message and read the NDJSON turn stream. No timeout: a turn with generation jobs can run for minutes.
  * Aborting only stops reading; the server finishes and stores the reply.
  */
-export async function streamCodexChatMessage(threadId: number, text: string, onEvent: (event: CodexChatStreamEvent) => void, signal?: AbortSignal, fileIds: string[] = [], flagIds: number[] = [], picks: string[] = [], mediaHashes: string[] = [], replyToMessageId?: number, pageContext?: ChatPageSnapshot, choice?: ChatChoiceAnswer) {
-  return streamChatOperation(`/api/codex-chat/threads/${threadId}/messages`, 'POST', { text, fileIds, flagIds, picks, mediaHashes, replyToMessageId, pageContext, choice }, onEvent, signal)
+export async function streamCodexChatMessage(threadId: number, text: string, onEvent: (event: CodexChatStreamEvent) => void, signal?: AbortSignal, fileIds: string[] = [], flagIds: number[] = [], picks: string[] = [], mediaHashes: string[] = [], replyToMessageId?: number, pageContext?: ChatPageSnapshot, choice?: ChatChoiceAnswer, toolDirective?: ChatToolDirective) {
+  return streamChatOperation(`/api/codex-chat/threads/${threadId}/messages`, 'POST', { text, fileIds, flagIds, picks, mediaHashes, replyToMessageId, pageContext, choice, toolDirective }, onEvent, signal)
 }
 
 /**

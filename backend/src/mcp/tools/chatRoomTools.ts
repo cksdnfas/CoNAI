@@ -47,6 +47,7 @@ function speakerName(row: RoomMessageRow, names: Map<number, string>, userName: 
 export function offersChatReplyTo(context: McpRequestContext) {
   const chat = context.chatContext;
   if (!chat || chat.kind === 'group' || context.source === 'codex-chat') return true;
+  if (context.composerPreview) return CodexChatStore.latestMessageId(chat.threadId) !== null;
   const latest = CodexChatStore.latestUserMessageId(chat.threadId);
   return latest !== null && CodexChatStore.hasMessagesBefore(chat.threadId, latest);
 }

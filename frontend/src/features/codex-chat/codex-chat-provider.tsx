@@ -2,11 +2,12 @@ import { useCallback, useEffect, useMemo, useRef, useState, type PropsWithChildr
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
-import { CHAT_APPEARANCE_QUERY_KEY, CHAT_FLAGS_QUERY_KEY, createCodexChatThread, type CodexChatThread, getCodexChatStatus, getCodexChatThread, previewChatGreeting, interruptCodexChatThread, pickSnapshot, choiceSnapshot, readThreadFlagIds, streamCodexChatMessage, streamChatContinue, streamChatRewrite, type ChatFlag, type ChatMediaAttachment, type CodexChatMessage, type CodexChatStreamEvent, type CodexChatThreadDetail } from '@/lib/api-codex-chat'
+import { CHAT_APPEARANCE_QUERY_KEY, CHAT_FLAGS_QUERY_KEY, createCodexChatThread, type CodexChatThread, getCodexChatStatus, getCodexChatThread, previewChatGreeting, interruptCodexChatThread, pickSnapshot, choiceSnapshot, readThreadFlagIds, streamCodexChatMessage, streamChatContinue, streamChatRewrite, toolDirectiveRequest, TOOL_DIRECTIVE_UNAVAILABLE, type ChatComposerTools, type ChatFlag, type ChatMediaAttachment, type CodexChatMessage, type CodexChatStreamEvent, type CodexChatThreadDetail } from '@/lib/api-codex-chat'
+import { ApiRequestError } from '@/lib/api-request'
 import { getErrorMessage } from '@/lib/error-message'
 import { CHAT_HEALTH_QUERY_KEY, CHAT_MESSAGE_PAGE_SIZE, CHAT_PROFILES_QUERY_KEY, CHAT_STATUS_QUERY_KEY, threadLorebooksQueryKey, type ChatProfileSummary } from '@/lib/api-codex-chat'
 import { summarizeChatError } from './chat-error-chip'
-import { postLink, type StoredFileEntry } from '@conai/shared'
+import { postLink, type ChatToolDirectiveSnapshot, type StoredFileEntry } from '@conai/shared'
 import type { CodexChatMediaItem } from '@/lib/api-codex-chat'
 import type { GenerationHistoryRecord } from '@/lib/api-image-generation-types'
 import { uploadStoredFiles } from '@/lib/api-files'
@@ -23,12 +24,14 @@ import {
   CodexChatReferenceContext,
   codexChatHistoryQueryKey,
   codexChatMediaQueryKey,
+  codexChatComposerToolsQueryKey,
   codexChatThreadQueryKey,
   defaultThreadId,
   PENDING_DRAFT_KEY,
   type ChatChoiceCard,
   type ChatChoiceDraft,
   type ChatPostReference,
+  type ChatToolSelection,
   type CodexChatApi,
   type CodexChatPendingChat,
   type CodexChatLiveReply,
@@ -66,6 +69,40 @@ function writeStoredDrafts(key: string, drafts: Record<number, string>) {
     else window.localStorage.setItem(key, JSON.stringify(drafts))
   } catch {
     // Storage blocked or full: the drafts last for this page only.
+  }
+}
+
+const TOOL_SELECTIONS_STORAGE_PREFIX = 'conai.chat.tool-selections.'
+const NO_TOOL_SELECTION: ChatToolSelection = { pick: null, keep: false }
+
+function readStoredToolPick(value: unknown): ChatToolDirectiveSnapshot | null {
+  if (!value || typeof value !== 'object') return null
+  const { presetId, name, tool } = value as Record<string, unknown>
+  if (typeof tool === 'string' && tool) return { tool }
+  return typeof presetId === 'number' && Number.isSafeInteger(presetId) && typeof name === 'string' ? { presetId, name } : null
+}
+
+/** The picks kept over sends in this browser for one account, by chat (a pick meant for one message is never saved). */
+function readStoredToolSelections(key: string): Record<number, ChatToolSelection> {
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(key) ?? '{}') as unknown
+    if (!parsed || typeof parsed !== 'object') return {}
+    return Object.fromEntries(Object.entries(parsed).flatMap(([id, value]) => {
+      const pick = readStoredToolPick(value)
+      return Number.isSafeInteger(Number(id)) && Number(id) > PENDING_DRAFT_KEY && pick ? [[Number(id), { pick, keep: true }]] : []
+    }))
+  } catch {
+    return {}
+  }
+}
+
+function writeStoredToolSelections(key: string, selections: Record<number, ChatToolSelection>) {
+  const kept = Object.fromEntries(Object.entries(selections).flatMap(([id, selection]) => (Number(id) > PENDING_DRAFT_KEY && selection.keep && selection.pick ? [[id, selection.pick]] : [])))
+  try {
+    if (Object.keys(kept).length === 0) window.localStorage.removeItem(key)
+    else window.localStorage.setItem(key, JSON.stringify(kept))
+  } catch {
+    // Storage blocked or full: the picks last for this page only.
   }
 }
 
@@ -120,6 +157,30 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
     draftsRef.current = kept
     setDrafts(kept)
   }, [])
+  // The preset or tool picked for each chat's next message. Picks kept over sends are saved like the drafts.
+  const [toolSelections, setToolSelections] = useState<Record<number, ChatToolSelection>>({})
+  const toolSelectionsRef = useRef(toolSelections)
+  const changeToolSelection = useCallback((key: number, change: (current: ChatToolSelection) => ChatToolSelection) => {
+    const current = toolSelectionsRef.current[key] ?? NO_TOOL_SELECTION
+    const next = change(current)
+    if (next.pick === current.pick && next.keep === current.keep) return
+    const rest = { ...toolSelectionsRef.current }
+    delete rest[key]
+    toolSelectionsRef.current = next.pick || next.keep ? { ...rest, [key]: next } : rest
+    setToolSelections(toolSelectionsRef.current)
+  }, [])
+  const setToolPick = useCallback((key: number, pick: ChatToolDirectiveSnapshot | null) => changeToolSelection(key, (current) => ({ ...current, pick })), [changeToolSelection])
+  const setToolKeep = useCallback((key: number, keep: boolean) => changeToolSelection(key, (current) => ({ ...current, keep })), [changeToolSelection])
+  const toolSelectionsKey = authStatus ? `${TOOL_SELECTIONS_STORAGE_PREFIX}${authStatus.accountId ?? 'local'}` : null
+  const [loadedToolSelectionsKey, setLoadedToolSelectionsKey] = useState<string | null>(null)
+  if (toolSelectionsKey !== loadedToolSelectionsKey) {
+    setLoadedToolSelectionsKey(toolSelectionsKey)
+    toolSelectionsRef.current = toolSelectionsKey ? readStoredToolSelections(toolSelectionsKey) : {}
+    setToolSelections(toolSelectionsRef.current)
+  }
+  useEffect(() => {
+    if (loadedToolSelectionsKey) writeStoredToolSelections(loadedToolSelectionsKey, toolSelections)
+  }, [toolSelections, loadedToolSelectionsKey])
   const [draftReply, updateDraftReply] = useState<CodexChatApi['draftReply']>(null)
   const draftReplyRef = useRef(draftReply)
   const setDraftReply = useCallback((reply: CodexChatApi['draftReply']) => {
@@ -320,7 +381,8 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
     pendingRef.current = null
     setPendingChat(null)
     setDraft(PENDING_DRAFT_KEY, '')
-  }, [setDraft])
+    changeToolSelection(PENDING_DRAFT_KEY, () => NO_TOOL_SELECTION)
+  }, [setDraft, changeToolSelection])
 
   const selectThread = useCallback((threadId: number | null | undefined) => {
     if (selectedRef.current !== threadId) disconnectPage?.()
@@ -340,6 +402,7 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
     disconnectPage?.()
     switchComposer(null)
     setDraft(PENDING_DRAFT_KEY, '')
+    changeToolSelection(PENDING_DRAFT_KEY, () => NO_TOOL_SELECTION)
     const pending: CodexChatPendingChat = { profileId, userProfileId, greeting: null, flagIds: [] }
     pendingRef.current = pending
     setPendingChat(pending)
@@ -355,7 +418,7 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
       setPendingChat(null)
       showSnackbar({ message: getErrorMessage(error, t({ ko: '채팅을 시작하지 못했어.', en: 'Could not start a chat.' })), tone: 'error' })
     })
-  }, [disconnectPage, setDraft, showSnackbar, switchComposer, t])
+  }, [changeToolSelection, disconnectPage, setDraft, showSnackbar, switchComposer, t])
 
   const reply = useCallback(async (threadId: number, rewrite?: { messageId: number; content?: string; continue?: boolean }, literalText?: string, createdThread?: CodexChatThread) => {
     const replyingTo = !rewrite && draftReplyRef.current?.threadId === threadId ? draftReplyRef.current : null
@@ -379,6 +442,9 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
     // The chat's switched-on flags go with a new message (a rewrite replays the ones stored on the message).
     const flags = rewrite ? [] : (queryClient.getQueryData<ChatFlag[]>(CHAT_FLAGS_QUERY_KEY) ?? []).filter((flag) => readThreadFlagIds(cachedThread).includes(flag.id))
     const shownFlags = [...flags, ...picked.map(pickSnapshot), ...(chosen ? chosen.labels.map((label) => choiceSnapshot(label, { id: chosen.proposalId, question: chosen.question })) : [])]
+    // The preset or tool picked for this message (a rewrite replays the message as stored; rooms take none).
+    const toolSelection = rewrite || isGroup ? null : toolSelectionsRef.current[threadId] ?? null
+    const toolDirective = toolSelection?.pick ?? null
     const running = streamsRef.current.get(threadId)
     if (running) {
       // In a group room the user may cut in: the server stops the room's reply when the new message arrives, so stop
@@ -408,8 +474,10 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
       picksRef.current = []
       // Any message answers or sets aside the open card.
       setChoice(null)
+      // A pick meant for one message goes with it; a kept one stays.
+      if (toolDirective && !toolSelection?.keep) changeToolSelection(sentThreadId, (current) => ({ ...current, pick: null }))
     }
-    patchLiveTurn(sentThreadId, () => ({ threadId: sentThreadId, userText: text, userRouting: replyingTo ? { replyTo: replyingTo.quote, recipients: [] } : undefined, flags: shownFlags, attachments, mediaAttachments, text: '', reasoning: '', toolCalls: new Map(), replies: isGroup ? [] : undefined }))
+    patchLiveTurn(sentThreadId, () => ({ threadId: sentThreadId, userText: text, userRouting: replyingTo ? { replyTo: replyingTo.quote, recipients: [] } : undefined, flags: shownFlags, toolDirective: toolDirective ?? undefined, attachments, mediaAttachments, text: '', reasoning: '', toolCalls: new Map(), replies: isGroup ? [] : undefined }))
     let accepted = false
 
     // Preserve event order (including replacement text and member completion), but publish at most once per frame.
@@ -495,7 +563,7 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
           accepted = true
           // A refetch mid-reply (a generation job, a reaction) brings the stored message in anyway; keeping the live copy
           // too would show it twice.
-          if (putMessage(event.message)) updateLiveTurn((current) => current ? { ...current, userText: '', userRouting: undefined, flags: [], attachments: [], mediaAttachments: [] } : current)
+          if (putMessage(event.message)) updateLiveTurn((current) => current ? { ...current, userText: '', userRouting: undefined, flags: [], toolDirective: undefined, attachments: [], mediaAttachments: [] } : current)
           flush()
           showUserActivity(event.message)
         } else if (event.type === 'speaker') {
@@ -553,7 +621,7 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
         } else if (event.type === 'done') {
           // Proposals are attached when the thread is read, so a reply that proposed something reloads it now.
           if (event.message.tool_calls.some((call) => call.tool.startsWith('propose_') || call.tool === 'offer_choices')) void refetchActiveChatQuery(queryClient, codexChatThreadQueryKey(sentThreadId))
-          updateLiveTurn((current) => current ? { ...current, replacingMessageId: event.message.id, text: event.message.display_content ?? event.message.content, userText: '', userRouting: undefined, flags: [], attachments: [], mediaAttachments: [] } : current)
+          updateLiveTurn((current) => current ? { ...current, replacingMessageId: event.message.id, text: event.message.display_content ?? event.message.content, userText: '', userRouting: undefined, flags: [], toolDirective: undefined, attachments: [], mediaAttachments: [] } : current)
         } else if (event.type === 'error') {
           // The full text stays on the failed message (its error chip); the toast only names the reason.
           showSnackbar({ message: summarizeChatError(event.message, t), tone: 'error' })
@@ -562,10 +630,21 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
       }
       if (rewrite?.continue) await streamChatContinue(sentThreadId, rewrite.messageId, onEvent, controller.signal)
       else if (rewrite) await streamChatRewrite(sentThreadId, rewrite.messageId, rewrite.content, onEvent, controller.signal)
-      else await streamCodexChatMessage(sentThreadId, text, onEvent, controller.signal, attachments.map((file) => file.id), flags.map((flag) => flag.id), picked, mediaAttachments.map((item) => item.compositeHash), replyingTo?.quote.messageId, pageAllowed && !chosen?.withoutPage ? capturePage?.() : undefined, chosen ? { proposalId: chosen.proposalId, answers: chosen.labels } : undefined)
+      else await streamCodexChatMessage(sentThreadId, text, onEvent, controller.signal, attachments.map((file) => file.id), flags.map((flag) => flag.id), picked, mediaAttachments.map((item) => item.compositeHash), replyingTo?.quote.messageId, pageAllowed && !chosen?.withoutPage ? capturePage?.() : undefined, chosen ? { proposalId: chosen.proposalId, answers: chosen.labels } : undefined, toolDirective ? toolDirectiveRequest(toolDirective) : undefined)
     } catch (error) {
       if (!controller.signal.aborted) {
         showSnackbar({ message: summarizeChatError(getErrorMessage(error, t({ ko: '응답 실패', en: 'Reply failed' })), t), tone: 'error' })
+        if (toolDirective && !accepted) {
+          if (error instanceof ApiRequestError && error.code === TOOL_DIRECTIVE_UNAVAILABLE) {
+            // The server refused the pick itself: it goes (a kept one too), and the list that offered it is read again.
+            changeToolSelection(sentThreadId, (current) => ({ ...current, pick: null }))
+            void queryClient.invalidateQueries({ queryKey: codexChatComposerToolsQueryKey({ threadId: sentThreadId }) })
+            if (cachedThread?.profile_id != null) void queryClient.invalidateQueries({ queryKey: codexChatComposerToolsQueryKey({ profileId: cachedThread.profile_id }) })
+          } else if (!toolSelection?.keep) {
+            // Any other failure: a kept pick stays, one meant for a single message comes back with the text.
+            changeToolSelection(sentThreadId, (current) => current.pick ? current : { ...current, pick: toolDirective })
+          }
+        }
         if (!accepted && !rewrite && attachmentEpoch.current === sentAttachmentEpoch) {
           if (!draftReplyRef.current) setDraftReply(replyingTo)
           setDraft(sentThreadId, (current) => current || (picked.length ? '' : typed))
@@ -599,7 +678,7 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
       settle()
     }
     return accepted
-  }, [capturePage, queryClient, showSnackbar, t, setDraftReply, setDraft, setChoice, patchLiveTurn])
+  }, [capturePage, queryClient, showSnackbar, t, setDraftReply, setDraft, setChoice, patchLiveTurn, changeToolSelection])
 
   const send = useCallback(async (threadId: number, text?: string) => { await reply(threadId, undefined, text) }, [reply])
 
@@ -648,6 +727,9 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
     const threadId = created.id
     // The new chat starts from the default appearance slot, copied on the server.
     void queryClient.invalidateQueries({ queryKey: CHAT_APPEARANCE_QUERY_KEY })
+    // It offers what its profile did, so the composer keeps its tools item instead of asking again.
+    const offered = queryClient.getQueryData<ChatComposerTools>(codexChatComposerToolsQueryKey({ profileId: pending.profileId }))
+    if (offered) queryClient.setQueryData(codexChatComposerToolsQueryKey({ threadId: created.id }), offered)
     // The user moved on meanwhile: the saved chat keeps the message as its draft instead of pulling them back.
     if (pendingRef.current !== pending) {
       setDraft(threadId, text)
@@ -658,11 +740,17 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
     pendingRef.current = null
     setPendingChat(null)
     setDraft(PENDING_DRAFT_KEY, '')
+    // The pick made for the opening message goes to the saved chat with it.
+    const pendingSelection = toolSelectionsRef.current[PENDING_DRAFT_KEY]
+    if (pendingSelection) {
+      changeToolSelection(threadId, () => pendingSelection)
+      changeToolSelection(PENDING_DRAFT_KEY, () => NO_TOOL_SELECTION)
+    }
     switchComposer(threadId, true)
     setListOpen(false)
     setView('chat')
     await reply(threadId, undefined, text, created)
-  }, [queryClient, reply, setDraft, showSnackbar, switchComposer, t])
+  }, [changeToolSelection, queryClient, reply, setDraft, showSnackbar, switchComposer, t])
   const regenerate = useCallback((threadId: number, messageId: number) => reply(threadId, { messageId }), [reply])
   const continueReply = useCallback((threadId: number, messageId: number) => reply(threadId, { messageId, continue: true }), [reply])
   const editMessage = useCallback((threadId: number, messageId: number, content: string) => reply(threadId, { messageId, content }), [reply])
@@ -712,6 +800,9 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
     isStartingChat,
     setDraft,
     keepDrafts,
+    toolSelections,
+    setToolPick,
+    setToolKeep,
     picks,
     togglePick,
     removePick,
@@ -739,7 +830,7 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
     messageFocus,
     focusMessage,
     clearMessageFocus,
-  }), [draftReply, setDraftReply, canUse, clearMessageFocus, closePanel, registerPanelCloseGuard, setDraft, keepDrafts, focusMessage, isPanelOpen, isStartingChat, currentLiveTurn, currentDrafts, messageFocus, openPanel, picks, togglePick, removePick, choice, toggleChoice, clearChoice, selectThread, settleSelection, selectedThreadId, listOpen, showList, send, regenerate, continueReply, editMessage, pendingChat, prepareChat, selectPendingGreeting, togglePendingFlag, sendPending, stop, view, draftAttachments, draftMediaAttachments, setMediaAttachments, removeMediaAttachment, toggleMediaAttachment, draftPostRefs, togglePostReference, attachmentsUploading, addAttachments, removeAttachment, uploadAttachments])
+  }), [draftReply, setDraftReply, canUse, clearMessageFocus, closePanel, registerPanelCloseGuard, setDraft, keepDrafts, focusMessage, isPanelOpen, isStartingChat, currentLiveTurn, currentDrafts, messageFocus, openPanel, toolSelections, setToolPick, setToolKeep, picks, togglePick, removePick, choice, toggleChoice, clearChoice, selectThread, settleSelection, selectedThreadId, listOpen, showList, send, regenerate, continueReply, editMessage, pendingChat, prepareChat, selectPendingGreeting, togglePendingFlag, sendPending, stop, view, draftAttachments, draftMediaAttachments, setMediaAttachments, removeMediaAttachment, toggleMediaAttachment, draftPostRefs, togglePostReference, attachmentsUploading, addAttachments, removeAttachment, uploadAttachments])
 
   const referencePanelOpen = canUse && isPanelOpen
   const referenceApi = useMemo<CodexChatReferenceApi>(() => ({ panelOpen: referencePanelOpen, draftMediaAttachments, toggleMediaAttachment, draftPostRefs, togglePostReference, draftAttachments, addAttachments, removeAttachment, focusMessage }), [referencePanelOpen, draftMediaAttachments, toggleMediaAttachment, draftPostRefs, togglePostReference, draftAttachments, addAttachments, removeAttachment, focusMessage])

@@ -14,6 +14,7 @@ import { validateChatMediaAttachments } from './chatMediaAttachments'
 import { MEDIA_HASH_PATTERN } from './chatMediaLinks'
 import { validateChatAttachments } from './chatAttachments'
 import { markPrivateAttachmentContext } from './chatAttachmentPrivacy'
+import { readToolDirectiveSnapshot } from './chatToolDirective'
 
 export const CHAT_IMPORT_MAX_BYTES = 32 * 1024 * 1024
 const MAX_MESSAGES = 20_000
@@ -168,7 +169,7 @@ export function importChatThread(requester: McpRequester, raw: Buffer, target: C
     if (file.privateAttachments === true) markPrivateAttachmentContext(created.id)
     const ids = new Map<number, number>()
     const insert = db.prepare(`INSERT INTO codex_chat_messages (thread_id, role, content, display_content, tool_calls, status, error, flags, finish_reason,
-      media_attachments, alternatives, active_alternative, created_date, speaker_profile_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      media_attachments, alternatives, active_alternative, created_date, speaker_profile_id, tool_directive) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
     const attach = db.prepare('INSERT INTO chat_file_attachments (message_id, file_id) VALUES (?, ?)')
     let droppedFiles = 0
     let droppedToolOutputs = 0
@@ -198,6 +199,7 @@ export function importChatThread(requester: McpRequester, raw: Buffer, target: C
         media.length ? JSON.stringify(media) : null, alternatives.length ? JSON.stringify(alternatives) : null, active,
         typeof message.created_date === 'string' && /^\d{4}-\d\d-\d\d[ T]\d\d:\d\d:\d\d/.test(message.created_date) ? message.created_date.slice(0, 30) : new Date().toISOString().replace('T', ' ').slice(0, 19),
         role === 'assistant' && typeof message.speaker_profile_id === 'number' ? profileIds.get(message.speaker_profile_id) ?? null : null,
+        role === 'user' ? JSON.stringify(readToolDirectiveSnapshot(message.toolDirective) ?? null) : null,
       ).lastInsertRowid)
       ids.set(oldId, copyId)
       for (const file of Array.isArray(message.attachments) ? message.attachments.slice(0, 20).map(object) : []) {

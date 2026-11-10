@@ -517,13 +517,13 @@ export function useChatPageRegistration(input: (Omit<Editor, 'instanceId' | 'pat
 }
 
 /** The composer's page link key: says whether the chat sees the current page, and turns that on or off. */
-export function ChatPageConnectButton({ disabled }: { disabled: boolean }) {
+export function ChatPageConnectButton({ disabled, onPress }: { disabled: boolean; onPress?: () => void }) {
   const page = useChatPage()
   const { t } = useI18n()
   const label = !page?.available
     ? t({ ko: '이 페이지는 연결 안 돼', en: 'This page cannot be linked' })
     : [t(page.driving ? { ko: '페이지 조작 중', en: 'Operating the page' } : page.enabled ? { ko: '페이지 연결 켜짐', en: 'Page linked' } : { ko: '페이지 연결', en: 'Link page' }), page.snapshot?.title].filter(Boolean).join(' · ')
-  return <IconButton variant="ghost" size="icon-sm" active={page?.enabled ?? false} disabled={disabled || !page?.available} onClick={page?.toggle} label={label}><Monitor className={page?.driving ? 'animate-pulse motion-reduce:animate-none' : undefined} /></IconButton>
+  return <IconButton variant="ghost" size="icon-sm" active={page?.enabled ?? false} disabled={disabled || !page?.available} onClick={() => { onPress?.(); page?.toggle() }} label={label}><Monitor className={page?.driving ? 'animate-pulse motion-reduce:animate-none' : undefined} /></IconButton>
 }
 
 /** A thin sweeping line along the top of the app while the chat operates the connected screen. */

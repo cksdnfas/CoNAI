@@ -59,6 +59,9 @@ export interface McpRequestContext {
   toolCatalog?: boolean;
   /** Internal API-chat callback; never accepted from HTTP input. */
   toolCatalogBudget?: () => number;
+  /** Host-only, non-executable listing of the upcoming send; never populated by HTTP/model input. */
+  composerPreview?: boolean;
+  profilePreview?: boolean;
 }
 
 /** The tool name of the n-th generation preset a chat profile links (generate_image, generate_image_2, …). */

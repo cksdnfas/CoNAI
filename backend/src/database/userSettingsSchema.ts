@@ -889,6 +889,7 @@ export function createUserSettingsSchema(db: Database.Database): void {
     ['speaker_profile_id', 'INTEGER'],
     // User messages: JSON copy of the chat flags that were on when it was sent (replayed on regenerate).
     ['flags', 'TEXT'],
+    ['tool_directive', 'TEXT'],
     // Assistant messages (LLM): the provider's finish_reason of the last round ('length' = cut by the token cap).
     ['finish_reason', 'TEXT'],
     // User messages: validated references to existing library media (no file copies).

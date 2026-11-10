@@ -1,6 +1,6 @@
 import { createContext, useContext } from 'react'
-import type { ChatFlagSnapshot, ChatMediaAttachment, ChatOpeningMessage, CodexChatThread, CodexChatToolCall } from '@/lib/api-codex-chat'
-import type { StoredFileEntry, ChatMessageRouting, ChatReplyQuote, ChatChoiceProposal } from '@conai/shared'
+import type { ChatComposerToolsTarget, ChatFlagSnapshot, ChatMediaAttachment, ChatOpeningMessage, CodexChatThread, CodexChatToolCall } from '@/lib/api-codex-chat'
+import type { StoredFileEntry, ChatMessageRouting, ChatReplyQuote, ChatChoiceProposal, ChatToolDirectiveSnapshot } from '@conai/shared'
 
 /** A post or comment put on the next message with 참조 (sent as a `post:` link line above the text). */
 export type ChatPostReference = { postId: number; commentId: number | null; label: string }
@@ -26,6 +26,14 @@ export function codexChatMediaQueryKey(threadId: number | null) {
 export function codexChatHistoryQueryKey(historyId: number) {
   return ['codex-chat-history', historyId] as const
 }
+
+/** The presets and tools a chat offers for directing a message (a chat not saved yet is asked by its profile). */
+export function codexChatComposerToolsQueryKey(target: ChatComposerToolsTarget) {
+  return 'threadId' in target ? ['codex-chat-composer-tools', 'thread', target.threadId] as const : ['codex-chat-composer-tools', 'profile', target.profileId] as const
+}
+
+/** The preset or tool picked to direct a chat's next message; `keep` carries it over the messages that follow. */
+export type ChatToolSelection = { pick: ChatToolDirectiveSnapshot | null; keep: boolean }
 
 /** Compacting (summarizing) a chat, from the menu, /compact or the context view: the chat waits until it ends. */
 export function codexChatCompactMutationKey(threadId: number | null) {
@@ -89,6 +97,8 @@ export type CodexChatLiveTurn = {
   userText: string
   /** The chat flags on for the message being sent (shown under it until it is stored). */
   flags?: ChatFlagSnapshot[]
+  /** The preset or tool the message being sent tells the chat to use (shown under it until it is stored). */
+  toolDirective?: ChatToolDirectiveSnapshot
   /** Direct chats: the reply so far (group rooms stream into `replies`). */
   text: string
   /** LLM chats: the model's reasoning so far (shown folded, never stored). */
@@ -136,6 +146,13 @@ export interface CodexChatApi {
   setDraft: (threadId: number, draft: string | ((current: string) => string)) => void
   /** Forget the texts of chats not among these (deleted elsewhere). */
   keepDrafts: (threadIds: number[]) => void
+  /**
+   * The preset or tool picked for each chat's next message (the new chat being prepared: PENDING_DRAFT_KEY). A kept
+   * pick stays after sending and over a reload; any other goes with the message.
+   */
+  toolSelections: Record<number, ChatToolSelection>
+  setToolPick: (key: number, pick: ChatToolDirectiveSnapshot | null) => void
+  setToolKeep: (key: number, keep: boolean) => void
   /** Items chosen in the status panel (`data-pick`), sent with the next message. */
   picks: string[]
   togglePick: (label: string) => void

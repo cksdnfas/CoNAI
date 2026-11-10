@@ -24,6 +24,7 @@ export function registerChatLinkedFileTools(server: McpServer, context: McpReque
   if (!chatContext) return;
   const places = (): LinkedPlace[] => {
     const thread = CodexChatStore.findThread(chatContext.threadId, context.requester?.accountId ?? null);
+    if (context.profilePreview) return placesForRequest({ thread: { id: 0, account_id: context.requester?.accountId ?? null }, profile: ChatProfileStore.find(chatContext.profileId) });
     if (!thread) throw new LinkedFileError('Chat not found.', 404);
     return placesForRequest({ thread, profile: ChatProfileStore.find(chatContext.profileId) });
   };

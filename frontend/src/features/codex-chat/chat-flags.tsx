@@ -1,4 +1,4 @@
-import { createElement, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type RefObject } from 'react'
+import { createElement, useEffect, useMemo, useRef, useState, type DragEvent, type RefObject } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Ban, Eye, EyeOff, Flag, GripVertical, Pencil, Shapes, Smile, Users } from 'lucide-react'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -30,16 +30,15 @@ import {
   type ChatFlag,
   type ChatFlagSnapshot,
 } from '@/lib/api-codex-chat'
+import type { ChatToolDirectiveSnapshot } from '@conai/shared'
 import { getErrorMessage } from '@/lib/error-message'
 import { cn } from '@/lib/utils'
 import type { ChatFlagStyle } from './chat-appearance'
 import { CHAT_FLAG_EMOJI, CHAT_FLAG_ICON_GROUPS, LUCIDE_PREFIX, chatFlagLucideIcon } from './chat-flag-icons'
 import { popChipAddClassName, popChipClassName } from './chat-pop-chip'
+import { ChatToolDirectiveTag } from './chat-composer-tools'
+import { usePopTray, useTrayDismiss } from './chat-tray'
 import { CountBadge } from '@/components/ui/count-badge'
-
-const POP_STAGGER_MS = 45
-const DROP_STAGGER_MS = 18
-const DROP_MS = 180
 
 const visibleFlags = (flags: ChatFlag[]) => flags.filter((flag) => !flag.hidden)
 
@@ -93,8 +92,6 @@ export function ChatFlagButton({ buttonRef, count, open, disabled, onToggle }: {
   )
 }
 
-type TrayPhase = 'open' | 'closing' | 'closed'
-
 /**
  * The flags, popped up above the composer in one row: each springs up a beat after the one before it, and a tap
  * switches it on or off for this chat. Closes on Esc or a click elsewhere (not on the flag button, which toggles).
@@ -111,48 +108,12 @@ export function ChatFlagTray({ flags, activeIds, open, flagStyle, buttonRef, onT
 }) {
   const { t } = useI18n()
   const trayRef = useRef<HTMLDivElement>(null)
-  const [phase, setPhase] = useState<TrayPhase>(open ? 'open' : 'closed')
   const [taps, setTaps] = useState<Record<number, number>>({})
-  const count = flags.length + 1
+  const { shown, closing, motion } = usePopTray(open, flags.length + 1)
+  // Tooltips, the manage dialog and its confirms live in portals; a click there does not count as outside.
+  useTrayDismiss({ open, trayRef, buttonRef, onClose })
 
-  useEffect(() => {
-    if (open) {
-      setPhase('open')
-      return
-    }
-    setPhase((current) => (current === 'open' ? 'closing' : current))
-    const timer = window.setTimeout(() => setPhase('closed'), DROP_MS + count * DROP_STAGGER_MS + 40)
-    return () => window.clearTimeout(timer)
-  }, [open, count])
-
-  useEffect(() => {
-    if (!open) return
-    const handlePointer = (event: PointerEvent) => {
-      const target = event.target as Node
-      if (trayRef.current?.contains(target) || buttonRef.current?.contains(target)) return
-      // Tooltips, the manage dialog and its confirms live in portals; a click there must not count as outside.
-      if ((target as Element).closest?.('[data-radix-popper-content-wrapper], [role="dialog"], [role="alertdialog"]')) return
-      onClose()
-    }
-    const handleKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        onClose()
-        buttonRef.current?.focus()
-      }
-    }
-    document.addEventListener('pointerdown', handlePointer)
-    document.addEventListener('keydown', handleKey)
-    return () => {
-      document.removeEventListener('pointerdown', handlePointer)
-      document.removeEventListener('keydown', handleKey)
-    }
-  }, [buttonRef, onClose, open])
-
-  if (phase === 'closed') return null
-  const closing = phase === 'closing'
-  const motion = (index: number): { className: string; style: CSSProperties } => closing
-    ? { className: 'animate-chat-flag-drop motion-reduce:animate-none motion-reduce:opacity-0', style: { animationDelay: `${(count - 1 - index) * DROP_STAGGER_MS}ms` } }
-    : { className: 'animate-chat-flag-pop motion-reduce:animate-chat-flag-fade', style: { animationDelay: `${index * POP_STAGGER_MS}ms` } }
+  if (!shown) return null
   const round = flagStyle === 'icon'
 
   return (
@@ -200,12 +161,12 @@ export function ChatFlagTray({ flags, activeIds, open, flagStyle, buttonRef, onT
   )
 }
 
-/** Under a sent message: the flags that were on for it (hover shows what was added). */
-export function ChatMessageFlags({ flags }: { flags?: Array<ChatFlagSnapshot & { displayContent?: string }> }) {
-  if (!flags?.length) return null
+/** Under a sent message: the flags that were on for it (hover shows what was added), and the preset or tool it directed. */
+export function ChatMessageFlags({ flags, toolDirective }: { flags?: Array<ChatFlagSnapshot & { displayContent?: string }>; toolDirective?: ChatToolDirectiveSnapshot }) {
+  if (!flags?.length && !toolDirective) return null
   return (
     <div className="mt-1 flex flex-wrap justify-end gap-1">
-      {flags.map((flag, index) => (
+      {flags?.map((flag, index) => (
         <Tip key={`${flag.id}-${index}`} content={<span className="whitespace-pre-wrap">{flag.displayContent ?? flag.content}</span>}>
           <span tabIndex={0} className="inline-flex items-center gap-1 rounded-full border border-line px-1.5 text-2xs leading-4.5 text-muted-foreground outline-none focus-visible:ring-3 focus-visible:ring-ring/40">
             <ChatFlagIcon icon={flag.icon} name={flag.name} className="size-3 text-xs" />
@@ -213,6 +174,7 @@ export function ChatMessageFlags({ flags }: { flags?: Array<ChatFlagSnapshot & {
           </span>
         </Tip>
       ))}
+      {toolDirective ? <ChatToolDirectiveTag directive={toolDirective} /> : null}
     </div>
   )
 }

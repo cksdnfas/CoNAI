@@ -1,4 +1,6 @@
 import { prepareChatSend } from './chatSendPreparation'
+import { retryChatToolDirective } from './chatComposerTools'
+import { toolDirectiveText, type ResolvedChatToolDirective } from './chatToolDirective'
 import { requirePrivateAttachmentRun } from './chatAttachmentPrivacy'
 import { deletingThreads } from './chatThreadReservation'
 import { requestChatModel, withChatTokenModel } from './llmChatContext'
@@ -100,6 +102,8 @@ function chatConnectionOf(profile: ChatProfile) {
 }
 
 type LlmTurn = {
+  toolDirective?: ResolvedChatToolDirective
+  restoreToolDirective?: true
   research?: ChatResearchExecution
   reaction?: GenerationReaction
   /**
@@ -289,6 +293,9 @@ async function runToolCall(turn: LlmTurn, bridge: ChatMcpBridge, call: { id: str
 async function runReply(turn: LlmTurn, requester: McpRequester, thread: CodexChatThreadRecord, chatProfile: ChatProfile) {
   // Without its own context length, the profile is sized to what a small local server holds.
   const profile = withServerContextLimit(chatProfile)
+  // Rewrites and continuations reserve the turn synchronously before any asynchronous grant lookup.
+  const savedDirective = turn.restoreToolDirective ? [...turnHistory(turn, profile)].reverse().find(message => message.role === 'user')?.toolDirective : undefined
+  if (savedDirective) turn.toolDirective = await retryChatToolDirective(requester, thread, profile, savedDirective)
   // Creation calls replay with their outcome (image attached / failed / running), not the "queued" JSON of their submission.
   const listMessages = () => withGenerationOutcomes(turnHistory(turn, profile))
   const config = resolveContextConfig(thread, profile)
@@ -460,6 +467,7 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
   if (target.transport === 'claude-code' && !resolveChatAccess(requester.accountId).claude) throw new LlmChatError('Claude Code를 사용할 권한이 없어.', 403)
   const { scopes, toolAllowlist } = resolveChatProfileToolGrant(profile, resolveChatAccess(requester.accountId), turn.threadId)
   const chatContext = turn.chatContext ?? turn.delivery?.context
+  if (chatContext && turn.toolDirective) chatContext.directTool = turn.toolDirective.tool
   if (chatContext) {
     chatContext.knowledgeProvider = target.providerName
     chatContext.knowledgeModel = target.model
@@ -502,10 +510,10 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
       ...visible.filter((tool) => !allowed.includes(tool)).map((tool) => tool.function.name),
       ...catalogued.filter((name) => judged !== null && judged.filterTools([{ type: 'function', function: { name, parameters: {} } }]).length === 0),
     ]
-    const blocked = new Set(judged?.userInstructed ? [] : withheld)
+    const blocked = new Set((judged?.userInstructed ? [] : withheld).filter(name => name !== turn.toolDirective?.tool))
     // A model whose server refused tool definitions gets its requests without them for a while (see toolsRefusedBy):
     // build them without tools as well, so no tool guidance, lore file, linked file or skill list names a missing tool.
-    const toolless = () => !turn.engineSession && toolsRefusedBy(target)
+    const toolless = () => !turn.toolDirective && !turn.engineSession && toolsRefusedBy(target)
     const offeredTools = toolless() ? [] : visible
     turn.offeredTools = offeredTools
     const built = await buildMessages(offeredTools, withSemanticContext(judged?.context ?? null, semantic))
@@ -543,7 +551,7 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
       target.contextWindow = profile.contextTokens ?? await serverContextLimit(target)
       target.piVision = profile.visionEnabled
     } else if (engineSession) target.claudeSession = engineSession
-    const directive = judgeDirectiveText(judged, withheld)
+    const directive = [judgeDirectiveText(judged, withheld.filter(name => name !== turn.toolDirective?.tool)), toolDirectiveText(turn.toolDirective)].filter(Boolean).join('\n\n')
     const messages = directive ? appendUserDirective(built, directive, 'judge') : built
     // Session engines own their accumulated context; only direct API requests can calculate the remaining room here.
     if (!engineSession && profile.contextTokens !== null) catalogBudget = () => Math.max(0, profile.contextTokens! - estimateMessagesTokens(profile.id, messages, offeredTools) - 2048)
@@ -623,7 +631,7 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
           catalogued: cataloguedSet,
           ...(lastRound && tools.length > 0 ? { toolChoice: 'none' as const } : {}),
           signal: turn.controller.signal,
-          allowCompatibilityFallback: !turn.reaction && !turn.research,
+          allowCompatibilityFallback: !turn.toolDirective && !turn.reaction && !turn.research,
           retry: !turn.reaction && !turn.research,
           canRetry: () => turn.text.length === (turn.continuing?.length ?? 0) && turn.reasoning.length === 0,
           stopLoops: true,
@@ -804,16 +812,17 @@ const CONTINUE_DIRECTIVE = '[Continue] Your last reply was cut off by the length
  * carried on — the turn starts with its text and tool calls, and is stored as a new variant of it.
  */
 function startReply(requester: McpRequester, thread: CodexChatThreadRecord, profile: ChatProfile, listener: (event: CodexChatStreamEvent) => void,
-  prepare: () => CodexChatStreamEvent, replacingMessageId?: number, continuing?: CodexChatMessageRecord, page?: ChatPageSnapshot): Promise<CodexChatMessageRecord>
+  prepare: () => CodexChatStreamEvent, replacingMessageId?: number, continuing?: CodexChatMessageRecord, page?: ChatPageSnapshot, reaction?: undefined, toolDirective?: ResolvedChatToolDirective): Promise<CodexChatMessageRecord>
 function startReply(requester: McpRequester, thread: CodexChatThreadRecord, profile: ChatProfile, listener: (event: CodexChatStreamEvent) => void,
   prepare: null, replacingMessageId: undefined, continuing: undefined, page: undefined, reaction: GenerationReaction): Promise<CodexChatMessageRecord | null>
 function startReply(requester: McpRequester, thread: CodexChatThreadRecord, profile: ChatProfile, listener: (event: CodexChatStreamEvent) => void,
-  prepare: (() => CodexChatStreamEvent) | null, replacingMessageId?: number, continuing?: CodexChatMessageRecord, page?: ChatPageSnapshot, reaction?: GenerationReaction) {
+  prepare: (() => CodexChatStreamEvent) | null, replacingMessageId?: number, continuing?: CodexChatMessageRecord, page?: ChatPageSnapshot, reaction?: GenerationReaction, toolDirective?: ResolvedChatToolDirective) {
   return withChatTokenModel(profile, () => {
   if (busy(thread.id)) throw new LlmChatError('이전 답변이 아직 진행 중이야.', 409)
   let resolveFinished: (message: CodexChatMessageRecord | null) => void = () => {}
   let rejectFinished: (error: unknown) => void = () => {}
   const turn: LlmTurn = {
+    toolDirective,
     reaction,
     page,
     threadId: thread.id, replacingMessageId, controller: new AbortController(), text: '', reasoning: '', toolCalls: new Map(), finishReason: null,
@@ -827,7 +836,11 @@ function startReply(requester: McpRequester, thread: CodexChatThreadRecord, prof
   }
   activeTurns.set(thread.id, turn)
   try {
-    if (prepare) emit(turn, prepare())
+    if (prepare) {
+      const event = prepare()
+      if (event.type === 'rewind') turn.restoreToolDirective = true
+      emit(turn, event)
+    }
   } catch (error) {
     activeTurns.delete(thread.id)
     throw error
@@ -1014,7 +1027,7 @@ export const LlmChatService = {
   async sendMessage(requester: McpRequester, thread: CodexChatThreadRecord, text: string, listener: (event: CodexChatStreamEvent) => void, fileIds?: unknown, flagIds?: unknown, picks?: unknown, mediaHashes?: unknown, replyToMessageId?: unknown, pageContext?: unknown, options: ChatSendOptions = {}) {
     assertLlmChatAvailable(requester)
     const profile = requireUsableProfile(thread.profile_id, requester, thread.id)
-    const { page, attachments, mediaAttachments, flags, trimmed, routing } = prepareChatSend(requester, thread, profile, text,
+    const { page, attachments, mediaAttachments, flags, trimmed, routing, toolDirective } = await prepareChatSend(requester, thread, profile, text,
       { fileIds, flagIds, picks, mediaHashes, replyToMessageId, pageContext, options }, LlmChatError)
     LlmChatService.skipReaction(thread.id)
     cancelJudgeFollowUp(thread.id)
@@ -1024,7 +1037,7 @@ export const LlmChatService = {
     const firstTitle = thread.title ? null : (withoutNarrationMarks(trimmed) || attachments[0]?.name || mediaAttachments[0]?.name || '').replace(/\s+/g, ' ')
     let namedFromMessage = false
     const reply = startReply(requester, thread, profile, listener, () => {
-      const userMessageId = CodexChatStore.addMessage({ thread_id: thread.id, role: 'user', content: trimmed, display_content: null, tool_calls: [], status: 'completed', error: null, flags, mediaAttachments, routing }, attachments.map((file) => file.id))
+      const userMessageId = CodexChatStore.addMessage({ thread_id: thread.id, role: 'user', content: trimmed, display_content: null, tool_calls: [], status: 'completed', error: null, flags, toolDirective: toolDirective?.snapshot, mediaAttachments, routing }, attachments.map((file) => file.id))
       rememberChatPage(requester, page, thread.id)
       if (!options.task && !options.routine) notifyChatUserSend(thread.id, Boolean(page))
       options.onDelivered?.(userMessageId)
@@ -1035,7 +1048,7 @@ export const LlmChatService = {
       ChatFlagStore.setThreadFlags(thread.id, flags.filter((flag) => !flag.pick).map((flag) => flag.id))
       if (firstTitle !== null) namedFromMessage = CodexChatStore.renameThreadIf(thread.id, '', firstTitle)
       return { type: 'user', message: CodexChatStore.findMessage(thread.id, userMessageId) as CodexChatMessageRecord }
-    }, undefined, undefined, page)
+    }, undefined, undefined, page, undefined, toolDirective)
     if (firstTitle !== null && namedFromMessage) void titleAfterFirstReply(profile, thread, firstTitle, trimmed, reply)
     return reply
   },

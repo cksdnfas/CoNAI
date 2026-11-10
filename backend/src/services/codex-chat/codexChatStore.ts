@@ -14,6 +14,8 @@ import { forgetReplyFileChanges, forgetThreadFileChanges } from './chatFileChang
 import { notifySemanticChange } from '../embeddings/semanticSignal'
 import { cancelAgentCallsForThread } from './chatAgentCalls'
 import type { ChatModelPatch } from './chatModelOverride'
+import type { ChatToolDirectiveSnapshot } from '@conai/shared'
+import { readToolDirectiveSnapshot } from './chatToolDirective'
 
 export type { ChatToolCall as CodexChatToolCall } from '@conai/shared'
 import type { ChatToolCall as CodexChatToolCall } from '@conai/shared'
@@ -194,6 +196,7 @@ export type CodexChatMessageRecord = {
   context_meta?: string | null
   /** User messages: the chat flags that were on when it was sent. */
   flags?: ChatFlagSnapshot[]
+  toolDirective?: ChatToolDirectiveSnapshot
   /** Replies: the text files their tools wrote (derived when reading; see chatFileChanges). */
   fileChanges?: ChatFileChange[]
   created_date: string
@@ -211,7 +214,7 @@ export type ChatMessageAlternative = {
   context_meta?: string | null
 }
 
-type StoredMessageRow = Omit<CodexChatMessageRecord, 'tool_calls' | 'alternatives' | 'flags' | 'routing'> & { tool_calls: string | null; alternatives: string | null; flags: string | null; media_attachments: string | null; routing: string | null }
+type StoredMessageRow = Omit<CodexChatMessageRecord, 'tool_calls' | 'alternatives' | 'flags' | 'routing' | 'toolDirective'> & { tool_calls: string | null; alternatives: string | null; flags: string | null; media_attachments: string | null; routing: string | null; tool_directive: string | null }
 
 /** A bounded request's historical lookups stay in this thread and exclude the reply being replaced. */
 export type ChatHistorySource = { threadId: number; excludeMessageId?: number; untilMessageId?: number }
@@ -220,7 +223,7 @@ export type ChatHistoryOutline = Pick<CodexChatMessageRecord, 'id' | 'role' | 's
 // ECMAScript String.trim whitespace: SQL's default trim only removes ASCII spaces.
 const MESSAGE_WHITESPACE = '\u0009\u000a\u000b\u000c\u000d\u0020\u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\ufeff'
 const CONTEXT_MESSAGE_COLUMNS = `id, thread_id, role, content, display_content, speaker_profile_id,
-  tool_calls, status, error, finish_reason, flags, media_attachments, routing, created_date,
+  tool_calls, status, error, finish_reason, flags, tool_directive, media_attachments, routing, created_date,
   active_alternative, NULL AS alternatives, NULL AS context_meta`
 const SENDABLE_MESSAGE_SQL = `(length(trim(content, ?)) > 0
   OR COALESCE(tool_calls, '[]') != '[]' OR COALESCE(media_attachments, '[]') != '[]'
@@ -282,10 +285,11 @@ function readMessageRows(threadId: number, rows: StoredMessageRow[]): CodexChatM
   if (rows.length === 0) return []
   const attachments = FileStoreService.attachmentsForThread(threadId, { fromId: rows[0].id, untilId: rows[rows.length - 1].id })
   const ids = new Set(rows.map((row) => row.id))
-  const parsed = rows.map(({ media_attachments, routing, ...row }) => ({
+  const parsed = rows.map(({ media_attachments, routing, tool_directive, ...row }) => ({
     ...row, routing: parseMessageRouting(routing), mediaAttachments: parseChatMediaAttachments(media_attachments),
     tool_calls: parseToolCalls(row.tool_calls), alternatives: parseAlternatives(row.alternatives),
     flags: parseFlagSnapshots(row.flags), attachments: attachments.get(row.id) ?? [],
+    toolDirective: (() => { try { return readToolDirectiveSnapshot(JSON.parse(tool_directive || 'null')) } catch { return undefined } })(),
   }))
   const references = [...new Set(parsed.flatMap((row) => row.routing?.replyTo ? [row.routing.replyTo.messageId] : []))].filter((id) => !ids.has(id))
   const db = getUserSettingsDb()
@@ -1008,7 +1012,7 @@ export const CodexChatStore = {
     return true
   },
 
-  addMessage(message: Pick<CodexChatMessageRecord, 'thread_id' | 'role' | 'content' | 'display_content' | 'tool_calls' | 'status' | 'error' | 'flags' | 'mediaAttachments' | 'routing'> & { speaker_profile_id?: number | null; finish_reason?: string | null }, fileIds: string[] = [], options: { notify?: boolean } = {}) {
+  addMessage(message: Pick<CodexChatMessageRecord, 'thread_id' | 'role' | 'content' | 'display_content' | 'tool_calls' | 'status' | 'error' | 'flags' | 'toolDirective' | 'mediaAttachments' | 'routing'> & { speaker_profile_id?: number | null; finish_reason?: string | null }, fileIds: string[] = [], options: { notify?: boolean } = {}) {
     const db = getUserSettingsDb()
     const saved = db.transaction(() => {
       const thread = CodexChatStore.findThreadById(message.thread_id)
@@ -1016,7 +1020,7 @@ export const CodexChatStore = {
       const attachments = FileStoreService.validateAttachments(chatAttachmentOwner(thread.account_id), fileIds)
       if (attachments.some(file => file.chatAttachment)) requirePrivateAttachmentDestination(thread.id)
       const result = db.prepare(`
-        INSERT INTO codex_chat_messages (thread_id, role, content, display_content, tool_calls, status, error, speaker_profile_id, flags, finish_reason, media_attachments) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO codex_chat_messages (thread_id, role, content, display_content, tool_calls, status, error, speaker_profile_id, flags, finish_reason, media_attachments, tool_directive) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         message.thread_id,
         message.role,
@@ -1029,6 +1033,7 @@ export const CodexChatStore = {
         message.flags?.length ? JSON.stringify(message.flags) : null,
         message.finish_reason ?? null,
         message.mediaAttachments?.length ? JSON.stringify(message.mediaAttachments) : null,
+        message.role === 'user' && message.toolDirective ? JSON.stringify(message.toolDirective) : null,
       )
       for (const file of attachments) db.prepare('INSERT INTO chat_file_attachments (message_id, file_id) VALUES (?, ?)').run(result.lastInsertRowid, file.id)
       if (message.routing) CodexChatStore.setMessageRouting(message.thread_id, Number(result.lastInsertRowid), message.routing)

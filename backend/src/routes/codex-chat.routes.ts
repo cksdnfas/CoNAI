@@ -29,6 +29,8 @@ import { enrichImageWithFileView } from './images/utils'
 import { canUseChatProfile, resolveChatAccess, resolveChatProfileToolGrant } from '../services/codex-chat/codexChatAccess'
 import { CHAT_VISION_BUILTIN_TOOLS, getMcpToolScope } from '../mcp/context'
 import { openChatMcpBridge } from '../services/codex-chat/chatMcpBridge'
+import { getChatComposerTools } from '../services/codex-chat/chatComposerTools'
+import { ChatToolDirectiveError } from '../services/codex-chat/chatToolDirective'
 import { buildCodexInstructions, CodexChatError, CodexChatService, type CodexChatStreamEvent } from '../services/codex-chat/codexChatService'
 import { buildChatPromptPreview, estimateTokens, isSummarizing, referenceBlock, selectChatLore } from '../services/codex-chat/llmChatContext'
 import { OwnedLorebookStore } from '../services/codex-chat/chatLorebookFiles'
@@ -1187,6 +1189,20 @@ router.get('/admin/tools', requireAdmin, asyncHandler(async (req: Request, res: 
   }
 }))
 
+/** GET /composer-tools?threadId=… or ?profileId=… — only this account's upcoming chat grant. */
+router.get('/composer-tools', requireChatAccess, asyncHandler(async (req: Request, res: Response) => {
+  const { threadId, profileId } = req.query
+  if ((threadId === undefined) === (profileId === undefined)
+    || (threadId !== undefined && (typeof threadId !== 'string' || parseId(threadId) === null))
+    || (profileId !== undefined && (typeof profileId !== 'string' || parseId(profileId) === null))) {
+    sendRouteBadRequest(res, 'Exactly one valid threadId or profileId is required')
+    return
+  }
+  try {
+    res.json({ success: true, data: await getChatComposerTools(requesterFrom(req), threadId !== undefined ? { threadId: parseId(threadId)! } : { profileId: parseId(profileId)! }) })
+  } catch (error) { sendChatError(res, error) }
+}))
+
 /**
  * POST /admin/profiles/preview — what a (possibly unsaved) profile sends before the conversation: the leading
  * messages (or Codex developer instructions) and the tool schemas, with token estimates (calibrated per saved
@@ -1690,9 +1706,13 @@ router.post('/threads/:threadId/messages', requireChatAccess, asyncHandler(async
     sendRouteBadRequest(res, '페이지 연결은 1:1 채팅에서 사용할 수 있어.')
     return
   }
+  if (req.body?.toolDirective !== undefined && isGroupThread(req, threadId)) {
+    sendChatError(res, new ChatToolDirectiveError('도구 지시는 1:1 채팅에서만 사용할 수 있어.'))
+    return
+  }
   await streamChatReply(req, res, (write) => isGroupThread(req, threadId)
     ? GroupChatService.sendMessage(requesterFrom(req), threadId, text, write, req.body?.fileIds, req.body?.flagIds, req.body?.mediaHashes, req.body?.picks, req.body?.replyToMessageId)
-    : CodexChatService.sendMessage(requesterFrom(req), threadId, text, write, req.body?.fileIds, req.body?.flagIds, req.body?.picks, req.body?.mediaHashes, req.body?.replyToMessageId, req.body?.pageContext, { choice: req.body?.choice }))
+    : CodexChatService.sendMessage(requesterFrom(req), threadId, text, write, req.body?.fileIds, req.body?.flagIds, req.body?.picks, req.body?.mediaHashes, req.body?.replyToMessageId, req.body?.pageContext, { choice: req.body?.choice, toolDirective: req.body?.toolDirective }))
 }))
 
 // ---- Chat user profiles: who the account is in a chat (name, persona, avatar), one per chat ----------------------

@@ -17,14 +17,14 @@ export type ChatMcpToolResult = { content?: unknown[]; structuredContent?: unkno
  * The CoNAI MCP server, connected in-process for an API LLM chat: the same tools, scope filter and requester
  * ownership as the HTTP endpoint, without a network hop or token. One bridge per reply; close it afterwards.
  */
-export async function openChatMcpBridge(requester: McpRequester, scopes: ChatScope[], toolAllowlist: string[] | null = null, options: { generationPresetIds?: number[]; chatContext?: ChatExecutionContext; allowEmpty?: boolean; contentRatingLimit?: number | null; toolCatalog?: boolean; toolCatalogBudget?: () => number; research?: ChatResearchExecution } = {}) {
+export async function openChatMcpBridge(requester: McpRequester, scopes: ChatScope[], toolAllowlist: string[] | null = null, options: { generationPresetIds?: number[]; chatContext?: ChatExecutionContext; allowEmpty?: boolean; contentRatingLimit?: number | null; toolCatalog?: boolean; toolCatalogBudget?: () => number; research?: ChatResearchExecution; source?: 'codex-chat' | 'llm-chat'; composerPreview?: boolean; profilePreview?: boolean; workspaces?: import('@conai/shared').WorkspaceBinding[] } = {}) {
   const chatTools: ChatCompletionTool[] = []
   const catalogTools = new Set<string>()
   const chatContext = options.chatContext ? { ...options.chatContext } : undefined
   const livePage = () => chatContext?.page ? currentChatPage(requester, chatContext.page) : undefined
   const signature = () => `${chatPageToolSignature(livePage())}|assist:${chatContext ? ChatProfileStore.pageAssistEnabled(chatContext.profileId) : false}|plugins:${pluginServerToolsSignature()}`
   const connect = async () => {
-    const server = createMcpServer({ scopes: [...scopes], requester, source: 'llm-chat', toolAllowlist, generationPresetIds: options.generationPresetIds ?? [], chatContext, contentRatingLimit: options.contentRatingLimit, toolCatalog: options.toolCatalog, toolCatalogBudget: options.toolCatalogBudget, research: options.research })
+    const server = createMcpServer({ scopes: [...scopes], requester, source: options.source ?? 'llm-chat', toolAllowlist, generationPresetIds: options.generationPresetIds ?? [], chatContext, contentRatingLimit: options.contentRatingLimit, toolCatalog: options.toolCatalog, toolCatalogBudget: options.toolCatalogBudget, research: options.research, composerPreview: options.composerPreview, profilePreview: options.profilePreview, workspaces: options.workspaces })
     const client = inProcessMcpClient({ name: 'conai-llm-chat', version: '1.0.0' })
     try {
       const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()

@@ -168,7 +168,7 @@ const ChatMessageRow = memo(function ChatMessageRow({ message, previousContext, 
     {isUser
       ? <>{actions.editingId === message.id
         ? <ChatMessageEditor message={message} busy={actions.busy} onSave={actions.onEdit} onCancel={() => actions.onEditingChange(null)} />
-        : (content || message.routing?.replyTo) && <ChatUserMessage content={content} routing={routing} recipientLabel={recipientLabel} mentions={mentions} appearance={look.appearance} createdAt={message.created_date} speaker={userSpeaker} />}<ChatFileLinks files={message.attachments} /><ChatReferenceChips items={message.mediaAttachments} threadId={message.thread_id} /><ChatMessageFlags flags={message.flags} /></>
+        : (content || message.routing?.replyTo) && <ChatUserMessage content={content} routing={routing} recipientLabel={recipientLabel} mentions={mentions} appearance={look.appearance} createdAt={message.created_date} speaker={userSpeaker} />}<ChatFileLinks files={message.attachments} /><ChatReferenceChips items={message.mediaAttachments} threadId={message.thread_id} /><ChatMessageFlags flags={message.flags} toolDirective={message.toolDirective} /></>
       : actions.editingId === message.id
         ? <ChatMessageEditor message={message} busy={actions.busy} onSave={actions.onEditReply} onCancel={() => actions.onEditingChange(null)} reply />
         : <ChatMessageIdContext.Provider value={message.id}><CodexChatAssistantMessage content={content} routing={routing} recipientLabel={recipientLabel} toolCalls={message.tool_calls} threadId={message.thread_id} fileChanges={message.fileChanges} replyId={message.routing?.replyId} onRetry={lastReply && actions.canRewrite && !actions.busy ? () => actions.onRegenerate(message.id) : undefined} status={message.status} error={message.error} finishReason={message.finish_reason ?? null} media={media} {...look} createdAt={message.created_date} agent={agent} speaker={agentSpeaker ?? (speakerOf ? speakerOf(message.speaker_profile_id) : look.speaker)} /></ChatMessageIdContext.Provider>}
@@ -251,7 +251,7 @@ export const ChatLiveMessage = memo(function ChatLiveMessage({ turn, speakerOf, 
     {(turn.userText || turn.userRouting?.replyTo) && <ChatUserMessage content={turn.userText} routing={turn.userRouting} mentions={mentions} appearance={look.appearance} speaker={userSpeaker} />}
     <ChatFileLinks files={turn.attachments} />
     <ChatReferenceChips items={turn.mediaAttachments} threadId={turn.threadId} />
-    <ChatMessageFlags flags={turn.flags} />
+    <ChatMessageFlags flags={turn.flags} toolDirective={turn.toolDirective} />
     {/* Group rooms: one bubble per member answering now; none between members. */}
     {turn.replies
       ? turn.replies.map((reply) => <CodexChatAssistantMessage key={reply.routing?.replyId ?? reply.profileId} content={reply.text} routing={reply.routing} recipientLabel={recipients(reply.routing)} toolCalls={[...reply.toolCalls.values()]} reasoning={reply.reasoning} streaming translating={reply.translating} {...look} speaker={speakerOf ? speakerOf(reply.profileId) : look.speaker} />)

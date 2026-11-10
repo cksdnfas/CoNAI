@@ -23,7 +23,7 @@ import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { hasAuthPermission } from '@/features/auth/auth-permissions'
 import { useUnsavedSettingsGuard } from '@/features/settings/use-unsaved-settings-guard'
 import { useI18n } from '@/i18n'
-import { ChatPageConnectButton } from './chat-page-context'
+import { ChatComposerActions } from './chat-composer-actions'
 import { ChatTaskStrip } from './chat-task-ui'
 import { chatHealthLine, useChatHealth, useChatHealthRecheck } from './chat-health'
 import { ChatChoiceDock, ChatChoiceStatesContext, chatChoiceStates, findOpenChoice } from './chat-choice'
@@ -84,10 +84,10 @@ import { ChatProfilePicker } from './chat-profile-picker'
 import { ChatThreadList, type ChatListPatch } from './chat-thread-list'
 import { applyChatReadReceipt, useChatRoomSummaries, usePagedChatDraftRetention } from './use-chat-room-directory'
 import { useChatThreadActions } from './use-chat-thread-actions'
-import { ChatAttachButton, ChatDraftAttachments, useChatFileDrop } from './chat-attachments'
-import { ChatFlagButton, ChatFlagManagerModal, ChatFlagTray, useChatFlags } from './chat-flags'
+import { ChatDraftAttachments, useChatFileDrop } from './chat-attachments'
+import { ChatFlagManagerModal, ChatFlagTray, useChatFlags } from './chat-flags'
 import { ChatRoutineEditor, useRoutineThreadIds } from './chat-routines'
-import { ChatSuggestButton, ChatSuggestTray } from './chat-suggestions'
+import { ChatSuggestTray } from './chat-suggestions'
 import { ChatUserProfilePickModal, newChatUserProfile, useChatUserProfiles, userSpeakerOf } from './chat-user-profiles'
 import {
   CODEX_CHAT_THREADS_QUERY_KEY,
@@ -181,6 +181,8 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   const { showSnackbar } = useSnackbar()
   const queryClient = useQueryClient()
   const composerRef = useRef<HTMLTextAreaElement | null>(null)
+  // Where the composer's trays rise from: beside its panel, not inside it.
+  const [composerTrayHost, setComposerTrayHost] = useState<HTMLDivElement | null>(null)
   const [editingMessageId, setEditingMessageId] = useState<number | null>(null)
   const [commandPending, setCommandPending] = useState(false)
   const [exportOpen, setExportOpen] = useState(false)
@@ -1017,19 +1019,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
         </div>
       ) : null}
       <div className="relative">
-      {profile?.suggestEnabled ? <ChatSuggestTray suggestions={suggestions} buttonRef={suggestButtonRef} onPick={pickSuggestion} /> : null}
-      {flags.length > 0 ? (
-        <ChatFlagTray
-          flags={flags}
-          activeIds={activeFlagIds}
-          open={flagTrayOpen && canToggleFlags}
-          flagStyle={appearance.flagStyle}
-          buttonRef={flagButtonRef}
-          onToggle={toggleFlag}
-          onManage={() => setFlagManagerOpen(true)}
-          onClose={closeFlagTray}
-        />
-      ) : null}
+      <div ref={setComposerTrayHost} />
       <Panel treatment="composer" padding="sm" radius="md" backdrop={Boolean(backgroundUrl)} {...fileDrop.dropHandlers} style={narrationColorStyle(profile?.style.roleplay ? profile.style.colors.narration : null)} data-narrating={narrating && caretOnNarration(draft, caret)} data-drag-active={fileDrop.dragging}>
         <div className="relative min-w-0">
         {narrating ? <ChatComposerNarrationBackdrop textareaRef={composerRef} text={draft} /> : null}
@@ -1052,10 +1042,45 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
         {/* The tools under the text, worded so whether each is on reads at a glance; send stays at the end. */}
         <div className="mt-1 flex items-end gap-2">
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
-          <ChatAttachButton chat={chat} disabled={isBusy || activeThreadId === null} allowPrivateUploads={allowPrivateUploads} />
-          {!isGroup && profile?.pageAssist ? <ChatPageConnectButton disabled={isBusy} /> : null}
-          {flags.length > 0 ? <ChatFlagButton buttonRef={flagButtonRef} count={activeFlagIds.length} open={flagTrayOpen} disabled={!canToggleFlags} onToggle={() => setFlagTrayOpen((open) => !open)} /> : null}
-          {profile?.suggestEnabled ? <ChatSuggestButton buttonRef={suggestButtonRef} open={suggestions.open} loading={suggestions.loading} disabled={isBusy || activeThreadId === null} onToggle={suggestions.toggle} /> : null}
+          <ChatComposerActions
+            chat={chat}
+            selectionKey={draftKey}
+            toolsTarget={activeThreadId !== null ? { threadId: activeThreadId } : pendingChat ? { profileId: pendingChat.profileId } : null}
+            trayHost={composerTrayHost}
+            composerRef={composerRef}
+            attachDisabled={isBusy || activeThreadId === null}
+            allowPrivateUploads={allowPrivateUploads}
+            pageAvailable={!isGroup && Boolean(profile?.pageAssist)}
+            pageDisabled={isBusy}
+            toolsDisabled={isStartingChat}
+            flags={{
+              available: flags.length > 0,
+              count: activeFlagIds.length,
+              open: flagTrayOpen,
+              disabled: !canToggleFlags,
+              setOpen: setFlagTrayOpen,
+              buttonRef: flagButtonRef,
+              tray: (buttonRef) => (
+                <ChatFlagTray
+                  flags={flags}
+                  activeIds={activeFlagIds}
+                  open={flagTrayOpen && canToggleFlags}
+                  flagStyle={appearance.flagStyle}
+                  buttonRef={buttonRef}
+                  onToggle={toggleFlag}
+                  onManage={() => setFlagManagerOpen(true)}
+                  onClose={closeFlagTray}
+                />
+              ),
+            }}
+            suggest={{
+              available: Boolean(profile?.suggestEnabled),
+              disabled: isBusy || activeThreadId === null,
+              state: suggestions,
+              buttonRef: suggestButtonRef,
+              tray: (buttonRef) => <ChatSuggestTray suggestions={suggestions} buttonRef={buttonRef} onPick={pickSuggestion} />,
+            }}
+          />
         </div>
         {(isStreaming || serverRunning) && !(isGroup && canSend) ? (
           <IconButton variant="secondary" size="icon-sm" onClick={() => activeThreadId !== null && chat.stop(activeThreadId)} label={t({ ko: '중단', en: 'Stop' })}>

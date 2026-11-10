@@ -13,7 +13,7 @@ const COPIED_THREAD_COLUMNS = ['account_id', 'engine', 'profile_id', 'kind', 'co
   'max_tokens', 'chat_model_slot_id', 'chat_model', 'flag_ids', 'user_profile_id', 'group_chain_limit', 'group_window_limit', 'lorebook_ids', 'lore_auto_save', 'lore_record_book_id', 'linked_files'] as const
 
 const COPIED_MESSAGE_COLUMNS = ['role', 'content', 'display_content', 'tool_calls', 'status', 'error', 'speaker_profile_id', 'flags', 'finish_reason',
-  'media_attachments', 'alternatives', 'active_alternative', 'context_meta', 'created_date'] as const
+  'media_attachments', 'alternatives', 'active_alternative', 'context_meta', 'created_date', 'tool_directive'] as const
 
 /**
  * A new chat holding `thread` up to and including `untilMessageId`: the messages (with their variants, files and

@@ -74,6 +74,7 @@ function contentsLine(names: string[]) {
 
 /** The chat's own tools and what a connected page brings stay in the tool list; everything else may be catalogued. */
 export function isDirectChatTool(context: McpRequestContext, toolName: string): boolean {
+  if (context.chatContext?.directTool === toolName) return true;
   if ((context.workspace || context.workspaces?.length) && toolName.startsWith('workspace_') && toolName !== 'workspace_publish_resources') return true;
   if (CHAT_ROOM_TOOLS.has(toolName) || CHAT_VISION_BUILTIN_TOOLS.has(toolName) || isChatGenerationTool(toolName)) return true;
   if (isConnectedChatPageTool(context, toolName)) {

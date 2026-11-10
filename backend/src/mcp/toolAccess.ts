@@ -259,6 +259,7 @@ export function requireMcpResourceOwner(context: McpRequestContext, record: { re
  * a picture an `after` generation preset queues once the reply that asked for it ended (chatGenerationPrompting).
  */
 export function requireMcpToolAccess(context: McpRequestContext, toolName: string, params: Record<string, unknown> = {}, execution: 'reply' | 'after-reply' | 'queued' = 'reply'): void {
+  if (context.composerPreview || context.profilePreview) throw new Error('Composer tool listings cannot execute tools.');
   context.requester = chatMcpRequester(context);
   if (!isContextToolAllowed(context, toolName, false)) throw new Error('Unknown or not permitted tool.');
   refreshMcpRequester(context.requester);
