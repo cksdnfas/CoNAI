@@ -1,6 +1,6 @@
 import { useRuntimeEventStream } from '@/features/runtime-events/use-runtime-event-stream'
 import { chatGenerationPollInterval } from '@/features/runtime-events/chat-generation-query-updates'
-import { buildChatImageRecord } from './chat-image-record'
+import { buildChatImageRecord, isChatResultImage } from './chat-image-record'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { CornerDownLeft, ImageIcon, Search } from 'lucide-react'
@@ -103,7 +103,7 @@ export function CodexChatGallery({ threadId, columns, pendingJobs }: { threadId:
             renderItemOverlay={(image) => {
               const media = image.composite_hash ? mediaByHash.get(image.composite_hash) : undefined
               return <div className="flex items-center gap-1">
-                <ChatReferenceButton compositeHash={image.composite_hash} mimeType={image.mime_type ?? null} size="icon-xs" />
+                <ChatReferenceButton compositeHash={image.composite_hash} mimeType={image.mime_type ?? null} delivered={isChatResultImage(image)} size="icon-xs" />
                 {media && chat ? <IconButton variant="overlay" size="icon-xs" label={t({ ko: '메시지로 이동', en: 'Go to message' })} onClick={(event) => { event.stopPropagation(); chat.focusMessage(media.messageId) }}><CornerDownLeft /></IconButton> : null}
               </div>
             }}

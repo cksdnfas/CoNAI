@@ -14,19 +14,25 @@ import { MEDIA_HASH_PATTERN } from './chatMediaLinks'
 /** A reference to existing library media, never a copy into the private file store. */
 export type ChatMediaAttachment = { compositeHash: string; name: string; mimeType: string | null }
 
-function requireChatMediaAccess(requester: McpRequester) {
+/**
+ * images.view attaches any library media. Without it only what the conversation itself delivered to the account
+ * (`delivered`, asked for only then) can go back: a hash alone is never a grant.
+ */
+function requireChatMediaAccess(requester: McpRequester, hashes: unknown, delivered?: () => ReadonlySet<string>) {
   const id = requester.accountId
   const permissions = id === null
     ? (hasConfiguredAuth() ? [] : AuthAccessControlService.resolveBootstrapAccess().permissionKeys)
     : (AuthAccount.findById(id)?.status === 'active' ? AuthAccessControlService.resolveForAccountId(id).permissionKeys : [])
-  if (!permissions.includes(IMAGE_VIEW_PERMISSION)) {
+  if (permissions.includes(IMAGE_VIEW_PERMISSION)) return
+  const allowed = delivered && Array.isArray(hashes) ? delivered() : null
+  if (!allowed || (hashes as unknown[]).some((hash) => !allowed.has(hash as string))) {
     throw new FileStoreError('앱 미디어 접근 권한이 없어.', 403)
   }
 }
 
-export function validateChatMediaAttachments(requester: McpRequester, hashes: unknown, fileCount: number): ChatMediaAttachment[] {
+export function validateChatMediaAttachments(requester: McpRequester, hashes: unknown, fileCount: number, delivered?: () => ReadonlySet<string>): ChatMediaAttachment[] {
   if (hashes === undefined || (Array.isArray(hashes) && hashes.length === 0)) return []
-  requireChatMediaAccess(requester)
+  requireChatMediaAccess(requester, hashes, delivered)
   if (!Array.isArray(hashes) || hashes.some((hash) => typeof hash !== 'string' || !MEDIA_HASH_PATTERN.test(hash))) {
     throw new FileStoreError('앱 미디어 목록에서 첨부할 항목을 다시 선택해줘.', 400)
   }

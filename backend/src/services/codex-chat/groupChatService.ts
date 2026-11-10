@@ -9,6 +9,7 @@ import { registerChatReply, skipThreadGenerationReactions } from './chatReplyReg
 import { notifyChatUserSend } from './chatSendEvents'
 import type { McpRequester } from '../../mcp/context'
 import { inlineTextsForChat, loadAttachedImages, validateChatAttachments, withLatestMediaGeneration } from './chatAttachments'
+import { deliveredChatMediaHashes } from './chatResultMediaAccess'
 import { chatProfileRequester } from './chatProfilePermissions'
 import { generatedImagesTokens, loadInlineGeneratedImages, withGeneratedImages } from './chatGenerationPrompting'
 import { ChatFlagStore, parseFlagIds, parsePicks } from './chatFlags'
@@ -597,7 +598,7 @@ export const GroupChatService = {
     assertGroupChatAvailable(requester)
     const attachments = validateChatAttachments(requester, fileIds)
     requirePrivateAttachmentRun(requester, { threadId, profileId: thread.profile_id!, kind: 'group' }, attachments.some(file => file.chatAttachment))
-    const mediaAttachments = validateChatMediaAttachments(requester, mediaHashes, attachments.length)
+    const mediaAttachments = validateChatMediaAttachments(requester, mediaHashes, attachments.length, () => deliveredChatMediaHashes(requester, thread))
     const flags = [...ChatFlagStore.resolve(requester, parseFlagIds(flagIds)), ...parsePicks(picks)]
     const trimmed = text.trim()
     if (!trimmed && attachments.length === 0 && mediaAttachments.length === 0) throw new CodexChatError('메시지를 입력해줘.')

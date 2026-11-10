@@ -17,6 +17,11 @@ export function buildChatLibraryImageRecord(compositeHash: string, mimeType?: st
   }
 }
 
+/** Whether `image` comes through its conversation's own result route: the chat delivered it, so the reader may reference it back without gallery access. */
+export function isChatResultImage(image: Pick<ImageRecord, 'detail_scope_key'> | null | undefined) {
+  return image?.detail_scope_key?.startsWith('/api/codex-chat/threads/') === true
+}
+
 /** A library image as the lightbox needs it; history rows and the thread's media map add mime type and size. */
 export function buildChatImageRecord(compositeHash: string, record?: GenerationHistoryRecord, info?: CodexChatMediaInfo): ImageRecord {
   const historyId = record?.id ?? info?.historyId

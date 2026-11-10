@@ -62,6 +62,11 @@ function collectScopedChatResultMedia(requester: McpRequester, thread: CodexChat
   return [...result.values()].sort((a, b) => b.messageId - a.messageId)
 }
 
+/** What `thread` itself delivered to this account: the only library media it may attach back without images.view. */
+export function deliveredChatMediaHashes(requester: McpRequester, thread: CodexChatThreadRecord): Set<string> {
+  return new Set(collectScopedChatResultMedia(requester, thread, CodexChatStore.listMessages(thread.id)).map((item) => item.compositeHash))
+}
+
 export function chatResultMediaMap(requester: McpRequester, thread: CodexChatThreadRecord, messages: CodexChatMessageRecord[]) {
   return Object.fromEntries(collectChatResultMedia(requester, thread, messages).map((item) => [item.compositeHash, {
     mimeType: item.mimeType, width: item.width, height: item.height, historyId: item.historyId,

@@ -5,6 +5,7 @@ import type { ChatSendOptions } from './chatTasks'
 import { validateChatAttachments } from './chatAttachments'
 import { requirePrivateAttachmentRun } from './chatAttachmentPrivacy'
 import { validateChatMediaAttachments } from './chatMediaAttachments'
+import { deliveredChatMediaHashes } from './chatResultMediaAccess'
 import { ChatFlagStore, parseFlagIds, parsePicks } from './chatFlags'
 import { readChoiceAnswer } from './chatChoices'
 import { parseChatPageContext } from './chatPageContext'
@@ -24,7 +25,7 @@ export async function prepareChatSend(
   const page = choice?.withoutPage ? undefined : parseChatPageContext(pageContext, requester)
   const attachments = validateChatAttachments(requester, fileIds)
   requirePrivateAttachmentRun(requester, { threadId: thread.id, profileId: profile.id, kind: thread.kind, page }, attachments.some(file => file.chatAttachment))
-  const mediaAttachments = validateChatMediaAttachments(requester, mediaHashes, attachments.length)
+  const mediaAttachments = validateChatMediaAttachments(requester, mediaHashes, attachments.length, () => deliveredChatMediaHashes(requester, thread))
   const flags = [...ChatFlagStore.resolve(requester, parseFlagIds(flagIds)), ...parsePicks(picks), ...(choice?.flags ?? [])]
   const trimmed = text.trim()
   if (!trimmed && attachments.length === 0 && mediaAttachments.length === 0) throw new ErrorType('메시지를 입력해줘.')

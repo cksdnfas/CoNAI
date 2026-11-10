@@ -55,7 +55,7 @@ function fillsWidth(size: ThumbSize) {
   return size === 'full' || size === 'tile'
 }
 
-import { buildChatImageRecord } from './chat-image-record'
+import { buildChatImageRecord, isChatResultImage } from './chat-image-record'
 import { parseServerDate } from '@/lib/server-time'
 
 /**
@@ -118,7 +118,7 @@ function ChatImageThumb({ image, size, onOpen }: { image: ImageRecord; size: Thu
   const placeholder = thumbPlaceholder(size, image.width, image.height)
 
   return (
-    <ChatThumbOverlay className={cn('flex shrink-0', fillsWidth(size) && 'w-full')} actions={drawn ? <ChatReferenceButton compositeHash={image.composite_hash} mimeType={image.mime_type ?? null} size="icon-xs" /> : null}>
+    <ChatThumbOverlay className={cn('flex shrink-0', fillsWidth(size) && 'w-full')} actions={drawn ? <ChatReferenceButton compositeHash={image.composite_hash} mimeType={image.mime_type ?? null} delivered={isChatResultImage(image)} size="icon-xs" /> : null}>
       {/* eslint-disable-next-line no-restricted-syntax -- the thumbnail itself is the control; Button padding/height would crop it */}
       <button
         type="button"
@@ -176,7 +176,7 @@ function ChatFoundTile({ image, onOpen }: { image: ImageRecord; onOpen: () => vo
   const hoverPreview = useMediaHoverPreview(thumbnailUrl && !isVideo ? { src: thumbnailUrl, fullSrc: image.image_url } : null)
 
   return (
-    <ChatThumbOverlay actions={<ChatReferenceButton compositeHash={image.composite_hash} mimeType={image.mime_type ?? null} size="icon-xs" />}>
+    <ChatThumbOverlay actions={<ChatReferenceButton compositeHash={image.composite_hash} mimeType={image.mime_type ?? null} delivered={isChatResultImage(image)} size="icon-xs" />}>
       {/* eslint-disable-next-line no-restricted-syntax -- the thumbnail itself is the control; Button padding/height would crop it */}
       <button
         type="button"

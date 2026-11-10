@@ -131,6 +131,13 @@ test('delegated chat media is bound to stored results and live account/profile/t
   const copiedThread = CodexChatStore.createThread(owner, 'Copied tool metadata', 'llm', profile.id)
   const copiedMessage = addReply(copiedThread)
   assert.equal(await status(`/api/codex-chat/threads/${copiedThread}/messages/${copiedMessage}/media/${hash}/file`), 404)
+  // A reference ("참조") without images.view: only what the same thread delivered goes back, never a bare hash.
+  const { prepareChatSend } = await import('../src/services/codex-chat/chatSendPreparation')
+  const { FileStoreError } = await import('../src/services/fileStoreService')
+  const reference = (id: number, hashes: string[]) => prepareChatSend({ accountId: owner, accountType: 'guest' }, CodexChatStore.findThread(id, owner)!, profile, 'this one', { mediaHashes: hashes, options: {} }, FileStoreError)
+  assert.deepEqual((await reference(threadId, [hash])).mediaAttachments.map((item) => item.compositeHash), [hash])
+  await assert.rejects(reference(threadId, [hash, unreturned]), { status: 403 })
+  await assert.rejects(reference(copiedThread, [hash]), { status: 403 })
   const failedMessage = addReply(threadId, undefined, [{ ...call, compositeHashes: [unreturned] }], 'failed-lookup')
   main.db.prepare("UPDATE media_metadata SET postprocess_status = 'pending' WHERE composite_hash = ?").run(unreturned)
   await invoke(threadId, 'failed-lookup', 'get_image_metadata', { composite_hash: unreturned }, false, false)

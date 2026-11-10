@@ -17,24 +17,27 @@ import { CHAT_DOCK_MIN_WIDTH_PX, CODEX_CHAT_ROUTE, codexChatMediaQueryKey, useCo
 /**
  * "참조": attach a library image seen in the chat to the next message (it goes along as an app-media attachment, the
  * same thing the paperclip's "앱 미디어에서 고르기" produces). Pressed while it is in the draft; pressing again detaches.
+ * `delivered` (see isChatResultImage): the conversation brought the image in itself, which the server takes back from a
+ * reader without gallery access.
  */
-export function useChatReference(compositeHash: string | null | undefined, mimeType: string | null) {
+export function useChatReference(compositeHash: string | null | undefined, mimeType: string | null, delivered = false) {
   const { t } = useI18n()
   const { canViewImages } = useImagePermissions()
   const chat = useCodexChatReference()
+  const allowed = canViewImages || delivered
   const active = Boolean(compositeHash) && (chat?.draftMediaAttachments.some((item) => item.compositeHash === compositeHash) ?? false)
   const toggle = useCallback(() => {
-    if (!canViewImages || !chat || !compositeHash) return
+    if (!allowed || !chat || !compositeHash) return
     chat.toggleMediaAttachment({ compositeHash, name: t({ ko: '참조 이미지', en: 'Referenced image' }), mimeType })
-  }, [canViewImages, chat, compositeHash, mimeType, t])
-  return { available: canViewImages && chat !== null && Boolean(compositeHash), active, toggle }
+  }, [allowed, chat, compositeHash, mimeType, t])
+  return { available: allowed && chat !== null && Boolean(compositeHash), active, toggle }
 }
 
-export function ChatReferenceButton({ compositeHash, mimeType, size = 'icon-sm', className }: {
-  compositeHash: string | null | undefined; mimeType: string | null; size?: 'icon' | 'icon-sm' | 'icon-xs'; className?: string
+export function ChatReferenceButton({ compositeHash, mimeType, delivered, size = 'icon-sm', className }: {
+  compositeHash: string | null | undefined; mimeType: string | null; delivered?: boolean; size?: 'icon' | 'icon-sm' | 'icon-xs'; className?: string
 }) {
   const { t } = useI18n()
-  const reference = useChatReference(compositeHash, mimeType)
+  const reference = useChatReference(compositeHash, mimeType, delivered)
   if (!reference.available) return null
   return (
     <IconButton
