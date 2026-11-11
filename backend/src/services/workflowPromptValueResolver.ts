@@ -12,7 +12,20 @@ export type WorkflowPromptFieldLike = {
   options?: unknown[]
 }
 
-const DROPDOWN_RANDOM_OPTION_VALUE = '__random__'
+export const DROPDOWN_RANDOM_OPTION_VALUE = '__random__'
+
+/**
+ * A dropdown field's choices as the generation form offers them: the items of the custom dropdown list it names
+ * (`listName`), or its own options when it names none or the list is gone. Null when there is nothing to choose from.
+ */
+export function workflowDropdownChoices(field: WorkflowPromptFieldLike): { options: string[]; listName: string | null } | null {
+  const listName = typeof field.dropdown_list_name === 'string' ? field.dropdown_list_name.trim() : ''
+  const list = listName ? CustomDropdownListModel.findByName(listName) : null
+  if (!list && field.type !== 'select') return null
+  const options = (list ? list.items : Array.isArray(field.options) ? field.options : [])
+    .filter((option): option is string => typeof option === 'string' && option.trim().length > 0 && option !== DROPDOWN_RANDOM_OPTION_VALUE)
+  return options.length > 0 ? { options, listName: list ? list.name : null } : null
+}
 
 const COMFY_MODEL_PATH_INPUT_KEYS = new Set([
   'ckpt_name',

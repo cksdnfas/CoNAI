@@ -197,7 +197,9 @@ test('judge presets: no-judge parity, original text, tool steering, fallback, lo
       notifications++
       assert.ok(CodexChatStore.latestMessage(id), 'delivery is already persisted')
       assert.equal(ChatTaskStore.find(task.id)?.status, 'running')
-      ChatTaskStore.update(task.id, { status: 'paused' })
+      // A send prepares asynchronously, so its delivery lands after sendMessage returns: the task waits on the user
+      // again from here, for the busy send below to find it waiting.
+      ChatTaskStore.update(task.id, { status: 'waiting', wait: 'user' })
     })
     s.after(unsubscribe)
     for (const send of [
@@ -216,7 +218,6 @@ test('judge presets: no-judge parity, original text, tool steering, fallback, lo
     assert.equal(notifications, 0)
     route(s, () => ({}), () => reply('done'))
     const first = LlmChatService.sendMessage(requester, thread, 'accepted', () => {})
-    ChatTaskStore.update(task.id, { status: 'waiting', wait: 'user' })
     await assert.rejects(LlmChatService.sendMessage(requester, thread, 'busy', () => {}), /진행 중/)
     assert.equal(ChatTaskStore.find(task.id)?.status, 'waiting')
     assert.equal(notifications, 1)

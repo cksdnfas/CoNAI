@@ -612,6 +612,20 @@ test('a tool round that does not fit is retried with the tool result cut shorter
   assert.throws(() => fitChatContext(profile, catalogMessages, [], 100), /컨텍스트 한도를 넘었어/, 'catalog schemas stay intact even when generic result cuts would fit')
 })
 
+test('a JSON tool result over the limit keeps its leading entries whole instead of shortening every string', () => {
+  const fields = Array.from({ length: 40 }, (_, index) => ({ id: `field_${index}_identifier`, label: `입력 필드 ${index}`, type: 'select', options: ['1:1 (Square)', '16:9 (Widescreen)'] }))
+  const content = JSON.stringify({ id: 5, name: 'MOSS QA', input_schema: fields })
+  const cut = cutToolOutput(content, Math.floor(content.length / 2))
+  assert.ok(cut.length <= Math.floor(content.length / 2))
+  const shown = JSON.parse(cut) as { truncated: boolean; data: { name: string; input_schema: Array<typeof fields[number] | string> } }
+  assert.equal(shown.truncated, true)
+  assert.equal(shown.data.name, 'MOSS QA')
+  const whole = shown.data.input_schema.filter((entry) => typeof entry === 'object')
+  assert.ok(whole.length >= 10, 'about half of the entries fit')
+  assert.deepEqual(whole.slice(0, -1), fields.slice(0, whole.length - 1), 'every entry before the cut reads exactly as it was returned')
+  assert.match(String(shown.data.input_schema.at(-1)), /^\(\d+ more omitted\)$/)
+})
+
 test('a tool round over the limit sheds old turns before the work in progress, then wraps up instead of failing', (t) => {
   mockModelRows(t, { 1: ['test', 'test'] }, 1)
   const profile = ChatProfileStore.draft({ name: 'Character', maxTokens: 100 })

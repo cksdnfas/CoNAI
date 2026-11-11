@@ -321,7 +321,7 @@ test('chat profile assets: library migration, access, imports and generation ref
     assert.equal((await call('/profiles')).body.data.find((profile: any) => profile.id === first.id).avatarHash, null)
   })
 
-  await t.test('chat-only readers see avatar thumbnails without access to originals, other media or hidden assets', async (sub) => {
+  await t.test('chat-only readers see avatar thumbnails without access to profile originals or hidden assets', async (sub) => {
     const large = await sharp({ create: { width: 512, height: 256, channels: 3, background: '#234567' } }).png().toBuffer()
     const legacy = `data:image/png;base64,${large.toString('base64')}`
     const asset = await assets.ingestProfileAsset(large, 'Thumbnail access')
@@ -348,7 +348,9 @@ test('chat profile assets: library migration, access, imports and generation ref
       assert.equal((await call('/profiles/:profileId/assets/:kind', { profileId: String(profile.id), kind })).status, 403)
     }
     assert.equal((await call('/profiles/:profileId/background', { profileId: String(profile.id) })).status, 403)
-    assert.equal((await call('/media/:compositeHash/thumbnail', { compositeHash: asset.compositeHash })).status, 403)
+    // Library media by hash opens on the chat's own media route since the chat became the grant there
+    // (chat-result-delivery.test.ts); the profile's asset routes above stay behind images.view.
+    assert.equal((await call('/media/:compositeHash/thumbnail', { compositeHash: asset.compositeHash })).status, 200)
     for (const id of [String(second.id), '999999', asset.compositeHash]) {
       assert.equal((await call('/profiles/:profileId/avatar-thumbnail', { profileId: id })).status, 404)
     }

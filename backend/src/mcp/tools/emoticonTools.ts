@@ -92,7 +92,7 @@ export function registerEmoticonTools(server: McpServer, context: McpRequestCont
 
   server.registerTool(
     'set_emoticon_keywords',
-    { description: 'Set group image emoticon keywords; returns per-item results. Each keyword belongs to one image per group: clashes are skipped. Choose distinct keywords and retry only clashing items.', inputSchema: z.object({
+    { description: 'Set group image emoticon keywords; returns per-item results. To set up a group: list_emoticons for it, look at the images with view_images in small batches when available (otherwise judge from file names and tags), then give each image a few short keywords. Each keyword belongs to one image per group: clashes are skipped. Choose distinct keywords and retry only clashing items.', inputSchema: z.object({
       group_id: groupIdSchema,
       group_path: groupPathSchema,
       items: z.array(z.object({

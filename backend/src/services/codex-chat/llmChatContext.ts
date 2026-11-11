@@ -89,7 +89,6 @@ function toolGuidance(presetMode: boolean) {
     'Call tools only through the tool-calling interface; never write tool-call markup (<tool_call>, <function=…>) or JSON calls in your reply text. A tool that is not in your tool list is called through run_tool {"tool": "<name>", "arguments": {…}} when run_tool is offered.',
     ...GENERATION_GUIDANCE[presetMode ? 'preset' : 'freeform'],
     ACTION_AUTHORIZATION_GUIDANCE,
-    'To set up an emoticon group: list_emoticons for the group, view_images in small batches when available (otherwise judge from file names and tags), then set_emoticon_keywords with a few short keywords per image.',
   ].join('\n')
 }
 
@@ -769,34 +768,43 @@ export function cutToolOutput(content: string, length: number) {
   try {
     const value: unknown = JSON.parse(content)
     const note = 'Partial result. Query a smaller page or selected fields for omitted data.'
-    for (let cap = Math.min(length, 1024); cap >= 1; cap = Math.floor(cap / 2)) {
-      let remaining = length
+    const envelope = JSON.stringify({ truncated: true, originalCharacters: content.length, data: null, note }).length
+    // What fits is kept whole from the start and the rest is left out: ids, names and choices cut to a few characters
+    // each still read as data but say nothing. The budget only shrinks when the omission marks themselves overflow.
+    for (let budget = length - envelope; budget > 0; budget = Math.floor(budget * 0.8)) {
+      let remaining = budget
       const compact = (item: unknown, depth: number): unknown => {
         if (remaining <= 0 || depth > 8) return '(omitted)'
         if (typeof item === 'string') {
-          const shown = item.length > cap ? `${item.slice(0, cap)}…(truncated)` : item
-          remaining -= shown.length
+          const size = JSON.stringify(item).length
+          const shown = size <= remaining ? item : `${item.slice(0, Math.max(0, remaining - 16))}…(truncated)`
+          remaining -= size
           return shown
         }
         if (Array.isArray(item)) {
+          remaining -= 2
           const shown: unknown[] = []
-          for (const entry of item.slice(0, Math.min(cap, 32))) {
-            if (remaining <= 0) break
-            remaining -= 4
+          for (const entry of item) {
+            if (remaining <= 0) {
+              shown.push(`(${item.length - shown.length} more omitted)`)
+              break
+            }
+            remaining -= 1
             shown.push(compact(entry, depth + 1))
           }
           return shown
         }
         if (item && typeof item === 'object') {
+          remaining -= 2
           const shown: Record<string, unknown> = {}
-          for (const [key, entry] of Object.entries(item).slice(0, 32)) {
+          for (const [key, entry] of Object.entries(item)) {
             if (remaining <= 0) break
-            remaining -= key.length + 4
+            remaining -= JSON.stringify(key).length + 2
             Object.defineProperty(shown, key, { value: compact(entry, depth + 1), enumerable: true })
           }
           return shown
         }
-        remaining -= 8
+        remaining -= JSON.stringify(item).length
         return item
       }
       const result = JSON.stringify({ truncated: true, originalCharacters: content.length, data: compact(value, 0), note })

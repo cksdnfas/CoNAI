@@ -274,12 +274,18 @@ async function runDeferred(row: DeferredGenerationRow) {
   const turns = splitTurns(saved.messages).map(turn => buildSuggestionTranscript(turn, user.name, nameOf, keys))
   const request = await fitAuxiliaryHistory(target, turns, history => buildWriterMessages({ ...base, transcript: history.join('\n\n') }))
   let args: Record<string, unknown> | null = null
+  // A refused answer goes back with the reason: asked the same way again, the model gives the same answer.
+  let refused: { answer: string; reason: string } | null = null
   for (let attempt = 0; attempt < WRITER_ATTEMPTS && !args; attempt++) {
-    const answer = await completeChat({ ...request.target, promptCacheMarks: false }, request.messages, new AbortController().signal, { purpose: 'image_prompt', profileId: profile.id, threadId: row.thread_id })
+    const messages: ChatCompletionMessage[] = refused
+      ? [...request.messages, { role: 'assistant', content: refused.answer || '(empty)' }, { role: 'user', content: `That answer was refused: ${refused.reason}\nAnswer again with one corrected JSON object and nothing else.` }]
+      : request.messages
+    const answer = await completeChat({ ...request.target, promptCacheMarks: false }, messages, new AbortController().signal, { purpose: 'image_prompt', profileId: profile.id, threadId: row.thread_id })
     const parsed = z.object(shape).safeParse(parseWriterAnswer(answer))
     if (parsed.success) args = parsed.data
+    else refused = { answer: stripThinking(answer).trim(), reason: z.prettifyError(parsed.error).replace(/\s+/g, ' ') }
   }
-  if (!args) throw new Error('모델이 쓴 프롬프트를 읽지 못했어.')
+  if (!args) throw new Error(`모델이 쓴 프롬프트를 읽지 못했어.${refused ? ` (${refused.reason})` : ''}`)
   const usesReference = preset.kind === 'nai' ? preset.nai?.characterReference !== 'none' : Boolean(preset.comfyui?.referenceField)
   if (usesReference) requireRequesterPermission(requester, 'images.view')
   // Loaded here: the job tools reach most of the chat services, and this module is loaded by some of them.

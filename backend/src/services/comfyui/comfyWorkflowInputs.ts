@@ -2,9 +2,9 @@ import type { ComfyUIServerRecord } from '../../types/comfyuiServer'
 import type { MarkedField, WorkflowRecord } from '../../types/workflow'
 import { ComfyUIServerModel, WorkflowServerModel } from '../../models/ComfyUIServer'
 import { ComfyUIService } from '../comfyuiService'
-import { reconcileComfyModelSelectionValues } from '../comfyModelSelectionResolver'
+import { normalizeComparableModelOption, reconcileComfyModelSelectionValues } from '../comfyModelSelectionResolver'
 import { ComfyInputValidationError, prepareComfyPromptData, validateComfyPromptData } from '../prepareComfyPromptData'
-import { resolveWorkflowPromptValues } from '../workflowPromptValueResolver'
+import { DROPDOWN_RANDOM_OPTION_VALUE, resolveWorkflowPromptValues, workflowDropdownChoices } from '../workflowPromptValueResolver'
 import { isComfySeedJsonPath } from './seedControl'
 import { isChatMcpSource, type McpRequestContext } from '../../mcp/context'
 import { validateMcpToolArguments } from '../../mcp/requestSecurity'
@@ -334,6 +334,53 @@ function normalizeMiniMaxValue(field: MarkedField, provided: unknown) {
   return value
 }
 
+/** A dropdown list's items go to a model whole (tool schema, workflow details, an error) up to this many characters; a longer list is searched. */
+const DROPDOWN_INLINE_CHARS = 2000
+const DROPDOWN_CLOSEST_SHOWN = 12
+
+/** A dropdown field's choices and whether a model is handed all of them; a field's own options always are. */
+export function mcpDropdownChoices(field: MarkedField) {
+  const choices = workflowDropdownChoices(field)
+  return choices ? { ...choices, inline: choices.listName === null || JSON.stringify(choices.options).length <= DROPDOWN_INLINE_CHARS } : null
+}
+
+function closestDropdownChoices(options: string[], value: string) {
+  const terms = value.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter((term) => term.length > 1)
+  return options
+    .map((option) => ({ option, score: terms.filter((term) => option.toLowerCase().includes(term)).length }))
+    .filter((entry) => entry.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, DROPDOWN_CLOSEST_SHOWN)
+    .map((entry) => entry.option)
+}
+
+/**
+ * A supplied dropdown value as its list spells it (case, slash direction and model file extension aside). Any other
+ * value is refused here with the choices: left to the ComfyUI server it fails after the job is queued, where the
+ * caller no longer sees why.
+ */
+export function requireDropdownChoice(field: MarkedField, value: unknown) {
+  const choices = mcpDropdownChoices(field)
+  // The workflow's saved value is what leaving the field out sends, so an input template sent back is not a wrong choice.
+  if (!choices || value === undefined || value === null || value === DROPDOWN_RANDOM_OPTION_VALUE || value === field.default_value) return value
+  const text = typeof value === 'number' ? String(value) : value
+  if (typeof text === 'string') {
+    if (choices.options.includes(text)) return text
+    const comparable = normalizeComparableModelOption(text)
+    const matches = choices.options.filter((option) => normalizeComparableModelOption(option) === comparable)
+    if (matches.length === 1) return matches[0]
+  }
+  const quoted = (options: string[]) => options.map((option) => JSON.stringify(option)).join(', ')
+  let hint = `Use exactly one of: ${quoted(choices.options)}`
+  if (!choices.inline) {
+    // A caller may have no tool to search the list with (a preset-only profile, the prompt writer): it always gets items to pick from.
+    const closest = closestDropdownChoices(choices.options, String(text))
+    const shown = closest.length > 0 ? closest : choices.options.slice(0, DROPDOWN_CLOSEST_SHOWN)
+    hint = `${closest.length > 0 ? 'Closest' : 'First'} ${shown.length} of ${choices.options.length}: ${quoted(shown)}. Where search_custom_dropdown_items is offered, it finds the others (list_name ${JSON.stringify(choices.listName)})`
+  }
+  throw new Error(`${field.label || field.id} (${field.id}): ${JSON.stringify(value)} is not a choice of this dropdown. ${hint}.`)
+}
+
 export function normalizeMcpWorkflowInputs(markedFields: MarkedField[], suppliedInputs: Record<string, unknown>) {
   const knownIds = new Set(markedFields.map((field) => field.id))
   const unknownIds = Object.keys(suppliedInputs).filter((key) => !knownIds.has(key))
@@ -347,7 +394,7 @@ export function normalizeMcpWorkflowInputs(markedFields: MarkedField[], supplied
     const suppliedValue = hasSuppliedValue ? suppliedInputs[field.id] : undefined
     const value = field.type === 'node' && field.node_editor === MINIMAX_DIRECTOR_EDITOR
       ? normalizeMiniMaxValue(field, suppliedValue)
-      : hasSuppliedValue ? suppliedValue : field.default_value
+      : hasSuppliedValue ? requireDropdownChoice(field, suppliedValue) : field.default_value
 
     if (field.required && !hasMeaningfulValue(value)) {
       throw new Error(`Required workflow input is missing: ${field.label || field.id} (${field.id})`)
@@ -515,15 +562,18 @@ function miniMaxInputSchema(field: MarkedField) {
 }
 
 export function describeMcpMarkedField(field: MarkedField) {
+  const choices = mcpDropdownChoices(field)
   return {
     id: field.id,
     label: field.label,
     description: field.description,
-    type: field.type,
+    type: choices ? 'select' : field.type,
     required: field.required === true,
     has_default: field.default_value !== undefined,
     placeholder: field.placeholder,
-    options: field.options,
+    // Only these values are accepted. A long list is named instead: search_custom_dropdown_items finds its items.
+    options: choices?.inline ? choices.options : undefined,
+    options_list: choices && !choices.inline ? { list_name: choices.listName, total: choices.options.length } : undefined,
     minimum: field.min,
     maximum: field.max,
     step: field.step,
@@ -552,7 +602,7 @@ export function createMcpWorkflowInputTemplate(markedFields: MarkedField[]) {
       }]
     }
     if (field.type === 'number') return [field.id, field.default_value ?? field.min ?? 0]
-    if (field.type === 'select') return [field.id, field.default_value ?? field.options?.[0] ?? '']
+    if (field.type === 'select') return [field.id, field.default_value ?? workflowDropdownChoices(field)?.options[0] ?? '']
     if (field.type === 'image') return [field.id, { fileName: 'input.png', dataUrl: 'data:image/png;base64,...' }]
     return [field.id, field.default_value ?? '']
   }))

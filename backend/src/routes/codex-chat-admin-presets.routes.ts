@@ -17,6 +17,7 @@ import { ModelSlotStore } from '../services/codex-chat/modelSlots'
 import { buildModelUsage } from '../services/codex-chat/modelUsage'
 import { buildLlmUsageSummary } from '../services/llmUsage'
 import { ChatGenerationPresetStore, readGenerationPresetFile, type ChatGenerationPresetInput } from '../services/codex-chat/chatGenerationPresets'
+import { presetProblem } from '../services/codex-chat/chatGenerationInputs'
 import { CodexChatStore } from '../services/codex-chat/codexChatStore'
 import { isChatTargetReady } from '../services/codex-chat/llmChatCompletion'
 import { sharedServerProfiles } from '../services/codex-chat/chatServerSharing'
@@ -431,7 +432,8 @@ router.get('/admin/judge-stats', requireAdmin, (req: Request, res: Response) => 
 
 /** Generation presets (a fixed NAI setup or ComfyUI workflow the model fills in). Profiles link them by id. */
 router.get('/admin/generation-presets', requireAdmin, (_req: Request, res: Response) => {
-  res.json({ success: true, data: ChatGenerationPresetStore.listWithAssetSupport() })
+  // `problem`: why the preset's tool cannot run now (workflow gone, a fixed value outside its dropdown), for the settings list.
+  res.json({ success: true, data: ChatGenerationPresetStore.listWithAssetSupport().map((preset) => ({ ...preset, problem: presetProblem(preset) })) })
 })
 
 router.post('/admin/generation-presets', requireAdmin, (req: Request, res: Response) => {

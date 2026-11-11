@@ -37,8 +37,9 @@ import {
   type ChatGenerationPresetInput,
   type ChatNaiPresetConfig,
 } from '@/lib/api-codex-chat'
-import { getGenerationWorkflows } from '@/lib/api-image-generation-workflows'
+import { getGenerationCustomDropdownLists, getGenerationWorkflows } from '@/lib/api-image-generation-workflows'
 import type { WorkflowMarkedField } from '@/lib/api-image-generation-types'
+import { TYPED_FIELD_RANDOM_OPTION_VALUE } from '@/features/shared-fields/typed-field-input'
 import { getErrorMessage } from '@/lib/error-message'
 import { EditorGroup } from '@/components/ui/editor-group'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -190,6 +191,13 @@ function ComfyPresetFields({ config, onChange }: { config: ChatComfyPresetConfig
   const workflow = workflows.find((entry) => entry.id === config.workflowId) ?? null
   const fields: WorkflowMarkedField[] = workflow?.marked_fields ?? []
   const patch = (next: Partial<ChatComfyPresetConfig>) => onChange({ ...config, ...next })
+  // A dropdown field takes its custom list's items, as the generation form and the chat tool do; its own options are the fallback.
+  const dropdownListsQuery = useQuery({ queryKey: ['image-generation-custom-dropdown-lists'], queryFn: () => getGenerationCustomDropdownLists() })
+  const optionsOf = (field: WorkflowMarkedField) => {
+    const list = field.dropdown_list_name ? dropdownListsQuery.data?.find((entry) => entry.name === field.dropdown_list_name) : undefined
+    const options = (list?.items ?? (field.type === 'select' ? field.options : undefined))?.filter((option) => option.trim() && option !== TYPED_FIELD_RANDOM_OPTION_VALUE)
+    return options?.length ? options : null
+  }
 
   const setExposed = (fieldId: string, exposed: boolean) => {
     patch({ exposedFieldIds: exposed ? [...new Set([...config.exposedFieldIds, fieldId])] : config.exposedFieldIds.filter((id) => id !== fieldId) })
@@ -220,6 +228,7 @@ function ComfyPresetFields({ config, onChange }: { config: ChatComfyPresetConfig
               const exposed = config.exposedFieldIds.includes(field.id)
               const fixed = config.fixedInputs[field.id]
               const editable = field.type === 'text' || field.type === 'textarea' || field.type === 'number' || field.type === 'select'
+              const options = optionsOf(field)
               return [
                 <div key={`${field.id}-x`} className="flex justify-center"><Checkbox checked={exposed} onCheckedChange={(checked) => setExposed(field.id, checked === true)} /></div>,
                 <div key={`${field.id}-l`} className="min-w-0">
@@ -229,10 +238,14 @@ function ComfyPresetFields({ config, onChange }: { config: ChatComfyPresetConfig
                 <div key={`${field.id}-v`} className="min-w-0">
                   {exposed ? (
                     <span className="text-xs text-muted-foreground">{t({ ko: '모델이 채움', en: 'Filled by the model' })}</span>
-                  ) : field.type === 'select' && field.options ? (
+                  ) : options ? (
                     <Select variant="settings" value={typeof fixed === 'string' ? fixed : ''} onChange={(event) => setFixed(field, event.target.value)}>
                       <option value="">{t({ ko: '기본값', en: 'Default' })}</option>
-                      {field.options.map((option) => <option key={option} value={option}>{option}</option>)}
+                      {/* As in the generation form; only a select field has its random pick resolved when the job runs. */}
+                      {field.type === 'select' ? <option value={TYPED_FIELD_RANDOM_OPTION_VALUE}>{t({ ko: '랜덤 선택', en: 'Random pick' })}</option> : null}
+                      {/* A value typed before the list was offered stays visible, so a listed one can be picked in its place. */}
+                      {typeof fixed === 'string' && fixed && fixed !== TYPED_FIELD_RANDOM_OPTION_VALUE && !options.includes(fixed) ? <option value={fixed}>{t({ ko: `${fixed} (목록에 없음)`, en: `${fixed} (not in the list)` })}</option> : null}
+                      {options.map((option) => <option key={option} value={option}>{option}</option>)}
                     </Select>
                   ) : editable ? (
                     <Input variant="settings" className="h-9" type={field.type === 'number' ? 'number' : 'text'} value={fixed === undefined || fixed === null ? '' : String(fixed)} placeholder={field.default_value === undefined || field.default_value === null || typeof field.default_value === 'object' ? '' : String(field.default_value)} onChange={(event) => setFixed(field, event.target.value)} />

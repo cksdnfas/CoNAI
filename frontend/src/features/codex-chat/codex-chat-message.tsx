@@ -216,7 +216,7 @@ const FOUND_PAGE_SIZE = 6
 
 /** Lightbox toolbar: reference the shown image in the next message. */
 function referenceAction(item: ImageRecord) {
-  return <ChatReferenceButton compositeHash={item.composite_hash} mimeType={item.mime_type ?? null} />
+  return <ChatReferenceButton compositeHash={item.composite_hash} mimeType={item.mime_type ?? null} delivered={isChatResultImage(item)} />
 }
 
 type ChatLightboxShown = { owner: symbol; items: ImageRecord[]; index: number }

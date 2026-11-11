@@ -91,7 +91,6 @@ function developerInstructions(presetMode: boolean) {
     'Reply in the language the user writes in. For Korean, use casual 반말. Keep replies short.',
     ...GENERATION_GUIDANCE[presetMode ? 'preset' : 'freeform'],
     ACTION_AUTHORIZATION_GUIDANCE,
-    'To set up an emoticon group: list_emoticons for the group, view_images in small batches (judge from file names and tags if you cannot see them), then set_emoticon_keywords with a few short keywords per image.',
     REPLY_FORMAT_GUIDANCE,
   ].join('\n')
 }

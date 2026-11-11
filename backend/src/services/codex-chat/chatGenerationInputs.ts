@@ -1,8 +1,8 @@
 import { z } from 'zod'
 import { supportsNaiCharacterPrompts } from '@conai/shared'
-import type { MarkedField } from '../../types/workflow'
-import { parseMcpMarkedFields } from '../comfyui/comfyWorkflowInputs'
-import { comfyAssetFields, resolvePresetWorkflow, type ChatGenerationPreset } from './chatGenerationPresets'
+import type { MarkedField, WorkflowRecord } from '../../types/workflow'
+import { mcpDropdownChoices, parseMcpMarkedFields, requireDropdownChoice } from '../comfyui/comfyWorkflowInputs'
+import { comfyAssetFields, resolvePresetWorkflow, type ChatComfyPresetConfig, type ChatGenerationPreset } from './chatGenerationPresets'
 
 /**
  * What a generation preset asks to be filled: the `generate_image` tool's input in `inline` presets, and the JSON the
@@ -25,32 +25,88 @@ function naiCharactersSchema(self: boolean) {
   })).max(6).optional().describe('One entry per character in the picture (NovelAI takes at most six), each with its own tags. Replaces the preset\'s fixed characters when not empty.')
 }
 
+function acceptsDropdownChoice(field: MarkedField, value: unknown) {
+  try {
+    requireDropdownChoice(field, value)
+    return true
+  } catch {
+    return false
+  }
+}
+
 /** `sceneField`: the filled text field holding the scene tags, where a character's appearance tags can go; null when none is filled. */
 export type PresetInputShape = { shape: Record<string, z.ZodTypeAny>; fill: string; workflowName: string | null; problem: string | null; sceneField: string | null }
 
-function fieldSchema(field: MarkedField, required: boolean): z.ZodTypeAny {
+/**
+ * One exposed ComfyUI field. `preset`: the value it gets when left out (the preset's fixed value, else the workflow's
+ * saved one). Text is always asked for: the saved text is another picture's prompt, and the model cannot see it to
+ * choose it. A dropdown or a number may be left out, and the description says what that keeps. `canSearch`: the
+ * caller is offered search_custom_dropdown_items, so a list too long to send is looked up instead of guessed.
+ */
+function fieldSchema(field: MarkedField, preset: unknown, canSearch: boolean): z.ZodTypeAny {
+  const choices = mcpDropdownChoices(field)
   const label = field.description ? `${field.label}: ${field.description}` : field.label
+  const notes: string[] = []
+  // A fixed value left on this field that its dropdown no longer offers cannot be kept: left out, the job is refused.
+  let required = preset === undefined ? field.required === true : !acceptsDropdownChoice(field, preset)
   let schema: z.ZodTypeAny
-  if (field.type === 'number') {
+  if (choices?.inline) {
+    schema = z.enum(choices.options as [string, ...string[]])
+  } else if (choices) {
+    // Checked here as well as at queueing, so a wrong value comes back with the closest items wherever the input is read.
+    schema = z.string().min(1).superRefine((value, ctx) => {
+      try { requireDropdownChoice(field, value) } catch (error) { ctx.addIssue({ code: 'custom', message: (error as Error).message }) }
+    })
+    notes.push(`Takes one exact item of the dropdown list ${JSON.stringify(choices.listName)} (${choices.options.length} items)${canSearch ? ': find it with search_custom_dropdown_items first' : ''}; any other value is refused with the closest items.`)
+  } else if (field.type === 'number') {
     let numeric = z.number()
     if (typeof field.min === 'number') numeric = numeric.min(field.min)
     if (typeof field.max === 'number') numeric = numeric.max(field.max)
     schema = numeric
-  } else if (field.type === 'select' && field.options && field.options.length > 0) {
-    schema = z.enum(field.options as [string, ...string[]])
   } else if (field.type === 'image') {
     schema = z.string().describe('A data URL of the image.')
   } else if (field.type === 'node') {
     schema = z.record(z.string(), z.unknown())
   } else {
-    schema = z.string().max(8000)
+    schema = z.string().min(1).max(8000)
+    if (field.type !== 'select') required = true
   }
-  schema = schema.describe(label)
+  if (!required && (choices || field.type === 'number' || field.type === 'select') && (typeof preset === 'string' || typeof preset === 'number')) {
+    notes.push(`Leave out to keep the preset value ${field.type === 'number' ? String(preset) : JSON.stringify(preset)}.`)
+  }
+  schema = schema.describe(notes.length > 0 ? [/[.!?]$/.test(label) ? label : `${label}.`, ...notes].join(' ') : label)
   return required ? schema : schema.optional()
 }
 
-/** The fields a preset's caller fills, and the sentence that says which; a ComfyUI preset whose workflow is gone has a `problem`. */
-export function presetInputShape(preset: ChatGenerationPreset, options: { self?: boolean } = {}): PresetInputShape {
+/**
+ * A ComfyUI preset's workflow fields, or why it cannot run now. A fixed value its dropdown no longer offers is refused
+ * at queueing, on every call and with nothing the model can change, so the preset says so up front (tool description,
+ * settings list). Fields the model fills are left out of that: its value replaces the fixed one.
+ */
+function comfyPresetFields(preset: ChatGenerationPreset): { problem: string } | { config: ChatComfyPresetConfig; workflow: WorkflowRecord; marked: MarkedField[] } {
+  const config = preset.comfyui
+  const { workflow, problem } = config ? resolvePresetWorkflow(config) : { workflow: null, problem: '워크플로가 없어.' }
+  if (!config || !workflow) return { problem: problem ?? 'Workflow unavailable' }
+  let marked: MarkedField[]
+  try {
+    marked = parseMcpMarkedFields(workflow)
+  } catch {
+    return { problem: `워크플로 "${workflow.name}"의 입력 필드 설정을 읽을 수 없어. 워크플로를 다시 저장해줘.` }
+  }
+  const stale = marked.find((field) => !config.exposedFieldIds.includes(field.id) && config.fixedInputs[field.id] !== undefined && !acceptsDropdownChoice(field, config.fixedInputs[field.id]))
+  if (stale) return { problem: `프리셋의 고정 값 ${JSON.stringify(config.fixedInputs[stale.id])}이(가) "${stale.label || stale.id}" 드롭다운에 없어. 프리셋 편집기에서 다시 골라줘.` }
+  return { config, workflow, marked }
+}
+
+/** Why a preset's tool cannot run now (null: it can); what `presetInputShape` reports, without building the schema. */
+export function presetProblem(preset: ChatGenerationPreset): string | null {
+  if (preset.kind === 'nai') return null
+  const fields = comfyPresetFields(preset)
+  return 'problem' in fields ? fields.problem : null
+}
+
+/** The fields a preset's caller fills, and the sentence that says which; a ComfyUI preset that cannot run (workflow gone or unreadable, a fixed value outside its dropdown) has a `problem`. */
+export function presetInputShape(preset: ChatGenerationPreset, options: { self?: boolean; canSearch?: boolean } = {}): PresetInputShape {
   if (preset.kind === 'nai') {
     const sizes = preset.nai?.sizes ?? []
     const labels = sizes.map((size) => size.label)
@@ -66,16 +122,12 @@ export function presetInputShape(preset: ChatGenerationPreset, options: { self?:
     const fill = `Fill prompt${characters ? ', characters for the characters in the picture' : ''}${labels.length > 1 ? ' and, when the composition calls for it, size' : ''}.`
     return { shape, fill: characters || labels.length > 1 ? fill : 'Fill only prompt.', workflowName: null, problem: null, sceneField: 'prompt' }
   }
-  const config = preset.comfyui
-  const { workflow, problem } = config ? resolvePresetWorkflow(config) : { workflow: null, problem: '워크플로가 없어.' }
-  if (!config || !workflow) return { shape: {}, fill: '', workflowName: null, problem: problem ?? 'Workflow unavailable', sceneField: null }
-  const marked = parseMcpMarkedFields(workflow)
+  const fields = comfyPresetFields(preset)
+  if ('problem' in fields) return { shape: {}, fill: '', workflowName: null, problem: fields.problem, sceneField: null }
+  const { config, workflow, marked } = fields
   const exposed = marked.filter((field) => config.exposedFieldIds.includes(field.id) && field.id !== config.referenceField)
   const shape: Record<string, z.ZodTypeAny> = {}
-  for (const field of exposed) {
-    const covered = config.fixedInputs[field.id] !== undefined || field.default_value !== undefined
-    shape[field.id] = fieldSchema(field, field.required === true && !covered)
-  }
+  for (const field of exposed) shape[field.id] = fieldSchema(field, config.fixedInputs[field.id] ?? field.default_value, options.canSearch === true)
   const fill = exposed.length > 0 ? `Fill ${exposed.map((field) => `${field.id} (${field.label})`).join(', ')}.` : 'It takes no input.'
   const promptField = comfyAssetFields(config, marked).promptField
   return { shape, fill, workflowName: workflow.name, problem: null, sceneField: promptField && shape[promptField] ? promptField : null }

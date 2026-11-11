@@ -216,7 +216,7 @@ stdio:
 | `list_workflows` | 등록된 ComfyUI 워크플로우 조회 (기본은 이미지 워크플로, `kind: "audio"`·`"all"`로 음향 포함) |
 | `list_comfyui_servers` | 등록된 ComfyUI 서버 조회 |
 | `list_comfy_refmods` | 서버의 `models/refmods` RefMod 목록 조회(`workflow_id`·`server_id` 선택). 이름을 MiniMax H3 Director 입력의 `refmods[].name`에 사용 (REF2VA 전용, DaSiWa 팩 미설치 서버는 오류) |
-| `get_workflow_details` | 워크플로우 상세와 marked fields 조회 (시드 필드에는 `seed_rule` 표시) |
+| `get_workflow_details` | 워크플로우 상세와 marked fields 조회 (시드 필드에는 `seed_rule` 표시). 드롭다운 필드는 받을 수 있는 값을 `options`로, 항목이 많은 드롭다운 목록은 `options_list`(`list_name`, `total`)로 알려 주며 후자는 `search_custom_dropdown_items`로 찾습니다 |
 | `check_comfy_workflow` | 등록된 워크플로(`workflow_id`)나 초안(`workflow_json`, 일반 workflow는 먼저 API 형식으로 변환)을 저장·실행 없이 서버 검사 |
 | `generate_comfyui` | 특정 ComfyUI 서버에서 생성 |
 | `generate_comfyui_all_servers` | 활성 ComfyUI 서버 전체에서 병렬 생성 |
@@ -778,6 +778,7 @@ claude mcp list
 - `list_workflows`로 workflow_id 확인
 - `list_comfyui_servers`로 server_id 확인
 - `get_workflow_details`로 marked field 이름 확인
+- 드롭다운 필드에 목록에 없는 값을 보내면 작업을 등록하기 전에 거절하고 선택지(긴 목록은 가까운 항목)를 돌려줍니다. 워크플로 입력을 자유롭게 보내는 도구(`submit_generation_job`, `generate_comfyui`)는 대소문자·슬래시 방향·모델 파일 확장자만 다른 값을 목록의 표기로 바꿔 받고, 채팅 생성 프리셋 도구는 스키마에 나온 값을 그대로 받습니다
 - ComfyUI 서버가 켜져 있는지 확인
 
 ### NovelAI 생성 실패

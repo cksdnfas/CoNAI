@@ -78,7 +78,7 @@ function generationProfile(context: McpRequestContext, toolName: string, args: R
 
 /** `inline`: the chat model fills the preset's fields now, and the job is queued at once. */
 function registerInlinePreset(server: McpServer, context: McpRequestContext, preset: ChatGenerationPreset, toolName: string, hasAppearance: boolean) {
-  const { shape, fill, workflowName, problem, sceneField } = presetInputShape(preset, { self: hasAppearance });
+  const { shape, fill, workflowName, problem, sceneField } = presetInputShape(preset, { self: hasAppearance, canSearch: isContextToolAllowed(context, 'search_custom_dropdown_items') });
   if (problem) {
     // Registered anyway so the model learns why instead of finding no generation tool at all.
     server.registerTool(toolName, { description: describe(preset, `Currently unavailable: ${problem}`), inputSchema: z.object({}) }, async () => errorResult(problem));

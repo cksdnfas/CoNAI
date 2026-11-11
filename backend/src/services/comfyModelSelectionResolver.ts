@@ -20,7 +20,7 @@ const COMFY_MODEL_PATH_INPUT_KEYS = new Set([
 const COMFY_MODEL_FILE_EXTENSIONS = ['.safetensors', '.ckpt', '.pt', '.pth', '.bin', '.gguf', '.onnx']
 
 /** Normalize one ComfyUI model option for loose matching across slash and extension variants. */
-function normalizeComparableModelOption(value: string) {
+export function normalizeComparableModelOption(value: string) {
   let normalized = value.trim().replace(/\//g, '\\').toLowerCase()
 
   for (const extension of COMFY_MODEL_FILE_EXTENSIONS) {

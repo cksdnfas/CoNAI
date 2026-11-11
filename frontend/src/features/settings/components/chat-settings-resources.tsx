@@ -320,6 +320,7 @@ export function ChatSettingsResources({ tab = 'presets', active = true }: { tab?
             extra={(
               <>
                 <Tip content={preset.kind === 'nai' ? preset.nai?.model : null}><span className="inline-flex"><Chip size="sm" tone="muted">{preset.kind === 'nai' ? 'NAI' : 'Comfy'}</Chip></span></Tip>
+                {preset.problem ? <Tip content={preset.problem}><span className="inline-flex"><Chip size="sm" tone="warning">{t({ ko: '확인 필요', en: 'Needs attention' })}</Chip></span></Tip> : null}
                 <NotLinked profiles={preset.profiles} />
               </>
             )}

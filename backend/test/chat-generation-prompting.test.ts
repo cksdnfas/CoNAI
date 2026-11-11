@@ -120,6 +120,70 @@ test('chat generation prompting: preset settings, guide, writer answers and defe
     assert.equal(parseWriterAnswer('no json'), null)
   })
 
+  await t.test('a ComfyUI preset offers a dropdown its list, always asks for text and refuses a value outside the list', async () => {
+    const { WorkflowModel } = await import('../src/models/Workflow')
+    const { CustomDropdownListModel } = await import('../src/models/CustomDropdownList')
+    const { normalizeMcpWorkflowInputs, parseMcpMarkedFields } = await import('../src/services/comfyui/comfyWorkflowInputs')
+    const ratios = ['1:1 (Square)', '9:16 (Portrait Widescreen)', '16:9 (Widescreen)']
+    const models = Array.from({ length: 80 }, (_, index) => `MOSS\\checkpoint_${String(index).padStart(3, '0')}_${index === 7 ? 'animeUWU' : 'base'}.safetensors`)
+    CustomDropdownListModel.create({ name: '종횡비', items: ratios })
+    CustomDropdownListModel.create({ name: 'models', items: models })
+    const workflowId = WorkflowModel.create({
+      name: 'dropdown wf',
+      workflow_json: JSON.stringify({ '1': { class_type: 'CLIPTextEncode', inputs: { text: 'saved prompt' } }, '2': { class_type: 'ResolutionSelector', inputs: { aspect_ratio: ratios[2] } }, '3': { class_type: 'UNETLoader', inputs: { unet_name: models[0] } } }),
+      marked_fields: [
+        { id: 'positive', label: 'Positive', type: 'textarea', jsonPath: '1.inputs.text', default_value: 'saved prompt' },
+        // As the form saves them: the list is named, the field itself holds no options.
+        { id: 'ratio', label: 'Ratio', type: 'select', jsonPath: '2.inputs.aspect_ratio', default_value: ratios[2], dropdown_list_name: '종횡비' },
+        { id: 'model', label: 'Model', type: 'select', jsonPath: '3.inputs.unet_name', default_value: models[0], dropdown_list_name: 'models' },
+      ],
+    })
+    const preset = ChatGenerationPresetStore.create({ name: '드롭다운', kind: 'comfyui', comfyui: { workflowId, exposedFieldIds: ['positive', 'ratio', 'model'], fixedInputs: {} } })
+    const { shape, problem } = presetInputShape(preset)
+    assert.equal(problem, null)
+    const input = z.object(shape)
+    const schema = z.toJSONSchema(input) as { required?: string[]; properties: Record<string, { enum?: string[]; description?: string }> }
+    assert.deepEqual(schema.properties.ratio.enum, ratios)
+    assert.match(schema.properties.ratio.description ?? '', /Leave out to keep the preset value "16:9 \(Widescreen\)"/)
+    assert.deepEqual(schema.required, ['positive'], 'a dropdown with a saved value may be left out; text may not')
+    assert.equal(input.safeParse({ positive: '1girl', ratio: '9:16 (Portrait)' }).success, false)
+    assert.equal(input.safeParse({ ratio: ratios[0] }).success, false, 'the saved prompt is never generated in place of a written one')
+    assert.ok(input.safeParse({ positive: '1girl' }).success)
+    // A long list is not sent with every request: the field names it and a wrong value comes back with the closest items.
+    assert.equal(schema.properties.model.enum, undefined)
+    assert.match(schema.properties.model.description ?? '', /dropdown list "models" \(80 items\); any other value is refused with the closest items/, 'a caller without the search tool is not sent to it')
+    assert.match((z.toJSONSchema(z.object(presetInputShape(preset, { canSearch: true }).shape)) as typeof schema).properties.model.description ?? '', /find it with search_custom_dropdown_items first/)
+    const wrong = input.safeParse({ positive: '1girl', model: 'animeUWU' })
+    assert.equal(wrong.success, false)
+    assert.match(z.prettifyError(wrong.error!), /Closest 1 of 80: "MOSS\\\\checkpoint_007_animeUWU\.safetensors"\./)
+    assert.match(z.prettifyError(input.safeParse({ positive: '1girl', model: '없는 모델' }).error!), /First 12 of 80: "MOSS\\\\checkpoint_000_base\.safetensors"/, 'a value like nothing in the list still comes back with items to pick from')
+    assert.ok(input.safeParse({ positive: '1girl', model: models[7] }).success)
+    // A caller that sends free-form inputs (submit_generation_job) is held to the same lists before its job is queued.
+    const fields = parseMcpMarkedFields(WorkflowModel.findById(workflowId)!)
+    assert.throws(() => normalizeMcpWorkflowInputs(fields, { ratio: '9:16 (Portrait)' }), /Ratio \(ratio\): "9:16 \(Portrait\)" is not a choice of this dropdown\. Use exactly one of: .*"9:16 \(Portrait Widescreen\)"/)
+    assert.deepEqual(normalizeMcpWorkflowInputs(fields, { ratio: '9:16 (portrait widescreen)', model: 'moss/checkpoint_007_animeuwu' }), { positive: 'saved prompt', ratio: ratios[1], model: models[7] }, 'case, slash direction and a model file extension apart, a value is taken as the listed item')
+    assert.equal(normalizeMcpWorkflowInputs(fields, {}).ratio, ratios[2])
+    // A fixed value its dropdown does not offer fails every call the same way: the preset reports it instead of offering the tool.
+    const broken = ChatGenerationPresetStore.create({ name: '고정 값', kind: 'comfyui', comfyui: { workflowId, exposedFieldIds: ['positive'], fixedInputs: { ratio: '9:16 (Portrait)' } } })
+    assert.match(presetInputShape(broken).problem ?? '', /고정 값 "9:16 \(Portrait\)"이\(가\) "Ratio" 드롭다운에 없어/)
+    assert.equal(presetInputShape(ChatGenerationPresetStore.update(broken.id, { comfyui: { workflowId, exposedFieldIds: ['positive'], fixedInputs: { ratio: '__random__', model: models[3] } } })!).problem, null)
+    // Left on a field the model fills, the same value blocks nothing: the model's choice replaces it, so it is asked for.
+    const overridden = presetInputShape(ChatGenerationPresetStore.update(broken.id, { comfyui: { workflowId, exposedFieldIds: ['positive', 'ratio'], fixedInputs: { ratio: '9:16 (Portrait)' } } })!)
+    assert.equal(overridden.problem, null)
+    const overriddenSchema = z.toJSONSchema(z.object(overridden.shape)) as typeof schema
+    assert.deepEqual(overriddenSchema.required, ['positive', 'ratio'])
+    assert.doesNotMatch(overriddenSchema.properties.ratio.description ?? '', /Leave out/)
+    // A workflow whose field settings cannot be read is a problem of its presets, never a failed preset list.
+    const { presetProblem } = await import('../src/services/codex-chat/chatGenerationInputs')
+    const unreadable = WorkflowModel.create({ name: 'unreadable wf', workflow_json: '{}', marked_fields: { not: 'an array' } as never })
+    const lost = ChatGenerationPresetStore.create({ name: '읽을 수 없음', kind: 'comfyui', comfyui: { workflowId: unreadable, exposedFieldIds: [], fixedInputs: {} } })
+    assert.match(presetProblem(lost) ?? '', /입력 필드 설정을 읽을 수 없어/)
+    assert.equal(presetProblem(ChatGenerationPresetStore.find(broken.id)!), null)
+    // A saved value no longer in its list is what leaving the field out sends: the input template sent back is taken too.
+    const stale = [{ ...fields[1], default_value: '4:3 (Standard)' }]
+    assert.equal(normalizeMcpWorkflowInputs(stale, { ratio: '4:3 (Standard)' }).ratio, '4:3 (Standard)')
+  })
+
   await t.test('a guide whose skill is gone never prevents inline tool registration', async () => {
     const { registerChatGenerationTools } = await import('../src/mcp/tools/chatGenerationTools')
     const skill = ChatSkillStore.create({ name: 'bad guide skill', description: 'Use when testing.', instructions: 'x', sections: [{ path: 'guide', title: 'Guide', summary: '', content: 'valid' }] })

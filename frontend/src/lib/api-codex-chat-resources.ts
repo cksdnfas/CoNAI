@@ -145,6 +145,8 @@ export interface ChatGenerationPreset {
   updatedDate: string
   /** How the preset can make character assets (admin list only). */
   assetSupport?: ChatPresetAssetSupport
+  /** Why the preset's tool cannot run now: workflow gone, a fixed value outside its dropdown (admin list only). */
+  problem?: string | null
 }
 
 /**

@@ -985,7 +985,7 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
       assert.match(profileGuide, /Existing card/)
       const list = JSON.parse(text(await bridge.call('list_chat_profiles', {})))
       assert.equal(list[0].name, 'Mina')
-      assert.deepEqual(Object.keys(list[0]).sort(), ['blockIds', 'engine', 'folderId', 'folderPath', 'id', 'isEnabled', 'lorebookIds', 'model', 'modelSlotId', 'name', 'sortOrder', 'systemPromptLength', 'tagline'])
+      assert.deepEqual(Object.keys(list[0]).sort(), ['blockIds', 'engine', 'folderId', 'folderPath', 'id', 'isEnabled', 'lorebookIds', 'model', 'modelSlotId', 'name', 'reactionEnabled', 'reactionSlotId', 'removedModelRoles', 'sortOrder', 'systemPromptLength', 'tagline'])
       const view = JSON.parse(text(await bridge.call('get_chat_profile', {})))
       assert.equal(view.systemPrompt, 'old prompt')
       assert.equal(typeof view.mcpEnabled, 'boolean')
