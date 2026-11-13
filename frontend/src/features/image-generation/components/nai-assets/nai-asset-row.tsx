@@ -17,6 +17,8 @@ type NaiAssetRowProps = {
   meta?: ReactNode
   strength: string
   strengthMin: number
+  strengthMax?: number
+  strengthStep?: number
   onStrengthCommit: (value: string) => void
   /** Settings shown at the top of the row menu (information extracted, fidelity, raw encoding). */
   menuFields?: ReactNode
@@ -24,7 +26,8 @@ type NaiAssetRowProps = {
   onSave?: () => void
   saveDisabled?: boolean
   saveTitle?: string
-  onRemove: () => void
+  /** Omit for a row that cannot be removed. */
+  onRemove?: () => void
 }
 
 /** One compact vibe/reference row: thumbnail, name + status, strength, and a menu for the rest. */
@@ -34,6 +37,8 @@ export function NaiAssetRow({
   meta,
   strength,
   strengthMin,
+  strengthMax = 1,
+  strengthStep = 0.01,
   onStrengthCommit,
   menuFields,
   onReplaceImage,
@@ -67,8 +72,8 @@ export function NaiAssetRow({
           <NumberStepperInput
             aria-label={strengthLabel}
             min={strengthMin}
-            max={1}
-            step={0.01}
+            max={strengthMax}
+            step={strengthStep}
             value={strength}
             onValueCommit={onStrengthCommit}
           />
@@ -93,9 +98,9 @@ export function NaiAssetRow({
               </PopoverClose>
             </span>
           </Tip> : null}
-          <PopoverClose asChild>
+          {onRemove ? <PopoverClose asChild>
             <Button variant="destructive-ghost" size="sm" className="w-full justify-start" onClick={onRemove}><Trash2 />{t('image-generation.components.nai.common.remove')}</Button>
-          </PopoverClose>
+          </PopoverClose> : null}
         </PopoverContent>
       </Popover>
     </div>

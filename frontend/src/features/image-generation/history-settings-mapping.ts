@@ -1,7 +1,8 @@
-import { isNaiEnhanceAmount, isNaiUcPresetId } from '@conai/shared'
+import { isNaiEnhanceAmount, isNaiUcPresetId, SNAPREF_SIMPLE_NODE_EDITOR } from '@conai/shared'
 import type { ConfirmFn } from '@/components/ui/confirm-dialog'
 import type { TranslationInput, TranslationParams } from '@/i18n'
 import type { WorkflowMarkedField } from '@/lib/api-image-generation-types'
+import { restoreSnapRefSimpleHistoryValue } from './components/snapref-simple-utils'
 import { buildWorkflowDraft } from './image-generation-drafts'
 import {
   DEFAULT_NAI_FORM,
@@ -179,7 +180,11 @@ export function buildComfyDraftFromHistoryPayload(
     }
 
     const value = toWorkflowDraftValue(field, promptData[field.id])
-    if (value !== undefined) {
+    if (field.node_editor === SNAPREF_SIMPLE_NODE_EDITOR && isRecord(value)) {
+      const restored = restoreSnapRefSimpleHistoryValue(value, currentDraft[field.id] ?? draft[field.id])
+      draft[field.id] = restored.value
+      hasImageInputs = hasImageInputs || restored.hasDroppedPictures
+    } else if (value !== undefined) {
       draft[field.id] = value
     }
   }

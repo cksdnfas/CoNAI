@@ -23,6 +23,7 @@ function hasPowerLoraLoaderEntries(value: unknown) {
 function isCompositeNodeEditorField(field: any) {
   return field?.node_editor === 'power_lora_loader_rgthree'
     || field?.node_editor === 'minimax_h3_director_dasiwa'
+    || field?.node_editor === 'snapref_simple'
     || hasPowerLoraLoaderEntries(field?.default_value);
 }
 

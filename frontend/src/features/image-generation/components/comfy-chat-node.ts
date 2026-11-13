@@ -1,8 +1,9 @@
-import { applyMiniMaxDirectorResolutionBounds, copyChatPageData, MINIMAX_H3_REFMOD_MAX_SLOTS, validateChatPageArguments, type ChatPageData, type ChatPageSchema, type MiniMaxH3RefModLibraryItem, type MiniMaxH3RefModRow } from '@conai/shared'
+import { applyMiniMaxDirectorResolutionBounds, copyChatPageData, findSnapRefSimpleValueIssues, MINIMAX_H3_REFMOD_MAX_SLOTS, SNAPREF_SIMPLE_FIDELITY, SNAPREF_SIMPLE_MAX_REFERENCES, SNAPREF_SIMPLE_MODES, SNAPREF_SIMPLE_NODE_EDITOR, SNAPREF_SIMPLE_STRENGTH, validateChatPageArguments, type ChatPageData, type ChatPageSchema, type MiniMaxH3RefModLibraryItem, type MiniMaxH3RefModRow } from '@conai/shared'
 import { pageArray, pageChoice, pageFreeText, pageNumber, pageObject, pageText, pageRecord } from '@/features/codex-chat/page-action-helpers'
 import type { WorkflowMarkedField } from '@/lib/api-image-generation-types'
 import { createRandomUuid } from '@/lib/random-uuid'
 import { buildPowerLoraNodeItemsFromInputs, isPowerLoraLoaderEntryValue } from './power-lora-loader-utils'
+import { describeSnapRefSimplePicture, readSnapRefSimpleSlots, writeSnapRefSimpleSlots } from './snapref-simple-utils'
 import { buildMiniMaxH3DirectorNodeValue, isMiniMaxH3DirectorInputLink, normalizeMiniMaxH3DirectorBuilderState, normalizeMiniMaxH3DirectorNodeValue, parseMiniMaxH3DirectorTimeline, validateMiniMaxH3DirectorNodeValue, MINIMAX_H3_DIRECTOR_MODES, MINIMAX_H3_DIRECTOR_ASPECT_OPTIONS, MINIMAX_H3_DIRECTOR_INPUT_SCALING_OPTIONS, MINIMAX_H3_DIRECTOR_RESOLUTION_PRESETS, MINIMAX_H3_DIRECTOR_VISIBLE_FIELDS, type MiniMaxH3DirectorTimeline } from './minimax-h3-director-dasiwa-utils'
 
 const resolution = pageObject({ aspect: pageChoice(MINIMAX_H3_DIRECTOR_ASPECT_OPTIONS.map(([key]) => key)), resolution: pageChoice(['auto', 'custom', ...Object.keys(MINIMAX_H3_DIRECTOR_RESOLUTION_PRESETS)]), input_scaling: pageChoice([...MINIMAX_H3_DIRECTOR_INPUT_SCALING_OPTIONS]), custom_aspect_w: pageNumber(1, 10000), custom_aspect_h: pageNumber(1, 10000), custom_mode: pageChoice(['mp', 'fixed']), custom_mp: pageNumber(0.01, 64), custom_width: pageNumber(16, 8192, true), custom_height: pageNumber(16, 8192, true) })
@@ -12,14 +13,21 @@ const timelineItems = pageArray(pageObject({ id: pageText(100), enabled: { type:
 // Merged by slot; `remove` drops that slot. Rows are consumed only in REF2VA.
 const refmods = pageArray(pageObject({ slot: pageNumber(1, MINIMAX_H3_REFMOD_MAX_SLOTS, true), name: pageText(500), enabled: { type: 'boolean' }, strength: pageNumber(0, 1), description: pageText(), remove: { type: 'boolean' } }, ['slot']), MINIMAX_H3_REFMOD_MAX_SLOTS)
 const promptBlocks = pageArray(pageObject({ id: pageText(100), text: pageText(), enabled: { type: 'boolean' }, start: pageNumber(0, 60), duration: pageNumber(0.1, 60) }, ['text', 'start', 'duration']), 64)
-export const COMFY_NODE_PATCH_SCHEMA = pageObject({ mode: pageChoice([...MINIMAX_H3_DIRECTOR_MODES]), width: pageNumber(32, 8192, true), height: pageNumber(32, 8192, true), duration: pageNumber(1, 60, true), frame_rate: pageNumber(0.1, 240), ref_image_size: pageChoice(['match', 'max']), prompt, resolution, postprocess, refmods, timelineItems, promptBlocks, loras: pageArray(pageObject({ key: pageText(100), lora: pageText(300), on: { type: 'boolean' }, strength: pageNumber(-100, 100) }, ['key', 'lora', 'on', 'strength']), 64) })
+// SnapRef pictures are attached with media.attach; `references` rows change a used slot's weight or drop it (`remove`).
+const snapref = pageObject({ adapter: pageText(300), mode: pageChoice([...SNAPREF_SIMPLE_MODES]), fidelity: pageNumber(SNAPREF_SIMPLE_FIDELITY.min, SNAPREF_SIMPLE_FIDELITY.max), references: pageArray(pageObject({ slot: pageNumber(1, SNAPREF_SIMPLE_MAX_REFERENCES, true), strength: pageNumber(SNAPREF_SIMPLE_STRENGTH.min, SNAPREF_SIMPLE_STRENGTH.max), remove: { type: 'boolean' } }, ['slot']), SNAPREF_SIMPLE_MAX_REFERENCES) })
+export const COMFY_NODE_PATCH_SCHEMA = pageObject({ mode: pageChoice([...MINIMAX_H3_DIRECTOR_MODES]), width: pageNumber(32, 8192, true), height: pageNumber(32, 8192, true), duration: pageNumber(1, 60, true), frame_rate: pageNumber(0.1, 240), ref_image_size: pageChoice(['match', 'max']), prompt, resolution, postprocess, refmods, timelineItems, promptBlocks, loras: pageArray(pageObject({ key: pageText(100), lora: pageText(300), on: { type: 'boolean' }, strength: pageNumber(-100, 100) }, ['key', 'lora', 'on', 'strength']), 64), snapref })
+
+function nodeRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
+}
 
 export function comfyNodeChatSchema(field: WorkflowMarkedField, value: unknown): ChatPageSchema {
   if (field.node_editor === 'power_lora_loader_rgthree') return pageObject({ loras: COMFY_NODE_PATCH_SCHEMA.properties!.loras }, ['loras'])
+  if (field.node_editor === SNAPREF_SIMPLE_NODE_EDITOR) return pageObject({ snapref }, ['snapref'])
   const node = normalizeMiniMaxH3DirectorNodeValue(value)
   const visible = field.node_visible_fields ?? [...MINIMAX_H3_DIRECTOR_VISIBLE_FIELDS]
   const properties = structuredClone(Object.fromEntries(Object.entries(COMFY_NODE_PATCH_SCHEMA.properties!).filter(([key]) => {
-    if (key === 'loras') return false
+    if (key === 'loras' || key === 'snapref') return false
     if (key === 'prompt') return visible.includes('prompt') && !isMiniMaxH3DirectorInputLink(node.builder_state) && !isMiniMaxH3DirectorInputLink(node.prompt)
     if (['resolution', 'postprocess', 'refmods', 'timelineItems', 'promptBlocks'].includes(key)) return visible.includes('timeline_data') && !isMiniMaxH3DirectorInputLink(node.timeline_data) && !field.node_hidden_controls?.includes(key)
     return visible.includes(key) && !isMiniMaxH3DirectorInputLink(node[key])
@@ -57,6 +65,11 @@ export function comfyNodeChatData(field: WorkflowMarkedField, value: unknown, co
     const node = value && typeof value === 'object' ? value as Record<string, unknown> : {}
     return copyChatPageData({ ...base, loras: buildPowerLoraNodeItemsFromInputs(node).map((item) => { const entry = node[item.key] as { on: boolean; lora: string; strength: number }; return { key: item.key, on: entry.on, lora: entry.lora, strength: entry.strength } }) })
   }
+  if (field.node_editor === SNAPREF_SIMPLE_NODE_EDITOR) {
+    const node = nodeRecord(value)
+    return copyChatPageData({ ...base, adapter: typeof node.adapter === 'string' ? node.adapter : '', mode: typeof node.mode === 'string' ? node.mode : '', fidelity: typeof node.fidelity === 'number' ? node.fidelity : null,
+      references: readSnapRefSimpleSlots(node).map((slot, index) => ({ slot: index + 1, name: pageFreeText(describeSnapRefSimplePicture(slot.picture).name), strength: slot.strength })), issues: findSnapRefSimpleValueIssues(node) })
+  }
   const node = normalizeMiniMaxH3DirectorNodeValue(value)
   const { timeline } = parseMiniMaxH3DirectorTimeline(node.timeline_data)
   const builder = normalizeMiniMaxH3DirectorBuilderState(node.builder_state, timeline, typeof node.mode === 'string' ? node.mode : 'FL2VA', typeof node.duration === 'number' ? node.duration : 5, typeof node.prompt === 'string' ? node.prompt : '')
@@ -75,6 +88,28 @@ export function applyComfyChatNode(field: WorkflowMarkedField, value: unknown, i
     const seen = new Set<string>()
     const knownLoras = new Set([...loraOptions, ...Object.values(node).filter(isPowerLoraLoaderEntryValue).map((entry) => entry.lora)])
     for (const raw of patch.loras as ChatPageData[]) { const item = pageRecord(raw); const key = String(item.key); if (!/^lora_\d+$/i.test(key) || seen.has(key)) throw new Error('LoRA 입력 키가 올바르지 않아.'); if (item.lora && !knownLoras.has(String(item.lora))) throw new Error('현재 LoRA 선택 목록에 없는 항목이야.'); seen.add(key); next[key] = { lora: item.lora, on: item.on, strength: item.strength } }
+    return next
+  }
+  if (field.node_editor === SNAPREF_SIMPLE_NODE_EDITOR) {
+    const { references, ...settings } = pageRecord(patch.snapref)
+    const node = nodeRecord(value)
+    if (settings.adapter !== undefined && settings.adapter !== node.adapter && loraOptions.length > 0 && !loraOptions.includes(String(settings.adapter))) throw new Error('현재 LoRA 선택 목록에 없는 어댑터야.')
+    let next: Record<string, unknown> = { ...node, ...settings }
+    if (Array.isArray(references)) {
+      const slots = readSnapRefSimpleSlots(next)
+      const seen = new Set<number>()
+      for (const raw of references) {
+        const { slot: rawSlot, remove, strength } = pageRecord(raw); const slot = Number(rawSlot)
+        if (seen.has(slot) || slot > slots.length) throw new Error('SnapRef 사진 칸이 없거나 중복됐어. 새 사진은 media.attach로 넣어.')
+        if (remove && slot === 1) throw new Error('첫 번째 SnapRef 사진은 필수야. 바꾸려면 media.attach에 slot 1을 줘.')
+        seen.add(slot)
+        if (strength !== undefined) slots[slot - 1] = { ...slots[slot - 1], strength: Number(strength) }
+      }
+      const removed = new Set((references as ChatPageData[]).flatMap((raw) => pageRecord(raw).remove ? [Number(pageRecord(raw).slot)] : []))
+      next = writeSnapRefSimpleSlots(next, slots.filter((_, index) => !removed.has(index + 1)))
+    }
+    const issues = findSnapRefSimpleValueIssues(next)
+    if (issues.length) throw new Error(issues[0])
     return next
   }
   const node = normalizeMiniMaxH3DirectorNodeValue(value)

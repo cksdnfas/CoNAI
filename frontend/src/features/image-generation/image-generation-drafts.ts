@@ -13,6 +13,7 @@ import {
   type MiniMaxH3DirectorIssue,
   type MiniMaxH3DirectorValidationOptions,
 } from './components/minimax-h3-director-dasiwa-utils'
+import { getSnapRefSimpleAssets } from './components/snapref-simple-utils'
 
 const NAI_FORM_DRAFT_STORAGE_KEY = 'conai:image-generation:nai-form-draft:v1'
 const COMFY_WORKFLOW_DRAFT_STORAGE_KEY_PREFIX = 'conai:image-generation:comfy:workflow-draft:v1:'
@@ -303,14 +304,14 @@ export function isValidWorkflowNumberDraftValue(value: WorkflowFieldDraftValue |
   return Number.isFinite(Number(value))
 }
 
-/** Mark private Director assets for delayed deletion after a draft is discarded. */
+/** Mark private Director and SnapRef assets for delayed deletion after a draft is discarded. */
 export async function deleteComfyWorkflowDraftInputAssets(draft: Record<string, WorkflowFieldDraftValue>) {
   const assetIds = new Set<string>()
   for (const value of Object.values(draft)) {
     if (!isWorkflowNodeDraftValue(value)) {
       continue
     }
-    for (const asset of Object.values(getMiniMaxH3DirectorAssets(value))) {
+    for (const asset of [...Object.values(getMiniMaxH3DirectorAssets(value)), ...getSnapRefSimpleAssets(value)]) {
       assetIds.add(asset.id)
     }
   }

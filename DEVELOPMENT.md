@@ -289,6 +289,8 @@ ComfyUI 요청 이미지 객체의 `path`·`filePath`·`file_path`·`storagePath
 
 DaSiWa MiniMax H3 Director의 RefMod(`models/refmods/`의 참조 번들)는 노드 값 `timeline_data.refmods` 행(`slot 1–8`, `name`, `enabled`, `strength 0–1`, `description`)을 DaSiWa 형식 그대로 쓴다. 공용 계약은 `shared/src/types/minimaxRefMod.ts`(행 정규화·검증, 라이브러리 항목 파서)이고, 화면은 `minimax-h3-director-refmod-panel.tsx`(REF2VA 전용, `node_hidden_controls`의 `refmods`로 숨김), 페이지 어시스턴트는 `comfy-chat-node.ts`의 `refmods` 스키마, MCP Director 입력은 `comfyWorkflowInputs.ts`의 친화 키 `refmods`를 거쳐 같은 검증을 통과한다. 라이브러리 목록은 `backend/src/services/comfyui/refmodLibrary.ts`가 해당 ComfyUI 서버의 `GET /dasiwa/refmods`를 프록시하며 `GET /api/comfyui-servers/refmods?workflowId=&serverId=`와 MCP `list_comfy_refmods`가 이를 공유한다(팩 미설치 서버는 404). 워크플로에 `DaSiWaH3RefModExport` 노드가 있으면(판별은 공용 `hasMiniMaxH3RefModExportNode`) `workflowSubstitution.ts`가 제출 시 `request_id`에 새 UUID를 넣고, `timeline_data`가 비어 있고 Director 노드가 하나뿐이면 업로드된 활성 항목만 담은 스냅샷을 복사한다. 이런 RefMod 생성 실행은 `comfyui/refmodRecords.ts`가 제출 전에 Director의 원본 미디어를 `minimax_refmod_records`(user-settings DB)와 `basePath/refmods/<id>/`(라이브러리 스캔·임시 입력 정리 밖, 라이브러리 출처는 `composite_hash` 참조)에 `pending`으로 보관하고, 큐·MCP 동기 경로 모두 ComfyUI history의 `dasiwa_refmod_export` 출력으로 `saved`+이름을 확정하며 대표 이미지 없이 이력을 완료한다(`generationHistoryService`가 행에 `refmod_name`·`refmod_results`를 붙이고, 실패 이력 정리에서 제외). 실패·취소·재시작 중단은 `failed`로 바꾸고 복사본을 지운다. 보관 미디어는 캡처 시 종류·바이트를 검증한 MIME으로만 `GET /api/refmods/:id/media/:index`(`images.view`, 라이브러리 숨김 검사, Range, `CSP sandbox`)에서 서빙하고, `GET /api/refmods`·`DELETE /api/refmods/:id`(`workflows.edit`, CoNAI 레코드·복사본만 삭제)와 라이브러리 항목의 `conai` 필드로 노출한다. 레코드는 인스턴스 공용이다. 생성 전용 템플릿은 `POST /api/workflows/templates/minimax-h3-refmod-export`(`refmodExportTemplate.ts`)가 등록하며, 화면은 export 노드가 있는 워크플로에서 Director의 `selected-model-connection` 검사를 건너뛴다. 서버 간 RefMod 파일 동기화·백업은 지원 범위 밖이다(ComfyUI `/view`는 models 폴더를 서빙하지 않음).
 
+ComfyUI 노드 편집기(`type: 'node'` 필드가 `<노드 ID>.inputs` 전체를 맡음)는 `power_lora_loader_rgthree`, `minimax_h3_director_dasiwa`, `snapref_simple` 세 가지다. SnapRef(`SnapRefSimple`, custom_nodes.snapref)의 공용 계약은 `shared/src/types/snapRefSimple.ts`(입력 키·범위·모드, `findSnapRefSimpleValueIssues`)이고, 값은 노드 입력 이름 그대로(`reference`·`reference_2`…`reference_8`, `strength*`, `mode`, `fidelity`, `adapter`)다. 사진은 ComfyUI 입력 파일 이름이거나 일반 이미지 입력과 같은 이미지 값이다. 작성 화면은 `comfy-workflow-authoring-graph.tsx`가 노드 하나를 필드 하나로 내고, 생성 화면·그래프 인스펙터는 `snapref-simple-input.tsx`(사진은 workflow-input-asset으로 올림), 페이지 어시스턴트는 `comfy-chat-node.ts`의 `snapref` 스키마와 `media.attach`의 `slot`을 쓴다. 서버는 `validateComfyPromptData`가 모든 경로(화면·공개 페이지·큐·MCP·그래프)에서 저장된 기본값 위에 얹은 값을 검사하고, `normalizeMcpWorkflowInputs`가 부분 값을 기본값과 합치며 없는 입력 이름을 거절한다. `prepareComfyPromptData`가 이미지 값을 ComfyUI에 올려 파일 이름으로 바꾸고, `workflowSubstitution.ts`는 편집 키만 덮어써 `model`·`clip`·`vae` 연결을 유지한다. MCP `get_workflow_details`의 `value_schema`도 `comfyWorkflowInputs.ts`가 만든다.
+
 `workflowInputAssetStore.ts`는 보존·재시도 가능한 큐 작업의 입력 참조를 등록한다. 일반 자산은 삭제 표시된 것만 백그라운드에서 정리하며, 대기·실행 중 그래프가 있으면 미루고 표시 없는 자산은 나이만으로 수거하지 않는다. 업로드 중 정리는 하지 않는다. 새 그래프→큐 복사본은 마지막 재시도 가능한 작업의 참조를 해제할 때 즉시 지우며 다른 그래프 실행은 이를 막지 않는다. 등록 전 복사본은 소유 그래프가 작업에 넘기는 동안 보호하고, 작업 삭제 등으로 참조 행이 먼저 사라진 고아는 주기 수거한다. 변경 전에 만든 복사본은 출처 표시가 없어 기존 30일 유예와 그래프 대기 규칙을 따른다. `generationQueueService.ts`는 queue-input 고아 파일도 주기적으로 정리한다.
 
 그래프가 만든 ComfyUI 큐 작업은 이미지 접근 검사에 원 요청 계정을 보존하되 사용자 역할별 큐 한도 집계에서 제외한다. 관리자의 재시도는 그래프 출처를 유지하지만, 비관리자의 재시도는 일반 작업으로 한도에 포함되며 초과 시 429다. 그래프 출처 큐 작업만으로는 예약 동시 실행 수를 줄이지 않는다. 수동 그래프 실행 자체와 일반 사용자 큐 작업에는 기존 예약 우선 정책이 계속 적용된다.
@@ -417,11 +419,13 @@ Git 저장소 설치·업데이트는 `pluginSources.ts`가 담당한다. 호스
 
 ## 검증 선택
 
-문서만 바꾸면 링크와 설명의 실제 코드 일치 여부를 확인하고 공개 문서는 `npm run docs:build`로 빌드한다. 애플리케이션 전체 테스트를 관성적으로 실행하지 않는다.
+구현을 모두 마친 뒤 변경을 직접 다루는 집중 검증 하나만 한 번 실행한다. 문서만 바꾸면 링크와 설명의 실제 코드 일치 여부를 확인한다. 문서 빌드 동작 자체를 바꾼 경우에만 `npm run docs:build`를 검증 후보로 선택한다. 무관한 테스트·스모크·전체 검증을 덧붙이지 않는다. 전체 테스트 모음과 1분을 넘길 것으로 예상되는 실행은 Lead만 시작한다.
 
-코드 변경에는 관련 명령을 선택한다. 최신 정의는 각 `package.json`에서 확인한다.
+테스트 코드·픽스처·테스트 설정의 추가나 변경은 Lead 승인이 필요하다. 프로젝트의 정상 테스트 경로에서 실제 동작을 보호하는 테스트와 필요한 픽스처만 유지한다. 일회성 probe·smoke·repro 스크립트와 검증용 임시 파일·로그·덤프·캡처는 작성자가 보고 전에 삭제한다.
 
-- 공유 계약: `npm run build:shared`, 이후 영향을 받는 backend/frontend 타입 검사.
+아래는 변경별 검증 후보이며 모두 실행하는 체크리스트가 아니다. 여러 파일을 묶은 명령 대신 변경을 다루는 기존 테스트 파일을 우선 선택하고, 최신 정의는 각 `package.json`에서 확인한다.
+
+- 공유 계약: 변경에 맞는 기존 계약 테스트 또는 영향을 받는 backend/frontend 타입 검사.
 - 타입 검사: `npm run typecheck --prefix backend`, `npm run typecheck --prefix frontend`.
 - 프론트 린트: frontend 디렉터리에서 변경 파일 대상으로 `npx eslint <files>`.
 - 오디오 파형 공유·취소·계정 경계: `npm run test:audio-waveform --prefix frontend`.

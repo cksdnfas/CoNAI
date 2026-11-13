@@ -19,6 +19,7 @@ export const VERSION = '26.11.05';
 
 export * from './utils/minimaxDirectorResolution';
 export * from './types/minimaxRefMod';
+export * from './types/snapRefSimple';
 export * from './types/fileStore';
 export * from './types/workspace';
 export * from './types/posts';

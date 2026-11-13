@@ -455,7 +455,7 @@ function isTimelineItem(value: unknown): value is MiniMaxH3DirectorTimelineItem 
     && typeof value.value === 'string'
 }
 
-function isWorkflowInputAssetRef(value: unknown): value is WorkflowInputAssetRef {
+export function isWorkflowInputAssetRef(value: unknown): value is WorkflowInputAssetRef {
   return isRecord(value)
     && value.__ref === WORKFLOW_INPUT_ASSET_REF_KIND
     && typeof value.id === 'string'

@@ -1,4 +1,4 @@
-import { CHAT_PAGE_LIMITS, isPrivateChatPageKey, type ChatPageData, type ChatPageField } from '@conai/shared'
+import { CHAT_PAGE_LIMITS, isPrivateChatPageKey, isSnapRefSimplePictureSet, SNAPREF_SIMPLE_MAX_REFERENCES, SNAPREF_SIMPLE_NODE_EDITOR, SNAPREF_SIMPLE_STRENGTH, type ChatPageData, type ChatPageField } from '@conai/shared'
 import { useI18n } from '@/i18n'
 import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
 import { useChatPageMedia } from '@/features/codex-chat/use-chat-page-media'
@@ -15,6 +15,7 @@ import { applyComfyChatNode, comfyNodeChatData, COMFY_NODE_PATCH_SCHEMA } from '
 import { buildMiniMaxH3DirectorNodeValue, normalizeMiniMaxH3DirectorNodeValue, parseMiniMaxH3DirectorTimeline, getMiniMaxH3DirectorAssets, createMiniMaxH3DirectorItemId, type MiniMaxH3DirectorMediaType, isMiniMaxH3DirectorInputLink } from './minimax-h3-director-dasiwa-utils'
 import { fitsMiniMaxDirectorMedia, getMiniMaxDirectorFreeSlot } from './minimax-h3-director-media'
 import { probeMediaDuration, probeMediaDimensions } from './minimax-h3-director-media-probe'
+import { getSnapRefSimpleAssets, readSnapRefSimpleSlots, writeSnapRefSimpleSlots } from './snapref-simple-utils'
 import { useChatPresetInsertion } from './use-chat-preset-insertion'
 import { useChatCharacterSettingInsertion } from './use-chat-character-setting-insertion'
 import { useGenerationChatRuns, type GenerationSubmitResult } from './use-generation-chat-runs'
@@ -39,6 +40,7 @@ function nodeRunSummary(value: ChatPageData): ChatPageData {
     mode: value.mode, width: value.width, height: value.height, duration: value.duration, frameRate: value.frame_rate,
     ...(prompt ? { prompt } : {}),
     ...(Array.isArray(value.loras) ? { loras: value.loras.slice(0, 20) } : {}),
+    ...(Array.isArray(value.references) ? { references: value.references } : {}),
     ...(Array.isArray(value.timelineItems) ? { timelineItems: value.timelineItems.slice(0, 10) } : {}),
   }
 }
@@ -51,8 +53,8 @@ export function useComfyChatPage(workflow: { id: number; name: string; assistant
   const permissions = useChatPagePermissions()
   const active = workflow?.id === ownerId
   const safe = active ? marked.filter((field) => !protectedField(field)) : []
-  const nodeFields = safe.filter((field) => field.type === 'node' && ['minimax_h3_director_dasiwa', 'power_lora_loader_rgthree'].includes(field.node_editor ?? ''))
-  const mediaFields = safe.filter((field) => field.type === 'image' || (field.node_editor === 'minimax_h3_director_dasiwa' && (field.node_visible_fields ?? ['timeline_data']).includes('timeline_data') && !isMiniMaxH3DirectorInputLink(normalizeMiniMaxH3DirectorNodeValue(draft[field.id]).timeline_data)))
+  const nodeFields = safe.filter((field) => field.type === 'node' && ['minimax_h3_director_dasiwa', 'power_lora_loader_rgthree', SNAPREF_SIMPLE_NODE_EDITOR].includes(field.node_editor ?? ''))
+  const mediaFields = safe.filter((field) => field.type === 'image' || field.node_editor === SNAPREF_SIMPLE_NODE_EDITOR || (field.node_editor === 'minimax_h3_director_dasiwa' && (field.node_visible_fields ?? ['timeline_data']).includes('timeline_data') && !isMiniMaxH3DirectorInputLink(normalizeMiniMaxH3DirectorNodeValue(draft[field.id]).timeline_data)))
   const media = useChatPageMedia(mediaFields.map((field) => field.id))
   const promptTargets = safe.filter((field) => field.type === 'text' || field.type === 'textarea').map((field) => field.id)
   const presets = useChatPresetInsertion(promptTargets)
@@ -83,7 +85,7 @@ export function useComfyChatPage(workflow: { id: number; name: string; assistant
     data: { recentRuns: runs.recentRuns, generating: runs.generating, workflows: workflowChoices.map((item) => ({ id: item.id, name: item.name })), seedFields: seedFields.map((field) => field.id), nodes: chatNodes, media: media.candidates, presets: presets.candidates,
       options: { ...Object.fromEntries(safe.filter((field) => field.options?.length).map((field) => [field.id, field.options!.slice(0, 512)])), loras: (options.loraOptions ?? []).slice(0, 512) }, selected: { workflowId: workflow?.id ?? 0, ...(options.route !== undefined ? { route: options.route, targetGroup: targetGroup ?? '' } : {}), name: workflow?.name ?? '', queueCount: options.queueCount, inputs: safe.filter((field) => field.type !== 'image' && field.type !== 'node').slice(0, 20).map((field) => ({ id: field.id, label: pageFreeText(field.label), value: pageFreeText(String(draft[field.id] ?? '').slice(0, 240)) })), nodes: chatNodes.slice(0, 10).map(nodeRunSummary), images: mediaFields.map((field) => ({ fieldId: field.id, label: field.label, name: mediaName(draft[field.id]) })) } },
     actions: [...(workflow && active ? runs.actions : []), ...media.actions, ...presets.actions, ...characterSettingActions,
-      ...(nodeFields.length ? [pageAction('comfy.node', t({ ko: 'H3·LoRA 노드 입력', en: 'Edit H3 or LoRA inputs' }), t({ ko: 'nodes에 나온 노드별 schema에 맞춰 patch를 입력해. 타임라인은 기존 미디어 ID만 편집하고 새 미디어는 media.attach로 등록해.', en: 'Match patch to the node-specific schema in nodes. Edit existing timeline media IDs; attach new media with media.attach.' }), pageObject({ fieldId: pageChoice(nodeFields.map((field) => field.id)), patch: COMFY_NODE_PATCH_SCHEMA }, ['fieldId', 'patch']))] : []),
+      ...(nodeFields.length ? [pageAction('comfy.node', t({ ko: 'H3·LoRA·SnapRef 노드 입력', en: 'Edit H3, LoRA or SnapRef inputs' }), t({ ko: 'nodes에 나온 노드별 schema에 맞춰 patch를 입력해. 타임라인은 기존 미디어 ID만 편집하고 새 미디어는 media.attach로 등록해. SnapRef 사진도 media.attach(slot 1–8)로 넣고, patch는 모드·충실도·어댑터와 사진별 강도·제거만 바꿔.', en: 'Match patch to the node-specific schema in nodes. Edit existing timeline media IDs; attach new media with media.attach. SnapRef pictures also go in with media.attach (slot 1–8); its patch changes mode, fidelity, adapter and each picture\'s strength or removal.' }), pageObject({ fieldId: pageChoice(nodeFields.map((field) => field.id)), patch: COMFY_NODE_PATCH_SCHEMA }, ['fieldId', 'patch']))] : []),
       ...(options.onSelect && workflowChoices.length ? [pageAction('comfy.select', t({ ko: '워크플로 선택', en: 'Select workflow' }), t({ ko: '등록된 워크플로를 선택해. 선택한 화면이 바로 돌아오니 이어서 입력을 채워.', en: 'Select a registered workflow; the new screen comes back so you can fill its inputs next.' }), pageObject({ id: pageChoice(workflowChoices.map((item) => item.id)) }, ['id']))] : []),
       ...(options.onRefresh ? [pageAction('comfy.refresh', t({ ko: '워크플로·선택 목록 최신화', en: 'Refresh workflow and options' }), t({ ko: '서버에 저장된 최신 워크플로와 선택 목록을 다시 읽어.', en: 'Reload the latest saved workflow and input options.' }))] : []),
       ...(permissions.canUpdateWorkflows && options.onOpenCreate ? [pageAction('comfy.open_create', t({ ko: '워크플로 등록 편집기 열기', en: 'Open workflow registration editor' }), t({ ko: '새 워크플로 편집기를 열어. 열린 편집기가 바로 돌아오니 이어서 JSON·marked field를 입력해.', en: 'Open the new workflow editor; the editor comes back so you can enter JSON and marked fields next.' }))] : []),
@@ -121,9 +123,42 @@ export function useComfyChatPage(workflow: { id: number; name: string; assistant
       const field = safe.find((item) => item.id === args.fieldId)
       if (!field) throw new Error('입력 필드가 바뀌었어.')
       const next = { ...draft }
+      // Like the editor's remove and replace, SnapRef pictures CoNAI stored that a committed change drops are marked for deletion.
+      const commitField = (value: typeof next) => {
+        const undo = commit(value)
+        if (field.node_editor === SNAPREF_SIMPLE_NODE_EDITOR) {
+          const snapRefAssets = (node: unknown) => getSnapRefSimpleAssets(node && typeof node === 'object' && !Array.isArray(node) ? node as Record<string, unknown> : {})
+          const kept = new Set(snapRefAssets(value[field.id]).map((asset) => asset.id))
+          for (const asset of snapRefAssets(draft[field.id])) if (!kept.has(asset.id)) void deleteWorkflowInputAsset(asset.id).catch(() => undefined)
+        }
+        return undo
+      }
       if (id === 'comfy.node') next[field.id] = applyComfyChatNode(field, draft[field.id], args.patch, options.loraOptions)
       else if (id === 'preset.insert') { const before = draft[field.id]; next[field.id] = presets.value(args, Array.isArray(before) ? before.join('\n\n') : String(before ?? '')) }
       else if (field.type === 'image') { next[field.id] = id === 'media.clear' ? '' : await (await media.load(args)).toImage(); assertCurrent() }
+      else if (field.node_editor === SNAPREF_SIMPLE_NODE_EDITOR) {
+        const node = draft[field.id] && typeof draft[field.id] === 'object' && !Array.isArray(draft[field.id]) ? draft[field.id] as Record<string, unknown> : {}
+        const slots = readSnapRefSimpleSlots(node)
+        if (id === 'media.clear') {
+          // Picture 1 is required; itemId names one of pictures 2–8, without it every extra picture goes.
+          const slot = args.itemId === undefined ? null : Number(args.itemId)
+          if (slot !== null && (!Number.isInteger(slot) || slot < 2 || slot > slots.length)) throw new Error('SnapRef는 itemId에 지울 사진 번호(2–8)를 줘. 첫 번째 사진은 필수야.')
+          next[field.id] = writeSnapRefSimpleSlots(node, slot === null ? slots.slice(0, 1) : slots.filter((_, index) => index !== slot - 1))
+        } else if (id === 'media.attach') {
+          const slot = args.slot === undefined ? (isSnapRefSimplePictureSet(slots[0].picture) ? slots.length + 1 : 1) : Number(args.slot)
+          if (slot < 1 || slot > Math.min(slots.length + 1, SNAPREF_SIMPLE_MAX_REFERENCES)) throw new Error('SnapRef 사진 칸은 1부터 다음 빈 칸까지(최대 8)만 쓸 수 있어.')
+          const loaded = await media.load(args); assertCurrent()
+          if (!loaded.blob.type.startsWith('image/')) throw new Error('SnapRef에는 이미지만 넣을 수 있어.')
+          const asset = await uploadWorkflowInputAsset(new File([loaded.blob], loaded.fileName, { type: loaded.blob.type }))
+          try {
+            assertCurrent()
+            next[field.id] = writeSnapRefSimpleSlots(node, slot <= slots.length
+              ? slots.map((entry, index) => index === slot - 1 ? { ...entry, picture: asset } : entry)
+              : [...slots, { picture: asset, strength: SNAPREF_SIMPLE_STRENGTH.default }])
+            return commitField(next)
+          } catch (error) { void deleteWorkflowInputAsset(asset.id); throw error }
+        } else throw new Error('등록되지 않은 미디어 작업이야.')
+      }
       else if (field.node_editor === 'minimax_h3_director_dasiwa') {
         const node = normalizeMiniMaxH3DirectorNodeValue(draft[field.id])
         const timeline = parseMiniMaxH3DirectorTimeline(node.timeline_data).timeline
@@ -149,7 +184,7 @@ export function useComfyChatPage(workflow: { id: number; name: string; assistant
         } else throw new Error('등록되지 않은 미디어 작업이야.')
       } else throw new Error('등록되지 않은 ComfyUI 작업이야.')
       assertCurrent()
-      return commit(next)
+      return commitField(next)
     },
   } : null)
 }

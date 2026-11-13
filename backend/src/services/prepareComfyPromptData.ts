@@ -1,5 +1,11 @@
 import fs from 'fs'
 import path from 'path'
+import {
+  findSnapRefSimpleValueIssues,
+  SNAPREF_SIMPLE_MAX_REFERENCES,
+  SNAPREF_SIMPLE_NODE_EDITOR,
+  snapRefSimpleReferenceKey,
+} from '@conai/shared'
 import { resolveUploadsPath } from '../config/runtimePaths'
 import { type MarkedField } from '../types/workflow'
 import { normalizeBase64ImageData } from '../utils/base64ImageData'
@@ -78,9 +84,35 @@ function validateMediaValue(value: unknown): boolean {
   return false
 }
 
+type ComfyPromptFieldLike = { id: string; label?: string; type?: string; node_editor?: string; default_value?: unknown }
+
+/** A SnapRef picture CoNAI uploads first; any other string is a ComfyUI input file name (or "none"), an array a link. */
+function isSnapRefUploadValue(value: unknown) {
+  return isRecord(value) || (typeof value === 'string' && /^data:/i.test(value))
+}
+
+/** Whether getComfyMediaUploadInput resolves a SnapRef picture object to image bytes; any other object would only fail mid-run. */
+function isUploadableSnapRefPicture(value: Record<string, unknown>) {
+  return Boolean(getTrustedGraphMedia(value)) || isQueueInputRef(value) || isWorkflowInputAssetRef(value)
+    || (typeof value.composite_hash === 'string' && value.composite_hash !== '')
+    || (typeof value.dataUrl === 'string' && value.dataUrl.trim() !== '')
+}
+
+/** Check a supplied SnapRef value as the run will use it: the workflow's saved inputs with the value over them. */
+function resolveSnapRefSimpleValue(field: ComfyPromptFieldLike, value: unknown): Record<string, unknown> {
+  const label = field.label || field.id
+  if (!isRecord(value)) {
+    throw new ComfyInputValidationError(`${label}: a SnapRef value must be an object of node inputs (adapter, mode, fidelity, reference, strength, reference_2 … reference_8, strength_2 … strength_8)`)
+  }
+  const effective = { ...(isRecord(field.default_value) ? field.default_value : {}), ...value }
+  const issues = findSnapRefSimpleValueIssues(effective)
+  if (issues.length > 0) throw new ComfyInputValidationError(`${label}: ${issues.join('; ')}`)
+  return effective
+}
+
 /** Validate every uploadable field before any upload; return whether a library image is referenced. */
 export function validateComfyPromptData(
-  markedFields: Array<{ id: string; type?: string; node_editor?: string }>,
+  markedFields: ComfyPromptFieldLike[],
   promptData: Record<string, unknown>,
 ): boolean {
   let usesLibrary = false
@@ -92,6 +124,15 @@ export function validateComfyPromptData(
       const meta = value[MINIMAX_H3_DIRECTOR_META_KEY]
       if (isRecord(meta) && isRecord(meta.assets)) {
         for (const asset of Object.values(meta.assets)) usesLibrary = validateMediaValue(asset) || usesLibrary
+      }
+    } else if (field.type === 'node' && field.node_editor === SNAPREF_SIMPLE_NODE_EDITOR && value !== undefined) {
+      const effective = resolveSnapRefSimpleValue(field, value)
+      for (let slot = 1; slot <= SNAPREF_SIMPLE_MAX_REFERENCES; slot++) {
+        const key = snapRefSimpleReferenceKey(slot)
+        usesLibrary = validateMediaValue(effective[key]) || usesLibrary
+        if (isRecord(effective[key]) && !isUploadableSnapRefPicture(effective[key])) {
+          throw new ComfyInputValidationError(`${field.label || field.id}: ${key} is not a usable picture. Give { composite_hash } of a CoNAI library image, { fileName, dataUrl } with a data:image/...;base64 URL, an uploaded workflow input, or a file name in the ComfyUI server input folder`)
+        }
       }
     }
   }
@@ -432,6 +473,49 @@ async function prepareMiniMaxDirectorNodeValue(
   return preparedValue
 }
 
+/** Upload one resolved media input to the ComfyUI input folder; null when it carries no bytes. */
+async function uploadComfyMediaInput(comfyService: ComfyUIService, uploadInput: ComfyMediaUploadInput, fallbackBase: string) {
+  const uploadName = buildComfyImageUploadName(uploadInput.fileName, fallbackBase)
+  // 업로드가 실패하면 소비되지 않은 스트림이 파일을 계속 열어 둬서,
+  // Windows에서 해당 이미지 삭제가 EBUSY로 막힌다. 항상 닫는다.
+  const fileStream = uploadInput.filePath ? fs.createReadStream(uploadInput.filePath) : null
+  const imageInput = fileStream ?? uploadInput.buffer
+
+  if (!imageInput) {
+    return null
+  }
+
+  try {
+    return await comfyService.uploadInputImage(uploadName, imageInput, { contentType: uploadInput.mimeType })
+  } finally {
+    fileStream?.destroy()
+  }
+}
+
+/** Upload SnapRef pictures given as images so every used slot holds a ComfyUI input file name. */
+async function prepareSnapRefSimpleNodeValue(
+  comfyService: ComfyUIService,
+  field: MarkedField,
+  value: Record<string, unknown>,
+  fallbackBase: string,
+) {
+  const preparedValue = { ...value }
+  for (let slot = 1; slot <= SNAPREF_SIMPLE_MAX_REFERENCES; slot++) {
+    const key = snapRefSimpleReferenceKey(slot)
+    if (!isSnapRefUploadValue(preparedValue[key])) {
+      continue
+    }
+
+    const uploadInput = getComfyMediaUploadInput(preparedValue[key])
+    const uploadedName = uploadInput ? await uploadComfyMediaInput(comfyService, uploadInput, `${fallbackBase}_${key}`) : null
+    if (uploadedName === null) {
+      throw new ComfyInputValidationError(`${field.label || field.id}: ${key} is not a readable image; use a library composite_hash, an uploaded image or a ComfyUI input file name`)
+    }
+    preparedValue[key] = uploadedName
+  }
+  return preparedValue
+}
+
 /** Upload image-marked prompt fields to ComfyUI and replace them with stored input filenames. */
 export async function prepareComfyPromptData(
   comfyService: ComfyUIService,
@@ -448,6 +532,18 @@ export async function prepareComfyPromptData(
       continue
     }
 
+    const fallbackBase = options.uploadNameBase
+      ? `${sanitizeUploadSegment(options.uploadNameBase)}_${sanitizeUploadSegment(field.id)}`
+      : sanitizeUploadSegment(field.id)
+
+    if (field.type === 'node' && field.node_editor === SNAPREF_SIMPLE_NODE_EDITOR) {
+      // validateComfyPromptData above already required a supplied value to be an object.
+      if (isRecord(preparedPromptData[field.id])) {
+        preparedPromptData[field.id] = await prepareSnapRefSimpleNodeValue(comfyService, field, preparedPromptData[field.id], fallbackBase)
+      }
+      continue
+    }
+
     if (field.type !== 'image') {
       continue
     }
@@ -457,25 +553,9 @@ export async function prepareComfyPromptData(
       continue
     }
 
-    const fallbackBase = options.uploadNameBase
-      ? `${sanitizeUploadSegment(options.uploadNameBase)}_${sanitizeUploadSegment(field.id)}`
-      : sanitizeUploadSegment(field.id)
-
-    const uploadName = buildComfyImageUploadName(uploadInput.fileName, fallbackBase)
-    // 업로드가 실패하면 소비되지 않은 스트림이 파일을 계속 열어 둬서,
-    // Windows에서 해당 이미지 삭제가 EBUSY로 막힌다. 항상 닫는다.
-    const fileStream = uploadInput.filePath ? fs.createReadStream(uploadInput.filePath) : null
-    const imageInput = fileStream ?? uploadInput.buffer
-
-    if (!imageInput) {
-      continue
-    }
-
-    try {
-      const uploadedName = await comfyService.uploadInputImage(uploadName, imageInput, { contentType: uploadInput.mimeType })
+    const uploadedName = await uploadComfyMediaInput(comfyService, uploadInput, fallbackBase)
+    if (uploadedName !== null) {
       preparedPromptData[field.id] = uploadedName
-    } finally {
-      fileStream?.destroy()
     }
   }
 

@@ -216,13 +216,15 @@ stdio:
 | `list_workflows` | 등록된 ComfyUI 워크플로우 조회 (기본은 이미지 워크플로, `kind: "audio"`·`"all"`로 음향 포함) |
 | `list_comfyui_servers` | 등록된 ComfyUI 서버 조회 |
 | `list_comfy_refmods` | 서버의 `models/refmods` RefMod 목록 조회(`workflow_id`·`server_id` 선택). 이름을 MiniMax H3 Director 입력의 `refmods[].name`에 사용 (REF2VA 전용, DaSiWa 팩 미설치 서버는 오류) |
-| `get_workflow_details` | 워크플로우 상세와 marked fields 조회 (시드 필드에는 `seed_rule` 표시). 드롭다운 필드는 받을 수 있는 값을 `options`로, 항목이 많은 드롭다운 목록은 `options_list`(`list_name`, `total`)로 알려 주며 후자는 `search_custom_dropdown_items`로 찾습니다 |
+| `get_workflow_details` | 워크플로우 상세와 marked fields 조회 (시드 필드에는 `seed_rule` 표시). 드롭다운 필드는 받을 수 있는 값을 `options`로, 항목이 많은 드롭다운 목록은 `options_list`(`list_name`, `total`)로 알려 주며 후자는 `search_custom_dropdown_items`로 찾습니다. 노드 편집기 필드 중 MiniMax H3 Director(`minimax_h3_director_dasiwa`)와 SnapRef(`snapref_simple`)는 입력 형식을 `value_schema`로 알려 줍니다 |
 | `check_comfy_workflow` | 등록된 워크플로(`workflow_id`)나 초안(`workflow_json`, 일반 workflow는 먼저 API 형식으로 변환)을 저장·실행 없이 서버 검사 |
 | `generate_comfyui` | 특정 ComfyUI 서버에서 생성 |
 | `generate_comfyui_all_servers` | 활성 ComfyUI 서버 전체에서 병렬 생성 |
 | `generate_nai` | NovelAI 생성 |
 
 생성 도구는 실제 파일과 생성 이력을 만듭니다. 프롬프트, 서버, 그룹 ID를 확인하고 실행합니다.
+
+SnapRef 필드 값은 노드 입력 이름 그대로인 객체야. `reference`(사진 1, 필수)와 `reference_2`~`reference_8`(안 쓰는 칸은 `"none"`), 사진별 `strength`·`strength_2`~`strength_8`(0–2), `mode`(`Character & Style` 또는 `Character`), `fidelity`(0–1), `adapter`(`models/loras`의 SnapRef 가중치 파일)를 받아. 일부만 보내면 나머지는 워크플로에 저장된 값을 쓰고, 없는 입력 이름·범위 밖 값·빈 사진 1은 작업 등록 전에 거절해. 사진은 아래 이미지 입력 형식이나 ComfyUI 서버 입력 폴더의 파일 이름이고, 이미지 값은 실행 전에 서버로 올려 파일 이름으로 바꿔.
 
 ComfyUI 이미지 입력은 라이브러리 `composite_hash`(이미지 조회 권한 필요), workflow-input-asset 또는 queue-input 참조, data URL이나 base64를 써. 이미지 객체에 `path`, `file_path`, `filePath`, `storagePath`, `originalPath`, `original_file_path`로 서버 파일 경로를 넣으면 거부돼. HTTP 요청은 400을 반환하고 MCP 도구는 오류로 알려 줘. 그래프 HTTP 실행도 미디어 객체와 API 파일 참조의 경로 필드를 실행 전에 거부해. 내장 API와 ComfyUI의 단독 이미지 문자열은 서버 파일 경로가 아니라 데이터로 다뤄. custom JS 노드의 신뢰 경계는 [워크플로우 편집](./WORKFLOW_EDITOR.md#실행)을 참고해.
 

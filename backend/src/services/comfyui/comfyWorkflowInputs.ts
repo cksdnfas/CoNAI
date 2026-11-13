@@ -13,6 +13,13 @@ import {
   isProtectedWorkflowKey,
   MINIMAX_H3_REFMOD_MAX_SLOTS,
   normalizeMiniMaxH3RefModRows,
+  SNAPREF_SIMPLE_EDITABLE_KEYS,
+  SNAPREF_SIMPLE_FIDELITY,
+  SNAPREF_SIMPLE_MAX_REFERENCES,
+  SNAPREF_SIMPLE_MODES,
+  SNAPREF_SIMPLE_NODE_EDITOR,
+  SNAPREF_SIMPLE_STRENGTH,
+  SNAPREF_SIMPLE_UNUSED,
   validateMiniMaxH3RefModRows,
 } from '@conai/shared'
 
@@ -334,6 +341,23 @@ function normalizeMiniMaxValue(field: MarkedField, provided: unknown) {
   return value
 }
 
+/**
+ * A supplied SnapRef value over the workflow's saved node inputs, so a partial value keeps the rest. Inputs the node
+ * does not have are refused here; ranges, mode and pictures are checked by validateComfyPromptData.
+ */
+function normalizeSnapRefValue(field: MarkedField, provided: unknown) {
+  if (provided === undefined) return field.default_value
+  const label = field.label || field.id
+  const incoming = parseSuppliedRecord(provided, label)
+  const defaults = isRecord(field.default_value) ? field.default_value : {}
+  const editable = new Set(SNAPREF_SIMPLE_EDITABLE_KEYS)
+  const unknownKeys = Object.keys(incoming).filter((key) => !editable.has(key) && !Object.prototype.hasOwnProperty.call(defaults, key))
+  if (unknownKeys.length > 0) {
+    throw new Error(`${label}: unknown SnapRef input(s) ${unknownKeys.join(', ')}. Use ${SNAPREF_SIMPLE_EDITABLE_KEYS.join(', ')}`)
+  }
+  return { ...defaults, ...incoming }
+}
+
 /** A dropdown list's items go to a model whole (tool schema, workflow details, an error) up to this many characters; a longer list is searched. */
 const DROPDOWN_INLINE_CHARS = 2000
 const DROPDOWN_CLOSEST_SHOWN = 12
@@ -394,7 +418,9 @@ export function normalizeMcpWorkflowInputs(markedFields: MarkedField[], supplied
     const suppliedValue = hasSuppliedValue ? suppliedInputs[field.id] : undefined
     const value = field.type === 'node' && field.node_editor === MINIMAX_DIRECTOR_EDITOR
       ? normalizeMiniMaxValue(field, suppliedValue)
-      : hasSuppliedValue ? requireDropdownChoice(field, suppliedValue) : field.default_value
+      : field.type === 'node' && field.node_editor === SNAPREF_SIMPLE_NODE_EDITOR
+        ? normalizeSnapRefValue(field, suppliedValue)
+        : hasSuppliedValue ? requireDropdownChoice(field, suppliedValue) : field.default_value
 
     if (field.required && !hasMeaningfulValue(value)) {
       throw new Error(`Required workflow input is missing: ${field.label || field.id} (${field.id})`)
@@ -561,6 +587,39 @@ function miniMaxInputSchema(field: MarkedField) {
   }
 }
 
+function snapRefInputSchema(field: MarkedField) {
+  const defaults = isRecord(field.default_value) ? field.default_value : {}
+  const strength = { type: 'number', minimum: SNAPREF_SIMPLE_STRENGTH.min, maximum: SNAPREF_SIMPLE_STRENGTH.max, step: SNAPREF_SIMPLE_STRENGTH.step, default: SNAPREF_SIMPLE_STRENGTH.default }
+  const properties: Record<string, unknown> = {
+    adapter: { type: 'string', description: 'SnapRef weights file in the server\'s models/loras.', default: defaults.adapter },
+    mode: { type: 'string', enum: [...SNAPREF_SIMPLE_MODES], default: SNAPREF_SIMPLE_MODES[0], description: 'Character & Style: character and art style from the pictures. Character: only the character; style comes from the model and prompt.' },
+    fidelity: { type: 'number', minimum: SNAPREF_SIMPLE_FIDELITY.min, maximum: SNAPREF_SIMPLE_FIDELITY.max, step: SNAPREF_SIMPLE_FIDELITY.step, default: SNAPREF_SIMPLE_FIDELITY.default, description: '1 keeps every detail of the pictures; lower follows the prompt more freely.' },
+    reference: { type: 'picture', required: true, description: 'Picture 1 of the character (required).' },
+    strength: { ...strength, description: 'Weight of picture 1: 1 = as trained, 0 = off.' },
+  }
+  for (let slot = 2; slot <= SNAPREF_SIMPLE_MAX_REFERENCES; slot++) {
+    properties[`reference_${slot}`] = { type: 'picture', default: SNAPREF_SIMPLE_UNUSED, description: `Picture ${slot} of the same character, or "${SNAPREF_SIMPLE_UNUSED}" when unused.` }
+    properties[`strength_${slot}`] = { ...strength, description: `Weight of picture ${slot}.` }
+  }
+  return {
+    format: 'object',
+    accepts_partial_value: true,
+    max_pictures: SNAPREF_SIMPLE_MAX_REFERENCES,
+    properties,
+    picture_values: 'A picture is { composite_hash } of a CoNAI library image, { fileName, dataUrl } with a data:image/...;base64 URL, or a file name already in the ComfyUI server input folder. CoNAI uploads image values to the server before the run. Every picture shows the same character; model, clip and vae stay as the workflow links them.',
+    examples: {
+      two_pictures: {
+        mode: SNAPREF_SIMPLE_MODES[0],
+        fidelity: 1,
+        reference: { composite_hash: '<composite-hash>' },
+        strength: 1,
+        reference_2: { composite_hash: '<second-composite-hash>' },
+        strength_2: 0.6,
+      },
+    },
+  }
+}
+
 export function describeMcpMarkedField(field: MarkedField) {
   const choices = mcpDropdownChoices(field)
   return {
@@ -583,7 +642,7 @@ export function describeMcpMarkedField(field: MarkedField) {
     node_editor: field.node_editor,
     value_schema: field.type === 'node' && field.node_editor === MINIMAX_DIRECTOR_EDITOR
       ? miniMaxInputSchema(field)
-      : undefined,
+      : field.type === 'node' && field.node_editor === SNAPREF_SIMPLE_NODE_EDITOR ? snapRefInputSchema(field) : undefined,
   }
 }
 
@@ -600,6 +659,9 @@ export function createMcpWorkflowInputTemplate(markedFields: MarkedField[]) {
         postprocess: { simple: { enabled: false }, model: { enabled: false }, rtx: { enabled: false } },
         media: [],
       }]
+    }
+    if (field.type === 'node' && field.node_editor === SNAPREF_SIMPLE_NODE_EDITOR) {
+      return [field.id, { mode: SNAPREF_SIMPLE_MODES[0], fidelity: 1, reference: { composite_hash: '<composite-hash>' }, strength: 1 }]
     }
     if (field.type === 'number') return [field.id, field.default_value ?? field.min ?? 0]
     if (field.type === 'select') return [field.id, field.default_value ?? workflowDropdownChoices(field)?.options[0] ?? '']

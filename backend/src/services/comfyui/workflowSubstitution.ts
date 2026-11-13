@@ -3,7 +3,7 @@ import { normalizeWorkflowNumericPromptValues } from '../workflowNumericFieldPol
 import { randomizeComfyWorkflowSeeds } from './seedControl';
 import { parseJsonRecord } from '../../utils/json';
 import { randomUUID } from 'node:crypto';
-import { MINIMAX_H3_REFMOD_EXPORT_CLASS_TYPE } from '@conai/shared';
+import { MINIMAX_H3_REFMOD_EXPORT_CLASS_TYPE, SNAPREF_SIMPLE_EDITABLE_KEYS, SNAPREF_SIMPLE_NODE_EDITOR } from '@conai/shared';
 import { getMiniMaxDirectorActiveItems } from '../prepareComfyPromptData';
 
 const MINIMAX_DIRECTOR_MODES = new Set([
@@ -16,6 +16,10 @@ const MINIMAX_DIRECTOR_MODES = new Set([
 ]);
 
 const DEFAULT_MINIMAX_UPSCALE_MODEL = '2x-AnimeSharpV4_RCAN.safetensors';
+
+/** Node inputs a composite editor's value may set; everything else keeps the workflow's saved inputs and links. */
+const MINIMAX_DIRECTOR_EDITABLE_KEYS = new Set(['mode', 'prompt', 'width', 'height', 'duration', 'frame_rate', 'ref_image_size', 'timeline_data', 'builder_state']);
+const SNAPREF_EDITABLE_KEYS = new Set(SNAPREF_SIMPLE_EDITABLE_KEYS);
 
 function isRecord(value: unknown): value is Record<string, any> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -234,12 +238,14 @@ export function substituteComfyPromptData(
 
   for (const field of markedFields) {
     let value = normalizedPromptData[field.id] ?? field.default_value;
-    if (field.node_editor === 'minimax_h3_director_dasiwa' && isRecord(value)) {
+    const editableKeys = field.node_editor === 'minimax_h3_director_dasiwa'
+      ? MINIMAX_DIRECTOR_EDITABLE_KEYS
+      : field.node_editor === SNAPREF_SIMPLE_NODE_EDITOR ? SNAPREF_EDITABLE_KEYS : null;
+    if (editableKeys && isRecord(value)) {
       const nodeId = field.jsonPath.endsWith('.inputs') ? field.jsonPath.slice(0, -7) : '';
       const templateInputs = workflow[nodeId]?.inputs;
       if (isRecord(templateInputs)) {
         // Saved editor drafts own values, not connections to template-local node IDs.
-        const editableKeys = new Set(['mode', 'prompt', 'width', 'height', 'duration', 'frame_rate', 'ref_image_size', 'timeline_data', 'builder_state']);
         const draftInputs = value;
         value = Object.fromEntries(Object.entries({ ...templateInputs, ...Object.fromEntries(Object.entries(draftInputs).filter(([key]) => editableKeys.has(key))) }).map(([key]) => [
           key,

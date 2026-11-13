@@ -13,6 +13,8 @@ import {
   MINIMAX_H3_DIRECTOR_NODE_EDITOR,
   MINIMAX_H3_DIRECTOR_NODE_INPUT_KEY,
 } from './minimax-h3-director-dasiwa-utils'
+import { SNAPREF_SIMPLE_CLASS_TYPE, SNAPREF_SIMPLE_NODE_EDITOR } from '@conai/shared'
+import { SNAPREF_SIMPLE_NODE_INPUT_KEY } from './snapref-simple-utils'
 
 type WorkflowJsonNodeRecord = {
   title?: string
@@ -454,6 +456,18 @@ export function parseWorkflowGraph(params: {
       })
     }
 
+    if (classType === SNAPREF_SIMPLE_CLASS_TYPE) {
+      editableInputs.push({
+        key: SNAPREF_SIMPLE_NODE_INPUT_KEY,
+        label: 'SnapRef',
+        value: inputs,
+        inferredType: 'node',
+        jsonPath: `${nodeId}.inputs`,
+        typeLabel: 'SnapRef',
+        nodeEditor: SNAPREF_SIMPLE_NODE_EDITOR,
+      })
+    }
+
     for (const [inputKey, inputValue] of Object.entries(inputs)) {
       if (Array.isArray(inputValue) && inputValue.length >= 2) {
         edges.push({
@@ -469,7 +483,7 @@ export function parseWorkflowGraph(params: {
         continue
       }
 
-      if (classType === MINIMAX_H3_DIRECTOR_CLASS_TYPE) {
+      if (classType === MINIMAX_H3_DIRECTOR_CLASS_TYPE || classType === SNAPREF_SIMPLE_CLASS_TYPE) {
         continue
       }
 

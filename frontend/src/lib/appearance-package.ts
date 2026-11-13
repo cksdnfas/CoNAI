@@ -38,8 +38,8 @@ function blobToBase64(blob: Blob) {
   })
 }
 
-/** Convert a packaged base64 font payload back into a File for upload. */
-function createFileFromBase64(base64Data: string, fileName: string, mimeType: string) {
+/** Convert a base64 payload (a packaged font, a picked image) back into a File for upload. */
+export function createFileFromBase64(base64Data: string, fileName: string, mimeType: string) {
   const binaryString = atob(base64Data)
   const bytes = Uint8Array.from(binaryString, (char) => char.charCodeAt(0))
   return new File([bytes], fileName, { type: mimeType })

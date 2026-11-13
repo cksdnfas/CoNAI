@@ -5,6 +5,7 @@ import { TYPED_FIELD_RANDOM_OPTION_VALUE, TypedFieldInput } from '@/features/sha
 import type { SelectedImageDraft, WorkflowFieldDraftValue } from '../image-generation-shared'
 import { PowerLoraLoaderInput } from './power-lora-loader-input'
 import { MiniMaxH3DirectorDasiwaInput } from './minimax-h3-director-dasiwa-input'
+import { SnapRefSimpleInput } from './snapref-simple-input'
 import { PathOptionTreeSelect } from './path-option-tree-select'
 import { useI18n } from '@/i18n'
 
@@ -63,7 +64,7 @@ export function WorkflowFieldInput({ field, value, hideLabel = false, loraOption
   const stringValue = typeof value === 'string' ? value : ''
   const commit = (nextValue: unknown) => onChange(nextValue as WorkflowFieldDraftValue)
 
-  if (field.type === 'node' && (field.node_editor === 'power_lora_loader_rgthree' || field.node_editor === 'minimax_h3_director_dasiwa')) {
+  if (field.type === 'node' && (field.node_editor === 'power_lora_loader_rgthree' || field.node_editor === 'minimax_h3_director_dasiwa' || field.node_editor === 'snapref_simple')) {
     const nodeValue: Record<string, unknown> = isWorkflowNodeDraftValue(value) ? value : {}
 
     return wrapField(field.node_editor === 'power_lora_loader_rgthree' ? (
@@ -74,6 +75,14 @@ export function WorkflowFieldInput({ field, value, hideLabel = false, loraOption
         isRefreshingLoraOptions={isRefreshingOptions}
         onRefreshLoraOptions={onRefreshOptions}
         useValueFallback={false}
+        onChange={onChange}
+      />
+    ) : field.node_editor === 'snapref_simple' ? (
+      <SnapRefSimpleInput
+        value={nodeValue}
+        loraOptions={loraOptions}
+        isRefreshingLoraOptions={isRefreshingOptions}
+        onRefreshLoraOptions={onRefreshOptions}
         onChange={onChange}
       />
     ) : (

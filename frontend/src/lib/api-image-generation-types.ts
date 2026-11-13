@@ -177,7 +177,7 @@ export interface WorkflowMarkedField {
   max?: number
   step?: number
   node_class_type?: string
-  node_editor?: 'power_lora_loader_rgthree' | 'minimax_h3_director_dasiwa'
+  node_editor?: 'power_lora_loader_rgthree' | 'minimax_h3_director_dasiwa' | 'snapref_simple'
   node_visible_fields?: string[]
   node_hidden_controls?: string[]
   node_numeric_bounds?: WorkflowNodeNumericBounds

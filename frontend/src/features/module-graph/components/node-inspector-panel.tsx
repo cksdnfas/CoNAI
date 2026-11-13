@@ -12,7 +12,7 @@ import { Section } from '@/components/ui/section'
 import { Text } from '@/components/ui/text'
 import { Tip } from '@/components/ui/tooltip'
 import { getNaiFixedNegativeHint, type SelectedImageDraft } from '@/features/image-generation/image-generation-shared'
-import { getNaiFixedModelSettings } from '@conai/shared'
+import { getNaiFixedModelSettings, SNAPREF_SIMPLE_NODE_EDITOR } from '@conai/shared'
 import { useI18n, type TranslationInput } from '@/i18n'
 import { getLlmPresetOptions, LLM_PRESET_OPTIONS_QUERY_KEY } from '@/lib/api-settings-llm'
 import type { GraphExecutionArtifactRecord, ModuleEngineType, ModulePortDefinition, ModuleUiFieldDefinition } from '@/lib/api-module-graph'
@@ -46,6 +46,7 @@ import { EmptyState } from '@/components/ui/empty-state'
 import type { PromptWildcardTool } from '@/features/image-generation/components/wildcard-inline-picker-helpers'
 import { TypedFieldInput, type TypedFieldKind } from '@/features/shared-fields/typed-field-input'
 import { MiniMaxH3DirectorDasiwaInput } from '@/features/image-generation/components/minimax-h3-director-dasiwa-input'
+import { SnapRefSimpleInput } from '@/features/image-generation/components/snapref-simple-input'
 import { useIsCoarsePointer } from '@/lib/use-is-coarse-pointer'
 import { isEditedOnNodeCard } from '../module-graph-node-field-placement'
 import { resolveModuleGraphNodeLayout } from './module-graph-node-card-operation-registry'
@@ -329,6 +330,16 @@ export function NodeInspectorPanel({
             visibleFields={field.node_visible_fields}
             hiddenControls={field.node_hidden_controls}
             numericBounds={field.node_numeric_bounds}
+            onChange={(value) => onNodeValueChange(node.id, field.key, value)}
+          />
+        )
+      }
+
+      if (field.node_editor === SNAPREF_SIMPLE_NODE_EDITOR) {
+        const snapRefValue = rawValue ?? field.default_value
+        return (
+          <SnapRefSimpleInput
+            value={snapRefValue && typeof snapRefValue === 'object' && !Array.isArray(snapRefValue) ? snapRefValue as Record<string, unknown> : {}}
             onChange={(value) => onNodeValueChange(node.id, field.key, value)}
           />
         )
