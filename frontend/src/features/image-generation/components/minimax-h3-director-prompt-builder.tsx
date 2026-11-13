@@ -1,13 +1,11 @@
 import { useState, type ReactNode } from 'react'
-import { Copy, Eye, ListChecks, Plus } from 'lucide-react'
+import { Copy, Eye, ListChecks } from 'lucide-react'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { Text } from '@/components/ui/text'
-import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Modal, ModalFooter } from '@/components/ui/modal'
-import { EditorFooter } from '@/components/ui/editor-footer'
 import { useI18n } from '@/i18n'
 import { copyTextToClipboard } from '@/lib/clipboard'
 import { Field } from '@/components/ui/field'
@@ -40,8 +38,6 @@ export function MiniMaxH3DirectorPromptBuilder({
 }: MiniMaxH3DirectorPromptBuilderProps) {
   const { t } = useI18n()
   const [previewOpen, setPreviewOpen] = useState(false)
-  // Draft shot number for the [Shot N] marker; null while its dialog is closed.
-  const [shotNumberDraft, setShotNumberDraft] = useState<string | null>(null)
   const preview = buildMiniMaxH3DirectorPrompt(state)
   const patchState = (patch: Partial<MiniMaxH3DirectorBuilderState>) => onChange({ ...state, ...patch })
   const patchRef = (patch: Partial<MiniMaxH3DirectorBuilderState['ref']>) => onChange({ ...state, ref: { ...state.ref, ...patch } })
@@ -51,17 +47,6 @@ export function MiniMaxH3DirectorPromptBuilder({
       {content}
     </div>
   )
-  const insertShotMarker = (shotNumber: string) => {
-    if (!shotNumber) return
-    const marker = `[Shot ${shotNumber}] `
-    if (state.prompt_mode === 'simple') {
-      patchState({ simple_prompt: `${state.simple_prompt}${state.simple_prompt ? '\n' : ''}${marker}` })
-    } else if (state.mode === 'REF2VA') {
-      patchRef({ detailed_description: `${state.ref.detailed_description}${state.ref.detailed_description ? '\n' : ''}${marker}` })
-    } else {
-      patchState({ imd: `${state.imd}${state.imd ? '\n' : ''}${marker}` })
-    }
-  }
   const setPromptMode = (nextPromptMode: string) => {
     if (nextPromptMode !== 'simple' && nextPromptMode !== 'structured') return
     if (nextPromptMode === state.prompt_mode) return
@@ -73,9 +58,6 @@ export function MiniMaxH3DirectorPromptBuilder({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Text as="div" variant="title">{t({ ko: '프롬프트 빌더', en: 'Prompt builder' })}</Text>
         <div className="flex flex-wrap gap-1">
-          <IconButton size="icon-sm" variant="secondary" label={t({ ko: '샷 마커 삽입 [Shot N]', en: 'Insert shot marker [Shot N]' })} onClick={() => setShotNumberDraft('1')}>
-            <Plus className="h-3.5 w-3.5" />
-          </IconButton>
           {state.mode === 'REF2VA' ? (
             <IconButton size="icon-sm" variant="secondary" label={t({ ko: '라벨·요약 자동 채우기', en: 'Auto-fill labels & summary' })} onClick={() => onChange(prefillMiniMaxH3DirectorRefBuilder(state, items))}>
               <ListChecks className="h-3.5 w-3.5" />
@@ -112,37 +94,37 @@ export function MiniMaxH3DirectorPromptBuilder({
         />)
       ) : state.mode === 'REF2VA' ? (
         <div className="grid gap-4">
-          {renderPortedField('prompt.subject_definitions', <Field label="subject_definitions">
+          {renderPortedField('prompt.subject_definitions', <Field label={t({ ko: '주체 정의', en: 'Subject definitions' })}>
             <Textarea rows={4} value={state.ref.subject_definitions} placeholder="<Subject 1> ... / <Picture 1> ..." onChange={(event) => patchRef({ subject_definitions: event.target.value })} />
           </Field>)}
-          {renderPortedField('prompt.summary', <Field label="summary">
+          {renderPortedField('prompt.summary', <Field label={t({ ko: '요약', en: 'Summary' })}>
             <Textarea rows={3} value={state.ref.summary} placeholder="[reference generation] Use <Picture 1> ..." onChange={(event) => patchRef({ summary: event.target.value })} />
           </Field>)}
-          {renderPortedField('prompt.retention_analysis', <Field label="retention_analysis">
+          {renderPortedField('prompt.retention_analysis', <Field label={t({ ko: '참조 유지 분석', en: 'Retention analysis' })}>
             <Textarea rows={4} value={state.ref.retention_analysis} placeholder="<Subject 1>: fully_preserved - ..." onChange={(event) => patchRef({ retention_analysis: event.target.value })} />
           </Field>)}
-          {renderPortedField('prompt.detailed_description', <Field label="detailed_description">
+          {renderPortedField('prompt.detailed_description', <Field label={t({ ko: '상세 묘사', en: 'Detailed description' })}>
             <Textarea rows={6} value={state.ref.detailed_description} placeholder="[Shot 1] ... [Shot 2] At 00:04.500, ..." aria-invalid={invalid} onChange={(event) => patchRef({ detailed_description: event.target.value })} />
           </Field>)}
           <div className="grid gap-4 sm:grid-cols-2">
-            {renderPortedField('prompt.soundscape', <Field label="overall_soundscape">
+            {renderPortedField('prompt.soundscape', <Field label={t({ ko: '전체 사운드', en: 'Soundscape' })}>
               <Textarea rows={3} value={state.ref.soundscape} onChange={(event) => patchRef({ soundscape: event.target.value })} />
             </Field>)}
-            {renderPortedField('prompt.music', <Field label="non_diegetic_music">
+            {renderPortedField('prompt.music', <Field label={t({ ko: '배경 음악', en: 'Background music' })}>
               <Textarea rows={3} value={state.ref.music} onChange={(event) => patchRef({ music: event.target.value })} />
             </Field>)}
           </div>
         </div>
       ) : (
         <div className="grid gap-4">
-          {renderPortedField('prompt.imd', <Field label="integrated_multimodal_description">
+          {renderPortedField('prompt.imd', <Field label={t({ ko: '장면 묘사', en: 'Scene description' })}>
             <Textarea rows={6} value={state.imd} placeholder="[Shot 1] Start your scene description here..." aria-invalid={invalid} onChange={(event) => patchState({ imd: event.target.value })} />
           </Field>)}
           <div className="grid gap-4 sm:grid-cols-2">
-            {renderPortedField('prompt.soundscape', <Field label="overall_soundscape">
+            {renderPortedField('prompt.soundscape', <Field label={t({ ko: '전체 사운드', en: 'Soundscape' })}>
               <Textarea rows={3} value={state.soundscape} onChange={(event) => patchState({ soundscape: event.target.value })} />
             </Field>)}
-            {renderPortedField('prompt.music', <Field label="non_diegetic_music">
+            {renderPortedField('prompt.music', <Field label={t({ ko: '배경 음악', en: 'Background music' })}>
               <Textarea rows={3} value={state.music} onChange={(event) => patchState({ music: event.target.value })} />
             </Field>)}
           </div>
@@ -169,28 +151,6 @@ export function MiniMaxH3DirectorPromptBuilder({
           <Button type="button" variant="ghost" onClick={() => setPreviewOpen(false)}>{t({ ko: '닫기', en: 'Close' })}</Button>
         </ModalFooter>
       </div>
-    </Modal>
-
-    <Modal
-      open={shotNumberDraft !== null}
-      title={t({ ko: '샷 마커 추가', en: 'Add shot marker' })}
-      size="md"
-      onClose={() => setShotNumberDraft(null)}
-    >
-      <form
-        className="space-y-4"
-        onSubmit={(event) => {
-          event.preventDefault()
-          insertShotMarker(shotNumberDraft?.trim() ?? '')
-          setShotNumberDraft(null)
-        }}
-      >
-        <label className="block space-y-2">
-          <span className="text-sm text-muted-foreground">{t({ ko: '샷 번호', en: 'Shot number' })}</span>
-          <Input autoFocus value={shotNumberDraft ?? ''} onChange={(event) => setShotNumberDraft(event.target.value)} />
-        </label>
-        <EditorFooter saveSubmit canSave={Boolean(shotNumberDraft?.trim())} saveLabel={t({ ko: '추가', en: 'Add' })} />
-      </form>
     </Modal>
   </>
 }

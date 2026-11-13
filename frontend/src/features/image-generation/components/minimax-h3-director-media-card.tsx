@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type DragEvent, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react'
-import { Film, ImageIcon, MoreHorizontal, Music2, RefreshCw, Trash2 } from 'lucide-react'
+import { Copy, ImageIcon, MoreHorizontal, RefreshCw, Trash2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { IconButton } from '@/components/ui/icon-button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
@@ -26,6 +26,8 @@ type MiniMaxH3DirectorMediaCardProps = {
   replaceLabel: string
   deleteLabel: string
   menuLabel: string
+  /** Copies the prompt marker (`<Picture 1>`) of a reference; omitted for frame slots, which have none. */
+  copyMarker?: { label: string; onCopy: () => void }
   onMenuOpenChange: (open: boolean) => void
   onRequestReplace: () => void
   onDelete: () => void
@@ -95,23 +97,27 @@ function MiniMaxDirectorMediaPreview({
     )
   }
   if (item.type === 'video' && src) {
+    const trimStart = Number(item.trim_start ?? 0)
+    const trimEnd = Number(item.trim_end ?? Math.max(2, Number(item.source_duration ?? item.duration ?? 2)))
     return (
       <video
         src={src}
         poster={videoPoster ?? undefined}
         aria-label={asset?.fileName || item.value}
         preload="metadata"
-        muted
+        muted={(item.media_mode ?? 'video') === 'video'}
         playsInline
+        controls
         draggable={false}
-        className="block h-auto max-h-64 w-auto max-w-full bg-black object-contain"
+        className="block h-auto max-h-64 w-full bg-black object-contain"
         onLoadedMetadata={(event) => onSourceDimensionsChange(event.currentTarget.videoWidth, event.currentTarget.videoHeight)}
+        onPlay={(event) => { if (event.currentTarget.currentTime < trimStart || event.currentTarget.currentTime >= trimEnd) event.currentTarget.currentTime = trimStart }}
+        onTimeUpdate={(event) => { if (event.currentTarget.currentTime >= trimEnd) event.currentTarget.pause() }}
       />
     )
   }
 
-  const Icon = item.type === 'image' ? ImageIcon : item.type === 'video' ? Film : Music2
-  return <Icon className="h-7 w-7 text-muted-foreground" />
+  return <ImageIcon className="h-7 w-7 text-muted-foreground" />
 }
 
 /** Compact media card with click actions and delayed pointer sorting for mouse and touch. */
@@ -127,6 +133,7 @@ export function MiniMaxH3DirectorMediaCard({
   replaceLabel,
   deleteLabel,
   menuLabel,
+  copyMarker,
   onMenuOpenChange,
   onRequestReplace,
   onDelete,
@@ -280,12 +287,28 @@ export function MiniMaxH3DirectorMediaCard({
         hasIssue && 'ring-2 ring-destructive/60',
       )}
     >
-      <div className="relative flex min-h-20 max-h-64 w-full items-center justify-center overflow-hidden bg-surface-lowest p-1">
-        <MiniMaxDirectorMediaPreview item={item} asset={asset} onSourceDimensionsChange={handleSourceDimensionsChange} />
-        <Tip content={aspectRatio}>
-          <Badge variant="overlay" data-minimax-aspect-ratio={aspectRatio ?? undefined} className="absolute left-2 top-2 max-w-[calc(100%-4rem)] truncate">{label}</Badge>
-        </Tip>
-      </div>
+      {item.type === 'image' ? (
+        <div className="relative flex min-h-20 max-h-64 w-full items-center justify-center overflow-hidden bg-surface-lowest p-1">
+          <MiniMaxDirectorMediaPreview item={item} asset={asset} onSourceDimensionsChange={handleSourceDimensionsChange} />
+          <Tip content={aspectRatio}>
+            <Badge variant="overlay" data-minimax-aspect-ratio={aspectRatio ?? undefined} className="absolute left-2 top-2 max-w-[calc(100%-6rem)] truncate">{label}</Badge>
+          </Tip>
+        </div>
+      ) : (
+        <>
+          {/* Video and audio show one player only; this strip carries the label and stays the click/sort handle. */}
+          <div className="flex min-h-11 items-center px-3">
+            <Tip content={aspectRatio}>
+              <Badge variant="secondary" data-minimax-aspect-ratio={aspectRatio ?? undefined} className="max-w-[calc(100%-5rem)] truncate">{label}</Badge>
+            </Tip>
+          </div>
+          {item.type === 'video' && asset ? (
+            <div data-minimax-interactive="true" className="flex justify-center bg-surface-lowest" onClick={(event) => event.stopPropagation()}>
+              <MiniMaxDirectorMediaPreview item={item} asset={asset} onSourceDimensionsChange={handleSourceDimensionsChange} />
+            </div>
+          ) : null}
+        </>
+      )}
 
       {children ? (
         <div data-minimax-interactive="true" className="space-y-2 p-3" onClick={(event) => event.stopPropagation()}>
@@ -294,9 +317,12 @@ export function MiniMaxH3DirectorMediaCard({
       ) : null}
 
       <DropdownMenu open={menuOpen && !disabled} onOpenChange={(open) => { if (!disabled) onMenuOpenChange(open) }}>
-        <div data-minimax-interactive="true" className="absolute top-2 right-2">
+        <div data-minimax-interactive="true" className="absolute top-2 right-2 flex items-center gap-1">
+          {copyMarker ? (
+            <IconButton variant={item.type === 'image' ? 'overlay' : 'ghost'} size="icon-sm" label={copyMarker.label} disabled={disabled} onClick={copyMarker.onCopy}><Copy /></IconButton>
+          ) : null}
           <DropdownMenuTrigger asChild>
-            <IconButton variant="overlay" size="icon-sm" label={menuLabel} disabled={disabled}><MoreHorizontal /></IconButton>
+            <IconButton variant={item.type === 'image' ? 'overlay' : 'ghost'} size="icon-sm" label={menuLabel} disabled={disabled}><MoreHorizontal /></IconButton>
           </DropdownMenuTrigger>
         </div>
         <DropdownMenuContent data-minimax-interactive="true" aria-label={menuLabel} align="end">

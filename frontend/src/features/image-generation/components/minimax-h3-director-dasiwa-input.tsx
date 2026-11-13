@@ -1,10 +1,11 @@
 import { useMemo, useRef, useState, type ClipboardEvent, type DragEvent, type ReactNode } from 'react'
 import { applyMiniMaxDirectorResolutionBounds } from '@conai/shared'
-import { Film, ImageIcon, ImagePlus, Link2, Music2, Plus, RotateCcw } from 'lucide-react'
+import { Copy, Film, ImageIcon, ImagePlus, Link2, Music2, Plus, RotateCcw } from 'lucide-react'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { DisclosureButton } from '@/components/ui/disclosure-button'
 import { IconButton } from '@/components/ui/icon-button'
 import { Inset } from '@/components/ui/inset'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
@@ -21,6 +22,7 @@ import {
   type WorkflowInputAssetRef,
 } from '@/lib/api-workflow-input-assets'
 import type { WorkflowNodeNumericBounds } from '@/lib/api-image-generation-types'
+import { copyTextToClipboard } from '@/lib/clipboard'
 import { isFromOwnDom } from '@/lib/portal-events'
 import { cn } from '@/lib/utils'
 import { Field } from '@/components/ui/field'
@@ -59,7 +61,7 @@ import {
   hasMiniMaxDirectorAudio, retargetMiniMaxDirectorVideo, sortMiniMaxDirectorMedia,
   type MiniMaxDirectorMediaLane as MediaLane,
 } from './minimax-h3-director-media'
-import { extractAudioWaveformPeaks, probeMediaDimensions, probeMediaDuration } from './minimax-h3-director-media-probe'
+import { probeMediaDimensions, probeMediaDuration } from './minimax-h3-director-media-probe'
 import { applyMiniMaxH3DirectorModeTimeline, patchMiniMaxH3DirectorValue, readMiniMaxH3DirectorState } from './minimax-h3-director-node-state'
 
 type MiniMaxH3DirectorDasiwaInputProps = {
@@ -71,6 +73,8 @@ type MiniMaxH3DirectorDasiwaInputProps = {
   comfyServerId?: number
   /** The workflow only saves a RefMod (DaSiWa export node): no model connection is needed. */
   refModExportOnly?: boolean
+  /** The surrounding form already lists the Director's validation issues, so the inner list is left out. */
+  issuesShownByHost?: boolean
   onChange: (value: Record<string, unknown>) => void
   renderInputPort?: (inputKey: MiniMaxH3DirectorGraphInputKey) => ReactNode
 }
@@ -82,7 +86,7 @@ function formatMediaTypeLabel(type: MiniMaxH3DirectorMediaType, index: number) {
 }
 
 /** Render DaSiWa MiniMax H3 Director inputs as a CoNAI-native reference board. */
-export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenControls, numericBounds, comfyServerId, refModExportOnly = false, onChange, renderInputPort }: MiniMaxH3DirectorDasiwaInputProps) {
+export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenControls, numericBounds, comfyServerId, refModExportOnly = false, issuesShownByHost = false, onChange, renderInputPort }: MiniMaxH3DirectorDasiwaInputProps) {
   const { t } = useI18n()
   const visualInputRef = useRef<HTMLInputElement>(null)
   const videoInputRef = useRef<HTMLInputElement>(null)
@@ -95,6 +99,8 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
   const [selectedLane, setSelectedLane] = useState<MediaLane>('image')
   const [status, setStatus] = useState<string | null>(null)
   const [isUploading, setIsUploading] = useState(false)
+  // The graph renders this editor to learn which input ports exist, so its settings must be mounted there.
+  const [settingsOpen, setSettingsOpen] = useState(Boolean(renderInputPort))
   const directorState = useMemo(() => readMiniMaxH3DirectorState(value, numericBounds), [value, numericBounds])
   const { nodeValue, mode, timeline, resolution, postprocess, promptValue, builderMode, builderDuration, builderState } = directorState
   const boundsError = directorState.boundsError
@@ -305,7 +311,6 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
         }
 
         const duration = sourceDuration === null ? 1 : Math.min(sourceDuration, 15)
-        const waveformPeaks = type === 'audio' ? await extractAudioWaveformPeaks(file) : []
         const item: MiniMaxH3DirectorTimelineItem = {
           id,
           type,
@@ -319,7 +324,6 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
           ...(sourceDuration !== null ? { source_duration: sourceDuration } : {}),
           ...(type === 'video' ? { media_mode: lane === 'audio' ? 'audio' as const : 'video' as const } : {}),
           ...(type === 'video' || type === 'audio' ? { trim_start: 0, trim_end: duration } : {}),
-          ...(waveformPeaks.length > 0 ? { waveform_peaks: waveformPeaks } : {}),
         }
         nextTimeline = { ...nextTimeline, items: [...nextTimeline.items, item] }
         nextAssets[id] = asset
@@ -357,7 +361,6 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
       setStatus(t({ ko: '{name} 교체 업로드 중…', en: 'Uploading replacement {name}…' }, { name: file.name }))
       const asset = await uploadWorkflowInputAsset(file)
       const duration = sourceDuration === null ? 1 : Math.min(sourceDuration, 15)
-      const waveformPeaks = type === 'audio' ? await extractAudioWaveformPeaks(file) : []
       const stableItem = { ...currentItem }
       delete stableItem.source_duration
       delete stableItem.trim_start
@@ -375,7 +378,6 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
         ...(sourceDuration !== null ? { source_duration: sourceDuration } : {}),
         ...(type === 'video' ? { media_mode: currentItem.type === 'video' ? currentItem.media_mode ?? 'video' : lane === 'audio' ? 'audio' : 'video', trim_start: 0, trim_end: duration } : {}),
         ...(type === 'audio' ? { trim_start: 0, trim_end: duration } : {}),
-        ...(waveformPeaks.length > 0 ? { waveform_peaks: waveformPeaks } : {}),
       }
       const previousAsset = assets[itemId]
       emit({}, {
@@ -456,12 +458,21 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
     window.setTimeout(() => replacementInputRef.current?.click(), 0)
   }
 
+  const copyMarker = (marker: string) => {
+    void copyTextToClipboard(marker).then(
+      () => setStatus(t({ ko: '{marker} 마커를 복사했어.', en: 'Copied the {marker} marker.' }, { marker })),
+      () => setStatus(t({ ko: '마커 복사에 실패했어.', en: 'Failed to copy the marker.' })),
+    )
+  }
+
   const renderMediaCard = (item: MiniMaxH3DirectorTimelineItem, typeIndex: number, labelOverride?: string, inputKey?: MiniMaxH3DirectorGraphInputKey) => {
     const asset = assets[item.id]
     const sourceDuration = Math.max(2, Number(item.source_duration ?? item.duration ?? 2))
     const trimStart = Number(item.trim_start ?? 0)
     const trimEnd = Number(item.trim_end ?? sourceDuration)
     const label = labelOverride ?? formatMediaTypeLabel(getMediaLane(item), typeIndex)
+    // Frame slots (the ones bound to an input key) are not referenced from the prompt, so they have no marker.
+    const marker = inputKey ? null : `<${label}>`
     return (
       <div key={item.id} className="space-y-1">
         {inputKey ? renderInputPort?.(inputKey) : null}
@@ -476,6 +487,7 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
           replaceLabel={t({ ko: '미디어 교체', en: 'Replace media' })}
           deleteLabel={t({ ko: '삭제', en: 'Delete' })}
           menuLabel={t({ ko: '{name} 메뉴', en: '{name} menu' }, { name: label })}
+          copyMarker={marker ? { label: t({ ko: '{marker} 마커 복사', en: 'Copy the {marker} marker' }, { marker }), onCopy: () => copyMarker(marker) } : undefined}
           onMenuOpenChange={(open) => setMenuItemId((current) => open ? item.id : current === item.id ? null : current)}
           onRequestReplace={() => requestReplacement(item.id)}
           onDelete={() => removeTimelineItem(item.id)}
@@ -493,45 +505,23 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
             value={item.media_mode ?? 'video'}
             onChange={(videoMode) => changeVideoMode(item, videoMode as MiniMaxH3DirectorVideoMode)}
             items={[
-              { value: 'video', label: 'V', ariaLabel: t({ ko: 'V: 영상만 참조', en: 'V: video only' }) },
-              { value: 'audio', label: 'A', ariaLabel: t({ ko: 'A: 소리만 오디오 참조로', en: 'A: audio track only' }) },
-              { value: 'video_audio', label: 'V+A', ariaLabel: t({ ko: 'V+A: 영상과 소리 둘 다 참조', en: 'V+A: video and audio' }) },
+              { value: 'video', label: t({ ko: '영상', en: 'Video' }), ariaLabel: t({ ko: '영상만 참조', en: 'Video only' }) },
+              { value: 'audio', label: t({ ko: '소리', en: 'Audio' }), ariaLabel: t({ ko: '소리만 오디오 참조로', en: 'Audio track only' }) },
+              { value: 'video_audio', label: t({ ko: '영상+소리', en: 'Both' }), ariaLabel: t({ ko: '영상과 소리 둘 다 참조', en: 'Video and audio' }) },
             ]}
           />
         ) : null}
 
-        {item.type !== 'image' && asset ? (
-          item.type === 'video' ? (
-            <video
-              src={buildWorkflowInputAssetUrl(asset)}
-              aria-label={asset.fileName}
-              preload="metadata"
-              muted={(item.media_mode ?? 'video') === 'video'}
-              playsInline
-              controls
-              className="max-h-52 w-full rounded-sm bg-black"
-              onPlay={(event) => { if (event.currentTarget.currentTime < trimStart || event.currentTarget.currentTime >= trimEnd) event.currentTarget.currentTime = trimStart }}
-              onTimeUpdate={(event) => { if (event.currentTarget.currentTime >= trimEnd) event.currentTarget.pause() }}
-            />
-          ) : (
-            <audio
-              src={buildWorkflowInputAssetUrl(asset)}
-              aria-label={asset.fileName}
-              preload="metadata"
-              controls
-              className="w-full"
-              onPlay={(event) => { if (event.currentTarget.currentTime < trimStart || event.currentTarget.currentTime >= trimEnd) event.currentTarget.currentTime = trimStart }}
-              onTimeUpdate={(event) => { if (event.currentTarget.currentTime >= trimEnd) event.currentTarget.pause() }}
-            />
-          )
-        ) : null}
-
-        {item.type === 'audio' && Array.isArray(item.waveform_peaks) && item.waveform_peaks.length > 0 ? (
-          <div className="flex h-10 items-center gap-px overflow-hidden rounded-sm bg-surface-low px-1" aria-hidden="true">
-            {item.waveform_peaks.map((peak, index) => (
-              <span key={`${item.id}-peak-${index}`} className="min-w-px flex-1 bg-primary/70" style={{ height: `${Math.max(8, Math.round(peak * 100))}%` }} />
-            ))}
-          </div>
+        {item.type === 'audio' && asset ? (
+          <audio
+            src={buildWorkflowInputAssetUrl(asset)}
+            aria-label={asset.fileName}
+            preload="metadata"
+            controls
+            className="w-full"
+            onPlay={(event) => { if (event.currentTarget.currentTime < trimStart || event.currentTarget.currentTime >= trimEnd) event.currentTarget.currentTime = trimStart }}
+            onTimeUpdate={(event) => { if (event.currentTarget.currentTime >= trimEnd) event.currentTarget.pause() }}
+          />
         ) : null}
 
         {item.type !== 'image' ? (
@@ -565,16 +555,9 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
                 }}
               />
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <NumberStepperInput aria-label={t({ ko: '시작(초)', en: 'Start (seconds)' })} min={0} max={Math.max(0, trimEnd - 2)} step={0.25} value={String(trimStart)} onValueCommit={(nextValue) => {
-                const nextStart = Math.max(0, Math.min(trimEnd - 2, Number(nextValue)))
-                updateTimelineItem(item.id, { trim_start: nextStart, duration: trimEnd - nextStart })
-              }} />
-              <NumberStepperInput aria-label={t({ ko: '끝(초)', en: 'End (seconds)' })} min={trimStart + 2} max={sourceDuration} step={0.25} value={String(trimEnd)} onValueCommit={(nextValue) => {
-                const nextEnd = Math.min(sourceDuration, Math.max(trimStart + 2, Number(nextValue)))
-                updateTimelineItem(item.id, { trim_end: nextEnd, duration: nextEnd - trimStart })
-              }} />
-            </div>
+            <Text variant="caption" className="tabular-nums">
+              {t({ ko: '{start}–{end}초 사용 · 길이 {length}초', en: 'Using {start}–{end}s · {length}s long' }, { start: trimStart.toFixed(2), end: trimEnd.toFixed(2), length: (trimEnd - trimStart).toFixed(2) })}
+            </Text>
           </div>
         ) : null}
 
@@ -621,7 +604,23 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
 
   const fl2vaModelConnected = isMiniMaxH3DirectorInputLink(nodeValue.fl2va_model)
   const ref2vaModelConnected = isMiniMaxH3DirectorInputLink(nodeValue.ref2va_model)
-  const hasVisibleDimensionField = (['width', 'height', 'duration', 'frame_rate', 'ref_image_size'] as const).some(isFieldVisible)
+  const showResolutionPanel = isFieldVisible('timeline_data') && !hiddenControls?.includes('resolution')
+  // The resolution panel resolves the canvas and writes width/height itself, so the raw inputs only stay without it.
+  const showCanvasFields = !showResolutionPanel
+  const hasVisibleDimensionField = (['duration', 'frame_rate', 'ref_image_size'] as const).some(isFieldVisible)
+    || (showCanvasFields && (isFieldVisible('width') || isFieldVisible('height')))
+  const showPostprocess = isFieldVisible('timeline_data')
+    && !['postprocess.simple', 'postprocess.model', 'postprocess.rtx'].every((control) => hiddenControls?.includes(control))
+  const hasSettings = showResolutionPanel || hasVisibleDimensionField || showPostprocess
+  // An invalid setting must not hide behind the collapsed section.
+  const settingsExpanded = settingsOpen || invalidFields.has('duration') || invalidFields.has('frame_rate')
+  const usesTiming = mode !== 'Image Inpaint'
+  const settingsSummary = [
+    showResolutionPanel ? `${resolvedCanvas[0]} × ${resolvedCanvas[1]}` : isFieldVisible('width') && isFieldVisible('height') && widthValue && heightValue ? `${widthValue} × ${heightValue}` : '',
+    usesTiming && isFieldVisible('duration') && durationValue ? t({ ko: '{value}초', en: '{value}s' }, { value: durationValue }) : '',
+    usesTiming && isFieldVisible('frame_rate') && frameRateValue ? `${frameRateValue}fps` : '',
+    showPostprocess && (postprocess.simple.enabled || postprocess.model.enabled || postprocess.rtx.enabled) ? t({ ko: '후처리 켜짐', en: 'Post-processing on' }) : '',
+  ].filter(Boolean).join(' · ')
   const canReset = (isFieldVisible('timeline_data') && timeline.items.length > 0)
     || (isFieldVisible('prompt') && (promptValue.trim().length > 0 || hasMiniMaxH3DirectorBuilderContent(builderState)))
   const isReferenceMediaMode = mode === null || mode === 'REF2VA'
@@ -648,21 +647,21 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
   }
   const hasImageLaneItems = timeline.items.some((item) => getMediaLane(item) === 'image')
   const hasAudioLaneItems = timeline.items.some(hasMiniMaxDirectorAudio)
-  const renderLaneIcon = (icon: ReactNode, label: string) => (
-    <Tip content={label}>
-      <span role="img" aria-label={label} className="inline-flex text-foreground">{icon}</span>
-    </Tip>
+  const renderLaneTitle = (icon: ReactNode, label: string) => (
+    <span className="inline-flex min-w-0 items-center gap-2 text-foreground">
+      {icon}
+      <Text as="span" variant="label">{label}</Text>
+    </span>
   )
   const renderDropZone = (label: string, icon: ReactNode, onClick: () => void, disabled?: boolean) => (
-    <Tip content={label}>
-      <Button type="button" variant="subtle" aria-label={label} disabled={disabled} className="h-10 w-full" onClick={onClick}>
-        {icon}
-      </Button>
-    </Tip>
+    <Button type="button" variant="subtle" disabled={disabled} className="h-10 w-full" onClick={onClick}>
+      {icon}
+      <span className="truncate text-xs text-muted-foreground">{label}</span>
+    </Button>
   )
 
-  return (
-    <div className="space-y-4" tabIndex={0} onPaste={handlePaste} onClick={() => setMenuItemId(null)}>
+  const header = (
+    <>
       <input ref={replacementInputRef} type="file" accept="image/*,video/*,audio/*" hidden onChange={(event) => {
         const itemId = replacementItemId
         const file = event.target.files?.[0]
@@ -697,8 +696,12 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
       </div>
 
       {boundsError ? <Alert variant="destructive"><AlertDescription>{boundsError}</AlertDescription></Alert> : null}
+    </>
+  )
 
-      {isFieldVisible('timeline_data') && !hiddenControls?.includes('resolution') ? (
+  const settings = (
+    <>
+      {showResolutionPanel ? (
         <MiniMaxH3DirectorResolutionPanel
           value={resolution}
           canvas={resolvedCanvas}
@@ -715,7 +718,7 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
           className="grid gap-4"
           style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 12rem), 1fr))' }}
         >
-          {isFieldVisible('width') ? (
+          {showCanvasFields && isFieldVisible('width') ? (
             <div className="space-y-1">
               {renderInputPort?.('width')}
               <Field label={t({ ko: '너비', en: 'Width' })}>
@@ -723,7 +726,7 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
               </Field>
             </div>
           ) : null}
-          {isFieldVisible('height') ? (
+          {showCanvasFields && isFieldVisible('height') ? (
             <div className="space-y-1">
               {renderInputPort?.('height')}
               <Field label={t({ ko: '높이', en: 'Height' })}>
@@ -783,7 +786,7 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
         </div>
       ) : null}
 
-      {isFieldVisible('timeline_data') ? (
+      {showPostprocess ? (
         <MiniMaxH3DirectorPostprocessPanel
           value={postprocess}
           hiddenControls={hiddenControls}
@@ -792,7 +795,14 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
         />
       ) : null}
 
-      {issues.length > 0 ? (
+    </>
+  )
+
+  return (
+    <div className="space-y-4" tabIndex={0} onPaste={handlePaste} onClick={() => setMenuItemId(null)}>
+      {header}
+
+      {issues.length > 0 && !issuesShownByHost ? (
         <Alert variant="destructive">
           <AlertTitle>{t({ ko: 'Director 입력 확인', en: 'Check Director inputs' })}</AlertTitle>
           <AlertDescription>
@@ -816,7 +826,7 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
       {mode !== 'T2VA' || hasImageLaneItems ? (
       <div className={cn('ui-tone-plinth space-y-3 rounded-sm p-3 transition-shadow', mode === 'T2VA' ? 'opacity-60' : selectedLane === 'image' && 'ring-1 ring-inset ring-primary/45')} onClick={() => setSelectedLane('image')} onDragOver={(event) => event.preventDefault()} onDrop={(event) => handleLaneDrop(event, 'image')}>
         <div className="flex items-center justify-between gap-3">
-          {renderLaneIcon(<ImageIcon className="h-4 w-4" />, isReferenceMediaMode ? t({ ko: '이미지 참조', en: 'Image references' }) : t({ ko: '키 프레임', en: 'Key frames' }))}
+          {renderLaneTitle(<ImageIcon className="h-4 w-4" />, isReferenceMediaMode ? t({ ko: '이미지 참조', en: 'Image references' }) : t({ ko: '키 프레임', en: 'Key frames' }))}
           <div className="flex items-center gap-1">
             {hasImageLaneItems ? (
               <IconButton size="icon-sm" variant="ghost" onClick={() => clearLane('image')} label={t({ ko: '이미지 모두 비우기', en: 'Clear all images' })}>
@@ -864,7 +874,7 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
       {isReferenceMediaMode ? (
         <div className={cn('ui-tone-plinth space-y-3 rounded-sm p-3 transition-shadow', selectedLane === 'video' && 'ring-1 ring-inset ring-primary/45')} onClick={() => setSelectedLane('video')} onDragOver={(event) => event.preventDefault()} onDrop={(event) => handleLaneDrop(event, 'video')}>
           <div className="flex items-center justify-between gap-3">
-            {renderLaneIcon(<Film className="h-4 w-4" />, t({ ko: '영상 참조', en: 'Video references' }))}
+            {renderLaneTitle(<Film className="h-4 w-4" />, t({ ko: '영상 참조', en: 'Video references' }))}
             <div className="flex items-center gap-1">
               {videoItems.length > 0 ? <IconButton size="icon-sm" variant="ghost" disabled={isUploading} onClick={() => clearLane('video')} label={t({ ko: '영상 모두 비우기', en: 'Clear all videos' })}><RotateCcw className="h-4 w-4" /></IconButton> : null}
               <IconButton size="icon-sm" variant="secondary" disabled={isUploading} onClick={() => videoInputRef.current?.click()} label={t({ ko: '참조 영상 추가', en: 'Add reference video' })}><Plus className="h-4 w-4" /></IconButton>
@@ -886,7 +896,7 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
       {isReferenceMediaMode || hasAudioLaneItems ? (
       <div className={cn('ui-tone-plinth space-y-3 rounded-sm p-3 transition-shadow', !isReferenceMediaMode ? 'opacity-60' : selectedLane === 'audio' && 'ring-1 ring-inset ring-primary/45')} onClick={() => { if (isReferenceMediaMode) setSelectedLane('audio') }} onDragOver={(event) => { if (isReferenceMediaMode) event.preventDefault() }} onDrop={(event) => isReferenceMediaMode ? handleLaneDrop(event, 'audio') : event.preventDefault()}>
         <div className="flex items-center justify-between gap-3">
-          {renderLaneIcon(<Music2 className="h-4 w-4" />, t({ ko: '오디오 참조', en: 'Audio references' }))}
+          {renderLaneTitle(<Music2 className="h-4 w-4" />, t({ ko: '오디오 참조', en: 'Audio references' }))}
           <div className="flex items-center gap-1">
             {hasAudioLaneItems ? (
               <IconButton size="icon-sm" variant="ghost" onClick={() => clearLane('audio')} label={t({ ko: '오디오 모두 비우기', en: 'Clear all audio' })}>
@@ -913,6 +923,9 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
                       <Link2 className="h-3.5 w-3.5" />
                     </span>
                   </Tip>
+                  <IconButton size="icon-sm" variant="ghost" className="ml-auto" label={t({ ko: '{marker} 마커 복사', en: 'Copy the {marker} marker' }, { marker: `<Audio ${index + 1}>` })} onClick={() => copyMarker(`<Audio ${index + 1}>`)}>
+                    <Copy className="h-4 w-4" />
+                  </IconButton>
                 </div>)}
           </div>
         ) : renderDropZone(
@@ -939,6 +952,18 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
           onStatus={setStatus}
           renderInputPort={renderInputPort}
         />
+      ) : null}
+
+      {hasSettings ? (
+        <section className="ui-tone-plinth rounded-sm px-3 py-1">
+          <DisclosureButton open={settingsExpanded} onClick={() => setSettingsOpen(!settingsExpanded)}>
+            <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 text-left">
+              <span className="font-medium text-foreground">{t({ ko: '출력 설정', en: 'Output settings' })}</span>
+              {settingsSummary ? <Text as="span" variant="caption" className="truncate">{settingsSummary}</Text> : null}
+            </span>
+          </DisclosureButton>
+          {settingsExpanded ? <div className="space-y-4 pt-1 pb-3">{settings}</div> : null}
+        </section>
       ) : null}
 
       {status ? <Inset role="status" padding="sm"><Text variant="caption">{status}</Text></Inset> : null}

@@ -1,7 +1,5 @@
 import type { MiniMaxH3DirectorMediaType } from './minimax-h3-director-dasiwa-utils'
 
-const MAX_AUDIO_WAVEFORM_DECODE_BYTES = 64 * 1024 * 1024
-
 /** Read browser media metadata without retaining an object URL. */
 export async function probeMediaDuration(file: File, type: MiniMaxH3DirectorMediaType) {
   if (type === 'image') {
@@ -52,32 +50,5 @@ export async function probeMediaDimensions(file: File, type: MiniMaxH3DirectorMe
       media.removeAttribute('src')
     }
     URL.revokeObjectURL(objectUrl)
-  }
-}
-
-/** Decode a compact standalone-audio waveform for a visual crop reference. */
-export async function extractAudioWaveformPeaks(file: File) {
-  if (typeof AudioContext === 'undefined' || file.size > MAX_AUDIO_WAVEFORM_DECODE_BYTES) {
-    return []
-  }
-
-  const audioContext = new AudioContext()
-  try {
-    const buffer = await audioContext.decodeAudioData(await file.arrayBuffer())
-    const channel = buffer.getChannelData(0)
-    const peakCount = 64
-    const step = Math.max(1, Math.floor(channel.length / peakCount))
-    return Array.from({ length: peakCount }, (_, index) => {
-      let peak = 0
-      const end = Math.min(channel.length, (index + 1) * step)
-      for (let sample = index * step; sample < end; sample += 1) {
-        peak = Math.max(peak, Math.abs(channel[sample] ?? 0))
-      }
-      return peak
-    })
-  } catch {
-    return []
-  } finally {
-    void audioContext.close()
   }
 }

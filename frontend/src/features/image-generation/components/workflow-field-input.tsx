@@ -93,6 +93,7 @@ export function WorkflowFieldInput({ field, value, hideLabel = false, loraOption
         numericBounds={field.node_numeric_bounds}
         comfyServerId={comfyServerId}
         refModExportOnly={refModExportOnly}
+        issuesShownByHost
         onChange={onChange}
       />
     ))
