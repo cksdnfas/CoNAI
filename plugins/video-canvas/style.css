@@ -2,8 +2,9 @@
 body { min-height: 680px }
 .conai-header { flex-wrap: wrap }
 #projects { max-width: 240px }
-#message { margin: 0; padding: var(--conai-edge) var(--conai-text-inset); white-space: pre-wrap }
-#message:empty { display: none }
+/* The status text fills the header between the project and the actions, so showing it never moves the canvas. */
+#message { flex: 1; min-width: 0; margin: 0; white-space: pre-wrap }
+#dialog-message { margin: var(--conai-text-inset) 0 0; white-space: pre-wrap }
 .workspace { flex: 1; min-height: 570px }
 .canvas { flex: 1; min-width: 0; position: relative; overflow: hidden; touch-action: none; background-image: radial-gradient(var(--conai-line) 1px, transparent 1px); background-size: 24px 24px }
 #stage { position: absolute; width: 1px; height: 1px; transform-origin: 0 0 }

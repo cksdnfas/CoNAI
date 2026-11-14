@@ -19,7 +19,62 @@ const assistant = createAssistantState(), extractionWatches = new Map()
 let api, queue = Promise.resolve(), previewObserver, launchName = null
 const selected = () => s.project?.nodes.find(node => node.id === s.selection)
 const cuts = () => s.project?.nodes.filter(node => node.kind === 'cut') ?? []
-function notice(message, error = false) { $('message').textContent = message; $('message').className = error ? 'error' : 'muted' }
+function notice(message, error = false) {
+  $('message').textContent = message; $('message').className = error ? 'error' : 'muted'
+  // An open dialog covers the header, so an error is repeated inside the dialog.
+  const inDialog = $('dialog-message')
+  if (inDialog) { inDialog.textContent = error ? message : ''; inDialog.hidden = !error; if (error) inDialog.scrollIntoView?.({ block: 'nearest' }) }
+}
+const ZOOM_MIN = 0.2, ZOOM_MAX = 2
+const clamp = (value, low, high) => Math.min(high, Math.max(low, value))
+// Node size in stage pixels; without layout the CSS widths and a typical height stand in.
+function nodeSize(node) {
+  const el = document.querySelector(`[data-id="${CSS.escape(node.id)}"]`)
+  return { w: el?.offsetWidth || (node.kind === 'cut' ? 292 : 182), h: el?.offsetHeight || (node.kind === 'cut' ? 220 : 150) }
+}
+/** Positions for new nodes inside the visible canvas that do not cover an existing node or each other. */
+function freeSpots(count, kind) {
+  const w = kind === 'cut' ? 292 : 182, h = kind === 'cut' ? 220 : 150, gap = 24
+  const taken = s.project.nodes.map(node => ({ x: node.x, y: node.y, ...nodeSize(node) }))
+  const left = (24 - s.x) / s.zoom, top = (24 - s.y) / s.zoom
+  const columns = Math.max(1, Math.floor($('canvas').clientWidth / s.zoom / (w + gap)))
+  const spots = []
+  for (let index = 0; spots.length < count; index++) {
+    const spot = { x: Math.round(left + (index % columns) * (w + gap)), y: Math.round(top + Math.floor(index / columns) * (h + gap)), w, h }
+    if (taken.some(box => spot.x < box.x + box.w + gap && box.x < spot.x + w + gap && spot.y < box.y + box.h + gap && box.y < spot.y + h + gap)) continue
+    spots.push(spot); taken.push(spot)
+  }
+  // Keep the new nodes in view: pan when the last one lands outside the visible canvas (its bottom holds the floating controls).
+  const last = spots.at(-1)
+  const overX = (last.x + w) * s.zoom + s.x - ($('canvas').clientWidth - 24), overY = (last.y + h) * s.zoom + s.y - ($('canvas').clientHeight - 80)
+  if (overX > 0) s.x -= overX
+  if (overY > 0) s.y -= overY
+  if (overX > 0 || overY > 0) { transform(); drawEdges() }
+  return spots.map(({ x, y }) => ({ x, y }))
+}
+/** Zoom by a factor while the canvas point (cx, cy) stays under the pointer. */
+function zoomAt(factor, cx, cy) {
+  const zoom = clamp(s.zoom * factor, ZOOM_MIN, ZOOM_MAX), ratio = zoom / s.zoom
+  s.x = cx - (cx - s.x) * ratio; s.y = cy - (cy - s.y) * ratio; s.zoom = zoom
+  transform(); drawEdges()
+}
+/** Sources stack on the left in the order the cuts use them and cuts stack on the right, so links run left to right. */
+function arrangeOps() {
+  const nodes = s.project.nodes, cutList = nodes.filter(node => node.kind === 'cut'), gap = 24
+  const rank = node => s.project.edges.filter(edge => edge.from === node.id).map(edge => [cutList.findIndex(cut => cut.id === edge.to), edge.position]).sort((a, b) => a[0] - b[0] || a[1] - b[1])[0] ?? [cutList.length, 0]
+  const sources = nodes.filter(node => node.kind !== 'cut').map(node => ({ node, rank: rank(node) })).sort((a, b) => a.rank[0] - b.rank[0] || a.rank[1] - b.rank[1]).map(item => item.node)
+  const limit = Math.max(640, cutList.reduce((sum, cut) => sum + nodeSize(cut).h + gap, 0))
+  const ops = []
+  let x = 20, y = 20
+  for (const node of sources) {
+    const { h } = nodeSize(node)
+    if (y > 20 && y + h > limit) { x += 182 + gap; y = 20 }
+    ops.push({ op: 'move', id: node.id, x, y }); y += h + gap
+  }
+  x = sources.length ? x + 182 + 96 : 20; y = 20
+  for (const cut of cutList) { ops.push({ op: 'move', id: cut.id, x, y }); y += nodeSize(cut).h + gap }
+  return ops
+}
 async function request(op, args = {}, options) {
   const result = await api.server({ project_id: s.project?.id, ...args, op }, options)
   if (result?.ok === false) {
@@ -60,8 +115,9 @@ async function http(path) {
   if (!response.ok || body.success === false) throw new Error(body.error ?? response.statusText)
   return body
 }
-function task(fn) {
-  const next = queue.then(fn)
+// A new action clears the previous error; a `quiet` background refresh leaves it for the user to read.
+function task(fn, quiet = false) {
+  const next = queue.then(() => { if (!quiet && $('message').className === 'error') notice(''); return fn() })
   queue = next.catch(error => { notice(error.message, true) })
   return next
 }
@@ -169,7 +225,29 @@ function review(item) {
 }
 const nameOf = id => s.project.nodes.find(node => node.id === id)?.data.name
 const toolbar = html => `<div class="toolbar">${html}</div>`
+let inspectorFor = null
+/** Redraw the inspector; for the same selection the open sections and the field being typed in survive the redraw. */
 function renderInspector() {
+  const host = $('inspector'), same = inspectorFor === s.selection, active = document.activeElement
+  const open = same ? new Set([...host.querySelectorAll('details[open][data-keep]')].map(item => item.dataset.keep)) : new Set()
+  const data = same && active && host.contains(active) ? active.dataset : null
+  const key = data?.field ? `[data-field="${CSS.escape(data.field)}"]` : data?.prop ? `[data-prop="${CSS.escape(data.prop)}"][data-edge="${CSS.escape(data.edge)}"]` : data?.memo ? `[data-memo="${CSS.escape(data.memo)}"]` : null
+  const typed = key ? active.value : null
+  drawInspector()
+  inspectorFor = s.selection
+  host.querySelectorAll('details[data-keep]').forEach(item => { if (open.has(item.dataset.keep)) item.open = true })
+  const field = key ? host.querySelector(key) : null
+  if (!field) return
+  if (field.value !== typed) {
+    // Text typed while an earlier edit was saving is kept; it is saved on leaving the field even if nothing more is typed.
+    field.value = typed
+    let saved = false
+    field.addEventListener('change', () => { saved = true }, { once: true })
+    field.addEventListener('blur', () => { if (!saved && field.isConnected) field.dispatchEvent(new Event('change', { bubbles: true })) }, { once: true })
+  }
+  field.focus()
+}
+function drawInspector() {
   const node = selected()
   if (s.tab === 'assistant') $('assistant-panel').setAttribute('aria-current', 'true'); else $('assistant-panel').removeAttribute('aria-current')
   if (s.tab === 'checks' && s.checks) {
@@ -196,7 +274,7 @@ function cutInspector(cut) {
     <h2 class="conai-group-head">입력 슬롯·순서</h2>
     ${all.map(edge => {
       const node = s.project.nodes.find(node => node.id === edge.from), row = table.filter(row => row.edgeId === edge.id).map(row => row.label).join(' / ')
-      return `<details class="slot-editor" draggable="true" data-order="${esc(edge.id)}" data-port="${edge.port}"><summary>${esc(row || '미사용')} · ${esc(node.data.name)}</summary><p class="muted">${ports[edge.port]} ${edge.position + 1}</p>${toolbar(button('up', '↑', `data-edge="${esc(edge.id)}" aria-label="위로"`) + button('down', '↓', `data-edge="${esc(edge.id)}" aria-label="아래로"`) + button('disconnect', '연결 해제', `data-edge="${esc(edge.id)}"`))}
+      return `<details class="slot-editor" draggable="true" data-keep="${esc(edge.id)}" data-order="${esc(edge.id)}" data-port="${edge.port}"><summary>${esc(row || '미사용')} · ${esc(node.data.name)}</summary><p class="muted">${ports[edge.port]} ${edge.position + 1}</p>${toolbar(button('up', '↑', `data-edge="${esc(edge.id)}" aria-label="위로"`) + button('down', '↓', `data-edge="${esc(edge.id)}" aria-label="아래로"`) + button('disconnect', '연결 해제', `data-edge="${esc(edge.id)}"`))}
       ${node.kind === 'video' || node.kind === 'audio' ? `<div class="two"><label>시작(초)<input type="number" step="any" data-prop="trim_start" data-edge="${esc(edge.id)}" value="${edge.props.trim_start ?? 0}"></label><label>끝(초)<input type="number" step="any" data-prop="trim_end" data-edge="${esc(edge.id)}" value="${edge.props.trim_end ?? node.data.duration ?? 2}"></label></div>` : ''}
       ${node.kind === 'video' ? `<label>영상 소리<select data-prop="media_mode" data-edge="${esc(edge.id)}">${[['video', '영상만'], ['audio', '소리만'], ['video_audio', '영상+소리']].map(([value, label]) => `<option value="${value}" ${(edge.props.media_mode ?? 'video') === value ? 'selected' : ''}>${label}</option>`).join('')}</select></label><label>오디오 슬롯 (0부터)<input type="number" data-prop="audioSlot" data-edge="${esc(edge.id)}" value="${edge.props.audioSlot ?? 0}"></label>` : ''}
       ${node.kind === 'bundle' ? `<div class="two"><label>번들 슬롯 (1–8)<input type="number" data-prop="slot" data-edge="${esc(edge.id)}" value="${edge.props.slot ?? edge.position + 1}"></label><label>강도<input type="number" step="any" data-prop="strength" data-edge="${esc(edge.id)}" value="${edge.props.strength ?? 1}"></label></div><label>설명<input data-prop="description" data-edge="${esc(edge.id)}" value="${esc(edge.props.description)}"></label>` : ''}</details>`
@@ -208,7 +286,7 @@ function cutInspector(cut) {
 }
 function takeCard(take) {
   const id = `data-take="${esc(take.id)}"`
-  return `<div class="conai-list-row"><div class="conai-row-main"><div class="toolbar"><span class="conai-row-title">${esc(take.label)}</span>${statusBadge(take.status)}</div><span class="conai-row-meta">seed ${take.seed}${take.jobId ? ` · job ${esc(take.jobId)}` : ''}</span>${take.error ? `<p class="error">${esc(take.error)}</p>` : ''}<details><summary>보낸 프롬프트·슬롯·프로필</summary><pre>${esc(JSON.stringify({ seed: take.seed, profile: take.profile, resolved: take.resolved }, null, 2))}</pre></details><div class="toolbar">
+  return `<div class="conai-list-row"><div class="conai-row-main"><div class="toolbar"><span class="conai-row-title">${esc(take.label)}</span>${statusBadge(take.status)}</div><span class="conai-row-meta">seed ${take.seed}${take.jobId ? ` · job ${esc(take.jobId)}` : ''}</span>${take.error ? `<p class="error">${esc(take.error)}</p>` : ''}<details data-keep="take:${esc(take.id)}"><summary>보낸 프롬프트·슬롯·프로필</summary><pre>${esc(JSON.stringify({ seed: take.seed, profile: take.profile, resolved: take.resolved }, null, 2))}</pre></details><div class="toolbar">
     ${take.status === 'proposed' ? button('approve', '승인하고 생성', id, 'primary') + button('discard', '폐기', id) : button('refresh-take', '상태 갱신', id)}
     ${take.jobId && !['completed', 'failed', 'cancelled'].includes(take.status) ? button('cancel', '취소', id) : ''}
     ${take.status === 'failed' && !take.jobId ? button('retry', '같은 요청 재시도', id) : ''}
@@ -218,7 +296,7 @@ function takeCard(take) {
 }
 // Every dialog is title, fields, then one footer row: close/cancel and at most one primary action (#dialog-primary).
 function modal(title, body, { primary, close = '취소', danger = false } = {}) {
-  $('modal').innerHTML = `<h2>${esc(title)}</h2>${body}<div class="conai-dialog-foot"><button id="dialog-close" class="ghost" data-close>${close}</button>${primary ? `<button id="dialog-primary" class="${danger ? 'destructive' : 'primary'}">${primary}</button>` : ''}</div>`
+  $('modal').innerHTML = `<h2>${esc(title)}</h2>${body}<p id="dialog-message" class="error" role="alert" hidden></p><div class="conai-dialog-foot"><button id="dialog-close" class="ghost" data-close>${close}</button>${primary ? `<button id="dialog-primary" class="${danger ? 'destructive' : 'primary'}">${primary}</button>` : ''}</div>`
   if (!$('modal').open) $('modal').showModal()
 }
 function select(id) {
@@ -247,7 +325,8 @@ async function createProject(name) {
   await loadProjects(); render()
 }
 async function importRows(rows) {
-  const result = await edit(rows.map((row, index) => ({ op: `import_${row.kind}`, ref: row.ref, name: row.name, at: { x: (80 + index * 24 - s.x) / s.zoom, y: (80 + index * 24 - s.y) / s.zoom } })))
+  const spots = freeSpots(rows.length)
+  const result = await edit(rows.map((row, index) => ({ op: `import_${row.kind}`, ref: row.ref, name: row.name, at: spots[index] })))
   if (result.applied.length) select(result.applied[0].id)
 }
 const memberCounts = members => ['image', 'video', 'audio'].map(kind => [kind, members.filter(member => member.kind === kind).length]).filter(([, count]) => count).map(([kind, count]) => `${names[kind]} ${count}`).join(' · ')
@@ -416,7 +495,12 @@ async function profileDialog() {
     await fields(profile)
   })
   $('dialog-primary').onclick = () => void task(async () => {
-    const profile = { label: $('profile-label').value, workflowId: Number($('profile-workflow').value), directorFieldId: $('profile-director').value, seedFieldId: $('profile-seed').value, overrides: JSON.parse($('profile-overrides').value),
+    if (!$('profile-label').value.trim()) throw new Error('프로필 이름을 써줘.')
+    if (!$('profile-workflow').value) throw new Error('워크플로우를 골라줘.')
+    if (!$('profile-director').value || !$('profile-seed').value) throw new Error('Director 필드와 시드 필드를 골라줘.')
+    let overrides
+    try { overrides = JSON.parse($('profile-overrides').value || '{}') } catch { throw new Error('Director overrides가 JSON 형식이 아니야.') }
+    const profile = { label: $('profile-label').value, workflowId: Number($('profile-workflow').value), directorFieldId: $('profile-director').value, seedFieldId: $('profile-seed').value, overrides,
       ...($('profile-existing').value ? { id: $('profile-existing').value } : {}), ...($('profile-server').value ? { serverId: Number($('profile-server').value) } : {}), ...($('profile-tag').value ? { serverTag: $('profile-tag').value } : {}) }
     await request('save_profile', { expected_revision: s.project.revision, profile })
     await reload(); $('modal').close()
@@ -464,7 +548,10 @@ function bind() {
   $('projects').onchange = event => void task(() => chooseProject(event.target.value))
   $('new-project').onclick = () => {
     modal('프로젝트 만들기', '<label>이름<input id="project-name"></label>', { primary: '만들기' })
-    $('dialog-primary').onclick = () => void task(async () => { await createProject($('project-name').value); $('modal').close() })
+    $('dialog-primary').onclick = () => void task(async () => {
+      if (!$('project-name').value.trim()) throw new Error('프로젝트 이름을 써줘.')
+      await createProject($('project-name').value); $('modal').close()
+    })
     $('project-name').onkeydown = event => { if (event.key === 'Enter') $('dialog-primary').click() }
     $('project-name').focus()
   }
@@ -473,12 +560,12 @@ function bind() {
     if (!s.project) return notice('프로젝트부터 만들어줘.', true)
     picker(button.dataset.import).catch(error => notice(error.message, true))
   } })
-  $('add-cut').onclick = () => void task(async () => { const result = await edit([{ op: 'add_node', kind: 'cut', name: '새 영상 컷', at: { x: (120 - s.x) / s.zoom, y: (80 - s.y) / s.zoom } }]); select(result.applied[0]?.id) })
+  $('add-cut').onclick = () => void task(async () => { const result = await edit([{ op: 'add_node', kind: 'cut', name: '새 영상 컷', at: freeSpots(1, 'cut')[0] }]); select(result.applied[0]?.id) })
   $('profiles').onclick = () => void task(profileDialog)
   $('check-all').onclick = () => void task(() => doCheck())
   $('generate').onclick = () => void launchRun()
   $('extract-selected').onclick = () => void task(() => extractionDialog({ nodeId: s.selection }))
-  $('arrange').onclick = () => void task(() => edit(s.project.nodes.map((node, index) => ({ op: 'move', id: node.id, x: (index % 3) * 350 + 20, y: Math.floor(index / 3) * 380 + 20 }))))
+  $('arrange').onclick = () => void task(async () => { if (s.project?.nodes.length) await edit(arrangeOps()) })
   $('assistant-panel').onclick = () => { s.tab = 'assistant'; renderInspector() }
   $('launch').onclick = event => {
     const action = event.target.closest('[data-launch]')?.dataset.launch
@@ -490,21 +577,32 @@ function bind() {
     document.querySelectorAll('[data-edges]').forEach(item => item.setAttribute('aria-pressed', String(item === button)))
     drawEdges()
   } })
-  $('zoom-in').onclick = () => { s.zoom *= 1.2; transform(); drawEdges() }
-  $('zoom-out').onclick = () => { s.zoom /= 1.2; transform(); drawEdges() }
+  $('zoom-in').onclick = () => zoomAt(1.2, $('canvas').clientWidth / 2, $('canvas').clientHeight / 2)
+  $('zoom-out').onclick = () => zoomAt(1 / 1.2, $('canvas').clientWidth / 2, $('canvas').clientHeight / 2)
+  $('canvas').addEventListener('wheel', event => {
+    if (!s.project) return
+    event.preventDefault()
+    const rect = $('canvas').getBoundingClientRect()
+    zoomAt(Math.exp(-event.deltaY * 0.0015), event.clientX - rect.x, event.clientY - rect.y)
+  }, { passive: false })
   $('fit').onclick = () => {
     if (!s.project?.nodes.length) return
-    const nodes = s.project.nodes, minX = Math.min(...nodes.map(node => node.x)), minY = Math.min(...nodes.map(node => node.y))
-    const maxX = Math.max(...nodes.map(node => node.x + 300)), maxY = Math.max(...nodes.map(node => node.y + 380))
-    s.zoom = Math.min($('canvas').clientWidth / (maxX - minX + 48), $('canvas').clientHeight / (maxY - minY + 48), 1)
-    s.x = 24 - minX * s.zoom; s.y = 24 - minY * s.zoom; transform(); drawEdges()
+    const boxes = s.project.nodes.map(node => ({ x: node.x, y: node.y, ...nodeSize(node) }))
+    const minX = Math.min(...boxes.map(box => box.x)), minY = Math.min(...boxes.map(box => box.y))
+    const width = Math.max(...boxes.map(box => box.x + box.w)) - minX, height = Math.max(...boxes.map(box => box.y + box.h)) - minY
+    // The floating controls cover the bottom of the canvas.
+    const viewWidth = $('canvas').clientWidth, viewHeight = $('canvas').clientHeight - 56
+    s.zoom = clamp(Math.min(viewWidth / (width + 48), viewHeight / (height + 48), 1), ZOOM_MIN, ZOOM_MAX)
+    s.x = (viewWidth - width * s.zoom) / 2 - minX * s.zoom; s.y = (viewHeight - height * s.zoom) / 2 - minY * s.zoom
+    transform(); drawEdges()
   }
   let drag
   $('canvas').onpointerdown = event => {
     if (event.target.closest('button')) return
     const nodeEl = event.target.closest('.vc-node'), node = s.project?.nodes.find(node => node.id === nodeEl?.dataset.id)
     drag = { id: node?.id, x: event.clientX, y: event.clientY, ox: node?.x ?? s.x, oy: node?.y ?? s.y, moved: false }
-    if (node) { s.selection = node.id; s.tab = 'input'; document.querySelectorAll('.vc-node').forEach(el => el.setAttribute('aria-selected', String(el === nodeEl))); renderInspector(); lockRunButtons(); publish(); void task(() => request('read_node', { id: node.id })) }
+    // Clicking the selected cut again keeps its open tab.
+    if (node) { if (node.id !== s.selection || !['input', 'generate'].includes(s.tab)) s.tab = 'input'; s.selection = node.id; document.querySelectorAll('.vc-node').forEach(el => el.setAttribute('aria-selected', String(el === nodeEl))); renderInspector(); lockRunButtons(); publish(); void task(() => request('read_node', { id: node.id })) }
     $('canvas').setPointerCapture(event.pointerId)
   }
   $('canvas').onpointermove = event => {
@@ -626,7 +724,7 @@ if (api.supports('launch.image') && api.launch?.image) {
 }
 bind()
 try { await loadProjects(); if (s.projects.length) await chooseProject(s.projects[0].id); else render() } catch (error) { notice(error.message, true) }
-const refreshQueued = createRefreshQueue(() => task(async () => { if (s.project) { s.project = await request('refresh'); render() } }))
+const refreshQueued = createRefreshQueue(() => task(async () => { if (s.project) { s.project = await request('refresh'); render() } }, true))
 const refresh = event => {
   if (!s.project) return
   const jobId = event?.payload?.job_id

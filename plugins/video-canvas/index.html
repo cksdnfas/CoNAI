@@ -10,11 +10,10 @@
   <header class="conai-header">
     <select id="projects" aria-label="프로젝트"></select>
     <button id="new-project" class="conai-icon-button" title="프로젝트 만들기" aria-label="프로젝트 만들기">＋</button>
-    <span id="revision" class="muted"></span><span class="conai-spacer"></span>
+    <span id="revision" class="muted"></span><p id="message" role="status" aria-live="polite" class="muted"></p>
     <button id="check-all">전체 체크</button><button id="arrange">정렬</button><button id="generate" class="primary">선택한 컷 생성</button>
   </header>
   <div id="launch" class="toolbar launch-panel" hidden></div>
-  <p id="message" role="status" aria-live="polite" class="muted"></p>
   <div class="conai-split workspace">
     <aside class="conai-sidebar" aria-label="가져오기">
       <h2 class="conai-group-head">가져오기</h2>
