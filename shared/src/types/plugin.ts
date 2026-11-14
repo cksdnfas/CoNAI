@@ -93,7 +93,14 @@ export type InstalledPlugin = {
   manifest: PluginManifest; enabled: boolean; installedAt: string; server?: PluginServerStatus; source?: PluginSource
   /** An official package that ships inside the app: it can be turned on and off, not removed or replaced by an install. */
   bundled?: boolean
+  /** The last in-place update (any install over an existing package) and the version it replaced; absent until one happens. */
+  updatedAt?: string; previousVersion?: string
+  /** An official package that this app start replaced with a newer build. */
+  bundledUpdated?: boolean
 }
+/** An official package the startup sync could not install or update; `pluginId` is null when its manifest did not read. */
+export type BundledPluginFailure = { file: string; pluginId: string | null; error: string }
+export type BundledPluginStatus = { failures: BundledPluginFailure[] }
 /** What installing from Git would change. Reviewing installs nothing; apply `reviewId` with `digest` before `expiresAt`. */
 export type PluginSourceReview = {
   reviewId: string; expiresAt: number

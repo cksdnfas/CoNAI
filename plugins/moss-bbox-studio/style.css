@@ -88,7 +88,8 @@
 /* Thumbnails only, newest first; the two actions appear over a tile on hover, keyboard focus or a tap. */
 .tile { flex: none; cursor: pointer }
 .tile .conai-media { height: 72px; aspect-ratio: var(--ratio, 1) }
-.tile .conai-media.pending { display: grid; place-items: center; align-content: center; gap: 4px; min-width: 72px; cursor: default; font-size: 11px }
+.tile .conai-media.pending { display: grid; place-items: center; align-content: center; gap: 4px; min-width: 96px; cursor: default; font-size: 11px }
+.tile .conai-media.pending .toolbar { flex-wrap: nowrap; gap: 2px }
 .tile .conai-media.pending button { min-height: 24px; padding: 0 8px; font-size: 12px }
 .tile-actions { position: absolute; inset: 0; display: flex; flex-wrap: wrap; align-items: center; align-content: center; justify-content: center; gap: 4px; background: rgb(0 0 0 / .5); visibility: hidden }
 .tile:hover .tile-actions, .tile:focus-within .tile-actions, .tile.open .tile-actions { visibility: visible }

@@ -42,7 +42,7 @@ let api
 async function call(path, init) {
   const response = await api.app.fetch(path, init)
   const body = await response.json().catch(() => null)
-  if (!response.ok || body?.success === false) throw new Error(body?.error || body?.message || `요청이 실패했어 (HTTP ${response.status})`)
+  if (!response.ok || body?.success === false) throw Object.assign(new Error(body?.error || body?.message || `요청이 실패했어 (HTTP ${response.status})`), { status: response.status })
   return body
 }
 
@@ -310,11 +310,14 @@ function renderResults() {
   const html = state.jobs.map((job) => {
     const ratio = `${job.size[0]} / ${job.size[1]}`
     const title = esc(`#${job.id} · ${job.workflowName} · 영역 ${job.regions}개 · ${job.size[0]}×${job.size[1]}`)
-    if (job.hashes.length) return job.hashes.map((hash) => `<div class="tile" title="${title}"><div class="conai-media" style="--ratio:${ratio}"><img src="/api/images/${hash}/thumbnail" alt="작업 #${job.id} 결과" loading="lazy"><div class="tile-actions"><button type="button" class="conai-icon-button sm" data-edit="${job.id}:${hash}" title="편집기로 불러오기" aria-label="편집기로 불러오기">${ICON.edit}</button><button type="button" class="conai-icon-button sm" data-open="${hash}" title="상세 보기" aria-label="상세 보기">${ICON.open}</button></div></div></div>`).join('')
+    // Dropping a tile only clears it from this list: a stuck job stays in the queue and images stay in the library.
+    const forget = `<button type="button" class="conai-icon-button sm" data-forget="${job.id}" title="목록에서 지우기" aria-label="목록에서 지우기">${ICON.trash}</button>`
+    if (job.hashes.length) return job.hashes.map((hash) => `<div class="tile" title="${title}"><div class="conai-media" style="--ratio:${ratio}"><img src="/api/images/${hash}/thumbnail" alt="작업 #${job.id} 결과" loading="lazy"><div class="tile-actions"><button type="button" class="conai-icon-button sm" data-edit="${job.id}:${hash}" title="편집기로 불러오기" aria-label="편집기로 불러오기">${ICON.edit}</button><button type="button" class="conai-icon-button sm" data-open="${hash}" title="상세 보기" aria-label="상세 보기">${ICON.open}</button>${forget}</div></div></div>`).join('')
     const failed = job.status === 'failed' || Boolean(job.error)
+    const cancelling = !TERMINAL.has(job.status) && job.cancelRequested
     const tone = failed ? 'destructive' : job.status === 'completed' ? 'ok' : TERMINAL.has(job.status) ? '' : 'warn'
-    const label = failed ? STATUS_LABEL.failed : job.status === 'completed' ? '처리 중' : STATUS_LABEL[job.status] ?? esc(job.status)
-    return `<div class="tile" title="${job.error ? esc(job.error) : title}"><div class="conai-media pending" style="--ratio:${ratio}"><span class="badge ${tone}">${label}</span>${TERMINAL.has(job.status) ? `<span class="muted">#${job.id}</span>` : `<button type="button" class="ghost" data-cancel="${job.id}">취소</button>`}</div></div>`
+    const label = failed ? STATUS_LABEL.failed : job.status === 'completed' ? '처리 중' : cancelling ? '취소 중' : STATUS_LABEL[job.status] ?? esc(job.status)
+    return `<div class="tile" title="${job.error ? esc(job.error) : title}"><div class="conai-media pending" style="--ratio:${ratio}"><span class="badge ${tone}">${label}</span><div class="toolbar">${TERMINAL.has(job.status) || cancelling ? '' : `<button type="button" class="ghost" data-cancel="${job.id}">취소</button>`}${forget}</div></div></div>`
   }).join('')
   // A poll that changed nothing keeps the thumbnails and the scroll position.
   if (html === resultsHtml) return
@@ -484,9 +487,14 @@ const pollJobs = guard(async () => {
   let failure = null
   for (const [index, result] of results.entries()) {
     const job = waiting[index]
-    if (result.status === 'rejected') { failure ??= result.reason; continue }
+    if (result.status === 'rejected') {
+      // A job the queue no longer has would otherwise stay "sending" here forever.
+      if (result.reason?.status === 404) { job.status = 'failed'; job.error = '큐에서 이 작업을 찾을 수 없어.' } else failure ??= result.reason
+      continue
+    }
     const record = result.value.data
     job.status = record.status
+    job.cancelRequested = record.cancel_requested > 0
     if (record.failure_message) job.error = record.failure_message
     if (job.status === 'completed') await loadResults(job)
   }
@@ -769,7 +777,23 @@ function bindChrome() {
     // The page is reloaded on the way back, so the draft and its image are stored before leaving.
     if (open) { await saveDraftNow(); await api.navigation.open(`/images/${open}`); return }
     const cancel = event.target.closest('[data-cancel]')?.dataset.cancel
-    if (cancel) { await call(`/api/generation-queue/${cancel}/cancel`, { method: 'POST' }); void pollJobs(); return }
+    if (cancel) {
+      await call(`/api/generation-queue/${cancel}/cancel`, { method: 'POST' })
+      // The server only records the request for a job already sent; the tile shows it until the worker stops the job.
+      const job = state.jobs.find((item) => item.id === Number(cancel))
+      if (job) job.cancelRequested = true
+      renderResults()
+      notify('취소를 요청했어. 서버가 작업을 멈추면 취소됨으로 바뀌어.')
+      void pollJobs()
+      return
+    }
+    const forget = event.target.closest('[data-forget]')?.dataset.forget
+    if (forget) {
+      state.jobs = state.jobs.filter((item) => item.id !== Number(forget))
+      void saveJobs()
+      renderResults(); renderTabs(); publish()
+      return
+    }
     // A tap shows the actions of one tile where there is no hover.
     const tile = event.target.closest('.tile')
     $('results').querySelectorAll('.tile.open').forEach((other) => { if (other !== tile) other.classList.remove('open') })

@@ -56,6 +56,8 @@ export function pluginDb(): Database.Database {
     if (!(db.prepare('PRAGMA table_info(plugins)').all() as Array<{ name: string }>).some(column => column.name === 'enabled_by')) db.exec('ALTER TABLE plugins ADD COLUMN enabled_by INTEGER')
     // Official packages that ship inside the app build: only an app update replaces them, and they can't be removed.
     if (!(db.prepare('PRAGMA table_info(plugins)').all() as Array<{ name: string }>).some(column => column.name === 'bundled')) db.exec('ALTER TABLE plugins ADD COLUMN bundled INTEGER NOT NULL DEFAULT 0')
+    // The last in-place update of a package, so management can show when it changed and from which version.
+    if (!(db.prepare('PRAGMA table_info(plugins)').all() as Array<{ name: string }>).some(column => column.name === 'updated_at')) db.exec('ALTER TABLE plugins ADD COLUMN updated_at TEXT; ALTER TABLE plugins ADD COLUMN previous_version TEXT')
     initialized.add(db)
   }
   return db

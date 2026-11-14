@@ -2,7 +2,7 @@
   "apiVersion": 1,
   "id": "video-canvas",
   "name": "영상 캔버스",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "앱의 이미지·영상·오디오·RefMod를 컷 입력 슬롯에 잇고, 등록한 DaSiWa Director 워크플로로 생성·검수·프레임 추출해.",
   "server": { "entry": "server.mjs" },
   "pages": [{

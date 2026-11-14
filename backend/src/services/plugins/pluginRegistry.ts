@@ -49,7 +49,7 @@ const allowedAssets = new Set(['.html', '.js', '.mjs', '.css', '.json', '.png', 
 export const PLUGIN_PACKAGE_LIMITS = { file: MAX_FILE, total: MAX_TOTAL, entries: 256 } as const
 export function pluginAssetAllowed(name: string) { return allowedAssets.has(path.extname(pluginAssetName(name)).toLowerCase()) }
 export const pluginPackagesRoot = path.join(runtimePaths.basePath, 'plugins', 'packages')
-type Row = { id: string; version: string; manifest: string; digest: string; enabled: number; installed_at: string; enabled_by: number | null; bundled: number }
+type Row = { id: string; version: string; manifest: string; digest: string; enabled: number; installed_at: string; enabled_by: number | null; bundled: number; updated_at: string | null; previous_version: string | null }
 
 export function pluginAssetName(value: string): string {
   if (value.length > 200 || !value || value.split('/').some((part) => !/^[a-zA-Z0-9_-][a-zA-Z0-9_.-]*$/.test(part) || part.endsWith('.') || WINDOWS_RESERVED_NAME.test(part))) throw new PluginError('패키지 경로가 올바르지 않아.')
@@ -131,7 +131,7 @@ export function getPlugin(id: string, enabled = true) {
 export function listPlugins(includeDisabled = false): InstalledPlugin[] {
   const rows = pluginDb().prepare(`SELECT * FROM plugins ${includeDisabled ? '' : 'WHERE enabled = 1'} ORDER BY id LIMIT 100`).all() as Row[]
   return rows.flatMap((row): InstalledPlugin[] => {
-    try { return [{ manifest: definitionOf(row), enabled: !!row.enabled, installedAt: row.installed_at, ...(row.bundled ? { bundled: true } : {}) }] } catch {
+    try { return [{ manifest: definitionOf(row), enabled: !!row.enabled, installedAt: row.installed_at, ...(row.bundled ? { bundled: true } : {}), ...(row.updated_at ? { updatedAt: row.updated_at, previousVersion: row.previous_version ?? undefined } : {}) }] } catch {
       // One unreadable package must not hide the others; management still lists it so it can be removed.
       if (!includeDisabled) return []
       return [{ manifest: { apiVersion: 1, id: row.id, name: row.id, version: row.version, description: '설치 정보를 읽을 수 없어. 제거한 뒤 다시 설치해줘.', capabilities: [], appTools: [], serverActions: [], pages: [] }, enabled: false, installedAt: row.installed_at }]
@@ -288,7 +288,7 @@ export async function installPlugin(zipBytes: Buffer, expectedDigest?: string | 
     placed = true
     db.transaction(() => {
       if (existing) {
-        db.prepare('UPDATE plugins SET version = ?, manifest = ?, digest = ?, enabled = ?, bundled = ? WHERE id = ?').run(manifest.version, JSON.stringify(manifest), digest, reenable ? 0 : existing.enabled, bundled ? 1 : existing.bundled, manifest.id)
+        db.prepare('UPDATE plugins SET version = ?, manifest = ?, digest = ?, enabled = ?, bundled = ?, updated_at = ?, previous_version = ? WHERE id = ?').run(manifest.version, JSON.stringify(manifest), digest, reenable ? 0 : existing.enabled, bundled ? 1 : existing.bundled, new Date().toISOString(), existing.version, manifest.id)
         db.prepare('DELETE FROM plugin_proposals WHERE instance_id IN (SELECT id FROM plugin_instances WHERE plugin_id = ?)').run(manifest.id)
         db.prepare('DELETE FROM plugin_instances WHERE plugin_id = ?').run(manifest.id)
         db.prepare("UPDATE plugin_app_requests SET status = 'cancelled' WHERE plugin_id = ? AND status = 'pending'").run(manifest.id)

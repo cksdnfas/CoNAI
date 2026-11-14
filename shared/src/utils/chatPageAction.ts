@@ -75,6 +75,8 @@ const nativeActionPermissions = {
   'plugin_author.save': null, 'plugin_author.review': null, 'plugin_author.install': null, 'plugin_author.export': null, 'plugin_author.refresh': null,
   // Plugin management's Git sources (administrator routes): check and review install nothing; install is a review card.
   'plugin_source.check': null, 'plugin_source.review': null, 'plugin_source.install': null,
+  // Retrying the startup sync of official packages replaces plugin code, so it is a review card.
+  'plugin_bundled.sync': null,
   'workspace.open': 'files.view', 'workspace.search': 'files.view', 'workspace.new': 'files.edit', 'workspace.create': 'files.edit', 'workspace.mkdir': 'files.edit', 'workspace.save': 'files.edit',
   'page.navigate': null, 'page.refresh': null, 'page.settings_open': null, 'page_settings.save': null, 'page_settings.select': null, 'page_settings.close': null,
   'prompt.create': 'prompts.edit', 'prompt.update': 'prompts.edit', 'prompt.delete': 'prompts.edit', 'prompt.select': 'prompts.view',
@@ -186,7 +188,7 @@ const IN_PLACE_VIEW_ACTIONS = new Set(['page.settings_open', 'comfy.check', 'pro
 for (const id of ['workspace.create', 'workspace.save']) COMMIT_ACTIONS.add(id)
 for (const id of ['plugin_author.create', 'plugin_author.save', 'plugin_author.install']) COMMIT_ACTIONS.add(id)
 for (const id of ['plugin_author.open', 'plugin_author.file', 'plugin_author.review', 'plugin_author.export', 'plugin_author.refresh']) VIEW_ACTIONS.add(id)
-COMMIT_ACTIONS.add('plugin_source.install')
+COMMIT_ACTIONS.add('plugin_source.install'); COMMIT_ACTIONS.add('plugin_bundled.sync')
 VIEW_ACTIONS.add('plugin_source.check'); IN_PLACE_VIEW_ACTIONS.add('plugin_source.check')
 for (const id of ['workspace.open', 'workspace.new', 'workspace.search', 'workspace.mkdir']) VIEW_ACTIONS.add(id)
 IN_PLACE_VIEW_ACTIONS.add('workspace.mkdir')

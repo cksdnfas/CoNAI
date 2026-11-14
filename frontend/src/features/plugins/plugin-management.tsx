@@ -1,7 +1,8 @@
 import { useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { ExternalLink, FileText, GitBranch, Puzzle, RefreshCw, ServerCog, Upload, Webhook, Wrench } from 'lucide-react'
+import { ExternalLink, FileText, GitBranch, Puzzle, RefreshCw, ServerCog, TriangleAlert, Upload, Webhook, Wrench } from 'lucide-react'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import { EmptyState } from '@/components/ui/empty-state'
 import type { InstalledPlugin, PluginInstallResult, PluginServerStatus, PluginSourceProvider } from '@conai/shared'
 import { Button } from '@/components/ui/button'
@@ -22,7 +23,7 @@ import { pageAction, pageChoice, pageFreeText, pageObject, pageText } from '@/fe
 import { resolveStreamFallbackInterval } from '@/features/runtime-events/runtime-event-fallback'
 import { useRuntimeEventStream } from '@/features/runtime-events/use-runtime-event-stream'
 import { useI18n } from '@/i18n'
-import { checkPluginSources, listPlugins, pluginRequest, PLUGINS_QUERY_KEY, unlinkPluginSource } from '@/lib/api-plugins'
+import { BUNDLED_PLUGINS_QUERY_KEY, checkPluginSources, getBundledPluginStatus, listPlugins, pluginRequest, PLUGINS_QUERY_KEY, syncBundledPlugins, unlinkPluginSource } from '@/lib/api-plugins'
 import { getErrorMessage } from '@/lib/error-message'
 import { PluginAuthoring, type PluginManagementPage } from './plugin-authoring'
 import { PluginSourceInstall, usePluginSourceInstall } from './plugin-source-install'
@@ -53,6 +54,19 @@ export function PluginManagement({ assistantPage, pageContext }: { assistantPage
     catch (reason) { setError(getErrorMessage(reason, t({ ko: '플러그인 작업에 실패했어.', en: 'Plugin operation failed.' }))) }
     finally { setBusy(false); if (fileInput.current) fileInput.current.value = '' }
   }
+  // Official packages follow the app build at startup; one that could not be applied is listed here with a retry.
+  const bundled = useQuery({ queryKey: BUNDLED_PLUGINS_QUERY_KEY, queryFn: getBundledPluginStatus, enabled: isAdmin })
+  const bundledFailures = bundled.data?.failures ?? []
+  const retryBundled = () => run(async () => {
+    const status = await syncBundledPlugins()
+    cache.setQueryData(BUNDLED_PLUGINS_QUERY_KEY, status)
+    showSnackbar({
+      tone: status.failures.length ? 'error' : 'info',
+      message: status.failures.length
+        ? t({ ko: '공식 플러그인 {count}개를 아직 적용하지 못했어.', en: '{count} official plugins still could not be applied.' }, { count: status.failures.length })
+        : t({ ko: '공식 플러그인을 적용했어.', en: 'Official plugins applied.' }),
+    })
+  })
   const setEnabled = (plugin: InstalledPlugin, enabled: boolean) => run(async () => {
     const { manifest } = plugin
     await pluginRequest(`/${manifest.id}/enabled`, 'PUT', { enabled })
@@ -119,9 +133,10 @@ export function PluginManagement({ assistantPage, pageContext }: { assistantPage
   })
   // Page data and arguments never carry URLs (shared page-data rule), so the repository travels as host/owner/repo.
   const sourcePage: PluginManagementPage = {
-    localRevision: JSON.stringify([busy, detail, sourceInstall.input, sourceInstall.review?.reviewId, sourceInstall.busy, assistantPage?.localRevision]),
+    localRevision: JSON.stringify([busy, detail, sourceInstall.input, sourceInstall.review?.reviewId, sourceInstall.busy, bundledFailures.length, assistantPage?.localRevision]),
     data: {
       ...assistantPage?.data,
+      bundledFailures: bundledFailures.map(({ pluginId, error: reason }) => ({ pluginId, error: pageFreeText(reason) })),
       linkedPlugins: linked.slice(0, 80).map(({ manifest, source }) => ({
         pluginId: manifest.id, name: pageFreeText(manifest.name), version: manifest.version,
         repository: source!.url.replace(/^https:\/\//, ''), ref: source!.ref, path: source!.path, commit: source!.commit, latestCommit: source!.latestCommit,
@@ -141,12 +156,14 @@ export function PluginManagement({ assistantPage, pageContext }: { assistantPage
         pluginId: pageText(48), repository: pageText(2000), provider: pageChoice(['github', 'gitlab', 'gitea']), ref: pageText(200), folder: pageText(200),
       })),
       ...(sourceInstall.input && sourceInstall.review ? [pageAction('plugin_source.install', t({ ko: '검토한 패키지 적용', en: 'Apply reviewed package' }), 'Install exactly the displayed Git package review. A new package stays disabled; an enabled update restarts its code.', undefined, 'save')] : []),
+      ...(bundledFailures.length ? [pageAction('plugin_bundled.sync', t({ ko: '공식 플러그인 다시 적용', en: 'Reapply official plugins' }), 'Retry applying the official plugins listed in bundledFailures. Only packages whose build differs from the installed one are replaced.', undefined, 'save')] : []),
       ...assistantPage?.actions ?? [],
     ],
     applyAction: async (id, args) => {
       if (assistantPage?.actions.some((action) => action.id === id)) { await assistantPage.applyAction(id, args); return }
       if (busy || sourceInstall.busy) throw new Error(t({ ko: '진행 중인 작업이 끝나면 다시 요청해줘.', en: 'Wait for the current operation to finish.' }))
-      if (id === 'plugin_source.check') await checkSources()
+      if (id === 'plugin_bundled.sync') await retryBundled()
+      else if (id === 'plugin_source.check') await checkSources()
       else if (id === 'plugin_source.review') {
         if (args.pluginId) {
           const plugin = linked.find(item => item.manifest.id === args.pluginId)
@@ -167,6 +184,18 @@ export function PluginManagement({ assistantPage, pageContext }: { assistantPage
   return (
     <div className="space-y-4">
       {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
+      {bundledFailures.length ? (
+        <Alert variant="warning">
+          <TriangleAlert />
+          <AlertDescription className="flex flex-wrap items-center gap-2">
+            <span className="min-w-0 flex-1">
+              {t({ ko: '앱에 포함된 공식 플러그인을 적용하지 못했어. 지금은 이전 버전이 쓰이고 있어.', en: 'An official plugin that ships with the app could not be applied. The earlier version is still in use.' })}
+              {bundledFailures.map((failure) => <span key={failure.file} className="block break-all font-mono text-xs">{failure.pluginId ?? failure.file}: {failure.error}</span>)}
+            </span>
+            <Button size="sm" variant="secondary" disabled={busy} onClick={() => void retryBundled()}>{t({ ko: '다시 적용', en: 'Reapply' })}</Button>
+          </AlertDescription>
+        </Alert>
+      ) : null}
       <RowGroup
         heading={t({ ko: '설치한 플러그인', en: 'Installed plugins' })}
         count={plugins.data?.length}
@@ -195,6 +224,8 @@ export function PluginManagement({ assistantPage, pageContext }: { assistantPage
                 <>
                   <Chip size="sm" tone="muted" mono>{manifest.version}</Chip>
                   {plugin.bundled ? <Chip size="sm">{t({ ko: '공식', en: 'Official' })}</Chip> : null}
+                  {plugin.bundledUpdated ? <Chip size="sm">{t({ ko: '업데이트됨', en: 'Updated' })}</Chip> : null}
+                  {bundledFailures.some((failure) => failure.pluginId === manifest.id) ? <ResourceRowStatus tone="destructive" tip={bundledFailures.find((failure) => failure.pluginId === manifest.id)?.error}>{t({ ko: '업데이트 실패', en: 'Update failed' })}</ResourceRowStatus> : null}
                   {isAdmin && plugin.source?.updateAvailable ? <Chip size="sm">{t({ ko: '업데이트', en: 'Update' })}</Chip> : null}
                   {plugin.server?.state === 'error' ? <ResourceRowStatus tone="destructive" tip={plugin.server.error}>{t({ ko: '서버 오류', en: 'Server error' })}</ResourceRowStatus> : null}
                 </>
@@ -223,6 +254,13 @@ export function PluginManagement({ assistantPage, pageContext }: { assistantPage
             <ModalBody spacing="lg">
               {opened.manifest.description ? <p className="text-sm">{opened.manifest.description}</p> : null}
               {opened.bundled ? <p className="text-sm text-muted-foreground">{t({ ko: '앱에 포함된 공식 플러그인이야. 켜고 끌 수만 있고, 앱을 업데이트하면 함께 바뀌어.', en: 'An official plugin that ships with the app. You can turn it on or off; it updates with the app.' })}</p> : null}
+              {opened.updatedAt ? (
+                <Text variant="caption">
+                  {opened.bundledUpdated ? t({ ko: '이번 앱 시작에서 업데이트됨', en: 'Updated at this app start' }) : t({ ko: '마지막 업데이트', en: 'Last update' })}
+                  {' · '}<time dateTime={opened.updatedAt}>{new Date(opened.updatedAt).toLocaleString()}</time>
+                  {opened.previousVersion && opened.previousVersion !== opened.manifest.version ? <span className="font-mono"> · {opened.previousVersion} → {opened.manifest.version}</span> : null}
+                </Text>
+              ) : null}
               {isAdmin && opened.source ? <RowGroup heading={t({ ko: 'Git 연결', en: 'Git source' })}>
                 <ListRow size="sm"><span className="shrink-0 text-xs text-muted-foreground">{t({ ko: '저장소 주소', en: 'Repository URL' })}</span><span className="min-w-0 break-all text-sm">{opened.source.url}</span></ListRow>
                 <ListRow size="sm"><span className="shrink-0 text-xs text-muted-foreground">{t({ ko: '브랜치·태그', en: 'Branch / tag' })}</span><span className="min-w-0 break-all font-mono text-xs">{opened.source.ref}</span></ListRow>

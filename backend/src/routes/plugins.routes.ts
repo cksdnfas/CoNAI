@@ -9,6 +9,7 @@ import { openPluginInstance, requirePluginInstance, renewPluginInstance, closePl
 import { asyncHandler, cancellableAsyncHandler } from '../middleware/asyncHandler'
 import { checkPluginSources, installPluginSource, listPluginSources, reviewPluginSource, unlinkPluginSource } from '../services/plugins/pluginSources'
 import { pluginStorage } from '../services/plugins/pluginStorage'
+import { bundledPluginFailures, bundledUpdatedThisStart, syncBundledPlugins } from '../services/plugins/pluginBundled'
 import { issuePluginArtifactMedia } from '../services/plugins/pluginArtifactMedia'
 import { issuePluginPreview } from '../services/plugins/pluginPreview'
 import { statPluginWorkspace, proposePluginWorkspaceChanges, listPluginWorkspace, readPluginWorkspace, proposePluginWorkspaceWrite, approvePluginWorkspaceWrite, applyPluginWorkspaceWrite, dismissPluginWorkspaceWrite, issuePluginWorkspaceMedia } from '../services/plugins/pluginWorkspace'
@@ -87,11 +88,19 @@ const withSource = (plugin: InstalledPlugin, sources = listPluginSources(plugin.
   const source = sources.get(plugin.manifest.id)
   return source ? { ...plugin, source } : plugin
 }
+/** An official package replaced by this app start is marked, so an applied update is visible. */
+const withBundled = (plugin: InstalledPlugin): InstalledPlugin => plugin.bundled && bundledUpdatedThisStart(plugin.manifest.id) ? { ...plugin, bundledUpdated: true } : plugin
 router.get('/', (req, res) => {
   const admin = isAdminRequest(req)
   const sources = admin ? listPluginSources() : null
-  res.json({ success: true, data: listPlugins(admin).map(plugin => withServer(sources ? withSource(plugin, sources) : plugin)) })
+  res.json({ success: true, data: listPlugins(admin).map(plugin => withBundled(withServer(sources ? withSource(plugin, sources) : plugin))) })
 })
+/** Official packages: what the startup sync could not apply, and a retry of that sync (it only touches packages whose build differs). */
+router.get('/bundled', requireAdmin, (_req, res) => { res.json({ success: true, data: { failures: bundledPluginFailures() } }) })
+router.post('/bundled/sync', requireAdmin, asyncHandler(async (_req, res) => {
+  await syncBundledPlugins()
+  res.json({ success: true, data: { failures: bundledPluginFailures() } })
+}))
 router.post('/install', requireAdmin, multer({ storage: multer.memoryStorage(), limits: { fileSize: PLUGIN_ZIP_LIMIT, files: 1, fields: 0 } }).single('package'), asyncHandler(async (req, res) => {
   if (!req.file) { res.status(400).json({ error: 'ZIP 패키지를 선택해줘.' }); return }
   const result = await installPlugin(req.file.buffer)
