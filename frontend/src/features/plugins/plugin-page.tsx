@@ -94,7 +94,7 @@ export function PluginPage() {
     {canProject ? <Button variant="field" size="field" onClick={() => setProjectPicker(true)}><FolderKanban />{projectId ? project.data?.name ?? '…' : t({ ko: '프로젝트 없음', en: 'No project' })}{projectId ? <span className="text-muted-foreground">· {t(write ? { ko: '편집 가능', en: 'Editable' } : { ko: '읽기 전용', en: 'Read only' })}</span> : null}<ChevronDown /></Button> : null}
     {canFiles ? <Button variant="field" size="field" onClick={() => setPicker(true)}><Files />{t({ ko: '파일 {count}개', en: '{count} files' }, { count: fileCount })}<ChevronDown /></Button> : null}
   </>
-  return <div className="pb-6">
+  return <div>
     <PageToolbar
       title={<span className="flex min-w-0 items-baseline gap-2"><span className="truncate">{page.title}</span>{definition.name !== page.title ? <span className="truncate text-sm font-normal text-muted-foreground">{definition.name}</span> : null}</span>}
       start={<div className="flex min-w-0 flex-wrap items-center gap-1">{contextButtons}</div>}
@@ -466,8 +466,8 @@ function PluginFrame({ instance, onDirty, embed, launch }: { instance: PluginIns
   return <>
     {error ? <Alert variant="destructive" className="mb-2"><TriangleAlert /><AlertDescription>{error}</AlertDescription></Alert> : null}
     {connectionError ? <Alert variant="warning" className="mb-2"><TriangleAlert /><AlertDescription className="flex flex-wrap items-center gap-2"><span className="min-w-0 flex-1">{connectionError}</span>{closed ? null : <Button size="sm" variant="secondary" onClick={() => void checkConnection()}>{t({ ko: '다시 확인', en: 'Retry' })}</Button>}</AlertDescription></Alert> : null}
-    {blockedFrame ? null : <iframe ref={frame} title={instance.page.title} allow="autoplay" referrerPolicy="no-referrer" src={`/api/plugin-assets/${instance.plugin.id}/${instance.plugin.version}/${instance.page.entry}`} onLoad={connect} style={embed ? { height: embed.height } : undefined} className={cn('w-full rounded-sm border-0', !embed && // Everything around the frame: shell header, page toolbar (3.5rem), this page's bottom padding (1.5rem) and the shell's bottom padding.
-      'h-[max(420px,calc(100dvh-var(--theme-shell-header-height)-var(--theme-shell-main-padding-bottom)-var(--shell-bottom-inset,0px)-5rem))]')} />}
+    {blockedFrame ? null : <iframe ref={frame} title={instance.page.title} allow="autoplay" referrerPolicy="no-referrer" src={`/api/plugin-assets/${instance.plugin.id}/${instance.plugin.version}/${instance.page.entry}`} onLoad={connect} style={embed ? { height: embed.height } : undefined} className={cn('w-full rounded-sm border-0', !embed && // Everything around the frame: shell header, page toolbar (3.5rem) and the shell's bottom padding.
+      'h-[max(420px,calc(100dvh-var(--theme-shell-header-height)-var(--theme-shell-main-padding-bottom)-var(--shell-bottom-inset,0px)-3.5rem))]')} />}
     {mediaPicks[0] ? <MediaLibraryPicker key={mediaPicks[0].id} initial={[]} mediaKind={mediaPicks[0].input.kind ?? 'all'} maxCount={mediaPicks[0].input.max ?? Infinity} title={mediaPicks[0].input.title} onPick={mediaPicks[0].resolve} onClose={() => mediaPicks[0].resolve([])} /> : null}
     {/* App operations started here report their job result back to the plugin page. */}
     {appRequests.filter(request => request.jobId).map(request => <AppRequestJob key={request.id} jobId={request.jobId!} showProgress={false} onFinished={result => { channel.current?.postMessage({ type: 'saved', proposalId: request.id, result }); setAppResult(appResultSummary(result)) }} />)}

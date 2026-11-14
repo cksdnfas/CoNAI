@@ -474,7 +474,8 @@ const jobNeedsWork = (job) => (!TERMINAL.has(job.status) && Date.now() - job.cre
 
 async function loadResults(job) {
   const { records } = await call(`/api/generation-history?queue_job_id=${job.id}&limit=20`)
-  job.hashes = (records ?? []).filter((record) => record.generation_status === 'completed').map((record) => record.actual_composite_hash || record.composite_hash).filter(Boolean)
+  // Only the hash of an image the library has registered: the history's own hash exists before that, when its thumbnail still answers 404.
+  job.hashes = (records ?? []).filter((record) => record.generation_status === 'completed').map((record) => record.actual_composite_hash).filter(Boolean)
   const failed = (records ?? []).find((record) => record.generation_status === 'failed')
   if (!job.hashes.length && failed?.error_message) job.error = failed.error_message
 }
