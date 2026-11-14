@@ -1,18 +1,35 @@
 import { MINIMAX_H3_REFMOD_CONCEPT_TYPES, MINIMAX_H3_REFMOD_EXPORT_CLASS_TYPE } from '@conai/shared';
 import type { MarkedField, WorkflowCreateData } from '../../types/workflow';
 
-export function buildRefModExportTemplate(options: { vaeNames?: string[] | null; endpoint?: string } = {}): WorkflowCreateData {
+// Official Comfy-Org/MiniMax-H3 VAE file names, in preference order: [video, audio].
+const H3_VAE_FILE_NAMES = [
+  ['minimax_h3_video_vae_fp16.safetensors', 'minimax_h3_video_vae_int8_convrot.safetensors'],
+  ['minimax_h3_audio_vae_fp32.safetensors'],
+];
+
+export function buildRefModExportTemplate(options: {
+  vaeNames?: string[] | null;
+  /** Auto-collected VAE dropdown list; preferred over vaeNames so the field follows later collections. */
+  vaeDropdownList?: { name: string; items: string[] } | null;
+  endpoint?: string;
+} = {}): WorkflowCreateData {
   const director = {
     mode: 'REF2VA', prompt: '', width: 1344, height: 768, duration: 5,
     frame_rate: 24, ref_image_size: 'match', timeline_data: '{"items":[]}', builder_state: '',
   };
+  const dropdownList = options.vaeDropdownList?.items.length ? options.vaeDropdownList : null;
+  const choices = dropdownList?.items ?? options.vaeNames ?? [];
   const vaeFields: MarkedField[] = ['2', '3'].map((nodeId, index) => ({
     id: index === 0 ? 'video_vae' : 'audio_vae',
     label: index === 0 ? 'Video VAE' : 'Audio VAE',
-    type: options.vaeNames?.length ? 'select' : 'text',
-    jsonPath: `${nodeId}.inputs.vae_name`, default_value: '', required: true,
-    ...(options.vaeNames?.length ? { options: options.vaeNames } : {}),
-    description: `Select the MiniMax H3 ${index === 0 ? 'video' : 'audio'} VAE installed on the target ComfyUI server.${options.vaeNames?.length ? '' : ' Enter the exact VAELoader vae_name; server options were not available.'}`,
+    type: choices.length ? 'select' : 'text',
+    jsonPath: `${nodeId}.inputs.vae_name`,
+    default_value: H3_VAE_FILE_NAMES[index]
+      .map((fileName) => choices.find((choice) => choice.split(/[\\/]/).pop() === fileName))
+      .find((choice) => choice !== undefined) ?? '',
+    required: true,
+    ...(dropdownList ? { dropdown_list_name: dropdownList.name } : choices.length ? { options: choices } : {}),
+    description: `Select the MiniMax H3 ${index === 0 ? 'video' : 'audio'} VAE installed on the target ComfyUI server.${choices.length ? '' : ' Enter the exact VAELoader vae_name; server options were not available.'}`,
   }));
   return {
     name: 'MiniMax H3 RefMod 생성',

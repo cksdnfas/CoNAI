@@ -22,6 +22,11 @@ export const DEFAULT_COMFY_MODEL_API_PATHS = [
   '/models/diffusion_models',
   '/models/unet_gguf',
   '/models/loras',
+  '/models/vae',
+  '/models/text_encoders',
+  '/models/clip_vision',
+  '/models/controlnet',
+  '/models/upscale_models',
 ]
 
 export function buildComfyModelThumbnailUrl(folder: string, value: string) {

@@ -192,6 +192,11 @@ product_photo.safetensors
 - `/models/diffusion_models`
 - `/models/unet_gguf`
 - `/models/loras`
+- `/models/vae`
+- `/models/text_encoders`
+- `/models/clip_vision`
+- `/models/controlnet`
+- `/models/upscale_models`
 
 일부 경로가 없거나 요청에 실패해도 나머지 경로의 수집은 계속됩니다. 완료 알림에 수집 결과와 실패한 경로·오류 원인을 함께 표시합니다.
 
@@ -249,7 +254,7 @@ RefMod는 ComfyUI의 `models/refmods/` 폴더에 저장된 MiniMax H3 참조 번
 
 ### RefMod 만들기
 
-ComfyUI 탭의 워크플로 목록 머리글에서 **RefMod 생성 워크플로 추가**를 누르면 "MiniMax H3 RefMod 생성" 워크플로가 등록됩니다(워크플로 편집 권한 필요). 구성은 Director(참조 입력용, REF2VA) + 영상/음성 VAE 로더 + DaSiWa **MiniMaxH3 Create RefMod**(`DaSiWaH3RefModExport`) 노드이고, 서버를 지정해 등록하면 VAE 선택지가 그 서버의 목록으로 채워집니다. 직접 만든 워크플로도 같은 노드가 들어 있으면 똑같이 동작합니다.
+ComfyUI 탭의 워크플로 목록 머리글에서 **RefMod 생성 워크플로 추가**를 누르면 "MiniMax H3 RefMod 생성" 워크플로가 등록됩니다(워크플로 편집 권한 필요). 구성은 Director(참조 입력용, REF2VA) + 영상/음성 VAE 로더 + DaSiWa **MiniMaxH3 Create RefMod**(`DaSiWaH3RefModExport`) 노드이고, 자동수집한 `vae (통합)` 목록이 있으면 두 VAE 입력이 그 드롭다운 목록에 연결되고, 없으면 등록할 때 지정한 서버의 VAE 목록을 선택지로 씁니다(둘 다 없으면 직접 입력). 선택지에 공식 H3 VAE 파일(`minimax_h3_video_vae_fp16.safetensors`, `minimax_h3_audio_vae_fp32.safetensors`)이 있으면 기본값으로 채워집니다. 먼저 자동수집을 실행한 뒤 워크플로를 추가하는 것을 권장합니다. 직접 만든 워크플로도 같은 노드가 들어 있으면 똑같이 동작합니다.
 
 - 이 워크플로는 RefMod만 만들므로 Director에 모델 연결이 없어도 실행됩니다. 패널에 "RefMod를 만들기만 해" 안내가 뜹니다.
 - Director에 이미지·영상·음성을 넣고 각 미디어의 설명(프롬프트)을 쓰면 그 설명이 RefMod 멤버 설명이 됩니다. 이름을 비우면 DaSiWa가 자동 이름을 붙입니다.

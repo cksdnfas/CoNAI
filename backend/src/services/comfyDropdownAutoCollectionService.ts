@@ -7,6 +7,11 @@ export const DEFAULT_COMFY_MODEL_API_PATHS = [
   '/models/diffusion_models',
   '/models/unet_gguf',
   '/models/loras',
+  '/models/vae',
+  '/models/text_encoders',
+  '/models/clip_vision',
+  '/models/controlnet',
+  '/models/upscale_models',
 ];
 
 const MODEL_FILE_EXTENSIONS = ['.safetensors', '.ckpt', '.pt', '.pth', '.bin', '.gguf', '.onnx'];
@@ -207,7 +212,7 @@ export function buildComfyModelFoldersFromApiBatches(batches: Pick<ApiModelFileB
     .sort((left, right) => left.displayName.localeCompare(right.displayName));
 }
 
-function buildMergedComfyDropdownListName(rootFolder: string) {
+export function buildMergedComfyDropdownListName(rootFolder: string) {
   return `${rootFolder} (통합)`;
 }
 
