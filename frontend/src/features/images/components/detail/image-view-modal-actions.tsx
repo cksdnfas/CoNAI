@@ -14,6 +14,7 @@ import { useImageDeleteMenuAction } from './image-delete-action'
 import { ImageEditAction } from './image-edit-action'
 import { ImageGroupAssignAction } from './image-group-assign-action'
 import { useImageMetadataEditMenuAction } from './image-metadata-edit-action'
+import { ImagePluginActionButtons, useImagePluginActions } from './image-plugin-action'
 import { ImageDownloadTriggerButton } from '../image-download-trigger-button'
 import { useImageViewModal, type ImageViewModalAccessOptions, type ImageViewSequenceTotal } from './image-view-modal-context'
 
@@ -95,6 +96,7 @@ export function ImageViewModalActions({
 
   const historyReuse = useGenerationHistoryReuseMenuActions(historyReuseId)
   const metadataEditAction = useImageMetadataEditMenuAction(controls.image)
+  const pluginActions = useImagePluginActions(controls.image, onClose)
   const deleteAction = useImageDeleteMenuAction(
     controls.image,
     (deletedCompositeHash) => (imageViewModal ? imageViewModal.removeImageFromView(deletedCompositeHash) : onClose()),
@@ -108,6 +110,7 @@ export function ImageViewModalActions({
     allowEditAction && permissions.canEditMetadata ? metadataEditAction : null,
     historyReuse.copy,
     historyReuse.load,
+    ...pluginActions.menu,
     '-',
     allowDeleteAction ? deleteAction : null,
   ]
@@ -122,6 +125,7 @@ export function ImageViewModalActions({
         {groupAssignButton}
         {editButton}
         {downloadButton}
+        <ImagePluginActionButtons actions={pluginActions.buttons} variant="overlay" />
         <ActionMenuButton entries={moreEntries} label={t({ ko: '더 보기', en: 'More' })} variant="overlay" size="icon-sm" />
       </div>
     </div>

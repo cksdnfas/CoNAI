@@ -27,18 +27,19 @@ export function usePluginPages() {
   )
 }
 
-export type PluginImagePage = { key: string; pluginId: string; pageId: string; title: string; pluginName: string; icon: LucideIcon }
+export type PluginImagePage = { key: string; pluginId: string; pageId: string; title: string; pluginName: string; icon: LucideIcon; prompt?: RegExp }
 
 /** Pages that declare `opensImages`: the image detail view lists them to open the current image in the plugin. */
 export function usePluginImagePages() {
   return usePluginManifests().flatMap((manifest) =>
-    manifest.pages.filter((page) => page.opensImages === true).map((page): PluginImagePage => ({
+    manifest.pages.filter((page) => !!page.opensImages).map((page): PluginImagePage => ({
       key: `plugin:${manifest.id}:${page.id}`,
       pluginId: manifest.id,
       pageId: page.id,
       title: page.title,
       pluginName: manifest.name,
       icon: pluginPageIcon(page.icon),
+      prompt: typeof page.opensImages === 'object' ? new RegExp(page.opensImages.prompt) : undefined,
     })),
   )
 }

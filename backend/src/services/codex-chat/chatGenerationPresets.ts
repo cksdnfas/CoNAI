@@ -62,9 +62,13 @@ export type ChatComfyPresetConfig = {
  * model only asks for a picture (with an optional note of the moment), and once the reply is finished a separate call
  * writes the prompt from the finished text (chatGenerationPrompting.ts). Either way the writer gets the guide (the
  * text here and the linked skill section) and up to `previousImages` of the chat's latest generated images.
+ * `early`: as `after`, a separate call writes the prompt, but at once when the chat model asks, from the conversation
+ * so far and the moment it describes, so the picture starts before the reply ends. A linked skill section never goes
+ * with `inline` (it becomes `after`): a whole guide document is read only by the call that writes a prompt, never
+ * carried in every request of the chat.
  */
 export type ChatPresetPrompting = {
-  timing: 'inline' | 'after'
+  timing: 'inline' | 'early' | 'after'
   guide: string
   /**
    * A section of a shared skill (or `group/` for a group's sections), so one skill can hold the guides of several
@@ -342,7 +346,7 @@ function readPrompting(value: string | null): ChatPresetPrompting {
   const stored = isRecord(raw) ? raw : {}
   const link = guideSkillLink(stored.guideSkill)
   return {
-    timing: stored.timing === 'after' ? 'after' : 'inline',
+    timing: stored.timing === 'early' ? 'early' : link || stored.timing === 'after' ? 'after' : 'inline',
     guide: text(stored.guide, PRESET_GUIDE_MAX_LENGTH),
     guideSkill: link ? resolveGuideSkill(link) : null,
     previousImages: number(stored.previousImages, { min: 0, max: PRESET_PREVIOUS_IMAGES_MAX }, 0, true),
@@ -354,7 +358,7 @@ function promptingOf(input: unknown, current: ChatPresetPrompting | null): ChatP
   const base = current ?? DEFAULT_PROMPTING
   if (input === undefined || input === null) return base
   if (!isRecord(input)) throw new ChatProfileError('프롬프트 작성 설정이 올바르지 않아.')
-  if (input.timing !== undefined && input.timing !== 'inline' && input.timing !== 'after') throw new ChatProfileError('작성 시점은 inline 또는 after여야 해.')
+  if (input.timing !== undefined && input.timing !== 'inline' && input.timing !== 'early' && input.timing !== 'after') throw new ChatProfileError('생성 시점은 inline, early 또는 after여야 해.')
   let guideSkill = base.guideSkill
   if (input.guideSkill === null) guideSkill = null
   else if (input.guideSkill !== undefined) {
@@ -365,8 +369,9 @@ function promptingOf(input: unknown, current: ChatPresetPrompting | null): ChatP
       if (guideSkill.title === null) throw new ChatProfileError('가이드로 고른 스킬 섹션을 찾을 수 없어.')
     }
   }
+  const timing = input.timing === undefined ? base.timing : input.timing
   return {
-    timing: input.timing === undefined ? base.timing : input.timing,
+    timing: guideSkill && timing === 'inline' ? 'after' : timing,
     guide: input.guide === undefined ? base.guide : text(input.guide, PRESET_GUIDE_MAX_LENGTH),
     guideSkill,
     previousImages: input.previousImages === undefined ? base.previousImages : number(input.previousImages, { min: 0, max: PRESET_PREVIOUS_IMAGES_MAX }, 0, true),

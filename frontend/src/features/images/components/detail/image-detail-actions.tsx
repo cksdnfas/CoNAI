@@ -10,7 +10,7 @@ import { useImageDeleteMenuAction } from './image-delete-action'
 import { ImageEditAction } from './image-edit-action'
 import { ImageGroupAssignAction } from './image-group-assign-action'
 import { useImageMetadataEditMenuAction } from './image-metadata-edit-action'
-import { useImagePluginMenuActions } from './image-plugin-action'
+import { ImagePluginActionButtons, useImagePluginActions } from './image-plugin-action'
 import { useImageSpriteMenuAction } from './image-sprite-action'
 
 interface ImageDetailActionsProps {
@@ -44,12 +44,12 @@ export function ImageDetailActions({ downloadUrl, image, editOpen, onEditOpenCha
   const metadataAction = useImageMetadataEditMenuAction(image)
   const spriteAction = useImageSpriteMenuAction(image)
   const deleteAction = useImageDeleteMenuAction(image, onDeleted)
-  const pluginActions = useImagePluginMenuActions(image)
+  const pluginActions = useImagePluginActions(image)
   const moreEntries: ActionMenuEntry[] = [
     metadataAction,
     similarity?.available ? { key: 'similarity', icon: ScanSearch, label: t({ ko: '유사/중복 검사', en: 'Check similar/duplicates' }), onSelect: similarity.onRequest } : null,
     spriteAction,
-    ...pluginActions,
+    ...pluginActions.menu,
     '-',
     deleteAction,
   ]
@@ -81,6 +81,7 @@ export function ImageDetailActions({ downloadUrl, image, editOpen, onEditOpenCha
         <ImageGroupAssignAction image={image} variant="ghost" />
         <ImageEditAction image={image} variant="ghost" open={editOpen} onOpenChange={onEditOpenChange} />
         {downloadUrl ? <ImageDownloadTriggerButton image={image} variant="ghost" size="icon-sm" /> : null}
+        <ImagePluginActionButtons actions={pluginActions.buttons} variant="ghost" />
         <ActionMenuButton entries={moreEntries} label={t({ ko: '더 보기', en: 'More' })} variant="ghost" size="icon-sm" />
         {trailing}
       </div>

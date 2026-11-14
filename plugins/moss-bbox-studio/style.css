@@ -1,16 +1,14 @@
 /* Layout and the parts only this plugin has (canvas boxes, region rows). Widgets come from conai-plugin.css. */
-.hint { font-size: 12px; margin: 8px 0 0 }
-.banner { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; flex: none; padding: 8px var(--conai-text-inset); font-size: 13px; background: color-mix(in srgb, var(--conai-primary) 8%, transparent) }
-.banner .conai-spacer { flex: 1 }
+.banner { flex: none; padding: var(--conai-edge) var(--conai-text-inset); font-size: 13px; background: color-mix(in srgb, var(--conai-primary) 8%, transparent) }
+.source-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
 
 .conai-sidebar { gap: 0 }
 .insp { --conai-sidebar-width: 340px; overflow-y: auto }
-.panel { display: grid; gap: 4px; margin: 0; padding: 14px 4px 16px }
+/* Fields keep the SDK label spacing, so the editor panels space like the setup view. */
+.panel { margin: 0; padding: 4px 0 }
 .panel + .panel { border-top: 1px solid var(--conai-line) }
-.panel label { margin: 6px 0 0 }
 .panel textarea { field-sizing: fixed; height: 120px; resize: none }
-.panel label > textarea, .panel label > input, .panel label > select { margin-top: 6px }
-.options-head { display: flex; align-items: center; justify-content: space-between; gap: 8px }
+.options-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 10px 0 }
 .options-head .conai-overline { margin: 0 }
 .layers { list-style: none; margin: 0 0 10px; padding: 0; display: grid; gap: 2px }
 .region-row { display: grid; grid-template-columns: 22px minmax(0, 1fr) 28px; align-items: center; gap: 6px; min-height: 44px; padding: 4px var(--conai-text-inset) 4px 6px; border-left: 2px solid var(--c); border-radius: var(--conai-radius-md); cursor: pointer }
@@ -53,7 +51,7 @@
 .bx:focus-visible { outline: 2px solid var(--conai-foreground); outline-offset: 2px }
 .cv.dropping { outline: 2px dashed var(--conai-primary); outline-offset: -4px }
 
-.region-head { display: flex; align-items: center; gap: 8px }
+.region-head { display: flex; align-items: center; gap: 8px; margin: 10px 0 }
 .region-head .number { flex: none; display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: var(--c); color: #111; font-size: 12px; font-weight: 700 }
 .region-head .conai-segmented { flex: 1; min-width: 0 }
 .region-head .conai-segmented > button { flex: 1; padding: 0 6px }
@@ -73,22 +71,23 @@ details.json pre { max-height: 220px; margin: 0; padding: 0 var(--conai-text-ins
 .status.error { color: var(--conai-destructive) }
 
 .setup { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 32px; align-items: start }
-.maprow { display: grid; grid-template-columns: 150px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 8px 0; border-top: 1px solid var(--conai-line) }
+.maprow { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 10px; align-items: center; padding: 8px 0; border-top: 1px solid var(--conai-line) }
 .maprow:first-of-type { border-top: 0 }
 .maprow label { margin: 0 }
-.maprow .role b { display: block; font-size: 13px }
+.maprow .role { display: flex; align-items: center; gap: 6px }
+.maprow .role b { font-size: 13px }
 .maprow select { margin: 0 }
 .maphead { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 18px 0 6px }
 .maphead .conai-overline { margin: 0 }
 .checks { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; font-size: 13px }
-.checks li { display: flex; align-items: baseline; gap: 8px }
 
 .jobs { display: grid; gap: 28px }
-.job-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px }
+.job-head { margin-bottom: 10px }
+.job-error { color: var(--conai-destructive); font-size: 13px }
 .tiles { display: flex; flex-wrap: wrap; gap: 16px }
 .tile { width: 150px }
 .tile .conai-media { aspect-ratio: var(--ratio, 1) }
-.tile .actions { display: flex; flex-direction: column; gap: 4px; margin-top: 8px }
+.tile .actions { margin-top: 8px }
 
 @media (max-width: 900px) { .setup { grid-template-columns: minmax(0, 1fr) } .maprow { grid-template-columns: minmax(0, 1fr) } }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important } }

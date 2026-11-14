@@ -2,17 +2,18 @@
 <html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>MOSS BBox Studio</title><link rel="stylesheet" href="conai-plugin.css"><link rel="stylesheet" href="style.css"><script type="module" src="main.js"></script></head>
 <body class="conai-app">
 <header class="conai-header">
-  <h1 class="conai-title">MOSS BBox Studio</h1>
   <nav class="conai-tabs" id="tabs" aria-label="화면">
     <button type="button" data-tab="editor">편집기</button>
     <button type="button" data-tab="results">결과 <span id="job-count"></span></button>
     <button type="button" data-tab="setup">연결 설정</button>
   </nav>
   <span class="conai-spacer"></span>
-  <button type="button" id="import-open">이미지 가져오기</button>
+  <button type="button" id="pick-library" hidden>라이브러리에서 고르기</button>
+  <button type="button" id="pick-file">파일 올리기</button>
+  <input type="file" id="file" accept="image/*" hidden>
   <button type="button" id="new-draft" class="ghost">새로 시작</button>
 </header>
-<div id="banner" class="banner" hidden></div>
+<div id="banner" class="banner toolbar" hidden></div>
 
 <div id="view-editor" class="conai-split">
   <aside class="conai-sidebar" aria-label="영역 목록">
@@ -46,16 +47,8 @@
   <button type="button" id="wf-open" class="ghost">워크플로우 <span id="wf-name" class="wf-name"></span></button>
   <label class="seed">시드 <input type="number" id="seed" min="0"></label>
   <span class="conai-spacer"></span>
-  <span class="badge" id="size-badge"></span>
   <button type="button" id="generate" class="primary">생성 요청</button>
 </footer>
-<details class="json" id="json-box"><summary>모델로 보낼 JSON 미리보기</summary><pre id="json" tabindex="0"></pre></details>
+<details class="json" id="json-box"><summary>레이아웃 JSON</summary><pre id="json" tabindex="0"></pre></details>
 <p id="status" role="status" class="status">연결 중…</p>
-
-<dialog id="import-dialog" aria-labelledby="import-title">
-  <h2 id="import-title">이미지 가져오기</h2>
-  <label>이미지 파일 <input type="file" id="file" accept="image/*"></label>
-  <label>라이브러리 이미지 해시 <input id="hash-input" maxlength="32" autocomplete="off"></label>
-  <div class="toolbar"><button type="button" id="import-hash" class="primary">해시로 가져오기</button><button type="button" id="import-close" class="ghost">닫기</button></div>
-</dialog>
 </body></html>

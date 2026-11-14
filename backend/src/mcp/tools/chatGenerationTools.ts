@@ -2,13 +2,12 @@ import { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import { ChatGenerationPresetStore, type ChatGenerationPreset } from '../../services/codex-chat/chatGenerationPresets';
 import { presetInputShape } from '../../services/codex-chat/chatGenerationInputs';
-import { presetGuideText } from '../../services/codex-chat/chatGenerationPrompting';
+import { presetGuideText, writeEarlyPresetJob } from '../../services/codex-chat/chatGenerationPrompting';
 import { ChatDeferredGenerationStore } from '../../services/codex-chat/chatDeferredGenerations';
 import { requireActiveChatReply } from '../../services/codex-chat/chatReplyRegistry';
 import { chatGenerationToolName, type McpRequestContext } from '../context';
 import { enqueueMcpGenerationJob } from './generationJobTools';
 import { ChatProfileStore } from '../../services/codex-chat/chatProfiles';
-import { skillGuide } from '../../services/codex-chat/chatSkills';
 import { isContextToolAllowed, requireMcpToolAccess } from '../toolAccess';
 import { requireRequesterPermission } from '../../middleware/featureAccess';
 import { errorResult, textResult } from '../toolResults';
@@ -45,24 +44,13 @@ function describe(preset: ChatGenerationPreset, body: string) {
   ].join(' ');
 }
 
-/** The preset's writing guide for the model filling the tool; it reaches a running Codex session with the preset signature. */
+/**
+ * The preset's few lines of guide for the model filling the tool; they reach a running Codex session with the preset
+ * signature. A linked guide document never comes here: its preset is written after the reply (ChatPresetPrompting).
+ */
 function withGuide(description: string, preset: ChatGenerationPreset) {
   const guide = presetGuideText(preset);
   return guide ? `${description}\n\nPrompt guide for this preset. Follow it when you fill the fields; where it differs from a field description or the general generation rules, the guide wins:\n${guide}` : description;
-}
-
-/**
- * The sections of skill `skillId` (a section path, or `group/`) that a generation tool of this chat already carries in
- * its description as the preset's prompt guide (withGuide). use_skill names that tool beside them in a table of
- * contents, so the model can tell the text is there instead of loading it a second time.
- */
-export function presetGuidesInTools(context: McpRequestContext, skillId: number): Array<{ path: string; tool: string }> {
-  return ChatGenerationPresetStore.resolve(context.generationPresetIds ?? []).flatMap((preset, index) => {
-    const link = preset.prompting.guideSkill;
-    const tool = chatGenerationToolName(index);
-    if (!link || link.skillId !== skillId || preset.prompting.timing === 'after' || !isContextToolAllowed(context, tool) || presetInputShape(preset).problem || skillGuide(skillId, link.path).text === null) return [];
-    return [{ path: link.path, tool }];
-  });
 }
 
 function usesReference(preset: ChatGenerationPreset) {
@@ -124,15 +112,37 @@ function registerAfterPreset(server: McpServer, context: McpRequestContext, pres
   );
 }
 
+/** `early`: the chat model describes the moment; a call of its own writes the prompt with the guide now, and the job is queued at once. */
+function registerEarlyPreset(server: McpServer, context: McpRequestContext, preset: ChatGenerationPreset, toolName: string) {
+  const { problem } = presetInputShape(preset);
+  if (problem) {
+    server.registerTool(toolName, { description: describe(preset, `Currently unavailable: ${problem}`), inputSchema: z.object({}) }, async () => errorResult(problem));
+    return;
+  }
+  server.registerTool(
+    toolName,
+    { description: describe(preset, 'Describe the moment in scene; the prompt is written from it and the conversation so far.'), inputSchema: z.object({ scene: z.string().trim().min(1).max(2000).describe('The moment to show, in plain words: who is in it, pose, action, expression, clothing, place, time and mood.') }) },
+    async (args: Record<string, unknown>) => {
+      try {
+        generationProfile(context, toolName, args, usesReference(preset));
+        return textResult(await writeEarlyPresetJob(context, preset, toolName, String(args.scene ?? '').trim()));
+      } catch (error) {
+        return errorResult(`Generation job error: ${(error as Error).message}`);
+      }
+    },
+  );
+}
+
 /** One `generate_image` tool per generation preset the chat profile links; nothing without presets. */
 export function registerChatGenerationTools(server: McpServer, context: McpRequestContext): void {
   const ids = context.generationPresetIds ?? [];
   if (ids.length === 0) return;
   const presets = ChatGenerationPresetStore.resolve(ids);
-  const hasAppearance = presets.some((preset) => preset.prompting.timing !== 'after') && Boolean(speakerAppearance(context));
+  const hasAppearance = presets.some((preset) => preset.prompting.timing === 'inline') && Boolean(speakerAppearance(context));
   presets.forEach((preset, index) => {
     const toolName = chatGenerationToolName(index);
     if (preset.prompting.timing === 'after') registerAfterPreset(server, context, preset, toolName);
+    else if (preset.prompting.timing === 'early') registerEarlyPreset(server, context, preset, toolName);
     else registerInlinePreset(server, context, preset, toolName, hasAppearance);
   });
 }

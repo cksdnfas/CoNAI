@@ -23,8 +23,13 @@ export type PluginPage = {
   menu?: boolean
   /** Header menu and launcher icon; absent: the puzzle icon. */
   icon?: PluginPageIcon
-  /** true: the image detail view offers "open in this plugin"; the page then reads the image as `api.launch.image`. */
-  opensImages?: boolean
+  /** true: a menu entry; a matching positive-prompt regex promotes it to a visible button. Handoff: `api.launch.image`. */
+  opensImages?: boolean | { prompt: string }
+}
+export type PluginMediaPickOptions = { kind?: 'image' | 'video' | 'all'; max?: number; title?: string }
+export type PluginMediaPickItem = {
+  compositeHash: string; kind: 'image' | 'video'; mimeType: string | null
+  width: number | null; height: number | null; name: string
 }
 /** What a page was opened with besides files: the library image whose detail view opened it. */
 export type PluginLaunch = { image: { compositeHash: string } }

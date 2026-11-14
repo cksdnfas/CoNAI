@@ -441,6 +441,20 @@ export const ChatSkillStore = {
     db.transaction(() => { for (const path of paths) bump.run(skillId, skillSectionPathKey(path)) })()
   },
 
+  /**
+   * A picture written with this section (or `group/`) as its preset's guide. The guide travels inside the generation
+   * request, never through use_skill, so without this its use would not show in the load counts at all.
+   */
+  recordGuideUse(skillId: number, path: string) {
+    const db = getUserSettingsDb()
+    const key = skillSectionPathKey(path.endsWith('/') ? path.slice(0, -1) : path)
+    db.transaction(() => {
+      db.prepare('UPDATE chat_skills SET load_count = load_count + 1, last_loaded_at = CURRENT_TIMESTAMP WHERE id = ?').run(skillId)
+      if (path.endsWith('/')) db.prepare('UPDATE chat_skill_sections SET load_count = load_count + 1, last_loaded_at = CURRENT_TIMESTAMP WHERE skill_id = ? AND substr(path_key, 1, ?) = ?').run(skillId, key.length + 1, `${key}/`)
+      else db.prepare('UPDATE chat_skill_sections SET load_count = load_count + 1, last_loaded_at = CURRENT_TIMESTAMP WHERE skill_id = ? AND path_key = ?').run(skillId, key)
+    })()
+  },
+
   /** Plugins that have skills stored. */
   pluginIds(): string[] {
     const rows = getUserSettingsDb().prepare("SELECT DISTINCT substr(source_ref, 1, instr(source_ref, '/') - 1) AS plugin_id FROM chat_skills WHERE source = 'plugin' AND source_ref IS NOT NULL").all() as Array<{ plugin_id: string }>
@@ -592,13 +606,12 @@ export function skillChunk(text: string, offset: number, room: number) {
   return { start, end, text: text.slice(start, end), more: end < text.length }
 }
 
-/** `included`: where the model already has the section's text (a tool's description), named instead of its size. */
-export type ContentsEntry = Pick<ChatSkillSectionFields, 'path' | 'title' | 'summary'> & { tokens: number; included?: string }
+export type ContentsEntry = Pick<ChatSkillSectionFields, 'path' | 'title' | 'summary'> & { tokens: number }
 
 export const contentsEntries = (sections: ChatSkillSectionFields[]): ContentsEntry[] =>
   sections.map((section) => ({ path: section.path, title: section.title, summary: section.summary, tokens: rawTokenEstimate(section.content) }))
 
-const contentsLine = (entry: ContentsEntry) => `- ${entry.path} — ${entry.title}${entry.summary ? `: ${entry.summary.replace(/\s+/g, ' ')}` : ''} (${entry.included ? `already in ${entry.included}; load it only if you cannot see it there` : `~${entry.tokens} tokens`})`
+const contentsLine = (entry: ContentsEntry) => `- ${entry.path} — ${entry.title}${entry.summary ? `: ${entry.summary.replace(/\s+/g, ' ')}` : ''} (~${entry.tokens} tokens)`
 
 /**
  * The table of contents under a skill's overview: one line per section (path, title, when to read it, rough size).

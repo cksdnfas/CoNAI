@@ -106,6 +106,8 @@ export function connectPlugin(handlers = {}) {
         delete: (key, revision) => api.request('storage.delete', { key, revision }),
       }
       api.media = { open: (artifactId, options) => api.request('media.open', { artifactId }, options) }
+      /** Host library modal; selection returns references, never media access grants. Cancel returns []. */
+      api.pickMedia = (input = {}, options) => api.request('pickMedia', input, options)
       /** A live HTML document to frame inside this page: `files` maps relative paths to media references or this package's files. update() keeps the address. */
       api.preview = {
         open: ({ html, files = {} }, options) => api.request('preview.open', { html, files }, options),

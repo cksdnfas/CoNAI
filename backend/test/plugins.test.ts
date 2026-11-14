@@ -81,7 +81,10 @@ test('trusted extensions preserve package, caller, explicit approval and externa
     assert.equal(installed.manifest.pages[0].icon, 'file-text', 'a stored manifest keeps its page icon')
     assert.throws(() => registry.parsePluginManifest({ ...installed.manifest, pages: [{ ...installed.manifest.pages[0], icon: 'skull' }] }), 'pages name an icon from the host set only')
     assert.equal(registry.parsePluginManifest({ ...installed.manifest, pages: [{ ...installed.manifest.pages[0], opensImages: true }] }).pages[0].opensImages, true, 'a page may offer itself in the image detail view')
-    assert.throws(() => registry.parsePluginManifest({ ...installed.manifest, pages: [{ ...installed.manifest.pages[0], opensImages: 'yes' }] }), 'opensImages is a boolean')
+    const conditionalImages = { prompt: '^\\s*\\{[\\s\\S]*"items"\\s*:' }
+    assert.deepEqual(registry.parsePluginManifest({ ...installed.manifest, pages: [{ ...installed.manifest.pages[0], opensImages: conditionalImages }] }).pages[0].opensImages, conditionalImages, 'a page may promote its action when the positive prompt matches')
+    assert.throws(() => registry.parsePluginManifest({ ...installed.manifest, pages: [{ ...installed.manifest.pages[0], opensImages: { prompt: '[' } }] }), /Invalid prompt regular expression/)
+    assert.throws(() => registry.parsePluginManifest({ ...installed.manifest, pages: [{ ...installed.manifest.pages[0], opensImages: 'yes' }] }), 'opensImages is a boolean or a prompt pattern')
     assert.throws(() => shared.chatPageActionTier('unknown.write'), /등록된/)
     await registry.setPluginEnabled('text-editor', true)
   })

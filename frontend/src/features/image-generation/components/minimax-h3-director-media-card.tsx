@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type DragEvent, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react'
+import { Children, useEffect, useRef, useState, type DragEvent, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react'
 import { Copy, ImageIcon, MoreHorizontal, RefreshCw, Trash2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { IconButton } from '@/components/ui/icon-button'
@@ -310,7 +310,7 @@ export function MiniMaxH3DirectorMediaCard({
         </>
       )}
 
-      {children ? (
+      {Children.toArray(children).length > 0 ? (
         <div data-minimax-interactive="true" className="space-y-2 p-3" onClick={(event) => event.stopPropagation()}>
           {children}
         </div>

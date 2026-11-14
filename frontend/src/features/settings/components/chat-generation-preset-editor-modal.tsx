@@ -430,8 +430,8 @@ function useGenerationPresetChatPage({ open, preset, draft, setDraft, dirty, sav
     { id: 'name', label: t({ ko: '이름', en: 'Name' }), type: 'text', value: draft.name },
     { id: 'instruction', label: t({ ko: '용도 (모델에게 보여줌)', en: 'Purpose (shown to the model)' }), type: 'text', value: draft.instruction },
     ...(preset ? [] : [{ id: 'kind', label: t({ ko: '종류', en: 'Kind' }), type: 'select' as const, value: draft.kind, options: ['nai', 'comfyui'] }]),
-    { id: 'timing', label: t({ ko: '프롬프트 작성 시점 (inline: 답변과 같이, after: 답변 끝난 뒤 따로 작성)', en: 'When the prompt is written (inline: with the reply, after: from the finished reply)' }), type: 'select', value: prompting.timing, options: ['inline', 'after'] },
-    { id: 'guide', label: t({ ko: '프롬프트 작성 가이드 (몇 줄)', en: 'Prompt writing guide (a few lines)' }), type: 'text', value: prompting.guide },
+    { id: 'timing', label: t({ ko: '생성 시점 (inline: 대화 모델이 답변 중에 직접 작성, early: 장면만 받아 따로 작성해 바로 생성, after: 답변 끝난 뒤 따로 작성. 가이드 문서를 연결한 프리셋은 inline 불가)', en: 'When it is generated (inline: the chat model writes it while replying, early: written separately from a described scene and queued at once, after: written separately from the finished reply; inline is not available while a guide document is linked)' }), type: 'select', value: prompting.timing, options: ['inline', 'early', 'after'] },
+    { id: 'guide', label: t({ ko: '추가 지시 (몇 줄, 가이드 문서와 함께 전달)', en: 'Extra instructions (a few lines, sent with the guide document)' }), type: 'text', value: prompting.guide },
     { id: 'previousImages', label: t({ ko: '이전 이미지 참고 장수', en: 'Earlier pictures shown' }), type: 'number', value: prompting.previousImages, min: 0, max: 4, integer: true },
     ...(draft.kind === 'nai' && nai ? [
       { id: 'model', label: t({ ko: '모델', en: 'Model' }), type: 'select' as const, value: nai.model, options: [...new Set([...NAI_MODEL_OPTIONS.map((option) => option.value), nai.model])] },

@@ -149,6 +149,9 @@ dialog {
 }
 /* Older Chromium does not pass custom properties to ::backdrop; the fallback keeps the scrim there. */
 dialog::backdrop { background: var(--conai-scrim, rgba(0, 0, 0, .62)) }
+/* Last row of a dialog: Cancel and the one primary action at the right; .start keeps an item (Delete) at the left. */
+.conai-dialog-foot { display: flex; justify-content: flex-end; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 16px }
+.conai-dialog-foot > .start { margin-right: auto }
 
 /* ---------- Page layout ---------- */
 

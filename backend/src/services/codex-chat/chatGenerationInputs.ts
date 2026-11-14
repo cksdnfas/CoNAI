@@ -14,6 +14,13 @@ export const SCENE_DESCRIPTION = 'What this moment shows, as comma-separated Dan
 
 const SHARED_SCENE_DESCRIPTION = 'Tags shared by the whole picture, comma-separated Danbooru-style: subject count (2girls, 1boy 1girl), setting, lighting, composition, camera angle. When the picture shows specific characters, put each one\'s looks, clothing, expression, pose and action in its own characters entry, not here. Do not add quality, artist or style tags and no negative tags; the preset already holds them.'
 
+/** A field description sits closer to the value than the preset's guide, so it defers to the guide by itself. */
+const GUIDE_FIRST_NOTE = 'Where the preset\'s prompt guide says otherwise, follow the guide.'
+
+function isGuided(preset: Pick<ChatGenerationPreset, 'prompting'>) {
+  return Boolean(preset.prompting.guide || preset.prompting.guideSkill?.title)
+}
+
 /** `self`: offered only to an inline speaker with appearance tags; the server adds those tags to that entry. */
 function naiCharactersSchema(self: boolean) {
   return z.array(z.object({
@@ -43,7 +50,7 @@ export type PresetInputShape = { shape: Record<string, z.ZodTypeAny>; fill: stri
  * choose it. A dropdown or a number may be left out, and the description says what that keeps. `canSearch`: the
  * caller is offered search_custom_dropdown_items, so a list too long to send is looked up instead of guessed.
  */
-function fieldSchema(field: MarkedField, preset: unknown, canSearch: boolean): z.ZodTypeAny {
+function fieldSchema(field: MarkedField, preset: unknown, canSearch: boolean, guided: boolean): z.ZodTypeAny {
   const choices = mcpDropdownChoices(field)
   const label = field.description ? `${field.label}: ${field.description}` : field.label
   const notes: string[] = []
@@ -69,7 +76,11 @@ function fieldSchema(field: MarkedField, preset: unknown, canSearch: boolean): z
     schema = z.record(z.string(), z.unknown())
   } else {
     schema = z.string().min(1).max(8000)
-    if (field.type !== 'select') required = true
+    if (field.type !== 'select') {
+      required = true
+      // The workflow's label says nothing of the format the guide asks for, and it sits closer to the value than the guide.
+      if (guided) notes.push(GUIDE_FIRST_NOTE)
+    }
   }
   if (!required && (choices || field.type === 'number' || field.type === 'select') && (typeof preset === 'string' || typeof preset === 'number')) {
     notes.push(`Leave out to keep the preset value ${field.type === 'number' ? String(preset) : JSON.stringify(preset)}.`)
@@ -111,10 +122,8 @@ export function presetInputShape(preset: ChatGenerationPreset, options: { self?:
     const sizes = preset.nai?.sizes ?? []
     const labels = sizes.map((size) => size.label)
     const characters = supportsNaiCharacterPrompts(preset.nai?.model)
-    // A field description sits closer to the value than the tool's guide, so it must defer to the guide by itself.
-    const guided = Boolean(preset.prompting.guide || preset.prompting.guideSkill?.title)
     const scene = characters ? SHARED_SCENE_DESCRIPTION : SCENE_DESCRIPTION
-    const shape: Record<string, z.ZodTypeAny> = { prompt: z.string().min(1).max(4000).describe(guided ? `${scene} Where the preset's prompt guide says otherwise, follow the guide.` : scene) }
+    const shape: Record<string, z.ZodTypeAny> = { prompt: z.string().min(1).max(4000).describe(isGuided(preset) ? `${scene} ${GUIDE_FIRST_NOTE}` : scene) }
     if (characters) shape.characters = naiCharactersSchema(options.self === true)
     if (labels.length > 1) {
       shape.size = z.enum(labels as [string, ...string[]]).optional().describe(`Picture size: ${sizes.map((size) => `${size.label} (${size.width}×${size.height})`).join(', ')}. Default ${labels[0]}.`)
@@ -127,7 +136,8 @@ export function presetInputShape(preset: ChatGenerationPreset, options: { self?:
   const { config, workflow, marked } = fields
   const exposed = marked.filter((field) => config.exposedFieldIds.includes(field.id) && field.id !== config.referenceField)
   const shape: Record<string, z.ZodTypeAny> = {}
-  for (const field of exposed) shape[field.id] = fieldSchema(field, config.fixedInputs[field.id] ?? field.default_value, options.canSearch === true)
+  const guided = isGuided(preset)
+  for (const field of exposed) shape[field.id] = fieldSchema(field, config.fixedInputs[field.id] ?? field.default_value, options.canSearch === true, guided)
   const fill = exposed.length > 0 ? `Fill ${exposed.map((field) => `${field.id} (${field.label})`).join(', ')}.` : 'It takes no input.'
   const promptField = comfyAssetFields(config, marked).promptField
   return { shape, fill, workflowName: workflow.name, problem: null, sceneField: promptField && shape[promptField] ? promptField : null }

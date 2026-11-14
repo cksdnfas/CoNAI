@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ChevronDown, Files, FolderKanban, RefreshCw, TriangleAlert } from 'lucide-react'
 import { EmptyState } from '@/components/ui/empty-state'
-import { copyChatPageData, type ChatPageData, type GenerationLayoutSurface, type PluginInstance, type PluginLaunch, type PluginSnapshot, type PluginWorkspaceProposal, type PluginMediaProposal, type StoredFileEntry } from '@conai/shared'
+import { copyChatPageData, type ChatPageData, type GenerationLayoutSurface, type PluginInstance, type PluginLaunch, type PluginMediaPickOptions, type PluginMediaPickItem, type PluginSnapshot, type PluginWorkspaceProposal, type PluginMediaProposal, type StoredFileEntry } from '@conai/shared'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
@@ -33,8 +33,10 @@ import { fetchPluginNative, pluginNativeResponse } from './plugin-native-api'
 import { createRuntimeEventStream } from '@/lib/runtime-event-stream'
 import { useCodexChat } from '@/features/codex-chat/codex-chat-context'
 import { getCodexChatThread } from '@/lib/api-codex-chat'
+import { MediaLibraryPicker, type MediaLibrarySelection } from '@/components/media/media-library-picker'
+import { getImagesBatch, IMAGE_BATCH_MAX_COUNT } from '@/lib/api-images'
 /** A library image's composite hash: 32 hex characters. */
-const LIBRARY_HASH_PATTERN = /^[a-f0-9]{32}$/i
+const LIBRARY_HASH_PATTERN = /^(?:[a-f0-9]{32}|[a-f0-9]{48})$/i
 const proposalRoute = (proposal: PluginProposal) => 'source' in proposal ? proposal.source === 'media' ? 'media-proposals' : 'workspace-proposals' : 'proposals'
 function appResultSummary(result: unknown) {
   return JSON.stringify(result, (_key, value: unknown) => {
@@ -156,6 +158,7 @@ function PluginFrame({ instance, onDirty, embed, launch }: { instance: PluginIns
   const [appRequestIds, setAppRequestIds] = useState<string[]>([])
   const [appResult, setAppResult] = useState('')
   const [review, setReview] = useState(false)
+  const [mediaPicks, setMediaPicks] = useState<Array<{ id: string; input: PluginMediaPickOptions; resolve: (items: MediaLibrarySelection[]) => void }>>([])
   const appRequestsQuery = useAppRequestsById(appRequestIds)
   const appRequests = appRequestsQuery.data?.requests ?? []
   const appCall = async (method: 'call' | 'action', args: unknown, signal?: AbortSignal) => {
@@ -314,6 +317,35 @@ function PluginFrame({ instance, onDirty, embed, launch }: { instance: PluginIns
         if (message.method === 'app.fetch') return fetchPluginNative(instance.id, message.args, controller.signal)
         if (JSON.stringify(message.args ?? null).length > 4_500_000) throw new Error('요청이 너무 커.')
         const args = message.args as Record<string, unknown> | undefined
+        if (message.method === 'pickMedia') {
+          if ((args?.kind !== undefined && (typeof args.kind !== 'string' || !['image', 'video', 'all'].includes(args.kind)))
+            || (args?.max !== undefined && (typeof args.max !== 'number' || !Number.isInteger(args.max) || args.max < 0))
+            || (args?.title !== undefined && typeof args.title !== 'string')) {
+            throw new ApiRequestError(t({ ko: '미디어 선택 옵션을 확인해줘.', en: 'Check the media picker options.' }), 400)
+          }
+          await request(`/instances/${instance.id}`)
+          controller.signal.throwIfAborted()
+          const selected = await new Promise<MediaLibrarySelection[]>((resolve, reject) => {
+            const remove = () => {
+              controller.signal.removeEventListener('abort', abort)
+              setMediaPicks(items => items.filter(item => item.id !== requestId))
+            }
+            const abort = () => { remove(); reject(controller.signal.reason) }
+            controller.signal.addEventListener('abort', abort, { once: true })
+            setMediaPicks(items => [...items, { id: requestId, input: (args ?? {}) as PluginMediaPickOptions, resolve: result => { remove(); resolve(result) } }])
+          })
+          const result: PluginMediaPickItem[] = []
+          for (let offset = 0; offset < selected.length; offset += IMAGE_BATCH_MAX_COUNT) {
+            const batch = selected.slice(offset, offset + IMAGE_BATCH_MAX_COUNT)
+            const records = await getImagesBatch(batch.map(item => item.compositeHash), { signal: controller.signal })
+            const byHash = new Map(records.map(item => [item.composite_hash, item]))
+            for (const item of batch) {
+              const record = byHash.get(item.compositeHash)
+              result.push({ ...item, kind: item.mimeType?.startsWith('video/') ? 'video' : 'image', width: record?.width ?? null, height: record?.height ?? null })
+            }
+          }
+          return result
+        }
         if (message.method === 'app.download') {
           const path = pluginNativeApiPath(String(args?.path ?? ''), [window.location.origin, new URL(buildApiUrl('/'), window.location.href).origin])
           await request(`/instances/${instance.id}`)
@@ -432,6 +464,7 @@ function PluginFrame({ instance, onDirty, embed, launch }: { instance: PluginIns
     {error ? <Alert variant="destructive" className="mb-2"><TriangleAlert /><AlertDescription>{error}</AlertDescription></Alert> : null}
     {connectionError ? <Alert variant="warning" className="mb-2"><TriangleAlert /><AlertDescription className="flex flex-wrap items-center gap-2"><span className="min-w-0 flex-1">{connectionError}</span>{closed ? null : <Button size="sm" variant="secondary" onClick={() => void checkConnection()}>{t({ ko: '다시 확인', en: 'Retry' })}</Button>}</AlertDescription></Alert> : null}
     {blockedFrame ? null : <iframe ref={frame} title={instance.page.title} allow="autoplay" referrerPolicy="no-referrer" src={`/api/plugin-assets/${instance.plugin.id}/${instance.plugin.version}/${instance.page.entry}`} onLoad={connect} style={embed ? { height: embed.height } : undefined} className={cn('w-full rounded-sm border-0', !embed && 'h-[max(420px,calc(100dvh-var(--theme-shell-header-height)-7rem))]')} />}
+    {mediaPicks[0] ? <MediaLibraryPicker key={mediaPicks[0].id} initial={[]} mediaKind={mediaPicks[0].input.kind ?? 'all'} maxCount={mediaPicks[0].input.max ?? Infinity} title={mediaPicks[0].input.title} onPick={mediaPicks[0].resolve} onClose={() => mediaPicks[0].resolve([])} /> : null}
     {/* App operations started here report their job result back to the plugin page. */}
     {appRequests.filter(request => request.jobId).map(request => <AppRequestJob key={request.id} jobId={request.jobId!} showProgress={false} onFinished={result => { channel.current?.postMessage({ type: 'saved', proposalId: request.id, result }); setAppResult(appResultSummary(result)) }} />)}
     <PluginReviewBar

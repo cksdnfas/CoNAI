@@ -12,7 +12,7 @@ const $ = (id) => document.getElementById(id)
 const esc = (value) => String(value ?? '').replace(/[&<>"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[char])
 const clamp = (value, low, high) => Math.min(high, Math.max(low, value))
 const color = (index) => REGION_COLORS[index % REGION_COLORS.length]
-const HASH = /^[a-f0-9]{32}$/i
+const HASH = /^(?:[a-f0-9]{32}|[a-f0-9]{48})$/i
 const TERMINAL = new Set(['completed', 'failed', 'cancelled'])
 const STATUS_LABEL = { queued: '대기 중', dispatching: '보내는 중', running: '생성 중', completed: '완료', failed: '실패', cancelled: '취소됨' }
 const MAX_STORED_JOBS = 8
@@ -94,7 +94,6 @@ function renderCanvasFrame() {
   const image = state.source && state.showImage
   canvas.classList.toggle('has-image', Boolean(image))
   canvas.style.setProperty('--image', image ? `url("${state.source.url}")` : 'none')
-  $('size-badge').textContent = `${width}×${height}`
   renderSizeControl()
   $('img-toggle').hidden = !state.source
   $('show-img').checked = state.showImage
@@ -133,7 +132,7 @@ function renderRegionList() {
   $('region-count').textContent = `${state.draft.items.length}개`
   $('layers').innerHTML = state.draft.items.map((item, index) => {
     const kind = KINDS.find((entry) => entry.id === item.label)?.label ?? ''
-    return `<li class="region-row${index === state.sel ? ' selected' : ''}" tabindex="0" data-index="${index}" style="--c:${color(index)}"><span class="number">${index + 1}</span><span class="text"><span class="kind">${esc(kind)}</span><span class="caption${item.caption ? '' : ' empty'}">${esc(item.caption || '아직 비어 있어')}</span></span><button type="button" class="conai-icon-button sm" data-remove="${index}" aria-label="영역 ${index + 1} 삭제" title="삭제">${ICON.trash}</button></li>`
+    return `<li class="region-row${index === state.sel ? ' selected' : ''}" tabindex="0" data-index="${index}" style="--c:${color(index)}"><span class="number">${index + 1}</span><span class="text"><span class="kind">${esc(kind)}</span><span class="caption${item.caption ? '' : ' empty'}">${esc(item.caption || '프롬프트 없음')}</span></span><button type="button" class="conai-icon-button sm" data-remove="${index}" aria-label="영역 ${index + 1} 삭제" title="삭제">${ICON.trash}</button></li>`
   }).join('')
 }
 
@@ -176,10 +175,13 @@ function renderBanner() {
   banner.hidden = false
   const parts = []
   if (source) {
-    parts.push(`<span class="badge ok">가져옴</span><span>${esc(source.name)} · ${source.layout ? `영역 ${source.original.items.length}개를 읽었어.` : '레이아웃 프롬프트가 아니라서 메인 프롬프트로만 가져왔어.'}${source.skipped ? ` 읽지 못한 영역 ${source.skipped}개는 건너뛰었어.` : ''}</span>`)
-    parts.push('<span class="conai-spacer"></span><button type="button" data-banner="reset">원본 영역으로 되돌리기</button><button type="button" class="ghost" data-banner="detach">이미지 떼기</button>')
+    parts.push(`<b class="source-name">${esc(source.name)}</b>`)
+    if (!source.layout) parts.push('<span class="badge warn">프롬프트만 가져옴</span>')
+    if (source.skipped) parts.push(`<span class="badge warn">영역 ${source.skipped}개 못 읽음</span>`)
   }
-  if (previous) parts.push(`${source ? '' : '<span class="conai-spacer"></span>'}<button type="button" class="ghost" data-banner="restore">이전 초안 복원</button>`)
+  parts.push('<span class="conai-spacer"></span>')
+  if (source) parts.push('<button type="button" data-banner="reset">원본으로 되돌리기</button><button type="button" class="ghost" data-banner="detach">이미지 떼기</button>')
+  if (previous) parts.push('<button type="button" class="ghost" data-banner="restore">이전 초안 복원</button>')
   banner.innerHTML = parts.join('')
 }
 
@@ -210,12 +212,11 @@ const syncOptionsReset = () => {
 /** Every workflow field the plugin does not fill itself (checkpoint, steps, CFG…), so the workflow can be tuned here. */
 function renderOptions() {
   const host = $('options-box')
-  const { adjustable, fixed } = splitOptionFields(workflowFields(), state.setup.mapping)
-  host.hidden = !adjustable.length && !fixed.length
+  const { adjustable } = splitOptionFields(workflowFields(), state.setup.mapping)
+  host.hidden = !adjustable.length
   if (host.hidden) { host.innerHTML = ''; return }
   host.innerHTML = `<div class="options-head"><p class="conai-overline">워크플로우 옵션</p><button type="button" class="ghost" id="options-reset">기본값으로</button></div>
-    ${adjustable.map((field) => `<label>${esc(field.label || field.id)}${optionControl(field)}</label>`).join('')}
-    ${fixed.length ? `<p class="hint">이 화면에서 고칠 수 없는 칸(${esc(fixed.map((field) => field.label || field.id).join(', '))})은 워크플로우에 저장된 값으로 생성돼.</p>` : ''}`
+    ${adjustable.map((field) => `<label>${esc(field.label || field.id)}${optionControl(field)}</label>`).join('')}`
   syncOptionsReset()
 }
 
@@ -254,17 +255,22 @@ function renderSetup() {
   const fields = workflowFields()
   const mapping = state.setup.mapping
   const issues = current ? setupIssues() : []
-  const option = (field, selected) => `<option value="${esc(field.id)}"${field.id === selected ? ' selected' : ''}>${esc(field.label || field.id)} (${esc(field.id)})</option>`
-  const row = (role) => `<div class="maprow"><div class="role"><b>${role.label}</b></div><label><select data-role="${role.id}" aria-label="${role.label} 칸"><option value="">연결 안 함</option>${compatibleFields(fields, role.id).map((field) => option(field, mapping[role.id])).join('')}</select></label><span class="badge ${mapping[role.id] ? 'ok' : ''}">${mapping[role.id] ? '연결됨' : role.required ? '필수' : '선택'}</span></div>`
+  const name = (field) => field.label || field.id
+  // The field id is shown only to tell apart fields that share a label.
+  const option = (field, selected, list) => `<option value="${esc(field.id)}"${field.id === selected ? ' selected' : ''}>${esc(name(field))}${list.filter((other) => name(other) === name(field)).length > 1 ? ` (${esc(field.id)})` : ''}</option>`
+  const row = (role) => {
+    const list = compatibleFields(fields, role.id)
+    return `<div class="maprow"><div class="role"><b>${role.label}</b>${role.required ? '<span class="badge">필수</span>' : ''}</div><label><select data-role="${role.id}" aria-label="${role.label} 칸"><option value="">연결 안 함</option>${list.map((field) => option(field, mapping[role.id], list)).join('')}</select></label></div>`
+  }
   const roles = rolesFor(mapping)
   const modes = [['size', '너비·높이'], ['ratio', '종횡비·메가픽셀']]
   $('view-setup').innerHTML = `<div class="setup">
     <section>
-      <label>사용할 워크플로우<select id="workflow-select"><option value="">선택 안 함</option>${state.workflows.map((item) => `<option value="${item.id}"${item.id === state.setup.workflowId ? ' selected' : ''}>${esc(item.name)} (#${item.id})</option>`).join('')}</select></label>
-      <p class="conai-overline field-gap">검사 결과</p>
-      <ul class="checks">${current ? (issues.length ? issues.map((issue) => `<li><span class="badge warn">확인</span><span>${esc(issue)}</span></li>`).join('') : '<li><span class="badge ok">통과</span><span>생성에 필요한 칸이 모두 연결돼 있어.</span></li>') : ''}
-        ${current && !sizeConnected(mapping) ? '<li><span class="badge warn">참고</span><span>크기 칸이 없어서 워크플로우에 고정된 크기로 생성돼. 캔버스 크기가 이와 다르면 박스 위치가 어긋나.</span></li>' : ''}</ul>
-      <div class="toolbar field-gap"><button type="button" id="reload-workflows">워크플로우 다시 불러오기</button></div>
+      <label>워크플로우<select id="workflow-select"><option value="">선택 안 함</option>${state.workflows.map((item) => `<option value="${item.id}"${item.id === state.setup.workflowId ? ' selected' : ''}>${esc(item.name)}</option>`).join('')}</select></label>
+      <div class="toolbar"><button type="button" id="reload-workflows">다시 불러오기</button></div>
+      ${current ? `<p class="conai-overline field-gap">검사</p>
+      <ul class="checks">${issues.length ? issues.map((issue) => `<li>${esc(issue)}</li>`).join('') : '<li><span class="badge ok">통과</span></li>'}
+        ${sizeConnected(mapping) ? '' : '<li>크기 칸이 연결되지 않아 워크플로우 고정 크기로 생성돼 박스가 어긋날 수 있어.</li>'}</ul>` : ''}
     </section>
     <section>
       <p class="conai-overline">입력 칸 연결</p>
@@ -276,15 +282,15 @@ function renderSetup() {
 
 function renderResults() {
   const host = $('view-results')
-  if (!state.jobs.length) { host.innerHTML = '<p class="conai-empty">아직 요청한 작업이 없어. 편집기에서 “생성 요청”을 눌러줘.</p>'; return }
+  if (!state.jobs.length) { host.innerHTML = '<p class="conai-empty">요청한 작업이 없어.</p>'; return }
   host.innerHTML = `<div class="jobs">${state.jobs.map((job) => {
     const tone = job.status === 'completed' ? 'ok' : job.status === 'failed' ? 'destructive' : TERMINAL.has(job.status) ? '' : 'warn'
     const cancelable = !TERMINAL.has(job.status)
     const ratio = `${job.size[0]} / ${job.size[1]}`
     return `<section>
-      <div class="job-head"><b>#${job.id}</b><span class="badge ${tone}">${STATUS_LABEL[job.status] ?? esc(job.status)}</span><span class="muted">${esc(job.workflowName)} · 영역 ${job.regions}개 · ${job.size[0]}×${job.size[1]}</span>${cancelable ? `<button type="button" class="ghost" data-cancel="${job.id}">취소</button>` : ''}</div>
-      ${job.error ? `<p class="muted">${esc(job.error)}</p>` : ''}
-      <div class="tiles">${job.hashes.map((hash) => `<div class="tile"><div class="conai-media-card"><div class="conai-media" style="--ratio:${ratio}"><img src="/api/images/${hash}/thumbnail" alt="작업 #${job.id} 결과" loading="lazy"></div></div><div class="actions"><button type="button" data-edit="${job.id}:${hash}">이 결과로 편집</button><button type="button" class="ghost" data-open="${hash}">이미지 상세 열기</button></div></div>`).join('')}
+      <div class="toolbar job-head"><b>#${job.id}</b><span class="badge ${tone}">${STATUS_LABEL[job.status] ?? esc(job.status)}</span><span class="muted">${esc(job.workflowName)} · 영역 ${job.regions}개 · ${job.size[0]}×${job.size[1]}</span>${cancelable ? `<button type="button" class="ghost" data-cancel="${job.id}">취소</button>` : ''}</div>
+      ${job.error ? `<p class="job-error">${esc(job.error)}</p>` : ''}
+      <div class="tiles">${job.hashes.map((hash) => `<div class="tile"><div class="conai-media-card"><div class="conai-media" style="--ratio:${ratio}"><img src="/api/images/${hash}/thumbnail" alt="작업 #${job.id} 결과" loading="lazy"></div></div><div class="toolbar actions"><button type="button" data-edit="${job.id}:${hash}">편집</button><button type="button" class="ghost" data-open="${hash}">상세 보기</button></div></div>`).join('')}
       ${job.status === 'completed' && !job.hashes.length ? '<p class="muted">결과 이미지를 처리하는 중이야…</p>' : ''}</div></section>`
   }).join('')}</div>`
 }
@@ -366,15 +372,16 @@ function applySource({ kind, hash, name, url, size, prompt }) {
   const parsed = parseLayoutPrompt(prompt, canvas)
   const draft = parsed?.draft ?? Object.assign(newDraft(canvas), { summary: String(prompt ?? '').trim() })
   replaceDraft(draft, { kind, hash, name, url, layout: Boolean(parsed), skipped: parsed?.skipped ?? 0, original: cloneDraft(draft) })
-  notify(parsed ? `영역 ${draft.items.length}개를 읽었어.` : '이 이미지의 프롬프트는 레이아웃(JSON)이 아니야. 메인 프롬프트로만 가져왔어.')
+  // The banner shows the source and what could not be read; the region list shows the count.
+  notify('')
 }
 
 async function importFromHash(hash) {
-  if (!HASH.test(hash)) throw new Error('이미지 해시는 32자리 영문·숫자야.')
+  if (!HASH.test(hash)) throw new Error('라이브러리 이미지를 찾을 수 없어.')
   notify('이미지를 불러오는 중…')
   const { data } = await call(`/api/images/${hash}`)
   applySource({
-    kind: 'library', hash, name: String(data.original_file_path ?? '').split(/[\\/]/).pop() || hash.slice(0, 8),
+    kind: 'library', hash, name: String(data.original_file_path ?? '').split(/[\\/]/).pop() || '이미지',
     url: `/api/images/${hash}/thumbnail`, size: [data.width, data.height], prompt: data.ai_metadata?.prompts?.prompt,
   })
 }
@@ -422,7 +429,7 @@ async function generate(seedOverride) {
     state.jobs.unshift({ id, status: result.record.status ?? 'queued', workflowName: current.name, layout: stringifyLayout(draft), size: [...draft.size], regions: draft.items.length, hashes: [], error: '', createdAt: Date.now() })
     void saveJobs()
     renderTabs(); publish(); startPolling()
-    notify(`작업 #${id}을 요청했어. “결과” 탭에서 볼 수 있어.`)
+    notify(`작업 #${id} 요청했어.`)
     return id
   } finally {
     state.submitting = false
@@ -500,7 +507,6 @@ function chooseWorkflow(id) {
   state.setup.options = {}
   void saveSetup()
   setupChanged()
-  if (id) notify(setupIssues().length ? '워크플로우를 골랐어. 아래 연결을 확인해줘.' : '워크플로우를 골랐어. 편집기에서 생성할 수 있어.')
 }
 
 // ---- events -----------------------------------------------------------------------------------------------------
@@ -672,18 +678,19 @@ function bindChrome() {
   $('tabs').addEventListener('click', (event) => { const tab = event.target.closest('[data-tab]')?.dataset.tab; if (tab) showTab(tab) })
   $('generate').addEventListener('click', guard(async () => { await generate() }))
   $('wf-open').addEventListener('click', () => showTab('setup'))
-  $('import-open').addEventListener('click', () => { $('hash-input').value = ''; $('import-dialog').showModal() })
-  $('import-close').addEventListener('click', () => $('import-dialog').close())
-  $('import-hash').addEventListener('click', guard(async () => { await importFromHash($('hash-input').value.trim()); $('import-dialog').close() }))
+  // Older hosts cannot open the library picker; the option stays hidden there rather than asking for a typed hash.
+  $('pick-library').hidden = !api.supports('pickMedia')
+  $('pick-library').addEventListener('click', guard(async () => {
+    const [picked] = await api.pickMedia({ kind: 'image', max: 1 })
+    if (picked) await importFromHash(picked.compositeHash)
+  }))
+  $('pick-file').addEventListener('click', () => $('file').click())
   $('file').addEventListener('change', guard(async (event) => {
     const file = event.target.files?.[0]
     event.target.value = ''
-    if (file) { await importFromFile(file); $('import-dialog').close() }
+    if (file) await importFromFile(file)
   }))
-  $('new-draft').addEventListener('click', () => {
-    replaceDraft(newDraft(state.draft.size), null)
-    notify('새 초안을 시작했어. 이전 초안은 위 배너에서 복원할 수 있어.')
-  })
+  $('new-draft').addEventListener('click', () => { replaceDraft(newDraft(state.draft.size), null) })
 
   $('view-setup').addEventListener('change', guard(async (event) => {
     if (event.target.id === 'workflow-select') { chooseWorkflow(Number(event.target.value) || null); return }
@@ -707,7 +714,6 @@ function bindChrome() {
     }
     if (event.target.id !== 'reload-workflows') return
     await loadWorkflows(); setupChanged()
-    notify('워크플로우 목록을 다시 불러왔어.')
   }))
   $('view-results').addEventListener('click', guard(async (event) => {
     const edit = event.target.closest('[data-edit]')?.dataset.edit
@@ -780,7 +786,8 @@ try { await loadWorkflows() } catch (error) { notify(`워크플로우를 불러�
 if (state.setup.workflowId && !workflow()) chooseWorkflow(null)
 
 renderEditor(); renderOptions(); renderTabs(); publish()
-if (!workflow() && !$('status').classList.contains('error')) notify('연결 설정에서 생성에 쓸 워크플로우를 먼저 골라줘.')
+// The genbar shows a missing workflow ("선택 안 함"), so the status line only keeps a load error.
+if (!$('status').classList.contains('error')) notify('')
 
 api.events.on('queue.job.status', (event) => {
   const jobId = event?.payload?.job_id ?? event?.job_id

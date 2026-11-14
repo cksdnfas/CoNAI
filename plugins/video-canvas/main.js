@@ -7,9 +7,16 @@ const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;
 const names = { image: '이미지', video: '비디오', audio: '오디오', bundle: '레퍼런스 번들', cut: '영상 컷', frame: '프레임' }
 const ports = { start: '시작 프레임', end: '끝 프레임', ref_image: '참조 이미지', ref_video: '참조 영상', ref_audio: '참조 오디오', refmod: '번들' }
 const reviewNames = { pending: '대기', pass: '통과', redo: '다시' }
+const statusNames = { preparing: '준비 중', submitting: '제출 중', starting: '시작 중', pending: '대기', queued: '대기', running: '진행 중', processing: '처리 중', completed: '완료', failed: '실패', cancelled: '취소됨', proposed: '제안', discarded: '폐기됨' }
+const assetStates = { ready: ['확인됨', 'ok'], changed: ['변경됨', 'warn'], 'no-permission': ['권한 없음', 'destructive'], missing: ['없음', 'destructive'], unverified: ['확인 실패', 'warn'] }
+const badge = (label, cls = '') => `<span class="badge ${cls}">${esc(label)}</span>`
+const statusBadge = status => badge(statusNames[status] ?? status, status === 'completed' ? 'ok' : status === 'failed' ? 'destructive' : '')
+const assetBadge = check => check ? badge(...(assetStates[check.status] ?? [check.status])) : ''
+const progressText = progress => progress?.total ? `${progress.processed}/${progress.total}` : ''
+const seconds = value => `${Number(Number(value).toFixed(1))}초`
 const s = { project: null, projects: [], selection: null, edges: 'all', x: 24, y: 24, zoom: 1, launch: null, checks: null, tab: 'input', batch: null, nodeDetail: null, runBusy: false }
 const assistant = createAssistantState(), extractionWatches = new Map()
-let api, queue = Promise.resolve(), previewObserver
+let api, queue = Promise.resolve(), previewObserver, launchName = null
 const selected = () => s.project?.nodes.find(node => node.id === s.selection)
 const cuts = () => s.project?.nodes.filter(node => node.kind === 'cut') ?? []
 function notice(message, error = false) { $('message').textContent = message; $('message').className = error ? 'error' : 'muted' }
@@ -64,7 +71,7 @@ async function reload() {
   render()
 }
 async function edit(ops, revision = s.project.revision, origin = 'human') {
-  const prepared = ops.map(op => op.op === 'import_launch' ? { ...op, ref: { source: 'library', compositeHash: s.launch.compositeHash } } : op)
+  const prepared = ops.map(op => op.op === 'import_launch' ? { ...op, name: op.name ?? launchName ?? names.image, ref: { source: 'library', compositeHash: s.launch.compositeHash } } : op)
   const result = await request('apply_ops', { ops: prepared, expected_revision: revision, origin })
   if (origin === 'assistant') s.batch = result
   await reload()
@@ -98,27 +105,32 @@ function slotRows(cut) {
 function render() {
   $('projects').innerHTML = '<option value="">프로젝트를 골라줘</option>' + s.projects.map(project => `<option value="${esc(project.id)}">${esc(project.name)}</option>`).join('')
   $('projects').value = s.project?.id ?? ''
-  $('revision').textContent = s.project ? `저장됨 · rev ${s.project.revision}` : ''
+  $('revision').textContent = s.project ? `rev ${s.project.revision}` : ''
   $('counts').innerHTML = `<dt>노드</dt><dd>${s.project?.nodes.length ?? 0}</dd><dt>검수 통과 컷</dt><dd>${cuts().filter(cut => cut.review === 'pass').length} / ${cuts().length}</dd>`
   renderLaunch(); renderNodes(); renderInspector(); lockRunButtons(); publish()
 }
 function renderLaunch() {
   $('launch').hidden = !s.launch
   if (!s.launch) return
-  $('launch').innerHTML = `<b>이 이미지를 가져올까?</b><span class="muted">${esc(s.launch.compositeHash)}</span><select id="launch-target" aria-label="이미지 가져올 곳"><option value="">새 이미지 노드</option>${cuts().flatMap(cut => ['start', 'end', 'ref_image'].map(port => `<option value="${esc(`${cut.id}|${port}`)}">${esc(cut.data.name)} · ${ports[port]}</option>`)).join('')}</select><button data-launch="import" ${s.project ? '' : 'disabled'}>가져오기</button><button data-launch="dismiss">그만두기</button><span class="muted">위에서 프로젝트를 먼저 골라줘.</span>`
+  $('launch').innerHTML = `<span class="conai-media launch-thumb"><img src="/api/images/${encodeURIComponent(s.launch.compositeHash)}/thumbnail" alt=""></span><b>${esc(launchName ?? names.image)}</b><select id="launch-target" aria-label="이미지 가져올 곳"><option value="">새 이미지 노드</option>${cuts().flatMap(cut => ['start', 'end', 'ref_image'].map(port => `<option value="${esc(`${cut.id}|${port}`)}">${esc(cut.data.name)} · ${ports[port]}</option>`)).join('')}</select><button data-launch="import" class="primary" ${s.project ? '' : 'disabled'}>가져오기</button><button data-launch="dismiss" class="ghost">그만두기</button>${s.project ? '' : '<span class="muted">프로젝트를 먼저 골라줘.</span>'}`
+}
+async function libraryName(hash, kind = 'image') {
+  const path = (await http(`/api/images/${encodeURIComponent(hash)}`)).data?.original_file_path
+  return path?.replace(/\\/g, '/').split('/').at(-1) || names[kind]
 }
 function renderNodes() {
   previewObserver?.disconnect()
   $('nodes').innerHTML = (s.project?.nodes ?? []).map(node => {
-    const check = node.data.check?.status ?? '미확인', last = s.project.takes.filter(take => take.cutId === node.id).at(-1)
+    const last = s.project.takes.filter(take => take.cutId === node.id).at(-1)
+    const members = node.data.check?.members ?? node.data.members ?? []
     return `<article class="vc-node" data-id="${esc(node.id)}" data-kind="${esc(node.kind)}" style="left:${node.x}px;top:${node.y}px" tabindex="0" aria-label="${esc(node.data.name)}" aria-selected="${node.id === s.selection}">
       <small>${names[node.kind]}${node.kind === 'cut' ? ` · ${esc(node.data.mode)} · ${node.data.duration}초` : ''}</small><h3>${esc(node.data.name)}</h3>
-      ${node.kind === 'bundle' ? `<div class="conai-chips">${['image', 'video', 'audio'].map(kind => `<span class="badge">${names[kind]} ${(node.data.check?.members ?? node.data.members ?? []).filter(member => member.kind === kind).length}</span>`).join('')}</div>` : ''}
+      ${node.kind === 'bundle' ? `<div class="conai-chips">${['image', 'video', 'audio'].map(kind => [kind, members.filter(member => member.kind === kind).length]).filter(([, count]) => count).map(([kind, count]) => badge(`${names[kind]} ${count}`)).join('')}</div>` : ''}
       ${node.data.ref?.source === 'library' ? `<img data-thumb="${esc(node.data.ref.compositeHash)}" alt="" loading="lazy">` : ''}
       ${node.kind === 'cut' ? `<div class="vc-slots">${slotRows(node).map(row => {
         const source = s.project.nodes.find(node => node.id === row.edge?.from)
-        return `<div class="vc-slot ${row.active ? '' : 'unused'}" data-edge="${esc(row.edge?.id ?? '')}" data-port="${row.port}" data-position="${row.position}"><button class="vc-input" aria-label="${ports[row.port]}에 연결"></button><span>${ports[row.port]} ${['start', 'end'].includes(row.port) ? '' : row.position + 1}</span><span>${esc(source?.data.name ?? '비어 있음 · 끌어 넣기')}</span></div>`
-      }).join('')}</div><p class="muted">${esc(node.data.raw || node.data.prompt)}</p><small>${esc(last?.status ?? '생성 전')} · seed ${node.data.seed}</small>` : `<small>${esc(check)} · ${reviewNames[node.review]}</small><button draggable="true" class="vc-output" aria-label="이 소재 연결"></button>`}
+        return `<div class="vc-slot ${row.active ? '' : 'unused'}" data-edge="${esc(row.edge?.id ?? '')}" data-port="${row.port}" data-position="${row.position}"><button class="vc-input" aria-label="${ports[row.port]}에 연결"></button><span>${ports[row.port]} ${['start', 'end'].includes(row.port) ? '' : row.position + 1}</span><span>${esc(source?.data.name ?? '비어 있음')}</span></div>`
+      }).join('')}</div><p class="muted">${esc(node.data.raw || node.data.prompt)}</p><small>${esc(last ? statusNames[last.status] ?? last.status : '생성 전')} · seed ${node.data.seed}</small>` : `<div class="conai-chips">${assetBadge(node.data.check)}${node.review === 'pending' ? '' : badge(reviewNames[node.review], node.review === 'pass' ? 'ok' : 'warn')}</div><button draggable="true" class="vc-output" aria-label="이 소재 연결"></button>`}
     </article>`
   }).join('')
   previewObserver = new IntersectionObserver(entries => {
@@ -153,53 +165,62 @@ function drawEdges() {
 const button = (action, label, data = '', cls = '') => `<button class="${cls}" data-action="${action}" ${data}>${label}</button>`
 const field = (label, key, value, type = 'text') => `<label>${label}<input data-field="${key}" type="${type}" value="${esc(value)}"></label>`
 function review(item) {
-  return `<h2 class="conai-group-head">검수</h2><div class="conai-segmented">${Object.entries(reviewNames).map(([value, label]) => button('review', label, `data-review="${value}" data-item="${esc(item.id)}" aria-pressed="${item.review === value}"`)).join('')}</div><label>메모<input data-memo="${esc(item.id)}" value="${esc(item.memo)}"></label><p class="muted">검수는 사람이 직접 해. 어시스턴트 자기보고는 검수가 아니야.</p>`
+  return `<h2 class="conai-group-head">검수</h2><div class="conai-segmented">${Object.entries(reviewNames).map(([value, label]) => button('review', label, `data-review="${value}" data-item="${esc(item.id)}" aria-pressed="${item.review === value}"`)).join('')}</div><label>메모<input data-memo="${esc(item.id)}" value="${esc(item.memo)}"></label>`
 }
+const nameOf = id => s.project.nodes.find(node => node.id === id)?.data.name
+const toolbar = html => `<div class="toolbar">${html}</div>`
 function renderInspector() {
   const node = selected()
+  if (s.tab === 'assistant') $('assistant-panel').setAttribute('aria-current', 'true'); else $('assistant-panel').removeAttribute('aria-current')
   if (s.tab === 'checks' && s.checks) {
-    $('inspector').innerHTML = `<h2>전체 체크</h2>${Object.entries(s.checks.assets).map(([id, asset]) => `<div class="conai-list-row"><div class="conai-row-main"><b>${esc(s.project.nodes.find(node => node.id === id)?.data.name)}</b><p class="${asset.status === 'changed' ? 'warning' : ''}">${esc(asset.message ?? asset.status)}</p>${asset.status === 'changed' ? button('fingerprint', '새 파일로 갱신', `data-item="${esc(id)}"`) + button('keep', '그대로 두기') : ''}</div></div>`).join('')}${s.checks.cuts.map(cut => `<h3>${esc(s.project.nodes.find(node => node.id === cut.id)?.data.name)}</h3>${issues(cut.errors, 'error')}${issues(cut.warnings, 'warning')}`).join('')}<p class="muted">삭제·권한·필수 슬롯·한도·토큰 오류만 생성을 막아. 변경과 미사용 참조는 경고야.</p>`
+    $('inspector').innerHTML = `<h2>전체 체크</h2><div class="conai-list">${Object.entries(s.checks.assets).map(([id, asset]) => `<div class="conai-list-row"><div class="conai-row-main"><span class="conai-row-title">${esc(nameOf(id))}</span>${asset.message ? `<p class="error">${esc(asset.message)}</p>` : ''}${asset.status === 'changed' ? toolbar(button('fingerprint', '새 파일로 갱신', `data-item="${esc(id)}"`) + button('keep', '그대로 두기')) : ''}</div>${assetBadge(asset)}</div>`).join('')}${s.checks.cuts.map(cut => `<div class="conai-list-row"><div class="conai-row-main"><span class="conai-row-title">${esc(nameOf(cut.id))}</span>${issues(cut.errors, 'error')}${issues(cut.warnings, 'warning')}</div>${cut.blocked ? badge('막힘', 'destructive') : badge('통과', 'ok')}</div>`).join('')}</div>`
     return
   }
   if (s.tab === 'assistant') {
-    $('inspector').innerHTML = `<h2>어시스턴트 변경</h2><p class="muted">앱의 페이지 어시스턴트에 연결돼 있어. headless 도구도 같은 편집·체크·생성 함수를 써.</p><p>rev ${s.project?.revision ?? 0}</p><pre>${esc(JSON.stringify(s.batch ?? { applied: [], rejected: [] }, null, 2))}</pre>${button('undo', '마지막 어시스턴트 배치 되돌리기')}<h2 class="conai-group-head">생성 제안</h2>${(s.project?.takes ?? []).filter(take => take.status === 'proposed').map(takeCard).join('')}<h2 class="conai-group-head">프레임 추출 작업</h2>${(s.project?.extractions ?? []).map(item => `<div class="conai-list-row"><div class="conai-row-main"><p>${esc(item.status)} · ${esc(item.jobId ?? item.id)}</p>${item.error ? `<p class="error">${esc(item.error)}</p>` : ''}${item.jobId && !['completed', 'failed', 'cancelled'].includes(item.status) ? button('extraction-status', '상태 갱신', `data-extraction="${esc(item.id)}"`) + button('extraction-cancel', '취소', `data-extraction="${esc(item.id)}"`) : ''}</div></div>`).join('')}`
+    const proposals = (s.project?.takes ?? []).filter(take => take.status === 'proposed'), extractions = s.project?.extractions ?? []
+    const sourceName = item => item.source?.nodeId ? nameOf(item.source.nodeId) : s.project.takes.find(take => take.id === item.source?.takeId)?.label
+    $('inspector').innerHTML = `<h2>어시스턴트 변경</h2>${s.batch ? `<details><summary>적용 ${s.batch.applied.length} · 거절 ${s.batch.rejected.length}</summary><pre>${esc(JSON.stringify(s.batch, null, 2))}</pre></details>` : ''}${toolbar(button('undo', '직전 배치 되돌리기'))}${proposals.length ? `<h2 class="conai-group-head">생성 제안</h2><div class="conai-list">${proposals.map(takeCard).join('')}</div>` : ''}${extractions.length ? `<h2 class="conai-group-head">프레임 추출 작업</h2><div class="conai-list">${extractions.map(item => `<div class="conai-list-row"><div class="conai-row-main"><span class="conai-row-title">${esc(sourceName(item) ?? '프레임 추출')}</span>${progressText(item.progress) ? `<span class="conai-row-meta">${progressText(item.progress)}</span>` : ''}${item.error ? `<p class="error">${esc(item.error)}</p>` : ''}${item.jobId && !isTerminal(item.status) ? toolbar(button('extraction-status', '상태 갱신', `data-extraction="${esc(item.id)}"`) + button('extraction-cancel', '작업 취소', `data-extraction="${esc(item.id)}"`)) : ''}</div>${statusBadge(item.status)}</div>`).join('')}</div>` : ''}`
     return
   }
-  if (!node) { $('inspector').innerHTML = '<p class="conai-empty">소재나 컷을 골라줘.</p>'; return }
-  $('inspector').innerHTML = `<h2>${esc(node.data.name)}</h2>${field('이름 (@참조에 써)', 'name', node.data.name)}${node.kind === 'cut' ? cutInspector(node) : `<p class="muted">${names[node.kind]} · ${esc(node.data.check?.status ?? '체크 전')}</p>${button('preview', '미리보기')}${node.kind === 'video' ? button('extract', '프레임 추출') : ''}<h2 class="conai-group-head">쓰는 곳</h2><ul class="conai-list">${s.project.edges.filter(edge => edge.from === node.id).map(edge => `<li class="conai-list-row">${esc(s.project.nodes.find(node => node.id === edge.to)?.data.name)} · ${ports[edge.port]}</li>`).join('')}</ul>`}${review(node)}${button('remove', '노드 삭제', '', 'ghost')}`
+  if (!node) { $('inspector').innerHTML = '<p class="conai-empty">선택 없음</p>'; return }
+  const uses = node.kind === 'cut' ? [] : s.project.edges.filter(edge => edge.from === node.id)
+  $('inspector').innerHTML = `<h2>${names[node.kind]}</h2>${field('이름', 'name', node.data.name)}${node.kind === 'cut' ? cutInspector(node) : `${node.data.check ? `<div class="conai-chips">${assetBadge(node.data.check)}</div>` : ''}${toolbar(button('preview', '미리보기') + (node.kind === 'video' ? button('extract', '프레임 추출') : ''))}<h2 class="conai-group-head">쓰는 곳</h2>${uses.length ? `<ul class="conai-list">${uses.map(edge => `<li class="conai-list-row">${esc(nameOf(edge.to))} · ${ports[edge.port]}</li>`).join('')}</ul>` : '<p class="conai-empty">연결 없음</p>'}`}${review(node)}${toolbar(button('remove', '노드 삭제', '', 'ghost'))}`
 }
 const issues = (list, cls) => list.map(issue => `<p class="${cls}">${esc(issue.message)}</p>`).join('')
 function cutInspector(cut) {
   const resolved = resolvePrompt(s.project, cut), table = labelTable(s.project, cut)
-  const all = cutEdges(s.project, cut, false)
+  const all = cutEdges(s.project, cut, false), takes = s.project.takes.filter(take => take.cutId === cut.id).reverse()
   return `<div class="conai-tabs"><button data-tab="input" aria-selected="${s.tab !== 'generate'}">입력·프롬프트</button><button data-tab="generate" aria-selected="${s.tab === 'generate'}">생성·이력</button></div>
-    ${s.tab === 'generate' ? `<label>생성 프로필<select data-field="profileId"><option value="">골라줘</option>${s.project.profiles.map(profile => `<option value="${esc(profile.id)}" ${cut.data.profileId === profile.id ? 'selected' : ''}>${esc(profile.label)}</option>`).join('')}</select></label><div class="two">${field('길이(초)', 'duration', cut.data.duration, 'number')}${field('시드', 'seed', cut.data.seed, 'number')}</div><div class="row-actions">${button('seed', '새 시드')}${button('run', '지금 생성', '', 'primary')}${button('propose', '제안으로 올리기')}</div><p class="muted">제안은 캔버스에 남아. 승인·폐기로 결정해.</p><h2 class="conai-group-head">생성 이력</h2>${s.project.takes.filter(take => take.cutId === cut.id).slice().reverse().map(takeCard).join('')}` : `
+    ${s.tab === 'generate' ? `<label>생성 프로필<select data-field="profileId"><option value="">골라줘</option>${s.project.profiles.map(profile => `<option value="${esc(profile.id)}" ${cut.data.profileId === profile.id ? 'selected' : ''}>${esc(profile.label)}</option>`).join('')}</select></label><div class="two">${field('길이(초)', 'duration', cut.data.duration, 'number')}${field('시드', 'seed', cut.data.seed, 'number')}</div>${toolbar(button('seed', '새 시드') + button('run', '지금 생성', '', 'primary') + button('propose', '제안으로 올리기'))}<h2 class="conai-group-head">생성 이력</h2>${takes.length ? `<div class="conai-list">${takes.map(takeCard).join('')}</div>` : '<p class="conai-empty">없음</p>'}` : `
     <label>모드<select data-field="mode">${MODES.map(mode => `<option ${mode === cut.data.mode ? 'selected' : ''}>${mode}</option>`).join('')}</select></label>
     <h2 class="conai-group-head">입력 슬롯·순서</h2>
-    <p class="muted">REF2VA 이미지 9 · 영상 3 · 오디오 3 · 합계 12 · RefMod 1–8. 영상 구간 2–15초, 합계 15초. 안 쓰는 연결은 남겨 두고 생성에서 빼.</p>
     ${all.map(edge => {
       const node = s.project.nodes.find(node => node.id === edge.from), row = table.filter(row => row.edgeId === edge.id).map(row => row.label).join(' / ')
-      return `<details class="slot-editor" draggable="true" data-order="${esc(edge.id)}" data-port="${edge.port}"><summary>${esc(row || '미사용')} · ${esc(node.data.name)}</summary><p>${ports[edge.port]} ${edge.position + 1}</p><div class="row-actions">${button('up', '↑', `data-edge="${esc(edge.id)}"`)}${button('down', '↓', `data-edge="${esc(edge.id)}"`)}${button('disconnect', '연결 해제', `data-edge="${esc(edge.id)}"`)}</div>
+      return `<details class="slot-editor" draggable="true" data-order="${esc(edge.id)}" data-port="${edge.port}"><summary>${esc(row || '미사용')} · ${esc(node.data.name)}</summary><p class="muted">${ports[edge.port]} ${edge.position + 1}</p>${toolbar(button('up', '↑', `data-edge="${esc(edge.id)}" aria-label="위로"`) + button('down', '↓', `data-edge="${esc(edge.id)}" aria-label="아래로"`) + button('disconnect', '연결 해제', `data-edge="${esc(edge.id)}"`))}
       ${node.kind === 'video' || node.kind === 'audio' ? `<div class="two"><label>시작(초)<input type="number" step="any" data-prop="trim_start" data-edge="${esc(edge.id)}" value="${edge.props.trim_start ?? 0}"></label><label>끝(초)<input type="number" step="any" data-prop="trim_end" data-edge="${esc(edge.id)}" value="${edge.props.trim_end ?? node.data.duration ?? 2}"></label></div>` : ''}
       ${node.kind === 'video' ? `<label>영상 소리<select data-prop="media_mode" data-edge="${esc(edge.id)}">${[['video', '영상만'], ['audio', '소리만'], ['video_audio', '영상+소리']].map(([value, label]) => `<option value="${value}" ${(edge.props.media_mode ?? 'video') === value ? 'selected' : ''}>${label}</option>`).join('')}</select></label><label>오디오 슬롯 (0부터)<input type="number" data-prop="audioSlot" data-edge="${esc(edge.id)}" value="${edge.props.audioSlot ?? 0}"></label>` : ''}
       ${node.kind === 'bundle' ? `<div class="two"><label>번들 슬롯 (1–8)<input type="number" data-prop="slot" data-edge="${esc(edge.id)}" value="${edge.props.slot ?? edge.position + 1}"></label><label>강도<input type="number" step="any" data-prop="strength" data-edge="${esc(edge.id)}" value="${edge.props.strength ?? 1}"></label></div><label>설명<input data-prop="description" data-edge="${esc(edge.id)}" value="${esc(edge.props.description)}"></label>` : ''}</details>`
     }).join('')}
-    <div class="two"><label>소재<select id="connect-from">${s.project.nodes.filter(node => node.kind !== 'cut').map(node => `<option value="${esc(node.id)}">${esc(node.data.name)}</option>`).join('')}</select></label><label>슬롯<select id="connect-port">${Object.entries(ports).map(([port, label]) => `<option value="${port}">${label}</option>`).join('')}</select></label></div>${button('connect', '슬롯에 넣기')}
+    <div class="two"><label>소재<select id="connect-from">${s.project.nodes.filter(node => node.kind !== 'cut').map(node => `<option value="${esc(node.id)}">${esc(node.data.name)}</option>`).join('')}</select></label><label>슬롯<select id="connect-port">${Object.entries(ports).map(([port, label]) => `<option value="${port}">${label}</option>`).join('')}</select></label></div>${toolbar(button('connect', '슬롯에 넣기'))}
     <h2 class="conai-group-head">프롬프트</h2><label>간단 프롬프트<textarea data-field="prompt" rows="4">${esc(cut.data.prompt)}</textarea></label><div class="conai-chips">${[...new Set(table.map(row => row.name))].map(name => `<button class="conai-chip" data-token="${esc(name)}">@${esc(name)}</button>`).join('')}</div>
-    <label>사운드<textarea data-field="soundscape" rows="2">${esc(cut.data.soundscape)}</textarea></label><label>음악<textarea data-field="music" rows="2">${esc(cut.data.music)}</textarea></label><label>원문 (있으면 간단 프롬프트 대신 보내)<textarea data-field="raw" rows="3">${esc(cut.data.raw)}</textarea></label>`}
-    <h2 class="conai-group-head">전송될 프롬프트</h2><div class="resolved">${esc(resolved.prompt)}${resolved.soundscape ? `\n사운드: ${esc(resolved.soundscape)}` : ''}${resolved.music ? `\n음악: ${esc(resolved.music)}` : ''}</div><table class="label-table"><tbody>${resolved.table.map(row => `<tr><td>${esc(row.label)}</td><td>${esc(row.name)}</td><td>${ports[row.port]} · ${row.slot}</td></tr>`).join('')}</tbody></table>${resolved.errors.map(message => `<p class="error">${esc(message)}</p>`).join('')}${resolved.warnings.map(message => `<p class="warning">${esc(message)}</p>`).join('')}`
+    <label>사운드<textarea data-field="soundscape" rows="2">${esc(cut.data.soundscape)}</textarea></label><label>음악<textarea data-field="music" rows="2">${esc(cut.data.music)}</textarea></label><label>원문<textarea data-field="raw" rows="3">${esc(cut.data.raw)}</textarea></label>`}
+    <h2 class="conai-group-head">전송될 프롬프트</h2><pre>${esc(resolved.prompt)}${resolved.soundscape ? `\n사운드: ${esc(resolved.soundscape)}` : ''}${resolved.music ? `\n음악: ${esc(resolved.music)}` : ''}</pre>${s.tab === 'generate' && resolved.table.length ? `<table class="label-table"><tbody>${resolved.table.map(row => `<tr><td>${esc(row.label)}</td><td>${esc(row.name)}</td><td>${ports[row.port]} · ${row.slot}</td></tr>`).join('')}</tbody></table>` : ''}${resolved.errors.map(message => `<p class="error">${esc(message)}</p>`).join('')}${resolved.warnings.map(message => `<p class="warning">${esc(message)}</p>`).join('')}`
 }
 function takeCard(take) {
   const id = `data-take="${esc(take.id)}"`
-  return `<section class="conai-list-row"><div class="conai-row-main"><b>${esc(take.label)} · ${esc(take.status)}</b><p class="conai-row-meta">seed ${take.seed} · ${esc(take.profile.label)} · job ${take.jobId ?? '—'}</p>${take.error ? `<p class="error">${esc(take.error)}</p>` : ''}<details><summary>보낸 프롬프트·슬롯·프로필</summary><pre class="snapshot">${esc(JSON.stringify({ seed: take.seed, profile: take.profile, resolved: take.resolved }, null, 2))}</pre></details><div class="take-actions">
+  return `<div class="conai-list-row"><div class="conai-row-main"><div class="toolbar"><span class="conai-row-title">${esc(take.label)}</span>${statusBadge(take.status)}</div><span class="conai-row-meta">seed ${take.seed}${take.jobId ? ` · job ${esc(take.jobId)}` : ''}</span>${take.error ? `<p class="error">${esc(take.error)}</p>` : ''}<details><summary>보낸 프롬프트·슬롯·프로필</summary><pre>${esc(JSON.stringify({ seed: take.seed, profile: take.profile, resolved: take.resolved }, null, 2))}</pre></details><div class="toolbar">
     ${take.status === 'proposed' ? button('approve', '승인하고 생성', id, 'primary') + button('discard', '폐기', id) : button('refresh-take', '상태 갱신', id)}
     ${take.jobId && !['completed', 'failed', 'cancelled'].includes(take.status) ? button('cancel', '취소', id) : ''}
     ${take.status === 'failed' && !take.jobId ? button('retry', '같은 요청 재시도', id) : ''}
     ${take.resultHash ? button('extract-take', '프레임 뽑기', id) + button('preview-take', '결과 보기', id) : ''}
     ${take.status === 'discarded' ? '' : button('rerun-take', '같은 시드·이 입력으로', id)}${button('rerun-canvas', '같은 시드·현재 입력으로', id)}${button('rerun-new', '새 시드·현재 입력으로', id)}
-    </div>${review(take)}</div></section>`
+    </div>${review(take)}</div></div>`
 }
-function modal(html) { $('dialog-body').innerHTML = html; if (!$('modal').open) $('modal').showModal() }
+// Every dialog is title, fields, then one footer row: close/cancel and at most one primary action (#dialog-primary).
+function modal(title, body, { primary, close = '취소', danger = false } = {}) {
+  $('modal').innerHTML = `<h2>${esc(title)}</h2>${body}<div class="conai-dialog-foot"><button id="dialog-close" class="ghost" data-close>${close}</button>${primary ? `<button id="dialog-primary" class="${danger ? 'destructive' : 'primary'}">${primary}</button>` : ''}</div>`
+  if (!$('modal').open) $('modal').showModal()
+}
 function select(id) {
   s.selection = id; s.nodeDetail = null; s.tab = 'input'; render()
   if (id) return request('read_node', { id })
@@ -225,25 +246,38 @@ async function createProject(name) {
   s.project = await request('create_project', { name })
   await loadProjects(); render()
 }
+async function importRows(rows) {
+  const result = await edit(rows.map((row, index) => ({ op: `import_${row.kind}`, ref: row.ref, name: row.name, at: { x: (80 + index * 24 - s.x) / s.zoom, y: (80 + index * 24 - s.y) / s.zoom } })))
+  if (result.applied.length) select(result.applied[0].id)
+}
+const memberCounts = members => ['image', 'video', 'audio'].map(kind => [kind, members.filter(member => member.kind === kind).length]).filter(([, count]) => count).map(([kind, count]) => `${names[kind]} ${count}`).join(' · ')
 async function picker(kind) {
-  modal(`<h2>${names[kind]} 가져오기</h2><label class="conai-search"><input id="asset-query" type="search" placeholder="${kind === 'audio' ? '오디오 그룹 이름' : '검색'}"></label><button id="asset-search">찾기</button><div id="asset-results" class="conai-list picker-list"></div><button id="asset-next" hidden>다음</button><p class="muted">앱에서 만든 소재를 가져와. 새 소재는 원래 화면에서 만들어줘.</p>`)
-  let page = 1, offset = 0, groupId = null, cursor = null
+  const library = kind === 'image' || kind === 'video'
+  if (library && api.supports('pickMedia')) {
+    const picked = await api.pickMedia({ kind, title: `${names[kind]} 가져오기` })
+    if (picked.length) await task(() => importRows(picked.map(item => ({ kind: item.kind, name: item.name, ref: { source: 'library', compositeHash: item.compositeHash } }))))
+    return
+  }
+  modal(`${names[kind]} 가져오기`, `<form id="asset-form"><label class="conai-search"><input id="asset-query" type="search" aria-label="검색" placeholder="${{ audio: '오디오 그룹', bundle: '번들 이름' }[kind] ?? '프롬프트'}"></label></form><div id="asset-group" class="toolbar" hidden><button id="asset-back" class="ghost">← 그룹</button><b id="asset-group-name"></b></div><div id="asset-results" class="${library ? 'picker-grid' : 'conai-list picker-list'}"></div><div class="toolbar"><button id="asset-next" hidden>더 보기</button></div>`)
+  let page = 1, offset = 0, group = null, cursor = null, rows = []
   async function search(next = false) {
-    if (!next) { page = 1; offset = 0; cursor = null }
+    if (!next) { page = 1; offset = 0; cursor = null; rows = [] }
     const query = $('asset-query').value
-    let rows, more = false
-    if (kind === 'image' || kind === 'video') {
+    let more = false
+    if (library) {
       const result = await native('search_images', { search_text: query, media_type: kind, page, limit: 20 })
-      rows = result.images.map(item => ({ label: `${item.composite_hash} · ${item.width}×${item.height}${item.duration ? ` · ${item.duration}초` : ''}`, ref: { source: 'library', compositeHash: item.composite_hash } }))
+      // search_images omits file paths; the per-item library lookup supplies the original file name.
+      const fileNames = await Promise.all(result.images.map(item => libraryName(item.composite_hash, kind)))
+      rows.push(...result.images.map((item, index) => ({ kind, hash: item.composite_hash, name: fileNames[index], meta: [item.width && item.height ? `${item.width}×${item.height}` : '', item.duration ? seconds(item.duration) : ''].filter(Boolean).join(' · '), ref: { source: 'library', compositeHash: item.composite_hash } })))
       more = page * 20 < result.total
     } else if (kind === 'audio') {
-      if (groupId) {
-        const result = await native('list_audio_candidates', { group_id: groupId, limit: 20, offset })
-        rows = result.candidates.map(item => ({ label: `${item.name} · ${item.duration_seconds ?? '?'}초`, name: item.name, ref: { source: 'audio', candidateId: item.candidate_id } }))
+      if (group) {
+        const result = await native('list_audio_candidates', { group_id: group.id, limit: 20, offset })
+        rows.push(...result.candidates.map(item => ({ kind, name: item.name, candidateId: item.candidate_id, meta: [item.duration_seconds == null ? '' : seconds(item.duration_seconds), { selected: '선택됨', rejected: '제외' }[item.review] ?? ''].filter(Boolean).join(' · '), ref: { source: 'audio', candidateId: item.candidate_id } })))
         more = offset + 20 < result.total
       } else {
         const result = await native('list_audio_groups', { search: query, limit: 20, ...(cursor ? { cursor } : {}) })
-        rows = result.items.map(item => ({ label: item.name, groupId: item.id }))
+        rows.push(...result.items.map(item => ({ group: item, name: item.name, meta: item.candidate_count == null ? '' : `후보 ${item.candidate_count}개` })))
         cursor = result.next_cursor
         more = Boolean(cursor)
       }
@@ -253,28 +287,35 @@ async function picker(kind) {
       const result = await native('list_comfy_refmods', { ...(profile ? { workflow_id: profile.workflowId } : {}), ...(profile?.serverId ? { server_id: profile.serverId } : {}) })
       rows = result.entries.filter(item => item.name.includes(query)).map(item => {
         const record = records.find(record => record.name === item.name && record.server_id === result.server_id)
-        return { label: `${item.name} · ${item.members.length}개`, name: item.name, ref: { name: item.name, ...(record ? { recordId: record.id } : {}) } }
+        return { kind, name: item.name, meta: [memberCounts(item.members), item.description || item.concept].filter(Boolean).join(' · '), ref: { name: item.name, ...(record ? { recordId: record.id } : {}) } }
       })
     }
-    $('asset-results').innerHTML = rows.map((row, index) => `<button class="conai-list-row interactive" data-pick="${index}"><span class="conai-row-main">${esc(row.label)}</span></button>`).join('') || '<p class="conai-empty">찾은 소재가 없어.</p>'
+    $('asset-form').hidden = Boolean(group)
+    $('asset-group').hidden = !group
+    $('asset-group-name').textContent = group?.name ?? ''
+    $('asset-results').innerHTML = rows.map((row, index) => library
+      ? `<button class="conai-media-card" data-pick="${index}" aria-label="${esc([row.name, row.meta].filter(Boolean).join(' · '))}"><span class="conai-media"><img src="/api/images/${encodeURIComponent(row.hash)}/thumbnail" alt="" loading="lazy"></span><span class="conai-media-body"><span class="conai-media-title">${esc(row.name)}</span>${row.meta ? `<span class="conai-media-meta">${esc(row.meta)}</span>` : ''}</span></button>`
+      : row.candidateId
+        ? `<div class="conai-list-row"><div class="conai-row-main"><span class="conai-row-title">${esc(row.name)}</span>${row.meta ? `<span class="conai-row-meta">${esc(row.meta)}</span>` : ''}<audio controls preload="none" src="/api/audio/candidates/${encodeURIComponent(row.candidateId)}/file"></audio></div><button data-pick="${index}">가져오기</button></div>`
+        : `<button class="conai-list-row" data-pick="${index}"><span class="conai-row-main"><span class="conai-row-title">${esc(row.name)}</span>${row.meta ? `<span class="conai-row-meta">${esc(row.meta)}</span>` : ''}</span></button>`).join('') || '<p class="conai-empty">찾은 소재가 없어.</p>'
     $('asset-next').hidden = !more
-    $('asset-results').onclick = event => {
-      const index = event.target.closest('[data-pick]')?.dataset.pick
-      if (index === undefined) return
-      const row = rows[Number(index)]
-      if (row.groupId) { groupId = row.groupId; void task(() => search()); return }
-      void task(async () => {
-        const result = await edit([{ op: `import_${kind}`, ref: row.ref, name: row.name, at: { x: (80 - s.x) / s.zoom, y: (80 - s.y) / s.zoom } }])
-        if (result.applied.length) select(result.applied[0].id)
-        $('modal').close()
-      })
-    }
   }
-  $('asset-search').onclick = () => { groupId = null; void task(() => search()) }
+  $('asset-results').onclick = event => {
+    const index = event.target.closest('[data-pick]')?.dataset.pick
+    if (index === undefined) return
+    const row = rows[Number(index)]
+    if (row.group) { group = row.group; void task(() => search()); return }
+    void task(async () => {
+      await importRows([row])
+      $('modal').close()
+    })
+  }
+  $('asset-form').onsubmit = event => { event.preventDefault(); void task(() => search()) }
+  $('asset-back').onclick = () => { group = null; void task(() => search()) }
   $('asset-next').onclick = () => { page++; offset += 20; void task(() => search(true)) }
-  await search()
+  await task(() => search())
 }
-async function preview(ref, target) {
+async function preview(ref, target, title = '미리보기') {
   let path
   if (ref.source === 'library') {
     const result = await native('get_media_download', { composite_hashes: [ref.compositeHash] })
@@ -289,25 +330,32 @@ async function preview(ref, target) {
   const element = target ?? document.createElement(type)
   element.src = path
   if (type !== 'img') element.controls = true
-  if (!target) { modal('<h2>소재 미리보기</h2><div id="media-preview"></div>'); $('media-preview').append(element) }
+  if (!target) { modal(title, '<div id="media-preview"></div>', { close: '닫기' }); $('media-preview').append(element) }
 }
 async function extractionDialog({ nodeId, takeId } = {}) {
   const node = s.project.nodes.find(node => node.id === nodeId), take = s.project.takes.find(take => take.id === takeId)
   if (take && !take.resultHash) throw new Error('결과 해시가 준비될 때까지 기다려줘.')
   if (node && (node.kind !== 'video' || node.data.ref.source !== 'library')) throw new Error('라이브러리 영상만 프레임을 뽑을 수 있어.')
   if (!node && !take) throw new Error('영상 노드나 준비된 take를 골라줘.')
-  modal(`<h2>프레임 추출 · ${esc(node?.data.name ?? take.label)}</h2><video id="frame-player" controls></video><label>위치<select id="frame-position"><option value="first">첫 프레임</option><option value="middle">가운데</option><option value="last" selected>마지막 프레임</option><option value="current">현재 재생 위치</option><option value="seconds">시간(초)</option><option value="index">프레임 번호</option></select></label><div class="two"><label>시간(초)<input id="frame-seconds" type="number" step="any" min="0" value="0"></label><label>프레임 번호 (0부터)<input id="frame-index" type="number" min="0" value="0"></label></div><label>형식<select id="frame-format"><option>png</option><option>webp</option></select></label><label>연결할 곳<select id="frame-target"><option value="">연결 안 함</option>${cuts().filter(cut => cut.id !== take?.cutId).flatMap(cut => ['start', 'end', 'ref_image'].map(port => `<option value="${esc(`${cut.id}|${port}`)}">${esc(cut.data.name)} · ${ports[port]}</option>`)).join('')}</select></label><p class="muted">현재 재생 위치는 디코드 프레임과 한 프레임 어긋날 수 있어. 정확한 위치는 프레임 번호로 골라줘.</p><div class="row-actions"><button id="extract-start" class="primary">프레임 추출</button><button id="extract-status" hidden>상태 갱신</button><button id="extract-cancel" hidden>취소</button></div><p id="extract-result" role="status"></p>`)
+  modal(`프레임 추출 · ${node?.data.name ?? take.label}`, `<video id="frame-player" controls></video><label>위치<select id="frame-position"><option value="first">첫 프레임</option><option value="middle">가운데</option><option value="last" selected>마지막 프레임</option><option value="current">현재 재생 위치</option><option value="seconds">시간(초)</option><option value="index">프레임 번호</option></select></label><p id="frame-current-note" class="warning" hidden>재생 위치는 한 프레임 어긋날 수 있어. 정확히 뽑으려면 프레임 번호를 골라줘.</p><label id="frame-seconds-field" hidden>시간(초)<input id="frame-seconds" type="number" step="any" min="0" value="0"></label><label id="frame-index-field" hidden>프레임 번호 (0부터)<input id="frame-index" type="number" min="0" value="0"></label><label>형식<select id="frame-format"><option>png</option><option>webp</option></select></label><label>연결할 곳<select id="frame-target"><option value="">연결 안 함</option>${cuts().filter(cut => cut.id !== take?.cutId).flatMap(cut => ['start', 'end', 'ref_image'].map(port => `<option value="${esc(`${cut.id}|${port}`)}">${esc(cut.data.name)} · ${ports[port]}</option>`)).join('')}</select></label><p id="extract-result" role="status"></p><div id="extract-job" class="toolbar" hidden><button id="extract-status">상태 갱신</button><button id="extract-cancel">작업 취소</button></div>`, { primary: '추출' })
+  $('frame-position').onchange = () => {
+    const position = $('frame-position').value
+    $('frame-current-note').hidden = position !== 'current'
+    $('frame-seconds-field').hidden = position !== 'seconds'
+    $('frame-index-field').hidden = position !== 'index'
+  }
   const ref = node?.data.ref ?? { source: 'library', compositeHash: take.resultHash }
   await preview(ref, $('frame-player'))
   let extraction
   const status = result => {
     extraction = result
-    $('extract-result').textContent = result.error ?? `${result.status} · ${JSON.stringify(result.progress ?? '')} · job ${result.jobId ?? '—'}${result.nodeIds?.length ? ` · 프레임 ${result.nodeIds.join(', ')}` : ''}${result.rejected?.length ? ` · 연결 실패: ${result.rejected.map(item => item.reason).join(', ')}` : ''}`
-    const pending = !['completed', 'failed', 'cancelled'].includes(result.status)
-    $('extract-status').hidden = !pending; $('extract-cancel').hidden = !pending
-    $('extract-start').disabled = true
+    $('extract-result').textContent = result.error ?? [statusNames[result.status] ?? result.status, progressText(result.progress), result.nodeIds?.length ? `프레임 ${result.nodeIds.length}개` : '', result.rejected?.length ? `연결 실패: ${result.rejected.map(item => item.reason).join(', ')}` : ''].filter(Boolean).join(' · ')
+    $('extract-result').className = result.error ? 'error' : ''
+    $('extract-job').hidden = isTerminal(result.status)
+    $('dialog-primary').disabled = true
+    $('dialog-close').textContent = '닫기'
   }
-  $('extract-start').onclick = () => void task(async () => {
+  $('dialog-primary').onclick = () => void task(async () => {
     const position = $('frame-position').value, target = $('frame-target').value.split('|')
     const result = await request('extract_frame', { expected_revision: s.project.revision, node_id: nodeId, take_id: takeId, format: $('frame-format').value,
       ...(['first', 'middle', 'last'].includes(position) ? { position } : position === 'index' ? { frame_index: Number($('frame-index').value) } : { at_seconds: [position === 'current' ? $('frame-player').currentTime : Number($('frame-seconds').value)] }),
@@ -340,14 +388,22 @@ function watchExtraction(id, update) {
   })()
 }
 async function profileDialog() {
-  const workflows = await native('list_workflows', {})
+  const [workflows, servers] = await Promise.all([native('list_workflows', {}), native('list_comfyui_servers', {})])
   const rows = Array.isArray(workflows) ? workflows : workflows.workflows ?? []
-  modal(`<h2>생성 프로필</h2><label>기존 프로필<select id="profile-existing"><option value="">새로 만들기</option>${s.project.profiles.map(profile => `<option value="${esc(profile.id)}">${esc(profile.label)}</option>`).join('')}</select></label><label>이름<input id="profile-label"></label><label>등록한 워크플로<select id="profile-workflow"><option value="">골라줘</option>${rows.map(workflow => `<option value="${workflow.id}">${esc(workflow.name)}</option>`).join('')}</select></label><label>Director Marked Field<select id="profile-director"></select></label><label>숫자 시드 Marked Field<select id="profile-seed"></select></label><div class="two"><label>서버 ID (선택)<input id="profile-server" type="number"></label><label>서버 태그 (선택)<input id="profile-tag"></label></div><label>Director overrides (해상도·후처리 등 JSON)<textarea id="profile-overrides" rows="5">{}</textarea></label><p class="muted">Director와 숫자 시드를 워크플로 편집에서 Marked Field로 열어줘. 시드는 플러그인이 정해서 항상 보내.</p><button id="profile-save" class="primary">검증하고 저장</button>`)
+  const serverRows = Array.isArray(servers) ? servers : servers.servers ?? []
+  const tags = [...new Set(serverRows.flatMap(server => server.routing_tags ?? (server.routing_tags_json ? JSON.parse(server.routing_tags_json) : [])))]
+  modal('생성 프로필', `<label>프로필<select id="profile-existing"><option value="">새 프로필</option>${s.project.profiles.map(profile => `<option value="${esc(profile.id)}">${esc(profile.label)}</option>`).join('')}</select></label><label>이름<input id="profile-label"></label><label>워크플로우<select id="profile-workflow"><option value="">골라줘</option>${rows.map(workflow => `<option value="${esc(workflow.id)}">${esc(workflow.name)}</option>`).join('')}</select></label><p id="profile-fields-missing" class="warning" hidden>워크플로우 편집에서 Director와 숫자 시드를 Marked Field로 열어줘.</p><label>Director 필드<select id="profile-director"></select></label><label>시드 필드<select id="profile-seed"></select></label><div class="two"><label>서버<select id="profile-server"><option value="">자동</option>${serverRows.map(server => `<option value="${esc(server.id)}">${esc(server.name)}</option>`).join('')}</select></label><label>서버 태그<select id="profile-tag"><option value="">없음</option>${tags.map(tag => `<option>${esc(tag)}</option>`).join('')}</select></label></div><label>Director overrides (JSON)<textarea id="profile-overrides" rows="5">{}</textarea></label>`, { primary: '저장' })
+  // A saved server or tag missing from the current lists stays selectable so saving does not drop it.
+  const choose = (select, value, label) => {
+    if (value && ![...select.options].some(option => option.value === String(value))) select.add(new Option(label, value))
+    select.value = value ?? ''
+  }
   async function fields(profile) {
     const details = await native('get_workflow_details', { workflow_id: Number($('profile-workflow').value) })
     const options = filter => details.input_schema.filter(filter).map(field => `<option value="${esc(field.id)}">${esc(field.label || field.id)}</option>`).join('')
     $('profile-director').innerHTML = options(field => field.type === 'node' && field.node_editor === 'minimax_h3_director_dasiwa')
     $('profile-seed').innerHTML = options(field => field.type === 'number' && field.seed_rule)
+    $('profile-fields-missing').hidden = Boolean($('profile-director').options.length && $('profile-seed').options.length)
     if (profile) { $('profile-director').value = profile.directorFieldId; $('profile-seed').value = profile.seedFieldId }
   }
   $('profile-workflow').onchange = () => void task(() => fields())
@@ -355,11 +411,11 @@ async function profileDialog() {
     const profile = s.project.profiles.find(profile => profile.id === $('profile-existing').value)
     if (!profile) return
     $('profile-label').value = profile.label; $('profile-workflow').value = profile.workflowId
-    $('profile-server').value = profile.serverId ?? ''; $('profile-tag').value = profile.serverTag ?? ''
+    choose($('profile-server'), profile.serverId, `서버 #${profile.serverId}`); choose($('profile-tag'), profile.serverTag, profile.serverTag)
     $('profile-overrides').value = JSON.stringify(profile.overrides ?? {}, null, 2)
     await fields(profile)
   })
-  $('profile-save').onclick = () => void task(async () => {
+  $('dialog-primary').onclick = () => void task(async () => {
     const profile = { label: $('profile-label').value, workflowId: Number($('profile-workflow').value), directorFieldId: $('profile-director').value, seedFieldId: $('profile-seed').value, overrides: JSON.parse($('profile-overrides').value),
       ...($('profile-existing').value ? { id: $('profile-existing').value } : {}), ...($('profile-server').value ? { serverId: Number($('profile-server').value) } : {}), ...($('profile-tag').value ? { serverTag: $('profile-tag').value } : {}) }
     await request('save_profile', { expected_revision: s.project.revision, profile })
@@ -369,7 +425,7 @@ async function profileDialog() {
 async function runCut(args = {}, op = 'run_cut') {
   const cut = args.cut_id ?? selected()?.id
   const take = await request(op, { cut_id: cut, ...args })
-  await reload(); notice(`${take.status} · take ${take.id ?? '—'} · seed ${take.seed ?? '—'}`)
+  await reload(); notice(`${statusNames[take.status] ?? take.status} · seed ${take.seed ?? '—'}`)
   return take
 }
 function lockRunButtons() {
@@ -406,8 +462,17 @@ async function reorder(edgeId, direction, targetId) {
 }
 function bind() {
   $('projects').onchange = event => void task(() => chooseProject(event.target.value))
-  $('new-project').onclick = () => { modal('<h2>프로젝트 만들기</h2><label>이름<input id="project-name"></label><button id="project-create" class="primary">만들기</button>'); $('project-create').onclick = () => void task(async () => { await createProject($('project-name').value); $('modal').close() }) }
-  document.querySelectorAll('[data-import]').forEach(button => { button.onclick = () => void task(async () => { if (!s.project) throw new Error('프로젝트부터 만들어줘.'); await picker(button.dataset.import) }) })
+  $('new-project').onclick = () => {
+    modal('프로젝트 만들기', '<label>이름<input id="project-name"></label>', { primary: '만들기' })
+    $('dialog-primary').onclick = () => void task(async () => { await createProject($('project-name').value); $('modal').close() })
+    $('project-name').onkeydown = event => { if (event.key === 'Enter') $('dialog-primary').click() }
+    $('project-name').focus()
+  }
+  // picker queues its own requests; running it inside task() would wait on itself while the host picker is open.
+  document.querySelectorAll('[data-import]').forEach(button => { button.onclick = () => {
+    if (!s.project) return notice('프로젝트부터 만들어줘.', true)
+    picker(button.dataset.import).catch(error => notice(error.message, true))
+  } })
   $('add-cut').onclick = () => void task(async () => { const result = await edit([{ op: 'add_node', kind: 'cut', name: '새 영상 컷', at: { x: (120 - s.x) / s.zoom, y: (80 - s.y) / s.zoom } }]); select(result.applied[0]?.id) })
   $('profiles').onclick = () => void task(profileDialog)
   $('check-all').onclick = () => void task(() => doCheck())
@@ -504,8 +569,8 @@ function bind() {
       if (action === 'extraction-status' || action === 'extraction-cancel') { await request('extract_frame', { expected_revision: s.project.revision, extraction_id: target.dataset.extraction, cancel: action === 'extraction-cancel' }); return reload() }
       if (action === 'refresh-take') { await request('get_take', { take_id: takeId }); return reload() }
       if (action === 'extract' || action === 'extract-take') return extractionDialog({ nodeId: action === 'extract' ? node.id : undefined, takeId })
-      if (action === 'preview-take') { const take = s.project.takes.find(take => take.id === takeId); return preview({ source: 'library', compositeHash: take.resultHash }, 'video') }
-      if (action === 'preview') return preview(node.data.ref)
+      if (action === 'preview-take') { const take = s.project.takes.find(take => take.id === takeId); return preview({ source: 'library', compositeHash: take.resultHash }, 'video', '생성 결과') }
+      if (action === 'preview') return preview(node.data.ref, undefined, node.data.name)
       if (action === 'disconnect') return edit([{ op: 'disconnect', id: target.dataset.edge }])
       if (action === 'up' || action === 'down') return reorder(target.dataset.edge, action === 'up' ? -1 : 1)
       if (action === 'connect') return edit([{ op: 'connect', from: $('connect-from').value, to: node.id, port: $('connect-port').value }])
@@ -518,14 +583,15 @@ function bind() {
       if (action === 'keep') return notice('가져온 지문은 그대로 둘게. 변경 경고는 남아.')
       if (action === 'undo') { await request('undo', { expected_revision: s.project.revision }); return reload() }
       if (action === 'remove') {
-        modal(`<h2>이 노드를 지울까?</h2><p>${esc(node.data.name)}와 연결선을 지워. 생성 이력은 남아.</p><button id="remove-confirm" class="primary">지우기</button>`)
-        $('remove-confirm').onclick = () => void task(async () => { await edit([{ op: 'remove', id: node.id }]); s.selection = null; $('modal').close(); render() })
+        modal('이 노드를 지울까?', `<p>${esc(node.data.name)}와 연결선을 지워. 생성 이력은 남아.</p>`, { primary: '지우기', danger: true })
+        $('dialog-primary').onclick = () => void task(async () => { await edit([{ op: 'remove', id: node.id }]); s.selection = null; $('modal').close(); render() })
       }
     })
   }
+  $('modal').onclick = event => { if (event.target.closest('[data-close]')) $('modal').close() }
   $('modal').addEventListener('close', () => {
     for (const controller of extractionWatches.values()) controller.abort()
-    $('dialog-body').querySelectorAll('video,audio').forEach(media => { media.pause(); media.removeAttribute('src'); media.load() })
+    $('modal').querySelectorAll('video,audio').forEach(media => { media.pause(); media.removeAttribute('src'); media.load() })
   })
   new ResizeObserver(drawEdges).observe($('canvas'))
 }
@@ -554,7 +620,10 @@ const actions = {
   }),
 }
 api = await connectPlugin(actions)
-if (api.supports('launch.image') && api.launch?.image) s.launch = { compositeHash: api.launch.image.compositeHash, kind: 'image' }
+if (api.supports('launch.image') && api.launch?.image) {
+  s.launch = { compositeHash: api.launch.image.compositeHash, kind: 'image' }
+  libraryName(s.launch.compositeHash).then(name => { launchName = name; renderLaunch() }, error => notice(error.message, true))
+}
 bind()
 try { await loadProjects(); if (s.projects.length) await chooseProject(s.projects[0].id); else render() } catch (error) { notice(error.message, true) }
 const refreshQueued = createRefreshQueue(() => task(async () => { if (s.project) { s.project = await request('refresh'); render() } }))

@@ -79,7 +79,7 @@ Administrator plugin lists and install responses carry `InstalledPlugin.source`.
 
 ### Opening a page with an image
 
-A page with `"opensImages": true` is listed in the ⋯ menu of an image's detail view (still images, page and viewer) as "<page title>에서 열기". Choosing it navigates to `/ext/<pluginId>/<pageId>?image=<compositeHash>`. The host accepts only a 32-character hexadecimal hash, ignores `?image=` for pages without `opensImages`, and passes it to the page once, in the connect message. The SDK exposes it as `api.launch`:
+A page with `"opensImages": true` is listed in the ⋯ menu of an image's detail view (still images, page and viewer) as "<page title>에서 열기". Alternatively, `"opensImages": {"prompt": "<regex source>"}` tests the positive prompt with a JavaScript `RegExp` without flags. A match promotes the action to a visible `IconButton` immediately before ⋯, with the page's manifest icon and the same tooltip/aria label, and removes it from the menu. A non-match stays in the menu. Invalid regex sources are rejected during manifest validation; trusted patterns have no length cap or sandbox. `false` or omission disables the entry. Choosing either action navigates to `/ext/<pluginId>/<pageId>?image=<compositeHash>`. The host accepts only a 32- or 48-character hexadecimal hash, ignores `?image=` for pages without a truthy `opensImages`, and passes it to the page once, in the connect message. The SDK exposes it as `api.launch`:
 
 ```js
 const api = await connectPlugin(handlers);
@@ -90,6 +90,26 @@ if (api.supports('launch.image') && api.launch?.image) {
 ```
 
 `api.launch` is `null` when the page is opened another way and on hosts without the feature. The hash grants nothing: reading the image, its metadata or media uses the same native routes and account permissions as any other call. No approval, revision or retry semantics change. Requires a host and SDK that list `launch.image` in `api.host.features`; older hosts reject a manifest that uses `opensImages`.
+
+The conditional object requires an updated host; boolean-only hosts reject it. The feature remains `launch.image` because navigation and handoff are unchanged. The MOSS manifest matches JSON-shaped prompts beginning with `{` (ignoring whitespace) and containing an `items` array or `summary` object; this regex is a UI gate, not JSON validation. Its existing plugin parser validates the actual document. Manifest regression coverage includes `true`, the object form and invalid patterns; the visible/detail/viewer flows still require Docker QA UI verification.
+
+### Library media picker
+
+`await api.pickMedia({kind?: 'image'|'video'|'all', max?: number, title?: string}, options?)`
+opens the host's existing `MediaLibraryPicker` over a full plugin page or embedded generation block.
+Check `api.supports('pickMedia')` (`api.host.features`) first; both host and bundled SDK must be updated.
+The bridge method is also `pickMedia`. Default kind is `all`; omit `max` for no selection-count cap.
+An explicit `max` is a nonnegative integer, enforced through the picker's existing `maxCount`, with no additional quota.
+`title` is optional text; otherwise the host's translated picker title is used.
+
+The promise returns `Array<{compositeHash:string, kind:'image'|'video', mimeType:string|null, width:number|null, height:number|null, name:string}>`.
+`name` is the library display name; unknown dimensions are `null`. Closing/cancelling the picker returns `[]`.
+Selection only passes references, never grants read access: listing, batched dimension lookup and subsequent media/native routes retain current account permissions, including `images.view`.
+No write, approval, revision or automatic retry occurs. Concurrent picker requests queue within the frame.
+`options` uses the existing `{signal?,timeoutMs?}` request contract (no implicit deadline); abort, explicit deadline or connection close removes pending picker UI and rejects the request rather than reporting user cancellation.
+SDK regression coverage checks option forwarding, selected-item data and empty cancellation responses. Host modal interaction, permissions, iframe teardown and embedded-block UI remain unverified until Docker QA.
+
+Verification for these two connections: `backend/test/plugins.test.ts` 21/21 and `frontend/test/plugin-sdk.test.ts` 11/11 passed; shared TypeScript build and backend/frontend type checks passed. No browser/UI run was performed.
 
 ### Package files
 
@@ -163,6 +183,7 @@ Compatibility: each package bundles its own copy of `conai-plugin.css`, so insta
 | `.conai-empty` | Quiet empty line, no box | `EmptyState` |
 | `.conai-drawer` (`.end`) + `.conai-backdrop` | Floating side sheet over a backdrop | `BottomDrawerSheet` / floating sheet |
 | `dialog` | Page tone over a scrim, hairline edge, floating shadow | `Modal` |
+| `.conai-dialog-foot` | Last row of a `dialog`: Cancel (`.ghost`) and the one primary action at the right, in one row with a gap; `.start` keeps an item (Delete) at the left | `EditorFooter` |
 | `.badge.dot`, `button.badge` | Status dot; clickable badge | `Badge` |
 
 There is no generic `button.active` look: state classes only style the component classes above. A toggle button outside them uses `aria-pressed="true"`.

@@ -46,7 +46,7 @@ test('chat generation prompting: preset settings, guide, writer answers and defe
     assert.equal(updated.prompting.previousImages, 4)
     // A patch without prompting leaves it alone.
     assert.equal(ChatGenerationPresetStore.update(preset.id, { name: '장면 2' })!.prompting.timing, 'after')
-    assert.throws(() => ChatGenerationPresetStore.update(preset.id, { prompting: { timing: 'later' } }), /inline 또는 after/)
+    assert.throws(() => ChatGenerationPresetStore.update(preset.id, { prompting: { timing: 'later' } }), /inline, early 또는 after/)
   })
 
   await t.test('a guide is a skill section (or a group) that reads into the guide and follows its edits', () => {
@@ -184,17 +184,20 @@ test('chat generation prompting: preset settings, guide, writer answers and defe
     assert.equal(normalizeMcpWorkflowInputs(stale, { ratio: '4:3 (Standard)' }).ratio, '4:3 (Standard)')
   })
 
-  await t.test('a guide whose skill is gone never prevents inline tool registration', async () => {
+  await t.test('a linked guide is read only when a picture is written, and a gone skill never prevents the tool', async () => {
     const { registerChatGenerationTools } = await import('../src/mcp/tools/chatGenerationTools')
     const skill = ChatSkillStore.create({ name: 'bad guide skill', description: 'Use when testing.', instructions: 'x', sections: [{ path: 'guide', title: 'Guide', summary: '', content: 'valid' }] })
-    const preset = ChatGenerationPresetStore.create({ name: 'bad guide', kind: 'nai', prompting: { guide: 'inline fallback', guideSkill: { skillId: skill.id, path: 'guide' } } })
+    const preset = ChatGenerationPresetStore.create({ name: 'bad guide', kind: 'nai', prompting: { timing: 'inline', guide: 'inline fallback', guideSkill: { skillId: skill.id, path: 'guide' } } })
+    assert.equal(preset.prompting.timing, 'after', 'a linked guide document is never carried in every request')
     ChatSkillStore.delete(skill.id)
     const descriptions: string[] = []
     registerChatGenerationTools({ registerTool: (_name: string, options: { description: string }) => { descriptions.push(options.description) } } as never,
       { scopes: ['generate'], source: 'llm-chat', generationPresetIds: [preset.id] })
     assert.equal(descriptions.length, 1)
-    assert.match(descriptions[0], /inline fallback/)
-    assert.match(descriptions[0], /Linked guide "guide" of skill #\d+ is gone/)
+    assert.doesNotMatch(descriptions[0], /inline fallback|valid/)
+    const guide = presetGuideText(ChatGenerationPresetStore.find(preset.id)!)
+    assert.match(guide, /inline fallback/)
+    assert.match(guide, /Linked guide "guide" of skill #\d+ is gone/)
   })
 
   await t.test('generated pictures join the latest user message', () => {

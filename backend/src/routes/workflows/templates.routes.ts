@@ -19,9 +19,15 @@ router.post(`/templates/${MINIMAX_H3_REFMOD_EXPORT_TEMPLATE_KEY}`, requirePermis
   if (server?.backend_type === 'modal') return res.status(400).json({ success: false, error: 'RefMod creation requires a standard ComfyUI server' });
   const vaeNames = server ? await createComfyUIService(server.endpoint, server).getNodeInputOptions('VAELoader', 'vae_name') : null;
   const template = buildRefModExportTemplate({ vaeNames, endpoint: server?.endpoint });
-  if (WorkflowModel.existsByName(template.name)) return res.status(409).json({ success: false, error: 'The MiniMax H3 RefMod creation workflow already exists' });
+  // A deleted workflow keeps its unique name but appears in no list, so adding again revives that row with the current template.
+  const trashed = WorkflowModel.findDeleted().find((workflow) => workflow.name === template.name);
+  if (!trashed && WorkflowModel.existsByName(template.name)) return res.status(409).json({ success: false, error: 'The MiniMax H3 RefMod creation workflow already exists' });
   const id = getUserSettingsDb().transaction(() => {
-    const workflowId = WorkflowModel.create(template);
+    if (trashed) {
+      WorkflowModel.restore(trashed.id);
+      WorkflowModel.update(trashed.id, { ...template, is_active: true });
+    }
+    const workflowId = trashed ? trashed.id : WorkflowModel.create(template);
     if (server) WorkflowServerModel.linkServer(workflowId, server.id);
     return workflowId;
   })();

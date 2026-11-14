@@ -162,7 +162,7 @@ export type ChatPresetAssetSupport = { mode: 'reference' | 'appearance' | null; 
  * `previousImages`.
  */
 export interface ChatPresetPrompting {
-  timing: 'inline' | 'after'
+  timing: 'inline' | 'early' | 'after'
   guide: string
   guideSkill: { skillId: number; path: string; skillName: string | null; title: string | null; updatedDate: string | null } | null
   previousImages: number

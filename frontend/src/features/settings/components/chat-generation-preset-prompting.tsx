@@ -32,9 +32,9 @@ type GuideSkill = ChatPresetPromptingInput['guideSkill']
 /**
  * 가이드: one section of a shared skill, or a whole group of them (`group/`, all its sections in order). Pick the skill,
  * then the section; a link whose skill or section is gone shows as missing. The pen opens that skill's editor.
- * Under them: the guide's rough size and how often it is sent, which `timing` decides.
+ * Before them: the guide's rough size. The row stays right-aligned whether or not a guide is chosen.
  */
-function GuideSkillSelect({ value, timing, onChange }: { value: GuideSkill; timing: ChatPresetPromptingInput['timing']; onChange: (value: GuideSkill) => void }) {
+function GuideSkillSelect({ value, onChange }: { value: GuideSkill; onChange: (value: GuideSkill) => void }) {
   const { t } = useI18n()
   const tokenLabel = useTokenLabel()
   const skillsQuery = useQuery({ queryKey: CHAT_SKILLS_QUERY_KEY, queryFn: listChatSkills })
@@ -59,7 +59,8 @@ function GuideSkillSelect({ value, timing, onChange }: { value: GuideSkill; timi
     : null
 
   return (
-    <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+    <div className="flex min-w-0 flex-wrap items-center justify-end gap-1.5">
+      {guideTokens !== null ? <Text variant="caption" className="shrink-0">{t({ ko: '{tokens} 토큰', en: '{tokens} tokens' }, { tokens: tokenLabel(guideTokens) })}</Text> : null}
       <Select
         variant="settings"
         controlSize="compact"
@@ -103,13 +104,6 @@ function GuideSkillSelect({ value, timing, onChange }: { value: GuideSkill; timi
       ) : null}
       {skill ? <IconButton size="icon-sm" variant="ghost" label={t({ ko: '스킬 편집기 열기', en: 'Open the skill editor' })} onClick={() => setEditing(true)}><SquarePen /></IconButton> : null}
       {skillId !== null ? <IconButton size="icon-sm" variant="ghost" label={t({ ko: '연결 풀기', en: 'Unlink' })} onClick={() => { setPendingSkillId(null); onChange(null) }}><X /></IconButton> : null}
-      {guideTokens !== null ? (
-        <Text variant="caption" className="basis-full text-right">
-          {timing === 'after'
-            ? t({ ko: '{tokens} 토큰 · 그림을 만들 때만 읽어', en: '{tokens} tokens · read only when a picture is made' }, { tokens: tokenLabel(guideTokens) })
-            : t({ ko: '{tokens} 토큰 · 이 프리셋을 연결한 프로필의 모든 요청에 실려', en: '{tokens} tokens · sent with every request of a profile that links this preset' }, { tokens: tokenLabel(guideTokens) })}
-        </Text>
-      ) : null}
       {editing && skill ? <ChatSkillEditorModal open skillId={skill.id} onClose={() => setEditing(false)} /> : null}
     </div>
   )
@@ -122,17 +116,18 @@ function GuideSkillSelect({ value, timing, onChange }: { value: GuideSkill; timi
 export function PresetPromptingFields({ value, onChange }: { value: ChatPresetPromptingInput; onChange: (value: ChatPresetPromptingInput) => void }) {
   const { t } = useI18n()
   const patch = (next: Partial<ChatPresetPromptingInput>) => onChange({ ...value, ...next })
+  // A linked guide document is read only by a call that writes the prompt, so the chat model never writes it itself.
+  const linked = value.guideSkill !== null
+  const timing = linked && value.timing === 'inline' ? 'after' : value.timing
   return (
-    <EditorGroup label={t({ ko: '프롬프트 작성', en: 'Prompt writing' })} info={t({ ko: '답변 끝난 뒤: 답변이 끝나면 완성된 본문으로 프롬프트를 따로 써서 생성해. 캐릭터 생김새는 프로필의 외형 설명만 보고 써. 시스템 프롬프트와 섹션은 안 봐.', en: "After the reply: once the reply is done, the prompt is written from the finished text and generated. The character's looks come only from the profile's appearance, not its system prompt or sections." })}>
+    <EditorGroup label={t({ ko: '프롬프트 작성', en: 'Prompt writing' })} info={t({ ko: '답변 후 생성: 답변이 끝나면 완성된 본문으로 프롬프트를 따로 써서 생성해. 캐릭터 생김새는 프로필의 외형 설명만 보고 써. 시스템 프롬프트와 섹션은 안 봐.', en: "After the reply: once the reply is done, the prompt is written from the finished text and generated. The character's looks come only from the profile's appearance, not its system prompt or sections." })}>
       <div className="border-t border-line">
-        <SettingRow label={<ChatFilledLabel fieldId="timing">{t({ ko: '작성 시점', en: 'When' })}</ChatFilledLabel>}>
+        <SettingRow label={<ChatFilledLabel fieldId="timing">{t({ ko: '생성 시점', en: 'When it is generated' })}</ChatFilledLabel>} info={t({ ko: '모델이 직접 작성: 대화 모델이 답변 중에 프롬프트를 직접 써. 가이드 문서를 연결하면 고를 수 없어.\n답변 중 생성: 대화 모델이 장면만 알려주면 프롬프트를 따로 써서 바로 생성해. 그동안 답변이 잠시 멈추고, 이후 답변 내용은 반영되지 않아.\n답변 후 생성: 완성된 답변을 보고 프롬프트를 따로 써서 생성해.', en: 'Written by the model: the chat model writes the prompt itself while replying; not available with a guide document.\nDuring the reply: the chat model only describes the scene, and the prompt is written separately and queued at once. The reply pauses meanwhile, and what it says afterwards is not reflected.\nAfter the reply: the prompt is written separately from the finished reply.' })}>
           <div className="flex gap-1.5">
-            <ToggleChip size="sm" pressed={value.timing === 'inline'} onClick={() => patch({ timing: 'inline' })}>{t({ ko: '답변과 같이', en: 'With the reply' })}</ToggleChip>
-            <ToggleChip size="sm" pressed={value.timing === 'after'} onClick={() => patch({ timing: 'after' })}>{t({ ko: '답변 끝난 뒤', en: 'After the reply' })}</ToggleChip>
+            <ToggleChip size="sm" pressed={timing === 'inline'} disabled={linked} onClick={() => patch({ timing: 'inline' })}>{t({ ko: '모델이 직접 작성', en: 'Written by the model' })}</ToggleChip>
+            <ToggleChip size="sm" pressed={timing === 'early'} onClick={() => patch({ timing: 'early' })}>{t({ ko: '답변 중 생성', en: 'During the reply' })}</ToggleChip>
+            <ToggleChip size="sm" pressed={timing === 'after'} onClick={() => patch({ timing: 'after' })}>{t({ ko: '답변 후 생성', en: 'After the reply' })}</ToggleChip>
           </div>
-        </SettingRow>
-        <SettingRow label={t({ ko: '가이드', en: 'Guide' })} info={t({ ko: '프롬프트를 쓸 때 따를 스킬 섹션이야. "그룹/"을 고르면 그 그룹의 섹션을 순서대로 전부 읽어.', en: 'The skill section the prompt writer follows. A "group/" choice reads all of that group’s sections in order.' })}>
-          <GuideSkillSelect value={value.guideSkill} timing={value.timing} onChange={(guideSkill) => patch({ guideSkill })} />
         </SettingRow>
         <SettingRow label={<ChatFilledLabel fieldId="previousImages">{t({ ko: '이전 이미지 참고', en: 'Earlier pictures shown' })}</ChatFilledLabel>} info={t({ ko: '이 채팅에서 최근에 만든 이미지를 이만큼 보여줘. 이미지를 못 보는 모델에는 안 보내.', en: "Shows this many of the chat's latest pictures. Not sent to models that cannot see images." })}>
           <NumberStepperInput
@@ -149,8 +144,11 @@ export function PresetPromptingFields({ value, onChange }: { value: ChatPresetPr
             aria-label={t({ ko: '이전 이미지 참고', en: 'Earlier pictures shown' })}
           />
         </SettingRow>
+        <SettingRow label={t({ ko: '가이드 문서', en: 'Guide document' })} info={t({ ko: '프롬프트를 쓸 때 따를 스킬 섹션이야. 그림을 만들 때만 읽어. "그룹/"을 고르면 그 그룹의 섹션을 순서대로 전부 읽어.', en: 'The skill section the prompt writer follows, read only when a picture is made. A "group/" choice reads all of that group’s sections in order.' })}>
+          <GuideSkillSelect value={value.guideSkill} onChange={(guideSkill) => patch(guideSkill && value.timing === 'inline' ? { guideSkill, timing: 'after' } : { guideSkill })} />
+        </SettingRow>
       </div>
-      <Field label={<ChatFilledLabel fieldId="guide">{t({ ko: '작성 가이드', en: 'Writing guide' })}</ChatFilledLabel>}>
+      <Field label={<ChatFilledLabel fieldId="guide">{t({ ko: '추가 지시 (가이드 문서와 함께 전달)', en: 'Extra instructions (sent with the guide document)' })}</ChatFilledLabel>}>
         <Textarea variant="settings" rows={3} maxLength={4000} value={value.guide} onChange={(event) => patch({ guide: event.target.value })} />
       </Field>
     </EditorGroup>

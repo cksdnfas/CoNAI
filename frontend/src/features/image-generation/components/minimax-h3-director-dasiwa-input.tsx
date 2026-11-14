@@ -561,13 +561,16 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
           </div>
         ) : null}
 
-        <Textarea
-          rows={3}
-          value={String(item.prompt ?? '')}
-          aria-label={t({ ko: '미디어 프롬프트', en: 'Media prompt' })}
-          placeholder={t({ ko: '역할·속성·동작', en: 'Role, attributes, motion' })}
-          onChange={(event) => updateTimelineItem(item.id, { prompt: event.target.value })}
-        />
+        {/* The DaSiWa node only consumes a member description when it saves a RefMod; generation ignores it. */}
+        {refModExportOnly ? (
+          <Textarea
+            rows={3}
+            value={String(item.prompt ?? '')}
+            aria-label={t({ ko: 'RefMod 멤버 설명', en: 'RefMod member description' })}
+            placeholder={t({ ko: '역할·속성·동작', en: 'Role, attributes, motion' })}
+            onChange={(event) => updateTimelineItem(item.id, { prompt: event.target.value })}
+          />
+        ) : null}
         </MiniMaxH3DirectorMediaCard>
       </div>
     )

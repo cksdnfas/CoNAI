@@ -20,6 +20,9 @@ const actionSchema = z.object({
   effect: z.enum(['draft', 'save']), tier: z.enum(['view', 'draft', 'direct', 'commit']), schema: z.unknown(),
 }).strict()
 const surfacesSchema = z.array(z.enum(GENERATION_LAYOUT_SURFACES as [string, ...string[]])).min(1).max(GENERATION_LAYOUT_SURFACES.length)
+const imagePromptPatternSchema = z.string().refine((source) => {
+  try { new RegExp(source); return true } catch { return false }
+}, 'Invalid prompt regular expression')
 const manifestSchema = z.object({
   apiVersion: z.literal(1), id: pluginIdSchema, name: z.string().min(1).max(100),
   version: z.string().regex(/^\d{1,4}\.\d{1,4}\.\d{1,4}$/), description: z.string().max(1000),
@@ -30,7 +33,7 @@ const manifestSchema = z.object({
   pages: z.array(z.object({
     id: pluginIdSchema, title: z.string().min(1).max(160), entry: z.string().min(1).max(200),
     accepts: z.array(z.string().regex(/^\.[a-z0-9]{1,16}$/)).max(40), actions: z.array(actionSchema), serverActions: z.array(z.string().max(100)).optional(),
-    menu: z.boolean().optional(), icon: z.enum(PLUGIN_PAGE_ICONS).optional(), opensImages: z.boolean().optional(),
+    menu: z.boolean().optional(), icon: z.enum(PLUGIN_PAGE_ICONS).optional(), opensImages: z.union([z.boolean(), z.object({ prompt: imagePromptPatternSchema }).strict()]).optional(),
   }).strict()).min(1),
   generation: z.object({
     blocks: z.array(z.object({ id: pluginIdSchema, page: pluginIdSchema, surfaces: surfacesSchema, height: z.number().int().min(120).max(1200).optional() }).strict()).max(8).default([]),

@@ -2,7 +2,7 @@
   "apiVersion": 1, "id": "moss-bbox-studio", "name": "MOSS BBox Studio", "version": "1.0.0",
   "description": "MOSS-Image 레이아웃 프롬프트를 영역 박스로 만들고 고쳐서, 등록한 ComfyUI 워크플로우로 생성 요청해.",
   "pages": [{
-    "id": "studio", "title": "MOSS BBox Studio", "entry": "index.html", "icon": "layout-dashboard", "accepts": [], "opensImages": true,
+    "id": "studio", "title": "MOSS BBox Studio", "entry": "index.html", "icon": "layout-dashboard", "accepts": [], "opensImages": { "prompt": "^\\s*\\{[\\s\\S]*(?:\"items\"\\s*:\\s*\\[|\"summary\"\\s*:\\s*\\{)[\\s\\S]*\\}\\s*$" },
     "actions": [
       { "id": "moss-bbox-studio.select_region", "label": "영역 고르기", "description": "번호로 영역 하나를 선택한다. 번호는 1부터이며 화면 목록의 번호와 같다.", "effect": "draft", "tier": "view", "schema": { "type": "object", "properties": { "number": { "type": "number", "integer": true, "minimum": 1, "maximum": 200 } }, "required": ["number"] } },
       { "id": "moss-bbox-studio.set_summary", "label": "메인 프롬프트 쓰기", "description": "장면 전체의 분위기와 스타일을 설명하는 메인 프롬프트(summary.caption)를 바꾼다. 영역에 들어갈 내용은 넣지 않는다.", "effect": "draft", "tier": "draft", "schema": { "type": "object", "properties": { "caption": { "type": "string", "maxLength": 4000 } }, "required": ["caption"] } },

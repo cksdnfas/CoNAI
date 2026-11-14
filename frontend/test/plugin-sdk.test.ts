@@ -23,10 +23,27 @@ test('plugin SDK preserves cancellation, structured errors, binary uploads and r
       return new Promise<void>((_resolve, reject) => actionSignal?.addEventListener('abort', () => reject(actionSignal!.reason), { once: true }))
     },
   })
-  window.dispatchEvent(Object.assign(new Event('message'), { source: window, data: { type: 'conai-plugin-connect', version: 1, features: ['app.fetch', 'request.abort'], nativeApiRoots: ['/api/files'], files: [] }, ports: [channel.port2] }))
+  window.dispatchEvent(Object.assign(new Event('message'), { source: window, data: { type: 'conai-plugin-connect', version: 1, features: ['app.fetch', 'request.abort', 'pickMedia'], nativeApiRoots: ['/api/files'], files: [] }, ports: [channel.port2] }))
   const api = await connected
   assert.equal(api.supports('app.fetch'), true)
   assert.equal(api.supports('unknown'), false)
+
+  await t.test('library picker forwards options and returns selection or an empty cancellation', async () => {
+    assert.equal(api.supports('pickMedia'), true)
+    const input = { kind: 'video', max: 2, title: 'Pick clips' }
+    let incoming = once(channel.port1, 'message')
+    const picked = api.pickMedia(input)
+    const [call] = await incoming
+    assert.deepEqual([call.method, call.args], ['pickMedia', input])
+    const items = [{ compositeHash: 'a'.repeat(32), kind: 'video', mimeType: 'video/mp4', width: 1280, height: 720, name: 'clip.mp4' }]
+    channel.port1.postMessage({ type: 'response', id: call.id, result: items })
+    assert.deepEqual(await picked, items)
+    incoming = once(channel.port1, 'message')
+    const cancelled = api.pickMedia()
+    const [cancel] = await incoming
+    channel.port1.postMessage({ type: 'response', id: cancel.id, result: [] })
+    assert.deepEqual(await cancelled, [])
+  })
 
   await t.test('errors keep HTTP status/code and cancellation releases the request slot', async () => {
     let incoming = once(channel.port1, 'message')

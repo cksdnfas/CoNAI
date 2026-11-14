@@ -16,7 +16,8 @@ body { min-height: 680px }
 .vc-node { position: absolute; width: 182px; padding: var(--conai-text-inset); background: var(--conai-surface-high); border: 1px solid var(--conai-line); border-radius: var(--conai-radius-md); cursor: grab; user-select: none }
 .vc-node[data-kind=cut] { width: 292px }
 .vc-node[aria-selected=true] { outline: 2px solid var(--conai-primary); outline-offset: 1px }
-.vc-node h3 { overflow-wrap: anywhere; margin: 4px 0 }
+.vc-node h3 { overflow-wrap: anywhere; margin: var(--conai-edge) 0 }
+.vc-node .conai-chips { margin-top: var(--conai-edge) }
 .vc-node small { color: var(--conai-muted-foreground) }
 .vc-node img { width: 100%; height: 65px; object-fit: cover; display: block; border-radius: var(--conai-radius) }
 .vc-output, .vc-input { position: absolute; width: 12px; min-height: 12px; padding: 0; border: 2px solid var(--conai-background); border-radius: 50%; background: var(--vc-image) }
@@ -25,30 +26,27 @@ body { min-height: 680px }
 .vc-node[data-kind=video] .vc-output, .vc-slot[data-port=ref_video] .vc-input { background: var(--vc-video) }
 .vc-node[data-kind=audio] .vc-output, .vc-slot[data-port=ref_audio] .vc-input { background: var(--vc-audio) }
 .vc-node[data-kind=bundle] .vc-output, .vc-slot[data-port=refmod] .vc-input { background: var(--vc-bundle) }
-.vc-slots { margin: 8px calc(-1 * var(--conai-text-inset)) 0 }
-.vc-slot { position: relative; display: flex; align-items: center; gap: 8px; min-height: 30px; padding: 4px 12px; border-top: 1px solid var(--conai-line); font-size: 12px }
+.vc-slots { margin: var(--conai-text-inset) calc(-1 * var(--conai-text-inset)) 0 }
+.vc-slot { position: relative; display: flex; align-items: center; gap: var(--conai-text-inset); min-height: 30px; padding: var(--conai-edge) calc(1.5 * var(--conai-text-inset)); border-top: 1px solid var(--conai-line); font-size: 12px }
 .vc-slot span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
 .vc-slot small { margin-left: auto }
 .vc-slot.unused { opacity: .35 }
-.canvas-controls { position: absolute; right: 12px; bottom: 12px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; background: var(--conai-surface-high); padding: var(--conai-edge); border-radius: var(--conai-radius-md) }
+.canvas-controls { position: absolute; right: var(--conai-text-inset); bottom: var(--conai-text-inset); padding: var(--conai-edge); background: var(--conai-surface-high); border-radius: var(--conai-radius-md) }
 .inspector { --conai-sidebar-width: 390px }
-.inspector > * + * { margin-top: 12px }
-.inspector pre, .resolved, .snapshot { white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.6 var(--conai-font-mono) }
-.resolved { padding: var(--conai-text-inset); background: var(--conai-field); border-radius: var(--conai-radius) }
-.row-actions, .two, .launch-panel { display: flex; gap: 8px; flex-wrap: wrap; align-items: center }
-.two > * { flex: 1; min-width: 100px }
-.launch-panel { padding: var(--conai-text-inset); border-bottom: 1px solid var(--conai-line) }
+.inspector pre { overflow-wrap: anywhere }
+.two { display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); column-gap: var(--conai-text-inset) }
+.launch-panel { padding: var(--conai-edge) var(--conai-text-inset); border-bottom: 1px solid var(--conai-line) }
+.launch-thumb { width: var(--conai-control-height); height: var(--conai-control-height) }
 .error { color: var(--conai-destructive) }
 .warning { color: var(--conai-warning) }
-.slot-editor { border-bottom: 1px solid var(--conai-line); padding: 8px var(--conai-text-inset) }
-.slot-editor .two input, .slot-editor select { max-width: 160px }
-.slot-editor summary { cursor: pointer }
-.label-table td { padding: 4px var(--conai-text-inset); vertical-align: top }
-.label-table { width: 100%; font-size: 12px }
-dialog { width: min(720px, calc(100vw - 32px)); max-height: 90vh; overflow: auto }
+.label-table { font-size: 12px }
+.label-table td { vertical-align: top }
+dialog { width: 100% }
 dialog video, .inspector video, .inspector audio { width: 100%; max-height: 260px }
 .picker-list { max-height: 45vh; overflow: auto }
-.take-actions { display: flex; flex-wrap: wrap; gap: 6px }
+.picker-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: var(--conai-text-inset); max-height: 50vh; overflow: auto; padding: var(--conai-edge) }
+.picker-grid .conai-media { aspect-ratio: 1 }
+.picker-list audio { width: 100%; height: var(--conai-control-height) }
 @media (min-width: 900px) and (max-width: 1199px) {
   .workspace > .conai-sidebar:first-child { --conai-sidebar-width: 180px }
   .inspector { --conai-sidebar-width: 320px }
