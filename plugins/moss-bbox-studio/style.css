@@ -67,6 +67,8 @@
 
 .genbar { display: flex; align-items: center; flex: none; flex-wrap: wrap; gap: 10px; padding: 10px var(--conai-text-inset); border-top: 1px solid var(--conai-line) }
 .wf-name { font-weight: 600 }
+/* An empty status line takes no room, so the actions hold the right edge themselves. */
+#wf-open { margin-left: auto }
 /* The status text shares the bar and takes the room between the results toggle and the actions. */
 .status { flex: 1; min-width: 0; margin: 0; font-size: 12px; color: var(--conai-muted-foreground) }
 .status.error { color: var(--conai-destructive) }
@@ -83,12 +85,14 @@
 .checks { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; font-size: 13px }
 
 .tiles { display: flex; flex: none; gap: 12px; padding: 0 var(--conai-text-inset) 10px; overflow-x: auto }
-/* The buttons sit beside the thumbnail so the strip stays one short row under the canvas. */
-.tile { display: flex; flex: none; gap: 6px }
+/* Thumbnails only, newest first; the two actions appear over a tile on hover, keyboard focus or a tap. */
+.tile { flex: none; cursor: pointer }
 .tile .conai-media { height: 72px; aspect-ratio: var(--ratio, 1) }
-.tile .conai-media.pending { display: grid; place-items: center; min-width: 72px }
-.tile .actions { flex-direction: column; flex-wrap: nowrap; align-items: stretch; justify-content: center; gap: 4px; font-size: 12px }
-.tile .actions button { min-height: 26px; padding: 0 8px; font-size: 12px }
+.tile .conai-media.pending { display: grid; place-items: center; align-content: center; gap: 4px; min-width: 72px; cursor: default; font-size: 11px }
+.tile .conai-media.pending button { min-height: 24px; padding: 0 8px; font-size: 12px }
+.tile-actions { position: absolute; inset: 0; display: flex; flex-wrap: wrap; align-items: center; align-content: center; justify-content: center; gap: 4px; background: rgb(0 0 0 / .5); visibility: hidden }
+.tile:hover .tile-actions, .tile:focus-within .tile-actions, .tile.open .tile-actions { visibility: visible }
+.tile-actions button { background: var(--conai-background); color: var(--conai-foreground) }
 
 @media (max-width: 900px) { .setup { grid-template-columns: minmax(0, 1fr) } .maprow { grid-template-columns: minmax(0, 1fr) } }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important } }

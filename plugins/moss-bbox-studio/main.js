@@ -15,7 +15,7 @@ const color = (index) => REGION_COLORS[index % REGION_COLORS.length]
 const HASH = /^(?:[a-f0-9]{32}|[a-f0-9]{48})$/i
 const TERMINAL = new Set(['completed', 'failed', 'cancelled'])
 const STATUS_LABEL = { queued: '대기 중', dispatching: '보내는 중', running: '생성 중', completed: '완료', failed: '실패', cancelled: '취소됨' }
-const MAX_STORED_JOBS = 8
+const MAX_JOBS = 50
 
 const state = {
   tab: 'editor',
@@ -61,11 +61,21 @@ async function load(key) { return (await api.storage.get(key).catch(() => null))
 let saveTimer
 function scheduleDraftSave() {
   clearTimeout(saveTimer)
-  saveTimer = setTimeout(() => { void store('draft', { draft: state.draft, negative: state.negative, seed: state.seed }) }, 600)
+  saveTimer = setTimeout(() => { void store('draft', draftValue()) }, 600)
 }
+/** The stored draft. A library or result image is reopened by its hash after a reload; an uploaded file only has a page-local blob URL. */
+function draftValue() {
+  const value = { draft: state.draft, negative: state.negative, seed: state.seed }
+  if (!state.source?.hash) return value
+  // A value is limited to 64 KiB: a source that does not fit is left out rather than losing the draft.
+  const full = { ...value, source: state.source, showImage: state.showImage }
+  return new TextEncoder().encode(JSON.stringify(full)).length < 60_000 ? full : value
+}
+/** Save without the typing delay, before leaving the page. */
+const saveDraftNow = () => { clearTimeout(saveTimer); return store('draft', draftValue()) }
 const saveSetup = () => store('setup', state.setup)
 // A value is limited to 64 KiB: only the newest jobs keep their layout text, older ones are edited from the image's own prompt.
-const saveJobs = () => store('jobs', state.jobs.slice(0, MAX_STORED_JOBS).map((job, index) => (index < 3 ? job : { ...job, layout: '' })))
+const saveJobs = () => store('jobs', state.jobs.map((job, index) => (index < 3 ? job : { ...job, layout: '' })))
 
 function notify(message, error = false) {
   const element = $('status')
@@ -84,6 +94,8 @@ const ICON = {
   up: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>',
   down: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M19 12l-7 7-7-7"/></svg>',
   trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>',
+  edit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>',
+  open: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>',
 }
 const hasContent = () => state.draft.items.length > 0 || state.draft.summary.trim() !== ''
 
@@ -298,11 +310,11 @@ function renderResults() {
   const html = state.jobs.map((job) => {
     const ratio = `${job.size[0]} / ${job.size[1]}`
     const title = esc(`#${job.id} · ${job.workflowName} · 영역 ${job.regions}개 · ${job.size[0]}×${job.size[1]}`)
-    if (job.hashes.length) return job.hashes.map((hash) => `<div class="tile" title="${title}"><div class="conai-media" style="--ratio:${ratio}"><img src="/api/images/${hash}/thumbnail" alt="작업 #${job.id} 결과" loading="lazy"></div><div class="toolbar actions"><button type="button" data-edit="${job.id}:${hash}">불러오기</button><button type="button" class="ghost" data-open="${hash}">상세</button></div></div>`).join('')
+    if (job.hashes.length) return job.hashes.map((hash) => `<div class="tile" title="${title}"><div class="conai-media" style="--ratio:${ratio}"><img src="/api/images/${hash}/thumbnail" alt="작업 #${job.id} 결과" loading="lazy"><div class="tile-actions"><button type="button" class="conai-icon-button sm" data-edit="${job.id}:${hash}" title="편집기로 불러오기" aria-label="편집기로 불러오기">${ICON.edit}</button><button type="button" class="conai-icon-button sm" data-open="${hash}" title="상세 보기" aria-label="상세 보기">${ICON.open}</button></div></div></div>`).join('')
     const failed = job.status === 'failed' || Boolean(job.error)
     const tone = failed ? 'destructive' : job.status === 'completed' ? 'ok' : TERMINAL.has(job.status) ? '' : 'warn'
     const label = failed ? STATUS_LABEL.failed : job.status === 'completed' ? '처리 중' : STATUS_LABEL[job.status] ?? esc(job.status)
-    return `<div class="tile" title="${job.error ? esc(job.error) : title}"><div class="conai-media pending" style="--ratio:${ratio}"><span class="badge ${tone}">${label}</span></div><div class="toolbar actions"><span class="muted">#${job.id}</span>${TERMINAL.has(job.status) ? '' : `<button type="button" class="ghost" data-cancel="${job.id}">취소</button>`}</div></div>`
+    return `<div class="tile" title="${job.error ? esc(job.error) : title}"><div class="conai-media pending" style="--ratio:${ratio}"><span class="badge ${tone}">${label}</span>${TERMINAL.has(job.status) ? `<span class="muted">#${job.id}</span>` : `<button type="button" class="ghost" data-cancel="${job.id}">취소</button>`}</div></div>`
   }).join('')
   // A poll that changed nothing keeps the thumbnails and the scroll position.
   if (html === resultsHtml) return
@@ -442,6 +454,7 @@ async function generate(seedOverride) {
     const id = result.record?.id
     if (!id) throw new Error('서버가 작업 번호를 돌려주지 않았어.')
     state.jobs.unshift({ id, status: result.record.status ?? 'queued', workflowName: current.name, layout: stringifyLayout(draft), size: [...draft.size], regions: draft.items.length, hashes: [], error: '', createdAt: Date.now() })
+    state.jobs.length = Math.min(state.jobs.length, MAX_JOBS)
     void saveJobs()
     renderResults(); renderTabs(); publish(); startPolling()
     notify(`작업 #${id} 요청했어.`)
@@ -753,10 +766,22 @@ function bindChrome() {
     const edit = event.target.closest('[data-edit]')?.dataset.edit
     if (edit) { const [jobId, hash] = edit.split(':'); await editResult(Number(jobId), hash); return }
     const open = event.target.closest('[data-open]')?.dataset.open
-    if (open) { await api.navigation.open(`/images/${open}`); return }
+    // The page is reloaded on the way back, so the draft and its image are stored before leaving.
+    if (open) { await saveDraftNow(); await api.navigation.open(`/images/${open}`); return }
     const cancel = event.target.closest('[data-cancel]')?.dataset.cancel
-    if (cancel) { await call(`/api/generation-queue/${cancel}/cancel`, { method: 'POST' }); void pollJobs() }
+    if (cancel) { await call(`/api/generation-queue/${cancel}/cancel`, { method: 'POST' }); void pollJobs(); return }
+    // A tap shows the actions of one tile where there is no hover.
+    const tile = event.target.closest('.tile')
+    $('results').querySelectorAll('.tile.open').forEach((other) => { if (other !== tile) other.classList.remove('open') })
+    tile?.classList.toggle('open')
   }))
+  // The strip scrolls sideways; a vertical wheel moves it too.
+  $('results').addEventListener('wheel', (event) => {
+    const strip = event.currentTarget
+    if (event.deltaX || strip.scrollWidth <= strip.clientWidth) return
+    event.preventDefault()
+    strip.scrollLeft += event.deltaY
+  }, { passive: false })
 }
 
 // ---- boot -------------------------------------------------------------------------------------------------------
@@ -808,6 +833,7 @@ bindChrome()
 
 const [savedDraft, savedSetup, savedJobs] = await Promise.all([load('draft'), load('setup'), load('jobs')])
 if (savedDraft?.draft?.items) {
+  if (savedDraft.source?.hash && savedDraft.source.original?.items) { state.source = savedDraft.source; state.showImage = savedDraft.showImage !== false }
   state.draft = savedDraft.draft
   state.negative = String(savedDraft.negative ?? '')
   state.seed = String(savedDraft.seed ?? '')
