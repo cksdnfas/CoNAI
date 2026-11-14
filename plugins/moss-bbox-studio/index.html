@@ -4,7 +4,6 @@
 <header class="conai-header">
   <nav class="conai-tabs" id="tabs" aria-label="화면">
     <button type="button" data-tab="editor">편집기</button>
-    <button type="button" data-tab="results">결과 <span id="job-count"></span></button>
     <button type="button" data-tab="setup">연결 설정</button>
   </nav>
   <span class="conai-spacer"></span>
@@ -29,26 +28,36 @@
     <div class="cvwrap"><div id="canvas" class="cv"></div></div>
   </section>
   <aside class="conai-sidebar end insp" aria-label="프롬프트">
-    <section class="panel">
-      <label>메인 프롬프트<textarea id="summary"></textarea></label>
-      <label>메타 태그<input id="meta"></label>
-    </section>
-    <section class="panel" id="inspector" hidden></section>
-    <section class="panel" id="negative-box" hidden>
-      <label>네거티브 프롬프트<textarea id="negative"></textarea></label>
-    </section>
-    <section class="panel" id="options-box" aria-label="워크플로우 옵션" hidden></section>
+    <nav class="conai-tabs side-tabs" id="side-tabs" aria-label="프롬프트 보기">
+      <button type="button" data-side="prompt">프롬프트</button>
+      <button type="button" data-side="json">레이아웃 JSON</button>
+    </nav>
+    <div class="insp-main">
+      <div id="side-prompt">
+        <section class="panel">
+          <label>메인 프롬프트<textarea id="summary"></textarea></label>
+          <label>메타 태그<input id="meta"></label>
+        </section>
+        <section class="panel" id="inspector" hidden></section>
+        <section class="panel" id="negative-box" hidden>
+          <label>네거티브 프롬프트<textarea id="negative"></textarea></label>
+        </section>
+      </div>
+      <pre id="json" class="json-view" tabindex="0" hidden></pre>
+    </div>
+    <div class="insp-run">
+      <label>시드<input type="number" id="seed" min="0" placeholder="비우면 새 시드"></label>
+      <section id="options-box" aria-label="워크플로우 옵션" hidden></section>
+    </div>
   </aside>
 </div>
-<div id="view-results" class="conai-pane" hidden></div>
 <div id="view-setup" class="conai-pane" hidden></div>
 
 <footer class="genbar" id="genbar">
+  <button type="button" id="results-toggle" class="ghost" aria-controls="results" hidden></button>
+  <p id="status" role="status" class="status">연결 중…</p>
   <button type="button" id="wf-open" class="ghost">워크플로우 <span id="wf-name" class="wf-name"></span></button>
-  <label class="seed">시드 <input type="number" id="seed" min="0"></label>
-  <span class="conai-spacer"></span>
   <button type="button" id="generate" class="primary">생성 요청</button>
 </footer>
-<details class="json" id="json-box"><summary>레이아웃 JSON</summary><pre id="json" tabindex="0"></pre></details>
-<p id="status" role="status" class="status">연결 중…</p>
+<div id="results" class="tiles" hidden></div>
 </body></html>

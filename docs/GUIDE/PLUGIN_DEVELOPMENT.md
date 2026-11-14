@@ -116,7 +116,7 @@ node scripts/build-plugin.mjs --local my-plugin
 | 기존 앱 도구 실행 | 브라우저 `api.app.tools/call/run`, 서버 `conai.tools.list/call` |
 | 기존 HTTP 기능·업로드·스트리밍 | 브라우저 `api.app.fetch`, 다운로드는 `api.app.download` |
 | 파일·연결 프로젝트 편집 | `files.*`, `workspace.*`, 기존 파일/프로젝트 도구와 리비전 검사 |
-| 작은 설정·변경 이벤트·이동 | `api.storage`, `api.events`, `api.navigation` |
+| 작은 설정·변경 이벤트·이동 | `api.storage`, `api.events`, `api.navigation`(`open`은 떠나는 플러그인 주소를 이동 상태 `sourcePath`로 남겨, 그렇게 연 이미지 상세를 닫으면 홈이 아니라 그 플러그인 페이지로 돌아옴. 구현 `plugin-page.tsx`, `image-source-navigation.ts`) |
 | 사용자가 라이브러리 이미지·영상 선택 | `api.pickMedia({kind?:'image'\|'video'\|'all', max?:number, title?:string})`; 선택 참조 배열, 창 취소는 `[]` |
 | 모델의 단일 답변 | `api.llm` 또는 `conai.llm`의 기본 `text` 모드 |
 | 대화방 없이 프로필의 판단 모델·프리셋 사용 | `llm.decide`(직접 질문), `llm.judgeTurn`(프리셋의 before/after 항목) |

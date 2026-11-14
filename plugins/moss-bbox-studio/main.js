@@ -19,6 +19,9 @@ const MAX_STORED_JOBS = 8
 
 const state = {
   tab: 'editor',
+  side: 'prompt',
+  resultsOpen: true,
+  hovered: null,
   draft: newDraft(),
   sel: -1,
   source: null,
@@ -121,10 +124,12 @@ function renderSizeControl() {
 const HANDLES = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w']
 
 function renderBoxes() {
+  // A redraw keeps the hover highlight; a hovered region that no longer exists dims nothing.
+  const focus = state.draft.items[state.hovered] ? state.hovered : null
   $('canvas').innerHTML = state.draft.items.map((item, index) => {
     const [x0, y0, x1, y1] = item.box
     const kind = KINDS.find((entry) => entry.id === item.label)?.label ?? ''
-    return `<div class="bx${index === state.sel ? ' selected' : ''}" tabindex="0" data-index="${index}" style="--c:${color(index)};left:${x0 * 100}%;top:${y0 * 100}%;width:${(x1 - x0) * 100}%;height:${(y1 - y0) * 100}%"><span class="tag">${index + 1} · ${esc(kind)}</span>${index === state.sel ? HANDLES.map((handle) => `<span class="handle" data-handle="${handle}"></span>`).join('') : ''}</div>`
+    return `<div class="bx${index === state.sel ? ' selected' : ''}${focus !== null && index !== focus ? ' dim' : ''}" tabindex="0" data-index="${index}" style="--c:${color(index)};left:${x0 * 100}%;top:${y0 * 100}%;width:${(x1 - x0) * 100}%;height:${(y1 - y0) * 100}%"><span class="tag">${index + 1} · ${esc(kind)}</span>${index === state.sel ? HANDLES.map((handle) => `<span class="handle" data-handle="${handle}"></span>`).join('') : ''}</div>`
   }).join('')
 }
 
@@ -132,7 +137,7 @@ function renderRegionList() {
   $('region-count').textContent = `${state.draft.items.length}개`
   $('layers').innerHTML = state.draft.items.map((item, index) => {
     const kind = KINDS.find((entry) => entry.id === item.label)?.label ?? ''
-    return `<li class="region-row${index === state.sel ? ' selected' : ''}" tabindex="0" data-index="${index}" style="--c:${color(index)}"><span class="number">${index + 1}</span><span class="text"><span class="kind">${esc(kind)}</span><span class="caption${item.caption ? '' : ' empty'}">${esc(item.caption || '프롬프트 없음')}</span></span><button type="button" class="conai-icon-button sm" data-remove="${index}" aria-label="영역 ${index + 1} 삭제" title="삭제">${ICON.trash}</button></li>`
+    return `<li class="region-row${index === state.sel ? ' selected' : ''}${index === state.hovered ? ' hover' : ''}" tabindex="0" data-index="${index}" style="--c:${color(index)}"><span class="number">${index + 1}</span><span class="text"><span class="kind">${esc(kind)}</span><span class="caption${item.caption ? '' : ' empty'}">${esc(item.caption || '프롬프트 없음')}</span></span><button type="button" class="conai-icon-button sm" data-remove="${index}" aria-label="영역 ${index + 1} 삭제" title="삭제">${ICON.trash}</button></li>`
   }).join('')
 }
 
@@ -234,12 +239,19 @@ function renderTabs() {
   document.querySelectorAll('#tabs [data-tab]').forEach((button) => button.setAttribute('aria-selected', String(button.dataset.tab === state.tab)))
   const editor = state.tab === 'editor'
   $('view-editor').hidden = !editor
-  $('genbar').hidden = !editor
-  $('json-box').hidden = !editor
-  $('view-results').hidden = state.tab !== 'results'
-  $('view-setup').hidden = state.tab !== 'setup'
+  // The bar stays on the setup tab for its status text; its editor controls do not.
+  $('wf-open').hidden = !editor
+  $('generate').hidden = !editor
   const active = state.jobs.filter((job) => !TERMINAL.has(job.status)).length
-  $('job-count').textContent = state.jobs.length ? `${active ? `${active}/` : ''}${state.jobs.length}` : ''
+  const toggle = $('results-toggle')
+  toggle.hidden = !editor || !state.jobs.length
+  toggle.setAttribute('aria-expanded', String(state.resultsOpen))
+  toggle.textContent = `${state.resultsOpen ? '▾' : '▸'} 결과 ${active ? `${active}/` : ''}${state.jobs.length}`
+  $('results').hidden = toggle.hidden || !state.resultsOpen
+  $('view-setup').hidden = state.tab !== 'setup'
+  document.querySelectorAll('#side-tabs [data-side]').forEach((button) => button.setAttribute('aria-selected', String(button.dataset.side === state.side)))
+  $('side-prompt').hidden = state.side !== 'prompt'
+  $('json').hidden = state.side !== 'json'
 }
 
 function renderEditor() {
@@ -280,26 +292,28 @@ function renderSetup() {
     </section></div>`
 }
 
+let resultsHtml = ''
+/** The strip under the editor: one tile per result image, or one status tile for a job without an image yet. */
 function renderResults() {
-  const host = $('view-results')
-  if (!state.jobs.length) { host.innerHTML = '<p class="conai-empty">요청한 작업이 없어.</p>'; return }
-  host.innerHTML = `<div class="jobs">${state.jobs.map((job) => {
-    const tone = job.status === 'completed' ? 'ok' : job.status === 'failed' ? 'destructive' : TERMINAL.has(job.status) ? '' : 'warn'
-    const cancelable = !TERMINAL.has(job.status)
+  const html = state.jobs.map((job) => {
     const ratio = `${job.size[0]} / ${job.size[1]}`
-    return `<section>
-      <div class="toolbar job-head"><b>#${job.id}</b><span class="badge ${tone}">${STATUS_LABEL[job.status] ?? esc(job.status)}</span><span class="muted">${esc(job.workflowName)} · 영역 ${job.regions}개 · ${job.size[0]}×${job.size[1]}</span>${cancelable ? `<button type="button" class="ghost" data-cancel="${job.id}">취소</button>` : ''}</div>
-      ${job.error ? `<p class="job-error">${esc(job.error)}</p>` : ''}
-      <div class="tiles">${job.hashes.map((hash) => `<div class="tile"><div class="conai-media-card"><div class="conai-media" style="--ratio:${ratio}"><img src="/api/images/${hash}/thumbnail" alt="작업 #${job.id} 결과" loading="lazy"></div></div><div class="toolbar actions"><button type="button" data-edit="${job.id}:${hash}">편집</button><button type="button" class="ghost" data-open="${hash}">상세 보기</button></div></div>`).join('')}
-      ${job.status === 'completed' && !job.hashes.length ? '<p class="muted">결과 이미지를 처리하는 중이야…</p>' : ''}</div></section>`
-  }).join('')}</div>`
+    const title = esc(`#${job.id} · ${job.workflowName} · 영역 ${job.regions}개 · ${job.size[0]}×${job.size[1]}`)
+    if (job.hashes.length) return job.hashes.map((hash) => `<div class="tile" title="${title}"><div class="conai-media" style="--ratio:${ratio}"><img src="/api/images/${hash}/thumbnail" alt="작업 #${job.id} 결과" loading="lazy"></div><div class="toolbar actions"><button type="button" data-edit="${job.id}:${hash}">불러오기</button><button type="button" class="ghost" data-open="${hash}">상세</button></div></div>`).join('')
+    const failed = job.status === 'failed' || Boolean(job.error)
+    const tone = failed ? 'destructive' : job.status === 'completed' ? 'ok' : TERMINAL.has(job.status) ? '' : 'warn'
+    const label = failed ? STATUS_LABEL.failed : job.status === 'completed' ? '처리 중' : STATUS_LABEL[job.status] ?? esc(job.status)
+    return `<div class="tile" title="${job.error ? esc(job.error) : title}"><div class="conai-media pending" style="--ratio:${ratio}"><span class="badge ${tone}">${label}</span></div><div class="toolbar actions"><span class="muted">#${job.id}</span>${TERMINAL.has(job.status) ? '' : `<button type="button" class="ghost" data-cancel="${job.id}">취소</button>`}</div></div>`
+  }).join('')
+  // A poll that changed nothing keeps the thumbnails and the scroll position.
+  if (html === resultsHtml) return
+  resultsHtml = html
+  $('results').innerHTML = html
 }
 
 function showTab(tab) {
   state.tab = tab
   renderTabs()
   if (tab === 'setup') renderSetup()
-  if (tab === 'results') renderResults()
 }
 
 // ---- state changes ----------------------------------------------------------------------------------------------
@@ -364,6 +378,7 @@ function replaceDraft(draft, source) {
   state.sel = draft.items.length ? 0 : -1
   state.showImage = true
   state.tab = 'editor'
+  state.side = 'prompt'
   changed()
 }
 
@@ -428,7 +443,7 @@ async function generate(seedOverride) {
     if (!id) throw new Error('서버가 작업 번호를 돌려주지 않았어.')
     state.jobs.unshift({ id, status: result.record.status ?? 'queued', workflowName: current.name, layout: stringifyLayout(draft), size: [...draft.size], regions: draft.items.length, hashes: [], error: '', createdAt: Date.now() })
     void saveJobs()
-    renderTabs(); publish(); startPolling()
+    renderResults(); renderTabs(); publish(); startPolling()
     notify(`작업 #${id} 요청했어.`)
     return id
   } finally {
@@ -463,8 +478,7 @@ const pollJobs = guard(async () => {
     if (job.status === 'completed') await loadResults(job)
   }
   void saveJobs()
-  renderTabs(); publish()
-  if (state.tab === 'results') renderResults()
+  renderResults(); renderTabs(); publish()
   if (failure) throw failure
 })
 
@@ -519,13 +533,26 @@ function bindEditor() {
     return [clamp((event.clientX - rect.left) / rect.width, 0, 1), clamp((event.clientY - rect.top) / rect.height, 0, 1)]
   }
 
+  // Boxes overlap, so the hit is decided by geometry instead of stacking order: the smallest box under the pointer wins
+  // (a background box never hides the ones inside it) and equal sizes go to the later, upper one, as in the image detail region map.
+  const boxAt = (x, y) => {
+    let hit = -1
+    let hitArea = Infinity
+    state.draft.items.forEach((item, index) => {
+      const [x0, y0, x1, y1] = item.box
+      const area = (x1 - x0) * (y1 - y0)
+      if (x >= x0 && x <= x1 && y >= y0 && y <= y1 && area <= hitArea) { hit = index; hitArea = area }
+    })
+    return hit
+  }
+
   // Dragging a box moves it, its handles resize it, and dragging on empty canvas draws a new one; a plain click on empty canvas deselects.
   canvas.addEventListener('pointerdown', (event) => {
     const [x, y] = fractions(event)
-    const box = event.target.closest('.bx')
-    if (box) {
-      const index = Number(box.dataset.index)
-      const handle = index === state.sel ? event.target.dataset.handle : undefined
+    // Only the selected box has handles, and they keep priority over a smaller box under them.
+    const handle = event.target.dataset.handle
+    const index = handle ? state.sel : boxAt(x, y)
+    if (index >= 0) {
       if (index !== state.sel) select(index)
       drag = { mode: handle ? 'resize' : 'move', handle, index, x, y, box: [...state.draft.items[index].box] }
     } else drag = { mode: 'draw', index: -1, x, y }
@@ -533,8 +560,11 @@ function bindEditor() {
   })
 
   canvas.addEventListener('pointermove', (event) => {
-    if (!drag) return
     const [x, y] = fractions(event)
+    if (!drag) {
+      if (event.pointerType === 'mouse') { const index = boxAt(x, y); hover(index < 0 ? null : index) }
+      return
+    }
     if (drag.mode === 'draw' && drag.index < 0) {
       if (Math.hypot(x - drag.x, y - drag.y) < 0.01) return
       state.draft.items.push({ label: 'object', caption: '', text: '', box: [drag.x, drag.y, drag.x, drag.y] })
@@ -578,11 +608,13 @@ function bindEditor() {
   canvas.addEventListener('pointercancel', finish)
 
   const hover = (index) => {
+    state.hovered = index
     $('layers').querySelectorAll('.region-row').forEach((row) => row.classList.toggle('hover', Number(row.dataset.index) === index))
     canvas.querySelectorAll('.bx').forEach((box) => box.classList.toggle('dim', index !== null && Number(box.dataset.index) !== index))
   }
   $('layers').addEventListener('mouseover', (event) => { const row = event.target.closest('.region-row'); hover(row ? Number(row.dataset.index) : null) })
   $('layers').addEventListener('mouseleave', () => hover(null))
+  canvas.addEventListener('pointerleave', () => { if (!drag) hover(null) })
   $('layers').addEventListener('click', (event) => {
     const remove = event.target.closest('[data-remove]')
     if (remove) {
@@ -676,6 +708,8 @@ function bindEditor() {
 
 function bindChrome() {
   $('tabs').addEventListener('click', (event) => { const tab = event.target.closest('[data-tab]')?.dataset.tab; if (tab) showTab(tab) })
+  $('side-tabs').addEventListener('click', (event) => { const side = event.target.closest('[data-side]')?.dataset.side; if (side) { state.side = side; renderTabs() } })
+  $('results-toggle').addEventListener('click', () => { state.resultsOpen = !state.resultsOpen; renderTabs() })
   $('generate').addEventListener('click', guard(async () => { await generate() }))
   $('wf-open').addEventListener('click', () => showTab('setup'))
   // Older hosts cannot open the library picker; the option stays hidden there rather than asking for a typed hash.
@@ -715,7 +749,7 @@ function bindChrome() {
     if (event.target.id !== 'reload-workflows') return
     await loadWorkflows(); setupChanged()
   }))
-  $('view-results').addEventListener('click', guard(async (event) => {
+  $('results').addEventListener('click', guard(async (event) => {
     const edit = event.target.closest('[data-edit]')?.dataset.edit
     if (edit) { const [jobId, hash] = edit.split(':'); await editResult(Number(jobId), hash); return }
     const open = event.target.closest('[data-open]')?.dataset.open
@@ -785,7 +819,7 @@ if (Array.isArray(savedJobs)) state.jobs = savedJobs.filter((job) => Number.isIn
 try { await loadWorkflows() } catch (error) { notify(`워크플로우를 불러오지 못했어: ${error.message}`, true) }
 if (state.setup.workflowId && !workflow()) chooseWorkflow(null)
 
-renderEditor(); renderOptions(); renderTabs(); publish()
+renderEditor(); renderOptions(); renderResults(); renderTabs(); publish()
 // The genbar shows a missing workflow ("선택 안 함"), so the status line only keeps a load error.
 if (!$('status').classList.contains('error')) notify('')
 

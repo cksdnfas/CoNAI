@@ -3,7 +3,12 @@
 .source-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
 
 .conai-sidebar { gap: 0 }
-.insp { --conai-sidebar-width: 340px; overflow-y: auto }
+/* Two fixed rows: the prompt / JSON tabs scroll on top, the seed and workflow options stay below. */
+.insp { --conai-sidebar-width: 340px; overflow: hidden }
+.side-tabs { flex: none }
+.insp-main { flex: 1; min-height: 0; overflow-y: auto }
+.insp-run { flex: none; max-height: 40%; overflow-y: auto; padding-top: 4px; border-top: 1px solid var(--conai-line) }
+.json-view { margin: 0; padding: 10px 0; font: 12px/1.55 var(--conai-font-mono); white-space: pre-wrap; overflow-wrap: anywhere }
 /* Fields keep the SDK label spacing, so the editor panels space like the setup view. */
 .panel { margin: 0; padding: 4px 0 }
 .panel + .panel { border-top: 1px solid var(--conai-line) }
@@ -62,12 +67,8 @@
 
 .genbar { display: flex; align-items: center; flex: none; flex-wrap: wrap; gap: 10px; padding: 10px var(--conai-text-inset); border-top: 1px solid var(--conai-line) }
 .wf-name { font-weight: 600 }
-.genbar .seed { display: flex; align-items: center; gap: 8px; margin: 0 }
-.genbar .seed > input:not([type=checkbox]):not([type=radio]):not([type=range]) { width: 130px; margin: 0 }
-details.json { flex: none; border-top: 1px solid var(--conai-line) }
-details.json summary { padding: 8px var(--conai-text-inset); color: var(--conai-muted-foreground); font-size: 13px; cursor: pointer }
-details.json pre { max-height: 220px; margin: 0; padding: 0 var(--conai-text-inset) 12px; overflow: auto; font: 12px/1.55 var(--conai-font-mono); white-space: pre-wrap; overflow-wrap: anywhere }
-.status { flex: none; min-height: 28px; margin: 0; padding: 4px var(--conai-text-inset); font-size: 12px; color: var(--conai-muted-foreground) }
+/* The status text shares the bar and takes the room between the results toggle and the actions. */
+.status { flex: 1; min-width: 0; margin: 0; font-size: 12px; color: var(--conai-muted-foreground) }
 .status.error { color: var(--conai-destructive) }
 
 .setup { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 32px; align-items: start }
@@ -81,13 +82,13 @@ details.json pre { max-height: 220px; margin: 0; padding: 0 var(--conai-text-ins
 .maphead .conai-overline { margin: 0 }
 .checks { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; font-size: 13px }
 
-.jobs { display: grid; gap: 28px }
-.job-head { margin-bottom: 10px }
-.job-error { color: var(--conai-destructive); font-size: 13px }
-.tiles { display: flex; flex-wrap: wrap; gap: 16px }
-.tile { width: 150px }
-.tile .conai-media { aspect-ratio: var(--ratio, 1) }
-.tile .actions { margin-top: 8px }
+.tiles { display: flex; flex: none; gap: 12px; padding: 0 var(--conai-text-inset) 10px; overflow-x: auto }
+/* The buttons sit beside the thumbnail so the strip stays one short row under the canvas. */
+.tile { display: flex; flex: none; gap: 6px }
+.tile .conai-media { height: 72px; aspect-ratio: var(--ratio, 1) }
+.tile .conai-media.pending { display: grid; place-items: center; min-width: 72px }
+.tile .actions { flex-direction: column; flex-wrap: nowrap; align-items: stretch; justify-content: center; gap: 4px; font-size: 12px }
+.tile .actions button { min-height: 26px; padding: 0 8px; font-size: 12px }
 
 @media (max-width: 900px) { .setup { grid-template-columns: minmax(0, 1fr) } .maprow { grid-template-columns: minmax(0, 1fr) } }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important } }

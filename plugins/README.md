@@ -321,7 +321,7 @@ await api.storage.set('preferences', { zoom: 2 }, settings.revision);
 // api.storage.delete(key, revision); stale revisions return HTTP 409.
 const unsubscribe = api.events.on('files.changed', event => refreshVisibleFiles(event.payload));
 // 'job.status', 'audio.changed', 'posts.changed', queue/history/workflow events, 'resync', 'connection', or '*'.
-await api.navigation.open('/files'); // native navigation and unsaved-draft guard
+await api.navigation.open('/files'); // native navigation and unsaved-draft guard; an image page opened this way goes back to this plugin page
 ```
 
 Storage is scoped to plugin + account, retained across package updates, removed on uninstall, and limited to 256 keys / 1 MiB per account with 64 KiB per value. It needs no server module. Use file/project APIs for documents and large assets. Events share the app's SSE connection and account/topic filtering, including authorized chat and page-command events. Re-query relevant visible data after `resync` rather than treating events as full records.

@@ -15,6 +15,7 @@ import { FileBrowser } from '@/features/files/file-browser'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { hasAuthPermission } from '@/features/auth/auth-permissions'
 import { WorkspaceProjectPicker } from '@/features/files/workspace-projects'
+import type { ImageSourceLocationState } from '@/features/images/image-source-navigation'
 import { useChatPage, useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
 import { closePlugin, listPlugins, openPlugin, pluginRequest, proposePluginWrite, PLUGINS_QUERY_KEY } from '@/lib/api-plugins'
 import { ApiRequestError } from '@/lib/api-request'
@@ -390,7 +391,9 @@ function PluginFrame({ instance, onDirty, embed, launch }: { instance: PluginIns
         if (message.method === 'navigation.open') {
           const path = String(args?.path ?? '')
           if (!path.startsWith('/') || path.startsWith('//') || /[\\#]/.test(path) || chatPagePermission(path.split('?')[0]) === null) throw new ApiRequestError('등록된 앱 페이지 경로를 사용해줘.', 400)
-          navigate(path); return { navigated: true }
+          // Image pages go back to their source screen; without it closing an image opened here would land on Home.
+          // The app uses a hash router, so the current page path is location.hash without its "#".
+          navigate(path, { state: { sourcePath: window.location.hash.slice(1) } satisfies ImageSourceLocationState }); return { navigated: true }
         }
         if (message.method === 'events.subscribe') {
           eventSubscription.current?.()
