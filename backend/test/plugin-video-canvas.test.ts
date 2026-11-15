@@ -11,11 +11,14 @@ import { normalizeMcpWorkflowInputs } from '../src/services/comfyui/comfyWorkflo
 import { CHAT_PAGE_ACTION_LIMITS, copyChatPageData, isPrivateChatPageKey, normalizeChatPageSchema, validateChatPageArguments } from '../../shared/src/utils/chatPageAction'
 
 const hash = 'a'.repeat(32), otherHash = 'b'.repeat(32)
+// With state.historyPerJob each generation job has its own history row and result hash.
+const jobHash = (job: number) => String(job).padStart(32, '0')
 const image = { source: 'library', compositeHash: hash }
 const profile = { id: 'draft', label: '초안', workflowId: 12, directorFieldId: 'director', seedFieldId: 'seed', overrides: { frame_rate: 24, resolution: { preset: '720p' } } }
-const details = { input_schema: [
+const details = { name: 'Director 기본', input_schema: [
   { id: 'director', type: 'node', node_editor: 'minimax_h3_director_dasiwa' },
   { id: 'seed', type: 'number', seed_rule: 'explicit seed', json_path: '5.inputs.seed' },
+  { id: 'steps', label: '스텝', type: 'number', minimum: 1, maximum: 50 },
 ] }
 const ops = (project: any, operations: any[], actor = 'assistant') => applyOps(project, operations, project.revision, randomUUID, actor)
 function canvas() {
@@ -165,21 +168,44 @@ test('video canvas only exposes final actual-or-original hashes when postprocess
 
 function serviceFixture() {
   const db = new Database(':memory:'), calls: any[] = [], registered: any[] = [], hooks = new Map<string, any>()
-  const state: any = { ready: false, fingerprint: 'fingerprint', audioRevision: 'revision-one', members: [{ kind: 'image' }], frames: [], frameId: randomUUID(), job: 480 }
-  let pageHandler: any
+  const state: any = { ready: false, fingerprint: 'fingerprint', audioRevision: 'revision-one', members: [{ kind: 'image' }], frames: [], frameId: randomUUID(), job: 480, joinTool: true, joins: [], jobs: {} }
+  let pageHandler: any, jobHandler: any
+  // Plugin tasks run in the background like the host's: the handler gets the starting account and a cancel signal.
+  const tasks = new Map<string, any>()
   const conai = {
     db,
+    warn() {},
+    onJob(handler: any) { jobHandler = handler },
+    jobs: {
+      async start({ data }: any) {
+        if (state.taskBusy) throw Object.assign(new Error('이 플러그인의 작업이 이미 실행 중이야.'), { status: 429 })
+        const jobId = randomUUID(), controller = new AbortController(), task: any = { status: 'running', controller }
+        tasks.set(jobId, task)
+        task.done = new Promise(resolve => setImmediate(resolve)).then(() => jobHandler(data, { account: { id: 1, type: 'admin' }, signal: controller.signal }))
+          .then(() => { task.status = controller.signal.aborted ? 'cancelled' : 'completed' }, (error: any) => { task.status = 'failed'; task.error = error.message })
+        return { jobId, status: 'queued' }
+      },
+      async get(jobId: string) { const task = tasks.get(jobId); return { jobId, status: task.status, error: task.error ?? null } },
+      async cancel(jobId: string) { tasks.get(jobId).controller.abort(new Error('cancelled')); return { jobId, status: 'cancelled' } },
+    },
     tools: {
       register(definition: any) { registered.push(definition) },
+      async list() { return [{ name: 'clip_video' }, ...(state.joinTool ? [{ name: 'join_videos' }] : [])] },
       async call(name: string, args: any) {
         calls.push({ name, args })
+        if (name === 'join_videos') {
+          if (!state.joinTool) throw new Error('플러그인 실행 문맥에서 지원하지 않는 앱 도구야: join_videos')
+          return { job_id: state.frameId, ...(state.joins.shift() ?? { status: 'running', progress: 0 }) }
+        }
+        if (name === 'list_comfyui_servers') return [{ id: 1, name: '메인', routing_tags: ['gpu'] }, { id: 2, name: '보조', routing_tags: ['gpu', 'fast'] }]
         if (name === 'get_workflow_details') { state.detailsStarted?.(); if (state.detailsGate) await state.detailsGate; return details }
         if (name === 'get_image_metadata') return { duration: 4 }
         if (name === 'get_audio_candidate') return { duration_seconds: 4, revision: state.audioRevision }
         if (name === 'list_comfy_refmods') return { server_id: 1, entries: [{ name: 'crowd', members: state.members }] }
         if (name === 'submit_generation_job') return { job_id: ++state.job, status: 'queued' }
-        if (name === 'cancel_generation_job') return { status: 'cancelled' }
-        if (name === 'get_generation_job') return { status: 'completed', history_ids: [91] }
+        if (name === 'cancel_generation_job') { state.jobs[args.job_id] = { status: 'cancelled' }; return { status: 'cancelled' } }
+        if (name === 'get_generation_job') return state.jobs[args.job_id] ?? { status: 'completed', history_ids: [state.historyPerJob ? args.job_id : 91] }
+        if (name === 'wait_generation_job') { state.onWait?.(args); await new Promise(resolve => setTimeout(resolve, 5)); return { finished: true } }
         if (name === 'save_video_frame') return { job_id: state.frameId, ...(state.frames.shift() ?? { status: 'completed', saved: [{ composite_hash: otherHash, seconds: 3.9 }] }) }
         if (name === 'get_media_edit_job') {
           state.frameWait?.(args)
@@ -201,7 +227,23 @@ function serviceFixture() {
       }
       if (url.startsWith('/api/workflow-input-assets/') && options?.method === 'DELETE') return Response.json({ success: true, data: { removed: true } })
       if (url === '/api/refmods') return Response.json({ data: [{ id: 1, name: 'crowd', status: 'saved', members: state.members }] })
+      if (url === '/api/workflows?kind=image' && state.workflowsDenied) return Response.json({ success: false, error: '워크플로 보기 권한이 없어.' }, { status: 403 })
+      if (url === '/api/workflows?kind=image') return Response.json({ success: true, data: [
+        { id: 12, name: 'Director 기본', is_active: true, marked_fields: [
+          { id: 'director', type: 'node', node_editor: 'minimax_h3_director_dasiwa', jsonPath: '3.inputs', node_hidden_controls: ['secret_switch'], default_value: { mode: 'T2VA', duration: 5, width: 1280, height: 720, frame_rate: 24, model_name: 'h3.safetensors', secret_switch: true, links: ['4', 0], timeline_data: JSON.stringify({ items: [], resolution: { aspect: '16:9', resolution: '720p' } }) } },
+          { id: 'seed', type: 'number', jsonPath: '5.inputs.seed' },
+          { id: 'steps', label: '스텝', type: 'number', jsonPath: '6.inputs.steps', default_value: 20 },
+        ] },
+        { id: 13, name: '이미지', is_active: true, marked_fields: [{ id: 'prompt', type: 'text', jsonPath: '1.inputs.text' }] },
+        ...(state.secondDirector ? [{ id: 14, name: 'Director 보조', is_active: true, marked_fields: [
+          { id: 'director', type: 'node', node_editor: 'minimax_h3_director_dasiwa', jsonPath: '3.inputs', default_value: { mode: 'T2VA' } },
+          { id: 'seed', type: 'number', jsonPath: '5.inputs.seed' }] }] : []),
+      ] })
       if (url === '/api/generation-history/91') return Response.json({ record: { postprocess_status: state.ready ? 'ready' : 'processing', composite_hash: hash, actual_composite_hash: otherHash } })
+      if (url.startsWith('/api/generation-history/')) {
+        const job = Number(url.split('/').at(-1))
+        return Response.json({ record: { postprocess_status: state.failedHistory?.includes(job) ? 'failed' : 'ready', composite_hash: jobHash(job) } })
+      }
       throw new Error(`Unexpected URL: ${url}`)
     } },
     hooks: { on(name: string, handler: any) { hooks.set(name, handler) } }, onRequest(handler: any) { pageHandler = handler },
@@ -209,7 +251,15 @@ function serviceFixture() {
   const service = activate(conai), account = { id: 1 }
   const dispatch = (op: string, args: any = {}, actor = 'assistant', options = {}) => service.dispatch({ op, ...args }, account, actor, options)
   const tool = async (name: string, args: any, actorAccount = account) => unwrap(await registered.find(tool => tool.name === name).handler(args, { account: actorAccount }))
-  return { db, conai, calls, state, service, dispatch, tool, emit: (name: string, event: any) => hooks.get(name)(event), page: (body: any) => pageHandler({ body, account }), markReady: () => { state.ready = true } }
+  return { db, conai, calls, state, service, dispatch, tool, tasks, emit: (name: string, event: any) => hooks.get(name)(event), page: (body: any) => pageHandler({ body, account }), markReady: () => { state.ready = true } }
+}
+async function until<T>(read: () => T): Promise<T> {
+  for (let attempt = 0; attempt < 400; attempt++) {
+    const value = read()
+    if (value) return value
+    await new Promise(resolve => setTimeout(resolve, 5))
+  }
+  throw new Error('condition not reached')
 }
 async function fixtureProject(f: ReturnType<typeof serviceFixture>, audio = false) {
   const created = await f.dispatch('create_project', { name: '영화' })
@@ -585,4 +635,405 @@ test('video canvas host-shape fallback follows protected-key names and their hos
       assert.deepEqual(JSON.parse(JSON.parse(section.json)), value)
     } else assert.deepEqual(section.data, value)
   }
+})
+test('video canvas project list, rename, archive, duplicate and delete stay account-owned', async () => {
+  const f = serviceFixture()
+  try {
+    const project = await fixtureProject(f, true)
+    const take = await f.dispatch('run_cut', await runArgs(f, project))
+    f.markReady()
+    await f.dispatch('get_take', { project_id: project.id, take_id: take.id })
+    await f.dispatch('create_project', { name: '두 번째 장면' })
+    const other = { id: 2 }, asOther = (body: any) => f.service.dispatch(body, other, 'human', { page: true })
+    for (const op of ['rename_project', 'archive_project', 'duplicate_project', 'delete_project']) {
+      await assert.rejects(() => asOther({ op, project_id: project.id, name: '남의 것', archived: true }), (error: any) => error.status === 404)
+    }
+    await assert.rejects(() => f.tool('manage_project', { project_id: project.id, action: 'rename', name: '남의 것' }, other), /접근/)
+    assert.deepEqual((await asOther({ op: 'list_projects' })).projects, [])
+    const listed = await f.dispatch('list_projects', { query: '영', sort: 'name' })
+    assert.equal(listed.total, 1)
+    assert.equal(listed.nextOffset, null)
+    const { updated, created, ...row } = listed.projects[0]
+    assert.ok(updated && created)
+    assert.deepEqual(row, { id: project.id, name: '영화', revision: 1, nodeCount: 4, cutCount: 1, archived: false, cover: otherHash })
+    assert.deepEqual((await f.dispatch('list_projects', { limit: 1 })).nextOffset, 1)
+
+    const renamed = await f.tool('manage_project', { project_id: project.id, action: 'rename', name: '  새 영화 ' })
+    assert.equal(renamed.name, '새 영화')
+    assert.equal(renamed.revision, 1)
+    assert.equal(f.service.store.get('account:1', project.id).name, '새 영화')
+    const copy = await f.tool('manage_project', { project_id: project.id, action: 'duplicate' })
+    assert.equal(copy.name, '새 영화 사본')
+    assert.equal(copy.takes.length, 0)
+    assert.equal(copy.nodes.length, 4)
+    assert.ok(copy.nodes.every((node: any) => !project.nodes.some((old: any) => old.id === node.id)))
+    assert.deepEqual(copy.sequence, [copy.nodes[0].id])
+    assert.notEqual(copy.profiles[0].id, 'draft')
+    assert.equal(copy.nodes[0].data.profileId, copy.profiles[0].id)
+    assert.ok(copy.edges.every((edge: any) => copy.nodes.some((node: any) => node.id === edge.from) && edge.to === copy.nodes[0].id))
+
+    assert.equal((await f.tool('manage_project', { project_id: project.id, action: 'archive' })).archived, true)
+    assert.equal((await f.dispatch('list_projects')).projects.some((item: any) => item.id === project.id), false)
+    assert.deepEqual((await f.dispatch('list_projects', { archived: true })).projects.map((item: any) => item.id), [project.id])
+
+    await assert.rejects(() => f.dispatch('delete_project', { project_id: project.id }), (error: any) => error.status === 403)
+    assert.equal((await f.page({ op: 'delete_project', project_id: project.id, name: '다른 이름' })).status, 409)
+    assert.deepEqual(await f.page({ op: 'delete_project', project_id: project.id, name: '새 영화', origin: 'assistant' }), { id: project.id, deleted: true, cleanupErrors: [] })
+    assert.equal(f.calls.filter(call => call.options?.method === 'DELETE').length, 1)
+    for (const table of ['vc_take', 'vc_take_upload', 'vc_upload', 'vc_run_request']) assert.equal(f.db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get().n, 0)
+    assert.equal((await f.dispatch('list_projects')).total, 2)
+  } finally { f.db.close() }
+})
+test('video canvas sequence follows cut adds and removals, rejects non-cuts and is undoable', async () => {
+  const f = serviceFixture()
+  try {
+    const project = await fixtureProject(f), first = project.nodes[0].id
+    const sequence = () => f.service.store.get('account:1', project.id).sequence
+    f.db.prepare("UPDATE vc_project SET data=json_remove(data,'$.sequence') WHERE id=?").run(project.id)
+    assert.deepEqual(sequence(), [first])
+    const added = await f.dispatch('apply_ops', { project_id: project.id, expected_revision: 1, ops: [{ op: 'add_node', kind: 'cut', tempId: 'b' }, { op: 'add_node', kind: 'cut', tempId: 'c' }] })
+    const { b, c } = added.tempIds
+    assert.deepEqual(sequence(), [first, b, c])
+    assert.equal(f.service.store.get('account:1', project.id).nodes.find((node: any) => node.id === b).data.profileId, 'draft')
+    const reordered = await f.dispatch('apply_ops', { project_id: project.id, expected_revision: added.revision, ops: [
+      { op: 'sequence', order: [c, first] }, { op: 'sequence', order: [project.nodes[1].id] }, { op: 'sequence', order: ['missing'] }, { op: 'sequence', order: [c, c] },
+    ] })
+    assert.equal(reordered.rejected.length, 3)
+    assert.deepEqual(sequence(), [c, first, b])
+    const undone = await f.dispatch('undo', { project_id: project.id, expected_revision: reordered.revision })
+    assert.deepEqual(undone.sequence, [first, b, c])
+    await f.dispatch('apply_ops', { project_id: project.id, expected_revision: undone.revision, ops: [{ op: 'remove', id: first }] }, 'human')
+    assert.deepEqual(sequence(), [b, c])
+  } finally { f.db.close() }
+})
+test('video canvas workflow options detect Director/seed fields and a workflow-only profile saves and sends extra inputs', async () => {
+  const f = serviceFixture()
+  try {
+    const project = await fixtureProject(f)
+    const options = await f.dispatch('workflow_options')
+    assert.deepEqual(options.servers, [{ id: 1, name: '메인', tags: ['gpu'] }, { id: 2, name: '보조', tags: ['gpu', 'fast'] }])
+    assert.deepEqual(options.tags, ['fast', 'gpu'])
+    const [director, image] = options.workflows
+    assert.deepEqual({ usable: director.usable, directorFieldId: director.directorFieldId, seedFieldId: director.seedFieldId }, { usable: true, directorFieldId: 'director', seedFieldId: 'seed' })
+    assert.deepEqual(director.defaults, { width: 1280, height: 720, frame_rate: 24, model_name: 'h3.safetensors', resolution: { aspect: '16:9', resolution: '720p' } })
+    assert.deepEqual(director.extraFields, [{ id: 'steps', label: '스텝', type: 'number', min: 1, max: 50, default: 20 }])
+    assert.equal(image.usable, false)
+    assert.match(image.reason, /Director/)
+    assert.equal(f.calls.filter(call => call.name === 'get_workflow_details').length, 1)
+
+    await assert.rejects(() => f.dispatch('save_profile', { project_id: project.id, expected_revision: 1, profile: { workflowId: 12, inputs: { steps: 99 } } }), /스텝/)
+    await assert.rejects(() => f.dispatch('save_profile', { project_id: project.id, expected_revision: 1, profile: { workflowId: 12, inputs: { seed: 1 } } }), /정할 수 없는/)
+    const saved = await f.tool('apply_ops', { project_id: project.id, expected_revision: 1, profile: { workflowId: 12, serverTag: 'gpu', inputs: { steps: 30 } } })
+    const { id, ...created } = saved.profiles.at(-1)
+    assert.deepEqual(created, { label: 'Director 기본', workflowId: 12, directorFieldId: 'director', seedFieldId: 'seed', serverTag: 'gpu', inputs: { steps: 30 } })
+    const added = await f.dispatch('apply_ops', { project_id: project.id, expected_revision: saved.revision, ops: [{ op: 'add_node', kind: 'cut', tempId: 'cut' }] })
+    assert.equal(f.service.store.get('account:1', project.id).nodes.find((node: any) => node.id === added.tempIds.cut).data.profileId, id)
+    const run = await f.dispatch('run_cut', await runArgs(f, project, { profile_id: id }))
+    const request = f.calls.filter(call => call.name === 'submit_generation_job').at(-1).args
+    assert.deepEqual({ steps: request.inputs.steps, seed: request.inputs.seed, tag: request.server_tag }, { steps: 30, seed: 482913, tag: 'gpu' })
+    assert.equal(typeof run.profile.inputs, 'string')
+  } finally { f.db.close() }
+})
+test('video canvas exports representing takes in sequence order through join_videos with wait, cancel and a missing tool', async () => {
+  const f = serviceFixture()
+  try {
+    const project = await fixtureProject(f), first = project.nodes[0].id
+    const take = await f.dispatch('run_cut', await runArgs(f, project))
+    const added = await f.dispatch('apply_ops', { project_id: project.id, expected_revision: 1, ops: [{ op: 'add_node', kind: 'cut', name: '엔딩', tempId: 'end' }] })
+    const end = added.tempIds.end
+    const picks = await f.dispatch('apply_ops', { project_id: project.id, expected_revision: added.revision, ops: [{ op: 'set', id: end, fields: { pickTakeId: take.id } }, { op: 'set', id: end, fields: { pickTakeId: 'nope' } }] })
+    assert.equal(picks.rejected.length, 2)
+    await assert.rejects(() => f.dispatch('export_sequence', { project_id: project.id, expected_revision: added.revision }), /준비되지 않은 컷이 있어: 컷, 엔딩\./)
+    f.markReady()
+    await assert.rejects(() => f.dispatch('export_sequence', { project_id: project.id, expected_revision: added.revision }), /준비되지 않은 컷이 있어: 엔딩\./)
+    assert.equal(f.calls.filter(call => call.name === 'join_videos').length, 0)
+
+    f.service.store.addTake('account:1', project.id, { id: 'end-take', cutId: end, seed: 1, status: 'completed', profile, resolved: {}, jobId: null, resultHash: 'd'.repeat(32) })
+    const ordered = await f.dispatch('apply_ops', { project_id: project.id, expected_revision: added.revision, ops: [{ op: 'sequence', order: [end] }, { op: 'set', id: end, fields: { pickTakeId: 'end-take' } }] })
+    const started = await f.dispatch('export_sequence', { project_id: project.id, expected_revision: ordered.revision })
+    assert.deepEqual(f.calls.find(call => call.name === 'join_videos').args, { composite_hashes: ['d'.repeat(32), otherHash], wait_seconds: 0 })
+    assert.deepEqual({ status: started.status, jobId: started.jobId, cutIds: started.cutIds, takeIds: started.takeIds, resultHash: started.resultHash }, { status: 'running', jobId: f.state.frameId, cutIds: [end, first], takeIds: ['end-take', take.id], resultHash: null })
+    f.state.frames = [{ status: 'running', progress: 0.5 }, { status: 'completed', progress: 1, saved: [{ source_composite_hash: 'd'.repeat(32), composite_hash: 'e'.repeat(32) }] }]
+    const finished = await f.tool('export_sequence', { project_id: project.id, export_id: started.id, wait_seconds: 120 })
+    assert.deepEqual({ status: finished.status, resultHash: finished.resultHash }, { status: 'completed', resultHash: 'e'.repeat(32) })
+    const read = f.service.store.get('account:1', project.id)
+    assert.equal(read.revision, ordered.revision)
+    assert.equal(read.exports[0].resultHash, 'e'.repeat(32))
+
+    await assert.rejects(() => f.dispatch('export_sequence', { project_id: project.id, expected_revision: ordered.revision, cut_ids: [first] }), /둘 이상/)
+    const subset = await f.dispatch('export_sequence', { project_id: project.id, expected_revision: ordered.revision, cut_ids: [first, end] })
+    assert.deepEqual(f.calls.filter(call => call.name === 'join_videos').at(-1).args.composite_hashes, [otherHash, 'd'.repeat(32)])
+    const cancelled = await f.dispatch('export_sequence', { project_id: project.id, export_id: subset.id, cancel: true })
+    assert.equal(cancelled.status, 'cancelled')
+    assert.equal(f.calls.at(-1).args.cancel, true)
+
+    f.state.joinTool = false
+    await assert.rejects(() => f.dispatch('export_sequence', { project_id: project.id, expected_revision: ordered.revision }), (error: any) => error.status === 501 && /join_videos/.test(error.message))
+    assert.equal(f.service.store.get('account:1', project.id).exports.at(-1).status, 'failed')
+  } finally { f.db.close() }
+})
+test('video canvas waits for a take by take or cut and carries the generation failure text', async () => {
+  const f = serviceFixture()
+  try {
+    const project = await fixtureProject(f), cut = project.nodes[0]
+    await assert.rejects(() => f.dispatch('get_take', { project_id: project.id, cut_id: cut.id }), /아직 take가 없어/)
+    await assert.rejects(() => f.dispatch('get_take', { project_id: project.id }), /take_id 또는 cut_id/)
+    f.state.jobs[481] = { status: 'running' }
+    f.state.onWait = (args: any) => { assert.equal(args.job_id, 481); delete f.state.jobs[481]; f.markReady() }
+    const run = await f.dispatch('run_cut', { ...await runArgs(f, project), wait_seconds: 30 })
+    assert.deepEqual({ status: run.status, resultHash: run.resultHash }, { status: 'completed', resultHash: otherHash })
+    const waited = f.calls.find(call => call.name === 'wait_generation_job').args
+    assert.ok(waited.timeout_seconds >= 5 && waited.timeout_seconds <= 30)
+    assert.equal((await f.tool('get_take', { project_id: project.id, cut_id: cut.id, wait_seconds: 120 })).id, run.id)
+
+    f.state.onWait = undefined
+    const hooked = await f.dispatch('run_cut', await runArgs(f, project))
+    f.state.jobs[482] = { status: 'failed', failure_message: 'ComfyUI 저장 실패', history_ids: [] }
+    await f.emit('generation.finished', { jobId: 482, status: 'failed', history: [], failureCode: 'execution_error' })
+    assert.equal(f.service.store.take('account:1', project.id, hooked.id).error, 'ComfyUI 저장 실패')
+    const polled = await f.dispatch('run_cut', await runArgs(f, project))
+    f.state.jobs[483] = { status: 'failed', failure_message: '디스크 부족' }
+    const read = await f.dispatch('get_take', { project_id: project.id, cut_id: cut.id, wait_seconds: 10 })
+    assert.deepEqual({ id: read.id, status: read.status, error: read.error }, { id: polled.id, status: 'failed', error: '디스크 부족' })
+
+    const row = excerpt(f.service.store.get('account:1', project.id)).nodes.find((node: any) => node.id === cut.id)
+    assert.deepEqual({ ...row, checkStatus: undefined }, { id: cut.id, kind: 'cut', name: '컷', checkStatus: undefined, humanReview: 'pending', mode: 'REF2VA',
+      newestTakeId: polled.id, newestTakeStatus: 'failed', newestTakeError: '디스크 부족', hasReadyResult: true, representingTakeId: run.id, resultHash: otherHash })
+    const publication = createAssistantState()
+    publication.set('lastRun', { id: run.id })
+    const before = publication.snapshot({}, 1).data.lastRun.fresh
+    publication.set('lastRun', { id: run.id })
+    assert.notEqual(publication.snapshot({}, 1).data.lastRun.fresh.seq, before.seq)
+  } finally { f.db.close() }
+})
+test('video canvas extraction targets switch the cut mode, frames are named after their source and nodes are placed apart', async () => {
+  const f = serviceFixture()
+  try {
+    const project = await fixtureProject(f)
+    const take = await f.dispatch('run_cut', await runArgs(f, project))
+    f.markReady()
+    const added = await f.dispatch('apply_ops', { project_id: project.id, expected_revision: 1, ops: [{ op: 'add_node', kind: 'cut', name: '둘째', tempId: 'next' }, { op: 'add_node', kind: 'cut', name: '셋째', tempId: 'last' }] })
+    const next = added.tempIds.next, node = (id: string) => f.service.store.get('account:1', project.id).nodes.find((item: any) => item.id === id)
+    assert.deepEqual([node(next).x, node(next).y, node(added.tempIds.last).x, node(added.tempIds.last).y], [672, 0, 1044, 0])
+
+    const start = await f.dispatch('extract_frame', { project_id: project.id, expected_revision: added.revision, take_id: take.id, position: 'last', target: { cut: next, port: 'start' } })
+    assert.deepEqual(start.modeChange, { cutId: next, from: 'T2VA', to: 'I2VA' })
+    const frame = node(start.nodeIds[0])
+    assert.equal(frame.data.name, '컷 마지막 프레임')
+    assert.ok(frame.x + 200 < 672 && frame.y === 0)
+    assert.equal(node(next).data.mode, 'I2VA')
+    const end = await f.dispatch('extract_frame', { project_id: project.id, expected_revision: start.revision, take_id: take.id, position: 'first', target: { cut: next, port: 'end' } })
+    assert.deepEqual(end.modeChange, { cutId: next, from: 'I2VA', to: 'FL2VA' })
+    assert.equal(node(end.nodeIds[0]).data.name, '컷 첫 프레임')
+    assert.notDeepEqual([node(end.nodeIds[0]).x, node(end.nodeIds[0]).y], [frame.x, frame.y])
+    // A replacing extraction removes the extracted frame it pushes out of the slot in the same edit; a reviewed frame stays.
+    assert.deepEqual(frame.data.origin, { nodeId: null, takeId: take.id, position: 'last', seconds: 3.9 })
+    const startFrom = () => f.service.store.get('account:1', project.id).edges.filter((edge: any) => edge.to === next && edge.port === 'start').map((edge: any) => edge.from)
+    const swapped = await f.dispatch('extract_frame', { project_id: project.id, expected_revision: end.revision, take_id: take.id, position: 'last', target: { cut: next, port: 'start', replace: true } })
+    assert.equal(swapped.revision, end.revision + 1)
+    assert.equal(node(frame.id), undefined)
+    assert.deepEqual(startFrom(), swapped.nodeIds)
+    const reviewed = await f.dispatch('human_review', { project_id: project.id, expected_revision: swapped.revision, ops: [{ op: 'review', id: swapped.nodeIds[0], status: 'pass' }] }, 'human')
+    const again = await f.dispatch('extract_frame', { project_id: project.id, expected_revision: reviewed.revision, take_id: take.id, position: 'last', target: { cut: next, port: 'start', replace: true } })
+    assert.equal(node(swapped.nodeIds[0]).review, 'pass')
+    assert.deepEqual(startFrom(), again.nodeIds)
+
+    const current = f.service.store.get('account:1', project.id), withVideo = ops(current, [{ op: 'add_node', kind: 'video', name: '참고 영상', ref: image }])
+    f.service.store.save('account:1', current, withVideo.project)
+    const video = withVideo.applied[0].id
+    f.state.frames = [{ status: 'completed', saved: [{ composite_hash: 'c'.repeat(32), seconds: 1.5 }] }]
+    const timed = await f.dispatch('extract_frame', { project_id: project.id, expected_revision: withVideo.revision, node_id: video, at_seconds: [1.5] })
+    assert.equal(node(timed.nodeIds[0]).data.name, '참고 영상 1.5초 프레임')
+    assert.equal(timed.modeChange, null)
+    f.state.frames = [{ status: 'completed', saved: [{ composite_hash: 'd'.repeat(32), seconds: 0.5 }] }]
+    const indexed = await f.dispatch('extract_frame', { project_id: project.id, expected_revision: timed.revision, node_id: video, frame_index: 12 })
+    assert.equal(node(indexed.nodeIds[0]).data.name, '참고 영상 12번 프레임')
+  } finally { f.db.close() }
+})
+test('video canvas chain run generates the sequence from each previous last frame, skips ready cuts and feeds export', async () => {
+  const f = serviceFixture()
+  try {
+    f.state.historyPerJob = true
+    const project = await fixtureProject(f), first = project.nodes[0]
+    const take = await f.dispatch('run_cut', await runArgs(f, project))
+    const added = await f.dispatch('apply_ops', { project_id: project.id, expected_revision: 1, ops: [{ op: 'add_node', kind: 'cut', name: '둘째', tempId: 'b' }, { op: 'add_node', kind: 'cut', name: '셋째', tempId: 'c' }] })
+    const { b, c } = added.tempIds
+    const chain = await f.dispatch('run_chain', { project_id: project.id, expected_revision: added.revision, wait_seconds: 120 })
+    assert.equal(chain.status, 'completed')
+    assert.equal(chain.current, null)
+    assert.deepEqual(chain.steps.map((step: any) => [step.cutId, step.status, step.error]), [[first.id, 'skipped', null], [b, 'completed', null], [c, 'completed', null]])
+    assert.equal(chain.steps[0].takeId, take.id)
+    assert.deepEqual(f.calls.filter(call => call.name === 'save_video_frame').map(call => [call.args.composite_hash, call.args.position]), [[jobHash(481), 'last'], [jobHash(482), 'last']])
+    const read = f.service.store.get('account:1', project.id)
+    for (const [cut, source] of [[b, '컷'], [c, '둘째']]) {
+      const edge = read.edges.find((item: any) => item.to === cut && item.port === 'start')
+      assert.equal(read.nodes.find((item: any) => item.id === edge.from).data.name, `${source} 마지막 프레임`)
+      assert.equal(read.nodes.find((item: any) => item.id === cut).data.mode, 'I2VA')
+    }
+    assert.deepEqual(chain.steps.slice(1).map((step: any) => read.takes.find((item: any) => item.id === step.takeId).jobId), [482, 483])
+    assert.deepEqual(read.chains.map((item: any) => item.id), [chain.id])
+    await f.dispatch('export_sequence', { project_id: project.id, expected_revision: read.revision })
+    assert.deepEqual(f.calls.find(call => call.name === 'join_videos').args.composite_hashes, [jobHash(481), jobHash(482), jobHash(483)])
+  } finally { f.db.close() }
+})
+test('video canvas chain stops at a failed cut, keeps one active chain per project and cancels the running generation', async () => {
+  const f = serviceFixture()
+  try {
+    const project = await fixtureProject(f), first = project.nodes[0]
+    const added = await f.dispatch('apply_ops', { project_id: project.id, expected_revision: 1, ops: [{ op: 'add_node', kind: 'cut', name: '둘째', tempId: 'b' }] })
+    const b = added.tempIds.b
+    f.state.jobs[481] = { status: 'failed', failure_message: '저장 실패', history_ids: [] }
+    const failed = await f.tool('run_chain', { project_id: project.id, expected_revision: added.revision, wait_seconds: 120 })
+    assert.deepEqual({ status: failed.status, error: failed.error, current: failed.current }, { status: 'failed', error: '컷: 저장 실패', current: first.id })
+    assert.deepEqual(failed.steps.map((step: any) => [step.cutId, step.status, step.error]), [[first.id, 'failed', '저장 실패'], [b, 'pending', null]])
+    assert.equal(f.calls.filter(call => call.name === 'save_video_frame').length, 0)
+
+    f.state.jobs[482] = { status: 'running' }
+    const running = await f.dispatch('run_chain', { project_id: project.id, expected_revision: added.revision })
+    assert.equal(running.status, 'queued')
+    const takeId = await until(() => f.service.store.chain('account:1', project.id, running.id).steps[0].takeId)
+    await assert.rejects(() => f.dispatch('run_chain', { project_id: project.id, expected_revision: added.revision }), (error: any) => error.status === 409 && /이미 진행 중/.test(error.message))
+    const cancelled = await f.dispatch('run_chain', { project_id: project.id, chain_id: running.id, cancel: true })
+    assert.deepEqual({ status: cancelled.status, step: cancelled.steps[0].status }, { status: 'cancelled', step: 'cancelled' })
+    assert.deepEqual(f.calls.filter(call => call.name === 'cancel_generation_job').map(call => call.args.job_id), [482])
+    await f.tasks.get(cancelled.jobId).done
+    assert.equal(f.service.store.take('account:1', project.id, takeId).status, 'cancelled')
+    assert.equal(f.service.store.chain('account:1', project.id, running.id).status, 'cancelled')
+    assert.equal(f.calls.filter(call => call.name === 'submit_generation_job').length, 2)
+
+    // A cancelled chain's extraction that finishes later (it had no job yet at the cancel) leaves its frame in the library only.
+    const before = f.service.store.get('account:1', project.id), late = randomUUID()
+    f.service.store.addExtraction('account:1', project.id, { id: late, status: 'running', jobId: f.state.frameId, source: { nodeId: null, takeId }, sourceName: '컷', position: 'last', target: { cut: b, port: 'start', replace: true }, modeChange: null, chainId: running.id })
+    f.state.frames = [{ status: 'completed', saved: [{ composite_hash: 'c'.repeat(32), seconds: 3.9 }] }]
+    const late_ = await f.dispatch('extract_frame', { project_id: project.id, extraction_id: late, wait_seconds: 0 })
+    assert.deepEqual({ status: late_.status, nodeIds: late_.nodeIds, resultHashes: late_.resultHashes, modeChange: late_.modeChange, revision: late_.revision }, { status: 'completed', nodeIds: [], resultHashes: ['c'.repeat(32)], modeChange: null, revision: before.revision })
+    const after = f.service.store.get('account:1', project.id)
+    const modeOf = (read: any) => read.nodes.find((node: any) => node.id === b).data.mode
+    assert.deepEqual([after.nodes.length, after.edges.length, modeOf(after)], [before.nodes.length, before.edges.length, modeOf(before)])
+  } finally { f.db.close() }
+})
+test('video canvas gives a profile-less project the sole usable workflow profile and lists the choices otherwise', async () => {
+  const f = serviceFixture()
+  try {
+    const project = await f.dispatch('create_project', { name: '빈 영상' })
+    const added = await f.dispatch('apply_ops', { project_id: project.id, expected_revision: 0, ops: [{ op: 'add_node', kind: 'cut', name: '첫 컷', tempId: 'a' }] })
+    assert.deepEqual({ ...added.autoProfile, id: undefined }, { id: undefined, label: 'Director 기본', workflowId: 12 })
+    const read = f.service.store.get('account:1', project.id)
+    assert.deepEqual(read.profiles.map((item: any) => item.id), [added.autoProfile.id])
+    assert.equal(read.nodes[0].data.profileId, added.autoProfile.id)
+    assert.equal(read.lastProfileId, added.autoProfile.id)
+    assert.equal((await f.dispatch('apply_ops', { project_id: project.id, expected_revision: added.revision, ops: [{ op: 'add_node', kind: 'cut', name: '둘째' }] })).autoProfile, undefined)
+
+    f.state.secondDirector = true
+    const other = await f.dispatch('create_project', { name: '고를 영상' })
+    const plain = await f.dispatch('apply_ops', { project_id: other.id, expected_revision: 0, ops: [{ op: 'add_node', kind: 'cut', name: '컷', tempId: 'a' }] })
+    assert.equal(plain.autoProfile, undefined)
+    const cut = plain.tempIds.a, args = { project_id: other.id, cut_id: cut, expected_revision: plain.revision }
+    await assert.rejects(() => f.dispatch('run_cut', { ...args, requestId: randomUUID() }), (error: any) => /Director 기본\(workflowId 12\)/.test(error.message) && /Director 보조\(workflowId 14\)/.test(error.message) && /프로필을 저장/.test(error.message))
+    await assert.rejects(() => f.dispatch('run_chain', { project_id: other.id, expected_revision: plain.revision }), /여럿/)
+    assert.equal(f.service.store.get('account:1', other.id).profiles.length, 0)
+    // Workflow discovery failing (no workflows.view) leaves the cut added without a profile; a run reports the real reason.
+    f.state.workflowsDenied = true
+    const denied = await f.dispatch('apply_ops', { project_id: other.id, expected_revision: plain.revision, ops: [{ op: 'add_node', kind: 'cut', name: '둘째 컷', tempId: 'b' }] }, 'human')
+    assert.deepEqual({ applied: denied.applied.length, rejected: denied.rejected, autoProfile: denied.autoProfile }, { applied: 1, rejected: [], autoProfile: undefined })
+    const second = denied.tempIds.b
+    assert.equal(f.service.store.get('account:1', other.id).nodes.find((node: any) => node.id === second).data.profileId, null)
+    await assert.rejects(() => f.dispatch('run_cut', { ...args, expected_revision: denied.revision, requestId: randomUUID() }), /워크플로 보기 권한/)
+    f.state.workflowsDenied = false
+    f.state.secondDirector = false
+    const run = await f.dispatch('run_cut', { ...args, expected_revision: denied.revision, requestId: randomUUID() })
+    assert.equal(run.status, 'queued')
+    assert.equal(run.autoProfile.workflowId, 12)
+    assert.equal(run.profile.id, run.autoProfile.id)
+    const after = f.service.store.get('account:1', other.id)
+    assert.equal(after.revision, denied.revision + 1)
+    // Every cut of the project gets the new profile, so the next cut runs without one being chosen.
+    assert.deepEqual([cut, second].map(id => after.nodes.find((node: any) => node.id === id).data.profileId), [run.autoProfile.id, run.autoProfile.id])
+    assert.equal(f.calls.filter(call => call.name === 'submit_generation_job').at(-1).args.workflow_id, 12)
+    const next = await f.dispatch('run_cut', { project_id: other.id, cut_id: second, expected_revision: after.revision, requestId: randomUUID() })
+    assert.deepEqual({ status: next.status, profile: next.profile.id, autoProfile: next.autoProfile }, { status: 'queued', profile: run.autoProfile.id, autoProfile: undefined })
+  } finally { f.db.close() }
+})
+test('video canvas creates a project together with its profile in one operation and ignores expected_revision', async () => {
+  const f = serviceFixture()
+  try {
+    const existing = await fixtureProject(f)
+    const created = await f.tool('apply_ops', { create_name: '새 영상', expected_revision: 99, profile: { workflowId: 12, serverTag: 'gpu' } })
+    assert.notEqual(created.id, existing.id)
+    assert.equal(created.revision, 0)
+    assert.deepEqual(created.profiles.map((item: any) => [item.id, item.label, item.serverTag]), [[created.profileId, 'Director 기본', 'gpu']])
+    assert.equal(created.lastProfileId, created.profileId)
+    const added = await f.dispatch('apply_ops', { project_id: created.id, expected_revision: 0, ops: [{ op: 'add_node', kind: 'cut', name: '컷', tempId: 'a' }] })
+    assert.equal(f.service.store.get('account:1', created.id).nodes[0].data.profileId, created.profileId)
+    assert.equal(added.autoProfile, undefined)
+
+    const total = () => f.service.store.count('account:1', {})
+    const before = total()
+    await assert.rejects(() => f.tool('apply_ops', { create_name: '잘못된 영상', expected_revision: 0, profile: { workflowId: 12, serverId: 1, serverTag: 'gpu' } }), /하나만/)
+    assert.equal(total(), before)
+    const page = await f.page({ op: 'create_project', name: '페이지 영상', profile: { workflowId: 12 } })
+    assert.equal(page.profiles[0].id, page.profileId)
+    const plain = await f.tool('apply_ops', { create_name: '그냥 영상', expected_revision: 42 })
+    assert.deepEqual([plain.revision, plain.profiles.length, total()], [0, 0, before + 2])
+  } finally { f.db.close() }
+})
+test('video canvas treats failed postprocessing as a finished take for waits and chains', async () => {
+  const f = serviceFixture()
+  try {
+    f.state.historyPerJob = true; f.state.failedHistory = [481, 482]
+    const project = await fixtureProject(f), started = Date.now()
+    const take = await f.dispatch('run_cut', { ...await runArgs(f, project), wait_seconds: 30 })
+    assert.deepEqual({ status: take.status, resultHash: take.resultHash, error: take.error, marker: take.postprocessFailed }, { status: 'completed', resultHash: null, error: '결과 후처리가 실패했어.', marker: true })
+    assert.equal((await f.dispatch('get_take', { project_id: project.id, take_id: take.id, wait_seconds: 120 })).error, '결과 후처리가 실패했어.')
+    assert.ok(Date.now() - started < 5000)
+    const chain = await f.dispatch('run_chain', { project_id: project.id, expected_revision: 1, wait_seconds: 120 })
+    assert.deepEqual({ status: chain.status, error: chain.error }, { status: 'failed', error: '컷: 결과 후처리가 실패했어.' })
+    assert.equal(f.calls.filter(call => call.name === 'submit_generation_job').length, 2)
+  } finally { f.db.close() }
+})
+test('video canvas chain adopts a generation already running for the cut instead of submitting another', async () => {
+  const f = serviceFixture()
+  try {
+    f.state.historyPerJob = true
+    const project = await fixtureProject(f)
+    f.state.jobs[481] = { status: 'running' }
+    const manual = await f.dispatch('run_cut', await runArgs(f, project))
+    f.state.onWait = (args: any) => { if (args.job_id === 481) delete f.state.jobs[481] }
+    const chain = await f.dispatch('run_chain', { project_id: project.id, expected_revision: 1, wait_seconds: 120 })
+    assert.deepEqual({ status: chain.status, step: chain.steps[0].status, takeId: chain.steps[0].takeId }, { status: 'completed', step: 'completed', takeId: manual.id })
+    assert.equal(f.calls.filter(call => call.name === 'submit_generation_job').length, 1)
+    assert.equal(f.service.store.take('account:1', project.id, manual.id).resultHash, jobHash(481))
+  } finally { f.db.close() }
+})
+test('video canvas chain moves a cut pick to the take it generated so export and the next cut agree', async () => {
+  const f = serviceFixture()
+  try {
+    f.state.historyPerJob = true
+    const project = await fixtureProject(f), first = project.nodes[0]
+    const ready = await f.dispatch('run_cut', await runArgs(f, project))
+    const added = await f.dispatch('apply_ops', { project_id: project.id, expected_revision: 1, ops: [{ op: 'add_node', kind: 'cut', name: '둘째', tempId: 'b' }] })
+    const b = added.tempIds.b
+    f.state.jobs[482] = { status: 'failed', failure_message: '실패' }
+    const broken = await f.dispatch('run_cut', { project_id: project.id, cut_id: b, expected_revision: added.revision, requestId: randomUUID() })
+    assert.equal((await f.dispatch('get_take', { project_id: project.id, take_id: broken.id })).status, 'failed')
+    const picked = await f.dispatch('apply_ops', { project_id: project.id, expected_revision: added.revision, ops: [
+      { op: 'set', id: first.id, fields: { pickTakeId: ready.id } }, { op: 'set', id: b, fields: { pickTakeId: broken.id } }] })
+    const pick = (id: string) => f.service.store.get('account:1', project.id).nodes.find((node: any) => node.id === id).data.pickTakeId
+
+    const resumed = await f.dispatch('run_chain', { project_id: project.id, expected_revision: picked.revision, wait_seconds: 120 })
+    assert.deepEqual(resumed.steps.map((step: any) => step.status), ['skipped', 'completed'])
+    assert.equal(pick(first.id), ready.id)
+    assert.equal(pick(b), resumed.steps[1].takeId)
+    let revision = f.service.store.get('account:1', project.id).revision
+    await f.dispatch('export_sequence', { project_id: project.id, expected_revision: revision })
+    assert.deepEqual(f.calls.filter(call => call.name === 'join_videos').at(-1).args.composite_hashes, [jobHash(481), jobHash(483)])
+
+    const again = await f.dispatch('run_chain', { project_id: project.id, expected_revision: revision, regenerate: true, wait_seconds: 120 })
+    assert.equal(again.status, 'completed')
+    assert.deepEqual([pick(first.id), pick(b)], again.steps.map((step: any) => step.takeId))
+    assert.equal(f.calls.filter(call => call.name === 'save_video_frame').at(-1).args.composite_hash, jobHash(484))
+    revision = f.service.store.get('account:1', project.id).revision
+    await f.dispatch('export_sequence', { project_id: project.id, expected_revision: revision })
+    assert.deepEqual(f.calls.filter(call => call.name === 'join_videos').at(-1).args.composite_hashes, [jobHash(484), jobHash(485)])
+  } finally { f.db.close() }
 })

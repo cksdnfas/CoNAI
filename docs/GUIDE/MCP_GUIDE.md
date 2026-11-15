@@ -466,7 +466,7 @@ ComfyUI 시드(`seed`·`noise_seed`)는 실행마다 새로 뽑힙니다. marked
 
 라이브러리 이미지·영상을 가공해 **새 라이브러리 항목**으로 저장합니다. 원본은 바꾸지 않습니다. 결과 그룹은 도구별 기본 경로(아래 표)이며 `group_id` 또는 `group_path`로 바꿀 수 있습니다. 일정 시간(`wait_seconds`, 기본 60초, 채팅은 최대 30초) 안에 끝나면 결과 해시와 다운로드 링크를 바로 돌려주고, 길어지면 `job_id`를 돌려줍니다. 편집 작업은 스프라이트 작업과 같은 줄에서 한 번에 하나씩 실행됩니다.
 
-영상 프레임 저장·구간 편집·스프라이트 처리는 번들 FFmpeg가 AV1 디코딩 등에서 실패하면 시스템에 설치된 FFmpeg로 한 번 대체 실행합니다. 취소·시간 초과는 대체 실행하지 않으며, 시스템 FFmpeg도 사용할 수 없거나 처리에 실패하면 작업 오류로 반환합니다. 생성 원본이나 코덱을 바꾸지 않고 처리 도구만 대체합니다.
+영상 프레임 저장·구간 편집·이어붙이기·스프라이트 처리는 번들 FFmpeg가 AV1 디코딩 등에서 실패하면 시스템에 설치된 FFmpeg로 한 번 대체 실행합니다. 취소·시간 초과는 대체 실행하지 않으며, 시스템 FFmpeg도 사용할 수 없거나 처리에 실패하면 작업 오류로 반환합니다. 생성 원본이나 코덱을 바꾸지 않고 처리 도구만 대체합니다.
 
 | Tool | 용도 | 기본 그룹 | 도구 범위 | 계정 권한 |
 | --- | --- | --- | --- | --- |
@@ -475,6 +475,7 @@ ComfyUI 시드(`seed`·`noise_seed`)는 실행마다 새로 뽑힙니다. marked
 | `crop_images` | 정지 이미지 최대 500개를 원본 픽셀 좌표 `rect: {x, y, width, height}`로 잘라 PNG로 저장(EXIF 회전 적용 후 기준). 영상·애니메이션은 항목별 오류 | 이미지 자르기 | `generate` | `images.edit` + `images.upload` |
 | `convert_images` | 정지 이미지 최대 500개를 PNG·WebP·JPEG로 저장(`quality` 기본 90, JPEG 투명 영역 배경 `background` 기본 `#ffffff`) | 이미지 변환 | `generate` | `images.edit` + `images.upload` |
 | `clip_video` | 영상 구간(`start_seconds`~`end_seconds`)을 MP4·WebM·GIF·WebP로 저장(`format` 기본 원본 컨테이너, `fps`·`width` 선택). 같은 컨테이너의 구간만 바꾸면 스트림 복사 | 영상 편집 | `generate` | `images.edit` + `images.upload` |
+| `join_videos` | 영상 2개 이상(`composite_hashes`, 출력 순서, 같은 해시 반복 가능)을 하나의 새 영상으로 이어붙임. 컨테이너·코덱·해상도·프레임 속도가 모두 같고 오디오가 없는 클립만 스트림 복사, 그 외에는 첫 클립의 해상도·프레임 속도의 MP4(H.264/AAC)로 다시 인코딩(비율이 다르면 여백, 오디오 없는 클립은 길이만큼 무음, 모든 클립에 오디오가 없으면 오디오 없음). 영상이 아니거나 열 수 없는 항목은 순번·해시와 함께 작업 오류 | 영상 이어붙이기 | `generate` | `images.edit` + `images.upload` |
 | `get_media_edit_job` | 편집 작업의 진행률·저장 해시·다운로드·항목별 오류 조회와 대기(`wait_seconds`), `cancel: true`로 취소 | - | `read` | `images.edit` + `images.upload` |
 
 - 결과 픽셀이 원본과 같으면(무손실 변환, 전체 영역 자르기) 새 항목을 만들지 않고 `identical`로 원본 해시를 돌려줍니다.

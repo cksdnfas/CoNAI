@@ -141,6 +141,16 @@ export function registerMediaEditTools(server: McpServer, context: McpRequestCon
   }, ({ composite_hash, start_seconds, end_seconds, format, fps, width, group_id, group_path, wait_seconds }) =>
     run({ operation: 'clip_video', compositeHash: composite_hash, startSeconds: start_seconds, endSeconds: end_seconds, format, fps, width, groupId: group_id, groupPath: group_path }, wait_seconds))
 
+  server.registerTool('join_videos', {
+    description: 'Join library videos in the given order into one new video; returns hashes/downloads and stream_copy, or job_id for get_media_edit_job. Same-format clips without audio stream-copy; others re-encode to MP4 at the first clip\'s size and frame rate (letterboxed), with silence for clips lacking audio. Fix the reported items; wait on pending jobs, do not restart.',
+    inputSchema: z.object({
+      composite_hashes: z.array(hash).min(2).describe('Library videos in output order; the same hash may repeat'),
+      ...target,
+      group_path: target.group_path.describe('Output group path, created if missing; excludes group_id; default group "영상 이어붙이기"'),
+    }).refine(onlyOneGroup, 'Use group_id or group_path, not both'),
+  }, ({ composite_hashes, group_id, group_path, wait_seconds }) =>
+    run({ operation: 'join_videos', compositeHashes: composite_hashes, groupId: group_id, groupPath: group_path }, wait_seconds))
+
   server.registerTool('get_media_edit_job', {
     description: 'Read or wait for a media-edit job; returns progress, saved hashes/downloads and per-item failures. Correct reported inputs and retry only failed items; do not restart running jobs.',
     inputSchema: z.object({ job_id: z.string().uuid(), wait_seconds: z.number().min(0).max(120).default(0).describe('Seconds to wait; chat maximum 30'), cancel: z.boolean().default(false).describe('Request cancellation; completed saves remain') }),

@@ -61,6 +61,7 @@ export const TOOL_FEATURE_PERMISSIONS: Record<string, string | readonly string[]
   crop_images: ['images.edit', 'images.upload'],
   convert_images: ['images.edit', 'images.upload'],
   clip_video: ['images.edit', 'images.upload'],
+  join_videos: ['images.edit', 'images.upload'],
   get_media_edit_job: ['images.edit', 'images.upload'],
   list_files: 'files.view', get_file_info: 'files.view', read_file_text: 'files.view', search_files: 'files.view',
   get_file_download: 'files.view',

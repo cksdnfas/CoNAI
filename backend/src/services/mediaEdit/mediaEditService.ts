@@ -17,7 +17,11 @@ import { findLibraryMedia, resolveSpriteGroup, type LibraryMedia } from '../spri
 import { inLane } from '../sprite/spriteService'
 import { MAX_IMAGE_PIXELS } from '../sprite/spriteOptions'
 import { probeVideo } from '../sprite/spriteFfmpeg'
-import { captureVideoFrame, CLIP_MIME, encodeVideoClip, sourceClipFormat, type FrameSelection } from './mediaEditFfmpeg'
+import type { SpriteVideoInfo } from '../sprite/spriteOptions'
+import {
+  captureVideoFrame, CLIP_MIME, concatVideoFiles, encodeJoinSegment, encodeVideoClip, probeJoinStreams, sourceClipFormat,
+  type ClipFormat, type FrameSelection, type JoinStreams,
+} from './mediaEditFfmpeg'
 
 interface EditTarget {
   groupId?: number
@@ -54,7 +58,12 @@ export interface ClipVideoParams extends EditTarget {
   fps?: number
   width?: number
 }
-export type MediaEditParams = SaveVideoFrameParams | CropImagesParams | ConvertImagesParams | ClipVideoParams
+export interface JoinVideosParams extends EditTarget {
+  operation: 'join_videos'
+  /** Output order; a hash may repeat. */
+  compositeHashes: string[]
+}
+export type MediaEditParams = SaveVideoFrameParams | CropImagesParams | ConvertImagesParams | ClipVideoParams | JoinVideosParams
 export interface MediaEditResult {
   groupId: number
   saved: Array<{ source: string; compositeHash: string; seconds?: number }>
@@ -65,7 +74,7 @@ export interface MediaEditResult {
 }
 
 const DEFAULT_GROUP = {
-  save_video_frame: '영상 캡처', crop_images: '이미지 자르기', convert_images: '이미지 변환', clip_video: '영상 편집',
+  save_video_frame: '영상 캡처', crop_images: '이미지 자르기', convert_images: '이미지 변환', clip_video: '영상 편집', join_videos: '영상 이어붙이기',
 }
 
 async function readableMedia(hash: string, limit: ContentRatingLimit): Promise<LibraryMedia> {
@@ -225,6 +234,78 @@ async function clipVideo(ctx: RuntimeJobContext<MediaEditParams>, params: ClipVi
   ctx.report({ processed: 1 })
 }
 
+interface JoinClip { media: LibraryMedia; info: SpriteVideoInfo; streams: JoinStreams; format: ClipFormat | null }
+
+async function joinVideos(ctx: RuntimeJobContext<MediaEditParams>, params: JoinVideosParams, directory: string, result: MediaEditResult): Promise<void> {
+  const itemError = (hash: string, error: unknown) => {
+    const items = params.compositeHashes.flatMap((item, index) => item === hash ? [index + 1] : [])
+    return `item ${items.join(', ')} (${hash}): ${error instanceof Error ? error.message : String(error)}`
+  }
+  const clips = new Map<string, JoinClip>()
+  const problems: string[] = []
+  for (const hash of new Set(params.compositeHashes)) {
+    ctx.throwIfCancelled()
+    try {
+      const media = await readableMedia(hash, params.contentRatingLimit)
+      requireEditableVideo(media)
+      const info = await probeVideo(media.filePath, ctx.signal)
+      const streams = await probeJoinStreams(media.filePath, ctx.signal)
+      let format: ClipFormat | null = null
+      try { format = sourceClipFormat(media.filePath, media.mimeType) } catch { /* unknown container: re-encode */ }
+      clips.set(hash, { media, info, streams, format })
+    } catch (error) {
+      ctx.throwIfCancelled()
+      ctx.recordError(hash, error)
+      problems.push(itemError(hash, error))
+    }
+  }
+  if (problems.length) throw new Error(`Cannot join videos: ${problems.join('; ')}`)
+  const ordered = params.compositeHashes.map((hash) => clips.get(hash)!)
+  const first = ordered[0]
+  // Copy only when nothing needs normalizing and no clip has audio: AAC/Opus priming per file would drift copied audio.
+  const copy = ['mp4', 'mov', 'mkv', 'webm'].includes(first.format ?? '')
+    && ordered.every((clip) => clip.format === first.format && clip.streams.streamKey === first.streams.streamKey && !clip.streams.hasAudio)
+  const format: ClipFormat = copy ? first.format! : 'mp4'
+  const output = path.join(directory, `joined.${format}`)
+  const listFile = path.join(directory, 'join.txt')
+  if (copy) {
+    ctx.flush({ total: 1 })
+    await concatVideoFiles({ files: ordered.map((clip) => ({ file: clip.media.filePath })), listFile, output, format, audio: false, signal: ctx.signal })
+  } else {
+    const width = Math.ceil(first.info.width / 2) * 2
+    const height = Math.ceil(first.info.height / 2) * 2
+    checkPixels(width, height)
+    const [numerator, denominator] = first.streams.frameRate
+    const audio = ordered.some((clip) => clip.streams.hasAudio)
+    ctx.flush({ total: clips.size + 1 })
+    const segments = new Map<string, { file: string; duration: number }>()
+    for (const [hash, clip] of clips) {
+      ctx.throwIfCancelled()
+      const frames = Math.max(1, Math.round(clip.info.duration * numerator / denominator))
+      const file = path.join(directory, `segment-${segments.size}.mov`)
+      try {
+        await encodeJoinSegment({
+          source: clip.media.filePath, output: file, width, height, frameRate: first.streams.frameRate, frames,
+          audio: audio ? clip.streams.hasAudio ? 'source' : 'silence' : null, signal: ctx.signal,
+        })
+      } catch (error) {
+        ctx.throwIfCancelled()
+        throw new Error(`Cannot join videos: ${itemError(hash, error)}`)
+      }
+      segments.set(hash, { file, duration: frames * denominator / numerator })
+      ctx.report({ processed: segments.size })
+      await ctx.yield()
+    }
+    ctx.throwIfCancelled()
+    await concatVideoFiles({ files: params.compositeHashes.map((hash) => segments.get(hash)!), listFile, output, format, audio, signal: ctx.signal })
+  }
+  ctx.throwIfCancelled()
+  const compositeHash = await saveMediaFileToLibrary({ sourcePath: output, extension: format, mimeType: CLIP_MIME[format], groupId: result.groupId })
+  result.saved.push({ source: params.compositeHashes[0], compositeHash })
+  result.streamCopy = copy
+  ctx.report({ processed: copy ? 1 : clips.size + 1 })
+}
+
 async function runMediaEdit(ctx: RuntimeJobContext<MediaEditParams>): Promise<MediaEditResult> {
   ctx.throwIfCancelled()
   ctx.flush({ phase: 'editing', message: 'Editing library media' })
@@ -236,6 +317,7 @@ async function runMediaEdit(ctx: RuntimeJobContext<MediaEditParams>): Promise<Me
   try {
     if (params.operation === 'save_video_frame') await captureFrames(ctx, params, directory, result)
     else if (params.operation === 'clip_video') await clipVideo(ctx, params, directory, result)
+    else if (params.operation === 'join_videos') await joinVideos(ctx, params, directory, result)
     else await editImages(ctx, params, result)
     return result
   } finally {

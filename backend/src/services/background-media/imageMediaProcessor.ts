@@ -12,6 +12,7 @@ import {
   linkMediaFileToHash,
   markFileAsProcessingFailed,
   shouldBackfillDuplicateMetadata,
+  type ExistingMediaMetadataSummary,
 } from './mediaProcessingSupport';
 import {
   completedFileProcessing,
@@ -89,42 +90,7 @@ export class ImageMediaProcessor {
     }
 
     if (existing) {
-      try {
-        linkMediaFileToHash(file.id, hashes.compositeHash);
-        recordPixelHash(hashes.compositeHash, identity.pixelHash);
-        stages.push(completedStage('duplicate-link'));
-      } catch (error) {
-        return stoppedFileProcessing(failedStage('duplicate-link', error, true), stages, {
-          compositeHash: hashes.compositeHash,
-          duplicate: true,
-          cause: error,
-        });
-      }
-
-      if (shouldBackfillDuplicateMetadata(existing)) {
-        stages.push(await MediaPostprocessCoordinator.extractMetadataForProcessedMedia(
-          file.original_file_path,
-          hashes.compositeHash,
-          `duplicate backfill ${fileName}`,
-          options,
-        ));
-      } else {
-        try {
-          stages.push(MediaPostprocessCoordinator.releaseVisibilityIfReady(hashes.compositeHash));
-        } catch (error) {
-          // The duplicate row is already linked, so the composite_hash NULL batch
-          // cannot retry this stage. Preserve the partial result as terminal detail.
-          return stoppedFileProcessing(failedStage('visibility', error, false), stages, {
-            compositeHash: hashes.compositeHash,
-            duplicate: true,
-            cause: error,
-          });
-        }
-      }
-
-      stages.push(await MediaPostprocessCoordinator.processApiGenerationGroupAssignment(hashes.compositeHash));
-      console.log(`  ♻️  Duplicate detected: ${fileName}`);
-      return completedFileProcessing(hashes.compositeHash, true, stages);
+      return this.linkToExistingMedia(file, hashes.compositeHash, identity.pixelHash, existing, stages, options);
     }
 
     let thumbnailPath: string;
@@ -146,14 +112,16 @@ export class ImageMediaProcessor {
       });
     }
 
+    let conflicting: ExistingMediaMetadataSummary | undefined;
     try {
-      db.transaction(() => {
-        db.prepare(`
+      conflicting = db.transaction(() => {
+        const inserted = db.prepare(`
           INSERT INTO media_metadata (
             composite_hash, perceptual_hash, dhash, ahash,
             width, height, thumbnail_path,
             postprocess_status, metadata_extraction_status
           ) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', 'pending')
+          ON CONFLICT(composite_hash) DO NOTHING
         `).run(
           hashes.compositeHash,
           hashes.perceptualHash,
@@ -162,16 +130,25 @@ export class ImageMediaProcessor {
           imageInfo.width,
           imageInfo.height,
           thumbnailPath,
-        );
+        ).changes > 0;
+        if (!inserted) return findExistingMediaMetadataSummary(hashes.compositeHash);
         MediaImageFeaturesModel.setHistogram(hashes.compositeHash, colorHistogram);
+        return undefined;
       })();
-      recordPixelHash(hashes.compositeHash, identity.pixelHash);
-      stages.push(completedStage('metadata-row'));
+      if (!conflicting) {
+        recordPixelHash(hashes.compositeHash, identity.pixelHash);
+        stages.push(completedStage('metadata-row'));
+      }
     } catch (error) {
       return stoppedFileProcessing(failedStage('metadata-row', error, true), stages, {
         compositeHash: hashes.compositeHash,
         cause: error,
       });
+    }
+    if (conflicting) {
+      // Another ingest path registered the same pixels after the duplicate check above (e.g. the
+      // background batch processing this same row while the thumbnail was built): reuse it like any duplicate.
+      return this.linkToExistingMedia(file, hashes.compositeHash, identity.pixelHash, conflicting, stages, options);
     }
 
     try {
@@ -208,5 +185,57 @@ export class ImageMediaProcessor {
 
     console.log(`  ✨ Processed image: ${fileName}`);
     return completedFileProcessing(hashes.compositeHash, false, stages);
+  }
+
+  private static async linkToExistingMedia(
+    file: UnhashedMediaFile,
+    compositeHash: string,
+    pixelHash: string,
+    existing: ExistingMediaMetadataSummary,
+    stages: MediaProcessingStageResult[],
+    options: ProcessFileOptions,
+  ): Promise<MediaFileProcessingResult> {
+    const fileName = path.basename(file.original_file_path);
+    let linkedByOtherWriter: boolean;
+    try {
+      // The writer that inserted the row links its file in the same synchronous step and runs that
+      // file's extraction itself; backfilling this same row again would extract and count prompts twice.
+      linkedByOtherWriter = (db.prepare('SELECT composite_hash FROM image_files WHERE id = ?')
+        .get(file.id) as { composite_hash: string | null } | undefined)?.composite_hash === compositeHash;
+      linkMediaFileToHash(file.id, compositeHash);
+      recordPixelHash(compositeHash, pixelHash);
+      stages.push(completedStage('duplicate-link'));
+    } catch (error) {
+      return stoppedFileProcessing(failedStage('duplicate-link', error, true), stages, {
+        compositeHash,
+        duplicate: true,
+        cause: error,
+      });
+    }
+
+    if (!linkedByOtherWriter && shouldBackfillDuplicateMetadata(existing)) {
+      stages.push(await MediaPostprocessCoordinator.extractMetadataForProcessedMedia(
+        file.original_file_path,
+        compositeHash,
+        `duplicate backfill ${fileName}`,
+        options,
+      ));
+    } else {
+      try {
+        stages.push(MediaPostprocessCoordinator.releaseVisibilityIfReady(compositeHash));
+      } catch (error) {
+        // The duplicate row is already linked, so the composite_hash NULL batch
+        // cannot retry this stage. Preserve the partial result as terminal detail.
+        return stoppedFileProcessing(failedStage('visibility', error, false), stages, {
+          compositeHash,
+          duplicate: true,
+          cause: error,
+        });
+      }
+    }
+
+    stages.push(await MediaPostprocessCoordinator.processApiGenerationGroupAssignment(compositeHash));
+    console.log(`  ♻️  Duplicate detected: ${fileName}`);
+    return completedFileProcessing(compositeHash, true, stages);
   }
 }

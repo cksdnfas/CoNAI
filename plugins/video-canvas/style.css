@@ -1,59 +1,273 @@
-:root { --vc-image: color-mix(in srgb, var(--conai-foreground) 65%, var(--conai-primary)); --vc-video: var(--conai-warning); --vc-audio: var(--conai-success); --vc-bundle: var(--conai-muted-foreground) }
+:root { --vc-image: color-mix(in srgb, var(--conai-foreground) 65%, var(--conai-primary)); --vc-video: var(--conai-warning); --vc-audio: var(--conai-success); --vc-bundle: var(--conai-muted-foreground); --vc-cut-width: 300px }
+[hidden] { display: none !important }
 body { min-height: 680px }
 .conai-header { flex-wrap: wrap }
-#projects { max-width: 240px }
-/* The status text fills the header between the project and the actions, so showing it never moves the canvas. */
-#message { flex: 1; min-width: 0; margin: 0; white-space: pre-wrap }
+.vc-bar { display: flex; flex: 1; flex-wrap: wrap; align-items: center; gap: 6px 8px; min-width: 0 }
+.vc-project-title { cursor: text; max-width: 36ch }
+.vc-title-input { width: 28ch; max-width: 100% }
+.muted { color: var(--conai-muted-foreground) }
+.error { color: var(--conai-destructive) }
+.warning { color: var(--conai-warning) }
+button.danger { color: var(--conai-destructive) }
+button.sm { min-height: 26px; padding: 0 8px; font-size: 12px }
+.vc-icon { flex: none }
+[aria-busy=true] { cursor: progress; opacity: .6 }
 #dialog-message { margin: var(--conai-text-inset) 0 0; white-space: pre-wrap }
+.launch-panel { padding: var(--conai-edge) var(--conai-text-inset); border-bottom: 1px solid var(--conai-line) }
+.launch-thumb { width: var(--conai-control-height); height: var(--conai-control-height) }
+img.vc-big { display: block; max-width: 100%; max-height: 70vh; margin: 0 auto }
+
+/* project home */
+.vc-home { flex: 1; padding-left: var(--conai-edge) }
+.vc-home-tools { margin-bottom: 16px }
+.vc-home-tools .conai-search { width: min(320px, 100%) }
+.vc-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px }
+.vc-card { position: relative }
+.vc-card.archived { opacity: .7 }
+.vc-card-open { width: 100% }
+.vc-cover { aspect-ratio: 16 / 9 }
+.vc-cover-empty { display: grid; place-items: center; height: 100%; color: var(--conai-muted-foreground); font-size: 12px }
+.vc-card-menu { position: absolute; top: 6px; right: 6px }
+.vc-more { justify-content: center; margin: 16px 0 }
+
+/* canvas */
 .workspace { flex: 1; min-height: 570px }
-.canvas { flex: 1; min-width: 0; position: relative; overflow: hidden; touch-action: none; background-image: radial-gradient(var(--conai-line) 1px, transparent 1px); background-size: 24px 24px }
+.vc-main { display: flex; flex: 1; flex-direction: column; min-width: 0; min-height: 0 }
+.canvas { flex: 1; min-height: 0; position: relative; overflow: hidden; touch-action: none; background-image: radial-gradient(var(--conai-line) 1px, transparent 1px); background-size: 24px 24px }
+.canvas.linking { cursor: crosshair }
 #stage { position: absolute; width: 1px; height: 1px; transform-origin: 0 0 }
 #edges { position: absolute; overflow: visible; width: 1px; height: 1px; pointer-events: none }
-#edges path { fill: none; stroke-width: 1.8; stroke: var(--conai-muted-foreground) }
-#edges path.unused { opacity: .2; stroke-dasharray: 5 4 }
-#edges path[data-kind=image] { stroke: var(--vc-image) }
-#edges path[data-kind=video] { stroke: var(--vc-video) }
-#edges path[data-kind=audio] { stroke: var(--vc-audio) }
-.vc-node { position: absolute; width: 182px; padding: var(--conai-text-inset); background: var(--conai-surface-high); border: 1px solid var(--conai-line); border-radius: var(--conai-radius-md); cursor: grab; user-select: none }
-.vc-node[data-kind=cut] { width: 292px }
+.vc-empty-canvas { display: none; position: absolute; inset: 0; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 0; pointer-events: none }
+.canvas.empty .vc-empty-canvas { display: flex }
+.vc-empty-canvas > * { margin: 0; pointer-events: auto }
+
+/* lines. A link (a frame of one cut feeding another) is the thick one; the order rail is a dotted hint; source lines are thin. */
+.vc-edge .line { fill: none; stroke-width: 1.5; stroke: var(--conai-muted-foreground); pointer-events: none }
+.vc-edge .hit { fill: none; stroke: transparent; stroke-width: 16; pointer-events: stroke; cursor: pointer }
+.vc-edge.src .line { stroke-opacity: .55 }
+.vc-edge.src.unused .line { stroke-dasharray: 5 4; opacity: .5 }
+.vc-edge.src[data-kind=image] .line { stroke: var(--vc-image) }
+.vc-edge.src[data-kind=video] .line { stroke: var(--vc-video) }
+.vc-edge.src[data-kind=audio] .line { stroke: var(--vc-audio) }
+.vc-edge.src[data-kind=bundle] .line { stroke: var(--vc-bundle) }
+.vc-edge.src.hot .line { stroke-width: 2.5; stroke-opacity: 1 }
+.vc-edge.chain .line { stroke: var(--vc-video); stroke-width: 3; marker-end: url(#vc-arr-video) }
+.vc-edge.refimg .line { stroke: var(--vc-video); stroke-width: 1.5 }
+.vc-edge.stale .line { stroke-dasharray: 6 4 }
+.vc-edge.run .line { stroke-dasharray: 6 4; animation: vc-flow .7s linear infinite }
+.vc-edge.rail .line { stroke-opacity: .5; stroke-dasharray: 1 5; stroke-linecap: round; marker-end: url(#vc-arr-muted) }
+.vc-edge:not(.rail):is(.sel, .hot, :hover) .line { stroke: var(--conai-foreground); stroke-opacity: 1 }
+.vc-edge.src:is(.sel, :hover) .line { stroke-width: 3 }
+.vc-edge.chain:is(.sel, :hover) .line { stroke-width: 4; marker-end: url(#vc-arr-fg) }
+.vc-edge.refimg:is(.sel, :hover) .line { stroke-width: 2.5 }
+.vc-edge.chain.hot .line { stroke-width: 4; marker-end: url(#vc-arr-fg) }
+.vc-edge.ghost { opacity: .2 }
+@keyframes vc-flow { to { stroke-dashoffset: -20 } }
+#link-line { fill: none; stroke: var(--conai-primary); stroke-width: 2.5; stroke-dasharray: 6 4; pointer-events: none }
+/* the frame as a chip on its line; the offer chip on an order rail starts a link */
+.vc-link-chip { position: absolute; z-index: 1; translate: -50% -50%; width: 48px; min-height: 0; height: 27px; padding: 0; overflow: hidden; border: 1px solid var(--vc-video); border-radius: var(--conai-radius); background: var(--conai-field); box-shadow: var(--conai-key-shadow) }
+.vc-link-chip img { display: block; width: 100%; height: 100%; object-fit: cover; -webkit-user-drag: none }
+.vc-link-chip:hover { border-color: var(--conai-foreground) }
+.vc-link-chip[aria-pressed=true] { outline: 2px solid var(--conai-foreground); outline-offset: 1px }
+.vc-link-chip .conai-overlay-badge { position: absolute; left: 2px; bottom: 2px }
+.vc-link-chip.offer { border: 1px dashed var(--conai-muted-foreground); background: var(--conai-background); color: var(--conai-muted-foreground); font-size: 11px; font-weight: 600; box-shadow: none }
+.vc-link-chip.offer:hover { border-color: var(--conai-foreground); color: var(--conai-foreground) }
+
+/* node cards */
+.vc-node { position: absolute; display: flex; flex-direction: column; width: 200px; padding: 0; background: var(--conai-surface-high); border: 1px solid var(--conai-line); border-radius: var(--conai-radius-md); user-select: none; cursor: grab }
+.vc-node[data-kind=cut] { width: var(--vc-cut-width) }
 .vc-node[aria-selected=true] { outline: 2px solid var(--conai-primary); outline-offset: 1px }
-.vc-node h3 { overflow-wrap: anywhere; margin: var(--conai-edge) 0 }
-.vc-node .conai-chips { margin-top: var(--conai-edge) }
-.vc-node small { color: var(--conai-muted-foreground) }
-.vc-node img { width: 100%; height: 65px; object-fit: cover; display: block; border-radius: var(--conai-radius) }
-.vc-output, .vc-input { position: absolute; width: 12px; min-height: 12px; padding: 0; border: 2px solid var(--conai-background); border-radius: 50%; background: var(--vc-image) }
-.vc-output { right: -7px; top: 50%; cursor: crosshair }
-.vc-input { left: -7px; top: 9px; cursor: crosshair }
+.vc-node.cant { opacity: .45 }
+.vc-node.drop { outline: 2px dashed var(--conai-primary); outline-offset: 2px }
+.vc-node img { -webkit-user-drag: none; user-select: none }
+/* the left stripe says what the cut is doing */
+.vc-node::before { content: ""; position: absolute; z-index: 3; top: 0; bottom: 0; left: 0; width: 3px; border-radius: var(--conai-radius-md) 0 0 var(--conai-radius-md); background: transparent; pointer-events: none }
+.vc-node:is([data-state=queued], [data-state=generating], [data-state=current])::before { background: var(--conai-primary); animation: vc-stripe 1.4s ease-in-out infinite }
+.vc-node[data-state=failed]::before { background: var(--conai-destructive) }
+.vc-node[data-state=proposed]::before { background: var(--conai-warning) }
+.vc-node[data-state=waiting]::before { background: var(--conai-muted-foreground) }
+@keyframes vc-stripe { 50% { opacity: .3 } }
+.vc-head { display: flex; align-items: center; gap: 6px; height: 32px; padding: 0 4px 0 10px }
+.vc-num { flex: none; font-variant-numeric: tabular-nums }
+.vc-state { flex: none; color: var(--conai-muted-foreground); font-size: 11px; white-space: nowrap }
+.vc-node[data-state=failed] .vc-state { color: var(--conai-destructive) }
+.vc-node input.vc-name:not([type=range]) { flex: 1; min-width: 0; width: 100%; min-height: 24px; padding: 0 4px; font-weight: 600; background: transparent; border-color: transparent }
+.vc-node input.vc-name:not([type=range]):hover, .vc-node input.vc-name:not([type=range]):focus { background: var(--conai-field) }
+.vc-mw { position: relative }
+.vc-result { position: relative; aspect-ratio: 16 / 9; overflow: hidden; background: var(--conai-field) }
+.vc-result > .vc-player { position: absolute; inset: 0; border-radius: 0 }
+.vc-empty { position: absolute; inset: 0; display: grid; place-items: center; padding: 8px; color: var(--conai-muted-foreground); font-size: 12px; text-align: center }
+.vc-empty.error { color: var(--conai-destructive) }
+.vc-pbar { position: absolute; z-index: 2; bottom: 0; left: 0; height: 3px; background: var(--conai-primary) }
+.vc-pbar.indeterminate { width: 35%; animation: vc-slide 1.2s ease-in-out infinite alternate }
+@keyframes vc-slide { from { left: 0 } to { left: 65% } }
+.vc-tools { position: absolute; z-index: 3; top: 6px; right: 6px; display: flex; align-items: center; gap: 4px }
+.vc-pill { display: inline-flex; align-items: center; border-radius: var(--conai-radius); background: var(--conai-scrim); color: #fff; font-size: 11px; backdrop-filter: blur(6px) }
+.vc-pill .conai-icon-button.overlay { background: transparent; width: 22px; min-height: 22px }
+.vc-take-pos { min-width: 3ch; font-variant-numeric: tabular-nums; text-align: center }
+.vc-star[aria-pressed=true] > svg { fill: currentColor }
+.vc-player { aspect-ratio: 16 / 9; background: #000 }
+.vc-player video { object-fit: contain; background: #000 }
+.vc-player .vc-playkey { position: absolute; z-index: 2; top: 50%; left: 50%; translate: -50% -50%; width: 40px; min-height: 40px; border-radius: 50% }
+.vc-playkey > svg { width: 20px; height: 20px }
+.vc-player:not([data-paused]) .vc-playkey { display: none }
+.vc-player-bar { position: absolute; right: 0; bottom: 0; left: 0; z-index: 2; display: flex; align-items: center; gap: 4px; padding: 4px; background: linear-gradient(transparent, var(--conai-scrim)); opacity: 0; transition: opacity .15s }
+.vc-player:hover .vc-player-bar, .vc-player:focus-within .vc-player-bar { opacity: 1 }
+.vc-player-bar .conai-icon-button > svg { width: 14px; height: 14px }
+.vc-seek { flex: 1; min-width: 0 }
+.vc-thumb { aspect-ratio: 4 / 3 }
+.vc-node:not([data-kind=cut]) .vc-media > .conai-media { border-radius: 5px 5px 0 0 }
+.vc-node:not([data-kind=cut]) .vc-media > audio { display: block; width: 100%; height: 40px; border-radius: 0 }
+.vc-members { padding: 12px 10px }
+.vc-cap { display: flex; align-items: center; gap: 6px; height: 28px; padding: 0 4px 0 10px }
+.vc-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--vc-image) }
+.vc-node[data-kind=video] .vc-dot { background: var(--vc-video) }
+.vc-node[data-kind=audio] .vc-dot { background: var(--vc-audio) }
+.vc-node[data-kind=bundle] .vc-dot { background: var(--vc-bundle) }
+.vc-cap-text { flex: 1; min-width: 0; overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap }
+.vc-body { display: flex; flex-direction: column; gap: 6px; padding: 6px 10px 10px; cursor: default }
+.vc-body > [data-r]:empty { display: none }
+.vc-error { display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; margin: 0; color: var(--conai-destructive); font-size: 12px; overflow-wrap: anywhere }
+.vc-settings { display: grid; grid-template-columns: minmax(0, 1fr) 84px 54px; gap: 4px }
+.vc-settings .vc-workflow { justify-content: flex-start; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.vc-node .vc-body select, .vc-node .vc-body input:not([type=range]), .vc-node .vc-body textarea { min-width: 0; min-height: 28px; padding: 3px 6px; font-size: 12px }
+.vc-node .vc-body textarea { display: block; width: 100%; box-sizing: border-box; height: 3.4em; min-height: 3.4em; resize: none; line-height: 1.4 }
+.vc-node .vc-body textarea:focus { height: 9em }
+.vc-actions { display: flex; gap: 6px }
+.vc-actions > button { flex: 1 }
+.vc-actions > button:not(.primary) { border: 1px solid var(--conai-line) }
+.vc-output, .vc-input { position: absolute; padding: 0; min-height: 0; border: 2px solid var(--conai-background); border-radius: 50%; background: var(--vc-image) }
+.vc-output { z-index: 4; right: -8px; top: 50%; translate: 0 -50%; width: 16px; height: 16px; cursor: crosshair }
+.vc-input { left: -8px; top: 50%; translate: 0 -50%; width: 14px; height: 14px; cursor: crosshair }
+.vc-node[data-kind=cut] .vc-output { background: var(--vc-video); opacity: .45 }
+.vc-node[data-kind=cut].has-result .vc-output { opacity: 1; box-shadow: 0 0 0 3px color-mix(in srgb, var(--vc-video) 35%, transparent) }
+.vc-output:hover, .vc-input:hover { scale: 1.3 }
 .vc-node[data-kind=video] .vc-output, .vc-slot[data-port=ref_video] .vc-input { background: var(--vc-video) }
 .vc-node[data-kind=audio] .vc-output, .vc-slot[data-port=ref_audio] .vc-input { background: var(--vc-audio) }
 .vc-node[data-kind=bundle] .vc-output, .vc-slot[data-port=refmod] .vc-input { background: var(--vc-bundle) }
-.vc-slots { margin: var(--conai-text-inset) calc(-1 * var(--conai-text-inset)) 0 }
-.vc-slot { position: relative; display: flex; align-items: center; gap: var(--conai-text-inset); min-height: 30px; padding: var(--conai-edge) calc(1.5 * var(--conai-text-inset)); border-top: 1px solid var(--conai-line); font-size: 12px }
-.vc-slot span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
-.vc-slot small { margin-left: auto }
-.vc-slot.unused { opacity: .35 }
-.canvas-controls { position: absolute; right: var(--conai-text-inset); bottom: var(--conai-text-inset); padding: var(--conai-edge); background: var(--conai-surface-high); border-radius: var(--conai-radius-md) }
+.vc-slots { margin: 0 -10px }
+.vc-slots:empty { display: none }
+.vc-slot { position: relative; display: flex; align-items: center; gap: var(--conai-text-inset); min-height: 28px; padding: 0 10px 0 14px; border-top: 1px solid var(--conai-line); font-size: 12px }
+.vc-slot-port { flex: none; color: var(--conai-muted-foreground) }
+.vc-slot-src { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.vc-ghost { margin-left: auto; color: var(--conai-muted-foreground); font-weight: 500 }
+.vc-unlink { margin-left: auto }
+.vc-slot.unused { opacity: .4 }
+.vc-slot.unused.ghost-row { opacity: .85 }
+.vc-slot.cant { opacity: .2 }
+.vc-slot.can { background: color-mix(in srgb, var(--conai-primary) 10%, transparent) }
+.vc-slot.can .vc-input { box-shadow: 0 0 0 3px color-mix(in srgb, var(--conai-primary) 40%, transparent) }
+.vc-slot.snap { background: color-mix(in srgb, var(--conai-primary) 24%, transparent) }
+.vc-slot.snap .vc-input { scale: 1.5 }
+
+/* chrome on the canvas */
+.vc-float { position: absolute; z-index: 5; top: 8px; left: 50%; translate: -50% 0; padding: var(--conai-edge) var(--conai-edge) var(--conai-edge) 12px; background: var(--conai-surface-high); border: 1px solid var(--conai-line); border-radius: var(--conai-radius-md); box-shadow: var(--conai-float-shadow); flex-wrap: nowrap; white-space: nowrap }
+.vc-float-count { margin-right: 4px; font-size: 12px; font-weight: 600 }
+.vc-controls { position: absolute; z-index: 6; right: 8px; bottom: 8px; display: flex; align-items: center; gap: 2px; padding: 3px; background: var(--conai-surface-high); border: 1px solid var(--conai-line); border-radius: var(--conai-radius-md); box-shadow: var(--conai-key-shadow) }
+.vc-controls #zoom { min-width: 48px; font-variant-numeric: tabular-nums }
+.vc-controls-sep { width: 1px; height: 16px; margin: 0 3px; background: var(--conai-line) }
+/* bottom-left of the canvas: toasts, the floating player and the remaining-frames chip; only the pieces themselves take the pointer */
+.vc-dock { position: absolute; right: var(--conai-text-inset); bottom: var(--conai-text-inset); left: var(--conai-text-inset); z-index: 6; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; pointer-events: none }
+.vc-tray-wrap { position: relative; pointer-events: auto }
+.vc-tray { position: absolute; bottom: calc(100% + 6px); left: 0; width: min(440px, 90vw); max-height: 50vh; overflow: auto; padding: 10px; background: var(--conai-surface-high); border: 1px solid var(--conai-line); border-radius: var(--conai-radius-md); box-shadow: var(--conai-float-shadow) }
+.vc-tray-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px }
+.vc-tray-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px }
+.vc-tray-item { display: flex; flex-direction: column; gap: 4px; min-width: 0 }
+.vc-tray-item .conai-media { aspect-ratio: 16 / 9 }
+.vc-tray-item .toolbar { flex-wrap: nowrap }
+
+/* sequence dock: 212px by default (154px at least), head 40px; collapsed it is the head only */
+.vc-sequence { --vc-th: calc(var(--vc-dock-h) - 100px); position: relative; display: flex; flex: none; flex-direction: column; height: var(--vc-dock-h); border-top: 1px solid var(--conai-line); background: var(--conai-background); container-type: inline-size }
+.vc-sequence.collapsed { height: 40px }
+.vc-sequence.collapsed .vc-seq-list { display: none }
+.vc-seq-resize { position: absolute; z-index: 3; top: -3px; right: 0; left: 0; height: 6px; cursor: ns-resize }
+.vc-seq-resize:hover, .vc-seq-resize:focus-visible { outline: 0; background: color-mix(in srgb, var(--conai-primary) 45%, transparent) }
+.vc-sequence.collapsed .vc-seq-resize { pointer-events: none }
+.vc-seq-head { display: flex; flex: none; align-items: center; height: 40px; padding: 0 var(--conai-text-inset); white-space: nowrap }
+.vc-seq-group { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 0 12px; border-left: 1px solid var(--conai-line) }
+.vc-seq-group:first-child { padding-left: 0; border-left: 0 }
+.vc-transport { flex: 1 }
+.vc-production { flex: none }
+.vc-seq-head b { font-size: 13px }
+#seq-play { min-width: 112px }
+#seq-play > svg { flex: none }
+.vc-scrub { display: flex; flex: 1; align-items: center; gap: 2px; min-width: 120px }
+.vc-scrub-seg { position: relative; flex-basis: 0; flex-shrink: 1; min-width: 6px; min-height: 0; height: 12px; padding: 0; overflow: hidden; border-radius: 2px; background: var(--conai-fill) }
+.vc-scrub-seg:hover:not(:disabled) { background: color-mix(in srgb, var(--conai-foreground) 18%, transparent) }
+.vc-scrub-seg:disabled { opacity: .4 }
+.vc-scrub-seg > i { position: absolute; inset: 0 auto 0 0; width: 0; background: var(--conai-primary) }
+#seq-time { min-width: 9ch; font-size: 12px; font-variant-numeric: tabular-nums; text-align: right }
+#seq-chain-state { display: flex; align-items: center; gap: 8px; min-width: 0 }
+.vc-chain-label { overflow: hidden; max-width: 40ch; font-size: 13px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap }
+.vc-short { display: none }
+@container (max-width: 959px) {
+  #seq-time, .vc-long { display: none }
+  .vc-short { display: inline }
+}
+.vc-seq-list { display: flex; flex: 1; align-items: flex-start; min-height: 0; padding: 10px 12px 0; overflow-x: auto; overflow-y: hidden; scrollbar-width: thin }
+.vc-seq-item { position: relative; flex: none; width: calc(var(--vc-th) * 16 / 9); cursor: grab }
+.vc-seq-item > .conai-media { width: 100%; height: var(--vc-th) }
+.vc-seq-none { position: absolute; inset: 0; display: grid; place-items: center; color: var(--conai-muted-foreground); font-size: 12px }
+.vc-seq-progress { position: absolute; bottom: 0; left: 0; display: none; width: 0; height: 3px; background: var(--conai-primary) }
+.vc-seq-item[data-playing] .vc-seq-progress, .vc-seq-export .vc-seq-progress { display: block }
+.vc-seq-item[data-current] .conai-media-title { color: var(--conai-primary) }
+.vc-seq-item.drop-before::before, .vc-seq-item.drop-after::after { content: ""; position: absolute; z-index: 2; top: 0; bottom: 0; width: 3px; background: var(--conai-primary) }
+.vc-seq-item.drop-before::before { left: -9px }
+.vc-seq-item.drop-after::after { right: -9px }
+.vc-seq-join { flex: none; width: 16px; min-height: 0; height: var(--vc-th); padding: 0; border-radius: 0; background: transparent; color: var(--conai-muted-foreground); opacity: .45 }
+.vc-seq-join:hover:not(:disabled) { background: var(--conai-fill); opacity: 1 }
+.vc-seq-join.chained { color: var(--vc-video); opacity: 1 }
+.vc-seq-export { position: sticky; right: 0; z-index: 2; flex: none; width: calc(var(--vc-th) * 16 / 9 + 13px); margin-left: auto; padding-left: 12px; border-left: 1px solid var(--conai-line); background: var(--conai-background) }
+.vc-seq-export .conai-media-card { width: 100% }
+.vc-export-media { width: 100%; height: var(--vc-th) }
+.vc-export-text { position: absolute; inset: 0; display: grid; place-items: center; padding: 8px; font-size: 12px; text-align: center; overflow-wrap: anywhere }
+.vc-seq-export[data-stale] { opacity: .55 }
+.vc-export-open { position: absolute; top: 6px; right: 6px }
+/* floating sequence player above the dock, over the canvas */
+.vc-seq-player { position: relative; width: clamp(280px, 28%, 420px); background: #000; border: 1px solid var(--conai-line); border-radius: var(--conai-radius-md); box-shadow: var(--conai-float-shadow); overflow: hidden; pointer-events: auto }
+.vc-seq-player.big { width: clamp(300px, 72%, 960px) }
+.vc-seq-tools { position: absolute; top: 4px; right: 4px; z-index: 2; display: flex; gap: 4px }
+.vc-seq-screen { position: relative; aspect-ratio: 16 / 9; background: #000 }
+.vc-seq-screen video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; visibility: hidden }
+.vc-seq-screen video.front { visibility: visible }
+
+/* inspector */
 .inspector { --conai-sidebar-width: 390px }
 .inspector pre { overflow-wrap: anywhere }
+.workspace.insp-closed .inspector { display: none }
+.vc-insp-head { position: sticky; top: 0; z-index: 1; background: var(--conai-background) }
+#insp-body section + section { margin-top: 16px }
+#insp-body label.vc-check { display: flex; align-items: center; gap: 8px }
 .two { display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); column-gap: var(--conai-text-inset) }
-.launch-panel { padding: var(--conai-edge) var(--conai-text-inset); border-bottom: 1px solid var(--conai-line) }
-.launch-thumb { width: var(--conai-control-height); height: var(--conai-control-height) }
-.error { color: var(--conai-destructive) }
-.warning { color: var(--conai-warning) }
 .label-table { font-size: 12px }
 .label-table td { vertical-align: top }
+
+/* toasts and menus */
+.vc-toasts { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; width: min(380px, 100%); pointer-events: none }
+body > .vc-toasts { position: fixed; bottom: 12px; left: 12px; z-index: 40 }
+.vc-toasts > * { width: 100% }
+.vc-toasts > .vc-toast-clear { width: auto; align-self: flex-start; pointer-events: auto }
+.vc-toast { display: flex; align-items: center; gap: 8px; padding: 8px 8px 8px var(--conai-text-inset); background: var(--conai-surface-high); border: 1px solid var(--conai-line); border-radius: var(--conai-radius-md); box-shadow: var(--conai-float-shadow); pointer-events: auto }
+.vc-toast.error { border-color: var(--conai-destructive) }
+.vc-toast-text { flex: 1; min-width: 0; overflow-wrap: anywhere; white-space: pre-wrap }
+.vc-menu { position: fixed; z-index: 50; display: flex; flex-direction: column; min-width: 180px; padding: 4px; background: var(--conai-surface-high); border: 1px solid var(--conai-line); border-radius: var(--conai-radius-md); box-shadow: var(--conai-float-shadow) }
+.vc-menu button { justify-content: flex-start; text-align: left }
+.vc-menu hr { width: 100%; margin: 4px 0; border: 0; border-top: 1px solid var(--conai-line) }
 dialog { width: 100% }
-dialog video, .inspector video, .inspector audio { width: 100%; max-height: 260px }
+dialog video { width: 100%; max-height: 260px }
 .picker-list { max-height: 45vh; overflow: auto }
 .picker-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: var(--conai-text-inset); max-height: 50vh; overflow: auto; padding: var(--conai-edge) }
 .picker-grid .conai-media { aspect-ratio: 1 }
 .picker-list audio { width: 100%; height: var(--conai-control-height) }
+
 @media (min-width: 900px) and (max-width: 1199px) {
-  .workspace > .conai-sidebar:first-child { --conai-sidebar-width: 180px }
   .inspector { --conai-sidebar-width: 320px }
+  :root { --vc-cut-width: 290px }
 }
 @media (max-width: 899px) {
+  .workspace { flex-direction: column }
+  .vc-main { flex: none }
   .canvas { min-height: 520px; flex: none; width: 100% }
   .inspector { width: 100% }
-  .canvas-controls { left: 8px; right: 8px }
+  .vc-seq-player, .vc-seq-player.big { width: 100% }
 }

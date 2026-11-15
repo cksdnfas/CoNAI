@@ -241,7 +241,7 @@ test('image batch resize: parity, job, permissions and MCP', { timeout: 240000 }
         const denied = await connect(id)
         try {
           const names = (await denied.client.listTools()).tools.map((tool) => tool.name)
-          for (const name of ['save_video_frame', 'crop_images', 'convert_images', 'clip_video']) assert.equal(names.includes(name), false)
+          for (const name of ['save_video_frame', 'crop_images', 'convert_images', 'clip_video', 'join_videos']) assert.equal(names.includes(name), false)
         } finally { await denied.close() }
       }
       const indexed = await edit('save_video_frame', { composite_hash: video, frame_index: 23, format: 'webp' })
@@ -324,6 +324,69 @@ test('image batch resize: parity, job, permissions and MCP', { timeout: 240000 }
       }
     }
     assert.equal(fileSha(video), original)
+  })
+
+  await t.test('join_videos joins clips in order with in-sync audio, stream-copies only safe inputs, reports items and cancels', async () => {
+    const { execFileSync, spawnSync } = await import('node:child_process')
+    const { ffmpegBinary, ffprobeBinary, probeVideo } = await import('../src/services/sprite/spriteFfmpeg')
+    const make = async (name: string, args: string[]) => {
+      const file = path.join(root, name)
+      execFileSync(ffmpegBinary(), ['-v', 'error', '-y', ...args, '-c:v', 'libx264', '-pix_fmt', 'yuv420p', file])
+      return library(file, 'mp4', 'video/mp4')
+    }
+    const audioStreams = (file: string) => execFileSync(ffprobeBinary(), ['-v', 'error', '-select_streams', 'a', '-show_entries', 'stream=index', '-of', 'csv=p=0', file]).toString().trim()
+    // 160×120 at 25 fps with a tone; the magenta fixture is 128×128 at 12 fps for 2 s without audio.
+    const tone = await make('join-tone.mp4', ['-f', 'lavfi', '-i', 'testsrc=size=160x120:rate=25:duration=1.5', '-f', 'lavfi', '-i', 'sine=frequency=440:duration=1.5', '-shortest', '-c:a', 'aac'])
+    const small = await make('join-small.mp4', ['-f', 'lavfi', '-i', 'testsrc=size=96x64:rate=10:duration=1'])
+    const toneSeconds = Math.round((await probeVideo(findLibraryMedia(tone)!.filePath)).duration * 25) / 25
+    const original = fileSha(video)
+
+    const joined = await edit('join_videos', { composite_hashes: [tone, video, tone] })
+    assert.equal(joined.stream_copy, false)
+    assert.equal(joined.saved.length, 1)
+    assert.equal(joined.group_id, GroupPathService.resolve('영상 이어붙이기', { create: false })?.groupId)
+    const output = findLibraryMedia(joined.saved[0].composite_hash)!
+    assert.equal(output.mimeType, 'video/mp4')
+    const info = await probeVideo(output.filePath)
+    assert.deepEqual([info.width, info.height, info.fps], [160, 120, 25], 'first clip size and rate')
+    assert.ok(Math.abs(info.duration - (toneSeconds * 2 + 2)) < 0.05, `duration ${info.duration}`)
+    assert.notEqual(audioStreams(output.filePath), '')
+    const silence = spawnSync(ffmpegBinary(), ['-hide_banner', '-nostats', '-i', output.filePath, '-af', 'silencedetect=noise=-40dB:d=0.3', '-f', 'null', '-']).stderr.toString()
+    const start = Number(/silence_start: ([\d.]+)/.exec(silence)?.[1])
+    const end = Number(/silence_end: ([\d.]+)/.exec(silence)?.[1])
+    assert.ok(Math.abs(start - toneSeconds) < 0.05 && Math.abs(end - (toneSeconds + 2)) < 0.05, `the silent clip spans its own slot: ${start}–${end}`)
+
+    const copied = await edit('join_videos', { composite_hashes: [video, video] })
+    assert.equal(copied.stream_copy, true)
+    const copiedFile = findLibraryMedia(copied.saved[0].composite_hash)!
+    assert.equal(copiedFile.mimeType, 'video/mp4')
+    assert.ok(Math.abs((await probeVideo(copiedFile.filePath)).duration - 4) < 0.1)
+
+    const mixed = await edit('join_videos', { composite_hashes: [video, small] })
+    assert.equal(mixed.stream_copy, false)
+    const mixedFile = findLibraryMedia(mixed.saved[0].composite_hash)!.filePath
+    const mixedInfo = await probeVideo(mixedFile)
+    assert.deepEqual([mixedInfo.width, mixedInfo.height, mixedInfo.fps], [128, 128, 12])
+    assert.ok(Math.abs(mixedInfo.duration - 3) < 0.1, `duration ${mixedInfo.duration}`)
+    assert.equal(audioStreams(mixedFile), '', 'no clip has audio, so neither does the output')
+    assert.equal(fileSha(video), original)
+
+    const invalid = startMediaEditJob({ operation: 'join_videos', compositeHashes: [video, imageA], contentRatingLimit: null, requestedByAccountId: makerId })
+    const failed = await waitForRuntimeJob(invalid.jobId, 60000)
+    assert.equal(failed!.status, 'failed')
+    assert.match(failed!.failureMessage!, new RegExp(`item 2 \\(${imageA}\\): .*library video`))
+
+    const session = await connect(makerId)
+    try {
+      const single = await session.client.callTool({ name: 'join_videos', arguments: { composite_hashes: [video] } }) as { isError?: boolean }
+      assert.equal(single.isError, true)
+      const started = await session.client.callTool({ name: 'join_videos', arguments: { composite_hashes: [tone, video, small, tone], wait_seconds: 0 } }) as { content: Array<{ text: string }> }
+      const jobId = JSON.parse(started.content[0].text).job_id
+      assert.ok(jobId)
+      await session.client.callTool({ name: 'get_media_edit_job', arguments: { job_id: jobId, cancel: true } })
+      const settled = await session.client.callTool({ name: 'get_media_edit_job', arguments: { job_id: jobId, wait_seconds: 60 } }) as { content: Array<{ text: string }> }
+      assert.equal(JSON.parse(settled.content[0].text).status, 'cancelled')
+    } finally { await session.close() }
   })
 
   await t.test('media edit results over 64 KiB round trip through the status tool and expire with their job', async (t) => {

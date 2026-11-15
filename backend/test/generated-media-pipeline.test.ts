@@ -1,5 +1,6 @@
 import './support/testTemp'
 import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -202,6 +203,104 @@ test('generated previews precede enrichment and video copies preserve the origin
       release();
       await waitFor(() => !(main.db.prepare("SELECT 1 FROM generated_video_optimizations WHERE status = 'processing'").get()));
       transcode.mock.restore();
+    }
+  });
+
+  await t.test('a generated video the background batch registers mid-ingest completes as that existing item', async () => {
+    const { BackgroundProcessorService } = await import('../src/services/backgroundProcessorService');
+    const { VideoProcessor } = await import('../src/services/videoProcessor');
+    const { VideoFrameExtractor } = await import('../src/services/videoFrameExtractor');
+    const bytes = Buffer.alloc(256, 7);
+    const hash = crypto.createHash('md5').update(bytes).digest('hex');
+    const source = path.join(root, 'temp', 'comfyui_race.mp4');
+    fs.mkdirSync(path.dirname(source), { recursive: true });
+    fs.writeFileSync(source, bytes);
+    let release!: () => void;
+    const barrier = new Promise<void>((resolve) => { release = resolve; });
+    let probes = 0;
+    // The generation's own probe stalls after its duplicate check; the batch's probe of the same row answers at once.
+    const probe = t.mock.method(VideoProcessor, 'extractMetadata', async () => {
+      probes += 1;
+      if (probes === 1) await barrier;
+      return { duration: 1, width: 64, height: 32, fps: 24, video_codec: 'av1', audio_codec: null, bitrate: 1, format: 'mp4', extractedAt: new Date().toISOString() };
+    });
+    const poster = t.mock.method(VideoFrameExtractor, 'generatePosterThumbnail', async () => 'thumbnails/race.webp');
+    const enqueue = t.mock.method(optimization, 'enqueue', async () => {});
+    const historyId = await GenerationHistoryService.createComfyUIHistory({ workflowId: 1, workflowName: 'video' });
+    try {
+      const saving = GenerationHistoryService.processAndUploadGeneratedFile(historyId, source, 'comfyui', { sourceMimeType: 'video/mp4' });
+      await waitFor(() => probes === 1);
+      const batch = await BackgroundProcessorService.processUnhashedImages();
+      assert.deepEqual([batch.processed, batch.errors], [1, 0]);
+      release();
+      await saving;
+      const record = HistoryQueryRepository.findAllWithMetadata({ ids: [historyId] })[0];
+      assert.equal(record.generation_status, 'completed');
+      assert.equal(record.actual_composite_hash, hash);
+      assert.equal((main.db.prepare('SELECT COUNT(*) AS count FROM media_metadata WHERE composite_hash = ?').get(hash) as { count: number }).count, 1);
+      const files = main.db.prepare('SELECT original_file_path FROM image_files WHERE composite_hash = ?').all(hash) as Array<{ original_file_path: string }>;
+      assert.equal(files.length, 1);
+      assert.deepEqual(fs.readFileSync(files[0].original_file_path), bytes);
+      assert.deepEqual(enqueue.mock.calls.map((call) => call.arguments[0]), [hash]);
+    } finally {
+      release();
+      probe.mock.restore();
+      poster.mock.restore();
+      enqueue.mock.restore();
+    }
+  });
+
+  await t.test('a generated image the background batch registers mid-ingest is extracted and prompt-collected once', async () => {
+    const { BackgroundProcessorService } = await import('../src/services/backgroundProcessorService');
+    const { ThumbnailGenerator } = await import('../src/utils/thumbnailGenerator');
+    let releaseThumbnail!: () => void;
+    let releaseExtraction!: () => void;
+    const thumbnailBarrier = new Promise<void>((resolve) => { releaseThumbnail = resolve; });
+    const extractionBarrier = new Promise<void>((resolve) => { releaseExtraction = resolve; });
+    let thumbnails = 0;
+    let extractions = 0;
+    // The generation's thumbnail stalls after its duplicate check, so the batch inserts and links the same row first.
+    const thumbnail = t.mock.method(ThumbnailGenerator, 'generateThumbnail', async () => {
+      thumbnails += 1;
+      if (thumbnails === 1) await thumbnailBarrier;
+      return 'thumbnails/race.webp';
+    });
+    // The batch's own extraction is still running when the generation hits the conflict.
+    const extract = t.mock.method(MetadataExtractor, 'extractMetadata', async () => {
+      extractions += 1;
+      if (extractions === 1) await extractionBarrier;
+      return { ai_info: { ai_tool: 'NovelAI', prompt: 'race prompt' }, extractedAt: new Date().toISOString() };
+    });
+    const collect = t.mock.method(BackgroundQueueService, 'addPromptCollectionTask', () => {});
+    const historyId = await GenerationHistoryService.createNAIHistory({ model: 'test' });
+    let batch: Promise<unknown> | undefined;
+    try {
+      const buffer = await sharp({ create: { width: 24, height: 24, channels: 4, background: '#9a3c21' } }).png().toBuffer();
+      const saving = GenerationHistoryService.processAndUploadImage(historyId, buffer, 'novelai');
+      await waitFor(() => thumbnails === 1);
+      const batching = BackgroundProcessorService.processUnhashedImages();
+      batch = batching;
+      await waitFor(() => extractions === 1);
+      releaseThumbnail();
+      await saving;
+      releaseExtraction();
+      const result = await batching;
+      assert.deepEqual([result.processed, result.errors], [1, 0]);
+      await waitFor(() => !BackgroundQueueService.getQueueStatus().processing);
+      const record = HistoryQueryRepository.findAllWithMetadata({ ids: [historyId] })[0];
+      assert.equal(record.generation_status, 'completed');
+      assert.ok(record.actual_composite_hash);
+      assert.equal((main.db.prepare('SELECT COUNT(*) AS count FROM image_files WHERE composite_hash = ?').get(record.actual_composite_hash) as { count: number }).count, 1);
+      assert.equal(extractions, 1);
+      assert.deepEqual(collect.mock.calls.map((call) => call.arguments[1]), [record.actual_composite_hash]);
+    } finally {
+      releaseThumbnail();
+      releaseExtraction();
+      await batch?.catch(() => undefined);
+      await waitFor(() => !BackgroundQueueService.getQueueStatus().processing);
+      thumbnail.mock.restore();
+      extract.mock.restore();
+      collect.mock.restore();
     }
   });
 });

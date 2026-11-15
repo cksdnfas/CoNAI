@@ -1,4 +1,4 @@
-import { fail, profilePublication, sameValue } from './domain.mjs'
+import { fail, profilePublication, representativeTake, sameValue, sequenceOf } from './domain.mjs'
 
 // These are host transport boundaries, not limits on a canvas, prompt or operation.
 export const SNAPSHOT_CHARS = 200000
@@ -60,20 +60,36 @@ export function recordPage(rows, { cursor, limit = rows.length || 1, budget = SN
   if (!items.length && index < rows.length && limit > 0) { items.push(rows[index]); index++ }
   return { items, cursor: String(offset), nextCursor: index < rows.length ? String(index) : null, total: rows.length }
 }
+// A cut's generation state in its own keys; humanReview is only the person's pass/redo review.
+function cutState(project, cut) {
+  const takes = project.takes.filter(take => take.cutId === cut.id), newest = takes.at(-1), shown = representativeTake(project, cut)
+  return { mode: cut.data.mode, newestTakeId: newest?.id ?? null, newestTakeStatus: newest?.status ?? null, newestTakeError: newest?.error ?? null,
+    hasReadyResult: Boolean(shown?.resultHash), representingTakeId: shown?.id ?? null, resultHash: shown?.resultHash ?? null }
+}
 export function excerpt(project, { offset, cursor = offset, edge_cursor, limit, selection = [], launch = null } = {}) {
-  const nodes = recordPage(project.nodes.map(node => ({ id: node.id, kind: node.kind, status: node.data.check?.status ?? node.review })), { cursor, limit })
+  const withTakes = { ...project, takes: project.takes ?? [] }
+  const nodes = recordPage(project.nodes.map(node => ({ id: node.id, kind: node.kind, name: node.data.name, checkStatus: node.data.check?.status ?? null, humanReview: node.review,
+    ...(node.kind === 'cut' ? cutState(withTakes, node) : {}) })), { cursor, limit })
   const edges = recordPage(project.edges.map(({ id, from, to, port, position }) => ({ id, from, to, port, position })), { cursor: edge_cursor, limit })
-  return { id: project.id, revision: project.revision, nodes: nodes.items, edges: edges.items, selection, launch,
+  return { id: project.id, revision: project.revision, nodes: nodes.items, edges: edges.items, sequence: sequenceOf(project), selection, launch,
     total: nodes.total, totalEdges: edges.total, nextCursor: nodes.nextCursor, nextEdgeCursor: edges.nextCursor, nextOffset: nodes.nextCursor === null ? null : Number(nodes.nextCursor) }
 }
+// Published `projects` rows; long lists page through the snapshot like any other section.
+export const projectRows = projects => projects.map(({ id, name, revision, updated, created, nodeCount, cutCount, archived, cover }) => ({ id, name, revision, updated, created, nodeCount, cutCount, archived, cover }))
+// Published `pendingExports`, like pendingExtractions.
+export const exportStates = project => (project?.exports ?? []).map(({ id, status, jobId, progress, resultHash, error, cutIds, takeIds }) => ({ id, status, jobId, progress, resultHash, error, cutIds, takeIds }))
+// Published `pendingChains` (and the shape of `lastChain`).
+export const chainStates = project => (project?.chains ?? []).map(({ id, status, cutIds, current, steps, error }) => ({ id, status, cutIds, current, steps: steps.map(({ cutId, status, takeId, error }) => ({ cutId, status, takeId, error })), error }))
 export function createAssistantState() {
   const sections = new Map(), cursors = new Map()
+  let calls = 0
   return {
     set(name, value, summary = {}) {
       // Operation fields and tempIds are user-chosen keys, not host snapshot field names.
       if (name === 'lastEdit') value = editPublication(value)
       if (!sections.has(name) || !sameValue(sections.get(name).value, value)) cursors.delete(name)
-      sections.set(name, { value, summary })
+      // The stamp changes on every call, so a repeated identical answer is still visibly a new one.
+      sections.set(name, { value, summary, fresh: { seq: ++calls, at: new Date().toISOString() } })
     },
     clear() { sections.clear(); cursors.clear() },
     page(name, cursor) {
@@ -89,10 +105,10 @@ export function createAssistantState() {
       const entries = [...sections]
       for (let index = 0; index < entries.length; index++) {
         const [name, section] = entries[index]
-        const metadata = size(Object.fromEntries(entries.slice(index).map(([key, entry]) => [key, { summary: entry.summary }])))
+        const metadata = size(Object.fromEntries(entries.slice(index).map(([key, entry]) => [key, { summary: entry.summary, fresh: entry.fresh }])))
         const remaining = SNAPSHOT_CHARS - size(envelope()) - metadata - 2
         const budget = Math.floor(remaining / (entries.length - index))
-        data[name] = { summary: section.summary, ...jsonPage(section.value, cursors.get(name), budget) }
+        data[name] = { summary: section.summary, fresh: section.fresh, ...jsonPage(section.value, cursors.get(name), budget) }
       }
       if (size(envelope()) > SNAPSHOT_CHARS) fail('화면 정보가 호스트 전송 범위를 넘었어.')
       return envelope()

@@ -8,46 +8,93 @@
 </head>
 <body class="conai-app">
   <header class="conai-header">
-    <select id="projects" aria-label="프로젝트"></select>
-    <button id="new-project" class="conai-icon-button" title="프로젝트 만들기" aria-label="프로젝트 만들기">＋</button>
-    <span id="revision" class="muted"></span><p id="message" role="status" aria-live="polite" class="muted"></p>
-    <button id="check-all">전체 체크</button><button id="arrange">정렬</button><button id="generate" class="primary">선택한 컷 생성</button>
+    <div id="home-bar" class="vc-bar">
+      <span class="conai-spacer"></span>
+      <button id="new-project" class="primary">＋ 새 프로젝트</button>
+    </div>
+    <div id="project-bar" class="vc-bar" hidden>
+      <button id="back-home" class="ghost" aria-label="프로젝트 목록으로" title="프로젝트 목록으로">← 프로젝트</button>
+      <h1 id="project-title" class="conai-title vc-project-title" role="button" tabindex="0" title="눌러서 이름 바꾸기"></h1>
+      <input id="project-title-input" class="vc-title-input" aria-label="프로젝트 이름" hidden>
+      <button id="add-cut">＋ 컷</button>
+      <button id="add-source" class="ghost" aria-haspopup="menu">소재 ▾</button>
+      <span class="conai-spacer"></span>
+      <button id="toggle-inspector" class="conai-icon-button" data-icon="panel" aria-pressed="true" aria-label="상세" title="상세"></button>
+    </div>
   </header>
   <div id="launch" class="toolbar launch-panel" hidden></div>
-  <div class="conai-split workspace">
-    <aside class="conai-sidebar" aria-label="가져오기">
-      <h2 class="conai-group-head">가져오기</h2>
-      <nav class="conai-nav">
-        <button class="conai-nav-item" data-import="image">이미지</button>
-        <button class="conai-nav-item" data-import="video">비디오</button>
-        <button class="conai-nav-item" data-import="audio">오디오</button>
-        <button class="conai-nav-item" data-import="bundle">레퍼런스 번들</button>
-      </nav>
-      <h2 class="conai-group-head">만들기</h2>
-      <nav class="conai-nav">
-        <button id="add-cut" class="conai-nav-item">영상 컷</button>
-        <button id="extract-selected" class="conai-nav-item">프레임 추출</button>
-      </nav>
-      <h2 class="conai-group-head">이 프로젝트</h2>
-      <dl id="counts" class="conai-kv"></dl>
-      <nav class="conai-nav">
-        <button id="profiles" class="conai-nav-item">생성 프로필</button>
-        <button id="assistant-panel" class="conai-nav-item">어시스턴트 변경</button>
-      </nav>
-    </aside>
-    <main id="canvas" class="canvas" aria-label="노드 캔버스" tabindex="0">
-      <div id="stage"><svg id="edges" aria-hidden="true"></svg><div id="nodes"></div></div>
-      <div class="toolbar canvas-controls">
-        <span class="muted">연결선</span>
-        <div class="conai-segmented" aria-label="연결선 표시">
-          <button data-edges="all" aria-pressed="true">전체</button><button data-edges="selected" aria-pressed="false">선택만</button><button data-edges="off" aria-pressed="false">끄기</button>
+  <main id="home" class="conai-pane vc-home" hidden>
+    <div class="toolbar vc-home-tools">
+      <label class="conai-search"><input id="home-query" type="search" placeholder="프로젝트 이름 검색" aria-label="프로젝트 검색"></label>
+      <select id="home-sort" aria-label="정렬"><option value="updated">최근 수정순</option><option value="created">만든 순</option><option value="name">이름순</option></select>
+      <button id="home-archived" class="conai-chip" aria-pressed="false">보관함 보기</button>
+      <span id="home-count" class="muted"></span>
+    </div>
+    <div id="home-grid" class="vc-cards"></div>
+    <div class="toolbar vc-more"><button id="home-more" hidden>더 보기</button></div>
+  </main>
+  <div id="workspace" class="conai-split workspace" hidden>
+    <div class="vc-main">
+      <div id="canvas" class="canvas" tabindex="0" aria-label="노드 캔버스">
+        <div id="stage"><svg id="edges" aria-hidden="true">
+          <defs>
+            <marker id="vc-arr-video" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="10" markerHeight="10" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1L9 5L1 9z" fill="var(--vc-video)"/></marker>
+            <marker id="vc-arr-muted" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1L9 5L1 9z" fill="var(--conai-muted-foreground)" fill-opacity=".6"/></marker>
+            <marker id="vc-arr-fg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="10" markerHeight="10" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1L9 5L1 9z" fill="var(--conai-foreground)"/></marker>
+          </defs>
+          <g id="edge-layer"></g><path id="link-line" style="display:none"/></svg><div id="nodes"></div></div>
+        <div id="float" class="vc-float toolbar" hidden></div>
+        <div class="vc-empty-canvas conai-empty"><button id="empty-add" class="primary">＋ 첫 컷 만들기</button><p class="muted">이미지·영상은 위의 소재에서 가져와.</p></div>
+        <div class="vc-dock">
+          <div id="toasts" class="vc-toasts" aria-live="polite"></div>
+          <div id="seq-player" class="vc-seq-player" hidden>
+            <div class="vc-seq-screen"><video id="seq-a" playsinline></video><video id="seq-b" playsinline></video></div>
+            <div class="vc-seq-tools"><button id="seq-big" class="conai-icon-button sm overlay" data-icon="maximize" aria-pressed="false" aria-label="크게 보기" title="크게 보기"></button><button id="seq-stop" class="conai-icon-button sm overlay" data-icon="x" aria-label="멈추고 닫기" title="멈추고 닫기"></button></div>
+          </div>
+          <div id="tray" class="vc-tray-wrap" hidden><div id="tray-pop" class="vc-tray" hidden></div><button id="tray-chip" class="conai-chip" aria-pressed="false" aria-haspopup="true"></button></div>
         </div>
-        <button id="zoom-out" class="conai-icon-button" aria-label="축소">−</button>
-        <span id="zoom">100%</span><button id="zoom-in" class="conai-icon-button" aria-label="확대">＋</button><button id="fit">맞춤</button>
+        <div class="vc-controls">
+          <button id="zoom-out" class="conai-icon-button sm" data-icon="minus" aria-label="축소" title="축소"></button>
+          <button id="zoom" class="ghost sm" title="100%로 되돌리기">100%</button>
+          <button id="zoom-in" class="conai-icon-button sm" data-icon="plus" aria-label="확대" title="확대"></button>
+          <span class="vc-controls-sep"></span>
+          <button id="fit" class="ghost sm">맞춤</button><button id="arrange" class="ghost sm" title="컷은 한 줄로, 소재는 그 아래로 정리해">정렬</button>
+          <span class="vc-controls-sep"></span>
+          <button id="edges-toggle" class="conai-icon-button sm" data-icon="edges" aria-pressed="true" aria-label="소재 선" title="소재 선: 켜면 모든 소재 연결을, 끄면 고른 노드의 연결만 보여줘"></button>
+        </div>
       </div>
-    </main>
-    <aside id="inspector" class="conai-sidebar end inspector" aria-label="소재·컷 설정"><p class="conai-empty">소재나 컷을 골라줘.</p></aside>
+      <section id="sequence" class="vc-sequence" aria-label="시퀀스">
+        <div id="seq-resize" class="vc-seq-resize" role="separator" aria-orientation="horizontal" aria-label="시퀀스 높이 조절" title="끌어서 높이 조절 · 더블클릭으로 되돌리기" tabindex="0"></div>
+        <div class="vc-seq-head">
+          <div class="vc-seq-group">
+            <button id="seq-collapse" class="conai-icon-button sm" aria-label="시퀀스 접기/펼치기" aria-expanded="true"></button>
+            <b>시퀀스</b><span id="seq-total" class="muted"></span>
+          </div>
+          <div class="vc-seq-group vc-transport">
+            <button id="seq-play"></button>
+            <button id="seq-halt" class="conai-icon-button sm" data-icon="stop" aria-label="멈추기" title="멈추기" disabled></button>
+            <div id="seq-scrub" class="vc-scrub"></div>
+            <span id="seq-time" class="muted"></span>
+          </div>
+          <div class="vc-seq-group vc-production">
+            <span id="seq-chain-state" hidden></span>
+            <button id="seq-chain" class="primary" aria-label="이어 생성">이어 생성</button>
+            <button id="seq-export-btn" aria-label="합본 내보내기" title="합본 내보내기"><span class="vc-long">합본 내보내기</span><span class="vc-short">합본</span></button>
+          </div>
+        </div>
+        <div id="seq-list" class="vc-seq-list"></div>
+      </section>
+    </div>
+    <aside id="inspector" class="conai-sidebar end inspector" aria-label="선택 상세">
+      <div class="toolbar vc-insp-head">
+        <div class="conai-segmented"><button data-tab="detail" aria-selected="true">선택</button><button data-tab="checks" aria-selected="false">체크</button><button data-tab="assistant" aria-selected="false">어시스턴트</button></div>
+        <span class="conai-spacer"></span>
+        <button id="insp-close" class="conai-icon-button sm" data-icon="right" aria-label="상세 접기" title="상세 접기"></button>
+      </div>
+      <div id="insp-body"></div>
+    </aside>
   </div>
+  <div id="menu" class="vc-menu" role="menu" hidden></div>
   <dialog id="modal"></dialog>
   <script type="module" src="main.js"></script>
 </body>

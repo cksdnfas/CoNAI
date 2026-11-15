@@ -82,33 +82,7 @@ export class VideoMediaProcessor {
     }
 
     if (existing) {
-      try {
-        linkMediaFileToHash(file.id, fileHash);
-        stages.push(completedStage('duplicate-link'));
-      } catch (error) {
-        return stoppedFileProcessing(failedStage('duplicate-link', error, true), stages, {
-          compositeHash: fileHash,
-          duplicate: true,
-          cause: error,
-        });
-      }
-
-      stages.push(await MediaPostprocessCoordinator.processApiGenerationGroupAssignment(fileHash));
-      stages.push(await generateVideoPosterFrame(fileHash, filePath, file.file_type, { skipIfPresent: true }));
-      try {
-        stages.push(MediaPostprocessCoordinator.releaseVisibilityIfReady(fileHash));
-      } catch (error) {
-        // The duplicate row is already linked and is no longer selected by the
-        // unhashed batch, so retryable=true would promise a retry that cannot occur.
-        return stoppedFileProcessing(failedStage('visibility', error, false), stages, {
-          compositeHash: fileHash,
-          duplicate: true,
-          cause: error,
-        });
-      }
-
-      console.log(`  ♻️  Video/Animated already processed: ${fileName}`);
-      return completedFileProcessing(fileHash, true, stages);
+      return this.linkToExistingMedia(file, fileHash, stages);
     }
 
     let width = 0;
@@ -138,20 +112,27 @@ export class VideoMediaProcessor {
       stages.push(failedStage('video-metadata', error, false));
     }
 
+    let inserted: boolean;
     try {
-      db.prepare(`
+      inserted = db.prepare(`
         INSERT INTO media_metadata (
           composite_hash, duration, fps, width, height, video_codec, audio_codec, bitrate, first_seen_date,
           postprocess_status, metadata_extraction_status
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, 'pending', ?)
-      `).run(fileHash, duration, fps, width, height, videoCodec, audioCodec, bitrate, options.metadataMode === 'background' || !width || !height ? 'pending' : 'completed');
-      stages.push(completedStage('metadata-row'));
+        ON CONFLICT(composite_hash) DO NOTHING
+      `).run(fileHash, duration, fps, width, height, videoCodec, audioCodec, bitrate, options.metadataMode === 'background' || !width || !height ? 'pending' : 'completed').changes > 0;
     } catch (error) {
       return stoppedFileProcessing(failedStage('metadata-row', error, true), stages, {
         compositeHash: fileHash,
         cause: error,
       });
     }
+    if (!inserted) {
+      // Another ingest path registered the same bytes after the duplicate check above (e.g. the
+      // background batch processing this same row while the probe ran): reuse it like any duplicate.
+      return this.linkToExistingMedia(file, fileHash, stages);
+    }
+    stages.push(completedStage('metadata-row'));
 
     try {
       linkMediaFileToHash(file.id, fileHash);
@@ -198,5 +179,39 @@ export class VideoMediaProcessor {
 
     console.log(`  ✨ Processed video/animated: ${fileName} (${width}x${height})`);
     return completedFileProcessing(fileHash, false, stages);
+  }
+
+  private static async linkToExistingMedia(
+    file: UnhashedMediaFile,
+    fileHash: string,
+    stages: MediaProcessingStageResult[],
+  ): Promise<MediaFileProcessingResult> {
+    try {
+      linkMediaFileToHash(file.id, fileHash);
+      stages.push(completedStage('duplicate-link'));
+    } catch (error) {
+      return stoppedFileProcessing(failedStage('duplicate-link', error, true), stages, {
+        compositeHash: fileHash,
+        duplicate: true,
+        cause: error,
+      });
+    }
+
+    stages.push(await MediaPostprocessCoordinator.processApiGenerationGroupAssignment(fileHash));
+    stages.push(await generateVideoPosterFrame(fileHash, file.original_file_path, file.file_type, { skipIfPresent: true }));
+    try {
+      stages.push(MediaPostprocessCoordinator.releaseVisibilityIfReady(fileHash));
+    } catch (error) {
+      // The duplicate row is already linked and is no longer selected by the
+      // unhashed batch, so retryable=true would promise a retry that cannot occur.
+      return stoppedFileProcessing(failedStage('visibility', error, false), stages, {
+        compositeHash: fileHash,
+        duplicate: true,
+        cause: error,
+      });
+    }
+
+    console.log(`  ♻️  Video/Animated already processed: ${path.basename(file.original_file_path)}`);
+    return completedFileProcessing(fileHash, true, stages);
   }
 }

@@ -299,6 +299,7 @@ const TOOL_SCOPES: Record<string, McpHttpScope> = {
   crop_images: 'generate',
   convert_images: 'generate',
   clip_video: 'generate',
+  join_videos: 'generate',
   get_media_edit_job: 'read',
   generate_comfyui: 'generate',
   generate_comfyui_all_servers: 'generate',

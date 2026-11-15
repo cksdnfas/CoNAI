@@ -14,9 +14,38 @@ export function sameValue(left, right) { return canonical(left) === canonical(ri
 export function expected(project, revision) {
   if (!Number.isInteger(revision) || project.revision !== revision) fail(`409: 캔버스가 바뀌었어. 다시 읽어줘. (rev ${project.revision})`, 409)
 }
+export function projectName(name) {
+  if (typeof name !== 'string' || !name.trim()) fail('프로젝트 이름을 써줘.')
+  return name.trim()
+}
 export function newProject(id, name) {
-  if (!String(name ?? '').trim()) fail('프로젝트 이름을 써줘.')
-  return { id, name: String(name).trim(), revision: 0, nodes: [], edges: [], takes: [], profiles: [], extractions: [] }
+  return { id, name: projectName(String(name ?? '')), revision: 0, nodes: [], edges: [], sequence: [], takes: [], profiles: [], extractions: [], exports: [] }
+}
+// Projects saved before sequences existed, and undo states, are read as their cuts in creation order.
+export function sequenceOf(project) {
+  const cuts = project.nodes.filter(node => node.kind === 'cut').map(node => node.id), known = new Set(cuts)
+  const order = [...new Set(Array.isArray(project.sequence) ? project.sequence : [])].filter(id => known.has(id))
+  const listed = new Set(order)
+  return [...order, ...cuts.filter(id => !listed.has(id))]
+}
+// The chosen take, or else the cut's latest take with a result hash.
+export function representativeTake(project, cut) {
+  const takes = project.takes.filter(take => take.cutId === cut.id)
+  if (cut.data.pickTakeId) return takes.find(take => take.id === cut.data.pickTakeId) ?? null
+  return takes.filter(take => take.resultHash).at(-1) ?? null
+}
+// A canvas copy with fresh node, edge and profile IDs; takes and job state stay with the original.
+export function duplicateCanvas(project, uuid) {
+  const ids = new Map(), fresh = id => { if (!ids.has(id)) ids.set(id, uuid()); return ids.get(id) }
+  const profiles = project.profiles.map(profile => ({ ...copy(profile), id: fresh(profile.id) }))
+  const nodes = project.nodes.map(node => {
+    const data = copy(node.data)
+    delete data.check; delete data.pickTakeId
+    if (data.profileId) data.profileId = ids.get(data.profileId) ?? null
+    return { ...copy(node), id: fresh(node.id), data }
+  })
+  const edges = project.edges.map(edge => ({ ...copy(edge), id: uuid(), from: fresh(edge.from), to: fresh(edge.to) }))
+  return { nodes, edges, profiles, sequence: sequenceOf(project).map(fresh), profileIds: ids }
 }
 export function nodeOf(project, id) {
   const node = project.nodes.find(node => node.id === id)
@@ -27,6 +56,33 @@ export function cutOf(project, id) {
   const node = nodeOf(project, id)
   if (node.kind !== 'cut') fail('영상 컷을 골라줘.')
   return node
+}
+// The mode that starts using a start/end slot the current mode ignores; other modes and ports stay as they are.
+const SLOT_MODES = { start: { T2VA: 'I2VA', L2VA: 'FL2VA' }, end: { T2VA: 'L2VA', I2VA: 'FL2VA' } }
+export const slotMode = (mode, port) => SLOT_MODES[port]?.[mode] ?? null
+// Server placement uses the page's default node sizes (CSS widths, typical heights) and gap.
+const GAP = 24
+const boxOf = (kind, x = 0, y = 0) => ({ x, y, ...(kind === 'cut' ? { w: 300, h: 300 } : { w: 200, h: 190 }) })
+const overlaps = (a, b) => a.x < b.x + b.w + GAP && b.x < a.x + a.w + GAP && a.y < b.y + b.h + GAP && b.y < a.y + a.h + GAP
+/**
+ * A spot that overlaps no node: a cut to the right of the last sequence cut on its row, a node feeding a cut
+ * to the left of that cut, anything else below the existing content. Scans always end past the occupied area.
+ */
+export function freePosition(project, kind, nearCutId = null) {
+  const taken = project.nodes.map(node => boxOf(node.kind, node.x, node.y)), size = boxOf(kind)
+  const free = (x, y) => !taken.some(box => overlaps({ ...size, x, y }, box))
+  const scan = (start, dx, columns) => {
+    for (let row = 0; ; row++) for (let column = 0; column < columns; column++) {
+      const x = Math.round(start.x + dx * column * (size.w + GAP)), y = Math.round(start.y + row * (size.h + GAP))
+      if (free(x, y)) return { x, y }
+    }
+  }
+  const near = nearCutId && project.nodes.find(node => node.id === nearCutId)
+  if (near) return scan({ x: near.x - size.w - 48, y: near.y }, -1, 12)
+  const last = kind === 'cut' && project.nodes.find(node => node.id === project.sequence?.at(-1))
+  if (last) return scan({ x: last.x + 300 + 72, y: last.y }, 1, Infinity)
+  if (!project.nodes.length) return { x: 40, y: 40 }
+  return scan({ x: Math.min(...taken.map(box => box.x)), y: Math.max(...taken.map(box => box.y + box.h)) + GAP }, 1, 12)
 }
 export function activePorts(mode) {
   return mode === 'REF2VA' ? ['ref_image', 'ref_video', 'ref_audio', 'refmod']
@@ -62,7 +118,7 @@ function renumber(project) {
   }
   for (const peers of groups.values()) peers.sort((a, b) => a.position - b.position || a.id.localeCompare(b.id)).forEach((edge, index) => { edge.position = index })
 }
-const editable = ['name', 'mode', 'prompt', 'soundscape', 'music', 'raw', 'seed', 'duration', 'frame_rate', 'profileId']
+const editable = ['name', 'mode', 'prompt', 'soundscape', 'music', 'raw', 'seed', 'duration', 'frame_rate', 'profileId', 'pickTakeId']
 function applyOne(project, op, aliases, uuid, actor) {
   const id = value => aliases.get(value) ?? value
   const type = op.op ?? op.type
@@ -70,14 +126,18 @@ function applyOne(project, op, aliases, uuid, actor) {
     const kind = type === 'import_launch' ? 'image' : type.startsWith('import_') ? type.slice(7) : op.kind
     if (!KINDS.includes(kind)) fail('지원하지 않는 노드 종류야.')
     if (op.tempId && (aliases.has(op.tempId) || project.nodes.some(node => node.id === op.tempId))) fail('tempId가 겹쳐.')
-    const at = op.at ?? { x: 40, y: 40 }
+    const at = op.at ?? freePosition(project, kind, op.target ? id(op.target.cut) : null)
     if (!Number.isFinite(at.x) || !Number.isFinite(at.y)) fail('좌표가 올바르지 않아.')
     const ref = kind === 'cut' ? null : normalizeRef(kind, op.ref)
     const data = { name: String(op.name ?? ref?.name ?? ref?.compositeHash ?? kind), ref }
-    if (kind === 'cut') Object.assign(data, { mode: 'T2VA', prompt: '', soundscape: '', music: '', raw: '', duration: 5, seed: op.seed === undefined ? 0 : op.seed, profileId: null })
-    if (kind === 'cut') validateData(data)
+    if (kind === 'cut') {
+      if (op.profileId != null && !project.profiles.some(profile => profile.id === op.profileId)) fail('생성 프로필이 없어.')
+      Object.assign(data, { mode: 'T2VA', prompt: '', soundscape: '', music: '', raw: '', duration: 5, seed: op.seed === undefined ? 0 : op.seed, profileId: op.profileId ?? null })
+      validateData(data)
+    }
     const node = { id: uuid(), kind, x: at.x, y: at.y, data, review: 'pending', memo: '' }
     project.nodes.push(node)
+    if (kind === 'cut') project.sequence.push(node.id)
     if (op.tempId) aliases.set(op.tempId, node.id)
     if (op.target) applyOne(project, { op: 'connect', from: node.id, to: id(op.target.cut), port: op.target.port, position: op.target.position, props: op.target.props }, aliases, uuid, actor)
     return { id: node.id, tempId: op.tempId }
@@ -121,6 +181,7 @@ function applyOne(project, op, aliases, uuid, actor) {
         if (!editable.includes(key)) fail(`바꿀 수 없는 필드야: ${key}`)
         if (node.kind !== 'cut' && key !== 'name') fail('컷 설정은 컷에서 바꿔줘.')
         if (['name', 'prompt', 'soundscape', 'music', 'raw'].includes(key) && typeof value !== 'string') fail('텍스트가 필요해.')
+        if (key === 'pickTakeId' && value !== null && !project.takes?.some(take => take.id === value && take.cutId === node.id)) fail('이 컷의 take를 골라줘.')
         node.data[key] = value
       }
       if (node.kind === 'cut') validateData(node.data)
@@ -137,8 +198,17 @@ function applyOne(project, op, aliases, uuid, actor) {
     nodeOf(project, id(op.id))
     project.nodes = project.nodes.filter(node => node.id !== id(op.id))
     project.edges = project.edges.filter(edge => edge.from !== id(op.id) && edge.to !== id(op.id))
+    project.sequence = project.sequence.filter(cutId => cutId !== id(op.id))
     renumber(project)
     return { id: id(op.id) }
+  }
+  if (type === 'sequence') {
+    const order = Array.isArray(op.order) ? op.order.map(id) : null
+    if (!order || new Set(order).size !== order.length) fail('컷 순서는 컷 ID 배열로 한 번씩 줘.')
+    for (const cutId of order) cutOf(project, cutId)
+    const listed = new Set(order)
+    project.sequence = [...order, ...project.sequence.filter(cutId => !listed.has(cutId))]
+    return { order: project.sequence }
   }
   if (type === 'review') {
     if (actor !== 'human') fail('검수는 사람이 화면에서 해줘. 어시스턴트 주장은 검수가 아니야.')
@@ -162,6 +232,7 @@ export function applyOps(project, ops, revision, uuid, actor = 'assistant') {
   expected(project, revision)
   if (!Array.isArray(ops)) fail('ops 배열이 필요해.')
   let next = copy(project)
+  next.sequence = sequenceOf(next)
   renumber(next)
   const applied = [], rejected = [], aliases = new Map()
   for (const op of ops) {
@@ -317,26 +388,88 @@ export function buildDirector(project, cut, assets = {}, overrides = {}) {
     assets: inputAssets, refmods,
   }
 }
-const profileKeys = ['id', 'label', 'workflowId', 'directorFieldId', 'seedFieldId', 'serverId', 'serverTag', 'overrides']
+const profileKeys = ['id', 'label', 'workflowId', 'directorFieldId', 'seedFieldId', 'serverId', 'serverTag', 'overrides', 'inputs']
 const profileData = profile => copy(Object.fromEntries(profileKeys.filter(key => profile[key] !== undefined).map(key => [key, profile[key]])))
 export function profilePublication(profile) {
   const value = profileData(profile)
-  return { ...value, overrides: JSON.stringify(value.overrides ?? {}) }
+  // Marked field IDs are workflow-chosen keys, published as text like the overrides.
+  return { ...value, overrides: JSON.stringify(value.overrides ?? {}), ...(value.inputs ? { inputs: JSON.stringify(value.inputs) } : {}) }
+}
+// Field rows come from get_workflow_details (json_path/seed_rule) or a stored workflow (jsonPath).
+const isDirectorField = field => field.type === 'node' && field.node_editor === 'minimax_h3_director_dasiwa'
+const isSeedField = field => field.type === 'number' && Boolean(field.seed_rule || /(?:^|\.)(?:seed|noise_seed)$/.test(field.json_path ?? field.jsonPath ?? ''))
+const simpleTypes = ['text', 'textarea', 'number', 'select']
+const cutKeys = ['mode', 'duration', 'media', 'assets', 'timeline_data', 'refmods', 'builder_state', 'prompt', 'simple_prompt']
+// A profile given as just a workflow takes the workflow name and its own Director and seed fields.
+export function completeProfile(profile, details) {
+  if (!record(profile)) fail('프로필 이름과 워크플로를 골라줘.')
+  const fields = details.input_schema ?? []
+  return { ...profile,
+    label: String(profile.label ?? '').trim() ? profile.label : details.name,
+    directorFieldId: profile.directorFieldId ?? fields.find(isDirectorField)?.id,
+    seedFieldId: profile.seedFieldId ?? fields.find(isSeedField)?.id }
+}
+function validateInputs(profile, fields) {
+  if (profile.inputs === undefined) return
+  if (!record(profile.inputs)) fail('inputs는 필드 ID별 값 객체로 써줘.')
+  for (const [key, value] of Object.entries(profile.inputs)) {
+    const field = fields.find(field => field.id === key)
+    if (!field || key === profile.directorFieldId || key === profile.seedFieldId || !simpleTypes.includes(field.type)) fail(`프로필에서 정할 수 없는 워크플로 입력이야: ${key}`)
+    const name = field.label || key
+    if (field.type === 'number') {
+      if (typeof value !== 'number' || !Number.isFinite(value)) fail(`${name}: 숫자가 필요해.`)
+      const min = field.minimum ?? field.min, max = field.maximum ?? field.max
+      if (min !== undefined && value < min || max !== undefined && value > max) fail(`${name}: ${min ?? ''}~${max ?? ''} 범위로 써줘.`)
+    } else if (typeof value !== 'string') fail(`${name}: 텍스트가 필요해.`)
+    else if (field.type === 'select' && Array.isArray(field.options) && !field.options.includes(value)) fail(`${name}: 목록에 있는 값을 골라줘.`)
+  }
 }
 export function validateProfile(profile, details) {
   if (!record(profile) || !String(profile.label ?? '').trim() || !Number.isInteger(profile.workflowId) || profile.workflowId < 1) fail('프로필 이름과 워크플로를 골라줘.')
   const fields = details.input_schema ?? []
-  if (!fields.some(field => field.id === profile.directorFieldId && field.type === 'node' && field.node_editor === 'minimax_h3_director_dasiwa')) fail('MiniMax H3 Director Marked Field를 골라줘.')
-  if (!fields.some(field => field.id === profile.seedFieldId && field.type === 'number' && (field.seed_rule || /(?:^|\.)(?:seed|noise_seed)$/.test(field.json_path ?? '')))) fail('워크플로 편집에서 숫자 시드를 Marked Field로 열어줘.')
+  if (!fields.some(field => field.id === profile.directorFieldId && isDirectorField(field))) fail('MiniMax H3 Director Marked Field를 골라줘.')
+  if (!fields.some(field => field.id === profile.seedFieldId && isSeedField(field))) fail('워크플로 편집에서 숫자 시드를 Marked Field로 열어줘.')
   if (profile.serverId && profile.serverTag) fail('서버 ID와 태그 중 하나만 골라줘.')
   if (profile.overrides !== undefined && !record(profile.overrides)) fail('overrides는 JSON 객체로 써줘.')
-  if (Object.keys(profile.overrides ?? {}).some(key => ['mode', 'duration', 'media', 'assets', 'timeline_data', 'refmods', 'builder_state', 'prompt', 'simple_prompt'].includes(key))) fail('프로필은 컷 입력을 덮어쓸 수 없어.')
+  if (Object.keys(profile.overrides ?? {}).some(key => cutKeys.includes(key))) fail('프로필은 컷 입력을 덮어쓸 수 없어.')
+  validateInputs(profile, fields)
   return profileData(profile)
+}
+const scalar = value => ['string', 'number', 'boolean'].includes(typeof value)
+const scalars = (value, skip = () => false) => Object.fromEntries(Object.entries(value).filter(([key, item]) => scalar(item) && !skip(key)))
+// Director values a profile may override, flat: scalar node values plus the timeline resolution block.
+function directorDefaults(field) {
+  const value = record(field?.default_value) ? field.default_value : {}, hidden = field?.node_hidden_controls ?? []
+  const defaults = scalars(value, key => key.startsWith('__') || hidden.includes(key) || cutKeys.includes(key) || ['prompt_mode', 'imd', 'soundscape', 'music', 'ref', 'postprocess', 'resolution'].includes(key))
+  let timeline = value.timeline_data
+  if (typeof timeline === 'string') try { timeline = JSON.parse(timeline) } catch { timeline = null }
+  if (record(timeline?.resolution)) defaults.resolution = scalars(timeline.resolution)
+  return defaults
+}
+// workflow: a GET /api/workflows row (marked_fields with defaults); details: its get_workflow_details, when fetched.
+export function workflowOption(workflow, details) {
+  const marked = workflow.marked_fields ?? [], fields = details?.input_schema ?? marked
+  const director = fields.find(isDirectorField), seed = fields.find(isSeedField)
+  const reason = !director && !seed ? 'Director 노드와 숫자 시드를 Marked Field로 열어줘.'
+    : !director ? 'MiniMax H3 Director 노드를 Marked Field로 열어줘.'
+      : !seed ? '워크플로 편집에서 숫자 시드를 Marked Field로 열어줘.'
+        : !workflow.is_active ? '꺼진 워크플로우야. ComfyUI 탭에서 켜줘.' : null
+  const defaultOf = id => marked.find(field => field.id === id)?.default_value
+  const extraFields = fields.filter(field => field !== director && field !== seed && simpleTypes.includes(field.type)).map(field => ({
+    id: field.id, label: field.label || field.id, type: field.type,
+    ...(Array.isArray(field.options) ? { options: field.options } : {}),
+    ...(field.minimum ?? field.min) !== undefined ? { min: field.minimum ?? field.min } : {},
+    ...(field.maximum ?? field.max) !== undefined ? { max: field.maximum ?? field.max } : {},
+    ...(defaultOf(field.id) !== undefined ? { default: defaultOf(field.id) } : {}),
+  }))
+  return { workflowId: workflow.id, name: workflow.name, usable: !reason, ...(reason ? { reason } : {}),
+    directorFieldId: director?.id ?? null, seedFieldId: seed?.id ?? null,
+    defaults: directorDefaults(director && marked.find(field => field.id === director.id)), extraFields }
 }
 export function generationRequest(profile, director, seed, takeId) {
   if (!Number.isInteger(seed) || seed < 0 || seed > 2147483647) fail('시드가 올바르지 않아.')
   return { service_type: 'comfyui', workflow_id: profile.workflowId,
-    inputs: { [profile.directorFieldId]: director, [profile.seedFieldId]: seed },
+    inputs: { ...copy(profile.inputs ?? {}), [profile.directorFieldId]: director, [profile.seedFieldId]: seed },
     ...(profile.serverId ? { server_id: profile.serverId } : {}), ...(profile.serverTag ? { server_tag: profile.serverTag } : {}),
     idempotency_key: `video-canvas-${takeId}` }
 }

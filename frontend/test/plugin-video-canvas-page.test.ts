@@ -19,6 +19,7 @@ type PageRequest =
   | { op: 'apply_ops'; ops: Record<string, unknown>[]; expected_revision: number }
   | { op: 'save_profile'; profile: Record<string, unknown>; expected_revision: number }
   | { op: 'run_cut'; expected_revision: number; mode?: string; input_digest?: string }
+  | { op: 'workflow_options' }
   | { op: 'check' | 'extract_frame' }
 const section = <T>(data: Record<string, unknown>, name: string) => (data[name] as { data: T }).data
 
@@ -41,6 +42,7 @@ test('video canvas publishes page-action outcomes when return values are discard
   const whenPublished = (matches: (snapshot: Snapshot) => boolean) => new Promise<void>(resolve => { snapshotWaiters.add({ matches, resolve }) })
   const api = {
     supports: () => false,
+    storage: { get: async () => ({ value: null }), set: async () => ({}) },
     events: { on(name: string, fn: (event: unknown) => void) { events.set(name, fn) } },
     publish(snapshot: Snapshot) {
       assert.ok(JSON.stringify(snapshot).length <= 200000)
@@ -55,6 +57,7 @@ test('video canvas publishes page-action outcomes when return values are discard
         const current = body.project_id === otherProject.id ? otherProject : project
         return body.full ? structuredClone(current) : publication.excerpt(current, body)
       }
+      if (body.op === 'workflow_options') return { workflows: [], servers: [], tags: [] }
       if (body.op === 'read_node') return nodeDetail(body.id)
       if (body.op === 'apply_ops') {
         const result = domain.applyOps(project, body.ops, body.expected_revision, randomUUID)
@@ -93,26 +96,39 @@ test('video canvas publishes page-action outcomes when return values are discard
     ...domain, ...publication, document: dom.window.document, window: dom.window, Event: dom.window.Event,
     CSS: { escape: (id: string) => id }, IntersectionObserver: Observer, ResizeObserver: Observer,
     requestAnimationFrame: (fn: () => void) => { fn(); return 0 }, crypto: { randomUUID },
-    AbortController, structuredClone, console,
+    AbortController, structuredClone, console, setTimeout, clearTimeout,
     connectPlugin: async (actions: Record<string, PageHandler>) => { Object.assign(handlers, actions); return api },
   })
-  // Package builds inject the SDK. Resolve that boundary in memory while executing the actual page module.
-  const source = fs.readFileSync(path.join(root, 'main.js'), 'utf8').split('\n').filter(line => !line.startsWith('import ')).join('\n')
-  await vm.runInContext(`(async () => { ${source}\n })()`, sandbox)
+  // Package builds inject the SDK and the browser resolves the page's ES modules. Resolve both in memory: each
+  // module becomes a function scope returning its exports, and main.js runs last with the SDK and domain as globals.
+  const modules = ['util', 'state', 'toast', 'menu', 'session', 'viewport', 'nodes', 'dialogs', 'workflow', 'actions', 'inspector', 'sequence', 'home', 'links', 'canvas', 'dispatch']
+  const link = (source: string) => source.split('\n').flatMap(line => {
+    const imported = /^import \{(.+)\} from '\.\/(\w+)\.mjs'$/.exec(line)
+    if (!imported) return line.startsWith('import ') ? [] : [line]
+    return modules.includes(imported[2]) ? [`const {${imported[1]}} = __m.${imported[2]};`] : []
+  }).join('\n')
+  const bundle = modules.map(name => {
+    const source = fs.readFileSync(path.join(root, `${name}.mjs`), 'utf8')
+    const exported = [...source.matchAll(/^export (?:async )?(?:function|const|let|class) (\w+|\$)/gm)].map(match => match[1])
+    return `__m.${name} = (() => {\n${link(source).replace(/^export /gm, '')}\nreturn { ${exported.join(', ')} }\n})()`
+  }).join('\n')
+  const source = link(fs.readFileSync(path.join(root, 'main.js'), 'utf8'))
+  await vm.runInContext(`(async () => { const __m = {};\n${bundle}\n${source}\n })()`, sandbox)
   const act = async (id: string, args: Record<string, unknown> = {}) => { await handlers[`video-canvas.${id}`](args, { signal: new AbortController().signal }); return snapshots.at(-1)!.data }
   let data = await act('read', {})
   assert.equal(section<{ nodes: { id: string }[] }>(data, 'lastRead').nodes[0].id, cut.id)
   data = await act('read_node', { id: cut.id })
   assert.equal(section<{ preview: { inputDigest: string } }>(data, 'lastNode').preview.inputDigest, '0'.repeat(63) + '1')
-  await act('select', { id: cut.id })
+  await act('select', { project_id: project.id, id: cut.id })
   const prompt = dom.window.document.querySelector<HTMLTextAreaElement>('[data-field="prompt"]')!
   prompt.value = '방금 편집한 장면'
   prompt.dispatchEvent(new dom.window.Event('change', { bubbles: true }))
-  dom.window.document.getElementById('generate')!.click()
-  dom.window.document.getElementById('generate')!.click()
+  const runButton = () => dom.window.document.querySelector<HTMLButtonElement>('.vc-node [data-action="run"]')!
+  runButton().click()
+  runButton().click()
   await started
   assert.equal(calls, 1)
-  assert.equal((dom.window.document.getElementById('generate') as HTMLButtonElement).disabled, true)
+  assert.equal(runButton().disabled, true)
   release(); await completed
   assert.equal(snapshots.at(-1)!.data.lastError, undefined, 'pending prompt edits must settle before reading the run revision')
   // The queued handler finishes its reload after publishing the result.
@@ -123,7 +139,7 @@ test('video canvas publishes page-action outcomes when return values are discard
   assert.equal(run.seed, 42)
   assert.equal(run.resolved.table[0].label, '<Picture 1>')
   await act('select', { id: cut.id })
-  dom.window.document.querySelector<HTMLButtonElement>('[data-tab="generate"]')!.click()
+  dom.window.document.getElementById('toggle-inspector')!.click() // the detail panel starts closed
   const seed = dom.window.document.querySelector<HTMLInputElement>('[data-field="seed"]')!
   seed.value = '43'
   seed.dispatchEvent(new dom.window.Event('change', { bubbles: true }))
