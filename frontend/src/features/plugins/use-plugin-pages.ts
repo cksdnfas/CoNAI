@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import type { LucideIcon } from 'lucide-react'
 import type { PluginHeaderNavigationKey } from '@conai/shared'
+import { hasAuthPermission } from '@/features/auth/auth-permissions'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { listPlugins, PLUGINS_QUERY_KEY } from '@/lib/api-plugins'
 import { pluginPageIcon } from './plugin-page-icon'
@@ -9,7 +10,7 @@ export type PluginPageLink = { id: PluginHeaderNavigationKey; to: string; title:
 
 function usePluginManifests() {
   const auth = useAuthStatusQuery()
-  const allowed = auth.data?.authenticated === true || auth.data?.hasCredentials === false
+  const allowed = auth.data?.hasCredentials === false || (auth.data?.authenticated === true && hasAuthPermission(auth.data.permissionKeys, 'page.extensions.view'))
   const plugins = useQuery({ queryKey: PLUGINS_QUERY_KEY, queryFn: listPlugins, enabled: allowed, staleTime: 30_000 })
   return allowed ? (plugins.data ?? []).filter((plugin) => plugin.enabled).map(({ manifest }) => manifest) : []
 }

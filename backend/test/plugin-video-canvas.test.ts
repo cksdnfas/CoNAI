@@ -715,7 +715,7 @@ test('video canvas workflow options detect Director/seed fields and a workflow-o
     assert.deepEqual(options.tags, ['fast', 'gpu'])
     const [director, image] = options.workflows
     assert.deepEqual({ usable: director.usable, directorFieldId: director.directorFieldId, seedFieldId: director.seedFieldId }, { usable: true, directorFieldId: 'director', seedFieldId: 'seed' })
-    assert.deepEqual(director.defaults, { width: 1280, height: 720, frame_rate: 24, model_name: 'h3.safetensors', resolution: { aspect: '16:9', resolution: '720p' } })
+    assert.deepEqual(director.defaults, { frame_rate: 24, resolution: { aspect: '16:9', resolution: '720p' } }, 'only what the Director editor shows: the resolution panel replaces raw width/height, other node inputs stay out')
     assert.deepEqual(director.extraFields, [{ id: 'steps', label: '스텝', type: 'number', min: 1, max: 50, default: 20 }])
     assert.equal(image.usable, false)
     assert.match(image.reason, /Director/)

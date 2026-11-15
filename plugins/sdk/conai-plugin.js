@@ -1,5 +1,22 @@
 /** CoNAI web extension SDK v1 for administrator-trusted app extensions. */
 
+/**
+ * A new result (a generation, an extracted frame, a joined video) is listed before the library has made its picture, so
+ * the first request for it can fail. A library picture that failed is asked for again for about a minute instead of
+ * staying broken until the page is reloaded; it is hidden meanwhile.
+ */
+if (typeof document !== 'undefined') {
+  document.addEventListener('error', event => {
+    const img = event.target, source = img.tagName === 'IMG' ? img.getAttribute('src') ?? '' : ''
+    const tries = Number(img.dataset?.conaiRetry ?? 0)
+    if (!source.startsWith('/api/images/') || tries >= 20) return
+    img.dataset.conaiRetry = tries + 1
+    img.style.visibility = 'hidden'
+    setTimeout(() => { if (img.isConnected && img.getAttribute('src') === source) img.src = `${source.split('?')[0]}?retry=${tries + 1}` }, 3000)
+  }, true)
+  document.addEventListener('load', event => { if (event.target.tagName === 'IMG' && event.target.dataset.conaiRetry) event.target.style.visibility = '' }, true)
+}
+
 /** The app's current colours and fonts as `--conai-*` variables for conai-plugin.css. Without a theme (older host) its dark defaults stay. */
 function applyTheme(theme) {
   if (!theme || typeof theme !== 'object') return

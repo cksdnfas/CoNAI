@@ -118,8 +118,15 @@ export function settingsHtml(cut) {
   const head = '<h2 class="conai-group-head">2 · 워크플로 설정</h2>'
   if (!profile) return `${head}<p class="conai-empty">워크플로를 먼저 골라줘.</p>`
   if (!s.wf) return `${head}<p class="muted">불러오는 중…</p>`
+  // The custom ratio and size inputs belong to the "custom" choices, as in the app's resolution panel.
+  const resolution = { ...wf?.defaults?.resolution, ...profile.overrides?.resolution }
+  const customSize = resolution.resolution === 'custom', fixed = resolution.custom_mode === 'fixed'
+  const hidden = [
+    ...(resolution.aspect === 'custom' ? [] : ['custom_aspect_w', 'custom_aspect_h']),
+    ...(customSize ? [] : ['custom_mode']), ...(customSize && !fixed ? [] : ['custom_mp']), ...(customSize && fixed ? [] : ['custom_width', 'custom_height']),
+  ].map(key => `resolution/${key}`)
   const fields = wf ? [
-    ...defaultFields(wf.defaults).map(field => {
+    ...defaultFields(wf.defaults).filter(field => !hidden.includes(field.key)).map(field => {
       const [key, sub] = field.key.split('/')
       const value = (sub ? profile.overrides?.[key]?.[sub] : profile.overrides?.[key]) ?? field.value
       return { id: `o:${field.key}`, label: field.label, kind: kindOf(typeof field.value), value, options: withCurrent(OPTIONS[field.key], value) }

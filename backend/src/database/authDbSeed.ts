@@ -81,6 +81,8 @@ export const PERMISSIONS_V2_SOURCES: Record<PermissionKey, readonly string[]> = 
   // New with web search: nothing to fold in.
   'chat.web.use': [],
   'chat.diagnostics.view': ['chat.diagnostics.view', 'chat.diagnostics.content'],
+  // Pages used to open for every signed-in account; plugins_view_v1 keeps that until an administrator turns it off.
+  'plugins.view': [],
   'auth.guest.create': ['auth.guest.create'],
 };
 
@@ -157,7 +159,20 @@ export function seedAccessControlDefaults(db: Database.Database): void {
     }
     db.prepare('INSERT INTO auth_seed_state(seed_key) VALUES (?)').run(key);
   })();
+  grantPluginsViewToGuestGroupOnce(db);
   applyAnonymousGuestSignupDefault(db);
+}
+
+/** Plugin pages were open to every signed-in account; the guest group (inherited by all accounts) keeps that once, later edits stay. */
+function grantPluginsViewToGuestGroupOnce(db: Database.Database): void {
+  db.transaction(() => {
+    const version = 'plugins_view_v1';
+    if (db.prepare('SELECT 1 FROM auth_seed_state WHERE seed_key = ?').get(version)) return;
+    db.prepare(`INSERT OR IGNORE INTO auth_group_permissions (group_id, permission_id, allowed)
+      SELECT g.id, p.id, 1 FROM auth_permission_groups g JOIN auth_permissions p ON p.permission_key = 'plugins.view'
+      WHERE g.group_key = 'guest'`).run();
+    db.prepare('INSERT INTO auth_seed_state (seed_key) VALUES (?)').run(version);
+  }).immediate();
 }
 
 /** Fold the old fine-grained keys into the catalog keys once per auth database. */

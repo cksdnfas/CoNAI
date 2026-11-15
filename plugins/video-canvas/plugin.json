@@ -2,7 +2,7 @@
   "apiVersion": 1,
   "id": "video-canvas",
   "name": "영상 캔버스",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "description": "앱의 이미지·영상·오디오·RefMod를 컷 입력 슬롯에 잇고, 워크플로만 고르면 되는 DaSiWa Director 프로필로 생성·검수·프레임 추출해. 여러 컷은 앞 컷의 마지막 프레임에서 이어 한 번에 생성하고, 컷 순서대로 대표 take를 한 영상으로 내보내. 프로젝트를 검색·보관·복제해.",
   "server": { "entry": "server.mjs" },
   "pages": [{

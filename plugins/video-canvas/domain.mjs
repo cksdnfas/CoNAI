@@ -444,10 +444,15 @@ const scalars = (value, skip = () => false) => Object.fromEntries(Object.entries
 // Director values a profile may override, flat: scalar node values plus the timeline resolution block.
 function directorDefaults(field) {
   const value = record(field?.default_value) ? field.default_value : {}, hidden = field?.node_hidden_controls ?? []
-  const defaults = scalars(value, key => key.startsWith('__') || hidden.includes(key) || cutKeys.includes(key) || ['prompt_mode', 'imd', 'soundscape', 'music', 'ref', 'postprocess', 'resolution'].includes(key))
+  // Same rule as the app's Director editor: only the settings the workflow opened (node_visible_fields, all by default).
+  // The resolution panel comes with the timeline and sets the canvas itself, so raw width/height show only without it.
+  const visible = field?.node_visible_fields ?? ['width', 'height', 'frame_rate', 'ref_image_size', 'timeline_data']
+  const panel = visible.includes('timeline_data') && !hidden.includes('resolution')
+  const open = ['frame_rate', 'ref_image_size', ...(panel ? [] : ['width', 'height'])].filter(key => visible.includes(key) && !hidden.includes(key))
+  const defaults = scalars(value, key => !open.includes(key))
   let timeline = value.timeline_data
   if (typeof timeline === 'string') try { timeline = JSON.parse(timeline) } catch { timeline = null }
-  if (record(timeline?.resolution)) defaults.resolution = scalars(timeline.resolution)
+  if (panel && record(timeline?.resolution)) defaults.resolution = scalars(timeline.resolution)
   return defaults
 }
 // workflow: a GET /api/workflows row (marked_fields with defaults); details: its get_workflow_details, when fetched.

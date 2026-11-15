@@ -36,10 +36,11 @@ export const PERMISSION_CATALOG = [
   { key: 'chat.agent.use', section: 'chat', label: { ko: '서버 에이전트 채팅 (Codex·Claude Code, 서버 계정 사용량 공유)', en: 'Server agent chat (Codex, Claude Code; shares server account usage)' }, description: 'Chat with profiles that run on the server Codex or Claude Code account.' },
   { key: 'chat.web.use', section: 'chat', label: { ko: '채팅 웹 검색 (Codex·Claude Code, 서버 계정 사용량 공유)', en: 'Chat web search (Codex, Claude Code; shares server account usage)' }, description: 'Let chat profiles search and read the web for you, when an administrator turned web search on.' },
   { key: 'chat.diagnostics.view', section: 'chat', label: { ko: '채팅 진단 보기', en: 'View chat diagnostics' }, description: 'Inspect how your own replies were composed.' },
+  { key: 'plugins.view', section: 'plugins', label: { ko: '플러그인 페이지 열기', en: 'Open plugin pages' }, description: 'Open the plugin list and installed plugin pages. What a plugin page does still follows the feature permissions the account holds.' },
   { key: 'auth.guest.create', section: 'account', anonymousOnly: true, anonymous: true, label: { ko: '게스트 가입', en: 'Guest signup' }, description: 'Create a guest account from the login page.' },
 ] as const satisfies ReadonlyArray<{
   key: string
-  section: 'images' | 'prompts' | 'characters' | 'generation' | 'files' | 'audio' | 'posts' | 'chat' | 'account' | 'settings'
+  section: 'images' | 'prompts' | 'characters' | 'generation' | 'files' | 'audio' | 'posts' | 'chat' | 'plugins' | 'account' | 'settings'
   label: { ko: string; en: string }
   description: string
   /** Visitors who are not signed in can use it. */
@@ -79,6 +80,7 @@ export const PAGE_PERMISSION_RULES = {
   'page.files.view': { all: ['files.view'] },
   'page.posts.view': { all: ['posts.view'] },
   'page.chat.view': { any: ['chat.use', 'chat.agent.use'] },
+  'page.extensions.view': { all: ['plugins.view'] },
   'page.settings.view': { admin: true },
 } as const satisfies Record<string, { all?: readonly PermissionKey[]; any?: readonly PermissionKey[]; admin?: true }>
 

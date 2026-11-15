@@ -23,6 +23,7 @@ const SECTION_LABELS: Record<CatalogSection, TranslationInput> = {
   audio: { ko: '오디오', en: 'Audio' },
   posts: { ko: '게시판', en: 'Posts' },
   chat: { ko: '채팅', en: 'Chat' },
+  plugins: { ko: '플러그인', en: 'Plugins' },
   account: { ko: '계정', en: 'Account' },
 }
 

@@ -46,7 +46,7 @@ test('trusted extensions preserve package, caller, explicit approval and externa
   const addAccount = (name: string) => Number(auth.prepare("INSERT INTO auth_accounts(username, password_hash, account_type) VALUES (?, 'unused', 'guest')").run(name).lastInsertRowid)
   const aliceId = addAccount('plugin-alice'), bobId = addAccount('plugin-bob')
   auth.prepare("INSERT INTO auth_accounts(username, password_hash, account_type) VALUES ('plugin-admin', 'unused', 'admin')").run()
-  const group = AuthPermissionGroup.createCustomGroup({ name: 'plugin-file-editors', permissionKeys: ['files.view', 'files.edit', 'images.view'] })
+  const group = AuthPermissionGroup.createCustomGroup({ name: 'plugin-file-editors', permissionKeys: ['files.view', 'files.edit', 'images.view', 'plugins.view'] })
   AuthPermissionGroup.addAccountMembership(group.id, aliceId)
   AuthPermissionGroup.addAccountMembership(group.id, bobId)
   invalidateConfiguredAuthCache()
@@ -183,7 +183,7 @@ test('trusted extensions preserve package, caller, explicit approval and externa
     const { subscribeToRuntimeEvents } = await import('../src/services/runtime-events/runtimeEventBus')
     const { resolveChatPageCommand } = await import('../src/services/codex-chat/chatPageBridge')
     const adminId = (auth.prepare("SELECT id FROM auth_accounts WHERE username='plugin-admin'").get() as {id:number}).id
-    const pageGroup = AuthPermissionGroup.createCustomGroup({ name: 'plugin-page-assistant', permissionKeys: ['files.view', 'files.edit'] })
+    const pageGroup = AuthPermissionGroup.createCustomGroup({ name: 'plugin-page-assistant', permissionKeys: ['files.view', 'files.edit', 'plugins.view'] })
     AuthPermissionGroup.addAccountMembership(pageGroup.id, adminId)
     const requester = { accountId: adminId, accountType: 'admin' as const }
     const page = shared.normalizeChatPageSnapshot({ instanceId: randomUUID(), connectionId: randomUUID(), path: '/ext/text-editor/editor', title: 'Text', kind: 'extension', resourceId: '1.0.0', fields: [], actions: instance.page.actions, revision: randomUUID(), dirty: true, data: {} })
