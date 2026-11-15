@@ -1,5 +1,5 @@
 import { excerpt, rejectedMessage, createRefreshQueue, projectRows, exportStates, chainStates } from './assistant-state.mjs'
-import { names, statusNames, isTerminal } from './util.mjs'
+import { names, statusNames, isTerminal, uuid } from './util.mjs'
 import { s, ctx, assistant, nodeById, DOCK_H } from './state.mjs'
 import { toast, notice, withBusy } from './toast.mjs'
 
@@ -175,7 +175,7 @@ export function launchRun(args = {}, op = 'run_cut') {
     if (args.origin === 'assistant') throw new Error('생성 요청을 처리 중이야. lastRun 상태를 먼저 읽어줘.')
     return Promise.resolve()
   }
-  const captured = { cut_id: s.selection, requestId: crypto.randomUUID(), ...args }
+  const captured = { cut_id: s.selection, requestId: uuid(), ...args }
   s.runBusy = true; lockRunButtons()
   const promise = task(async () => {
     const queued = { ...captured, expected_revision: captured.expected_revision ?? s.project.revision }

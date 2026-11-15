@@ -83,3 +83,5 @@ export function ago(value) {
   if (diff < 86400 * 30) return `${Math.floor(diff / 86400)}일 전`
   return new Date(time).toLocaleDateString('ko-KR')
 }
+/** A v4 UUID that also works on HTTP LAN origins, where crypto.randomUUID is missing. */
+export const uuid = () => typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : '10000000-1000-4000-8000-100000000000'.replace(/[018]/g, digit => (digit ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> digit / 4).toString(16))

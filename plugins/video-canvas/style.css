@@ -177,9 +177,9 @@ img.vc-big { display: block; max-width: 100%; max-height: 70vh; margin: 0 auto }
 .vc-tray-item .toolbar { flex-wrap: nowrap }
 
 /* sequence dock: 212px by default (154px at least), head 40px; collapsed it is the head only */
-.vc-sequence { --vc-th: calc(var(--vc-dock-h) - 100px); position: relative; display: flex; flex: none; flex-direction: column; height: var(--vc-dock-h); border-top: 1px solid var(--conai-line); background: var(--conai-background); container-type: inline-size }
+.vc-sequence { --vc-th: calc(var(--vc-dock-h) - 66px); position: relative; display: flex; flex: none; flex-direction: column; height: var(--vc-dock-h); border-top: 1px solid var(--conai-line); background: var(--conai-background); container-type: inline-size }
 .vc-sequence.collapsed { height: 40px }
-.vc-sequence.collapsed .vc-seq-list { display: none }
+.vc-sequence.collapsed .vc-seq-row { display: none }
 .vc-seq-resize { position: absolute; z-index: 3; top: -3px; right: 0; left: 0; height: 6px; cursor: ns-resize }
 .vc-seq-resize:hover, .vc-seq-resize:focus-visible { outline: 0; background: color-mix(in srgb, var(--conai-primary) 45%, transparent) }
 .vc-sequence.collapsed .vc-seq-resize { pointer-events: none }
@@ -204,20 +204,24 @@ img.vc-big { display: block; max-width: 100%; max-height: 70vh; margin: 0 auto }
   #seq-time, .vc-long { display: none }
   .vc-short { display: inline }
 }
-.vc-seq-list { display: flex; flex: 1; align-items: flex-start; min-height: 0; padding: 10px 12px 0; overflow-x: auto; overflow-y: hidden; scrollbar-width: thin }
+.vc-seq-row { display: flex; flex: 1; min-height: 0 }
+.vc-seq-list { display: flex; flex: 1; align-items: flex-start; min-width: 0; min-height: 0; padding: 10px 12px 0; overflow-x: auto; overflow-y: hidden; scrollbar-width: thin }
 .vc-seq-item { position: relative; flex: none; width: calc(var(--vc-th) * 16 / 9); cursor: grab }
 .vc-seq-item > .conai-media { width: 100%; height: var(--vc-th) }
 .vc-seq-none { position: absolute; inset: 0; display: grid; place-items: center; color: var(--conai-muted-foreground); font-size: 12px }
 .vc-seq-progress { position: absolute; bottom: 0; left: 0; display: none; width: 0; height: 3px; background: var(--conai-primary) }
 .vc-seq-item[data-playing] .vc-seq-progress, .vc-seq-export .vc-seq-progress { display: block }
-.vc-seq-item[data-current] .conai-media-title { color: var(--conai-primary) }
+.vc-seq-item[data-current] > .conai-media { box-shadow: inset 0 0 0 2px var(--conai-primary) }
 .vc-seq-item.drop-before::before, .vc-seq-item.drop-after::after { content: ""; position: absolute; z-index: 2; top: 0; bottom: 0; width: 3px; background: var(--conai-primary) }
 .vc-seq-item.drop-before::before { left: -9px }
 .vc-seq-item.drop-after::after { right: -9px }
 .vc-seq-join { flex: none; width: 16px; min-height: 0; height: var(--vc-th); padding: 0; border-radius: 0; background: transparent; color: var(--conai-muted-foreground); opacity: .45 }
 .vc-seq-join:hover:not(:disabled) { background: var(--conai-fill); opacity: 1 }
 .vc-seq-join.chained { color: var(--vc-video); opacity: 1 }
-.vc-seq-export { position: sticky; right: 0; z-index: 2; flex: none; width: calc(var(--vc-th) * 16 / 9 + 13px); margin-left: auto; padding-left: 12px; border-left: 1px solid var(--conai-line); background: var(--conai-background) }
+.vc-seq-side { flex: none; padding: 10px 12px 0; border-left: 1px solid var(--conai-line) }
+.vc-seq-side:empty { display: none }
+.vc-seq-export { position: relative; width: min(calc(var(--vc-th) * 16 / 9), 32cqw) }
+.vc-export-cancel { position: absolute; right: 6px; bottom: 8px }
 .vc-seq-export .conai-media-card { width: 100% }
 .vc-export-media { width: 100%; height: var(--vc-th) }
 .vc-export-text { position: absolute; inset: 0; display: grid; place-items: center; padding: 8px; font-size: 12px; text-align: center; overflow-wrap: anywhere }

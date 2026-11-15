@@ -55,10 +55,12 @@ export function connectPlugin(handlers = {}) {
         publish(snapshot) { if (closed) return; queued = snapshot; if (!timer) flush() },
         onSaved(listener) { saved.add(listener); return () => saved.delete(listener) },
       }
+      // crypto.randomUUID exists only on secure origins; a LAN address over HTTP has getRandomValues alone.
+      const uuid = () => typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : '10000000-1000-4000-8000-100000000000'.replace(/[018]/g, digit => (digit ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> digit / 4).toString(16))
       api.app = {
         tools: (query = {}, options) => api.request('app.tools', query, options),
-        call: (tool, args = {}, requestId = crypto.randomUUID(), options) => api.request('app.call', { tool, arguments: args, requestId }, options),
-        run: (action, args = {}, requestId = crypto.randomUUID(), options) => api.request('app.action', { action, arguments: args, requestId }, options),
+        call: (tool, args = {}, requestId = uuid(), options) => api.request('app.call', { tool, arguments: args, requestId }, options),
+        run: (action, args = {}, requestId = uuid(), options) => api.request('app.action', { action, arguments: args, requestId }, options),
         getRequest: (requestId, options) => api.request('app.getRequest', { requestId }, options),
         cancel: (requestId, options) => api.request('app.cancel', { requestId }, options),
         /** Native JSON, multipart and streaming responses; exactly the native route's permission/revision rules. Never automatically retries. */

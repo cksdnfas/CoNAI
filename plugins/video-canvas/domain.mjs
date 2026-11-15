@@ -178,6 +178,7 @@ function applyOne(project, op, aliases, uuid, actor) {
     } else {
       const node = nodeOf(project, id(op.id))
       for (const [key, value] of Object.entries(op.fields ?? {})) {
+        if (['ref', 'refmods', 'builder_state', 'timeline_data', 'assets', 'media'].includes(key)) fail(`${key}는 set으로 넣을 수 없어. 소재와 RefMod는 노드로 가져와 컷 슬롯에 이어줘: RefMod는 컷 mode를 REF2VA로 두고 import_bundle {ref:{name}, target:{cut, port:"refmod"}}.`)
         if (!editable.includes(key)) fail(`바꿀 수 없는 필드야: ${key}`)
         if (node.kind !== 'cut' && key !== 'name') fail('컷 설정은 컷에서 바꿔줘.')
         if (['name', 'prompt', 'soundscape', 'music', 'raw'].includes(key) && typeof value !== 'string') fail('텍스트가 필요해.')
@@ -315,6 +316,9 @@ export function resolvePrompt(project, cut) {
     return rows.map(row => row.label).join(' / ') + part.slice(name.length)
   }).join('')
   const fields = { prompt: resolve(cut.data.raw || cut.data.prompt), soundscape: resolve(cut.data.soundscape), music: resolve(cut.data.music) }
+  // A typed <RefMod N> without a bundle in that slot reaches the Director as a tag with no reference and fails there.
+  const slots = new Set(table.filter(row => row.type === 'bundle').map(row => row.slot))
+  for (const [, slot] of Object.values(fields).join('\n').matchAll(/<RefMod (\d+)>/g)) if (!slots.has(Number(slot))) errors.push(`<RefMod ${slot}>에 연결된 RefMod가 없어. REF2VA 컷의 RefMod 슬롯에 번들을 이어줘.`)
   for (const edge of cutEdges(project, cut)) if (!['start', 'end'].includes(edge.port) && !used.has(edge.id)) warnings.push(`쓰지 않은 참조야: @${nodeOf(project, edge.from).data.name}`)
   return { ...fields, table, errors: [...new Set(errors)], warnings }
 }
@@ -431,7 +435,7 @@ export function validateProfile(profile, details) {
   if (!fields.some(field => field.id === profile.seedFieldId && isSeedField(field))) fail('워크플로 편집에서 숫자 시드를 Marked Field로 열어줘.')
   if (profile.serverId && profile.serverTag) fail('서버 ID와 태그 중 하나만 골라줘.')
   if (profile.overrides !== undefined && !record(profile.overrides)) fail('overrides는 JSON 객체로 써줘.')
-  if (Object.keys(profile.overrides ?? {}).some(key => cutKeys.includes(key))) fail('프로필은 컷 입력을 덮어쓸 수 없어.')
+  if (Object.keys(profile.overrides ?? {}).some(key => cutKeys.includes(key))) fail('프로필은 컷 입력을 덮어쓸 수 없어. 소재와 RefMod는 컷 슬롯에 이어줘.')
   validateInputs(profile, fields)
   return profileData(profile)
 }

@@ -52,7 +52,7 @@ function cardState(cut) {
   return null
 }
 const stepNames = { pending: '대기', skipped: '건너뜀', extracting: '프레임 뽑는 중', generating: '생성 중', completed: '완료', failed: '실패', cancelled: '취소됨' }
-// ---- strip: one row of cards, a joint between neighbours, the last export sticky at the right ----
+// ---- strip: one row of cards, a joint between neighbours, the last export in its own column at the right ----
 const sameList = (a, b) => a.length === b.length && a.every((id, index) => id === b[index])
 function jointHtml(cut, link) {
   return link
@@ -63,7 +63,7 @@ function itemHtml(cut, index, order, links, length) {
   const take = repTake(cut), badge = cardState(cut), step = stepOf(cut), chain = activeChain()
   const before = order[index - 1]?.id, back = links.find(link => link.target.id === cut.id && link.edge.port === 'start' && link.source.id !== before)
   const lengthTitle = step?.error ?? (length.real ? '실제 길이' : '예상 길이(결과가 아직 없어)')
-  return `<button class="conai-media-card vc-seq-item" draggable="true" data-seq="${esc(cut.id)}" ${chain?.current === cut.id ? 'data-current' : ''}${step?.error ? ` title="${esc(step.error)}"` : ''}><span class="conai-media">${take ? `<img src="${thumbUrl(take.resultHash)}" alt="" loading="lazy">` : '<span class="vc-seq-none">생성 전</span>'}<span class="conai-overlay-badge tl">${index + 1}</span>${badge ? `<span class="conai-overlay-badge br ${badge[1]}">${esc(badge[0])}</span>` : ''}${back ? `<span class="conai-overlay-badge xs bl" title="시작 프레임: ${esc(back.source.data.name)}">↩ ${order.findIndex(item => item.id === back.source.id) + 1}</span>` : ''}<i class="vc-seq-progress"></i></span><span class="conai-media-body"><span class="conai-media-title" title="${esc(cut.data.name)}">${esc(cut.data.name)}</span><span class="conai-media-meta" title="${esc(lengthTitle)}">${length.real ? '' : '~'}${secs(length.value)}</span></span></button>`
+  return `<button class="conai-media-card vc-seq-item" draggable="true" data-seq="${esc(cut.id)}" ${chain?.current === cut.id ? 'data-current' : ''} title="${esc(`${cut.data.name}${step?.error ? ` · ${step.error}` : ''}`)}" aria-label="${esc(cut.data.name)}"><span class="conai-media">${take ? `<img src="${thumbUrl(take.resultHash)}" alt="" loading="lazy">` : '<span class="vc-seq-none">생성 전</span>'}<span class="conai-overlay-badge tl">${index + 1}</span><span class="conai-overlay-badge xs tr" title="${esc(lengthTitle)}">${length.real ? '' : '~'}${secs(length.value)}</span>${badge ? `<span class="conai-overlay-badge br ${badge[1]}">${esc(badge[0])}</span>` : ''}${back ? `<span class="conai-overlay-badge xs bl" title="시작 프레임: ${esc(back.source.data.name)}">↩ ${order.findIndex(item => item.id === back.source.id) + 1}</span>` : ''}<i class="vc-seq-progress"></i></span></button>`
 }
 function exportHtml(order, chain) {
   const item = (s.project?.exports ?? []).at(-1)
@@ -73,12 +73,12 @@ function exportHtml(order, chain) {
   const length = durations.get(item.resultHash) ?? (Number(item.duration) || 0)
   if (!isTerminal(item.status)) {
     const value = fraction(item.progress), text = `합본 만드는 중${value === null ? '' : ` ${Math.round(value * 100)}%`}`
-    return `<div class="vc-seq-export" data-export-card><span class="conai-media vc-export-media"><span class="vc-export-text" title="${esc(statusNames[item.status] ?? item.status)} ${esc(progressText(item.progress))}">${esc(text)}</span><i class="vc-seq-progress" style="width:${Math.round((value ?? 0) * 100)}%"></i></span><span class="conai-media-body"><span class="toolbar"><button class="sm" data-action="export-cancel" data-export="${esc(item.id)}">취소</button></span></span></div>`
+    return `<div class="vc-seq-export" data-export-card><span class="conai-media vc-export-media"><span class="vc-export-text" title="${esc(statusNames[item.status] ?? item.status)} ${esc(progressText(item.progress))}">${esc(text)}</span><button class="sm vc-export-cancel" data-action="export-cancel" data-export="${esc(item.id)}">취소</button><i class="vc-seq-progress" style="width:${Math.round((value ?? 0) * 100)}%"></i></span></div>`
   }
   if (item.status === 'completed' && item.resultHash) {
-    return `<div class="vc-seq-export" data-export-card ${stale ? 'data-stale' : ''}><button class="conai-media-card" data-action="export-play" data-export="${esc(item.id)}" title="여기서 재생" aria-label="합본 재생"><span class="conai-media vc-export-media"><img src="${thumbUrl(item.resultHash)}" alt="" loading="lazy"></span><span class="conai-media-body"><span class="conai-media-title">${stale ? '이전 합본' : '합본'}${length ? ` · ${secs(length)}` : ''}</span></span></button><button class="conai-icon-button sm overlay vc-export-open" data-action="open-detail" data-hash="${esc(item.resultHash)}" aria-label="상세에서 열기" title="상세에서 열기">${icon('maximize', 14)}</button></div>`
+    return `<div class="vc-seq-export" data-export-card ${stale ? 'data-stale' : ''}><button class="conai-media-card" data-action="export-play" data-export="${esc(item.id)}" title="여기서 재생" aria-label="합본 재생"><span class="conai-media vc-export-media"><img src="${thumbUrl(item.resultHash)}" alt="" loading="lazy"><span class="conai-overlay-badge xs tl">${stale ? '이전 합본' : '합본'}${length ? ` · ${secs(length)}` : ''}</span></span></button><button class="conai-icon-button sm overlay vc-export-open" data-action="open-detail" data-hash="${esc(item.resultHash)}" aria-label="상세에서 열기" title="상세에서 열기">${icon('maximize', 14)}</button></div>`
   }
-  return `<div class="vc-seq-export" data-export-card ${stale ? 'data-stale' : ''}><span class="conai-media vc-export-media"><span class="vc-export-text error" title="${esc(item.error ?? '')}">${esc(statusNames[item.status] ?? item.status)}${item.error ? ` · ${esc(item.error)}` : ''}</span></span><span class="conai-media-body"><span class="conai-media-title">${stale ? '이전 합본' : '합본'}</span></span></div>`
+  return `<div class="vc-seq-export" data-export-card ${stale ? 'data-stale' : ''}><span class="conai-media vc-export-media"><span class="vc-export-text error" title="${esc(item.error ?? '')}">${esc(statusNames[item.status] ?? item.status)}${item.error ? ` · ${esc(item.error)}` : ''}</span><span class="conai-overlay-badge xs tl">${stale ? '이전 합본' : '합본'}</span></span></div>`
 }
 const scrubHtml = (order, lengths) => order.map((cut, index) => `<button class="vc-scrub-seg" data-scrub="${esc(cut.id)}" style="flex-grow:${lengths[index].value || 1}" title="${esc(cut.data.name)}" ${repTake(cut) ? '' : 'disabled'}><i></i></button>`).join('')
 // The running chain takes the place of the 이어 생성 button: finished steps out of all, the cut being worked on and its step, cancel.
@@ -101,7 +101,8 @@ export function renderSequence() {
   const lengths = order.map(lengthOf), links = allLinks(true)
   $('seq-total').textContent = order.length ? `${order.length}컷 · ${lengths.every(length => length.real) ? '' : '~'}${secs(lengths.reduce((sum, length) => sum + length.value, 0))}` : ''
   patch($('seq-scrub'), scrubHtml(order, lengths))
-  patch($('seq-list'), order.map((cut, index) => (index ? jointHtml(cut, links.find(link => link.target.id === cut.id && ['start', 'end'].includes(link.edge.port) && link.source.id === order[index - 1].id)) : '') + itemHtml(cut, index, order, links, lengths[index])).join('') + exportHtml(order, chain))
+  patch($('seq-list'), order.map((cut, index) => (index ? jointHtml(cut, links.find(link => link.target.id === cut.id && ['start', 'end'].includes(link.edge.port) && link.source.id === order[index - 1].id)) : '') + itemHtml(cut, index, order, links, lengths[index])).join(''))
+  patch($('seq-export'), exportHtml(order, chain))
   patch($('seq-chain-state'), chainHtml(chain))
   $('seq-chain-state').hidden = !chain
   $('seq-chain').hidden = Boolean(chain)
