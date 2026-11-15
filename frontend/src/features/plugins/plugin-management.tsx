@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { ExternalLink, FileText, GitBranch, Puzzle, RefreshCw, ServerCog, TriangleAlert, Upload, Webhook, Wrench } from 'lucide-react'
+import { ExternalLink, FileText, GitBranch, PackageCheck, Puzzle, RefreshCw, ServerCog, TriangleAlert, Upload, Webhook, Wrench } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { EmptyState } from '@/components/ui/empty-state'
 import type { InstalledPlugin, PluginInstallResult, PluginServerStatus, PluginSourceProvider } from '@conai/shared'
@@ -54,7 +54,7 @@ export function PluginManagement({ assistantPage, pageContext }: { assistantPage
     catch (reason) { setError(getErrorMessage(reason, t({ ko: '플러그인 작업에 실패했어.', en: 'Plugin operation failed.' }))) }
     finally { setBusy(false); if (fileInput.current) fileInput.current.value = '' }
   }
-  // Official packages follow the app build at startup; one that could not be applied is listed here with a retry.
+  // Official packages follow the app build at startup; an admin can also apply them on demand, and one that could not be applied is listed here.
   const bundled = useQuery({ queryKey: BUNDLED_PLUGINS_QUERY_KEY, queryFn: getBundledPluginStatus, enabled: isAdmin })
   const bundledFailures = bundled.data?.failures ?? []
   const retryBundled = () => run(async () => {
@@ -64,7 +64,9 @@ export function PluginManagement({ assistantPage, pageContext }: { assistantPage
       tone: status.failures.length ? 'error' : 'info',
       message: status.failures.length
         ? t({ ko: '공식 플러그인 {count}개를 아직 적용하지 못했어.', en: '{count} official plugins still could not be applied.' }, { count: status.failures.length })
-        : t({ ko: '공식 플러그인을 적용했어.', en: 'Official plugins applied.' }),
+        : status.updated?.length
+          ? t({ ko: '공식 플러그인 {count}개를 업데이트했어. 열려 있는 플러그인 화면은 다시 열어줘.', en: 'Updated {count} official plugins. Reopen any plugin page that is open.' }, { count: status.updated.length })
+          : t({ ko: '공식 플러그인이 이미 최신이야.', en: 'Official plugins are already up to date.' }),
     })
   })
   const setEnabled = (plugin: InstalledPlugin, enabled: boolean) => run(async () => {
@@ -156,7 +158,7 @@ export function PluginManagement({ assistantPage, pageContext }: { assistantPage
         pluginId: pageText(48), repository: pageText(2000), provider: pageChoice(['github', 'gitlab', 'gitea']), ref: pageText(200), folder: pageText(200),
       })),
       ...(sourceInstall.input && sourceInstall.review ? [pageAction('plugin_source.install', t({ ko: '검토한 패키지 적용', en: 'Apply reviewed package' }), 'Install exactly the displayed Git package review. A new package stays disabled; an enabled update restarts its code.', undefined, 'save')] : []),
-      ...(bundledFailures.length ? [pageAction('plugin_bundled.sync', t({ ko: '공식 플러그인 다시 적용', en: 'Reapply official plugins' }), 'Retry applying the official plugins listed in bundledFailures. Only packages whose build differs from the installed one are replaced.', undefined, 'save')] : []),
+      ...(isAdmin ? [pageAction('plugin_bundled.sync', t({ ko: '공식 플러그인 업데이트', en: 'Update official plugins' }), 'Apply the official plugins that ship with the app now, including those listed in bundledFailures. Only packages whose build differs from the installed one are replaced.', undefined, 'save')] : []),
       ...assistantPage?.actions ?? [],
     ],
     applyAction: async (id, args) => {
@@ -207,6 +209,7 @@ export function PluginManagement({ assistantPage, pageContext }: { assistantPage
             }} />
             <IconButton size="icon-sm" variant="ghost" disabled={busy} label={t({ ko: '패키지 설치 (.zip)', en: 'Install package (.zip)' })} onClick={() => fileInput.current?.click()}><Upload /></IconButton>
             <IconButton size="icon-sm" variant="ghost" disabled={busy || sourceInstall.busy} label={t({ ko: 'Git에서 설치', en: 'Install from Git' })} onClick={() => sourceInstall.open()}><GitBranch /></IconButton>
+            <IconButton size="icon-sm" variant="ghost" disabled={busy} label={t({ ko: '공식 플러그인 업데이트', en: 'Update official plugins' })} onClick={() => void retryBundled()}><PackageCheck /></IconButton>
             {linked.length ? <IconButton size="icon-sm" variant="ghost" disabled={busy || sourceInstall.busy} label={t({ ko: '업데이트 확인', en: 'Check for updates' })} onClick={() => void checkSources().catch(() => undefined)}><RefreshCw /></IconButton> : null}
           </>
         ) : undefined}

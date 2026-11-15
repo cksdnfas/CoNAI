@@ -100,7 +100,8 @@ export type InstalledPlugin = {
 }
 /** An official package the startup sync could not install or update; `pluginId` is null when its manifest did not read. */
 export type BundledPluginFailure = { file: string; pluginId: string | null; error: string }
-export type BundledPluginStatus = { failures: BundledPluginFailure[] }
+/** `updated`: the ids a sync on demand installed or replaced. */
+export type BundledPluginStatus = { failures: BundledPluginFailure[]; updated?: string[] }
 /** What installing from Git would change. Reviewing installs nothing; apply `reviewId` with `digest` before `expiresAt`. */
 export type PluginSourceReview = {
   reviewId: string; expiresAt: number

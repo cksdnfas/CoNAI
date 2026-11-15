@@ -97,9 +97,10 @@ router.get('/', (req, res) => {
 })
 /** Official packages: what the startup sync could not apply, and a retry of that sync (it only touches packages whose build differs). */
 router.get('/bundled', requireAdmin, (_req, res) => { res.json({ success: true, data: { failures: bundledPluginFailures() } }) })
+// On demand the same sync also answers which packages it installed or replaced.
 router.post('/bundled/sync', requireAdmin, asyncHandler(async (_req, res) => {
-  await syncBundledPlugins()
-  res.json({ success: true, data: { failures: bundledPluginFailures() } })
+  const updated = await syncBundledPlugins()
+  res.json({ success: true, data: { failures: bundledPluginFailures(), updated } })
 }))
 router.post('/install', requireAdmin, multer({ storage: multer.memoryStorage(), limits: { fileSize: PLUGIN_ZIP_LIMIT, files: 1, fields: 0 } }).single('package'), asyncHandler(async (req, res) => {
   if (!req.file) { res.status(400).json({ error: 'ZIP 패키지를 선택해줘.' }); return }
