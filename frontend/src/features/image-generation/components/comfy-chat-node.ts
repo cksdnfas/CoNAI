@@ -7,7 +7,8 @@ import { describeSnapRefSimplePicture, readSnapRefSimpleSlots, writeSnapRefSimpl
 import { buildMiniMaxH3DirectorNodeValue, isMiniMaxH3DirectorInputLink, normalizeMiniMaxH3DirectorBuilderState, normalizeMiniMaxH3DirectorNodeValue, parseMiniMaxH3DirectorTimeline, validateMiniMaxH3DirectorNodeValue, MINIMAX_H3_DIRECTOR_MODES, MINIMAX_H3_DIRECTOR_ASPECT_OPTIONS, MINIMAX_H3_DIRECTOR_INPUT_SCALING_OPTIONS, MINIMAX_H3_DIRECTOR_RESOLUTION_PRESETS, MINIMAX_H3_DIRECTOR_VISIBLE_FIELDS, type MiniMaxH3DirectorTimeline } from './minimax-h3-director-dasiwa-utils'
 
 const resolution = pageObject({ aspect: pageChoice(MINIMAX_H3_DIRECTOR_ASPECT_OPTIONS.map(([key]) => key)), resolution: pageChoice(['auto', 'custom', ...Object.keys(MINIMAX_H3_DIRECTOR_RESOLUTION_PRESETS)]), input_scaling: pageChoice([...MINIMAX_H3_DIRECTOR_INPUT_SCALING_OPTIONS]), custom_aspect_w: pageNumber(1, 10000), custom_aspect_h: pageNumber(1, 10000), custom_mode: pageChoice(['mp', 'fixed']), custom_mp: pageNumber(0.01, 64), custom_width: pageNumber(16, 8192, true), custom_height: pageNumber(16, 8192, true) })
-const prompt = pageObject({ mode: pageChoice(['simple', 'structured']), simple_prompt: pageText(), imd: pageText(), soundscape: pageText(), music: pageText(), subject_definitions: pageText(), summary: pageText(), retention_analysis: pageText(), detailed_description: pageText() })
+// The whole prompt is one text; section headings (`summary:` …) are written inside it.
+const prompt = pageObject({ simple_prompt: pageText() })
 const postprocess = pageObject({ simple: pageObject({ enabled: { type: 'boolean' } }), model: pageObject({ enabled: { type: 'boolean' }, model_name: pageText(300) }), rtx: pageObject({ enabled: { type: 'boolean' }, denoise: { type: 'boolean' }, denoise_quality: pageChoice(['Low', 'Medium', 'High', 'Ultra']), deblur: { type: 'boolean' }, deblur_quality: pageChoice(['Low', 'Medium', 'High', 'Ultra']), upscale: pageChoice(['Off', 'VSR', 'High Bitrate']), upscale_quality: pageChoice(['Low', 'Medium', 'High', 'Ultra']), resize_type: pageChoice(['Keep Ratio', 'Manual', 'Preset Ratio', 'Same Size', 'Scale']), scale: pageNumber(1, 4), megapixels: pageNumber(0.01, 64) }) })
 const timelineItems = pageArray(pageObject({ id: pageText(100), enabled: { type: 'boolean' }, slot: pageNumber(0, 8, true), start: pageNumber(0, 60), duration: pageNumber(0.1, 60), trim_start: pageNumber(0, 3600), trim_end: pageNumber(0, 3600), prompt: pageText(), remove: { type: 'boolean' } }, ['id']), 32)
 // Merged by slot; `remove` drops that slot. Rows are consumed only in REF2VA.
@@ -74,7 +75,7 @@ export function comfyNodeChatData(field: WorkflowMarkedField, value: unknown, co
   const { timeline } = parseMiniMaxH3DirectorTimeline(node.timeline_data)
   const builder = normalizeMiniMaxH3DirectorBuilderState(node.builder_state, timeline, typeof node.mode === 'string' ? node.mode : 'FL2VA', typeof node.duration === 'number' ? node.duration : 5, typeof node.prompt === 'string' ? node.prompt : '')
   return copyChatPageData({ ...base, mode: node.mode, width: node.width, height: node.height, duration: node.duration, frame_rate: node.frame_rate, ref_image_size: node.ref_image_size,
-    prompt: { mode: builder.prompt_mode, simple_prompt: builder.simple_prompt, imd: builder.imd, soundscape: builder.soundscape, music: builder.music, subject_definitions: builder.ref.subject_definitions, summary: builder.ref.summary, retention_analysis: builder.ref.retention_analysis, detailed_description: builder.ref.detailed_description }, resolution: timeline.resolution ?? {}, postprocess: timeline.postprocess ?? {}, refmods: describeRefModRows(timeline.refmods ?? [], context.refModLibrary),
+    prompt: { simple_prompt: builder.simple_prompt }, resolution: timeline.resolution ?? {}, postprocess: timeline.postprocess ?? {}, refmods: describeRefModRows(timeline.refmods ?? [], context.refModLibrary),
     timelineItems: timeline.items.map((item) => ({ id: item.id, type: item.type, name: /^(?:data:|blob:|https?:)/i.test(item.value) ? item.type : item.value.split(/[\\/]/).pop() ?? '', enabled: item.enabled, slot: item.slot, start: item.start, duration: item.duration })), promptBlocks: timeline.prompt_blocks.map((item) => ({ id: item.id, text: item.text, enabled: item.enabled, start: item.start, duration: item.duration })), issues: validateMiniMaxH3DirectorNodeValue(node, { refModExportOnly: context.refModExportOnly }).map((issue) => issue.ko),
     ...(context.refModExportOnly ? { refModExportOnly: true } : {}) })
 }
@@ -149,8 +150,7 @@ export function applyComfyChatNode(field: WorkflowMarkedField, value: unknown, i
   let builder = normalizeMiniMaxH3DirectorBuilderState(node.builder_state, timeline, (basic.mode ?? node.mode) as typeof MINIMAX_H3_DIRECTOR_MODES[number], Number(basic.duration ?? node.duration), typeof node.prompt === 'string' ? node.prompt : '')
   if (patch.prompt) {
     const p = pageRecord(patch.prompt)
-    const refs = Object.fromEntries(Object.entries(p).filter(([key]) => ['subject_definitions', 'summary', 'retention_analysis', 'detailed_description', 'soundscape', 'music'].includes(key)))
-    builder = { ...builder, ...p, prompt_mode: (p.mode ?? builder.prompt_mode) as 'simple' | 'structured', mode: (basic.mode ?? builder.mode) as typeof builder.mode, ref: { ...builder.ref, ...refs } } as typeof builder
+    if (typeof p.simple_prompt === 'string') builder = { ...builder, simple_prompt: p.simple_prompt }
   }
   const updatesTimeline = ['resolution', 'postprocess', 'refmods', 'timelineItems', 'promptBlocks'].some((key) => patch[key] !== undefined)
   const built = buildMiniMaxH3DirectorNodeValue(node, basic, updatesTimeline ? timeline : undefined, undefined, builder)

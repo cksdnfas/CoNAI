@@ -64,15 +64,7 @@ const PORT_SPECS: MiniMaxDirectorPortSpec[] = [
   { inputKey: 'reference_image', label: '참조 이미지', dataType: 'image', visibleField: 'timeline_data', activeModes: ['REF2VA'], multiple: true },
   { inputKey: 'reference_video', label: '참조 영상', dataType: 'video', visibleField: 'timeline_data', activeModes: ['REF2VA'], multiple: true },
   { inputKey: 'reference_audio', label: '참조 오디오', dataType: 'audio', visibleField: 'timeline_data', activeModes: ['REF2VA'], multiple: true },
-  { inputKey: 'prompt.mode', label: '프롬프트 모드', dataType: 'text', visibleField: 'prompt' },
-  { inputKey: 'prompt.simple_prompt', label: '간단 프롬프트', dataType: 'prompt', visibleField: 'prompt' },
-  { inputKey: 'prompt.imd', label: '통합 설명', dataType: 'prompt', visibleField: 'prompt', activeModes: ['T2VA', 'I2VA', 'FL2VA', 'L2VA', 'Image Inpaint'] },
-  { inputKey: 'prompt.subject_definitions', label: '주체 정의', dataType: 'prompt', visibleField: 'prompt', activeModes: ['REF2VA'] },
-  { inputKey: 'prompt.summary', label: '요약', dataType: 'prompt', visibleField: 'prompt', activeModes: ['REF2VA'] },
-  { inputKey: 'prompt.retention_analysis', label: '보존 분석', dataType: 'prompt', visibleField: 'prompt', activeModes: ['REF2VA'] },
-  { inputKey: 'prompt.detailed_description', label: '상세 설명', dataType: 'prompt', visibleField: 'prompt', activeModes: ['REF2VA'] },
-  { inputKey: 'prompt.soundscape', label: '사운드스케이프', dataType: 'prompt', visibleField: 'prompt' },
-  { inputKey: 'prompt.music', label: '음악', dataType: 'prompt', visibleField: 'prompt' },
+  { inputKey: 'prompt.simple_prompt', label: '프롬프트', dataType: 'prompt', visibleField: 'prompt' },
 ]
 
 const DEFAULT_VISIBLE_FIELDS = new Set(['mode', 'width', 'height', 'duration', 'frame_rate', 'ref_image_size', 'timeline_data', 'prompt'])
@@ -357,18 +349,14 @@ export function applyMiniMaxDirectorPortInputs(
       if (binding.input_key.startsWith('prompt.')) {
         const promptKey = binding.input_key.slice('prompt.'.length)
         const promptValue = String(Array.isArray(connectedValue) ? connectedValue[0] ?? '' : connectedValue)
-        if (promptKey === 'mode') {
-          if (promptValue === 'simple' || promptValue === 'structured') builder.prompt_mode = promptValue
-        } else if (promptKey === 'simple_prompt') {
-          builder.simple_prompt = promptValue
-        } else if (promptKey === 'imd') {
-          builder.imd = promptValue
-        } else if (promptKey === 'soundscape' || promptKey === 'music') {
-          if (mode === 'REF2VA') refBuilder[promptKey] = promptValue
-          else builder[promptKey] = promptValue
-        } else {
-          refBuilder[promptKey] = promptValue
+        // Modules saved before the single prompt field still carry per-section ports. Their text has no
+        // place in one prompt, so a connection fails here instead of being dropped without notice.
+        if (promptKey !== 'simple_prompt') {
+          throw new Error(`"${port.label}" 포트는 더 이상 쓰지 않아. 프롬프트는 한 칸으로 합쳐졌으니 "프롬프트" 포트에 다시 연결해줘.`)
         }
+        // A connected prompt replaces whatever the node stored, including older per-section fields.
+        builder.prompt_mode = 'simple'
+        builder.simple_prompt = promptValue
         continue
       }
 

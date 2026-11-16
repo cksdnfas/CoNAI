@@ -952,7 +952,6 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
           items={activeItems}
           invalid={invalidFields.has('prompt')}
           onChange={updateBuilderState}
-          onStatus={setStatus}
           renderInputPort={renderInputPort}
         />
       ) : null}

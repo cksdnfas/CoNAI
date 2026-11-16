@@ -189,7 +189,7 @@ function renumber(project) {
   }
   for (const peers of groups.values()) peers.sort((a, b) => a.position - b.position || a.id.localeCompare(b.id)).forEach((edge, index) => { edge.position = index })
 }
-const editable = ['name', 'mode', 'prompt', 'soundscape', 'music', 'raw', 'seed', 'duration', 'frame_rate', 'profileId', 'pickTakeId']
+const editable = ['name', 'mode', 'prompt', 'raw', 'seed', 'duration', 'frame_rate', 'profileId', 'pickTakeId']
 const genEditable = ['name', 'prompt', 'seed', 'profileId', 'pickTakeId', 'inputs', 'size']
 // Keys each edit operation reads (besides op/type); any other key is refused instead of silently dropped.
 const OP_KEYS = {
@@ -223,7 +223,7 @@ function applyOne(project, op, aliases, uuid, actor) {
       if (op.profileId != null) profileFor(project, kind, op.profileId)
       const seed = op.seed === undefined ? 0 : op.seed, profileId = op.profileId ?? null
       if (kind === 'cut') {
-        Object.assign(data, { mode: 'T2VA', prompt: '', soundscape: '', music: '', raw: '', duration: 5, seed, profileId })
+        Object.assign(data, { mode: 'T2VA', prompt: '', raw: '', duration: 5, seed, profileId })
         validateData(data)
       } else {
         Object.assign(data, { prompt: '', seed, profileId, inputs: {} })
@@ -289,7 +289,7 @@ function applyOne(project, op, aliases, uuid, actor) {
           fail(node.kind === 'gen' ? `${key}는 컷 전용 필드야. 생성 노드에는 ${genEditable.join('·')}만 정할 수 있어.` : node.kind === 'cut' ? `${key}는 생성 노드 전용 필드야. 컷에는 ${editable.join('·')}만 정할 수 있어.`
             : editable.includes(key) ? '컷 설정은 컷에서 바꿔줘.' : '생성 노드 필드는 생성 노드에서 바꿔줘.')
         }
-        if (['name', 'prompt', 'soundscape', 'music', 'raw'].includes(key) && typeof value !== 'string') fail('텍스트가 필요해.')
+        if (['name', 'prompt', 'raw'].includes(key) && typeof value !== 'string') fail('텍스트가 필요해.')
         if (key === 'pickTakeId' && value !== null && !project.takes?.some(take => take.id === value && take.cutId === node.id)) fail(node.kind === 'gen' ? '이 생성 노드의 take를 골라줘.' : '이 컷의 take를 골라줘.')
         if (key === 'profileId' && value !== null) profileFor(project, node.kind, value)
         node.data[key] = copy(value)
@@ -425,12 +425,13 @@ export function resolvePrompt(project, cut) {
     rows.forEach(row => used.add(row.edgeId))
     return rows.map(row => row.label).join(' / ') + part.slice(name.length)
   }).join('')
-  const fields = { prompt: resolve(cut.data.raw || cut.data.prompt), soundscape: resolve(cut.data.soundscape), music: resolve(cut.data.music) }
+  // The Director takes one prompt text; sound and music are written inside it (overall_soundscape:, non_diegetic_music:).
+  const prompt = resolve(cut.data.raw || cut.data.prompt)
   // A typed <RefMod N> without a bundle in that slot reaches the Director as a tag with no reference and fails there.
   const slots = new Set(table.filter(row => row.type === 'bundle').map(row => row.slot))
-  for (const [, slot] of Object.values(fields).join('\n').matchAll(/<RefMod (\d+)>/g)) if (!slots.has(Number(slot))) errors.push(`<RefMod ${slot}>에 연결된 RefMod가 없어. REF2VA 컷의 RefMod 슬롯에 번들을 이어줘.`)
+  for (const [, slot] of prompt.matchAll(/<RefMod (\d+)>/g)) if (!slots.has(Number(slot))) errors.push(`<RefMod ${slot}>에 연결된 RefMod가 없어. REF2VA 컷의 RefMod 슬롯에 번들을 이어줘.`)
   for (const edge of cutEdges(project, cut)) if (!['start', 'end'].includes(edge.port) && !used.has(edge.id)) warnings.push(`쓰지 않은 참조야: @${nodeOf(project, edge.from).data.name}`)
-  return { ...fields, table, errors: [...new Set(errors)], warnings }
+  return { prompt, table, errors: [...new Set(errors)], warnings }
 }
 // Source defects shared by cut slots and generation inputs; a generation node feeds only a result withResults found.
 function sourceIssues(project, edge, kind, assets, add) {
@@ -560,11 +561,11 @@ export function buildDirector(project, cut, assets = {}, overrides = {}) {
     slot: edge.props.slot ?? edge.position + 1, name: nodeOf(project, edge.from).data.ref.name,
     enabled: true, strength: edge.props.strength ?? 1, description: edge.props.description ?? '',
   }))
-  const builder = { version: cut.data.mode === 'REF2VA' ? 2 : 1, mode: cut.data.mode, duration: cut.data.duration, prompt_mode: 'simple', simple_prompt: resolved.prompt, soundscape: resolved.soundscape, music: resolved.music }
+  const builder = { version: cut.data.mode === 'REF2VA' ? 2 : 1, mode: cut.data.mode, duration: cut.data.duration, prompt_mode: 'simple', simple_prompt: resolved.prompt }
   return {
     ...copy(overrides), mode: cut.data.mode, duration: cut.data.duration,
     ...(cut.data.frame_rate !== undefined ? { frame_rate: cut.data.frame_rate } : {}),
-    prompt_mode: 'simple', simple_prompt: resolved.prompt, soundscape: resolved.soundscape, music: resolved.music,
+    prompt_mode: 'simple', simple_prompt: resolved.prompt,
     prompt: resolved.prompt, builder_state: JSON.stringify(builder),
     timeline_data: JSON.stringify({ version: 1, items, prompt_blocks: [], refmods, builder_state: builder }),
     assets: inputAssets, refmods,

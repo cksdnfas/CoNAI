@@ -3,6 +3,8 @@
 // Row shape mirrors ComfyUI-DaSiWa-Nodes `timeline_data.refmods`; library
 // entries mirror its `GET /dasiwa/refmods` response.
 
+import { readMiniMaxH3DirectorPromptText } from '../utils/minimaxDirectorPrompt'
+
 export const MINIMAX_H3_REFMOD_MAX_SLOTS = 8
 export const MINIMAX_H3_REFMOD_CONCEPT_TYPES = ['generic', 'identity', 'style', 'motion', 'audio'] as const
 export const MINIMAX_H3_REFMOD_KINDS = ['image', 'video', 'audio'] as const
@@ -157,6 +159,50 @@ export function getActiveMiniMaxH3RefModRows(rows: MiniMaxH3RefModRow[]): MiniMa
   return rows
     .filter((row) => row.enabled && row.name.length > 0 && row.strength > 0)
     .sort((left, right) => left.slot - right.slot)
+}
+
+// Same pattern as the DaSiWa Director's `REFMOD_ALIAS`.
+const REFMOD_ALIAS = /<\s*refmod\s*_?\s*(\d+)(?:\s*:[^>]+)?\s*>/gi
+
+function collectRefModAliasSlots(value: unknown, slots: Set<number>): void {
+  if (typeof value === 'string') {
+    for (const match of value.matchAll(REFMOD_ALIAS)) slots.add(Number(match[1]))
+  } else if (Array.isArray(value)) {
+    for (const item of value) collectRefModAliasSlots(item, slots)
+  } else if (isRecord(value)) {
+    for (const item of Object.values(value)) collectRefModAliasSlots(item, slots)
+  }
+}
+
+/**
+ * Slots written as `<RefMod N>` that the Director cannot resolve and would reject at run time.
+ * The prompt is read as it will be sent (the collapsed builder text); RefMods load only in REF2VA.
+ */
+export function findUnresolvedMiniMaxH3RefModSlots(input: {
+  mode: string
+  prompt: unknown
+  /** Parsed `builder_state`. */
+  builder: unknown
+  /** `timeline_data.continuity`. */
+  continuity: unknown
+  refmods: MiniMaxH3RefModRow[]
+}): number[] {
+  const continuity = isRecord(input.continuity) ? input.continuity : null
+  const continuing = continuity?.operation === 'continue'
+  const active = input.mode === 'REF2VA' && (!continuing || Boolean(continuity?.use_references))
+    ? getActiveMiniMaxH3RefModRows(input.refmods)
+    : []
+  const used = new Set<number>()
+  collectRefModAliasSlots(active.map((row) => row.description), used)
+  if (continuing) {
+    collectRefModAliasSlots([continuity?.continuation_prompt, continuity?.idea], used)
+  } else {
+    // A builder that never stored its own text adopts the node prompt, so that is what gets sent.
+    const text = isRecord(input.builder) ? readMiniMaxH3DirectorPromptText(input.builder, input.mode) : ''
+    collectRefModAliasSlots(text || (isRecord(input.builder) && typeof input.builder.simple_prompt === 'string' ? '' : input.prompt), used)
+  }
+  const activeSlots = new Set(active.map((row) => row.slot))
+  return [...used].filter((slot) => !activeSlots.has(slot)).sort((left, right) => left - right)
 }
 
 /** Lowest unused slot number, or null when all eight are taken. */

@@ -1,3 +1,4 @@
+import { buildMiniMaxH3DirectorSectionedPrompt } from '@conai/shared'
 import type { WorkflowInputAssetRef } from '@/lib/api-workflow-input-assets'
 import {
   buildMiniMaxH3DirectorNodeValue, createMiniMaxH3DirectorBuilderState, createMiniMaxH3DirectorItemId,
@@ -88,10 +89,7 @@ export function buildMiniMaxDirectorPack(value: Record<string, unknown>, scope: 
   if (scope !== 'files') {
     const timeline = parseMiniMaxH3DirectorTimeline(node.timeline_data).timeline
     const builder = normalizeMiniMaxH3DirectorBuilderState(node.builder_state, timeline, node.mode, Number(node.duration), node.prompt)
-    const fields = node.mode === 'REF2VA' ? builder.ref : builder
-    const keys = node.mode === 'REF2VA' ? PROMPT_KEYS.filter((key) => key !== 'imd') : ['imd', 'soundscape', 'music'] as const
-    pack.prompt = builder.prompt_mode === 'simple' ? { prompt_mode: 'simple', simple_prompt: builder.simple_prompt }
-      : { prompt_mode: 'structured', fields: Object.fromEntries(keys.map((key) => [key, String(fields[key] ?? '')])) }
+    pack.prompt = { prompt_mode: 'simple', simple_prompt: builder.simple_prompt }
   }
   return pack
 }
@@ -141,17 +139,18 @@ export function applyMiniMaxDirectorPack(value: Record<string, unknown>, pack: M
   if (wantsPrompt && pack.prompt) {
     if (!append) builder = createMiniMaxH3DirectorBuilderState(pack.model_mode, Number(node.duration))
     const join = (current: string, incoming: string) => append ? [current.trim(), incoming.trim()].filter(Boolean).join('\n\n') : incoming
-    builder.prompt_mode = pack.prompt.prompt_mode
-    if (pack.prompt.prompt_mode === 'simple') builder.simple_prompt = join(builder.simple_prompt, pack.prompt.simple_prompt ?? '')
-    else {
-      for (const [key, text] of Object.entries(pack.prompt.fields ?? {})) {
-        const target = pack.model_mode === 'REF2VA' ? builder.ref : builder
-        target[key] = join(String(target[key] ?? ''), text)
-      }
+    let incoming = pack.prompt.simple_prompt ?? ''
+    if (pack.prompt.prompt_mode === 'structured') {
+      // Packs saved by the former per-section editor become headed text.
+      const blank = createMiniMaxH3DirectorBuilderState(pack.model_mode, Number(node.duration))
+      const fields = pack.prompt.fields ?? {}
+      incoming = buildMiniMaxH3DirectorSectionedPrompt(pack.model_mode === 'REF2VA' ? { ...blank, ref: { ...blank.ref, ...fields } } : { ...blank, ...fields })
     }
+    builder.simple_prompt = join(builder.simple_prompt, incoming)
   }
   const result = buildMiniMaxH3DirectorNodeValue(value, { mode: pack.model_mode }, { ...timeline, items }, assets, builder)
-  const issues = validateMiniMaxH3DirectorNodeValue(result).filter((issue) => issue.code !== 'selected-model-connection')
+  // A pack carries no RefMod rows, so its <RefMod N> tags are resolved after import, in the editor.
+  const issues = validateMiniMaxH3DirectorNodeValue(result).filter((issue) => issue.code !== 'selected-model-connection' && !issue.code.startsWith('refmod-unresolved-tag-'))
   if (issues.length) throw new Error(issues[0].en)
   return result
 }

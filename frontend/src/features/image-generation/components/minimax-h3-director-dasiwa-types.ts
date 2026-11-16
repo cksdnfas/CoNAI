@@ -74,15 +74,7 @@ export type MiniMaxH3DirectorGraphInputKey =
   | 'postprocess.model.model_name'
   | 'postprocess.rtx.enabled'
   | `postprocess.rtx.${string}`
-  | 'prompt.mode'
   | 'prompt.simple_prompt'
-  | 'prompt.imd'
-  | 'prompt.subject_definitions'
-  | 'prompt.summary'
-  | 'prompt.retention_analysis'
-  | 'prompt.detailed_description'
-  | 'prompt.soundscape'
-  | 'prompt.music'
 export const MINIMAX_H3_DIRECTOR_VISIBLE_FIELDS = [
   'mode',
   'width',

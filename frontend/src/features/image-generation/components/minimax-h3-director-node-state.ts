@@ -3,7 +3,6 @@ import type { WorkflowNodeNumericBounds } from '@/lib/api-image-generation-types
 import type { WorkflowInputAssetRef } from '@/lib/api-workflow-input-assets'
 import {
   buildMiniMaxH3DirectorNodeValue,
-  buildMiniMaxH3DirectorPrompt,
   getMiniMaxH3DirectorAssets,
   isMiniMaxH3DirectorInputLink,
   MINIMAX_H3_DIRECTOR_MODES,
@@ -14,7 +13,6 @@ import {
   parseMiniMaxH3DirectorTimeline,
   type MiniMaxH3DirectorBuilderState,
   type MiniMaxH3DirectorMode,
-  type MiniMaxH3DirectorPromptMode,
   type MiniMaxH3DirectorTimeline,
   type MiniMaxH3DirectorTimelineItem,
 } from './minimax-h3-director-dasiwa-utils'
@@ -158,17 +156,4 @@ export function changeMiniMaxH3DirectorMode(state: MiniMaxH3DirectorState, numer
     state.assets,
     { ...state.builderState, mode: nextMode, version: nextMode === 'REF2VA' ? 2 : 1 },
   )
-}
-
-/** Builder state after switching prompt mode; going to simple keeps the structured text as the simple prompt. */
-export function setMiniMaxH3DirectorPromptMode(state: MiniMaxH3DirectorBuilderState, nextPromptMode: MiniMaxH3DirectorPromptMode): MiniMaxH3DirectorBuilderState {
-  if (nextPromptMode === state.prompt_mode) return state
-  if (nextPromptMode === 'simple') {
-    return {
-      ...state,
-      prompt_mode: 'simple',
-      simple_prompt: buildMiniMaxH3DirectorPrompt({ ...state, prompt_mode: 'structured' }),
-    }
-  }
-  return { ...state, prompt_mode: 'structured' }
 }

@@ -13,7 +13,7 @@ import {
   type MiniMaxH3DirectorRtxSettings,
   type MiniMaxH3DirectorTimeline,
 } from '@/features/image-generation/components/minimax-h3-director-dasiwa-utils'
-import { setMiniMaxH3DirectorPromptMode, type MiniMaxH3DirectorState } from '@/features/image-generation/components/minimax-h3-director-node-state'
+import type { MiniMaxH3DirectorState } from '@/features/image-generation/components/minimax-h3-director-node-state'
 import type { WorkflowNodeNumericBounds } from '@/lib/api-image-generation-types'
 import type { useI18n } from '@/i18n'
 
@@ -77,9 +77,6 @@ const RTX_SELECTS: Partial<Record<keyof MiniMaxH3DirectorRtxSettings, readonly s
 }
 
 const RTX_BOOLEANS = new Set<keyof MiniMaxH3DirectorRtxSettings>(['enabled', 'denoise', 'deblur', 'empty_cache', 'use_mmap', 'auto_unload_models'])
-
-const PROMPT_KEYS = new Set(['simple_prompt', 'imd', 'soundscape', 'music'])
-const REF_PROMPT_KEYS = new Set(['subject_definitions', 'summary', 'retention_analysis', 'detailed_description'])
 
 /** The same choices and limits the panel editor offers for this key, read from and written back to one Director value. */
 export function getDirectorWidgetSpec(
@@ -159,13 +156,8 @@ export function getDirectorWidgetSpec(
       return { kind: 'boolean', value: postprocess.model.enabled, write: (enabled) => withPostprocess(state, { ...postprocess, model: { ...postprocess.model, enabled } }) }
     case 'postprocess.model.model_name':
       return { kind: 'text', value: postprocess.model.model_name, write: (model_name) => withPostprocess(state, { ...postprocess, model: { ...postprocess.model, model_name } }) }
-    case 'prompt.mode':
-      return {
-        kind: 'select',
-        value: builderState.prompt_mode,
-        options: [{ value: 'simple', label: t({ ko: '간단', en: 'Simple' }) }, { value: 'structured', label: t({ ko: '구조화', en: 'Structured' }) }],
-        write: (mode) => ({ builder: setMiniMaxH3DirectorPromptMode(builderState, mode === 'simple' ? 'simple' : 'structured') }),
-      }
+    case 'prompt.simple_prompt':
+      return { kind: 'prompt', value: builderState.simple_prompt }
     case 'start_image':
     case 'end_image':
     case 'reference_image':
@@ -191,15 +183,6 @@ export function getDirectorWidgetSpec(
       return { kind: 'number', value: numberValue(postprocess.rtx[key]), min, max, step, write: (value) => withRtx(state, { [key]: key === 'device_id' ? Math.trunc(value) : value }) }
     }
     return null
-  }
-
-  if (inputKey.startsWith('prompt.')) {
-    const key = inputKey.slice('prompt.'.length)
-    // REF2VA's structured builder keeps its own soundscape and music under `ref`, like the panel shows them.
-    const fromRef = REF_PROMPT_KEYS.has(key)
-      || (builderState.mode === 'REF2VA' && builderState.prompt_mode !== 'simple' && (key === 'soundscape' || key === 'music'))
-    if (fromRef) return { kind: 'prompt', value: String(builderState.ref[key] ?? '') }
-    if (PROMPT_KEYS.has(key)) return { kind: 'prompt', value: String(builderState[key] ?? '') }
   }
   return null
 }

@@ -1,4 +1,7 @@
 import {
+  buildMiniMaxH3DirectorSectionedPrompt,
+  collapseMiniMaxH3DirectorPrompt,
+  findUnresolvedMiniMaxH3RefModSlots,
   normalizeMiniMaxH3RefModRows,
   resolveMiniMaxDirectorCanvas,
   validateMiniMaxH3RefModRows,
@@ -201,7 +204,7 @@ export function createMiniMaxH3DirectorBuilderState(
     version: mode === 'REF2VA' ? 2 : 1,
     mode,
     duration,
-    prompt_mode: 'structured',
+    prompt_mode: 'simple',
     simple_prompt: '',
     imd: '',
     soundscape: '',
@@ -273,24 +276,13 @@ export const DEFAULT_MINIMAX_H3_DIRECTOR_POSTPROCESS: MiniMaxH3DirectorPostproce
 }
 
 export function hasMiniMaxH3DirectorBuilderContent(state: MiniMaxH3DirectorBuilderState) {
-  if (state.simple_prompt.trim().length > 0) return true
-  if (state.mode === 'REF2VA') {
-    return [
-      state.ref.subject_definitions,
-      state.ref.summary,
-      state.ref.retention_analysis,
-      state.ref.detailed_description,
-      state.ref.soundscape,
-      state.ref.music,
-    ].some((value) => value.trim().length > 0)
-  }
-  return [state.imd, state.soundscape, state.music]
-    .some((value) => value.trim().length > 0)
+  return state.simple_prompt.trim().length > 0
 }
 
 /**
  * Read builder state using the node input first, then the timeline copy, then a
- * lossless legacy-prompt conversion. Unknown future keys are retained.
+ * lossless legacy-prompt conversion. Unknown future keys are retained. The prompt
+ * always comes back as one `simple_prompt`; older per-section fields are folded into it.
  */
 export function normalizeMiniMaxH3DirectorBuilderState(
   value: unknown,
@@ -359,60 +351,34 @@ export function normalizeMiniMaxH3DirectorBuilderState(
       .join('\n')
   }
 
+  const collapsed = collapseMiniMaxH3DirectorPrompt(normalized)
+  // A stored `simple_prompt`, even an empty one, is the user's text; only a builder that never had one adopts the node prompt.
+  if (typeof source.simple_prompt === 'string' || hasMiniMaxH3DirectorBuilderContent(collapsed)) return collapsed
   const legacy = buildLegacyPrompt(legacyPrompt, timeline)
-  if (legacy && !hasMiniMaxH3DirectorBuilderContent(normalized)) {
-    normalized.prompt_mode = 'simple'
-    normalized.simple_prompt = legacy
-  }
-  return normalized
+  return legacy ? { ...collapsed, simple_prompt: legacy } : collapsed
 }
 
-function alignMiniMaxFrameCount(frameCount: number) {
-  let aligned = Math.max(5, Math.trunc(frameCount))
-  while (aligned % 17 !== 5) aligned += 1
-  return aligned
-}
-
-function formatMiniMaxAlignedSeconds(duration: number) {
-  const seconds = alignMiniMaxFrameCount(Math.trunc(duration * 24)) / 24
-  return (Math.round(seconds * 100) / 100).toFixed(2)
-}
-
-/** Build the same canonical prompt text as DaSiWa's Python prompt helper. */
+/** The prompt text sent to the Director. */
 export function buildMiniMaxH3DirectorPrompt(state: MiniMaxH3DirectorBuilderState) {
-  if (state.prompt_mode === 'simple') {
-    return state.simple_prompt.trim()
-  }
+  return state.simple_prompt.trim()
+}
 
-  if (state.mode === 'REF2VA') {
-    return [
-      `subject_definitions:\n${state.ref.subject_definitions.trim()}`,
-      `summary:\n${state.ref.summary.trim()}`,
-      `retention_analysis:\n${state.ref.retention_analysis.trim()}`,
-      `detailed_description:\n${state.ref.detailed_description.trim()}`,
-      `overall_soundscape:\n${state.ref.soundscape.trim()}`,
-      `non_diegetic_music:\n${state.ref.music.trim() || 'N/A'}`,
-    ].join('\n\n')
-  }
-
-  const end = formatMiniMaxAlignedSeconds(state.duration)
-  const alignment = state.mode === 'I2VA'
-    ? 'For the target video, at 0.00 seconds into the target video, <Picture 1> (from [Shot 1]) is fully referenced.'
-    : state.mode === 'FL2VA'
-      ? `How the reference pictures align with the target video — Picture 1 (from Shot 1) aligns with the 0.00-second mark of the target video; Picture 2 (from Shot 2) aligns with the ${end}-second mark of the target video.`
-      : state.mode === 'L2VA'
-        ? `How the reference pictures align with the target video — <Picture 1> (from [Shot 1]) aligns with the ${end}-second mark of the target video.`
-        : ''
-  const body = [
-    `integrated_multimodal_description: ${state.imd.trim()}`,
-    `overall_soundscape: ${state.soundscape.trim()}`,
-    `non_diegetic_music: ${state.music.trim() || 'N/A'}`,
-  ].join('\n\n')
-  return alignment ? `${alignment}\n\n${body}` : body
+/**
+ * The section headings DaSiWa's "Insert Prompt Structure" inserts for this mode. In REF2VA the
+ * labels and summary are prefilled from the references the Director will actually consume.
+ */
+export function buildMiniMaxH3DirectorPromptTemplate(
+  state: MiniMaxH3DirectorBuilderState,
+  items: MiniMaxH3DirectorTimelineItem[],
+) {
+  const blank = createMiniMaxH3DirectorBuilderState(state.mode, state.duration)
+  return buildMiniMaxH3DirectorSectionedPrompt(
+    state.mode === 'REF2VA' && items.some((item) => item.enabled !== false) ? prefillMiniMaxH3DirectorRefBuilder(blank, items) : blank,
+  )
 }
 
 /** Prefill REF2VA labels from the actual streams that the Director will consume. */
-export function prefillMiniMaxH3DirectorRefBuilder(
+function prefillMiniMaxH3DirectorRefBuilder(
   state: MiniMaxH3DirectorBuilderState,
   items: MiniMaxH3DirectorTimelineItem[],
 ): MiniMaxH3DirectorBuilderState {
@@ -760,12 +726,30 @@ export function validateMiniMaxH3DirectorNodeValue(value: unknown, options: Mini
 
   if (staticMode && !isMiniMaxH3DirectorInputLink(nodeValue.builder_state)) {
     const builderRaw = nodeValue.builder_state.trim()
+    let builder: unknown = parsedTimeline.timeline.builder_state
     if (builderRaw) {
       try {
-        if (!isRecord(JSON.parse(builderRaw))) throw new Error('builder_state must contain an object')
+        builder = JSON.parse(builderRaw)
+        if (!isRecord(builder)) throw new Error('builder_state must contain an object')
       } catch {
+        builder = null
         issues.push({ code: 'builder-json', field: 'prompt', ko: '프롬프트 빌더 데이터가 올바른 JSON이 아니야.', en: 'Prompt builder data is not valid JSON.' })
       }
+    }
+    const unresolvedRefModSlots = findUnresolvedMiniMaxH3RefModSlots({
+      mode: staticMode,
+      prompt: nodeValue.prompt,
+      builder,
+      continuity: parsedTimeline.timeline.continuity,
+      refmods: parsedTimeline.timeline.refmods ?? [],
+    })
+    for (const slot of unresolvedRefModSlots) {
+      issues.push({
+        code: `refmod-unresolved-tag-${slot}`,
+        field: 'prompt',
+        ko: `프롬프트에 <RefMod ${slot}> 태그가 있는데 활성 RefMod ${slot}이 없어. RefMod를 고르거나 태그를 지워줘.`,
+        en: `The prompt uses <RefMod ${slot}> but no active RefMod is in slot ${slot}. Select one or remove the tag.`,
+      })
     }
   }
 

@@ -81,6 +81,20 @@ export class ComfyUINodeValidationError extends Error {
   }
 }
 
+/** Reduce ComfyUI history status messages to the failing node and its exception, without traceback or inputs. */
+function summarizeComfyExecutionError(messages: unknown): string {
+  const entry = Array.isArray(messages)
+    ? messages.find((message) => Array.isArray(message) && message[0] === 'execution_error')
+    : null;
+  const detail = entry?.[1];
+  if (!detail || typeof detail !== 'object' || typeof detail.exception_message !== 'string') {
+    return JSON.stringify(messages);
+  }
+  const classType = typeof detail.node_type === 'string' ? ` (${detail.node_type.slice(0, 80)})` : '';
+  const exceptionType = typeof detail.exception_type === 'string' ? ` ${detail.exception_type.slice(0, 80)}` : '';
+  return `node ${String(detail.node_id).slice(0, 80)}${classType}${exceptionType}: ${detail.exception_message.trim()}`;
+}
+
 function readComfyNodeErrors(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return null;
@@ -451,7 +465,7 @@ export class ComfyUIService {
         }
         // 에러가 있는지 확인
         if (item.status.status_str === 'error') {
-          throw new Error(`ComfyUI execution error: ${JSON.stringify(item.status.messages)}`);
+          throw new Error(`ComfyUI execution error: ${summarizeComfyExecutionError(item.status.messages)}`);
         }
       }
 

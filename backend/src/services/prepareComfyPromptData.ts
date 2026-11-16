@@ -1,6 +1,7 @@
 import fs from 'fs'
 import path from 'path'
 import {
+  collapseMiniMaxH3DirectorPrompt,
   findSnapRefSimpleValueIssues,
   SNAPREF_SIMPLE_MAX_REFERENCES,
   SNAPREF_SIMPLE_NODE_EDITOR,
@@ -250,7 +251,7 @@ function createMiniMaxBuilderState(mode: string, duration: number) {
     version: mode === 'REF2VA' ? 2 : 1,
     mode,
     duration,
-    prompt_mode: 'structured',
+    prompt_mode: 'simple',
     simple_prompt: '',
     imd: '',
     soundscape: '',
@@ -360,11 +361,12 @@ function normalizeMiniMaxBuilderState(value: Record<string, any>, timeline: Reco
   ].filter(Boolean).join('\n')
   const legacyPrompt = [timeline.resolved_prompt, timeline.full_prompt, assembledLegacyPrompt]
     .find((candidate) => typeof candidate === 'string' && candidate.trim())
-  if (typeof legacyPrompt === 'string' && legacyPrompt.trim() && !hasMiniMaxBuilderContent(builder)) {
+  // A stored `simple_prompt`, even an empty one, is the user's text; only a builder that never had one adopts the node prompt.
+  if (typeof source.simple_prompt !== 'string' && typeof legacyPrompt === 'string' && legacyPrompt.trim() && !hasMiniMaxBuilderContent(builder)) {
     builder.prompt_mode = 'simple'
     builder.simple_prompt = legacyPrompt.trim()
   }
-  return builder
+  return collapseMiniMaxH3DirectorPrompt(builder)
 }
 
 export function getMiniMaxDirectorActiveItems(mode: unknown, timeline: Record<string, any>) {
@@ -409,7 +411,9 @@ async function prepareMiniMaxDirectorNodeValue(
   if (isComfyInputLink(value.timeline_data)) {
     const preparedValue = { ...value }
     if (!isComfyInputLink(value.builder_state)) {
-      preparedValue.builder_state = JSON.stringify(normalizeMiniMaxBuilderState(value, { version: 1, items: [], prompt_blocks: [] }))
+      const builderState = normalizeMiniMaxBuilderState(value, { version: 1, items: [], prompt_blocks: [] })
+      preparedValue.builder_state = JSON.stringify(builderState)
+      if (!isComfyInputLink(value.prompt)) preparedValue.prompt = builderState.simple_prompt.trim()
     }
     delete preparedValue[MINIMAX_H3_DIRECTOR_META_KEY]
     return preparedValue
@@ -437,7 +441,11 @@ async function prepareMiniMaxDirectorNodeValue(
     }
   }
   const builderState = normalizeMiniMaxBuilderState(value, timeline)
-  const nextTimeline = { ...timeline, version: 1, items: nextItems, builder_state: builderState }
+  // Outside REF2VA the node renders its `prompt` input, and it restores an empty builder from the timeline's
+  // prompt copies; both therefore follow the one prompt text.
+  const promptText = builderState.simple_prompt.trim()
+  const nextTimeline: Record<string, any> = { ...timeline, version: 1, items: nextItems, builder_state: builderState, resolved_prompt: promptText }
+  delete nextTimeline.full_prompt
   const activeItemIds = new Set(getMiniMaxDirectorActiveItems(value.mode, nextTimeline).map((item) => String(item.id ?? '')))
 
   for (const item of nextItems) {
@@ -469,6 +477,7 @@ async function prepareMiniMaxDirectorNodeValue(
     timeline_data: JSON.stringify(nextTimeline),
     builder_state: isComfyInputLink(value.builder_state) ? value.builder_state : JSON.stringify(builderState),
   }
+  if (!isComfyInputLink(value.prompt) && !isComfyInputLink(value.builder_state)) preparedValue.prompt = promptText
   delete preparedValue[MINIMAX_H3_DIRECTOR_META_KEY]
   return preparedValue
 }

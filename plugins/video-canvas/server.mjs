@@ -78,7 +78,7 @@ const checkSummary = check => ({ blocked: check.blocked, errors: check.errors, w
 const reviewFields = (cut, profile, resolved) => ({
   cut_mode: cut.data.mode, duration: cut.data.duration, seed: cut.data.seed,
   profile_id: profile.id, profile_label: profile.label,
-  prompt: resolved.prompt, soundscape: resolved.soundscape, music: resolved.music,
+  prompt: resolved.prompt,
   slot_summary: JSON.stringify(resolved.table.map(({ port, slot, label, name, props }) => ({ port, slot, label, name, props }))),
 })
 export function createService(conai, store = createStore(conai.db)) {

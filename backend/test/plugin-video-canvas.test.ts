@@ -565,7 +565,7 @@ test('video canvas proposal cards bind human-readable fields to the current serv
     assert.equal(node.preview.review.prompt, '<Picture 1> 이 <Picture 2> 앞에 서 있어.')
     assert.equal(JSON.parse(node.preview.review.slot_summary)[0].label, '<Picture 1>')
     const fields = { ...node.preview.review, project_id: project.id }
-    for (const mismatch of [{ cut_mode: 'T2VA' }, { seed: 0 }, { duration: 6 }, { profile_id: 'other' }, { profile_label: '다른 프로필' }, { prompt: '다른 프롬프트' }, { soundscape: '소리' }, { music: '음악' }, { slot_summary: '[]' }]) {
+    for (const mismatch of [{ cut_mode: 'T2VA' }, { seed: 0 }, { duration: 6 }, { profile_id: 'other' }, { profile_label: '다른 프로필' }, { prompt: '다른 프롬프트' }, { slot_summary: '[]' }]) {
       await assert.rejects(() => f.dispatch('propose_run_cut', { ...fields, ...mismatch, requestId: randomUUID() }), (error: { status: number }) => error.status === 409)
     }
     assert.equal(f.calls.filter(call => call.name === 'submit_generation_job').length, 0)
@@ -603,7 +603,7 @@ test('video canvas manifest accepts user text up to the actual host text boundar
     const action = (id: string) => normalizeChatPageSchema(manifest.pages[0].actions.find((item: { id: string }) => item.id === `video-canvas.${id}`).schema)
     const review = (await f.dispatch('read_node', { project_id: project.id, id: project.nodes[0].id })).preview.review
     const proposeSchema = action('propose_run_cut')
-    for (const field of ['prompt', 'soundscape', 'music', 'slot_summary', 'profile_label']) {
+    for (const field of ['prompt', 'slot_summary', 'profile_label']) {
       assert.doesNotThrow(() => validateChatPageArguments(proposeSchema, { ...review, [field]: 'x'.repeat(8001) }))
       assert.doesNotThrow(() => validateChatPageArguments(proposeSchema, { ...review, [field]: 'x'.repeat(CHAT_PAGE_ACTION_LIMITS.text) }))
       assert.throws(() => validateChatPageArguments(proposeSchema, { ...review, [field]: 'x'.repeat(CHAT_PAGE_ACTION_LIMITS.text + 1) }))

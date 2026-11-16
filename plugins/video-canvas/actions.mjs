@@ -99,7 +99,7 @@ export function duplicateCuts(ids) {
   const ops = [], taken = nodeBoxes()
   ids.map(nodeById).filter(node => node?.kind === 'cut' || node?.kind === 'gen').forEach((node, index) => {
     const temp = `copy-${index}`, data = node.data, size = nodeSize(node), cut = node.kind === 'cut'
-    const fields = cut ? { prompt: data.prompt, soundscape: data.soundscape, music: data.music, raw: data.raw, duration: data.duration, seed: newSeed(), profileId: data.profileId }
+    const fields = cut ? { prompt: data.prompt, raw: data.raw, duration: data.duration, seed: newSeed(), profileId: data.profileId }
       : { prompt: data.prompt, seed: data.seed, profileId: data.profileId, inputs: data.inputs, size: data.size }
     // The copy goes to the first free spot right of its source.
     ops.push({ op: 'add_node', kind: node.kind, tempId: temp, name: `${data.name} 복사`, at: freeSpot(size, { x: node.x + size.w + 24, y: node.y }, taken), fields: defined(fields) })

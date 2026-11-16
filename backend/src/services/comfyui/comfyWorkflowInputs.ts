@@ -10,6 +10,7 @@ import { isChatMcpSource, type McpRequestContext } from '../../mcp/context'
 import { validateMcpToolArguments } from '../../mcp/requestSecurity'
 import { requireContextPermission, requireRequesterPermission } from '../../middleware/featureAccess'
 import {
+  findUnresolvedMiniMaxH3RefModSlots,
   isProtectedWorkflowKey,
   MINIMAX_H3_REFMOD_MAX_SLOTS,
   normalizeMiniMaxH3RefModRows,
@@ -201,6 +202,19 @@ function validateMiniMaxValue(field: MarkedField, value: Record<string, any>) {
     throw new Error(`${field.label || field.id}: frame_rate must be from 0.1 to 240`)
   }
 
+  const timeline = parseRecord(value.timeline_data)
+  const unresolvedRefModSlots = findUnresolvedMiniMaxH3RefModSlots({
+    mode,
+    prompt: value.prompt,
+    builder: parseRecord(value.builder_state, parseRecord(timeline.builder_state)),
+    continuity: timeline.continuity,
+    refmods: normalizeMiniMaxH3RefModRows(timeline.refmods),
+  })
+  if (unresolvedRefModSlots.length > 0) {
+    const tags = unresolvedRefModSlots.map((slot) => `<RefMod ${slot}>`).join(', ')
+    throw new Error(`${field.label || field.id}: the prompt uses ${tags} without an active refmods row in that slot (REF2VA only). Add the row or remove the tag from simple_prompt.`)
+  }
+
   const items = activeMiniMaxItems(value)
   if (validateMiniMaxFrameMedia(field, mode, items)) {
     return
@@ -288,6 +302,12 @@ function normalizeMiniMaxValue(field: MarkedField, provided: unknown) {
   }
   for (const key of ['prompt_mode', 'simple_prompt', 'imd', 'soundscape', 'music'] as const) {
     if (incoming[key] !== undefined) builder[key] = incoming[key]
+  }
+  // The supplied prompt is the whole prompt: a saved default in structured mode must not replace it.
+  const suppliedPrompt = incoming.simple_prompt ?? (typeof incoming.prompt === 'string' ? incoming.prompt : undefined)
+  if (typeof suppliedPrompt === 'string') {
+    builder.prompt_mode = 'simple'
+    builder.simple_prompt = suppliedPrompt
   }
   builder.mode = value.mode
   builder.duration = value.duration
@@ -524,12 +544,7 @@ function miniMaxInputSchema(field: MarkedField) {
       mode: { type: 'string', required: false },
       duration: { type: 'integer', minimum: 1, maximum: 60 },
       frame_rate: { type: 'number', minimum: 0.1, maximum: 240 },
-      prompt_mode: { type: 'string', enum: ['simple', 'structured'] },
-      simple_prompt: { type: 'string' },
-      imd: { type: 'string' },
-      soundscape: { type: 'string' },
-      music: { type: 'string' },
-      ref: { type: 'object' },
+      simple_prompt: { type: 'string', description: 'The whole prompt. Write section headings such as "summary:" or "overall_soundscape:" inside this text; there are no separate section inputs.' },
       resolution: { type: 'object', description: 'Aspect, resolution, custom size, and input scaling settings.' },
       postprocess: { type: 'object', description: 'simple/model/rtx upscaling settings.' },
       media: {
@@ -653,7 +668,6 @@ export function createMcpWorkflowInputTemplate(markedFields: MarkedField[]) {
         mode: 'T2VA',
         duration: 5,
         frame_rate: 24,
-        prompt_mode: 'simple',
         simple_prompt: 'Describe the scene and camera movement.',
         resolution: { aspect: '16:9', resolution: 'auto', input_scaling: 'Auto' },
         postprocess: { simple: { enabled: false }, model: { enabled: false }, rtx: { enabled: false } },
