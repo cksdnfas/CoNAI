@@ -4,11 +4,12 @@ import { s, nodeById, shownTake, activeChain } from './state.mjs'
 import { toast } from './toast.mjs'
 import { showMenu } from './menu.mjs'
 import { request, ui, edit, reload, doCheck, openDetail, showInspector } from './session.mjs'
-import { applySelection, removeNodes, removeEdge, duplicateCuts, pickTake, cycleTake, takeAction, runFor, changeWorkflow, extractFrom, continueFromPrevious, onFieldChange, foldFrame } from './actions.mjs'
+import { applySelection, removeNodes, removeEdge, duplicateCuts, pickTake, cycleTake, takeAction, runFor, chooseSetting, extractFrom, continueFromPrevious, onFieldChange, foldFrame } from './actions.mjs'
+import { openSettings } from './settings.mjs'
 import { cancelExport, cancelChain, playExport } from './sequence.mjs'
 import { nodeMenu } from './canvas.mjs'
 
-const TAKE_ACTIONS = ['approve', 'discard', 'retry', 'cancel', 'rerun-take', 'rerun-canvas', 'rerun-new']
+const TAKE_ACTIONS = ['approve', 'discard', 'retry', 'cancel', 'rerun-take', 'rerun-canvas', 'rerun-new', 'upscale', 'upscale-again']
 async function reorderEdge(edgeId, direction) {
   const edge = s.project.edges.find(item => item.id === edgeId)
   const peers = cutEdges(s.project, nodeById(edge.to), false).filter(item => item.port === edge.port).map(item => item.id)
@@ -34,7 +35,8 @@ function dispatch(target) {
   if (action === 'chain-cancel') return void (activeChain() && cancelChain(activeChain().id))
   if (action === 'check-all') return void ui(() => doCheck(), target)
   if (action === 'open-settings') { s.tab = 'detail'; if (id && s.selection !== id) applySelection([id]); return showInspector(true) }
-  if (action === 'pick-workflow') return void changeWorkflow(id)
+  if (action === 'pick-setting') return chooseSetting(id, target)
+  if (action === 'manage-settings') return void openSettings(target.dataset.role)
   if (action === 'continue-prev') return void continueFromPrevious(id)
   if (action === 'disconnect') return void removeEdge(target.dataset.edge)
   if (action === 'remove') return void removeNodes([id])

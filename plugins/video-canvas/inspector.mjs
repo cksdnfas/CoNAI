@@ -1,8 +1,8 @@
 import { MODES, labelTable, resolvePrompt, cutEdges, adapterOf, outputOf } from './domain.mjs'
 import { $, esc, names, ports, outputNames, reviewNames, badge, statusBadge, assetBadge, isTerminal, progressText, patch } from './util.mjs'
-import { s, nodeById, selected, takesOf, repTake, takeTitle, profileOf, outputKind, takeOutput, genInputs, checkOf, staleWarnings, current } from './state.mjs'
+import { s, nodeById, selected, takesOf, repTake, takeTitle, profileOf, outputKind, takeOutput, genInputs, checkOf, staleWarnings, current, cutRunning, upscaleRetry } from './state.mjs'
 import { lockRunButtons, request, task } from './session.mjs'
-import { workflowHtml, settingsHtml, ensureOptions, genSettingsHtml, genFieldsHtml, guideTitle, wfOf } from './workflow.mjs'
+import { cutSettingsHtml, ensureOptions, genSettingsHtml, genFieldsHtml, guideTitle, wfOf } from './workflow.mjs'
 
 const button = (action, label, data = '', cls = '') => `<button class="${cls}" data-action="${action}" ${data}>${label}</button>`
 const toolbar = html => `<div class="toolbar">${html}</div>`
@@ -14,13 +14,15 @@ function review(item) {
 // A generation take carries its whole profile (a NovelAI one has the full settings): the card shows only which setting made it.
 const profileSummary = profile => profile && adapterOf(profile) !== 'director' ? { label: profile.label, adapter: adapterOf(profile), output: outputOf(profile) } : profile
 function takeCard(take) {
-  const id = `data-take="${esc(take.id)}"`, cut = nodeById(take.cutId)
-  return `<div class="conai-list-row"><div class="conai-row-main"><div class="toolbar"><span class="conai-row-title">${esc(takeTitle(take))}</span>${statusBadge(take.status)}${cut && repTake(cut)?.id === take.id ? badge('대표', 'ok') : ''}</div><span class="conai-row-meta">${esc(take.label)} · seed ${take.seed}${take.jobId ? ` · job ${esc(take.jobId)}` : ''}</span>${take.error ? `<p class="error">${esc(take.error)}</p>` : ''}<details data-keep="take:${esc(take.id)}"><summary>보낸 프롬프트·슬롯·프로필</summary><pre>${esc(JSON.stringify({ seed: take.seed, profile: profileSummary(take.profile), resolved: take.resolved }, null, 2))}</pre></details><div class="toolbar">
+  // Nothing new, an upscale included, starts on a cut that is running; `data-locked` keeps lockRunButtons from enabling the button again.
+  const id = `data-take="${esc(take.id)}"`, cut = nodeById(take.cutId), upscaled = Boolean(take.upscaleOf), lock = cut && cutRunning(cut) ? `${id} disabled data-locked` : id
+  return `<div class="conai-list-row"><div class="conai-row-main"><div class="toolbar"><span class="conai-row-title">${esc(takeTitle(take))}</span>${statusBadge(take.status)}${upscaled ? badge('업스케일') : ''}${cut && repTake(cut)?.id === take.id ? badge('대표', 'ok') : ''}</div><span class="conai-row-meta">${esc(take.label)} · seed ${take.seed}${take.jobId ? ` · job ${esc(take.jobId)}` : ''}</span>${take.error ? `<p class="error">${esc(take.error)}</p>` : ''}<details data-keep="take:${esc(take.id)}"><summary>보낸 프롬프트·슬롯·프로필</summary><pre>${esc(JSON.stringify({ seed: take.seed, profile: profileSummary(take.profile), resolved: take.resolved }, null, 2))}</pre></details><div class="toolbar">
     ${take.status === 'proposed' && cut?.kind === 'cut' ? button('approve', '승인하고 생성', id, 'primary') + button('discard', '폐기', id) : button('refresh-take', '상태 갱신', id)}
     ${take.jobId && !isTerminal(take.status) ? button('cancel', '취소', id) : ''}
-    ${take.status === 'failed' && !take.jobId ? button('retry', '같은 요청 재시도', id) : ''}
-    ${take.resultHash ? button('take-pick', '대표로', id) + (cut?.kind === 'cut' ? button('extract-take', '프레임 뽑기', id) : '') + (takeOutput(take) === 'audio' ? '' : button('open-detail', '상세에서 열기', `data-hash="${esc(take.resultHash)}"`)) : ''}
-    ${take.status === 'discarded' ? '' : button('rerun-take', '같은 시드·이 입력으로', id)}${button('rerun-canvas', '같은 시드·현재 입력으로', id)}${button('rerun-new', '새 시드·현재 입력으로', id)}
+    ${take.status === 'failed' && !take.jobId && (!upscaled || take.request) ? button('retry', '같은 요청 재시도', id) : ''}
+    ${take.resultHash ? button('take-pick', '대표로', id) + (cut?.kind === 'cut' ? button('extract-take', '프레임 뽑기', id) + button('upscale', upscaled ? '다시 업스케일' : '업스케일', lock) : '') + (takeOutput(take) === 'audio' ? '' : button('open-detail', '상세에서 열기', `data-hash="${esc(take.resultHash)}"`)) : ''}
+    ${upscaled ? (upscaleRetry(take) ? button('upscale-again', '다시 업스케일', lock) : '')
+      : (take.status === 'discarded' ? '' : button('rerun-take', '같은 시드·이 입력으로', id)) + button('rerun-canvas', '같은 시드·현재 입력으로', id) + button('rerun-new', '새 시드·현재 입력으로', id)}
     </div>${review(take)}</div></div>`
 }
 // What the server's check says about a node: a generation node shows all of it, a cut (whose prompt problems are listed with its prompt) only the stale-input warning.
@@ -41,13 +43,13 @@ function slotEditors(cut) {
 }
 function cutHtml(cut) {
   const resolved = resolvePrompt(s.project, cut), table = labelTable(s.project, cut), takes = takesOf(cut.id).slice().reverse()
-  return `<section>${workflowHtml(cut)}</section><section>${settingsHtml(cut)}</section>
-    <section><h2 class="conai-group-head">3 · 모드·길이·시드</h2><label>모드<select data-field="mode">${MODES.map(mode => `<option ${mode === cut.data.mode ? 'selected' : ''}>${mode}</option>`).join('')}</select></label><div class="two"><label>길이(초)<input data-field="duration" type="number" step="any" value="${esc(cut.data.duration)}"></label><label>시드<input data-field="seed" type="number" value="${esc(cut.data.seed)}"></label></div>${toolbar(button('seed', '새 시드'))}</section>
-    <section><h2 class="conai-group-head">4 · 입력 슬롯</h2>${slotEditors(cut)}</section>
-    <section><h2 class="conai-group-head">5 · 프롬프트</h2><label>프롬프트<textarea data-field="prompt" rows="4">${esc(cut.data.prompt)}</textarea></label><div class="conai-chips">${[...new Set(table.map(row => row.name))].map(name => `<button class="conai-chip" data-token="${esc(name)}">@${esc(name)}</button>`).join('')}</div>
+  return `<section>${cutSettingsHtml(cut)}</section>
+    <section><h2 class="conai-group-head">2 · 모드·길이·시드</h2><label>모드<select data-field="mode">${MODES.map(mode => `<option ${mode === cut.data.mode ? 'selected' : ''}>${mode}</option>`).join('')}</select></label><div class="two"><label>길이(초)<input data-field="duration" type="number" step="any" value="${esc(cut.data.duration)}"></label><label>시드<input data-field="seed" type="number" value="${esc(cut.data.seed)}"></label></div>${toolbar(button('seed', '새 시드'))}</section>
+    <section><h2 class="conai-group-head">3 · 입력 슬롯</h2>${slotEditors(cut)}</section>
+    <section><h2 class="conai-group-head">4 · 프롬프트</h2><label>프롬프트<textarea data-field="prompt" rows="4">${esc(cut.data.prompt)}</textarea></label><div class="conai-chips">${[...new Set(table.map(row => row.name))].map(name => `<button class="conai-chip" data-token="${esc(name)}">@${esc(name)}</button>`).join('')}</div>
     <label>원문<textarea data-field="raw" rows="3">${esc(cut.data.raw)}</textarea></label>
     <details data-keep="resolved"><summary>전송될 프롬프트</summary><pre>${esc(resolved.prompt)}</pre>${resolved.table.length ? `<table class="label-table"><tbody>${resolved.table.map(row => `<tr><td>${esc(row.label)}</td><td>${esc(row.name)}</td><td>${ports[row.port]} · ${row.slot}</td></tr>`).join('')}</tbody></table>` : ''}</details>${resolved.errors.map(message => `<p class="error">${esc(message)}</p>`).join('')}${resolved.warnings.map(message => `<p class="warning">${esc(message)}</p>`).join('')}</section>
-    <section><h2 class="conai-group-head">6 · 생성·이력</h2>${toolbar(button('run', '지금 생성', '', 'primary') + button('propose', '제안으로 올리기') + button('continue-prev', '앞 컷에서 이어가기'))}${staleIssue(cut)}${takes.length ? `<div class="conai-list">${takes.map(takeCard).join('')}</div>` : '<p class="conai-empty">아직 생성 이력이 없어.</p>'}</section>${review(cut)}${toolbar(button('remove', '노드 삭제', '', 'ghost'))}`
+    <section><h2 class="conai-group-head">5 · 생성·이력</h2>${toolbar(button('run', '지금 생성', '', 'primary') + button('propose', '제안으로 올리기') + button('continue-prev', '앞 컷에서 이어가기'))}${staleIssue(cut)}${takes.length ? `<div class="conai-list">${takes.map(takeCard).join('')}</div>` : '<p class="conai-empty">아직 생성 이력이 없어.</p>'}</section>${review(cut)}${toolbar(button('remove', '노드 삭제', '', 'ghost'))}`
 }
 function usesHtml(node) {
   const uses = s.project.edges.filter(edge => edge.from === node.id)

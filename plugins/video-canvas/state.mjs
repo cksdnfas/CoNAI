@@ -1,5 +1,5 @@
 import { createAssistantState } from './assistant-state.mjs'
-import { PORTS, GEN_PORTS, adapterOf, outputOf, withResults, staleUpstream } from './domain.mjs'
+import { PORTS, GEN_PORTS, outputOf, roleOf, withResults, staleUpstream } from './domain.mjs'
 import { isTerminal, fraction } from './util.mjs'
 
 export const DOCK_H = 212
@@ -30,8 +30,17 @@ export function takeTitle(take) {
 export const profileOf =cut => s.project?.profiles?.find(profile => profile.id === cut?.data.profileId)
 /** The kind each input slot takes: a cut's typed slots and a generation node's image slots. */
 export const SLOT_KINDS = { ...PORTS, ...GEN_PORTS }
-/** Generation nodes' profiles (workflow or NovelAI); a cut's Director profiles stay out of this list. */
-export const genProfiles = () => (s.project?.profiles ?? []).filter(profile => adapterOf(profile) !== 'director')
+/** The account's settings library (it rides on every project read) as the settings of one use: `cut` (Director), `upscale` or `gen`. */
+export const settingsOf = role => (s.project?.profiles ?? []).filter(profile => roleOf(profile) === role)
+/** Generation nodes' settings (workflow or NovelAI). */
+export const genProfiles = () => settingsOf('gen')
+const DEFAULT_KEYS = { cut: 'cutProfileId', upscale: 'upscaleProfileId' }
+/** The account's default setting of a use, while it is still in the library. */
+export const defaultOf = role => settingsOf(role).find(profile => profile.id === s.project?.settings?.[DEFAULT_KEYS[role]]) ?? null
+/** The setting a new or unset cut gets: the default one, else the library's only cut setting (the server gives it the same). */
+export const cutDefault = () => defaultOf('cut') ?? (settingsOf('cut').length === 1 ? settingsOf('cut')[0] : null)
+/** The upscale setting a cut's upscale uses: its own, else the default one (a cut that names a deleted setting follows the default too); null when there is none to use. */
+export const upscaleSettingOf = cut => settingsOf('upscale').find(profile => profile.id === cut.data.upscaleProfileId) ?? defaultOf('upscale')
 /** What a node feeds into a slot: a generation node's result kind (null until it has a profile), a frame is an image, a cut a video. */
 export function outputKind(node) {
   if (node.kind === 'gen') { const profile = profileOf(node); return profile ? outputOf(profile) : null }
@@ -69,11 +78,18 @@ function staleOf(node) {
 /** The stale-input warnings of a cut or generation node (its result was made from a generation node's older result): the server's own check when it is current, else the same rule run on the loaded project. */
 export const staleWarnings = node => checkOf(node)?.warnings.filter(warning => warning.code === 'stale-input') ?? staleOf(node)
 export const staleWarning = node => staleWarnings(node)[0] ?? null
-/** The take that stands for the cut: the one marked on the cut, else the latest with a result. */
+/** The take that stands for the cut: the one marked on the cut, else the latest with a result (an upscale take is one like any other; the server moves the mark to it). */
 export function repTake(cut) {
   const takes = takesOf(cut.id)
   return takes.find(take => take.id === cut.data.pickTakeId && take.resultHash) ?? takes.filter(take => take.resultHash).at(-1) ?? null
 }
+/** The take a frame for another cut is taken from: an upscale stands for the generated take it came from, so frames keep the native size. */
+export function frameTake(cut) {
+  const take = repTake(cut)
+  return take?.upscaleOf ? takesOf(cut.id).find(item => item.id === take.upscaleOf) : take
+}
+/** What a running take is doing, in the words of the card: finishing, upscaling or generating. */
+export const runningWord = take => finishing(take) ? '마무리 중' : take.upscaleOf ? '업스케일 중' : '생성 중'
 /** A completed take whose result is not there yet: the server is still finishing it while it has a history row and has not given up on it. */
 export const finishing = take => take.status === 'completed' && !take.resultHash && Boolean(take.historyId) && !take.postprocessFailed && !take.error
 /** A failed take, or a completed one that will never have a result (no output, or its postprocessing failed). */
@@ -101,14 +117,19 @@ export function cutState(cut) {
   const live = takes.filter(working).at(-1), last = takes.at(-1), ratio = live && !finishing(live) ? fraction(live.progress) : null
   const percent = ratio === null ? '' : ` ${Math.round(ratio * 100)}%`
   if (step && chain.current === cut.id && ['extracting', 'generating'].includes(step.status)) return { key: 'current', word: `이어 생성 ${chain.steps.indexOf(step) + 1}/${chain.steps.length}`, ratio, take: live ?? null, step }
-  if (live) return WAITING.includes(live.status) ? { key: 'queued', word: '대기 중', ratio, take: live, step } : { key: 'generating', word: finishing(live) ? '마무리 중' : `생성 중${percent}`, ratio, take: live, step }
+  if (live) return WAITING.includes(live.status) ? { key: 'queued', word: live.upscaleOf ? '업스케일 대기 중' : '대기 중', ratio, take: live, step } : { key: 'generating', word: `${runningWord(live)}${percent}`, ratio, take: live, step }
   if (step?.status === 'pending') return { key: 'waiting', word: '대기', ratio: null, take: null, step }
   if (last?.status === 'proposed') return { key: 'proposed', word: '승인 대기', ratio: null, take: last, step }
   // A cancelled latest take is not a result and not a failure: the cut reads as it did before the run (done by an earlier take, or empty).
-  if (last && failedTake(last)) return { key: 'failed', word: '실패', ratio: null, take: last, step }
+  if (last && failedTake(last)) return { key: 'failed', word: last.upscaleOf ? '업스케일 실패' : '실패', ratio: null, take: last, step }
   const rep = repTake(cut)
   return rep ? { key: 'done', word: '', ratio: null, take: rep, step } : { key: 'empty', word: '', ratio: null, take: null, step }
 }
+
+/** An upscale take that ended with no result (failed, cancelled): its 다시 업스케일 runs it again with its own setting, from its source. */
+export const upscaleRetry = take => Boolean(take.upscaleOf) && !take.resultHash && isTerminal(take.status)
+/** True while a take of the cut runs or waits (an upscale too) or a chain is generating it: nothing new, an upscale included, starts on it then. */
+export const cutRunning = cut => ['queued', 'generating', 'current'].includes(cutState(cut).key)
 
 // ---- extracted frames: a frame taken from another cut's result is a link, not a card ----
 /** The cut and take an extracted frame came from, when both are still in this project (a duplicated project's frames point to takes that are not). */
@@ -138,7 +159,9 @@ export function allLinks(withOpen = false) {
     if (frame?.kind !== 'frame') continue
     if (frameRole(frame) !== 'link' && !(withOpen && s.open.includes(frame.id) && frameSource(frame) && frameSource(frame).cut.id !== edge.to)) continue
     const { cut: source, take } = frameSource(frame), target = nodeById(edge.to)
-    if (target) links.push({ edge, frame, source, take, target, stale: repTake(source)?.id !== take.id })
+    // An upscale of the cut's result does not make a frame taken from the generated take stale (either side may be the upscale).
+    const base = item => item?.upscaleOf ?? item?.id
+    if (target) links.push({ edge, frame, source, take, target, stale: base(repTake(source)) !== base(take) })
   }
   return links
 }

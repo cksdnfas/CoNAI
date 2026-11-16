@@ -4,7 +4,7 @@ import Database from 'better-sqlite3'
 import path from 'node:path'
 import fs from 'node:fs'
 import { randomUUID } from 'node:crypto'
-import { applyOps, buildDirector, checkCut, generationRequest, labelTable, mediaItems, newProject, normalizeRef, resolvePrompt, resultHash } from '../../plugins/video-canvas/domain.mjs'
+import { applyOps, buildDirector, checkCut, generationRequest, labelTable, mediaItems, newProject, normalizeRef, profilePublication, resolvePrompt, resultHash, roleOf } from '../../plugins/video-canvas/domain.mjs'
 import { activate, createStore, unwrap } from '../../plugins/video-canvas/server.mjs'
 import { createAssistantState, createRefreshQueue, excerpt, rejectedMessage } from '../../plugins/video-canvas/assistant-state.mjs'
 import { normalizeMcpWorkflowInputs } from '../src/services/comfyui/comfyWorkflowInputs'
@@ -284,6 +284,8 @@ async function fixtureProject(f: ReturnType<typeof serviceFixture>, audio = fals
   project.revision = 1
   for (const node of project.nodes.filter((node: any) => node.kind !== 'cut')) node.data.fingerprint = 'fingerprint'
   f.service.store.save('account:1', created, project)
+  // Profiles live in the account library, not in the project.
+  f.service.store.putProfile('account:1', structuredClone(profile))
   return project
 }
 async function runArgs(f: ReturnType<typeof serviceFixture>, project: any, extra: any = {}) {
@@ -619,9 +621,9 @@ test('video canvas profile publication keeps override keys in JSON strings and d
     const project = await fixtureProject(f)
     const saved = await f.dispatch('save_profile', { project_id: project.id, expected_revision: 1,
       profile: { ...profile, unknown_token: 'not a profile field', overrides: { prompt_enhancer_token_limit: 12000 } } })
-    assert.equal(saved.profiles[0].unknown_token, undefined)
+    assert.equal(saved.profile.unknown_token, undefined)
     assert.deepEqual(f.service.store.get('account:1', project.id).profiles[0].overrides, { prompt_enhancer_token_limit: 12000 })
-    assert.deepEqual(JSON.parse(saved.profiles[0].overrides), { prompt_enhancer_token_limit: 12000 })
+    assert.deepEqual(JSON.parse(saved.profile.overrides), { prompt_enhancer_token_limit: 12000 })
     const run = await f.dispatch('run_cut', await runArgs(f, project))
     const detail = await f.dispatch('read_node', { project_id: project.id, id: project.nodes[0].id })
     const take = await f.dispatch('get_take', { project_id: project.id, take_id: run.id })
@@ -632,7 +634,9 @@ test('video canvas profile publication keeps override keys in JSON strings and d
     const state = createAssistantState()
     state.set('lastNode', detail)
     state.set('lastRun', run)
-    state.set('lastEdit', { profiles: saved.profiles, applied: [], rejected: [], tempIds: {} })
+    // The page publishes a person's library save once (session recordEdits) before it records it for the assistant.
+    const pageSaved = await f.page({ op: 'save_profile', profile: { id: profile.id, label: '페이지에서 저장' } })
+    state.set('lastEdit', { profileId: pageSaved.profileId, profiles: [{ ...profilePublication(pageSaved.profile), role: roleOf(pageSaved.profile) }], settings: pageSaved.settings, applied: [{ op: 'save_profile' }], rejected: [], tempIds: {} })
     assert.doesNotThrow(() => copyChatPageData(JSON.parse(JSON.stringify(state.snapshot({}, saved.revision).data))))
     assert.equal(typeof state.snapshot({}, saved.revision).data.lastEdit.data.profiles[0].overrides, 'string')
     assert.equal(f.calls.find(call => call.name === 'submit_generation_job').args.inputs.director.prompt_enhancer_token_limit, 12000)
@@ -682,8 +686,7 @@ test('video canvas project list, rename, archive, duplicate and delete stay acco
     assert.equal(copy.nodes.length, 4)
     assert.ok(copy.nodes.every((node: any) => !project.nodes.some((old: any) => old.id === node.id)))
     assert.deepEqual(copy.sequence, [copy.nodes[0].id])
-    assert.notEqual(copy.profiles[0].id, 'draft')
-    assert.equal(copy.nodes[0].data.profileId, copy.profiles[0].id)
+    assert.equal(copy.nodes[0].data.profileId, 'draft')
     assert.ok(copy.edges.every((edge: any) => copy.nodes.some((node: any) => node.id === edge.from) && edge.to === copy.nodes[0].id))
 
     assert.equal((await f.tool('manage_project', { project_id: project.id, action: 'archive' })).archived, true)
@@ -738,8 +741,11 @@ test('video canvas workflow options detect Director/seed fields and a workflow-o
     await assert.rejects(() => f.dispatch('save_profile', { project_id: project.id, expected_revision: 1, profile: { workflowId: 12, inputs: { steps: 99 } } }), /스텝/)
     await assert.rejects(() => f.dispatch('save_profile', { project_id: project.id, expected_revision: 1, profile: { workflowId: 12, inputs: { seed: 1 } } }), /정할 수 없는/)
     const saved = await f.tool('apply_ops', { project_id: project.id, expected_revision: 1, profile: { workflowId: 12, serverTag: 'gpu', inputs: { steps: 30 } } })
-    const { id, ...created } = saved.profiles.at(-1)
-    assert.deepEqual(created, { label: 'Director 기본', workflowId: 12, directorFieldId: 'director', seedFieldId: 'seed', serverTag: 'gpu', overrides: '{}', inputs: '{"steps":30}' })
+    const { id, ...created } = saved.profile
+    assert.deepEqual(created, { label: 'Director 기본', workflowId: 12, directorFieldId: 'director', seedFieldId: 'seed', serverTag: 'gpu', overrides: '{}', inputs: '{"steps":30}', role: 'cut' })
+    // A second cut profile becomes the default only when chosen.
+    assert.equal(saved.settings.cutProfileId, null)
+    await f.dispatch('save_settings', { settings: { cutProfileId: id } })
     const added = await f.dispatch('apply_ops', { project_id: project.id, expected_revision: saved.revision, ops: [{ op: 'add_node', kind: 'cut', tempId: 'cut' }] })
     assert.equal(f.service.store.get('account:1', project.id).nodes.find((node: any) => node.id === added.tempIds.cut).data.profileId, id)
     const run = await f.dispatch('run_cut', await runArgs(f, project, { profile_id: id }))
@@ -926,7 +932,7 @@ test('video canvas chain stops at a failed cut, keeps one active chain per proje
     assert.deepEqual([after.nodes.length, after.edges.length, modeOf(after)], [before.nodes.length, before.edges.length, modeOf(before)])
   } finally { f.db.close() }
 })
-test('video canvas gives a profile-less project the sole usable workflow profile and lists the choices otherwise', async () => {
+test('video canvas gives an account without cut settings the sole usable workflow profile as its default and lists the choices otherwise', async () => {
   const f = serviceFixture()
   try {
     const project = await f.dispatch('create_project', { name: '빈 영상' })
@@ -935,9 +941,11 @@ test('video canvas gives a profile-less project the sole usable workflow profile
     const read = f.service.store.get('account:1', project.id)
     assert.deepEqual(read.profiles.map((item: any) => item.id), [added.autoProfile.id])
     assert.equal(read.nodes[0].data.profileId, added.autoProfile.id)
-    assert.equal(read.lastProfileId, added.autoProfile.id)
+    assert.equal(read.settings.cutProfileId, added.autoProfile.id)
     assert.equal((await f.dispatch('apply_ops', { project_id: project.id, expected_revision: added.revision, ops: [{ op: 'add_node', kind: 'cut', name: '둘째' }] })).autoProfile, undefined)
 
+    // With the library empty again and several usable workflows, nothing is made and the choices are listed.
+    assert.equal((await f.page({ op: 'delete_profile', id: added.autoProfile.id })).settings.cutProfileId, null)
     f.state.secondDirector = true
     const other = await f.dispatch('create_project', { name: '고를 영상' })
     const plain = await f.dispatch('apply_ops', { project_id: other.id, expected_revision: 0, ops: [{ op: 'add_node', kind: 'cut', name: '컷', tempId: 'a' }] })
@@ -945,7 +953,7 @@ test('video canvas gives a profile-less project the sole usable workflow profile
     const cut = plain.tempIds.a, args = { project_id: other.id, cut_id: cut, expected_revision: plain.revision }
     await assert.rejects(() => f.dispatch('run_cut', { ...args, requestId: randomUUID() }), (error: any) => /Director 기본\(workflowId 12\)/.test(error.message) && /Director 보조\(workflowId 14\)/.test(error.message) && /프로필을 저장/.test(error.message))
     await assert.rejects(() => f.dispatch('run_chain', { project_id: other.id, expected_revision: plain.revision }), /여럿/)
-    assert.equal(f.service.store.get('account:1', other.id).profiles.length, 0)
+    assert.equal(f.service.store.profiles('account:1').length, 0)
     // Workflow discovery failing (no workflows.view) leaves the cut added without a profile; a run reports the real reason.
     f.state.workflowsDenied = true
     const denied = await f.dispatch('apply_ops', { project_id: other.id, expected_revision: plain.revision, ops: [{ op: 'add_node', kind: 'cut', name: '둘째 컷', tempId: 'b' }] }, 'human')
@@ -961,7 +969,8 @@ test('video canvas gives a profile-less project the sole usable workflow profile
     assert.equal(run.profile.id, run.autoProfile.id)
     const after = f.service.store.get('account:1', other.id)
     assert.equal(after.revision, denied.revision + 1)
-    // Every cut of the project gets the new profile, so the next cut runs without one being chosen.
+    assert.equal(after.settings.cutProfileId, run.autoProfile.id)
+    // Every cut of the project without a cut profile gets the new default, so the next cut runs without one being chosen.
     assert.deepEqual([cut, second].map(id => after.nodes.find((node: any) => node.id === id).data.profileId), [run.autoProfile.id, run.autoProfile.id])
     assert.equal(f.calls.filter(call => call.name === 'submit_generation_job').at(-1).args.workflow_id, 12)
     const next = await f.dispatch('run_cut', { project_id: other.id, cut_id: second, expected_revision: after.revision, requestId: randomUUID() })
@@ -971,12 +980,14 @@ test('video canvas gives a profile-less project the sole usable workflow profile
 test('video canvas creates a project together with its profile in one operation and ignores expected_revision', async () => {
   const f = serviceFixture()
   try {
-    const existing = await fixtureProject(f)
+    const existing = await f.dispatch('create_project', { name: '기존 영상' })
     const created = await f.tool('apply_ops', { create_name: '새 영상', expected_revision: 99, profile: { workflowId: 12, serverTag: 'gpu' } })
     assert.notEqual(created.id, existing.id)
     assert.equal(created.revision, 0)
-    assert.deepEqual(created.profiles.map((item: any) => [item.id, item.label, item.serverTag]), [[created.profileId, 'Director 기본', 'gpu']])
-    assert.equal(created.lastProfileId, created.profileId)
+    // The library's first cut profile becomes the default new cuts get.
+    assert.equal(created.settings.cutProfileId, created.profileId)
+    const stored = f.service.store.profiles('account:1').find((item: any) => item.id === created.profileId)
+    assert.deepEqual([stored.label, stored.serverTag], ['Director 기본', 'gpu'])
     const added = await f.dispatch('apply_ops', { project_id: created.id, expected_revision: 0, ops: [{ op: 'add_node', kind: 'cut', name: '컷', tempId: 'a' }] })
     assert.equal(f.service.store.get('account:1', created.id).nodes[0].data.profileId, created.profileId)
     assert.equal(added.autoProfile, undefined)
@@ -986,9 +997,9 @@ test('video canvas creates a project together with its profile in one operation 
     await assert.rejects(() => f.tool('apply_ops', { create_name: '잘못된 영상', expected_revision: 0, profile: { workflowId: 12, serverId: 1, serverTag: 'gpu' } }), /하나만/)
     assert.equal(total(), before)
     const page = await f.page({ op: 'create_project', name: '페이지 영상', profile: { workflowId: 12 } })
-    assert.equal(page.profiles[0].id, page.profileId)
+    assert.ok(f.service.store.profiles('account:1').some((item: any) => item.id === page.profileId))
     const plain = await f.tool('apply_ops', { create_name: '그냥 영상', expected_revision: 42 })
-    assert.deepEqual([plain.revision, plain.profiles.length, total()], [0, 0, before + 2])
+    assert.deepEqual([plain.revision, total()], [0, before + 2])
   } finally { f.db.close() }
 })
 test('video canvas treats failed postprocessing as a finished take for waits and chains', async () => {
@@ -1172,7 +1183,7 @@ test('video canvas preset import copies the preset for administrators and refuse
       prompting: { timing: 'before', guide: '밝게', guideSkill: { skillId: 3, path: 'style/bg', skillName: '스타일', title: '배경' }, previousImages: 2 } }
     const project = await fixtureProject(f)
     const imported = await f.dispatch('import_preset', { project_id: project.id, expected_revision: revisionOf(f, project), preset: { id: 7 } })
-    const id = imported.lastProfileId
+    const id = imported.profileId
     const copied = { id, label: '배경 프리셋', workflowId: 20, serverId: 2, output: 'image', promptFieldId: 'prompt', seedFieldId: 'seed', imageFieldIds: ['image'],
       exposedFieldIds: ['steps'], fixedInputs: { cfg: 6 }, instruction: '배경을 만들어', guide: '밝게', guideSkill: { skillId: 3, path: 'style/bg' } }
     assert.deepEqual(storedProfile(f, project, id), copied)
@@ -1247,5 +1258,146 @@ test('video canvas add_node takes set fields, rejects unknown op keys and ops wi
     assert.match(unknown.rejected[0].reason, /fields 안에/)
     assert.equal(f.service.store.get('account:1', project.id).nodes.length, before)
     await assert.rejects(() => f.dispatch('apply_ops', { project_id: project.id, ops: [{ op: 'add_node', kind: 'cut', name: '컷' }] }), /expected_revision이 필요해/)
+  } finally { f.db.close() }
+})
+test('video canvas migrates embedded profiles into one library per account with their IDs and shares it across projects', async () => {
+  const f = serviceFixture()
+  try {
+    // Before the library, each project embedded its profiles and its cuts named them.
+    const cut = (id: string, profileId: string) => ({ id, kind: 'cut', x: 0, y: 0, data: { name: id, mode: 'T2VA', prompt: '', raw: '', duration: 5, seed: 1, profileId }, review: 'pending', memo: '' })
+    const embedded = { a: [{ ...profile, id: 'used' }, structuredClone(generator)], b: [{ ...profile, id: 'newer', label: '나중' }] }
+    const old = (id: string, account: string, profiles: any[], nodes: any[]) => f.db.prepare("INSERT INTO vc_project(id,account,name,revision,data,updated,created) VALUES(?,?,?,7,?,'2026-01-01 00:00:00','2026-01-01 00:00:00')")
+      .run(id, account, id, JSON.stringify({ id, name: id, revision: 7, nodes, edges: [], sequence: nodes.map(node => node.id), profiles }))
+    old('old-a', 'account:1', embedded.a, [cut('a1', 'used'), cut('a2', 'used')])
+    // A repeated ID with the same content is stored once; with other content the later project's version gets a new ID.
+    old('old-b', 'account:1', [...embedded.b, { ...profile, id: 'used' }], [cut('b1', 'newer')])
+    const other = { ...profile, id: 'used', label: '다른 내용' }
+    old('old-d', 'account:1', [other], [cut('d1', 'used')])
+    f.db.prepare("INSERT INTO vc_take(id,project,account,job_id,status,data) VALUES('take-d','old-d','account:1',1,'completed',?)")
+      .run(JSON.stringify({ id: 'take-d', cutId: 'd1', seed: 1, profile: other, snapshot: { nodes: [cut('d1', 'used')], edges: [] }, guard: { cut_id: 'd1', profile_id: 'used', inputs: 'canvas' }, status: 'completed', jobId: 1, resultHash: null }))
+    f.db.prepare("INSERT INTO vc_undo VALUES('old-d','account:1',7,'{}','[]',0)").run()
+    old('old-c', 'account:2', [{ ...profile, id: 'theirs' }], [])
+    f.db.exec('DROP TABLE vc_profile; DROP TABLE vc_settings')
+    const rows = () => f.db.prepare('SELECT id, revision, updated, data FROM vc_project ORDER BY id').all().map((row: any) => row.id === 'old-d' ? { ...row, data: undefined } : row)
+    const before = rows()
+    createStore(f.db)
+    assert.deepEqual(rows(), before)
+    const library = await f.dispatch('library', {}, 'human'), renamed = library.profiles.at(-1).id
+    assert.notEqual(renamed, 'used')
+    assert.deepEqual(library.profiles, [...embedded.a, ...embedded.b, { ...other, id: renamed }])
+    assert.deepEqual(library.settings, { cutProfileId: 'used', upscaleProfileId: null })
+    assert.deepEqual(library.usage, { used: 2, newer: 1, [renamed]: 1 })
+    assert.deepEqual(f.service.store.get('account:1', 'old-b').profiles.map((item: any) => item.id), ['used', generator.id, 'newer', renamed])
+    // Only the project holding the other version is rewritten to name it, its takes included; its undo batch is gone.
+    assert.equal(f.service.store.get('account:1', 'old-d').nodes[0].data.profileId, renamed)
+    const take = f.service.store.take('account:1', 'old-d', 'take-d')
+    assert.deepEqual([take.snapshot.nodes[0].data.profileId, take.guard.profile_id, take.profile.id], [renamed, renamed, renamed])
+    assert.equal(f.service.store.lastLog('old-d'), undefined)
+    assert.deepEqual((await f.service.dispatch({ op: 'library' }, { id: 2 }, 'human', { page: true })).profiles.map((item: any) => item.id), ['theirs'])
+
+    // The assistant's create_name + profile flow adds one library row, not one per project.
+    const first = await f.tool('apply_ops', { create_name: '하나', profile: { workflowId: 12 } })
+    const second = await f.tool('apply_ops', { create_name: '둘', profile: { workflowId: 12 } })
+    assert.equal(second.profileId, first.profileId)
+    assert.equal(f.service.store.profiles('account:1').length, 5)
+    // A project's embedded copy goes with its next save; deleting the default clears it and the cuts keep the ID.
+    await f.dispatch('apply_ops', { project_id: 'old-a', expected_revision: 7, ops: [{ op: 'move', id: 'a1', x: 5, y: 5 }] })
+    assert.deepEqual(f.db.prepare("SELECT id, json_type(data,'$.profiles') AS profiles FROM vc_project WHERE id IN ('old-a','old-b') ORDER BY id").all(), [{ id: 'old-a', profiles: null }, { id: 'old-b', profiles: 'array' }])
+    assert.equal((await f.page({ op: 'delete_profile', id: 'used' })).settings.cutProfileId, null)
+    assert.equal(f.service.store.get('account:1', 'old-a').nodes[0].data.profileId, 'used')
+  } finally { f.db.close() }
+})
+test('video canvas refuses a library save made from a stale read of the entry', async () => {
+  const f = serviceFixture()
+  try {
+    await fixtureProject(f)
+    const read = await f.page({ op: 'library' }), revision = read.revisions[profile.id]
+    const first = await f.page({ op: 'save_profile', profile: { id: profile.id, label: '먼저' }, expected_profile_revision: revision })
+    assert.equal(first.profileRevision, revision + 1)
+    const stale = await f.page({ op: 'save_profile', profile: { id: profile.id, label: '나중' }, expected_profile_revision: revision })
+    assert.deepEqual([stale.ok, stale.status], [false, 409])
+    assert.equal(f.service.store.profiles('account:1')[0].label, '먼저')
+  } finally { f.db.close() }
+})
+test('video canvas merges library entries equal apart from their ID and moves the projects naming the removed ones to the kept one', async () => {
+  const f = serviceFixture()
+  try {
+    const { store } = f.service
+    const cut = (id: string, profileId: string) => ({ id, kind: 'cut', x: 0, y: 0, data: { name: id, mode: 'T2VA', prompt: '', raw: '', duration: 5, seed: 1, profileId }, review: 'pending', memo: '' })
+    const project = (id: string, account: string, nodes: any[]) => f.db.prepare("INSERT INTO vc_project(id,account,name,revision,data,updated,created) VALUES(?,?,?,3,?,'2026-01-01 00:00:00','2026-01-01 00:00:00')")
+      .run(id, account, id, JSON.stringify({ id, name: id, revision: 3, nodes, edges: [], sequence: nodes.map(node => node.id) }))
+    // Two groups of equal entries (the second differs from the first only by its label), an entry of its own and another account.
+    for (const [id, label] of [['old', profile.label], ['a', profile.label], ['b', profile.label], ['m', '둘'], ['n', '둘'], ['single', '하나']]) store.putProfile('account:1', { ...profile, id, label })
+    for (const id of ['x', 'y']) store.putProfile('account:2', { ...profile, id })
+    store.setSettings('account:1', { cutProfileId: 'a', upscaleProfileId: null })
+    project('p1', 'account:1', [cut('c1', 'b'), cut('c2', 'n')])
+    project('p2', 'account:1', [cut('c3', 'single')])
+    project('p3', 'account:2', [cut('c4', 'y')])
+    f.db.prepare("INSERT INTO vc_take(id,project,account,job_id,status,data) VALUES('take-1','p1','account:1',1,'completed',?)")
+      .run(JSON.stringify({ id: 'take-1', cutId: 'c1', seed: 1, profile: { ...profile, id: 'old' }, snapshot: { nodes: [cut('c1', 'old')], edges: [] }, guard: { cut_id: 'c1', profile_id: 'old', inputs: 'canvas' }, status: 'completed', jobId: 1, resultHash: null }))
+    f.db.prepare("INSERT INTO vc_undo VALUES('p1','account:1',3,?,'[]',0)").run(JSON.stringify({ nodes: [cut('c1', 'b')], edges: [], sequence: [] }))
+    const untouched = () => f.db.prepare("SELECT id, revision, updated, data FROM vc_project WHERE id IN ('p2','p3') ORDER BY id").all()
+    const before = untouched()
+    assert.equal((await f.page({ op: 'library' })).duplicates, 3)
+    await assert.rejects(() => f.dispatch('merge_profiles', {}), (error: any) => error.status === 403)
+
+    // The default is kept over the more used entry; without a default the most used is kept over the oldest.
+    assert.deepEqual(await f.page({ op: 'merge_profiles' }), { merged: 3, settings: { cutProfileId: 'a', upscaleProfileId: null } })
+    const library = await f.page({ op: 'library' })
+    assert.deepEqual([library.profiles.map((item: any) => item.id), library.duplicates], [['a', 'n', 'single'], 0])
+    const moved = store.get('account:1', 'p1'), take = store.take('account:1', 'p1', 'take-1')
+    assert.deepEqual([moved.revision, moved.nodes.map((node: any) => node.data.profileId)], [4, ['a', 'n']])
+    assert.equal((f.db.prepare("SELECT revision FROM vc_project WHERE id='p1'").get() as any).revision, 4)
+    assert.deepEqual([take.snapshot.nodes[0].data.profileId, take.guard.profile_id, take.profile.id], ['a', 'a', 'a'])
+    assert.equal(store.lastLog('p1'), undefined)
+    assert.deepEqual(untouched(), before)
+    assert.deepEqual(store.profiles('account:2').map((item: any) => item.id), ['x', 'y'])
+    assert.deepEqual(await f.page({ op: 'merge_profiles' }), { merged: 0, settings: { cutProfileId: 'a', upscaleProfileId: null } })
+  } finally { f.db.close() }
+})
+test('video canvas gives a new cut the default cut setting and a new generation node no setting among several', async () => {
+  const f = serviceFixture()
+  try {
+    f.state.workflowDetails = { 20: genDetails }
+    const project = await fixtureProject(f)
+    // A second cut profile does not become the default by itself.
+    assert.equal((await f.dispatch('save_profile', { profile: { ...profile, id: 'final', label: '본작업' } })).settings.cutProfileId, null)
+    await assert.rejects(() => f.dispatch('save_settings', { settings: { cutProfileId: 'missing' } }), (error: any) => error.status === 404)
+    assert.deepEqual((await f.dispatch('save_settings', { settings: { cutProfileId: 'draft' } })).settings, { cutProfileId: 'draft', upscaleProfileId: null })
+    await f.dispatch('save_profile', { profile: generator })
+    await assert.rejects(() => f.dispatch('save_settings', { settings: { cutProfileId: generator.id } }), /Director/)
+    const one = await f.dispatch('apply_ops', { project_id: project.id, expected_revision: revisionOf(f, project), ops: [{ op: 'add_node', kind: 'cut', tempId: 'cut' }, { op: 'add_node', kind: 'gen', tempId: 'gen' }] })
+    await f.dispatch('save_profile', { profile: { ...generator, id: 'gen-two', label: '두 번째 배경' } })
+    const several = await f.dispatch('apply_ops', { project_id: project.id, expected_revision: one.revision, ops: [{ op: 'add_node', kind: 'gen', tempId: 'gen' }] })
+    const data = (id: string) => f.service.store.get('account:1', project.id).nodes.find((node: any) => node.id === id).data
+    assert.deepEqual([data(one.tempIds.cut).profileId, data(one.tempIds.gen).profileId, data(several.tempIds.gen).profileId], ['draft', generator.id, null])
+  } finally { f.db.close() }
+})
+test('video canvas upscales a finished cut take into a new take of the cut and moves the pick to it', async () => {
+  const f = serviceFixture()
+  try {
+    f.state.historyPerJob = true
+    f.state.workflowDetails = { 30: { name: '영상 업스케일', input_schema: [
+      { id: 'video', label: '영상', type: 'image', json_path: '2.inputs.video', node_class_type: 'VHS_LoadVideo' },
+      { id: 'seed', type: 'number', json_path: '4.inputs.seed' }, { id: 'scale', type: 'number' }] } }
+    const project = await fixtureProject(f), cut = project.nodes[0]
+    const source = await f.dispatch('get_take', { project_id: project.id, take_id: (await f.dispatch('run_cut', await runArgs(f, project))).id })
+    const saved = await f.dispatch('save_profile', { profile: { workflowId: 30, videoFieldId: 'video', fixedInputs: { scale: 2 } } })
+    assert.deepEqual([saved.profile.role, saved.profile.output, saved.settings.upscaleProfileId], ['upscale', 'video', saved.profileId])
+    // An upscale setting generates neither a cut nor a generation node.
+    await assert.rejects(async () => f.dispatch('run_cut', await runArgs(f, project, { profile_id: saved.profileId })), /Director/)
+    const picked = await f.dispatch('apply_ops', { project_id: project.id, expected_revision: 1, ops: [{ op: 'set', id: cut.id, fields: { pickTakeId: source.id } }, { op: 'add_node', kind: 'gen', profileId: saved.profileId }] })
+    assert.match(picked.rejected[0].reason, /업스케일 설정은 생성 노드에/)
+
+    const upscaled = await f.dispatch('run_cut', { project_id: project.id, cut_id: cut.id, action: 'upscale', requestId: randomUUID(), expected_revision: picked.revision })
+    assert.equal(upscaled.upscaleOf, source.id)
+    assert.equal('output' in f.service.store.take('account:1', project.id, upscaled.id), false)
+    assert.deepEqual(f.calls.filter(call => call.name === 'submit_generation_job').at(-1).args, { service_type: 'comfyui', workflow_id: 30, inputs: { scale: 2, video: { composite_hash: source.resultHash }, seed: upscaled.seed }, idempotency_key: `video-canvas-${upscaled.id}` })
+    assert.equal((await f.dispatch('get_take', { project_id: project.id, take_id: upscaled.id })).resultHash, jobHash(482))
+    const after = f.service.store.get('account:1', project.id)
+    assert.deepEqual([after.nodes[0].data.pickTakeId, after.revision], [upscaled.id, picked.revision + 1])
+    // Upscaling the upscaled take again starts from the generated take.
+    const again = await f.dispatch('run_cut', { project_id: project.id, cut_id: cut.id, action: 'upscale', requestId: randomUUID(), expected_revision: after.revision })
+    assert.equal(again.upscaleOf, source.id)
   } finally { f.db.close() }
 })

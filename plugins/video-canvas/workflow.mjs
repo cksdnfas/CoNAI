@@ -1,8 +1,8 @@
-import { adapterOf, outputOf } from './domain.mjs'
+import { adapterOf, outputOf, roleOf, sameValue } from './domain.mjs'
 import { $, esc, outputNames } from './util.mjs'
-import { s, ctx, nodeById, cuts, profileOf, genProfiles } from './state.mjs'
+import { s, ctx, nodeById, profileOf, genProfiles, settingsOf, defaultOf, cutDefault } from './state.mjs'
 import { toast } from './toast.mjs'
-import { request, edit, reload, ui } from './session.mjs'
+import { request, accountRequest, edit, ui } from './session.mjs'
 import { modal } from './dialogs.mjs'
 
 // Cut inputs are never profile settings (the server rejects them), so they never show up as form fields.
@@ -29,7 +29,8 @@ export function ensureOptions(force = false) {
   if (!force && s.wf) return Promise.resolve(s.wf)
   if (!force && failed) return Promise.reject(new Error('워크플로 목록을 불러오지 못했어.'))
   loading ??= request('workflow_options', { presets: true, skills: true }).then(result => { s.wf = result; failed = false; ctx.hooks.renderInspector?.(); return result })
-    .catch(error => { failed = true; toast(error.message, { error: true }); throw error }).finally(() => { loading = null })
+    // `toasted` tells a caller that catches the error that the person has been told already.
+    .catch(error => { failed = true; toast(error.message, { error: true }); error.toasted = true; throw error }).finally(() => { loading = null })
   return loading
 }
 export const wfOf = profile => s.wf?.workflows?.find(workflow => workflow.workflowId === profile?.workflowId)
@@ -41,75 +42,58 @@ const serverOptions = (current) => {
   const known = value => servers.some(server => `id:${server.id}` === value) || tags.some(tag => `tag:${tag}` === value)
   return `<option value="">자동</option>${servers.map(server => `<option value="id:${esc(server.id)}" ${current === `id:${server.id}` ? 'selected' : ''}>${esc(server.name)}</option>`).join('')}${tags.map(tag => `<option value="tag:${esc(tag)}" ${current === `tag:${tag}` ? 'selected' : ''}>태그 · ${esc(tag)}</option>`).join('')}${current && !known(current) ? `<option value="${esc(current)}" selected>${esc(current.replace(/^id:/, '서버 #').replace(/^tag:/, '태그 · '))}</option>` : ''}`
 }
-// The setting a new node starts with, among the profiles that fit its kind (cuts take Director ones, generation nodes the others): the one used last, else the latest saved.
-const lastOf = (director, nodes) => {
-  const own = s.project.profiles.filter(profile => (adapterOf(profile) === 'director') === director)
-  return [s.project.lastProfileId, ...nodes.map(node => node.data.profileId).reverse(), own.at(-1)?.id].find(id => own.some(profile => profile.id === id)) ?? null
+export const serverName = key => key.startsWith('id:') ? s.wf?.servers?.find(server => `id:${server.id}` === key)?.name ?? `서버 #${key.slice(3)}` : key.startsWith('tag:') ? `태그 · ${key.slice(4)}` : '서버 자동'
+/** What a workflow offers a use (`cut`, `upscale` or `gen`): { usable, reason? }, as the server worked it out. */
+const useOf = (role, workflow) => role === 'cut' ? workflow : role === 'gen' ? workflow.generator : workflow.upscale
+/** The workflows a use can take: `usable` are the rows of its picker, `hidden` ones (with the reason) are only counted and listed.
+ *  A cut or an upscale runs an image-kind workflow; sound workflows are only for generation nodes. */
+export function workflowsFor(role) {
+  const all = (s.wf?.workflows ?? []).filter(workflow => role === 'gen' || workflow.kind === 'image')
+  return { usable: all.filter(workflow => useOf(role, workflow).usable), hidden: all.filter(workflow => !useOf(role, workflow).usable).map(workflow => ({ workflow, reason: useOf(role, workflow).reason })) }
 }
-export const lastPresetId = () => lastOf(true, cuts())
-export const lastGeneratorId = () => lastOf(false, s.project.nodes.filter(node => node.kind === 'gen'))
-/** Saves a profile and returns its id (the server picks the id of a new one). */
-export async function saveProfile(profile) {
-  const before = new Set(s.project.profiles.map(item => item.id))
-  const result = await request('save_profile', { expected_revision: s.project.revision, profile })
-  await reload()
-  return profile.id ?? result.profiles.find(item => !before.has(item.id))?.id
+/** A cut setting's changes to its workflow's defaults as text ("해상도 720p · 화면 비율 16:9"): the app saves only changed values, but an older fork can hold defaults too. */
+function changedSettings(profile, wf) {
+  const base = new Map(defaultFields(wf?.defaults).map(field => [field.key, field.value]))
+  const changed = defaultFields(profile.overrides).filter(field => !sameValue(base.get(field.key), field.value)).map(field => `${field.label} ${field.value}`)
+  const inputs = Object.keys(profile.inputs ?? {}).length
+  return [...changed, ...(inputs ? [`추가 입력 ${inputs}개`] : [])].join(' · ')
 }
-export const profileFrom = (workflow, key = '') => ({ workflowId: workflow.workflowId, label: workflow.name, ...serverFields(key), overrides: {}, inputs: {} })
-// A cut runs an image-kind (Director) workflow; sound workflows are only for generation nodes.
-const imageKind = workflow => workflow.kind === 'image'
-/** Asks which workflow (and server) to use. Resolves { workflow, key }, { skip: true } or null when cancelled. */
-export function chooseWorkflow({ title = '어떤 워크플로로 만들까?', allowSkip = false, current } = {}) {
-  return new Promise(resolve => {
-    let result = null, chosen = null
-    modal(title, '<div id="wf-body"><p class="muted">워크플로를 불러오는 중이야…</p></div>', { primary: '이걸로 할래', extra: allowSkip ? '<button id="wf-skip" class="ghost">나중에 고를래</button>' : '' })
-    $('dialog-primary').disabled = true
-    if (allowSkip) $('wf-skip').onclick = () => { result = { skip: true }; $('modal').close() }
-    $('dialog-primary').onclick = () => { result = { workflow: chosen, key: $('wf-server').value }; $('modal').close() }
-    $('modal').addEventListener('close', () => resolve(result), { once: true })
-    ensureOptions(true).then(({ workflows: all }) => {
-      if (!$('wf-body')) return
-      const workflows = all.filter(imageKind)
-      $('wf-body').innerHTML = `<div id="wf-list" class="conai-list picker-list" role="listbox" aria-label="워크플로">${workflows.map(workflow => `<button class="conai-list-row" role="option" data-wf="${esc(workflow.workflowId)}" aria-selected="false" ${workflow.usable ? '' : 'disabled'}><span class="conai-row-main"><span class="conai-row-title">${esc(workflow.name)}</span>${workflow.usable ? '' : `<span class="conai-row-meta">쓸 수 없어 · ${esc(workflow.reason ?? '준비가 덜 됐어')}</span>`}</span></button>`).join('') || '<p class="conai-empty">등록된 워크플로가 없어. ComfyUI 탭에서 먼저 등록해줘.</p>'}</div><label>서버<select id="wf-server">${serverOptions(current?.key ?? '')}</select></label>`
-      const pick = id => {
-        chosen = workflows.find(workflow => String(workflow.workflowId) === String(id))
-        $('wf-list').querySelectorAll('[data-wf]').forEach(row => row.setAttribute('aria-selected', String(row.dataset.wf === String(id))))
-        $('dialog-primary').disabled = !chosen
-      }
-      $('wf-list').onclick = event => { const id = event.target.closest('[data-wf]')?.dataset.wf; if (id) pick(id) }
-      if (current?.workflowId && workflows.some(workflow => workflow.workflowId === current.workflowId && workflow.usable)) pick(current.workflowId)
-    }, error => toast(error.message, { error: true }))
-  })
+/** What tells one setting from another: [{ key, text, warn? }], for the settings dialog's rows and the inspector's summary. */
+export function profileFacts(profile) {
+  const role = roleOf(profile), wf = wfOf(profile), facts = []
+  if (adapterOf(profile) === 'nai') facts.push({ key: '종류', text: `NovelAI · ${profile.nai.model}` })
+  else {
+    facts.push({ key: '워크플로', text: wf?.name ?? (s.wf ? '워크플로를 찾을 수 없어' : `#${profile.workflowId}`), warn: Boolean(s.wf) && !wf })
+    if (wf && !useOf(role, wf).usable) facts.push({ key: '상태', text: `지금은 쓸 수 없어 · ${useOf(role, wf).reason ?? '준비가 덜 됐어'}`, warn: true })
+    facts.push({ key: '서버', text: serverName(serverKey(profile)) })
+  }
+  if (role === 'cut') { const changed = changedSettings(profile, wf); if (changed) facts.push({ key: '바뀐 설정', text: changed }) }
+  // The rows of the dialog show the text only, so each one says what it is: two settings on one workflow differ in these.
+  if (role === 'upscale') facts.push({ key: '영상 입력', text: `영상 입력 ${wf?.upscale.videoFields.find(field => field.id === profile.videoFieldId)?.label ?? profile.videoFieldId}` })
+  if (role !== 'cut') facts.push(...fieldFacts(profile, wf))
+  if (role === 'gen') facts.push({ key: '결과', text: outputNames[outputOf(profile)] })
+  return facts
 }
-/** Saves the cut's changed settings; a preset other cuts also use is forked so only this cut changes. */
-export async function updateProfile(cutId, change) {
-  const cut = nodeById(cutId), profile = profileOf(cut)
-  const shared = cuts().filter(item => item.data.profileId === profile.id).length > 1
-  const next = { label: profile.label, workflowId: profile.workflowId, ...(profile.serverId ? { serverId: profile.serverId } : profile.serverTag ? { serverTag: profile.serverTag } : {}), overrides: { ...profile.overrides }, inputs: { ...profile.inputs } }
-  // The guide text travels with the setting; the skill link stays on the stored profile by itself, so only a fork has to bring it along.
-  for (const key of shared ? ['instruction', 'guide', 'guideSkill'] : ['instruction', 'guide']) if (profile[key] !== undefined) next[key] = profile[key]
-  change(next)
-  if (!shared) next.id = profile.id
-  const id = await saveProfile(next)
-  if (shared) await edit([{ op: 'set', id: cutId, fields: { profileId: id } }])
+/** The facts of a setting as one line (what the settings rows and the menus show to tell same-named settings apart); a fault is not part of it. */
+export const factsLine = profile => profileFacts(profile).filter(fact => !fact.warn).map(fact => fact.text).join(' · ')
+const fieldLabel = (wf, id) => wf?.extraFields?.find(field => field.id === id)?.label ?? id
+// A fixed image can be a data URL of any size; a value that is not plain text is not spelled out.
+const fixedText = value => typeof value === 'string' ? (/^data:/i.test(value.trim()) ? '(파일)' : value) : value !== null && typeof value === 'object' ? '…' : String(value)
+/** A workflow setting's fixed values and (a generation setting's) fields every node fills itself. */
+function fieldFacts(profile, wf) {
+  const fixed = Object.entries(profile.fixedInputs ?? {}).map(([id, value]) => `${fieldLabel(wf, id)} ${fixedText(value)}`)
+  const perNode = (profile.exposedFieldIds ?? []).filter(id => id !== profile.promptFieldId && id !== profile.seedFieldId).map(id => fieldLabel(wf, id))
+  return [...(fixed.length ? [{ key: '고정값', text: `고정값 ${fixed.join(', ')}` }] : []), ...(perNode.length ? [{ key: '노드마다', text: `노드마다 ${perNode.join(', ')}` }] : [])]
 }
-/** Creates a preset from the dialog's choice and binds it to the cut. */
-export async function bindWorkflow(cutId, choice) {
-  const profile = profileOf(nodeById(cutId))
-  if (profile) return updateProfile(cutId, next => {
-    delete next.serverId; delete next.serverTag
-    Object.assign(next, profileFrom(choice.workflow, choice.key))
-  })
-  const id = await saveProfile(profileFrom(choice.workflow, choice.key))
-  await edit([{ op: 'set', id: cutId, fields: { profileId: id } }])
-}
-const valueOf = target => target.dataset.ptype === 'boolean' ? target.checked : target.dataset.ptype === 'number' ? (target.value === '' ? undefined : Number(target.value)) : target.tagName === 'SELECT' ? JSON.parse(target.value) : target.value
+const factsHtml = profile => `<dl class="conai-kv">${profileFacts(profile).map(fact => `<dt>${esc(fact.key)}</dt><dd${fact.warn ? ' class="warning"' : ''}>${esc(fact.text)}</dd>`).join('')}</dl>`
+export const valueOf = target => target.dataset.ptype === 'boolean' ? target.checked : target.dataset.ptype === 'number' ? (target.value === '' ? undefined : Number(target.value)) : target.tagName === 'SELECT' ? JSON.parse(target.value) : target.value
 // Defaults are single values plus nested groups such as `resolution`; a group field is addressed as "group/key".
 const defaultFields = defaults => Object.entries(defaults ?? {}).filter(([key]) => !RESERVED.includes(key)).flatMap(([key, value]) =>
   value && typeof value === 'object' && !Array.isArray(value) ? Object.entries(value).filter(([, item]) => ['number', 'string', 'boolean'].includes(typeof item)).map(([sub, item]) => ({ key: `${key}/${sub}`, label: key === 'resolution' ? (LABELS[sub] ?? sub) : `${LABELS[key] ?? key} · ${LABELS[sub] ?? sub}`, value: item }))
     : ['number', 'string', 'boolean'].includes(typeof value) ? [{ key, label: LABELS[key] ?? key, value }] : [])
-function fieldHtml(field) {
-  const attrs = `data-pf="${esc(field.id)}" data-ptype="${field.options ? 'option' : field.kind}" aria-label="${esc(field.label)}"`
+// `attr` names the data attribute that carries the field's ID: `pf` in a node's detail, `cf` in the settings dialog's cut form.
+function fieldHtml(field, attr = 'pf') {
+  const attrs = `data-${attr}="${esc(field.id)}" data-ptype="${field.options ? 'option' : field.kind}" aria-label="${esc(field.label)}"`
   const input = field.options
     ? `<select ${attrs}>${field.options.map(option => { const value = option?.value ?? option, label = option?.label ?? option; return `<option value="${esc(JSON.stringify(value))}" ${JSON.stringify(value) === JSON.stringify(field.value) ? 'selected' : ''}>${esc(label)}</option>` }).join('')}</select>`
     : field.kind === 'boolean' ? `<input type="checkbox" ${attrs} ${field.value ? 'checked' : ''}>`
@@ -119,60 +103,56 @@ function fieldHtml(field) {
   return `<label class="${field.kind === 'boolean' ? 'vc-check' : ''}">${esc(field.label)}${input}</label>`
 }
 const kindOf = type => ['number', 'integer', 'int', 'float'].includes(type) ? 'number' : ['boolean', 'bool', 'checkbox'].includes(type) ? 'boolean' : 'text'
-/** Section 1 of the cut settings: workflow and server. */
-export function workflowHtml(cut) {
-  const profile = profileOf(cut)
-  if (!s.wf) return `<h2 class="conai-group-head">1 · 워크플로·서버</h2><p class="muted">${profile ? esc(profile.label) : ''} 워크플로 목록을 불러오는 중이야…</p>`
-  const known = wfOf(profile)
-  return `<h2 class="conai-group-head">1 · 워크플로·서버</h2><label>워크플로<select data-pf="workflow">${profile ? '' : '<option value="">골라줘</option>'}${s.wf.workflows.filter(imageKind).map(workflow => `<option value="${esc(workflow.workflowId)}" ${workflow.workflowId === profile?.workflowId ? 'selected' : ''} ${workflow.usable || workflow.workflowId === profile?.workflowId ? '' : 'disabled'}>${esc(workflow.name)}${workflow.usable ? '' : ` — 쓸 수 없어 (${esc(workflow.reason ?? '준비가 덜 됐어')})`}</option>`).join('')}${profile && !known ? `<option value="${esc(profile.workflowId)}" selected>${esc(profile.label)}</option>` : ''}</select></label>${profile ? `<label>서버<select data-pf="server">${serverOptions(serverKey(profile))}</select></label>` : ''}`
+/** Section 1 of a cut's detail: the cut setting and the upscale setting it uses (both chosen among the registered ones), the chosen setting in short, and the way to the library. */
+export function cutSettingsHtml(cut) {
+  const profile = profileOf(cut), own = cut.data.upscaleProfileId, upscales = settingsOf('upscale'), fallback = defaultOf('upscale'), main = defaultOf('cut')
+  // What a deleted setting leaves behind: a cut keeps the ID, gets the default cut setting when it generates and follows the default upscale setting.
+  const lost = cut.data.profileId && !profile, replacement = cutDefault()
+  return `<h2 class="conai-group-head">1 · 설정</h2>
+    <label>영상 설정<select data-pf="profile">${profile ? '' : '<option value="">골라줘</option>'}${settingsOf('cut').map(item => opt(item.id, item.id === main?.id ? `${item.label} · 대표` : item.label, profile?.id)).join('')}</select></label>
+    ${lost ? `<p class="warning">이 컷이 쓰던 영상 설정은 지워졌어. ${replacement ? `생성하면 대표 영상 설정(${esc(replacement.label)})을 받아.` : '쓸 설정을 골라줘.'}</p>` : ''}
+    <label>업스케일 설정<select data-pf="upscale">${opt('', `대표 설정 따름 · ${fallback?.label ?? '없음'}`, own ?? '')}${upscales.map(item => opt(item.id, item.label, own)).join('')}${own && !upscales.some(item => item.id === own) ? opt(own, `지워진 설정 · 대표 설정을 따름 (${fallback?.label ?? '없음'})`, own) : ''}</select></label>
+    ${profile ? factsHtml(profile) : ''}<div class="toolbar"><button data-action="manage-settings" data-role="cut">설정 관리</button></div>`
 }
-/** Section 2: the workflow's adjustable settings as a form; raw overrides only under "고급". */
-export function settingsHtml(cut) {
-  const profile = profileOf(cut), wf = wfOf(profile)
-  const head = '<h2 class="conai-group-head">2 · 워크플로 설정</h2>'
-  if (!profile) return `${head}<p class="conai-empty">워크플로를 먼저 골라줘.</p>`
-  if (!s.wf) return `${head}<p class="muted">불러오는 중…</p>`
+/** The adjustable settings of a cut setting as form fields (`draft` carries its overrides, inputs and the JSON text being edited); raw overrides only under "고급". */
+export function cutFieldsHtml(draft, wf) {
+  const profile = draft
   // The custom ratio and size inputs belong to the "custom" choices, as in the app's resolution panel.
-  const resolution = { ...wf?.defaults?.resolution, ...profile.overrides?.resolution }
+  const resolution = { ...wf.defaults?.resolution, ...profile.overrides?.resolution }
   const customSize = resolution.resolution === 'custom', fixed = resolution.custom_mode === 'fixed'
   const hidden = [
     ...(resolution.aspect === 'custom' ? [] : ['custom_aspect_w', 'custom_aspect_h']),
     ...(customSize ? [] : ['custom_mode']), ...(customSize && !fixed ? [] : ['custom_mp']), ...(customSize && fixed ? [] : ['custom_width', 'custom_height']),
   ].map(key => `resolution/${key}`)
-  const fields = wf ? [
+  const fields = [
     ...defaultFields(wf.defaults).filter(field => !hidden.includes(field.key)).map(field => {
       const [key, sub] = field.key.split('/')
       const value = (sub ? profile.overrides?.[key]?.[sub] : profile.overrides?.[key]) ?? field.value
       return { id: `o:${field.key}`, label: field.label, kind: kindOf(typeof field.value), value, options: withCurrent(OPTIONS[field.key], value) }
     }),
     ...(wf.extraFields ?? []).map(field => ({ id: `i:${field.id}`, type: field.type, label: field.label ?? field.id, kind: kindOf(field.type), options: field.options, min: field.min, max: field.max, value: profile.inputs?.[field.id] ?? field.default })),
-  ] : []
-  const shared = cuts().filter(item => item.data.profileId === profile.id).length > 1
-  return `${head}${fields.map(fieldHtml).join('') || '<p class="conai-empty">이 워크플로에는 조절할 설정이 없어.</p>'}${shared ? '<p class="muted">같은 프리셋을 쓰는 컷이 더 있어. 바꾸면 이 컷만 새 프리셋으로 갈라져.</p>' : ''}<details data-keep="advanced"><summary>고급</summary><label>overrides (JSON)<textarea data-pf="json" rows="5">${esc(JSON.stringify(profile.overrides ?? {}, null, 2))}</textarea></label></details>`
+  ]
+  return `${fields.map(field => fieldHtml(field, 'cf')).join('') || '<p class="conai-empty">이 워크플로에는 조절할 설정이 없어.</p>'}<details data-keep="advanced"><summary>고급</summary><label>overrides (JSON)<textarea data-cf="json" rows="5">${esc(draft.json ?? JSON.stringify(profile.overrides ?? {}, null, 2))}</textarea></label></details>`
 }
-/** change handler for the workflow section and settings form of a cut. */
-export async function onProfileChange(target) {
-  const cutId = target.closest('[data-id]').dataset.id, key = target.dataset.pf
-  if (nodeById(cutId).kind === 'gen') return onGenChange(nodeById(cutId), key, target)
-  if (key === 'workflow') {
-    const workflow = s.wf.workflows.find(item => String(item.workflowId) === target.value)
-    if (workflow) await bindWorkflow(cutId, { workflow, key: serverKey(profileOf(nodeById(cutId))) })
+/** A change in the cut form of the settings dialog goes into the draft. Invalid JSON text stays as typed (`draft.json`) and is refused. */
+export function applyCutField(draft, wf, target) {
+  const key = target.dataset.cf
+  if (key === 'json') {
+    try { draft.overrides = JSON.parse(target.value || '{}'); draft.json = undefined } catch { draft.json = target.value; throw new Error('overrides가 JSON 형식이 아니야.') }
     return
   }
-  if (key === 'server') return updateProfile(cutId, next => { delete next.serverId; delete next.serverTag; Object.assign(next, serverFields(target.value)) })
-  if (key === 'json') {
-    let overrides
-    try { overrides = JSON.parse(target.value || '{}') } catch { throw new Error('overrides가 JSON 형식이 아니야.') }
-    return updateProfile(cutId, next => { next.overrides = overrides })
-  }
   const value = valueOf(target), [group, id] = [key.slice(0, 1), key.slice(2)]
-  return updateProfile(cutId, next => {
-    const bucket = group === 'o' ? next.overrides : next.inputs, [top, sub] = id.split('/')
-    if (sub && group === 'o') {
-      // A changed group is sent whole (the workflow's defaults with the user's change), so it never half-applies.
-      bucket[top] = { ...wfOf(profileOf(nodeById(cutId)))?.defaults?.[top], ...bucket[top], [sub]: value }
-    } else if (value === undefined) delete bucket[id]; else bucket[id] = value
-  })
+  const bucket = group === 'o' ? draft.overrides : draft.inputs, [top, sub] = id.split('/')
+  // A changed group is sent whole (the workflow's defaults with the user's change), so it never half-applies.
+  if (sub && group === 'o') bucket[top] = { ...wf.defaults?.[top], ...bucket[top], [sub]: value }
+  else if (value === undefined) delete bucket[id]
+  else bucket[id] = value
+}
+/** change handler for the selects in a node's detail: the setting a cut or generation node uses, a cut's upscale setting, a generation node's own values. */
+export async function onProfileChange(target) {
+  const node = nodeById(target.closest('[data-id]').dataset.id), key = target.dataset.pf
+  if (node.kind === 'gen') return onGenChange(node, key, target)
+  return edit([{ op: 'set', id: node.id, fields: key === 'upscale' ? { upscaleProfileId: target.value || null } : { profileId: target.value || null } }])
 }
 
 // ---- generation settings: the profiles of generation nodes (ComfyUI workflow or NovelAI), registered here or copied from an app preset ----
@@ -194,7 +174,8 @@ export function genSettingsHtml(node) {
   const profile = profileOf(node), used = profile ? s.project.nodes.filter(item => item.kind === 'gen' && item.data.profileId === profile.id).length : 0
   return `<h2 class="conai-group-head">1 · 생성 설정</h2><label>생성 설정<select data-pf="profile">${profile ? '' : '<option value="">골라줘</option>'}${genProfiles().map(item => opt(item.id, `${item.label} · ${outputNames[outputOf(item)]}`, profile?.id)).join('')}</select></label>
     <div class="toolbar">${profile ? '<button data-gen="edit">생성 설정 고치기</button>' : ''}<button data-gen="new">새 생성 설정</button>${presetsAvailable() ? '<button data-gen="import">생성 프리셋에서 가져오기</button>' : ''}</div>
-    ${profile ? `<p class="muted">${adapterNames[adapterOf(profile)]} · 결과 종류 ${outputNames[outputOf(profile)]}${used > 1 ? ` · 이 생성 설정을 쓰는 생성 노드 ${used}개` : ''}</p>` : '<p class="conai-empty">생성 설정을 먼저 골라줘.</p>'}`
+    ${profile ? `<p class="muted">${adapterNames[adapterOf(profile)]} · 결과 종류 ${outputNames[outputOf(profile)]}${used > 1 ? ` · 이 프로젝트에서 ${used}개 노드가 사용` : ''}</p><p class="muted">모든 프로젝트가 같이 쓰는 설정이라, 고치면 다른 프로젝트의 노드에도 반영돼.</p>`
+      : `<p class="conai-empty">${node.data.profileId ? '이 노드가 쓰던 생성 설정은 지워졌어. 다른 설정을 골라줘.' : '생성 설정을 먼저 골라줘.'}</p>`}`
 }
 /** The fields a generation node fills itself (the profile marks them "노드마다"). */
 export function genFieldsHtml(node) {
@@ -212,19 +193,23 @@ async function onGenChange(node, key, target) {
   return edit([{ op: 'set', id: node.id, fields: { inputs } }])
 }
 
-const draftFor = profile => {
+// ---- the form of one setting in the settings dialog: a draft is edited and only an explicit save sends it ----
+/** The draft of a new setting of a use (`cut`, `upscale`, `gen`), or of `profile` (a stored one). `touched` turns true when anything but the name and guide texts changes. */
+export function newDraft(role, profile = null) {
   const exposed = profile?.exposedFieldIds ?? [], fixed = profile?.fixedInputs ?? {}
-  return { id: profile?.id, original: profile ?? null, label: profile?.label ?? '', workflowId: profile?.workflowId ?? null, output: profile?.output ?? 'image',
-    promptFieldId: profile?.promptFieldId ?? '', seedFieldId: profile?.seedFieldId ?? '', imageFieldIds: [...(profile?.imageFieldIds ?? [])],
-    mode: Object.fromEntries([...exposed.map(id => [id, 'node']), ...Object.keys(fixed).map(id => [id, 'fixed'])]), fixed: { ...fixed },
+  return { role, id: profile?.id, original: profile, touched: false, label: profile?.label ?? '', workflowId: profile?.workflowId ?? null, output: profile?.output ?? 'image',
+    promptFieldId: profile?.promptFieldId ?? '', seedFieldId: profile?.seedFieldId ?? '', imageFieldIds: [...(profile?.imageFieldIds ?? [])], videoFieldId: profile?.videoFieldId ?? '',
+    mode: Object.fromEntries([...(role === 'upscale' ? [] : exposed).map(id => [id, 'node']), ...Object.keys(fixed).map(id => [id, 'fixed'])]), fixed: { ...fixed },
+    overrides: structuredClone(profile?.overrides ?? {}), inputs: structuredClone(profile?.inputs ?? {}), json: undefined,
     key: serverKey(profile), instruction: profile?.instruction ?? '', guide: profile?.guide ?? '',
     // `skill` is the guide skill link to save (undefined keeps the stored one, null cuts it); `skillId` is only the skill the picker shows.
     skill: undefined, skillId: profile?.guideSkill?.skillId ?? null, autoLabel: null }
 }
-/** A newly chosen workflow brings its detected roles and an output guess; values meant for the old workflow go. */
+/** A newly chosen workflow brings its detected roles (a generation node's also an output guess); values meant for the old workflow go. */
 function useWorkflow(draft, workflow) {
-  const { generator } = workflow
-  Object.assign(draft, { workflowId: workflow.workflowId, output: generator.output, promptFieldId: generator.promptFieldId ?? '', seedFieldId: generator.seedFieldId ?? '', imageFieldIds: [...generator.imageFieldIds], mode: {}, fixed: {} })
+  Object.assign(draft, { workflowId: workflow.workflowId, mode: {}, fixed: {}, overrides: {}, inputs: {}, json: undefined })
+  if (draft.role === 'gen') { const { generator } = workflow; Object.assign(draft, { output: generator.output, promptFieldId: generator.promptFieldId ?? '', seedFieldId: generator.seedFieldId ?? '', imageFieldIds: [...generator.imageFieldIds] }) }
+  if (draft.role === 'upscale') Object.assign(draft, { videoFieldId: workflow.upscale.videoFields[0]?.id ?? '', seedFieldId: workflow.upscale.seedFieldId ?? '' })
   if (!draft.label.trim() || draft.label === draft.autoLabel) draft.label = workflow.name
   draft.autoLabel = workflow.name
 }
@@ -250,79 +235,96 @@ function guideSkillHtml(draft) {
   return `${shown}<label>가이드 스킬 고르기<select data-g="skillId"><option value="">연결 없음</option>${skills.map(skill => opt(skill.skillId, skill.enabled ? skill.name : `${skill.name} (꺼져 있음)`, draft.skillId)).join('')}${draft.skillId !== null && !picked ? opt(draft.skillId, `스킬 #${draft.skillId}`, draft.skillId) : ''}</select></label>
     ${picked ? `${picked.enabled ? '' : '<p class="warning">이 스킬이 꺼져 있어서, 켜기 전에는 가이드를 읽지 않아.</p>'}<label>스킬 섹션<select data-g="skillPath"><option value="">섹션 고르기</option>${entries.map(entry => opt(entry.path, entry.label, link?.skillId === picked.skillId ? link.path : '')).join('')}</select></label>` : ''}`
 }
-function generatorBody(draft) {
+/** The "다른 필드" rows: each simple field is the workflow's default, fixed in the setting or (a generation node's) filled per node. */
+const otherFieldsHtml = (draft, workflow, modes) => otherFields(draft, workflow).map(field => `<div class="vc-gfield"><span class="vc-gfield-label" title="${esc(field.id)}">${esc(field.label)}</span><select data-g="mode" data-gid="${esc(field.id)}" aria-label="${esc(field.label)} 방식">${modes.map(([value, label]) => opt(value, label, draft.mode[field.id] ?? 'default')).join('')}</select>${draft.mode[field.id] === 'fixed' ? `<div class="vc-gfixed">${fixedControl(field, draft)}</div>` : ''}</div>`).join('') || '<p class="muted">더 정할 필드가 없어.</p>'
+const seedSelect = (draft, detected) => `<label>시드 필드<select data-g="seedFieldId"><option value="">없음 (시드를 보내지 않아)</option>${[...new Set([detected, draft.seedFieldId].filter(Boolean))].map(id => opt(id, id, draft.seedFieldId)).join('')}</select></label>`
+function genBlock(draft, workflow) {
+  const prompts = textFields(workflow), images = workflow.generator.imageFields
+  return `<label>결과 종류<select data-g="output">${Object.entries(outputNames).map(([value, label]) => opt(value, label, draft.output)).join('')}</select></label><h2 class="conai-group-head">필드 역할</h2>
+    <label>프롬프트 필드<select data-g="promptFieldId"><option value="">없음 (프롬프트를 쓰지 않아)</option>${prompts.map(field => opt(field.id, field.label, draft.promptFieldId)).join('')}${draft.promptFieldId && !prompts.some(field => field.id === draft.promptFieldId) ? opt(draft.promptFieldId, draft.promptFieldId, draft.promptFieldId) : ''}</select></label>
+    ${seedSelect(draft, workflow.generator.seedFieldId)}
+    ${images.length ? `<p>입력 이미지 필드 <span class="muted">(체크한 필드에 위에서부터 입력 이미지 1번, 2번… 순서로 들어가)</span></p>${images.map(field => `<label class="vc-check"><input type="checkbox" data-g="img" value="${esc(field.id)}" ${draft.imageFieldIds.includes(field.id) ? 'checked' : ''}>${esc(field.label)}</label>`).join('')}` : '<p class="muted">이 워크플로에는 이미지 입력 필드가 없어.</p>'}
+    <h2 class="conai-group-head">다른 필드</h2>${otherFieldsHtml(draft, workflow, MODES)}`
+}
+function upscaleBlock(draft, workflow) {
+  const fields = workflow.upscale.videoFields
+  return `<label>영상 입력 필드<select data-g="videoFieldId">${fields.map(field => opt(field.id, field.label, draft.videoFieldId)).join('')}${draft.videoFieldId && !fields.some(field => field.id === draft.videoFieldId) ? opt(draft.videoFieldId, draft.videoFieldId, draft.videoFieldId) : ''}</select></label>
+    ${seedSelect(draft, workflow.upscale.seedFieldId)}<h2 class="conai-group-head">다른 필드</h2>${otherFieldsHtml(draft, workflow, MODES.filter(([value]) => value !== 'node'))}`
+}
+/** The workflow picker lists the usable workflows only; the stored one stays selectable when it no longer is (or is gone), and the hidden ones are counted with their reasons. */
+function workflowPicker(draft, workflow) {
+  const { usable, hidden } = workflowsFor(draft.role), kept = draft.workflowId && !usable.some(item => item.workflowId === draft.workflowId)
+  const others = hidden.filter(item => item.workflow.workflowId !== draft.workflowId)
+  return `<label>워크플로<select data-g="workflowId">${draft.workflowId ? '' : '<option value="">골라줘</option>'}${usable.map(item => opt(item.workflowId, item.name, draft.workflowId)).join('')}${kept ? opt(draft.workflowId, workflow ? `${workflow.name} — 지금은 쓸 수 없어` : `워크플로 #${draft.workflowId} — 찾을 수 없어`, draft.workflowId) : ''}</select></label>
+    ${others.length ? `<details class="muted" data-keep="hidden-workflows"><summary>쓸 수 없는 워크플로 ${others.length}개는 숨겼어</summary><div class="conai-list">${others.map(item => `<div class="conai-list-row sm"><div class="conai-row-main"><span class="conai-row-title">${esc(item.workflow.name)}</span><span class="conai-row-meta">${esc(item.reason ?? '준비가 덜 됐어')}</span></div></div>`).join('')}</div></details>` : ''}`
+}
+/** The whole form of a draft. A setting whose workflow is gone, or no longer usable, keeps it as the selected value and can still be renamed and given guide text. */
+export function formHtml(draft) {
   const nai = draft.original && adapterOf(draft.original) === 'nai', workflow = workflowById(draft.workflowId)
-  const guideText = `<label>안내 (이 생성 설정이 무엇을 만드는지)<textarea data-g="instruction" rows="2">${esc(draft.instruction)}</textarea></label><label>가이드 (프롬프트 쓰는 법)<textarea data-g="guide" rows="5">${esc(draft.guide)}</textarea></label>${guideSkillHtml(draft)}`
+  // An upscale takes no prompt, so it has no guide on how to write one: its only text is the note on what the setting is for.
+  const prompted = draft.role !== 'upscale', texts = prompted ? '이름·안내·가이드' : '이름·안내'
+  const guideText = `<label>안내 (이 설정이 무엇을 위한 건지)<textarea data-g="instruction" rows="2">${esc(draft.instruction)}</textarea></label>${prompted ? `<label>가이드 (프롬프트 쓰는 법)<textarea data-g="guide" rows="5">${esc(draft.guide)}</textarea></label>` : ''}${draft.role === 'gen' ? guideSkillHtml(draft) : ''}`
   const name = `<label>이름<input data-g="label" value="${esc(draft.label)}"></label>`
   if (nai) {
     const config = draft.original.nai
     return `${name}<p class="muted">NovelAI 설정은 생성 프리셋에서 복사한 값이라 여기서 고칠 수 없어. 바꾸려면 생성 프리셋을 다시 가져와줘.</p><p class="muted">${esc(config.model)} · 크기 ${esc(config.sizes.map(size => size.label).join(', '))}</p>${guideText}`
   }
-  const known = s.wf.workflows
-  const prompts = textFields(workflow), images = workflow?.generator.imageFields ?? []
-  const roles = workflow ? `<h2 class="conai-group-head">필드 역할</h2>
-    <label>프롬프트 필드<select data-g="promptFieldId"><option value="">없음 (프롬프트를 쓰지 않아)</option>${prompts.map(field => opt(field.id, field.label, draft.promptFieldId)).join('')}${draft.promptFieldId && !prompts.some(field => field.id === draft.promptFieldId) ? opt(draft.promptFieldId, draft.promptFieldId, draft.promptFieldId) : ''}</select></label>
-    <label>시드 필드<select data-g="seedFieldId"><option value="">없음 (시드를 보내지 않아)</option>${[...new Set([workflow.generator.seedFieldId, draft.seedFieldId].filter(Boolean))].map(id => opt(id, id, draft.seedFieldId)).join('')}</select></label>
-    ${images.length ? `<p>입력 이미지 필드 <span class="muted">(체크한 필드에 위에서부터 입력 이미지 1번, 2번… 순서로 들어가)</span></p>${images.map(field => `<label class="vc-check"><input type="checkbox" data-g="img" value="${esc(field.id)}" ${draft.imageFieldIds.includes(field.id) ? 'checked' : ''}>${esc(field.label)}</label>`).join('')}` : '<p class="muted">이 워크플로에는 이미지 입력 필드가 없어.</p>'}
-    <h2 class="conai-group-head">다른 필드</h2>${otherFields(draft, workflow).map(field => `<div class="vc-gfield"><span class="vc-gfield-label" title="${esc(field.id)}">${esc(field.label)}</span><select data-g="mode" data-gid="${esc(field.id)}" aria-label="${esc(field.label)} 방식">${MODES.map(([value, label]) => opt(value, label, draft.mode[field.id] ?? 'default')).join('')}</select>${draft.mode[field.id] === 'fixed' ? `<div class="vc-gfixed">${fixedControl(field, draft)}</div>` : ''}</div>`).join('') || '<p class="muted">더 정할 필드가 없어.</p>'}`
-    : draft.workflowId ? '<p class="warning">이 워크플로를 지금 목록에서 찾을 수 없어. 필드 설정은 그대로 두고 이름·안내·가이드만 고칠 수 있어.</p>' : ''
-  return `${name}<label>워크플로<select data-g="workflowId">${draft.workflowId ? '' : '<option value="">골라줘</option>'}${known.map(item => opt(item.workflowId, `${item.name}${item.generator.usable ? '' : ` — 쓸 수 없어 (${item.generator.reason ?? '준비가 덜 됐어'})`}`, draft.workflowId, !item.generator.usable && item.workflowId !== draft.workflowId)).join('')}${draft.workflowId && !workflow ? opt(draft.workflowId, draft.original?.label ?? `워크플로 #${draft.workflowId}`, draft.workflowId) : ''}</select></label>
-    <label>서버<select data-g="key">${serverOptions(draft.key)}</select></label>
-    <label>결과 종류<select data-g="output">${Object.entries(outputNames).map(([value, label]) => opt(value, label, draft.output)).join('')}</select></label>${roles}${guideText}`
+  const status = !draft.workflowId ? '' : !workflow ? `<p class="warning">이 워크플로를 지금 목록에서 찾을 수 없어. 필드 설정은 그대로 두고 ${texts}만 고칠 수 있어.</p>`
+    : useOf(draft.role, workflow).usable ? '' : `<p class="warning">이 워크플로는 지금 쓸 수 없어 (${esc(useOf(draft.role, workflow).reason ?? '준비가 덜 됐어')}). 다른 워크플로를 고르거나 ${texts}만 고칠 수 있어.</p>`
+  const block = !workflow ? '' : draft.role === 'cut' ? cutFieldsHtml(draft, workflow) : draft.role === 'upscale' ? upscaleBlock(draft, workflow) : genBlock(draft, workflow)
+  return `${name}${workflowPicker(draft, workflow)}${status}<label>서버<select data-g="key">${serverOptions(draft.key)}</select></label>${block}${guideText}`
 }
-function profileFromDraft(draft) {
-  const workflow = workflowById(draft.workflowId), nai = draft.original && adapterOf(draft.original) === 'nai'
-  const common = { ...(draft.id ? { id: draft.id } : {}), label: draft.label.trim(), instruction: draft.instruction, guide: draft.guide, ...(draft.skill === undefined ? {} : { guideSkill: draft.skill }) }
-  if (nai) return { ...common, output: 'image' }
+/** True when the draft can be saved. */
+export const formReady = draft => Boolean(draft.workflowId || draft.original && adapterOf(draft.original) === 'nai') && (draft.role !== 'upscale' || Boolean(draft.videoFieldId))
+/** The profile a save sends. With nothing but the name and guide texts changed the stored profile goes back as it is, so the server skips the workflow check
+ *  and a setting whose workflow is gone or unusable can still be renamed. Invalid JSON text in the cut form is refused. */
+export function formPayload(draft) {
+  const text = { label: draft.label.trim(), instruction: draft.instruction, guide: draft.guide, ...(draft.skill === undefined ? {} : { guideSkill: draft.skill }) }
+  if (draft.original && !draft.touched) return { ...draft.original, ...text }
+  if (draft.json !== undefined) throw new Error('overrides가 JSON 형식이 아니야.')
+  const workflow = workflowById(draft.workflowId), common = { ...(draft.id ? { id: draft.id } : {}), ...text, workflowId: draft.workflowId, ...serverFields(draft.key) }
+  if (draft.role === 'cut') return { ...common, overrides: draft.overrides, inputs: draft.inputs }
   const shown = otherFields(draft, workflow), listed = new Set((workflow?.extraFields ?? []).map(field => field.id))
   // Values of fields this form cannot show (kept as they were) stay in the profile.
   const hidden = key => !listed.has(key)
   const fixedInputs = { ...Object.fromEntries(Object.entries(draft.original?.fixedInputs ?? {}).filter(([key]) => hidden(key))), ...Object.fromEntries(shown.filter(field => draft.mode[field.id] === 'fixed' && draft.fixed[field.id] !== undefined && draft.fixed[field.id] !== '').map(field => [field.id, draft.fixed[field.id]])) }
+  // An upscale has no prompt, no input images and no per-node values: its one input is the video.
+  if (draft.role === 'upscale') return { ...common, videoFieldId: draft.videoFieldId, seedFieldId: draft.seedFieldId || null, promptFieldId: null, imageFieldIds: [], exposedFieldIds: [], fixedInputs }
   const exposedFieldIds = [...(draft.original?.exposedFieldIds ?? []).filter(hidden), ...shown.filter(field => draft.mode[field.id] === 'node').map(field => field.id)]
-  return { ...common, workflowId: draft.workflowId, output: draft.output, promptFieldId: draft.promptFieldId || null, seedFieldId: draft.seedFieldId || null, imageFieldIds: draft.imageFieldIds, exposedFieldIds, fixedInputs, ...serverFields(draft.key) }
+  return { ...common, output: draft.output, promptFieldId: draft.promptFieldId || null, seedFieldId: draft.seedFieldId || null, imageFieldIds: draft.imageFieldIds, exposedFieldIds, fixedInputs }
 }
 const STRUCTURAL = ['workflowId', 'promptFieldId', 'seedFieldId', 'mode', 'skillId', 'skillPath']
-/** Registers a generation setting, or edits `profile`. Resolves the saved profile's ID, or null when cancelled. */
-export async function generatorDialog({ profile } = {}) {
-  await ensureOptions(true)
-  return new Promise(resolve => {
-    const draft = draftFor(profile)
-    let saved = null
-    modal(profile ? '생성 설정 고치기' : '생성 설정 등록', '<div id="gen-form"></div>', { primary: '저장' })
-    const render = () => {
-      const form = $('gen-form')
-      form.innerHTML = generatorBody(draft)
-      $('dialog-primary').disabled = !draft.workflowId && !(draft.original && adapterOf(draft.original) === 'nai')
-    }
-    $('gen-form').addEventListener('input', event => handle(event))
-    $('gen-form').addEventListener('change', event => handle(event))
-    function handle(event) {
-      const target = event.target, key = target.dataset.g, id = target.dataset.gid, workflow = workflowById(draft.workflowId)
-      if (!key) return
-      if (key === 'img') draft.imageFieldIds = [...$('gen-form').querySelectorAll('[data-g=img]')].filter(box => box.checked).map(box => box.value)
-      else if (key === 'workflowId') { const next = workflowById(Number(target.value)); if (next) useWorkflow(draft, next) }
-      else if (key === 'mode') {
-        draft.mode[id] = target.value
-        const field = workflow?.extraFields.find(item => item.id === id)
-        if (target.value === 'fixed' && draft.fixed[id] === undefined && field?.options) draft.fixed[id] = field.default ?? field.options[0]
-      } else if (key === 'fixed') {
-        const field = workflow?.extraFields.find(item => item.id === id)
-        draft.fixed[id] = field?.type === 'number' ? (target.value === '' ? undefined : Number(target.value)) : target.value
-      } else if (key === 'skillId') {
-        draft.skillId = target.value ? Number(target.value) : null
-        // Choosing "연결 없음" cuts the stored link; choosing a skill changes nothing until one of its sections is picked.
-        if (!target.value) draft.skill = draft.original?.guideSkill ? null : undefined
-      } else if (key === 'skillPath') {
-        if (target.value) { const link = { skillId: draft.skillId, path: target.value }; draft.skill = sameLink(link, draft.original?.guideSkill) ? undefined : link }
-      } else draft[key] = target.value
-      if (event.type === 'change' && STRUCTURAL.includes(key)) render()
-    }
-    $('dialog-primary').onclick = () => void ui(async () => { saved = await saveProfile(profileFromDraft(draft)); $('modal').close() })
-    $('modal').addEventListener('close', () => resolve(saved), { once: true })
-    render()
-  })
+const TEXT_KEYS = ['label', 'instruction', 'guide', 'skillId', 'skillPath']
+/** An input or change event in the form changes the draft; returns true when the form has to be drawn again. A rejected value throws. */
+export function formChange(draft, event, root) {
+  const target = event.target, key = target.dataset.g, id = target.dataset.gid, workflow = workflowById(draft.workflowId)
+  if (target.dataset.cf) {
+    if (event.type !== 'change') return false
+    draft.touched = true
+    applyCutField(draft, workflow, target)
+    return target.dataset.cf === 'json' || target.dataset.cf.startsWith('o:resolution/')
+  }
+  if (!key) return false
+  if (!TEXT_KEYS.includes(key)) draft.touched = true
+  if (key === 'img') draft.imageFieldIds = [...root.querySelectorAll('[data-g=img]')].filter(box => box.checked).map(box => box.value)
+  else if (key === 'workflowId') { const next = workflowById(Number(target.value)); if (next && next.workflowId !== draft.workflowId) useWorkflow(draft, next) }
+  else if (key === 'mode') {
+    draft.mode[id] = target.value
+    const field = workflow?.extraFields.find(item => item.id === id)
+    if (target.value === 'fixed' && draft.fixed[id] === undefined && field?.options) draft.fixed[id] = field.default ?? field.options[0]
+  } else if (key === 'fixed') {
+    const field = workflow?.extraFields.find(item => item.id === id)
+    draft.fixed[id] = field?.type === 'number' ? (target.value === '' ? undefined : Number(target.value)) : target.value
+  } else if (key === 'skillId') {
+    draft.skillId = target.value ? Number(target.value) : null
+    // Choosing "연결 없음" cuts the stored link; choosing a skill changes nothing until one of its sections is picked.
+    if (!target.value) draft.skill = draft.original?.guideSkill ? null : undefined
+  } else if (key === 'skillPath') {
+    if (target.value) { const link = { skillId: draft.skillId, path: target.value }; draft.skill = sameLink(link, draft.original?.guideSkill) ? undefined : link }
+  } else draft[key] = target.value
+  return event.type === 'change' && STRUCTURAL.includes(key)
 }
-/** Asks which preset to copy, then makes the generation setting from it. Resolves the new profile's ID, or null when cancelled. */
+/** Asks which preset to copy, then makes the generation setting from it. Resolves the new setting's ID, or null when cancelled. */
 export async function importPresetDialog() {
   await ensureOptions(true)
   const presets = s.wf.presets ?? []
@@ -345,30 +347,10 @@ export async function importPresetDialog() {
     }
     $('dialog-primary').onclick = () => void ui(async () => {
       const label = $('preset-label').value.trim()
-      const result = await request('import_preset', { expected_revision: s.project.revision, preset: { id: chosen.id, ...(label && label !== chosen.name ? { label } : {}), ...(chosen.kind === 'nai' ? {} : { output: $('preset-output').value }) } })
-      await reload()
-      saved = result.lastProfileId
+      const result = await accountRequest('import_preset', { preset: { id: chosen.id, ...(label && label !== chosen.name ? { label } : {}), ...(chosen.kind === 'nai' ? {} : { output: $('preset-output').value }) } })
+      saved = result.profileId
       $('modal').close()
     })
     $('modal').addEventListener('close', () => resolve(saved), { once: true })
   })
-}
-/** Asks which generation setting to use. Resolves { id }, { skip: true } or null when cancelled; registering or importing happens here and resolves the new ID. */
-export async function chooseGenerator({ title = '어떤 생성 설정으로 만들까?', allowSkip = false, current } = {}) {
-  await ensureOptions(true)
-  const pick = await new Promise(resolve => {
-    let result = null
-    const list = genProfiles()
-    modal(title, `<div id="gen-list" class="conai-list picker-list" role="listbox" aria-label="생성 설정">${list.map(item => `<button class="conai-list-row" role="option" data-profile="${esc(item.id)}" aria-selected="${item.id === current}"><span class="conai-row-main"><span class="conai-row-title">${esc(item.label)}</span><span class="conai-row-meta">${esc(adapterNames[adapterOf(item)])} · 결과 종류 ${esc(outputNames[outputOf(item)])}</span></span></button>`).join('') || '<p class="conai-empty">등록한 생성 설정이 없어. 새로 만들거나 생성 프리셋에서 가져와줘.</p>'}</div>`,
-      { extra: `<button id="gen-new">새 생성 설정</button>${presetsAvailable() ? '<button id="gen-import">생성 프리셋에서 가져오기</button>' : ''}${allowSkip ? '<button id="gen-skip" class="ghost">나중에 고를래</button>' : ''}` })
-    const done = value => { result = value; $('modal').close() }
-    $('gen-list').onclick = event => { const id = event.target.closest('[data-profile]')?.dataset.profile; if (id) done({ id }) }
-    $('gen-new').onclick = () => done({ action: 'new' })
-    if (presetsAvailable()) $('gen-import').onclick = () => done({ action: 'import' })
-    if (allowSkip) $('gen-skip').onclick = () => done({ skip: true })
-    $('modal').addEventListener('close', () => resolve(result), { once: true })
-  })
-  if (!pick?.action) return pick
-  const id = await (pick.action === 'import' ? importPresetDialog() : generatorDialog())
-  return id ? { id } : null
 }

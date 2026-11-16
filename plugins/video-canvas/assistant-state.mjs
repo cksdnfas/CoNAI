@@ -1,4 +1,4 @@
-import { fail, outputOf, profileOf, profilePublication, representativeTake, sameValue, sequenceOf } from './domain.mjs'
+import { fail, outputOf, profileOf, representativeTake, sameValue, sequenceOf } from './domain.mjs'
 
 // These are host transport boundaries, not limits on a canvas, prompt or operation.
 export const SNAPSHOT_CHARS = 200000
@@ -20,7 +20,6 @@ const hostShape = (value, depth = 0) => {
 const size = value => JSON.stringify(value).length
 const editPublication = batch => ({
   ...batch,
-  ...(batch.profiles ? { profiles: batch.profiles.map(profilePublication) } : {}),
   applied: (batch.applied ?? []).map(item => ({ ...item, op: JSON.stringify(item.op) })),
   rejected: (batch.rejected ?? []).map(item => ({ ...item, op: JSON.stringify(item.op) })),
   tempIds: Object.entries(batch.tempIds ?? {}).map(([tempId, id]) => ({ tempId, id })),
@@ -78,7 +77,7 @@ export function excerpt(project, { offset, cursor = offset, edge_cursor, limit, 
 // Published `projects` rows; long lists page through the snapshot like any other section.
 export const projectRows = projects => projects.map(({ id, name, revision, updated, created, nodeCount, cutCount, archived, cover }) => ({ id, name, revision, updated, created, nodeCount, cutCount, archived, cover }))
 // Published `pendingExports`, like pendingExtractions.
-export const exportStates = project => (project?.exports ?? []).map(({ id, status, jobId, progress, resultHash, error, cutIds, takeIds }) => ({ id, status, jobId, progress, resultHash, error, cutIds, takeIds }))
+export const exportStates = project => (project?.exports ?? []).map(({ id, status, jobId, progress, resultHash, error, cutIds, takeIds, warnings }) => ({ id, status, jobId, progress, resultHash, error, cutIds, takeIds, warnings }))
 // Published `pendingChains` (and the shape of `lastChain`).
 export const chainStates = project => (project?.chains ?? []).map(({ id, status, cutIds, current, steps, error }) => ({ id, status, cutIds, current, steps: steps.map(({ cutId, status, takeId, error }) => ({ cutId, status, takeId, error })), error }))
 export function createAssistantState() {

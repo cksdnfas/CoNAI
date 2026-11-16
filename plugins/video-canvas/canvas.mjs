@@ -1,12 +1,12 @@
 import { $, names, patch } from './util.mjs'
-import { s, ctx, nodeById, repTake, frameRole, outputKind, takeOutput, SLOT_KINDS } from './state.mjs'
+import { s, ctx, nodeById, repTake, frameRole, outputKind, takeOutput, cutRunning, upscaleRetry, SLOT_KINDS } from './state.mjs'
 import { ui, edit, task, request, openDetail, showInspector } from './session.mjs'
 import { showMenu } from './menu.mjs'
 import { transform, zoomAt, toStage, fit } from './viewport.mjs'
 import { nodeEl } from './nodes.mjs'
 import { drawEdges, center, curve, inStage } from './links.mjs'
 import { picker } from './dialogs.mjs'
-import { applySelection, addCut, addGen, duplicateCuts, announceModeChange, removeNodes, removeEdge, pickTake, takeAction, runFor, changeWorkflow, extractFrom, continueFromPrevious, connectCutResult, disconnectOps, linkMenu, foldFrame, arrangeOps } from './actions.mjs'
+import { applySelection, addCut, genMenu, duplicateCuts, announceModeChange, removeNodes, removeEdge, pickTake, takeAction, runFor, chooseSetting, extractFrom, continueFromPrevious, connectCutResult, disconnectOps, linkMenu, foldFrame, arrangeOps } from './actions.mjs'
 
 // ---- connecting: drag from an output port, live line, snap, drop ----
 const RESULT_PORTS = ['ref_video', 'start', 'end', 'ref_image']
@@ -91,7 +91,8 @@ export function renderFloat() {
 // ---- menus ----
 const SOURCES = ['image', 'video', 'audio', 'bundle']
 export const sourceItems = at => SOURCES.map(kind => ({ label: `${names[kind]} 가져오기…`, run: () => picker(kind, at) }))
-export const addItems = at => [{ label: '영상 컷 추가', run: () => addCut(at) }, { label: '생성 노드 추가', run: () => addGen(at) }, { sep: true }, ...sourceItems(at)]
+/** The empty-canvas menu: `at` is the stage position of the click, `point` its viewport position (where the generation setting choice opens). */
+export const addItems = (at, point) => [{ label: '영상 컷 추가', run: () => addCut(at) }, { label: '생성 노드 추가…', run: () => genMenu(at, point.x, point.y) }, { sep: true }, ...sourceItems(at)]
 export function nodeMenu(node) {
   const ids = s.sel.includes(node.id) ? s.sel : [node.id], hash = node.data.ref?.source === 'library' ? node.data.ref.compositeHash : null
   const cut = node.kind === 'cut', runs = cut || node.kind === 'gen', rep = runs ? repTake(node) : null
@@ -101,7 +102,7 @@ export function nodeMenu(node) {
     runs && { label: '생성', run: () => runFor(node.id) },
     s.open.includes(node.id) && { label: '접기', run: () => foldFrame(node.id) },
     { label: '설정·상세 열기', run: () => showInspector(true) },
-    runs && { label: cut ? '워크플로 바꾸기' : '생성 설정 바꾸기', run: () => changeWorkflow(node.id) },
+    runs && { label: cut ? '컷 설정 바꾸기' : '생성 설정 바꾸기', run: () => chooseSetting(node.id) },
     cut && { label: '앞 컷에서 이어가기', run: () => continueFromPrevious(node.id) },
     runs && { label: ids.length > 1 ? '복제 (선택 전체)' : '복제', run: () => duplicateCuts(ids) },
     openable && { label: '결과 상세에서 열기', run: () => openDetail(rep.resultHash) },
@@ -118,8 +119,12 @@ function takeMenu(cut, take) {
     take.resultHash && takeOutput(take) !== 'audio' && { label: '상세에서 열기', run: () => openDetail(take.resultHash) },
     take.resultHash && cut.kind === 'cut' && { label: '프레임 추출', run: () => extractFrom({ takeId: take.id }) },
     { sep: true },
-    { label: '같은 시드로 다시 생성', disabled: s.runBusy, run: () => takeAction('rerun-canvas', take.id) },
-    { label: '새 시드로 다시 생성', disabled: s.runBusy, run: () => takeAction('rerun-new', take.id) },
+    // An upscale that is still running on the cut is not started again. One that ended with no result runs again with its own setting, as its card button does.
+    ...(take.upscaleOf ? [{ label: '다시 업스케일', disabled: s.runBusy || cutRunning(cut), run: () => takeAction(upscaleRetry(take) ? 'upscale-again' : 'upscale', take.id) }] : [
+      cut.kind === 'cut' && take.resultHash && { label: '업스케일', disabled: s.runBusy || cutRunning(cut), run: () => takeAction('upscale', take.id) },
+      { label: '같은 시드로 다시 생성', disabled: s.runBusy, run: () => takeAction('rerun-canvas', take.id) },
+      { label: '새 시드로 다시 생성', disabled: s.runBusy, run: () => takeAction('rerun-new', take.id) },
+    ]),
   ]
 }
 function onContextMenu(event) {
@@ -141,7 +146,7 @@ function onContextMenu(event) {
   }
   if (node) return showMenu(event.clientX, event.clientY, nodeMenu(node))
   if (s.sel.length || s.edgeSel) applySelection([])
-  showMenu(event.clientX, event.clientY, addItems(toStage(event.clientX, event.clientY)))
+  showMenu(event.clientX, event.clientY, addItems(toStage(event.clientX, event.clientY), { x: event.clientX, y: event.clientY }))
 }
 
 // ---- pointer: select, move, pan, connect ----

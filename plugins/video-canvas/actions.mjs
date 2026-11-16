@@ -1,12 +1,14 @@
-import { PORTS, cutEdges } from './domain.mjs'
-import { esc, fileUrl, isTerminal, ports } from './util.mjs'
-import { s, ctx, nodeById, cuts, profileOf, repTake, shownTake, takesOf, cutOrder, frameRole, frameSource, frameLabel } from './state.mjs'
+import { PORTS, cutEdges, outputOf } from './domain.mjs'
+import { esc, fileUrl, isTerminal, ports, outputNames } from './util.mjs'
+import { s, ctx, nodeById, cuts, profileOf, repTake, frameTake, shownTake, takesOf, cutOrder, frameRole, frameSource, frameLabel, settingsOf, genProfiles, defaultOf, cutDefault, upscaleSettingOf } from './state.mjs'
 import { toast } from './toast.mjs'
+import { showMenu } from './menu.mjs'
 import { request, ui, edit, reload, launchRun, lockRunButtons, publish, saveView } from './session.mjs'
 import { nodeSize, nodeBoxes, freeSpot, freeSpots, reveal } from './viewport.mjs'
-import { markSelection } from './nodes.mjs'
+import { markSelection, nodeEl } from './nodes.mjs'
 import { confirmDialog, extractionDialog, extractionTarget, afterFrames, settleExtraction, watchExtraction, modal } from './dialogs.mjs'
-import { chooseWorkflow, bindWorkflow, saveProfile, profileFrom, lastPresetId, lastGeneratorId, serverKey, onProfileChange, chooseGenerator, generatorDialog, importPresetDialog } from './workflow.mjs'
+import { onProfileChange, factsLine, ensureOptions } from './workflow.mjs'
+import { openSettings } from './settings.mjs'
 
 // ---- selection ----
 export function applySelection(ids) {
@@ -31,7 +33,6 @@ export function focusNode(id, takeId) {
 }
 // ---- creating and removing ----
 const newSeed = () => crypto.getRandomValues(new Uint32Array(1))[0] & 2147483647
-/** Adds a cut. The first cut (or one with no preset to reuse) asks for the workflow first; later ones reuse the last preset. */
 function nextCutName() {
   const used = new Set(cuts().map(cut => cut.data.name))
   let number = cuts().length + 1
@@ -45,46 +46,61 @@ function nextCutSpot() {
   const size = nodeSize(last)
   return freeSpot({ w: size.w, h: 370 }, { x: last.x + size.w + 96, y: last.y }, nodeBoxes(), 1, 6)
 }
+/** Adds a cut at once; the server gives it the default cut setting. One that came back without a setting (none registered, or several and no default) opens the settings. */
 export async function addCut(at) {
-  let choice = null
-  if (!lastPresetId()) { choice = await chooseWorkflow({ allowSkip: true }); if (!choice) return }
   await ui(async () => {
-    const profileId = choice?.workflow ? await saveProfile(profileFrom(choice.workflow, choice.key)) : lastPresetId()
-    const result = await edit([{ op: 'add_node', kind: 'cut', name: nextCutName(), at: at ?? nextCutSpot(), tempId: 'new-cut' }, ...(profileId ? [{ op: 'set', id: 'new-cut', fields: { profileId } }] : [])])
-    await select(result.applied[0]?.id)
+    const result = await edit([{ op: 'add_node', kind: 'cut', name: nextCutName(), at: at ?? nextCutSpot(), tempId: 'new-cut' }])
+    const id = result.applied[0]?.id
+    await select(id)
+    if (id && !profileOf(nodeById(id))) void openSettings('cut', { message: '새 컷에 줄 컷 설정이 없어서 설정 없이 만들었어. 컷 설정을 등록하고 대표로 정하거나, 컷에서 설정을 골라줘.' })
   })
 }
-/** Adds a generation node. Without any generation setting in the project it asks for one first (or lets the person choose later);
- *  otherwise the server gives it the setting used last. */
-export async function addGen(at) {
-  let profileId
-  if (!lastGeneratorId()) {
-    const choice = await chooseGenerator({ allowSkip: true }).catch(() => null)
-    if (!choice) return
-    profileId = choice.id
-  }
+/** Adds a generation node with a registered generation setting. */
+export function addGen(at, profileId) {
   const used = new Set(s.project.nodes.filter(node => node.kind === 'gen').map(node => node.data.name))
   let number = used.size + 1
   while (used.has(`생성 ${number}`)) number++
-  await ui(async () => {
-    const result = await edit([{ op: 'add_node', kind: 'gen', name: `생성 ${number}`, at: at ?? freeSpots(1, 'cut')[0], tempId: 'new-gen', ...(profileId ? { profileId } : {}) }])
+  return ui(async () => {
+    const result = await edit([{ op: 'add_node', kind: 'gen', name: `생성 ${number}`, at: at ?? freeSpots(1, 'cut')[0], tempId: 'new-gen', profileId }])
     await select(result.applied[0]?.id)
   })
 }
-/** Puts a generation setting on a node (a setting of another kind of output has other fields, so the node's own values reset). */
-const useGenerator = (nodeId, id) => ui(() => edit([{ op: 'set', id: nodeId, fields: { profileId: id, inputs: {}, size: null } }]))
-async function changeGenerator(nodeId) {
-  const profile = profileOf(nodeById(nodeId)), choice = await chooseGenerator({ title: '생성 설정 바꾸기', current: profile?.id }).catch(() => null)
-  if (choice?.id && choice.id !== profile?.id) await useGenerator(nodeId, choice.id)
+/** The choice of generation settings for a new generation node, as a menu at a point; with none registered the settings open on their tab. */
+export function genMenu(at, x, y) {
+  const list = genProfiles()
+  if (!list.length) return void openSettings('gen')
+  showMenu(x, y, [...list.map(profile => settingItem(list, profile, `${profile.label} · ${outputNames[outputOf(profile)]}`, { run: () => addGen(at, profile.id) })), { sep: true }, { label: '생성 설정 관리…', run: () => openSettings('gen') }])
 }
-/** The inspector's buttons of a generation node: edit this setting, register a new one, import a preset. */
+/** A menu entry of a setting. When another setting of the list has the same name, the entry also shows the facts the settings rows use to tell them apart.
+ *  The facts name the workflow, so they wait for the workflow list (asked for here, shown from the next menu on). */
+function settingItem(list, profile, label, item) {
+  const twin = list.some(other => other !== profile && other.label === profile.label)
+  if (twin && !s.wf) ensureOptions().catch(() => {})
+  return { label, ...(twin && s.wf ? { meta: factsLine(profile) } : {}), ...item }
+}
+/** Puts a registered setting on a node (a generation setting of another kind of output has other fields, so the node's own values reset). */
+const useSetting = (node, id) => ui(() => edit([{ op: 'set', id: node.id, fields: node.kind === 'gen' ? { profileId: id, inputs: {}, size: null } : { profileId: id } }]))
+/** The registered settings of a node's use with the current one marked, and the way to the settings. */
+function settingMenu(node) {
+  const role = node.kind === 'gen' ? 'gen' : 'cut', current = profileOf(node)?.id, main = defaultOf('cut'), list = settingsOf(role)
+  return [...list.map(profile => settingItem(list, profile, role === 'gen' ? `${profile.label} · ${outputNames[outputOf(profile)]}` : profile.id === main?.id ? `${profile.label} · 대표` : profile.label, { checked: profile.id === current, run: () => profile.id !== current && useSetting(node, profile.id) })),
+    { sep: true }, { label: '설정 관리…', run: () => openSettings(role) }]
+}
+/** The setting menu under a card's setting button (with no setting registered for the node's use the settings open instead). */
+export function chooseSetting(nodeId, anchor = nodeEl(nodeId)?.querySelector('[data-action=pick-setting]')) {
+  const node = nodeById(nodeId), role = node.kind === 'gen' ? 'gen' : 'cut', rect = anchor.getBoundingClientRect()
+  if (!settingsOf(role).length) return void openSettings(role)
+  showMenu(rect.left, rect.bottom + 4, settingMenu(node))
+}
+/** The inspector's buttons of a generation node: edit this setting, register a new one, import a preset. They all go through the settings dialog;
+ *  a setting created or imported there is put on the node. */
 export function bindGen() {
   document.addEventListener('click', async event => {
     const target = event.target.closest('[data-gen]'), nodeId = target?.closest('[data-id]')?.dataset.id
     if (!target || target.disabled || nodeById(nodeId)?.kind !== 'gen') return
     const profile = profileOf(nodeById(nodeId)), action = target.dataset.gen
-    const id = await (action === 'edit' ? generatorDialog({ profile }) : action === 'import' ? importPresetDialog() : generatorDialog()).catch(() => null)
-    if (id && id !== profile?.id) await useGenerator(nodeId, id)
+    const id = await openSettings('gen', { start: action, ...(action === 'edit' ? { id: profile.id } : {}) })
+    if (id && id !== profile?.id) await useSetting(nodeById(nodeId), id)
   })
 }
 const modeText = change => `모드는 ${change.from} → ${change.to}로 바뀌었어.`
@@ -99,7 +115,7 @@ export function duplicateCuts(ids) {
   const ops = [], taken = nodeBoxes()
   ids.map(nodeById).filter(node => node?.kind === 'cut' || node?.kind === 'gen').forEach((node, index) => {
     const temp = `copy-${index}`, data = node.data, size = nodeSize(node), cut = node.kind === 'cut'
-    const fields = cut ? { prompt: data.prompt, raw: data.raw, duration: data.duration, seed: newSeed(), profileId: data.profileId }
+    const fields = cut ? { prompt: data.prompt, raw: data.raw, duration: data.duration, seed: newSeed(), profileId: data.profileId, upscaleProfileId: data.upscaleProfileId }
       : { prompt: data.prompt, seed: data.seed, profileId: data.profileId, inputs: data.inputs, size: data.size }
     // The copy goes to the first free spot right of its source.
     ops.push({ op: 'add_node', kind: node.kind, tempId: temp, name: `${data.name} 복사`, at: freeSpot(size, { x: node.x + size.w + 24, y: node.y }, taken), fields: defined(fields) })
@@ -143,20 +159,26 @@ export function cycleTake(cutId, direction) {
 }
 export function takeAction(action, takeId) {
   const take = s.project.takes.find(take => take.id === takeId)
+  if (action === 'upscale') return upscaleCut(take.cutId, take.id)
+  // A failed upscale runs again as a new take on its source with the same setting, as long as that setting is still registered.
+  if (action === 'upscale-again') return upscaleCut(take.cutId, take.upscaleOf, settingsOf('upscale').some(profile => profile.id === take.profile.id) ? take.profile.id : undefined)
   const args = action.startsWith('rerun-') ? { cut_id: take.cutId, take_id: takeId, profile_id: profileOf(nodeById(take.cutId))?.id ?? take.profile.id, inputs: action === 'rerun-take' ? 'take' : 'canvas', new_seed: action === 'rerun-new' }
     : { cut_id: take.cutId, action, take_id: takeId, input_digest: take.inputDigest }
   return launchRun(args)
 }
-/** Generate: a cut with no preset asks for the workflow first. */
+/** Generate. A generation node with no setting asks for one; so does a cut with none (a proposal, or no default setting for the server to give it). */
 export function runFor(cutId, mode = 'now') {
-  if (!profileOf(nodeById(cutId))) { toast(nodeById(cutId).kind === 'gen' ? '생성 설정을 먼저 골라줘.' : '워크플로를 먼저 골라줘.'); return changeWorkflow(cutId) }
+  const node = nodeById(cutId)
+  if (!profileOf(node) && !(node.kind === 'cut' && mode === 'now' && cutDefault())) { toast(node.kind === 'gen' ? '생성 설정을 먼저 골라줘.' : '컷 설정을 먼저 골라줘.'); return chooseSetting(cutId) }
   return launchRun({ cut_id: cutId, mode })
 }
-export async function changeWorkflow(cutId) {
-  if (nodeById(cutId).kind === 'gen') return changeGenerator(cutId)
-  const profile = profileOf(nodeById(cutId))
-  const choice = await chooseWorkflow({ title: '워크플로 바꾸기', current: profile && { workflowId: profile.workflowId, key: serverKey(profile) } })
-  if (choice?.workflow) await ui(() => bindWorkflow(cutId, choice))
+/** Upscales the result a cut shows (an upscale stands for the take it came from). With no upscale setting to use, the settings open on their upscale tab. */
+export function upscaleCut(cutId, takeId, profileId) {
+  const cut = nodeById(cutId)
+  if (!profileId && !upscaleSettingOf(cut)) {
+    return void openSettings('upscale', { message: settingsOf('upscale').length ? '이 컷에 쓸 업스케일 설정이 없어. 업스케일 설정을 대표로 정하거나 컷의 상세에서 골라줘.' : '업스케일 설정이 없어. 영상을 불러오는 입력이 있는 워크플로로 등록해줘.' })
+  }
+  return launchRun({ cut_id: cutId, action: 'upscale', take_id: takeId ?? shownTake(cut).id, ...(profileId ? { profile_id: profileId } : {}) })
 }
 export function extractFrom({ nodeId, takeId, target, after }) {
   return ui(() => extractionDialog({ nodeId, takeId, target, after }))
@@ -184,7 +206,7 @@ function replaceLink(edgeId, cutId, port) {
 /** Takes the first or last frame of a cut's representing result into a slot of another cut. A start/end slot's old frame is replaced
  *  by the server; `replaces` (a ref_image link) is replaced here once the new frame is connected, in the old one's place. */
 async function pullFrame(fromId, cutId, port, position, confirm = false, replaces = null) {
-  const from = nodeById(fromId), take = repTake(from)
+  const from = nodeById(fromId), take = frameTake(from)
   if (!take?.resultHash) return toast(`${from.data.name}에 쓸 결과가 아직 없어. 먼저 생성해줘.`, { error: true })
   const cut = nodeById(cutId), single = ['start', 'end'].includes(port), existing = single ? cutEdges(s.project, cut, false).find(edge => edge.port === port) : null
   if (existing && confirm && !await confirmDialog(`${ports[port]}을 바꿀까?`, `<p>${esc(cut.data.name)}의 ${ports[port]} 연결을 ${esc(from.data.name)}의 ${FRAME_POSITIONS[position]}으로 바꿔.</p>`, '바꾸기', false)) return
@@ -223,7 +245,7 @@ export function repull(edgeId) {
   return pullFrame(link.cut.id, link.target.id, edge.port, position, false, edge.port === 'ref_image' ? edgeId : null)
 }
 function pickFrame(edgeId) {
-  const edge = s.project.edges.find(item => item.id === edgeId), link = edge && sourceOf(edge), take = link && repTake(link.cut)
+  const edge = s.project.edges.find(item => item.id === edgeId), link = edge && sourceOf(edge), take = link && frameTake(link.cut)
   if (!take) return toast('이 컷에 쓸 결과가 아직 없어. 먼저 생성해줘.', { error: true })
   const listed = edge.port === 'ref_image'
   return extractFrom({ takeId: take.id, target: { cut: link.target.id, port: edge.port, ...(listed ? { position: edge.position } : {}) }, ...(listed ? { after: replaceLink(edgeId, link.target.id, edge.port) } : {}) })

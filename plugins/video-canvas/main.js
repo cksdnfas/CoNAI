@@ -3,7 +3,7 @@ import { $, esc, names, ports, isTerminal, fillIcons } from './util.mjs'
 import { s, ctx, cuts, assistant } from './state.mjs'
 import { notice, initToasts, dockToasts } from './toast.mjs'
 import { initMenu, showMenu } from './menu.mjs'
-import { request, queued, assistantTask, ui, edit, reload, publish, lockRunButtons, launchRun, doCheck, refreshQueued, loadView, saveView, openDetail, showInspector, forgetProject } from './session.mjs'
+import { request, accountRequest, recordEdits, queued, assistantTask, ui, edit, reload, publish, lockRunButtons, launchRun, doCheck, refreshQueued, loadView, saveView, openDetail, showInspector, forgetProject } from './session.mjs'
 import { reveal } from './viewport.mjs'
 import { renderNodes, bindNodes } from './nodes.mjs'
 import { libraryName, watchExtraction } from './dialogs.mjs'
@@ -12,7 +12,8 @@ import { renderSequence, bindSequence, startSequencePlayback, playExport, watchE
 import { loadProjects, renderHome, chooseProject, createProject, newProjectDialog, bindHome, bindTitle, settled, hasChosen } from './home.mjs'
 import { drawEdges, renderTray, bindLinks } from './links.mjs'
 import { renderFloat, bindCanvas, sourceItems } from './canvas.mjs'
-import { select, focusNode, focusFrame, addCut, addGen, bindGen, announceModeChange } from './actions.mjs'
+import { select, focusNode, focusFrame, addCut, genMenu, bindGen, announceModeChange } from './actions.mjs'
+import { openSettings, bindSettings } from './settings.mjs'
 import { bindDispatch } from './dispatch.mjs'
 
 // Every `task` below belongs to a page action from the assistant (the person's own two launch-bar tasks use `queued`).
@@ -51,8 +52,9 @@ function bindHeader() {
   $('new-project').onclick = () => void newProjectDialog()
   $('back-home').onclick = () => void ui(() => chooseProject(null))
   $('add-cut').onclick = () => void addCut()
-  $('add-gen').onclick = () => void addGen()
+  $('add-gen').onclick = event => { const rect = event.currentTarget.getBoundingClientRect(); genMenu(undefined, rect.left, rect.bottom + 4) }
   $('empty-add').onclick = () => void addCut()
+  $('home-settings').onclick = $('project-settings').onclick = () => void openSettings()
   $('add-source').onclick = event => { const rect = event.currentTarget.getBoundingClientRect(); showMenu(rect.left, rect.bottom + 4, sourceItems(undefined)) }
   $('toggle-inspector').onclick = () => showInspector(!s.inspectorOpen)
   $('insp-close').onclick = () => showInspector(false)
@@ -101,6 +103,8 @@ const actions = {
     let id = args.export_id
     if (!id) {
       const started = await task(async () => { const result = await call({ wait_seconds: undefined }); await reload(); return result })
+      // The assistant reads these in its result; the person who watches the canvas is told as well.
+      for (const warning of started.warnings ?? []) notice(warning, true)
       if (!seconds) return
       id = started.id
     }
@@ -110,14 +114,28 @@ const actions = {
   'video-canvas.edit': args => task(async () => {
     // One server operation creates the project with its profile; no revision of another project is involved.
     if (args.create_name) {
-      const { profileId } = await createProject(args.create_name, args.profile_json ? JSON.parse(args.profile_json) : undefined, args.preset_json ? JSON.parse(args.preset_json) : undefined)
+      const { profileId } = await createProject(args.create_name, args.profile_json ? JSON.parse(args.profile_json) : undefined, args.preset_json ? JSON.parse(args.preset_json) : undefined, args.expected_profile_revision)
       return { id: s.project.id, revision: s.project.revision, ...(profileId ? { profileId } : {}) }
     }
-    if (args.profile_json || args.preset_json || args.undo) {
-      const op = args.undo ? 'undo' : args.preset_json ? 'import_preset' : 'save_profile'
-      const result = await request(op, { origin: 'assistant', expected_revision: args.expected_revision, ...(args.profile_json ? { profile: JSON.parse(args.profile_json) } : {}), ...(args.preset_json ? { preset: JSON.parse(args.preset_json) } : {}) })
+    if (args.undo) {
+      const result = await request('undo', { origin: 'assistant', expected_revision: args.expected_revision })
       await reload()
       return { revision: result.revision }
+    }
+    // The settings library belongs to the account: these calls name no project and need no revision.
+    if (args.profile_json || args.preset_json || args.settings_json) {
+      // The calls of one action are one edit: each result is kept and they are published together, also when a later one fails.
+      const done = [], call = async (op, extra) => { done.push([op, await accountRequest(op, { origin: 'assistant', record: false, ...extra })]) }
+      let failure, published
+      try {
+        if (args.profile_json) await call('save_profile', { profile: JSON.parse(args.profile_json), ...(args.expected_profile_revision === undefined ? {} : { expected_profile_revision: args.expected_profile_revision }) })
+        if (args.preset_json) await call('import_preset', { preset: JSON.parse(args.preset_json) })
+        if (args.settings_json) await call('save_settings', { settings: JSON.parse(args.settings_json) })
+      } catch (error) { failure = error }
+      // A call that went through is saved whatever came after it: it is published and the open canvas shows it (menus and selects read the library).
+      if (done.length) { published = recordEdits(done, 'assistant'); if (s.project) await reload() }
+      if (failure) throw failure
+      return published
     }
     const ops = JSON.parse(args.ops)
     if (ops.some(op => op.op === 'remove')) throw new Error('삭제는 video-canvas.remove 검토 작업으로 요청해줘.')
@@ -172,7 +190,7 @@ const actions = {
 let booted = Promise.resolve()
 const gated = Object.fromEntries(Object.entries(actions).map(([id, handler]) => [id, async (args, context) => { await booted; await settled(); return handler(args, context) }]))
 ctx.api = await connectPlugin(gated)
-fillIcons(); initToasts(); initMenu(); bindHeader(); bindNodes(); bindCanvas(); bindLinks(); bindDispatch(); bindGen(); bindHome(); bindTitle(); bindSequence()
+fillIcons(); initToasts(); initMenu(); bindHeader(); bindNodes(); bindCanvas(); bindLinks(); bindDispatch(); bindGen(); bindSettings(); bindHome(); bindTitle(); bindSequence()
 if (ctx.api.supports('launch.image') && ctx.api.launch?.image) {
   s.launch = { compositeHash: ctx.api.launch.image.compositeHash, kind: 'image' }
   libraryName(s.launch.compositeHash).then(name => { launchName = name; ctx.launchName = name; renderLaunch() }, error => notice(error.message, true))

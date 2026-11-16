@@ -1,5 +1,5 @@
 import { $, esc, clamp, statusNames, isTerminal, fileUrl, thumbUrl, progressText, fraction, patch, icon } from './util.mjs'
-import { s, ctx, nodeById, repTake, cutOrder, profileOf, activeChain, stepOf, cutState, finishing, allLinks, DOCK_H } from './state.mjs'
+import { s, ctx, nodeById, repTake, cutOrder, profileOf, cutDefault, activeChain, stepOf, cutState, runningWord, allLinks, DOCK_H } from './state.mjs'
 import { toast } from './toast.mjs'
 import { showMenu } from './menu.mjs'
 import { request, ui, edit, reload, reloadQueued, saveView } from './session.mjs'
@@ -44,11 +44,11 @@ function cardState(cut) {
   const state = cutState(cut), percent = state.ratio === null ? '' : ` ${Math.round(state.ratio * 100)}%`
   if (state.step?.status === 'skipped') return ['건너뜀', '']
   if (state.key === 'waiting' || state.key === 'queued') return ['대기', '']
-  const working = state.take && finishing(state.take) ? '마무리 중' : `생성 중${percent}`
+  const working = state.take ? `${runningWord(state.take)}${percent}` : `생성 중${percent}`
   if (state.key === 'current') return state.step.status === 'extracting' ? ['프레임 뽑는 중', ''] : [working, 'warn']
   if (state.key === 'generating') return [working, 'warn']
   if (state.key === 'proposed') return ['승인 대기', 'warn']
-  if (state.key === 'failed') return ['실패', 'destructive']
+  if (state.key === 'failed') return [state.word, 'destructive']
   return null
 }
 const stepNames = { pending: '대기', skipped: '건너뜀', extracting: '프레임 뽑는 중', generating: '생성 중', completed: '완료', failed: '실패', cancelled: '취소됨' }
@@ -65,6 +65,8 @@ function itemHtml(cut, index, order, links, length) {
   const lengthTitle = step?.error ?? (length.real ? '실제 길이' : '예상 길이(결과가 아직 없어)')
   return `<button class="conai-media-card vc-seq-item" draggable="true" data-seq="${esc(cut.id)}" ${chain?.current === cut.id ? 'data-current' : ''} title="${esc(`${cut.data.name}${step?.error ? ` · ${step.error}` : ''}`)}" aria-label="${esc(cut.data.name)}"><span class="conai-media">${take ? `<img src="${thumbUrl(take.resultHash)}" alt="" loading="lazy">` : '<span class="vc-seq-none">생성 전</span>'}<span class="conai-overlay-badge tl">${index + 1}</span><span class="conai-overlay-badge xs tr" title="${esc(lengthTitle)}">${length.real ? '' : '~'}${secs(length.value)}</span>${badge ? `<span class="conai-overlay-badge br ${badge[1]}">${esc(badge[0])}</span>` : ''}${back ? `<span class="conai-overlay-badge xs bl" title="시작 프레임: ${esc(back.source.data.name)}">↩ ${order.findIndex(item => item.id === back.source.id) + 1}</span>` : ''}<i class="vc-seq-progress"></i></span></button>`
 }
+// Warnings the server gave the export (upscaled and not upscaled cuts mixed): a mark on the card, the text as its tooltip.
+const warnHtml = item => item.warnings?.length ? `<span class="conai-overlay-badge xs bl warn" role="img" title="${esc(item.warnings.join('\n'))}" aria-label="${esc(item.warnings.join(' '))}">경고</span>` : ''
 function exportHtml(order, chain) {
   const item = (s.project?.exports ?? []).at(-1)
   if (!item) return ''
@@ -73,12 +75,12 @@ function exportHtml(order, chain) {
   const length = durations.get(item.resultHash) ?? (Number(item.duration) || 0)
   if (!isTerminal(item.status)) {
     const value = fraction(item.progress), text = `합본 만드는 중${value === null ? '' : ` ${Math.round(value * 100)}%`}`
-    return `<div class="vc-seq-export" data-export-card><span class="conai-media vc-export-media"><span class="vc-export-text" title="${esc(statusNames[item.status] ?? item.status)} ${esc(progressText(item.progress))}">${esc(text)}</span><button class="sm vc-export-cancel" data-action="export-cancel" data-export="${esc(item.id)}">취소</button><i class="vc-seq-progress" style="width:${Math.round((value ?? 0) * 100)}%"></i></span></div>`
+    return `<div class="vc-seq-export" data-export-card><span class="conai-media vc-export-media"><span class="vc-export-text" title="${esc(statusNames[item.status] ?? item.status)} ${esc(progressText(item.progress))}">${esc(text)}</span><button class="sm vc-export-cancel" data-action="export-cancel" data-export="${esc(item.id)}">취소</button>${warnHtml(item)}<i class="vc-seq-progress" style="width:${Math.round((value ?? 0) * 100)}%"></i></span></div>`
   }
   if (item.status === 'completed' && item.resultHash) {
-    return `<div class="vc-seq-export" data-export-card ${stale ? 'data-stale' : ''}><button class="conai-media-card" data-action="export-play" data-export="${esc(item.id)}" title="여기서 재생" aria-label="합본 재생"><span class="conai-media vc-export-media"><img src="${thumbUrl(item.resultHash)}" alt="" loading="lazy"><span class="conai-overlay-badge xs tl">${stale ? '이전 합본' : '합본'}${length ? ` · ${secs(length)}` : ''}</span></span></button><button class="conai-icon-button sm overlay vc-export-open" data-action="open-detail" data-hash="${esc(item.resultHash)}" aria-label="상세에서 열기" title="상세에서 열기">${icon('maximize', 14)}</button></div>`
+    return `<div class="vc-seq-export" data-export-card ${stale ? 'data-stale' : ''}><button class="conai-media-card" data-action="export-play" data-export="${esc(item.id)}" title="여기서 재생" aria-label="${esc(`합본 재생${item.warnings?.length ? ` · 경고: ${item.warnings.join(' ')}` : ''}`)}"><span class="conai-media vc-export-media"><img src="${thumbUrl(item.resultHash)}" alt="" loading="lazy"><span class="conai-overlay-badge xs tl">${stale ? '이전 합본' : '합본'}${length ? ` · ${secs(length)}` : ''}</span>${warnHtml(item)}</span></button><button class="conai-icon-button sm overlay vc-export-open" data-action="open-detail" data-hash="${esc(item.resultHash)}" aria-label="상세에서 열기" title="상세에서 열기">${icon('maximize', 14)}</button></div>`
   }
-  return `<div class="vc-seq-export" data-export-card ${stale ? 'data-stale' : ''}><span class="conai-media vc-export-media"><span class="vc-export-text error" title="${esc(item.error ?? '')}">${esc(statusNames[item.status] ?? item.status)}${item.error ? ` · ${esc(item.error)}` : ''}</span><span class="conai-overlay-badge xs tl">${stale ? '이전 합본' : '합본'}</span></span></div>`
+  return `<div class="vc-seq-export" data-export-card ${stale ? 'data-stale' : ''}><span class="conai-media vc-export-media"><span class="vc-export-text error" title="${esc(item.error ?? '')}">${esc(statusNames[item.status] ?? item.status)}${item.error ? ` · ${esc(item.error)}` : ''}</span><span class="conai-overlay-badge xs tl">${stale ? '이전 합본' : '합본'}</span>${warnHtml(item)}</span></div>`
 }
 const scrubHtml = (order, lengths) => order.map((cut, index) => `<button class="vc-scrub-seg" data-scrub="${esc(cut.id)}" style="flex-grow:${lengths[index].value || 1}" title="${esc(cut.data.name)}" ${repTake(cut) ? '' : 'disabled'}><i></i></button>`).join('')
 // The running chain takes the place of the 이어 생성 button: finished steps out of all, the cut being worked on and its step, cancel.
@@ -282,6 +284,7 @@ export async function startExport() {
       await reload()
       watchExport(result.id)
       toast('합본 내보내기를 시작했어.')
+      for (const warning of result.warnings ?? []) toast(warning, { error: true })
     }, $('seq-export-btn'))
   } finally { exportStarting = false; lockExport() }
 }
@@ -295,9 +298,10 @@ export function cancelExport(id) {
 // ---- chain: 이어 생성 runs on the server; the page starts it and follows it like an export ----
 let chainStarting = false
 function lockChain() {
-  const button = $('seq-chain'), order = cutOrder().map(nodeById), unprofiled = order.filter(cut => !profileOf(cut))
+  // A cut with no setting gets the default one when the chain runs; without a default each of them needs its own.
+  const button = $('seq-chain'), order = cutOrder().map(nodeById), unprofiled = cutDefault() ? [] : order.filter(cut => !profileOf(cut))
   button.disabled = chainStarting || !order.length || unprofiled.length > 0
-  button.title = unprofiled.length ? `${unprofiled.map(cut => cut.data.name).join(', ')}에 워크플로가 없어. 먼저 골라줘.` : '앞 컷의 마지막 프레임으로 이어서 차례로 생성'
+  button.title = unprofiled.length ? `${unprofiled.map(cut => cut.data.name).join(', ')}에 컷 설정이 없어. 먼저 골라줘.` : '앞 컷의 마지막 프레임으로 이어서 차례로 생성'
 }
 function watchChain(id) {
   if (chainWatches.has(id)) return

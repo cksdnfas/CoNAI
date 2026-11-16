@@ -38,18 +38,16 @@ export function representativeTake(project, cut) {
   if (cut.data.pickTakeId) return takes.find(take => take.id === cut.data.pickTakeId) ?? null
   return takes.filter(take => take.resultHash).at(-1) ?? null
 }
-// A canvas copy with fresh node, edge and profile IDs; takes and job state stay with the original.
+// A canvas copy with fresh node and edge IDs; nodes keep their library profile IDs. Takes and job state stay with the original.
 export function duplicateCanvas(project, uuid) {
   const ids = new Map(), fresh = id => { if (!ids.has(id)) ids.set(id, uuid()); return ids.get(id) }
-  const profiles = project.profiles.map(profile => ({ ...copy(profile), id: fresh(profile.id) }))
   const nodes = project.nodes.map(node => {
     const data = copy(node.data)
     delete data.check; delete data.pickTakeId
-    if (data.profileId) data.profileId = ids.get(data.profileId) ?? null
     return { ...copy(node), id: fresh(node.id), data }
   })
   const edges = project.edges.map(edge => ({ ...copy(edge), id: uuid(), from: fresh(edge.from), to: fresh(edge.to) }))
-  return { nodes, edges, profiles, sequence: sequenceOf(project).map(fresh), profileIds: ids }
+  return { nodes, edges, sequence: sequenceOf(project).map(fresh) }
 }
 export function nodeOf(project, id) {
   const node = project.nodes.find(node => node.id === id)
@@ -69,16 +67,22 @@ export function generatorOf(project, id) {
 }
 export const profileOf = (project, node) => project.profiles.find(profile => profile.id === node.data.profileId)
 // Stored profiles: a Director profile names its Director field, a NovelAI one carries the preset's copied `nai` settings,
-// a generic workflow profile names its output instead.
-export const adapterOf = profile => profile.directorFieldId ? 'director' : profile.nai ? 'nai' : profile.output === undefined ? 'director' : 'workflow'
+// a generic workflow profile names its output (or, for an upscale, its video input field) instead.
+export const adapterOf = profile => profile.directorFieldId ? 'director' : profile.nai ? 'nai' : profile.output === undefined && profile.videoFieldId == null ? 'director' : 'workflow'
 export const outputOf = profile => ({ director: 'video', nai: 'image', workflow: profile.output })[adapterOf(profile)]
+// What a profile is for, derived and never stored: `cut` (Director) generates cuts, `upscale` (a workflow profile with a video
+// input field) upscales a cut's take, `gen` (the other workflow and NovelAI profiles) runs generation nodes.
+export const roleOf = profile => adapterOf(profile) === 'director' ? 'cut' : adapterOf(profile) === 'workflow' && profile.videoFieldId ? 'upscale' : 'gen'
+const ROLE_REFUSALS = { cut: '컷에는 Director 생성 설정을 골라줘.', gen: '생성 노드에는 워크플로나 NovelAI 생성 설정을 골라줘.', upscale: '업스케일에는 영상 입력 필드가 있는 업스케일 설정을 골라줘.' }
+const ROLE_NAMES = { cut: '컷', gen: '생성 노드', upscale: '업스케일' }
+/** `kind` is the use: `cut` (a cut's generation), `gen` (a generation node) or `upscale` (a cut's upscale); the profile's role must match. */
 export function assertAdapter(kind, profile) {
-  if ((adapterOf(profile) === 'director') !== (kind === 'cut')) fail(kind === 'cut' ? '컷에는 Director 생성 설정을 골라줘.' : '생성 노드에는 워크플로나 NovelAI 생성 설정을 골라줘.')
+  if (roleOf(profile) !== kind) fail(kind === 'gen' && roleOf(profile) === 'upscale' ? '업스케일 설정은 생성 노드에 쓸 수 없어. 컷의 업스케일 설정으로 골라줘.' : ROLE_REFUSALS[kind])
   return profile
 }
 function profileFor(project, kind, profileId) {
   const profile = project.profiles.find(item => item.id === profileId)
-  if (!profile) fail(`이 프로젝트에 없는 생성 설정이야. ${kind === 'cut' ? '컷' : '생성 노드'}에 맞는 생성 설정을 골라줘.`)
+  if (!profile) fail(`생성 설정 목록에 없는 설정이야. ${ROLE_NAMES[kind]}에 맞는 생성 설정을 골라줘.`)
   return assertAdapter(kind, profile)
 }
 // A take's result as a source reference: sounds are audio candidates, pictures and videos library media.
@@ -189,7 +193,8 @@ function renumber(project) {
   }
   for (const peers of groups.values()) peers.sort((a, b) => a.position - b.position || a.id.localeCompare(b.id)).forEach((edge, index) => { edge.position = index })
 }
-const editable = ['name', 'mode', 'prompt', 'raw', 'seed', 'duration', 'frame_rate', 'profileId', 'pickTakeId']
+// A cut's upscaleProfileId names an upscale profile; null follows the account's default upscale profile.
+const editable = ['name', 'mode', 'prompt', 'raw', 'seed', 'duration', 'frame_rate', 'profileId', 'pickTakeId', 'upscaleProfileId']
 const genEditable = ['name', 'prompt', 'seed', 'profileId', 'pickTakeId', 'inputs', 'size']
 // Keys each edit operation reads (besides op/type); any other key is refused instead of silently dropped.
 const OP_KEYS = {
@@ -292,6 +297,7 @@ function applyOne(project, op, aliases, uuid, actor) {
         if (['name', 'prompt', 'raw'].includes(key) && typeof value !== 'string') fail('텍스트가 필요해.')
         if (key === 'pickTakeId' && value !== null && !project.takes?.some(take => take.id === value && take.cutId === node.id)) fail(node.kind === 'gen' ? '이 생성 노드의 take를 골라줘.' : '이 컷의 take를 골라줘.')
         if (key === 'profileId' && value !== null) profileFor(project, node.kind, value)
+        if (key === 'upscaleProfileId' && value !== null) profileFor(project, 'upscale', value)
         node.data[key] = copy(value)
       }
       if (node.kind === 'cut') validateData(node.data)
@@ -575,7 +581,7 @@ export function buildDirector(project, cut, assets = {}, overrides = {}) {
 const guideKeys = ['instruction', 'guide', 'guideSkill']
 const profileKeys = {
   director: ['id', 'label', 'workflowId', 'directorFieldId', 'seedFieldId', 'serverId', 'serverTag', 'overrides', 'inputs', ...guideKeys],
-  workflow: ['id', 'label', 'workflowId', 'serverId', 'serverTag', 'output', 'promptFieldId', 'seedFieldId', 'imageFieldIds', 'exposedFieldIds', 'fixedInputs', ...guideKeys],
+  workflow: ['id', 'label', 'workflowId', 'serverId', 'serverTag', 'output', 'promptFieldId', 'seedFieldId', 'imageFieldIds', 'exposedFieldIds', 'fixedInputs', 'videoFieldId', ...guideKeys],
   nai: ['id', 'label', 'output', 'nai', ...guideKeys],
 }
 const SAME_ADAPTER = '같은 생성 설정 ID로 생성 방식(Director/워크플로/NovelAI)을 바꿀 수 없어. 새 생성 설정으로 저장해줘.'
@@ -605,6 +611,16 @@ export function mergeProfile(input, existing, fields) {
   return given
 }
 const profileData = profile => copy(Object.fromEntries(profileKeys[adapterOf(profile)].filter(key => profile[key] !== undefined).map(key => [key, profile[key]])))
+const textKeys = ['id', 'label', 'instruction', 'guide', 'guideSkill']
+/**
+ * The stored profile with only its name and guide texts changed, or null when `input` changes anything else (that save checks
+ * the workflow). A profile whose workflow became unusable or was removed can still be renamed this way.
+ */
+export function relabelProfile(input, existing) {
+  if (Object.keys(input).some(key => !textKeys.includes(key) && !sameValue(input[key], existing[key]))) return null
+  const given = mergeProfile(input, existing)
+  return { ...profileData({ ...given, label: String(given.label ?? '').trim() ? given.label : existing.label }), ...guideData(given) }
+}
 // Data-URL values (an image fixed in a preset) are blobs the assistant has no use for; it reads a marker instead.
 const DATA_URL = '(data URL)'
 const withoutDataUrls = value => typeof value === 'string' ? (/^data:/i.test(value.trim()) ? DATA_URL : value)
@@ -639,15 +655,21 @@ function generatorRoles(fields, given = {}) {
   return {
     promptFieldId: given.promptFieldId !== undefined ? given.promptFieldId : pick?.[0].id ?? null,
     seedFieldId: given.seedFieldId !== undefined ? given.seedFieldId : fields.find(isSeedField)?.id ?? null,
-    imageFieldIds: given.imageFieldIds ?? fields.filter(field => field.type === 'image' && !(record(given.fixedInputs) && own(given.fixedInputs, field.id))).map(field => field.id),
+    imageFieldIds: given.imageFieldIds ?? fields.filter(field => field.type === 'image' && field.id !== given.videoFieldId && !(record(given.fixedInputs) && own(given.fixedInputs, field.id))).map(field => field.id),
   }
 }
+// An image-type marked field that loads a video: its node class says video, or it fills a node's `video` input.
+const isVideoField = field => field.type === 'image' && (/video/i.test(field.node_class_type ?? '') || String(field.json_path ?? field.jsonPath ?? '').split('.').at(-1) === 'video')
 // A profile given as just a workflow takes the workflow name and its own Director and seed fields; one with an output, its generic roles.
 export function completeProfile(profile, details) {
   if (!record(profile)) fail('프로필 이름과 워크플로를 골라줘.')
   const fields = details.input_schema ?? []
   const label = String(profile.label ?? '').trim() ? profile.label : details.name
-  if (adapterOf(profile) === 'workflow') return { ...profile, label, ...generatorRoles(fields, profile), exposedFieldIds: profile.exposedFieldIds ?? [], fixedInputs: profile.fixedInputs ?? {} }
+  if (adapterOf(profile) === 'workflow') {
+    // An upscale profile (one with a video input field) always makes a video.
+    const { videoFieldId, ...generic } = profile, upscale = videoFieldId == null ? {} : { videoFieldId, output: 'video' }
+    return { ...generic, label, ...generatorRoles(fields, profile), exposedFieldIds: profile.exposedFieldIds ?? [], fixedInputs: profile.fixedInputs ?? {}, ...upscale }
+  }
   return { ...profile, label,
     directorFieldId: profile.directorFieldId ?? fields.find(isDirectorField)?.id,
     seedFieldId: profile.seedFieldId ?? fields.find(isSeedField)?.id }
@@ -690,6 +712,9 @@ function validateGenerator(profile, fields) {
   if (profile.seedFieldId != null && !(field(profile.seedFieldId) && isSeedField(field(profile.seedFieldId)))) fail('시드 필드는 숫자 시드 Marked Field로 골라줘.')
   const images = profile.imageFieldIds ?? []
   if (!Array.isArray(images) || new Set(images).size !== images.length || images.some(id => field(id)?.type !== 'image')) fail('이미지 입력 필드는 겹치지 않는 이미지 Marked Field ID 배열로 골라줘.')
+  // The host uploads a library video as it is into an image-type field (prepareComfyPromptData getComfyMediaUploadInput);
+  // the field must load a video by the rule workflowOption lists `upscale.videoFields` with.
+  if (profile.videoFieldId !== undefined && (!field(profile.videoFieldId) || !isVideoField(field(profile.videoFieldId)) || images.includes(profile.videoFieldId))) fail('업스케일 영상 입력 필드(videoFieldId)는 영상을 불러오는 이미지 Marked Field 중에서, 이미지 입력 필드와 겹치지 않게 골라줘.')
   const exposed = profile.exposedFieldIds ?? []
   if (!Array.isArray(exposed) || exposed.some(id => !field(id))) fail('exposedFieldIds는 이 워크플로의 Marked Field ID 배열로 써줘.')
   if (profile.fixedInputs !== undefined && !record(profile.fixedInputs)) fail('fixedInputs는 필드 ID별 값 객체로 써줘.')
@@ -750,11 +775,17 @@ export function workflowOption(workflow, details) {
   }))
   // `usable`/`reason` are for cuts (Director); `generator` is the same workflow as a generation node's generic profile.
   const generatorReason = director ? 'Director 워크플로는 컷의 생성 설정으로 써줘.' : !workflow.is_active ? '꺼진 워크플로우야. ComfyUI 탭에서 켜줘.' : null
+  // `upscale` is the same workflow as an upscale profile: its videoFieldId is one of `videoFields`.
+  const videoFields = fields.filter(isVideoField)
+  const upscaleReason = director ? 'Director 워크플로는 업스케일에 쓸 수 없어.'
+    : !videoFields.length ? '영상을 불러오는 이미지 Marked Field가 없어. 워크플로 편집에서 영상 불러오기 노드의 입력을 Marked Field로 열어줘.'
+      : !workflow.is_active ? '꺼진 워크플로우야. ComfyUI 탭에서 켜줘.' : null
   return { workflowId: workflow.id, name: workflow.name, kind: workflow.kind === 'audio' ? 'audio' : 'image', usable: !reason, ...(reason ? { reason } : {}),
     directorFieldId: director?.id ?? null, seedFieldId: seed?.id ?? null,
     defaults: directorDefaults(director && marked.find(field => field.id === director.id)), extraFields,
     generator: { usable: !generatorReason, ...(generatorReason ? { reason: generatorReason } : {}), output: workflow.kind === 'audio' ? 'audio' : 'image', ...generatorRoles(fields),
-      imageFields: fields.filter(field => field.type === 'image').map(field => ({ id: field.id, label: field.label || field.id })) } }
+      imageFields: fields.filter(field => field.type === 'image').map(field => ({ id: field.id, label: field.label || field.id })) },
+    upscale: { usable: !upscaleReason, ...(upscaleReason ? { reason: upscaleReason } : {}), videoFields: videoFields.map(field => ({ id: field.id, label: field.label || field.id })), seedFieldId: seed?.id ?? null } }
 }
 /** The adapters' submit request: `director` sends the Director value and seed, `workflow` fixed inputs under the node's values and seed. */
 export function generationRequest(profile, value, seed, takeId) {

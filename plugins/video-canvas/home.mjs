@@ -74,8 +74,8 @@ async function openProject(id, current) {
   transform()
   if (!view) requestAnimationFrame(() => fit())
 }
-export async function createProject(name, profile, preset) {
-  const project = await request('create_project', { name, ...(profile ? { profile } : {}), ...(preset ? { preset } : {}) })
+export async function createProject(name, profile, preset, expectedProfileRevision) {
+  const project = await request('create_project', { name, ...(profile ? { profile, ...(expectedProfileRevision === undefined ? {} : { expected_profile_revision: expectedProfileRevision }) } : {}), ...(preset ? { preset } : {}) })
   await chooseProject(project.id)
   // Opening the project clears the published sections; the creation is still the last edit.
   recordEdit('create_project', project)

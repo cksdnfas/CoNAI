@@ -17,8 +17,9 @@ type PageRequest =
   | { op: 'read_canvas'; full?: boolean; project_id?: string }
   | { op: 'read_node'; id: string }
   | { op: 'apply_ops'; ops: Record<string, unknown>[]; expected_revision: number }
-  | { op: 'save_profile'; profile: Record<string, unknown>; expected_revision: number }
-  | { op: 'run_cut'; expected_revision: number; mode?: string; input_digest?: string }
+  | { op: 'save_profile'; profile: Record<string, unknown>; origin?: string }
+  | { op: 'save_settings'; settings: Record<string, string | null> }
+  | { op: 'run_cut'; expected_revision: number; mode?: string; input_digest?: string; action?: string; take_id?: string }
   | { op: 'workflow_options' }
   | { op: 'check' | 'extract_frame' }
 const section = <T>(data: Record<string, unknown>, name: string) => (data[name] as { data: T }).data
@@ -30,6 +31,8 @@ test('video canvas publishes page-action outcomes when return values are discard
   let project = domain.applyOps(domain.newProject('project', '영상'), [{ op: 'add_node', kind: 'cut', seed: 42 }], 0, randomUUID).project
   project.profiles.push({ id: 'draft', label: '초안', workflowId: 12, directorFieldId: 'director', seedFieldId: 'seed', overrides: {} })
   project.nodes[0].data.profileId = 'draft'
+  // The account's settings library rides on every project read.
+  Object.assign(project, { settings: { cutProfileId: 'draft', upscaleProfileId: null } })
   const otherProject = domain.newProject('other-project', '다른 영상')
   const cut = project.nodes[0], snapshots: Snapshot[] = [], handlers: Record<string, PageHandler> = {}, events = new Map<string, (event: unknown) => void>()
   let calls = 0, release!: () => void, entered!: () => void, published!: () => void
@@ -57,25 +60,35 @@ test('video canvas publishes page-action outcomes when return values are discard
         const current = body.project_id === otherProject.id ? otherProject : project
         return body.full ? structuredClone(current) : publication.excerpt(current, body)
       }
-      if (body.op === 'workflow_options') return { workflows: [], servers: [], tags: [] }
+      if (body.op === 'workflow_options') return { workflows: [], servers: [], tags: [], profiles: [], settings: {} }
       if (body.op === 'read_node') return nodeDetail(body.id)
       if (body.op === 'apply_ops') {
         const result = domain.applyOps(project, body.ops, body.expected_revision, randomUUID)
         project = result.project
         return { revision: result.revision, applied: result.applied, rejected: result.rejected, tempIds: result.tempIds }
       }
+      // The library belongs to the account: saving a setting names no project and moves no revision.
       if (body.op === 'save_profile') {
-        domain.expected(project, body.expected_revision)
         project.profiles[0] = domain.validateProfile(body.profile, { input_schema: [
           { id: 'director', type: 'node', node_editor: 'minimax_h3_director_dasiwa' },
           { id: 'seed', type: 'number', seed_rule: 'explicit' },
         ] })
-        project.revision++
-        return structuredClone(project)
+        // As the server answers: an assistant gets the setting already published (with its role), a person the stored object.
+        const shown = body.origin === 'assistant' ? { ...domain.profilePublication(project.profiles[0]), role: domain.roleOf(project.profiles[0]) } : structuredClone(project.profiles[0])
+        return { profile: shown, profileId: project.profiles[0].id, settings: structuredClone(project.settings) }
+      }
+      if (body.op === 'save_settings') {
+        Object.assign(project.settings, body.settings)
+        return { settings: structuredClone(project.settings) }
       }
       if (body.op === 'check') return { assets: {}, cuts: [{ id: cut.id, ...domain.checkCut(project, project.nodes[0]) }], revision: project.revision }
       if (body.op === 'run_cut') {
         calls++; entered(); await gate
+        if (body.action === 'upscale') {
+          const upscale = { id: 'upscale-one', takeId: 'upscale-one', cutId: cut.id, upscaleOf: body.take_id, seed: 7, status: 'queued', profile: project.profiles[0] }
+          project.takes.push(upscale)
+          return upscale
+        }
         if (body.expected_revision !== project.revision || body.mode === 'propose' && body.input_digest !== currentDigest()) return { ok: false, status: 409, error: '409: edit-then-run used stale inputs' }
         const id = calls === 1 ? 'take-one' : 'proposal-two'
         const take = { id, takeId: id, cutId: cut.id, seed: project.nodes[0].data.seed, status: body.mode === 'propose' ? 'proposed' : 'queued', profile: project.profiles[0],
@@ -101,7 +114,7 @@ test('video canvas publishes page-action outcomes when return values are discard
   })
   // Package builds inject the SDK and the browser resolves the page's ES modules. Resolve both in memory: each
   // module becomes a function scope returning its exports, and main.js runs last with the SDK and domain as globals.
-  const modules = ['util', 'state', 'toast', 'menu', 'session', 'viewport', 'nodes', 'dialogs', 'workflow', 'actions', 'inspector', 'sequence', 'home', 'links', 'canvas', 'dispatch']
+  const modules = ['util', 'state', 'toast', 'menu', 'session', 'viewport', 'nodes', 'dialogs', 'workflow', 'settings', 'actions', 'inspector', 'sequence', 'home', 'links', 'canvas', 'dispatch']
   const link = (source: string) => source.split('\n').flatMap(line => {
     const imported = /^import \{(.+)\} from '\.\/(\w+)\.mjs'$/.exec(line)
     if (!imported) return line.startsWith('import ') ? [] : [line]
@@ -159,12 +172,22 @@ test('video canvas publishes page-action outcomes when return values are discard
     assert.equal(section<{ status: number }>(snapshots.at(-1)!.data, 'lastError').status, 409)
   }
   assert.equal(project.takes.length, takesBeforeStaleRuns)
-  data = await act('edit', { expected_revision: project.revision, profile_json: JSON.stringify({
+  data = await act('edit', { profile_json: JSON.stringify({
     ...project.profiles[0], unknown_token: 'not a profile field', overrides: { prompt_enhancer_token_limit: 12000 },
   }) })
-  const publishedProfile = section<{ profiles: { overrides: string; unknown_token?: unknown }[] }>(data, 'lastEdit').profiles[0]
+  const publishedProfile = section<{ profiles: { overrides: string; role: string; unknown_token?: unknown }[] }>(data, 'lastEdit').profiles[0]
   assert.deepEqual(JSON.parse(publishedProfile.overrides), { prompt_enhancer_token_limit: 12000 })
+  assert.equal(publishedProfile.role, 'cut')
   assert.equal(publishedProfile.unknown_token, undefined)
+  // Defaults and upscale are the same page actions: settings_json needs no revision, run_cut takes action upscale.
+  data = await act('edit', { settings_json: JSON.stringify({ upscaleProfileId: 'draft' }) })
+  assert.equal(section<{ settings: { upscaleProfileId: string } }>(data, 'lastEdit').settings.upscaleProfileId, 'draft')
+  data = await act('run_cut', { cut_id: cut.id, expected_revision: project.revision, action: 'upscale', take_id: 'take-one' })
+  // The queued handler finishes its reload after publishing the result.
+  data = await act('read', { section: 'lastRun' })
+  // The profile's own setting key `prompt_enhancer_token_limit` makes the host reject the plain object, so the result is published as a JSON string.
+  const upscale = JSON.parse(JSON.parse((data.lastRun as { json: string }).json)) as { takeId: string; upscaleOf: string }
+  assert.equal(upscale.upscaleOf, 'take-one')
   await assert.rejects(() => act('edit', { expected_revision: project.revision, ops: JSON.stringify([
     { op: 'add_node', kind: 'cut', tempId: 'token-shot' },
     { op: 'connect', from: 'token-shot', to: cut.id, port: 'start' },

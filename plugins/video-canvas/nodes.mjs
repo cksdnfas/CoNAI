@@ -1,6 +1,8 @@
 import { MODES, PORTS, activePorts, cutEdges, adapterOf } from './domain.mjs'
 import { $, esc, names, ports, outputNames, reviewNames, assetStates, thumbUrl, fileUrl, audioUrl, patch, icon } from './util.mjs'
 import { s, ctx, nodeById, takesOf, profileOf, repTake, shownTake, cutOrder, prevCut, cutState, finishing, failedTake, frameRole, frameLabel, outputKind, takeOutput, genInputs, staleWarning } from './state.mjs'
+// The one control that names and changes a node's setting: its label is the setting's name, its menu the registered settings.
+const settingButton = (profile, tip) => `<button class="vc-workflow sm" data-action="pick-setting" aria-haspopup="menu" title="${profile ? `${esc(profile.label)} · 설정 바꾸기` : tip}">${profile ? esc(profile.label) : '설정 고르기'}</button>`
 
 const els = new Map()
 export const nodeEl = id => els.get(id)
@@ -43,16 +45,17 @@ function resultHtml(cut, state) {
   return holder(text, take && failedTake(take) ? 'error' : '') + bar
 }
 // What the media says for a take that has no result to play.
-const takeText = take => failedTake(take) ? '생성이 실패했어' : take.status === 'proposed' ? '승인을 기다리는 제안이야' : take.status === 'cancelled' ? '취소됐어'
-  : finishing(take) ? '마무리 중…' : WAITING.includes(take.status) ? '대기 중…' : '만드는 중…'
-// Take pill (‹ 2/3 ›) and the 대표 star sit on the result's top right.
+const takeText = take => failedTake(take) ? (take.upscaleOf ? '업스케일이 실패했어' : '생성이 실패했어') : take.status === 'proposed' ? '승인을 기다리는 제안이야' : take.status === 'cancelled' ? '취소됐어'
+  : finishing(take) ? '마무리 중…' : WAITING.includes(take.status) ? '대기 중…' : take.upscaleOf ? '업스케일 중…' : '만드는 중…'
+// The 업스케일 mark of an upscale take, the take pill (‹ 2/3 ›) and the 대표 star sit on the result's top right.
 function toolsHtml(cut) {
   const takes = takesOf(cut.id).filter(take => take.status !== 'discarded'), take = shownTake(cut)
   if (!take) return ''
+  const mark = take.upscaleOf ? '<span class="conai-overlay-badge xs">업스케일</span>' : ''
   const index = takes.indexOf(take), pill = takes.length < 2 ? ''
     : `<span class="vc-pill"><button class="conai-icon-button sm overlay" data-action="take-prev" aria-label="이전 take" title="이전 take" ${index <= 0 ? 'disabled' : ''}>${icon('left', 14)}</button><span class="vc-take-pos">${index + 1}/${takes.length}</span><button class="conai-icon-button sm overlay" data-action="take-next" aria-label="다음 take" title="다음 take" ${index >= takes.length - 1 ? 'disabled' : ''}>${icon('right', 14)}</button></span>`
   const star = take.resultHash ? `<button class="conai-icon-button sm overlay vc-star" data-action="take-pick" data-take="${esc(take.id)}" aria-pressed="${repTake(cut)?.id === take.id}" aria-label="대표 take" title="대표 take">${icon('star', 14)}</button>` : ''
-  return pill + star
+  return mark + pill + star
 }
 const reviewHtml = node => node.review === 'pending' ? '' : `<span class="conai-overlay-badge tl ${node.review === 'pass' ? 'ok' : 'warn'}">${esc(reviewNames[node.review])}</span>`
 // An asset that is not in order says so on the media; a healthy one shows nothing.
@@ -63,17 +66,22 @@ const moreButton = `<button class="conai-icon-button sm" data-action="node-menu"
 const cutHead = (cut, state) => `<span class="badge vc-num">${cutOrder().indexOf(cut.id) + 1}</span><input class="vc-name" data-field="name" value="${esc(cut.data.name)}" aria-label="이름"><span class="vc-state">${esc(state.word)}</span>${moreButton}`
 function reasonHtml(state) {
   if (state.key !== 'failed') return ''
-  const text = state.take?.error ?? '생성이 실패했어.'
+  const text = state.take?.error ?? (state.take?.upscaleOf ? '업스케일이 실패했어.' : '생성이 실패했어.')
   return `<p class="vc-error" title="${esc(text)}">${esc(text)}</p>`
 }
 function actionsHtml(cut, state) {
   const take = state.take, id = take ? `data-take="${esc(take.id)}"` : ''
+  // A cut whose shown take has a result can be upscaled while nothing runs on it (an upscale take upscales the take it came from).
+  const shown = cut.kind === 'cut' ? shownTake(cut) : null, upscale = shown?.resultHash ? `<button data-action="upscale" data-take="${esc(shown.id)}">업스케일</button>` : ''
   if (state.key === 'empty') return '<button class="primary" data-action="run">생성</button>'
-  if (state.key === 'done') return '<button data-action="run">다시 생성</button>'
+  if (state.key === 'done') return `<button data-action="run">다시 생성</button>${upscale}`
   // A finished job has nothing left to cancel while its result is being finished.
   if (state.key === 'queued' || state.key === 'generating') return take?.jobId && !finishing(take) ? `<button data-action="cancel" ${id}>취소</button>` : '<button disabled>취소</button>'
   if (state.key === 'current') return '<button data-action="chain-cancel">취소</button>'
-  if (state.key === 'failed') return `<button class="primary" data-action="${take.jobId ? 'rerun-canvas' : 'retry'}" ${id}>다시 생성</button>`
+  // A failed upscale runs again as an upscale: a retry only while its request was made and no job was (a failure while preparing has no request
+  // for the server to resend), else a new take on its source. 다시 생성 stays a plain run of the cut.
+  if (state.key === 'failed' && take.upscaleOf) return `<button class="primary" data-action="${take.request && !take.jobId ? 'retry' : 'upscale-again'}" ${id}>다시 업스케일</button><button data-action="run">다시 생성</button>`
+  if (state.key === 'failed') return `<button class="primary" data-action="${take.jobId ? 'rerun-canvas' : 'retry'}" ${id}>다시 생성</button>${upscale}`
   if (state.key === 'proposed' && cut.kind === 'cut') return `<button class="primary" data-action="approve" ${id}>승인하고 생성</button><button data-action="discard" ${id}>폐기</button>`
   return `<button disabled>${repTake(cut) ? '다시 생성' : '생성'}</button>`
 }
@@ -87,7 +95,7 @@ function slotsHtml(cut) {
 }
 function formHtml(node) {
   const profile = profileOf(node)
-  return `<div class="vc-settings"><button class="vc-workflow sm" data-action="pick-workflow" title="${profile ? `${esc(profile.label)} · 워크플로 바꾸기` : '워크플로 고르기'}">${profile ? esc(profile.label) : '워크플로 고르기'}</button>
+  return `<div class="vc-settings">${settingButton(profile, '컷 설정 고르기')}
     <select data-field="mode" aria-label="모드" title="모드">${MODES.map(mode => `<option ${mode === node.data.mode ? 'selected' : ''}>${mode}</option>`).join('')}</select>
     <input class="vc-duration" type="number" data-field="duration" min="1" step="any" value="${esc(node.data.duration)}" aria-label="길이(초)" title="길이(초)"></div>
     ${slotsHtml(node)}
@@ -99,7 +107,7 @@ function genFormHtml(node) {
   const size = node.data.size ?? sizes[0]?.label
   // A workflow without a prompt field takes no prompt; NovelAI always does.
   const prompted = nai || Boolean(profile?.promptFieldId)
-  return `<div class="vc-settings gen${nai ? ' sized' : ''}"><button class="vc-workflow sm" data-action="pick-workflow" title="${profile ? `${esc(profile.label)} · 생성 설정 바꾸기` : '생성 설정 고르기'}">${profile ? esc(profile.label) : '생성 설정 고르기'}</button>${nai ? `<select data-field="size" aria-label="크기" title="크기">${sizes.map(entry => `<option ${entry.label === size ? 'selected' : ''}>${esc(entry.label)}</option>`).join('')}${size && !sizes.some(entry => entry.label === size) ? `<option selected>${esc(size)}</option>` : ''}</select>` : ''}</div>
+  return `<div class="vc-settings gen${nai ? ' sized' : ''}">${settingButton(profile, '생성 설정 고르기')}${nai ? `<select data-field="size" aria-label="크기" title="크기">${sizes.map(entry => `<option ${entry.label === size ? 'selected' : ''}>${esc(entry.label)}</option>`).join('')}${size && !sizes.some(entry => entry.label === size) ? `<option selected>${esc(size)}</option>` : ''}</select>` : ''}</div>
     ${slotsHtml(node)}
     ${prompted ? `<textarea data-field="prompt" rows="2" placeholder="프롬프트" aria-label="프롬프트">${esc(node.data.prompt)}</textarea>` : ''}`
 }

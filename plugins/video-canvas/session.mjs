@@ -1,3 +1,4 @@
+import { profilePublication, roleOf } from './domain.mjs'
 import { excerpt, rejectedMessage, createRefreshQueue, projectRows, exportStates, chainStates } from './assistant-state.mjs'
 import { names, statusNames, isTerminal, uuid } from './util.mjs'
 import { s, ctx, assistant, nodeById, DOCK_H } from './state.mjs'
@@ -6,7 +7,9 @@ import { toast, notice, withBusy } from './toast.mjs'
 let queue = Promise.resolve()
 const api = () => ctx.api
 export async function request(op, args = {}, options) {
-  const result = await api().server({ project_id: s.project?.id, ...args, op }, options)
+  // `record: false` leaves the `lastEdit` section to the caller, which publishes several library calls as one edit.
+  const { record = true, ...sent } = args
+  const result = await api().server({ project_id: s.project?.id, ...sent, op }, options)
   if (result?.ok === false) {
     assistant.set('lastError', { op, status: result.status, message: result.error })
     if (result.outcome) assistant.set('lastRun', result.outcome, { takeId: result.outcome.takeId, seed: result.outcome.seed, status: result.outcome.status, inputDigest: result.outcome.inputDigest })
@@ -20,17 +23,19 @@ export async function request(op, args = {}, options) {
       : section === 'lastRun' ? { takeId: shown.takeId ?? shown.id, seed: shown.seed, status: shown.status, inputDigest: shown.inputDigest }
         : section === 'lastNode' ? { nodeId: shown.node.id, inputDigest: shown.preview?.inputDigest ?? null }
           : section === 'lastExtraction' || section === 'lastExport' || section === 'lastChain' ? { id: shown.id, status: shown.status, jobId: shown.jobId }
-            : section === 'workflowOptions' ? { workflows: shown.workflows.length, servers: shown.servers.length, ...(shown.presets ? { presets: shown.presets.length } : {}) }
+            : section === 'workflowOptions' ? { workflows: shown.workflows.length, servers: shown.servers.length, profiles: shown.profiles.length, ...(shown.presets ? { presets: shown.presets.length } : {}) }
               : section === 'lastCheck' ? { blocked: shown.cuts.some(cut => cut.blocked) } : { nextCursor: shown.nextCursor, nextEdgeCursor: shown.nextEdgeCursor }
     assistant.set(section, shown, shown.autoProfile ? { ...summary, autoProfile: shown.autoProfile } : summary)
     if (op === 'read_node') s.nodeDetail = result
     publish()
   }
-  // The server made a default profile for a project that had none; the assistant reads it from the published result, a person is told here.
-  if (result?.autoProfile && args.origin !== 'assistant') notice(`프로필이 없어서 "${result.autoProfile.label}" 워크플로로 기본 프로필을 만들었어.`)
-  if (['create_project', 'save_profile', 'import_preset', 'undo'].includes(op)) recordEdit(op, result)
+  // The server made a cut setting because the library had none; the assistant reads it from the published result, a person is told here.
+  if (result?.autoProfile && args.origin !== 'assistant') notice(`컷 설정이 없어서 "${result.autoProfile.label}" 워크플로로 기본 설정을 만들었어.`)
+  if (record && ['create_project', 'save_profile', 'import_preset', 'duplicate_profile', 'save_settings', 'undo'].includes(op)) recordEdit(op, result, args.origin)
   return result
 }
+/** A call about the account's settings library (a library read, a setting saved, imported, copied, deleted, a default chosen): it names no project, whichever one is open. */
+export const accountRequest = (op, args = {}) => request(op, { project_id: undefined, ...args })
 // The server reports `autoProfile` once, on the call that created it. Waiting on the same take or chain republishes it without that
 // field, so the section keeps showing it for that take or chain.
 const autoSeen = new Map()
@@ -41,13 +46,23 @@ function withAutoProfile(section, result) {
   else if (autoSeen.get(section)?.subject === subject) return { ...result, autoProfile: autoSeen.get(section).profile }
   return result
 }
-/** Publishes the `lastEdit` section for the operations that change the project outside apply_ops. */
-export function recordEdit(op, result) {
-  assistant.set('lastEdit', { revision: result.revision, projectId: result.id,
-    ...(result.profileId ? { profileId: result.profileId } : {}),
-    ...(op === 'save_profile' || op === 'import_preset' ? { profiles: result.profiles } : {}), applied: [{ op }], rejected: [], tempIds: {} },
-  { revision: result.revision, applied: 1, rejected: 0 })
+/** Publishes the `lastEdit` section for the operations that change the project or the settings library outside apply_ops. */
+export const recordEdit = (op, result, origin) => recordEdits([[op, result]], origin)
+/**
+ * One `lastEdit` for the calls of one action, each as [op, result]. An assistant's call already got its settings in the published form (with
+ * their role) from the server; a person's got the stored object, which is published here, so each setting is published exactly once.
+ * Returns what the assistant's action reports back: the saved setting's ID and revision and the defaults.
+ */
+export function recordEdits(entries, origin) {
+  const shown = entries.map(([op, result]) => [op, origin !== 'assistant' && result.profile ? { ...result, profile: { ...profilePublication(result.profile), role: roleOf(result.profile) } } : result])
+  const last = key => shown.map(([, result]) => result[key]).filter(value => value !== undefined && value !== null).at(-1)
+  const found = shown.find(([op]) => op === 'create_project' || op === 'undo')?.[1], profiles = shown.flatMap(([, result]) => result.profile ? [result.profile] : [])
+  const done = { ...(last('profileId') ? { profileId: last('profileId') } : {}), ...(last('profileRevision') === undefined ? {} : { profileRevision: last('profileRevision') }), ...(last('settings') ? { settings: last('settings') } : {}) }
+  assistant.set('lastEdit', { ...(last('revision') === undefined ? {} : { revision: last('revision') }), ...(found ? { projectId: found.id } : {}), ...done,
+    ...(profiles.length ? { profiles } : {}), applied: shown.map(([op]) => ({ op })), rejected: [], tempIds: {} },
+  { revision: last('revision'), applied: shown.length, rejected: 0 })
   publish()
+  return done
 }
 function unwrap(result) {
   const out = result.result ?? result
@@ -163,12 +178,13 @@ export async function runCut(args = {}, op = 'run_cut') {
   const take = await request(op, { cut_id: args.cut_id ?? s.selection, ...args })
   delete s.viewTake[take.cutId ?? args.cut_id]
   await reload()
-  toast(`${statusNames[take.status] ?? take.status} · seed ${take.seed ?? '—'}`)
+  toast(take.upscaleOf ? `업스케일 ${statusNames[take.status] ?? take.status}` : `${statusNames[take.status] ?? take.status} · seed ${take.seed ?? '—'}`)
   return take
 }
-const RUN_ACTIONS = ['run', 'propose', 'approve', 'discard', 'retry', 'cancel', 'rerun-take', 'rerun-canvas', 'rerun-new']
+const RUN_ACTIONS = ['run', 'propose', 'approve', 'discard', 'retry', 'cancel', 'rerun-take', 'rerun-canvas', 'rerun-new', 'upscale', 'upscale-again']
 export function lockRunButtons() {
-  for (const button of document.querySelectorAll('[data-action]')) if (RUN_ACTIONS.includes(button.dataset.action)) button.disabled = s.runBusy
+  // A button locked because its cut is running stays disabled when the page's own run ends.
+  for (const button of document.querySelectorAll('[data-action]')) if (RUN_ACTIONS.includes(button.dataset.action)) button.disabled = s.runBusy || 'locked' in button.dataset
 }
 export function launchRun(args = {}, op = 'run_cut') {
   if (s.runBusy) {
