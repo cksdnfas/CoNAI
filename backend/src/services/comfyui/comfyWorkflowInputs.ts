@@ -30,16 +30,19 @@ const MINIMAX_MODES = new Set(['T2VA', 'I2VA', 'FL2VA', 'L2VA', 'REF2VA', 'Image
 const FRIENDLY_MINIMAX_KEYS = new Set([
   'prompt_mode',
   'simple_prompt',
-  'imd',
-  'soundscape',
-  'music',
-  'ref',
   'resolution',
   'postprocess',
   'media',
   'assets',
   'refmods',
 ])
+
+/** Section inputs of the former structured prompt mode, and the heading names models tend to send as keys. */
+const MINIMAX_SECTION_INPUT_KEYS = [
+  'imd', 'soundscape', 'music', 'ref',
+  'subject_definitions', 'summary', 'retention_analysis', 'detailed_description',
+  'integrated_multimodal_description', 'overall_soundscape', 'non_diegetic_music',
+]
 
 type MiniMaxMediaInput = {
   id?: string
@@ -297,11 +300,13 @@ function normalizeMiniMaxValue(field: MarkedField, provided: unknown) {
     ref: {
       ...(isRecord(defaultBuilder.ref) ? defaultBuilder.ref : {}),
       ...(isRecord(incomingBuilder.ref) ? incomingBuilder.ref : {}),
-      ...(isRecord(incoming.ref) ? incoming.ref : {}),
     },
   }
-  for (const key of ['prompt_mode', 'simple_prompt', 'imd', 'soundscape', 'music'] as const) {
-    if (incoming[key] !== undefined) builder[key] = incoming[key]
+  // The Director takes one prompt text. Section inputs of the former structured mode would be dropped
+  // without notice, so they are refused with the way to write them instead.
+  const sectionKeys = MINIMAX_SECTION_INPUT_KEYS.filter((key) => incoming[key] !== undefined)
+  if (sectionKeys.length > 0 || incoming.prompt_mode === 'structured') {
+    throw new Error(`${field.label || field.id}: ${[...sectionKeys, ...(incoming.prompt_mode === 'structured' ? ['prompt_mode: structured'] : [])].join(', ')} is no longer a separate input. Put the whole prompt in simple_prompt and write the sections inside it under their headings (e.g. "summary:", "overall_soundscape:", "non_diegetic_music:").`)
   }
   // The supplied prompt is the whole prompt: a saved default in structured mode must not replace it.
   const suppliedPrompt = incoming.simple_prompt ?? (typeof incoming.prompt === 'string' ? incoming.prompt : undefined)
