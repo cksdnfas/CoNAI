@@ -210,6 +210,62 @@ export type PluginLlmProfileDetail = PluginLlmProfile & {
   /** The judge preset the profile uses, whole; null without one. */
   judgePreset: ChatJudgePreset | null
 }
+/** Server module `conai.generationPresets.list()` / `get(id)` (administrators only): a chat generation preset. */
+export type PluginGenerationPreset = {
+  id: number
+  name: string
+  /** What the model is told the preset is for. */
+  instruction: string
+  kind: 'nai' | 'comfyui'
+  /** Null for a ComfyUI preset. The preset's NovelAI settings as stored (ChatNaiPresetConfig). */
+  nai: {
+    model: string; sampler: string; noiseSchedule: string; steps: number; scale: number
+    varietyPlus: boolean; transparentBackground: boolean
+    /** Fixed text before and after the scene tags. */
+    promptPrefix: string; promptSuffix: string; negativePrompt: string
+    /** Allowed sizes; the first is the default. */
+    sizes: Array<{ label: string; width: number; height: number }>
+    characters: Array<{ prompt: string; uc: string; center_x: number; center_y: number }>
+    useCoords: boolean
+    vibes: Array<{ encoded: string; strength: number; information_extracted: number }>
+    characterRefs: Array<{ image: string; type: string; strength: number; fidelity: number }>
+    characterReference: 'none' | 'replace' | 'append'
+  } | null
+  /** Null for a NovelAI preset. */
+  comfyui: {
+    workflowId: number
+    serverId: number | null
+    serverTag: string | null
+    /** Values of the marked fields the model does not fill. */
+    fixedInputs: Record<string, unknown>
+    /** Marked fields the model fills. */
+    exposedFieldIds: string[]
+    referenceField: string | null
+    promptField: string | null
+  } | null
+  prompting: {
+    timing: 'inline' | 'early' | 'after'
+    guide: string
+    /** A linked skill section, or `group/` for a group's sections; names and date are null once it is gone. Read its text with `skills.section`. */
+    guideSkill: { skillId: number; path: string; skillName: string | null; title: string | null; updatedDate: string | null } | null
+    previousImages: number
+  }
+}
+/** Server module `conai.skills.section({ skillId, path })`: the current text of a skill section (a `group/` path: its sections in order). */
+export type PluginSkillSection = { skillId: number; path: string; skillName: string; title: string; updatedDate: string; text: string }
+/**
+ * Server module `conai.skills.list()` (administrators only): a skill with every link a preset guide accepts, without
+ * section texts. `enabled` is false while the skill's plugin is off (still linkable, its guide not read then).
+ */
+export type PluginGuideSkill = {
+  skillId: number
+  name: string
+  enabled: boolean
+  /** Every section, in the skill's order. */
+  sections: Array<{ path: string; title: string }>
+  /** Every group as `group/` (all its sections), titled `group/ (count)` like `skills.section` titles it. */
+  groups: Array<{ path: string; title: string; count: number }>
+}
 /** Stateless questions on the profile's judge model; no preset or chat thread is required. */
 export type PluginLlmDecideInput = {
   profileId: number; state: Record<string, unknown>; timeoutMs?: number

@@ -4,21 +4,13 @@
   "name": "앱 작업 도구",
   "version": "1.0.0",
   "description": "라이브러리·게시판·워크플로·오디오를 연결하는 선택 설치 도구이자 커스텀 플러그인 제작 예제야.",
-  "capabilities": [
-    "workspace.read",
-    "workspace.write"
-  ],
   "appTools": [
     "list_image_groups",
     "create_image_group",
     "posts_create",
     "posts_search",
     "list_workflows",
-    "list_audio_projects",
-    "workspace_list",
-    "workspace_read",
-    "workspace_search",
-    "workspace_apply"
+    "list_audio_projects"
   ],
   "serverActions": [
     {
@@ -107,59 +99,6 @@
         "type": "object",
         "properties": {}
       }
-    },
-    {
-      "id": "app-workbench.project_files",
-      "label": "프로젝트 파일 조회",
-      "description": "명시적으로 연결한 프로젝트의 한 폴더를 조회한다. 채팅의 프로젝트 연결 또는 확장 페이지의 프로젝트 연결이 필요하다.",
-      "tool": "workspace_list",
-      "schema": {
-        "type": "object",
-        "properties": {
-          "target": {
-            "type": "string",
-            "maxLength": 1000
-          }
-        }
-      }
-    },
-    {
-      "id": "app-workbench.project_note",
-      "tier": "commit",
-      "label": "프로젝트 문서 만들기",
-      "description": "연결한 프로젝트에 새 문서를 작성한다. 기존 문서는 덮어쓰지 않는다. AI/MCP 요청은 호스트 검토 후 적용한다.",
-      "tool": "workspace_apply",
-      "schema": {
-        "type": "object",
-        "properties": {
-          "target": {
-            "type": "string",
-            "maxLength": 1000
-          },
-          "text": {
-            "type": "string",
-            "maxLength": 8000
-          }
-        },
-        "required": [
-          "target",
-          "text"
-        ]
-      },
-      "arguments": {
-        "operations": [
-          {
-            "kind": "write",
-            "target": {
-              "$input": "target"
-            },
-            "text": {
-              "$input": "text"
-            },
-            "expectedRevision": null
-          }
-        ]
-      }
     }
   ],
   "pages": [
@@ -175,9 +114,7 @@
         "app-workbench.create_group",
         "app-workbench.write_note",
         "app-workbench.workflows",
-        "app-workbench.audio",
-        "app-workbench.project_files",
-        "app-workbench.project_note"
+        "app-workbench.audio"
       ]
     }
   ]

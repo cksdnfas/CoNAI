@@ -310,7 +310,7 @@ function linkedProfiles() {
 const DEFAULT_PROMPTING: ChatPresetPrompting = { timing: 'inline', guide: '', guideSkill: null, previousImages: 0 }
 
 /** A stored or saved `{ skillId, path }` as a guide link (path: a section, or `group/`), else null. */
-function guideSkillLink(value: unknown): { skillId: number; path: string } | null {
+export function guideSkillLink(value: unknown): { skillId: number; path: string } | null {
   if (!isRecord(value) || !Number.isSafeInteger(value.skillId) || (value.skillId as number) <= 0 || typeof value.path !== 'string') return null
   const raw = value.path.trim()
   const group = raw.endsWith('/')

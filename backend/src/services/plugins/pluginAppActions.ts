@@ -229,11 +229,5 @@ export function cancelPluginAppRequest(id: string, context: Context, admin = fal
 export function pluginInstanceAppContext(id: string, caller: PluginCaller, baseUrl: string, review = false) {
   const instance = requirePluginInstance(id, caller)
   const context = pluginBrowserContext(caller, baseUrl, review)
-  if (instance.workspace) {
-    requireFileStoreOwner(caller.requester)
-    const project = WorkspaceService.get(instance.owner, instance.workspace.id)
-    context.projectGrant = { id: project.id, write: instance.workspace.write, revision: project.revision }
-    context.workspace = { project: { ...project, guidelines: '' }, write: instance.workspace.write, bindingRevision: 'plugin-approved-project' }
-  }
   return { pluginId: instance.plugin.id, context }
 }

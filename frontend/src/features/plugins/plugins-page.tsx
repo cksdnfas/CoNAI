@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { ChevronRight, Files, FolderKanban, History, Puzzle, ShieldCheck } from 'lucide-react'
+import { ChevronRight, Files, History, Puzzle, ShieldCheck } from 'lucide-react'
 import { pluginPageIcon } from './plugin-page-icon'
 import { ListPager } from '@/components/common/list-pager'
 import { PageToolbar } from '@/components/common/page-toolbar'
@@ -18,7 +18,6 @@ import { RowGroup } from '@/components/ui/row-group'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { useI18n } from '@/i18n'
 import { listPlugins, PLUGINS_QUERY_KEY } from '@/lib/api-plugins'
-import { getWorkspace } from '@/lib/api-workspaces'
 import type { PluginAppRequest } from '@conai/shared'
 import { PluginAppRequestList, usePendingAppRequests, usePluginAppRequests } from './plugin-app-requests'
 import { PluginManagement } from './plugin-management'
@@ -63,26 +62,23 @@ export function PluginsPage() {
   const [review, setReview] = useState<PluginAppRequest | null>(null)
   const closeReview = useCallback(() => setReview(null), [])
   const files = params.get('files') ?? ''
-  const projectId = params.get('project') ?? ''
-  const project = useQuery({ queryKey: ['workspaces', projectId, 'plugin-context'], queryFn: () => getWorkspace(projectId), enabled: !!projectId })
   const contextParams = new URLSearchParams()
   if (files) contextParams.set('files', files)
-  if (projectId) contextParams.set('project', projectId)
-  const clearContext = (key: 'files' | 'project') => setParams((previous) => { const next = new URLSearchParams(previous); next.delete(key); return next })
+  const clearFiles = () => setParams((previous) => { const next = new URLSearchParams(previous); next.delete('files'); return next })
   const enabled = (plugins.data ?? []).filter((plugin) => plugin.enabled)
   const pluginName = (id: string) => plugins.data?.find((plugin) => plugin.manifest.id === id)?.manifest.name ?? id
   const pending = (requests.data?.requests ?? []).filter((request) => request.status === 'pending')
   const fileCount = files ? files.split(',').filter(Boolean).length : 0
-  const pageOpenBlocked = (projectId || fileCount) && !auth.data?.permissionKeys.includes('files.view')
+  const pageOpenBlocked = fileCount && !auth.data?.permissionKeys.includes('files.view')
     ? t({ ko: '파일 조회 권한이 필요해', en: 'File access required' }) : null
   const pages = enabled.flatMap(({ manifest }) => manifest.pages.filter((page) => page.menu !== false).map((page) => {
-    // A page opened with a project needs project access; one opened with files needs file access.
+    // A page opened with files needs file access.
     return { manifest, page, blocked: pageOpenBlocked }
   }))
 
   const chatPages = pages.slice(0, 100)
   const assistantPage: PluginManagementPage = {
-    localRevision: JSON.stringify([files, projectId]),
+    localRevision: JSON.stringify([files]),
     data: { pages: chatPages.map(({ manifest, page, blocked }) => ({ pluginId: manifest.id, pageId: page.id, plugin: pageFreeText(manifest.name), title: pageFreeText(page.title), blocked: !!blocked })) },
     actions: pages.some(({ blocked }) => !blocked) ? [pageAction('plugins.open', t({ ko: '플러그인 열기', en: 'Open plugin' }), t({ ko: 'data.pages의 플러그인과 페이지를 열어. 승인 요청은 사람이 검토해.', en: 'Open a page in data.pages. Pending requests remain human-only.' }), pageObject({ pluginId: pageText(48), pageId: pageText(48) }, ['pluginId', 'pageId']))] : [],
     applyAction: async (id, args) => {
@@ -102,10 +98,9 @@ export function PluginsPage() {
     <div className="pb-6">
       <PageToolbar
         title={t('pageAccessCatalog.extensions')}
-        start={fileCount || projectId ? (
+        start={fileCount ? (
           <div className="flex flex-wrap items-center gap-1">
-            {fileCount ? <Chip tone="muted" onRemove={() => clearContext('files')} removeLabel={t({ ko: '파일 연결 빼기', en: 'Remove files' })}><Files />{t({ ko: '파일 {count}개', en: '{count} files' }, { count: fileCount })}</Chip> : null}
-            {projectId ? <Chip tone="muted" onRemove={() => clearContext('project')} removeLabel={t({ ko: '프로젝트 연결 빼기', en: 'Remove project' })}><FolderKanban />{project.data?.name ?? '…'}</Chip> : null}
+            <Chip tone="muted" onRemove={clearFiles} removeLabel={t({ ko: '파일 연결 빼기', en: 'Remove files' })}><Files />{t({ ko: '파일 {count}개', en: '{count} files' }, { count: fileCount })}</Chip>
           </div>
         ) : null}
         actions={(

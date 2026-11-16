@@ -136,6 +136,12 @@ test('ComfyUI media inputs reject client paths while trusted references remain u
   }
   assert.deepEqual(uploads, [source, source, source, source])
 
+  // Only a plugin host's generation submit may carry the reference of its own upload; chat tools and other references stay refused.
+  const { validateMcpToolArguments } = await import('../src/mcp/requestSecurity')
+  assert.doesNotThrow(() => validateMcpToolArguments({ inputs: { image: asset } }, undefined, false, { workflowInputAssets: true }))
+  assert.throws(() => validateMcpToolArguments({ inputs: { image: asset } }), /internal storage/)
+  assert.throws(() => validateMcpToolArguments({ inputs: { image: queueRef } }, undefined, false, { workflowInputAssets: true }), /internal storage/)
+
   const graphFile = path.join(runtimePaths.basePath, 'trusted-graph-output.png')
   await fs.promises.writeFile(graphFile, source)
   const context = {

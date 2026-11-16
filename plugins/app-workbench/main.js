@@ -4,7 +4,7 @@ let revision = 0
 let formVersion = 0, submittedVersion = 0
 const api = await connectPlugin()
 function publish() {
-  api.publish({ revision: String(++revision), dirty: formVersion !== submittedVersion, data: { lastResult: $('result').textContent.slice(0, 2000), form: { groupName: $('group-name').value, title: $('post-title').value, body: $('post-body').value.slice(0, 2000), target: $('document-target').value } } })
+  api.publish({ revision: String(++revision), dirty: formVersion !== submittedVersion, data: { lastResult: $('result').textContent.slice(0, 2000), form: { groupName: $('group-name').value, title: $('post-title').value, body: $('post-body').value.slice(0, 2000) } } })
 }
 function show(result) {
   $('result').textContent = JSON.stringify(result, null, 2)
@@ -20,9 +20,7 @@ for (const action of ['groups', 'workflows', 'audio']) $(action).onclick = () =>
 $('tools').onclick = () => run(() => api.app.tools())
 $('create-group').onclick = () => run(() => api.app.run('app-workbench.create_group', { name: $('group-name').value }), true)
 $('write-note').onclick = () => run(() => api.app.run('app-workbench.write_note', { title: $('post-title').value, body: $('post-body').value }), true)
-$('project-files').onclick = () => run(() => api.app.run('app-workbench.project_files'))
-$('project-note').onclick = () => run(() => api.app.run('app-workbench.project_note', { target: $('document-target').value, text: $('post-body').value }), true)
 api.onSaved(({ result }) => show({ status: 'completed', result }))
 $('status').textContent = '앱에 연결했어.'
-for (const id of ['group-name', 'post-title', 'post-body', 'document-target']) $(id).oninput = () => { formVersion++; publish() }
+for (const id of ['group-name', 'post-title', 'post-body']) $(id).oninput = () => { formVersion++; publish() }
 publish()

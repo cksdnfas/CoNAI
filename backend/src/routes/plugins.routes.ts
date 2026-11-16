@@ -148,8 +148,8 @@ router.post('/:pluginId/generation-actions/:actionId', cancellableAsyncHandler(a
   res.json({ success: true, data: await runGenerationActionHook(plugin.id, { action: action.id, surface: input.surface, fields: input.fields }, caller(req).requester, signal) })
 }))
 router.post('/:pluginId/pages/:pageId/instances', requirePermission('plugins.view'), (req, res) => {
-  const input = z.object({ files: z.array(z.string()).max(20), workspace: z.object({ id: z.string(), write: z.boolean().default(false) }).strict().optional() }).strict().parse(req.body)
-  res.status(201).json({ success: true, data: openPluginInstance(param(req, 'pluginId'), param(req, 'pageId'), input.files, caller(req), input.workspace) })
+  const input = z.object({ files: z.array(z.string()).max(20) }).strict().parse(req.body)
+  res.status(201).json({ success: true, data: openPluginInstance(param(req, 'pluginId'), param(req, 'pageId'), input.files, caller(req)) })
 })
 router.get('/instances/:instanceId', (req, res) => {
   const instance = requirePluginInstance(param(req, 'instanceId'), caller(req))
@@ -167,7 +167,7 @@ router.post('/proposals/:proposalId/apply', requirePermission('files.edit'), (re
 })
 router.delete('/proposals/:proposalId', (req, res) => { dismissPluginWrite(param(req, 'proposalId'), caller(req)); res.json({ success: true }) })
 router.post('/instances/:instanceId/workspace/list', asyncHandler(async (req, res) => res.json({ success: true, data: await listPluginWorkspace(param(req, 'instanceId'), req.body, caller(req)) })))
-router.post('/instances/:instanceId/workspace/read', cancellableAsyncHandler(async (req, res, signal) => res.json({ success: true, data: await readPluginWorkspace(param(req, 'instanceId'), req.body, caller(req), signal) })))
+router.post('/instances/:instanceId/workspace/read', asyncHandler(async (req, res) => res.json({ success: true, data: await readPluginWorkspace(param(req, 'instanceId'), req.body, caller(req)) })))
 router.post('/instances/:instanceId/workspace/media', asyncHandler(async (req, res) => res.json({ success: true, data: await issuePluginWorkspaceMedia(param(req, 'instanceId'), req.body, caller(req)) })))
 router.post('/instances/:instanceId/workspace/proposals', requirePermission('files.edit'), asyncHandler(async (req, res) => res.json({ success: true, data: await proposePluginWorkspaceWrite(param(req, 'instanceId'), req.body, caller(req)) })))
 router.post('/workspace-proposals/:proposalId/approve', requirePermission('files.edit'), asyncHandler(async (req, res) => res.json({ success: true, data: await approvePluginWorkspaceWrite(param(req, 'proposalId'), caller(req)) })))

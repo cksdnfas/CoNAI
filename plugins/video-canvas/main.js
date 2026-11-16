@@ -12,7 +12,7 @@ import { renderSequence, bindSequence, startSequencePlayback, playExport, watchE
 import { loadProjects, renderHome, chooseProject, createProject, newProjectDialog, bindHome, bindTitle, settled, hasChosen } from './home.mjs'
 import { drawEdges, renderTray, bindLinks } from './links.mjs'
 import { renderFloat, bindCanvas, sourceItems } from './canvas.mjs'
-import { select, focusNode, focusFrame, addCut } from './actions.mjs'
+import { select, focusNode, focusFrame, addCut, addGen, bindGen, announceModeChange } from './actions.mjs'
 import { bindDispatch } from './dispatch.mjs'
 
 // Every `task` below belongs to a page action from the assistant (the person's own two launch-bar tasks use `queued`).
@@ -43,6 +43,7 @@ function render() {
 Object.assign(ctx.hooks, {
   render, renderInspector, focusNode, focusFrame, select, openDetail, watchExports, watchChains, reveal, playSequence: startSequencePlayback, markSeqSelection,
   layoutChanged() { drawEdges() },
+  nodeRead() { if (s.project) { renderInspector(); renderNodes() } },
   showExport: playExport,
   afterSelection() { renderInspector(); renderFloat(); drawEdges() },
 })
@@ -50,6 +51,7 @@ function bindHeader() {
   $('new-project').onclick = () => void newProjectDialog()
   $('back-home').onclick = () => void ui(() => chooseProject(null))
   $('add-cut').onclick = () => void addCut()
+  $('add-gen').onclick = () => void addGen()
   $('empty-add').onclick = () => void addCut()
   $('add-source').onclick = event => { const rect = event.currentTarget.getBoundingClientRect(); showMenu(rect.left, rect.bottom + 4, sourceItems(undefined)) }
   $('toggle-inspector').onclick = () => showInspector(!s.inspectorOpen)
@@ -57,7 +59,7 @@ function bindHeader() {
   $('launch').onclick = event => {
     const action = event.target.closest('[data-launch]')?.dataset.launch
     if (action === 'dismiss') void queued(async () => { s.launch = null; render(); await ctx.api.navigation.open('/ext/video-canvas/canvas') })
-    if (action === 'import') void queued(() => { const [cut, port] = $('launch-target').value.split('|'); return edit([{ op: 'import_launch', ...(cut ? { target: { cut, port } } : {}) }]) })
+    if (action === 'import') void queued(async () => { const [cut, port] = $('launch-target').value.split('|'); announceModeChange(await edit([{ op: 'import_launch', ...(cut ? { target: { cut, port } } : {}) }])) })
   }
   $('modal').onclick = event => { if (event.target.closest('[data-close]')) $('modal').close() }
   $('modal').addEventListener('close', () => {
@@ -80,7 +82,7 @@ const actions = {
     if (!s.project) renderHome()
     publish()
   }),
-  'video-canvas.workflow_options': () => task(async () => { s.wf = await request('workflow_options'); renderInspector() }),
+  'video-canvas.workflow_options': args => task(async () => { s.wf = await request('workflow_options', { ...(args.presets ? { presets: true } : {}), ...(args.skills ? { skills: true } : {}) }); renderInspector() }),
   'video-canvas.rename_project': args => task(async () => { await request('rename_project', { project_id: args.project_id, name: args.name }); if (s.project?.id === args.project_id) await reload(); await loadProjects() }),
   'video-canvas.archive_project': args => task(async () => { await request('archive_project', { project_id: args.project_id, archived: args.archived }); await loadProjects() }),
   'video-canvas.duplicate_project': args => task(async () => { await request('duplicate_project', { project_id: args.project_id, name: args.name }); await loadProjects() }),
@@ -90,7 +92,8 @@ const actions = {
     // After leaving: forgetting while the project is still open would save its viewport back.
     void forgetProject(args.project_id)
   }),
-  'video-canvas.sequence': args => task(() => edit([{ op: 'sequence', order: args.order }], args.expected_revision, 'assistant')),
+  // The assistant's revision goes to the server as given (null when it left it out): the page's own revision must never stand in for it.
+  'video-canvas.sequence': args => task(() => edit([{ op: 'sequence', order: args.order }], args.expected_revision ?? null, 'assistant')),
   'video-canvas.export_sequence': async (args, context) => {
     const call = extra => request('export_sequence', { ...args, ...extra, origin: 'assistant' }, { signal: context?.signal })
     const projectId = s.project?.id, seconds = waitFor(args.wait_seconds)
@@ -107,13 +110,18 @@ const actions = {
   'video-canvas.edit': args => task(async () => {
     // One server operation creates the project with its profile; no revision of another project is involved.
     if (args.create_name) {
-      const { profileId } = await createProject(args.create_name, args.profile_json ? JSON.parse(args.profile_json) : undefined)
+      const { profileId } = await createProject(args.create_name, args.profile_json ? JSON.parse(args.profile_json) : undefined, args.preset_json ? JSON.parse(args.preset_json) : undefined)
       return { id: s.project.id, revision: s.project.revision, ...(profileId ? { profileId } : {}) }
     }
-    if (args.profile_json || args.undo) { const result = await request(args.undo ? 'undo' : 'save_profile', { origin: 'assistant', expected_revision: args.expected_revision, ...(args.profile_json ? { profile: JSON.parse(args.profile_json) } : {}) }); await reload(); return { revision: result.revision } }
+    if (args.profile_json || args.preset_json || args.undo) {
+      const op = args.undo ? 'undo' : args.preset_json ? 'import_preset' : 'save_profile'
+      const result = await request(op, { origin: 'assistant', expected_revision: args.expected_revision, ...(args.profile_json ? { profile: JSON.parse(args.profile_json) } : {}), ...(args.preset_json ? { preset: JSON.parse(args.preset_json) } : {}) })
+      await reload()
+      return { revision: result.revision }
+    }
     const ops = JSON.parse(args.ops)
     if (ops.some(op => op.op === 'remove')) throw new Error('삭제는 video-canvas.remove 검토 작업으로 요청해줘.')
-    return edit(ops, args.expected_revision, 'assistant')
+    return edit(ops, args.expected_revision ?? null, 'assistant')
   }),
   'video-canvas.check': args => task(() => doCheck({ ...args, origin: 'assistant' })),
   'video-canvas.run_cut': async (args, context) => {
@@ -146,7 +154,7 @@ const actions = {
     await task(reload)
   },
   'video-canvas.propose_run_cut': args => launchRun({ ...args, origin: 'assistant' }, 'propose_run_cut'),
-  'video-canvas.remove': args => task(() => edit([{ op: 'remove', id: args.id }], args.expected_revision, 'assistant')),
+  'video-canvas.remove': args => task(() => edit([{ op: 'remove', id: args.id }], args.expected_revision ?? null, 'assistant')),
   'video-canvas.extract_frame': async (args, context) => {
     // Start (or look up) inside the queue without waiting; a requested wait runs outside it, by extraction id.
     const { wait_seconds: requested, ...start } = args, projectId = s.project?.id, seconds = waitFor(requested)
@@ -164,7 +172,7 @@ const actions = {
 let booted = Promise.resolve()
 const gated = Object.fromEntries(Object.entries(actions).map(([id, handler]) => [id, async (args, context) => { await booted; await settled(); return handler(args, context) }]))
 ctx.api = await connectPlugin(gated)
-fillIcons(); initToasts(); initMenu(); bindHeader(); bindNodes(); bindCanvas(); bindLinks(); bindDispatch(); bindHome(); bindTitle(); bindSequence()
+fillIcons(); initToasts(); initMenu(); bindHeader(); bindNodes(); bindCanvas(); bindLinks(); bindDispatch(); bindGen(); bindHome(); bindTitle(); bindSequence()
 if (ctx.api.supports('launch.image') && ctx.api.launch?.image) {
   s.launch = { compositeHash: ctx.api.launch.image.compositeHash, kind: 'image' }
   libraryName(s.launch.compositeHash).then(name => { launchName = name; ctx.launchName = name; renderLaunch() }, error => notice(error.message, true))

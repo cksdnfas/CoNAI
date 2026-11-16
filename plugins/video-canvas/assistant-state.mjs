@@ -1,4 +1,4 @@
-import { fail, profilePublication, representativeTake, sameValue, sequenceOf } from './domain.mjs'
+import { fail, outputOf, profileOf, profilePublication, representativeTake, sameValue, sequenceOf } from './domain.mjs'
 
 // These are host transport boundaries, not limits on a canvas, prompt or operation.
 export const SNAPSHOT_CHARS = 200000
@@ -60,16 +60,17 @@ export function recordPage(rows, { cursor, limit = rows.length || 1, budget = SN
   if (!items.length && index < rows.length && limit > 0) { items.push(rows[index]); index++ }
   return { items, cursor: String(offset), nextCursor: index < rows.length ? String(index) : null, total: rows.length }
 }
-// A cut's generation state in its own keys; humanReview is only the person's pass/redo review.
+// A cut's (mode) or generation node's (output; resultHash is an audio candidate ID for audio) generation state in its own keys;
+// humanReview is only the person's pass/redo review.
 function cutState(project, cut) {
-  const takes = project.takes.filter(take => take.cutId === cut.id), newest = takes.at(-1), shown = representativeTake(project, cut)
-  return { mode: cut.data.mode, newestTakeId: newest?.id ?? null, newestTakeStatus: newest?.status ?? null, newestTakeError: newest?.error ?? null,
+  const takes = project.takes.filter(take => take.cutId === cut.id), newest = takes.at(-1), shown = representativeTake(project, cut), profile = cut.kind === 'gen' && profileOf(project, cut)
+  return { ...(cut.kind === 'cut' ? { mode: cut.data.mode } : { output: profile ? outputOf(profile) : null }), newestTakeId: newest?.id ?? null, newestTakeStatus: newest?.status ?? null, newestTakeError: newest?.error ?? null,
     hasReadyResult: Boolean(shown?.resultHash), representingTakeId: shown?.id ?? null, resultHash: shown?.resultHash ?? null }
 }
 export function excerpt(project, { offset, cursor = offset, edge_cursor, limit, selection = [], launch = null } = {}) {
-  const withTakes = { ...project, takes: project.takes ?? [] }
+  const withTakes = { ...project, takes: project.takes ?? [], profiles: project.profiles ?? [] }
   const nodes = recordPage(project.nodes.map(node => ({ id: node.id, kind: node.kind, name: node.data.name, checkStatus: node.data.check?.status ?? null, humanReview: node.review,
-    ...(node.kind === 'cut' ? cutState(withTakes, node) : {}) })), { cursor, limit })
+    ...(node.kind === 'cut' || node.kind === 'gen' ? cutState(withTakes, node) : {}) })), { cursor, limit })
   const edges = recordPage(project.edges.map(({ id, from, to, port, position }) => ({ id, from, to, port, position })), { cursor: edge_cursor, limit })
   return { id: project.id, revision: project.revision, nodes: nodes.items, edges: edges.items, sequence: sequenceOf(project), selection, launch,
     total: nodes.total, totalEdges: edges.total, nextCursor: nodes.nextCursor, nextEdgeCursor: edges.nextCursor, nextOffset: nodes.nextCursor === null ? null : Number(nodes.nextCursor) }

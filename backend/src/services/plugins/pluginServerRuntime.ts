@@ -17,6 +17,7 @@ import { callPluginLlm } from './pluginLlm'
 import { callPluginTask, setPluginTaskInvoker } from './pluginTasks'
 import { callPluginServerMedia } from './pluginServerMedia'
 import { callPluginServerNative } from './pluginServerNative'
+import { callPluginServerChat } from './pluginServerChat'
 import type { RuntimeJobContext } from '../runtimeJobs/runtimeJobRunner'
 
 /**
@@ -127,6 +128,14 @@ const conai = Object.freeze({
   media: Object.freeze({
     resolve: (reference) => call('media.resolve', reference),
     save: (input) => call('media.save', input),
+  }),
+  generationPresets: Object.freeze({
+    list: () => call('generationPresets.list', {}),
+    get: (id) => call('generationPresets.get', { id }),
+  }),
+  skills: Object.freeze({
+    section: (input) => call('skills.section', input),
+    list: () => call('skills.list', {}),
   }),
   app: Object.freeze({
     // The native feature routes a page reaches with api.app.fetch, as this call's account; resolves to a Response.
@@ -247,6 +256,8 @@ async function answerCall(server: Server, message: { id: number; method: string;
       reply({ value: await callPluginServerMedia(server.pluginId, requester, message.method.slice(6), message.params, invocation?.signal) })
     } else if (message.method === 'app.fetch') {
       reply({ value: await callPluginServerNative(requester, message.params, invocation?.signal) })
+    } else if (message.method.startsWith('generationPresets.') || message.method.startsWith('skills.')) {
+      reply({ value: callPluginServerChat(requester, message.method, message.params) })
     } else if (message.method === 'job.progress') {
       const job = invocation?.job
       if (!job) throw new PluginError('실행 중인 작업에서만 진행률을 보낼 수 있어.')

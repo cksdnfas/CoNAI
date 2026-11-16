@@ -17,7 +17,7 @@ This directory contains the shared SDK and four installable development examples
 
 Build an example with `node scripts/build-plugin.mjs text-editor`, then upload `build-output/plugins/text-editor.zip` at `/#/settings?section=plugins` and enable it as an administrator.
 
-`video-canvas` (영상 캔버스) is also an official bundled feature plugin. It imports library images/videos, audio candidates and RefMod bundles into typed cut slots, submits registered DaSiWa MiniMax H3 Director workflows with an explicit plugin-held seed, tracks comparable takes, extracts library video frames and exports the cuts' representing takes in sequence order as one video through the host tool `join_videos`, and can generate a whole sequence in the background by chaining each cut from the previous cut's last frame (version 1.2.0). Its server module keeps account-scoped projects (search, sort, archive, duplicate, delete) and revision-checked operation batches in `conai.db`; UI, 19 page actions and eleven headless tools share its domain functions (deleting a project is human or commit-card only). A chat drives the canvas through page actions only while the composer's "페이지 연결" is on for the open canvas page; the host's chat-to-page bridge waits 20 s for a page action, so the page's `wait_take` waits at most 15 s per call while headless tools wait 0-120 s. Register a Director workflow with a numeric seed Marked Field, then pick it in the plugin: the server detects the Director and seed fields (`workflow_options`). See [video-canvas/README.md](video-canvas/README.md) for limits and verification boundaries. Headless proposals use canvas `proposed` takes with human approve/discard: a manifest action targeting its own registered tool fails validation before first activation (`pluginRegistry.parsePluginManifest` → `pluginAppToolScope` → `getMcpToolScope`), so the package does not depend on that circular connection. No host contract changes are required.
+`video-canvas` (Video Canvas) is also an official bundled feature plugin. It imports library images/videos, audio candidates and RefMod bundles into typed cut slots, submits registered DaSiWa MiniMax H3 Director workflows with an explicit plugin-held seed, tracks comparable takes, extracts library video frames and exports the cuts' representing takes in sequence order as one video through the host tool `join_videos`, and can generate a whole sequence in the background by chaining each cut from the previous cut's last frame (version 1.2.0). Its server module keeps account-scoped projects (search, sort, archive, duplicate, delete) and revision-checked operation batches in `conai.db`; UI, 19 page actions and eleven headless tools share its domain functions (deleting a project is human or commit-card only). A chat drives the canvas through page actions only while the composer's "페이지 연결" is on for the open canvas page; the host's chat-to-page bridge waits 20 s for a page action, so the page's `wait_take` waits at most 15 s per call while headless tools wait 0-120 s. Register a Director workflow with a numeric seed Marked Field, then pick it in the plugin: the server detects the Director and seed fields (`workflow_options`). See [video-canvas/README.md](video-canvas/README.md) for limits and verification boundaries. Headless proposals use canvas `proposed` takes with human approve/discard: a manifest action targeting its own registered tool fails validation before first activation (`pluginRegistry.parsePluginManifest` → `pluginAppToolScope` → `getMcpToolScope`), so the package does not depend on that circular connection. No host contract changes are required.
 
 Personal packages belong in `local-plugins/<plugin-name>/`, excluded from Git and Docker build contexts. Build them explicitly with `node scripts/build-plugin.mjs --local <plugin-name>`; ZIPs go to `build-output/local-plugins/`. Keep package-specific documentation and tests under `local-plugins/` too. These local sources need a separate personal backup; a repository clone does not include them. Public examples and host tests must not depend on personal packages.
 
@@ -331,7 +331,7 @@ SDK calls accept `{ signal, timeoutMs }` (`request`'s third argument, `server`'s
 
 ## Project adapter
 
-The host lets the user connect one project. Its edit mode follows the current account's `files.edit` permission, without a separate plugin write toggle. `api.workspace` contains `{ id, name, write }`; project IDs cannot be overridden by SDK arguments. Explicit read-only API connections remain read-only. Instance, revision and account checks also apply to server-module calls from that page.
+A plugin that declares any `workspace.*` capability is connected by the host to its own file-box folder `플러그인/<plugin name>`, created when missing at every open; plugins without the capability get none, and users cannot pick another folder. Targets are paths relative to that folder; writes are ordinary file-box text versions (text extensions only), batches are not transactional across operations, and `api.workspace.id` is the folder's file-box ID. Native `workspace_*` chat/MCP tools do not see this folder. Its edit mode follows the current account's `files.edit` permission, without a separate plugin write toggle. `api.workspace` contains `{ id, name, write }`; project IDs cannot be overridden by SDK arguments. Instance, revision and account checks also apply to server-module calls from that page.
 
 | Method | Input | Result |
 | --- | --- | --- |
@@ -364,6 +364,9 @@ export function activate(conai) {
   conai.log('…'); conai.warn('…')                                      // server log, prefixed [plugin:<id>]
   await conai.background.account()                                    // { id, type } that timer calls run as, or null
   await conai.app.fetch('/api/codex-chat/lorebooks')                   // a native feature route as that account: a Response
+  await conai.generationPresets.list()                                 // chat generation presets (administrators only); get(id) for one
+  await conai.skills.section({ skillId: 3, path: 'guides/' })          // a guide skill section's current text (any account)
+  await conai.skills.list()                                            // skills with the sections/groups a guide can link (administrators only)
 }
 ```
 
@@ -386,6 +389,34 @@ Jobs use `RuntimeJobRunner` (`plugin-task`), with two processing slots per insta
 `conai.media.resolve(reference)` uses the same internal-media resolver as project previews. Accepted references are `{source:'library', compositeHash}`, `{source:'files', fileId}` and `{source:'audio', candidateId}`. It returns `{path, name, mimeType, size, fingerprint}` to **the trusted server only**. Search through existing native tools first; never send native paths to a page or model. Recheck the reference fingerprint and live permissions before copying/using a source and before publishing output. Preserve references in project documents; expiring preview URLs are not persistent asset identities.
 
 `conai.media.save({path, groupPath?})` imports an existing output from a **relative path under that plugin's private data folder** through the native media pipeline, returning `{source:'library', compositeHash, groupId}`. It requires `images.view`, `images.upload` and `images.edit`, refuses links/path escapes and changed source files, and accepts PNG/JPG/WebP/MP4/WebM up to 512 MiB. It copies the file without buffering the whole video. Run it inside an idempotent processing job. Cancellation cannot undo a file already ingested; such output remains in its native library group.
+
+### Generation presets and guide skill sections
+
+`conai.generationPresets.list()` (all, by name) and `conai.generationPresets.get(id)` read the chat generation presets of `ChatGenerationPresetStore` as `PluginGenerationPreset` (`shared/src/types/plugin.ts`). A NovelAI preset has `comfyui: null` and its stored settings in `nai`; a ComfyUI preset has `nai: null`:
+
+```js
+{ id, name, instruction, kind: 'nai' | 'comfyui',
+  nai: { model, sampler, noiseSchedule, steps, scale, varietyPlus, transparentBackground, promptPrefix, promptSuffix, negativePrompt, sizes, characters, useCoords, vibes, characterRefs, characterReference } | null,
+  comfyui: { workflowId, serverId, serverTag, fixedInputs, exposedFieldIds, referenceField, promptField } | null,
+  prompting: { timing: 'inline' | 'early' | 'after', guide, previousImages,
+    guideSkill: { skillId, path, skillName, title, updatedDate } | null } }   // names/date null once the section is gone
+```
+
+As with `/api/codex-chat/admin/generation-presets`, only an active administrator (or the bootstrap owner while no accounts exist) may call them; the role is re-read on every call. Errors: 403 for any other account or without an account, 400 for an `id` that is not a positive integer, 404 for an unknown `id`.
+
+`conai.skills.section({ skillId, path })` returns `PluginSkillSection` `{ skillId, path, skillName, title, updatedDate, text }`: the section's text as it is now, read on every call by the same reader that puts a preset's linked guide into its prompt request (`skillGuide`). `path` uses the `guideSkill` link format: a section (`name` or `group/name`) or `group/` for all of that group's sections in order (then `title` is `group/ (n)` and `text` puts each under `### title (path)`); `updatedDate` is the latest section change. Any account the call runs as may read it, because every user's assistant needs the guide a plugin page links when it generates. The call changes nothing (no load count). Errors: 400 for a malformed link, 404 when the skill or the section no longer exists (the message says which), 409 while the skill's plugin is switched off, 403 without an account.
+
+`conai.skills.list()` returns `PluginGuideSkill[]`: every skill (by name, from the same `ChatSkillStore.list()` the preset editor's guide picker reads) with each link `skills.section` and `guideSkill` accept, without section texts:
+
+```js
+[{ skillId, name, enabled,                       // enabled: false while the skill's plugin is off (linkable, its guide not read then)
+   sections: [{ path, title }],                  // every section in the skill's order: 'name' or 'group/name'
+   groups: [{ path, title, count }] }]           // every group as 'group/', title 'group/ (count)', in order of first section
+```
+
+Administrators only, by the same rule and errors as `generationPresets` (403 for any other account or without an account).
+
+All are server-module only; a page reaches them through its own `api.server`. Pages can check the host features `generationPresets.read`, `skills.section` and `skills.list` with `api.supports`; server modules check `typeof conai.generationPresets?.list === 'function'`, `typeof conai.skills?.section === 'function'` and `typeof conai.skills?.list === 'function'`. Older hosts have none of them.
 
 ## Generation layouts
 
@@ -675,6 +706,7 @@ Profile assets use the same library references, legacy embedded images and safet
 - `frontend/src/features/plugins/`: optional package management and trusted host.
 - `backend/test/plugins.test.ts`: important package, permission, approval and origin regressions (`npx tsx --test backend/test/plugins.test.ts`).
 - `backend/src/services/plugins/pluginServerRuntime.ts`, `pluginServerTools.ts`, `pluginData.ts`: server module workers, registered tools, data folders; `backend/test/plugin-server.test.ts` covers them.
+- `backend/src/services/plugins/pluginServerChat.ts`: `conai.generationPresets` and `conai.skills.section/list` over `ChatGenerationPresetStore`, `guideSkillLink`, `skillGuide` and `ChatSkillStore.list`; covered by `backend/test/plugin-server.test.ts`.
 - `backend/src/services/plugins/pluginLlm.ts`, `backend/src/services/codex-chat/chatProfileReply.ts`: account-bound profile replies, shared prompts, idempotent jobs and cancellation; covered by the server plugin and workflow LLM tests.
 - `frontend/test/plugin-text-editor.test.ts`: draft preservation during conflict refresh and concurrent typing (`cd frontend && npx tsx --test test/plugin-text-editor.test.ts`).
 - Generation layouts: `frontend/src/features/plugins/plugin-generation.ts` (contributions), `plugin-layout-block.tsx` (embedded page), `plugin-generation-actions.tsx` (Generate-bar buttons), `withPluginBlocks` in `frontend/src/features/image-generation/layout/generation-layout-ops.ts`, the form bridge (`form`/`fillForm`) in `frontend/src/features/codex-chat/chat-page-context.tsx`; covered by `frontend/test/generation-layout.test.ts`, `frontend/test/plugin-sdk.test.ts` and `backend/test/plugin-server.test.ts`.

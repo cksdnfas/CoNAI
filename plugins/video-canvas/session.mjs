@@ -20,7 +20,7 @@ export async function request(op, args = {}, options) {
       : section === 'lastRun' ? { takeId: shown.takeId ?? shown.id, seed: shown.seed, status: shown.status, inputDigest: shown.inputDigest }
         : section === 'lastNode' ? { nodeId: shown.node.id, inputDigest: shown.preview?.inputDigest ?? null }
           : section === 'lastExtraction' || section === 'lastExport' || section === 'lastChain' ? { id: shown.id, status: shown.status, jobId: shown.jobId }
-            : section === 'workflowOptions' ? { workflows: shown.workflows.length, servers: shown.servers.length }
+            : section === 'workflowOptions' ? { workflows: shown.workflows.length, servers: shown.servers.length, ...(shown.presets ? { presets: shown.presets.length } : {}) }
               : section === 'lastCheck' ? { blocked: shown.cuts.some(cut => cut.blocked) } : { nextCursor: shown.nextCursor, nextEdgeCursor: shown.nextEdgeCursor }
     assistant.set(section, shown, shown.autoProfile ? { ...summary, autoProfile: shown.autoProfile } : summary)
     if (op === 'read_node') s.nodeDetail = result
@@ -28,7 +28,7 @@ export async function request(op, args = {}, options) {
   }
   // The server made a default profile for a project that had none; the assistant reads it from the published result, a person is told here.
   if (result?.autoProfile && args.origin !== 'assistant') notice(`프로필이 없어서 "${result.autoProfile.label}" 워크플로로 기본 프로필을 만들었어.`)
-  if (['create_project', 'save_profile', 'undo'].includes(op)) recordEdit(op, result)
+  if (['create_project', 'save_profile', 'import_preset', 'undo'].includes(op)) recordEdit(op, result)
   return result
 }
 // The server reports `autoProfile` once, on the call that created it. Waiting on the same take or chain republishes it without that
@@ -45,7 +45,7 @@ function withAutoProfile(section, result) {
 export function recordEdit(op, result) {
   assistant.set('lastEdit', { revision: result.revision, projectId: result.id,
     ...(result.profileId ? { profileId: result.profileId } : {}),
-    ...(op === 'save_profile' ? { profiles: result.profiles } : {}), applied: [{ op }], rejected: [], tempIds: {} },
+    ...(op === 'save_profile' || op === 'import_preset' ? { profiles: result.profiles } : {}), applied: [{ op }], rejected: [], tempIds: {} },
   { revision: result.revision, applied: 1, rejected: 0 })
   publish()
 }

@@ -20,7 +20,7 @@ export const reviewPluginSource = (input: PluginSourceInput) => pluginRequest<Pl
 export const installPluginSource = (review: Pick<PluginSourceReview, 'reviewId' | 'digest'>) => pluginRequest<PluginInstallResult>('/sources/install', 'POST', { reviewId: review.reviewId, digest: review.digest })
 export const checkPluginSources = (pluginId?: string) => pluginRequest<PluginSourceCheck[]>('/sources/check', 'POST', pluginId ? { pluginId } : {})
 export const unlinkPluginSource = (pluginId: string) => pluginRequest<void>(`/${encodeURIComponent(pluginId)}/source`, 'DELETE')
-export const openPlugin = (id: string, page: string, files: string[], workspace?: { id: string; write: boolean }) => pluginRequest<PluginInstance>(`/${encodeURIComponent(id)}/pages/${encodeURIComponent(page)}/instances`, 'POST', { files, ...(workspace ? { workspace } : {}) })
+export const openPlugin = (id: string, page: string, files: string[]) => pluginRequest<PluginInstance>(`/${encodeURIComponent(id)}/pages/${encodeURIComponent(page)}/instances`, 'POST', { files })
 export const proposePluginWrite = (instance: string, value: unknown, signal?: AbortSignal) => pluginRequest<PluginWriteProposal>(`/instances/${instance}/proposals`, 'POST', value, signal)
 /** A plugin's button next to Generate: the screen's form goes to its server module, which may answer with values to fill. */
 export const runPluginGenerationAction = (pluginId: string, actionId: string, input: { surface: GenerationLayoutSurface; fields: Array<Pick<ChatPageField, 'id' | 'label' | 'type' | 'value'>> }) =>

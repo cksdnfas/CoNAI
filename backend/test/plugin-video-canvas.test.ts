@@ -168,7 +168,9 @@ test('video canvas only exposes final actual-or-original hashes when postprocess
 
 function serviceFixture() {
   const db = new Database(':memory:'), calls: any[] = [], registered: any[] = [], hooks = new Map<string, any>()
-  const state: any = { ready: false, fingerprint: 'fingerprint', audioRevision: 'revision-one', members: [{ kind: 'image' }], frames: [], frameId: randomUUID(), job: 480, joinTool: true, joins: [], jobs: {} }
+  const state: any = { ready: false, fingerprint: 'fingerprint', audioRevision: 'revision-one', members: [{ kind: 'image' }], frames: [], frameId: randomUUID(), job: 480, joinTool: true, joins: [], jobs: {}, admin: true, presets: {}, sections: {} }
+  // The host shows generation presets to administrators only; skill sections are read for any account and throw once gone.
+  const refused = () => Object.assign(new Error('관리자만 볼 수 있어.'), { status: 403 })
   let pageHandler: any, jobHandler: any
   // Plugin tasks run in the background like the host's: the handler gets the starting account and a cancel signal.
   const tasks = new Map<string, any>()
@@ -198,7 +200,7 @@ function serviceFixture() {
           return { job_id: state.frameId, ...(state.joins.shift() ?? { status: 'running', progress: 0 }) }
         }
         if (name === 'list_comfyui_servers') return [{ id: 1, name: '메인', routing_tags: ['gpu'] }, { id: 2, name: '보조', routing_tags: ['gpu', 'fast'] }]
-        if (name === 'get_workflow_details') { state.detailsStarted?.(); if (state.detailsGate) await state.detailsGate; return details }
+        if (name === 'get_workflow_details') { state.detailsStarted?.(); if (state.detailsGate) await state.detailsGate; return state.workflowDetails?.[args.workflow_id] ?? details }
         if (name === 'get_image_metadata') return { duration: 4 }
         if (name === 'get_audio_candidate') return { duration_seconds: 4, revision: state.audioRevision }
         if (name === 'list_comfy_refmods') return { server_id: 1, entries: [{ name: 'crowd', members: state.members }] }
@@ -227,6 +229,7 @@ function serviceFixture() {
       }
       if (url.startsWith('/api/workflow-input-assets/') && options?.method === 'DELETE') return Response.json({ success: true, data: { removed: true } })
       if (url === '/api/refmods') return Response.json({ data: [{ id: 1, name: 'crowd', status: 'saved', members: state.members }] })
+      if (url === '/api/workflows?kind=audio') return Response.json({ success: true, data: [] })
       if (url === '/api/workflows?kind=image' && state.workflowsDenied) return Response.json({ success: false, error: '워크플로 보기 권한이 없어.' }, { status: 403 })
       if (url === '/api/workflows?kind=image') return Response.json({ success: true, data: [
         { id: 12, name: 'Director 기본', is_active: true, marked_fields: [
@@ -245,6 +248,15 @@ function serviceFixture() {
         return Response.json({ record: { postprocess_status: state.failedHistory?.includes(job) ? 'failed' : 'ready', composite_hash: jobHash(job) } })
       }
       throw new Error(`Unexpected URL: ${url}`)
+    } },
+    generationPresets: {
+      async list() { if (!state.admin) throw refused(); return Object.values(state.presets).map(structuredClone) },
+      async get(id: number) { if (!state.admin) throw refused(); if (!state.presets[id]) throw Object.assign(new Error('프리셋이 없어.'), { status: 404 }); return structuredClone(state.presets[id]) },
+    },
+    skills: { async section({ skillId, path }: any) {
+      const text = state.sections[`${skillId}:${path}`]
+      if (text === undefined) throw Object.assign(new Error('스킬 섹션이 없어.'), { status: 404 })
+      return { skillId, path, skillName: '스타일', title: path, updatedDate: '2026-01-01', text }
     } },
     hooks: { on(name: string, handler: any) { hooks.set(name, handler) } }, onRequest(handler: any) { pageHandler = handler },
   }
@@ -419,7 +431,8 @@ test('video canvas keeps one assistant undo batch without logging human drags or
     const batch = await f.dispatch('apply_ops', { project_id: project.id, expected_revision: 6, ops: [{ op: 'set', id: project.nodes[0].id, fields: { prompt: '바뀐 장면' } }] })
     await f.dispatch('run_cut', await runArgs(f, project))
     await f.dispatch('check', { project_id: project.id })
-    const undone = await f.dispatch('undo', { project_id: project.id, expected_revision: batch.revision })
+    await f.dispatch('undo', { project_id: project.id, expected_revision: batch.revision })
+    const undone = f.service.store.get('account:1', project.id)
     assert.equal(undone.nodes[0].data.prompt, project.nodes[0].data.prompt)
     assert.equal(undone.takes.length, 1)
   } finally { f.db.close() }
@@ -607,7 +620,8 @@ test('video canvas profile publication keeps override keys in JSON strings and d
     const saved = await f.dispatch('save_profile', { project_id: project.id, expected_revision: 1,
       profile: { ...profile, unknown_token: 'not a profile field', overrides: { prompt_enhancer_token_limit: 12000 } } })
     assert.equal(saved.profiles[0].unknown_token, undefined)
-    assert.deepEqual(saved.profiles[0].overrides, { prompt_enhancer_token_limit: 12000 })
+    assert.deepEqual(f.service.store.get('account:1', project.id).profiles[0].overrides, { prompt_enhancer_token_limit: 12000 })
+    assert.deepEqual(JSON.parse(saved.profiles[0].overrides), { prompt_enhancer_token_limit: 12000 })
     const run = await f.dispatch('run_cut', await runArgs(f, project))
     const detail = await f.dispatch('read_node', { project_id: project.id, id: project.nodes[0].id })
     const take = await f.dispatch('get_take', { project_id: project.id, take_id: run.id })
@@ -701,7 +715,7 @@ test('video canvas sequence follows cut adds and removals, rejects non-cuts and 
     assert.equal(reordered.rejected.length, 3)
     assert.deepEqual(sequence(), [c, first, b])
     const undone = await f.dispatch('undo', { project_id: project.id, expected_revision: reordered.revision })
-    assert.deepEqual(undone.sequence, [first, b, c])
+    assert.deepEqual(f.service.store.get('account:1', project.id).sequence, [first, b, c])
     await f.dispatch('apply_ops', { project_id: project.id, expected_revision: undone.revision, ops: [{ op: 'remove', id: first }] }, 'human')
     assert.deepEqual(sequence(), [b, c])
   } finally { f.db.close() }
@@ -725,7 +739,7 @@ test('video canvas workflow options detect Director/seed fields and a workflow-o
     await assert.rejects(() => f.dispatch('save_profile', { project_id: project.id, expected_revision: 1, profile: { workflowId: 12, inputs: { seed: 1 } } }), /정할 수 없는/)
     const saved = await f.tool('apply_ops', { project_id: project.id, expected_revision: 1, profile: { workflowId: 12, serverTag: 'gpu', inputs: { steps: 30 } } })
     const { id, ...created } = saved.profiles.at(-1)
-    assert.deepEqual(created, { label: 'Director 기본', workflowId: 12, directorFieldId: 'director', seedFieldId: 'seed', serverTag: 'gpu', inputs: { steps: 30 } })
+    assert.deepEqual(created, { label: 'Director 기본', workflowId: 12, directorFieldId: 'director', seedFieldId: 'seed', serverTag: 'gpu', overrides: '{}', inputs: '{"steps":30}' })
     const added = await f.dispatch('apply_ops', { project_id: project.id, expected_revision: saved.revision, ops: [{ op: 'add_node', kind: 'cut', tempId: 'cut' }] })
     assert.equal(f.service.store.get('account:1', project.id).nodes.find((node: any) => node.id === added.tempIds.cut).data.profileId, id)
     const run = await f.dispatch('run_cut', await runArgs(f, project, { profile_id: id }))
@@ -1035,5 +1049,203 @@ test('video canvas chain moves a cut pick to the take it generated so export and
     revision = f.service.store.get('account:1', project.id).revision
     await f.dispatch('export_sequence', { project_id: project.id, expected_revision: revision })
     assert.deepEqual(f.calls.filter(call => call.name === 'join_videos').at(-1).args.composite_hashes, [jobHash(484), jobHash(485)])
+  } finally { f.db.close() }
+})
+
+// A plain image workflow (no Director field) for generation nodes, and a second one with other field IDs.
+const genDetails = { name: '배경 이미지', input_schema: [
+  { id: 'prompt', label: 'Positive prompt', type: 'text' },
+  { id: 'seed', type: 'number', json_path: '3.inputs.seed' },
+  { id: 'image', type: 'image' },
+  { id: 'steps', label: '스텝', type: 'number', minimum: 1, maximum: 50 },
+  { id: 'cfg', type: 'number' },
+] }
+const otherGenDetails = { name: '다른 이미지', input_schema: [
+  { id: 'text', label: 'prompt', type: 'textarea' },
+  { id: 'noise_seed', type: 'number', json_path: '9.inputs.noise_seed' },
+  { id: 'ref', type: 'image' },
+  { id: 'steps', label: '스텝', type: 'number', minimum: 1, maximum: 50 },
+] }
+const generator = { id: 'gen-profile', label: '배경 생성', workflowId: 20, output: 'image', promptFieldId: 'prompt', seedFieldId: 'seed', imageFieldIds: ['image'], exposedFieldIds: ['steps'], fixedInputs: { cfg: 7 } }
+const revisionOf = (f: ReturnType<typeof serviceFixture>, project: any) => f.service.store.get('account:1', project.id).revision
+const storedProfile = (f: ReturnType<typeof serviceFixture>, project: any, id: string) => f.service.store.get('account:1', project.id).profiles.find((item: any) => item.id === id)
+// The fixture cut (T2VA, plain prompt) with a generation node on its start slot.
+async function genProject(f: ReturnType<typeof serviceFixture>) {
+  f.state.historyPerJob = true
+  f.state.workflowDetails = { 20: genDetails, 21: otherGenDetails }
+  const project = await fixtureProject(f), cut = project.nodes[0]
+  await f.dispatch('save_profile', { project_id: project.id, expected_revision: revisionOf(f, project), profile: generator })
+  const edit = await f.dispatch('apply_ops', { project_id: project.id, expected_revision: revisionOf(f, project), ops: [
+    { op: 'set', id: cut.id, fields: { mode: 'T2VA', prompt: '노을 진 바다를 걷는 유나' } },
+    { op: 'add_node', kind: 'gen', name: '바다 배경', tempId: 'gen', profileId: 'gen-profile', seed: 77, fields: { prompt: '노을 진 바다', inputs: { steps: 30 } } },
+    { op: 'connect', from: 'gen', to: cut.id, port: 'start' },
+  ] })
+  return { project, cut, gen: edit.tempIds.gen, edit }
+}
+async function generate(f: ReturnType<typeof serviceFixture>, project: any, nodeId: string) {
+  const started = await f.dispatch('run_cut', { project_id: project.id, cut_id: nodeId, expected_revision: revisionOf(f, project), requestId: randomUUID() })
+  return f.dispatch('get_take', { project_id: project.id, take_id: started.id })
+}
+test('video canvas generation node submits mapped workflow inputs and feeds its result to a cut start slot', async () => {
+  const f = serviceFixture()
+  try {
+    const { project, cut, gen, edit } = await genProject(f)
+    assert.deepEqual(edit.rejected, [])
+    assert.deepEqual(edit.applied[2].modeChange, { cutId: cut.id, from: 'T2VA', to: 'I2VA' })
+    const waiting = await f.dispatch('check', { project_id: project.id, cut_id: cut.id })
+    assert.equal(waiting.cuts[0].blocked, true)
+    assert.ok(waiting.cuts[0].errors.some((issue: any) => /결과가 아직 없어/.test(issue.message)))
+    await assert.rejects(() => f.dispatch('run_cut', { project_id: project.id, cut_id: cut.id, expected_revision: revisionOf(f, project), requestId: randomUUID() }), /결과가 아직 없어/)
+
+    const result = await generate(f, project, gen)
+    assert.ok(result.resultHash)
+    const submits = f.calls.filter(call => call.name === 'submit_generation_job')
+    assert.equal(submits.length, 1)
+    assert.deepEqual(submits[0].args, { service_type: 'comfyui', workflow_id: 20, inputs: { cfg: 7, steps: 30, prompt: '노을 진 바다', seed: 77 }, idempotency_key: `video-canvas-${result.id}` })
+
+    assert.equal((await f.dispatch('check', { project_id: project.id, cut_id: cut.id })).cuts[0].blocked, false)
+    await generate(f, project, cut.id)
+    const director = f.calls.filter(call => call.name === 'submit_generation_job').at(-1).args.inputs.director
+    assert.equal(director.mode, 'I2VA')
+    assert.ok(Object.values(director.assets).some((asset: any) => asset.composite_hash === result.resultHash))
+  } finally { f.db.close() }
+})
+test('video canvas warns without blocking when a cut result used an older generation node result', async () => {
+  const f = serviceFixture()
+  try {
+    const { project, cut, gen } = await genProject(f)
+    await generate(f, project, gen)
+    await generate(f, project, cut.id)
+    const fresh = await f.dispatch('check', { project_id: project.id, cut_id: cut.id })
+    assert.ok(!fresh.cuts[0].warnings.some((issue: any) => issue.code === 'stale-input'))
+
+    await generate(f, project, gen)
+    const stale = await f.dispatch('check', { project_id: project.id, cut_id: cut.id })
+    assert.equal(stale.cuts[0].blocked, false)
+    assert.ok(stale.cuts[0].warnings.some((issue: any) => issue.code === 'stale-input' && issue.message.includes('바다 배경')))
+  } finally { f.db.close() }
+})
+test('video canvas NovelAI generation sends one sample with a real seed and keeps the reference blobs out of results', async () => {
+  const f = serviceFixture()
+  try {
+    f.state.historyPerJob = true
+    const vibe = 'VIBE-ENCODED-BLOB', reference = 'data:image/png;base64,CHARACTER-REF-BLOB'
+    f.state.presets[5] = { id: 5, name: 'NAI 일러스트', instruction: '일러스트용', kind: 'nai', comfyui: null, prompting: { guide: '', guideSkill: null },
+      nai: { model: 'nai-diffusion-4-5-full', sampler: 'k_euler', noiseSchedule: 'karras', steps: 28, scale: 5, varietyPlus: false, transparentBackground: false,
+        promptPrefix: 'masterpiece', promptSuffix: 'best quality', negativePrompt: 'lowres', sizes: [{ label: '세로', width: 832, height: 1216 }], characters: [], useCoords: false,
+        vibes: [{ encoded: vibe, strength: 0.6 }], characterRefs: [{ image: reference, fidelity: 1 }], characterReference: { mode: 'replace' }, n_samples: 4 } }
+    const created = await f.dispatch('create_project', { name: '일러스트', preset: { id: 5 } })
+    const project = { id: created.id }
+    const edit = await f.dispatch('apply_ops', { project_id: project.id, expected_revision: created.revision, ops: [{ op: 'add_node', kind: 'gen', name: '소녀', tempId: 'gen', seed: 0, fields: { prompt: '바닷가 소녀' } }] })
+    const gen = edit.tempIds.gen
+    const started = await f.dispatch('run_cut', { project_id: project.id, cut_id: gen, expected_revision: revisionOf(f, project), requestId: randomUUID() })
+    const take = await f.dispatch('get_take', { project_id: project.id, take_id: started.id })
+    const submitted = f.calls.find(call => call.name === 'submit_generation_job').args
+    assert.equal(submitted.service_type, 'novelai')
+    assert.equal(submitted.request_payload.n_samples, 1)
+    assert.equal(submitted.request_payload.prompt, 'masterpiece, 바닷가 소녀, best quality')
+    assert.ok(submitted.request_payload.seed > 0)
+    assert.equal(take.seed, submitted.request_payload.seed)
+    assert.equal(f.service.store.get('account:1', project.id).nodes.find((node: any) => node.id === gen).data.seed, submitted.request_payload.seed)
+    // The request keeps the one copy a same-key retry resends.
+    assert.equal(f.service.store.take('account:1', project.id, take.id).request.request_payload.vibes[0].encoded, vibe)
+
+    const results = [created, edit, started, take,
+      await f.dispatch('read_node', { project_id: project.id, id: gen }),
+      await f.tool('read_canvas', { project_id: project.id, node_id: gen }),
+      await f.tool('read_canvas', { project_id: project.id }),
+      await f.tool('get_take', { project_id: project.id, take_id: take.id })]
+    for (const result of results) {
+      const text = JSON.stringify(result)
+      assert.ok(!text.includes('VIBE-ENCODED-BLOB') && !text.includes('CHARACTER-REF-BLOB'))
+    }
+    assert.ok(!JSON.stringify(f.service.store.take('account:1', project.id, take.id).profile).includes('BLOB'))
+  } finally { f.db.close() }
+})
+test('video canvas preset import copies the preset for administrators and refuses others and unknown keys', async () => {
+  const f = serviceFixture()
+  try {
+    f.state.historyPerJob = true
+    f.state.workflowDetails = { 20: genDetails }
+    f.state.presets[7] = { id: 7, name: '배경 프리셋', instruction: '배경을 만들어', kind: 'comfyui', nai: null,
+      comfyui: { workflowId: 20, serverId: 2, serverTag: null, fixedInputs: { cfg: 6 }, exposedFieldIds: ['steps'], referenceField: 'image', promptField: 'prompt' },
+      prompting: { timing: 'before', guide: '밝게', guideSkill: { skillId: 3, path: 'style/bg', skillName: '스타일', title: '배경' }, previousImages: 2 } }
+    const project = await fixtureProject(f)
+    const imported = await f.dispatch('import_preset', { project_id: project.id, expected_revision: revisionOf(f, project), preset: { id: 7 } })
+    const id = imported.lastProfileId
+    const copied = { id, label: '배경 프리셋', workflowId: 20, serverId: 2, output: 'image', promptFieldId: 'prompt', seedFieldId: 'seed', imageFieldIds: ['image'],
+      exposedFieldIds: ['steps'], fixedInputs: { cfg: 6 }, instruction: '배경을 만들어', guide: '밝게', guideSkill: { skillId: 3, path: 'style/bg' } }
+    assert.deepEqual(storedProfile(f, project, id), copied)
+
+    f.state.presets[7].comfyui.fixedInputs.cfg = 9
+    f.state.presets[7].prompting.guide = '어둡게'
+    const edit = await f.dispatch('apply_ops', { project_id: project.id, expected_revision: revisionOf(f, project), ops: [{ op: 'add_node', kind: 'gen', name: '배경', tempId: 'gen', profileId: id, seed: 3, fields: { prompt: '숲' } }] })
+    await generate(f, project, edit.tempIds.gen)
+    assert.equal(f.calls.filter(call => call.name === 'submit_generation_job').at(-1).args.inputs.cfg, 6)
+    assert.deepEqual(storedProfile(f, project, id), copied)
+
+    await assert.rejects(() => f.dispatch('import_preset', { project_id: project.id, expected_revision: revisionOf(f, project), preset: { id: 7, guideSkill: { skillId: 3, path: 'style/bg' } } }), /preset에 쓸 수 없는 키야: guideSkill/)
+    f.state.admin = false
+    await assert.rejects(() => f.dispatch('import_preset', { project_id: project.id, expected_revision: revisionOf(f, project), preset: { id: 7 } }), (error: any) => error.status === 403)
+  } finally { f.db.close() }
+})
+test('video canvas guide skill links are set by administrators, carried by forks and read into the node preview', async () => {
+  const f = serviceFixture()
+  try {
+    const { project, gen } = await genProject(f)
+    const link = { skillId: 3, path: 'style/bg' }
+    f.state.sections['3:style/bg'] = '배경은 밝은 톤으로 그려.'
+    await f.dispatch('save_profile', { project_id: project.id, expected_revision: revisionOf(f, project), profile: { ...generator, guide: '밝게', guideSkill: link } })
+
+    f.state.admin = false
+    await assert.rejects(() => f.dispatch('save_profile', { project_id: project.id, expected_revision: revisionOf(f, project), profile: { id: generator.id, guideSkill: { skillId: 3, path: 'style/other' } } }), /관리자/)
+    await assert.rejects(() => f.dispatch('save_profile', { project_id: project.id, expected_revision: revisionOf(f, project), profile: { ...generator, id: 'other', guideSkill: { skillId: 4, path: 'x' } } }), /관리자/)
+    await f.dispatch('save_profile', { project_id: project.id, expected_revision: revisionOf(f, project), profile: { id: generator.id, guide: '더 밝게' } })
+    assert.deepEqual(storedProfile(f, project, generator.id).guideSkill, link)
+    await f.dispatch('save_profile', { project_id: project.id, expected_revision: revisionOf(f, project), profile: { ...generator, id: 'fork', guideSkill: link } })
+    assert.deepEqual(storedProfile(f, project, 'fork').guideSkill, link)
+
+    const read = await f.dispatch('read_node', { project_id: project.id, id: gen })
+    assert.equal(read.preview.guide.text, '더 밝게')
+    assert.equal(read.preview.guide.skill.text, '배경은 밝은 톤으로 그려.')
+    assert.equal(read.preview.guide.guideWarning, undefined)
+    delete f.state.sections['3:style/bg']
+    const gone = await f.dispatch('read_node', { project_id: project.id, id: gen })
+    assert.equal(gone.preview.guide.text, '더 밝게')
+    assert.match(gone.preview.guide.guideWarning, /읽을 수 없어/)
+  } finally { f.db.close() }
+})
+test('video canvas partial profile saves keep omitted settings, clear explicit nulls and re-derive roles for another workflow', async () => {
+  const f = serviceFixture()
+  try {
+    f.state.workflowDetails = { 20: genDetails, 21: otherGenDetails }
+    const project = await fixtureProject(f)
+    const full = { ...generator, id: 'g', serverId: 2, instruction: '배경용', guide: '밝게' }
+    const save = (profile: any) => f.dispatch('save_profile', { project_id: project.id, expected_revision: revisionOf(f, project), profile })
+    await save(full)
+    await save({ id: 'g', workflowId: 20, guide: '새 가이드' })
+    assert.deepEqual(storedProfile(f, project, 'g'), { ...full, guide: '새 가이드' })
+    await save({ id: 'g', serverId: null })
+    const { serverId, ...withoutServer } = full
+    assert.deepEqual(storedProfile(f, project, 'g'), { ...withoutServer, guide: '새 가이드' })
+    await save({ id: 'g', workflowId: 21 })
+    assert.deepEqual(storedProfile(f, project, 'g'), { ...withoutServer, guide: '새 가이드', workflowId: 21, promptFieldId: 'text', seedFieldId: 'noise_seed', imageFieldIds: ['ref'], exposedFieldIds: ['steps'], fixedInputs: {} })
+  } finally { f.db.close() }
+})
+test('video canvas add_node takes set fields, rejects unknown op keys and ops without expected_revision', async () => {
+  const f = serviceFixture()
+  try {
+    const project = await fixtureProject(f)
+    const added = await f.dispatch('apply_ops', { project_id: project.id, expected_revision: revisionOf(f, project), ops: [{ op: 'add_node', kind: 'cut', name: '새 컷', tempId: 'n', fields: { prompt: '걷는다', duration: 6, seed: 5 } }] })
+    const node = f.service.store.get('account:1', project.id).nodes.find((item: any) => item.id === added.tempIds.n)
+    assert.deepEqual([node.data.prompt, node.data.duration, node.data.seed], ['걷는다', 6, 5])
+
+    const before = f.service.store.get('account:1', project.id).nodes.length
+    const unknown = await f.dispatch('apply_ops', { project_id: project.id, expected_revision: revisionOf(f, project), ops: [{ op: 'add_node', kind: 'cut', name: '잃어버린 컷', prompt: '사라지면 안 돼' }] })
+    assert.equal(unknown.applied.length, 0)
+    assert.match(unknown.rejected[0].reason, /쓸 수 없는 키야: prompt/)
+    assert.match(unknown.rejected[0].reason, /fields 안에/)
+    assert.equal(f.service.store.get('account:1', project.id).nodes.length, before)
+    await assert.rejects(() => f.dispatch('apply_ops', { project_id: project.id, ops: [{ op: 'add_node', kind: 'cut', name: '컷' }] }), /expected_revision이 필요해/)
   } finally { f.db.close() }
 })

@@ -3,6 +3,7 @@ import { findExternalMcpTool } from '../services/externalMcp/externalMcpServers'
 import { findPluginServerTool } from '../services/plugins/pluginServerTools';
 import { unwrapCatalogCall } from './toolCatalog';
 import { MAX_UPLOAD_FILE_SIZE_BYTES } from '../middleware/upload';
+import { isWorkflowInputAssetRef } from '../services/workflowInputAssetStore';
 
 export const MCP_DECODED_MEDIA_LIMIT_BYTES = 50 * 1024 * 1024;
 export const MCP_HTTP_JSON_LIMIT_MB = 70;
@@ -77,7 +78,7 @@ function detectMediaFamilies(data: Buffer): Set<'image' | 'video' | 'audio'> {
 }
 
 // `outside`: arguments for an external MCP server's tool, where a path names something on that server, not ours.
-function inspectValue(value: unknown, state: { decodedBytes: number; onManagedMedia?: () => void; outside?: boolean; fileDataUrl?: string }, depth = 0, chat = false, structured = false): void {
+function inspectValue(value: unknown, state: { decodedBytes: number; onManagedMedia?: () => void; outside?: boolean; fileDataUrl?: string; workflowInputAssets?: boolean }, depth = 0, chat = false, structured = false): void {
   if (depth > 40) throw new McpRequestValidationError('MCP input nesting is too deep.', 400, -32602);
   if (typeof value === 'string') {
     if (state.fileDataUrl !== undefined && value === state.fileDataUrl) {
@@ -128,7 +129,8 @@ function inspectValue(value: unknown, state: { decodedBytes: number; onManagedMe
 
   for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
     if (chat && key === 'composite_hash' && child) state.onManagedMedia?.();
-    if (chat && key === '__ref') throw new McpRequestValidationError('Chat media must use data URLs or managed image hashes, not internal storage references.', 400, -32602);
+    // A plugin host call may pass the reference /api/workflow-input-assets returned for its own upload; nothing else.
+    if (chat && key === '__ref' && !(state.workflowInputAssets && isWorkflowInputAssetRef(value))) throw new McpRequestValidationError('Chat media must use data URLs or managed image hashes, not internal storage references.', 400, -32602);
     if (!state.outside && FORBIDDEN_PATH_KEYS.has(key.toLowerCase())) {
       throw new McpRequestValidationError(
         `MCP file path input is not allowed (${key}). Use data_url or composite_hash.`,
@@ -141,11 +143,11 @@ function inspectValue(value: unknown, state: { decodedBytes: number; onManagedMe
 }
 
 /** The same filesystem/media boundary for in-process chat tools and HTTP MCP. */
-export function validateMcpToolArguments(args: unknown, onManagedMedia?: () => void, outside = false, options: { toolName?: string; requestBody?: unknown } = {}): void {
+export function validateMcpToolArguments(args: unknown, onManagedMedia?: () => void, outside = false, options: { toolName?: string; requestBody?: unknown; workflowInputAssets?: boolean } = {}): void {
   const call = options.toolName ? unwrapCatalogCall(options.toolName, args) : undefined;
   const toolArgs = call?.arguments as Record<string, unknown> | undefined;
   const fileDataUrl = call?.tool === 'write_binary_file' && typeof toolArgs?.data_url === 'string' ? toolArgs.data_url : undefined;
-  inspectValue(options.requestBody ?? args, { decodedBytes: 0, onManagedMedia, outside, fileDataUrl }, 0, options.requestBody === undefined);
+  inspectValue(options.requestBody ?? args, { decodedBytes: 0, onManagedMedia, outside, fileDataUrl, workflowInputAssets: options.workflowInputAssets }, 0, options.requestBody === undefined);
 }
 
 /** Validate decoded media totals and reject client-supplied server filesystem paths. */

@@ -7,8 +7,7 @@ import { refreshMcpRequester } from '../../mcp/toolAccess'
 import { requireFileStoreOwner, requireFileStoreAction } from '../fileStoreAccess'
 import { pluginDb, pluginToken, sha256 as hash, PluginError, requireProposalRoom, issueProposalApproval, PluginMediaGrants } from './pluginStore'
 import { getPlugin } from './pluginRegistry'
-import { WorkspaceService } from '../workspaceService'
-import { workspaceIdSchema } from '../workspaceSchemas'
+import { ensurePluginFolder } from './pluginFolder'
 
 export const pluginTokenSchema = z.string().regex(/^[a-f0-9]{48}$/)
 const fileIdSchema = z.string().regex(/^[a-f0-9]{32}$/)
@@ -41,7 +40,7 @@ export function requirePluginInstance(id: string, caller: PluginCaller) {
   if (!page) throw new PluginError('페이지가 없어.', 404)
   return { row, plugin: plugin.definition, page, fileIds: JSON.parse(row.files) as string[], workspace: row.workspace ? JSON.parse(row.workspace) as { id: string; name: string; write: boolean } : undefined, owner }
 }
-export function openPluginInstance(pluginId: string, pageId: string, input: unknown, caller: PluginCaller, workspaceInput?: unknown): PluginInstance {
+export function openPluginInstance(pluginId: string, pageId: string, input: unknown, caller: PluginCaller): PluginInstance {
   cleanup()
   const plugin = getPlugin(pluginId)
   const page = plugin.definition.pages.find((item) => item.id === pageId)
@@ -49,7 +48,7 @@ export function openPluginInstance(pluginId: string, pageId: string, input: unkn
   const ids = [...new Set(z.array(fileIdSchema).max(20).parse(input))]
   refreshMcpRequester(caller.requester)
   const owner = fileOwnerKey(caller.requester.accountId)
-  if (ids.length || workspaceInput !== undefined) requireFileStoreOwner(caller.requester)
+  if (ids.length) requireFileStoreOwner(caller.requester)
   if (!caller.sessionId) throw new PluginError('세션이 필요해.', 401)
   const files = ids.map((id) => {
     const file = FileStoreService.get(owner, id)
@@ -57,13 +56,16 @@ export function openPluginInstance(pluginId: string, pageId: string, input: unkn
     return { id: file.id, name: file.name, mimeType: file.mimeType, size: file.size }
   })
   let workspace: PluginInstance['workspace']
-  if (workspaceInput !== undefined) {
-    const selected = z.object({ id: workspaceIdSchema, write: z.boolean().default(false) }).strict().parse(workspaceInput)
-    if (selected.write) {
-      requireFileStoreAction(caller.requester, 'organize')
+  // A plugin that declares workspace access works in its own file-box folder; accounts without file access get no workspace.
+  if (plugin.definition.capabilities.some((capability) => capability.startsWith('workspace.'))) {
+    let allowed = true
+    try { requireFileStoreOwner(caller.requester) } catch { allowed = false }
+    if (allowed) {
+      let write = true
+      try { requireFileStoreAction(caller.requester, 'organize') } catch { write = false }
+      const folder = ensurePluginFolder(owner, { id: plugin.definition.id, name: plugin.definition.name })
+      workspace = { id: folder.id, name: folder.name, write }
     }
-    const project = WorkspaceService.get(owner, selected.id)
-    workspace = { id: project.id, name: project.name, write: selected.write }
   }
   const id = pluginToken(), expiresAt = Date.now() + PLUGIN_CONNECTION_LEASE_MS
   pluginDb().prepare('INSERT INTO plugin_instances (id,plugin_id,version,digest,page_id,session_key,owner_key,files,expires_at,workspace) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(id, pluginId, plugin.version, plugin.digest, pageId, hash(caller.sessionId), owner, JSON.stringify(ids), expiresAt, workspace ? JSON.stringify(workspace) : null)

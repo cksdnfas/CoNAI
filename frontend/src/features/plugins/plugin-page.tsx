@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { ChevronDown, Files, FolderKanban, RefreshCw, TriangleAlert } from 'lucide-react'
+import { ChevronDown, Files, RefreshCw, TriangleAlert } from 'lucide-react'
 import { EmptyState } from '@/components/ui/empty-state'
 import { copyChatPageData, type ChatPageData, type GenerationLayoutSurface, type PluginInstance, type PluginLaunch, type PluginMediaPickOptions, type PluginMediaPickItem, type PluginSnapshot, type PluginWorkspaceProposal, type PluginMediaProposal, type StoredFileEntry } from '@conai/shared'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -14,13 +14,11 @@ import { PageToolbar } from '@/components/common/page-toolbar'
 import { FileBrowser } from '@/features/files/file-browser'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { hasAuthPermission } from '@/features/auth/auth-permissions'
-import { WorkspaceProjectPicker } from '@/features/files/workspace-projects'
 import type { ImageSourceLocationState } from '@/features/images/image-source-navigation'
 import { useChatPage, useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
 import { closePlugin, listPlugins, openPlugin, pluginRequest, proposePluginWrite, PLUGINS_QUERY_KEY } from '@/lib/api-plugins'
 import { ApiRequestError } from '@/lib/api-request'
 import { FILES_QUERY_KEY } from '@/lib/api-files'
-import { getWorkspace } from '@/lib/api-workspaces'
 import { useI18n } from '@/i18n'
 import { useUnsavedSettingsGuard } from '@/features/settings/use-unsaved-settings-guard'
 import { createRandomUuid } from '@/lib/random-uuid'
@@ -64,17 +62,13 @@ export function PluginPage() {
   const { pluginId = '', pageId = '' } = useParams()
   const [params, setParams] = useSearchParams()
   const files = params.get('files') ?? ''
-  const projectId = params.get('project') ?? ''
   // The image detail view opens image-aware pages with the library image's hash; anything else is ignored.
   const imageParam = params.get('image') ?? ''
   const imageHash = LIBRARY_HASH_PATTERN.test(imageParam) ? imageParam.toLowerCase() : ''
-  const write = hasAuthPermission(auth.data?.permissionKeys, 'files.edit')
-  const [projectPicker, setProjectPicker] = useState(false)
   const [hasDraft, setHasDraft] = useState(false)
   const [reload, setReload] = useState(0)
   const confirm = useConfirm()
   const plugins = useQuery({ queryKey: PLUGINS_QUERY_KEY, queryFn: listPlugins })
-  const project = useQuery({ queryKey: ['workspaces', projectId, 'plugin-context'], queryFn: () => getWorkspace(projectId), enabled: !!projectId })
   const definition = plugins.data?.find((plugin) => plugin.enabled && plugin.manifest.id === pluginId)?.manifest
   const page = definition?.pages.find((item) => item.id === pageId)
   const [picker, setPicker] = useState(false)
@@ -88,30 +82,16 @@ export function PluginPage() {
   if (plugins.isPending) return <LoadingState />
   if (!page || !definition) return <ErrorState description={t({ ko: '플러그인이 없거나 꺼져 있어.', en: 'The plugin is unavailable or disabled.' })} />
   const canFiles = hasAuthPermission(auth.data?.permissionKeys, 'files.view')
-  const canProject = canFiles
+  // Only pages that declare the file types they open need a host file picker; other plugins manage their own inputs.
+  const usesFiles = canFiles && page.accepts.length > 0
   const fileCount = files ? files.split(',').filter(Boolean).length : 0
-  const contextButtons = <>
-    {canProject ? <Button variant="field" size="field" onClick={() => setProjectPicker(true)}><FolderKanban />{projectId ? project.data?.name ?? '…' : t({ ko: '프로젝트 없음', en: 'No project' })}{projectId ? <span className="text-muted-foreground">· {t(write ? { ko: '편집 가능', en: 'Editable' } : { ko: '읽기 전용', en: 'Read only' })}</span> : null}<ChevronDown /></Button> : null}
-    {canFiles ? <Button variant="field" size="field" onClick={() => setPicker(true)}><Files />{t({ ko: '파일 {count}개', en: '{count} files' }, { count: fileCount })}<ChevronDown /></Button> : null}
-  </>
   return <div>
     <PageToolbar
       title={<span className="flex min-w-0 items-baseline gap-2"><span className="truncate">{page.title}</span>{definition.name !== page.title ? <span className="truncate text-sm font-normal text-muted-foreground">{definition.name}</span> : null}</span>}
-      start={<div className="flex min-w-0 flex-wrap items-center gap-1">{contextButtons}</div>}
+      start={usesFiles ? <div className="flex min-w-0 flex-wrap items-center gap-1"><Button variant="field" size="field" onClick={() => setPicker(true)}><Files />{t({ ko: '파일 {count}개', en: '{count} files' }, { count: fileCount })}<ChevronDown /></Button></div> : undefined}
       actions={<IconButton variant="ghost" label={t({ ko: '다시 열기', en: 'Reopen' })} onClick={() => { void (async () => { if (await discardDraft()) setReload(value => value + 1) })() }}><RefreshCw /></IconButton>}
     />
-    {files || projectId || page.accepts.length === 0 ? <PluginConnection key={`${pluginId}/${pageId}/${files}/${projectId}/${imageHash}/${write}/${reload}`} pluginId={pluginId} pageId={pageId} fileIds={files} projectId={projectId} write={write} imageHash={page.opensImages ? imageHash : ''} onDirty={setHasDraft} /> : <EmptyState icon={Files} title={t({ ko: '열린 파일이 없어', en: 'No files open' })} action={canFiles ? <IconButton label={t({ ko: '파일 고르기', en: 'Choose files' })} onClick={() => setPicker(true)}><Files /></IconButton> : undefined} />}
-    <WorkspaceProjectPicker
-      open={projectPicker}
-      onClose={() => setProjectPicker(false)}
-      projectId={projectId || null}
-      write={write}
-      writeLabel={null}
-      onConnect={(selected) => {
-        setParams(previous => { const next = new URLSearchParams(previous); if (selected) next.set('project', selected); else next.delete('project'); return next })
-        setProjectPicker(false)
-      }}
-    />
+    {files || page.accepts.length === 0 ? <PluginConnection key={`${pluginId}/${pageId}/${files}/${imageHash}/${reload}`} pluginId={pluginId} pageId={pageId} fileIds={files} imageHash={page.opensImages ? imageHash : ''} onDirty={setHasDraft} /> : <EmptyState icon={Files} title={t({ ko: '열린 파일이 없어', en: 'No files open' })} action={canFiles ? <IconButton label={t({ ko: '파일 고르기', en: 'Choose files' })} onClick={() => setPicker(true)}><Files /></IconButton> : undefined} />}
     <Modal open={picker} onClose={() => setPicker(false)} title={t({ ko: '플러그인에 연결할 파일', en: 'Files for this plugin' })} size="xl"><ModalBody>
       <FileBrowser parentId={folder} onNavigate={setFolder} onPick={pick} accept={page.accepts.length ? page.accepts : undefined} pickLabel={(count) => t({ ko: '{count}개 연결', en: 'Connect {count}' }, { count })} />
     </ModalBody></Modal>
@@ -121,12 +101,12 @@ export function PluginPage() {
 /** Shown inside a generation layout instead of on its own page: fixed height, no chat registration, reads the screen's form. */
 export type PluginEmbed = { surface: GenerationLayoutSurface; height: number }
 
-export function PluginConnection({ pluginId, pageId, fileIds, projectId, write, imageHash = '', onDirty, embed }: { pluginId: string; pageId: string; fileIds: string; projectId: string; write: boolean; imageHash?: string; onDirty: (value: boolean) => void; embed?: PluginEmbed }) {
+export function PluginConnection({ pluginId, pageId, fileIds, imageHash = '', onDirty, embed }: { pluginId: string; pageId: string; fileIds: string; imageHash?: string; onDirty: (value: boolean) => void; embed?: PluginEmbed }) {
   const [instance, setInstance] = useState<PluginInstance | null>(null)
   const [error, setError] = useState('')
   useEffect(() => {
     let disposed = false, active: PluginInstance | null = null
-    void openPlugin(pluginId, pageId, fileIds ? fileIds.split(',') : [], projectId ? { id: projectId, write } : undefined).then((value) => {
+    void openPlugin(pluginId, pageId, fileIds ? fileIds.split(',') : []).then((value) => {
       active = value
       if (disposed) void closePlugin(value.id)
       else setInstance(value)
@@ -134,7 +114,7 @@ export function PluginConnection({ pluginId, pageId, fileIds, projectId, write, 
     const onHide = (event: PageTransitionEvent) => { if (!event.persisted && active) void closePlugin(active.id) }
     window.addEventListener('pagehide', onHide)
     return () => { disposed = true; window.removeEventListener('pagehide', onHide); if (active) void closePlugin(active.id) }
-  }, [pluginId, pageId, fileIds, projectId, write])
+  }, [pluginId, pageId, fileIds])
   return error ? <ErrorState description={error} /> : instance ? <PluginFrame instance={instance} onDirty={onDirty} embed={embed} launch={imageHash ? { image: { compositeHash: imageHash } } : null} /> : <LoadingState />
 }
 
@@ -450,7 +430,7 @@ function PluginFrame({ instance, onDirty, embed, launch }: { instance: PluginIns
       const approval = await pluginRequest<{ applied: boolean; approval?: string; result?: unknown }>(`/${route}/${proposal.id}/approve`, 'POST')
       const result = approval.applied ? approval.result : await pluginRequest(`/${route}/${proposal.id}/apply`, 'POST', { approval: approval.approval })
       setProposals((items) => items.filter((item) => item.id !== proposal.id))
-      await queryClient.invalidateQueries({ queryKey: 'source' in proposal ? ['workspaces', proposal.projectId] : FILES_QUERY_KEY })
+      await queryClient.invalidateQueries({ queryKey: FILES_QUERY_KEY })
       if ('source' in proposal && proposal.source === 'media') {
         const job = result as { jobId: string }
         setJobs(items => [...items.filter(item => item.jobId !== job.jobId), { jobId: job.jobId, proposalId: proposal.id, status: 'running' }].slice(-4))
@@ -478,7 +458,7 @@ function PluginFrame({ instance, onDirty, embed, launch }: { instance: PluginIns
       onReview={() => setReview(true)}
       onJobFinished={(job, status, result, failure) => {
         setJobs(items => items.map(item => item.jobId === job.jobId ? { ...item, status } : item))
-        void queryClient.invalidateQueries({ queryKey: ['workspaces', instance.workspace?.id] })
+        void queryClient.invalidateQueries({ queryKey: FILES_QUERY_KEY })
         if (status === 'completed') channel.current?.postMessage({ type: 'saved', proposalId: job.proposalId, result })
         if (status === 'failed' && failure) setError(failure)
       }}

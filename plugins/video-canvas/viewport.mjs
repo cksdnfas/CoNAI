@@ -6,7 +6,8 @@ export const ZOOM_MIN = 0.2, ZOOM_MAX = 2
 /** Node size in stage pixels; without layout the CSS widths and a typical height stand in. */
 export function nodeSize(node) {
   const el = document.querySelector(`[data-id="${CSS.escape(node.id)}"]`)
-  return { w: el?.offsetWidth || (node.kind === 'cut' ? 300 : 200), h: el?.offsetHeight || (node.kind === 'cut' ? 370 : 190) }
+  const card = node.kind === 'cut' || node.kind === 'gen'
+  return { w: el?.offsetWidth || (card ? 300 : 200), h: el?.offsetHeight || (card ? 370 : 190) }
 }
 const GAP = 24
 const overlaps = (a, b) => a.x < b.x + b.w + GAP && b.x < a.x + a.w + GAP && a.y < b.y + b.h + GAP && b.y < a.y + a.h + GAP

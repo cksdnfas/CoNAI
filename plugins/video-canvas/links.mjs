@@ -1,6 +1,5 @@
-import { PORTS } from './domain.mjs'
 import { $, esc, clamp, ports, thumbUrl, patch } from './util.mjs'
-import { s, ctx, nodeById, cutOrder, allLinks, activeChain, frameSource, frameLabel, trayFrames } from './state.mjs'
+import { s, ctx, nodeById, cutOrder, allLinks, activeChain, frameSource, frameLabel, trayFrames, SLOT_KINDS } from './state.mjs'
 import { nodeEl } from './nodes.mjs'
 import { showMenu } from './menu.mjs'
 import { openDetail } from './session.mjs'
@@ -84,7 +83,7 @@ export function drawEdges() {
     if (!from || !a || !b) continue
     const pulled = from.kind === 'frame' && Boolean(frameSource(from)) && ['start', 'end'].includes(edge.port)
     if (!pulled && s.edges !== 'all' && !s.sel.includes(edge.from) && !s.sel.includes(edge.to) && edge.id !== s.edgeSel) continue
-    items.push({ cls: pulled ? 'chain' : `src${slots.get(edge.id).classList.contains('unused') ? ' unused' : ''}`, d: curve(a, b), from: edge.from, to: edge.to, edge: edge.id, kind: PORTS[edge.port], hit: true })
+    items.push({ cls: pulled ? 'chain' : `src${slots.get(edge.id).classList.contains('unused') ? ' unused' : ''}`, d: curve(a, b), from: edge.from, to: edge.to, edge: edge.id, kind: SLOT_KINDS[edge.port], hit: true })
   }
   layer.innerHTML = items.map(item => `<g class="vc-edge ${item.cls}${item.edge && item.edge === s.edgeSel ? ' sel' : ''}${item.edge && item.edge === s.ghostEdge ? ' ghost' : ''}" data-edge="${esc(item.edge ?? '')}" data-from="${esc(item.from)}" data-to="${esc(item.to)}" ${item.kind ? `data-kind="${item.kind}"` : ''}>${item.hit ? `<path class="hit" d="${item.d}"/>` : ''}<path class="line" d="${item.d}"/></g>`).join('')
   syncChips(chips)

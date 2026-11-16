@@ -13,8 +13,6 @@ export default function PluginLayoutBlock({ block, surface }: { block: PluginLay
         pluginId={block.pluginId}
         pageId={block.page.id}
         fileIds=""
-        projectId=""
-        write={false}
         onDirty={ignoreDirty}
         embed={{ surface, height: block.height }}
       />

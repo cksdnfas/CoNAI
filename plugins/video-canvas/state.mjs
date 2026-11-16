@@ -1,4 +1,5 @@
 import { createAssistantState } from './assistant-state.mjs'
+import { PORTS, GEN_PORTS, adapterOf, outputOf, withResults, staleUpstream } from './domain.mjs'
 import { isTerminal, fraction } from './util.mjs'
 
 export const DOCK_H = 212
@@ -7,11 +8,15 @@ export const DOCK_H = 212
 export const s = {
   project: null, projects: [], projectTotal: 0, nextOffset: null, home: { query: '', sort: 'updated', archived: false, loading: false },
   sel: [], selection: null, edgeSel: null, edges: 'all', x: 24, y: 24, zoom: 1, open: [], ghostEdge: null,
-  launch: null, checks: null, tab: 'detail', batch: null, nodeDetail: null, runBusy: false,
+  launch: null, checks: null, tab: 'detail', batch: null, runBusy: false,
   wf: null, viewTake: {}, inspectorOpen: false, seqOpen: true, seqH: DOCK_H,
 }
 // hooks let lower modules call the renderers without importing them (no import cycles).
 export const ctx = { api: null, hooks: {}, launchName: null, view: { last: null, views: {}, inspector: false, seq: true, seqH: DOCK_H } }
+// The server's read of the selected node arrives after the selection is drawn; what shows it (the inspector's checks and guide,
+// the card's warning badge) redraws when it does.
+let nodeDetail = null
+Object.defineProperty(s, 'nodeDetail', { enumerable: true, get: () => nodeDetail, set(value) { nodeDetail = value; if (value) ctx.hooks.nodeRead?.() } })
 export const assistant = createAssistantState()
 export const nodeById = id => s.project?.nodes?.find(node => node.id === id)
 export const selected = () => nodeById(s.selection)
@@ -23,6 +28,47 @@ export function takeTitle(take) {
   return cut ? `${cut.data.name} · take ${takesOf(cut.id).findIndex(item => item.id === take.id) + 1}` : take.label
 }
 export const profileOf =cut => s.project?.profiles?.find(profile => profile.id === cut?.data.profileId)
+/** The kind each input slot takes: a cut's typed slots and a generation node's image slots. */
+export const SLOT_KINDS = { ...PORTS, ...GEN_PORTS }
+/** Generation nodes' profiles (workflow or NovelAI); a cut's Director profiles stay out of this list. */
+export const genProfiles = () => (s.project?.profiles ?? []).filter(profile => adapterOf(profile) !== 'director')
+/** What a node feeds into a slot: a generation node's result kind (null until it has a profile), a frame is an image, a cut a video. */
+export function outputKind(node) {
+  if (node.kind === 'gen') { const profile = profileOf(node); return profile ? outputOf(profile) : null }
+  return node.kind === 'frame' ? 'image' : node.kind === 'cut' ? 'video' : node.kind
+}
+/** A take's result kind; cut takes carry none and are videos. */
+export const takeOutput = take => take.output ?? 'video'
+/** A generation node's image inputs: the connections in slot order and the profile's image fields they fill. */
+export function genInputs(node) {
+  const edges = (s.project?.edges ?? []).filter(edge => edge.to === node.id).sort((a, b) => a.position - b.position || a.id.localeCompare(b.id))
+  return { edges, fields: profileOf(node)?.imageFieldIds ?? [] }
+}
+const finishedTakes = () => (s.project?.takes ?? []).filter(take => take.resultHash).length
+const stamps = new WeakMap()
+/** True while a server read or check is still about the canvas on screen: a take finishing changes no revision, but it can change a check. */
+export function current(read) {
+  if (!read) return false
+  if (!stamps.has(read)) stamps.set(read, { revision: read.revision ?? s.project.revision, finished: finishedTakes() })
+  const stamp = stamps.get(read)
+  return stamp.revision === s.project.revision && stamp.finished === finishedTakes()
+}
+/** The server's check { errors, warnings } of a cut or generation node: the read of the open node, else the last full check. Nothing is judged here. */
+export function checkOf(node) {
+  if (s.nodeDetail?.node.id === node.id && s.nodeDetail.preview?.checks && current(s.nodeDetail)) return s.nodeDetail.preview.checks
+  return current(s.checks) ? s.checks.cuts.find(item => item.id === node.id) ?? null : null
+}
+// The stale-input rule compares the upstream results recorded on a node's representing take (its snapshot) with each generation node's current result (what
+// withResults adds): all of it is in the project the page loaded, so it runs here on every load with no check and no server call. The copy is made once per loaded project.
+let resultsView = null
+function staleOf(node) {
+  if (resultsView?.project !== s.project) resultsView = { project: s.project, view: withResults(s.project), warnings: new Map() }
+  if (!resultsView.warnings.has(node.id)) resultsView.warnings.set(node.id, staleUpstream(resultsView.view, node))
+  return resultsView.warnings.get(node.id)
+}
+/** The stale-input warnings of a cut or generation node (its result was made from a generation node's older result): the server's own check when it is current, else the same rule run on the loaded project. */
+export const staleWarnings = node => checkOf(node)?.warnings.filter(warning => warning.code === 'stale-input') ?? staleOf(node)
+export const staleWarning = node => staleWarnings(node)[0] ?? null
 /** The take that stands for the cut: the one marked on the cut, else the latest with a result. */
 export function repTake(cut) {
   const takes = takesOf(cut.id)

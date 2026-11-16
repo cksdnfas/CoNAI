@@ -1,7 +1,9 @@
 export const $ = id => document.getElementById(id)
 export const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c])
-export const names = { image: '이미지', video: '비디오', audio: '오디오', bundle: '레퍼런스 번들', cut: '영상 컷', frame: '프레임' }
-export const ports = { start: '시작 프레임', end: '끝 프레임', ref_image: '참조 이미지', ref_video: '참조 영상', ref_audio: '참조 오디오', refmod: '번들' }
+export const names = { image: '이미지', video: '비디오', audio: '오디오', bundle: '레퍼런스 번들', cut: '영상 컷', frame: '프레임', gen: '생성 노드' }
+export const ports = { start: '시작 프레임', end: '끝 프레임', ref_image: '참조 이미지', ref_video: '참조 영상', ref_audio: '참조 오디오', refmod: '번들', image: '입력 이미지' }
+/** What a generation node makes (a profile's output kind). */
+export const outputNames = { video: '영상', image: '이미지', audio: '오디오' }
 export const reviewNames = { pending: '대기', pass: '통과', redo: '다시' }
 export const statusNames = { preparing: '준비 중', submitting: '제출 중', starting: '시작 중', pending: '대기', queued: '대기', running: '진행 중', processing: '처리 중', completed: '완료', failed: '실패', cancelled: '취소됨', proposed: '제안', discarded: '폐기됨' }
 export const assetStates = { ready: ['확인됨', 'ok'], changed: ['변경됨', 'warn'], 'no-permission': ['권한 없음', 'destructive'], missing: ['없음', 'destructive'], unverified: ['확인 실패', 'warn'] }

@@ -6,7 +6,8 @@ import type { PluginMediaProposal } from '@conai/shared'
 import { pluginDb, pluginToken as token, sha256 as hash, PluginError, requireProposalRoom, issueProposalApproval } from './pluginStore'
 import { pluginTokenSchema, type PluginCaller } from './pluginHost'
 import { requirePluginWorkspace, mediaTarget } from './pluginWorkspace'
-import { WorkspaceService, workspaceTarget } from '../workspaceService'
+import { workspaceTarget } from '../workspaceService'
+import { PluginFolder } from './pluginFolder'
 import { requireRequesterPermission } from '../../middleware/featureAccess'
 import { RuntimeJobRunner } from '../runtimeJobs/runtimeJobRunner'
 import { RuntimeJobConflictError } from '../runtimeJobs/runtimeJobStore'
@@ -33,7 +34,7 @@ function access(id: string, caller: PluginCaller, kind: string) {
 }
 async function outputRevision(id: string, target: string, caller: PluginCaller) {
   const instance = requirePluginWorkspace(id, caller, 'workspace.write')
-  try { return (await WorkspaceService.stat(instance.owner, instance.workspace.id, target)).revision } catch (error) { if (error instanceof Error && 'status' in error && error.status === 404) return null; throw error }
+  try { return (PluginFolder.stat(instance.owner, instance.workspace.id, target)).revision } catch (error) { if (error instanceof Error && 'status' in error && error.status === 404) return null; throw error }
 }
 export async function proposePluginMedia(id: string, value: unknown, caller: PluginCaller): Promise<PluginMediaProposal> {
   const input = schema.parse(value)
@@ -42,12 +43,12 @@ export async function proposePluginMedia(id: string, value: unknown, caller: Plu
   if (input.operation.kind === 'crop' && (input.operation.width * input.operation.height > 50000000 || input.operation.outputWidth * input.operation.outputHeight > 16000000)) throw new PluginError('자르기 입력은 5천만, 출력은 1천6백만 픽셀까지 지원해.')
   const instance = access(id, caller, input.operation.kind)
   const parent = path.posix.dirname(target)
-  if (parent !== '.' && (await WorkspaceService.stat(instance.owner, instance.workspace.id, parent)).kind !== 'folder') throw new PluginError('출력 폴더를 먼저 만들어줘.')
+  if (parent !== '.' && PluginFolder.stat(instance.owner, instance.workspace.id, parent).kind !== 'folder') throw new PluginError('출력 폴더를 먼저 만들어줘.')
   const source = await mediaTarget(id, sourceTarget, caller)
   if ((await outputRevision(id, target, caller)) !== input.revision) throw new PluginError('출력 참조 문서가 변경됐어.', 409)
   let previous = '(새 참조 문서)'
   if (input.revision !== null) {
-    const file = (await WorkspaceService.read(instance.owner, instance.workspace.id, [{ target, limit: 16384, revision: input.revision }])).files[0]
+    const file = (PluginFolder.read(instance.owner, instance.workspace.id, [{ target, limit: 16384, revision: input.revision }])).files[0]
     if (file.nextOffset !== null) throw new PluginError('기존 결과 참조 문서는 16KB까지 교체할 수 있어.')
     previous = file.text
   }
@@ -118,7 +119,7 @@ function registerHandler() {
       ctx.flush({ phase: 'linking', message: '미디어 저장 완료 · 프로젝트 참조 연결 중' })
       let link
       try {
-        link = await WorkspaceService.apply(instance.owner, instance.workspace.id, `plugin-media-${proposal.id}`, [{ kind: 'write', target: proposal.target, text: JSON.stringify(reference, null, 2) + '\n', expectedRevision: proposal.revision }], () => { access(proposal.instanceId, caller, operation.kind) }, ctx.signal)
+        link = PluginFolder.apply(instance.owner, instance.workspace.id, `plugin-media-${proposal.id}`, [{ kind: 'write', target: proposal.target, text: JSON.stringify(reference, null, 2) + '\n', expectedRevision: proposal.revision }], () => { access(proposal.instanceId, caller, operation.kind) }, ctx.signal)
       } catch (error) { link = { status: 'failed', error: error instanceof Error ? error.message : String(error) } }
       if (link.status !== 'completed') ctx.recordWarning('미디어는 저장됐지만 프로젝트 참조 연결에 실패했어. 결과의 참조를 확인해줘.')
       ctx.flush({ processed: 1, succeeded: 1 })

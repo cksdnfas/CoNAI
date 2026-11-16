@@ -1,6 +1,9 @@
-export const KINDS = ['image', 'video', 'audio', 'bundle', 'cut', 'frame']
+export const KINDS = ['image', 'video', 'audio', 'bundle', 'cut', 'frame', 'gen']
 export const MODES = ['T2VA', 'I2VA', 'FL2VA', 'L2VA', 'REF2VA']
 export const PORTS = { start: 'image', end: 'image', ref_image: 'image', ref_video: 'video', ref_audio: 'audio', refmod: 'bundle' }
+// A generation node's inputs: edge position N goes to the profile's Nth image field (generic workflows mark no audio/video inputs).
+export const GEN_PORTS = { image: 'image' }
+export const OUTPUTS = ['video', 'image', 'audio']
 export const LIMITS = { ref_image: 9, ref_video: 3, ref_audio: 3, refmod: 8 }
 const copy = value => structuredClone(value)
 export function fail(message, status = 400) { throw Object.assign(new Error(message), { status }) }
@@ -12,6 +15,7 @@ export function canonical(value) {
 }
 export function sameValue(left, right) { return canonical(left) === canonical(right) }
 export function expected(project, revision) {
+  if (revision === undefined || revision === null) fail('expected_revision이 필요해. 캔버스를 읽고 지금 revision을 넣어줘.')
   if (!Number.isInteger(revision) || project.revision !== revision) fail(`409: 캔버스가 바뀌었어. 다시 읽어줘. (rev ${project.revision})`, 409)
 }
 export function projectName(name) {
@@ -57,12 +61,68 @@ export function cutOf(project, id) {
   if (node.kind !== 'cut') fail('영상 컷을 골라줘.')
   return node
 }
+// A node that runs a generator: a Director cut or a generation node.
+export function generatorOf(project, id) {
+  const node = nodeOf(project, id)
+  if (node.kind !== 'cut' && node.kind !== 'gen') fail('영상 컷이나 생성 노드를 골라줘.')
+  return node
+}
+export const profileOf = (project, node) => project.profiles.find(profile => profile.id === node.data.profileId)
+// Stored profiles: a Director profile names its Director field, a NovelAI one carries the preset's copied `nai` settings,
+// a generic workflow profile names its output instead.
+export const adapterOf = profile => profile.directorFieldId ? 'director' : profile.nai ? 'nai' : profile.output === undefined ? 'director' : 'workflow'
+export const outputOf = profile => ({ director: 'video', nai: 'image', workflow: profile.output })[adapterOf(profile)]
+export function assertAdapter(kind, profile) {
+  if ((adapterOf(profile) === 'director') !== (kind === 'cut')) fail(kind === 'cut' ? '컷에는 Director 생성 설정을 골라줘.' : '생성 노드에는 워크플로나 NovelAI 생성 설정을 골라줘.')
+  return profile
+}
+function profileFor(project, kind, profileId) {
+  const profile = project.profiles.find(item => item.id === profileId)
+  if (!profile) fail(`이 프로젝트에 없는 생성 설정이야. ${kind === 'cut' ? '컷' : '생성 노드'}에 맞는 생성 설정을 골라줘.`)
+  return assertAdapter(kind, profile)
+}
+// A take's result as a source reference: sounds are audio candidates, pictures and videos library media.
+export const resultRef = take => take.output === 'audio' ? { source: 'audio', candidateId: take.resultHash } : { source: 'library', compositeHash: take.resultHash }
+/**
+ * A copy in which every generation node with a ready representing take carries that result as its source ref, kind and
+ * duration. Take snapshots keep the ref they ran with; the stored canvas never holds one.
+ */
+export function withResults(project) {
+  const next = copy(project)
+  for (const node of next.nodes) if (node.kind === 'gen' && !node.data.ref) {
+    const take = representativeTake(next, node)
+    if (take?.resultHash) Object.assign(node.data, { ref: resultRef(take), resultKind: take.output ?? 'video', ...(take.resultDuration ? { duration: take.resultDuration } : {}) })
+  }
+  return next
+}
+/**
+ * Warnings for a cut or generation node whose shown result was made from a connected generation node's result that node no
+ * longer represents (it was regenerated or another take was picked). `project` comes through withResults; take snapshots
+ * keep the refs they ran with.
+ */
+export function staleUpstream(project, node) {
+  const shown = representativeTake(project, node)
+  if (!shown?.resultHash) return []
+  return (shown.snapshot?.nodes ?? []).filter(old => old.kind === 'gen' && old.data.ref).flatMap(old => {
+    const current = project.nodes.find(item => item.id === old.id)
+    if (current?.kind !== 'gen' || !current.data.ref || sameValue(current.data.ref, old.data.ref) || !project.edges.some(edge => edge.from === current.id && edge.to === node.id)) return []
+    return [{ code: 'stale-input', message: `연결한 생성 노드 '${current.data.name}'를 다시 생성했어. 이 결과는 예전 생성물로 만든 거야. 새 생성물을 쓰려면 다시 생성해줘.`, nodeId: node.id }]
+  })
+}
+// The kind a node feeds into a slot: a frame is an image, a generation node its profile's output.
+function sourceKind(project, node) {
+  if (node.kind === 'frame') return 'image'
+  if (node.kind !== 'gen') return node.kind
+  const profile = profileOf(project, node)
+  if (!profile) fail('생성 노드의 생성 설정을 먼저 골라줘.')
+  return outputOf(profile)
+}
 // The mode that starts using a start/end slot the current mode ignores; other modes and ports stay as they are.
 const SLOT_MODES = { start: { T2VA: 'I2VA', L2VA: 'FL2VA' }, end: { T2VA: 'L2VA', I2VA: 'FL2VA' } }
 export const slotMode = (mode, port) => SLOT_MODES[port]?.[mode] ?? null
 // Server placement uses the page's default node sizes (CSS widths, typical heights) and gap.
 const GAP = 24
-const boxOf = (kind, x = 0, y = 0) => ({ x, y, ...(kind === 'cut' ? { w: 300, h: 300 } : { w: 200, h: 190 }) })
+const boxOf = (kind, x = 0, y = 0) => ({ x, y, ...(kind === 'cut' || kind === 'gen' ? { w: 300, h: 300 } : { w: 200, h: 190 }) })
 const overlaps = (a, b) => a.x < b.x + b.w + GAP && b.x < a.x + a.w + GAP && a.y < b.y + b.h + GAP && b.y < a.y + a.h + GAP
 /**
  * A spot that overlaps no node: a cut to the right of the last sequence cut on its row, a node feeding a cut
@@ -92,6 +152,11 @@ export function cutEdges(project, cut, active = true) {
   return project.edges.filter(edge => edge.to === cut.id && (!active || activePorts(cut.data.mode).includes(edge.port)))
     .sort((a, b) => a.position - b.position || a.id.localeCompare(b.id))
 }
+// The edges a cut (its active slots) or a generation node (all of its inputs) generates from.
+export function inputEdges(project, node, active = true) {
+  if (node.kind === 'cut') return cutEdges(project, node, active)
+  return project.edges.filter(edge => edge.to === node.id).sort((a, b) => a.position - b.position || a.id.localeCompare(b.id))
+}
 export function normalizeRef(kind, input) {
   const ref = input ?? {}
   if (kind === 'bundle') {
@@ -101,11 +166,17 @@ export function normalizeRef(kind, input) {
   if (ref.source === 'library' && /^(?:[a-f0-9]{32}|[a-f0-9]{48})$/i.test(ref.compositeHash ?? '')) return { source: 'library', compositeHash: ref.compositeHash.toLowerCase() }
   if (ref.source === 'audio' && kind === 'audio' && typeof ref.candidateId === 'string' && ref.candidateId.trim()) return { source: 'audio', candidateId: ref.candidateId.trim() }
   if (ref.source === 'files' && typeof ref.fileId === 'string' && ref.fileId) return { source: 'files', fileId: ref.fileId }
-  fail('앱 소재의 안정 식별자가 필요해.')
+  fail('앱 소재의 안정 식별자가 필요해. ref는 {source:"library", compositeHash}(라이브러리 이미지·영상), {source:"audio", candidateId}(오디오 후보), {source:"files", fileId}(파일함) 중 하나로 써줘.')
+}
+const checkSeed = seed => { if (!Number.isInteger(seed) || seed < 0 || seed > 2147483647) fail('시드는 0~2147483647 정수로 써줘.') }
+function validateGenData(data) {
+  checkSeed(data.seed)
+  if (data.inputs !== undefined && !record(data.inputs)) fail('inputs는 필드 ID별 값 객체로 써줘.')
+  if (data.size !== undefined && data.size !== null && typeof data.size !== 'string') fail('크기(size)는 생성 설정에 있는 NovelAI 크기 이름으로 써줘.')
 }
 function validateData(data) {
   if (!MODES.includes(data.mode)) fail('지원하지 않는 모드야.')
-  if (!Number.isInteger(data.seed) || data.seed < 0 || data.seed > 2147483647) fail('시드는 0~2147483647 정수로 써줘.')
+  checkSeed(data.seed)
   if (!Number.isInteger(data.duration) || data.duration < 1 || data.duration > 60) fail('길이는 1~60초 정수로 써줘.')
   if (data.frame_rate !== undefined && (!Number.isFinite(data.frame_rate) || data.frame_rate < 0.1 || data.frame_rate > 240)) fail('프레임 레이트는 0.1~240으로 써줘.')
 }
@@ -119,33 +190,62 @@ function renumber(project) {
   for (const peers of groups.values()) peers.sort((a, b) => a.position - b.position || a.id.localeCompare(b.id)).forEach((edge, index) => { edge.position = index })
 }
 const editable = ['name', 'mode', 'prompt', 'soundscape', 'music', 'raw', 'seed', 'duration', 'frame_rate', 'profileId', 'pickTakeId']
+const genEditable = ['name', 'prompt', 'seed', 'profileId', 'pickTakeId', 'inputs', 'size']
+// Keys each edit operation reads (besides op/type); any other key is refused instead of silently dropped.
+const OP_KEYS = {
+  add_node: ['kind', 'tempId', 'at', 'target', 'ref', 'name'], import: ['tempId', 'at', 'target', 'ref', 'name'],
+  connect: ['from', 'to', 'port', 'position', 'props'], disconnect: ['id'], reorder: ['cut', 'port', 'order'], set: ['id', 'fields'],
+  move: ['id', 'x', 'y'], remove: ['id'], sequence: ['order'], review: ['id', 'status', 'memo'],
+}
+const RUN_KEYS = ['kind', 'tempId', 'at', 'target', 'name', 'profileId', 'seed', 'fields']
+function checkKeys(op, type) {
+  const runs = type === 'add_node' && (op.kind === 'cut' || op.kind === 'gen')
+  const allowed = runs ? RUN_KEYS : OP_KEYS[typeof type === 'string' && type.startsWith('import_') ? 'import' : type]
+  if (!allowed) fail(`모르는 편집 연산이야: ${type}`)
+  const unknown = Object.keys(op).filter(key => key !== 'op' && key !== 'type' && !allowed.includes(key))
+  if (!unknown.length) return
+  const hint = runs && unknown.some(key => editable.includes(key) || genEditable.includes(key)) ? ' 노드 값은 fields 안에 넣어줘.' : ''
+  fail(`${type}에 쓸 수 없는 키야: ${unknown.join(', ')}. 쓸 수 있는 키는 ${allowed.join(', ')}야.${hint}`)
+}
 function applyOne(project, op, aliases, uuid, actor) {
   const id = value => aliases.get(value) ?? value
   const type = op.op ?? op.type
+  checkKeys(op, type)
   if (type === 'add_node' || type.startsWith('import_')) {
     const kind = type === 'import_launch' ? 'image' : type.startsWith('import_') ? type.slice(7) : op.kind
     if (!KINDS.includes(kind)) fail('지원하지 않는 노드 종류야.')
     if (op.tempId && (aliases.has(op.tempId) || project.nodes.some(node => node.id === op.tempId))) fail('tempId가 겹쳐.')
     const at = op.at ?? freePosition(project, kind, op.target ? id(op.target.cut) : null)
     if (!Number.isFinite(at.x) || !Number.isFinite(at.y)) fail('좌표가 올바르지 않아.')
-    const ref = kind === 'cut' ? null : normalizeRef(kind, op.ref)
+    const ref = kind === 'cut' || kind === 'gen' ? null : normalizeRef(kind, op.ref)
     const data = { name: String(op.name ?? ref?.name ?? ref?.compositeHash ?? kind), ref }
-    if (kind === 'cut') {
-      if (op.profileId != null && !project.profiles.some(profile => profile.id === op.profileId)) fail('생성 프로필이 없어.')
-      Object.assign(data, { mode: 'T2VA', prompt: '', soundscape: '', music: '', raw: '', duration: 5, seed: op.seed === undefined ? 0 : op.seed, profileId: op.profileId ?? null })
-      validateData(data)
+    if (kind === 'cut' || kind === 'gen') {
+      if (op.profileId != null) profileFor(project, kind, op.profileId)
+      const seed = op.seed === undefined ? 0 : op.seed, profileId = op.profileId ?? null
+      if (kind === 'cut') {
+        Object.assign(data, { mode: 'T2VA', prompt: '', soundscape: '', music: '', raw: '', duration: 5, seed, profileId })
+        validateData(data)
+      } else {
+        Object.assign(data, { prompt: '', seed, profileId, inputs: {} })
+        validateGenData(data)
+      }
     }
     const node = { id: uuid(), kind, x: at.x, y: at.y, data, review: 'pending', memo: '' }
     project.nodes.push(node)
     if (kind === 'cut') project.sequence.push(node.id)
     if (op.tempId) aliases.set(op.tempId, node.id)
-    if (op.target) applyOne(project, { op: 'connect', from: node.id, to: id(op.target.cut), port: op.target.port, position: op.target.position, props: op.target.props }, aliases, uuid, actor)
-    return { id: node.id, tempId: op.tempId }
+    // Values a set would change can come with the new cut or generation node, checked by that same set.
+    if (op.fields !== undefined) {
+      if (!record(op.fields)) fail('fields는 필드 이름별 값 객체로 써줘.')
+      applyOne(project, { op: 'set', id: node.id, fields: op.fields }, aliases, uuid, actor)
+    }
+    const connected = op.target ? applyOne(project, { op: 'connect', from: node.id, to: id(op.target.cut), port: op.target.port, position: op.target.position, props: op.target.props }, aliases, uuid, actor) : null
+    return { id: node.id, tempId: op.tempId, ...(connected?.modeChange ? { modeChange: connected.modeChange } : {}) }
   }
   if (type === 'connect') {
-    const source = nodeOf(project, id(op.from)), cut = cutOf(project, id(op.to))
-    const kind = source.kind === 'frame' ? 'image' : source.kind
-    if (!own(PORTS, op.port) || PORTS[op.port] !== kind) fail('소재 종류와 입력 슬롯이 달라.')
+    const source = nodeOf(project, id(op.from)), cut = generatorOf(project, id(op.to)), ports = cut.kind === 'cut' ? PORTS : GEN_PORTS
+    if (source.id === cut.id) fail('노드를 자기 자신에 이을 수 없어. 다른 노드에 이어줘.')
+    if (!own(ports, op.port) || ports[op.port] !== sourceKind(project, source)) fail('소재 종류와 입력 슬롯이 달라.')
     const peers = project.edges.filter(edge => edge.to === cut.id && edge.port === op.port)
     if (op.position !== undefined && (!Number.isInteger(op.position) || op.position < 0)) fail('슬롯 순서가 올바르지 않아.')
     const position = Math.min(op.position ?? peers.length, peers.length)
@@ -153,7 +253,12 @@ function applyOne(project, op, aliases, uuid, actor) {
     const edge = { id: uuid(), from: source.id, to: cut.id, port: op.port, position, props: cleanProps(op.props ?? {}) }
     for (const peer of peers) if (peer.position >= position) peer.position++
     project.edges.push(edge)
-    return { id: edge.id }
+    // A start/end image the cut's mode ignores would be left out of the generation, so the mode switches to one that uses it.
+    const mode = cut.kind === 'cut' ? slotMode(cut.data.mode, op.port) : null
+    if (!mode) return { id: edge.id }
+    const modeChange = { cutId: cut.id, from: cut.data.mode, to: mode }
+    cut.data.mode = mode
+    return { id: edge.id, modeChange }
   }
   if (type === 'disconnect') {
     const index = project.edges.findIndex(edge => edge.id === id(op.id))
@@ -163,7 +268,7 @@ function applyOne(project, op, aliases, uuid, actor) {
     return { id: id(op.id) }
   }
   if (type === 'reorder') {
-    cutOf(project, id(op.cut))
+    generatorOf(project, id(op.cut))
     const peers = project.edges.filter(edge => edge.to === id(op.cut) && edge.port === op.port)
     const order = op.order?.map(id)
     if (!Array.isArray(order) || order.length !== peers.length || new Set(order).size !== peers.length || peers.some(edge => !order.includes(edge.id))) fail('이 슬롯의 연결선 ID를 빠짐없이 한 번씩 줘.')
@@ -179,13 +284,18 @@ function applyOne(project, op, aliases, uuid, actor) {
       const node = nodeOf(project, id(op.id))
       for (const [key, value] of Object.entries(op.fields ?? {})) {
         if (['ref', 'refmods', 'builder_state', 'timeline_data', 'assets', 'media'].includes(key)) fail(`${key}는 set으로 넣을 수 없어. 소재와 RefMod는 노드로 가져와 컷 슬롯에 이어줘: RefMod는 컷 mode를 REF2VA로 두고 import_bundle {ref:{name}, target:{cut, port:"refmod"}}.`)
-        if (!editable.includes(key)) fail(`바꿀 수 없는 필드야: ${key}`)
-        if (node.kind !== 'cut' && key !== 'name') fail('컷 설정은 컷에서 바꿔줘.')
+        if (!editable.includes(key) && !genEditable.includes(key)) fail(`바꿀 수 없는 필드야: ${key}`)
+        if (node.kind === 'gen' ? !genEditable.includes(key) : node.kind === 'cut' ? !editable.includes(key) : key !== 'name') {
+          fail(node.kind === 'gen' ? `${key}는 컷 전용 필드야. 생성 노드에는 ${genEditable.join('·')}만 정할 수 있어.` : node.kind === 'cut' ? `${key}는 생성 노드 전용 필드야. 컷에는 ${editable.join('·')}만 정할 수 있어.`
+            : editable.includes(key) ? '컷 설정은 컷에서 바꿔줘.' : '생성 노드 필드는 생성 노드에서 바꿔줘.')
+        }
         if (['name', 'prompt', 'soundscape', 'music', 'raw'].includes(key) && typeof value !== 'string') fail('텍스트가 필요해.')
-        if (key === 'pickTakeId' && value !== null && !project.takes?.some(take => take.id === value && take.cutId === node.id)) fail('이 컷의 take를 골라줘.')
-        node.data[key] = value
+        if (key === 'pickTakeId' && value !== null && !project.takes?.some(take => take.id === value && take.cutId === node.id)) fail(node.kind === 'gen' ? '이 생성 노드의 take를 골라줘.' : '이 컷의 take를 골라줘.')
+        if (key === 'profileId' && value !== null) profileFor(project, node.kind, value)
+        node.data[key] = copy(value)
       }
       if (node.kind === 'cut') validateData(node.data)
+      if (node.kind === 'gen') validateGenData(node.data)
     }
     return { id: id(op.id) }
   }
@@ -322,18 +432,86 @@ export function resolvePrompt(project, cut) {
   for (const edge of cutEdges(project, cut)) if (!['start', 'end'].includes(edge.port) && !used.has(edge.id)) warnings.push(`쓰지 않은 참조야: @${nodeOf(project, edge.from).data.name}`)
   return { ...fields, table, errors: [...new Set(errors)], warnings }
 }
+// Source defects shared by cut slots and generation inputs; a generation node feeds only a result withResults found.
+function sourceIssues(project, edge, kind, assets, add) {
+  const node = nodeOf(project, edge.from), state = assets[node.id] ?? {}
+  if (['deleted', 'no-permission', 'missing'].includes(state.status)) add(state.status, state.message ?? '소재를 쓸 수 없어.', node.id)
+  if (state.status === 'changed') add('changed', '가져온 뒤 파일이 바뀌었어.', node.id, false)
+  if (state.status === 'unverified') add('unverified', state.message, node.id, false)
+  if (node.kind === 'gen' && !node.data.ref) add('required-slot', `연결한 생성 노드에 결과가 아직 없어: ${node.data.name}. 먼저 생성해줘.`, node.id)
+  else if (node.kind === 'gen' && node.data.resultKind !== kind) add('kind', `연결한 생성 노드의 결과 종류가 이 슬롯과 달라: ${node.data.name}. 결과 종류에 맞는 슬롯에 다시 이어줘.`, node.id)
+}
+const roleFields = profile => [profile.promptFieldId, profile.seedFieldId, ...(profile.imageFieldIds ?? [])].filter(Boolean)
+const genRoles = profile => [['image', profile?.imageFieldIds ?? [], '이미지']]
+// The node's own values its profile takes: exposed fields no role fills. Keys a profile edit left behind are not sent.
+const genValues = (node, profile) => Object.fromEntries(Object.entries(node.data.inputs ?? {}).filter(([key]) => (profile.exposedFieldIds ?? []).includes(key) && !roleFields(profile).includes(key)))
+/** A generation node's check, shaped like checkCut: `resolved.table` says which profile field each connected input fills. */
+export function checkGen(project, node, assets = {}) {
+  const errors = [], warnings = [], add = (code, message, nodeId = node.id, blocking = true) => (blocking ? errors : warnings).push({ code, message, nodeId })
+  const profile = profileOf(project, node), edges = inputEdges(project, node), table = []
+  for (const edge of edges) sourceIssues(project, edge, GEN_PORTS[edge.port], assets, add)
+  for (const [port, fields, name] of genRoles(profile)) {
+    const linked = edges.filter(edge => edge.port === port)
+    if (profile && linked.length > fields.length) add('limit', fields.length ? `이 생성 설정은 ${name} 입력을 ${fields.length}개까지 받아. 남는 연결을 빼줘.` : `이 생성 설정에는 ${name} 입력 필드가 없어. 연결을 빼거나 ${name} 입력이 있는 생성 설정을 골라줘.`)
+    linked.forEach((edge, index) => {
+      const source = nodeOf(project, edge.from)
+      table.push({ nodeId: source.id, edgeId: edge.id, name: source.data.name, label: fields[index] ?? null, type: port, port, slot: index, order: table.length, props: copy(edge.props) })
+    })
+  }
+  if (profile) {
+    const used = genValues(node, profile)
+    for (const key of Object.keys(node.data.inputs ?? {})) if (!own(used, key)) add('input', `이 생성 설정이 받지 않는 입력이라 빼고 보내: ${key}. 필요 없으면 inputs에서 지워줘.`, node.id, false)
+  }
+  if (node.data.size && !(profile?.nai?.sizes ?? []).some(entry => entry.label === node.data.size)) add('input', `이 생성 설정에 없는 크기야: ${node.data.size}. 생성 설정의 크기 이름 중에서 골라줘.`)
+  return { blocked: errors.length > 0, errors, warnings, resolved: { prompt: node.data.prompt ?? '', table, errors: [], warnings: [] } }
+}
+export const checkNode = (project, node, assets) => node.kind === 'gen' ? checkGen(project, node, assets) : checkCut(project, node, assets)
+// Same as the app's joinPrompt (codex-chat/chatGenerationPayload.ts), which NovelAI chat presets use.
+const joinPrompt = parts => parts.map(part => String(part ?? '').trim().replace(/^,+|,+$/g, '').trim()).filter(Boolean).join(', ')
+/**
+ * The NovelAI request payload a chat preset makes (chatGenerationPayload.ts) for this node's prompt and size; without a
+ * chat profile there is no reference image, so only the preset's own character references go. Always one sample: more cost credits.
+ */
+function naiPayload(config, node) {
+  const size = config.sizes.find(entry => entry.label === node.data.size) ?? config.sizes[0]
+  return {
+    prompt: joinPrompt([config.promptPrefix, node.data.prompt, config.promptSuffix]), negative_prompt: config.negativePrompt || undefined,
+    model: config.model, action: 'generate', sampler: config.sampler, noise_schedule: config.noiseSchedule,
+    width: size.width, height: size.height, steps: config.steps, scale: config.scale, n_samples: 1, use_coords: config.useCoords,
+    characters: config.characters?.length ? copy(config.characters) : undefined, vibes: config.vibes?.length ? copy(config.vibes) : undefined,
+    character_refs: config.characterRefs?.length ? copy(config.characterRefs) : undefined,
+    variety_plus: config.varietyPlus, transparent_background: config.transparentBackground,
+  }
+}
+/**
+ * A generation node's adapter value: for `workflow` its exposed inputs, then its prompt and connected images in the mapped
+ * fields; for `nai` the NovelAI payload without the seed.
+ */
+export function buildWorkflowInputs(project, node, assets = {}) {
+  const check = checkGen(project, node)
+  if (check.blocked) fail(check.errors.map(issue => issue.message).join('\n'))
+  validateGenData(node.data)
+  const profile = profileOf(project, node)
+  if (!profile) fail('생성 노드의 생성 설정을 먼저 골라줘.')
+  if (adapterOf(profile) === 'nai') return naiPayload(profile.nai, node)
+  const values = copy(genValues(node, profile))
+  if (profile.promptFieldId) values[profile.promptFieldId] = node.data.prompt
+  const edges = inputEdges(project, node)
+  for (const [port, fields] of genRoles(profile)) edges.filter(edge => edge.port === port).forEach((edge, index) => {
+    const source = nodeOf(project, edge.from), ref = source.data.ref
+    if (ref.source === 'library') values[fields[index]] = { composite_hash: ref.compositeHash }
+    else if (assets[source.id]) values[fields[index]] = copy(assets[source.id])
+    else fail(`업로드한 워크플로 입력이 필요해: ${source.data.name}`)
+  })
+  return values
+}
 export function checkCut(project, cut, assets = {}) {
   const errors = [], warnings = [], add = (code, message, nodeId = cut.id, blocking = true) => (blocking ? errors : warnings).push({ code, message, nodeId })
   const edges = cutEdges(project, cut), items = mediaItems(project, cut)
   for (const port of activePorts(cut.data.mode).filter(port => ['start', 'end'].includes(port))) {
     if (edges.filter(edge => edge.port === port).length !== 1) add('required-slot', `${port === 'start' ? '시작' : '끝'} 프레임이 필요해.`)
   }
-  for (const edge of edges) {
-    const node = nodeOf(project, edge.from), state = assets[node.id] ?? {}
-    if (['deleted', 'no-permission', 'missing'].includes(state.status)) add(state.status, state.message ?? '소재를 쓸 수 없어.', node.id)
-    if (state.status === 'changed') add('changed', '가져온 뒤 파일이 바뀌었어.', node.id, false)
-    if (state.status === 'unverified') add('unverified', state.message, node.id, false)
-  }
+  for (const edge of edges) sourceIssues(project, edge, PORTS[edge.port], assets, add)
   if (cut.data.mode === 'REF2VA') {
     for (const [port, limit] of Object.entries(LIMITS)) if (edges.filter(edge => edge.port === port).length > limit) add('limit', `${port}: ${limit}개를 넘었어.`)
     if (items.length > 12) add('limit', '참조 합계는 12개까지야.')
@@ -392,11 +570,53 @@ export function buildDirector(project, cut, assets = {}, overrides = {}) {
     assets: inputAssets, refmods,
   }
 }
-const profileKeys = ['id', 'label', 'workflowId', 'directorFieldId', 'seedFieldId', 'serverId', 'serverTag', 'overrides', 'inputs']
-const profileData = profile => copy(Object.fromEntries(profileKeys.filter(key => profile[key] !== undefined).map(key => [key, profile[key]])))
+// Both adapters may carry the app generation preset's instruction and guide; guideSkill is a { skillId, path } link read at use time.
+const guideKeys = ['instruction', 'guide', 'guideSkill']
+const profileKeys = {
+  director: ['id', 'label', 'workflowId', 'directorFieldId', 'seedFieldId', 'serverId', 'serverTag', 'overrides', 'inputs', ...guideKeys],
+  workflow: ['id', 'label', 'workflowId', 'serverId', 'serverTag', 'output', 'promptFieldId', 'seedFieldId', 'imageFieldIds', 'exposedFieldIds', 'fixedInputs', ...guideKeys],
+  nai: ['id', 'label', 'output', 'nai', ...guideKeys],
+}
+const SAME_ADAPTER = '같은 생성 설정 ID로 생성 방식(Director/워크플로/NovelAI)을 바꿀 수 없어. 새 생성 설정으로 저장해줘.'
+// Keys naming the workflow's own fields (worked out again for another workflow), and values keyed by its field IDs.
+const roleKeys = ['directorFieldId', 'seedFieldId', 'promptFieldId', 'imageFieldIds']
+const fieldValueKeys = ['exposedFieldIds', 'fixedInputs', 'inputs']
+/**
+ * The profile a save of `input` asks for. A save of a stored profile changes only the keys it gives (null or an empty value
+ * clears one); with another workflow (`fields` its input schema) the old field roles are derived again and values of fields
+ * it lacks are dropped. A key of another adapter would change how the profile generates, which needs a new profile.
+ */
+export function mergeProfile(input, existing, fields) {
+  const given = { ...input }
+  if (existing) {
+    const keys = profileKeys[adapterOf(existing)]
+    if (Object.keys(input).some(key => !keys.includes(key) && Object.values(profileKeys).some(list => list.includes(key)))
+      || adapterOf(existing) === 'nai' && input.output !== undefined && input.output !== 'image') fail(SAME_ADAPTER)
+    const moved = input.workflowId !== undefined && input.workflowId !== existing.workflowId, ids = new Set((fields ?? []).map(field => field.id))
+    for (const key of keys) {
+      if (given[key] !== undefined || existing[key] === undefined || moved && roleKeys.includes(key)) continue
+      const value = copy(existing[key])
+      given[key] = !moved || !fieldValueKeys.includes(key) ? value
+        : Array.isArray(value) ? value.filter(id => ids.has(id)) : Object.fromEntries(Object.entries(value).filter(([id]) => ids.has(id)))
+    }
+  }
+  for (const key of ['serverId', 'serverTag']) if (given[key] === null) delete given[key]
+  return given
+}
+const profileData = profile => copy(Object.fromEntries(profileKeys[adapterOf(profile)].filter(key => profile[key] !== undefined).map(key => [key, profile[key]])))
+// Data-URL values (an image fixed in a preset) are blobs the assistant has no use for; it reads a marker instead.
+const DATA_URL = '(data URL)'
+const withoutDataUrls = value => typeof value === 'string' ? (/^data:/i.test(value.trim()) ? DATA_URL : value)
+  : Array.isArray(value) ? value.map(withoutDataUrls) : record(value) ? Object.fromEntries(Object.entries(value).map(([key, item]) => [key, withoutDataUrls(item)])) : value
 export function profilePublication(profile) {
-  const value = profileData(profile)
+  const value = withoutDataUrls(profileData(profile))
   // Marked field IDs are workflow-chosen keys, published as text like the overrides.
+  if (adapterOf(value) === 'workflow') return { ...value, fixedInputs: JSON.stringify(value.fixedInputs ?? {}) }
+  // Vibe encodings and reference images are large base64 the assistant has no use for; it reads their counts (a take's copy stores only counts).
+  if (adapterOf(value) === 'nai') {
+    const { vibes, characterRefs, ...settings } = value.nai, count = list => Array.isArray(list) ? list.length : list ?? 0
+    return { ...value, nai: { ...settings, vibes: count(vibes), characterRefs: count(characterRefs) } }
+  }
   return { ...value, overrides: JSON.stringify(value.overrides ?? {}), ...(value.inputs ? { inputs: JSON.stringify(value.inputs) } : {}) }
 }
 // Field rows come from get_workflow_details (json_path/seed_rule) or a stored workflow (jsonPath).
@@ -404,21 +624,46 @@ const isDirectorField = field => field.type === 'node' && field.node_editor === 
 const isSeedField = field => field.type === 'number' && Boolean(field.seed_rule || /(?:^|\.)(?:seed|noise_seed)$/.test(field.json_path ?? field.jsonPath ?? ''))
 const simpleTypes = ['text', 'textarea', 'number', 'select']
 const cutKeys = ['mode', 'duration', 'media', 'assets', 'timeline_data', 'refmods', 'builder_state', 'prompt', 'simple_prompt']
-// A profile given as just a workflow takes the workflow name and its own Director and seed fields.
+const isTextField = field => field.type === 'text' || field.type === 'textarea'
+/**
+ * Roles a generic workflow profile leaves unset, by the app generation preset's rule (chatGenerationPresets comfyAssetFields):
+ * the prompt is the only exposed text field, else the one named like a positive prompt, else the only text field; the seed
+ * is the seed-marked number field; input images are the image fields not fixed.
+ */
+function generatorRoles(fields, given = {}) {
+  const texts = fields.filter(isTextField), describe = field => `${field.id} ${field.label ?? ''}`
+  const named = list => list.filter(field => /positive|prompt|프롬프트|긍정/i.test(describe(field)) && !/negative|neg_|부정|undesired/i.test(describe(field)))
+  const exposed = texts.filter(field => (given.exposedFieldIds ?? []).includes(field.id))
+  const pick = [exposed, named(exposed), named(texts), texts].find(list => list.length === 1)
+  return {
+    promptFieldId: given.promptFieldId !== undefined ? given.promptFieldId : pick?.[0].id ?? null,
+    seedFieldId: given.seedFieldId !== undefined ? given.seedFieldId : fields.find(isSeedField)?.id ?? null,
+    imageFieldIds: given.imageFieldIds ?? fields.filter(field => field.type === 'image' && !(record(given.fixedInputs) && own(given.fixedInputs, field.id))).map(field => field.id),
+  }
+}
+// A profile given as just a workflow takes the workflow name and its own Director and seed fields; one with an output, its generic roles.
 export function completeProfile(profile, details) {
   if (!record(profile)) fail('프로필 이름과 워크플로를 골라줘.')
   const fields = details.input_schema ?? []
-  return { ...profile,
-    label: String(profile.label ?? '').trim() ? profile.label : details.name,
+  const label = String(profile.label ?? '').trim() ? profile.label : details.name
+  if (adapterOf(profile) === 'workflow') return { ...profile, label, ...generatorRoles(fields, profile), exposedFieldIds: profile.exposedFieldIds ?? [], fixedInputs: profile.fixedInputs ?? {} }
+  return { ...profile, label,
     directorFieldId: profile.directorFieldId ?? fields.find(isDirectorField)?.id,
     seedFieldId: profile.seedFieldId ?? fields.find(isSeedField)?.id }
 }
 function validateInputs(profile, fields) {
   if (profile.inputs === undefined) return
   if (!record(profile.inputs)) fail('inputs는 필드 ID별 값 객체로 써줘.')
-  for (const [key, value] of Object.entries(profile.inputs)) {
+  checkValues(profile.inputs, fields, key => key !== profile.directorFieldId && key !== profile.seedFieldId, '프로필에서 정할 수 없는 워크플로 입력이야')
+}
+// A generation node's own values for its profile's exposed simple fields (role fields are filled by the node itself).
+export function validateGenInputs(node, profile, details) {
+  checkValues(genValues(node, profile), details.input_schema ?? [], () => true, '이 생성 설정에서 정할 수 없는 입력이야')
+}
+function checkValues(values, fields, allowed, refusal) {
+  for (const [key, value] of Object.entries(values)) {
     const field = fields.find(field => field.id === key)
-    if (!field || key === profile.directorFieldId || key === profile.seedFieldId || !simpleTypes.includes(field.type)) fail(`프로필에서 정할 수 없는 워크플로 입력이야: ${key}`)
+    if (!field || !allowed(key) || !simpleTypes.includes(field.type)) fail(`${refusal}: ${key}`)
     const name = field.label || key
     if (field.type === 'number') {
       if (typeof value !== 'number' || !Number.isFinite(value)) fail(`${name}: 숫자가 필요해.`)
@@ -428,16 +673,47 @@ function validateInputs(profile, fields) {
     else if (field.type === 'select' && Array.isArray(field.options) && !field.options.includes(value)) fail(`${name}: 목록에 있는 값을 골라줘.`)
   }
 }
+// Guide text is copied; the skill section stays a link, so only its { skillId, path } is stored.
+function guideData(profile) {
+  for (const key of ['instruction', 'guide']) if (profile[key] !== undefined && typeof profile[key] !== 'string') fail(`${key}는 텍스트로 써줘.`)
+  const link = profile.guideSkill
+  if (link === undefined || link === null) return {}
+  if (!record(link) || !Number.isInteger(link.skillId) || link.skillId < 1 || typeof link.path !== 'string' || !link.path.trim()) fail('가이드 스킬(guideSkill)은 스킬 섹션 링크 {skillId, path}로 골라줘.')
+  return { guideSkill: { skillId: link.skillId, path: link.path } }
+}
+function validateGenerator(profile, fields) {
+  const field = id => fields.find(item => item.id === id)
+  if (fields.some(isDirectorField)) fail('Director 워크플로는 컷의 생성 설정으로 써줘.')
+  if (!OUTPUTS.includes(profile.output)) fail('결과 종류(output)는 video / image / audio 중에서 골라줘.')
+  if (profile.promptFieldId != null && !(field(profile.promptFieldId) && isTextField(field(profile.promptFieldId)))) fail('프롬프트 필드는 텍스트 Marked Field 하나로 골라줘.')
+  if (profile.seedFieldId != null && !(field(profile.seedFieldId) && isSeedField(field(profile.seedFieldId)))) fail('시드 필드는 숫자 시드 Marked Field로 골라줘.')
+  const images = profile.imageFieldIds ?? []
+  if (!Array.isArray(images) || new Set(images).size !== images.length || images.some(id => field(id)?.type !== 'image')) fail('이미지 입력 필드는 겹치지 않는 이미지 Marked Field ID 배열로 골라줘.')
+  const exposed = profile.exposedFieldIds ?? []
+  if (!Array.isArray(exposed) || exposed.some(id => !field(id))) fail('exposedFieldIds는 이 워크플로의 Marked Field ID 배열로 써줘.')
+  if (profile.fixedInputs !== undefined && !record(profile.fixedInputs)) fail('fixedInputs는 필드 ID별 값 객체로 써줘.')
+  const unknown = Object.keys(profile.fixedInputs ?? {}).find(key => !field(key))
+  if (unknown) fail(`워크플로에 없는 고정 입력이야: ${unknown}. fixedInputs에서 빼줘.`)
+}
 export function validateProfile(profile, details) {
-  if (!record(profile) || !String(profile.label ?? '').trim() || !Number.isInteger(profile.workflowId) || profile.workflowId < 1) fail('프로필 이름과 워크플로를 골라줘.')
+  if (!record(profile) || !String(profile.label ?? '').trim() || adapterOf(profile) !== 'nai' && (!Number.isInteger(profile.workflowId) || profile.workflowId < 1)) fail('프로필 이름과 워크플로를 골라줘.')
   const fields = details.input_schema ?? []
+  if (profile.serverId && profile.serverTag) fail('서버 ID와 태그 중 하나만 골라줘.')
+  const guide = guideData(profile)
+  if (adapterOf(profile) === 'nai') {
+    if (!Array.isArray(profile.nai.sizes) || !profile.nai.sizes.length || profile.nai.sizes.some(size => !Number.isInteger(size?.width) || !Number.isInteger(size?.height))) fail('NovelAI 설정에 크기가 없어. 생성 프리셋을 다시 확인해줘.')
+    return { ...profileData({ ...profile, output: 'image' }), ...guide }
+  }
+  if (adapterOf(profile) === 'workflow') {
+    validateGenerator(profile, fields)
+    return { ...profileData(profile), ...guide }
+  }
   if (!fields.some(field => field.id === profile.directorFieldId && isDirectorField(field))) fail('MiniMax H3 Director Marked Field를 골라줘.')
   if (!fields.some(field => field.id === profile.seedFieldId && isSeedField(field))) fail('워크플로 편집에서 숫자 시드를 Marked Field로 열어줘.')
-  if (profile.serverId && profile.serverTag) fail('서버 ID와 태그 중 하나만 골라줘.')
   if (profile.overrides !== undefined && !record(profile.overrides)) fail('overrides는 JSON 객체로 써줘.')
   if (Object.keys(profile.overrides ?? {}).some(key => cutKeys.includes(key))) fail('프로필은 컷 입력을 덮어쓸 수 없어. 소재와 RefMod는 컷 슬롯에 이어줘.')
   validateInputs(profile, fields)
-  return profileData(profile)
+  return { ...profileData(profile), ...guide }
 }
 const scalar = value => ['string', 'number', 'boolean'].includes(typeof value)
 const scalars = (value, skip = () => false) => Object.fromEntries(Object.entries(value).filter(([key, item]) => scalar(item) && !skip(key)))
@@ -471,14 +747,23 @@ export function workflowOption(workflow, details) {
     ...(field.maximum ?? field.max) !== undefined ? { max: field.maximum ?? field.max } : {},
     ...(defaultOf(field.id) !== undefined ? { default: defaultOf(field.id) } : {}),
   }))
-  return { workflowId: workflow.id, name: workflow.name, usable: !reason, ...(reason ? { reason } : {}),
+  // `usable`/`reason` are for cuts (Director); `generator` is the same workflow as a generation node's generic profile.
+  const generatorReason = director ? 'Director 워크플로는 컷의 생성 설정으로 써줘.' : !workflow.is_active ? '꺼진 워크플로우야. ComfyUI 탭에서 켜줘.' : null
+  return { workflowId: workflow.id, name: workflow.name, kind: workflow.kind === 'audio' ? 'audio' : 'image', usable: !reason, ...(reason ? { reason } : {}),
     directorFieldId: director?.id ?? null, seedFieldId: seed?.id ?? null,
-    defaults: directorDefaults(director && marked.find(field => field.id === director.id)), extraFields }
+    defaults: directorDefaults(director && marked.find(field => field.id === director.id)), extraFields,
+    generator: { usable: !generatorReason, ...(generatorReason ? { reason: generatorReason } : {}), output: workflow.kind === 'audio' ? 'audio' : 'image', ...generatorRoles(fields),
+      imageFields: fields.filter(field => field.type === 'image').map(field => ({ id: field.id, label: field.label || field.id })) } }
 }
-export function generationRequest(profile, director, seed, takeId) {
+/** The adapters' submit request: `director` sends the Director value and seed, `workflow` fixed inputs under the node's values and seed. */
+export function generationRequest(profile, value, seed, takeId) {
   if (!Number.isInteger(seed) || seed < 0 || seed > 2147483647) fail('시드가 올바르지 않아.')
-  return { service_type: 'comfyui', workflow_id: profile.workflowId,
-    inputs: { ...copy(profile.inputs ?? {}), [profile.directorFieldId]: director, [profile.seedFieldId]: seed },
+  // NovelAI reads the seed from request_payload.seed (backend utils/nai/metadata.ts); the payload always has n_samples 1.
+  if (adapterOf(profile) === 'nai') return { service_type: 'novelai', request_payload: { ...copy(value), n_samples: 1, seed }, idempotency_key: `video-canvas-${takeId}` }
+  const inputs = adapterOf(profile) === 'director'
+    ? { ...copy(profile.inputs ?? {}), [profile.directorFieldId]: value, [profile.seedFieldId]: seed }
+    : { ...copy(profile.fixedInputs ?? {}), ...copy(value), ...(profile.seedFieldId ? { [profile.seedFieldId]: seed } : {}) }
+  return { service_type: 'comfyui', workflow_id: profile.workflowId, inputs,
     ...(profile.serverId ? { server_id: profile.serverId } : {}), ...(profile.serverTag ? { server_tag: profile.serverTag } : {}),
     idempotency_key: `video-canvas-${takeId}` }
 }

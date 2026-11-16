@@ -1,6 +1,6 @@
 import { randomUUID, randomInt, createHash } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
-import { applyOps, buildDirector, canonical, checkCut, completeProfile, cutEdges, cutOf, duplicateCanvas, expected, fail, freePosition, generationRequest, nodeOf, normalizeRef, profilePublication, representativeTake, resultHash, sequenceOf, slotMode, validateProfile, workflowOption } from './domain.mjs'
+import { adapterOf, applyOps, assertAdapter, buildDirector, buildWorkflowInputs, canonical, checkCut, checkNode, completeProfile, cutEdges, mergeProfile, cutOf, duplicateCanvas, expected, fail, freePosition, generationRequest, generatorOf, inputEdges, nodeOf, normalizeRef, outputOf, profileOf, profilePublication, representativeTake, resultHash, sequenceOf, slotMode, staleUpstream, validateGenInputs, validateProfile, withResults, workflowOption } from './domain.mjs'
 import { excerpt, recordPage } from './assistant-state.mjs'
 import { createStore, workflowSourceKey } from './store.mjs'
 export { createStore } from './store.mjs'
@@ -62,8 +62,17 @@ function frameName(extraction, item, index) {
   return `${extraction.sourceName} ${where}`
 }
 const safeTake = take => {
-  const { request, baseDirector, snapshot, guard, ...safe } = take
+  // Generation takes made before they stopped storing `baseInputs` still carry it (NovelAI blobs included).
+  const { request, baseDirector, baseInputs, snapshot, guard, ...safe } = take
   return { ...safe, profile: profilePublication(take.profile), takeId: take.id }
+}
+// What a project-level edit returns: identity, revision and published profiles, never stored settings blobs or takes.
+const editResult = (project, extra = {}) => ({ id: project.id, name: project.name, revision: project.revision, lastProfileId: project.lastProfileId ?? null, ...extra, profiles: project.profiles.map(profilePublication) })
+// A take keeps its request (a same-key retry resends it); its NovelAI profile copy keeps counts and a digest of the vibe and reference blobs, not the blobs again.
+function takeProfile(profile) {
+  if (adapterOf(profile) !== 'nai') return structuredClone(profile)
+  const { nai: { vibes, characterRefs, ...settings }, ...rest } = profile
+  return { ...structuredClone(rest), nai: { ...structuredClone(settings), vibes: vibes?.length ?? 0, characterRefs: characterRefs?.length ?? 0, referencesDigest: digest({ vibes, characterRefs }) } }
 }
 const checkSummary = check => ({ blocked: check.blocked, errors: check.errors, warnings: check.warnings })
 const reviewFields = (cut, profile, resolved) => ({
@@ -113,9 +122,11 @@ export function createService(conai, store = createStore(conai.db)) {
     const record = await bundleRecord(node, cache)
     return { fingerprint: bundleFingerprint(node, record, entries), members: (record?.members ?? entries[0]?.members ?? []).map(member => ({ kind: member.kind })) }
   }
+  // `project` comes through withResults (or a take snapshot), so generation nodes with a result are checked as that result.
   async function inspect(project, cutId) {
     const cache = new Map(), sources = {}, assets = {}
-    const nodes = cutId ? [...new Set(cutEdges(project, cutOf(project, cutId)).map(edge => edge.from))].map(id => nodeOf(project, id)) : project.nodes.filter(node => node.kind !== 'cut')
+    const nodes = (cutId ? [...new Set(inputEdges(project, generatorOf(project, cutId)).map(edge => edge.from))].map(id => nodeOf(project, id)) : project.nodes.filter(node => node.kind !== 'cut'))
+      .filter(node => node.kind !== 'gen' || node.data.ref)
     for (const node of nodes) {
       try {
         const resolved = node.kind === 'bundle' ? await bundleState(node, project, cache)
@@ -126,7 +137,7 @@ export function createService(conai, store = createStore(conai.db)) {
         assets[node.id] = { status: error.status === 403 ? 'no-permission' : error.status === 404 ? 'missing' : 'unverified', message: error.message }
       }
     }
-    return { sources, assets, cuts: project.nodes.filter(node => node.kind === 'cut' && (!cutId || node.id === cutId)).map(cut => ({ id: cut.id, ...checkCut(project, cut, assets) })) }
+    return { sources, assets, cuts: project.nodes.filter(node => (node.kind === 'cut' || node.kind === 'gen') && (!cutId || node.id === cutId)).map(cut => ({ id: cut.id, ...checkNode(project, cut, assets) })) }
   }
   async function upload(owner, node, resolved, takeId) {
     resolved ??= await conai.media.resolve(node.data.ref)
@@ -154,29 +165,32 @@ export function createService(conai, store = createStore(conai.db)) {
     uploads.set(flight, pending)
     try { return await pending } finally { uploads.delete(flight) }
   }
+  // A cut's or generation node's run input; `cut` is that node. The digest keeps the Director form for cuts so stored digests still match.
   function inputFor(project, args, chosenSeed) {
-    let source = structuredClone(project), cut = cutOf(source, args.cut_id), previous
+    let source = withResults(project), cut = generatorOf(source, args.cut_id), previous
     if (args.take_id) {
       previous = project.takes.find(take => take.id === args.take_id && take.cutId === cut.id)
       if (!previous) fail('다시 돌릴 take가 없어.')
       if (args.inputs === 'take') {
         if (previous.status === 'discarded') fail('폐기한 제안의 입력은 다시 쓸 수 없어. 현재 입력으로 새로 생성해줘.')
         source.nodes = structuredClone(previous.snapshot.nodes); source.edges = structuredClone(previous.snapshot.edges)
-        cut = cutOf(source, cut.id)
+        cut = generatorOf(source, cut.id)
       }
     }
     const seed = chosenSeed ?? previous?.seed ?? cut.data.seed
     const profile = project.profiles.find(profile => profile.id === (args.profile_id ?? cut.data.profileId))
-    if (!profile) fail('생성 프로필을 먼저 만들어 골라줘.')
+    if (!profile) fail(`${cut.kind === 'cut' ? '컷' : '생성 노드'}의 생성 설정을 먼저 골라줘.`)
+    assertAdapter(cut.kind, profile)
     cut.data.seed = seed; cut.data.profileId = profile.id; source.profiles = [profile]
     const identities = {}
-    for (const edge of cutEdges(source, cut)) {
+    for (const edge of inputEdges(source, cut)) {
       const node = nodeOf(source, edge.from)
-      if (node.kind !== 'bundle' && node.data.ref.source !== 'library') identities[node.id] = { ...node.data.ref, fingerprint: node.data.fingerprint ?? null }
+      if (node.kind !== 'bundle' && node.data.ref && node.data.ref.source !== 'library') identities[node.id] = { ...node.data.ref, fingerprint: node.data.fingerprint ?? null }
     }
-    const intended = buildDirector(source, cut, identities)
-    const inputDigest = digest({ director: { ...intended, ...profile.overrides }, seed, profile })
-    return { source, cut, seed, profile: structuredClone(profile), previous: args.inputs === 'take' ? previous : null, inputDigest }
+    const inputDigest = cut.kind === 'cut'
+      ? digest({ director: { ...buildDirector(source, cut, identities), ...profile.overrides }, seed, profile })
+      : digest({ workflow: buildWorkflowInputs(source, cut, identities), seed, profile })
+    return { source, cut, seed, profile, previous: args.inputs === 'take' ? previous : null, inputDigest }
   }
   function currentDigest(owner, projectId, take) {
     return inputFor(store.get(owner, projectId), take.guard, take.seed).inputDigest
@@ -191,7 +205,9 @@ export function createService(conai, store = createStore(conai.db)) {
     if (!take.jobId || take.resultHash) return take
     const job = await call('get_generation_job', { job_id: take.jobId })
     let historyId = take.historyId, hash = null, rows = 0, failedRows = 0
-    for (const id of job.history_ids ?? (take.historyId ? [take.historyId] : [])) {
+    // A sound run saves audio candidates, not library media; its take keeps no history ID, so ending without one settles it.
+    if (take.output === 'audio') hash = job.status === 'completed' ? job.audio_candidate_ids?.[0] ?? null : null
+    else for (const id of job.history_ids ?? (take.historyId ? [take.historyId] : [])) {
       const record = (await json(`/api/generation-history/${id}`)).record
       rows++; if (record?.postprocess_status === 'failed') failedRows++
       historyId = id; hash = resultHash(record)
@@ -200,7 +216,16 @@ export function createService(conai, store = createStore(conai.db)) {
     // Every output failed postprocessing: no result hash will come, so waits and chains stop on it.
     const postprocessFailed = job.status === 'completed' && rows > 0 && failedRows === rows
     const marker = postprocessFailed ? { postprocessFailed, error: POSTPROCESS_FAILED } : take.postprocessFailed ? { postprocessFailed, error: null } : {}
-    return store.setTake(owner, projectId, takeId, { status: job.status, historyId: historyId ?? null, resultHash: hash, ...marker, ...failure(job, take) })
+    const duration = hash ? await resultDuration(take, hash) : undefined
+    return store.setTake(owner, projectId, takeId, { status: job.status, historyId: historyId ?? null, resultHash: hash, ...(duration ? { resultDuration: duration } : {}), ...marker, ...failure(job, take) })
+  }
+  // A generation node's video or sound result feeds cut slots whose trim range needs the source length.
+  async function resultDuration(take, hash) {
+    if (take.output !== 'video' && take.output !== 'audio') return undefined
+    try {
+      const info = take.output === 'audio' ? await call('get_audio_candidate', { candidate_id: hash }) : await call('get_image_metadata', { composite_hash: hash })
+      return info.duration_seconds ?? info.duration
+    } catch (error) { conai.warn(`take ${take.id} result length unavailable: ${error.message}`); return undefined }
   }
   // The generation job's own failure text; a failed take always carries one, so refresh stops asking.
   function failure(job, take) {
@@ -254,6 +279,7 @@ export function createService(conai, store = createStore(conai.db)) {
     booleanArg(args.new_seed, 'new_seed')
     if (['approve', 'discard'].includes(args.action) && actor !== 'human') fail('제안 승인·폐기는 사람이 캔버스에서 직접 해줘.', 403)
     const project = store.get(owner, args.project_id)
+    if (args.mode === 'propose' && !args.action && generatorOf(project, args.cut_id).kind !== 'cut') fail('생성 제안은 영상 컷에서만 올릴 수 있어. 생성 노드는 바로 생성해줘.')
     let reviewedFields
     if (reviewed) {
       const cut = cutOf(project, args.cut_id), profile = project.profiles.find(profile => profile.id === cut.data.profileId), check = checkCut(project, cut)
@@ -295,8 +321,11 @@ export function createService(conai, store = createStore(conai.db)) {
     if (existing) return view(existing)
     if (args.mode !== 'propose' && args.input_digest === undefined) expected(project, args.expected_revision)
     if (args.mode === 'propose' && args.new_seed) fail('새 시드는 먼저 컷에서 골라줘.')
-    const prepared = inputFor(project, args, args.new_seed ? randomInt(0, 2147483648) : undefined)
+    let prepared = inputFor(project, args, args.new_seed ? randomInt(0, 2147483648) : undefined)
     if (args.mode === 'propose' && args.input_digest !== prepared.inputDigest || args.input_digest !== undefined && args.input_digest !== prepared.inputDigest) fail('409: 컷 입력 digest를 read_node로 다시 읽어줘.', 409)
+    // NovelAI replaces seed 0 with a random seed it does not report back, so a 0 seed gets a real one as new_seed does: kept on the node, recorded on the take.
+    const pickedSeed = adapterOf(prepared.profile) === 'nai' && prepared.seed === 0
+    if (pickedSeed) prepared = inputFor(project, args, randomInt(1, 2147483648))
     const flight = `${owner}:${project.id}:${prepared.cut.id}:${prepared.inputDigest}:${args.mode ?? 'now'}`
     if (preparing.has(flight)) {
       const running = preparing.get(flight)
@@ -304,38 +333,47 @@ export function createService(conai, store = createStore(conai.db)) {
       return view(await running.promise)
     }
     const { source, cut, seed, profile } = prepared, id = randomUUID()
-    const snapshot = { nodes: source.nodes.filter(node => node.id === cut.id || cutEdges(source, cut).some(edge => edge.from === node.id)), edges: cutEdges(source, cut) }
-    const take = { id, cutId: cut.id, seed, profile, snapshot, inputDigest: prepared.inputDigest,
+    const edges = inputEdges(source, cut)
+    const snapshot = { nodes: source.nodes.filter(node => node.id === cut.id || edges.some(edge => edge.from === node.id)), edges }
+    // Generation node takes record their output kind; a take without one is a cut's video.
+    const take = { id, cutId: cut.id, seed, profile: takeProfile(profile), snapshot, inputDigest: prepared.inputDigest, ...(cut.kind === 'gen' ? { output: outputOf(profile) } : {}),
       guard: { cut_id: cut.id, profile_id: profile.id, take_id: args.take_id, inputs: args.inputs ?? 'canvas' },
-      resolved: checkCut(source, cut).resolved, status: 'preparing', jobId: null, historyId: null, resultHash: null, review: 'pending', memo: '', label: profile.label }
+      resolved: checkNode(source, cut).resolved, status: 'preparing', jobId: null, historyId: null, resultHash: null, review: 'pending', memo: '', label: profile.label }
     store.addTake(owner, project.id, take)
     store.linkRequest(owner, project.id, args.requestId, fingerprint, id)
     store.useProfile(owner, project.id, profile.id)
-    if (args.new_seed) {
-      const next = structuredClone(project); cutOf(next, cut.id).data.seed = seed; save(owner, project, next)
+    if (args.new_seed || pickedSeed) {
+      const next = structuredClone(project); generatorOf(next, cut.id).data.seed = seed; save(owner, project, next)
     }
     const promise = (async () => {
       try {
         signal?.throwIfAborted()
-        validateProfile(profile, await call('get_workflow_details', { workflow_id: profile.workflowId }))
+        // NovelAI runs no workflow; the other adapters check the profile against the workflow's current fields.
+        if (adapterOf(profile) !== 'nai') {
+          const details = await call('get_workflow_details', { workflow_id: profile.workflowId })
+          validateProfile(profile, details)
+          if (cut.kind === 'gen') validateGenInputs(cut, profile, details)
+        }
         const checked = await inspect(source, cut.id), issues = checked.cuts[0]
         store.setTake(owner, project.id, id, { checks: checkSummary(issues) })
         if (issues.blocked) fail(issues.errors.map(issue => issue.message).join('\n'))
-        let baseDirector
-        if (prepared.previous?.baseDirector) baseDirector = structuredClone(prepared.previous.baseDirector)
+        // A cut rerun keeps its Director value (only the new profile's overrides apply); a generation node maps fields per profile, so it rebuilds.
+        let base
+        if (cut.kind === 'cut' && prepared.previous?.baseDirector) base = structuredClone(prepared.previous.baseDirector)
         else {
           const assets = {}
-          for (const edge of cutEdges(source, cut)) {
+          for (const edge of edges) {
             const node = nodeOf(source, edge.from)
             if (node.kind === 'bundle' || node.data.ref.source === 'library' || assets[node.id]) continue
-            assets[node.id] = prepared.previous?.request?.inputs?.[prepared.previous.profile.directorFieldId]?.assets?.[edge.id] ?? await upload(owner, node, checked.sources[node.id], id)
+            assets[node.id] = (cut.kind === 'cut' ? prepared.previous?.request?.inputs?.[prepared.previous.profile.directorFieldId]?.assets?.[edge.id] : undefined) ?? await upload(owner, node, checked.sources[node.id], id)
           }
-          baseDirector = buildDirector(source, cut, assets)
+          base = cut.kind === 'cut' ? buildDirector(source, cut, assets) : buildWorkflowInputs(source, cut, assets)
         }
-        const request = generationRequest(profile, { ...baseDirector, ...structuredClone(profile.overrides ?? {}) }, seed, id)
+        const request = generationRequest(profile, cut.kind === 'cut' ? { ...base, ...structuredClone(profile.overrides ?? {}) } : base, seed, id)
         signal?.throwIfAborted()
         assertDigest(owner, project.id, take, take.inputDigest)
-        const saved = store.setTake(owner, project.id, id, { baseDirector, request, status: args.mode === 'propose' ? 'proposed' : 'submitting' })
+        // Only a cut's Director value is reused (by a rerun); a generation node's inputs live once, in the request.
+        const saved = store.setTake(owner, project.id, id, { ...(cut.kind === 'cut' ? { baseDirector: base } : {}), request, status: args.mode === 'propose' ? 'proposed' : 'submitting' })
         store.retainUploads(owner, saved)
         return args.mode === 'propose' ? saved : await submit(owner, project.id, id)
       } catch (error) {
@@ -491,7 +529,7 @@ export function createService(conai, store = createStore(conai.db)) {
     let job
     try { job = await conai.jobs.start({ requestId: `video-canvas-chain:${id}`, data: { project_id: project.id, chain_id: id } }) } catch (error) {
       store.removeChain(owner, project.id, id)
-      if (error.status === 429) fail(`앱에서 다른 영상 캔버스 이어 생성이 실행 중이야. 끝나거나 취소된 뒤 다시 실행해줘. (${error.message})`, 429)
+      if (error.status === 429) fail(`앱에서 다른 Video Canvas 이어 생성이 실행 중이야. 끝나거나 취소된 뒤 다시 실행해줘. (${error.message})`, 429)
       throw error
     }
     updateChain(owner, project.id, id, { jobId: job.jobId })
@@ -647,6 +685,8 @@ export function createService(conai, store = createStore(conai.db)) {
     let hash, sourceName
     if (args.take_id) {
       const take = await refreshTake(owner, before.id, args.take_id)
+      // Generation node takes record their output kind; they stay out even after their node is deleted.
+      if (take.output) fail('프레임 추출은 영상 컷의 take에서만 돼. 생성 노드 결과는 컷 슬롯에 바로 이어줘.')
       hash = take.resultHash
       if (!hash) fail('결과 후처리가 끝나고 해시가 준비되면 프레임을 뽑을 수 있어.')
       sourceName = before.nodes.find(node => node.id === take.cutId)?.data.name ?? '컷'
@@ -676,20 +716,82 @@ export function createService(conai, store = createStore(conai.db)) {
       throw error
     }
   }
-  function readNode(project, body) {
+  // The profile's guide as the assistant reads it before writing a prompt: the copied text and the linked skill section, read now.
+  async function guideOf(profile) {
+    if (!profile?.guide && !profile?.guideSkill) return null
+    const guide = { text: profile.guide ?? '', skill: null }
+    if (!profile.guideSkill) return guide
+    if (!conai.skills?.section) return { ...guide, guideWarning: '이 앱 버전에는 스킬 섹션 읽기가 없어서 연결한 가이드 스킬을 읽지 못했어. 앱을 업데이트해줘.' }
+    try {
+      const { skillId, path, skillName, title, updatedDate, text } = await conai.skills.section(profile.guideSkill)
+      return { ...guide, skill: { skillId, path, skillName, title, updatedDate, text } }
+    } catch (error) {
+      return { ...guide, skill: { ...profile.guideSkill }, guideWarning: `연결한 가이드 스킬 섹션을 읽을 수 없어(지워졌거나 꺼졌을 수 있어). 가이드 글만 따르고, 관리자에게 가이드 스킬을 다시 연결해 달라고 해줘. (${error.message})` }
+    }
+  }
+  async function readNode(project, body) {
     const node = nodeOf(project, body.id), edges = recordPage(project.edges.filter(edge => edge.from === node.id || edge.to === node.id), { cursor: body.edge_cursor, limit: body.limit })
     const takes = recordPage(project.takes.filter(take => take.cutId === node.id).slice().reverse().map(safeTake), { cursor: body.take_cursor, limit: body.limit })
     let preview = null
-    if (node.kind === 'cut') {
-      const check = checkCut(project, node)
-      const profile = project.profiles.find(profile => profile.id === node.data.profileId)
-      preview = { mode: node.data.mode, duration: node.data.duration, seed: node.data.seed, profile: profile ? profilePublication(profile) : null, resolved: check.resolved, checks: checkSummary(check), inputDigest: null }
+    if (node.kind === 'cut' || node.kind === 'gen') {
+      const view = withResults(project), check = checkNode(view, nodeOf(view, node.id))
+      check.warnings.push(...staleUpstream(view, nodeOf(view, node.id)))
+      const profile = profileOf(project, node), published = profile ? profilePublication(profile) : null
+      preview = node.kind === 'cut'
+        ? { mode: node.data.mode, duration: node.data.duration, seed: node.data.seed, profile: published, resolved: check.resolved, checks: checkSummary(check), inputDigest: null }
+        : { output: profile ? outputOf(profile) : null, seed: node.data.seed, profile: published, resolved: check.resolved, checks: checkSummary(check), inputDigest: null }
       if (preview.profile && !check.blocked) {
         preview.inputDigest = inputFor(project, { cut_id: node.id }).inputDigest
-        preview.review = { cut_id: node.id, input_digest: preview.inputDigest, ...reviewFields(node, preview.profile, check.resolved) }
+        if (node.kind === 'cut') preview.review = { cut_id: node.id, input_digest: preview.inputDigest, ...reviewFields(node, preview.profile, check.resolved) }
       }
+      if (profile?.instruction) preview.instruction = profile.instruction
+      const guide = await guideOf(profile)
+      if (guide) preview.guide = guide
     }
     return { revision: project.revision, node, preview, edges: edges.items, takes: takes.items, nextEdgeCursor: edges.nextCursor, nextTakeCursor: takes.nextCursor, totalEdges: edges.total, totalTakes: takes.total }
+  }
+  const PRESET_EMPTY = '이 생성 프리셋에는 ComfyUI·NovelAI 설정이 없어. 앱에서 프리셋을 확인해줘.'
+  const presetsApi = () => {
+    if (!conai.generationPresets?.get) fail('이 앱 버전에는 생성 프리셋 가져오기가 없어. 앱을 업데이트한 뒤 다시 해줘.', 501)
+    return conai.generationPresets
+  }
+  // Presets are listed for administrators only (the host refuses others).
+  async function presetRows() {
+    return (await presetsApi().list()).map(preset => ({ id: preset.id, name: preset.name, instruction: preset.instruction, kind: preset.kind,
+      usable: Boolean(preset.kind === 'nai' ? preset.nai : preset.comfyui), ...(preset.kind === 'nai' ? preset.nai : preset.comfyui) ? {} : { reason: PRESET_EMPTY },
+      workflowId: preset.comfyui?.workflowId ?? null, hasGuide: Boolean(preset.prompting?.guide),
+      guideSkill: preset.prompting?.guideSkill ? { skillId: preset.prompting.guideSkill.skillId, path: preset.prompting.guideSkill.path, title: preset.prompting.guideSkill.title } : null }))
+  }
+  /**
+   * A generation profile copied from an app generation preset (the host lets only administrators read them): ComfyUI workflow,
+   * server, fixed and exposed fields and prompt field, or the NovelAI settings, plus instruction and guide text are copies, so
+   * later preset edits do not reach it; the guide skill stays a link. Chat-only settings (timing, previous images, reference
+   * field, the chat profile's character reference mode) are not copied.
+   */
+  async function presetProfile(input) {
+    if (!input || typeof input !== 'object' || !Number.isInteger(input.id) || input.id < 1) fail('가져올 생성 프리셋 ID(preset.id)를 골라줘.')
+    const allowed = ['id', 'label', 'output', 'promptFieldId', 'seedFieldId', 'imageFieldIds'], unknown = Object.keys(input).filter(key => !allowed.includes(key))
+    if (unknown.length) fail(`preset에 쓸 수 없는 키야: ${unknown.join(', ')}. 쓸 수 있는 키는 ${allowed.join(', ')}야. 가이드 스킬은 가져온 뒤 생성 설정을 guideSkill로 저장해서 이어줘(관리자만).`)
+    const preset = await presetsApi().get(input.id)
+    const { comfyui, nai, prompting } = preset
+    if (!(preset.kind === 'nai' ? nai : comfyui)) fail(PRESET_EMPTY)
+    const guide = { instruction: preset.instruction ?? '', guide: prompting?.guide ?? '', guideSkill: prompting?.guideSkill ? { skillId: prompting.guideSkill.skillId, path: prompting.guideSkill.path } : null }
+    if (preset.kind === 'nai') {
+      const { characterReference, ...settings } = nai
+      return checkedProfile({ label: input.label ?? preset.name, output: 'image', nai: structuredClone(settings), ...guide }, undefined, true)
+    }
+    const chosen = Object.fromEntries(['label', 'output', 'promptFieldId', 'seedFieldId', 'imageFieldIds'].filter(key => input[key] !== undefined).map(key => [key, input[key]]))
+    return checkedProfile({ label: preset.name, output: 'image', workflowId: comfyui.workflowId,
+      ...(comfyui.serverId ? { serverId: comfyui.serverId } : comfyui.serverTag ? { serverTag: comfyui.serverTag } : {}),
+      fixedInputs: structuredClone(comfyui.fixedInputs ?? {}), exposedFieldIds: [...(comfyui.exposedFieldIds ?? [])],
+      ...(comfyui.promptField ? { promptFieldId: comfyui.promptField } : {}), ...guide, ...chosen }, undefined, true)
+  }
+  // conai.skills.section reads any skill for any account, so only an administrator may point a profile at one; the host re-reads the role.
+  async function requireAdmin() {
+    try { await presetsApi().list() } catch (error) {
+      if (error.status === 501) throw error
+      fail(`가이드 스킬 연결은 관리자만 정하거나 바꿀 수 있어. 가이드 스킬은 그대로 두고 저장하거나 관리자에게 부탁해줘. (${error.message})`, 403)
+    }
   }
   async function directorWorkflows() {
     const workflows = await json('/api/workflows?kind=image')
@@ -699,17 +801,52 @@ export function createService(conai, store = createStore(conai.db)) {
       return { option: workflowOption(workflow, details), details }
     }))
   }
-  async function workflowOptions() {
-    const [workflows, servers] = await Promise.all([directorWorkflows(), call('list_comfyui_servers', { active_only: true })])
-    const rows = servers.map(server => ({ id: server.id, name: server.name, tags: server.routing_tags ?? [] }))
-    return { workflows: workflows.map(row => row.option), servers: rows, tags: [...new Set(rows.flatMap(server => server.tags))].sort() }
+  // Skill sections an administrator may link as a profile's guide; the host lists them to administrators only.
+  async function skillRows() {
+    return (await conai.skills.list()).map(({ skillId, name, enabled, sections, groups }) => ({ skillId, name, enabled,
+      sections: (sections ?? []).map(({ path, title }) => ({ path, title })), groups: (groups ?? []).map(({ path, title, count }) => ({ path, title, count })) }))
   }
-  async function checkedProfile(input) {
-    if (!Number.isInteger(input?.workflowId) || input.workflowId < 1) fail('프로필 이름과 워크플로를 골라줘.')
-    const details = await call('get_workflow_details', { workflow_id: input.workflowId })
-    const profile = validateProfile(completeProfile(input, details), details)
+  // Image workflows (Director ones for cuts, any for generation nodes) and sound workflows; presets and skills on request, for administrators.
+  async function workflowOptions(presets, skills) {
+    // The host refuses both lists to anyone but an administrator, and an older host has neither; the workflows come without them.
+    const listed = presets ? presetRows().catch(() => null) : null
+    const linked = skills && conai.skills?.list ? skillRows().catch(() => null) : null
+    const [workflows, sounds, servers, presetList, skillList] = await Promise.all([directorWorkflows(), json('/api/workflows?kind=audio'), call('list_comfyui_servers', { active_only: true }), listed, linked])
+    const rows = servers.map(server => ({ id: server.id, name: server.name, tags: server.routing_tags ?? [] }))
+    return { workflows: [...workflows.map(row => row.option), ...sounds.data.map(workflow => workflowOption({ ...workflow, kind: 'audio' }))], servers: rows, tags: [...new Set(rows.flatMap(server => server.tags))].sort(),
+      ...(presetList ? { presets: presetList } : {}), ...(skillList ? { skills: skillList } : {}) }
+  }
+  /**
+   * `existing` is the stored profile with the same ID: a save keeps every key it leaves out (see mergeProfile), its guide skill
+   * link changes only by an administrator and its NovelAI settings stay as imported. `imported` profiles come from presets the
+   * host showed an administrator. `known` are the project's profiles: a new profile may carry a link one of them has.
+   */
+  async function checkedProfile(input, existing, imported = false, known = []) {
+    if (!input || typeof input !== 'object' || Array.isArray(input)) fail('프로필 이름과 워크플로를 골라줘.')
+    let profile
+    if (existing ? adapterOf(existing) === 'nai' : adapterOf(input) === 'nai') {
+      const given = mergeProfile(input, existing)
+      if (!imported && canonical(given.nai) !== canonical(existing?.nai)) fail('NovelAI 설정(nai)은 관리자가 생성 프리셋에서 가져와서만 만들 수 있어. 저장할 땐 nai를 빼고 이름·안내·가이드만 바꿔줘.')
+      profile = validateProfile({ ...given, label: String(given.label ?? '').trim() ? given.label : existing?.label }, {})
+    } else {
+      const workflowId = input.workflowId ?? existing?.workflowId
+      if (!Number.isInteger(workflowId) || workflowId < 1) fail('프로필 이름과 워크플로를 골라줘.')
+      const details = await call('get_workflow_details', { workflow_id: workflowId })
+      profile = validateProfile(completeProfile(mergeProfile(input, existing, details.input_schema), details), details)
+    }
+    // A new profile copying a link already in the project (a fork of a shared profile) points at no new skill.
+    const carried = !existing && profile.guideSkill && known.some(item => canonical(item.guideSkill ?? null) === canonical(profile.guideSkill))
+    if (!imported && !carried && canonical(profile.guideSkill ?? null) !== canonical(existing?.guideSkill ?? null)) await requireAdmin()
     profile.id ??= randomUUID()
     return profile
+  }
+  function storeProfile(owner, project, profile) {
+    const next = structuredClone(project), index = next.profiles.findIndex(item => item.id === profile.id)
+    if (index < 0) next.profiles.push(profile)
+    else next.profiles[index] = profile
+    const saved = save(owner, project, next)
+    store.useProfile(owner, project.id, profile.id)
+    return editResult(saved, { lastProfileId: profile.id })
   }
   // The default profile of the only usable Director workflow; with none or several, the usable ones for the refusal.
   async function soleProfile() {
@@ -722,9 +859,9 @@ export function createService(conai, store = createStore(conai.db)) {
   // A run in a project without any profile gets the sole usable workflow's default profile on every cut, so each later run finds it.
   async function ensureProfile(owner, projectId, cutIds, revision) {
     const before = store.get(owner, projectId)
-    // Without any profile in the project, no cut has a usable one.
-    if (before.profiles.length || !cutIds.length) return null
-    for (const id of cutIds) cutOf(before, id)
+    // Without any Director profile in the project, no cut has a usable one; generation nodes never get one made.
+    if (before.profiles.some(profile => adapterOf(profile) === 'director') || !cutIds.length) return null
+    if (!cutIds.filter(id => generatorOf(before, id).kind === 'cut').length) return null
     expected(before, revision)
     const { profile, usable } = await soleProfile()
     if (!profile) {
@@ -753,13 +890,16 @@ export function createService(conai, store = createStore(conai.db)) {
       return { projects, total, nextOffset: offset + projects.length < total ? offset + projects.length : null }
     }
     if (action === 'create_project') {
-      if (body.profile === undefined) return store.create(owner, body.name)
+      if (body.profile === undefined && body.preset === undefined) return editResult(store.create(owner, body.name))
       // One operation: the profile is validated first and created with the project, so no other revision is involved.
-      const profile = await checkedProfile(body.profile)
+      const profile = body.preset !== undefined ? await presetProfile(body.preset) : await checkedProfile(body.profile)
       const created = store.create(owner, body.name, { profiles: [profile] }, profile.id)
-      return { ...store.get(owner, created.id), profileId: profile.id }
+      return editResult(created, { profileId: profile.id, lastProfileId: profile.id })
     }
-    if (action === 'workflow_options') return workflowOptions()
+    if (action === 'workflow_options') {
+      booleanArg(body.presets, 'presets'); booleanArg(body.skills, 'skills')
+      return workflowOptions(body.presets === true, body.skills === true)
+    }
     requiredText(body.project_id, 'project_id')
     if (action === 'rename_project') return store.rename(owner, body.project_id, body.name)
     if (action === 'archive_project') {
@@ -769,7 +909,8 @@ export function createService(conai, store = createStore(conai.db)) {
     if (action === 'duplicate_project') {
       const source = store.get(owner, body.project_id)
       const { profileIds, ...canvas } = duplicateCanvas(source, randomUUID)
-      return store.create(owner, body.name ?? `${source.name} 사본`, canvas, profileIds.get(source.lastProfileId) ?? null)
+      const copy = store.create(owner, body.name ?? `${source.name} 사본`, canvas, profileIds.get(source.lastProfileId) ?? null)
+      return { ...copy, profiles: copy.profiles.map(profilePublication) }
     }
     if (action === 'delete_project') {
       // The page runs this for a person or after its commit card; headless tools cannot reach it.
@@ -806,9 +947,9 @@ export function createService(conai, store = createStore(conai.db)) {
       let takeId = body.take_id
       if (!takeId) {
         requiredText(body.cut_id, 'take_id 또는 cut_id')
-        cutOf(project, body.cut_id)
+        const node = generatorOf(project, body.cut_id)
         takeId = project.takes.filter(take => take.cutId === body.cut_id).at(-1)?.id
-        if (!takeId) fail('이 컷에는 아직 take가 없어. run_cut이나 run_chain으로 먼저 생성해줘.')
+        if (!takeId) fail(node.kind === 'gen' ? '이 생성 노드에는 아직 take가 없어. run_cut으로 먼저 생성해줘.' : '이 컷에는 아직 take가 없어. run_cut이나 run_chain으로 먼저 생성해줘.')
       }
       const take = await waitTake(owner, project.id, takeId, seconds, signal)
       return { ...safeTake(take), revision: store.get(owner, project.id).revision }
@@ -819,20 +960,15 @@ export function createService(conai, store = createStore(conai.db)) {
       return store.get(owner, project.id)
     }
     if (action === 'check') {
-      const result = await inspect(project, body.cut_id)
+      // A shown result made from an older upstream generation warns here and in read_node, not in the checks a new take records.
+      const view = withResults(project), result = await inspect(view, body.cut_id)
       store.setChecks(owner, project.id, result.assets)
-      return { assets: result.assets, cuts: result.cuts, revision: store.get(owner, project.id).revision }
+      const cuts = result.cuts.map(cut => ({ ...cut, warnings: [...cut.warnings, ...staleUpstream(view, nodeOf(view, cut.id))] }))
+      return { assets: result.assets, cuts, revision: store.get(owner, project.id).revision }
     }
     expected(project, body.expected_revision)
-    if (action === 'save_profile') {
-      const profile = await checkedProfile(body.profile)
-      const next = structuredClone(project), index = next.profiles.findIndex(item => item.id === profile.id)
-      if (index < 0) next.profiles.push(profile)
-      else next.profiles[index] = profile
-      const saved = save(owner, project, next)
-      store.useProfile(owner, project.id, profile.id)
-      return { ...saved, lastProfileId: profile.id }
-    }
+    if (action === 'save_profile') return storeProfile(owner, project, await checkedProfile(body.profile, project.profiles.find(item => item.id === body.profile?.id), false, project.profiles))
+    if (action === 'import_preset') return storeProfile(owner, project, await presetProfile(body.preset))
     if (action === 'accept_fingerprint') {
       const node = nodeOf(project, body.id), next = structuredClone(project)
       const resolved = node.kind === 'bundle' ? await bundleState(node, project, new Map()) : await conai.media.resolve(node.data.ref)
@@ -844,25 +980,32 @@ export function createService(conai, store = createStore(conai.db)) {
     if (action === 'undo') {
       const log = store.lastLog(project.id)
       if (!log) fail('되돌릴 어시스턴트 배치가 없어.')
-      return store.undo(owner, project, log)
+      return editResult(store.undo(owner, project, log))
     }
     if (action === 'apply_ops' || action === 'human_review') {
       if (action === 'human_review' && actor !== 'human') fail('검수는 사람이 직접 해줘.', 403)
       const ops = structuredClone(typeof body.ops === 'string' ? JSON.parse(body.ops) : body.ops)
       if (!Array.isArray(ops)) fail('ops 배열이 필요해.')
       const metadata = new Map(), cache = new Map()
-      let base = project, defaultProfile = project.profiles.some(profile => profile.id === project.lastProfileId) ? project.lastProfileId : project.profiles.at(-1)?.id
-      // A cut added to a project without any profile gets the sole usable workflow's default profile, saved in the same edit.
+      // New cuts get the latest Director profile, new generation nodes the latest generation one (the last used first).
+      const latest = director => {
+        const fits = profile => profile && (adapterOf(profile) === 'director') === director
+        const last = project.profiles.find(profile => profile.id === project.lastProfileId)
+        return fits(last) ? last.id : project.profiles.filter(fits).at(-1)?.id
+      }
+      let base = project
+      const defaults = { cut: latest(true), gen: latest(false) }
+      // A cut added to a project without any Director profile gets the sole usable workflow's default profile, saved in the same edit.
       // It is optional here: without workflow discovery (no workflows.view, a failing workflow) the cut is still added and a run reports why.
-      const autoProfile = !project.profiles.length && ops.some(op => op && (op.op ?? op.type) === 'add_node' && op.kind === 'cut' && op.profileId === undefined)
+      const autoProfile = !defaults.cut && ops.some(op => op && (op.op ?? op.type) === 'add_node' && op.kind === 'cut' && op.profileId === undefined)
         ? (await soleProfile().catch(error => { conai.warn(`auto profile skipped: ${error.message}`); return { profile: null } })).profile : null
-      if (autoProfile) { base = structuredClone(project); base.profiles.push(autoProfile); defaultProfile = autoProfile.id }
+      if (autoProfile) { base = structuredClone(project); base.profiles.push(autoProfile); defaults.cut = autoProfile.id }
       for (const op of ops) {
         if (!op || typeof op !== 'object') continue
-        const type = op.op ?? op.type
-        if (type === 'add_node' && op.kind === 'cut' && op.seed === undefined) op.seed = randomInt(0, 2147483648)
-        if (type === 'add_node' && op.kind === 'cut' && op.profileId === undefined && defaultProfile) op.profileId = defaultProfile
-        if (type?.startsWith('import_') || type === 'add_node' && op.kind !== 'cut') {
+        const type = op.op ?? op.type, runs = type === 'add_node' && (op.kind === 'cut' || op.kind === 'gen')
+        if (runs && op.seed === undefined) op.seed = randomInt(0, 2147483648)
+        if (runs && op.profileId === undefined && defaults[op.kind]) op.profileId = defaults[op.kind]
+        if (type?.startsWith('import_') || type === 'add_node' && !runs) {
           const kind = type === 'add_node' ? op.kind : type === 'import_launch' ? 'image' : type.slice(7)
           try {
             const ref = normalizeRef(kind, op.ref)
@@ -910,7 +1053,8 @@ export function createService(conai, store = createStore(conai.db)) {
     }
     for (const row of rows) {
       const take = store.take(row.account, row.project, row.id)
-      store.setTake(row.account, row.project, row.id, { status, historyId: history?.[0]?.id ?? take.historyId, ...(job ? failure(job, take) : {}) })
+      // A sound take's result is its audio candidate (refreshTake), never a history row.
+      store.setTake(row.account, row.project, row.id, { status, historyId: take.output === 'audio' ? take.historyId : history?.[0]?.id ?? take.historyId, ...(job ? failure(job, take) : {}) })
     }
   } }
 }
@@ -923,9 +1067,9 @@ export function activate(conai) {
   const definitions = [
     ['list_projects', 'read', { offset: { type: 'integer', minimum: 0 }, limit: { type: 'integer', minimum: 1 }, query: { type: 'string' }, sort: { type: 'string', enum: ['updated', 'name', 'created'] }, archived: { type: 'boolean' } }, []],
     ['manage_project', 'organize', { project_id: common.project_id, action: { type: 'string', enum: ['rename', 'archive', 'duplicate'] }, name: { type: 'string' }, archived: { type: 'boolean' } }, ['project_id', 'action']],
-    ['workflow_options', 'read', {}, []],
+    ['workflow_options', 'read', { presets: { type: 'boolean' }, skills: { type: 'boolean' } }, []],
     ['read_canvas', 'read', { project_id: common.project_id, node_id: { type: 'string' }, cursor: cursor, edge_cursor: cursor, take_cursor: cursor, limit: { type: 'integer', minimum: 1 } }, ['project_id']],
-    ['apply_ops', 'organize', { ...common, ops: { type: 'array', items: { type: 'object' } }, create_name: { type: 'string' }, undo: { type: 'boolean' }, profile: { type: 'object' } }, []],
+    ['apply_ops', 'organize', { ...common, ops: { type: 'array', items: { type: 'object' } }, create_name: { type: 'string' }, undo: { type: 'boolean' }, profile: { type: 'object' }, preset: { type: 'object' } }, []],
     ['check', 'organize', { ...common, cut_id: { type: 'string' } }, ['project_id']],
     ['run_cut', 'generate', { ...common, requestId: { type: 'string' }, input_digest: { type: 'string' }, cut_id: { type: 'string' }, mode: { type: 'string', enum: ['now', 'propose'] }, profile_id: { type: 'string' }, take_id: { type: 'string' }, inputs: { type: 'string', enum: ['take', 'canvas'] }, new_seed: { type: 'boolean' }, action: { type: 'string', enum: ['retry', 'cancel'] }, wait_seconds: wait }, ['project_id']],
     ['get_take', 'read', { project_id: common.project_id, take_id: { type: 'string' }, cut_id: { type: 'string' }, wait_seconds: wait }, ['project_id']],
@@ -938,12 +1082,12 @@ export function activate(conai) {
     description: {
       list_projects: 'List account-owned video canvas projects (40 per page by default) with total and nextOffset. query searches names; sort updated|name|created; archived:true lists only archived projects. Rows carry cutCount and a cover composite hash.',
       manage_project: 'Rename (name), archive/unarchive (archived, default true) or duplicate (optional name) a project. Duplicates copy nodes, edges, profiles and sequence with fresh IDs, not takes/extractions/exports. Deletion is only offered on the canvas page.',
-      workflow_options: 'List image workflows with usable/reason, the detected Director and seed field IDs, adjustable Director defaults (override keys) and other simple marked fields; plus active ComfyUI servers and routing tags. Save a profile with apply_ops profile {workflowId, label?, serverId|serverTag?, overrides?, inputs?}.',
+      workflow_options: 'List image and sound workflows: usable/reason and the detected Director/seed fields, adjustable Director defaults (override keys) and other simple marked fields (extraFields) for cuts; `generator` {usable, reason, output (a guess: say video for a video workflow), promptFieldId, seedFieldId, imageFieldIds, imageFields} for generation nodes; plus active ComfyUI servers and routing tags. presets:true (administrators) adds the app generation presets {id, name, instruction, kind comfyui|nai, usable, workflowId, hasGuide, guideSkill}; skills:true (administrators) adds the skill sections a profile guide can link {skillId, name, enabled, sections [{path, title}], groups [{path, title, count}]}. Both are left out for other accounts. Cut profile: apply_ops profile {workflowId, label?, serverId|serverTag?, overrides?, inputs?}. Generation profile: apply_ops profile {workflowId, output: video|image|audio, label?, promptFieldId?, seedFieldId?, imageFieldIds?, exposedFieldIds?, fixedInputs?, instruction?, guide?, serverId|serverTag?} or apply_ops preset {id, output?, label?, promptFieldId?, seedFieldId?, imageFieldIds?} to copy a preset (NovelAI presets only this way).',
       export_sequence: 'Last step of a multi-cut video, after run_chain completed. Join the cuts\' representing takes (data.pickTakeId, else the latest take with a result) into one library video in sequence order, or cut_ids order. Needs expected_revision; cuts without a ready result block it. Returns id/status/jobId/progress/resultHash; export_id reads, waits (0..120 s) or cancels.',
-      read_canvas: 'Read paged canvas nodes/edges. Each cut row has newestTakeId/newestTakeStatus/newestTakeError, hasReadyResult, representingTakeId and resultHash (generation state); humanReview is only the person\'s review, not a generation state. node_id reads detail, paged edges/takes and preview.inputDigest. Pass nextCursor/nextEdgeCursor/nextTakeCursor back only while they are non-null; null or omitted means the first page.',
-      apply_ops: 'Create and edit cuts. Multi-cut video: 1) create_name makes a project (expected_revision is ignored; with profile in the same call it is created with that profile and returns id, revision and profileId), 2) one ops batch adds the cuts (add_node kind cut with name, then set fields prompt/duration/mode) in story order, 3) run_chain, 4) export_sequence. Consistency: give every cut of one video the same style/subject/setting description in its prompt and describe only what changes; run_chain continues each later cut from the previous cut\'s last frame. RefMod: set the cut mode to REF2VA, then import_bundle {ref:{name}, target:{cut, port:"refmod", props:{strength, description}}} with a name from list_comfy_refmods, and mention it in the prompt as @name (it becomes <RefMod N>); it cannot be given through set fields or profile overrides. Ops need expected_revision; tempIds and applied/rejected are returned. Nodes without at are placed without overlap. sequence {order:[cutId]} reorders the export sequence (unlisted cuts follow); set {fields:{pickTakeId}} picks the take representing a cut. New cuts get the latest used profile; in a project without any profile, adding or running a cut creates the default profile of the only usable workflow (reported as autoProfile), and with several usable workflows you save one with profile. profile saves a validated profile (only workflowId is required); undo restores the latest assistant batch. Human reviews cannot be supplied by an assistant.',
-      check: 'Check live source fingerprints, permissions, typed slots, limits and prompt names. Missing/permission/required-slot/limit/token errors block; changed files and unused references warn.',
-      run_cut: 'The normal way to generate one cut now (several cuts of one video: run_chain). New runs need requestId and expected_revision; wait_seconds (0..120) waits for the take to finish with its result hash in the same call. mode propose is only for when the person asked to review before generating; proposals are approved only by a human. take_id + inputs take|canvas reruns with profile_id; action retry/cancel manages a take.',
+      read_canvas: 'Read paged canvas nodes/edges. Each cut row has newestTakeId/newestTakeStatus/newestTakeError, hasReadyResult, representingTakeId and resultHash (generation state); humanReview is only the person\'s review, not a generation state. node_id reads detail, paged edges/takes and preview.inputDigest; for a generation node or a cut whose profile has a guide, preview.guide {text, skill {title, text}, guideWarning} is the prompt guide to follow before writing that node\'s prompt (preview.instruction says what the generator is for). Gen rows carry output and the same generation state as cuts. Pass nextCursor/nextEdgeCursor/nextTakeCursor back only while they are non-null; null or omitted means the first page.',
+      apply_ops: 'Create and edit cuts. Multi-cut video: 1) create_name makes a project (expected_revision is ignored; with profile in the same call it is created with that profile and returns id, revision and profileId), 2) one ops batch adds the cuts (add_node kind cut with name and fields {prompt, duration, mode}: add_node of a cut or gen node takes the same fields as set; unknown op keys are rejected) in story order, 3) run_chain, 4) export_sequence. Consistency: give every cut of one video the same style/subject/setting description in its prompt and describe only what changes; run_chain continues each later cut from the previous cut\'s last frame. RefMod: set the cut mode to REF2VA, then import_bundle {ref:{name}, target:{cut, port:"refmod", props:{strength, description}}} with a name from list_comfy_refmods, and mention it in the prompt as @name (it becomes <RefMod N>); it cannot be given through set fields or profile overrides. Ops need expected_revision; tempIds and applied/rejected are returned. Connecting an image to a start/end slot the cut\'s mode ignores switches the mode (start: T2VA->I2VA, L2VA->FL2VA; end: T2VA->L2VA, I2VA->FL2VA), reported as modeChange on that connect or add/import op. Nodes without at are placed without overlap. sequence {order:[cutId]} reorders the export sequence (unlisted cuts follow); set {fields:{pickTakeId}} picks the take representing a cut. New cuts get the latest used profile; in a project without any profile, adding or running a cut creates the default profile of the only usable workflow (reported as autoProfile), and with several usable workflows you save one with profile. profile saves a validated profile (only workflowId is required); undo restores the latest assistant batch. Human reviews cannot be supplied by an assistant. Generation nodes: add_node kind gen (gets the latest generation profile; set fields name/prompt/seed/profileId/pickTakeId, inputs {exposedFieldId: value}, size for a NovelAI profile) runs a generation profile (see workflow_options; preset copies an app preset) with run_cut cut_id=<gen id>; read its preview.guide with read_canvas node_id before writing its prompt. Its input port image takes image/frame nodes (position N fills the profile\'s Nth image field). Its result connects to cut slots by output: image -> start/end/ref_image, video -> ref_video, audio -> ref_audio (connect from the gen node); the slot uses the gen node\'s representing take and blocks until it has a result; once the gen node is regenerated, check and read_canvas node_id warn (stale-input) on nodes whose result used its older result. run_chain does not generate gen nodes.',
+      check: 'Check live source fingerprints, permissions, typed slots, limits and prompt names. Missing/permission/required-slot/limit/token errors block; changed files, unused references and results made from a since-regenerated gen node (stale-input) warn.',
+      run_cut: 'The normal way to generate one cut now (several cuts of one video: run_chain). New runs need requestId and expected_revision; wait_seconds (0..120) waits for the take to finish with its result hash in the same call. mode propose (cuts only) is only for when the person asked to review before generating; proposals are approved only by a human. take_id + inputs take|canvas reruns with profile_id; action retry/cancel manages a take. cut_id may be a generation node: read its preview.guide (read_canvas node_id) before writing its prompt; its take result (image/video/audio) then feeds the cut slots it is connected to.',
       get_take: 'Read a take by take_id, or a cut\'s newest take by cut_id. wait_seconds (0..120) waits until it is finished (completed with result hash, failed or cancelled; error holds the failure text). Repeat while status is unfinished.',
       run_chain: 'Generate several cuts as one continuous video in the background (keeps running after your turn). Starts with expected_revision and optional cut_ids (default: the whole sequence); cuts with a ready result are skipped unless regenerate:true. Every later cut gets the previous cut\'s last frame in its start slot (T2VA becomes I2VA, L2VA becomes FL2VA) and is generated with its own prompt/seed/profile; keep_start:true keeps a start image a cut already has. Stops at the first failure, naming the cut and reason. One active chain per project. Returns id/status/current/steps[{cutId,status,takeId,error}]; chain_id with wait_seconds (0..120) waits, cancel:true cancels the running generation. When completed, call export_sequence.',
       extract_frame: 'Start a library video or take frame extraction or query extraction_id; wait_seconds (0..120) waits with cancellation/progress. target connects the frame to start/end/ref_image; a start/end slot the cut\'s mode ignores switches the mode (start: T2VA->I2VA, L2VA->FL2VA; end: T2VA->L2VA, I2VA->FL2VA), reported as modeChange. Frames are named after their source and position. Chained cuts: prefer run_chain.',
@@ -953,7 +1097,7 @@ export function activate(conai) {
       try {
         const body = name === 'manage_project'
           ? { ...args, op: `${args.action}_project`, archived: args.action === 'archive' ? args.archived ?? true : undefined }
-          : { ...args, op: name === 'read_canvas' && args.node_id ? 'read_node' : name === 'apply_ops' && args.create_name ? 'create_project' : name === 'apply_ops' && args.profile ? 'save_profile' : name === 'apply_ops' && args.undo ? 'undo' : name, name: args.create_name, id: args.node_id }
+          : { ...args, op: name === 'read_canvas' && args.node_id ? 'read_node' : name === 'apply_ops' && args.create_name ? 'create_project' : name === 'apply_ops' && args.profile ? 'save_profile' : name === 'apply_ops' && args.preset ? 'import_preset' : name === 'apply_ops' && args.undo ? 'undo' : name, name: args.create_name, id: args.node_id }
         return await service.dispatch(body, context.account, 'assistant', { signal: context.signal })
       } catch (error) {
         return { isError: true, content: [{ type: 'text', text: error.message }, ...(error.outcome ? [{ type: 'text', text: JSON.stringify(error.outcome) }] : [])] }

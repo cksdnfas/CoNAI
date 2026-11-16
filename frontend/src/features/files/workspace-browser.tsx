@@ -1,7 +1,6 @@
 import { useMemo, useRef, useState, type DragEvent } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { BookOpen, FilePlus, FileText, Folder, FolderInput, FolderKanban, FolderPlus, History, LayoutGrid, List, Pencil, Puzzle, RefreshCw, Search, Trash2, Upload } from 'lucide-react'
+import { BookOpen, FilePlus, FileText, Folder, FolderInput, FolderKanban, FolderPlus, History, LayoutGrid, List, Pencil, RefreshCw, Search, Trash2, Upload } from 'lucide-react'
 import type { WorkspaceEntry, WorkspaceOperation, WorkspaceProject } from '@conai/shared'
 import { PageWithSidebar } from '@/components/common/page-with-sidebar'
 import { PageToolbar } from '@/components/common/page-toolbar'
@@ -67,7 +66,6 @@ export function WorkspaceBrowser({ projectId, dir, onNavigate, onProject, onCrea
   onSystem: (location: SystemFolderLocation) => void
 }) {
   const { t } = useI18n()
-  const navigateTo = useNavigate()
   const { showSnackbar } = useSnackbar()
   const confirm = useConfirm()
   const queryClient = useQueryClient()
@@ -278,7 +276,6 @@ export function WorkspaceBrowser({ projectId, dir, onNavigate, onProject, onCrea
         label={t({ ko: '더 보기', en: 'More' })}
         entries={[
           { key: 'guidelines', label: t({ ko: '작업 공간 지침', en: 'Workspace guidelines' }), icon: BookOpen, disabled: !project.data, onSelect: () => setProjectOpen(true) },
-          { key: 'plugin', label: t({ ko: '플러그인으로 열기', en: 'Open with plugin' }), icon: Puzzle, onSelect: () => navigateTo(`/extensions?project=${projectId}`) },
           canWrite && { key: 'new-document', label: t({ ko: '새 문서', en: 'New document' }), icon: FilePlus, disabled: busy, onSelect: () => setEditor({ entry: null }) },
           { key: 'changes', label: t({ ko: '변경 내역', en: 'Change history' }), icon: History, onSelect: () => setChangesOpen(true) },
           { key: 'refresh', label: t({ ko: '새로고침', en: 'Refresh' }), icon: RefreshCw, disabled: busy, onSelect: () => void refresh() },

@@ -6,7 +6,7 @@ import { request, ui, edit, reload, launchRun, lockRunButtons, publish, saveView
 import { nodeSize, nodeBoxes, freeSpot, freeSpots, reveal } from './viewport.mjs'
 import { markSelection } from './nodes.mjs'
 import { confirmDialog, extractionDialog, extractionTarget, afterFrames, settleExtraction, watchExtraction, modal } from './dialogs.mjs'
-import { chooseWorkflow, bindWorkflow, saveProfile, profileFrom, lastPresetId, serverKey, onProfileChange } from './workflow.mjs'
+import { chooseWorkflow, bindWorkflow, saveProfile, profileFrom, lastPresetId, lastGeneratorId, serverKey, onProfileChange, chooseGenerator, generatorDialog, importPresetDialog } from './workflow.mjs'
 
 // ---- selection ----
 export function applySelection(ids) {
@@ -54,16 +54,60 @@ export async function addCut(at) {
     await select(result.applied[0]?.id)
   })
 }
+/** Adds a generation node. Without any generation setting in the project it asks for one first (or lets the person choose later);
+ *  otherwise the server gives it the setting used last. */
+export async function addGen(at) {
+  let profileId
+  if (!lastGeneratorId()) {
+    const choice = await chooseGenerator({ allowSkip: true }).catch(() => null)
+    if (!choice) return
+    profileId = choice.id
+  }
+  const used = new Set(s.project.nodes.filter(node => node.kind === 'gen').map(node => node.data.name))
+  let number = used.size + 1
+  while (used.has(`생성 ${number}`)) number++
+  await ui(async () => {
+    const result = await edit([{ op: 'add_node', kind: 'gen', name: `생성 ${number}`, at: at ?? freeSpots(1, 'cut')[0], tempId: 'new-gen', ...(profileId ? { profileId } : {}) }])
+    await select(result.applied[0]?.id)
+  })
+}
+/** Puts a generation setting on a node (a setting of another kind of output has other fields, so the node's own values reset). */
+const useGenerator = (nodeId, id) => ui(() => edit([{ op: 'set', id: nodeId, fields: { profileId: id, inputs: {}, size: null } }]))
+async function changeGenerator(nodeId) {
+  const profile = profileOf(nodeById(nodeId)), choice = await chooseGenerator({ title: '생성 설정 바꾸기', current: profile?.id }).catch(() => null)
+  if (choice?.id && choice.id !== profile?.id) await useGenerator(nodeId, choice.id)
+}
+/** The inspector's buttons of a generation node: edit this setting, register a new one, import a preset. */
+export function bindGen() {
+  document.addEventListener('click', async event => {
+    const target = event.target.closest('[data-gen]'), nodeId = target?.closest('[data-id]')?.dataset.id
+    if (!target || target.disabled || nodeById(nodeId)?.kind !== 'gen') return
+    const profile = profileOf(nodeById(nodeId)), action = target.dataset.gen
+    const id = await (action === 'edit' ? generatorDialog({ profile }) : action === 'import' ? importPresetDialog() : generatorDialog()).catch(() => null)
+    if (id && id !== profile?.id) await useGenerator(nodeId, id)
+  })
+}
+const modeText = change => `모드는 ${change.from} → ${change.to}로 바뀌었어.`
+/** A connection to a start/end slot the cut's mode ignored switches the mode (the server says so on that operation, a `connect` or a node added or imported with a `target`): tell the person, as an extraction does. */
+export function announceModeChange(result) {
+  for (const { op, modeChange: change } of result.applied) if (change) toast(`${nodeById(change.cutId)?.data.name ?? '컷'}의 ${ports[op.port ?? op.target?.port]} 슬롯에 연결했어. ${modeText(change)}`)
+}
+const defined = fields => Object.fromEntries(Object.entries(fields).filter(([, value]) => value !== undefined))
+/** Copies cuts and generation nodes (values, setting and input connections; no takes) next to their originals, in one edit.
+ *  A cut gets a new seed; a generation node keeps its seed, so the copy starts from the same result. */
 export function duplicateCuts(ids) {
   const ops = [], taken = nodeBoxes()
-  ids.map(nodeById).filter(node => node?.kind === 'cut').forEach((cut, index) => {
-    const temp = `copy-${index}`, data = cut.data, size = nodeSize(cut)
+  ids.map(nodeById).filter(node => node?.kind === 'cut' || node?.kind === 'gen').forEach((node, index) => {
+    const temp = `copy-${index}`, data = node.data, size = nodeSize(node), cut = node.kind === 'cut'
+    const fields = cut ? { prompt: data.prompt, soundscape: data.soundscape, music: data.music, raw: data.raw, duration: data.duration, seed: newSeed(), profileId: data.profileId }
+      : { prompt: data.prompt, seed: data.seed, profileId: data.profileId, inputs: data.inputs, size: data.size }
     // The copy goes to the first free spot right of its source.
-    ops.push({ op: 'add_node', kind: 'cut', tempId: temp, name: `${data.name} 복사`, at: freeSpot(size, { x: cut.x + size.w + 24, y: cut.y }, taken), seed: newSeed() })
-    ops.push({ op: 'set', id: temp, fields: { mode: data.mode, prompt: data.prompt, soundscape: data.soundscape, music: data.music, raw: data.raw, duration: data.duration, profileId: data.profileId } })
-    for (const edge of s.project.edges.filter(edge => edge.to === cut.id)) ops.push({ op: 'connect', from: edge.from, to: temp, port: edge.port, position: edge.position, props: edge.props })
+    ops.push({ op: 'add_node', kind: node.kind, tempId: temp, name: `${data.name} 복사`, at: freeSpot(size, { x: node.x + size.w + 24, y: node.y }, taken), fields: defined(fields) })
+    for (const edge of s.project.edges.filter(edge => edge.to === node.id)) ops.push({ op: 'connect', from: edge.from, to: temp, port: edge.port, position: edge.position, props: edge.props })
+    // The mode is set after the connections: a connection to a start/end slot the mode ignores would switch it, and the copy must keep the original's.
+    if (cut) ops.push({ op: 'set', id: temp, fields: { mode: data.mode } })
   })
-  if (!ops.length) return toast('복제할 컷을 골라줘.', { error: true })
+  if (!ops.length) return toast('복제할 컷이나 생성 노드를 골라줘.', { error: true })
   return ui(async () => {
     const result = await edit(ops)
     const added = result.applied.filter(item => item.tempId?.startsWith('copy-')).map(item => item.id)
@@ -105,10 +149,11 @@ export function takeAction(action, takeId) {
 }
 /** Generate: a cut with no preset asks for the workflow first. */
 export function runFor(cutId, mode = 'now') {
-  if (!profileOf(nodeById(cutId))) { toast('워크플로를 먼저 골라줘.'); return changeWorkflow(cutId) }
+  if (!profileOf(nodeById(cutId))) { toast(nodeById(cutId).kind === 'gen' ? '생성 설정을 먼저 골라줘.' : '워크플로를 먼저 골라줘.'); return changeWorkflow(cutId) }
   return launchRun({ cut_id: cutId, mode })
 }
 export async function changeWorkflow(cutId) {
+  if (nodeById(cutId).kind === 'gen') return changeGenerator(cutId)
   const profile = profileOf(nodeById(cutId))
   const choice = await chooseWorkflow({ title: '워크플로 바꾸기', current: profile && { workflowId: profile.workflowId, key: serverKey(profile) } })
   if (choice?.workflow) await ui(() => bindWorkflow(cutId, choice))
@@ -152,7 +197,7 @@ async function pullFrame(fromId, cutId, port, position, confirm = false, replace
     await reload()
     settleExtraction(result)
     if (!isTerminal(result.status)) watchExtraction(result.id)
-    toast(`${cut.data.name}의 ${ports[port]} 슬롯에 ${from.data.name}의 ${FRAME_POSITIONS[position]}을 가져오는 중이야.${result.modeChange ? ` 모드는 ${result.modeChange.from} → ${result.modeChange.to}로 바뀌었어.` : ''}`)
+    toast(`${cut.data.name}의 ${ports[port]} 슬롯에 ${from.data.name}의 ${FRAME_POSITIONS[position]}을 가져오는 중이야.${result.modeChange ? ` ${modeText(result.modeChange)}` : ''}`)
   })
 }
 /** A cut's result dropped on a slot of another cut: a video reference imports the clip, an image slot takes a frame of it. */
@@ -231,44 +276,55 @@ export function focusFrame(id) {
 }
 // ---- layout ----
 /**
- * One lane of cuts in sequence order, 96px apart. Each cut's sources sit in a lane below it, in columns that end 24px left of
- * that cut, so no source column ever sits between two cuts; frames folded into links park in the same lane.
+ * One lane of cuts in sequence order, 96px apart. Each cut's inputs sit in a lane below it, in columns that end 24px left of
+ * that cut, so no column ever sits between two cuts. Left to right in that lane: the media sources, then the generation nodes,
+ * one column per step (a generation node that feeds another goes left of it), the column next to the cut holding the ones
+ * that feed it. Inside a column nodes are ordered by the cut and slot they end up in. Frames folded into links park in the lane.
  */
 export function arrangeOps() {
   const order = cutOrder().map(nodeById), gap = 24, between = 96, columnHeight = 440, top = 20
   const index = new Map(order.map((cut, i) => [cut.id, i])), portRank = Object.keys(PORTS)
-  const firstUse = node => s.project.edges.filter(edge => edge.from === node.id && index.has(edge.to))
-    .map(edge => ({ cut: edge.to, rank: [index.get(edge.to), portRank.indexOf(edge.port), edge.position] })).sort((a, b) => a.rank[0] - b.rank[0] || a.rank[1] - b.rank[1] || a.rank[2] - b.rank[2])[0]
-  const owned = new Map(order.map(cut => [cut.id, []])), parked = new Map(order.map(cut => [cut.id, []])), loose = []
+  const outgoing = node => s.project.edges.filter(edge => edge.from === node.id)
+  const before = (a, b) => { for (let i = 0; i < Math.min(a.length, b.length); i++) if (a[i] !== b[i]) return a[i] - b[i]; return a.length - b.length }
+  // The first cut and slot a node's result ends up in, directly or through generation nodes (`rank` orders it among its neighbours).
+  const firstUse = (node, seen = new Set([node.id])) => outgoing(node).flatMap(edge => {
+    if (index.has(edge.to)) return [{ cut: edge.to, rank: [index.get(edge.to), portRank.indexOf(edge.port), edge.position] }]
+    const next = nodeById(edge.to), through = next?.kind === 'gen' && !seen.has(next.id) ? firstUse(next, new Set([...seen, next.id])) : null
+    return through ? [{ cut: through.cut, rank: [...through.rank, edge.position] }] : []
+  }).sort((a, b) => before(a.rank, b.rank))[0]
+  // How many generation nodes sit between a generation node and the end of its chain (0: nothing generated is built on it).
+  const stepsOf = (gen, seen = new Set([gen.id])) => Math.max(-1, ...outgoing(gen).map(edge => nodeById(edge.to)).filter(next => next?.kind === 'gen' && !seen.has(next.id)).map(next => stepsOf(next, new Set([...seen, next.id])))) + 1
+  const lanes = new Map([...order.map(cut => cut.id), null].map(id => [id, { sources: [], gens: [], parked: [] }]))
   for (const node of s.project.nodes.filter(node => node.kind !== 'cut')) {
-    const role = frameRole(node), use = firstUse(node)
+    const role = frameRole(node), use = firstUse(node), lane = lanes.get(use?.cut ?? null), rank = use?.rank ?? [0, 0, 0]
     if (role === 'tray') continue
-    if (role === 'link') parked.get(use?.cut)?.push(node)
-    else if (use) owned.get(use.cut).push({ node, rank: use.rank })
-    else loose.push({ node, rank: [0, 0, 0] })
+    if (role === 'link') { if (use) lane.parked.push(node) }
+    else if (node.kind === 'gen') lane.gens.push({ node, rank, steps: stepsOf(node) })
+    else lane.sources.push({ node, rank })
   }
   const laneY = top + Math.max(300, ...order.map(cut => nodeSize(cut).h)) + 48
-  // Source columns of one lane group (a column wraps once it gets tall).
-  const columnsOf = sources => {
+  // Columns of one group of nodes (a column wraps once it gets taller than `limit`).
+  const columnsOf = (items, limit = columnHeight) => {
     const columns = []
-    for (const { node } of sources.sort((a, b) => a.rank[1] - b.rank[1] || a.rank[2] - b.rank[2])) {
+    for (const { node } of items.sort((a, b) => before(a.rank, b.rank))) {
       const size = nodeSize(node), column = columns.at(-1)
-      if (column && column.height + gap + size.h <= columnHeight) { column.items.push({ node, y: column.height + gap }); column.height += gap + size.h; column.width = Math.max(column.width, size.w) }
+      if (column && column.height + gap + size.h <= limit) { column.items.push({ node, y: column.height + gap }); column.height += gap + size.h; column.width = Math.max(column.width, size.w) }
       else columns.push({ items: [{ node, y: 0 }], height: size.h, width: size.w })
     }
     return columns
   }
+  const columnsFor = lane => [...columnsOf(lane.sources), ...[...new Set(lane.gens.map(gen => gen.steps))].sort((a, b) => b - a).flatMap(steps => columnsOf(lane.gens.filter(gen => gen.steps === steps), Infinity))]
   const ops = [], place = (columns, left) => { for (const column of columns) { for (const item of column.items) ops.push({ op: 'move', id: item.node.id, x: left, y: laneY + item.y }); left += column.width + gap } }
   const widthOf = columns => columns.reduce((sum, column) => sum + column.width + gap, 0)
   let cutRight = top - between, laneRight = top - gap
   for (const cut of order) {
-    const columns = columnsOf(owned.get(cut.id)), width = widthOf(columns), x = Math.max(cutRight + between, laneRight + gap + width)
+    const lane = lanes.get(cut.id), columns = columnsFor(lane), width = widthOf(columns), x = Math.max(cutRight + between, laneRight + gap + width)
     place(columns, x - width)
-    for (const frame of parked.get(cut.id)) ops.push({ op: 'move', id: frame.id, x: x - gap - nodeSize(frame).w, y: laneY })
+    for (const frame of lane.parked) ops.push({ op: 'move', id: frame.id, x: x - gap - nodeSize(frame).w, y: laneY })
     ops.push({ op: 'move', id: cut.id, x, y: top })
     cutRight = x + nodeSize(cut).w; laneRight = x - gap
   }
-  place(columnsOf(loose), Math.max(cutRight + between, laneRight + gap))
+  place(columnsFor(lanes.get(null)), Math.max(cutRight + between, laneRight + gap))
   return ops
 }
 // ---- field edits (delegated change events) ----

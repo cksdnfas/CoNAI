@@ -1,11 +1,17 @@
-import { MODES, PORTS, activePorts, cutEdges } from './domain.mjs'
-import { $, esc, names, ports, reviewNames, assetStates, thumbUrl, fileUrl, audioUrl, patch, icon } from './util.mjs'
-import { s, ctx, nodeById, takesOf, profileOf, repTake, shownTake, cutOrder, prevCut, cutState, finishing, failedTake, frameRole, frameLabel } from './state.mjs'
+import { MODES, PORTS, activePorts, cutEdges, adapterOf } from './domain.mjs'
+import { $, esc, names, ports, outputNames, reviewNames, assetStates, thumbUrl, fileUrl, audioUrl, patch, icon } from './util.mjs'
+import { s, ctx, nodeById, takesOf, profileOf, repTake, shownTake, cutOrder, prevCut, cutState, finishing, failedTake, frameRole, frameLabel, outputKind, takeOutput, genInputs, staleWarning } from './state.mjs'
 
 const els = new Map()
 export const nodeEl = id => els.get(id)
 
 export function slotRows(cut) {
+  // A generation node offers one image slot per mapped image field of its profile: the connected ones, then the next free one.
+  if (cut.kind === 'gen') {
+    const { edges, fields } = genInputs(cut), rows = edges.map(edge => ({ edge, port: 'image', active: true, position: edge.position }))
+    if (edges.length < fields.length) rows.push({ edge: null, port: 'image', active: true, position: edges.length })
+    return rows
+  }
   const edges = cutEdges(s.project, cut, false), rows = [], before = prevCut(cut)
   for (const port of Object.keys(PORTS)) {
     const active = activePorts(cut.data.mode).includes(port), peers = edges.filter(edge => edge.port === port)
@@ -20,11 +26,16 @@ const WAITING = ['queued', 'pending', 'preparing', 'submitting', 'starting']
 const player = hash => `<div class="conai-media vc-player" data-hash="${esc(hash)}" data-paused><video preload="none" playsinline poster="${thumbUrl(hash)}" src="${fileUrl(hash)}"></video><button class="conai-icon-button overlay vc-playkey" data-media="play" aria-label="재생" title="재생">${icon('play')}</button><div class="vc-player-bar"><button class="conai-icon-button sm overlay" data-media="play" aria-label="재생" title="재생">${icon('play', 14)}</button><input class="vc-seek" type="range" min="0" max="1000" value="0" data-media="seek" aria-label="재생 위치"><button class="conai-icon-button sm overlay" data-media="mute" aria-pressed="false" aria-label="소리 끄기" title="소리 끄기">${icon('volume', 14)}</button><button class="conai-icon-button sm overlay" data-media="loop" aria-pressed="false" aria-label="반복" title="반복">${icon('repeat', 14)}</button></div></div>`
 const holder = (text, cls = '') => `<div class="vc-empty ${cls}">${esc(text)}</div>`
 
-// ---- cut card: head, result (always 16:9, so the card and its ports keep their size), settings, slots, prompt, one action row ----
+// A generation node's result is a picture, a clip or a sound (a sound's result is an audio candidate, not a library hash).
+const resultMedia = take => ({
+  image: `<div class="conai-media vc-fill" data-hash="${esc(take.resultHash)}"><img loading="lazy" alt="" src="${thumbUrl(take.resultHash)}"></div>`,
+  audio: `<div class="vc-audio"><audio controls preload="none" src="${audioUrl(take.resultHash)}"></audio></div>`,
+})[takeOutput(take)] ?? player(take.resultHash)
+// ---- cut and generation card: head, result (always 16:9, so the card and its ports keep their size), settings, slots, prompt, one action row ----
 function resultHtml(cut, state) {
   const take = shownTake(cut), running = ['queued', 'generating', 'current'].includes(state.key)
   const bar = running ? `<i class="vc-pbar${state.ratio === null ? ' indeterminate' : ''}" ${state.ratio === null ? '' : `style="width:${Math.round(state.ratio * 100)}%"`}></i>` : ''
-  if (take?.resultHash) return player(take.resultHash) + bar
+  if (take?.resultHash) return resultMedia(take) + bar
   const text = state.step?.status === 'extracting' && state.key === 'current' ? '프레임 뽑는 중…'
     : state.key === 'current' && !state.take ? '만드는 중…'
       : state.key === 'waiting' ? '이어 생성 차례를 기다리는 중'
@@ -46,6 +57,8 @@ function toolsHtml(cut) {
 const reviewHtml = node => node.review === 'pending' ? '' : `<span class="conai-overlay-badge tl ${node.review === 'pass' ? 'ok' : 'warn'}">${esc(reviewNames[node.review])}</span>`
 // An asset that is not in order says so on the media; a healthy one shows nothing.
 const checkHtml = node => { const check = node.data.check; return check && check.status !== 'ready' ? `<span class="conai-overlay-badge tr ${assetStates[check.status]?.[1] ?? 'warn'}">${esc(assetStates[check.status]?.[0] ?? check.status)}</span>` : '' }
+// A cut or generation node whose result was made from a connected generation node's older result: the server's own message is the tooltip.
+const staleHtml = node => { const warning = staleWarning(node); return warning ? `<span class="conai-overlay-badge bl warn" title="${esc(warning.message)}">예전 생성물</span>` : '' }
 const moreButton = `<button class="conai-icon-button sm" data-action="node-menu" aria-label="메뉴" title="메뉴">${icon('more')}</button>`
 const cutHead = (cut, state) => `<span class="badge vc-num">${cutOrder().indexOf(cut.id) + 1}</span><input class="vc-name" data-field="name" value="${esc(cut.data.name)}" aria-label="이름"><span class="vc-state">${esc(state.word)}</span>${moreButton}`
 function reasonHtml(state) {
@@ -61,7 +74,7 @@ function actionsHtml(cut, state) {
   if (state.key === 'queued' || state.key === 'generating') return take?.jobId && !finishing(take) ? `<button data-action="cancel" ${id}>취소</button>` : '<button disabled>취소</button>'
   if (state.key === 'current') return '<button data-action="chain-cancel">취소</button>'
   if (state.key === 'failed') return `<button class="primary" data-action="${take.jobId ? 'rerun-canvas' : 'retry'}" ${id}>다시 생성</button>`
-  if (state.key === 'proposed') return `<button class="primary" data-action="approve" ${id}>승인하고 생성</button><button data-action="discard" ${id}>폐기</button>`
+  if (state.key === 'proposed' && cut.kind === 'cut') return `<button class="primary" data-action="approve" ${id}>승인하고 생성</button><button data-action="discard" ${id}>폐기</button>`
   return `<button disabled>${repTake(cut) ? '다시 생성' : '생성'}</button>`
 }
 function slotsHtml(cut) {
@@ -79,6 +92,16 @@ function formHtml(node) {
     <input class="vc-duration" type="number" data-field="duration" min="1" step="any" value="${esc(node.data.duration)}" aria-label="길이(초)" title="길이(초)"></div>
     ${slotsHtml(node)}
     <textarea data-field="prompt" rows="2" placeholder="프롬프트 (@이름으로 연결한 소재를 불러)" aria-label="프롬프트">${esc(node.data.prompt)}</textarea>`
+}
+const genHead = (node, state) => { const kind = outputKind(node); return `<span class="badge vc-out" data-output="${esc(kind ?? '')}">${esc(kind ? outputNames[kind] : '생성 설정 필요')}</span><input class="vc-name" data-field="name" value="${esc(node.data.name)}" aria-label="이름"><span class="vc-state">${esc(state.word)}</span>${moreButton}` }
+function genFormHtml(node) {
+  const profile = profileOf(node), nai = profile && adapterOf(profile) === 'nai', sizes = profile?.nai?.sizes ?? []
+  const size = node.data.size ?? sizes[0]?.label
+  // A workflow without a prompt field takes no prompt; NovelAI always does.
+  const prompted = nai || Boolean(profile?.promptFieldId)
+  return `<div class="vc-settings gen${nai ? ' sized' : ''}"><button class="vc-workflow sm" data-action="pick-workflow" title="${profile ? `${esc(profile.label)} · 생성 설정 바꾸기` : '생성 설정 고르기'}">${profile ? esc(profile.label) : '생성 설정 고르기'}</button>${nai ? `<select data-field="size" aria-label="크기" title="크기">${sizes.map(entry => `<option ${entry.label === size ? 'selected' : ''}>${esc(entry.label)}</option>`).join('')}${size && !sizes.some(entry => entry.label === size) ? `<option selected>${esc(size)}</option>` : ''}</select>` : ''}</div>
+    ${slotsHtml(node)}
+    ${prompted ? `<textarea data-field="prompt" rows="2" placeholder="프롬프트" aria-label="프롬프트">${esc(node.data.prompt)}</textarea>` : ''}`
 }
 // ---- source card: flush media, one caption row ----
 function sourceMedia(node) {
@@ -99,8 +122,8 @@ function captionHtml(node) {
 function create(node) {
   const el = document.createElement('article')
   el.className = 'vc-node'; el.dataset.id = node.id; el.dataset.kind = node.kind; el.tabIndex = 0
-  const output = `<button class="vc-output" aria-label="${node.kind === 'cut' ? '이 컷의 결과 연결' : '이 소재 연결'}" ${node.kind === 'cut' ? 'title="결과를 끌어서 다른 컷에 연결 (참조 영상 · 시작/끝 프레임 · 참조 이미지)"' : ''}></button>`
-  el.innerHTML = node.kind === 'cut'
+  const output = `<button class="vc-output" aria-label="${node.kind === 'cut' ? '이 컷의 결과 연결' : node.kind === 'gen' ? '이 생성 노드의 결과 연결' : '이 소재 연결'}" ${node.kind === 'cut' ? 'title="결과를 끌어서 다른 컷에 연결 (참조 영상 · 시작/끝 프레임 · 참조 이미지)"' : node.kind === 'gen' ? 'title="결과를 끌어서 맞는 슬롯에 연결 (이미지: 시작/끝 프레임 · 참조 이미지 · 입력 이미지, 영상: 참조 영상, 오디오: 참조 오디오)"' : ''}></button>`
+  el.innerHTML = node.kind === 'cut' || node.kind === 'gen'
     ? `<div class="vc-head" data-r="head"></div><div class="vc-mw"><div class="vc-media vc-result" data-r="media"></div><div class="vc-tools" data-r="tools"></div><div data-r="badge"></div>${output}</div><div class="vc-body"><div data-r="status"></div><div data-r="form"></div><div class="vc-actions" data-r="actions"></div></div>`
     : `<div class="vc-mw"><div class="vc-media" data-r="media"></div><div data-r="badge"></div>${output}</div><div class="vc-cap" data-r="head"></div>`
   $('nodes').append(el)
@@ -116,21 +139,23 @@ export function renderNodes() {
   for (const node of project?.nodes ?? []) {
     if (frameRole(node) !== 'card') continue
     live.add(node.id)
-    const el = els.get(node.id) ?? create(node), cut = node.kind === 'cut', state = cut ? cutState(node) : null
+    // A cut and a generation node share the card: result with takes, form, one action row.
+    const el = els.get(node.id) ?? create(node), cut = node.kind === 'cut', run = cut || node.kind === 'gen', state = run ? cutState(node) : null
     el.style.left = `${node.x}px`; el.style.top = `${node.y}px`
     el.setAttribute('aria-label', node.data.name)
     el.dataset.state = state?.key ?? ''
-    if (cut) el.classList.toggle('has-result', Boolean(repTake(node)))
-    patch(region(el, 'head'), cut ? cutHead(node, state) : captionHtml(node))
-    patch(region(el, 'media'), cut ? resultHtml(node, state) : sourceMedia(node))
-    patch(region(el, 'badge'), reviewHtml(node) + checkHtml(node))
-    const media = region(el, 'media'), shown = cut ? shownTake(node) : null
+    if (run) el.classList.toggle('has-result', Boolean(repTake(node)))
+    if (run) el.dataset.output = outputKind(node) ?? ''
+    patch(region(el, 'head'), cut ? cutHead(node, state) : run ? genHead(node, state) : captionHtml(node))
+    patch(region(el, 'media'), run ? resultHtml(node, state) : sourceMedia(node))
+    patch(region(el, 'badge'), reviewHtml(node) + checkHtml(node) + (run ? staleHtml(node) : ''))
+    const media = region(el, 'media'), shown = run ? shownTake(node) : null
     if (shown) media.dataset.take = shown.id; else delete media.dataset.take
-    if (cut) {
+    if (run) {
       patch(region(el, 'tools'), toolsHtml(node))
       patch(region(el, 'status'), reasonHtml(state))
       // The prompt being typed must not share a patched region with the action row, which changes with every progress event.
-      patch(region(el, 'form'), formHtml(node))
+      patch(region(el, 'form'), cut ? formHtml(node) : genFormHtml(node))
       patch(region(el, 'actions'), actionsHtml(node, state))
     }
   }

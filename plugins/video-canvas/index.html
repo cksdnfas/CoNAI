@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>영상 캔버스</title>
+  <title>Video Canvas</title>
   <link rel="stylesheet" href="conai-plugin.css">
   <link rel="stylesheet" href="style.css">
 </head>
@@ -17,6 +17,7 @@
       <h1 id="project-title" class="conai-title vc-project-title" role="button" tabindex="0" title="눌러서 이름 바꾸기"></h1>
       <input id="project-title-input" class="vc-title-input" aria-label="프로젝트 이름" hidden>
       <button id="add-cut">＋ 컷</button>
+      <button id="add-gen" title="이미지·영상·오디오를 만드는 생성 노드">＋ 생성</button>
       <button id="add-source" class="ghost" aria-haspopup="menu">소재 ▾</button>
       <span class="conai-spacer"></span>
       <button id="toggle-inspector" class="conai-icon-button" data-icon="panel" aria-pressed="true" aria-label="상세" title="상세"></button>
@@ -58,7 +59,7 @@
           <button id="zoom" class="ghost sm" title="100%로 되돌리기">100%</button>
           <button id="zoom-in" class="conai-icon-button sm" data-icon="plus" aria-label="확대" title="확대"></button>
           <span class="vc-controls-sep"></span>
-          <button id="fit" class="ghost sm">맞춤</button><button id="arrange" class="ghost sm" title="컷은 한 줄로, 소재는 그 아래로 정리해">정렬</button>
+          <button id="fit" class="ghost sm">맞춤</button><button id="arrange" class="ghost sm" title="컷은 한 줄로, 생성 노드와 소재는 그 아래로 정리해">정렬</button>
           <span class="vc-controls-sep"></span>
           <button id="edges-toggle" class="conai-icon-button sm" data-icon="edges" aria-pressed="true" aria-label="소재 선" title="소재 선: 켜면 모든 소재 연결을, 끄면 고른 노드의 연결만 보여줘"></button>
         </div>

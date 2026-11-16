@@ -125,6 +125,44 @@ test('trusted plugins run a server module with their own data, hooks and tools',
     assert.throws(() => registry.unpackPlugin(packageOf(folder, m => { m.server = { entry: 'missing.mjs' } })), /서버 모듈 파일/)
   })
 
+  await t.test('server modules read generation presets only as an administrator and guide sections as any account', async () => {
+    const reads = path.join(root, 'chat-reads-plugin')
+    fs.mkdirSync(reads)
+    fs.writeFileSync(path.join(reads, 'plugin.json'), JSON.stringify({ apiVersion: 1, id: 'chat-reads', name: 'chat-reads', version: '1.0.0', description: '', server: { entry: 'server.mjs' }, pages: [{ id: 'main', title: 'reads', entry: 'index.html', accepts: [], actions: [] }] }))
+    fs.writeFileSync(path.join(reads, 'index.html'), '<!doctype html><title>reads</title>')
+    fs.writeFileSync(path.join(reads, 'server.mjs'), `export function activate(conai) {
+      conai.onRequest(({ body }) => (body.op === 'section' ? conai.skills.section(body.link) : body.op === 'skills' ? conai.skills.list() : body.op === 'get' ? conai.generationPresets.get(body.id) : conai.generationPresets.list())
+        .catch((error) => ({ error: error.message, status: error.status })));
+    }`)
+    const { ChatSkillStore } = await import('../src/services/codex-chat/chatSkills')
+    const { ChatGenerationPresetStore } = await import('../src/services/codex-chat/chatGenerationPresets')
+    const skill = ChatSkillStore.create({ name: 'reads guide', description: 'guide', instructions: 'overview', sections: [{ path: 'guides/comfy', title: 'Comfy', content: 'tag order rules' }] })
+    const preset = ChatGenerationPresetStore.create({ name: 'Comfy portrait', instruction: 'portraits', kind: 'comfyui', comfyui: { workflowId: 7, fixedInputs: { steps: 20 }, exposedFieldIds: ['prompt'] }, prompting: { guideSkill: { skillId: skill.id, path: 'guides/' } } })
+    const guestId = Number(auth.prepare("INSERT INTO auth_accounts(username, password_hash, account_type) VALUES ('reads-guest', 'unused', 'guest')").run().lastInsertRowid)
+    const guest = { accountId: guestId, accountType: 'guest' as const }
+    await registry.installPlugin(packageOf(reads))
+    await registry.setPluginEnabled('chat-reads', true, adminId)
+    await until(() => runtime.pluginServerStatus('chat-reads').state === 'ready', 'reads module ready')
+    const ask = (body: object, requester: typeof admin | typeof guest) => runtime.requestPluginServer('chat-reads', body, requester, {}) as Promise<any>
+    assert.deepEqual(await ask({ op: 'get', id: preset.id }, admin), {
+      id: preset.id, name: 'Comfy portrait', instruction: 'portraits', kind: 'comfyui', nai: null,
+      comfyui: { workflowId: 7, serverId: null, serverTag: null, fixedInputs: { steps: 20 }, exposedFieldIds: ['prompt'], referenceField: null, promptField: null },
+      prompting: { timing: 'after', guide: '', guideSkill: { skillId: skill.id, path: 'guides/', skillName: 'reads guide', title: 'guides/ (1)', updatedDate: preset.prompting.guideSkill!.updatedDate }, previousImages: 0 },
+    })
+    assert.equal((await ask({ op: 'list' }, admin)).length, 1)
+    assert.equal((await ask({ op: 'list' }, guest)).status, 403, 'presets stay administrator-only')
+    assert.equal((await ask({ op: 'get', id: preset.id + 99 }, admin)).status, 404)
+    assert.deepEqual((await ask({ op: 'skills' }, admin)).find((entry: any) => entry.skillId === skill.id), {
+      skillId: skill.id, name: 'reads guide', enabled: true, sections: [{ path: 'guides/comfy', title: 'Comfy' }], groups: [{ path: 'guides/', title: 'guides/ (1)', count: 1 }],
+    })
+    assert.equal((await ask({ op: 'skills' }, guest)).status, 403, 'the skill list stays administrator-only')
+    const section = await ask({ op: 'section', link: { skillId: skill.id, path: 'guides/comfy' } }, guest)
+    assert.deepEqual([section.title, section.text, section.skillName], ['Comfy', 'tag order rules', 'reads guide'])
+    assert.match((await ask({ op: 'section', link: preset.prompting.guideSkill }, guest)).text, /### Comfy \(guides\/comfy\)\n\ntag order rules/)
+    assert.equal((await ask({ op: 'section', link: { skillId: skill.id, path: 'gone' } }, guest)).status, 404)
+    await registry.removePlugin('chat-reads')
+  })
+
   await t.test('enabling starts the module: hook, tool and page requests work against its own database', async () => {
     const installed = await registry.installPlugin(packageOf(folder))
     assert.equal(installed.updated, false)
@@ -304,7 +342,6 @@ test('trusted plugins run a server module with their own data, hooks and tools',
     await registry.installPlugin(packageOf(folder, m => { m.id = 'llm-bridge' }, { 'server.mjs': `export function activate(conai) {
       let late = null;
       conai.onRequest(({ body }) => {
-        if (body.op === 'project') return conai.tools.call(body.tool || 'workspace_list', body.args || {});
         if (body.op === 'late') return late;
         if (body.op === 'background') return conai.background.account();
         if (body.op === 'delay') {
@@ -316,17 +353,6 @@ test('trusted plugins run a server module with their own data, hooks and tools',
     }` }))
     await registry.setPluginEnabled('llm-bridge', true, adminId)
     await until(() => runtime.pluginServerStatus('llm-bridge').state === 'ready', 'LLM bridge ready')
-    const { WorkspaceService } = await import('../src/services/workspaceService')
-    const project = await WorkspaceService.create(`account:${adminId}`, 'Server bridge project')
-    const host = await import('../src/services/plugins/pluginHost')
-    const adminCaller = { requester: admin, sessionId: 'server-project-session' }
-    const projectPage = host.openPluginInstance('llm-bridge', 'rules', [], adminCaller, { id: project.id, write: false })
-    const app = await import('../src/services/plugins/pluginAppActions')
-    const binding = app.pluginInstanceAppContext(projectPage.id, adminCaller, 'http://localhost:1666').context.workspace
-    const projectResult = await runtime.requestPluginServer('llm-bridge', { op: 'project' }, admin, {}, 'http://localhost:1666', binding) as { isError?: boolean }
-    assert.notEqual(projectResult.isError, true, 'server calls inherit the page project')
-    await assert.rejects(runtime.requestPluginServer('llm-bridge', { op: 'project', tool: 'workspace_apply', args: {} }, admin, {}, 'http://localhost:1666', binding), /not permitted/, 'read-only connections remain read-only')
-    host.closePluginInstance(projectPage.id, adminCaller)
     const bridge = (op: string, input?: unknown) => runtime.requestPluginServer('llm-bridge', { op, input }, guest, {})
     const listed = await bridge('profiles') as Array<{ id: number }>
     assert.ok(listed.some(item => item.id === profile.id), 'ordinary chat users can select their profiles')

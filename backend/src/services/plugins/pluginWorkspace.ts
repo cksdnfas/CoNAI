@@ -4,7 +4,8 @@ import { z } from 'zod'
 import type { PluginWorkspaceProposal, StoredFileEntry } from '@conai/shared'
 import { requirePluginInstance, pluginTokenSchema, type PluginCaller } from './pluginHost'
 import { pluginDb, pluginToken as token, sha256 as hash, PluginError, requireProposalRoom, issueProposalApproval, PluginMediaGrants } from './pluginStore'
-import { WorkspaceService, workspaceTarget } from '../workspaceService'
+import { workspaceTarget } from '../workspaceService'
+import { PluginFolder } from './pluginFolder'
 import { workspaceListSchema, workspaceReadSchema, workspaceApplySchema } from '../workspaceSchemas'
 import type { WorkspaceOperation } from '@conai/shared'
 import { requireFileStoreAction, requireFileStoreOwner } from '../fileStoreAccess'
@@ -32,25 +33,25 @@ export function requirePluginWorkspace(id: string, caller: PluginCaller, capabil
     if (!instance.workspace.write) throw new PluginError('읽기 전용 프로젝트 연결이야.', 403)
     requireFileStoreAction(caller.requester, 'organize')
   }
-  WorkspaceService.get(instance.owner, instance.workspace.id)
+  PluginFolder.get(instance.owner, instance.workspace.id)
   return { ...instance, workspace: instance.workspace }
 }
 export function listPluginWorkspace(id: string, input: unknown, caller: PluginCaller) {
   const instance = requirePluginWorkspace(id, caller)
   const args = workspaceListSchema.parse(input)
-  return WorkspaceService.entries(instance.owner, instance.workspace.id, args.target, args.offset)
+  return PluginFolder.entries(instance.owner, instance.workspace.id, args.target, args.offset)
 }
-export function readPluginWorkspace(id: string, input: unknown, caller: PluginCaller, signal?: AbortSignal) {
+export async function readPluginWorkspace(id: string, input: unknown, caller: PluginCaller) {
   const instance = requirePluginWorkspace(id, caller)
   const args = workspaceReadSchema.parse(input)
-  return WorkspaceService.read(instance.owner, instance.workspace.id, args.targets, signal)
+  return PluginFolder.read(instance.owner, instance.workspace.id, args.targets)
 }
 export async function statPluginWorkspace(id: string, input: unknown, caller: PluginCaller) {
   const instance = requirePluginWorkspace(id, caller)
   const target = z.string().min(1).max(1000)
   const args = z.union([z.object({ target }).strict(), z.object({ targets: z.array(target).min(1).max(32) }).strict()]).parse(input)
   const read = async (target: string) => {
-    try { return { ...await WorkspaceService.stat(instance.owner, instance.workspace.id, target), exists: true } } catch (error) {
+    try { return { ...await PluginFolder.stat(instance.owner, instance.workspace.id, target), exists: true } } catch (error) {
       if (error instanceof Error && 'status' in error && error.status === 404) return { target, exists: false, revision: null, kind: null }
       throw error
     }
@@ -69,13 +70,13 @@ async function checkOperations(id: string, operations: WorkspaceOperation[], cal
     let target = workspaceTarget(operation.target)
     for (const move of [...moves].reverse()) if (target === move.destination || target.startsWith(`${move.destination}/`)) target = move.target + target.slice(move.destination.length)
     let current = null
-    try { current = await WorkspaceService.stat(instance.owner, instance.workspace.id, target) } catch (error) { if (!(error instanceof Error && 'status' in error && error.status === 404)) throw error }
+    try { current = await PluginFolder.stat(instance.owner, instance.workspace.id, target) } catch (error) { if (!(error instanceof Error && 'status' in error && error.status === 404)) throw error }
     const expected = operation.kind === 'mkdir' ? null : operation.expectedRevision
     if ((current?.revision ?? null) !== expected) throw new PluginError(`대상이 변경됐어: ${operation.target}`, 409)
     if (operation.kind === 'mkdir' && created.has(target)) throw new PluginError('폴더 생성 대상이 중복됐어.')
     if (operation.kind === 'move') {
       const destination = workspaceTarget(operation.destination)
-      try { await WorkspaceService.stat(instance.owner, instance.workspace.id, destination); throw new PluginError(`이동 대상이 이미 있어: ${destination}`, 409) } catch (error) { if (!(error instanceof Error && 'status' in error && error.status === 404)) throw error }
+      try { await PluginFolder.stat(instance.owner, instance.workspace.id, destination); throw new PluginError(`이동 대상이 이미 있어: ${destination}`, 409) } catch (error) { if (!(error instanceof Error && 'status' in error && error.status === 404)) throw error }
       moves.push({ target, destination })
     }
     if (operation.kind === 'mkdir') created.add(target)
@@ -97,7 +98,7 @@ export async function proposePluginWorkspaceChanges(id: string, value: unknown, 
 async function currentText(id: string, target: string, caller: PluginCaller) {
   const instance = requirePluginWorkspace(id, caller, 'workspace.write')
   try {
-    const { files: [file] } = await WorkspaceService.read(instance.owner, instance.workspace.id, [{ target, limit: MAX_TEXT }])
+    const { files: [file] } = PluginFolder.read(instance.owner, instance.workspace.id, [{ target, limit: MAX_TEXT }])
     if (file.nextOffset !== null) throw new PluginError('확장 저장 검토는 1MB까지 지원해.', 413)
     return { text: file.text, revision: file.revision as string | null }
   } catch (error) {
@@ -141,7 +142,7 @@ export async function applyPluginWorkspaceWrite(id: string, approval: string, ca
   const { row, proposal, instance } = requireProposal(id, caller)
   if (row.approval_hash !== hash(approval)) throw new PluginError('호스트의 저장 승인이 필요해.', 403)
   if (row.result) return JSON.parse(row.result)
-  const result = await WorkspaceService.apply(instance.owner, instance.workspace.id, `plugin-${id}`, proposal.operations ?? [{ kind: 'write', target: proposal.target, text: proposal.text, expectedRevision: proposal.revision }], () => { requireProposal(id, caller) })
+  const result = PluginFolder.apply(instance.owner, instance.workspace.id, `plugin-${id}`, proposal.operations ?? [{ kind: 'write', target: proposal.target, text: proposal.text, expectedRevision: proposal.revision }], () => { requireProposal(id, caller) })
   if (result.status !== 'completed') throw new PluginError(`${result.error ?? '프로젝트 저장 실패'} · 적용된 항목 ${result.results.length}개: ${result.results.slice(0, 10).map(item => item.target).join(', ')}. 최신 파일과 작업 내역을 확인해줘.`, 409)
   pluginDb().prepare('UPDATE plugin_proposals SET result=? WHERE id=?').run(JSON.stringify(result), id)
   return result
@@ -160,7 +161,7 @@ const mediaReferenceSchema = z.discriminatedUnion('source', [
 const grants = new PluginMediaGrants<{ instanceId: string; target: string; revision: string; caller: PluginCaller; fingerprint: string }>()
 export async function mediaTarget(id: string, target: string, caller: PluginCaller, expected?: string) {
   const instance = requirePluginWorkspace(id, caller, 'workspace.media')
-  const { files: [file] } = await WorkspaceService.read(instance.owner, instance.workspace.id, [{ target, limit: 16384, ...(expected ? { revision: expected } : {}) }])
+  const { files: [file] } = PluginFolder.read(instance.owner, instance.workspace.id, [{ target, limit: 16384, ...(expected ? { revision: expected } : {}) }])
   if (file.nextOffset !== null) throw new PluginError('미디어 참조 문서가 너무 커.')
   let value: unknown
   try { value = JSON.parse(file.text) } catch { throw new PluginError('미디어 참조 문서의 JSON 형식을 확인해줘.') }

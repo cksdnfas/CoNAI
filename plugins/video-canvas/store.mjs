@@ -8,6 +8,8 @@ const encodeCanvas = project => {
   for (const node of canvas.nodes) delete node.data.check
   return JSON.stringify(canvas)
 }
+// The result_hash column feeds project covers; a sound take's result is an audio candidate ID, not library media.
+const coverHash = take => take.output === 'audio' ? null : take.resultHash ?? null
 const SORTS = { updated: 'updated DESC, id', name: 'name COLLATE NOCASE, id', created: 'created DESC, id' }
 // Additive columns for project lists and covers; existing rows are backfilled once when a column is added.
 function addColumns(db) {
@@ -158,10 +160,10 @@ export function createStore(db) {
       db.transaction(() => { for (const [id, value] of Object.entries(assets)) db.prepare('INSERT OR REPLACE INTO vc_node_check VALUES(?,?,?)').run(project, id, JSON.stringify(value)) })()
     },
     take(account, project, id) { canvasOf(account, project); return readState('vc_take', account, project, id) },
-    addTake(account, project, take) { canvasOf(account, project); insertTake.run(take.id, project, account, take.jobId ?? null, take.status, JSON.stringify(take), take.resultHash ?? null); return take },
+    addTake(account, project, take) { canvasOf(account, project); insertTake.run(take.id, project, account, take.jobId ?? null, take.status, JSON.stringify(take), coverHash(take)); return take },
     setTake(account, project, id, patch) {
       const take = { ...this.take(account, project, id), ...patch }
-      db.prepare('UPDATE vc_take SET job_id=?,status=?,data=?,result_hash=? WHERE id=? AND account=? AND project=?').run(take.jobId ?? null, take.status, JSON.stringify(take), take.resultHash ?? null, id, account, project)
+      db.prepare('UPDATE vc_take SET job_id=?,status=?,data=?,result_hash=? WHERE id=? AND account=? AND project=?').run(take.jobId ?? null, take.status, JSON.stringify(take), coverHash(take), id, account, project)
       return take
     },
     byJob(jobId) { return db.prepare('SELECT account,project,id FROM vc_take WHERE job_id=?').all(jobId) },
@@ -209,11 +211,14 @@ export function createStore(db) {
       // Shared takes retain the actual asset, independently of the source cache key.
       db.prepare('INSERT OR IGNORE INTO vc_take_upload VALUES(?,?,?)').run(takeId, account, this.upload(account, key).id)
     },
+    // Uploaded inputs anywhere in the request: a Director value's assets or a generic workflow's image fields.
     retainUploads(account, take) {
-      const assets = Object.values(take.request?.inputs?.[take.profile.directorFieldId]?.assets ?? {})
-      for (const ref of assets) if (ref?.__ref === 'workflow-input-asset') {
-        db.prepare('INSERT OR IGNORE INTO vc_take_upload VALUES(?,?,?)').run(take.id, account, ref.id)
+      const refs = [], walk = value => {
+        if (Array.isArray(value)) value.forEach(walk)
+        else if (value && typeof value === 'object') { if (value.__ref === 'workflow-input-asset') refs.push(value); else Object.values(value).forEach(walk) }
       }
+      walk(take.request?.inputs)
+      for (const ref of refs) db.prepare('INSERT OR IGNORE INTO vc_take_upload VALUES(?,?,?)').run(take.id, account, ref.id)
     },
     // Without a take this lists uploads already left unreferenced, e.g. by a deleted project.
     releaseCandidates(account, takeId = null) {
