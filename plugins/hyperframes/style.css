@@ -1,0 +1,256 @@
+/* HyperFrames studio: sources | preview + timeline | AI / adjust / HTML panel. Layout, tabs, chips, search, icon buttons,
+   media cards, rows, drawer and dialog come from conai-plugin.css; this file places them and styles only the parts
+   unique to the studio (player, timeline, chat, adjust fields, toasts).
+   From 900 to 1199px main.js makes the sources the panel's first tab; below 900px the sources and the panel sit under
+   the timeline and the mobile tabs choose what shows next to the capped preview. */
+.sprite { position: absolute; width: 0; height: 0 }
+svg { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round }
+label.inline { display: inline-flex; align-items: center; gap: 6px; margin: 0; font-size: 12px }
+label.inline input:not([type=checkbox]):not([type=radio]):not([type=range]) { display: inline-block; width: 72px; margin: 0 }
+
+/* Header: one row that never wraps. */
+.top { position: relative; flex-wrap: nowrap }
+/* The spacer is what pushes undo / save / export to the right end, so it keeps its grow. */
+.top > :not(.conai-spacer) { flex: none }
+#title { flex: 0 1 auto; min-width: 60px; max-width: min(360px, 34vw); background: transparent; font-size: 15px; font-weight: 700; field-sizing: content }
+#title:hover, #title:focus-visible { background: var(--conai-field) }
+.export { position: relative }
+.menu { position: absolute; top: calc(100% + 4px); right: 0; z-index: 30; display: flex; flex-direction: column; gap: 2px; min-width: 150px; max-width: min(280px, 86vw); max-height: 50vh; padding: 4px; overflow-y: auto; border: 1px solid var(--conai-line); border-radius: var(--conai-radius-md); background: var(--conai-surface-high); box-shadow: var(--conai-float-shadow) }
+.menu.up { top: auto; right: auto; bottom: calc(100% + 4px); left: 0 }
+.menu > button { justify-content: flex-start; width: 100%; white-space: normal; text-align: left }
+.job { display: flex; align-items: center; gap: 8px; font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap }
+.job progress { width: 90px; height: 4px; overflow: hidden; border: 0; border-radius: 2px; background: var(--conai-fill); accent-color: var(--conai-primary); appearance: none }
+.job progress::-webkit-progress-bar { background: var(--conai-fill) }
+.job progress::-webkit-progress-value { background: var(--conai-primary) }
+.job progress::-moz-progress-bar { background: var(--conai-primary) }
+
+/* Toasts float and never move the layout. The recovery notice is a banner row between the header and the workspace: it
+   covers no control, and the workspace (inert while it shows) keeps the rest of the height. */
+.toasts { position: fixed; bottom: 16px; left: 50%; z-index: 40; display: flex; flex-direction: column; gap: 8px; width: min(520px, calc(100vw - 24px)); transform: translateX(-50%); pointer-events: none }
+.toast { display: flex; align-items: flex-start; gap: 8px; padding: 10px 6px 10px 14px; border: 1px solid var(--conai-line); border-radius: var(--conai-radius-md); background: var(--conai-surface-high); box-shadow: var(--conai-float-shadow); font-size: 13px; overflow-wrap: anywhere; pointer-events: auto }
+.toast > span { flex: 1; min-width: 0; padding-top: 3px }
+.toast.error { color: var(--conai-destructive) }
+.recovery { display: flex; flex: none; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding: 10px var(--conai-edge); border-bottom: 1px solid var(--conai-line); background: var(--conai-surface-high); color: var(--conai-warning); font-size: 13px; overflow-wrap: anywhere }
+.recovery > span { flex: 1 1 260px; min-width: 0 }
+.workspace[inert] { opacity: .5 }
+
+.workspace { min-height: 0 }
+.panel, .sources { min-height: 0 }
+/* The SDK puts 24px above a section that follows another section, hidden ones included (the start screen, the tabs not shown). */
+.workspace > section, .panel > section, .sources > section { margin-top: 0 }
+body[data-start] #pane-center, body[data-start] #panel { display: none }
+
+/* Sources: this video's sources over the library. */
+.sources { --conai-sidebar-width: 290px; display: flex; flex-direction: column; gap: 14px; overflow: hidden }
+.tray { display: flex; flex: none; flex-direction: column; max-height: 38%; min-height: 0 }
+#source-list { overflow-y: auto }
+.src { gap: 10px }
+.src .cover { position: relative; display: grid; flex: none; place-items: center; width: 44px; height: 30px; overflow: hidden; border-radius: 3px; background: var(--conai-field); color: var(--conai-muted-foreground) }
+.src .cover img { width: 100%; height: 100%; object-fit: cover }
+/* The id outweighs the SDK's input rule, which would otherwise restore its own padding and fill. */
+#source-list .src-name { width: 100%; min-height: 26px; padding: 0 var(--conai-text-inset); background: transparent; font-weight: 500 }
+#source-list .src-name:hover, #source-list .src-name:focus-visible { background: var(--conai-field) }
+.src .conai-row-meta { padding-left: var(--conai-text-inset) }
+.library { display: flex; flex: 1; flex-direction: column; gap: 10px; min-height: 0 }
+/* The 4px frame keeps tile focus rings inside the scroll box. */
+.lib-scroll { position: relative; flex: 1; min-height: 0; margin: 0 -4px; padding: 4px 4px 8px; overflow-x: hidden; overflow-y: auto }
+.masonry { display: flex; align-items: flex-start; gap: 6px }
+.masonry-col { display: flex; flex: 1; flex-direction: column; gap: 6px; min-width: 0 }
+.masonry > .conai-empty { flex: 1 }
+/* Sits well above the end of the list so the next page starts loading before the bottom is reached. */
+.sentinel { position: relative; top: -600px; height: 1px; pointer-events: none }
+.loading { padding: 12px 0; color: var(--conai-muted-foreground); font-size: 12px; text-align: center }
+.tile { width: 100% }
+.tile .conai-media > img { opacity: 0; transition: opacity .2s }
+.tile .conai-media > img.loaded { opacity: 1 }
+.tile .order { position: absolute; top: 6px; right: 6px; z-index: 1; display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: var(--conai-primary); color: var(--conai-primary-foreground); font-size: 11px; font-weight: 700 }
+.tile .open { position: absolute; right: 6px; bottom: 6px; z-index: 1; opacity: 0 }
+.tile:hover .open, .tile .open:focus-visible { opacity: 1 }
+.tile .open svg { width: 14px; height: 14px }
+
+/* Centre: the preview and timeline never scroll away; only the panel and the sources scroll. */
+.center { display: flex; flex-direction: column; min-width: 0; padding-top: 12px; padding-bottom: 12px; overflow: hidden }
+.stage-bar { flex: none; padding-bottom: 6px }
+.stage-bar:empty { display: none }
+.stage { display: grid; flex: 1 1 0; place-items: center; min-height: 80px; container-type: size }
+/* The player is the largest box of the video's aspect ratio that fits, so it is never cropped. */
+.viewer { position: relative; width: min(100cqw, calc(100cqh * var(--ar, 1.7778))); aspect-ratio: var(--ar, 1.7778); overflow: hidden; border-radius: var(--conai-radius); background: #000 }
+.viewer video { position: absolute; inset: 0; width: 100%; height: 100%; border-radius: 0; object-fit: contain }
+.viewer .empty { position: absolute; inset: 0; display: grid; place-items: center; padding: 16px; color: var(--conai-muted-foreground); font-size: 13px; text-align: center }
+.live { position: absolute; inset: 0; overflow: hidden }
+.live iframe { position: absolute; top: 50%; left: 50%; border: 0; background: #000; transform-origin: center }
+.live iframe.incoming { visibility: hidden }
+.transport { display: flex; flex: none; align-items: center; gap: 8px; min-height: 36px; padding-top: 4px }
+#scrub { flex: 1; min-width: 0; min-height: 0; height: 20px; margin: 0; padding: 0; border: 0; background: transparent; box-shadow: none; accent-color: var(--conai-primary); cursor: pointer }
+.clock { color: var(--conai-muted-foreground); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap }
+
+/* Timeline: one clip per scene, as wide as its length. */
+.board { flex: none; margin-top: 6px; padding-top: 8px; border-top: 1px solid var(--conai-line) }
+.board-head { display: flex; align-items: center; min-height: 22px; margin-bottom: 6px; font-size: 12px }
+.track-wrap { position: relative }
+/* The 4px frame keeps focus rings and the drop marker inside the scroll box. */
+.track { position: relative; display: flex; gap: 4px; margin: -4px; padding: 4px; overflow-x: auto; overflow-y: hidden }
+.track > .conai-empty { flex: 1; padding-block: 14px }
+.clip { flex: 1 1 0; min-width: 76px }
+.clip .conai-media { height: 54px }
+.clip .conai-overlay-caption { padding: 12px 6px 3px }
+.clip.dragging { opacity: .4 }
+.clip.drop-before .conai-media { box-shadow: -4px 0 0 var(--conai-primary) }
+.add { flex: none; width: 54px; min-height: 54px; border: 1px dashed color-mix(in srgb, var(--conai-foreground) 25%, transparent); background: transparent; color: var(--conai-muted-foreground) }
+.playhead { position: absolute; top: 0; bottom: 0; z-index: 2; width: 2px; background: #fff; box-shadow: 0 0 0 1px rgba(0, 0, 0, .45); pointer-events: none }
+/* Two music rows show; more scroll, so the timeline never grows past what the column can hold. */
+.music-list { display: flex; flex-direction: column; gap: 4px; max-height: 56px; margin-top: 6px; overflow-y: auto }
+.music-list:empty { display: none }
+.music { display: flex; align-items: center; gap: 8px; min-height: 26px; padding: 0 2px 0 var(--conai-text-inset); border-radius: var(--conai-radius); background: color-mix(in srgb, var(--conai-success) 14%, transparent); color: var(--conai-success); font-size: 12px; font-weight: 600 }
+.music > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+
+/* Result view: the output plays in the player; versions below, marks on a bar. */
+.result-bar { display: flex; flex: none; flex-direction: column; gap: 6px; padding-top: 6px }
+.result-row, .mark-form { display: flex; align-items: center; gap: 8px }
+.mark-form input { flex: 1; min-width: 0 }
+.pins { position: relative; height: 22px; border-radius: var(--conai-radius); background: var(--conai-fill) }
+.pin { position: absolute; top: 2px; width: 18px; min-height: 18px; height: 18px; padding: 0; border-radius: 50%; background: var(--conai-warning); color: #201400; font-size: 11px; font-weight: 800; transform: translateX(-50%) }
+.pin:hover:not(:disabled) { background: color-mix(in srgb, var(--conai-warning) 85%, #fff 15%) }
+.versions { display: flex; flex: none; gap: 10px; margin: 6px -4px 0; padding: 4px 4px 2px; overflow-x: auto }
+.versions:empty { display: none }
+.versions > .conai-empty { padding-block: 10px }
+.ver { flex: none; width: 132px }
+.ver .conai-media { aspect-ratio: 16 / 10 }
+.ver.running .conai-media { display: grid; place-items: center; align-content: center; gap: 6px; padding: 0 10px }
+.ver progress { width: 100%; height: 4px; overflow: hidden; border: 0; border-radius: 2px; background: var(--conai-fill); accent-color: var(--conai-primary); appearance: none }
+.ver progress::-webkit-progress-bar { background: var(--conai-fill) }
+.ver progress::-webkit-progress-value { background: var(--conai-primary) }
+.ver progress::-moz-progress-bar { background: var(--conai-primary) }
+.ver .conai-media-meta { gap: 4px }
+
+/* Right panel: tabs over one pane each; the composer stays at the bottom of the AI pane. */
+.panel { --conai-sidebar-width: 360px; display: flex; flex-direction: column; gap: 0; padding: 0; overflow: hidden }
+.panel-tabs { flex: none; padding: 0 var(--conai-sidebar-pad-x); gap: 0 18px }
+.panel-tabs > button { font-weight: 700 }
+.ptab { display: flex; flex: 1; flex-direction: column; min-height: 0 }
+.ai-scroll, .adjust-scroll { flex: 1; min-height: 0; overflow-y: auto }
+.ai-scroll { padding: 12px var(--conai-sidebar-pad-x) 4px }
+.block { margin-bottom: 14px }
+.chat > .conai-empty { padding-block: 18px }
+.msg { margin: 0 0 14px }
+.msg .who { margin-bottom: 3px; color: var(--conai-muted-foreground); font-size: 11.5px; font-weight: 600 }
+.msg p { margin: 0; font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; white-space: pre-wrap }
+.msg.me p { padding: 8px 10px; border-radius: var(--conai-radius-md); background: var(--conai-fill) }
+.msg.error p { color: var(--conai-destructive) }
+.msg-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px }
+.changes { margin: 8px 0 0; padding: 0; border: 1px solid var(--conai-line); border-radius: var(--conai-radius-md); list-style: none }
+.changes li { display: flex; justify-content: space-between; gap: 10px; padding: 6px 9px; font-size: 12.5px; overflow-wrap: anywhere }
+.changes li + li { border-top: 1px solid var(--conai-line) }
+.changes em { flex: none; max-width: 55%; color: var(--conai-muted-foreground); font-style: normal; text-align: right }
+.ref { display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 8px 0 3px; border-radius: 11px; background: color-mix(in srgb, var(--conai-primary) 14%, transparent); color: var(--conai-primary); font-size: 12px; font-weight: 600; vertical-align: middle; white-space: nowrap }
+.ref img { width: 16px; height: 16px; border-radius: 50%; object-fit: cover }
+.composer { display: flex; flex: none; flex-direction: column; gap: 8px; padding: 10px var(--conai-sidebar-pad-x) 12px; border-top: 1px solid var(--conai-line) }
+.scope { display: flex; flex-wrap: wrap; align-items: center; gap: 6px }
+.scope select { max-width: 150px; min-height: 26px; padding-block: 0 }
+#brief { min-height: 66px; resize: none }
+.composer-row { display: flex; align-items: center; gap: 8px }
+.mention { position: relative }
+
+/* Adjust */
+.group { padding: 12px var(--conai-sidebar-pad-x) 6px; border-bottom: 1px solid var(--conai-line) }
+.group:last-child { border-bottom: 0 }
+.note { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding: 12px var(--conai-sidebar-pad-x); border-bottom: 1px solid var(--conai-line); color: var(--conai-warning); font-size: 12.5px }
+.field { display: grid; grid-template-columns: 76px minmax(0, 1fr); align-items: center; gap: 10px; margin: 0 0 10px }
+.field > .fl { color: var(--conai-muted-foreground); font-size: 12.5px }
+.field > select, .field > input { width: 100% }
+.slider { display: grid; grid-template-columns: minmax(0, 1fr) 54px; align-items: center; gap: 8px }
+.slider input[type=range] { width: 100%; min-height: 0; margin: 0 }
+.slider output { color: var(--conai-muted-foreground); font: 12px var(--conai-font-mono); text-align: right }
+.color-row { display: flex; align-items: center; gap: 8px }
+#tab-adjust input[type=color] { width: 48px; min-height: 30px; padding: 2px; cursor: pointer }
+.scene-tools { display: inline-flex; margin-left: auto }
+#scene-group .conai-group-head { justify-content: flex-start }
+/* One line, so a long source name cannot stretch the heading and push "장면 N" down inside it. */
+#scene-group .conai-group-head .muted { flex: 1 1 0; min-width: 0; overflow: hidden; font-size: 12px; font-weight: 400; text-overflow: ellipsis; white-space: nowrap }
+#scene-title { flex: none }
+#scene-empty { padding-block: 14px }
+#tab-html { padding: 10px var(--conai-sidebar-pad-x) 12px }
+#html { flex: 1; width: 100%; min-height: 0; margin: 0; font-family: var(--conai-font-mono); font-size: 12px; line-height: 1.5; resize: none }
+
+/* Start screen */
+.start { overflow-y: auto }
+.start-inner { display: flex; flex-direction: column; gap: 14px; width: min(760px, 100%); margin: 0 auto; padding-block: 16px 24px }
+.start h2 { margin: 0; font-size: 20px }
+.ways { display: grid; grid-template-columns: 1.35fr 1fr; gap: 14px }
+.way { display: flex; flex-direction: column; gap: 10px; padding: 16px; border-radius: var(--conai-radius-md); background: var(--conai-field) }
+.way h3 { margin: 0; font-size: 14px }
+.way textarea { width: 100%; resize: none }
+.way-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px }
+.start-sources { display: flex; flex-wrap: wrap; gap: 6px; min-height: 48px }
+.start-sources .conai-empty { padding: 12px 0; text-align: left }
+.start-thumb { position: relative; width: 74px; height: 48px }
+.start-thumb .conai-media { width: 100%; height: 100% }
+.start-thumb .conai-icon-button { position: absolute; top: 2px; right: 2px; z-index: 1 }
+.recent { display: flex; flex-wrap: wrap; gap: 12px }
+.recent .conai-media-card { width: 150px }
+.recent .conai-media { aspect-ratio: 16 / 10 }
+
+/* Project drawer */
+.drawer-head { display: flex; align-items: center; gap: 4px }
+.drawer-head .conai-search { flex: 1 }
+.project-list { flex: 1; min-height: 0; overflow-y: auto }
+#legacy-list { flex: none; max-height: 30%; padding-top: 6px; border-top: 1px solid var(--conai-line) }
+.prow .cover { display: grid; flex: none; place-items: center; width: 56px; height: 34px; overflow: hidden; border-radius: 3px; background: var(--conai-field); color: var(--conai-muted-foreground) }
+.prow .cover img { width: 100%; height: 100%; object-fit: cover }
+.drawer-foot { display: flex; align-items: center; gap: 6px; font-size: 12px }
+.current { display: flex; flex: none; flex-direction: column; gap: 8px; padding-top: 10px; border-top: 1px solid var(--conai-line) }
+
+/* Renderer dialog */
+.checks { display: flex; flex-direction: column }
+.st { display: grid; flex: none; place-items: center; width: 18px; height: 18px; border: 1px solid var(--conai-line); border-radius: 50% }
+.st svg { width: 12px; height: 12px; stroke-width: 2.6 }
+.st.ok { border: 0; background: color-mix(in srgb, var(--conai-success) 20%, transparent); color: var(--conai-success) }
+.st.no { border: 0; background: color-mix(in srgb, var(--conai-warning) 20%, transparent); color: var(--conai-warning) }
+.st.run { border: 2px solid var(--conai-line); border-top-color: var(--conai-primary) }
+@media (prefers-reduced-motion: no-preference) { .st.run { animation: spin 1s linear infinite } @keyframes spin { to { transform: rotate(360deg) } } }
+.log { max-height: 220px; margin-top: 10px; color: var(--conai-muted-foreground); font-size: 11.5px; line-height: 1.6 }
+#renderer-admin { margin: 10px 0 0 }
+
+#mobile-tabs { display: none }
+@supports not (container-type: size) { .viewer { width: 100%; max-height: 52vh } }
+
+/* 900-1199px: the panel keeps its column, a little narrower, and the sources are its first tab (main.js place()); the
+   preview keeps the centre column's width instead of what a panel under the timeline would leave it. */
+@media (max-width: 1199px) {
+  .sources { --conai-sidebar-width: 270px }
+  .panel { --conai-sidebar-width: 340px }
+  .panel > .sources { flex: 1; width: auto; padding: 12px var(--conai-sidebar-pad-x) 8px; border: 0 }
+}
+@media (max-width: 1099px) { .top .label:not(.keep) { display: none } }
+body[data-view=result] #timeline-block { display: none }
+
+/* Below 900px: one column, the preview capped at 40% of the viewport; sources, timeline, AI, adjust and HTML are tabs. */
+@media (max-width: 899px) {
+  .workspace { flex-direction: column; overflow: hidden }
+  .workspace > .conai-pane { flex: 1; width: 100%; padding-inline: var(--conai-edge); overflow: hidden }
+  .workspace > .start { overflow-y: auto }
+  .top { gap: 2px 4px }
+  #title { flex: 1 1 0; min-width: 0; max-width: none; field-sizing: fixed }
+  .top > .conai-spacer { display: none }
+  .top .badge .t, .top .label:not(.keep) { display: none }
+  .job progress { width: 44px }
+  .stage { flex: none; width: 100%; max-height: 40vh; aspect-ratio: var(--ar, 1.7778); min-height: 0 }
+  #mobile-tabs { display: flex; flex: none; margin-top: 6px }
+  .panel-tabs { display: none }
+  #pane-sources, #timeline-block, #panel, #versions { display: none }
+  #pane-sources { flex: 1; width: auto; padding-inline: 0; border: 0 }
+  #panel { flex: 1; height: auto; margin: 0; border: 0 }
+  body[data-mtab=sources] #pane-sources { display: flex }
+  body[data-mtab=timeline] #timeline-block { display: block; flex: 1; overflow-y: auto }
+  body[data-mtab=ai] #panel, body[data-mtab=adjust] #panel, body[data-mtab=html] #panel { display: flex }
+  body[data-view=result][data-mtab=timeline] #versions:not(:empty) { display: flex }
+  body[data-view=result] #timeline-block { display: none }
+  body[data-start] #pane-center { display: flex; flex: none; height: 44vh; padding-top: 0 }
+  body[data-start] #pane-center > :not(#pane-sources) { display: none }
+  body[data-start] #pane-sources { display: flex; flex: 1 }
+  .ways { grid-template-columns: 1fr }
+  .field { grid-template-columns: 70px minmax(0, 1fr) }
+}
+@media (max-width: 479px) {
+  .export .label { display: none }
+}

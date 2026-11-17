@@ -33,12 +33,17 @@ FROM node:24-bookworm-slim AS runtime-base
 
 WORKDIR /app/backend
 
+# chromium and the Noto fonts let plugin server modules render HTML to video headlessly (docs/GUIDE/PLUGIN_DEVELOPMENT.md §6).
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
+    chromium \
     curl \
     ffmpeg \
+    fonts-noto-cjk \
+    fonts-noto-color-emoji \
     python3-pip \
     python3 \
+    tini \
   && rm -rf /var/lib/apt/lists/* \
   && mkdir -p \
     /app/data/user/uploads \
@@ -83,6 +88,8 @@ EXPOSE 1666
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=5 \
   CMD node -e "require('http').get('http://127.0.0.1:1666/health', r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"
 
+# tini reaps processes orphaned by plugin child processes (a stopped Chromium's helpers); Node as PID 1 would not.
+ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["node", "dist/backend/src/index.js"]
 
 # CPU is the default and keeps the normal image free of CUDA libraries.

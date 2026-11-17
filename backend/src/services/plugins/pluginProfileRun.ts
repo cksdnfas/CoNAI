@@ -229,7 +229,9 @@ export async function runPluginProfile(params: {
       onPrimaryComplete: params.onPrimaryComplete, followUpDeadlineExpired: params.followUpDeadlineExpired }))
     if (!result.followUpTimedOut) signal.throwIfAborted()
     if (result.replies[0]?.status !== 'completed') {
-      throw new PluginError(`프로필 실행을 완료하지 못했어. 채팅에서 실행 결과를 확인해줘. (대화 ${room.id})`, 502)
+      // The engine's own reason (quota, sign-in, model error) is on the failed reply; without it the caller sees only "failed".
+      const reason = result.replies[0]?.error?.trim()
+      throw new PluginError(`프로필 실행을 완료하지 못했어${reason ? `: ${reason}` : '.'} 채팅에서 실행 결과를 확인해줘. (대화 ${room.id})`, 502)
     }
     const completed = result.replies.filter(reply => reply.status === 'completed')
     const raw = completed.map(reply => reply.display_content ?? reply.content).join('\n\n')
