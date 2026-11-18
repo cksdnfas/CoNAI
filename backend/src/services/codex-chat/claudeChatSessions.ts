@@ -12,7 +12,7 @@ import { contextSource } from './chatContextDiagnostics'
 import { pendingGeneratedImages } from './chatGenerationPrompting'
 import { chatProfileRequester } from './chatProfilePermissions'
 import { ChatGroupStore } from './chatGroupStore'
-import { pendingPageReference, pendingProposalOutcomes } from './chatPageContext'
+import { PAGE_VIEW_KEY, pendingPageReference, pendingProposalOutcomes } from './chatPageContext'
 import { profileContentLimit } from './chatContentRating'
 import type { ChatProfile } from './chatProfiles'
 import { buildReplyContext } from './chatReplyContext'
@@ -41,8 +41,13 @@ import { skillReminderText } from './chatSkills'
 
 /** The agent that keeps a chat's session (sessionRuntimeOf). */
 export type SessionRuntime = 'claude' | 'pi'
-/** A session a turn continues, with the agent it belongs to. */
-export type EngineSession = ClaudeChatSession & { runtime: SessionRuntime }
+/**
+ * A session a turn continues, with the agent it belongs to. `shownPageView` (a pi reply): the sent key of the screen the
+ * model holds, the turn's own at its start and then the one its page tools showed (llmChatService), which the session
+ * holds once the turn goes through; PAGE_VIEW_UNKNOWN when the model may not hold it whole, which makes the next turn
+ * carry the screen.
+ */
+export type EngineSession = ClaudeChatSession & { runtime: SessionRuntime; shownPageView?: string }
 
 const SESSION_VALUE: Record<SessionRuntime, RegExp> = {
   claude: /^claude:([0-9a-f-]{36}):([0-9a-f]{12})$/,
@@ -165,12 +170,15 @@ export async function buildClaudeSessionTurn(params: {
     runtime,
     dir,
     resumeId,
+    // A pi reply's page tools carry on from the screen the turn starts on (pageViewAfter in llmChatService).
+    ...(runtime === 'pi' && pageReference.viewKey ? { shownPageView: pageReference.viewKey } : {}),
     onDone: (sessionId, compacted) => {
       const value = `${runtime}:${sessionId}:${systemHash}`
       CodexChatStore.setCodexThreadId(threadId, value)
       // A folded memory lost what it was given: everything goes in again from the next turn.
       if (compacted) CodexChatStore.markCodexCompacted(value, earlier.at(-1)?.id ?? null)
-      else CodexChatStore.setCodexLoreSent(threadId, nextLoreSent(sent, keys))
+      // The screen the reply's own page tools showed last supersedes the one it started on.
+      else CodexChatStore.setCodexLoreSent(threadId, nextLoreSent(sent, session.shownPageView ? [...keys.filter((key) => !key.startsWith(PAGE_VIEW_KEY)), session.shownPageView] : keys))
     },
   }
   const contextMeta = codexInputMeta(profile, latest ? [latest] : [], lore, text, keys, [

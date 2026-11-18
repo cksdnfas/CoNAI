@@ -3,13 +3,11 @@ import { z } from 'zod'
 import { CHAT_CHOICE_LIMITS } from '@conai/shared'
 import type { McpRequestContext } from '../context'
 import { ChatProposalStore } from '../../services/codex-chat/chatProposals'
-import { ChatTaskStore } from '../../services/codex-chat/chatTasks'
 import { ChatProfileStore } from '../../services/codex-chat/chatProfiles'
 import { requireActiveChatReply } from '../../services/codex-chat/chatReplyRegistry'
 import { translateChoice } from '../../services/codex-chat/chatChoices'
 import { errorResult as failure, textResult as result } from '../toolResults'
-import { isPluginProfileRun } from '../../services/plugins/pluginServerTools'
-import { resolveChatAccess, resolveChatProfileToolGrant } from '../../services/codex-chat/codexChatAccess'
+import { offersChatWorkTools } from './chatTaskTools'
 
 /**
  * A question with ready answers in a 1:1 chat: the app shows it above the composer, and the person's next message
@@ -17,11 +15,8 @@ import { resolveChatAccess, resolveChatProfileToolGrant } from '../../services/c
  */
 export function registerChatChoiceTools(server: McpServer, context: McpRequestContext) {
   const chat = context.chatContext
-  if (!chat || chat.kind !== 'direct') return
-  // Same gate as the task tools: a profile with nothing to work with keeps its tool list empty.
-  const profile = isPluginProfileRun(chat.threadId) ? ChatProfileStore.find(chat.profileId) : null
-  const scopes = profile && context.requester ? resolveChatProfileToolGrant(profile, resolveChatAccess(context.requester.accountId)).scopes : context.scopes
-  if (scopes.length === 0 && !chat.page && !context.generationPresetIds?.length && !ChatTaskStore.live(chat.threadId)) return
+  // Listed exactly when the task tools are: a profile with nothing to work with keeps its tool list empty.
+  if (!chat || chat.kind !== 'direct' || !offersChatWorkTools(context)) return
 
   server.registerTool('offer_choices', { description: 'Show choices above the composer for ambiguity or a blocked next step; the choice or typed answer becomes the next user message. Returns a choice card. Call once, last, then end your reply; keep text short and do not repeat options.', inputSchema: z.object({
     question: z.string().min(1).max(CHAT_CHOICE_LIMITS.question).describe('In the person\'s language'),

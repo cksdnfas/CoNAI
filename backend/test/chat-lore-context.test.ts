@@ -344,13 +344,27 @@ test('lore context: books per request, the index, always-on entries, linked file
       await bridge.close()
       unregister()
     }
-    // A chat whose books link no file is not offered the tool.
+    // A chat whose books link no file: listed beside save_lore (the model's own entry can bring the first file) and
+    // refused while there is nothing to read; a profile without lore proposals is not offered it.
     const plain = CodexChatStore.createThread(1, '빈 채팅', 'llm', luna.id)
-    const quiet = await openChatMcpBridge({ accountId: 1, accountType: 'admin' } as never, [], null, { chatContext: { threadId: plain, profileId: luna.id, kind: 'direct', replyId: 'quiet' } })
+    const quietContext = { threadId: plain, profileId: luna.id, kind: 'direct' as const, replyId: 'quiet' }
+    const unregisterQuiet = registerChatReply(quietContext, controller.signal, () => ({ replyTo: null, recipients: ['user'] }))
+    const quiet = await openChatMcpBridge({ accountId: 1, accountType: 'admin' } as never, [], null, { chatContext: quietContext })
     try {
-      assert.ok(!quiet.tools.some((tool) => tool.function.name === 'read_lore_file'))
+      assert.ok(quiet.tools.some((tool) => tool.function.name === 'read_lore_file'))
+      const refused = await quiet.call('read_lore_file', { book: '이 채팅', title: '먹물 실종' })
+      assert.equal(refused.isError, true)
+      assert.match(JSON.stringify(refused.content), /nothing to read/)
     } finally {
       await quiet.close()
+      unregisterQuiet()
+    }
+    const closed = ChatProfileStore.create({ name: '솔', engine: 'llm', providerName: 'conn', allowLoreProposals: false })
+    const shut = await openChatMcpBridge({ accountId: 1, accountType: 'admin' } as never, [], null, { chatContext: { threadId: CodexChatStore.createThread(1, '제안 없는 채팅', 'llm', closed.id), profileId: closed.id, kind: 'direct', replyId: 'shut' } })
+    try {
+      assert.ok(!shut.tools.some((tool) => tool.function.name === 'read_lore_file'))
+    } finally {
+      await shut.close()
     }
   })
 

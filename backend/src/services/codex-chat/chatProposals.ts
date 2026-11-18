@@ -165,3 +165,12 @@ export function isChatProposalToolAvailable(context: ChatExecutionContext | unde
   const kind = toolName === 'save_lore' ? 'lore' : toolName === 'propose_profile_assets' ? 'profile_assets' : null
   return !kind || !context?.replyId || ChatProposalStore.forReply(context.threadId, context.replyId, kind).length === 0
 }
+
+/**
+ * What a call of one of these tools gets once this reply holds its proposal (null: it may run). The tools stay listed
+ * for the whole reply: the tool list opens every request, and dropping one would make a provider cache read it again.
+ */
+export function chatProposalToolRefusal(context: ChatExecutionContext | undefined, toolName: string): string | null {
+  if (isChatProposalToolAvailable(context, toolName)) return null
+  return `This reply already has a ${toolName === 'save_lore' ? 'lore' : 'profile asset'} proposal (one per reply). Do not call ${toolName} again in this reply; propose in a later reply if it still matters.`
+}

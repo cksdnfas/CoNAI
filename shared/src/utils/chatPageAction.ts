@@ -51,21 +51,35 @@ export function normalizeChatPageSchema(input: unknown, depth = 0): ChatPageSche
   return schema
 }
 
+/** What the schema accepts at a path, for failure messages. Read from the schema itself and never from the rejected value. */
+function acceptedChatPageInput(schema: ChatPageSchema) {
+  if (schema.enum) return `가능한 값: ${schema.enum.join(', ')}.`
+  if (schema.type === 'boolean') return '가능한 입력: true 또는 false.'
+  if (schema.type === 'object') return '가능한 입력: 객체 또는 그 JSON 문자열.'
+  if (schema.type === 'array') return `가능한 입력: 항목 ${schema.minItems ?? 0}개 이상 ${Math.min(schema.maxItems ?? 512, 512)}개 이하의 배열 또는 그 JSON 문자열.`
+  if (schema.type === 'string') return `가능한 입력: ${Math.min(schema.maxLength ?? 8000, CHAT_PAGE_ACTION_LIMITS.text)}자 이하의 문자열.`
+  const range = [schema.minimum !== undefined && `${schema.minimum} 이상`, schema.maximum !== undefined && `${schema.maximum} 이하`].filter(Boolean).join(' ')
+  return `가능한 입력: ${range ? `${range}의 ` : ''}${schema.integer ? '정수' : '숫자'}.`
+}
+
 export function validateChatPageArguments(schema: ChatPageSchema, input: unknown, path = 'arguments'): ChatPageData {
   let value = input
   // Local models sometimes serialize a structured argument as JSON. Only decode where the schema requires it.
-  if ((schema.type === 'object' || schema.type === 'array') && typeof value === 'string') { try { value = JSON.parse(value) } catch { throw new Error(`${path}: JSON 입력이 필요해.`) } }
+  if ((schema.type === 'object' || schema.type === 'array') && typeof value === 'string') { try { value = JSON.parse(value) } catch { throw new Error(`${path}: JSON 입력이 필요해. ${acceptedChatPageInput(schema)}`) } }
   if (schema.type === 'object') {
     if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(`${path}: 객체가 필요해.`)
     const entries = Object.entries(value)
-    if (entries.some(([key]) => !own(schema.properties ?? {}, key)) || schema.required?.some((key) => !own(value!, key))) throw new Error(`${path}: 등록된 필드와 필수 입력을 확인해줘.`)
+    const properties = schema.properties ?? {}
+    const unregistered = entries.map(([key]) => key).filter((key) => !own(properties, key))
+    const missing = (schema.required ?? []).filter((key) => !own(value as object, key))
+    if (unregistered.length || missing.length) throw new Error(`${path}: 등록된 필드와 필수 입력을 확인해줘.${unregistered.length ? ` 없는 필드: ${unregistered.join(', ')}.` : ''}${missing.length ? ` 빠진 필수 입력: ${missing.join(', ')}.` : ''} 가능한 필드: ${Object.keys(properties).join(', ') || '없음'}.`)
     return Object.fromEntries(entries.map(([key, item]) => [key, validateChatPageArguments(schema.properties![key], item, `${path}.${key}`)]))
   }
   if (schema.type === 'array') {
-    if (!Array.isArray(value) || value.length < (schema.minItems ?? 0) || value.length > Math.min(schema.maxItems ?? 512, 512)) throw new Error(`${path}: 항목 개수가 올바르지 않아.`)
+    if (!Array.isArray(value) || value.length < (schema.minItems ?? 0) || value.length > Math.min(schema.maxItems ?? 512, 512)) throw new Error(`${path}: 항목 개수가 올바르지 않아. ${acceptedChatPageInput(schema)}`)
     return value.map((item, index) => validateChatPageArguments(schema.items!, item, `${path}[${index}]`))
   }
-  if (typeof value !== schema.type || (schema.type === 'string' && (value as string).length > Math.min(schema.maxLength ?? 8000, CHAT_PAGE_ACTION_LIMITS.text)) || (schema.type === 'number' && (!Number.isFinite(value) || (schema.integer && !Number.isSafeInteger(value)) || (schema.minimum !== undefined && (value as number) < schema.minimum) || (schema.maximum !== undefined && (value as number) > schema.maximum))) || (schema.enum && !schema.enum.includes(value as string | number))) throw new Error(`${path}: 입력 형식이나 허용 범위를 확인해줘.`)
+  if (typeof value !== schema.type || (schema.type === 'string' && (value as string).length > Math.min(schema.maxLength ?? 8000, CHAT_PAGE_ACTION_LIMITS.text)) || (schema.type === 'number' && (!Number.isFinite(value) || (schema.integer && !Number.isSafeInteger(value)) || (schema.minimum !== undefined && (value as number) < schema.minimum) || (schema.maximum !== undefined && (value as number) > schema.maximum))) || (schema.enum && !schema.enum.includes(value as string | number))) throw new Error(`${path}: 입력 형식이나 허용 범위를 확인해줘. ${acceptedChatPageInput(schema)}`)
   return copyChatPageData(value)
 }
 

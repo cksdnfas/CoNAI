@@ -7,7 +7,7 @@ import { hasConfiguredAuth } from '../auth/sessionAccess'
 import { publishRuntimeEvent, subscribeToRuntimeEvents } from '../runtime-events/runtimeEventBus'
 import { onChatReplyFinished } from './chatReplyRegistry'
 import { onProposalResolved } from './chatProposals'
-import { lastChatPageForThread } from './chatPageBridge'
+import { captureChatPage, lastChatPageForThread } from './chatPageBridge'
 import { onChatUserSend } from './chatSendEvents'
 import { CodexChatStore } from './codexChatStore'
 import { ChatProfileStore } from './chatProfiles'
@@ -56,7 +56,7 @@ function table() {
 const LIVE: ChatTaskStatus[] = ['awaiting_plan', 'running', 'waiting', 'paused']
 const parse = <T>(value: string | null, fallback: T): T => { try { return value ? JSON.parse(value) as T : fallback } catch { return fallback } }
 function toTask(row: TaskRow): ChatTask {
-  return { id: row.id, threadId: row.thread_id, goal: row.goal, steps: parse<ChatTaskStep[]>(row.steps, []), status: row.status, wait: row.wait, waitIds: parse<number[]>(row.wait_ids, []), reason: row.reason, budget: parse(row.budget, CHAT_TASK_DEFAULT_BUDGET), used: parse(row.used, { continuations: 0, images: 0 }), createdAt: row.created_at, updatedAt: row.updated_at }
+  return { id: row.id, threadId: row.thread_id, goal: row.goal, steps: parse<ChatTaskStep[]>(row.steps, []), status: row.status, wait: row.wait, waitIds: parse<Array<number | string>>(row.wait_ids, []), reason: row.reason, budget: parse(row.budget, CHAT_TASK_DEFAULT_BUDGET), used: parse(row.used, { continuations: 0, images: 0 }), createdAt: row.created_at, updatedAt: row.updated_at }
 }
 const clip = (value: unknown, max: number) => String(value ?? '').replace(/\s+/g, ' ').trim().slice(0, max)
 
@@ -121,12 +121,12 @@ export const ChatTaskStore = {
     announce(task)
     return task
   },
-  /** Remembers the step state at a continuation; returns how many continuations in a row changed nothing. */
-  markProgress(id: number): number {
+  /** Remembers the step state at a continuation; returns how many continuations in a row changed nothing. `peek` answers what marking would count without recording it. */
+  markProgress(id: number, peek = false): number {
     const row = table().prepare('SELECT steps, progress, stalled FROM chat_tasks WHERE id = ?').get(id) as Pick<TaskRow, 'steps' | 'progress' | 'stalled'> | undefined
     if (!row) return 0
     const stalled = row.progress === row.steps ? row.stalled + 1 : 0
-    table().prepare('UPDATE chat_tasks SET progress = ?, stalled = ? WHERE id = ?').run(row.steps, stalled, id)
+    if (!peek) table().prepare('UPDATE chat_tasks SET progress = ?, stalled = ? WHERE id = ?').run(row.steps, stalled, id)
     return stalled
   },
   /** The task (re)starts running now: the active-time limit counts from here. */
@@ -144,32 +144,40 @@ export const ChatTaskStore = {
   },
 }
 
-function waitTargetIds(task: ChatTask, wait: 'approval' | 'job', replyId: string | undefined, ids?: number[]) {
+/** `runtimeIds`: runtime jobs (a plugin task such as a Video Canvas chain, a media edit), which no chat link names, so they are
+ *  always explicit; omitted `ids` still select this reply's own targets, which may then be none. */
+function waitTargetIds(task: ChatTask, wait: 'approval' | 'job', replyId: string | undefined, ids?: number[], runtimeIds?: string[]) {
   const db = table()
-  const selected = ids ?? ((wait === 'approval'
+  const selected = ids ?? (((wait === 'approval'
     ? db.prepare("SELECT id FROM chat_proposals WHERE thread_id = ? AND reply_id = ? AND kind <> 'task_plan'").all(task.threadId, replyId ?? '')
-    : db.prepare('SELECT job_id AS id FROM chat_generation_links WHERE thread_id = ? AND reply_id = ?').all(task.threadId, replyId ?? '')) as Array<{ id: number }>).map((row) => row.id)
+    : db.prepare('SELECT job_id AS id FROM chat_generation_links WHERE thread_id = ? AND reply_id = ?').all(task.threadId, replyId ?? '')) as Array<{ id: number }>).map((row) => row.id))
   const targets = [...new Set(selected)]
-  if (!targets.length) throw new Error('기다릴 대상을 찾지 못했어. 도구 결과의 proposal_ids 또는 job_ids를 지정해줘.')
+  const runtime = [...new Set(runtimeIds ?? [])]
+  if (!targets.length && !runtime.length) throw new Error('기다릴 대상을 찾지 못했어. 도구 결과의 proposal_ids, job_ids 또는 runtime_job_ids를 지정해줘.')
   const json = JSON.stringify(targets)
-  const allowed = wait === 'approval'
+  const allowed = !targets.length ? [] : wait === 'approval'
     ? db.prepare("SELECT id FROM chat_proposals WHERE thread_id = ? AND kind <> 'task_plan' AND id IN (SELECT value FROM json_each(?))").all(task.threadId, json)
     : db.prepare(`SELECT j.id FROM generation_queue_jobs j JOIN codex_chat_threads t ON t.id = ?
         WHERE j.id IN (SELECT value FROM json_each(?))
           AND (j.requested_by_account_id IS t.account_id OR EXISTS (
             SELECT 1 FROM chat_generation_links l WHERE l.job_id = j.id AND l.thread_id = t.id))`).all(task.threadId, json)
-  if (allowed.length !== targets.length) throw new Error('대기 대상이 없거나 이 채팅에서 확인할 수 없는 대상이야.')
-  return targets
+  const owned = !runtime.length ? [] : db.prepare(`SELECT j.job_id FROM runtime_jobs j JOIN codex_chat_threads t ON t.id = ?
+      WHERE j.job_id IN (SELECT value FROM json_each(?)) AND j.requested_by_account_id IS t.account_id`).all(task.threadId, JSON.stringify(runtime))
+  if (allowed.length !== targets.length || owned.length !== runtime.length) throw new Error('대기 대상이 없거나 이 채팅에서 확인할 수 없는 대상이야.')
+  return [...targets, ...runtime]
 }
 
 function reconcileWait(taskId: number) {
   const task = ChatTaskStore.find(taskId)
   if (task?.status !== 'waiting' || (task.wait !== 'approval' && task.wait !== 'job')) return task
   const ids = task.waitIds ?? []
-  const json = JSON.stringify(ids)
+  // Cards and generation-queue jobs have numeric ids; runtime jobs have UUIDs and their own table.
+  const numbers = JSON.stringify(ids.filter((id) => typeof id === 'number'))
+  const runtime = JSON.stringify(ids.filter((id) => typeof id === 'string'))
   const rows = (task.wait === 'approval'
-    ? table().prepare('SELECT id, (saved = 1 OR dismissed = 1) AS ready FROM chat_proposals WHERE thread_id = ? AND id IN (SELECT value FROM json_each(?))').all(task.threadId, json)
-    : table().prepare("SELECT id, status IN ('completed', 'failed', 'cancelled') AS ready FROM generation_queue_jobs WHERE id IN (SELECT value FROM json_each(?))").all(json)) as Array<{ id: number; ready: number }>
+    ? table().prepare('SELECT id, (saved = 1 OR dismissed = 1) AS ready FROM chat_proposals WHERE thread_id = ? AND id IN (SELECT value FROM json_each(?))').all(task.threadId, numbers)
+    : [...table().prepare("SELECT id, status IN ('completed', 'failed', 'cancelled') AS ready FROM generation_queue_jobs WHERE id IN (SELECT value FROM json_each(?))").all(numbers),
+      ...table().prepare("SELECT job_id AS id, status IN ('completed', 'failed', 'cancelled') AS ready FROM runtime_jobs WHERE job_id IN (SELECT value FROM json_each(?))").all(runtime)]) as Array<{ id: number | string; ready: number }>
   if (!ids.length || rows.length !== ids.length) return ChatTaskStore.update(task.id, { status: 'paused', reason: '대기 대상을 확인할 수 없어 멈췄어. 실제 결과를 확인한 뒤 재개해줘.' })
   if (rows.some((row) => !row.ready)) return task
   const resumed = ChatTaskStore.update(task.id, { status: 'running', reason: null })
@@ -287,10 +295,11 @@ export const ChatTaskRunner = {
       if (task?.status !== 'waiting' || !(task.wait === 'user' || (task.wait === 'page' && withPage))) return
       ChatTaskStore.update(task.id, { status: 'running', reason: null })
     }))
+    // A generation-queue job ends with queue.job.status (a numeric id), a runtime job with the runner's job.status (a UUID).
     subscriptions.push(subscribeToRuntimeEvents((record) => {
-      if (record.name !== 'queue.job.status') return
-      const payload = record.payload as { job_id?: number; status?: string }
-      if (!['completed', 'failed', 'cancelled'].includes(payload?.status ?? '') || typeof payload?.job_id !== 'number') return
+      if (record.name !== 'queue.job.status' && record.name !== 'job.status') return
+      const payload = record.payload as { job_id?: number | string; status?: string }
+      if (!['completed', 'failed', 'cancelled'].includes(payload?.status ?? '') || typeof payload?.job_id !== (record.name === 'job.status' ? 'string' : 'number')) return
       const rows = table().prepare(`SELECT id FROM chat_tasks WHERE status = 'waiting' AND wait = 'job'
         AND EXISTS (SELECT 1 FROM json_each(chat_tasks.wait_ids) WHERE value = ?)`).all(payload.job_id) as Array<{ id: number }>
       for (const row of rows) reconcileWait(row.id)
@@ -305,9 +314,9 @@ export const ChatTaskRunner = {
     for (const unsubscribe of subscriptions.splice(0)) unsubscribe()
   },
 
-  wait(taskId: number, wait: ChatTaskWait, reason: string, replyId?: string, ids?: number[]) {
+  wait(taskId: number, wait: ChatTaskWait, reason: string, replyId?: string, ids?: number[], runtimeIds?: string[]) {
     const task = ChatTaskStore.requireActive(taskId)
-    const waitIds = wait === 'approval' || wait === 'job' ? waitTargetIds(task, wait, replyId, ids) : []
+    const waitIds = wait === 'approval' || wait === 'job' ? waitTargetIds(task, wait, replyId, ids, runtimeIds) : []
     ChatTaskStore.update(task.id, { status: 'waiting', wait, waitIds, reason })
     // Completion may already have arrived before the model registered its wait.
     return reconcileWait(task.id)!
@@ -389,12 +398,18 @@ export const ChatTaskRunner = {
     // in a moment, before anything counts against the budget or the stall limit. Its end schedules a turn too.
     const { CodexChatService } = await import('./codexChatService')
     const { GroupChatService } = await import('./groupChatService')
-    task = ChatTaskStore.find(task.id)
-    if (stopped || !task || task.status !== 'running' || running.has(threadId)) return
-    if (CodexChatService.isRunning(threadId) || GroupChatService.isRunning(threadId)) {
-      if (!timers.has(threadId)) ChatTaskRunner.schedule(threadId, event, 1500)
-      return
+    const taskId = task.id
+    const due = () => {
+      const found = ChatTaskStore.find(taskId)
+      if (stopped || !found || found.status !== 'running' || running.has(threadId)) return null
+      if (CodexChatService.isRunning(threadId) || GroupChatService.isRunning(threadId)) {
+        if (!timers.has(threadId)) ChatTaskRunner.schedule(threadId, event, 1500)
+        return null
+      }
+      return found
     }
+    task = due()
+    if (!task) return
     const thread = CodexChatStore.findThreadById(threadId)
     const group = thread?.kind === 'group'
     const members: Member[] = group ? ChatGroupStore.members(threadId).flatMap((member) => { const found = ChatProfileStore.find(member.profile_id); return found?.isEnabled ? [found] : [] }) : []
@@ -404,12 +419,29 @@ export const ChatTaskRunner = {
       ChatTaskStore.update(task.id, { status: 'failed', reason: '채팅이나 프로필, 계정을 쓸 수 없어서 멈췄어.' })
       return
     }
-    const used = { ...task.used, images: imagesUsed(task) }
-    if (used.continuations >= task.budget.continuations) { ChatTaskStore.update(task.id, { status: 'paused', used, reason: '이어가기 예산을 다 썼어. 예산을 늘려 승인한 뒤 이어가거나 작업을 중단해줘.' }); return }
-    if (used.images >= task.budget.images) { ChatTaskStore.update(task.id, { status: 'paused', used, reason: '이미지 예산을 다 썼어. 예산을 늘려 승인한 뒤 이어가거나 작업을 중단해줘.' }); return }
-    if (task.budget.tokens !== undefined && (used.tokens ?? 0) >= task.budget.tokens) { ChatTaskStore.update(task.id, { status: 'paused', used, reason: '토큰 예산을 다 썼어. 예산을 늘려 승인한 뒤 이어가거나 작업을 중단해줘.' }); return }
-    if (ChatTaskStore.activeMs(task.id) > ACTIVE_LIMIT_MS) { ChatTaskStore.update(task.id, { status: 'paused', used, reason: '작업 시간이 길어져서 멈췄어. 이어가려면 재개해줘.' }); return }
-    if (ChatTaskStore.markProgress(task.id) >= STALL_LIMIT) { ChatTaskStore.update(task.id, { status: 'paused', used, reason: '몇 번 이어가도 진전이 없어서 멈췄어.' }); return }
+    let used = { ...task.used, images: imagesUsed(task) }
+    const spent = (of: ChatTask) => used.continuations >= of.budget.continuations ? '이어가기 예산을 다 썼어. 예산을 늘려 승인한 뒤 이어가거나 작업을 중단해줘.'
+      : used.images >= of.budget.images ? '이미지 예산을 다 썼어. 예산을 늘려 승인한 뒤 이어가거나 작업을 중단해줘.'
+      : of.budget.tokens !== undefined && (used.tokens ?? 0) >= of.budget.tokens ? '토큰 예산을 다 썼어. 예산을 늘려 승인한 뒤 이어가거나 작업을 중단해줘.'
+      : ChatTaskStore.activeMs(of.id) > ACTIVE_LIMIT_MS ? '작업 시간이 길어져서 멈췄어. 이어가려면 재개해줘.'
+      : null
+    const over = spent(task)
+    if (over) { ChatTaskStore.update(task.id, { status: 'paused', used, reason: over }); return }
+    // The stall count is only recorded once the turn is certain to go, so a turn put off below does not count.
+    if (ChatTaskStore.markProgress(task.id, true) >= STALL_LIMIT) { ChatTaskStore.update(task.id, { status: 'paused', used, reason: '몇 번 이어가도 진전이 없어서 멈췄어.' }); return }
+    // The turn's first direct action is checked against the screen the turn is sent with, so it goes with the connected
+    // tab's live screen when the tab answers, else the last one the tab reported. The person may pause or start a reply meanwhile.
+    const known = profile?.pageAssist ? lastChatPageForThread(requester, threadId) : undefined
+    const page = known ? (await captureChatPage(requester, known, threadId)).page : undefined
+    if (known) {
+      task = due()
+      if (!task) return
+      used = { ...task.used, images: imagesUsed(task) }
+      // Usage recorded while the tab answered counts against this turn too.
+      const overNow = spent(task)
+      if (overNow) { ChatTaskStore.update(task.id, { status: 'paused', used, reason: overNow }); return }
+    }
+    ChatTaskStore.markProgress(task.id)
     const current = task.steps.findIndex((step) => step.status === 'doing' || step.status === 'todo')
     const turn = group ? groupTurn(task, current, members, members.find((member) => member.id === thread.profile_id) ?? members[0]) : null
     // The text shows the steps as they stand; the member woken for an `all` step is remembered with the turn.
@@ -423,7 +455,7 @@ export const ChatTaskRunner = {
     try {
       await withLlmUsageContext({ taskId: task.id, threadId }, () => turn
         ? GroupChatService.sendMessage(requester, threadId, text, () => {}, undefined, undefined, undefined, undefined, undefined, { task: routing, recipients: [turn.member.id] })
-        : CodexChatService.sendMessage(requester, threadId, text, () => {}, undefined, undefined, undefined, undefined, undefined, profile?.pageAssist ? lastChatPageForThread(requester, threadId) : undefined, { task: routing }))
+        : CodexChatService.sendMessage(requester, threadId, text, () => {}, undefined, undefined, undefined, undefined, undefined, page, { task: routing }))
     } catch (error) {
       // A reply already running finishes first and its end schedules the next continuation; in case it ended just
       // before, this one is given back and tried again a little later.

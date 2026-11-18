@@ -238,15 +238,15 @@ test('trusted extensions preserve package, caller, explicit approval and externa
     const requester = { accountId: adminId, accountType: 'admin' as const }
     const before = shared.normalizeChatPageSnapshot({ instanceId: randomUUID(), connectionId: randomUUID(), path: '/ext/text-editor/editor', title: 'Text', kind: 'extension', resourceId: '1.0.0', fields: [], actions: instance.page.actions, revision: randomUUID(), dirty: true, data: { selected: { excerpt: 'x'.repeat(8000) }, note: 'keep' } })
     const next = { ...before, revision: randomUUID() }
-    const unchanged = pageOperationView(requester, before, next) as { data: unknown; unchangedData: string[]; removedData?: string[] }
+    const unchanged = pageOperationView(requester, before, next).page as { data: unknown; unchangedData: string[]; removedData?: string[] }
     assert.deepEqual(unchanged.data, {})
     assert.deepEqual(unchanged.unchangedData, ['selected', 'note'])
     const oldShape = { ...unchanged, data: before.data, unchangedData: undefined }
     t.diagnostic(`Unchanged 8000-character extension excerpt: result before=${Buffer.byteLength(JSON.stringify(oldShape))} bytes; delta=${Buffer.byteLength(JSON.stringify(unchanged))} bytes.`)
-    const changed = pageOperationView(requester, before, { ...next, data: { selected: { excerpt: 'new' } } }) as { data: unknown; removedData: string[] }
+    const changed = pageOperationView(requester, before, { ...next, data: { selected: { excerpt: 'new' } } }).page as { data: unknown; removedData: string[] }
     assert.deepEqual(changed.data, { selected: { excerpt: 'new' } })
     assert.deepEqual(changed.removedData, ['note'])
-    const reopened = pageOperationView(requester, before, { ...next, instanceId: randomUUID() }) as { data: unknown }
+    const reopened = pageOperationView(requester, before, { ...next, instanceId: randomUUID() }).page as { data: unknown }
     assert.deepEqual(reopened.data, before.data, 'a different screen must send its document even when the excerpt matches')
   })
   await t.test('project extensions share CAS, retry and media-reference boundaries with agents', async () => {

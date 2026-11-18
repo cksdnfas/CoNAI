@@ -20,7 +20,7 @@ export async function request(op, args = {}, options) {
   if (section) {
     const shown = withAutoProfile(section, result)
     const summary = section === 'lastEdit' ? { revision: shown.revision, applied: shown.applied.length, rejected: shown.rejected.length }
-      : section === 'lastRun' ? { takeId: shown.takeId ?? shown.id, seed: shown.seed, status: shown.status, inputDigest: shown.inputDigest }
+      : section === 'lastRun' ? { takeId: shown.takeId ?? shown.id, seed: shown.seed, status: shown.status, jobId: shown.jobId, inputDigest: shown.inputDigest }
         : section === 'lastNode' ? { nodeId: shown.node.id, inputDigest: shown.preview?.inputDigest ?? null }
           : section === 'lastExtraction' || section === 'lastExport' || section === 'lastChain' ? { id: shown.id, status: shown.status, jobId: shown.jobId }
             : section === 'workflowOptions' ? { workflows: shown.workflows.length, servers: shown.servers.length, profiles: shown.profiles.length, ...(shown.presets ? { presets: shown.presets.length } : {}) }

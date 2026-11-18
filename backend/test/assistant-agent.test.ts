@@ -145,18 +145,66 @@ test('assistant agent: proposal outcomes, page operation records, task plan and 
   await t.test('a page operation on the same screen answers with what changed only', async () => {
     const { normalizeChatPageSnapshot } = await import('@conai/shared')
     const { pageOperationView } = await import('../src/mcp/tools/chatPageView')
+    const { PAGE_VIEW_UNKNOWN } = await import('../src/services/codex-chat/chatPageContext')
     const admin = { accountId: null, accountType: 'admin' as const }
     const before = normalizeChatPageSnapshot({ instanceId: 'inst-op-1', connectionId: 'conn-op-1', path: '/settings', title: '설정', kind: 'settings', resourceId: 'chat', revision: 'rev-op-1',
       fields: [{ id: 'name', label: '이름', type: 'text', value: '' }, { id: 'prompt', label: '프롬프트', type: 'text', value: 'p'.repeat(4000) }],
       actions: [{ id: 'profile.open_create', label: '새 프로필', description: '', effect: 'draft', schema: { type: 'object', properties: {} } }] })
     const filled = normalizeChatPageSnapshot({ ...before, revision: 'rev-op-2', fields: [{ ...before.fields[0], value: '세라' }, before.fields[1]] })
-    const same = pageOperationView(admin, before, filled) as { fields: Array<{ id: string }>; actions: unknown; otherFields?: string }
+    const operation = pageOperationView(admin, before, filled)
+    const same = operation.page as { fields: Array<{ id: string }>; actions: unknown; otherFields?: string; changesOnly?: unknown }
     assert.deepEqual(same.fields.map((field) => field.id), ['name'])
     assert.match(String(same.actions), /unchanged/)
     assert.ok(same.otherFields)
-    const elsewhere = pageOperationView(admin, before, normalizeChatPageSnapshot({ ...filled, instanceId: 'inst-op-2' })) as { fields: unknown[]; actions: unknown }
+    assert.equal(same.changesOnly, true, 'a changed-parts view is marked as one')
+    assert.notEqual(operation.key, PAGE_VIEW_UNKNOWN, 'changes given whole leave the new screen known')
+    const trimmed = pageOperationView(admin, before, normalizeChatPageSnapshot({ ...before, revision: 'rev-op-5', fields: [before.fields[0]], actions: undefined })).page as { removedFields?: string[]; removedActions?: string[]; actions?: unknown }
+    assert.deepEqual([trimmed.removedFields, trimmed.removedActions, trimmed.actions], [['prompt'], ['profile.open_create'], undefined], 'a removed field or operation is named, never left as unchanged')
+    const elsewhere = pageOperationView(admin, before, normalizeChatPageSnapshot({ ...filled, instanceId: 'inst-op-2' })).page as { fields: unknown[]; actions: unknown }
     assert.equal(elsewhere.fields.length, 2, 'another screen comes back whole')
     assert.ok(Array.isArray(elsewhere.actions))
+    // Any screen leaves its unchanged data out (here option lists), and an oversized changed value keeps the answer a
+    // changed-parts view with that value read by key.
+    const options = { sampler: Array.from({ length: 300 }, (_, index) => `sampler_${index}`) }
+    const listed = normalizeChatPageSnapshot({ ...before, data: { options, node: 'old' } })
+    const read = pageOperationView(admin, listed, normalizeChatPageSnapshot({ ...listed, revision: 'rev-op-3', data: { options, node: 'new' } })).page as { data: unknown; unchangedData: string[] }
+    assert.deepEqual(read.data, { node: 'new' })
+    assert.deepEqual(read.unchangedData, ['options'])
+    const largeOperation = pageOperationView(admin, listed, normalizeChatPageSnapshot({ ...listed, revision: 'rev-op-4', data: { options, node: 'n'.repeat(20_000) } }))
+    assert.equal(largeOperation.key, PAGE_VIEW_UNKNOWN, 'a shortened change leaves the new screen unknown')
+    const large = largeOperation.page as { fields: unknown[]; actions: unknown; data: unknown; unchangedData: string[] }
+    assert.deepEqual(large.data, { node: { readWith: 'read_page_data' } })
+    assert.deepEqual(large.unchangedData, ['options'])
+    assert.deepEqual(large.fields, [])
+    assert.match(String(large.actions), /unchanged/, 'past the budget the unchanged operations stay out')
+  })
+
+  await t.test('a superseded screen keeps only what the next full view of it does not repeat', async () => {
+    const { normalizeChatPageSnapshot } = await import('@conai/shared')
+    const { boundedPageView } = await import('../src/services/codex-chat/chatPageContext')
+    const { chatPageView, pageViewResidual } = await import('../src/mcp/tools/chatPageView')
+    const admin = { accountId: null, accountType: 'admin' as const }
+    const page = normalizeChatPageSnapshot({ instanceId: 'inst-res-1', connectionId: 'conn-res-1', path: '/settings', title: '설정', kind: 'settings', resourceId: 'chat', revision: 'rev-res-1',
+      fields: [{ id: 'name', label: '이름', type: 'text', value: 'A' }, { id: 'prompt', label: '프롬프트', type: 'text', value: 'p'.repeat(4000) }],
+      actions: [{ id: 'profile.open_create', label: '새 프로필', description: '', effect: 'draft', schema: { type: 'object', properties: {} } }], data: { options: ['a', 'b'], node: 'old' } })
+    const view = (snapshot: typeof page, budget?: number) => JSON.parse(boundedPageView(chatPageView(admin, snapshot), budget))
+    const older = view(page)
+    const newer = view(normalizeChatPageSnapshot({ ...page, revision: 'rev-res-2', fields: [{ ...page.fields[0], value: 'B' }, page.fields[1]], data: { options: ['a', 'b'], node: 'new' } }))
+    const residual = pageViewResidual(older, newer)
+    assert.deepEqual(residual.fields, [older.fields[0]], 'the field that differs stays as it was')
+    assert.deepEqual(residual.data, { node: 'old' })
+    assert.equal(residual.actions, undefined)
+    assert.equal(residual.revision, 'rev-res-1')
+    const { note, ...named } = residual.sameInNextView as { note: string }
+    assert.match(note, /identical in the next full view of this screen/)
+    assert.deepEqual(named, { fields: ['prompt'], actions: true, data: ['options'] })
+    assert.equal(pageViewResidual(residual, newer), residual, 'a reduced view stays as it is')
+    // A later view that shortened a value does not repeat it.
+    const shortened = view(page, 3000)
+    assert.match(String(shortened.truncated), /shortened/)
+    const kept = pageViewResidual(older, shortened)
+    assert.deepEqual(kept.fields.map((field) => field.id), ['prompt'])
+    assert.equal((kept.fields[0] as { value?: unknown }).value, 'p'.repeat(4000))
   })
 
   await t.test('the LLM engine merges the page reference into the latest user message', async () => {
@@ -228,8 +276,8 @@ test('assistant agent: proposal outcomes, page operation records, task plan and 
     try {
       const names = bridge.tools.map((tool) => tool.function.name)
       assert.ok(names.includes('task_propose'), 'task_propose is offered in a 1:1 chat')
-      // An API LLM chat lists the step tools only while an approved task runs (they cost every request otherwise).
-      for (const name of ['task_status', 'task_update', 'task_wait', 'task_finish']) assert.ok(!names.includes(name), `${name} waits for an approved plan`)
+      // The step tools are listed before any plan (the tool list stays the same); they refuse until a plan is approved.
+      for (const name of ['task_status', 'task_update', 'task_wait', 'task_finish']) assert.ok(names.includes(name), `${name} is listed from the start`)
       assert.ok((await bridge.call('task_update', { step: 1, status: 'done' })).isError, 'no task yet')
       const proposed = await bridge.call('task_propose', { goal: '세라 프로필 완성', steps: [{ title: '초안' }, { title: '저장', approval: true }, { title: '이미지' }], budget: { continuations: 5 } })
       assert.ok(!proposed.isError, JSON.stringify(proposed.content))
@@ -244,7 +292,7 @@ test('assistant agent: proposal outcomes, page operation records, task plan and 
       assert.equal(ChatTaskStore.find(taskId)?.status, 'running')
       assert.equal(scheduled.length, 1, 'approval starts the first turn')
 
-      // The next request (the runner's turn) lists the step tools.
+      // The next request (the runner's turn) lists them as well.
       await bridge.close()
       bridge = await open()
       for (const name of ['task_status', 'task_update', 'task_wait', 'task_finish']) assert.ok(bridge.tools.some((tool) => tool.function.name === name), `${name} is offered while the task runs`)
@@ -267,6 +315,43 @@ test('assistant agent: proposal outcomes, page operation records, task plan and 
       assert.equal(ChatTaskStore.find(taskId)?.status, 'done')
       assert.equal(ChatTaskStore.live(threadId), null)
     } finally { stop(); await bridge.close() }
+  })
+
+  await t.test('the tool list stays the same as the chat goes on; a tool unusable right now refuses the call', async (sub) => {
+    sub.mock.method(ChatTaskRunner, 'schedule', () => {})
+    const thread = CodexChatStore.createThread(null, 'steady tools', 'llm', profile.id)
+    const say = (content: string) => CodexChatStore.addMessage({ thread_id: thread, role: 'user', content, tool_calls: [], status: 'completed', error: null })
+    const text = (result: { content?: unknown[] }) => (result.content?.[0] as { text: string }).text
+    // Each reply opens its own bridge, as each request does; what it lists is compared whole, definitions included.
+    const listed = async (replyId: string, use: (bridge: Awaited<ReturnType<typeof openChatMcpBridge>>) => Promise<void> = async () => {}) => {
+      const context: ChatExecutionContext = { threadId: thread, profileId: profile.id, kind: 'direct', replyId }
+      const stop = registerChatReply(context, controller.signal, () => ({ replyTo: null, recipients: ['user'] }))
+      const bridge = await openChatMcpBridge({ accountId: null, accountType: 'admin' }, ['read', 'configure'], null, { chatContext: context })
+      try { await use(bridge); return JSON.stringify(bridge.tools) } finally { stop(); await bridge.close() }
+    }
+    const first = say('등대 얘기 기억해줘.')
+    const start = await listed('steady-1', async (bridge) => {
+      assert.match(text(await bridge.call('chat_reply_to', { message_id: first })), /no older message/, 'nothing older to quote yet')
+      assert.match(text(await bridge.call('task_status', {})), /진행 중인 작업이 없어/)
+      assert.ok(!(await bridge.call('save_lore', { title: '등대', keys: ['등대'], content: '등대 램프는 매주 닦는다.' })).isError)
+      assert.match(text(await bridge.call('save_lore', { title: '방파제', keys: ['방파제'], content: '방파제는 낡았다.' })), /already has a lore proposal/)
+    })
+    for (const name of ['chat_reply_to', 'task_status', 'task_update', 'task_wait', 'task_finish', 'save_lore']) assert.ok(start.includes(`"name":"${name}"`), name)
+
+    say('두 번째 얘기.')
+    assert.equal(await listed('steady-2', async (bridge) => {
+      assert.ok(!(await bridge.call('chat_reply_to', { message_id: first })).isError, 'an older message can be quoted now')
+    }), start, 'the second turn, after a lore proposal')
+    const task = ChatTaskStore.create(thread, '등대 정리', [{ title: '정리' }])
+    assert.equal(await listed('steady-3', async (bridge) => {
+      assert.match(text(await bridge.call('task_status', {})), /승인 전/)
+    }), start, 'a plan waiting for approval')
+    ChatTaskRunner.approve(task.id)
+    assert.equal(await listed('steady-4', async (bridge) => {
+      assert.ok(!(await bridge.call('task_status', {})).isError)
+    }), start, 'a running task')
+    ChatTaskStore.update(task.id, { status: 'done', reason: '끝' })
+    assert.equal(await listed('steady-5'), start, 'a finished task')
   })
 
   await t.test('waits reconcile targets completed before registration or during a restart', async (sub) => {
@@ -349,6 +434,31 @@ test('assistant agent: proposal outcomes, page operation records, task plan and 
       db.prepare("UPDATE generation_queue_jobs SET status = 'completed' WHERE id = ?").run(selectedJob)
       publishRuntimeEvent({ name: 'queue.job.status', topic: 'generation-queue', payload: { job_id: selectedJob, status: 'completed' } })
       assert.equal(ChatTaskStore.find(task.id)?.status, 'running', 'unrelated jobs from the same account and chat do not hold this wait')
+    } finally { ChatTaskRunner.cancel(thread); stop(); await bridge.close() }
+  })
+
+  await t.test('a task waits on its own account’s runtime job and resumes when the job ends', async (sub) => {
+    const scheduled = sub.mock.method(ChatTaskRunner, 'schedule', () => {})
+    const { publishRuntimeJobHintEvent } = await import('../src/services/runtime-events/runtimeEventPublishers')
+    const { RuntimeJobStore } = await import('../src/services/runtimeJobs/runtimeJobStore')
+    const thread = CodexChatStore.createThread(null, 'runtime waits', 'llm', profile.id)
+    const context = { ...reply('runtime-waits'), threadId: thread }
+    const task = ChatTaskStore.create(thread, '이어 생성', [{ title: '체인' }])
+    ChatTaskRunner.approve(task.id)
+    const stop = registerChatReply(context, controller.signal, () => ({ replyTo: null, recipients: ['user'] }))
+    const bridge = await openChatMcpBridge({ accountId: null, accountType: 'admin' }, ['read', 'configure'], null, { chatContext: context })
+    try {
+      const own = RuntimeJobStore.create({ kind: 'plugin-task', requestedByAccountId: null, singletonKey: null })
+      const foreign = RuntimeJobStore.create({ kind: 'plugin-task', requestedByAccountId: 77, singletonKey: null })
+      assert.ok((await bridge.call('task_wait', { for: 'job', reason: '체인', runtime_job_ids: [foreign.jobId] })).isError, 'another account’s job is refused')
+      assert.equal(ChatTaskStore.find(task.id)?.status, 'running')
+      assert.ok(!(await bridge.call('task_wait', { for: 'job', reason: '체인', runtime_job_ids: [own.jobId] })).isError)
+      assert.equal(ChatTaskStore.find(task.id)?.status, 'waiting')
+      const before = scheduled.mock.callCount()
+      RuntimeJobStore.markCompleted(own.jobId, null)
+      publishRuntimeJobHintEvent({ job_id: own.jobId, kind: 'plugin-task', status: 'completed', updated_at: new Date().toISOString() })
+      assert.equal(ChatTaskStore.find(task.id)?.status, 'running')
+      assert.equal(scheduled.mock.callCount(), before + 1, 'the end of the job schedules the continuation')
     } finally { ChatTaskRunner.cancel(thread); stop(); await bridge.close() }
   })
 

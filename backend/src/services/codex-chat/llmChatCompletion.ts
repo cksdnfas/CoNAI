@@ -6,7 +6,7 @@ import { LlmRequestError, retryLlmRequest } from '../llmRequestRetry'
 import { recordRequestOutcome } from './connectionHealthState'
 import { CLAUDE_CHAT_PROVIDER, streamClaudeChatCompletion, type ClaudeChatSession } from './claudeChatCompletion'
 import type { ChatMcpToolResult } from './chatMcpBridge'
-import { streamPiChatCompletion, type PiChatSession } from './piChatCompletion'
+import { streamPiChatCompletion, type PiChatSession, type PiRequestUsage } from './piChatCompletion'
 import { primaryModelOf } from './modelSlots'
 import { createRepetitionWatch, withoutRepetition } from './repetitionGuard'
 import { rawMessagesEstimate, rawTokenEstimate, readUsageCounts, recordLlmUsage, type LlmTokenCounts, type LlmUsageTag } from '../llmUsage'
@@ -109,9 +109,20 @@ export function noteLlmConnectFailure(target: Pick<ChatCompletionTarget, 'provid
   const failures = previous && now - previous.last < 60_000 ? previous.failures + 1 : 1
   unreachable.set(target.providerName, { failures, last: now, until: failures >= 2 ? now + UNREACHABLE_PAUSE_MS : 0 })
 }
+/** A request that never reached the connection's server. Node's fetch only says "fetch failed"; the cause (ECONNREFUSED, ENOTFOUND…) is what the user can act on. */
+export function llmConnectError(target: Pick<ChatCompletionTarget, 'providerName' | 'endpoint'>, error: unknown) {
+  const cause = (error as { cause?: { code?: string; message?: string } })?.cause
+  noteLlmConnectFailure(target, cause?.code)
+  return new LlmRequestError(`LLM 서버에 연결하지 못했어: ${target.endpoint} (${cause?.code ?? cause?.message ?? (error instanceof Error ? error.message : String(error))})`, undefined, { cause: error })
+}
 
 /** Servers that refused cache marks, by connection and model (marks are an optimization: remembered, not retried). */
 const marksRefused = new Map<string, number>()
+const MARKS_REFUSED_MS = 60 * 60_000
+/** A server that does not know cache_control rejects the whole request, naming the field. */
+export const isCacheMarksRefusal = (status: number, errorText: string) => status === 400 && /cache_control|cache.control|cache marks|prompt.cache/i.test(errorText)
+export const cacheMarksRefusedBy = (target: ChatCompletionTarget) => (marksRefused.get(toolsKey(target)) ?? 0) > Date.now()
+export const noteCacheMarksRefused = (target: ChatCompletionTarget) => { marksRefused.set(toolsKey(target), Date.now() + MARKS_REFUSED_MS) }
 const streamUsageRefused = new Map<string, number>()
 
 /** A 400 that says the server or model cannot take tool definitions (not a broken call or schema of ours). */
@@ -342,7 +353,7 @@ function readJsonCompletion(json: unknown): ChatCompletionResult {
 }
 
 /** A request is metered only once transport starts; its latency includes waiting for a slot. */
-async function requestChatCompletion(meter: { sent: boolean; usage: LlmTokenCounts | null; output: string; queueMs: number | null }, params: {
+async function requestChatCompletion(meter: { sent: boolean; usage: LlmTokenCounts | null; output: string; queueMs: number | null; requests: PiRequestUsage[] }, params: {
   target: ChatCompletionTarget
   messages: ChatCompletionMessage[]
   tools?: ChatCompletionTool[]
@@ -391,7 +402,7 @@ async function requestChatCompletion(meter: { sent: boolean; usage: LlmTokenCoun
       const piTools = params.toolChoice === 'none' ? [] : params.tools ?? []
       params.onRequestBody?.({ model: params.target.model, messages: params.messages, tools: piTools, transport: 'pi' }, params.target)
       meter.sent = true
-      return await streamPiChatCompletion({ ...params, tools: piTools, signal, onUsage: (usage) => { meter.usage = usage } })
+      return await streamPiChatCompletion({ ...params, tools: piTools, signal, onRequest: (request) => { meter.requests.push(request) } })
     }
     let streamUsage = (streamUsageRefused.get(toolsKey(params.target)) ?? 0) <= Date.now()
     let toolChoiceRefused = false
@@ -411,13 +422,10 @@ async function requestChatCompletion(meter: { sent: boolean; usage: LlmTokenCoun
         return response
       }, (error: unknown) => {
         if (signal.aborted) throw error
-        // Node's fetch only says "fetch failed"; the cause (ECONNREFUSED, ENOTFOUND…) is what the user can act on.
-        const cause = (error as { cause?: { code?: string; message?: string } })?.cause
-        noteLlmConnectFailure(target, cause?.code)
-        throw new LlmRequestError(`LLM 서버에 연결하지 못했어: ${params.target.endpoint} (${cause?.code ?? cause?.message ?? (error instanceof Error ? error.message : String(error))})`, undefined, { cause: error })
+        throw llmConnectError(target, error)
       })
     }
-    let target = (marksRefused.get(toolsKey(params.target)) ?? 0) > Date.now() ? { ...params.target, promptCacheMarks: false } : params.target
+    let target = cacheMarksRefusedBy(params.target) ? { ...params.target, promptCacheMarks: false } : params.target
     let response: Response
     let rateLimited = false
     let capFitted = false
@@ -439,10 +447,10 @@ async function requestChatCompletion(meter: { sent: boolean; usage: LlmTokenCoun
         }
       }
       // A server that does not know cache_control rejects the whole request; the marks are an optimization, so retry without them.
-      if (params.allowCompatibilityFallback !== false && response.status === 400 && target.promptCacheMarks && /cache_control|cache.control|cache marks|prompt.cache/i.test(errorText)) {
+      if (params.allowCompatibilityFallback !== false && target.promptCacheMarks && isCacheMarksRefusal(response.status, errorText)) {
         console.warn(`[llm-chat] ${params.target.displayName}: request with cache marks rejected (${errorText.slice(0, 200)}); retrying without`)
         target = { ...target, promptCacheMarks: false }
-        marksRefused.set(toolsKey(target), Date.now() + 60 * 60_000)
+        noteCacheMarksRefused(target)
         continue
       }
       // Likewise the usage chunk: a server that names stream_options in its refusal gets the request without it.
@@ -606,30 +614,50 @@ async function meteredChatCompletion(params: ChatCompletionParams & {
   recordHealth?: boolean
 }): Promise<ChatCompletionResult> {
   const startedAt = Date.now()
-  const meter = { sent: false, usage: null as LlmTokenCounts | null, output: '', queueMs: null as number | null }
+  const meter = { sent: false, usage: null as LlmTokenCounts | null, output: '', queueMs: null as number | null, requests: [] as PiRequestUsage[] }
   let firstTokenMs: number | null = null
   const noteOutput = (text: string) => {
     if (text && firstTokenMs === null) firstTokenMs = Math.max(0, Date.now() - startedAt - (meter.queueMs ?? 0))
     meter.output += text
   }
   const record = (result: ChatCompletionResult | null) => {
-    const reported = result?.usage ?? meter.usage
-    const estimate = !reported && (result !== null || meter.output.length > 0)
-    recordLlmUsage({
-      ...(params.usage ?? { purpose: 'other' }),
-      engine: params.target.transport === 'claude-code' ? 'claude-code' : 'api',
+    const { requests } = meter
+    const reported = requests.length > 0 ? requests.some((request) => request.tokens) : Boolean(result?.usage ?? meter.usage)
+    const estimate = !reported && (result !== null || meter.output.length > 0) ? {
+      inputTokens: rawMessagesEstimate(params.messages, params.tools ?? []),
+      cachedInputTokens: 0,
+      outputTokens: rawTokenEstimate(result ? result.content + result.reasoning + result.toolCalls.map((call) => call.function.name + call.function.arguments).join('') : meter.output),
+    } : null
+    const event = {
+      ...(params.usage ?? { purpose: 'other' as const }),
+      engine: params.target.transport === 'claude-code' ? 'claude-code' as const : 'api' as const,
       providerName: params.target.providerName,
       model: params.target.model,
-      tokens: reported ?? (estimate ? {
-        inputTokens: rawMessagesEstimate(params.messages, params.tools ?? []),
-        cachedInputTokens: 0,
-        outputTokens: rawTokenEstimate(result ? result.content + result.reasoning + result.toolCalls.map((call) => call.function.name + call.function.arguments).join('') : meter.output),
-      } : null),
-      estimated: Boolean(estimate),
-      latencyMs: Date.now() - startedAt,
-      queueMs: meter.queueMs,
-      firstTokenMs,
-      ok: result !== null,
+    }
+    if (requests.length === 0) {
+      recordLlmUsage({ ...event, tokens: result?.usage ?? meter.usage ?? estimate, estimated: Boolean(estimate), latencyMs: Date.now() - startedAt, queueMs: meter.queueMs, firstTokenMs, ok: result !== null })
+      return
+    }
+    // A pi run: one row per provider request it made, its rounds numbered in order. Its compaction summaries fold the
+    // session for this reply and count as summaries outside the rounds. The run's slot wait and first output go on
+    // the first row and the first round; an estimate for a run no request reported goes on its last reply request.
+    const replies = requests.map((request) => !request.compaction)
+    const estimateAt = replies.includes(true) ? replies.lastIndexOf(true) : requests.length - 1
+    let round = 0
+    requests.forEach((request, index) => {
+      const own = request.compaction ? null : ++round
+      const estimated = Boolean(estimate) && index === estimateAt
+      recordLlmUsage({
+        ...event,
+        ...(request.compaction ? { purpose: 'summary' as const } : {}),
+        round: own,
+        tokens: request.tokens ?? (estimated ? estimate : null),
+        estimated,
+        latencyMs: request.latencyMs ?? 0,
+        queueMs: index === 0 ? meter.queueMs : null,
+        firstTokenMs: own === 1 ? firstTokenMs : null,
+        ok: request.ok,
+      })
     })
   }
   try {

@@ -11,6 +11,7 @@ import { loadChatSettings } from '../../services/codex-chat/chatSettings';
 import { FileStoreService, applyTextEdits, fileOwnerKey } from '../../services/fileStoreService';
 import { loreKeyLanguageLabel, type FileWriteSource } from '@conai/shared';
 import { fileWriteSource, type McpRequestContext } from '../context';
+import { isContextToolAllowed } from '../toolAccess';
 import { errorResult } from '../toolResults';
 
 /** Bytes of a linked file one call returns; the rest follows with `offset`. */
@@ -59,6 +60,7 @@ function withFiles(book: { entries: ChatLoreEntry[] }) {
  */
 export async function readLoreFile(chat: LoreChat, input: { book: string; title: string; offset?: number }) {
   const books = attachedBooks(chat);
+  if (!hasLoreFiles(books)) throw new LoreFileError('No attached lorebook links a file yet (no entry is marked (자료) in the lore index), so there is nothing to read; use the entries themselves.', 404);
   const book = findBook(books, input.book);
   if (!book) {
     throw new LoreFileError(`Lorebook not found: "${input.book}". Attached books: ${books.map((entry) => `"${entry.label}"`).join(', ') || '(none)'}.`, 404);
@@ -140,18 +142,29 @@ function allowsLoreProposals(profileId: number) {
 export const SAVE_LORE_DONE = 'Proposed as a card under your reply; it is saved when the user presses 저장.';
 export const SAVE_LORE_SAVED = 'Saved to the lorebook; the user can undo it.';
 
+/** Whether the chat's record book has an entry with a file edit_lore_file could change. */
+function recordBookHasFiles(threadId: number) {
+  return OwnedLorebookStore.recordBook(threadId)?.entries.some((entry) => entry.enabled && entry.file) === true;
+}
+
 /**
- * Chat agents' lorebook tools, scoped like the room tools (no MCP scope needed). read_lore_file: offered in a chat
- * (direct or room) whose attached books link a file; a Codex session outlives its first tool list, so it always has
- * it. save_lore: offered in a chat whose profile allows lore proposals (checked again on each call, for Codex);
- * edit_lore_file with it, while auto-save is on and the record book has a file (a Codex session: always).
+ * Chat agents' lorebook tools, scoped like the room tools (no MCP scope needed). save_lore: offered in a chat whose
+ * profile allows lore proposals (checked again on each call, for Codex) and that admits it (an agent room does not);
+ * edit_lore_file and read_lore_file with it, since the model's own auto-saved entry can bring the record book its first
+ * file and a tool that arrived then would make a provider cache read the whole prompt again (their calls are refused
+ * while there is nothing to change or read). Where save_lore is not offered, edit_lore_file needs lore proposals,
+ * auto-save and a record book file, and read_lore_file attached books that link a file; a Codex session outlives its
+ * first tool list, so it always has both.
  */
 export function registerChatLoreTools(server: McpServer, context: McpRequestContext): void {
   const chatContext = context.chatContext;
   if (!chatContext) return;
   const chat: LoreChat = { threadId: chatContext.threadId, profileId: chatContext.profileId, accountId: context.requester?.accountId ?? null };
-  if (allowsLoreProposals(chat.profileId)) registerSaveLore(server, context);
-  if (context.source !== 'codex-chat') {
+  const proposes = allowsLoreProposals(chat.profileId);
+  const savesLore = proposes && isContextToolAllowed(context, SAVE_LORE_TOOL);
+  if (savesLore) registerSaveLore(server, context);
+  if (proposes && (savesLore || context.source === 'codex-chat' || (loreAutoSaveOn(chat.threadId) && recordBookHasFiles(chat.threadId)))) registerEditLoreFile(server, context);
+  if (context.source !== 'codex-chat' && !savesLore) {
     try {
       const profile = context.profilePreview ? ChatProfileStore.find(chat.profileId) : null;
       const books = profile ? booksForRequest({ thread: null, profile, profileOwner: fileOwnerKey(chat.accountId) }) : attachedBooks(chat);
@@ -201,26 +214,19 @@ function saveLoreTarget(context: McpRequestContext, threadId: number) {
     : { where: `this chat's own lorebook ("${CHAT_BOOK_LABEL}")`, memory: false };
 }
 
-/** Whether the chat's record book has an entry with a file edit_lore_file could change. */
-function recordBookHasFiles(threadId: number) {
-  return OwnedLorebookStore.recordBook(threadId)?.entries.some((entry) => entry.enabled && entry.file) === true;
-}
-
 function registerSaveLore(server: McpServer, context: McpRequestContext): void {
   const threadId = context.chatContext?.threadId;
   if (threadId === undefined) return;
-  const autoSave = loreAutoSaveOn(threadId);
-  const saving = autoSave
-    ? 'Saves immediately under your reply; the user can undo.'
-    : 'Returns a review card; only the user\'s 저장 saves it.';
   const target = saveLoreTarget(context, threadId);
   const memory = target.memory
     ? ' Also keep consequential events, relationships and established setting facts.'
     : '';
-  const editable = context.source === 'codex-chat' || (autoSave && recordBookHasFiles(threadId));
+  // The description does not say how it saves: a private attachment turns auto-save off, not a setting the user edits,
+  // and a definition that changed mid-chat would make a provider cache read the whole prompt again. The result says how
+  // it was saved.
   server.registerTool(
     SAVE_LORE_TOOL,
-    { description: `Keep durable facts, promises, preferences or requested memories in ${target.where}; not small talk or what the conversation already holds.${memory} At most one per reply and one every several replies. Never repeat dismissed, undone or pending titles. ${saving}`, inputSchema: z.object({
+    { description: `Keep durable facts, promises, preferences or requested memories in ${target.where}; not small talk or what the conversation already holds.${memory} At most one per reply and one every several replies. Never repeat dismissed, undone or pending titles. Saved at once (the user can undo) or as a review card the user saves, as the chat's lore setting says; the result tells which.`, inputSchema: z.object({
       title: z.string().trim().min(1).max(LORE_PROPOSAL_LIMITS.title).describe('As the lore index shows it; an existing title updates that entry with the full new content.'),
       keys: z.array(z.string().trim().min(1).max(LORE_PROPOSAL_LIMITS.key)).max(LORE_PROPOSAL_LIMITS.keys).default([]).describe(`At most ${LORE_PROPOSAL_MAX_KEYS} retained distinctive words, ${loreKeyGuidance(context.chatContext?.profileId)}; no user/own names, dates or times.`),
       content: z.string().trim().min(1).max(LORE_PROPOSAL_LIMITS.content).describe('Short and factual. Use the profile model language, not the reader/display translation. The app stores a separate reader translation.'),
@@ -228,7 +234,8 @@ function registerSaveLore(server: McpServer, context: McpRequestContext): void {
       file: z.object({
         name: z.string().trim().min(1).max(LORE_PROPOSAL_LIMITS.fileName).describe('Plain file name, e.g. 반지.md'),
         text: z.string().min(1).describe(`UTF-8, ≤ ${LORE_PROPOSAL_LIMITS.fileBytes / 1024} KB`),
-      }).optional().describe(`Longer text stored in the book's 자료/ folder${editable ? `; later change with ${EDIT_LORE_FILE_TOOL}` : ''}.`),
+      // Only where edit_lore_file is listed with it: a public page and a board-call room leave it out.
+      }).optional().describe(`Longer text stored in the book's 자료/ folder${isContextToolAllowed(context, EDIT_LORE_FILE_TOOL) ? `; later change with ${EDIT_LORE_FILE_TOOL}` : ''}.`),
     }) },
     async (args, extra) => {
       try {
@@ -244,8 +251,9 @@ function registerSaveLore(server: McpServer, context: McpRequestContext): void {
       }
     },
   );
-  // Only where there is a file to change (a Codex session keeps its first tool list, so it always has it).
-  if (!editable) return;
+}
+
+function registerEditLoreFile(server: McpServer, context: McpRequestContext): void {
   server.registerTool(
     EDIT_LORE_FILE_TOOL,
     { description: `Immediately append or atomically edit an entry's linked text file; returns file size/replacement count. Requires lore auto-save; if off or no file exists, use ${SAVE_LORE_TOOL}. On text mismatch, reread with ${READ_LORE_FILE_TOOL}.`, inputSchema: z.object({

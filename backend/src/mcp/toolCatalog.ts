@@ -5,7 +5,7 @@ import { rawTokenEstimate } from '../services/llmUsage';
 import { CHAT_ROOM_TOOLS, CHAT_VISION_BUILTIN_TOOLS, isChatGenerationTool, isConnectedChatPageTool, type McpRequestContext } from './context';
 import { errorResult } from './toolResults';
 import { PLUGIN_SERVER_TOOL_PREFIX, pluginProfileTools } from '../services/plugins/pluginServerTools';
-import { isChatProposalToolAvailable } from '../services/codex-chat/chatProposals';
+import { chatProposalToolRefusal, isChatProposalToolAvailable } from '../services/codex-chat/chatProposals';
 import { inProcessMcpClient, NO_TOOL_DEADLINE } from './inProcessClient';
 
 /**
@@ -215,7 +215,8 @@ export function createToolCatalog(server: McpServer, registerDirect: (args: unkn
       }) }, async ({ tool, arguments: args }: { tool: string; arguments?: Record<string, unknown> }, ctx: { mcpReq?: { signal?: AbortSignal } }) => {
         if (!byName.has(tool)) return errorResult(`Unknown tool: ${tool}. See the contents of ${CATALOG_OPEN_TOOL}.`);
         if (byName.get(tool)?.direct) return errorResult(`${tool} is available directly. Call ${tool} with its arguments, not through ${CATALOG_RUN_TOOL}. ${CATALOG_OPEN_TOOL} {"tools":["${tool}"]} shows its schema.`);
-        if (!isChatProposalToolAvailable(chatContext, tool)) return errorResult(`${tool} is not available in this reply.`);
+        const refused = chatProposalToolRefusal(chatContext, tool);
+        if (refused) return errorResult(refused);
         try {
           const connected = await client();
           const result = await connected.callTool({ name: tool, arguments: args ?? {} }, { signal: ctx?.mcpReq?.signal, timeout: NO_TOOL_DEADLINE });

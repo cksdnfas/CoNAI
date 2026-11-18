@@ -459,7 +459,7 @@ test('chat tool catalog: contents, open, run, validation and routing', { timeout
       assert.ok(!text(after).includes('input_schema'))
       const repeated = await limited.call(CATALOG_RUN_TOOL, { tool: 'propose_profile_assets', arguments: {} })
       assert.equal(repeated.isError, true)
-      assert.match(text(repeated), /not available in this reply/)
+      assert.match(text(repeated), /already has a profile asset proposal \(one per reply\)/)
       const lore = await limited.call(CATALOG_OPEN_TOOL, { tools: ['save_lore'] })
       assert.notEqual(lore.isError, true, text(lore))
       ChatProposalStore.add(chatContext, { kind: 'lore', title: 'Favorite tea', keys: ['oolong'], content: 'The user prefers oolong tea.', constant: false })

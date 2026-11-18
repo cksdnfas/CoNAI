@@ -44,23 +44,34 @@ function writesLinkedFiles(context: McpRequestContext) {
 }
 
 /**
+ * Whether a chat lists the work tools (the task tools and offer_choices). A profile with nothing to work with (no
+ * scopes, no page, no generation presets, no linked place it may write) has no use for a plan; its tools would only cost
+ * every request and break models that cannot take tools. A task already running keeps them.
+ */
+export function offersChatWorkTools(context: McpRequestContext) {
+  const chat = context.chatContext
+  if (!chat) return false
+  const profile = isPluginProfileRun(chat.threadId) ? ChatProfileStore.find(chat.profileId) : null
+  const scopes = profile && context.requester ? resolveChatProfileToolGrant(profile, resolveChatAccess(context.requester.accountId)).scopes : context.scopes
+  return scopes.length > 0 || Boolean(chat.page) || Boolean(context.generationPresetIds?.length) || writesLinkedFiles(context) || ChatTaskStore.live(chat.threadId) !== null
+}
+
+/**
  * Long tasks in a chat or a group room: the model proposes a plan (a card the person approves), then marks steps, says
  * what it waits for and finishes. The server, not the model, starts every next turn (see ChatTaskRunner); in a room
  * each step names the member it wakes, or every member in turn.
  */
 export function registerChatTaskTools(server: McpServer, context: McpRequestContext) {
   const chat = context.chatContext
-  if (!chat) return
+  if (!chat || !offersChatWorkTools(context)) return
   const group = chat.kind === 'group'
-  // A profile with nothing to work with (no scopes, no page, no generation presets, no linked place it may write) has
-  // no use for a plan; its tools would only cost every request and break models that cannot take tools. A task already
-  // running keeps them.
-  const profile = isPluginProfileRun(chat.threadId) ? ChatProfileStore.find(chat.profileId) : null
-  const scopes = profile && context.requester ? resolveChatProfileToolGrant(profile, resolveChatAccess(context.requester.accountId)).scopes : context.scopes
-  if (scopes.length === 0 && !chat.page && !context.generationPresetIds?.length && !writesLinkedFiles(context) && !ChatTaskStore.live(chat.threadId)) return
+  // The step tools are listed before any plan too: tool definitions open every request, and a list that changed as a
+  // task starts and ends would make a provider cache read the whole prompt again. They refuse the call instead; an API
+  // LLM chat's still do until the plan is approved, as when they were left out of its list (Codex always had them).
   const live = () => {
     const task = ChatTaskStore.live(chat.threadId)
     if (!task) throw new Error('진행 중인 작업이 없어. task_propose로 플랜부터 제안해.')
+    if (context.source === 'llm-chat' && task.status === 'awaiting_plan') throw new Error(`작업 #${task.id}의 플랜이 아직 승인 전이야. 승인되면 앱이 첫 단계를 시작하니 지금은 답변을 끝내.`)
     return task
   }
   const members = (): Member[] => group ? ChatGroupStore.members(chat.threadId).flatMap((member) => ChatProfileStore.find(member.profile_id) ?? []) : []
@@ -95,11 +106,6 @@ export function registerChatTaskTools(server: McpServer, context: McpRequestCont
     try { return result({ proposals: proposalStatuses(chat.threadId, proposal_ids) }) } catch (error) { return failure(error) }
   })
 
-  // API LLM chats get the tool list with every request: the step tools come only once a plan is approved (the next
-  // request after the approval lists them). Codex and Claude sessions list tools once per session, so they keep all.
-  const running = ChatTaskStore.live(chat.threadId)
-  if (context.source === 'llm-chat' && (!running || running.status === 'awaiting_plan')) return
-
   server.registerTool('task_status', { description: 'Read this chat\'s current task: goal, steps with status, what it waits for, budget used.', inputSchema: z.object({}) }, async () => {
     try { return result(view(live(), members())) } catch (error) { return failure(error) }
   })
@@ -117,15 +123,16 @@ export function registerChatTaskTools(server: McpServer, context: McpRequestCont
 
   server.registerTool('task_wait', { description: 'Suspend the task and return its state; end your reply, do not poll. The app checks outcomes now and resumes only when all selected targets resolve; unrelated work has no effect. Cannot override a user pause; the user must resume it.', inputSchema: z.object({
     // A room has no page connection to wait for.
-    for: (group ? z.enum(['approval', 'job', 'user']) : z.enum(['approval', 'job', 'page', 'user'])).describe('approval: review cards; job: generation; page: reconnection; user: answer.'),
+    for: (group ? z.enum(['approval', 'job', 'user']) : z.enum(['approval', 'job', 'page', 'user'])).describe('approval: review cards; job: generation or background job; page: reconnection; user: answer.'),
     reason: z.string().max(CHAT_TASK_LIMITS.note),
     proposal_ids: z.array(z.number().int().positive()).min(1).optional().describe('approval only: IDs from results; omit for non-plan cards from this reply only.'),
     job_ids: z.array(z.number().int().positive()).min(1).optional().describe('job only: IDs from results; omit for linked jobs from this reply only. Earlier-reply or saved asset-card jobs require explicit IDs.'),
-  }) }, async ({ for: wait, reason, proposal_ids, job_ids }) => {
+    runtime_job_ids: z.array(z.string().uuid()).min(1).optional().describe('job only: UUID job IDs of background plugin tasks or media edits from results (e.g. a page\'s published jobId); always explicit.'),
+  }) }, async ({ for: wait, reason, proposal_ids, job_ids, runtime_job_ids }) => {
     try {
       const task = live()
-      if ((proposal_ids !== undefined && wait !== 'approval') || (job_ids !== undefined && wait !== 'job')) throw new Error('대기 종류에 맞는 대상 ID만 지정해줘.')
-      return result(view(ChatTaskRunner.wait(task.id, wait, reason, chat.replyId, proposal_ids ?? job_ids), members()))
+      if ((proposal_ids !== undefined && wait !== 'approval') || ((job_ids !== undefined || runtime_job_ids !== undefined) && wait !== 'job')) throw new Error('대기 종류에 맞는 대상 ID만 지정해줘.')
+      return result(view(ChatTaskRunner.wait(task.id, wait, reason, chat.replyId, proposal_ids ?? job_ids, runtime_job_ids), members()))
     } catch (error) { return failure(error) }
   })
 

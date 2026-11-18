@@ -2,19 +2,21 @@ import fs from 'fs'
 import os from 'os'
 import path from 'path'
 import { randomUUID } from 'crypto'
-import type { AgentSessionEvent, ToolDefinition } from '@earendil-works/pi-coding-agent'
+import type { AgentSessionEvent, ModelRuntime, ToolDefinition } from '@earendil-works/pi-coding-agent'
 import { runtimePaths } from '../../config/runtimePaths'
 import { loadPiSdk, reservePiRun } from '../piRuntime'
 import { isInsideServedDir, isPathStrictlyInside } from '../../utils/pathResolver'
 import type { LlmTokenCounts } from '../llmUsage'
 import { buildOpenAiGenerationFields } from '../llmGenerationOptions'
+import { LlmRequestError } from '../llmRequestRetry'
 import type { ChatMcpToolResult } from './chatMcpBridge'
 import type { ClaudeChatSession } from './claudeChatCompletion'
-import type { ChatCompletionMessage, ChatCompletionResult, ChatCompletionTarget, ChatCompletionTool } from './llmChatCompletion'
+import { cacheMarksRefusedBy, isCacheMarksRefusal, llmConnectError, noteCacheMarksRefused, type ChatCompletionMessage, type ChatCompletionResult, type ChatCompletionTarget, type ChatCompletionTool } from './llmChatCompletion'
 import { CATALOG_RUN_TOOL } from '../../mcp/toolCatalog'
 import { chatToolRoundLimit, loadChatSettings } from './chatSettings'
 import { noteTextToolCalls, recoverTextToolCalls, textToolCallFilter, type TextToolCallTools } from './textToolCalls'
 import { createRepetitionWatch, withoutRepetition } from './repetitionGuard'
+import { supersededPageViewEdits } from './piPageViewEdits'
 
 /**
  * API LLM chats that run through pi (ChatLlmRuntime 'pi'): the pi agent SDK, embedded in-process, keeps the chat as
@@ -30,8 +32,11 @@ import { createRepetitionWatch, withoutRepetition } from './repetitionGuard'
  * get no `models` API, and make at most as many calls each as the tool round limit (ChatSettings.toolRoundLimit).
  */
 
-/** A pi chat's session, kept like a Claude Code one (claudeChatSessions.ts): every turn forks the file it continues. */
-export type PiChatSession = ClaudeChatSession
+/**
+ * A pi chat's session, kept like a Claude Code one (claudeChatSessions.ts): every turn forks the file it continues.
+ * `onCompaction`: pi folded the memory in the middle of the run.
+ */
+export type PiChatSession = ClaudeChatSession & { onCompaction?: () => void }
 
 /** The provider id the profile's connection is registered under, in a model runtime of its own per run. */
 const PI_PROVIDER = 'conai'
@@ -99,33 +104,283 @@ export function piToolResult(result: ChatMcpToolResult) {
  * context gets proportionate ones. A configured output that fits the window is reserved before the next request;
  * this changes the compaction threshold, not the output ceiling sent to the provider.
  */
-export function piCompactionSettings(contextWindow: number, maxTokens?: number | null) {
+export function piCompactionSettings(contextWindow: number, maxTokens?: number | null, requestMargin = 0) {
   const outputReserve = typeof maxTokens === 'number' && maxTokens > 0 && maxTokens < contextWindow ? maxTokens : 0
   return {
     enabled: contextWindow > 0,
-    reserveTokens: Math.max(Math.min(16_384, Math.max(1, Math.floor(contextWindow * 0.2))), outputReserve),
+    reserveTokens: Math.max(Math.min(16_384, Math.max(1, Math.floor(contextWindow * 0.2))), outputReserve) + requestMargin,
     keepRecentTokens: Math.min(20_000, Math.max(1, Math.floor(contextWindow * 0.25))),
   }
 }
 
-/** The run's model, as pi registers it: the connection's OpenAI-compatible API and the profile's options. */
-export function piModelConfig(target: ChatCompletionTarget, contextWindow: number, vision: boolean) {
+/** pi's catalog entry for a model: its thinking style, compat flags, image limits and output ceiling. */
+type PiCatalogModel = NonNullable<ReturnType<ModelRuntime['getModel']>>
+
+/**
+ * Anthropic's own API host over https, where pi speaks Anthropic's native Messages API: its OpenAI compatibility
+ * endpoint ignores `cache_control`, so nothing would be cached. The host's origin (the SDK adds `/v1/messages`), or null
+ * for any other, and for a Claude subscription key: pi would answer as Claude Code, with its own system text and tool
+ * names (pi-ai anthropic-messages `isOAuthToken`).
+ */
+export function piAnthropicRoot(target: Pick<ChatCompletionTarget, 'endpoint' | 'apiKey'>) {
+  const url = new URL(target.endpoint)
+  return url.protocol === 'https:' && url.hostname === 'api.anthropic.com' && !target.apiKey?.includes('sk-ant-oat') ? url.origin : null
+}
+
+/** The room pi's request fitting keeps free beside the prompt and the output (pi-ai simple-options `CONTEXT_SAFETY_TOKENS`). */
+const PI_CONTEXT_SAFETY_TOKENS = 4096
+
+type ModelLimits = { maxTokens: number | null; contextWindow: number | null }
+/**
+ * Models API lookups by API root, connection and model: one call shared by the runs that need it, kept once answered.
+ * An HTTP error is kept for an hour, like refused cache marks, so runs meanwhile go to pi's catalog; a network error is
+ * not kept.
+ */
+const anthropicModelLimitsCache = new Map<string, { limits: Promise<ModelLimits>; until: number }>()
+const MODEL_LOOKUP_REFUSED_MS = 60 * 60_000
+
+/** What Anthropic's models API says of a model (`GET /v1/models/{id}`: `max_tokens`, `max_input_tokens`). */
+async function requestAnthropicModelLimits(root: string, target: ChatCompletionTarget): Promise<ModelLimits> {
+  // The call is shared, so it ends on the connection's own timeout rather than on one run's abort.
+  const response = await fetch(`${root}/v1/models/${encodeURIComponent(target.model)}`, {
+    headers: { 'x-api-key': target.apiKey ?? '', 'anthropic-version': '2023-06-01' },
+    signal: target.timeoutMs != null ? AbortSignal.timeout(target.timeoutMs) : undefined,
+  }).catch((error: unknown) => { throw llmConnectError(target, error) })
+  if (!response.ok) throw new LlmRequestError(`Anthropic 모델 정보를 가져오지 못했어 (${response.status})`, response.status)
+  const model = (await response.json()) as { max_tokens?: unknown; max_input_tokens?: unknown }
+  const positive = (value: unknown) => typeof value === 'number' && value > 0 ? value : null
+  return { maxTokens: positive(model.max_tokens), contextWindow: positive(model.max_input_tokens) }
+}
+
+/** A model's reported limits through the shared lookup; a run stops waiting on it when the run is aborted. */
+function anthropicModelLimits(root: string, target: ChatCompletionTarget, signal: AbortSignal): Promise<ModelLimits> {
+  const key = `${root}\u0000${target.providerName}\u0000${target.model}`
+  let lookup = anthropicModelLimitsCache.get(key)
+  if (!lookup || lookup.until <= Date.now()) {
+    const started = { limits: requestAnthropicModelLimits(root, target), until: Infinity }
+    anthropicModelLimitsCache.set(key, started)
+    started.limits.catch((error: unknown) => {
+      console.warn(`[pi-chat] ${target.displayName} (${target.model}): Anthropic's models API failed (${error instanceof Error ? error.message : String(error)})`)
+      if (error instanceof LlmRequestError && error.status !== undefined) started.until = Date.now() + MODEL_LOOKUP_REFUSED_MS
+      else if (anthropicModelLimitsCache.get(key) === started) anthropicModelLimitsCache.delete(key)
+    })
+    lookup = started
+  }
+  const { limits } = lookup
+  return new Promise((resolve, reject) => {
+    const abort = () => reject(signal.reason)
+    if (signal.aborted) return abort()
+    signal.addEventListener('abort', abort, { once: true })
+    limits.then(resolve, reject).finally(() => signal.removeEventListener('abort', abort))
+  })
+}
+
+/**
+ * A native run's limits: the profile's output limit and the known context window win, else what Anthropic's models API
+ * reports for the model, else pi's catalog entry (its windows can be ones only a beta header opens, which pi does not
+ * send). An unknown window stays unknown (no compaction, as before); an unknown output limit fails the run, since the
+ * native API requires one.
+ */
+async function piAnthropicLimits(root: string, catalog: PiCatalogModel | undefined, target: ChatCompletionTarget, signal: AbortSignal) {
+  const profileMaxTokens = target.generation.maxTokens ?? null
+  const profileWindow = target.contextWindow || 0
+  const reported = profileMaxTokens !== null && profileWindow ? null : await anthropicModelLimits(root, target, signal).catch((error: unknown) => {
+    if (signal.aborted || (profileMaxTokens === null && !catalog?.maxTokens)) throw error
+    return null
+  })
+  const maxTokens = profileMaxTokens ?? reported?.maxTokens ?? (catalog?.maxTokens || null)
+  const contextWindow = profileWindow || reported?.contextWindow || catalog?.contextWindow || 0
+  if (maxTokens === null) throw new Error(`Anthropic이 ${target.model}의 최대 출력 토큰을 알려 주지 않아. 프로필에서 최대 출력 토큰을 정해줘.`)
+  return { root, catalog, maxTokens, contextWindow }
+}
+
+type JsonSchema = Record<string, unknown>
+const propertiesOf = (schema: JsonSchema) => (schema.properties ?? {}) as Record<string, unknown>
+const requiredOf = (schema: JsonSchema) => (schema.required ?? []) as string[]
+const unionsOf = (schema: JsonSchema) => [schema.oneOf, schema.anyOf].filter(Array.isArray) as JsonSchema[][]
+const sameSchema = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
+/** A shape that takes no property it does not define. */
+const closedShape = (shape: JsonSchema) => shape.additionalProperties === false && shape.patternProperties === undefined
+
+/** A union member with what its parent declares beside the union: properties (both definitions where both have one), requirements, and closedness. */
+function foldShape(parent: JsonSchema, member: JsonSchema): JsonSchema {
+  const properties = { ...propertiesOf(parent) }
+  for (const [key, value] of Object.entries(propertiesOf(member))) {
+    properties[key] = key in properties && !sameSchema(properties[key], value) ? { allOf: [properties[key], value] } : value
+  }
+  return {
+    ...member,
+    properties,
+    required: [...new Set([...requiredOf(parent), ...requiredOf(member)])],
+    additionalProperties: closedShape(parent) ? false : member.additionalProperties,
+  }
+}
+
+/** The argument shapes a schema allows: each member of its unions (nested ones too) with what it inherits, or the schema itself. */
+const argumentShapes = (schema: JsonSchema): JsonSchema[] => {
+  const unions = unionsOf(schema)
+  return unions.length ? unions.flat().flatMap((member) => argumentShapes(foldShape(schema, member))) : [schema]
+}
+
+/**
+ * A CoNAI tool schema as Anthropic's native API takes it: whole (pi's converter would keep only `properties` and
+ * `required`), without `$schema`. Anthropic refuses a union at the root, so the argument shapes are merged into one
+ * object that takes every call the original takes: every property a shape names (differing definitions as anyOf, and
+ * anything where an open shape leaves it free), required what every shape requires, closed only when every shape is,
+ * and each union's shapes with their own requirements in the description. CoNAI still validates a call against the
+ * full schema.
+ */
+export function anthropicToolSchema(schema: JsonSchema): JsonSchema {
+  const { $schema: _dialect, ...whole } = schema
+  const unions = unionsOf(schema)
+  if (!unions.length) return whole
+  const { oneOf: _oneOf, anyOf: _anyOf, properties: _properties, required: _required, additionalProperties: _additional, patternProperties: _patterns, ...rest } = whole
+  const groups = unions.map((members) => members.flatMap((member) => argumentShapes(foldShape(schema, member))))
+  const shapes = groups.flat()
+  const properties = new Map<string, unknown[]>()
+  const accept = (key: string, value: unknown) => {
+    const variants = properties.get(key) ?? []
+    if (!variants.some((known) => sameSchema(known, value))) properties.set(key, [...variants, value])
+  }
+  for (const shape of shapes) for (const [key, value] of Object.entries(propertiesOf(shape))) accept(key, value)
+  for (const shape of shapes.filter((shape) => !closedShape(shape))) {
+    const free = typeof shape.additionalProperties === 'object' && shape.patternProperties === undefined ? shape.additionalProperties : {}
+    for (const key of [...properties.keys()]) if (!(key in propertiesOf(shape))) accept(key, free)
+  }
+  const shapeNote = (shape: JsonSchema, index: number) => {
+    const fixed = Object.entries(propertiesOf(shape) as Record<string, { const?: unknown } | undefined>).filter(([, value]) => value?.const !== undefined)
+    return `${fixed.map(([key, value]) => `${key}=${JSON.stringify(value?.const)}`).join(', ') || `shape ${index + 1}`}: requires ${requiredOf(shape).join(', ') || 'nothing'}`
+  }
+  const unionNotes = groups.map((group, index) => `${index ? 'Also match one of' : 'Send one argument shape'}: ${group.map(shapeNote).join('; ')}.`)
+  return {
+    ...rest,
+    type: 'object',
+    properties: Object.fromEntries([...properties].map(([key, variants]) => [key, variants.length === 1 ? variants[0] : { anyOf: variants }])),
+    required: requiredOf(shapes[0]).filter((key) => shapes.every((shape) => requiredOf(shape).includes(key))),
+    ...(shapes.every(closedShape) ? { additionalProperties: false } : {}),
+    description: [rest.description, ...unionNotes].filter(Boolean).join('\n'),
+  }
+}
+
+/** A native request with each CoNAI tool's own schema where pi put its reduced one: the request's tools and tools added mid-conversation. */
+function withToolSchemas(payload: unknown, schemas: ReadonlyMap<string, JsonSchema>) {
+  const body = payload as { tools?: Array<{ name?: string; input_schema?: unknown }>; messages?: Array<{ content?: unknown }> }
+  const restore = (tool: { name?: string; input_schema?: unknown } | undefined) => {
+    const schema = tool?.name ? schemas.get(tool.name) : undefined
+    if (tool && schema) tool.input_schema = schema
+  }
+  for (const tool of body.tools ?? []) restore(tool)
+  for (const message of body.messages ?? []) {
+    if (!Array.isArray(message.content)) continue
+    for (const block of message.content as Array<{ type?: string; tool?: { definition?: { name?: string; input_schema?: unknown } } }>) {
+      if (block.type === 'tool_addition') restore(block.tool?.definition)
+    }
+  }
+  return body
+}
+
+/**
+ * A native request whose thinking budget Anthropic would refuse (under 1024, or not below `max_tokens`: an output
+ * limit under about 2048 once fitted) goes without thinking instead of failing every turn.
+ */
+function withFittingThinking(payload: unknown) {
+  const body = payload as { max_tokens?: unknown; thinking?: { type?: string; budget_tokens?: unknown } }
+  const budget = Number(body.thinking?.budget_tokens)
+  if (body.thinking?.type === 'enabled' && (!(budget >= 1024) || budget >= Number(body.max_tokens))) body.thinking = { type: 'disabled' }
+  return payload
+}
+
+/** An OpenAI-compatible request body without its cache marks (the parts and the tool pi marked). */
+function withoutCacheMarks(body: string) {
+  const json = JSON.parse(body) as { messages?: Array<{ content?: unknown }>; tools?: Array<Record<string, unknown>> }
+  for (const message of json.messages ?? []) {
+    if (Array.isArray(message.content)) for (const part of message.content as Array<Record<string, unknown>>) delete part.cache_control
+  }
+  for (const tool of json.tools ?? []) delete tool.cache_control
+  return JSON.stringify(json)
+}
+
+/**
+ * The transport of a run that sends cache marks, recovering as the direct path does (llmChatCompletion): a server that
+ * refuses `cache_control` gets the same request again without the marks, then none for the rest of the run, and is
+ * spared them for a while. pi only ever sees the answer, so its session holds no trace of the refused attempt.
+ */
+function cacheMarkFetch(target: ChatCompletionTarget): typeof fetch {
+  let marked = true
+  return async (input, init) => {
+    const unmarked = () => fetch(input, { ...init, body: withoutCacheMarks(String(init?.body)) })
+    if (!marked) return unmarked()
+    const response = await fetch(input, init)
+    if (response.status !== 400) return response
+    const errorText = await response.clone().text()
+    if (!isCacheMarksRefusal(response.status, errorText)) return response
+    console.warn(`[pi-chat] ${target.displayName}: request with cache marks rejected (${errorText.slice(0, 200)}); retrying without`)
+    marked = false
+    noteCacheMarksRefused(target)
+    return unmarked()
+  }
+}
+
+/**
+ * The run's model, as pi registers it, with the profile's options. On Anthropic's own API (`anthropic`) pi's native
+ * Messages API marks the system prompt, last tool and last message for caching, and pi's catalog entry for the model
+ * decides the thinking payload. Every native request carries an output limit (the native API requires one), the
+ * profile's or else the model's own (`requestOptions.maxTokens`), which pi cuts to the room the request's prompt leaves
+ * in the context window and fits any thinking budget under. Anywhere else the connection's OpenAI-compatible API with
+ * the profile's limit as is (`payloadMaxTokens`; none: the server's default), and Anthropic-style marks when the
+ * connection's cache marks are on and its server has not refused them (`cacheMarks`).
+ */
+export function piModelConfig(target: ChatCompletionTarget, contextWindow: number, vision: boolean, anthropic?: { root: string; catalog?: PiCatalogModel; maxTokens: number }) {
   const effort = target.generation.reasoningEffort
   const reasoning = effort === 'low' || effort === 'medium' || effort === 'high'
+  const thinkingLevel = reasoning ? effort : 'off' as const
+  const input = vision ? ['text' as const, 'image' as const] : ['text' as const]
+  const cost = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
+  // pi lists a model only when its provider has a key; a local server without one ignores it.
+  const apiKey = target.apiKey || 'none'
+  if (anthropic) {
+    const { catalog } = anthropic
+    const temperature = target.generation.temperature
+    return {
+      thinkingLevel,
+      // pi reads no sampling params here and sends temperature only where Anthropic takes it (no thinking, a model that
+      // has it), which is 0-1 where profiles go up to 2.
+      requestOptions: { maxTokens: anthropic.maxTokens, ...(temperature == null ? {} : { temperature: Math.min(temperature, 1) }) },
+      payloadMaxTokens: null,
+      cacheMarks: false,
+      provider: {
+        baseUrl: anthropic.root,
+        api: 'anthropic-messages' as const,
+        apiKey,
+        models: [{
+          id: target.model, name: target.model, input, cost, contextWindow, maxTokens: anthropic.maxTokens,
+          reasoning: catalog?.reasoning ?? reasoning,
+          ...(catalog ? {
+            thinkingLevelMap: catalog.thinkingLevelMap,
+            inputLimits: catalog.inputLimits,
+            // A server-side fallback would let another model answer for the one the profile names.
+            compat: catalog.compat && { ...catalog.compat, allowedFallbackModels: undefined },
+          } : {}),
+        }],
+      },
+    }
+  }
   const sampling = buildOpenAiGenerationFields({ ...target.generation, maxTokens: null }, target.thinkingSwitch)
+  const cacheMarks = target.promptCacheMarks && !cacheMarksRefusedBy(target)
   return {
-    thinkingLevel: reasoning ? effort : 'off' as const,
+    thinkingLevel,
+    requestOptions: null,
+    payloadMaxTokens: target.generation.maxTokens ?? null,
+    cacheMarks,
     provider: {
       baseUrl: target.endpoint.replace(/\/chat\/completions\/?$/, ''),
       api: 'openai-completions' as const,
-      // pi lists a model only when its provider has a key; a local server without one ignores it.
-      apiKey: target.apiKey || 'none',
+      apiKey,
       models: [{
-        id: target.model, name: target.model,
-        input: vision ? ['text' as const, 'image' as const] : ['text' as const],
-        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+        id: target.model, name: target.model, input, cost,
         reasoning, contextWindow,
-        compat: { maxTokensField: 'max_tokens' as const },
+        // Anthropic models behind LiteLLM or OpenRouter cache only marked prefixes (ChatCompletionTarget.promptCacheMarks).
+        compat: { maxTokensField: 'max_tokens' as const, ...(cacheMarks ? { cacheControlFormat: 'anthropic' as const } : {}) },
         // Pi's runtime model uses zero for unknown limits; the wire request below preserves unset output.
         maxTokens: target.generation.maxTokens ?? 0,
         ...(Object.keys(sampling).length ? { samplingParams: sampling } : {}),
@@ -172,6 +427,9 @@ const addUsage = (total: LlmTokenCounts, usage: { input?: number; output?: numbe
   total.outputTokens += usage.output ?? 0
 }
 
+/** One provider request of a pi run, as it ended: its own counts (null when the provider reported none) and duration. */
+export type PiRequestUsage = { tokens: LlmTokenCounts | null; latencyMs: number | null; ok: boolean; compaction: boolean }
+
 /** A pi update waits until no run uses the loaded package. */
 export async function streamPiChatCompletion(params: Parameters<typeof runPiChatCompletion>[0]): Promise<ChatCompletionResult> {
   params.signal.throwIfAborted()
@@ -186,9 +444,10 @@ async function runPiChatCompletion(params: {
   signal: AbortSignal
   onContent?: (text: string) => void
   onReasoning?: (text: string) => void
-  /** Cumulative provider usage, including compaction and requests completed before a failure. */
-  onUsage?: (usage: LlmTokenCounts) => void
-  callTool?: (name: string, args: Record<string, unknown>, id: string) => Promise<ChatMcpToolResult>
+  /** Each provider request in order as it ends, compaction summaries and requests before a failure included. */
+  onRequest?: (request: PiRequestUsage) => void
+  /** `nested`: a codemode script's call; the model reads its result only as the script prints it. */
+  callTool?: (name: string, args: Record<string, unknown>, id: string, nested?: boolean) => Promise<ChatMcpToolResult>
   catalogued?: ReadonlySet<string>
   maxToolRounds?: number
   stopLoops?: boolean
@@ -206,9 +465,14 @@ async function runPiChatCompletion(params: {
   const tools = params.tools ?? []
   const toolRounds = params.maxToolRounds ?? chatToolRoundLimit()
   const codemode = tools.length > 0 && loadChatSettings().piCodemode
-  const contextWindow = params.target.contextWindow ?? 0
-  const { thinkingLevel, provider } = piModelConfig(params.target, contextWindow, Boolean(params.target.piVision))
+  const modelRuntime = await pi.ModelRuntime.create({ authPath: path.join(agentDir, 'auth.json'), modelsPath: null, refreshOnCreate: false, allowModelNetwork: false })
+  const anthropicRoot = piAnthropicRoot(params.target)
+  const anthropic = anthropicRoot ? await piAnthropicLimits(anthropicRoot, modelRuntime.getModel('anthropic', params.target.model), params.target, params.signal) : undefined
+  const contextWindow = anthropic?.contextWindow ?? params.target.contextWindow ?? 0
+  const { thinkingLevel, provider, requestOptions, payloadMaxTokens, cacheMarks } = piModelConfig(params.target, contextWindow, Boolean(params.target.piVision), anthropic)
+  const toolSchemas = new Map<string, JsonSchema>(anthropic ? tools.map((tool) => [tool.function.name, anthropicToolSchema((tool.function.parameters ?? { type: 'object', properties: {} }) as JsonSchema)]) : [])
 
+  const input = piPromptInput(params.messages)
   // A turn continues a copy of the session, so a failed or retried turn leaves the chat on the file it was on.
   let file: string | null = null
   if (session.resumeId) {
@@ -220,13 +484,26 @@ async function runPiChatCompletion(params: {
     for (const name of fs.readdirSync(sessionsDir)) fs.rmSync(path.join(sessionsDir, name), { recursive: true, force: true })
   }
   const sessionManager = file ? pi.SessionManager.open(file, sessionsDir, cwd) : pi.SessionManager.create(cwd, sessionsDir)
-  const modelRuntime = await pi.ModelRuntime.create({ authPath: path.join(agentDir, 'auth.json'), modelsPath: null, refreshOnCreate: false, allowModelNetwork: false })
+  // A resumed session's superseded screens keep only their residual (supersededPageViewEdits): only as a turn starts (a
+  // provider's prompt cache rewrites what follows an edited message), kept in the fork, so every request, restart and
+  // compaction reads the same content, and a failed turn takes its edits with it.
+  if (file) {
+    try {
+      for (const edit of supersededPageViewEdits(sessionManager.buildSessionProjection().entries, input.text)) {
+        sessionManager.appendContextEdit(edit.targetId, { content: edit.content } as Parameters<typeof sessionManager.appendContextEdit>[1])
+      }
+    } catch (error) {
+      fs.rmSync(file, { force: true })
+      throw error
+    }
+  }
   modelRuntime.registerProvider(PI_PROVIDER, provider)
   const model = modelRuntime.getModel(PI_PROVIDER, params.target.model)
   if (!model) throw new Error('pi에 모델을 등록하지 못했어.')
   const system = params.messages.filter((message) => message.role === 'system').map((message) => message.content).join('\n\n')
   const settingsManager = pi.SettingsManager.inMemory({
-    compaction: params.research ? { enabled: false } : piCompactionSettings(contextWindow, params.target.generation.maxTokens),
+    // Natively pi cuts each request's output to the room the prompt leaves less its own margin; compaction keeps that margin too.
+    compaction: params.research ? { enabled: false } : piCompactionSettings(contextWindow, params.target.generation.maxTokens, anthropic ? PI_CONTEXT_SAFETY_TOKENS : 0),
     httpIdleTimeoutMs: params.target.timeoutMs ?? 0,
     retry: { enabled: !params.research, maxRetries: params.research ? 0 : 2, ...(params.target.timeoutMs != null ? { provider: { timeoutMs: params.target.timeoutMs } } : {}) },
     enableInstallTelemetry: false,
@@ -291,13 +568,14 @@ async function runPiChatCompletion(params: {
       if (!params.callTool) throw new Error('Unknown or not permitted tool')
       if (round > toolRounds) return { content: [{ type: 'text' as const, text: TOOL_BUDGET_NOTE }], details: {}, isError: true }
       const slash = toolCallId.lastIndexOf('/')
-      if (codemode && slash > 0) {
+      const nested = codemode && slash > 0
+      if (nested) {
         const script = toolCallId.slice(0, slash)
         const count = (scriptCalls.get(script) ?? 0) + 1
         scriptCalls.set(script, count)
         if (count > toolRounds) return { content: [{ type: 'text' as const, text: codemodeBudgetNote(toolRounds) }], details: {}, isError: true }
       }
-      return piToolResult(await params.callTool(tool.function.name, (args ?? {}) as Record<string, unknown>, toolCallId))
+      return piToolResult(await params.callTool(tool.function.name, (args ?? {}) as Record<string, unknown>, toolCallId, nested))
     },
   }))
 
@@ -305,30 +583,54 @@ async function runPiChatCompletion(params: {
     cwd, agentDir, model, thinkingLevel, modelRuntime, resourceLoader, settingsManager, sessionManager,
     customTools, tools: [...customTools.map((tool) => tool.name), ...(codemode ? [CODEMODE_TOOL] : [])],
   })
-  // Pi's simple adapter invents an output cap and subtracts a fixed context margin; its summaries also set their
-  // own cap. Preserve the profile on every request instead. The provider validates the actual remaining context.
+  // Every request, summaries included (they set a cap of their own), asks for the run's output limit (piModelConfig):
+  // natively pi cuts it to the room the prompt leaves; on an OpenAI-compatible server pi's adapter would invent a cap
+  // and subtract a fixed context margin, so the profile's limit goes as is and the provider validates the context.
   const stream = agent.agent.streamFunction
-  agent.agent.streamFunction = (requestModel, context, options) => stream(requestModel, context, {
+  const marksFetch = cacheMarks ? cacheMarkFetch(params.target) : null
+  const usage: LlmTokenCounts = { inputTokens: 0, cachedInputTokens: 0, outputTokens: 0 }
+  let reportedUsage = false
+  let compacting = false
+  const noteRequest = (message: { usage?: Parameters<typeof addUsage>[1]; stopReason: string; durationMs?: number }) => {
+    const counts = message.usage
+    // pi initializes absent provider usage to zero; keep our fallback estimate available in that case.
+    const reported = Boolean(counts) && [counts?.input, counts?.output, counts?.cacheRead, counts?.cacheWrite].some((value) => (value ?? 0) > 0)
+    // A budget stop aborts between turns, and pi's next request then ends aborted without being sent.
+    if (budgetStopped && message.stopReason === 'aborted' && !reported) return
+    const own: LlmTokenCounts ={ inputTokens: 0, cachedInputTokens: 0, outputTokens: 0 }
+    if (reported) {
+      reportedUsage = true
+      addUsage(own, counts)
+      addUsage(usage, counts)
+    }
+    // The request the loop guard hung up on answered, as a direct request cut the same way does.
+    const ok = message.stopReason !== 'error' && (message.stopReason !== 'aborted' || looping)
+    params.onRequest?.({ tokens: reported ? own : null, latencyMs: message.durationMs ?? null, ok, compaction: compacting })
+  }
+  const send: typeof stream = (requestModel, context, options) => stream(requestModel, context, requestOptions ? {
     ...options,
+    ...requestOptions,
+    onPayload: async (payload, model) => withFittingThinking(withToolSchemas(await options?.onPayload?.(payload, model) ?? payload, toolSchemas)),
+  } : {
+    ...options,
+    ...(marksFetch ? { fetch: marksFetch } : {}),
     onPayload: async (payload, model) => {
       const body = (await options?.onPayload?.(payload, model) ?? payload) as Record<string, unknown>
       delete body.max_tokens
       delete body.max_completion_tokens
-      if (params.target.generation.maxTokens != null) body.max_tokens = params.target.generation.maxTokens
+      if (payloadMaxTokens != null) body.max_tokens = payloadMaxTokens
       return body
     },
   })
+  // Every provider request pi makes passes here, its compaction summaries too (synthetic failure messages do not):
+  // the final message resolves before pi goes on, so each request is counted once, in order.
+  agent.agent.streamFunction = async (requestModel, context, options) => {
+    const response = await send(requestModel, context, options)
+    void response.result().then(noteRequest)
+    return response
+  }
   // This run's model answers, in order (a compaction rebuilds the session's messages, so they are collected here).
   const produced: Array<Extract<AgentSessionEvent, { type: 'message_end' }>['message'] & { role: 'assistant' }> = []
-  const usage: LlmTokenCounts = { inputTokens: 0, cachedInputTokens: 0, outputTokens: 0 }
-  let reportedUsage = false
-  const noteUsage = (counts: Parameters<typeof addUsage>[1]) => {
-    // pi initializes absent provider usage to zero; keep our fallback estimate available in that case.
-    if (!counts || ![counts.input, counts.output, counts.cacheRead, counts.cacheWrite].some((value) => (value ?? 0) > 0)) return
-    reportedUsage = true
-    addUsage(usage, counts)
-    params.onUsage?.({ ...usage })
-  }
   let reasoning = ''
   let compacted = false
   let budgetStopped = false
@@ -384,19 +686,19 @@ async function runPiChatCompletion(params: {
       }
       if (looping) void agent.abort()
     }
-    if (event.type === 'message_end' && event.message.role === 'assistant') {
-      produced.push(event.message)
-      noteUsage(event.message.usage)
-    }
-    if (event.type === 'compaction_end' && event.result && !event.aborted) {
-      compacted = true
-      noteUsage(event.result.usage)
+    if (event.type === 'message_end' && event.message.role === 'assistant') produced.push(event.message)
+    if (event.type === 'compaction_start') compacting = true
+    if (event.type === 'compaction_end') {
+      compacting = false
+      if (event.result && !event.aborted) {
+        compacted = true
+        session.onCompaction?.()
+      }
     }
   })
   let succeeded = false
   try {
     verifyPiTools(agent.getActiveToolNames(), tools, codemode ? [CODEMODE_TOOL] : [])
-    const input = piPromptInput(params.messages)
     params.signal.throwIfAborted()
     try {
       await agent.prompt(input.text, { expandPromptTemplates: false, ...(input.images.length ? { images: input.images } : {}) })

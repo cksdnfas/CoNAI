@@ -79,7 +79,13 @@ export function resolveChatPageCommand(requester: McpRequester, commandId: strin
   const answer = (body && typeof body === 'object' ? body : {}) as { ok?: unknown; error?: unknown; page?: unknown }
   if (answer.ok !== true) {
     const message = typeof answer.error === 'string' && answer.error.trim() ? answer.error.trim().slice(0, 300) : '페이지 작업이 실패했어.'
-    entry.reject(new ChatPageContextError(message, 409))
+    // The screen the refusal or failure left, validated like a success's: it becomes the connection's newest, so a
+    // retry is checked against the screen the model is then shown, and it travels with the error. An invalid one is dropped.
+    let page: ChatPageSnapshot | undefined
+    try { page = parseChatPageContext(answer.page, requester) } catch { page = undefined }
+    if (page?.connectionId !== entry.connectionId) page = undefined
+    if (page) rememberChatPage(requester, page)
+    entry.reject(new ChatPageContextError(message, 409, page))
     return
   }
   try {

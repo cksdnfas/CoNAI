@@ -80,7 +80,7 @@ export function listAppGuides(): AppGuideTopic[] {
       const text = readTopic(dir, topic)
       if (text === null) return []
       const all = headings(text)
-      return [{ topic, title: all[0] ?? topic, sections: all.slice(1, 40), chars: text.length }]
+      return [{ topic, title: all[0] ?? topic, sections: all.slice(1), chars: text.length }]
     })
 }
 

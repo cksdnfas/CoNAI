@@ -189,7 +189,7 @@ test('chat lore record book: create from the chat, save_lore and edit_lore_file 
     assert.match(plain.keyGuidance, /in English and also in 한국어/)
     assert.match(plain.save, /this chat's own lorebook/)
     assert.doesNotMatch(plain.save, /consequential events/, 'the wider rule only for a record book')
-    assert.equal(plain.edit, false, 'no file to change: no edit_lore_file')
+    assert.equal(plain.edit, true, 'listed with save_lore before any file exists (its call is refused until then)')
     updateChatSettings({ loreKeyLanguage: null })
     assert.match((await offered()).keyGuidance, /in English only/)
 

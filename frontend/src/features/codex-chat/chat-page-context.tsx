@@ -71,16 +71,16 @@ const ACTIVITY_LIMIT = 30
  * Wait until the screen stops changing, up to a few seconds: an operation may open a route or an editor that still
  * loads, so it gets `checks` equal reads `interval` ms apart. Filling inputs only needs the re-render (two quick
  * checks), and a capture changes nothing, so it reads at once (a background tab's slowed timers would otherwise
- * outlast the server's short capture wait).
+ * outlast the server's short capture wait). `until` ends the wait early, the last check included.
  */
-async function settledSnapshot(read: () => ChatPageSnapshot | undefined, kind: ChatPageCommandEvent['type']) {
+async function settledSnapshot(read: () => ChatPageSnapshot | undefined, kind: ChatPageCommandEvent['type'], until = Infinity) {
   if (kind === 'capture') return read()
   const [interval, checks] = kind === 'action' ? [100, 3] : [50, 2]
-  const deadline = Date.now() + 5000
+  const deadline = Math.min(Date.now() + 5000, until)
   let last = ''
   let stable = 0
   while (Date.now() < deadline) {
-    await new Promise((resolve) => setTimeout(resolve, interval))
+    await new Promise((resolve) => setTimeout(resolve, Math.min(interval, deadline - Date.now())))
     const key = JSON.stringify(read() ?? null)
     if (key !== 'null' && key === last) { stable += 1; if (stable >= checks) break }
     else { stable = 0; last = key }
@@ -381,14 +381,22 @@ export function ChatPageProvider({ children }: PropsWithChildren) {
       setDriving(true)
     }
     if (handledCommands.current.size > 200) handledCommands.current = new Set([...handledCommands.current].slice(-100))
+    const read = () => current.current.snapshot ? normalizeChatPageSnapshot(current.current.snapshot) : undefined
+    // The server stops waiting at expiresAt, so the answer has to arrive by then. It travels the way the claim did, so
+    // settling ends that claim's measured round trip before the window closes.
+    let answerBy = event.expiresAt
     try {
-      if (event.requiresClaim) await requestApiData<void>(`/api/codex-chat/page-commands/${encodeURIComponent(event.commandId)}/claim`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ connectionId: event.connectionId }),
-      })
+      if (event.requiresClaim) {
+        const sent = Date.now()
+        await requestApiData<void>(`/api/codex-chat/page-commands/${encodeURIComponent(event.commandId)}/claim`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ connectionId: event.connectionId }),
+        })
+        answerBy -= Date.now() - sent
+      }
       if (cancelledCommands.current.has(event.commandId) || event.expiresAt < Date.now()) throw new Error('중단된 페이지 작업이야.')
       const live = current.current
       if (!live.snapshot || !live.editor) throw new Error('연결된 페이지가 없어.')
-      if (event.type !== 'capture' && live.snapshot.instanceId !== event.instanceId) throw new Error('그사이 화면이 바뀌었어. get_current_page로 지금 화면을 읽고 다시 해.')
+      if (event.type !== 'capture' && live.snapshot.instanceId !== event.instanceId) throw new Error('그사이 화면이 바뀌었어. 바뀐 화면을 보고 다시 해. 화면이 함께 오지 않았으면 get_current_page로 읽어.')
       const target = chatPageTarget(live.snapshot)
       const assertTargetCurrent = () => {
         if (connectionRef.current !== event.connectionId || !current.current.snapshot || !current.current.editor) throw new Error('페이지 연결이 해제됐어.')
@@ -399,10 +407,10 @@ export function ChatPageProvider({ children }: PropsWithChildren) {
         assertTargetCurrent()
         // Native drafts check again after loading inputs and before replacing their captured state.
         // Extensions validate their own revisions and can report a new snapshot before returning.
-        if (event.type === 'action' && event.tier === 'draft' && live.snapshot!.kind !== 'extension' && current.current.snapshot!.revision !== live.snapshot!.revision) throw new Error('그사이 입력이나 선택이 바뀌었어. 지금 화면을 읽고 다시 요청해줘.')
+        if (event.type === 'action' && event.tier === 'draft' && live.snapshot!.kind !== 'extension' && current.current.snapshot!.revision !== live.snapshot!.revision) throw new Error('그사이 입력이나 선택이 바뀌었어. 바뀐 화면을 보고 다시 요청해줘. 화면이 함께 오지 않았으면 get_current_page로 읽어줘.')
       }
       if (event.type === 'action') {
-        if (event.tier === 'direct' && (!event.revision || live.snapshot.revision !== event.revision)) throw new Error('그사이 화면이나 선택이 바뀌었어. get_current_page로 다시 읽고 요청해줘.')
+        if (event.tier === 'direct' && (!event.revision || live.snapshot.revision !== event.revision)) throw new Error('그사이 화면이나 선택이 바뀌었어. 바뀐 화면을 보고 다시 요청해줘. 화면이 함께 오지 않았으면 get_current_page로 읽어줘.')
         const { action, undo } = await runRegisteredAction(live.editor, event.actionId, event.tier, event.arguments, assertCurrent, controller.signal)
         record({ id: event.commandId, threadId: event.threadId, label: action.label, tier: event.tier, ...(undo && event.tier === 'draft' ? { undo: () => { assertTargetCurrent(); if (!undo.isCurrent()) throw new Error('그 뒤에 입력이 바뀌어서 되돌리지 않았어.'); undo.restore() } } : {}) })
       } else if (event.type === 'workflow') {
@@ -424,11 +432,16 @@ export function ChatPageProvider({ children }: PropsWithChildren) {
           markFilled(filledOn, patch, true)
         } })
       }
-      const page = await settledSnapshot(() => current.current.snapshot ? normalizeChatPageSnapshot(current.current.snapshot) : undefined, event.type)
+      const page = await settledSnapshot(read, event.type, answerBy)
       if (!page || page.connectionId !== event.connectionId) throw new Error('페이지 연결이 해제됐어.')
       await answerChatPageCommand(event.commandId, { ok: true, page })
     } catch (error) {
-      await answerChatPageCommand(event.commandId, { ok: false, error: error instanceof Error ? error.message : '페이지 작업이 실패했어.' }).catch(() => undefined)
+      // A refused or failed operation also reports the screen it left (an extension may record why on it), so the
+      // chat sees what changed without reading the page again. A stopped or expired command has no one waiting.
+      const reported = (event.type === 'action' || event.type === 'fields') && !cancelledCommands.current.has(event.commandId) && event.expiresAt >= Date.now() && connectionRef.current === event.connectionId
+        ? await settledSnapshot(read, event.type, answerBy).catch(() => undefined) : undefined
+      const page = reported?.connectionId === event.connectionId ? reported : undefined
+      await answerChatPageCommand(event.commandId, { ok: false, error: error instanceof Error ? error.message : '페이지 작업이 실패했어.', ...(page ? { page } : {}) }).catch(() => undefined)
     } finally {
       activeCommands.current.delete(event.commandId)
       cancelledCommands.current.delete(event.commandId)

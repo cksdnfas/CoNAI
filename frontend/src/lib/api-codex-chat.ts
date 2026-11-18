@@ -1286,8 +1286,8 @@ export function approveChatTaskPlan(proposalId: number) {
   return requestApiData<unknown>(`/api/chat-proposals/${proposalId}/task-approve`, { method: 'POST' })
 }
 
-/** The connected tab's answer to a page operation the chat ran: the new screen, or why it could not run. */
-export function answerChatPageCommand(commandId: string, answer: { ok: true; page: ChatPageSnapshot } | { ok: false; error: string }) {
+/** The connected tab's answer to a page operation the chat ran: the new screen, or why it could not run and the screen it left. */
+export function answerChatPageCommand(commandId: string, answer: { ok: true; page: ChatPageSnapshot } | { ok: false; error: string; page?: ChatPageSnapshot }) {
   return requestApiData<void>(`/api/codex-chat/page-commands/${encodeURIComponent(commandId)}`, { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(answer) })
 }
 

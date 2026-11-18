@@ -1723,26 +1723,41 @@ test('page commands preserve draft undo, screen identity and reviewed saves', { 
   let sequence = 0
   let authorizedProposal: ChatProposal | undefined
   const replies = new Map<string, (answer: { ok: boolean; error?: string; page?: ChatPageSnapshot }) => void>()
+  let claimDelay = 0
   t.mock.method(globalThis, 'fetch', async (url: string | URL | Request, init?: RequestInit) => {
     if (String(url).includes('/api/codex-chat/admin/chat-media/usage')) return Response.json({ success: true, data: { profiles: ['Alice'], messages: 0 } })
     if (String(url).includes('/api/chat-proposals/')) {
       assert.ok(authorizedProposal)
       return Response.json({ success: true, data: authorizedProposal })
     }
+    if (String(url).endsWith('/claim')) {
+      await new Promise(resolve => setTimeout(resolve, claimDelay))
+      return Response.json({ success: true, data: null })
+    }
     const id = String(url).split('/page-commands/')[1]
     assert.ok(id && replies.has(id), `unexpected request: ${String(url)}`)
     replies.get(id)!(JSON.parse(String(init?.body)))
     return Response.json({ success: true, data: null })
   })
-  async function send(command: ChatPageCommand) {
+  async function send(command: ChatPageCommand, extra: { expiresAt?: number; requiresClaim?: boolean } = {}) {
     const snapshot = page.capture()!
     const commandId = `command-${++sequence}`
     const answer = new Promise<{ ok: boolean; error?: string; page?: ChatPageSnapshot }>(resolve => replies.set(commandId, resolve))
     await act(async () => TestEventSource.latest.dispatchEvent(new dom.window.MessageEvent('chat.page.command', { data: JSON.stringify({
-      name: 'chat.page.command', payload: { ...command, commandId, connectionId: snapshot.connectionId, instanceId: snapshot.instanceId, threadId: 1, expiresAt: Date.now() + 10000 },
+      name: 'chat.page.command', payload: { ...command, commandId, connectionId: snapshot.connectionId, instanceId: snapshot.instanceId, threadId: 1, expiresAt: Date.now() + 10000, ...extra },
     }) })))
     return { commandId, answer }
   }
+  await t.test('an action answers before its window closes, keeping the claim’s round trip for the answer', async () => {
+    claimDelay = 150
+    const expiresAt = Date.now() + 400
+    const command = await send({ type: 'action', actionId: 'profile.draft', tier: 'draft', arguments: { value: 'short window' } }, { expiresAt, requiresClaim: true })
+    let answeredAt = 0
+    await act(async () => { assert.equal((await command.answer).ok, true); answeredAt = Date.now() })
+    claimDelay = 0
+    assert.ok(answeredAt < expiresAt, `answered ${answeredAt - expiresAt} ms after the window`)
+    await act(async () => edit('original'))
+  })
   await t.test('applied field cards show chat-filled marks and clear them on undo or manual editing', async () => {
     const snapshot = page.capture()!
     const proposal = { id: 901, kind: 'page_fields' as const, page: chatPageTarget(snapshot), changes: buildChatPageChanges(snapshot, [{ fieldId: 'name', value: 'card filled' }]), expiresAt: Date.now() + 60_000 }

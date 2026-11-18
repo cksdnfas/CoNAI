@@ -444,6 +444,17 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
     assert.equal(chatPageActionTier(workspace.actions![1].id), 'commit')
     const categories = normalizeChatPageSchema(pageObject({ id: pageChoice(['all', '1']) }, ['id']))
     assert.deepEqual(validateChatPageArguments(categories, { id: '1' }), { id: '1' })
+    // A wrong key names itself, the missing required keys and what the path accepts, at every level.
+    const node = normalizeChatPageSchema(pageObject({ fieldId: pageText(40), patch: pageObject({ seed: pageText(20), steps: pageText(20) }, ['seed']) }, ['fieldId', 'patch']))
+    assert.throws(() => validateChatPageArguments(node, { field: 'a' }), { message: 'arguments: 등록된 필드와 필수 입력을 확인해줘. 없는 필드: field. 빠진 필수 입력: fieldId, patch. 가능한 필드: fieldId, patch.' })
+    assert.throws(() => validateChatPageArguments(node, { fieldId: 'a', patch: { sed: '1' } }), { message: 'arguments.patch: 등록된 필드와 필수 입력을 확인해줘. 없는 필드: sed. 빠진 필수 입력: seed. 가능한 필드: seed, steps.' })
+    // A rejected format or range says what that path accepts, taken from its schema and never echoing the value.
+    const accepts = normalizeChatPageSchema(pageObject({ wait: { type: 'number', integer: true, minimum: 0, maximum: 30 }, mode: pageChoice(['all', 'one']), note: pageText(40), list: pageArray(pageText(10), 4, 1), draft: pageObject({ a: pageText(5) }) }))
+    assert.throws(() => validateChatPageArguments(accepts, { wait: 'secret' }), { message: 'arguments.wait: 입력 형식이나 허용 범위를 확인해줘. 가능한 입력: 0 이상 30 이하의 정수.' })
+    assert.throws(() => validateChatPageArguments(accepts, { mode: 'secret' }), { message: 'arguments.mode: 입력 형식이나 허용 범위를 확인해줘. 가능한 값: all, one.' })
+    assert.throws(() => validateChatPageArguments(accepts, { note: 'x'.repeat(41) }), { message: 'arguments.note: 입력 형식이나 허용 범위를 확인해줘. 가능한 입력: 40자 이하의 문자열.' })
+    assert.throws(() => validateChatPageArguments(accepts, { list: [] }), { message: 'arguments.list: 항목 개수가 올바르지 않아. 가능한 입력: 항목 1개 이상 4개 이하의 배열 또는 그 JSON 문자열.' })
+    assert.throws(() => validateChatPageArguments(accepts, { draft: 'not json' }), { message: 'arguments.draft: JSON 입력이 필요해. 가능한 입력: 객체 또는 그 JSON 문자열.' })
     assert.throws(() => normalizeChatPageSchema({ type: 'string', enum: ['all', 1] }), /선택 목록/, 'a schema must never advertise impossible choices')
   })
 
@@ -745,14 +756,15 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
     const bridge = await openChatMcpBridge(admin, [], [], { chatContext: context })
     const before = ChatProposalStore.listForThread(pageThreadId).length
     const commands: string[] = []
+    let browser: { revision?: string; answer: Record<string, unknown> } = { revision: directPage.revision, answer: { ok: true, page: directPage } }
     const stop = subscribeToRuntimeEvents((record) => {
       if (record.name !== 'chat.page.command') return
       const event = record.payload as import('@conai/shared').ChatPageCommandEvent
       if (event.type !== 'action') return
       commands.push(event.actionId)
       assert.equal(event.tier, 'direct')
-      assert.equal(event.revision, directPage.revision, 'the browser checks this revision before applying a direct change')
-      setImmediate(() => resolveChatPageCommand(admin, event.commandId, { ok: true, page: directPage }))
+      assert.equal(event.revision, browser.revision, 'the browser checks this revision before applying a direct change')
+      setImmediate(() => resolveChatPageCommand(admin, event.commandId, browser.answer))
     })
     try {
       for (const action of ['files.name_save', 'files.move_save']) {
@@ -765,6 +777,25 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
       assert.equal((await bridge.call('page_act', { action: 'files.delete', arguments: {} })).isError, true, 'destructive page saves still require review')
       assert.deepEqual(commands, ['files.name_save', 'files.move_save'])
       assert.equal(ChatProposalStore.listForThread(pageThreadId).length, before)
+      // A tab refusing a stale screen answers with the screen it has: unchanged, the message alone; changed, the error
+      // also carries what changed, and the retry is checked against that screen's revision.
+      const stale = '그사이 화면이나 선택이 바뀌었어. 바뀐 화면을 보고 다시 요청해줘.'
+      browser.answer = { ok: false, error: stale, page: directPage }
+      const same = await bridge.call('page_act', { action: 'files.name_save', arguments: {} })
+      assert.equal(same.isError, true)
+      assert.deepEqual(same.content?.map((part) => (part as { text: string }).text), [stale])
+      const moved = normalizeChatPageSnapshot({ ...directPage, revision: 'direct-files-revision-2', title: 'Files moved' })
+      browser.answer = { ok: false, error: stale, page: moved }
+      const refused = await bridge.call('page_act', { action: 'files.name_save', arguments: {} })
+      assert.equal(refused.isError, true)
+      assert.equal((refused.content?.[0] as { text: string }).text, stale)
+      const shown = JSON.parse((refused.content?.[1] as { text: string }).text).page
+      assert.equal(shown.revision, moved.revision)
+      assert.equal(shown.title, 'Files moved')
+      assert.match(String(shown.actions), /unchanged/, 'only the changed parts come back')
+      browser = { revision: moved.revision, answer: { ok: true, page: moved } }
+      const retried = await bridge.call('page_act', { action: 'files.name_save', arguments: {} })
+      assert.equal(retried.isError, undefined, JSON.stringify(retried))
     } finally { stop(); unregister(); await bridge.close() }
   })
 
@@ -780,7 +811,7 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
       assert.ok((await broad.call('move_files', { ids: [], parent_id: null })).isError, 'execution still rechecks the actual restrictive profile')
       assert.ok(SHARED_FILE_TOOLS.every((tool) => offered(broad).includes(tool)), 'ordinary pages retain authorized file tools')
       const shared = await openChatMcpBridge({ accountId: null, accountType: 'admin' }, ['read', 'generate', 'organize', 'configure'], null, { chatContext: { ...context, replyId: 'page-tools', page: normalizeChatPageSnapshot({ ...page, path: '/public/workflows/example' }) } })
-      try { assert.ok(offered(shared).every((tool) => CHAT_PAGE_TOOLS.has(tool) || tool === 'save_lore' || tool === 'chat_reply_to' || tool === 'get_proposal_status' || tool === 'offer_choices' || tool.startsWith('task_')), 'a public workflow page written by someone else keeps only its page tools') } finally { await shared.close() }
+      try { assert.ok(offered(shared).every((tool) => CHAT_PAGE_TOOLS.has(tool) || tool === 'save_lore' || tool === 'read_lore_file' || tool === 'chat_reply_to' || tool === 'get_proposal_status' || tool === 'offer_choices' || tool.startsWith('task_')), 'a public workflow page written by someone else keeps only its page tools') } finally { await shared.close() }
       assert.ok(!(await bridge.call('get_current_page', {})).isError)
       // Play the connected tab: it receives the validated change set and answers with its new screen.
       setChatPageCommandTimeout(2000)

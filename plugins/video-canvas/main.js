@@ -18,8 +18,12 @@ import { bindDispatch } from './dispatch.mjs'
 
 // Every `task` below belongs to a page action from the assistant (the person's own two launch-bar tasks use `queued`).
 const task = assistantTask
-// The host's chat bridge answers a page action after ~20s, so no single call waits longer than this; the assistant calls again.
+// The host's chat bridge answers a page action after ~20s, so no single call waits longer than this; longer work is
+// followed by task_wait with the job id, not by calling again.
 const waitFor = seconds => Math.min(Math.max(Number(seconds) || 0, 0), 15)
+// What is left of an action's wait: its deadline is taken when the action arrives, so starting the work (the queue, the
+// server's preparation, reloads) counts against it instead of being added on top.
+const left = deadline => Math.max(0, (deadline - Date.now()) / 1000)
 // wait_take's id → the server call that waits on it (it takes the id under the same name).
 const WAITS = [['take_id', 'get_take'], ['cut_id', 'get_take'], ['chain_id', 'run_chain'], ['export_id', 'export_sequence'], ['extraction_id', 'extract_frame']]
 let launchName = null
@@ -98,17 +102,17 @@ const actions = {
   'video-canvas.sequence': args => task(() => edit([{ op: 'sequence', order: args.order }], args.expected_revision ?? null, 'assistant')),
   'video-canvas.export_sequence': async (args, context) => {
     const call = extra => request('export_sequence', { ...args, ...extra, origin: 'assistant' }, { signal: context?.signal })
-    const projectId = s.project?.id, seconds = waitFor(args.wait_seconds)
+    const projectId = s.project?.id
     // Starting joins the queue like any edit; waiting on a running export must not block it.
     let id = args.export_id
     if (!id) {
       const started = await task(async () => { const result = await call({ wait_seconds: undefined }); await reload(); return result })
       // The assistant reads these in its result; the person who watches the canvas is told as well.
       for (const warning of started.warnings ?? []) notice(warning, true)
-      if (!seconds) return
+      if (!waitFor(args.wait_seconds)) return
       id = started.id
     }
-    await call({ project_id: projectId, export_id: id, wait_seconds: seconds })
+    await call({ project_id: projectId, export_id: id, wait_seconds: left(context.deadline) })
     await task(reload)
   },
   'video-canvas.edit': args => task(async () => {
@@ -144,10 +148,10 @@ const actions = {
   'video-canvas.check': args => task(() => doCheck({ ...args, origin: 'assistant' })),
   'video-canvas.run_cut': async (args, context) => {
     // The run starts inside the queue and under the run lock without waiting; the wait follows outside both, by take id.
-    const { wait_seconds: requested, ...start } = args, projectId = s.project?.id, seconds = waitFor(requested)
+    const { wait_seconds: requested, ...start } = args, projectId = s.project?.id
     const take = await launchRun({ ...start, origin: 'assistant' })
-    if (!seconds || !take) return
-    await request('get_take', { project_id: projectId, take_id: take.takeId ?? take.id, wait_seconds: seconds }, { signal: context?.signal })
+    if (!waitFor(requested) || !take) return
+    await request('get_take', { project_id: projectId, take_id: take.takeId ?? take.id, wait_seconds: left(context.deadline) }, { signal: context?.signal })
     await task(reload)
   },
   // The one waiting action: the id it receives says what to wait for, and the answer lands in that thing's own section.
@@ -155,40 +159,44 @@ const actions = {
     const given = WAITS.filter(([key]) => args[key]), projectId = s.project?.id
     if (given.length !== 1) throw new Error(`${WAITS.map(([key]) => key).join(', ')} 중 하나만 줘.`)
     const [[key, op]] = given
-    const result = await request(op, { project_id: projectId, [key]: args[key], wait_seconds: waitFor(args.wait_seconds) }, { signal: context?.signal })
+    const result = await request(op, { project_id: projectId, [key]: args[key], wait_seconds: left(context.deadline) }, { signal: context?.signal })
     await task(reload)
     if (key === 'extraction_id' && s.project?.id === projectId && !isTerminal(result.status)) watchExtraction(result.id)
   },
   'video-canvas.run_chain': async (args, context) => {
     // Starting joins the queue like any edit; waiting on the chain must not block it.
-    const projectId = s.project?.id, seconds = waitFor(args.wait_seconds)
+    const projectId = s.project?.id
     let id = args.chain_id
     if (!id) {
       const started = await task(async () => { const result = await request('run_chain', { ...args, wait_seconds: undefined, origin: 'assistant' }, { signal: context?.signal }); await reload(); return result })
-      if (!seconds) return
+      if (!waitFor(args.wait_seconds)) return
       id = started.id
     }
-    await request('run_chain', { project_id: projectId, chain_id: id, cancel: args.cancel, wait_seconds: seconds }, { signal: context?.signal })
+    await request('run_chain', { project_id: projectId, chain_id: id, cancel: args.cancel, wait_seconds: left(context.deadline) }, { signal: context?.signal })
     await task(reload)
   },
   'video-canvas.propose_run_cut': args => launchRun({ ...args, origin: 'assistant' }, 'propose_run_cut'),
   'video-canvas.remove': args => task(() => edit([{ op: 'remove', id: args.id }], args.expected_revision ?? null, 'assistant')),
   'video-canvas.extract_frame': async (args, context) => {
     // Start (or look up) inside the queue without waiting; a requested wait runs outside it, by extraction id.
-    const { wait_seconds: requested, ...start } = args, projectId = s.project?.id, seconds = waitFor(requested)
+    const { wait_seconds: requested, ...start } = args, projectId = s.project?.id
     let result = await task(async () => { const started = await request('extract_frame', { ...start, origin: 'assistant' }, { signal: context?.signal }); await reload(); return started })
     if (args.cancel) return
-    if (seconds && !isTerminal(result.status)) {
-      result = await request('extract_frame', { project_id: projectId, extraction_id: result.id, wait_seconds: seconds }, { signal: context?.signal })
+    if (waitFor(requested) && !isTerminal(result.status)) {
+      result = await request('extract_frame', { project_id: projectId, extraction_id: result.id, wait_seconds: left(context.deadline) }, { signal: context?.signal })
       await task(reload)
     }
     if (s.project?.id === projectId && !isTerminal(result.status)) watchExtraction(result.id)
   },
 }
 // A page action waits for the page start (the remembered-project restore) and for any project switch under way,
-// so it never runs against whichever project happens to be loaded at that moment.
+// so it never runs against whichever project happens to be loaded at that moment. Its wait deadline is taken before that.
 let booted = Promise.resolve()
-const gated = Object.fromEntries(Object.entries(actions).map(([id, handler]) => [id, async (args, context) => { await booted; await settled(); return handler(args, context) }]))
+const gated = Object.fromEntries(Object.entries(actions).map(([id, handler]) => [id, async (args, context) => {
+  const deadline = Date.now() + waitFor(args?.wait_seconds) * 1000
+  await booted; await settled()
+  return handler(args, { ...context, deadline })
+}]))
 ctx.api = await connectPlugin(gated)
 fillIcons(); initToasts(); initMenu(); bindHeader(); bindNodes(); bindCanvas(); bindLinks(); bindDispatch(); bindGen(); bindSettings(); bindHome(); bindTitle(); bindSequence()
 if (ctx.api.supports('launch.image') && ctx.api.launch?.image) {

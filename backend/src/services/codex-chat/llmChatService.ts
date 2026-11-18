@@ -7,7 +7,7 @@ import { requestChatModel, withChatTokenModel } from './llmChatContext'
 import { addChatOpening } from './chatGreeting'
 import type { ChatExecutionContext, ChatPageSnapshot, ChatProposal } from '@conai/shared'
 import { isCodexChatCreationTool } from '@conai/shared'
-import { ChatProposalStore, isChatProposalToolAvailable } from './chatProposals'
+import { ChatProposalStore, chatProposalToolRefusal, isChatProposalToolAvailable } from './chatProposals'
 import { beginDirectReply } from './chatReplies'
 import { isChatOwnTool, type McpRequester } from '../../mcp/context'
 import type { LlmGenerationOptions } from '../llmGenerationOptions'
@@ -41,7 +41,7 @@ import { ChatSummaryStore } from './chatMemory'
 import { appendUserDirective, buildChatMessages, cutToolOutput, directContextTurns, estimateMessagesTokens, estimateTokens, type ChatContextMeta, fillCharacterPlaceholders, fitChatContext, fitThreadSummary, fitWorkspaceRead, latestWindow, prefixUserContent, rawMessagesEstimate, recordPromptUsage, replyCapFor, resolveContextConfig, sendableMessages, stripThinking, summarizeAhead, summarizeAll, unsummarizedMessages, wrapUpRequest } from './llmChatContext'
 import { addressLabelFilter, restatement, roundSeparator } from './chatReplyText'
 import { noteTextToolCalls, recoverTextToolCalls, textToolCallFilter } from './textToolCalls'
-import { chatPageReference, NO_PAGE_NOTE, proposalOutcomeNote } from './chatPageContext'
+import { chatPageReference, NO_PAGE_NOTE, notePageViewFolded, PAGE_VIEW_KEY, PAGE_VIEW_TOOLS, PAGE_VIEW_UNKNOWN, pageViewAfter, proposalOutcomeNote, takePageViewFolded, type PageViewShown } from './chatPageContext'
 import { knowledgePageForExecution, recordQuotedBoardKnowledge } from '../posts/knowledge/knowledgePage'
 import type { ChatSendOptions } from './chatTasks'
 import { rememberChatPage } from './chatPageBridge'
@@ -220,7 +220,8 @@ function readToolImages(result: { content?: unknown[] }) {
   })
 }
 
-async function runToolCall(turn: LlmTurn, bridge: ChatMcpBridge, call: { id: string; function: { name: string; arguments: string } }, outputLimit: number, images: string[]) {
+/** One tool call of a reply. `nested`: a pi codemode script's call, whose result the model reads only as the script prints it. */
+export async function runToolCall(turn: LlmTurn, bridge: ChatMcpBridge, call: { id: string; function: { name: string; arguments: string } }, outputLimit: number, images: string[], nested = false) {
   let nativeResult: Awaited<ReturnType<ChatMcpBridge['call']>> | null = null
   const record: CodexChatToolCall = {
     id: call.id,
@@ -235,6 +236,10 @@ async function runToolCall(turn: LlmTurn, bridge: ChatMcpBridge, call: { id: str
   turn.toolCalls.set(record.id, record)
 
   let output: string
+  // A refused or failed page_act / page_fill: its message, without the changed screen that follows it.
+  let refusedPageText: string | undefined
+  // What a page tool's result showed of the screen (notePageViewShown); no transport is given it.
+  let shownPageView: PageViewShown | undefined
   try {
     record.arguments = parseArguments(call.function.arguments)
     // A run_tool call is recorded as the catalogued tool it runs; the bridge routes that name through the catalog.
@@ -243,7 +248,10 @@ async function runToolCall(turn: LlmTurn, bridge: ChatMcpBridge, call: { id: str
     record.arguments = target.arguments
     record.generated = isCodexChatCreationTool(record.tool)
     emit(turn, { type: 'tool', call: { ...record } })
-    const result = await bridge.call(record.tool, record.arguments as Record<string, unknown>, turn.controller.signal)
+    const called = await bridge.call(record.tool, record.arguments as Record<string, unknown>, turn.controller.signal)
+    const { pageView, pageViewBase, ...structured } = ((PAGE_VIEW_TOOLS.has(record.tool) && called.structuredContent) || {}) as { pageView?: unknown; pageViewBase?: unknown }
+    if (typeof pageView === 'string' && pageView.startsWith(PAGE_VIEW_KEY)) shownPageView = { key: pageView, ...(typeof pageViewBase === 'string' ? { base: pageViewBase } : {}) }
+    const result = shownPageView === undefined ? called : { ...called, structuredContent: Object.keys(structured).length ? structured : undefined }
     nativeResult = result
     if (['propose_page_changes', 'propose_workflow_changes', 'propose_page_action'].includes(record.tool) && !result.isError) {
       // propose_page_changes / propose_workflow_changes are retired; the names stay for chats recorded before.
@@ -253,6 +261,7 @@ async function runToolCall(turn: LlmTurn, bridge: ChatMcpBridge, call: { id: str
     }
     const { texts, historyIds, compositeHashes, jobIds, pendingJobIds, audioCandidateIds, pageOperation } = readMcpToolResult(result, record.tool)
     if (pageOperation && !result.isError) record.pageOperation = pageOperation
+    if (result.isError && (record.tool === 'page_act' || record.tool === 'page_fill') && texts.length > 1) refusedPageText = texts[0]
     output = texts.join('\n') || (result.structuredContent ? JSON.stringify(result.structuredContent) : '')
     const found = readToolImages(result)
     if (found.length > 0) {
@@ -267,6 +276,7 @@ async function runToolCall(turn: LlmTurn, bridge: ChatMcpBridge, call: { id: str
     if (audioCandidateIds.length > 0) record.audioCandidateIds = audioCandidateIds
   } catch (error) {
     output = `Error: ${error instanceof Error ? error.message : String(error)}`
+    shownPageView = undefined
     record.status = 'failed'
     if (record.arguments === null) {
       record.arguments = call.function.arguments
@@ -279,13 +289,21 @@ async function runToolCall(turn: LlmTurn, bridge: ChatMcpBridge, call: { id: str
   const catalogRead = record.tool === CATALOG_OPEN_TOOL && record.status === 'completed'
   // So are a skill's instructions: a later request replays tool results cut short, which would read as the whole skill.
   const skillCall = record.tool === USE_SKILL_TOOL && record.status === 'completed' ? skillCallLabel((record.arguments ?? {}) as Record<string, unknown>) : null
-  record.summary = pageRead ? '현재 요청에 연결한 페이지를 읽었어.' : catalogRead ? '도구 설명을 열람했어.' : skillCall !== null ? `Loaded: ${skillCall}.` : record.pageOperation ? record.pageOperation.label : output ? truncateToolSummary(output) : null
-  record.output = pageRead ? '(Page/editor snapshot omitted; use the screen in the current request, or the page tools for what it does not show.)' : catalogRead ? '(Tool schemas omitted; open them again with open_tools when needed.)' : skillCall !== null ? `(${skillCall} was loaded for that reply; its instructions are not kept. Call ${USE_SKILL_TOOL} again in a reply that needs them.)` : record.pageOperation ? `(Page operation done: ${record.pageOperation.label}. Screen snapshot omitted; use the screen in the current request.)` : cutToolOutput(output, STORED_TOOL_OUTPUT_LENGTH)
+  record.summary = pageRead ? '현재 요청에 연결한 페이지를 읽었어.' : catalogRead ? '도구 설명을 열람했어.' : skillCall !== null ? `Loaded: ${skillCall}.` : record.pageOperation ? record.pageOperation.label : output ? truncateToolSummary(refusedPageText ?? output) : null
+  record.output = pageRead ? '(Page/editor snapshot omitted; use the screen in the current request, or the page tools for what it does not show.)' : catalogRead ? '(Tool schemas omitted; open them again with open_tools when needed.)' : skillCall !== null ? `(${skillCall} was loaded for that reply; its instructions are not kept. Call ${USE_SKILL_TOOL} again in a reply that needs them.)` : record.pageOperation ? `(Page operation done: ${record.pageOperation.label}. Screen snapshot omitted; use the screen in the current request.)` : refusedPageText !== undefined ? `${refusedPageText} (Screen snapshot omitted; use the screen in the current request.)` : cutToolOutput(output, STORED_TOOL_OUTPUT_LENGTH)
   emit(turn, { type: 'tool', call: { ...record } })
   // The catalog pages at whole-schema boundaries; cutting JSON here makes the opened tools unusable.
   // A workspace read is shortened at a resumable offset instead, so a cut file never looks whole.
   const fitted = record.tool === 'workspace_read' && output.length > outputLimit ? fitWorkspaceRead(output, outputLimit) : null
   const text = (fitted ?? (!catalogRead && output.length > outputLimit ? cutToolOutput(output, outputLimit) : output)) || '(no output)'
+  // A pi session holds the screen once the turn goes through (buildClaudeSessionTurn). A cut result, or one a script
+  // got, leaves it unknown; changes count only on the screen the session holds (pageViewAfter).
+  const session = turn.engineSession
+  if (shownPageView !== undefined && session?.runtime === 'pi') {
+    session.shownPageView = nested || text !== output ? PAGE_VIEW_UNKNOWN : pageViewAfter(session.shownPageView, shownPageView)
+    // A whole screen a script got (after a fold, too) never reached the model: its next own page operation answers whole.
+    if (nested && shownPageView.base === undefined) notePageViewFolded(turn.threadId)
+  }
   return { text, nativeResult: nativeResult ? { ...nativeResult, content: [{ type: 'text', text }, ...(nativeResult.content ?? []).filter((part) => (part as { type?: unknown })?.type === 'image')] } : { isError: true, content: [{ type: 'text', text }] } }
 }
 
@@ -542,6 +560,7 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
         turn.engineSession!.onDone(id, compacted)
         if (turn.contextMeta?.session) turn.contextMeta.session.compacted = compacted === true
       },
+      onCompaction: () => notePageViewFolded(turn.threadId),
     } : undefined
     if (turn.engineSession?.runtime === 'pi') {
       // The same connection and model, run by pi, which folds its session at the profile's context (its 최대
@@ -563,7 +582,9 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
       for (const name of bridge?.catalogTools ?? []) if (profile.visionEnabled || !isVisionTool(name)) cataloguedSet.add(name)
       offeredNames.clear()
       for (const name of [...offeredTools.map(tool => tool.function.name), ...cataloguedSet]) offeredNames.add(name)
-      return offeredTools.filter(tool => isChatProposalToolAvailable(chatContext, tool.function.name))
+      // A proposal tool already used in this reply stays listed and is refused when called (permitted), like the
+      // judge's withheld tools: a list that changed between rounds would make the provider read the whole prompt again.
+      return [...offeredTools]
     }
     const permitted = (name: string) => offeredNames.has(name) && !blocked.has(name) && isChatProposalToolAvailable(chatContext, name)
     if (judged && turn.contextMeta) turn.contextMeta.judge = judged.diagnostics
@@ -638,7 +659,7 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
           maxToolRounds: toolRounds,
           research: turn.research,
           usage: { purpose: 'chat', profileId: profile.id, threadId: turn.threadId, replyId: chatContext?.replyId, round: target.transport ? null : round },
-          callTool: bridge ? async (name, args, id) => {
+          callTool: bridge ? async (name, args, id, nested?: boolean) => {
             await refreshTools()
             requireProfileAccess(requester, profile)
             if (turn.research) {
@@ -647,8 +668,8 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
               if (!turn.research.takeTool()) return { isError: true, content: [{ type: 'text', text: 'A summary has no tools. Answer only from the text already supplied.' }] }
             }
             const target = unwrapCatalogCall(name, args).tool
-            if (!permitted(target)) return { isError: true, content: [{ type: 'text', text: `${target} is not available in this reply.` }] }
-            return (await runToolCall(turn, bridge, { id, function: { name, arguments: JSON.stringify(args) } }, profile.toolOutputLimit, [])).nativeResult
+            if (!permitted(target)) return { isError: true, content: [{ type: 'text', text: chatProposalToolRefusal(chatContext, target) ?? `${target} is not available in this reply.` }] }
+            return (await runToolCall(turn, bridge, { id, function: { name, arguments: JSON.stringify(args) } }, profile.toolOutputLimit, [], nested)).nativeResult
           } : undefined,
           onRequestBody: (body, actualTarget) => {
             if (turn.research) {
@@ -726,7 +747,7 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
         const target = calledTool(call.function.name, call.function.arguments)
         messages.push({ role: 'tool', tool_call_id: call.id, content: permitted(call.function.name) && permitted(target)
           ? (await runToolCall(turn, bridge, call, profile.toolOutputLimit, images)).text
-          : blocked.has(target) ? `${target} is not available in this reply.` : `Unknown or not permitted tool: ${target}` })
+          : chatProposalToolRefusal(chatContext, target) ?? (blocked.has(target) ? `${target} is not available in this reply.` : `Unknown or not permitted tool: ${target}`) })
       }
       // An order is done once its job went through: what the model would say about it is never shown.
       if (turn.order && [...turn.toolCalls.values()].some((call) => call.status === 'completed' && turn.order!.done(call))) return
@@ -737,6 +758,7 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
     }
   } finally {
     endJudgedTurn(judged, [...turn.toolCalls.values()].map((call) => call.tool))
+    takePageViewFolded(turn.threadId)
     await bridge?.close()
   }
 }

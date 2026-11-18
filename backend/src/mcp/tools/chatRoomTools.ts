@@ -41,13 +41,20 @@ function speakerName(row: RoomMessageRow, names: Map<number, string>, userName: 
 
 /**
  * A direct chat's reply already answers (and quotes) the latest user message, so chat_reply_to there only quotes an
- * older one. Without an earlier message there is nothing to change. Codex keeps its session's initial tool list,
- * so it must retain the tool even before an older message exists.
+ * older one. The model's tool list has it from the first turn, since tool definitions open every request and one that
+ * arrived with the second turn would make a provider cache read the whole prompt again; the call is refused until an
+ * older message exists (hasOlderMessage). The composer lists picks for the person, not a prompt: an empty chat leaves it out.
  */
 export function offersChatReplyTo(context: McpRequestContext) {
   const chat = context.chatContext;
+  if (!context.composerPreview || !chat || chat.kind === 'group' || context.source === 'codex-chat') return true;
+  return CodexChatStore.latestMessageId(chat.threadId) !== null;
+}
+
+/** Whether a direct chat has a message older than the one this reply answers (Codex and rooms quote without this check). */
+function hasOlderMessage(context: McpRequestContext) {
+  const chat = context.chatContext;
   if (!chat || chat.kind === 'group' || context.source === 'codex-chat') return true;
-  if (context.composerPreview) return CodexChatStore.latestMessageId(chat.threadId) !== null;
   const latest = CodexChatStore.latestUserMessageId(chat.threadId);
   return latest !== null && CodexChatStore.hasMessagesBefore(chat.threadId, latest);
 }
@@ -114,6 +121,7 @@ function registerChatReplyTo(server: McpServer, context: McpRequestContext): voi
       try {
         if (message_id === undefined && to === undefined) throw new Error('Choose a message_id or to recipient.');
         requireRoom(context, context.chatContext?.threadId ?? 0);
+        if (!hasOlderMessage(context)) throw new Error('There is no older message in this chat to quote yet; your reply already quotes and answers the latest one. Just write your reply.');
         const routing = routeChatReply(context.chatContext, { messageId: message_id, recipients: direct ? undefined : to as ChatRecipient[] | undefined });
         return textResult({ reply_to: routing.replyTo?.messageId ?? null, to: routing.recipients, context: message_id ? buildReplyContext(CodexChatStore.listMessages(context.chatContext!.threadId), routing, { group: context.chatContext?.kind === 'group' }) : undefined, note: 'Recipients are accepted. Finish your own reply; delivery happens after it is saved.' });
       } catch (error) { return errorResult(error); }

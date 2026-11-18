@@ -542,7 +542,7 @@ test('message replies: storage, delivery, context, and generation ownership', { 
   const directChat = () => CodexChatStore.findThreadById(LlmChatService.createThread(requester, a.id))!
   type StreamEvent = Parameters<Parameters<typeof LlmChatService.sendMessage>[3]>[0]
 
-  await t.test('direct chats offer quoting only with older messages; group routing stays unchanged', async () => {
+  await t.test('direct chats list quoting from the first turn; group routing stays unchanged', async () => {
     const names = async (context: ChatExecutionContext) => {
       const bridge = await openChatMcpBridge(requester, [], null, { chatContext: context })
       try { return bridge.tools.map((tool) => tool.function.name) } finally { await bridge.close() }
@@ -552,7 +552,7 @@ test('message replies: storage, delivery, context, and generation ownership', { 
     const directContext = { threadId: thread.id, profileId: a.id, kind: 'direct' as const, replyId: 'tools-direct' }
     sayUser('안녕')
     const first = await names(directContext)
-    assert.ok(!first.includes('chat_reply_to'), 'the only incoming message is already quoted')
+    assert.ok(first.includes('chat_reply_to'), 'listed before an older message exists (the call is refused until then)')
     for (const tool of ['room_history_search', 'room_history_read', 'room_call_member']) assert.ok(!first.includes(tool), tool)
     sayUser('아까 그 얘기 말인데')
     const direct = await names(directContext)
@@ -570,19 +570,21 @@ test('message replies: storage, delivery, context, and generation ownership', { 
     for (const tool of ['chat_reply_to', 'room_history_search', 'room_history_read', 'room_call_member']) assert.ok(group.includes(tool), tool)
   })
 
-  await t.test('a stored lore proposal removes save_lore from later rounds, but a failed proposal does not', async s => {
+  await t.test('save_lore stays listed in every round; after a stored lore proposal, not a failed one, the next call is refused', async s => {
     const thread = directChat()
-    let calls = 0
+    const bodies: Array<{ tools?: Array<{ function: { name: string } }>; messages: Array<{ role: string; content?: unknown }> }> = []
     s.mock.method(globalThis, 'fetch', async (_url, init) => {
-      const body = JSON.parse(String(init?.body))
-      const offered = (body.tools ?? []).some((tool: { function: { name: string } }) => tool.function.name === 'save_lore')
-      calls++
-      assert.equal(offered, calls <= 2)
-      if (calls <= 2) return response('', { name: 'save_lore', args: { title: calls === 1 ? '' : 'Favorite tea', keys: ['oolong'], content: 'The user prefers oolong tea.' } })
+      bodies.push(JSON.parse(String(init?.body)))
+      const calls = bodies.length
+      if (calls <= 3) return response('', { name: 'save_lore', args: { title: ['', 'Favorite tea', 'Favorite cup'][calls - 1], keys: ['oolong'], content: 'The user prefers oolong tea.' } })
       return response('기억해둘게.')
     })
     const reply = await LlmChatService.sendMessage(requester, thread, 'Remember that I prefer oolong tea.', () => {})
     assert.equal(reply.status, 'completed', reply.error ?? '')
+    assert.equal(bodies.length, 4)
+    assert.ok(bodies[0].tools?.some(tool => tool.function.name === 'save_lore'))
+    for (const body of bodies) assert.equal(JSON.stringify(body.tools), JSON.stringify(bodies[0].tools), 'the same tool list every round')
+    assert.match(String(bodies[3].messages.at(-1)?.content), /already has a lore proposal/)
     assert.deepEqual(reply.tool_calls.map(call => call.status), ['failed', 'completed'])
     const { ChatProposalStore } = await import('../src/services/codex-chat/chatProposals')
     assert.equal(ChatProposalStore.forReply(thread.id, reply.routing!.replyId!, 'lore').length, 1)
@@ -620,7 +622,9 @@ test('message replies: storage, delivery, context, and generation ownership', { 
     assert.equal(final.content, 'Done.')
     assert.equal(streamed.trim(), 'Done.')
 
-    s.mock.method(globalThis, 'fetch', async () => response(`Done. ${escaped}`))
+    // A direct chat is never offered room_call_member: its markup stays a call nobody may run.
+    const groupOnly = '<tool_call> <function=room_call_member> <parameter=room_id> 1 </parameter> <parameter=names> ["B"] </parameter> </function> </tool_call>'
+    s.mock.method(globalThis, 'fetch', async () => response(`Done. ${groupOnly.replace(/</g, '&lt;').replace(/>/g, '&gt;')}`))
     const unavailable = await LlmChatService.sendMessage(requester, directChat(), 'First message, nothing older to quote.', () => {})
     assert.equal(unavailable.status, 'completed', unavailable.error ?? '')
     assert.equal(unavailable.content, 'Done.', 'unavailable calls are not speech either')
