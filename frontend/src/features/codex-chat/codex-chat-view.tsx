@@ -5,7 +5,7 @@ import { resolveChatPortrait } from '@conai/shared'
 import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useIsMutating, useMutation, useQueries, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query'
-import { Activity, AlarmClock, ALargeSmall, ArrowLeft, ArrowUp, ChevronLeft, ChevronRight, Cpu, Download, Eraser, Flag, FoldVertical, Image as ImageIcon, LayoutGrid, ListChecks, Maximize2, Minimize2, MoreHorizontal, Plus, RotateCw, SlidersHorizontal, Square, SquarePen, Target, Trash2, TriangleAlert, UserPlus, X } from 'lucide-react'
+import { Activity, AlarmClock, ALargeSmall, ArrowDown, ArrowLeft, ArrowUp, ChevronLeft, ChevronRight, Cpu, Download, Eraser, Flag, FoldVertical, Image as ImageIcon, LayoutGrid, ListChecks, Maximize2, Minimize2, MoreHorizontal, Plus, RotateCw, SlidersHorizontal, Square, SquarePen, Target, Trash2, TriangleAlert, UserPlus, X } from 'lucide-react'
 import { Chip } from '@/components/ui/chip'
 import { CountBadge } from '@/components/ui/count-badge'
 import { useConfirm } from '@/components/ui/confirm-dialog'
@@ -410,7 +410,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   // Off while the list covers the chat: coming back remounts the transcript, which scrolls down again.
   const isTranscript = !showList
   const sheetView = activeView !== 'chat' && !dockView
-  const { scrollRef, visibleMessages, flashMessageId, observeTranscript, showEarlierMessages, onTranscriptScroll, followLatest } = useChatTranscriptWindow({
+  const { scrollRef, visibleMessages, flashMessageId, observeTranscript, showEarlierMessages, onTranscriptScroll, followLatest, isAtBottom } = useChatTranscriptWindow({
     activeThreadId, messages, isTranscript, messageFocus, clearMessageFocus, runningText: threadQuery.data?.running?.text,
     loadEarlier, preserveHistory, loadingEarlier, earlierError, hasMoreBefore,
     serverReplyLength: serverReplies.reduce((total, reply) => total + reply.text.length + reply.toolCalls.length, 0),
@@ -997,6 +997,20 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
       const draftRecipientLabel = isGroup ? draftRecipients.map((id) => typeof id === 'number' ? profilesById.get(id)?.name : null).filter(Boolean).join(', ') || profile?.name : profile?.name
       return (
     <div className={cn('relative w-full shrink-0 pb-4 pt-2', layout === 'page' ? cn('mx-auto px-(--page-gutter)', CHAT_WIDTH_CLASS[appearance.width]) : 'px-3')}>
+      {!isAtBottom && visibleMessages.length > 0 ? (
+        <div className="absolute -top-11 left-1/2 z-10 -translate-x-1/2 rounded-sm shadow-elevation-2">
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            onClick={followLatest}
+            aria-label={t({ ko: '최신 메시지로 이동', en: 'Jump to latest message' })}
+          >
+            <ArrowDown className="size-3.5" aria-hidden />
+            <span>{isBusy ? t({ ko: '새 답변 보기', en: 'New reply' }) : t({ ko: '최신으로', en: 'Latest' })}</span>
+          </Button>
+        </div>
+      ) : null}
       {showCommands ? <ChatCommandList id={commandListId} commands={matchingCommands} selected={selectedCommand} onSelect={pickCommand} /> : null}
       {showMentions ? <MentionList id={mentionListId} options={mentionMatches} selected={selectedMention} onSelect={pickMention} /> : null}
       {activeThreadId !== null ? <ChatTaskStrip threadId={activeThreadId} warning={blockingWarning} fallback={composerStatus} /> : composerStatus}

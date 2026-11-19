@@ -8,7 +8,7 @@ import { FloatingSaveBar } from '@/components/ui/floating-save-bar'
 import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover'
 import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
-import { usePageSaveShortcut } from '@/lib/keyboard-shortcut'
+import { usePageSaveShortcut, withShortcut } from '@/lib/keyboard-shortcut'
 import { cn } from '@/lib/utils'
 import type { WorkflowValidationIssue } from '../module-graph-types'
 import { WorkflowValidationIndicator } from './workflow-validation-indicator'
@@ -209,16 +209,16 @@ export function ModuleWorkflowEditorView({
       <IconButton size="icon-sm" variant="ghost" onClick={onAddNode} disabled={!canUpdateWorkflows} label={t({ ko: '노드 추가 (더블클릭)', en: 'Add node (double-click)' })}>
         <Plus />
       </IconButton>
-      <IconButton size="icon-sm" variant="ghost" onClick={onUndo} disabled={!canUndo} label={t({ ko: '되돌리기 (Ctrl+Z)', en: 'Undo (Ctrl+Z)' })}>
+      <IconButton size="icon-sm" variant="ghost" onClick={onUndo} disabled={!canUndo} label={withShortcut(t({ ko: '되돌리기', en: 'Undo' }), 'Mod+Z')}>
         <Undo2 />
       </IconButton>
-      <IconButton size="icon-sm" variant="ghost" onClick={onRedo} disabled={!canRedo} label={t({ ko: '다시 하기 (Ctrl+Shift+Z)', en: 'Redo (Ctrl+Shift+Z)' })}>
+      <IconButton size="icon-sm" variant="ghost" onClick={onRedo} disabled={!canRedo} label={withShortcut(t({ ko: '다시 하기', en: 'Redo' }), 'Mod+Shift+Z')}>
         <Redo2 />
       </IconButton>
       <WorkflowValidationIndicator issues={validationIssues} onIssueSelect={onValidationIssueSelect} />
       <span className="min-w-2 flex-1" />
       <IconButton size="icon-sm" variant="ghost" onClick={onTestRun} disabled={!canExecuteGeneration || isExecuting || nodesCount === 0} label={t({ ko: '시험 실행', en: 'Test run' })}>
-        {isExecuting ? <Loader2 className="animate-spin" /> : <Play />}
+        {isExecuting ? <Loader2 className="motion-safe:animate-spin" /> : <Play />}
       </IconButton>
       {!isDockOpen ? (
         <IconButton size="icon-sm" variant="ghost" onClick={toggleDock} label={t({ ko: '패널 열기', en: 'Open panel' })}>
@@ -264,7 +264,7 @@ export function ModuleWorkflowEditorView({
   if (!isWideLayout) {
     // Phone: the editor takes the whole screen between the app header and the bottom tabs; the dock is a bottom sheet.
     return (
-      <div className="fixed inset-x-0 bottom-(--shell-bottom-inset) top-(--theme-shell-header-height) z-[45] flex flex-col bg-background">
+      <div className="fixed inset-x-0 bottom-(--shell-bottom-inset) top-(--theme-shell-header-height) z-30 flex flex-col bg-background">
         {bar}
         <div className={cn(canvasClassName, 'flex-1')}>
           {graphCanvas}
@@ -285,7 +285,7 @@ export function ModuleWorkflowEditorView({
 
   return (
     <div
-      className="fixed inset-x-0 bottom-0 top-(--theme-shell-header-height) z-[45] flex flex-col bg-background lg:right-(--editor-side-inset)"
+      className="fixed inset-x-0 bottom-0 top-(--theme-shell-header-height) z-30 flex flex-col bg-background lg:right-(--editor-side-inset)"
       style={{ '--editor-side-inset': 'var(--chat-dock-width, 0px)' } as CSSProperties}
     >
       {bar}

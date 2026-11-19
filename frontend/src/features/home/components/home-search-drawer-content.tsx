@@ -1,5 +1,6 @@
 import { useConfirm } from '@/components/ui/confirm-dialog'
-import { useEffect, useRef, useState, type CSSProperties } from 'react'
+import { useOverlayBackClose } from '@/components/ui/use-overlay-back-close'
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { RotateCcw, Trash2, X } from 'lucide-react'
 import { SearchField } from '@/components/common/search-field'
@@ -40,7 +41,6 @@ interface HomeSearchSuggestionPanelProps {
 /** Render the shared suggestion panel below the drawer search input. */
 function HomeSearchSuggestionPanel({
   searchScope,
-  setSearchScope,
   searchInput,
   submitSearchFromInput,
   addSuggestionChip,
@@ -49,7 +49,7 @@ function HomeSearchSuggestionPanel({
   onClose,
   className,
   style,
-}: HomeSearchSuggestionPanelProps) {
+}: Omit<HomeSearchSuggestionPanelProps, 'setSearchScope'>) {
   const {
     promptSuggestions,
     filteredRatingTiers,
@@ -61,26 +61,17 @@ function HomeSearchSuggestionPanel({
     loraSuggestionsLoading,
   } = useSearchSuggestionData(searchScope, searchInput)
   const { t } = useI18n()
-  const viewerSettingsQuery = useQuery({
-    queryKey: ['image-viewer-settings'],
-    queryFn: getImageViewerSettings,
-    staleTime: 60_000,
-  })
-  const canSearchByMeaning = viewerSettingsQuery.data?.search?.imageSearch === true
 
   return (
     <div className={cn('theme-floating-panel overflow-hidden rounded-sm bg-background/95', className)} style={style}>
-      <div className="flex items-center gap-2 px-(--theme-panel-padding-x) py-2.5">
-        <div className="min-w-0 flex-1">
-          <SearchScopeTabs searchScope={searchScope} onChange={setSearchScope} scopes={canSearchByMeaning ? SEARCH_SCOPE_TABS_WITH_MEANING : undefined} />
-        </div>
-
-        {onClose ? (
+      {onClose ? (
+        <div className="flex items-center justify-between gap-2 px-(--theme-panel-padding-x) pt-2">
+          <Text as="div" variant="overline">{t({ ko: '추천 항목', en: 'Suggestions' })}</Text>
           <IconButton size="icon-sm" variant="ghost" onClick={onClose} label={t('homeSearchDrawerContent.closeInputFilter')}>
             <X className="h-4 w-4" />
           </IconButton>
-        ) : null}
-      </div>
+        </div>
+      ) : null}
 
       <div className="max-h-[420px] overflow-y-auto py-2">
         <SearchSuggestionList
@@ -132,14 +123,34 @@ export function HomeSearchDrawerContent({ active, onReturnFocus }: { active: boo
   } = useHomeSearch()
   const [isSuggestionPanelOpen, setIsSuggestionPanelOpen] = useState(false)
   const searchSectionRef = useRef<HTMLElement | null>(null)
+  const searchInputRef = useRef<HTMLInputElement | null>(null)
   const { t, formatNumber } = useI18n()
   const confirm = useConfirm()
+  const viewerSettingsQuery = useQuery({
+    queryKey: ['image-viewer-settings'],
+    queryFn: getImageViewerSettings,
+    staleTime: 60_000,
+    enabled: active && isDrawerOpen,
+  })
+  const canSearchByMeaning = viewerSettingsQuery.data?.search?.imageSearch === true
+
+  const closeFromDrawer = useCallback(() => {
+    onReturnFocus()
+    closeDrawer()
+  }, [closeDrawer, onReturnFocus])
+
+  useOverlayBackClose({ open: active && isDrawerOpen, onClose: closeFromDrawer })
 
   useEffect(() => {
     if (!isDrawerOpen) {
       setIsSuggestionPanelOpen(false)
       return
     }
+
+    // Once per open: focusing again on a later re-run would reopen the suggestion panel through the field's onFocus.
+    const rafId = window.requestAnimationFrame(() => {
+      searchInputRef.current?.focus({ preventScroll: true })
+    })
 
     const handlePointerDown = (event: PointerEvent) => {
       if (!searchSectionRef.current?.contains(event.target as Node)) {
@@ -148,8 +159,32 @@ export function HomeSearchDrawerContent({ active, onReturnFocus }: { active: boo
     }
 
     document.addEventListener('pointerdown', handlePointerDown)
-    return () => document.removeEventListener('pointerdown', handlePointerDown)
+    return () => {
+      window.cancelAnimationFrame(rafId)
+      document.removeEventListener('pointerdown', handlePointerDown)
+    }
   }, [isDrawerOpen])
+
+  useEffect(() => {
+    if (!isDrawerOpen) {
+      return
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.defaultPrevented) {
+        return
+      }
+      event.preventDefault()
+      if (isSuggestionPanelOpen) {
+        setIsSuggestionPanelOpen(false)
+        return
+      }
+      closeFromDrawer()
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [closeFromDrawer, isDrawerOpen, isSuggestionPanelOpen])
 
   if (!active) {
     return null
@@ -167,11 +202,7 @@ export function HomeSearchDrawerContent({ active, onReturnFocus }: { active: boo
     setIsSuggestionPanelOpen(false)
   }
 
-  const closeFromDrawer = () => {
-    onReturnFocus()
-    closeDrawer()
-  }
-
+  // Enter searches right away: the typed text joins the chips already picked.
   const handleSubmitSearchFromInput = () => {
     submitSearchFromInput()
     setIsSuggestionPanelOpen(false)
@@ -180,17 +211,15 @@ export function HomeSearchDrawerContent({ active, onReturnFocus }: { active: boo
 
   const handleAddSuggestionChip = (value: string) => {
     addSuggestionChip(value)
-    setIsSuggestionPanelOpen(false)
+    searchInputRef.current?.focus({ preventScroll: true })
   }
 
   const handleAddAIToolChip = (tool: 'nai' | 'comfyui' | 'other') => {
     addAIToolChip(tool)
-    setIsSuggestionPanelOpen(false)
   }
 
   const handleAddRatingChip = (chip: ReturnType<typeof createRatingSearchChip>) => {
     addRatingChip(chip)
-    setIsSuggestionPanelOpen(false)
   }
 
   const handleApplySearch = () => {
@@ -208,17 +237,22 @@ export function HomeSearchDrawerContent({ active, onReturnFocus }: { active: boo
   return (
     <>
       <div
+        aria-hidden={!isDrawerOpen}
         className={cn(
-          'fixed inset-x-0 bottom-(--shell-bottom-inset) top-[var(--theme-shell-header-height)] z-40 bg-backdrop/50 transition-opacity',
+          'fixed inset-x-0 bottom-(--shell-bottom-inset) top-[var(--theme-shell-header-height)] z-drawer bg-backdrop/50 transition-opacity motion-reduce:transition-none',
           isDrawerOpen ? 'pointer-events-auto opacity-100' : 'pointer-events-none opacity-0',
         )}
-        onClick={closeDrawer}
+        onClick={closeFromDrawer}
       />
 
       <aside
+        role={isDrawerOpen ? 'dialog' : undefined}
+        aria-modal={isDrawerOpen ? 'true' : undefined}
+        aria-label={t({ ko: '라이브러리 검색', en: 'Search library' })}
+        aria-hidden={!isDrawerOpen}
         inert={!isDrawerOpen}
         className={cn(
-          'theme-floating-panel fixed bottom-(--shell-bottom-inset) right-0 top-[var(--theme-shell-header-height)] z-40 flex max-w-full flex-col bg-background/94 transition-transform duration-300',
+          'theme-floating-panel fixed bottom-(--shell-bottom-inset) right-0 top-[var(--theme-shell-header-height)] z-drawer-panel flex max-w-full flex-col bg-background/94 transition-transform duration-300 motion-reduce:transition-none',
           isDrawerOpen ? 'translate-x-0' : 'translate-x-full',
         )}
         style={{ width: 'min(calc(100vw - 0.75rem), 420px)' }}
@@ -232,12 +266,12 @@ export function HomeSearchDrawerContent({ active, onReturnFocus }: { active: boo
 
         <div className="theme-drawer-body flex-1 space-y-4 overflow-y-auto">
           <section ref={searchSectionRef} className="space-y-3">
-            <SearchField value={searchInput} onChange={setSearchInput} onSubmit={handleSubmitSearchFromInput} placeholder={activeCountLabel} onFocus={handleOpenSuggestionPanel} />
+            <SearchScopeTabs searchScope={searchScope} onChange={setSearchScope} scopes={canSearchByMeaning ? SEARCH_SCOPE_TABS_WITH_MEANING : undefined} />
+            <SearchField ref={searchInputRef} value={searchInput} onChange={setSearchInput} onSubmit={handleSubmitSearchFromInput} placeholder={activeCountLabel} onFocus={handleOpenSuggestionPanel} />
 
             {isSuggestionPanelOpen ? (
               <HomeSearchSuggestionPanel
                 searchScope={searchScope}
-                setSearchScope={setSearchScope}
                 searchInput={searchInput}
                 submitSearchFromInput={handleSubmitSearchFromInput}
                 addSuggestionChip={handleAddSuggestionChip}

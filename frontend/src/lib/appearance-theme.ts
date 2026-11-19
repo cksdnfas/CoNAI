@@ -149,8 +149,13 @@ export function buildAppearanceVariables(appearance: AppearanceThemeSettings) {
   const mutedForeground = ensureTextContrast(surfacePalette.mutedForeground, textBackgrounds, 4.5, surfacePalette.foreground)
   // 라이트 모드의 secondary는 채움용 옅은 색이라 글자로 쓰면 안 보인다. 글자용은 primary에서 따로 만든다.
   const secondaryText = ensureTextContrast(mode === 'light' ? primary : secondary, textBackgrounds, 4.5, surfacePalette.foreground)
-  // The accent as text (current page, links, selected labels): the brand orange itself where it reads (dark), a darker step on light surfaces.
-  const primaryText = ensureTextContrast(primary, [surfacePalette.background, surfacePalette.surfaceLow, mixColors(surfacePalette.background, primary, 0.16)], 4.5, surfacePalette.foreground)
+  // The accent as text (current page, links, selected labels): readable on every surface including surface-high/highest.
+  const primaryText = ensureTextContrast(primary, [...textBackgrounds, mixColors(surfacePalette.background, primary, 0.16)], 4.5, surfacePalette.foreground)
+  const badgeBackgrounds = [surfacePalette.background, surfacePalette.surfaceLow, surfacePalette.surfaceContainer]
+  const positiveBadge = ensureTextContrast(appearance.positiveBadgeColor, badgeBackgrounds, 4.5, surfacePalette.foreground)
+  const negativeBadge = ensureTextContrast(appearance.negativeBadgeColor, badgeBackgrounds, 4.5, surfacePalette.foreground)
+  const autoBadge = ensureTextContrast(appearance.autoBadgeColor, badgeBackgrounds, 4.5, surfacePalette.foreground)
+  const ratingBadge = ensureTextContrast(appearance.ratingBadgeColor, badgeBackgrounds, 4.5, surfacePalette.foreground)
 
   return {
     '--radius': RADIUS_PRESETS[appearance.radiusPreset].radius,
@@ -185,6 +190,7 @@ export function buildAppearanceVariables(appearance: AppearanceThemeSettings) {
     '--theme-floating-border': toAlphaColor(secondary, mode === 'light' ? 0.22 : 0.16),
     '--theme-header-blur': `${glassPreset.blur + 6}px`,
     '--theme-floating-blur': `${glassPreset.blur}px`,
+    '--theme-floating-backdrop-filter': glassPreset.floatingAlpha >= 0.96 ? 'none' : `blur(${glassPreset.blur}px)`,
     '--theme-card-shadow': `0 0 ${shadowPreset.cardBlur}px ${toAlphaColor(shadowBase, shadowPreset.cardOpacity)}`,
     '--theme-list-shadow': `0 0 ${shadowPreset.listBlur}px ${toAlphaColor(shadowBase, shadowPreset.listOpacity)}`,
     '--theme-floating-shadow': `0 0 ${shadowPreset.floatingBlur}px ${toAlphaColor(shadowBase, shadowPreset.floatingOpacity)}`,
@@ -216,14 +222,14 @@ export function buildAppearanceVariables(appearance: AppearanceThemeSettings) {
     '--theme-text-scale': `${appearance.textScalePercent / 100}`,
     '--theme-selection-outline-width': `${appearance.selectionOutlineWidth}px`,
     '--theme-selection-outline-width-strong': `calc(${appearance.selectionOutlineWidth}px + 1px)`,
-    '--theme-badge-positive': appearance.positiveBadgeColor,
-    '--theme-badge-positive-soft': toAlphaColor(appearance.positiveBadgeColor, 0.14),
-    '--theme-badge-negative': appearance.negativeBadgeColor,
-    '--theme-badge-negative-soft': toAlphaColor(appearance.negativeBadgeColor, 0.14),
-    '--theme-badge-auto': appearance.autoBadgeColor,
-    '--theme-badge-auto-soft': toAlphaColor(appearance.autoBadgeColor, 0.14),
-    '--theme-badge-rating': appearance.ratingBadgeColor,
-    '--theme-badge-rating-soft': toAlphaColor(appearance.ratingBadgeColor, 0.14),
+    '--theme-badge-positive': positiveBadge,
+    '--theme-badge-positive-soft': toAlphaColor(positiveBadge, mode === 'light' ? 0.12 : 0.14),
+    '--theme-badge-negative': negativeBadge,
+    '--theme-badge-negative-soft': toAlphaColor(negativeBadge, mode === 'light' ? 0.12 : 0.14),
+    '--theme-badge-auto': autoBadge,
+    '--theme-badge-auto-soft': toAlphaColor(autoBadge, mode === 'light' ? 0.12 : 0.14),
+    '--theme-badge-rating': ratingBadge,
+    '--theme-badge-rating-soft': toAlphaColor(ratingBadge, mode === 'light' ? 0.12 : 0.14),
   }
 }
 

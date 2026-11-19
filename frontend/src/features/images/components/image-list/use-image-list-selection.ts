@@ -35,6 +35,9 @@ export function useImageListSelection({
   const previewElementsRef = useRef<Set<HTMLElement>>(new Set())
   const suppressClickUntilRef = useRef(0)
   const didDragSelectionRef = useRef(false)
+  const additiveDragRef = useRef(false)
+  const selectedIdsRef = useRef(selectedIds)
+  selectedIdsRef.current = selectedIds
   const canStartSelection = useMultiTouchSelectionStartGuard(containerElement, selectable)
   const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds])
   const onLongPressSelectRef = useRef(onLongPressSelect)
@@ -210,8 +213,9 @@ export function useImageListSelection({
           return false
         }
       })
-      .on('start', () => {
+      .on('start', ({ event }) => {
         didDragSelectionRef.current = false
+        additiveDragRef.current = Boolean(event && ('shiftKey' in event || 'ctrlKey' in event || 'metaKey' in event) && (event.shiftKey || event.ctrlKey || event.metaKey))
         onDragStateChange?.(true)
       })
       .on('move', ({ store }) => {
@@ -219,16 +223,16 @@ export function useImageListSelection({
         applyPreviewElements(store.selected as HTMLElement[])
       })
       .on('stop', ({ store }) => {
+        const draggedIds = (store.selected as HTMLElement[])
+          .map((element) => element.dataset.imageId)
+          .filter((value): value is string => typeof value === 'string' && value.length > 0)
         const nextSelectedIds = Array.from(
-          new Set(
-            (store.selected as HTMLElement[])
-              .map((element) => element.dataset.imageId)
-              .filter((value): value is string => typeof value === 'string' && value.length > 0),
-          ),
+          new Set(additiveDragRef.current ? [...selectedIdsRef.current, ...draggedIds] : draggedIds),
         )
 
         const shouldCommitSelectionDrag = didDragSelectionRef.current
         didDragSelectionRef.current = false
+        additiveDragRef.current = false
         clearPreviewElements()
         onDragStateChange?.(false)
 

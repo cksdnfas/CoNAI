@@ -1,10 +1,12 @@
-import { useEffect, useRef } from 'react'
+import { lazy, Suspense, useEffect, useRef } from 'react'
+import { LoadingState } from '@/components/ui/loading-state'
 import { useCodexChat } from '@/features/codex-chat/codex-chat-context'
 import { CodexChatProvider } from '@/features/codex-chat/codex-chat-provider'
-import { CodexChatView } from '@/features/codex-chat/codex-chat-view'
 import { ImageViewModalProvider } from '@/features/images/components/detail/image-view-modal-provider'
 import type { WallpaperWidgetInstance } from './wallpaper-types'
 import { useWallpaperChatThreads } from './wallpaper-widget-data'
+
+const CodexChatViewLazy = lazy(() => import('@/features/codex-chat/codex-chat-view').then((module) => ({ default: module.CodexChatView })))
 
 /** Opens the panel where the widget says once: the chat list, or one character's latest chat. */
 function ChatPanelStart({ start, profileId }: { start: 'list' | 'chat'; profileId: number | null }) {
@@ -44,7 +46,9 @@ function WallpaperChatPanel({ start, profileId }: { start: 'list' | 'chat'; prof
       <ImageViewModalProvider>
         <ChatPanelStart start={start} profileId={profileId} />
         <div className="flex h-full min-h-0 flex-col">
-          <CodexChatView layout="panel" />
+          <Suspense fallback={<LoadingState variant="inline" />}>
+            <CodexChatViewLazy layout="panel" />
+          </Suspense>
         </div>
       </ImageViewModalProvider>
     </CodexChatProvider>

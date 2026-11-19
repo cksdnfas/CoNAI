@@ -1,5 +1,6 @@
-import { useEffect, type ComponentProps, type ReactNode } from 'react'
+import { useEffect, useRef, type ComponentProps, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
+import { useI18n } from '@/i18n'
 import { stopAtPortalEdge } from '@/lib/portal-events'
 import { cn } from '@/lib/utils'
 import { useOverlayBackClose } from './use-overlay-back-close'
@@ -53,18 +54,38 @@ export function BottomDrawerSheet({
   headerClassName,
   headerPortalClassName,
   footer,
-  closeLabel = '접기',
+  closeLabel,
   hideHandle = false,
 }: BottomDrawerSheetProps) {
+  const { t } = useI18n()
+  const resolvedCloseLabel = closeLabel ?? t({ ko: '접기', en: 'Close' })
+  const drawerRef = useRef<HTMLElement | null>(null)
+  const returnFocusRef = useRef<HTMLElement | null>(null)
   useOverlayBackClose({ open, onClose })
 
   useEffect(() => {
     if (!open) {
+      const target = returnFocusRef.current
+      returnFocusRef.current = null
+      // `inert` on close can already have dropped focus to <body>; that still counts as focus left behind in the drawer.
+      if (target?.isConnected && (!document.activeElement || document.activeElement === document.body || drawerRef.current?.contains(document.activeElement))) {
+        target.focus({ preventScroll: true })
+      }
       return
     }
 
+    if (document.activeElement instanceof HTMLElement) {
+      returnFocusRef.current = document.activeElement
+    }
+    const rafId = window.requestAnimationFrame(() => {
+      if (drawerRef.current && !drawerRef.current.contains(document.activeElement)) {
+        drawerRef.current.focus({ preventScroll: true })
+      }
+    })
+
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
+      if (event.key === 'Escape' && !event.defaultPrevented) {
+        event.preventDefault()
         onClose()
       }
     }
@@ -72,6 +93,7 @@ export function BottomDrawerSheet({
     const releaseScroll = lockBodyScroll()
     window.addEventListener('keydown', handleKeyDown)
     return () => {
+      window.cancelAnimationFrame(rafId)
       releaseScroll()
       window.removeEventListener('keydown', handleKeyDown)
     }
@@ -87,27 +109,31 @@ export function BottomDrawerSheet({
   return createPortal(
     <>
       <div
-        className={open ? 'fixed inset-0 z-drawer bg-backdrop/70 transition-opacity duration-200' : 'pointer-events-none fixed inset-0 z-drawer bg-transparent transition-opacity duration-200'}
+        aria-hidden={!open}
+        className={open ? 'fixed inset-0 z-drawer bg-backdrop/70 transition-opacity duration-200 motion-reduce:transition-none' : 'pointer-events-none fixed inset-0 z-drawer bg-transparent transition-opacity duration-200 motion-reduce:transition-none'}
         onClick={stopAtPortalEdge(onClose)}
       />
 
       <aside
+        ref={drawerRef}
+        tabIndex={open ? -1 : undefined}
+        inert={!open}
+        aria-hidden={!open}
         role="dialog"
-        aria-modal="true"
+        aria-modal={open ? 'true' : undefined}
         aria-label={ariaLabel}
         onClick={stopAtPortalEdge()}
-        data-surface={useControllerSurface ? undefined : 'raised'}
         className={cn(
           open
-            ? 'theme-floating-panel theme-bottom-drawer fixed inset-x-0 bottom-0 z-drawer-panel flex h-[min(82vh,calc(100vh-1rem))] flex-col overflow-hidden transition-transform duration-300'
-            : 'theme-floating-panel theme-bottom-drawer pointer-events-none fixed inset-x-0 bottom-0 z-drawer-panel flex h-[min(82vh,calc(100vh-1rem))] translate-y-full flex-col overflow-hidden transition-transform duration-300',
-          useControllerSurface && 'border-x-0 border-b-0 bg-background/96 shadow-[0_-24px_64px_rgba(0,0,0,0.42)] backdrop-blur-md',
+            ? 'theme-floating-panel theme-bottom-drawer fixed inset-x-0 bottom-0 z-drawer-panel flex h-[min(82dvh,calc(100dvh-1rem))] flex-col overflow-hidden outline-none transition-transform duration-300 motion-reduce:transition-none'
+            : 'theme-floating-panel theme-bottom-drawer pointer-events-none fixed inset-x-0 bottom-0 z-drawer-panel flex h-[min(82dvh,calc(100dvh-1rem))] translate-y-full flex-col overflow-hidden outline-none transition-transform duration-300 motion-reduce:transition-none',
+          useControllerSurface && 'border-x-0 border-b-0 bg-background/96 shadow-elevation-3 backdrop-blur-md',
           className,
         )}
       >
         {!hideHandle ? (
           <div className="flex justify-center px-4 pt-3">
-            <div className="h-1.5 w-14 rounded-full bg-white/15" />
+            <div className="h-1.5 w-14 rounded-full bg-foreground/20" />
           </div>
         ) : null}
 
@@ -142,7 +168,7 @@ export function BottomDrawerSheet({
           <div className="pointer-events-none absolute inset-x-0 bottom-0 flex justify-center p-4 pb-[calc(env(safe-area-inset-bottom)+1rem)]">
             {footer !== undefined ? footer : (
               <Button type="button" size="sm" className="pointer-events-auto w-[30vw] min-w-[112px] max-w-[180px]" onClick={onClose}>
-                {closeLabel}
+                {resolvedCloseLabel}
               </Button>
             )}
           </div>

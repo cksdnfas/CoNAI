@@ -1,13 +1,13 @@
 import { useEffect } from 'react'
 import { LayoutGrid } from 'lucide-react'
-import { NavLink } from 'react-router-dom'
+import { NavLink, useLocation } from 'react-router-dom'
 import { prefetchAppRoute } from '@/app/lazy-routes'
 import { CountBadge } from '@/components/ui/count-badge'
 import { CODEX_CHAT_ROUTE } from '@/features/codex-chat/codex-chat-context'
 import { useCodexChatUnreadCount } from '@/features/codex-chat/codex-chat-shell'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
-import type { AppNavLink } from './app-navigation'
+import { isAppNavLinkActive, type AppNavLink } from './app-navigation'
 
 /** Phones get at most four pinned pages as tabs; 전체 is the fifth. */
 const PINNED_TABS = 4
@@ -19,28 +19,35 @@ const PINNED_TABS = 4
  */
 export function AppBottomNav({ pinned }: { pinned: AppNavLink[] }) {
   const { t } = useI18n()
+  const location = useLocation()
   const unread = useCodexChatUnreadCount()
   useEffect(() => {
     document.documentElement.setAttribute('data-bottom-nav', '')
     return () => document.documentElement.removeAttribute('data-bottom-nav')
   }, [])
+  const pinnedTabs = pinned.filter((link) => link.to !== '/access').slice(0, PINNED_TABS)
+  const isAnyPinnedActive = pinnedTabs.some((tab) => isAppNavLinkActive(tab.to, location.pathname))
   const tabs = [
-    ...pinned.filter((link) => link.to !== '/access').slice(0, PINNED_TABS),
+    ...pinnedTabs,
     { key: 'access', to: '/access', label: t({ ko: '전체', en: 'All' }), icon: LayoutGrid },
   ]
 
   return (
     <nav aria-label={t('appShell.mainPageNavigation')} className="app-bottom-nav fixed inset-x-0 bottom-0 z-header flex md:hidden">
-      {tabs.map(({ key, to, label, icon: Icon }) => (
+      {tabs.map(({ key, to, label, icon: Icon }) => {
+        const isCurrent = to === '/access'
+          ? isAppNavLinkActive('/access', location.pathname) || !isAnyPinnedActive
+          : isAppNavLinkActive(to, location.pathname)
+        return (
         <NavLink
           key={key}
           to={to}
           end={to === '/'}
           onMouseEnter={() => prefetchAppRoute(to)}
           onFocus={() => prefetchAppRoute(to)}
-          className={({ isActive }) => cn(
+          className={cn(
             'flex h-(--shell-bottom-nav-height) min-w-0 flex-1 flex-col items-center justify-center gap-1 text-2xs text-muted-foreground outline-none transition-colors focus-visible:bg-fill',
-            isActive && 'font-semibold text-primary-text',
+            isCurrent && 'font-semibold text-primary-text',
           )}
         >
           <span className="relative">
@@ -49,7 +56,8 @@ export function AppBottomNav({ pinned }: { pinned: AppNavLink[] }) {
           </span>
           <span className="max-w-full truncate px-1">{label}</span>
         </NavLink>
-      ))}
+        )
+      })}
     </nav>
   )
 }

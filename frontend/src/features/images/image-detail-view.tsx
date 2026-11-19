@@ -16,6 +16,7 @@ import { getImageViewerSettings } from '@/lib/api-settings'
 import { getErrorMessage } from '@/lib/error-message'
 import { GenerationBlockLayout } from '@/features/image-generation/layout/generation-block-layout'
 import { useI18n } from '@/i18n'
+import { isTypingTarget, openDialogCount } from '@/lib/keyboard-shortcut'
 import { useGlobalAppearanceSettingsQuery } from '@/lib/use-global-appearance-settings'
 import { useElementMinWidth, useMinWidth } from '@/lib/use-min-width'
 import { cn } from '@/lib/utils'
@@ -177,7 +178,30 @@ function ImageDetailViewBody({ compositeHash, presentation = 'page', initialImag
   const usesDesktopRelatedImageColumns = useElementMinWidth(modalShellElement, 768) ?? isViewportWideForRelatedColumns
   const [activeImageAreaTab, setActiveImageAreaTab] = useState<ImageDetailImageAreaTab>('current')
   const [editOpen, setEditOpen] = useState(false)
-  const [isModalInfoViewerOpen, setIsModalInfoViewerOpen] = useState(canUseDesktopModalLayout)
+  const [desktopModalInfoOpen, setDesktopModalInfoOpen] = useState(() => {
+    try {
+      return typeof window !== 'undefined' ? window.localStorage.getItem('conai:image-detail-modal:info-open') !== 'false' : true
+    } catch {
+      return true
+    }
+  })
+  const [mobileModalInfoOpen, setMobileModalInfoOpen] = useState(false)
+  const isModalInfoViewerOpen = canUseDesktopModalLayout ? desktopModalInfoOpen : mobileModalInfoOpen
+  const setModalInfoViewerOpen = useCallback((next: boolean | ((current: boolean) => boolean)) => {
+    if (canUseDesktopModalLayout) {
+      setDesktopModalInfoOpen((current) => {
+        const resolved = typeof next === 'function' ? next(current) : next
+        try {
+          window.localStorage.setItem('conai:image-detail-modal:info-open', resolved ? 'true' : 'false')
+        } catch {
+          // Ignore storage quota errors
+        }
+        return resolved
+      })
+    } else {
+      setMobileModalInfoOpen((current) => (typeof next === 'function' ? next(current) : next))
+    }
+  }, [canUseDesktopModalLayout])
   const [isPrimaryMediaReady, setIsPrimaryMediaReady] = useState(false)
   const [isSimilarityInspectionRequested, setIsSimilarityInspectionRequested] = useState(false)
   const [isImageSimilarityInspectionRequested, setIsImageSimilarityInspectionRequested] = useState(false)
@@ -237,10 +261,19 @@ function ImageDetailViewBody({ compositeHash, presentation = 'page', initialImag
   }, [compositeHash])
 
   useEffect(() => {
-    if (presentation === 'modal') {
-      setIsModalInfoViewerOpen(canUseDesktopModalLayout)
+    if (presentation !== 'modal') return
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return
+      if (event.target instanceof Element && event.target.closest('[data-chat-dock]')) return
+      if (isTypingTarget(event) || openDialogCount() > 1) return
+      if (event.code === 'KeyI') {
+        event.preventDefault()
+        setModalInfoViewerOpen((current) => !current)
+      }
     }
-  }, [canUseDesktopModalLayout, presentation])
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [presentation, setModalInfoViewerOpen])
 
   useEffect(() => {
     return () => {
@@ -661,7 +694,7 @@ function ImageDetailViewBody({ compositeHash, presentation = 'page', initialImag
                 variant="secondary"
                 // eslint-disable-next-line shadcn/no-restyle -- glass key straddling the image and the info pane; placement and glass live in index.css
                 className="image-detail-modal-info-reopen-desktop"
-                onClick={() => setIsModalInfoViewerOpen(true)}
+                onClick={() => setModalInfoViewerOpen(true)}
                 label={modalInfoToggleLabel}
               >
                 <PanelRightOpen className="h-4 w-4" />
@@ -688,7 +721,7 @@ function ImageDetailViewBody({ compositeHash, presentation = 'page', initialImag
                 <div className="relative h-full w-full bg-black">
                   <ImageDetailModalNavigationButtons navigation={modalNavigation} />
                   <div className="flex h-full w-full items-center justify-center bg-black">
-                    <ImageDetailMedia image={image as ImageRecord} renderUrl={renderUrl} isRefreshing={imageQuery.isFetching} className="max-h-full max-w-full w-auto object-contain" onPrimaryLoad={handlePrimaryMediaReady} />
+                    <ImageDetailMedia image={image as ImageRecord} renderUrl={renderUrl} isRefreshing={imageQuery.isFetching} defaultWheelZoomEnabled className="max-h-full max-w-full w-auto object-contain" onPrimaryLoad={handlePrimaryMediaReady} />
                   </div>
                 </div>
               ) : null}
@@ -716,7 +749,7 @@ function ImageDetailViewBody({ compositeHash, presentation = 'page', initialImag
                 variant="secondary"
                 // eslint-disable-next-line shadcn/no-restyle -- glass key straddling the image and the info pane; placement and glass live in index.css
                 className="image-detail-modal-info-toggle-desktop"
-                onClick={() => setIsModalInfoViewerOpen(false)}
+                onClick={() => setModalInfoViewerOpen(false)}
                 label={modalInfoToggleLabel}
               >
                 <PanelRightClose className="h-4 w-4" />
@@ -727,7 +760,7 @@ function ImageDetailViewBody({ compositeHash, presentation = 'page', initialImag
             <button
               type="button"
               className="image-detail-modal-info-mobile-header"
-              onClick={() => setIsModalInfoViewerOpen((current) => !current)}
+              onClick={() => setModalInfoViewerOpen((current) => !current)}
               aria-expanded={isModalInfoViewerOpen}
               aria-label={modalInfoToggleLabel}
             >

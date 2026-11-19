@@ -248,7 +248,7 @@ function Modal({ open, title, description, status, actions, headerContent, leadi
   }, [])
 
   const handleContentKeyDown = useCallback((event: ReactKeyboardEvent<HTMLDivElement>) => {
-    if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === 's') {
+    if ((event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey && (event.code === 'KeyS' || event.key.toLowerCase() === 's')) {
       // A dialog opened inside this one already took it: only the innermost dialog saves.
       if (event.defaultPrevented) return
       // Always keep the browser's "save page" away from an open editor; save only when it can.
@@ -346,7 +346,7 @@ function Modal({ open, title, description, status, actions, headerContent, leadi
               </div>
 
               {/* The body scrolls under a fixed header; a footer at its end stays pinned (index.css, `[data-slot="modal-scroll"]`). */}
-              <div data-slot="modal-scroll" className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pt-2 pb-4 md:px-5 md:pb-5">
+              <div data-slot="modal-scroll" className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pt-2 pb-[calc(1rem+env(safe-area-inset-bottom))] md:px-5 md:pb-5">
                 {body}
               </div>
             </DialogPrimitive.Content>

@@ -87,10 +87,12 @@ export function ImageViewModalActions({
           <ExternalLink className="h-4 w-4" />
         </IconButton>
       ) : null}
-      {/* The record is refetched every time the viewer opens (staleTime 0); a manual refresh only helps while it is still processing. */}
-      <IconButton size="icon-sm" variant="overlay" onClick={controls.refresh} disabled={controls.isRefreshing || !controls.image?.is_processing} label={controls.image?.is_processing ? t('images.components.detail.image.view.modal.actions.refresh') : t({ ko: '처리 중인 이미지가 없어', en: 'No image is being processed' })}>
-        <RefreshCcw className={controls.isRefreshing ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} />
-      </IconButton>
+      {/* The record is refetched every time the viewer opens (staleTime 0); only show refresh while it is still processing. */}
+      {controls.image?.is_processing ? (
+        <IconButton size="icon-sm" variant="overlay" onClick={controls.refresh} disabled={controls.isRefreshing} label={t('images.components.detail.image.view.modal.actions.refresh')}>
+          <RefreshCcw className={controls.isRefreshing ? 'h-4 w-4 motion-safe:animate-spin' : 'h-4 w-4'} />
+        </IconButton>
+      ) : null}
     </>
   )
 

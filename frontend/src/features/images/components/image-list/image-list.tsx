@@ -114,35 +114,39 @@ export function ImageList({
     void onLoadMore()
   }, [hasMore, isLoadingMore, onLoadMore, scrollMode])
 
+  const selectionStateRef = useRef({ itemIdIndex, itemIds, onSelectedIdsChange, selectedIdSet, selectedIds })
+  selectionStateRef.current = { itemIdIndex, itemIds, onSelectedIdsChange, selectedIdSet, selectedIds }
+
   /** Toggle one tile, or with Shift add every loaded tile between the anchor and it. */
   const handleToggleSelect = useCallback((_image: ImageRecord | null, imageId: string, modifiers?: ImageListActivateModifiers): void => {
-    if (!onSelectedIdsChange) {
+    const { itemIdIndex: idIndex, itemIds: currentItemIds, onSelectedIdsChange: commit, selectedIdSet: currentSet, selectedIds: currentSelectedIds } = selectionStateRef.current
+    if (!commit) {
       return
     }
 
     const anchorId = selectionAnchorIdRef.current
-    const anchorIndex = modifiers?.shiftKey && anchorId !== null && selectedIdSet.has(anchorId) ? itemIdIndex.get(anchorId) : undefined
-    const targetIndex = itemIdIndex.get(imageId)
+    const anchorIndex = modifiers?.shiftKey && anchorId !== null && currentSet.has(anchorId) ? idIndex.get(anchorId) : undefined
+    const targetIndex = idIndex.get(imageId)
     if (anchorIndex !== undefined && targetIndex !== undefined) {
-      const nextSelectedIds = [...selectedIds]
-      const nextSelectedIdSet = new Set(selectedIds)
+      const nextSelectedIds = [...currentSelectedIds]
+      const nextSelectedIdSet = new Set(currentSelectedIds)
       const [start, end] = anchorIndex <= targetIndex ? [anchorIndex, targetIndex] : [targetIndex, anchorIndex]
       for (let index = start; index <= end; index += 1) {
-        const rangeId = itemIds[index]
+        const rangeId = currentItemIds[index]
         if (!nextSelectedIdSet.has(rangeId)) {
           nextSelectedIdSet.add(rangeId)
           nextSelectedIds.push(rangeId)
         }
       }
-      onSelectedIdsChange(nextSelectedIds)
+      commit(nextSelectedIds)
       return
     }
 
     selectionAnchorIdRef.current = imageId
-    onSelectedIdsChange(selectedIdSet.has(imageId)
-      ? selectedIds.filter((selectedId) => selectedId !== imageId)
-      : [...selectedIds, imageId])
-  }, [itemIdIndex, itemIds, onSelectedIdsChange, selectedIdSet, selectedIds])
+    commit(currentSet.has(imageId)
+      ? currentSelectedIds.filter((selectedId) => selectedId !== imageId)
+      : [...currentSelectedIds, imageId])
+  }, [])
 
   const handleLongPressSelect = useCallback((imageId: string) => {
     handleToggleSelect(null, imageId)
@@ -189,7 +193,7 @@ export function ImageList({
         return
       }
 
-      if ((event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey && event.key.toLowerCase() === 'a' && currentItemIds.length > 0) {
+      if ((event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey && (event.code === 'KeyA' || event.key.toLowerCase() === 'a') && currentItemIds.length > 0) {
         event.preventDefault()
         commit(Array.from(new Set(currentItemIds)))
       }
@@ -249,6 +253,13 @@ export function ImageList({
     [activationMode, canSelect, handleToggleSelect, hasMore, imageViewModal, itemCompositeHashes, items, location.pathname, location.search, modalAccessOptions, modalNavigationSourceId, navigate, selectionMode, shouldSuppressClick, stableSequenceTotal],
   )
 
+  const previewPrefetchTimerRef = useRef<number | null>(null)
+  useEffect(() => () => {
+    if (previewPrefetchTimerRef.current !== null) {
+      window.clearTimeout(previewPrefetchTimerRef.current)
+    }
+  }, [])
+
   const handlePreviewIntent = useCallback((image: ImageRecord) => {
     onPreviewIntent?.(image)
 
@@ -264,11 +275,17 @@ export function ImageList({
       return
     }
 
-    void queryClient.prefetchQuery({
-      queryKey: getImageDetailQueryKey(compositeHash, image),
-      queryFn: ({ signal }) => getImage(compositeHash, { signal }, image),
-      staleTime: 30_000,
-    })
+    if (previewPrefetchTimerRef.current !== null) {
+      window.clearTimeout(previewPrefetchTimerRef.current)
+    }
+    previewPrefetchTimerRef.current = window.setTimeout(() => {
+      previewPrefetchTimerRef.current = null
+      void queryClient.prefetchQuery({
+        queryKey: getImageDetailQueryKey(compositeHash, image),
+        queryFn: ({ signal }) => getImage(compositeHash, { signal }, image),
+        staleTime: 30_000,
+      })
+    }, 150)
   }, [activationMode, isDraggingSelection, onPreviewIntent, queryClient, selectionMode])
 
   const activeModalIndexInList = useMemo(() => {

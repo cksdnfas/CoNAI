@@ -399,8 +399,8 @@ export function PromptSyntaxTokenPopup({ token, tool, position, popupRef, onMous
     <div
       ref={popupRef}
       data-surface="high"
-      // A popup opened from inside the inline picker's anchored popover: one layer above z-popover.
-      className={cn('z-popover-nested overflow-y-auto overscroll-contain px-3 py-2.5', floatingSurfaceClassName)}
+      // Floats above both regular popovers and modals when prompt fields are edited inside a Modal.
+      className={cn('z-floating overflow-y-auto overscroll-contain px-3 py-2.5', floatingSurfaceClassName)}
       style={{
         position: 'fixed',
         top: position.top,
@@ -459,8 +459,8 @@ export function WildcardInlinePickerPopup({
     <div
       ref={popupRef}
       data-surface="high"
-      // Above the token preview (z-popover-nested) and anchored popovers (z-popover).
-      className={cn('fixed z-[calc(var(--z-index-popover-nested)+10)] overflow-hidden', floatingSurfaceClassName)}
+      // Above the token preview (z-floating) and modals (z-modal), still below snackbar toasts (z-toast).
+      className={cn('fixed z-[calc(var(--z-index-floating)+10)] overflow-hidden', floatingSurfaceClassName)}
       style={getFloatingDropdownStyle(position)}
       onMouseDown={(event) => {
         event.preventDefault()
@@ -572,7 +572,7 @@ export function PromptAutocompletePopup({
                       setRelatedTagTab(tab.id)
                     }}
                   >
-                    {tab.label}
+                    {t(tab.label)}
                   </Button>
                 ))}
               </div>

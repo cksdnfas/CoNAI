@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useLocation, useSearchParams } from 'react-router-dom'
 import { Code, FilePlus, Plus, RefreshCw, Upload } from 'lucide-react'
@@ -9,11 +9,11 @@ import { IconButton } from '@/components/ui/icon-button'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Input } from '@/components/ui/input'
 import { ListRow } from '@/components/ui/list-row'
+import { LoadingState } from '@/components/ui/loading-state'
 import { Modal, ModalBody } from '@/components/ui/modal'
 import { RowGroup } from '@/components/ui/row-group'
 import { ResourceRow } from '@/components/ui/resource-row'
 import { useConfirm } from '@/components/ui/confirm-dialog'
-import { PlainTextEditor } from '@/components/common/plain-text-editor'
 import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
 import { pageAction, pageFreeText, pageObject, pageText } from '@/features/codex-chat/page-action-helpers'
 import { CHAT_DOCK_INSET } from '@/features/settings/components/use-settings-editor-chat-page'
@@ -23,6 +23,8 @@ import { getErrorMessage } from '@/lib/error-message'
 import { PLUGINS_QUERY_KEY } from '@/lib/api-plugins'
 import { changePluginDraft, createPluginDraft, deletePluginDraft, downloadPluginPackage, getPluginDraft, installPluginDraft, listPluginDrafts, PLUGIN_DRAFTS_QUERY_KEY, readPluginDraft, reviewPluginDraft, uploadPluginDraftAsset } from '@/lib/api-plugin-authoring'
 import { PluginPackageReviewSummary } from './plugin-package-review-summary'
+
+const PlainTextEditorLazy = lazy(() => import('@/components/common/plain-text-editor').then((module) => ({ default: module.PlainTextEditor })))
 
 /** Plugin management's own assistant data and actions. A page has one active registration, so the drafts list carries them. */
 export type PluginManagementPage = {
@@ -264,7 +266,11 @@ function PluginDraftEditor({ initial, remoteRevision, onClose }: { initial: Plug
             <IconButton variant="ghost" size="icon-sm" disabled={busy || dirty} label={t({ ko: '최신 소스 읽기', en: 'Reload source' })} onClick={() => void run(() => load(document?.target ?? 'plugin.json'))}><RefreshCw /></IconButton>
             <Button variant="destructive-ghost" size="sm" disabled={busy || dirty || !selectedFile} onClick={() => void run(removeFile)}>{t({ ko: '파일 삭제', en: 'Delete file' })}</Button>
           </div>
-          {document ? <PlainTextEditor value={document.text} onChange={changeText} fileName={document.target} heightClassName="h-[45vh] min-h-40" /> : null}
+          {document ? (
+            <Suspense fallback={<LoadingState variant="inline" />}>
+              <PlainTextEditorLazy value={document.text} onChange={changeText} fileName={document.target} heightClassName="h-[45dvh] min-h-40" />
+            </Suspense>
+          ) : null}
         </div>
       </div>
       {review ? <PluginPackageReviewSummary review={review} /> : null}

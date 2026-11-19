@@ -179,7 +179,10 @@ const ImageListItemComponent = memo(function ImageListItemComponent({
 
   const quickActions = chatActions ? null : showDefaultQuickActions && !selectionMode ? (
     <div
-      className="absolute right-2 top-2 z-30 flex items-center gap-2 opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-within:opacity-100"
+      className={cn(
+        'absolute right-2 top-2 z-30 flex items-center gap-2 opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-within:opacity-100',
+        menuEntries?.length && 'pointer-coarse:hidden',
+      )}
       onMouseDown={(event) => event.stopPropagation()}
       onClick={(event) => event.stopPropagation()}
       // Portals a quick action opens (the image editor) bubble here through React; keep them off the tile menu.

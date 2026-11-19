@@ -42,10 +42,10 @@ export const PROMPT_AUTOCOMPLETE_LIST_SIZE = 10
 const PROMPT_AUTOCOMPLETE_DEBOUNCE_MS = 150
 const PROMPT_AUTOCOMPLETE_RELATED_TAG_LIMIT = 42
 const PROMPT_AUTOCOMPLETE_LABEL_MAX_LENGTH = 48
-export const PROMPT_RELATED_TAG_TABS: Array<{ id: PromptRelatedTagTab; label: string }> = [
-  { id: 'general', label: '일반' },
-  { id: 'character', label: '캐릭터' },
-  { id: 'other', label: '그외' },
+export const PROMPT_RELATED_TAG_TABS: Array<{ id: PromptRelatedTagTab; label: { ko: string; en: string } }> = [
+  { id: 'general', label: { ko: '일반', en: 'General' } },
+  { id: 'character', label: { ko: '캐릭터', en: 'Character' } },
+  { id: 'other', label: { ko: '그외', en: 'Other' } },
 ]
 
 export function normalizeAutocompleteText(value: string) {

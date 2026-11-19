@@ -17,8 +17,12 @@ export const IMAGE_CONTROLS_COLLAPSED_STORAGE_KEY = 'conai:image-detail-media:co
 
 type BooleanPreferenceStorage = Pick<Storage, 'getItem' | 'setItem'>
 
-export function readImageDetailBooleanPreference(storage: Pick<BooleanPreferenceStorage, 'getItem'> | null, key: string) {
-  return storage?.getItem(key) === 'true'
+export function readImageDetailBooleanPreference(storage: Pick<BooleanPreferenceStorage, 'getItem'> | null, key: string, defaultValue = false) {
+  const raw = storage?.getItem(key)
+  if (raw === null || raw === undefined) {
+    return defaultValue
+  }
+  return raw === 'true'
 }
 
 export function writeImageDetailBooleanPreference(storage: Pick<BooleanPreferenceStorage, 'setItem'> | null, key: string, value: boolean) {
@@ -39,8 +43,9 @@ export function useImageDetailRenderModePreference() {
 }
 
 /** Own every persisted preference used by the image-detail media surface. */
-export function useImageDetailMediaPreferences() {
-  const [isWheelZoomEnabled, setIsWheelZoomEnabled] = useState(() => readImageDetailBooleanPreference(getBrowserPreferenceStorage(), IMAGE_WHEEL_ZOOM_ENABLED_STORAGE_KEY))
+export function useImageDetailMediaPreferences(options?: { defaultWheelZoomEnabled?: boolean }) {
+  const defaultWheelZoomEnabled = options?.defaultWheelZoomEnabled ?? false
+  const [isWheelZoomEnabled, setIsWheelZoomEnabled] = useState(() => readImageDetailBooleanPreference(getBrowserPreferenceStorage(), IMAGE_WHEEL_ZOOM_ENABLED_STORAGE_KEY, defaultWheelZoomEnabled))
   const [isControlsCollapsed, setIsControlsCollapsed] = useState(() => readImageDetailBooleanPreference(getBrowserPreferenceStorage(), IMAGE_CONTROLS_COLLAPSED_STORAGE_KEY))
   const [pixelPreviewMode, setPixelPreviewMode] = useState<PixelPreviewMode>(() => loadImagePixelPreviewMode())
   const [pixelPreviewSettings, setPixelPreviewSettings] = useState<PixelPreviewSettings>(() => loadImagePixelPreviewSettings())

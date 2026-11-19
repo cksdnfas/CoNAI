@@ -1,6 +1,7 @@
 import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { AlertTriangle, Loader2, MoreHorizontal, RotateCcw, Wand } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { IconButton } from '@/components/ui/icon-button'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
@@ -109,6 +110,7 @@ function useGenerateShortcut(enabled: boolean, trigger: () => void) {
 
       // Number steppers commit their draft on Enter (and preventDefault); run after that commit lands.
       const target = event.target instanceof Element ? event.target : null
+      if (target?.closest('[data-chat-dock]')) return
       const inStepper = Boolean(target?.closest('[data-slot="number-stepper-input"]'))
       if (event.defaultPrevented && !inStepper) return
       if (isBlockingOverlayOpen()) return
@@ -178,31 +180,33 @@ export function GenerateActionBar({
       <Tip content={<>{`${generateButtonLabel} (${shortcutHint})`}{generateSuffix && !isGenerating && generateSuffixHint ? <> · {generateSuffixHint}</> : null}</>}>
         {/* A disabled button swallows hover and focus, so the span carries the tooltip that says why it is off. */}
         <span className="inline-flex shrink-0" tabIndex={canGenerate ? undefined : 0}>
-        <IconButton
+        <Button
+          type="button"
           variant="default"
-          size={isSticky ? 'icon-touch' : 'icon'}
-          label={generateButtonLabel}
-          tooltip={false}
+          size={isSticky ? 'touch' : 'default'}
           onClick={onGenerate}
           disabled={!canGenerate}
           aria-busy={isGenerating || undefined}
           aria-keyshortcuts="Control+Enter Meta+Enter"
         >
-          {isGenerating ? <Loader2 className="animate-spin" aria-hidden="true" /> : <Wand aria-hidden="true" />}
-        </IconButton>
+          {isGenerating ? <Loader2 className="motion-safe:animate-spin" aria-hidden="true" /> : <Wand aria-hidden="true" />}
+          <span>{actionLabel}</span>
+          {generateSuffix && !isGenerating ? <span className="text-xs opacity-85 tabular-nums">· {generateSuffix}</span> : null}
+        </Button>
         </span>
       </Tip>
   )
 
   const repeatStepper = repeat ? (
     <Tip content={repeatHint}>
-      <div className="flex shrink-0 items-center">
+      <div className="flex shrink-0 items-center gap-1">
+        <span className="text-xs font-medium text-muted-foreground select-none" aria-hidden="true">×</span>
         <NumberStepperInput
           min={repeat.min ?? 1}
           max={repeat.max}
           step={1}
           variant="detail"
-          className="w-32 min-w-32 shrink-0 sm:w-28 sm:min-w-28"
+          className="w-28 min-w-28 shrink-0 sm:w-24 sm:min-w-24"
           value={repeat.value}
           onValueCommit={repeat.onChange}
           disabled={isGenerating || repeat.disabled}

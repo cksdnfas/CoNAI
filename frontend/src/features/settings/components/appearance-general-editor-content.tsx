@@ -84,7 +84,20 @@ export function AppearanceFontRows({
         />
       </SettingRow>
 
-      <SettingRow label={<ChatFilledLabel fieldId="appearance.textScalePercent">{labels.textScale}</ChatFilledLabel>} controlWidth="standard">
+      <SettingRow
+        label={<ChatFilledLabel fieldId="appearance.textScalePercent">{labels.textScale}</ChatFilledLabel>}
+        info={t(
+          {
+            ko: 'UI 배율({ui}%)과 곱해져 실효 글자 크기는 {effective}%로 적용됩니다.',
+            en: 'Multiplies with UI scale ({ui}%) for an effective text size of {effective}%.',
+          },
+          {
+            ui: appearanceDraft.fontScalePercent,
+            effective: Math.round((appearanceDraft.fontScalePercent * appearanceDraft.textScalePercent) / 100),
+          },
+        )}
+        controlWidth="standard"
+      >
         <NumberStepperInput
           min={85}
           max={200}

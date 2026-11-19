@@ -776,7 +776,7 @@ function ReasoningBlock({ text, active }: { text: string; active: boolean }) {
 
 /** Appearance setting → avatar size. Every size sits on the name line, so the reply keeps the chat's full width. */
 const AVATAR_SIZE = { sm: 'sm', md: 'lg', lg: 'xl' } as const
-const BUBBLE_CLASS = 'max-w-[85%] self-start rounded-lg bg-surface-low/85 px-3.5 py-2.5 backdrop-blur-sm'
+const BUBBLE_CLASS = 'max-w-[85%] self-start rounded-lg bg-surface-low/95 px-3.5 py-2.5'
 
 /** A report's first line as plain text (heading, list and emphasis marks dropped), for a folded card's title. */
 const firstLineOf = (text: string) => text.split('\n').map((line) => line.replace(/^\s*(#+|[-*>]|\d+\.)\s+/, '').replace(/\*\*|__|`/g, '').trim()).find(Boolean) ?? ''

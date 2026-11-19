@@ -15,6 +15,7 @@ import { UnreadCount } from '@/features/codex-chat/chat-unread-count'
 import { useHomeSearchToggle } from '@/features/home/components/home-search-ui'
 import { useI18n } from '@/i18n'
 import { logoutLocalAccount } from '@/lib/api-auth'
+import { formatShortcut } from '@/lib/keyboard-shortcut'
 import { hasAuthPermission } from './auth-permissions'
 import { LanguageTabs } from './language-switch'
 import { AUTH_STATUS_QUERY_KEY, useAuthStatusQuery } from './use-auth-status-query'
@@ -166,7 +167,7 @@ export function HeaderAccountMenu({ foldedSearch = false, foldedChat = false }: 
 
           {canOpenMine ? <MenuRow icon={UserRound} label={t({ ko: '내 설정', en: 'My settings' })} onClick={() => runAndClose(() => navigate('/settings?section=mine'))} /> : null}
 
-          {showSearch || foldedChat ? <Separator /> : null}
+          {showSearch || menuChat || canOpenSettings || canOpenMine ? <Separator /> : null}
 
           {showSearch ? (
             <MenuRow
@@ -187,8 +188,13 @@ export function HeaderAccountMenu({ foldedSearch = false, foldedChat = false }: 
             />
           ) : null}
 
-          {/* Narrow (touch) headers have no Ctrl/⌘+K, so the palette sits with the other folded keys. */}
-          {foldedChat ? <MenuRow icon={Command} label={t({ ko: '빠른 실행', en: 'Command palette' })} onClick={() => runAndClose(openCommandPalette)} /> : null}
+          {/* Always reachable from the account menu (with shortcut hint on desktop, and grouped with folded keys on phones). */}
+          <MenuRow
+            icon={Command}
+            label={t({ ko: '빠른 실행', en: 'Command palette' })}
+            end={foldedChat ? undefined : <span className="font-mono text-2xs">{formatShortcut('Mod+K')}</span>}
+            onClick={() => runAndClose(openCommandPalette)}
+          />
 
           {isAnonymousSession || isSignedIn ? <Separator /> : null}
 

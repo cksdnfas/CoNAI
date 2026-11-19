@@ -24,7 +24,7 @@ function resolveFrontendPort(frontendUrl?: string): number {
   return 1677
 }
 
-/** Keep the heaviest feature dependencies in dedicated chunks. */
+/** Keep the heaviest feature dependencies and Radix primitives in stable chunks. */
 function manualChunks(id: string) {
   if (!id.includes('node_modules')) {
     return undefined
@@ -45,6 +45,10 @@ function manualChunks(id: string) {
 
   if (id.includes('@tanstack/react-query')) {
     return 'react-query'
+  }
+
+  if (id.includes('radix-ui') || id.includes('@radix-ui')) {
+    return 'radix-vendor'
   }
 
   // One cached icon chunk instead of hundreds of sub-1KB per-icon requests on first load and navigation.

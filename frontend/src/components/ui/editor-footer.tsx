@@ -43,7 +43,7 @@ export function EditorFooter({ onDelete, deleteLabel, deleteDisabled = false, de
         <Tip content={deleteTip}>
           <span>
             <Button type="button" size="sm" variant="destructive-ghost" onClick={onDelete} disabled={deleteDisabled || deleting || saving}>
-              {deleting ? <LoaderCircle className="animate-spin" /> : null}
+              {deleting ? <LoaderCircle className="motion-safe:animate-spin" /> : null}
               {deleteLabel ?? t({ ko: '삭제', en: 'Delete' })}
             </Button>
           </span>
@@ -70,7 +70,7 @@ export function EditorFooter({ onDelete, deleteLabel, deleteDisabled = false, de
         <Tip content={saveTip}>
           <span tabIndex={saveTip && (!canSave || saving) ? 0 : undefined} aria-disabled={saveTip && (!canSave || saving) ? true : undefined} aria-label={!canSave || saving ? typeof saveTip === 'string' ? saveTip : saveLabel ?? t({ ko: '저장', en: 'Save' }) : undefined} className="inline-flex shrink-0 rounded-sm outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40">
             <Button size="sm" variant="default" type={saveSubmit ? 'submit' : 'button'} onClick={saveSubmit ? undefined : onSave} disabled={!canSave || saving}>
-              {saving ? <LoaderCircle className="animate-spin" /> : null}
+              {saving ? <LoaderCircle className="motion-safe:animate-spin" /> : null}
               {saveLabel ?? t({ ko: '저장', en: 'Save' })}
             </Button>
           </span>

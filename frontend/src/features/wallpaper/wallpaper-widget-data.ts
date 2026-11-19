@@ -95,6 +95,9 @@ export function useWallpaperWorkflowActivityQuery(scope: string, refreshInterval
   useEffect(() => {
     workflowActivityRefreshIntervals.set(scope, effectiveIntervalMs)
     const refetch = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+        return
+      }
       void queryClient.refetchQueries({ queryKey: WALLPAPER_WORKFLOW_ACTIVITY_QUERY_KEY, type: 'active' })
     }
     syncWorkflowActivityRefreshTimer(refetch)

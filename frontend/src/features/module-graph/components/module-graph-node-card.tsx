@@ -4,6 +4,7 @@ import { NodeToolbar, Position, useUpdateNodeInternals, type NodeProps } from '@
 import { Copy, Ellipsis, Play, Power, RotateCcw, Trash2 } from 'lucide-react'
 import { floatingSurfaceClassName } from '@/components/ui/floating-surface'
 import { IconButton } from '@/components/ui/icon-button'
+import { Select } from '@/components/ui/select'
 import { Tip } from '@/components/ui/tooltip'
 import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
 import { useI18n } from '@/i18n'
@@ -240,7 +241,8 @@ function ModuleGraphNodeCardComponent({ id, data, selected, dragging }: NodeProp
           </span>
         )}
         {family && variant && variants.length > 1 && !isRenaming ? (
-          <select
+          <Select
+            variant="nodeVariant"
             aria-label={t({ ko: '{family} 변형', en: '{family} variant' }, { family: t(family.label) })}
             title={t(variant.label)}
             value={variant.id}
@@ -249,11 +251,10 @@ function ModuleGraphNodeCardComponent({ id, data, selected, dragging }: NodeProp
             onPointerDown={stopNodeEvent}
             onKeyDown={stopNodeEvent}
             onChange={(event) => actions.changeVariant(id, event.target.value)}
-            className="nodrag nopan nowheel h-6 min-w-0 max-w-[125px] rounded border border-line bg-surface-high px-1 text-2xs disabled:opacity-50"
           >
             {!variants.some((entry) => entry.variant.id === variant.id) ? <option value={variant.id}>{t(variant.label)}</option> : null}
             {variants.map((entry) => <option key={entry.variant.id} value={entry.variant.id}>{t(entry.variant.label)}</option>)}
-          </select>
+          </Select>
         ) : null}
         {debugMode && data.plannedExecutionOrder ? (
           <Tip content={t({ ko: '실행 순서', en: 'Run order' })}>

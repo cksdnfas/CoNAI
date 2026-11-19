@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react'
 import { ArrowLeftFromLine, ArrowRightToLine, Grid2X2, ImageIcon, Lock, RotateCcw, RotateCw, ScanSearch, Undo2, Unlock, ZoomIn, ZoomOut } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { CountBadge } from '@/components/ui/count-badge'
@@ -69,6 +70,31 @@ export function ImageDetailAuxiliaryControls({
 }: ImageDetailAuxiliaryControlsProps) {
   const { t } = useI18n()
   const pixelPreviewModeLabels = usePixelPreviewModeLabels()
+  const pixelPanelContainerRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    if (!isPixelPreviewPanelOpen) {
+      return
+    }
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!pixelPanelContainerRef.current?.contains(event.target as Node)) {
+        onTogglePixelPreviewPanel()
+      }
+    }
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !event.defaultPrevented) {
+        event.preventDefault()
+        onTogglePixelPreviewPanel()
+      }
+    }
+    document.addEventListener('pointerdown', handlePointerDown)
+    // Capture phase: the open panel takes Escape before the detail page (back) and the viewer (close), whose listeners were added earlier.
+    window.addEventListener('keydown', handleKeyDown, true)
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown)
+      window.removeEventListener('keydown', handleKeyDown, true)
+    }
+  }, [isPixelPreviewPanelOpen, onTogglePixelPreviewPanel])
 
   if (!canToggleRenderMode && !canUsePixelPreview) {
     return null
@@ -83,7 +109,7 @@ export function ImageDetailAuxiliaryControls({
       onPointerDown={(event) => event.stopPropagation()}
     >
       {canUsePixelPreview ? (
-        <div className="relative">
+        <div ref={pixelPanelContainerRef} className="relative">
           <IconButton
             {...toolbarButtonProps}
             className="relative"

@@ -21,15 +21,22 @@ function leavesDraft(leaves: GuardedLeave, current: Location, next: Location) {
  */
 export function UnsavedSettingsGuardProvider({ children }: PropsWithChildren) {
   const [guards, setGuards] = useState<Record<string, Guard>>({})
+  const [matchedMessages, setMatchedMessages] = useState<string[]>([])
   const register = useCallback<Register>((id, guard) => {
     setGuards((current) => ({ ...current, [id]: guard }))
     return () => setGuards((current) => { const next = { ...current }; delete next[id]; return next })
   }, [])
   useUnloadGuard(Object.keys(guards).length > 0)
-  const shouldBlock = useCallback<BlockerFunction>(({ currentLocation, nextLocation }) => (
-    Object.values(guards).some((guard) => leavesDraft(guard.leaves, currentLocation, nextLocation))
-  ), [guards])
-  useBlockerConfirm(useBlocker(shouldBlock), [...new Set(Object.values(guards).map((guard) => guard.message))].join('\n'))
+  const shouldBlock = useCallback<BlockerFunction>(({ currentLocation, nextLocation }) => {
+    const matched = Object.values(guards).filter((guard) => leavesDraft(guard.leaves, currentLocation, nextLocation))
+    if (matched.length === 0) {
+      return false
+    }
+    setMatchedMessages([...new Set(matched.map((guard) => guard.message))])
+    return true
+  }, [guards])
+  const fallbackMessages = [...new Set(Object.values(guards).map((guard) => guard.message))]
+  useBlockerConfirm(useBlocker(shouldBlock), (matchedMessages.length > 0 ? matchedMessages : fallbackMessages).join('\n'))
   return createElement(GuardContext.Provider, { value: register }, children)
 }
 

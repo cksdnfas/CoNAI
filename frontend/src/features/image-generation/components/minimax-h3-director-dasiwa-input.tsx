@@ -827,7 +827,7 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
       {isFieldVisible('timeline_data') ? <>
       {/* T2VA takes no frames: the image lane only stays while leftover images still need clearing. */}
       {mode !== 'T2VA' || hasImageLaneItems ? (
-      <div className={cn('ui-tone-plinth space-y-3 rounded-sm p-3 transition-shadow', mode === 'T2VA' ? 'opacity-60' : selectedLane === 'image' && 'ring-1 ring-inset ring-primary/45')} onClick={() => setSelectedLane('image')} onDragOver={(event) => event.preventDefault()} onDrop={(event) => handleLaneDrop(event, 'image')}>
+      <div className={cn('ui-tone-plinth space-y-3 rounded-sm p-3 transition-shadow', mode === 'T2VA' ? 'opacity-60' : selectedLane === 'image' && 'ring-1 ring-inset ring-primary/45')} onClick={() => setSelectedLane('image')} onFocusCapture={() => setSelectedLane('image')} onDragOver={(event) => event.preventDefault()} onDrop={(event) => handleLaneDrop(event, 'image')}>
         <div className="flex items-center justify-between gap-3">
           {renderLaneTitle(<ImageIcon className="h-4 w-4" />, isReferenceMediaMode ? t({ ko: '이미지 참조', en: 'Image references' }) : t({ ko: '키 프레임', en: 'Key frames' }))}
           <div className="flex items-center gap-1">
@@ -875,7 +875,7 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
       ) : null}
 
       {isReferenceMediaMode ? (
-        <div className={cn('ui-tone-plinth space-y-3 rounded-sm p-3 transition-shadow', selectedLane === 'video' && 'ring-1 ring-inset ring-primary/45')} onClick={() => setSelectedLane('video')} onDragOver={(event) => event.preventDefault()} onDrop={(event) => handleLaneDrop(event, 'video')}>
+        <div className={cn('ui-tone-plinth space-y-3 rounded-sm p-3 transition-shadow', selectedLane === 'video' && 'ring-1 ring-inset ring-primary/45')} onClick={() => setSelectedLane('video')} onFocusCapture={() => setSelectedLane('video')} onDragOver={(event) => event.preventDefault()} onDrop={(event) => handleLaneDrop(event, 'video')}>
           <div className="flex items-center justify-between gap-3">
             {renderLaneTitle(<Film className="h-4 w-4" />, t({ ko: '영상 참조', en: 'Video references' }))}
             <div className="flex items-center gap-1">
@@ -897,7 +897,7 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
 
       {/* Audio references only exist in reference-media mode; the lane stays elsewhere only to clear leftovers. */}
       {isReferenceMediaMode || hasAudioLaneItems ? (
-      <div className={cn('ui-tone-plinth space-y-3 rounded-sm p-3 transition-shadow', !isReferenceMediaMode ? 'opacity-60' : selectedLane === 'audio' && 'ring-1 ring-inset ring-primary/45')} onClick={() => { if (isReferenceMediaMode) setSelectedLane('audio') }} onDragOver={(event) => { if (isReferenceMediaMode) event.preventDefault() }} onDrop={(event) => isReferenceMediaMode ? handleLaneDrop(event, 'audio') : event.preventDefault()}>
+      <div className={cn('ui-tone-plinth space-y-3 rounded-sm p-3 transition-shadow', !isReferenceMediaMode ? 'opacity-60' : selectedLane === 'audio' && 'ring-1 ring-inset ring-primary/45')} onClick={() => { if (isReferenceMediaMode) setSelectedLane('audio') }} onFocusCapture={() => { if (isReferenceMediaMode) setSelectedLane('audio') }} onDragOver={(event) => { if (isReferenceMediaMode) event.preventDefault() }} onDrop={(event) => isReferenceMediaMode ? handleLaneDrop(event, 'audio') : event.preventDefault()}>
         <div className="flex items-center justify-between gap-3">
           {renderLaneTitle(<Music2 className="h-4 w-4" />, t({ ko: '오디오 참조', en: 'Audio references' }))}
           <div className="flex items-center gap-1">

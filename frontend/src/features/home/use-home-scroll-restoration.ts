@@ -26,20 +26,36 @@ export function useHomeScrollRestoration({
   useEffect(() => {
     if (!enabled) return
 
-    const saveScrollPosition = () => {
+    let saveTimerId: number | null = null
+    const flushScrollPosition = () => {
+      if (saveTimerId !== null) {
+        window.clearTimeout(saveTimerId)
+        saveTimerId = null
+      }
       if (sessionStorage.getItem(HOME_SCROLL_PENDING_KEY) === 'true') {
         return
       }
-
       sessionStorage.setItem(HOME_SCROLL_STORAGE_KEY, String(window.scrollY))
     }
 
-    if (sessionStorage.getItem(HOME_SCROLL_PENDING_KEY) !== 'true') {
-      saveScrollPosition()
+    const scheduleSaveScrollPosition = () => {
+      if (saveTimerId !== null) {
+        return
+      }
+      saveTimerId = window.setTimeout(flushScrollPosition, 150)
     }
 
-    window.addEventListener('scroll', saveScrollPosition, { passive: true })
-    return () => window.removeEventListener('scroll', saveScrollPosition)
+    if (sessionStorage.getItem(HOME_SCROLL_PENDING_KEY) !== 'true') {
+      flushScrollPosition()
+    }
+
+    window.addEventListener('scroll', scheduleSaveScrollPosition, { passive: true })
+    window.addEventListener('pagehide', flushScrollPosition)
+    return () => {
+      window.removeEventListener('scroll', scheduleSaveScrollPosition)
+      window.removeEventListener('pagehide', flushScrollPosition)
+      flushScrollPosition()
+    }
   }, [enabled])
 
   useEffect(() => {

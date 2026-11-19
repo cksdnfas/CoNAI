@@ -1,6 +1,6 @@
 import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
 import { FeaturePermissionNotice } from '@/features/auth/feature-permission-notice'
-import { Fragment, useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { Fragment, lazy, Suspense, useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { hasMiniMaxH3RefModExportNode } from '@conai/shared'
@@ -40,8 +40,9 @@ import { useConfirm } from '@/components/ui/confirm-dialog'
 import { ComfyManagementArea } from './comfy-management-area'
 import { ComfyModuleSaveModal } from './comfy-module-save-modal'
 import { ComfyServerRegistrationModal } from './comfy-server-registration-modal'
-import { ComfyWorkflowAuthoringModal } from './comfy-workflow-authoring-modal'
 import { ComfyWorkflowControllerPanel } from './comfy-workflow-controller-panel'
+
+const ComfyWorkflowAuthoringModalLazy = lazy(() => import('./comfy-workflow-authoring-modal').then((module) => ({ default: module.ComfyWorkflowAuthoringModal })))
 import { GenerationBlockLayout } from '../layout/generation-block-layout'
 import { useGenerationLayoutSurface } from '../layout/generation-layout-context'
 import { stackedLayoutBlocks } from '../layout/generation-layout-ops'
@@ -574,17 +575,21 @@ function ComfyGenerationPanelContent({
         ) : null}
       </div>
 
-      <ComfyWorkflowAuthoringModal
-        open={isAuthoringModalOpen}
-        mode={workflowEditorState ? 'edit' : 'create'}
-        initialData={workflowEditorState}
-        dropdownLists={dropdownListsQuery.data ?? []}
-        onClose={() => {
-          setIsAuthoringModalOpen(false)
-          setWorkflowEditorState(null)
-        }}
-        onSaved={(workflowId) => void handleAuthoringSaved(workflowId)}
-      />
+      {isAuthoringModalOpen ? (
+        <Suspense fallback={null}>
+          <ComfyWorkflowAuthoringModalLazy
+            open={isAuthoringModalOpen}
+            mode={workflowEditorState ? 'edit' : 'create'}
+            initialData={workflowEditorState}
+            dropdownLists={dropdownListsQuery.data ?? []}
+            onClose={() => {
+              setIsAuthoringModalOpen(false)
+              setWorkflowEditorState(null)
+            }}
+            onSaved={(workflowId) => void handleAuthoringSaved(workflowId)}
+          />
+        </Suspense>
+      ) : null}
 
       <ComfyServerRegistrationModal
         open={isServerModalOpen}

@@ -99,6 +99,7 @@ export function ImageListVideoPreview({
             shouldMountVideo && hasLoadedFrame && 'opacity-0',
           )}
           loading="lazy"
+          decoding="async"
           draggable={false}
         />
       ) : (

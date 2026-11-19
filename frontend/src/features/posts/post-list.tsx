@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { VirtuosoMasonry, type ItemContent } from '@virtuoso.dev/masonry'
 import type { PostCategory, PostSummary } from '@conai/shared'
 import { EyeOff, FileClock, Images, MessageCircle, MessageSquare, Pin } from 'lucide-react'
@@ -159,12 +159,16 @@ export function PostCards({ posts, categories, onOpen, onTag, menu, menuOnClick 
   const columnCount = Math.min(CARD_MAX_COLUMNS, fitColumns)
   // As in ImageListMasonry: VirtuosoMasonry seeds columns only at mount, so remount while posts are fewer than columns.
   const masonryKey = posts.length < columnCount ? `sparse:${posts.length}:${columnCount}` : 'dense'
+  const cardContext = useMemo<CardContext>(
+    () => ({ categories, onOpen, onTag, menu, menuOnClick, canViewImages }),
+    [canViewImages, categories, menu, menuOnClick, onOpen, onTag],
+  )
   return (
     <div ref={setContainer}>
       <VirtuosoMasonry<PostSummary, CardContext>
         key={masonryKey}
         data={posts}
-        context={{ categories, onOpen, onTag, menu, menuOnClick, canViewImages }}
+        context={cardContext}
         useWindowScroll
         columnCount={columnCount}
         initialItemCount={Math.min(posts.length, Math.max(columnCount * 2, 8))}

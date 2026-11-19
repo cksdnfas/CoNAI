@@ -128,7 +128,7 @@ function MediaHoverPreviewCard({ anchor, source }: { anchor: DOMRect; source: Me
     <div
       ref={cardRef}
       aria-hidden="true"
-      className={cn(floatingSurfaceClassName, 'pointer-events-none fixed z-popover p-2 text-foreground')}
+      className={cn(floatingSurfaceClassName, 'pointer-events-none fixed z-floating p-2 text-foreground')}
       style={{ left: position?.left ?? 0, top: position?.top ?? 0, visibility: position && fittedSize ? 'visible' : 'hidden' }}
     >
       {videoSrc ? (
@@ -153,6 +153,7 @@ function MediaHoverPreviewCard({ anchor, source }: { anchor: DOMRect; source: Me
         <img
           src={fullSize && fullSrc ? fullSrc : source.src}
           alt=""
+          decoding="async"
           className="block rounded-sm object-contain"
           style={fittedSize ?? { width: 1, height: 1 }}
           onLoad={(event) => {
@@ -177,6 +178,7 @@ function MediaHoverPreviewCard({ anchor, source }: { anchor: DOMRect; source: Me
 export function useMediaHoverPreview(source: MediaHoverPreviewSource | null) {
   const [anchor, setAnchor] = useState<DOMRect | null>(null)
   const [inPlace, setInPlace] = useState(false)
+  const [isPendingTimer, setIsPendingTimer] = useState(false)
   const timerRef = useRef<number | null>(null)
 
   const clearTimer = useCallback(() => {
@@ -184,6 +186,7 @@ export function useMediaHoverPreview(source: MediaHoverPreviewSource | null) {
       window.clearTimeout(timerRef.current)
       timerRef.current = null
     }
+    setIsPendingTimer(false)
   }, [])
 
   const hide = useCallback(() => {
@@ -195,7 +198,7 @@ export function useMediaHoverPreview(source: MediaHoverPreviewSource | null) {
   useEffect(() => clearTimer, [clearTimer])
 
   useEffect(() => {
-    if (!anchor && !inPlace) {
+    if (!anchor && !inPlace && !isPendingTimer) {
       return
     }
 
@@ -207,7 +210,7 @@ export function useMediaHoverPreview(source: MediaHoverPreviewSource | null) {
       window.removeEventListener('wheel', hide)
       window.removeEventListener('blur', hide)
     }
-  }, [anchor, inPlace, hide])
+  }, [anchor, inPlace, isPendingTimer, hide])
 
   const handlePointerEnter = useCallback((event: ReactPointerEvent<HTMLElement>) => {
     if (event.pointerType !== 'mouse' || !source || !canHover()) {
@@ -216,8 +219,10 @@ export function useMediaHoverPreview(source: MediaHoverPreviewSource | null) {
 
     const target = event.currentTarget
     clearTimer()
+    setIsPendingTimer(true)
     timerRef.current = window.setTimeout(() => {
       timerRef.current = null
+      setIsPendingTimer(false)
       if (!target.isConnected) {
         return
       }

@@ -307,8 +307,11 @@ export function HomePage() {
       ) : null}
 
       {imagesQuery.isPending ? (
-        <section className="columns-1 gap-4 sm:columns-2 xl:columns-3 2xl:columns-4">
-          {Array.from({ length: 8 }).map((_, index) => (
+        <section
+          className="gap-4"
+          style={{ columnCount: Math.max(1, homeColumnCount ?? 4) }}
+        >
+          {Array.from({ length: Math.max(8, (homeColumnCount ?? 4) * 2) }).map((_, index) => (
             <div key={index} className="mb-4 break-inside-avoid overflow-hidden rounded-sm">
               <Skeleton radius="sm" className="min-h-[280px] w-full" />
             </div>

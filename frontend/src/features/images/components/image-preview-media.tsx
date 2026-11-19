@@ -1,6 +1,7 @@
 import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { isChatResultMedia } from '@/lib/chat-result-media'
-import type { CSSProperties, DragEventHandler } from 'react'
+import { useInView } from '@/lib/use-in-view'
+import { useEffect, type CSSProperties, type DragEventHandler } from 'react'
 import type { ImageRecord } from '@/types/image'
 import {
   getImageListDisplayName,
@@ -17,6 +18,59 @@ interface ImagePreviewMediaProps {
   draggable?: boolean
   onDragStart?: DragEventHandler<HTMLImageElement | HTMLVideoElement>
   onError?: () => void
+}
+
+/**
+ * One <video> that only carries its source near the viewport; away from it the poster shows.
+ * The element itself is the observed box (no wrapper), so the caller's sizing and positioning classes keep applying to it.
+ */
+function ViewportGatedVideoPreview({
+  src,
+  poster,
+  className,
+  style,
+  draggable,
+  onDragStart,
+  onError,
+}: {
+  src: string
+  poster?: string
+  className?: string
+  style?: CSSProperties
+  draggable: boolean
+  onDragStart?: DragEventHandler<HTMLImageElement | HTMLVideoElement>
+  onError?: () => void
+}) {
+  const [ref, { visible: isInView }] = useInView<HTMLVideoElement>('200px 0px')
+
+  // Removing `src` alone keeps the loaded stream playing; load() releases it and brings the poster back.
+  useEffect(() => {
+    const video = ref.current
+    if (!isInView && video?.currentSrc) {
+      video.load()
+    }
+  }, [isInView, ref])
+
+  return (
+    <video
+      ref={ref}
+      src={isInView ? src : undefined}
+      poster={poster}
+      className={className}
+      style={style}
+      muted
+      loop
+      autoPlay
+      playsInline
+      preload="metadata"
+      draggable={draggable}
+      controls={false}
+      disablePictureInPicture
+      controlsList="nodownload noplaybackrate noremoteplayback"
+      onDragStart={onDragStart}
+      onError={() => onError?.()}
+    />
+  )
 }
 
 /** Render preview media with shared image/GIF/video handling for card UIs. */
@@ -46,22 +100,14 @@ export function ImagePreviewMedia({
 
   if (mediaKind === 'video') {
     return (
-      <video
+      <ViewportGatedVideoPreview
         src={previewUrl}
         poster={image.thumbnail_url ?? undefined}
         className={className}
         style={style}
-        muted
-        loop
-        autoPlay
-        playsInline
-        preload="metadata"
         draggable={draggable}
-        controls={false}
-        disablePictureInPicture
-        controlsList="nodownload noplaybackrate noremoteplayback"
         onDragStart={onDragStart}
-        onError={() => onError?.()}
+        onError={onError}
       />
     )
   }
@@ -73,6 +119,7 @@ export function ImagePreviewMedia({
       className={className}
       style={style}
       loading={loading}
+      decoding="async"
       draggable={draggable}
       onDragStart={onDragStart}
       onError={() => onError?.()}

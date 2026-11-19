@@ -9,7 +9,7 @@ export const floatingSurfaceClassName = 'rounded-md bg-surface-high shadow-eleva
 
 /** Radix open / close animation for floating content (fade + zoom, off under reduced motion). */
 export const floatingMotionClassName =
-  'data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 motion-reduce:animate-none'
+  'motion-safe:data-[state=open]:animate-in motion-safe:data-[state=open]:fade-in-0 motion-safe:data-[state=open]:zoom-in-95 motion-safe:data-[state=closed]:animate-out motion-safe:data-[state=closed]:fade-out-0 motion-safe:data-[state=closed]:zoom-out-95'
 
 /**
  * Springy open: the panel pops from its transform origin; closing keeps the standard fade. `motion-safe:` because a

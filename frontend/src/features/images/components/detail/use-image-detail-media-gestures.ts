@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from 'react'
+import { isTypingTarget, openDialogCount } from '@/lib/keyboard-shortcut'
 
 interface PointerPosition { x: number; y: number }
 interface MediaSize { width: number; height: number }
@@ -29,7 +30,7 @@ function getElementSize(element: Element): MediaSize {
 }
 
 /** Own zoom, rotation, pointer/pinch state, fitted sizing, and animation-frame cleanup. */
-export function useImageDetailMediaGestures({ isWheelZoomEnabled, renderUrl }: { isWheelZoomEnabled: boolean; renderUrl: string }) {
+export function useImageDetailMediaGestures({ isWheelZoomEnabled, renderUrl, isModal = false }: { isWheelZoomEnabled: boolean; renderUrl: string; isModal?: boolean }) {
   const viewportRef = useRef<HTMLDivElement | null>(null)
   const pointersRef = useRef(new Map<number, PointerPosition>())
   const pinchStartDistanceRef = useRef<number | null>(null)
@@ -121,7 +122,8 @@ export function useImageDetailMediaGestures({ isWheelZoomEnabled, renderUrl }: {
     setRotation(0)
     setOffset({ x: 0, y: 0 })
   }, [cancelPendingOffsetFrame])
-  const applyScale = useCallback((nextScale: number) => {
+  const applyScale = useCallback((nextScale: number, focalClientPoint?: PointerPosition) => {
+    const previousScale = scaleRef.current
     const clampedScale = clamp(nextScale, MIN_SCALE, MAX_SCALE)
     scaleRef.current = clampedScale
     setScale(clampedScale)
@@ -129,9 +131,23 @@ export function useImageDetailMediaGestures({ isWheelZoomEnabled, renderUrl }: {
       offsetRef.current = { x: 0, y: 0 }
       cancelPendingOffsetFrame()
       setOffset({ x: 0, y: 0 })
+      return
+    }
+    if (focalClientPoint && viewportRef.current && previousScale > 0) {
+      const rect = viewportRef.current.getBoundingClientRect()
+      const mx = focalClientPoint.x - (rect.left + rect.width / 2)
+      const my = focalClientPoint.y - (rect.top + rect.height / 2)
+      const ratio = clampedScale / previousScale
+      const nextOffset = {
+        x: mx - ratio * (mx - offsetRef.current.x),
+        y: my - ratio * (my - offsetRef.current.y),
+      }
+      offsetRef.current = nextOffset
+      cancelPendingOffsetFrame()
+      setOffset(nextOffset)
     }
   }, [cancelPendingOffsetFrame])
-  const zoomBy = useCallback((delta: number) => applyScale(scaleRef.current + delta), [applyScale])
+  const zoomBy = useCallback((delta: number, focalClientPoint?: PointerPosition) => applyScale(scaleRef.current + delta, focalClientPoint), [applyScale])
   const rotateBy = useCallback((delta: number) => {
     const nextRotation = normalizeRotation(rotationRef.current + delta)
     rotationRef.current = nextRotation
@@ -154,15 +170,45 @@ export function useImageDetailMediaGestures({ isWheelZoomEnabled, renderUrl }: {
       if (!isWheelZoomEnabled) return
       if (event.cancelable) event.preventDefault()
       event.stopPropagation()
-      zoomBy(event.deltaY < 0 ? ZOOM_STEP : -ZOOM_STEP)
+      zoomBy(event.deltaY < 0 ? ZOOM_STEP : -ZOOM_STEP, { x: event.clientX, y: event.clientY })
     }
     node.addEventListener('wheel', handleWheel, { passive: false })
     return () => node.removeEventListener('wheel', handleWheel)
   }, [isWheelZoomEnabled, zoomBy])
 
+  useEffect(() => {
+    const expectedDialogs = isModal ? 1 : 0
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) return
+      if (event.target instanceof Element && event.target.closest('[data-chat-dock]')) return
+      if (isTypingTarget(event) || openDialogCount() > expectedDialogs) return
+
+      if (event.key === '+' || event.key === '=') {
+        event.preventDefault()
+        zoomBy(ZOOM_STEP)
+      } else if (event.key === '-' || event.key === '_') {
+        event.preventDefault()
+        zoomBy(-ZOOM_STEP)
+      } else if (event.key === '0') {
+        event.preventDefault()
+        resetView()
+      } else if (event.code === 'KeyR' && !event.shiftKey) {
+        event.preventDefault()
+        rotateBy(ROTATION_STEP)
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [isModal, resetView, rotateBy, zoomBy])
+
   const handlePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.pointerType === 'mouse' && event.button !== 0) return
-    if (!isWheelZoomEnabled && (event.pointerType === 'touch' || event.pointerType === 'pen')) return
+    // On inline pages with zoom locked, only block single-finger pan while unzoomed so vertical page scroll stays smooth;
+    // two-finger pinch zoom always remains available.
+    if (!isWheelZoomEnabled && !isPannable && pointersRef.current.size === 0 && (event.pointerType === 'touch' || event.pointerType === 'pen')) {
+      pointersRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY })
+      return
+    }
     event.stopPropagation()
     event.currentTarget.setPointerCapture(event.pointerId)
     pointersRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY })
@@ -179,17 +225,25 @@ export function useImageDetailMediaGestures({ isWheelZoomEnabled, renderUrl }: {
   }
   const handlePointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (!pointersRef.current.has(event.pointerId)) return
-    event.stopPropagation()
     pointersRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY })
     if (pointersRef.current.size >= 2) {
+      event.stopPropagation()
       const [first, second] = Array.from(pointersRef.current.values())
       const startDistance = pinchStartDistanceRef.current
-      if (!startDistance || startDistance <= 0) return
+      if (!startDistance || startDistance <= 0) {
+        pinchStartDistanceRef.current = getPointerDistance(first, second)
+        pinchStartScaleRef.current = scaleRef.current
+        return
+      }
       event.preventDefault()
-      applyScale(pinchStartScaleRef.current * (getPointerDistance(first, second) / startDistance))
+      applyScale(
+        pinchStartScaleRef.current * (getPointerDistance(first, second) / startDistance),
+        { x: (first.x + second.x) / 2, y: (first.y + second.y) / 2 },
+      )
       return
     }
     if (!isPannable) return
+    event.stopPropagation()
     const panOrigin = panOriginRef.current
     if (!panOrigin || panOrigin.pointerId !== event.pointerId) return
     event.preventDefault()
@@ -221,10 +275,9 @@ export function useImageDetailMediaGestures({ isWheelZoomEnabled, renderUrl }: {
       setOffset({ x: 0, y: 0 })
     }
   }
-  const handleDoubleClick = () => {
-    if (!isWheelZoomEnabled) return
+  const handleDoubleClick = (event: ReactMouseEvent<HTMLDivElement>) => {
     if (scaleRef.current > DEFAULT_SCALE + 0.001) resetView()
-    else applyScale(DOUBLE_TAP_SCALE)
+    else applyScale(DOUBLE_TAP_SCALE, { x: event.clientX, y: event.clientY })
   }
   const recordNaturalMediaSize = (element: HTMLImageElement) => {
     const width = element.naturalWidth || element.width

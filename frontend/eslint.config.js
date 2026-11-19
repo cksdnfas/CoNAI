@@ -20,6 +20,10 @@ const classNameString = (pattern, message) => [
 
 const DESIGN_SYSTEM_GUARDS = [
   {
+    selector: "JSXOpeningElement[name.name='select']",
+    message: '[ds/select] Raw <select>: use Select from components/ui.',
+  },
+  {
     selector: "JSXOpeningElement[name.name='input'] > JSXAttribute[name.name='type'][value.value='checkbox']",
     message: '[ds/checkbox] Raw <input type="checkbox">: use Checkbox or Switch from components/ui.',
   },

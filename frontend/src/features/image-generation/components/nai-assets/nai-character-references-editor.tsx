@@ -3,6 +3,7 @@ import { Plus } from 'lucide-react'
 import { IconButton } from '@/components/ui/icon-button'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { Section } from '@/components/ui/section'
+import { Select } from '@/components/ui/select'
 import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import type { StoredNaiCharacterReferenceAsset } from '@/lib/api-image-generation-types'
@@ -150,18 +151,19 @@ export function NaiCharacterReferencesEditor({
             <NaiAssetRow
               key={`nai-character-reference-${index}`}
               image={reference.image}
-              title={reference.image?.fileName || `Reference ${index + 1}`}
+              title={reference.image?.fileName || t({ ko: '참조 {index}', en: 'Reference {index}' }, { index: index + 1 })}
               meta={(
-                <select
+                <Select
+                  variant="inline"
                   aria-label={t({ ko: '유형', en: 'Type' })}
                   value={reference.type}
                   onChange={(event) => onFieldChange(index, 'type', event.target.value)}
-                  className="-ml-1 h-6 max-w-full cursor-pointer field-sizing-content rounded-sm bg-transparent px-1 text-xs text-muted-foreground outline-none hover:bg-field focus-visible:ring-2 focus-visible:ring-primary/15"
+                  className="-ml-1"
                 >
                   <option value="character">{t({ ko: '캐릭터', en: 'Character' })}</option>
                   <option value="style">{t({ ko: '스타일', en: 'Style' })}</option>
                   <option value="character&style">{t({ ko: '캐릭터+스타일', en: 'Character + Style' })}</option>
-                </select>
+                </Select>
               )}
               strength={reference.strength}
               strengthMin={0}

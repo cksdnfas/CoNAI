@@ -25,7 +25,7 @@ export function FloatingSaveBar({ label, saving, canSave = true, onSave, onDisca
 }) {
   const { t } = useI18n()
   return (
-    <div className="sticky bottom-[calc(var(--shell-float-bottom)+1rem)] z-30 mt-8" role="region" aria-label={ariaLabel ?? t({ ko: '저장', en: 'Save' })}>
+    <div className="sticky bottom-[calc(var(--shell-float-bottom)+1rem)] z-sticky mt-8" role="region" aria-label={ariaLabel ?? t({ ko: '저장', en: 'Save' })}>
       <div className={cn('theme-floating-panel', floatingSurfaceClassName, 'flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg py-2 pr-2 pl-4')}>
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-2" aria-live="polite">
           <div className="flex shrink-0 items-center gap-2 text-sm font-semibold text-foreground">
@@ -38,7 +38,7 @@ export function FloatingSaveBar({ label, saving, canSave = true, onSave, onDisca
         <div className="ml-auto flex shrink-0 items-center gap-2">
           {onDiscard ? <Button size="sm" variant="ghost" disabled={saving} onClick={onDiscard}>{t({ ko: '되돌리기', en: 'Revert' })}</Button> : null}
           <Button size="sm" disabled={saving || !canSave} aria-busy={saving || undefined} onClick={onSave}>
-            {saving ? <LoaderCircle className="animate-spin" /> : null}
+            {saving ? <LoaderCircle className="motion-safe:animate-spin" /> : null}
             {saveLabel ?? t({ ko: '저장', en: 'Save' })}
           </Button>
         </div>

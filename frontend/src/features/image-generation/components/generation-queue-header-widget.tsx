@@ -2,11 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { ListTodo, RefreshCw } from 'lucide-react'
 import { SegmentedTabBar } from '@/components/common/segmented-tab-bar'
+import { AnchoredPopup } from '@/components/ui/anchored-popup'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { IconButton } from '@/components/ui/icon-button'
 import { CountBadge } from '@/components/ui/count-badge'
 import { useSnackbar } from '@/components/ui/snackbar-context'
-import { useOverlayBackClose } from '@/components/ui/use-overlay-back-close'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { resolveStreamFallbackInterval } from '@/features/runtime-events/runtime-event-fallback'
 import { useRuntimeEventStream } from '@/features/runtime-events/use-runtime-event-stream'
@@ -15,7 +15,6 @@ import { getGenerationWorkflows } from '@/lib/api-image-generation-workflows'
 import { cancelGenerationQueueJob, getGenerationQueue } from '@/lib/api-image-generation-queue'
 import type { GenerationQueueJobRecord } from '@/lib/api-image-generation-types'
 import { getGraphWorkflowNames, getGraphWorkflowSchedules } from '@/lib/api-module-graph'
-import { cn } from '@/lib/utils'
 import { runGenerationQueueMutation } from './generation-queue-actions'
 import {
   canRetryGenerationQueueCancellation,
@@ -28,7 +27,7 @@ import { GenerationQueueJobsTab, type QueueFilterValue } from './generation-queu
 import { GenerationQueueReservationsTab } from './generation-queue-reservations-tab'
 import { getActiveWorkflowReservationScheduleCount, sortWorkflowReservationSchedules } from './workflow-reservations-ui'
 
-const POPUP_LIST_CLASS_NAME = 'max-h-[min(24rem,calc(100vh-var(--theme-shell-header-height)-5rem))] space-y-3 overflow-y-auto px-3 py-3 sm:max-h-[min(28rem,calc(100vh-var(--theme-shell-header-height)-2rem))] sm:px-4'
+const POPUP_LIST_CLASS_NAME = 'max-h-[min(24rem,calc(100dvh-var(--theme-shell-header-height)-var(--shell-bottom-inset)-5rem))] space-y-3 overflow-y-auto px-3 py-3 sm:max-h-[min(28rem,calc(100dvh-var(--theme-shell-header-height)-var(--shell-bottom-inset)-2rem))] sm:px-4'
 const ACTIVE_QUEUE_STATUSES: Array<GenerationQueueJobRecord['status']> = ['queued', 'dispatching', 'running']
 const ACTIVE_QUEUE_REFETCH_INTERVAL_MS = 3_000
 const IDLE_QUEUE_REFETCH_INTERVAL_MS = 30_000
@@ -119,8 +118,7 @@ export function GenerationQueueHeaderWidget() {
   const [lastSeenQueueJobId, setLastSeenQueueJobId] = useState<number | null>(initialLastSeenQueueJobId)
   const [isNotificationBaselineReady, setIsNotificationBaselineReady] = useState(initialLastSeenQueueJobId !== null)
   const containerRef = useRef<HTMLDivElement | null>(null)
-
-  useOverlayBackClose({ open: isOpen, onClose: () => setIsOpen(false) })
+  const closePopup = useCallback(() => setIsOpen(false), [])
 
   const canViewWorkflows = (authStatusQuery.data?.permissionKeys ?? []).includes('workflows.view')
   // 큐 목록 REST 는 인증만 요구한다(permission-neutral). 페이지 권한은 워크플로 필터 목록과
@@ -234,35 +232,6 @@ export function GenerationQueueHeaderWidget() {
       return
     }
 
-    const handlePointerDown = (event: MouseEvent) => {
-      // The cancel confirmation renders in a body portal; clicking it must not close the popup behind it.
-      if (event.target instanceof Element && event.target.closest('[data-slot="confirm-dialog"], [data-slot="confirm-dialog-overlay"]')) {
-        return
-      }
-      if (!containerRef.current?.contains(event.target as Node)) {
-        setIsOpen(false)
-      }
-    }
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setIsOpen(false)
-      }
-    }
-
-    window.addEventListener('mousedown', handlePointerDown)
-    window.addEventListener('keydown', handleKeyDown)
-    return () => {
-      window.removeEventListener('mousedown', handlePointerDown)
-      window.removeEventListener('keydown', handleKeyDown)
-    }
-  }, [isOpen])
-
-  useEffect(() => {
-    if (!isOpen) {
-      return
-    }
-
     persistLastSeenQueueJobId(latestQueueJobId)
     setLastSeenQueueJobId(latestQueueJobId)
   }, [isOpen, latestQueueJobId])
@@ -354,14 +323,7 @@ export function GenerationQueueHeaderWidget() {
         {hasUnreadQueueUpdate ? <CountBadge tone="destructive" corner="top-right" ring /> : null}
       </IconButton>
 
-      <div
-        className={cn(
-          'theme-floating-panel fixed left-2 right-2 top-[calc(var(--theme-shell-header-height)+0.5rem)] z-popover overflow-hidden rounded-md transition-opacity sm:absolute sm:left-auto sm:right-0 sm:top-[calc(100%+0.5rem)] sm:w-[min(33rem,calc(100vw-1rem))]',
-          isOpen ? 'pointer-events-auto opacity-100' : 'pointer-events-none opacity-0',
-        )}
-      >
-        {/* 닫힌 팝업까지 전역 잡 목록을 매 렌더 재조정하지 않도록, 프레임만 남기고 내용은 열렸을 때만 렌더한다. */}
-        {isOpen ? (<>
+      <AnchoredPopup open={isOpen} anchorRef={containerRef} onClose={closePopup} align="end" side="bottom" layer="floating" closeOnBack className="w-[min(33rem,calc(100vw-1rem))]">
         <div className="px-3 py-3 sm:px-4">
           <SegmentedTabBar
             value={effectiveTab}
@@ -416,8 +378,7 @@ export function GenerationQueueHeaderWidget() {
             listClassName={POPUP_LIST_CLASS_NAME}
           />
         )}
-        </>) : null}
-      </div>
+      </AnchoredPopup>
     </div>
   )
 }

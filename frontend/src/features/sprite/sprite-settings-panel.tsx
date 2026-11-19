@@ -112,7 +112,7 @@ export function SpriteSettingsPanel({ form, setForm, output, setOutput, save, se
         <div className="flex flex-col gap-1.5">
           {form.keyColors.map((color, index) => (
             <div key={index} className="flex items-center gap-2">
-              <label className={cn('relative size-7 shrink-0 cursor-pointer overflow-hidden rounded-sm border-2', index === activeColor && !form.despill ? 'border-foreground' : 'border-line')} style={{ background: color }} onClick={() => onActiveColorChange(index)}>
+              <label className={cn('relative size-7 shrink-0 cursor-pointer overflow-hidden rounded-sm border-2 focus-within:ring-2 focus-within:ring-ring/60', index === activeColor && !form.despill ? 'border-foreground' : 'border-line')} style={{ background: color }} onClick={() => onActiveColorChange(index)}>
                 <input type="color" className="absolute inset-0 cursor-pointer opacity-0" value={color.toLowerCase()} aria-label={t({ ko: '색 고르기', en: 'Choose colour' })} onChange={(event) => setColor(index, event.target.value)} />
               </label>
               <HexInput value={color} label={t({ ko: '색 코드', en: 'Colour code' })} onCommit={(value) => setColor(index, value)} />

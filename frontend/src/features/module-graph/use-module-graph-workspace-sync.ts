@@ -1,5 +1,6 @@
 import type { Dispatch, SetStateAction } from 'react'
 import { useEffect, useRef } from 'react'
+import { useI18n } from '@/i18n'
 import {
   getGraphExecution,
   type GraphExecutionArtifactRecord,
@@ -184,6 +185,7 @@ export function useModuleGraphWorkspaceSync({
   setNodes: Dispatch<SetStateAction<ModuleGraphNode[]>>
   showSnackbar: (input: { message: string; tone: 'info' | 'error' }) => void
 }) {
+  const { t } = useI18n()
   const previousExecutionStatusesRef = useRef<Record<number, GraphExecutionRecord['status']>>({})
   const lastNodePreviewSyncSignatureRef = useRef('')
   const lastAutoSelectedGraphIdRef = useRef<number | null>(null)
@@ -241,11 +243,11 @@ export function useModuleGraphWorkspaceSync({
 
       if ((previousStatus === 'queued' || previousStatus === 'running') && execution.status !== previousStatus) {
         if (execution.status === 'completed') {
-          showSnackbar({ message: `실행 #${execution.id} 완료.`, tone: 'info' })
+          showSnackbar({ message: t({ ko: '실행 #{id} 완료.', en: 'Run #{id} completed.' }, { id: execution.id }), tone: 'info' })
         } else if (execution.status === 'failed') {
-          showSnackbar({ message: `실행 #${execution.id} 실패.`, tone: 'error' })
+          showSnackbar({ message: t({ ko: '실행 #{id} 실패.', en: 'Run #{id} failed.' }, { id: execution.id }), tone: 'error' })
         } else if (execution.status === 'cancelled') {
-          showSnackbar({ message: `실행 #${execution.id} 취소됨.`, tone: 'info' })
+          showSnackbar({ message: t({ ko: '실행 #{id} 취소됨.', en: 'Run #{id} cancelled.' }, { id: execution.id }), tone: 'info' })
         }
       }
     }
@@ -254,7 +256,7 @@ export function useModuleGraphWorkspaceSync({
       acc[execution.id] = execution.status
       return acc
     }, {})
-  }, [executionList, showSnackbar])
+  }, [executionList, showSnackbar, t])
 
   useEffect(() => {
     const connectedInputMap = new Map<string, Set<string>>()

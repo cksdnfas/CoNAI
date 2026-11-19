@@ -46,7 +46,7 @@ export function AnchoredPopup({
   viewportPadding = 12,
   className,
   closeOnBack = true,
-  layer = 'popover',
+  layer,
   surfaceProps,
   children,
 }: AnchoredPopupProps) {
@@ -54,6 +54,7 @@ export function AnchoredPopup({
   // The last press that went through this popup's React tree, which also covers menus and dialogs it opened in their own portals.
   const pressInsideRef = useRef<Event | null>(null)
   const [position, setPosition] = useState<AnchoredPopupPosition | null>(null)
+  const [autoFloating, setAutoFloating] = useState(false)
 
   useOverlayBackClose({ open, onClose: onClose ?? (() => undefined), enabled: closeOnBack && Boolean(onClose) })
 
@@ -105,6 +106,9 @@ export function AnchoredPopup({
       if (!target) {
         return
       }
+      if (target instanceof Element && target.closest('[data-slot="confirm-dialog"], [data-slot="confirm-dialog-overlay"]')) {
+        return
+      }
       if (anchorRef.current?.contains(target)) {
         return
       }
@@ -115,11 +119,15 @@ export function AnchoredPopup({
     }
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
+      if (event.key === 'Escape' && !event.defaultPrevented) {
+        event.preventDefault()
         onClose?.()
       }
     }
 
+    if (!layer) {
+      setAutoFloating(Boolean(anchorRef.current?.closest('[data-slot="modal"], [role="dialog"]')))
+    }
     updatePosition()
     const rafId = window.requestAnimationFrame(updatePosition)
     window.addEventListener('resize', updatePosition)
@@ -134,16 +142,18 @@ export function AnchoredPopup({
       document.removeEventListener('pointerdown', handlePointerDown)
       document.removeEventListener('keydown', handleKeyDown)
     }
-  }, [align, anchorRef, onClose, open, side, sideOffset, viewportPadding])
+  }, [align, anchorRef, layer, onClose, open, side, sideOffset, viewportPadding])
 
   if (!open || typeof document === 'undefined') {
     return null
   }
 
+  const resolvedLayer = layer ?? (autoFloating ? 'floating' : 'popover')
+
   return createPortal(
     <div
       ref={panelRef}
-      className={cn(anchoredPopupSurfaceClassName, layer === 'floating' ? 'z-floating' : 'z-popover', 'overflow-y-auto overscroll-contain', className)}
+      className={cn(anchoredPopupSurfaceClassName, resolvedLayer === 'floating' ? 'z-floating' : 'z-popover', 'overflow-y-auto overscroll-contain', className)}
       style={{
         position: 'fixed',
         top: position?.top ?? -9999,

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Navigate, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -23,8 +23,9 @@ import { useChatPage } from '@/features/codex-chat/chat-page-context'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { WorkflowArtifactExplorerPanel } from './components/workflow-artifact-explorer-panel'
 import { useComfyChatPage } from './components/use-comfy-chat-page'
-import { ComfyWorkflowAuthoringModal } from './components/comfy-workflow-authoring-modal'
 import { findAutoCollectedPowerLoraOptions } from './components/power-lora-loader-utils'
+
+const ComfyWorkflowAuthoringModalLazy = lazy(() => import('./components/comfy-workflow-authoring-modal').then((module) => ({ default: module.ComfyWorkflowAuthoringModal })))
 import { useGenerationHistoryFeed } from './components/use-generation-history-feed'
 import { GenerationLayoutControls } from './layout/generation-layout-controls'
 import { GenerationLayoutProvider, useGenerationLayout } from './layout/generation-layout-context'
@@ -376,7 +377,11 @@ function PublicComfyWorkflowPageContent() {
           />
         )
       ) : null}
-      <ComfyWorkflowAuthoringModal open={isAuthoringOpen} mode={authoringWorkflow ? 'edit' : 'create'} initialData={authoringWorkflow ? { workflow: authoringWorkflow } : null} dropdownLists={authoringDropdowns.data ?? []} onClose={() => { setIsAuthoringOpen(false); setAuthoringWorkflow(null) }} onSaved={() => { setIsAuthoringOpen(false); setAuthoringWorkflow(null); void workflowQuery.refetch() }} />
+      {isAuthoringOpen ? (
+        <Suspense fallback={null}>
+          <ComfyWorkflowAuthoringModalLazy open={isAuthoringOpen} mode={authoringWorkflow ? 'edit' : 'create'} initialData={authoringWorkflow ? { workflow: authoringWorkflow } : null} dropdownLists={authoringDropdowns.data ?? []} onClose={() => { setIsAuthoringOpen(false); setAuthoringWorkflow(null) }} onSaved={() => { setIsAuthoringOpen(false); setAuthoringWorkflow(null); void workflowQuery.refetch() }} />
+        </Suspense>
+      ) : null}
     </div>
   )
 }

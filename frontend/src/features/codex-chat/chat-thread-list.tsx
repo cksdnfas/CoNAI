@@ -11,6 +11,7 @@ import { Modal, ModalBody } from '@/components/ui/modal'
 import { RowGroup } from '@/components/ui/row-group'
 import { useI18n } from '@/i18n'
 import type { ChatProfileSummary, CodexChatThreadSummary } from '@/lib/api-codex-chat'
+import { hasOpenDialog } from '@/lib/keyboard-shortcut'
 import { cn } from '@/lib/utils'
 import { ChatDeleteDialog } from './chat-delete-dialog'
 import { useChatHealth } from './chat-health'
@@ -102,7 +103,12 @@ export function ChatThreadList({ query = '', profilesById, activeThreadId, runni
   const clearPicks = () => setPicked(new Set())
   useEffect(() => {
     if (!selecting) return
-    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape' && !confirmingDelete) setPicked(new Set()) }
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !event.defaultPrevented && !confirmingDelete && !hasOpenDialog()) {
+        event.preventDefault()
+        setPicked(new Set())
+      }
+    }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [selecting, confirmingDelete])

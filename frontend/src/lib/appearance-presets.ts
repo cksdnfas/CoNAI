@@ -113,13 +113,13 @@ export const APPEARANCE_PRESETS: Record<Exclude<AppearancePreset, 'custom'>, Acc
   ocean: {
     label: 'Ocean',
     description: 'appearancePresets.accent.ocean.description',
-    primary: '#2f7cf6',
+    primary: '#2563eb',
     secondary: '#8de3df',
   },
   forest: {
     label: 'Forest',
     description: 'appearancePresets.accent.forest.description',
-    primary: '#2f8f5b',
+    primary: '#1f7a4c',
     secondary: '#b7e3c5',
   },
 }
@@ -425,7 +425,7 @@ export const FONT_PRESETS: Record<FontPreset, FontPresetDefinition> = {
   system: {
     label: 'System',
     description: 'appearancePresets.font.system.description',
-    fontFamily: "ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+    fontFamily: "ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', sans-serif",
     monoFamily: "ui-monospace, 'SFMono-Regular', Menlo, Consolas, 'D2Coding', 'Malgun Gothic', 'Apple SD Gothic Neo', 'Noto Sans KR', monospace",
   },
   custom: {

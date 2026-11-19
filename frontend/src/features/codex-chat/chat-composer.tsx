@@ -1,5 +1,6 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from 'react'
 import type { ChatProfileSummary } from '@/lib/api-codex-chat'
+import { useIsCoarsePointer } from '@/lib/use-is-coarse-pointer'
 import { CHAT_COMMANDS, type ChatCommand } from './chat-commands'
 import { mentionOptions, type MentionOption } from './chat-group'
 import { mentionQueryAt } from './chat-mentions'
@@ -31,6 +32,7 @@ export function ChatComposer({ children, ...props }: ComposerProps & { children:
 
 function useComposer({ chat, draftKey, activeThreadId, composerRef, isTranscript, placeholder, isGroup, isCodexThread, memberProfiles, representativeId, isBusy, sendBlocked: blocked, ready, profileBlocked, hasChoice, suggestEnabled, lastMessageId, onCommand, onSend }: ComposerProps) {
   const drafts = useCodexChatDrafts()
+  const isCoarsePointer = useIsCoarsePointer()
   const draft = draftKey !== null ? drafts[draftKey] ?? '' : ''
   const setDraft = (next: string) => { if (draftKey !== null) chat.setDraft(draftKey, next) }
   const [caret, setCaret] = useState(0)
@@ -131,7 +133,12 @@ function useComposer({ chat, draftKey, activeThreadId, composerRef, isTranscript
         return
       }
     }
-    if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); handleSend() }
+    if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
+      // Touch keyboards lack Shift+Enter; keep Enter for newlines and use the explicit Send button on coarse pointers.
+      if (isCoarsePointer && !(event.ctrlKey || event.metaKey)) return
+      event.preventDefault()
+      handleSend()
+    }
   }
   return { draft, setDraft, caret, setCaret, setCommandIndex, setMentionIndex, flagTrayOpen, setFlagTrayOpen, flagButtonRef, closeFlagTray, suggestButtonRef, suggestions, pickSuggestion, narrating, isCommand, sendBlocked, canSend, commandListId, matchingCommands, selectedCommand, showCommands, pickCommand, mentionListId, mentionMatches, selectedMention, showMentions, pickMention, handleSend, handleComposerKeyDown }
 }

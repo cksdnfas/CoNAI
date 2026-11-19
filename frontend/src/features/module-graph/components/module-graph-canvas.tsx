@@ -3,7 +3,7 @@ import { Background, Controls, MiniMap, ReactFlow, useNodesInitialized, type Con
 import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
 import type { ModuleDefinitionRecord } from '@/lib/api-module-graph'
 import { useIsCoarsePointer } from '@/lib/use-is-coarse-pointer'
-import { isTypingTarget } from '@/lib/keyboard-shortcut'
+import { hasOpenDialog, isTypingTarget } from '@/lib/keyboard-shortcut'
 import { ModuleGraphActionMenu, type ModuleGraphActionMenuState } from './module-graph-action-menu'
 import { ModuleGraphQuickCreateMenu, type RecommendedModuleMatch } from './module-graph-quick-create-menu'
 import { ModuleGraphNodeCard } from './module-graph-node-card'
@@ -553,25 +553,26 @@ export function ModuleGraphCanvas({
     }
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (!isCanvasActiveRef.current || isTypingTarget(event)) {
+      if (!isCanvasActiveRef.current || event.defaultPrevented || event.isComposing || isTypingTarget(event) || hasOpenDialog()) {
         return
       }
 
-      if (!(event.ctrlKey || event.metaKey)) {
+      if (!(event.ctrlKey || event.metaKey) || event.altKey) {
         return
       }
 
       const key = event.key.toLowerCase()
-      if (key === 'z' || key === 'y') {
+      const code = event.code
+      if (code === 'KeyZ' || code === 'KeyY' || key === 'z' || key === 'y') {
         event.preventDefault()
         closeQuickCreateMenu()
         closeActionMenu()
-        if (key === 'y' || event.shiftKey) onRedo()
+        if (code === 'KeyY' || key === 'y' || event.shiftKey) onRedo()
         else onUndo()
         return
       }
 
-      if (key === 'd') {
+      if (code === 'KeyD' || key === 'd') {
         event.preventDefault()
         for (const node of nodesRef.current.filter((candidate) => candidate.selected)) {
           onDuplicateNodeById(node.id)
@@ -579,13 +580,13 @@ export function ModuleGraphCanvas({
         return
       }
 
-      if (key === 'a') {
+      if (code === 'KeyA' || key === 'a') {
         event.preventDefault()
         selectAll()
         return
       }
 
-      if (key === 'c') {
+      if (code === 'KeyC' || key === 'c') {
         event.preventDefault()
         closeQuickCreateMenu()
         closeActionMenu()
@@ -593,7 +594,7 @@ export function ModuleGraphCanvas({
         return
       }
 
-      if (key === 'v') {
+      if (code === 'KeyV' || key === 'v') {
         event.preventDefault()
         closeQuickCreateMenu()
         closeActionMenu()

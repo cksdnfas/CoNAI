@@ -51,7 +51,7 @@ export function Snackbar({ message, content, action, tone = 'info', onClose, dur
 
   return (
     <div
-      className="pointer-events-auto w-full max-w-md min-w-[240px] rounded-sm border px-4 py-3 text-sm text-foreground backdrop-blur-sm animate-in fade-in slide-in-from-bottom-2 duration-200"
+      className="pointer-events-auto w-full max-w-md min-w-[240px] rounded-sm border px-4 py-3 text-sm text-foreground backdrop-blur-sm motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-2 duration-200"
       style={snackbarSurfaceStyleByTone[tone]}
       role={tone === 'error' ? 'alert' : 'status'}
       aria-live={tone === 'error' ? 'assertive' : 'polite'}
@@ -81,7 +81,7 @@ export function Snackbar({ message, content, action, tone = 'info', onClose, dur
           <button
             type="button"
             onClick={onClose}
-            className={cn('-mr-1 shrink-0 rounded-sm p-0.5 text-muted-foreground transition hover:text-foreground', 'focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/35')}
+            className={cn('-mr-1 -mt-1 inline-flex size-7 shrink-0 items-center justify-center rounded-sm text-muted-foreground transition hover:bg-fill hover:text-foreground', 'focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/35')}
             aria-label={t({ ko: '닫기', en: 'Close' })}
           >
             <X className="h-4 w-4" />

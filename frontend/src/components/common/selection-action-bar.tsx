@@ -65,8 +65,8 @@ export function SelectionActionBar({
   }
 
   return (
-    // Drawer layer +6: above bottom drawers and page floating controls, below the image viewer's later portal and modals.
-    <div className="pointer-events-none fixed inset-x-0 bottom-[max(1.5rem,env(safe-area-inset-bottom),calc(var(--shell-bottom-inset)+1rem))] z-[calc(var(--z-index-drawer)+6)] flex justify-center px-4">
+    // Above header/floating page controls, below modal bottom drawers (z-drawer = 84) and clear of the docked chat panel.
+    <div className="pointer-events-none fixed left-0 right-[var(--chat-dock-width,0px)] bottom-[max(1.5rem,env(safe-area-inset-bottom),calc(var(--shell-bottom-inset)+1rem))] z-[calc(var(--z-index-header)+20)] flex justify-center px-4">
       <div
         className={cn(
           'theme-floating-panel theme-selection-bar pointer-events-auto flex max-w-full flex-wrap items-center gap-3 text-sm text-foreground',

@@ -13,7 +13,7 @@ import {
 import { getImage, getImageDetailQueryKey, IMAGE_DETAIL_STALE_TIME_MS } from '@/lib/api-images'
 import { registerTranslationCatalog } from '@/i18n'
 import { lockBodyScroll } from '@/lib/body-scroll-lock'
-import { isTypingTarget } from '@/lib/keyboard-shortcut'
+import { isTypingTarget, openDialogCount } from '@/lib/keyboard-shortcut'
 
 type ImageViewModalOverlayModule = typeof import('./image-view-modal-overlay')
 type ImageViewModalOverlayComponent = ImageViewModalOverlayModule['ImageViewModalOverlay']
@@ -363,7 +363,7 @@ export function ImageViewModalProvider({ children }: PropsWithChildren) {
 
       const nextCompositeHashes = current.compositeHashes.filter((candidate) => candidate !== compositeHash)
       const nextActiveCompositeHash = current.compositeHash === compositeHash
-        ? nextCompositeHashes[removedIndex] ?? null
+        ? nextCompositeHashes[removedIndex] ?? nextCompositeHashes[removedIndex - 1] ?? null
         : current.compositeHash
       if (!nextActiveCompositeHash) {
         return createClosedModalState(current)
@@ -454,7 +454,7 @@ export function ImageViewModalProvider({ children }: PropsWithChildren) {
       }
 
       if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
-        if (isTypingTarget(event)) {
+        if (isTypingTarget(event) || openDialogCount() > 1) {
           return
         }
 

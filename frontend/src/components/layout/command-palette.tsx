@@ -9,11 +9,13 @@ import { Modal } from '@/components/ui/modal'
 import { RowGroup } from '@/components/ui/row-group'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { listAccessiblePageAccessItems } from '@/features/auth/page-access-catalog'
+import { usePluginPages } from '@/features/plugins/use-plugin-pages'
 import { SETTINGS_TAB_LABELS, type SettingsTab } from '@/features/settings/settings-tabs'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { useChatPage } from '@/features/codex-chat/chat-page-context'
 import { authCatalog } from '@/i18n/resources/auth'
 import { useI18n } from '@/i18n'
+import { isAppNavLinkActive } from './app-navigation'
 
 type PaletteItem = { id: string; label: string; terms: string[]; icon: LucideIcon; current?: boolean; run: () => void }
 type PaletteGroup = { id: string; heading: string; items: PaletteItem[] }
@@ -64,6 +66,7 @@ function CommandPaletteBody({ onClose }: { onClose: () => void }) {
   const { showSnackbar } = useSnackbar()
   const auth = useAuthStatusQuery().data
   const permissionKeys = auth?.permissionKeys ?? []
+  const pluginPages = usePluginPages()
   const page = useChatPage()
   const watchCommandActions = page?.watchCommandActions
   const runCommandAction = page?.runCommandAction
@@ -91,18 +94,28 @@ function CommandPaletteBody({ onClose }: { onClose: () => void }) {
     icon: Zap,
     run: () => run(() => runCommandAction?.(action.id)),
   }))
-  const pageItems: PaletteItem[] = listAccessiblePageAccessItems(permissionKeys).map((item) => {
-    const labels = authCatalog[item.labelKey] ?? {}
-    return {
-      id: `page:${item.path}`,
-      label: t(item.labelKey),
-      // Korean and English names both match, whichever language the screen shows.
-      terms: [labels.ko ?? '', labels.en ?? '', item.path],
-      icon: item.icon,
-      current: item.path === location.pathname,
-      run: () => run(() => navigate(item.path)),
-    }
-  })
+  const pageItems: PaletteItem[] = [
+    ...listAccessiblePageAccessItems(permissionKeys).map((item) => {
+      const labels = authCatalog[item.labelKey] ?? {}
+      return {
+        id: `page:${item.path}`,
+        label: t(item.labelKey),
+        // Korean and English names both match, whichever language the screen shows.
+        terms: [labels.ko ?? '', labels.en ?? '', item.path],
+        icon: item.icon,
+        current: isAppNavLinkActive(item.path, location.pathname),
+        run: () => run(() => navigate(item.path)),
+      }
+    }),
+    ...pluginPages.map((pluginPage) => ({
+      id: `plugin:${pluginPage.id}`,
+      label: pluginPage.title,
+      terms: [pluginPage.title, pluginPage.to, pluginPage.id],
+      icon: pluginPage.icon,
+      current: isAppNavLinkActive(pluginPage.to, location.pathname),
+      run: () => run(() => navigate(pluginPage.to)),
+    })),
+  ]
   const normalizedQuery = query.trim().toLowerCase()
   const groups: PaletteGroup[] = [
     { id: 'actions', heading: t({ ko: '이 화면', en: 'This screen' }), items: filterItems(actionItems, normalizedQuery) },
@@ -126,7 +139,7 @@ function CommandPaletteBody({ onClose }: { onClose: () => void }) {
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       event.preventDefault()
       if (items.length) setActive((activeIndex + (event.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length)
-    } else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+    } else if ((event.ctrlKey || event.metaKey) && (event.code === 'KeyK' || event.key.toLowerCase() === 'k')) {
       event.preventDefault()
       onClose()
     }

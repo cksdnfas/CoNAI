@@ -179,13 +179,42 @@ function ImageGenerationPageContent() {
     }
   }
 
+  const lastTabParamsRef = useRef<{ comfyWorkflowId: string | null; graphId: string | null; graphEdit: string | null }>({
+    comfyWorkflowId: null,
+    graphId: null,
+    graphEdit: null,
+  })
+
   const handleChangeTab = (nextTab: ImageGenerationTab) => {
+    const currentWorkflow = searchParams.get(IMAGE_GENERATION_WORKFLOW_PARAM)
+    if (activeTab === 'comfyui' && currentWorkflow) {
+      lastTabParamsRef.current.comfyWorkflowId = currentWorkflow
+    }
+    if (activeTab === 'workflows') {
+      const currentGraph = searchParams.get(IMAGE_GENERATION_GRAPH_PARAM)
+      if (currentGraph) {
+        lastTabParamsRef.current.graphId = currentGraph
+        lastTabParamsRef.current.graphEdit = searchParams.get(IMAGE_GENERATION_GRAPH_EDIT_PARAM)
+      }
+    }
+
     const nextSearchParams = new URLSearchParams(searchParams)
     nextSearchParams.set('tab', nextTab)
-    if (nextTab !== 'comfyui') {
+    if (nextTab === 'comfyui') {
+      if (!nextSearchParams.get(IMAGE_GENERATION_WORKFLOW_PARAM) && lastTabParamsRef.current.comfyWorkflowId) {
+        nextSearchParams.set(IMAGE_GENERATION_WORKFLOW_PARAM, lastTabParamsRef.current.comfyWorkflowId)
+      }
+    } else {
       nextSearchParams.delete(IMAGE_GENERATION_WORKFLOW_PARAM)
     }
-    if (nextTab !== 'workflows') {
+    if (nextTab === 'workflows') {
+      if (!nextSearchParams.get(IMAGE_GENERATION_GRAPH_PARAM) && lastTabParamsRef.current.graphId) {
+        nextSearchParams.set(IMAGE_GENERATION_GRAPH_PARAM, lastTabParamsRef.current.graphId)
+        if (lastTabParamsRef.current.graphEdit) {
+          nextSearchParams.set(IMAGE_GENERATION_GRAPH_EDIT_PARAM, lastTabParamsRef.current.graphEdit)
+        }
+      }
+    } else {
       nextSearchParams.delete(IMAGE_GENERATION_GRAPH_PARAM)
       nextSearchParams.delete(IMAGE_GENERATION_GRAPH_EDIT_PARAM)
     }

@@ -256,6 +256,8 @@ function handleVisibilityChange() {
   hiddenReleaseTimer = clearTimer(hiddenReleaseTimer)
   if (!eventSource && handlerSets.size > 0) {
     consecutiveFailureCount = 0
+    // Leave the intentional background-release degraded state before opening SSE so fallback pollers don't double-fire right before `hello` resync.
+    setStatus('connecting')
     openEventSource()
   }
 }

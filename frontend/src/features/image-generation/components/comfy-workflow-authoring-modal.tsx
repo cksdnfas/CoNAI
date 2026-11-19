@@ -194,6 +194,27 @@ export function ComfyWorkflowAuthoringModal({
     return releaseScroll
   }, [open])
 
+  // Mod+S and Escape. Apart from the focus effect: these handlers change with every edit, and re-running that one would pull focus out of the field being typed in.
+  useEffect(() => {
+    if (!open) return
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.isComposing) return
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        void requestClose()
+        return
+      }
+      if ((event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey && (event.code === 'KeyS' || event.key.toLowerCase() === 's')) {
+        event.preventDefault()
+        if (!event.repeat && !isSaving) {
+          void handleSave()
+        }
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [handleSave, isSaving, open, requestClose])
+
   if (!open || typeof document === 'undefined') return null
 
   const title = mode === 'edit' ? t({ ko: 'ComfyUI 워크플로우 수정', en: 'Edit ComfyUI workflow' }) : t({ ko: 'ComfyUI 워크플로우 등록', en: 'Register ComfyUI workflow' })

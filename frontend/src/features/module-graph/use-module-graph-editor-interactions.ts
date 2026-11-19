@@ -3,6 +3,7 @@ import type { Dispatch, SetStateAction } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { addEdge, type Connection } from '@xyflow/react'
 import type { SelectedImageDraft } from '@/features/image-generation/image-generation-shared'
+import { useI18n } from '@/i18n'
 import type { GraphWorkflowExposedInput, ModuleDefinitionRecord } from '@/lib/api-module-graph'
 import { copyTextToClipboard } from '@/lib/clipboard'
 import {
@@ -82,6 +83,7 @@ export function useModuleGraphEditorInteractions({
 }) {
   const queryClient = useQueryClient()
   const lastCopiedSelectionRef = useRef<string | null>(null)
+  const { t } = useI18n()
   const nodeById = useMemo(() => new Map(nodes.map((node) => [node.id, node])), [nodes])
 
   /** Validate whether one graph-port connection is allowed. */
@@ -123,7 +125,7 @@ export function useModuleGraphEditorInteractions({
   /** Create one edge connection and apply presentation metadata when valid. */
   const handleConnect = useCallback((connection: Connection) => {
     if (!isValidConnection(connection)) {
-      showSnackbar({ message: '포트 타입이 맞지 않아서 연결할 수 없어.', tone: 'error' })
+      showSnackbar({ message: t({ ko: '포트 타입이 맞지 않아서 연결할 수 없어.', en: 'Cannot connect incompatible port types.' }), tone: 'error' })
       return
     }
 
@@ -148,7 +150,7 @@ export function useModuleGraphEditorInteractions({
 
       return addEdge(nextConnection, trimmedEdges)
     })
-  }, [isValidConnection, nodeById, setEdges, showSnackbar])
+  }, [isValidConnection, nodeById, setEdges, showSnackbar, t])
 
   /** Add one new module node to the graph canvas, optionally pre-connecting it from one dragged port. */
   const handleAddModuleNode = useCallback((
@@ -284,8 +286,8 @@ export function useModuleGraphEditorInteractions({
     ])
     setSelectedEdgeId(null)
     setSelectedNodeId(duplicatedNodeId)
-    showSnackbar({ message: '노드를 복제했어.', tone: 'info' })
-  }, [nodeById, setNodes, setSelectedEdgeId, setSelectedNodeId, showSnackbar])
+    showSnackbar({ message: t({ ko: '노드를 복제했어.', en: 'Node duplicated.' }), tone: 'info' })
+  }, [nodeById, setNodes, setSelectedEdgeId, setSelectedNodeId, showSnackbar, t])
 
   /** Duplicate the currently selected node with copied input values. */
   const handleDuplicateSelectedNode = useCallback(() => {
@@ -308,13 +310,18 @@ export function useModuleGraphEditorInteractions({
     try {
       await copyTextToClipboard(serializedPayload)
       lastCopiedSelectionRef.current = serializedPayload
-      showSnackbar({ message: selectedNodes.length === 1 ? '노드를 복사했어.' : `${selectedNodes.length}개 노드를 복사했어.`, tone: 'info' })
+      showSnackbar({
+        message: selectedNodes.length === 1
+          ? t({ ko: '노드를 복사했어.', en: 'Node copied.' })
+          : t({ ko: '{count}개 노드를 복사했어.', en: 'Copied {count} nodes.' }, { count: selectedNodes.length }),
+        tone: 'info',
+      })
       return true
     } catch {
-      showSnackbar({ message: '클립보드에 노드를 복사하지 못했어.', tone: 'error' })
+      showSnackbar({ message: t({ ko: '클립보드에 노드를 복사하지 못했어.', en: 'Could not copy nodes to the clipboard.' }), tone: 'error' })
       return false
     }
-  }, [edges, nodes, showSnackbar])
+  }, [edges, nodes, showSnackbar, t])
 
   /** Paste one copied node selection while preserving relative layout and internal edges. */
   const handlePasteNodesFromClipboard = useCallback(async (options?: { position?: { x: number; y: number } }) => {
@@ -382,7 +389,7 @@ export function useModuleGraphEditorInteractions({
     }
 
     if (nextNodes.length === 0) {
-      showSnackbar({ message: '붙여넣을 수 있는 노드를 찾지 못했어.', tone: 'error' })
+      showSnackbar({ message: t({ ko: '붙여넣을 수 있는 노드를 찾지 못했어.', en: 'No compatible nodes found to paste.' }), tone: 'error' })
       return false
     }
 
@@ -421,9 +428,14 @@ export function useModuleGraphEditorInteractions({
     ])
     setSelectedEdgeId(null)
     setSelectedNodeId(nextNodes.length === 1 ? nextNodes[0].id : null)
-    showSnackbar({ message: nextNodes.length === 1 ? '노드를 붙여넣었어.' : `${nextNodes.length}개 노드를 붙여넣었어.`, tone: 'info' })
+    showSnackbar({
+      message: nextNodes.length === 1
+        ? t({ ko: '노드를 붙여넣었어.', en: 'Node pasted.' })
+        : t({ ko: '{count}개 노드를 붙여넣었어.', en: 'Pasted {count} nodes.' }, { count: nextNodes.length }),
+      tone: 'info',
+    })
     return true
-  }, [modules, setEdges, setNodes, setSelectedEdgeId, setSelectedNodeId, showSnackbar])
+  }, [modules, setEdges, setNodes, setSelectedEdgeId, setSelectedNodeId, showSnackbar, t])
 
   /** A variant switch is explicit and lossless; incompatible inputs and links stay untouched. */
   const handleNodeVariantChange = useCallback((nodeId: string, variantId: string) => {
@@ -431,9 +443,9 @@ export function useModuleGraphEditorInteractions({
       const nextNodes = changeModuleGraphNodeVariant(nodes, edges, modules, nodeId, variantId)
       setNodes(nextNodes)
     } catch (error) {
-      showSnackbar({ message: error instanceof Error ? error.message : '변형을 변경할 수 없어.', tone: 'error' })
+      showSnackbar({ message: error instanceof Error ? error.message : t({ ko: '변형을 변경할 수 없어.', en: 'Could not change the variant.' }), tone: 'error' })
     }
-  }, [nodes, edges, modules, setNodes, showSnackbar])
+  }, [nodes, edges, modules, setNodes, showSnackbar, t])
 
   /** Update one node label in local editor state. */
   const handleNodeLabelChange = useCallback((nodeId: string, label: string) => {
@@ -527,9 +539,9 @@ export function useModuleGraphEditorInteractions({
     try {
       handleNodeValueChange(nodeId, portKey, await toWorkflowImageValue(image))
     } catch (error) {
-      showSnackbar({ message: error instanceof Error ? error.message : '이미지를 라이브러리에 넣지 못했어.', tone: 'error' })
+      showSnackbar({ message: error instanceof Error ? error.message : t({ ko: '이미지를 라이브러리에 넣지 못했어.', en: 'Could not add the image to the library.' }), tone: 'error' })
     }
-  }, [handleNodeValueChange, handleNodeValueClear, showSnackbar])
+  }, [handleNodeValueChange, handleNodeValueClear, showSnackbar, t])
 
   /** Update one workflow-run exposed input value. */
   const handleWorkflowRunInputChange = useCallback((inputId: string, value: unknown) => {
@@ -558,9 +570,9 @@ export function useModuleGraphEditorInteractions({
     try {
       handleWorkflowRunInputChange(inputId, await toWorkflowImageValue(image))
     } catch (error) {
-      showSnackbar({ message: error instanceof Error ? error.message : '이미지를 라이브러리에 넣지 못했어.', tone: 'error' })
+      showSnackbar({ message: error instanceof Error ? error.message : t({ ko: '이미지를 라이브러리에 넣지 못했어.', en: 'Could not add the image to the library.' }), tone: 'error' })
     }
-  }, [handleWorkflowRunInputChange, handleWorkflowRunInputClear, showSnackbar])
+  }, [handleWorkflowRunInputChange, handleWorkflowRunInputClear, showSnackbar, t])
 
   /** Auto-layout the current graph and refit the viewport afterwards. */
   const handleAutoLayout = useCallback(() => {
@@ -589,9 +601,9 @@ export function useModuleGraphEditorInteractions({
     })
 
     if (removedCount > 0) {
-      showSnackbar({ message: '입력 연결을 끊었어.', tone: 'info' })
+      showSnackbar({ message: t({ ko: '입력 연결을 끊었어.', en: 'Disconnected input.' }), tone: 'info' })
     }
-  }, [setEdges, showSnackbar])
+  }, [setEdges, showSnackbar, t])
 
   /** Disconnect every edge attached to one node. */
   const handleDisconnectAllNodeConnections = useCallback((nodeId: string) => {
@@ -609,9 +621,9 @@ export function useModuleGraphEditorInteractions({
     })
 
     if (removedCount > 0) {
-      showSnackbar({ message: '노드의 모든 연결을 끊었어.', tone: 'info' })
+      showSnackbar({ message: t({ ko: '노드의 모든 연결을 끊었어.', en: 'Disconnected all node links.' }), tone: 'info' })
     }
-  }, [setEdges, showSnackbar])
+  }, [setEdges, showSnackbar, t])
 
   /** Toggle whether one node is skipped during workflow execution. */
   const handleToggleNodeDisabled = useCallback((nodeId: string) => {
@@ -632,8 +644,13 @@ export function useModuleGraphEditorInteractions({
       }
     }))
 
-    showSnackbar({ message: nextDisabled ? '노드를 비활성화했어.' : '노드 비활성화를 풀었어.', tone: 'info' })
-  }, [setNodes, showSnackbar])
+    showSnackbar({
+      message: nextDisabled
+        ? t({ ko: '노드를 비활성화했어.', en: 'Node disabled.' })
+        : t({ ko: '노드 비활성화를 풀었어.', en: 'Node enabled.' }),
+      tone: 'info',
+    })
+  }, [setNodes, showSnackbar, t])
 
   /** Remove one node together with its attached edges and exposed-input metadata. */
   const handleRemoveNodeById = useCallback((nodeId: string) => {

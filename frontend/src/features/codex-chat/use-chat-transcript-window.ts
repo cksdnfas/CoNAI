@@ -25,6 +25,7 @@ export function useChatTranscriptWindow({ activeThreadId, messages, isTranscript
   const prependHeightRef = useRef<number | null>(null)
   const prependFirstRef = useRef<number | null>(null)
   const followBottomRef = useRef(true)
+  const [isAtBottom, setIsAtBottom] = useState(true)
   const [followRequest, setFollowRequest] = useState(0)
   const currentThreadRef = useRef(activeThreadId)
   useLayoutEffect(() => { currentThreadRef.current = activeThreadId }, [activeThreadId])
@@ -40,7 +41,7 @@ export function useChatTranscriptWindow({ activeThreadId, messages, isTranscript
     const node = scrollRef.current
     if (node) node.scrollTop = node.scrollHeight
   }, [])
-  const followLatest = () => { followBottomRef.current = true; setFollowRequest((current) => current + 1) }
+  const followLatest = () => { followBottomRef.current = true; setIsAtBottom(true); setFollowRequest((current) => current + 1) }
   // Wait for the sent message and the cleared composer's height to reach the DOM.
   useLayoutEffect(() => {
     if (followRequest > 0) scrollToBottom()
@@ -62,9 +63,11 @@ export function useChatTranscriptWindow({ activeThreadId, messages, isTranscript
     const saved = activeThreadId !== null ? readingPositions.get(activeThreadId) : undefined
     if (saved !== undefined && scrollRef.current) {
       followBottomRef.current = false
+      setIsAtBottom(false)
       scrollRef.current.scrollTop = saved.top
     } else {
       followBottomRef.current = true
+      setIsAtBottom(true)
       scrollToBottom()
     }
   }, [activeThreadId, isTranscript, scrollToBottom])
@@ -110,6 +113,7 @@ export function useChatTranscriptWindow({ activeThreadId, messages, isTranscript
     if (!node) return
     node.scrollIntoView({ block: 'center' })
     followBottomRef.current = false
+    setIsAtBottom(false)
     setHistoryWindow({ threadId: activeThreadId, firstId: messages[Math.max(0, messages.length - windowCount)]?.id ?? null })
     setFlashMessageId(messageFocus.messageId)
     clearMessageFocus()
@@ -121,9 +125,11 @@ export function useChatTranscriptWindow({ activeThreadId, messages, isTranscript
   }, [flashMessageId])
   const onTranscriptScroll = (event: UIEvent<HTMLDivElement>) => {
     const node = event.currentTarget
-    followBottomRef.current = node.scrollHeight - node.scrollTop - node.clientHeight < 100
+    const nearBottom = node.scrollHeight - node.scrollTop - node.clientHeight < 100
+    followBottomRef.current = nearBottom
+    setIsAtBottom(nearBottom)
     if (activeThreadId !== null) {
-      if (followBottomRef.current) readingPositions.delete(activeThreadId)
+      if (nearBottom) readingPositions.delete(activeThreadId)
       else {
         preserveHistory?.()
         readingPositions.set(activeThreadId, { top: node.scrollTop, firstId: visibleMessages[0]?.id ?? null })
@@ -131,5 +137,5 @@ export function useChatTranscriptWindow({ activeThreadId, messages, isTranscript
     }
     if (node.scrollTop < 80 && !earlierError) void showEarlierMessages()
   }
-  return { scrollRef, visibleMessages, flashMessageId, observeTranscript, showEarlierMessages, onTranscriptScroll, followLatest }
+  return { scrollRef, visibleMessages, flashMessageId, observeTranscript, showEarlierMessages, onTranscriptScroll, followLatest, isAtBottom }
 }

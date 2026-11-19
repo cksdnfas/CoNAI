@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type SyntheticEvent as ReactSyntheticEvent } from 'react'
-import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
 import type { ImageRecord } from '@/types/image'
 import { getImagePreviewStateLabel, resolveImagePreviewState } from '@/features/images/components/image-preview-state'
@@ -29,11 +28,11 @@ interface ImageDetailMediaProps {
   className?: string
   onPrimaryLoad?: () => void
   isRefreshing?: boolean
+  defaultWheelZoomEnabled?: boolean
 }
 
 /** Render the main detail media using the correct element for image, GIF, or video files. */
-export function ImageDetailMedia({ image, renderUrl, className, onPrimaryLoad, isRefreshing = false }: ImageDetailMediaProps) {
-  const { showSnackbar } = useSnackbar()
+export function ImageDetailMedia({ image, renderUrl, className, onPrimaryLoad, isRefreshing = false, defaultWheelZoomEnabled = false }: ImageDetailMediaProps) {
   const { t } = useI18n()
   const { preferredRenderMode, updatePreferredRenderMode } = useImageDetailRenderModePreference()
   const mediaKind = getImageListMediaKind(image)
@@ -64,13 +63,6 @@ export function ImageDetailMedia({ image, renderUrl, className, onPrimaryLoad, i
   const handleToggleRenderMode = () => {
     const nextMode = getNextImageDetailRenderMode(preferredRenderMode)
     updatePreferredRenderMode(nextMode)
-    showSnackbar({
-      message: t(
-        { ko: '{mode} 보기로 바꿨어.', en: 'Switched to {mode} view.' },
-        { mode: nextMode === 'original' ? t('images.components.detail.image.detail.utils.original') : t('images.components.detail.image.detail.utils.thumbnails') },
-      ),
-      tone: 'info',
-    })
   }
 
   if (mediaKind === 'video') {
@@ -87,6 +79,7 @@ export function ImageDetailMedia({ image, renderUrl, className, onPrimaryLoad, i
       canToggleRenderMode={canToggleRenderMode}
       onToggleRenderMode={handleToggleRenderMode}
       canUsePixelPreview
+      defaultWheelZoomEnabled={defaultWheelZoomEnabled}
       onPrimaryLoad={onPrimaryLoad}
     />
   )
@@ -123,6 +116,7 @@ function InteractiveImageDetailMedia({
   canToggleRenderMode,
   onToggleRenderMode,
   canUsePixelPreview,
+  defaultWheelZoomEnabled,
   onPrimaryLoad,
 }: {
   image: ImageRecord
@@ -133,6 +127,7 @@ function InteractiveImageDetailMedia({
   canToggleRenderMode: boolean
   onToggleRenderMode: () => void
   canUsePixelPreview: boolean
+  defaultWheelZoomEnabled: boolean
   onPrimaryLoad?: () => void
 }) {
   const { t } = useI18n()
@@ -156,7 +151,7 @@ function InteractiveImageDetailMedia({
     togglePixelPreviewEnabled,
     toggleWheelZoomEnabled,
     updatePixelPreviewSettings,
-  } = useImageDetailMediaPreferences()
+  } = useImageDetailMediaPreferences({ defaultWheelZoomEnabled })
   const {
     canZoomIn,
     canZoomOut,
@@ -178,7 +173,7 @@ function InteractiveImageDetailMedia({
     transformSummary,
     viewportRef,
     zoomBy,
-  } = useImageDetailMediaGestures({ isWheelZoomEnabled, renderUrl })
+  } = useImageDetailMediaGestures({ isWheelZoomEnabled, renderUrl, isModal: defaultWheelZoomEnabled })
   const [isPixelPreviewReady, setIsPixelPreviewReady] = useState(false)
   const pixelPreviewProfile = useMemo(() => getPixelPreviewProfile(pixelPreviewMode, pixelPreviewSettings), [pixelPreviewMode, pixelPreviewSettings])
   const activePixelPreviewSettings = pixelPreviewProfile ?? pixelPreviewSettings
@@ -260,7 +255,7 @@ function InteractiveImageDetailMedia({
           'relative z-0 flex h-full w-full items-center justify-center overflow-hidden select-none',
           isPannable ? 'cursor-grab active:cursor-grabbing' : isWheelZoomEnabled ? 'cursor-zoom-in' : 'cursor-default',
         )}
-        style={{ touchAction: isWheelZoomEnabled ? 'none' : 'pan-y', overscrollBehavior: isWheelZoomEnabled ? 'contain' : 'auto' }}
+        style={{ touchAction: isWheelZoomEnabled || isPannable ? 'none' : 'pan-y', overscrollBehavior: isWheelZoomEnabled ? 'contain' : 'auto' }}
         onDoubleClick={handleDoubleClick}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}

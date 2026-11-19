@@ -4,9 +4,10 @@ import type { ImageRecord } from '@/types/image'
 import type { WallpaperAnimationEasing, WallpaperAnimationEasingPreset, WallpaperImageHoverMotion, WallpaperImageTransitionSpeed } from './wallpaper-types'
 import { isWallpaperPlaybackRunning, useWallpaperPlayback } from './wallpaper-playback'
 
-/** Render one live clock string for the wallpaper clock widget. */
+/** Render one live clock string for the wallpaper clock widget; pauses when wallpaper playback is paused. */
 export function useWallpaperClockText() {
-  return new Date(useNow(1000, true))
+  const running = isWallpaperPlaybackRunning(useWallpaperPlayback())
+  return new Date(useNow(1000, running))
 }
 
 /**

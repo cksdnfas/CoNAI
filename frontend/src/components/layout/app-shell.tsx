@@ -109,13 +109,19 @@ function AppShellLayout() {
   return (
     // dvh, not vh: on phones 100vh also counts the browser toolbars, so full-height pages (the chat) would scroll by that much.
     <div className="min-h-dvh bg-background text-foreground">
-      <header className="theme-shell-header fixed inset-x-0 top-0 z-50">
+      <a
+        href="#app-main-content"
+        className="sr-only fixed top-2 left-2 z-toast rounded-sm bg-surface-high px-3 py-2 text-sm font-medium text-foreground shadow-elevation-2 focus:not-sr-only focus:outline-none focus-visible:ring-3 focus-visible:ring-ring/40"
+      >
+        {t({ ko: '본문으로 건너뛰기', en: 'Skip to main content' })}
+      </a>
+      <header className="theme-shell-header fixed inset-x-0 top-0 z-header">
         <div className="theme-shell-inner mx-auto flex w-full max-w-[1680px] items-center gap-3 sm:gap-4">
           <div className="flex min-w-0 flex-1 items-center gap-3 lg:gap-6">
             <Tip content={APP_BRAND_TOOLTIP} side="bottom" align="start">
               <NavLink
                 to={logoTarget}
-                className="flex shrink-0 items-center gap-3 rounded-sm transition-opacity hover:opacity-90"
+                className="flex shrink-0 items-center gap-3 rounded-sm outline-none transition-opacity hover:opacity-90 focus-visible:ring-3 focus-visible:ring-ring/40"
                 aria-label={t('appShell.availablePages')}
                 onMouseEnter={() => prefetchAppRoute(logoTarget)}
                 onFocus={() => prefetchAppRoute(logoTarget)}
@@ -178,7 +184,7 @@ function AppShellLayout() {
 
       {/* The docked chat panel takes the right edge from lg up; the page keeps the rest. */}
       <div className={cn(isCodexChatDockVisible && 'lg:pr-(--chat-dock-width)')}>
-        <main className="theme-shell-main mx-auto w-full max-w-[1680px]">
+        <main id="app-main-content" tabIndex={-1} className="theme-shell-main mx-auto w-full max-w-[1680px] outline-none">
           <Outlet />
         </main>
       </div>

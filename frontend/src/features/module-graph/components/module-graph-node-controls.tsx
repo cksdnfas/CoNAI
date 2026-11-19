@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useRef, useState, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type SyntheticEvent } from 'react'
 import { ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react'
 import { IconButton } from '@/components/ui/icon-button'
+import { Select } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import type { TypedFieldOption } from '@/features/shared-fields/typed-field-input'
 import { useI18n } from '@/i18n'
@@ -102,14 +103,14 @@ export function NodeSelectControl({
     return (
       <span className={cn('flex min-w-0 items-center justify-end', className)} onMouseDown={stopNodeEvent} onPointerDown={stopNodeEvent}>
         <WidgetStepButton direction={-1} label={ariaLabel} onStep={() => step(-1)} disabled={cycle.length < 2} />
-        <select
+        <Select
+          variant="nodeWidget"
           aria-label={ariaLabel}
           value={current}
           onChange={(event) => onChange(event.target.value)}
-          className={cn(NODE_WIDGET_CONTROL_CLASS, 'max-w-full cursor-pointer appearance-none truncate [&_option]:bg-surface-high [&_option]:text-left')}
         >
           {optionElements}
-        </select>
+        </Select>
         <WidgetStepButton direction={1} label={ariaLabel} onStep={() => step(1)} disabled={cycle.length < 2} />
       </span>
     )
@@ -117,14 +118,14 @@ export function NodeSelectControl({
 
   return (
     <span className={cn('relative inline-flex min-w-0', className)} onMouseDown={stopNodeEvent} onPointerDown={stopNodeEvent}>
-      <select
+      <Select
+        variant="node"
         aria-label={ariaLabel}
         value={current}
         onChange={(event) => onChange(event.target.value)}
-        className={cn(NODE_CONTROL_CLASS, 'w-full appearance-none truncate pr-5')}
       >
         {optionElements}
-      </select>
+      </Select>
       <ChevronDown className="pointer-events-none absolute top-1/2 right-1 size-3 -translate-y-1/2 text-muted-foreground" aria-hidden />
     </span>
   )
