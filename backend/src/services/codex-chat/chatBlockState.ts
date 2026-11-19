@@ -233,6 +233,7 @@ const STATE_READING_TEXT = [
   '- Values are the present mood and situation. A low or zero value does not mean there is no shared past or relationship: what memories, summaries or lore record still happened, and the values say how it feels now.',
   '- Read each field on its own; one value does not change the meaning of another field.',
 ].join('\n')
+const STATE_VALUES_ONLY_TEXT = 'Values only: the reading guidance and rules given earlier still apply.'
 
 /**
  * The state as the model reads it each request (inside `[Reference]`, beside the author's note): current values per
@@ -243,14 +244,28 @@ export function blockStateText(blocks: ChatDisplayBlock[], state: Record<string,
   return content ? ['## Current state', STATE_READING_TEXT, content].join('\n') : ''
 }
 
-/** Public state values and rules, without the model's fixed instructions. */
-export function blockStateContentText(blocks: ChatDisplayBlock[], state: Record<string, BlockData>) {
+/** The current values alone, for a session that keeps the reading text and rules it was given (blockStateRulesText). */
+export function blockStateValuesText(blocks: ChatDisplayBlock[], state: Record<string, BlockData>) {
+  const content = blockStateContentText(blocks, state, false)
+  return content ? ['## Current state', STATE_VALUES_ONLY_TEXT, content].join('\n') : ''
+}
+
+/** What blockStateText gives besides the values: the reading text, the blocks in order and their rules. */
+export function blockStateRulesText(blocks: ChatDisplayBlock[]) {
+  return [STATE_READING_TEXT, ...usableBlocks(blocks).map((block) => [`### ${block.key}`, ...blockRuleLines(block)].filter(Boolean).join('\n'))].join('\n')
+}
+
+function blockRuleLines(block: ChatDisplayBlock) {
+  return [block.rules ? `Rules: ${block.rules}` : '', ...fieldRuleLines(block).map((line) => `Field rule: ${line}`)]
+}
+
+/** Public state values and rules (`rules: false`: values only), without the model's fixed instructions. */
+export function blockStateContentText(blocks: ChatDisplayBlock[], state: Record<string, BlockData>, rules = true) {
   const parts = usableBlocks(blocks).map((block) => [
     `### ${block.key}`,
     JSON.stringify(state[block.key] ?? {}),
     chatBlockToneText(block.fields, state[block.key] ?? {}) ? `Tone: ${chatBlockToneText(block.fields, state[block.key] ?? {})}` : '',
-    block.rules ? `Rules: ${block.rules}` : '',
-    ...fieldRuleLines(block).map((line) => `Field rule: ${line}`),
+    ...(rules ? blockRuleLines(block) : []),
   ].filter(Boolean).join('\n'))
   return parts.join('\n')
 }

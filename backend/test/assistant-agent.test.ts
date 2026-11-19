@@ -462,6 +462,35 @@ test('assistant agent: proposal outcomes, page operation records, task plan and 
     } finally { ChatTaskRunner.cancel(thread); stop(); await bridge.close() }
   })
 
+  await t.test('a waiting task is released by the periodic check when its job ends without an event', async (sub) => {
+    const scheduled = sub.mock.method(ChatTaskRunner, 'schedule', () => {})
+    const { RuntimeJobStore } = await import('../src/services/runtimeJobs/runtimeJobStore')
+    const db = dbModule.getUserSettingsDb()
+    // The check's timer starts with a wait; a fresh start drops one an earlier wait left on the real clock.
+    ChatTaskRunner.stop()
+    sub.mock.timers.enable({ apis: ['setInterval'] })
+    ChatTaskRunner.start()
+    const thread = CodexChatStore.createThread(null, 'silent job end', 'llm', profile.id)
+    const context = { ...reply('silent-job'), threadId: thread }
+    const task = ChatTaskStore.create(thread, '조용히 끝난 작업', [{ title: '체인' }])
+    ChatTaskRunner.approve(task.id)
+    const stop = registerChatReply(context, controller.signal, () => ({ replyTo: null, recipients: ['user'] }))
+    const bridge = await openChatMcpBridge({ accountId: null, accountType: 'admin' }, ['read', 'configure'], null, { chatContext: context })
+    try {
+      const job = RuntimeJobStore.create({ kind: 'plugin-task', requestedByAccountId: null, singletonKey: null })
+      assert.ok(RuntimeJobStore.markRunning(job.jobId, 'subprocess'))
+      assert.ok(!(await bridge.call('task_wait', { for: 'job', reason: '체인', runtime_job_ids: [job.jobId] })).isError)
+      // Its worker went quiet: the store's sweep closes the job and nothing in this process announces it.
+      db.prepare("UPDATE runtime_jobs SET heartbeat_at = datetime('now', '-10 minutes') WHERE job_id = ?").run(job.jobId)
+      assert.ok(RuntimeJobStore.sweepStaleJobs().includes(job.jobId))
+      assert.equal(ChatTaskStore.find(task.id)?.status, 'waiting')
+      const before = scheduled.mock.callCount()
+      sub.mock.timers.tick(60_000)
+      assert.equal(ChatTaskStore.find(task.id)?.status, 'running', 'the stored outcome releases the wait without a restart')
+      assert.equal(scheduled.mock.callCount(), before + 1)
+    } finally { ChatTaskRunner.cancel(thread); ChatTaskRunner.stop(); sub.mock.timers.reset(); ChatTaskRunner.start(); stop(); await bridge.close() }
+  })
+
   await t.test('model task tools and pending continuations preserve the person’s pause', async (sub) => {
     sub.mock.method(ChatTaskRunner, 'schedule', () => {})
     const sent = sub.mock.method(CodexChatService, 'sendMessage', async () => {})

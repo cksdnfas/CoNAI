@@ -17,6 +17,7 @@ import { registerPluginTools } from './tools/pluginTools';
 import { registerPluginAuthoringTools } from './tools/pluginAuthoringTools';
 import { registerWorkspaceTools } from './tools/workspaceTools';
 import { chatWorkspaces } from '../services/codex-chat/chatWorkspace';
+import { chatMcpRequester } from '../services/codex-chat/chatProfilePermissions';
 import { registerChatLinkedFileTools } from './tools/chatLinkedFileTools';
 import { registerChatSkillTools } from './tools/chatSkillTools';
 import { registerChatSettingsTools } from './tools/chatSettingsTools';
@@ -64,7 +65,7 @@ const pluginToolRegistrars = new Map<string, ToolRegistrar>();
  * Stateless 방식에서는 요청마다 새 인스턴스를 생성한다.
  */
 export function createMcpServer(context: McpRequestContext = { scopes: ALL_MCP_HTTP_SCOPES }): McpServer {
-  context = { ...context, workspace: context.source === 'plugin' ? context.workspace : undefined, workspaces: isChatMcpSource(context.source) ? context.workspaces ?? chatWorkspaces(context.requester, context.chatContext?.threadId, context.chatContext?.profileId) : undefined };
+  context = { ...context, workspace: context.source === 'plugin' ? context.workspace : undefined, workspaces: isChatMcpSource(context.source) ? context.workspaces ?? chatWorkspaces(chatMcpRequester(context), context.chatContext?.threadId, context.chatContext?.profileId) : undefined };
   const server = new McpServer({
     name: 'conai',
     version: '2.1.0',

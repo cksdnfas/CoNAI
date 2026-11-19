@@ -29,6 +29,7 @@ import { SidebarGroupLabel, SidebarItem, SidebarNav } from '@/components/ui/side
 import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import type { AudioFolder, AudioGroup, AudioGroupFilter, AudioProject } from '@/lib/api-audio'
+import { useDropTarget } from '@/lib/use-drop-target'
 import { cn } from '@/lib/utils'
 import { audioDragType, readAudioDrag } from './audio-candidate-list'
 
@@ -125,7 +126,6 @@ export function AudioSidebar({
   const { t } = useI18n()
   const [draft, setDraft] = useState<Draft | null>(null)
   const [text, setText] = useState('')
-  const [dropTarget, setDropTarget] = useState<string | null>(null)
   const filters: Array<[AudioSidebarFilter, string]> = [[null, t({ ko: '전체', en: 'All' })], ['unselected', t({ ko: '채택 없는 효과음', en: 'No adopted take' })], ['pending_comments', t({ ko: '코멘트 대기', en: 'Open comments' })]]
 
   const startDraft = (next: Draft, initial = '') => {
@@ -171,21 +171,6 @@ export function AudioSidebar({
     </div>
   )
 
-  /** Takes dragged from the list go to an effect of the same project; files go to the effect, or the project's 받은 파일. */
-  const dropProps = (key: string, accepts: (event: DragEvent) => boolean, onDrop: (event: DragEvent) => void) => ({
-    onDragOver: (event: DragEvent) => {
-      if (!accepts(event)) return
-      event.preventDefault()
-      setDropTarget(key)
-    },
-    onDragLeave: () => setDropTarget((current) => (current === key ? null : current)),
-    onDrop: (event: DragEvent) => {
-      setDropTarget(null)
-      if (!accepts(event)) return
-      event.preventDefault()
-      onDrop(event)
-    },
-  })
   const hasFiles = (event: DragEvent) => canEdit && event.dataTransfer.types.includes('Files')
   const hasEffect = (event: DragEvent) => canEdit && event.dataTransfer.types.includes(EFFECT_DRAG_TYPE)
   const draggedEffect = (event: DragEvent) => groups.find((entry) => entry.id === event.dataTransfer.getData(EFFECT_DRAG_TYPE)) ?? null
@@ -195,6 +180,45 @@ export function AudioSidebar({
     if (dragged && dragged.folder_id !== folderId) onMoveGroup(dragged, folderId)
   }
 
+  /**
+   * What a drag must carry to land on the row with this drop id, and what the drop does. Takes dragged from the list go
+   * to an effect of the same project; files go to the effect, or the project's 받은 파일.
+   */
+  const dropTargetFor = (key: string): { accepts: (event: DragEvent) => boolean; drop: (event: DragEvent) => void } | null => {
+    if (key === 'project') {
+      return project ? { accepts: hasFiles, drop: (event) => onDropFiles({ projectId: project.id }, Array.from(event.dataTransfer.files)) } : null
+    }
+    if (key === 'loose') return { accepts: hasEffect, drop: (event) => moveDragged(event, null) }
+    if (key.startsWith('folder:')) {
+      const folderId = key.slice('folder:'.length)
+      return {
+        accepts: hasEffect,
+        drop: (event) => {
+          moveDragged(event, folderId)
+          onToggleFolder(folderId, true)
+        },
+      }
+    }
+
+    const sortable = !searchResults
+    const group = (searchResults ? Object.values(searchResults).flatMap((entries) => entries ?? []) : groups).find((entry) => entry.id === key)
+    if (!group) return null
+    if (group.is_inbox) return { accepts: hasFiles, drop: (event) => onDropFiles({ groupId: group.id }, Array.from(event.dataTransfer.files)) }
+    return {
+      accepts: (event) => hasFiles(event) || (sortable && hasEffect(event)) || (canEdit && group.id !== activeGroupId && event.dataTransfer.types.includes(audioDragType(group.project_id))),
+      drop: (event) => {
+        if (event.dataTransfer.types.includes(EFFECT_DRAG_TYPE)) return moveDragged(event, group.folder_id)
+        const ids = readAudioDrag(event, group.project_id)
+        if (ids.length > 0) onDropCandidates(group, ids)
+        else onDropFiles({ groupId: group.id }, Array.from(event.dataTransfer.files))
+      },
+    }
+  }
+  const drop = useDropTarget({
+    accepts: (key, event) => dropTargetFor(key)?.accepts(event) ?? false,
+    onDrop: (key, event) => dropTargetFor(key)?.drop(event),
+  })
+
   const effectRow = (group: AudioGroup, depth: number, sortable: boolean) => {
     const tip = [group.description, group.label ? t({ ko: '내보낼 파일명: {label}', en: 'Export file name: {label}' }, { label: group.label }) : ''].filter(Boolean).join('\n')
     return (
@@ -203,7 +227,7 @@ export function AudioSidebar({
           depth={depth}
           icon={<AudioWaveform className="size-3.5 text-muted-foreground/75" />}
           active={group.id === activeGroupId}
-          data-drop-target={dropTarget === group.id ? 'true' : undefined}
+          {...drop.getTargetAttributes(group.id)}
           label={group.name}
           count={<EffectCounts group={group} />}
           onClick={() => onSelectGroup(group)}
@@ -212,16 +236,6 @@ export function AudioSidebar({
             event.dataTransfer.setData(EFFECT_DRAG_TYPE, group.id)
             event.dataTransfer.effectAllowed = 'move'
           } : undefined}
-          {...dropProps(
-            group.id,
-            (event) => hasFiles(event) || (sortable && hasEffect(event)) || (canEdit && group.id !== activeGroupId && event.dataTransfer.types.includes(audioDragType(group.project_id))),
-            (event) => {
-              if (event.dataTransfer.types.includes(EFFECT_DRAG_TYPE)) return moveDragged(event, group.folder_id)
-              const ids = readAudioDrag(event, group.project_id)
-              if (ids.length > 0) onDropCandidates(group, ids)
-              else onDropFiles({ groupId: group.id }, Array.from(event.dataTransfer.files))
-            },
-          )}
         />
       </Tip>
     )
@@ -234,7 +248,7 @@ export function AudioSidebar({
   const loose = effects.filter((group) => !group.folder_id || !folderIds.has(group.folder_id))
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-3" {...drop.containerProps}>
       {project ? (
         <div className="flex items-center gap-0.5">
           <DropdownMenu>
@@ -244,8 +258,7 @@ export function AudioSidebar({
                 size="lg"
                 aria-label={t({ ko: '프로젝트', en: 'Project' })}
                 className="min-w-0 flex-1 justify-start text-left"
-                data-drop-target={dropTarget === 'project' ? 'true' : undefined}
-                {...dropProps('project', hasFiles, (event) => onDropFiles({ projectId: project.id }, Array.from(event.dataTransfer.files)))}
+                {...drop.getTargetAttributes('project')}
               >
                 {project.name === GENERATION_TAB_PROJECT ? <Wand className="size-3.5 shrink-0 text-muted-foreground" aria-hidden /> : null}
                 <span className="min-w-0 flex-1 truncate">{project.name}</span>
@@ -326,11 +339,10 @@ export function AudioSidebar({
               <SidebarItem
                 icon={Inbox}
                 active={inbox.id === activeGroupId}
-                data-drop-target={dropTarget === inbox.id ? 'true' : undefined}
+                {...drop.getTargetAttributes(inbox.id)}
                 label={t({ ko: '받은 파일', en: 'Inbox' })}
                 count={inbox.candidate_count}
                 onClick={() => onSelectGroup(inbox)}
-                {...dropProps(inbox.id, hasFiles, (event) => onDropFiles({ groupId: inbox.id }, Array.from(event.dataTransfer.files)))}
               />
             ) : null}
             {canEdit && draft?.kind === 'folder' ? draftInput(0, t({ ko: '그룹 이름', en: 'Group name' })) : null}
@@ -350,7 +362,7 @@ export function AudioSidebar({
                     ]}
                   >
                     <SidebarItem
-                      data-drop-target={dropTarget === `folder:${folder.id}` ? 'true' : undefined}
+                      {...drop.getTargetAttributes(`folder:${folder.id}`)}
                       icon={<ChevronRight className={cn('size-4 text-muted-foreground transition-transform', open && 'rotate-90')} />}
                       aria-expanded={open}
                       label={(
@@ -361,10 +373,6 @@ export function AudioSidebar({
                       )}
                       count={folder.group_count}
                       onClick={(event) => { event.preventDefault(); onToggleFolder(folder.id) }}
-                      {...dropProps(`folder:${folder.id}`, hasEffect, (event) => {
-                        moveDragged(event, folder.id)
-                        onToggleFolder(folder.id, true)
-                      })}
                     />
                   </ActionContextMenu>
                   {open ? (
@@ -383,10 +391,9 @@ export function AudioSidebar({
                 <SidebarItem
                   icon={Plus}
                   className="min-w-0 flex-1"
-                  data-drop-target={dropTarget === 'loose' ? 'true' : undefined}
+                  {...drop.getTargetAttributes('loose')}
                   label={t({ ko: '효과음 추가', en: 'Add effect' })}
                   onClick={() => startDraft({ kind: 'effect', folderId: null })}
-                  {...dropProps('loose', hasEffect, (event) => moveDragged(event, null))}
                 />
                 <IconButton variant="ghost" size="icon-sm" label={t({ ko: '그룹 추가', en: 'Add group' })} onClick={() => startDraft({ kind: 'folder' })}><FolderPlus /></IconButton>
               </div>

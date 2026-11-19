@@ -5,6 +5,7 @@ import type { ActionMenuEntry } from '@/components/ui/action-menu'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
+import type { DropTarget } from '@/lib/use-drop-target'
 import { getGroupHierarchyCountDescription, getGroupHierarchyCountLabel, type GroupCountMaps } from '@/features/groups/group-count-utils'
 import type { GroupWithHierarchy } from '@/types/group'
 import { GroupColorDot } from './group-color-dot'
@@ -15,17 +16,14 @@ interface GroupTreeProps {
   selectedGroupId?: number
   /** Case-insensitive name filter; matches keep their ancestors so the path stays visible. */
   filterText?: string
-  /** Group row currently hovered by an image drag. */
-  dropTargetId?: number | null
+  /** Delegated drop hook of the surrounding container: rows get its target id (the group id) and drop-target look. */
+  dropTarget?: DropTarget
   onSelectGroup: (groupId: number) => void
   /** A row's actions (e.g. "insert this group"), opened by right-click / long-press on the row. */
   getGroupMenu?: (group: GroupWithHierarchy) => ActionMenuEntry[]
   /** Groups already picked by the caller (e.g. inserted into a post), marked with a check. */
   pickedGroupIds?: ReadonlySet<number>
 }
-
-/** Attribute the sidebar's delegated drag-and-drop reads to find the hovered group row. */
-export const GROUP_DROP_ID_ATTRIBUTE = 'data-group-drop-id'
 
 const EMPTY_IDS: number[] = []
 
@@ -73,7 +71,7 @@ export function filterGroupsByName(groups: GroupWithHierarchy[], filterText: str
   }
 }
 
-export function GroupTree({ groups, countMaps, selectedGroupId, filterText = '', dropTargetId = null, onSelectGroup, getGroupMenu, pickedGroupIds }: GroupTreeProps) {
+export function GroupTree({ groups, countMaps, selectedGroupId, filterText = '', dropTarget, onSelectGroup, getGroupMenu, pickedGroupIds }: GroupTreeProps) {
   const { formatNumber, t } = useI18n()
   const { visibleGroups, expandedIds } = useMemo(() => filterGroupsByName(groups, filterText), [filterText, groups])
 
@@ -95,11 +93,6 @@ export function GroupTree({ groups, countMaps, selectedGroupId, filterText = '',
     )
   }, [countMaps, formatNumber, pickedGroupIds, t])
 
-  const getItemDataAttributes = useCallback((group: GroupWithHierarchy) => ({
-    [GROUP_DROP_ID_ATTRIBUTE]: String(group.id),
-    'data-drop-target': dropTargetId === group.id ? 'true' : undefined,
-  }), [dropTargetId])
-
   if (visibleGroups.length === 0 && filterText.trim()) {
     return <EmptyState size="compact" title={t({ ko: '맞는 그룹이 없어', en: 'No matching groups' })} />
   }
@@ -116,7 +109,8 @@ export function GroupTree({ groups, countMaps, selectedGroupId, filterText = '',
       getLabel={getLabel}
       sortItems={sortGroupsByName}
       renderIcon={renderGroupIcon}
-      getItemDataAttributes={getItemDataAttributes}
+      expandOnDragHover={Boolean(dropTarget)}
+      getItemDataAttributes={(group) => dropTarget?.getTargetAttributes(String(group.id)) ?? {}}
       getItemMenu={getGroupMenu}
     />
   )

@@ -124,13 +124,14 @@ export const ChatUserProfileStore = {
     })()
   },
 
-  /** Chats that used the profile go back to the plain user. */
+  /** Chats that used the profile go back to the plain user; chat profiles it wrote suggestions for fall back to their role. */
   delete(accountId: number | null, profileId: number) {
     const db = getUserSettingsDb()
     db.transaction(() => {
       const result = db.prepare('DELETE FROM chat_user_profiles WHERE id = ? AND account_id IS ?').run(profileId, accountId)
       if (!result.changes) throw new ChatUserProfileError('사용자 프로필을 찾을 수 없어.', 404)
       db.prepare('UPDATE codex_chat_threads SET user_profile_id = NULL WHERE user_profile_id = ? AND account_id IS ?').run(profileId, accountId)
+      db.prepare('UPDATE llm_chat_profiles SET suggest_user_profile_id = NULL, updated_date = CURRENT_TIMESTAMP WHERE suggest_user_profile_id = ?').run(profileId)
     })()
   },
 

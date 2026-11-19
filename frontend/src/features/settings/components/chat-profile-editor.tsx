@@ -1,5 +1,7 @@
 import { useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, type Dispatch, type ReactNode, type Ref, type SetStateAction } from 'react'
 import { chatDraftEqual } from '@/features/codex-chat/chat-draft-equal'
+import { refetchActiveChatQuery, scheduleChatDirectoryRefresh } from '@/features/codex-chat/chat-query-refresh'
+import { codexChatThreadQueryKey } from '@/features/codex-chat/codex-chat-context'
 import { useLocation, useNavigate, useSearchParams, type Location } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { BookOpen, ChevronDown, ChevronLeft, ChevronRight, Copy, Eye, FileText, FolderInput, Image as ImageIcon, Palette, Sparkles, Trash2, TriangleAlert, UserRound, Wrench } from 'lucide-react'
@@ -56,6 +58,8 @@ import {
   listChatUserProfiles,
   listModelSlots,
   updateChatProfile,
+  getChatProfileEngineUsage,
+  CHAT_ENGINE_LABELS,
   type ChatProfile,
   type ChatAssetApplyResult,
   type ChatAssetKind,
@@ -847,8 +851,22 @@ function ProfileEditor({ open, profile, setProfile, draft, setDraft, dirty: prof
   const defaultSlot = slots.find((slot) => slot.isDefault) ?? null
   const saveMutation = useMutation({
     // Synced: the setting's changed look is stored first (a conflict stops here with both drafts kept), then the
-    // profile without the look's fields.
-    mutationFn: async () => {
+    // profile without the look's fields. `confirmEngine`: the person's own save asks before converting chats; a
+    // connected chat's save already went through its review card. A declined confirmation resolves null, saving nothing.
+    mutationFn: async (confirmEngine: boolean) => {
+      if (confirmEngine && profile && draft.engine !== profile.engine) {
+        const { directChats, rooms } = await getChatProfileEngineUsage(profile.id)
+        if ((directChats > 0 || rooms > 0) && !await confirm({
+          title: t({ ko: '엔진을 바꿀까?', en: 'Change the engine?' }),
+          description: t({
+            ko: '이 프로필을 쓰는 1:1 대화 {direct}개와 그룹 방 {rooms}개가 {to} 엔진으로 전환돼. 메시지와 요약은 남고, 이전 엔진의 세션 기억과 채팅별 모델 지정은 지워져서 되돌릴 수 없어.',
+            en: "{direct} direct chats and {rooms} rooms using this profile will switch to {to}. Messages and summaries stay; the previous engine's session memory and per-chat model choices are removed and cannot be restored.",
+          }, { direct: directChats, rooms, to: t(CHAT_ENGINE_LABELS[draft.engine]) })
+            + (draft.engine === 'llm' ? t({ ko: ' API LLM으로 바꾸면 1:1 대화는 최근 대화만 이어받고, 엔진을 다시 되돌려도 이전 상태로 돌아가지 않아.', en: ' With API LLM, direct chats carry over only the recent conversation, and switching the engine back does not restore the earlier state.' }) : ''),
+          confirmLabel: t({ ko: '전환하고 저장', en: 'Switch and save' }),
+          tone: 'destructive',
+        })) return null
+      }
       let submitted = draft
       const sourceLocation = pageLocation
       const pendingCreation = profile ? null : creatingRef.current
@@ -888,11 +906,18 @@ function ProfileEditor({ open, profile, setProfile, draft, setDraft, dirty: prof
       }
       return { savedProfile, submitted, sourceLocation, sourceBase }
     },
-    onSuccess: async ({ savedProfile, submitted, sourceLocation, sourceBase }) => {
+    onSuccess: async (result) => {
+      if (!result) return
+      const { savedProfile, submitted, sourceLocation, sourceBase } = result
       const previous = profile?.lorebookIds ?? []
       // Lorebooks list their profiles by name: a link change or a rename of a linked profile refreshes them.
       await refreshProfiles(savedProfile.lorebookIds.length !== previous.length || savedProfile.lorebookIds.some((id) => !previous.includes(id))
         || (previous.length > 0 && savedProfile.name !== profile?.name))
+      // A changed engine converts the profile's chats on the server: open chats read their new engine and notice.
+      if (sourceBase && sourceBase.engine !== savedProfile.engine) {
+        void scheduleChatDirectoryRefresh(queryClient)
+        for (const { queryKey } of queryClient.getQueryCache().findAll({ predicate: (query) => query.queryKey[0] === codexChatThreadQueryKey(null)[0] })) void refetchActiveChatQuery(queryClient, queryKey)
+      }
       if (!mounted.current || !isCurrentPage(sourceLocation, savedProfile.id)) return
       showSnackbar({ message: t({ ko: '저장했어.', en: 'Saved.' }), tone: 'info' })
       if (!routed && !stayOpen && JSON.stringify(draftRef.current) === JSON.stringify(submitted) && !settingDirtyRef.current) { onClose(); return }
@@ -972,7 +997,7 @@ function ProfileEditor({ open, profile, setProfile, draft, setDraft, dirty: prof
     return () => onBusyChange(false)
   }, [busy, onBusyChange])
   useImperativeHandle(ref, () => ({
-    save: () => { if (canSave) saveMutation.mutate() },
+    save: () => { if (canSave) saveMutation.mutate(true) },
     preview: () => setPreviewDraft({ ...draft, id: profile?.id }),
     copy: () => { if (!busy && profile) copyMutation.mutate() },
     move: () => { if (!busy) setMoving(true) },
@@ -994,7 +1019,7 @@ function ProfileEditor({ open, profile, setProfile, draft, setDraft, dirty: prof
   // A connected chat reads and fills this draft, opens sections, and asks (by card) to save or generate images.
   const assist = useProfileEditorChatPage({
     open, profile, draft, setDraft, dirty, section, go, slots,
-    lorebooks: linkableLorebooks, blocks: blocksQuery.data, skills: skillsQuery.data, runs, link, save: () => saveMutation.mutateAsync(),
+    lorebooks: linkableLorebooks, blocks: blocksQuery.data, skills: skillsQuery.data, runs, link, save: () => saveMutation.mutateAsync(false),
   })
   const mark = (entry: (typeof sections)[number]) => entry.incomplete
     ? <><span aria-hidden="true" className="size-1.5 rounded-full bg-primary" /><span className="sr-only">{incompleteLabel}</span></>
@@ -1062,7 +1087,7 @@ function ProfileEditor({ open, profile, setProfile, draft, setDraft, dirty: prof
       </div>
       </ModalBody>
       </ProfileAssistContext.Provider>
-      <EditorFooter onSave={() => saveMutation.mutate()} canSave={canSave && (dirty || !profile)} saving={saveMutation.isPending} onRevert={() => void handleRevert()} canRevert={dirty && !busy}>
+      <EditorFooter onSave={() => saveMutation.mutate(true)} canSave={canSave && (dirty || !profile)} saving={saveMutation.isPending} onRevert={() => void handleRevert()} canRevert={dirty && !busy}>
         {nameMissing ? <span className="text-xs text-muted-foreground">{t({ ko: '이름을 적어야 저장할 수 있어', en: 'Needs a name to save' })}</span>
           : connectionMissing ? <span className="text-xs text-muted-foreground">{t({ ko: '모델을 골라야 저장할 수 있어', en: 'Needs a model to save' })}</span> : null}
       </EditorFooter>

@@ -3,7 +3,7 @@ import { chatExecutionRoot } from './chatExecutionRoot'
 import { finishKnowledgeExecution, knowledgeExecutionFromChat } from '../posts/knowledge/knowledgeRuntime'
 import { beginKnowledgeOrderTask } from '../posts/knowledge/knowledgeTaskObservations'
 import type { ChatExecutionContext } from '@conai/shared'
-import { isChatOwnTool, type McpRequester } from '../../mcp/context'
+import type { McpRequester } from '../../mcp/context'
 import { inlineTextsForChat, loadAttachedImages } from './chatAttachments'
 import { chatProfileRequester } from './chatProfilePermissions'
 import { ChatFlagError } from './chatFlags'
@@ -19,10 +19,11 @@ import { userPersonaForThread } from './chatUserProfiles'
 import { canUseChatProfile, resolveChatAccess } from './codexChatAccess'
 import { withGenerationOutcomes } from './codexChatMedia'
 import { CodexChatError, CodexChatService, runCodexOrderTurn, type CodexChatStreamEvent } from './codexChatService'
-import { CodexChatStore, type CodexChatMessageRecord, type CodexChatThreadRecord } from './codexChatStore'
-import { buildGroupLlmMessages, groupSummaryOn, withoutStaleWakes } from './groupChatContext'
+import { CodexChatStore, type ChatHistorySource, type CodexChatMessageRecord, type CodexChatThreadRecord } from './codexChatStore'
+import { readReplyHistory } from './chatJudge'
+import { buildGroupLlmMessages, groupSummaryOn, readGroupReplyHistory, withoutStaleWakes } from './groupChatContext'
 import { GroupChatService } from './groupChatService'
-import { appendUserDirective, buildChatMessages, directContextTurns, resolveContextConfig, sendableMessages, splitTurns, unsummarizedMessages } from './llmChatContext'
+import { appendUserDirective, buildChatMessages, directContextTurns, resolveContextConfig, sendableMessages, splitTurns, toolGuidanceFor, unsummarizedMessages } from './llmChatContext'
 import { runLlmOrderTurn, type GroupReplyResult } from './llmChatService'
 import { withServerContextLimit } from './serverContextLimit'
 
@@ -87,15 +88,19 @@ export async function runChatOrder(requester: McpRequester, threadId: number, me
     const emit = (event: CodexChatStreamEvent) => { if (event.type === 'tool') listener(event) }
     const directive = chatOrderDirective(kind, messageId)
     // The conversation as it stood at the reply. A summary that already covers the reply would tell what came after.
-    // Historical orders still need an as-of-target prefix for lore timers, quotes and state; never read future rows.
-    // Alternatives and activation metadata remain necessary for these legacy in-memory consumers.
-    const history = withGenerationOutcomes(CodexChatStore.listMessages(threadId, { before: messageId + 1 }).map((message) => message.id === target.id ? target : message))
+    // `source` ends at the reply, so no later row is read. Only the messages the request can show are loaded; lore
+    // timers, quotes, state and a room's turn positions come through `source`, as for the chat's own replies.
+    const source: ChatHistorySource = { threadId, untilMessageId: messageId }
+    const asOfReply = (messages: CodexChatMessageRecord[]) => withGenerationOutcomes(messages.map((message) => message.id === target.id ? target : message))
     const summarized = (thread.summary_until_message_id ?? 0) >= messageId
     const group = thread.kind === 'group'
     let result: GroupReplyResult
     if (profile.engine === 'codex') {
-      const sendable = sendableMessages(history)
-      const window = group ? sendable.slice(-groupLimitsOf(thread).window) : splitTurns(sendable).slice(-resolveContextConfig(thread, profile).contextTurns).flat()
+      // Codex reads its window alone (its lore and state too): positions pick it, then just those rows are read.
+      const sendable = CodexChatStore.listHistoryOutline(source).filter((message) => message.sendable)
+      const shown = group ? sendable.slice(-groupLimitsOf(thread).window) : splitTurns(sendable).slice(-resolveContextConfig(thread, profile).contextTurns).flat()
+      const ids = new Set(shown.map((message) => message.id))
+      const window = shown.length ? asOfReply(CodexChatStore.listMessages(threadId, { after: shown[0].id - 1, before: messageId + 1 }).filter((message) => ids.has(message.id))) : []
       const user = userPersonaForThread(thread)
       const nameOf = (message: CodexChatMessageRecord) => message.role === 'user' ? user.name : (group && message.speaker_profile_id ? ChatProfileStore.find(message.speaker_profile_id)?.name : profile.name) ?? '(나간 참가자)'
       const summary = !summarized && thread.summary?.trim() ? `## Summary of what came before\n${thread.summary.trim()}` : ''
@@ -108,6 +113,8 @@ export async function runChatOrder(requester: McpRequester, threadId: number, me
       const sized = group ? profile : withServerContextLimit(profile)
       const config = resolveContextConfig(thread, sized)
       if (summarized) config.summaryEnabled = false
+      const bounded = group ? readGroupReplyHistory(thread, profile, source) : null
+      const history = asOfReply(bounded?.messages ?? readReplyHistory(sized, source, Number.MAX_SAFE_INTEGER, config.contextTurns))
       const candidates = group
         ? withoutStaleWakes(sendableMessages(unsummarizedMessages(history, room, { summaryEnabled: groupSummaryOn(room) }))).slice(-groupLimitsOf(thread).window)
         : directContextTurns(history, thread, config).flat()
@@ -121,17 +128,17 @@ export async function runChatOrder(requester: McpRequester, threadId: number, me
         const maxTokens = ChatGroupStore.member(threadId, profile.id)?.max_tokens ?? thread.max_tokens ?? profile.maxTokens
         result = await runLlmOrderTurn({
           chatContext: context, requester, threadId, profile, signal: run.signal, emit, done, generation: { maxTokens },
-          buildMessages: (tools) => appendUserDirective(buildGroupLlmMessages({
-            profile, thread: room, members, messages: history, routing: target.routing ?? undefined, windowLimit: groupLimitsOf(thread).window, tools, maxTokens,
-            withTools: tools.some((tool) => !isChatOwnTool(tool.function.name)), segments: groupSummaryOn(room) ? ChatSummaryStore.list(threadId) : undefined,
+          buildMessages: (tools, _onMeta, _judged, _useSession, catalogued) => appendUserDirective(buildGroupLlmMessages({
+            profile, thread: room, members, messages: history, history: bounded?.history, routing: target.routing ?? undefined, windowLimit: groupLimitsOf(thread).window, tools, maxTokens,
+            withTools: toolGuidanceFor(tools, catalogued), segments: groupSummaryOn(room) ? ChatSummaryStore.list(threadId) : undefined,
             attachmentTexts, attachedImages,
           }), directive),
         })
       } else {
         result = await runLlmOrderTurn({
           chatContext: context, requester, threadId, profile: sized, signal: run.signal, emit, done, generation: { maxTokens: config.maxTokens },
-          buildMessages: (tools) => appendUserDirective(buildChatMessages({
-            profile: sized, thread, messages: history, config, tools, segments: config.summaryEnabled ? ChatSummaryStore.list(threadId) : [],
+          buildMessages: (tools, _onMeta, _judged, _useSession, catalogued) => appendUserDirective(buildChatMessages({
+            profile: sized, thread, messages: history, historySource: source, config, tools, catalogued, segments: config.summaryEnabled ? ChatSummaryStore.list(threadId) : [],
             attachmentTexts, attachedImages,
           }), directive),
         })

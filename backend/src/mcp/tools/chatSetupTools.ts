@@ -2,7 +2,7 @@ import type { McpServer } from '@modelcontextprotocol/server';
 import { CHAT_PROFILE_DEFAULTS, CHAT_SKILL_LIMITS, CHAT_TRANSLATION_LANGUAGES, MAX_WORKSPACE_LINKS, isChatTranslationLanguage, skillSectionPathKey, type ChatProposal, type ChatSkillSectionChange, type ChatSkillSectionFields } from '@conai/shared';
 import { z } from 'zod';
 import { ChatProposalStore, type NewChatProposal } from '../../services/codex-chat/chatProposals';
-import { ChatProfileStore, CHAT_PROFILE_LIMITS, CHAT_PROFILE_TEXT_LIMITS, normalizeAlternateGreetings, normalizeSections, normalizeProfileScalarField, validateProfileText as limitedText, type ChatProfile } from '../../services/codex-chat/chatProfiles';
+import { ChatProfileStore, CHAT_PROFILE_LIMITS, CHAT_PROFILE_TEXT_LIMITS, normalizeAlternateGreetings, normalizeSections, normalizeProfileScalarField, validateProfileNumber, validateProfileText as limitedText, type ChatProfile } from '../../services/codex-chat/chatProfiles';
 import { normalizeGreetingPosition, normalizeOpeningHistory } from '../../services/codex-chat/chatOpeningHistory';
 import { ChatSharedBlockStore, PROFILE_MAX_BLOCKS } from '../../services/codex-chat/chatDisplayBlocks';
 import { applySectionChanges, checkSkill, ChatSkillStore, contentsEntries, skillChunk, skillContents } from '../../services/codex-chat/chatSkills';
@@ -41,7 +41,7 @@ const NO_CHAT_ERROR = 'Proposals need an active chat reply.';
 const PROPOSABLE_KEYS = [
   'name', 'folderId', 'tagline', 'systemPrompt', 'promptSections', 'greeting', 'alternateGreetings', 'openingHistory', 'greetingPosition', 'authorNote', 'appearance',
   'modelSlotId', 'summarySlotId', 'translationSlotId', 'suggestSlotId', 'reactionSlotId', 'reactionEnabled', 'judgeSlotId', 'judgePresetId', 'lorebookIds', 'blockIds', 'skillIds',
-  'temperature', 'maxTokens', 'contextTurns', 'contextTokens', 'toolOutputLimit',
+  'temperature', 'maxTokens', 'contextTurns', 'contextTokens', 'reasoningBudgetTokens', 'toolOutputLimit',
   'summaryEnabled', 'summaryTriggerTurns', 'summaryPrompt',
   'translationModelLanguage', 'translationDisplayLanguage', 'translationInstructions',
   'suggestEnabled', 'suggestProfileId',
@@ -78,6 +78,7 @@ const KEY_ALIASES: Record<string, ProposableKey> = {
   max_tokens: 'maxTokens',
   context_turns: 'contextTurns',
   context_tokens: 'contextTokens',
+  reasoning_budget_tokens: 'reasoningBudgetTokens',
   tool_output_limit: 'toolOutputLimit',
   summary_enabled: 'summaryEnabled',
   summary_trigger_turns: 'summaryTriggerTurns',
@@ -140,7 +141,7 @@ function profileGuide() {
   const skills = ChatSkillStore.list();
   const judges = ChatJudgePresetStore.list();
   const tiers = RatingScoreModel.getAllTiers();
-  const profiles = ChatProfileStore.list();
+  const profiles = ChatProfileStore.listNames();
   const limits = CHAT_PROFILE_TEXT_LIMITS;
   return [
     'CHAT PROFILE reference',
@@ -343,6 +344,8 @@ function normalizeProposedField(key: ProposableKey, value: unknown, fieldContext
     case 'visionEnabled':
     case 'agentEnabled':
     case 'allowLoreProposals': return normalizeProfileScalarField(key, value);
+    // The store's own write rule for this field: the reply cap's range, null leaves it unsent.
+    case 'reasoningBudgetTokens': return validateProfileNumber(key, value, CHAT_PROFILE_LIMITS.maxTokens, { integer: true, nullable: true });
     case 'translationModelLanguage':
     case 'translationDisplayLanguage': return translationLanguage(key, value);
     case 'suggestProfileId': return suggestProfile(value);
@@ -644,6 +647,7 @@ export function profileSetupView(profile: ChatProfile, owner: string | null = nu
     maxTokens: profile.maxTokens,
     contextTurns: profile.contextTurns,
     contextTokens: profile.contextTokens,
+    reasoningBudgetTokens: profile.reasoningBudgetTokens,
     toolOutputLimit: profile.toolOutputLimit,
     summaryEnabled: profile.summaryEnabled,
     summaryTriggerTurns: profile.summaryTriggerTurns,

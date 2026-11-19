@@ -61,9 +61,11 @@ export function renderSummary(segments: ChatSummarySegment[]) {
  * revision moves with every change of what was folded (`bump`), so a fold computed from the old state is dropped; a
  * hand edit of a segment's text leaves it.
  */
-function syncThreadSummary(threadId: number, bump = true) {
+function syncThreadSummary(threadId: number, bump = true, floor = 0) {
   const segments = listSegments(threadId)
-  const until = segments.reduce<number | null>((max, segment) => (max === null || segment.until_message_id > max ? segment.until_message_id : max), null)
+  const covered = segments.reduce<number | null>((max, segment) => (max === null || segment.until_message_id > max ? segment.until_message_id : max), null)
+  // A cursor ahead of the segments (an engine hand-over) that the change did not reach.
+  const until = floor > (covered ?? 0) ? floor : covered
   getUserSettingsDb().prepare(`UPDATE codex_chat_threads SET summary = ?, summary_until_message_id = ?,
     summary_updated_date = CASE WHEN ? IS NULL THEN NULL ELSE CURRENT_TIMESTAMP END, context_revision = context_revision + ? WHERE id = ?`)
     .run(renderSummary(segments) || null, until, until, bump ? 1 : 0, threadId)
@@ -142,14 +144,17 @@ export const ChatSummaryStore = {
    * History changed at `messageId`: every segment that reaches it is dropped. So is the plot when it does: a backed
    * plot's older stretches stay and are folded again; an unbacked plot has nothing beneath it, so everything starts
    * over from the first message. Runs inside the caller's transaction.
+   * `floor` (non-null when the cursor reached the change): with no segment dropped, the text is rendered again and
+   * the cursor goes back to the later of the segments' end and `floor`.
    */
-  invalidateFrom(threadId: number, messageId: number) {
+  invalidateFrom(threadId: number, messageId: number, floor: number | null = null) {
     const db = getUserSettingsDb()
     const plot = db.prepare('SELECT until_message_id, backed FROM chat_summary_segments WHERE thread_id = ? AND level = 1').get(threadId) as { until_message_id: number; backed: number } | undefined
     const removed = plot && !plot.backed && plot.until_message_id >= messageId
       ? db.prepare('DELETE FROM chat_summary_segments WHERE thread_id = ?').run(threadId).changes
       : db.prepare('DELETE FROM chat_summary_segments WHERE thread_id = ? AND until_message_id >= ?').run(threadId, messageId).changes
     if (removed > 0) syncThreadSummary(threadId)
+    else if (floor !== null) syncThreadSummary(threadId, false, floor)
   },
 
   clear(threadId: number) {

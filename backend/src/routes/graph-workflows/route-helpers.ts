@@ -1,10 +1,12 @@
-import type { Response } from 'express'
+import type { Request, Response } from 'express'
 import { GraphWorkflowModel } from '../../models/GraphWorkflow'
 import { GraphWorkflowFolderModel } from '../../models/GraphWorkflowFolder'
 import { GraphWorkflowScheduleModel } from '../../models/GraphWorkflowSchedule'
+import { getRequesterAccountId, isAdminRequest } from '../requester-session-helpers'
 import { parseRouteIntegerParam, sendRouteBadRequest } from '../routeValidation'
 import type {
   GraphWorkflowScheduleFailurePolicy,
+  GraphWorkflowScheduleRecord,
   GraphWorkflowScheduleStatus,
   GraphWorkflowScheduleType,
   ModuleGraphResponse,
@@ -142,4 +144,18 @@ export function findScheduleWorkflowContextOrRespond(res: Response, scheduleId: 
   }
 
   return { schedule, workflow }
+}
+
+/**
+ * A schedule's runs act as the account that saved it, so only that account or an administrator may start one now
+ * or switch the schedule back on. Schedules saved before accounts were recorded stay open. Responds 403 otherwise.
+ */
+export function ensureScheduleAccountOrRespond(req: Request, res: Response, schedule: GraphWorkflowScheduleRecord, error: string) {
+  const runAs = schedule.run_as_account_id ?? null
+  if (runAs === null || runAs === getRequesterAccountId(req) || isAdminRequest(req)) {
+    return true
+  }
+
+  res.status(403).json({ success: false, error } as ModuleGraphResponse)
+  return false
 }

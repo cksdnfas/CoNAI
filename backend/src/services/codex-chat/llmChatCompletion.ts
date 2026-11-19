@@ -244,13 +244,7 @@ function buildHeaders(target: ChatCompletionTarget) {
   return headers
 }
 
-function textOf(content: ChatCompletionMessage['content']) {
-  if (typeof content === 'string') return content
-  if (Array.isArray(content)) return content.find((part): part is Extract<ChatContentPart, { type: 'text' }> => part.type === 'text')?.text ?? ''
-  return ''
-}
-
-/** The index of the nearest system or user message at or before `index` (Anthropic takes cache marks on those), or -1. */
+/** The index of the nearest system or user message at or before `index`, or -1. */
 function markableAtOrBefore(messages: ChatCompletionMessage[], index: number) {
   for (let cursor = Math.min(index, messages.length - 1); cursor >= 0; cursor -= 1) {
     const role = messages[cursor].role
@@ -259,50 +253,81 @@ function markableAtOrBefore(messages: ChatCompletionMessage[], index: number) {
   return -1
 }
 
+/** Anthropic refuses a request naming more than four cache breakpoints. */
+const MAX_CACHE_MARKS = 4
+
+/**
+ * `content` with `cache_control` on its last text part, in the shape pi sends these gateways (a string becomes one text
+ * part; an image after the text keeps its place), or null when no text can carry it (Anthropic refuses an empty or
+ * whitespace-only text block once it is a block of its own, with an error that does not name the mark).
+ */
+function markedContent(content: ChatCompletionMessage['content']): unknown[] | null {
+  if (typeof content === 'string') return content.trim() ? [{ type: 'text', text: content, cache_control: { type: 'ephemeral' } }] : null
+  if (!Array.isArray(content)) return null
+  for (let index = content.length - 1; index >= 0; index -= 1) {
+    const part = content[index]
+    if (part.type === 'text' && part.text.trim()) return content.map((entry, at) => (at === index ? { ...entry, cache_control: { type: 'ephemeral' } } : entry))
+  }
+  return null
+}
+
 /**
  * Anthropic caches nothing by itself: a request names up to four breakpoints and the longest already-seen prefix
- * ending at one of them is read from cache. Marked here: the system prompt, the message before the one carrying the
- * reference block (everything up to there survives the block moving), and the message before the latest user message
- * (so the tool-call rounds of one reply reuse each other). Marked content becomes text parts carrying `cache_control`.
+ * ending at one of them is read from cache. Marked here, in this order while breakpoints are left: the end of the
+ * system prompt; the last message once tool rounds follow the latest user message (each round reads the one before
+ * from cache), or in the first round the latest user message itself when `appTools` (tools beyond the chat's own are
+ * offered, so tool rounds are likely; a reply or one-shot request without them pays no cache write for a message
+ * nothing reads back); the message before the one carrying the reference block (everything up to there
+ * survives the block moving); the persona before the system prompt's lore index and summary; and the message before
+ * the latest user message. Marked content becomes text parts carrying `cache_control`; tool definitions stay unmarked.
  */
-export function markCacheBreakpoints(messages: ChatCompletionMessage[]): unknown[] {
-  const wanted = new Set<number>()
+export function markCacheBreakpoints(messages: ChatCompletionMessage[], appTools = false): unknown[] {
+  const marked = new Map<number, unknown[]>()
+  let used = 0
+  const mark = (index: number) => {
+    if (index < 0 || used >= MAX_CACHE_MARKS || marked.has(index)) return false
+    const content = markedContent(messages[index].content)
+    if (!content) return false
+    marked.set(index, content)
+    used += 1
+    return true
+  }
+  const systemIndex = messages.findIndex((message) => message.role === 'system')
+  mark(systemIndex)
+  const lastUser = messages.map((message) => message.role).lastIndexOf('user')
+  if (lastUser < messages.length - 1) {
+    // As pi does: the latest message with text to carry the mark, normally the last tool result.
+    for (let index = messages.length - 1; index > lastUser; index -= 1) if (mark(index)) break
+  } else if (appTools) mark(lastUser)
+  const reference = messages.findIndex((message) => message.role === 'user' && contextPartsOf(message).some((part) => part.kind === 'reference'))
+  if (reference > 0) mark(markableAtOrBefore(messages, reference - 1))
   // The system message ends with the lore index and the summary, which change now and then: the persona before them
   // gets its own mark, so a new summary does not make the whole character prompt miss.
-  const systemIndex = messages.findIndex((message) => message.role === 'system')
   const systemMessage = systemIndex >= 0 ? messages[systemIndex] : null
   const systemText = systemMessage && typeof systemMessage.content === 'string' ? systemMessage.content : ''
   const memoryAt = systemMessage ? Math.min(...contextPartsOf(systemMessage).filter((part) => ['lore-index', 'constant-lore', 'summary'].includes(part.kind) && part.text)
     .map((part) => systemText.indexOf(part.text)).filter((index) => index > 0), Infinity) : Infinity
-  const system = messages.findIndex((message) => message.role === 'system')
-  if (system >= 0) wanted.add(system)
-  const reference = messages.findIndex((message) => message.role === 'user' && textOf(message.content).startsWith(REFERENCE_BLOCK_START))
-  if (reference > 0) wanted.add(markableAtOrBefore(messages, reference - 1))
-  const lastUser = messages.map((message) => message.role).lastIndexOf('user')
-  if (lastUser > 0) wanted.add(markableAtOrBefore(messages, lastUser - 1))
-  wanted.delete(-1)
+  if (marked.has(systemIndex) && Number.isFinite(memoryAt) && systemText.slice(0, memoryAt).trim() && used < MAX_CACHE_MARKS) {
+    marked.set(systemIndex, [
+      { type: 'text', text: systemText.slice(0, memoryAt), cache_control: { type: 'ephemeral' } },
+      { type: 'text', text: systemText.slice(memoryAt), cache_control: { type: 'ephemeral' } },
+    ])
+    used += 1
+  }
+  if (lastUser > 0) mark(markableAtOrBefore(messages, lastUser - 1))
   return messages.map((message, index) => {
-    if (index === systemIndex && Number.isFinite(memoryAt)) {
-      return { ...message, content: [
-        { type: 'text', text: systemText.slice(0, memoryAt), cache_control: { type: 'ephemeral' } },
-        { type: 'text', text: systemText.slice(memoryAt), cache_control: { type: 'ephemeral' } },
-      ] }
-    }
-    if (!wanted.has(index) || (message.role !== 'system' && message.role !== 'user')) return message
-    const parts: unknown[] = typeof message.content === 'string' ? [{ type: 'text', text: message.content }] : [...message.content]
-    const last = parts[parts.length - 1] as Record<string, unknown> | undefined
-    if (!last || last.type !== 'text') return message
-    parts[parts.length - 1] = { ...last, cache_control: { type: 'ephemeral' } }
-    return { ...message, content: parts }
+    const content = marked.get(index)
+    return content ? { ...message, content } : message
   })
 }
 
 /**
  * `streamUsage`: a streamed request asks for the usage chunk at the end (`stream_options.include_usage`; OpenAI and
  * llama.cpp send it as a last chunk with empty `choices`), so the prompt token count is known for streamed replies too.
+ * `appTools`: some offered tool is not the chat's own (see the request's `appTools`).
  */
-export function buildBody(target: ChatCompletionTarget, messages: ChatCompletionMessage[], tools: ChatCompletionTool[], stream: boolean, streamUsage = stream, toolChoice?: 'none') {
-  const body: Record<string, unknown> = { ...buildOpenAiGenerationFields(target.generation, target.thinkingSwitch), model: target.model, messages: target.promptCacheMarks ? markCacheBreakpoints(messages) : messages, stream }
+export function buildBody(target: ChatCompletionTarget, messages: ChatCompletionMessage[], tools: ChatCompletionTool[], stream: boolean, streamUsage = stream, toolChoice?: 'none', appTools = false) {
+  const body: Record<string, unknown> = { ...buildOpenAiGenerationFields(target.generation, target.thinkingSwitch), model: target.model, messages: target.promptCacheMarks ? markCacheBreakpoints(messages, appTools && tools.length > 0) : messages, stream }
   if (stream && streamUsage) {
     const options = body.stream_options
     body.stream_options = { ...(options && typeof options === 'object' && !Array.isArray(options) ? options : {}), include_usage: true }
@@ -357,6 +382,11 @@ async function requestChatCompletion(meter: { sent: boolean; usage: LlmTokenCoun
   target: ChatCompletionTarget
   messages: ChatCompletionMessage[]
   tools?: ChatCompletionTool[]
+  /**
+   * Some offered tool is not the chat's own (the caller knows which are): tool rounds are likely, so the first round
+   * gets a cache mark on the latest user message (markCacheBreakpoints).
+   */
+  appTools?: boolean
   refreshTools?: () => Promise<ChatCompletionTool[]>
   signal: AbortSignal
   onContent?: (text: string) => void
@@ -408,7 +438,7 @@ async function requestChatCompletion(meter: { sent: boolean; usage: LlmTokenCoun
     let toolChoiceRefused = false
     const request = async (target: ChatCompletionTarget) => {
       assertLlmReachable(target)
-      const body = buildBody(target, params.messages, toolsRefusedBy(target) || (toolChoiceRefused && params.toolChoice) ? [] : params.tools ?? [], true, streamUsage, params.toolChoice)
+      const body = buildBody(target, params.messages, toolsRefusedBy(target) || (toolChoiceRefused && params.toolChoice) ? [] : params.tools ?? [], true, streamUsage, params.toolChoice, params.appTools)
       params.onRequestBody?.(body, target)
       signal.throwIfAborted()
       meter.sent = true

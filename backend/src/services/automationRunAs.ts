@@ -8,8 +8,9 @@ export type AutomationRunAs =
   | { ok: false; code: 'run_as_missing' | 'run_as_unavailable' | 'run_as_forbidden'; message: string }
 
 /**
- * The account a schedule or routine acts as: the person who last saved it. It has to be active and still hold every
- * key in `permissionKeys` at run time, so a demoted or disabled account's automations stop instead of running on.
+ * The account a schedule or routine acts as: the person who last saved it. At run time it has to be active (a disabled
+ * or missing account's automations stop) and still hold every key in `permissionKeys`. Only those keys are checked: a
+ * demoted account that is still active keeps running unless it lost one of them (none, for an empty list).
  * `null` is the bootstrap owner, valid only while no accounts are configured.
  */
 export function resolveAutomationRunAs(accountId: number | null | undefined, permissionKeys: string[]): AutomationRunAs {

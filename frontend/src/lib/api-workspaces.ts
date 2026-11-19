@@ -1,5 +1,6 @@
-import type { WorkspaceProject, WorkspaceSummary, WorkspaceEntry, WorkspaceText, WorkspaceBinding, WorkspaceChatMode, WorkspaceOperation, WorkspaceBatchResult } from '@conai/shared'
+import type { FileStoreSortDirection, FileStoreSortKey, WorkspaceProject, WorkspaceSummary, WorkspaceEntry, WorkspaceText, WorkspaceBinding, WorkspaceChatMode, WorkspaceOperation, WorkspaceBatchResult } from '@conai/shared'
 import { requestApiData } from './api-request'
+import { listOrderQuery } from './api-files'
 const headers = { 'Content-Type': 'application/json' }
 const post = <T>(url: string, body: unknown) => requestApiData<T>(url, { method: 'POST', headers, body: JSON.stringify(body) })
 export const listWorkspaces = (offset = 0) => requestApiData<WorkspaceSummary[]>(`/api/workspaces?offset=${offset}`)
@@ -8,7 +9,8 @@ export const updateWorkspace = (id: string, input: { name?: string; guidelines?:
 export const statWorkspace = (id: string, target: string) => requestApiData<{ target: string; kind: 'file' | 'folder'; size: number; revision: string }>(`/api/workspaces/${id}/stat?target=${encodeURIComponent(target)}`)
 export const listWorkspaceFolders = (id: string) => requestApiData<string[]>(`/api/workspaces/${id}/folders`)
 export const createWorkspace = (name: string, guidelines: string) => post<WorkspaceProject>('/api/workspaces', { name, guidelines })
-export const listWorkspaceEntries = (id: string, target: string, offset = 0) => requestApiData<{ entries: WorkspaceEntry[]; nextOffset: number | null }>(`/api/workspaces/${id}/entries?target=${encodeURIComponent(target)}&offset=${offset}`)
+/** One page (100) of a project folder, folders first; `order` defaults to name, ascending (no `modified` order here). */
+export const listWorkspaceEntries = (id: string, target: string, offset = 0, order: { sort?: Exclude<FileStoreSortKey, 'modified'>; direction?: FileStoreSortDirection } = {}) => requestApiData<{ entries: WorkspaceEntry[]; nextOffset: number | null }>(`/api/workspaces/${id}/entries?target=${encodeURIComponent(target)}&offset=${offset}${listOrderQuery(order)}`)
 export const readWorkspace = (id: string, targets: Array<{ target: string; offset?: number; limit?: number; revision?: string }>) => post<{ files: WorkspaceText[]; remaining: unknown[]; truncated: boolean }>(`/api/workspaces/${id}/read`, { targets })
 export const searchWorkspace = (id: string, query: string, offset = 0, signal?: AbortSignal) => requestApiData<{ hits: Array<WorkspaceEntry & { excerpt?: string; revision?: string }>; nextOffset: number | null; partialFiles: number; skippedFiles?: number; note: string }>(`/api/workspaces/${id}/search`, { method: 'POST', headers, body: JSON.stringify({ query, offset }), signal })
 export const applyWorkspace = (id: string, operations: WorkspaceOperation[], requestId = crypto.randomUUID()) => post<WorkspaceBatchResult>(`/api/workspaces/${id}/apply`, { requestId, operations })

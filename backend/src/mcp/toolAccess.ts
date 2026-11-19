@@ -133,7 +133,7 @@ function featurePermissionOf(toolName: string): string | readonly string[] | und
   return TOOL_FEATURE_PERMISSIONS[toolName] ?? (findExternalMcpTool(toolName) || findPluginServerTool(toolName) ? [] : undefined);
 }
 
-function requiredToolKeys(toolName: string): readonly string[] {
+export function requiredToolKeys(toolName: string): readonly string[] {
   const required = featurePermissionOf(toolName) ?? [];
   return typeof required === 'string' ? [required] : required;
 }

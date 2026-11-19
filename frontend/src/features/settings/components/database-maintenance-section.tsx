@@ -138,7 +138,7 @@ export function DatabaseMaintenanceSection() {
     kept: orphanResult.orphanMetadata.keptReferenced,
     thumbnails: orphanResult.dryRun ? orphanResult.orphanThumbnails.orphaned : orphanResult.orphanThumbnails.deleted,
     thumbnailBytes: orphanResult.orphanThumbnails.bytes,
-    temp: orphanResult.tempLeftovers.graphExecutionDirs + orphanResult.tempLeftovers.incomingEntries + orphanResult.tempLeftovers.videoFrames,
+    temp: orphanResult.tempLeftovers.graphExecutionDirs + orphanResult.tempLeftovers.incomingEntries + orphanResult.tempLeftovers.videoFrames + (orphanResult.tempLeftovers.codexJobDirs ?? 0),
     tempBytes: orphanResult.tempLeftovers.bytes,
   } : null
   const previewReady = Boolean(orphanResult?.dryRun) && !orphanRunning

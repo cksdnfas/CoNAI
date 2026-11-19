@@ -15,6 +15,8 @@ const GT = '(?:>|&gt;)'
 const BLOCK = new RegExp(`${LT}tool_call${GT}([\\s\\S]*?)(?:${LT}/tool_call${GT}|$)`, 'g')
 const FUNCTION = new RegExp(`${LT}function=([\\w.-]+)${GT}([\\s\\S]*?)(?:${LT}/function${GT}|$)`, 'g')
 const PARAMETER = new RegExp(`${LT}parameter=([\\w.-]+)${GT}([\\s\\S]*?)(?=${LT}/parameter${GT}|${LT}parameter=|$)(?:${LT}/parameter${GT})?`, 'g')
+/** A matched call that reached its closing tag (BLOCK and FUNCTION also take one the text ends inside of). */
+const CLOSED = new RegExp(`${LT}/(?:tool_call|function)${GT}$`)
 /** Where a written tool call starts; the stream holds text back from the first of these. */
 const MARKERS = ['<tool_call>', '&lt;tool_call>', '&lt;tool_call&gt;', '<function=', '&lt;function=']
 
@@ -61,9 +63,10 @@ function readCall(body: string, coerce: (tool: string, key: string, value: strin
 
 /**
  * The calls written in `text` (outside code blocks) and the text from `from` on without them, or null unless every
- * written call is a usable one. `from`: where the part of the text not yet shown to the reader starts.
+ * written call is a usable one. `from`: where the part of the text not yet shown to the reader starts. `cut`: the text
+ * was cut off, so a call it ends inside of is left out unread (its arguments are incomplete).
  */
-function readTextToolCalls(text: string, available: TextToolCallTools | null, from = 0): { text: string; calls: ChatCompletionToolCall[] } | null {
+function readTextToolCalls(text: string, available: TextToolCallTools | null, from = 0, cut = false): { text: string; calls: ChatCompletionToolCall[] } | null {
   const direct = new Map((available?.tools ?? []).map((tool) => [tool.function.name, tool]))
   // A string parameter stays as written; anything else is read as JSON when it is JSON (numbers, objects, booleans).
   const coerce = (tool: string, key: string, value: string) => {
@@ -73,12 +76,16 @@ function readTextToolCalls(text: string, available: TextToolCallTools | null, fr
   }
   const fences = fencedRanges(text)
   const usable = (match: RegExpMatchArray) => match.index! >= from && !fences.some(([start, end]) => match.index! >= start && match.index! < end)
-  const spanOf = (match: RegExpMatchArray, body: string) => ({ start: match.index!, end: match.index! + match[0].length, body: match[0].startsWith('&lt;') ? unescapeHtml(body) : body })
+  const spanOf = (match: RegExpMatchArray, body: string) => ({ start: match.index!, end: match.index! + match[0].length, body: match[0].startsWith('&lt;') ? unescapeHtml(body) : body, closed: CLOSED.test(match[0]) })
   let spans = [...text.matchAll(BLOCK)].filter(usable).map((match) => spanOf(match, match[1]))
   if (spans.length === 0) spans = [...text.matchAll(FUNCTION)].filter(usable).map((match) => spanOf(match, match[0]))
   if (spans.length === 0) return null
+  // Only a span that starts like a call is one the cut ended inside of; a mere mention of the tag in prose is read
+  // (and so refused) as if nothing were cut.
+  const last = spans[spans.length - 1]
+  const read = cut && !last.closed && /^(?:\{|<function=|&lt;function=)/.test(last.body.trim()) ? spans.slice(0, -1) : spans
   const calls: ChatCompletionToolCall[] = []
-  for (const [index, span] of spans.entries()) {
+  for (const [index, span] of read.entries()) {
     const call = readCall(span.body, coerce)
     if (!call) return null
     const name = !available || direct.has(call.name) ? call.name : available.catalogued.has(call.name) && direct.has(CATALOG_RUN_TOOL) ? CATALOG_RUN_TOOL : null
@@ -100,8 +107,8 @@ function readTextToolCalls(text: string, available: TextToolCallTools | null, fr
 }
 
 /** Recover executable calls only when every named tool is offered by this request. */
-export function parseTextToolCalls(text: string, available: TextToolCallTools, from = 0) {
-  return readTextToolCalls(text, available, from)
+export function parseTextToolCalls(text: string, available: TextToolCallTools, from = 0, cut = false) {
+  return readTextToolCalls(text, available, from, cut)
 }
 
 /**
@@ -149,13 +156,14 @@ export function textToolCallFilter(onText: (text: string) => void) {
 /**
  * The calls written in the `held` tail of a message's `text` (what textToolCallFilter kept back): `text` without them,
  * `tail` the part of it still to show, set off from what was already shown. `stripUnavailable`: also remove valid
- * markup for unavailable tools without executing it. Null when no recoverable call syntax was recognized.
+ * markup for unavailable tools without executing it. `cut`: the text was cut off (see readTextToolCalls). Null when no
+ * recoverable call syntax was recognized.
  */
-export function recoverTextToolCalls(text: string, held: { text: string; marked: boolean }, available: TextToolCallTools, stripUnavailable = false) {
+export function recoverTextToolCalls(text: string, held: { text: string; marked: boolean }, available: TextToolCallTools, stripUnavailable = false, cut = false) {
   if (!held.marked || !text.endsWith(held.text)) return null
   const shown = text.slice(0, text.length - held.text.length)
-  const executable = parseTextToolCalls(text, available, shown.length)
-  const parsed = executable ?? (stripUnavailable ? readTextToolCalls(text, null, shown.length) : null)
+  const executable = parseTextToolCalls(text, available, shown.length, cut)
+  const parsed = executable ?? (stripUnavailable ? readTextToolCalls(text, null, shown.length, cut) : null)
   if (!parsed) return null
   const tail = parsed.text ? `${shown && !shown.endsWith('\n\n') ? (shown.endsWith('\n') ? '\n' : '\n\n') : ''}${parsed.text}` : ''
   return { text: shown + tail, tail, calls: executable?.calls ?? [] }

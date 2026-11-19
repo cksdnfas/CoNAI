@@ -1,6 +1,6 @@
-import { useMemo, useRef, useState, type DragEvent } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { BookOpen, FilePlus, FileText, Folder, FolderInput, FolderKanban, FolderPlus, History, LayoutGrid, List, Pencil, RefreshCw, Search, Trash2, Upload } from 'lucide-react'
+import { BookOpen, ClipboardPaste, FilePlus, FileText, Folder, FolderInput, FolderKanban, FolderPlus, History, LayoutGrid, List, Pencil, RefreshCw, Scissors, Search, Trash2, Upload } from 'lucide-react'
 import type { WorkspaceEntry, WorkspaceOperation, WorkspaceProject } from '@conai/shared'
 import { PageWithSidebar } from '@/components/common/page-with-sidebar'
 import { PageToolbar } from '@/components/common/page-toolbar'
@@ -26,20 +26,25 @@ import { pageAction, pageObject, pageText } from '@/features/codex-chat/page-act
 import { useChatPageDataPermissions } from '@/features/codex-chat/use-chat-page-permissions'
 import { useI18n } from '@/i18n'
 import { formatFileSize } from '@/lib/format-size'
-import { applyWorkspace, deleteWorkspaceEntries, getWorkspace, listWorkspaceEntries, listWorkspaceFolders, readWorkspace, searchWorkspace, statWorkspace } from '@/lib/api-workspaces'
+import { applyWorkspace, deleteWorkspaceEntries, getWorkspace, listWorkspaceEntries, readWorkspace, searchWorkspace, statWorkspace } from '@/lib/api-workspaces'
 import { ApiRequestError } from '@/lib/api-request'
 import { getErrorMessage } from '@/lib/error-message'
 import { FileEntryView, type EntryItem } from './file-entry-views'
-import { useFileViewMode } from './file-view-mode'
+import { FileListSurface } from './file-list-surface'
+import { TreeUploadStatus } from './tree-upload-status'
+import { nextFileSort, useFileSort, useFileViewMode, type FileSort } from './file-view-mode'
+import { FileSortMenu } from './file-sort-menu'
+import { clearCutItems, cutItems, forgetCutItems, useCutItems, workspaceCutScope } from './cut-items'
 import { StoreFolderSidebarGroup } from './store-folders'
 import { SystemFolderSidebarGroup, type SystemFolderLocation } from './system-folder-browser'
 import { TextDocumentEditor, type TextDocumentStore } from './text-document-editor'
+import { useEntryDrop } from './use-entry-drop'
 import { WorkspaceChangesDialog, WorkspaceProjectDialog } from './workspace-dialogs'
+import { baseName, join, parentOf, useWorkspaceFolders, workspaceTreeReservesToggle, WorkspaceFolderTree } from './workspace-folders'
 import { WorkspaceSidebarGroup } from './workspace-projects'
 import { HighlightText } from '@/components/common/highlight-text'
 import { fileExtension } from '@/lib/file-extension'
 import { useDebouncedValue } from '@/lib/use-debounced-value'
-import { droppedIds, isMoveDrag, startMoveDrag } from './file-drag'
 
 const DRAG_TYPE = 'application/x-conai-workspace-targets'
 /** A document read in one go; larger ones are edited from chat in parts. */
@@ -47,10 +52,6 @@ const EDITOR_LIMIT = 1024 * 1024
 const IMPORT_LIMIT = { files: 100, bytes: 8 * 1024 * 1024 }
 const PAGE_SIZE = 100
 type WorkspaceDocument = { id: string; name: string; size: number }
-
-const join = (...parts: string[]) => parts.filter(Boolean).join('/')
-const baseName = (target: string) => target.split('/').at(-1) ?? target
-const parentOf = (target: string) => (target.includes('/') ? target.slice(0, target.lastIndexOf('/')) : '')
 
 /**
  * A project workspace in the files page: the same toolbar, list, selection bar, dialogs and document editor as the
@@ -77,7 +78,8 @@ export function WorkspaceBrowser({ projectId, dir, onNavigate, onProject, onCrea
   const [viewMode, changeViewMode] = useFileViewMode('workspace')
   const [offset, setOffset] = useState(0)
   const [selected, setSelected] = useState<string[]>([])
-  const [nameDialog, setNameDialog] = useState<{ target?: string; name: string } | null>(null)
+  // `inline`: a person's gesture edits the listed item's name in place (committing when the field is left); the dialog is for the rest.
+  const [nameDialog, setNameDialog] = useState<{ target?: string; name: string; inline?: boolean } | null>(null)
   const [moveOpen, setMoveOpen] = useState(false)
   const [moveTarget, setMoveTarget] = useState('')
   const [editor, setEditor] = useState<{ entry: WorkspaceDocument | null } | null>(null)
@@ -98,7 +100,12 @@ export function WorkspaceBrowser({ projectId, dir, onNavigate, onProject, onCrea
   }
 
   const project = useQuery({ queryKey: ['workspaces', projectId, 'info'], queryFn: () => getWorkspace(projectId) })
-  const entries = useQuery({ queryKey: ['workspaces', projectId, 'entries', dir, offset], queryFn: () => listWorkspaceEntries(projectId, dir, offset), enabled: !searching })
+  const [sortOrder, changeSortOrder, sortKeys] = useFileSort('workspace')
+  // The workspace has no modified time: its order is a name or a size (the hook only stores those).
+  const order = { sort: sortOrder.sort === 'size' ? 'size' as const : 'name' as const, direction: sortOrder.direction }
+  const entries = useQuery({ queryKey: ['workspaces', projectId, 'entries', dir, offset, order.sort, order.direction], queryFn: () => listWorkspaceEntries(projectId, dir, offset, order), enabled: !searching })
+  // The server sorts the whole folder, so a new order starts again at the first page.
+  const setSort = (next: FileSort) => { changeSortOrder(next); setOffset(0); setSelected([]) }
   // Each page checks 100 entries; "더 찾기" adds the next page's hits below the ones found so far.
   const results = useInfiniteQuery({
     queryKey: ['workspaces', projectId, 'search', searchQuery],
@@ -108,7 +115,7 @@ export function WorkspaceBrowser({ projectId, dir, onNavigate, onProject, onCrea
     enabled: searching,
   })
   const hits = results.data?.pages.flatMap((page) => page.hits) ?? []
-  const folders = useQuery({ queryKey: ['workspaces', projectId, 'folders'], queryFn: () => listWorkspaceFolders(projectId), enabled: moveOpen })
+  const { folders } = useWorkspaceFolders(projectId)
   const shown = useMemo(() => entries.data?.entries ?? [], [entries.data])
   const selection = shown.filter((entry) => selected.includes(entry.target))
   const projectName = project.data?.name ?? t({ ko: '작업 공간', en: 'Workspace' })
@@ -121,19 +128,41 @@ export function WorkspaceBrowser({ projectId, dir, onNavigate, onProject, onCrea
       await refresh()
       if (result && result.status !== 'completed') throw new Error(result.error ?? result.status)
     },
-    onSuccess: () => { setSelected([]); setNameDialog(null); setMoveOpen(false) },
+    // A name being edited in place belongs to its own commit: another operation (a drop of files) must not discard it.
+    onSuccess: () => { setSelected([]); setNameDialog((current) => (current?.inline ? current : null)); setMoveOpen(false) },
     onError: (error) => showSnackbar({ tone: 'error', message: getErrorMessage(error, t({ ko: '작업을 완료하지 못했어.', en: 'Could not complete the operation.' })) }),
   })
   const busy = mutation.isPending
   const apply = (operations: WorkspaceOperation[]) => applyWorkspace(projectId, operations)
-  // A listed file is checked against the revision the person saw; a folder's is read when they act.
-  const revision = async (target: string) => byTarget.get(target)?.revision ?? (await statWorkspace(projectId, target)).revision
-  const moveTo = (targets: string[], destination: string) => mutation.mutate(async () => {
+  // A file is checked against the revision the person saw (in the listing, or, for a paste, when it was cut); a folder's is read when they act.
+  const revision = async (target: string, seen?: Readonly<Record<string, string>>) => seen?.[target] ?? byTarget.get(target)?.revision ?? (await statWorkspace(projectId, target)).revision
+  const moveRun = (targets: string[], destination: string, seen?: Readonly<Record<string, string>>) => async () => {
     const moving = targets.filter((target) => join(destination, baseName(target)) !== target)
     if (!moving.length) return
-    return apply(await Promise.all(moving.map(async (target) => ({ kind: 'move' as const, target, destination: join(destination, baseName(target)), expectedRevision: await revision(target) }))))
-  })
-  const rename = (target: string, name: string) => mutation.mutate(async () => apply([{ kind: 'move', target, destination: join(parentOf(target), name.trim()), expectedRevision: await revision(target) }]))
+    return apply(await Promise.all(moving.map(async (target) => ({ kind: 'move' as const, target, destination: join(destination, baseName(target)), expectedRevision: await revision(target, seen) }))))
+  }
+  // A path that is moved, renamed or deleted, or whose folder is, is no longer what a cut marked.
+  const cutScope = workspaceCutScope(projectId)
+  const account = auth.data?.accountId ?? 'bootstrap'
+  const forgetCut = (changed: string[]) => forgetCutItems(cutScope, (marked) => marked.ids.some((id) => changed.some((path) => id === path || id.startsWith(`${path}/`))))
+  const moveTo = (targets: string[], destination: string, seen?: Readonly<Record<string, string>>) => { void mutation.mutateAsync(moveRun(targets, destination, seen)).then(() => forgetCut(targets), () => undefined) }
+  const rename = (target: string, name: string) => mutation.mutateAsync(async () => apply([{ kind: 'move', target, destination: join(parentOf(target), name.trim()), expectedRevision: await revision(target) }])).then(() => forgetCut([target]))
+  // Cut marks items; a paste in another folder of this project moves them through the same move as a drag does.
+  const cut = useCutItems(cutScope, account)
+  const cutSelection = (targets: string[] = selected) => {
+    if (!canWrite || !targets.length) return
+    const revisions: Record<string, string> = {}
+    for (const target of targets) {
+      const seen = byTarget.get(target)?.revision
+      if (seen) revisions[target] = seen
+    }
+    cutItems({ scope: cutScope, account, ids: targets, from: dir, revisions })
+  }
+  const canPasteInto = (folder: string) => cut !== null && canWrite && !busy && folder !== cut.from && !cut.ids.some((target) => target === folder || folder.startsWith(`${target}/`))
+  // A paste that did not fully go through (a revision conflict, a partial move) drops the mark: the person cuts again from the refreshed list.
+  const paste = (folder: string = dir) => {
+    if (cut && canPasteInto(folder)) void mutation.mutateAsync(moveRun(cut.ids, folder, cut.revisions)).then(() => forgetCut(cut.ids), clearCutItems)
+  }
   const createFolder = (name: string) => mutation.mutate(() => apply([{ kind: 'mkdir', target: join(dir, name.trim()) }]))
   const remove = async (targets: string[]) => {
     const folderCount = shown.filter((entry) => targets.includes(entry.target) && entry.kind === 'folder').length
@@ -143,7 +172,7 @@ export function WorkspaceBrowser({ projectId, dir, onNavigate, onProject, onCrea
       confirmLabel: t({ ko: '삭제', en: 'Delete' }),
       tone: 'destructive',
     })
-    if (ok) mutation.mutate(async () => deleteWorkspaceEntries(projectId, await Promise.all(targets.map(async (target) => ({ target, expectedRevision: await revision(target) })))))
+    if (ok) void mutation.mutateAsync(async () => deleteWorkspaceEntries(projectId, await Promise.all(targets.map(async (target) => ({ target, expectedRevision: await revision(target) }))))).then(() => forgetCut(targets), () => undefined)
   }
   const importFiles = (files: File[], folder = dir) => {
     if (!canWrite || busy || !files.length) return
@@ -162,20 +191,31 @@ export function WorkspaceBrowser({ projectId, dir, onNavigate, onProject, onCrea
   const openDocument = (entry: Pick<WorkspaceEntry, 'target' | 'size'>) => setEditor({ entry: { id: entry.target, name: baseName(entry.target), size: entry.size } })
   const toggle = (target: string, checked: boolean) => setSelected((current) => (checked ? [...current, target] : current.filter((value) => value !== target)))
 
-  // Drag rows onto folders to move them; drop files from the computer to import them.
-  const dragOver = (event: DragEvent) => {
-    if (busy || !canWrite) return
-    event.preventDefault()
-    event.dataTransfer.dropEffect = isMoveDrag(event, DRAG_TYPE) ? 'move' : 'copy'
+  // Drag rows onto folders to move them; drop files from the computer to import them. Targets are folder paths ('' is the top).
+  const { drop, startMove, endMove } = useEntryDrop({
+    moveType: DRAG_TYPE,
+    canMove: canWrite,
+    canUpload: canWrite,
+    busy,
+    // Moving into the open folder is no move, nor is a folder moved into itself or its own subfolders.
+    allowsMove: (folder, targets) => folder !== dir && !targets.some((target) => target === folder || folder.startsWith(`${target}/`)),
+    onMove: moveTo,
+    onUpload: importFiles,
+  })
+  // A rename of a listed item edits its name in place; the draft is the same `nameDialog` the assistant reads and writes.
+  // It needs its item on this page: once that is gone (another page, a delete, a search) the draft goes too.
+  const renamingEntry = nameDialog?.inline && !searching ? shown.find((entry) => entry.target === nameDialog.target) : undefined
+  if (nameDialog?.inline && renamingEntry === undefined) setNameDialog(null)
+  const commitRename = async () => {
+    if (!nameDialog?.target || !renamingEntry) return
+    const name = nameDialog.name.trim()
+    if (!name || name === baseName(renamingEntry.target)) { setNameDialog(null); return }
+    if (!busy) {
+      await rename(nameDialog.target, name)
+      setNameDialog(null)
+    }
   }
-  const drop = (event: DragEvent, folder: string) => {
-    event.preventDefault()
-    event.stopPropagation()
-    if (busy || !canWrite) return
-    const targets = droppedIds(event, DRAG_TYPE)
-    if (targets) moveTo(targets.filter((target) => target !== folder && !folder.startsWith(`${target}/`)), folder)
-    else if (event.dataTransfer.files.length) importFiles(Array.from(event.dataTransfer.files), folder)
-  }
+  const openItem = (entry: WorkspaceEntry) => { if (entry.kind === 'folder') openFolder(entry.target); else openDocument(entry) }
 
   const store = useMemo((): TextDocumentStore<WorkspaceDocument> => ({
     key: `workspace:${projectId}`,
@@ -199,10 +239,11 @@ export function WorkspaceBrowser({ projectId, dir, onNavigate, onProject, onCrea
   }), [projectId, dir, projectName, t])
 
   useChatPageRegistration(chatPage ? {
-    kind: 'files', title: projectName, resourceId: `workspace:${projectId}`, localRevision: JSON.stringify([dir, offset, selected, nameDialog, searchInput, editor?.entry?.id]),
+    kind: 'files', title: projectName, resourceId: `workspace:${projectId}`, localRevision: JSON.stringify([dir, offset, selected, nameDialog, searchInput, editor?.entry?.id, order]),
     reviewRevision: JSON.stringify([dir, selected, nameDialog, editor?.entry?.id]),
     fields: [
       { id: 'search', label: t({ ko: '검색어 (빈 값은 검색 닫기)', en: 'Search (empty closes search)' }), type: 'text', value: searchOpen ? searchInput : '' },
+      { id: 'sort', label: t({ ko: '목록 정렬 (기준:방향, 폴더가 먼저)', en: 'List order (key:direction, folders first)' }), type: 'select', value: `${order.sort}:${order.direction}`, options: sortKeys.flatMap((key) => [`${key}:asc`, `${key}:desc`]), viewOnly: true },
       ...(nameDialog ? [{ id: 'name', label: t({ ko: '폴더 이름 입력', en: 'Folder name draft' }), type: 'text' as const, value: nameDialog.name }] : []),
     ],
     data: { project: { id: projectId, name: projectName }, folder: dir, offset, entries: shown.map((entry) => ({ target: entry.target, kind: entry.kind, bytes: entry.size })), selected },
@@ -216,6 +257,11 @@ export function WorkspaceBrowser({ projectId, dir, onNavigate, onProject, onCrea
       ] : []),
     ],
     apply: (patch) => {
+      if (patch.sort !== undefined) {
+        const [key, direction] = String(patch.sort).split(':')
+        const next = sortKeys.find((value) => value === key)
+        if (next && (direction === 'asc' || direction === 'desc')) setSort({ sort: next, direction })
+      }
       if (patch.search !== undefined) { setSearchInput(String(patch.search)); setSearchOpen(String(patch.search).trim() !== '') }
       if (patch.name !== undefined) setNameDialog((current) => (current ? { ...current, name: String(patch.name) } : current))
     },
@@ -239,7 +285,8 @@ export function WorkspaceBrowser({ projectId, dir, onNavigate, onProject, onCrea
   const rowMenu = (entry: WorkspaceEntry): ActionMenuEntry[] => [
     entry.kind === 'file' && { key: 'open', label: t({ ko: '편집', en: 'Edit' }), icon: FileText, onSelect: () => openDocument(entry) },
     '-',
-    canWrite && { key: 'rename', label: t({ ko: '이름 변경', en: 'Rename' }), icon: Pencil, disabled: busy, onSelect: () => setNameDialog({ target: entry.target, name: baseName(entry.target) }) },
+    canWrite && { key: 'cut', label: t({ ko: '잘라내기', en: 'Cut' }), icon: Scissors, disabled: busy, onSelect: () => cutSelection(selected.includes(entry.target) ? selected : [entry.target]) },
+    canWrite && { key: 'rename', label: t({ ko: '이름 변경', en: 'Rename' }), icon: Pencil, disabled: busy, onSelect: () => setNameDialog({ target: entry.target, name: baseName(entry.target), inline: true }) },
     canWrite && { key: 'move', label: t({ ko: '이동', en: 'Move' }), icon: FolderInput, disabled: busy, onSelect: () => { setSelected([entry.target]); setMoveTarget(dir); setMoveOpen(true) } },
     '-',
     canDelete && { key: 'delete', label: t({ ko: '삭제', en: 'Delete' }), icon: Trash2, destructive: true, disabled: busy, onSelect: () => void remove([entry.target]) },
@@ -256,6 +303,13 @@ export function WorkspaceBrowser({ projectId, dir, onNavigate, onProject, onCrea
     }
   }
   const byTarget = new Map(shown.map((entry) => [entry.target, entry]))
+  /** Right-click on empty list space: the ways to add something to the open folder. */
+  const emptySpaceMenu: ActionMenuEntry[] = [
+    canWrite && { key: 'new-folder', label: t({ ko: '새 폴더', en: 'New folder' }), icon: FolderPlus, disabled: busy, onSelect: () => setNameDialog({ name: '' }) },
+    canWrite && { key: 'new-document', label: t({ ko: '새 문서', en: 'New document' }), icon: FilePlus, disabled: busy, onSelect: () => setEditor({ entry: null }) },
+    canPasteInto(dir) && { key: 'paste', label: t({ ko: '붙여넣기', en: 'Paste' }), icon: ClipboardPaste, onSelect: () => paste() },
+    canWrite && { key: 'import', label: t({ ko: '텍스트 문서 가져오기', en: 'Import text documents' }), icon: Upload, disabled: busy, onSelect: () => uploadInput.current?.click() },
+  ]
 
   const actions = (
     <>
@@ -269,6 +323,7 @@ export function WorkspaceBrowser({ projectId, dir, onNavigate, onProject, onCrea
           { value: 'list', label: <List className="size-3.5" />, ariaLabel: t({ ko: '자세히 보기', en: 'Details' }) },
         ]}
       />
+      {viewMode === 'grid' ? <FileSortMenu value={sortOrder} keys={sortKeys} onChange={setSort} /> : null}
       <IconButton size="icon-sm" variant="ghost" active={searchOpen} label={t({ ko: '검색', en: 'Search' })} onClick={() => searchOpen ? closeSearch() : setSearchOpen(true)}><Search /></IconButton>
       {canWrite ? <IconButton size="icon-sm" variant="ghost" label={t({ ko: '새 폴더', en: 'New folder' })} disabled={busy} onClick={() => setNameDialog({ name: '' })}><FolderPlus /></IconButton> : null}
       <ActionMenuButton
@@ -288,15 +343,22 @@ export function WorkspaceBrowser({ projectId, dir, onNavigate, onProject, onCrea
   const breadcrumbs = (
     <PathBreadcrumbs
       ariaLabel={t({ ko: '현재 경로', en: 'Current path' })}
-      items={[{ key: 'files', label: t('pageAccessCatalog.files'), onClick: () => onStore(null) }, { key: '', label: projectName, onClick: () => openFolder('') }, ...segments.map((segment, index) => ({ key: segments.slice(0, index + 1).join('/'), label: segment, onClick: () => openFolder(segments.slice(0, index + 1).join('/')) }))]}
+      items={[{ key: 'files', label: t('pageAccessCatalog.files'), onClick: () => onStore(null) }, { key: '', label: projectName, dropId: '', onClick: () => openFolder('') }, ...segments.map((segment, index) => { const path = segments.slice(0, index + 1).join('/'); return { key: path, label: segment, dropId: path, onClick: () => openFolder(path) } })]}
+      dropTarget={drop}
     />
   )
   const searchField = (
     <PageToolbarSearch value={searchInput} onChange={setSearchInput} onClose={closeSearch} placeholder={t({ ko: '문서 이름이나 내용 검색', en: 'Search document names and text' })} />
   )
   const sidebar = (
-    <SidebarNav aria-label={t({ ko: '폴더', en: 'Folders' })}>
-      <WorkspaceSidebarGroup activeId={projectId} onOpen={onProject} onCreate={canWrite ? onCreateProject : undefined} />
+    <SidebarNav aria-label={t({ ko: '폴더', en: 'Folders' })} {...drop.containerProps}>
+      <WorkspaceSidebarGroup
+        activeId={projectId}
+        onOpen={onProject}
+        onCreate={canWrite ? onCreateProject : undefined}
+        rowDepth={workspaceTreeReservesToggle(folders) ? 1 : 0}
+        tree={{ atTop: dir === '', topAttributes: drop.getTargetAttributes(''), children: <WorkspaceFolderTree folders={folders} dir={dir} onOpen={openFolder} dropTarget={drop} /> }}
+      />
       <StoreFolderSidebarGroup activeId={undefined} onOpen={onStore} />
       {auth.data?.isAdmin ? <SystemFolderSidebarGroup active={null} onOpen={(root) => onSystem({ root, path: '' })} /> : null}
     </SidebarNav>
@@ -338,25 +400,43 @@ export function WorkspaceBrowser({ projectId, dir, onNavigate, onProject, onCrea
       onSelectAll={(checked) => setSelected(checked ? shown.map((entry) => entry.target) : [])}
       menu={(item) => rowMenu(byTarget.get(item.id)!)}
       formatSize={formatFileSize}
+      onSelect={setSelected}
+      sort={sortOrder}
+      sortKeys={sortKeys}
+      onSort={(key) => setSort(nextFileSort(sortOrder, key))}
+      cutIds={cut?.ids}
+      renaming={renamingEntry && nameDialog ? { id: renamingEntry.target, value: nameDialog.name, onChange: (name) => setNameDialog((current) => (current ? { ...current, name } : null)), onCommit: commitRename, onCancel: () => setNameDialog(null) } : undefined}
       draggable={canWrite && !busy}
-      onDragStart={(item, event) => {
-        startMoveDrag(event, DRAG_TYPE, selected.includes(item.id) ? selection.map((entry) => entry.target) : [item.id])
-      }}
-      onFolderDragOver={dragOver}
-      onFolderDrop={(item, event) => drop(event, item.id)}
-      onOpen={(item) => {
-        if (item.folder) openFolder(item.id)
-        else if (viewMode === 'grid' && selected.length > 0) toggle(item.id, !selected.includes(item.id))
-        else openDocument(byTarget.get(item.id)!)
-      }}
+      onDragStart={(ids, event) => startMove(event, ids)}
+      onDragEnd={endMove}
+      dropTarget={drop}
+      onOpen={(item) => openItem(byTarget.get(item.id)!)}
     />
   )
 
   return (
     <>
       <PageWithSidebar storageKey="files" sidebarLabel={t({ ko: '파일 보관함', en: 'Files' })} sidebar={sidebar} toolbar={<PageToolbar sticky start={searchOpen ? searchField : breadcrumbs} actions={actions} />}>
-        <div className="min-h-72 space-y-3" onDragOver={dragOver} onDrop={(event) => drop(event, dir)}>
+        <FileListSurface
+          drop={drop}
+          dropId={dir}
+          dropLabel={t({ ko: '여기에 놓으면 "{folder}"로 가져와', en: 'Drop to import into "{folder}"' }, { folder: dir ? baseName(dir) : projectName })}
+          selection={searching ? undefined : {
+            selectedIds: selected,
+            pageIds: shown.map((entry) => entry.target),
+            onSelectedIdsChange: setSelected,
+            onOpen: selection.length === 1 ? () => openItem(selection[0]) : undefined,
+            onDelete: canDelete && selection.length > 0 && !busy ? () => void remove(selection.map((entry) => entry.target)) : undefined,
+            onRename: canWrite && selection.length === 1 && !busy ? () => setNameDialog({ target: selection[0].target, name: baseName(selection[0].target), inline: true }) : undefined,
+            onParent: dir ? () => openFolder(parentOf(dir)) : undefined,
+            onCut: canWrite && !busy && selection.length > 0 ? () => cutSelection() : undefined,
+            onPaste: canPasteInto(dir) ? () => paste() : undefined,
+            onCancelCut: cut ? clearCutItems : undefined,
+            menu: emptySpaceMenu,
+          }}
+        >
           <input ref={uploadInput} type="file" multiple accept=".md,.markdown,.txt,.json,.csv,.yaml,.yml,.xml,.html,.css,.js,.ts" className="hidden" aria-label={t({ ko: '텍스트 문서 가져오기', en: 'Import text documents' })} onChange={(event) => { const files = Array.from(event.target.files ?? []); event.target.value = ''; importFiles(files) }} />
+          <TreeUploadStatus />
           {list}
           {searching ? null : (
             <ListPager
@@ -366,7 +446,7 @@ export function WorkspaceBrowser({ projectId, dir, onNavigate, onProject, onCrea
               onNext={() => { setOffset(entries.data!.nextOffset!); setSelected([]) }}
             />
           )}
-        </div>
+        </FileListSurface>
       </PageWithSidebar>
 
       <SelectionActionBar
@@ -375,7 +455,7 @@ export function WorkspaceBrowser({ projectId, dir, onNavigate, onProject, onCrea
         responsiveActions
         actions={canWrite ? (
           <>
-            <SelectionBarAction icon={Pencil} label={t({ ko: '이름 변경', en: 'Rename' })} disabled={selection.length !== 1 || busy} onClick={() => setNameDialog({ target: selection[0].target, name: baseName(selection[0].target) })} />
+            <SelectionBarAction icon={Pencil} label={t({ ko: '이름 변경', en: 'Rename' })} disabled={selection.length !== 1 || busy} onClick={() => setNameDialog({ target: selection[0].target, name: baseName(selection[0].target), inline: true })} />
             <SelectionBarAction icon={FolderInput} label={t({ ko: '이동', en: 'Move' })} disabled={busy} onClick={() => { setMoveTarget(dir); setMoveOpen(true) }} />
             {canDelete ? <SelectionBarAction icon={Trash2} label={t({ ko: '삭제', en: 'Delete' })} variant="destructive" disabled={busy} onClick={() => void remove(selection.map((entry) => entry.target))} /> : null}
           </>
@@ -383,11 +463,11 @@ export function WorkspaceBrowser({ projectId, dir, onNavigate, onProject, onCrea
       />
 
       <NameDialog
-        open={nameDialog !== null}
+        open={nameDialog !== null && !nameDialog.inline}
         title={nameDialog?.target ? t({ ko: '이름 변경', en: 'Rename' }) : t({ ko: '새 폴더', en: 'New folder' })}
         value={nameDialog?.name ?? ''}
         onChange={(name) => setNameDialog((current) => (current ? { ...current, name } : null))}
-        onSubmit={() => { if (nameDialog) { if (nameDialog.target) rename(nameDialog.target, nameDialog.name); else createFolder(nameDialog.name) } }}
+        onSubmit={() => { if (nameDialog) { if (nameDialog.target) void rename(nameDialog.target, nameDialog.name).catch(() => undefined); else createFolder(nameDialog.name) } }}
         onClose={() => setNameDialog(null)}
         busy={busy}
       />
@@ -395,7 +475,7 @@ export function WorkspaceBrowser({ projectId, dir, onNavigate, onProject, onCrea
         open={moveOpen}
         value={moveTarget}
         onChange={setMoveTarget}
-        folders={(folders.data ?? []).map((target) => ({ value: target, label: `/${target}`, disabled: selected.some((source) => target === source || target.startsWith(`${source}/`)) }))}
+        folders={moveOpen ? folders.filter((folder) => !selected.some((source) => folder.path === source || folder.path.startsWith(`${source}/`))).map((folder) => ({ value: folder.path, label: folder.name, parent: folder.parent })) : []}
         rootLabel={projectName}
         onSubmit={() => moveTo(selection.map((entry) => entry.target), moveTarget)}
         onClose={() => setMoveOpen(false)}

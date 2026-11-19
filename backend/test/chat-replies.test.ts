@@ -590,6 +590,27 @@ test('message replies: storage, delivery, context, and generation ownership', { 
     assert.equal(ChatProposalStore.forReply(thread.id, reply.routing!.replyId!, 'lore').length, 1)
   })
 
+  await t.test('a direct request without a page carries the no-page note only beside app tools', async s => {
+    const { NO_PAGE_NOTE } = await import('../src/services/codex-chat/chatPageContext')
+    const { isChatOwnTool } = await import('../src/mcp/context')
+    const bodies: Array<{ model: string; tools?: Array<{ function: { name: string } }>; messages: unknown[] }> = []
+    s.mock.method(globalThis, 'fetch', async (_url, init) => {
+      if (!init?.body) return new Response('', { status: 404 })
+      bodies.push(JSON.parse(String(init.body)))
+      return response('응.')
+    })
+    const assistant = ChatProfileStore.create({ name: 'App tools', engine: 'llm', providerName: 'test', model: 'app-tools', mcpEnabled: true, mcpScopes: ['read'], summaryEnabled: false })
+    await LlmChatService.sendMessage(requester, directChat(), '안녕', () => {})
+    await LlmChatService.sendMessage(requester, CodexChatStore.findThreadById(LlmChatService.createThread(requester, assistant.id))!, '안녕', () => {})
+    const noted = (body: typeof bodies[number]) => JSON.stringify(body.messages).includes(JSON.stringify(NO_PAGE_NOTE).slice(1, -1))
+    const own = bodies.find(body => body.model === 'A')!
+    const app = bodies.find(body => body.model === 'app-tools')!
+    assert.ok(own.tools?.length && own.tools.every(tool => isChatOwnTool(tool.function.name)), 'the plain chat offers only its own tools')
+    assert.equal(noted(own), false, 'no page note beside the chat\'s own tools')
+    assert.ok(app.tools?.some(tool => !isChatOwnTool(tool.function.name)), 'the assistant offers app tools')
+    assert.equal(noted(app), true, 'app tools bring the page note')
+  })
+
   await t.test('spaced Qwen XML executes as a quote and never streams or persists as speech, including the final round', async s => {
     const thread = directChat()
     const older = CodexChatStore.addMessage({ thread_id: thread.id, role: 'user', content: 'Earlier question', tool_calls: [], status: 'completed', error: null })
@@ -730,6 +751,54 @@ test('message replies: storage, delivery, context, and generation ownership', { 
     assert.ok(served < 150, `kept reading after the loop (${served} chunks)`)
     const last = events.filter((event) => event.type === 'text').at(-1)
     assert.deepEqual(last && 'text' in last ? last.text : null, said)
+  })
+
+  await t.test('a loop after written tool markup leaves neither the markup nor the loop in the reply, and keeps the text before it', async (s) => {
+    const loop = Array.from({ length: 400 }, () => text('wuwx'))
+    const cases = [
+      // A whole call, more text, then the loop: the text around the call stays, the call never runs.
+      { chunks: [text('Checking.\n\n'), text('<tool_call>{"name": "chat_reply_to", "arguments": {"to": ["user"]}}</tool_call>'), text('\n\nStill here.\n')], kept: 'Checking.\n\nStill here.' },
+      // The loop inside a call's arguments leaves the call unclosed: it goes with the loop.
+      { chunks: [text('Saving it.\n\n'), text('<tool_call>{"name": "save_lore", "arguments": {"content": "')], kept: 'Saving it.' },
+      // The tag named in prose is no call: all of the prose stays.
+      { chunks: [text('Your server prints the `<tool_call>` tag as text. Enable its tool-call parser.\n')], kept: 'Your server prints the `<tool_call>` tag as text. Enable its tool-call parser.' },
+    ]
+    for (const { chunks, kept } of cases) {
+      s.mock.method(globalThis, 'fetch', async () => sse(...chunks, ...loop, text('', 'length')))
+      let live = ''
+      const reply = await LlmChatService.sendMessage(requester, directChat(), '확인해줘', (event) => { if (event.type === 'delta') live += event.text; else if (event.type === 'text') live = event.text })
+      assert.equal(reply.finish_reason, 'repetition')
+      assert.equal(reply.content, kept)
+      assert.deepEqual(reply.tool_calls, [])
+      assert.equal(live.trim(), kept)
+    }
+  })
+
+  await t.test('a member that fails once it has the floor stores a failed reply, says so and gives the floor back', async (s) => {
+    const { ChatUserProfileStore } = await import('../src/services/codex-chat/chatUserProfiles')
+    const room = createRoom()
+    const forThread = ChatUserProfileStore.forThread.bind(ChatUserProfileStore)
+    let failNext = false
+    s.mock.method(ChatUserProfileStore, 'forThread', (thread: Parameters<typeof forThread>[0]) => {
+      if (failNext) { failNext = false; throw new Error('user profile unavailable') }
+      return forThread(thread)
+    })
+    let calls = 0
+    s.mock.method(globalThis, 'fetch', async () => ++calls === 1
+      ? response('Asking B.', { name: 'room_call_member', args: { room_id: room.id, names: ['B'] } })
+      : response('B will answer.'))
+    const events: Array<Parameters<Parameters<typeof GroupChatService.sendMessage>[3]>[0]> = []
+    await GroupChatService.sendMessage(requester, room.id, '@A ask B', (event) => {
+      events.push(event)
+      // B takes the floor right after A's reply is announced; its first read of the room's user then fails.
+      if (event.type === 'done' && event.message.speaker_profile_id === a.id) failNext = true
+    })
+    const failed = CodexChatStore.listMessages(room.id).find((message) => message.speaker_profile_id === b.id)
+    assert.equal(failed?.status, 'failed')
+    assert.equal(failed?.error, 'user profile unavailable')
+    assert.ok(events.some((event) => event.type === 'error' && event.message === 'user profile unavailable'))
+    const queue = events.filter((event) => event.type === 'queue').at(-1)
+    assert.deepEqual(queue && 'speakers' in queue ? queue.speakers : null, [])
   })
 
   await t.test('the loop check leaves ordinary repeats and long varied text alone', async () => {

@@ -1,4 +1,5 @@
 import { Folder, History, Plus, Search, Shuffle, Upload } from 'lucide-react'
+import { hierarchyReservesToggleColumn } from '@/components/common/hierarchy-nav'
 import { COUNT_UNITS } from '@/lib/count-display'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -55,6 +56,8 @@ export function WildcardExplorerSidebarPanel({
 }: WildcardExplorerSidebarPanelProps) {
   const { t, formatNumber } = useI18n()
   const hasSearch = searchInput.trim().length > 0
+  // Search rows stand in for the tree rows, so they keep the tree's chevron column and do not jump when a search starts.
+  const treeReservesToggle = hierarchyReservesToggleColumn(browserEntries, (entry) => entry.wildcard.id, (entry) => entry.wildcard.parent_id)
   const countLabel = hasSearch
     ? `${formatNumber(filteredEntries.length)} / ${formatNumber(browserEntries.length)}`
     : t(COUNT_UNITS.items, { count: formatNumber(browserEntries.length) })
@@ -109,6 +112,7 @@ export function WildcardExplorerSidebarPanel({
                 label={entry.wildcard.name}
                 title={entry.path.join(' / ')}
                 active={entry.wildcard.id === selectedWildcardId}
+                depth={treeReservesToggle ? 1 : 0}
                 onClick={() => onSelectWildcard(entry.wildcard.id)}
               />
             ))

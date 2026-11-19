@@ -323,6 +323,9 @@ test('new chats and resets save the filled history around the greeting as ordina
       return rename(...args)
     })
     const inputs: string[] = []
+    const started: string[] = []
+    const resumed: string[] = []
+    const deleted: string[] = []
     s.mock.method(CodexAppServerClient, 'start', async (options: Parameters<typeof CodexAppServerClient.start>[0]) => {
       const client = Object.assign(new EventEmitter(), { whenExited: Promise.resolve(), close: () => {}, isAlive: true,
         request: async (method: string, params: Record<string, unknown>) => {
@@ -342,7 +345,17 @@ test('new chats and resets save the filled history around the greeting as ordina
           if (method === 'thread/start') {
             preparing = true
             codexId = `opening-memory-${++threadNumber}`
+            started.push(String(params.developerInstructions))
             return { thread: { id: codexId } }
+          }
+          if (method === 'thread/resume') {
+            codexId = String(params.threadId)
+            resumed.push(codexId)
+            return {}
+          }
+          if (method === 'thread/delete') {
+            deleted.push(String(params.threadId))
+            return {}
           }
           assert.equal(method, 'turn/start')
           assert.equal(params.threadId, codexId)
@@ -361,7 +374,7 @@ test('new chats and resets save the filled history around the greeting as ordina
       chatId = CodexChatService.createThread(requester, saved.id, user.id).id
       failBeforeStart = failure
       const before = inputs.length
-      assert.equal((await CodexChatService.sendMessage(requester, chatId, '첫 시도', () => {})).status, 'failed')
+      assert.equal((await CodexChatService.sendMessage(requester, chatId, '첫 시도', () => {})).status, failure === 'cancellation' ? 'interrupted' : 'failed', 'a stop before turn/start is no failure')
       assert.equal(CodexChatService.isRunning(chatId), false, 'every post-registration failure releases the turn')
       assert.equal(inputs.length, before, 'the failed/cancelled preparation never starts a Codex turn')
       assert.equal(CodexChatStore.findThreadById(chatId)!.codex_thread_id, null, 'an unused memory is not committed')
@@ -373,6 +386,70 @@ test('new chats and resets save the filled history around the greeting as ordina
       await CodexChatService.sendMessage(requester, chatId, '계속', () => {})
       assert.ok(!inputs[before + 1].includes(expected[0].content), 'a successfully started memory does not repeat the recap')
     }
+    await s.test('edited character instructions start a new Codex thread from a recap; an unchanged prompt, a new user profile and an older thread resume', async () => {
+      const kai = ChatProfileStore.create({ name: '카이', engine: 'codex', systemPrompt: '{{char}}는 {{user}}의 친구다.' })
+      const seoyeon = ChatUserProfileStore.create(1, { name: '서연', persona: '' })
+      const chat = CodexChatService.createThread(requester, kai.id, user.id).id
+      const stored = () => CodexChatStore.findThreadById(chat)!
+      const send = async (text: string) => {
+        assert.equal((await CodexChatService.sendMessage(requester, chat, text, () => {})).status, 'completed')
+        return inputs.at(-1)!
+      }
+      await send('하나')
+      const first = stored()
+      assert.ok(first.codex_thread_id && first.codex_instructions_fingerprint, 'a new thread is stored with its fingerprint')
+      assert.doesNotMatch(await send('둘'), /\[Earlier conversation\]/)
+      ChatUserProfileStore.setThreadUserProfile(chat, seoyeon.id)
+      assert.doesNotMatch(await send('셋'), /\[Earlier conversation\]/)
+      assert.deepEqual([stored().codex_thread_id, stored().codex_instructions_fingerprint], [first.codex_thread_id, first.codex_instructions_fingerprint], 'an unchanged prompt and a new user profile keep the thread')
+
+      ChatProfileStore.update(kai.id, { systemPrompt: '{{char}}는 {{user}}의 오랜 친구다.' })
+      const starts = started.length
+      const recap = await send('넷')
+      assert.equal(started.length, starts + 1, 'the edited prompt starts a new thread')
+      assert.match(started.at(-1)!, /카이는 서연의 오랜 친구다\./)
+      assert.match(recap, /\[Earlier conversation\]/)
+      assert.ok(recap.includes('서연: 셋'), 'the new thread is told the conversation so far')
+      const edited = stored()
+      assert.notEqual(edited.codex_thread_id, first.codex_thread_id)
+      assert.notEqual(edited.codex_instructions_fingerprint, first.codex_instructions_fingerprint)
+      assert.ok(deleted.includes(first.codex_thread_id!), 'the replaced thread is deleted')
+      assert.doesNotMatch(await send('다섯'), /\[Earlier conversation\]/)
+
+      // A thread stored before fingerprints were kept.
+      CodexChatStore.setCodexThreadId(chat, 'legacy-memory')
+      assert.doesNotMatch(await send('여섯'), /\[Earlier conversation\]/)
+      assert.equal(resumed.at(-1), 'legacy-memory')
+      assert.deepEqual([stored().codex_thread_id, stored().codex_instructions_fingerprint], ['legacy-memory', edited.codex_instructions_fingerprint], 'it is adopted and resumed')
+
+      const memory = () => [stored().codex_thread_id, stored().codex_instructions_fingerprint]
+      const legacy = memory()
+      ChatProfileStore.update(kai.id, { promptSections: [{ id: 'off', title: '메모', content: '꺼진 메모', kind: 'text', enabled: false }] })
+      assert.doesNotMatch(await send('일곱'), /\[Earlier conversation\]/)
+      ChatProfileStore.update(kai.id, { promptSections: [{ id: 'off', title: '메모', content: '고친 꺼진 메모', kind: 'text', enabled: false }] })
+      assert.doesNotMatch(await send('여덟'), /\[Earlier conversation\]/)
+      assert.deepEqual(memory(), legacy, 'a disabled section never reaches the instructions')
+
+      // A section stored without an id gets a new one on every read.
+      dbModule.getUserSettingsDb().prepare('UPDATE llm_chat_profiles SET prompt_sections = ? WHERE id = ?').run(JSON.stringify([{ title: '말투', content: '짧게 말한다.', kind: 'text' }]), kai.id)
+      assert.match(await send('아홉'), /\[Earlier conversation\]/)
+      const sectioned = memory()
+      assert.doesNotMatch(await send('열'), /\[Earlier conversation\]/)
+      assert.doesNotMatch(await send('열하나'), /\[Earlier conversation\]/)
+      assert.deepEqual(memory(), sectioned, 'a section without a stored id keeps the thread')
+
+      const { WorkspaceService } = await import('../src/services/workspaceService')
+      // A chat reaches a linked project only with the file store's view permission.
+      const files = s.mock.method(AuthAccessControlService, 'resolveForAccountId', () => ({ permissionKeys: ['chat.use', 'chat.agent.use', 'files.view'] }))
+      s.after(() => files.mock.restore())
+      const project = await WorkspaceService.create('account:1', '항구 기록', '처음 지침')
+      WorkspaceService.setChatProject('account:1', chat, project.id, 'read')
+      assert.match(await send('열둘'), /\[Earlier conversation\]/)
+      assert.match(started.at(-1)!, /처음 지침/)
+      await WorkspaceService.update('account:1', project.id, { guidelines: '바뀐 지침', revision: project.revision })
+      assert.match(await send('열셋'), /\[Earlier conversation\]/)
+      assert.match(started.at(-1)!, /바뀐 지침/, 'a changed project guideline starts a new thread')
+    })
     const other = ChatProfileStore.create({ name: '동행 Codex', engine: 'codex' })
     const room = GroupChatService.create(requester, { profileIds: [saved.id, other.id], representativeId: saved.id })
     s.mock.method(CodexChatStore, 'setContextMeta', () => { throw new Error('metadata persistence failed after the reply was stored') })
@@ -381,6 +458,14 @@ test('new chats and resets save the filled history around the greeting as ordina
     assert.equal(answers.length, 1, 'metadata failure cannot cause a second failed room reply')
     assert.equal(answers[0].status, 'completed')
     assert.equal(answers[0].content, '답장')
+    const { ChatGroupStore } = await import('../src/services/codex-chat/chatGroupStore')
+    const member = ChatGroupStore.member(room.id, saved.id)!
+    assert.ok(member.codex_thread_id && member.codex_instructions_fingerprint, 'a member thread is stored with its fingerprint')
+    dbModule.getUserSettingsDb().prepare("UPDATE chat_group_members SET codex_thread_id = 'legacy-member', codex_instructions_fingerprint = NULL WHERE thread_id = ? AND profile_id = ?").run(room.id, saved.id)
+    await GroupChatService.sendMessage(requester, room.id, '또 답해줘', () => {})
+    assert.equal(resumed.at(-1), 'legacy-member')
+    const adopted = ChatGroupStore.member(room.id, saved.id)!
+    assert.deepEqual([adopted.codex_thread_id, adopted.codex_instructions_fingerprint], ['legacy-member', member.codex_instructions_fingerprint], 'an older member thread is adopted and resumed')
   })
 
   await t.test('legacy history sections migrate once, preserving disabled or unparseable sections as examples', async () => {
@@ -429,6 +514,19 @@ test('new chats and resets save the filled history around the greeting as ordina
     assert.deepEqual(row.get(capped.id), cappedResult, 'overflow sections are not migrated on the next startup')
     assert.deepEqual(row.get(untouched.id), { opening_history: '[]', prompt_sections: unmarkedSections })
     assert.deepEqual(row.get(malformed.id), { opening_history: '[]', prompt_sections: 'not JSON' })
+  })
+
+  await t.test('a partial update keeps the sections of a profile saved before prompt sections; sent sections replace them', () => {
+    const saved = ChatProfileStore.create({ name: '레거시', engine: 'codex' })
+    dbModule.getUserSettingsDb().prepare("UPDATE llm_chat_profiles SET prompt_sections = NULL, character_description = '은발의 검사', user_persona = '여행자', example_dialogue = ? WHERE id = ?").run('사용자: 안녕\n레거시: 응', saved.id)
+    const before = ChatProfileStore.find(saved.id)!.promptSections
+    assert.deepEqual(before.map((section) => section.id), ['legacy-character', 'legacy-persona', 'legacy-dialogue'])
+    ChatProfileStore.update(saved.id, { isEnabled: false })
+    ChatProfileStore.update(saved.id, { tagline: '옮김' })
+    assert.deepEqual(ChatProfileStore.find(saved.id)!.promptSections, before)
+    const sent = [{ id: 'own', title: '세계', content: '항구 도시', kind: 'text' as const, enabled: true }]
+    ChatProfileStore.update(saved.id, { promptSections: sent })
+    assert.deepEqual(ChatProfileStore.find(saved.id)!.promptSections, sent)
   })
 })
 

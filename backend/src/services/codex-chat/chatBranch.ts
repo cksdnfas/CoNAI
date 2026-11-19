@@ -1,3 +1,4 @@
+import { CHAT_PROFILE_DEFAULTS } from '@conai/shared'
 import { getUserSettingsDb } from '../../database/userSettingsDb'
 import { OwnedLorebookStore } from './chatLorebookFiles'
 import { parseBlockEdits } from './chatBlockState'
@@ -116,7 +117,23 @@ export function branchChatThread(thread: CodexChatThreadRecord, untilMessageId: 
       setMeta.run(remapMeta(row.context_meta), alternatives, ids.get(row.id))
     }
     const copied = db.prepare('SELECT * FROM chat_summary_segments WHERE thread_id = ?').all(branchId) as ChatSummarySegment[]
-    const until = copied.reduce<number | null>((max, segment) => (max === null || segment.until_message_id > max ? segment.until_message_id : max), null)
+    const covered = copied.reduce<number | null>((max, segment) => (max === null || segment.until_message_id > max ? segment.until_message_id : max), null)
+    // An API LLM direct chat's cursor ahead of its segments (an engine hand-over) skips a stretch the branch must not
+    // fold either: a branch after the cursor keeps it, one at or before it hands over its own latest turns. Other
+    // chats' cursors belong to their session, which the branch does not take.
+    const branch = db.prepare(`SELECT t.kind = 'direct' AND p.engine = 'llm' AND p.llm_runtime IS NOT 'pi' AS direct, COALESCE(t.context_turns, p.context_turns) AS turns
+      FROM codex_chat_threads t LEFT JOIN llm_chat_profiles p ON p.id = t.profile_id WHERE t.id = ?`).get(branchId) as { direct: number | null; turns: number | null }
+    const sourceEnd = (db.prepare('SELECT MAX(until_message_id) AS id FROM chat_summary_segments WHERE thread_id = ?').get(thread.id) as { id: number | null }).id ?? 0
+    const cursor = thread.summary_until_message_id ?? 0
+    let until = covered
+    if (branch.direct && cursor > sourceEnd && untilMessageId > sourceEnd) {
+      if (untilMessageId > cursor) {
+        const held = rows.reduce<number | undefined>((last, row) => (row.id > sourceEnd && row.id <= cursor ? row.id : last), undefined)
+        if (held !== undefined) until = ids.get(held) as number
+      } else {
+        until = CodexChatStore.handOverCursor(branchId, branch.turns ?? CHAT_PROFILE_DEFAULTS.contextTurns) || null
+      }
+    }
     db.prepare(`UPDATE codex_chat_threads SET summary = ?, summary_until_message_id = ?, summary_updated_date = CASE WHEN ? IS NULL THEN NULL ELSE CURRENT_TIMESTAMP END WHERE id = ?`)
       .run(renderSummary(copied) || null, until, until, branchId)
     // The copied conversation was already there to read: a branch starts with nothing unread.

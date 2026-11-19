@@ -18,7 +18,8 @@ import { checkedProfileFolder, createChatProfileFolder, deleteChatProfileFolder,
 import { CHAT_SCOPES, LORE_SELECTION_LIMITS, MAX_CHAT_CAPTURE_LIMIT, TOOL_ROUND_LIMITS, WEB_RESEARCH_ENGINES, WEB_RESEARCH_MAX_DAILY_LIMIT, loadChatSettings, updateChatSettings } from '../services/codex-chat/chatSettings'
 import { exportChatDiagnostics, getChatDiagnostics, visibleContextMessages } from '../services/codex-chat/chatDiagnostics'
 import { DEFAULT_CHAT_STYLE } from '../services/codex-chat/chatStyle'
-import { chatExpressionGroupId, listProfileEmoticons } from '../services/codex-chat/chatEmoticons'
+import { listProfileEmoticons } from '../services/codex-chat/chatEmoticons'
+import { backgroundVersionOf, toPublicProfile } from '../services/codex-chat/chatProfileViews'
 import { copyProfileExpressions, expressionGroupId as ownExpressionGroupId } from '../services/codex-chat/chatProfileExpressions'
 import { EmoticonService } from '../services/emoticonService'
 import { serveThumbnailOrOriginal, streamCacheableFile, streamRangeFile } from './images/query-file-helpers'
@@ -40,7 +41,6 @@ import { loreIndexText } from '../services/codex-chat/chatLoreContext'
 import { deleteChatThread, type ThreadLorebookOption } from '../services/codex-chat/chatThreadDeletion'
 import { ModelSlotStore } from '../services/codex-chat/modelSlots'
 import { downChatProfiles } from '../services/codex-chat/chatConnectionHealth'
-import { effectiveModelOf, modelLabelOf } from '../services/codex-chat/chatModelRoles'
 import { chatModelOptions, validateChatModelPatch, warmClaudeChatModel } from '../services/codex-chat/chatModelOverride'
 import { CodexChatStore, type ChatThreadSummary } from '../services/codex-chat/codexChatStore'
 import { attachJobResults } from '../services/codex-chat/codexChatMedia'
@@ -62,13 +62,14 @@ import { backupChatToFiles, backupDateOf, exportChatJson } from '../services/cod
 import { activeMediaFile, chatAssetFile, chatMediaInfo, chatMediaUsage, localizeImages, rewriteStoredMessages } from '../services/codex-chat/chatCardAssets'
 import { MEDIA_HASH_PATTERN, rewriteMediaLinks } from '../services/codex-chat/chatMediaLinks'
 import { GroupChatService } from '../services/codex-chat/groupChatService'
+import { profileEngineSwitch } from '../services/codex-chat/chatProfileEngineSwitch'
 import { ChatFlagStore, parseFlagIds } from '../services/codex-chat/chatFlags'
 import { chatOrdersOf } from '../services/codex-chat/chatOrders'
 import { runChatOrder } from '../services/codex-chat/chatOrderRunner'
 import { ChatUserProfileStore, type ChatUserProfile } from '../services/codex-chat/chatUserProfiles'
 import { ChatAppearanceStore } from '../services/codex-chat/chatAppearance'
 import { validateBlockData } from '../services/codex-chat/chatBlockState'
-import { canSuggest, ChatSuggestError, profileWriterReady, suggestReplies, userWriterReady } from '../services/codex-chat/chatSuggestions'
+import { ChatSuggestError, profileWriterReady, suggestReplies, userWriterReady } from '../services/codex-chat/chatSuggestions'
 import { createUploadStorage, MAX_UPLOAD_FILE_SIZE_BYTES } from '../middleware/upload'
 import { downloadProfileAsset, hiddenProfileAssets, importFileStoreProfileAsset, ingestProfileAsset, isProfileAssetHidden, profileAssetFields, profileAvatarThumbnail, resolveProfileAsset } from '../services/codex-chat/chatProfileAssets'
 import chatAssetBatchesRouter, { chatProfileExpressionsRouter } from './chat-asset-batches.routes'
@@ -120,50 +121,6 @@ router.use((_req: Request, _res: Response, next: NextFunction) => {
   ensureCodexProfileMigrated()
   next()
 })
-
-/** What a chat user sees of a profile: enough to pick it and show who is talking. */
-/** Changes whenever the background does, so the image URL can be cached for good. Null: no background. */
-function backgroundVersionOf(profile: ChatProfile) {
-  return profile.background || profile.backgroundHash ? `${profile.id}-${profile.backgroundHash?.slice(0, 8) ?? ''}-${Date.parse(profile.updatedDate) || 0}` : null
-}
-
-/**
- * `canViewLibrary`: the reader may see the character library, so the library setting the profile looks like is named
- * (its folders and name); others only see the profile.
- */
-function toPublicProfile(profile: ChatProfile, accountId: number | null, canViewLibrary: boolean, hidden?: ReadonlySet<string>) {
-  const canViewImages = canRequesterViewImages({ accountId, accountType: null })
-  const link = canViewLibrary ? profile.characterLink : null
-  return {
-    id: profile.id,
-    name: profile.name,
-    tagline: profile.tagline,
-    agentEnabled: profile.agentEnabled,
-    agentDescription: profile.agentDescription,
-    model: effectiveModelOf(profile),
-    modelLabel: modelLabelOf(profile),
-    ...profileAssetFields(profile, canViewImages, hidden),
-    engine: profile.engine,
-    isEnabled: profile.isEnabled,
-    contextTurns: profile.contextTurns,
-    summaryEnabled: profile.summaryEnabled,
-    reactionEnabled: profile.reactionEnabled,
-    reactionSlotId: profile.reactionSlotId,
-    removedModelRoles: profile.removedModelRoles,
-    maxTokens: profile.maxTokens,
-    reasoningEffort: profile.reasoningEffort,
-    reasoningBudgetTokens: profile.reasoningBudgetTokens,
-    loreDepth: profile.loreDepth,
-    authorNote: profile.authorNote,
-    style: profile.style,
-    expressionGroupId: canViewImages ? chatExpressionGroupId(profile) : null,
-    backgroundVersion: canViewImages ? backgroundVersionOf(profile) : null,
-    // The composer shows the suggestion button only when someone can answer it.
-    suggestEnabled: canSuggest(profile, accountId),
-    pageAssist: profile.pageAssist,
-    characterLink: link ? { settingId: link.settingId, synced: link.synced, settingName: link.settingName, path: link.path } : null,
-  }
-}
 
 /** Admin view of a profile: everything but the background image itself (served by its own route). */
 function toAdminProfile(profile: ChatProfile | null, hidden?: ReadonlySet<string>, includeOwnExpression = false) {
@@ -677,17 +634,23 @@ router.patch('/threads/:threadId/context', requireChatAccess, (req: Request, res
       sendRouteBadRequest(res, 'reactionEnabled must be a boolean or null')
       return
     }
+    // Reactions run for API LLM profiles only (see chatGenerationReactions); a Claude Code chat is an LLM thread too.
+    const reactionPatch = body.reactionEnabled !== undefined || body.reactionModelSlotId !== undefined
+    const directEngine = reactionPatch && thread.kind === 'direct'
+      ? thread.engine === 'codex' ? 'codex' : thread.profile_id === null ? null : ChatProfileStore.find(thread.profile_id)?.engine
+      : null
+    if (directEngine === 'codex' || directEngine === 'claude') {
+      sendRouteBadRequest(res, `${directEngine === 'codex' ? 'Codex' : 'Claude Code'} 채팅은 완료 반응을 사용할 수 없어.`)
+      return
+    }
     let reactionModelSlotId: number | null | undefined
     if (body.reactionModelSlotId !== undefined) {
-      reactionModelSlotId = body.reactionModelSlotId as number | null
-      if (reactionModelSlotId !== null && (typeof reactionModelSlotId !== 'number' || !Number.isSafeInteger(reactionModelSlotId) || reactionModelSlotId <= 0 || !ModelSlotStore.target(reactionModelSlotId))) {
+      if (body.reactionModelSlotId !== null && (typeof body.reactionModelSlotId !== 'number' || !Number.isSafeInteger(body.reactionModelSlotId) || body.reactionModelSlotId <= 0)) {
         sendRouteBadRequest(res, '반응 모델 슬롯을 다시 골라줘.')
         return
       }
-    }
-    if (thread.kind === 'direct' && thread.engine === 'codex' && (body.reactionEnabled !== undefined || body.reactionModelSlotId !== undefined)) {
-      sendRouteBadRequest(res, 'Codex 채팅은 완료 반응을 사용할 수 없어.')
-      return
+      // The same check as a profile's reaction row: an existing row that reaches an LLM connection.
+      reactionModelSlotId = ModelSlotStore.checked(body.reactionModelSlotId)
     }
     if (thread.engine !== 'llm' && windowKeys.some((key) => body[key] !== undefined)) {
       sendRouteBadRequest(res, 'Only LLM chats have context settings')
@@ -1076,7 +1039,7 @@ router.post('/admin/profiles', requireAdmin, asyncHandler(async (req: Request, r
     // A new profile/cross-folder copy appends to its folder; a same-folder copy stays by its source.
     input.sortOrder = source && source.folderId === (input.folderId ?? null) ? source.sortOrder : ChatProfileStore.nextSortOrder(checkedProfileFolder(input.folderId))
     // A copy follows its source's link unless the draft chose its own (linked or unlinked before the first save).
-    if (source && input.characterLink === undefined) input.characterLink = source.characterLink ? { settingId: source.characterLink.settingId, synced: source.characterLink.synced } : null
+    if (source && input.characterLink === undefined) input.characterLink = source.characterLink ? { settingId: source.characterLink.settingId, synced: source.characterLink.synced, outfit: source.characterLink.outfit } : null
     const created = ChatProfileStore.create(input, source ?? undefined)
     // A synced copy shows its setting's expressions; only an own-look copy takes the source's own ones.
     res.status(201).json({ success: true, data: toAdminProfile(source && !source.characterLink?.synced && !created.characterLink?.synced ? copyProfileExpressions(source, created) : created) })
@@ -1102,7 +1065,11 @@ router.put('/admin/profiles/:profileId', requireAdmin, asyncHandler(async (req: 
     if (revision !== undefined && revision !== current.revision) throw new ChatRevisionConflict(current)
     await assertCodexEffortSupported({ ...current, ...patch })
     if (patch.linkedFiles !== undefined) assertLinkedFiles(fileOwnerKey(getRequesterAccountId(req)), normalizeLinkedFiles(patch.linkedFiles), current.linkedFiles)
-    res.json({ success: true, data: toAdminProfile(ChatProfileStore.update(profileId, patch, undefined, { revision })) })
+    // A new engine converts the chats using the profile; their old sessions go once the save is committed.
+    const engineSwitch = profileEngineSwitch(profileId)
+    const updated = ChatProfileStore.update(profileId, patch, undefined, { revision, engineSwitch: engineSwitch.engineSwitch })
+    engineSwitch.cleanup()
+    res.json({ success: true, data: toAdminProfile(updated) })
   } catch (error) {
     if (error instanceof ChatRevisionConflict) {
       res.status(409).json({ success: false, code: 'revision_conflict', error: error.message, data: toAdminProfile(error.current as ChatProfile) })
@@ -1111,6 +1078,14 @@ router.put('/admin/profiles/:profileId', requireAdmin, asyncHandler(async (req: 
     sendChatError(res, error)
   }
 }))
+
+/** The chats an engine change of the profile would convert, counted from what the conversion itself reads. */
+router.get('/admin/profiles/:profileId/engine-usage', requireAdmin, (req: Request, res: Response) => {
+  const profileId = parseId(req.params.profileId)
+  if (profileId === null) { sendRouteBadRequest(res, 'Invalid profile id'); return }
+  if (!ChatProfileStore.find(profileId)) { res.status(404).json({ success: false, error: '프로필을 찾을 수 없어.' }); return }
+  res.json({ success: true, data: { directChats: CodexChatStore.directThreadIdsOfProfile(profileId).length, rooms: ChatGroupStore.roomIdsOfProfile(profileId).length } })
+})
 
 router.delete('/admin/profiles/:profileId', requireAdmin, (req: Request, res: Response) => {
   const profileId = parseId(req.params.profileId)
@@ -1214,7 +1189,7 @@ router.post('/admin/profiles/preview', requireAdmin, asyncHandler(async (req: Re
     const profileId = parseId(body.id) ?? 0
     // A draft that leaves its link alone previews with the stored one (a synced profile shows its setting's look).
     const stored = body.characterLink === undefined && profileId > 0 ? ChatProfileStore.find(profileId)?.characterLink : null
-    const profile = ChatProfileStore.draft(stored ? { ...body, characterLink: { settingId: stored.settingId, synced: stored.synced } } : body, profileId)
+    const profile = ChatProfileStore.draft(stored ? { ...body, characterLink: { settingId: stored.settingId, synced: stored.synced, outfit: stored.outfit } } : body, profileId)
     const { scopes, toolAllowlist } = resolveChatProfileToolGrant(profile, resolveChatAccess(requesterFrom(req).accountId))
     const bridge = scopes.length > 0
       ? await openChatMcpBridge(requesterFrom(req), scopes, toolAllowlist, { generationPresetIds: profile.generationPresetIds })
@@ -1223,7 +1198,7 @@ router.post('/admin/profiles/preview', requireAdmin, asyncHandler(async (req: Re
       const tools = (bridge?.tools ?? []).filter((tool) => profile.engine === 'codex' || profile.visionEnabled || !isVisionTool(tool.function.name))
       const messages = profile.engine === 'codex'
         ? [{ role: 'developer', content: buildCodexInstructions(profile) }]
-        : buildChatPromptPreview(profile, tools)
+        : buildChatPromptPreview(profile, tools, bridge?.catalogTools)
       // Codex gets the lore index and the always-on entries in its first turn's reference block (no chat here: the
       // profile's global books only, as in an LLM preview).
       if (profile.engine === 'codex') {

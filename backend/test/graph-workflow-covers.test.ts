@@ -49,6 +49,44 @@ test('graph workflow covers: newest library image per workflow, refreshed when a
   result(textOnly, 'image', { compositeHash: 'first-image' })
   assert.deepEqual(GraphExecutionFinalResultModel.findLatestImageCovers(), { [sheet]: 'new-sheet', [upscale]: 'upscaled', [textOnly]: 'first-image' })
 
+  await t.test('a run cancelled while its final result uploads records no final result and fills no group', async (sub) => {
+    const main = await import('../src/database/init')
+    await main.initializeDatabase()
+    ;(await import('../src/database/apiGenerationDb')).initializeApiGenerationDb()
+    const { GenerationHistoryService } = await import('../src/services/generationHistoryService')
+    const { HistoryCommandService } = await import('../src/services/historyCommandService')
+    const { MediaPostprocessCoordinator } = await import('../src/services/background-media/mediaPostprocessCoordinator')
+    const { GroupModel } = await import('../src/models/Group')
+    const abort = await import('../src/services/graph-workflow-executor/execution-abort')
+    const { executeFinalResultNode } = await import('../src/services/graph-workflow-executor/system-result-operations')
+    const workflowId = workflow('cancelled final')
+    const executionId = Number(db.prepare("INSERT INTO graph_executions (graph_workflow_id, graph_version, status) VALUES (?, 1, 'running')").run(workflowId).lastInsertRowid)
+    const storagePath = path.join(root, 'cancelled-final.png')
+    fs.writeFileSync(storagePath, 'png')
+    const artifactRecordId = Number(db.prepare("INSERT INTO graph_execution_artifacts (execution_id, node_id, port_key, artifact_type, storage_path) VALUES (?, 'n1', 'image', 'image', ?)").run(executionId, storagePath).lastInsertRowid)
+    const handle = abort.createExecutionAbortHandle(executionId)
+    abort.registerExecutionAbortHandle(handle)
+    sub.after(() => abort.unregisterExecutionAbortHandle(executionId))
+    const groupId = GroupModel.create({ name: 'cancelled final group' })
+    const hash = 'cd'.repeat(24)
+    main.db.prepare('INSERT INTO media_metadata (composite_hash) VALUES (?)').run(hash)
+    // The cancel lands while the upload runs; the upload still finishes and files its row's group as the real one does.
+    sub.mock.method(GenerationHistoryService, 'processAndUploadGeneratedFile', async (historyId: number) => {
+      handle.abort({ kind: 'user_cancel' })
+      HistoryCommandService.updateImagePaths(historyId, { compositeHash: hash })
+      HistoryCommandService.updateStatus(historyId, 'completed')
+      await MediaPostprocessCoordinator.processApiGenerationGroupAssignment(hash)
+    })
+    const context = {
+      executionId, signal: handle.signal, getAbortReason: handle.getReason, outputGroupId: groupId,
+      workflow: { id: workflowId, name: 'cancelled final', graph: { nodes: [], edges: [{ source_node_id: 'n1', source_port_key: 'image', target_node_id: 'final', target_port_key: 'value' }] } },
+      artifactsByNode: new Map([['n1', { image: { type: 'image', value: null, storagePath, artifactRecordId } }]]),
+    } as any
+    await assert.rejects(executeFinalResultNode(context, { id: 'final' } as any, { name: 'final' } as any, {}), (error) => abort.isGraphCancellationError(error))
+    assert.deepEqual(GraphExecutionFinalResultModel.findByExecution(executionId), [])
+    assert.equal(main.db.prepare('SELECT 1 FROM image_groups WHERE group_id = ?').get(groupId), undefined)
+  })
+
   await t.test('scope cleanup pages technical artifacts without deleting reused final results or active runs', async () => {
     const { deleteGraphWorkflowArtifactsInScope } = await import('../src/services/graphWorkflowOutputManagementService')
     const sourceWorkflow = workflow('scope-source')

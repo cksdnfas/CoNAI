@@ -114,4 +114,85 @@ test('group room memory: the room summary, what its members see, and recall', { 
     assert.ok(await summarizeGroupAll(threadId, members, WINDOW))
     assert.equal(thread().summary_error, null)
   })
+
+  await t.test('a used profile switched to another engine converts its chats, and is refused while one answers', async () => {
+    const { profileEngineSwitch } = await import('../src/services/codex-chat/chatProfileEngineSwitch')
+    const { beginChatOrderRun } = await import('../src/services/codex-chat/chatOrderRuns')
+    const { claudeMemberSessionDir } = await import('../src/services/codex-chat/claudeChatSessions')
+    const nova = ChatProfileStore.create({ name: '노바', engine: 'codex' })
+    const stella = ChatProfileStore.create({ name: '스텔라', engine: 'codex' })
+    const directId = CodexChatStore.createThread(null, '', 'codex', nova.id)
+    const add = (role: 'user' | 'assistant', content: string) => CodexChatStore.addMessage({ thread_id: directId, role, content, tool_calls: [], status: 'completed', error: null })
+    const firstId = add('user', '안녕')
+    const lastId = add('assistant', '반가워')
+    assert.ok(ChatSummaryStore.addSegment(directId, { from: firstId, until: firstId, content: '인사를 나눴다.' }, CodexChatStore.findThreadById(directId)!.context_revision))
+    db.prepare("UPDATE codex_chat_threads SET codex_thread_id = 'old-codex', codex_input_tokens = 10, codex_lore_sent = '[\"k\"]', chat_model = 'gpt-old', updated_date = '2001-02-03 04:05:06' WHERE id = ?").run(directId)
+    ChatGroupStore.addMembers(threadId, [nova.id, stella.id])
+    ChatGroupStore.setMemberCodexThread(threadId, nova.id, 'old-member')
+    ChatGroupStore.setLastSeen(threadId, nova.id, CodexChatStore.latestMessageId(threadId)!)
+    ChatGroupStore.setMemberChatModel(threadId, nova.id, { chatModel: 'gpt-old' })
+    // A compacted chat: the session moved the cursor past every message without writing a summary.
+    const compactedId = CodexChatStore.createThread(null, '', 'codex', nova.id)
+    const replies = ['1', '2', '3'].map((turn) => {
+      CodexChatStore.addMessage({ thread_id: compactedId, role: 'user', content: `질문 ${turn}`, tool_calls: [], status: 'completed', error: null })
+      return CodexChatStore.addMessage({ thread_id: compactedId, role: 'assistant', content: `답 ${turn}`, tool_calls: [], status: 'completed', error: null })
+    })
+    db.prepare('UPDATE codex_chat_threads SET context_turns = 2, summary_until_message_id = ? WHERE id = ?').run(replies[2], compactedId)
+    const compactedRevision = CodexChatStore.findThreadById(compactedId)!.context_revision
+    // A session chat's summary text without segments: it becomes a plot up to the cursor it had.
+    const legacyId = CodexChatStore.createThread(null, '', 'codex', nova.id)
+    const [legacyFirst, legacyUntil] = (['user', 'assistant'] as const).map((role) => CodexChatStore.addMessage({ thread_id: legacyId, role, content: role, tool_calls: [], status: 'completed', error: null }))
+    db.prepare('UPDATE codex_chat_threads SET summary = ?, summary_until_message_id = ? WHERE id = ?').run('옛 요약', legacyUntil, legacyId)
+    assert.equal(ChatSummaryStore.list(legacyId).length, 0)
+    const direct = () => CodexChatStore.findThreadById(directId)!
+    const kept = () => ({ messages: CodexChatStore.listMessages(directId).map((message) => [message.id, message.content]), summary: direct().summary,
+      until: direct().summary_until_message_id, revision: direct().context_revision, updated: direct().updated_date, segments: ChatSummaryStore.list(directId) })
+    const before = kept()
+    assert.deepEqual([before.summary, before.until, before.updated], ['인사를 나눴다.', firstId, '2001-02-03 04:05:06'])
+    const roomBefore = thread().engine_changes
+    const save = () => ChatProfileStore.update(nova.id, { engine: 'llm', providerName: 'conn' }, undefined, { engineSwitch: profileEngineSwitch(nova.id).engineSwitch })
+
+    assert.throws(() => ChatProfileStore.update(nova.id, { engine: 'llm', providerName: 'conn' }), /대화에서 사용 중인 프로필의 엔진은 바꿀 수 없어/, 'other callers keep the rejection')
+    const order = beginChatOrderRun(directId, lastId, 'reply')!
+    assert.throws(save, /대화 1개가 답변 중/)
+    order.end()
+    assert.equal(ChatProfileStore.find(nova.id)!.engine, 'codex')
+    assert.equal(direct().engine, 'codex')
+    assert.equal(direct().codex_thread_id, 'old-codex')
+    assert.equal(direct().engine_changes, null)
+    assert.equal(ChatGroupStore.member(threadId, nova.id)!.codex_thread_id, 'old-member')
+    assert.equal(thread().engine_changes, roomBefore)
+
+    assert.equal(save()!.engine, 'llm')
+    const after = direct()
+    assert.equal(after.engine, 'llm')
+    assert.deepEqual([after.codex_thread_id, after.codex_input_tokens, after.codex_lore_sent, after.chat_model, after.chat_model_slot_id], [null, null, null, null, null])
+    assert.deepEqual(kept(), before)
+    // An API LLM target hands over the latest turns: the next message is one, so with two only the newest stays verbatim.
+    const compacted = CodexChatStore.findThreadById(compactedId)!
+    assert.deepEqual([compacted.summary_until_message_id, compacted.context_revision - compactedRevision, compacted.summary], [replies[1], 1, null])
+    assert.deepEqual(ChatSummaryStore.list(legacyId).map((segment) => [segment.level, segment.from_message_id, segment.until_message_id, segment.content, segment.backed]), [[1, legacyFirst, legacyUntil, '옛 요약', 0]])
+    assert.equal(CodexChatStore.findThreadById(legacyId)!.summary, '옛 요약')
+    assert.deepEqual(JSON.parse(after.engine_changes!).map(({ at, ...change }: { at: string }) => (assert.ok(at), change)), [{ afterMessageId: lastId, from: 'codex', to: 'llm' }])
+    const member = ChatGroupStore.member(threadId, nova.id)!
+    assert.deepEqual([member.codex_thread_id, member.last_seen_message_id, member.chat_model, member.chat_model_slot_id], [null, null, null, null])
+    const roomChanges = () => JSON.parse(thread().engine_changes!).map(({ at: _at, ...change }: { at: string }) => change)
+    const anchor = CodexChatStore.latestMessageId(threadId)
+    assert.deepEqual(roomChanges(), [{ afterMessageId: anchor, from: 'codex', to: 'llm', profileId: nova.id }])
+
+    // Another member switches at the same point: its cleanup takes only its own session folder in the room.
+    const stellaDir = claudeMemberSessionDir(threadId, stella.id, 'claude')
+    const kaiDir = claudeMemberSessionDir(threadId, kai.id, 'pi')
+    for (const dir of [stellaDir, kaiDir]) fs.mkdirSync(dir, { recursive: true })
+    const stellaSwitch = profileEngineSwitch(stella.id)
+    ChatProfileStore.update(stella.id, { engine: 'llm', providerName: 'conn' }, undefined, { engineSwitch: stellaSwitch.engineSwitch })
+    stellaSwitch.cleanup()
+    assert.ok(!fs.existsSync(stellaDir), 'the switched member loses its session')
+    assert.ok(fs.existsSync(kaiDir), 'the other members keep theirs')
+    // The first member switching back undoes its own notice, wherever it sits; the other member's stays.
+    ChatProfileStore.update(nova.id, { engine: 'codex' }, undefined, { engineSwitch: profileEngineSwitch(nova.id).engineSwitch })
+    assert.deepEqual(roomChanges(), [{ afterMessageId: anchor, from: 'codex', to: 'llm', profileId: stella.id }])
+    assert.equal(direct().engine, 'codex')
+    assert.equal(direct().engine_changes, null)
+  })
 })

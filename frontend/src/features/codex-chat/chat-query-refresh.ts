@@ -10,8 +10,16 @@ import { CODEX_CHAT_THREADS_QUERY_KEY, codexChatThreadQueryKey } from './codex-c
 export async function applyChatThreadUpdate(queryClient: QueryClient, thread: CodexChatThread) {
   const queryKey = codexChatThreadQueryKey(thread.id)
   const interrupted = queryClient.getQueryState(queryKey)?.fetchStatus === 'fetching'
-  queryClient.setQueryData<CodexChatThreadDetail>(queryKey, (current) => current ? { ...current, thread } : current)
+  patchChatThreadQuery(queryClient, thread.id, (current) => current ? { ...current, thread } : current)
   if (interrupted) void queryClient.invalidateQueries({ queryKey, exact: true, refetchType: 'active' })
+}
+
+/** `setQueryData` clears a stale mark, so a row patch of an unopened chat must not hide a reply that arrived before it. */
+export function patchChatThreadQuery(queryClient: QueryClient, threadId: number, update: (current: CodexChatThreadDetail | undefined) => CodexChatThreadDetail | undefined) {
+  const queryKey = codexChatThreadQueryKey(threadId)
+  const marked = queryClient.getQueryState(queryKey)?.isInvalidated
+  queryClient.setQueryData<CodexChatThreadDetail>(queryKey, update)
+  if (marked) void queryClient.invalidateQueries({ queryKey, exact: true, refetchType: 'none' })
 }
 
 /** Merge a mutation's bounded detail, refreshing the loaded range if another rewrite preceded a reply edit. */
@@ -117,7 +125,15 @@ export function waitForChatQueryReads(queryClient: QueryClient, filters: QueryFi
   }))).then(() => undefined)
 }
 
-/** Exact tail/media/badge refresh: a pre-event response cannot satisfy it; unopened caches never fetch. */
+/** True while a mounted observer reads this query. */
+export function hasActiveChatQuery(queryClient: QueryClient, queryKey: QueryKey) {
+  return queryClient.getQueryCache().find({ queryKey, exact: true, type: 'active' }) !== undefined
+}
+
+/**
+ * Exact tail/media/badge refresh: a pre-event response cannot satisfy it. A mounted query is read again; an unopened
+ * cache is never fetched, only marked stale so opening it re-reads instead of trusting `staleTime`.
+ */
 export function refetchActiveChatQuery(queryClient: QueryClient, queryKey: QueryKey): Promise<void> {
   let reads = pendingReads.get(queryClient)
   if (!reads) { reads = new Map(); pendingReads.set(queryClient, reads) }
@@ -125,11 +141,18 @@ export function refetchActiveChatQuery(queryClient: QueryClient, queryKey: Query
   const existing = reads.get(key)
   if (existing) return existing
   const filters = { queryKey, exact: true, type: 'active' as const }
-  const refresh = waitForChatQueryReads(queryClient, filters).then(() => {
+  // An unopened cache's read already on the wire would otherwise land after the mark and clear it.
+  const refresh = waitForChatQueryReads(queryClient, { queryKey, exact: true }).then(() => {
     // Events arriving after the fresh read starts need their own follow-up, not its older snapshot.
     reads.delete(key)
+    const markUnopened = () => void queryClient.invalidateQueries({ queryKey, exact: true, type: 'inactive', refetchType: 'none' })
+    markUnopened()
+    const updatedAt = queryClient.getQueryState(queryKey)?.dataUpdatedAt
     void queryClient.refetchQueries(filters, { cancelRefetch: false })
-    return waitForChatQueryReads(queryClient, filters)
+    return waitForChatQueryReads(queryClient, filters).then(() => {
+      // Leaving the chat cancels its read and restores the old cache; without a result, the reply is still missing.
+      if (queryClient.getQueryState(queryKey)?.dataUpdatedAt === updatedAt) markUnopened()
+    })
   })
   reads.set(key, refresh)
   return refresh

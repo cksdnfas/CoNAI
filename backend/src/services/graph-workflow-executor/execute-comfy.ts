@@ -121,6 +121,19 @@ export function buildQueuePayload(promptData: Record<string, unknown>, context: 
   return payload
 }
 
+/** Account-less authorities carry a signed grant bound to the stored input; account and bootstrap runs are checked as their requester. */
+export function attachGraphImageGrant(queuePayload: Record<string, unknown>, imageAuthority: ReturnType<typeof requireGraphImageAuthority> | null, workflowId: number) {
+  if (imageAuthority?.kind === 'mcp-key') {
+    queuePayload[MCP_QUEUE_IMAGE_GRANT_KEY] = createMcpQueueImageGrant(
+      { scopes: ['generate'], keyId: imageAuthority.keyId, keyGroup: imageAuthority.groupKey },
+      workflowId,
+      queuePayload.prompt_data as Record<string, unknown>,
+    )
+  } else if (imageAuthority?.kind === 'stdio' || imageAuthority?.kind === 'legacy-schedule') {
+    queuePayload[MCP_QUEUE_IMAGE_GRANT_KEY] = createTrustedQueueImageGrant(imageAuthority.kind, workflowId, queuePayload.prompt_data as Record<string, unknown>)
+  }
+}
+
 function buildQueuePromptData(
   context: ExecutionContext,
   node: GraphWorkflowNode,
@@ -358,15 +371,7 @@ async function executeQueueBackedComfyModule(context: ExecutionContext, node: Gr
   try {
     const materializedPrompt = await materialize(queuePromptData) as Record<string, unknown>
     const queuePayload = buildQueuePayload(materializedPrompt, context)
-    if (imageAuthority?.kind === 'mcp-key') {
-      queuePayload[MCP_QUEUE_IMAGE_GRANT_KEY] = createMcpQueueImageGrant(
-        { scopes: ['generate'], keyId: imageAuthority.keyId, keyGroup: imageAuthority.groupKey },
-        workflow.id,
-        queuePayload.prompt_data as Record<string, unknown>,
-      )
-    } else if (imageAuthority?.kind === 'stdio' || imageAuthority?.kind === 'legacy-schedule') {
-      queuePayload[MCP_QUEUE_IMAGE_GRANT_KEY] = createTrustedQueueImageGrant(imageAuthority.kind, workflow.id, queuePayload.prompt_data as Record<string, unknown>)
-    }
+    attachGraphImageGrant(queuePayload, imageAuthority, workflow.id)
 
     throwIfExecutionAborted(context, node.id)
     ;[jobId] = enqueueGenerationJobs({

@@ -13,7 +13,7 @@ import type { GenerationHistoryRecord } from '@/lib/api-image-generation-types'
 import { uploadStoredFiles } from '@/lib/api-files'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { useChatPage } from './chat-page-context'
-import { refetchActiveChatQuery, scheduleChatDirectoryRefresh } from './chat-query-refresh'
+import { hasActiveChatQuery, refetchActiveChatQuery, scheduleChatDirectoryRefresh } from './chat-query-refresh'
 import { patchChatRoomLists } from './use-chat-room-directory'
 import { ChatLiveStateProvider } from './chat-live-state-provider'
 import {
@@ -619,6 +619,8 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
           } : current)
           updateLiveTurn((current) => current ? { ...current, replacingMessageId: event.mode === 'regenerate' ? event.message.id : undefined } : current)
         } else if (event.type === 'done') {
+          // An open chat shows the live reply until its refetch lands; a chat nobody has open has no such bubble, so its cached thread takes the reply now.
+          if (!hasActiveChatQuery(queryClient, codexChatThreadQueryKey(sentThreadId))) putMessage(event.message)
           // Proposals are attached when the thread is read, so a reply that proposed something reloads it now.
           if (event.message.tool_calls.some((call) => call.tool.startsWith('propose_') || call.tool === 'offer_choices')) void refetchActiveChatQuery(queryClient, codexChatThreadQueryKey(sentThreadId))
           updateLiveTurn((current) => current ? { ...current, replacingMessageId: event.message.id, text: event.message.display_content ?? event.message.content, userText: '', userRouting: undefined, flags: [], toolDirective: undefined, attachments: [], mediaAttachments: [] } : current)

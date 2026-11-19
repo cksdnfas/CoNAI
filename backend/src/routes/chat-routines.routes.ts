@@ -79,7 +79,8 @@ router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
   const existing = ChatRoutineStore.find(id)!
   if (ChatRoutineRunner.isRunning(id)) { res.status(409).json({ success: false, error: '루틴이 실행 중이야. 끝나면 다시 저장해줘.' }); return }
   try {
-    const values = normalizeChatRoutineInput({ ...req.body }, getRequesterAccountId(req))
+    // The editors send no time zone: a save without one keeps the routine's own.
+    const values = normalizeChatRoutineInput({ ...req.body, timezone: req.body?.timezone ?? existing.timezone }, getRequesterAccountId(req))
     const active = req.body?.active === undefined ? existing.status === 'active' : req.body.active !== false
     const nextRunAt = active ? chatRoutineFirstRunAt({ scheduleType: values.schedule_type, runAt: values.run_at, intervalMinutes: values.interval_minutes, dailyTime: values.daily_time, timezone: values.timezone }) : null
     // A dedicated room belongs to one character of one account; a different one gets a new room on the next run.
@@ -106,6 +107,8 @@ router.post('/:id/resume', asyncHandler(async (req: Request, res: Response) => {
   const id = routineId(req, res)
   if (id === null) return
   const routine = ChatRoutineStore.find(id)!
+  // A routine at its run limit would stop again after one more run: the limit is raised first.
+  if (routine.maxRunCount !== null && routine.runCount >= routine.maxRunCount) { res.status(400).json({ success: false, error: '최대 실행 횟수를 이미 채웠어. 횟수를 늘려서 저장해줘.' }); return }
   const nextRunAt = chatRoutineFirstRunAt(routine)
   if (!nextRunAt) { res.status(400).json({ success: false, error: '다음 실행 시각이 없어. 시각을 고쳐서 저장해줘.' }); return }
   res.json({ success: true, data: ChatRoutineStore.update(id, { status: 'active', stop_reason: null, next_run_at: nextRunAt, fail_streak: 0 }) })

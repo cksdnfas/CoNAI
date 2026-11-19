@@ -174,7 +174,8 @@ export async function resolvePluginMediaReference(value: unknown, requester: Mcp
   const reference = mediaReferenceSchema.parse(value)
   let resolved: { entry: StoredFileEntry; filePath: string }
   if (reference.source === 'files') {
-    resolved = FileStoreService.resolveFile(requireFileStoreOwner(requester), reference.fileId)
+    // Plugins act as the account alone: a plain copy drops a chat profile's delegated file permissions.
+    resolved = FileStoreService.resolveFile(requireFileStoreOwner({ accountId: requester.accountId, accountType: requester.accountType }), reference.fileId)
   } else if (reference.source === 'audio') {
     requireRequesterPermission(requester, 'audio.view')
     const { candidate, file } = audioCandidateFile(reference.candidateId)

@@ -728,11 +728,12 @@ function toColumns(input: ChatProfileInput, options: { draft?: boolean; strictKe
     const slotKey = column.replace(/_([a-z])/g, (_, letter: string) => letter.toUpperCase())
     const providerKey = column === 'model_slot_id' ? 'providerName' : `${column.replace('_slot_id', '')}ProviderName`
     if (!strict(slotKey) && !strict(providerKey) && !strict('engine')) return ModelSlotStore.existing(slotId)
-    if (slotId !== null && slotId !== undefined && slotId !== '') return ModelSlotStore.checked(slotId, kinds)
+    const role = MODEL_ROLES.find((key) => ROLE_SLOT_COLUMNS[key] === column) ?? 'judge'
+    if (slotId !== null && slotId !== undefined && slotId !== '') return ModelSlotStore.checked(slotId, kinds, role)
     if (typeof providerName !== 'string' || !providerName.trim()) return null
     const id = ModelSlotStore.ensure(providerName, model, { create: false, kinds })
     if (id === null) pending.push({ column, providerName, model, kinds })
-    return id === null ? null : ModelSlotStore.checked(id, kinds)
+    return id === null ? null : ModelSlotStore.checked(id, kinds, role)
   }
   // Codex has no connection, so no chat row; its helper roles (summary, translation, suggestions) still use rows.
   const modelSlotId = engine === 'llm' ? roleSlot('model_slot_id', input.modelSlotId, input.providerName, input.model) : null
@@ -828,7 +829,8 @@ function toColumns(input: ChatProfileInput, options: { draft?: boolean; strictKe
     translation_display_language: isChatTranslationLanguage(input.translationDisplayLanguage) ? input.translationDisplayLanguage : null,
     suggest_enabled: input.suggestEnabled ? 1 : 0,
     reaction_enabled: input.reactionEnabled ? 1 : 0,
-    reaction_slot_id: roleSlot('reaction_slot_id', input.reactionSlotId, null, null),
+    // Only API LLM profiles react (see chatGenerationReactions), so another engine holds no reaction row.
+    reaction_slot_id: engine === 'llm' ? roleSlot('reaction_slot_id', input.reactionSlotId, null, null) : null,
     suggest_provider_name: null,
     suggest_model: null,
     model_slot_id: modelSlotId,
@@ -867,8 +869,8 @@ function toColumns(input: ChatProfileInput, options: { draft?: boolean; strictKe
   return columns
 }
 
-const ADMIN_PROFILE_COLUMNS = `id, folder_id, revision, background_revision, name, tagline, lorebook_ids, block_ids, lore_scan_depth, lore_token_budget,
-  lore_depth, lore_recursion_depth, author_note, avatar, appearance, reference_hash, avatar_hash, avatar_crop,
+const PROFILE_SETTING_COLUMNS = `id, folder_id, revision, background_revision, name, tagline, lorebook_ids, block_ids, lore_scan_depth, lore_token_budget,
+  lore_depth, lore_recursion_depth, author_note, appearance, reference_hash, avatar_hash, avatar_crop,
   background_hash, engine, model, llm_runtime, reasoning_effort, reasoning_budget_tokens, extra_params, system_prompt,
   prompt_sections, tool_allowlist, tool_output_limit, character_description, example_dialogue, user_persona, greeting,
   alternate_greetings, opening_history, greeting_position, temperature, max_tokens, mcp_enabled, mcp_scopes,
@@ -878,6 +880,9 @@ const ADMIN_PROFILE_COLUMNS = `id, folder_id, revision, background_revision, nam
   chat_style, vision_enabled, content_rating_mode, content_rating_tier_id, page_assist, allow_lore_proposals,
   agent_enabled, agent_description, linked_files, workspaces, skill_ids, judge_preset_id, judge_slot_id, is_enabled, sort_order, created_date, updated_date,
   CASE WHEN background_image IS NOT NULL AND background_image != '' THEN 'present' ELSE NULL END AS background_image`
+const ADMIN_PROFILE_COLUMNS = `${PROFILE_SETTING_COLUMNS}, avatar`
+/** Every saved setting with both inline images as presence markers, for readers that only test whether one exists. */
+const MARKED_PROFILE_COLUMNS = `${PROFILE_SETTING_COLUMNS}, CASE WHEN avatar IS NOT NULL AND avatar != '' THEN 'present' ELSE NULL END AS avatar`
 
 export const ChatProfileStore = {
   /** Agent discovery needs no prompts, assets, model slots or display blocks. */
@@ -928,7 +933,7 @@ export const ChatProfileStore = {
       .all(...ids ?? []) as Array<Pick<ChatProfile, 'id' | 'name'>>
   },
 
-  list(options: { enabledOnly?: boolean; directory?: boolean; admin?: boolean; folderId?: number | null; query?: string; limit?: number; offset?: number } = {}): ChatProfile[] {
+  list(options: { enabledOnly?: boolean; directory?: boolean; admin?: boolean; imageMarkers?: boolean; folderId?: number | null; query?: string; limit?: number; offset?: number } = {}): ChatProfile[] {
     const db = getUserSettingsDb()
     // The public directory never sends prompts, greetings, linked-file contents or inline images.
     // Presence sentinels retain the legacy asset URLs without hydrating the base64 payloads.
@@ -936,9 +941,9 @@ export const ChatProfileStore = {
       translation_slot_id, suggest_slot_id, reaction_slot_id, reaction_enabled, removed_model_roles, suggest_profile_id, suggest_user_profile_id, suggest_enabled,
       reasoning_effort, reasoning_budget_tokens, temperature, max_tokens, context_turns, context_tokens, summary_enabled,
       lore_depth, author_note, appearance, avatar_hash, avatar_crop, background_hash, reference_hash, chat_style, block_ids,
-      mcp_enabled, mcp_scopes, tool_allowlist, allowed_group_keys, generation_preset_ids, allow_lore_proposals, agent_enabled, agent_description, page_assist, is_enabled, sort_order, created_date, updated_date,
+      mcp_enabled, mcp_scopes, tool_allowlist, allowed_group_keys, delegated_permissions, generation_preset_ids, allow_lore_proposals, agent_enabled, agent_description, page_assist, is_enabled, sort_order, created_date, updated_date,
       CASE WHEN avatar IS NOT NULL AND avatar != '' THEN 'present' ELSE NULL END AS avatar,
-      CASE WHEN background_image IS NOT NULL AND background_image != '' THEN 'present' ELSE NULL END AS background_image` : options.admin ? ADMIN_PROFILE_COLUMNS : '*'
+      CASE WHEN background_image IS NOT NULL AND background_image != '' THEN 'present' ELSE NULL END AS background_image` : options.imageMarkers ? MARKED_PROFILE_COLUMNS : options.admin ? ADMIN_PROFILE_COLUMNS : '*'
     const where = [options.enabledOnly ? 'is_enabled = 1' : '', options.folderId !== undefined ? 'folder_id IS @folderId' : '', options.query ? 'instr(lower(name), lower(@query)) > 0' : ''].filter(Boolean)
     const rank = options.folderId === undefined ? chatProfileFolderRankSql() : '0'
     const order = options.folderId === undefined ? 'profile_folder_rank, sort_order, id' : 'sort_order, id'
@@ -1011,7 +1016,11 @@ export const ChatProfileStore = {
     return result
   },
 
-  update(profileId: number, patch: ChatProfileInput, assetDatabase?: ReturnType<typeof getUserSettingsDb>, options: { deletingCharacterSetting?: boolean; revision?: string } = {}): ChatProfile | null {
+  /**
+   * `engineSwitch`: converts the profile's chats to a new engine in this save's transaction (chatProfileEngineSwitch);
+   * without it, a profile that chats use keeps its engine.
+   */
+  update(profileId: number, patch: ChatProfileInput, assetDatabase?: ReturnType<typeof getUserSettingsDb>, options: { deletingCharacterSetting?: boolean; revision?: string; engineSwitch?: (from: ChatProfileEngine, to: ChatProfileEngine, llmTurns: number | null) => void } = {}): ChatProfile | null {
     const db = getUserSettingsDb(), nested = db.inTransaction
     // Checked saves lock the record before reading it; asset grouping must use the same attached connection.
     if (options.revision !== undefined && !assetDatabase) {
@@ -1072,8 +1081,14 @@ export const ChatProfileStore = {
       if ((key === 'reasoningBudgetTokens' || key === 'extraParams') && strictKeys.has('engine')) continue
       ;(columns as Record<string, unknown>)[column] = (stored as unknown as Record<string, unknown>)[column]
     }
+    // A legacy row (prompt_sections NULL, restored above) is read from its fixed columns: keep them with it.
+    if (!strictKeys.has('promptSections')) Object.assign(columns, { character_description: stored.character_description, example_dialogue: stored.example_dialogue, user_persona: stored.user_persona })
     if (columns.folder_id !== (stored.folder_id ?? null)) columns.sort_order = nextProfileSortOrder(columns.folder_id)
-    if (columns.engine !== current.engine && getUserSettingsDb().prepare(`
+    if (columns.engine !== current.engine && options.engineSwitch) {
+      // An API LLM target is sized by the new context turns; the profile row is not written yet, so they go along.
+      options.engineSwitch(current.engine, columns.engine as ChatProfileEngine,
+        columns.engine === 'llm' && columns.llm_runtime !== 'pi' ? columns.context_turns ?? CHAT_PROFILE_DEFAULTS.contextTurns : null)
+    } else if (columns.engine !== current.engine && getUserSettingsDb().prepare(`
       SELECT 1 FROM codex_chat_threads WHERE profile_id = ?
       UNION ALL SELECT 1 FROM chat_group_members WHERE profile_id = ? LIMIT 1
     `).get(profileId, profileId)) {
@@ -1096,12 +1111,20 @@ export const ChatProfileStore = {
     return result
   },
 
-  /** Chats that used the profile stay readable; they just can't send until another profile replaces it. */
+  /**
+   * Chats that used the profile stay readable; they just can't send until another profile replaces it. Room members
+   * stay too: rooms skip a missing profile, and a member row still holds its Codex memory for the room's deletion.
+   */
   delete(profileId: number) {
     const db = getUserSettingsDb()
     const row = db.transaction(() => {
       const row = db.prepare('SELECT character_setting_id, character_sync FROM llm_chat_profiles WHERE id = ?').get(profileId) as { character_setting_id: number | null; character_sync: number } | undefined
-      if (row) db.prepare('DELETE FROM llm_chat_profiles WHERE id = ?').run(profileId)
+      if (row) {
+        db.prepare('DELETE FROM llm_chat_profiles WHERE id = ?').run(profileId)
+        // A missing writer already reads as none; the pointer and the profile's token calibration go with it.
+        db.prepare('UPDATE llm_chat_profiles SET suggest_profile_id = NULL, updated_date = CURRENT_TIMESTAMP WHERE suggest_profile_id = ?').run(profileId)
+        db.prepare('DELETE FROM chat_estimate_ratios WHERE profile_id = ?').run(profileId)
+      }
       return row
     })()
     if (row?.character_sync === 1 && row.character_setting_id !== null) characterChanged([], [row.character_setting_id], [profileId])

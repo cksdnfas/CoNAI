@@ -357,8 +357,10 @@ test('trusted plugins run a server module with their own data, hooks and tools',
     const listed = await bridge('profiles') as Array<{ id: number }>
     assert.ok(listed.some(item => item.id === profile.id), 'ordinary chat users can select their profiles')
     assert.ok(!listed.some(item => item.id === off.id))
-    // Plugins read every saved profile setting, persona included; profiles hold no credentials.
-    assert.equal((listed.find(item => item.id === profile.id) as unknown as import('@conai/shared').PluginLlmProfile).details.systemPrompt, 'You are a village resident.')
+    // An administrator's plugin reads every saved profile setting, persona included; other accounts get the profile list's
+    // public view. Profiles hold no credentials.
+    assert.equal('systemPrompt' in (listed.find(item => item.id === profile.id) as unknown as import('@conai/shared').PluginLlmProfile).details, false)
+    assert.equal(llm.listPluginLlmProfiles('llm-bridge', admin).find(item => item.id === profile.id)!.details.systemPrompt, 'You are a village resident.')
     assert.doesNotMatch(JSON.stringify(listed), /apiKey/)
     // A synced look is the library's; plugins get the setting id, never library names or folders without characters.view.
     const library = await import('../src/services/characterLibrary')
@@ -369,7 +371,7 @@ test('trusted plugins run a server module with their own data, hooks and tools',
     assert.equal('characterLink' in linked.details, false)
     ChatProfileStore.update(profile.id, { characterLink: null })
     const detail = await bridge('profile', { profileId: profile.id }) as import('@conai/shared').PluginLlmProfileDetail
-    assert.equal(detail.details.systemPrompt, 'You are a village resident.'); assert.deepEqual(detail.lorebooks, []); assert.equal(detail.judgePreset, null)
+    assert.equal('systemPrompt' in detail.details, false); assert.deepEqual(detail.lorebooks, []); assert.equal(detail.judgePreset, null)
     await assert.rejects(bridge('profile', { profileId: off.id }), /사용할 수 없는 프로필/)
     assert.deepEqual(await bridge('background'), { id: adminId, type: 'admin' }, 'modules learn which account their own timer calls run as')
     await registry.installPlugin(packageOf(folder, m => { m.id = 'web-llm'; delete m.server; delete m.capabilities }))
@@ -619,9 +621,12 @@ test('trusted plugins run a server module with their own data, hooks and tools',
     assert.ok(ChatJudgeLogStore.list({ profileId: profile.id }).some(run => run.threadId === null && run.presetId === judgePreset.id))
     const exposed = (await bridge('profiles') as import('@conai/shared').PluginLlmProfile[]).find(item => item.id === profile.id)!
     assert.equal(exposed.judge.available, true); assert.equal(exposed.judge.presetName, 'Plugin judge')
-    assert.equal(exposed.judge.followUp?.directive.length, 1100)
-    assert.equal(exposed.judge.room?.route.instructions, DEFAULT_ROUTE_INSTRUCTIONS)
-    assert.equal(exposed.judge.room?.next.instructions, DEFAULT_NEXT_INSTRUCTIONS)
+    // The preset's settings and instructions are the administrator's; another account gets its id and name only.
+    assert.deepEqual([exposed.judge.followUp, exposed.judge.fields, exposed.judge.room], [null, null, null])
+    const adminJudge = llm.listPluginLlmProfiles('llm-bridge', admin).find(item => item.id === profile.id)!.judge
+    assert.equal(adminJudge.followUp?.directive.length, 1100)
+    assert.equal(adminJudge.room?.route.instructions, DEFAULT_ROUTE_INSTRUCTIONS)
+    assert.equal(adminJudge.room?.next.instructions, DEFAULT_NEXT_INSTRUCTIONS)
     assert.deepEqual(exposed.statusBlocks, [{ key: 'resident_status', name: '상태', fields: [{ name: 'mood', label: '기분', min: null, max: null, step: null, values: ['calm', 'happy'], readonly: false }] }])
     // statusBlocks is the field summary; the whole blocks (templates, instructions) are in details.style.
     assert.doesNotMatch(JSON.stringify(exposed.statusBlocks), /PRIVATE_BLOCK_/)
@@ -739,6 +744,48 @@ test('trusted plugins run a server module with their own data, hooks and tools',
     await new Promise(resolve => setTimeout(resolve, 150))
     assert.match(String(await bridge('late')), /문맥이 만료/, 'late work cannot silently become administrator work')
     await registry.removePlugin('llm-bridge')
+  })
+
+  await t.test('a plugin server tool called from a chat that delegates files.view still reads shared files as the account alone', async () => {
+    const dir = path.join(root, 'delegated-media-plugin')
+    fs.mkdirSync(dir)
+    fs.writeFileSync(path.join(dir, 'plugin.json'), JSON.stringify({ apiVersion: 1, id: 'delegated-media', name: 'delegated-media', version: '1.0.0', description: '', server: { entry: 'server.mjs' }, pages: [{ id: 'main', title: 'media', entry: 'index.html', accepts: [], actions: [] }] }))
+    fs.writeFileSync(path.join(dir, 'index.html'), '<!doctype html><title>media</title>')
+    fs.writeFileSync(path.join(dir, 'server.mjs'), `export function activate(conai) {
+      conai.tools.register({ name: 'read_file', scope: 'read', inputSchema: { type: 'object', properties: { fileId: { type: 'string' } } },
+        handler: ({ fileId }) => conai.media.resolve({ source: 'files', fileId }).then(() => 'resolved', error => 'refused: ' + error.message) });
+    }`)
+    await registry.installPlugin(packageOf(dir))
+    await registry.setPluginEnabled('delegated-media', true, adminId)
+    await until(() => runtime.pluginServerStatus('delegated-media').tools.some(tool => tool.name === 'p_delegated_media_read_file'), 'delegated media tool')
+    const { updateChatSettings } = await import('../src/services/codex-chat/chatSettings')
+    const { ChatProfileStore } = await import('../src/services/codex-chat/chatProfiles')
+    const { CodexChatStore } = await import('../src/services/codex-chat/codexChatStore')
+    const { registerChatReply } = await import('../src/services/codex-chat/chatReplyRegistry')
+    const { chatProfileRequester } = await import('../src/services/codex-chat/chatProfilePermissions')
+    const { requireFileStoreOwner } = await import('../src/services/fileStoreAccess')
+    const { FileStoreService, fileOwnerKey } = await import('../src/services/fileStoreService')
+    const { createMcpServer } = await import('../src/mcp/server')
+    const { Client, InMemoryTransport } = await import('@modelcontextprotocol/client')
+    updateChatSettings({ enabled: true })
+    const guestId = Number(auth.prepare("INSERT INTO auth_accounts(username,password_hash,account_type) VALUES ('delegated-media-guest','unused','guest')").run().lastInsertRowid)
+    AuthPermissionGroup.addAccountMembership(AuthPermissionGroup.createCustomGroup({ name: 'delegated-media-chat', permissionKeys: ['chat.use'] }).id, guestId)
+    const guest = { accountId: guestId, accountType: 'guest' as const }
+    const file = FileStoreService.writeText(fileOwnerKey(adminId), null, 'delegated-media.txt', 'shared', { create: true })
+    const profile = ChatProfileStore.create({ name: 'Delegated media', engine: 'llm', mcpEnabled: true, mcpScopes: ['read'], toolAllowlist: ['p_delegated_media_read_file'], delegatedPermissions: ['files.view'] })
+    const chat = { threadId: CodexChatStore.createThread(guestId, 'delegated media', 'llm', profile.id), profileId: profile.id, kind: 'direct' as const, replyId: 'delegated-media-reply' }
+    assert.ok(requireFileStoreOwner(chatProfileRequester(guest, chat)), 'the chat itself holds the delegated files.view')
+    const stop = registerChatReply(chat, new AbortController().signal, () => ({ replyTo: null, recipients: ['user'] }))
+    const server = createMcpServer({ scopes: ['read'], source: 'llm-chat', requester: guest, chatContext: chat, toolCatalog: false })
+    const client = new Client({ name: 'delegated-media-test', version: '1' })
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
+    try {
+      await Promise.all([server.connect(serverTransport), client.connect(clientTransport)])
+      const result = await client.callTool({ name: 'p_delegated_media_read_file', arguments: { fileId: file.id } })
+      assert.notEqual(result.isError, true, JSON.stringify(result))
+      assert.match(JSON.stringify(result.content), /refused: 파일 보관함 접근 권한이 없어/, 'the plugin does not inherit the delegation')
+    } finally { stop(); await client.close(); await server.close() }
+    await registry.removePlugin('delegated-media')
   })
 
   await t.test('profile runs execute native tools, return their results, recheck grants and cancel without replay', async st => {

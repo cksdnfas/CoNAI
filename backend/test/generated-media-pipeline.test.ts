@@ -303,4 +303,67 @@ test('generated previews precede enrichment and video copies preserve the origin
       collect.mock.restore();
     }
   });
+
+  await t.test('a freed encoder slot goes to the waiting encoder, never to a newcomer', async () => {
+    const previous = process.env.CONAI_VIDEO_ENCODER_CONCURRENCY;
+    process.env.CONAI_VIDEO_ENCODER_CONCURRENCY = '1';
+    const slots = VideoOptimizationService as unknown as { acquireEncoderSlot(): Promise<() => void> };
+    let active = 0;
+    let peak = 0;
+    const encode = async () => {
+      const release = await slots.acquireEncoderSlot();
+      active += 1;
+      peak = Math.max(peak, active);
+      await new Promise((resolve) => setImmediate(resolve));
+      active -= 1;
+      release();
+    };
+    try {
+      const first = await slots.acquireEncoderSlot();
+      const waiting = encode();
+      first();
+      // Arrives in the same tick the slot frees, before the woken waiter resumes.
+      const newcomer = encode();
+      await Promise.all([waiting, newcomer]);
+      assert.equal(peak, 1);
+    } finally {
+      if (previous === undefined) delete process.env.CONAI_VIDEO_ENCODER_CONCURRENCY;
+      else process.env.CONAI_VIDEO_ENCODER_CONCURRENCY = previous;
+    }
+  });
+
+  await t.test('repeated artifact descriptors hash an unchanged file once and a changed file again', async () => {
+    const { McpArtifactService } = await import('../src/services/mcpArtifactService');
+    const { GraphExecutionArtifactModel } = await import('../src/models/GraphExecutionArtifact');
+    const file = path.join(root, 'artifacts', 'descriptor.mp4');
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, Buffer.alloc(256 * 1024, 5));
+    const artifacts = t.mock.method(GraphExecutionArtifactModel, 'findByIds', () => [{ id: 1, execution_id: 7, storage_path: file }] as never);
+    const createReadStream = fs.createReadStream;
+    let fullReads = 0;
+    const reads = t.mock.method(fs, 'createReadStream', ((...args: Parameters<typeof fs.createReadStream>) => {
+      if (path.resolve(String(args[0])) === file) fullReads += 1;
+      return createReadStream(...args);
+    }) as typeof fs.createReadStream);
+    try {
+      const builds = 20;
+      const first = await McpArtifactService.createGraphDescriptor(1, 'http://localhost');
+      for (let index = 1; index < builds; index += 1) {
+        assert.equal((await McpArtifactService.createGraphDescriptor(1, 'http://localhost'))?.sha256, first?.sha256);
+      }
+      assert.equal(first?.sha256, crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex'));
+      assert.equal(fullReads, 1, `${builds} builds of an unchanged file hash it once`);
+      // Same size, new content and modification time.
+      fs.writeFileSync(file, Buffer.alloc(256 * 1024, 6));
+      const later = new Date(fs.statSync(file).mtimeMs + 5_000);
+      fs.utimesSync(file, later, later);
+      const changed = await McpArtifactService.createGraphDescriptor(1, 'http://localhost');
+      assert.equal(fullReads, 2);
+      assert.equal(changed?.sha256, crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex'));
+      t.diagnostic(`${builds} descriptor builds of an unchanged file: 1 full-file hash`);
+    } finally {
+      reads.mock.restore();
+      artifacts.mock.restore();
+    }
+  });
 });

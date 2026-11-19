@@ -5,7 +5,7 @@ import { publishRuntimeEvent } from './runtime-events/runtimeEventBus';
 import fs from 'fs';
 import { DOCUMENT_EXTENSIONS } from './fileDocumentExtraction';
 import path from 'path';
-import type { FileStoreListing, FileWriteSource, StoredFileEntry, StoredFileText } from '@conai/shared';
+import type { FileStoreListing, FileStoreSortKey, FileWriteSource, StoredFileEntry, StoredFileText } from '@conai/shared';
 import { getUserSettingsDb } from '../database/userSettingsDb';
 import { ensureFileOwnerDirectory, ensureFileStoreDirectories, fileStoreIncoming, migrateFileStoreLayout, storedFilePath, fileStoreThumbnailPath } from './fileStorePaths';
 import { FileStoreRevisions } from './fileStoreRevisions';
@@ -106,6 +106,38 @@ function uploadedName(value: string): string {
     catch (error) { if (error instanceof FileStoreError) throw error; }
   }
   return normalizeName(value);
+}
+
+/**
+ * A folder upload's paths, one `a/b/name.ext` per file below the target: each file's folder names, checked as the store
+ * checks any name. The last name must be the file's own, so paths sent out of order are refused rather than misfiled.
+ */
+function uploadFolders(value: unknown, files: Express.Multer.File[]): string[][] {
+  if (!Array.isArray(value) || value.length !== files.length) throw new FileStoreError('업로드 경로는 파일마다 하나씩 보내줘.');
+  return value.map((item, index) => {
+    if (typeof item !== 'string') throw new FileStoreError('업로드 경로는 문자열이어야 해.');
+    const segments = item.split('/');
+    if (segments.length > MAX_DEPTH + 1) throw new FileStoreError('폴더는 최대 64단계까지 만들 수 있어.');
+    if (segments.some((segment) => segment === '' || segment === '.' || segment === '..')) {
+      throw new FileStoreError(`잘못된 업로드 경로야: ${item}. 대상 폴더 기준의 a/b/파일 형식으로 보내줘.`);
+    }
+    const names = segments.map(normalizeName);
+    if (names.pop() !== uploadedName(files[index].originalname)) throw new FileStoreError(`업로드 경로의 마지막 이름이 파일 이름과 달라: ${item}`);
+    return names;
+  });
+}
+
+/** SQL column per listing order; the requested key is looked up here, never interpolated. */
+type ListColumn = 'name_key' | 'updated_at' | 'size';
+const LIST_ORDER = new Map<string, ListColumn>([['name', 'name_key'], ['modified', 'updated_at'], ['size', 'size']] satisfies Array<[FileStoreSortKey, ListColumn]>);
+
+/** The listing order of list and neighbors (see FileStoreListOrder); omitted fields keep name, ascending. */
+function listOrder(order: { sort?: unknown; direction?: unknown }) {
+  const sort = order.sort ?? 'name';
+  const column = typeof sort === 'string' ? LIST_ORDER.get(sort) : undefined;
+  const direction = order.direction ?? 'asc';
+  if (!column || (direction !== 'asc' && direction !== 'desc')) throw new FileStoreError('잘못된 정렬이야. sort는 name·modified·size, direction은 asc·desc 중 하나야.');
+  return { column, ascending: direction === 'asc' };
 }
 
 export function parseFileId(value: unknown, nullable = false): string | null {
@@ -240,26 +272,35 @@ export const FileStoreService = {
 
   get(owner: string, id: string) { return toEntry(requireRow(owner, id)); },
 
-  neighbors(owner: string, id: string) {
+  /** The files before and after `id` in its folder's listing `order` (see list); folders are skipped. */
+  neighbors(owner: string, id: string, order: { sort?: unknown; direction?: unknown } = {}) {
     const row = requireRow(owner, id);
+    const { column, ascending } = listOrder(order);
     const find = (previous: boolean) => {
-      const operator = previous ? '<' : '>';
-      const direction = previous ? 'DESC' : 'ASC';
+      // `step` walks the sort column, `tie` the name and ID that break its ties; previous walks the listing backwards.
+      const step = ascending !== previous ? '>' : '<';
+      const tie = column === 'name_key' ? step : previous ? '<' : '>';
+      const by = (operator: string) => (operator === '>' ? 'ASC' : 'DESC');
+      const after = column === 'name_key' ? `(name_key, id) ${tie} (?, ?)` : `(${column} ${step} ? OR (${column} = ? AND (name_key, id) ${tie} (?, ?)))`;
       const found = getUserSettingsDb().prepare(`SELECT * FROM stored_file_entries
         WHERE parent_id IS ? AND kind = 'file' AND deleted_at IS NULL AND chat_owner_key IS NULL
-        AND (name_key, id) ${operator} (?, ?) ORDER BY name_key ${direction}, id ${direction} LIMIT 1`)
-        .get(row.parent_id, row.name_key, row.id) as FileRow | undefined;
+        AND ${after} ORDER BY ${column === 'name_key' ? '' : `${column} ${by(step)}, `}name_key ${by(tie)}, id ${by(tie)} LIMIT 1`)
+        .get(row.parent_id, ...(column === 'name_key' ? [] : [row[column], row[column]]), row.name_key, row.id) as FileRow | undefined;
       return found ? toEntry(found) : null;
     };
     return { previous: find(true), next: find(false) };
   },
 
-  list(owner: string, parentId: string | null, offset = 0, limit = 100): FileStoreListing {
+  /** `order`: see FileStoreListOrder (folders first, name and ID break ties); omitted fields keep name, ascending. */
+  list(owner: string, parentId: string | null, offset = 0, limit = 100, order: { sort?: unknown; direction?: unknown } = {}): FileStoreListing {
     requireFolder(owner, parentId);
     if (!Number.isSafeInteger(offset) || offset < 0 || !Number.isSafeInteger(limit) || limit < 1 || limit > 200) throw new FileStoreError('잘못된 목록 범위야.');
+    const { column, ascending } = listOrder(order);
+    const dir = ascending ? 'ASC' : 'DESC';
     const db = getUserSettingsDb();
+    // Every order is the parent-index lookup plus one sort, the same plan as the default name order.
     const rows = db.prepare(`SELECT * FROM stored_file_entries WHERE parent_id IS ? AND deleted_at IS NULL AND chat_owner_key IS NULL
-      ORDER BY kind DESC, name_key, id LIMIT ? OFFSET ?`).all(parentId, limit, offset) as FileRow[];
+      ORDER BY kind DESC, ${column === 'name_key' ? `name_key ${dir}, id ${dir}` : `${column} ${dir}, name_key, id`} LIMIT ? OFFSET ?`).all(parentId, limit, offset) as FileRow[];
     const { total } = db.prepare('SELECT COUNT(*) AS total FROM stored_file_entries WHERE parent_id IS ? AND deleted_at IS NULL AND chat_owner_key IS NULL').get(parentId) as { total: number };
     return { entries: rows.map(toEntry), breadcrumbs: ancestors(owner, parentId), total, offset, limit };
   },
@@ -275,16 +316,36 @@ export const FileStoreService = {
     return entry;
   },
 
-  /** The caller owns staged files; failed transactions remove all newly allocated blobs. */
-  upload(owner: string, parentId: string | null, files: Express.Multer.File[], allowAnyType = false, replace?: { id: string; source?: FileWriteSource | null }) {
+  /**
+   * The caller owns staged files; failed transactions remove all newly allocated blobs and created folders. `paths`
+   * (a folder upload, refused with `replace`): one `a/b/name.ext` per file below `parentId` (see uploadFolders); missing
+   * folders are created once per call by ensureFolder.
+   */
+  upload(owner: string, parentId: string | null, files: Express.Multer.File[], allowAnyType = false, replace?: { id: string; source?: FileWriteSource | null }, paths?: unknown) {
     if (replace && files.length !== 1) throw new FileStoreError('교체할 파일 하나만 선택해줘.');
+    if (replace && paths !== undefined) throw new FileStoreError('교체 업로드에는 폴더 경로를 붙일 수 없어.');
+    const folders = paths === undefined ? null : uploadFolders(paths, files);
     ensureFileStoreDirectories();
     ensureFileOwnerDirectory(owner);
     const allocated: string[] = [];
+    const created: StoredFileEntry[] = [];
+    // Lowercased path below parentId → folder ID (names compare as the store compares them); used inside the transaction only.
+    const resolved = new Map<string, string>();
+    const folderOf = (names: string[]) => {
+      let folderId = parentId;
+      let key = '';
+      for (const name of names) {
+        key += `/${name.toLowerCase()}`;
+        let next = resolved.get(key);
+        if (next === undefined) resolved.set(key, next = this.ensureFolder(owner, folderId, name, created).id);
+        folderId = next;
+      }
+      return folderId;
+    };
     let kept: string | null = null;
     let entries: StoredFileEntry[];
     try {
-      entries = getUserSettingsDb().transaction(() => files.map((file) => {
+      entries = getUserSettingsDb().transaction(() => files.map((file, index) => {
         const name = uploadedName(file.originalname);
         assertFileTypeAllowed(name, allowAnyType);
         const size = fs.statSync(file.path).size;
@@ -308,7 +369,7 @@ export const FileStoreService = {
           return toEntry(requireRow(owner, previous.id));
         }
         const id = crypto.randomBytes(16).toString('hex');
-        const entry = insert(owner, parentId, name, 'file', id, size,
+        const entry = insert(owner, folders ? folderOf(folders[index]) : parentId, name, 'file', id, size,
           /^[a-zA-Z0-9.+-]+\/[a-zA-Z0-9.+-]+$/.test(file.mimetype) ? file.mimetype : 'application/octet-stream');
         const target = storedFilePath(owner, id);
         // The DB ID is reserved in this transaction, and staging shares the destination volume.
@@ -327,7 +388,7 @@ export const FileStoreService = {
       if (kept) FileStoreRevisions.trim(owner, replace.id);
       fs.rmSync(fileStoreThumbnailPath(replace.id), { force: true });
     }
-    notifyChange({ owner, action: 'write', entries: entries.map((entry) => ({ id: entry.id, kind: entry.kind, name: entry.name, parentId: entry.parentId })) });
+    notifyChange({ owner, action: 'write', entries: [...created, ...entries].map((entry) => ({ id: entry.id, kind: entry.kind, name: entry.name, parentId: entry.parentId })) });
     return entries;
   },
 
@@ -406,13 +467,16 @@ export const FileStoreService = {
     return row ? toEntry(row) : null;
   },
 
-  /** The folder `name` under `parentId`, created when missing. A file of that name is a conflict. */
-  ensureFolder(owner: string, parentId: string | null, value: unknown): StoredFileEntry {
+  /** The folder `name` under `parentId`, created when missing (and then added to `created`). A file of that name is a conflict. */
+  ensureFolder(owner: string, parentId: string | null, value: unknown, created?: StoredFileEntry[]): StoredFileEntry {
     const name = normalizeName(value);
     return getUserSettingsDb().transaction(() => {
       const existing = this.findChild(owner, parentId, name);
       if (existing && existing.kind !== 'folder') throw new FileStoreError(`같은 이름의 항목이 있어: ${name}`, 409);
-      return existing ?? insert(owner, parentId, name, 'folder', crypto.randomBytes(16).toString('hex'));
+      if (existing) return existing;
+      const entry = insert(owner, parentId, name, 'folder', crypto.randomBytes(16).toString('hex'));
+      created?.push(entry);
+      return entry;
     }).immediate();
   },
 

@@ -864,6 +864,28 @@ test('exact chat refreshes replace pre-event snapshots without fetching inactive
   }
 })
 
+test('a reply that finishes for an unopened chat marks its cache stale without fetching it, so opening re-reads it', async () => {
+  const { QueryClient, QueryObserver } = await import('@tanstack/react-query')
+  const { refetchActiveChatQuery, waitForChatQueryReads } = await import('../src/features/codex-chat/chat-query-refresh')
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity, gcTime: Infinity } } })
+  const queryKey = ['codex-chat-thread', 1]
+  client.setQueryData(queryKey, { messages: ['without the reply'] })
+  let reads = 0
+  let unsubscribe = () => {}
+  try {
+    await refetchActiveChatQuery(client, queryKey)
+    assert.equal(client.getQueryState(queryKey)?.fetchStatus, 'idle', 'no request for a chat nobody is viewing')
+    assert.equal(client.getQueryState(queryKey)?.isInvalidated, true)
+    unsubscribe = new QueryObserver(client, { queryKey, queryFn: async () => { reads++; return { messages: ['with the reply'] } } }).subscribe(() => {})
+    await waitForChatQueryReads(client, { queryKey })
+    assert.equal(reads, 1, 'opening the chat re-reads it despite staleTime')
+    assert.deepEqual(client.getQueryData(queryKey), { messages: ['with the reply'] })
+  } finally {
+    unsubscribe()
+    clearTestQueryClient(client)
+  }
+})
+
 test('read acknowledgements survive pre-ack directory and badge responses', async () => {
   const { QueryClient, QueryObserver } = await import('@tanstack/react-query')
   const { applyChatReadReceipt } = await import('../src/features/codex-chat/use-chat-room-directory')
@@ -1551,6 +1573,7 @@ test('streamed deltas publish once per frame, final text wins, and unmount cance
   })
   assert.equal(texts.at(-1), 'translated final')
   assert.equal(frames.size, 0)
+  assert.deepEqual(client.getQueryData<CodexChatThreadDetail>(codexChatThreadQueryKey(1))?.messages.filter(message => message.id === 2).map(message => message.content), ['final'], 'a reply finishing for a chat nobody has open joins its cached thread once')
   const { QueryObserver } = await import('@tanstack/react-query')
   let releaseDirectory!: () => void
   const directoryResponse = new Promise<void>(resolve => { releaseDirectory = resolve })
@@ -1716,18 +1739,21 @@ test('page commands preserve draft undo, screen identity and reviewed saves', { 
   await t.test('navigation includes unrestricted pages without granting restricted destinations', () => {
     const destinations = page.capture()?.actions?.find(action => action.id === 'page.navigate')?.schema.properties?.to?.enum ?? []
     assert.ok(destinations.includes('/access'))
-    assert.ok(destinations.includes('/extensions'))
+    assert.ok(!destinations.includes('/extensions'))
     assert.ok(!destinations.includes('/chat'))
     assert.equal(new Set(destinations).size, destinations.length)
   })
   let sequence = 0
   let authorizedProposal: ChatProposal | undefined
+  const acknowledged: number[] = []
   const replies = new Map<string, (answer: { ok: boolean; error?: string; page?: ChatPageSnapshot }) => void>()
   let claimDelay = 0
   t.mock.method(globalThis, 'fetch', async (url: string | URL | Request, init?: RequestInit) => {
     if (String(url).includes('/api/codex-chat/admin/chat-media/usage')) return Response.json({ success: true, data: { profiles: ['Alice'], messages: 0 } })
     if (String(url).includes('/api/chat-proposals/')) {
       assert.ok(authorizedProposal)
+      const receipt = /\/api\/chat-proposals\/(\d+)\/page-applied$/.exec(String(url))
+      if (receipt) acknowledged.push(Number(receipt[1]))
       return Response.json({ success: true, data: authorizedProposal })
     }
     if (String(url).endsWith('/claim')) {
@@ -1903,6 +1929,108 @@ test('page commands preserve draft undo, screen identity and reviewed saves', { 
     await act(async () => viewImages.click())
     await act(async () => generateImages.click())
     assert.deepEqual(state.draft!.delegatedPermissions, [])
+    authorizedProposal = undefined
+  })
+  await t.test('the profile editor page revision follows draft replacements, an undo back to earlier content included, and not re-renders', async () => {
+    const { useProfileEditorDraft } = await import('../src/features/settings/components/chat-profile-editor')
+    const { useProfileEditorChatPage } = await import('../src/features/settings/components/use-profile-editor-chat-page')
+    const defaults = { style: {} } as import('../src/lib/api-codex-chat').ChatProfileDefaults
+    const runs = { preset: null, emotionNames: [], slotState: () => ({ working: false, failed: false, candidates: [] }) } as unknown as import('../src/features/settings/components/chat-profile-asset-runs').AssetRuns
+    const link = { synced: false, canView: false, canEdit: false, otherSyncedProfiles: [], setting: { ready: false, draft: {}, baseRef: { current: null }, draftRef: { current: { sections: [], outfits: [] } } } } as unknown as import('../src/features/settings/components/use-profile-character-link').ProfileCharacterLink
+    let state!: ReturnType<typeof useProfileEditorDraft>
+    let rerender!: () => void
+    function ProfileEditor() {
+      const api = useChatPage()!
+      const [, setTick] = useState(0)
+      const editor = useProfileEditorDraft({ open: true, profile: null, defaults })
+      useProfileEditorChatPage({ open: true, profile: null, draft: editor.draft!, setDraft: editor.setDraft, dirty: editor.dirty, section: 'basic', go() {}, slots: [], runs, link, save: async () => {} })
+      useLayoutEffect(() => { page = api; state = editor; rerender = () => setTick(value => value + 1) }, [api, editor])
+      return null
+    }
+    client.setQueryData(['workspaces', 'list', 1, 'pages'], { pages: [[]], pageParams: [0] })
+    await act(async () => root.render(h(QueryClientProvider, { client }, h(MemoryRouter, { key: 'profile-revision', initialEntries: ['/chat/profiles'] },
+      h(I18nProvider, null, h(SnackbarContext.Provider, { value: { showSnackbar() {}, closeSnackbar() {} } }, h(ChatPageProvider, null, h(ProfileEditor))))))))
+    await act(async () => page.toggle())
+    const initial = page.capture()!.inputRevision
+    assert.ok(initial)
+    await act(async () => rerender())
+    assert.equal(page.capture()!.inputRevision, initial)
+    const original = state.draft!
+    await act(async () => state.setDraft(current => ({ ...current, tagline: 'changed' })))
+    const changed = page.capture()!.inputRevision
+    assert.notEqual(changed, initial)
+    await act(async () => state.setDraft(() => original))
+    const reverted = page.capture()!.inputRevision
+    assert.notEqual(reverted, changed)
+    assert.notEqual(reverted, initial)
+  })
+  await t.test('an approved commit card of a plugin page survives its own republished snapshot; native pages and stale cards still refuse', async () => {
+    client.setQueryData(['auth-status'], { authenticated: true, hasCredentials: true, accountId: 1, permissionKeys: ['page.settings.view', 'page.extensions.view'] })
+    let republish!: () => void
+    let entered = () => {}
+    let gate: Promise<void> = Promise.resolve()
+    let cardId = 910
+    let actionStarts = 0
+    function Republishing({ extension }: { extension: boolean }) {
+      const api = useChatPage()!
+      const [version, setVersion] = useState(0)
+      useLayoutEffect(() => { page = api; republish = () => setVersion(value => value + 1) }, [api])
+      useChatPageRegistration({
+        kind: extension ? 'extension' : 'settings', title: 'Republishing', resourceId: extension ? '1.0.0' : 'one', fields: [], data: { version },
+        actions: [extension ? { id: 'demo.save', label: 'Save', description: '', schema: pageObject({}), effect: 'save' as const, tier: 'commit' as const } : pageAction('profile.save', 'Save', '', undefined, 'save')],
+        apply: () => {},
+        applyAction: async (_id, _args, assertCurrent) => { actionStarts++; entered(); await gate; assertCurrent() },
+      })
+      return null
+    }
+    const mount = async (extension: boolean) => {
+      await act(async () => root.render(h(QueryClientProvider, { client }, h(MemoryRouter, { key: `republishing-${extension}`, initialEntries: [extension ? '/ext/demo/main' : '/settings'] },
+        h(I18nProvider, null, h(SnackbarContext.Provider, { value: { showSnackbar() {}, closeSnackbar() {} } }, h(ChatPageProvider, null, h(Republishing, { extension }))))))))
+      await act(async () => page.toggle())
+    }
+    // The card is reviewed against the page as it is now (no action-scoped revision), so any later republish makes it stale.
+    const reviewCard = (extension: boolean) => {
+      const snapshot = page.capture()!
+      const action = snapshot.actions!.find(item => item.id === (extension ? 'demo.save' : 'profile.save'))!
+      const proposal = { id: cardId++, kind: 'page_action' as const, page: chatPageTarget(snapshot), revision: snapshot.revision!, action, arguments: {}, before: chatPageActionBefore(snapshot, action, {}), expiresAt: Date.now() + 60_000 }
+      authorizedProposal = proposal
+      return proposal
+    }
+    const outcomeOf = (proposal: ReturnType<typeof reviewCard>) => page.applyAction(proposal).then(() => 'applied', (error: Error) => error.message)
+    const approveWhileRepublishing = async (proposal: ReturnType<typeof reviewCard>) => {
+      let release!: () => void
+      gate = new Promise<void>(resolve => { release = resolve })
+      const inAction = new Promise<void>(resolve => { entered = resolve })
+      let outcome!: Promise<string>
+      await act(async () => { outcome = outcomeOf(proposal); await Promise.race([inAction, outcome]) })
+      await act(async () => republish())
+      let result = ''
+      await act(async () => { release(); result = await outcome })
+      return result
+    }
+
+    await mount(true)
+    const applied = reviewCard(true)
+    assert.equal(await approveWhileRepublishing(applied), 'applied')
+    assert.equal(actionStarts, 1)
+    assert.equal(page.states.get(applied.id), 'applied')
+    assert.deepEqual(acknowledged.filter(id => id === applied.id), [applied.id], 'the receipt is recorded, so a re-request cannot repeat the save')
+
+    const stale = reviewCard(true)
+    await act(async () => republish())
+    let staleOutcome = ''
+    await act(async () => { staleOutcome = await outcomeOf(stale) })
+    assert.match(staleOutcome, /입력이나 선택/)
+    assert.equal(actionStarts, 1, 'a card stale before it starts never runs the action')
+    assert.equal(page.states.get(stale.id), undefined)
+    assert.equal(acknowledged.includes(stale.id), false)
+
+    await mount(false)
+    const native = reviewCard(false)
+    assert.match(await approveWhileRepublishing(native), /입력이나 선택/)
+    assert.equal(actionStarts, 2, 'the native card failed after its action started, not before')
+    assert.equal(page.states.get(native.id), undefined)
+    assert.equal(acknowledged.includes(native.id), false)
     authorizedProposal = undefined
   })
   await t.test('sprite extract undo survives video selection and URL changes without previewing a stale selection', async () => {

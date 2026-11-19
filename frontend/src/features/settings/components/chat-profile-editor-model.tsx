@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { Select } from '@/components/ui/select'
+import { Text } from '@/components/ui/text'
 import { Textarea } from '@/components/ui/textarea'
 import { Tip } from '@/components/ui/tooltip'
 import { CodexModelSelect } from '@/features/image-generation/components/codex-model-select'
@@ -15,7 +16,8 @@ import { CodexReasoningSelect } from '@/features/image-generation/components/cod
 import { useChatAdminLinks } from '@/features/codex-chat/chat-admin-location'
 import { useI18n } from '@/i18n'
 import { CHAT_JUDGE_PRESETS_QUERY_KEY, listChatJudgePresets } from '@/lib/api-chat-judge'
-import { thinkingMayFillCap, type ChatProfileDefaults, type ChatProfileInput, type ModelRole, type ModelSlot, type ModelUseRole } from '@/lib/api-codex-chat'
+import { CHAT_ENGINE_LABELS, thinkingMayFillCap, type ChatProfileDefaults, type ChatProfileInput, type ModelRole, type ModelSlot, type ModelUseRole } from '@/lib/api-codex-chat'
+import { EXTERNAL_API_PROVIDERS_QUERY_KEY, getExternalApiProviders } from '@/lib/api-external-api'
 import type { CodexModelOption } from '@/lib/api-image-generation-queue'
 import { cn } from '@/lib/utils'
 import { CHAT_PROFILE_LIMITS, CHAT_PROFILE_TEXT_LIMITS, CHAT_TRANSLATION_LANGUAGES, type ChatTranslationLanguage, type ClaudeModelOption } from '@conai/shared'
@@ -223,6 +225,12 @@ export function ChatProfileModelPanel({ draft, patch, defaults, slots, slotsRead
   // Codex, Claude and pi fold their own sessions with the chat model.
   const selfCompacting = draft.engine !== 'llm' || draft.llmRuntime === 'pi'
   const serverDefault = t({ ko: '서버 기본값', en: 'Server default' })
+  // Slots carry no address: the connection list (shared with Settings → AI 연결) is read only while an API-connection chat model runs "CoNAI 직접".
+  const chatSlot = slots.find((slot) => slot.id === draft.modelSlotId) ?? slots.find((slot) => slot.isDefault)
+  const directRuntime = isLlm && (draft.llmRuntime ?? 'direct') === 'direct' && chatSlot?.providerType === 'llm_openai_compatible'
+  const providersQuery = useQuery({ queryKey: EXTERNAL_API_PROVIDERS_QUERY_KEY, queryFn: getExternalApiProviders, enabled: directRuntime })
+  const chatBaseUrl = providersQuery.data?.find((provider) => provider.provider_name === chatSlot?.providerName)?.base_url
+  const anthropicNoCache = directRuntime && !!chatBaseUrl && URL.canParse(chatBaseUrl) && new URL(chatBaseUrl).hostname.toLowerCase() === 'api.anthropic.com'
   const summaryOn = roleChoice(draft, 'summary', slots, hasLlmContext, slotsReady) !== 'off'
   const translationOn = roleChoice(draft, 'translation', slots, isLlm, slotsReady) !== 'off'
   const summaryTuning = !selfCompacting && summaryOn
@@ -284,9 +292,9 @@ export function ChatProfileModelPanel({ draft, patch, defaults, slots, slotsRead
           value={draft.engine}
           onChange={(engine) => patch(enginePatch(engine as Draft['engine'], draft))}
           items={[
-            { value: 'llm', label: t({ ko: 'API LLM', en: 'API LLM' }) },
-            { value: 'codex', label: 'Codex' },
-            { value: 'claude', label: 'Claude Code' },
+            { value: 'llm', label: t(CHAT_ENGINE_LABELS.llm) },
+            { value: 'codex', label: t(CHAT_ENGINE_LABELS.codex) },
+            { value: 'claude', label: t(CHAT_ENGINE_LABELS.claude) },
           ]}
           ariaLabel={t({ ko: '엔진', en: 'Engine' })}
         />
@@ -303,6 +311,11 @@ export function ChatProfileModelPanel({ draft, patch, defaults, slots, slotsRead
                 <option value="direct">{t({ ko: 'CoNAI 직접', en: 'CoNAI direct' })}</option>
                 <option value="pi">{t({ ko: 'pi 에이전트', en: 'pi agent' })}</option>
               </Select>
+              {anthropicNoCache ? (
+                <Text variant="caption" tone="warning" role="note">
+                  {t({ ko: '이 연결(api.anthropic.com)은 CoNAI 직접 방식에서 프롬프트 캐시가 적용되지 않아. pi 에이전트로 바꾸면 API 키 사용 시 캐시돼.', en: 'With this connection (api.anthropic.com), prompt caching does not apply in CoNAI direct mode. Switch to the pi agent to get caching with an API key.' })}
+                </Text>
+              ) : null}
             </Field>
             <div className="grid gap-3 md:grid-cols-2">
               <Field label={t({ ko: '온도', en: 'Temperature' })}>

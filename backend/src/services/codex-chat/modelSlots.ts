@@ -34,6 +34,9 @@ export const ROUTE_KEYS: readonly RouteKey[] = ['chat', 'summary', 'translation'
 
 const ROUTE_NAMES: Record<RouteKey, string> = { chat: '대화', summary: '요약', translation: '번역', suggest: '답장 추천', judge: '판단' }
 
+/** A profile role as the settings screen names it. */
+const ROLE_NAMES: Record<ModelUseRole, string> = { ...ROUTE_NAMES, reaction: '완료 반응' }
+
 /** Built-in routes that, without a target, follow the chat model. */
 const FOLLOWS_CHAT: readonly RouteKey[] = ['summary', 'suggest']
 
@@ -480,8 +483,8 @@ function replacementFor(ids: number[], value: unknown, rows = allRows(), workflo
   const replacement = ModelSlotStore.checked(value, MODEL_CONNECTION_TYPES)
   const target = ModelSlotStore.target(replacement)
   if (!target || ids.includes(target.id)) throw new ChatProfileError('삭제하지 않는 대체 모델을 골라줘.')
-  const type = ExternalApiProvider.findByName(target.providerName)?.provider_type
-  if (!type || !MODEL_CONNECTION_TYPES.includes(type)) throw new ChatProfileError('대체 모델의 연결을 찾을 수 없어.')
+  // checked() above already refused a missing connection or one outside MODEL_CONNECTION_TYPES.
+  const type = ExternalApiProvider.findByName(target.providerName)!.provider_type
   const consumers = [...new Set([...ids, ...[...rows.values()].filter((row) => {
     const reached = reachedId(row, rows)
     return reached !== null && ids.includes(reached)
@@ -715,16 +718,17 @@ export const ModelSlotStore = {
 
   /**
    * A row id for a saved field: null for empty, else the row, which must exist and reach a connection of `kinds`
-   * rather than accepting an empty representative model as an assignment.
+   * rather than accepting an empty representative model as an assignment. `role` names the profile role in the message.
    */
-  checked(slotId: unknown, kinds: readonly string[] = LLM_CONNECTION_TYPES): number | null {
+  checked(slotId: unknown, kinds: readonly string[] = LLM_CONNECTION_TYPES, role?: ModelUseRole): number | null {
     if (slotId === null || slotId === undefined || slotId === '') return null
     const id = ModelSlotStore.existing(slotId)
     if (id === null) throw new ChatProfileError('모델을 찾을 수 없어.')
     const target = ModelSlotStore.target(id)
     if (!target?.model) throw new ChatProfileError('모델이 설정되지 않았어. 대표모델이 가리킬 모델을 먼저 골라줘.')
-    const type = target ? ExternalApiProvider.findByName(target.providerName)?.provider_type : undefined
-    if (type && !kinds.includes(type)) throw new ChatProfileError(kinds.includes('decision_typesafe') ? '판단에 쓸 수 없는 모델이야.' : '판단 모델은 채팅에 쓸 수 없어. LLM 연결의 모델을 골라줘.')
+    const type = ExternalApiProvider.findByName(target.providerName)?.provider_type
+    if (!type) throw new ChatProfileError(`${role ? `${ROLE_NAMES[role]} 모델` : '이 모델'}의 AI 연결을 찾을 수 없어. 다른 모델을 골라줘.`)
+    if (!kinds.includes(type)) throw new ChatProfileError(kinds.includes('decision_typesafe') ? '판단에 쓸 수 없는 모델이야.' : '판단 모델은 채팅에 쓸 수 없어. LLM 연결의 모델을 골라줘.')
     return id
   },
 

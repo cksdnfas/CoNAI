@@ -6,7 +6,7 @@ import { resolveAutomationRunAs } from '../automationRunAs'
 import { AutomationSwitch } from '../automationSwitch'
 import { DEFAULT_SCHEDULE_TIMEZONE, followingRunAt, initialRunAt, parseDailyTime, resolveScheduleTimezone } from '../scheduleTiming'
 import { ChatProfileStore } from './chatProfiles'
-import { ChatWakeBusyError, ensureAutomationRoom, forgetAutomationRoom, wakeChatRoom } from './chatRoomWake'
+import { ChatWakeBusyError, ensureAutomationRoom, forgetAutomationRoom, wakeChatRoom, wakeFailure } from './chatRoomWake'
 import { CodexChatError } from './codexChatService'
 import { CodexChatStore } from './codexChatStore'
 
@@ -182,25 +182,61 @@ const POLL_MS = 15_000
 /** Failures in a row before a routine stops itself (a skip because the room was busy is not a failure). */
 const FAIL_LIMIT = 3
 
+/** Why a run failed that the server's shutdown or restart cut off. */
+const RESTART_INTERRUPTED = '실행 중에 서버가 다시 시작돼서 끊겼어.'
+
 let pollTimer: NodeJS.Timeout | null = null
 let polling = false
-const running = new Set<number>()
+/** The routines answering now, with what cuts their wake off. */
+const running = new Map<number, AbortController>()
+
+/**
+ * Record one failed run. A scheduled one-time routine has no next turn: it stops at once for the person to check what
+ * the run already did. Any other routine stops after FAIL_LIMIT failures in a row.
+ */
+function recordFailure(routine: ChatRoutine, message: string, startedAt: string | undefined, manual: boolean) {
+  const failStreak = ((table().prepare('SELECT fail_streak FROM chat_routines WHERE id = ?').get(routine.id) as { fail_streak: number } | undefined)?.fail_streak ?? 0) + 1
+  const onceFailed = routine.scheduleType === 'once' && !manual
+  const stopped = onceFailed || failStreak >= FAIL_LIMIT
+  return ChatRoutineStore.update(routine.id, {
+    last_result: 'failed', last_run_at: startedAt, last_error: message, fail_streak: failStreak, run_count: routine.runCount + 1,
+    ...(stopped ? { status: 'error_stopped' as const, stop_reason: onceFailed ? `한 번 실행할 루틴이 실패해서 멈췄어. 실제 결과를 확인한 뒤 다시 실행해줘: ${message}` : `${FAIL_LIMIT}번 연속 실패해서 멈췄어: ${message}`, next_run_at: null } : {}),
+  })
+}
 
 /** Runs due routines. Each wake goes on in the background; a routine never runs twice at once. */
 export const ChatRoutineRunner = {
   start() {
     if (pollTimer) return false
+    ChatRoutineRunner.recover()
     void ChatRoutineRunner.poll()
     pollTimer = setInterval(() => { void ChatRoutineRunner.poll() }, POLL_MS)
     pollTimer.unref?.()
     return true
   },
 
+  /**
+   * Stops polling and cuts off the wakes still answering (a shutdown). A one-time routine records the cut as its run's
+   * failure; a repeating one records it as skipped.
+   */
   stop() {
+    for (const controller of running.values()) controller.abort()
     if (!pollTimer) return false
     clearInterval(pollTimer)
     pollTimer = null
     return true
+  },
+
+  /**
+   * A scheduled one-time routine still active with no next run had its run cut off by a restart (its due time is
+   * taken before the wake). It is closed as that run's failure and never fired again on its own: the cut-off run may
+   * already have done work or cost.
+   */
+  recover() {
+    const rows = table().prepare("SELECT * FROM chat_routines WHERE status = 'active' AND schedule_type = 'once' AND next_run_at IS NULL").all() as RoutineRow[]
+    for (const routine of rows.map(toRoutine)) {
+      if (!running.has(routine.id)) recordFailure(routine, RESTART_INTERRUPTED, undefined, false)
+    }
   },
 
   isRunning(id: number) {
@@ -243,7 +279,8 @@ export const ChatRoutineRunner = {
     if (!runAs.ok) return pause(runAs.message)
     const requester = runAs.requester
 
-    running.add(id)
+    const controller = new AbortController()
+    running.set(id, controller)
     try {
       let threadId = routine.threadId
       try {
@@ -261,21 +298,21 @@ export const ChatRoutineRunner = {
 
       const startedAt = new Date().toISOString()
       try {
-        await wakeChatRoom({ requester, threadId: threadId as number, instruction: routine.message, routing: { source: 'routine', id, name: routine.name }, chainLimit: routine.chainLimit })
+        const result = await wakeChatRoom({ requester, threadId: threadId as number, instruction: routine.message, routing: { source: 'routine', id, name: routine.name }, chainLimit: routine.chainLimit, signal: controller.signal })
+        const failure = wakeFailure(result, '캐릭터가 답하지 못했어.')
+        if (failure !== null) throw new Error(failure)
       } catch (error) {
         if (error instanceof ChatWakeBusyError) {
           // A one-time routine has no next turn of its own: it tries again in a minute.
           const retry = routine.scheduleType === 'once' && !options.manual ? { next_run_at: new Date(Date.now() + 60_000).toISOString() } : {}
           return ChatRoutineStore.update(id, { last_result: 'skipped', last_run_at: startedAt, last_error: error.message, ...retry })
         }
-        const message = clip(error instanceof Error ? error.message : error, 300)
-        const failStreak = ((table().prepare('SELECT fail_streak FROM chat_routines WHERE id = ?').get(id) as { fail_streak: number } | undefined)?.fail_streak ?? 0) + 1
-        const onceFailed = routine.scheduleType === 'once' && !options.manual
-        const stopped = onceFailed || failStreak >= FAIL_LIMIT
-        return ChatRoutineStore.update(id, {
-          last_result: 'failed', last_run_at: startedAt, last_error: message, fail_streak: failStreak, run_count: routine.runCount + 1,
-          ...(stopped ? { status: 'error_stopped' as const, stop_reason: onceFailed ? `한 번 실행할 루틴이 실패해서 멈췄어. 실제 결과를 확인한 뒤 다시 실행해줘: ${message}` : `${FAIL_LIMIT}번 연속 실패해서 멈췄어: ${message}`, next_run_at: null } : {}),
-        })
+        // A repeating routine cut off by a shutdown is not failing: it keeps its streak and runs at its next time.
+        if (controller.signal.aborted && routine.scheduleType !== 'once') {
+          return ChatRoutineStore.update(id, { last_result: 'skipped', last_run_at: startedAt, last_error: RESTART_INTERRUPTED })
+        }
+        const message = controller.signal.aborted ? RESTART_INTERRUPTED : clip(error instanceof Error ? error.message : error, 300)
+        return recordFailure(routine, message, startedAt, options.manual === true)
       }
 
       const runCount = routine.runCount + 1

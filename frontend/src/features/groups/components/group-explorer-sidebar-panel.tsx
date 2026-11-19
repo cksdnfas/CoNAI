@@ -1,4 +1,4 @@
-import { useState, type DragEvent } from 'react'
+import { useState } from 'react'
 import { ErrorState } from '@/components/ui/error-state'
 import { SearchField } from '@/components/common/search-field'
 import { SegmentedControl } from '@/components/common/segmented-control'
@@ -9,8 +9,9 @@ import type { GroupWithHierarchy } from '@/types/group'
 import type { GroupCountMaps } from '@/features/groups/group-count-utils'
 import { isGroupImageDrag, readGroupImageDrag } from '@/features/groups/group-image-drag'
 import type { GroupSourceKey } from '@/features/groups/group-page-shared'
-import { GROUP_DROP_ID_ATTRIBUTE, GroupTree } from './group-tree'
+import { GroupTree } from './group-tree'
 import { useI18n } from '@/i18n'
+import { useDropTarget } from '@/lib/use-drop-target'
 
 interface GroupExplorerSidebarPanelProps {
   sourceKey: GroupSourceKey
@@ -26,13 +27,6 @@ interface GroupExplorerSidebarPanelProps {
   onDropImages?: (groupId: number, compositeHashes: string[]) => void
   /** Custom groups only: a row's actions (edit, move, delete…), opened by right-click / long-press. */
   getGroupMenu?: (group: GroupWithHierarchy) => ActionMenuEntry[]
-}
-
-/** Find the tree row under a drag event. */
-function getDropGroupId(event: DragEvent<HTMLElement>) {
-  const target = event.target instanceof Element ? event.target.closest(`[${GROUP_DROP_ID_ATTRIBUTE}]`) : null
-  const groupId = Number(target?.getAttribute(GROUP_DROP_ID_ATTRIBUTE))
-  return Number.isFinite(groupId) && groupId > 0 ? groupId : null
 }
 
 /**
@@ -60,36 +54,17 @@ export function GroupExplorerSidebarPanel({
     }
   }
   const [filterText, setFilterText] = useState('')
-  const [dropTargetId, setDropTargetId] = useState<number | null>(null)
   const canDrop = Boolean(onDropImages)
-
-  const handleDragOver = (event: DragEvent<HTMLDivElement>) => {
-    if (!canDrop || !isGroupImageDrag(event.dataTransfer)) return
-    const groupId = getDropGroupId(event)
-    if (groupId === null) {
-      setDropTargetId(null)
-      return
-    }
-    event.preventDefault()
-    event.dataTransfer.dropEffect = 'copy'
-    setDropTargetId(groupId)
-  }
-
-  const handleDragLeave = (event: DragEvent<HTMLDivElement>) => {
-    if (event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget)) return
-    setDropTargetId(null)
-  }
-
-  const handleDrop = (event: DragEvent<HTMLDivElement>) => {
-    setDropTargetId(null)
-    const groupId = getDropGroupId(event)
-    if (!canDrop || groupId === null || !isGroupImageDrag(event.dataTransfer)) return
-    event.preventDefault()
-    const compositeHashes = readGroupImageDrag(event.dataTransfer)
-    if (compositeHashes.length > 0) {
-      onDropImages?.(groupId, compositeHashes)
-    }
-  }
+  const drop = useDropTarget({
+    accepts: (_groupId, event) => canDrop && isGroupImageDrag(event.dataTransfer),
+    dropEffect: 'copy',
+    onDrop: (groupId, event) => {
+      const compositeHashes = readGroupImageDrag(event.dataTransfer)
+      if (compositeHashes.length > 0) {
+        onDropImages?.(Number(groupId), compositeHashes)
+      }
+    },
+  })
 
   const header = (
     <div className="space-y-2">
@@ -134,13 +109,13 @@ export function GroupExplorerSidebarPanel({
       ) : null}
 
       {!isLoading && !isError ? (
-        <div onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop}>
+        <div {...drop.containerProps}>
           <GroupTree
             groups={groups}
             countMaps={countMaps}
             selectedGroupId={selectedGroupId}
             filterText={filterText}
-            dropTargetId={dropTargetId}
+            dropTarget={drop}
             getGroupMenu={getGroupMenu}
             onSelectGroup={(groupId) => {
               closeDrawer()

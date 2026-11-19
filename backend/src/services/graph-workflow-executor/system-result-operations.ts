@@ -2,6 +2,8 @@ import { GraphExecutionFinalResultModel } from '../../models/GraphExecutionFinal
 import { type GraphWorkflowNode } from '../../types/moduleGraph'
 import { assignGeneratedMediaToGroup } from '../generationTargetGroupService'
 import { GroupPathService } from '../groupPathService'
+import { HistoryCommandService } from '../historyCommandService'
+import { throwIfExecutionAborted } from './execution-abort'
 import { replacePromotedFinalResultSourceWithCanonicalMedia, tryPromoteFinalResultArtifactToGenerationHistory } from './final-result-promotion'
 import {
   writeExecutionLog,
@@ -75,16 +77,8 @@ export async function executeFinalResultNode(
     return
   }
 
+  throwIfExecutionAborted(context, node.id)
   const targetGroup = resolveFinalResultGroup(context, resolvedInputs)
-
-  const finalResultId = GraphExecutionFinalResultModel.create({
-    execution_id: context.executionId,
-    final_node_id: node.id,
-    source_artifact_id: sourceArtifact.artifactRecordId,
-    source_node_id: sourceEdge.source_node_id,
-    source_port_key: sourceEdge.source_port_key,
-    artifact_type: sourceArtifact.type,
-  })
 
   const promotionResult = await tryPromoteFinalResultArtifactToGenerationHistory({
     executionId: context.executionId,
@@ -94,12 +88,27 @@ export async function executeFinalResultNode(
     sourceNodeId: sourceEdge.source_node_id,
     sourcePortKey: sourceEdge.source_port_key,
     sourceArtifact,
-    groupId: targetGroup.groupId,
   })
   const canonicalReplacementResult = await replacePromotedFinalResultSourceWithCanonicalMedia(sourceArtifact, promotionResult)
 
-  // 대기열 생성 노드의 이미지는 이미 라이브러리에 있어 승격을 건너뛰므로(already_uploaded) 여기서 직접 넣는다.
-  // 승격된 경우는 history 의 assigned_group_id 로 이미 들어가 있어 중복 추가는 무시된다.
+  // 승격을 기다리는 동안 취소됐다면 최종 결과도 그룹 배정도 남기지 않는다. 이 검사부터 두 쓰기까지는 await 가 없다.
+  throwIfExecutionAborted(context, node.id)
+  const finalResultId = GraphExecutionFinalResultModel.create({
+    execution_id: context.executionId,
+    final_node_id: node.id,
+    source_artifact_id: sourceArtifact.artifactRecordId,
+    source_node_id: sourceEdge.source_node_id,
+    source_port_key: sourceEdge.source_port_key,
+    artifact_type: sourceArtifact.type,
+  })
+
+  // 그룹 배정은 위 취소 검사를 통과한 뒤 여기서만 한다. 승격된 history 행은 그룹 없이 만들어지므로 그룹도 여기서 기록한다.
+  const promotedHistoryId = promotionResult.reason === 'promoted' && 'historyId' in promotionResult && typeof promotionResult.historyId === 'number'
+    ? promotionResult.historyId
+    : null
+  if (targetGroup.groupId && promotedHistoryId) {
+    HistoryCommandService.update(promotedHistoryId, { assigned_group_id: targetGroup.groupId })
+  }
   const groupAssignedCount = targetGroup.groupId && promotionResult.compositeHash
     ? assignGeneratedMediaToGroup(targetGroup.groupId, [promotionResult.compositeHash])
     : 0

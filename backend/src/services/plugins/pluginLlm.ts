@@ -6,7 +6,8 @@ import { profileFolderPaths } from '../codex-chat/chatProfileFolders'
 import { booksForRequest } from '../codex-chat/chatLoreContext'
 import { OwnedLorebookStore } from '../codex-chat/chatLorebookFiles'
 import { canRequesterViewImages, requireRequesterImagePermission } from '../../middleware/imageAccess'
-import { resolveProfileAsset } from '../codex-chat/chatProfileAssets'
+import { hiddenProfileAssets, resolveProfileAsset } from '../codex-chat/chatProfileAssets'
+import { toPublicProfile } from '../codex-chat/chatProfileViews'
 import { MEDIA_MAX_PIXELS } from '../codex-chat/chatMediaLinks'
 import type { McpRequester } from '../../mcp/context'
 import { ChatProfileStore, type ChatProfile } from '../codex-chat/chatProfiles'
@@ -30,7 +31,7 @@ import { onPluginChanged, pluginDb, PluginError, sha256 } from './pluginStore'
 import { refreshPluginProfileRun, runPluginProfile, acquirePluginProfileLock, ensurePluginProfileRoom, forgetPluginProfileRooms, discardPluginProfileRun } from './pluginProfileRun'
 import { validatePluginProfileTools } from './pluginServerTools'
 import { requireResearchProfile } from '../codex-chat/chatResearch'
-import { requireRequesterPermission } from '../../middleware/featureAccess'
+import { isRequesterAdmin, requireRequesterPermission } from '../../middleware/featureAccess'
 import { usableBlocks } from '../codex-chat/chatBlockState'
 import { callPluginJudge, pluginJudgeSettings } from './pluginJudge'
 import { pluginLlmFailure } from './pluginLlmErrors'
@@ -191,10 +192,25 @@ function profileContext(profile: ChatProfile) {
   }
 }
 
-function pluginProfileOf(profile: ChatProfile, images: boolean, loreSelectionLimit: number): PluginLlmProfile {
-  // Image bytes are served by `asset()`; every other saved setting is the plugin's to read. The library link is only its id:
-  // setting names and folders are read through the library, which checks `characters.view`.
-  const { avatar: _avatar, background: _background, characterLink, characterExpressionGroupId: _expressionGroupId, ...details } = profile
+type PluginProfileViewer = { accountId: number | null; admin: boolean; images: boolean; hidden?: ReadonlySet<string> }
+/** `listed`: profiles read together, so their hidden avatars are looked up at once. */
+function profileViewer(actor: McpRequester, listed?: ChatProfile[]): PluginProfileViewer {
+  const admin = isRequesterAdmin(actor)
+  return { accountId: actor.accountId, admin, images: canRequesterViewImages(actor), hidden: admin || !listed ? undefined : hiddenProfileAssets(listed) }
+}
+
+function pluginProfileOf(profile: ChatProfile, viewer: PluginProfileViewer, loreSelectionLimit: number): PluginLlmProfile {
+  const { images } = viewer
+  // Image bytes are served by `asset()`. `details` is what the account's own profile API gives: every saved setting for
+  // an administrator, the chat user's public view otherwise (image hashes and crop only with image access). The library
+  // link is only its id: setting names and folders are read through the library, which checks `characters.view`.
+  const { avatar: _avatar, background: _background, characterLink, characterExpressionGroupId: _expressionGroupId, ...settings } = profile
+  const details = viewer.admin ? settings : (() => {
+    const { characterLink: _link, ...shown } = toPublicProfile(profile, viewer.accountId, false, viewer.hidden)
+    return { ...shown, avatarCrop: images ? profile.avatarCrop : null }
+  })()
+  // Judge presets are administrator-written prompts: other accounts get the preset's id and name, as /judge-presets gives.
+  const judge = pluginJudgeSettings(profile)
   return { id: profile.id, name: profile.name, tagline: profile.tagline, engine: profile.engine, appearance: profile.appearance ?? '',
     character: characterLink ? { settingId: characterLink.settingId, synced: characterLink.synced } : null,
     context: profileContext(profile),
@@ -202,7 +218,7 @@ function pluginProfileOf(profile: ChatProfile, images: boolean, loreSelectionLim
     assetVersion: images ? `${profile.updatedDate}:${profile.avatarHash ?? ''}:${profile.backgroundHash ?? ''}:${profile.referenceHash ?? ''}${profile.characterLink?.synced ? `:setting:${profile.characterLink.settingId}:${profile.characterLink.revision}` : ''}` : null,
     avatarCrop: images ? profile.avatarCrop : null,
     assets: { avatar: images && Boolean(profile.avatarHash || profile.avatar), background: images && Boolean(profile.backgroundHash || profile.background), reference: images && Boolean(profile.referenceHash) },
-    judge: pluginJudgeSettings(profile),
+    judge: viewer.admin ? judge : { ...judge, followUp: null, fields: null, room: null },
     statusBlocks: usableBlocks(profile.style.blocks).map(block => ({
       key: block.key, name: block.name ?? block.key,
       fields: block.fields.map(field => ({ name: field.name, label: field.label ?? field.name, min: field.min, max: field.max, step: field.step, values: field.values, readonly: field.readonly })),
@@ -214,22 +230,29 @@ function pluginProfileOf(profile: ChatProfile, images: boolean, loreSelectionLim
 
 export function listPluginLlmProfiles(pluginId: string, requester: McpRequester | undefined): PluginLlmProfile[] {
   const { chat, requester: actor } = access(pluginId, requester)
-  const images = canRequesterViewImages(actor), { loreSelectionLimit } = loadChatSettings()
-  const profiles = ChatProfileStore.list({ enabledOnly: true }).filter(profile => canUseChatProfile(chat, profile))
+  const { loreSelectionLimit } = loadChatSettings()
+  // Images are served by `asset()`: the list only tells whether a profile has one.
+  const profiles = ChatProfileStore.list({ enabledOnly: true, imageMarkers: true }).filter(profile => canUseChatProfile(chat, profile))
   const paths = profileFolderPaths(profiles, () => true)
-  return profiles.map(profile => ({ ...pluginProfileOf(profile, images, loreSelectionLimit), folderId: profile.folderId, folderPath: paths.get(profile.id) ?? [], sortOrder: profile.sortOrder }))
+  const viewer = profileViewer(actor, profiles)
+  return profiles.map(profile => ({ ...pluginProfileOf(profile, viewer, loreSelectionLimit), folderId: profile.folderId, folderPath: paths.get(profile.id) ?? [], sortOrder: profile.sortOrder }))
 }
 
-/** One profile with its lorebooks and judge preset read whole (`llm.profile`). */
+/**
+ * One profile with its lorebooks and judge preset (`llm.profile`). An administrator reads both whole; another account as
+ * the chat API gives them: global books without entries (the account's own books keep theirs), the preset's id and name.
+ */
 export function readPluginLlmProfile(pluginId: string, requester: McpRequester | undefined, raw: unknown): PluginLlmProfileDetail {
   const input = z.object({ profileId: z.number().int().positive() }).strict().parse(raw)
   const { profile, requester: actor } = profileAccess(pluginId, requester, input.profileId)
+  const viewer = profileViewer(actor)
   const books = booksForRequest({ thread: null, profile, profileOwner: fileOwnerKey(actor.accountId ?? null) })
+  const preset = profile.judgePresetId ? ChatJudgePresetStore.find(profile.judgePresetId) : null
   return {
-    ...pluginProfileOf(profile, canRequesterViewImages(actor), loadChatSettings().loreSelectionLimit),
+    ...pluginProfileOf(profile, viewer, loadChatSettings().loreSelectionLimit),
     folderId: profile.folderId, folderPath: profileFolderPaths([profile], () => true).get(profile.id) ?? [], sortOrder: profile.sortOrder,
-    lorebooks: books.map(book => ({ id: book.id, name: book.name, kind: book.kind, entries: book.entries })),
-    judgePreset: profile.judgePresetId ? ChatJudgePresetStore.find(profile.judgePresetId) : null,
+    lorebooks: books.map(book => ({ id: book.id, name: book.name, kind: book.kind, entries: viewer.admin || book.kind !== 'global' ? book.entries : [] })),
+    judgePreset: preset && !viewer.admin ? { id: preset.id, name: preset.name } : preset,
   }
 }
 

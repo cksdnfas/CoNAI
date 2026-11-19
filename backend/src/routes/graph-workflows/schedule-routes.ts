@@ -12,8 +12,9 @@ import { asyncHandler } from '../../middleware/asyncHandler'
 import { parsePositiveInteger, sendRouteBadRequest } from '../routeValidation'
 import type { ModuleGraphResponse } from '../../types/moduleGraph'
 import { DEFAULT_SCHEDULE_TIMEZONE, resolveScheduleTimezone } from '../../services/scheduleTiming'
-import { isAdminRequest, getRequesterAccountId } from '../requester-session-helpers'
+import { getRequesterAccountId } from '../requester-session-helpers'
 import {
+  ensureScheduleAccountOrRespond,
   findGraphWorkflowFolderOrRespond,
   findGraphWorkflowOrRespond,
   findGraphWorkflowScheduleOrRespond,
@@ -288,6 +289,7 @@ export function createGraphWorkflowScheduleRoutes() {
         input_values: inputChanged ? inputValues : undefined,
         confirmed_graph_version: resuming ? workflow.version : schedule.confirmed_graph_version,
         confirmed_input_signature: inputChanged || resuming ? inputSignature : undefined,
+        last_execution_id: resuming ? GraphWorkflowScheduleService.lastExecutionIdOnResume(schedule) : undefined,
         next_run_at: nextRunAt,
         stop_reason_code: finalStatus === 'active' ? (resuming ? null : schedule.stop_reason_code) : schedule.status === 'active' ? 'manual_pause' : schedule.stop_reason_code,
         stop_reason_message: finalStatus === 'active' ? (resuming ? null : schedule.stop_reason_message) : schedule.status === 'active' ? '사용자가 예약작업을 일시정지했어.' : schedule.stop_reason_message,
@@ -343,6 +345,10 @@ export function createGraphWorkflowScheduleRoutes() {
     }
 
     const { schedule, workflow } = scheduleContext
+    // Resuming confirms the current workflow version for runs that act as the schedule's account.
+    if (!ensureScheduleAccountOrRespond(req, res, schedule, '이 예약은 저장한 계정이나 관리자만 다시 켤 수 있어.')) {
+      return
+    }
     const expected = readExpectedScheduleVersions(req, res)
     if (!expected) return
 
@@ -357,6 +363,7 @@ export function createGraphWorkflowScheduleRoutes() {
     const updated = GraphWorkflowScheduleModel.update(scheduleId, {
       status: 'active',
       confirmed_graph_version: workflow.version,
+      last_execution_id: GraphWorkflowScheduleService.lastExecutionIdOnResume(schedule),
       next_run_at: nextRunAt,
       stop_reason_code: null,
       stop_reason_message: null,
@@ -378,10 +385,8 @@ export function createGraphWorkflowScheduleRoutes() {
     }
 
     const { schedule } = scheduleContext
-    // A run-now acts as the schedule's account, so only that account or an administrator may start one.
-    const runAs = schedule.run_as_account_id ?? null
-    if (runAs !== null && runAs !== getRequesterAccountId(req) && !isAdminRequest(req)) {
-      return res.status(403).json({ success: false, error: '이 예약은 저장한 계정이나 관리자만 바로 실행할 수 있어.' } as ModuleGraphResponse)
+    if (!ensureScheduleAccountOrRespond(req, res, schedule, '이 예약은 저장한 계정이나 관리자만 바로 실행할 수 있어.')) {
+      return
     }
     const enqueueCount = parseScheduleEnqueueCount(req.body?.enqueue_count ?? 1)
     if (enqueueCount === null || enqueueCount <= 0) {

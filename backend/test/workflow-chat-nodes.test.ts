@@ -79,13 +79,21 @@ test('workflow chat nodes: run requester, characters, presets, lorebooks and cha
   }
   const node = (id: string, operationKey: string, inputValues: Record<string, unknown> = {}) => ({ id, module_id: moduleFor(operationKey).id, position: { x: 0, y: 0 }, input_values: inputValues })
   const edge = (source: string, sourcePort: string, target: string, targetPort: string) => ({ id: `${source}.${sourcePort}-${target}.${targetPort}`, source_node_id: source, source_port_key: sourcePort, target_node_id: target, target_port_key: targetPort })
+  const createMany = GenerationQueueModel.createMany
   /** One node run through its handler, inside a real execution row. */
   async function run(operationKey: string, inputs: Record<string, unknown>, options: { requester?: number | null; edges?: ReturnType<typeof edge>[]; aborted?: boolean } = {}) {
     const graph = { nodes: [node('n', operationKey)], edges: options.edges ?? [] }
     const workflowId = GraphWorkflowModel.create({ name: `run ${operationKey}`, graph } as any)
     const executionId = GraphExecutionModel.create({ graph_workflow_id: workflowId, graph_version: 1, requested_by_account_id: options.requester ?? null })
     const controller = new AbortController()
-    if (options.aborted) controller.abort()
+    // The abort lands as the job is queued, so the node stops at the queue wait; a run aborted earlier queues nothing.
+    const queued = options.aborted
+      ? t.mock.method(GenerationQueueModel, 'createMany', (...args: Parameters<typeof createMany>) => {
+        const ids = createMany.apply(GenerationQueueModel, args)
+        controller.abort()
+        return ids
+      })
+      : null
     const context = {
       executionId,
       workflow: { id: workflowId, name: 'chat nodes', graph },
@@ -97,7 +105,11 @@ test('workflow chat nodes: run requester, characters, presets, lorebooks and cha
       getAbortReason: () => null,
       requestedByAccountId: options.requester ?? null,
     } as any
-    await CHAT_NODE_HANDLERS[operationKey](context, graph.nodes[0] as any, parseModuleDefinition(moduleFor(operationKey)), inputs)
+    try {
+      await CHAT_NODE_HANDLERS[operationKey](context, graph.nodes[0] as any, parseModuleDefinition(moduleFor(operationKey)), inputs)
+    } finally {
+      queued?.mock.restore()
+    }
     const artifacts = context.artifactsByNode.get('n') as Record<string, { type: string; value: any }>
     return Object.fromEntries(Object.entries(artifacts).map(([key, artifact]) => [key, artifact.value])) as Record<string, any>
   }
@@ -233,6 +245,15 @@ test('workflow chat nodes: run requester, characters, presets, lorebooks and cha
     const access = t.mock.method(AuthAccessControlService, 'resolveForAccountId', () => ({ permissionKeys: [], groupKeys: [] }) as any)
     try {
       await assert.rejects(run('system.load_chat_profile', { profile_id: limited.id }, { requester: 5 }), /실행한 계정이 쓸 수 없어/)
+      const referencePort = [edge('n', 'reference_image', 'x', 'image')]
+      await assert.rejects(run('system.load_chat_profile', { profile_id: mina.id }, { requester: 5, edges: referencePort }), /images\.view/)
+      const withoutImages = await run('system.load_chat_profile', { profile_id: mina.id }, { requester: 5 })
+      assert.ok(!('reference_image' in withoutImages), 'an unconnected image needs no image permission')
+      assert.equal(withoutImages.profile.reference_hash, null, 'library hashes are hidden as the profile API hides them')
+      access.mock.mockImplementation(() => ({ permissionKeys: ['images.view'], groupKeys: [] }) as any)
+      const withImages = await run('system.load_chat_profile', { profile_id: mina.id }, { requester: 5, edges: referencePort })
+      assert.ok(String(withImages.reference_image).startsWith('data:image/png;base64,'), 'an account that may view images gets the original')
+      assert.equal(withImages.profile.reference_hash, referenceRef.composite_hash, 'and the library hash')
       access.mock.mockImplementation(() => ({ permissionKeys: [], groupKeys: ['vip'] }) as any)
       assert.equal((await run('system.load_chat_profile', { profile_id: limited.id }, { requester: 5 })).name, 'Limited')
     } finally {
@@ -372,6 +393,67 @@ test('workflow chat nodes: run requester, characters, presets, lorebooks and cha
   assert.equal(comfyJob.payload.prompt_data.positive_prompt, 'best quality, 1girl, silver hair, smiling')
   assert.equal(typeof comfyJob.payload.prompt_data.seed, 'number')
   assert.notEqual(comfyJob.payload.prompt_data.seed, 1, 'the fixed seed is drawn again')
+  assert.equal(comfyJob.requested_by_account_id, null)
+  assert.equal(GenerationQueueModel.isGraphOrigin(comfyJob.id), true, 'queued as a graph job, like the graph ComfyUI node')
+  assert.equal(comfyJob.payload.__conaiMcpImageGrant, undefined, 'no library input, no image grant')
+  // A reference goes to the queue as a library hash, read under the run's image authority (graphImageAuthority).
+  const { withMcpGraphImageAuthority } = await import('../src/services/graph-workflow-executor/graphImageAuthority')
+  const refWorkflowId = WorkflowModel.create({
+    name: 'Comfy reference test',
+    workflow_json: JSON.stringify({ '3': { class_type: 'KSampler', inputs: { seed: 1 } }, '6': { class_type: 'CLIPTextEncode', inputs: { text: '' } }, '9': { class_type: 'LoadImage', inputs: { image: '' } } }),
+    marked_fields: [
+      { id: 'positive_prompt', label: 'Positive Prompt', jsonPath: '6.inputs.text', type: 'textarea' },
+      { id: 'seed', label: 'Seed', jsonPath: '3.inputs.seed', type: 'number', default_value: 1 },
+      { id: 'reference', label: 'Reference', jsonPath: '9.inputs.image', type: 'image' },
+    ],
+  } as any)
+  const refPreset = ChatGenerationPresetStore.create({ name: 'Scene ref', kind: 'comfyui', comfyui: { workflowId: refWorkflowId, fixedInputs: { positive_prompt: 'best quality' }, exposedFieldIds: [], referenceField: 'reference' } })
+  const latestJobId = () => (db.prepare('SELECT id FROM generation_queue_jobs ORDER BY id DESC LIMIT 1').get() as { id: number }).id
+  await assert.rejects(run('system.generate_with_chat_preset', { preset_id: refPreset.id, prompt: 'bootstrap', profile_id: mina.id }, { aborted: true }), /__GRAPH_EXECUTION_CANCELLED__/)
+  const bootstrapJob = latestJob()
+  assert.equal(bootstrapJob.payload.prompt_data.reference.composite_hash, referenceRef.composite_hash)
+  assert.equal(bootstrapJob.requested_by_account_id, null)
+  assert.equal(bootstrapJob.payload.__conaiMcpImageGrant, undefined, 'the bootstrap owner is checked as itself')
+  await assert.rejects(withMcpGraphImageAuthority({ scopes: ['generate'] }, () => run('system.generate_with_chat_preset', { preset_id: refPreset.id, prompt: 'stdio', profile_id: mina.id }, { aborted: true })), /__GRAPH_EXECUTION_CANCELLED__/)
+  const stdioJob = latestJob()
+  assert.equal(stdioJob.payload.__conaiMcpImageGrant.kind, 'stdio', 'an account-less local caller carries a signed grant')
+  assert.equal(GenerationQueueModel.isGraphOrigin(stdioJob.id), true)
+  await withAuthConfigured(async () => {
+    const before = latestJobId()
+    await assert.rejects(run('system.generate_with_chat_preset', { preset_id: refPreset.id, prompt: 'no authority', profile_id: mina.id }, { aborted: true }), /images\.view/)
+    assert.equal(latestJobId(), before, 'an account-less run without image authority queues nothing')
+    await assert.rejects(run('system.generate_with_chat_preset', { preset_id: naiPreset.id, prompt: 'no authority', profile_id: mina.id }, { aborted: true }), /images\.view/)
+    assert.equal(latestJobId(), before, 'NovelAI embeds the stored reference, so it is checked before queueing')
+    await assert.rejects(run('system.generate_with_chat_preset', { preset_id: naiPreset.id, prompt: 'tags', character_setting_id: look.id }, { aborted: true }), /__GRAPH_EXECUTION_CANCELLED__/)
+    assert.equal(latestJob().payload.character_refs, undefined, 'without image authority a setting lends only its tags')
+  })
+  {
+    const findAccount = t.mock.method(AuthAccount, 'findById', (id: number) => ({ id, status: 'active', account_type: 'guest' }) as any)
+    const access = t.mock.method(AuthAccessControlService, 'resolveForAccountId', () => ({ permissionKeys: ['images.view', 'characters.view'], groupKeys: [] }) as any)
+    try {
+      await assert.rejects(run('system.generate_with_chat_preset', { preset_id: refPreset.id, prompt: 'account', profile_id: mina.id }, { requester: 5, aborted: true }), /__GRAPH_EXECUTION_CANCELLED__/)
+      const accountJob = latestJob()
+      assert.equal(accountJob.requested_by_account_id, 5, 'the queue checks images.view as the run account')
+      assert.equal(GenerationQueueModel.isGraphOrigin(accountJob.id), true)
+      assert.equal(accountJob.payload.__conaiMcpImageGrant, undefined)
+      await assert.rejects(run('system.generate_with_chat_preset', { preset_id: naiPreset.id, prompt: 'account', profile_id: mina.id }, { requester: 5, aborted: true }), /__GRAPH_EXECUTION_CANCELLED__/)
+      assert.equal(latestJob().service_type, 'novelai')
+      assert.equal(latestJob().requested_by_account_id, 5)
+      assert.equal(latestJob().payload.character_refs.length, 1, 'an account that may view images lends the profile reference')
+      access.mock.mockImplementation(() => ({ permissionKeys: ['characters.view'], groupKeys: [] }) as any)
+      const before = latestJobId()
+      await assert.rejects(run('system.generate_with_chat_preset', { preset_id: refPreset.id, prompt: 'hidden', profile_id: mina.id }, { requester: 5, aborted: true }), /images\.view/)
+      assert.equal(latestJobId(), before, 'a requester who may not view images gets no stored reference')
+      await assert.rejects(run('system.generate_with_chat_preset', { preset_id: naiPreset.id, prompt: 'hidden', profile_id: mina.id }, { requester: 5, aborted: true }), /images\.view/)
+      assert.equal(latestJobId(), before, 'nor through a NovelAI preset')
+      await assert.rejects(run('system.generate_with_chat_preset', { preset_id: refPreset.id, prompt: 'tags only', character_setting_id: look.id }, { requester: 5, aborted: true }), /__GRAPH_EXECUTION_CANCELLED__/)
+      assert.equal(latestJob().payload.prompt_data.reference, undefined, 'a hidden setting reference still falls back to tags')
+      assert.equal(latestJob().payload.prompt_data.positive_prompt, 'best quality, gold hair, tags only')
+    } finally {
+      findAccount.mock.restore()
+      access.mock.restore()
+    }
+  }
   await assert.rejects(run('system.generate_with_chat_preset', { preset_id: comfyPreset.id, prompt: 'x', reference_image: postedImage }, { aborted: true }), /기준 이미지를 받을 이미지 필드가 없어/)
   await assert.rejects(run('system.generate_with_chat_preset', { prompt: 'x' }), /생성 프리셋을 골라줘/)
   await assert.rejects(run('system.generate_with_chat_preset', { preset_id: naiPreset.id, prompt: ' ' }), /프롬프트를 넣어줘/)

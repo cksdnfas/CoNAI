@@ -11,7 +11,7 @@ import { splitTurns } from './llmChatContext'
 import type { ChatCompletionMessage, ChatCompletionTool } from './llmChatCompletion'
 import { referenceBlock } from './llmChatContext'
 import { estimateMessagesTokens, replyReserveFor } from './llmChatContext'
-import { postHistoryText, buildContextMeta, recalledSegments, type ChatContextMeta } from './llmChatContext'
+import { postHistoryText, buildContextMeta, recalledSegments, type ChatContextMeta, type ToolGuidance } from './llmChatContext'
 import { recallText } from './chatMemory'
 import { contextSource, limitContextMeta, contextPartsOf, markContextParts } from './chatContextDiagnostics'
 import { appendUserDirective, buildLeadingMessages, depthBlocks, flagDirectiveFor, insertDepthBlocks, offersLinkedFiles, offersLoreFileTool, offersSkills, recallFor, rejectedLoreFor, resolveAuthorNote, selectChatLore, sendableMessages, threadBlockStateText, toCompletionMessages, unsummarizedMessages, latestWindow } from './llmChatContext'
@@ -128,7 +128,7 @@ type GroupLlmContext = {
   members: Member[]
   messages: CodexChatMessageRecord[]
   windowLimit: number
-  withTools: boolean
+  withTools: ToolGuidance
   tools: ChatCompletionTool[]
   maxTokens: number | null
   /** Space for a caller's final message, such as generation outcomes. */
@@ -220,7 +220,7 @@ export function buildGroupLlmMessages(params: GroupLlmContext): ChatCompletionMe
     context = buildGroupWindowMessages(params, window, sendable.length, lore, stateText)
   }
   if (params.onMeta) {
-    const meta = buildContextMeta(params.profile, params.thread, params.messages, window, groupSummaryOn(params.thread), context.lore, context.recalled, params.tools, context.messages, params.history?.source, stateText)
+    const meta = buildContextMeta(params.profile, params.thread, params.messages, window, groupSummaryOn(params.thread), context.lore, context.recalled, params.tools, context.messages, params.history?.source, stateText, params.withTools)
     if (meta.version === 2 && params.history && meta.window) {
       meta.window.droppedTurns = splitTurns(params.history.outline.filter((message) => message.sendable && message.id > until))
         .filter((turn) => !turn.some((message) => window.some((entry) => entry.id === message.id))).length

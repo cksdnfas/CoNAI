@@ -14,6 +14,7 @@ import { resolveThumbnailAbsolutePath } from '../utils/thumbnailGenerator';
 import type { ImageMetadataRecord, ImageFileRecord } from '../types/image';
 import { QueryCacheService } from './QueryCacheService';
 import { MediaImageFeaturesModel } from '../models/Image/MediaImageFeaturesModel';
+import { GeneratedVideoOptimizationService } from './generatedVideoOptimizationService';
 
 interface RestorableImageModel {
   model_hash: string;
@@ -36,6 +37,11 @@ interface RestorableVideoOptimization {
   attempts: number;
   lease_until: number;
   last_error: string | null;
+}
+
+/** The optimization state that rebuilds a playback copy which no longer exists. */
+function asRebuildableOptimization(optimization: RestorableVideoOptimization): RestorableVideoOptimization {
+  return { ...optimization, status: 'pending', output_path: null, attempts: 0, lease_until: 0, last_error: null };
 }
 
 interface LibraryRestoreData {
@@ -151,6 +157,11 @@ export class DeletionService {
     }
   }
 
+  private static findVideoOptimization(compositeHash: string): RestorableVideoOptimization | undefined {
+    return db.prepare(`SELECT source_path, source_size, source_mtime, crf, audio_bitrate, status, output_path, attempts, lease_until, last_error
+      FROM generated_video_optimizations WHERE composite_hash = ?`).get(compositeHash) as RestorableVideoOptimization | undefined;
+  }
+
   /** Remove generation-history rows linked to a hash and keep log wording consistent. */
   private static cleanupGenerationHistoryForHash(compositeHash: string, orphaned = false): number {
     const deletedHistoryCount = HistoryCommandService.deleteByCompositeHash(compositeHash);
@@ -212,12 +223,13 @@ export class DeletionService {
     const models = useRecycleBin
       ? db.prepare('SELECT model_hash, model_role, weight, civitai_checked, civitai_failed, checked_at, created_at FROM image_models WHERE composite_hash = ?').all(compositeHash) as RestorableImageModel[]
       : [];
-    const videoOptimization = useRecycleBin
-      ? db.prepare(`SELECT source_path, source_size, source_mtime, crf, audio_bitrate, status, output_path, attempts, lease_until, last_error
-        FROM generated_video_optimizations WHERE composite_hash = ?`).get(compositeHash) as RestorableVideoOptimization | undefined
-      : undefined;
+    const videoOptimization = useRecycleBin ? this.findVideoOptimization(compositeHash) : undefined;
     const recycleBinEntries: string[] = [];
-    const movedFiles: Array<{ name: string; binPath: string; original: string }> = [];
+    const movedFiles: Array<{ name: string; binPath: string; original: string; file: ImageFileRecord }> = [];
+    const recordRestoreData = (name: string, file: ImageFileRecord, optimization: RestorableVideoOptimization | undefined) => {
+      recordLibraryRestoreData(name, JSON.stringify({ metadata, file, groups, folderGroups, colorHistogram, models, videoOptimization: optimization } satisfies LibraryRestoreData));
+    };
+    let deletedOptimization: RestorableVideoOptimization | undefined;
 
     console.log(`🗑️ Deleting image ${compositeHash}:`, {
       useRecycleBin,
@@ -232,8 +244,8 @@ export class DeletionService {
         if (binPath) {
           const name = path.basename(binPath);
           const original = path.isAbsolute(file.original_file_path) ? file.original_file_path : path.join(this.UPLOAD_BASE_PATH, file.original_file_path);
-          movedFiles.push({ name, binPath, original });
-          recordLibraryRestoreData(name, JSON.stringify({ metadata, file, groups, folderGroups, colorHistogram, models, videoOptimization } satisfies LibraryRestoreData));
+          movedFiles.push({ name, binPath, original, file });
+          recordRestoreData(name, file, videoOptimization);
           recycleBinEntries.push(name);
         }
       }
@@ -247,6 +259,8 @@ export class DeletionService {
         }
       }
 
+      // Read in the same synchronous step as the delete: the worker may have finished a copy during the moves above.
+      deletedOptimization = this.findVideoOptimization(compositeHash);
       if (!this.deleteMetadataWithFiles(compositeHash)) throw new Error('Failed to delete image from database');
     } catch (error) {
       // A failed protected deletion must not strand the first copies of a multi-file image in the bin.
@@ -257,6 +271,19 @@ export class DeletionService {
       throw error;
     }
 
+    // Like thumbnails, a removed playback copy is regenerable, so its bin entry queues it again on restore.
+    // A copy that stays on disk keeps its row as it was, so a restore still points at it.
+    const copyRemoved = await GeneratedVideoOptimizationService.removePlaybackCopy(deletedOptimization?.output_path);
+    const restorableOptimization = copyRemoved && deletedOptimization?.status === 'completed'
+      ? asRebuildableOptimization(deletedOptimization)
+      : deletedOptimization;
+    if (useRecycleBin && JSON.stringify(restorableOptimization) !== JSON.stringify(videoOptimization)) {
+      try {
+        for (const moved of movedFiles) recordRestoreData(moved.name, moved.file, restorableOptimization);
+      } catch (error) {
+        console.warn(`⚠️ Could not update video optimization restore data for ${compositeHash}:`, error);
+      }
+    }
     await this.cleanupPromptCollection(metadata.prompt, metadata.negative_prompt, metadata.character_prompt_text, metadata.auto_tags);
     this.cleanupGenerationHistoryForHash(compositeHash);
 
@@ -290,7 +317,11 @@ export class DeletionService {
       }
       if (!existing) ImageFileModel.create({ ...file, original_file_path: restoredTo, file_status: 'active' });
       else ImageFileModel.updateStatus(existing.id, 'active');
-      const optimization = snapshot.videoOptimization;
+      // A completed copy can be gone (crash before the bin entry was rewritten, failed rewrite, older entries): rebuild it.
+      const optimization = snapshot.videoOptimization?.status === 'completed'
+        && !(snapshot.videoOptimization.output_path && fs.existsSync(snapshot.videoOptimization.output_path))
+        ? asRebuildableOptimization(snapshot.videoOptimization)
+        : snapshot.videoOptimization;
       const original = path.isAbsolute(file.original_file_path) ? file.original_file_path : path.join(this.UPLOAD_BASE_PATH, file.original_file_path);
       if (optimization && path.resolve(optimization.source_path) === path.resolve(original)) {
         db.prepare(`INSERT OR IGNORE INTO generated_video_optimizations
@@ -383,8 +414,10 @@ export class DeletionService {
             }
           }
 
-          // 메타데이터 삭제 (남은 missing/deleted 파일 행도 함께 정리)
+          // 메타데이터 삭제 (남은 missing/deleted 파일 행도 함께 정리). 최적화 행은 CASCADE로 지워지므로 재생본 경로를 먼저 읽는다.
+          const optimization = this.findVideoOptimization(composite_hash);
           this.deleteMetadataWithFiles(composite_hash);
+          await GeneratedVideoOptimizationService.removePlaybackCopy(optimization?.output_path);
           this.cleanupGenerationHistoryForHash(composite_hash);
           console.log(`✅ Metadata cleaned up for ${composite_hash}`);
         }

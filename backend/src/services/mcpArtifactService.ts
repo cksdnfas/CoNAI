@@ -200,6 +200,31 @@ async function sha256File(absolutePath: string): Promise<string> {
   });
 }
 
+const SHA256_CACHE_ENTRIES = 512;
+/** Descriptors are rebuilt on every job poll; least recently used first. Concurrent builds share one hashing run. */
+const sha256Cache = new Map<string, { size: number; mtimeMs: number; ctimeMs: number; ino: number; digest: Promise<string> }>();
+
+/**
+ * Hash a file once while its path, size, inode and modification/change times stay the same. The change time
+ * and inode catch a same-size rewrite or replacement whose modification time was preserved.
+ */
+function cachedSha256File(absolutePath: string, stats: fs.Stats): Promise<string> {
+  const cached = sha256Cache.get(absolutePath);
+  sha256Cache.delete(absolutePath);
+  if (cached && cached.size === stats.size && cached.mtimeMs === stats.mtimeMs
+    && cached.ctimeMs === stats.ctimeMs && cached.ino === stats.ino) {
+    sha256Cache.set(absolutePath, cached);
+    return cached.digest;
+  }
+  const entry = { size: stats.size, mtimeMs: stats.mtimeMs, ctimeMs: stats.ctimeMs, ino: stats.ino, digest: sha256File(absolutePath) };
+  sha256Cache.set(absolutePath, entry);
+  if (sha256Cache.size > SHA256_CACHE_ENTRIES) sha256Cache.delete(sha256Cache.keys().next().value!);
+  entry.digest.catch(() => {
+    if (sha256Cache.get(absolutePath) === entry) sha256Cache.delete(absolutePath);
+  });
+  return entry.digest;
+}
+
 export class McpArtifactService {
   /** Verify the stable identity before account authorization, without touching its host file. */
   static identity(artifactId: string): McpArtifactPayload | null {
@@ -324,7 +349,7 @@ export class McpArtifactService {
       file_name: artifact.fileName,
       mime_type: artifact.mimeType,
       size_bytes: stats.size,
-      sha256: await sha256File(artifact.absolutePath),
+      sha256: await cachedSha256File(artifact.absolutePath, stats),
       download_url: `${normalizedBaseUrl}/mcp/artifacts/${encodeURIComponent(artifactId)}?expires=${expires}&token=${encodeURIComponent(token)}`,
       expires_at: new Date(expires * 1000).toISOString(),
     };

@@ -102,7 +102,7 @@ import {
   type CodexChatApi,
 } from './codex-chat-context'
 import { ChatLightboxProvider, CodexChatAssistantMessage, type ChatSpeaker } from './codex-chat-message'
-import { ChatSavedMessages } from './chat-transcript'
+import { ChatSavedMessages, parseEngineChanges } from './chat-transcript'
 import { Button } from '@/components/ui/button'
 import { CHAT_COMMANDS, ChatCommandList } from './chat-commands'
 import { ChatExportDialog, ChatSearchInput, ChatSearchResults } from './chat-search-export'
@@ -312,6 +312,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   }, [activeFlagIds, activeThreadId, canToggleFlags, flags, queryClient, showSnackbar, t, togglePendingFlag])
   // Group rooms: `profile` is the representative (the room's look); every member speaks with its own face and emoticons.
   const isGroup = displayThread?.kind === 'group'
+  const engineChanges = parseEngineChanges(thread?.engine_changes)
   const group = isGroup ? threadQuery.data?.group ?? null : null
   const memberIdsKey = (isGroup ? group?.memberIds ?? activeThread?.member_profile_ids ?? [] : []).join(',')
   const memberProfiles = useMemo(() => memberIdsKey ? memberIdsKey.split(',').flatMap((id) => profilesById.get(Number(id)) ?? []) : [], [memberIdsKey, profilesById])
@@ -911,7 +912,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
           </div> : null}
           {pendingOpening(pendingChat.greeting.after, 'after')}
         </> : null}
-        <ChatSavedMessages messages={visibleMessages} contextMessages={messages} segments={threadQuery.data?.summarySegments} flashMessageId={flashMessageId} summaryUntilId={isGroup ? null : thread?.summary_until_message_id ?? null} media={media} actions={messageActions} appearance={appearance} speaker={speaker} userSpeaker={userSpeaker} speakerOf={isGroup ? speakerOf : undefined} agentSpeakerOf={speakerOf} mentions={isGroup ? memberNames : undefined} />
+        <ChatSavedMessages messages={visibleMessages} contextMessages={messages} segments={threadQuery.data?.summarySegments} flashMessageId={flashMessageId} summaryUntilId={isGroup ? null : thread?.summary_until_message_id ?? null} engineChanges={engineChanges} media={media} actions={messageActions} appearance={appearance} speaker={speaker} userSpeaker={userSpeaker} speakerOf={isGroup ? speakerOf : undefined} agentSpeakerOf={speakerOf} mentions={isGroup ? memberNames : undefined} />
         <ChatStreamingMessage threadId={activeThreadId} appearance={appearance} speaker={speaker} userSpeaker={userSpeaker} speakerOf={isGroup ? speakerOf : undefined} mentions={isGroup ? memberNames : undefined} />
         {runningFromServer && !isGroup && speaker ? <CodexChatAssistantMessage content={runningFromServer.text} toolCalls={runningFromServer.toolCalls} streaming appearance={appearance} speaker={speaker} /> : null}
         {serverReplies.map((reply) => {

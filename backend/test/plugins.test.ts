@@ -513,6 +513,56 @@ test('trusted extensions preserve package, caller, explicit approval and externa
     assert.equal(app.cancelPluginAppRequest(draft.id, context).status, 'cancelled')
     await registry.removePlugin('app-workbench')
   })
+  await t.test('plugin actions run in a chat whose profile delegates files.view, without its delegated project', async sub => {
+    const packageZip = new AdmZip()
+    packageZip.addLocalFolder(path.resolve(__dirname, '../../plugins/app-workbench'), '', entry => !/\.md$/i.test(entry))
+    packageZip.addLocalFile(path.resolve(__dirname, '../../plugins/sdk/conai-plugin.js'))
+    await registry.installPlugin(packageZip.toBuffer()); await registry.setPluginEnabled('app-workbench', true)
+    sub.after(async () => { if (registry.listPlugins(true).some(plugin => plugin.manifest.id === 'app-workbench')) await registry.removePlugin('app-workbench') })
+    const { loadChatSettings, updateChatSettings } = await import('../src/services/codex-chat/chatSettings')
+    const chatWasEnabled = loadChatSettings().enabled
+    updateChatSettings({ enabled: true })
+    sub.after(() => { updateChatSettings({ enabled: chatWasEnabled }) })
+    const { ExternalApiProvider } = await import('../src/models/ExternalApiProvider')
+    const { ModelSlotStore } = await import('../src/services/codex-chat/modelSlots')
+    const { ChatProfileStore } = await import('../src/services/codex-chat/chatProfiles')
+    const { CodexChatStore } = await import('../src/services/codex-chat/codexChatStore')
+    const { registerChatReply } = await import('../src/services/codex-chat/chatReplyRegistry')
+    const { chatProfileRequester } = await import('../src/services/codex-chat/chatProfilePermissions')
+    const { chatWorkspaces } = await import('../src/services/codex-chat/chatWorkspace')
+    const { WorkspaceService } = await import('../src/services/workspaceService')
+    const { fileOwnerKey } = await import('../src/services/fileStoreService')
+    const { createMcpServer } = await import('../src/mcp/server')
+    const { Client, InMemoryTransport } = await import('@modelcontextprotocol/client')
+    const adminId = (auth.prepare("SELECT id FROM auth_accounts WHERE username='plugin-admin'").get() as { id: number }).id
+    const guestId = addAccount('plugin-delegated-chat')
+    AuthPermissionGroup.addAccountMembership(AuthPermissionGroup.createCustomGroup({ name: 'plugin-delegated-chat', permissionKeys: ['chat.use', 'images.view', 'images.edit'] }).id, guestId)
+    const requester = { accountId: guestId, accountType: 'guest' as const }
+    const project = await WorkspaceService.create(fileOwnerKey(adminId), 'Delegated plugin project')
+    ExternalApiProvider.create({ provider_name: 'plugin-delegated-chat', display_name: 'Delegated chat test', provider_type: 'llm_openai_compatible', base_url: 'http://unused.invalid', is_enabled: true, additional_config: {} })
+    const profile = ChatProfileStore.create({ name: 'Delegated plugin chat', engine: 'llm', modelSlotId: ModelSlotStore.ensure('plugin-delegated-chat', 'test-model')!, mcpEnabled: true, mcpScopes: ['read', 'organize'],
+      toolAllowlist: ['run_plugin_action', 'get_plugin_action', 'cancel_plugin_action'], delegatedPermissions: ['files.view'], workspaces: [{ id: project.id, write: false }] })
+    const chat = { threadId: CodexChatStore.createThread(guestId, 'delegated plugin chat', 'llm', profile.id), profileId: profile.id, kind: 'direct' as const, replyId: randomUUID() }
+    assert.equal(chatWorkspaces(chatProfileRequester(requester, chat), chat.threadId, profile.id).length, 1, 'the chat itself reaches the project through the delegation')
+    const stop = registerChatReply(chat, new AbortController().signal, () => ({ replyTo: null, recipients: ['user'] }))
+    const server = createMcpServer({ scopes: ['read', 'organize'], source: 'llm-chat', requester, chatContext: chat, toolCatalog: false })
+    const client = new Client({ name: 'plugin-delegated-chat', version: '1' })
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
+    const call = async (name: string, args: Record<string, unknown>) => {
+      const result = await client.callTool({ name, arguments: args })
+      assert.notEqual(result.isError, true, `${name}: ${JSON.stringify(result)}`)
+      return JSON.parse((result.content as Array<{ text: string }>)[0].text)
+    }
+    try {
+      await Promise.all([server.connect(serverTransport), client.connect(clientTransport)])
+      assert.equal((await call('run_plugin_action', { pluginId: 'app-workbench', action: 'app-workbench.groups', arguments: {} })).status, 'completed')
+      const pending = await call('run_plugin_action', { pluginId: 'app-workbench', action: 'app-workbench.create_group', arguments: { name: 'delegated-chat-group' }, requestId: 'delegated-chat-request' })
+      assert.equal(pending.status, 'pending')
+      assert.equal(pending.project, undefined, 'the plugin acts as the account, which cannot open the delegated project')
+      assert.equal((await call('get_plugin_action', { requestId: pending.id })).status, 'pending')
+      assert.equal((await call('cancel_plugin_action', { requestId: pending.id })).status, 'cancelled')
+    } finally { stop(); await client.close(); await server.close() }
+  })
   await t.test('live permission revocation invalidates approved writes and media grants', () => {
     const { pluginDb } = require('../src/services/plugins/pluginStore') as typeof import('../src/services/plugins/pluginStore')
     const manifest = registry.getPlugin('text-editor').definition

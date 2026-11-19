@@ -117,7 +117,7 @@ export async function activate(conai) {
     { name: 'job_status', description: 'Read your HyperFrames render progress, errors, result library hash and source references. Does not restart failed renders.', scope: 'read', inputSchema: { ...objectSchema({ jobId: { type: 'string', format: 'uuid' } }), required: ['jobId'] }, handler: args => jobStatus(args.jobId) },
     { name: 'cancel_render', description: 'Cancel your running HyperFrames render. Does not delete already saved library output.', scope: 'generate', inputSchema: { ...objectSchema({ jobId: { type: 'string', format: 'uuid' } }), required: ['jobId'] }, handler: args => conai.jobs.cancel(args.jobId) },
     { name: 'renderer_status', description: 'Check whether the HyperFrames renderer can run: a Chromium browser on the host and the installed renderer package, plus the progress of a renderer install.', scope: 'read', inputSchema: objectSchema({}), handler: (args, context) => status(context.account) },
-    { name: 'install_renderer', description: 'Install the HyperFrames renderer package with npm into the plugin data folder (a few minutes, needs network and npm). Returns at once; poll renderer_status. Administrators only.', scope: 'configure', inputSchema: objectSchema({}), handler: async (args, context) => {
+    { name: 'install_renderer', description: 'Install the HyperFrames renderer package with npm into the plugin data folder (a few minutes, needs network and npm). Returns at once without a job ID (task_wait cannot wait on it): do not poll, tell the user it is installing and check renderer_status once in a later turn. Administrators only.', scope: 'configure', inputSchema: objectSchema({}), handler: async (args, context) => {
       requireAdmin(context.account)
       // Installing replaces the renderer folder, which a running render is using.
       if ((await rendererStatus(conai.dataDir)).package.ok) throw new Error('렌더러 패키지는 이미 설치돼 있어.')
@@ -127,7 +127,7 @@ export async function activate(conai) {
   ]
   for (const definition of definitions) conai.tools.register(definition)
   conai.onRequest(async ({ body, account }) => {
-    // Page requests are read-only. Mutations use app.call so the normal host review/idempotency boundary applies.
+    // Page requests are read-only. Mutations use app.call (the account's permissions and request-ID idempotency); assistant review comes from the commit-tier page actions.
     if (body?.op === 'guide') return guide()
     if (body?.op === 'status') return status(account)
     if (body?.op === 'read') return readProject(body.fileId)

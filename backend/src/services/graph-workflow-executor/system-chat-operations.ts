@@ -13,13 +13,12 @@ import { ChatLorebookStore, loreEntryKeys, loreEntryMatches, loreEntryTitle, typ
 import { OwnedLorebookStore } from '../codex-chat/chatLorebookFiles'
 import { MEDIA_MIME_TYPES } from '../codex-chat/chatMediaLinks'
 import { fillCharacterPlaceholders } from '../codex-chat/chatPlaceholders'
-import { resolveProfileAsset, type ChatProfileAssetKind } from '../codex-chat/chatProfileAssets'
+import { profileAssetFields, resolveProfileAsset, type ChatProfileAssetKind } from '../codex-chat/chatProfileAssets'
 import { ChatProfileStore, type ChatProfile } from '../codex-chat/chatProfiles'
 import { getCharacterSetting } from '../characterLibrary'
 import { requireRequesterPermission } from '../../middleware/featureAccess'
-import { canRequesterViewImages } from '../../middleware/imageAccess'
 import { CodexChatStore } from '../codex-chat/codexChatStore'
-import { ensureAutomationRoom, wakeChatRoom, wakeReplyText, ChatWakeBusyError } from '../codex-chat/chatRoomWake'
+import { ensureAutomationRoom, wakeChatRoom, wakeFailure, wakeReplyText, ChatWakeBusyError } from '../codex-chat/chatRoomWake'
 import { resolveAutomationRunAs } from '../automationRunAs'
 import { actorFromRequester } from '../posts/postActor'
 import { PostStore } from '../posts/postStore'
@@ -29,12 +28,16 @@ import { enqueueGenerationJobs } from '../generation-queue/queueEnqueue'
 import { publishRuntimeEvent } from '../runtime-events/runtimeEventBus'
 import { normalizeWorkflowNumericPromptValues } from '../workflowNumericFieldPolicy'
 import { ingestWorkflowInputImage, isLibraryImageRef } from '../workflowInputImages'
+import { GenerationQueueModel } from '../../models/GenerationQueue'
+import { validateComfyPromptData } from '../prepareComfyPromptData'
 import { saveArtifactBuffer } from './artifacts'
-import { buildQueuePayload, resolveQueueBackedOutput } from './execute-comfy'
+import { attachGraphImageGrant, buildQueuePayload, resolveQueueBackedOutput } from './execute-comfy'
+import { requireGraphImageAuthority } from './graphImageAuthority'
 import { executeNaiModule } from './execute-nai'
 import { waitForGraphQueueCompletion } from './queue-wait'
 import { isProfileAllowedForRun } from './workflow-llm-runtime'
 import { buildRuntimeArtifact, completeSystemNode } from './system-module-artifacts'
+import { throwIfExecutionAborted } from './execution-abort'
 import {
   bufferToDataUrl,
   parsePositiveIntegerish,
@@ -63,6 +66,22 @@ function joinPrompt(parts: string[]) {
 /** The account that started the run; null for scheduled runs and while no accounts are configured. */
 function runRequester(context: ExecutionContext) {
   return context.requestedByAccountId ?? null
+}
+
+/** Whether the run may read library images: its account, or the authority of an account-less run (graphImageAuthority). */
+function runMayViewImages(context: ExecutionContext, nodeId: string) {
+  try {
+    requireGraphImageAuthority(context)
+    return true
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    // A missing permission is the expected fallback; any other failure (a revoked key, an unreadable key file) would
+    // silently drop the image, so it is logged.
+    if (!message.startsWith('Permission required:')) {
+      writeExecutionLog({ executionId: context.executionId, nodeId, level: 'warn', eventType: 'node_image_authority_failed', message: `Image authority check failed: ${message}`, always: true })
+    }
+    return false
+  }
 }
 
 /** The file store owner whose account books this run may read; null when the run has no account (and accounts exist). */
@@ -105,8 +124,10 @@ const PROFILE_IMAGE_LABELS: Record<ChatProfileAssetKind, string> = {
 async function profileImageArtifact(context: ExecutionContext, node: GraphWorkflowNode, profile: ChatProfile, kind: ChatProfileAssetKind, portKey: string): Promise<RuntimeArtifact | null> {
   if (!hasConnectedOutput(context, node, portKey)) return null
   const asset = resolveProfileAsset(profile, kind)
-  if (asset.state === 'hidden') throw new Error(`안전 등급 때문에 ${PROFILE_IMAGE_LABELS[kind]}를 쓸 수 없어.`)
   if (asset.state === 'missing') return null
+  // Only the avatar thumbnail is open to chat access; the original avatar, background and reference need images.view.
+  requireGraphImageAuthority(context)
+  if (asset.state === 'hidden') throw new Error(`안전 등급 때문에 ${PROFILE_IMAGE_LABELS[kind]}를 쓸 수 없어.`)
   const sourcePath = asset.state === 'file' ? asset.file.path : null
   const mimeType = asset.state === 'file' ? asset.file.mimeType : asset.mimeType
   const buffer = asset.state === 'file' ? await fs.promises.readFile(asset.file.path) : asset.buffer
@@ -145,6 +166,8 @@ export async function executeLoadChatProfileNode(
     avatar_image: await profileImageArtifact(context, node, profile, 'avatar', 'avatar_image'),
     background_image: await profileImageArtifact(context, node, profile, 'background', 'background_image'),
   }
+  // A library hash opens the image through chat media links, so the hashes follow the profile API's images.view rule.
+  const assets = profileAssetFields(profile, runMayViewImages(context, node.id))
   const profileValue = {
     id: profile.id,
     name: profile.name,
@@ -157,9 +180,9 @@ export async function executeLoadChatProfileNode(
     greeting_position: profile.greetingPosition,
     lorebook_ids: profile.lorebookIds,
     generation_preset_ids: profile.generationPresetIds,
-    reference_hash: profile.referenceHash,
-    avatar_hash: profile.avatarHash,
-    background_hash: profile.backgroundHash,
+    reference_hash: assets.referenceHash,
+    avatar_hash: assets.avatarHash,
+    background_hash: assets.backgroundHash,
   }
   const nodeArtifacts: Record<string, RuntimeArtifact> = {
     name: buildRuntimeArtifact(context.executionId, node.id, 'name', 'text', profile.name, meta),
@@ -188,14 +211,23 @@ async function runComfyPresetJob(
 ) {
   const routing = resolveMcpGenerationRoutingInput({ serviceType: 'comfyui', workflowId: workflow.id, serverId: job.server_id ?? null, serverTag: job.server_tag ?? null })
   const promptData = normalizeMcpWorkflowInputs(markedFields, normalizeWorkflowNumericPromptValues(markedFields, job.inputs))
+  // A reference image travels as a library hash, which the queue reads under this authority.
+  const imageAuthority = validateComfyPromptData(markedFields, promptData) ? requireGraphImageAuthority(context) : null
+  // Checked before the inputs are stored: building the payload and enqueueing below are synchronous.
+  throwIfExecutionAborted(context, node.id)
+  const queuePayload = buildQueuePayload(promptData, context)
+  attachGraphImageGrant(queuePayload, imageAuthority, workflow.id)
   const [jobId] = enqueueGenerationJobs({
     service_type: 'comfyui',
     workflow_id: workflow.id,
     workflow_name: workflow.name,
+    requested_by_account_id: runRequester(context),
     requested_server_id: routing.requestedServerId,
     requested_server_tag: routing.requestedServerTag,
-    request_payload: buildQueuePayload(promptData, context),
+    request_payload: queuePayload,
     request_summary: `${context.workflow.name} · ${node.label || moduleDefinition.name}`,
+  }, {
+    withinTransaction: ({ jobIds }) => jobIds.forEach((id) => GenerationQueueModel.markGraphOrigin(id)),
   }).jobIds
   writeExecutionLog({
     executionId: context.executionId,
@@ -252,10 +284,9 @@ export async function executeGenerateWithChatPresetNode(
   if (hasSetting && requester !== null) requireRequesterPermission({ accountId: requester, accountType: null }, 'characters.view')
   const profile = hasProfile ? requireWorkflowProfile(context, resolvedInputs.profile_id) : null
   const explicitReference = await libraryHashOfImageInput(resolvedInputs.reference_image)
-  // Connected images have their own input boundary. Only borrow a stored reference when it is visible;
-  // otherwise the setting still lends its tags. Account-less scheduled runs retain their existing access.
-  const setting = settingId === null ? null : getCharacterSetting(settingId,
-    explicitReference === null && (requester === null || canRequesterViewImages({ accountId: requester, accountType: null })))
+  // Connected images have their own input boundary: library refs are read under the run's authority before the node
+  // runs. Only borrow a stored reference when the run may view images; otherwise the setting still lends its tags.
+  const setting = settingId === null ? null : getCharacterSetting(settingId, explicitReference === null && runMayViewImages(context, node.id))
   // A named outfit must exist: a typo would otherwise draw the default one silently.
   if (setting && outfit && !setting.outfits.some((entry) => entry.name.trim().toLowerCase() === outfit.toLowerCase())) {
     throw new Error(`외형 설정 '${setting.name}'에 '${outfit}' 의상이 없어. 있는 의상: ${setting.outfits.map((entry) => entry.name).join(', ') || '(없음)'}`)
@@ -268,6 +299,8 @@ export async function executeGenerateWithChatPresetNode(
   const options = { forceReference: explicitReference !== null, omitReference: referenceHash === null }
 
   if (preset.kind === 'nai') {
+    // The job carries a stored reference as image bytes, so no queue check reads it later.
+    if (explicitReference === null && referenceHash !== null && preset.nai?.characterReference !== 'none') requireGraphImageAuthority(context)
     const job = await buildChatGenerationPresetJob(preset, { prompt: fullPrompt }, referenceSource, options)
     if (job.service_type !== 'novelai') throw new Error('NAI 프리셋 설정을 찾을 수 없어.')
     await executeNaiModule(context, node, moduleDefinition, job.request_payload)
@@ -292,7 +325,9 @@ export async function executeGenerateWithChatPresetNode(
 
   const metadata = context.artifactsByNode.get(node.id)?.metadata
   if (metadata && metadata.value && typeof metadata.value === 'object' && !Array.isArray(metadata.value)) {
-    metadata.value = { ...metadata.value, chat_preset: { id: preset.id, name: preset.name, kind: preset.kind }, profile_id: profile?.id ?? null, character_setting_id: setting?.id ?? null, character_outfit: setting ? setting.outfits[characterOutfitIndex(setting.outfits, outfit)]?.name ?? null : null, reference_hash: referenceHash }
+    // A library hash opens the image through chat media links: a run that may not view images gets none (as the profile API).
+    const visibleReferenceHash = referenceHash !== null && runMayViewImages(context, node.id) ? referenceHash : null
+    metadata.value = { ...metadata.value, chat_preset: { id: preset.id, name: preset.name, kind: preset.kind }, profile_id: profile?.id ?? null, character_setting_id: setting?.id ?? null, character_outfit: setting ? setting.outfits[characterOutfitIndex(setting.outfits, outfit)]?.name ?? null : null, reference_hash: visibleReferenceHash }
   }
 }
 
@@ -524,6 +559,10 @@ export async function executeWakeChatRoomNode(
   if (wait) {
     try {
       const result = await wakeChatRoom({ requester, threadId, instruction: message, routing, chainLimit, signal: context.signal })
+      throwIfExecutionAborted(context, node.id)
+      // A failed wake fails the node like any other wake error.
+      const failure = wakeFailure(result, '캐릭터가 답하지 못했어.')
+      if (failure !== null) throw new Error(failure)
       text = wakeReplyText(result)
       replies = result.replies.map((reply) => ({ id: reply.id, speaker_profile_id: reply.speaker_profile_id ?? null, content: reply.content, status: reply.status }))
       status = 'ok'

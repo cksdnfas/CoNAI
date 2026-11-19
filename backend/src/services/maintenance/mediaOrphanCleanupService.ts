@@ -22,7 +22,8 @@ import { sweepAudioOrphans, type AudioOrphanResult } from '../audio/audioMainten
  *    membership, an unrestored edit revision, anything in user.db). Keeping a referenced row means a moved file
  *    that comes back re-attaches to its tags, groups and chat references.
  * 3. Thumbnail files no row points at (old regenerations, rows deleted before the delete path cleaned up).
- * 4. Temp leftovers: empty graph execution folders, stale file-store uploads, stale video frames.
+ * 4. Temp leftovers: empty graph execution folders, stale file-store uploads, stale video frames, Codex job folders
+ *    left by a crash or restart.
  *
  * Every pass is keyset-paged with short write transactions and yields between pages, so it can run on the live
  * server. A dry run walks the same paths and only counts.
@@ -70,7 +71,7 @@ export interface MediaOrphanCleanupResult {
     thumbnailsDeleted: number;
   };
   orphanThumbnails: { scanned: number; orphaned: number; deleted: number; bytes: number; emptyDirsRemoved: number };
-  tempLeftovers: { graphExecutionDirs: number; incomingEntries: number; videoFrames: number; bytes: number };
+  tempLeftovers: { graphExecutionDirs: number; incomingEntries: number; videoFrames: number; codexJobDirs: number; bytes: number };
   /** The audio workspace store (audio.db + uploads/audio), counted separately from the image library. */
   audio: AudioOrphanResult;
   userDbReferenceTokens: number;
@@ -91,7 +92,7 @@ function emptyResult(dryRun: boolean): MediaOrphanCleanupResult {
     missingFiles: { matched: 0, deleted: 0 },
     orphanMetadata: { scanned: 0, candidates: 0, keptReferenced: 0, deleted: 0, thumbnailsDeleted: 0 },
     orphanThumbnails: { scanned: 0, orphaned: 0, deleted: 0, bytes: 0, emptyDirsRemoved: 0 },
-    tempLeftovers: { graphExecutionDirs: 0, incomingEntries: 0, videoFrames: 0, bytes: 0 },
+    tempLeftovers: { graphExecutionDirs: 0, incomingEntries: 0, videoFrames: 0, codexJobDirs: 0, bytes: 0 },
     audio: { scannedFiles: 0, orphanFiles: 0, orphanBytes: 0, recoveredFiles: 0, unreferencedBlobs: 0, releasedBlobs: 0 },
     userDbReferenceTokens: 0,
     durationMs: 0,
@@ -559,6 +560,11 @@ async function sweepTempLeftovers(
   const frames = await removeStaleEntries(path.join(runtimePaths.tempDir, 'video_frames'), cutoffMs, options.dryRun);
   result.tempLeftovers.videoFrames += frames.count;
   result.tempLeftovers.bytes += frames.bytes;
+
+  // A finished, failed or cancelled job removes its own folder; only crash or restart leftovers reach this.
+  const codexJobs = await removeStaleEntries(path.join(runtimePaths.tempDir, 'codex-jobs'), cutoffMs, options.dryRun);
+  result.tempLeftovers.codexJobDirs += codexJobs.count;
+  result.tempLeftovers.bytes += codexJobs.bytes;
 }
 
 /* ------------------------------------------------------------------------------------------------------------ */
@@ -621,7 +627,7 @@ export async function runMediaOrphanCleanup(
     `🧹 Media orphan cleanup${options.dryRun ? ' [DRY RUN]' : ''}: ` +
       `missing rows ${result.missingFiles.matched}, orphan metadata ${result.orphanMetadata.deleted}` +
       ` (kept ${result.orphanMetadata.keptReferenced} referenced), orphan thumbnails ${result.orphanThumbnails.orphaned},` +
-      ` temp leftovers ${result.tempLeftovers.graphExecutionDirs + result.tempLeftovers.incomingEntries + result.tempLeftovers.videoFrames}` +
+      ` temp leftovers ${result.tempLeftovers.graphExecutionDirs + result.tempLeftovers.incomingEntries + result.tempLeftovers.videoFrames + result.tempLeftovers.codexJobDirs}` +
       `, audio orphan files ${result.audio.orphanFiles} / unused blobs ${result.audio.unreferencedBlobs}` +
       ` in ${result.durationMs}ms`,
   );

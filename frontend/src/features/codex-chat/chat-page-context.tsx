@@ -313,6 +313,7 @@ export function ChatPageProvider({ children }: PropsWithChildren) {
     const state = statesRef.current.get(proposal.id)
     if (undo ? state !== 'applied' : !!state || proposal.saved) throw new Error('이미 처리한 제안이야.')
     let checked = proposal
+    let started = false
     const controller = new AbortController()
     const assertCurrent = () => {
       controller.signal.throwIfAborted()
@@ -320,7 +321,8 @@ export function ChatPageProvider({ children }: PropsWithChildren) {
       if (!live.snapshot || !live.editor?.applyAction) throw new Error('페이지 연결이나 편집기가 닫혔어.')
       requireChatPageTarget(live.snapshot, checked.page)
       if (undo) { if (!actionUndos.current.get(proposal.id)?.isCurrent()) throw new Error('적용 뒤 입력이 바뀌었어.') }
-      else requireChatPageActionState(live.snapshot, checked)
+      // An extension reports new snapshots while its own action runs; the reviewed state was checked before it started.
+      else if (!started || live.snapshot.kind !== 'extension') requireChatPageActionState(live.snapshot, checked)
     }
     assertCurrent()
     busy.current.add(proposal.id)
@@ -331,6 +333,7 @@ export function ChatPageProvider({ children }: PropsWithChildren) {
       assertCurrent()
       if (undo) { actionUndos.current.get(proposal.id)!.restore(); actionUndos.current.delete(proposal.id) }
       else {
+        started = true
         const record = await current.current.editor!.applyAction!(authorized.action.id, authorized.arguments, assertCurrent, authorized.nativeRevision, controller.signal)
         if (record && authorized.action.effect === 'draft') actionUndos.current.set(proposal.id, record)
       }

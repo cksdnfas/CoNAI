@@ -23,6 +23,7 @@ import { externalizeQueueInputDataUrls } from '../generation-queue/queueInputSto
 import { assertCodexAvailable } from '../codexGenerationExecutor'
 import { parseCodexGenerationRequest } from '../codexGenerationOptions'
 import { GRAPH_EXECUTION_CANCELLED_MESSAGE, waitForGraphQueueCompletion } from './queue-wait'
+import { throwIfExecutionAborted } from './execution-abort'
 
 const CODEX_RANDOM_ASPECT_CHOICES = [
   { value: '1:1', width: 1, height: 1 },
@@ -373,9 +374,12 @@ export async function executeCodexImageGenerationNode(
   })
 
   try {
+    // Checked before the inputs are stored: externalizing and enqueueing below are synchronous.
+    throwIfExecutionAborted(context, node.id)
     const [jobId] = enqueueGenerationJobs({
       service_type: 'codex',
       workflow_name: moduleDefinition.name,
+      requested_by_account_id: context.requestedByAccountId ?? null,
       request_payload: externalizeQueueInputDataUrls({
         ...requestPayload,
         _debug: {
@@ -384,6 +388,8 @@ export async function executeCodexImageGenerationNode(
         },
       }).value,
       request_summary: `${context.workflow.name} · ${node.label || moduleDefinition.name}`,
+    }, {
+      withinTransaction: ({ jobIds }) => jobIds.forEach((id) => GenerationQueueModel.markGraphOrigin(id)),
     }).jobIds
 
     writeExecutionLog({

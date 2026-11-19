@@ -49,6 +49,7 @@ type FailedJob = NonNullable<CodexChatMessageRecord['tool_calls'][number]['faile
 export function failureMessageOf(status: FailedJob['status'], code: string | null, media: 'image' | 'audio' = 'image') {
   const messages = new Map([
     ['no_image', media === 'audio' ? '완료된 오디오가 없어' : '완료된 이미지가 없어'],
+    ['result_pruned', '생성은 끝났지만 결과 기록이 더 이상 보관되지 않아'],
     ['process_restarted', '서버가 다시 시작돼 작업이 끝났어'],
     ['process_restarted_orphan', '서버가 다시 시작돼 작업을 복구하지 못했어'],
     ['nai_submit_ambiguous', '생성 요청의 접수 여부를 확인하지 못했어'],
@@ -195,13 +196,17 @@ export function attachJobResults(messages: CodexChatMessageRecord[]) {
     const linked = db.prepare(`SELECT job_id, reply_id FROM chat_generation_links WHERE job_id IN (${placeholders})`).all(...chunk) as Array<{ job_id: number; reply_id: string }>
     linked.forEach((link) => owners.set(link.job_id, link.reply_id))
     const histories = db.prepare(`SELECT id, queue_job_id, generation_status, composite_hash FROM api_generation_history WHERE queue_job_id IN (${placeholders}) ORDER BY id`).all(...chunk) as Array<{ id: number; queue_job_id: number; generation_status: string; composite_hash: string | null }>
+    const recordedJobs = new Set(histories.map((row) => row.queue_job_id))
     histories.filter((row) => row.generation_status === 'completed' && row.composite_hash !== null).forEach((row) => historiesByJob.set(row.queue_job_id, [...(historiesByJob.get(row.queue_job_id) ?? []), row.id]))
     const jobs = db.prepare(`SELECT id, status, failure_code FROM generation_queue_jobs WHERE id IN (${placeholders})`).all(...chunk) as Array<{ id: number; status: string; failure_code: string | null }>
     for (const job of jobs) {
       if (!FINISHED_JOB_STATUSES.has(job.status)) pendingJobIds.add(job.id)
       if (!owners.has(job.id) || historiesByJob.get(job.id)?.length || audioByJob.get(job.id)?.length) continue
       if (job.status !== 'failed' && job.status !== 'cancelled' && job.status !== 'completed') continue
-      const failureCode = job.status === 'completed' ? 'no_image' : job.failure_code
+      // An image job writes its history rows before it can complete; a completed one with none left had them removed
+      // later (history retention or deletion). Audio-order jobs never write image history.
+      const failureCode = job.status !== 'completed' ? job.failure_code
+        : recordedJobs.has(job.id) || audioOrderGroups.has(job.id) ? 'no_image' : 'result_pruned'
       failedJobsByJob.set(job.id, { jobId: job.id, status: job.status, failureCode, failureMessage: failureMessageOf(job.status, failureCode, audioOrderGroups.has(job.id) ? 'audio' : 'image') })
     }
     histories.filter((row) => failedJobsByJob.has(row.queue_job_id)).forEach((row) => failedHistoryIds.add(row.id))
@@ -212,8 +217,11 @@ export function attachJobResults(messages: CodexChatMessageRecord[]) {
   return { pendingJobs: pendingJobIds.size, messages: attachResolvedJobResults(messages, historiesByJob, pendingJobIds, owners, failedJobsByJob, audioByJob) }
 }
 
-/** What became of a generation job, as a later request should read it. `sounds`: its audio candidates; `audio`: an audio-order job. */
-export type GenerationOutcome = { status: string; images: number; sounds?: number; audio?: boolean }
+/**
+ * What became of a generation job, as a later request should read it. `sounds`: its audio candidates; `audio`: an
+ * audio-order job; `pruned`: its history rows were removed after it completed (see attachJobResults' result_pruned).
+ */
+export type GenerationOutcome = { status: string; images: number; sounds?: number; audio?: boolean; pruned?: boolean }
 
 /**
  * One line in place of the job JSON a creation call stored at submission (always "queued" there): whether the image
@@ -231,7 +239,7 @@ export function generationOutcomeNote(jobId: number, outcome: GenerationOutcome 
     if (outcome.status === 'cancelled') return `Audio job #${jobId} was cancelled: no sound was attached to this reply.`
     return `Audio job #${jobId} is still running; its sound attaches to this reply when it finishes.`
   }
-  if (outcome.status === 'completed') return `Generation job #${jobId} finished but produced no image.`
+  if (outcome.status === 'completed') return outcome.pruned ? `Generation job #${jobId} finished, but its result is no longer kept.` : `Generation job #${jobId} finished but produced no image.`
   if (outcome.status === 'failed') return `Generation job #${jobId} failed: no image was attached to this reply.`
   if (outcome.status === 'cancelled') return `Generation job #${jobId} was cancelled: no image was attached to this reply.`
   return `Generation job #${jobId} is still running; its image attaches to this reply when it finishes.`
@@ -268,8 +276,9 @@ function readGenerationOutcomes(jobIds: number[]) {
   for (const chunk of chunked(jobIds)) {
     const placeholders = chunk.map(() => '?').join(',')
     const jobs = db.prepare(`SELECT id, status FROM generation_queue_jobs WHERE id IN (${placeholders})`).all(...chunk) as Array<{ id: number; status: string }>
-    jobs.forEach((job) => outcomes.set(job.id, { status: job.status, images: 0 }))
-    const histories = db.prepare(`SELECT queue_job_id, COUNT(*) AS images FROM api_generation_history WHERE generation_status = 'completed' AND composite_hash IS NOT NULL AND queue_job_id IN (${placeholders}) GROUP BY queue_job_id`).all(...chunk) as Array<{ queue_job_id: number; images: number }>
+    // Every row counts as recorded; only completed ones with a file are images (a completed job with none was pruned).
+    jobs.forEach((job) => outcomes.set(job.id, { status: job.status, images: 0, pruned: job.status === 'completed' }))
+    const histories = db.prepare(`SELECT queue_job_id, SUM(CASE WHEN generation_status = 'completed' AND composite_hash IS NOT NULL THEN 1 ELSE 0 END) AS images FROM api_generation_history WHERE queue_job_id IN (${placeholders}) GROUP BY queue_job_id`).all(...chunk) as Array<{ queue_job_id: number; images: number }>
     histories.forEach((row) => outcomes.set(row.queue_job_id, { status: outcomes.get(row.queue_job_id)?.status ?? 'completed', images: row.images }))
   }
   for (const jobId of audioOrderGroupsByQueueJob(jobIds).keys()) {

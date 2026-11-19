@@ -274,9 +274,12 @@ test('administrators browse server folders and manage the RecycleBin safely', { 
              (?, 'model-lora', 'lora', 0.75, 0, 1, '2020-01-03', '2020-01-01')`).run(hash, hash)
     const modelsBefore = modelRows.all(hash)
     const videoRows = db.prepare('SELECT * FROM generated_video_optimizations WHERE composite_hash = ?')
+    // Outside the managed cache folder, so deletion keeps the copy and its completed state.
+    const optimizedCopy = path.join(root, 'optimized-copy.mp4')
+    fs.writeFileSync(optimizedCopy, 'copy')
     db.prepare(`INSERT INTO generated_video_optimizations
       (composite_hash, source_path, source_size, source_mtime, crf, audio_bitrate, status, output_path, attempts)
-      VALUES (?, ?, 1234, 1000, 23, 128, 'completed', ?, 2)`).run(hash, second, path.join(root, 'optimized-copy.mp4'))
+      VALUES (?, ?, 1234, 1000, 23, 128, 'completed', ?, 2)`).run(hash, second, optimizedCopy)
     const videoBefore = videoRows.get(hash)
     const folderGroupId = Number(db.prepare(`INSERT INTO auto_folder_groups (folder_path, absolute_path, display_name)
       VALUES ('undo-folder', ?, 'Undo folder')`).run(path.join(uploads, 'undo-folder')).lastInsertRowid)
@@ -355,6 +358,34 @@ test('administrators browse server folders and manage the RecycleBin safely', { 
     const permanent = await ImageManagementService.deleteImagesBulk([otherHash])
     assert.deepEqual(permanent.details.recycleBinEntries, [])
     assert.equal(fs.existsSync(other), false)
+  })
+
+  await t.test('a completed video copy that is gone by restore time is queued for a rebuild', async (t) => {
+    const { settingsService } = await import('../src/services/settingsService')
+    const settings = settingsService.loadSettings()
+    t.mock.method(settingsService, 'loadSettings', () => ({ ...settings, general: { ...settings.general, deleteProtection: { ...settings.general.deleteProtection, enabled: true } } }))
+    const db = main.db
+    const folderId = (db.prepare('SELECT id FROM watched_folders ORDER BY id LIMIT 1').get() as { id: number }).id
+    const hash = 'a7'.repeat(24)
+    const video = path.join(uploads, 'copy-gone.mp4')
+    const copy = path.join(root, 'copy-gone-optimized.mp4')
+    fs.writeFileSync(video, 'video')
+    fs.writeFileSync(copy, 'copy')
+    db.prepare("INSERT INTO media_metadata (composite_hash, first_seen_date) VALUES (?, '2020-01-01 00:00:00')").run(hash)
+    db.prepare("INSERT INTO image_files (composite_hash, original_file_path, folder_id, file_size, mime_type) VALUES (?, ?, ?, 5, 'video/mp4')").run(hash, video, folderId)
+    db.prepare(`INSERT INTO generated_video_optimizations
+      (composite_hash, source_path, source_size, source_mtime, crf, audio_bitrate, status, output_path, attempts, last_error)
+      VALUES (?, ?, 5, 1000, 23, 128, 'completed', ?, 2, 'earlier failure')`).run(hash, video, copy)
+    const deletion = await call(`/api/images/${hash}`, adminId, 'DELETE')
+    const entries = deletion.body.data.recycleBinEntries
+    assert.equal(entries.length, 1)
+    // The bin entry still says completed (as after a crash before its rewrite); the copy then disappears.
+    fs.unlinkSync(copy)
+    assert.equal((await call('/api/images/restore', adminId, 'POST', { names: entries })).body.data.done.length, 1)
+    assert.deepEqual({ ...db.prepare(`SELECT source_path, status, output_path, attempts, lease_until, last_error
+      FROM generated_video_optimizations WHERE composite_hash = ?`).get(hash) as object }, {
+      source_path: video, status: 'pending', output_path: null, attempts: 0, lease_until: 0, last_error: null,
+    })
   })
 
   await t.test('MCP uploads reject mismatched or undecodable media without creating library files or rows', async (t) => {

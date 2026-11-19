@@ -5,6 +5,7 @@ import { ImageMetadataWriteService, type ImageOutputFormat } from '../services/i
 import type { AIMetadata } from '../services/metadata/types';
 import { runtimePaths } from '../config/runtimePaths';
 import { generateDatedRandomFilename, getDateFolder, normalizeRelativePath } from './mediaStoragePaths';
+import { relocateFile } from './recycleBin';
 
 export type GeneratedImageSaveOptions = {
   format?: 'original' | ImageOutputFormat;
@@ -33,25 +34,10 @@ type SavedGeneratedMedia = {
 };
 
 export class FileSaver {
-  /** Resolve an output image format from explicit options or the source mime/path. */
-  private static resolveOutputFormat(options?: GeneratedImageSaveOptions): ImageOutputFormat {
+  /** Narrow a requested or Sharp-detected format to one the saver writes; anything else is null. */
+  private static toOutputFormat(format: string | undefined): ImageOutputFormat | null {
     // The format becomes the file extension; queued payloads are untyped JSON, so only known formats pass.
-    if (options?.format === 'png' || options?.format === 'jpeg' || options?.format === 'webp') {
-      return options.format;
-    }
-
-    const normalizedMime = (options?.sourceMimeType || '').toLowerCase();
-    const extension = options?.sourcePathForMetadata ? path.extname(options.sourcePathForMetadata).toLowerCase() : '';
-
-    if (normalizedMime === 'image/jpeg' || extension === '.jpg' || extension === '.jpeg') {
-      return 'jpeg';
-    }
-
-    if (normalizedMime === 'image/webp' || extension === '.webp') {
-      return 'webp';
-    }
-
-    return 'png';
+    return format === 'png' || format === 'jpeg' || format === 'webp' ? format : null;
   }
 
   private static resolveMimeTypeFromPath(filePath: string): string {
@@ -112,32 +98,36 @@ export class FileSaver {
 
       await fs.promises.mkdir(dateFolderPath, { recursive: true });
 
-      const outputFormat = this.resolveOutputFormat(options);
+      const source = await sharp(imageBuffer).metadata();
+      const sourceFormat = this.toOutputFormat(source.format);
+      const requestedFormat = this.toOutputFormat(options?.format);
+      // 'original' (or no format) keeps the source's own format.
+      const outputFormat = requestedFormat ?? sourceFormat ?? 'png';
       const outputExtension = outputFormat === 'jpeg' ? 'jpg' : outputFormat;
       const filename = generateDatedRandomFilename(outputExtension);
       const fullPath = path.join(dateFolderPath, filename);
 
-      const hasTransformOptions = Boolean(
-        options
-        && (
-          options.format !== undefined
-          || options.resizeEnabled !== undefined
-          || options.quality !== undefined
-          || options.maxWidth !== undefined
-          || options.maxHeight !== undefined
-          || options.metadataPatch !== undefined
-        )
+      // Keep the original bytes and metadata when nothing would change. An explicit jpeg/webp request is
+      // still re-encoded at its quality even if the source already has that format; only png is lossless.
+      const exceedsLimit = (limit: number | undefined, size: number | undefined) => (
+        typeof limit === 'number' && Number.isFinite(limit) && (size ?? 0) > limit
       );
+      const resizes = options?.resizeEnabled === true
+        && (exceedsLimit(options.maxWidth, source.width) || exceedsLimit(options.maxHeight, source.height));
+      const keepsSourceEncoding = outputFormat === sourceFormat && (requestedFormat === null || requestedFormat === 'png');
+      const needsTransform = !keepsSourceEncoding || resizes || options?.metadataPatch !== undefined;
 
       let outputBuffer = imageBuffer;
-      let width = 0;
-      let height = 0;
+      let width = source.width || 0;
+      let height = source.height || 0;
 
-      if (hasTransformOptions) {
+      if (needsTransform) {
         const rewritten = await ImageMetadataWriteService.writeBufferAsFormatBuffer(imageBuffer, {
           format: outputFormat,
           quality: options?.quality,
           sourcePathForMetadata: options?.sourcePathForMetadata,
+          // In-memory results (NovelAI) have no source file; their AI metadata is read from their own bytes.
+          inputFormatForMetadata: sourceFormat ?? undefined,
           originalFileName: options?.originalFileName,
           mimeType: options?.sourceMimeType,
           metadataPatch: options?.metadataPatch,
@@ -148,10 +138,6 @@ export class FileSaver {
         outputBuffer = rewritten.buffer;
         width = rewritten.info.width || 0;
         height = rewritten.info.height || 0;
-      } else {
-        const metadata = await sharp(imageBuffer).metadata();
-        width = metadata.width || 0;
-        height = metadata.height || 0;
       }
 
       if (options?.verifySavedFile) {
@@ -166,7 +152,8 @@ export class FileSaver {
           const stagedPath = path.join(stagingDirectory, filename);
           await fs.promises.writeFile(stagedPath, outputBuffer);
           await options.verifySavedFile(stagedPath);
-          await fs.promises.rename(stagedPath, fullPath);
+          // Temp and uploads can sit on different volumes (configured data paths, Docker mounts): copy when rename can't.
+          await relocateFile(stagedPath, fullPath);
         } finally {
           await fs.promises.rm(stagingDirectory, { recursive: true, force: true });
         }

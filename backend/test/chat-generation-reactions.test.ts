@@ -358,6 +358,61 @@ test('generation reactions: opt-in, one-shot recovery, user precedence and speak
     assert.equal(GroupChatService.isRunning(room.id), false)
   })
 
+  await t.test('a reaction landing while its room still answers waits, then is delivered once the room is idle', async (s) => {
+    const { ChatJudgePresetStore } = await import('../src/services/codex-chat/chatJudgePresets')
+    const speaker = ChatProfileStore.create({ name: '달', engine: 'llm', providerName: 'test', model: 'group-model', summaryEnabled: false, mcpEnabled: false })
+    const room = GroupChatService.create(requester, { profileIds: [profile.id, speaker.id], representativeId: profile.id, userProfileId: null })
+    CodexChatStore.updateThreadContext(room.id, { reactionEnabled: true })
+    // The room's judge still decides who speaks next after the last reply closed, so that reply's close hook finds the
+    // room busy too: only the room's idle wake-up can deliver the reaction.
+    const judge = ChatJudgePresetStore.create({ name: '다음 화자', modelSlotId: ModelSlotStore.ensure('test', 'judge-model')!, items: [] })
+    GroupChatService.updateRoom(requester, room.id, { judgePresetId: judge.id })
+    const gate = () => {
+      let open!: () => void
+      return { opened: new Promise<void>((resolve) => { open = resolve }), open: () => open() }
+    }
+    const answering = gate(), answered = gate(), judging = gate(), judged = gate()
+    const calls: string[] = []
+    s.mock.method(globalThis, 'fetch', async (_url: unknown, init?: RequestInit) => {
+      if (!init?.method || init.method === 'GET') return new Response('', { status: 404 })
+      const model = String(JSON.parse(String(init.body)).model)
+      calls.push(model)
+      if (model === 'judge-model') { judging.open(); await judged.opened; return replyResponse('{}') }
+      if (model === 'group-model') return replyResponse('달의 반응이야.')
+      answering.open()
+      await answered.opened
+      return replyResponse('루나가 답했어.')
+    })
+    const delivered = new Promise<void>((resolve) => {
+      const unsubscribe = subscribeToRuntimeEvents((event) => {
+        if (event.name === 'chat.reaction.created' && (event.payload as { threadId: number }).threadId === room.id) { unsubscribe(); resolve() }
+      })
+    })
+    reactions.start()
+    s.after(async () => { await reactions.stop() })
+    const turn = GroupChatService.sendMessage(requester, room.id, '@루나 다음 장면', () => {})
+    await answering.opened
+    const linked = attach(room, ['completed'], speaker.id)
+    await reactions.reconcile(room.id)
+    assert.equal(state(linked.replyId)!.state, 'pending', 'a room that is only busy defers the reaction')
+    answered.open()
+    await judging.opened
+    // Let the last reply's close hook run its reconciliation while the judge holds the room.
+    await new Promise<void>((resolve) => setImmediate(resolve))
+    await reactions.reconcile(room.id)
+    assert.equal(GroupChatService.isRunning(room.id), true)
+    assert.equal(state(linked.replyId)!.state, 'pending')
+    assert.deepEqual(calls, ['chat-model', 'judge-model'])
+    judged.open()
+    await turn
+    await delivered
+    assert.deepEqual(calls, ['chat-model', 'judge-model', 'group-model'])
+    assert.equal(state(linked.replyId)!.state, 'done')
+    assert.equal(state(linked.replyId)!.attempts, 1)
+    const last = CodexChatStore.listMessages(room.id).at(-1)!
+    assert.deepEqual([last.speaker_profile_id, last.content], [speaker.id, '달의 반응이야.'])
+  })
+
   await t.test('vision attaches bounded local previews; image permission and hidden media are respected', async (s) => {
     const images = await import('../src/database/init')
     await images.initializeDatabase()

@@ -18,6 +18,18 @@ import { migrateLoreEntryIds } from '../services/codex-chat/chatLorebookIds';
 import { ensureGraphWorkflowRevisionSchema } from './graphWorkflowRevisionSchema';
 import { migratePostsKnowledgeModel } from '../services/posts/postsSettings';
 
+/**
+ * A summary written before segments existed becomes the thread's plot, standing on its own: up to where it reached,
+ * or — written by hand before anything was folded — up to 0, ahead of every message. Callers append the threads it
+ * applies to (`AND t....`).
+ */
+export const LEGACY_SUMMARY_PLOT_SQL = `INSERT INTO chat_summary_segments (thread_id, level, from_message_id, until_message_id, content, backed)
+    SELECT t.id, 1, CASE WHEN t.summary_until_message_id > 0 THEN COALESCE((SELECT MIN(m.id) FROM codex_chat_messages m WHERE m.thread_id = t.id), 0) ELSE 0 END,
+      COALESCE(t.summary_until_message_id, 0), t.summary, 0
+    FROM codex_chat_threads t
+    WHERE t.summary IS NOT NULL AND TRIM(t.summary) <> ''
+      AND NOT EXISTS (SELECT 1 FROM chat_summary_segments s WHERE s.thread_id = t.id)`;
+
 /** Bootstrap core user-settings tables, indexes, and simple column backfills. */
 export function createUserSettingsSchema(db: Database.Database): void {
   ensureCharacterLibrarySchema(db);
@@ -788,6 +800,8 @@ export function createUserSettingsSchema(db: Database.Database): void {
     ['codex_cached_input_tokens', 'INTEGER'],
     ['codex_output_tokens', 'INTEGER'],
     ['codex_lore_sent', 'TEXT'],
+    // Codex chats: the fingerprint of the instructions codex_thread_id started with (null: a thread from before it was kept).
+    ['codex_instructions_fingerprint', 'TEXT'],
     // Group rooms: several profiles answer by @mention; profile_id is the representative who answers unaddressed messages.
     ['kind', "TEXT NOT NULL DEFAULT 'direct'"],
     ['group_chain_limit', 'INTEGER'],
@@ -805,6 +819,8 @@ export function createUserSettingsSchema(db: Database.Database): void {
     ['flag_ids', 'TEXT'],
     // JSON hand edits of the display block state (the state itself is folded from the messages).
     ['block_edits', 'TEXT'],
+    // JSON engine switches of the chat's profile (or a room member's), shown as notices (see withEngineChange).
+    ['engine_changes', 'TEXT'],
     // The account's user profile (persona) in this chat; null is the plain user.
     ['user_profile_id', 'INTEGER'],
     // JSON pinned memories ([{ id, text }]): short facts every request of this chat carries.
@@ -1048,7 +1064,7 @@ export function createUserSettingsSchema(db: Database.Database): void {
   )`);
   db.exec('CREATE INDEX IF NOT EXISTS idx_llm_usage_events_created ON llm_usage_events(created_at)');
   const usageColumns = new Set((db.prepare('PRAGMA table_info(llm_usage_events)').all() as Array<{ name: string }>).map((column) => column.name));
-  for (const [name, type] of Object.entries({ reply_id: 'TEXT', task_id: 'INTEGER', round: 'INTEGER', queue_ms: 'INTEGER', first_token_ms: 'INTEGER' })) {
+  for (const [name, type] of Object.entries({ reply_id: 'TEXT', task_id: 'INTEGER', round: 'INTEGER', queue_ms: 'INTEGER', first_token_ms: 'INTEGER', cache_write_input_tokens: 'INTEGER' })) {
     if (!usageColumns.has(name)) db.exec(`ALTER TABLE llm_usage_events ADD COLUMN ${name} ${type}`);
   }
   db.exec('CREATE INDEX IF NOT EXISTS idx_llm_usage_events_reply ON llm_usage_events(reply_id) WHERE reply_id IS NOT NULL');
@@ -1071,19 +1087,14 @@ export function createUserSettingsSchema(db: Database.Database): void {
     db.exec('ALTER TABLE chat_summary_segments ADD COLUMN backed INTEGER NOT NULL DEFAULT 1');
   }
   db.exec('CREATE INDEX IF NOT EXISTS idx_chat_summary_segments_thread ON chat_summary_segments(thread_id, level, until_message_id)');
-  // A summary written before segments existed becomes the thread's plot, standing on its own: up to where it reached,
-  // or — written by hand before anything was folded — up to 0, ahead of every message.
-  db.exec(`INSERT INTO chat_summary_segments (thread_id, level, from_message_id, until_message_id, content, backed)
-    SELECT t.id, 1, CASE WHEN t.summary_until_message_id > 0 THEN COALESCE((SELECT MIN(m.id) FROM codex_chat_messages m WHERE m.thread_id = t.id), 0) ELSE 0 END,
-      COALESCE(t.summary_until_message_id, 0), t.summary, 0
-    FROM codex_chat_threads t
-    WHERE t.engine = 'llm' AND t.summary IS NOT NULL AND TRIM(t.summary) <> ''
-      AND NOT EXISTS (SELECT 1 FROM chat_summary_segments s WHERE s.thread_id = t.id)`);
+  // API LLM chats' summaries; a session chat's is converted when its profile switches to API LLM (switchProfileEngine).
+  db.exec(`${LEGACY_SUMMARY_PLOT_SQL} AND t.engine = 'llm'`);
   // Group members: this member's reply token cap in the room (null: the room's cap, then the profile's).
   if (!hasColumn('chat_group_members', 'max_tokens')) {
     db.exec('ALTER TABLE chat_group_members ADD COLUMN max_tokens INTEGER');
   }
-  for (const [column, type] of [['chat_model_slot_id', 'INTEGER'], ['chat_model', 'TEXT']]) {
+  // codex_instructions_fingerprint: the fingerprint of the instructions the member's Codex thread started with.
+  for (const [column, type] of [['chat_model_slot_id', 'INTEGER'], ['chat_model', 'TEXT'], ['codex_instructions_fingerprint', 'TEXT']]) {
     if (!hasColumn('chat_group_members', column)) db.exec(`ALTER TABLE chat_group_members ADD COLUMN ${column} ${type}`);
   }
   const chatProfileColumns: Array<[string, string]> = [

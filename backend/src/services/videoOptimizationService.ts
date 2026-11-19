@@ -29,11 +29,13 @@ export class VideoOptimizationService {
 
   /** Wait for one process-wide FFmpeg encoder slot. */
   private static async acquireEncoderSlot(): Promise<() => void> {
-    if (this.activeEncoderCount >= this.getEncoderConcurrency()) {
+    if (this.encoderWaiters.length === 0 && this.activeEncoderCount < this.getEncoderConcurrency()) {
+      this.activeEncoderCount += 1;
+    } else {
+      // A release hands its slot straight to the oldest waiter, so a newcomer never takes it before the waiter resumes.
       await new Promise<void>((resolve) => this.encoderWaiters.push(resolve));
     }
 
-    this.activeEncoderCount += 1;
     let released = false;
 
     return () => {
@@ -41,8 +43,12 @@ export class VideoOptimizationService {
         return;
       }
       released = true;
-      this.activeEncoderCount -= 1;
-      this.encoderWaiters.shift()?.();
+      const next = this.activeEncoderCount <= this.getEncoderConcurrency() ? this.encoderWaiters.shift() : undefined;
+      if (next) {
+        next();
+      } else {
+        this.activeEncoderCount -= 1;
+      }
     };
   }
 

@@ -12,7 +12,7 @@ import { resolveWorkflowPromptValues } from '../workflowPromptValueResolver'
 import { executeComfyGeneration, isComfyGenerationCancelledError } from '../comfyGenerationExecutor'
 import { resolveComfyAbandonedCancelResult } from '../comfyuiService'
 import { executeNaiGeneration } from '../naiGenerationExecutor'
-import { executeCodexGeneration } from '../codexGenerationExecutor'
+import { executeCodexGeneration, removeCodexJobDirectory } from '../codexGenerationExecutor'
 import { reconcileComfyModelSelectionValues } from '../comfyModelSelectionResolver'
 import { FileDiscoveryService } from '../folderScan/fileDiscoveryService'
 import { ImageUploadService } from '../imageUploadService'
@@ -687,6 +687,9 @@ async function executeCodexJob(job: GenerationQueueJobRecord, context: QueueJobE
     console.error(`⚠️ Failed to create Codex queue history for job ${job.id}:`, historyError)
   }
 
+  // The job folder holds the outputs only until they are saved; it is removed on every exit once all saves settle.
+  let codexJobDirectory: string | null = null
+  const processPromises: Promise<void>[] = []
   try {
     context.transitionJob(job.id, 'running', {
       expectedCurrentStatuses: ['dispatching'],
@@ -710,6 +713,7 @@ async function executeCodexJob(job: GenerationQueueJobRecord, context: QueueJobE
         })
       },
     })
+    codexJobDirectory = result.jobDirectory
 
     // Codex도 comfyui가 아니라 업스트림 취소 경로가 없다. 산출물을 라이브러리에 올리기 전에
     // cancel_requested를 확인해야 취소가 무시되지 않는다(인메모리 abort 는 같은 프로세스 전용).
@@ -722,7 +726,6 @@ async function executeCodexJob(job: GenerationQueueJobRecord, context: QueueJobE
     }
 
     const historyIds: number[] = []
-    const processPromises: Promise<void>[] = []
 
     for (let index = 0; index < result.outputFiles.length; index += 1) {
       const output = result.outputFiles[index]
@@ -810,5 +813,10 @@ async function executeCodexJob(job: GenerationQueueJobRecord, context: QueueJobE
     }
 
     throw error
+  } finally {
+    if (codexJobDirectory) {
+      await Promise.allSettled(processPromises)
+      await removeCodexJobDirectory(codexJobDirectory)
+    }
   }
 }

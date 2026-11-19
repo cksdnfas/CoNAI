@@ -201,6 +201,26 @@ test('profile agents: admission, no recursion, expiry logs and unread isolation'
     deletion.mock.restore()
   })
 
+  await t.test('an expired call keeps its room and binding while a generation job it queued is unfinished', async () => {
+    const room = await ensureAutomationRoom(requester, agent.id, 'agent:401', 'Agent 401')
+    const resultId = CodexChatStore.addMessage({ thread_id: threadId, role: 'assistant', content: 'Result', tool_calls: [], status: 'completed', error: null })
+    const job = Number(db.prepare("INSERT INTO generation_queue_jobs (service_type, status, request_payload) VALUES ('novelai', 'queued', '{}')").run().lastInsertRowid)
+    db.prepare('INSERT INTO chat_generation_links (job_id, thread_id, reply_id, message_id) VALUES (?, ?, ?, ?)').run(job, threadId, 'agent-result:401', resultId)
+    db.prepare(`INSERT INTO chat_agent_calls (id, account_key, caller_thread_id, caller_profile_id, agent_profile_id, agent_thread_id,
+      agent_name, caller_name, instruction, on_done, status, result_message_id, finished_at, expires_at, created_at)
+      VALUES (401, '1', ?, ?, ?, ?, 'Agent', 'Caller', 'work', 'notify', 'completed', ?, '2026-01-01T00:00:00.000Z', '2026-01-01T01:00:00.000Z', '2026-01-01T00:00:00.000Z')`)
+      .run(threadId, caller.id, agent.id, room.id, resultId)
+    // The forwarded binding the queue requires before it runs the job (requireQueuedChatGenerationAccess).
+    const binding = db.prepare('SELECT 1 FROM chat_agent_calls WHERE id = 401 AND agent_thread_id = ? AND caller_thread_id = ?')
+    await ChatAgentRunner.poll(new Date('2026-01-01T02:00:00Z'))
+    assert.ok(binding.get(room.id, threadId), 'a queued job keeps the call binding')
+    assert.ok(CodexChatStore.findThread(room.id, 1), 'and the agent room it runs under')
+    db.prepare("UPDATE generation_queue_jobs SET status = 'completed' WHERE id = ?").run(job)
+    await ChatAgentRunner.poll(new Date('2026-01-01T02:00:00Z'))
+    assert.equal(binding.get(room.id, threadId), undefined, 'cleanup follows once the job is finished')
+    assert.equal(CodexChatStore.findThread(room.id, 1), undefined)
+  })
+
   await t.test('unread aggregate leaves out agent and plugin rooms by default; each room can be switched', async () => {
     const before = chatUnreadCount(1)
     const rooms = new Map<string, number>()

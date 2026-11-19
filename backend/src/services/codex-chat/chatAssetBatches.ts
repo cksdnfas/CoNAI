@@ -17,7 +17,7 @@ import { buildChatGenerationPresetJob, CHAT_NAI_PAYLOAD_MAX_BYTES } from './chat
 import { chatCharacterGroupPath, normalizeAvatarCrop, normalizeProfileAssetHash, isProfileAssetHidden } from './chatProfileAssets'
 import { activeMediaFile } from './chatCardAssets'
 import { ChatAssetError, requireChatAssetAdmin, requireChatAssetGeneration, requireLocalProfileAssets } from './chatAssetAccess'
-import { assetTaggerEnabled, tagAsset, reviewAsset, type AssetTagCache } from './chatAssetReview'
+import { assetTaggerEnabled, tagAsset, readAssetHashes, reviewAsset, type AssetHashes, type AssetTagCache } from './chatAssetReview'
 import { assetJudgeSetup, judgeExpression, type ExpressionJudgement } from './chatJudgeAssets'
 import { requireRequesterPermission } from '../../middleware/featureAccess'
 import { assignExpressionKeywords, styleWithExpressionGroup } from './chatProfileExpressions'
@@ -271,14 +271,17 @@ export function latestChatAssetBatchId(target: ChatAssetOwner | number): number 
 export function getChatAssetBatch(requester: McpRequester, id: number, profileId?: ChatAssetOwner | number): ChatAssetBatch {
   const row = authorize(requester, id, profileId, true)
   const snapshot = snapshotOf(row)
-  const rows = slotRows(id)
-  const allCandidates = rows.flatMap((slot) => attemptsOf(slot).flatMap((attempt) => candidatesOf(attempt.jobId).map((candidate) => ({ slotKey: slot.slot_key, compositeHash: candidate.compositeHash }))))
-  const tagCache = Object.assign({}, ...rows.flatMap((slot) => attemptsOf(slot).map((attempt) => attempt.tags ?? {}))) as Record<string, AssetTagCache>
+  const rows = slotRows(id).map((slot) => ({ slot, attempts: attemptsOf(slot).map((attempt) => ({ attempt, candidates: candidatesOf(attempt.jobId) })) }))
+  const allCandidates = rows.flatMap(({ slot, attempts }) => attempts.flatMap(({ candidates }) => candidates.map((candidate) => ({ slotKey: slot.slot_key, compositeHash: candidate.compositeHash }))))
+  const tagCache = Object.assign({}, ...rows.flatMap(({ attempts }) => attempts.map(({ attempt }) => attempt.tags ?? {}))) as Record<string, AssetTagCache>
   const enabled = assetTaggerEnabled()
-  const slots = rows.map((slot) => {
-    const attempts: ChatAssetAttempt[] = attemptsOf(slot).map((attempt) => {
+  // Each review compares its candidate with every other slot's: their library hashes are read once for the view.
+  const hashes = enabled && allCandidates.some((entry) => tagCache[entry.compositeHash]) ? readAssetHashes(allCandidates.map((entry) => entry.compositeHash)) : new Map<string, AssetHashes>()
+  const slots = rows.map(({ slot, attempts: stored }) => {
+    const others = allCandidates.filter((entry) => entry.slotKey !== slot.slot_key)
+    const attempts: ChatAssetAttempt[] = stored.map(({ attempt, candidates: found }) => {
       const job = getUserSettingsDb().prepare('SELECT status, failure_code, cancel_requested FROM generation_queue_jobs WHERE id = ?').get(attempt.jobId) as { status: string; failure_code: string | null; cancel_requested: number } | undefined
-      const candidates = candidatesOf(attempt.jobId).map((candidate) => ({ ...candidate, ...(enabled && tagCache[candidate.compositeHash] ? { review: reviewAsset(slot.kind, slot.slot_key, candidate.compositeHash, tagCache[candidate.compositeHash], attempt.referenceHash ? tagCache[attempt.referenceHash] : undefined, allCandidates.filter((entry) => entry.slotKey !== slot.slot_key), attempt.judged?.[candidate.compositeHash]) } : {}) }))
+      const candidates = found.map((candidate) => ({ ...candidate, ...(enabled && tagCache[candidate.compositeHash] ? { review: reviewAsset(slot.kind, slot.slot_key, candidate.compositeHash, tagCache[candidate.compositeHash], attempt.referenceHash ? tagCache[attempt.referenceHash] : undefined, others, hashes, attempt.judged?.[candidate.compositeHash]) } : {}) }))
       return { jobId: attempt.jobId, createdAt: attempt.createdAt, useCurrentPreset: attempt.useCurrentPreset, referenceHash: attempt.referenceHash, status: job?.status ?? 'failed', failureCode: job?.failure_code ?? (!job ? 'job_missing' : job.status === 'completed' && !candidates.length ? 'no_image' : null), cancelRequested: job?.cancel_requested === 1, candidates }
     })
     const latest = attempts[attempts.length - 1]
@@ -357,7 +360,8 @@ export async function cacheChatAssetReviews(id: number) {
       const target = current.find((entry) => entry.jobId === attempt.jobId)
       if (!target) continue
       target.tagCheckedAt = { ...target.tagCheckedAt, [hash]: Date.now() }
-      target.tags = { ...target.tags, ...tags }
+      // Only the hash read here: readers merge every slot's attempts (rows stored before hold the whole batch's tags).
+      if (tagged) target.tags = { ...target.tags, [hash]: tagged }
       getUserSettingsDb().prepare('UPDATE chat_asset_slots SET attempts = ? WHERE batch_id = ? AND slot_key = ?').run(JSON.stringify(current), id, slot.slot_key)
     }
   }

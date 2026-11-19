@@ -39,8 +39,9 @@ const textBody = (req: Request) => {
   return text;
 };
 
+/** GET /api/files?parentId=&offset=&limit=&sort=name|modified|size&direction=asc|desc — folders first; default name, asc. */
 router.get('/', (req, res) => {
-  res.json({ success: true, data: FileStoreService.list(owner(req), parseFileId(req.query.parentId, true), Number(req.query.offset ?? 0), Number(req.query.limit ?? 100)) });
+  res.json({ success: true, data: FileStoreService.list(owner(req), parseFileId(req.query.parentId, true), Number(req.query.offset ?? 0), Number(req.query.limit ?? 100), { sort: req.query.sort, direction: req.query.direction }) });
 });
 router.get('/folders', (req, res) => res.json({ success: true, data: FileStoreService.folders(owner(req)) }));
 /** GET /api/files/search?q= — files and folders whose name or text contains every word ("quoted phrase" = one term). */
@@ -57,7 +58,9 @@ router.post('/text', requirePermission('files.edit'), (req, res) => {
 
 const upload = wrapUploadMiddleware(multer({
   storage: createUploadStorage(MAX_MULTIPLE_UPLOAD_TOTAL_BYTES, fileStoreIncoming, false),
-  limits: { fileSize: MAX_UPLOAD_FILE_SIZE_BYTES, files: MAX_MULTIPLE_UPLOAD_FILES, fields: 0, parts: MAX_MULTIPLE_UPLOAD_FILES },
+  // The one text field is a folder upload's `paths`. busboy refuses the request once the part count reaches `parts`,
+  // so a full batch (every file plus `paths`) needs one more than it holds.
+  limits: { fileSize: MAX_UPLOAD_FILE_SIZE_BYTES, files: MAX_MULTIPLE_UPLOAD_FILES, fields: 1, parts: MAX_MULTIPLE_UPLOAD_FILES + 2 },
   // Reject restricted extensions before their bytes are received; the service rechecks the decoded name on commit.
   fileFilter: (req, file, callback) => {
     try {
@@ -69,6 +72,16 @@ const upload = wrapUploadMiddleware(multer({
   },
 }).array('files', MAX_MULTIPLE_UPLOAD_FILES));
 
+/** A folder upload's `paths` field: a JSON array with one relative `a/b/name.ext` per file, checked by the service. */
+const uploadPaths = (value: unknown): unknown => {
+  if (value === undefined) return undefined;
+  if (typeof value === 'string') {
+    try { return JSON.parse(value); } catch { /* reported below */ }
+  }
+  throw new FileStoreError('업로드 경로는 파일마다 하나씩 담은 JSON 배열로 보내줘.');
+};
+
+/** POST /api/files/upload?parentId= — `files` (1~20); optional `paths` recreates a folder tree under parentId. */
 router.post('/upload', requirePermission('files.edit'), (req, res, next) => {
   // Validate the destination before receiving bytes, then recheck it inside the commit transaction.
   FileStoreService.list(owner(req), parseFileId(req.query.parentId, true), 0, 1);
@@ -79,7 +92,7 @@ router.post('/upload', requirePermission('files.edit'), (req, res, next) => {
   const files = Array.isArray(req.files) ? req.files : [];
   try {
     if (files.length === 0) throw new FileStoreError('파일을 선택해줘.');
-    const data = FileStoreService.upload(owner(req), parseFileId(req.query.parentId, true), files, res.locals.allowAnyType === true);
+    const data = FileStoreService.upload(owner(req), parseFileId(req.query.parentId, true), files, res.locals.allowAnyType === true, undefined, uploadPaths(req.body?.paths));
     FileStoreService.purgeDeleted();
     res.status(201).json({ success: true, data });
   } finally {
@@ -99,7 +112,8 @@ router.patch('/:id', requirePermission('files.edit'), (req, res) => {
   res.json({ success: true, data: FileStoreService.rename(owner(req), id(req), req.body?.name, allowAnyType(req)) });
 });
 router.get('/:id', (req, res) => res.json({ success: true, data: FileStoreService.get(owner(req), id(req)) }));
-router.get('/:id/neighbors', (req, res) => res.json({ success: true, data: FileStoreService.neighbors(owner(req), id(req)) }));
+/** GET /api/files/:id/neighbors?sort=&direction= — previous/next file in the listing order of GET /api/files. */
+router.get('/:id/neighbors', (req, res) => res.json({ success: true, data: FileStoreService.neighbors(owner(req), id(req), { sort: req.query.sort, direction: req.query.direction }) }));
 router.post('/:id/reindex', asyncHandler(async (req, res) => {
   res.json({ success: true, data: await retryFileSearchIndex(owner(req), id(req)) });
 }));

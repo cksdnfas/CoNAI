@@ -88,6 +88,15 @@ export async function waitForGraphQueueCompletion(params: {
     }
 
     terminalWait = null
+    if (job === null) {
+      // null 은 대기 시간 초과·큐 서비스 정지·행 없음 중 하나다. 행이 없으면 다음 대기도 즉시 null 로 끝나
+      // 타이머 없이 도는 루프가 되므로 여기서 노드를 실패시킨다. 나머지는 다음 대기가 타이머로 막힌다.
+      if (!GenerationQueueModel.findListRecordById(params.jobId)) {
+        throw new Error(`Queue job ${params.jobId} no longer exists, so its result can never arrive`)
+      }
+      continue
+    }
+
     const completedJob = resolveGraphQueueTerminalJob(job, params.jobId)
     if (completedJob) {
       return completedJob as GenerationQueueJobListRecord

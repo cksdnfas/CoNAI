@@ -465,6 +465,7 @@ const UPDATE_LABELS: Record<string, { ko: string; en: string }> = {
   skillIds: { ko: '스킬', en: 'Skills' },
   temperature: { ko: '온도', en: 'Temperature' },
   maxTokens: { ko: '최대 출력 토큰', en: 'Max output tokens' },
+  reasoningBudgetTokens: { ko: '추론 토큰 예산', en: 'Reasoning token budget' },
   contextTurns: { ko: '컨텍스트 턴', en: 'Context turns' },
   contextTokens: { ko: '컨텍스트 토큰', en: 'Context tokens' },
   toolOutputLimit: { ko: '도구 결과 길이', en: 'Tool output limit' },

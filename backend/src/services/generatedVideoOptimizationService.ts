@@ -57,6 +57,22 @@ export class GeneratedVideoOptimizationService {
       .finally(() => { this.activeDrain = undefined; });
   }
 
+  private static outputDirectory(): string {
+    return path.join(runtimePaths.basePath, 'cache', 'generated-videos');
+  }
+
+  /** Remove the playback copy of deleted media; true when no copy remains at that path. */
+  static async removePlaybackCopy(outputPath: string | null | undefined): Promise<boolean> {
+    if (!outputPath) return false;
+    const relative = path.relative(this.outputDirectory(), outputPath);
+    if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) return false;
+    return await fs.promises.unlink(outputPath).then(() => true, (error: NodeJS.ErrnoException) => {
+      if (error.code === 'ENOENT') return true;
+      console.warn(`Could not remove generated video playback copy ${outputPath}:`, error);
+      return false;
+    });
+  }
+
   /** Only called after the caller has checked the media's access and active original file. */
   static getPlaybackPath(compositeHash: string): string | null {
     const row = db.prepare(`SELECT output_path FROM generated_video_optimizations
@@ -94,7 +110,7 @@ export class GeneratedVideoOptimizationService {
       return;
     }
     // An expired worker must never overwrite/delete a newer worker's successful rendition.
-    const outputPath = path.join(runtimePaths.basePath, 'cache', 'generated-videos', `${job.composite_hash}.${job.attempts}.mp4`);
+    const outputPath = path.join(this.outputDirectory(), `${job.composite_hash}.${job.attempts}.mp4`);
     const heartbeat = setInterval(() => {
       try {
         db.prepare("UPDATE generated_video_optimizations SET lease_until = ? WHERE composite_hash = ? AND status = 'processing' AND attempts = ?")

@@ -1,5 +1,4 @@
 import type { McpRequester } from '../../mcp/context'
-import { isChatOwnTool } from '../../mcp/context'
 import { USE_SKILL_TOOL } from './chatSkills'
 import { FileStoreService, fileOwnerKey } from '../fileStoreService'
 import { backupDateOf, backupFileName } from './chatBackup'
@@ -12,9 +11,9 @@ import { ChatGroupStore } from './chatGroupStore'
 import { buildGroupHeader } from './groupChatContext'
 import { constantLine, loreEntryTitle } from './chatLorebook'
 import { booksForRequest, buildLoreIndex, buildLoreIndexContent } from './chatLoreContext'
-import { blockStateContentText, blockStateText, foldBlockState, parseBlockEdits } from './chatBlockState'
+import { blockStateContentText, blockStateText, blockStateValuesText, foldBlockState, parseBlockEdits } from './chatBlockState'
 import { userPersonaForThread, userPersonaPrompt } from './chatUserProfiles'
-import { flagDirectiveFor, fillCharacterPlaceholders, estimateTokens, fixedContextGuidance, auxiliaryInstructionText, resolveAuthorNote, type ChatContextMeta } from './llmChatContext'
+import { flagDirectiveFor, fillCharacterPlaceholders, estimateTokens, fixedContextGuidance, auxiliaryInstructionText, resolveAuthorNote, toolGuidanceFor, type ChatContextMeta } from './llmChatContext'
 import { loadChatSettings } from './chatSettings'
 import { openChatMcpBridge } from './chatMcpBridge'
 import { readChatRequestCapture } from './chatRequestCaptures'
@@ -91,13 +90,17 @@ export async function getChatDiagnostics(requester: McpRequester, threadId: numb
       texts.push({ ...source, ...extra, ...(text === undefined ? { unavailable: true } : { text: displayText, ...(scope === 'prompts' && displayText !== text ? { promptText: text } : {}), changedSince: contextHash(text) !== source.hash }) })
     }
     let definitions: Map<string, string> | undefined
+    let catalogued: string[] = []
     if (scope === 'prompts' && meta.sources?.some((source) => source.kind === 'tool-definition')) {
       const grant = resolveChatProfileToolGrant(profile, resolveChatAccess(requester.accountId))
       const bridge = await openChatMcpBridge(requester, grant.scopes, grant.toolAllowlist, {
         generationPresetIds: profile.generationPresetIds, allowEmpty: true,
         chatContext: { threadId, profileId: profile.id, kind: thread.kind },
       })
-      try { definitions = new Map(bridge.tools.map((tool) => [tool.function.name, JSON.stringify(tool)])) }
+      try {
+        definitions = new Map(bridge.tools.map((tool) => [tool.function.name, JSON.stringify(tool)]))
+        catalogued = [...bridge.catalogTools]
+      }
       finally { await bridge.close() }
     }
     for (const source of [...(meta.sources ?? []), ...(scope === 'prompts' ? meta.auxiliarySources ?? [] : [])]) {
@@ -110,8 +113,11 @@ export async function getChatDiagnostics(requester: McpRequester, threadId: numb
         case 'author-note': text = resolveAuthorNote(thread, profile, user).text; break
         case 'state': {
           const folded = foldBlockState(profile, messages, parseBlockEdits(thread.block_edits), thread.kind === 'group' ? profile.id : undefined)
-          text = folded ? blockStateText(profile.style.blocks, folded.state) : ''
-          displayText = folded ? blockStateContentText(profile.style.blocks, folded.state) : ''
+          // A session turn after the first sends the values alone; such a turn is compared with that text.
+          const values = folded ? blockStateValuesText(profile.style.blocks, folded.state) : ''
+          const valuesOnly = folded !== null && contextHash(values) === source.hash
+          text = valuesOnly ? values : folded ? blockStateText(profile.style.blocks, folded.state) : ''
+          displayText = folded ? blockStateContentText(profile.style.blocks, folded.state, !valuesOnly) : ''
           break
         }
         case 'flags': {
@@ -138,7 +144,11 @@ export async function getChatDiagnostics(requester: McpRequester, threadId: numb
           text = section ? render(section.kind === 'post' ? section.content.trim() : section.content) : undefined
           break
         }
-        case 'guidance': text = fixedContextGuidance(profile, meta.sources?.some((item) => item.kind === 'tool-definition' && !isChatOwnTool(String(item.id))) ?? false, meta.sources?.some((item) => item.kind === 'tool-definition' && item.id === USE_SKILL_TOOL) ?? false); break
+        case 'guidance': {
+          const offered = (meta.sources ?? []).flatMap((item) => item.kind === 'tool-definition' ? [{ type: 'function' as const, function: { name: String(item.id), parameters: {} } }] : [])
+          text = fixedContextGuidance(profile, toolGuidanceFor(offered, catalogued), meta.sources?.some((item) => item.kind === 'tool-definition' && item.id === USE_SKILL_TOOL) ?? false)
+          break
+        }
         case 'tool-definition': text = definitions?.get(String(source.id)); break
         case 'group-header': text = buildGroupHeader({ thread, members: profiles, self: profile, user }); break
         case 'summary-instruction': case 'translation-instruction': text = auxiliaryInstructionText(profile, user, String(source.id)); break

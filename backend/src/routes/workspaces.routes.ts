@@ -39,9 +39,11 @@ router.get('/:id/stat', asyncHandler(async (req, res) => {
   const target = z.string().min(1).max(1000).parse(req.query.target)
   res.json({ success: true, data: await WorkspaceService.stat(owner(req), projectId(req), target) })
 }))
+/** GET /api/workspaces/:id/entries?target=&offset=&sort=name|size&direction=asc|desc — folders first; default name, asc. */
 router.get('/:id/entries', asyncHandler(async (req, res) => {
   const input = workspaceListSchema.parse({ target: req.query.target ?? '', offset: Number(req.query.offset ?? 0) })
-  res.json({ success: true, data: await WorkspaceService.entries(owner(req), projectId(req), input.target, input.offset, { revisions: true }) })
+  const order = z.object({ sort: z.enum(['name', 'size']).optional(), direction: z.enum(['asc', 'desc']).optional() }).parse({ sort: req.query.sort, direction: req.query.direction })
+  res.json({ success: true, data: await WorkspaceService.entries(owner(req), projectId(req), input.target, input.offset, { revisions: true, ...order }) })
 }))
 router.post('/:id/read', cancellableAsyncHandler(async (req, res, signal) => {
   const input = workspaceReadSchema.parse(req.body)

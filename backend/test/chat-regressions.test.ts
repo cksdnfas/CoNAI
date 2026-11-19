@@ -128,6 +128,98 @@ test('manual Codex compaction cancels a waiting instruction hook and releases th
   assert.equal(CodexChatStore.findThreadById(thread.id), undefined)
 })
 
+test('a stopped Codex compaction keeps the chat until its turn completes, so that completion cannot end the next reply', { timeout: 30000 }, async (t) => {
+  const fs = (await import('node:fs')).default
+  const os = await import('node:os')
+  const path = await import('node:path')
+  const childProcess = (await import('node:child_process')).default
+  const { EventEmitter } = await import('node:events')
+  const { PassThrough } = await import('node:stream')
+  const { CodexAppServerClient } = await import('../src/services/codex-chat/codexAppServerClient')
+  const { CodexChatService } = await import('../src/services/codex-chat/codexChatService')
+  const { AuthAccount } = await import('../src/models/AuthAccount')
+  const { AuthAccessControlService } = await import('../src/services/authAccessControlService')
+  const { updateChatSettings } = await import('../src/services/codex-chat/chatSettings')
+  const db = await import('../src/database/userSettingsDb')
+  db.initializeUserSettingsDb()
+  updateChatSettings({ enabled: true })
+  t.mock.method(AuthAccount, 'findById', (id: number) => ({ id, status: 'active', account_type: 'admin' }) as never)
+  t.mock.method(AuthAccessControlService, 'resolveForAccountId', () => ({ permissionKeys: ['chat.use', 'chat.agent.use'] }))
+  const requester = { accountId: 1, accountType: 'admin' as const }
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'conai-compact-stop-'))
+  fs.writeFileSync(path.join(home, 'auth.json'), '{}')
+  const previousHome = process.env.CODEX_HOME
+  process.env.CODEX_HOME = home
+  t.after(async () => {
+    await CodexChatService.stopAllSessions('compaction stop regression complete')
+    db.closeUserSettingsDb()
+    if (previousHome === undefined) delete process.env.CODEX_HOME
+    else process.env.CODEX_HOME = previousHome
+    fs.rmSync(home, { recursive: true, force: true })
+  })
+  const features = new Set(['shell_tool', 'unified_exec', 'hooks', 'plugins', 'apps', 'code_mode_host', 'code_mode', 'browser_use', 'computer_use', 'multi_agent', 'image_generation', 'view_image', 'skill_mcp_dependency_install', 'skill_search', 'skip_host_skill_discovery'])
+  t.mock.method(childProcess, 'spawn', (_command: string, args: string[]) => {
+    const child = Object.assign(new EventEmitter(), { stdout: new PassThrough(), stderr: new PassThrough(), kill: () => true })
+    setImmediate(() => {
+      child.stdout.end(args.includes('features') ? [...features].map(name => `${name} stable false`).join('\n') : '[]')
+      child.emit('close', 0)
+    })
+    return child
+  })
+  const interrupts: unknown[] = []
+  let compactRequested!: () => void
+  const requested = new Promise<void>(resolve => { compactRequested = resolve })
+  let answerCompact!: () => void
+  const answered = new Promise<void>(resolve => { answerCompact = resolve })
+  let notify: ((method: string, turn: Record<string, unknown>) => void) | undefined
+  t.mock.method(CodexAppServerClient, 'start', async (options: Parameters<typeof CodexAppServerClient.start>[0]) => {
+    const client = Object.assign(new EventEmitter(), { whenExited: Promise.resolve(), close: () => {}, isAlive: true,
+      request: async (method: string, params: Record<string, unknown>) => {
+        if (method === 'config/read') return { config: { approval_policy: 'never', sandbox_mode: 'read-only', web_search: 'disabled', project_doc_max_bytes: 0,
+          features: chatFeatureOverrides(features), mcp_servers: { conai: { url: `http://127.0.0.1:${process.env.PORT || 1666}/mcp` } }, projects: { [options.cwd]: { trust_level: 'untrusted' } } } }
+        if (method === 'mcpServerStatus/list') return { data: [{ name: 'conai' }] }
+        if (method === 'model/list') return { data: [{ id: 'compact-model', isDefault: true }] }
+        if (method === 'thread/resume') return {}
+        if (method === 'turn/interrupt') { interrupts.push(params); return {} }
+        if (method === 'thread/compact/start') {
+          notify = (name, turn) => client.emit('notification', { method: name, params: { threadId: 'compact-memory', turn } })
+          compactRequested()
+          await answered
+          return {}
+        }
+        assert.equal(method, 'turn/start')
+        setImmediate(() => {
+          client.emit('notification', { method: 'item/completed', params: { threadId: 'compact-memory', item: { id: 'reply', type: 'agentMessage', text: '답장' } } })
+          client.emit('notification', { method: 'turn/completed', params: { threadId: 'compact-memory', turn: { id: 'reply-turn', status: 'completed' } } })
+        })
+        return { turn: { id: 'reply-turn' } }
+      },
+    })
+    return client as unknown as CodexAppServerClient
+  })
+  const profile = ChatProfileStore.create({ name: 'Compact stop', engine: 'codex', mcpEnabled: false })
+  const thread = CodexChatService.createThread(requester, profile.id)
+  CodexChatStore.setCodexThreadId(thread.id, 'compact-memory')
+  const running = CodexChatService.compact(requester, thread.id)
+  void running.catch(() => {})
+  await requested
+  // Stopped while the start request is out, before Codex has named the compaction turn.
+  await CodexChatService.interrupt(requester, thread.id)
+  assert.deepEqual(interrupts, [])
+  notify!('turn/started', { id: 'compact-turn' })
+  assert.deepEqual(interrupts, [{ threadId: 'compact-memory', turnId: 'compact-turn' }], 'the turn is interrupted as soon as Codex names it')
+  answerCompact()
+  await new Promise(resolve => setImmediate(resolve))
+  assert.equal(CodexChatService.isRunning(thread.id), true, 'the chat stays held until the compaction turn completes')
+  await assert.rejects(CodexChatService.sendMessage(requester, thread.id, '안녕', () => {}), { status: 409 })
+  notify!('turn/completed', { id: 'compact-turn', status: 'interrupted' })
+  await assert.rejects(running, { name: 'AbortError' })
+  assert.equal(CodexChatService.isRunning(thread.id), false)
+  const reply = await CodexChatService.sendMessage(requester, thread.id, '안녕', () => {})
+  assert.equal(reply.status, 'completed')
+  assert.equal(reply.content, '답장')
+})
+
 test('Claude chat rejects unexpected host tools, keeps vision data and restricts OAuth links', () => {
   const tools = [{ type: 'function' as const, function: { name: 'search_images', parameters: { type: 'object' } } }]
   assert.doesNotThrow(() => verifyClaudeTools(['mcp__conai__search_images', 'EndConversation'], tools))

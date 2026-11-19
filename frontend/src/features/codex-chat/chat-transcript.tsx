@@ -8,7 +8,7 @@ import { Panel } from '@/components/ui/panel'
 import { Tip } from '@/components/ui/tooltip'
 import { Textarea } from '@/components/ui/textarea'
 import { useI18n } from '@/i18n'
-import { CHAT_ORDERS, type ChatContextMeta, type ChatOrderKind, type ChatSummarySegment, type CodexChatMediaInfo, type CodexChatMessage } from '@/lib/api-codex-chat'
+import { CHAT_ENGINE_LABELS, CHAT_ORDERS, type ChatContextMeta, type ChatEngineChange, type ChatOrderKind, type ChatSummarySegment, type CodexChatMediaInfo, type CodexChatMessage } from '@/lib/api-codex-chat'
 import { isFromOwnDom } from '@/lib/portal-events'
 import { cn } from '@/lib/utils'
 import type { ChatAppearance } from './chat-appearance'
@@ -211,8 +211,23 @@ const ChatMessageRow = memo(function ChatMessageRow({ message, previousContext, 
   </div>
 })
 
+const NO_ENGINE_CHANGES: ChatEngineChange[] = []
+
+/** The thread's recorded engine changes; anything unreadable is no notice. */
+export function parseEngineChanges(value: string | null | undefined): ChatEngineChange[] {
+  if (!value) return NO_ENGINE_CHANGES
+  try {
+    const parsed: unknown = JSON.parse(value)
+    if (!Array.isArray(parsed)) return NO_ENGINE_CHANGES
+    const isEngine = (engine: unknown) => typeof engine === 'string' && Object.hasOwn(CHAT_ENGINE_LABELS, engine)
+    return parsed.filter((entry): entry is ChatEngineChange => typeof entry?.afterMessageId === 'number' && isEngine(entry.from) && isEngine(entry.to))
+  } catch {
+    return NO_ENGINE_CHANGES
+  }
+}
+
 /** Stored rows stay untouched while a live turn streams or the composer changes. */
-export const ChatSavedMessages = memo(function ChatSavedMessages({ messages, contextMessages, segments = EMPTY_SEGMENTS, flashMessageId, summaryUntilId, media, actions, ...look }: MessageLook & {
+export const ChatSavedMessages = memo(function ChatSavedMessages({ messages, contextMessages, segments = EMPTY_SEGMENTS, flashMessageId, summaryUntilId, engineChanges = NO_ENGINE_CHANGES, media, actions, ...look }: MessageLook & {
   messages: CodexChatMessage[]
   contextMessages: CodexChatMessage[]
   segments?: ChatSummarySegment[]
@@ -220,6 +235,8 @@ export const ChatSavedMessages = memo(function ChatSavedMessages({ messages, con
   media?: Record<string, CodexChatMediaInfo>
   actions: MessageActions
   summaryUntilId: number | null
+  /** Notices of profile engine changes, shown at their recorded position (display only). */
+  engineChanges?: ChatEngineChange[]
 }) {
   const { t } = useI18n()
   const previousContexts = useMemo(() => {
@@ -233,13 +250,29 @@ export const ChatSavedMessages = memo(function ChatSavedMessages({ messages, con
     return result
   }, [contextMessages, look.appearance.showDiagnostics])
   const divider = <div role="separator" className="flex items-center gap-3 text-xs text-muted-foreground"><span className="h-px flex-1 bg-line" />{t({ ko: '여기까지 요약됨', en: 'Summarized up to here' })}<span className="h-px flex-1 bg-line" /></div>
+  const engineNotice = (change: ChatEngineChange, index: number) => {
+    const from = t(CHAT_ENGINE_LABELS[change.from])
+    const to = t(CHAT_ENGINE_LABELS[change.to])
+    const name = change.profileId === undefined ? undefined : look.speakerOf?.(change.profileId)?.name
+    return <div key={index} className="flex flex-col gap-1">
+      <div role="separator" className="flex items-center gap-3 text-xs text-muted-foreground"><span className="h-px flex-1 bg-line" />{name
+        ? t({ ko: '{name} 엔진 변경 · {from} → {to}', en: '{name}: engine changed · {from} → {to}' }, { name, from, to })
+        : t({ ko: '엔진 변경 · {from} → {to}', en: 'Engine changed · {from} → {to}' }, { from, to })}<span className="h-px flex-1 bg-line" /></div>
+      <p className="text-center text-xs text-muted-foreground">{change.profileId !== undefined
+        ? t({ ko: '방의 메시지와 요약은 그대로야. 이 멤버의 이전 엔진 내부 기억(세션)은 초기화됐고, 새 엔진은 방의 요약과 최근 대화에서 이어가.', en: "The room's messages and summary are kept. This member's previous engine memory (session) was reset; the new engine continues from the room's summary and recent conversation." })
+        : change.to === 'llm'
+        ? t({ ko: '메시지와 저장된 요약은 그대로야. 이전 엔진의 내부 기억(세션)은 초기화됐고, 새 엔진은 최근 대화와 (요약이 켜져 있으면) 저장된 요약만 이어받아. 그보다 오래된 내용은 요약에 있는 것만 남아.', en: "Messages and the stored summary are kept. The previous engine's own memory (session) was reset; the new engine picks up only the recent conversation and, with the summary on, the stored summary. Anything older survives only where the summary has it." })
+        : t({ ko: '메시지와 저장된 요약은 그대로야. 이전 엔진의 내부 기억(세션)은 초기화됐고, 새 엔진은 저장된 요약과 최근 메시지를 한 번 전달받아 새 세션으로 이어가.', en: "Messages and the stored summary are kept. The previous engine's own memory (session) was reset; the new engine starts a new session, told the stored summary and the latest messages once." })}</p>
+    </div>
+  }
   return <>
     {summaryUntilId !== null && messages[0]?.id > summaryUntilId ? divider : null}
-    {messages.map((message) => <Fragment key={message.id}>
+    {messages.map((message, index) => <Fragment key={message.id}>
       <MessageErrorBoundary message={message}>
         <ChatMessageRow message={message} previousContext={previousContexts.get(message.id) ?? null} segments={segments} flash={flashMessageId === message.id} media={media} actions={actions} {...look} />
       </MessageErrorBoundary>
       {message.id === summaryUntilId ? divider : null}
+      {engineChanges.map((change, changeIndex) => message.id <= change.afterMessageId && !(messages[index + 1]?.id <= change.afterMessageId) ? engineNotice(change, changeIndex) : null)}
     </Fragment>)}
   </>
 })

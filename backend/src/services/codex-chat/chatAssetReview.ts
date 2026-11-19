@@ -36,19 +36,26 @@ function colorCheck(reference: AssetTagCache | undefined, candidate: AssetTagCac
   return { reference: before, candidate: after, matches: before.length && after.length ? before.length === after.length && before.every((tag) => after.includes(tag)) : null }
 }
 
+export type AssetHashes = { perceptual_hash: string | null; dhash: string | null; ahash: string | null }
+
+/** The library's already computed similarity hashes of `hashes`, in one read for a whole batch view. */
+export function readAssetHashes(hashes: string[]): Map<string, AssetHashes> {
+  const rows = imagesDb.prepare('SELECT composite_hash, perceptual_hash, dhash, ahash FROM media_metadata WHERE composite_hash IN (SELECT value FROM json_each(?))')
+    .all(JSON.stringify([...new Set(hashes)])) as Array<AssetHashes & { composite_hash: string }>
+  return new Map(rows.map(({ composite_hash, ...row }) => [composite_hash, row]))
+}
+
 /**
- * Uses the library's already computed hashes, never runs another image analysis on reads. `judged`: the judge's
- * cached reading of an expression candidate (see chatJudgeAssets), when there is one.
+ * Uses the library's already computed hashes (`hashes`, from readAssetHashes), never runs another image analysis on
+ * reads. `judged`: the judge's cached reading of an expression candidate (see chatJudgeAssets), when there is one.
  */
-export function reviewAsset(kind: string, emotion: string, hash: string, tags: AssetTagCache, reference: AssetTagCache | undefined, others: Array<{ slotKey: string; compositeHash: string }>, judged?: { picked: string; probability: number } | null): ChatAssetReview {
+export function reviewAsset(kind: string, emotion: string, hash: string, tags: AssetTagCache, reference: AssetTagCache | undefined, others: Array<{ slotKey: string; compositeHash: string }>, hashes: ReadonlyMap<string, AssetHashes>, judged?: { picked: string; probability: number } | null): ChatAssetReview {
   const expected = kind === 'expression' ? EXPRESSION_EXPECTED_TAGS[emotion] ?? [] : []
   const matched = expected.filter((tag) => tags.general.includes(tag))
-  type Hashes = { perceptual_hash: string | null; dhash: string | null; ahash: string | null }
-  const read = (id: string) => imagesDb.prepare('SELECT perceptual_hash, dhash, ahash FROM media_metadata WHERE composite_hash = ?').get(id) as Hashes | undefined
-  const own = read(hash)
+  const own = hashes.get(hash)
   const similarSlots = others.flatMap((other) => {
     if (other.compositeHash === hash) return [{ ...other, confidence: 100 }]
-    const next = read(other.compositeHash)
+    const next = hashes.get(other.compositeHash)
     if (!own?.perceptual_hash || !own.dhash || !own.ahash || !next?.perceptual_hash || !next.dhash || !next.ahash) return []
     const result = ImageSimilarityService.isSameImage(
       { perceptualHash: own.perceptual_hash, dHash: own.dhash, aHash: own.ahash },

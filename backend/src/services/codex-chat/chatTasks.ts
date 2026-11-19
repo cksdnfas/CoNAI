@@ -10,6 +10,7 @@ import { onProposalResolved } from './chatProposals'
 import { captureChatPage, lastChatPageForThread } from './chatPageBridge'
 import { onChatUserSend } from './chatSendEvents'
 import { CodexChatStore } from './codexChatStore'
+import type { CodexChatStreamEvent } from './codexChatService'
 import { ChatProfileStore } from './chatProfiles'
 import { ChatGroupStore } from './chatGroupStore'
 import { withLlmUsageContext } from '../llmUsage'
@@ -18,7 +19,7 @@ import { withLlmUsageContext } from '../llmUsage'
 /** `choice`: the request body's answer to the chat's question card, unchecked (see readChoiceAnswer). */
 export type ChatSendOptions = { task?: ChatTaskRouting; routine?: ChatRoutineRouting; choice?: unknown; toolDirective?: unknown; onDelivered?: (messageId: number) => void }
 
-type TaskRow = { id: number; thread_id: number; goal: string; steps: string; status: ChatTaskStatus; wait: ChatTaskWait | null; wait_ids: string | null; reason: string | null; budget: string; used: string; progress: string | null; stalled: number; active_since: string | null; created_at: string; updated_at: string }
+type TaskRow = { id: number; thread_id: number; goal: string; steps: string; status: ChatTaskStatus; wait: ChatTaskWait | null; wait_ids: string | null; reason: string | null; budget: string; used: string; progress: string | null; stalled: number; active_since: string | null; waiting_since: string | null; created_at: string; updated_at: string }
 
 const ensured = new WeakSet<Database.Database>()
 /** Created on first use like chat_proposals; the statements are idempotent. */
@@ -40,6 +41,7 @@ function table() {
         progress TEXT,
         stalled INTEGER NOT NULL DEFAULT 0,
         active_since TEXT,
+        waiting_since TEXT,
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
         updated_at TEXT NOT NULL DEFAULT (datetime('now'))
       );
@@ -48,6 +50,7 @@ function table() {
     const columns = (db.prepare('PRAGMA table_info(chat_tasks)').all() as Array<{ name: string }>).map((column) => column.name)
     if (!columns.includes('active_since')) db.exec('ALTER TABLE chat_tasks ADD COLUMN active_since TEXT')
     if (!columns.includes('wait_ids')) db.exec('ALTER TABLE chat_tasks ADD COLUMN wait_ids TEXT')
+    if (!columns.includes('waiting_since')) db.exec('ALTER TABLE chat_tasks ADD COLUMN waiting_since TEXT')
     ensured.add(db)
   }
   return db
@@ -115,8 +118,14 @@ export const ChatTaskStore = {
     const next = { ...current, ...patch }
     // A request can finish while a runner is awaiting a reply. Never overwrite its newly recorded tokens.
     if (current.used.tokens !== undefined) next.used = { ...next.used, tokens: Math.max(current.used.tokens, next.used.tokens ?? 0) }
-    table().prepare("UPDATE chat_tasks SET steps = ?, status = ?, wait = ?, wait_ids = ?, reason = ?, used = ?, budget = ?, updated_at = datetime('now') WHERE id = ?")
-      .run(JSON.stringify(next.steps), next.status, next.status === 'waiting' ? next.wait : null, next.status === 'waiting' ? JSON.stringify(next.waitIds ?? []) : null, next.reason, JSON.stringify(next.used), JSON.stringify(next.budget), id)
+    // Time spent waiting (for a card, a job, the person or the page) is not active time: leaving a wait moves the
+    // active-time start on by the time waited. The CASE reads the row as it was before this update.
+    table().prepare(`UPDATE chat_tasks SET steps = ?, status = ?, wait = ?, wait_ids = ?, reason = ?, used = ?, budget = ?,
+      active_since = CASE WHEN status = 'waiting' AND ? <> 'waiting' AND waiting_since IS NOT NULL
+        THEN datetime(julianday(COALESCE(active_since, created_at)) + julianday('now') - julianday(waiting_since)) ELSE active_since END,
+      waiting_since = CASE WHEN ? = 'waiting' THEN COALESCE(waiting_since, datetime('now')) END,
+      updated_at = datetime('now') WHERE id = ?`)
+      .run(JSON.stringify(next.steps), next.status, next.status === 'waiting' ? next.wait : null, next.status === 'waiting' ? JSON.stringify(next.waitIds ?? []) : null, next.reason, JSON.stringify(next.used), JSON.stringify(next.budget), next.status, next.status, id)
     const task = ChatTaskStore.find(id)
     announce(task)
     return task
@@ -133,7 +142,7 @@ export const ChatTaskStore = {
   markActive(id: number) {
     table().prepare("UPDATE chat_tasks SET active_since = datetime('now'), stalled = 0 WHERE id = ?").run(id)
   },
-  /** How long the task has been running since it was approved or last resumed. */
+  /** How long the task has been running since it was approved or last resumed, its waits left out (see update). */
   activeMs(id: number) {
     const row = table().prepare('SELECT active_since, created_at FROM chat_tasks WHERE id = ?').get(id) as Pick<TaskRow, 'active_since' | 'created_at'> | undefined
     const since = row?.active_since ?? row?.created_at
@@ -252,21 +261,65 @@ function continuationText(task: ChatTask, event: string, room?: { members: Membe
 }
 
 const STALL_LIMIT = 3
-/** A task runs at most this long after its approval or last resume before it stops for the person. */
+/** A task runs at most this long after its approval or last resume before it stops for the person (waits do not count). */
 const ACTIVE_LIMIT_MS = 3 * 60 * 60_000
+/** How often card and job waits are checked against stored outcomes, for an end no event announced (a deleted card). */
+const WAIT_CHECK_MS = 60_000
 const timers = new Map<number, NodeJS.Timeout>()
-const running = new Set<number>()
+/**
+ * The continuation each chat is sending now. `delivered` once its message is stored: from then on the reply running in
+ * the chat is the task's, and `stop` interrupts it through the chat's own stop.
+ */
+type RunnerTurn = { taskId: number; delivered: boolean; stop: () => Promise<void> }
+const running = new Map<number, RunnerTurn>()
 const subscriptions: Array<() => void> = []
+let waitCheck: NodeJS.Timeout | null = null
 // Requests may schedule before subscriptions start; only explicit shutdown blocks new continuations.
 let stopped = false
+
+/** Reconciles every card and job wait; returns how many still wait. */
+function reconcileWaits() {
+  const rows = table().prepare("SELECT id FROM chat_tasks WHERE status = 'waiting' AND wait IN ('approval', 'job')").all() as Array<{ id: number }>
+  return rows.filter((row) => reconcileWait(row.id)?.status === 'waiting').length
+}
+
+/** Runs while a task waits on cards or jobs and stops once none does; the next such wait starts it again. */
+function watchWaits() {
+  if (waitCheck || stopped) return
+  waitCheck = setInterval(() => {
+    try {
+      if (reconcileWaits() > 0) return
+    } catch (error) {
+      console.warn('[chat-task] wait check failed:', error instanceof Error ? error.message : error)
+      return
+    }
+    clearInterval(waitCheck!)
+    waitCheck = null
+  }, WAIT_CHECK_MS)
+  waitCheck.unref?.()
+}
+
+/** Interrupt the reply a continuation started. Deferred: delivery calls it from inside the engine's event emit. */
+function stopTurn(threadId: number, sending: RunnerTurn) {
+  setImmediate(() => {
+    // The task's reply may have ended meanwhile; the chat's stop would then hit the person's next reply.
+    if (running.get(threadId) !== sending) return
+    sending.stop().catch((error: unknown) => console.warn('[chat-task] could not stop the task reply:', error instanceof Error ? error.message : error))
+  })
+}
+
+/** Stop the task's own reply when one is running; a reply the person started is never the runner's. */
+function stopTaskReply(threadId: number, taskId: number) {
+  const sending = running.get(threadId)
+  if (sending?.taskId === taskId && sending.delivered) stopTurn(threadId, sending)
+}
 
 export const ChatTaskRunner = {
   started: false,
   recover() {
     // Never replay an interrupted turn; waits can recover from durable outcomes without replaying their effects.
     table().prepare("UPDATE chat_tasks SET status = 'paused', reason = '서버가 다시 시작돼서 멈췄어.', wait = NULL, wait_ids = NULL WHERE status = 'running'").run()
-    const rows = table().prepare("SELECT id FROM chat_tasks WHERE status = 'waiting' AND wait IN ('approval', 'job')").all() as Array<{ id: number }>
-    for (const row of rows) reconcileWait(row.id)
+    if (reconcileWaits() > 0) watchWaits()
   },
 
   start() {
@@ -312,6 +365,8 @@ export const ChatTaskRunner = {
     for (const timer of timers.values()) clearTimeout(timer)
     timers.clear()
     for (const unsubscribe of subscriptions.splice(0)) unsubscribe()
+    if (waitCheck) clearInterval(waitCheck)
+    waitCheck = null
   },
 
   wait(taskId: number, wait: ChatTaskWait, reason: string, replyId?: string, ids?: number[], runtimeIds?: string[]) {
@@ -319,7 +374,9 @@ export const ChatTaskRunner = {
     const waitIds = wait === 'approval' || wait === 'job' ? waitTargetIds(task, wait, replyId, ids, runtimeIds) : []
     ChatTaskStore.update(task.id, { status: 'waiting', wait, waitIds, reason })
     // Completion may already have arrived before the model registered its wait.
-    return reconcileWait(task.id)!
+    const waiting = reconcileWait(task.id)!
+    if (waiting.status === 'waiting' && waitIds.length) watchWaits()
+    return waiting
   },
 
   /** Plan approved: the task starts. */
@@ -336,7 +393,9 @@ export const ChatTaskRunner = {
     if (!task || task.status === 'awaiting_plan') throw new Error('멈출 작업이 없어.')
     clearTimeout(timers.get(threadId))
     timers.delete(threadId)
-    return ChatTaskStore.update(task.id, { status: 'paused', reason })
+    const paused = ChatTaskStore.update(task.id, { status: 'paused', reason })
+    stopTaskReply(threadId, task.id)
+    return paused
   },
 
   resume(threadId: number, extension?: unknown) {
@@ -375,7 +434,20 @@ export const ChatTaskRunner = {
     if (!task) throw new Error('중단할 작업이 없어.')
     clearTimeout(timers.get(threadId))
     timers.delete(threadId)
-    return ChatTaskStore.update(task.id, { status: 'cancelled', reason: '사용자가 중단했어.' })
+    const cancelled = ChatTaskStore.update(task.id, { status: 'cancelled', reason: '사용자가 중단했어.' })
+    stopTaskReply(threadId, task.id)
+    return cancelled
+  },
+
+  /** The conversation was cleared: its tasks go with it, so no continuation is sent into the cleared chat. */
+  clearThread(threadId: number) {
+    clearTimeout(timers.get(threadId))
+    timers.delete(threadId)
+    const latest = ChatTaskStore.latest(threadId)
+    if (!latest) return
+    ChatTaskStore.deleteForThread(threadId)
+    // The progress card and the chat list's ring drop the task.
+    announce(LIVE.includes(latest.status) ? { ...latest, status: 'cancelled' } : latest)
   },
 
   /**
@@ -451,11 +523,19 @@ export const ChatTaskRunner = {
       ...(turn?.heard ? { steps: task.steps.map((step, index) => index === current ? { ...step, heard: turn.heard } : step) } : {}),
     })!
     const routing: ChatTaskRouting = { id: task.id, step: current >= 0 ? current + 1 : null, total: task.steps.length, title: current >= 0 ? task.steps[current].title : null, event: clip(event, 160), ...(turn ? { assignee: turn.member.id } : {}) }
-    running.add(threadId)
+    const sending: RunnerTurn = { taskId, delivered: false, stop: () => turn ? GroupChatService.stop(threadId) : CodexChatService.interrupt(requester, threadId) }
+    // Only the events of the reply this send starts reach its listener, so its stored message makes that reply the
+    // task's. A pause, cancel or clear that came while the turn was prepared stops the reply as soon as it starts.
+    const listener = (event: CodexChatStreamEvent) => {
+      if (event.type !== 'user' || sending.delivered) return
+      sending.delivered = true
+      if (ChatTaskStore.find(taskId)?.status !== 'running') stopTurn(threadId, sending)
+    }
+    running.set(threadId, sending)
     try {
       await withLlmUsageContext({ taskId: task.id, threadId }, () => turn
-        ? GroupChatService.sendMessage(requester, threadId, text, () => {}, undefined, undefined, undefined, undefined, undefined, { task: routing, recipients: [turn.member.id] })
-        : CodexChatService.sendMessage(requester, threadId, text, () => {}, undefined, undefined, undefined, undefined, undefined, page, { task: routing }))
+        ? GroupChatService.sendMessage(requester, threadId, text, listener, undefined, undefined, undefined, undefined, undefined, { task: routing, recipients: [turn.member.id] })
+        : CodexChatService.sendMessage(requester, threadId, text, listener, undefined, undefined, undefined, undefined, undefined, page, { task: routing }))
     } catch (error) {
       // A reply already running finishes first and its end schedules the next continuation; in case it ended just
       // before, this one is given back and tried again a little later.

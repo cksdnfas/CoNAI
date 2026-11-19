@@ -545,14 +545,14 @@ export class RuntimeJobStore {
   }
 
   /**
-   * Close out jobs whose worker stopped stamping its heartbeat.
+   * Close out jobs whose worker stopped stamping its heartbeat; returns their ids so the runner can announce them.
    * G3(영구 running 고착)과 G4(자식 크래시 미감지)를 함께 해소한다.
    */
-  static sweepStaleJobs(staleAfterMs: number = RUNTIME_JOB_STALE_AFTER_MS): number {
+  static sweepStaleJobs(staleAfterMs: number = RUNTIME_JOB_STALE_AFTER_MS): string[] {
     const db = getUserSettingsDb()
     const staleSeconds = Math.max(0, Math.floor(staleAfterMs / 1000))
 
-    return db.prepare(`
+    const swept = db.prepare(`
       UPDATE runtime_jobs
       SET status = 'failed',
           failure_code = ?,
@@ -562,10 +562,12 @@ export class RuntimeJobStore {
       WHERE status = 'running'
         AND heartbeat_at IS NOT NULL
         AND heartbeat_at <= datetime('now', '-${staleSeconds} seconds')
-    `).run(
+      RETURNING job_id
+    `).all(
       RUNTIME_JOB_FAILURE_CODES.workerLost,
       '작업을 실행하던 프로세스의 응답이 끊겨 작업을 종료했습니다. 다시 실행해 주세요.',
-    ).changes
+    ) as Array<{ job_id: string }>
+    return swept.map((row) => row.job_id)
   }
 
   /** Delete finished jobs older than the retention window. */

@@ -9,7 +9,7 @@ import { profileContentLimit } from './chatContentRating'
 import { activeMediaFile } from './chatCardAssets'
 import { isProfileAssetHidden } from './chatProfileAssets'
 import { onChatReplyFinished } from './chatReplyRegistry'
-import { isChatOrderRunning } from './chatOrderRuns'
+import { chatOrderFinished, isChatOrderRunning } from './chatOrderRuns'
 import { CodexChatStore } from './codexChatStore'
 import { ChatProfileStore, type ChatProfile } from './chatProfiles'
 import { ModelSlotStore } from './modelSlots'
@@ -36,6 +36,8 @@ export class ChatGenerationReactionService {
   private static unsubscribeReplies: (() => void) | null = null
   private static scheduled = new Map<number, NodeJS.Immediate>()
   private static processing = new Map<string, { threadId: number; finished: Promise<void> }>()
+  /** While stop() drains: a reaction still preparing leaves its pending row for the next start. */
+  private static stopping = false
 
   static start() {
     if (this.unsubscribe) return
@@ -55,7 +57,7 @@ export class ChatGenerationReactionService {
   }
 
   private static schedule(threadId: number) {
-    if (this.scheduled.has(threadId)) return
+    if (!this.unsubscribe || this.scheduled.has(threadId)) return
     this.scheduled.set(threadId, setImmediate(() => {
       this.scheduled.delete(threadId)
       void this.reconcile(threadId).catch((error: unknown) => console.warn('[chat-reaction] reconciliation failed:', error instanceof Error ? error.message : error))
@@ -86,32 +88,43 @@ export class ChatGenerationReactionService {
       .run(to, replyId, from).changes > 0).immediate()
   }
 
+  /**
+   * The chat or room is still answering (another member, its judge, another reaction): the pending reaction is tried
+   * again once that work lets go, from its own completion rather than a timer.
+   */
+  private static whenIdle(threadId: number) {
+    const finished: Promise<unknown> | undefined = GroupChatService.runFinished(threadId) ?? LlmChatService.replyFinished(threadId) ?? chatOrderFinished(threadId)
+    void finished?.then(() => this.schedule(threadId), () => this.schedule(threadId))
+  }
+
   private static async react({ reply_id: replyId, thread_id: threadId }: Candidate) {
     // An order holds the chat for a moment; its end (a reply finishing, see chatOrderRunner) tries again.
     if (isChatOrderRunning(threadId)) return
     const db = getUserSettingsDb()
     const source = CodexChatStore.findMessageByReplyId(threadId, replyId, 'assistant')
+    const busy = () => LlmChatService.isRunning(threadId) || GroupChatService.isRunning(threadId)
     // A fast job may finish while its requesting reply is still being written; its close hook tries again.
-    if (!source && (LlmChatService.isRunning(threadId) || GroupChatService.isRunning(threadId))) return
+    if (!source && busy()) return
     db.transaction(() => {
       db.prepare("INSERT OR IGNORE INTO chat_generation_reactions (reply_id, thread_id, state) VALUES (?, ?, 'pending')").run(replyId, threadId)
     }).immediate()
     const thread = CodexChatStore.findThreadById(threadId)
     const profileId = thread?.kind === 'group' ? source?.speaker_profile_id : thread?.profile_id
     const profile = profileId ? ChatProfileStore.find(profileId, threadId) : null
+    // Whether the reaction may still be given at all. A chat that is only busy right now is no reason (see whenIdle).
     const eligible = () => {
       const current = CodexChatStore.findThreadById(threadId)
       const currentProfile = profileId ? ChatProfileStore.find(profileId, threadId) : null
       return Boolean(current && source && (current.reaction_enabled === null ? currentProfile?.reactionEnabled : current.reaction_enabled === 1) && currentProfile?.isEnabled && currentProfile.engine === 'llm'
         && CodexChatStore.findMessage(threadId, source.id)?.routing?.replyId === replyId
         && (current.kind === 'group' ? ChatGroupStore.member(threadId, currentProfile.id) : current.engine === 'llm' && current.profile_id === currentProfile.id)
-        && (CodexChatStore.latestUserMessageId(threadId) ?? 0) <= source.id
-        && !LlmChatService.isRunning(threadId) && !GroupChatService.isRunning(threadId))
+        && (CodexChatStore.latestUserMessageId(threadId) ?? 0) <= source.id)
     }
     if (!eligible() || !thread || !profile || !source) {
       this.transition(replyId, 'pending', 'skipped')
       return
     }
+    if (busy()) { this.whenIdle(threadId); return }
     try {
       const requester = chatProfileRequester({ accountId: thread.account_id, accountType: thread.account_id === null ? null : AuthAccount.findById(thread.account_id)?.account_type ?? null }, { threadId, profileId: profile.id, kind: thread.kind })
       const jobs = db.prepare('SELECT j.id, j.status, j.failure_code, j.requested_by_account_id FROM chat_generation_links l JOIN generation_queue_jobs j ON j.id = l.job_id WHERE l.thread_id = ? AND l.reply_id = ? ORDER BY j.id').all(threadId, replyId) as Job[]
@@ -144,6 +157,8 @@ export class ChatGenerationReactionService {
       if (withheld > 0) lines.push(`(${withheld} image(s) not shown because they exceed the allowed rating. Do not guess what they show.)`)
       // Loading previews yields to user requests; reserve only if the reaction still owns its pending record.
       if (!eligible()) { this.transition(replyId, 'pending', 'skipped'); return }
+      if (busy()) { this.whenIdle(threadId); return }
+      if (this.stopping) return
       const current = CodexChatStore.findThreadById(threadId)!
       const currentProfile = ChatProfileStore.find(profile.id, threadId)!
       const claimed = db.transaction(() => db.prepare("UPDATE chat_generation_reactions SET state = 'running', attempts = attempts + 1, updated_at = CURRENT_TIMESTAMP WHERE reply_id = ? AND state = 'pending'").run(replyId).changes > 0).immediate()
@@ -163,7 +178,8 @@ export class ChatGenerationReactionService {
       if (message) publishRuntimeEvent({ name: 'chat.reaction.created', topic: 'generation-queue', visibility: 'owner', accountId: thread.account_id,
         payload: { threadId, messageId: message.id, requestedByAccountId: thread.account_id } })
       else this.transition(replyId, 'running', 'skipped')
-    } catch {
+    } catch (error) {
+      console.warn(`[chat-reaction] reaction for reply ${replyId} failed:`, error instanceof Error ? error.message : error)
       this.transition(replyId, 'pending', 'failed')
       this.transition(replyId, 'running', 'failed')
     }
@@ -173,14 +189,16 @@ export class ChatGenerationReactionService {
     this.unsubscribe?.()
     this.unsubscribeReplies?.()
     this.unsubscribe = this.unsubscribeReplies = null
+    this.stopping = true
     for (const handle of this.scheduled.values()) clearImmediate(handle)
     this.scheduled.clear()
-    const db = getUserSettingsDb()
-    db.transaction(() => {
-      db.prepare("UPDATE chat_generation_reactions SET state = 'skipped', updated_at = CURRENT_TIMESTAMP WHERE state = 'pending'").run()
-    }).immediate()
+    // Pending reactions stay pending: the next start() reconciles them (delivered, or skipped for a real reason).
     const threads = getUserSettingsDb().prepare("SELECT DISTINCT thread_id FROM chat_generation_reactions WHERE state = 'running'").all() as Array<{ thread_id: number }>
     for (const thread of threads) LlmChatService.skipReaction(thread.thread_id)
-    await Promise.allSettled([...this.processing.values()].map((entry) => entry.finished))
+    const settled = await Promise.allSettled([...this.processing.values()].map((entry) => entry.finished))
+    for (const result of settled) {
+      if (result.status === 'rejected') console.warn('[chat-reaction] reaction did not settle cleanly on stop:', result.reason instanceof Error ? result.reason.message : result.reason)
+    }
+    this.stopping = false
   }
 }

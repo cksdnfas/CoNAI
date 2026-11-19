@@ -2,6 +2,7 @@ import { isPathInside } from '../../utils/pathResolver'
 import fs from 'fs'
 import path from 'path'
 import { resolveUploadsPath, runtimePaths } from '../../config/runtimePaths'
+import { GenerationQueueModel } from '../../models/GenerationQueue'
 import { GraphExecutionArtifactModel } from '../../models/GraphExecutionArtifact'
 import { HistoryQueryRepository } from '../../repositories/history/HistoryQueryRepository'
 import type { ServiceType } from '../../types/generationHistory'
@@ -9,7 +10,7 @@ import { HistoryCommandService } from '../historyCommandService'
 import { GenerationHistoryService } from '../generationHistoryService'
 import { FileDiscoveryService } from '../folderScan/fileDiscoveryService'
 import { ImageUploadService } from '../imageUploadService'
-import { throwIfGraphExecutionAborted } from './execution-abort'
+import { GraphAbortError, throwIfGraphExecutionAborted } from './execution-abort'
 import type { RuntimeArtifact } from './shared'
 
 type ArtifactMetadata = Record<string, unknown>
@@ -39,8 +40,6 @@ type FinalResultPromotionParams = {
   sourceNodeId: string
   sourcePortKey: string
   sourceArtifact: RuntimeArtifact
-  /** 승격된 결과를 넣을 이미지 그룹 */
-  groupId?: number | null
 }
 
 type PromotedFinalResult = FinalResultPromotionCandidate & {
@@ -362,6 +361,32 @@ export function resolveFinalResultPromotionCandidate(sourceArtifact: RuntimeArti
   }
 }
 
+/**
+ * A queue-backed node's output was uploaded by the queue, whose history row has no graph ids. Tag that row so the
+ * workflow's history lists it like a promoted result. Only the row of the queue job the node waited on qualifies;
+ * a library image passed through without a job keeps its own history.
+ */
+function linkQueueUploadedHistoryToGraphExecution(params: FinalResultPromotionParams) {
+  // Only the executor-written metadata names the job; an artifact's value is upstream data and could name any row.
+  const metadata = parseMetadata(params.sourceArtifact.metadata)
+  const historyId = optionalNumber(metadata.historyId)
+  const queueJobId = optionalNumber(metadata.queueJobId)
+  if (
+    !historyId
+    || !queueJobId
+    || !GenerationQueueModel.isGraphOrigin(queueJobId)
+    || HistoryQueryRepository.findById(historyId)?.queue_job_id !== queueJobId
+  ) {
+    return null
+  }
+
+  HistoryCommandService.update(historyId, {
+    graph_workflow_id: params.workflowId,
+    graph_execution_id: params.executionId,
+  })
+  return historyId
+}
+
 /** Promote one explicit final-result visual artifact into the shared image-generation result list. */
 export async function promoteFinalResultArtifactToGenerationHistory(params: FinalResultPromotionParams) {
   // abort 된 실행은 생성 히스토리에 결과를 만들지 않는다. 여기가 late write 차단의 핵심 지점이다.
@@ -369,7 +394,8 @@ export async function promoteFinalResultArtifactToGenerationHistory(params: Fina
 
   const candidate = resolveFinalResultPromotionCandidate(params.sourceArtifact)
   if (!candidate.shouldPromote) {
-    return candidate
+    const historyId = candidate.reason === 'already_uploaded' ? linkQueueUploadedHistoryToGraphExecution(params) : null
+    return historyId ? { ...candidate, historyId } : candidate
   }
 
   const { metadata } = resolveArtifactMetadata(params.sourceArtifact)
@@ -384,7 +410,8 @@ export async function promoteFinalResultArtifactToGenerationHistory(params: Fina
     graph_workflow_id: params.workflowId,
     graph_execution_id: params.executionId,
     workflow_name: params.workflowName,
-    assigned_group_id: params.groupId ?? undefined,
+    // No assigned_group_id: the upload files a row's group into the library, which a run cancelled meanwhile must
+    // not do. The final-result node records the group once its abort check passes.
     nai_model: resolveModelName(metadata) ?? (serviceType === 'codex' ? 'codex' : undefined),
     nai_sampler: candidate.sampler ?? undefined,
     nai_seed: candidate.seed ?? undefined,
@@ -428,6 +455,11 @@ export async function tryPromoteFinalResultArtifactToGenerationHistory(params: F
   try {
     return await promoteFinalResultArtifactToGenerationHistory(params)
   } catch (error) {
+    // A cancellation is not a promotion failure, including an upload that broke off because the run was cancelled.
+    if (error instanceof GraphAbortError) {
+      throw error
+    }
+    throwIfGraphExecutionAborted(params.executionId, params.finalNodeId)
     const candidate = resolveFinalResultPromotionCandidate(params.sourceArtifact)
     return {
       ...candidate,

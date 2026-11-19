@@ -60,7 +60,7 @@ AI 제작·수정은 선택한 CoNAI 프로필을 `mode: profile`로 실행한�
 
 프로젝트 원문은 공유 파일함에만 두고, 플러그인 SQLite에는 검색용 제목·상태·파일 ID·리비전·시각과 출력 참조만 저장한다. 목록 조회도 기존 `files.view` 권한을 검사한다. 프로젝트 파일은 공용이며 임시 초안과 출력 작업 이력은 계정별이다. 목록·초안·출력 이력에는 미디어 원본이나 재생 URL을 복제하지 않는다. 계정당 복구 슬롯 하나와 프로젝트·계정당 출력 이력 20개로 보관량을 제한한다.
 
-페이지 어시스턴트는 `hyperframes.projects/details/new/copy/restore_draft/history`와 기존 열기·저장 작업을 사용한다. 화면 없는 작업은 `p_hyperframes_list_projects`, `read_project`, `save_project`, `project_history`를 사용한다. 제목·상태 변경은 문서를 읽고 현재 리비전으로 저장하며, 복제는 새로운 요청 ID와 `fileId` 없는 저장을 사용한다. AI 저장 요청은 기존 호스트 검토 경계를 유지한다.
+페이지 어시스턴트는 `hyperframes.projects/details/new/copy/restore_draft/history`와 기존 열기·저장·출력 작업을 사용한다. 저장(`hyperframes.save`)·복사 저장(`hyperframes.copy`)·출력(`hyperframes.render`)은 `commit` 작업이다. 어시스턴트가 `propose_page_action`으로 검토 카드를 만들고, 사람이 채팅에서 카드를 적용하면 열려 있는 영상 제작 화면이 버튼과 같은 처리로 실행한다. 출력 중에는 화면이 보이는 동안 진행률을 2초마다 다시 게시해 리비전이 바뀌므로, 그동안 만든 카드는 적용 시작 전 확인에서 거절되고 출력이 끝난 뒤 새 카드를 받아야 한다. 화면의 저장·복사 저장·출력 버튼은 추가 승인 없이 바로 실행한다. 화면 없는 작업은 `p_hyperframes_list_projects`, `read_project`, `save_project`, `project_history`를 사용한다. 제목·상태 변경은 문서를 읽고 현재 리비전으로 저장하며, 복제는 새로운 요청 ID와 `fileId` 없는 저장을 사용한다.
 
 ## 실행 범위
 

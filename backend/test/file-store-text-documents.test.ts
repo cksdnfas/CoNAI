@@ -83,4 +83,28 @@ test('file store text documents: create refuses taken names, update keeps the id
     assert.notEqual(refreshed.revision, first.revision)
     assert.ok(refreshed.text.startsWith('새로'))
   })
+
+  await t.test('a folder upload refuses unsafe relative paths without writing anything', () => {
+    const target = FileStoreService.createFolder(me, null, '올림')
+    const rootTotal = FileStoreService.list(me, null).total
+    const staged = (names: string[]) => names.map((name) => {
+      fs.writeFileSync(path.join(root, name), name)
+      return { path: path.join(root, name), originalname: name, mimetype: 'text/plain', size: name.length } as never
+    })
+    const files = staged(['ok.txt', 'a.txt'])
+    for (const unsafe of ['../a.txt', '/a.txt', '하위//a.txt', 'C:/a.txt', '하위\\a.txt', `${'d/'.repeat(65)}a.txt`]) {
+      assert.throws(() => FileStoreService.upload(me, target.id, files, false, undefined, ['하위/ok.txt', unsafe]), (error: unknown) => (error as { status?: number }).status === 400, unsafe)
+    }
+    assert.equal(FileStoreService.list(me, target.id).total, 0)
+    assert.equal(FileStoreService.list(me, null).total, rootTotal)
+    const [ok, deep] = FileStoreService.upload(me, target.id, files, false, undefined, ['하위/ok.txt', '하위/깊이/a.txt'])
+    const [folder] = FileStoreService.list(me, target.id).entries
+    assert.equal(folder.name, '하위')
+    assert.equal(ok.parentId, folder.id)
+    assert.equal(FileStoreService.get(me, deep.parentId!).parentId, folder.id)
+    // A later file's name conflict, after the first file's new folders were created, undoes those folders and files.
+    assert.throws(() => FileStoreService.upload(me, target.id, staged(['x.txt', 'ok.txt']), false, undefined, ['새/안쪽/x.txt', '하위/ok.txt']), (error: unknown) => (error as { status?: number }).status === 409)
+    assert.deepEqual(FileStoreService.list(me, target.id).entries.map((entry) => entry.name), ['하위'])
+    assert.equal(FileStoreService.list(me, folder.id).total, 2)
+  })
 })

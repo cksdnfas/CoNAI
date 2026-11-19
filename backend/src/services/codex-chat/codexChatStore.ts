@@ -1,4 +1,5 @@
 import { getUserSettingsDb } from '../../database/userSettingsDb'
+import { LEGACY_SUMMARY_PLOT_SQL } from '../../database/userSettingsSchema'
 import { publishRuntimeEvent } from '../runtime-events/runtimeEventBus'
 import { CHAT_THREAD_TITLE_MAX_LENGTH as TITLE_MAX_LENGTH, type StoredFileEntry, type ChatMessageRouting, type ChatFileChange } from '@conai/shared'
 import { FileStoreService, chatAttachmentOwner } from '../fileStoreService'
@@ -14,6 +15,7 @@ import { forgetReplyFileChanges, forgetThreadFileChanges } from './chatFileChang
 import { notifySemanticChange } from '../embeddings/semanticSignal'
 import { cancelAgentCallsForThread } from './chatAgentCalls'
 import type { ChatModelPatch } from './chatModelOverride'
+import type { ChatProfileEngine } from './chatProfiles'
 import type { ChatToolDirectiveSnapshot } from '@conai/shared'
 import { readToolDirectiveSnapshot } from './chatToolDirective'
 
@@ -46,6 +48,8 @@ export type CodexChatThreadRecord = {
   codex_output_tokens: number | null
   /** Codex chats: JSON keys of lore entries already given to the Codex thread since its last compaction. */
   codex_lore_sent: string | null
+  /** Codex chats: codexInstructionsFingerprint of the instructions the Codex thread started with (null: an older thread). */
+  codex_instructions_fingerprint: string | null
   /** `group`: several profiles answer by @mention, `profile_id` being the representative. */
   kind: 'direct' | 'group'
   /** Group rooms: bot-to-bot wakes per user message and messages handed to a woken member (null: defaults). */
@@ -66,6 +70,8 @@ export type CodexChatThreadRecord = {
   flag_ids: string | null
   /** JSON hand edits of the display block state (see chatBlockState). */
   block_edits: string | null
+  /** JSON ChatEngineChange[]: the profile engine switches this chat went through, shown as notices. */
+  engine_changes: string | null
   /** The account's user profile (persona) in this chat; null is the plain user. */
   user_profile_id: number | null
   /** JSON ids of the owner's account lorebooks linked to this chat only (see chatLorebookFiles). */
@@ -242,7 +248,32 @@ export function parseMessageRouting(value: string | null): ChatMessageRouting | 
 const RESET_CODEX_STATE = `codex_context_tokens = NULL, codex_context_window = NULL, codex_input_tokens = NULL,
   codex_cached_input_tokens = NULL, codex_output_tokens = NULL, codex_lore_sent = NULL`
 
-function parseToolCalls(value: string | null): CodexChatToolCall[] {
+/** A profile engine switch after `afterMessageId`; `profileId` names the room member it was. */
+export type ChatEngineChange = { afterMessageId: number; from: ChatProfileEngine; to: ChatProfileEngine; at: string; profileId?: number }
+
+export function parseEngineChanges(value: string | null): ChatEngineChange[] {
+  try {
+    const parsed: unknown = JSON.parse(value || '[]')
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
+/**
+ * The stored list with `change` added; another switch at the same point of the same member replaces that entry in
+ * place (with the later time), or undoes it when it returns to where it started.
+ */
+export function withEngineChange(value: string | null, change: ChatEngineChange): string | null {
+  const changes = parseEngineChanges(value)
+  const index = changes.findIndex((entry) => entry.afterMessageId === change.afterMessageId && entry.profileId === change.profileId)
+  if (index < 0) changes.push(change)
+  else if (changes[index].from === change.to) changes.splice(index, 1)
+  else changes[index] = { ...changes[index], to: change.to, at: change.at }
+  return changes.length > 0 ? JSON.stringify(changes) : null
+}
+
+export function parseToolCalls(value: string | null): CodexChatToolCall[] {
   if (!value) {
     return []
   }
@@ -303,18 +334,41 @@ function readMessageRows(threadId: number, rows: StoredMessageRow[]): CodexChatM
   return parsed
 }
 
+/** Where the turn holding `messageId` starts: the last sendable user message at or before it (countSummaryItems' turns). */
+function turnStartOf(threadId: number, messageId: number) {
+  return (getUserSettingsDb().prepare(`SELECT MAX(id) AS id FROM codex_chat_messages WHERE thread_id = ? AND id <= ? AND role = 'user' AND ${SENDABLE_MESSAGE_SQL}`)
+    .get(threadId, messageId, MESSAGE_WHITESPACE) as { id: number | null }).id
+}
+
 /**
  * Any history rewrite invalidates summaries being computed from the old history, and the summary segments that
- * reach the changed message (a Codex chat's compaction divider likewise).
+ * reach the changed message (a Codex chat's compaction divider likewise). An API LLM direct chat's cursor ahead of
+ * every segment (an engine hand-over) keeps the stretch it skips skipped; `replying`: a reply to the changed turn is
+ * about to be written, so that turn goes back into the request.
  */
-function invalidateContext(threadId: number, changedMessageId: number) {
-  getUserSettingsDb().prepare(`UPDATE codex_chat_threads SET
+function invalidateContext(threadId: number, changedMessageId: number, replying = false) {
+  const db = getUserSettingsDb()
+  // Read before the cursor is cleared. Only an API LLM chat's cursor decides what the request leaves out.
+  const held = db.prepare(`SELECT t.summary_until_message_id AS cursor,
+      t.kind = 'direct' AND p.engine = 'llm' AND p.llm_runtime IS NOT 'pi' AS direct
+    FROM codex_chat_threads t LEFT JOIN llm_chat_profiles p ON p.id = t.profile_id WHERE t.id = ?`)
+    .get(threadId) as { cursor: number | null; direct: number | null } | undefined
+  db.prepare(`UPDATE codex_chat_threads SET
     summary = CASE WHEN summary_until_message_id >= ? THEN NULL ELSE summary END,
     summary_updated_date = CASE WHEN summary_until_message_id >= ? THEN NULL ELSE summary_updated_date END,
     summary_until_message_id = CASE WHEN summary_until_message_id >= ? THEN NULL ELSE summary_until_message_id END,
-    codex_thread_id = NULL, ${RESET_CODEX_STATE}, context_revision = context_revision + 1, updated_date = CURRENT_TIMESTAMP WHERE id = ?
+    codex_thread_id = NULL, codex_instructions_fingerprint = NULL, ${RESET_CODEX_STATE}, context_revision = context_revision + 1, updated_date = CURRENT_TIMESTAMP WHERE id = ?
   `).run(changedMessageId, changedMessageId, changedMessageId, threadId)
-  ChatSummaryStore.invalidateFrom(threadId, changedMessageId)
+  let floor: number | null = null
+  if (held?.cursor != null && held.cursor >= changedMessageId) {
+    floor = 0
+    if (held.direct) {
+      // A reply about to be written needs its turn in the request; any other change leaves the cursor where it was.
+      const before = replying ? turnStartOf(threadId, changedMessageId) : held.cursor + 1
+      floor = before === null ? 0 : CodexChatStore.latestMessageId(threadId, before) ?? 0
+    }
+  }
+  ChatSummaryStore.invalidateFrom(threadId, changedMessageId, floor)
 }
 
 function removeMessagesAfter(threadId: number, messageId: number) {
@@ -322,10 +376,15 @@ function removeMessagesAfter(threadId: number, messageId: number) {
   db.prepare('DELETE FROM chat_file_attachments WHERE message_id IN (SELECT id FROM codex_chat_messages WHERE thread_id = ? AND id > ?)').run(threadId, messageId)
   db.prepare('DELETE FROM codex_chat_messages WHERE thread_id = ? AND id > ?').run(threadId, messageId)
   // Block state edits made after a removed message go with it.
-  const row = db.prepare('SELECT block_edits FROM codex_chat_threads WHERE id = ?').get(threadId) as { block_edits: string | null } | undefined
+  const row = db.prepare('SELECT block_edits, engine_changes FROM codex_chat_threads WHERE id = ?').get(threadId) as { block_edits: string | null; engine_changes: string | null } | undefined
   if (row?.block_edits) {
     const kept = parseBlockEdits(row.block_edits).filter((edit) => edit.afterMessageId <= messageId)
     db.prepare('UPDATE codex_chat_threads SET block_edits = ? WHERE id = ?').run(kept.length > 0 ? JSON.stringify(kept) : null, threadId)
+  }
+  // Engine notices after a removed message go too.
+  if (row?.engine_changes) {
+    const kept = parseEngineChanges(row.engine_changes).filter((change) => change.afterMessageId <= messageId)
+    db.prepare('UPDATE codex_chat_threads SET engine_changes = ? WHERE id = ?').run(kept.length > 0 ? JSON.stringify(kept) : null, threadId)
   }
 }
 
@@ -482,10 +541,73 @@ export const CodexChatStore = {
     getUserSettingsDb().prepare('UPDATE codex_chat_threads SET summary_error = ? WHERE id = ? AND summary_error IS NOT ?').run(error, threadId, error)
   },
 
-  setCodexThreadId(threadId: number, codexThreadId: string) {
+  /** The profile's direct chats, for checking none is answering before its engine changes. */
+  directThreadIdsOfProfile(profileId: number) {
+    return (getUserSettingsDb().prepare("SELECT id FROM codex_chat_threads WHERE profile_id = ? AND kind = 'direct'").all(profileId) as Array<{ id: number }>).map((row) => row.id)
+  },
+
+  /**
+   * The profile's engine changed: its direct chats go on with the new one, keeping their messages and summary. The old
+   * engine's session and the chat's model override (meant for the old engine) are dropped, and the chat gets a notice.
+   * Returns the old sessions with the chat's owner, to delete once the change is committed.
+   *
+   * `llmTurns` (an API LLM target's context turns, else null) places the summary cursor (`handOverCursor`) so the chat
+   * hands over only its latest turns verbatim. A session's compaction moves the cursor
+   * without writing text, so it may move back. The summary text and segments stay — summary text without segments
+   * (a session chat's) first becomes a plot up to the stored cursor, as the schema migration does for API LLM chats,
+   * so a later history change keeps it; a moved cursor bumps the revision so an in-flight fold is refused.
+   */
+  switchProfileEngine(profileId: number, from: ChatProfileEngine, to: ChatProfileEngine, llmTurns: number | null = null) {
+    const db = getUserSettingsDb()
+    const rows = db.prepare(`SELECT t.id, t.account_id, t.codex_thread_id, t.engine_changes, t.context_turns, t.summary_until_message_id,
+      (SELECT MAX(m.id) FROM codex_chat_messages m WHERE m.thread_id = t.id) AS last_message_id
+      FROM codex_chat_threads t WHERE t.profile_id = ? AND t.kind = 'direct'`).all(profileId) as Array<{ id: number; account_id: number | null; codex_thread_id: string | null; engine_changes: string | null; context_turns: number | null; summary_until_message_id: number | null; last_message_id: number | null }>
+    const at = new Date().toISOString()
+    const update = db.prepare(`UPDATE codex_chat_threads SET engine = ?, codex_thread_id = NULL, codex_instructions_fingerprint = NULL, ${RESET_CODEX_STATE},
+      chat_model_slot_id = NULL, chat_model = NULL, engine_changes = ?, summary_until_message_id = ?, context_revision = context_revision + ? WHERE id = ?`)
+    const legacyPlot = db.prepare(`${LEGACY_SUMMARY_PLOT_SQL} AND t.id = ?`)
+    for (const row of rows) {
+      const changes = row.last_message_id === null ? row.engine_changes : withEngineChange(row.engine_changes, { afterMessageId: row.last_message_id, from, to, at })
+      let cursor = row.summary_until_message_id
+      if (llmTurns !== null) {
+        // Runs before the update below, so the plot ends at the cursor as stored.
+        legacyPlot.run(row.id)
+        const placed = CodexChatStore.handOverCursor(row.id, row.context_turns ?? llmTurns)
+        if (placed !== (row.summary_until_message_id ?? 0)) cursor = placed || null
+      }
+      update.run(to === 'codex' ? 'codex' : 'llm', changes, cursor, cursor === row.summary_until_message_id ? 0 : 1, row.id)
+    }
+    return rows.map((row) => ({ threadId: row.id, accountId: row.account_id, codexThreadId: row.codex_thread_id }))
+  },
+
+  /**
+   * Where an API LLM chat's summary cursor goes so its next request carries only its latest `turns` turns verbatim:
+   * the next user message is a turn too, so the turns before the newest `turns - 1` count as summarized, or up to what
+   * the chat's segments cover when that is later. 0: nothing is.
+   */
+  handOverCursor(threadId: number, turns: number) {
+    const db = getUserSettingsDb()
+    const keep = Math.max(0, turns - 1)
+    // A turn starts at a sendable user message, as countSummaryItems counts them; an assistant-only opening is the oldest.
+    const start = keep > 0 ? (db.prepare(`SELECT id FROM codex_chat_messages WHERE thread_id = ? AND role = 'user' AND ${SENDABLE_MESSAGE_SQL} ORDER BY id DESC LIMIT 1 OFFSET ?`)
+      .get(threadId, MESSAGE_WHITESPACE, keep - 1) as { id: number } | undefined)?.id : undefined
+    const target = keep === 0 ? CodexChatStore.latestMessageId(threadId) ?? 0
+      : start === undefined ? 0 : CodexChatStore.latestMessageId(threadId, start) ?? 0
+    const covered = (db.prepare('SELECT MAX(until_message_id) AS id FROM chat_summary_segments WHERE thread_id = ?').get(threadId) as { id: number | null }).id ?? 0
+    return Math.max(target, covered)
+  },
+
+  /** A Codex thread with the fingerprint of the instructions it started with; a Claude Code or pi session value has none. */
+  setCodexThreadId(threadId: number, codexThreadId: string, instructionsFingerprint: string | null = null) {
     getUserSettingsDb().prepare(`
-      UPDATE codex_chat_threads SET codex_thread_id = ?, ${RESET_CODEX_STATE}, updated_date = CURRENT_TIMESTAMP WHERE id = ?
-    `).run(codexThreadId, threadId)
+      UPDATE codex_chat_threads SET codex_thread_id = ?, codex_instructions_fingerprint = ?, ${RESET_CODEX_STATE}, updated_date = CURRENT_TIMESTAMP WHERE id = ?
+    `).run(codexThreadId, instructionsFingerprint, threadId)
+  },
+
+  /** A Codex thread kept from before fingerprints goes on under the current one (it is never reset for lacking one). */
+  adoptInstructionsFingerprint(threadId: number, codexThreadId: string, instructionsFingerprint: string) {
+    getUserSettingsDb().prepare('UPDATE codex_chat_threads SET codex_instructions_fingerprint = ? WHERE id = ? AND codex_thread_id = ? AND codex_instructions_fingerprint IS NULL')
+      .run(instructionsFingerprint, threadId, codexThreadId)
   },
 
   findThreadByCodexId(codexThreadId: string) {
@@ -553,6 +675,8 @@ export const CodexChatStore = {
       forgetThreadFileChanges(threadId)
       // chat_tasks is created on first use (see chatTasks.ts); deleted here without importing the task runner.
       if (db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'chat_tasks'").get()) db.prepare('DELETE FROM chat_tasks WHERE thread_id = ?').run(threadId)
+      // chat_automation_rooms likewise (see chatRoomWake.ts): an automation remakes its room when it next needs one.
+      if (db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'chat_automation_rooms'").get()) db.prepare('DELETE FROM chat_automation_rooms WHERE thread_id = ?').run(threadId)
       // Its branches stay, as chats of their own.
       db.prepare('UPDATE codex_chat_threads SET branched_from_thread_id = NULL, branched_at_message_id = NULL WHERE branched_from_thread_id = ?').run(threadId)
       db.prepare('DELETE FROM codex_chat_threads WHERE id = ?').run(threadId)
@@ -822,8 +946,14 @@ export const CodexChatStore = {
     return deleted
   },
 
+  /**
+   * A reply about to be written again (regenerate, continue). A direct chat's request needs the turn's user message,
+   * so history is invalidated from it: a fold ends there when the reply failed empty (not sendable). A room, or an
+   * opening reply with no user message before it, invalidates from the reply.
+   */
   prepareRegeneration(threadId: number, messageId: number) {
-    invalidateContext(threadId, messageId)
+    const direct = (getUserSettingsDb().prepare('SELECT kind FROM codex_chat_threads WHERE id = ?').get(threadId) as { kind: string } | undefined)?.kind === 'direct'
+    invalidateContext(threadId, (direct ? turnStartOf(threadId, messageId) : null) ?? messageId, true)
   },
 
   /** The model's (English) text of a user message translated after it was stored; the reader keeps their own words. */
@@ -838,7 +968,7 @@ export const CodexChatStore = {
       const updated = db.prepare("UPDATE codex_chat_messages SET content = ?, display_content = ?, flags = COALESCE(?, flags), error = ? WHERE thread_id = ? AND id = ? AND role = 'user'").run(content, displayContent, flags ? JSON.stringify(flags) : null, error, threadId, messageId)
       if (!updated.changes) throw new Error('User message not found')
       removeMessagesAfter(threadId, messageId)
-      invalidateContext(threadId, messageId)
+      invalidateContext(threadId, messageId, true)
     }).immediate()
     notifySemanticChange('message')
   },
@@ -894,8 +1024,8 @@ export const CodexChatStore = {
       db.prepare('DELETE FROM chat_deferred_generations WHERE thread_id = ?').run(threadId)
       removeMessagesAfter(threadId, 0)
       ChatSummaryStore.clear(threadId)
-      db.prepare(`UPDATE codex_chat_threads SET summary = NULL, summary_until_message_id = NULL, summary_updated_date = NULL, summary_error = NULL, block_edits = NULL,
-        codex_thread_id = NULL, ${RESET_CODEX_STATE}, context_revision = context_revision + 1, updated_date = CURRENT_TIMESTAMP WHERE id = ?`).run(threadId)
+      db.prepare(`UPDATE codex_chat_threads SET summary = NULL, summary_until_message_id = NULL, summary_updated_date = NULL, summary_error = NULL, block_edits = NULL, engine_changes = NULL,
+        codex_thread_id = NULL, codex_instructions_fingerprint = NULL, ${RESET_CODEX_STATE}, context_revision = context_revision + 1, updated_date = CURRENT_TIMESTAMP WHERE id = ?`).run(threadId)
       if (opening) opening()
     }).immediate()
   },

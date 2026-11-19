@@ -103,12 +103,16 @@ function resolveCodexJobRoot() {
   return path.join(runtimePaths.tempDir, 'codex-jobs')
 }
 
-/** Best-effort cleanup for a cancelled Codex job directory. */
-async function removeCodexJobDirectory(jobDirectory: string) {
+/**
+ * Best-effort removal of a Codex job directory once its job failed, was cancelled or its outputs were saved.
+ * Leftovers from crashes are swept by age in the media orphan cleanup.
+ */
+export async function removeCodexJobDirectory(jobDirectory: string) {
   try {
-    await fs.promises.rm(jobDirectory, { recursive: true, force: true })
+    // A freshly written output can stay briefly locked on Windows (antivirus, indexer); rm retries EBUSY/EPERM with backoff.
+    await fs.promises.rm(jobDirectory, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
   } catch (cleanupError) {
-    console.warn(`⚠️ Failed to remove cancelled Codex job directory ${jobDirectory}:`, cleanupError)
+    console.warn(`⚠️ Failed to remove Codex job directory ${jobDirectory}:`, cleanupError)
   }
 }
 
@@ -611,16 +615,25 @@ async function runCodexExec(jobDirectory: string, prompt: string, imagePaths: st
     const stdoutStream = fs.createWriteStream(stdoutPath)
     const stderrStream = fs.createWriteStream(stderrPath)
     let settled = false
+    let logsClosed: Promise<unknown> | undefined
+    // Until both handles are closed the stderr file may be partial, and removing the job folder fails with EBUSY on Windows.
+    const closeLogs = () => logsClosed ??= Promise.all([stdoutStream, stderrStream].map((stream) => new Promise<void>((resolveClose) => {
+      if (stream.closed) {
+        resolveClose()
+        return
+      }
+      stream.once('close', () => resolveClose())
+      stream.end()
+    })))
 
-    const finalize = (error?: Error) => {
+    const finalize = async (error?: Error) => {
       if (settled) {
         return
       }
       settled = true
       processTimeout.clear()
       processAbort.clear()
-      stdoutStream.end()
-      stderrStream.end()
+      await closeLogs()
       if (error) {
         reject(error)
         return
@@ -637,7 +650,7 @@ async function runCodexExec(jobDirectory: string, prompt: string, imagePaths: st
     })
 
     child.once('error', (error) => {
-      finalize(new Error(`Failed to launch codex exec: ${error.message}`))
+      void finalize(new Error(`Failed to launch codex exec: ${error.message}`))
     })
 
     child.once('close', async (code, signal) => {
@@ -645,10 +658,11 @@ async function runCodexExec(jobDirectory: string, prompt: string, imagePaths: st
       processAbort.clear()
 
       if (code === 0 && !signal && !processTimeout.timedOut && !processAbort.aborted) {
-        finalize()
+        await finalize()
         return
       }
 
+      await closeLogs()
       let lastMessage = ''
       try {
         lastMessage = await fs.promises.readFile(lastMessagePath, 'utf8')
@@ -672,7 +686,7 @@ async function runCodexExec(jobDirectory: string, prompt: string, imagePaths: st
             ? `codex exec was killed (${signal})`
             : `codex exec failed with exit code ${code ?? 'unknown'}`
 
-      finalize(new Error([
+      await finalize(new Error([
         failureSummary,
         lastMessage.trim() ? `last message: ${lastMessage.trim()}` : null,
         stderrTail.trim() ? `stderr: ${stderrTail.trim().slice(-1200)}` : null,
@@ -735,59 +749,56 @@ export async function executeCodexGeneration(payload: CodexGenerationPayload, op
 
   await fs.promises.mkdir(jobDirectory, { recursive: true })
 
-  const attachedImages: string[] = []
-  const ignoredBasenames = new Set<string>()
-  const manifest: Array<CodexAttachmentDescriptor & { path: string }> = []
-  for (const [index, input] of codexImageInputs(payload).entries()) {
-    const imagePath = await writeAttachedImage(jobDirectory, `attachment-${String(index + 1).padStart(2, '0')}`, input.data_url)
-    attachedImages.push(imagePath)
-    ignoredBasenames.add(path.basename(imagePath))
-    manifest.push({ ...payload.attachment_descriptors![index], path: imagePath })
-  }
-  await fs.promises.writeFile(path.join(jobDirectory, 'attachments.json'), JSON.stringify(manifest, null, 2))
-
-  const requestedFileNames = buildRequestedOutputFileNames(requestedCount, payload.output_format)
-  const prompt = buildCodexPrompt(payload, requestedFileNames, manifest)
-  await fs.promises.writeFile(path.join(jobDirectory, 'request-prompt.txt'), `${prompt}\n`, 'utf8')
-
-  let runResult
+  // On success the caller removes the folder after saving its outputs; on any failure nothing in it is kept.
   try {
-    runResult = await runCodexExec(jobDirectory, prompt, attachedImages, payload.model, options)
+    const attachedImages: string[] = []
+    const ignoredBasenames = new Set<string>()
+    const manifest: Array<CodexAttachmentDescriptor & { path: string }> = []
+    for (const [index, input] of codexImageInputs(payload).entries()) {
+      const imagePath = await writeAttachedImage(jobDirectory, `attachment-${String(index + 1).padStart(2, '0')}`, input.data_url)
+      attachedImages.push(imagePath)
+      ignoredBasenames.add(path.basename(imagePath))
+      manifest.push({ ...payload.attachment_descriptors![index], path: imagePath })
+    }
+    await fs.promises.writeFile(path.join(jobDirectory, 'attachments.json'), JSON.stringify(manifest, null, 2))
+
+    const requestedFileNames = buildRequestedOutputFileNames(requestedCount, payload.output_format)
+    const prompt = buildCodexPrompt(payload, requestedFileNames, manifest)
+    await fs.promises.writeFile(path.join(jobDirectory, 'request-prompt.txt'), `${prompt}\n`, 'utf8')
+
+    const runResult = await runCodexExec(jobDirectory, prompt, attachedImages, payload.model, options)
+
+    const outputFiles = await discoverOutputFiles(jobDirectory, requestedFileNames, ignoredBasenames)
+
+    if (outputFiles.length === 0) {
+      throw new Error(['Codex finished without producing any output files', runResult.lastMessage ? `last message: ${runResult.lastMessage}` : null].filter(Boolean).join('\n'))
+    }
+    const strict = payload.preserve === 'strict'
+      ? await createCodexStrictPreservation(payload.image!, payload.mask!)
+      : undefined
+    const artifacts: CodexGeneratedArtifact[] = []
+    for (const [index, output] of outputFiles.slice(0, requestedCount).entries()) {
+      if (strict) {
+        const strictPath = path.join(jobDirectory, `strict-output-${index + 1}.png`)
+        await strict.composite(output.absolutePath, strictPath)
+        output.absolutePath = strictPath
+        output.mimeType = 'image/png'
+      }
+      const measured = await sharp(output.absolutePath).metadata()
+      artifacts.push({ ...output, width: measured.width, height: measured.height })
+    }
+
+    return {
+      jobDirectory,
+      outputFiles: artifacts,
+      attachmentDescriptors: payload.attachment_descriptors!,
+      verifySavedFile: strict?.verifySavedFile,
+      lastMessage: runResult.lastMessage,
+      stdoutPath: runResult.stdoutPath,
+      stderrPath: runResult.stderrPath,
+    }
   } catch (error) {
-    // 취소로 끝난 실행은 산출물이 없으므로 job 디렉터리를 남겨 둘 이유가 없다.
-    if (options?.signal?.aborted) {
-      await removeCodexJobDirectory(jobDirectory)
-    }
+    await removeCodexJobDirectory(jobDirectory)
     throw error
-  }
-
-  const outputFiles = await discoverOutputFiles(jobDirectory, requestedFileNames, ignoredBasenames)
-
-  if (outputFiles.length === 0) {
-    throw new Error(`Codex finished without producing any output files in ${jobDirectory}`)
-  }
-  const strict = payload.preserve === 'strict'
-    ? await createCodexStrictPreservation(payload.image!, payload.mask!)
-    : undefined
-  const artifacts: CodexGeneratedArtifact[] = []
-  for (const [index, output] of outputFiles.slice(0, requestedCount).entries()) {
-    if (strict) {
-      const strictPath = path.join(jobDirectory, `strict-output-${index + 1}.png`)
-      await strict.composite(output.absolutePath, strictPath)
-      output.absolutePath = strictPath
-      output.mimeType = 'image/png'
-    }
-    const measured = await sharp(output.absolutePath).metadata()
-    artifacts.push({ ...output, width: measured.width, height: measured.height })
-  }
-
-  return {
-    jobDirectory,
-    outputFiles: artifacts,
-    attachmentDescriptors: payload.attachment_descriptors!,
-    verifySavedFile: strict?.verifySavedFile,
-    lastMessage: runResult.lastMessage,
-    stdoutPath: runResult.stdoutPath,
-    stderrPath: runResult.stderrPath,
   }
 }

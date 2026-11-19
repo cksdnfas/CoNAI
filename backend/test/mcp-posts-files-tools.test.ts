@@ -333,6 +333,33 @@ test('mcp posts and file version tools', { timeout: 120000 }, async (t) => {
     } finally { stop(); await client.close(); await server.close() }
   })
 
+  await t.test('delegated file permissions work in the bound chat, and the same account elsewhere is still refused', async () => {
+    const { registerChatReply } = await import('../src/services/codex-chat/chatReplyRegistry')
+    const { WorkspaceService } = await import('../src/services/workspaceService')
+    const { requireFileStoreAction, requireFileStoreOwner } = await import('../src/services/fileStoreAccess')
+    const accountId = addAccount('delegated-files', ['chat.use'])
+    const project = await WorkspaceService.create(fileOwnerKey(adminId), 'Delegated project')
+    const delegated = ChatProfileStore.create({
+      name: 'Delegated files', engine: 'llm', providerName: 'conn', mcpEnabled: true, mcpScopes: ['read', 'organize'],
+      toolAllowlist: ['list_files', 'create_file_folder'], delegatedPermissions: ['files.view', 'files.edit'], workspaces: [{ id: project.id, write: false }],
+    })
+    const requester = { accountId, accountType: 'guest' as const }
+    const chat = { threadId: CodexChatStore.createThread(accountId, 'delegated files', 'llm', delegated.id), profileId: delegated.id, kind: 'direct' as const, replyId: 'delegated-files-reply' }
+    const stop = registerChatReply(chat, new AbortController().signal, () => ({ replyTo: null, recipients: ['user'] }))
+    const server = createMcpServer({ scopes: ['read', 'organize'], source: 'llm-chat', requester, chatContext: chat, toolCatalog: false })
+    const client = new Client({ name: 'delegated-files-test', version: '1' })
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
+    try {
+      await Promise.all([server.connect(serverTransport), client.connect(clientTransport)])
+      ok(await call(client, 'list_files', {}))
+      ok(await call(client, 'create_file_folder', { name: 'delegated-folder' }))
+      ok(await call(client, 'workspace_list', {}))
+    } finally { stop(); await client.close(); await server.close() }
+    assert.throws(() => requireFileStoreOwner(requester), { status: 403 })
+    assert.throws(() => requireFileStoreAction(requester, 'organize'), { status: 403 })
+    assert.ok(!(await names(await connect(requester))).includes('list_files'), 'an MCP key of the account gets no delegated file tools')
+  })
+
   await t.test('library imports validate bytes before creating groups or copying unsupported stored files', async () => {
     const folder = ok(await call(admin, 'create_file_folder', { name: 'import-validation' }))
     const fake = ok(await call(admin, 'write_binary_file', { name: 'disguised.png', parent_id: folder.id, data_url: `data:application/octet-stream;base64,${Buffer.from('not an image').toString('base64')}` }))

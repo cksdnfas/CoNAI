@@ -21,7 +21,8 @@ export function withLlmUsageContext<T>(context: UsageContext, run: () => T): T {
   return usageContext.run({ ...(previous?.threadId === context.threadId ? previous : {}), ...context }, run)
 }
 
-export type LlmTokenCounts = { inputTokens: number; cachedInputTokens: number; outputTokens: number }
+/** `inputTokens` is the whole prompt: cache reads (`cachedInputTokens`) and writes (`cacheWriteInputTokens`, when reported) included. */
+export type LlmTokenCounts = { inputTokens: number; cachedInputTokens: number; cacheWriteInputTokens?: number; outputTokens: number }
 
 export type LlmUsageEvent = LlmUsageTag & {
   engine: LlmUsageEngine
@@ -47,9 +48,9 @@ function count(value: unknown) {
 }
 
 /**
- * Token counts from a response's `usage`: OpenAI style (`prompt_tokens`, `completion_tokens`, cached prompt tokens under
- * `prompt_tokens_details`), Anthropic style (`input_tokens` plus cache reads and writes) or Ollama's top-level counts.
- * Null when the body reports nothing.
+ * Token counts from a response's `usage`: OpenAI style (`prompt_tokens`, `completion_tokens`, cache reads and writes
+ * under `prompt_tokens_details` or, from LiteLLM, beside them), Anthropic style (`input_tokens` plus cache reads and
+ * writes) or Ollama's top-level counts. Null when the body reports nothing.
  */
 export function readUsageCounts(json: unknown): LlmTokenCounts | null {
   const body = json as Record<string, unknown> | null
@@ -58,15 +59,18 @@ export function readUsageCounts(json: unknown): LlmTokenCounts | null {
   if (usage && typeof usage === 'object') {
     if (typeof usage.prompt_tokens === 'number' || typeof usage.completion_tokens === 'number') {
       const details = usage.prompt_tokens_details as Record<string, unknown> | undefined
+      const written = count(details?.cache_write_tokens ?? usage.cache_creation_input_tokens)
       return {
         inputTokens: count(usage.prompt_tokens),
         cachedInputTokens: count(details?.cached_tokens ?? usage.cache_read_input_tokens),
+        ...(written ? { cacheWriteInputTokens: written } : {}),
         outputTokens: count(usage.completion_tokens),
       }
     }
     if (typeof usage.input_tokens === 'number' || typeof usage.output_tokens === 'number') {
       const cached = count(usage.cache_read_input_tokens)
-      return { inputTokens: count(usage.input_tokens) + count(usage.cache_creation_input_tokens) + cached, cachedInputTokens: cached, outputTokens: count(usage.output_tokens) }
+      const written = count(usage.cache_creation_input_tokens)
+      return { inputTokens: count(usage.input_tokens) + written + cached, cachedInputTokens: cached, ...(written ? { cacheWriteInputTokens: written } : {}), outputTokens: count(usage.output_tokens) }
     }
   }
   if (typeof body.prompt_eval_count === 'number' || typeof body.eval_count === 'number') {
@@ -109,11 +113,11 @@ export function recordLlmUsage(event: LlmUsageEvent) {
     const bound = { ...(event.threadId != null && context?.threadId !== event.threadId ? {} : context), ...event }
     db.transaction(() => {
       db.prepare(`
-        INSERT INTO llm_usage_events (purpose, engine, provider_name, model, profile_id, thread_id, input_tokens, cached_input_tokens, output_tokens, estimated, latency_ms, ok, reply_id, task_id, round, queue_ms, first_token_ms)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO llm_usage_events (purpose, engine, provider_name, model, profile_id, thread_id, input_tokens, cached_input_tokens, cache_write_input_tokens, output_tokens, estimated, latency_ms, ok, reply_id, task_id, round, queue_ms, first_token_ms)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         bound.purpose, bound.engine, bound.providerName, bound.model, bound.profileId ?? null, bound.threadId ?? null,
-        count(bound.tokens?.inputTokens), count(bound.tokens?.cachedInputTokens), count(bound.tokens?.outputTokens),
+        count(bound.tokens?.inputTokens), count(bound.tokens?.cachedInputTokens), count(bound.tokens?.cacheWriteInputTokens), count(bound.tokens?.outputTokens),
         bound.estimated ? 1 : 0, count(bound.latencyMs), bound.ok ? 1 : 0,
         bound.replyId ?? null, bound.taskId ?? null, bound.round ?? null, bound.queueMs == null ? null : count(bound.queueMs), bound.firstTokenMs == null ? null : count(bound.firstTokenMs),
       )
@@ -134,7 +138,7 @@ export function recordLlmUsage(event: LlmUsageEvent) {
   }
 }
 
-type Totals = { requests: number; failed: number; inputTokens: number; cachedInputTokens: number; outputTokens: number; estimatedRequests: number; averageLatencyMs: number | null; averageQueueMs: number | null; averageFirstTokenMs: number | null }
+type Totals = { requests: number; failed: number; inputTokens: number; cachedInputTokens: number; cacheWriteInputTokens: number; outputTokens: number; estimatedRequests: number; averageLatencyMs: number | null; averageQueueMs: number | null; averageFirstTokenMs: number | null }
 
 export type LlmUsageSummary = {
   days: number
@@ -147,14 +151,14 @@ export type LlmUsageSummary = {
 }
 
 const TOTAL_COLUMNS = `COUNT(*) AS requests, SUM(1 - ok) AS failed, SUM(input_tokens) AS inputTokens, SUM(cached_input_tokens) AS cachedInputTokens,
-  SUM(output_tokens) AS outputTokens, SUM(estimated) AS estimatedRequests, AVG(CASE WHEN latency_ms > 0 THEN latency_ms END) AS averageLatencyMs,
+  SUM(cache_write_input_tokens) AS cacheWriteInputTokens, SUM(output_tokens) AS outputTokens, SUM(estimated) AS estimatedRequests, AVG(CASE WHEN latency_ms > 0 THEN latency_ms END) AS averageLatencyMs,
   AVG(queue_ms) AS averageQueueMs, AVG(first_token_ms) AS averageFirstTokenMs`
 
 function totalsOf(row: Record<string, unknown> | undefined): Totals {
   const average = row?.averageLatencyMs
   return {
     requests: count(row?.requests), failed: count(row?.failed), inputTokens: count(row?.inputTokens), cachedInputTokens: count(row?.cachedInputTokens),
-    outputTokens: count(row?.outputTokens), estimatedRequests: count(row?.estimatedRequests), averageLatencyMs: typeof average === 'number' ? Math.round(average) : null,
+    cacheWriteInputTokens: count(row?.cacheWriteInputTokens), outputTokens: count(row?.outputTokens), estimatedRequests: count(row?.estimatedRequests), averageLatencyMs: typeof average === 'number' ? Math.round(average) : null,
     averageQueueMs: typeof row?.averageQueueMs === 'number' ? Math.round(row.averageQueueMs) : null,
     averageFirstTokenMs: typeof row?.averageFirstTokenMs === 'number' ? Math.round(row.averageFirstTokenMs) : null,
   }

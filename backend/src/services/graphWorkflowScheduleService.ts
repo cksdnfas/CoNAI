@@ -67,6 +67,19 @@ export class GraphWorkflowScheduleService {
     return initialRunAt(params, params.now ?? new Date())
   }
 
+  /**
+   * The last-execution link a schedule keeps when it is switched back on. Switching it on acknowledges a failed last
+   * run, so the link is cleared (null) and the next due time runs instead of stopping on that failure again; a run
+   * still in progress stays linked (undefined keeps it), so a failure after the resume still stops the schedule.
+   */
+  static lastExecutionIdOnResume(schedule: GraphWorkflowScheduleRecord) {
+    if (!schedule.last_execution_id) {
+      return undefined
+    }
+
+    return GraphExecutionModel.findById(schedule.last_execution_id)?.status === 'failed' ? null : undefined
+  }
+
   /** Start the schedule polling loop once per process. */
   static start() {
     if (this.pollTimer) {
@@ -158,7 +171,12 @@ export class GraphWorkflowScheduleService {
       const now = new Date()
       const dueSchedules = GraphWorkflowScheduleModel.findDueSchedules(now.toISOString())
       for (const schedule of dueSchedules) {
-        await this.handleDueSchedule(schedule, now)
+        // One schedule that throws must not hold back the others due in this tick.
+        try {
+          await this.handleDueSchedule(schedule, now)
+        } catch (error) {
+          console.error(`Graph workflow schedule ${schedule.id} failed:`, error)
+        }
       }
     } catch (error) {
       console.error('Graph workflow schedule polling failed:', error)

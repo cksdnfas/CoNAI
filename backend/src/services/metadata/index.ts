@@ -17,15 +17,18 @@ import { logger } from '../../utils/logger';
 export class MetadataExtractor {
   /**
    * Extract raw parser input plus parsed metadata for metadata-preserving conversions.
+   * `preloaded` supplies the bytes of an in-memory source; `filePath` then only names its format.
    */
-  static async extractPreservableData(filePath: string): Promise<{
+  static async extractPreservableData(filePath: string, preloaded?: Buffer): Promise<{
     metadata: ImageMetadata;
     rawData: Record<string, any>;
   }> {
-    await assertFileReadable(filePath);
+    if (!preloaded) {
+      await assertFileReadable(filePath);
+    }
 
     const fileExt = path.extname(filePath).toLowerCase();
-    const buffer = await fs.promises.readFile(filePath);
+    const buffer = preloaded ?? await fs.promises.readFile(filePath);
     const rawData = await this.extractRawData(buffer, filePath, fileExt);
     const metadata = await this.extractMetadata(filePath, buffer, rawData);
 

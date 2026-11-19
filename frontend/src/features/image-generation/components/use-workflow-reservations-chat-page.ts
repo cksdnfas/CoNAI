@@ -134,7 +134,7 @@ export function useWorkflowReservationsChatPage({ enabled, view, automationPause
     }), 'save')] : []),
     ...(scheduleTarget ? [
       pageAction('workflow.schedule_pause', t({ ko: '자동 실행 일시정지', en: 'Pause autorun' }), '', scheduleTarget, 'save'),
-      pageAction('workflow.schedule_resume', t({ ko: '자동 실행 다시 켜기', en: 'Resume autorun' }), '', scheduleTarget, 'save'),
+      pageAction('workflow.schedule_resume', t({ ko: '자동 실행 다시 켜기', en: 'Resume autorun' }), t({ ko: '실행 계정 본인이나 관리자만.', en: 'Run-as account or an administrator only.' }), scheduleTarget, 'save'),
       pageAction('workflow.schedule_run_now', t({ ko: '자동 실행 바로 실행', en: 'Run autorun now' }), t({ ko: '실행 계정 본인이나 관리자만.', en: 'Run-as account or an administrator only.' }), scheduleTarget, 'save'),
       pageAction('workflow.schedule_delete', t({ ko: '자동 실행 삭제', en: 'Delete autorun' }), '', scheduleTarget, 'save'),
     ] : []),

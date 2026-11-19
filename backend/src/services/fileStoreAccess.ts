@@ -1,9 +1,8 @@
 import { AuthAccount } from '../models/AuthAccount';
 import { hasConfiguredAuth } from './auth/sessionAccess';
-import { AuthAccessControlService } from './authAccessControlService';
 import { FileStoreError, fileOwnerKey } from './fileStoreService';
 import type { McpRequester } from '../mcp/context';
-import { isRequesterAdmin } from '../middleware/featureAccess';
+import { isRequesterAdmin, requesterPermissionKeys } from '../middleware/featureAccess';
 
 export type FileStoreAction = 'upload' | 'organize' | 'delete';
 
@@ -20,7 +19,8 @@ const ACTION_DENIED: Record<FileStoreAction, string> = {
 };
 
 /** Validate shared-file access and return the actor key for history and private chat bindings.
- * An unbound external key never means the local bootstrap actor. */
+ * An unbound external key never means the local bootstrap actor. The account's keys decide, plus the delegated keys
+ * only a server-bound chat requester carries (chatProfileRequester); any other requester gets none. */
 export function requireFileStoreOwner(requester: McpRequester | undefined): string {
   if (!requester) throw new FileStoreError('파일 접근에는 사용자 계정이 연결된 요청이 필요해.', 403);
   const id = requester.accountId;
@@ -28,7 +28,7 @@ export function requireFileStoreOwner(requester: McpRequester | undefined): stri
     if (hasConfiguredAuth()) throw new FileStoreError('로그인이 필요해.', 401);
     return fileOwnerKey(null);
   }
-  if (AuthAccount.findById(id)?.status !== 'active' || !AuthAccessControlService.hasPermission(id, 'files.view')) {
+  if (AuthAccount.findById(id)?.status !== 'active' || !requesterPermissionKeys(requester).includes('files.view')) {
     throw new FileStoreError('파일 보관함 접근 권한이 없어.', 403);
   }
   return fileOwnerKey(id);
@@ -37,8 +37,7 @@ export function requireFileStoreOwner(requester: McpRequester | undefined): stri
 /** Authorize a shared-file change; edit permission does not imply delete permission. */
 export function requireFileStoreAction(requester: McpRequester | undefined, action: FileStoreAction): string {
   const owner = requireFileStoreOwner(requester);
-  const id = requester?.accountId ?? null;
-  if (id !== null && !AuthAccessControlService.hasPermission(id, FILE_STORE_ACTION_PERMISSIONS[action])) {
+  if (requester && requester.accountId !== null && !requesterPermissionKeys(requester).includes(FILE_STORE_ACTION_PERMISSIONS[action])) {
     throw new FileStoreError(ACTION_DENIED[action], 403);
   }
   return owner;

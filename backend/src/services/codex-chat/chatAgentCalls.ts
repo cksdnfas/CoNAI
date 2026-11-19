@@ -4,6 +4,7 @@ import type { ChatAgentCallStatus, ChatAgentOnDone, ChatExecutionContext } from 
 import { getUserSettingsDb } from '../../database/userSettingsDb'
 import type { McpRequester } from '../../mcp/context'
 import { resolveAutomationRunAs } from '../automationRunAs'
+import { AutomationSwitch } from '../automationSwitch'
 import { FileStoreService, chatAttachmentOwner, fileOwnerKey } from '../fileStoreService'
 import { canUseChatProfile, resolveChatAccess, resolveChatProfileToolGrant } from './codexChatAccess'
 import { BoardCallRooms } from '../posts/boardCallRooms'
@@ -13,7 +14,7 @@ import { CodexChatStore } from './codexChatStore'
 import { onChatReplyFinished, requireActiveChatReply } from './chatReplyRegistry'
 import { translateReply } from './chatTranslation'
 import { userPersonaForThread } from './chatUserProfiles'
-import { ChatWakeBusyError, ensureAutomationRoom, forgetAutomationRoom, isAgentRoom, wakeChatRoom } from './chatRoomWake'
+import { ChatWakeBusyError, ensureAutomationRoom, forgetAutomationRoom, isAgentRoom, wakeChatRoom, wakeFailure } from './chatRoomWake'
 import { automationResults } from './chatAutomationResults'
 import { backupFileName } from './chatBackup'
 import { hasPrivateAttachmentContext, markPrivateAttachmentContext } from './chatAttachmentPrivacy'
@@ -63,6 +64,8 @@ const reacting = new Map<number, AbortController>()
 let timer: NodeJS.Timeout | null = null
 let stopReplyListener: (() => void) | null = null
 const processing = new Map<number, { promise: Promise<void>; controller: AbortController }>()
+/** How often a call admitted while automation is paused looks at the switch again (as often as routines poll). */
+const PAUSED_RECHECK_MS = 15_000
 function find(id: number) { return table().prepare('SELECT * FROM chat_agent_calls WHERE id = ?').get(id) as AgentCall | undefined }
 function warn(id: number, error: unknown) { console.warn(`[chat-agent] ${id}:`, error instanceof Error ? error.message : error) }
 
@@ -126,7 +129,7 @@ export function callChatAgent(requester: McpRequester, chat: ChatExecutionContex
   const controller = new AbortController()
   running.set(id, controller)
   setImmediate(() => { void execute(id, requester, chat, input.mediaHashes, fileIds, controller).catch(error => warn(id, error)) })
-  return { callId: id, status: 'running' as const }
+  return { callId: id, status: 'running' as const, ...(AutomationSwitch.isPaused() ? { note: 'Automation is paused: the agent starts once it is switched back on.' } : {}) }
 }
 
 function repliesOf(call: AgentCall) {
@@ -200,6 +203,8 @@ async function execute(id: number, requester: McpRequester, chat: ChatExecutionC
   const signal = controller.signal
   try {
     signal.throwIfAborted()
+    // The stop-everything switch: like a due routine, an admitted call waits until it is off again.
+    while (AutomationSwitch.isPaused()) await delay(PAUSED_RECHECK_MS, undefined, { signal })
     const call = find(id)!
     requireAgent(requester, chat, call.agent_profile_id)
     const room = await ensureAutomationRoom(requester, call.agent_profile_id, roomKey(id), `${call.agent_name} · 에이전트 #${id}`)
@@ -211,9 +216,8 @@ async function execute(id: number, requester: McpRequester, chat: ChatExecutionC
     const result = await wakeChatRoom({ requester, threadId: room.id, instruction: call.instruction,
       routing: { source: 'agent', id, name: call.caller_name }, mediaHashes, fileIds, signal })
     signal.throwIfAborted()
-    if (!result.replies.length || result.replies.some(reply => reply.status !== 'completed')) {
-      throw new Error(result.replies.find(reply => reply.error)?.error ?? '에이전트가 작업을 완료하지 못했어.')
-    }
+    const failure = wakeFailure(result, '에이전트가 작업을 완료하지 못했어.')
+    if (failure !== null) throw new Error(failure)
     // An after-preset still has to enqueue its job before we can transfer its durable references.
     while (table().prepare("SELECT 1 FROM chat_deferred_generations WHERE thread_id = ? AND state IN ('pending','writing') LIMIT 1").get(room.id)) {
       await delay(1000, undefined, { signal })
@@ -248,6 +252,8 @@ export function cancelAgentCallsForThread(threadId: number) {
 
 async function react(call: AgentCall, now = Date.now()) {
   if (call.on_done !== 'react' || call.reaction_state !== 'pending' || call.result_message_id === null || reacting.has(call.id)) return
+  // The stop-everything switch: the wake stays pending and the sweep delivers it once the switch is off.
+  if (AutomationSwitch.isPaused()) return
   const db = table()
   // Check terminal queue state rather than thumbnail placeholders (a partially completed batch may have both).
   const result = CodexChatStore.findMessage(call.caller_thread_id, call.result_message_id)
@@ -278,9 +284,18 @@ async function react(call: AgentCall, now = Date.now()) {
   } finally { reacting.delete(call.id) }
 }
 
+/** Generation jobs the agent queued still run under its room and this call's binding (see requireQueuedChatGenerationAccess). */
+function hasUnfinishedJobs(call: AgentCall) {
+  return Boolean(table().prepare(`SELECT 1 FROM chat_generation_links l JOIN generation_queue_jobs j ON j.id = l.job_id
+    WHERE ((l.thread_id = ? AND l.reply_id = ?) OR l.thread_id = ?) AND j.status NOT IN ('completed','failed','cancelled') LIMIT 1`)
+    .get(call.caller_thread_id, `agent-result:${call.id}`, call.agent_thread_id))
+}
+
 async function cleanup(call: AgentCall) {
   const accountId = accountIdOf(call)
   if (!call.publish_failed && (call.status === 'completed' || call.status === 'failed') && call.result_message_id === null && CodexChatStore.findThread(call.caller_thread_id, accountId)) return
+  // The sweep comes back for the room and the record once those jobs are finished.
+  if (hasUnfinishedJobs(call)) return
   if (call.status === 'failed' && !call.log_file_id && !call.private_attachments) {
     const owner = fileOwnerKey(accountId)
     const root = FileStoreService.ensureFolder(owner, null, '에이전트 작업 기록')
@@ -305,7 +320,7 @@ async function cleanup(call: AgentCall) {
     await CodexChatService.deleteThread({ accountId, accountType: null }, call.agent_thread_id)
   }
   forgetAutomationRoom(accountId, roomKey(call.id))
-  // Queue jobs can outlive the room's one-hour TTL. Keep only the call's pending reaction until they settle;
+  // A reaction not delivered yet (a busy room, the paused switch) keeps only the call's record;
   // its durable job links and result already live in the caller room.
   if (call.on_done === 'react' && call.reaction_state !== 'done') {
     table().prepare('UPDATE chat_agent_calls SET agent_thread_id = NULL WHERE id = ?').run(call.id)

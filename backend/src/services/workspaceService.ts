@@ -3,7 +3,7 @@ import path from 'path'
 import os from 'os'
 import { createHash, randomBytes } from 'crypto'
 import type Database from 'better-sqlite3'
-import { MAX_WORKSPACE_LINKS, type WorkspaceProject, type WorkspaceEntry, type WorkspaceText, type WorkspaceOperation, type WorkspaceBinding, type WorkspaceBatchResult, type WorkspaceChatMode } from '@conai/shared'
+import { MAX_WORKSPACE_LINKS, type FileStoreSortDirection, type FileStoreSortKey, type WorkspaceProject, type WorkspaceEntry, type WorkspaceText, type WorkspaceOperation, type WorkspaceBinding, type WorkspaceBatchResult, type WorkspaceChatMode } from '@conai/shared'
 import { getUserSettingsDb } from '../database/userSettingsDb'
 import { runtimePaths } from '../config/runtimePaths'
 import { applyTextEdits, TEXT_EXTENSIONS } from './fileStoreService'
@@ -262,12 +262,18 @@ export const WorkspaceService = {
     } else db().prepare('DELETE FROM workspace_bindings WHERE thread_id=? AND project_id=?').run(threadId, projectId)
     return this.resolve(owner, threadId)
   },
-  /** `revisions`: files carry their revision (the screen's move and delete check against what the person saw). */
-  async entries(owner: string, projectId: string, target = '', offset = 0, options: { revisions?: boolean } = {}) {
+  /**
+   * `revisions`: files carry their revision (the screen's move and delete check against what the person saw).
+   * `sort`/`direction`: folders first, then name (default, ascending) or size with the name breaking ties. The index
+   * keeps no modification time, so there is no `modified` order here.
+   */
+  async entries(owner: string, projectId: string, target = '', offset = 0, options: { revisions?: boolean; sort?: Exclude<FileStoreSortKey, 'modified'>; direction?: FileStoreSortDirection } = {}) {
     requireProject(owner, projectId)
     const folder = await resolved(owner, projectId, target)
     if (!(await fs.promises.stat(folder)).isDirectory()) throw new WorkspaceError('목록 대상은 폴더여야 해.')
-    const page = () => db().prepare('SELECT id,target,kind,size FROM workspace_entries WHERE project_id=? AND parent=? ORDER BY kind DESC,target LIMIT 101 OFFSET ?')
+    const dir = options.direction === 'desc' ? 'DESC' : 'ASC'
+    const order = options.sort === 'size' ? `size ${dir},target` : `target ${dir}`
+    const page = () => db().prepare(`SELECT id,target,kind,size FROM workspace_entries WHERE project_id=? AND parent=? ORDER BY kind DESC,${order} LIMIT 101 OFFSET ?`)
       .all(projectId, workspaceTarget(target, true), offset) as WorkspaceEntry[]
     // Rows whose file the disk lost (a half-finished delete or move) drop out of the index when their folder is shown.
     const check = async (entries: WorkspaceEntry[]) => {

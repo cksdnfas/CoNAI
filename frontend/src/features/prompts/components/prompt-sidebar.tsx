@@ -1,4 +1,5 @@
 import { BarChart3, ChevronDown, ChevronUp, Download, Ellipsis, Inbox, Layers, Pencil, Plus, Tags, Trash2, Upload, Wrench } from 'lucide-react'
+import { hierarchyReservesToggleColumn } from '@/components/common/hierarchy-nav'
 import { ActionMenuButton } from '@/components/ui/action-menu'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -50,6 +51,12 @@ export function PromptSidebar({
 }: PromptSidebarProps) {
   const { t, formatNumber } = useI18n()
   const moreLabel = t({ ko: '그룹 도구', en: 'Group tools' })
+  // Same rows PromptTree shows, so the "All" row lines up with a tree that reserves the chevron column.
+  const treeReservesToggle = hierarchyReservesToggleColumn(
+    groups.filter((group) => group.id === 0 || Boolean(group.is_visible)),
+    (group) => group.id,
+    (group) => group.parent_id,
+  )
 
   return (
     <SidebarNav>
@@ -103,6 +110,7 @@ export function PromptSidebar({
         label={t({ ko: '전체', en: 'All' })}
         count={formatNumber(totalCount)}
         active={selectedGroupId == null}
+        depth={treeReservesToggle ? 1 : 0}
         onClick={() => onSelectGroup(undefined)}
       />
 

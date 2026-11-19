@@ -108,6 +108,10 @@ export function useProfileEditorChatPage({ open, profile, draft, setDraft, dirty
   const { t } = useI18n()
   const draftRef = useRef(draft)
   draftRef.current = draft
+  // The page revision must change whenever the draft is replaced (an undo back to earlier content included) and only then;
+  // a counter on the draft's identity says that without serializing a draft that can hold inline images on every render.
+  const [draftVersion, setDraftVersion] = useState({ draft, count: 0 })
+  if (draftVersion.draft !== draft) setDraftVersion({ draft, count: draftVersion.count + 1 })
   // While synced (and loaded) the look read and filled here is the linked setting's draft.
   const look = link.synced && link.setting.ready ? link.setting.draft : draft
   // A synced setting's text is its sections plus default outfit.
@@ -203,7 +207,7 @@ export function useProfileEditorChatPage({ open, profile, draft, setDraft, dirty
     kind: 'settings',
     title: profile ? t({ ko: '프로필 편집 · {name}', en: 'Edit profile · {name}' }, { name: profile.name }) : t({ ko: '프로필 추가', en: 'Add profile' }),
     resourceId: profile ? `profile:${profile.id}` : 'profile:new',
-    localRevision: JSON.stringify([draft, profile?.revision]),
+    localRevision: `${draftVersion.count}:${profile?.revision}`,
     priority: 10,
     dirty,
     fields: [],

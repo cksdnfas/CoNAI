@@ -1,4 +1,4 @@
-import type { FileStoreListing, FileWriteSource, StoredFileEntry, StoredFileRevision, StoredFileSearchResult, StoredFileText } from '@conai/shared'
+import type { FileStoreListOrder, FileStoreListing, FileWriteSource, StoredFileEntry, StoredFileRevision, StoredFileSearchResult, StoredFileText } from '@conai/shared'
 import { requestApiData } from './api-request'
 import { buildApiUrl } from './api-url'
 import { UPLOAD_LIMITS } from './upload-limits'
@@ -9,13 +9,17 @@ export const storedFileRevisionsQueryKey = (accountKey: string | number, fileId:
   [...FILES_QUERY_KEY, accountKey, 'revisions', fileId, updatedAt] as const
 const headers = { 'Content-Type': 'application/json' }
 
-export const listStoredFiles = (parentId: string | null, offset = 0, signal?: AbortSignal) => requestApiData<FileStoreListing>(`/api/files?parentId=${parentId ?? ''}&offset=${offset}`, { signal })
+/** `&sort=&direction=` of a listing order; empty for the default (name, ascending). */
+export const listOrderQuery = ({ sort, direction }: FileStoreListOrder) => `${sort ? `&sort=${sort}` : ''}${direction ? `&direction=${direction}` : ''}`
+/** One page of a folder, folders first; `order` defaults to name, ascending. */
+export const listStoredFiles = (parentId: string | null, offset = 0, signal?: AbortSignal, order: FileStoreListOrder = {}) => requestApiData<FileStoreListing>(`/api/files?parentId=${parentId ?? ''}&offset=${offset}${listOrderQuery(order)}`, { signal })
 /** Files and folders whose name or text contains every word of `query` (a "quoted phrase" is one term). */
 export const searchStoredFiles = (query: string, signal?: AbortSignal) => requestApiData<StoredFileSearchResult>(`/api/files/search?q=${encodeURIComponent(query)}`, { signal })
 export const listStoredFolders = (signal?: AbortSignal) => requestApiData<StoredFileEntry[]>(`/api/files/folders`, { signal })
 export const storedFileDownloadUrl = (id: string) => buildApiUrl(`/api/files/${encodeURIComponent(id)}/download`)
 export const storedFileViewUrl = (id: string) => buildApiUrl(`/api/files/${encodeURIComponent(id)}/view`)
-export const getStoredFileNeighbors = (id: string) => requestApiData<{ previous: StoredFileEntry | null; next: StoredFileEntry | null }>(`/api/files/${encodeURIComponent(id)}/neighbors`)
+/** The files before and after `id` in its folder listed in `order` (pass the listing's order; default name, ascending). */
+export const getStoredFileNeighbors = (id: string, order: FileStoreListOrder = {}) => requestApiData<{ previous: StoredFileEntry | null; next: StoredFileEntry | null }>(`/api/files/${encodeURIComponent(id)}/neighbors${listOrderQuery(order).replace('&', '?')}`)
 /** Small WebP preview of image and video files. */
 export const storedFileThumbnailUrl = (id: string) => buildApiUrl(`/api/files/${encodeURIComponent(id)}/thumbnail`)
 export const readStoredFileText = (id: string, offset = 0, revision?: string, signal?: AbortSignal) => requestApiData<StoredFileText>(`/api/files/${encodeURIComponent(id)}/text?offset=${offset}${revision ? `&revision=${encodeURIComponent(revision)}` : ''}`, { signal })
@@ -63,8 +67,14 @@ export function isRestrictedFileName(name: string) {
   return !extension || !DEFAULT_UPLOAD_EXTENSIONS.has(extension)
 }
 
-export async function uploadStoredFiles(parentId: string | null, files: File[], options: { allowAnyType?: boolean; chatThreadId?: number } = {}) {
+/**
+ * `relativePaths` (a folder upload): one `a/b/name.ext` per file, in the same order, relative to `parentId` (what
+ * `File.webkitRelativePath` holds); the server creates the missing folders. Larger trees go in 20-file batches.
+ */
+export async function uploadStoredFiles(parentId: string | null, files: File[], options: { allowAnyType?: boolean; chatThreadId?: number; relativePaths?: string[] } = {}) {
   if (files.length === 0 || files.length > UPLOAD_LIMITS.maxFilesPerRequest) throw new Error('한 번에 1~20개 파일을 업로드할 수 있어. / Upload 1–20 files at a time.')
+  if (options.relativePaths && options.relativePaths.length !== files.length) throw new Error('파일마다 경로가 하나씩 필요해. / Each file needs one relative path.')
+  if (options.relativePaths && options.chatThreadId !== undefined) throw new Error('채팅 첨부로는 폴더를 올릴 수 없어. / Folders cannot be chat attachments.')
   if (files.some((file) => file.size > UPLOAD_LIMITS.maxFileBytes) || files.reduce((sum, file) => sum + file.size, 0) > UPLOAD_LIMITS.maxRequestBytes) {
     throw new Error('파일당 500MB, 한 번에 총 1GB까지 가능해. / Limit: 500 MB per file, 1 GB total.')
   }
@@ -72,6 +82,7 @@ export async function uploadStoredFiles(parentId: string | null, files: File[], 
   const restricted = options.allowAnyType === false ? files.find((file) => isRestrictedFileName(file.name)) : null
   if (restricted) throw new Error(`이 형식은 올릴 수 없어: ${restricted.name}. 텍스트·이미지·영상·오디오·문서만 가능해. / Restricted file type: ${restricted.name}.`)
   const body = new FormData()
+  if (options.relativePaths) body.append('paths', JSON.stringify(options.relativePaths))
   for (const file of files) body.append('files', file)
   return requestApiData<StoredFileEntry[]>(options.chatThreadId !== undefined ? `/api/codex-chat/attachments/upload?threadId=${options.chatThreadId}` : `/api/files/upload?parentId=${parentId ?? ''}`, { method: 'POST', body })
 }

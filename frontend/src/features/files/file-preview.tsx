@@ -1,7 +1,7 @@
 import { lazy, Suspense, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Code, Download, File, History, SquarePen, WrapText } from 'lucide-react'
-import type { StoredFileEntry } from '@conai/shared'
+import type { FileStoreListOrder, StoredFileEntry } from '@conai/shared'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
 import { IconButton } from '@/components/ui/icon-button'
@@ -44,7 +44,7 @@ function tableRows(text: string, delimiter: string, complete: boolean) {
  * `onEdit`: offered
  * for text files small enough for the editor. Text files also show their earlier versions; `history` opens on them.
  */
-export function FilePreview({ entry, onClose, onNavigate, onEdit, history: openHistory = false }: { entry: StoredFileEntry; onClose: () => void; onNavigate: (entry: StoredFileEntry) => void; onEdit?: (entry: StoredFileEntry) => void; history?: boolean }) {
+export function FilePreview({ entry, onClose, onNavigate, onEdit, history: openHistory = false, order }: { entry: StoredFileEntry; onClose: () => void; onNavigate: (entry: StoredFileEntry) => void; onEdit?: (entry: StoredFileEntry) => void; history?: boolean; /** The list's order, so previous / next follow it. */ order?: FileStoreListOrder }) {
   const { t } = useI18n()
   const auth = useAuthStatusQuery()
   const { canViewImages } = useImagePermissions()
@@ -53,7 +53,7 @@ export function FilePreview({ entry, onClose, onNavigate, onEdit, history: openH
   const versioned = TEXT_FILE_PATTERN.test(entry.name) && entry.size <= MAX_TEXT_DOCUMENT_BYTES
   const canWrite = auth.data?.permissionKeys?.includes('files.edit') === true
   const accountKey = `${auth.data?.accountId ?? (auth.data?.hasCredentials ? 'anonymous' : 'bootstrap')}`
-  const neighbors = useQuery({ queryKey: [...FILES_QUERY_KEY, accountKey, 'neighbors', entry.id], queryFn: () => getStoredFileNeighbors(entry.id) })
+  const neighbors = useQuery({ queryKey: [...FILES_QUERY_KEY, accountKey, 'neighbors', entry.id, order?.sort, order?.direction], queryFn: () => getStoredFileNeighbors(entry.id, order) })
   return <Modal open title={entry.name} onClose={onClose} size="xl" sidePanelInset="var(--chat-dock-width, 0px)" headerContent={<div className="flex items-center gap-1">
     <FilePreviewNavigation previous={neighbors.data?.previous} next={neighbors.data?.next} onNavigate={onNavigate} />
     <span className="flex-1 text-xs text-muted-foreground">{formatFileSize(entry.size)}</span>

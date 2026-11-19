@@ -22,6 +22,17 @@ export interface FileStoreListing {
   limit: number;
 }
 
+/**
+ * Order of a folder listing (`GET /api/files?sort=&direction=`). Folders always come first; the name and then the ID
+ * settle ties, so offset pages stay stable. Default `name`, `asc`. `modified` is `updatedAt`.
+ */
+export type FileStoreSortKey = 'name' | 'modified' | 'size';
+export type FileStoreSortDirection = 'asc' | 'desc';
+export interface FileStoreListOrder {
+  sort?: FileStoreSortKey;
+  direction?: FileStoreSortDirection;
+}
+
 export interface StoredFileText {
   text: string;
   offset: number;

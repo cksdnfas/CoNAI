@@ -20,7 +20,8 @@ import { splitTurns } from './llmChatContext'
  *
  * Who writes them: a chat profile linked as the writer (another one or the chat's own; its model, and its prompt as
  * extra direction) or a user profile (its model and description), else the profile's suggest role (slot, connection,
- * or the chat's own connection). A Codex profile with none of these asks its own Codex model in a one-shot run.
+ * or the chat's own connection). A Codex profile with none of these, or a Codex writer, resolves to a one-shot Codex
+ * run, which suggestReplies refuses; readiness checks count such a writer as unable to answer.
  */
 
 export const SUGGESTION_COUNT = 3
@@ -109,9 +110,8 @@ export function canSuggest(profile: ChatProfile, accountId?: number | null) {
   }
 }
 
-/** Whether a chat profile could write suggestions: Codex, or an API model whose connection can be used. */
+/** Whether a chat profile could write suggestions: a chat model whose connection can be used (Codex has none). */
 export function profileWriterReady(profile: ChatProfile) {
-  if (profile.engine === 'codex') return true
   const resolved = resolveProfileModel(profile, 'chat')
   return resolved !== null && isChatTargetReady(resolved.providerName, resolved.model)
 }

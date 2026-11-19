@@ -72,6 +72,8 @@ const registry = new Map<RuntimeJobKind, RegisteredHandler>()
 
 let maintenanceHandle: ReturnType<typeof setInterval> | null = null
 let isBootstrapped = false
+/** Set by shutdown(): the database may already be closed, and the next start's recovery closes what is left open. */
+let isShutDown = false
 
 /** 잡 상태 전이를 SSE 채널에 얹는 경량 힌트. 진행률 수치는 절대 싣지 않는다. */
 function emitJobHint(job: RuntimeJobRecord | null): void {
@@ -253,11 +255,10 @@ function spawnJobSubprocess(job: RuntimeJobRecord): void {
   })
 
   // 부모가 먼저 죽으면 이 리스너도 사라지지만, 그때는 하트비트 스위퍼가 잡을 마감한다.
+  // The child's own job.status hints stay inside its process (the event bus is in-process), so its end is announced
+  // here; a job the exited child left open has no runner left and is closed first.
   child.on('exit', (code) => {
-    if (code === 0) {
-      return
-    }
-
+    if (isShutDown) return
     const current = RuntimeJobStore.get(job.jobId)
     if (current && (current.status === 'queued' || current.status === 'running')) {
       RuntimeJobStore.markFailed(
@@ -265,8 +266,8 @@ function spawnJobSubprocess(job: RuntimeJobRecord): void {
         RUNTIME_JOB_FAILURE_CODES.handlerError,
         `작업 프로세스가 코드 ${code ?? 'unknown'} 으로 종료되었습니다.`,
       )
-      emitJobHint(RuntimeJobStore.get(job.jobId))
     }
+    emitJobHint(RuntimeJobStore.get(job.jobId))
   })
 }
 
@@ -388,15 +389,17 @@ export class RuntimeJobRunner {
    */
   static bootstrap(): { cancelled: number; failedQueued: number; failedRunning: number } {
     const recovery = RuntimeJobStore.recoverInterruptedJobs()
+    isShutDown = false
 
     if (!isBootstrapped) {
       isBootstrapped = true
       maintenanceHandle = setInterval(() => {
         try {
           const swept = RuntimeJobStore.sweepStaleJobs()
-          if (swept > 0) {
-            console.warn(`⚠️  Runtime jobs closed after losing their worker: ${swept}`)
+          if (swept.length > 0) {
+            console.warn(`⚠️  Runtime jobs closed after losing their worker: ${swept.length}`)
           }
+          for (const jobId of swept) emitJobHint(RuntimeJobStore.get(jobId))
           RuntimeJobStore.pruneExpired()
         } catch (error) {
           console.warn('⚠️  Runtime job maintenance pass failed:', error instanceof Error ? error.message : error)
@@ -424,6 +427,7 @@ export class RuntimeJobRunner {
       maintenanceHandle = null
     }
     isBootstrapped = false
+    isShutDown = true
 
     const ownedJobIds = [...localControllers.keys()]
     for (const controller of localControllers.values()) {

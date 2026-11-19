@@ -1,5 +1,5 @@
 import { getUserSettingsDb } from '../../database/userSettingsDb'
-import { CodexChatStore } from './codexChatStore'
+import { CodexChatStore, withEngineChange, type ChatEngineChange } from './codexChatStore'
 import type { ChatModelPatch } from './chatModelOverride'
 
 export const GROUP_MEMBER_MAX = 6
@@ -23,6 +23,8 @@ export type ChatGroupMember = {
   codex_cached_input_tokens: number | null
   codex_output_tokens: number | null
   codex_lore_sent: string | null
+  /** codexInstructionsFingerprint of the instructions the member's Codex thread started with (null: an older thread). */
+  codex_instructions_fingerprint: string | null
   /** This member's reply token cap in the room (null: the room's cap, then the profile's). */
   max_tokens: number | null
   chat_model_slot_id: number | null
@@ -30,7 +32,7 @@ export type ChatGroupMember = {
   joined_date: string
 }
 
-const RESET_MEMBER_CODEX = `codex_thread_id = NULL, last_seen_message_id = NULL, codex_context_tokens = NULL, codex_context_window = NULL,
+const RESET_MEMBER_CODEX = `codex_thread_id = NULL, codex_instructions_fingerprint = NULL, last_seen_message_id = NULL, codex_context_tokens = NULL, codex_context_window = NULL,
   codex_input_tokens = NULL, codex_cached_input_tokens = NULL, codex_output_tokens = NULL, codex_lore_sent = NULL`
 
 export function groupLimitsOf(thread: { group_chain_limit: number | null; group_window_limit: number | null }) {
@@ -120,10 +122,16 @@ export const ChatGroupStore = {
     getUserSettingsDb().prepare('UPDATE chat_group_members SET last_seen_message_id = ? WHERE thread_id = ? AND profile_id = ?').run(messageId, threadId, profileId)
   },
 
-  /** A new Codex thread starts with no memory: no usage, no lore, nothing seen. */
-  setMemberCodexThread(threadId: number, profileId: number, codexThreadId: string) {
+  /** A new Codex thread starts with no memory: no usage, no lore, nothing seen; it keeps the fingerprint of its instructions. */
+  setMemberCodexThread(threadId: number, profileId: number, codexThreadId: string, instructionsFingerprint: string) {
     getUserSettingsDb().prepare(`UPDATE chat_group_members SET ${RESET_MEMBER_CODEX} WHERE thread_id = ? AND profile_id = ?`).run(threadId, profileId)
-    getUserSettingsDb().prepare('UPDATE chat_group_members SET codex_thread_id = ? WHERE thread_id = ? AND profile_id = ?').run(codexThreadId, threadId, profileId)
+    getUserSettingsDb().prepare('UPDATE chat_group_members SET codex_thread_id = ?, codex_instructions_fingerprint = ? WHERE thread_id = ? AND profile_id = ?').run(codexThreadId, instructionsFingerprint, threadId, profileId)
+  },
+
+  /** A member's Codex thread kept from before fingerprints goes on under the current one (never reset for lacking one). */
+  adoptMemberInstructionsFingerprint(threadId: number, profileId: number, codexThreadId: string, instructionsFingerprint: string) {
+    getUserSettingsDb().prepare('UPDATE chat_group_members SET codex_instructions_fingerprint = ? WHERE thread_id = ? AND profile_id = ? AND codex_thread_id = ? AND codex_instructions_fingerprint IS NULL')
+      .run(instructionsFingerprint, threadId, profileId, codexThreadId)
   },
 
   findMemberByCodexId(codexThreadId: string) {
@@ -151,8 +159,32 @@ export const ChatGroupStore = {
    * has seen. `loreSent` null after the session folded its memory.
    */
   setMemberClaudeSession(threadId: number, profileId: number, value: string, loreSent: string[] | null, lastSeenMessageId: number) {
-    getUserSettingsDb().prepare('UPDATE chat_group_members SET codex_thread_id = ?, codex_lore_sent = ?, last_seen_message_id = ? WHERE thread_id = ? AND profile_id = ?')
+    getUserSettingsDb().prepare('UPDATE chat_group_members SET codex_thread_id = ?, codex_instructions_fingerprint = NULL, codex_lore_sent = ?, last_seen_message_id = ? WHERE thread_id = ? AND profile_id = ?')
       .run(value, loreSent?.length ? JSON.stringify(loreSent) : null, lastSeenMessageId, threadId, profileId)
+  },
+
+  /** The rooms the profile is a member of, for checking none is answering before its engine changes. */
+  roomIdsOfProfile(profileId: number) {
+    return (getUserSettingsDb().prepare('SELECT thread_id FROM chat_group_members WHERE profile_id = ?').all(profileId) as Array<{ thread_id: number }>).map((row) => row.thread_id)
+  },
+
+  /**
+   * The member profile's engine changed: in every room it goes on with the new one, its old memory and model override
+   * dropped (the room's own engine stays). Each room gets a notice naming the member. Returns the old sessions with
+   * the room's owner, to delete.
+   */
+  switchProfileEngine(profileId: number, from: ChatEngineChange['from'], to: ChatEngineChange['to']) {
+    const db = getUserSettingsDb()
+    const rows = db.prepare(`SELECT gm.thread_id, t.account_id, gm.codex_thread_id, t.engine_changes,
+      (SELECT MAX(m.id) FROM codex_chat_messages m WHERE m.thread_id = gm.thread_id) AS last_message_id
+      FROM chat_group_members gm JOIN codex_chat_threads t ON t.id = gm.thread_id WHERE gm.profile_id = ?`).all(profileId) as Array<{ thread_id: number; account_id: number | null; codex_thread_id: string | null; engine_changes: string | null; last_message_id: number | null }>
+    db.prepare(`UPDATE chat_group_members SET ${RESET_MEMBER_CODEX}, chat_model_slot_id = NULL, chat_model = NULL WHERE profile_id = ?`).run(profileId)
+    const at = new Date().toISOString()
+    const notice = db.prepare('UPDATE codex_chat_threads SET engine_changes = ? WHERE id = ?')
+    for (const row of rows) {
+      if (row.last_message_id !== null) notice.run(withEngineChange(row.engine_changes, { afterMessageId: row.last_message_id, from, to, at, profileId }), row.thread_id)
+    }
+    return rows.map((row) => ({ threadId: row.thread_id, accountId: row.account_id, codexThreadId: row.codex_thread_id }))
   },
 
   /** Forget one member's memory of the room; returns its Codex thread (or Claude session value) to delete. */

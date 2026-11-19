@@ -22,9 +22,22 @@ test('llm usage ledger: reported, estimated, failed and stopped requests; daily 
 
   await t.test('usage bodies: OpenAI, Anthropic and Ollama shapes', () => {
     assert.deepEqual(readUsageCounts({ usage: { prompt_tokens: 120, completion_tokens: 30, prompt_tokens_details: { cached_tokens: 100 } } }), { inputTokens: 120, cachedInputTokens: 100, outputTokens: 30 })
-    assert.deepEqual(readUsageCounts({ usage: { input_tokens: 10, cache_creation_input_tokens: 5, cache_read_input_tokens: 200, output_tokens: 7 } }), { inputTokens: 215, cachedInputTokens: 200, outputTokens: 7 })
+    assert.deepEqual(readUsageCounts({ usage: { input_tokens: 10, cache_creation_input_tokens: 5, cache_read_input_tokens: 200, output_tokens: 7 } }), { inputTokens: 215, cachedInputTokens: 200, cacheWriteInputTokens: 5, outputTokens: 7 })
     assert.deepEqual(readUsageCounts({ prompt_eval_count: 40, eval_count: 9 }), { inputTokens: 40, cachedInputTokens: 0, outputTokens: 9 })
     assert.equal(readUsageCounts({ choices: [] }), null)
+  })
+
+  await t.test('cache writes: each shape that reports them is read, the prompt total stays the same, the ledger keeps them', () => {
+    // OpenRouter's place, LiteLLM's (Anthropic's field beside the OpenAI counts), and Anthropic's own.
+    const counts = { inputTokens: 1200, cachedInputTokens: 800, cacheWriteInputTokens: 300, outputTokens: 30 }
+    assert.deepEqual(readUsageCounts({ usage: { prompt_tokens: 1200, completion_tokens: 30, prompt_tokens_details: { cached_tokens: 800, cache_write_tokens: 300 } } }), counts)
+    assert.deepEqual(readUsageCounts({ usage: { prompt_tokens: 1200, completion_tokens: 30, cache_read_input_tokens: 800, cache_creation_input_tokens: 300 } }), counts)
+    assert.deepEqual(readUsageCounts({ usage: { input_tokens: 100, cache_read_input_tokens: 800, cache_creation_input_tokens: 300, output_tokens: 30 } }), counts)
+    const before = buildLlmUsageSummary(1, 540).totals.cacheWriteInputTokens
+    recordLlmUsage({ purpose: 'chat', engine: 'api', providerName: 'local', model: 'claude', tokens: counts, latencyMs: 5, ok: true })
+    assert.deepEqual(db.prepare('SELECT input_tokens, cached_input_tokens, cache_write_input_tokens FROM llm_usage_events ORDER BY id DESC LIMIT 1').get(), { input_tokens: 1200, cached_input_tokens: 800, cache_write_input_tokens: 300 })
+    recordLlmUsage({ purpose: 'chat', engine: 'api', providerName: 'local', model: 'claude', tokens: { ...counts, cacheWriteInputTokens: 200 }, latencyMs: 5, ok: true })
+    assert.equal(buildLlmUsageSummary(1, 540).totals.cacheWriteInputTokens - before, 500, 'the summary adds up the writes')
   })
 
   const target = { providerName: 'local', displayName: 'Local', endpoint: 'http://local.invalid/v1/chat/completions', apiKey: null, model: 'gemma', generation: {}, promptCacheMarks: false }
@@ -104,7 +117,7 @@ test('llm usage ledger: reported, estimated, failed and stopped requests; daily 
     const summary = buildLlmUsageSummary(7, 540)
     assert.equal(summary.daily.length, 7)
     assert.equal(summary.daily.at(-1)!.date, (db.prepare(`SELECT date('now', '+540 minutes') AS d`).get() as { d: string }).d)
-    assert.deepEqual(summary.totals, { requests: 4, failed: 1, inputTokens: 1500, cachedInputTokens: 0, outputTokens: 405, estimatedRequests: 1, averageLatencyMs: Math.round((2000 + 400 + 1000) / 3), averageQueueMs: null, averageFirstTokenMs: null })
+    assert.deepEqual(summary.totals, { requests: 4, failed: 1, inputTokens: 1500, cachedInputTokens: 0, cacheWriteInputTokens: 0, outputTokens: 405, estimatedRequests: 1, averageLatencyMs: Math.round((2000 + 400 + 1000) / 3), averageQueueMs: null, averageFirstTokenMs: null })
     assert.equal(summary.daily.reduce((sum, day) => sum + day.requests, 0), 4)
     const purposes = new Map<string, number>()
     for (const entry of summary.byPurpose) purposes.set(entry.purpose, (purposes.get(entry.purpose) ?? 0) + entry.tokens)

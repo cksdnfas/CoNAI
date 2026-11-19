@@ -16,7 +16,8 @@ import { textResult } from '../toolResults'
 export function registerWorkspaceTools(server: McpServer, context: McpRequestContext) {
   const bindings = context.source === 'plugin' ? (context.workspace ? [context.workspace] : []) : context.workspaces ?? []
   if (bindings.length === 0 || !context.requester || (!context.chatContext && context.source !== 'plugin')) return
-  const account = context.requester
+  // Read per call: requireMcpToolAccess rebinds context.requester to the chat's profile-bound requester before each call.
+  const account = () => context.requester
   const many = bindings.length > 1
   const connected = bindings.map(binding => `${JSON.stringify(binding.project.name)} (${binding.project.id}, ${binding.write ? 'read/write' : 'read-only'})`).join('; ')
   const projectField = z.string().trim().min(1).max(200).describe(`Choose a connected project by name or id: ${connected}. Use id if names are ambiguous.`)
@@ -31,15 +32,15 @@ export function registerWorkspaceTools(server: McpServer, context: McpRequestCon
   }
   const check = (binding: WorkspaceBinding, write = false) => {
     if (context.source === 'plugin') {
-      const owner = write ? requireFileStoreAction(account, 'organize') : requireFileStoreOwner(account)
+      const owner = write ? requireFileStoreAction(account(), 'organize') : requireFileStoreOwner(account())
       if (write && !binding.write) throw new Error('읽기 전용 프로젝트야.')
       if (WorkspaceService.get(owner, binding.project.id).revision !== binding.project.revision) throw new Error('프로젝트 지침이 변경됐어. 새 작업을 요청해줘.')
       return owner
     }
-    const current = chatWorkspaces(account, context.chatContext!.threadId, context.chatContext!.profileId).find(item => item.project.id === binding.project.id)
+    const current = chatWorkspaces(account(), context.chatContext!.threadId, context.chatContext!.profileId).find(item => item.project.id === binding.project.id)
     if (!current || workspaceSignature([current]) !== workspaceSignature([binding])) throw new Error('프로젝트 연결 또는 지침이 변경됐어. 다음 답변에서 다시 시작해줘.')
     if (write && !current.write) throw new Error('읽기 전용 프로젝트야.')
-    return write ? requireFileStoreAction(account, 'organize') : requireFileStoreOwner(account)
+    return write ? requireFileStoreAction(account(), 'organize') : requireFileStoreOwner(account())
   }
   const output = async (fn: () => unknown | Promise<unknown>) => {
     try { return textResult(await fn()) }

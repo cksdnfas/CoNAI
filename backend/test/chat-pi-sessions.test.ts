@@ -429,7 +429,7 @@ test('pi sessions: tool rounds, forked turns, failures leave no trace, compactio
         tools: [...tools, folders], signal: new AbortController().signal, callTool: async () => ({ content: [{ type: 'text', text: 'ok' }] }),
       })
       assert.equal(result.content, 'Cached answer.')
-      assert.deepEqual(result.usage, { inputTokens: 1005, cachedInputTokens: 900, outputTokens: 7 }, 'cache reads and writes count as input')
+      assert.deepEqual(result.usage, { inputTokens: 1005, cachedInputTokens: 900, cacheWriteInputTokens: 100, outputTokens: 7 }, 'cache reads and writes count as input')
       assert.equal(sent.length, 1)
       const [{ url, headers, body }] = sent
       assert.equal(url, 'https://api.anthropic.com/v1/messages?beta=true')
@@ -583,7 +583,7 @@ test('pi sessions: tool rounds, forked turns, failures leave no trace, compactio
     // One turn of the chat on a screen, through pi; a page_fill call answers as the tool would.
     const turnOn = async (name: string, script: typeof mock.script, result?: unknown, page = screen(name)) => {
       CodexChatStore.addMessage({ thread_id: threadId, role: 'user', content: `on ${name}`, tool_calls: [], status: 'completed', error: null })
-      const turn = await buildClaudeSessionTurn({ requester: admin as never, threadId, profile, history: CodexChatStore.listMessages(threadId), page, withTools: true, runtime: 'pi' })
+      const turn = await buildClaudeSessionTurn({ requester: admin as never, threadId, profile, history: CodexChatStore.listMessages(threadId), page, withTools: { app: true, generate: true }, runtime: 'pi' })
       mock.requests.length = 0
       mock.script.push(...script)
       const run = streamPiChatCompletion({ target: target(turn.session), messages: turn.messages, tools: pageTools, signal: new AbortController().signal, maxToolRounds: 4,

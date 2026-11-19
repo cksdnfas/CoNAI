@@ -278,7 +278,7 @@ export class GenerationQueueService {
     }
 
     const ownedJobIds = new Set(queueCancellationRegistry.ownedJobIds())
-    let finalized = 0
+    const finalizedJobIds: number[] = []
 
     for (const candidate of candidates) {
       if (ownedJobIds.has(candidate.id)) {
@@ -286,27 +286,38 @@ export class GenerationQueueService {
         continue
       }
 
-      const submitState = candidate.provider_submit_state ?? 'none'
-      if (submitState !== 'none') {
-        // 상류에 작업이 남아 있을 수 있으므로 reconcile 대상으로 승격시킨 뒤 terminal 로 보낸다.
-        GenerationQueueModel.markProviderSubmitState(candidate.id, 'orphan_suspected')
+      // 상류가 접수한 작업은 남아 있을 수 있으므로 reconcile 대상으로 승격시킨 뒤 terminal 로 보낸다.
+      // `in_flight` 는 cancelled 전이가 승격하고, 이미 후보이거나 판정이 끝난 상태
+      // (cancel_confirmed / cancel_unsupported / orphan_unresolved)는 덮어쓰지 않는다.
+      // SELECT 이후 다른 프로세스가 제출 상태를 확정했을 수 있으므로 상태와 제출 상태를 함께 조건으로 건다.
+      if (candidate.provider_submit_state === 'accepted') {
+        getUserSettingsDb().prepare(`
+          UPDATE generation_queue_jobs
+          SET provider_submit_state = 'orphan_suspected', updated_date = CURRENT_TIMESTAMP
+          WHERE id = ? AND status = ? AND provider_submit_state = 'accepted'
+        `).run(candidate.id, candidate.status)
       }
 
       try {
         this.transitionJob(candidate.id, 'cancelled', {
           expectedCurrentStatuses: [candidate.status],
         })
-        finalized += 1
+        finalizedJobIds.push(candidate.id)
       } catch (transitionError) {
         console.warn(`⚠️ Failed to finalize abandoned cancellation for queue job ${candidate.id}:`, transitionError)
       }
     }
 
-    if (finalized > 0) {
-      console.log(`🧹 Finalized ${finalized} abandoned queue cancellation(s) with no owning worker`)
+    if (finalizedJobIds.length > 0) {
+      // 소유 워커가 없으니 연결된 history 행을 닫아 줄 주체도 이 스위퍼뿐이다.
+      HistoryCommandService.recordErrorByQueueJobIds(
+        finalizedJobIds,
+        'Cancelled. The worker running this job had stopped, so the cancellation was finalized without it.',
+      )
+      console.log(`🧹 Finalized ${finalizedJobIds.length} abandoned queue cancellation(s) with no owning worker`)
     }
 
-    return finalized
+    return finalizedJobIds.length
   }
 
   /** Wait for a queue job to reach a terminal state without per-consumer DB polling. */
@@ -481,8 +492,10 @@ export class GenerationQueueService {
     }
 
     // CC-3: NovelAI 는 접수 시점에 Anlas 가 빠지므로 모호한 실패의 자동 재시도는 이중 과금이 된다.
+    // `orphan_suspected` 로 끝난 NovelAI 취소는 reconciler 가 곧 `orphan_unresolved` 로 판정하므로 같이 막는다.
     const isAmbiguousNaiSubmit = existing.failure_code === NAI_SUBMIT_AMBIGUOUS_FAILURE_CODE
-      || (existing.service_type === 'novelai' && existing.provider_submit_state === 'orphan_unresolved')
+      || (existing.service_type === 'novelai'
+        && (existing.provider_submit_state === 'orphan_unresolved' || existing.provider_submit_state === 'orphan_suspected'))
     if (isAmbiguousNaiSubmit && options?.force !== true) {
       throw new Error(`Queue job ${id} may already have consumed NovelAI Anlas, so it cannot be retried without an explicit force flag`)
     }
@@ -557,12 +570,14 @@ export class GenerationQueueService {
           AND provider_submit_state = 'none'
       `).all().map((row) => (row as { id: number }).id)
       // 24시간이 지나도록 회수되지 않은 제출은 가망이 없다고 보고 함께 실패 확정한다.
+      // 시각 컬럼은 ISO('T'·'Z') 문자열인데 datetime('now') 는 'YYYY-MM-DD HH:MM:SS' 라 그대로 비교하면
+      // 같은 날짜에서 'T' > ' ' 로 늦게 판정된다. datetime() 으로 정규화해 어느 저장 형식이든 맞게 비교한다.
       const expiredOrphanJobIds = db.prepare(`
         SELECT id
         FROM generation_queue_jobs
         WHERE status IN ('dispatching', 'running')
           AND provider_submit_state != 'none'
-          AND COALESCE(provider_submit_started_at, started_at, queued_at) < datetime('now', ?)
+          AND datetime(COALESCE(provider_submit_started_at, started_at, queued_at)) < datetime('now', ?)
       `).all(orphanDeadlineHours).map((row) => (row as { id: number }).id)
 
       const cancelledBeforeDispatch = db.prepare(`
@@ -606,7 +621,7 @@ export class GenerationQueueService {
             updated_date = CURRENT_TIMESTAMP
         WHERE status IN ('dispatching', 'running')
           AND provider_submit_state != 'none'
-          AND COALESCE(provider_submit_started_at, started_at, queued_at) < datetime('now', ?)
+          AND datetime(COALESCE(provider_submit_started_at, started_at, queued_at)) < datetime('now', ?)
       `).run(nowIso, orphanDeadlineHours).changes
 
       // 아직 회수 가능성이 있는 잡은 status 를 유지한 채 취소 요청 + orphan 후보로만 마킹한다.

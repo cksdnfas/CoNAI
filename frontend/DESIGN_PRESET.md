@@ -225,8 +225,8 @@ Margin, padding, type, colour, radius and effect exceptions must not be smuggled
 **Case-by-case, not mechanical:** wallpaper artwork vs editor chrome; image crop/selection handles and inspector
 gradients; rich Button-to-MediaCard/ListRow conversions; semantic warning/success indicators vs toggle state;
 resource-row inactive opacity; Tip numeric content; progress custom tones; and chat prose scale/line-height.
-HierarchyNav drag-target feedback goes through `getItemDataAttributes` (`'data-drop-target': 'true'`), which
-SidebarItem and Button nav style.
+HierarchyNav drag-target feedback goes through `getItemDataAttributes` (`'data-drop-target': 'true'`, from
+`useDropTarget().getTargetAttributes`), which SidebarItem and Button nav style (see "Trees and drag-and-drop").
 
 ### Flat tokens
 | Token | Tailwind | Use |
@@ -560,6 +560,47 @@ that opens a window is not explained again inside it.
 ### Navigation rows
 Current row = `bg-fill` + 2px primary bar on the left + `foreground` text (SidebarItem, Button `nav`, `HierarchyNav`).
 Hover = `bg-fill`. Only the top app nav uses primary text for the active item.
+
+### Trees and drag-and-drop
+- `HierarchyNav` (`components/common/hierarchy-nav`) is the one tree; `HierarchyPicker` wraps it. `variant="sidebar"`
+  rows are SidebarItems; a row with children gets its own chevron (`접기` / `펼치기`, `aria-expanded`) laid over the
+  row's left edge from a sibling element (no button inside a button), which folds the node without selecting it. The
+  chevron is for pointer and touch and is not a tab stop (keyboard users fold with Left/Right on the row); the default
+  variant's chevron stays focusable. Every row of a tree that has children reserves that column (one extra `depth`
+  level), so rows with and without children stay aligned. A row click still selects and opens (a click on the selected,
+  open row folds it).
+- Sibling rows next to a sidebar-variant tree (an "All" / root row above it, search-result rows that replace it) must
+  line up with it: `hierarchyReservesToggleColumn(items, getId, getParentId)` (exported by `hierarchy-nav`, same
+  `getId` / `getParentId` as the tree) says whether the tree reserves the column; pass `depth={reserves ? 1 : 0}` to
+  those `SidebarItem`s.
+- Expansion is internal by default. Ancestors of `selectedId` open when the selection changes (or when the item first
+  appears or moves) and the user can fold them afterwards, in both variants. `defaultExpandedIds` (with `expandable`)
+  still opens its ids whenever the array changes.
+- Controlled expansion (optional, for a tree that remounts while its open rows must be kept, e.g. a page that keys its
+  view per folder): `expandedIds` (ids of the open rows) plus `onExpandedChange(ids, expanded)`; the callback gets
+  deltas (`expanded` true opens `ids`, false folds them) from the chevron, Left/Right, a row click, a drag resting on a
+  row (`expandOnDragHover`) and the ancestors of a revealed selection (called after the commit, not during render).
+  Keep the ids outside the remounting component. When `expandedIds` is omitted the tree keeps its own state and
+  `onExpandedChange` is not called; `defaultExpandedIds` is ignored while controlled.
+- `expandOnDragHover` (opt-in): a drag resting on a collapsed row with children opens it after `DRAG_HOVER_EXPAND_MS`
+  (700 ms); leaving the row, dropping or unmounting cancels. It does not look at what is dragged.
+- Arrow keys (both variants, any focused row or chevron; modifier keys and events from inputs are ignored): Up/Down move
+  focus over the visible rows, Home/End jump, Right opens a collapsed node or enters its first child (focus stays when
+  none of its children is a focusable row), Left folds an open node or goes to the parent. Enter/Space stay native button activation. Rows carry `data-hierarchy-nav` (tree id)
+  and `data-hierarchy-row` (item id) for this; do not rely on them elsewhere.
+- Drop targets: `useDropTarget({ accepts, dropEffect?, onDrop })` (`lib/use-drop-target`) returns `targetId`,
+  `containerProps` (`onDragOver` / `onDragLeave` / `onDrop` for the element that holds the targets) and
+  `getTargetAttributes(id)`. A target is any element carrying `data-drop-id="<id>"` (`DROP_ID_ATTRIBUTE`); the hook finds
+  it with `closest`, asks `accepts(id, event)` (only `dataTransfer.types` is readable then), sets the optional drop
+  effect and exposes the id so the row renders `data-drop-target="true"` (SidebarItem and Button `nav` style it). The
+  highlight clears on leave, drop and when the drag ends elsewhere. Feed `getItemDataAttributes={(item) =>
+  drop.getTargetAttributes(String(item.id))}` to HierarchyNav (the sidebar variant also puts the row's attributes on the
+  element holding the chevron, so the whole row is the target). Several non-nested containers (tree + breadcrumbs) may
+  share one hook; never spread `containerProps` on nested containers.
+- `PathBreadcrumbs` takes `dropTarget` (the same hook result) and a `dropId` per crumb; only crumbs with a `dropId` take
+  drops, drawn with the same tint and ring as a navigation row. Without `dropTarget` nothing changes.
+- A drag that carries many items shows `setDragCountBadge(dataTransfer, label)` (`lib/drag-count-badge`) instead of the
+  ghost: the primary count badge the group image drag uses.
 
 ### Icons: one meaning each
 | Icon (lucide) | Means | Never |

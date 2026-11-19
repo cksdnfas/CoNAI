@@ -329,4 +329,50 @@ test('stage 5: lore provenance, usage, undo, branches, greetings and tone', { ti
     CodexChatStore.clearThread(id, '')
     compare(0)
   })
+
+  await t.test('session engines get the reading text and block rules once, then only changed values', async () => {
+    const { nextLoreSent, pendingBlockState, readLoreSent } = await import('../src/services/codex-chat/chatSessionMemory')
+    const { threadBlockStateText } = await import('../src/services/codex-chat/llmChatContext')
+    const status = normalizeBlock({ key: 'status', example: '{"hp":10}', rules: 'hp drops when hurt', fields: [{ name: 'hp', min: 0, max: 100, step: 5 }] })!
+    const place = normalizeBlock({ key: 'place', example: '{"room":"hall"}' })!
+    const withBlocks = (blocks: typeof status[]) => ({ ...profile, style: { ...profile.style, blocks } })
+    const stateProfile = withBlocks([status, place])
+    const at = (hp: number) => ({ block_edits: JSON.stringify([{ id: `hp-${hp}`, key: 'status', afterMessageId: 0, data: { hp }, at: '' }]) })
+    let sent = readLoreSent(null)
+    const turn = (thread: ReturnType<typeof at>, selected = stateProfile) => {
+      const pending = pendingBlockState(thread, selected, [], sent)
+      sent = new Set(nextLoreSent(sent, pending.keys))
+      return pending.text
+    }
+    const isFull = (text: string, rules = 'hp drops when hurt') => {
+      assert.match(text, /The values below are the facts of the scene now/)
+      assert.match(text, new RegExp(`^Rules: ${rules}$`, 'm'))
+      assert.match(text, /^Field rule: hp: 0~100, at most ±5 per change$/m)
+    }
+    const isValuesOnly = (text: string, hp: number) => {
+      assert.match(text, /rules given earlier still apply/)
+      assert.ok(text.includes(`### status\n{"hp":${hp}}`))
+      assert.ok(text.includes('### place\n{"room":"hall"}'))
+      assert.doesNotMatch(text, /The values below are the facts|^Rules: |^Field rule: /m)
+    }
+
+    const first = turn(at(10))
+    isFull(first)
+    assert.equal(first, threadBlockStateText(stateProfile, at(10), []), 'a fresh session gets the direct runtime text')
+    assert.equal(turn(at(10)), '', 'an unchanged state is not given again')
+    isValuesOnly(turn(at(15)), 15)
+    isValuesOnly(turn(at(20)), 20)
+    isFull(threadBlockStateText(stateProfile, at(20), []))
+
+    const changedRules = withBlocks([{ ...status, rules: 'hp drops fast' }, place])
+    isFull(turn(at(20), changedRules), 'hp drops fast')
+    isValuesOnly(turn(at(25), changedRules), 25)
+    const fewerBlocks = turn(at(25), withBlocks([{ ...status, rules: 'hp drops fast' }]))
+    isFull(fewerBlocks, 'hp drops fast')
+    assert.ok(!fewerBlocks.includes('### place'))
+
+    // An empty sent set (a new session) gets the full text.
+    sent = readLoreSent(null)
+    isFull(turn(at(25)))
+  })
 })

@@ -17,6 +17,8 @@ import { chatToolRoundLimit } from './chatSettings'
 import type { ChatCompletionMessage, ChatCompletionResult, ChatCompletionTarget, ChatCompletionTool } from './llmChatCompletion'
 
 export const CLAUDE_CHAT_PROVIDER = '__conai_claude_code__'
+/** The end of the CLI's own stderr kept for a failed run's error; the rest is dropped as it arrives. */
+const STDERR_TAIL_LENGTH = 2000
 
 /** Where Claude chat runs keep their state (each run's home, and the session folders of chats that keep memory). */
 export function claudeChatPrivateRoot() {
@@ -241,7 +243,9 @@ export async function streamClaudeChatCompletion(params: {
           while ((end = buffer.indexOf('\n')) >= 0) { const line = buffer.slice(0, end).trim(); buffer = buffer.slice(end + 1); if (line) read(line) }
         } catch (error) { failure = error instanceof Error ? error : new Error('Invalid Claude Code response'); killCodexProcessTree(child, 'SIGTERM') }
       })
-      child.stderr.on('data', () => {})
+      let stderr = ''
+      child.stderr.setEncoding('utf8')
+      child.stderr.on('data', (chunk: string) => { stderr = `${stderr}${chunk}`.slice(-STDERR_TAIL_LENGTH) })
       child.stdin.on('error', () => {})
       child.stdin.end(input)
       const cleanup = () => { timeout?.clear(); if (abortTimer) clearTimeout(abortTimer); params.signal.removeEventListener('abort', abort) }
@@ -259,7 +263,12 @@ export async function streamClaudeChatCompletion(params: {
           // Preserve that receipt rather than clamping it to the configured limit or inventing provider usage.
           if (params.research) params.research.result.turns = typeof result?.num_turns === 'number' && Number.isSafeInteger(result.num_turns) && result.num_turns >= 0 ? result.num_turns : null
           if (turnLimited && params.research) params.research.result.stopReason = 'turn_limit'
-          if ((!turnLimited && code !== 0) || !verified || !result || (!turnLimited && (result.is_error === true || result.subtype !== 'success'))) throw new Error('Claude Code 요청에 실패했어. 인증 상태, 모델 및 사용량 한도를 확인해줘.')
+          const failedResult = !turnLimited && result !== null && (result.is_error === true || result.subtype !== 'success')
+          if ((!turnLimited && code !== 0) || !verified || !result || failedResult) {
+            // The CLI reports most failures (login, usage limit) in its error result and leaves stderr empty.
+            const reason = failedResult && typeof result?.result === 'string' ? result.result.trim() : ''
+            throw new Error(['Claude Code 요청에 실패했어. 인증 상태, 모델 및 사용량 한도를 확인해줘.', reason || stderr.trim()].filter(Boolean).join('\n'))
+          }
           const finalText = typeof result.result === 'string' ? result.result : content
           if (!content && finalText) params.onContent?.(finalText)
           if (session) {

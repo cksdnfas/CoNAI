@@ -24,7 +24,7 @@ import { pendingGenerationOutcomes } from './codexChatMedia'
 import { CodexChatStore, type ChatHistorySource, type CodexChatMessageRecord, type CodexChatThreadRecord } from './codexChatStore'
 import { buildGroupCodexInput, buildGroupHeader, groupMissedMessages, type GroupHistory } from './groupChatContext'
 import type { ChatCompletionMessage, ChatContentPart } from './llmChatCompletion'
-import { buildPersonaPrompt, fixedContextGuidance, flagDirectiveFor, postHistoryText, referenceBlock, resolveAuthorNote, type ChatContextMeta } from './llmChatContext'
+import { buildPersonaPrompt, fixedContextGuidance, flagDirectiveFor, postHistoryText, referenceBlock, resolveAuthorNote, type ChatContextMeta, type ToolGuidance } from './llmChatContext'
 import { skillReminderText } from './chatSkills'
 
 /**
@@ -86,7 +86,7 @@ export function deleteClaudeSessions(threadId: number) {
  * The session's fixed part, recorded on its first turn (Claude Code reuses it as is): guidance, then the persona. The
  * session has use_skill whenever the profile links a skill, so the skill list (empty without skills) always goes in.
  */
-export function claudeSessionSystem(profile: ChatProfile, withTools: boolean, user: ReturnType<typeof userPersonaForThread>) {
+export function claudeSessionSystem(profile: ChatProfile, withTools: ToolGuidance, user: ReturnType<typeof userPersonaForThread>) {
   return [fixedContextGuidance(profile, withTools, true, true), buildPersonaPrompt(profile, { dialogueAsText: true, user })].filter(Boolean).join('\n\n')
 }
 
@@ -111,7 +111,7 @@ export async function buildClaudeSessionTurn(params: {
   history: CodexChatMessageRecord[]
   historySource?: ChatHistorySource
   page?: ChatPageSnapshot
-  withTools: boolean
+  withTools: ToolGuidance
   judged?: JudgedContext | null
   runtime?: SessionRuntime
   signal?: AbortSignal
@@ -122,7 +122,7 @@ export async function buildClaudeSessionTurn(params: {
   const runtime = params.runtime ?? 'claude'
   const thread = CodexChatStore.findThreadById(threadId) ?? null
   const user = userPersonaForThread(thread)
-  const workspaces = chatWorkspaces(requester, threadId, profile.id)
+  const workspaces = chatWorkspaces(chatProfileRequester(requester, attachmentContext), threadId, profile.id)
   // Plugins may rewrite it; a changed system prompt starts a new session (systemHash).
   const system = await applyChatInstructionHooks([claudeSessionSystem(profile, params.withTools, user), workspaceInstructions(workspaces)].filter(Boolean).join('\n\n'), { engine: runtime, threadId, group: false, profile: { id: profile.id, name: profile.name } }, requester, params.signal)
   const systemHash = systemHashOf(system)
@@ -209,7 +209,7 @@ export async function buildClaudeGroupSessionTurn(params: {
   history?: GroupHistory
   routing?: ChatMessageRouting
   windowLimit: number
-  withTools: boolean
+  withTools: ToolGuidance
   attachmentTexts?: ReadonlyMap<string, string>
   attachedImages?: AttachedImages
   judged?: JudgedContext | null
@@ -221,7 +221,9 @@ export async function buildClaudeGroupSessionTurn(params: {
   requirePrivateAttachmentRun(requester, attachmentContext)
   const runtime = params.runtime ?? 'claude'
   const user = userPersonaForThread(thread)
-  const system = await applyChatInstructionHooks([claudeSessionSystem(profile, params.withTools, user), buildGroupHeader({ thread, members, self: profile, user })].join('\n\n'), { engine: runtime, threadId: thread.id, group: true, profile: { id: profile.id, name: profile.name } }, requester, params.signal)
+  // The room's and the member's projects come with workspace tools in a room too (see buildClaudeSessionTurn).
+  const workspaces = chatWorkspaces(chatProfileRequester(requester, attachmentContext), thread.id, profile.id)
+  const system = await applyChatInstructionHooks([claudeSessionSystem(profile, params.withTools, user), buildGroupHeader({ thread, members, self: profile, user }), workspaceInstructions(workspaces)].filter(Boolean).join('\n\n'), { engine: runtime, threadId: thread.id, group: true, profile: { id: profile.id, name: profile.name } }, requester, params.signal)
   const systemHash = systemHashOf(system)
   const dir = claudeMemberSessionDir(thread.id, profile.id, runtime)
   const member = ChatGroupStore.member(thread.id, profile.id)

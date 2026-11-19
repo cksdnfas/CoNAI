@@ -1,7 +1,7 @@
+import { HierarchyPicker } from '@/components/common/hierarchy-picker'
 import { EditorFooter } from '@/components/ui/editor-footer'
 import { Input } from '@/components/ui/input'
 import { Modal, ModalBody } from '@/components/ui/modal'
-import { Select } from '@/components/ui/select'
 import { useI18n } from '@/i18n'
 
 /** One name to type (new folder, rename): an input and a save button; Enter saves. */
@@ -32,9 +32,17 @@ export function NameDialog({ open, title, value, onChange, onSubmit, onClose, bu
   )
 }
 
-export type FolderOption = { value: string; label: string; disabled?: boolean }
+/** A folder offered as a destination: `value` is its id (workspace: path), `parent` its parent's value ('' is the top level). */
+export type FolderOption = { value: string; label: string; parent: string }
 
-/** Choose the folder to move the selection into. `rootLabel` is the top level (value ''). */
+const getFolderValue = (folder: FolderOption) => folder.value
+const getFolderParent = (folder: FolderOption) => folder.parent || null
+const getFolderLabel = (folder: FolderOption) => <span className="truncate">{folder.label}</span>
+
+/**
+ * Choose the folder to move the selection into, from a tree. `rootLabel` is the top level (value ''). `folders` are the
+ * valid destinations only: leave out the moved folders and everything inside them (their subtrees would be orphans).
+ */
 export function MoveDialog({ open, value, onChange, folders, rootLabel, onSubmit, onClose, busy = false }: {
   open: boolean
   value: string
@@ -49,10 +57,18 @@ export function MoveDialog({ open, value, onChange, folders, rootLabel, onSubmit
   return (
     <Modal open={open} title={t({ ko: '폴더로 이동', en: 'Move to folder' })} onClose={() => { if (!busy) onClose() }} size="md">
       <ModalBody>
-        <Select variant="settings" aria-label={t({ ko: '대상 폴더', en: 'Destination folder' })} value={value} onChange={(event) => onChange(event.target.value)}>
-          <option value="">{rootLabel}</option>
-          {folders.map((folder) => <option key={folder.value} value={folder.value} disabled={folder.disabled}>{folder.label}</option>)}
-        </Select>
+        <div role="group" aria-label={t({ ko: '대상 폴더', en: 'Destination folder' })}>
+          <HierarchyPicker
+            items={folders}
+            selectedId={value || null}
+            onSelectRoot={() => onChange('')}
+            onSelect={(folder) => onChange(folder.value)}
+            getId={getFolderValue}
+            getParentId={getFolderParent}
+            getLabel={getFolderLabel}
+            rootLabel={rootLabel}
+          />
+        </div>
       </ModalBody>
       <EditorFooter onSave={onSubmit} saving={busy} saveLabel={t({ ko: '이동', en: 'Move' })} />
     </Modal>

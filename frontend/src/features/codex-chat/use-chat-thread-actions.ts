@@ -1,9 +1,9 @@
 import { useLayoutEffect, useRef } from 'react'
 import { useQueryClient, type QueryClient } from '@tanstack/react-query'
-import { threadLorebooksQueryKey, updateChatListState, type CodexChatThread, type CodexChatThreadDetail } from '@/lib/api-codex-chat'
+import { threadLorebooksQueryKey, updateChatListState, type CodexChatThread } from '@/lib/api-codex-chat'
 import { codexChatMediaQueryKey, codexChatThreadQueryKey, type CodexChatApi } from './codex-chat-context'
 import type { ChatListPatch } from './chat-thread-list'
-import { applyChatThreadUpdate, refetchActiveChatQuery, scheduleChatDirectoryRefresh } from './chat-query-refresh'
+import { applyChatThreadUpdate, patchChatThreadQuery, refetchActiveChatQuery, scheduleChatDirectoryRefresh } from './chat-query-refresh'
 import { patchChatRoomLists } from './use-chat-room-directory'
 
 /** Both the list buttons and page assistant update the header's detail cache as well as the directory. */
@@ -16,7 +16,7 @@ export async function updateChatListEntry(queryClient: QueryClient, threadId: nu
     ...(patch.notify !== undefined ? { notify_enabled: patch.notify } : {}),
   })
   patchChatRoomLists(queryClient, threadId, apply({ id: threadId } as CodexChatThread))
-  queryClient.setQueryData<CodexChatThreadDetail>(codexChatThreadQueryKey(threadId), current => current ? { ...current, thread: apply(current.thread) } : current)
+  patchChatThreadQuery(queryClient, threadId, current => current ? { ...current, thread: apply(current.thread) } : current)
   try {
     const thread = await updateChatListState(threadId, patch)
     patchChatRoomLists(queryClient, threadId, thread)

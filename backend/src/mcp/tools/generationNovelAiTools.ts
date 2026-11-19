@@ -85,7 +85,7 @@ export function registerNovelAiGenerationTools(server: McpServer, context: McpRe
           success: job.finished,
           job_id: job.id,
           status: job.status,
-          ...(job.finished ? {} : { note: 'Still running: call wait_generation_job with this job_id.' }),
+          ...(job.finished ? {} : { note: isChatMcpSource(context.source) ? 'Still running: the result attaches to your reply automatically; do not wait or poll.' : 'Still running: call wait_generation_job with this job_id.' }),
           ...(canView ? { historyIds: job.history_ids } : {}),
           count: job.history_ids.length,
           ...(canView ? { metadata: {

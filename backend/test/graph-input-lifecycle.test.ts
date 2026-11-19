@@ -23,8 +23,9 @@ import { resolveWorkflowRoleQueueLimitState } from '../src/services/generation-q
 import { ComfyUIService } from '../src/services/comfyuiService'
 import { getIncomingArtifacts } from '../src/services/graph-workflow-executor/artifacts'
 import { executeComfyModule } from '../src/services/graph-workflow-executor/execute-comfy'
+import { executeNaiModule } from '../src/services/graph-workflow-executor/execute-nai'
 import { getWorkflowInputAssetStoreDir, isWorkflowInputAssetRef, pruneDeletedWorkflowInputAssets, resolveWorkflowInputAssetFilePath, storeGraphQueueInputFile } from '../src/services/workflowInputAssetStore'
-import { getQueueInputStoreDir, resolveQueueInputFilePath, storeQueueInputBuffer, sweepOrphanQueueInputFiles } from '../src/services/generation-queue/queueInputStore'
+import { getQueueInputStoreDir, hydrateQueueInputDataUrls, resolveQueueInputFilePath, storeQueueInputBuffer, sweepOrphanQueueInputFiles } from '../src/services/generation-queue/queueInputStore'
 
 test('graph input copies are retained only by committed jobs and queue orphans are swept', { timeout: 60000 }, async (t) => {
   initializeAuthDb()
@@ -269,5 +270,16 @@ test('graph input copies are retained only by committed jobs and queue orphans a
     storeQueueInputBuffer(data)
     await sweepOrphanQueueInputFiles()
     assert.ok(resolveQueueInputFilePath(ref))
+  })
+
+  await t.test('a NovelAI graph job stores its input image by reference for its account as graph work', async (sub) => {
+    sub.mock.method(GenerationQueueService, 'waitForTerminalJob', async () => ({ status: 'failed', failure_message: 'queue stopped' } as any))
+    const image = `data:image/png;base64,${Buffer.alloc(16 * 1024, 7).toString('base64')}`
+    await assert.rejects(executeNaiModule({ ...context, requestedByAccountId: 7 }, node, { name: 'nai', output_ports: [] } as any, { prompt: 'cat', action: 'img2img', image }), /queue stopped/)
+    const row = getUserSettingsDb().prepare("SELECT id, requested_by_account_id, request_payload FROM generation_queue_jobs WHERE service_type = 'novelai' ORDER BY id DESC LIMIT 1").get() as { id: number; requested_by_account_id: number; request_payload: string }
+    assert.doesNotMatch(row.request_payload, /;base64,/)
+    assert.equal(hydrateQueueInputDataUrls(JSON.parse(row.request_payload)).image, image)
+    assert.equal(row.requested_by_account_id, 7)
+    assert.equal(GenerationQueueModel.isGraphOrigin(row.id), true)
   })
 })

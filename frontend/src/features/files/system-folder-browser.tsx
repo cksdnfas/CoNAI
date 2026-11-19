@@ -37,6 +37,7 @@ import {
 import { getErrorMessage } from '@/lib/error-message'
 import { cn } from '@/lib/utils'
 import { useFileViewMode } from './file-view-mode'
+import { TreeUploadStatus } from './tree-upload-status'
 import { FileEntryIcon as EntryIcon, FileMediaPreview, FilePreviewNavigation, fileMediaKind as mediaKind, filePreviewKind, readFilePreviewMime } from './file-preview-shared'
 import { ListPager } from '@/components/common/list-pager'
 
@@ -392,6 +393,7 @@ export function SystemFolderBrowser({ location, onNavigate, sidebar }: {
         toolbar={<PageToolbar sticky start={breadcrumbs} actions={actions} />}
       >
         <div className="min-h-72 space-y-3">
+          <TreeUploadStatus />
           {list}
           {pager}
         </div>

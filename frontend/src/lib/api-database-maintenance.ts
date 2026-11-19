@@ -34,7 +34,8 @@ export interface MediaOrphanCleanupResult {
   missingFiles: { matched: number; deleted: number }
   orphanMetadata: { scanned: number; candidates: number; keptReferenced: number; deleted: number; thumbnailsDeleted: number }
   orphanThumbnails: { scanned: number; orphaned: number; deleted: number; bytes: number; emptyDirsRemoved: number }
-  tempLeftovers: { graphExecutionDirs: number; incomingEntries: number; videoFrames: number; bytes: number }
+  /** codexJobDirs is absent from results stored before Codex job folders were swept. */
+  tempLeftovers: { graphExecutionDirs: number; incomingEntries: number; videoFrames: number; codexJobDirs?: number; bytes: number }
   durationMs: number
 }
 

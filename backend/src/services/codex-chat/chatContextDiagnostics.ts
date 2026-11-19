@@ -1,5 +1,5 @@
 import { createHash } from 'crypto'
-import type { ChatCompletionMessage, ChatCompletionTool } from './llmChatCompletion'
+import { REFERENCE_BLOCK_START, type ChatCompletionMessage, type ChatCompletionTool } from './llmChatCompletion'
 import type { ChatJudgeDiagnostics } from '@conai/shared'
 import type { LoreDecision } from './chatLorebook'
 
@@ -72,7 +72,7 @@ export function contextSections(messages: ChatCompletionMessage[], tools: ChatCo
     ...messages.map((message, position) => {
       const text = contextContentText(message.content)
       const body = message.role === 'assistant' && message.tool_calls ? `${text}\n${JSON.stringify(message.tool_calls)}` : text
-      const kind = messageKinds.get(message) ?? (message.role === 'system' ? 'persona' : message.role === 'tool' ? 'tool-result' : text.includes('[참고 설정]') ? 'reference' : 'window')
+      const kind = messageKinds.get(message) ?? (message.role === 'system' ? 'persona' : message.role === 'tool' ? 'tool-result' : text.includes(REFERENCE_BLOCK_START) ? 'reference' : 'window')
       const parts = messageParts.get(message)
       return { kind, role: message.role, position, estTokens: estimate(body), hash: contextHash(body), ...(parts ? { parts: parts.map((part) => ({ kind: part.kind, role: message.role, position, estTokens: estimate(part.text), hash: contextHash(part.text) })) } : {}) }
     }),

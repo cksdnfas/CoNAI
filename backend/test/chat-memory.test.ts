@@ -170,6 +170,59 @@ test('chat memory: pinned memories, summary segments, plot folding, recall', { t
     assert.equal(thread().summary_until_message_id, null)
   })
 
+  await t.test('a change in a stretch the cursor skips without a segment leaves it skipped', async () => {
+    const id = CodexChatStore.createThread(null, 'handover', 'llm', profile.id)
+    const ids = ['u1', 'a1', 'u2', 'a2', 'u3', 'a3', 'u4', 'a4'].map((text, index) => CodexChatStore.addMessage({ thread_id: id, role: index % 2 ? 'assistant' : 'user', content: text, tool_calls: [], status: 'completed', error: null }))
+    const state = () => { const row = CodexChatStore.findThreadById(id)!; return [row.summary_until_message_id, row.summary, ChatSummaryStore.list(id).length] }
+    assert.ok(ChatSummaryStore.addSegment(id, { from: ids[0], until: ids[1], content: 'S1' }, CodexChatStore.findThreadById(id)!.context_revision))
+    const { branchChatThread } = await import('../src/services/codex-chat/chatBranch')
+    const branched = (at = ids[7]) => {
+      const branchId = branchChatThread(CodexChatStore.findThreadById(id)!, at)!
+      const copies = CodexChatStore.listMessages(branchId).map((message) => message.id)
+      return [CodexChatStore.findThreadById(branchId)!.summary_until_message_id, ChatSummaryStore.list(branchId).map((segment) => [segment.from_message_id, segment.until_message_id, segment.content]), copies] as const
+    }
+    // A cursor at the segment end: the branch's cursor is the copied segment's end, as before.
+    let [cursor, segments, copies] = branched()
+    assert.deepEqual([cursor, segments], [copies[1], [[copies[0], copies[1], 'S1']]])
+    // An engine hand-over: the cursor is ahead of the segment, and a branch keeps it there.
+    db.prepare('UPDATE codex_chat_threads SET summary_until_message_id = ? WHERE id = ?').run(ids[5], id)
+    ;[cursor, segments, copies] = branched()
+    assert.deepEqual([cursor, segments], [copies[5], [[copies[0], copies[1], 'S1']]])
+    // A branch at the hand-over point hands over its own latest turns (2 here), not the point itself.
+    db.prepare('UPDATE codex_chat_threads SET context_turns = 2 WHERE id = ?').run(id)
+    ;[cursor, segments, copies] = branched(ids[5])
+    assert.deepEqual([cursor, segments], [copies[3], [[copies[0], copies[1], 'S1']]])
+    db.prepare('UPDATE codex_chat_threads SET context_turns = NULL WHERE id = ?').run(id)
+    CodexChatStore.editAssistantMessage(id, ids[3], '고친 답')
+    assert.deepEqual(state(), [ids[5], 'S1', 1])
+    // A reply to the edited turn is about to be written: the cursor moves to just before that turn.
+    CodexChatStore.editUserMessage(id, ids[4], '다시')
+    assert.deepEqual(state(), [ids[3], 'S1', 1])
+  })
+
+  await t.test('regenerating a failed empty reply brings back the user message a fold ended at', () => {
+    const chat = () => {
+      const id = CodexChatStore.createThread(null, 'regenerate', 'llm', profile.id)
+      const ids = ['u1', 'a1', 'u2', ''].map((text, index) => CodexChatStore.addMessage({ thread_id: id, role: index % 2 ? 'assistant' : 'user', content: text, tool_calls: [], status: text ? 'completed' : 'failed', error: text ? null : 'boom' }))
+      const fold = (from: number, until: number, content: string) => assert.ok(ChatSummaryStore.addSegment(id, { from, until, content }, CodexChatStore.findThreadById(id)!.context_revision))
+      fold(ids[0], ids[1], 'S1')
+      const state = () => [CodexChatStore.findThreadById(id)!.summary_until_message_id, ChatSummaryStore.list(id).map((segment) => segment.content)]
+      return { id, ids, fold, state }
+    }
+    // The empty reply is not sendable, so summarizing everything ended at the user message it answers.
+    const failed = chat()
+    failed.fold(failed.ids[2], failed.ids[2], 'S2')
+    assert.deepEqual(failed.state(), [failed.ids[2], ['S1', 'S2']])
+    CodexChatStore.prepareRegeneration(failed.id, failed.ids[3])
+    assert.deepEqual(failed.state(), [failed.ids[1], ['S1']])
+    // The cursor is before the turn's user message: nothing moves.
+    const ordinary = chat()
+    const revision = CodexChatStore.findThreadById(ordinary.id)!.context_revision
+    CodexChatStore.prepareRegeneration(ordinary.id, ordinary.ids[3])
+    assert.deepEqual(ordinary.state(), [ordinary.ids[1], ['S1']])
+    assert.equal(CodexChatStore.findThreadById(ordinary.id)!.context_revision - revision, 1)
+  })
+
   await t.test('a summary written before segments existed becomes an unbacked plot; an edit inside it starts over', () => {
     const legacyId = CodexChatStore.createThread(null, 'legacy', 'llm', profile.id)
     const ids = ['a', 'b', 'c', 'd'].map((text, index) => CodexChatStore.addMessage({ thread_id: legacyId, role: index % 2 ? 'assistant' : 'user', content: text, tool_calls: [], status: 'completed', error: null }))

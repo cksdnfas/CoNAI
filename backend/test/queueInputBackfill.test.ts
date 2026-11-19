@@ -430,3 +430,34 @@ test('large terminal payload pruning preserves shared inputs until their last jo
   assert.equal(repeated.pruned, 0)
   assert.equal(repeated.releasedInputFiles, 0)
 })
+
+test('an abandoned cancellation with possible upstream work stays reconcilable and closes its history', async () => {
+  ;(await import('../src/database/apiGenerationDb')).initializeApiGenerationDb()
+  const { GenerationQueueService } = await import('../src/services/generationQueueService')
+  const db = getUserSettingsDb()
+  const abandoned = (submitState: string) => {
+    const id = GenerationQueueModel.create({ service_type: 'novelai', request_payload: { prompt: 'abandoned' } })
+    db.prepare(`UPDATE generation_queue_jobs SET status = 'running', cancel_requested = 1, provider_submit_state = ?,
+      updated_date = '2000-01-01 00:00:00' WHERE id = ?`).run(submitState, id)
+    return id
+  }
+  const inFlight = abandoned('in_flight')
+  const accepted = abandoned('accepted')
+  const settled = abandoned('cancel_confirmed')
+  const historyId = Number(db.prepare(`INSERT INTO api_generation_history (service_type, generation_status, queue_job_id)
+    VALUES ('novelai', 'processing', ?)`).run(accepted).lastInsertRowid)
+
+  GenerationQueueService.finalizeAbandonedCancellations()
+
+  const state = (id: number) => {
+    const row = GenerationQueueModel.findListRecordById(id)!
+    return [row.status, row.provider_submit_state]
+  }
+  assert.deepEqual(state(inFlight), ['cancelled', 'orphan_suspected'])
+  assert.deepEqual(state(accepted), ['cancelled', 'orphan_suspected'])
+  assert.deepEqual(state(settled), ['cancelled', 'cancel_confirmed'])
+  const reconcilable = GenerationQueueModel.findOrphanReconcileCandidates(500).map((row) => row.id)
+  assert.deepEqual([inFlight, accepted, settled].map((id) => reconcilable.includes(id)), [true, true, false])
+  const history = db.prepare('SELECT generation_status FROM api_generation_history WHERE id = ?').get(historyId) as { generation_status: string }
+  assert.equal(history.generation_status, 'failed')
+})

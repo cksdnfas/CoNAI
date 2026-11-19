@@ -35,7 +35,7 @@ import { completeRefModRecords, failRefModRecords, linkRefModRecords } from '../
 export function registerGenerationTools(server: McpServer, context: McpRequestContext): void {
   registerWorkflowListTools(server);
   registerComfyGenerationTools(server, context);
-  registerWorkflowDetailTools(server);
+  registerWorkflowDetailTools(server, context);
   registerNovelAiGenerationTools(server, context);
   registerGenerationJobTools(server, context);
 }
@@ -322,7 +322,7 @@ function registerComfyGenerationTools(server: McpServer, context: McpRequestCont
   );
 }
 
-function registerWorkflowDetailTools(server: McpServer): void {
+function registerWorkflowDetailTools(server: McpServer, context: McpRequestContext): void {
   // 워크플로우 상세 조회
   server.registerTool(
     'get_workflow_details',
@@ -372,7 +372,9 @@ function registerWorkflowDetailTools(server: McpServer): void {
               COMFY_SEED_RULE,
               'Omit both server_id and server_tag for automatic queue distribution.',
               'Provide server_id for one fixed active workflow-eligible server, or server_tag for exact normalized tag routing. Do not combine them.',
-              'submit_generation_job returns immediately; poll get_generation_job at intervals of at least 2 seconds and back off on HTTP 429.',
+              isChatMcpSource(context.source)
+                ? 'submit_generation_job returns immediately; the result attaches to your reply automatically, so do not wait or poll.'
+                : 'submit_generation_job returns immediately; poll get_generation_job at intervals of at least 2 seconds and back off on HTTP 429.',
               'Pass idempotency_key when retrying a submission: the same MCP key and request return the original job, while a different request is rejected.',
               'generate_comfyui remains available only as a synchronous compatibility tool.',
             ],

@@ -84,6 +84,14 @@ export function applyChatProfileAssetsProposal(proposalId: number) {
   return requestApiData<{ proposal: ChatProposal; batch?: ChatAssetBatch; result?: ChatAssetApplyResult }>(`/api/chat-proposals/${proposalId}/apply`, { method: 'POST' })
 }
 export type ChatEngine = 'llm' | 'codex' | 'claude'
+/** The engine's display name (profile editor's engine selector, chat transcript notices). */
+export const CHAT_ENGINE_LABELS: Record<ChatEngine, { ko: string; en: string }> = {
+  llm: { ko: 'API LLM', en: 'API LLM' },
+  codex: { ko: 'Codex', en: 'Codex' },
+  claude: { ko: 'Claude Code', en: 'Claude Code' },
+}
+/** A profile engine change recorded on a thread: shown after message `afterMessageId`; `profileId` names the room member. */
+export type ChatEngineChange = { afterMessageId: number; from: ChatEngine; to: ChatEngine; at: string; profileId?: number }
 export type ChatLlmRuntime = 'direct' | 'pi'
 export type ChatDiagnosticsScope = 'none' | 'view' | 'content' | 'prompts'
 
@@ -615,6 +623,8 @@ export interface CodexChatThread {
   max_tokens: number | null
   summary: string | null
   summary_until_message_id: number | null
+  /** JSON array of ChatEngineChange (read defensively); null: the engine never changed. */
+  engine_changes: string | null
   summary_updated_date: string | null
   /** Moves whenever the history or its summary is rewritten. */
   context_revision: number
@@ -923,6 +933,11 @@ export function updateChatProfile(profileId: number, patch: ChatProfileInput, re
 /** Marks a chat proposal saved (after the card's save or the editor's) so the card shows "saved" on every reload. */
 export function markChatProposalSaved(proposalId: number, savedId?: number | null) {
   return requestApiData<{ id: number; savedId: number | null; saved: boolean }>(`/api/chat-proposals/${proposalId}/saved`, { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(savedId == null ? {} : { savedId }) })
+}
+
+/** The chats a change of the profile's engine converts: direct chats and group rooms that use it. */
+export function getChatProfileEngineUsage(profileId: number) {
+  return requestApiData<{ directChats: number; rooms: number }>(`/api/codex-chat/admin/profiles/${profileId}/engine-usage`, { cache: 'no-store' })
 }
 
 export function deleteChatProfile(profileId: number) {

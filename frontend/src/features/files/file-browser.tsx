@@ -1,8 +1,8 @@
 import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { useNavigate } from 'react-router-dom'
-import { useMemo, useRef, useState, type DragEvent } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AudioLines, Download, FilePlus, Folder, FolderInput, FolderPlus, LayoutGrid, List, Pencil, Puzzle, RefreshCw, Reply, Search, Trash2, Upload } from 'lucide-react'
+import { AudioLines, ClipboardPaste, Download, FilePlus, Folder, FolderUp, FolderInput, FolderPlus, LayoutGrid, List, Pencil, Puzzle, RefreshCw, Reply, Scissors, Search, Trash2, Upload } from 'lucide-react'
 import type { FileSearchStatus, StoredFileEntry, StoredFileSearchHit } from '@conai/shared'
 import { PageWithSidebar } from '@/components/common/page-with-sidebar'
 import { PageToolbar } from '@/components/common/page-toolbar'
@@ -33,7 +33,7 @@ import { useChatPageDataPermissions } from '@/features/codex-chat/use-chat-page-
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { useI18n } from '@/i18n'
 import { triggerBrowserDownload } from '@/lib/api-client'
-import { FILES_QUERY_KEY, MAX_TEXT_DOCUMENT_BYTES, TEXT_FILE_PATTERN, createStoredFolder, deleteStoredFiles, listStoredFileRevisions, listStoredFiles, moveStoredFiles, renameStoredFile, restoreStoredFileRevision, searchStoredFiles, retryStoredFileIndex, storedFileDownloadUrl, storedFileRevisionsQueryKey, storedFileThumbnailUrl, uploadStoredFiles } from '@/lib/api-files'
+import { FILES_QUERY_KEY, MAX_TEXT_DOCUMENT_BYTES, TEXT_FILE_PATTERN, createStoredFolder, deleteStoredFiles, isRestrictedFileName, listStoredFileRevisions, listStoredFiles, moveStoredFiles, renameStoredFile, restoreStoredFileRevision, searchStoredFiles, retryStoredFileIndex, storedFileDownloadUrl, storedFileRevisionsQueryKey, storedFileThumbnailUrl, uploadStoredFiles } from '@/lib/api-files'
 import { formatFileSize } from '@/lib/format-size'
 import { getErrorMessage } from '@/lib/error-message'
 import { FilePreview } from './file-preview'
@@ -41,17 +41,29 @@ import { FileEntryIcon as EntryIcon, fileMediaKind as mediaKind } from './file-p
 import { FileTextEditor } from './file-text-editor'
 import { FileEntryView, type EntryItem } from './file-entry-views'
 import { WorkspaceSidebarGroup } from './workspace-projects'
-import { StoreFolderSidebarGroup, useStoreFolders } from './store-folders'
-import { useFileViewMode, type FileViewMode } from './file-view-mode'
+import { isInsideFolders, StoreFolderSidebarGroup, useStoreFolders } from './store-folders'
+import { nextFileSort, useFileSort, useFileViewMode, type FileSort, type FileViewMode } from './file-view-mode'
+import { FileSortMenu } from './file-sort-menu'
+import { clearCutItems, cutItems, forgetCutItems, STORE_CUT_SCOPE, useCutItems } from './cut-items'
 import { SystemFolderBrowser, SystemFolderSidebarGroup, type SystemFolderLocation } from './system-folder-browser'
 import { HighlightText } from '@/components/common/highlight-text'
 import { fileExtension } from '@/lib/file-extension'
 import { useDebouncedValue } from '@/lib/use-debounced-value'
-import { droppedIds, isMoveDrag, startMoveDrag } from './file-drag'
+import { FileListSurface } from './file-list-surface'
+import { advanceTreeUpload, entriesFromPickedFolder, finishTreeUpload, startTreeUpload, treeUploadRunning, treeUploadStopping, uploadBatches, useTreeUploadProgress, type UploadEntry } from './folder-upload'
+import { TreeUploadStatus } from './tree-upload-status'
+import { UPLOAD_LIMITS } from '@/lib/upload-limits'
+import { useEntryDrop } from './use-entry-drop'
 
 const FILE_DRAG_TYPE = 'application/x-conai-file-ids'
 const PAGE_SIZE = 100
-type NameDialog = { id?: string; name: string } | null
+/**
+ * `id` renames that item; without it a folder is created in `parent` (default: the open folder). `inline`: a person's
+ * gesture (F2, the item menu, the selection bar) edits the listed item's name in place, committing when the field is
+ * left. Everything else, the assistant's rename included, is the dialog: a review card's click would otherwise leave the
+ * field and rename before the person decided.
+ */
+type NameDialog = { id?: string; name: string; parent?: string | null; inline?: boolean } | null
 
 /** A stored item's grid face: image and video files show a thumbnail, everything else a type icon with its extension. */
 function StoredFileFace({ entry }: { entry: StoredFileEntry }) {
@@ -166,14 +178,22 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, pickFolde
   const canSendAudio = useCanSendToAudio()
   const [viewMode, changeViewMode] = useFileViewMode()
   const uploadInput = useRef<HTMLInputElement>(null)
+  const folderInput = useRef<HTMLInputElement>(null)
+  // A folder upload goes on while the files page remounts this browser for another folder: its progress is not state here.
+  const treeUploadProgress = useTreeUploadProgress()
+  const treeUpload = isPicker ? null : treeUploadProgress
   // Search replaces the folder list while open; the request waits for typing to pause.
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchInput, setSearchInput] = useState('')
   const searchQuery = useDebouncedValue(searchInput.trim())
   const canSearch = !isPicker
   const searching = canSearch && searchOpen && searchQuery !== ''
-  const query = useQuery({ queryKey: [...FILES_QUERY_KEY, accountKey, 'list', parentId, offset], queryFn: ({ signal }) => listStoredFiles(parentId, offset, signal), enabled: canViewFiles && !browsingSystem })
-  const { folders } = useStoreFolders(canViewFiles)
+  const [sortOrder, changeSortOrder, sortKeys] = useFileSort('files')
+  const order = { sort: sortOrder.sort, direction: sortOrder.direction }
+  const query = useQuery({ queryKey: [...FILES_QUERY_KEY, accountKey, 'list', parentId, offset, sortOrder.sort, sortOrder.direction], queryFn: ({ signal }) => listStoredFiles(parentId, offset, signal, order), enabled: canViewFiles && !browsingSystem })
+  // The server sorts the whole folder, so a new order starts again at the first page.
+  const setSort = (next: FileSort) => { changeSortOrder(next); setOffset(0); setSelected([]) }
+  const { folders, entries: folderEntries, byId: folderById } = useStoreFolders(canViewFiles)
   const searchResults = useQuery({ queryKey: [...FILES_QUERY_KEY, accountKey, 'search', searchQuery], queryFn: ({ signal }) => searchStoredFiles(searchQuery, signal), enabled: canViewFiles && searching })
   const retryExtraction = useMutation({
     mutationFn: (id: string) => retryStoredFileIndex(id),
@@ -193,32 +213,42 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, pickFolde
   const chatReference = useCodexChatReference()
   const chatRef = !isPicker && chatDocked ? chatReference : null
   const selectedFiles = selection.filter((entry) => entry.kind === 'file')
-  const refresh = () => queryClient.invalidateQueries({ queryKey: FILES_QUERY_KEY })
+  // A name edited in place needs its item on this page; once it is gone (another page, a delete, a search) the draft goes too.
+  const renamingEntry = nameDialog?.inline && !searching ? entries.find((entry) => entry.id === nameDialog.id) : undefined
+  if (nameDialog?.inline && renamingEntry === undefined) setNameDialog(null)
+  const refresh =() => queryClient.invalidateQueries({ queryKey: FILES_QUERY_KEY })
   const mutation = useMutation({
     mutationFn: (action: () => Promise<unknown>) => action(),
     onSuccess: async () => {
       setSelected([])
-      setNameDialog(null)
+      // A name being edited in place belongs to its own commit: another operation (a drop of files) must not discard it.
+      setNameDialog((current) => (current?.inline ? current : null))
       setMoveOpen(false)
       await refresh()
     },
     onError: (error) => showSnackbar({ tone: 'error', message: getErrorMessage(error, t({ ko: '파일 작업에 실패했어.', en: 'File operation failed.' })) }),
   })
-  const busy = mutation.isPending
+  const busy = mutation.isPending || treeUpload !== null
   const chatPage = !isPicker && chatCanReadFiles && !browsingSystem
   // The previewed text file's earlier versions, so the connected chat can put one back (a review card).
   const previewVersioned = chatPage && preview !== null && preview.kind === 'file' && TEXT_FILE_PATTERN.test(preview.name)
   const versionsQuery = useQuery({ queryKey: storedFileRevisionsQueryKey(accountKey, preview?.id, preview?.updatedAt), queryFn: () => listStoredFileRevisions(preview!.id), enabled: previewVersioned })
   const versions = previewVersioned ? versionsQuery.data?.revisions ?? [] : []
   const editableDocuments = entries.filter((entry) => entry.kind === 'file' && TEXT_FILE_PATTERN.test(entry.name) && entry.size <= MAX_TEXT_DOCUMENT_BYTES)
-  const saveName = (dialog: NonNullable<NameDialog>) => mutation.mutateAsync(() => (dialog.id ? renameStoredFile(dialog.id, dialog.name) : createStoredFolder(parentId, dialog.name)))
+  // Every route that deletes, moves or renames (the list, the sidebar, the assistant) goes through these, so a cut mark
+  // is dropped whenever its items, or the folder they were cut in (or one above it), are changed.
+  const forgetCut = (changed: string[]) => forgetCutItems(STORE_CUT_SCOPE, (cut) => cut.ids.some((id) => changed.includes(id)) || isInsideFolders(folderById, cut.from, changed))
+  const saveName = (dialog: NonNullable<NameDialog>) => mutation.mutateAsync(() => (dialog.id ? renameStoredFile(dialog.id, dialog.name) : createStoredFolder(dialog.parent === undefined ? parentId : dialog.parent, dialog.name))).then(() => { if (dialog.id) forgetCut([dialog.id]) })
+  const moveItems = (ids: string[], folderId: string) => mutation.mutateAsync(() => moveStoredFiles(ids, folderId || null)).then(() => forgetCut(ids))
+  const deleteItems = (ids: string[]) => mutation.mutateAsync(() => deleteStoredFiles(ids)).then(() => forgetCut(ids))
   const writerName = (source: { via?: string; profileName?: string } | null) => (source ? [source.via, source.profileName].filter(Boolean).join(' · ') : null)
 
   useChatPageRegistration(chatPage ? {
-    kind: 'files', title: t({ ko: '파일 보관함', en: 'File store' }), resourceId: `shared:${parentId ?? 'root'}`, localRevision: JSON.stringify([selected, preview?.id, nameDialog, moveOpen, searchOpen, searchInput]),
+    kind: 'files', title: t({ ko: '파일 보관함', en: 'File store' }), resourceId: `shared:${parentId ?? 'root'}`, localRevision: JSON.stringify([selected, preview?.id, nameDialog, moveOpen, searchOpen, searchInput, sortOrder]),
     reviewRevision: JSON.stringify([selected, preview?.id, nameDialog]),
     fields: [
       { id: 'viewMode', label: t({ ko: '목록 표시', en: 'List view' }), type: 'select', value: viewMode, options: ['grid', 'list'], viewOnly: true },
+      { id: 'sort', label: t({ ko: '목록 정렬 (기준:방향, 폴더가 먼저)', en: 'List order (key:direction, folders first)' }), type: 'select', value: `${sortOrder.sort}:${sortOrder.direction}`, options: sortKeys.flatMap((key) => [`${key}:asc`, `${key}:desc`]), viewOnly: true },
       { id: 'search', label: t({ ko: '파일 검색어 (이름·내용, 빈 값은 검색 닫기)', en: 'File search (name or text; empty closes search)' }), type: 'text', value: searchOpen ? searchInput : '' },
       ...(nameDialog ? [{ id: 'name', label: t({ ko: '폴더·파일 이름 입력', en: 'Folder or file name draft' }), type: 'text' as const, value: nameDialog.name }] : []),
       ...(moveOpen ? [{ id: 'moveTarget', label: t({ ko: '이동할 폴더 (빈 값은 최상위)', en: 'Destination folder (empty means root)' }), type: 'select' as const, value: moveTarget, options: ['', ...folders.filter((entry) => !selected.includes(entry.folder.id)).map((entry) => entry.folder.id)].slice(0, 100) }] : []),
@@ -229,7 +259,7 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, pickFolde
       // Names and writers of the previewed file's versions only: their text stays out (open the document to read it).
       ...(versions.length ? { previewVersions: versions.slice(0, 30).map((version) => ({ id: version.id, at: version.replacedAt, by: writerName(version.replacedBy) })) } : {}),
     },
-    apply: (patch) => { if (patch.viewMode !== undefined) changeViewMode(patch.viewMode as FileViewMode); if (patch.search !== undefined) { setSearchInput(String(patch.search)); setSearchOpen(String(patch.search).trim() !== '') } if (patch.name !== undefined) setNameDialog((old) => old ? { ...old, name: String(patch.name) } : old); if (patch.moveTarget !== undefined) setMoveTarget(String(patch.moveTarget)) },
+    apply: (patch) => { if (patch.viewMode !== undefined) changeViewMode(patch.viewMode as FileViewMode); if (patch.sort !== undefined) { const [key, direction] = String(patch.sort).split(':'); const next = sortKeys.find((value) => value === key); if (next && (direction === 'asc' || direction === 'desc')) setSort({ sort: next, direction }) } if (patch.search !== undefined) { setSearchInput(String(patch.search)); setSearchOpen(String(patch.search).trim() !== '') } if (patch.name !== undefined) setNameDialog((old) => old ? { ...old, name: String(patch.name) } : old); if (patch.moveTarget !== undefined) setMoveTarget(String(patch.moveTarget)) },
     actions: [
       pageAction('files.open', t({ ko: '폴더 열기', en: 'Open folder' }), t({ ko: '목록(data.files)의 폴더나 최상위(root)를 열어.', en: 'Open a listed folder or the top level (root).' }), pageObject({ id: pageChoice(['root', ...entries.filter((entry) => entry.kind === 'folder').slice(0, 200).map((entry) => entry.id)]) }, ['id'])),
       ...(entries.some((entry) => entry.kind !== 'folder') ? [pageAction('files.preview', t({ ko: '파일 미리보기', en: 'Preview file' }), t({ ko: '목록의 파일 미리보기를 열어.', en: 'Open a listed file preview.' }), pageObject({ id: pageChoice(entries.filter((entry) => entry.kind !== 'folder').slice(0, 300).map((entry) => entry.id)) }, ['id']))] : []),
@@ -237,7 +267,8 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, pickFolde
       ...(canOrganize ? [
         pageAction('files.new_folder', t({ ko: '새 폴더 창 열기', en: 'Open new folder dialog' }), t({ ko: 'name을 채우고 files.name_save', en: 'fill name, then files.name_save' })),
         ...(entries.length ? [pageAction('files.rename', t({ ko: '이름 변경 창 열기', en: 'Open rename dialog' }), t({ ko: 'name을 채우고 files.name_save', en: 'fill name, then files.name_save' }), pageObject({ id: pageText(32) }, ['id']))] : []),
-        ...(nameDialog && nameDialog.name.trim() ? [pageAction('files.name_save', nameDialog.id ? t({ ko: '이름 바꾸기', en: 'Rename' }) : t({ ko: '폴더 만들기', en: 'Create folder' }), '', undefined, 'save')] : []),
+        // Not while a name is edited in place: leaving that field commits it, so a review card could never decide first.
+        ...(nameDialog && !nameDialog.inline && nameDialog.name.trim() ? [pageAction('files.name_save', nameDialog.id ? t({ ko: '이름 바꾸기', en: 'Rename' }) : t({ ko: '폴더 만들기', en: 'Create folder' }), '', undefined, 'save')] : []),
         ...(selection.length ? [pageAction('files.move', t({ ko: '이동 창 열기', en: 'Open move dialog' }), t({ ko: 'moveTarget을 고르고 files.move_save', en: 'pick moveTarget, then files.move_save' }))] : []),
         ...(moveOpen && selection.length ? [pageAction('files.move_save', t({ ko: '선택 항목 이동', en: 'Move selection' }), '', undefined, 'save')] : []),
       ] : []),
@@ -253,8 +284,8 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, pickFolde
       if (id === 'files.new_folder') { setNameDialog({ name: '' }); return }
       if (id === 'files.name_save' && nameDialog) { await saveName(nameDialog); return }
       if (id === 'files.move') { setMoveTarget(parentId ?? ''); setMoveOpen(true); return }
-      if (id === 'files.move_save') { await mutation.mutateAsync(() => moveStoredFiles(selected, moveTarget || null)); return }
-      if (id === 'files.delete') { await mutation.mutateAsync(() => deleteStoredFiles(selected)); return }
+      if (id === 'files.move_save') { await moveItems(selected, moveTarget); return }
+      if (id === 'files.delete') { await deleteItems(selected); return }
       if (id === 'files.new_document') { setEditor({ entry: null }); return }
       if (id === 'files.restore_version' && preview) {
         if (!versions.some((version) => version.id === args.versionId)) throw new Error('그 버전을 찾을 수 없어.')
@@ -295,33 +326,79 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, pickFolde
   const upload = (files: File[], target: string | null = parentId) => {
     if (canUpload && !busy && files.length) mutation.mutate(() => uploadStoredFiles(target, files, { allowAnyType: canUploadAny }))
   }
-  const drop = (event: DragEvent, target: string | null) => {
-    event.preventDefault()
-    event.stopPropagation()
-    if (busy) return
-    const dragged = droppedIds(event, FILE_DRAG_TYPE)
-    if (dragged) {
-      // A folder dropped onto itself stays put; the server refuses moves into its own subfolders.
-      const ids = dragged.filter((id) => id !== target)
-      if (canOrganize && ids.length) mutation.mutate(() => moveStoredFiles(ids, target))
-    } else if (event.dataTransfer.files.length) {
-      upload(Array.from(event.dataTransfer.files), target)
-    }
+  /**
+   * Files and folders from the computer (dropped or picked) into `target`: batched requests, in order, stoppable between
+   * batches. Its progress is `useTreeUploadProgress`, from the first read of the dropped folders on.
+   */
+  const uploadTree = (source: Promise<UploadEntry[]> | UploadEntry[], target: string | null) => {
+    if (!canUpload || busy || treeUploadRunning()) return
+    startTreeUpload()
+    void mutation.mutateAsync(async () => {
+      try {
+        const entries = await source
+        if (entries.length === 0) {
+          showSnackbar({ tone: 'info', message: t({ ko: '올릴 파일이 없어.', en: 'No files to upload.' }) })
+          return
+        }
+        const restricted = canUploadAny ? undefined : entries.find((entry) => isRestrictedFileName(entry.file.name))
+        if (restricted) throw new Error(t({ ko: '이 형식은 올릴 수 없어: {name}', en: 'Restricted file type: {name}' }, { name: restricted.file.name }))
+        const oversized = entries.find((entry) => entry.file.size > UPLOAD_LIMITS.maxFileBytes)
+        if (oversized) throw new Error(t({ ko: '파일 하나는 {limit}까지 올릴 수 있어: {name}', en: 'A file can be up to {limit}: {name}' }, { limit: formatFileSize(UPLOAD_LIMITS.maxFileBytes), name: oversized.file.name }))
+        const folders = entries.some((entry) => entry.path.includes('/'))
+        let done = 0
+        try {
+          for (const batch of uploadBatches(entries, UPLOAD_LIMITS.maxFilesPerRequest, UPLOAD_LIMITS.maxRequestBytes)) {
+            if (treeUploadStopping()) break
+            advanceTreeUpload(done, entries.length)
+            await uploadStoredFiles(target, batch.map((entry) => entry.file), { allowAnyType: canUploadAny, relativePaths: folders ? batch.map((entry) => entry.path) : undefined })
+            done += batch.length
+          }
+        } catch (error) {
+          await refresh()
+          throw new Error(`${t({ ko: '{done}개 올리고 {rest}개는 올리지 못했어.', en: 'Uploaded {done}; {rest} were not uploaded.' }, { done, rest: entries.length - done })} ${getErrorMessage(error, '')}`.trim(), { cause: error })
+        }
+        if (done < entries.length) showSnackbar({ tone: 'info', message: t({ ko: '업로드를 멈췄어. {done}개 올리고 {rest}개는 올리지 않았어.', en: 'Upload stopped. Uploaded {done}; {rest} were not uploaded.' }, { done, rest: entries.length - done }) })
+      } finally {
+        finishTreeUpload()
+      }
+    }).catch(() => undefined)
   }
-  const dragOver = (event: DragEvent) => {
-    if (busy) return
-    const moving = isMoveDrag(event, FILE_DRAG_TYPE)
-    if (moving ? !canOrganize : !canUpload) return
-    event.preventDefault()
-    event.dataTransfer.dropEffect = moving ? 'move' : 'copy'
-  }
+  const move = (ids: string[], folderId: string) => { void moveItems(ids, folderId).catch(() => undefined) }
+  // Cut marks items; a paste in another folder moves them through the same move as a drag does.
+  const cut = useCutItems(STORE_CUT_SCOPE, accountKey)
+  const cutSelection = (ids: string[] = selected) => { if (canOrganize && ids.length) cutItems({ scope: STORE_CUT_SCOPE, account: accountKey, ids, from: parentId ?? '' }) }
+  const canPasteInto = (folderId: string) => cut !== null && canOrganize && !busy && folderId !== cut.from && !isInsideFolders(folderById, folderId, cut.ids)
+  // A paste that did not go through drops the mark: the person cuts again from the refreshed list.
+  const paste = (folderId: string = parentId ?? '') => { if (cut && canPasteInto(folderId)) void moveItems(cut.ids, folderId).catch(clearCutItems) }
+  // Drop targets are folder ids ('' is the top): tiles, rows, the sidebar tree, the breadcrumbs and the list itself.
+  const { drop, startMove, endMove } = useEntryDrop({
+    moveType: FILE_DRAG_TYPE,
+    canMove: canOrganize,
+    canUpload,
+    busy,
+    // Moving into the open folder is no move; the server also refuses a folder moved into its own subfolders.
+    allowsMove: (folderId, ids) => folderId !== (parentId ?? '') && !isInsideFolders(folderById, folderId, ids),
+    onMove: move,
+    onUpload: (files, folderId) => upload(files, folderId || null),
+    // Pickers keep the plain file upload.
+    onUploadTree: isPicker ? undefined : (entries, folderId) => uploadTree(entries, folderId || null),
+  })
+  /** True once the person confirmed and the server deleted. */
   const remove = async (ids: string[] = selected) => {
     const confirmed = await confirm({
       title: t({ ko: '선택한 항목을 삭제할까?', en: 'Delete selected items?' }),
       description: t({ ko: '선택한 항목과 원본 파일을 삭제해. 빈 폴더가 아니거나 채팅에서 쓰는 파일은 남겨. 삭제한 항목은 되돌릴 수 없어.', en: 'Delete selected items and original files, keeping non-empty folders and files used in chats. Deleted items cannot be restored.' }),
       tone: 'destructive',
     })
-    if (confirmed) mutation.mutate(() => deleteStoredFiles(ids))
+    if (!confirmed) return false
+    return deleteItems(ids).then(() => true, () => false)
+  }
+  /** A sidebar folder, deleted like a listed one; when it held the open folder and is really gone (the server keeps a non-empty one), the view steps out of it. */
+  const removeFolder = async (folder: StoredFileEntry) => {
+    const viewing = parentId !== null && isInsideFolders(folderById, parentId, [folder.id])
+    if (!await remove([folder.id]) || !viewing) return
+    const remaining = queryClient.getQueryData<StoredFileEntry[]>([...FILES_QUERY_KEY, accountKey, 'folders'])
+    if (remaining && !remaining.some((entry) => entry.id === folder.id)) navigate(folder.parentId)
   }
   const download = (entry: StoredFileEntry) => {
     triggerBrowserDownload(storedFileDownloadUrl(entry.id), entry.name)
@@ -334,10 +411,27 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, pickFolde
       ? { key: 'chat-reference', label: t({ ko: '채팅 참조 빼기', en: 'Remove chat reference' }), icon: Reply, onSelect: () => chatRef.removeAttachment(entry.id) }
       : { key: 'chat-reference', label: t({ ko: '채팅에 참조', en: 'Reference in chat' }), icon: Reply, onSelect: () => chatRef.addAttachments([entry]) }),
     '-',
-    canOrganize && { key: 'rename', label: t({ ko: '이름 변경', en: 'Rename' }), icon: Pencil, disabled: busy, onSelect: () => setNameDialog({ id: entry.id, name: entry.name }) },
+    canOrganize && { key: 'cut', label: t({ ko: '잘라내기', en: 'Cut' }), icon: Scissors, disabled: busy, onSelect: () => cutSelection(selected.includes(entry.id) ? selected : [entry.id]) },
+    canOrganize && { key: 'rename', label: t({ ko: '이름 변경', en: 'Rename' }), icon: Pencil, disabled: busy, onSelect: () => setNameDialog({ id: entry.id, name: entry.name, inline: true }) },
     canOrganize && { key: 'move', label: t({ ko: '이동', en: 'Move' }), icon: FolderInput, disabled: busy, onSelect: () => { setSelected([entry.id]); setMoveTarget(parentId ?? ''); setMoveOpen(true) } },
     '-',
     canDelete && { key: 'delete', label: t({ ko: '삭제', en: 'Delete' }), icon: Trash2, destructive: true, disabled: busy, onSelect: () => void remove([entry.id]) },
+  ]
+  /** A sidebar folder's actions (null: the top row): the list's dialogs and confirmation, for that folder. */
+  const folderMenu = (folder: StoredFileEntry | null): ActionMenuEntry[] => [
+    canOrganize && { key: 'new-folder', label: t({ ko: '새 폴더', en: 'New folder' }), icon: FolderPlus, disabled: busy, onSelect: () => setNameDialog({ name: '', parent: folder?.id ?? null }) },
+    folder && canOrganize && { key: 'rename', label: t({ ko: '이름 변경', en: 'Rename' }), icon: Pencil, disabled: busy, onSelect: () => setNameDialog({ id: folder.id, name: folder.name }) },
+    canPasteInto(folder?.id ?? '') && { key: 'paste', label: t({ ko: '붙여넣기', en: 'Paste' }), icon: ClipboardPaste, onSelect: () => paste(folder?.id ?? '') },
+    '-',
+    folder && canDelete && { key: 'delete', label: t({ ko: '삭제', en: 'Delete' }), icon: Trash2, destructive: true, disabled: busy, onSelect: () => void removeFolder(folder) },
+  ]
+  /** Right-click on empty list space: the ways to add something to the open folder. */
+  const emptySpaceMenu: ActionMenuEntry[] = [
+    canOrganize && { key: 'new-folder', label: t({ ko: '새 폴더', en: 'New folder' }), icon: FolderPlus, disabled: busy, onSelect: () => setNameDialog({ name: '' }) },
+    canUpload && { key: 'new-document', label: t({ ko: '새 문서', en: 'New document' }), icon: FilePlus, disabled: busy, onSelect: () => setEditor({ entry: null }) },
+    canPasteInto(parentId ?? '') && { key: 'paste', label: t({ ko: '붙여넣기', en: 'Paste' }), icon: ClipboardPaste, onSelect: () => paste() },
+    canUpload && { key: 'upload', label: t({ ko: '파일 업로드', en: 'Upload files' }), icon: Upload, disabled: busy, onSelect: () => uploadInput.current?.click() },
+    canUpload && { key: 'upload-folder', label: t({ ko: '폴더 업로드', en: 'Upload folder' }), icon: FolderUp, disabled: busy, onSelect: () => folderInput.current?.click() },
   ]
 
   const actions = (
@@ -352,6 +446,7 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, pickFolde
           { value: 'list', label: <List className="size-3.5" />, ariaLabel: t({ ko: '자세히 보기', en: 'Details' }) },
         ]}
       />
+      {viewMode === 'grid' ? <FileSortMenu value={sortOrder} keys={sortKeys} onChange={setSort} /> : null}
       {canSearch ? (
         <IconButton size="icon-sm" variant="ghost" active={searchOpen} label={t({ ko: '검색', en: 'Search' })} onClick={() => searchOpen ? closeSearch() : setSearchOpen(true)}>
           <Search />
@@ -368,6 +463,7 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, pickFolde
         entries={[
           !isPicker && !browsingSystem && { key: 'plugin', label: t({ ko: '플러그인으로 열기', en: 'Open with plugin' }), icon: Puzzle, disabled: busy || selected.length > 20 || selection.some((entry) => entry.kind !== 'file'), onSelect: () => navigateToExtension(`/extensions${selected.length ? `?files=${encodeURIComponent(selected.join(','))}` : ''}`) },
           canUpload && !isPicker && { key: 'new-document', label: t({ ko: '새 문서', en: 'New document' }), icon: FilePlus, disabled: busy, onSelect: () => setEditor({ entry: null }) },
+          canUpload && !isPicker && { key: 'upload-folder', label: t({ ko: '폴더 업로드', en: 'Upload folder' }), icon: FolderUp, disabled: busy, onSelect: () => folderInput.current?.click() },
           { key: 'refresh', label: t({ ko: '새로고침', en: 'Refresh' }), icon: RefreshCw, disabled: busy, onSelect: () => void refresh() },
         ]}
       />
@@ -386,7 +482,8 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, pickFolde
   const breadcrumbs = (
     <PathBreadcrumbs
       ariaLabel={t({ ko: '현재 경로', en: 'Current path' })}
-      items={[{ key: 'root', label: rootLabel, onClick: () => navigate(null) }, ...(query.data?.breadcrumbs ?? []).map((folder) => ({ key: folder.id, label: folder.name, onClick: () => navigate(folder.id) }))]}
+      items={[{ key: 'root', label: rootLabel, dropId: '', onClick: () => navigate(null) }, ...(query.data?.breadcrumbs ?? []).map((folder) => ({ key: folder.id, label: folder.name, dropId: folder.id, onClick: () => navigate(folder.id) }))]}
+      dropTarget={isPicker ? undefined : drop}
     />
   )
 
@@ -394,10 +491,11 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, pickFolde
     <PageToolbarSearch value={searchInput} onChange={setSearchInput} onClose={closeSearch} placeholder={t({ ko: '파일 이름이나 내용 검색', en: 'Search file names and text' })} />
   )
 
+  // A server folder is open instead of the store: the tree only navigates (the dialogs below belong to the store view).
   const sidebar = (
-    <SidebarNav aria-label={t({ ko: '폴더', en: 'Folders' })}>
+    <SidebarNav aria-label={t({ ko: '폴더', en: 'Folders' })} {...(browsingSystem ? undefined : drop.containerProps)}>
       {workspaces && canViewFiles ? <WorkspaceSidebarGroup activeId={null} onOpen={workspaces.onOpen} onCreate={workspaces.onCreate} /> : null}
-      <StoreFolderSidebarGroup labelled={workspaces !== undefined} activeId={browsingSystem ? undefined : parentId} onOpen={navigate} onDragOver={dragOver} onDrop={drop} />
+      <StoreFolderSidebarGroup labelled={workspaces !== undefined} activeId={browsingSystem ? undefined : parentId} onOpen={navigate} dropTarget={browsingSystem ? undefined : drop} getFolderMenu={browsingSystem ? undefined : folderMenu} />
       {canBrowseSystem ? <SystemFolderSidebarGroup active={browsingSystem ? system.root : null} onOpen={(root) => onSystemNavigate({ root, path: '' })} /> : null}
     </SidebarNav>
   )
@@ -413,6 +511,16 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, pickFolde
     disabled: isPicker && (entry.kind === 'file' ? !pickable(entry) : refuse?.(entry) === true),
     disabledReason: isPicker && refuse?.(entry) === true ? refuseReason : undefined,
   })
+  const commitRename = async () => {
+    if (!nameDialog?.id || !renamingEntry) return
+    const name = nameDialog.name.trim()
+    if (!name || name === renamingEntry.name) { setNameDialog(null); return }
+    if (!busy) {
+      await saveName({ ...nameDialog, name })
+      setNameDialog(null)
+    }
+  }
+  const openEntry = (entry: StoredFileEntry) => { if (entry.kind === 'folder') navigate(entry.id); else setPreview(entry) }
   let list
   if (searching) {
     if (searchResults.isPending) list = <LoadingState />
@@ -437,17 +545,20 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, pickFolde
         canSelect={(item) => !isPicker || pickable(byId.get(item.id)!)}
         menu={isPicker ? undefined : (item) => rowEntries(byId.get(item.id)!)}
         formatSize={formatFileSize}
+        onSelect={isPicker ? undefined : setSelected}
+        sort={sortOrder}
+        sortKeys={sortKeys}
+        onSort={(key) => setSort(nextFileSort(sortOrder, key))}
+        cutIds={isPicker ? undefined : cut?.ids}
+        renaming={renamingEntry && nameDialog ? { id: renamingEntry.id, value: nameDialog.name, onChange: (name) => setNameDialog((current) => (current ? { ...current, name } : null)), onCommit: commitRename, onCancel: () => setNameDialog(null) } : undefined}
         draggable={canOrganize && !busy && !isPicker}
-        onDragStart={(item, event) => {
-          startMoveDrag(event, FILE_DRAG_TYPE, selected.includes(item.id) ? selected : [item.id])
-        }}
-        onFolderDragOver={dragOver}
-        onFolderDrop={(item, event) => drop(event, item.id)}
+        onDragStart={(ids, event) => startMove(event, ids)}
+        onDragEnd={endMove}
+        dropTarget={drop}
         onOpen={(item) => {
           const entry = byId.get(item.id)!
-          if (entry.kind === 'folder') navigate(entry.id)
-          else if (isPicker || (viewMode === 'grid' && selected.length > 0)) toggle(entry.id, !checked.includes(entry.id))
-          else setPreview(entry)
+          if (isPicker && entry.kind !== 'folder') toggle(entry.id, !checked.includes(entry.id))
+          else openEntry(entry)
         }}
       />
     )
@@ -462,12 +573,33 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, pickFolde
     />
   ) : null
 
+  const crumbs = query.data?.breadcrumbs ?? []
   const body = (
-    <div className="min-h-72 space-y-3" onDragOver={dragOver} onDrop={(event) => drop(event, parentId)}>
+    <FileListSurface
+      drop={drop}
+      dropId={parentId ?? ''}
+      dropLabel={t({ ko: '여기에 놓으면 "{folder}"에 업로드해', en: 'Drop to upload to "{folder}"' }, { folder: crumbs.at(-1)?.name ?? rootLabel })}
+      selection={isPicker || searching ? undefined : {
+        selectedIds: selected,
+        pageIds: entries.map((entry) => entry.id),
+        onSelectedIdsChange: setSelected,
+        onOpen: selection.length === 1 ? () => openEntry(selection[0]) : undefined,
+        onDelete: canDelete && selection.length > 0 && !busy ? () => void remove() : undefined,
+        onRename: canOrganize && selection.length === 1 && !busy ? () => setNameDialog({ id: selection[0].id, name: selection[0].name, inline: true }) : undefined,
+        // The parent is known from the path of the open folder: until that has loaded there is none to go to.
+        onParent: parentId !== null && crumbs.length > 0 ? () => navigate(crumbs.length > 1 ? crumbs[crumbs.length - 2].id : null) : undefined,
+        onCut: canOrganize && !busy && selection.length > 0 ? () => cutSelection() : undefined,
+        onPaste: canPasteInto(parentId ?? '') ? () => paste() : undefined,
+        onCancelCut: cut ? clearCutItems : undefined,
+        menu: emptySpaceMenu,
+      }}
+    >
       <input ref={uploadInput} type="file" multiple className="hidden" onChange={(event) => { upload(Array.from(event.target.files ?? [])); event.target.value = '' }} />
+      {isPicker ? null : <input ref={folderInput} type="file" multiple className="hidden" aria-label={t({ ko: '폴더 업로드', en: 'Upload folder' })} {...{ webkitdirectory: '' }} onChange={(event) => { const picked = entriesFromPickedFolder(Array.from(event.target.files ?? [])); event.target.value = ''; uploadTree(picked, parentId) }} />}
+      {isPicker ? null : <TreeUploadStatus />}
       {list}
       {pager}
-    </div>
+    </FileListSurface>
   )
 
   return (
@@ -512,7 +644,7 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, pickFolde
             <>
               {chatRef && selectedFiles.length > 0 ? <SelectionBarAction icon={Reply} label={t({ ko: '채팅에 참조', en: 'Reference in chat' })} onClick={() => { chatRef.addAttachments(selectedFiles); setSelected([]) }} /> : null}
               {canSendAudio && audioSelection ? <SelectionBarAction icon={AudioLines} label={t({ ko: '오디오로 보내기', en: 'Send to Audio' })} disabled={busy} onClick={() => setAudioSend(selection)} /> : null}
-              {canOrganize ? <SelectionBarAction icon={Pencil} label={t({ ko: '이름 변경', en: 'Rename' })} disabled={selection.length !== 1 || busy} onClick={() => setNameDialog({ id: selection[0].id, name: selection[0].name })} /> : null}
+              {canOrganize ? <SelectionBarAction icon={Pencil} label={t({ ko: '이름 변경', en: 'Rename' })} disabled={selection.length !== 1 || busy} onClick={() => setNameDialog({ id: selection[0].id, name: selection[0].name, inline: true })} /> : null}
               {canOrganize ? <SelectionBarAction icon={FolderInput} label={t({ ko: '이동', en: 'Move' })} disabled={busy} onClick={() => { setMoveTarget(parentId ?? ''); setMoveOpen(true) }} /> : null}
               {canDelete ? <SelectionBarAction icon={Trash2} label={t({ ko: '삭제', en: 'Delete' })} variant="destructive" disabled={busy} onClick={() => void remove()} /> : null}
             </>
@@ -521,7 +653,7 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, pickFolde
       )}
 
       <NameDialog
-        open={nameDialog !== null}
+        open={nameDialog !== null && !nameDialog.inline}
         title={nameDialog?.id ? t({ ko: '이름 변경', en: 'Rename' }) : t({ ko: '새 폴더', en: 'New folder' })}
         value={nameDialog?.name ?? ''}
         onChange={(name) => setNameDialog((current) => (current ? { ...current, name } : null))}
@@ -534,15 +666,15 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, pickFolde
         open={moveOpen}
         value={moveTarget}
         onChange={setMoveTarget}
-        folders={folders.map(({ folder, path }) => ({ value: folder.id, label: path, disabled: selected.includes(folder.id) }))}
+        folders={moveOpen ? folderEntries.filter((folder) => !isInsideFolders(folderById, folder.id, selected)).map((folder) => ({ value: folder.id, label: folder.name, parent: folder.parentId ?? '' })) : []}
         rootLabel={rootLabel}
-        onSubmit={() => mutation.mutate(() => moveStoredFiles(selected, moveTarget || null))}
+        onSubmit={() => move(selected, moveTarget)}
         onClose={() => setMoveOpen(false)}
         busy={busy}
       />
 
       <SendToAudioDialog files={audioSend} onClose={() => setAudioSend(null)} />
-      {preview ? <FilePreview entry={preview} onClose={() => setPreview(null)} onNavigate={setPreview} onEdit={canUpload ? (entry) => { setPreview(null); setEditor({ entry }) } : undefined} /> : null}
+      {preview ? <FilePreview entry={preview} order={order} onClose={() => setPreview(null)} onNavigate={setPreview} onEdit={canUpload ? (entry) => { setPreview(null); setEditor({ entry }) } : undefined} /> : null}
       {editor ? (
         <FileTextEditor
           key={editor.entry?.id ?? 'new'}

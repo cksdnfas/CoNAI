@@ -31,9 +31,9 @@ export function DataTh({ numeric = false, className, ...props }: ComponentProps<
   return <th className={cn('py-2 pr-3 font-semibold last:pr-0', numeric && 'text-right', className)} {...props} />
 }
 
-/** Hairline row; `interactive` adds the hover wash, `selected` keeps it. */
+/** Hairline row; `interactive` adds the hover wash, `selected` keeps it; `data-drop-target="true"` tints it as the current drop target. */
 export function DataTr({ interactive = false, selected = false, className, ...props }: ComponentProps<'tr'> & { interactive?: boolean; selected?: boolean }) {
-  return <tr className={cn('border-b border-line last:border-b-0', interactive && 'hover:bg-fill', selected && 'bg-fill', className)} {...props} />
+  return <tr className={cn('border-b border-line last:border-b-0', interactive && 'hover:bg-fill', selected && 'bg-fill', 'data-[drop-target=true]:bg-primary/20', className)} {...props} />
 }
 
 /**

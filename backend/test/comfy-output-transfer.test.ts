@@ -11,7 +11,11 @@ import type { AxiosInstance } from 'axios'
 test('ComfyUI transfer streams output and removes incomplete files', { timeout: 30000 }, async t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'conai-comfy-transfer-'))
   process.env.RUNTIME_BASE_PATH = root
-  t.after(() => fs.promises.rm(root, { recursive: true, force: true }))
+  t.after(async () => {
+    // The ComfyUI service's imports open images.db under this root; Windows cannot remove it while it is open.
+    ;(await import('../src/database/init')).closeDatabase()
+    await fs.promises.rm(root, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 })
+  })
   const { downloadComfyOutputFile } = await import('../src/services/comfyui/fileTransfer')
   const bytes = Buffer.from('output bytes')
   const axios = {

@@ -14,6 +14,7 @@ import { CodexChatStore } from './codexChatStore'
 import { ChatGroupStore } from './chatGroupStore'
 import { requireChatPageAccess } from './chatPageContext'
 import { chatWorkspaces } from './chatWorkspace'
+import { chatProfileRequester } from './chatProfilePermissions'
 import { mcpToolNames } from '../../mcp/context'
 import { pluginProfileTools } from '../plugins/pluginServerTools'
 
@@ -51,6 +52,8 @@ export type ChatAccess = {
   isAdmin: boolean
   /** The account's permission groups (inherited ones included), for profiles limited to some groups. */
   groupKeys: string[]
+  /** The account's feature keys, which each tool still needs (a profile's delegated keys come on top in its chats). */
+  permissionKeys: string[]
 }
 
 /**
@@ -81,6 +84,7 @@ export function resolveChatAccess(accountId: number | null): ChatAccess {
     diagnostics: loadChatSettings().diagnostics.enabled ? diagnosticsScopeOf(permissionKeys, isAdmin) : 'none',
     isAdmin,
     groupKeys,
+    permissionKeys,
   }
 }
 
@@ -159,7 +163,7 @@ const tokens = new Map<string, { research?: McpHttpAuthentication['research']; r
  */
 export function issueCodexChatMcpToken(requester: McpRequester, scopes: ChatScope[], toolAllowlist: string[] | null, generationPresetIds: number[] = [], chatContext?: ChatExecutionContext, research?: McpHttpAuthentication['research']) {
   const token = `${CHAT_MCP_TOKEN_PREFIX}${crypto.randomBytes(32).toString('base64url')}`
-  tokens.set(token, { research, requester: { ...requester }, scopes: [...scopes], toolAllowlist: toolAllowlist ? [...toolAllowlist] : null, generationPresetIds: [...generationPresetIds], generationPresetSnapshot: JSON.stringify(ChatGenerationPresetStore.resolve(generationPresetIds)), chatContext, workspaces: research ? [] : chatWorkspaces(requester, chatContext?.threadId, chatContext?.profileId) })
+  tokens.set(token, { research, requester: { ...requester }, scopes: [...scopes], toolAllowlist: toolAllowlist ? [...toolAllowlist] : null, generationPresetIds: [...generationPresetIds], generationPresetSnapshot: JSON.stringify(ChatGenerationPresetStore.resolve(generationPresetIds)), chatContext, workspaces: research ? [] : chatWorkspaces(chatContext ? chatProfileRequester(requester, chatContext) : requester, chatContext?.threadId, chatContext?.profileId) })
   return token
 }
 

@@ -176,6 +176,8 @@ test('chat generation: terminal results and owner-only completion events', { tim
   await t.test('failure without history, cancellation and no-image completion stay on the creator; pending does not overlap', () => {
     for (const status of ['failed', 'cancelled', 'completed']) {
       const id = job(status)
+      // A completed job that made nothing still has its imageless history row (one with none left was pruned, below).
+      if (status === 'completed') history(id, 'completed', null)
       const messageId = reply(id, [call(id), call(id, 'wait_generation_job')])
       const result = read()
       const calls = result.messages.find((message) => message.id === messageId)!.tool_calls
@@ -198,6 +200,27 @@ test('chat generation: terminal results and owner-only completion events', { tim
     const failedHistoryId = history(id, 'failed', null)
     db.prepare('UPDATE codex_chat_messages SET tool_calls = ? WHERE id = ?').run(JSON.stringify([{ ...call(id), historyIds: [failedHistoryId] }]), messageId)
     assert.deepEqual(read().messages.find((message) => message.id === messageId)!.tool_calls[0].historyIds, [], 'the failure card replaces any stored empty history thumbnail')
+  })
+
+  await t.test('a completed result whose history row was pruned reads as no longer kept, not as a failure', () => {
+    const kept = job('completed')
+    const keptMessage = reply(kept)
+    const keptHistory = history(kept, 'completed', `image-${kept}`)
+    const pruned = job('completed')
+    const prunedMessage = reply(pruned)
+    // What generation-history retention does to the oldest terminal rows.
+    db.prepare('DELETE FROM api_generation_history WHERE id = ?').run(history(pruned, 'completed', `image-${pruned}`))
+    const messages = read().messages
+    const keptCall = messages.find((message) => message.id === keptMessage)!.tool_calls[0]
+    assert.deepEqual(keptCall.historyIds, [keptHistory])
+    assert.equal(keptCall.failedJobs, undefined)
+    const cards = messages.find((message) => message.id === prunedMessage)!.tool_calls[0].failedJobs!
+    assert.deepEqual(cards.map(({ jobId, status, failureCode }) => ({ jobId, status, failureCode })), [{ jobId: pruned, status: 'completed', failureCode: 'result_pruned' }])
+    assert.match(cards[0].failureMessage, /보관되지 않아/)
+    // A later request is told the same, not that the job produced nothing.
+    const replayed = withGenerationOutcomes(CodexChatStore.listMessages(thread.id))
+    assert.match(String(replayed.find((message) => message.id === prunedMessage)!.tool_calls[0].output), new RegExp(`job #${pruned} finished, but its result is no longer kept`))
+    assert.match(String(replayed.find((message) => message.id === keptMessage)!.tool_calls[0].output), /1 image attached/)
   })
 
   await t.test('completed images suppress failure cards; unlinked failures do not acquire them', () => {

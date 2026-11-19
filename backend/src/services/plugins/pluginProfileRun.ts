@@ -220,13 +220,24 @@ export async function runPluginProfile(params: {
     signal.throwIfAborted()
     const { CodexChatService } = await import('../codex-chat/codexChatService')
     await CodexChatService.waitUntilIdle(room.id, signal)
-    CodexChatStore.updateThreadContext(room.id, { maxTokens: input.maxTokens === undefined ? null : Math.min(input.maxTokens, profile.maxTokens ?? input.maxTokens) })
+    // This run's cap (unset: the profile's own) is lent to the room for the run only; the room's own setting comes back
+    // afterwards, also on failure or abort, unless someone changed it meanwhile. The room lock keeps other runs out.
+    const runMaxTokens = input.maxTokens === undefined ? null : Math.min(input.maxTokens, profile.maxTokens ?? input.maxTokens)
+    const roomMaxTokens = CodexChatStore.findThreadById(room.id)?.max_tokens ?? null
+    if (runMaxTokens !== roomMaxTokens) CodexChatStore.updateThreadContext(room.id, { maxTokens: runMaxTokens })
     const instruction = [input.history ? `<plugin-history>\n${input.history}\n</plugin-history>` : '',
       input.userName ? `Conversation partner: ${input.userName}` : '', input.message].filter(Boolean).join('\n\n')
-    const result = await withPluginProfileTools({ threadId: room.id, pluginId, accountId: requester.accountId, profileId: profile.id,
-      requestId: input.requestId, tools: input.pluginTools ?? [] }, () => wakeChatRoom({ requester, threadId: room.id, instruction,
-      routing: { source: 'plugin', id: null, name: pluginName }, signal, onDelivered: messageId => params.onDelivered?.({ threadId: room.id, messageId }),
-      onPrimaryComplete: params.onPrimaryComplete, followUpDeadlineExpired: params.followUpDeadlineExpired }))
+    let result: Awaited<ReturnType<typeof wakeChatRoom>>
+    try {
+      result = await withPluginProfileTools({ threadId: room.id, pluginId, accountId: requester.accountId, profileId: profile.id,
+        requestId: input.requestId, tools: input.pluginTools ?? [] }, () => wakeChatRoom({ requester, threadId: room.id, instruction,
+        routing: { source: 'plugin', id: null, name: pluginName }, signal, onDelivered: messageId => params.onDelivered?.({ threadId: room.id, messageId }),
+        onPrimaryComplete: params.onPrimaryComplete, followUpDeadlineExpired: params.followUpDeadlineExpired }))
+    } finally {
+      if (runMaxTokens !== roomMaxTokens && (CodexChatStore.findThreadById(room.id)?.max_tokens ?? null) === runMaxTokens) {
+        CodexChatStore.updateThreadContext(room.id, { maxTokens: roomMaxTokens })
+      }
+    }
     if (!result.followUpTimedOut) signal.throwIfAborted()
     if (result.replies[0]?.status !== 'completed') {
       // The engine's own reason (quota, sign-in, model error) is on the failed reply; without it the caller sees only "failed".

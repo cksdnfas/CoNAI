@@ -7,8 +7,10 @@ import { type GraphWorkflowNode } from '../../types/moduleGraph'
 import { FileDiscoveryService } from '../folderScan/fileDiscoveryService'
 import { ImageUploadService } from '../imageUploadService'
 import { enqueueGenerationJobs } from '../generation-queue/queueEnqueue'
+import { externalizeQueueInputDataUrls } from '../generation-queue/queueInputStore'
 import { settingsService } from '../settingsService'
 import { saveCanonicalMediaArtifactReference, saveMetadataArtifact, shouldMaterializeRuntimeArtifactValue } from './artifacts'
+import { throwIfExecutionAborted } from './execution-abort'
 import { GRAPH_EXECUTION_CANCELLED_MESSAGE, waitForGraphQueueCompletion } from './queue-wait'
 import {
   bufferToDataUrl,
@@ -191,18 +193,24 @@ export async function executeNaiModule(context: ExecutionContext, node: GraphWor
   const imageSaveOptions = buildQueueImageSaveOptions()
 
   try {
+    // Checked before the inputs are stored: externalizing and enqueueing below are synchronous.
+    throwIfExecutionAborted(context, node.id)
     const [jobId] = enqueueGenerationJobs({
       service_type: 'novelai',
       workflow_name: moduleDefinition.name,
-      request_payload: {
+      requested_by_account_id: context.requestedByAccountId ?? null,
+      // Upstream images arrive as base64 data URLs; the NovelAI executor hydrates the stored references back.
+      request_payload: externalizeQueueInputDataUrls({
         ...requestInput,
         imageSaveOptions,
         _debug: {
           graph_execution_id: context.executionId,
           workflow_debug_mode: context.debugMode,
         },
-      },
+      }).value,
       request_summary: `${context.workflow.name} · ${node.label || moduleDefinition.name}`,
+    }, {
+      withinTransaction: ({ jobIds }) => jobIds.forEach((id) => GenerationQueueModel.markGraphOrigin(id)),
     }).jobIds
 
     writeExecutionLog({

@@ -183,6 +183,27 @@ test('automation routines: run-as schedules, timing, chat wakes, routines and no
     assert.equal(GraphWorkflowScheduleModel.findById(broken)!.status, 'error_stopped')
   })
 
+  await t.test('only the schedule account or an administrator can switch a schedule back on', async () => {
+    const workflowId = GraphWorkflowModel.create({ name: 'theirs', graph } as any)
+    const scheduleId = GraphWorkflowScheduleModel.create({
+      graph_workflow_id: workflowId, name: 'theirs', schedule_type: 'interval', interval_minutes: 60, status: 'paused', confirmed_graph_version: 1, run_as_account_id: 1,
+    } as any)
+    const router = createGraphWorkflowScheduleRoutes() as any
+    const route = router.stack.find((layer: any) => layer.route?.path === '/schedules/:scheduleId/resume').route
+    const handler = route.stack[route.stack.length - 1].handle
+    const resume = (accountId: number) => new Promise<number>((resolve, reject) => {
+      let status = 200
+      const res = { status(code: number) { status = code; return this }, json() { resolve(status); return this } }
+      Promise.resolve(handler({ params: { scheduleId: String(scheduleId) }, query: {}, body: {}, session: { authenticated: true, accountId } }, res, reject)).catch(reject)
+    })
+    await withAuthConfigured(async () => {
+      assert.equal(await resume(2), 403)
+      assert.equal(GraphWorkflowScheduleModel.findById(scheduleId)!.status, 'paused')
+      assert.equal(await resume(1), 200)
+    })
+    assert.equal(GraphWorkflowScheduleModel.findById(scheduleId)!.status, 'active')
+  })
+
   // ---- Chat wakes ----------------------------------------------------------------------------------------------------
   const mina = ChatProfileStore.create({ name: 'Mina', engine: 'llm', providerName: 'test', model: 'mina', mcpEnabled: false, summaryEnabled: false })
   const rui = ChatProfileStore.create({ name: 'Rui', engine: 'llm', providerName: 'test', model: 'rui', mcpEnabled: false, summaryEnabled: false })
@@ -238,6 +259,25 @@ test('automation routines: run-as schedules, timing, chat wakes, routines and no
     assert.equal(values.name, 'Morning')
     assert.equal(values.timezone, 'Asia/Seoul')
     assert.equal(values.account_id, 1)
+  })
+
+  await t.test('saving a routine without a time zone keeps its own and times the next run in it', async () => {
+    const routine = ChatRoutineStore.create({ ...normalizeChatRoutineInput({ name: 'UTC morning', target: 'dedicated', profileId: mina.id, message: 'm', scheduleType: 'daily', dailyTime: '09:00', timezone: 'UTC' }, 1), status: 'active' })
+    const router = (await import('../src/routes/chat-routines.routes')).default as any
+    const route = router.stack.find((layer: any) => layer.route?.path === '/:id' && layer.route.methods.put).route
+    const handler = route.stack[route.stack.length - 1].handle
+    const saved = await new Promise<number>((resolve, reject) => {
+      let status = 200
+      const res = { status(code: number) { status = code; return this }, json() { resolve(status); return this } }
+      const body = { name: 'UTC morning', target: 'dedicated', profileId: mina.id, message: 'Changed.', scheduleType: 'daily', dailyTime: '09:00', active: true }
+      Promise.resolve(handler({ params: { id: String(routine.id) }, query: {}, body, session: { accountId: 1 } }, res, reject)).catch(reject)
+    })
+    assert.equal(saved, 200)
+    const after = ChatRoutineStore.find(routine.id)!
+    assert.equal(after.message, 'Changed.')
+    assert.equal(after.timezone, 'UTC')
+    assert.match(after.nextRunAt ?? '', /T09:00:00\.000Z$/)
+    ChatRoutineStore.delete(routine.id)
   })
 
   await t.test('a due routine wakes its own room, moves its next time first, and records the outcome', async () => {

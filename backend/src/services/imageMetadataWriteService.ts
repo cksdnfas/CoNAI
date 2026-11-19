@@ -12,6 +12,8 @@ export interface ImageMetadataWriteOptions {
   quality?: number;
   lossless?: boolean;
   sourcePathForMetadata?: string;
+  /** Format of an input with no source file; when set and no source path is given, AI metadata is read from the input bytes. */
+  inputFormatForMetadata?: ImageOutputFormat;
   originalFileName?: string;
   mimeType?: string;
   metadataPatch?: Partial<AIMetadata>;
@@ -82,8 +84,11 @@ function applyMetadataPatch(baseAiInfo: AIMetadata | undefined, metadataPatch: P
 }
 
 /** Build standard EXIF/XMP carriers from extracted source metadata. */
-async function buildMetadataArtifacts(options: Pick<ImageMetadataWriteOptions, 'sourcePathForMetadata' | 'originalFileName' | 'mimeType' | 'metadataPatch'>): Promise<ImageMetadataArtifacts> {
-  if (!options.sourcePathForMetadata) {
+async function buildMetadataArtifacts(
+  options: Pick<ImageMetadataWriteOptions, 'sourcePathForMetadata' | 'inputFormatForMetadata' | 'originalFileName' | 'mimeType' | 'metadataPatch'>,
+  inputBuffer: Buffer,
+): Promise<ImageMetadataArtifacts> {
+  if (!options.sourcePathForMetadata && !options.inputFormatForMetadata) {
     return {
       payload: null,
       xmp: null,
@@ -91,7 +96,10 @@ async function buildMetadataArtifacts(options: Pick<ImageMetadataWriteOptions, '
     };
   }
 
-  const extracted = await MetadataExtractor.extractPreservableData(options.sourcePathForMetadata);
+  const extracted = options.sourcePathForMetadata
+    ? await MetadataExtractor.extractPreservableData(options.sourcePathForMetadata)
+    // In-memory source: the name only selects the format's readers, the bytes are the input itself.
+    : await MetadataExtractor.extractPreservableData(`input.${options.inputFormatForMetadata}`, inputBuffer);
   const extractedRawData = extracted.rawData && Object.keys(extracted.rawData).length > 0
     ? extracted.rawData
     : undefined;
@@ -202,10 +210,11 @@ export class ImageMetadataWriteService {
   static async writeBufferAsFormatBuffer(inputBuffer: Buffer, options: ImageMetadataWriteOptions): Promise<ImageMetadataWriteResult> {
     const artifacts = await buildMetadataArtifacts({
       sourcePathForMetadata: options.sourcePathForMetadata,
+      inputFormatForMetadata: options.inputFormatForMetadata,
       originalFileName: options.originalFileName,
       mimeType: options.mimeType,
       metadataPatch: options.metadataPatch,
-    });
+    }, inputBuffer);
 
     const pipelineInput = options.metadataPatch && Object.keys(options.metadataPatch).length > 0
       ? await sharp(inputBuffer).toBuffer()

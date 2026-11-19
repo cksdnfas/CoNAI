@@ -567,7 +567,8 @@ export function CodexChatContextView({ thread, profiles, profileEngine, profileM
       <ChatUserProfileRow thread={thread} />
       <ChatModelRow thread={thread} engine={profileEngine} profileModelLabel={profileModelLabel} />
       <AuthorNoteBlock key={thread.id} thread={thread} defaults={noteDefaults} />
-      <GenerationReactionSettings thread={thread} profile={profileReaction} />
+      {/* Only API LLM profiles react: a Claude Code chat gets none, like a Codex one (the context route refuses both). */}
+      {profileEngine === 'llm' ? <GenerationReactionSettings thread={thread} profile={profileReaction} /> : null}
       <LorebookBlock threadId={thread.id} loreAutoSave={thread.lore_auto_save} profiles={profiles} />
       <LinkedFilesBlock threadId={thread.id} group={thread.kind === 'group'} />
       <SettingRow label={t({ ko: '참고할 최근 턴 수', en: 'Recent turns sent' })}>

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { Fragment, useEffect, useState, type ReactNode } from 'react'
 import { useInfiniteQuery } from '@tanstack/react-query'
 import { Check, ChevronDown, FolderKanban, Plus } from 'lucide-react'
 import type { WorkspaceSummary } from '@conai/shared'
@@ -33,17 +33,34 @@ export function useWorkspaceProjects(enabled = true) {
   return { projects, query, hasMore: query.hasNextPage, loadMore: () => void query.fetchNextPage() }
 }
 
-/** Files sidebar group: every project, + to create one, and "더 보기" past the first 50. */
-export function WorkspaceSidebarGroup({ activeId, onOpen, onCreate }: { activeId: string | null; onOpen: (id: string) => void; onCreate?: () => void }) {
+/**
+ * The open project's folder tree for `WorkspaceSidebarGroup`: shown under its row, which then stands for the
+ * project's top folder (current when `atTop`, a drop target through `topAttributes`).
+ */
+export type WorkspaceSidebarTree = { atTop: boolean; topAttributes?: Record<`data-${string}`, string | undefined>; children: ReactNode }
+
+/** Files sidebar group: every project (the open one with its folder tree), + to create one, and "더 보기" past the first 50. */
+export function WorkspaceSidebarGroup({ activeId, onOpen, onCreate, tree, rowDepth = 0 }: { activeId: string | null; onOpen: (id: string) => void; onCreate?: () => void; tree?: WorkspaceSidebarTree; /** Indent of the project rows, to line up beside a tree that has a chevron column. */ rowDepth?: number }) {
   const { t } = useI18n()
   const { projects, hasMore, loadMore, query } = useWorkspaceProjects()
+  // A project past the loaded pages has no row to hang its tree on; the tree then follows the list.
+  const treeListed = projects.some((project) => project.id === activeId)
   return (
     <>
       <SidebarGroupLabel actions={onCreate ? <Button size="compact" variant="ghost" aria-label={t({ ko: '새 작업 공간', en: 'New workspace' })} onClick={onCreate}><Plus />{t({ ko: '추가', en: 'Add' })}</Button> : undefined}>
         {t({ ko: '작업 공간', en: 'Workspaces' })}
       </SidebarGroupLabel>
-      {projects.map((project) => <SidebarItem key={project.id} icon={FolderKanban} label={project.name} active={project.id === activeId} onClick={() => onOpen(project.id)} />)}
+      {projects.map((project) => {
+        const open = project.id === activeId
+        return (
+          <Fragment key={project.id}>
+            <SidebarItem icon={FolderKanban} depth={rowDepth} label={project.name} active={open && (tree?.atTop ?? true)} onClick={() => onOpen(project.id)} {...(open ? tree?.topAttributes : undefined)} />
+            {open ? tree?.children : null}
+          </Fragment>
+        )
+      })}
       {hasMore ? <SidebarItem icon={ChevronDown} label={t({ ko: '더 보기', en: 'More' })} disabled={query.isFetchingNextPage} onClick={(event) => { event.preventDefault(); loadMore() }} /> : null}
+      {treeListed ? null : tree?.children}
     </>
   )
 }

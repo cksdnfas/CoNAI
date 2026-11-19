@@ -26,9 +26,6 @@ export const QUEUE_PROVIDER_SUBMIT_STATES: GenerationQueueProviderSubmitState[] 
   'cancel_unsupported',
 ]
 
-/** terminal 로 확정해도 상류 정리가 끝나지 않은 상태들. cancelled 전이 시 승격 대상. */
-const UNRESOLVED_SUBMIT_STATES: GenerationQueueProviderSubmitState[] = ['in_flight', 'orphan_suspected']
-
 export type QueueTransitionUpdateOptions = {
   assignedServerId?: number | null
   failureCode?: string | null
@@ -92,10 +89,11 @@ export function buildQueueTransitionUpdates(
     case 'cancelled':
       updates.completed_at = nowIso
       updates.cancel_requested = true
-      // 상류에 작업이 남아 있을 수 있는 채로 terminal 이 되는 경우다.
-      // 상태만 확정하고 정리는 미완료로 표시해 orphan reconciler 가 이어받게 한다.
-      if (UNRESOLVED_SUBMIT_STATES.includes(current.provider_submit_state ?? 'none')) {
-        updates.provider_submit_state = 'orphan_unresolved'
+      // 제출 도중에 terminal 이 되면 상류에 작업이 남아 있을 수 있다. 상태만 확정하고 reconcile 후보로
+      // 남겨 orphan reconciler 가 이어받게 한다(`orphan_suspected` 는 이미 후보라 그대로 둔다).
+      // `orphan_unresolved` 는 reconciler 가 정리를 포기할 때만 붙는다.
+      if (current.provider_submit_state === 'in_flight') {
+        updates.provider_submit_state = 'orphan_suspected'
       }
       break
   }

@@ -116,6 +116,16 @@ export async function wakeChatRoom(params: {
   return { thread, replies, ...(followUpFailed ? { followUpFailed } : {}), ...(followUpTimedOut ? { followUpTimedOut } : {}) }
 }
 
+/**
+ * The chat services store a failed or cut-off answer as a reply instead of throwing, so a wake that set off no reply
+ * or any reply that did not complete counts as failed. Returns the failure text (the first reply error, else
+ * `fallback`), or null when the wake succeeded.
+ */
+export function wakeFailure(result: ChatWakeResult, fallback: string) {
+  if (result.replies.length && result.replies.every((reply) => reply.status === 'completed')) return null
+  return result.replies.find((reply) => reply.error)?.error ?? fallback
+}
+
 /** The text of the replies a wake set off, speaker-labelled in group rooms. */
 export function wakeReplyText(result: ChatWakeResult) {
   const names = new Map(ChatProfileStore.listNames().map((profile) => [profile.id, profile.name]))
@@ -138,6 +148,7 @@ function roomsTable() {
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
         PRIMARY KEY (account_key, room_key)
       );
+      CREATE INDEX IF NOT EXISTS idx_chat_automation_rooms_thread ON chat_automation_rooms(thread_id);
     `)
     ensured.add(db)
   }

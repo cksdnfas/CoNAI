@@ -212,8 +212,8 @@ test('posts bots: @ calls run as the caller, chain, limits and cancel', { timeou
     assert.match(opening, /이 글 요약해줘/)
     assert.ok(!opening.includes('등대 아래 우체통'), 'the post text is not pasted into the room')
     assert.ok(seraRequests.some((messages) => JSON.stringify(messages).includes('등대 아래 우체통')), 'it came back from posts_read')
-    // Others wrote the post: the turn never offers the caller's private files, though the profile allows them.
-    assert.ok(seraTools.length > 0 && seraTools.every((names) => names.includes('posts_read') && !names.includes('list_files') && !names.includes('read_file_text')), JSON.stringify(seraTools))
+    // The shared file store stays open in a board call, as in any chat the profile allows it in.
+    assert.ok(seraTools.length > 0 && seraTools.every((names) => names.includes('posts_read') && names.includes('list_files') && names.includes('read_file_text')), JSON.stringify(seraTools))
 
     const comments = PostCommentStore.list(alice, post.id)
     const seraComments = comments.filter((comment) => comment.author.profileId === sera.id)

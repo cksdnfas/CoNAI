@@ -181,6 +181,7 @@ export type PluginLlmProfile = {
   translation?: { enabled: boolean; modelLanguage: 'en' | 'ko' | 'ja' | 'zh'; displayLanguage: 'en' | 'ko' | 'ja' | 'zh' }
   assetVersion: string | null; avatarCrop: { x: number; y: number; scale: number } | null
   assets: { avatar: boolean; background: boolean; reference: boolean }
+  /** An administrator gets the preset's settings; any other account only `presetId`, `presetName` and `available` (the rest null). */
   judge: {
     presetId: number | null; presetName: string | null; available: boolean
     followUp: { maxConsecutive: number; delaySeconds: number; directive: string } | null
@@ -195,20 +196,24 @@ export type PluginLlmProfile = {
     name: string; label: string; min: number | null; max: number | null; step: number | null; values: string[]; readonly: boolean
   }> }>
   /**
-   * Every saved profile setting as the profile editor holds it (persona prompt and sections, greetings, opening history,
-   * lore/summary/context/judge settings, style with its blocks, model rows…). Only image bytes are left out: read
-   * them with `asset()`.
+   * What the account's own profile API gives. An administrator: every saved profile setting as the profile editor holds
+   * it (persona prompt and sections, greetings, opening history, lore/summary/context/judge settings, style with its
+   * blocks, model rows…). Any other account: the chat user's public profile view, image hashes and crop null without
+   * `images.view`. Image bytes are always left out: read them with `asset()`.
    */
   details: Record<string, unknown>
   /** App-wide (Settings › 채팅 › 기억): keyword lore entries one selection keeps, best matches first. */
   loreSelectionLimit: number
 }
-/** `llm.profile({ profileId })`: one profile with what it links, read whole. */
+/** `llm.profile({ profileId })`: one profile with what it links. */
 export type PluginLlmProfileDetail = PluginLlmProfile & {
-  /** The profile's lorebooks (shared account books, then global ones) with every entry. */
+  /**
+   * The profile's lorebooks (shared account books, then global ones). The account's own books carry every entry; global
+   * books carry them only for an administrator (`entries: []` otherwise, as the chat lorebook list gives them).
+   */
   lorebooks: Array<{ id: number; name: string; kind: string; entries: Array<Record<string, unknown>> }>
-  /** The judge preset the profile uses, whole; null without one. */
-  judgePreset: ChatJudgePreset | null
+  /** The judge preset the profile uses: whole for an administrator, `{ id, name }` for any other account; null without one. */
+  judgePreset: ChatJudgePreset | Pick<ChatJudgePreset, 'id' | 'name'> | null
 }
 /** Server module `conai.generationPresets.list()` / `get(id)` (administrators only): a chat generation preset. */
 export type PluginGenerationPreset = {

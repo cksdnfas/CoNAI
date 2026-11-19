@@ -393,12 +393,14 @@ function FailedJobThumb({ job, size }: { job: NonNullable<CodexChatToolCall['fai
   const { t } = useI18n()
   const cancelled = job.status === 'cancelled'
   const noImage = job.failureCode === 'no_image'
-  const label = cancelled ? t({ ko: '취소됨', en: 'Cancelled' }) : noImage ? t({ ko: '이미지 없음', en: 'No image' }) : t({ ko: '실패', en: 'Failed' })
-  const reason = job.failureMessage || (cancelled ? t({ ko: '작업이 취소됐어', en: 'The job was cancelled' }) : noImage ? t({ ko: '완료된 이미지가 없어', en: 'No completed image' }) : t({ ko: '이미지 생성에 실패했어', en: 'Image generation failed' }))
-  const Icon = cancelled ? Ban : AlertTriangle
+  // A finished result whose history record was cleaned up later: not a failure.
+  const pruned = job.failureCode === 'result_pruned'
+  const label = cancelled ? t({ ko: '취소됨', en: 'Cancelled' }) : pruned ? t({ ko: '보관 안 됨', en: 'Not kept' }) : noImage ? t({ ko: '이미지 없음', en: 'No image' }) : t({ ko: '실패', en: 'Failed' })
+  const reason = job.failureMessage || (cancelled ? t({ ko: '작업이 취소됐어', en: 'The job was cancelled' }) : pruned ? t({ ko: '생성은 끝났지만 결과 기록이 더 이상 보관되지 않아', en: 'Finished, but its result record is no longer kept' }) : noImage ? t({ ko: '완료된 이미지가 없어', en: 'No completed image' }) : t({ ko: '이미지 생성에 실패했어', en: 'Image generation failed' }))
+  const Icon = cancelled ? Ban : pruned ? ImageOff : AlertTriangle
   return (
     <Tip content={`${t({ ko: '작업', en: 'Job' })} #${job.jobId} · ${reason}`}>
-      <div className={cn('flex shrink-0 flex-col items-center justify-center gap-1.5 rounded-sm border bg-surface-low text-xs font-semibold', THUMB_PLACEHOLDER_CLASS[size], cancelled ? 'border-line text-muted-foreground' : 'border-destructive/22 text-destructive')}>
+      <div className={cn('flex shrink-0 flex-col items-center justify-center gap-1.5 rounded-sm border bg-surface-low text-xs font-semibold', THUMB_PLACEHOLDER_CLASS[size], cancelled || pruned ? 'border-line text-muted-foreground' : 'border-destructive/22 text-destructive')}>
         <Icon className="size-[18px]" />
         {label}
       </div>

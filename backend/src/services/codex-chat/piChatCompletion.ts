@@ -396,20 +396,25 @@ type PiToolCall = Extract<PiAssistantMessage['content'][number], { type: 'toolCa
  * A finished pi answer with the tool calls it wrote as text made real, and native calls to catalogued tools sent
  * through run_tool (pi runs only the tools it was given). `held`: the text the stream kept back (textToolCallFilter);
  * `tail` is what of it to show. Null: nothing to change. pi executes the returned message's calls (message_end).
+ * `final`: the run's last round, whose tools are gone.
  */
-export function recoverPiToolCalls(message: PiAssistantMessage, available: TextToolCallTools, held: { text: string; marked: boolean }) {
+export function recoverPiToolCalls(message: PiAssistantMessage, available: TextToolCallTools, held: { text: string; marked: boolean }, final = false) {
   const direct = new Set(available.tools.map((tool) => tool.function.name))
   const routable = (name: string) => !direct.has(name) && available.catalogued.has(name) && direct.has(CATALOG_RUN_TOOL)
   const native = message.content.filter((part): part is PiToolCall => part.type === 'toolCall')
   const text = message.content.flatMap((part) => (part.type === 'text' ? [part.text] : [])).join('')
-  const written = native.length === 0 ? recoverTextToolCalls(text, held, available) : null
+  // A call the output limit cut off carries broken arguments, and the last round runs none: as in a direct reply
+  // (llmChatService), no call is made of the markup, which still stays out of the reply and out of pi's session.
+  const stripOnly = final || message.stopReason === 'length'
+  const written = native.length === 0 ? recoverTextToolCalls(text, held, available, stripOnly, message.stopReason === 'length') : null
   if (written) {
     const firstText = message.content.findIndex((part) => part.type === 'text')
     const content = message.content.flatMap<PiAssistantMessage['content'][number]>((part, index) => part.type !== 'text' ? [part] : index === firstText && written.text ? [{ ...part, text: written.text }] : [])
+    if (stripOnly) return { message: { ...message, content }, tail: written.tail }
     const calls: PiToolCall[] = written.calls.map((call) => ({ type: 'toolCall', id: call.id, name: call.function.name, arguments: JSON.parse(call.function.arguments) }))
     return { message: { ...message, content: [...content, ...calls], stopReason: message.stopReason === 'stop' ? 'toolUse' as const : message.stopReason }, tail: written.tail }
   }
-  if (!native.some((call) => routable(call.name))) return null
+  if (final || !native.some((call) => routable(call.name))) return null
   const content = message.content.map((part) => part.type === 'toolCall' && routable(part.name) ? { ...part, name: CATALOG_RUN_TOOL, arguments: { tool: part.name, arguments: part.arguments } } : part)
   return { message: { ...message, content }, tail: held.text }
 }
@@ -424,6 +429,7 @@ const addUsage = (total: LlmTokenCounts, usage: { input?: number; output?: numbe
   if (!usage) return
   total.inputTokens += (usage.input ?? 0) + (usage.cacheRead ?? 0) + (usage.cacheWrite ?? 0)
   total.cachedInputTokens += usage.cacheRead ?? 0
+  if (usage.cacheWrite) total.cacheWriteInputTokens = (total.cacheWriteInputTokens ?? 0) + usage.cacheWrite
   total.outputTokens += usage.output ?? 0
 }
 
@@ -517,7 +523,8 @@ async function runPiChatCompletion(params: {
   const textWatch = params.stopLoops ? createRepetitionWatch() : null
   const reasoningWatch = params.stopLoops ? createRepetitionWatch() : null
   let separate = false
-  // Tool calls written as text are recovered while the model has tools (they go once the budget is used up).
+  // Tool calls written as text are recovered while the model has tools (they go once the budget is used up); after
+  // that, their markup is still kept out of the reply.
   let recovering = tools.length > 0
   // Each assistant message's text starts a paragraph of its own (a round's note, then the answer).
   const emitText = (text: string) => {
@@ -541,7 +548,7 @@ async function runPiChatCompletion(params: {
       api.on('message_end', (event) => {
         if (event.message.role !== 'assistant' || looping) return
         const held = textFilter.end()
-        const recovered = recovering ? recoverPiToolCalls(event.message, { tools, catalogued: params.catalogued ?? new Set() }, held) : null
+        const recovered = recoverPiToolCalls(event.message, { tools, catalogued: params.catalogued ?? new Set() }, held, !recovering)
         emitText(recovered ? recovered.tail : held.text)
         if (recovered && held.marked) noteTextToolCalls(params.target)
         return recovered ? { message: recovered.message } : undefined
@@ -626,7 +633,8 @@ async function runPiChatCompletion(params: {
   // the final message resolves before pi goes on, so each request is counted once, in order.
   agent.agent.streamFunction = async (requestModel, context, options) => {
     const response = await send(requestModel, context, options)
-    void response.result().then(noteRequest)
+    // A stream that rejects fails its request, which reports the failure itself: there is nothing to count.
+    void response.result().then(noteRequest, () => {})
     return response
   }
   // This run's model answers, in order (a compaction rebuilds the session's messages, so they are collected here).

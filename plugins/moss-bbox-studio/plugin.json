@@ -1,5 +1,5 @@
 {
-  "apiVersion": 1, "id": "moss-bbox-studio", "name": "MOSS BBox Studio", "version": "1.1.1",
+  "apiVersion": 1, "id": "moss-bbox-studio", "name": "MOSS BBox Studio", "version": "1.1.2",
   "description": "MOSS-Image 레이아웃 프롬프트를 영역 박스로 만들고 고쳐서, 등록한 ComfyUI 워크플로우로 생성 요청해.",
   "pages": [{
     "id": "studio", "title": "MOSS BBox Studio", "entry": "index.html", "icon": "layout-dashboard", "accepts": [], "opensImages": { "prompt": "^\\s*\\{[\\s\\S]*(?:\"items\"\\s*:\\s*\\[|\"summary\"\\s*:\\s*\\{)[\\s\\S]*\\}\\s*$" },
@@ -10,7 +10,7 @@
       { "id": "moss-bbox-studio.remove_region", "label": "영역 삭제", "description": "번호로 영역 하나를 지운다.", "effect": "draft", "tier": "draft", "schema": { "type": "object", "properties": { "number": { "type": "number", "integer": true, "minimum": 1, "maximum": 200 } }, "required": ["number"] } },
       { "id": "moss-bbox-studio.set_size", "label": "캔버스 크기", "description": "캔버스 크기를 바꾼다. 16의 배수여야 하고 박스는 비율로 유지된다. 생성 크기와 같으니 워크플로우의 크기 칸(너비·높이 또는 종횡비·메가픽셀)이 연결돼 있어야 한다.", "effect": "draft", "tier": "draft", "schema": { "type": "object", "properties": { "width": { "type": "number", "integer": true, "minimum": 256, "maximum": 4096 }, "height": { "type": "number", "integer": true, "minimum": 256, "maximum": 4096 } }, "required": ["width", "height"] } },
       { "id": "moss-bbox-studio.set_option", "label": "워크플로우 옵션 바꾸기", "description": "연결된 워크플로우의 옵션 칸(체크포인트·스텝·CFG 같은 선택·숫자·텍스트 칸) 하나를 바꾼다. id와 선택지·범위는 페이지 데이터의 workflow.options에 있다. 숫자 칸도 값을 문자열로 준다. 선택지가 많은 칸은 개수만 주므로 없는 값이면 오류에 비슷한 선택지가 나온다. 빈 값은 숫자·선택 칸에서는 워크플로우에 저장된 값으로 되돌리고 텍스트 칸은 비운다. 프롬프트·시드·크기 칸은 여기서 바꾸지 않는다.", "effect": "draft", "tier": "draft", "schema": { "type": "object", "properties": { "id": { "type": "string" }, "value": { "type": "string" } }, "required": ["id", "value"] } },
-      { "id": "moss-bbox-studio.import_image", "label": "라이브러리 이미지 가져오기", "description": "라이브러리 이미지의 프롬프트(레이아웃 JSON)에서 영역을 읽어 와 편집 초안으로 연다. 지금 초안은 이 화면에서 되돌릴 수 있다.", "effect": "draft", "tier": "draft", "schema": { "type": "object", "properties": { "compositeHash": { "type": "string", "maxLength": 32 } }, "required": ["compositeHash"] } },
+      { "id": "moss-bbox-studio.import_image", "label": "라이브러리 이미지 가져오기", "description": "라이브러리 이미지의 프롬프트(레이아웃 JSON)에서 영역을 읽어 와 편집 초안으로 연다. 지금 초안은 이 화면에서 되돌릴 수 있다.", "effect": "draft", "tier": "draft", "schema": { "type": "object", "properties": { "compositeHash": { "type": "string", "maxLength": 48 } }, "required": ["compositeHash"] } },
       { "id": "moss-bbox-studio.generate", "label": "생성 요청", "description": "지금 레이아웃으로 연결 설정에서 고른 ComfyUI 워크플로우에 생성 요청을 넣는다. 검토 카드에서 사람이 적용해야 실행된다. seed를 비우면 새 시드를 쓴다.", "effect": "save", "tier": "commit", "schema": { "type": "object", "properties": { "seed": { "type": "number", "integer": true, "minimum": 0, "maximum": 4294967295 } } } }
     ]
   }]

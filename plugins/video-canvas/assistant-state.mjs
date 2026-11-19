@@ -78,8 +78,8 @@ export function excerpt(project, { offset, cursor = offset, edge_cursor, limit, 
 export const projectRows = projects => projects.map(({ id, name, revision, updated, created, nodeCount, cutCount, archived, cover }) => ({ id, name, revision, updated, created, nodeCount, cutCount, archived, cover }))
 // Published `pendingExports`, like pendingExtractions.
 export const exportStates = project => (project?.exports ?? []).map(({ id, status, jobId, progress, resultHash, error, cutIds, takeIds, warnings }) => ({ id, status, jobId, progress, resultHash, error, cutIds, takeIds, warnings }))
-// Published `pendingChains` (and the shape of `lastChain`).
-export const chainStates = project => (project?.chains ?? []).map(({ id, status, cutIds, current, steps, error }) => ({ id, status, cutIds, current, steps: steps.map(({ cutId, status, takeId, error }) => ({ cutId, status, takeId, error })), error }))
+// Published `pendingChains` (and the shape of `lastChain`). `jobId` is the chain's runtime job (task_wait runtime_job_ids); null means it has none.
+export const chainStates = project => (project?.chains ?? []).map(({ id, status, jobId, cutIds, current, steps, error }) => ({ id, status, jobId, cutIds, current, steps: steps.map(({ cutId, status, takeId, error }) => ({ cutId, status, takeId, error })), error }))
 export function createAssistantState() {
   const sections = new Map(), cursors = new Map()
   let calls = 0

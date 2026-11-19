@@ -421,7 +421,7 @@ test('chat profile assets: library migration, access, imports and generation ref
     const { FileStoreService } = await import('../src/services/fileStoreService')
     const { storedFilePath } = await import('../src/services/fileStorePaths')
     sub.mock.method(AuthAccount, 'findById', (id: number) => ({ id, status: 'active', account_type: 'admin' }) as any)
-    sub.mock.method(AuthAccessControlService, 'hasPermission', () => true)
+    sub.mock.method(AuthAccessControlService, 'resolveForAccountId', () => ({ groupKeys: [], permissionKeys: ['files.view'] }))
     const staged = path.join(root, 'temp', 'private.png')
     fs.writeFileSync(staged, png)
     const file = FileStoreService.upload('account:1', null, [{ path: staged, originalname: 'private.png', mimetype: 'image/png', size: png.length } as Express.Multer.File])[0]

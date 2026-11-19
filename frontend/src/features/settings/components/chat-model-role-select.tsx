@@ -19,8 +19,8 @@ export type SuggestWriter = ChatProfileFolderFields & { id: number; name: string
 /** The chat profiles and the editor's own user profiles that can write suggestions (undefined until loaded). */
 export type SuggestWriters = { profiles?: SuggestWriter[]; users?: SuggestWriter[] }
 
-/** Suggestions borrow the chat model on Codex profiles too (a one-shot Codex run); summaries only on API LLM ones. */
-const inheritsFor = (role: ModelRole, canInherit: boolean) => role === 'suggest' || (role === 'summary' && canInherit)
+/** Summaries and suggestions borrow the chat model where there is one to borrow (not Codex: chat runs no one-shot Codex). */
+const inheritsFor = (role: ModelRole, canInherit: boolean) => (role === 'suggest' || role === 'summary') && canInherit
 
 /** Rows chat roles can use: representative models and models that reach an LLM connection (TypeSafe models only judge). */
 export const chatModelRows = (slots: ModelSlot[]) => slots.filter((slot) => slot.providerType !== 'decision_typesafe')
@@ -109,8 +109,8 @@ function roleEnabledPatch(role: ModelRole, enabled: boolean): Partial<Draft> {
 
 /**
  * Draft -> select value. Off first; then a writer (suggestions: a chat or user profile); then the role's row; with none,
- * `inherit` (suggestions, or a summary on an API LLM profile), `off` (translation, a Codex summary) or, for the chat
- * role, the default row it falls back to.
+ * `inherit` (a summary or suggestions on a non-Codex profile), `off` (translation, a Codex summary or suggestions) or,
+ * for the chat role, the default row it falls back to.
  * A row id whose row was deleted (list loaded, id absent) counts as unset, so the next save clears it.
  */
 export function roleChoice(draft: Draft, role: ModelRole, slots: ModelSlot[], canInherit: boolean, slotsReady: boolean): RoleChoice {
@@ -154,8 +154,9 @@ export function ModelRoleSelect({ role, value, slots, slotsReady, canInherit, wr
   ariaLabel: string
 }) {
   const { t } = useI18n()
-  // The chat role never picks a representative model that follows the chat model (it would point back at itself).
-  const rows = chatModelRows(slots).filter((slot) => role !== 'chat' || !slot.followsChat)
+  // The chat role never picks a representative model that follows the chat model (it would point back at itself), and
+  // a profile without a chat model to borrow (Codex) has nothing for such a row to reach.
+  const rows = chatModelRows(slots).filter((slot) => (role !== 'chat' && canInherit) || !slot.followsChat)
   // An empty summary / suggestion uses its part's representative model, which follows the chat model unless pointed elsewhere.
   const partRoute = slots.find((slot) => slot.routeKey === role)
   const inheritLabel = partRoute && !partRoute.followsChat && partRoute.model

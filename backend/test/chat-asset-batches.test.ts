@@ -236,6 +236,43 @@ test('character asset batches: durable jobs, dependencies, review and approved a
     assert.ok(!batches.getChatAssetBatch(requester, batch.id).slots[0].attempts.at(-1)!.candidates[0].review)
   })
 
+  await t.test('a batch view reads every candidate hash in one query; each slot caches only the tags it read', async (sub) => {
+    const { ImageSimilarityService } = await import('../src/services/imageSimilarity')
+    const looks = ChatProfileStore.create({ name: '닮은 후보', engine: 'codex', referenceHash: reference })
+    const made = await batches.createChatAssetBatch(requester, looks.id, { idempotencyKey: 'similar-slots', presetId: preset.id, expressionPresetId: expressionPreset.id, expressions: ['기쁨', '슬픔'], slots: [{ slotKey: '배경', kind: 'background', prompt: 'room' }] })
+    finish(made, '기쁨', candidate); finish(made, '슬픔', other); finish(made, '배경', reference)
+    const near = { perceptualHash: '0'.repeat(16), dHash: '0'.repeat(16), aHash: '0'.repeat(16) }
+    const nearer = { ...near, perceptualHash: `${'0'.repeat(15)}1` }
+    const saved = images.db.prepare('SELECT composite_hash, perceptual_hash, dhash, ahash FROM media_metadata WHERE composite_hash IN (?, ?, ?)').all(candidate, other, reference) as Array<{ composite_hash: string; perceptual_hash: string | null; dhash: string | null; ahash: string | null }>
+    const setHashes = images.db.prepare('UPDATE media_metadata SET perceptual_hash = ?, dhash = ?, ahash = ? WHERE composite_hash = ?')
+    setHashes.run(near.perceptualHash, near.dHash, near.aHash, candidate)
+    setHashes.run(nearer.perceptualHash, nearer.dHash, nearer.aHash, other)
+    setHashes.run('f'.repeat(16), 'f'.repeat(16), 'f'.repeat(16), reference)
+    taggerEnabled = true
+    try {
+      sub.mock.method(imageTaggerService, 'tagImage', async () => ({ success: true, general: { smile: 0.9 }, rating: { general: 0.9 } }))
+      await batches.cacheChatAssetReviews(made.id)
+      const cached = Object.fromEntries((db().prepare('SELECT slot_key, attempts FROM chat_asset_slots WHERE batch_id = ?').all(made.id) as Array<{ slot_key: string; attempts: string }>)
+        .map((row) => [row.slot_key, Object.keys(JSON.parse(row.attempts)[0].tags ?? {}).sort()]))
+      assert.deepEqual(cached, { 기쁨: [candidate, reference].sort(), 슬픔: [other], 배경: [] })
+      const prepare = images.db.prepare
+      const reads: string[] = []
+      sub.mock.method(images.db, 'prepare', (sql: string) => { if (sql.includes('perceptual_hash')) reads.push(sql); return prepare.call(images.db, sql) })
+      const view = batches.getChatAssetBatch(requester, made.id)
+      assert.equal(reads.length, 1)
+      const review = (key: string) => view.slots.find((slot) => slot.slotKey === key)!.attempts[0].candidates[0].review!
+      const { isSame, confidence } = ImageSimilarityService.isSameImage(near, nearer)
+      assert.ok(isSame)
+      assert.deepEqual(review('기쁨').similarSlots, [{ slotKey: '슬픔', compositeHash: other, confidence }])
+      assert.deepEqual(review('슬픔').similarSlots, [{ slotKey: '기쁨', compositeHash: candidate, confidence }])
+      // The background's tags were read by an expression slot's attempt (its reference), and are found from there.
+      assert.deepEqual(review('배경').similarSlots, [])
+    } finally {
+      taggerEnabled = false
+      for (const row of saved) setHashes.run(row.perceptual_hash, row.dhash, row.ahash, row.composite_hash)
+    }
+  })
+
   await t.test('application adds memberships/keywords, front-links expression group, and existing chat response exposes emotions', async () => {
     const generalGroup = GroupPathService.resolveOrCreate('일반 이모티콘').groupId
     images.db.prepare('UPDATE groups SET emoticon_enabled = 1 WHERE id = ?').run(generalGroup)

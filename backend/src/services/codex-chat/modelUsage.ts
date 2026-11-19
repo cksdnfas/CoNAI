@@ -94,7 +94,7 @@ export function buildModelUsage(): ModelUsage {
   const refs = workflowNodeRefs()
   const slotNodes = new Map(refs.slots)
   if (refs.profiles.size > 0) {
-    for (const profile of ChatProfileStore.list()) {
+    for (const profile of ChatProfileStore.list({ directory: true })) {
       if (profile.engine !== 'llm') continue
       for (const role of new Set(Object.values(MODEL_NODE_ROLES))) {
         const nodes = refs.profiles.get(`${profile.id}:${role}`) ?? 0

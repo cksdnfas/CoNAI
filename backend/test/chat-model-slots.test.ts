@@ -361,6 +361,28 @@ test('model rows: connection ▸ models, legacy pairs, resolution, sync, deletio
     assert.throws(() => ModelSlotStore.setDefault(jevRow), /LLM 연결의 모델만/)
     assert.throws(() => ChatJudgePresetStore.create({ name: 'p', items: [], escalationSlotId: jevRow }), /판단에 쓸 수 없는|채팅에 쓸 수 없어/)
     ChatProfileStore.delete(judged.id)
+    ExternalApiProvider.create({ provider_name: 'gone-connection', display_name: 'Gone', provider_type: 'llm_ollama', base_url: 'http://unused.invalid' })
+    const orphan = ModelSlotStore.ensure('gone-connection', 'orphan')!
+    ExternalApiProvider.delete('gone-connection')
+    assert.throws(() => ChatProfileStore.create({ name: 'x', engine: 'llm', summarySlotId: orphan }), /요약 모델의 AI 연결을 찾을 수 없어/, 'a row whose connection was deleted is no assignment, and the error names the role')
+    ModelSlotStore.delete(orphan)
+  })
+
+  await t.test('deleting a chat or user profile clears suggestion writer links and the profile\'s token calibration', async () => {
+    const { ChatUserProfileStore } = await import('../src/services/codex-chat/chatUserProfiles')
+    const model = rowOf('conn-a', 'conn-a-default')!
+    const writer = ChatProfileStore.create({ name: 'deleted writer', modelSlotId: model })
+    const user = ChatUserProfileStore.create(null, { name: 'deleted user writer', modelSlotId: model })
+    const byProfile = ChatProfileStore.create({ name: 'profile-written', modelSlotId: model, suggestEnabled: true, suggestProfileId: writer.id })
+    const byUser = ChatProfileStore.create({ name: 'user-written', modelSlotId: model, suggestEnabled: true, suggestUserProfileId: user.id })
+    db.prepare("INSERT INTO chat_estimate_ratios (profile_id, model_key, ratio) VALUES (?, 'measured', 1.2)").run(writer.id)
+    ChatProfileStore.delete(writer.id)
+    ChatUserProfileStore.delete(null, user.id)
+    assert.equal(ChatProfileStore.find(byProfile.id)!.suggestProfileId, null)
+    assert.equal(ChatProfileStore.find(byUser.id)!.suggestUserProfileId, null)
+    assert.equal(db.prepare('SELECT 1 FROM chat_estimate_ratios WHERE profile_id = ?').get(writer.id), undefined)
+    ChatProfileStore.delete(byProfile.id)
+    ChatProfileStore.delete(byUser.id)
   })
 
   await t.test('shared route/provider changes preserve chat consumers while judge-only TypeSafe remains valid', () => {
