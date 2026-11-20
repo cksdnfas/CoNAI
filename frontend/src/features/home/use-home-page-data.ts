@@ -19,7 +19,7 @@ import { addImagesToGroup, getGroupsHierarchyAll, GROUPS_HIERARCHY_ALL_QUERY_KEY
 import { useConfirmImageDelete } from '@/features/images/chat-media-delete-warning'
 import { removeBulkDeletedImagesFromListCaches } from '@/features/images/image-list-cache'
 import { useImageDeleteUndo } from '@/features/images/use-image-delete-undo'
-import { deleteImagesBulk, downloadImageSelection, getImages, getImagesCount, searchImagesComplex } from '@/lib/api-images'
+import { deleteImagesBulk, downloadImageSelection, getImages, getImagesCount, nextLibraryImagesCursor, searchImagesComplex, type LibraryImagesCursor } from '@/lib/api-images'
 import { formatGroupBulkAddNotice } from '@/features/groups/group-bulk-result-messages'
 import { collectGroupSubtreeIds } from '@/features/groups/group-option-utils'
 import { countStateFromQuery, type CountState } from '@/lib/count-display'
@@ -31,11 +31,7 @@ interface UseHomePageDataOptions {
   notifyError: (message: string) => void
 }
 
-type HomeImagesPageParam = number | {
-  cursorDate?: string | null
-  cursorHash?: string | null
-  cursorValue?: string | number | null
-}
+type HomeImagesPageParam = number | LibraryImagesCursor
 
 /** Collect Home page auth state, image feed data, selection, and group actions. */
 export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOptions) {
@@ -119,30 +115,7 @@ export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOpti
         excludeGroupIds,
       }, { signal })
     },
-    getNextPageParam: (lastPage) => {
-      if (!lastPage.hasMore) {
-        return undefined
-      }
-
-      if (isSearchMode) {
-        if (!lastPage.nextCursorHash || lastPage.nextCursorValue === undefined) {
-          return undefined
-        }
-        return {
-          cursorValue: lastPage.nextCursorValue,
-          cursorHash: lastPage.nextCursorHash,
-        }
-      }
-
-      if (!lastPage.nextCursorDate || !lastPage.nextCursorHash) {
-        return undefined
-      }
-
-      return {
-        cursorDate: lastPage.nextCursorDate,
-        cursorHash: lastPage.nextCursorHash,
-      }
-    },
+    getNextPageParam: lastPage => nextLibraryImagesCursor(lastPage, isSearchMode),
     enabled: canViewHome && canViewImages,
   })
 
@@ -366,8 +339,8 @@ export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOpti
     try {
       setIsDeleting(true)
       const result = await deleteImagesBulk(selectedCompositeHashes)
-      setSelectedIds([])
-      await removeBulkDeletedImagesFromListCaches(queryClient, selectedCompositeHashes, result.details.errors)
+      const deleted = await removeBulkDeletedImagesFromListCaches(queryClient, selectedCompositeHashes, result.details)
+      setSelectedIds(current => current.filter(id => !deleted.has(id)))
       notifyImageDeleted(result.details)
       return result
     } finally {

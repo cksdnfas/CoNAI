@@ -12,6 +12,7 @@ export interface BulkDeleteImagesResult {
   deleted: number;
   failed: number;
   errors: string[];
+  failedHashes: string[];
   recycleBinEntries: string[];
 }
 
@@ -43,6 +44,7 @@ export class ImageManagementService {
         deleted: batchResult.success,
         failed: batchResult.failed,
         errors: batchResult.errors.map((entry) => `Image ${entry.hash}: ${entry.error}`),
+        failedHashes: batchResult.errors.map((entry) => entry.hash),
         recycleBinEntries: batchResult.recycleBinEntries,
       },
     };

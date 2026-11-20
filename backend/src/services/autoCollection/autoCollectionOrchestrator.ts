@@ -8,17 +8,16 @@
  */
 
 import { GroupModel, ImageGroupModel } from '../../models/Group';
-import { GroupRecord,
-AutoCollectCondition,
-AutoCollectResult,
-ComplexFilter } from '@conai/shared';
+import type { AutoCollectCondition, AutoCollectResult, ComplexFilter } from '@conai/shared';
 import { MediaMetadataModel } from '../../models/Image/MediaMetadataModel';
 import { ComplexFilterService } from '../complexFilterService';
 import { checkImageMatchesConditions } from './conditionEvaluator';
 import { EvaluableImage } from './types';
 import { maybeTruncateImagesWal } from '../../database/walMaintenance';
 import { db } from '../../database/init';
-import { LIBRARY_BATCH_SIZE, pageBoundary } from '../maintenance/libraryBatch';
+import { LIBRARY_BATCH_SIZE, pageBoundary, type LibraryBatchHooks } from '../maintenance/libraryBatch';
+
+class ObsoleteStage extends Error {}
 
 /**
  * Auto Collection Orchestrator Class
@@ -43,54 +42,41 @@ export class AutoCollectionOrchestrator {
    * @param groupId - Group ID to run auto-collection for
    * @returns Auto-collection result with statistics
    */
-  static async runAutoCollectionForGroup(groupId: number): Promise<AutoCollectResult> {
+  static async runAutoCollectionForGroup(groupId: number, hooks: LibraryBatchHooks = {}): Promise<AutoCollectResult> {
     const startTime = Date.now();
-
-    try {
-      const group = await GroupModel.findById(groupId);
+    let added = 0, removed = 0;
+    const matches = db.prepare('SELECT 1 FROM groups WHERE id = ? AND auto_collect_enabled = 1 AND auto_collect_conditions = ?');
+    // A rule edit joins the live job for this group. Discard its obsolete stage and finish against the saved rules.
+    for (;;) {
+      hooks.throwIfCancelled?.();
+      const group = GroupModel.findById(groupId);
       if (!group || !group.auto_collect_enabled || !group.auto_collect_conditions) {
         throw new Error('Group not found or auto collection not enabled');
       }
-
-      const parsedConditions = JSON.parse(group.auto_collect_conditions);
-
-      // ComplexFilter format
-      if (this.isComplexFilter(parsedConditions)) {
-        return await this.runAutoCollectionWithComplexFilter(
-          groupId,
-          group,
-          parsedConditions,
-          startTime
-        );
+      const rules = group.auto_collect_conditions;
+      const parsed = JSON.parse(rules);
+      const current = () => Boolean(matches.get(groupId, rules));
+      const complex = this.isComplexFilter(parsed);
+      const stage = (table: string) => complex
+        ? this.stageComplexFilter(table, parsed)
+        : this.stageLegacyConditions(table, parsed, hooks, current);
+      try {
+        const diff = await ImageGroupModel.replaceAutoCollectedImagesStaged(groupId, stage, hooks, current);
+        removed += diff.removedCount;
+        added += diff.addedCount;
+        hooks.throwIfCancelled?.();
+        if (diff.superseded || !GroupModel.updateAutoCollectLastRun(groupId, rules)) continue;
+      } catch (error) {
+        if (error instanceof ObsoleteStage) continue;
+        throw error;
       }
-
-      // Legacy format (AutoCollectCondition[])
-      const conditions: AutoCollectCondition[] = parsedConditions;
-      if (!conditions || conditions.length === 0) {
-        throw new Error('No valid conditions found');
-      }
-
-      return await this.runAutoCollectionWithLegacyConditions(
-        groupId,
-        group,
-        conditions,
-        startTime
-      );
-    } catch (error) {
-      console.error(`Auto collection failed for group ${groupId}:`, error);
-      throw error;
+      maybeTruncateImagesWal(complex ? 'auto-collection-group-complex' : 'auto-collection-group-legacy');
+      return { group_id: groupId, group_name: group.name, images_added: added, images_removed: removed, execution_time: Date.now() - startTime };
     }
   }
 
-  /**
-   * Run auto-collection using legacy conditions format
-   */
-  private static async runAutoCollectionWithLegacyConditions(
-    groupId: number,
-    group: GroupRecord,
-    conditions: AutoCollectCondition[],
-    startTime: number
-  ): Promise<AutoCollectResult> {
+  private static async stageLegacyConditions(table: string, conditions: AutoCollectCondition[], hooks: LibraryBatchHooks, current: () => boolean) {
+    if (!Array.isArray(conditions) || !conditions.length) throw new Error('No valid conditions found');
     // Conditions are OR-ed, so the order only decides how soon a row is accepted. Duplicate conditions each run a
     // similarity search, so they go last and only see rows no cheaper condition already matched.
     const orderedConditions = [
@@ -100,89 +86,30 @@ export class AutoCollectionOrchestrator {
 
     // Walk the ready rows by rowid (no COUNT, no OFFSET) and stage matches in a TEMP table, so neither the rows nor
     // the matching hashes are ever all in memory and the images.db write lock is only taken by the diff pages.
-    const { removedCount, addedCount } = await ImageGroupModel.replaceAutoCollectedImagesStaged(groupId, async (tempTable) => {
-      const stageHash = db.prepare(`INSERT OR IGNORE INTO ${tempTable} (composite_hash) VALUES (?)`);
-      const stagePage = db.transaction((hashes: string[]) => {
-        for (const hash of hashes) stageHash.run(hash);
-      });
-
-      let cursor = 0;
-      for (;;) {
-        const images = MediaMetadataModel.findReadyPageAfterRowid(cursor, LIBRARY_BATCH_SIZE);
-        if (images.length === 0) {
-          break;
-        }
-        cursor = images[images.length - 1].row_id;
-
-        const matches: string[] = [];
-        for (const image of images) {
-          if (await checkImageMatchesConditions(image, orderedConditions)) {
-            matches.push(image.composite_hash);
-          }
-        }
-        stagePage(matches);
-        await pageBoundary({});
-      }
+    const stageHash = db.prepare(`INSERT OR IGNORE INTO ${table} (composite_hash) VALUES (?)`);
+    const stagePage = db.transaction((hashes: string[]) => {
+      for (const hash of hashes) stageHash.run(hash);
     });
-    maybeTruncateImagesWal('auto-collection-group-legacy');
-
-    // Update last run time
-    await GroupModel.updateAutoCollectLastRun(groupId);
-
-    const executionTime = Date.now() - startTime;
-
-    return {
-      group_id: groupId,
-      group_name: group.name,
-      images_added: addedCount,
-      images_removed: removedCount,
-      execution_time: executionTime
-    };
+    let cursor = 0;
+    for (;;) {
+      hooks.throwIfCancelled?.();
+      if (!current()) throw new ObsoleteStage();
+      const images = MediaMetadataModel.findReadyPageAfterRowid(cursor, LIBRARY_BATCH_SIZE);
+      if (!images.length) break;
+      cursor = images[images.length - 1].row_id;
+      const hashes: string[] = [];
+      for (const image of images) {
+        if (await checkImageMatchesConditions(image, orderedConditions)) hashes.push(image.composite_hash);
+      }
+      stagePage(hashes);
+      await pageBoundary(hooks);
+    }
   }
 
-  /**
-   * Run auto-collection using ComplexFilter format
-   */
-  private static async runAutoCollectionWithComplexFilter(
-    groupId: number,
-    group: GroupRecord,
-    complexFilter: ComplexFilter,
-    startTime: number
-  ): Promise<AutoCollectResult> {
-    try {
-      // The hash search runs once, straight into the TEMP stage: it only reads images.db, so it no longer holds the
-      // write lock (it used to run inside the BEGIN IMMEDIATE that applied the diff).
-      const matchingHashesQuery = await ComplexFilterService.buildComplexSearchHashesQuery(
-        complexFilter,
-        undefined,
-        { includeMediaWithoutActiveFile: true },
-      );
-      const { removedCount, addedCount } = await ImageGroupModel.replaceAutoCollectedImagesStaged(groupId, (tempTable) => {
-        db.prepare(`
-          INSERT OR IGNORE INTO ${tempTable} (composite_hash)
-          SELECT composite_hash
-          FROM (${matchingHashesQuery.query}) AS desired_hashes
-          WHERE composite_hash IS NOT NULL
-        `).run(...matchingHashesQuery.params);
-      });
-      maybeTruncateImagesWal('auto-collection-group-complex');
-
-      // Update last run time
-      await GroupModel.updateAutoCollectLastRun(groupId);
-
-      const executionTime = Date.now() - startTime;
-
-      return {
-        group_id: groupId,
-        group_name: group.name,
-        images_added: addedCount,
-        images_removed: removedCount,
-        execution_time: executionTime
-      };
-    } catch (error) {
-      console.error(`Complex filter auto collection failed for group ${groupId}:`, error);
-      throw error;
-    }
+  private static async stageComplexFilter(table: string, filter: ComplexFilter) {
+    const query = await ComplexFilterService.buildComplexSearchHashesQuery(filter, undefined, { includeMediaWithoutActiveFile: true });
+    db.prepare(`INSERT OR IGNORE INTO ${table} (composite_hash)
+      SELECT composite_hash FROM (${query.query}) AS desired_hashes WHERE composite_hash IS NOT NULL`).run(...query.params);
   }
 
   /**
@@ -201,8 +128,12 @@ export class AutoCollectionOrchestrator {
         throw new Error(`Image metadata not found for hash: ${compositeHash.substring(0, 16)}...`);
       }
 
-      const groups = await GroupModel.findAutoCollectEnabled();
+      const groups = GroupModel.findAutoCollectEnabled();
       const results: AutoCollectResult[] = [];
+      const collect = db.prepare(`INSERT INTO image_groups (group_id, composite_hash, order_index, collection_type)
+        SELECT id, ?, 0, 'auto' FROM groups WHERE id = ? AND auto_collect_enabled = 1 AND auto_collect_conditions = ?
+        AND EXISTS (SELECT 1 FROM media_metadata WHERE composite_hash = ?)
+        ON CONFLICT(group_id, composite_hash) DO NOTHING`);
 
       for (const group of groups) {
         try {
@@ -224,23 +155,8 @@ export class AutoCollectionOrchestrator {
             matches = await checkImageMatchesConditions(image, conditions);
           }
 
-          if (matches) {
-            // Check if already in group
-            const alreadyInGroup = await ImageGroupModel.isImageInGroup(
-              group.id,
-              compositeHash
-            );
-
-            if (!alreadyInGroup) {
-              await ImageGroupModel.addImageToGroup(group.id, compositeHash, 'auto');
-              results.push({
-                group_id: group.id,
-                group_name: group.name,
-                images_added: 1,
-                images_removed: 0,
-                execution_time: 0
-              });
-            }
+          if (matches && collect.run(compositeHash, group.id, group.auto_collect_conditions, compositeHash).changes) {
+            results.push({ group_id: group.id, group_name: group.name, images_added: 1, images_removed: 0, execution_time: 0 });
           }
         } catch (error) {
           console.error(`Auto collection failed for new image in group ${group.name}:`, error);

@@ -12,7 +12,7 @@ export interface FileAccessResult {
 }
 
 /**
- * 파일의 존재 여부 및 읽기/쓰기 권한을 체크합니다.
+ * 한 번의 읽기 권한 검사로 파일 부재와 일시 접근 오류를 구분합니다.
  *
  * exists=false는 진짜 ENOENT일 때만 보고합니다. UNC/SMB 폴더의 일시적 오류
  * (EBUSY/EPERM/ENETUNREACH 등)를 "없음"으로 취급하면 호출부가 DB 행을 영구
@@ -22,36 +22,25 @@ export interface FileAccessResult {
  * @param filePath 체크할 파일 경로
  * @returns 파일 접근 권한 정보
  */
-export async function checkFileAccess(filePath: string): Promise<FileAccessResult> {
+export async function checkFileReadAccess(filePath: string): Promise<Omit<FileAccessResult, 'writable'>> {
   try {
-    // 파일 존재 여부 체크
-    await fs.promises.access(filePath, fs.constants.F_OK);
-
-    // 읽기 권한 체크
-    const readable = await fs.promises.access(filePath, fs.constants.R_OK)
-      .then(() => true)
-      .catch(() => false);
-
-    // 쓰기 권한 체크
-    const writable = await fs.promises.access(filePath, fs.constants.W_OK)
-      .then(() => true)
-      .catch(() => false);
-
-    return {
-      exists: true,
-      readable,
-      writable,
-    };
+    await fs.promises.access(filePath, fs.constants.R_OK);
+    return { exists: true, readable: true };
   } catch (error) {
     const errno = (error as NodeJS.ErrnoException).code;
     return {
       exists: errno !== 'ENOENT',
       readable: false,
-      writable: false,
       error: (error as Error).message,
       errorCode: errno,
     };
   }
+}
+
+export async function checkFileAccess(filePath: string): Promise<FileAccessResult> {
+  const access = await checkFileReadAccess(filePath);
+  const writable = access.exists && await fs.promises.access(filePath, fs.constants.W_OK).then(() => true, () => false);
+  return { ...access, writable };
 }
 
 /**
@@ -94,7 +83,7 @@ export async function checkDirectoryAccess(dirPath: string): Promise<FileAccessR
  * @throws 파일이 존재하지 않거나 읽을 수 없는 경우
  */
 export async function assertFileReadable(filePath: string): Promise<void> {
-  const access = await checkFileAccess(filePath);
+  const access = await checkFileReadAccess(filePath);
 
   if (!access.exists) {
     const error: NodeJS.ErrnoException = new Error(`File does not exist: ${filePath}`);

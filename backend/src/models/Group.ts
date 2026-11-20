@@ -15,21 +15,21 @@ import {
   getImageFileIdsForGroupQuery,
   countVisibleImagesByGroupQuery,
 } from './GroupImageQueries';
-import { LIBRARY_BATCH_SIZE, chunkArray, pageBoundary, placeholders, type LibraryBatchHooks } from '../services/maintenance/libraryBatch';
+import { LIBRARY_BATCH_SIZE, pageBoundary, placeholders, type LibraryBatchHooks } from '../services/maintenance/libraryBatch';
+import { addImagesManuallyInPages, addImagesToGroupManually, removeImagesInPages } from './GroupMembershipCommands';
+export type { GroupBulkAddCounts, GroupBulkRemoveCounts } from './GroupMembershipCommands';
 
 let autoCollectStageCounter = 0;
 
-export interface GroupBulkAddCounts {
-  addedCount: number;
-  convertedCount: number;
-  skippedCount: number;
-  errors: string[];
-}
+const GROUP_STATS_SELECT = `SELECT g.*, COUNT(ig.id) AS image_count,
+  COUNT(CASE WHEN ig.collection_type = 'auto' THEN 1 END) AS auto_collected_count,
+  COUNT(CASE WHEN ig.collection_type = 'manual' THEN 1 END) AS manual_added_count
+  FROM groups g LEFT JOIN image_groups ig ON g.id = ig.group_id`;
 
-export interface GroupBulkRemoveCounts {
-  removedCount: number;
-  skippedCount: number;
-  errors: string[];
+function queryGroupStats(parent?: number | null): GroupWithStats[] {
+  const filtered = parent !== undefined;
+  return db.prepare(`${GROUP_STATS_SELECT} ${filtered ? 'WHERE g.parent_id IS ?' : ''} GROUP BY g.id ORDER BY g.created_date DESC`)
+    .all(...(filtered ? [parent] : [])) as GroupWithStats[];
 }
 
 /**
@@ -79,24 +79,11 @@ export class GroupModel {
    * 모든 그룹 조회 (통계 포함)
    */
   static findAllWithStats(): GroupWithStats[] {
-    return resolveGroupList('groups:all-with-stats', () => this.queryAllWithStats());
+    return resolveGroupList('groups:all-with-stats', () => queryGroupStats());
   }
 
-  private static queryAllWithStats(): GroupWithStats[] {
-    const query = `
-      SELECT
-        g.*,
-        COUNT(ig.id) as image_count,
-        COUNT(CASE WHEN ig.collection_type = 'auto' THEN 1 END) as auto_collected_count,
-        COUNT(CASE WHEN ig.collection_type = 'manual' THEN 1 END) as manual_added_count
-      FROM groups g
-      LEFT JOIN image_groups ig ON g.id = ig.group_id
-      GROUP BY g.id
-      ORDER BY g.created_date DESC
-    `;
-
-    const rows = db.prepare(query).all() as GroupWithStats[];
-    return rows || [];
+  static findOneWithStats(id: number): GroupWithStats | null {
+    return (db.prepare(`${GROUP_STATS_SELECT} WHERE g.id = ? GROUP BY g.id`).get(id) as GroupWithStats | undefined) ?? null;
   }
 
   /**
@@ -201,10 +188,10 @@ export class GroupModel {
   /**
    * 자동수집 마지막 실행 시간 업데이트
    */
-  static updateAutoCollectLastRun(id: number): boolean {
+  static updateAutoCollectLastRun(id: number, conditions: string): boolean {
     const info = db.prepare(
-      'UPDATE groups SET auto_collect_last_run = CURRENT_TIMESTAMP WHERE id = ?'
-    ).run(id);
+      'UPDATE groups SET auto_collect_last_run = CURRENT_TIMESTAMP WHERE id = ? AND auto_collect_enabled = 1 AND auto_collect_conditions = ?'
+    ).run(id, conditions);
     return info.changes > 0;
   }
 
@@ -214,50 +201,14 @@ export class GroupModel {
    * 루트 그룹들 조회 (parent_id가 NULL인 그룹들)
    */
   static findRoots(): GroupWithStats[] {
-    return resolveGroupList('groups:roots', () => this.queryRoots());
-  }
-
-  private static queryRoots(): GroupWithStats[] {
-    const query = `
-      SELECT
-        g.*,
-        COUNT(ig.id) as image_count,
-        COUNT(CASE WHEN ig.collection_type = 'auto' THEN 1 END) as auto_collected_count,
-        COUNT(CASE WHEN ig.collection_type = 'manual' THEN 1 END) as manual_added_count
-      FROM groups g
-      LEFT JOIN image_groups ig ON g.id = ig.group_id
-      WHERE g.parent_id IS NULL
-      GROUP BY g.id
-      ORDER BY g.created_date DESC
-    `;
-
-    const rows = db.prepare(query).all() as GroupWithStats[];
-    return rows || [];
+    return resolveGroupList('groups:roots', () => queryGroupStats(null));
   }
 
   /**
    * 특정 부모의 자식 그룹들 조회
    */
   static findChildren(parentId: number): GroupWithStats[] {
-    return resolveGroupList(`groups:children:${parentId}`, () => this.queryChildren(parentId));
-  }
-
-  private static queryChildren(parentId: number): GroupWithStats[] {
-    const query = `
-      SELECT
-        g.*,
-        COUNT(ig.id) as image_count,
-        COUNT(CASE WHEN ig.collection_type = 'auto' THEN 1 END) as auto_collected_count,
-        COUNT(CASE WHEN ig.collection_type = 'manual' THEN 1 END) as manual_added_count
-      FROM groups g
-      LEFT JOIN image_groups ig ON g.id = ig.group_id
-      WHERE g.parent_id = ?
-      GROUP BY g.id
-      ORDER BY g.created_date DESC
-    `;
-
-    const rows = db.prepare(query).all(parentId) as GroupWithStats[];
-    return rows || [];
+    return resolveGroupList(`groups:children:${parentId}`, () => queryGroupStats(parentId));
   }
 
   /**
@@ -285,10 +236,10 @@ export class GroupModel {
     total_visible_image_count: number;
   }> {
     const groups = this.findAllWithStats();
-    const hierarchyService = getGroupHierarchyService();
-
-    const groupIds = groups.map(g => g.id);
-    const childCountMap = hierarchyService.getChildCountBatch(groupIds);
+    const childCountMap = new Map<number, number>();
+    for (const { parent_id } of groups) {
+      if (parent_id != null) childCountMap.set(parent_id, (childCountMap.get(parent_id) ?? 0) + 1);
+    }
     // image_count stays the raw membership count for existing consumers; the visible
     // counts use the in-group list filters so tree/card numbers match the group page.
     const visibleCountMap = countVisibleImagesByGroupQuery();
@@ -323,112 +274,9 @@ export class GroupModel {
 }
 
 export class ImageGroupModel {
-  /** Add manual memberships atomically; surface database errors instead of treating them as duplicates. */
-  static addImagesToGroupManually(groupId: number, compositeHashes: string[]) {
-    return db.transaction(() => {
-      if (!GroupModel.findById(groupId)) {
-        throw new Error(`Group ${groupId} not found`);
-      }
-      const imageExists = db.prepare('SELECT 1 FROM media_metadata WHERE composite_hash = ?');
-      const insert = db.prepare(`
-        INSERT INTO image_groups (group_id, composite_hash, order_index, collection_type)
-        VALUES (?, ?, 0, 'manual')
-      `);
-      let added = 0;
-      let converted = 0;
-      let skipped = 0;
-      const missing_hashes: string[] = [];
-      for (const compositeHash of new Set(compositeHashes)) {
-        if (!imageExists.get(compositeHash)) {
-          missing_hashes.push(compositeHash);
-          skipped += 1;
-          continue;
-        }
-        const collectionType = this.getCollectionType(groupId, compositeHash);
-        if (collectionType === 'manual') {
-          skipped += 1;
-        } else if (collectionType === 'auto') {
-          this.convertToManual(groupId, compositeHash);
-          converted += 1;
-        } else {
-          insert.run(groupId, compositeHash);
-          added += 1;
-        }
-      }
-      return { added, converted, skipped, missing_hashes };
-    }).immediate();
-  }
-
-  /**
-   * Bulk add from the group routes: each hash is skipped if already manual, converted if auto, inserted otherwise.
-   * One prepared statement set and one transaction per page of hashes (it used to be 2–3 autocommits per hash).
-   * Duplicates in the request count as skipped, as before. A hash that is not in the library is reported in
-   * `errors` instead of being counted as added.
-   */
-  static async addImagesManuallyInPages(groupId: number, compositeHashes: string[]): Promise<GroupBulkAddCounts> {
-    const selectType = db.prepare('SELECT collection_type FROM image_groups WHERE group_id = ? AND composite_hash = ?');
-    const convert = db.prepare(`
-      UPDATE image_groups SET collection_type = 'manual'
-      WHERE group_id = ? AND composite_hash = ? AND collection_type = 'auto'
-    `);
-    const insert = db.prepare(`
-      INSERT INTO image_groups (group_id, composite_hash, order_index, collection_type)
-      VALUES (?, ?, 0, 'manual')
-    `);
-    const counts: GroupBulkAddCounts = { addedCount: 0, convertedCount: 0, skippedCount: 0, errors: [] };
-    const applyPage = db.transaction((hashes: string[]) => {
-      for (const compositeHash of hashes) {
-        try {
-          const row = selectType.get(groupId, compositeHash) as { collection_type: string } | undefined;
-          if (row?.collection_type === 'manual') {
-            counts.skippedCount++;
-          } else if (row?.collection_type === 'auto') {
-            if (convert.run(groupId, compositeHash).changes > 0) {
-              counts.convertedCount++;
-            }
-          } else {
-            insert.run(groupId, compositeHash);
-            counts.addedCount++;
-          }
-        } catch (error) {
-          counts.errors.push(`Image ${compositeHash}: ${(error as Error).message}`);
-        }
-      }
-    });
-
-    for (const page of chunkArray(compositeHashes)) {
-      // IMMEDIATE: each page reads before it writes, and a deferred read transaction cannot be upgraded once another
-      // connection has written (SQLITE_BUSY at once, busy_timeout ignored).
-      applyPage.immediate(page);
-      await pageBoundary({});
-    }
-    return counts;
-  }
-
-  /** Bulk remove from the group routes, one transaction per page of hashes. */
-  static async removeImagesInPages(groupId: number, compositeHashes: string[]): Promise<GroupBulkRemoveCounts> {
-    const remove = db.prepare('DELETE FROM image_groups WHERE group_id = ? AND composite_hash = ?');
-    const counts: GroupBulkRemoveCounts = { removedCount: 0, skippedCount: 0, errors: [] };
-    const applyPage = db.transaction((hashes: string[]) => {
-      for (const compositeHash of hashes) {
-        try {
-          if (remove.run(groupId, compositeHash).changes > 0) {
-            counts.removedCount++;
-          } else {
-            counts.skippedCount++;
-          }
-        } catch (error) {
-          counts.errors.push(`Image ${compositeHash}: ${(error as Error).message}`);
-        }
-      }
-    });
-
-    for (const page of chunkArray(compositeHashes)) {
-      applyPage(page);
-      await pageBoundary({});
-    }
-    return counts;
-  }
+  static addImagesToGroupManually = addImagesToGroupManually;
+  static addImagesManuallyInPages = addImagesManuallyInPages;
+  static removeImagesInPages = removeImagesInPages;
 
   /**
    * 이미지를 그룹에 추가 (composite_hash 기반)
@@ -486,8 +334,11 @@ export class ImageGroupModel {
     groupId: number,
     stage: (tempTable: string) => void | Promise<void>,
     hooks: LibraryBatchHooks = {},
-  ): Promise<{ removedCount: number; addedCount: number }> {
+    currentRules?: () => boolean,
+  ): Promise<{ removedCount: number; addedCount: number; superseded?: true }> {
     const tempTable = `temp_auto_collect_${process.pid}_${++autoCollectStageCounter}`;
+    // New-image matching runs while the scan yields. Its newer memberships were not part of this scan.
+    const lastMembership = db.prepare('SELECT COALESCE(MAX(id), 0) FROM image_groups').pluck().get() as number;
     db.exec(`CREATE TEMP TABLE ${tempTable} (composite_hash TEXT PRIMARY KEY) WITHOUT ROWID`);
     try {
       await stage(tempTable);
@@ -497,16 +348,16 @@ export class ImageGroupModel {
         FROM image_groups ig
         WHERE ig.group_id = ?
           AND ig.collection_type = 'auto'
+          AND ig.id <= ?
           AND ig.composite_hash > ?
           AND NOT EXISTS (SELECT 1 FROM ${tempTable} t WHERE t.composite_hash = ig.composite_hash)
         ORDER BY ig.composite_hash
         LIMIT ${LIBRARY_BATCH_SIZE}
       `);
-      // One statement per page (a single statement is its own transaction).
       const removePage = (hashes: string[]) => db.prepare(`
         DELETE FROM image_groups
-        WHERE group_id = ? AND collection_type = 'auto' AND composite_hash IN (${placeholders(hashes.length)})
-      `).run(groupId, ...hashes).changes;
+        WHERE group_id = ? AND id <= ? AND collection_type = 'auto' AND composite_hash IN (${placeholders(hashes.length)})
+      `).run(groupId, lastMembership, ...hashes).changes;
 
       const missingHashes = db.prepare(`
         SELECT t.composite_hash
@@ -524,20 +375,24 @@ export class ImageGroupModel {
         WHERE m.composite_hash IN (${placeholders(hashes.length)})
       `).run(groupId, ...hashes).changes;
 
-      let removedCount = 0;
+      // The settings writer uses another connection. Check the rules under the same lock as each diff write.
+      const apply = db.transaction((write: (hashes: string[]) => number, hashes: string[]) =>
+        currentRules && !currentRules() ? null : write(hashes));
+      let removedCount = 0, addedCount = 0;
       let cursor = '';
       for (;;) {
         hooks.throwIfCancelled?.();
-        const hashes = (staleHashes.all(groupId, cursor) as Array<{ composite_hash: string }>).map((row) => row.composite_hash);
+        const hashes = (staleHashes.all(groupId, lastMembership, cursor) as Array<{ composite_hash: string }>).map((row) => row.composite_hash);
         if (hashes.length === 0) {
           break;
         }
         cursor = hashes[hashes.length - 1];
-        removedCount += removePage(hashes);
+        const changed = apply.immediate(removePage, hashes);
+        if (changed === null) return { removedCount, addedCount, superseded: true };
+        removedCount += changed;
         await pageBoundary(hooks);
       }
 
-      let addedCount = 0;
       cursor = '';
       for (;;) {
         hooks.throwIfCancelled?.();
@@ -546,7 +401,9 @@ export class ImageGroupModel {
           break;
         }
         cursor = hashes[hashes.length - 1];
-        addedCount += addPage(hashes);
+        const changed = apply.immediate(addPage, hashes);
+        if (changed === null) return { removedCount, addedCount, superseded: true };
+        addedCount += changed;
         await pageBoundary(hooks);
       }
 

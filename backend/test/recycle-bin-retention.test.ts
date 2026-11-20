@@ -104,6 +104,23 @@ test('RecycleBin retention is off by default and deletes only old top-level file
   const records = (userDb.prepare('SELECT bin_name FROM recycle_bin_entries').all() as Array<{ bin_name: string }>).map((row) => row.bin_name)
   assert.deepEqual(records, [path.basename(recordedNew)], 'only the surviving file keeps its origin')
 
+  // Losing the whole bin between listing and unlink must not discard the usable restore record.
+  userDb.prepare("UPDATE recycle_bin_entries SET deleted_at = '2000-01-01' WHERE bin_name = ?").run(path.basename(recordedNew))
+  const offline = `${bin}-unmounted`
+  const unlink = fs.promises.unlink
+  const disconnect = t.mock.method(fs.promises, 'unlink', async target => {
+    if (String(target) === recordedNew) fs.renameSync(bin, offline)
+    return unlink(target)
+  })
+  try {
+    await runRecycleBinRetention({ retentionDays: 30, now: NOW, previewDirectory: previews })
+    assert.ok(fs.existsSync(offline), 'the bin was disconnected during retention')
+  } finally {
+    disconnect.mock.restore()
+    if (fs.existsSync(offline)) fs.renameSync(offline, bin)
+  }
+  assert.ok(recycle.readRecycleBinOrigins([path.basename(recordedNew)]).has(path.basename(recordedNew)))
+
   // Turned on, the scheduler starts the job with the configured days.
   settingsService.updateGeneralSettings({ deleteProtection: { enabled: true, recycleBinRetentionDays: 14 } })
   await DatabaseMaintenanceScheduler.runRecycleBinRetentionIfEnabled()

@@ -21,8 +21,8 @@ import { ImageList } from '@/features/images/components/image-list/image-list'
 import { useImageFeedSafety } from '@/features/images/components/image-list/use-image-feed-safety'
 import { SEARCH_AI_TOOL_OPTIONS } from '@/features/search/search-constants'
 import { useI18n } from '@/i18n'
-import { getGroupImages, getGroupsHierarchyAll, GROUPS_HIERARCHY_ALL_QUERY_KEY } from '@/lib/api-groups'
-import { getImages, searchImagesComplex } from '@/lib/api-images'
+import { getGroupsHierarchyAll, GROUPS_HIERARCHY_ALL_QUERY_KEY } from '@/lib/api-groups'
+import { mediaLibraryPages } from './media-library-pages'
 import type { ImageRecord } from '@/types/image'
 import type { GroupWithHierarchy } from '@/types/group'
 
@@ -81,27 +81,8 @@ export function MediaLibraryBrowser({
 
   // The group listing takes no search, tool or order: searching goes back to the whole library, a group clears them.
   const query = useInfiniteQuery({
-    queryKey: groupId === null ? ['home-images', 'media-library', search, tool, order] : ['group-images', 'custom', groupId, 'media-library'],
+    ...mediaLibraryPages(groupId, search, tool, order),
     enabled: canViewImages && (!initialGroupPath || !groupsQuery.isPending),
-    initialPageParam: { page: 1, cursorOrderIndex: null as number | null, cursorAddedDate: null as string | null, cursorHash: null as string | null },
-    queryFn: async ({ pageParam, signal }) => {
-      if (groupId !== null) {
-        const result = await getGroupImages(groupId, { ...pageParam, limit: 48, includeChildren: true }, { signal })
-        return { images: result.images, hasMore: result.pagination.hasMore ?? result.pagination.page < result.pagination.totalPages, cursorOrderIndex: result.pagination.nextCursorOrderIndex ?? null, cursorAddedDate: result.pagination.nextCursorAddedDate ?? null, cursorHash: result.pagination.nextCursorHash ?? null }
-      }
-      const result = await (search || tool ? searchImagesComplex({
-        complex_filter: {
-          or_group: search ? [
-            { category: 'positive_prompt', type: 'prompt_contains', value: search },
-            { category: 'auto_tag', type: 'auto_tag_any', value: search, min_score: 0, max_score: 1 },
-          ] : [],
-          and_group: tool ? [{ category: 'basic', type: 'ai_tool_group', value: tool }] : [],
-        },
-        page: pageParam.page, limit: 48, sortBy: 'first_seen_date', sortOrder: order,
-      }, { signal }) : getImages({ page: pageParam.page, limit: 48, sortOrder: order }, { signal }))
-      return { images: result.images, hasMore: result.hasMore, cursorOrderIndex: null, cursorAddedDate: null, cursorHash: null }
-    },
-    getNextPageParam: (lastPage, pages) => lastPage.hasMore ? { page: pages.length + 1, cursorOrderIndex: lastPage.cursorOrderIndex, cursorAddedDate: lastPage.cursorAddedDate, cursorHash: lastPage.cursorHash } : undefined,
   })
   const items = useMemo(() => [...new Map((query.data?.pages.flatMap((page) => page.images) ?? [])
     .filter((item) => item.composite_hash && (kind === 'all' || item.mime_type?.startsWith(kind === 'image' ? 'image/' : 'video/')))

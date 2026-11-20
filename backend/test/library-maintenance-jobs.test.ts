@@ -259,6 +259,7 @@ test('file verification keeps the old rules and applies one page per transaction
   const { db, runtimePaths } = await booted
   const { FileVerificationService } = await import('../src/services/fileVerificationService')
   const dir = path.join(root, 'verify')
+  fs.mkdirSync(runtimePaths.uploadsDir, { recursive: true })
   // Thumbnails for everything that has an original keep the thumbnail-regeneration path out of this test.
   for (let n = 0; n < 1100; n++) {
     const hash = hashOf('v', n)
@@ -305,6 +306,60 @@ test('file verification keeps the old rules and applies one page per transaction
   assert.equal((db.prepare("SELECT COUNT(*) c FROM image_files WHERE last_verified_date = '2000-01-01 00:00:00'").get() as { c: number }).c, 0,
     'every kept row was marked verified')
   assert.ok(state.yields >= 3)
+})
+
+test('verification removes confirmed missing files, not offline, unreadable or re-registered ones', async (t) => {
+  const { db, runtimePaths } = await booted
+  const { FileVerificationService } = await import('../src/services/fileVerificationService')
+  const online = path.join(root, 'verify-online'), offline = path.join(root, 'verify-offline')
+  fs.mkdirSync(online)
+  const onlineId = folderId(db, online), offlineId = folderId(db, offline)
+  const racePath = path.join(online, 'old.mp4'), restoredPath = path.join(online, 'restored.mp4')
+  const gone = insertFile(db, null, path.join(online, 'deleted.mp4'), { folder: onlineId, type: 'video' })
+  const replacementPath = path.join(online, 'replaced.mp4')
+  const replacement = insertFile(db, null, replacementPath, { folder: onlineId, type: 'video' })
+  const disconnected = insertFile(db, null, path.join(offline, 'unavailable.mp4'), { folder: offlineId, type: 'video' })
+  const raced = insertFile(db, null, racePath, { folder: onlineId, type: 'video' })
+  const hash = hashOf('verify-access', 1), thumb = 'thumbnails/verification-protected.webp'
+  insertMedia(db, hash, { thumbnail_path: thumb })
+  const protectedImage = insertFile(db, hash, path.join(online, 'protected.png'), { folder: onlineId })
+  const newThumbHash = hashOf('verify-renew', 1), newThumb = path.join(runtimePaths.tempDir, 'thumbnails', 'reappeared.webp')
+  insertMedia(db, newThumbHash, { thumbnail_path: newThumb })
+  const thumbOnly = insertFile(db, newThumbHash, path.join(online, 'thumb-only.png'), { folder: onlineId })
+  t.after(() => {
+    db.prepare('DELETE FROM watched_folders WHERE id IN (?, ?)').run(onlineId, offlineId)
+    db.prepare('DELETE FROM media_metadata WHERE composite_hash IN (?, ?)').run(hash, newThumbHash)
+  })
+  const access = fs.promises.access
+  let replaced = false
+  t.mock.method(fs.promises, 'access', async (file, mode) => {
+    if (String(file) === newThumb && !fs.existsSync(newThumb)) {
+      writeFile(newThumb)
+      throw Object.assign(new Error('thumbnail regenerated'), { code: 'ENOENT' })
+    }
+    if (String(file) === replacementPath && !replaced) {
+      replaced = true
+      writeFile(replacementPath)
+      throw Object.assign(new Error('already replaced'), { code: 'ENOENT' })
+    }
+    if (String(file) === racePath) {
+      writeFile(restoredPath)
+      db.prepare('UPDATE image_files SET original_file_path = ? WHERE id = ?').run(restoredPath, raced)
+    }
+    if (String(file) === path.join(runtimePaths.tempDir, thumb)) throw Object.assign(new Error('unreadable'), { code: 'EACCES' })
+    return access(file, mode)
+  })
+  const count = () => db.prepare('SELECT COUNT(*) FROM image_files').pluck().get() as number
+  const before = count()
+  const result = await FileVerificationService.verifyAllFiles()
+  assert.equal(result.deletedRecords, before - count(), 'report only committed deletions')
+  const readPath = (id: number) => db.prepare('SELECT original_file_path FROM image_files WHERE id = ?').pluck().get(id)
+  assert.equal(readPath(gone), undefined)
+  assert.equal(readPath(replacement), replacementPath)
+  assert.equal(readPath(disconnected), path.join(offline, 'unavailable.mp4'))
+  assert.equal(readPath(protectedImage), path.join(online, 'protected.png'))
+  assert.equal(readPath(thumbOnly), path.join(online, 'thumb-only.png'))
+  assert.equal(readPath(raced), restoredPath)
 })
 
 test('auto-folder rebuild applies only the differences and keeps unchanged group ids', async () => {
@@ -377,6 +432,25 @@ test('auto-collect diff keeps manual members, drops stale auto ones and is idemp
     const again = await AutoCollectionService.runAutoCollectionForGroup(groupId)
     assert.deepEqual([again.images_added, again.images_removed], [0, 0])
   }
+
+  const newer = JSON.stringify({ and_group: [{ category: 'positive_prompt', type: 'prompt_contains', value: 'unmatched-new-rule' }] })
+  let edited = false
+  const rematch = await AutoCollectionService.runAutoCollectionForGroup(legacyId, { yield: async () => {
+    if (!edited) {
+      edited = true
+      db.prepare('UPDATE groups SET auto_collect_conditions = ? WHERE id = ?').run(newer, legacyId)
+    }
+  } })
+  assert.equal(rematch.images_removed, zebras.length, 'the running scan applies the new rules rather than its abandoned stage')
+  assert.deepEqual(db.prepare('SELECT collection_type FROM image_groups WHERE group_id = ?').all(legacyId), [{ collection_type: 'manual' }])
+  const { ImageGroupModel } = await import('../src/models/Group')
+  const late = hashOf('g', 1400)
+  const concurrent = await ImageGroupModel.replaceAutoCollectedImagesStaged(legacyId, async () => {
+    insertMedia(db, late, { prompt: 'unmatched-new-rule' })
+    await AutoCollectionService.runAutoCollectionForNewImage(late)
+  })
+  assert.equal(concurrent.removedCount, 0)
+  assert.equal(ImageGroupModel.getCollectionType(legacyId, late), 'auto', 'a match added after the scan started is not stale')
 })
 
 test('bulk group add counts duplicates as skipped, converts auto rows and reports unknown hashes', async () => {

@@ -158,20 +158,23 @@ export function registerImageLibraryTools(server: McpServer, context: McpRequest
         const hashes = [...new Set(composite_hashes)];
         const allowed = [];
         const errors = [];
+        const failedHashes = [];
         for (const hash of hashes) {
           try {
             requireVisibleMetadata(hash);
             allowed.push(hash);
           } catch (error) {
+            failedHashes.push(hash);
             errors.push(error instanceof Error ? error.message : 'Image not found');
           }
         }
         const result = allowed.length ? await ImageManagementService.deleteImagesBulk(allowed) : {
-          message: 'Deleted 0 image(s)', details: { deleted: 0, failed: 0, errors: [] as string[], recycleBinEntries: [] as string[] },
+          message: 'Deleted 0 image(s)', details: { deleted: 0, failed: 0, errors: [], failedHashes: [], recycleBinEntries: [] },
         };
         return textResult({ ...result, details: {
           ...result.details,
           failed: result.details.failed + errors.length,
+          failedHashes: [...result.details.failedHashes, ...failedHashes],
           errors: [...result.details.errors, ...errors],
         } });
       } catch (error) {

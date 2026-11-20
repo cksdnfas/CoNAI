@@ -162,24 +162,31 @@ test('administrators browse server folders and manage the RecycleBin safely', { 
     t.diagnostic('12 simultaneous system-folder requests: 1 decoder invocation; changed/deleted sources not published')
   })
 
-  await t.test('RecycleBin names never collide and keep deletion order', async () => {
+  await t.test('RecycleBin names never overwrite another deletion and keep deletion order', async (t) => {
     const now = new Date('2026-10-08T01:02:03.456Z')
-    const names = new Set(Array.from({ length: 200 }, () => recycle.generateRecycleBinFileName('/a/ComfyUI_00001_.png', now)))
-    assert.equal(names.size, 200)
+    const name = recycle.generateRecycleBinFileName('/a/ComfyUI_00001_.png', now)
     const long = recycle.generateRecycleBinFileName(`/a/${'가'.repeat(150)}.png`, now)
     assert.ok(Buffer.byteLength(long, 'utf8') <= 200 && long.endsWith('.png'))
-    assert.deepEqual(recycle.parseRecycleBinFileName([...names][0]), { deletedAt: '2026-10-08T01:02:03.456Z', originalName: 'ComfyUI_00001_.png' })
+    assert.deepEqual(recycle.parseRecycleBinFileName(name), { deletedAt: '2026-10-08T01:02:03.456Z', originalName: 'ComfyUI_00001_.png' })
     assert.deepEqual(recycle.parseRecycleBinFileName('2025-01-15T12-30-45-123Z_한글.png'), { deletedAt: '2025-01-15T12:30:45.123Z', originalName: '한글.png' })
 
     // Two same-named files deleted at once (every copy of one image) both survive.
     const left = path.join(uploads, 'left'); const right = path.join(uploads, 'right')
     fs.mkdirSync(left); fs.mkdirSync(right)
     fs.writeFileSync(path.join(left, 'same.png'), 'L'); fs.writeFileSync(path.join(right, 'same.png'), 'R')
+    // An earlier deletion owns the first candidate name by the time the OS tries to publish ours.
+    let occupied: string | undefined
+    const link = fs.promises.link
+    t.mock.method(fs.promises, 'link', async (source: string, target: string) => {
+      if (!occupied) { fs.writeFileSync(target, 'older', { flag: 'wx' }); occupied = target }
+      return link(source, target)
+    })
     const [first, second] = await Promise.all([
       recycle.deleteFile(path.join(left, 'same.png'), true, 'library'),
       recycle.deleteFile(path.join(right, 'same.png'), true, 'library'),
     ])
     assert.ok(first && second && first !== second)
+    assert.equal(fs.readFileSync(occupied!, 'utf8'), 'older')
     assert.deepEqual([fs.readFileSync(first, 'utf8'), fs.readFileSync(second, 'utf8')].sort(), ['L', 'R'])
   })
 
@@ -285,7 +292,8 @@ test('administrators browse server folders and manage the RecycleBin safely', { 
       VALUES ('undo-folder', ?, 'Undo folder')`).run(path.join(uploads, 'undo-folder')).lastInsertRowid)
     db.prepare('INSERT INTO auto_folder_group_images (group_id, composite_hash) VALUES (?, ?)').run(folderGroupId, hash)
     db.prepare("INSERT INTO prompt_collection (prompt, usage_count) VALUES ('undo_prompt', 2)").run()
-    db.prepare("INSERT INTO image_groups (group_id, composite_hash, collection_type, order_index) VALUES (?, ?, 'manual', 7)").run(groupId, hash)
+    const keywords = JSON.stringify(['undo-emote'])
+    db.prepare("INSERT INTO image_groups (group_id, composite_hash, collection_type, order_index, emote_keywords) VALUES (?, ?, 'manual', 7, ?)").run(groupId, hash, keywords)
     const unused = path.join(uploads, 'unrelated-output.txt')
     fs.writeFileSync(unused, 'unrelated')
     const unrelatedName = path.basename(await recycle.deleteFile(unused, true, 'workflow-output') as string)
@@ -294,6 +302,7 @@ test('administrators browse server folders and manage the RecycleBin safely', { 
     const details = deletion.body.data.details
     assert.equal(details.deleted, 1)
     assert.equal(details.failed, 1)
+    assert.deepEqual(details.failedHashes, ['invalid'])
     assert.equal(details.recycleBinEntries.length, 2, 'one entry per physical copy, not per hash')
     assert.equal(db.prepare('SELECT 1 FROM media_metadata WHERE composite_hash = ?').get(hash), undefined)
     assert.deepEqual(modelRows.all(hash), [], 'model links really were cascaded away')
@@ -330,7 +339,8 @@ test('administrators browse server folders and manage the RecycleBin safely', { 
     assert.equal(fs.readFileSync(first, 'utf8'), 'newer')
     assert.equal(fs.readFileSync(second, 'utf8'), 'undo-second.png')
     assert.equal((db.prepare('SELECT first_seen_date FROM media_metadata WHERE composite_hash = ?').get(hash) as { first_seen_date: string }).first_seen_date, '2020-01-01 00:00:00')
-    assert.equal((db.prepare('SELECT order_index FROM image_groups WHERE composite_hash = ? AND group_id = ?').get(hash, groupId) as { order_index: number }).order_index, 7)
+    const membership = db.prepare('SELECT order_index, emote_keywords FROM image_groups WHERE composite_hash = ? AND group_id = ?')
+    assert.deepEqual(membership.get(hash, groupId), { order_index: 7, emote_keywords: keywords })
     assert.deepEqual(MediaImageFeaturesModel.getHistogram(hash), histogramBefore, 'histogram BLOB survives byte-for-byte')
     assert.deepEqual(similarityRow.get(hash), similarityBefore, 'hash bands and color descriptors are rebuilt')
     assert.deepEqual(modelRows.all(hash), modelsBefore, 'model roles, weights and lookup status survive')
@@ -341,8 +351,10 @@ test('administrators browse server folders and manage the RecycleBin safely', { 
       JOIN media_metadata m ON m.media_id = mat.media_id WHERE m.composite_hash = ?`).all(hash), [{ tag_key: 'undo_tag', score: 0.875 }], 'auto-tag search rows are rebuilt from metadata')
     assert.equal((db.prepare("SELECT usage_count FROM prompt_collection WHERE prompt = 'undo_prompt'").get() as { usage_count: number }).usage_count, 2, 'restoring copies increments usage only once')
     fs.unlinkSync(first)
+    db.prepare(`UPDATE image_groups SET emote_keywords = '[]' WHERE composite_hash = ? AND group_id = ?`).run(hash, groupId)
     const retry = await call('/api/images/restore', editorId, 'POST', { names: restored.body.data.failed.map((entry: { name: string }) => entry.name) })
     assert.equal(retry.body.data.done.length, 1)
+    assert.deepEqual(membership.get(hash, groupId), { order_index: 7, emote_keywords: '[]' }, 'another copy must not revert a later keyword edit')
     assert.equal(fs.readFileSync(first, 'utf8'), 'undo-first.png')
     assert.equal((db.prepare('SELECT COUNT(*) AS count FROM image_files WHERE composite_hash = ?').get(hash) as { count: number }).count, 2)
     assert.equal((db.prepare("SELECT usage_count FROM prompt_collection WHERE prompt = 'undo_prompt'").get() as { usage_count: number }).usage_count, 2)
@@ -500,12 +512,66 @@ test('administrators browse server folders and manage the RecycleBin safely', { 
     assert.equal(fs.existsSync(file), true, 'a restorable-only tool never permanently deletes when protection is off')
   })
 
+  await t.test('protected deletion preserves an offline library and rolls back when another copy is registered', async (t) => {
+    const db = main.db
+    const { settingsService } = await import('../src/services/settingsService')
+    const settings = settingsService.loadSettings()
+    t.mock.method(settingsService, 'loadSettings', () => ({ ...settings, general: { ...settings.general, deleteProtection: { ...settings.general.deleteProtection, enabled: true } } }))
+    const online = path.join(root, 'delete-source'), offline = path.join(root, 'delete-disconnected')
+    const folder = db.prepare('INSERT INTO watched_folders(folder_path, folder_name) VALUES (?, ?)')
+    const firstFolder = Number(folder.run(online, 'source').lastInsertRowid), secondFolder = Number(folder.run(offline, 'offline').lastInsertRowid)
+    const hash = 'e1'.repeat(24)
+    db.prepare('INSERT INTO media_metadata(composite_hash) VALUES(?)').run(hash)
+    const insert = db.prepare("INSERT INTO image_files(composite_hash,original_file_path,folder_id,file_size,mime_type) VALUES(?,?,?,1,'image/png')")
+    const first = path.join(online, 'first.png'), second = path.join(offline, 'second.png'), late = path.join(online, 'late.png')
+    fs.mkdirSync(online)
+    fs.writeFileSync(first, 'a')
+    insert.run(hash, first, firstFolder); insert.run(hash, second, secondFolder)
+    const remove = async () => (await call('/api/images/bulk', adminId, 'DELETE', { compositeHashes: [hash] })).body.data.details
+    assert.deepEqual((await remove()).failedHashes, [hash])
+    assert.equal(fs.readFileSync(first, 'utf8'), 'a')
+    fs.mkdirSync(offline)
+    fs.writeFileSync(second, 'b')
+    const access = fs.promises.access
+    t.mock.method(fs.promises, 'access', async (target, mode) => {
+      if (String(target) === first && !fs.existsSync(late)) {
+        fs.writeFileSync(late, 'c')
+        insert.run(hash, late, firstFolder)
+      }
+      return access(target, mode)
+    })
+    assert.deepEqual((await remove()).failedHashes, [hash])
+    assert.deepEqual([first, second, late].map(file => fs.readFileSync(file, 'utf8')), ['a', 'b', 'c'])
+    assert.equal(db.prepare('SELECT COUNT(*) FROM image_files WHERE composite_hash = ?').pluck().get(hash), 3)
+  })
+
+  await t.test('deleting the last individual copy cannot delete a reimport during prompt cleanup', async (t) => {
+    const { DeletionService } = await import('../src/services/deletionService')
+    const { PromptCollectionService } = await import('../src/services/promptCollectionService')
+    const db = main.db, hash = 'e2'.repeat(24)
+    const folder = db.prepare('SELECT id FROM watched_folders WHERE is_default = 1').pluck().get()
+    const old = path.join(uploads, 'replaced-old.png'), replacement = path.join(uploads, 'replaced-new.png')
+    const addMetadata = db.prepare('INSERT OR IGNORE INTO media_metadata(composite_hash) VALUES(?)')
+    const addFile = db.prepare("INSERT INTO image_files(composite_hash,original_file_path,folder_id,file_size,mime_type) VALUES(?,?,?,1,'image/png')")
+    addMetadata.run(hash)
+    fs.writeFileSync(old, 'a')
+    const id = Number(addFile.run(hash, old, folder).lastInsertRowid)
+    t.mock.method(PromptCollectionService, 'removeFromImage', async () => {
+      addMetadata.run(hash)
+      fs.writeFileSync(replacement, 'a')
+      addFile.run(hash, replacement, folder)
+    })
+    assert.equal(await DeletionService.deleteImageFile(id), true)
+    assert.equal(db.prepare('SELECT original_file_path FROM image_files WHERE composite_hash = ?').pluck().get(hash), replacement)
+    assert.ok(db.prepare('SELECT 1 FROM media_metadata WHERE composite_hash = ?').get(hash))
+  })
+
   await t.test('administrators can recover files with warnings when library reattachment is impossible, while Undo stays strict', async (t) => {
     const { settingsService } = await import('../src/services/settingsService')
     const settings = settingsService.loadSettings()
     t.mock.method(settingsService, 'loadSettings', () => ({ ...settings, general: { ...settings.general, deleteProtection: { ...settings.general.deleteProtection, enabled: true } } }))
     const db = main.db
-    for (const [index, reason] of ['removed-folder', 'registered-path', 'malformed-json'].entries()) {
+    for (const [index, reason] of ['removed-folder', 'registered-path', 'malformed-json', 'reassigned-keyword'].entries()) {
       const hash = `${index + 1}f`.repeat(24)
       const directory = path.join(uploads, `fallback-${reason}`)
       fs.mkdirSync(directory)
@@ -514,6 +580,9 @@ test('administrators browse server folders and manage the RecycleBin safely', { 
       const folderId = Number(db.prepare('INSERT INTO watched_folders (folder_path, folder_name) VALUES (?, ?)').run(directory, reason).lastInsertRowid)
       db.prepare('INSERT INTO media_metadata (composite_hash) VALUES (?)').run(hash)
       db.prepare("INSERT INTO image_files (composite_hash, original_file_path, folder_id, file_size, mime_type) VALUES (?, ?, ?, 19, 'image/png')").run(hash, original, folderId)
+      const emoteGroup = reason === 'reassigned-keyword' ? Number(db.prepare("INSERT INTO groups (name, emoticon_enabled) VALUES ('keyword claims', 1)").run().lastInsertRowid) : null
+      const addKeyword = db.prepare(`INSERT INTO image_groups (group_id, composite_hash, emote_keywords) VALUES (?, ?, '["wave"]')`)
+      if (emoteGroup) addKeyword.run(emoteGroup, hash)
       const deletion = await call('/api/images/bulk', adminId, 'DELETE', { compositeHashes: [hash] })
       const [name] = deletion.body.data.details.recycleBinEntries
       assert.ok(name, 'the protected deletion records an undo entry')
@@ -522,8 +591,20 @@ test('administrators browse server folders and manage the RecycleBin safely', { 
         const otherHash = 'ef'.repeat(24)
         db.prepare('INSERT INTO media_metadata (composite_hash) VALUES (?)').run(otherHash)
         db.prepare("INSERT INTO image_files (composite_hash, original_file_path, folder_id, file_size, mime_type) VALUES (?, ?, ?, 1, 'image/png')").run(otherHash, original, folderId)
+      } else if (emoteGroup) {
+        const currentOwner = `${hash.slice(0, -1)}0`
+        db.prepare('INSERT INTO media_metadata (composite_hash) VALUES (?)').run(currentOwner)
+        addKeyword.run(emoteGroup, currentOwner)
       } else {
         user.getUserSettingsDb().prepare("UPDATE recycle_bin_entries SET library_restore_data = '{broken' WHERE bin_name = ?").run(name)
+        const unlink = fs.promises.unlink
+        const duringUndo = t.mock.method(fs.promises, 'unlink', async (target: string) => {
+          await unlink(target)
+          if (target === path.join(bin, name)) {
+            duringUndo.mock.restore()
+            await recycle.forgetMissingRecycleBinOrigins(bin, new Set(fs.readdirSync(bin)))
+          }
+        })
       }
       const undo = await call('/api/images/restore', adminId, 'POST', { names: [name] })
       assert.equal(undo.body.data.done.length, 0, reason)

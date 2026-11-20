@@ -2,7 +2,7 @@ import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { useMemo } from 'react'
 import { useInfiniteQuery, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import { getAutoFolderGroupFileCounts } from '@/lib/api-auto-folder-groups'
-import { getGroupFileCounts, getGroupImages, getGroupsHierarchyAll, GROUPS_HIERARCHY_ALL_QUERY_KEY } from '@/lib/api-groups'
+import { getGroupFileCounts, getGroupImages, getGroupsHierarchyAll, GROUPS_HIERARCHY_ALL_QUERY_KEY, nextGroupImagesCursor } from '@/lib/api-groups'
 import type { GroupImagesPayload, GroupWithHierarchy } from '@/types/group'
 import { createEmptyGroupFileCounts, getDownloadCountsFromImages, type GroupSourceDefinition } from './group-page-shared'
 
@@ -55,23 +55,13 @@ export function useGroupPageQueries({
 
   const groupImagesQuery = useInfiniteQuery({
     queryKey: ['group-images', selectedSource.key, selectedGroupId, isCustomSource ? groupImageCollectionFilter : 'all'],
-    queryFn: async ({ pageParam }): Promise<GroupImagesPayload> => (
+    queryFn: async ({ pageParam, signal }): Promise<GroupImagesPayload> => (
       isCustomSource
-        ? getGroupImages(selectedGroupId!, { ...pageParam, limit: 40, collectionType: groupImageCollectionFilter, includeChildren: true })
-        : selectedSource.getImages(selectedGroupId!, { ...pageParam, limit: 40, includeChildren: true })
+        ? getGroupImages(selectedGroupId!, { ...pageParam, limit: 40, collectionType: groupImageCollectionFilter, includeChildren: true }, { signal })
+        : selectedSource.getImages(selectedGroupId!, { ...pageParam, limit: 40, includeChildren: true }, { signal })
     ),
     initialPageParam: {} as GroupImagesPageParam,
-    getNextPageParam: (lastPage): GroupImagesPageParam | undefined => {
-      if (!lastPage.pagination.hasMore || !lastPage.pagination.nextCursorHash) {
-        return undefined
-      }
-      return {
-        cursorOrderIndex: lastPage.pagination.nextCursorOrderIndex,
-        cursorAddedDate: lastPage.pagination.nextCursorAddedDate,
-        cursorDate: lastPage.pagination.nextCursorDate,
-        cursorHash: lastPage.pagination.nextCursorHash,
-      }
-    },
+    getNextPageParam: nextGroupImagesCursor,
     enabled: canViewImages && Number.isFinite(selectedGroupId),
   })
 

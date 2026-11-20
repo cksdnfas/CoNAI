@@ -35,8 +35,7 @@ export async function ingestGeneratedAudioOutputs(
   for (const [index, output] of outputs.entries()) {
     try {
       const originalName = path.basename(output.filename || output.tempPath);
-      const { file } = await ingestAudioFile(output.tempPath, originalName);
-      candidates.push(registerGeneratedAudioCandidate({
+      candidates.push(await ingestAudioFile(output.tempPath, originalName, ({ file }) => registerGeneratedAudioCandidate({
         groupId: target.groupId, file, name: target.name(index), accountId: target.accountId,
         orderId: target.orderId, sourceKey: `gen:${context.queueJobId}:${output.nodeId}:${index}`, jobId: context.queueJobId,
         provenance: {
@@ -47,7 +46,7 @@ export async function ingestGeneratedAudioOutputs(
           server_id: context.serverId, server_name: context.serverName,
           output_node_id: output.nodeId, output_filename: originalName,
         },
-      }));
+      })));
     } catch (error) {
       failures.push(error instanceof Error ? error.message : String(error));
       onFailure?.(output, error);

@@ -66,10 +66,11 @@ test('stopped file watchers stay stopped through pending and in-flight recovery'
   const folderId = Number(db.prepare('INSERT INTO watched_folders (folder_path, folder_name, is_active) VALUES (?, ?, 1)')
     .run(folderPath, 'recovery test').lastInsertRowid)
   const watchers: Array<InstanceType<typeof EventEmitter>> = []
+  let holdReady = false
   const watch = t.mock.method(chokidar, 'watch', () => {
     const watcher = Object.assign(new EventEmitter(), { close: async () => {} })
     watchers.push(watcher)
-    queueMicrotask(() => watcher.emit('ready'))
+    if (!holdReady) queueMicrotask(() => watcher.emit('ready'))
     return watcher as unknown as ReturnType<typeof chokidar.watch>
   })
   t.after(async () => {
@@ -94,6 +95,52 @@ test('stopped file watchers stay stopped through pending and in-flight recovery'
   await restarting
   assert.equal(watch.mock.callCount(), 2, 'shutdown cancels recovery already waiting to reopen')
   assert.equal(FileWatcherService.getWatcherStatus(folderId), null)
+
+  holdReady = true
+  const starting = Promise.allSettled([FileWatcherService.startWatcher(folderId), FileWatcherService.startWatcher(folderId)])
+  assert.equal(watch.mock.callCount(), 3, 'two starts share the same in-flight watcher')
+  await FileWatcherService.stopWatcher(folderId)
+  assert.deepEqual((await starting).map(result => result.status), ['rejected', 'rejected'])
+  watchers[2].emit('ready')
+  assert.equal(FileWatcherService.getWatcherStatus(folderId), null, 'late readiness cannot undo stop')
+})
+
+test('watcher unlinks drop only a missing file still owned by that watcher', async (t) => {
+  const { db } = await booted
+  const { EventEmitter } = await import('node:events')
+  const chokidar: typeof import('chokidar').default = require('chokidar').default
+  const { FileWatcherService } = await import('../src/services/fileWatcherService')
+  const dir = path.join(root, 'watch-unlink')
+  fs.mkdirSync(dir)
+  const owner = Number(db.prepare('INSERT INTO watched_folders (folder_path, folder_name) VALUES (?, ?)').run(dir, 'unlink').lastInsertRowid)
+  const watcher = Object.assign(new EventEmitter(), { close: async () => {} })
+  t.mock.method(chokidar, 'watch', () => {
+    queueMicrotask(() => watcher.emit('ready'))
+    return watcher as unknown as ReturnType<typeof chokidar.watch>
+  })
+  await FileWatcherService.startWatcher(owner)
+  t.after(async () => {
+    await FileWatcherService.stopWatcher(owner)
+    db.prepare('DELETE FROM watched_folders WHERE id = ?').run(owner)
+  })
+  const filePath = path.join(dir, 'reused.png')
+  const insert = db.prepare("INSERT INTO image_files (original_file_path,folder_id,file_size,mime_type) VALUES(?,?,1,'image/png')")
+  const registered = () => db.prepare('SELECT folder_id FROM image_files WHERE original_file_path = ?').pluck().get(filePath)
+  const unlink = watcher.listeners('unlink')[0]
+  insert.run(filePath, owner)
+  writeFile(filePath)
+  await unlink.call(watcher, filePath)
+  assert.equal(registered(), owner, 'replacement at the same path survives a delayed event')
+  fs.rmSync(dir, { recursive: true })
+  await unlink.call(watcher, filePath)
+  assert.equal(registered(), owner, 'losing the entire folder is not a file deletion')
+  fs.mkdirSync(dir)
+  await unlink.call(watcher, filePath)
+  assert.equal(registered(), undefined, 'genuine deletion is still reflected')
+  insert.run(filePath, owner)
+  await FileWatcherService.stopWatcher(owner)
+  await unlink.call(watcher, filePath)
+  assert.equal(registered(), owner, 'events from the closed watcher have no effect')
 })
 
 test('backup watcher shutdown cancels a restart waiting to reopen its source', async (t) => {
@@ -211,10 +258,28 @@ test('simultaneous workflow copies preserve both results and the original in the
   assert.equal(fs.readFileSync(original, 'utf8'), 'keep')
 })
 
-test('background processing shutdown drains its active write and cancels scheduled follow-up batches', async (t) => {
+test('a disconnected source keeps its pending import retryable until the root is reachable', async (t) => {
   const { db } = await booted
+  const { processMediaFile } = await import('../src/services/background-media/mediaFileProcessor')
+  const dir = path.join(root, 'pending-offline'), filePath = path.join(dir, 'import.png')
+  const folder = Number(db.prepare('INSERT INTO watched_folders (folder_path, folder_name) VALUES (?, ?)').run(dir, 'pending').lastInsertRowid)
+  const insert = db.prepare("INSERT INTO image_files (original_file_path,folder_id,file_size,mime_type) VALUES(?,?,1,'image/png')")
+  const id = Number(insert.run(filePath, folder).lastInsertRowid)
+  t.after(() => { db.prepare('DELETE FROM watched_folders WHERE id = ?').run(folder) })
+  const row = { id, original_file_path: filePath, folder_id: folder, mime_type: 'image/png', file_type: 'image' }
+  const registered = () => db.prepare('SELECT file_status FROM image_files WHERE id = ?').pluck().get(id)
+  assert.equal((await processMediaFile(row)).retryable, true)
+  assert.equal(registered(), 'active')
+  fs.mkdirSync(dir)
+  assert.equal((await processMediaFile(row)).status, 'skipped')
+  assert.equal(registered(), undefined)
+})
+
+test('background processing shutdown drains its active write and cancels scheduled follow-up batches', async (t) => {
+  const { db, runtimePaths } = await booted
   const { BackgroundProcessorService } = await import('../src/services/backgroundProcessorService')
-  const missing = path.join(root, 'shutdown-missing.png')
+  fs.mkdirSync(runtimePaths.uploadsDir, { recursive: true })
+  const missing = path.join(runtimePaths.uploadsDir, 'shutdown-missing.png')
   insertFile(db, null, missing)
   let release!: () => void
   let entered!: () => void
@@ -241,12 +306,13 @@ test('background processing shutdown drains its active write and cancels schedul
     release()
     await Promise.all([running, stopping])
     assert.equal(db.prepare('SELECT 1 FROM image_files WHERE original_file_path = ?').get(missing), undefined)
+    const checksAtShutdown = checks
     insertFile(db, null, missing)
     BackgroundProcessorService.triggerHashGeneration()
     t.mock.timers.tick(60_000)
     await new Promise((resolve) => setImmediate(resolve))
     await new Promise((resolve) => setImmediate(resolve))
-    assert.equal(checks, 1, 'neither a pre-shutdown timer nor a new trigger may restart processing')
+    assert.equal(checks, checksAtShutdown, 'neither a pre-shutdown timer nor a new trigger may restart processing')
     BackgroundProcessorService.start()
   } finally {
     release()

@@ -13,7 +13,6 @@ import {
   GROUP_AUTO_COLLECT_RULE_LIMIT,
   GROUP_AUTO_COLLECT_SCOPES,
   readGroupAutoCollectRules,
-  type GroupRecord,
 } from '@conai/shared';
 import type { McpRequestContext } from '../context';
 import { createCustomGroup, deleteCustomGroups, moveCustomGroups, updateCustomGroup } from '../../services/groupMutationService';
@@ -99,8 +98,9 @@ function summarizeJob(job: GroupRematchJobRecord | null) {
 }
 
 /** Settings view of one custom group; conditions the rules cannot express are returned raw instead of dropped. */
-function describeGroup(group: GroupRecord) {
-  const stats = GroupModel.findAllWithStats().find((row) => row.id === group.id);
+function describeGroup(id: number) {
+  const group = GroupModel.findOneWithStats(id);
+  if (!group) throw new Error('Group not found');
   const rules = readGroupAutoCollectRules(group.auto_collect_conditions);
   return {
     group_id: group.id,
@@ -110,9 +110,9 @@ function describeGroup(group: GroupRecord) {
     description: group.description ?? null,
     color: group.color ?? null,
     emoticon_enabled: Boolean(group.emoticon_enabled),
-    image_count: stats?.image_count ?? 0,
-    auto_collected_count: stats?.auto_collected_count ?? 0,
-    manual_added_count: stats?.manual_added_count ?? 0,
+    image_count: group.image_count,
+    auto_collected_count: group.auto_collected_count,
+    manual_added_count: group.manual_added_count,
     auto_collect: {
       enabled: Boolean(group.auto_collect_enabled),
       rules,
@@ -330,9 +330,7 @@ export function registerImageGroupTools(server: McpServer, context: McpRequestCo
     }) },
     async ({ group_id, group_path }) => {
       try {
-        const group = GroupModel.findById(resolveExistingGroup(group_id, group_path));
-        if (!group) throw new Error('Group not found');
-        return textResult(describeGroup(group));
+        return textResult(describeGroup(resolveExistingGroup(group_id, group_path)));
       } catch (error) {
         return errorResult(error, 'Failed to get image group');
       }
@@ -360,7 +358,7 @@ export function registerImageGroupTools(server: McpServer, context: McpRequestCo
           auto_collect_enabled: Boolean(auto_collect_rules),
           auto_collect_conditions: auto_collect_rules ? buildGroupAutoCollectFilter(auto_collect_rules) : undefined,
         }, requesterAccountId);
-        return textResult({ ...describeGroup(GroupModel.findById(id)!), auto_collect_job: summarizeJob(autoCollectJob) });
+        return textResult({ ...describeGroup(id), auto_collect_job: summarizeJob(autoCollectJob) });
       } catch (error) {
         return errorResult(error, 'Failed to create image group');
       }
@@ -398,7 +396,7 @@ export function registerImageGroupTools(server: McpServer, context: McpRequestCo
           auto_collect_enabled: enabled,
           auto_collect_conditions: conditions,
         }, requesterAccountId);
-        return textResult({ ...describeGroup(GroupModel.findById(id)!), auto_collect_job: summarizeJob(autoCollectJob) });
+        return textResult({ ...describeGroup(id), auto_collect_job: summarizeJob(autoCollectJob) });
       } catch (error) {
         return errorResult(error, 'Failed to update image group');
       }

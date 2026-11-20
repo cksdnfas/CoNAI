@@ -9,7 +9,9 @@ import {
   forgetRecycleBinOrigins,
   moveFileWithoutReplacing,
   parseRecycleBinFileName,
+  readLibraryRestoreData,
   readRecycleBinOrigins,
+  reinstateLibraryOrigin,
   unlinkWithTransientLockRetry,
   type RecycleBinOrigin,
 } from '../utils/recycleBin';
@@ -283,7 +285,8 @@ export const SystemFolderService = {
     for (const name of names) {
       try {
         const origin = origins.get(name);
-        if (libraryOnly && (origin?.source !== 'library' || !origin.libraryRestoreData)) {
+        const libraryData = origin?.source === 'library' ? readLibraryRestoreData(name) : null;
+        if (libraryOnly && !libraryData) {
           throw new SystemFolderError('이 항목은 라이브러리 삭제 되돌리기 대상이 아니야.', 403);
         }
         if (!origin) throw new SystemFolderError('원래 위치 기록이 없어서 복원할 수 없어.', 409, 'no-origin');
@@ -294,23 +297,28 @@ export const SystemFolderService = {
         if (isDenied(targetDirectory, roots.denied) || within(roots.binRoot, targetDirectory)) throw new SystemFolderError('이 위치로는 복원할 수 없어.', 403);
         await fs.promises.mkdir(path.dirname(original), { recursive: true });
         // The move itself refuses an occupied name (EEXIST), so a file created after any check is never replaced.
-        const restoredTo = await restoreWithoutReplacing(absolute, original, conflict);
+        let restoredTo = await restoreWithoutReplacing(absolute, original, conflict);
         let warning: string | undefined;
-        if (origin.source === 'library' && origin.libraryRestoreData) {
+        if (libraryData) {
           try {
             const { DeletionService } = await import('./deletionService');
-            DeletionService.restoreLibraryEntry(origin.libraryRestoreData, restoredTo);
+            DeletionService.restoreLibraryEntry(libraryData, restoredTo);
           } catch (error) {
             if (libraryOnly) {
               await moveFileWithoutReplacing(restoredTo, absolute);
+              reinstateLibraryOrigin(origin, libraryData);
               throw error;
             }
             // Administrators must still be able to recover the file when its former DB links no longer exist.
             warning = `파일은 복원했지만 라이브러리에 다시 연결하지 못했어: ${errorMessage(error)}`;
           }
         }
+        if (origin.source === 'audio') {
+          const canonical = await reattachRestoredAudio(restoredTo);
+          if (canonical) restoredTo = canonical;
+          else warning = '파일은 복원했지만 오디오 목록에는 다시 연결하지 못했어.';
+        }
         forgetRecycleBinOrigins([name]);
-        if (origin.source === 'audio') await reattachRestoredAudio(restoredTo);
         result.done.push({ name, restoredTo, ...(warning ? { warning } : {}) });
       } catch (error) {
         result.failed.push(failure(name, error));
@@ -355,7 +363,7 @@ export const SystemFolderService = {
       if (index % 200 === 199) await new Promise<void>((resolve) => setImmediate(resolve));
     }
     forgetRecycleBinOrigins(deletedNames);
-    forgetMissingRecycleBinOrigins(directory);
+    await forgetMissingRecycleBinOrigins(directory, new Set(dirents.map(entry => entry.name)));
     return { deleted: deletedNames.length, failed };
   },
 };
@@ -363,12 +371,13 @@ export const SystemFolderService = {
 const isTaken = (error: unknown) => (error as NodeJS.ErrnoException | undefined)?.code === 'EEXIST';
 
 /** An audio blob back in the audio store gets its rows again; a failure leaves the file for the orphan sweep. */
-async function reattachRestoredAudio(restoredTo: string): Promise<void> {
+async function reattachRestoredAudio(restoredTo: string): Promise<string | null> {
   try {
     const { reattachAudioFile } = await import('./audio/audioMaintenance');
-    await reattachAudioFile(restoredTo);
+    return (await reattachAudioFile(restoredTo)).path;
   } catch (error) {
     console.warn('⚠️ Restored audio file could not be re-attached:', error);
+    return null;
   }
 }
 

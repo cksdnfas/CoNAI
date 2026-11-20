@@ -85,6 +85,16 @@ export async function getGroupBreadcrumb(groupId: number) {
   return response.data
 }
 
+export function nextGroupImagesCursor({ pagination }: GroupImagesPayload) {
+  if (!pagination.hasMore || !pagination.nextCursorHash) return
+  return {
+    cursorOrderIndex: pagination.nextCursorOrderIndex,
+    cursorAddedDate: pagination.nextCursorAddedDate,
+    cursorDate: pagination.nextCursorDate,
+    cursorHash: pagination.nextCursorHash,
+  }
+}
+
 export async function getGroupImages(groupId: number, params?: {
   page?: number
   limit?: number
@@ -93,12 +103,13 @@ export async function getGroupImages(groupId: number, params?: {
   cursorAddedDate?: string | null
   cursorHash?: string | null
   includeChildren?: boolean
+  includeTotal?: boolean
 }, init?: RequestInit): Promise<GroupImagesPayload> {
   const searchParams = new URLSearchParams()
   searchParams.set('page', String(params?.page ?? 1))
   searchParams.set('limit', String(params?.limit ?? 40))
   searchParams.set('pagination', 'cursor')
-  searchParams.set('include_total', params?.cursorHash ? 'false' : 'true')
+  searchParams.set('include_total', String(params?.includeTotal ?? !params?.cursorHash))
   searchParams.set('include_children', String(params?.includeChildren ?? false))
   if (params?.cursorOrderIndex !== null && params?.cursorOrderIndex !== undefined) {
     searchParams.set('cursor_order_index', String(params.cursorOrderIndex))

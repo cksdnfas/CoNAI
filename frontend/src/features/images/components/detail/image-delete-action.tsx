@@ -5,7 +5,7 @@ import type { ActionMenuAction } from '@/components/ui/action-menu'
 import { IconButton } from '@/components/ui/icon-button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useImagePermissions } from '@/features/auth/use-image-permissions'
-import { removeDeletedImagesFromListCaches } from '@/features/images/image-list-cache'
+import { removeBulkDeletedImagesFromListCaches } from '@/features/images/image-list-cache'
 import { useImageDeleteUndo } from '@/features/images/use-image-delete-undo'
 import { useI18n } from '@/i18n'
 import { useConfirmImageDelete } from '@/features/images/chat-media-delete-warning'
@@ -62,7 +62,7 @@ export function useImageDeletion(image: ImageRecord | undefined, onDeleted?: (co
       const result = await deleteImagesBulk([compositeHash])
       if (result.details.deleted === 0) throw new Error(result.details.errors[0] ?? t({ ko: '이미지를 지우지 못했어.', en: 'Could not delete the image.' }))
       onDeleted?.(compositeHash)
-      await removeDeletedImagesFromListCaches(queryClient, [compositeHash])
+      await removeBulkDeletedImagesFromListCaches(queryClient, [compositeHash], result.details)
       notifyImageDeleted(result.details)
       if (result.details.failed) throw new Error(result.details.errors.join(', ') || t({ ko: '이미지를 지우지 못했어.', en: 'Could not delete the image.' }))
     } finally {

@@ -7,7 +7,7 @@ import { HistoryCommandService } from './historyCommandService';
 import { PromptCollectionService } from './promptCollectionService';
 import { settingsService } from './settingsService';
 import { deleteFile as recycleBinDeleteFile, recordLibraryRestoreData, moveFileWithoutReplacing, forgetRecycleBinOrigins } from '../utils/recycleBin';
-import { runtimePaths } from '../config/runtimePaths';
+import { resolveUploadsPath } from '../config/runtimePaths';
 import { db } from '../database/init';
 import { ImageStatsModel } from '../models/Image/ImageStatsModel';
 import { resolveThumbnailAbsolutePath } from '../utils/thumbnailGenerator';
@@ -15,6 +15,8 @@ import type { ImageMetadataRecord, ImageFileRecord } from '../types/image';
 import { QueryCacheService } from './QueryCacheService';
 import { MediaImageFeaturesModel } from '../models/Image/MediaImageFeaturesModel';
 import { GeneratedVideoOptimizationService } from './generatedVideoOptimizationService';
+import { EmoticonService } from './emoticonService';
+import { canConfirmMissingFiles } from './watchedFilePresence';
 
 interface RestorableImageModel {
   model_hash: string;
@@ -47,7 +49,7 @@ function asRebuildableOptimization(optimization: RestorableVideoOptimization): R
 interface LibraryRestoreData {
   metadata: ImageMetadataRecord;
   file: ImageFileRecord;
-  groups: Array<{ group_id: number; added_date: string; order_index: number; collection_type: string; auto_collected_date: string | null }>;
+  groups: Array<{ group_id: number; added_date: string; order_index: number; collection_type: string; auto_collected_date: string | null; emote_keywords?: string | null }>;
   folderGroups: Array<{ group_id: number; added_date: string }>;
   /** Optional for entries created before side-table snapshots were supported. The BLOB is encoded losslessly. */
   colorHistogram?: string | null;
@@ -64,38 +66,20 @@ interface LibraryRestoreData {
  * - 일관된 에러 핸들링
  */
 export class DeletionService {
-  private static UPLOAD_BASE_PATH = runtimePaths.uploadsDir;
-
-  /**
-   * 파일 삭제 (RecycleBin 또는 완전 삭제)
-   *
-   * @param filePath - 삭제할 파일 경로 (상대 경로 또는 절대 경로)
-   * @param useRecycleBin - RecycleBin 사용 여부
-   * @returns RecycleBin 사용 시 RecycleBin 경로, 완전 삭제 시 undefined
-   */
-  private static async deletePhysicalFile(
-    filePath: string,
-    useRecycleBin: boolean
-  ): Promise<string | undefined> {
-    // 절대 경로로 변환
-    let absolutePath: string;
-    if (path.isAbsolute(filePath)) {
-      absolutePath = filePath;
-    } else {
-      absolutePath = path.join(this.UPLOAD_BASE_PATH, filePath);
-    }
-
-    // 파일 존재 확인
-    if (!fs.existsSync(absolutePath)) {
+  /** A disconnected drive must not turn an apparent deletion into an irreversible metadata-only deletion. */
+  private static async resolveDeleteTarget(filePath: string, folderId?: number): Promise<string | undefined> {
+    const absolutePath = resolveUploadsPath(filePath);
+    try {
+      await fs.promises.access(absolutePath);
+      return absolutePath;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+      if (folderId !== undefined) {
+        const folder = db.prepare('SELECT folder_path FROM watched_folders WHERE id = ?').pluck().get(folderId) as string | undefined;
+        if (!folder || !await canConfirmMissingFiles(folder)) throw new Error('감시 폴더에 접근할 수 없어. 연결을 확인한 뒤 다시 삭제해줘.');
+      }
       console.warn(`⚠️ File not found (skipping): ${absolutePath}`);
       return undefined;
-    }
-
-    try {
-      return await recycleBinDeleteFile(absolutePath, useRecycleBin, 'library');
-    } catch (error) {
-      console.error(`❌ Failed to delete file: ${absolutePath}`, error);
-      throw error;
     }
   }
 
@@ -123,11 +107,20 @@ export class DeletionService {
    * Delete one media row and every image_files row that points at it, in one transaction. The image_files FK is
    * ON DELETE SET NULL, so deleting only the metadata would leave active file rows with a NULL hash behind.
    */
-  private static deleteMetadataWithFiles(compositeHash: string): boolean {
+  private static deleteMetadataWithFiles(compositeHash: string, originalFiles?: readonly ImageFileRecord[]): boolean {
     const deleted = db.transaction(() => {
+      if (originalFiles) {
+        const before = new Map(originalFiles.map(file => [file.id, file]));
+        for (const file of ImageFileModel.findActiveByHash(compositeHash)) {
+          const seen = before.get(file.id);
+          if (!seen || seen.original_file_path !== file.original_file_path || seen.file_size !== file.file_size || seen.file_modified_date !== file.file_modified_date) {
+            throw new Error('삭제 중 파일 등록이 바뀌었어. 목록을 새로고침한 뒤 다시 시도해줘.');
+          }
+        }
+      }
       db.prepare('DELETE FROM image_files WHERE composite_hash = ?').run(compositeHash);
       return db.prepare('DELETE FROM media_metadata WHERE composite_hash = ?').run(compositeHash).changes > 0;
-    })();
+    }).immediate();
 
     if (deleted) {
       ImageStatsModel.invalidateAutoTagStatsCache();
@@ -214,7 +207,7 @@ export class DeletionService {
     const settings = settingsService.loadSettings();
     const useRecycleBin = settings.general.deleteProtection.enabled;
     const groups = useRecycleBin
-      ? db.prepare('SELECT group_id, added_date, order_index, collection_type, auto_collected_date FROM image_groups WHERE composite_hash = ?').all(compositeHash) as LibraryRestoreData['groups']
+      ? db.prepare('SELECT group_id, added_date, order_index, collection_type, auto_collected_date, emote_keywords FROM image_groups WHERE composite_hash = ?').all(compositeHash) as LibraryRestoreData['groups']
       : [];
     const folderGroups = useRecycleBin
       ? db.prepare('SELECT group_id, added_date FROM auto_folder_group_images WHERE composite_hash = ?').all(compositeHash) as LibraryRestoreData['folderGroups']
@@ -239,29 +232,24 @@ export class DeletionService {
     // 5. 물리적 파일 삭제
     // 원본 파일들 - RecycleBin 설정에 따라 백업 또는 삭제
     try {
+      const targets: Array<{ file: ImageFileRecord; original: string }> = [];
       for (const file of files) {
-        const binPath = await this.deletePhysicalFile(file.original_file_path, useRecycleBin);
+        const original = await this.resolveDeleteTarget(file.original_file_path, file.folder_id);
+        if (original) targets.push({ file, original });
+      }
+      for (const { file, original } of targets) {
+        const binPath = await recycleBinDeleteFile(original, useRecycleBin, 'library');
         if (binPath) {
           const name = path.basename(binPath);
-          const original = path.isAbsolute(file.original_file_path) ? file.original_file_path : path.join(this.UPLOAD_BASE_PATH, file.original_file_path);
           movedFiles.push({ name, binPath, original, file });
           recordRestoreData(name, file, videoOptimization);
           recycleBinEntries.push(name);
         }
       }
 
-      // Thumbnails are regenerable; only originals are backed up.
-      if (metadata.thumbnail_path) {
-        try {
-          await this.deleteThumbnailFile(metadata.thumbnail_path);
-        } catch (error) {
-          console.warn(`⚠️ Failed to delete thumbnail (continuing): ${metadata.thumbnail_path}`, error);
-        }
-      }
-
       // Read in the same synchronous step as the delete: the worker may have finished a copy during the moves above.
       deletedOptimization = this.findVideoOptimization(compositeHash);
-      if (!this.deleteMetadataWithFiles(compositeHash)) throw new Error('Failed to delete image from database');
+      if (!this.deleteMetadataWithFiles(compositeHash, files)) throw new Error('Failed to delete image from database');
     } catch (error) {
       // A failed protected deletion must not strand the first copies of a multi-file image in the bin.
       for (const moved of movedFiles) {
@@ -271,6 +259,9 @@ export class DeletionService {
       throw error;
     }
 
+    if (metadata.thumbnail_path) {
+      await this.deleteThumbnailFile(metadata.thumbnail_path).catch(error => console.warn('⚠️ Failed to delete thumbnail:', error));
+    }
     // Like thumbnails, a removed playback copy is regenerable, so its bin entry queues it again on restore.
     // A copy that stays on disk keeps its row as it was, so a restore still points at it.
     const copyRemoved = await GeneratedVideoOptimizationService.removePlaybackCopy(deletedOptimization?.output_path);
@@ -322,7 +313,7 @@ export class DeletionService {
         && !(snapshot.videoOptimization.output_path && fs.existsSync(snapshot.videoOptimization.output_path))
         ? asRebuildableOptimization(snapshot.videoOptimization)
         : snapshot.videoOptimization;
-      const original = path.isAbsolute(file.original_file_path) ? file.original_file_path : path.join(this.UPLOAD_BASE_PATH, file.original_file_path);
+      const original = resolveUploadsPath(file.original_file_path);
       if (optimization && path.resolve(optimization.source_path) === path.resolve(original)) {
         db.prepare(`INSERT OR IGNORE INTO generated_video_optimizations
           (composite_hash, source_path, source_size, source_mtime, crf, audio_bitrate, status, output_path, attempts, lease_until, last_error)
@@ -333,7 +324,13 @@ export class DeletionService {
       const addGroup = db.prepare(`INSERT OR IGNORE INTO image_groups
         (group_id, composite_hash, added_date, order_index, collection_type, auto_collected_date)
         SELECT ?, ?, ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM groups WHERE id = ?)`);
-      for (const group of groups) addGroup.run(group.group_id, metadata.composite_hash, group.added_date, group.order_index, group.collection_type, group.auto_collected_date, group.group_id);
+      for (const group of groups) {
+        const { changes } = addGroup.run(group.group_id, metadata.composite_hash, group.added_date, group.order_index, group.collection_type, group.auto_collected_date, group.group_id);
+        if (changes && group.emote_keywords != null) {
+          const result = EmoticonService.setKeywords(group.group_id, [{ compositeHash: metadata.composite_hash, keywords: JSON.parse(group.emote_keywords) }], db);
+          if (result.conflicts.length) throw new Error('The original emoticon keywords are already in use');
+        }
+      }
       const addFolderGroup = db.prepare(`INSERT OR IGNORE INTO auto_folder_group_images (group_id, composite_hash, added_date)
         SELECT ?, ?, ? WHERE EXISTS (SELECT 1 FROM auto_folder_groups WHERE id = ?)`);
       for (const group of folderGroups) addFolderGroup.run(group.group_id, metadata.composite_hash, group.added_date, group.group_id);
@@ -376,53 +373,36 @@ export class DeletionService {
 
     // 3. 물리 파일 삭제 (RecycleBin 또는 완전 삭제)
     try {
-      await this.deletePhysicalFile(original_file_path, useRecycleBin);
+      const target = await this.resolveDeleteTarget(original_file_path, file.folder_id);
+      if (target) await recycleBinDeleteFile(target, useRecycleBin, 'library');
       console.log(`✅ Physical file deleted: ${original_file_path}`);
     } catch (error) {
       console.error(`❌ Failed to delete physical file: ${original_file_path}`, error);
       throw error;
     }
 
-    // 4. image_files 테이블에서 삭제
-    ImageFileModel.delete(fileId);
-    console.log(`✅ Deleted image_file record: ${fileId}`);
-
-    // 5. 같은 composite_hash의 남은 파일 확인
-    if (composite_hash) {
-      const remainingFiles = ImageFileModel.findActiveByHash(composite_hash);
-
-      if (remainingFiles.length === 0) {
-        // 마지막 파일 삭제됨 → 메타데이터 정리
-        console.log(`⚠️ Last file deleted - cleaning up metadata for ${composite_hash}`);
-
-        const metadata = MediaMetadataModel.findByHash(composite_hash);
-        if (metadata) {
-          // 프롬프트 수집에서 제거
-          await this.cleanupPromptCollection(
-            metadata.prompt,
-            metadata.negative_prompt,
-            metadata.character_prompt_text,
-            metadata.auto_tags,
-          );
-
-          // 썸네일 삭제 (재생성 가능하므로 RecycleBin 없이 즉시 삭제)
-          if (metadata.thumbnail_path) {
-            try {
-              await this.deleteThumbnailFile(metadata.thumbnail_path);
-            } catch (error) {
-              console.warn(`⚠️ Failed to delete thumbnail (non-critical)`);
-            }
-          }
-
-          // 메타데이터 삭제 (남은 missing/deleted 파일 행도 함께 정리). 최적화 행은 CASCADE로 지워지므로 재생본 경로를 먼저 읽는다.
-          const optimization = this.findVideoOptimization(composite_hash);
-          this.deleteMetadataWithFiles(composite_hash);
-          await GeneratedVideoOptimizationService.removePlaybackCopy(optimization?.output_path);
-          this.cleanupGenerationHistoryForHash(composite_hash);
-          console.log(`✅ Metadata cleaned up for ${composite_hash}`);
-        }
-      } else {
-        console.log(`📋 ${remainingFiles.length} file(s) remaining with same hash - keeping metadata`);
+    // Consume the last-copy decision under the same lock, before prompt or thumbnail cleanup can yield.
+    const detached = db.transaction(() => {
+      const current = ImageFileModel.findById(fileId);
+      if (current && (current.original_file_path !== original_file_path || current.composite_hash !== composite_hash
+        || current.folder_id !== file.folder_id || current.file_size !== file.file_size || current.file_modified_date !== file.file_modified_date)) {
+        throw new Error('삭제 중 파일 등록이 바뀌었어. 목록을 새로고침한 뒤 다시 시도해줘.');
+      }
+      ImageFileModel.delete(fileId);
+      if (!composite_hash || db.prepare("SELECT 1 FROM image_files WHERE composite_hash = ? AND file_status = 'active' LIMIT 1").get(composite_hash)) return null;
+      const metadata = MediaMetadataModel.findByHash(composite_hash);
+      if (!metadata) return null;
+      const optimization = this.findVideoOptimization(composite_hash);
+      this.deleteMetadataWithFiles(composite_hash);
+      return { metadata, optimization };
+    }).immediate();
+    if (detached && composite_hash) {
+      const { metadata, optimization } = detached;
+      this.cleanupGenerationHistoryForHash(composite_hash);
+      await this.cleanupPromptCollection(metadata.prompt, metadata.negative_prompt, metadata.character_prompt_text, metadata.auto_tags);
+      if (!MediaMetadataModel.findByHash(composite_hash)) {
+        if (metadata.thumbnail_path) await this.deleteThumbnailFile(metadata.thumbnail_path).catch(error => console.warn('⚠️ Failed to delete thumbnail:', error));
+        await GeneratedVideoOptimizationService.removePlaybackCopy(optimization?.output_path);
       }
     }
 
@@ -486,7 +466,8 @@ export class DeletionService {
    */
   static async deleteTempFile(tempFilePath: string): Promise<void> {
     // 임시 파일은 RecycleBin 사용 안 함
-    await this.deletePhysicalFile(tempFilePath, false);
+    const target = await this.resolveDeleteTarget(tempFilePath);
+    if (target) await recycleBinDeleteFile(target, false);
   }
 
   /**

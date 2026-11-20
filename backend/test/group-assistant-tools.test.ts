@@ -263,12 +263,19 @@ test('group assistant tools: rules, page actions and MCP group create/update/run
       const id = created.body.data!.id!
       assert.equal((await send('POST', base, { name: 'route GROUP' })).status, 400, 'name conflict')
       assert.equal((await send('POST', base, { name: '  ' })).status, 400, 'name required')
+      assert.equal((await send('POST', base, { name: 'Detached', parent_id: 999999 })).status, 400)
+      const absentParent = await send('POST', `${base}/${id}/validate-hierarchy`, { parent_id: 999999 })
+      assert.equal((absentParent.body.data as { valid: boolean }).valid, false, 'preview must reject a missing destination just like the write')
       const invalid = await send('POST', base, { name: 'Bad rules', auto_collect_enabled: true, auto_collect_conditions: { and_group: [{ category: 'positive_prompt', type: 'prompt_contains', value: '' }] } })
       assert.equal(invalid.status, 400)
       assert.match(invalid.body.error ?? '', /Invalid auto collection conditions/)
       assert.equal((await send('PUT', `${base}/${id}`, { description: 'changed' })).status, 200)
       assert.equal((await send('PUT', `${base}/${id}`, { parent_id: id })).status, 400, 'self parent')
       assert.equal((await send('PUT', `${base}/999999`, { description: 'missing' })).status, 404)
+      for (const operation of ['bulk', 'bulk-remove']) {
+        assert.equal((await send('POST', `${base}/999999/images/${operation}`, { composite_hashes: ['f'.repeat(48)] })).status, 404)
+        assert.equal((await send('POST', `${base}/${id}/images/${operation}`, { composite_hashes: [null] })).status, 400)
+      }
 
       // Bulk move / delete: one transaction each; child groups survive a delete unless cascade is picked.
       const { GroupModel } = await import('../src/models/Group')

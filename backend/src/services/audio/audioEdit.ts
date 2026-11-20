@@ -152,8 +152,8 @@ export async function saveAudioEdit(
   const staged = path.join(scratchDir('audio-incoming'), `${crypto.randomUUID()}.wav`);
   try {
     await renderAudioEdit(sourcePath, staged, edit, duration);
-    const { file } = await ingestAudioFile(staged, `${candidate.id}.wav`);
-    return registerEditedAudioCandidate({ sourceId: candidate.id, file, edit, accountId: options.accountId, sourceKey });
+    return await ingestAudioFile(staged, `${candidate.id}.wav`, ({ file }) =>
+      registerEditedAudioCandidate({ sourceId: candidate.id, file, edit, accountId: options.accountId, sourceKey }));
   } finally {
     await fs.promises.rm(staged, { force: true }).catch(() => undefined);
   }

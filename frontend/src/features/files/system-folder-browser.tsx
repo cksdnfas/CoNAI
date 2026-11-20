@@ -35,6 +35,8 @@ import {
   systemFolderViewUrl,
 } from '@/lib/api-system-folders'
 import { getErrorMessage } from '@/lib/error-message'
+import { AUDIO_QUERY_KEY } from '@/lib/api-audio'
+import { refreshRestoredImageListCaches } from '@/features/images/image-list-cache'
 import { cn } from '@/lib/utils'
 import { useFileViewMode } from './file-view-mode'
 import { TreeUploadStatus } from './tree-upload-status'
@@ -168,6 +170,12 @@ export function SystemFolderBrowser({ location, onNavigate, sidebar }: {
     const warning = result.done.find((item) => item.warning)?.warning
     if (warning) showSnackbar({ tone: 'error', message: warning })
     if (otherFailure) showSnackbar({ tone: 'error', message: otherFailure.error })
+    const reattached = new Set(result.done.filter(item => !item.warning).map(item => item.name))
+    const sources = new Set(targets.filter(entry => reattached.has(entry.name)).map(entry => entry.recycle?.source))
+    await Promise.all([
+      ...(sources.has('library') ? [refreshRestoredImageListCaches(queryClient)] : []),
+      ...(sources.has('audio') ? [queryClient.invalidateQueries({ queryKey: [AUDIO_QUERY_KEY] })] : []),
+    ])
   })
   const removeForever = async (targets: SystemFolderEntry[]) => {
     const confirmed = await confirm({

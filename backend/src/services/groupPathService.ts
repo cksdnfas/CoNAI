@@ -1,6 +1,6 @@
 import type Database from 'better-sqlite3'
 import { db } from '../database/init';
-import { getGroupHierarchyService } from './groupHierarchyService';
+import { getGroupHierarchyService, GROUP_MAX_DEPTH } from './groupHierarchyService';
 
 /**
  * `프로젝트/이펙트` 같은 슬래시 경로를 그룹 계층으로 해석한다.
@@ -10,7 +10,7 @@ import { getGroupHierarchyService } from './groupHierarchyService';
  * - 동시 생성은 `INSERT ... ON CONFLICT DO NOTHING` 후 재조회로 흡수한다(다른 프로세스 포함).
  */
 
-export const GROUP_PATH_MAX_DEPTH = 5;
+export const GROUP_PATH_MAX_DEPTH = GROUP_MAX_DEPTH;
 export const GROUP_NAME_MAX_LENGTH = 255;
 
 export class GroupPathError extends Error {

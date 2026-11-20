@@ -1,8 +1,8 @@
 import fs from 'fs';
 import path from 'path';
-import { db } from '../../database/init';
 import { MetadataExtractionError } from '../../types/errors';
-import { checkFileAccess } from '../../utils/fileAccess';
+import { checkFileReadAccess } from '../../utils/fileAccess';
+import { reconcileWatchedUnlink } from '../watchedFilePresence';
 import { ImageMediaProcessor } from './imageMediaProcessor';
 import { markFileAsProcessingFailed } from './mediaProcessingSupport';
 import {
@@ -21,12 +21,14 @@ export async function processMediaFile(
   options: ProcessFileOptions = {},
 ): Promise<MediaFileProcessingResult> {
   const fileName = path.basename(file.original_file_path);
-  const access = await checkFileAccess(file.original_file_path);
+  const access = await checkFileReadAccess(file.original_file_path);
 
-  // Only a real ENOENT deletes the DB row. Transient SMB/permission failures retry.
+  // A disconnected root also reports ENOENT for every child. Keep the pending row for retry.
   if (!access.exists) {
-    console.log(`  ⚠️  File not found, deleting DB record: ${fileName}`);
-    db.prepare('DELETE FROM image_files WHERE id = ?').run(file.id);
+    if (await reconcileWatchedUnlink(file.folder_id, file.original_file_path, { pendingId: file.id }) === 'offline') {
+      const cause = MetadataExtractionError.fileAccessError(file.original_file_path, new Error('Watched folder unavailable'));
+      return stoppedFileProcessing(failedStage('file-access', cause, true), [], { cause });
+    }
     return stoppedFileProcessing(skippedStage('file-access', 'file not found'), []);
   }
 

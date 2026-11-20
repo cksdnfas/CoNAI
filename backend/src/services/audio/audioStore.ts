@@ -4,7 +4,7 @@ import path from 'path';
 import { execFile } from 'child_process';
 import { runtimePaths } from '../../config/runtimePaths';
 import { getAudioDb } from '../../database/audioDb';
-import { relocateFile } from '../../utils/recycleBin';
+import { linkOrCopyFileWithoutReplacing } from '../../utils/recycleBin';
 import { isPathInside } from '../../utils/pathResolver';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const ffprobeStatic = require('ffprobe-static') as { path?: string };
@@ -81,7 +81,7 @@ export function audioBlobPath(hash: string, ext: string): string {
 
 /** Parse `<hash>.<ext>` from a store file name, or null when it is not a store blob name. */
 export function parseAudioBlobName(fileName: string): { hash: string; ext: string } | null {
-  const match = /^([a-f0-9]{64})\.([a-z0-9]+)$/.exec(fileName);
+  const match = /^([a-f0-9]{64})\.([a-z0-9]+)$/.exec(fileName.toLowerCase());
   if (!match || !isAllowedAudioExtension(match[2])) return null;
   return { hash: match[1], ext: match[2] };
 }
@@ -143,11 +143,26 @@ export interface IngestedAudio {
   created: boolean;
 }
 
+/** Runs synchronously inside the audio.db transaction, before a concurrent purge can release these bytes. */
+type AttachAudio<T> = (audio: IngestedAudio) => T;
+const mutations = new Map<string, Promise<unknown>>();
+
+/** Serialize only publication, attachment and release of the same bytes; probes and unrelated sounds run freely. */
+export async function withAudioBlobMutation<T>(hash: string, action: () => Promise<T>): Promise<T> {
+  const previous = mutations.get(hash) ?? Promise.resolve();
+  const current = previous.then(action, action);
+  mutations.set(hash, current);
+  try { return await current; }
+  finally { if (mutations.get(hash) === current) mutations.delete(hash); }
+}
+
 /**
  * Move a staged file into the store under its content hash and register it. The staged file is consumed: moved into
  * place, or removed when the same content is already stored. `originalName` only decides the extension.
  */
-export async function ingestAudioFile(stagedPath: string, originalName: string): Promise<IngestedAudio> {
+export function ingestAudioFile(stagedPath: string, originalName: string): Promise<IngestedAudio>;
+export function ingestAudioFile<T>(stagedPath: string, originalName: string, attach: AttachAudio<T>): Promise<T>;
+export async function ingestAudioFile<T>(stagedPath: string, originalName: string, attach?: AttachAudio<T>): Promise<T | IngestedAudio> {
   try {
     const ext = normalizeAudioExtension(originalName);
     if (!isAllowedAudioExtension(ext)) throw new AudioStoreError(`지원하지 않는 오디오 형식이야: .${ext || '?'}`);
@@ -157,44 +172,51 @@ export async function ingestAudioFile(stagedPath: string, originalName: string):
     const probe = await probeAudioFile(stagedPath);
     const hash = await sha256File(stagedPath);
 
-    const existing = getAudioFile(hash);
-    if (existing && fs.existsSync(audioBlobPath(hash, existing.ext))) {
-      return { file: existing, created: false };
-    }
-
-    const target = audioBlobPath(hash, ext);
-    await fs.promises.mkdir(path.dirname(target), { recursive: true });
-    if (fs.existsSync(target)) {
-      // Same content already on disk without a row (e.g. restored from the RecycleBin): keep it, register it.
-    } else {
-      await relocateFile(stagedPath, target);
-    }
-    const now = new Date().toISOString();
-    getAudioDb().prepare(`
-      INSERT INTO audio_files (hash, ext, size, duration, sample_rate, channels, codec, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(hash) DO UPDATE SET ext = excluded.ext, size = excluded.size, duration = excluded.duration,
-        sample_rate = excluded.sample_rate, channels = excluded.channels, codec = excluded.codec
-    `).run(hash, ext, stat.size, probe.duration, probe.sampleRate, probe.channels, probe.codec, existing?.created_at ?? now);
-    return { file: getAudioFile(hash)!, created: !existing };
+    return await withAudioBlobMutation(hash, async () => {
+      const existing = getAudioFile(hash);
+      const storedExt = existing?.ext ?? ext;
+      const target = audioBlobPath(hash, storedExt);
+      if (!existing || !fs.existsSync(target)) {
+        await fs.promises.mkdir(path.dirname(target), { recursive: true });
+        try {
+          await linkOrCopyFileWithoutReplacing(stagedPath, target);
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+          if (!(await fs.promises.lstat(target)).isFile() || await sha256File(target) !== hash) {
+            throw new AudioStoreError('오디오 저장 위치에 내용이 다른 파일이 있어.', 409);
+          }
+        }
+      }
+      return getAudioDb().transaction(() => {
+        const created = !existing && getAudioDb().prepare(`INSERT INTO audio_files (hash, ext, size, duration, sample_rate, channels, codec, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(hash) DO NOTHING`)
+          .run(hash, storedExt, stat.size, probe.duration, probe.sampleRate, probe.channels, probe.codec, new Date().toISOString()).changes === 1;
+        const stored = { file: existing ?? getAudioFile(hash)!, created };
+        return attach ? attach(stored) : stored;
+      }).immediate();
+    });
   } finally {
     await fs.promises.rm(stagedPath, { force: true }).catch(() => undefined);
   }
 }
 
 /** Copy a file (that must stay where it is) into the staging area, then ingest the copy. */
-export async function ingestAudioCopy(sourcePath: string, originalName: string): Promise<IngestedAudio> {
+export function ingestAudioCopy(sourcePath: string, originalName: string): Promise<IngestedAudio>;
+export function ingestAudioCopy<T>(sourcePath: string, originalName: string, attach: AttachAudio<T>): Promise<T>;
+export async function ingestAudioCopy<T>(sourcePath: string, originalName: string, attach?: AttachAudio<T>): Promise<T | IngestedAudio> {
   const staged = await stageAudioPath(normalizeAudioExtension(originalName));
   await fs.promises.copyFile(sourcePath, staged, fs.constants.COPYFILE_EXCL);
-  return ingestAudioFile(staged, originalName);
+  return attach ? ingestAudioFile(staged, originalName, attach) : ingestAudioFile(staged, originalName);
 }
 
 /** Write bytes (a decoded data URL) to staging, then ingest them. */
-export async function ingestAudioBuffer(data: Buffer, originalName: string): Promise<IngestedAudio> {
+export function ingestAudioBuffer(data: Buffer, originalName: string): Promise<IngestedAudio>;
+export function ingestAudioBuffer<T>(data: Buffer, originalName: string, attach: AttachAudio<T>): Promise<T>;
+export async function ingestAudioBuffer<T>(data: Buffer, originalName: string, attach?: AttachAudio<T>): Promise<T | IngestedAudio> {
   if (data.length > AUDIO_MAX_FILE_BYTES) throw new AudioStoreError('오디오 파일은 200MB까지 올릴 수 있어.', 413);
   const staged = await stageAudioPath(normalizeAudioExtension(originalName));
   await fs.promises.writeFile(staged, data, { flag: 'wx' });
-  return ingestAudioFile(staged, originalName);
+  return attach ? ingestAudioFile(staged, originalName, attach) : ingestAudioFile(staged, originalName);
 }
 
 async function stageAudioPath(ext: string): Promise<string> {

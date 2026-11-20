@@ -10,7 +10,7 @@ import { RuntimeJobRunner, type RuntimeJobContext } from '../runtimeJobRunner'
  * temp 디렉터리의 JSON 파일 대신 `runtime_jobs` 테이블을 쓴다. 그 덕에
  * - 쓰기 도중 폴링이 겹쳐 `JSON.parse` 가 터지는 창이 사라졌고,
  * - 재시작/자식 크래시로 잡이 영구 `running` 에 고착되지 않으며,
- * - `all-auto-collect` 를 그룹 경계에서 취소할 수 있다.
+ * - 자동수집을 페이지 경계에서도 취소할 수 있다.
  */
 
 export interface GroupAutoCollectJobParams {
@@ -50,7 +50,7 @@ async function runGroupAutoCollect(ctx: RuntimeJobContext<GroupAutoCollectJobPar
   ctx.flush({ total: 1, processed: 0, currentLabel: `group:${groupId}` })
   ctx.throwIfCancelled()
 
-  const result = await AutoCollectionService.runAutoCollectionForGroup(groupId)
+  const result = await AutoCollectionService.runAutoCollectionForGroup(groupId, ctx)
   ctx.flush({ total: 1, processed: 1, succeeded: 1, currentLabel: result.group_name })
   return result
 }
@@ -72,15 +72,15 @@ async function runAllAutoCollect(ctx: RuntimeJobContext<AllAutoCollectJobParams>
   let failed = 0
 
   for (const group of groups) {
-    // 그룹 경계가 유일한 안전한 취소 지점이다. 그룹 하나의 재매칭은 원자적으로 끝나야 한다.
     ctx.throwIfCancelled()
     ctx.report({ currentLabel: group.name })
 
     try {
-      const result = await AutoCollectionService.runAutoCollectionForGroup(group.id)
+      const result = await AutoCollectionService.runAutoCollectionForGroup(group.id, ctx)
       results.push(result)
       succeeded++
     } catch (error) {
+      ctx.throwIfCancelled()
       console.error(`Auto collection failed for group ${group.name} (${group.id}):`, error)
       ctx.recordError(`group:${group.id}`, error)
       results.push({

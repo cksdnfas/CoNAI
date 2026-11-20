@@ -681,18 +681,20 @@ export function registerGeneratedAudioCandidate(input: Omit<CandidateInsert, 'or
 /** Register an uploaded (multer-staged) file as a new candidate. The staged file is consumed. */
 export async function importAudioUpload(target: AudioImportTarget, stagedPath: string, originalName: string, accountId: number | null): Promise<AudioCandidate> {
   const group = resolveImportGroup(target);
-  const { file } = await ingestAudioFile(stagedPath, originalName);
-  return insertCandidate({ groupId: group.id, file, origin: 'uploaded', name: candidateNameFrom(originalName), accountId,
-    provenance: { source: 'upload', original_name: originalName } });
+  return ingestAudioFile(stagedPath, originalName, ({ file }) => insertCandidate({
+    groupId: group.id, file, origin: 'uploaded', name: candidateNameFrom(originalName), accountId,
+    provenance: { source: 'upload', original_name: originalName },
+  }));
 }
 
 /** Copy one file from the requester's private file store (never moves it). `owner` is a resolved file-store owner key. */
 export async function importAudioFromFileStore(target: AudioImportTarget, owner: string, fileId: string, accountId: number | null): Promise<AudioCandidate> {
   const group = resolveImportGroup(target);
   const { entry, filePath } = FileStoreService.resolveFile(owner, fileId);
-  const { file } = await ingestAudioCopy(filePath, entry.name);
-  return insertCandidate({ groupId: group.id, file, origin: 'imported', name: candidateNameFrom(entry.name), accountId,
-    provenance: { source: 'file-store', file_id: fileId, original_name: entry.name } });
+  return ingestAudioCopy(filePath, entry.name, ({ file }) => insertCandidate({
+    groupId: group.id, file, origin: 'imported', name: candidateNameFrom(entry.name), accountId,
+    provenance: { source: 'file-store', file_id: fileId, original_name: entry.name },
+  }));
 }
 
 /** Decode a `data:audio/...;base64,` URL (already checked by the MCP request validator) and import it. */
@@ -704,9 +706,10 @@ export async function importAudioDataUrl(target: AudioImportTarget, dataUrl: str
     ?? (mime === 'audio/x-wav' || mime === 'audio/wave' ? 'wav' : mime === 'audio/mp3' ? 'mp3' : mime === 'audio/x-flac' ? 'flac' : null);
   const name = fileName && normalizeAudioExtension(fileName) ? fileName : `audio.${fallbackExt ?? 'bin'}`;
   const group = resolveImportGroup(target);
-  const { file } = await ingestAudioBuffer(Buffer.from(match[2].replace(/\s/g, ''), 'base64'), name);
-  return insertCandidate({ groupId: group.id, file, origin: 'imported', name: candidateNameFrom(name), accountId,
-    provenance: { source: 'data-url', original_name: fileName ?? null } });
+  return ingestAudioBuffer(Buffer.from(match[2].replace(/\s/g, ''), 'base64'), name, ({ file }) => insertCandidate({
+    groupId: group.id, file, origin: 'imported', name: candidateNameFrom(name), accountId,
+    provenance: { source: 'data-url', original_name: fileName ?? null },
+  }));
 }
 
 /** Path data for streaming a candidate's file. */

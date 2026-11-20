@@ -35,6 +35,18 @@ interface ComplexImageSearchRequest {
   exclude_group_ids?: number[]
 }
 
+export interface LibraryImagesCursor {
+  cursorDate?: string | null
+  cursorHash?: string | null
+  cursorValue?: string | number | null
+}
+
+export function nextLibraryImagesCursor(page: ImageListPayload, search: boolean): LibraryImagesCursor | undefined {
+  if (!page.hasMore || !page.nextCursorHash) return
+  if (search) return page.nextCursorValue === undefined ? undefined : { cursorValue: page.nextCursorValue, cursorHash: page.nextCursorHash }
+  if (page.nextCursorDate) return { cursorDate: page.nextCursorDate, cursorHash: page.nextCursorHash }
+}
+
 export async function getImages(params?: {
   page?: number
   limit?: number
@@ -167,6 +179,7 @@ export async function deleteImagesBulk(compositeHashes: string[]) {
       deleted: number
       failed: number
       errors: string[]
+      failedHashes?: string[]
       recycleBinEntries: string[]
     }
   }>>('/api/images/bulk', {

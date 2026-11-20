@@ -62,16 +62,6 @@ export function updateWatcherLastEventInDatabase(folderId: number, lastEventIso:
   `).run(lastEventIso, folderId);
 }
 
-/** Delete one tracked file row after an unlink event so listings immediately drop the stale entry. */
-export function deleteWatchedFileRecord(filePath: string): number {
-  const result = db.prepare(`
-    DELETE FROM image_files
-    WHERE original_file_path = ?
-  `).run(filePath);
-
-  return result.changes;
-}
-
 /** Check whether a watched folder still exists in the DB before a deferred batch scan runs. */
 export function watchedFolderExists(folderId: number): boolean {
   const row = db.prepare('SELECT id FROM watched_folders WHERE id = ?').get(folderId);

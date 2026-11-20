@@ -121,15 +121,17 @@ export async function runRecycleBinRetention(
   const pause = hooks.yield ?? yieldToEventLoop;
 
   let names: string[] = [];
+  let listed = false;
   try {
     const stat = await fs.promises.lstat(directory);
     if (stat.isDirectory()) {
       names = (await fs.promises.readdir(directory, { withFileTypes: true }))
         .filter((dirent) => dirent.isFile())
         .map((dirent) => dirent.name);
+      listed = true;
     }
-  } catch {
-    // No RecycleBin yet.
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
   }
 
   for (let start = 0; start < names.length; start += CHUNK_SIZE) {
@@ -153,11 +155,8 @@ export async function runRecycleBinRetention(
           result.deletedBytes += size;
         }
       } catch (error) {
-        if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-          deletedNames.push(name);
-        } else {
-          result.failedFiles += 1;
-        }
+        // ENOENT can mean a disconnected bin or a restore in progress. Only our successful unlink owns its origin.
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') result.failedFiles += 1;
       }
     }
     forgetRecycleBinOrigins(deletedNames);
@@ -165,9 +164,7 @@ export async function runRecycleBinRetention(
     await pause();
   }
 
-  if (names.length > 0 || fs.existsSync(directory)) {
-    forgetMissingRecycleBinOrigins(directory);
-  }
+  if (listed) await forgetMissingRecycleBinOrigins(directory, new Set(names), hooks);
   result.deletedPreviews = await prunePreviews(options.previewDirectory ?? path.join(fileStoreRoot, '.system-thumbs'), cutoffMs, hooks);
   return result;
 }

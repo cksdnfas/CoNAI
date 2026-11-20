@@ -1,6 +1,6 @@
 import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { createElement, useRef, useState } from 'react'
+import { createElement, useRef, useState, type Dispatch, type SetStateAction } from 'react'
 import type { GroupMoveOptions } from '@conai/shared'
 import { GroupMergeConfirmationDetails } from './components/group-merge-confirmation-details'
 import { downloadAutoFolderGroupArchive, startAutoFolderGroupRebuild } from '@/lib/api-auto-folder-groups'
@@ -79,7 +79,7 @@ export function useGroupPageActions({
   }
   editorState: GroupEditorState | null
   setEditorState: (state: GroupEditorState | null) => void
-  setSelectedGroupImageIds: (ids: string[]) => void
+  setSelectedGroupImageIds: Dispatch<SetStateAction<string[]>>
   /** Groups checked in the management list. */
   setManagedGroupIds: (ids: number[]) => void
   setIsAssignModalOpen: (open: boolean) => void
@@ -280,8 +280,8 @@ export function useGroupPageActions({
   const deleteSelectedImagesMutation = useMutation({
     mutationFn: (compositeHashes: string[]) => deleteImagesBulk(compositeHashes),
     onSuccess: async (result, compositeHashes) => {
-      setSelectedGroupImageIds([])
-      await removeBulkDeletedImagesFromListCaches(queryClient, compositeHashes, result.details.errors)
+      const deleted = await removeBulkDeletedImagesFromListCaches(queryClient, compositeHashes, result.details)
+      setSelectedGroupImageIds(current => current.filter(id => !deleted.has(id)))
       notifyImageDeleted(result.details)
     },
     onError: (error) => {

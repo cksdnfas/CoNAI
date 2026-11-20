@@ -1,4 +1,4 @@
-import type { InfiniteData, QueryClient } from '@tanstack/react-query'
+import type { InfiniteData, Query, QueryClient } from '@tanstack/react-query'
 import type { ImageRecord } from '@/types/image'
 
 /** Home feed pages carry `total`; group pages carry `pagination.total`. Both list `images`. */
@@ -10,6 +10,20 @@ interface ImageListCachePage {
 
 /** Gallery lists whose cached pages should drop deleted images in place instead of refetching every page. */
 const GALLERY_LIST_QUERY_KEYS = [['home-images'], ['group-images']] as const
+const DEPENDENT_ROOTS = new Set([
+  'home-images-total', 'groups-hierarchy-all', 'group-detail', 'group-file-counts', 'group-cover-images',
+  'prompt-search', 'prompt-statistics', 'prompt-groups', 'prompt-group-statistics', 'prompt-top', 'chat-prompt-item',
+])
+const isFilterTotal = (query: Query) => query.queryKey[0] === 'group-images' && query.queryKey[3] === 'filter-total'
+const isGallery = (query: Query) => GALLERY_LIST_QUERY_KEYS.some(([root]) => query.queryKey[0] === root)
+
+async function refreshDependentQueries(client: QueryClient, restored: boolean) {
+  const matches = (query: Query) => DEPENDENT_ROOTS.has(String(query.queryKey[0])) || isFilterTotal(query)
+    || (restored && (isGallery(query) || query.queryKey[0] === 'image-detail'))
+  // An initial fetch has no data yet: ordinary invalidation would reuse its pre-mutation response.
+  await client.cancelQueries({ predicate: query => query.state.fetchStatus !== 'idle' && matches(query) })
+  await client.invalidateQueries({ predicate: matches })
+}
 
 function withDecrementedTotal(page: ImageListCachePage, removedCount: number): ImageListCachePage {
   const next = { ...page }
@@ -27,10 +41,17 @@ function withDecrementedTotal(page: ImageListCachePage, removedCount: number): I
  * sequence they feed) update at once without reloading the whole infinite list, then refresh
  * the counts that depend on them.
  */
-export async function removeDeletedImagesFromListCaches(queryClient: QueryClient, compositeHashes: readonly string[]) {
-  const deletedHashes = new Set(compositeHashes)
-  if (deletedHashes.size === 0) {
-    return
+async function removeDeletedImagesFromListCaches(queryClient: QueryClient, deletedHashes: ReadonlySet<string>) {
+  if (!deletedHashes.size) return
+
+  const inFlight = queryClient.getQueryCache().findAll({ predicate: query =>
+    query.state.fetchStatus !== 'idle' && isGallery(query) && !isFilterTotal(query),
+  })
+  const initial = new Set(inFlight.filter(query => query.state.data === undefined))
+  // A page fetched before the delete can otherwise put it back. Restart empty active lists, not every loaded page.
+  if (inFlight.length) {
+    const pending = new Set(inFlight)
+    await queryClient.cancelQueries({ predicate: query => pending.has(query) })
   }
 
   for (const queryKey of GALLERY_LIST_QUERY_KEYS) {
@@ -65,26 +86,30 @@ export async function removeDeletedImagesFromListCaches(queryClient: QueryClient
   }
 
   await Promise.all([
-    queryClient.invalidateQueries({ queryKey: ['home-images-total'] }),
-    queryClient.invalidateQueries({ queryKey: ['groups-hierarchy-all'] }),
-    queryClient.invalidateQueries({ queryKey: ['group-detail'] }),
-    queryClient.invalidateQueries({ queryKey: ['group-file-counts'] }),
-    queryClient.invalidateQueries({ queryKey: ['group-images'], predicate: (query) => query.queryKey[3] === 'filter-total' }),
-    // Cover mosaics may show a deleted image.
-    queryClient.invalidateQueries({ queryKey: ['group-cover-images'] }),
+    ...(initial.size ? [queryClient.refetchQueries({ type: 'active', predicate: query => initial.has(query) })] : []),
+    refreshDependentQueries(queryClient, false),
+    // A failed detail refetch keeps its old data. Reset all scopes for the removed hashes, not the rest of the library.
+    queryClient.resetQueries({ predicate: query =>
+      query.queryKey[0] === 'image-detail' && typeof query.queryKey[1] === 'string' && deletedHashes.has(query.queryKey[1]),
+    }),
   ])
 }
 
-/** Bulk-delete failures use the API's `Image <hash>: <error>` format; keep those items in the lists. */
-export function removeBulkDeletedImagesFromListCaches(queryClient: QueryClient, compositeHashes: readonly string[], errors: readonly string[]) {
-  const failedHashes = new Set(errors.map((error) => error.slice('Image '.length, error.indexOf(': '))))
-  return removeDeletedImagesFromListCaches(queryClient, compositeHashes.filter((hash) => !failedHashes.has(hash)))
+/** Keep failed items selected and visible. An older server with a partial result cannot identify them reliably. */
+export async function removeBulkDeletedImagesFromListCaches(queryClient: QueryClient, hashes: readonly string[], result: {
+  failed: number; failedHashes?: readonly string[]; recycleBinEntries: readonly string[]
+}) {
+  const failed = new Set(result.failedHashes)
+  const unknown = result.failed > 0 && !result.failedHashes
+  const deleted = new Set(unknown ? [] : hashes.filter(hash => !failed.has(hash)))
+  await Promise.all([
+    unknown ? refreshRestoredImageListCaches(queryClient) : removeDeletedImagesFromListCaches(queryClient, deleted),
+    ...(result.recycleBinEntries.length ? [queryClient.invalidateQueries({ queryKey: ['system-folders', 'list', 'recycle-bin'] })] : []),
+  ])
+  return deleted
 }
 
 /** Restoration changes ordering and can reintroduce filtered items; refresh active lists and their dependent counts. */
 export async function refreshRestoredImageListCaches(queryClient: QueryClient) {
-  await Promise.all([
-    ...GALLERY_LIST_QUERY_KEYS.map((queryKey) => queryClient.invalidateQueries({ queryKey })),
-    ...['home-images-total', 'groups-hierarchy-all', 'group-detail', 'group-file-counts', 'group-cover-images', 'image-detail', 'system-folders', 'prompt-search', 'prompt-statistics', 'prompt-group-statistics', 'prompt-top'].map((key) => queryClient.invalidateQueries({ queryKey: [key] })),
-  ])
+  await refreshDependentQueries(queryClient, true)
 }

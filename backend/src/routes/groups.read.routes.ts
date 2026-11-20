@@ -2,7 +2,6 @@ import { Router, Request, Response } from 'express';
 import fs from 'fs';
 import { routeParam } from './routeParam';
 import { GroupModel, ImageGroupModel } from '../models/Group';
-import { db } from '../database/init';
 import { GroupDownloadService, DownloadType, CaptionMode } from '../services/groupDownloadService';
 import { PAGINATION, errorResponse, successResponse, validateId } from '@conai/shared';
 import { asyncHandler, cancellableAsyncHandler } from '../middleware/asyncHandler';
@@ -121,19 +120,7 @@ router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
   try {
     const id = validateId(routeParam(req.params.id), 'Group ID');
 
-    const query = `
-      SELECT
-        g.*,
-        COUNT(ig.id) as image_count,
-        COUNT(CASE WHEN ig.collection_type = 'auto' THEN 1 END) as auto_collected_count,
-        COUNT(CASE WHEN ig.collection_type = 'manual' THEN 1 END) as manual_added_count
-      FROM groups g
-      LEFT JOIN image_groups ig ON g.id = ig.group_id
-      WHERE g.id = ?
-      GROUP BY g.id
-    `;
-
-    const group = db.prepare(query).get(id);
+    const group = GroupModel.findOneWithStats(id);
 
     if (!group) {
       return res.status(404).json(errorResponse('Group not found'));

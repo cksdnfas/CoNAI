@@ -1,11 +1,10 @@
 import { db } from '../database/init';
-import fs from 'fs';
 import path from 'path';
 import { MediaMetadataModel } from '../models/Image/MediaMetadataModel';
-import { resolveUploadsPath, runtimePaths } from '../config/runtimePaths';
-import type { FileType } from '../types/image';
-import { checkFileAccess } from '../utils/fileAccess';
-import { ThumbnailGenerator } from '../utils/thumbnailGenerator';
+import { resolveUploadsPath } from '../config/runtimePaths';
+import { checkFileReadAccess } from '../utils/fileAccess';
+import { resolveThumbnailAbsolutePath, ThumbnailGenerator } from '../utils/thumbnailGenerator';
+import { canConfirmMissingFiles, originalIsMissing, SAME_WATCHED_FILE, SELECT_WATCHED_FILE, type WatchedFileSnapshot } from './watchedFilePresence';
 import { maybeTruncateImagesWal } from '../database/walMaintenance';
 import { LIBRARY_BATCH_SIZE, chunkArray, pageBoundary, type LibraryBatchHooks } from './maintenance/libraryBatch';
 import { verifyAudioFiles, type AudioVerificationResult } from './audio/audioMaintenance';
@@ -52,22 +51,7 @@ export interface VerificationStats {
   lastVerificationResult: VerificationLog | null;
 }
 
-interface ImageFileRecord {
-  id: number;
-  composite_hash: string | null;
-  original_file_path: string;
-  file_type: FileType;
-  mime_type: string | null;
-  thumbnail_path: string | null;
-}
-
-interface FileVerificationOutcome {
-  hasIssue: boolean;
-  /** The image_files row should go (original gone, nothing left to show). */
-  deleted: boolean;
-  /** The row was checked and stays; `last_verified_date` moves. False when the check was skipped. */
-  verified: boolean;
-}
+type FileVerificationOutcome = 'delete' | 'verified' | 'issue' | 'skipped';
 
 export interface VerifyAllFilesOptions {
   hooks?: LibraryBatchHooks;
@@ -122,26 +106,21 @@ export class FileVerificationService {
     try {
       console.log('🔍 파일 검증 시작...');
 
-      const totalFiles = (db.prepare(`SELECT COUNT(*) AS total FROM image_files WHERE file_status = 'active'`).get() as { total: number }).total;
-      const nextPage = db.prepare(`
-        SELECT
-          if.id,
-          if.composite_hash,
-          if.original_file_path,
-          if.file_type,
-          if.mime_type,
-          mm.thumbnail_path
-        FROM image_files if
-        LEFT JOIN media_metadata mm ON if.composite_hash = mm.composite_hash
-        WHERE if.file_status = 'active' AND if.id > ?
-        ORDER BY if.id ASC
+      const { total: totalFiles, lastId } = db.prepare(`SELECT COUNT(*) AS total, COALESCE(MAX(id), 0) AS lastId
+        FROM image_files WHERE file_status = 'active'`).get() as { total: number; lastId: number };
+      const nextPage = db.prepare(`${SELECT_WATCHED_FILE}
+        WHERE f.file_status = 'active' AND f.id > ? AND f.id <= ?
+        ORDER BY f.id ASC
         LIMIT ${LIBRARY_BATCH_SIZE}
       `);
-      const deleteRecord = db.prepare(`DELETE FROM image_files WHERE id = ?`);
-      const markVerified = db.prepare(`UPDATE image_files SET last_verified_date = CURRENT_TIMESTAMP WHERE id = ?`);
-      const applyPage = db.transaction((deleteIds: number[], verifiedIds: number[]) => {
-        for (const id of deleteIds) deleteRecord.run(id);
-        for (const id of verifiedIds) markVerified.run(id);
+      const deleteRecord = db.prepare(`DELETE FROM image_files WHERE ${SAME_WATCHED_FILE}
+        AND (SELECT thumbnail_path FROM media_metadata WHERE composite_hash = @composite_hash) IS @thumbnail_path`);
+      const markVerified = db.prepare(`UPDATE image_files SET last_verified_date = CURRENT_TIMESTAMP WHERE ${SAME_WATCHED_FILE}`);
+      const applyPage = db.transaction((missing: WatchedFileSnapshot[], verified: WatchedFileSnapshot[]) => {
+        let deleted = 0;
+        for (const file of missing) deleted += deleteRecord.run(file).changes;
+        for (const file of verified) markVerified.run(file);
+        return deleted;
       });
 
       console.log(`  📊 총 ${totalFiles}개 파일 검증 예정`);
@@ -157,14 +136,14 @@ export class FileVerificationService {
       let cursor = 0;
       for (;;) {
         hooks.throwIfCancelled?.();
-        const page = nextPage.all(cursor) as ImageFileRecord[];
+        const page = nextPage.all(cursor, lastId) as WatchedFileSnapshot[];
         if (page.length === 0) {
           break;
         }
         cursor = page[page.length - 1].id;
 
-        const deleteIds: number[] = [];
-        const verifiedIds: number[] = [];
+        const missing: WatchedFileSnapshot[] = [];
+        const verified: WatchedFileSnapshot[] = [];
         for (const batch of chunkArray(page, VERIFY_CONCURRENCY)) {
           const batchResults = await Promise.allSettled(batch.map((file) => this.verifyFile(file)));
 
@@ -173,18 +152,9 @@ export class FileVerificationService {
             totalChecked++;
 
             if (result.status === 'fulfilled') {
-              const { hasIssue, deleted, verified } = result.value;
-              if (deleted) {
-                deleteIds.push(file.id);
-              } else if (verified) {
-                verifiedIds.push(file.id);
-              }
-              if (hasIssue) {
-                missingFound++;
-                if (deleted) {
-                  deletedRecords++;
-                }
-              }
+              if (result.value === 'delete') missing.push(file);
+              if (result.value === 'verified' || result.value === 'issue') verified.push(file);
+              if (result.value === 'issue') missingFound++;
             } else {
               errorCount++;
               if (errors.length < MAX_REPORTED_ERRORS) {
@@ -200,7 +170,26 @@ export class FileVerificationService {
           });
         }
 
-        applyPage(deleteIds, verifiedIds);
+        const online = new Set<string>();
+        for (const roots of chunkArray([...new Set(missing.map(file => file.folder_path))], VERIFY_CONCURRENCY)) {
+          await Promise.all(roots.map(async root => {
+            if (await canConfirmMissingFiles(root)) online.add(root);
+            else console.warn(`  ⏭️  감시 폴더 접근 실패, 누락 파일 정리 보류: ${root}`);
+          }));
+        }
+        const confirmed: WatchedFileSnapshot[] = [];
+        for (const batch of chunkArray(missing.filter(file => online.has(file.folder_path)), VERIFY_CONCURRENCY)) {
+          const absent = await Promise.all(batch.map(async file => {
+            if (!await originalIsMissing(file)) return false;
+            if (this.isVideoLike(file) || !file.thumbnail_path) return true;
+            const thumbnail = resolveThumbnailAbsolutePath(file.thumbnail_path);
+            return thumbnail !== null && !(await checkFileReadAccess(thumbnail)).exists;
+          }));
+          confirmed.push(...batch.filter((_, index) => absent[index]));
+        }
+        const deleted = applyPage(confirmed, verified);
+        deletedRecords += deleted;
+        missingFound += deleted;
         this.currentProgress.checkedFiles = totalChecked;
         this.currentProgress.missingFiles = missingFound;
         hooks.progress?.(totalChecked, totalFiles);
@@ -260,60 +249,58 @@ export class FileVerificationService {
   }
 
   /**
-   * 단일 파일 검증. DB 는 건드리지 않고 판정만 돌려준다 — 페이지 단위로 모아 한 트랜잭션에 반영한다.
+   * 원본과 썸네일을 확인한다. 파일 등록의 삭제·검증 시각 갱신은 페이지 단위로 반영한다.
    */
-  private static async verifyFile(file: ImageFileRecord): Promise<FileVerificationOutcome> {
+  private static async verifyFile(file: WatchedFileSnapshot): Promise<FileVerificationOutcome> {
     try {
       const originalPath = resolveUploadsPath(file.original_file_path);
 
       // 원본 부재 판정은 진짜 ENOENT일 때만. UNC/SMB 일시 장애(EACCES/EPERM/
       // ENETUNREACH 등)는 exists=true + readable=false로 보고되므로, 그 경우
       // DB 행을 지우지 않고 이번 스윕을 건너뛴 뒤 다음 검증에서 재시도한다.
-      const originalAccess = await checkFileAccess(originalPath);
+      const originalAccess = await checkFileReadAccess(originalPath);
       if (originalAccess.exists && !originalAccess.readable) {
         console.warn(
           `  ⏭️  원본 접근 실패(${originalAccess.errorCode || 'unknown'}), 이번 검증 건너뜀: ${file.original_file_path}`
         );
-        return { hasIssue: false, deleted: false, verified: false };
+        return 'skipped';
       }
 
       const originalExists = originalAccess.exists;
 
       if (this.isVideoLike(file)) {
-        if (!originalExists) {
-          const fileName = path.basename(file.original_file_path);
-          console.log(`  ⚠️  원본 없음(video/animated), DB 삭제: ${fileName}`);
-          return { hasIssue: true, deleted: true, verified: false };
+        return originalExists ? 'verified' : 'delete';
+      }
+
+      let thumbnailExists = false;
+      if (file.thumbnail_path) {
+        const thumbnailPath = resolveThumbnailAbsolutePath(file.thumbnail_path);
+        if (!thumbnailPath && !originalExists) return 'skipped';
+        if (thumbnailPath) {
+          const access = await checkFileReadAccess(thumbnailPath);
+          if (access.exists && !access.readable) return 'skipped';
+          thumbnailExists = access.exists;
         }
-
-        return { hasIssue: false, deleted: false, verified: true };
       }
-
-      const thumbnailExists = await this.thumbnailExists(file.thumbnail_path);
-
-      if (!originalExists && !thumbnailExists) {
-        const fileName = path.basename(file.original_file_path);
-        console.log(`  ⚠️  원본/썸네일 모두 없음(image), DB 삭제: ${fileName}`);
-        return { hasIssue: true, deleted: true, verified: false };
-      }
+      if (!originalExists && !thumbnailExists) return 'delete';
 
       if (!originalExists && thumbnailExists) {
         console.log(`  ⚠️  원본 없음(image), 썸네일 유지로 보류: ${file.original_file_path}`);
-        return { hasIssue: true, deleted: false, verified: true };
+        return 'issue';
       }
 
       if (!thumbnailExists) {
         await this.regenerateThumbnail(file, originalPath);
-        return { hasIssue: true, deleted: false, verified: true };
+        return 'issue';
       }
 
-      return { hasIssue: false, deleted: false, verified: true };
+      return 'verified';
     } catch (error) {
       throw new Error(`파일 검증 실패: ${(error as Error).message}`);
     }
   }
 
-  private static isVideoLike(file: ImageFileRecord): boolean {
+  private static isVideoLike(file: WatchedFileSnapshot): boolean {
     return (
       file.file_type === 'video' ||
       file.file_type === 'animated' ||
@@ -321,24 +308,7 @@ export class FileVerificationService {
     );
   }
 
-  private static async thumbnailExists(thumbnailPath: string | null): Promise<boolean> {
-    if (!thumbnailPath) {
-      return false;
-    }
-
-    const absoluteThumbnailPath = path.isAbsolute(thumbnailPath)
-      ? thumbnailPath
-      : path.join(runtimePaths.tempDir, thumbnailPath);
-
-    try {
-      await fs.promises.access(absoluteThumbnailPath);
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
-  private static async regenerateThumbnail(file: ImageFileRecord, originalPath: string): Promise<void> {
+  private static async regenerateThumbnail(file: WatchedFileSnapshot, originalPath: string): Promise<void> {
     if (!file.composite_hash) {
       throw new Error('composite_hash가 없어 썸네일을 재생성할 수 없습니다');
     }

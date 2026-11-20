@@ -2,7 +2,7 @@ import type { AutoCollectCondition, ComplexFilter, GroupCreateData, GroupUpdateD
 import { GroupModel } from '../models/Group';
 import { AutoCollectionService } from './autoCollectionService';
 import { ComplexFilterService } from './complexFilterService';
-import { getGroupHierarchyService } from './groupHierarchyService';
+import { getGroupHierarchyService, GROUP_MAX_DEPTH } from './groupHierarchyService';
 import { GROUP_NAME_CONFLICT_MESSAGE, isGroupNameConflictError } from './groupPathService';
 import { GroupRematchJobService, type GroupRematchJobRecord } from './groupRematchJobService';
 import { executeGroupMove, GroupMoveError } from './groupMoveService';
@@ -44,8 +44,10 @@ function rethrowNameConflict(error: unknown): never {
 export function createCustomGroup(data: GroupCreateData, requestedByAccountId: number | null) {
   if (typeof data.name !== 'string' || !data.name.trim()) throw new GroupMutationError('Group name is required');
   if (data.parent_id !== undefined && data.parent_id !== null) {
-    if (getGroupHierarchyService().calculateDepth(data.parent_id) >= 4) {
-      throw new GroupMutationError('Maximum hierarchy depth (5 levels) would be exceeded');
+    const parentDepth = getGroupHierarchyService().calculateDepth(data.parent_id);
+    if (parentDepth < 0) throw new GroupMutationError('Target parent group not found');
+    if (parentDepth + 1 >= GROUP_MAX_DEPTH) {
+      throw new GroupMutationError(`Maximum hierarchy depth (${GROUP_MAX_DEPTH} levels) would be exceeded`);
     }
   }
   requireValidAutoCollect(data.auto_collect_enabled, data.auto_collect_conditions);

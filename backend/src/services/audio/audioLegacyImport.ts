@@ -520,21 +520,23 @@ export async function runLegacyAudioImport(params: LegacyImportParams, hooks: Le
         continue;
       }
       try {
-        const { file, created } = await ingestAudioCopy(filePath, candidate.file);
-        if (created) result.files.new += 1;
-        else result.files.reused += 1;
         const parentId = candidate.parent_id ? candidateIds.get(candidate.parent_id) ?? null : null;
         const isEdit = Boolean(candidate.parent_id) || Boolean(candidate.edit);
         const review = ['pending', 'selected', 'rejected'].includes(candidate.review) ? candidate.review : 'pending';
         const at = now();
         const id = crypto.randomUUID();
-        db().prepare(`
-          INSERT INTO audio_candidates (id, group_id, file_hash, parent_id, origin, name, review, notes, edit_json, provenance_json,
-            source_key, created_by_account_id, created_at, updated_at, deleted_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `).run(id, groupId, file.hash, parentId, isEdit ? 'edited' : 'generated', candidate.name || '오디오', review,
-          candidate.notes ?? '', candidate.edit ?? null, JSON.stringify(legacyProvenance(candidate)), `legacy:${candidate.id}`,
-          params.accountId, candidate.created || at, at, candidate.deleted ? at : null);
+        const created = await ingestAudioCopy(filePath, candidate.file, ({ file, created }) => {
+          db().prepare(`
+            INSERT INTO audio_candidates (id, group_id, file_hash, parent_id, origin, name, review, notes, edit_json, provenance_json,
+              source_key, created_by_account_id, created_at, updated_at, deleted_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `).run(id, groupId, file.hash, parentId, isEdit ? 'edited' : 'generated', candidate.name || '오디오', review,
+            candidate.notes ?? '', candidate.edit ?? null, JSON.stringify(legacyProvenance(candidate)), `legacy:${candidate.id}`,
+            params.accountId, candidate.created || at, at, candidate.deleted ? at : null);
+          return created;
+        });
+        if (created) result.files.new += 1;
+        else result.files.reused += 1;
         candidateIds.set(candidate.id, id);
         result.candidates.imported += 1;
         if (candidate.deleted) result.candidates.soft_deleted += 1;

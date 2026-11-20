@@ -1,5 +1,6 @@
 import { Database } from 'better-sqlite3';
 import { db } from '../database/init';
+import { chunkSqliteValues, sqliteInPlaceholders } from '../utils/sqliteBatch';
 
 /**
  * 그룹 계층 구조 관리 서비스
@@ -8,7 +9,12 @@ import { db } from '../database/init';
  * - 재귀 쿼리로 조상/자손 조회
  */
 
-const MAX_DEPTH = 5;
+export const GROUP_MAX_DEPTH = 5;
+
+const SUBTREE = `WITH RECURSIVE subtree(id, depth) AS (
+  SELECT id, 0 FROM groups WHERE id = ?
+  UNION ALL SELECT g.id, s.depth + 1 FROM groups g JOIN subtree s ON g.parent_id = s.id
+)`;
 
 export interface AncestorNode {
   id: number;
@@ -60,22 +66,8 @@ export class GroupHierarchyService {
    * @returns 자손 노드 배열
    */
   getDescendants(groupId: number): AncestorNode[] {
-    const query = `
-      WITH RECURSIVE descendants AS (
-        SELECT id, parent_id, name, 0 as depth
-        FROM groups
-        WHERE id = ?
-        UNION ALL
-        SELECT g.id, g.parent_id, g.name, d.depth + 1
-        FROM groups g
-        INNER JOIN descendants d ON g.parent_id = d.id
-      )
-      SELECT * FROM descendants
-      WHERE id != ?
-      ORDER BY depth ASC
-    `;
-
-    return this.db.prepare(query).all(groupId, groupId) as AncestorNode[];
+    return this.db.prepare(`${SUBTREE} SELECT g.id, g.parent_id, g.name, s.depth
+      FROM subtree s JOIN groups g ON g.id = s.id WHERE s.depth > 0 ORDER BY s.depth`).all(groupId) as AncestorNode[];
   }
 
   /**
@@ -109,11 +101,9 @@ export class GroupHierarchyService {
       };
     }
 
-    // 순환 참조 검증: newParentId가 groupId의 자손인지 확인
-    const descendants = this.getDescendants(groupId);
-    const isDescendant = descendants.some(d => d.id === newParentId);
-
-    if (isDescendant) {
+    const parentPath = this.getAncestorPath(newParentId);
+    if (!parentPath.length) return { valid: false, error: 'Target parent group not found' };
+    if (parentPath.some(node => node.id === groupId)) {
       return {
         valid: false,
         error: 'Circular reference detected: Cannot set descendant as parent'
@@ -121,20 +111,18 @@ export class GroupHierarchyService {
     }
 
     // 깊이 제한 검증
-    const parentDepth = this.calculateDepth(newParentId);
-    const maxDescendantDepth = descendants.length > 0
-      ? Math.max(...descendants.map(d => d.depth))
-      : 0;
+    const parentDepth = parentPath.length - 1;
+    const maxDescendantDepth = this.db.prepare(`${SUBTREE} SELECT COALESCE(MAX(depth), 0) FROM subtree`).pluck().get(groupId) as number;
 
     // 새 위치에서의 최대 깊이 = 부모 깊이 + 1 + 현재 그룹의 최대 자손 깊이
     const newMaxDepth = parentDepth + 1 + maxDescendantDepth;
 
-    if (newMaxDepth >= MAX_DEPTH) {
+    if (newMaxDepth >= GROUP_MAX_DEPTH) {
       return {
         valid: false,
-        error: `Maximum depth (${MAX_DEPTH}) exceeded`,
+        error: `Maximum depth (${GROUP_MAX_DEPTH}) exceeded`,
         current_depth: newMaxDepth,
-        max_depth: MAX_DEPTH
+        max_depth: GROUP_MAX_DEPTH
       };
     }
 
@@ -147,23 +135,12 @@ export class GroupHierarchyService {
    * @returns Map<groupId, childCount>
    */
   getChildCountBatch(groupIds: number[]): Map<number, number> {
-    if (groupIds.length === 0) return new Map();
-
-    const placeholders = groupIds.map(() => '?').join(',');
-    const query = `
-      SELECT parent_id, COUNT(*) as count
-      FROM groups
-      WHERE parent_id IN (${placeholders})
-      GROUP BY parent_id
-    `;
-
-    const results = this.db.prepare(query).all(...groupIds) as Array<{ parent_id: number; count: number }>;
-
     const map = new Map<number, number>();
-    results.forEach(row => {
-      map.set(row.parent_id, row.count);
-    });
-
+    for (const page of chunkSqliteValues(groupIds)) {
+      const rows = this.db.prepare(`SELECT parent_id, COUNT(*) AS count FROM groups
+        WHERE parent_id IN (${sqliteInPlaceholders(page)}) GROUP BY parent_id`).all(...page) as Array<{ parent_id: number; count: number }>;
+      for (const row of rows) map.set(row.parent_id, row.count);
+    }
     return map;
   }
 }

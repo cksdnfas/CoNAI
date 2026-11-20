@@ -5,6 +5,7 @@ import { runtimePaths } from '../config/runtimePaths';
 import { ensureRecycleBinSchema } from '../database/recycleBinSchema';
 import { getUserSettingsDb } from '../database/userSettingsDb';
 import { normalizeFilename } from './pathResolver';
+import { chunkSqliteValues, SQLITE_BIND_BATCH_SIZE, sqliteInPlaceholders } from './sqliteBatch';
 
 /**
  * RecycleBin 유틸리티
@@ -95,11 +96,16 @@ export function parseRecycleBinFileName(binName: string): { deletedAt: string | 
   return { deletedAt: `${date}T${hours}:${minutes}:${seconds}.${millis}Z`, originalName };
 }
 
-/** A fresh RecycleBin path that no existing file occupies. */
-function reserveRecycleBinPath(filePath: string): string {
+/** The write claims the bin name; a prior exists check could race another protected deletion. */
+async function writeToFreeBinPath(filePath: string, write: (source: string, target: string) => Promise<void>): Promise<string> {
   for (let attempt = 0; attempt < 8; attempt += 1) {
     const candidate = path.join(RECYCLE_BIN_PATH, generateRecycleBinFileName(filePath));
-    if (!fs.existsSync(candidate)) return candidate;
+    try {
+      await write(filePath, candidate);
+      return candidate;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+    }
   }
   throw new Error('Could not reserve a unique RecycleBin file name');
 }
@@ -125,7 +131,7 @@ function recordOrigin(binPath: string, originalPath: string, size: number, sourc
   }
 }
 
-export type RecycleBinOrigin = { binName: string; originalPath: string; size: number; source: string | null; deletedAt: string; libraryRestoreData: string | null };
+export type RecycleBinOrigin = { binName: string; originalPath: string; size: number; source: string | null; deletedAt: string };
 
 /** Library undo data is required, unlike best-effort origins for older callers. */
 export function recordLibraryRestoreData(binName: string, data: string): void {
@@ -138,29 +144,61 @@ export function readRecycleBinOrigins(binNames: readonly string[]): Map<string, 
   const result = new Map<string, RecycleBinOrigin>();
   if (binNames.length === 0) return result;
   const db = recycleBinDb();
-  const select = db.prepare('SELECT bin_name, original_path, size, source, deleted_at, library_restore_data FROM recycle_bin_entries WHERE bin_name = ?');
-  for (const name of binNames) {
-    const row = select.get(name) as { bin_name: string; original_path: string; size: number; source: string | null; deleted_at: string; library_restore_data: string | null } | undefined;
-    if (row) result.set(name, { binName: row.bin_name, originalPath: row.original_path, size: row.size, source: row.source, deletedAt: `${row.deleted_at.replace(' ', 'T')}Z`, libraryRestoreData: row.library_restore_data });
+  for (const page of chunkSqliteValues(binNames)) {
+    const rows = db.prepare(`SELECT bin_name AS binName, original_path AS originalPath, size, source,
+      replace(deleted_at, ' ', 'T') || 'Z' AS deletedAt FROM recycle_bin_entries WHERE bin_name IN (${sqliteInPlaceholders(page)})`)
+      .all(...page) as RecycleBinOrigin[];
+    for (const row of rows) result.set(row.binName, row);
   }
   return result;
+}
+
+/** Potentially large; only the library item currently being restored needs its snapshot. */
+export function readLibraryRestoreData(name: string): string | null {
+  return (recycleBinDb().prepare('SELECT library_restore_data FROM recycle_bin_entries WHERE bin_name = ?').pluck().get(name) as string | null | undefined) ?? null;
+}
+
+/** Missing-origin cleanup may have run while a failed strict restore had the file out of the bin. */
+export function reinstateLibraryOrigin(origin: RecycleBinOrigin, data: string): void {
+  recycleBinDb().prepare(`INSERT OR IGNORE INTO recycle_bin_entries (bin_name, original_path, size, source, deleted_at, library_restore_data)
+    VALUES (?, ?, ?, ?, datetime(?), ?)`).run(origin.binName, origin.originalPath, origin.size, origin.source, origin.deletedAt, data);
 }
 
 export function forgetRecycleBinOrigins(binNames: readonly string[]): void {
   if (binNames.length === 0) return;
   const db = recycleBinDb();
-  const remove = db.prepare('DELETE FROM recycle_bin_entries WHERE bin_name = ?');
-  db.transaction(() => { for (const name of binNames) remove.run(name); })();
+  db.transaction(() => {
+    for (const page of chunkSqliteValues(binNames)) {
+      db.prepare(`DELETE FROM recycle_bin_entries WHERE bin_name IN (${sqliteInPlaceholders(page)})`).run(...page);
+    }
+  })();
 }
 
 /**
  * Drop recorded origins whose file is gone from the RecycleBin. Checked per record against the directory as it is
  * now, so a file moved in while the bin was being emptied keeps its origin.
  */
-export function forgetMissingRecycleBinOrigins(directory: string): void {
+export async function forgetMissingRecycleBinOrigins(directory: string, listedNames: ReadonlySet<string>, hooks: { throwIfCancelled?: () => void; yield?: () => Promise<void> } = {}): Promise<void> {
   const db = recycleBinDb();
-  const names = (db.prepare('SELECT bin_name FROM recycle_bin_entries').all() as Array<{ bin_name: string }>).map((row) => row.bin_name);
-  forgetRecycleBinOrigins(names.filter((name) => !fs.existsSync(path.join(directory, name))));
+  const nextPage = db.prepare('SELECT bin_name FROM recycle_bin_entries WHERE bin_name > ? ORDER BY bin_name LIMIT ?').pluck();
+  let after = '';
+  for (;;) {
+    hooks.throwIfCancelled?.();
+    const names = nextPage.all(after, SQLITE_BIND_BATCH_SIZE) as string[];
+    if (!names.length) return;
+    const unlisted = names.filter(name => !listedNames.has(name));
+    if (unlisted.length) {
+      // An unavailable volume is not an empty bin. Recheck unlisted names: a concurrent delete can add one.
+      if (!fs.lstatSync(directory, { throwIfNoEntry: false })?.isDirectory()) return;
+      db.transaction(() => {
+        const absent = unlisted.filter(name => !fs.lstatSync(path.join(directory, name), { throwIfNoEntry: false }));
+        if (absent.length && fs.lstatSync(directory, { throwIfNoEntry: false })?.isDirectory()) forgetRecycleBinOrigins(absent);
+      }).immediate();
+    }
+    if (names.length < SQLITE_BIND_BATCH_SIZE) return;
+    after = names[names.length - 1];
+    await (hooks.yield ? hooks.yield() : new Promise<void>(resolve => setImmediate(resolve)));
+  }
 }
 
 /**
@@ -199,21 +237,21 @@ export async function relocateFile(source: string, target: string): Promise<void
 }
 
 /** Hard links are not available here (another volume, FAT/exFAT, some network shares): copy instead. */
-const LINK_FALLBACK_ERROR_CODES = new Set(['EXDEV', 'EPERM', 'EACCES', 'ENOTSUP', 'EOPNOTSUPP', 'ENOSYS', 'EMLINK']);
+const LINK_FALLBACK_ERROR_CODES = new Set(['EXDEV', 'EPERM', 'EBUSY', 'EACCES', 'ENOTSUP', 'EOPNOTSUPP', 'ENOSYS', 'EMLINK']);
 
-/**
- * Move one file without ever replacing `target`: rename would overwrite a file created there in the meantime, so the
- * file is hard-linked (or exclusively copied) to `target` first, which fails with EEXIST when the name is taken, and
- * only then removed from `source`. On failure `source` is left in place.
- */
-export async function moveFileWithoutReplacing(source: string, target: string): Promise<void> {
+/** Publish a second name without touching either an occupied target or the source. */
+export async function linkOrCopyFileWithoutReplacing(source: string, target: string): Promise<void> {
   try {
     await fs.promises.link(source, target);
   } catch (linkError) {
     if (!LINK_FALLBACK_ERROR_CODES.has(String((linkError as NodeJS.ErrnoException).code))) throw linkError;
     await fs.promises.copyFile(source, target, fs.constants.COPYFILE_EXCL);
   }
+}
 
+/** Only remove the source after its target name is claimed; rename would overwrite a competing file. */
+export async function moveFileWithoutReplacing(source: string, target: string): Promise<void> {
+  await linkOrCopyFileWithoutReplacing(source, target);
   try {
     await unlinkWithTransientLockRetry(source);
   } catch (error) {
@@ -243,8 +281,7 @@ export async function copyToRecycleBin(filePath: string, source: RecycleBinSourc
   }
 
   await fs.promises.mkdir(RECYCLE_BIN_PATH, { recursive: true });
-  const recycleBinFilePath = reserveRecycleBinPath(filePath);
-  await fs.promises.copyFile(filePath, recycleBinFilePath, fs.constants.COPYFILE_EXCL);
+  const recycleBinFilePath = await writeToFreeBinPath(filePath, (source, target) => fs.promises.copyFile(source, target, fs.constants.COPYFILE_EXCL));
   recordOrigin(recycleBinFilePath, filePath, stats.size, source);
   return recycleBinFilePath;
 }
@@ -260,15 +297,7 @@ async function moveToRecycleBin(filePath: string, source: RecycleBinSource | nul
   }
 
   await fs.promises.mkdir(RECYCLE_BIN_PATH, { recursive: true });
-  const recycleBinFilePath = reserveRecycleBinPath(filePath);
-
-  try {
-    await relocateFile(filePath, recycleBinFilePath);
-  } catch (error) {
-    console.error(`❌ Failed to move file to RecycleBin:`, error);
-    throw error;
-  }
-
+  const recycleBinFilePath = await writeToFreeBinPath(filePath, moveFileWithoutReplacing);
   recordOrigin(recycleBinFilePath, filePath, stats.size, source);
   console.log(`♻️ Moved to RecycleBin: ${path.basename(filePath)} → ${path.basename(recycleBinFilePath)}`);
   return recycleBinFilePath;

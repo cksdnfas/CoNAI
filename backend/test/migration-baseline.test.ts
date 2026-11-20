@@ -26,6 +26,7 @@ const KEPT_MIGRATIONS = [
   '044_add_media_postprocess_state',
   '045_add_group_resources',
   '046_add_prompt_group_page_indexes',
+  '047_track_group_collection_type',
 ]
 
 let dbCounter = 0

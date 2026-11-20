@@ -2,7 +2,7 @@ import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { getAudioDb, hasAudioDb } from '../../database/audioDb';
-import { deleteFile, moveFileWithoutReplacing } from '../../utils/recycleBin';
+import { deleteFile, linkOrCopyFileWithoutReplacing, moveFileWithoutReplacing } from '../../utils/recycleBin';
 import { settingsService } from '../settingsService';
 import {
   AUDIO_STORE_DIR,
@@ -12,6 +12,7 @@ import {
   parseAudioBlobName,
   probeAudioFile,
   sha256File,
+  withAudioBlobMutation,
   type AudioFileRecord,
 } from './audioStore';
 
@@ -71,45 +72,48 @@ export async function releaseUnreferencedAudioBlobs(hashes: Iterable<string>, sn
   const result: AudioReleaseResult = { released: 0, recycled: 0, missing: 0, failed: 0 };
   const recycle = useRecycleBin();
   for (const hash of new Set(hashes)) {
-    const file = db().transaction((): AudioFileRecord | null => {
-      if (referenceCount(hash) > 0) return null;
-      const row = getAudioFile(hash);
-      if (!row) return null;
-      const previous = db().prepare('SELECT candidates_json FROM audio_purged_files WHERE hash = ?').get(hash) as { candidates_json: string } | undefined;
-      const candidates = [...(previous ? safeArray(previous.candidates_json) : []), ...(snapshot.get(hash) ?? [])];
-      db().prepare(`INSERT INTO audio_purged_files (hash, file_json, candidates_json, purged_at) VALUES (?, ?, ?, ?)
-        ON CONFLICT(hash) DO UPDATE SET file_json = excluded.file_json, candidates_json = excluded.candidates_json, purged_at = excluded.purged_at`)
-        .run(hash, JSON.stringify(row), JSON.stringify(dedupeById(candidates)), new Date().toISOString());
-      db().prepare('DELETE FROM audio_files WHERE hash = ?').run(hash);
-      return row;
-    }).immediate();
-    if (!file) continue;
-    result.released += 1;
-
-    const blob = audioBlobPath(file.hash, file.ext);
-    if (!fs.existsSync(blob)) {
-      result.missing += 1;
-      continue;
-    }
-    try {
-      const binPath = await deleteFile(blob, recycle, 'audio');
-      if (binPath) {
-        result.recycled += 1;
-        // The same bytes were ingested again while the file was moving: put them back for the new row.
-        if (getAudioFile(file.hash) && !fs.existsSync(blob)) {
-          await moveFileWithoutReplacing(binPath, blob).catch(() => undefined);
-        }
-      } else {
-        db().prepare('DELETE FROM audio_purged_files WHERE hash = ?').run(file.hash);
-      }
-    } catch {
-      result.failed += 1;
-      // Keep the blob registered so it can be released again later.
-      db().prepare(`INSERT OR IGNORE INTO audio_files (hash, ext, size, duration, sample_rate, channels, codec, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
-        .run(file.hash, file.ext, file.size, file.duration, file.sample_rate, file.channels, file.codec, file.created_at);
-    }
+    await withAudioBlobMutation(hash, () => releaseOne(hash, snapshot.get(hash) ?? [], recycle, result));
   }
   return result;
+}
+
+async function releaseOne(hash: string, snapshot: unknown[], recycle: boolean, result: AudioReleaseResult): Promise<void> {
+  const file = db().transaction((): AudioFileRecord | null => {
+    if (referenceCount(hash) > 0) return null;
+    const row = getAudioFile(hash);
+    if (!row) return null;
+    const previous = db().prepare('SELECT candidates_json FROM audio_purged_files WHERE hash = ?').get(hash) as { candidates_json: string } | undefined;
+    const candidates = [...(previous ? safeArray(previous.candidates_json) : []), ...snapshot];
+    db().prepare(`INSERT INTO audio_purged_files (hash, file_json, candidates_json, purged_at) VALUES (?, ?, ?, ?)
+      ON CONFLICT(hash) DO UPDATE SET file_json = excluded.file_json, candidates_json = excluded.candidates_json, purged_at = excluded.purged_at`)
+      .run(hash, JSON.stringify(row), JSON.stringify(dedupeById(candidates)), new Date().toISOString());
+    db().prepare('DELETE FROM audio_files WHERE hash = ?').run(hash);
+    return row;
+  }).immediate();
+  if (!file) return;
+  result.released += 1;
+
+  const blob = audioBlobPath(file.hash, file.ext);
+  if (!fs.existsSync(blob)) {
+    result.missing += 1;
+    return;
+  }
+  try {
+    const binPath = await deleteFile(blob, recycle, 'audio');
+    if (binPath) {
+      result.recycled += 1;
+      if (getAudioFile(file.hash)?.ext === file.ext && !fs.existsSync(blob)) {
+        await moveFileWithoutReplacing(binPath, blob).catch(() => undefined);
+      }
+    } else {
+      db().prepare('DELETE FROM audio_purged_files WHERE hash = ?').run(file.hash);
+    }
+  } catch {
+    result.failed += 1;
+    // Keep the blob registered so it can be released again later.
+    db().prepare(`INSERT OR IGNORE INTO audio_files (hash, ext, size, duration, sample_rate, channels, codec, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run(file.hash, file.ext, file.size, file.duration, file.sample_rate, file.channels, file.codec, file.created_at);
+  }
 }
 
 function safeArray(value: string): unknown[] {
@@ -197,6 +201,7 @@ function recoveryGroup(row: { group_id?: unknown; project_id?: unknown }): strin
 
 export interface AudioReattachResult {
   hash: string | null;
+  path: string | null;
   /** Candidates re-created from the purge record (or one new candidate when there was none). */
   candidates: number;
   /** The file was not an audio blob (wrong name/content); left where it is. */
@@ -209,31 +214,48 @@ export interface AudioReattachResult {
  */
 export async function reattachAudioFile(filePath: string): Promise<AudioReattachResult> {
   const resolved = path.resolve(filePath);
-  if (!isAudioStorePath(resolved) || !fs.existsSync(resolved)) return { hash: null, candidates: 0, skipped: true };
-  const ext = path.extname(resolved).replace(/^\./, '').toLowerCase();
-  const nameExt = (parseAudioBlobName(path.basename(resolved))?.ext) ?? ext;
+  const skipped = { hash: null, path: null, candidates: 0, skipped: true };
+  if (!isAudioStorePath(resolved) || !fs.existsSync(resolved)) return skipped;
+  const blob = parseAudioBlobName(path.basename(resolved));
   let hash: string;
   let probe: Awaited<ReturnType<typeof probeAudioFile>>;
   try {
     probe = await probeAudioFile(resolved);
     hash = await sha256File(resolved);
   } catch {
-    return { hash: null, candidates: 0, skipped: true };
+    return skipped;
   }
+  if (blob && blob.hash !== hash) return skipped;
+  return withAudioBlobMutation(hash, () => reattachProbedAudio(resolved, hash, probe));
+}
+
+async function reattachProbedAudio(resolved: string, hash: string, probe: Awaited<ReturnType<typeof probeAudioFile>>): Promise<AudioReattachResult> {
+  const skipped = { hash: null, path: null, candidates: 0, skipped: true };
+  const nameExt = getAudioFile(hash)?.ext ?? path.extname(resolved).slice(1).toLowerCase();
   let canonical: string;
   try {
     canonical = audioBlobPath(hash, nameExt);
   } catch {
-    return { hash: null, candidates: 0, skipped: true };
+    return skipped;
   }
-  if (path.resolve(canonical) !== resolved) {
+  let removeRecoveredName = false;
+  if (canonical !== resolved) {
     await fs.promises.mkdir(path.dirname(canonical), { recursive: true });
-    if (fs.existsSync(canonical)) await fs.promises.rm(resolved, { force: true });
-    else await moveFileWithoutReplacing(resolved, canonical);
+    try {
+      await linkOrCopyFileWithoutReplacing(resolved, canonical);
+      removeRecoveredName = true;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+      // A name collision is not proof that the canonical file still contains these bytes.
+      if (!(await fs.promises.lstat(canonical)).isFile() || await sha256File(canonical) !== hash) return skipped;
+      const [source, target] = await Promise.all([fs.promises.realpath(resolved), fs.promises.realpath(canonical)]);
+      // Some case-insensitive volumes preserve the caller's casing in realpath. Keep an ambiguous alias.
+      removeRecoveredName = path.relative(source, target) !== '' && source.toLowerCase() !== target.toLowerCase();
+    }
   }
   const size = (await fs.promises.stat(canonical)).size;
 
-  return db().transaction((): AudioReattachResult => {
+  const result = db().transaction((): AudioReattachResult => {
     const purged = db().prepare('SELECT * FROM audio_purged_files WHERE hash = ?').get(hash) as { file_json: string; candidates_json: string } | undefined;
     const previousFile = purged ? (JSON.parse(purged.file_json) as Partial<AudioFileRecord>) : null;
     db().prepare(`INSERT INTO audio_files (hash, ext, size, duration, sample_rate, channels, codec, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -261,8 +283,13 @@ export async function reattachAudioFile(filePath: string): Promise<AudioReattach
         JSON.stringify({ source: 'recovered' }), null, null, null, null, at, at).changes;
     }
     db().prepare('DELETE FROM audio_purged_files WHERE hash = ?').run(hash);
-    return { hash, candidates: created, skipped: false };
+    return { hash, path: canonical, candidates: created, skipped: false };
   }).immediate();
+  if (removeRecoveredName) {
+    // The recovered name stays usable even if recreating the database rows fails.
+    await fs.promises.unlink(resolved).catch(error => console.warn('Could not remove duplicate restored audio:', error));
+  }
+  return result;
 }
 
 /* ------------------------------------------------------------------------------------------------ orphan sweep */
@@ -314,20 +341,27 @@ export async function sweepAudioOrphans(options: { dryRun: boolean; graceMs?: nu
     if (blob && getAudioFile(blob.hash)) return;
     const purged = blob ? db().prepare('SELECT 1 FROM audio_purged_files WHERE hash = ?').get(blob.hash) : undefined;
     if (purged) {
-      result.recoveredFiles += 1;
-      if (!options.dryRun) {
-        try { await reattachAudioFile(filePath); } catch (error) { hooks.warn?.(`audio re-attach failed: ${(error as Error).message}`); }
-      }
+      if (options.dryRun) result.recoveredFiles += 1;
+      else try {
+        if (!(await reattachAudioFile(filePath)).skipped) result.recoveredFiles += 1;
+        else hooks.warn?.(`audio re-attach skipped: ${filePath}`);
+      } catch (error) { hooks.warn?.(`audio re-attach failed: ${(error as Error).message}`); }
       return;
     }
-    result.orphanFiles += 1;
-    result.orphanBytes += stat.size;
-    if (!options.dryRun) {
-      try { await deleteFile(filePath, recycle, 'audio'); } catch (error) { hooks.warn?.(`audio orphan move failed: ${(error as Error).message}`); }
-    }
+    const collect = async () => {
+      // Publication can finish while this sweep waits. Never collect a blob which now has an owner.
+      if (blob && (getAudioFile(blob.hash) || db().prepare('SELECT 1 FROM audio_purged_files WHERE hash = ?').get(blob.hash))) return;
+      result.orphanFiles += 1;
+      result.orphanBytes += stat.size;
+      if (!options.dryRun) {
+        try { await deleteFile(filePath, recycle, 'audio'); } catch (error) { hooks.warn?.(`audio orphan move failed: ${(error as Error).message}`); }
+      }
+    };
+    if (blob) await withAudioBlobMutation(blob.hash, collect);
+    else await collect();
   }, hooks);
 
-  // Same grace as the files: an ingest registers the blob a moment before its candidate row exists.
+  // Leave recently registered blobs alone even when a candidate could not be attached.
   const unreferenced = (db().prepare(`
     SELECT f.hash FROM audio_files f
     WHERE f.created_at < ? AND NOT EXISTS (SELECT 1 FROM audio_candidates c WHERE c.file_hash = f.hash)

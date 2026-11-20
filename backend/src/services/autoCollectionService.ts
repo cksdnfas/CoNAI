@@ -1,5 +1,6 @@
 import { AutoCollectCondition, AutoCollectResult } from '@conai/shared';
 import { AutoCollectionOrchestrator } from './autoCollection';
+import type { LibraryBatchHooks } from './maintenance/libraryBatch';
 
 /** Stable facade for the auto-collection operations used by routes and media pipelines. */
 export class AutoCollectionService {
@@ -10,8 +11,8 @@ export class AutoCollectionService {
    * @param groupId - Group ID
    * @returns AutoCollectResult with statistics
    */
-  static async runAutoCollectionForGroup(groupId: number): Promise<AutoCollectResult> {
-    return AutoCollectionOrchestrator.runAutoCollectionForGroup(groupId);
+  static async runAutoCollectionForGroup(groupId: number, hooks?: LibraryBatchHooks): Promise<AutoCollectResult> {
+    return AutoCollectionOrchestrator.runAutoCollectionForGroup(groupId, hooks);
   }
 
   /**

@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { routeParam } from './routeParam';
 import { GroupModel, ImageGroupModel } from '../models/Group';
+import { GroupNotFoundError } from '../models/GroupMembershipCommands';
 import { GroupRematchJobService } from '../services/groupRematchJobService';
 import { GroupCreateData, GroupUpdateData, errorResponse, successResponse, validateId } from '@conai/shared';
 import { asyncHandler } from '../middleware/asyncHandler';
@@ -34,6 +35,10 @@ function requireCompositeHashes(res: Response, compositeHashes: unknown): compos
     return false;
   }
 
+  if (!compositeHashes.every(hash => typeof hash === 'string' && hash.trim())) {
+    sendRouteBadRequest(res, 'Composite hashes must be non-empty strings');
+    return false;
+  }
   return true;
 }
 
@@ -214,6 +219,7 @@ router.post('/:id/images/bulk', asyncHandler(async (req: Request, res: Response)
     );
   } catch (error) {
     console.error('Error bulk adding images to group:', error);
+    if (error instanceof GroupNotFoundError) return res.status(404).json(errorResponse(error.message));
     const errorMessage = error instanceof Error ? error.message : 'Failed to bulk add images to group';
     const statusCode = errorMessage.includes('Invalid') ? 400 : 500;
     return res.status(statusCode).json(errorResponse(errorMessage));
@@ -241,6 +247,7 @@ router.post('/:id/images/bulk-remove', asyncHandler(async (req: Request, res: Re
     );
   } catch (error) {
     console.error('Error bulk removing images from group:', error);
+    if (error instanceof GroupNotFoundError) return res.status(404).json(errorResponse(error.message));
     const errorMessage = error instanceof Error ? error.message : 'Failed to bulk remove images from group';
     const statusCode = errorMessage.includes('Invalid') ? 400 : 500;
     return res.status(statusCode).json(errorResponse(errorMessage));

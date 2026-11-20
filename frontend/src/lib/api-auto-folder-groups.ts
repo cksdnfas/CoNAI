@@ -117,7 +117,7 @@ export async function getAutoFolderGroupImages(groupId: number, params?: {
   cursorOrderIndex?: number | null
   cursorAddedDate?: string | null
   includeChildren?: boolean
-}): Promise<GroupImagesPayload> {
+}, init?: RequestInit): Promise<GroupImagesPayload> {
   const searchParams = new URLSearchParams()
   searchParams.set('page', String(params?.page ?? 1))
   searchParams.set('pageSize', String(params?.limit ?? 40))
@@ -131,7 +131,7 @@ export async function getAutoFolderGroupImages(groupId: number, params?: {
     searchParams.set('cursor_hash', params.cursorHash)
   }
 
-  const response = await requestJson<ApiResponse<AutoFolderGroupImagesApiPayload>>(`/api/auto-folder-groups/${groupId}/images?${searchParams.toString()}`)
+  const response = await requestJson<ApiResponse<AutoFolderGroupImagesApiPayload>>(`/api/auto-folder-groups/${groupId}/images?${searchParams.toString()}`, init)
   if (!response.success) {
     throw createApiFallbackError(response.error, 'autoFolderGroups.images.load')
   }

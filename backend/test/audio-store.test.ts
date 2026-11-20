@@ -191,6 +191,17 @@ test('audio workspace: store, lifecycle, routes and MCP tools', { timeout: 18000
     await assert.rejects(service.importAudioUpload({ groupId: snow.id }, text, 'notes.txt', null), /지원하지 않는/)
     assert.equal(storeFiles().length, 1)
 
+    const collisionHash = await store.sha256File(toneB)
+    const occupied = store.audioBlobPath(collisionHash, 'wav')
+    fs.mkdirSync(path.dirname(occupied), { recursive: true })
+    fs.copyFileSync(toneA, occupied)
+    try {
+      await assert.rejects(service.importAudioUpload({ groupId: snow.id }, staged(toneB), 'occupied.wav', null),
+        (error: unknown) => error instanceof store.AudioStoreError && error.status === 409)
+      assert.equal(store.getAudioFile(collisionHash), null)
+      assert.deepEqual(fs.readFileSync(occupied), fs.readFileSync(toneA))
+    } finally { fs.unlinkSync(occupied) }
+
     const inboxed = await service.importAudioUpload({ projectId: project.id }, staged(toneC), 'flac take.flac', null)
     assert.equal(inboxed.group_id, project.inbox_group_id)
     assert.equal(inboxed.file.ext, 'flac')
@@ -210,6 +221,37 @@ test('audio workspace: store, lifecycle, routes and MCP tools', { timeout: 18000
     assert.deepEqual(service.listAudioCandidates(snow.id, { deleted: 'only' }).items.map((item) => item.id), [second.id])
     assert.deepEqual(service.restoreAudioCandidates([second.id]), { restored: 1 })
     assert.equal(service.listAudioCandidates(snow.id).total, 2)
+  })
+
+  await t.test('permanent release cannot remove a reused sound while its new upload finishes', async (t) => {
+    const { settingsService } = await import('../src/services/settingsService')
+    const protection = settingsService.loadSettings().general.deleteProtection
+    settingsService.updateGeneralSettings({ deleteProtection: { ...protection, enabled: false } })
+    t.after(() => { settingsService.updateGeneralSettings({ deleteProtection: protection }) })
+    const oldGroup = service.createAudioGroup(project.id, { name: 'release race', label: 'release_[00]' })
+    const newGroup = service.createAudioGroup(project.id, { name: 'reused sound', label: 'reused_[00]' })
+    const source = tone('release.wav', 1234)
+    const old = await service.importAudioUpload({ groupId: oldGroup.id }, staged(source), 'old.wav', null)
+    const incoming = staged(source)
+    let cleaning!: () => void, finish!: () => void
+    const started = new Promise<void>(resolve => { cleaning = resolve })
+    const gate = new Promise<void>(resolve => { finish = resolve })
+    const rm = fs.promises.rm
+    t.mock.method(fs.promises, 'rm', async (file, options) => {
+      if (file === incoming) { cleaning(); await gate }
+      return rm(file, options)
+    })
+    const importing = service.importAudioUpload({ groupId: newGroup.id }, incoming, 'reused.wav', null)
+    let released: number
+    try {
+      await started
+      released = (await service.deleteAudioGroup(oldGroup.id)).released
+    } finally { finish() }
+    const reused = await importing
+    assert.equal(released, 0)
+    assert.equal(reused.file_hash, old.file_hash)
+    assert.deepEqual(fs.readFileSync(store.audioBlobPath(reused.file_hash, 'wav')), fs.readFileSync(source))
+    await service.deleteAudioGroup(newGroup.id)
   })
 
   await t.test('comments use the original optimistic revision lock', () => {
@@ -282,8 +324,30 @@ test('audio workspace: store, lifecycle, routes and MCP tools', { timeout: 18000
     assert.equal(readRecycleBinOrigins([binName]).get(binName)?.source, 'audio')
 
     const { SystemFolderService } = await import('../src/services/systemFolderService')
-    const restored = await SystemFolderService.restore([binName], 'fail')
+    const canonical = store.audioBlobPath(lone.file_hash, 'wav')
+    fs.copyFileSync(toneA, canonical)
+    const collision = await SystemFolderService.restore([binName], 'rename')
+    assert.equal(collision.failed.length, 0)
+    assert.ok(collision.done[0].warning, 'file-only recovery is not a successful re-attachment')
+    const recovered = collision.done[0].restoredTo!
+    assert.deepEqual(fs.readFileSync(recovered), fs.readFileSync(toneB), 'different bytes at the canonical name cannot discard the restored sound')
+    assert.deepEqual(fs.readFileSync(canonical), fs.readFileSync(toneA))
+    assert.equal(store.getAudioFile(lone.file_hash), null)
+
+    const { deleteFile } = await import('../src/utils/recycleBin')
+    const retry = await deleteFile(recovered, true, 'audio')
+    fs.copyFileSync(toneB, canonical)
+    const restored = await SystemFolderService.restore([path.basename(retry!)], 'fail')
     assert.equal(restored.failed.length, 0, JSON.stringify(restored.failed))
+    assert.equal(restored.done[0].warning, undefined)
+    assert.equal(restored.done[0].restoredTo, canonical, 'identical bytes are reattached at the existing name')
+    assert.equal(fs.existsSync(recovered), false)
+    const alternateSpelling = `${canonical.slice(0, -3)}WAV`
+    fs.renameSync(canonical, alternateSpelling)
+    assert.equal((await maintenance.reattachAudioFile(alternateSpelling)).path, canonical)
+    fs.utimesSync(canonical, new Date(0), new Date(0))
+    await maintenance.sweepAudioOrphans({ dryRun: false })
+    assert.deepEqual(fs.readFileSync(canonical), fs.readFileSync(toneB), 'on a case-insensitive volume these spellings are the same file')
     const back = service.getAudioCandidate(lone.id)
     assert.equal(back.deleted_at, null)
     assert.equal(back.review, 'selected')

@@ -24,7 +24,10 @@ export function useImageDeleteUndo() {
       } catch (error) {
         showSnackbar({ message: error instanceof Error ? error.message : t({ ko: '복원하지 못했어.', en: 'Could not restore the files.' }), tone: 'error' })
       } finally {
-        await refreshRestoredImageListCaches(queryClient)
+        await Promise.all([
+          refreshRestoredImageListCaches(queryClient),
+          queryClient.invalidateQueries({ queryKey: ['system-folders', 'list', 'recycle-bin'] }),
+        ])
       }
     }
     const summary = details.failed
