@@ -105,15 +105,39 @@ test('backup watcher shutdown cancels a restart waiting to reopen its source', a
   const sourcePath = path.join(root, 'backup-restart')
   fs.mkdirSync(sourcePath)
   const sourceId = await BackupSourceService.addSource({ source_path: sourcePath, target_folder_name: 'backup-restart' })
+  const sourceFile = writeFile(path.join(sourcePath, 'frame.png'))
+  let entered!: () => void, release!: () => void
+  const copying = new Promise<void>(resolve => { entered = resolve })
+  const gate = new Promise<void>(resolve => { release = resolve })
+  const copy = fs.promises.copyFile.bind(fs.promises)
+  t.mock.method(fs.promises, 'copyFile', async (...args: Parameters<typeof fs.promises.copyFile>) => {
+    if (args[0] === sourceFile) { entered(); await gate }
+    return copy(...args)
+  })
   const watch = t.mock.method(chokidar, 'watch', () => {
     const watcher = Object.assign(new EventEmitter(), { close: async () => {} })
     queueMicrotask(() => watcher.emit('ready'))
     return watcher as unknown as ReturnType<typeof chokidar.watch>
   })
   t.after(async () => {
+    release()
     await BackupSourceWatcherService.stopAll()
     t.mock.timers.reset()
   })
+  await Promise.all([BackupSourceWatcherService.startWatcher(sourceId), BackupSourceWatcherService.startWatcher(sourceId)])
+  assert.equal(watch.mock.callCount(), 1, 'concurrent starts share one watcher')
+  await copying
+  let closed = false
+  const closing = BackupSourceWatcherService.stopWatcher(sourceId).then(() => { closed = true })
+  const lateStart = BackupSourceWatcherService.startWatcher(sourceId)
+  const rejected = assert.rejects(lateStart, { name: 'AbortError' })
+  const shutdown = BackupSourceWatcherService.stopAll()
+  await new Promise(resolve => setImmediate(resolve))
+  assert.equal(closed, false, 'a stop drains the active copy before another generation can start')
+  release()
+  await Promise.all([closing, rejected, shutdown])
+  assert.equal((await BackupSourceService.getSource(sourceId))?.watcher_last_event, null, 'the retired import must not write watcher state')
+  assert.equal(watch.mock.callCount(), 1)
   await BackupSourceWatcherService.startWatcher(sourceId)
   t.mock.timers.enable({ apis: ['setTimeout'] })
   const restarting = BackupSourceWatcherService.restartWatcher(sourceId)
@@ -121,8 +145,70 @@ test('backup watcher shutdown cancels a restart waiting to reopen its source', a
   await BackupSourceWatcherService.stopAll()
   t.mock.timers.tick(300)
   await restarting
-  assert.equal(watch.mock.callCount(), 1, 'shutdown must not allow a delayed restart to reopen the source')
+  assert.equal(watch.mock.callCount(), 2, 'shutdown must not allow a delayed restart to reopen the source')
   assert.equal((await BackupSourceService.getSource(sourceId))?.watcher_status, 'stopped')
+})
+
+test('backup import recognizes original-format video fallbacks and simultaneous media writes never replace each other', async t => {
+  const { runtimePaths } = await booted
+  const { BackupSourceService } = await import('../src/services/backupSourceService')
+  const { importBackupFile } = await import('../src/services/backupSourceImporter')
+  const { VideoOptimizationService: video } = await import('../src/services/videoOptimizationService')
+  const { settingsService } = await import('../src/services/settingsService')
+  const previous = settingsService.loadSettings().videoOptimization
+  settingsService.updateVideoOptimizationSettings({ enabled: true, applyToBackupImports: true })
+  t.after(() => { settingsService.updateVideoOptimizationSettings(previous) })
+  const dir = path.join(root, 'backup-video-source')
+  const original = writeFile(path.join(dir, 'clip.MOV'), 'original')
+  const id = await BackupSourceService.addSource({ source_path: dir, target_folder_name: 'mirrored-video' })
+  const source = (await BackupSourceService.getSource(id))!
+  const mirror = path.join(runtimePaths.uploadsDir, source.target_folder_name)
+  const signal = new AbortController().signal
+  const image = path.join(dir, '..album', 'page.png')
+  fs.mkdirSync(path.dirname(image), { recursive: true })
+  const sharp = (await import('sharp')).default
+  await sharp({ create: { width: 2, height: 2, channels: 3, background: 'white' } }).png().toFile(image)
+  const converted = await importBackupFile({ ...source, import_mode: 'convert_webp' }, mirror, image, true, signal)
+  assert.equal(converted, path.join(mirror, '..album', 'page.webp'))
+  assert.equal((await sharp(converted!).metadata()).format, 'webp')
+  const encode = t.mock.method(video, 'transcodeToMp4', async (_file, out) => {
+    fs.writeFileSync(out, 'larger than the original')
+    return { outputPath: out, fileSize: fs.statSync(out).size, mimeType: 'video/mp4' }
+  })
+  assert.equal(await importBackupFile(source, mirror, original, true, signal), path.join(mirror, 'clip.mov'))
+  assert.equal(await importBackupFile(source, mirror, original, true, signal), null)
+  assert.deepEqual(fs.readdirSync(mirror).sort(), ['..album', 'clip.mov'])
+  assert.equal(encode.mock.callCount(), 1, 'the saved original is a complete mirror, not another encoding job')
+
+  // Both calls reach the encoder before either can publish. Distinct bytes prove we kept both outputs.
+  encode.mock.mockImplementation(async (file, out) => {
+    const bytes = fs.readFileSync(file).subarray(0, 1)
+    await fs.promises.writeFile(out, bytes)
+    return { outputPath: out, fileSize: 1, mimeType: 'video/mp4' }
+  })
+  const second = writeFile(path.join(dir, 'other.mov'), 'second')
+  const options = { crf: 24, audioBitrateKbps: 96 }
+  const outputs = await Promise.all([original, second].map(file => video.persistWithFallback(file, path.join(mirror, 'clip'), '.mov', options)))
+  assert.deepEqual(outputs.map(item => fs.readFileSync(item.outputPath, 'utf8')), ['o', 's'])
+  assert.deepEqual(fs.readdirSync(mirror).sort(), ['..album', 'clip (1).mp4', 'clip.mov', 'clip.mp4'])
+  const stopped = new AbortController()
+  encode.mock.mockImplementation(async () => { stopped.abort(); throw stopped.signal.reason })
+  await assert.rejects(video.persistWithFallback(second, path.join(mirror, 'cancelled'), '.mov', { ...options, signal: stopped.signal }), { name: 'AbortError' })
+  assert.ok(!fs.existsSync(path.join(mirror, 'cancelled.mov')), 'cancellation is not an encoder failure to fall back from')
+})
+
+test('simultaneous workflow copies preserve both results and the original in the watch folder', async t => {
+  const { db, runtimePaths } = await booted
+  const { copyGraphWorkflowArtifactsToWatchedFolder } = await import('../src/services/graphWorkflowOutputManagementService')
+  const { BackgroundProcessorService } = await import('../src/services/backgroundProcessorService')
+  t.mock.method(BackgroundProcessorService, 'processSavedMediaFile', async () => {})
+  const target = path.join(root, 'workflow-copies')
+  const original = writeFile(path.join(target, 'output.png'), 'keep')
+  const folder = Number(db.prepare('INSERT INTO watched_folders (folder_path, folder_name, is_active) VALUES (?, ?, 1)').run(target, 'copies').lastInsertRowid)
+  const sources = ['first', 'second'].map(value => writeFile(path.join(runtimePaths.tempDir, 'graph-executions', value, 'output.png'), value))
+  const results = await Promise.all(sources.map(source => copyGraphWorkflowArtifactsToWatchedFolder(folder, [source])))
+  assert.deepEqual(results.map(result => fs.readFileSync(result!.copied[0].target_path, 'utf8')), ['first', 'second'])
+  assert.equal(fs.readFileSync(original, 'utf8'), 'keep')
 })
 
 test('background processing shutdown drains its active write and cancels scheduled follow-up batches', async (t) => {
@@ -539,4 +625,7 @@ test('database backup writes openable copies and keeps only the newest N stamped
   assert.deepEqual(backups.map((backup) => backup.name), ['20261008-120200', '20261008-120100'])
   assert.ok(fs.existsSync(path.join(backupRoot, 'images.before-manual-copy')), 'hand-made copies are never pruned')
   assert.equal(fs.readdirSync(backupRoot).some((name) => name.endsWith('.partial')), false)
+  const earlier = await runDatabaseBackup({ root: backupRoot, keep: 1, now: new Date(base.getTime() - 60_000) })
+  assert.deepEqual(listDatabaseBackups(backupRoot).map(backup => backup.name), [earlier.name], 'a clock rollback must not prune the backup just returned')
+  assert.ok(fs.existsSync(path.join(earlier.path, 'user.db')))
 })

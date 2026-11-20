@@ -21,7 +21,7 @@ import { useI18n } from '@/i18n'
 import { createRandomUuid } from '@/lib/random-uuid'
 import { getErrorMessage } from '@/lib/error-message'
 import { PLUGINS_QUERY_KEY } from '@/lib/api-plugins'
-import { changePluginDraft, createPluginDraft, deletePluginDraft, downloadPluginPackage, getPluginDraft, installPluginDraft, listPluginDrafts, PLUGIN_DRAFTS_QUERY_KEY, readPluginDraft, reviewPluginDraft, uploadPluginDraftAsset } from '@/lib/api-plugin-authoring'
+import { changePluginDraft, createPluginDraft, deletePluginDraft, downloadPluginPackage, getPluginDraft, installPluginDraft, listPluginDrafts, PLUGIN_DRAFTS_QUERY_KEY, pluginDraftQueryKey, readPluginDraft, reviewPluginDraft, uploadPluginDraftAsset } from '@/lib/api-plugin-authoring'
 import { PluginPackageReviewSummary } from './plugin-package-review-summary'
 
 const PlainTextEditorLazy = lazy(() => import('@/components/common/plain-text-editor').then((module) => ({ default: module.PlainTextEditor })))
@@ -44,7 +44,7 @@ export function PluginAuthoring({ page }: { page?: PluginManagementPage }) {
   const [params, setParams] = useSearchParams()
   const selected = params.get('draft')
   const drafts = useQuery({ queryKey: PLUGIN_DRAFTS_QUERY_KEY, queryFn: listPluginDrafts })
-  const draft = useQuery({ queryKey: ['plugin-draft', selected], queryFn: () => getPluginDraft(selected!), enabled: !!selected })
+  const draft = useQuery({ queryKey: pluginDraftQueryKey(selected), queryFn: () => getPluginDraft(selected!), enabled: !!selected })
   const [creating, setCreating] = useState(false)
   const [pluginId, setPluginId] = useState('')
   const [name, setName] = useState('')
@@ -121,7 +121,7 @@ function PluginDraftEditor({ initial, remoteRevision, onClose }: { initial: Plug
   const changedElsewhere = remoteRevision > draft.revision
   const refresh = async () => {
     await cache.invalidateQueries({ queryKey: PLUGIN_DRAFTS_QUERY_KEY })
-    await cache.invalidateQueries({ queryKey: ['plugin-draft', initial.id] })
+    await cache.invalidateQueries({ queryKey: pluginDraftQueryKey(initial.id) })
   }
   const run = async (operation: () => Promise<unknown>) => {
     setBusy(true); setError(''); setMessage('')

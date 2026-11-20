@@ -121,6 +121,8 @@ test('task events replace pre-update requests, reconnect refreshes tasks, and pa
       } }).subscribe(() => {}))
     }
     client.setQueryData(['unrelated', 1], 'unchanged')
+    const drafts = [['plugin-drafts'], ['plugin-draft', 'a'.repeat(32)]]
+    for (const key of drafts) client.setQueryData(key, 'before disconnect')
     const scans = t.mock.method(client.getQueryCache(), 'findAll')
     await bridge.resyncAll()
     assert.ok(scans.mock.callCount() <= 3, 'bulk cancellation, invalidation and refetch need at most three cache scans regardless of matched key count')
@@ -136,6 +138,7 @@ test('task events replace pre-update requests, reconnect refreshes tasks, and pa
     assert.deepEqual(await inactiveResult, { value: 'quote attachment' })
     assert.deepEqual(overlapKeys.map(key => overlapCounts.get(JSON.stringify(key))), Array(12).fill(1))
     assert.equal(client.getQueryState(['unrelated', 1])?.isInvalidated, false)
+    for (const key of drafts) assert.equal(client.getQueryState(key)?.isInvalidated, true)
 
     const counts = new Map<string, number>()
     const keys = [

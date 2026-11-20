@@ -398,6 +398,25 @@ test('audio workspace: edits, exports, deletion plan and MCP tools', { timeout: 
     assert.equal(fs.readdirSync(path.join(root, 'temp', 'audio-exports')).length, 0, 'inline exports leave no workspace')
   })
 
+  await t.test('a cancelled export does not wait for unrelated renders to finish', async () => {
+    const { withAudioRenderSlot } = await import('../src/services/audio/audioFfmpeg')
+    let release!: () => void
+    const gate = new Promise<void>(resolve => { release = resolve })
+    const occupied = [withAudioRenderSlot(() => gate), withAudioRenderSlot(() => gate)]
+    const controller = new AbortController()
+    const output = path.join(scratch, 'cancelled.wav')
+    const pending = exporting.renderAudioFileExport('', output, exporting.DEFAULT_AUDIO_EXPORT_OPTIONS, { duration: 1, sampleRate: 44100 }, controller.signal)
+    const rejected = assert.rejects(pending, { status: 409 })
+    controller.abort()
+    try {
+      assert.equal(await Promise.race([rejected.then(() => true), new Promise<false>(resolve => setImmediate(() => resolve(false)))]), true)
+      assert.ok(!fs.existsSync(output))
+    } finally {
+      release()
+      await Promise.all([...occupied, rejected])
+    }
+  })
+
   await t.test('cancelling while ZIP output starts closes handles and removes the workspace', async () => {
     const controller = new AbortController()
     await assert.rejects(exporting.buildAudioExport(project.id, null,

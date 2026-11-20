@@ -40,7 +40,7 @@ test('document retrieval: PDF/XLSX extraction, shared files, resumable chunks an
   const { semanticIndexer } = await import('../src/services/embeddings/semanticIndex')
   const db = database.getUserSettingsDb()
   t.after(async () => {
-    semanticIndexer.stop()
+    await semanticIndexer.stop()
     database.closeUserSettingsDb()
     ;(await import('../src/database/init')).closeDatabase()
     const { logger } = await import('../src/utils/logger')
@@ -164,6 +164,35 @@ test('document retrieval: PDF/XLSX extraction, shared files, resumable chunks an
     assert.equal(state(), 'ready')
   })
 
+  await t.test('startup indexes a missed write without a search request, and shutdown drains its open file', async sub => {
+    await stopFileSearchMaintenance()
+    const file = FileStoreService.writeText(owner, null, 'offline.txt', 'waiting for extraction')
+    db.prepare("UPDATE stored_file_entries SET updated_at='2000-01-01' WHERE id=?").run(file.id)
+    const target = FileStoreService.resolveFile(owner, file.id).filePath
+    let entered!: () => void, release!: () => void
+    const started = new Promise<void>(resolve => { entered = resolve })
+    const gate = new Promise<void>(resolve => { release = resolve })
+    const open = fs.promises.open.bind(fs.promises)
+    sub.mock.method(fs.promises, 'open', async (...args: Parameters<typeof fs.promises.open>) => {
+      if (args[0] === target) { entered(); await gate }
+      return open(...args)
+    })
+    sub.mock.timers.enable({ apis: ['setTimeout'] })
+    try {
+      startFileSearchMaintenance()
+      sub.mock.timers.tick(10)
+      await started
+      let drained = false
+      const stopping = stopFileSearchMaintenance().then(() => { drained = true })
+      await new Promise(resolve => setImmediate(resolve))
+      assert.equal(drained, false)
+      release()
+      await stopping
+      assert.deepEqual(db.prepare("SELECT body,extraction_state FROM search_db.search_documents WHERE source_id=?").get(file.id),
+        { body: 'waiting for extraction', extraction_state: 'ready' })
+    } finally { release(); await stopFileSearchMaintenance() }
+  })
+
   await t.test('loaded vector caches preserve other files, replace retried chunks and discard old revisions', async () => {
     const { vectorStore } = await import('../src/services/vectors/vectorStore')
     const write = (id: string, revision: string, chunk: number, axis: number) => vectorStore.appendFileBatch(id, 'cache-test', owner, revision,
@@ -233,6 +262,9 @@ test('document retrieval: PDF/XLSX extraction, shared files, resumable chunks an
     assert.equal(natural.search?.keywordTermsLimited, true)
     const semanticHit = natural.hits.find(hit => hit.entry.id === long.id)!
     assert.ok(semanticHit.read!.offset > 16000)
+    const isolated = FileStoreService.createFolder(owner, null, 'separate-scope')
+    assert.deepEqual((await searchStoredFiles(owner, 'archived reference deepneedle', 20, [isolated.id], { semantic: true })).hits, [],
+      'a high-scoring document outside the linked folder never enters its result ranking')
     const passage = await FileStoreService.readText(owner, long.id, semanticHit.read!.offset, semanticHit.read!.limit, semanticHit.read)
     assert.match(passage.text, /deepneedle/)
     const last = db.prepare("SELECT span_end FROM vector_db.vectors WHERE space = 'file' AND source_key = ? ORDER BY chunk DESC LIMIT 1").get(long.id) as { span_end: number }

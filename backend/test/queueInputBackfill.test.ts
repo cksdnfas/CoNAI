@@ -8,6 +8,7 @@ import { GenerationQueueModel } from '../src/models/GenerationQueue'
 import { externalizeQueueInputDataUrls, externalizeStoredQueuePayloads, hydrateQueueInputDataUrls, isQueueInputRef, resolveQueueInputFilePath, storeQueueInputBuffer } from '../src/services/generation-queue/queueInputStore'
 import { parseCodexQueuePayload, parseNaiQueuePayload } from '../src/services/generation-queue/queuePayloads'
 import fs from 'node:fs/promises'
+import syncFs from 'node:fs'
 import path from 'node:path'
 import { randomBytes } from 'node:crypto'
 import sharp from 'sharp'
@@ -53,6 +54,20 @@ test('stored payloads with base64 beside prompt_data are rewritten to references
   const second = externalizeStoredQueuePayloads()
   assert.equal(second.rewritten, 0)
   assert.equal(second.scanned, 0)
+})
+
+test('a legacy backfill does not restore an obsolete payload over a newer job revision', t => {
+  const image = `data:image/png;base64,${Buffer.alloc(9 * 1024, 31).toString('base64')}`
+  const job = GenerationQueueModel.create({ service_type: 'novelai', request_payload: { image } })
+  const db = getUserSettingsDb()
+  const rename = syncFs.renameSync
+  t.mock.method(syncFs, 'renameSync', (...args: Parameters<typeof rename>) => {
+    rename(...args)
+    db.prepare('UPDATE generation_queue_jobs SET request_payload = ? WHERE id = ?').run('{"replaced":true}', job)
+  }, { times: 1 })
+  assert.equal(externalizeStoredQueuePayloads().rewritten, 0)
+  assert.deepEqual(JSON.parse(GenerationQueueModel.findById(job)!.request_payload), { replaced: true })
+  assert.equal(db.prepare('SELECT 1 FROM generation_queue_input_refs WHERE job_id = ?').get(job), undefined)
 })
 
 test('NovelAI inputs survive externalization and hydration with references claimed by every repeat', () => {
@@ -409,11 +424,25 @@ test('large terminal payload pruning preserves shared inputs until their last jo
 
   const db = getUserSettingsDb()
   db.prepare("UPDATE generation_queue_jobs SET status = 'completed' WHERE id BETWEEN ? AND ?").run(jobIds[0], exclusiveId)
+  // A failed claim write must leave the payload retryable, not strand its inputs behind a pruned row.
+  db.exec(`CREATE TEMP TRIGGER reject_input_detach BEFORE DELETE ON generation_queue_input_refs
+    BEGIN SELECT RAISE(ABORT, 'input store unavailable'); END`)
+  try {
+    assert.throws(() => GenerationQueueModel.pruneTerminalRequestPayloads({ retainRecentTerminalJobs: 0 }), /input store unavailable/)
+    assert.deepEqual(JSON.parse(GenerationQueueModel.findById(exclusiveId)!.request_payload), { image: exclusiveRef })
+    assert.ok(resolveQueueInputFilePath(exclusiveRef))
+  } finally {
+    db.exec('DROP TRIGGER reject_input_detach')
+  }
   const first = GenerationQueueModel.pruneTerminalRequestPayloads({ retainRecentTerminalJobs: 0 })
   assert.equal(first.pruned, 1002)
   assert.equal(first.releasedInputFiles, 1)
   assert.equal(first.releasedInputBytes, exclusiveBuffer.byteLength)
   assert.equal(resolveQueueInputFilePath(exclusiveRef), null)
+  const total = () => db.prepare('SELECT COUNT(*) AS n FROM generation_queue_jobs').get()
+  const before = total()
+  assert.throws(() => GenerationQueueModel.createMany([sharedRef, exclusiveRef].map(image => ({ service_type: 'novelai', request_payload: { image } }))), /다시 첨부/)
+  assert.deepEqual(total(), before, 'one missing input rejects the whole enqueue, without leaving a partial job')
   assert.equal(hydrateQueueInputDataUrls({ image: sharedRef }).image, `data:image/png;base64,${sharedBuffer.toString('base64')}`)
   assert.equal(GenerationQueueModel.findById(keeperId)!.status, 'queued')
 

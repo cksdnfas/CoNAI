@@ -1,6 +1,6 @@
 import type { Request, Response } from 'express';
 import { errorResponse, successResponse } from '@conai/shared';
-import { RuntimeJobRunner } from '../services/runtimeJobs/runtimeJobRunner';
+import { RuntimeJobRunner, RuntimeJobRunnerStoppedError } from '../services/runtimeJobs/runtimeJobRunner';
 import { RuntimeJobConflictError } from '../services/runtimeJobs/runtimeJobStore';
 import type { RuntimeJobKind } from '../types/runtimeJob';
 import { getRequesterAccountId } from './requester-session-helpers';
@@ -22,6 +22,7 @@ export function respondWithStartedJob(
     });
     return res.status(202).json(successResponse(job));
   } catch (error) {
+    if (error instanceof RuntimeJobRunnerStoppedError) return res.status(error.statusCode).json(errorResponse(error.message));
     if (error instanceof RuntimeJobConflictError) {
       return res.status(409).json({
         ...errorResponse(conflictMessage),

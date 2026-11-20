@@ -197,7 +197,7 @@ test('project files share files while preserving revisions, execution boundaries
     assert.equal(joined, text)
     assert.equal((await read('long.md')).nextOffset, null)
   })
-  await t.test('folder moves protect child revisions and preserve indexed identities', async () => {
+  await t.test('folder moves protect child revisions and preserve indexed identities', async sub => {
     assert.equal((await apply('folder-move-setup', [{ kind: 'mkdir', target: 'stage' }, { kind: 'mkdir', target: 'stage/hero' }, { kind: 'write', target: 'stage/hero/info.json', text: '{}', expectedRevision: null }])).status, 'completed')
     const entry = (await service.entries('bootstrap', project.id, 'stage/hero')).entries[0]
     const stale = await service.stat('bootstrap', project.id, 'stage/hero')
@@ -205,6 +205,12 @@ test('project files share files while preserving revisions, execution boundaries
     assert.equal((await apply('folder-stale-move', [{ kind: 'move', target: 'stage/hero', destination: 'moved', expectedRevision: stale.revision }])).status, 'failed')
     const current = await service.stat('bootstrap', project.id, 'stage/hero')
     const operations: WorkspaceOperation[] = [{ kind: 'move', target: 'stage/hero', destination: 'moved', expectedRevision: current.revision }]
+    const rename = fs.promises.rename.bind(fs.promises)
+    sub.mock.method(fs.promises, 'rename', async (...args: Parameters<typeof rename>) => {
+      await rename(...args)
+      const listing = await service.entries('bootstrap', project.id, 'stage')
+      assert.ok(!listing.entries.some(item => item.target === 'stage/hero'), 'the old folder is no longer visible')
+    }, { times: 1 })
     const moved = await apply('folder-valid-move', operations)
     assert.equal(moved.status, 'completed')
     assert.deepEqual(await apply('folder-valid-move', operations), moved)
@@ -440,7 +446,9 @@ test('project files share files while preserving revisions, execution boundaries
     assert.equal(after.revision, before.revision + 1)
     assert.equal((await read('AI_GUIDELINES.md')).text, 'New guide')
     assert.equal(JSON.parse(service.changes('bootstrap', project.id)[0].result).results[0].target, 'AI_GUIDELINES.md')
-    await service.update('bootstrap', project.id, { name: '리소스', revision: after.revision })
+    const renamed = await service.update('bootstrap', project.id, { name: '리소스', revision: after.revision })
+    assert.equal(renamed.revision, after.revision + 1)
+    await assert.rejects(service.update('bootstrap', project.id, { name: 'stale', revision: after.revision }), /다시 열어/)
   })
   await t.test('a lock left by a container that is gone is reclaimed; one from a live same-host writer is not', async () => {
     const { getUserSettingsDb } = await import('../src/database/userSettingsDb')
@@ -459,7 +467,15 @@ test('project files share files while preserving revisions, execution boundaries
     fs.rmSync(path.join(directory, 'workspaces', project.id, 'drift', 'a.md'))
     // A child the disk lost no longer makes the folder unreadable, and the listing drops it from the index.
     const folder = await service.stat('bootstrap', project.id, 'drift')
-    assert.deepEqual((await service.entries('bootstrap', project.id, 'drift')).entries.map(entry => entry.target), ['drift/b.md'])
+    // More than one listing page can be lost at once. The refill must not return a second page of ghosts.
+    const db = settings.getUserSettingsDb()
+    const lost = db.prepare("INSERT INTO workspace_entries(id,project_id,target,target_key,parent,kind) VALUES(lower(hex(randomblob(16))),?,?,?,'drift','file')")
+    db.transaction(() => {
+      for (let i = 0; i < 105; i++) { const target = `drift/0-${i}.md`; lost.run(project.id, target, target) }
+    })()
+    const page = await service.entries('bootstrap', project.id, 'drift')
+    assert.deepEqual(page.entries.map(entry => entry.target), ['drift/b.md'])
+    assert.equal(page.nextOffset, null)
     assert.notEqual((await service.stat('bootstrap', project.id, 'drift')).revision, folder.revision)
     assert.equal((await apply('drift-delete', [{ kind: 'delete', target: 'drift', expectedRevision: (await service.stat('bootstrap', project.id, 'drift')).revision }])).status, 'completed')
   })

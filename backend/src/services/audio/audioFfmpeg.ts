@@ -1,6 +1,6 @@
 import ffmpegStaticPath from 'ffmpeg-static';
 import { AudioServiceError } from './audioService';
-import { MediaProcessError, runMediaProcess, type MediaProcessResult } from '../../utils/mediaProcess';
+import { MediaProcessError, MediaRenderSlots, runMediaProcess, type MediaProcessResult } from '../../utils/mediaProcess';
 
 /**
  * ffmpeg for the audio workspace (edits, previews, exports). Same binaries as VideoProcessor: the bundled static
@@ -16,13 +16,15 @@ function ffmpegCandidates(): string[] {
 
 export type AudioFfmpegResult = MediaProcessResult;
 
+const cancelled = () => new AudioServiceError('작업이 취소됐어.', 409);
+
 /** Run ffmpeg to completion; a missing bundled binary falls back to the system one. */
 export async function runAudioFfmpeg(args: string[], options: { timeoutMs?: number; signal?: AbortSignal } = {}): Promise<AudioFfmpegResult> {
   try {
     return await runMediaProcess(ffmpegCandidates(), args, { timeoutMs: options.timeoutMs ?? AUDIO_FFMPEG_TIMEOUT_MS, signal: options.signal });
   } catch (error) {
     if (!(error instanceof MediaProcessError)) throw error;
-    if (error.reason === 'cancelled') throw new AudioServiceError('작업이 취소됐어.', 409);
+    if (error.reason === 'cancelled') throw cancelled();
     if (error.reason === 'timeout') throw new AudioServiceError('오디오 처리 시간이 너무 오래 걸렸어.', 504);
     if (error.reason === 'exit') throw new AudioServiceError(`오디오 처리 실패: ${error.stderr.slice(-800).trim()}`, 422);
     if (!['ENOENT', 'EACCES'].includes(error.originalError?.code ?? '')) throw error.originalError ?? error;
@@ -30,23 +32,13 @@ export async function runAudioFfmpeg(args: string[], options: { timeoutMs?: numb
   }
 }
 
-/** A small FIFO semaphore: edits, previews and export renders share two slots, like the original `edit_slots`. */
-class Semaphore {
-  private active = 0;
-  private readonly waiting: Array<() => void> = [];
+/** Edits, previews and export renders share two slots, like the original `edit_slots`. */
+const audioRenderSlots = new MediaRenderSlots(() => 2);
 
-  constructor(private readonly size: number) {}
-
-  async run<T>(task: () => Promise<T>): Promise<T> {
-    if (this.active >= this.size) await new Promise<void>((resolve) => this.waiting.push(resolve));
-    this.active += 1;
-    try {
-      return await task();
-    } finally {
-      this.active -= 1;
-      this.waiting.shift()?.();
-    }
+export async function withAudioRenderSlot<T>(work: () => Promise<T>, signal?: AbortSignal): Promise<T> {
+  try { return await audioRenderSlots.run(work, signal); }
+  catch (error) {
+    if (signal?.aborted && error === signal.reason) throw cancelled();
+    throw error;
   }
 }
-
-export const audioRenderSlots = new Semaphore(2);

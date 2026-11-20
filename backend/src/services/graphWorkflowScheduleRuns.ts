@@ -1,7 +1,7 @@
 import { GraphExecutionModel } from '../models/GraphExecution'
 import { GraphWorkflowExecutionQueue } from './graphWorkflowExecutionQueue'
 
-/** Shared by the schedule routes (run now) and the wallpaper quick-run button. */
+/** Shared by timed reservations, run now and the wallpaper quick-run button. */
 export function parseStoredScheduleInputValues(value?: string | null) {
   if (!value) {
     return undefined
@@ -10,32 +10,21 @@ export function parseStoredScheduleInputValues(value?: string | null) {
   return JSON.parse(value) as Record<string, unknown>
 }
 
-function countReservedScheduleRuns(scheduleId: number) {
-  return GraphExecutionModel.countReservedByScheduleId(scheduleId)
-}
-
-function resolveAllowedScheduleEnqueueCount(scheduleId: number, requestedCount: number, maxRunCount?: number | null) {
-  if (requestedCount <= 0) {
-    return 0
-  }
-
-  if (maxRunCount === null || maxRunCount === undefined) {
-    return requestedCount
-  }
-
-  const remainingCount = Math.max(0, maxRunCount - countReservedScheduleRuns(scheduleId))
-  return Math.min(requestedCount, remainingCount)
-}
-
 export function enqueueScheduleRuns(params: {
   scheduleId: number
   workflowId: number
   inputValues?: Record<string, unknown>
   requestedCount: number
   maxRunCount?: number | null
+  /** The poller's just-read count of queued, running and completed executions. */
+  reservedRunCount?: number
   requestedByAccountId: number | null
 }) {
-  const allowedCount = resolveAllowedScheduleEnqueueCount(params.scheduleId, params.requestedCount, params.maxRunCount)
+  let allowedCount = Math.max(0, params.requestedCount)
+  if (allowedCount > 0 && params.maxRunCount != null) {
+    const reserved = params.reservedRunCount ?? GraphExecutionModel.countReservedByScheduleId(params.scheduleId)
+    allowedCount = Math.min(allowedCount, Math.max(0, params.maxRunCount - reserved))
+  }
   const executionIds = GraphWorkflowExecutionQueue.enqueueMany(
     params.workflowId,
     allowedCount,

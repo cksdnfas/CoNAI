@@ -118,11 +118,16 @@ router.post('/:id/resume', asyncHandler(async (req: Request, res: Response) => {
 router.post('/:id/run', asyncHandler(async (req: Request, res: Response) => {
   const id = routineId(req, res)
   if (id === null) return
-  if (ChatRoutineRunner.isRunning(id)) { res.status(409).json({ success: false, error: '이미 실행 중이야.' }); return }
-  void ChatRoutineRunner.fire(id, { manual: true }).catch((error: unknown) => {
-    console.warn(`[chat-routine] manual run of ${id} failed:`, error instanceof Error ? error.message : error)
-  })
-  res.status(202).json({ success: true, data: { id, started: true } })
+  try {
+    const run = ChatRoutineRunner.fire(id, { manual: true })
+    if (!run) { res.status(409).json({ success: false, error: '이미 실행 중이야.' }); return }
+    void run.catch((error: unknown) => {
+      console.warn(`[chat-routine] manual run of ${id} failed:`, error instanceof Error ? error.message : error)
+    })
+    res.status(202).json({ success: true, data: { id, started: true } })
+  } catch (error) {
+    sendError(res, error)
+  }
 }))
 
 router.delete('/:id', asyncHandler(async (req: Request, res: Response) => {

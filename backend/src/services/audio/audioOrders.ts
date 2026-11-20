@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { stringifyRequestJson } from '../../utils/stableRequestJson';
 import { getAudioDb, hasAudioDb } from '../../database/audioDb';
 import { getUserSettingsDb } from '../../database/userSettingsDb';
 import { GenerationQueueModel } from '../../models/GenerationQueue';
@@ -92,17 +93,7 @@ const TERMINAL = new Set(['completed', 'failed', 'cancelled']);
 
 /* ------------------------------------------------------------------------------------------------ helpers */
 
-function stableJson(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`;
-  if (value && typeof value === 'object') {
-    return `{${Object.entries(value as Record<string, unknown>).filter(([, entry]) => entry !== undefined)
-      .sort(([left], [right]) => left.localeCompare(right))
-      .map(([key, entry]) => `${JSON.stringify(key)}:${stableJson(entry)}`).join(',')}}`;
-  }
-  return JSON.stringify(value) ?? 'null';
-}
-
-const sha256 = (value: string) => crypto.createHash('sha256').update(value).digest('hex');
+const orderRequestHash = (value: unknown) => crypto.createHash('sha256').update(stringifyRequestJson(value, 'legacy-locale')).digest('hex');
 
 function optionalInt(value: unknown, field: string, min: number, max: number): number | null {
   if (value === undefined || value === null || value === '') return null;
@@ -146,9 +137,9 @@ export async function createAudioOrder(input: AudioOrderInput, actor: AudioOrder
   if (requestKey.length < 8 || requestKey.length > 128) throw new AudioServiceError('request_key는 8~128자여야 해.');
 
   const { workflow, binding, fields } = requireBoundAudioWorkflow(workflowId);
-  const requestHash = sha256(stableJson({
+  const requestHash = orderRequestHash({
     group_id: group.id, workflow_id: workflow.id, text, seconds, count, seed: requestedSeed, server_id: serverId, server_tag: serverTag,
-  }));
+  });
   const existing = db().prepare('SELECT id, request_hash FROM audio_orders WHERE request_scope = ? AND request_key = ?')
     .get(actor.scope, requestKey) as { id: string; request_hash: string } | undefined;
   if (existing) {
@@ -258,7 +249,7 @@ function queuePendingRows(orderId: string, options: { binding?: ReturnType<typeo
       requested_by_account_id: order.created_by_account_id,
       requested_by_account_type: (order.created_by_account_type ?? null) as GenerationQueueJobRecord['requested_by_account_type'],
     }, {
-      idempotency: { scope: AUDIO_ORDER_QUEUE_SCOPE, key, requestHash: sha256(stableJson({ order: orderId, idx: row.idx, attempt: row.attempt, seed: row.seed })) },
+      idempotency: { scope: AUDIO_ORDER_QUEUE_SCOPE, key, requestHash: orderRequestHash({ order: orderId, idx: row.idx, attempt: row.attempt, seed: row.seed }) },
       withinTransaction: ({ jobIds }) => {
         db().prepare("UPDATE audio_order_jobs SET job_id = ?, status_cache = 'queued', error = NULL, updated_at = ? WHERE order_id = ? AND idx = ?")
           .run(jobIds[0], now(), orderId, row.idx);

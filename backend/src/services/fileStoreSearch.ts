@@ -84,9 +84,10 @@ async function readIndexText(owner: string, row: Pick<FileRow, 'id' | 'name'>): 
 const refreshing = new Map<string, Promise<void>>();
 const FILE_READ_CHUNK_BYTES = 16 * 1024;
 const RETRY_DELAYS_MS = [30_000, 120_000, 600_000];
-const scheduledOwners = new Map<string, number>();
 let maintenanceTimer: NodeJS.Timeout | null = null;
-let maintenanceRunning = false;
+let maintenanceDue: number | null = null;
+let maintenanceRunning: Promise<void> | null = null;
+let unsubscribeFiles: (() => void) | null = null;
 let maintenanceStopped = false;
 
 /** Bump when extracted text or byte-chunk layout changes. */
@@ -106,45 +107,46 @@ function pendingExtractions(owner: string, onlyId?: string, limit = 8, force = f
 }
 
 function armMaintenance() {
-  if (maintenanceStopped || maintenanceRunning || scheduledOwners.size === 0) return;
-  if (maintenanceTimer) clearTimeout(maintenanceTimer);
-  const at = Math.min(...scheduledOwners.values());
+  if (maintenanceStopped || maintenanceRunning || maintenanceDue === null || maintenanceTimer) return;
   maintenanceTimer = setTimeout(() => {
     maintenanceTimer = null;
-    const next = [...scheduledOwners].sort((a, b) => a[1] - b[1])[0];
-    if (!next) return;
-    const [owner] = next;
-    scheduledOwners.delete(owner);
-    maintenanceRunning = true;
-    void refreshFileSearchIndex(owner, undefined, { limit: 1 }).catch(() => undefined).finally(() => {
-      maintenanceRunning = false;
+    maintenanceDue = null;
+    maintenanceRunning = refreshFileSearchIndex('shared', undefined, { limit: 1 }).catch(error => {
+      console.warn('[FileSearch] maintenance pass failed:', error instanceof Error ? error.message : error);
+    }).finally(() => {
+      maintenanceRunning = null;
       armMaintenance();
     });
-  }, Math.max(10, at - Date.now()));
+  }, Math.max(10, maintenanceDue - Date.now()));
   maintenanceTimer.unref();
 }
 
 /** A small extraction pass runs independently of vector work; requests share one maintenance queue. */
 export function queueFileSearchRefresh(_actor: string, at = Date.now()) {
-  const owner = 'shared';
-  if (maintenanceStopped) return;
-  scheduledOwners.set(owner, Math.min(scheduledOwners.get(owner) ?? Infinity, at));
+  if (maintenanceStopped || (maintenanceDue !== null && maintenanceDue <= at)) return;
+  maintenanceDue = at;
+  if (maintenanceTimer) clearTimeout(maintenanceTimer);
+  maintenanceTimer = null;
   armMaintenance();
 }
 
-/** Retry deadlines are persisted so a restart does not forget transient failures. */
+/** A first pass finds unindexed files as well as persisted retries, even with vector search switched off. */
 export function startFileSearchMaintenance() {
   maintenanceStopped = false;
-  const rows = getUserSettingsDb().prepare(`SELECT owner_key, MIN(retry_after) AS due FROM search_db.search_documents
-    WHERE source = 'file' AND retryable = 1 AND retry_after IS NOT NULL GROUP BY owner_key`).all() as Array<{ owner_key: string; due: number }>;
-  for (const row of rows) queueFileSearchRefresh(row.owner_key, row.due);
+  unsubscribeFiles ??= FileStoreService.onChange(change => {
+    if (change.action !== 'delete' && change.entries.some(entry => entry.kind === 'file')) queueFileSearchRefresh(change.owner);
+  });
+  queueFileSearchRefresh('shared');
 }
 
 export function stopFileSearchMaintenance() {
   maintenanceStopped = true;
+  unsubscribeFiles?.();
+  unsubscribeFiles = null;
   if (maintenanceTimer) clearTimeout(maintenanceTimer);
   maintenanceTimer = null;
-  scheduledOwners.clear();
+  maintenanceDue = null;
+  return maintenanceRunning ?? Promise.resolve();
 }
 
 async function refreshOne(row: PendingFile, force: boolean) {
@@ -235,13 +237,13 @@ async function withSemanticRows(owner: string, query: string, limit: number, sco
   status.mode = 'hybrid';
   status.semantic = status.indexedFiles === 0 && status.searchableFiles > 0 ? 'not_indexed' : status.indexedFiles < status.searchableFiles || status.pendingDocuments > 0 ? 'partial' : 'ready';
   const db = getUserSettingsDb();
-  const scope = scopeSql
-    ? new Set((db.prepare(`SELECT e.id FROM stored_file_entries e WHERE e.chat_owner_key IS NULL ${scopeSql}`).all({ owner, within: params.within }) as Array<{ id: string }>).map((row) => row.id))
-    : null;
-  const revisions = new Map((db.prepare(`SELECT e.id, (t.revision || ':' || t.content_hash) AS revision FROM stored_file_entries e JOIN search_db.search_documents t ON t.source = 'file' AND t.source_id = e.id WHERE e.deleted_at IS NULL AND e.chat_owner_key IS NULL AND t.revision = ${FILE_REVISION}`).all() as Array<{ id: string; revision: string }>).map(row => [row.id, row.revision]));
+  const current = db.prepare(`SELECT e.id, (t.revision || ':' || t.content_hash) AS revision FROM stored_file_entries e
+    JOIN search_db.search_documents t ON t.source = 'file' AND t.source_id = e.id AND t.revision = ${FILE_REVISION}
+    WHERE e.deleted_at IS NULL AND e.chat_owner_key IS NULL ${scopeSql}`).all(scopeSql ? { within: params.within } : {}) as Array<{ id: string; revision: string }>;
+  const revisions = new Map(current.map(row => [row.id, row.revision]));
   const best = new Map<string, { score: number; spanStart: number | null }>();
-  for (const hit of vectorStore.search(SEMANTIC_SPACES.file, EMBEDDING_MODEL_KEY, vector, {})) {
-    if ((scope && !scope.has(hit.sourceKey)) || hit.contentHash !== revisions.get(hit.sourceKey)) continue;
+  for (const hit of vectorStore.search(SEMANTIC_SPACES.file, EMBEDDING_MODEL_KEY, vector, scopeSql ? { sourceKeys: [...revisions.keys()] } : {})) {
+    if (hit.contentHash !== revisions.get(hit.sourceKey)) continue;
     const known = best.get(hit.sourceKey);
     if (!known || known.score < hit.score) best.set(hit.sourceKey, { score: hit.score, spanStart: hit.spanStart });
   }
@@ -319,8 +321,16 @@ export async function searchStoredFiles(owner: string, query: unknown, limit = 5
     failedDocuments: totals.failedDocuments ?? 0, unsupportedFiles: totals.unsupportedFiles ?? 0, pendingDocuments: totals.pendingDocuments ?? 0 };
   const ranked = (options.semantic ? await withSemanticRows(owner, String(query), limit, scope, params, rows, search, options.signal) : null) ?? rows;
 
-  const folders = new Map((db.prepare(`SELECT id, parent_id, name FROM stored_file_entries WHERE kind = 'folder' AND deleted_at IS NULL`)
-    .all() as Array<{ id: string; parent_id: string | null; name: string }>).map((folder) => [folder.id, folder]));
+  const page = ranked.slice(0, limit);
+  const parents = [...new Set(page.flatMap(row => row.parent_id === null ? [] : [row.parent_id]))];
+  // Only the returned page needs breadcrumbs. Deduplicate shared ancestors and stop at the store's depth limit.
+  const ancestors = parents.length ? db.prepare(`WITH RECURSIVE ancestors(id, depth) AS (
+    SELECT value, 1 FROM json_each(?) UNION
+    SELECT f.parent_id, a.depth + 1 FROM ancestors a JOIN stored_file_entries f ON f.id = a.id
+    WHERE f.kind = 'folder' AND f.deleted_at IS NULL AND f.parent_id IS NOT NULL AND a.depth < 64
+  ) SELECT id, parent_id, name FROM stored_file_entries WHERE id IN (SELECT id FROM ancestors) AND kind = 'folder' AND deleted_at IS NULL`)
+    .all(JSON.stringify(parents)) as Array<{ id: string; parent_id: string | null; name: string }> : [];
+  const folders = new Map(ancestors.map(folder => [folder.id, folder]));
   const paths = new Map<string | null, string>([[null, '/']]);
   const folderPath = (id: string | null): string => {
     const known = paths.get(id);
@@ -337,7 +347,7 @@ export async function searchStoredFiles(owner: string, query: unknown, limit = 5
     return value;
   };
 
-  const hits = ranked.slice(0, limit).map((row) => {
+  const hits = page.map((row) => {
     let snippet: string | null = null;
     if (row.excerpt) {
       const start = Math.max(row.hit_at - SNIPPET_BEFORE, 1);

@@ -1,9 +1,8 @@
-import { WINDOWS_RESERVED_NAME } from '../utils/pathResolver';
 import fs from 'fs';
 import path from 'path';
 import { db } from '../database/init';
 import { runtimePaths } from '../config/runtimePaths';
-import { normalizeUnicode } from '../utils/pathResolver';
+import { isPathInside, normalizeUnicode, WINDOWS_RESERVED_NAME } from '../utils/pathResolver';
 import {
   getBackupSourceUpdateValidationPlan,
   normalizeOptionalBackupSourceFlag,
@@ -20,7 +19,7 @@ function createServiceError(message: string, statusCode: number): ServiceError {
 }
 
 export function normalizeBackupComparePath(inputPath: string): string {
-  return path.resolve(normalizeUnicode(inputPath)).replace(/[\\/]+$/, '').toLowerCase();
+  return path.resolve(normalizeUnicode(inputPath)).toLowerCase();
 }
 
 /** Validate and normalize a source path for backup ingestion. */
@@ -93,19 +92,13 @@ function assertSafeSourcePath(sourcePath: string): void {
   const normalizedSource = normalizeBackupComparePath(sourcePath);
   const normalizedUploads = normalizeBackupComparePath(runtimePaths.uploadsDir);
 
-  const sourceToUploads = path.relative(normalizedSource, normalizedUploads);
-  const uploadsToSource = path.relative(normalizedUploads, normalizedSource);
-
-  const sourceContainsUploads = sourceToUploads === '' || (!sourceToUploads.startsWith('..') && !path.isAbsolute(sourceToUploads));
-  const uploadsContainsSource = uploadsToSource === '' || (!uploadsToSource.startsWith('..') && !path.isAbsolute(uploadsToSource));
-
-  if (sourceContainsUploads || uploadsContainsSource) {
+  if (isPathInside(normalizedSource, normalizedUploads) || isPathInside(normalizedUploads, normalizedSource)) {
     throw createServiceError('source_path는 uploads 경로와 겹칠 수 없습니다', 400);
   }
 }
 
 /** Ensure a source folder exists and is readable. */
-function assertExistingDirectory(sourcePath: string): void {
+export function assertBackupSourceDirectory(sourcePath: string): void {
   if (!fs.existsSync(sourcePath)) {
     throw createServiceError(`폴더가 존재하지 않습니다: ${sourcePath}`, 400);
   }
@@ -116,6 +109,7 @@ function assertExistingDirectory(sourcePath: string): void {
   }
 
   fs.accessSync(sourcePath, fs.constants.R_OK);
+  assertSafeSourcePath(sourcePath);
 }
 
 /** Resolve the target directory under uploads for a backup source. */
@@ -197,8 +191,7 @@ export class BackupSourceService {
     const sourcePath = normalizeSourcePath(input.source_path);
     const targetFolderName = normalizeTargetFolderName(input.target_folder_name);
 
-    assertExistingDirectory(sourcePath);
-    assertSafeSourcePath(sourcePath);
+    assertBackupSourceDirectory(sourcePath);
     ensureBackupTargetDirectory(targetFolderName);
 
     const existing = db.prepare('SELECT id FROM backup_sources WHERE source_path = ?').get(sourcePath) as { id: number } | undefined;
@@ -243,8 +236,7 @@ export class BackupSourceService {
     const validationPlan = getBackupSourceUpdateValidationPlan(updates);
 
     if (validationPlan.validateSourcePath) {
-      assertExistingDirectory(nextSourcePath);
-      assertSafeSourcePath(nextSourcePath);
+      assertBackupSourceDirectory(nextSourcePath);
     }
 
     if (validationPlan.ensureTargetDirectory) {
@@ -337,7 +329,7 @@ export class BackupSourceService {
   static updateWatcherLastEvent(id: number): void {
     db.prepare(`
       UPDATE backup_sources
-      SET watcher_last_event = ?, watcher_error = NULL, updated_date = ?
+      SET watcher_last_event = ?, watcher_status = 'watching', watcher_error = NULL, updated_date = ?
       WHERE id = ?
     `).run(new Date().toISOString(), new Date().toISOString(), id);
   }
@@ -346,8 +338,7 @@ export class BackupSourceService {
   static async validateSourcePath(sourcePath: string): Promise<{ exists: boolean; isDirectory: boolean; error?: string }> {
     try {
       const normalized = normalizeSourcePath(sourcePath);
-      assertExistingDirectory(normalized);
-      assertSafeSourcePath(normalized);
+      assertBackupSourceDirectory(normalized);
       return { exists: true, isDirectory: true };
     } catch (error) {
       return {

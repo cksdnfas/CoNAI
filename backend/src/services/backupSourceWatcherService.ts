@@ -1,14 +1,10 @@
 import chokidar, { FSWatcher } from 'chokidar';
-import fs from 'fs';
 import path from 'path';
-import { isImageExtension, isSupportedExtension, isVideoExtension } from '../constants/supportedExtensions';
-import { runtimePaths } from '../config/runtimePaths';
-import { settingsService } from './settingsService';
-import { VideoOptimizationService } from './videoOptimizationService';
-import { WebPConversionService } from './webpConversionService';
-import { BackupSource, BackupSourceService, ensureBackupTargetDirectory, normalizeBackupComparePath } from './backupSourceService';
+import { isSupportedExtension } from '../constants/supportedExtensions';
+import { existingBackupFiles, importBackupFile } from './backupSourceImporter';
+import { assertBackupSourceDirectory, BackupSource, BackupSourceService, ensureBackupTargetDirectory, normalizeBackupComparePath } from './backupSourceService';
 import { clampWatcherPollingIntervalMs } from './fileWatcher/fileWatcherPathUtils';
-import { restartWatcherAfterDelay, sleep, waitForChokidarReady } from './watcherLifecycleUtils';
+import { restartWatcherAfterDelay, waitForChokidarReady } from './watcherLifecycleUtils';
 
 const isVerboseBackupWatcherLoggingEnabled = process.env.CONAI_VERBOSE_SCAN_DEBUG === 'true';
 
@@ -16,12 +12,13 @@ type WatcherState = 'initializing' | 'watching' | 'error' | 'stopped';
 
 interface BackupWatcherEntry {
   sourceId: number;
-  sourcePath: string;
-  displayName: string;
-  targetFolderName: string;
-  importMode: 'copy_original' | 'convert_webp';
-  webpQuality: number;
-  watcher: FSWatcher;
+  controller: AbortController;
+  ready?: Promise<void>;
+  closing?: Promise<void>;
+  stopRequests: number;
+  watcher?: FSWatcher;
+  tasks: Set<Promise<unknown>>;
+  imports: Set<string>;
   state: WatcherState;
 }
 
@@ -32,118 +29,9 @@ interface InitialImportSummary {
   failed: number;
 }
 
-/** Build a unique target path without overwriting an existing file. */
-function buildUniqueTargetPath(targetPath: string): string {
-  if (!fs.existsSync(targetPath)) {
-    return targetPath;
-  }
-
-  const parsed = path.parse(targetPath);
-  let index = 1;
-
-  while (true) {
-    const candidate = path.join(parsed.dir, `${parsed.name} (${index})${parsed.ext}`);
-    if (!fs.existsSync(candidate)) {
-      return candidate;
-    }
-    index += 1;
-  }
-}
-
-/** Wait until a newly created file is readable and stable enough to import. */
-async function waitForFileWrite(filePath: string): Promise<void> {
-  const maxAttempts = 20;
-
-  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-    try {
-      const statsA = await fs.promises.stat(filePath);
-      await sleep(300);
-      const statsB = await fs.promises.stat(filePath);
-
-      if (statsA.size === statsB.size && statsB.size > 0) {
-        await fs.promises.access(filePath, fs.constants.R_OK);
-        return;
-      }
-    } catch {
-      // Retry until the file is stable.
-    }
-  }
-
-  throw new Error(`파일 쓰기 완료를 확인하지 못했습니다: ${filePath}`);
-}
-
-function shouldConvertBackupFileToWebP(source: BackupSource, sourceFilePath: string): boolean {
-  return source.import_mode === 'convert_webp' && isImageExtension(path.extname(sourceFilePath));
-}
-
-function shouldOptimizeBackupVideoFile(sourceFilePath: string): boolean {
-  const extension = path.extname(sourceFilePath).toLowerCase();
-  if (!isVideoExtension(extension) || extension === '.gif') {
-    return false;
-  }
-
-  const settings = settingsService.loadSettings().videoOptimization;
-  return settings.enabled && settings.applyToBackupImports;
-}
-
-/** Compute the preferred destination path under uploads for one imported file. */
-function buildPreferredTargetPath(source: BackupSource, sourceFilePath: string): string {
-  const targetRoot = ensureBackupTargetDirectory(source.target_folder_name);
-  const relativePath = path.relative(source.source_path, sourceFilePath);
-  const relativeDirectory = path.dirname(relativePath);
-  const targetDirectory = relativeDirectory === '.' ? targetRoot : path.join(targetRoot, relativeDirectory);
-
-  fs.mkdirSync(targetDirectory, { recursive: true });
-
-  if (shouldOptimizeBackupVideoFile(sourceFilePath)) {
-    const baseName = path.parse(sourceFilePath).name;
-    return path.join(targetDirectory, `${baseName}.mp4`);
-  }
-
-  if (shouldConvertBackupFileToWebP(source, sourceFilePath)) {
-    const baseName = path.parse(sourceFilePath).name;
-    return path.join(targetDirectory, `${baseName}.webp`);
-  }
-
-  return path.join(targetDirectory, path.basename(sourceFilePath));
-}
-
-/** Compute the destination path under uploads for one imported file. */
-function buildTargetPath(source: BackupSource, sourceFilePath: string): string {
-  return buildUniqueTargetPath(buildPreferredTargetPath(source, sourceFilePath));
-}
-
-async function collectExistingSupportedFiles(rootPath: string, recursive: boolean): Promise<string[]> {
-  const collected: string[] = [];
-
-  const walk = async (directoryPath: string): Promise<void> => {
-    const entries = await fs.promises.readdir(directoryPath, { withFileTypes: true });
-
-    for (const entry of entries) {
-      const entryPath = path.join(directoryPath, entry.name);
-
-      if (entry.isDirectory()) {
-        if (recursive) {
-          await walk(entryPath);
-        }
-        continue;
-      }
-
-      if (entry.isFile() && isSupportedExtension(path.extname(entry.name))) {
-        collected.push(entryPath);
-      }
-    }
-  };
-
-  await walk(rootPath);
-  return collected;
-}
-
 export class BackupSourceWatcherService {
   private static watcherRegistry = new Map<number, BackupWatcherEntry>();
   private static pendingRestarts = new Map<number, AbortController>();
-  private static pendingImports = new Set<string>();
-  private static activeTasks = new Set<Promise<unknown>>();
   // 초기 임포트는 오래 걸릴 수 있으므로 이 간격마다 소스 활성 여부를 다시 읽는다.
   private static readonly INITIAL_IMPORT_ACTIVE_RECHECK_INTERVAL = 100;
 
@@ -168,9 +56,7 @@ export class BackupSourceWatcherService {
           break;
         }
 
-        const message = error instanceof Error ? error.message : 'Unknown error';
-        console.warn(`⚠️  백업 소스 워처 시작 실패: ${source.display_name || source.source_path}`);
-        BackupSourceService.updateWatcherState(source.id, 'error', message);
+        if (!(error instanceof Error && error.name === 'AbortError')) console.warn(`⚠️  백업 소스 워처 시작 실패: ${source.display_name || source.source_path}`, error);
       }
     }
 
@@ -180,32 +66,42 @@ export class BackupSourceWatcherService {
   /** Start a watcher for one backup source. */
   static async startWatcher(sourceId: number, signal?: AbortSignal): Promise<void> {
     signal?.throwIfAborted();
-
     const existing = this.watcherRegistry.get(sourceId);
-    if (existing && existing.state === 'watching') {
-      return;
-    }
-
     if (existing) {
-      await this.stopWatcher(sourceId);
+      const closing = existing.closing ?? (existing.state === 'error' ? this.stopWatcher(sourceId) : undefined);
+      if (!closing) return existing.ready;
+      const version = existing.stopRequests;
+      await closing;
+      if (version !== existing.stopRequests) throw new DOMException('Watcher start cancelled', 'AbortError');
+      return this.startWatcher(sourceId, signal);
     }
+    // Register before the first await so a concurrent start shares readiness and stop can cancel a lookup.
+    const entry: BackupWatcherEntry = { sourceId, state: 'initializing', stopRequests: 0, controller: new AbortController(), tasks: new Set(), imports: new Set() };
+    this.watcherRegistry.set(sourceId, entry);
+    const startup = signal ? AbortSignal.any([signal, entry.controller.signal]) : entry.controller.signal;
+    entry.ready = this.openWatcher(entry, startup).catch(async error => {
+      if (!entry.controller.signal.aborted) {
+        if (!startup.aborted) BackupSourceService.updateWatcherState(sourceId, 'error', error instanceof Error ? error.message : 'Unknown error');
+        entry.controller.abort();
+        await entry.watcher?.close();
+        await Promise.allSettled(entry.tasks);
+        if (this.watcherRegistry.get(sourceId) === entry) this.watcherRegistry.delete(sourceId);
+      }
+      throw error;
+    });
+    return entry.ready;
+  }
 
-    signal?.throwIfAborted();
-
+  private static async openWatcher(entry: BackupWatcherEntry, signal: AbortSignal): Promise<void> {
+    const { sourceId } = entry;
     const source = await BackupSourceService.getSource(sourceId);
-    signal?.throwIfAborted();
+    signal.throwIfAborted();
     if (!source || source.is_active !== 1) {
       throw new Error(`백업 소스를 찾을 수 없거나 비활성화됨: ${sourceId}`);
     }
 
-    ensureBackupTargetDirectory(source.target_folder_name);
-    fs.accessSync(source.source_path, fs.constants.R_OK);
-
-    const normalizedUploads = normalizeBackupComparePath(runtimePaths.uploadsDir);
-    const normalizedSource = normalizeBackupComparePath(source.source_path);
-    if (normalizedUploads === normalizedSource) {
-      throw new Error('source_path는 uploads와 동일할 수 없습니다');
-    }
+    assertBackupSourceDirectory(source.source_path);
+    const root = ensureBackupTargetDirectory(source.target_folder_name);
 
     const isNetworkPath = source.source_path.startsWith('\\\\') || source.source_path.startsWith('//');
     const usePolling = source.watcher_polling_interval != null || isNetworkPath;
@@ -225,55 +121,30 @@ export class BackupSourceWatcherService {
       interval: pollingInterval,
     });
 
-    const entry: BackupWatcherEntry = {
-      sourceId,
-      sourcePath: source.source_path,
-      displayName: source.display_name || path.basename(source.source_path),
-      targetFolderName: source.target_folder_name,
-      importMode: source.import_mode,
-      webpQuality: source.webp_quality,
-      watcher,
-      state: 'initializing',
-    };
-
-    this.watcherRegistry.set(sourceId, entry);
+    entry.watcher = watcher;
     BackupSourceService.updateWatcherState(sourceId, 'initializing', null);
 
     watcher.on('add', (filePath) => {
-      this.trackTask(this.handleAddEvent(sourceId, filePath));
+      if (!entry.controller.signal.aborted && isSupportedExtension(path.extname(filePath))) {
+        this.trackTask(entry, this.importOne(entry, source, root, filePath, false));
+      }
     });
 
     watcher.on('error', (error) => {
+      if (entry.controller.signal.aborted) return;
       const message = error instanceof Error ? error.message : 'Unknown error';
       entry.state = 'error';
       BackupSourceService.updateWatcherState(sourceId, 'error', message);
     });
 
-    try {
-      await waitForChokidarReady({
-        watcher,
-        signal,
-        timeoutMessage: '백업 소스 워처 초기화 타임아웃',
-        onReady: () => {
-          entry.state = 'watching';
-          BackupSourceService.updateWatcherState(sourceId, 'watching', null);
-          this.trackTask(this.runInitialImport(sourceId));
-        },
-      });
-    } catch (error) {
-      await watcher.close();
-      if (this.watcherRegistry.get(sourceId) === entry) {
-        this.watcherRegistry.delete(sourceId);
-      }
-      if (!signal?.aborted) {
-        BackupSourceService.updateWatcherState(
-          sourceId,
-          'error',
-          error instanceof Error ? error.message : 'Unknown error',
-        );
-      }
-      throw error;
-    }
+    await waitForChokidarReady({
+      watcher, signal, timeoutMessage: '백업 소스 워처 초기화 타임아웃',
+      onReady: () => {
+        entry.state = 'watching';
+        BackupSourceService.updateWatcherState(sourceId, 'watching', null);
+        this.trackTask(entry, this.runInitialImport(entry, source, root));
+      },
+    });
   }
 
   /** Stop a watcher for one backup source. */
@@ -286,22 +157,34 @@ export class BackupSourceWatcherService {
       return;
     }
 
-    await entry.watcher.close();
-    this.watcherRegistry.delete(sourceId);
-    BackupSourceService.updateWatcherState(sourceId, 'stopped', null);
+    entry.stopRequests++;
+    if (entry.closing) return entry.closing;
+    entry.state = 'stopped';
+    entry.controller.abort();
+    entry.closing = (async () => {
+      try { await entry.watcher?.close(); }
+      finally {
+        await Promise.allSettled([entry.ready, ...entry.tasks]);
+        this.watcherRegistry.delete(sourceId);
+        BackupSourceService.updateWatcherState(sourceId, 'stopped', null);
+      }
+    })();
+    return entry.closing;
   }
 
   /** Close every watcher, then drain imports that already own filesystem work. */
   static async stopAll(): Promise<void> {
     const sourceIds = [...new Set([...this.watcherRegistry.keys(), ...this.pendingRestarts.keys()])];
     await Promise.allSettled(sourceIds.map((sourceId) => this.stopWatcher(sourceId)));
-    await Promise.allSettled([...this.activeTasks]);
   }
 
-  private static trackTask(task: Promise<unknown>): void {
-    this.activeTasks.add(task);
-    void task.finally(() => {
-      this.activeTasks.delete(task);
+  private static trackTask(entry: BackupWatcherEntry, task: Promise<unknown>): void {
+    entry.tasks.add(task);
+    void task.then(() => entry.tasks.delete(task), error => {
+      entry.tasks.delete(task);
+      if (entry.controller.signal.aborted) return;
+      BackupSourceService.updateWatcherState(entry.sourceId, 'error', error instanceof Error ? error.message : 'Unknown error');
+      console.error(`❌ [BackupSource] 초기 스캔 실패: ${entry.sourceId}`, error);
     });
   }
 
@@ -312,164 +195,45 @@ export class BackupSourceWatcherService {
       (signal) => this.startWatcher(sourceId, signal));
   }
 
-  private static buildPendingImportKey(sourceId: number, filePath: string): string {
-    return `${sourceId}:${normalizeBackupComparePath(filePath)}`;
-  }
-
-  /**
-   * 초기 임포트 중단 여부 확인
-   * 소스 조회는 루프 밖에서 1회만 하되(파일당 조회 제거), 사용자가 도중에 소스를
-   * 끄는 경우를 위해 인메모리 워처 상태는 매 파일, is_active는 N개마다 재확인한다.
-   */
-  private static async isInitialImportStillActive(sourceId: number, processedCount: number): Promise<boolean> {
-    const entry = this.watcherRegistry.get(sourceId);
-    if (!entry || entry.state !== 'watching') {
-      return false;
-    }
-
-    if (processedCount > 0 && processedCount % this.INITIAL_IMPORT_ACTIVE_RECHECK_INTERVAL === 0) {
-      const latest = await BackupSourceService.getSource(sourceId);
-      if (!latest || latest.is_active !== 1) {
-        return false;
-      }
-    }
-
-    return true;
-  }
-
   /** Scan the current source tree once so existing files are imported too. */
-  private static async runInitialImport(sourceId: number): Promise<void> {
-    const source = await BackupSourceService.getSource(sourceId);
-    if (!source || source.is_active !== 1) {
-      return;
+  private static async runInitialImport(entry: BackupWatcherEntry, source: BackupSource, root: string): Promise<void> {
+    const summary: InitialImportSummary = { scanned: 0, imported: 0, skipped: 0, failed: 0 };
+    for await (const file of existingBackupFiles(source.source_path, source.recursive === 1, entry.controller.signal)) {
+      if (entry.state !== 'watching') break;
+      if (summary.scanned && summary.scanned % this.INITIAL_IMPORT_ACTIVE_RECHECK_INTERVAL === 0
+        && (await BackupSourceService.getSource(source.id))?.is_active !== 1) break;
+      summary.scanned++;
+      summary[await this.importOne(entry, source, root, file, true)]++;
     }
-
-    try {
-      const files = await collectExistingSupportedFiles(source.source_path, source.recursive === 1);
-      if (files.length === 0) {
-        return;
-      }
-
-      if (isVerboseBackupWatcherLoggingEnabled) {
-        console.log(`📥 [BackupSource] Initial scan started: ${source.display_name || source.source_path} (${files.length} files)`);
-      }
-
-      const summary: InitialImportSummary = {
-        scanned: files.length,
-        imported: 0,
-        skipped: 0,
-        failed: 0,
-      };
-
-      for (let index = 0; index < files.length; index += 1) {
-        if (!(await this.isInitialImportStillActive(sourceId, index))) {
-          summary.scanned = index;
-          console.warn(`⏹️ [BackupSource] Initial scan cancelled: ${source.display_name || source.source_path} (${index}/${files.length})`);
-          break;
-        }
-
-        const result = await this.handleAddEvent(sourceId, files[index], { skipIfTargetExists: true, skipStabilityCheck: true, source });
-        if (result === 'imported') {
-          summary.imported += 1;
-        } else if (result === 'skipped') {
-          summary.skipped += 1;
-        } else if (result === 'failed') {
-          summary.failed += 1;
-        }
-      }
-
-      if (summary.imported > 0 || summary.failed > 0 || isVerboseBackupWatcherLoggingEnabled) {
-        console.log(`📥 [BackupSource] Initial sync: ${source.display_name || source.source_path} (scanned=${summary.scanned}, imported=${summary.imported}, skipped=${summary.skipped}, failed=${summary.failed})`);
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown error';
-      BackupSourceService.updateWatcherState(sourceId, 'error', message);
-      console.error(`❌ [BackupSource] 초기 스캔 실패: ${source.source_path}`, error);
+    if (summary.imported || summary.failed || isVerboseBackupWatcherLoggingEnabled) {
+      console.log(`📥 [BackupSource] Initial sync: ${source.display_name || source.source_path} (scanned=${summary.scanned}, imported=${summary.imported}, skipped=${summary.skipped}, failed=${summary.failed})`);
     }
   }
 
   /** Import a newly added supported media file into uploads. */
-  private static async handleAddEvent(
-    sourceId: number,
-    filePath: string,
-    options?: { skipIfTargetExists?: boolean; skipStabilityCheck?: boolean; source?: BackupSource },
-  ): Promise<'imported' | 'skipped' | 'failed'> {
-    const pendingKey = this.buildPendingImportKey(sourceId, filePath);
-    if (this.pendingImports.has(pendingKey)) {
-      return 'skipped';
-    }
-
-    this.pendingImports.add(pendingKey);
-
+  private static async importOne(entry: BackupWatcherEntry, source: BackupSource, root: string, filePath: string, initial: boolean): Promise<'imported' | 'skipped' | 'failed'> {
+    const { signal } = entry.controller;
+    const key = process.platform === 'win32' ? normalizeBackupComparePath(filePath) : path.resolve(filePath);
+    if (signal.aborted || entry.imports.has(key)) return 'skipped';
+    entry.imports.add(key);
     try {
-      if (!isSupportedExtension(path.extname(filePath))) {
-        return 'skipped';
-      }
-
-      // 초기 일괄 임포트는 소스를 한 번만 조회해 재사용 (파일당 조회 제거)
-      const source = options?.source ?? await BackupSourceService.getSource(sourceId);
-      if (!source || source.is_active !== 1) {
-        return 'skipped';
-      }
-
-      if (!options?.skipStabilityCheck) {
-        await waitForFileWrite(filePath);
-      }
-
-      const relativePath = path.relative(source.source_path, filePath);
-      if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
-        return 'skipped';
-      }
-
-      const preferredTargetPath = buildPreferredTargetPath(source, filePath);
-      if (options?.skipIfTargetExists && fs.existsSync(preferredTargetPath)) {
-        if (isVerboseBackupWatcherLoggingEnabled) {
-          console.log(`⏭️ [BackupSource] Skipped existing source file already mirrored in target: ${filePath}`);
-        }
-        return 'skipped';
-      }
-
-      const targetPath = options?.skipIfTargetExists
-        ? preferredTargetPath
-        : buildTargetPath(source, filePath);
-
-      if (shouldOptimizeBackupVideoFile(filePath)) {
-        const videoOptimizationSettings = settingsService.loadSettings().videoOptimization;
-        await VideoOptimizationService.persistWithFallback(
-          filePath,
-          targetPath.replace(/\.mp4$/i, ''),
-          path.extname(filePath) || '.mp4',
-          {
-            crf: videoOptimizationSettings.crf,
-            audioBitrateKbps: videoOptimizationSettings.audioBitrateKbps,
-            logLabel: 'backup import',
-          },
-        );
-      } else if (shouldConvertBackupFileToWebP(source, filePath)) {
-        const converted = await WebPConversionService.convertFileToWebPBuffer(filePath, {
-          quality: source.webp_quality,
-          sourcePathForMetadata: filePath,
-          originalFileName: path.basename(filePath),
-        });
-        await fs.promises.writeFile(targetPath, converted.buffer);
-      } else {
-        await fs.promises.copyFile(filePath, targetPath);
-      }
-
-      BackupSourceService.updateWatcherLastEvent(sourceId);
-      BackupSourceService.updateWatcherState(sourceId, 'watching', null);
+      if (!initial && (await BackupSourceService.getSource(source.id))?.is_active !== 1) return 'skipped';
+      const targetPath = await importBackupFile(source, root, filePath, initial, signal);
+      if (!targetPath) return 'skipped';
+      if (!signal.aborted && entry.state !== 'error') BackupSourceService.updateWatcherLastEvent(source.id);
 
       if (isVerboseBackupWatcherLoggingEnabled) {
         console.log(`📥 [BackupSource] ${path.basename(filePath)} -> ${targetPath}`);
       }
       return 'imported';
     } catch (error) {
+      if (signal.aborted) return 'skipped';
       const message = error instanceof Error ? error.message : 'Unknown error';
-      BackupSourceService.updateWatcherState(sourceId, 'error', message);
+      BackupSourceService.updateWatcherState(source.id, 'error', message);
       console.error(`❌ [BackupSource] 파일 가져오기 실패: ${filePath}`, error);
       return 'failed';
     } finally {
-      this.pendingImports.delete(pendingKey);
+      entry.imports.delete(key);
     }
   }
 }

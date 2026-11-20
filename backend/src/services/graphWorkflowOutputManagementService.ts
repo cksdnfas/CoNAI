@@ -1,4 +1,5 @@
 import { isPathInside } from '../utils/pathResolver'
+import { copyToAvailablePath } from '../utils/availableFilePath'
 import fs from 'fs'
 import path from 'path'
 import { runtimePaths } from '../config/runtimePaths'
@@ -131,26 +132,6 @@ function matchesTechnicalArtifactFilter({
 
 function resolveWorkflowScope(folderId: number | null) {
   return GraphWorkflowModel.findNameEntries(true, folderId !== null ? GraphWorkflowFolderModel.getSubtreeFolderIds(folderId) : undefined)
-}
-
-/** Resolve a collision-safe target path inside one watched folder. */
-async function resolveUniqueCopyTargetPath(targetFolderPath: string, fileName: string) {
-  const parsed = path.parse(fileName || 'artifact')
-  const safeBaseName = parsed.name || 'artifact'
-  const extension = parsed.ext || ''
-  let attempt = 0
-
-  while (true) {
-    const candidateName = attempt === 0 ? `${safeBaseName}${extension}` : `${safeBaseName} (${attempt})${extension}`
-    const candidatePath = path.join(targetFolderPath, candidateName)
-
-    try {
-      await fs.promises.access(candidatePath, fs.constants.F_OK)
-      attempt += 1
-    } catch {
-      return candidatePath
-    }
-  }
 }
 
 /** Delete finished output-less executions and keep non-empty or active ones. */
@@ -378,8 +359,7 @@ export async function copyGraphWorkflowArtifactsToWatchedFolder(folderId: number
       continue
     }
 
-    const targetPath = await resolveUniqueCopyTargetPath(targetFolderPath, path.basename(resolvedSourcePath))
-    await fs.promises.copyFile(resolvedSourcePath, targetPath)
+    const targetPath = await copyToAvailablePath(resolvedSourcePath, path.join(targetFolderPath, path.basename(resolvedSourcePath)))
 
     try {
       await BackgroundProcessorService.processSavedMediaFile(targetPath, {

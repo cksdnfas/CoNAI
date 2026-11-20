@@ -307,7 +307,7 @@ test('generated previews precede enrichment and video copies preserve the origin
   await t.test('a freed encoder slot goes to the waiting encoder, never to a newcomer', async () => {
     const previous = process.env.CONAI_VIDEO_ENCODER_CONCURRENCY;
     process.env.CONAI_VIDEO_ENCODER_CONCURRENCY = '1';
-    const slots = VideoOptimizationService as unknown as { acquireEncoderSlot(): Promise<() => void> };
+    const slots = VideoOptimizationService as unknown as { acquireEncoderSlot(signal?: AbortSignal): Promise<() => void> };
     let active = 0;
     let peak = 0;
     const encode = async () => {
@@ -320,6 +320,10 @@ test('generated previews precede enrichment and video copies preserve the origin
     };
     try {
       const first = await slots.acquireEncoderSlot();
+      const stop = new AbortController();
+      const abandoned = slots.acquireEncoderSlot(stop.signal);
+      stop.abort();
+      await assert.rejects(abandoned, { name: 'AbortError' });
       const waiting = encode();
       first();
       // Arrives in the same tick the slot frees, before the woken waiter resumes.

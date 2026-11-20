@@ -16,7 +16,6 @@ import {
 } from '../aiWorker/textEmbeddingService'
 import { loreEntryKeys, loreEntryTitle, normalizeLorebook, type ChatLoreEntry } from '../codex-chat/chatLorebook'
 import { FILE_REVISION, queueFileSearchRefresh, readCachedFileBytes, startFileSearchMaintenance, stopFileSearchMaintenance } from '../fileStoreSearch'
-import { FileStoreService } from '../fileStoreService'
 import { SEMANTIC_SPACES } from './rankFusion'
 import { indexPendingImages, pruneImageVectors } from './imageIndex'
 import { onSemanticChange, type SemanticSource } from './semanticSignal'
@@ -389,7 +388,6 @@ class SemanticIndexer {
   private queue: { source: SemanticSource; items: IndexItem[] } | null = null
   private lastPruneAt = 0
   private skillPrunePending = true
-  private unsubscribeFiles: (() => void) | null = null
 
   /** Start sweeping (once, after boot). */
   start() {
@@ -401,20 +399,18 @@ class SemanticIndexer {
       if (source === 'skill') this.skillPrunePending = true
       this.poke(source)
     })
-    this.unsubscribeFiles = FileStoreService.onChange((change) => {
-      if (change.action === 'write' && change.entries.some((entry) => entry.kind === 'file')) this.poke('file')
-    })
+    // File extraction signals 'file' after the new text is ready, not before the file has been read.
     this.schedule(FIRST_SWEEP_MS)
   }
 
   stop() {
     this.stopped = true
-    stopFileSearchMaintenance()
+    this.started = false
+    const extraction = stopFileSearchMaintenance()
     onSemanticChange(null)
-    this.unsubscribeFiles?.()
-    this.unsubscribeFiles = null
     if (this.timer) clearTimeout(this.timer)
     this.timer = null
+    return Promise.all([extraction, this.running])
   }
 
   /** Something changed (one source, or anything when not said): look at it soon. */

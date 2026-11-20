@@ -11,7 +11,7 @@ import {
   registerEditedAudioCandidate,
   type AudioCandidate,
 } from './audioService';
-import { audioRenderSlots, runAudioFfmpeg } from './audioFfmpeg';
+import { runAudioFfmpeg, withAudioRenderSlot } from './audioFfmpeg';
 
 /**
  * Non-destructive edits, ported from the SFX manager (`sfx/audio.py` `filters` / `render`, `sfx/models.py` EditInput):
@@ -90,7 +90,7 @@ export function buildAudioEditFilterChain(edit: AudioEditParams, duration: numbe
 /** Render an edit of `source` into a new 24-bit WAV at `destination`. */
 export async function renderAudioEdit(source: string, destination: string, edit: AudioEditParams, duration: number, signal?: AbortSignal): Promise<void> {
   const chain = buildAudioEditFilterChain(edit, duration);
-  await audioRenderSlots.run(() => runAudioFfmpeg(['-nostdin', '-v', 'error', '-y', '-i', source, '-vn', '-af', chain, '-c:a', 'pcm_s24le', destination], { signal }));
+  await withAudioRenderSlot(() => runAudioFfmpeg(['-nostdin', '-v', 'error', '-y', '-i', source, '-vn', '-af', chain, '-c:a', 'pcm_s24le', destination], { signal }), signal);
 }
 
 function scratchDir(name: string): string {

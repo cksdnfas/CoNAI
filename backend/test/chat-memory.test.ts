@@ -198,6 +198,17 @@ test('chat memory: pinned memories, summary segments, plot folding, recall', { t
     // A reply to the edited turn is about to be written: the cursor moves to just before that turn.
     CodexChatStore.editUserMessage(id, ids[4], '다시')
     assert.deepEqual(state(), [ids[3], 'S1', 1])
+
+    // Neither rewording an older segment nor folding it into the plot covers a different stretch of conversation.
+    const [segment] = ChatSummaryStore.list(id)
+    assert.ok(ChatSummaryStore.editSegment(id, segment.id, '손본 요약'))
+    assert.deepEqual(state(), [ids[3], '손본 요약', 1])
+    assert.ok(ChatSummaryStore.setPlot(id, { from: ids[0], until: ids[1], content: '합친 줄거리' }, CodexChatStore.findThreadById(id)!.context_revision))
+    const current = CodexChatStore.findThreadById(id)!
+    const request = sentText(buildChatMessages({ profile, thread: current, messages: CodexChatStore.listMessages(id), config: resolveContextConfig(current, profile), tools: [] }))
+    assert.match(request, /합친 줄거리/)
+    assert.match(request, /다시/)
+    assert.doesNotMatch(request, /고친 답/)
   })
 
   await t.test('regenerating a failed empty reply brings back the user message a fold ended at', () => {

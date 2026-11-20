@@ -77,7 +77,7 @@ export function WorkspaceBrowser({ projectId, dir, onNavigate, onProject, onCrea
   const chatPage = useChatPageDataPermissions().canReadFiles
   const [viewMode, changeViewMode] = useFileViewMode('workspace')
   const [offset, setOffset] = useState(0)
-  const [selected, setSelected] = useState<string[]>([])
+  const [marked, setSelected] = useState<string[]>([])
   // `inline`: a person's gesture edits the listed item's name in place (committing when the field is left); the dialog is for the rest.
   const [nameDialog, setNameDialog] = useState<{ target?: string; name: string; inline?: boolean } | null>(null)
   const [moveOpen, setMoveOpen] = useState(false)
@@ -97,7 +97,7 @@ export function WorkspaceBrowser({ projectId, dir, onNavigate, onProject, onCrea
     setShownDir(dir)
     setSelected([])
     setOffset(0)
-  }
+  } else if (searching && marked.length) setSelected([])
 
   const project = useQuery({ queryKey: ['workspaces', projectId, 'info'], queryFn: () => getWorkspace(projectId) })
   const [sortOrder, changeSortOrder, sortKeys] = useFileSort('workspace')
@@ -109,7 +109,7 @@ export function WorkspaceBrowser({ projectId, dir, onNavigate, onProject, onCrea
   // Each page checks 100 entries; "더 찾기" adds the next page's hits below the ones found so far.
   const results = useInfiniteQuery({
     queryKey: ['workspaces', projectId, 'search', searchQuery],
-    queryFn: ({ pageParam, signal }) => searchWorkspace(projectId, searchQuery, pageParam, signal),
+    queryFn: async ({ pageParam, signal }) => ({ ...await searchWorkspace(projectId, searchQuery, pageParam, signal), offset: pageParam }),
     initialPageParam: 0,
     getNextPageParam: (page) => page.nextOffset ?? undefined,
     enabled: searching,
@@ -117,7 +117,13 @@ export function WorkspaceBrowser({ projectId, dir, onNavigate, onProject, onCrea
   const hits = results.data?.pages.flatMap((page) => page.hits) ?? []
   const { folders } = useWorkspaceFolders(projectId)
   const shown = useMemo(() => entries.data?.entries ?? [], [entries.data])
-  const selection = shown.filter((entry) => selected.includes(entry.target))
+  const visible = searching ? hits : shown
+  // Keep the connected page's payload to one server page, including when "find more" appends another page of hits.
+  const lastSearchPage = results.data?.pages.at(-1)
+  const contextPage = searching ? lastSearchPage?.hits ?? [] : shown
+  const byTarget = new Map(shown.map(entry => [entry.target, entry]))
+  const selection = marked.flatMap(target => { const entry = byTarget.get(target); return entry ? [entry] : [] })
+  const selected = selection.map(entry => entry.target)
   const projectName = project.data?.name ?? t({ ko: '작업 공간', en: 'Workspace' })
   const refresh = () => queryClient.invalidateQueries({ queryKey: ['workspaces', projectId] })
 
@@ -246,7 +252,7 @@ export function WorkspaceBrowser({ projectId, dir, onNavigate, onProject, onCrea
       { id: 'sort', label: t({ ko: '목록 정렬 (기준:방향, 폴더가 먼저)', en: 'List order (key:direction, folders first)' }), type: 'select', value: `${order.sort}:${order.direction}`, options: sortKeys.flatMap((key) => [`${key}:asc`, `${key}:desc`]), viewOnly: true },
       ...(nameDialog ? [{ id: 'name', label: t({ ko: '폴더 이름 입력', en: 'Folder name draft' }), type: 'text' as const, value: nameDialog.name }] : []),
     ],
-    data: { project: { id: projectId, name: projectName }, folder: dir, offset, entries: shown.map((entry) => ({ target: entry.target, kind: entry.kind, bytes: entry.size })), selected },
+    data: { project: { id: projectId, name: projectName }, folder: dir, offset: searching ? lastSearchPage?.offset ?? 0 : offset, entries: contextPage.map((entry) => ({ target: entry.target, kind: entry.kind, bytes: entry.size })), selected },
     actions: [
       pageAction('workspace.open', t({ ko: '항목 열기', en: 'Open item' }), t({ ko: '목록의 폴더나 문서, 빈 값은 작업 공간 최상위', en: 'a listed folder or document; empty opens the workspace root' }), pageObject({ target: pageText(1000) }, ['target'])),
       pageAction('workspace.search', t({ ko: '검색', en: 'Search' }), t({ ko: 'search를 채운 뒤', en: 'after filling search' })),
@@ -274,7 +280,7 @@ export function WorkspaceBrowser({ projectId, dir, onNavigate, onProject, onCrea
       if (action === 'workspace.open') {
         const target = String(args.target ?? '')
         if (!target) { openFolder(''); return }
-        const entry = shown.find((item) => item.target === target)
+        const entry = visible.find((item) => item.target === target)
         if (entry?.kind === 'folder') { openFolder(entry.target); return }
         if (entry) { openDocument(entry); return }
       }
@@ -302,7 +308,6 @@ export function WorkspaceBrowser({ projectId, dir, onNavigate, onProject, onCrea
       face: <span className="flex flex-col items-center gap-1"><Icon className={folder ? 'size-9 text-warning' : 'size-9 text-muted-foreground'} />{extension ? <span className="text-2xs font-semibold tracking-wide text-muted-foreground">{extension}</span> : null}</span>,
     }
   }
-  const byTarget = new Map(shown.map((entry) => [entry.target, entry]))
   /** Right-click on empty list space: the ways to add something to the open folder. */
   const emptySpaceMenu: ActionMenuEntry[] = [
     canWrite && { key: 'new-folder', label: t({ ko: '새 폴더', en: 'New folder' }), icon: FolderPlus, disabled: busy, onSelect: () => setNameDialog({ name: '' }) },

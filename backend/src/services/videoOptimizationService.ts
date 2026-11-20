@@ -1,11 +1,15 @@
 import fs from 'fs';
 import path from 'path';
-import { spawn } from 'child_process';
+import { randomUUID } from 'crypto';
 import type { VideoOptimizationSettings } from '@conai/shared';
+import { copyToAvailablePath, writeToAvailablePath } from '../utils/availableFilePath';
+import { moveFileWithoutReplacing } from '../utils/recycleBin';
+import { MediaProcessError, MediaRenderSlots, runMediaProcess } from '../utils/mediaProcess';
 import { VideoProcessor } from './videoProcessor';
 
 export type VideoOptimizationRunOptions = Pick<VideoOptimizationSettings, 'crf' | 'audioBitrateKbps'> & {
   logLabel?: string;
+  signal?: AbortSignal;
 };
 
 export type VideoOptimizationPersistResult = {
@@ -19,8 +23,7 @@ export type VideoOptimizationPersistResult = {
 /** Shared H.264 MP4 transcoding helper used by upload, generated-output, and backup-import flows. */
 export class VideoOptimizationService {
   static readonly OUTPUT_EXTENSION = '.mp4';
-  private static activeEncoderCount = 0;
-  private static readonly encoderWaiters: Array<() => void> = [];
+  private static readonly encoderSlots = new MediaRenderSlots(() => this.getEncoderConcurrency());
 
   private static getEncoderConcurrency() {
     const configured = Number.parseInt(process.env.CONAI_VIDEO_ENCODER_CONCURRENCY ?? '', 10);
@@ -28,28 +31,8 @@ export class VideoOptimizationService {
   }
 
   /** Wait for one process-wide FFmpeg encoder slot. */
-  private static async acquireEncoderSlot(): Promise<() => void> {
-    if (this.encoderWaiters.length === 0 && this.activeEncoderCount < this.getEncoderConcurrency()) {
-      this.activeEncoderCount += 1;
-    } else {
-      // A release hands its slot straight to the oldest waiter, so a newcomer never takes it before the waiter resumes.
-      await new Promise<void>((resolve) => this.encoderWaiters.push(resolve));
-    }
-
-    let released = false;
-
-    return () => {
-      if (released) {
-        return;
-      }
-      released = true;
-      const next = this.activeEncoderCount <= this.getEncoderConcurrency() ? this.encoderWaiters.shift() : undefined;
-      if (next) {
-        next();
-      } else {
-        this.activeEncoderCount -= 1;
-      }
-    };
+  private static acquireEncoderSlot(signal?: AbortSignal): Promise<() => void> {
+    return this.encoderSlots.acquire(signal);
   }
 
   static isOptimizableVideoExtension(extension: string) {
@@ -81,34 +64,17 @@ export class VideoOptimizationService {
     }
   }
 
-  private static buildEncodingOutputPath(outputPath: string) {
-    return outputPath.toLowerCase().endsWith(this.OUTPUT_EXTENSION)
-      ? outputPath.replace(/\.mp4$/i, '.encoding.mp4')
-      : `${outputPath}.encoding.mp4`;
-  }
-
-  private static buildUniqueOutputPath(targetPath: string) {
-    if (!fs.existsSync(targetPath)) {
-      return targetPath;
-    }
-
-    const parsed = path.parse(targetPath);
-    let index = 1;
-    while (true) {
-      const candidate = path.join(parsed.dir, `${parsed.name} (${index})${parsed.ext}`);
-      if (!fs.existsSync(candidate)) {
-        return candidate;
-      }
-      index += 1;
-    }
+  static outputPaths(targetBasePath: string, originalExtension: string) {
+    const ext = this.normalizeExtension(originalExtension) || this.OUTPUT_EXTENSION;
+    return { optimized: `${targetBasePath}${this.OUTPUT_EXTENSION}`, original: `${targetBasePath}${ext}` };
   }
 
   static async transcodeToMp4(inputPath: string, outputPath: string, options: VideoOptimizationRunOptions) {
     await fs.promises.mkdir(path.dirname(outputPath), { recursive: true });
-    const releaseEncoderSlot = await this.acquireEncoderSlot();
+    const releaseEncoderSlot = await this.acquireEncoderSlot(options.signal);
 
-    const tempOutputPath = this.buildEncodingOutputPath(outputPath);
-    await fs.promises.unlink(tempOutputPath).catch(() => undefined);
+    // A watcher must see only a finished video; a different encoder must never own this staging file.
+    const tempOutputPath = path.join(path.dirname(outputPath), `.conai-${randomUUID()}.part`);
 
     try {
       const args = [
@@ -123,6 +89,7 @@ export class VideoOptimizationService {
         '-movflags', '+faststart',
         '-c:a', 'aac',
         '-b:a', `${options.audioBitrateKbps}k`,
+        '-f', 'mp4',
         '-y',
         tempOutputPath,
       ];
@@ -132,33 +99,17 @@ export class VideoOptimizationService {
       const errors: string[] = [];
       let transcoded = false;
       for (const ffmpegCmd of VideoProcessor.listFFmpegPaths()) {
+        options.signal?.throwIfAborted();
         try {
-          await new Promise<void>((resolve, reject) => {
-            const ffmpeg = spawn(ffmpegCmd, args);
-            let stderr = '';
-
-            ffmpeg.stderr.on('data', (data) => {
-              stderr = (stderr + data.toString()).slice(-4000);
-            });
-
-            ffmpeg.on('error', (error) => {
-              reject(new Error(`Failed to spawn FFmpeg: ${error.message}`));
-            });
-
-            ffmpeg.on('close', (code) => {
-              if (code !== 0) {
-                // Decoders repeat one error per packet; the last lines carry the outcome.
-                const tail = stderr.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).slice(-3).join(' / ');
-                reject(new Error(`FFmpeg exited with code ${code}${tail ? `: ${tail}` : ''}`));
-                return;
-              }
-              resolve();
-            });
-          });
+          await runMediaProcess([ffmpegCmd], args, { timeoutMs: null, signal: options.signal, captureStdout: false, stderrTailBytes: 4000 });
           transcoded = true;
           break;
         } catch (error) {
-          errors.push(`${ffmpegCmd}: ${error instanceof Error ? error.message : String(error)}`);
+          options.signal?.throwIfAborted();
+          const reason = error instanceof MediaProcessError && error.reason === 'exit'
+            ? `FFmpeg exited with code ${error.exitCode}: ${error.stderr.trim().split(/\r?\n/).slice(-3).join(' / ')}`
+            : error instanceof Error ? error.message : String(error);
+          errors.push(`${ffmpegCmd}: ${reason}`);
           await fs.promises.unlink(tempOutputPath).catch(() => undefined);
         }
       }
@@ -166,7 +117,7 @@ export class VideoOptimizationService {
         throw new Error(errors.join(' | '));
       }
 
-      await fs.promises.unlink(outputPath).catch(() => undefined);
+      options.signal?.throwIfAborted();
       await fs.promises.rename(tempOutputPath, outputPath);
 
       const stats = await fs.promises.stat(outputPath);
@@ -193,55 +144,36 @@ export class VideoOptimizationService {
     originalExtension: string,
     options: VideoOptimizationRunOptions,
   ): Promise<VideoOptimizationPersistResult> {
-    const normalizedOriginalExtension = this.normalizeExtension(originalExtension) || path.extname(inputPath).toLowerCase() || this.OUTPUT_EXTENSION;
-    const requestedFallbackOutputPath = `${targetBasePath}${normalizedOriginalExtension}`;
-    const requestedOptimizedOutputPath = `${targetBasePath}${this.OUTPUT_EXTENSION}`;
-
-    const fallbackOutputPath = this.buildUniqueOutputPath(requestedFallbackOutputPath);
-    const optimizedOutputPath = normalizedOriginalExtension === this.OUTPUT_EXTENSION
-      ? fallbackOutputPath
-      : this.buildUniqueOutputPath(requestedOptimizedOutputPath);
-
+    const requested = this.outputPaths(targetBasePath, originalExtension || path.extname(inputPath));
+    const staging = path.join(path.dirname(targetBasePath), `.conai-${randomUUID()}.part`);
     const sourceStats = await fs.promises.stat(inputPath);
-
     try {
-      const optimizedResult = await this.transcodeToMp4(inputPath, optimizedOutputPath, options);
-      if (optimizedResult.fileSize < sourceStats.size) {
-        return {
-          ...optimizedResult,
-          optimized: true,
-        };
+      let encoded: Awaited<ReturnType<typeof this.transcodeToMp4>> | undefined;
+      try {
+        encoded = await this.transcodeToMp4(inputPath, staging, { ...options, logLabel: undefined });
+      } catch (error) {
+        options.signal?.throwIfAborted();
+        console.warn(`⚠️ Video optimization fallback${options.logLabel ? ` (${options.logLabel})` : ''}:`, error);
       }
-
-      await fs.promises.unlink(optimizedOutputPath).catch(() => undefined);
-      await fs.promises.copyFile(inputPath, fallbackOutputPath);
-      const fallbackStats = await fs.promises.stat(fallbackOutputPath);
-
-      if (options.logLabel) {
+      options.signal?.throwIfAborted();
+      if (encoded && encoded.fileSize < sourceStats.size) {
+        const outputPath = await writeToAvailablePath(requested.optimized, candidate => moveFileWithoutReplacing(staging, candidate));
+        if (options.logLabel) console.log(`🎞️ Video optimized (${options.logLabel}): ${path.basename(outputPath)} (${Math.round(encoded.fileSize / 1024)}KB)`);
+        return { ...encoded, outputPath, optimized: true };
+      }
+      if (encoded && options.logLabel) {
         console.log(`↩️ Video optimization skipped (${options.logLabel}): kept original because encoded file was not smaller.`);
       }
-
+      const outputPath = await copyToAvailablePath(inputPath, requested.original);
       return {
-        outputPath: fallbackOutputPath,
-        fileSize: fallbackStats.size,
-        mimeType: this.resolveMimeTypeForExtension(normalizedOriginalExtension),
+        outputPath,
+        fileSize: (await fs.promises.stat(outputPath)).size,
+        mimeType: this.resolveMimeTypeForExtension(path.extname(requested.original)),
         optimized: false,
-        fallbackReason: 'larger-than-original',
+        fallbackReason: encoded ? 'larger-than-original' : 'transcode-failed',
       };
-    } catch (error) {
-      await fs.promises.unlink(optimizedOutputPath).catch(() => undefined);
-      await fs.promises.copyFile(inputPath, fallbackOutputPath);
-      const fallbackStats = await fs.promises.stat(fallbackOutputPath);
-
-      console.warn(`⚠️ Video optimization fallback${options.logLabel ? ` (${options.logLabel})` : ''}:`, error);
-
-      return {
-        outputPath: fallbackOutputPath,
-        fileSize: fallbackStats.size,
-        mimeType: this.resolveMimeTypeForExtension(normalizedOriginalExtension),
-        optimized: false,
-        fallbackReason: 'transcode-failed',
-      };
+    } finally {
+      await fs.promises.rm(staging, { force: true });
     }
   }
 }

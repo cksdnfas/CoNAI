@@ -37,6 +37,7 @@ RUNTIME_RECYCLE_BIN_DIR=E:/CoNAI/RecycleBin
 | `user/uploads` | 매우 높음 | CoNAI가 관리하는 미디어 파일 |
 | `user/files` | 매우 높음 | 공용 파일함 원본과 텍스트 버전 |
 | `user/workspaces` | 매우 높음 | 프로젝트 지침·문서·작업본. 프로젝트와 변경 기록은 DB에도 저장 |
+| `user/queue-inputs`, `user/workflow-input-assets` | 높음 | 생성 큐와 워크플로의 입력 원본. DB에는 파일 참조가 남으므로 대기 작업을 이어가거나 다시 시도하려면 디렉터리를 함께 복구 |
 | `user/RecycleBin` | 높음 | 삭제 보호 흐름에서 보관되는 파일 |
 | `user/refmods` | 높음 | CoNAI에서 만든 MiniMax H3 RefMod의 원본 참조 복사본(레코드는 DB). ComfyUI의 `models/refmods` 번들 자체는 포함하지 않음 |
 | `user/models` | 중간 | 자동 태그/추출 모델 |
@@ -46,7 +47,7 @@ RUNTIME_RECYCLE_BIN_DIR=E:/CoNAI/RecycleBin
 ## 백업 기본 원칙
 
 1. 앱을 종료하거나 쓰기 작업이 없는 상태로 만듭니다.
-2. `database`, `uploads`, `files`, `workspaces`를 같은 시점으로 백업합니다.
+2. `database`, `uploads`, `files`, `workspaces`와 사용 중인 `queue-inputs`, `workflow-input-assets`를 같은 시점으로 백업합니다.
 3. 삭제 보호를 쓴다면 `RecycleBin`도 함께 백업합니다.
 4. `.env`를 별도로 보관합니다.
 5. 자동 태그/추출 모델 재다운로드가 번거롭다면 `models`도 백업합니다.
@@ -59,7 +60,7 @@ DB와 파일의 시점이 다르면 상세 화면은 존재하지만 원본이 �
 
 1. 앱 종료
 2. `user/database` 백업
-3. `user/uploads`, `user/files`, `user/workspaces` 백업
+3. `user/uploads`, `user/files`, `user/workspaces`와 사용 중인 `user/queue-inputs`, `user/workflow-input-assets` 백업
 4. `user/RecycleBin` 백업
 5. `.env` 백업
 6. 필요하면 `user/models`와 `user/logs` 백업
@@ -74,7 +75,7 @@ DB와 파일의 시점이 다르면 상세 화면은 존재하지만 원본이 �
 1. 앱을 종료합니다.
 2. 기존 데이터를 별도 위치에 원본 백업합니다.
 3. 새 `RUNTIME_BASE_PATH` 또는 개별 `RUNTIME_*_DIR`를 정합니다.
-4. `database`, `uploads`, `files`, `workspaces`, `RecycleBin`을 새 위치로 복사합니다.
+4. `database`, `uploads`, `files`, `workspaces`, `RecycleBin`과 사용 중인 `queue-inputs`, `workflow-input-assets`를 새 위치로 복사합니다.
 5. `.env` 경로를 새 위치에 맞춥니다.
 6. 앱을 실행합니다.
 7. 홈 이미지 수, 상세 원본 경로, 다운로드, 스캔 로그를 확인합니다.
@@ -91,6 +92,8 @@ DB와 파일의 시점이 다르면 상세 화면은 존재하지만 원본이 �
 | RecycleBin | 삭제 보호와 복구 여지를 확보합니다. |
 
 감시 폴더는 “이미 있는 위치를 읽기”, 백업 소스는 “원본 위치에서 관리 폴더로 가져오기”에 가깝습니다.
+
+백업 소스를 다시 시작하면 기존 파일을 순서대로 확인합니다. 영상 최적화 결과가 더 크거나 변환에 실패해 원본 형식으로 저장한 파일도 이미 가져온 것으로 봅니다. 감시 중 같은 이름의 파일이 새로 들어오면 기존 파일을 덮지 않고 `이름 (1).확장자`처럼 구분합니다. 중지·재시작하면 대기 중이거나 실행 중인 인코딩은 취소하고, 이미 시작한 파일 복사가 끝날 때까지 기다립니다.
 
 ## 파일 검증
 

@@ -63,9 +63,10 @@ export function createProductionGracefulShutdownDependencies(): GracefulShutdown
       const { ChatTaskRunner } = await import('../services/codex-chat/chatTasks');
       ChatTaskRunner.stop();
       const { ChatRoutineRunner } = await import('../services/codex-chat/chatRoutines');
-      ChatRoutineRunner.stop();
+      const routinesDrained = ChatRoutineRunner.stopAndDrain();
       const { ChatAgentRunner } = await import('../services/codex-chat/chatAgentCalls');
       ChatAgentRunner.stop();
+      await routinesDrained;
       const { ChatGenerationReactionService } = await import('../services/codex-chat/chatGenerationReactions');
       await ChatGenerationReactionService.stop();
       const { ChatGenerationPromptingService } = await import('../services/codex-chat/chatGenerationPrompting');
@@ -136,9 +137,9 @@ export function createProductionGracefulShutdownDependencies(): GracefulShutdown
       const { imageTaggerService } = await import('../services/imageTaggerService');
       await imageTaggerService.stopDaemon();
       const { semanticIndexer } = await import('../services/embeddings/semanticIndex');
-      semanticIndexer.stop();
+      const drained = semanticIndexer.stop();
       const { textWorker } = await import('../services/aiWorker/textEmbeddingService');
-      await textWorker.stop();
+      await Promise.all([drained, textWorker.stop()]);
     },
     shutdownRuntimeJobs: async () => {
       const { RuntimeJobRunner } = await import('../services/runtimeJobs/runtimeJobRunner');

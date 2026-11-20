@@ -59,16 +59,17 @@ export function renderSummary(segments: ChatSummarySegment[]) {
 /**
  * Keep the thread's summary columns in step with its segments: the rendered text and the last message folded. The
  * revision moves with every change of what was folded (`bump`), so a fold computed from the old state is dropped; a
- * hand edit of a segment's text leaves it.
+ * hand edit of a segment's text leaves it. Folding or rewording text must not rewind an engine hand-over cursor.
+ * Only replacing the summary or invalidating history supplies a `rewindFloor` (0 to rebuild from segments alone).
  */
-function syncThreadSummary(threadId: number, bump = true, floor = 0) {
+function syncThreadSummary(threadId: number, bump = true, rewindFloor?: number) {
   const segments = listSegments(threadId)
   const covered = segments.reduce<number | null>((max, segment) => (max === null || segment.until_message_id > max ? segment.until_message_id : max), null)
-  // A cursor ahead of the segments (an engine hand-over) that the change did not reach.
-  const until = floor > (covered ?? 0) ? floor : covered
-  getUserSettingsDb().prepare(`UPDATE codex_chat_threads SET summary = ?, summary_until_message_id = ?,
-    summary_updated_date = CASE WHEN ? IS NULL THEN NULL ELSE CURRENT_TIMESTAMP END, context_revision = context_revision + ? WHERE id = ?`)
-    .run(renderSummary(segments) || null, until, until, bump ? 1 : 0, threadId)
+  const until = rewindFloor !== undefined && rewindFloor > (covered ?? 0) ? rewindFloor : covered
+  getUserSettingsDb().prepare(`UPDATE codex_chat_threads SET summary = @summary,
+    summary_until_message_id = CASE WHEN @forwardOnly AND summary_until_message_id > @until THEN summary_until_message_id ELSE @until END,
+    summary_updated_date = CASE WHEN @until IS NULL THEN NULL ELSE CURRENT_TIMESTAMP END, context_revision = context_revision + @bump WHERE id = @threadId`)
+    .run({ summary: renderSummary(segments) || null, until, forwardOnly: rewindFloor === undefined ? 1 : 0, bump: bump ? 1 : 0, threadId })
 }
 
 function revisionMatches(threadId: number, expectedRevision: number) {
@@ -135,7 +136,7 @@ export const ChatSummaryStore = {
         db.prepare('INSERT INTO chat_summary_segments (thread_id, level, from_message_id, until_message_id, content, backed) VALUES (?, 1, ?, ?, ?, 0)')
           .run(threadId, until ? first.id ?? 0 : 0, until ?? 0, content)
       }
-      syncThreadSummary(threadId)
+      syncThreadSummary(threadId, true, 0)
       db.prepare('UPDATE codex_chat_threads SET summary_error = NULL WHERE id = ?').run(threadId)
     }).immediate()
   },
@@ -153,7 +154,7 @@ export const ChatSummaryStore = {
     const removed = plot && !plot.backed && plot.until_message_id >= messageId
       ? db.prepare('DELETE FROM chat_summary_segments WHERE thread_id = ?').run(threadId).changes
       : db.prepare('DELETE FROM chat_summary_segments WHERE thread_id = ? AND until_message_id >= ?').run(threadId, messageId).changes
-    if (removed > 0) syncThreadSummary(threadId)
+    if (removed > 0) syncThreadSummary(threadId, true, 0)
     else if (floor !== null) syncThreadSummary(threadId, false, floor)
   },
 

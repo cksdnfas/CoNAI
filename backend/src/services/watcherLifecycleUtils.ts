@@ -36,6 +36,7 @@ export async function restartWatcherAfterDelay(
   pending.set(id, controller);
   try {
     await closing;
+    if (controller.signal.aborted) return;
     await sleep(delayMs);
     if (controller.signal.aborted) return;
     await start(controller.signal);

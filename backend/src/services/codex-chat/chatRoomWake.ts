@@ -14,8 +14,6 @@ import { drainJudgeFollowUps } from './chatJudge'
  *
  * The chat services are loaded on use: the workflow executor reaches this file while they are still loading.
  */
-const chatServices = async () => ({ ...(await import('./codexChatService')), ...(await import('./groupChatService')) })
-
 /** The room was still answering; an automation never cuts in, the wake is skipped. */
 export class ChatWakeBusyError extends Error {
   readonly status = 409
@@ -71,7 +69,7 @@ export async function wakeChatRoom(params: {
   followUpDeadlineExpired?: () => boolean
 }): Promise<ChatWakeResult> {
   const { requester, threadId } = params
-  const { CodexChatError, CodexChatService, GroupChatService } = await chatServices()
+  const [{ CodexChatError, CodexChatService }, { GroupChatService }] = await Promise.all([import('./codexChatService'), import('./groupChatService')])
   const thread = CodexChatStore.findThread(threadId, requester.accountId)
   if (!thread) throw new CodexChatError('실행 계정의 채팅방이 아니거나 없는 채팅방이야.', 404)
   if (!params.instruction.trim()) throw new CodexChatError('보낼 지시를 넣어줘.')
@@ -162,18 +160,23 @@ const accountKey = (accountId: number | null) => (accountId === null ? 'bootstra
  * exists and still holds that character, made again (as a normal chat of the account) when it was deleted.
  */
 export async function ensureAutomationRoom(requester: McpRequester, profileId: number, key: string, title: string) {
-  const db = roomsTable()
   const existing = findAutomationRoom(requester, profileId, key)
   if (existing) return existing
-  const profile = ChatProfileStore.find(profileId)
-  const { CodexChatError, CodexChatService } = await chatServices()
-  if (!profile) throw new CodexChatError(`캐릭터를 찾을 수 없어: ${profileId}`, 404)
-  const thread = CodexChatService.createThread(requester, profileId)
-  CodexChatStore.updateThreadContext(thread.id, { reactionEnabled: false })
-  CodexChatStore.updateListState(thread.id, { title: title.trim() || `${profile.name} 루틴` })
-  db.prepare(`INSERT INTO chat_automation_rooms (account_key, room_key, thread_id) VALUES (?, ?, ?)
-    ON CONFLICT(account_key, room_key) DO UPDATE SET thread_id = excluded.thread_id`).run(accountKey(requester.accountId), key, thread.id)
-  return CodexChatStore.findThread(thread.id, requester.accountId) as CodexChatThreadRecord
+  const { CodexChatError, CodexChatService } = await import('./codexChatService')
+  const db = roomsTable()
+  return db.transaction(() => {
+    // Another wake may have claimed this key while the service loaded. The room and its link commit together.
+    const claimed = findAutomationRoom(requester, profileId, key)
+    if (claimed) return claimed
+    const profile = ChatProfileStore.find(profileId)
+    if (!profile) throw new CodexChatError(`캐릭터를 찾을 수 없어: ${profileId}`, 404)
+    const thread = CodexChatService.createThread(requester, profileId)
+    CodexChatStore.updateThreadContext(thread.id, { reactionEnabled: false })
+    CodexChatStore.updateListState(thread.id, { title: title.trim() || `${profile.name} 루틴` })
+    db.prepare(`INSERT INTO chat_automation_rooms (account_key, room_key, thread_id) VALUES (?, ?, ?)
+      ON CONFLICT(account_key, room_key) DO UPDATE SET thread_id = excluded.thread_id`).run(accountKey(requester.accountId), key, thread.id)
+    return CodexChatStore.findThread(thread.id, requester.accountId) as CodexChatThreadRecord
+  }).immediate()
 }
 /** Read-only lookup: a stale queued execution must not recreate a forgotten room. */
 export function findAutomationRoom(requester: McpRequester, profileId: number, key: string) {

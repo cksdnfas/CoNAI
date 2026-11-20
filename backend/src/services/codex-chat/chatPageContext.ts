@@ -222,9 +222,16 @@ export function notePageViewShown(context: McpRequestContext, page: ChatPageSnap
   if (!thread?.codex_thread_id) return null
   let sent: string[] = []
   try { sent = JSON.parse(thread.codex_lore_sent || '[]') } catch { sent = [] }
-  // The key of the screen as a request would show it; a result that reached Codex shortened holds less than that.
-  const key = pageViewKey(context.requester!, page, limit)
-  CodexChatStore.setCodexLoreSent(threadId, [...(Array.isArray(sent) ? sent : []).filter((entry) => typeof entry === 'string' && !entry.startsWith(PAGE_VIEW_KEY)), shown && shown.key !== key ? PAGE_VIEW_UNKNOWN : key])
+  const keys = Array.isArray(sent) ? sent.filter((entry) => typeof entry === 'string') : []
+  // A delta already names the resulting view. If the person changed the base outside this turn, Codex lacks it.
+  let next: string
+  if (shown?.base !== undefined) {
+    next = pageViewAfter(keys.find((entry) => entry.startsWith(PAGE_VIEW_KEY)), shown)
+  } else {
+    const key = pageViewKey(context.requester!, page, limit)
+    next = shown && shown.key !== key ? PAGE_VIEW_UNKNOWN : key
+  }
+  CodexChatStore.setCodexLoreSent(threadId, [...keys.filter((entry) => !entry.startsWith(PAGE_VIEW_KEY)), next])
   return null
 }
 

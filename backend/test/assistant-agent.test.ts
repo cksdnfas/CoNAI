@@ -145,7 +145,7 @@ test('assistant agent: proposal outcomes, page operation records, task plan and 
   await t.test('a page operation on the same screen answers with what changed only', async () => {
     const { normalizeChatPageSnapshot } = await import('@conai/shared')
     const { pageOperationView } = await import('../src/mcp/tools/chatPageView')
-    const { PAGE_VIEW_UNKNOWN } = await import('../src/services/codex-chat/chatPageContext')
+    const { PAGE_VIEW_UNKNOWN, notePageViewShown, pendingPageReference } = await import('../src/services/codex-chat/chatPageContext')
     const admin = { accountId: null, accountType: 'admin' as const }
     const before = normalizeChatPageSnapshot({ instanceId: 'inst-op-1', connectionId: 'conn-op-1', path: '/settings', title: '설정', kind: 'settings', resourceId: 'chat', revision: 'rev-op-1',
       fields: [{ id: 'name', label: '이름', type: 'text', value: '' }, { id: 'prompt', label: '프롬프트', type: 'text', value: 'p'.repeat(4000) }],
@@ -158,6 +158,20 @@ test('assistant agent: proposal outcomes, page operation records, task plan and 
     assert.ok(same.otherFields)
     assert.equal(same.changesOnly, true, 'a changed-parts view is marked as one')
     assert.notEqual(operation.key, PAGE_VIEW_UNKNOWN, 'changes given whole leave the new screen known')
+    const codex = ChatProfileStore.create({ name: 'Screen reader', engine: 'codex' })
+    const id = CodexChatStore.createThread(null, 'screen', 'codex', codex.id)
+    CodexChatStore.setCodexThreadId(id, 'screen-session')
+    const ctx = { scopes: [], source: 'codex-chat' as const, requester: admin, chatContext: { threadId: id, profileId: codex.id, kind: 'direct' as const } }
+    const { readLoreSent } = await import('../src/services/codex-chat/chatSessionMemory')
+    const nextRequest = () => pendingPageReference(filled, admin, readLoreSent(CodexChatStore.findThreadById(id)!.codex_lore_sent), null).text
+    // A person changed the prompt from the version Codex saw; the fill result only transmits the name.
+    const seen = normalizeChatPageSnapshot({ ...before, fields: [before.fields[0], { ...before.fields[1], value: 'earlier prompt' }] })
+    notePageViewShown(ctx, seen, null)
+    notePageViewShown(ctx, filled, null, operation)
+    assert.ok(nextRequest().includes('p'.repeat(4000)), 'the next request supplies the missing prompt')
+    notePageViewShown(ctx, before, null)
+    notePageViewShown(ctx, filled, null, operation)
+    assert.match(nextRequest(), /Same screen/, 'the same delta on a known base does not resend the screen')
     const trimmed = pageOperationView(admin, before, normalizeChatPageSnapshot({ ...before, revision: 'rev-op-5', fields: [before.fields[0]], actions: undefined })).page as { removedFields?: string[]; removedActions?: string[]; actions?: unknown }
     assert.deepEqual([trimmed.removedFields, trimmed.removedActions, trimmed.actions], [['prompt'], ['profile.open_create'], undefined], 'a removed field or operation is named, never left as unchanged')
     const elsewhere = pageOperationView(admin, before, normalizeChatPageSnapshot({ ...filled, instanceId: 'inst-op-2' })).page as { fields: unknown[]; actions: unknown }

@@ -169,19 +169,20 @@ function graphCopyOwner(file: string): number | null {
   }
 }
 
-/** Discard only graph-owned copies which were not claimed by a successfully committed queue job. */
-export function releaseUnclaimedGraphInputs(refs: WorkflowInputAssetRef[]) {
+/** Discard only graph-owned copies without a committed job, including candidates from payload compaction. */
+export function releaseUnclaimedGraphInputs(refs: ReadonlyArray<Pick<WorkflowInputAssetRef, 'id'>>) {
   if (!refs.length) return;
   const db = ensureWorkflowInputAssetRefs();
   const isReferenced = db.prepare('SELECT 1 FROM workflow_input_asset_job_refs WHERE asset_id = ? LIMIT 1');
   db.transaction(() => {
     for (const ref of refs) {
       if (isReferenced.get(ref.id)) continue;
-      const file = resolveWorkflowInputAssetPath(ref.id)!;
+      const file = resolveWorkflowInputAssetPath(ref.id);
+      if (!file || graphCopyOwner(file) === null) continue;
       fs.rmSync(file, { force: true });
-      fs.rmSync(`${file}.deleted`, { force: true });
       fs.rmSync(`${file}.graph`, { force: true });
       fs.rmSync(`${file}.claimed`, { force: true });
+      fs.rmSync(`${file}.deleted`, { force: true });
     }
   }).immediate();
 }
@@ -201,16 +202,15 @@ export function registerWorkflowInputAssetRefs(jobId: number, refs: WorkflowInpu
   }
 }
 
-/** Release claims only once the job payload can no longer be retried. */
+/** Return detached claims for post-commit collection; retained jobs and browser drafts keep their files. */
 export function releaseWorkflowInputAssetRefs(jobIds: number[]) {
-  if (!jobIds.length) return;
+  if (!jobIds.length) return [];
   const db = ensureWorkflowInputAssetRefs();
-  db.transaction(() => {
-    const stillReferenced = db.prepare('SELECT 1 FROM workflow_input_asset_job_refs WHERE asset_id = ? LIMIT 1');
+  return db.transaction(() => {
+    const candidates = new Set<string>();
     for (const chunk of chunkSqliteValues(jobIds)) {
       const placeholders = sqliteInPlaceholders(chunk);
-      const candidates = db.prepare(`SELECT DISTINCT asset_id FROM workflow_input_asset_job_refs WHERE job_id IN (${placeholders})`).all(...chunk) as Array<{ asset_id: string }>;
-      db.prepare(`
+      const rows = db.prepare(`
         DELETE FROM workflow_input_asset_job_refs
         WHERE job_id IN (${placeholders})
           AND (
@@ -222,16 +222,11 @@ export function releaseWorkflowInputAssetRefs(jobIds: number[]) {
                 AND CASE WHEN json_valid(j.request_payload) THEN json_extract(j.request_payload, '$.pruned') = 1 ELSE 0 END
             )
           )
-      `).run(...chunk);
-      for (const { asset_id: assetId } of candidates) {
-        const file = resolveWorkflowInputAssetPath(assetId);
-        if (!file || stillReferenced.get(assetId) || graphCopyOwner(file) === null) continue;
-        fs.rmSync(file, { force: true });
-        fs.rmSync(`${file}.deleted`, { force: true });
-        fs.rmSync(`${file}.graph`, { force: true });
-        fs.rmSync(`${file}.claimed`, { force: true });
-      }
+        RETURNING asset_id
+      `).all(...chunk) as Array<{ asset_id: string }>;
+      for (const row of rows) candidates.add(row.asset_id);
     }
+    return Array.from(candidates, id => ({ id }));
   }).immediate();
 }
 

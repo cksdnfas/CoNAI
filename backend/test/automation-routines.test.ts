@@ -22,7 +22,7 @@ test('automation routines: run-as schedules, timing, chat wakes, routines and no
   const images = await import('../src/database/init')
   await images.initializeDatabase()
   t.after(async () => {
-    ChatRoutineRunner.stop()
+    await ChatRoutineRunner.stopAndDrain()
     settings.closeUserSettingsDb()
     auth.getAuthDb().close()
     images.closeDatabase()
@@ -240,7 +240,11 @@ test('automation routines: run-as schedules, timing, chat wakes, routines and no
   })
 
   await t.test('an automation keeps one room per key and makes it again when it is gone', async () => {
-    const first = await ensureAutomationRoom(admin, mina.id, 'test:1', 'Mina routine')
+    const [first, concurrent] = await Promise.all([
+      ensureAutomationRoom(admin, mina.id, 'test:1', 'Mina routine'),
+      ensureAutomationRoom(admin, mina.id, 'test:1', 'Mina routine'),
+    ])
+    assert.equal(concurrent.id, first.id)
     assert.equal(first.title, 'Mina routine')
     assert.equal((await ensureAutomationRoom(admin, mina.id, 'test:1', 'Mina routine')).id, first.id)
     await CodexChatService.deleteThread(admin, first.id)
@@ -362,6 +366,38 @@ test('automation routines: run-as schedules, timing, chat wakes, routines and no
     await (GraphWorkflowScheduleService as any).pollDueSchedules()
     assert.notEqual(GraphWorkflowScheduleModel.findById(schedule)!.last_execution_id ?? null, null)
     ChatRoutineStore.delete(routine.id)
+  })
+
+  await t.test('shutdown holds new routines and drains an interrupted wake before allowing a restart', async (sub) => {
+    const room = CodexChatStore.createThread(1, 'shutdown', 'llm', mina.id)
+    const due = '2020-01-01T00:00:00.000Z'
+    const once = (name: string) => ChatRoutineStore.create({ ...normalizeChatRoutineInput({ name, target: 'room', threadId: room, message: 'm', scheduleType: 'once', runAt: due }, 1), status: 'active', next_run_at: due })
+    let entered!: () => void, release!: () => void
+    const started = new Promise<void>((resolve) => { entered = resolve })
+    const held = new Promise<void>((resolve) => { release = resolve })
+    const engine = sub.mock.method(CodexChatService, 'sendMessage', async () => { entered(); await held })
+    const active = once('in progress')
+    await ChatRoutineRunner.poll()
+    await started
+    const waiting = once('still due')
+    let drained = false
+    const shutdown = ChatRoutineRunner.stopAndDrain().then(() => { drained = true })
+    try {
+      await ChatRoutineRunner.poll()
+      assert.equal(ChatRoutineStore.find(waiting.id)!.nextRunAt, due)
+      assert.throws(() => ChatRoutineRunner.fire(waiting.id, { manual: true }), (e: unknown) => (e as { status: number }).status === 503)
+      assert.equal(drained, false)
+    } finally {
+      release()
+      await shutdown
+      engine.mock.restore()
+    }
+    const after = ChatRoutineStore.find(active.id)!
+    assert.deepEqual([after.status, after.lastResult, after.runCount], ['error_stopped', 'failed', 1])
+    ChatRoutineStore.delete(waiting.id)
+    ChatRoutineRunner.start()
+    assert.equal((await ChatRoutineRunner.fire(active.id, { manual: true }))?.lastResult, 'ok')
+    assert.equal(ChatRoutineStore.find(active.id)!.runCount, 2)
   })
 
   // ---- Workflow nodes ------------------------------------------------------------------------------------------------

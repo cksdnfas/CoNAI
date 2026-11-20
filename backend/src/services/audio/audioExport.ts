@@ -14,7 +14,7 @@ import {
   getAudioGroupInfo,
   getAudioProjectInfo,
 } from './audioService';
-import { audioRenderSlots, runAudioFfmpeg } from './audioFfmpeg';
+import { runAudioFfmpeg, withAudioRenderSlot } from './audioFfmpeg';
 
 /**
  * Export of selected takes, ported from the SFX manager (`sfx/audio.py` export, `sfx/service.py` export_plan /
@@ -229,7 +229,7 @@ export async function planAudioFileExport(source: string, options: AudioExportOp
  * stream serial, so the same export never had the same bytes twice.
  */
 export async function renderAudioFileExport(source: string, destination: string, options: AudioExportOptions, meta: { duration: number; sampleRate: number }, signal?: AbortSignal): Promise<AudioExportRenderPlan> {
-  return audioRenderSlots.run(async () => {
+  return withAudioRenderSlot(async () => {
     const plan = await planAudioFileExport(source, options, meta, signal);
     const codec = options.format === 'ogg'
       ? ['-c:a', 'libvorbis', '-q:a', String(options.quality), '-fflags', '+bitexact', '-flags:a', '+bitexact']
@@ -237,7 +237,7 @@ export async function renderAudioFileExport(source: string, destination: string,
     await runAudioFfmpeg(['-nostdin', '-v', 'error', '-y', '-i', source, '-map', '0:a:0', '-vn', '-map_metadata', '-1', '-af', plan.chain,
       '-ar', String(plan.rate), ...codec, destination], { signal });
     return plan;
-  });
+  }, signal);
 }
 
 function safeFileName(name: string): string {

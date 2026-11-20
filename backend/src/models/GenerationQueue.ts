@@ -13,7 +13,7 @@ import type {
   GenerationQueueReconcileCandidate,
 } from '../types/generationQueue'
 import { buildUpdateQuery, filterDefined, sqlLiteral } from '../utils/dynamicUpdate'
-import { collectQueueInputRefs, registerQueueInputRefs, releaseQueueInputsForJobs } from '../services/generation-queue/queueInputStore'
+import { collectDetachedQueueInputs, collectQueueInputRefs, detachQueueInputRefs, registerQueueInputRefs } from '../services/generation-queue/queueInputStore'
 
 function stringifyPayload(value: Record<string, unknown> | undefined) {
   if (value === undefined) {
@@ -313,6 +313,7 @@ export class GenerationQueueModel {
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `)
     const prepared = new Map<unknown, { json: string; debug: ReturnType<typeof readCreateDebugSection>; refs: ReturnType<typeof collectQueueInputRefs> }>()
+    const checkedInputs = new Set<string>()
     return db.transaction(() => rows.map((data) => {
       const queuedAt = data.queued_at ?? new Date().toISOString()
       let payload = prepared.get(data.request_payload)
@@ -356,7 +357,7 @@ export class GenerationQueueModel {
       // PAYLOAD-3: claim every content-addressed input this payload points at. Doing it here means
       // every enqueue path gets refcounting for free — user routes, public workflows, graph
       // executors, and `retryJob`, which re-creates a job from a payload full of the same refs.
-      registerQueueInputRefs(jobId, payload.refs)
+      registerQueueInputRefs(jobId, payload.refs, checkedInputs)
       return jobId
     }))()
   }
@@ -693,31 +694,7 @@ export class GenerationQueueModel {
       Math.floor(input.retainRecentTerminalJobs ?? DEFAULT_TERMINAL_PAYLOAD_RETAIN_LIMIT),
     )
 
-    // The ids are read with the same predicate the UPDATE uses, inside one transaction, so the
-    // released set can never drift from the compacted set.
-    const prunableJobIds = db.prepare(`
-      WITH retained_recent AS (
-        SELECT id
-        FROM generation_queue_jobs
-        WHERE status IN (${TERMINAL_QUEUE_STATUS_PLACEHOLDERS})
-        ORDER BY COALESCE(completed_at, started_at, queued_at, created_date) DESC, id DESC
-        LIMIT ?
-      )
-      SELECT id
-      FROM generation_queue_jobs
-      WHERE status IN (${TERMINAL_QUEUE_STATUS_PLACEHOLDERS})
-        AND request_payload IS NOT NULL
-        AND request_payload != ?
-        AND id NOT IN (SELECT id FROM retained_recent)
-    `).all(
-      // No SET clause here, so this binds one parameter group fewer than the UPDATE below.
-      ...TERMINAL_QUEUE_STATUSES,
-      retainRecentTerminalJobs,
-      ...TERMINAL_QUEUE_STATUSES,
-      COMPACTED_TERMINAL_REQUEST_PAYLOAD,
-    ).map((row) => (row as { id: number }).id)
-
-    const info = db.prepare(`
+    const compact = db.prepare(`
       WITH retained_recent AS (
         SELECT id
         FROM generation_queue_jobs
@@ -731,18 +708,18 @@ export class GenerationQueueModel {
         AND request_payload IS NOT NULL
         AND request_payload != ?
         AND id NOT IN (SELECT id FROM retained_recent)
-    `).run(
-      ...TERMINAL_QUEUE_STATUSES,
-      retainRecentTerminalJobs,
-      COMPACTED_TERMINAL_REQUEST_PAYLOAD,
-      ...TERMINAL_QUEUE_STATUSES,
-      COMPACTED_TERMINAL_REQUEST_PAYLOAD,
-    )
-
-    const released = releaseQueueInputsForJobs(prunableJobIds)
+      RETURNING id
+    `)
+    const { pruned, inputs } = db.transaction(() => {
+      const rows = compact.all(...TERMINAL_QUEUE_STATUSES, retainRecentTerminalJobs,
+        COMPACTED_TERMINAL_REQUEST_PAYLOAD, ...TERMINAL_QUEUE_STATUSES, COMPACTED_TERMINAL_REQUEST_PAYLOAD) as Array<{ id: number }>
+      return { pruned: rows.length, inputs: detachQueueInputRefs(rows.map(row => row.id)) }
+    }).immediate()
+    // Files cannot be rolled back. When nested inside another writer, leave collection to the disk sweeps.
+    const released = db.inTransaction ? { releasedFiles: 0, releasedBytes: 0 } : collectDetachedQueueInputs(inputs)
 
     return {
-      pruned: info.changes,
+      pruned,
       retainRecentTerminalJobs,
       compactPayload: COMPACTED_TERMINAL_REQUEST_PAYLOAD,
       releasedInputFiles: released.releasedFiles,

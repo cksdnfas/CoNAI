@@ -1,7 +1,49 @@
 import { spawn } from 'child_process';
 
 export interface MediaProcessResult { stdout: Buffer; stderr: string }
-export interface MediaProcessOptions { timeoutMs: number; signal?: AbortSignal; captureStdout?: boolean }
+export interface MediaProcessOptions { timeoutMs: number | null; signal?: AbortSignal; captureStdout?: boolean; stderrTailBytes?: number }
+
+/** Grant before waking a waiter: a caller arriving in the same turn cannot steal its slot. */
+export class MediaRenderSlots {
+  private active = 0;
+  private readonly waiting = new Set<() => void>();
+  constructor(private readonly limit: () => number) {}
+
+  private drain() {
+    for (const grant of this.waiting) {
+      if (this.active >= this.limit()) break;
+      this.waiting.delete(grant);
+      this.active++;
+      grant();
+    }
+  }
+
+  async acquire(signal?: AbortSignal): Promise<() => void> {
+    signal?.throwIfAborted();
+    await new Promise<void>((resolve, reject) => {
+      const grant = () => { signal?.removeEventListener('abort', cancel); resolve(); };
+      const cancel = () => { this.waiting.delete(grant); reject(signal!.reason); };
+      this.waiting.add(grant);
+      signal?.addEventListener('abort', cancel, { once: true });
+      this.drain();
+    });
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      this.active--;
+      this.drain();
+    };
+  }
+
+  async run<T>(work: () => Promise<T>, signal?: AbortSignal): Promise<T> {
+    const release = await this.acquire(signal);
+    try {
+      signal?.throwIfAborted();
+      return await work();
+    } finally { release(); }
+  }
+}
 
 export class MediaProcessError extends Error {
   constructor(
@@ -37,19 +79,19 @@ function runOnce(command: string, args: string[], options: MediaProcessOptions):
       // Settle on close so callers can safely remove files on Windows.
     };
     const onAbort = () => stop('cancelled');
-    const timer = setTimeout(() => stop('timeout'), options.timeoutMs);
+    const timer = options.timeoutMs === null ? undefined : setTimeout(() => stop('timeout'), options.timeoutMs);
     options.signal?.addEventListener('abort', onAbort, { once: true });
     child.stdout.on('data', (chunk: Buffer) => { if (options.captureStdout !== false) stdout.push(chunk); });
     child.stderr.on('data', (chunk: Buffer) => {
       // Retain the stream banner (raw frame dimensions) and the diagnostic tail (loudnorm JSON).
-      if (stderrHead.length < 64 * 1024) stderrHead = Buffer.concat([stderrHead, chunk.subarray(0, 64 * 1024 - stderrHead.length)]);
+      if (options.stderrTailBytes === undefined && stderrHead.length < 64 * 1024) stderrHead = Buffer.concat([stderrHead, chunk.subarray(0, 64 * 1024 - stderrHead.length)]);
       stderrBytes += chunk.length;
       const combined = Buffer.concat([stderr, chunk]);
-      stderr = combined.subarray(Math.max(0, combined.length - 1024 * 1024));
+      stderr = combined.subarray(Math.max(0, combined.length - (options.stderrTailBytes ?? 1024 * 1024)));
     });
     child.once('error', (error: NodeJS.ErrnoException) => finish(stopped ?? new MediaProcessError('spawn', command, '', null, error)));
     child.once('close', (code) => {
-      const diagnostic = stderrBytes > stderr.length ? `${stderrHead.toString('utf8')}\n…\n${stderr.toString('utf8')}` : stderr.toString('utf8');
+      const diagnostic = stderrHead.length && stderrBytes > stderr.length ? `${stderrHead.toString('utf8')}\n…\n${stderr.toString('utf8')}` : stderr.toString('utf8');
       finish(stopped ?? (code === 0 ? null : new MediaProcessError('exit', command, diagnostic, code)), { stdout: Buffer.concat(stdout), stderr: diagnostic });
     });
   });

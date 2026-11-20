@@ -520,6 +520,7 @@ test('runtime shutdown waits for cancelled handlers to finish their final databa
     await new Promise((resolve) => setImmediate(resolve))
     assert.equal(signal.aborted, true)
     assert.equal(drained, false, 'the caller must not close the database while a handler is pending')
+    assert.throws(() => RuntimeJobRunner.start('auto-tag-reset', {}), { statusCode: 503 })
     release()
     assert.equal(await shutdown, 1)
     assert.equal(finished, true)
@@ -528,6 +529,7 @@ test('runtime shutdown waits for cancelled handlers to finish their final databa
     release()
     await new Promise((resolve) => setImmediate(resolve))
     registerRuntimeJobHandlers()
+    RuntimeJobRunner.bootstrap()
   }
 })
 

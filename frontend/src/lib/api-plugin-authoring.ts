@@ -5,6 +5,8 @@ import { prepareDownloadTarget, readDownloadBlob, saveDownloadBlob } from './dow
 
 const root = '/authoring'
 export const PLUGIN_DRAFTS_QUERY_KEY = ['plugin-drafts'] as const
+export const PLUGIN_DRAFT_QUERY_ROOT = 'plugin-draft'
+export const pluginDraftQueryKey = (id: string | null) => [PLUGIN_DRAFT_QUERY_ROOT, id] as const
 export const listPluginDrafts = () => pluginRequest<PluginDraftSummary[]>(`${root}/drafts`)
 export const getPluginDraft = (id: string) => pluginRequest<PluginDraft>(`${root}/drafts/${id}`)
 export const createPluginDraft = (input: { requestId: string; pluginId: string; name?: string; fromInstalled?: boolean }) => pluginRequest<PluginDraft>(`${root}/drafts`, 'POST', input)

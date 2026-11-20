@@ -64,6 +64,21 @@ test('file store text documents: create refuses taken names, update keeps the id
     assert.equal((await FileStoreService.readText(me, note.id)).revision, newer.revision)
   })
 
+  await t.test('batch moves respect the entry depth limit without flattening a selection or partially moving it', () => {
+    let parent: string | null = null
+    for (let depth = 1; depth < 64; depth++) parent = FileStoreService.createFolder(me, parent, `level-${depth}`).id
+    const last = FileStoreService.createFolder(me, parent, '마지막')
+    const folder = FileStoreService.createFolder(me, null, '묶음')
+    const child = FileStoreService.writeText(me, folder.id, '자식.txt', '내용')
+    const loose = FileStoreService.writeText(me, null, '별도.txt', '내용')
+    assert.throws(() => FileStoreService.move(me, [loose.id], last.id), /64단계/)
+    assert.throws(() => FileStoreService.move(me, [loose.id, child.id, folder.id], parent), /64단계/)
+    assert.equal(FileStoreService.get(me, loose.id).parentId, null)
+    FileStoreService.move(me, [child.id, folder.id, loose.id], FileStoreService.get(me, parent!).parentId)
+    assert.equal(FileStoreService.get(me, child.id).parentId, folder.id)
+    assert.equal(FileStoreService.get(me, folder.id).parentId, FileStoreService.get(me, loose.id).parentId)
+  })
+
   await t.test('update refuses folders and permits other file editors', () => {
     const folder = FileStoreService.ensureFolder(me, null, '보관')
     assert.throws(() => FileStoreService.updateText(me, folder.id, 'x'), /파일을 선택/)

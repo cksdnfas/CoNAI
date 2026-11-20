@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { stringifyRequestJson } from '../../utils/stableRequestJson';
 import type { ChatAssetOwner } from '@conai/shared';
 import { chatAssetOwner } from '../../services/codex-chat/chatAssetOwner';
 import { linkChatGeneration, requireActiveChatReply } from '../../services/codex-chat/chatReplyRegistry';
@@ -37,24 +38,9 @@ import {
   resolveMcpGenerationRoutingInput,
 } from '../../services/generation-queue/generationJobRouting';
 
-/** Serialize JSON-compatible request values deterministically across object key order. */
-function stringifyStableJson(value: unknown): string {
-  if (Array.isArray(value)) {
-    return `[${value.map((entry) => stringifyStableJson(entry)).join(',')}]`;
-  }
-  if (value && typeof value === 'object') {
-    const entries = Object.entries(value as Record<string, unknown>)
-      .filter(([, entry]) => entry !== undefined)
-      .sort(([left], [right]) => left.localeCompare(right))
-      .map(([key, entry]) => `${JSON.stringify(key)}:${stringifyStableJson(entry)}`);
-    return `{${entries.join(',')}}`;
-  }
-  return JSON.stringify(value) ?? 'null';
-}
-
 /** Build the semantic request hash used to detect conflicting idempotent retries. */
 export function buildIdempotencyRequestHash(value: Record<string, unknown>) {
-  return crypto.createHash('sha256').update(stringifyStableJson(value)).digest('hex');
+  return crypto.createHash('sha256').update(stringifyRequestJson(value, 'legacy-locale')).digest('hex');
 }
 
 /** Scope idempotency to the authenticated MCP key, with one local transport fallback. */

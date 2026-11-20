@@ -6,6 +6,7 @@ import type {
   GraphWorkflowScheduleStatus,
 } from '../types/moduleGraph'
 import { GraphWorkflowExecutionQueue, RUNNING_EXECUTION_RESTART_MESSAGE } from './graphWorkflowExecutionQueue'
+import { enqueueScheduleRuns, parseStoredScheduleInputValues } from './graphWorkflowScheduleRuns'
 import { buildRuntimeInputSignature } from './graph-workflow-executor/shared'
 import { resolveAutomationRunAs } from './automationRunAs'
 import { AutomationSwitch } from './automationSwitch'
@@ -16,14 +17,6 @@ const DEFAULT_POLL_INTERVAL_MS = 15_000
 
 /** Keys a schedule's account must still hold when it runs (the same ones it needed to save the schedule). */
 const SCHEDULE_RUN_PERMISSIONS = ['generation.execute']
-
-function parseInputValues(schedule: GraphWorkflowScheduleRecord) {
-  if (!schedule.input_values) {
-    return undefined
-  }
-
-  return JSON.parse(schedule.input_values) as Record<string, unknown>
-}
 
 function timingOf(schedule: GraphWorkflowScheduleRecord) {
   return {
@@ -272,26 +265,14 @@ export class GraphWorkflowScheduleService {
     }
 
     const nextRunAt = followingRunAt(timingOf(schedule), schedule.next_run_at, now)
-    const requestedEnqueueCount = normalizeRunEnqueueCount(schedule.run_enqueue_count)
-    const remainingRunCount = schedule.max_run_count !== null && schedule.max_run_count !== undefined
-      ? Math.max(0, schedule.max_run_count - reservedRunCount)
-      : requestedEnqueueCount
-    const allowedEnqueueCount = Math.min(requestedEnqueueCount, remainingRunCount)
-    const inputValues = { ...parseInputValues(schedule) }
+    const inputValues = { ...parseStoredScheduleInputValues(schedule.input_values) }
     delete inputValues[GRAPH_IMAGE_AUTHORITY_INPUT]
     if (!runAs) inputValues[GRAPH_IMAGE_AUTHORITY_INPUT] = 'legacy-schedule'
-    const executionIds = GraphWorkflowExecutionQueue.enqueueMany(
-      schedule.graph_workflow_id,
-      allowedEnqueueCount,
-      inputValues,
-      undefined,
-      false,
-      {
-        triggerType: 'schedule',
-        scheduleId: schedule.id,
-        requestedByAccountId: runAs?.ok ? runAs.requester.accountId : null,
-      },
-    ).map((enqueueResult) => enqueueResult.executionId)
+    const { execution_ids: executionIds } = enqueueScheduleRuns({
+      scheduleId: schedule.id, workflowId: schedule.graph_workflow_id, inputValues,
+      requestedCount: normalizeRunEnqueueCount(schedule.run_enqueue_count), maxRunCount: schedule.max_run_count,
+      reservedRunCount, requestedByAccountId: runAs?.ok ? runAs.requester.accountId : null,
+    })
 
     const nextStatus: GraphWorkflowScheduleStatus = schedule.schedule_type === 'once'
       ? 'completed'

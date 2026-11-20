@@ -134,6 +134,11 @@ test('graph input copies are retained only by committed jobs and queue orphans a
     GenerationQueueModel.pruneTerminalRequestPayloads({ retainRecentTerminalJobs: 0 })
     assert.ok(resolveWorkflowInputAssetFilePath(ref), 'a retry still claims the graph copy')
     db.prepare("UPDATE generation_queue_jobs SET status = 'failed' WHERE id = ?").run(retryId)
+    assert.throws(db.transaction(() => {
+      GenerationQueueModel.pruneTerminalRequestPayloads({ retainRecentTerminalJobs: 0 })
+      throw new Error('outer writer rolled back')
+    }), /outer writer rolled back/)
+    assert.deepEqual(await fs.promises.readFile(resolveWorkflowInputAssetFilePath(ref)!), bytes, 'DB rollback must not destroy the retry input')
     GenerationQueueModel.pruneTerminalRequestPayloads({ retainRecentTerminalJobs: 0 })
     assert.equal(resolveWorkflowInputAssetFilePath(ref), null)
   })
@@ -265,11 +270,15 @@ test('graph input copies are retained only by committed jobs and queue orphans a
   await t.test('reusing an old blob starts a new in-flight grace period', async () => {
     const data = Buffer.from('reused')
     const ref = storeQueueInputBuffer(data)
+    const job = GenerationQueueModel.create({ service_type: 'comfyui', request_payload: { image: ref } })
     const old = new Date(Date.now() - 2 * 60 * 60 * 1000)
     await fs.promises.utimes(resolveQueueInputFilePath(ref)!, old, old)
-    storeQueueInputBuffer(data)
+    const nextInput = storeQueueInputBuffer(data)
+    GenerationQueueModel.updateIfCurrentStatus(job, ['queued'], { status: 'completed' })
+    GenerationQueueModel.pruneTerminalRequestPayloads({ retainRecentTerminalJobs: 0 })
     await sweepOrphanQueueInputFiles()
-    assert.ok(resolveQueueInputFilePath(ref))
+    GenerationQueueModel.create({ service_type: 'comfyui', request_payload: { image: nextInput } })
+    assert.deepEqual(await fs.promises.readFile(resolveQueueInputFilePath(nextInput)!), data)
   })
 
   await t.test('a NovelAI graph job stores its input image by reference for its account as graph work', async (sub) => {

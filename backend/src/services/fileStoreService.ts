@@ -410,23 +410,30 @@ export const FileStoreService = {
 
   move(owner: string, value: unknown, parentId: string | null) {
     const ids = idsInput(value);
-    const moved = getUserSettingsDb().transaction(() => {
+    const db = getUserSettingsDb();
+    const moved = db.transaction(() => {
       requireFolder(owner, parentId);
       const destinationAncestors = ancestors(owner, parentId);
       const rows = ids.map((id) => requireRow(owner, id));
-      if (destinationAncestors.some((entry) => ids.includes(entry.id))) throw new FileStoreError('폴더를 자기 자신이나 하위 폴더로 옮길 수 없어.');
-      // Selecting a folder already moves its descendants; do not flatten them accidentally.
-      const roots = rows.filter((row) => !ancestors(owner, row.parent_id).some((entry) => ids.includes(entry.id)));
+      const folderIds = new Set(rows.filter((row) => row.kind === 'folder').map((row) => row.id));
+      if (destinationAncestors.some((entry) => folderIds.has(entry.id))) throw new FileStoreError('폴더를 자기 자신이나 하위 폴더로 옮길 수 없어.');
+      // Only a selected folder can carry other entries with it. Siblings share the same answer before any row moves.
+      const nestedParents = new Map<string, boolean>();
+      const roots = folderIds.size === 0 ? rows : rows.filter(({ parent_id }) => {
+        if (parent_id === null) return true;
+        if (!nestedParents.has(parent_id)) nestedParents.set(parent_id, folderIds.has(parent_id) || ancestors(owner, parent_id).some((entry) => folderIds.has(entry.id)));
+        return !nestedParents.get(parent_id);
+      });
+      const subtreeDepth = folderIds.size ? db.prepare(`WITH RECURSIVE tree(id, depth) AS (
+        SELECT id, 1 FROM stored_file_entries WHERE id = ? UNION ALL
+        SELECT e.id, tree.depth + 1 FROM stored_file_entries e JOIN tree ON e.parent_id = tree.id WHERE e.deleted_at IS NULL
+      ) SELECT MAX(depth) AS depth FROM tree`) : null;
+      const update = db.prepare('UPDATE stored_file_entries SET parent_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?');
       for (const row of roots) {
-        if (row.kind === 'folder') {
-          const subtree = getUserSettingsDb().prepare(`WITH RECURSIVE tree(id, depth) AS (
-            SELECT id, 1 FROM stored_file_entries WHERE id = ? UNION ALL
-            SELECT e.id, tree.depth + 1 FROM stored_file_entries e JOIN tree ON e.parent_id = tree.id WHERE e.deleted_at IS NULL
-          ) SELECT MAX(depth) AS depth FROM tree`).get(row.id) as { depth: number };
-          if (destinationAncestors.length + subtree.depth > MAX_DEPTH) throw new FileStoreError('폴더는 최대 64단계까지 이동할 수 있어.');
-        }
+        const depth = row.kind === 'folder' && subtreeDepth ? (subtreeDepth.get(row.id) as { depth: number }).depth : 1;
+        if (destinationAncestors.length + depth > MAX_DEPTH) throw new FileStoreError('폴더는 최대 64단계까지 이동할 수 있어.');
         assertUnique(owner, parentId, row.name, row.id);
-        getUserSettingsDb().prepare('UPDATE stored_file_entries SET parent_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(parentId, row.id);
+        update.run(parentId, row.id);
       }
       return roots.map((row) => changedEntry({ ...row, parent_id: parentId }, row));
     }).immediate();

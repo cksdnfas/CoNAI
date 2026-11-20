@@ -162,6 +162,26 @@ function plainFsError(error: unknown) {
 // hostname). Its PID can't be probed from here, so it is reclaimed once no real batch could still be running.
 const FOREIGN_LOCK_MS = 10 * 60_000
 const KEPT_OPERATIONS = 200
+const settingsConflict = () => new WorkspaceError('다른 곳에서 프로젝트 설정이 바뀌었어. 다시 열어줘.', 409)
+
+/** Screen settings and file operations share the same writer. A slow live writer never loses its lock. */
+function recoverInterruptedWriter(store: Database.Database, projectId: string) {
+  const active = store.prepare("SELECT request_id,process_id,hostname,result,created_at FROM workspace_operations WHERE project_id=? AND status='running'").get(projectId) as { request_id: string; process_id: number; hostname: string; result: string; created_at: string } | undefined
+  if (!active) return
+  let dead = false
+  if (active.hostname !== hostname) dead = Date.now() - Date.parse(`${active.created_at.replace(' ', 'T')}Z`) > FOREIGN_LOCK_MS
+  else {
+    dead = active.process_id === process.pid && !activeOperations.has(`${projectId}:${active.request_id}`)
+    if (!dead) {
+      try { process.kill(active.process_id, 0) } catch (error) { dead = (error as NodeJS.ErrnoException).code === 'ESRCH' }
+    }
+  }
+  if (dead) {
+    const interrupted = { ...JSON.parse(active.result), status: 'interrupted', error: '프로세스가 중단됐어. 기록 뒤의 변경 여부는 파일을 다시 읽어 확인해줘.' }
+    store.prepare("UPDATE workspace_operations SET status='interrupted',result=? WHERE project_id=? AND request_id=? AND status='running'").run(JSON.stringify(interrupted), projectId, active.request_id)
+  }
+}
+
 function remember(projectId: string, target: string, kind: 'file' | 'folder', size: number) {
   db().prepare(`INSERT INTO workspace_entries(id,project_id,target,target_key,parent,kind,size) VALUES(?,?,?,?,?,?,?)
     ON CONFLICT(project_id,target_key) DO UPDATE SET size=excluded.size`).run(id(), projectId, target, target.toLowerCase(), parent(target), kind, size)
@@ -183,7 +203,7 @@ export const WorkspaceService = {
   /** Name and guidelines from the project settings dialog. The guidelines go through the same file write as any edit, so they are logged and bump the revision. */
   async update(owner: string, projectId: string, input: { name?: string; guidelines?: string; revision: number }, checkAccess: () => void = () => {}) {
     const current = requireProject(owner, projectId)
-    if (current.revision !== input.revision) throw new WorkspaceError('다른 곳에서 프로젝트 지침이 바뀌었어. 다시 열어줘.', 409)
+    if (current.revision !== input.revision) throw settingsConflict()
     const name = input.name?.trim()
     if (name !== undefined && (!name || name.length > 100)) throw new WorkspaceError('이름은 1~100자로 입력해줘.')
     if (input.guidelines !== undefined && input.guidelines !== current.guidelines) {
@@ -191,13 +211,19 @@ export const WorkspaceService = {
       const file = await resolved(owner, projectId, GUIDELINES, true)
       let expectedRevision: string | null = null
       try { expectedRevision = await fileRevision(file) } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error }
-      // A write that landed while the file revision was read would otherwise be overwritten unseen.
-      if (requireProject(owner, projectId).revision !== input.revision) throw new WorkspaceError('다른 곳에서 프로젝트 지침이 바뀌었어. 다시 열어줘.', 409)
-      const result = await this.apply(owner, projectId, `project-${id()}`, [{ kind: 'write', target: GUIDELINES, text: input.guidelines, expectedRevision }], checkAccess, undefined, { guidelines: true })
+      const result = await this.apply(owner, projectId, `project-${id()}`, [{ kind: 'write', target: GUIDELINES, text: input.guidelines, expectedRevision }], checkAccess, undefined, {
+        guidelines: true, projectName: name,
+        beforeWrite: async () => { if (requireProject(owner, projectId).revision !== input.revision) throw settingsConflict() },
+      })
       if (result.status !== 'completed') throw new WorkspaceError(result.error ?? '프로젝트 지침을 저장하지 못했어.', 409)
-    }
-    if (name !== undefined && name !== current.name) {
-      db().prepare('UPDATE workspace_projects SET name=? WHERE id=?').run(name, projectId)
+    } else if (name !== undefined && name !== current.name) {
+      const store = db()
+      store.transaction(() => {
+        checkAccess()
+        recoverInterruptedWriter(store, projectId)
+        if (store.prepare("SELECT 1 FROM workspace_operations WHERE project_id=? AND status='running'").get(projectId)) throw new WorkspaceError('프로젝트에 다른 변경 작업이 진행 중이야.', 409)
+        if (!store.prepare('UPDATE workspace_projects SET name=?,revision=revision+1 WHERE id=? AND revision=?').run(name, projectId, input.revision).changes) throw settingsConflict()
+      }).immediate()
       changed(owner, projectId)
     }
     return this.get(owner, projectId)
@@ -273,28 +299,48 @@ export const WorkspaceService = {
     if (!(await fs.promises.stat(folder)).isDirectory()) throw new WorkspaceError('목록 대상은 폴더여야 해.')
     const dir = options.direction === 'desc' ? 'DESC' : 'ASC'
     const order = options.sort === 'size' ? `size ${dir},target` : `target ${dir}`
-    const page = () => db().prepare(`SELECT id,target,kind,size FROM workspace_entries WHERE project_id=? AND parent=? ORDER BY kind DESC,${order} LIMIT 101 OFFSET ?`)
-      .all(projectId, workspaceTarget(target, true), offset) as WorkspaceEntry[]
+    const store = db()
+    const page = store.prepare(`SELECT id,target,kind,size FROM workspace_entries WHERE project_id=? AND parent=? ORDER BY kind DESC,${order} LIMIT ? OFFSET ?`)
+    const directory = workspaceTarget(target, true)
     // Rows whose file the disk lost (a half-finished delete or move) drop out of the index when their folder is shown.
-    const check = async (entries: WorkspaceEntry[]) => {
-      const gone: string[] = []
-      await Promise.all(entries.slice(0, 100).map(async entry => {
+    const entries: WorkspaceEntry[] = []
+    let cursor = offset
+    while (entries.length < 100) {
+      const take = 100 - entries.length
+      const rows = page.all(projectId, directory, take + 1, cursor) as WorkspaceEntry[]
+      const gone = new Set<WorkspaceEntry>()
+      const candidates = rows.slice(0, take)
+      await Promise.all(candidates.map(async entry => {
         try {
           const info = await fs.promises.lstat(path.join(folder, path.basename(entry.target)), { bigint: true })
           if (options.revisions && entry.kind === 'file' && info.isFile()) entry.revision = revision(info)
-        } catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') gone.push(entry.target) }
+        } catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') gone.add(entry) }
       }))
-      return gone
+      if (gone.size) {
+        const drop = store.prepare(`DELETE FROM workspace_entries WHERE project_id=? AND (target=? OR ${UNDER})`)
+        store.transaction(() => {
+          // A move renames on disk before it updates the indexed subtree. Hide those rows but let the writer own them.
+          recoverInterruptedWriter(store, projectId)
+          if (store.prepare("SELECT 1 FROM workspace_operations WHERE project_id=? AND status='running'").get(projectId)) {
+            cursor += gone.size
+            return
+          }
+          for (const entry of gone) {
+            // A writer may have restored this path since the async stat. Do not discard its index.
+            const info = fs.lstatSync(path.join(folder, path.basename(entry.target)), { bigint: true, throwIfNoEntry: false })
+            if (!info) drop.run(projectId, entry.target, ...under(entry.target))
+            else {
+              gone.delete(entry)
+              if (options.revisions && entry.kind === 'file' && info.isFile()) entry.revision = revision(info)
+            }
+          }
+        }).immediate()
+      }
+      cursor += candidates.length - gone.size
+      entries.push(...candidates.filter(entry => !gone.has(entry)))
+      if (rows.length <= take) return { entries, nextOffset: null }
     }
-    let entries = page()
-    const gone = await check(entries)
-    if (gone.length) {
-      const drop = db().prepare(`DELETE FROM workspace_entries WHERE project_id=? AND (target=? OR ${UNDER})`)
-      db().transaction(() => { for (const lost of gone) drop.run(projectId, lost, ...under(lost)) })()
-      entries = page()
-      await check(entries)
-    }
-    return { entries: entries.slice(0, 100), nextOffset: entries.length > 100 ? offset + 100 : null }
+    return { entries, nextOffset: cursor }
   },
   /** Every folder of a project (move dialog), at most 2,000. */
   folders(owner: string, projectId: string) {
@@ -387,27 +433,12 @@ export const WorkspaceService = {
    * `guidelines`: the screen may write AI_GUIDELINES.md. Chats and plugins may not: the file becomes the
    * "selected by the user" instructions of every connected chat, so text they read must not rewrite it.
    */
-  async apply(owner: string, projectId: string, requestId: string, operations: WorkspaceOperation[], checkAccess: () => void = () => {}, signal?: AbortSignal, options: { guidelines?: boolean; beforeWrite?: () => Promise<void>; inputIdentity?: unknown } = {}): Promise<WorkspaceBatchResult> {
+  async apply(owner: string, projectId: string, requestId: string, operations: WorkspaceOperation[], checkAccess: () => void = () => {}, signal?: AbortSignal, options: { guidelines?: boolean; projectName?: string; beforeWrite?: () => Promise<void>; inputIdentity?: unknown } = {}): Promise<WorkspaceBatchResult> {
     requireProject(owner, projectId)
     if (!/^[\w-]{8,100}$/.test(requestId) || !operations.length || operations.length > 100 || Buffer.byteLength(JSON.stringify(operations)) > MAX_TEXT) throw new WorkspaceError('한 번에 1~100개, 총 8MB까지 처리할 수 있어.')
     const fingerprint = hash(JSON.stringify(options.inputIdentity === undefined ? operations : { operations, identity: options.inputIdentity }))
     const store = db()
-    // Cross-process exclusion. Never expire a same-host lock merely because an operation is slow.
-    const active = store.prepare("SELECT request_id,process_id,hostname,result,created_at FROM workspace_operations WHERE project_id=? AND status='running'").get(projectId) as { request_id: string; process_id: number; hostname: string; result: string; created_at: string } | undefined
-    if (active) {
-      let dead = false
-      if (active.hostname !== hostname) dead = Date.now() - Date.parse(`${active.created_at.replace(' ', 'T')}Z`) > FOREIGN_LOCK_MS
-      else {
-        dead = active.process_id === process.pid && !activeOperations.has(`${projectId}:${active.request_id}`)
-        if (!dead) {
-          try { process.kill(active.process_id, 0) } catch (error) { dead = (error as NodeJS.ErrnoException).code === 'ESRCH' }
-        }
-      }
-      if (dead) {
-        const interrupted = { ...JSON.parse(active.result), status: 'interrupted', error: '프로세스가 중단됐어. 기록 뒤의 변경 여부는 파일을 다시 읽어 확인해줘.' }
-        store.prepare("UPDATE workspace_operations SET status='interrupted',result=? WHERE project_id=? AND request_id=? AND status='running'").run(JSON.stringify(interrupted), projectId, active.request_id)
-      }
-    }
+    recoverInterruptedWriter(store, projectId)
     const previous = store.prepare('SELECT input_hash,status,result FROM workspace_operations WHERE project_id=? AND request_id=?').get(projectId, requestId) as { input_hash: string; status: string; result: string } | undefined
     if (previous) {
       if (previous.input_hash !== fingerprint) throw new WorkspaceError('같은 요청 ID에 다른 작업을 넣을 수 없어.', 409)
@@ -506,7 +537,7 @@ export const WorkspaceService = {
               await fs.promises.copyFile(staging, file, fs.constants.COPYFILE_EXCL)
             } else await fs.promises.rename(staging, file)
             remember(projectId, target, 'file', bytes.length)
-            if (isGuideline) store.prepare('UPDATE workspace_projects SET guidelines=?,revision=revision+1 WHERE id=?').run(text, projectId)
+            if (isGuideline) store.prepare('UPDATE workspace_projects SET guidelines=?,name=COALESCE(?,name),revision=revision+1 WHERE id=?').run(text, options.projectName ?? null, projectId)
             result.results.push({ target, revision: await fileRevision(file) })
           } finally { await fs.promises.unlink(staging).catch(() => {}) }
         }

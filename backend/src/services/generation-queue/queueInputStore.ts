@@ -8,7 +8,9 @@ import {
   collectWorkflowInputAssetRefs,
   isWorkflowInputAssetRef,
   registerWorkflowInputAssetRefs,
+  releaseUnclaimedGraphInputs,
   releaseWorkflowInputAssetRefs,
+  WorkflowInputAssetError,
   type WorkflowInputAssetRef,
 } from '../workflowInputAssetStore'
 
@@ -22,8 +24,6 @@ import {
  *
  * Lifetime is refcounted in `generation_queue_input_refs` (migration 032) and released
  * by `pruneTerminalRequestPayloads` — the same moment a job stops being retryable.
- * See `releaseQueueInputsForJobs` for why that anchor (rather than "job is terminal")
- * is the safe one.
  *
  * CleanupService backfills stored payloads through `externalizeStoredQueuePayloads`.
  * Inputs that remain inline still work through the base64 branch in `prepareComfyPromptData`.
@@ -81,6 +81,13 @@ export function resolveQueueInputFilePath(ref: QueueInputRef) {
   return fs.existsSync(absolutePath) ? absolutePath : null
 }
 
+// Another submission may have reused these bytes but not yet registered its jobs. Persist the
+// grace across workers; an input published only once can still be freed with its last claim.
+const reuseMarker = (file: string) => `${file}.reuse`
+function recentlyReused(file: string, cutoff: number) {
+  return (fs.statSync(reuseMarker(file), { throwIfNoEntry: false })?.mtimeMs ?? -Infinity) > cutoff
+}
+
 /**
  * Write one decoded input to the store and return its reference.
  * Writing is idempotent: an identical blob (same hash) is stored exactly once, which is what
@@ -105,8 +112,7 @@ export function storeQueueInputBuffer(buffer: Buffer, options: { mimeType?: stri
         fs.rmSync(stagingPath, { force: true })
       }
     } else {
-      const now = new Date()
-      fs.utimesSync(absolutePath, now, now)
+      fs.writeFileSync(reuseMarker(absolutePath), '1')
     }
   }).immediate()
 
@@ -250,7 +256,7 @@ export function collectQueueInputRefs(value: unknown): Array<QueueInputRef | Wor
  * Called from `GenerationQueueModel.create`, so every enqueue path — user routes, public
  * workflow routes, graph executors and retries — registers its claims without knowing about it.
  */
-export function registerQueueInputRefs(jobId: number, refs: Array<QueueInputRef | WorkflowInputAssetRef>) {
+export function registerQueueInputRefs(jobId: number, refs: Array<QueueInputRef | WorkflowInputAssetRef>, checked = new Set<string>()) {
   if (refs.length === 0) {
     return 0
   }
@@ -264,6 +270,10 @@ export function registerQueueInputRefs(jobId: number, refs: Array<QueueInputRef 
   let inserted = 0
   for (const ref of refs) {
     if (isWorkflowInputAssetRef(ref)) continue
+    if (!checked.has(ref.sha256)) {
+      if (!fs.statSync(resolveQueueInputPath(ref.sha256), { throwIfNoEntry: false })?.isFile()) throw new WorkflowInputAssetError('큐 입력 파일을 찾을 수 없어. 원본을 다시 첨부해줘.')
+      checked.add(ref.sha256)
+    }
     inserted += insert.run(jobId, ref.sha256, ref.bytes ?? 0).changes
   }
 
@@ -285,10 +295,12 @@ export function externalizeStoredQueuePayloads() {
     SELECT id FROM generation_queue_jobs WHERE request_payload LIKE '%;base64,%' ORDER BY id
   `).all() as Array<{ id: number }>).map((row) => row.id)
   const read = db.prepare('SELECT request_payload FROM generation_queue_jobs WHERE id = ?')
-  const write = db.prepare('UPDATE generation_queue_jobs SET request_payload = ? WHERE id = ?')
-  const apply = db.transaction((jobId: number, payload: string, refs: QueueInputRef[]) => {
-    write.run(payload, jobId)
+  // Publishing blobs is outside this transaction; do not revive a job another worker already compacted.
+  const write = db.prepare('UPDATE generation_queue_jobs SET request_payload = ? WHERE id = ? AND request_payload = ?')
+  const apply = db.transaction((jobId: number, previous: string, payload: string, refs: QueueInputRef[]) => {
+    if (!write.run(payload, jobId, previous).changes) return false
     registerQueueInputRefs(jobId, refs)
+    return true
   })
 
   let rewritten = 0
@@ -312,7 +324,10 @@ export function externalizeStoredQueuePayloads() {
       continue
     }
     const payload = JSON.stringify(value)
-    apply(jobId, payload, refs)
+    if (!apply(jobId, row.request_payload, payload, refs)) {
+      skipped++
+      continue
+    }
     rewritten += 1
     savedBytes += Buffer.byteLength(row.request_payload) - Buffer.byteLength(payload)
   }
@@ -320,65 +335,44 @@ export function externalizeStoredQueuePayloads() {
   return { scanned: ids.length, rewritten, savedBytes, skipped }
 }
 
-/**
- * Drop the given jobs' claims and delete any input that nobody references any more.
- *
- * Callers must only pass jobs whose payload has just been compacted. That is the point where a
- * job can no longer be retried (`retryJob` rejects pruned payloads), which is the real end of an
- * input's usefulness — a merely terminal job may still be retried, and an `orphan_suspected`
- * job is not terminal at all, so neither is a safe deletion anchor.
- */
-export function releaseQueueInputsForJobs(jobIds: number[]) {
-  if (jobIds.length === 0) {
-    return { releasedFiles: 0, releasedBytes: 0 }
-  }
-
-  releaseWorkflowInputAssetRefs(jobIds)
+/** Detach claims in the payload compaction transaction; no filesystem changes before commit. */
+export function detachQueueInputRefs(jobIds: number[]) {
+  const workflowAssets = releaseWorkflowInputAssetRefs(jobIds)
   const db = getUserSettingsDb()
-  // A cold backlog can compact far more jobs than SQLite's bind-parameter ceiling allows.
-  const chunks = chunkSqliteValues(jobIds)
-
   const candidateShaSet = new Set<string>()
-  for (const chunk of chunks) {
-    const placeholders = sqliteInPlaceholders(chunk)
-    for (const row of db.prepare(`
-      SELECT DISTINCT sha256 FROM generation_queue_input_refs
-      WHERE job_id IN (${placeholders})
-    `).all(...chunk) as Array<{ sha256: string }>) {
-      candidateShaSet.add(row.sha256)
-    }
+  for (const chunk of chunkSqliteValues(jobIds)) {
+    const rows = db.prepare(`DELETE FROM generation_queue_input_refs WHERE job_id IN (${sqliteInPlaceholders(chunk)}) RETURNING sha256`)
+      .all(...chunk) as Array<{ sha256: string }>
+    for (const row of rows) candidateShaSet.add(row.sha256)
   }
+  return { workflowAssets, hashes: candidateShaSet }
+}
 
-  const candidateShas = [...candidateShaSet]
-  if (candidateShas.length === 0) {
-    return { releasedFiles: 0, releasedBytes: 0 }
-  }
-
-  for (const chunk of chunks) {
-    const placeholders = sqliteInPlaceholders(chunk)
-    db.prepare(`DELETE FROM generation_queue_input_refs WHERE job_id IN (${placeholders})`).run(...chunk)
-  }
-
-  const stillReferenced = db.prepare(`SELECT 1 FROM generation_queue_input_refs WHERE sha256 = ? LIMIT 1`)
+/** Recheck under the writer lock: another job may have claimed an input since compaction committed. */
+export function collectDetachedQueueInputs({ workflowAssets, hashes }: ReturnType<typeof detachQueueInputRefs>) {
+  releaseUnclaimedGraphInputs(workflowAssets)
   let releasedFiles = 0
   let releasedBytes = 0
-
-  for (const sha256 of candidateShas) {
-    if (stillReferenced.get(sha256)) {
-      continue
-    }
-
-    const absolutePath = resolveQueueInputPath(sha256)
-    try {
-      const size = fs.statSync(absolutePath).size
-      fs.rmSync(absolutePath, { force: true })
-      releasedFiles += 1
-      releasedBytes += size
-    } catch {
-      // Already gone (or never written); the refcount row is what mattered.
-    }
+  if (hashes.size) {
+    const db = getUserSettingsDb()
+    const stillReferenced = db.prepare('SELECT 1 FROM generation_queue_input_refs WHERE sha256 = ? LIMIT 1')
+    db.transaction(() => {
+      const cutoff = Date.now() - ORPHAN_SWEEP_GRACE_MS
+      for (const sha256 of hashes) {
+        if (stillReferenced.get(sha256)) continue
+        const file = resolveQueueInputPath(sha256)
+        if (recentlyReused(file, cutoff)) continue
+        try {
+          const size = fs.statSync(file).size
+          fs.unlinkSync(file)
+          releasedFiles++
+          releasedBytes += size
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+        }
+      }
+    }).immediate()
   }
-
   return { releasedFiles, releasedBytes }
 }
 
@@ -432,9 +426,9 @@ export async function sweepOrphanQueueInputFiles(options: { graceMs?: number } =
           const latest = fs.statSync(absolutePath)
           if (latest.mtimeMs > cutoff) return null
           const sha256 = entry.name.endsWith('.bin') ? entry.name.slice(0, -'.bin'.length) : null
-          if (sha256 && isReferenced.get(sha256)) return null
+          if (sha256 && (isReferenced.get(sha256) || recentlyReused(absolutePath, cutoff))) return null
           fs.rmSync(absolutePath, { force: true })
-          return { size: latest.size }
+          return entry.name.endsWith('.reuse') ? null : { size: latest.size }
         }).immediate()
         if (deleted) {
           removed += 1

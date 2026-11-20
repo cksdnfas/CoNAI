@@ -121,8 +121,8 @@ export function listDatabaseBackups(root: string = getDatabaseBackupRoot()): Dat
     .sort((a, b) => b.name.localeCompare(a.name));
 }
 
-/** Keep the newest `keep` stamped backups; also clears `.partial` leftovers of crashed runs. */
-export function pruneDatabaseBackups(keep: number, root: string = getDatabaseBackupRoot()): string[] {
+/** Keep the just-finished run even after a clock rollback; fill the remaining places in stamp order. */
+export function pruneDatabaseBackups(keep: number, root: string = getDatabaseBackupRoot(), justFinished?: string): string[] {
   const removed: string[] = [];
   let entries: fs.Dirent[];
   try {
@@ -138,10 +138,13 @@ export function pruneDatabaseBackups(keep: number, root: string = getDatabaseBac
     }
   }
 
-  const backups = listDatabaseBackups(root);
-  for (const backup of backups.slice(Math.max(1, Math.floor(keep)))) {
-    fs.rmSync(path.join(root, backup.name), { recursive: true, force: true });
-    removed.push(backup.name);
+  // Retention needs directory names, not a size scan of every database in every backup.
+  const names = entries.filter(entry => entry.isDirectory() && BACKUP_DIR_PATTERN.test(entry.name)).map(entry => entry.name).sort().reverse();
+  const keepCount = Math.max(1, Math.floor(keep));
+  const expired = justFinished && names.includes(justFinished) ? names.filter(name => name !== justFinished).slice(keepCount - 1) : names.slice(keepCount);
+  for (const name of expired) {
+    fs.rmSync(path.join(root, name), { recursive: true, force: true });
+    removed.push(name);
   }
 
   return removed;
@@ -252,7 +255,7 @@ export async function runDatabaseBackup(options: {
       throw error;
     }
 
-    const removed = pruneDatabaseBackups(options.keep ?? DEFAULT_DATABASE_BACKUP_KEEP, root);
+    const removed = pruneDatabaseBackups(options.keep ?? DEFAULT_DATABASE_BACKUP_KEEP, root, name);
     const durationMs = Date.now() - startedAt;
     const totalMb = files.reduce((sum, file) => sum + file.bytes, 0) / (1024 * 1024);
     console.log(`💾 Database backup ${name}: ${files.map((file) => file.fileName).join(', ')} (${totalMb.toFixed(1)}MB) in ${(durationMs / 1000).toFixed(1)}s${removed.length > 0 ? `, pruned ${removed.length}` : ''}`);

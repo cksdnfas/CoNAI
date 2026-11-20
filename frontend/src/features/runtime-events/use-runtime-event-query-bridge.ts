@@ -9,6 +9,7 @@ import { CHARACTER_LIBRARY_QUERY_KEY, invalidateCharacterLibrary } from '@/lib/a
 import { chatTaskQueryKey, invalidateChatProfileViews, type CodexChatThreadDetail } from '@/lib/api-codex-chat'
 import { CHAT_ROUTINES_QUERY_KEY } from '@/lib/api-chat-routines'
 import { PLUGINS_QUERY_KEY } from '@/lib/api-plugins'
+import { PLUGIN_DRAFT_QUERY_ROOT, PLUGIN_DRAFTS_QUERY_KEY, pluginDraftQueryKey } from '@/lib/api-plugin-authoring'
 import { POSTS_QUERY_KEY, invalidatePostScopes } from '@/lib/api-posts'
 import { RUNTIME_JOB_QUERY_KEY } from '@/lib/use-runtime-job'
 import { refetchActiveChatQuery, scheduleChatDirectoryRefresh } from '@/features/codex-chat/chat-query-refresh'
@@ -429,8 +430,8 @@ export function useRuntimeEventQueryBridge() {
       }
       case 'plugin.draft.changed': {
         const { draftId } = envelope.payload as { draftId: string }
-        if (/^[a-f0-9]{32}$/.test(draftId)) void queryClient.invalidateQueries({ queryKey: ['plugin-draft', draftId], refetchType: 'active' })
-        scheduleInvalidate(['plugin-drafts'], 200)
+        if (/^[a-f0-9]{32}$/.test(draftId)) void queryClient.invalidateQueries({ queryKey: pluginDraftQueryKey(draftId), refetchType: 'active' })
+        scheduleInvalidate([PLUGIN_DRAFTS_QUERY_KEY[0]], 200)
         return
       }
       case 'plugin.server.changed': {
@@ -477,6 +478,8 @@ export function useRuntimeEventQueryBridge() {
       GRAPH_EXECUTION_PROGRESS_QUERY_KEY_PREFIX,
       POSTS_QUERY_KEY,
       PLUGINS_QUERY_KEY_PREFIX,
+      PLUGIN_DRAFT_QUERY_ROOT,
+      PLUGIN_DRAFTS_QUERY_KEY[0],
       CHAT_ROUTINES_QUERY_KEY_PREFIX,
       'workspaces',
       'file-store',

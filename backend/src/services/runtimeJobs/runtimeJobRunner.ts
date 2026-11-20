@@ -75,6 +75,11 @@ let isBootstrapped = false
 /** Set by shutdown(): the database may already be closed, and the next start's recovery closes what is left open. */
 let isShutDown = false
 
+export class RuntimeJobRunnerStoppedError extends Error {
+  readonly statusCode = 503
+  constructor() { super('작업 서비스가 종료 중이야. 다시 시작된 뒤 시도해줘.') }
+}
+
 /** 잡 상태 전이를 SSE 채널에 얹는 경량 힌트. 진행률 수치는 절대 싣지 않는다. */
 function emitJobHint(job: RuntimeJobRecord | null): void {
   if (!job) {
@@ -250,6 +255,7 @@ function spawnJobSubprocess(job: RuntimeJobRecord): void {
   child.unref()
 
   child.on('error', (error) => {
+    if (isShutDown) return
     RuntimeJobStore.markFailed(job.jobId, RUNTIME_JOB_FAILURE_CODES.handlerError, error.message)
     emitJobHint(RuntimeJobStore.get(job.jobId))
   })
@@ -290,6 +296,7 @@ export class RuntimeJobRunner {
     params: TParams,
     meta?: { requestedByAccountId?: number | null; total?: number },
   ): RuntimeJobRecord {
+    if (isShutDown) throw new RuntimeJobRunnerStoppedError()
     const registered = registry.get(kind)
     if (!registered) {
       throw new Error(`No runtime job handler registered for kind: ${kind}`)
@@ -331,6 +338,7 @@ export class RuntimeJobRunner {
    * subprocess 러너 스크립트 전용 진입점이다.
    */
   static async runExisting(jobId: string): Promise<void> {
+    if (isShutDown) throw new RuntimeJobRunnerStoppedError()
     const job = RuntimeJobStore.get(jobId)
     if (!job) {
       throw new Error(`Runtime job not found: ${jobId}`)

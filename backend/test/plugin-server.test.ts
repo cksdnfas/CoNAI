@@ -1485,12 +1485,12 @@ test('trusted plugins run a server module with their own data, hooks and tools',
     AuthPermissionGroup.addAccountMembership(runnerGroup.id, adminId)
     const runner = { accountId: runnerId, accountType: 'guest' as const }
     const submit = (requestId: string, data: object) => runtime.requestPluginServer('chat-instructions', { op: 'start', input: { requestId, data } }, runner, {}) as Promise<{ jobId: string }>
-    const first = await submit('same-request-123', { value: 42 })
+    const first = await submit('same-request-123', { value: 42, options: { zoom: 2, layers: [1, 2] } })
     await until(() => tasks.callPluginTask('chat-instructions', runner, 'get', { jobId: first.jobId }).status === 'completed', 'processing completed')
-    const again = await submit('same-request-123', { value: 42 })
+    const again = await submit('same-request-123', { options: { layers: [1, 2], zoom: 2 }, value: 42 })
     assert.equal(first.jobId, again.jobId)
     assert.deepEqual(tasks.callPluginTask('chat-instructions', runner, 'get', { jobId: first.jobId }).result, { value: 42 })
-    await assert.rejects(submit('same-request-123', { value: 43 }), /같은 요청 ID/)
+    await assert.rejects(submit('same-request-123', { options: { layers: [2, 1], zoom: 2 }, value: 42 }), /같은 요청 ID/)
     assert.throws(() => tasks.callPluginTask('chat-instructions', admin, 'get', { jobId: first.jobId }), /찾을 수 없어/)
     const waiting = await submit('cancel-request-123', { wait: true })
     await until(() => tasks.callPluginTask('chat-instructions', runner, 'get', { jobId: waiting.jobId }).status === 'running', 'processing running')

@@ -72,7 +72,6 @@ function toRoutine(row: RoutineRow): ChatRoutine {
   }
 }
 
-const timingOf = (routine: ChatRoutine) => ({ scheduleType: routine.scheduleType, runAt: routine.runAt, intervalMinutes: routine.intervalMinutes, dailyTime: routine.dailyTime, timezone: routine.timezone })
 const roomKey = (id: number) => `routine:${id}`
 const clip = (value: unknown, max: number) => String(value ?? '').replace(/\s+/g, ' ').trim().slice(0, max)
 
@@ -187,8 +186,8 @@ const RESTART_INTERRUPTED = '실행 중에 서버가 다시 시작돼서 끊겼�
 
 let pollTimer: NodeJS.Timeout | null = null
 let polling = false
-/** The routines answering now, with what cuts their wake off. */
-const running = new Map<number, AbortController>()
+let stopped = false
+const running = new Map<number, { controller: AbortController; finished: Promise<ChatRoutine | null> }>()
 
 /**
  * Record one failed run. A scheduled one-time routine has no next turn: it stops at once for the person to check what
@@ -204,10 +203,58 @@ function recordFailure(routine: ChatRoutine, message: string, startedAt: string 
   })
 }
 
-/** Runs due routines. Each wake goes on in the background; a routine never runs twice at once. */
+/** Execute one admitted run and persist its outcome before the runner releases the routine. */
+async function runRoutine(routine: ChatRoutine, manual: boolean, signal: AbortSignal) {
+  const { id } = routine
+  const startedAt = new Date().toISOString()
+  const interrupted = () => routine.scheduleType === 'once'
+    ? recordFailure(routine, RESTART_INTERRUPTED, startedAt, manual)
+    : ChatRoutineStore.update(id, { last_result: 'skipped', last_run_at: startedAt, last_error: RESTART_INTERRUPTED })
+  const pause = (reason: string) => ChatRoutineStore.update(id, { status: 'paused', stop_reason: reason, next_run_at: null })
+  if (signal.aborted) return interrupted()
+  const runAs = resolveAutomationRunAs(routine.accountId, [])
+  if (!runAs.ok) return pause(runAs.message)
+  const requester = runAs.requester
+  let threadId = routine.threadId
+  try {
+    if (routine.target === 'dedicated') {
+      if (routine.profileId === null || !ChatProfileStore.find(routine.profileId)) return pause('캐릭터가 없어져서 멈췄어.')
+      threadId = (await ensureAutomationRoom(requester, routine.profileId, roomKey(id), routine.name)).id
+      if (threadId !== routine.threadId) ChatRoutineStore.update(id, { thread_id: threadId })
+    } else if (threadId === null || !CodexChatStore.findThread(threadId, requester.accountId)) {
+      return pause('채팅방이 없어져서 멈췄어.')
+    }
+  } catch (error) {
+    return signal.aborted ? interrupted() : pause(`채팅방을 준비하지 못했어: ${clip(error instanceof Error ? error.message : error, 200)}`)
+  }
+
+  try {
+    const result = await wakeChatRoom({ requester, threadId, instruction: routine.message, routing: { source: 'routine', id, name: routine.name }, chainLimit: routine.chainLimit, signal })
+    const failure = wakeFailure(result, '캐릭터가 답하지 못했어.')
+    if (failure !== null) throw new Error(failure)
+  } catch (error) {
+    if (signal.aborted) return interrupted()
+    if (error instanceof ChatWakeBusyError) {
+      // Only a scheduled one-time run needs another due time when the room was busy.
+      const retry = routine.scheduleType === 'once' && !manual ? { next_run_at: new Date(Date.now() + 60_000).toISOString() } : {}
+      return ChatRoutineStore.update(id, { last_result: 'skipped', last_run_at: startedAt, last_error: error.message, ...retry })
+    }
+    return recordFailure(routine, clip(error instanceof Error ? error.message : error, 300), startedAt, manual)
+  }
+
+  const runCount = routine.runCount + 1
+  const finished = (routine.scheduleType === 'once' && !manual) || (routine.maxRunCount !== null && runCount >= routine.maxRunCount)
+  return ChatRoutineStore.update(id, {
+    last_result: 'ok', last_run_at: startedAt, last_error: null, fail_streak: 0, run_count: runCount,
+    ...(finished ? { status: 'completed' as const, stop_reason: routine.scheduleType === 'once' ? '한 번 실행하고 끝났어.' : '최대 실행 횟수를 채웠어.', next_run_at: null } : {}),
+  })
+}
+
+/** Owns scheduling, admission and shutdown for timed and manual runs alike. */
 export const ChatRoutineRunner = {
   start() {
     if (pollTimer) return false
+    stopped = false
     ChatRoutineRunner.recover()
     void ChatRoutineRunner.poll()
     pollTimer = setInterval(() => { void ChatRoutineRunner.poll() }, POLL_MS)
@@ -220,11 +267,18 @@ export const ChatRoutineRunner = {
    * failure; a repeating one records it as skipped.
    */
   stop() {
-    for (const controller of running.values()) controller.abort()
+    stopped = true
+    for (const { controller } of running.values()) controller.abort()
     if (!pollTimer) return false
     clearInterval(pollTimer)
     pollTimer = null
     return true
+  },
+
+  /** No new wakes may enter while the admitted ones finish writing their results to the still-open database. */
+  async stopAndDrain() {
+    ChatRoutineRunner.stop()
+    await Promise.allSettled(Array.from(running.values(), (run) => run.finished))
   },
 
   /**
@@ -244,17 +298,18 @@ export const ChatRoutineRunner = {
   },
 
   async poll(now = new Date()) {
-    if (polling) return
+    if (stopped || polling) return
     polling = true
     try {
       // The stop-everything switch: due routines wait until it is off again.
       if (AutomationSwitch.isPaused()) return
       for (const routine of ChatRoutineStore.due(now.toISOString())) {
+        if (stopped) break
         if (running.has(routine.id)) continue
         // The next due time is taken before the wake starts, so a slow answer cannot make the routine fire again.
-        const next = followingRunAt(timingOf(routine), routine.nextRunAt, now)
+        const next = followingRunAt(routine, routine.nextRunAt, now)
         ChatRoutineStore.update(routine.id, { next_run_at: next })
-        void ChatRoutineRunner.fire(routine.id).catch((error: unknown) => {
+        void ChatRoutineRunner.fire(routine.id)?.catch((error: unknown) => {
           console.warn(`[chat-routine] routine ${routine.id} failed:`, error instanceof Error ? error.message : error)
         })
       }
@@ -266,68 +321,22 @@ export const ChatRoutineRunner = {
   },
 
   /**
-   * Wake the routine's room once now (a timed run or "run now"). Resolves when the room has answered; the outcome is
-   * recorded on the routine. A run that cannot start (no account, no room) pauses the routine with the reason.
-   * A manual run does not use up a one-time routine.
+   * Claim the routine synchronously, so "run now" acknowledges only an admitted wake. Missing or already running:
+   * null. Otherwise its promise settles after the outcome is stored. A manual run does not consume a one-time schedule.
    */
-  async fire(id: number, options: { manual?: boolean } = {}) {
+  fire(id: number, options: { manual?: boolean } = {}) {
+    if (stopped) throw new CodexChatError('서버가 종료 중이라 루틴을 실행할 수 없어.', 503)
+    if (running.has(id)) return null
     const routine = ChatRoutineStore.find(id)
-    if (!routine || running.has(id)) return null
-    const pause = (reason: string, status: ChatRoutineStatus = 'paused') => ChatRoutineStore.update(id, { status, stop_reason: reason, next_run_at: null })
-
-    const runAs = resolveAutomationRunAs(routine.accountId, [])
-    if (!runAs.ok) return pause(runAs.message)
-    const requester = runAs.requester
-
+    if (!routine) return null
     const controller = new AbortController()
-    running.set(id, controller)
-    try {
-      let threadId = routine.threadId
-      try {
-        if (routine.target === 'dedicated') {
-          const profile = routine.profileId === null ? null : ChatProfileStore.find(routine.profileId)
-          if (!profile) return pause('캐릭터가 없어져서 멈췄어.')
-          threadId = (await ensureAutomationRoom(requester, profile.id, roomKey(id), routine.name)).id
-          if (threadId !== routine.threadId) ChatRoutineStore.update(id, { thread_id: threadId })
-        } else if (threadId === null || !CodexChatStore.findThread(threadId, requester.accountId)) {
-          return pause('채팅방이 없어져서 멈췄어.')
-        }
-      } catch (error) {
-        return pause(`채팅방을 준비하지 못했어: ${clip(error instanceof Error ? error.message : error, 200)}`)
-      }
-
-      const startedAt = new Date().toISOString()
-      try {
-        const result = await wakeChatRoom({ requester, threadId: threadId as number, instruction: routine.message, routing: { source: 'routine', id, name: routine.name }, chainLimit: routine.chainLimit, signal: controller.signal })
-        const failure = wakeFailure(result, '캐릭터가 답하지 못했어.')
-        if (failure !== null) throw new Error(failure)
-      } catch (error) {
-        if (error instanceof ChatWakeBusyError) {
-          // A one-time routine has no next turn of its own: it tries again in a minute.
-          const retry = routine.scheduleType === 'once' && !options.manual ? { next_run_at: new Date(Date.now() + 60_000).toISOString() } : {}
-          return ChatRoutineStore.update(id, { last_result: 'skipped', last_run_at: startedAt, last_error: error.message, ...retry })
-        }
-        // A repeating routine cut off by a shutdown is not failing: it keeps its streak and runs at its next time.
-        if (controller.signal.aborted && routine.scheduleType !== 'once') {
-          return ChatRoutineStore.update(id, { last_result: 'skipped', last_run_at: startedAt, last_error: RESTART_INTERRUPTED })
-        }
-        const message = controller.signal.aborted ? RESTART_INTERRUPTED : clip(error instanceof Error ? error.message : error, 300)
-        return recordFailure(routine, message, startedAt, options.manual === true)
-      }
-
-      const runCount = routine.runCount + 1
-      const finished = (routine.scheduleType === 'once' && !options.manual) || (routine.maxRunCount !== null && runCount >= routine.maxRunCount)
-      return ChatRoutineStore.update(id, {
-        last_result: 'ok', last_run_at: startedAt, last_error: null, fail_streak: 0, run_count: runCount,
-        ...(finished ? { status: 'completed' as const, stop_reason: routine.scheduleType === 'once' ? '한 번 실행하고 끝났어.' : '최대 실행 횟수를 채웠어.', next_run_at: null } : {}),
-      })
-    } finally {
-      running.delete(id)
-    }
+    const finished = Promise.resolve().then(() => runRoutine(routine, options.manual === true, controller.signal)).finally(() => running.delete(id))
+    running.set(id, { controller, finished })
+    return finished
   },
 }
 
 /** The first due time for a routine switched on now. */
 export function chatRoutineFirstRunAt(routine: Pick<ChatRoutine, 'scheduleType' | 'runAt' | 'intervalMinutes' | 'dailyTime' | 'timezone'>, now = new Date()) {
-  return initialRunAt(timingOf(routine as ChatRoutine), now)
+  return initialRunAt(routine, now)
 }

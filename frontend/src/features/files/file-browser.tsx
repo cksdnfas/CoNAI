@@ -165,7 +165,7 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, pickFolde
   const browsingSystem = canBrowseSystem && system !== null
   const accountKey = auth.data?.accountId ?? (auth.data?.hasCredentials ? 'anonymous' : 'bootstrap')
   const [offset, setOffset] = useState(0)
-  const [selected, setSelected] = useState<string[]>([])
+  const [marked, setSelected] = useState<string[]>([])
   /** Picker only: what is ticked, kept across folders (the list shows one folder at a time). */
   const [chosen, setChosen] = useState<StoredFileEntry[]>([])
   const [nameDialog, setNameDialog] = useState<NameDialog>(null)
@@ -188,9 +188,10 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, pickFolde
   const searchQuery = useDebouncedValue(searchInput.trim())
   const canSearch = !isPicker
   const searching = canSearch && searchOpen && searchQuery !== ''
+  if ((searching || browsingSystem) && marked.length) setSelected([])
   const [sortOrder, changeSortOrder, sortKeys] = useFileSort('files')
   const order = { sort: sortOrder.sort, direction: sortOrder.direction }
-  const query = useQuery({ queryKey: [...FILES_QUERY_KEY, accountKey, 'list', parentId, offset, sortOrder.sort, sortOrder.direction], queryFn: ({ signal }) => listStoredFiles(parentId, offset, signal, order), enabled: canViewFiles && !browsingSystem })
+  const query = useQuery({ queryKey: [...FILES_QUERY_KEY, accountKey, 'list', parentId, offset, sortOrder.sort, sortOrder.direction], queryFn: ({ signal }) => listStoredFiles(parentId, offset, signal, order), enabled: canViewFiles && !browsingSystem && !searching })
   // The server sorts the whole folder, so a new order starts again at the first page.
   const setSort = (next: FileSort) => { changeSortOrder(next); setOffset(0); setSelected([]) }
   const { folders, entries: folderEntries, byId: folderById } = useStoreFolders(canViewFiles)
@@ -200,13 +201,15 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, pickFolde
     onSuccess: () => { void queryClient.invalidateQueries({ queryKey: FILES_QUERY_KEY }) },
     onError: (error: unknown) => showSnackbar({ tone: 'error', message: getErrorMessage(error, t({ ko: '본문을 다시 추출하지 못했어.', en: 'Could not retry extraction.' })) }),
   })
-  const entries = query.data?.entries ?? []
+  const entries = searching ? searchResults.data?.hits.map(hit => hit.entry) ?? [] : query.data?.entries ?? []
+  const byId = new Map(entries.map(entry => [entry.id, entry]))
+  const selection = marked.flatMap(id => { const entry = byId.get(id); return entry ? [entry] : [] })
+  const selected = selection.map(entry => entry.id)
   const rootLabel = t({ ko: '공용 파일', en: 'Shared files' })
   // A picker takes files of the accepted types, and folders only when asked; everything else is just shown.
   const pickable = (entry: StoredFileEntry) => refuse?.(entry) !== true && (entry.kind === 'folder' ? pickFolders : !accept || accept.some((extension) => entry.name.toLowerCase().endsWith(extension)))
   const selectable = isPicker ? entries.filter(pickable) : entries
   const checked = isPicker ? chosen.map((entry) => entry.id) : selected
-  const selection = entries.filter((entry) => selected.includes(entry.id))
   const audioSelection = selection.length > 0 && selection.every((entry) => entry.kind === 'file' && mediaKind(entry) === 'audio')
   // "채팅에 참조": files go on the docked chat's next message, the same reference as the paperclip's "보관함에서 고르기".
   const chatDocked = useChatDockedBesidePage()
@@ -254,7 +257,7 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, pickFolde
       ...(moveOpen ? [{ id: 'moveTarget', label: t({ ko: '이동할 폴더 (빈 값은 최상위)', en: 'Destination folder (empty means root)' }), type: 'select' as const, value: moveTarget, options: ['', ...folders.filter((entry) => !selected.includes(entry.folder.id)).map((entry) => entry.folder.id)].slice(0, 100) }] : []),
     ],
     data: {
-      files: entries.slice(0, 512).map((entry) => ({ id: entry.id, name: entry.name, kind: entry.kind, mimeType: entry.mimeType, bytes: entry.size })), selected: selection.map((entry) => ({ id: entry.id, name: entry.name })), total: query.data?.total ?? 0, offset,
+      files: entries.slice(0, 512).map((entry) => ({ id: entry.id, name: entry.name, kind: entry.kind, mimeType: entry.mimeType, bytes: entry.size })), selected: selection.map((entry) => ({ id: entry.id, name: entry.name })), total: searching ? entries.length : query.data?.total ?? 0, offset: searching ? 0 : offset,
       ...(preview ? { previewing: preview.id } : {}),
       // Names and writers of the previewed file's versions only: their text stays out (open the document to read it).
       ...(versions.length ? { previewVersions: versions.slice(0, 30).map((version) => ({ id: version.id, at: version.replacedAt, by: writerName(version.replacedBy) })) } : {}),
@@ -263,7 +266,7 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, pickFolde
     actions: [
       pageAction('files.open', t({ ko: '폴더 열기', en: 'Open folder' }), t({ ko: '목록(data.files)의 폴더나 최상위(root)를 열어.', en: 'Open a listed folder or the top level (root).' }), pageObject({ id: pageChoice(['root', ...entries.filter((entry) => entry.kind === 'folder').slice(0, 200).map((entry) => entry.id)]) }, ['id'])),
       ...(entries.some((entry) => entry.kind !== 'folder') ? [pageAction('files.preview', t({ ko: '파일 미리보기', en: 'Preview file' }), t({ ko: '목록의 파일 미리보기를 열어.', en: 'Open a listed file preview.' }), pageObject({ id: pageChoice(entries.filter((entry) => entry.kind !== 'folder').slice(0, 300).map((entry) => entry.id)) }, ['id']))] : []),
-      ...(entries.length ? [pageAction('files.select', t({ ko: '항목 선택', en: 'Select items' }), t({ ko: '빈 배열은 선택 해제', en: 'empty clears' }), pageObject({ ids: pageArray(pageText(32), 200) }, ['ids']))] : []),
+      ...(!searching && entries.length ? [pageAction('files.select', t({ ko: '항목 선택', en: 'Select items' }), t({ ko: '빈 배열은 선택 해제', en: 'empty clears' }), pageObject({ ids: pageArray(pageText(32), 200) }, ['ids']))] : []),
       ...(canOrganize ? [
         pageAction('files.new_folder', t({ ko: '새 폴더 창 열기', en: 'Open new folder dialog' }), t({ ko: 'name을 채우고 files.name_save', en: 'fill name, then files.name_save' })),
         ...(entries.length ? [pageAction('files.rename', t({ ko: '이름 변경 창 열기', en: 'Open rename dialog' }), t({ ko: 'name을 채우고 files.name_save', en: 'fill name, then files.name_save' }), pageObject({ id: pageText(32) }, ['id']))] : []),
@@ -504,7 +507,6 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, pickFolde
     return <SystemFolderBrowser key={`${system.root}:${system.path}`} location={system} onNavigate={onSystemNavigate} sidebar={sidebar} />
   }
 
-  const byId = new Map(entries.map((entry) => [entry.id, entry]))
   const toItem = (entry: StoredFileEntry): EntryItem => ({
     id: entry.id, name: entry.name, folder: entry.kind === 'folder', size: entry.size, modified: formatDateTime(entry.updatedAt),
     icon: <EntryIcon entry={entry} />, face: <StoredFileFace entry={entry} />,

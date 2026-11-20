@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import type { McpRequester } from '../../mcp/context'
 import { requireRequesterPermission } from '../../middleware/featureAccess'
+import { stringifyRequestJson } from '../../utils/stableRequestJson'
 import { RuntimeJobRunner, type RuntimeJobContext } from '../runtimeJobs/runtimeJobRunner'
 import { RuntimeJobStore, RuntimeJobConflictError, RUNTIME_JOB_TTL_MS } from '../runtimeJobs/runtimeJobStore'
 import { getPlugin } from './pluginRegistry'
@@ -65,12 +66,14 @@ export function callPluginTask(pluginId: string, requester: McpRequester | undef
   const input = z.object({ requestId: z.string().min(8).max(100).regex(/^[a-zA-Z0-9_.:-]+$/), data: z.record(z.string(), z.unknown()) }).strict().parse(raw)
   const serialized = JSON.stringify(input.data)
   if (Buffer.byteLength(serialized) > 256 * 1024) throw new PluginError('작업 입력은 256KB까지 지원해.', 413)
-  const fingerprint = sha256(serialized)
+  const fingerprint = sha256(stringifyRequestJson(input.data))
   register()
   return db.transaction(() => {
     const previous = db.prepare('SELECT * FROM plugin_task_requests WHERE plugin_id=? AND owner_key=? AND request_key=?').get(pluginId, owner, input.requestId) as Row | undefined
     if (previous) {
-      if (previous.fingerprint !== fingerprint || previous.digest !== plugin.digest) throw new PluginError('같은 요청 ID의 입력이나 플러그인 버전이 달라.', 409)
+      // Old rows kept only the raw JSON hash. An exact replay can upgrade them without starting another job.
+      if (previous.digest !== plugin.digest || (previous.fingerprint !== fingerprint && previous.fingerprint !== sha256(serialized))) throw new PluginError('같은 요청 ID의 입력이나 플러그인 버전이 달라.', 409)
+      if (previous.fingerprint !== fingerprint) db.prepare('UPDATE plugin_task_requests SET fingerprint=? WHERE plugin_id=? AND owner_key=? AND request_key=?').run(fingerprint, pluginId, owner, input.requestId)
       return view(previous)
     }
     db.prepare("DELETE FROM plugin_task_requests WHERE expires_at<? AND job_id NOT IN (SELECT job_id FROM runtime_jobs WHERE status IN ('queued','running'))").run(Date.now())

@@ -80,8 +80,8 @@ export function TextDocumentEditor<T extends TextDocument>({ entry, store, onClo
   const [conflict, setConflict] = useState(false)
   const listedTooLarge = entry !== null && store.tooLarge?.(entry) === true
   const source = useQuery({
-    queryKey: ['text-document-editor', store.key, entry?.id],
-    queryFn: () => store.load(entry!),
+    queryKey: ['text-document-editor', store.key, file?.id],
+    queryFn: () => store.load(file!),
     enabled: entry !== null && !listedTooLarge,
     gcTime: 0,
     staleTime: Infinity,
@@ -89,6 +89,7 @@ export function TextDocumentEditor<T extends TextDocument>({ entry, store, onClo
     refetchOnWindowFocus: false,
   })
   const tooLarge = listedTooLarge || (source.data !== undefined && 'tooLarge' in source.data)
+  const reloading = conflict && source.isFetching
   useEffect(() => {
     if (source.data !== undefined && !('tooLarge' in source.data) && text === null) {
       setText(source.data.text)
@@ -122,11 +123,19 @@ export function TextDocumentEditor<T extends TextDocument>({ entry, store, onClo
   })
   /** The saved version replaces the draft (after a confirm, since the draft is lost). */
   const reloadLatest = async () => {
+    if (!file) return
     if (dirty && !(await confirm({ title: t({ ko: '고친 내용을 버리고 최신본을 불러올까?', en: 'Discard your edits and load the latest version?' }), confirmLabel: t({ ko: '불러오기', en: 'Load' }), tone: 'destructive' }))) return
+    // refetch retains the previous cache entry while loading. Adopt only the completed read, never discard a draft on failure.
+    const latest = await source.refetch()
+    if (latest.isError || !latest.data) {
+      showSnackbar({ tone: 'error', message: getErrorMessage(latest.error, t({ ko: '최신본을 확인하지 못했어.', en: 'Could not check the latest version.' })) })
+      return
+    }
+    const loaded = 'tooLarge' in latest.data ? null : latest.data
+    setText(loaded?.text ?? null)
+    setBaseline(loaded?.text ?? null)
+    setRevision(loaded?.revision ?? null)
     setConflict(false)
-    setText(null)
-    setBaseline(null)
-    await source.refetch()
   }
   /** The draft is saved over the newer version: take its revision, then save as usual. */
   const overwrite = async () => {
@@ -136,7 +145,7 @@ export function TextDocumentEditor<T extends TextDocument>({ entry, store, onClo
     if ('tooLarge' in latest) { setConflict(false); showSnackbar({ tone: 'error', message: store.tooLargeTitle ?? t({ ko: '너무 큰 파일은 여기서 편집할 수 없어', en: 'This file is too large to edit here' }) }); return }
     save.mutate({ value: text, base: latest.revision })
   }
-  const canSave = text !== null && !save.isPending && (file ? dirty : name.trim() !== '')
+  const canSave = text !== null && !tooLarge && !reloading && !save.isPending && (file ? dirty : name.trim() !== '')
   const submit = () => { if (canSave && text !== null) save.mutate({ value: text }) }
 
   // The connected chat reads and drafts the document opened here; that draft leaves the page context on close.
@@ -145,7 +154,7 @@ export function TextDocumentEditor<T extends TextDocument>({ entry, store, onClo
   const [chunkOffset, setChunkOffset] = useState(0)
   const commitText = useChatDraftTransaction(text ?? '', setText)
   const textFits = text !== null && text.length <= DOCUMENT_CHUNK
-  useChatPageRegistration(chatPage && !save.isPending ? {
+  useChatPageRegistration(chatPage && !save.isPending && !reloading ? {
     kind: 'files',
     title: file ? file.name : t({ ko: '새 문서', en: 'New document' }),
     resourceId: `document:${store.key}:${file?.id ?? 'new'}`,
@@ -190,8 +199,8 @@ export function TextDocumentEditor<T extends TextDocument>({ entry, store, onClo
 
   let content
   if (tooLarge) content = <EmptyState icon={File} title={store.tooLargeTitle ?? t({ ko: '너무 큰 파일은 여기서 편집할 수 없어', en: 'This file is too large to edit here' })} />
-  else if (source.isError) content = <ErrorState title={t({ ko: '파일을 열지 못했어.', en: 'Could not open the file.' })} error={source.error} onRetry={() => void source.refetch()} />
-  else if (text === null) content = <LoadingState />
+  else if (source.isError && text === null) content = <ErrorState title={t({ ko: '파일을 열지 못했어.', en: 'Could not open the file.' })} error={source.error} onRetry={() => void source.refetch()} />
+  else if (text === null || reloading) content = <LoadingState />
   else if (!markdown) content = <Suspense fallback={<LoadingState />}><PlainTextEditor value={text} onChange={setText} autoFocus={file !== null} fileName={file?.name ?? fileName} /></Suspense>
   else content = (
     // Markdown: the same in-place tabs as the post editor, in one frame. The visual editor keeps the text Markdown.
@@ -244,8 +253,8 @@ export function TextDocumentEditor<T extends TextDocument>({ entry, store, onClo
         )}
         {conflict ? (
           <SaveConflictAlert message={t({ ko: '다른 곳에서 이 문서가 바뀌었어.', en: 'This document was changed elsewhere.' })}>
-            <Button size="sm" variant="secondary" disabled={save.isPending} onClick={() => void reloadLatest()}>{t({ ko: '최신본 불러오기', en: 'Load latest' })}</Button>
-            <SaveConflictOverwriteButton disabled={save.isPending} onClick={() => void overwrite()} />
+            <Button size="sm" variant="secondary" disabled={save.isPending || reloading} onClick={() => void reloadLatest()}>{t({ ko: '최신본 불러오기', en: 'Load latest' })}</Button>
+            <SaveConflictOverwriteButton disabled={save.isPending || reloading} onClick={() => void overwrite()} />
           </SaveConflictAlert>
         ) : null}
         {content}
