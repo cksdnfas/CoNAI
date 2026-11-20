@@ -140,8 +140,9 @@ export async function createGraphWorkflowFolder(payload: {
   name: string
   description?: string
   parent_id?: number | null
+  assign_to?: { workflow_id: number; expected_revision: number }
 }) {
-  return requestApiData<CreateEnvelope>('/api/graph-workflows/folders', {
+  return requestApiData<CreateEnvelope & { workflow_revision?: number }>('/api/graph-workflows/folders', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -219,7 +220,7 @@ export async function uploadWorkflowInputImage(dataUrl: string) {
 /** Update a saved graph workflow document in place. */
 export async function updateGraphWorkflow(workflowId: number, payload: {
   name?: string
-  description?: string
+  description?: string | null
   graph?: GraphWorkflowDocument
   folder_id?: number | null
   version?: number

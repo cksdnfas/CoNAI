@@ -4,6 +4,7 @@ import { Modal, ModalFooter } from '@/components/ui/modal'
 import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import type { GraphWorkflowFolderRecord, GraphWorkflowRecord } from '@/lib/api-module-graph'
+import type { WorkflowFolderSettingsPanelProps } from './workflow-folder-settings-panel'
 
 const WorkflowFolderSettingsPanelLazy = lazy(async () => {
   const module = await import('./workflow-folder-settings-panel')
@@ -50,8 +51,8 @@ export function ModuleGraphWorkspaceModals({
   folderDeleteTarget: GraphWorkflowFolderRecord | null
   isCustomNodeManagerOpen: boolean
   onCloseBrowseManage: () => void
-  onAssignWorkflowFolder: (folderId: number | null) => void
-  onCreateFolder: (input: { name: string; description?: string; parent_id?: number | null; assignToWorkflow?: boolean }) => void
+  onAssignWorkflowFolder: WorkflowFolderSettingsPanelProps['onAssignWorkflowFolder']
+  onCreateFolder: WorkflowFolderSettingsPanelProps['onCreateFolder']
   onUpdateFolder: (folderId: number, input: { name?: string; description?: string | null; parent_id?: number | null }) => void
   onDeleteFolder: (folderId: number) => void
   onEditWorkflow: () => void

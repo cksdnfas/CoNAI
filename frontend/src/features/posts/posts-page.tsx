@@ -20,11 +20,11 @@ import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
 import { pageAction, pageChoice, pageNumber, pageFreeText, pageObject, pageText } from '@/features/codex-chat/page-action-helpers'
 import { useI18n } from '@/i18n'
-import { POSTS_QUERY_KEY, invalidatePostScope, cancelPostBotRun, createPostCategory, createPostComment, deletePost, deletePostCategory, deletePostComment, getPost, getPostRevision, getPostsSettings, listPostCategories, listPostRevisionSummaries, listPosts, listPostTags, restorePostKnowledge, setPostCommentHidden, updatePost, updatePostCategory, updatePostComment } from '@/lib/api-posts'
+import { POSTS_QUERY_KEY, invalidatePostScope, cancelPostBotRun, createPostCategory, deletePost, deletePostCategory, deletePostComment, getPost, getPostRevision, getPostsSettings, listPostCategories, listPostRevisionSummaries, listPosts, listPostTags, restorePostKnowledge, setPostCommentHidden, updatePost, updatePostCategory } from '@/lib/api-posts'
 import { getErrorMessage } from '@/lib/error-message'
 import { PostCategoryDialog } from './post-category-dialog'
 import { flattenCategories, PostEditor } from './post-editor'
-import { EMPTY_COMMENT_DRAFT, type PostCommentDraft } from './post-comments'
+import { openCommentEdit, publishCommentDraft, saveCommentDraft, usePostCommentDraft } from './post-comment-draft'
 import { PostActions } from './post-actions'
 import { LoadMoreSentinel } from './post-attach-shared'
 import { PostCards, PostFeed, PostSns } from './post-list'
@@ -141,8 +141,7 @@ export function PostsPage() {
   })
 
   // The open post's comment boxes (see PostCommentDraft): held here so the connected chat can read and draft them.
-  const [commentDraft, setCommentDraft] = useState<PostCommentDraft>(EMPTY_COMMENT_DRAFT)
-  useEffect(() => { setCommentDraft(EMPTY_COMMENT_DRAFT) }, [postId])
+  const [commentDraft, setCommentDraft] = usePostCommentDraft(postId)
   // Where the connected chat reads the open post's body from, when it is longer than one chunk.
   const [bodyOffset, setBodyOffset] = useState(0)
   useEffect(() => { setBodyOffset(0) }, [postId])
@@ -163,13 +162,9 @@ export function PostsPage() {
   const submitComment = useMutation({
     mutationFn: async (target: 'comment' | 'reply') => {
       const reply = target === 'reply' ? commentDraft.reply : null
-      const body = (reply ? reply.text : commentDraft.top).trim()
-      if (!openPostData || !body) throw new Error(t({ ko: '올릴 댓글 내용이 없어.', en: 'There is no comment to post.' }))
-      return createPostComment(openPostData.id, { body, parentId: reply?.to ?? null })
-    },
-    onSuccess: async (comment, target) => {
-      setCommentDraft((current) => (target === 'reply' ? { ...current, reply: null } : { ...current, top: '' }))
-      await invalidatePostScope(queryClient, comment.postId, 'comment')
+      const text = target === 'reply' ? reply?.text : commentDraft.top
+      if (!openPostData || !text?.trim()) throw new Error(t({ ko: '올릴 댓글 내용이 없어.', en: 'There is no comment to post.' }))
+      return publishCommentDraft(queryClient, openPostData.id, reply?.to ?? null, text, setCommentDraft)
     },
   })
   const tagNames = (tagsQuery.data ?? []).slice(0, 100).map((item) => item.name)
@@ -265,7 +260,7 @@ export function PostsPage() {
       if (patch.editComment !== undefined) {
         const id = Number(patch.editComment) || null
         const target = editableComments.find((comment) => comment.id === id)
-        setCommentDraft((current) => ({ ...current, edit: target ? { id: target.id, text: current.edit?.id === target.id ? current.edit.text : target.body } : null }))
+        setCommentDraft((current) => target ? openCommentEdit(current, target) : { ...current, edit: null })
       }
       if (patch.editText !== undefined) setCommentDraft((current) => (current.edit ? { ...current, edit: { ...current.edit, text: String(patch.editText) } } : current))
     },
@@ -306,9 +301,7 @@ export function PostsPage() {
       } else if (id === 'posts.comment_update' && commentDraft.edit) {
         const comment = editableComments.find((item) => item.id === commentDraft.edit?.id)
         if (!comment) throw new Error('고칠 댓글을 찾을 수 없어.')
-        await updatePostComment(comment.id, { body: commentDraft.edit.text.trim(), expectedRevision: comment.revision })
-        setCommentDraft((current) => ({ ...current, edit: null }))
-        await invalidatePostScope(queryClient, comment.postId, 'comment')
+        await saveCommentDraft(queryClient, comment.postId, commentDraft.edit, setCommentDraft)
       } else if (id === 'posts.comment_delete') {
         if (!editableComments.some((comment) => comment.id === Number(args.id))) throw new Error('지울 수 있는 댓글이 아니야.')
         await deletePostComment(Number(args.id))

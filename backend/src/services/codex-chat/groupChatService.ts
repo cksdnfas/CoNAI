@@ -1,6 +1,7 @@
 import { validateChatMediaAttachments } from './chatMediaAttachments'
 import { requirePrivateAttachmentRun } from './chatAttachmentPrivacy'
 import { deletingThreads } from './chatThreadReservation'
+import { getUserSettingsDb } from '../../database/userSettingsDb'
 import { randomUUID } from 'crypto'
 import { chatExecutionRoot } from './chatExecutionRoot'
 import type { ChatExecutionContext, ChatMessageRouting, ChatRecipient, ChatRoutineRouting, ChatTaskRouting } from '@conai/shared'
@@ -533,10 +534,11 @@ export const GroupChatService = {
 
   /** A group room; the representative comes first and answers messages that address no one. */
   /** `userProfileId`: the account's user profile in the room; undefined picks the default one (see ChatUserProfileStore.resolveNew), null none. */
-  create(requester: McpRequester, input: { profileIds: unknown; representativeId: unknown; title?: unknown; userProfileId?: number | null }) {
+  create(requester: McpRequester, input: { profileIds: unknown; representativeId: unknown; title?: unknown; userProfileId?: number | null }, origin: 'new' | 'import' = 'new') {
     const ids = Array.isArray(input.profileIds) ? [...new Set(input.profileIds.map(Number).filter((id) => Number.isSafeInteger(id) && id > 0))] : []
     const representativeId = Number(input.representativeId)
-    if (ids.length < 2) throw new CodexChatError('참가자를 두 명 이상 골라줘.')
+    // A saved room may have only its representative left after the other members were removed.
+    if (ids.length < (origin === 'import' ? 1 : 2)) throw new CodexChatError('참가자를 두 명 이상 골라줘.')
     if (!ids.includes(representativeId)) throw new CodexChatError('대표자는 참가자 중에서 골라줘.')
     const profiles = ids.map((id) => ChatProfileStore.find(id))
     if (profiles.some((profile) => !profile)) throw new CodexChatError('없는 프로필이 있어.', 404)
@@ -545,9 +547,11 @@ export const GroupChatService = {
     const user = ChatUserProfileStore.requireOwn(requester.accountId, input.userProfileId === undefined ? ChatUserProfileStore.resolveNew(requester.accountId) : input.userProfileId)
     assertUserNameFree(user, ordered)
     const title = (typeof input.title === 'string' ? input.title.trim() : '') || ordered.map((profile) => profile.name).join(', ')
-    const threadId = ChatGroupStore.create(requester.accountId, title.slice(0, TITLE_MAX_LENGTH), ordered.map((profile) => profile.id), representativeId)
-    if (user) ChatUserProfileStore.setThreadUserProfile(threadId, user.id)
-    return withChatModelLabel(requireGroup(requester, threadId))
+    return getUserSettingsDb().transaction(() => {
+      const threadId = ChatGroupStore.create(requester.accountId, title.slice(0, TITLE_MAX_LENGTH), ordered.map((profile) => profile.id), representativeId)
+      if (user) ChatUserProfileStore.setThreadUserProfile(threadId, user.id)
+      return withChatModelLabel(requireGroup(requester, threadId))
+    }).immediate()
   },
 
   /** Change who the user is in the room (null: the plain user); the name must not collide with a member's. */
@@ -571,7 +575,8 @@ export const GroupChatService = {
     const thread = requireGroup(requester, threadId)
     const detail = CodexChatService.getThread(requester, threadId, tail)
     const limits = groupLimitsOf(thread)
-    const memberProfiles = ChatGroupStore.members(threadId).flatMap((member) => ChatProfileStore.find(member.profile_id, threadId) ?? [])
+    const members = ChatGroupStore.members(threadId)
+    const memberProfiles = members.flatMap((member) => ChatProfileStore.find(member.profile_id, threadId) ?? [])
     return {
       ...detail,
       // Each member's display blocks are its own: folded from its replies (and the edits made on them).
@@ -579,15 +584,15 @@ export const GroupChatService = {
       // `text`/`toolCalls`/`speakerProfileId` are the first reply's, for readers that show one.
       running: GroupChatService.getRunning(requester, threadId),
       group: {
-        memberIds: ChatGroupStore.members(threadId).map((member) => member.profile_id),
+        memberIds: members.map((member) => member.profile_id),
         representativeId: thread.profile_id,
         chainLimit: limits.chain,
         windowLimit: limits.window,
         limits: GROUP_LIMITS,
         // Reply token caps: the room's (null: each profile's own) and each member's override of it.
         maxTokens: thread.max_tokens,
-        memberMaxTokens: Object.fromEntries(ChatGroupStore.members(threadId).map((member) => [member.profile_id, member.max_tokens])),
-        memberChatModels: Object.fromEntries(ChatGroupStore.members(threadId).map((member) => [member.profile_id, {
+        memberMaxTokens: Object.fromEntries(members.map((member) => [member.profile_id, member.max_tokens])),
+        memberChatModels: Object.fromEntries(members.map((member) => [member.profile_id, {
           slotId: member.chat_model_slot_id, model: member.chat_model,
           label: chatModelLabel(memberProfiles.find(profile => profile.id === member.profile_id) ?? null),
         }])),
@@ -767,8 +772,7 @@ export const GroupChatService = {
       await GroupChatService.stop(threadId)
       const codexThreadIds = ChatGroupStore.members(threadId).map((member) => member.codex_thread_id)
       if (runs.has(threadId) || LlmChatService.hasActiveWork(threadId)) throw new CodexChatError('답변 중단을 처리 중이야. 잠시 후 다시 삭제해줘.', 409)
-      beforeDelete?.()
-      CodexChatStore.deleteThread(threadId, preserve)
+      CodexChatStore.deleteThread(threadId, preserve, beforeDelete)
       for (const codexThreadId of codexThreadIds) deleteCodexRollout(requester, codexThreadId)
       deleteClaudeSessions(threadId)
     } finally {
@@ -807,8 +811,10 @@ export const GroupChatService = {
     if (!ChatGroupStore.member(threadId, profileId)) throw new CodexChatError('이 방의 참가자가 아니야.', 404)
     const model = validateChatModelPatch(ChatProfileStore.find(profileId), patch)
     const maxTokens = patch.maxTokens === undefined ? undefined : replyCapOf(patch.maxTokens)
-    if (maxTokens !== undefined) ChatGroupStore.setMemberMaxTokens(threadId, profileId, maxTokens)
-    ChatGroupStore.setMemberChatModel(threadId, profileId, model)
+    getUserSettingsDb().transaction(() => {
+      if (maxTokens !== undefined) ChatGroupStore.setMemberMaxTokens(threadId, profileId, maxTokens)
+      ChatGroupStore.setMemberChatModel(threadId, profileId, model)
+    }).immediate()
     warmClaudeChatModel(profileId, model)
     return GroupChatService.getThread(requester, threadId, tail)
   },
@@ -816,34 +822,34 @@ export const GroupChatService = {
   /** Representative, title, the per-room limits, the room's reply token cap (null restores a default) and its judge preset (null: none). */
   updateRoom(requester: McpRequester, threadId: number, patch: { representativeId?: unknown; title?: unknown; chainLimit?: unknown; windowLimit?: unknown; maxTokens?: unknown; judgePresetId?: unknown }, tail?: number) {
     requireGroup(requester, threadId)
-    if (patch.judgePresetId !== undefined) {
-      const id = patch.judgePresetId === null || patch.judgePresetId === '' ? null : ChatJudgePresetStore.existing(Number(patch.judgePresetId))
-      if (patch.judgePresetId !== null && patch.judgePresetId !== '' && id === null) throw new CodexChatError('판단 프리셋을 찾을 수 없어.')
-      ChatGroupStore.setJudgePreset(threadId, id)
-    }
-    if (patch.maxTokens !== undefined) {
-      CodexChatStore.updateThreadContext(threadId, { maxTokens: replyCapOf(patch.maxTokens) })
-    }
-    if (patch.representativeId !== undefined) {
-      const id = Number(patch.representativeId)
-      if (!ChatGroupStore.member(threadId, id)) throw new CodexChatError('대표자는 참가자 중에서 골라줘.')
-      ChatGroupStore.setRepresentative(threadId, id)
-    }
-    if (patch.title !== undefined) {
-      const title = typeof patch.title === 'string' ? patch.title.trim() : ''
-      if (!title) throw new CodexChatError('방 이름을 입력해줘.')
-      CodexChatStore.renameThread(threadId, title)
-    }
     const limit = (value: unknown, range: { min: number; max: number }) => {
       if (value === null) return null
       const number = Number(value)
       if (!Number.isSafeInteger(number) || number < range.min || number > range.max) throw new CodexChatError(`${range.min}~${range.max} 사이로 정해줘.`)
       return number
     }
-    ChatGroupStore.setLimits(threadId, {
-      chain: patch.chainLimit === undefined ? undefined : limit(patch.chainLimit, GROUP_LIMITS.chain),
-      window: patch.windowLimit === undefined ? undefined : limit(patch.windowLimit, GROUP_LIMITS.window),
-    })
+    getUserSettingsDb().transaction(() => {
+      if (patch.judgePresetId !== undefined) {
+        const id = patch.judgePresetId === null || patch.judgePresetId === '' ? null : ChatJudgePresetStore.existing(Number(patch.judgePresetId))
+        if (patch.judgePresetId !== null && patch.judgePresetId !== '' && id === null) throw new CodexChatError('판단 프리셋을 찾을 수 없어.')
+        ChatGroupStore.setJudgePreset(threadId, id)
+      }
+      if (patch.maxTokens !== undefined) CodexChatStore.updateThreadContext(threadId, { maxTokens: replyCapOf(patch.maxTokens) })
+      if (patch.representativeId !== undefined) {
+        const id = Number(patch.representativeId)
+        if (!ChatGroupStore.member(threadId, id)) throw new CodexChatError('대표자는 참가자 중에서 골라줘.')
+        ChatGroupStore.setRepresentative(threadId, id)
+      }
+      if (patch.title !== undefined) {
+        const title = typeof patch.title === 'string' ? patch.title.trim() : ''
+        if (!title) throw new CodexChatError('방 이름을 입력해줘.')
+        CodexChatStore.renameThread(threadId, title)
+      }
+      ChatGroupStore.setLimits(threadId, {
+        chain: patch.chainLimit === undefined ? undefined : limit(patch.chainLimit, GROUP_LIMITS.chain),
+        window: patch.windowLimit === undefined ? undefined : limit(patch.windowLimit, GROUP_LIMITS.window),
+      })
+    }).immediate()
     return GroupChatService.getThread(requester, threadId, tail)
   },
 }

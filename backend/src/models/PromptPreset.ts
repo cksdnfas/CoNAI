@@ -1,4 +1,5 @@
 import { getUserSettingsDb } from '../database/userSettingsDb';
+import { attachPromptItems, buildPromptTree, deletePromptTreeNode, readPromptTreeRows } from './promptLibraryTree';
 
 export interface PromptPreset {
   id: number;
@@ -143,25 +144,7 @@ export class PromptPresetModel {
   }
 
   static delete(id: number, cascade = false): boolean {
-    const db = getUserSettingsDb();
-
-    if (cascade) {
-      const children = db.prepare('SELECT id FROM prompt_presets WHERE parent_id = ?').all(id) as { id: number }[];
-      for (const child of children) {
-        this.delete(child.id, true);
-      }
-      const result = db.prepare('DELETE FROM prompt_presets WHERE id = ?').run(id);
-      return result.changes > 0;
-    }
-
-    const preset = this.findById(id);
-    if (!preset) {
-      return false;
-    }
-
-    db.prepare('UPDATE prompt_presets SET parent_id = ? WHERE parent_id = ?').run(preset.parent_id, id);
-    const result = db.prepare('DELETE FROM prompt_presets WHERE id = ?').run(id);
-    return result.changes > 0;
+    return deletePromptTreeNode('prompt_presets', id, cascade);
   }
 
   static findByIdWithItems(id: number): PromptPresetWithItems | undefined {
@@ -177,10 +160,15 @@ export class PromptPresetModel {
   }
 
   static findAllWithItems(): PromptPresetWithItems[] {
-    return PromptPresetModel.findAll().map((preset) => ({
-      ...preset,
-      items: PromptPresetItemModel.findByPresetId(preset.id),
-    }));
+    return getUserSettingsDb().transaction(() => this.withItems(this.findAll()))();
+  }
+
+  private static withItems(rows: PromptPreset[]): PromptPresetWithItems[] {
+    if (!rows.length) return [];
+    const items = getUserSettingsDb().prepare(`SELECT * FROM prompt_preset_items
+      WHERE preset_id IN (SELECT value FROM json_each(?)) ORDER BY preset_id, order_index, id`)
+      .all(JSON.stringify(rows.map(row => row.id))) as PromptPresetItem[];
+    return attachPromptItems(rows, items, item => item.preset_id);
   }
 
   static findRoots(): PromptPreset[] {
@@ -194,20 +182,8 @@ export class PromptPresetModel {
   }
 
   static findHierarchy(parentId: number | null = null): PromptPresetWithHierarchy[] {
-    const db = getUserSettingsDb();
-    const presets = parentId === null
-      ? db.prepare('SELECT * FROM prompt_presets WHERE parent_id IS NULL ORDER BY name').all() as PromptPreset[]
-      : db.prepare('SELECT * FROM prompt_presets WHERE parent_id = ? ORDER BY name').all(parentId) as PromptPreset[];
-
-    return presets.map((preset) => {
-      const items = PromptPresetItemModel.findByPresetId(preset.id);
-      const children = PromptPresetModel.findHierarchy(preset.id);
-      return {
-        ...preset,
-        items,
-        children: children.length > 0 ? children : undefined,
-      };
-    });
+    return getUserSettingsDb().transaction(() =>
+      buildPromptTree(this.withItems(readPromptTreeRows<PromptPreset>('prompt_presets', parentId)), parentId))();
   }
 
   static checkCircularReference(id: number, parentId: number): boolean {

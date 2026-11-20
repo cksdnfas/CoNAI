@@ -86,14 +86,13 @@ router.post('/:id/tag', requireImageAction('images.edit'), asyncHandler(async (r
         compositeHash,
         imagePath,
         mimeType: imageData.file_mime_type || imageData.mime_type,
-        existingAutoTags: imageData.auto_tags || null,
       },
       '[ImageTag]',
       { verboseResult: true, logRatingScore: true, includeErrorType: true },
     );
 
     if (!result.success) {
-      return res.status(500).json({
+      return res.status(result.error_type === 'NotFound' ? 404 : 500).json({
         success: false,
         error: result.error,
         details: { error_type: result.error_type },

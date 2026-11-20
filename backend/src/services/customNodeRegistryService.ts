@@ -232,22 +232,23 @@ function findExistingCustomNodeFilePath(folderPath: string, fileName: string): s
   return fs.existsSync(filePath) ? filePath : null;
 }
 
-/** Build one update payload from normalized module creation data. */
-function buildModuleDefinitionUpdateData(createData: ModuleDefinitionCreateData): ModuleDefinitionUpdateData {
-  return {
-    name: createData.name,
-    description: createData.description,
-    category: createData.category,
-    template_defaults: createData.template_defaults,
-    exposed_inputs: createData.exposed_inputs,
-    output_ports: createData.output_ports,
-    ui_schema: createData.ui_schema,
-    is_active: true,
-    color: createData.color,
-    external_key: createData.external_key,
-    source_path: createData.source_path,
-    source_hash: createData.source_hash,
-  };
+function changedManifestFields(row: ModuleDefinitionRecord, data: ModuleDefinitionCreateData): ModuleDefinitionUpdateData {
+  const changes: ModuleDefinitionUpdateData = {};
+  if (row.name !== data.name) changes.name = data.name;
+  if (row.description !== (data.description || null)) changes.description = data.description || null;
+  if (row.category !== data.category) changes.category = data.category;
+  if (row.color !== data.color) changes.color = data.color;
+  if (row.source_path !== data.source_path) changes.source_path = data.source_path;
+  if (row.source_hash !== data.source_hash) changes.source_hash = data.source_hash;
+  if (!row.is_active) changes.is_active = true;
+  if (row.template_defaults !== JSON.stringify(data.template_defaults)) changes.template_defaults = data.template_defaults;
+  // Input ports and their UI fields jointly define which saved input values survive a schema change.
+  if (row.exposed_inputs !== JSON.stringify(data.exposed_inputs) || row.ui_schema !== JSON.stringify(data.ui_schema)) {
+    changes.exposed_inputs = data.exposed_inputs;
+    changes.ui_schema = data.ui_schema;
+  }
+  if (row.output_ports !== JSON.stringify(data.output_ports)) changes.output_ports = data.output_ports;
+  return changes;
 }
 
 /** Sync one file-backed custom node into module_definitions and report the outcome. */
@@ -257,7 +258,11 @@ function syncCustomNodeModuleRecord(nodeRecord: CustomNodeRecord, errors: Custom
   try {
     const existingByExternalKey = ModuleDefinitionModel.findByExternalKey(nodeRecord.manifest.key);
     if (existingByExternalKey) {
-      const updated = ModuleDefinitionModel.update(existingByExternalKey.id, buildModuleDefinitionUpdateData(createData));
+      if (existingByExternalKey.authoring_source !== 'custom_node_fs') {
+        throw new Error(`Module key already exists: ${nodeRecord.manifest.key}`);
+      }
+      const changes = changedManifestFields(existingByExternalKey, createData);
+      const updated = ModuleDefinitionModel.update(existingByExternalKey.id, changes);
       return updated ? 'updated' : 'skipped';
     }
 
@@ -280,25 +285,6 @@ function syncCustomNodeModuleRecord(nodeRecord: CustomNodeRecord, errors: Custom
     });
     return 'skipped';
   }
-}
-
-/** Deactivate missing file-backed custom node modules that were not seen in the latest scan. */
-function deactivateMissingCustomNodeModules(seenExternalKeys: Set<string>): number {
-  let deactivatedCount = 0;
-  const fileBackedModules = ModuleDefinitionModel.findAll(false)
-    .filter((moduleRecord) => moduleRecord.authoring_source === 'custom_node_fs');
-
-  for (const moduleRecord of fileBackedModules) {
-    if (!moduleRecord.external_key || seenExternalKeys.has(moduleRecord.external_key)) {
-      continue;
-    }
-
-    if (deactivateMissingCustomNodeModule(moduleRecord)) {
-      deactivatedCount += 1;
-    }
-  }
-
-  return deactivatedCount;
 }
 
 /** Validate one custom node manifest and resolve its entry file. */
@@ -612,18 +598,23 @@ ${templateNotes.join('\n')}
 `;
 }
 
-/** Mark one file-backed custom node module inactive after its folder disappears. */
-function deactivateMissingCustomNodeModule(moduleRecord: ModuleDefinitionRecord): boolean {
-  if (!moduleRecord.id || moduleRecord.is_active === false) {
-    return false;
-  }
-
-  return ModuleDefinitionModel.update(moduleRecord.id, {
-    is_active: false,
-  });
+class RegistryStoppingError extends Error {
+  readonly statusCode = 503;
+  constructor() { super('Custom node registry is stopping'); }
 }
 
 export class CustomNodeRegistryService {
+  private static lastSync: Promise<CustomNodeSyncResult> | null = null;
+  private static queuedSync: Promise<CustomNodeSyncResult> | null = null;
+  private static stopping = false;
+  private static scaffolds = new Set<Promise<CustomNodeScaffoldResult>>();
+
+  /** HTTP rescans and scaffolds can still own a future SQLite write after the watcher has closed. */
+  static async stopAndDrain(): Promise<void> {
+    this.stopping = true;
+    await Promise.allSettled([this.lastSync, ...this.scaffolds]);
+  }
+
   /** Ensure the custom node root directory exists before scanning. */
   static async ensureCustomNodesDirectory(): Promise<void> {
     await fs.promises.mkdir(runtimePaths.customNodesDir, { recursive: true });
@@ -631,6 +622,13 @@ export class CustomNodeRegistryService {
 
   /** Create one starter custom node folder and sync it into module_definitions. */
   static async scaffoldCustomNode(input: CustomNodeScaffoldInput): Promise<CustomNodeScaffoldResult> {
+    if (this.stopping) throw new RegistryStoppingError();
+    const write = this.writeScaffold(input);
+    this.scaffolds.add(write);
+    try { return await write; } finally { this.scaffolds.delete(write); }
+  }
+
+  private static async writeScaffold(input: CustomNodeScaffoldInput): Promise<CustomNodeScaffoldResult> {
     await this.ensureCustomNodesDirectory();
 
     if (!/^[a-zA-Z0-9._-]+$/.test(input.folderName)) {
@@ -639,21 +637,22 @@ export class CustomNodeRegistryService {
 
     const template = input.template ?? 'empty';
     const folderPath = path.join(runtimePaths.customNodesDir, input.folderName);
-    if (fs.existsSync(folderPath)) {
-      throw new Error(`Custom node folder already exists: ${input.folderName}`);
-    }
-
     const manifestPath = path.join(folderPath, 'node.json');
     const entryPath = path.join(folderPath, 'index.js');
     const readmePath = path.join(folderPath, 'README.md');
     const manifest = buildCustomNodeScaffoldManifest({ ...input, template });
 
-    await fs.promises.mkdir(folderPath, { recursive: true });
-    await fs.promises.writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
+    try {
+      await fs.promises.mkdir(folderPath);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'EEXIST') throw new Error(`Custom node folder already exists: ${input.folderName}`);
+      throw error;
+    }
     await fs.promises.writeFile(entryPath, buildCustomNodeScaffoldEntrySource(template), 'utf8');
     await fs.promises.writeFile(readmePath, buildCustomNodeScaffoldReadme({ ...input, template }), 'utf8');
+    await fs.promises.writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
 
-    const sync = await this.syncCustomNodesFromFileSystem();
+    const sync = await this.enqueueSync();
     return {
       folderPath,
       manifestPath,
@@ -690,9 +689,20 @@ export class CustomNodeRegistryService {
       }
     }
 
+    const keys = new Set<string>();
+    const duplicates = new Set<string>();
+    for (const { manifest } of nodes) {
+      if (keys.has(manifest.key)) duplicates.add(manifest.key);
+      keys.add(manifest.key);
+    }
+    const uniqueNodes = nodes.filter(({ manifest, folderName, folderPath }) => {
+      if (!duplicates.has(manifest.key)) return true;
+      errors.push({ folderName, folderPath, message: `Duplicate custom node key: ${manifest.key}` });
+      return false;
+    });
     return {
       customNodesDir: runtimePaths.customNodesDir,
-      nodes,
+      nodes: uniqueNodes,
       errors,
     };
   }
@@ -703,16 +713,30 @@ export class CustomNodeRegistryService {
     return scanResult.nodes.find((node) => node.manifest.key === key) ?? null;
   }
 
-  /** Sync file-backed custom nodes into module_definitions for graph usage. */
-  static async syncCustomNodesFromFileSystem(): Promise<CustomNodeSyncResult> {
+  /** Requests arriving during a scan share one fresh pass, never an older filesystem snapshot. */
+  static syncCustomNodesFromFileSystem(): Promise<CustomNodeSyncResult> {
+    if (this.stopping) return Promise.reject(new RegistryStoppingError());
+    return this.enqueueSync();
+  }
+
+  private static enqueueSync(): Promise<CustomNodeSyncResult> {
+    if (this.queuedSync) return this.queuedSync;
+    const start = () => {
+      this.queuedSync = null;
+      return this.scanAndApply();
+    };
+    const result = (this.lastSync ?? Promise.resolve()).then(start, start);
+    this.queuedSync = this.lastSync = result;
+    const release = () => { if (this.lastSync === result) this.lastSync = null; };
+    void result.then(release, release);
+    return result;
+  }
+
+  private static async scanAndApply(): Promise<CustomNodeSyncResult> {
     const scanResult = await this.scanCustomNodesFromFileSystem();
     let createdCount = 0;
     let updatedCount = 0;
-    const seenExternalKeys = new Set<string>();
-
     for (const nodeRecord of scanResult.nodes) {
-      seenExternalKeys.add(nodeRecord.manifest.key);
-
       const syncOutcome = syncCustomNodeModuleRecord(nodeRecord, scanResult.errors);
       if (syncOutcome === 'created') {
         createdCount += 1;
@@ -723,7 +747,7 @@ export class CustomNodeRegistryService {
       }
     }
 
-    const deactivatedCount = deactivateMissingCustomNodeModules(seenExternalKeys);
+    const deactivatedCount = ModuleDefinitionModel.deactivateMissingFileNodes(scanResult.nodes.map(node => node.manifest.key));
 
     return {
       ...scanResult,

@@ -100,6 +100,18 @@ test('chat lore record book: create from the chat, save_lore and edit_lore_file 
     assert.equal(threadLorebooks(CodexChatStore.findThreadById(threadId)!, [ChatProfileStore.find(profile.id)!]).recordBookId, book.id)
     assert.match(index(), /\[리나 기억\]\(기록\) empty/)
     assert.throws(() => OwnedLorebookStore.createForThread(threadId, '리나 기억'), /같은 이름/)
+    const db = dbModule.getUserSettingsDb()
+    db.exec(`CREATE TEMP TRIGGER refuse_record_book BEFORE UPDATE OF lore_record_book_id ON codex_chat_threads
+      WHEN NEW.id=${threadId} AND NEW.lore_record_book_id != OLD.lore_record_book_id BEGIN SELECT RAISE(ABORT, 'held link'); END`)
+    try {
+      assert.throws(() => OwnedLorebookStore.createForThread(threadId, 'retryable book'), /held link/)
+      assert.deepEqual(OwnedLorebookStore.threadLinks(threadId), [book.id])
+      assert.equal(OwnedLorebookStore.recordBookId(threadId), book.id)
+    } finally { db.exec('DROP TRIGGER refuse_record_book') }
+    const retry = OwnedLorebookStore.createForThread(threadId, 'retryable book')
+    assert.equal(OwnedLorebookStore.recordBookId(threadId), retry.id)
+    OwnedLorebookStore.setRecordBook(threadId, book.id)
+    OwnedLorebookStore.delete(retry.id, me)
   })
 
   let savedId = 0

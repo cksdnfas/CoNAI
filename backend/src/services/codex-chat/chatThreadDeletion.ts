@@ -10,7 +10,7 @@ import { ChatAppearanceStore } from './chatAppearance'
 
 export type ThreadLorebookOption = { action: 'delete' | 'keep' | 'merge'; targetId: number | null; decisions: unknown }
 
-/** Shared native deletion: optional backup/book preservation, native removal, then appearance cleanup. */
+/** Backup first when requested; book preservation and appearance cleanup commit with removal. */
 export async function deleteChatThread(requester: McpRequester, threadId: number, options: {
   lorebook?: ThreadLorebookOption; backup?: boolean; backupDate?: unknown
   /** Internal guard, rechecked immediately before a direct room is removed. Never accepted from HTTP input. */
@@ -43,9 +43,9 @@ export async function deleteChatThread(requester: McpRequester, threadId: number
       const { book, ...counts } = applyMergePreview(preview, owner, option.decisions)
       lorebook = { action: 'merge', bookId: book.id, merge: counts }
     }
+    ChatAppearanceStore.threadDeleted(requester.accountId, threadId)
   }
   if (thread?.kind === 'group') await GroupChatService.deleteThread(requester, threadId, beforeDelete, preserve)
   else await CodexChatService.deleteThread(requester, threadId, beforeDelete, preserve)
-  ChatAppearanceStore.threadDeleted(requester.accountId, threadId)
   return { lorebook }
 }

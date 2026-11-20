@@ -121,6 +121,18 @@ test('chat knowledge: linked search, file versions, connected history, group mem
     await write('w2', 'linked_edit', { target: '[기획]/회의록/10-11.md', append: '예산: 120만 원\n' })
     assert.throws(() => undoFileChange({ threadId, accountId: null, replyId: 'w1', fileId: minutes }), /다시 고쳐져서/, 'a made file someone changed since is not removed')
 
+    const failUndo = (replyId: string, fileId: string) => {
+      const db = dbModule.getUserSettingsDb()
+      const before = FileStoreService.readEditableText(me, fileId).text
+      const versions = FileStoreRevisions.list(me, fileId)
+      db.exec("CREATE TEMP TRIGGER hold_undo BEFORE UPDATE OF undone_at ON chat_file_changes BEGIN SELECT RAISE(ABORT, 'held undo'); END")
+      try {
+        assert.throws(() => undoFileChange({ threadId, accountId: null, replyId, fileId }), /held undo/)
+        assert.equal(FileStoreService.readEditableText(me, fileId).text, before)
+        assert.deepEqual(FileStoreRevisions.list(me, fileId), versions)
+      } finally { db.exec('DROP TRIGGER hold_undo') }
+    }
+    failUndo('w1', plan.id)
     const undone = undoFileChange({ threadId, accountId: null, replyId: 'w1', fileId: plan.id })
     assert.equal(undone.undone, true)
     assert.equal((await FileStoreService.readText(me, plan.id)).text, '# 1안\n')
@@ -131,6 +143,7 @@ test('chat knowledge: linked search, file versions, connected history, group mem
 
     await write('w3', 'linked_write', { target: '[기획]/초안.md', text: '초안\n' })
     const draft = FileStoreService.findChild(me, folder.id, '초안.md')!
+    failUndo('w3', draft.id)
     undoFileChange({ threadId, accountId: null, replyId: 'w3', fileId: draft.id })
     assert.equal(FileStoreService.findChild(me, folder.id, '초안.md'), null, 'a file the reply made, untouched since, is removed')
   })

@@ -90,14 +90,14 @@ test('resource row context and overflow menus run actions without opening the ed
   }
 })
 
-test('shared resource deletion confirms names before pending and protects cancellation and read-only resources', async (t) => {
+test('shared resource editors preserve drafts and protect confirmed deletion', async (t) => {
   const dom = new JSDOM('<div id="root"></div>', { url: 'http://localhost/', pretendToBeVisual: true })
   const globals = {
     window: dom.window, document: dom.window.document, navigator: dom.window.navigator,
     localStorage: dom.window.localStorage, sessionStorage: dom.window.sessionStorage,
     Event: dom.window.Event, CustomEvent: dom.window.CustomEvent, HTMLElement: dom.window.HTMLElement,
     HTMLInputElement: dom.window.HTMLInputElement, HTMLTextAreaElement: dom.window.HTMLTextAreaElement,
-    Element: dom.window.Element, Node: dom.window.Node,
+    Element: dom.window.Element, Node: dom.window.Node, DOMParser: dom.window.DOMParser,
     NodeFilter: dom.window.NodeFilter, MutationObserver: dom.window.MutationObserver,
     getComputedStyle: dom.window.getComputedStyle.bind(dom.window),
     requestAnimationFrame: dom.window.requestAnimationFrame.bind(dom.window),
@@ -123,7 +123,7 @@ test('shared resource deletion confirms names before pending and protects cancel
     id: 7, revision: '1', name: 'Named lorebook', kind: 'global', entries: [], profiles: [], createdDate: '', updatedDate: '',
   }
   const generation: import('../src/lib/api-codex-chat').ChatGenerationPreset = {
-    id: 8, name: 'In-use preset', instruction: '', kind: 'nai', nai: null, comfyui: null,
+    id: 8, revision: 1, name: 'In-use preset', instruction: '', kind: 'nai', nai: null, comfyui: null,
     prompting: { timing: 'inline', guide: '', guideSkill: null, previousImages: 0 },
     profiles: [{ id: 1, name: 'Linked profile' }], createdDate: '', updatedDate: '',
   }
@@ -259,6 +259,51 @@ test('shared resource deletion confirms names before pending and protects cancel
         modalFetch.mock.restore()
       }
     }
+    await t.test('creating a display block keeps later typing, then saves against the returned id and revision', async (s) => {
+      const { ChatBlockEditorModal } = await import('../src/features/settings/components/chat-block-editor-modal')
+      const { starterBlock } = await import('../src/features/settings/components/chat-block-editor')
+      const block = starterBlock()
+      let answer!: (value: Response) => void
+      const first = new Promise<Response>(resolve => { answer = resolve })
+      const sent: Array<[string, string | undefined, string, number | undefined]> = []
+      const saved = (name: string, revision: number) => ({ id: 97, name, revision, block, profiles: [], createdDate: '', updatedDate: '' })
+      s.mock.method(globalThis, 'fetch', async (url, init) => {
+        const body = JSON.parse(String(init?.body))
+        sent.push([String(url), init?.method, body.name, body.revision])
+        return sent.length === 1 ? first : Response.json({ success: true, data: saved(body.name, 2) })
+      })
+      let closed = 0, created = 0
+      const router = createMemoryRouter([{ path: '/chat/resources', element: h(ChatBlockEditorModal, {
+        open: true, shared: null, initialName: 'initial', initialBlock: block, onClose: () => { closed++ }, onSaved: () => { created++ },
+      }) }], { initialEntries: ['/chat/resources'] })
+      const name = () => document.querySelector<HTMLInputElement>('input[maxlength="80"]')!
+      const writeName = async (value: string) => act(async () => {
+        Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, 'value')!.set!.call(name(), value)
+        name().dispatchEvent(new dom.window.Event('input', { bubbles: true }))
+      })
+      const save = () => click([...document.querySelectorAll<HTMLButtonElement>('button')].find(node => node.textContent === 'Save')!)
+      try {
+        await act(async () => root.render(h(QueryClientProvider, { client }, h(I18nProvider, null, h(SnackbarContext.Provider,
+          { value: { showSnackbar() {}, closeSnackbar() {} } }, h(ConfirmProvider, null, h(TooltipProvider, null, h(RouterProvider, { router }))))))))
+        await writeName('submitted')
+        await save()
+        await writeName('typed later')
+        await act(async () => {
+          answer(Response.json({ success: true, data: saved('submitted', 1) }))
+          await new Promise<void>(resolve => notifyManager.schedule(resolve))
+        })
+        assert.deepEqual([closed, created, name().value], [0, 1, 'typed later'])
+        await save()
+        assert.deepEqual(sent, [
+          ['/api/codex-chat/admin/blocks', 'POST', 'submitted', undefined],
+          ['/api/codex-chat/admin/blocks/97', 'PUT', 'typed later', 1],
+        ])
+        assert.deepEqual([closed, created], [1, 1])
+      } finally {
+        await act(async () => root.render(null))
+        router.dispose()
+      }
+    })
   } finally {
     await act(async () => {
       root.unmount()
@@ -290,13 +335,13 @@ test('profile loading keeps one overlay and a dirty close preserves the draft un
   const { act, createElement: h } = await import('react')
   const { createRoot } = await import('react-dom/client')
   const { MemoryRouter } = await import('react-router-dom')
-  const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query')
+  const { QueryClient, QueryClientProvider, notifyManager } = await import('@tanstack/react-query')
   const { I18nProvider } = await import('../src/i18n')
   const { ConfirmProvider } = await import('../src/components/ui/confirm-dialog')
   const { TooltipProvider } = await import('../src/components/ui/tooltip')
   const { SnackbarContext } = await import('../src/components/ui/snackbar-context')
   const { ImagePermissionsContext, resolveImagePermissions } = await import('../src/features/auth/use-image-permissions')
-  const { ChatProfileEditorModal } = await import('../src/features/settings/components/chat-profile-editor')
+  const { ChatProfileEditorModal, buildDraft } = await import('../src/features/settings/components/chat-profile-editor')
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity, gcTime: Infinity }, mutations: { gcTime: Infinity } } })
   client.setQueryData(['auth-status'], { authenticated: true, hasCredentials: true, accountId: 1, permissionKeys: ['page.settings.view'] })
   client.setQueryData(['runtime-language-settings'], { general: { language: 'en' } })
@@ -307,11 +352,11 @@ test('profile loading keeps one overlay and a dirty close preserves the draft un
   const initialDraft = { name: 'Unsaved copy', engine: 'codex' as const }
   let closed = 0
   const root = createRoot(document.getElementById('root')!)
-  const render = (placeholder?: string) => root.render(h(QueryClientProvider, { client }, h(MemoryRouter, null,
+  const render = (placeholder?: string, stayOpen = false) => root.render(h(QueryClientProvider, { client }, h(MemoryRouter, null,
     h(I18nProvider, null, h(SnackbarContext.Provider, { value: { showSnackbar() {}, closeSnackbar() {} } },
       h(ImagePermissionsContext.Provider, { value: resolveImagePermissions([], false) },
         h(TooltipProvider, null, h(ConfirmProvider, null, h(ChatProfileEditorModal, {
-          open: true, profile: null, initialDraft, defaults: placeholder ? undefined : defaults, placeholder, onClose: () => { closed++ },
+          open: true, profile: null, initialDraft, defaults: placeholder ? undefined : defaults, placeholder, stayOpen, onClose: () => { closed++ },
         })))))))))
   const button = (label: string) => [...document.querySelectorAll<HTMLButtonElement>('button')].find(node => node.textContent === label)!
   try {
@@ -337,6 +382,41 @@ test('profile loading keeps one overlay and a dirty close preserves the draft un
     await act(async () => document.querySelector<HTMLButtonElement>('button[aria-label="Close"]')!.click())
     await act(async () => button('Discard').click())
     assert.equal(closed, 1)
+    await t.test('a save conflict cannot silently submit edits typed after the profile save', async s => {
+      await act(async () => root.render(null))
+      const saved = { ...buildDraft(initialDraft, defaults), id: 91, revision: 'opened', folderPath: '', removedModelRoles: [] }
+      let answer!: (value: Response) => void
+      const conflict = new Promise<Response>(resolve => { answer = resolve })
+      const writes: Array<[string, string, string | undefined]> = []
+      s.mock.method(globalThis, 'fetch', async (_url, init) => {
+        if (init?.method !== 'POST' && init?.method !== 'PUT') return Response.json({ success: true, data: [] })
+        const body = JSON.parse(String(init.body))
+        writes.push([init.method, body.name, body.revision])
+        if (writes.length === 2) return conflict
+        return Response.json({ success: true, data: { ...saved, name: body.name } })
+      })
+      const save = async () => act(async () => {
+        button('Save').click()
+        await new Promise<void>(resolve => notifyManager.schedule(resolve))
+      })
+      const name = () => document.querySelector<HTMLInputElement>('input[aria-label="Name"]')!
+      const edit = (value: string) => act(async () => {
+        Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, 'value')!.set!.call(name(), value)
+        name().dispatchEvent(new dom.window.Event('input', { bubbles: true }))
+      })
+      await act(async () => render(undefined, true))
+      await save()
+      await edit('submitted')
+      await save()
+      await edit('typed later')
+      await act(async () => {
+        answer(Response.json({ success: false, code: 'revision_conflict', error: 'changed', data: { ...saved, tagline: 'other change', revision: 'newer' } }, { status: 409 }))
+        await new Promise<void>(resolve => notifyManager.schedule(resolve))
+      })
+      assert.deepEqual(writes, [['POST', 'Unsaved copy', undefined], ['PUT', 'submitted', 'opened']])
+      assert.equal(name().value, 'typed later')
+      assert.equal(button('Save').disabled, false)
+    })
   } finally {
     // Radix releases focus in a deferred unmount event; keep this DOM's globals until that work has finished.
     const released = Promise.all([...document.querySelectorAll('[role="dialog"], [role="alertdialog"]')].map(node =>

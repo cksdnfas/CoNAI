@@ -76,7 +76,9 @@ export class MediaPostprocessCoordinator {
     logLabel: string,
   ): Promise<MediaProcessingStageResult> {
     try {
-      await BackgroundQueueService.extractAndPersistMetadata(filePath, compositeHash);
+      if (!await BackgroundQueueService.extractAndPersistMetadata(filePath, compositeHash)) {
+        return failedStage('metadata-extraction', 'Metadata extraction did not complete', false);
+      }
       console.log(`  🧠 Metadata extracted: ${logLabel}`);
       return completedStage('metadata-extraction');
     } catch (error) {

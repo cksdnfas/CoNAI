@@ -421,21 +421,54 @@ test('lorebook merge: chat book end of life (delete, keep, merge), duplicates, d
 
   await t.test('failed deletion leaves a chat book attached for both preservation choices', async () => {
     const { deleteChatThread } = await import('../src/services/codex-chat/chatThreadDeletion')
+    const { backupChatToFiles } = await import('../src/services/codex-chat/chatBackup')
     const requester = { accountId: null, accountType: null }
     const target = OwnedLorebookStore.create(me, { name: '삭제 실패 대상', entries: [] })
     for (const action of ['keep', 'merge'] as const) {
       const source = chatWithBook(`삭제 실패 ${action}`, [{ id: 'source', title: '보존', content: '원본 내용' }])
+      const backupDate = '2026-10-05'
+      const backup = backupChatToFiles(requester, source.threadId, backupDate)
+      const previous = readBlob(backup.id)
+      CodexChatStore.addMessage({ thread_id: source.threadId, role: 'user', content: 'after backup', tool_calls: [], status: 'completed', error: null })
+      const events: string[] = []
+      const unsubscribe = FileStoreService.onChange(change => events.push(change.action))
       db.exec(`CREATE TEMP TRIGGER refuse_chat_deletion BEFORE DELETE ON codex_chat_threads WHEN OLD.id = ${source.threadId} BEGIN SELECT RAISE(ABORT, 'deletion failed'); END`)
       try {
-        await assert.rejects(deleteChatThread(requester, source.threadId, { lorebook: { action, targetId: target.id, decisions: [] } }), /deletion failed/)
+        await assert.rejects(deleteChatThread(requester, source.threadId, { backup: true, backupDate, lorebook: { action, targetId: target.id, decisions: [] } }), /deletion failed/)
+        assert.equal(readBlob(backup.id), previous)
+        assert.deepEqual(events, [])
       } finally {
         db.exec('DROP TRIGGER refuse_chat_deletion')
+        unsubscribe()
       }
       assert.ok(threadExists(source.threadId))
       assert.equal(OwnedLorebookStore.chatBookOf(source.threadId)?.id, source.chatBook.id)
       assert.equal(book(source.chatBook.id).entries[0].content, '원본 내용')
       assert.deepEqual(book(target.id).entries, [])
     }
+  })
+
+  await t.test('a refused chat-book cleanup rolls back the merge, its copied files and the room', async () => {
+    const { deleteChatThread } = await import('../src/services/codex-chat/chatThreadDeletion')
+    const target = OwnedLorebookStore.create(me, { name: 'late failure target', entries: [{ content: 'existing' }] })
+    const source = chatWithBook('late failure source', [{ content: 'incoming' }])
+    FileStoreService.writeText(me, materials(source.chatBook).id, 'memo.md', 'keep me')
+    const snapshot = () => ['lorebook.json', 'lorebook.md'].map(name => readBlob(child(target.folderId, name)!.id))
+    const before = snapshot()
+    const liveFiles = () => fs.readdirSync(path.join(root, 'files')).filter(name => name.endsWith('.bin')).sort()
+    // Purges from successful earlier deletions must not affect this case.
+    while (FileStoreService.purgeDeleted() > 0) { /* drain */ }
+    const files = liveFiles()
+    db.exec(`CREATE TEMP TRIGGER refuse_book_removal BEFORE DELETE ON chat_lorebooks WHEN OLD.id=${source.chatBook.id} BEGIN SELECT RAISE(ABORT, 'held book'); END`)
+    try {
+      await assert.rejects(deleteChatThread({ accountId: null, accountType: null }, source.threadId, {
+        lorebook: { action: 'merge', targetId: target.id, decisions: [] },
+      }), /held book/)
+      assert.ok(threadExists(source.threadId))
+      assert.equal(OwnedLorebookStore.chatBookOf(source.threadId)?.id, source.chatBook.id)
+      assert.deepEqual(snapshot(), before)
+      assert.deepEqual(liveFiles(), files)
+    } finally { db.exec('DROP TRIGGER refuse_book_removal') }
   })
 
   await t.test('deletion reserves direct and group rooms while their replies stop', async (s) => {

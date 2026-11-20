@@ -101,7 +101,18 @@ test('stage 5: lore provenance, usage, undo, branches, greetings and tone', { ti
     const book = OwnedLorebookStore.saveChatBook(id, [{ id: 'promise', title: '약속', content: '옛 약속', enabled: false, secondaryKeys: ['밤'], order: 12 }])!
     const before = book.entries[0]
     const card = proposal(id, 'replacement', before.id)
+    const texts = () => ['lorebook.json', 'lorebook.md'].map(name => FileStoreService.readEditableText(owner, FileStoreService.findChild(owner, book.folderId, name)!.id).text)
+    const refuse = (column: 'proposal' | 'saved', change: () => unknown) => {
+      const previous = texts()
+      db.exec(`CREATE TEMP TRIGGER hold_card BEFORE UPDATE OF ${column} ON chat_proposals WHEN NEW.id=${card.id} BEGIN SELECT RAISE(ABORT, 'held card'); END`)
+      try {
+        assert.throws(change, /held card/)
+        assert.deepEqual(texts(), previous)
+      } finally { db.exec('DROP TRIGGER hold_card') }
+    }
+    refuse('proposal', () => applyLoreProposal(card.id))
     applyLoreProposal(card.id)
+    refuse('saved', () => undoLoreProposal(card.id))
     const restored = undoLoreProposal(card.id)
     assert.deepEqual(restored.book!.entries[0], before)
     assert.equal((restored.proposal as { undone?: boolean }).undone, true)

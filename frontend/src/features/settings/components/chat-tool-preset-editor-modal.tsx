@@ -1,5 +1,3 @@
-import { useLayoutEffect, useMemo, useState } from 'react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Copy, Download } from 'lucide-react'
 import { ToggleChip } from '@/components/ui/chip'
 import { EditorFooter } from '@/components/ui/editor-footer'
@@ -8,7 +6,6 @@ import { Field } from '@/components/ui/field'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { Modal, ModalBody } from '@/components/ui/modal'
-import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Tip } from '@/components/ui/tooltip'
 import { getChatScopeCopy } from '@/features/codex-chat/chat-scope-copy'
 import { useI18n } from '@/i18n'
@@ -23,7 +20,7 @@ import {
   type ChatToolPreset,
   type ChatToolPresetInput,
 } from '@/lib/api-codex-chat'
-import { getErrorMessage } from '@/lib/error-message'
+import { useChatResourceEditor } from './use-chat-resource-editor'
 import { ChatToolPicker, useChatToolGroups } from './chat-tool-picker'
 import { downloadChatToolPresetFile } from './chat-tool-preset-file'
 import { CHAT_DOCK_INSET } from './use-settings-editor-chat-page'
@@ -35,7 +32,7 @@ const EMPTY: ChatToolPresetInput = { name: '', scopes: ['read'], toolAllowlist: 
  * Create or edit one tool preset: name, scopes and the tools within them. Saving reaches every profile that links it.
  * `onSaved` hands the saved preset back.
  */
-export function ChatToolPresetEditorModal({ open, preset, initial, onClose, onSaved, onDuplicate, duplicating }: {
+type ToolEditorProps = {
   open: boolean
   preset: ChatToolPreset | null
   /** Starting values for a new preset (e.g. a duplicate, or a profile's own grant turned into a preset). */
@@ -45,47 +42,32 @@ export function ChatToolPresetEditorModal({ open, preset, initial, onClose, onSa
   /** Copy the opened preset (only offered when editing an existing one). */
   onDuplicate?: (preset: ChatToolPreset) => void
   duplicating?: boolean
-}) {
+}
+
+export function ChatToolPresetEditorModal(props: ToolEditorProps) {
+  return props.open ? <ToolEditor key={props.preset?.id ?? 'new'} {...props} /> : null
+}
+
+function ToolEditor({ open, preset: record, initial, onClose, onSaved, onDuplicate, duplicating }: ToolEditorProps) {
   const { t } = useI18n()
-  const { showSnackbar } = useSnackbar()
-  const queryClient = useQueryClient()
-  const [draft, setDraft] = useState<ChatToolPresetInput>(EMPTY)
   const { groups, isPending } = useChatToolGroups(open)
-  const saved = useMemo<ChatToolPresetInput>(() => (preset ? { name: preset.name, scopes: preset.scopes, toolAllowlist: preset.toolAllowlist } : initial ?? EMPTY), [initial, preset])
-
-  useLayoutEffect(() => {
-    if (open) setDraft(saved)
-  }, [open, saved])
-
-  const refresh = async () => {
-    await Promise.all([
-      queryClient.invalidateQueries({ queryKey: CHAT_TOOL_PRESETS_QUERY_KEY }),
-      queryClient.invalidateQueries({ queryKey: CHAT_ADMIN_PROFILES_QUERY_KEY }),
-      queryClient.invalidateQueries({ queryKey: CHAT_PROFILES_QUERY_KEY }),
-    ])
-  }
-  const saveMutation = useMutation({
-    mutationFn: () => (preset ? updateChatToolPreset(preset.id, draft) : createChatToolPreset(draft)),
-    onSuccess: async (saved) => {
-      await refresh()
-      onSaved?.(saved)
-      onClose()
-    },
-    onError: (error) => showSnackbar({ message: getErrorMessage(error, t({ ko: '저장하지 못했어.', en: 'Could not save.' })), tone: 'error' }),
+  const { base: preset, draft, setDraft, dirty, saveMutation } = useChatResourceEditor({
+    initial: record, draftOf: row => row ? { name: row.name, scopes: row.scopes, toolAllowlist: row.toolAllowlist } : initial ?? EMPTY,
+    write: (base, value) => base ? updateChatToolPreset(base.id, value, base.revision) : createChatToolPreset(value),
+    refresh: [CHAT_TOOL_PRESETS_QUERY_KEY, CHAT_ADMIN_PROFILES_QUERY_KEY, CHAT_PROFILES_QUERY_KEY], onSaved, onClose,
   })
   const deleteMutation = useChatResourceDelete(onClose)
 
-  const toggleScope = (scope: ChatScope) => {
-    const pressed = draft.scopes.includes(scope)
-    if (pressed && draft.scopes.length === 1) return
-    const scopes = pressed ? draft.scopes.filter((item) => item !== scope) : CHAT_SCOPES.filter((item) => item === scope || draft.scopes.includes(item))
+  const toggleScope = (scope: ChatScope) => setDraft(current => {
+    const pressed = current.scopes.includes(scope)
+    if (pressed && current.scopes.length === 1) return current
+    const scopes = pressed ? current.scopes.filter((item) => item !== scope) : CHAT_SCOPES.filter((item) => item === scope || current.scopes.includes(item))
     // Tools of a scope that went away leave the list too, so the summary never names a tool the grant cannot offer.
     const allowed = new Set(groups.filter((group) => scopes.includes(group.scope)).flatMap((group) => group.tools.map((tool) => tool.name)))
-    setDraft({ ...draft, scopes, toolAllowlist: draft.toolAllowlist === null ? null : draft.toolAllowlist.filter((name) => allowed.has(name)) })
-  }
+    return { ...current, scopes, toolAllowlist: current.toolAllowlist === null ? null : current.toolAllowlist.filter((name) => allowed.has(name)) }
+  })
 
   const nameMissing = draft.name.trim().length === 0
-  const dirty = JSON.stringify(draft) !== JSON.stringify(saved)
   const canSave = !nameMissing && !saveMutation.isPending && (dirty || !preset)
 
   return (
@@ -102,7 +84,7 @@ export function ChatToolPresetEditorModal({ open, preset, initial, onClose, onSa
       <ModalBody>
         <div className="grid gap-3 md:grid-cols-2">
           <Field label={t({ ko: '이름', en: 'Name' })}>
-            <Input variant="settings" value={draft.name} maxLength={80} autoFocus onChange={(event) => setDraft({ ...draft, name: event.target.value })} />
+            <Input variant="settings" value={draft.name} maxLength={80} autoFocus onChange={(event) => setDraft(current => ({ ...current, name: event.target.value }))} />
           </Field>
           <Field label={t({ ko: '권한', en: 'Scopes' })}>
             <div className="flex min-h-10 flex-wrap items-center gap-1.5">
@@ -119,7 +101,7 @@ export function ChatToolPresetEditorModal({ open, preset, initial, onClose, onSa
           </Field>
         </div>
         <EditorGroup label={t({ ko: '도구', en: 'Tools' })}>
-          <ChatToolPicker groups={groups} scopes={draft.scopes} allowlist={draft.toolAllowlist} onChange={(toolAllowlist) => setDraft({ ...draft, toolAllowlist })} loading={isPending} />
+          <ChatToolPicker groups={groups} scopes={draft.scopes} allowlist={draft.toolAllowlist} onChange={(toolAllowlist) => setDraft(current => ({ ...current, toolAllowlist }))} loading={isPending} />
         </EditorGroup>
       </ModalBody>
       <EditorFooter

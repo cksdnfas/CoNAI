@@ -7,7 +7,7 @@ import { ModuleDefinitionModel, getModuleDefinitionRevision } from '../models/Mo
 import { GraphWorkflowExecutor } from './graphWorkflowExecutor'
 import { settingsService } from './settingsService'
 import { getGenerationQueueServerCapacity } from './generationQueueRouting'
-import { parseGraphWorkflowRecord, parseModuleDefinition, resolveSystemOperationKey, writeExecutionLog, type ParsedModuleDefinition } from './graph-workflow-executor/shared'
+import { parseGraphWorkflowRecord, parseModuleDefinition, resolveSystemOperationKey, setExecutionDebugMode, writeExecutionLog, type ParsedModuleDefinition } from './graph-workflow-executor/shared'
 import { requestGraphExecutionAbort } from './graph-workflow-executor/execution-abort'
 import { encodeQueuedExecutionMetadata, parseQueuedExecutionMetadata } from './graphWorkflowExecutionQueueMetadata'
 
@@ -391,11 +391,12 @@ export class GraphWorkflowExecutionQueue {
 
   /** Cancel queued executions that belong to one schedule id set. */
   static cancelQueuedByScheduleIds(scheduleIds: number[]) {
-    if (scheduleIds.length === 0) {
-      return { cancelled: 0, runningCancellationRequested: 0 }
-    }
-
     const cancelled = GraphExecutionModel.cancelQueuedByScheduleIds(scheduleIds)
+    return { cancelled, runningCancellationRequested: this.cancelRunningByScheduleIds(scheduleIds) }
+  }
+
+  static cancelRunningByScheduleIds(scheduleIds: number[]) {
+    if (!scheduleIds.length) return 0
     const scheduleIdSet = new Set(scheduleIds)
 
     let runningCancellationRequested = 0
@@ -408,7 +409,22 @@ export class GraphWorkflowExecutionQueue {
       }
     }
 
-    return { cancelled, runningCancellationRequested }
+    return runningCancellationRequested
+  }
+
+  /** The execution rows (including manual runs) are already gone. Abort their owners without writing to those rows. */
+  static abortDeletedWorkflowRuns(workflowIds: number[]) {
+    if (!workflowIds.length) return 0
+    const removed = new Set(workflowIds)
+    let count = 0
+    for (const job of this.runningJobs.values()) {
+      if (!removed.has(job.workflowId)) continue
+      setExecutionDebugMode(job.executionId, false)
+      this.cancelRequestedExecutionIds.add(job.executionId)
+      requestGraphExecutionAbort(job.executionId, { kind: 'user_cancel' })
+      count++
+    }
+    return count
   }
 
   /** Read runtime queue metadata for an execution row. */
@@ -652,15 +668,8 @@ export class GraphWorkflowExecutionQueue {
     try {
       const workflow = parseGraphWorkflowRecord(workflowRecord)
       const executableNodeIds = collectExecutionNodeIds(workflow.graph, job.targetNodeId)
-      for (const node of workflow.graph.nodes) {
-        if (!executableNodeIds.has(node.id)) {
-          continue
-        }
-
-        const moduleRecord = ModuleDefinitionModel.findById(node.module_id)
-        if (!moduleRecord) {
-          continue
-        }
+      const moduleIds = new Set(workflow.graph.nodes.filter(node => executableNodeIds.has(node.id)).map(node => node.module_id))
+      for (const moduleRecord of ModuleDefinitionModel.findByIds([...moduleIds])) {
         addReservationLaneForModule(lanes, parseModuleDefinition(moduleRecord))
       }
     } catch (error) {

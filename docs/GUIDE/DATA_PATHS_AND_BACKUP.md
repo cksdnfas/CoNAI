@@ -29,6 +29,8 @@ RUNTIME_RECYCLE_BIN_DIR=E:/CoNAI/RecycleBin
 
 ## 중요한 데이터
 
+파일 보관함을 옮기거나 백업에서 복원할 때는 서버와 MCP를 종료하고 `files/` 전체(숨김 폴더 포함)와 같은 시점의 `user.db`를 함께 보관하세요. `files/.write-journal/`은 중단된 저장을 복구하는 기록입니다. 다른 DB의 기록을 조합하거나 이전 버전에서 남은 `.incoming/*.rollback` 파일을 자동으로 원본에 덮어쓰지 않습니다.
+
 계정별 채팅 모양과 저장 슬롯은 `user.db`에 보관되어 DB 백업에 포함됩니다. 이전 `save/chat-appearance/` JSON은 해당 계정이 처음 사용될 때 한 번 이관하고 원본을 남깁니다. 이관 후의 변경은 DB에만 저장하므로 이전 JSON을 최신 설정으로 사용하지 않습니다.
 
 | 경로 | 중요도 | 설명 |

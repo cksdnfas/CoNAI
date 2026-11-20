@@ -1,5 +1,6 @@
 import { CHAT_PROFILE_DEFAULTS } from '@conai/shared'
 import { getUserSettingsDb } from '../../database/userSettingsDb'
+import { withFileStoreWrites } from '../fileStoreWriteTransaction'
 import { OwnedLorebookStore } from './chatLorebookFiles'
 import { parseBlockEdits } from './chatBlockState'
 import { renderSummary, type ChatSummarySegment } from './chatMemory'
@@ -24,7 +25,7 @@ const COPIED_MESSAGE_COLUMNS = ['role', 'content', 'display_content', 'tool_call
  */
 export function branchChatThread(thread: CodexChatThreadRecord, untilMessageId: number, purpose: ChatBranchPurpose = 'continue'): number | null {
   const db = getUserSettingsDb()
-  return db.transaction(() => {
+  return withFileStoreWrites(() => {
     if (!db.prepare('SELECT 1 FROM codex_chat_messages WHERE thread_id = ? AND id = ?').get(thread.id, untilMessageId)) return null
     const title = `${(thread.title || '새 채팅').slice(0, TITLE_MAX_LENGTH - BRANCH_TITLE_SUFFIX.length)}${BRANCH_TITLE_SUFFIX}`
     const branchId = Number(db.prepare(`INSERT INTO codex_chat_threads (title, branched_from_thread_id, branched_at_message_id, branch_purpose, ${COPIED_THREAD_COLUMNS.join(', ')})
@@ -33,7 +34,9 @@ export function branchChatThread(thread: CodexChatThreadRecord, untilMessageId: 
 
     // Messages in order, so the copies keep it; ids map old → new for everything that points at a message.
     const ids = new Map<number, number>()
-    const rows = db.prepare(`SELECT id, routing, ${COPIED_MESSAGE_COLUMNS.join(', ')} FROM codex_chat_messages WHERE thread_id = ? AND id <= ? ORDER BY id`)
+    const rows = db.prepare(`SELECT id, routing, ${COPIED_MESSAGE_COLUMNS.join(', ')},
+      EXISTS(SELECT 1 FROM chat_file_attachments a WHERE a.message_id = m.id) AS has_files
+      FROM codex_chat_messages m WHERE thread_id = ? AND id <= ? ORDER BY id`)
       .all(thread.id, untilMessageId) as Array<Record<string, unknown> & { id: number; routing: string | null }>
     const insert = db.prepare(`INSERT INTO codex_chat_messages (thread_id, ${COPIED_MESSAGE_COLUMNS.join(', ')}) VALUES (?, ${COPIED_MESSAGE_COLUMNS.map(() => '?').join(', ')})`)
     for (const row of rows) {
@@ -49,7 +52,7 @@ export function branchChatThread(thread: CodexChatThreadRecord, untilMessageId: 
         if (routing.replyTo) routing.replyTo = quoted ? { ...routing.replyTo, messageId: quoted } : { ...routing.replyTo, excerpt: '', media: undefined, unavailable: true }
         setRouting.run(JSON.stringify(routing), copyId)
       }
-      copyFiles.run(copyId, row.id)
+      if (row.has_files) copyFiles.run(copyId, row.id)
     }
 
     // A room's members come along with their order, models and reply caps. Their place in the conversation (and Codex
@@ -106,15 +109,21 @@ export function branchChatThread(thread: CodexChatThreadRecord, untilMessageId: 
     }
     const setMeta = db.prepare('UPDATE codex_chat_messages SET context_meta = ?, alternatives = ? WHERE id = ?')
     for (const row of rows) {
+      if (!row.context_meta && !row.alternatives) continue
       let alternatives = row.alternatives
       try {
         const parsed = typeof alternatives === 'string' ? JSON.parse(alternatives) as Array<{ context_meta?: string | null }> : null
         if (Array.isArray(parsed)) {
-          parsed.forEach((alternative) => { if (alternative.context_meta) alternative.context_meta = remapMeta(alternative.context_meta) as string })
-          alternatives = JSON.stringify(parsed)
+          let changed = false
+          for (const alternative of parsed) if (alternative.context_meta) {
+            const next = remapMeta(alternative.context_meta) as string
+            if (next !== alternative.context_meta) { alternative.context_meta = next; changed = true }
+          }
+          if (changed) alternatives = JSON.stringify(parsed)
         }
       } catch { /* Keep older malformed variants as they were. */ }
-      setMeta.run(remapMeta(row.context_meta), alternatives, ids.get(row.id))
+      const meta = remapMeta(row.context_meta)
+      if (meta !== row.context_meta || alternatives !== row.alternatives) setMeta.run(meta, alternatives, ids.get(row.id))
     }
     const copied = db.prepare('SELECT * FROM chat_summary_segments WHERE thread_id = ?').all(branchId) as ChatSummarySegment[]
     const covered = copied.reduce<number | null>((max, segment) => (max === null || segment.until_message_id > max ? segment.until_message_id : max), null)
@@ -139,5 +148,5 @@ export function branchChatThread(thread: CodexChatThreadRecord, untilMessageId: 
     // The copied conversation was already there to read: a branch starts with nothing unread.
     CodexChatStore.markRead(branchId, Number.MAX_SAFE_INTEGER)
     return branchId
-  }).immediate()
+  })
 }

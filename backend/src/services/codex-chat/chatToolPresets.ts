@@ -1,6 +1,7 @@
 import { getUserSettingsDb } from '../../database/userSettingsDb'
 import { getMcpToolScope, CHAT_ROOM_TOOLS, CHAT_SETTINGS_TOOLS } from '../../mcp/context'
 import { ChatProfileError } from './chatProfileError'
+import { editChatResource } from './chatResourceWrite'
 import { CHAT_SCOPES, type ChatScope } from './chatSettings'
 
 /**
@@ -9,6 +10,7 @@ import { CHAT_SCOPES, type ChatScope } from './chatSettings'
  */
 export type ChatToolPreset = {
   id: number
+  revision: number
   name: string
   scopes: ChatScope[]
   /** Only these tools (within the scopes); null offers every tool the scopes allow. */
@@ -23,7 +25,7 @@ const TOOL_NAME_PATTERN = /^[a-z0-9_]{1,64}$/
 /** The file a preset is exported as (and imported from); a bare preset or an array of either is accepted too. */
 export const TOOL_PRESET_FILE_MARK = 'conai_tool_preset'
 
-type PresetRow = { id: number; name: string; scopes: string; tool_allowlist: string | null; created_date: string; updated_date: string }
+type PresetRow = { id: number; revision: number; name: string; scopes: string; tool_allowlist: string | null; created_date: string; updated_date: string }
 
 function parseJsonList(value: unknown): unknown[] | null {
   if (typeof value === 'string') {
@@ -61,6 +63,7 @@ function toPreset(row: PresetRow): ChatToolPreset {
   const scopes = normalizePresetScopes(row.scopes)
   return {
     id: row.id,
+    revision: row.revision,
     name: row.name,
     scopes,
     toolAllowlist: normalizePresetAllowlist(row.tool_allowlist, scopes),
@@ -88,18 +91,14 @@ export const ChatToolPresetStore = {
     return ChatToolPresetStore.find(Number(result.lastInsertRowid)) as ChatToolPreset
   },
 
-  update(presetId: number, patch: { name?: unknown; scopes?: unknown; toolAllowlist?: unknown }) {
-    const current = ChatToolPresetStore.find(presetId)
-    if (!current) return null
-    const scopes = patch.scopes === undefined ? current.scopes : normalizePresetScopes(patch.scopes)
-    const allowlist = normalizePresetAllowlist(patch.toolAllowlist === undefined ? current.toolAllowlist : patch.toolAllowlist, scopes)
-    getUserSettingsDb().prepare('UPDATE chat_tool_presets SET name = ?, scopes = ?, tool_allowlist = ?, updated_date = CURRENT_TIMESTAMP WHERE id = ?').run(
-      patch.name === undefined ? current.name : presetName(patch.name),
-      JSON.stringify(scopes),
-      allowlist ? JSON.stringify(allowlist) : null,
-      presetId,
-    )
-    return ChatToolPresetStore.find(presetId)
+  update(presetId: number, patch: { name?: unknown; scopes?: unknown; toolAllowlist?: unknown }, revision?: unknown) {
+    return editChatResource(presetId, revision, ChatToolPresetStore.find, current => {
+      const scopes = patch.scopes === undefined ? current.scopes : normalizePresetScopes(patch.scopes)
+      const allowlist = normalizePresetAllowlist(patch.toolAllowlist === undefined ? current.toolAllowlist : patch.toolAllowlist, scopes)
+      getUserSettingsDb().prepare('UPDATE chat_tool_presets SET name = ?, scopes = ?, tool_allowlist = ?, updated_date = CURRENT_TIMESTAMP WHERE id = ?').run(
+        patch.name === undefined ? current.name : presetName(patch.name), JSON.stringify(scopes), allowlist ? JSON.stringify(allowlist) : null, presetId,
+      )
+    })
   },
 
   /** Profiles keep the tools they loaded, so a preset can always go. */

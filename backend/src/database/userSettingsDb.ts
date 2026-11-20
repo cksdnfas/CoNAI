@@ -8,6 +8,7 @@ import { attachVectorDatabase } from './vectorDb';
 import { ensureUserSettingsCompatibility } from './userSettingsCompatibility';
 import { createUserSettingsSchema } from './userSettingsSchema';
 import { configureSqliteConnection } from './sqlitePragmas';
+import { openFileStoreJournal } from '../services/fileStoreJournal';
 
 export let userSettingsDb: Database.Database;
 
@@ -39,6 +40,7 @@ export function initializeUserSettingsDb(): void {
       console.log('✅ Connected to existing unified user database');
     }
 
+    openFileStoreJournal(userSettingsDb);
     createUserSettingsSchema(userSettingsDb);
     ensureUserSettingsCompatibility(userSettingsDb);
     attachMainImagesDatabase(userSettingsDb);

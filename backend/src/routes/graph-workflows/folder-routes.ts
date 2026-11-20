@@ -1,6 +1,7 @@
 import { requirePermission } from '../../middleware/authMiddleware';
 import { Router, type Request, type Response } from 'express'
-import { GraphWorkflowFolderModel } from '../../models/GraphWorkflowFolder'
+import { GraphFolderWriteError, GraphWorkflowFolderModel } from '../../models/GraphWorkflowFolder'
+import { GraphWorkflowExecutionQueue } from '../../services/graphWorkflowExecutionQueue'
 import { asyncHandler } from '../../middleware/asyncHandler'
 import { sendRouteBadRequest } from '../routeValidation'
 import type { ModuleGraphResponse } from '../../types/moduleGraph'
@@ -23,6 +24,7 @@ export function createGraphWorkflowFolderRoutes() {
     const name = typeof req.body?.name === 'string' ? req.body.name.trim() : ''
     const description = typeof req.body?.description === 'string' ? req.body.description.trim() : ''
     const parentId = typeof req.body?.parent_id === 'number' ? req.body.parent_id : null
+    const assign = req.body?.assign_to
 
     if (!name) {
       return sendRouteBadRequest(res, 'name is required')
@@ -31,11 +33,17 @@ export function createGraphWorkflowFolderRoutes() {
     if (parentId !== null && !findGraphWorkflowFolderOrRespond(res, parentId, 'Parent folder not found')) {
       return
     }
+    if (assign !== undefined && (!Number.isSafeInteger(assign?.workflow_id) || assign.workflow_id <= 0
+      || !Number.isSafeInteger(assign?.expected_revision) || assign.expected_revision <= 0)) {
+      return sendRouteBadRequest(res, 'Invalid workflow assignment')
+    }
 
     try {
-      const id = GraphWorkflowFolderModel.create({ name, description: description || null, parent_id: parentId })
-      return res.status(201).json({ success: true, data: { id, message: 'Graph workflow folder created successfully' } } as ModuleGraphResponse)
+      const input = { name, description: description || null, parent_id: parentId }
+      const result = assign ? GraphWorkflowFolderModel.createAndAssign(input, assign.workflow_id, assign.expected_revision) : { id: GraphWorkflowFolderModel.create(input) }
+      return res.status(201).json({ success: true, data: { ...result, message: 'Graph workflow folder created successfully' } } as ModuleGraphResponse)
     } catch (error) {
+      if (error instanceof GraphFolderWriteError) return res.status(error.status).json({ success: false, error: error.message })
       console.error('Error creating graph workflow folder:', error)
       return res.status(500).json({ success: false, error: 'Failed to create graph workflow folder' } as ModuleGraphResponse)
     }
@@ -49,7 +57,7 @@ export function createGraphWorkflowFolderRoutes() {
 
     const existingFolder = findGraphWorkflowFolderOrRespond(res, id)
     const name = typeof req.body?.name === 'string' ? req.body.name.trim() : undefined
-    const description = typeof req.body?.description === 'string' ? req.body.description.trim() : undefined
+    const description = typeof req.body?.description === 'string' ? req.body.description.trim() : req.body?.description === null ? null : undefined
     const parentId = typeof req.body?.parent_id === 'number' ? req.body.parent_id : req.body?.parent_id === null ? null : undefined
 
     if (!existingFolder) {
@@ -81,6 +89,7 @@ export function createGraphWorkflowFolderRoutes() {
 
       return res.json({ success: true, data: { message: 'Graph workflow folder updated successfully' } } as ModuleGraphResponse)
     } catch (error) {
+      if (error instanceof GraphFolderWriteError) return res.status(error.status).json({ success: false, error: error.message })
       console.error('Error updating graph workflow folder:', error)
       return res.status(500).json({ success: false, error: 'Failed to update graph workflow folder' } as ModuleGraphResponse)
     }
@@ -99,11 +108,12 @@ export function createGraphWorkflowFolderRoutes() {
     }
 
     try {
-      const deleted = GraphWorkflowFolderModel.delete(id, deleteMode)
+      const { deleted, workflowIds } = GraphWorkflowFolderModel.deleteWithWorkflows(id, deleteMode)
       if (!deleted) {
         return res.status(500).json({ success: false, error: 'Failed to delete graph workflow folder' } as ModuleGraphResponse)
       }
 
+      GraphWorkflowExecutionQueue.abortDeletedWorkflowRuns(workflowIds)
       return res.json({ success: true, data: { message: deleteMode === 'delete_tree' ? 'Graph workflow folder tree deleted successfully' : 'Graph workflow folder deleted and children moved successfully' } } as ModuleGraphResponse)
     } catch (error) {
       console.error('Error deleting graph workflow folder:', error)

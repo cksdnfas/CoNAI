@@ -1,6 +1,7 @@
 import { getUserSettingsDb } from '../../database/userSettingsDb'
 import { chatProfileOrderSql } from './chatProfileOrder'
 import { ChatProfileError } from './chatProfileError'
+import { editChatResource } from './chatResourceWrite'
 import { normalizeBlock, type ChatDisplayBlock } from './chatStyle'
 
 /**
@@ -10,6 +11,7 @@ import { normalizeBlock, type ChatDisplayBlock } from './chatStyle'
  */
 export type ChatSharedBlock = {
   id: number
+  revision: number
   name: string
   block: ChatDisplayBlock
   /** Profiles that link this block. */
@@ -32,7 +34,7 @@ export function normalizeBlockIds(value: unknown): number[] {
   return [...new Set(value.map(Number).filter((id) => Number.isSafeInteger(id) && id > 0))].slice(0, PROFILE_MAX_BLOCKS)
 }
 
-type BlockRow = { id: number; name: string; block: string; created_date: string; updated_date: string }
+type BlockRow = { id: number; revision: number; name: string; block: string; created_date: string; updated_date: string }
 
 function blockName(value: unknown, fallback: string) {
   return (typeof value === 'string' ? value.trim().slice(0, BLOCK_NAME_MAX_LENGTH) : '') || fallback || '표시 블록'
@@ -60,6 +62,7 @@ function parseStoredBlock(id: number, text: string): ChatDisplayBlock {
 function toSharedBlock(row: BlockRow, profiles: ReturnType<typeof linkedProfiles>): ChatSharedBlock {
   return {
     id: row.id,
+    revision: row.revision,
     name: row.name,
     block: parseStoredBlock(row.id, row.block),
     profiles: profiles.filter((profile) => profile.blockIds.includes(row.id)).map(({ id, name }) => ({ id, name })),
@@ -112,16 +115,15 @@ export const ChatSharedBlockStore = {
     return ChatSharedBlockStore.find(Number(result.lastInsertRowid)) as ChatSharedBlock
   },
 
-  update(blockId: number, patch: { name?: unknown; block?: unknown }) {
-    const current = ChatSharedBlockStore.find(blockId)
-    if (!current) return null
-    const block = patch.block === undefined ? current.block : savedBlock(patch.block)
-    getUserSettingsDb().prepare('UPDATE chat_display_blocks SET name = ?, block = ?, updated_date = CURRENT_TIMESTAMP WHERE id = ?').run(
-      patch.name === undefined ? current.name : blockName(patch.name, block.key),
-      JSON.stringify(block),
-      blockId,
-    )
-    return ChatSharedBlockStore.find(blockId)
+  update(blockId: number, patch: { name?: unknown; block?: unknown }, revision?: unknown) {
+    return editChatResource(blockId, revision, ChatSharedBlockStore.find, current => {
+      const block = patch.block === undefined ? current.block : savedBlock(patch.block)
+      getUserSettingsDb().prepare('UPDATE chat_display_blocks SET name = ?, block = COALESCE(?, block), updated_date = CURRENT_TIMESTAMP WHERE id = ?').run(
+        patch.name === undefined ? current.name : blockName(patch.name, block.key),
+        patch.block === undefined ? null : JSON.stringify(block),
+        blockId,
+      )
+    })
   },
 
   /** Also unlinks the block from every profile. */

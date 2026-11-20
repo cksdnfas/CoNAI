@@ -1,14 +1,15 @@
-import type { ChatJudgeItemStats, ChatJudgeLogRun, ChatJudgePreset, ChatJudgePresetInput, ChatJudgeTestTurn } from '@conai/shared'
+import type { ChatJudgeItemStats, ChatJudgeLogRun, ChatJudgePreset as SharedJudgePreset, ChatJudgePresetInput, ChatJudgeTestTurn } from '@conai/shared'
 import { triggerBlobDownload } from '@/lib/api-client'
 import { requestApiData } from '@/lib/api-request'
 
-export type { ChatJudgeItem, ChatJudgeItemStats, ChatJudgeLogRun, ChatJudgePreset, ChatJudgePresetInput, ChatJudgeTestTurn } from '@conai/shared'
+import { JSON_HEADERS, requestRevisionChecked } from './api-codex-chat-core'
+export type { ChatJudgeItem, ChatJudgeItemStats, ChatJudgeLogRun, ChatJudgePresetInput, ChatJudgeTestTurn } from '@conai/shared'
+export type ChatJudgePreset = SharedJudgePreset & { revision: number }
 
 export const CHAT_JUDGE_PRESETS_QUERY_KEY = ['codex-chat-judge-presets'] as const
 export const CHAT_JUDGE_LOGS_QUERY_KEY = ['codex-chat-judge-logs'] as const
 export const CHAT_JUDGE_STATS_QUERY_KEY = ['codex-chat-judge-stats'] as const
 
-const JSON_HEADERS = { 'Content-Type': 'application/json' }
 const BASE = '/api/codex-chat/admin'
 
 export function listChatJudgePresets() {
@@ -31,8 +32,8 @@ export function importChatJudgePresets(contents: unknown) {
   return requestApiData<ChatJudgePreset[]>(`${BASE}/judge-presets/import`, { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(contents) })
 }
 
-export function updateChatJudgePreset(presetId: number, patch: ChatJudgePresetInput) {
-  return requestApiData<ChatJudgePreset>(`${BASE}/judge-presets/${presetId}`, { method: 'PUT', headers: JSON_HEADERS, body: JSON.stringify(patch) })
+export function updateChatJudgePreset(presetId: number, patch: ChatJudgePresetInput, revision?: number) {
+  return requestRevisionChecked<ChatJudgePreset>(`${BASE}/judge-presets/${presetId}`, { method: 'PUT', headers: JSON_HEADERS, body: JSON.stringify({ ...patch, revision }) })
 }
 
 export function deleteChatJudgePreset(presetId: number) {

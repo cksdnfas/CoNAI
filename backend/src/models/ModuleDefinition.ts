@@ -225,6 +225,13 @@ export class ModuleDefinitionModel {
     return row || null
   }
 
+  /** Export in first-use order, without fetching unrelated modules or preparing one query per node. */
+  static findByIds(ids: number[]): ModuleDefinitionRecord[] {
+    if (!ids.length) return []
+    return getUserSettingsDb().prepare(`SELECT m.* FROM json_each(?) wanted
+      JOIN module_definitions m ON m.id = wanted.value ORDER BY wanted.key`).all(JSON.stringify(ids)) as ModuleDefinitionRecord[]
+  }
+
   static findAll(activeOnly = false): ModuleDefinitionRecord[] {
     const db = getUserSettingsDb()
     let query = 'SELECT * FROM module_definitions'
@@ -264,11 +271,13 @@ export class ModuleDefinitionModel {
     }
 
     const { sql, values } = buildUpdateQuery('module_definitions', finalUpdates, { id })
-    const info = db.prepare(sql).run(...values)
-    const updated = info.changes > 0
+    const updated = db.transaction(() => {
+      if (!db.prepare(sql).run(...values).changes) return false
+      reconcileSavedGraphWorkflowsForModuleDefinitionUpdate(id, moduleData)
+      return true
+    }).immediate()
     if (updated) {
       bumpModuleDefinitionRevision()
-      reconcileSavedGraphWorkflowsForModuleDefinitionUpdate(id, moduleData)
     }
     return updated
   }
@@ -301,5 +310,13 @@ export class ModuleDefinitionModel {
     const db = getUserSettingsDb()
     const row = db.prepare('SELECT * FROM module_definitions WHERE external_key = ?').get(externalKey) as ModuleDefinitionRecord | undefined
     return row || null
+  }
+
+  static deactivateMissingFileNodes(validKeys: string[]): number {
+    const { changes } = getUserSettingsDb().prepare(`UPDATE module_definitions SET is_active = 0, updated_date = CURRENT_TIMESTAMP
+      WHERE authoring_source = 'custom_node_fs' AND is_active = 1 AND external_key IS NOT NULL
+        AND external_key NOT IN (SELECT value FROM json_each(?))`).run(JSON.stringify(validKeys))
+    if (changes) bumpModuleDefinitionRevision()
+    return changes
   }
 }

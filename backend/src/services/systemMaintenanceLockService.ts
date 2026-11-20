@@ -25,6 +25,7 @@ export interface AcquiredSystemMaintenanceLock {
 /** In-process exclusive maintenance gate for jobs that rewrite media identity. */
 export class SystemMaintenanceLockService {
   private static activeLock: ActiveSystemMaintenanceLock | null = null;
+  private static readonly waiters = new Set<() => void>();
 
   static acquireExclusive(input: {
     owner: string;
@@ -59,6 +60,12 @@ export class SystemMaintenanceLockService {
     }
 
     this.activeLock = null;
+    for (const resolve of this.waiters) resolve();
+    this.waiters.clear();
+  }
+
+  static async waitUntilUnlocked(): Promise<void> {
+    while (this.activeLock) await new Promise<void>(resolve => this.waiters.add(resolve));
   }
 
   static isExclusiveActive(): boolean {

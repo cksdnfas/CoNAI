@@ -217,9 +217,11 @@ router.post('/:key/test', requireAdmin, asyncHandler(async (req: Request, res: R
     });
   }
 
-  await CustomNodeRegistryService.syncCustomNodesFromFileSystem();
+  const scan = await CustomNodeRegistryService.syncCustomNodesFromFileSystem();
+  const source = scan.nodes.find(node => node.manifest.key === key);
   const moduleRecord = ModuleDefinitionModel.findByExternalKey(key);
-  if (!moduleRecord || moduleRecord.authoring_source !== 'custom_node_fs') {
+  if (!source || scan.errors.some(error => error.folderPath === source.folderPath)
+      || !moduleRecord?.is_active || moduleRecord.authoring_source !== 'custom_node_fs') {
     return res.status(404).json({
       success: false,
       error: `Custom node not found: ${key}`,

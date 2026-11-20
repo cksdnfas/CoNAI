@@ -5,14 +5,16 @@ import { SystemSettingsService } from './systemSettingsService';
 import { RatingScoreService } from './ratingScoreService';
 import { PromptCollectionService } from './promptCollectionService';
 import { AutoTagsComposeService } from './autoTagsComposeService';
-import { AutoTagIndexService } from './autoTagIndexService';
+import { MediaMetadataModel } from '../models/Image/MediaMetadataModel';
 import { AutoTagStateService } from './autoTagStateService';
 import { AutoCollectionService } from './autoCollectionService';
-import { analyzeMedia } from './aiWorker/aiVisionService';
+import { saveMediaStyleVector } from './aiWorker/aiVisionService';
+import { imageTaggerService } from './imageTaggerService';
+import { extractRatingData } from './hashTaggingService';
+import { resolveUploadsPath } from '../config/runtimePaths';
 import { SystemMaintenanceLockService } from './systemMaintenanceLockService';
 import { MediaPostprocessVisibilityService } from './mediaPostprocessVisibilityService';
 import { QueryCacheService } from './QueryCacheService';
-import { ImageStatsModel } from '../models/Image/ImageStatsModel';
 import { RatingData } from '../types/autoTag';
 
 interface PendingAutoTagMedia {
@@ -57,6 +59,12 @@ const TAGGABLE_FILE_EXISTS = `EXISTS (
         WHERE ${TAGGABLE_FILE_MATCH}
       )`;
 
+// Legacy tagger payloads are already complete. Invalid JSON, however, must be replaced, not fed to json_extract.
+const NEEDS_ENABLED_RESULT = `(mm.auto_tags IS NULL OR NOT json_valid(mm.auto_tags)
+  OR (? = 1 AND json_extract(mm.auto_tags, '$.tagger') IS NULL
+    AND NOT (json_type(mm.auto_tags, '$.rating') IS 'object' AND json_type(mm.auto_tags, '$.general') IS 'object'))
+  OR (? = 1 AND json_extract(mm.auto_tags, '$.kaloscope') IS NULL))`;
+
 /**
  * Pull one file column for the row the `EXISTS` guard just proved present.
  *
@@ -82,9 +90,12 @@ function taggableFileColumn(column: 'original_file_path' | 'file_type'): string 
  */
 class AutoTagScheduler {
   private isRunning = false;
-  private isProcessing = false;
+  private activeWork: Promise<void> | null = null;
+  private shuttingDown = false;
+  private readonly shutdownController = new AbortController();
   private rerunRequested = false;
-  private lockRetryScheduled = false;
+  private pendingTimer: NodeJS.Timeout | null = null;
+  private restartTimer: NodeJS.Timeout | null = null;
   private pollingTimer: NodeJS.Timeout | null = null;
   /** Pause before a requested rerun of the pending batch. */
   private readonly PROCESSING_DELAY_MS = 1000;
@@ -119,6 +130,7 @@ class AutoTagScheduler {
   }
 
   start(): boolean {
+    if (this.shuttingDown) return false;
     if (this.isRunning) {
       return true;
     }
@@ -153,6 +165,11 @@ class AutoTagScheduler {
 
   stop(): void {
     this.isRunning = false;
+    this.rerunRequested = false;
+    if (this.pendingTimer) clearTimeout(this.pendingTimer);
+    if (this.restartTimer) clearTimeout(this.restartTimer);
+    this.pendingTimer = null;
+    this.restartTimer = null;
 
     if (this.pollingTimer) {
       clearInterval(this.pollingTimer);
@@ -160,27 +177,25 @@ class AutoTagScheduler {
     }
   }
 
-  private extractRatingData(raw: unknown): RatingData | null {
-    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
-      return null;
+  async stopAndDrain(): Promise<void> {
+    this.shuttingDown = true;
+    this.shutdownController.abort();
+    this.stop();
+    try { await this.activeWork; } finally { await AutoTagStateService.waitForCapabilitySync(); }
+  }
+
+  private runOnce(work: () => Promise<void>): Promise<void> {
+    if (this.shuttingDown) return Promise.resolve();
+    if (this.activeWork) {
+      this.rerunRequested = true;
+      return this.activeWork;
     }
-
-    const rating = raw as Record<string, unknown>;
-    const general = rating.general;
-    const sensitive = rating.sensitive;
-    const questionable = rating.questionable;
-    const explicit = rating.explicit;
-
-    if (
-      typeof general !== 'number' ||
-      typeof sensitive !== 'number' ||
-      typeof questionable !== 'number' ||
-      typeof explicit !== 'number'
-    ) {
-      return null;
-    }
-
-    return { general, sensitive, questionable, explicit };
+    this.activeWork = Promise.resolve().then(() => this.shuttingDown ? undefined : work()).finally(() => {
+      this.activeWork = null;
+      if (this.rerunRequested && this.isRunning) this.schedulePending(this.PROCESSING_DELAY_MS);
+      this.rerunRequested = false;
+    });
+    return this.activeWork;
   }
 
   /**
@@ -199,11 +214,7 @@ class AutoTagScheduler {
         ${taggableFileColumn('original_file_path')} as original_file_path,
         ${taggableFileColumn('file_type')} as media_type
       FROM media_metadata mm
-      WHERE ${AutoTagStateService.buildPendingStatePrefix('mm')}(
-        mm.auto_tags IS NULL
-        OR (? = 1 AND json_extract(mm.auto_tags, '$.tagger') IS NULL)
-        OR (? = 1 AND json_extract(mm.auto_tags, '$.kaloscope') IS NULL)
-      )
+      WHERE ${AutoTagStateService.buildPendingStatePrefix('mm')}${NEEDS_ENABLED_RESULT}
         AND ${TAGGABLE_FILE_EXISTS}
       LIMIT ?
     `).all(capabilities.taggerAutoEnabled ? 1 : 0, capabilities.kaloscopeAutoEnabled ? 1 : 0, batchSize) as PendingAutoTagMedia[];
@@ -227,11 +238,7 @@ class AutoTagScheduler {
       FROM media_metadata mm
       JOIN image_files taggable ON ${TAGGABLE_FILE_MATCH}
       WHERE mm.composite_hash = ?
-        AND (
-          mm.auto_tags IS NULL
-          OR (? = 1 AND json_extract(mm.auto_tags, '$.tagger') IS NULL)
-          OR (? = 1 AND json_extract(mm.auto_tags, '$.kaloscope') IS NULL)
-        )
+        AND ${NEEDS_ENABLED_RESULT}
       LIMIT 1
     `).get(
       compositeHash,
@@ -247,29 +254,26 @@ class AutoTagScheduler {
    */
   private countPendingMedia(capabilities: AutoTagCapabilities): number {
     AutoTagStateService.syncCapabilityState(capabilities);
+    if (!this.hasEnabledProcessor(capabilities)) return 0;
 
     const result = db.prepare(`
       SELECT COUNT(*) as count
       FROM media_metadata mm
-      WHERE ${AutoTagStateService.buildPendingStatePrefix('mm')}(
-        mm.auto_tags IS NULL
-        OR (? = 1 AND json_extract(mm.auto_tags, '$.tagger') IS NULL)
-        OR (? = 1 AND json_extract(mm.auto_tags, '$.kaloscope') IS NULL)
-      )
+      WHERE ${AutoTagStateService.buildPendingStatePrefix('mm')}${NEEDS_ENABLED_RESULT}
         AND ${TAGGABLE_FILE_EXISTS}
     `).get(capabilities.taggerAutoEnabled ? 1 : 0, capabilities.kaloscopeAutoEnabled ? 1 : 0) as { count: number };
 
     return result.count;
   }
 
-  private async processPendingMedia(): Promise<void> {
-    if (SystemMaintenanceLockService.isExclusiveActive()) {
-      this.scheduleProcessPendingAfterMaintenanceLock();
-      return;
-    }
+  private processPendingMedia(): Promise<void> {
+    return this.runOnce(() => this.processBatch());
+  }
 
-    if (this.isProcessing) {
-      this.rerunRequested = true;
+  private async processBatch(): Promise<void> {
+    if (!this.isRunning) return;
+    if (SystemMaintenanceLockService.isExclusiveActive()) {
+      this.schedulePending(this.LOCK_RETRY_DELAY_MS);
       return;
     }
 
@@ -277,8 +281,6 @@ class AutoTagScheduler {
     if (!this.hasEnabledProcessor(capabilities)) {
       return;
     }
-
-    this.isProcessing = true;
 
     try {
       const pendingMedia = this.getPendingMedia(capabilities, this.getBatchSize());
@@ -295,7 +297,7 @@ class AutoTagScheduler {
         }
 
         if (SystemMaintenanceLockService.isExclusiveActive()) {
-          this.scheduleProcessPendingAfterMaintenanceLock();
+          this.schedulePending(this.LOCK_RETRY_DELAY_MS);
           break;
         }
 
@@ -316,15 +318,6 @@ class AutoTagScheduler {
       console.log(`[AutoTagScheduler] Batch processing completed (${pendingMedia.length} items)`);
     } catch (error) {
       console.error('[AutoTagScheduler] Error in processPendingMedia:', error);
-    } finally {
-      this.isProcessing = false;
-
-      if (this.rerunRequested) {
-        this.rerunRequested = false;
-        setTimeout(() => {
-          void this.processPendingMedia();
-        }, this.PROCESSING_DELAY_MS);
-      }
     }
   }
 
@@ -341,50 +334,37 @@ class AutoTagScheduler {
       return;
     }
 
-    let autoTags = existingAutoTags;
-    let taggerTaglist = '';
-    let ratingData: RatingData | null = null;
-
     // One worker request for both models: the file (or the video's frames, extracted once) is decoded once.
-    const analysis = await analyzeMedia(
-      filePath,
+    const analysis = await imageTaggerService.analyze(
+      resolveUploadsPath(filePath),
       isVideo,
       { tagger: needsTagger, kaloscope: needsKaloscope },
-      { priority: 'low', compositeHash },
+      { priority: 'low', signal: this.shutdownController.signal },
     );
+    if (this.shuttingDown) return; // Interrupted work stays pending for the next start.
 
-    if (needsTagger) {
-      const taggerResult = analysis.tagger ?? { success: false, error: 'Tagger returned nothing' };
-
-      if (taggerResult.success) {
-        autoTags = AutoTagsComposeService.mergeTagger(autoTags, taggerResult);
-        taggerTaglist = taggerResult.taglist || '';
-        ratingData = this.extractRatingData(taggerResult.rating);
-      } else {
-        const errorMessage = taggerResult.error || 'Unknown tagging error';
-        console.warn('[AutoTagScheduler] Tagger failed:', errorMessage);
-        autoTags = AutoTagsComposeService.mergeTaggerFailure(autoTags, errorMessage);
-      }
-    }
-
-    if (needsKaloscope) {
-      const kaloscopeResult = analysis.kaloscope ?? { success: false, error: 'Kaloscope returned nothing' };
-
-      if (kaloscopeResult.success) {
-        autoTags = AutoTagsComposeService.mergeKaloscope(autoTags, kaloscopeResult);
-      } else {
-        console.warn('[AutoTagScheduler] Kaloscope tagging failed:', kaloscopeResult.error || kaloscopeResult.error_type || 'unknown');
-        autoTags = AutoTagsComposeService.mergeKaloscopeFailure(autoTags, kaloscopeResult.error, kaloscopeResult.error_type);
-      }
-    }
-
-    if (!autoTags) {
-      return;
-    }
-
-    const ratingScore = await this.calculateRatingScore(ratingData);
-    await this.persistAutoTags(compositeHash, autoTags, ratingScore);
-    await this.collectAutoPrompts(taggerTaglist);
+    const tagger = analysis.tagger ?? { success: false, error: 'Tagger returned nothing' };
+    const kaloscope = analysis.kaloscope ?? { success: false, error: 'Kaloscope returned nothing' };
+    const ratingScore = await this.calculateRatingScore(tagger.success ? extractRatingData(tagger.rating) : null);
+    let wroteTagger = false;
+    let wroteKaloscope = false;
+    const saved = MediaMetadataModel.mergeAutoTags(compositeHash, current => {
+      wroteTagger = needsTagger && !AutoTagsComposeService.hasTagger(current);
+      wroteKaloscope = needsKaloscope && !AutoTagsComposeService.hasKaloscope(current);
+      let merged = current;
+      if (wroteTagger) merged = tagger.success
+        ? AutoTagsComposeService.mergeTagger(merged, tagger)
+        : AutoTagsComposeService.mergeTaggerFailure(merged, tagger.error);
+      if (wroteKaloscope) merged = kaloscope.success
+        ? AutoTagsComposeService.mergeKaloscope(merged, kaloscope)
+        : AutoTagsComposeService.mergeKaloscopeFailure(merged, kaloscope.error, kaloscope.error_type);
+      return merged !== null && (wroteTagger || wroteKaloscope)
+        ? { auto_tags: merged, rating_score: wroteTagger ? ratingScore : undefined } : null;
+    });
+    if (saved === null) return;
+    if (wroteKaloscope && kaloscope.success && kaloscope.style?.length) saveMediaStyleVector(compositeHash, kaloscope.style);
+    await this.afterTagging(compositeHash);
+    if (wroteTagger && tagger.success) await this.collectAutoPrompts(tagger.taglist || '');
   }
 
   private async calculateRatingScore(ratingData: RatingData | null): Promise<number | null> {
@@ -401,17 +381,7 @@ class AutoTagScheduler {
     }
   }
 
-  private async persistAutoTags(compositeHash: string, autoTags: string, ratingScore: number | null): Promise<void> {
-    db.prepare(`
-      UPDATE media_metadata
-      SET auto_tags = ?, rating_score = ?, metadata_updated_date = CURRENT_TIMESTAMP
-      WHERE composite_hash = ?
-    `).run(autoTags, ratingScore, compositeHash);
-    AutoTagIndexService.syncForHash(compositeHash, autoTags);
-    // Tagging finished for this row: settle (or re-arm) its pending state.
-    AutoTagStateService.refreshForHash(compositeHash);
-    ImageStatsModel.invalidateAutoTagStatsCache();
-
+  private async afterTagging(compositeHash: string): Promise<void> {
     try {
       const autoCollectResults = await AutoCollectionService.runAutoCollectionForNewImage(compositeHash);
       if (autoCollectResults.length > 0) {
@@ -425,11 +395,7 @@ class AutoTagScheduler {
       );
     }
 
-    MediaPostprocessVisibilityService.publishLinkedGenerationHistoryEvents([compositeHash]);
-    const releasedForVisibility = MediaPostprocessVisibilityService.markReadyIfNoPendingImmediateWork(compositeHash);
-    if (releasedForVisibility) {
-      QueryCacheService.scheduleGalleryCacheInvalidation();
-    }
+    MediaPostprocessVisibilityService.finishAutoTagging(compositeHash);
   }
 
   private async collectAutoPrompts(taggerTaglist: string): Promise<void> {
@@ -454,16 +420,12 @@ class AutoTagScheduler {
   }
 
   /** Retry postprocess tagging promptly after an exclusive maintenance lock can clear. */
-  private scheduleProcessPendingAfterMaintenanceLock(): void {
-    if (this.lockRetryScheduled) {
-      return;
-    }
-
-    this.lockRetryScheduled = true;
-    setTimeout(() => {
-      this.lockRetryScheduled = false;
+  private schedulePending(delay: number): void {
+    if (this.shuttingDown || this.pendingTimer) return;
+    this.pendingTimer = setTimeout(() => {
+      this.pendingTimer = null;
       void this.processPendingMedia();
-    }, this.LOCK_RETRY_DELAY_MS);
+    }, delay);
   }
 
   getStatus(): {
@@ -475,7 +437,7 @@ class AutoTagScheduler {
     let untaggedCount = 0;
 
     try {
-      untaggedCount = this.countPendingMedia(this.getCapabilities());
+      if (!this.shuttingDown) untaggedCount = this.countPendingMedia(this.getCapabilities());
     } catch (error) {
       console.error('[AutoTagScheduler] Failed to get untagged count:', error);
     }
@@ -489,11 +451,9 @@ class AutoTagScheduler {
   }
 
   restart(): void {
-    if (this.isRunning) {
-      this.stop();
-    }
-
-    setTimeout(() => this.start(), 100);
+    if (this.shuttingDown) return;
+    this.stop();
+    this.restartTimer = setTimeout(() => { this.restartTimer = null; this.start(); }, 100);
   }
 
   /**
@@ -502,7 +462,7 @@ class AutoTagScheduler {
    */
   async triggerManualProcessing(compositeHash?: string): Promise<void> {
     if (compositeHash) {
-      await this.processSavedMedia(compositeHash);
+      await this.runOnce(() => this.processSavedMedia(compositeHash));
       return;
     }
 
@@ -513,7 +473,7 @@ class AutoTagScheduler {
   /** Tag one freshly saved media row without touching the pending scan path. */
   private async processSavedMedia(compositeHash: string): Promise<void> {
     if (SystemMaintenanceLockService.isExclusiveActive()) {
-      this.scheduleProcessPendingAfterMaintenanceLock();
+      this.schedulePending(this.LOCK_RETRY_DELAY_MS);
       return;
     }
 
@@ -527,17 +487,10 @@ class AutoTagScheduler {
     // any batch poll can observe it.
     AutoTagStateService.refreshForHash(compositeHash);
 
-    if (this.isProcessing) {
-      this.rerunRequested = true;
-      return;
-    }
-
     const media = this.findPendingMediaByHash(compositeHash, capabilities);
     if (!media) {
       return;
     }
-
-    this.isProcessing = true;
 
     try {
       console.log(`[AutoTagScheduler] Direct tagging requested for ${compositeHash.substring(0, 12)}`);
@@ -547,15 +500,6 @@ class AutoTagScheduler {
         `[AutoTagScheduler] Failed to tag saved media: ${path.basename(media.original_file_path)}`,
         error instanceof Error ? error.message : error,
       );
-    } finally {
-      this.isProcessing = false;
-
-      if (this.rerunRequested) {
-        this.rerunRequested = false;
-        setTimeout(() => {
-          void this.processPendingMedia();
-        }, this.PROCESSING_DELAY_MS);
-      }
     }
   }
 }

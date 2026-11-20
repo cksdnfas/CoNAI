@@ -25,7 +25,7 @@ test('graph editor saves and test runs use the loaded revision, not a refreshed 
     }
   })
 
-  const requests: Array<{ url: string; body: { expected_revision?: number; name?: string } }> = []
+  const requests: Array<{ url: string; body: { expected_revision?: number; name?: string; description?: string | null } }> = []
   let conflict = true
   let nextRevision = 3
   let pendingResponse: Promise<Response> | null = null
@@ -62,6 +62,7 @@ test('graph editor saves and test runs use the loaded revision, not a refreshed 
   await act(async () => assert.equal(await actions.handleSaveGraph(), false))
   await act(async () => { await actions.handleTestRunCurrentGraph() })
   assert.deepEqual(requests.map((request) => request.body.expected_revision), [2, 2])
+  assert.equal(requests[0].body.description, null, 'erasing the description must clear it rather than omit the edit')
   assert.ok(requests.every((request) => request.url.endsWith('/api/graph-workflows/7')), 'a conflicting test run is not enqueued')
   assert.equal(snapshots, 0)
   assert.equal(base.current.revision, 2)

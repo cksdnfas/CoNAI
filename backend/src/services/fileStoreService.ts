@@ -9,6 +9,7 @@ import type { FileStoreListing, FileStoreSortKey, FileWriteSource, StoredFileEnt
 import { getUserSettingsDb } from '../database/userSettingsDb';
 import { ensureFileOwnerDirectory, ensureFileStoreDirectories, fileStoreIncoming, migrateFileStoreLayout, storedFilePath, fileStoreThumbnailPath } from './fileStorePaths';
 import { FileStoreRevisions } from './fileStoreRevisions';
+import { afterFileStoreCommit, installStoredBlob, withFileStoreWrites } from './fileStoreWriteTransaction';
 
 export class FileStoreError extends Error {
   constructor(message: string, readonly status = 400) { super(message); }
@@ -219,6 +220,10 @@ const textWriteListeners = new Set<(event: TextWriteEvent) => void>();
 /** A failing listener never fails the change itself; it is logged. */
 function notifyChange(change: FileStoreChange) {
   if (change.entries.length === 0 || isChatAttachmentOwner(change.owner)) return;
+  afterFileStoreCommit(() => publishChange(change));
+}
+
+function publishChange(change: FileStoreChange) {
   publishRuntimeEvent({ name: 'files.changed', topic: 'files', visibility: 'all', payload: { action: change.action, ids: change.entries.map(entry => entry.id) } });
   for (const listener of changeListeners) {
     try { listener(change); }
@@ -327,7 +332,6 @@ export const FileStoreService = {
     const folders = paths === undefined ? null : uploadFolders(paths, files);
     ensureFileStoreDirectories();
     ensureFileOwnerDirectory(owner);
-    const allocated: string[] = [];
     const created: StoredFileEntry[] = [];
     // Lowercased path below parentId → folder ID (names compare as the store compares them); used inside the transaction only.
     const resolved = new Map<string, string>();
@@ -343,9 +347,8 @@ export const FileStoreService = {
       return folderId;
     };
     let kept: string | null = null;
-    let entries: StoredFileEntry[];
-    try {
-      entries = getUserSettingsDb().transaction(() => files.map((file, index) => {
+    return withFileStoreWrites(() => {
+      const entries = files.map((file, index) => {
         const name = uploadedName(file.originalname);
         assertFileTypeAllowed(name, allowAnyType);
         const size = fs.statSync(file.path).size;
@@ -365,7 +368,7 @@ export const FileStoreService = {
           getUserSettingsDb().prepare('UPDATE stored_file_entries SET size = ?, mime_type = ?, rating_score = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
             .run(size, /^[a-zA-Z0-9.+-]+\/[a-zA-Z0-9.+-]+$/.test(file.mimetype) ? file.mimetype : 'application/octet-stream', previous.id);
           getUserSettingsDb().prepare("DELETE FROM search_db.search_documents WHERE source = 'file' AND source_id = ?").run(previous.id);
-          fs.renameSync(file.path, storedFilePath(owner, previous.id));
+          installStoredBlob(file.path, previous.id, true);
           return toEntry(requireRow(owner, previous.id));
         }
         const id = crypto.randomBytes(16).toString('hex');
@@ -374,22 +377,17 @@ export const FileStoreService = {
         const target = storedFilePath(owner, id);
         // The DB ID is reserved in this transaction, and staging shares the destination volume.
         if (fs.existsSync(target)) throw new FileStoreError('파일 저장 ID가 충돌했어. 다시 시도해줘.', 409);
-        fs.renameSync(file.path, target);
-        allocated.push(target);
+        installStoredBlob(file.path, id, false);
         return entry;
-      })).immediate();
-    } catch (error) {
-      for (const target of allocated) fs.rmSync(target, { force: true });
-      if (kept) fs.rmSync(kept, { force: true });
-      throw error;
-    }
-    if (replace) {
-      FileStoreRevisions.setWriter(replace.id, replace.source ?? null);
-      if (kept) FileStoreRevisions.trim(owner, replace.id);
-      fs.rmSync(fileStoreThumbnailPath(replace.id), { force: true });
-    }
-    notifyChange({ owner, action: 'write', entries: [...created, ...entries].map((entry) => ({ id: entry.id, kind: entry.kind, name: entry.name, parentId: entry.parentId })) });
-    return entries;
+      });
+      if (replace) {
+        FileStoreRevisions.setWriter(replace.id, replace.source ?? null);
+        if (kept) FileStoreRevisions.trim(replace.id);
+        afterFileStoreCommit(() => fs.rmSync(fileStoreThumbnailPath(replace.id), { force: true }));
+      }
+      notifyChange({ owner, action: 'write', entries: [...created, ...entries].map((entry) => ({ id: entry.id, kind: entry.kind, name: entry.name, parentId: entry.parentId })) });
+      return entries;
+    });
   },
 
   /** Renaming is the other way a restricted extension could appear, so files obey the same type policy as uploads. */
@@ -408,7 +406,7 @@ export const FileStoreService = {
     return toEntry(current);
   },
 
-  move(owner: string, value: unknown, parentId: string | null) {
+  move(owner: string, value: unknown, parentId: string | null, rename?: { id: string; name: string }) {
     const ids = idsInput(value);
     const db = getUserSettingsDb();
     const moved = db.transaction(() => {
@@ -429,15 +427,22 @@ export const FileStoreService = {
         SELECT e.id, tree.depth + 1 FROM stored_file_entries e JOIN tree ON e.parent_id = tree.id WHERE e.deleted_at IS NULL
       ) SELECT MAX(depth) AS depth FROM tree`) : null;
       const update = db.prepare('UPDATE stored_file_entries SET parent_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?');
-      for (const row of roots) {
+      return roots.map(row => {
         const depth = row.kind === 'folder' && subtreeDepth ? (subtreeDepth.get(row.id) as { depth: number }).depth : 1;
         if (destinationAncestors.length + depth > MAX_DEPTH) throw new FileStoreError('폴더는 최대 64단계까지 이동할 수 있어.');
-        assertUnique(owner, parentId, row.name, row.id);
-        update.run(parentId, row.id);
-      }
-      return roots.map((row) => changedEntry({ ...row, parent_id: parentId }, row));
+        const name = rename?.id === row.id ? normalizeName(rename.name) : row.name;
+        assertUnique(owner, parentId, name, row.id);
+        if (name === row.name) update.run(parentId, row.id);
+        else {
+          if (row.kind === 'file' && name.toLowerCase() !== row.name_key) assertFileTypeAllowed(name, false);
+          db.prepare('UPDATE stored_file_entries SET parent_id = ?, name = ?, name_key = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(parentId, name, name.toLowerCase(), row.id);
+          db.prepare("DELETE FROM search_db.search_documents WHERE source = 'file' AND source_id = ?").run(row.id);
+        }
+        return changedEntry({ ...row, name, parent_id: parentId }, row);
+      });
     }).immediate();
     notifyChange({ owner, action: 'move', entries: moved });
+    if (rename) notifyChange({ owner, action: 'rename', entries: moved.filter(entry => entry.previousName !== entry.name) });
   },
 
   /** Empty folders only. Attachments protect their originals; deleting a chat releases the reference. */
@@ -457,7 +462,7 @@ export const FileStoreService = {
       for (const id of ids) db.prepare('UPDATE stored_file_entries SET deleted_at = CURRENT_TIMESTAMP WHERE id = ?').run(id);
       return rows;
     }).immediate();
-    this.purgeDeleted();
+    afterFileStoreCommit(() => this.purgeDeleted());
     notifyChange({ owner, action: 'delete', entries: removed.map((row) => changedEntry(row)) });
   },
 
@@ -500,13 +505,9 @@ export const FileStoreService = {
     ensureFileOwnerDirectory(owner);
     const data = Buffer.from(text, 'utf8');
     const staged = path.join(fileStoreIncoming, `${crypto.randomBytes(16).toString('hex')}.tmp`);
-    fs.writeFileSync(staged, data);
-    let row: FileRow;
-    let kept: string | null = null;
-    let created = false;
-    let revision: string;
     try {
-      row = getUserSettingsDb().transaction(() => {
+      fs.writeFileSync(staged, data);
+      return withFileStoreWrites(() => {
         const existing = this.findChild(owner, parentId, name);
         if (existing && (existing.kind !== 'file' || options.create)) throw new FileStoreError(`같은 이름의 항목이 있어: ${name}`, 409);
         if (options.replaceId !== undefined && existing?.id !== options.replaceId) throw new FileStoreError('파일이 옮겨졌거나 이름이 바뀌었어. 다시 열어줘.', 409);
@@ -514,38 +515,36 @@ export const FileStoreService = {
           throw new FileStoreError('다른 곳에서 파일이 변경됐어. 초안을 보관하고 최신 파일을 다시 열어줘.', 409);
         }
         const id = existing?.id ?? crypto.randomBytes(16).toString('hex');
-        created = !existing;
         if (existing) {
-          if (options.history !== false) kept = FileStoreRevisions.keep(owner, requireRow(owner, id), storedFilePath(owner, id), options.source ?? null);
+          if (options.history !== false && FileStoreRevisions.keep(owner, requireRow(owner, id), storedFilePath(owner, id), options.source ?? null)) {
+            FileStoreRevisions.trim(id);
+          }
           getUserSettingsDb().prepare('UPDATE stored_file_entries SET size = ?, mime_type = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(data.length, textMimeType(name), id);
           // A rewrite in the same second at the same size would look unchanged to the search cache.
           getUserSettingsDb().prepare("DELETE FROM search_db.search_documents WHERE source = 'file' AND source_id = ?").run(id);
         } else {
           insert(owner, parentId, name, 'file', id, data.length, textMimeType(name));
         }
-        fs.renameSync(staged, storedFilePath(owner, id));
-        revision = statRevision(fs.statSync(storedFilePath(owner, id), { bigint: true }));
-        return requireRow(owner, id);
-      }).immediate();
-    } catch (error) {
-      // The transaction took its version row back; its copy goes too.
-      if (kept) fs.rmSync(kept, { force: true });
-      throw error;
+        const target = installStoredBlob(staged, id, Boolean(existing));
+        const revision = statRevision(fs.statSync(target, { bigint: true }));
+        const row = requireRow(owner, id);
+        FileStoreRevisions.setWriter(id, options.source ?? null);
+        afterFileStoreCommit(() => fs.rmSync(fileStoreThumbnailPath(id), { force: true }));
+        if (!options.silent) notifyChange({ owner, action: 'write', entries: [changedEntry(row)] });
+        if (options.source) {
+          const event = { owner, entry: toEntry(row), source: options.source, created: !existing };
+          afterFileStoreCommit(() => {
+            for (const listener of textWriteListeners) {
+              try { listener(event); }
+              catch (error) { console.warn('[file-store] Text write hook failed:', error instanceof Error ? error.message : error); }
+            }
+          });
+        }
+        return { ...toEntry(row), revision };
+      });
     } finally {
       fs.rmSync(staged, { force: true });
     }
-    FileStoreRevisions.setWriter(row.id, options.source ?? null);
-    if (kept) FileStoreRevisions.trim(owner, row.id);
-    fs.rmSync(fileStoreThumbnailPath(row.id), { force: true });
-    if (!options.silent) notifyChange({ owner, action: 'write', entries: [changedEntry(row)] });
-    if (options.source) {
-      const event = { owner, entry: toEntry(row), source: options.source, created };
-      for (const listener of textWriteListeners) {
-        try { listener(event); }
-        catch (error) { console.warn('[file-store] Text write hook failed:', error instanceof Error ? error.message : error); }
-      }
-    }
-    return { ...toEntry(row), revision: revision! };
   },
 
   /** Listen to text writes whose writer is known (see TextWriteEvent). Returns the unsubscribe. */
@@ -556,10 +555,12 @@ export const FileStoreService = {
 
   /** Put an earlier version's text back (the current text becomes a version itself, so a restore can be undone). */
   restoreRevision(owner: string, id: string, revisionId: string, source: FileWriteSource | null = null): StoredFileEntry {
-    const row = requireRow(owner, id);
-    const text = FileStoreRevisions.readText(owner, id, revisionId);
-    if (text === null) throw new FileStoreError('그 버전을 찾을 수 없어.', 404);
-    return this.writeText(owner, row.parent_id, row.name, text, { replaceId: row.id, source: { ...(source ?? {}), via: 'restore' } });
+    return withFileStoreWrites(() => {
+      const row = requireRow(owner, id);
+      const text = FileStoreRevisions.readText(owner, id, revisionId);
+      if (text === null) throw new FileStoreError('그 버전을 찾을 수 없어.', 404);
+      return this.writeText(owner, row.parent_id, row.name, text, { replaceId: row.id, source: { ...(source ?? {}), via: 'restore' } });
+    });
   },
 
   /** Replace the text of an existing text file in place (the editor's save). */
@@ -585,48 +586,48 @@ export const FileStoreService = {
   },
 
   /**
-   * Read a whole text file, transform it and save it in place. Read and write are synchronous, so no other request
-   * can save the file in between and have its change overwritten.
+   * Read the recovered original under the writer lock, so another process's unfinished bytes never enter an edit.
    */
   editText(owner: string, id: string, transform: (text: string) => string, record: TextWriteRecord = {}): StoredFileEntry {
-    const { entry, filePath } = this.resolveFile(owner, id);
-    if (!TEXT_EXTENSIONS.has(path.extname(entry.name).toLowerCase())) throw new FileStoreError('텍스트 파일만 고칠 수 있어.', 415);
-    if (entry.size > MAX_TEXT_DOCUMENT_BYTES) throw new FileStoreError('2MB가 넘는 파일은 고칠 수 없어.', 413);
-    const data = fs.readFileSync(filePath);
-    if (data.includes(0)) throw new FileStoreError('바이너리 파일은 텍스트로 고칠 수 없어.', 415);
-    let text: string;
-    try { text = new TextDecoder('utf-8', { fatal: true }).decode(data); }
-    catch { throw new FileStoreError('UTF-8로 저장한 텍스트 파일만 고칠 수 있어.', 415); }
-    const next = transform(text);
-    if (Buffer.byteLength(next, 'utf8') > MAX_TEXT_DOCUMENT_BYTES) throw new FileStoreError('문서는 2MB까지 저장할 수 있어.', 413);
-    return this.updateText(owner, id, next, record);
+    return withFileStoreWrites(() => {
+      const { entry, filePath } = this.resolveFile(owner, id);
+      if (!TEXT_EXTENSIONS.has(path.extname(entry.name).toLowerCase())) throw new FileStoreError('텍스트 파일만 고칠 수 있어.', 415);
+      if (entry.size > MAX_TEXT_DOCUMENT_BYTES) throw new FileStoreError('2MB가 넘는 파일은 고칠 수 없어.', 413);
+      const data = fs.readFileSync(filePath);
+      if (data.includes(0)) throw new FileStoreError('바이너리 파일은 텍스트로 고칠 수 없어.', 415);
+      let text: string;
+      try { text = new TextDecoder('utf-8', { fatal: true }).decode(data); }
+      catch { throw new FileStoreError('UTF-8로 저장한 텍스트 파일만 고칠 수 있어.', 415); }
+      const next = transform(text);
+      if (Buffer.byteLength(next, 'utf8') > MAX_TEXT_DOCUMENT_BYTES) throw new FileStoreError('문서는 2MB까지 저장할 수 있어.', 413);
+      return this.updateText(owner, id, next, record);
+    });
   },
 
   /**
    * A copy of one of the owner's files as a new file `name` under `parentId` (a new id; the name must be free). The
-   * blob is in place when this returns: a caller whose surrounding transaction rolls back removes it itself.
+   * blob is in place when this returns and follows the enclosing file-store transaction on rollback.
    */
   copyFile(owner: string, fileId: string, parentId: string | null, value: unknown, options: { silent?: boolean } = {}): StoredFileEntry {
     const name = normalizeName(value);
-    const source = requireRow(owner, fileId);
-    if (source.kind !== 'file') throw new FileStoreError('파일을 선택해줘.');
     ensureFileStoreDirectories();
     ensureFileOwnerDirectory(owner);
     const staged = path.join(fileStoreIncoming, `${crypto.randomBytes(16).toString('hex')}.tmp`);
-    fs.copyFileSync(storedFilePath(owner, source.id), staged);
-    let row: FileRow;
     try {
-      row = getUserSettingsDb().transaction(() => {
+      return withFileStoreWrites(() => {
+        const source = requireRow(owner, fileId);
+        if (source.kind !== 'file') throw new FileStoreError('파일을 선택해줘.');
+        fs.copyFileSync(storedFilePath(owner, source.id), staged);
         const id = crypto.randomBytes(16).toString('hex');
         insert(owner, parentId, name, 'file', id, source.size, source.mime_type);
-        fs.renameSync(staged, storedFilePath(owner, id));
-        return requireRow(owner, id);
-      }).immediate();
+        installStoredBlob(staged, id, false);
+        const row = requireRow(owner, id);
+        if (!options.silent) notifyChange({ owner, action: 'write', entries: [changedEntry(row)] });
+        return toEntry(row);
+      });
     } finally {
       fs.rmSync(staged, { force: true });
     }
-    if (!options.silent) notifyChange({ owner, action: 'write', entries: [changedEntry(row)] });
-    return toEntry(row);
   },
 
   /** A folder and everything under it. Files a chat message attaches are refused, as with delete. */
@@ -648,7 +649,7 @@ export const FileStoreService = {
       return rows;
     }).immediate();
     // Tombstones hide the whole tree immediately; physical removal yields between small batches.
-    scheduleDeletedFilePurge();
+    afterFileStoreCommit(scheduleDeletedFilePurge);
     if (!options.silent) notifyChange({ owner, action: 'delete', entries: removed.map((row) => changedEntry(row)) });
   },
 
@@ -683,25 +684,30 @@ export const FileStoreService = {
   /** Tombstones make interrupted filesystem deletion retryable without reviving a half-deleted file. */
   purgeDeleted(limit = 200) {
     const db = getUserSettingsDb();
+    if (db.inTransaction) { scheduleDeletedFilePurge(); return 0; }
     db.prepare(`UPDATE stored_file_entries SET deleted_at = CURRENT_TIMESTAMP
       WHERE chat_owner_key IS NOT NULL AND deleted_at IS NULL AND created_at < datetime('now', '-1 day')
       AND NOT EXISTS (SELECT 1 FROM chat_file_attachments a WHERE a.file_id = stored_file_entries.id)`).run();
-    const rows = db.prepare(`SELECT id, kind, owner_key FROM stored_file_entries e WHERE deleted_at IS NOT NULL
-      AND NOT EXISTS (SELECT 1 FROM stored_file_entries child WHERE child.parent_id=e.id) LIMIT ?`).all(limit) as Array<{ id: string; kind: string; owner_key: string }>;
-    let removed = 0;
-    for (const row of rows) {
-      try {
-        if (row.kind === 'file') {
-          fs.rmSync(storedFilePath(row.owner_key, row.id), { force: true });
-          fs.rmSync(fileStoreThumbnailPath(row.id), { force: true });
-          FileStoreRevisions.purge(row.owner_key, row.id);
+    // Settle a dead writer before removing committed tombstones; a later replay must not resurrect their bytes.
+    const removed = withFileStoreWrites(() => {
+      const rows = db.prepare(`SELECT id, kind, owner_key FROM stored_file_entries e WHERE deleted_at IS NOT NULL
+        AND NOT EXISTS (SELECT 1 FROM stored_file_entries child WHERE child.parent_id=e.id) LIMIT ?`).all(limit) as Array<{ id: string; kind: string; owner_key: string }>;
+      let count = 0;
+      for (const row of rows) {
+        try {
+          if (row.kind === 'file') {
+            fs.rmSync(storedFilePath(row.owner_key, row.id), { force: true });
+            fs.rmSync(fileStoreThumbnailPath(row.id), { force: true });
+            FileStoreRevisions.purge(row.owner_key, row.id);
+          }
+          count += db.prepare('DELETE FROM stored_file_entries WHERE id = ? AND NOT EXISTS (SELECT 1 FROM stored_file_entries WHERE parent_id = ?)').run(row.id, row.id).changes;
+          db.prepare("DELETE FROM search_db.search_documents WHERE source = 'file' AND source_id = ?").run(row.id);
+        } catch (error) {
+          console.warn('[file-store] Deletion will retry:', row.id, error instanceof Error ? error.message : error);
         }
-        removed += db.prepare('DELETE FROM stored_file_entries WHERE id = ? AND NOT EXISTS (SELECT 1 FROM stored_file_entries WHERE parent_id = ?)').run(row.id, row.id).changes;
-        db.prepare("DELETE FROM search_db.search_documents WHERE source = 'file' AND source_id = ?").run(row.id);
-      } catch (error) {
-        console.warn('[file-store] Deletion will retry:', row.id, error instanceof Error ? error.message : error);
       }
-    }
+      return count;
+    });
     if (removed > 0) scheduleDeletedFilePurge();
     return removed;
   },

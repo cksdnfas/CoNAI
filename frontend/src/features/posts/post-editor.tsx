@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import type { Location } from 'react-router-dom'
 import type { PostCategory, PostCommentMode, PostDetail, PostStatus } from '@conai/shared'
@@ -152,32 +152,41 @@ export function PostEditor({ post, categories, defaultCategoryId, onSaved, onCan
   const richEditorRef = useRef<PostRichEditorHandle | null>(null)
   const stickyTop = useStickyTopBelowPageToolbar()
   const flat = useMemo(() => flattenCategories(categories), [categories])
-  const previewContext = useMemo(() => ({ postId: post?.id ?? null, mediaHashes: mediaHashesOf(body) }), [post?.id, body])
+  const previewContext = useMemo(() => ({ postId: base?.id ?? null, mediaHashes: mediaHashesOf(body) }), [base?.id, body])
 
+  const draft = useMemo(() => ({ title, body, categoryId, tags, status, commentMode, ...(isAdmin ? { pinned } : {}) }),
+    [title, body, categoryId, tags, status, commentMode, isAdmin, pinned])
+  const currentDraft = useRef<typeof draft | null>(null)
+  useLayoutEffect(() => {
+    currentDraft.current = draft
+    return () => { currentDraft.current = null }
+  }, [draft])
   const save = useMutation({
-    mutationFn: () => {
-      const input = { title, body, categoryId, tags, status, commentMode, ...(isAdmin ? { pinned } : {}) }
-      return post ? updatePost(post.id, { ...input, expectedRevision: (base ?? post).revision }) : createPost(input)
-    },
+    mutationFn: (input: typeof draft) => base ? updatePost(base.id, { ...input, expectedRevision: base.revision }) : createPost(input),
     onMutate: () => setConflict(false),
-    onSuccess: async (saved) => {
-      await invalidatePostScope(queryClient, saved.id, 'post')
-      leavingRef.current = true
-      onSaved(saved)
+    onSuccess: (saved, submitted) => {
+      void invalidatePostScope(queryClient, saved.id, 'post')
+      if (!currentDraft.current || leavingRef.current) return
+      setBase(saved)
+      // Fields remain editable while saving. Navigate only if this editor still contains that submission.
+      if (currentDraft.current === submitted) {
+        leavingRef.current = true
+        onSaved(saved)
+      }
     },
     onError: (error) => {
       // Someone saved first: keep the draft and offer to rebase it on the latest version (see rebaseOnLatest).
-      if (post && error instanceof ApiRequestError && error.status === 409) { setConflict(true); return }
+      if (base && error instanceof ApiRequestError && error.status === 409) { setConflict(true); return }
       showSnackbar({ tone: 'error', message: getErrorMessage(error, t({ ko: '글을 저장하지 못했어.', en: 'Could not save the post.' })) })
     },
   })
 
   /** Take the latest saved version as the draft's base, keeping every field as typed; the next save overwrites it. */
   const rebaseOnLatest = async () => {
-    if (!post) return
+    if (!base) return
     setRebasing(true)
     try {
-      const latest = await getPost(post.id)
+      const latest = await getPost(base.id)
       setBase(latest)
       setConflict(false)
       showSnackbar({ tone: 'info', message: t({ ko: '최신본을 기준으로 바꿨어. 저장하면 내 글로 덮어써.', en: 'Now based on the latest version. Saving replaces it with your text.' }) })
@@ -214,8 +223,8 @@ export function PostEditor({ post, categories, defaultCategoryId, onSaved, onCan
   const bodyFits = body.length <= BODY_CHUNK
   const dirty = base
     ? title !== base.title || body !== base.body || categoryId !== base.categoryId || tags.join('\u0000') !== base.tags.join('\u0000') || status !== base.status || commentMode !== base.commentMode || (isAdmin && pinned !== base.pinned)
-    : Boolean(title.trim() || body.trim())
-  usePageSaveShortcut(() => { if (title.trim()) save.mutate() }, save.isPending)
+    : Boolean(title.trim() || body.trim() || tags.length || categoryId !== defaultCategoryId || status !== 'published' || commentMode !== 'open' || pinned)
+  usePageSaveShortcut(() => { if (title.trim()) save.mutate(draft) }, save.isPending || rebasing)
   const revert = async () => {
     if (!base || save.isPending || !await confirm({
       title: t({ ko: '변경 되돌리기', en: 'Revert changes' }),
@@ -241,13 +250,14 @@ export function PostEditor({ post, categories, defaultCategoryId, onSaved, onCan
       tone: 'destructive',
     }))) return
     leavingRef.current = true
-    onCancel()
+    if (base && !post) onSaved(base)
+    else onCancel()
   }
-  useChatPageRegistration(save.isPending || post?.knowledge ? null : {
+  useChatPageRegistration(save.isPending || rebasing || post?.knowledge ? null : {
     kind: 'posts',
-    title: post ? t({ ko: '글 고치기', en: 'Edit post' }) : t({ ko: '새 글', en: 'New post' }),
-    resourceId: `edit:${post?.id ?? 'new'}`,
-    localRevision: JSON.stringify([body, post?.revision]),
+    title: base ? t({ ko: '글 고치기', en: 'Edit post' }) : t({ ko: '새 글', en: 'New post' }),
+    resourceId: `edit:${base?.id ?? 'new'}`,
+    localRevision: JSON.stringify([body, base?.revision, post?.revision]),
     priority: 1,
     dirty,
     fields: [
@@ -265,7 +275,7 @@ export function PostEditor({ post, categories, defaultCategoryId, onSaved, onCan
         pageAction('posts.body_at', t({ ko: '본문 이어 읽기', en: 'Read the body from' }), t({ ko: 'data.body를 offset부터 보여줘', en: 'data.body from offset' }), pageObject({ offset: pageNumber(0, Math.max(0, body.length - 1), true) }, ['offset'])),
         pageAction('posts.body_edit', t({ ko: '본문 고치기', en: 'Edit the body' }), t({ ko: 'whole은 본문 전체를 바꿔. edits는 find(한 번만 나오는 글)를 replace로 차례로 바꾸고, 하나라도 안 맞으면 그대로야', en: 'whole replaces the body; edits replace each find (appearing once) in order, all or nothing' }), pageObject({ whole: pageText(200000), edits: pageArray(pageObject({ find: pageText(8000), replace: pageText(100000), all: { type: 'boolean' } }, ['find', 'replace']), 50) })),
       ]),
-      ...(title.trim() && dirty ? [pageAction('posts.save', post ? t({ ko: '글 저장', en: 'Save post' }) : t({ ko: '글 올리기', en: 'Publish post' }), t({ ko: '편집 중인 글을 저장해.', en: 'Save the post being edited.' }), undefined, 'save')] : []),
+      ...(title.trim() && dirty ? [pageAction('posts.save', base ? t({ ko: '글 저장', en: 'Save post' }) : t({ ko: '글 올리기', en: 'Publish post' }), t({ ko: '편집 중인 글을 저장해.', en: 'Save the post being edited.' }), undefined, 'save')] : []),
     ],
     apply: (patch) => {
       if (typeof patch.title === 'string') setTitle(patch.title.slice(0, POST_LIMITS.title))
@@ -285,7 +295,7 @@ export function PostEditor({ post, categories, defaultCategoryId, onSaved, onCan
         return commitBody(replaceExactText(body, (Array.isArray(args.edits) ? args.edits : []) as ExactTextEdit[], '본문'))
       }
       if (id !== 'posts.save') throw new Error('글 편집기에 없는 작업이야.')
-      await save.mutateAsync()
+      await save.mutateAsync(draft)
     },
   })
 
@@ -384,7 +394,7 @@ export function PostEditor({ post, categories, defaultCategoryId, onSaved, onCan
         <span className="flex-1" />
         <Button variant="ghost" onClick={() => void cancel()} disabled={save.isPending}>{t({ ko: '취소', en: 'Cancel' })}</Button>
       </div>
-      {!base || dirty || save.isPending ? <FloatingSaveBar label={t({ ko: '저장 안 한 변경', en: 'Unsaved changes' })} saving={save.isPending} canSave={Boolean(title.trim())} onSave={() => save.mutate()} onDiscard={base ? () => void revert() : undefined} /> : null}
+      {!base || dirty || save.isPending ? <FloatingSaveBar label={t({ ko: '저장 안 한 변경', en: 'Unsaved changes' })} saving={save.isPending} canSave={Boolean(title.trim()) && !rebasing} onSave={() => save.mutate(draft)} onDiscard={base ? () => void revert() : undefined} /> : null}
 
       {picker ? <PostAttachPicker initialTab={picker} onClose={() => setPicker(null)} onInsert={(lines) => { setPicker(null); insert(lines) }} /> : null}
     </div>

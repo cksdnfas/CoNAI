@@ -73,11 +73,12 @@ export const PostBotRuns = {
     if (!row) throw new PostError('봇 호출을 찾을 수 없어.', 404);
     requireRunPost(actor, row.post_id);
     if (!canCancel(actor, row)) throw new PostError('이 호출을 취소할 수 없어.', 403);
-    db().prepare(`UPDATE post_bot_runs SET status = 'cancelled', error = '취소됨', finished_at = CURRENT_TIMESTAMP WHERE id = ? AND status IN ('queued', 'running')`).run(runId);
+    const changed = db().prepare(`UPDATE post_bot_runs SET status = 'cancelled', error = '취소됨', finished_at = CURRENT_TIMESTAMP WHERE id = ? AND status IN ('queued', 'running')`).run(runId);
+    if (!changed.changes) throw new PostError('이 호출을 취소할 수 없어.', 403);
     for (const listener of cancelListeners) {
       try { listener(runId); } catch { /* the runner logs its own failures */ }
     }
-    announcePostChange(row.post_id, 'run');
+    announcePostChange(row.post_id, 'bot-run');
     return toBotRun(actor, db().prepare('SELECT * FROM post_bot_runs WHERE id = ?').get(runId) as BotRunRow);
   },
 

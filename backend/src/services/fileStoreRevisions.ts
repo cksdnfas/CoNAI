@@ -1,10 +1,9 @@
 import crypto from 'crypto';
 import fs from 'fs';
-import path from 'path';
-import type Database from 'better-sqlite3';
 import type { FileWriteSource, StoredFileRevision } from '@conai/shared';
-import { getUserSettingsDb } from '../database/userSettingsDb';
-import { fileStoreRoot } from './fileStorePaths';
+import { getUserSettingsDb as db } from '../database/userSettingsDb';
+import { storedRevisionPath } from './fileStorePaths';
+import { copyStoredRevision, retireStoredRevision } from './fileStoreWriteTransaction';
 
 /**
  * Earlier versions of text files. Each time a text file is replaced in place, the text it had is kept here before the
@@ -16,40 +15,6 @@ import { fileStoreRoot } from './fileStorePaths';
 export const REVISIONS_PER_FILE = 30;
 /** Bigger files (only uploads get there) are not versioned. */
 export const MAX_REVISION_BYTES = 2 * 1024 * 1024;
-
-const revisionRoot = path.join(fileStoreRoot, '.revisions');
-
-const ensured = new WeakSet<Database.Database>();
-/** Created on first use, like the chat's own tables. */
-function db() {
-  const database = getUserSettingsDb();
-  if (!ensured.has(database)) {
-    database.exec(`
-      CREATE TABLE IF NOT EXISTS stored_file_revisions (
-        id TEXT PRIMARY KEY,
-        file_id TEXT NOT NULL,
-        owner_key TEXT NOT NULL,
-        size INTEGER NOT NULL,
-        written_at TEXT NOT NULL,
-        written_by TEXT,
-        replaced_at TEXT NOT NULL DEFAULT (datetime('now')),
-        replaced_by TEXT
-      );
-      CREATE INDEX IF NOT EXISTS idx_stored_file_revisions_file ON stored_file_revisions(file_id, replaced_at DESC);
-      CREATE TABLE IF NOT EXISTS stored_file_writers (
-        file_id TEXT PRIMARY KEY,
-        written_by TEXT
-      );
-    `);
-    ensured.add(database);
-  }
-  return database;
-}
-
-function revisionPath(_actor: string, id: string) {
-  if (!/^[a-f0-9]{32}$/.test(id)) throw new Error('Invalid revision ID');
-  return path.join(revisionRoot, `${id}.bin`);
-}
 
 function parseSource(value: string | null): FileWriteSource | null {
   if (!value) return null;
@@ -86,31 +51,29 @@ export const FileStoreRevisions = {
 
   /**
    * Keep the file's current text as a version, just before `replacedBy` replaces it. Runs inside the replacing
-   * transaction; the returned blob path is for the caller to remove when that transaction rolls back.
+   * transaction; a rollback also removes the retained copy.
    */
   keep(owner: string, file: { id: string; size: number; updated_at: string }, currentPath: string, replacedBy: FileWriteSource | null): string | null {
     if (file.size > MAX_REVISION_BYTES || !fs.existsSync(currentPath)) return null;
     const id = crypto.randomBytes(16).toString('hex');
-    const target = revisionPath(owner, id);
-    fs.mkdirSync(path.dirname(target), { recursive: true });
-    fs.copyFileSync(currentPath, target);
+    const target = copyStoredRevision(currentPath, id);
     const writer = (db().prepare('SELECT written_by FROM stored_file_writers WHERE file_id = ?').get(file.id) as { written_by: string | null } | undefined)?.written_by ?? null;
     db().prepare('INSERT INTO stored_file_revisions (id, file_id, owner_key, size, written_at, written_by, replaced_by) VALUES (?, ?, ?, ?, ?, ?, ?)')
       .run(id, file.id, owner, file.size, file.updated_at, writer, replacedBy ? JSON.stringify(replacedBy) : null);
     return target;
   },
 
-  /** Remember who wrote the file's text now (after a create or replace committed). */
+  /** Store the writer in the same transaction as the file bytes. */
   setWriter(fileId: string, source: FileWriteSource | null) {
     db().prepare('INSERT INTO stored_file_writers (file_id, written_by) VALUES (?, ?) ON CONFLICT(file_id) DO UPDATE SET written_by = excluded.written_by')
       .run(fileId, source ? JSON.stringify(source) : null);
   },
 
   /** Drop the oldest versions past REVISIONS_PER_FILE. */
-  trim(owner: string, fileId: string) {
+  trim(fileId: string) {
     const old = db().prepare('SELECT id FROM stored_file_revisions WHERE file_id = ? ORDER BY replaced_at DESC, rowid DESC LIMIT -1 OFFSET ?').all(fileId, REVISIONS_PER_FILE) as Array<{ id: string }>;
     for (const row of old) {
-      fs.rmSync(revisionPath(owner, row.id), { force: true });
+      retireStoredRevision(row.id);
       db().prepare('DELETE FROM stored_file_revisions WHERE id = ?').run(row.id);
     }
   },
@@ -128,7 +91,7 @@ export const FileStoreRevisions = {
   /** One version's text (versions are UTF-8 text files up to MAX_REVISION_BYTES). */
   readText(owner: string, fileId: string, revisionId: string): string | null {
     if (!/^[a-f0-9]{32}$/.test(revisionId) || !FileStoreRevisions.find(owner, fileId, revisionId)) return null;
-    const target = revisionPath(owner, revisionId);
+    const target = storedRevisionPath(revisionId);
     if (!fs.existsSync(target)) return null;
     return new TextDecoder('utf-8').decode(fs.readFileSync(target));
   },
@@ -144,7 +107,7 @@ export const FileStoreRevisions = {
   /** Forget a purged file's versions and writer. */
   purge(owner: string, fileId: string) {
     const rows = db().prepare('SELECT id FROM stored_file_revisions WHERE file_id = ?').all(fileId) as Array<{ id: string }>;
-    for (const row of rows) fs.rmSync(revisionPath(owner, row.id), { force: true });
+    for (const row of rows) fs.rmSync(storedRevisionPath(row.id), { force: true });
     db().prepare('DELETE FROM stored_file_revisions WHERE file_id = ?').run(fileId);
     db().prepare('DELETE FROM stored_file_writers WHERE file_id = ?').run(fileId);
   },

@@ -79,7 +79,7 @@ function requireRevisionAccess(actor: PostActor, postId: number) {
   if (!canEditPost(actor, row)) throw new PostError('이 글의 이전 판을 볼 권한이 없어.', 403);
 }
 
-function announce(postId: number, kind: 'post' | 'comment' | 'run') {
+function announce(postId: number, kind: 'post' | 'comment' | 'run' | 'bot-run') {
   publishRuntimeEvent({ name: 'posts.changed', topic: 'posts', visibility: 'all', payload: { postId, kind } });
 }
 
@@ -856,6 +856,9 @@ export const PostCommentStore = {
     const refs = extractMediaRefs(body);
     const created = db().transaction(() => {
       const post = requirePostRow(actor, postId);
+      if (options.botRunId != null && !db().prepare("SELECT 1 FROM post_bot_runs WHERE id = ? AND status = 'running'").get(options.botRunId)) {
+        throw new PostError('이미 끝난 게시판 호출이어서 댓글을 달 수 없어.', 409);
+      }
       if (post.status !== 'published' && !(actor.isAdmin || post.owner_account_id === actor.accountId)) throw new PostError('발행된 글에만 댓글을 달 수 있어.', 403);
       if (post.comment_mode === 'closed' && !(actor.isAdmin && actor.profileId === null)) throw new PostError('댓글이 닫힌 글이야.', 403);
       let parentId: number | null = null;
@@ -872,6 +875,10 @@ export const PostCommentStore = {
         options.origin?.threadId ?? null, options.origin?.replyId ?? null);
       const id = Number(result.lastInsertRowid);
       saveMediaRefs(postId, 'comment', id, refs, actor);
+      if (options.botRunId != null) {
+        db().prepare('UPDATE post_bot_runs SET result_comment_id = ? WHERE id = ? AND post_id = ? AND result_comment_id IS NULL')
+          .run(id, options.botRunId, postId);
+      }
       refreshCommentCount(postId);
       return { row: db().prepare('SELECT * FROM post_comments WHERE id = ?').get(id) as CommentRow, post };
     }).immediate();
@@ -922,12 +929,18 @@ export const PostCommentStore = {
   /** Administrators hide a comment from everyone but its writer, or show it again. */
   setHidden(actor: PostActor, commentId: number, hidden: boolean): PostComment {
     if (!actor.isAdmin || actor.profileId !== null) throw new PostError('댓글 숨김은 관리자만 할 수 있어.', 403);
-    const current = db().prepare('SELECT * FROM post_comments WHERE id = ?').get(commentId) as CommentRow | undefined;
-    if (!current || current.status === 'deleted') throw new PostError('댓글을 찾을 수 없어.', 404);
-    db().prepare('UPDATE post_comments SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(hidden ? 'hidden' : 'visible', commentId);
-    refreshCommentCount(current.post_id);
-    announce(current.post_id, 'comment');
-    return PostCommentStore.get(actor, commentId);
+    const saved = db().transaction(() => {
+      const current = db().prepare('SELECT * FROM post_comments WHERE id = ?').get(commentId) as CommentRow | undefined;
+      if (!current || current.status === 'deleted') throw new PostError('댓글을 찾을 수 없어.', 404);
+      requirePostRow(actor, current.post_id);
+      const status = hidden ? 'hidden' : 'visible';
+      if (current.status === status) return current;
+      const row = db().prepare('UPDATE post_comments SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? RETURNING *').get(status, commentId) as CommentRow;
+      refreshCommentCount(row.post_id);
+      return row;
+    }).immediate();
+    announce(saved.post_id, 'comment');
+    return toComment(actor, saved, createAuthorResolver(actor));
   },
 };
 

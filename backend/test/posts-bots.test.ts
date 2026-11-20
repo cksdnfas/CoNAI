@@ -43,9 +43,11 @@ test('posts bots: @ calls run as the caller, chain, limits and cancel', { timeou
   /** 세라 has the board tools: reads the post, answers with post_comment (calling 카이), then says so in the room. */
   const seraRequests: Array<Array<{ role: string; content?: unknown; tool_calls?: unknown }>> = []
   const seraTools: string[][] = []
+  let heldResponse: (() => Promise<Response>) | undefined
   const toolCall = (name: string, args: unknown) => Response.json({ choices: [{ message: { content: '', tool_calls: [{ id: `call-${name}-${seraRequests.length}`, type: 'function', function: { name, arguments: JSON.stringify(args) } }] }, finish_reason: 'tool_calls' }], usage: { prompt_tokens: 10 } })
   t.mock.method(globalThis, 'fetch', async (_url: unknown, init?: RequestInit) => {
     if (!init?.method || init.method === 'GET') return new Response('', { status: 404 })
+    if (heldResponse) return heldResponse()
     const body = JSON.parse(String(init.body))
     const system = JSON.stringify(body.messages.filter((message: { role: string }) => message.role === 'system'))
     const user = JSON.stringify(body.messages.at(-1))
@@ -81,8 +83,7 @@ test('posts bots: @ calls run as the caller, chain, limits and cancel', { timeou
   PostBotRunner.start()
 
   t.after(async () => {
-    PostBotRunner.stop()
-    await new Promise((resolve) => setTimeout(resolve, 100))
+    await PostBotRunner.stop()
     dbModule.closeUserSettingsDb()
     ;(await import('../src/database/init')).closeDatabase()
     const { logger } = await import('../src/utils/logger')
@@ -230,5 +231,36 @@ test('posts bots: @ calls run as the caller, chain, limits and cancel', { timeou
 
     // The @ in the tool-written answer continues the call's chain (as the caller's account), not a new one.
     assert.deepEqual([second.profile_id, second.status, second.chain_depth, second.run_as_account_id], [kai.id, 'done', 2, 2])
+  })
+
+  await t.test('shutdown drains an interrupted turn, keeps cancellation final, and resumes only unstarted calls', async () => {
+    let enter!: () => void, release!: (response: Response) => void
+    const entered = new Promise<void>(resolve => { enter = resolve })
+    const held = new Promise<Response>(resolve => { release = resolve })
+    heldResponse = () => { enter(); return held }
+    const post = PostStore.create(alice, { title: '종료 후 단 하나의 답글', body: '' })
+    const firstCall = PostCommentStore.create(alice, post.id, { body: '@루나 잠시 기다려' })
+    try {
+      await entered
+      const active = runs(post.id)[0]
+      assert.equal(PostBotRuns.cancel(alice, active.id).status, 'cancelled')
+      assert.throws(() => PostCommentStore.create({ ...alice, profileId: luna.id }, post.id, { body: 'too late' }, { botRunId: active.id }), /이미 끝난/)
+      PostCommentStore.create(alice, post.id, { body: '@루나 다음에 다시' })
+      const drained = PostBotRunner.stop()
+      release(Response.json({ choices: [{ message: { content: 'late result' }, finish_reason: 'stop' }] }))
+      await drained
+      assert.deepEqual(runs(post.id).map(row => row.status), ['cancelled', 'queued'])
+      const interrupted = Number(db().prepare(`INSERT INTO post_bot_runs (post_id, trigger_comment_id, profile_id, profile_name, status, run_as_account_id)
+        VALUES (?, ?, ?, '루나', 'running', 2)`).run(post.id, firstCall.id, luna.id).lastInsertRowid)
+      const answer = PostCommentStore.create({ ...alice, profileId: luna.id }, post.id, { body: '이미 쓴 답', parentId: firstCall.id }, { botRunId: interrupted })
+      // A published answer whose worker never reached its terminal write must not be sent again.
+      heldResponse = undefined
+      PostBotRunner.start()
+      await settle(post.id)
+      const after = runs(post.id)
+      assert.deepEqual(after.map(row => row.status), ['cancelled', 'done', 'done'])
+      assert.equal(after[2].result_comment_id, answer.id)
+      assert.equal(PostCommentStore.list(alice, post.id).filter(row => row.botRunId === interrupted).length, 1)
+    } finally { heldResponse = undefined; release(Response.json({ choices: [] })) }
   })
 })

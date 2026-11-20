@@ -9,6 +9,8 @@ import { RatingScoreService } from './ratingScoreService';
 import { settingsService } from './settingsService';
 import { RatingData } from '../types/autoTag';
 import { logger } from '../utils/logger';
+import { saveMediaStyleVector, type KaloscopeVisionResult } from './aiWorker/aiVisionService';
+import { MediaPostprocessVisibilityService } from './mediaPostprocessVisibilityService';
 
 /**
  * Tag one library item and persist the result. Shared by the tagging routes and the batch tagging job (moved out of
@@ -29,7 +31,6 @@ export interface TaggingTarget {
   compositeHash: string;
   imagePath: string;
   mimeType?: string;
-  existingAutoTags: string | null;
 }
 
 export interface FailedTaggingResult {
@@ -122,7 +123,6 @@ function buildTargetFromRecord(
       compositeHash,
       imagePath,
       mimeType: record.file_mime_type || record.mime_type,
-      existingAutoTags: record.auto_tags || null,
     },
   };
 }
@@ -163,12 +163,12 @@ function resolveRecordTaggingTarget(
   return buildTargetFromRecord(image, compositeHash, filePath, missingFileError);
 }
 
-/** Tagger plus (when enabled) Kaloscope in one worker request; Kaloscope's style vector is stored for the hash. */
+/** Tagger plus (when enabled) Kaloscope in one worker request. */
 async function runTagger(
   target: TaggingTarget,
   logPrefix: string,
   verboseResult = false,
-): Promise<{ taggerResult: TaggerResult; kaloscopeResult?: KaloscopeResult }> {
+): Promise<{ taggerResult: TaggerResult; kaloscopeResult?: KaloscopeVisionResult }> {
   const isVideo = ImageTaggerService.isVideoFile(target.imagePath, target.mimeType);
   if (verboseResult && isVideo) {
     logger.debug('[ImageTag] Detected video file, extracting frames...');
@@ -178,7 +178,6 @@ async function runTagger(
     target.imagePath,
     isVideo,
     { tagger: true, kaloscope: settingsService.loadSettings().kaloscope.enabled },
-    { compositeHash: target.compositeHash },
   );
   const taggerResult: TaggerResult = analysis.tagger ?? { success: false, error: 'Tagger returned nothing', error_type: 'WorkerError' };
 
@@ -228,19 +227,20 @@ export async function tagAndPersistTarget(
     );
   }
 
-  const autoTagsJson = buildMergedAutoTags(target.existingAutoTags, taggerResult, kaloscopeResult);
+  const ratingScore = await calculateRatingScore(taggerResult, logPrefix, options.logRatingScore);
+  const autoTagsJson = MediaMetadataModel.mergeAutoTags(target.compositeHash, current => ({
+    auto_tags: buildMergedAutoTags(current, taggerResult, kaloscopeResult),
+    rating_score: ratingScore,
+  }));
+  if (autoTagsJson === null) return createFailedTaggingResult(target.compositeHash, 'Image not found', 'NotFound');
+  if (kaloscopeResult?.success && kaloscopeResult.style?.length) saveMediaStyleVector(target.compositeHash, kaloscopeResult.style);
+  MediaPostprocessVisibilityService.finishAutoTagging(target.compositeHash);
   if (options.verboseResult) {
     logger.debug(`${logPrefix} Formatted JSON length: ${autoTagsJson?.length || 0}`);
     if (autoTagsJson) {
       logger.verbose(`${logPrefix} Formatted JSON preview: ${autoTagsJson.substring(0, 100)}`);
     }
   }
-
-  const ratingScore = await calculateRatingScore(taggerResult, logPrefix, options.logRatingScore);
-  MediaMetadataModel.update(target.compositeHash, {
-    auto_tags: autoTagsJson,
-    rating_score: ratingScore,
-  });
 
   return {
     composite_hash: target.compositeHash,

@@ -411,37 +411,24 @@ export class GraphExecutionModel {
     return claimed
   }
 
-  /** Cancel queued graph executions for schedule ids without loading the whole backlog. */
+  /** Capture the transition, not a pre-update SELECT. A workflow deletion may remove the rows at commit. */
+  static stageQueuedScheduleCancellation(scheduleIds: number[]) {
+    const events = scheduleIds.length ? getUserSettingsDb().prepare(`
+      UPDATE graph_executions SET status = 'cancelled', updated_date = CURRENT_TIMESTAMP,
+        completed_at = COALESCE(completed_at, CURRENT_TIMESTAMP)
+      WHERE status = 'queued' AND schedule_id IN (SELECT value FROM json_each(?))
+      RETURNING id AS execution_id, graph_workflow_id, status, trigger_type, schedule_id
+    `).all(JSON.stringify(scheduleIds)) as Parameters<typeof publishGraphExecutionEvent>[0][] : []
+    return {
+      cancelled: events.length,
+      publish: () => events.forEach(event => publishGraphExecutionEvent(event)),
+    }
+  }
+
   static cancelQueuedByScheduleIds(scheduleIds: number[]) {
-    if (scheduleIds.length === 0) {
-      return 0
-    }
-
-    const db = getUserSettingsDb()
-    let cancelledCount = 0
-    for (const batch of chunkSqliteValues(scheduleIds)) {
-      const placeholders = sqliteInPlaceholders(batch)
-      // 전이 대상 id 를 먼저 확보해야 취소된 행별 이벤트를 발행할 수 있다.
-      const cancelledIds = (db.prepare(`
-        SELECT id
-        FROM graph_executions
-        WHERE status = 'queued'
-          AND schedule_id IN (${placeholders})
-      `).all(...batch) as Array<{ id: number }>).map((row) => row.id)
-
-      const result = db.prepare(`
-        UPDATE graph_executions
-        SET status = 'cancelled',
-            updated_date = CURRENT_TIMESTAMP,
-            completed_at = COALESCE(completed_at, CURRENT_TIMESTAMP)
-        WHERE status = 'queued'
-          AND schedule_id IN (${placeholders})
-      `).run(...batch)
-      cancelledCount += result.changes
-      // E16: 예약 정리로 취소된 대기 실행도 예약 패널에 즉시 반영되어야 한다.
-      cancelledIds.forEach((executionId) => publishExecutionStatusById(executionId))
-    }
-    return cancelledCount
+    const change = this.stageQueuedScheduleCancellation(scheduleIds)
+    change.publish()
+    return change.cancelled
   }
 
   /** Resolve queued positions for a visible execution set without hydrating the full queue. */

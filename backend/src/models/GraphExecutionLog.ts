@@ -55,20 +55,22 @@ export class GraphExecutionLogModel {
     event_type: string
     message: string
     details?: string | null
-  }): number {
+  }): number | null {
     const db = getUserSettingsDb()
+    // A node can settle after workflow deletion has cascaded to its execution and logs.
     const info = db.prepare(`
       INSERT INTO graph_execution_logs (
         execution_id, node_id, level, event_type, message, details
-      ) VALUES (?, ?, ?, ?, ?, ?)
+      ) SELECT id, ?, ?, ?, ?, ? FROM graph_executions WHERE id = ?
     `).run(
-      data.execution_id,
       data.node_id ?? null,
       data.level ?? 'info',
       data.event_type,
       data.message,
       data.details ?? null,
+      data.execution_id,
     )
+    if (!info.changes) return null
 
     if (data.node_id && NODE_PROGRESS_EVENT_TYPES.has(data.event_type)) {
       queueProgressEvent(data.execution_id)

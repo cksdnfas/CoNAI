@@ -2,6 +2,7 @@ import type Database from 'better-sqlite3'
 import type { ChatFileChange } from '@conai/shared'
 import { getUserSettingsDb } from '../../database/userSettingsDb'
 import { FileStoreRevisions } from '../fileStoreRevisions'
+import { withFileStoreWrites } from '../fileStoreWriteTransaction'
 import { FileStoreError, FileStoreService, fileOwnerKey } from '../fileStoreService'
 import type { CodexChatMessageRecord } from './codexChatStore'
 
@@ -79,7 +80,12 @@ export function attachFileChanges(messages: CodexChatMessageRecord[]): CodexChat
 }
 
 /** Undo what one reply did to one file (see the module note). `accountId` is the chat owner acting from the chip. */
-export function undoFileChange(params: { threadId: number; accountId: number | null; replyId: string; fileId: string; canDelete?: () => void }): ChatFileChange {
+type FileUndo = { threadId: number; accountId: number | null; replyId: string; fileId: string; canDelete?: () => void }
+export function undoFileChange(params: FileUndo): ChatFileChange {
+  return withFileStoreWrites(() => undoRecordedWrite(params))
+}
+
+function undoRecordedWrite(params: FileUndo): ChatFileChange {
   const owner = fileOwnerKey(params.accountId)
   const row = db().prepare('SELECT * FROM chat_file_changes WHERE thread_id = ? AND reply_id = ? AND file_id = ? AND owner_key = ?')
     .get(params.threadId, params.replyId, params.fileId, owner) as ChangeRow | undefined

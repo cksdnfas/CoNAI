@@ -1,5 +1,6 @@
 import type { McpRequester } from '../../mcp/context'
 import { FileStoreService, fileOwnerKey } from '../fileStoreService'
+import { withFileStoreWrites } from '../fileStoreWriteTransaction'
 import { ChatFlagStore } from './chatFlags'
 import { ChatGroupStore } from './chatGroupStore'
 import { OwnedLorebookStore } from './chatLorebookFiles'
@@ -41,7 +42,7 @@ export function exportChatJson(requester: McpRequester, threadId: number, option
     media: detail.media,
     summarySegments: ChatSummaryStore.list(threadId),
     // A room's members, so an import can find them by id and name.
-    members: members?.map(member => ({ id: member.profile_id, name: names.get(member.profile_id) ?? null })),
+    members: members?.map(member => ({ id: member.profile_id, name: names.get(member.profile_id) ?? null, maxTokens: member.max_tokens })),
     lorebook: book && book.entries.length > 0 ? { entries: book.entries.map((entry) => ({ ...entry, file: null, fileId: null })) } : undefined,
     links: {
       flags: ChatFlagStore.resolve(requester, flagIds).map(({ id, name }) => ({ id, name })),
@@ -92,7 +93,10 @@ export function backupChatToFiles(requester: McpRequester, threadId: number, dat
   const file = exportChatJson(requester, threadId, options)
   requireSharedChatExport(threadId)
   const owner = fileOwnerKey(requester.accountId)
-  const root = FileStoreService.ensureFolder(owner, null, CHAT_BACKUP_FOLDER)
-  const day = FileStoreService.ensureFolder(owner, root.id, date)
-  return FileStoreService.writeText(owner, day.id, backupFileName(file.thread.title, threadId), JSON.stringify(file, null, 2))
+  const text = JSON.stringify(file, null, 2)
+  return withFileStoreWrites(() => {
+    const root = FileStoreService.ensureFolder(owner, null, CHAT_BACKUP_FOLDER)
+    const day = FileStoreService.ensureFolder(owner, root.id, date)
+    return FileStoreService.writeText(owner, day.id, backupFileName(file.thread.title, threadId), text)
+  })
 }

@@ -51,6 +51,7 @@ test('workflow and schedule revisions protect reviewed saves and preserve legacy
   const { GraphWorkflowScheduleModel } = await import('../src/models/GraphWorkflowSchedule')
   const { buildGraphWorkflowReservationContent } = await import('../src/services/graphWorkflowViewService')
   const { createGraphWorkflowCrudRoutes } = await import('../src/routes/graph-workflows/workflow-routes')
+  const { createGraphWorkflowFolderRoutes } = await import('../src/routes/graph-workflows/folder-routes')
   const { createGraphWorkflowScheduleRoutes } = await import('../src/routes/graph-workflows/schedule-routes')
   const workflowRoutes = createGraphWorkflowCrudRoutes() as any
   const scheduleRoutes = createGraphWorkflowScheduleRoutes() as any
@@ -68,7 +69,104 @@ test('workflow and schedule revisions protect reviewed saves and preserve legacy
   const loaded = GraphWorkflowModel.findById(workflowId)!
   assert.equal(loaded.revision, 1)
 
-  const moved = await invoke(workflowRoutes, 'put', '/:id', workflowParams, { folder_id: null })
+  await t.test('folder moves reject cycles and create-and-assign never leaves a stray folder on conflict', async () => {
+    const routes = createGraphWorkflowFolderRoutes()
+    const parent = GraphWorkflowFolderModel.create({ name: 'Parent', description: 'Old description' })
+    const child = GraphWorkflowFolderModel.create({ name: 'Child', parent_id: parent })
+    const leaf = GraphWorkflowFolderModel.create({ name: 'Leaf', parent_id: child })
+    assert.equal((await invoke(routes, 'put', '/folders/:id', { id: String(parent) }, { name: 'Lost', parent_id: leaf })).status, 400)
+    assert.equal(GraphWorkflowFolderModel.findById(parent)!.parent_id, null)
+    assert.equal(GraphWorkflowFolderModel.findById(parent)!.name, 'Parent')
+    assert.equal((await invoke(routes, 'put', '/folders/:id', { id: String(parent) }, { description: null })).status, 200)
+    assert.equal(GraphWorkflowFolderModel.findById(parent)!.description, null)
+    const id = GraphWorkflowModel.create({ name: 'Move me', graph })
+    const create = () => invoke(routes, 'post', '/folders', {}, { name: 'New folder', parent_id: child, assign_to: { workflow_id: id, expected_revision: 1 } })
+    const result = await create()
+    assert.equal(result.status, 201)
+    assert.equal(result.body.data.workflow_revision, 2)
+    assert.equal((await create()).status, 409)
+    assert.deepEqual(GraphWorkflowFolderModel.findAll().filter(f => f.name === 'New folder').map(f => f.id), [result.body.data.id])
+    assert.equal(GraphWorkflowModel.findById(id)!.folder_id, result.body.data.id)
+    assert.equal(GraphWorkflowModel.findById(id)!.version, 1)
+    assert.equal(GraphWorkflowFolderModel.delete(parent, 'delete_tree'), true)
+    assert.equal(GraphWorkflowModel.findById(id), null)
+  })
+
+  await t.test('workflow writes commit or roll back the version, schedules, queue and notifications together', async () => {
+    const db = user.getUserSettingsDb()
+    const { subscribeToRuntimeEvents } = await import('../src/services/runtime-events/runtimeEventBus')
+    const { GraphWorkflowExecutionQueue } = await import('../src/services/graphWorkflowExecutionQueue')
+    const { GraphWorkflowScheduleService } = await import('../src/services/graphWorkflowScheduleService')
+    const id = GraphWorkflowModel.create({ name: 'Atomic save', graph })
+    const schedule = GraphWorkflowScheduleModel.create({ graph_workflow_id: id, name: 'Scheduled', schedule_type: 'daily', status: 'active' })
+    const execution = db.prepare("INSERT INTO graph_executions (graph_workflow_id, graph_version, trigger_type, schedule_id, status) VALUES (?, 1, 'schedule', ?, 'queued')").run(id, schedule).lastInsertRowid
+    const events: Array<[string, boolean]> = []
+    const off = subscribeToRuntimeEvents(event => { if (event.name.startsWith('graph.')) events.push([event.name, db.inTransaction]) })
+    const update = () => invoke(workflowRoutes, 'put', '/:id', { id: String(id) }, { graph: { nodes: [], edges: [], metadata: { debug_mode: true } }, expected_revision: 1 })
+    const remove = () => invoke(workflowRoutes, 'delete', '/:id', { id: String(id) })
+    try {
+      db.exec("CREATE TEMP TRIGGER hold_schedule_queue BEFORE UPDATE OF status ON graph_executions BEGIN SELECT RAISE(ABORT,'held queue'); END")
+      assert.equal((await update()).status, 500)
+      const scheduleParams = { scheduleId: String(schedule) }
+      await assert.rejects(invoke(scheduleRoutes, 'post', '/schedules/:scheduleId/pause', scheduleParams), /held queue/)
+      db.exec("DROP TRIGGER hold_schedule_queue; CREATE TEMP TRIGGER hold_workflow_delete BEFORE DELETE ON graph_workflows BEGIN SELECT RAISE(ABORT,'held graph'); END")
+      assert.equal((await remove()).status, 500)
+      db.exec("CREATE TEMP TRIGGER hold_schedule_delete BEFORE DELETE ON graph_workflow_schedules BEGIN SELECT RAISE(ABORT,'held schedule'); END")
+      await assert.rejects(invoke(scheduleRoutes, 'delete', '/schedules/:scheduleId', scheduleParams), /held schedule/)
+      assert.deepEqual(events, [])
+      assert.equal(GraphWorkflowModel.findById(id)!.revision, 1)
+      assert.equal(GraphWorkflowModel.findVersionSummaries(id).length, 1)
+      assert.equal(GraphWorkflowScheduleModel.findById(schedule)!.status, 'active')
+      assert.equal(db.prepare('SELECT status FROM graph_executions WHERE id=?').pluck().get(execution), 'queued')
+      db.exec('DROP TRIGGER hold_workflow_delete; DROP TRIGGER hold_schedule_delete')
+      const saved = await update()
+      assert.equal(saved.status, 200)
+      assert.deepEqual(saved.body.data.schedule_maintenance, { pausedScheduleCount: 1, cancelled: 1, runningCancellationRequested: 0 })
+      assert.deepEqual(events, [['graph.schedule.changed', false], ['graph.execution.status', false]])
+      assert.equal(GraphWorkflowScheduleModel.findById(schedule)!.status, 'paused')
+      assert.equal(db.prepare('SELECT status FROM graph_executions WHERE id=?').pluck().get(execution), 'cancelled')
+      GraphWorkflowExecutionQueue.start()
+      const run = GraphWorkflowExecutionQueue.enqueue(id)
+      // The queue claimed this manual execution; deletion now lands before its async plan lookup completes.
+      assert.equal(GraphWorkflowScheduleService.deleteWorkflow(id)?.runningCancellationRequested, 1)
+      assert.equal(GraphWorkflowExecutionQueue.isCancellationRequested(run.executionId), true)
+      assert.equal(GraphWorkflowScheduleModel.findById(schedule), null)
+      const { writeExecutionLog } = await import('../src/services/graph-workflow-executor/shared')
+      writeExecutionLog({ executionId: run.executionId, nodeId: 'settling', eventType: 'node_aborted', message: 'Settled after deletion', always: true })
+      assert.equal(db.prepare('SELECT COUNT(*) FROM graph_execution_logs WHERE execution_id = ?').pluck().get(run.executionId), 0)
+    } finally {
+      off()
+      await GraphWorkflowExecutionQueue.stop()
+      db.exec('DROP TRIGGER IF EXISTS hold_schedule_queue; DROP TRIGGER IF EXISTS hold_workflow_delete; DROP TRIGGER IF EXISTS hold_schedule_delete')
+    }
+  })
+
+  await t.test('workflow import and its initial version commit together, preserving an inactive export', async () => {
+    const db = user.getUserSettingsDb()
+    const payload = { schema: 'conai.graph-workflow.export', schema_version: 1, module_definitions: [],
+      workflow: { name: 'imported draft', is_active: 0, graph: { nodes: [{ id: 'node', module_id: 900001 }], edges: [] } } }
+    db.exec("CREATE TEMP TRIGGER reject_initial BEFORE INSERT ON graph_workflow_versions BEGIN SELECT RAISE(ABORT, 'held version'); END")
+    try {
+      assert.equal((await invoke(workflowRoutes, 'post', '/import', {}, { payload })).status, 400)
+      assert.equal(db.prepare("SELECT count(*) FROM graph_workflows WHERE name = 'imported draft'").pluck().get(), 0)
+      assert.equal(db.prepare("SELECT count(*) FROM module_definitions WHERE name = 'Missing module 900001'").pluck().get(), 0)
+      assert.throws(() => GraphWorkflowModel.create({ name: 'held create', graph }), /held version/)
+      assert.equal(db.prepare("SELECT count(*) FROM graph_workflows WHERE name = 'held create'").pluck().get(), 0)
+    } finally { db.exec('DROP TRIGGER reject_initial') }
+    const imported = await invoke(workflowRoutes, 'post', '/import', {}, { payload })
+    assert.equal(imported.status, 201)
+    const exported = await invoke(workflowRoutes, 'get', '/:id/export', { id: String(imported.body.data.id) })
+    assert.equal(exported.body.data.workflow.is_active, false)
+    assert.deepEqual(exported.body.data.module_definitions.map((row: { original_id: number }) => row.original_id), imported.body.data.placeholder_module_ids)
+  })
+
+  const same = await invoke(workflowRoutes, 'put', '/:id', workflowParams, {
+    name: loaded.name, description: null, folder_id: folder, graph: { edges: [], nodes: [] }, is_active: true, expected_revision: loaded.revision,
+  })
+  assert.equal(same.status, 200)
+  assert.equal(same.body.data.revision, loaded.revision, 'another editor can still save after an equivalent document with reordered object keys')
+  assert.equal(same.body.data.schedule_maintenance, null)
+  const moved = await invoke(workflowRoutes, 'put', '/:id', workflowParams, { folder_id: null, expected_revision: loaded.revision })
   assert.equal(moved.status, 200)
   assert.equal(GraphWorkflowModel.findById(workflowId)!.version, loaded.version, 'metadata does not change the execution graph version')
   const staleGraph = await invoke(workflowRoutes, 'put', '/:id', workflowParams, { name: 'stale', graph, folder_id: folder, expected_revision: loaded.revision })

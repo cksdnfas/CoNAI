@@ -2,6 +2,7 @@ import type { NextFunction, Request, Response } from 'express'
 import type { McpRequester } from '../mcp/context'
 import { ChatPageContextError } from '../services/codex-chat/chatPageContext'
 import { ChatProfileError } from '../services/codex-chat/chatProfiles'
+import { ChatRevisionConflict } from '../services/codex-chat/chatProfileError'
 import { loadChatSettings } from '../services/codex-chat/chatSettings'
 import { ChatDiagnosticsError } from '../services/codex-chat/chatDiagnostics'
 import { resolveChatAccess } from '../services/codex-chat/codexChatAccess'
@@ -48,6 +49,10 @@ export function isGroupThread(req: Request, threadId: number) {
 }
 
 export function sendChatError(res: Response, error: unknown) {
+  if (error instanceof ChatRevisionConflict) {
+    res.status(409).json({ success: false, code: 'revision_conflict', error: error.message, data: error.current })
+    return
+  }
   if (error instanceof CharacterLibraryError) {
     res.status(error.status).json({ success: false, error: error.message, ...(error.code ? { code: error.code } : {}), ...(error.revision !== undefined ? { revision: error.revision } : {}) })
     return

@@ -1,5 +1,6 @@
 import { requirePermission } from '../../middleware/authMiddleware';
 import { Router, type Request, type Response } from 'express'
+import { getUserSettingsDb } from '../../database/userSettingsDb'
 import { GraphExecutionModel } from '../../models/GraphExecution'
 import { GraphExecutionFinalResultModel } from '../../models/GraphExecutionFinalResult'
 import { GraphWorkflowModel } from '../../models/GraphWorkflow'
@@ -77,10 +78,7 @@ function buildWorkflowExportPayload(workflowId: number): GraphWorkflowExportPayl
 
   const graph = parseWorkflowGraph(workflow.graph_json)
   const moduleIds = [...new Set(graph.nodes.map((node) => node.module_id))]
-  const moduleDefinitions = moduleIds
-    .map((moduleId) => ModuleDefinitionModel.findById(moduleId))
-    .filter((moduleDefinition): moduleDefinition is ModuleDefinitionRecord => moduleDefinition !== null)
-    .map(buildExportedModuleDefinition)
+  const moduleDefinitions = ModuleDefinitionModel.findByIds(moduleIds).map(buildExportedModuleDefinition)
 
   return {
     schema: 'conai.graph-workflow.export',
@@ -91,7 +89,7 @@ function buildWorkflowExportPayload(workflowId: number): GraphWorkflowExportPayl
       description: workflow.description ?? null,
       graph,
       version: workflow.version,
-      is_active: workflow.is_active,
+      is_active: Boolean(workflow.is_active),
     },
     module_definitions: moduleDefinitions,
   }
@@ -148,7 +146,9 @@ function createPlaceholderModule(exportedModule?: ExportedModuleDefinition, orig
   })
 }
 
-function importWorkflowPayload(payload: unknown, options: { name?: string; folderId?: number | null }) {
+type ImportTarget = { name?: string; folderId?: number | null }
+
+function importWorkflowPayload(payload: unknown, options: ImportTarget) {
   const exportPayload = payload as Partial<GraphWorkflowExportPayload>
   if (
     exportPayload?.schema !== 'conai.graph-workflow.export'
@@ -159,12 +159,16 @@ function importWorkflowPayload(payload: unknown, options: { name?: string; folde
     throw new Error('Invalid graph workflow export payload')
   }
 
-  const exportedModules = Array.isArray(exportPayload.module_definitions) ? exportPayload.module_definitions : []
+  return getUserSettingsDb().transaction(writeWorkflowImport).immediate(exportPayload.workflow, exportPayload.module_definitions ?? [], options)
+}
+
+function writeWorkflowImport(workflow: GraphWorkflowExportPayload['workflow'], modules: ExportedModuleDefinition[], options: ImportTarget) {
+  const exportedModules = Array.isArray(modules) ? modules : []
   const exportedModuleById = new Map(exportedModules.map((moduleDefinition) => [moduleDefinition.original_id, moduleDefinition]))
   const moduleIdMap = new Map<number, number>()
   const placeholderModuleIds: number[] = []
 
-  for (const node of exportPayload.workflow.graph.nodes ?? []) {
+  for (const node of workflow.graph.nodes ?? []) {
     if (moduleIdMap.has(node.module_id)) {
       continue
     }
@@ -182,15 +186,15 @@ function importWorkflowPayload(payload: unknown, options: { name?: string; folde
   }
 
   const graph: GraphWorkflowDocument = {
-    ...exportPayload.workflow.graph,
-    nodes: (exportPayload.workflow.graph.nodes ?? []).map((node) => ({
+    ...workflow.graph,
+    nodes: (workflow.graph.nodes ?? []).map((node) => ({
       ...node,
       module_id: moduleIdMap.get(node.module_id) ?? node.module_id,
     })),
-    metadata: exportPayload.workflow.graph.metadata
+    metadata: workflow.graph.metadata
       ? {
-        ...exportPayload.workflow.graph.metadata,
-        exposed_inputs: exportPayload.workflow.graph.metadata.exposed_inputs?.map((input) => ({
+        ...workflow.graph.metadata,
+        exposed_inputs: workflow.graph.metadata.exposed_inputs?.map((input) => ({
           ...input,
           module_id: typeof input.module_id === 'number' ? (moduleIdMap.get(input.module_id) ?? input.module_id) : input.module_id,
         })),
@@ -199,12 +203,12 @@ function importWorkflowPayload(payload: unknown, options: { name?: string; folde
   }
 
   const workflowId = GraphWorkflowModel.create({
-    name: options.name?.trim() || exportPayload.workflow.name || 'Imported workflow',
-    description: exportPayload.workflow.description || undefined,
+    name: options.name?.trim() || workflow.name || 'Imported workflow',
+    description: workflow.description || undefined,
     graph,
     folder_id: options.folderId ?? null,
     version: 1,
-    is_active: exportPayload.workflow.is_active !== false,
+    is_active: workflow.is_active === undefined || Boolean(workflow.is_active),
   })
 
   return {
@@ -369,7 +373,7 @@ export function createGraphWorkflowCrudRoutes() {
     }
 
     try {
-      const payload = buildWorkflowExportPayload(id)
+      const payload = getUserSettingsDb().transaction(buildWorkflowExportPayload)(id)
       if (!payload) {
         return res.status(404).json({ success: false, error: 'Graph workflow not found' } as ModuleGraphResponse)
       }
@@ -456,11 +460,6 @@ export function createGraphWorkflowCrudRoutes() {
     }
 
     try {
-      const existing = GraphWorkflowModel.findById(id)
-      if (!existing) {
-        return res.status(404).json({ success: false, error: 'Graph workflow not found' } as ModuleGraphResponse)
-      }
-
       const updateData: GraphWorkflowUpdateData = {
         name: req.body.name,
         description: req.body.description,
@@ -470,15 +469,11 @@ export function createGraphWorkflowCrudRoutes() {
         is_active: req.body.is_active,
       }
 
-      const { updated, versionChanged, conflict, revision } = GraphWorkflowModel.update(id, updateData, expectedRevision)
+      const { updated, scheduleMaintenance, conflict, revision, missing } = GraphWorkflowScheduleService.updateWorkflow(id, updateData, expectedRevision)
+      if (missing) return res.status(404).json({ success: false, error: 'Graph workflow not found' } as ModuleGraphResponse)
       if (conflict) {
         return res.status(409).json({ success: false, error: '워크플로가 바뀌었어. 새로 불러와줘.' })
       }
-      // Schedules only need review when the stored version actually changed; identical-graph
-      // auto-saves must not pause schedules or cancel queued runs.
-      const scheduleMaintenance = versionChanged
-        ? GraphWorkflowScheduleService.pauseSchedulesForWorkflowChange(id)
-        : null
       return res.json({
         success: true,
         data: {
@@ -501,9 +496,8 @@ export function createGraphWorkflowCrudRoutes() {
     }
 
     try {
-      const scheduleMaintenance = GraphWorkflowScheduleService.deleteSchedulesForWorkflowDeletion(id)
-      const deleted = GraphWorkflowModel.delete(id)
-      if (!deleted) {
+      const scheduleMaintenance = GraphWorkflowScheduleService.deleteWorkflow(id)
+      if (!scheduleMaintenance) {
         return res.status(404).json({ success: false, error: 'Graph workflow not found' } as ModuleGraphResponse)
       }
 

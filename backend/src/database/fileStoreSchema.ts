@@ -27,6 +27,12 @@ export function ensureFileStoreSchema(db: Database.Database): void {
     CREATE TABLE IF NOT EXISTS chat_private_attachment_contexts (
       thread_id INTEGER PRIMARY KEY REFERENCES codex_chat_threads(id) ON DELETE CASCADE
     );
+    CREATE TABLE IF NOT EXISTS stored_file_revisions (
+      id TEXT PRIMARY KEY, file_id TEXT NOT NULL, owner_key TEXT NOT NULL, size INTEGER NOT NULL,
+      written_at TEXT NOT NULL, written_by TEXT, replaced_at TEXT NOT NULL DEFAULT (datetime('now')), replaced_by TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_stored_file_revisions_file ON stored_file_revisions(file_id, replaced_at DESC);
+    CREATE TABLE IF NOT EXISTS stored_file_writers (file_id TEXT PRIMARY KEY, written_by TEXT);
   `);
   if (!(db.prepare('PRAGMA table_info(stored_file_entries)').all() as Array<{ name: string }>).some(column => column.name === 'chat_owner_key')) {
     db.exec('ALTER TABLE stored_file_entries ADD COLUMN chat_owner_key TEXT');

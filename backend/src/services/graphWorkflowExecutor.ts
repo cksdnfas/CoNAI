@@ -304,15 +304,11 @@ export class GraphWorkflowExecutor {
     const runtimeInputValues = options?.runtimeInputValues ?? {}
     workflow.graph = applyWorkflowRuntimeInputs(workflow.graph, exposedInputs, runtimeInputValues)
 
-    const modules = workflow.graph.nodes.map((node) => {
-      const record = ModuleDefinitionModel.findById(node.module_id)
-      if (!record) {
-        throw new Error(`Module definition ${node.module_id} not found`)
-      }
-      return parseModuleDefinition(record)
-    })
-
-    const modulesById = new Map(modules.map((module) => [module.id, module]))
+    const moduleIds = [...new Set(workflow.graph.nodes.map(node => node.module_id))]
+    const modulesById = new Map(ModuleDefinitionModel.findByIds(moduleIds).map(row => [row.id, parseModuleDefinition(row)]))
+    for (const id of moduleIds) {
+      if (!modulesById.has(id)) throw new Error(`Module definition ${id} not found`)
+    }
     workflow.graph = normalizeMiniMaxDirectorLegacyGraphEdges(workflow.graph, modulesById)
     validateGraphTypes(workflow.graph, modulesById)
     const moduleByNodeId = new Map(workflow.graph.nodes.map((node) => {
@@ -353,9 +349,12 @@ export class GraphWorkflowExecutor {
     let executionId: number
     if (options?.executionId !== undefined) {
       executionId = options.executionId
-      GraphExecutionModel.update(executionId, {
-        execution_plan: executionPlanJson,
-      })
+      if (!GraphExecutionModel.update(executionId, { execution_plan: executionPlanJson })) {
+        // The workflow may have been deleted while looking up reusable results, before an abort handle existed.
+        if (options.shouldCancel?.()) return { executionId, status: 'cancelled' as const, orderedNodeIds, targetNodeId: targetNodeId ?? null,
+          artifacts: [], final_results: [], node_io: [], logs: [] }
+        throw new Error('Execution not found')
+      }
     } else {
       executionId = GraphExecutionModel.create({
         graph_workflow_id: workflow.id,

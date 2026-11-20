@@ -54,7 +54,7 @@ export class ImageTaggerService {
     filePath: string,
     isVideo: boolean,
     tasks: VisionTasks,
-    options: { priority?: AiWorkerPriority; compositeHash?: string } = {},
+    options: { priority?: AiWorkerPriority; compositeHash?: string; signal?: AbortSignal } = {},
   ): Promise<VisionResult> {
     return analyzeMedia(filePath, isVideo, tasks, options);
   }

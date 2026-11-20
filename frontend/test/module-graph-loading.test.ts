@@ -132,4 +132,35 @@ test('workflow loads preserve newer navigation and edits made while loading', as
   await act(async () => assert.equal(await actions.handleCreateWorkflow(), true))
   assert.equal(draftResets, 1, 'a fresh workflow resets the draft')
   assert.equal(editorEntries, 2, 'a fresh workflow enters the editor')
+
+  await t.test('folder settings keep the reviewed workflow revision and keep failed create-and-assign input', async () => {
+    const { WorkflowFolderSettingsPanel } = await import('../src/features/module-graph/components/workflow-folder-settings-panel')
+    const { TooltipProvider } = await import('../src/components/ui/tooltip')
+    const moves: number[] = []
+    const assignments: unknown[] = []
+    const show = (revision: number) => act(async () => root.render(h(QueryClientProvider, { client }, h(I18nProvider, null,
+      h(TooltipProvider, null, h(WorkflowFolderSettingsPanel, {
+        folders: [], selectedFolder: null, selectedWorkflow: { ...graph(6), revision } as never,
+        onAssignWorkflowFolder: async (_id, seen) => { moves.push(seen); return undefined },
+        onCreateFolder: async input => { assignments.push(input.assign_to); return undefined },
+        onUpdateFolder: noop, onDeleteFolder: noop,
+      }))))))
+    const click = async (text: string) => {
+      const button = [...document.querySelectorAll('button')].find(b => b.textContent?.trim() === text)
+      assert.ok(button, text)
+      await act(async () => button.click())
+    }
+    await show(2)
+    const field = document.querySelector<HTMLInputElement>('input[placeholder="New folder name"]')!
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, 'value')!.set!.call(field, 'My folder')
+      field.dispatchEvent(new dom.window.Event('input', { bubbles: true }))
+    })
+    await show(3)
+    await click('Save')
+    await click('Create and assign')
+    assert.deepEqual(moves, [2])
+    assert.deepEqual(assignments, [{ workflow_id: 6, expected_revision: 2 }])
+    assert.equal(field.value, 'My folder')
+  })
 })

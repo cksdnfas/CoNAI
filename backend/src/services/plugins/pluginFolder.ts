@@ -3,6 +3,7 @@ import { createHash } from 'crypto'
 import type { StoredFileEntry, WorkspaceBatchResult, WorkspaceEntry, WorkspaceOperation, WorkspaceText } from '@conai/shared'
 import { FileStoreError, FileStoreService, applyTextEdits } from '../fileStoreService'
 import { storedFilePath } from '../fileStorePaths'
+import { withFileStoreWrites } from '../fileStoreWriteTransaction'
 import { statRevision } from '../../utils/fileHash'
 import { workspaceTarget, WORKSPACE_READ_BUDGET } from '../workspaceService'
 
@@ -109,16 +110,18 @@ export const PluginFolder = {
           FileStoreService.createFolder(owner, parent().id, nameOf(target))
           result.results.push({ target })
         } else if (operation.kind === 'move') {
-          const entry = find(owner, folderId, target)
-          if (revisionOf(owner, entry) !== operation.expectedRevision) throw new FileStoreError('이동할 파일이나 폴더 내용이 변경됐어.', 409)
-          const destination = workspaceTarget(operation.destination)
-          if (destination.toLowerCase().startsWith(`${target.toLowerCase()}/`)) throw new FileStoreError('폴더를 자기 안으로 이동할 수 없어.')
-          const into = folderIn(owner, folderId, parentOf(destination))
-          const sameEntry = FileStoreService.findChild(owner, into.id, nameOf(destination))
-          if (sameEntry && sameEntry.id !== entry.id) throw new FileStoreError('이동할 위치에 같은 이름이 있어.', 409)
-          if (into.id !== entry.parentId) FileStoreService.move(owner, [entry.id], into.id)
-          if (nameOf(destination) !== entry.name) FileStoreService.rename(owner, entry.id, nameOf(destination))
-          result.results.push({ target: destination, revision: revisionOf(owner, FileStoreService.get(owner, entry.id)) })
+          result.results.push(withFileStoreWrites(() => {
+            const entry = find(owner, folderId, target)
+            if (revisionOf(owner, entry) !== operation.expectedRevision) throw new FileStoreError('이동할 파일이나 폴더 내용이 변경됐어.', 409)
+            const destination = workspaceTarget(operation.destination)
+            if (destination.toLowerCase().startsWith(`${target.toLowerCase()}/`)) throw new FileStoreError('폴더를 자기 안으로 이동할 수 없어.')
+            const into = folderIn(owner, folderId, parentOf(destination)), name = nameOf(destination)
+            const sameEntry = FileStoreService.findChild(owner, into.id, name)
+            if (sameEntry && sameEntry.id !== entry.id) throw new FileStoreError('이동할 위치에 같은 이름이 있어.', 409)
+            if (into.id !== entry.parentId) FileStoreService.move(owner, [entry.id], into.id, { id: entry.id, name })
+            else if (name !== entry.name) FileStoreService.rename(owner, entry.id, name)
+            return { target: destination, revision: revisionOf(owner, FileStoreService.get(owner, entry.id)) }
+          }))
         } else if (operation.kind === 'delete') {
           throw new FileStoreError('플러그인은 삭제할 수 없어.', 403)
         } else {

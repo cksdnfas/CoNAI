@@ -34,6 +34,8 @@ test('chat review items: lore conditions, card import report, post sections, att
   const { buildChatMessages, resolveContextConfig } = await import('../src/services/codex-chat/llmChatContext')
   const { importChatThread } = await import('../src/services/codex-chat/chatImport')
   const { OwnedLorebookStore } = await import('../src/services/codex-chat/chatLorebookFiles')
+  const { fileStoreRoot } = await import('../src/services/fileStorePaths')
+  const { FileStoreService, fileOwnerKey } = await import('../src/services/fileStoreService')
   const { GroupChatService } = await import('../src/services/codex-chat/groupChatService')
   const { ChatGroupStore } = await import('../src/services/codex-chat/chatGroupStore')
   const { buildGroupLlmMessages } = await import('../src/services/codex-chat/groupChatContext')
@@ -49,7 +51,7 @@ test('chat review items: lore conditions, card import report, post sections, att
   const requester = { accountId: 1, accountType: 'admin' as const }
   const importTarget = {
     direct: (profileId: number) => CodexChatService.createThread(requester, profileId),
-    group: (profileIds: number[], representativeId: number) => GroupChatService.create(requester, { profileIds, representativeId, userProfileId: null }),
+    group: (profileIds: number[], representativeId: number) => GroupChatService.create(requester, { profileIds, representativeId, userProfileId: null }, 'import'),
   }
   const reply = (content: string, finish = 'stop') => Response.json({ choices: [{ message: { content }, finish_reason: finish }], usage: { prompt_tokens: 321 } })
 
@@ -203,7 +205,7 @@ test('chat review items: lore conditions, card import report, post sections, att
     assert.ok(CodexChatStore.listMessages(id).find((message) => message.id === cut)!.content.endsWith('끝.'), 'it fit and was stored')
   })
 
-  await t.test('branch: a new chat up to a message, quotes and summary re-pointed, the original untouched', () => {
+  await t.test('branch: a new chat up to a message, quotes and summary re-pointed, the original untouched', async () => {
     const id = newThread()
     const u1 = say(id, 'user', '하나')
     say(id, 'assistant', '둘')
@@ -218,6 +220,23 @@ test('chat review items: lore conditions, card import report, post sections, att
     assert.equal(ChatSummaryStore.list(branch.id)[0].until_message_id, copied[1].id)
     assert.equal(CodexChatStore.findThreadById(branch.id)!.summary, '하나와 둘')
     assert.equal(CodexChatStore.listMessages(id).length, 4)
+    const { ChatAppearanceStore } = await import('../src/services/codex-chat/chatAppearance')
+    ChatAppearanceStore.saveSlots(requester.accountId, { defaultSlotId: 1, slots: [{ id: 1, name: 'default', appearance: { layout: 'wide' } }] })
+    const book = OwnedLorebookStore.addChatBookEntries(id, [{ content: 'branch note' }])!
+    const owner = fileOwnerKey(requester.accountId)
+    const attachments = FileStoreService.findChild(owner, book.folderId, '자료')!
+    const reference = FileStoreService.writeText(owner, attachments.id, 'source.txt', 'source')
+    OwnedLorebookStore.update(book.id, owner, { entries: [{ ...book.entries[0], file: '자료/source.txt', fileId: reference.id }] })
+    const blobs = () => fs.readdirSync(fileStoreRoot).filter(name => name.endsWith('.bin')).sort()
+    const db = dbModule.getUserSettingsDb(), before = blobs()
+    const count = () => db.prepare('SELECT count(*) FROM codex_chat_threads').pluck().get()
+    const rooms = count()
+    db.exec("CREATE TEMP TRIGGER refuse_branch_slot BEFORE INSERT ON user_preferences WHEN NEW.key GLOB 'chat_appearance:*:thread:*' BEGIN SELECT RAISE(ABORT, 'held slot'); END")
+    try {
+      assert.throws(() => ChatAppearanceStore.createWithDefault(requester.accountId, () => CodexChatService.branchThread(requester, id, u2)), /held slot/)
+      assert.equal(count(), rooms)
+      assert.deepEqual(blobs(), before)
+    } finally { db.exec('DROP TRIGGER refuse_branch_slot') }
   })
 
   await t.test('import: an exported chat comes back as a new chat, tool outputs reduced to summaries', () => {
@@ -238,6 +257,25 @@ test('chat review items: lore conditions, card import report, post sections, att
     assert.deepEqual(OwnedLorebookStore.chatBookOf(result.threadId)?.entries.map((entry) => [entry.id, entry.content, entry.constant]), [['memory-m1', '카이는 왼손잡이', true]], 'old pinned memories become always-on entries')
     assert.ok(result.notes.some((note) => note.includes('요약만')))
     assert.throws(() => importChatThread(requester, Buffer.from('{"format":"other"}'), importTarget), /CoNAI에서 내보낸/)
+    const threads = () => dbModule.getUserSettingsDb().prepare('SELECT COUNT(*) FROM codex_chat_threads').pluck().get()
+    const before = threads()
+    assert.throws(() => importChatThread(requester, Buffer.from(JSON.stringify(file)), { ...importTarget, direct: profileId => {
+      importTarget.direct(profileId)
+      throw new Error('Room creation interrupted')
+    } }), /Room creation interrupted/)
+    assert.equal(threads(), before, 'the failed import did not leave a new room')
+    const db = dbModule.getUserSettingsDb()
+    const blobs = () => fs.readdirSync(fileStoreRoot).filter(name => name.endsWith('.bin')).sort()
+    const initialBlobs = blobs(), events: string[] = []
+    const unsubscribe = FileStoreService.onChange(change => events.push(change.action))
+    db.exec(`CREATE TEMP TRIGGER refuse_import_summary BEFORE UPDATE OF summary_until_message_id ON codex_chat_threads
+      WHEN EXISTS (SELECT 1 FROM chat_lorebooks WHERE thread_id=NEW.id) BEGIN SELECT RAISE(ABORT, 'held summary'); END`)
+    try {
+      assert.throws(() => importChatThread(requester, Buffer.from(JSON.stringify(file)), importTarget), /held summary/)
+      assert.deepEqual(blobs(), initialBlobs)
+      assert.equal(threads(), before)
+      assert.deepEqual(events, [])
+    } finally { db.exec('DROP TRIGGER refuse_import_summary'); unsubscribe() }
   })
 
   const members = ['갑', '을'].map((name) => ChatProfileStore.create({ name, engine: 'llm', providerName: 'test', model: name, mcpEnabled: false, summaryEnabled: false }))
@@ -263,6 +301,35 @@ test('chat review items: lore conditions, card import report, post sections, att
     assert.equal(thread.kind, 'group')
     assert.deepEqual(CodexChatStore.listMessages(imported.threadId).map((message) => [message.content, message.speaker_profile_id]), [['@갑 안녕', null], ['반가워요', members[0].id], ['@을 너는?', null], ['저도요', members[1].id]])
     assert.throws(() => importChatThread(requester, Buffer.from(JSON.stringify({ ...file, members: [{ id: 999, name: '없는 사람' }, ...file.members] })), importTarget), /없는 사람/)
+  })
+
+  await t.test('an exported room with one remaining member keeps its hand edits and room limits under new IDs', async () => {
+    const { exportChatJson } = await import('../src/services/codex-chat/chatBackup')
+    const { ChatSharedBlockStore } = await import('../src/services/codex-chat/chatDisplayBlocks')
+    const block = ChatSharedBlockStore.create({ name: 'HP', block: { key: 'vitals', example: '{"hp":10}' } })
+    const member = members[0]
+    ChatProfileStore.update(member.id, { blockIds: [block.id] })
+    const id = room()
+    say(id, 'user', 'saved turn')
+    GroupChatService.removeMember(requester, id, members[1].id)
+    assert.throws(() => GroupChatService.create(requester, { profileIds: [member.id], representativeId: member.id }))
+    GroupChatService.updateRoom(requester, id, { title: 'solo room', chainLimit: 0, windowLimit: 71 })
+    assert.throws(() => GroupChatService.updateRoom(requester, id, { title: 'rejected title', windowLimit: -1 }))
+    GroupChatService.updateMember(requester, id, member.id, { maxTokens: 200_000 })
+    CodexChatService.editBlock(requester, id, 'vitals', { hp: 37 }, member.id)
+    const file = exportChatJson(requester, id)
+    // The same name on a different instance need not have the same numeric ID.
+    const remoteId = member.id + 9000
+    const edits = JSON.parse(file.thread.block_edits!) as Array<{ profileId: number }>
+    const raw = Buffer.from(JSON.stringify({ ...file, members: [{ ...file.members![0], id: remoteId }],
+      thread: { ...file.thread, profile_id: remoteId, block_edits: JSON.stringify(edits.map(edit => ({ ...edit, profileId: remoteId }))) } }))
+    const restored = GroupChatService.getThread(requester, importChatThread(requester, raw, importTarget).threadId)
+    assert.equal(restored.thread.title, 'solo room')
+    assert.deepEqual(restored.group.memberIds, [member.id])
+    assert.equal(restored.group.chainLimit, 0)
+    assert.equal(restored.group.windowLimit, 71)
+    assert.equal(restored.group.memberMaxTokens[member.id], 200_000)
+    assert.equal(restored.memberBlocks?.[member.id]?.state.vitals.hp, 37)
   })
 
   await t.test('rooms: a member without file tools gets text attachments in the transcript', () => {

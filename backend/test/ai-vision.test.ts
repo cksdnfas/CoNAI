@@ -73,6 +73,76 @@ test('ai vision: merge keeps the tagger result when Kaloscope failed', async () 
   assert.equal(both.kaloscope.status, 'success')
 })
 
+test('overlapping manual and scheduled results preserve the latest tags, score, visibility and index', async t => {
+  const { db } = await boot()
+  const { imageTaggerService } = await import('../src/services/imageTaggerService')
+  const { settingsService } = await import('../src/services/settingsService')
+  const { autoTagScheduler } = await import('../src/services/autoTagScheduler')
+  const { processHashTaggingItem } = await import('../src/services/hashTaggingService')
+  const { MediaMetadataModel } = await import('../src/models/Image/MediaMetadataModel')
+  const settings = settingsService.loadSettings()
+  t.mock.method(settingsService, 'loadSettings', () => ({ ...settings, tagger: { ...settings.tagger, enabled: true, autoTagOnUpload: true },
+    kaloscope: { ...settings.kaloscope, enabled: true, autoTagOnUpload: true } }))
+  const file = path.join(root, 'uploads', 'overlap.png')
+  fs.mkdirSync(path.dirname(file), { recursive: true })
+  fs.writeFileSync(file, 'test worker input')
+  const id = hash(30001)
+  db.prepare("INSERT INTO media_metadata (composite_hash, metadata_extraction_status, postprocess_status) VALUES (?, 'completed', 'pending')").run(id)
+  db.prepare(`INSERT INTO image_files (composite_hash, original_file_path, file_type, folder_id, file_status, file_size, mime_type)
+    VALUES (?, 'overlap.png', 'image', (SELECT min(id) FROM watched_folders), 'active', 17, 'image/png')`).run(id)
+  let started!: () => void, resume!: () => void
+  let called = new Promise<void>(resolve => { started = resolve })
+  let gate = new Promise<void>(resolve => { resume = resolve })
+  t.mock.method(imageTaggerService, 'analyze', async (target, _video, _tasks, options) => {
+    assert.equal(target, file)
+    if (options?.priority === 'low') {
+      started()
+      await gate
+      return { tagger: { success: false, error: 'old failure' }, kaloscope: { success: true, artists: { 'new artist': 1 } } }
+    }
+    return { tagger: { success: true, general: { 'manual tag': 1 }, rating: { general: 1, sensitive: 0, questionable: 0, explicit: 0 } } }
+  })
+  try {
+    assert.equal(autoTagScheduler.getStatus().untaggedCount, 1)
+    const pending = autoTagScheduler.triggerManualProcessing(id)
+    await called
+    MediaMetadataModel.update(id, { auto_tags: '{"custom":"kept"}' })
+    const manual = await processHashTaggingItem(id, '[test]')
+    assert.equal(manual.success, true)
+    const snapshot = () => db.prepare('SELECT auto_tags, rating_score, postprocess_status FROM media_metadata WHERE composite_hash = ?').get(id) as { auto_tags: string; rating_score: number; postprocess_status: string }
+    const score = snapshot().rating_score
+    assert.equal(typeof score, 'number')
+    resume()
+    await pending
+    const row = snapshot(), tags = JSON.parse(row.auto_tags)
+    assert.deepEqual([tags.custom, tags.tagger.general, tags.kaloscope.artists, row.rating_score, row.postprocess_status],
+      ['kept', { 'manual tag': 1 }, { 'new artist': 1 }, score, 'ready'])
+    db.exec("CREATE TEMP TRIGGER hold_tag_index BEFORE INSERT ON media_auto_tags BEGIN SELECT RAISE(ABORT, 'held index'); END")
+    try {
+      assert.throws(() => MediaMetadataModel.update(id, { auto_tags: '{"tagger":{"general":{"rejected":1}}}', rating_score: 99 }), /held index/)
+      assert.deepEqual(snapshot(), row)
+      assert.equal(db.prepare(`SELECT count(*) FROM media_auto_tags a JOIN auto_tag_terms t ON t.term_id=a.term_id
+        JOIN media_metadata mm ON mm.media_id=a.media_id WHERE mm.composite_hash=? AND t.tag_key='manual tag'`).pluck().get(id), 1)
+    } finally { db.exec('DROP TRIGGER hold_tag_index') }
+
+    MediaMetadataModel.update(id, { auto_tags: null })
+    called = new Promise<void>(resolve => { started = resolve })
+    gate = new Promise<void>(resolve => { resume = resolve })
+    const last = autoTagScheduler.triggerManualProcessing(id)
+    await called
+    const drained = autoTagScheduler.stopAndDrain()
+    autoTagScheduler.restart()
+    assert.equal(autoTagScheduler.start(), false)
+    await autoTagScheduler.triggerManualProcessing(id)
+    resume()
+    await Promise.all([drained, last])
+    assert.equal(snapshot().auto_tags, null, 'shutdown does not persist a worker failure or release pending work')
+  } finally {
+    resume()
+    await autoTagScheduler.stopAndDrain()
+  }
+})
+
 test('ai vision: style vectors round-trip through vectors.db and search ranks by cosine', async () => {
   await boot()
   const { vectorStore } = await import('../src/services/vectors/vectorStore')

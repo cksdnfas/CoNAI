@@ -1,4 +1,5 @@
 import { getUserSettingsDb } from '../database/userSettingsDb'
+import { GraphWorkflowModel } from './GraphWorkflow'
 import { GraphWorkflowFolderRecord } from '../types/moduleGraph'
 import { buildUpdateQuery, filterDefined, sqlLiteral } from '../utils/dynamicUpdate'
 
@@ -16,31 +17,20 @@ export type GraphWorkflowFolderUpdateData = {
 
 export type GraphWorkflowFolderDeleteMode = 'move_children' | 'delete_tree'
 
-function collectDescendantFolderIds(folders: GraphWorkflowFolderRecord[], folderId: number) {
-  const descendants = new Set<number>()
-  const queue = [folderId]
+const subtree = `WITH RECURSIVE subtree(id) AS (
+  SELECT id FROM graph_workflow_folders WHERE id = ?
+  UNION SELECT f.id FROM graph_workflow_folders f JOIN subtree s ON f.parent_id = s.id
+)`
 
-  while (queue.length > 0) {
-    const currentId = queue.shift()!
-    for (const folder of folders) {
-      if (folder.parent_id !== currentId || descendants.has(folder.id)) {
-        continue
-      }
-
-      descendants.add(folder.id)
-      queue.push(folder.id)
-    }
-  }
-
-  return [...descendants]
+export class GraphFolderWriteError extends Error {
+  constructor(readonly status: 400 | 404 | 409, message: string) { super(message) }
 }
 
 /** Manage workflow explorer folders for graph workflows. */
 export class GraphWorkflowFolderModel {
   /** Resolve one folder subtree including the selected folder id itself. */
   static getSubtreeFolderIds(folderId: number): number[] {
-    const folders = this.findAll()
-    return [folderId, ...collectDescendantFolderIds(folders, folderId)]
+    return getUserSettingsDb().prepare(`${subtree} SELECT id FROM subtree`).pluck().all(folderId) as number[]
   }
 
   static create(folderData: GraphWorkflowFolderCreateData): number {
@@ -56,6 +46,16 @@ export class GraphWorkflowFolderModel {
     )
 
     return info.lastInsertRowid as number
+  }
+
+  static createAndAssign(data: GraphWorkflowFolderCreateData, workflowId: number, expectedRevision: number) {
+    return getUserSettingsDb().transaction(() => {
+      const id = this.create(data)
+      const moved = GraphWorkflowModel.update(workflowId, { folder_id: id }, expectedRevision)
+      if (moved.missing) throw new GraphFolderWriteError(404, 'Graph workflow not found')
+      if (moved.conflict) throw new GraphFolderWriteError(409, '워크플로가 바뀌었어. 새로 불러와줘.')
+      return { id, workflow_revision: moved.revision }
+    }).immediate()
   }
 
   static findById(id: number): GraphWorkflowFolderRecord | null {
@@ -83,33 +83,35 @@ export class GraphWorkflowFolderModel {
     }
 
     const { sql, values } = buildUpdateQuery('graph_workflow_folders', updates, { id })
-    const info = db.prepare(sql).run(...values)
-    return info.changes > 0
+    return db.transaction(() => {
+      if (folderData.parent_id != null && db.prepare(`${subtree} SELECT 1 FROM subtree WHERE id = ?`).get(id, folderData.parent_id)) {
+        throw new GraphFolderWriteError(400, 'Folder cannot be moved inside its own subtree')
+      }
+      return db.prepare(sql).run(...values).changes > 0
+    }).immediate()
   }
 
   static delete(id: number, mode: GraphWorkflowFolderDeleteMode = 'move_children'): boolean {
+    return this.deleteWithWorkflows(id, mode).deleted
+  }
+
+  static deleteWithWorkflows(id: number, mode: GraphWorkflowFolderDeleteMode) {
     const db = getUserSettingsDb()
-    const targetFolder = this.findById(id)
-    if (!targetFolder) {
-      return false
-    }
-
     const transaction = db.transaction(() => {
+      const targetFolder = this.findById(id)
+      let workflowIds: number[] = []
+      if (!targetFolder) return { deleted: false, workflowIds }
       if (mode === 'delete_tree') {
-        const descendantFolderIds = collectDescendantFolderIds(this.findAll(), id)
-        const targetFolderIds = [id, ...descendantFolderIds]
-        const placeholders = targetFolderIds.map(() => '?').join(', ')
-
-        db.prepare(`DELETE FROM graph_workflows WHERE folder_id IN (${placeholders})`).run(...targetFolderIds)
+        workflowIds = db.prepare(`${subtree} DELETE FROM graph_workflows WHERE folder_id IN (SELECT id FROM subtree) RETURNING id`).pluck().all(id) as number[]
       } else {
         db.prepare('UPDATE graph_workflow_folders SET parent_id = ?, updated_date = CURRENT_TIMESTAMP WHERE parent_id = ?').run(targetFolder.parent_id ?? null, id)
         db.prepare('UPDATE graph_workflows SET folder_id = ?, updated_date = CURRENT_TIMESTAMP WHERE folder_id = ?').run(targetFolder.parent_id ?? null, id)
       }
 
       const info = db.prepare('DELETE FROM graph_workflow_folders WHERE id = ?').run(id)
-      return info.changes > 0
+      return { deleted: info.changes > 0, workflowIds }
     })
 
-    return transaction()
+    return transaction.immediate()
   }
 }

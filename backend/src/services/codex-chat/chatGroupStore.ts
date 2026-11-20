@@ -73,9 +73,11 @@ export const ChatGroupStore = {
 
   addMembers(threadId: number, profileIds: number[]) {
     const db = getUserSettingsDb()
-    const next = (db.prepare('SELECT COALESCE(MAX(member_order), -1) + 1 AS next FROM chat_group_members WHERE thread_id = ?').get(threadId) as { next: number }).next
-    const insert = db.prepare('INSERT OR IGNORE INTO chat_group_members (thread_id, profile_id, member_order) VALUES (?, ?, ?)')
-    profileIds.forEach((profileId, index) => insert.run(threadId, profileId, next + index))
+    db.transaction(() => {
+      const next = (db.prepare('SELECT COALESCE(MAX(member_order), -1) + 1 AS next FROM chat_group_members WHERE thread_id = ?').get(threadId) as { next: number }).next
+      const insert = db.prepare('INSERT OR IGNORE INTO chat_group_members (thread_id, profile_id, member_order) VALUES (?, ?, ?)')
+      profileIds.forEach((profileId, index) => insert.run(threadId, profileId, next + index))
+    }).immediate()
   },
 
   /** Returns the member's Codex thread so its memory can be deleted. A leaving representative passes to the earliest member. */

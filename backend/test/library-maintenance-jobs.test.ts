@@ -94,6 +94,14 @@ function countingHooks(cancelAfterChecks = Infinity) {
   }
 }
 
+test('draining two immediate capability changes on an empty library completes the last one', async () => {
+  const { db } = await booted
+  const { AutoTagStateService } = await import('../src/services/autoTagStateService')
+  for (const kaloscopeAutoEnabled of [false, true, false]) AutoTagStateService.syncCapabilityState({ taggerAutoEnabled: false, kaloscopeAutoEnabled })
+  await AutoTagStateService.waitForCapabilitySync()
+  assert.equal(db.prepare("SELECT value FROM system_settings WHERE key='auto_tag_state_synced_capabilities'").pluck().get(), '0:0')
+})
+
 test('auto-tag reset clears every page and the tag index, one page per transaction', async () => {
   const { db } = await booted
   const { AutoTagIndexService } = await import('../src/services/autoTagIndexService')
@@ -253,6 +261,13 @@ test('capability recompute runs in the background, in ranges, and records comple
   const row = db.prepare('SELECT auto_tag_state FROM media_metadata WHERE composite_hash = ?').get(hashOf('c', 1)) as { auto_tag_state: string }
   assert.equal(row.auto_tag_state, 'pending')
   assert.equal((db.prepare("SELECT value FROM system_settings WHERE key = 'auto_tag_state_synced_capabilities'").get() as { value: string }).value, '1:1')
+  // Flip back before the first background range finishes its whole pass.
+  AutoTagStateService.syncCapabilityState({ taggerAutoEnabled: true, kaloscopeAutoEnabled: false })
+  assert.notEqual(db.prepare("SELECT value FROM system_settings WHERE key = 'auto_tag_state_synced_capabilities'").pluck().get(), '1:1')
+  AutoTagStateService.syncCapabilityState({ taggerAutoEnabled: true, kaloscopeAutoEnabled: true })
+  await AutoTagStateService.waitForCapabilitySync()
+  assert.equal(db.prepare('SELECT kaloscope_enabled FROM auto_tag_state_meta WHERE id = 1').pluck().get(), 1)
+  assert.equal(db.prepare("SELECT COUNT(*) FROM media_metadata WHERE composite_hash LIKE 'c%' AND auto_tag_state = 'done' AND EXISTS (SELECT 1 FROM image_files f WHERE f.composite_hash = media_metadata.composite_hash)").pluck().get(), 0)
 })
 
 test('file verification keeps the old rules and applies one page per transaction', async () => {

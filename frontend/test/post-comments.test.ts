@@ -12,6 +12,7 @@ test('comment paging retains an old linked thread and removes stale or other-pos
   const { createRoot } = await import('react-dom/client')
   const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query')
   const { usePostComments } = await import('../src/features/posts/use-post-comments')
+  const { usePostCommentDraft } = await import('../src/features/posts/post-comment-draft')
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity, gcTime: Infinity } } })
   const root = createRoot(document.getElementById('root')!)
   t.after(async () => {
@@ -42,9 +43,11 @@ test('comment paging retains an old linked thread and removes stale or other-pos
     return Response.json({ success: true, data })
   })
   let state!: ReturnType<typeof usePostComments>
+  let box!: ReturnType<typeof usePostCommentDraft>
   function Reader({ postId, focusIds }: { postId: number; focusIds: number[] }) {
     const value = usePostComments(postId, focusIds)
-    useEffect(() => { state = value }, [value])
+    const draft = usePostCommentDraft(postId)
+    useEffect(() => { state = value; box = draft }, [value, draft])
     return null
   }
   const render = async (postId: number, focusIds: number[]) => {
@@ -66,7 +69,42 @@ test('comment paging retains an old linked thread and removes stale or other-pos
   await until(() => state.comments.length === 1)
     assert.deepEqual(state.comments.map((item) => item.id), [100], 'a refreshed visibility change removes all stale focused rows')
     assert.equal(state.moreReplies.has(1), false)
+  const finishOldPost = box[1]
   await render(2, [])
   await until(() => state.comments.some((item) => item.id === 200))
   assert.deepEqual(state.comments.map((item) => item.id), [200], 'opened reply pages never cross the post boundary')
+  await render(1, [])
+  await act(async () => box[1](draft => ({ ...draft, top: 'new session' })))
+  await act(async () => finishOldPost(draft => ({ ...draft, top: '' })))
+  assert.equal(box[0].top, 'new session', 'a late completion from the first visit cannot clear a reopened post')
+})
+
+test('comment writes preserve a newer reply and keep the edit revision the writer actually saw', async (t) => {
+  const { QueryClient } = await import('@tanstack/react-query')
+  const { openCommentEdit, publishCommentDraft, saveCommentDraft } = await import('../src/features/posts/post-comment-draft')
+  type Draft = import('../src/features/posts/post-comment-draft').PostCommentDraft
+  const client = new QueryClient()
+  t.after(() => client.clear())
+  const original = { id: 8, postId: 1, revision: 2, body: 'opened' } as PostComment
+  let draft: Draft = { top: '', edit: null, reply: { to: 8, text: 'sending' } }
+  const set = (update: (draft: Draft) => Draft) => { draft = update(draft) }
+  let release!: () => void
+  const gate = new Promise<void>(resolve => { release = resolve })
+  const requests: Record<string, unknown>[] = []
+  t.mock.method(globalThis, 'fetch', async (_url: unknown, init: RequestInit) => {
+    requests.push(JSON.parse(String(init.body)))
+    await gate
+    return Response.json({ success: true, data: { ...original, revision: 3 } })
+  })
+  const reply = publishCommentDraft(client, 1, 8, 'sending', set)
+  draft = { ...draft, reply: { to: 9, text: 'next reply' } }
+  draft = openCommentEdit(draft, original)
+  draft = openCommentEdit(draft, { ...original, revision: 4, body: 'remote edit' })
+  const edit = saveCommentDraft(client, 1, draft.edit!, set)
+  draft = { ...draft, edit: { ...draft.edit!, text: 'typed during save' } }
+  release()
+  await Promise.all([reply, edit])
+  assert.equal(requests[1].expectedRevision, 2)
+  assert.deepEqual(draft.reply, { to: 9, text: 'next reply' })
+  assert.deepEqual(draft.edit, { id: 8, revision: 3, text: 'typed during save' })
 })

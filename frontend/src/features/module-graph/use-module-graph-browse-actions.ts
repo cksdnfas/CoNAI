@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { useI18n } from '@/i18n'
 import { triggerBlobDownload } from '@/lib/api-client'
+import { ApiRequestError } from '@/lib/api-request'
 import { resolveAccountDraftOwner } from '@/features/auth/auth-permissions'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import type { Dispatch, RefObject, SetStateAction } from 'react'
@@ -266,14 +267,27 @@ export function useModuleGraphBrowseActions({
     return true
   }, [canApplyGraphNavigation, confirmDiscardUnsavedChanges, editorRevisionRef, enterWorkflowEditor, graphLoadRequestRef, onDirectGraphNavigation, resetWorkflowDraft, selectedFolderId, setDraftWorkflowFolderId, showSnackbar, t])
 
-  /** Create one workflow folder and optionally assign the selected workflow into it. */
-  const handleCreateWorkflowFolder = useCallback(async (input?: { name?: string; description?: string; parent_id?: number | null; assignToWorkflow?: boolean }) => {
+  const refreshFolderContents = useCallback((workflowsChanged: boolean) => Promise.all([
+    refetchGraphWorkflowFolders(),
+    workflowsChanged ? refetchGraphWorkflows() : queryClient.invalidateQueries({ queryKey: ['module-graph-browse-content'] }),
+  ]), [queryClient, refetchGraphWorkflowFolders, refetchGraphWorkflows])
+
+  const stillOnFolderTarget = useCallback((before: GraphNavigationRevision, request: number) => {
+    const now = editorRevisionRef.current
+    return request === graphLoadRequestRef.current && before.graphId === now.graphId && before.sessionId === now.sessionId
+      && before.view === now.view && before.draftFolderId === now.draftFolderId
+  }, [editorRevisionRef, graphLoadRequestRef])
+
+  /** Creating and assigning is one write against the workflow revision the folder picker opened with. */
+  const handleCreateWorkflowFolder = useCallback(async (input?: Parameters<typeof createGraphWorkflowFolder>[0]) => {
     const nextName = input?.name?.trim()
     if (!nextName) {
       showSnackbar({ message: t({ ko: '폴더 이름을 먼저 입력해줘.', en: 'Enter a folder name first.' }), tone: 'error' })
       return
     }
 
+    const before = editorRevisionRef.current
+    const request = graphLoadRequestRef.current
     try {
       const resolvedParentId = input && Object.prototype.hasOwnProperty.call(input, 'parent_id')
         ? (input.parent_id ?? null)
@@ -283,32 +297,33 @@ export function useModuleGraphBrowseActions({
         name: nextName,
         description: input?.description?.trim() || undefined,
         parent_id: resolvedParentId,
+        assign_to: input?.assign_to,
       })
-      await refetchGraphWorkflowFolders()
-      setSelectedFolderId(result.id)
-      setDraftWorkflowFolderId(result.id)
-
-      if (input?.assignToWorkflow && selectedGraphRecord) {
-        await updateGraphWorkflow(selectedGraphRecord.id, { folder_id: result.id })
-        await refetchGraphWorkflows()
+      await refreshFolderContents(Boolean(input?.assign_to))
+      if (stillOnFolderTarget(before, request)) {
+        setSelectedFolderId(result.id)
+        setDraftWorkflowFolderId(result.id)
       }
 
       showSnackbar({ message: t({ ko: '폴더 "{name}"을(를) 만들었어.', en: 'Created folder "{name}".' }, { name: nextName }), tone: 'info' })
+      return result
     } catch (error) {
+      if (error instanceof ApiRequestError && error.status === 409) void refetchGraphWorkflows()
       showSnackbar({ message: error instanceof Error ? error.message : t({ ko: '폴더 생성에 실패했어.', en: 'Failed to create the folder.' }), tone: 'error' })
+      return undefined
     }
-  }, [refetchGraphWorkflowFolders, refetchGraphWorkflows, selectedFolderId, selectedGraphRecord, setDraftWorkflowFolderId, setSelectedFolderId, showSnackbar, t])
+  }, [editorRevisionRef, graphLoadRequestRef, refreshFolderContents, refetchGraphWorkflows, selectedFolderId, setDraftWorkflowFolderId, setSelectedFolderId, showSnackbar, stillOnFolderTarget, t])
 
   /** Update one existing workflow folder. */
   const handleUpdateSelectedFolder = useCallback(async (folderId: number, input: { name?: string; description?: string | null; parent_id?: number | null }) => {
     try {
       await updateGraphWorkflowFolder(folderId, input)
-      await refetchGraphWorkflowFolders()
+      await refreshFolderContents(false)
       showSnackbar({ message: t({ ko: '폴더 설정을 저장했어.', en: 'Saved folder settings.' }), tone: 'info' })
     } catch (error) {
       showSnackbar({ message: error instanceof Error ? error.message : t({ ko: '폴더 저장에 실패했어.', en: 'Failed to save the folder.' }), tone: 'error' })
     }
-  }, [refetchGraphWorkflowFolders, showSnackbar, t])
+  }, [refreshFolderContents, showSnackbar, t])
 
   /** Open delete confirmation for one chosen folder. */
   const handleDeleteSelectedFolder = useCallback(async (folderId?: number) => {
@@ -336,7 +351,7 @@ export function useModuleGraphBrowseActions({
       setSelectedFolderId(folderDeleteTarget.parent_id ?? null)
       setSelectedGraphId(null)
       setFolderDeleteTarget(null)
-      await Promise.all([refetchGraphWorkflowFolders(), refetchGraphWorkflows()])
+      await refreshFolderContents(true)
       showSnackbar({
         message: mode === 'delete_tree'
           ? t({ ko: '폴더와 내부 항목을 모두 삭제했어.', en: 'Deleted the folder and everything inside it.' })
@@ -346,24 +361,29 @@ export function useModuleGraphBrowseActions({
     } catch (error) {
       showSnackbar({ message: error instanceof Error ? error.message : t({ ko: '폴더 삭제에 실패했어.', en: 'Failed to delete the folder.' }), tone: 'error' })
     }
-  }, [folderDeleteTarget, refetchGraphWorkflowFolders, refetchGraphWorkflows, setFolderDeleteTarget, setSelectedFolderId, setSelectedGraphId, showSnackbar, t])
+  }, [folderDeleteTarget, refreshFolderContents, setFolderDeleteTarget, setSelectedFolderId, setSelectedGraphId, showSnackbar, t])
 
   /** Reassign the selected workflow into another folder or back to root. */
-  const handleAssignSelectedWorkflowFolder = useCallback(async (folderId: number | null) => {
+  const handleAssignSelectedWorkflowFolder = useCallback(async (folderId: number | null, expectedRevision: number) => {
     if (!selectedGraphRecord) {
       showSnackbar({ message: t({ ko: '먼저 워크플로우를 하나 선택해줘.', en: 'Select a workflow first.' }), tone: 'error' })
       return
     }
 
+    const before = editorRevisionRef.current
+    const request = graphLoadRequestRef.current
     try {
-      await updateGraphWorkflow(selectedGraphRecord.id, { folder_id: folderId })
-      setSelectedFolderId(folderId)
+      const result = await updateGraphWorkflow(selectedGraphRecord.id, { folder_id: folderId, expected_revision: expectedRevision })
+      if (stillOnFolderTarget(before, request)) setSelectedFolderId(folderId)
       await refetchGraphWorkflows()
       showSnackbar({ message: folderId === null ? t({ ko: '워크플로우를 Root에 할당했어.', en: 'Moved the workflow to Root.' }) : t({ ko: '워크플로우 폴더 할당을 바꿨어.', en: 'Changed the workflow folder.' }), tone: 'info' })
+      return result.revision
     } catch (error) {
+      if (error instanceof ApiRequestError && error.status === 409) void refetchGraphWorkflows()
       showSnackbar({ message: error instanceof Error ? error.message : t({ ko: '워크플로우 폴더 할당에 실패했어.', en: 'Failed to change the workflow folder.' }), tone: 'error' })
+      return undefined
     }
-  }, [refetchGraphWorkflows, selectedGraphRecord, setSelectedFolderId, showSnackbar, t])
+  }, [editorRevisionRef, graphLoadRequestRef, refetchGraphWorkflows, selectedGraphRecord, setSelectedFolderId, showSnackbar, stillOnFolderTarget, t])
 
   /** Open the currently selected workflow inside editor mode. */
   const handleEditSelectedWorkflow = useCallback((target?: GraphWorkflowSummaryRecord | GraphWorkflowRecord) => {

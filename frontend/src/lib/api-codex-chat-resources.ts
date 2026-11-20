@@ -68,6 +68,7 @@ export interface ChatBlocksState {
 /** A shared display block (status card); profiles link it by id, so editing it reaches every linked profile. */
 export interface ChatSharedBlock {
   id: number
+  revision: number
   name: string
   block: ChatDisplayBlock
   profiles: Array<{ id: number; name: string }>
@@ -81,6 +82,7 @@ export const CHAT_BLOCK_FILE_MARK = 'conai_display_block'
 /** A tool preset (MCP scopes + tool allowlist) to load into a profile; loading copies it, so the preset can change freely. */
 export interface ChatToolPreset {
   id: number
+  revision: number
   name: string
   scopes: ChatScope[]
   /** Only these tools; null offers every tool the scopes allow. */
@@ -133,6 +135,7 @@ export type ChatGenerationPresetKind = 'nai' | 'comfyui'
 /** A generation preset; each one a profile links becomes a generate_image tool, and free-form generation is withheld. */
 export interface ChatGenerationPreset {
   id: number
+  revision: number
   name: string
   /** What the model is told the preset is for. */
   instruction: string
@@ -191,8 +194,8 @@ export function importChatBlocks(contents: unknown) {
   return requestApiData<ChatSharedBlock[]>('/api/codex-chat/admin/blocks/import', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(contents) })
 }
 
-export function updateChatBlock(blockId: number, patch: { name?: string; block?: ChatDisplayBlock }) {
-  return requestApiData<ChatSharedBlock>(`/api/codex-chat/admin/blocks/${blockId}`, { method: 'PUT', headers: JSON_HEADERS, body: JSON.stringify(patch) })
+export function updateChatBlock(blockId: number, patch: { name?: string; block?: ChatDisplayBlock }, revision?: number) {
+  return requestRevisionChecked<ChatSharedBlock>(`/api/codex-chat/admin/blocks/${blockId}`, { method: 'PUT', headers: JSON_HEADERS, body: JSON.stringify({ ...patch, revision }) })
 }
 
 export function deleteChatBlock(blockId: number) {
@@ -322,8 +325,8 @@ export function importChatToolPresets(contents: unknown) {
   return requestApiData<ChatToolPreset[]>('/api/codex-chat/admin/tool-presets/import', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(contents) })
 }
 
-export function updateChatToolPreset(presetId: number, patch: Partial<ChatToolPresetInput>) {
-  return requestApiData<ChatToolPreset>(`/api/codex-chat/admin/tool-presets/${presetId}`, { method: 'PUT', headers: JSON_HEADERS, body: JSON.stringify(patch) })
+export function updateChatToolPreset(presetId: number, patch: Partial<ChatToolPresetInput>, revision?: number) {
+  return requestRevisionChecked<ChatToolPreset>(`/api/codex-chat/admin/tool-presets/${presetId}`, { method: 'PUT', headers: JSON_HEADERS, body: JSON.stringify({ ...patch, revision }) })
 }
 
 export function deleteChatToolPreset(presetId: number) {
@@ -343,8 +346,8 @@ export function importChatGenerationPresets(contents: unknown) {
   return requestApiData<ChatGenerationPreset[]>('/api/codex-chat/admin/generation-presets/import', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(contents) })
 }
 
-export function updateChatGenerationPreset(presetId: number, patch: Partial<ChatGenerationPresetInput>) {
-  return requestApiData<ChatGenerationPreset>(`/api/codex-chat/admin/generation-presets/${presetId}`, { method: 'PUT', headers: JSON_HEADERS, body: JSON.stringify(patch) })
+export function updateChatGenerationPreset(presetId: number, patch: Partial<ChatGenerationPresetInput>, revision?: number) {
+  return requestRevisionChecked<ChatGenerationPreset>(`/api/codex-chat/admin/generation-presets/${presetId}`, { method: 'PUT', headers: JSON_HEADERS, body: JSON.stringify({ ...patch, revision }) })
 }
 
 export function deleteChatGenerationPreset(presetId: number) {

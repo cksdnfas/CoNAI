@@ -67,6 +67,10 @@ export async function getPromptPresets(params?: { hierarchical?: boolean; rootsO
   return requestApiData<PromptPresetRecord[]>(`/api/prompt-presets${suffix}`, 'promptPresets.list.load', undefined, { requireData: true })
 }
 
+export function getPromptPreset(id: number) {
+  return requestApiData<PromptPresetRecord>(`/api/prompt-presets/${id}`, 'promptPresets.list.load', undefined, { requireData: true })
+}
+
 export async function createPromptPreset(input: PromptPresetMutationInput) {
   return requestApiData<PromptPresetRecord>('/api/prompt-presets', 'promptPresets.create', {
     method: 'POST',

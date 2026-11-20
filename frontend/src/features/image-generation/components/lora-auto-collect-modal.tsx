@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { EditorFooter } from '@/components/ui/editor-footer'
 import { Button } from '@/components/ui/button'
@@ -24,7 +24,7 @@ type RelativeFile = File & {
 }
 
 function getRelativeFilePath(file: RelativeFile) {
-  return file.webkitRelativePath ?? file.name
+  return file.webkitRelativePath || file.name
 }
 
 function getFolderPath(relativePath: string) {
@@ -42,150 +42,105 @@ function splitPromptLines(text: string) {
     .filter((line) => line.length > 0)
 }
 
-/** Build LoRA scan records from a selected folder dump. */
-async function collectLoraFilesFromSelection(
-  files: RelativeFile[],
-  options: {
-    matchingMode: MatchingMode
-    commonTextFilename: string
-  },
-) {
-  const loraFiles: LoraFileData[] = []
-  const fileByRelativePath = new Map<string, RelativeFile>()
-  const commonTextCache = new Map<string, string[]>()
-  const normalizedCommonTextFilename = options.commonTextFilename.trim()
-
-  for (const file of files) {
-    const relativePath = getRelativeFilePath(file)
-    fileByRelativePath.set(relativePath, file)
-
-    if (normalizedCommonTextFilename.length === 0 || file.name !== normalizedCommonTextFilename) {
-      continue
+function prepareLoraSelection(files: RelativeFile[]) {
+  const byPath = new Map(files.map(file => [getRelativeFilePath(file), file]))
+  const models = files.filter(isLoraModelFile)
+  const cache = new Map<RelativeFile, Promise<string[]>>()
+  const read = (file: RelativeFile) => {
+    let lines = cache.get(file)
+    if (!lines) {
+      lines = file.text().then(splitPromptLines).catch(error => { cache.delete(file); throw error })
+      cache.set(file, lines)
     }
-
-    commonTextCache.set(getFolderPath(relativePath), splitPromptLines(await file.text()))
+    return lines
   }
-
-  for (const file of files) {
-    if (!isLoraModelFile(file)) {
-      continue
+  return async (mode: MatchingMode, commonName: string, signal: AbortSignal) => {
+    const records: LoraFileData[] = []
+    for (const file of models) {
+      signal.throwIfAborted()
+      const relative = getRelativeFilePath(file)
+      const parts = relative.split('/')
+      const dir = getFolderPath(relative)
+      const common = commonName ? byPath.get(dir ? `${dir}/${commonName}` : commonName) : undefined
+      const paired = byPath.get(relative.replace(/\.safetensors$/i, '.txt'))
+      const candidates = mode === 'common' ? [common, paired] : [paired, common]
+      let promptLines: string[] = []
+      for (const candidate of candidates) {
+        if (!candidate) continue
+        signal.throwIfAborted()
+        promptLines = await read(candidate)
+        if (promptLines.length) break
+      }
+      records.push({ folderName: parts.slice(1, -1).join('/') || parts[0] || 'root', loraName: file.name.replace(/\.safetensors$/i, ''), promptLines })
     }
-
-    const relativePath = getRelativeFilePath(file)
-    const pathParts = relativePath.split('/')
-    const folderPath = getFolderPath(relativePath)
-    const folderName = pathParts.slice(1, -1).join('/') || pathParts[0] || 'root'
-    const loraName = file.name.replace(/\.safetensors$/i, '')
-    const pairedTextPath = relativePath.replace(/\.safetensors$/i, '.txt')
-    const pairedTextFile = fileByRelativePath.get(pairedTextPath)
-    const pairedLines = pairedTextFile ? splitPromptLines(await pairedTextFile.text()) : []
-    const commonLines = commonTextCache.get(folderPath) ?? []
-
-    const promptLines = options.matchingMode === 'common'
-      ? (commonLines.length > 0 ? commonLines : pairedLines)
-      : (pairedLines.length > 0 ? pairedLines : commonLines)
-
-    loraFiles.push({
-      folderName,
-      loraName,
-      promptLines,
-    })
+    return records
   }
-
-  return loraFiles
 }
 
-export function LoraAutoCollectModal({ open, isSubmitting = false, onClose, onSubmit }: LoraAutoCollectModalProps) {
+export function LoraAutoCollectModal(props: LoraAutoCollectModalProps) {
+  return props.open ? <LoraFolderForm {...props} /> : null
+}
+
+function LoraFolderForm({ isSubmitting = false, onClose, onSubmit }: LoraAutoCollectModalProps) {
   const { t, formatNumber } = useI18n()
   const inputRef = useRef<HTMLInputElement | null>(null)
   const [selectedSourceFiles, setSelectedSourceFiles] = useState<RelativeFile[]>([])
-  const [selectedFiles, setSelectedFiles] = useState<LoraFileData[]>([])
   const [loraWeight, setLoraWeight] = useState('1.0')
   const [duplicateHandling, setDuplicateHandling] = useState<'number' | 'parent'>('number')
   const [matchingMode, setMatchingMode] = useState<MatchingMode>('filename')
   const [commonTextFilename, setCommonTextFilename] = useState('add.txt')
   const [formError, setFormError] = useState<string | null>(null)
-  const [isPreparingFiles, setIsPreparingFiles] = useState(false)
+  const [publishing, setPublishing] = useState(false)
+  const read = useMemo(() => prepareLoraSelection(selectedSourceFiles), [selectedSourceFiles])
+  const request = useMemo(() => ({ read, matchingMode, commonName: commonTextFilename.trim() }), [read, matchingMode, commonTextFilename])
+  const [prepared, setPrepared] = useState<{ request: typeof request; files: LoraFileData[]; error?: unknown } | null>(null)
+  const current = prepared?.request === request ? prepared : null
+  const selectedFiles = current?.files ?? []
+  const isPreparingFiles = selectedSourceFiles.length > 0 && !current
+  const busy = isSubmitting || publishing
+  const previewSummary = selectedFiles.slice(0, 5)
+  const message = formError || (current && 'error' in current
+    ? current.error instanceof Error ? current.error.message : t({ ko: '폴더 파일을 읽는 중 오류가 났어.', en: 'An error occurred while reading the folder files.' })
+    : null)
 
   useEffect(() => {
-    if (!open) {
-      return
-    }
-
-    setSelectedSourceFiles([])
-    setSelectedFiles([])
-    setLoraWeight('1.0')
-    setDuplicateHandling('number')
-    setMatchingMode('filename')
-    setCommonTextFilename('add.txt')
-    setFormError(null)
-  }, [open])
-
-  useEffect(() => {
-    if (!inputRef.current) {
-      return
-    }
-
-    inputRef.current.setAttribute('webkitdirectory', '')
-    inputRef.current.setAttribute('directory', '')
-  }, [open])
-
-  const previewSummary = useMemo(() => selectedFiles.slice(0, 5), [selectedFiles])
-
-  const buildSelectedFiles = useCallback(async (files: RelativeFile[], overrides?: { matchingMode?: MatchingMode; commonTextFilename?: string }) => {
-    return collectLoraFilesFromSelection(files, {
-      matchingMode: overrides?.matchingMode ?? matchingMode,
-      commonTextFilename: overrides?.commonTextFilename ?? commonTextFilename,
+    if (!selectedSourceFiles.length) return
+    const controller = new AbortController()
+    void request.read(request.matchingMode, request.commonName, controller.signal).then(files => {
+      if (!controller.signal.aborted) setPrepared({ request, files })
+    }, error => {
+      if (!controller.signal.aborted) setPrepared({ request, files: [], error })
     })
-  }, [commonTextFilename, matchingMode])
-
-  const rebuildSelectedFiles = useCallback(async (files: RelativeFile[], overrides?: { matchingMode?: MatchingMode; commonTextFilename?: string }) => {
-    setIsPreparingFiles(true)
-    setFormError(null)
-
-    try {
-      const nextFiles = await buildSelectedFiles(files, overrides)
-      setSelectedFiles(nextFiles)
-      return nextFiles
-    } catch (error) {
-      setFormError(error instanceof Error ? error.message : t({ ko: '폴더 파일을 읽는 중 오류가 났어.', en: 'An error occurred while reading the folder files.' }))
-      setSelectedFiles([])
-      return []
-    } finally {
-      setIsPreparingFiles(false)
-    }
-  }, [buildSelectedFiles, t])
+    return () => controller.abort()
+  }, [request, selectedSourceFiles])
 
   const handlePickFolder = () => {
     inputRef.current?.click()
   }
 
-  const handleFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files ?? []) as RelativeFile[]
     if (files.length === 0) {
       return
     }
 
     setSelectedSourceFiles(files)
-    await rebuildSelectedFiles(files)
+    setFormError(null)
     event.target.value = ''
   }
 
   const handleMatchingModeChange = (nextMode: MatchingMode) => {
     setMatchingMode(nextMode)
-    if (selectedSourceFiles.length > 0) {
-      void rebuildSelectedFiles(selectedSourceFiles, { matchingMode: nextMode })
-    }
+    setFormError(null)
   }
 
   const handleCommonTextFilenameChange = (nextFilename: string) => {
     setCommonTextFilename(nextFilename)
-    if (selectedSourceFiles.length > 0) {
-      void rebuildSelectedFiles(selectedSourceFiles, { commonTextFilename: nextFilename })
-    }
+    setFormError(null)
   }
 
   const handleSubmit = async () => {
+    if (busy || isPreparingFiles || (current && 'error' in current)) return
     if (selectedSourceFiles.length === 0) {
       setFormError(t({ ko: '먼저 LoRA 폴더를 골라줘.', en: 'Choose a LoRA folder first.' }))
       return
@@ -198,19 +153,16 @@ export function LoraAutoCollectModal({ open, isSubmitting = false, onClose, onSu
     }
 
     setFormError(null)
-    setIsPreparingFiles(true)
+    setPublishing(true)
 
     try {
-      const nextFiles = await buildSelectedFiles(selectedSourceFiles)
-      setSelectedFiles(nextFiles)
-
-      if (nextFiles.length === 0) {
+      if (selectedFiles.length === 0) {
         setFormError(t({ ko: '선택한 폴더에서 LoRA 파일을 찾지 못했어.', en: 'Could not find LoRA files in the selected folder.' }))
         return
       }
 
       await onSubmit({
-        loraFiles: nextFiles,
+        loraFiles: selectedFiles,
         loraWeight: parsedWeight,
         duplicateHandling,
         matchingMode,
@@ -219,15 +171,15 @@ export function LoraAutoCollectModal({ open, isSubmitting = false, onClose, onSu
     } catch (error) {
       setFormError(error instanceof Error ? error.message : t({ ko: '자동 수집 준비 중 오류가 났어.', en: 'An error occurred while preparing auto-collection.' }))
     } finally {
-      setIsPreparingFiles(false)
+      setPublishing(false)
     }
   }
 
   return (
     <Modal
-      open={open}
+      open
       onClose={() => {
-        if (!isSubmitting && !isPreparingFiles) {
+        if (!busy) {
           onClose()
         }
       }}
@@ -235,14 +187,14 @@ export function LoraAutoCollectModal({ open, isSubmitting = false, onClose, onSu
       size="lg"
     >
       <ModalBody spacing="lg">
-        {formError ? (
+        {message ? (
           <Alert variant="destructive">
             <AlertTitle>{t({ ko: '수집 준비 실패', en: 'Collection preparation failed' })}</AlertTitle>
-            <AlertDescription>{formError}</AlertDescription>
+            <AlertDescription>{message}</AlertDescription>
           </Alert>
         ) : null}
 
-        <input ref={inputRef} type="file" className="hidden" multiple onChange={(event) => void handleFileChange(event)} />
+        <input ref={inputRef} type="file" className="hidden" multiple {...{ webkitdirectory: '', directory: '' }} onChange={handleFileChange} />
 
         <div className="space-y-3">
           <div className="flex flex-wrap items-center gap-3">
@@ -250,7 +202,7 @@ export function LoraAutoCollectModal({ open, isSubmitting = false, onClose, onSu
               variant="secondary"
               size="sm"
               onClick={handlePickFolder}
-              disabled={isSubmitting || isPreparingFiles}
+              disabled={busy}
             >
               {t({ ko: '폴더 고르기', en: 'Choose folder' })}
             </Button>
@@ -299,7 +251,7 @@ export function LoraAutoCollectModal({ open, isSubmitting = false, onClose, onSu
           </Field>
         </div>
 
-        <EditorFooter onSave={() => void handleSubmit()} canSave={selectedSourceFiles.length > 0} saving={isSubmitting || isPreparingFiles} saveLabel={t({ ko: '다시 만들기', en: 'Rebuild' })} />
+        <EditorFooter onSave={() => void handleSubmit()} canSave={selectedSourceFiles.length > 0 && !!current && !('error' in current)} saving={busy || isPreparingFiles} saveLabel={t({ ko: '다시 만들기', en: 'Rebuild' })} />
       </ModalBody>
     </Modal>
   )

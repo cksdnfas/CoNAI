@@ -30,6 +30,8 @@ test('native preset and wildcard editors retain their draft and read revision ac
   const { SnackbarContext } = await import('../src/components/ui/snackbar-context')
   const { PromptPresetPanel } = await import('../src/features/prompts/components/prompt-preset-panel')
   const { WildcardGenerationPanel } = await import('../src/features/image-generation/components/wildcard-generation-panel')
+  const { LoraAutoCollectModal } = await import('../src/features/image-generation/components/lora-auto-collect-modal')
+  const scans: import('../src/lib/api-wildcards').LoraScanRequest[] = []
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity, gcTime: Infinity }, mutations: { retry: false, gcTime: Infinity } } })
   client.setQueryData(['auth-status'], { authenticated: true, hasCredentials: true, permissionKeys: ['prompts.edit', 'wildcards.edit'] })
   client.setQueryData(['runtime-language-settings'], { general: { language: 'ko' } })
@@ -66,17 +68,19 @@ test('native preset and wildcard editors retain their draft and read revision ac
       wildcard = { ...wildcard, name: String(body.name), assistant_revision: 'wildcard-saved', items: items.general.map((item, index) => ({ ...item, id: 20 + index, wildcard_id: 2, tool: 'general', order_index: index, created_date: '' })) }
       return Response.json({ success: true, data: wildcard })
     }
-    if (url.startsWith('/api/prompt-presets')) return Response.json({ success: true, data: [preset] })
+    if (url === '/api/prompt-presets/1') return Response.json({ success: true, data: preset })
+    if (url.startsWith('/api/prompt-presets?')) return Response.json({ success: true, data: [preset] })
     if (url === '/api/wildcards/2') return Response.json({ success: true, data: wildcard })
     if (url.startsWith('/api/wildcards?')) return Response.json({ success: true, data: [wildcard] })
     throw new Error(`Unexpected request: ${url}`)
   })
   const root = createRoot(document.getElementById('root')!)
   const settle = () => new Promise((resolve) => setTimeout(resolve, 30))
-  const render = async (view: 'preset' | 'wildcard') => {
+  const render = async (view: 'preset' | 'wildcard' | 'lora') => {
     const panel = view === 'preset'
       ? h(PromptPresetPanel, { toolbarProps: { view: 'presets', promptType: 'positive', canViewWildcards: true, onChangeView: () => {} } })
-      : h(WildcardGenerationPanel, { refreshNonce: 0 })
+      : view === 'wildcard' ? h(WildcardGenerationPanel, { refreshNonce: 0 })
+        : h(LoraAutoCollectModal, { open: true, onClose: () => {}, onSubmit: async input => { scans.push(input) } })
     await act(async () => {
       root.render(h(QueryClientProvider, { client }, h(I18nProvider, { catalog: { ...promptsCatalog, ...imageGenerationCatalog } },
         h(MemoryRouter, null, h(TooltipProvider, null, h(ConfirmProvider, null,
@@ -177,4 +181,30 @@ test('native preset and wildcard editors retain their draft and read revision ac
     assert.equal(messages.at(-1), '편집 정보를 불러오지 못했어. 새로고침해줘.')
     await act(async () => root.render(null))
   }
+
+  await t.test('the LoRA scan submits the latest preview without reading selected files twice', async () => {
+    await render('lora')
+    const picker = document.querySelector<HTMLInputElement>('input[type=file]')!
+    assert.ok(picker.hasAttribute('webkitdirectory'))
+    let release!: (text: string) => void
+    const slow = new Promise<string>(resolve => { release = resolve })
+    let pairedReads = 0, commonReads = 0
+    const file = (name: string, text: () => Promise<string>) => ({ name, webkitRelativePath: `Root/Kit/${name}`, text })
+    Object.defineProperty(picker, 'files', { value: [
+      file('model.safetensors', async () => { throw new Error('must not read model bytes') }),
+      file('model.txt', () => { pairedReads++; return slow }), file('add.txt', async () => { commonReads++; return 'new mode' }),
+    ] })
+    await act(async () => { picker.dispatchEvent(new dom.window.Event('change', { bubbles: true })) })
+    assert.equal(pairedReads, 1)
+    const mode = [...document.querySelectorAll('select')].find(select => [...select.options].some(option => option.value === 'common'))!
+    await act(async () => { mode.value = 'common'; mode.dispatchEvent(new dom.window.Event('change', { bubbles: true })) })
+    await act(async () => { release('old mode'); await slow })
+    await click([...document.querySelectorAll('button')].find(button => button.textContent?.trim() === '다시 만들기'))
+    assert.deepEqual(scans[0]?.loraFiles, [{ folderName: 'Kit', loraName: 'model', promptLines: ['new mode'] }])
+    assert.deepEqual([pairedReads, commonReads], [1, 1])
+    // Radix restores focus on the next turn. Keep this document's CustomEvent installed until that finishes.
+    const closed = new Promise<void>(resolve => picker.closest('[role="dialog"]')!.addEventListener('focusScope.autoFocusOnUnmount', () => resolve(), { once: true }))
+    await act(async () => root.render(null))
+    await closed
+  })
 })

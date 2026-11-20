@@ -1,8 +1,6 @@
-import fs from 'fs'
 import { randomUUID } from 'crypto'
-import { getUserSettingsDb } from '../../database/userSettingsDb'
 import { FileStoreService } from '../fileStoreService'
-import { storedFilePath } from '../fileStorePaths'
+import { withFileStoreWrites } from '../fileStoreWriteTransaction'
 import { LOREBOOK_MAX_ENTRIES, loreEntryKeys, loreEntryTitle, type ChatLoreEntry } from './chatLorebook'
 import {
   LOREBOOK_JSON,
@@ -242,82 +240,73 @@ export function applyMerge(sourceId: number, targetId: number, owner: string, de
 export function applyMergePreview(preview: MergePreview, owner: string, decisionsValue: unknown): MergeResult {
   const decisions = decisionsFor(preview, decisionsValue)
   const { target } = preview
-  const db = getUserSettingsDb()
-  const copied: string[] = []
-  try {
-    return db.transaction(() => {
-      // Files: the copies, and where each source file now is (by id, and by its old path for a link without an id).
-      const moved = new Map<string, { file: string; fileId: string }>()
-      for (const plan of planFiles(owner, preview.source, target)) {
-        let folder = FileStoreService.ensureFolder(owner, target.folderId, LORE_FILES_FOLDER)
-        for (const dir of plan.dirs) folder = FileStoreService.ensureFolder(owner, folder.id, dir)
-        const copy = FileStoreService.copyFile(owner, plan.source.id, folder.id, plan.name, { silent: true })
-        copied.push(copy.id)
-        const link = { file: [LORE_FILES_FOLDER, ...plan.dirs, copy.name].join('/'), fileId: copy.id }
-        moved.set(plan.source.id, link)
-        moved.set(plan.source.rel.toLowerCase(), link)
-      }
-      const linkOf = (entry: ChatLoreEntry) => {
-        const link = (entry.fileId && moved.get(entry.fileId)) || (entry.file && moved.get(entry.file.toLowerCase())) || null
-        return link ?? { file: null, fileId: null }
-      }
+  return withFileStoreWrites(() => {
+    const plans = planFiles(owner, preview.source, target)
+    const moved = new Map<string, { file: string; fileId: string }>()
+    for (const plan of plans) {
+      let folder = FileStoreService.ensureFolder(owner, target.folderId, LORE_FILES_FOLDER)
+      for (const dir of plan.dirs) folder = FileStoreService.ensureFolder(owner, folder.id, dir)
+      const copy = FileStoreService.copyFile(owner, plan.source.id, folder.id, plan.name, { silent: true })
+      const link = { file: [LORE_FILES_FOLDER, ...plan.dirs, copy.name].join('/'), fileId: copy.id }
+      moved.set(plan.source.id, link)
+      moved.set(plan.source.rel.toLowerCase(), link)
+    }
+    const linkOf = (entry: ChatLoreEntry) => {
+      const link = (entry.fileId && moved.get(entry.fileId)) || (entry.file && moved.get(entry.file.toLowerCase())) || null
+      return link ?? { file: null, fileId: null }
+    }
 
-      const entries = target.entries.map((entry) => ({ ...entry }))
-      const ids = new Set(entries.map((entry) => entry.id))
-      let order = entries.reduce((max, entry) => Math.max(max, entry.order), -1)
-      const freeId = (base: string) => {
-        let id = base
-        while (ids.has(id)) id = randomUUID()
-        ids.add(id)
-        return id
+    const entries = target.entries.map((entry) => ({ ...entry }))
+    const ids = new Set(entries.map((entry) => entry.id))
+    let order = entries.reduce((max, entry) => Math.max(max, entry.order), -1)
+    const freeId = (base: string) => {
+      let id = base
+      while (ids.has(id)) id = randomUUID()
+      ids.add(id)
+      return id
+    }
+    const append = (entry: ChatLoreEntry, title = entry.title) => {
+      entries.push({ ...entry, ...linkOf(entry), id: freeId(entry.id), title, order: ++order })
+    }
+    const takeOver = (into: ChatLoreEntry, from: ChatLoreEntry, content: string) => {
+      into.content = content
+      into.keys = unionKeys(into.keys, from.keys)
+      into.localKeys = unionKeys(into.localKeys ?? [], from.localKeys ?? [])
+      if (!into.file) Object.assign(into, linkOf(from))
+    }
+    let added = 0
+    let updated = 0
+    let skipped = 0
+    for (const item of preview.items) {
+      if (item.status === 'new') {
+        append(item.entry)
+        added++
+        continue
       }
-      const append = (entry: ChatLoreEntry, title = entry.title) => {
-        entries.push({ ...entry, ...linkOf(entry), id: freeId(entry.id), title, order: ++order })
-      }
-      const takeOver = (into: ChatLoreEntry, from: ChatLoreEntry, content: string) => {
-        into.content = content
-        into.keys = unionKeys(into.keys, from.keys)
-        into.localKeys = unionKeys(into.localKeys ?? [], from.localKeys ?? [])
-        if (!into.file) Object.assign(into, linkOf(from))
-      }
-      let added = 0
-      let updated = 0
-      let skipped = 0
-      for (const item of preview.items) {
-        if (item.status === 'new') {
-          append(item.entry)
-          added++
-          continue
+      const decision = decisions.get(item.entry.id) as MergeDecision
+      const into = entries.find((entry) => entry.id === item.duplicateOf?.id)
+      if (decision.choice === 'target' || !into) {
+        skipped++
+      } else if (decision.choice === 'both') {
+        const titles = new Set(entries.map((entry) => foldLoreTitle(loreEntryTitle(entry))))
+        const base = loreEntryTitle(item.entry)
+        let title = item.entry.title
+        if (titles.has(foldLoreTitle(base))) {
+          let n = 2
+          while (titles.has(foldLoreTitle(`${base} (${n})`))) n++
+          title = `${base} (${n})`
         }
-        const decision = decisions.get(item.entry.id) as MergeDecision
-        const into = entries.find((entry) => entry.id === item.duplicateOf?.id)
-        if (decision.choice === 'target' || !into) {
-          skipped++
-        } else if (decision.choice === 'both') {
-          const titles = new Set(entries.map((entry) => foldLoreTitle(loreEntryTitle(entry))))
-          const base = loreEntryTitle(item.entry)
-          let title = item.entry.title
-          if (titles.has(foldLoreTitle(base))) {
-            let n = 2
-            while (titles.has(foldLoreTitle(`${base} (${n})`))) n++
-            title = `${base} (${n})`
-          }
-          append(item.entry, title)
-          added++
-        } else {
-          takeOver(into, item.entry, decision.choice === 'merged' ? decision.content as string : item.entry.content)
-          updated++
-        }
+        append(item.entry, title)
+        added++
+      } else {
+        takeOver(into, item.entry, decision.choice === 'merged' ? decision.content as string : item.entry.content)
+        updated++
       }
-      assertMergeLimit(entries.length)
-      const book = OwnedLorebookStore.update(target.id, owner, { entries }) as OwnedLorebook
-      return { book, added, updated, skipped, files: copied.length }
-    }).immediate()
-  } catch (error) {
-    // The rows went with the transaction; their blobs did not.
-    for (const id of copied) fs.rmSync(storedFilePath(owner, id), { force: true })
-    throw error
-  }
+    }
+    assertMergeLimit(entries.length)
+    const book = OwnedLorebookStore.update(target.id, owner, { entries }) as OwnedLorebook
+    return { book, added, updated, skipped, files: plans.length }
+  })
 }
 
 // ---- Drafts by a profile's model ------------------------------------------------------------------------------

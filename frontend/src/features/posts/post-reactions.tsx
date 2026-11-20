@@ -13,7 +13,8 @@ import { TabsContent } from '@/components/ui/tabs'
 import { useI18n } from '@/i18n'
 import { POSTS_QUERY_KEY, getPostKnowledgeLinks, listPostKnowledgeProposals, listPostKnowledgeReviewQueue } from '@/lib/api-posts'
 import { useRelativeTime } from './post-author'
-import { PostComments, type PostCommentDraft } from './post-comments'
+import { PostComments } from './post-comments'
+import type { PostCommentDraft, SetCommentDraft } from './post-comment-draft'
 import { PostKnowledgeEvaluations } from './post-knowledge-evaluations'
 import { PostKnowledgeFeedback } from './post-knowledge-feedback'
 import { KnowledgeReviewDialog, usePostKnowledgeState } from './post-knowledge-panel'
@@ -88,7 +89,7 @@ export function PostReactions({ post, topic, searchContext, commentDraft, setCom
   topic: PostTopicEvaluationState
   searchContext: KnowledgeSearchContext | null
   commentDraft: PostCommentDraft
-  setCommentDraft: (update: (current: PostCommentDraft) => PostCommentDraft) => void
+  setCommentDraft: SetCommentDraft
 }) {
   const { t } = useI18n()
   const { active } = usePostKnowledgeState(post)

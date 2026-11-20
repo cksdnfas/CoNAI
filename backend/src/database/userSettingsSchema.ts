@@ -783,6 +783,19 @@ export function createUserSettingsSchema(db: Database.Database): void {
     db.exec("ALTER TABLE chat_generation_presets ADD COLUMN prompting TEXT NOT NULL DEFAULT '{}'");
   }
 
+  // Legacy and reviewed writers share these counters. Usage and timestamp-only writes are not edits.
+  for (const [table, fields] of Object.entries({
+    chat_display_blocks: ['name', 'block'],
+    chat_tool_presets: ['name', 'scopes', 'tool_allowlist'],
+    chat_judge_presets: ['name', 'provider_name', 'model', 'escalation_provider_name', 'escalation_model', 'model_slot_id', 'escalation_slot_id', 'items', 'follow_up', 'options'],
+    chat_generation_presets: ['name', 'instruction', 'kind', 'config', 'prompting'],
+  })) {
+    if (!hasColumn(table, 'revision')) db.exec(`ALTER TABLE ${table} ADD COLUMN revision INTEGER NOT NULL DEFAULT 1`);
+    db.exec(`CREATE TRIGGER IF NOT EXISTS ${table}_advance_revision AFTER UPDATE OF ${fields.join(', ')} ON ${table}
+      WHEN NEW.revision = OLD.revision AND (${fields.map(field => `OLD.${field} IS NOT NEW.${field}`).join(' OR ')})
+      BEGIN UPDATE ${table} SET revision = OLD.revision + 1 WHERE id = NEW.id; END`);
+  }
+
   // Codex chat threads also host LLM chats: engine, profile, and per-thread context (turn window + rolling summary).
   const codexChatThreadColumns: Array<[string, string]> = [
     ['engine', "TEXT NOT NULL DEFAULT 'codex'"],

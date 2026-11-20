@@ -1,5 +1,6 @@
 import { getUserSettingsDb } from '../database/userSettingsDb';
 import { buildSqlContainsPattern, SQL_LIKE_ESCAPE_CLAUSE } from '../utils/sqlLike';
+import { attachPromptItems, buildPromptTree, deletePromptTreeNode, readPromptTreeRows } from './promptLibraryTree';
 
 /**
  * Wildcard 인터페이스
@@ -92,6 +93,24 @@ export interface WildcardSummary extends Wildcard {
   children?: WildcardSummary[];
 }
 
+/** The caller owns the transaction: a manual create writes one row, a LoRA rescan replaces a whole set. */
+export function prepareWildcardInsert() {
+  const db = getUserSettingsDb();
+  const insert = db.prepare(`INSERT INTO wildcards
+    (id, name, description, parent_id, include_children, only_children, type, chain_option, is_auto_collected, lora_weight)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+  const item = db.prepare('INSERT INTO wildcard_items (wildcard_id, tool, content, weight, order_index) VALUES (?, ?, ?, ?, ?)');
+  return (data: WildcardCreateData, scanWeight?: number): number => {
+    const id = Number(insert.run(data.customId || null, data.name, data.description || null, data.parent_id ?? null,
+      data.include_children ?? 0, data.only_children ?? 0, data.type || 'wildcard', data.chain_option || 'replace',
+      scanWeight === undefined ? 0 : 1, scanWeight ?? 1).lastInsertRowid);
+    for (const tool of WILDCARD_TOOLS) {
+      (data.items[tool] ?? []).forEach((entry, index) => item.run(id, tool, entry.content, entry.weight, index));
+    }
+    return id;
+  };
+}
+
 /**
  * Wildcard Model
  * user-settings.db의 wildcards 테이블 관리
@@ -129,55 +148,7 @@ export class WildcardModel {
 
     // 트랜잭션으로 와일드카드와 항목 동시 생성
     const result = db.transaction(() => {
-      // 와일드카드 생성 (커스텀 ID 지원)
-      let wildcardId: number;
-
-      if (data.customId) {
-        // 커스텀 ID로 생성 (자동 LORA용)
-        db.prepare(`
-          INSERT INTO wildcards (id, name, description, parent_id, include_children, only_children, type, chain_option)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        `).run(
-          data.customId,
-          data.name,
-          data.description || null,
-          data.parent_id ?? null,
-          data.include_children ?? 0,
-          data.only_children ?? 0,
-          data.type || 'wildcard',
-          data.chain_option || 'replace'
-        );
-        wildcardId = data.customId;
-      } else {
-        // 기본 자동 증가 ID
-        const wildcardResult = db.prepare(`
-          INSERT INTO wildcards (name, description, parent_id, include_children, only_children, type, chain_option)
-          VALUES (?, ?, ?, ?, ?, ?, ?)
-        `).run(
-          data.name,
-          data.description || null,
-          data.parent_id ?? null,
-          data.include_children ?? 0,
-          data.only_children ?? 0,
-          data.type || 'wildcard',
-          data.chain_option || 'replace'
-        );
-        wildcardId = wildcardResult.lastInsertRowid as number;
-      }
-
-      const insertItem = db.prepare(`
-        INSERT INTO wildcard_items (wildcard_id, tool, content, weight, order_index)
-        VALUES (?, ?, ?, ?, ?)
-      `);
-
-      for (const tool of WILDCARD_TOOLS) {
-        const items = data.items[tool] ?? [];
-        items.forEach((item, index) => {
-          insertItem.run(wildcardId, tool, item.content, item.weight, index);
-        });
-      }
-
-      return WildcardModel.findById(wildcardId);
+      return WildcardModel.findById(prepareWildcardInsert()(data));
     })();
 
     if (!result) {
@@ -272,33 +243,7 @@ export class WildcardModel {
    * @param cascade true인 경우 모든 하위 와일드카드도 함께 삭제, false인 경우 자식들의 parent_id를 현재 와일드카드의 parent_id로 변경
    */
   static delete(id: number, cascade: boolean = false): boolean {
-    const db = getUserSettingsDb();
-
-    if (cascade) {
-      // Cascade 삭제: 모든 하위 와일드카드 재귀적으로 삭제
-      const children = db.prepare('SELECT id FROM wildcards WHERE parent_id = ?').all(id) as { id: number }[];
-
-      // 먼저 모든 자식을 재귀적으로 삭제
-      for (const child of children) {
-        this.delete(child.id, true);
-      }
-
-      // 그 다음 자신을 삭제 (wildcard_items는 ON DELETE CASCADE로 자동 삭제됨)
-      const result = db.prepare('DELETE FROM wildcards WHERE id = ?').run(id);
-      return result.changes > 0;
-    } else {
-      // 단일 삭제: 자식들의 parent_id를 현재 와일드카드의 parent_id로 변경
-      const wildcard = this.findById(id);
-      if (!wildcard) return false;
-
-      // 자식들의 parent_id를 현재 와일드카드의 parent_id로 업데이트
-      db.prepare('UPDATE wildcards SET parent_id = ? WHERE parent_id = ?')
-        .run(wildcard.parent_id, id);
-
-      // 현재 와일드카드 삭제
-      const result = db.prepare('DELETE FROM wildcards WHERE id = ?').run(id);
-      return result.changes > 0;
-    }
+    return deletePromptTreeNode('wildcards', id, cascade);
   }
 
   /**
@@ -338,15 +283,7 @@ export class WildcardModel {
 
   /** Attach items in one batch, retaining the per-wildcard order used by weighted picks. */
   static withItems(wildcards: Wildcard[], itemWildcardIds = wildcards.map(wildcard => wildcard.id)): WildcardWithItems[] {
-    const itemsByWildcard = new Map<number, WildcardItem[]>();
-    for (const item of WildcardItemModel.findByWildcardIds(itemWildcardIds)) {
-      const items = itemsByWildcard.get(item.wildcard_id) ?? [];
-      items.push(item);
-      itemsByWildcard.set(item.wildcard_id, items);
-    }
-    return wildcards.map(wildcard => {
-      return { ...wildcard, items: itemsByWildcard.get(wildcard.id) ?? [] };
-    });
+    return attachPromptItems(wildcards, WildcardItemModel.findByWildcardIds(itemWildcardIds), item => item.wildcard_id);
   }
 
   /**
@@ -403,16 +340,8 @@ export class WildcardModel {
    * 계층 구조로 모든 와일드카드 조회 (재귀)
    */
   static findHierarchy(parentId: number | null = null): WildcardWithHierarchy[] {
-    const db = getUserSettingsDb();
-    const wildcards = parentId === null
-      ? db.prepare('SELECT * FROM wildcards WHERE parent_id IS NULL ORDER BY name').all() as Wildcard[]
-      : db.prepare('SELECT * FROM wildcards WHERE parent_id = ? ORDER BY name').all(parentId) as Wildcard[];
-
-    return wildcards.map(wildcard => {
-      const items = WildcardItemModel.findByWildcardId(wildcard.id);
-      const children = WildcardModel.findHierarchy(wildcard.id);
-      return { ...wildcard, items, children: children.length > 0 ? children : undefined };
-    });
+    return getUserSettingsDb().transaction(() =>
+      buildPromptTree(this.withItems(readPromptTreeRows<Wildcard>('wildcards', parentId)), parentId))();
   }
 
   /** Browsing projection: aggregate counts in SQL without reading any item content. */
@@ -432,17 +361,7 @@ export class WildcardModel {
     const nodes = rows.map(({ general_count, nai_count, comfyui_count, ...wildcard }): WildcardSummary => ({
       ...wildcard, item_counts: { general: general_count, nai: nai_count, comfyui: comfyui_count },
     }));
-    const byId = new Map(nodes.map(node => [node.id, node]));
-    const roots: WildcardSummary[] = [];
-    for (const node of nodes) {
-      if (node.parent_id === null) {
-        roots.push(node);
-      } else {
-        const parent = byId.get(node.parent_id);
-        if (parent) (parent.children ??= []).push(node);
-      }
-    }
-    return roots;
+    return buildPromptTree(nodes);
   }
 
   /**
@@ -553,7 +472,7 @@ export class WildcardItemModel {
     return db.prepare(`
       SELECT * FROM wildcard_items
       WHERE wildcard_id IN (SELECT value FROM json_each(?))
-      ORDER BY order_index
+      ORDER BY wildcard_id, order_index, id
     `).all(JSON.stringify(wildcardIds)) as WildcardItem[];
   }
 
@@ -565,7 +484,7 @@ export class WildcardItemModel {
     return db.prepare(`
       SELECT * FROM wildcard_items
       WHERE wildcard_id = ?
-      ORDER BY order_index
+      ORDER BY order_index, id
     `).all(wildcardId) as WildcardItem[];
   }
 

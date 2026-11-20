@@ -58,7 +58,7 @@ import { ExternalApiProvider } from '../models/ExternalApiProvider'
 import { readLlmConnectionConfig } from '../services/llmGenerationOptions'
 import { CHAT_CARD_MAX_BYTES, importChatCard } from '../services/codex-chat/chatCardImport'
 import { ChatGroupStore } from '../services/codex-chat/chatGroupStore'
-import { backupChatToFiles, backupDateOf, exportChatJson } from '../services/codex-chat/chatBackup'
+import { backupDateOf, exportChatJson } from '../services/codex-chat/chatBackup'
 import { activeMediaFile, chatAssetFile, chatMediaInfo, chatMediaUsage, localizeImages, rewriteStoredMessages } from '../services/codex-chat/chatCardAssets'
 import { MEDIA_HASH_PATTERN, rewriteMediaLinks } from '../services/codex-chat/chatMediaLinks'
 import { GroupChatService } from '../services/codex-chat/groupChatService'
@@ -491,8 +491,8 @@ router.post('/threads/group', requireChatAccess, (req: Request, res: Response) =
     const body = (req.body ?? {}) as Record<string, unknown>
     const userProfileId = parseUserProfileIdField(body.userProfileId)
     if (userProfileId === 'invalid') { sendRouteBadRequest(res, 'userProfileId must be a number or null'); return }
-    const created = GroupChatService.create(requesterFrom(req), { profileIds: body.profileIds, representativeId: body.representativeId, title: body.title, userProfileId })
-    ChatAppearanceStore.threadCreated(getRequesterAccountId(req), created.id)
+    const created = ChatAppearanceStore.createWithDefault(getRequesterAccountId(req), () =>
+      GroupChatService.create(requesterFrom(req), { profileIds: body.profileIds, representativeId: body.representativeId, title: body.title, userProfileId }))
     res.status(201).json({ success: true, data: created })
   } catch (error) {
     sendChatError(res, error)
@@ -593,8 +593,8 @@ router.post('/threads', requireChatAccess, (req: Request, res: Response) => {
     return
   }
   try {
-    const created = CodexChatService.createThread(requesterFrom(req), profileId, userProfileId, greetingIndex as number | null | undefined, req.body?.flagIds)
-    ChatAppearanceStore.threadCreated(getRequesterAccountId(req), created.id)
+    const created = ChatAppearanceStore.createWithDefault(getRequesterAccountId(req), () =>
+      CodexChatService.createThread(requesterFrom(req), profileId, userProfileId, greetingIndex as number | null | undefined, req.body?.flagIds))
     res.status(201).json({ success: true, data: created })
   } catch (error) {
     sendChatError(res, error)
@@ -1249,6 +1249,13 @@ router.get('/search', requireChatAccess, (req: Request, res: Response) => {
 
 const chatImportUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: CHAT_IMPORT_MAX_BYTES, files: 1, fields: 0, parts: 2 } }).single('file')
 
+function restoreChatFile(requester: ReturnType<typeof requesterFrom>, raw: Buffer) {
+  return importChatThread(requester, raw, {
+    direct: profileId => CodexChatService.createThread(requester, profileId),
+    group: (profileIds, representativeId) => GroupChatService.create(requester, { profileIds, representativeId }, 'import'),
+  })
+}
+
 /** POST /api/codex-chat/threads/import — a CoNAI chat JSON (multipart `file`) as a new chat. Returns `{ thread, notes }`. */
 router.post('/threads/import', requireChatAccess, (req, res, next) => {
   chatImportUpload(req, res, (error) => {
@@ -1259,12 +1266,8 @@ router.post('/threads/import', requireChatAccess, (req, res, next) => {
   try {
     if (!req.file) throw new ChatImportError('대화 JSON 파일을 골라줘.')
     const requester = requesterFrom(req)
-    const result = importChatThread(requester, req.file.buffer, {
-      direct: (profileId) => CodexChatService.createThread(requester, profileId),
-      group: (profileIds, representativeId) => GroupChatService.create(requester, { profileIds, representativeId }),
-    })
-    ChatAppearanceStore.threadCreated(getRequesterAccountId(req), result.threadId)
-    res.status(201).json({ success: true, data: { thread: CodexChatService.getThread(requester, result.threadId).thread, notes: result.notes } })
+    const result = restoreChatFile(requester, req.file.buffer)
+    res.status(201).json({ success: true, data: { thread: CodexChatService.getThreadRecord(requester, result.threadId), notes: result.notes } })
   } catch (error) {
     if (error instanceof ChatImportError) { res.status(error.status).json({ success: false, error: error.message }); return }
     sendChatError(res, error)
@@ -1288,18 +1291,13 @@ router.post('/threads/import-files', requireChatAccess, (req: Request, res: Resp
   if (fileIds.length === 0 || fileIds.length > 20) { sendRouteBadRequest(res, 'fileIds must hold 1–20 files'); return }
   const requester = requesterFrom(req)
   const owner = fileOwnerKey(requester.accountId)
-  const target = {
-    direct: (profileId: number) => CodexChatService.createThread(requester, profileId),
-    group: (profileIds: number[], representativeId: number) => GroupChatService.create(requester, { profileIds, representativeId }),
-  }
   const results = fileIds.map((fileId) => {
     let name = ''
     try {
       const { entry, filePath } = FileStoreService.resolveFile(owner, fileId)
       name = entry.name
       if (entry.size > CHAT_IMPORT_MAX_BYTES) throw new ChatImportError('대화 JSON은 최대 32MB야.')
-      const imported = importChatThread(requester, fs.readFileSync(filePath), target)
-      ChatAppearanceStore.threadCreated(getRequesterAccountId(req), imported.threadId)
+      const imported = restoreChatFile(requester, fs.readFileSync(filePath))
       return { fileId, name, threadId: imported.threadId, notes: imported.notes }
     } catch (error) {
       return { fileId, name, error: error instanceof Error ? error.message : String(error) }
@@ -1596,10 +1594,7 @@ router.post('/threads/bulk', requireChatAccess, asyncHandler(async (req: Request
           results.push({ threadId, status: 'skipped', reason: '답변 중' })
           continue
         }
-        if (body.backup === true) backupChatToFiles(requester, threadId, backupDate)
-        if (isGroupThread(req, threadId)) await GroupChatService.deleteThread(requester, threadId)
-        else await CodexChatService.deleteThread(requester, threadId)
-        ChatAppearanceStore.threadDeleted(getRequesterAccountId(req), threadId)
+        await deleteChatThread(requester, threadId, { backup: body.backup === true, backupDate })
       }
       results.push({ threadId, status: 'done' })
     } catch (error) {
@@ -1617,8 +1612,9 @@ router.post('/threads/:threadId/messages/:messageId/branch', requireChatAccess, 
   if (messageId === null) { sendRouteBadRequest(res, '메시지를 확인해줘.'); return }
   try {
     const purpose = req.body?.purpose === 'preserve' ? 'preserve' : 'continue'
-    const branch = isGroupThread(req, threadId) ? GroupChatService.branchThread(requesterFrom(req), threadId, messageId, purpose) : CodexChatService.branchThread(requesterFrom(req), threadId, messageId, purpose)
-    ChatAppearanceStore.threadCreated(getRequesterAccountId(req), branch.id)
+    const branch = ChatAppearanceStore.createWithDefault(getRequesterAccountId(req), () => isGroupThread(req, threadId)
+      ? GroupChatService.branchThread(requesterFrom(req), threadId, messageId, purpose)
+      : CodexChatService.branchThread(requesterFrom(req), threadId, messageId, purpose))
     res.status(201).json({ success: true, data: branch })
   } catch (error) { sendChatError(res, error) }
 })

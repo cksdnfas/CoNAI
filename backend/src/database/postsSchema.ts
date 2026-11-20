@@ -91,6 +91,7 @@ export function ensurePostsSchema(db: Database.Database): void {
     );
     CREATE INDEX IF NOT EXISTS idx_post_comments_post ON post_comments(post_id, created_at);
     CREATE INDEX IF NOT EXISTS idx_post_comments_parent ON post_comments(parent_id);
+    CREATE INDEX IF NOT EXISTS idx_post_comments_bot_answer ON post_comments(bot_run_id, post_id, id) WHERE bot_run_id IS NOT NULL AND status = 'visible';
     CREATE INDEX IF NOT EXISTS idx_post_comments_thread_page ON post_comments(post_id, parent_id, created_at DESC, id DESC);
 
     -- Media a post or comment embeds, extracted from its body on save. file_owner_key records provenance, not a file-access boundary.
@@ -125,6 +126,7 @@ export function ensurePostsSchema(db: Database.Database): void {
       finished_at TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_post_bot_runs_status ON post_bot_runs(status, id);
+    CREATE INDEX IF NOT EXISTS idx_post_bot_runs_trigger_profile ON post_bot_runs(trigger_comment_id, profile_id);
     CREATE INDEX IF NOT EXISTS idx_post_bot_runs_post ON post_bot_runs(post_id, created_at);
     CREATE INDEX IF NOT EXISTS idx_post_bot_runs_profile ON post_bot_runs(profile_id, created_at);
     CREATE INDEX IF NOT EXISTS idx_post_bot_runs_requester ON post_bot_runs(requested_by_account_id, created_at);

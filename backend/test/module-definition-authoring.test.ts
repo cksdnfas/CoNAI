@@ -1,12 +1,12 @@
 import './support/testTemp'
 import assert from 'node:assert/strict'
-import { once } from 'node:events'
+import { EventEmitter, once } from 'node:events'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { test } from 'node:test'
 
-test('snapshot module routes preserve authoring data, versions and engine isolation', async (t) => {
+test('module authoring preserves saved definitions and engine isolation', async (t) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'conai-module-authoring-'))
   process.env.RUNTIME_BASE_PATH = root
   for (const part of ['DATABASE', 'UPLOADS', 'LOGS', 'TEMP', 'SAVE', 'CANVAS', 'ARTIFACTS', 'MODELS', 'CUSTOM_NODES', 'RECYCLE_BIN']) {
@@ -124,5 +124,118 @@ test('snapshot module routes preserve authoring data, versions and engine isolat
       assert.equal(missing.body.error, 'Target module definition not found')
     }
     assert.deepEqual([...ids.values()].map((id) => ModuleDefinitionModel.findById(id)), before)
+  })
+
+  await t.test('file rescans reconcile only changes from a unique source and keep the last valid definition', async () => {
+    const { CustomNodeRegistryService: registry } = await import('../src/services/customNodeRegistryService')
+    const { getModuleDefinitionRevision } = await import('../src/models/ModuleDefinition')
+    const input = { folderName: 'sample', name: 'Local sample', key: 'local.sample', description: 'Before edit' }
+    const attempts = await Promise.allSettled([registry.scaffoldCustomNode(input), registry.scaffoldCustomNode(input)])
+    const created = attempts.filter(result => result.status === 'fulfilled')
+    assert.equal(created.length, 1, 'only the caller that created this directory owns its files')
+    const { manifestPath, folderPath } = created[0].value
+    const saved = () => ModuleDefinitionModel.findByExternalKey(input.key)!
+    const original = saved()
+    const revision = getModuleDefinitionRevision()
+    assert.equal((await registry.syncCustomNodesFromFileSystem()).updatedCount, 0)
+    assert.equal(getModuleDefinitionRevision(), revision)
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'))
+    delete manifest.description
+    fs.writeFileSync(manifestPath, JSON.stringify(manifest))
+    assert.equal((await registry.syncCustomNodesFromFileSystem()).updatedCount, 1)
+    assert.equal(saved().description, null)
+
+    const copy = path.join(path.dirname(folderPath), 'sample-copy')
+    fs.cpSync(folderPath, copy, { recursive: true })
+    fs.writeFileSync(path.join(copy, 'node.json'), JSON.stringify({ ...manifest, name: 'Copied sample' }))
+    const ambiguous = await registry.syncCustomNodesFromFileSystem()
+    assert.deepEqual(ambiguous.errors.map(error => error.folderName).sort(), ['sample', 'sample-copy'])
+    assert.equal(ambiguous.deactivatedCount, 1)
+    assert.equal(saved().name, input.name)
+    assert.equal(Boolean(saved().is_active), false)
+    assert.equal((await registry.syncCustomNodesFromFileSystem()).deactivatedCount, 0)
+    fs.rmSync(copy, { recursive: true })
+    await registry.syncCustomNodesFromFileSystem()
+    assert.equal(saved().id, original.id)
+    assert.equal(Boolean(saved().is_active), true)
+
+    const otherId = ModuleDefinitionModel.create({ name: 'Saved module', external_key: 'saved.module', engine_type: 'system',
+      authoring_source: 'manual', template_defaults: {}, exposed_inputs: [], output_ports: [] })
+    const other = ModuleDefinitionModel.findById(otherId)
+    fs.writeFileSync(manifestPath, JSON.stringify({ ...manifest, key: 'saved.module' }))
+    assert.equal((await registry.syncCustomNodesFromFileSystem()).errors.length, 1)
+    assert.deepEqual(ModuleDefinitionModel.findById(otherId), other)
+  })
+
+  await t.test('stopping the custom node watcher drains the active read and discards late file events', async t => {
+    const { CustomNodeWatcherService: service } = await import('../src/services/customNodeWatcherService')
+    const chokidar: typeof import('chokidar').default = require('chokidar').default
+    const watcher = Object.assign(new EventEmitter(), { close: async () => {} })
+    const watch = t.mock.method(chokidar, 'watch', () => watcher)
+    const cancelledStart = service.initialize()
+    await service.stopAll()
+    await cancelledStart
+    assert.equal(watch.mock.callCount(), 0)
+    await Promise.all([service.initialize(), service.initialize()])
+    assert.equal(watch.mock.callCount(), 1)
+    const entered = Promise.withResolvers<void>()
+    const release = Promise.withResolvers<void>()
+    const list = fs.promises.readdir.bind(fs.promises)
+    const reads = t.mock.method(fs.promises, 'readdir', async (...args: Parameters<typeof list>) => {
+      entered.resolve()
+      await release.promise
+      return list(...args)
+    })
+    t.mock.timers.enable({ apis: ['setTimeout'] })
+    const event = () => { watcher.emit('change', 'node.json'); t.mock.timers.runAll() }
+    try {
+      event()
+      await entered.promise
+      event()
+      assert.equal(service.getStatus().hasPendingSync, true)
+      let done = false
+      const stopped = service.stopAll().then(() => { done = true })
+      watcher.emit('ready')
+      event()
+      await new Promise(resolve => setImmediate(resolve))
+      assert.equal(done, false, 'the database cannot close while the active scan is reading files')
+      release.resolve()
+      await stopped
+      assert.equal(service.getStatus().state, 'stopped')
+      assert.equal(reads.mock.callCount(), 1)
+    } finally {
+      release.resolve()
+      await service.stopAll()
+      t.mock.timers.reset()
+    }
+  })
+
+  await t.test('registry shutdown finishes accepted HTTP and scaffold writes but rejects new ones', async t => {
+    const { CustomNodeRegistryService: registry } = await import('../src/services/customNodeRegistryService')
+    const entered = Promise.withResolvers<void>()
+    const release = Promise.withResolvers<void>()
+    const list = fs.promises.readdir.bind(fs.promises)
+    t.mock.method(fs.promises, 'readdir', async (...args: Parameters<typeof list>) => {
+      const entries = await list(...args)
+      entered.resolve()
+      await release.promise
+      return entries
+    })
+    const manual = registry.syncCustomNodesFromFileSystem()
+    await entered.promise
+    const input = { name: 'Last accepted node', folderName: 'accepted', key: 'local.accepted' }
+    const scaffold = registry.scaffoldCustomNode(input)
+    let drained = false
+    const stop = registry.stopAndDrain().then(() => { drained = true })
+    try {
+      await assert.rejects(registry.syncCustomNodesFromFileSystem(), { statusCode: 503 })
+      await assert.rejects(registry.scaffoldCustomNode({ ...input, folderName: 'rejected' }), { statusCode: 503 })
+      assert.equal(drained, false)
+    } finally {
+      release.resolve()
+      await stop
+    }
+    assert.equal(Boolean(ModuleDefinitionModel.findByExternalKey(input.key)?.is_active), true)
+    await Promise.all([manual, scaffold])
   })
 })

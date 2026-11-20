@@ -132,6 +132,7 @@ export function useModuleGraphPageQueries({
     await Promise.all([
       graphWorkflowsQuery.refetch(),
       queryClient.invalidateQueries({ queryKey: ['module-graph-workflow-detail'] }),
+      queryClient.invalidateQueries({ queryKey: ['module-graph-browse-content'] }),
     ])
   }, [graphWorkflowsQuery, queryClient])
 

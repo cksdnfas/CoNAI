@@ -199,6 +199,13 @@ export class GraphWorkflowScheduleModel {
 
   /** Update one schedule row. */
   static update(id: number, data: GraphWorkflowScheduleUpdateData, expectedRevision?: number, expectedGraphVersion?: number) {
+    const updated = this.writeUpdate(id, data, expectedRevision, expectedGraphVersion)
+    if (updated) this.publishChanges([id])
+    return updated
+  }
+
+  /** The caller owns the transaction and notifies readers only after it commits. */
+  static writeUpdate(id: number, data: GraphWorkflowScheduleUpdateData, expectedRevision?: number, expectedGraphVersion?: number) {
     const db = getUserSettingsDb()
     const updates = filterDefined({
       ...data,
@@ -218,13 +225,22 @@ export class GraphWorkflowScheduleModel {
       ? ''
       : ' AND EXISTS (SELECT 1 FROM graph_workflows WHERE id = graph_workflow_schedules.graph_workflow_id AND version = ?)'
     const info = db.prepare(sql + versionCondition).run(...values, ...(expectedGraphVersion === undefined ? [] : [expectedGraphVersion]))
-    if (info.changes > 0) {
-      scheduleWriteRevision += 1
-      // E14: status / next_run_at / stop_reason 변경
-      publishScheduleChangedById(id)
-    }
-
     return info.changes > 0
+  }
+
+  static publishChanges(ids: number[]) {
+    if (!ids.length) return
+    scheduleWriteRevision += 1
+    ids.forEach(publishScheduleChangedById)
+  }
+
+  /** Stage the pauses in the workflow transaction; readers must only hear about committed changes. */
+  static stagePauseForWorkflowChange(workflowId: number) {
+    const ids = getUserSettingsDb().prepare(`UPDATE graph_workflow_schedules
+      SET status = 'paused', stop_reason_code = 'workflow_changed', stop_reason_message = ?,
+        updated_date = CURRENT_TIMESTAMP WHERE graph_workflow_id = ? RETURNING id`)
+      .pluck().all('워크플로우가 바뀌어서 다시 시작 전에 검토가 필요해.', workflowId) as number[]
+    return ids
   }
 
   /** Delete one schedule row. */

@@ -10,20 +10,29 @@ export class CustomNodeWatcherService {
   private static state: CustomNodeWatcherState = 'stopped';
   private static debounceTimer: NodeJS.Timeout | null = null;
   private static readonly RESCAN_DEBOUNCE_MS = parseInt(process.env.CUSTOM_NODE_WATCH_DEBOUNCE_MS || '800', 10);
-  private static isSyncRunning = false;
+  private static generation = 0;
+  private static activeSync: Promise<void> | null = null;
+  private static stopping: Promise<void> | null = null;
   private static hasPendingSync = false;
 
   /** Start one chokidar watcher for local file-based custom node folders. */
   static async initialize(signal?: AbortSignal): Promise<void> {
     signal?.throwIfAborted();
 
-    if (this.watcher) {
+    if (this.watcher || this.stopping) {
       return;
     }
 
+    const generation = this.generation;
     this.state = 'initializing';
-    await CustomNodeRegistryService.ensureCustomNodesDirectory();
-    signal?.throwIfAborted();
+    try {
+      await CustomNodeRegistryService.ensureCustomNodesDirectory();
+      signal?.throwIfAborted();
+    } catch (error) {
+      if (generation === this.generation && !this.watcher) this.state = signal?.aborted ? 'stopped' : 'error';
+      throw error;
+    }
+    if (generation !== this.generation || this.watcher) return;
 
     const watcher = chokidar.watch(runtimePaths.customNodesDir, {
       persistent: true,
@@ -35,9 +44,11 @@ export class CustomNodeWatcherService {
       depth: 3,
     });
 
+    this.watcher = watcher;
     const scheduleSync = (eventType: string, targetPath: string) => {
+      if (this.watcher !== watcher) return;
       console.log(`🧩 Custom node watcher event: ${eventType} -> ${targetPath}`);
-      this.scheduleRegistrySync();
+      this.scheduleRegistrySync(watcher);
     };
 
     watcher
@@ -47,34 +58,33 @@ export class CustomNodeWatcherService {
       .on('addDir', (targetPath) => scheduleSync('addDir', targetPath))
       .on('unlinkDir', (targetPath) => scheduleSync('unlinkDir', targetPath))
       .on('error', (error) => {
+        if (this.watcher !== watcher) return;
         this.state = 'error';
         console.warn('⚠️  Custom node watcher error:', error instanceof Error ? error.message : error);
       })
       .on('ready', () => {
+        if (this.watcher !== watcher) return;
         this.state = 'watching';
         console.log(`✅ Custom node watcher ready: ${runtimePaths.customNodesDir}`);
       });
-
-    this.watcher = watcher;
-    if (signal?.aborted) {
-      await this.stopAll();
-      signal.throwIfAborted();
-    }
   }
 
-  /** Stop the watcher and clear any pending debounce timer. */
-  static async stopAll(): Promise<void> {
+  /** Detach callbacks immediately, then drain the accepted scan before SQLite closes. */
+  static stopAll(): Promise<void> {
+    if (this.stopping) return this.stopping;
+    this.generation++;
     if (this.debounceTimer) {
       clearTimeout(this.debounceTimer);
       this.debounceTimer = null;
     }
-
-    if (this.watcher) {
-      await this.watcher.close();
-      this.watcher = null;
-    }
-
+    const watcher = this.watcher;
+    this.watcher = null;
+    this.hasPendingSync = false;
     this.state = 'stopped';
+    this.stopping = (async () => {
+      try { await watcher?.close(); } finally { await this.activeSync; }
+    })().finally(() => { this.stopping = null; });
+    return this.stopping;
   }
 
   /** Return the current watcher state for debugging and future status surfaces. */
@@ -82,44 +92,40 @@ export class CustomNodeWatcherService {
     return {
       state: this.state,
       watchingPath: this.watcher ? runtimePaths.customNodesDir : null,
-      isSyncRunning: this.isSyncRunning,
+      isSyncRunning: this.activeSync !== null,
       hasPendingSync: this.hasPendingSync,
     };
   }
 
   /** Debounce file-system bursts before resyncing custom nodes into module_definitions. */
-  private static scheduleRegistrySync() {
+  private static scheduleRegistrySync(watcher: FSWatcher) {
     if (this.debounceTimer) {
       clearTimeout(this.debounceTimer);
     }
 
     this.debounceTimer = setTimeout(() => {
       this.debounceTimer = null;
-      void this.runRegistrySync();
+      if (this.watcher === watcher) this.runRegistrySync(watcher);
     }, this.RESCAN_DEBOUNCE_MS);
   }
 
   /** Run one registry sync, coalescing overlapping watcher bursts into one follow-up pass. */
-  private static async runRegistrySync(): Promise<void> {
-    if (this.isSyncRunning) {
+  private static runRegistrySync(watcher: FSWatcher) {
+    if (this.activeSync) {
       this.hasPendingSync = true;
       return;
     }
 
-    this.isSyncRunning = true;
-
-    try {
-      const result = await CustomNodeRegistryService.syncCustomNodesFromFileSystem();
-      console.log(`🧩 Custom node watcher sync complete: ${result.nodes.length} loaded, ${result.errors.length} errors, ${result.createdCount} created, ${result.updatedCount} updated, ${result.deactivatedCount} deactivated`);
-    } catch (error) {
-      console.warn('⚠️  Custom node watcher sync failed:', error instanceof Error ? error.message : error);
-    } finally {
-      this.isSyncRunning = false;
-    }
-
-    if (this.hasPendingSync) {
-      this.hasPendingSync = false;
-      await this.runRegistrySync();
-    }
+    this.activeSync = (async () => {
+      do {
+        this.hasPendingSync = false;
+        try {
+          const result = await CustomNodeRegistryService.syncCustomNodesFromFileSystem();
+          console.log(`🧩 Custom node watcher sync complete: ${result.nodes.length} loaded, ${result.errors.length} errors, ${result.createdCount} created, ${result.updatedCount} updated, ${result.deactivatedCount} deactivated`);
+        } catch (error) {
+          console.warn('⚠️  Custom node watcher sync failed:', error instanceof Error ? error.message : error);
+        }
+      } while (this.watcher === watcher && this.hasPendingSync);
+    })().finally(() => { this.activeSync = null; });
   }
 }

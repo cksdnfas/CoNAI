@@ -1,12 +1,10 @@
-import { useLayoutEffect, useRef, useState } from 'react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useRef, useState, type SetStateAction } from 'react'
 import { Copy, Download } from 'lucide-react'
 import { EditorFooter } from '@/components/ui/editor-footer'
 import { Field } from '@/components/ui/field'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { Modal, ModalBody } from '@/components/ui/modal'
-import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
 import {
   CHAT_ADMIN_PROFILES_QUERY_KEY,
@@ -17,7 +15,7 @@ import {
   type ChatDisplayBlock,
   type ChatSharedBlock,
 } from '@/lib/api-codex-chat'
-import { getErrorMessage } from '@/lib/error-message'
+import { useChatResourceEditor } from './use-chat-resource-editor'
 import { BLOCK_KEY_PATTERN, ChatBlockEditor, starterBlock } from './chat-block-editor'
 import { downloadChatBlockFile } from './chat-block-file'
 import { useChatResourceDelete } from './use-chat-resource-actions'
@@ -26,7 +24,7 @@ import { ChatFilledLabel } from '@/features/codex-chat/chat-page-context'
 import { pageAction, pageArray, pageNumber, pageObject, pageText } from '@/features/codex-chat/page-action-helpers'
 
 /** Create or edit one shared display block. Saving reaches every profile that links it. */
-export function ChatBlockEditorModal({ open, shared, initialName, initialBlock, onClose, onSaved, onDuplicate, duplicating }: {
+type BlockEditorProps = {
   open: boolean
   shared: ChatSharedBlock | null
   /** New block only: the draft starts from this name and block (a block proposed in a chat) instead of the starter. */
@@ -38,47 +36,26 @@ export function ChatBlockEditorModal({ open, shared, initialName, initialBlock, 
   /** Copy the opened block (only offered when editing an existing one). */
   onDuplicate?: (shared: ChatSharedBlock) => void
   duplicating?: boolean
-}) {
+}
+
+export function ChatBlockEditorModal(props: BlockEditorProps) {
+  return props.open ? <BlockEditor key={props.shared?.id ?? 'new'} {...props} /> : null
+}
+
+function BlockEditor({ open, shared: initial, initialName, initialBlock, onClose, onSaved, onDuplicate, duplicating }: BlockEditorProps) {
   const { t } = useI18n()
-  const { showSnackbar } = useSnackbar()
-  const queryClient = useQueryClient()
-  const [name, setName] = useState('')
-  const [block, setBlock] = useState<ChatDisplayBlock>(starterBlock)
-  /** What was opened, to tell unsaved edits apart (the starter of a new block counts as unedited). */
-  const [opened, setOpened] = useState<{ name: string; block: ChatDisplayBlock } | null>(null)
-  /** Bumped with every open, so the editor (and its field rows) mounts on the block being opened, not the last one. */
   const [session, setSession] = useState(0)
-
-  useLayoutEffect(() => {
-    if (open) {
-      const next = { name: shared?.name ?? initialName ?? '', block: shared?.block ?? initialBlock ?? starterBlock() }
-      setName(next.name)
-      setBlock(next.block)
-      setOpened(next)
-      setSession((current) => current + 1)
-    }
-  }, [shared, initialName, initialBlock, open])
-
-  const refresh = async () => {
-    await Promise.all([
-      queryClient.invalidateQueries({ queryKey: CHAT_BLOCKS_QUERY_KEY }),
-      queryClient.invalidateQueries({ queryKey: CHAT_ADMIN_PROFILES_QUERY_KEY }),
-      queryClient.invalidateQueries({ queryKey: CHAT_PROFILES_QUERY_KEY }),
-    ])
-  }
-  const saveMutation = useMutation({
-    mutationFn: () => (shared ? updateChatBlock(shared.id, { name, block }) : createChatBlock({ name: name.trim() || block.key, block })),
-    onSuccess: async (saved) => {
-      if (!shared) onSaved?.(saved)
-      await refresh()
-      onClose()
-    },
-    onError: (error) => showSnackbar({ message: getErrorMessage(error, t({ ko: '저장하지 못했어.', en: 'Could not save.' })), tone: 'error' }),
+  const { base: shared, draft: { name, block }, setDraft, dirty, reload, saveMutation } = useChatResourceEditor({
+    initial, draftOf: row => ({ name: row?.name ?? initialName ?? '', block: row?.block ?? initialBlock ?? starterBlock() }),
+    write: (base, value) => base ? updateChatBlock(base.id, value, base.revision) : createChatBlock({ ...value, name: value.name.trim() || value.block.key }),
+    refresh: [CHAT_BLOCKS_QUERY_KEY, CHAT_ADMIN_PROFILES_QUERY_KEY, CHAT_PROFILES_QUERY_KEY],
+    onClose, onSaved: (saved, created) => { if (created) onSaved?.(saved) },
   })
+  const setName = (value: string) => setDraft(current => ({ ...current, name: value }))
+  const setBlock = (value: SetStateAction<ChatDisplayBlock>) => setDraft(current => ({ ...current, block: typeof value === 'function' ? value(current.block) : value }))
   const deleteMutation = useChatResourceDelete(onClose)
 
   const keyValid = BLOCK_KEY_PATTERN.test(block.key)
-  const dirty = opened !== null && JSON.stringify({ name, block }) !== JSON.stringify(opened)
   const canSave = keyValid && !saveMutation.isPending && (dirty || !shared)
   useBlockChatPage({ open, shared, name, setName, block, setBlock, remount: () => setSession((current) => current + 1), dirty, save: () => saveMutation.mutateAsync() })
 
@@ -97,7 +74,7 @@ export function ChatBlockEditorModal({ open, shared, initialName, initialBlock, 
         <Field label={<ChatFilledLabel fieldId="name">{t({ ko: '이름', en: 'Name' })}</ChatFilledLabel>} info={t({ ko: '비우면 블록 이름을 써.', en: 'Empty uses the block name.' })}>
           <Input variant="settings" value={name} maxLength={80} onChange={(event) => setName(event.target.value)} />
         </Field>
-        <ChatBlockEditor key={session} block={block} onChange={setBlock} />
+        <ChatBlockEditor key={session + reload} block={block} onChange={setBlock} />
       </ModalBody>
       <EditorFooter
         onDelete={shared ? () => deleteMutation.mutate({ kind: 'block', resource: shared }) : undefined}
@@ -142,6 +119,7 @@ function useBlockChatPage({ open, shared, name, setName, block, setBlock, remoun
   blockRef.current = block
   useSettingsEditorChatPage({
     open, dirty,
+    localRevision: String(shared?.revision ?? 'new'),
     title: shared ? t({ ko: '표시 블록 편집 · {name}', en: 'Edit display block · {name}' }, { name: shared.name }) : t({ ko: '표시 블록 추가', en: 'Add display block' }),
     resourceId: `display-block:${shared?.id ?? 'new'}`,
     fields: [

@@ -2,12 +2,12 @@ import express, { type Request, type Response } from 'express'
 import type { ChatJudgePresetInput } from '@conai/shared'
 import { asyncHandler } from '../middleware/asyncHandler'
 import { requireAdmin } from '../middleware/authMiddleware'
+import { importChatResources } from '../services/codex-chat/chatResourceWrite'
 import { ChatProfileStore } from '../services/codex-chat/chatProfiles'
 import { ChatSharedBlockStore, readBlockFile } from '../services/codex-chat/chatDisplayBlocks'
 import multer from 'multer'
 import { ChatSkillStore, previewSkill, type ChatSkillInput, type ChatSkillPatch } from '../services/codex-chat/chatSkills'
 import { exportSkillZip, readSkillUpload, SKILL_UPLOAD_LIMIT } from '../services/codex-chat/chatSkillPackages'
-import { ChatRevisionConflict } from '../services/codex-chat/chatProfileError'
 import { ChatToolPresetStore, readToolPresetFile } from '../services/codex-chat/chatToolPresets'
 import { ChatJudgePresetStore, readJudgePresetFile } from '../services/codex-chat/chatJudgePresets'
 import { ChatJudgeLogStore } from '../services/codex-chat/chatJudgeLogs'
@@ -43,7 +43,7 @@ router.post('/admin/blocks', requireAdmin, (req: Request, res: Response) => {
 /** POST /admin/blocks/import — the parsed contents of a block JSON file (one block, an export, or an array); each becomes a shared block. */
 router.post('/admin/blocks/import', requireAdmin, (req: Request, res: Response) => {
   try {
-    const created = readBlockFile(req.body).map((item) => ChatSharedBlockStore.create(item))
+    const created = importChatResources(readBlockFile(req.body), ChatSharedBlockStore.create)
     res.status(201).json({ success: true, data: created })
   } catch (error) { sendChatError(res, error) }
 })
@@ -53,7 +53,7 @@ router.put('/admin/blocks/:blockId', requireAdmin, (req: Request, res: Response)
   if (blockId === null) { sendRouteBadRequest(res, 'Invalid block id'); return }
   try {
     const body = (req.body ?? {}) as { name?: unknown; block?: unknown }
-    const updated = ChatSharedBlockStore.update(blockId, { name: body.name, block: body.block })
+    const updated = ChatSharedBlockStore.update(blockId, { name: body.name, block: body.block }, req.body?.revision)
     if (!updated) { res.status(404).json({ success: false, error: '표시 블록을 찾을 수 없어.' }); return }
     res.json({ success: true, data: updated })
   } catch (error) { sendChatError(res, error) }
@@ -70,11 +70,6 @@ router.delete('/admin/blocks/:blockId', requireAdmin, (req: Request, res: Respon
  * Profiles link them by id; an edit reaches every linked profile. The list leaves the texts to GET /admin/skills/:id.
  */
 const SKILL_NOT_FOUND = '스킬을 찾을 수 없어.'
-
-function sendSkillError(res: Response, error: unknown) {
-  if (error instanceof ChatRevisionConflict) { res.status(409).json({ success: false, code: 'revision_conflict', error: error.message, data: error.current }); return }
-  sendChatError(res, error)
-}
 
 /** A body's `revision` (the one the editor loaded); undefined when absent. */
 function revisionOf(value: unknown): number | undefined | null {
@@ -128,7 +123,7 @@ router.put('/admin/skills/:skillId', requireAdmin, (req: Request, res: Response)
     const updated = ChatSkillStore.update(skillId, { name: body.name, description: body.description, category: body.category, instructions: body.instructions, sections: body.sections, sectionChanges: body.sectionChanges }, { revision })
     if (!updated) { res.status(404).json({ success: false, error: SKILL_NOT_FOUND }); return }
     res.json({ success: true, data: updated })
-  } catch (error) { sendSkillError(res, error) }
+  } catch (error) { sendChatError(res, error) }
 })
 
 router.delete('/admin/skills/:skillId', requireAdmin, (req: Request, res: Response) => {
@@ -168,7 +163,7 @@ router.post('/admin/skills/:skillId/restore', requireAdmin, (req: Request, res: 
     const restored = ChatSkillStore.restore(skillId, from, { revision })
     if (!restored) { res.status(404).json({ success: false, error: '그 버전을 찾을 수 없어.' }); return }
     res.json({ success: true, data: restored })
-  } catch (error) { sendSkillError(res, error) }
+  } catch (error) { sendChatError(res, error) }
 })
 
 /** GET /admin/skills/:id/export — the skill as an Agent Skills ZIP (SKILL.md and references/). */
@@ -304,7 +299,7 @@ router.post('/admin/tool-presets', requireAdmin, (req: Request, res: Response) =
 /** POST /admin/tool-presets/import — the parsed contents of a preset JSON file (one preset, an export, or an array); each becomes a preset. */
 router.post('/admin/tool-presets/import', requireAdmin, (req: Request, res: Response) => {
   try {
-    const created = readToolPresetFile(req.body).map((item) => ChatToolPresetStore.create(item))
+    const created = importChatResources(readToolPresetFile(req.body), ChatToolPresetStore.create)
     res.status(201).json({ success: true, data: created })
   } catch (error) { sendChatError(res, error) }
 })
@@ -314,7 +309,7 @@ router.put('/admin/tool-presets/:presetId', requireAdmin, (req: Request, res: Re
   if (presetId === null) { sendRouteBadRequest(res, 'Invalid preset id'); return }
   try {
     const body = (req.body ?? {}) as { name?: unknown; scopes?: unknown; toolAllowlist?: unknown }
-    const updated = ChatToolPresetStore.update(presetId, { name: body.name, scopes: body.scopes, toolAllowlist: body.toolAllowlist })
+    const updated = ChatToolPresetStore.update(presetId, { name: body.name, scopes: body.scopes, toolAllowlist: body.toolAllowlist }, req.body?.revision)
     if (!updated) { res.status(404).json({ success: false, error: '도구 프리셋을 찾을 수 없어.' }); return }
     res.json({ success: true, data: updated })
   } catch (error) { sendChatError(res, error) }
@@ -347,7 +342,7 @@ router.post('/admin/judge-presets', requireAdmin, (req: Request, res: Response) 
 /** POST /admin/judge-presets/import — the parsed contents of a judge preset JSON file; each becomes a preset (without a connection). */
 router.post('/admin/judge-presets/import', requireAdmin, (req: Request, res: Response) => {
   try {
-    const created = readJudgePresetFile(req.body).map((item) => ChatJudgePresetStore.create(item))
+    const created = importChatResources(readJudgePresetFile(req.body), ChatJudgePresetStore.create)
     res.status(201).json({ success: true, data: created })
   } catch (error) { sendChatError(res, error) }
 })
@@ -386,7 +381,7 @@ router.put('/admin/judge-presets/:presetId', requireAdmin, (req: Request, res: R
   const presetId = parseId(req.params.presetId)
   if (presetId === null) { sendRouteBadRequest(res, 'Invalid preset id'); return }
   try {
-    const updated = ChatJudgePresetStore.update(presetId, (req.body ?? {}) as ChatJudgePresetInput)
+    const updated = ChatJudgePresetStore.update(presetId, (req.body ?? {}) as ChatJudgePresetInput, req.body?.revision)
     if (!updated) { res.status(404).json({ success: false, error: '판단 프리셋을 찾을 수 없어.' }); return }
     res.json({ success: true, data: updated })
   } catch (error) { sendChatError(res, error) }
@@ -445,7 +440,7 @@ router.post('/admin/generation-presets', requireAdmin, (req: Request, res: Respo
 /** POST /admin/generation-presets/import — the parsed contents of a preset JSON file (one preset, an export, or an array). */
 router.post('/admin/generation-presets/import', requireAdmin, (req: Request, res: Response) => {
   try {
-    const created = readGenerationPresetFile(req.body).map((item) => ChatGenerationPresetStore.create(item))
+    const created = importChatResources(readGenerationPresetFile(req.body), ChatGenerationPresetStore.create)
     res.status(201).json({ success: true, data: created })
   } catch (error) { sendChatError(res, error) }
 })
@@ -454,7 +449,7 @@ router.put('/admin/generation-presets/:presetId', requireAdmin, (req: Request, r
   const presetId = parseId(req.params.presetId)
   if (presetId === null) { sendRouteBadRequest(res, 'Invalid preset id'); return }
   try {
-    const updated = ChatGenerationPresetStore.update(presetId, (req.body ?? {}) as ChatGenerationPresetInput)
+    const updated = ChatGenerationPresetStore.update(presetId, (req.body ?? {}) as ChatGenerationPresetInput, req.body?.revision)
     if (!updated) { res.status(404).json({ success: false, error: '생성 프리셋을 찾을 수 없어.' }); return }
     res.json({ success: true, data: updated })
   } catch (error) { sendChatError(res, error) }

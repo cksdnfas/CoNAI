@@ -277,6 +277,18 @@ test('trusted extensions preserve package, caller, explicit approval and externa
       pluginDb().prepare('UPDATE plugin_instances SET workspace=? WHERE id=?').run(JSON.stringify({ ...readonly.workspace, write: false }), readonly.id)
       await assert.rejects(projectHost.proposePluginWorkspaceWrite(readonly.id, { target: '검수.json', revision: null, text: '{}' }, alice), /읽기 전용/)
       const seed = (name: string, target: string, text: string, expectedRevision: string | null = null) => PluginFolder.apply(owner, folder.id, name, [{ kind: 'write', target, text, expectedRevision }])
+      const from = FileStoreService.createFolder(owner, folder.id, 'from')
+      const into = FileStoreService.createFolder(owner, folder.id, 'into')
+      const original = FileStoreService.writeText(owner, from.id, 'old.md', 'original')
+      FileStoreService.writeText(owner, from.id, 'new.md', 'keep here')
+      FileStoreService.writeText(owner, into.id, 'old.md', 'keep there')
+      const move = (name: string) => PluginFolder.apply(owner, folder.id, 'relocate', [{
+        kind: 'move', target: 'from/old.md', destination: `into/${name}`, expectedRevision: original.revision!,
+      }])
+      assert.equal(move('old.md').status, 'failed')
+      assert.equal(FileStoreService.get(owner, original.id).parentId, from.id)
+      assert.equal(move('new.md').status, 'completed', 'only the final path has to be free')
+      assert.equal(FileStoreService.findChild(owner, into.id, 'new.md')?.id, original.id)
       const mediaProcessing = await import('../src/services/plugins/pluginMediaProcessing')
       await assert.rejects(mediaProcessing.proposePluginMedia(connected.id, { sourceTarget: 'media.json', target: 'audio.json', revision: null, operation: { kind: 'extract_audio', quality: 5 } }, alice), /권한|permission|Permission/)
       await assert.rejects(projectHost.proposePluginWorkspaceChanges(readonly.id, { operations: [{ kind: 'mkdir', target: 'denied' }] }, alice), /읽기 전용/)

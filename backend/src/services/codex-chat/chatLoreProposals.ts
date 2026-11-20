@@ -1,10 +1,9 @@
-import fs from 'fs'
 import path from 'path'
 import { createHash, randomUUID } from 'node:crypto'
 import type { ChatExecutionContext, ChatProposal } from '@conai/shared'
 import { getUserSettingsDb } from '../../database/userSettingsDb'
 import { FileStoreService, TEXT_EXTENSIONS, fileOwnerKey } from '../fileStoreService'
-import { storedFilePath } from '../fileStorePaths'
+import { afterFileStoreCommit, withFileStoreWrites } from '../fileStoreWriteTransaction'
 import { loreEntryKeys, loreEntryTitle, normalizeLorebook } from './chatLorebook'
 import { LORE_FILES_FOLDER, OwnedLorebookStore, foldLoreTitle, freeChildName, type OwnedLorebook } from './chatLorebookFiles'
 import { ChatGroupStore } from './chatGroupStore'
@@ -234,55 +233,48 @@ function proposalBook(proposal: LoreProposal, threadId: number, owner: string) {
 /**
  * A person (or auto-save) saved a lore proposal: the entry goes into its book (proposalBook), in
  * place of the entry it replaces when that one is still there; the file, if any, into the book's 자료/ (a taken name
- * gets a suffix, unless it is the replaced entry's own file, which is rewritten). The entry as saved is kept on the
+ * gets a suffix so the original remains available for undo). The entry as saved is kept on the
  * proposal for undo. One transaction.
  */
 export function applyLoreProposal(proposalId: number): { proposal: ChatProposal; book: OwnedLorebook } {
-  const proposal = ChatProposalStore.find(proposalId)
-  if (!proposal || proposal.kind !== 'lore') throw new LoreProposalError('로어 제안이 아니야.')
-  if (isSaved(proposal)) throw new LoreProposalError('이미 저장한 제안이야.', 409)
-  const threadId = ChatProposalStore.threadIdOf(proposalId) as number
-  const db = getUserSettingsDb()
-  const thread = db.prepare('SELECT account_id FROM codex_chat_threads WHERE id = ?').get(threadId) as { account_id: number | null } | undefined
-  if (!thread) throw new LoreProposalError('채팅을 찾을 수 없어.', 404)
-  const owner = fileOwnerKey(thread.account_id)
-  let created: string | null = null
-  try {
-    return db.transaction(() => {
-      const target = proposalBook(proposal, threadId, owner)
-      const entries = target.current?.entries ?? []
-      const replaced = proposal.replaces ? entries.find((entry) => entry.id === proposal.replaces) : undefined
-      const replyId = ChatProposalStore.replyIdOf(proposalId)!
-      // The proposal's keywords replace both languages' lists; saving sorts them by the lore key language.
-      const fields = { title: proposal.title, keys: proposal.keys, localKeys: [], content: proposal.content, language: proposal.language, translation: proposal.translation ?? null, constant: proposal.constant, source: { threadId, replyId, proposalId } }
-      const entryId = replaced?.id ?? randomUUID()
-      const next = replaced
-        ? entries.map((entry) => (entry.id === replaced.id ? { ...entry, ...fields } : entry))
-        : [...entries, { id: entryId, ...fields, enabled: true, order: entries.reduce((max, entry) => Math.max(max, entry.order), -1) + 1 }]
-      let book = target.save(next) as OwnedLorebook
-      if (proposal.file) {
-        const materials = FileStoreService.ensureFolder(owner, book.folderId, LORE_FILES_FOLDER)
-        // Keep the replaced entry's file intact so undo can restore its original link and bytes.
-        const name = freeChildName(owner, materials.id, proposal.file.name)
-        const existed = FileStoreService.findChild(owner, materials.id, name)
-        const written = FileStoreService.writeText(owner, materials.id, name, proposal.file.text, { silent: true })
-        if (!existed) created = written.id
-        book = OwnedLorebookStore.update(book.id, owner, {
-          entries: book.entries.map((entry) => (entry.id === entryId ? { ...entry, file: `${LORE_FILES_FOLDER}/${written.name}`, fileId: written.id } : entry)),
-        }) as OwnedLorebook
-      }
-      ChatProposalStore.markSaved(proposalId, book.id)
-      const remembered = ChatProposalStore.updateLoreUndo(proposalId, {
-        ...(replaced ? { undoBefore: { ...replaced } } : {}),
-        undoAfter: { ...book.entries.find((entry) => entry.id === entryId)! },
-        ...(created ? { createdFileId: created } : {}),
-      })
-      return { proposal: remembered as ChatProposal, book }
-    }).immediate()
-  } catch (error) {
-    if (created) fs.rmSync(storedFilePath(owner, created), { force: true })
-    throw error
-  }
+  return withFileStoreWrites(() => {
+    const proposal = ChatProposalStore.find(proposalId)
+    if (!proposal || proposal.kind !== 'lore') throw new LoreProposalError('로어 제안이 아니야.')
+    if (isSaved(proposal)) throw new LoreProposalError('이미 저장한 제안이야.', 409)
+    const threadId = ChatProposalStore.threadIdOf(proposalId) as number
+    const thread = getUserSettingsDb().prepare('SELECT account_id FROM codex_chat_threads WHERE id = ?').get(threadId) as { account_id: number | null } | undefined
+    if (!thread) throw new LoreProposalError('채팅을 찾을 수 없어.', 404)
+    const owner = fileOwnerKey(thread.account_id)
+    const target = proposalBook(proposal, threadId, owner)
+    const entries = target.current?.entries ?? []
+    const replaced = proposal.replaces ? entries.find((entry) => entry.id === proposal.replaces) : undefined
+    const replyId = ChatProposalStore.replyIdOf(proposalId)!
+    // The proposal's keywords replace both languages' lists; saving sorts them by the lore key language.
+    const fields = { title: proposal.title, keys: proposal.keys, localKeys: [], content: proposal.content, language: proposal.language, translation: proposal.translation ?? null, constant: proposal.constant, source: { threadId, replyId, proposalId } }
+    const entryId = replaced?.id ?? randomUUID()
+    const next = replaced
+      ? entries.map((entry) => (entry.id === replaced.id ? { ...entry, ...fields } : entry))
+      : [...entries, { id: entryId, ...fields, enabled: true, order: entries.reduce((max, entry) => Math.max(max, entry.order), -1) + 1 }]
+    let book = target.save(next) as OwnedLorebook
+    let created: string | undefined
+    if (proposal.file) {
+      const materials = FileStoreService.ensureFolder(owner, book.folderId, LORE_FILES_FOLDER)
+      const name = freeChildName(owner, materials.id, proposal.file.name)
+      const written = FileStoreService.writeText(owner, materials.id, name, proposal.file.text, { silent: true, create: true })
+      created = written.id
+      book = OwnedLorebookStore.update(book.id, owner, {
+        entries: book.entries.map((entry) => (entry.id === entryId ? { ...entry, file: `${LORE_FILES_FOLDER}/${written.name}`, fileId: written.id } : entry)),
+      }) as OwnedLorebook
+    }
+    ChatProposalStore.markSaved(proposalId, book.id, { notify: false })
+    const remembered = ChatProposalStore.updateLoreUndo(proposalId, {
+      ...(replaced ? { undoBefore: { ...replaced } } : {}),
+      undoAfter: { ...book.entries.find((entry) => entry.id === entryId)! },
+      ...(created ? { createdFileId: created } : {}),
+    })!
+    afterFileStoreCommit(() => ChatProposalStore.notifySaved(remembered))
+    return { proposal: remembered, book }
+  })
 }
 
 /**
@@ -292,7 +284,7 @@ export function applyLoreProposal(proposalId: number): { proposal: ChatProposal;
  */
 export function undoLoreProposal(proposalId: number, force = false, expectedHash?: string): { proposal?: ChatProposal; book?: OwnedLorebook; changed?: boolean; currentHash?: string } {
   let removedFile: { owner: string; id: string } | null = null
-  const result = getUserSettingsDb().transaction(() => {
+  const result = withFileStoreWrites(() => {
     const proposal = ChatProposalStore.find(proposalId)
     if (proposal?.kind !== 'lore' || !isSaved(proposal) || proposal.undone || (proposal.replaces ? !proposal.before : !proposal.undoAfter)) throw new LoreProposalError('되돌릴 저장이 없어.', 409)
     const threadId = ChatProposalStore.threadIdOf(proposalId)!
@@ -323,13 +315,13 @@ export function undoLoreProposal(proposalId: number, force = false, expectedHash
     const remaining = saveBook(book.entries.filter((item) => item.id !== entry.id)) ?? undefined
     if (proposal.createdFileId && entry.fileId === proposal.createdFileId) removedFile = { owner, id: proposal.createdFileId }
     return { proposal: undone(), book: remaining }
-  }).immediate()
+  })
   // The file goes after the entry is out of the book; a file someone attached elsewhere meanwhile stays.
   const file = removedFile as { owner: string; id: string } | null
-  if (file) {
+  if (file) afterFileStoreCommit(() => {
     try { FileStoreService.delete(file.owner, [file.id]) }
     catch (error) { console.warn('[chat-lore] Kept the undone entry\'s file:', error instanceof Error ? error.message : error) }
-  }
+  })
   return result
 }
 

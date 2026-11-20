@@ -2,6 +2,7 @@ import fs from 'fs'
 import path from 'path'
 import { runtimePaths } from '../../config/runtimePaths'
 import { getUserSettingsDb } from '../../database/userSettingsDb'
+import { withFileStoreWrites } from '../fileStoreWriteTransaction'
 
 /**
  * Chat appearance: how a reader sees their chats (text size, avatar size, layout…). Each chat keeps its own values;
@@ -136,6 +137,14 @@ function threadKey(prefix: string, threadId: number) {
 }
 
 export const ChatAppearanceStore = {
+  /** A failed default-slot write must not leave a second room for a retried create or branch. */
+  createWithDefault<T extends { id: number }>(accountId: number | null, create: () => T): T {
+    return withFileStoreWrites(() => {
+      const thread = create()
+      this.threadCreated(accountId, thread.id)
+      return thread
+    })
+  },
   /** Compatibility snapshot; normal edits update only one row. */
   read(accountId: number | null, liveThreadIds?: Iterable<number>): ChatAppearanceFile {
     const store = accountStore(accountId)

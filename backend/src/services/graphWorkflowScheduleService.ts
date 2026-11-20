@@ -1,9 +1,11 @@
+import { getUserSettingsDb } from '../database/userSettingsDb'
 import { GraphExecutionModel } from '../models/GraphExecution'
 import { GraphWorkflowScheduleModel } from '../models/GraphWorkflowSchedule'
 import { GraphWorkflowModel } from '../models/GraphWorkflow'
 import type {
   GraphWorkflowScheduleRecord,
   GraphWorkflowScheduleStatus,
+  GraphWorkflowUpdateData,
 } from '../types/moduleGraph'
 import { GraphWorkflowExecutionQueue, RUNNING_EXECUTION_RESTART_MESSAGE } from './graphWorkflowExecutionQueue'
 import { enqueueScheduleRuns, parseStoredScheduleInputValues } from './graphWorkflowScheduleRuns'
@@ -119,36 +121,58 @@ export class GraphWorkflowScheduleService {
     this.activePoll = poll
   }
 
-  /** Pause schedules after their workflow changed and clear queued schedule jobs. */
-  static pauseSchedulesForWorkflowChange(workflowId: number) {
-    const schedules = GraphWorkflowScheduleModel.findByWorkflowId(workflowId)
-    const scheduleIds = schedules.map((schedule) => schedule.id)
-    for (const schedule of schedules) {
-      GraphWorkflowScheduleModel.update(schedule.id, {
-        status: 'paused',
-        stop_reason_code: 'workflow_changed',
-        stop_reason_message: '워크플로우가 바뀌어서 다시 시작 전에 검토가 필요해.',
-      })
-    }
-
-    const queueCleanup = GraphWorkflowExecutionQueue.cancelQueuedByScheduleIds(scheduleIds)
-    return {
-      pausedScheduleCount: schedules.length,
-      ...queueCleanup,
-    }
+  /** Do not announce a pause or abort a live run until the graph, its version and the queue have committed. */
+  static updateWorkflow(workflowId: number, data: GraphWorkflowUpdateData, expectedRevision?: number) {
+    const { saved, maintenance } = getUserSettingsDb().transaction(() => {
+      const saved = GraphWorkflowModel.update(workflowId, data, expectedRevision)
+      if (!saved.versionChanged) return { saved, maintenance: null }
+      const ids = GraphWorkflowScheduleModel.stagePauseForWorkflowChange(workflowId)
+      return { saved, maintenance: { ids, queue: GraphExecutionModel.stageQueuedScheduleCancellation(ids) } }
+    }).immediate()
+    if (!maintenance) return { ...saved, scheduleMaintenance: null }
+    GraphWorkflowScheduleModel.publishChanges(maintenance.ids)
+    return { ...saved, scheduleMaintenance: { pausedScheduleCount: maintenance.ids.length, ...this.finishQueueCancellation(maintenance) } }
   }
 
-  /** Delete schedules before workflow removal and clear queued schedule jobs. */
-  static deleteSchedulesForWorkflowDeletion(workflowId: number) {
-    const schedules = GraphWorkflowScheduleModel.findByWorkflowId(workflowId)
-    const scheduleIds = schedules.map((schedule) => schedule.id)
-    const queueCleanup = GraphWorkflowExecutionQueue.cancelQueuedByScheduleIds(scheduleIds)
-    const deletedCount = GraphWorkflowScheduleModel.deleteByWorkflowIds([workflowId])
+  private static finishQueueCancellation({ ids, queue }: { ids: number[]; queue: ReturnType<typeof GraphExecutionModel.stageQueuedScheduleCancellation> }) {
+    queue.publish()
+    return { cancelled: queue.cancelled, runningCancellationRequested: GraphWorkflowExecutionQueue.cancelRunningByScheduleIds(ids) }
+  }
 
-    return {
-      deletedScheduleCount: deletedCount,
-      ...queueCleanup,
-    }
+  static pauseSchedule(id: number, expectedRevision: number, expectedGraphVersion?: number) {
+    const ids = [id]
+    const queue = getUserSettingsDb().transaction(() => {
+      const updated = GraphWorkflowScheduleModel.writeUpdate(id, { status: 'paused', next_run_at: null,
+        stop_reason_code: 'manual_pause', stop_reason_message: '사용자가 예약작업을 일시정지했어.' }, expectedRevision, expectedGraphVersion)
+      return updated ? GraphExecutionModel.stageQueuedScheduleCancellation(ids) : null
+    }).immediate()
+    if (!queue) return null
+    GraphWorkflowScheduleModel.publishChanges(ids)
+    return this.finishQueueCancellation({ ids, queue })
+  }
+
+  static deleteSchedule(id: number) {
+    const ids = [id]
+    const queue = getUserSettingsDb().transaction(() => {
+      // Deletion sets graph_executions.schedule_id to NULL, so capture the queue transition first.
+      const pending = GraphExecutionModel.stageQueuedScheduleCancellation(ids)
+      return GraphWorkflowScheduleModel.delete(id) ? pending : null
+    }).immediate()
+    return queue ? this.finishQueueCancellation({ ids, queue }) : null
+  }
+
+  static deleteWorkflow(workflowId: number) {
+    const db = getUserSettingsDb()
+    const removed = db.transaction(() => {
+      const ids = db.prepare('SELECT id FROM graph_workflow_schedules WHERE graph_workflow_id = ?').pluck().all(workflowId) as number[]
+      const queue = GraphExecutionModel.stageQueuedScheduleCancellation(ids)
+      // FK cascades remove the schedules and executions together; a rejected delete must keep them all.
+      return GraphWorkflowModel.delete(workflowId) ? { deletedScheduleCount: ids.length, queue } : null
+    }).immediate()
+    if (!removed) return null
+    removed.queue.publish()
+    return { deletedScheduleCount: removed.deletedScheduleCount, cancelled: removed.queue.cancelled,
+      runningCancellationRequested: GraphWorkflowExecutionQueue.abortDeletedWorkflowRuns([workflowId]) }
   }
 
   /** Poll due schedules and enqueue the work that is now safe to reserve. */

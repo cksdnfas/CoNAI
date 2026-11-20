@@ -620,8 +620,8 @@ function ModuleWorkflowWorkspaceInner({ isWideLayout }: ModuleWorkflowWorkspaceP
         folderDeleteTarget={folderDeleteTarget}
         isCustomNodeManagerOpen={isCustomNodeManagerOpen}
         onCloseBrowseManage={() => setIsBrowseManageModalOpen(false)}
-        onAssignWorkflowFolder={(folderId) => handleAssignSelectedWorkflowFolder(folderId)}
-        onCreateFolder={(input) => handleCreateWorkflowFolder(input)}
+        onAssignWorkflowFolder={handleAssignSelectedWorkflowFolder}
+        onCreateFolder={handleCreateWorkflowFolder}
         onUpdateFolder={(folderId, input) => handleUpdateSelectedFolder(folderId, input)}
         onDeleteFolder={(folderId) => handleDeleteSelectedFolder(folderId)}
         onEditWorkflow={() => {

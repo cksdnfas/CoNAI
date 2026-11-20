@@ -3,6 +3,7 @@ import type { PluginInstance, PluginWriteProposal } from '@conai/shared'
 import { z } from 'zod'
 import type { McpRequester } from '../../mcp/context'
 import { FileStoreService, MAX_TEXT_DOCUMENT_BYTES, fileOwnerKey } from '../fileStoreService'
+import { withFileStoreWrites } from '../fileStoreWriteTransaction'
 import { refreshMcpRequester } from '../../mcp/toolAccess'
 import { requireFileStoreOwner, requireFileStoreAction } from '../fileStoreAccess'
 import { pluginDb, pluginToken, sha256 as hash, PluginError, requireProposalRoom, issueProposalApproval, PluginMediaGrants } from './pluginStore'
@@ -138,15 +139,14 @@ export function approvePluginWrite(id: string, caller: PluginCaller) {
 }
 export function applyPluginWrite(id: string, approval: string, caller: PluginCaller) {
   pluginTokenSchema.parse(approval)
-  const { row, instance, proposal } = requireProposal(id, caller)
-  if (row.approval_hash !== hash(approval)) throw new PluginError('호스트의 저장 승인이 필요해.', 403)
-  if (row.result) return JSON.parse(row.result)
-  // Synchronous file store CAS plus an immediate DB transaction serializes competing applies.
-  return pluginDb().transaction(() => {
+  return withFileStoreWrites(() => {
+    const { row, instance, proposal } = requireProposal(id, caller)
+    if (row.approval_hash !== hash(approval)) throw new PluginError('호스트의 저장 승인이 필요해.', 403)
+    if (row.result) return JSON.parse(row.result)
     const result = FileStoreService.updateText(instance.owner, row.file_id, proposal.text, { expectedRevision: proposal.revision, source: { via: 'editor', accountId: caller.requester.accountId } })
     pluginDb().prepare('UPDATE plugin_proposals SET result = ? WHERE id = ?').run(JSON.stringify(result), id)
     return result
-  }).immediate()
+  })
 }
 export function dismissPluginWrite(id: string, caller: PluginCaller) {
   requireProposal(id, caller)

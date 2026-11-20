@@ -6,7 +6,7 @@ import { ToggleChip } from '@/components/ui/chip'
 import { useI18n } from '@/i18n'
 import { useRelativeTime } from './post-author'
 import { PostAuthorChip } from './post-chat-links'
-import type { PostCommentDraft } from './post-comments'
+import type { PostCommentDraft, SetCommentDraft } from './post-comment-draft'
 import { mediaHashesOf, PostMarkdown } from './post-markdown'
 import { PostMediaContext } from './post-media'
 import { PostVoteBar } from './post-knowledge-panel'
@@ -28,7 +28,7 @@ export function categoryPath(categories: PostCategory[], id: number | null) {
 /** One post: title, who wrote it and when, tags, the body with its media, then the comments. */
 export function PostView({ post, categories, onTag, onCategory, commentDraft, setCommentDraft, knowledgeSearchContext }: {
   post: PostDetail; categories: PostCategory[]; onTag: (tag: string) => void; onCategory: (id: number) => void
-  commentDraft: PostCommentDraft; setCommentDraft: (update: (current: PostCommentDraft) => PostCommentDraft) => void
+  commentDraft: PostCommentDraft; setCommentDraft: SetCommentDraft
   knowledgeSearchContext: KnowledgeSearchContext | null
 }) {
   const { t, formatDateTime } = useI18n()

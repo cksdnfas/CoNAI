@@ -43,9 +43,18 @@ test('post editor keeps the draft through a save conflict and asks before discar
   } as unknown as PostDetail
   let stored = { ...opened, title: 'Someone else', revision: 3 }
   const patches: Array<{ expectedRevision: number; title: string }> = []
+  let creates = 0
+  let pendingCreate: Promise<void> | undefined
   t.mock.method(globalThis, 'fetch', async (input: string | URL | Request, init?: RequestInit) => {
     const url = String(input)
-    if (url.endsWith('/api/posts/5') && init?.method === 'PATCH') {
+    if (url.endsWith('/api/posts') && init?.method === 'POST') {
+      creates++
+      const input = JSON.parse(String(init.body))
+      await pendingCreate
+      stored = { ...opened, ...input, id: 12, revision: 1 }
+      return Response.json({ success: true, data: stored })
+    }
+    if (url.endsWith(`/api/posts/${stored.id}`) && init?.method === 'PATCH') {
       const body = JSON.parse(String(init.body)) as { expectedRevision: number; title: string }
       patches.push(body)
       if (body.expectedRevision !== stored.revision) return Response.json({ success: false, error: '다른 곳에서 먼저 고쳤어.' }, { status: 409 })
@@ -71,11 +80,12 @@ test('post editor keeps the draft through a save conflict and asks before discar
   })
   const saved: PostDetail[] = []
   let cancels = 0
-  const render = async () => {
+  let instance = 0
+  const render = async (post: PostDetail | null = opened) => {
     await act(async () => {
       root.render(h(QueryClientProvider, { client }, h(I18nProvider, null, h(MemoryRouter, { initialEntries: ['/posts?edit=5'] }, h(TooltipProvider, null, h(ConfirmProvider, null,
         h(SnackbarContext.Provider, { value: { showSnackbar: () => {}, closeSnackbar: () => {} } },
-          h(PostEditor, { key: Math.random(), post: opened, categories: [], defaultCategoryId: null, onSaved: (post: PostDetail) => saved.push(post), onCancel: () => { cancels += 1 } }))))))))
+          h(PostEditor, { key: ++instance, post, categories: [], defaultCategoryId: null, onSaved: (post: PostDetail) => saved.push(post), onCancel: () => { cancels += 1 } }))))))))
       await settle()
     })
   }
@@ -114,4 +124,20 @@ test('post editor keeps the draft through a save conflict and asks before discar
   assert.equal(cancels, 0, 'cancel asks before discarding a dirty draft')
   await click([...document.querySelectorAll<HTMLButtonElement>('[role="alertdialog"] button, [role="dialog"] button')].find((item) => item.textContent?.trim() === '버리기'))
   assert.equal(cancels, 1, 'confirming discards and leaves')
+
+  await t.test('typing while a new post is being saved keeps the editor and the ID of that post', async () => {
+    let release!: () => void
+    pendingCreate = new Promise<void>(resolve => { release = resolve })
+    await render(null)
+    await typeTitle('First version')
+    await click(button('저장'))
+    assert.equal(creates, 1)
+    await typeTitle('Still editing')
+    await act(async () => { release(); await settle() })
+    assert.equal(saved.length, 1, 'the pending create did not navigate away from later edits')
+    assert.equal(title().value, 'Still editing')
+    await click(button('저장'))
+    assert.equal(creates, 1)
+    assert.deepEqual([saved.at(-1)?.id, stored.revision, stored.title], [12, 2, 'Still editing'])
+  })
 })

@@ -101,6 +101,10 @@ export class MediaMetadataModel {
    * 메타데이터 생성
    */
   static create(data: Omit<ImageMetadataRecord, 'first_seen_date' | 'metadata_updated_date'>): string {
+    return db.transaction(() => this.insertMetadata(data))();
+  }
+
+  private static insertMetadata(data: Omit<ImageMetadataRecord, 'first_seen_date' | 'metadata_updated_date'>): string {
     const promptSimilaritySettings = settingsService.loadSettings().similarity.promptSimilarity;
     const promptSimilarityFields = (promptSimilaritySettings.enabled && promptSimilaritySettings.autoBuildOnMetadataUpdate)
       ? PromptSimilarityService.buildPreparedFields(data, promptSimilaritySettings.algorithm)
@@ -157,6 +161,24 @@ export class MediaMetadataModel {
    * 메타데이터 업데이트
    */
   static update(compositeHash: string, updates: Partial<ImageMetadataRecord>): boolean {
+    return db.transaction(() => this.writeUpdates(compositeHash, updates))();
+  }
+
+  /** Compose against the row at commit time, not the snapshot that preceded worker inference. */
+  static mergeAutoTags(
+    compositeHash: string,
+    merge: (current: string | null) => { auto_tags: string; rating_score?: number | null } | null,
+  ): string | null {
+    return db.transaction(() => {
+      const record = this.findByHash(compositeHash);
+      if (!record) return null;
+      const updates = merge(record.auto_tags ?? null);
+      if (!updates) return null;
+      return this.writeUpdates(compositeHash, updates, record) ? updates.auto_tags : null;
+    })();
+  }
+
+  private static writeUpdates(compositeHash: string, updates: Partial<ImageMetadataRecord>, record?: ImageMetadataRecord): boolean {
     // 업데이트 가능한 필드들만 필터링
     const updatableFields = [
       'prompt', 'negative_prompt', 'auto_tags', 'rating_score',
@@ -181,7 +203,7 @@ export class MediaMetadataModel {
 
     const shouldBuildPromptSimilarity = ['prompt', 'negative_prompt', 'auto_tags'].some((field) => field in filteredUpdates);
     if (shouldBuildPromptSimilarity) {
-      const currentRecord = this.findByHash(compositeHash);
+      const currentRecord = record ?? this.findByHash(compositeHash);
       if (currentRecord) {
         const nextRecord = {
           ...currentRecord,

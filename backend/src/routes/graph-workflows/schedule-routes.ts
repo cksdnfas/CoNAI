@@ -4,7 +4,6 @@ import { GraphWorkflowModel } from '../../models/GraphWorkflow'
 import { GraphWorkflowFolderModel } from '../../models/GraphWorkflowFolder'
 import { GraphExecutionModel } from '../../models/GraphExecution'
 import { GraphWorkflowScheduleModel } from '../../models/GraphWorkflowSchedule'
-import { GraphWorkflowExecutionQueue } from '../../services/graphWorkflowExecutionQueue'
 import { enqueueScheduleRuns, parseStoredScheduleInputValues } from '../../services/graphWorkflowScheduleRuns'
 import { GraphWorkflowScheduleService } from '../../services/graphWorkflowScheduleService'
 import { decorateGraphWorkflowScheduleRecords } from '../../services/graphWorkflowViewService'
@@ -321,16 +320,10 @@ export function createGraphWorkflowScheduleRoutes() {
     const expected = readExpectedScheduleVersions(req, res)
     if (!expected) return
 
-    const updated = GraphWorkflowScheduleModel.update(scheduleId, {
-      status: 'paused',
-      next_run_at: null,
-      stop_reason_code: 'manual_pause',
-      stop_reason_message: '사용자가 예약작업을 일시정지했어.',
-    }, expected.expectedRevision ?? schedule.revision, expected.expectedGraphVersion)
-    if (!updated) return res.status(409).json({ success: false, error: '자동 실행이나 워크플로가 바뀌었어. 새로 불러와줘.' })
-    const queueCleanup = GraphWorkflowExecutionQueue.cancelQueuedByScheduleIds([scheduleId])
+    const queueCleanup = GraphWorkflowScheduleService.pauseSchedule(scheduleId, expected.expectedRevision ?? schedule.revision, expected.expectedGraphVersion)
+    if (!queueCleanup) return res.status(409).json({ success: false, error: '자동 실행이나 워크플로가 바뀌었어. 새로 불러와줘.' })
 
-    return res.json({ success: updated, data: { id: scheduleId, message: '예약작업을 일시정지했어.', queue_cleanup: queueCleanup } } as ModuleGraphResponse)
+    return res.json({ success: true, data: { id: scheduleId, message: '예약작업을 일시정지했어.', queue_cleanup: queueCleanup } } as ModuleGraphResponse)
   }))
 
   router.post('/schedules/:scheduleId/resume', requirePermission('generation.execute'), asyncHandler(async (req: Request, res: Response) => {
@@ -436,9 +429,9 @@ export function createGraphWorkflowScheduleRoutes() {
       return
     }
 
-    const queueCleanup = GraphWorkflowExecutionQueue.cancelQueuedByScheduleIds([scheduleId])
-    const deleted = GraphWorkflowScheduleModel.delete(scheduleId)
-    return res.json({ success: deleted, data: { id: scheduleId, message: '예약작업을 삭제했어.', queue_cleanup: queueCleanup } } as ModuleGraphResponse)
+    const queueCleanup = GraphWorkflowScheduleService.deleteSchedule(scheduleId)
+    if (!queueCleanup) return res.status(404).json({ success: false, error: '예약작업을 찾지 못했어.' })
+    return res.json({ success: true, data: { id: scheduleId, message: '예약작업을 삭제했어.', queue_cleanup: queueCleanup } } as ModuleGraphResponse)
   }))
 
   return router

@@ -8,16 +8,16 @@ import { Input } from '@/components/ui/input'
 import { Text } from '@/components/ui/text'
 import { Textarea } from '@/components/ui/textarea'
 import { useI18n } from '@/i18n'
-import type { GraphWorkflowFolderRecord, GraphWorkflowRecord } from '@/lib/api-module-graph'
+import type { createGraphWorkflowFolder, GraphWorkflowFolderRecord, GraphWorkflowRecord } from '@/lib/api-module-graph'
 import { WorkflowFolderPicker } from './workflow-folder-picker'
 
-type WorkflowFolderSettingsPanelProps = {
+export type WorkflowFolderSettingsPanelProps = {
   folders: GraphWorkflowFolderRecord[]
   selectedFolder: GraphWorkflowFolderRecord | null
   selectedWorkflow: GraphWorkflowRecord | null
   showHeader?: boolean
-  onAssignWorkflowFolder: (folderId: number | null) => Promise<void> | void
-  onCreateFolder: (input: { name: string; description?: string; parent_id?: number | null; assignToWorkflow?: boolean }) => Promise<void> | void
+  onAssignWorkflowFolder: (folderId: number | null, expectedRevision: number) => Promise<number | undefined>
+  onCreateFolder: (input: Parameters<typeof createGraphWorkflowFolder>[0]) => Promise<Awaited<ReturnType<typeof createGraphWorkflowFolder>> | undefined>
   onUpdateFolder: (folderId: number, input: { name?: string; description?: string | null; parent_id?: number | null }) => Promise<void> | void
   onDeleteFolder: (folderId: number) => Promise<void> | void
   onEditWorkflow?: () => void
@@ -61,6 +61,7 @@ export function WorkflowFolderSettingsPanel({
 }: WorkflowFolderSettingsPanelProps) {
   const { locale, t } = useI18n()
   const [workflowFolderId, setWorkflowFolderId] = useState<number | null>(() => selectedWorkflow?.folder_id ?? null)
+  const [revision, setRevision] = useState(selectedWorkflow?.revision)
   const [folderName, setFolderName] = useState(() => selectedFolder?.name ?? t({ ko: '루트', en: 'Root' }))
   const [folderDescription, setFolderDescription] = useState(() => selectedFolder?.description ?? '')
   const [folderParentId, setFolderParentId] = useState<number | null>(() => selectedFolder?.parent_id ?? null)
@@ -96,14 +97,20 @@ export function WorkflowFolderSettingsPanel({
       return
     }
 
-    await onCreateFolder({
+    if (assignToWorkflow && (!selectedWorkflow || !revision)) return
+    const created = await onCreateFolder({
       name: nextName,
       description: childFolderDescription.trim() || undefined,
       parent_id: selectedFolder?.id ?? null,
-      assignToWorkflow,
+      assign_to: assignToWorkflow && selectedWorkflow && revision ? { workflow_id: selectedWorkflow.id, expected_revision: revision } : undefined,
     })
-    setChildFolderName('')
-    setChildFolderDescription('')
+    if (!created) return
+    if (created.workflow_revision !== undefined) {
+      setRevision(created.workflow_revision)
+      setWorkflowFolderId(previous => previous === workflowFolderId ? created.id : previous)
+    }
+    setChildFolderName(previous => previous === childFolderName ? '' : previous)
+    setChildFolderDescription(previous => previous === childFolderDescription ? '' : previous)
   }
 
   return (
@@ -140,7 +147,11 @@ export function WorkflowFolderSettingsPanel({
               </IconButton>
             ) : null}
             <span className="flex-1" />
-            <Button type="button" size="xs" variant="default" onClick={() => void onAssignWorkflowFolder(workflowFolderId)}>{t({ ko: '저장', en: 'Save' })}</Button>
+            <Button type="button" size="xs" variant="default" disabled={!revision} onClick={async () => {
+              if (!revision) return
+              const saved = await onAssignWorkflowFolder(workflowFolderId, revision)
+              if (saved !== undefined) setRevision(saved)
+            }}>{t({ ko: '저장', en: 'Save' })}</Button>
           </div>
 
           <Inset padding="sm" className="space-y-3">

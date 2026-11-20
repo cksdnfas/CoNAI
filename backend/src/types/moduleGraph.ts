@@ -80,7 +80,7 @@ export interface ModuleDefinitionCreateData {
 
 export interface ModuleDefinitionUpdateData {
   name?: string
-  description?: string
+  description?: string | null
   category?: string
   template_defaults?: Record<string, unknown>
   exposed_inputs?: ModulePortDefinition[]
@@ -119,7 +119,7 @@ export interface GraphWorkflowCreateData {
 
 export interface GraphWorkflowUpdateData {
   name?: string
-  description?: string
+  description?: string | null
   graph?: GraphWorkflowDocument
   folder_id?: number | null
   version?: number

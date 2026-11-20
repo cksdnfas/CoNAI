@@ -87,7 +87,7 @@ router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
     return res.status(404).json({ success: false, error: 'Prompt preset not found' });
   }
 
-  return res.json({ success: true, data: preset });
+  return res.json({ success: true, data: withNativeEditRevisions([preset])[0] });
 }));
 
 router.post('/', requirePermission('prompts.edit'), asyncHandler(async (req: Request, res: Response) => {

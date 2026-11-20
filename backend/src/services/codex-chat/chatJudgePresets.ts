@@ -2,6 +2,7 @@ import type { ChatJudgeChoiceOption, ChatJudgeFollowUp, ChatJudgeItem, ChatJudge
 import { getUserSettingsDb } from '../../database/userSettingsDb'
 import { chatProfileOrderSql } from './chatProfileOrder'
 import { ChatProfileError } from './chatProfileError'
+import { editChatResource } from './chatResourceWrite'
 import { LLM_CONNECTION_TYPES, MODEL_CONNECTION_TYPES, ModelSlotStore } from './modelSlots'
 import { JUDGE_FOLLOW_UP_DEFAULTS, JUDGE_ITEM_DEFAULTS, JUDGE_OPTION_DEFAULTS, type JudgeOptions } from './chatJudgeDefaults'
 import { isJudgeConnectionReady } from '../judge/judgeEngine'
@@ -34,6 +35,7 @@ const TOOL_PATTERN = /^[a-z0-9_]{1,64}\*?$/
 
 type PresetRow = {
   id: number
+  revision: number
   name: string
   provider_name: string | null
   model: string
@@ -198,9 +200,10 @@ function roomsUsing(presetId: number) {
   return getUserSettingsDb().prepare("SELECT id, COALESCE(title, '') AS title FROM codex_chat_threads WHERE judge_preset_id = ? AND kind = 'group' ORDER BY id ASC").all(presetId) as Array<{ id: number; title: string }>
 }
 
-function toPreset(row: PresetRow): ChatJudgePreset {
+function toPreset(row: PresetRow): ChatJudgePreset & { revision: number } {
   return {
     id: row.id,
+    revision: row.revision,
     name: row.name,
     modelSlotId: ModelSlotStore.existing(row.model_slot_id),
     escalationSlotId: ModelSlotStore.existing(row.escalation_slot_id),
@@ -267,7 +270,7 @@ export const ChatJudgePresetStore = {
   /** A preset as it would be saved, without saving it (testing an unsaved draft). */
   draft(input: ChatJudgePresetInput): ChatJudgePreset {
     const columns = toColumns({ ...input, name: input.name || '판단 프리셋' }, true)
-    return toPreset({ ...columns, id: 0, created_date: '', updated_date: '' })
+    return toPreset({ ...columns, id: 0, revision: 0, created_date: '', updated_date: '' })
   },
 
   create(input: ChatJudgePresetInput) {
@@ -279,18 +282,15 @@ export const ChatJudgePresetStore = {
     })()
   },
 
-  update(presetId: number, patch: ChatJudgePresetInput) {
-    return getUserSettingsDb().transaction(() => {
-      const current = ChatJudgePresetStore.find(presetId)
-      if (!current) return null
+  update(presetId: number, patch: ChatJudgePresetInput, revision?: unknown) {
+    return editChatResource(presetId, revision, ChatJudgePresetStore.find, current => {
       const merged: ChatJudgePresetInput = { ...current, ...Object.fromEntries(Object.entries(patch).filter(([, value]) => value !== undefined)) }
       // A legacy pair in the patch replaces the current row unless the patch names a row too.
       if (patch.providerName && patch.modelSlotId === undefined) delete merged.modelSlotId
       if (patch.escalationProviderName && patch.escalationSlotId === undefined) delete merged.escalationSlotId
       const columns = toColumns(merged)
       getUserSettingsDb().prepare(`UPDATE chat_judge_presets SET ${Object.keys(columns).map((name) => `${name} = @${name}`).join(', ')}, updated_date = CURRENT_TIMESTAMP WHERE id = @id`).run({ ...columns, id: presetId })
-      return ChatJudgePresetStore.find(presetId)
-    })()
+    })
   },
 
   /** Profiles and rooms that referenced it go back to judging nothing (exactly as without a judge). */

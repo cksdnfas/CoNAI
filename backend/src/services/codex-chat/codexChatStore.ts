@@ -1,4 +1,5 @@
 import { getUserSettingsDb } from '../../database/userSettingsDb'
+import { withFileStoreWrites } from '../fileStoreWriteTransaction'
 import { LEGACY_SUMMARY_PLOT_SQL } from '../../database/userSettingsSchema'
 import { publishRuntimeEvent } from '../runtime-events/runtimeEventBus'
 import { CHAT_THREAD_TITLE_MAX_LENGTH as TITLE_MAX_LENGTH, type StoredFileEntry, type ChatMessageRouting, type ChatFileChange } from '@conai/shared'
@@ -664,9 +665,10 @@ export const CodexChatStore = {
    * (which keep a file from being deleted) go with them. A book the chat should keep or merge is dealt with before
    * this (see the thread delete route); a kept book is no longer the chat's, so it stays.
    */
-  deleteThread(threadId: number, preserve?: () => void) {
+  deleteThread(threadId: number, preserve?: () => void, beforeDelete?: () => void) {
     const db = getUserSettingsDb()
-    const abortAgents = db.transaction(() => {
+    const abortAgents = withFileStoreWrites(() => {
+      beforeDelete?.()
       const abort = cancelAgentCallsForThread(threadId)
       db.prepare('DELETE FROM codex_chat_messages WHERE thread_id = ?').run(threadId)
       db.prepare('DELETE FROM chat_group_members WHERE thread_id = ?').run(threadId)
@@ -682,18 +684,14 @@ export const CodexChatStore = {
       db.prepare('DELETE FROM codex_chat_threads WHERE id = ?').run(threadId)
       // Preserve only after removal has succeeded, while its transaction can still roll back both changes.
       preserve?.()
+      OwnedLorebookStore.threadDeleted(threadId)
       return abort
-    })()
+    })
     const afterCommit = () => {
       if (CodexChatStore.findThreadById(threadId)) return
       cancelThreadSummary(threadId)
       abortAgents()
       pendingAutomaticTitles.delete(threadId)
-      try {
-        OwnedLorebookStore.threadDeleted(threadId)
-      } catch (error) {
-        console.warn(`[lorebook] Chat ${threadId}: its book could not be removed:`, error instanceof Error ? error.message : error)
-      }
     }
     if (db.inTransaction) setImmediate(afterCommit)
     else afterCommit()

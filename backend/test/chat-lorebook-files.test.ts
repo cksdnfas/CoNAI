@@ -58,6 +58,31 @@ test('lorebook files: account and chat books as file store folders, cache sync, 
   })
 
   let bookId = 0
+  await t.test('a rejected lorebook save preserves its two files, cached entries and folder name', s => {
+    const book = OwnedLorebookStore.create(me, { name: 'before rename', entries: [{ keys: ['before'], content: 'original' }] })
+    s.after(() => { OwnedLorebookStore.delete(book.id, me) })
+    const texts = () => ['lorebook.json', 'lorebook.md'].map(name => readBlob(me, child(me, book.folderId, name)!.id))
+    const original = texts()
+    db.exec(`CREATE TEMP TRIGGER refuse_lore_cache BEFORE UPDATE OF entries ON chat_lorebooks
+      WHEN NEW.id=${book.id} BEGIN SELECT RAISE(ABORT, 'held cache'); END`)
+    try {
+      assert.throws(() => OwnedLorebookStore.update(book.id, me, { name: 'after rename', entries: [{ content: 'changed' }] }), /held cache/)
+      assert.deepEqual(texts(), original)
+      assert.equal(FileStoreService.get(me, book.folderId).name, 'before rename')
+      assert.equal(cached(book.id)[0].content, 'original')
+    } finally { db.exec('DROP TRIGGER refuse_lore_cache') }
+    // Restoring the old bytes can change ctime: a reopened editor uses the fresh filesystem token.
+    const reopened = OwnedLorebookStore.requireOwn(book.id, me)
+    assert.deepEqual(reopened.entries, book.entries)
+    const renamed = OwnedLorebookStore.update(book.id, me, { name: 'after rename' }, reopened.revision)!
+    assert.equal(renamed.revision, OwnedLorebookStore.requireOwn(book.id, me).revision, 'the file listener must not invalidate a successful rename')
+    db.exec(`CREATE TEMP TRIGGER refuse_book_delete BEFORE DELETE ON chat_lorebooks WHEN OLD.id=${book.id} BEGIN SELECT RAISE(ABORT, 'held book'); END`)
+    try {
+      assert.throws(() => OwnedLorebookStore.delete(book.id, me), /held book/)
+      assert.equal(FileStoreService.get(me, book.folderId).name, 'after rename')
+      assert.equal(OwnedLorebookStore.requireOwn(book.id, me).revision, renamed.revision)
+    } finally { db.exec('DROP TRIGGER refuse_book_delete') }
+  })
   await t.test('an account book is a folder under 로어북/ with lorebook.json, lorebook.md and 자료/', () => {
     const book = OwnedLorebookStore.create(me, { name: '카이', entries: [{ keys: ['왼손'], content: '카이는 왼손잡이다.' }] })
     bookId = book.id
@@ -305,6 +330,15 @@ test('lorebook files: account and chat books as file store folders, cache sync, 
     const emptyId = CodexChatStore.createThread(1, '빈 기억', 'llm', profile.id)
     db.prepare('UPDATE codex_chat_threads SET memories = ? WHERE id = ?').run(JSON.stringify([{ id: 'm1', text: '카이는 왼손잡이' }, { id: 'm2', text: '내일 저녁 바다에서 반지를 주기로 했다. 카이는 아직 모른다.' }]), threadId)
     db.prepare("UPDATE codex_chat_threads SET memories = '[]' WHERE id = ?").run(emptyId)
+    const blobs = () => fs.readdirSync(path.join(root, 'files')).filter(name => name.endsWith('.bin')).sort()
+    const before = blobs()
+    db.exec(`CREATE TEMP TRIGGER hold_old_memories BEFORE UPDATE OF memories ON codex_chat_threads WHEN OLD.id=${threadId} BEGIN SELECT RAISE(ABORT, 'held memories'); END`)
+    try {
+      files.migratePinnedMemoriesToChatBooks(db)
+      assert.ok(memoriesOf(threadId))
+      assert.equal(OwnedLorebookStore.chatBookOf(threadId), null)
+      assert.deepEqual(blobs(), before)
+    } finally { db.exec('DROP TRIGGER hold_old_memories') }
     createUserSettingsSchema(db)
     createUserSettingsSchema(db)
     const book = OwnedLorebookStore.chatBookOf(threadId)!
@@ -320,6 +354,13 @@ test('lorebook files: account and chat books as file store folders, cache sync, 
     createUserSettingsSchema(db)
     assert.equal(OwnedLorebookStore.chatBookOf(threadId)!.entries.length, 2)
     assert.equal(memoriesOf(threadId), null)
+    for (const raw of ['{"oldFormat":true}', JSON.stringify([{ id: 'm3', text: 'recognised' }, { id: 4, text: 'unrecognised' }]),
+      JSON.stringify([{ id: 'm1', text: 'different text under the same id' }])]) {
+      db.prepare('UPDATE codex_chat_threads SET memories = ? WHERE id = ?').run(raw, threadId)
+      files.migratePinnedMemoriesToChatBooks(db)
+      assert.equal(memoriesOf(threadId), raw, 'never erase an original that could not be fully represented')
+      assert.deepEqual(OwnedLorebookStore.chatBookOf(threadId)!.entries, book.entries)
+    }
   })
 
   await t.test('links: a profile or a chat takes any account\'s account books, never a chat book', () => {

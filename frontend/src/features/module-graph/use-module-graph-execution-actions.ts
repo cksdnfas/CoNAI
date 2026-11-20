@@ -118,7 +118,7 @@ export function useModuleGraphExecutionActions({
       if (!base || base.id !== targetGraphId || !Number.isSafeInteger(base.revision)) {
         throw new Error(t({ ko: '워크플로를 새로 불러와줘.', en: 'Reload the workflow first.' }))
       }
-      const updateResult = await updateGraphWorkflow(targetGraphId, { ...payload, expected_revision: base.revision })
+      const updateResult = await updateGraphWorkflow(targetGraphId, { ...payload, description: description ?? null, expected_revision: base.revision })
       graphId = targetGraphId
       created = false
       savedRevision = updateResult.revision

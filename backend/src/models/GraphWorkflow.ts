@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from 'node:util'
 import { getUserSettingsDb } from '../database/userSettingsDb'
 import {
   GraphWorkflowRecord,
@@ -8,6 +9,7 @@ import {
   GraphWorkflowVersionSummaryRecord,
 } from '../types/moduleGraph'
 import { buildUpdateQuery, filterDefined, sqlLiteral } from '../utils/dynamicUpdate'
+import { parseJsonOr } from '../utils/json'
 
 const MAX_VERSION_SNAPSHOTS_PER_WORKFLOW = 50
 
@@ -136,22 +138,17 @@ export class GraphWorkflowModel {
 
   static create(workflowData: GraphWorkflowCreateData): number {
     const db = getUserSettingsDb()
-    const info = db.prepare(`
-      INSERT INTO graph_workflows (
-        name, description, graph_json, folder_id, version, is_active
-      ) VALUES (?, ?, ?, ?, ?, ?)
-    `).run(
-      workflowData.name,
-      workflowData.description || null,
-      stringifyGraph(workflowData.graph),
-      workflowData.folder_id ?? null,
-      workflowData.version ?? 1,
-      workflowData.is_active !== undefined ? (workflowData.is_active ? 1 : 0) : 1,
-    )
-
-    const workflowId = info.lastInsertRowid as number
+    const graphJson = stringifyGraph(workflowData.graph)
+    const version = workflowData.version ?? 1
+    const workflowId = db.transaction(() => {
+      const info = db.prepare(`INSERT INTO graph_workflows (name, description, graph_json, folder_id, version, is_active)
+        VALUES (?, ?, ?, ?, ?, ?)`).run(workflowData.name, workflowData.description || null, graphJson,
+        workflowData.folder_id ?? null, version, workflowData.is_active === undefined || workflowData.is_active ? 1 : 0)
+      const id = Number(info.lastInsertRowid)
+      this.storeVersionSnapshot(id, version, graphJson, 'Initial version')
+      return id
+    })()
     graphWorkflowRevision += 1
-    this.createVersionSnapshot(workflowId, workflowData.version ?? 1, workflowData.graph, 'Initial version')
     return workflowId
   }
 
@@ -268,56 +265,43 @@ export class GraphWorkflowModel {
     return rows.map((row) => ({ ...row, final_result_node_count: counts.get(row.id) ?? 0 }))
   }
 
-  static update(id: number, workflowData: GraphWorkflowUpdateData, expectedRevision?: number): { updated: boolean; versionChanged: boolean; conflict: boolean; revision?: number } {
+  static update(id: number, workflowData: GraphWorkflowUpdateData, expectedRevision?: number): { updated: boolean; versionChanged: boolean; conflict: boolean; revision?: number; missing?: boolean } {
     const db = getUserSettingsDb()
+    const incomingGraphJson = workflowData.graph !== undefined ? stringifyGraph(workflowData.graph) : undefined
     return db.transaction(() => {
-      const current = this.findById(id)
+      const current = db.prepare(`SELECT revision, version, name, description, folder_id, is_active${incomingGraphJson === undefined ? '' : ', graph_json'} FROM graph_workflows WHERE id = ?`)
+        .get(id) as Pick<GraphWorkflowRecord, 'revision' | 'version' | 'name' | 'description' | 'folder_id' | 'is_active'> & { graph_json?: string } | undefined
       if (!current) {
-        return { updated: false, versionChanged: false, conflict: false }
+        return { updated: false, versionChanged: false, conflict: false, missing: true }
       }
       if (expectedRevision !== undefined && expectedRevision !== current.revision) {
         return { updated: false, versionChanged: false, conflict: true }
       }
 
-    // Byte-identical graph saves (editor auto-saves) must not bump the version or write a snapshot,
-    // otherwise partial-run reuse caches are invalidated and schedules get paused for review.
-    const incomingGraphJson = workflowData.graph !== undefined ? stringifyGraph(workflowData.graph) : undefined
-    const graphChanged = incomingGraphJson !== undefined && incomingGraphJson !== current.graph_json
-
-    const cleanData: Record<string, unknown> = {
-      name: workflowData.name,
-      description: workflowData.description,
-      version: workflowData.version,
-      graph_json: graphChanged ? incomingGraphJson : undefined,
-      folder_id: workflowData.folder_id,
-      is_active: workflowData.is_active !== undefined ? (workflowData.is_active ? 1 : 0) : undefined,
-    }
-
-    const updates = filterDefined(cleanData)
+      // An identical graph must not invalidate partial runs or pause schedules for review.
+      const graphChanged = incomingGraphJson !== undefined && incomingGraphJson !== current.graph_json
+        && !isDeepStrictEqual(JSON.parse(incomingGraphJson), parseJsonOr<unknown>(current.graph_json, null))
+      const minimum = current.version + (graphChanged ? 1 : 0)
+      const nextVersion = Math.max(workflowData.version ?? minimum, minimum)
+      const updates = filterDefined({
+        name: current.name !== workflowData.name ? workflowData.name : undefined,
+        description: current.description !== workflowData.description ? workflowData.description : undefined,
+        folder_id: current.folder_id !== workflowData.folder_id ? workflowData.folder_id : undefined,
+        is_active: workflowData.is_active !== undefined && Boolean(current.is_active) !== Boolean(workflowData.is_active) ? Number(Boolean(workflowData.is_active)) : undefined,
+        version: nextVersion !== current.version ? nextVersion : undefined,
+        graph_json: graphChanged ? incomingGraphJson : undefined,
+      })
       if (Object.keys(updates).length === 0) {
         return { updated: false, versionChanged: false, conflict: false, revision: current.revision }
       }
 
-    const nextVersion = graphChanged
-      ? Math.max(workflowData.version ?? current.version + 1, current.version + 1)
-      : Math.max(workflowData.version ?? current.version, current.version)
-    const finalUpdates = {
-      ...updates,
-      version: nextVersion,
-      updated_date: sqlLiteral('CURRENT_TIMESTAMP'),
-    }
-
-    const { sql, values } = buildUpdateQuery('graph_workflows', finalUpdates, { id, revision: current.revision })
-    const info = db.prepare(sql).run(...values)
-    const updated = info.changes > 0
-    if (updated) {
-      graphWorkflowRevision += 1
-    }
-
-    if (updated && graphChanged && workflowData.graph !== undefined) {
-      this.createVersionSnapshot(id, nextVersion, workflowData.graph, 'Workflow updated')
-    }
-
+      const finalUpdates = { ...updates, updated_date: sqlLiteral('CURRENT_TIMESTAMP') }
+      const { sql, values } = buildUpdateQuery('graph_workflows', finalUpdates, { id, revision: current.revision })
+      const updated = db.prepare(sql).run(...values).changes > 0
+      if (updated) {
+        if (graphChanged) this.storeVersionSnapshot(id, nextVersion, incomingGraphJson, 'Workflow updated')
+        graphWorkflowRevision++
+      }
       return {
         updated,
         versionChanged: updated && nextVersion !== current.version,
@@ -338,6 +322,10 @@ export class GraphWorkflowModel {
   }
 
   static createVersionSnapshot(workflowId: number, version: number, graph: unknown, changelog?: string) {
+    return getUserSettingsDb().transaction(() => this.storeVersionSnapshot(workflowId, version, stringifyGraph(graph), changelog))()
+  }
+
+  private static storeVersionSnapshot(workflowId: number, version: number, graphJson: string, changelog?: string) {
     const db = getUserSettingsDb()
     db.prepare(`
       INSERT OR REPLACE INTO graph_workflow_versions (
@@ -346,7 +334,7 @@ export class GraphWorkflowModel {
     `).run(
       workflowId,
       version,
-      stringifyGraph(graph),
+      graphJson,
       changelog || null,
     )
 

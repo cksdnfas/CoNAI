@@ -1437,8 +1437,7 @@ export const CodexChatService = {
     if (thread.engine === 'llm') {
       await LlmChatService.stop(threadId)
       if (LlmChatService.hasActiveWork(threadId)) throw new CodexChatError('답변 중단을 처리 중이야. 잠시 후 다시 삭제해줘.', 409)
-      beforeDelete?.()
-      CodexChatStore.deleteThread(threadId, preserve)
+      CodexChatStore.deleteThread(threadId, preserve, beforeDelete)
       deleteClaudeSessions(threadId)
       return
     }
@@ -1460,8 +1459,7 @@ export const CodexChatService = {
       clearTimeout(timer)
       if (!settled) throw new CodexChatError('답변 중단을 처리 중이야. 잠시 후 다시 삭제해줘.', 409)
     }
-    beforeDelete?.()
-    CodexChatStore.deleteThread(threadId, preserve)
+    CodexChatStore.deleteThread(threadId, preserve, beforeDelete)
     deleteCodexRollout(requester, thread.codex_thread_id)
     } finally {
       deletingThreads.delete(threadId)

@@ -1,9 +1,94 @@
 import './support/testTemp'
 import assert from 'node:assert/strict'
+import { spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { test } from 'node:test'
+
+test('restarting an interrupted writer or recovery preserves exactly the committed files and versions', { timeout: 60000 }, t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'conai-file-restart-'))
+  t.after(() => fs.rmSync(root, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 }))
+  const run = (body: string, exit: number, beforeOpen = '') => {
+    const child = spawnSync(process.execPath, ['--import', 'tsx', '-e', `
+      const fs = require('node:fs'), path = require('node:path'), assert = require('node:assert/strict');
+      const root = process.env.RUNTIME_BASE_PATH, dir = path.join(root, 'files');
+      const user = require('./src/database/userSettingsDb');
+      ${beforeOpen}
+      user.initializeUserSettingsDb();
+      const db = user.getUserSettingsDb(), { FileStoreService: files, fileOwnerKey } = require('./src/services/fileStoreService');
+      const { withFileStoreWrites: write, afterFileStoreCommit: committed } = require('./src/services/fileStoreWriteTransaction');
+      const { REVISIONS_PER_FILE: limit, FileStoreRevisions: versions } = require('./src/services/fileStoreRevisions');
+      const owner = fileOwnerKey(null), note = () => files.findChild(owner, null, 'note.txt');
+      const save = text => files.updateText(owner, note().id, text);
+      const read = name => files.readEditableText(owner, files.findChild(owner, null, name).id).text;
+      const checkFiles = () => {
+        for (const [folder, rows] of [[dir, "SELECT id FROM stored_file_entries WHERE kind='file'"],
+            [path.join(dir, '.revisions'), 'SELECT id FROM stored_file_revisions']]) {
+          assert.deepEqual(fs.readdirSync(folder).filter(n => n.endsWith('.bin')).sort(), db.prepare(rows).pluck().all().map(id => id+'.bin').sort());
+        }
+      };
+      const history = () => versions.list(owner, note().id).map(v => versions.readText(owner, note().id, v.id));
+      ${body}
+    `], {
+      cwd: path.resolve(__dirname, '..'), env: { ...process.env, RUNTIME_BASE_PATH: root, RUNTIME_DATABASE_DIR: path.join(root, 'database'), RUNTIME_SAVE_DIR: path.join(root, 'save') },
+      encoding: 'utf8', timeout: 15000, windowsHide: true,
+    })
+    if (child.error) throw child.error
+    assert.equal(child.status, exit, child.stderr || child.stdout)
+  }
+  run(`
+    files.writeText(owner, null, 'note.txt', '0');
+    for (let n=1; n<limit; n++) save(String(n));
+    save('old');
+    write(() => {
+      save('not committed'); save('twice');
+      files.copyFile(owner, note().id, null, 'orphan.txt');
+      process.exit(71);
+    });
+  `, 71)
+  // Die after the first old blob has been reinstalled but before recovery has finished the others.
+  run('', 72, `
+    const rename = fs.renameSync;
+    fs.renameSync = (from, to) => { rename(from, to); if (from.endsWith('.old')) process.exit(72); };
+  `)
+  run(`
+    assert.equal(read('note.txt'), 'old'); assert.equal(note().size, 3);
+    assert.equal(files.findChild(owner, null, 'orphan.txt'), null);
+    assert.deepEqual(history(), Array.from({length: limit}, (_, i) => String(limit-1-i)));
+    checkFiles();
+    write(() => {
+      committed(() => process.exit(73)); // SQLite committed; normal journal cleanup has not run.
+      save('committed');
+      assert.throws(() => write(() => { save('discarded savepoint'); throw Error('savepoint'); }), /savepoint/);
+      files.copyFile(owner, note().id, null, 'kept.txt');
+    });
+  `, 73)
+  run(`
+    assert.equal(read('note.txt'), 'committed'); assert.equal(note().size, 9);
+    assert.equal(read('kept.txt'), 'committed'); assert.equal(files.findChild(owner, null, 'orphan.txt'), null);
+    assert.deepEqual(history(), ['old', ...Array.from({length: limit-1}, (_, i) => String(limit-1-i))]);
+    checkFiles();
+    assert.deepEqual(fs.readdirSync(path.join(dir, '.write-journal')), []);
+    // This store stays open while another writer dies: even the source of a copy or append must be recovered.
+    const crashPeer = () => {
+      const code = "require('./src/database/userSettingsDb').initializeUserSettingsDb();"
+        + "const {FileStoreService:f,fileOwnerKey}=require('./src/services/fileStoreService');"
+        + "require('./src/services/fileStoreWriteTransaction').withFileStoreWrites(()=>{f.updateText(fileOwnerKey(null),process.argv[1],'unfinished');process.exit(74)});";
+      const peer = require('node:child_process').spawnSync(process.execPath, ['--import','tsx','-e',code,note().id],
+        {env: process.env, encoding:'utf8', timeout:10000, windowsHide:true});
+      assert.equal(peer.status, 74, peer.stderr);
+    };
+    crashPeer();
+    files.copyFile(owner, note().id, null, 'snapshot.txt');
+    assert.equal(read('snapshot.txt'), 'committed');
+    crashPeer();
+    files.editText(owner, note().id, text => text + '+');
+    assert.equal(read('note.txt'), 'committed+');
+    checkFiles();
+    user.closeUserSettingsDb();
+  `, 0)
+})
 
 test('file store text documents: create refuses taken names, update keeps the id and follows the file', { timeout: 60000 }, async (t) => {
   // Load runtime modules only after isolating every data path. Never open the user's databases.
@@ -40,6 +125,26 @@ test('file store text documents: create refuses taken names, update keeps the id
     assert.equal(saved.id, note.id)
     assert.equal(saved.size, Buffer.byteLength('# 고침\n\n한글 본문'))
     assert.equal(await read(note.id), '# 고침\n\n한글 본문')
+  })
+
+  await t.test('a rejected writer record leaves the last bytes, versions and file events intact', async () => {
+    const db = dbModule.getUserSettingsDb()
+    const { FileStoreRevisions } = await import('../src/services/fileStoreRevisions')
+    const before = await read(note.id), versions = FileStoreRevisions.list(me, note.id)
+    const revisionDir = path.join(root, 'files', '.revisions')
+    const retained = fs.readdirSync(revisionDir).sort(), events: string[] = []
+    const unsubscribe = FileStoreService.onChange(change => events.push(change.action))
+    db.exec("CREATE TEMP TRIGGER hold_writer BEFORE INSERT ON stored_file_writers BEGIN SELECT RAISE(ABORT, 'held writer'); END")
+    try {
+      assert.throws(() => FileStoreService.updateText(me, note.id, 'not saved'), /held writer/)
+      const upload = path.join(root, 'replacement')
+      fs.writeFileSync(upload, 'not uploaded')
+      assert.throws(() => FileStoreService.upload(me, null, [{ path: upload, originalname: Buffer.from(note.name).toString('latin1'), mimetype: 'text/markdown' } as never], false, { id: note.id }), /held writer/)
+      assert.equal(await read(note.id), before)
+      assert.deepEqual(FileStoreRevisions.list(me, note.id), versions)
+      assert.deepEqual(fs.readdirSync(revisionDir).sort(), retained)
+      assert.deepEqual(events, [])
+    } finally { db.exec('DROP TRIGGER hold_writer'); unsubscribe() }
   })
 
   await t.test('update follows a renamed or moved file', async () => {

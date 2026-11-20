@@ -1,4 +1,4 @@
-import { Suspense, lazy } from 'react'
+import { Suspense, lazy, type Dispatch, type SetStateAction } from 'react'
 import type { Connection, OnEdgesChange, OnNodesChange } from '@xyflow/react'
 import type { GraphWorkflowFolderRecord, GraphWorkflowRecord, ModuleDefinitionRecord } from '@/lib/api-module-graph'
 import type { SelectedImageDraft } from '@/features/image-generation/image-generation-shared'
@@ -96,8 +96,8 @@ export function useModuleGraphPageEditorPanels({
   onNodesChange: OnNodesChange<ModuleGraphNode>
   onEdgesChange: OnEdgesChange<ModuleGraphEdge>
   onDraftWorkflowFolderIdChange: (folderId: number | null) => void
-  onDraftChildFolderNameChange: (value: string) => void
-  onDraftChildFolderDescriptionChange: (value: string) => void
+  onDraftChildFolderNameChange: Dispatch<SetStateAction<string>>
+  onDraftChildFolderDescriptionChange: Dispatch<SetStateAction<string>>
   onCreateWorkflowFolder: (input: { name: string; description?: string; parent_id?: number | null }) => Promise<unknown>
   onDuplicateNodeById: (nodeId: string) => void
   onDisconnectAllNodeConnections: (nodeId: string) => void
@@ -154,9 +154,10 @@ export function useModuleGraphPageEditorPanels({
               name: draftChildFolderName,
               description: draftChildFolderDescription,
               parent_id: draftWorkflowFolderId,
-            }).then(() => {
-              onDraftChildFolderNameChange('')
-              onDraftChildFolderDescriptionChange('')
+            }).then(created => {
+              if (!created) return
+              onDraftChildFolderNameChange(value => value === draftChildFolderName ? '' : value)
+              onDraftChildFolderDescriptionChange(value => value === draftChildFolderDescription ? '' : value)
             })
           }}
         />

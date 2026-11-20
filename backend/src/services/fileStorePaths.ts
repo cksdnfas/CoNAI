@@ -52,10 +52,30 @@ export function storedFilePath(_actor: string, id: string): string {
   return target;
 }
 
+export function fileStoreJournalPath(): string {
+  assertNotLink(fileStoreRoot, 'File store cannot be a link');
+  const dir = path.join(fileStoreRoot, '.write-journal');
+  assertNotLink(dir, 'File-store journal cannot be a link');
+  return dir;
+}
+
+export function storedRevisionPath(id: string): string {
+  if (!/^[a-f0-9]{32}$/.test(id)) throw new Error('Invalid revision ID');
+  assertNotLink(fileStoreRoot, 'File store cannot be a link');
+  const dir = path.join(fileStoreRoot, '.revisions');
+  assertNotLink(dir, 'File-store revisions cannot be a link');
+  const target = path.join(dir, `${id}.bin`);
+  assertNotLink(target, 'Stored revision cannot be a link');
+  return target;
+}
+
 /** Cached preview of an image file (regenerated when the file is newer). */
 export function fileStoreThumbnailPath(id: string): string {
   if (!/^[a-f0-9]{32}$/.test(id)) throw new Error('Invalid stored file ID');
-  return path.join(fileStoreRoot, '.thumbs', `${id}.webp`);
+  const dir = path.join(fileStoreRoot, '.thumbs');
+  assertNotLink(fileStoreRoot, 'File store cannot be a link');
+  assertNotLink(dir, 'File-store thumbnails cannot be a link');
+  return path.join(dir, `${id}.webp`);
 }
 
 /** Rename each legacy item once. Never merge or overwrite an existing destination. */

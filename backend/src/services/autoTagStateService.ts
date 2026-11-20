@@ -85,6 +85,7 @@ const COMPLETED_SIGNATURE_KEY = 'auto_tag_state_synced_capabilities';
 /** Rows per recompute range; each range is one short write transaction. */
 const RECOMPUTE_RANGE_SIZE = 500;
 let recomputeInFlight: Promise<void> | null = null;
+let capabilityEpoch = 0;
 
 function readStoredSignature(): string | null {
   const stored = db.prepare(`
@@ -142,6 +143,7 @@ async function runCapabilityRecompute(): Promise<void> {
   try {
     for (;;) {
       const signature = readStoredSignature();
+      const epoch = capabilityEpoch;
       if (signature === null) {
         return;
       }
@@ -162,7 +164,7 @@ async function runCapabilityRecompute(): Promise<void> {
         await new Promise<void>((resolve) => setImmediate(resolve));
       }
 
-      if (readStoredSignature() !== signature) {
+      if (epoch !== capabilityEpoch || readStoredSignature() !== signature) {
         continue;
       }
 
@@ -235,24 +237,37 @@ export class AutoTagStateService {
       }
 
       if (storedSignature !== signature) {
-        db.prepare(`
-          INSERT INTO ${META_TABLE} (id, tagger_enabled, kaloscope_enabled, updated_at)
-          VALUES (1, ?, ?, CURRENT_TIMESTAMP)
-          ON CONFLICT(id) DO UPDATE SET
-            tagger_enabled = excluded.tagger_enabled,
-            kaloscope_enabled = excluded.kaloscope_enabled,
-            updated_at = CURRENT_TIMESTAMP
-        `).run(capabilities.taggerAutoEnabled ? 1 : 0, capabilities.kaloscopeAutoEnabled ? 1 : 0);
+        // The old marker is no longer true once even one range changes. This also distinguishes
+        // an interrupted first pass from a legacy database that never needed a marker.
+        db.transaction(() => {
+          writeCompletedSignature('pending');
+          db.prepare(`
+            INSERT INTO ${META_TABLE} (id, tagger_enabled, kaloscope_enabled, updated_at)
+            VALUES (1, ?, ?, CURRENT_TIMESTAMP)
+            ON CONFLICT(id) DO UPDATE SET
+              tagger_enabled = excluded.tagger_enabled,
+              kaloscope_enabled = excluded.kaloscope_enabled,
+              updated_at = CURRENT_TIMESTAMP
+          `).run(capabilities.taggerAutoEnabled ? 1 : 0, capabilities.kaloscopeAutoEnabled ? 1 : 0);
+        })();
+        syncedCapabilitySignature = null;
+        capabilityEpoch++;
       }
 
-      if (!recomputeInFlight) {
-        recomputeInFlight = runCapabilityRecompute().finally(() => {
-          recomputeInFlight = null;
-        });
-      }
+      this.startCapabilityRecompute();
     } catch (error) {
       console.warn('[AutoTagState] Failed to sync auto-tag state capabilities:', error instanceof Error ? error.message : error);
     }
+  }
+
+  private static startCapabilityRecompute(): void {
+    if (recomputeInFlight) return;
+    const requestedEpoch = capabilityEpoch;
+    recomputeInFlight = runCapabilityRecompute().finally(() => {
+      recomputeInFlight = null;
+      // A single-range pass may finish before its promise settles; a change in that gap still owns a pass.
+      if (capabilityEpoch !== requestedEpoch && syncedCapabilitySignature === null) this.startCapabilityRecompute();
+    });
   }
 
   /** Resolve once the background capability recompute (if any) has finished. Tests and benchmarks wait on it. */

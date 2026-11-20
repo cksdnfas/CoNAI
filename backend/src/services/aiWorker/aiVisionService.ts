@@ -87,7 +87,7 @@ export async function analyzeMedia(
   filePath: string,
   isVideo: boolean,
   tasks: VisionTasks,
-  options: { priority?: AiWorkerPriority; compositeHash?: string } = {},
+  options: { priority?: AiWorkerPriority; compositeHash?: string; signal?: AbortSignal } = {},
 ): Promise<VisionResult> {
   if (!tasks.tagger && !tasks.kaloscope) {
     return {}
@@ -102,11 +102,12 @@ export async function analyzeMedia(
   let frames: string[] = []
   let reply: AnalyzeReply
   try {
+    options.signal?.throwIfAborted()
     frames = isVideo ? await VideoFrameExtractor.extractFramesForTagging(filePath) : [filePath]
     const payload: Record<string, unknown> = { images: frames }
     if (tasks.tagger) payload.wd = taggerOptions()
     if (tasks.kaloscope) payload.kaloscope = kaloscopeOptions(typeof tasks.kaloscope === 'object' ? tasks.kaloscope.topk : undefined)
-    reply = await visionWorker.request<AnalyzeReply>('analyze', payload, { priority: options.priority })
+    reply = await visionWorker.request<AnalyzeReply>('analyze', payload, { priority: options.priority, signal: options.signal })
   } catch (error) {
     return {
       ...(tasks.tagger && { tagger: failure(error) }),

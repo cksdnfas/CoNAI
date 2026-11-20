@@ -6,6 +6,7 @@ import { WorkflowModel } from '../../models/Workflow'
 import { CHAT_SKILL_LIMITS, normalizeSkillSectionPath } from '@conai/shared'
 import { FileStoreService } from '../fileStoreService'
 import { ChatProfileError } from './chatProfileError'
+import { editChatResource } from './chatResourceWrite'
 import { splitLong } from './chatSkillPackages'
 import { ChatSkillStore, skillChunk, skillGuide, uniqueSkillName } from './chatSkills'
 import type { MarkedField } from '../../types/workflow'
@@ -85,6 +86,7 @@ export const PRESET_GUIDE_MAX_LENGTH = 4000
 
 export type ChatGenerationPreset = {
   id: number
+  revision: number
   name: string
   /** What the model is told the preset is for (shown in the tool description), e.g. "캐릭터 전신 일러스트". */
   instruction: string
@@ -129,7 +131,7 @@ const DEFAULT_NAI: ChatNaiPresetConfig = {
   characterReference: 'none',
 }
 
-type PresetRow = { id: number; name: string; instruction: string; kind: string; config: string; prompting: string | null; created_date: string; updated_date: string }
+type PresetRow = { id: number; revision: number; name: string; instruction: string; kind: string; config: string; prompting: string | null; created_date: string; updated_date: string }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
@@ -482,6 +484,7 @@ function parseConfig(row: PresetRow): Pick<ChatGenerationPreset, 'kind' | 'nai' 
 function toPreset(row: PresetRow, profiles: ReturnType<typeof linkedProfiles>): ChatGenerationPreset {
   return {
     id: row.id,
+    revision: row.revision,
     name: row.name,
     instruction: row.instruction,
     ...parseConfig(row),
@@ -551,13 +554,12 @@ export const ChatGenerationPresetStore = {
     return ChatGenerationPresetStore.find(Number(result.lastInsertRowid)) as ChatGenerationPreset
   },
 
-  update(presetId: number, patch: ChatGenerationPresetInput) {
-    const current = ChatGenerationPresetStore.find(presetId)
-    if (!current) return null
-    const columns = columnsOf(patch, current)
-    getUserSettingsDb().prepare('UPDATE chat_generation_presets SET name = ?, instruction = ?, kind = ?, config = ?, prompting = ?, updated_date = CURRENT_TIMESTAMP WHERE id = ?')
-      .run(columns.name, columns.instruction, columns.kind, columns.config, columns.prompting, presetId)
-    return ChatGenerationPresetStore.find(presetId)
+  update(presetId: number, patch: ChatGenerationPresetInput, revision?: unknown) {
+    return editChatResource(presetId, revision, ChatGenerationPresetStore.find, current => {
+      const columns = columnsOf(patch, current)
+      getUserSettingsDb().prepare('UPDATE chat_generation_presets SET name = ?, instruction = ?, kind = ?, config = ?, prompting = ?, updated_date = CURRENT_TIMESTAMP WHERE id = ?')
+        .run(columns.name, columns.instruction, columns.kind, columns.config, columns.prompting, presetId)
+    })
   },
 
   /** A preset in use cannot go: the profiles would silently fall back to free-form generation. */

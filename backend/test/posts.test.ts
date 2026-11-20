@@ -205,6 +205,11 @@ test('posts: categories, posts, tags, media refs, comments, visibility and searc
     assert.equal(deeper.quoteCommentId, reply.id)
     assert.equal(status(() => PostCommentStore.create(reader, postId, { body: '읽기만' })), 403)
     assert.equal(status(() => PostCommentStore.update(alice, top.id, { body: '남의 댓글' })), 403)
+    db.exec(`CREATE TEMP TRIGGER refuse_count BEFORE UPDATE OF comment_count ON posts WHEN OLD.id=${postId} BEGIN SELECT RAISE(ABORT, 'held count'); END`)
+    try {
+      assert.throws(() => PostCommentStore.setHidden(admin, deeper.id, true), /held count/)
+      assert.equal(PostCommentStore.get(reader, deeper.id).status, 'visible', 'a failed count update must roll back hiding the comment')
+    } finally { db.exec('DROP TRIGGER refuse_count') }
     PostCommentStore.setHidden(admin, deeper.id, true)
     assert.equal(PostCommentStore.list(reader, postId).some((comment) => comment.id === deeper.id), false)
     assert.equal(PostCommentStore.list(bob, postId).find((comment) => comment.id === deeper.id)?.status, 'hidden', 'the writer still sees it')

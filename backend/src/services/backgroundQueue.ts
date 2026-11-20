@@ -11,6 +11,7 @@ import { MediaMetadataModel } from '../models/Image/MediaMetadataModel';
 import { MediaPostprocessVisibilityService } from './mediaPostprocessVisibilityService';
 import type { AIMetadata } from './metadata/types';
 import { SystemMaintenanceLockService } from './systemMaintenanceLockService';
+import { resolveUploadsPath } from '../config/runtimePaths';
 
 function resolveBackgroundQueueBatchSize(): number {
   const configured = Number.parseInt(process.env.CONAI_BACKGROUND_QUEUE_BATCH_SIZE ?? '', 10);
@@ -103,25 +104,28 @@ export class BackgroundQueueService {
   private static readonly metadataTasks = new Map<string, BackgroundTask>();
   private static readonly queueChangeListeners = new Set<() => void>();
   private static processing = false;
-  private static processScheduled = false;
-  private static lockRetryScheduled = false;
+  private static stopping = false;
+  private static drain: Promise<void> | undefined;
+  private static runner: Promise<void> | undefined;
+  private static scheduled: NodeJS.Immediate | undefined;
+  private static lockRetry: NodeJS.Timeout | undefined;
+  private static readonly extractions = new Map<string, Promise<boolean>>();
   private static readonly MAX_RETRIES = 3;
   private static readonly BATCH_SIZE = resolveBackgroundQueueBatchSize(); // 동시 처리 작업 수
 
   /** Pending metadata survives a restart; failed extraction stays private instead of becoming public. */
   static startMetadataRecovery(): void {
-    if (this.recoveryTimer) return;
+    if (this.stopping || this.recoveryTimer) return;
     const recover = () => {
       try {
-        const rows = db.prepare(`SELECT mm.composite_hash, (
-          SELECT original_file_path FROM image_files f WHERE f.composite_hash = mm.composite_hash
-            AND f.file_status = 'active' LIMIT 1
-        ) AS file_path FROM media_metadata mm
-          WHERE metadata_extraction_status = 'pending' AND EXISTS (
-            SELECT 1 FROM image_files f WHERE f.composite_hash = mm.composite_hash AND f.file_status = 'active'
-          ) LIMIT 50`).all() as Array<{ composite_hash: string; file_path: string | null }>;
+        const rows = db.prepare(`SELECT mm.composite_hash, f.original_file_path AS file_path
+          FROM media_metadata mm JOIN image_files f ON f.id = (
+            SELECT candidate.id FROM image_files candidate WHERE candidate.composite_hash = mm.composite_hash
+              AND candidate.file_status = 'active' AND candidate.original_file_path IS NOT NULL
+              ORDER BY candidate.last_verified_date DESC, candidate.id DESC LIMIT 1
+          ) WHERE mm.metadata_extraction_status = 'pending' LIMIT 50`).all() as Array<{ composite_hash: string; file_path: string }>;
         for (const row of rows) {
-          if (row.file_path) this.addMetadataExtractionTask(row.file_path, row.composite_hash);
+          this.addMetadataExtractionTask(row.file_path, row.composite_hash);
         }
       } catch (error) {
         logger.warn('Pending metadata recovery failed', error);
@@ -133,7 +137,7 @@ export class BackgroundQueueService {
   }
 
   private static getMetadataExtractionTaskKey(filePath: string, compositeHash: string): string {
-    return `${compositeHash}\u0000${path.resolve(filePath)}`;
+    return `${compositeHash}\u0000${path.resolve(resolveUploadsPath(filePath))}`;
   }
 
   private static enqueue(task: BackgroundTask): void {
@@ -162,11 +166,17 @@ export class BackgroundQueueService {
    * 메타데이터 추출 작업 추가
    */
   static addMetadataExtractionTask(filePath: string, compositeHash: string): void {
+    if (this.stopping) throw new Error('Metadata queue is shutting down');
+    if (this.extractions.has(this.getMetadataExtractionTaskKey(filePath, compositeHash))) return;
     this.getOrAddMetadataExtractionTask(filePath, compositeHash);
   }
 
   /** Share the existing queued or active extraction and observe its final outcome, including retries. */
   static trackMetadataExtractionTask(filePath: string, compositeHash: string): Promise<boolean> {
+    if (this.stopping) return Promise.resolve(false);
+    const key = this.getMetadataExtractionTaskKey(filePath, compositeHash);
+    const inline = this.extractions.get(key);
+    if (inline && !this.metadataTasks.has(key)) return inline;
     const task = this.getOrAddMetadataExtractionTask(filePath, compositeHash);
     if (!task.completion) {
       let resolve!: (success: boolean) => void;
@@ -183,7 +193,7 @@ export class BackgroundQueueService {
   }
 
   private static getOrAddMetadataExtractionTask(filePath: string, compositeHash: string): BackgroundTask {
-    const resolvedFilePath = path.resolve(filePath);
+    const resolvedFilePath = path.resolve(resolveUploadsPath(filePath));
     const key = this.getMetadataExtractionTaskKey(resolvedFilePath, compositeHash);
     const existing = this.metadataTasks.get(key);
     if (existing) {
@@ -207,11 +217,10 @@ export class BackgroundQueueService {
     logger.debug(`  📋 백그라운드 작업 추가: 메타데이터 추출 - ${path.basename(filePath)}`);
 
     // 큐 처리 시작
-    if (!this.processing && !this.processScheduled) {
-      this.processScheduled = true;
-      setImmediate(() => {
-        this.processScheduled = false;
-        void this.processQueue();
+    if (!this.processing && !this.scheduled) {
+      this.scheduled = setImmediate(() => {
+        this.scheduled = undefined;
+        this.processQueue();
       });
     }
     return task;
@@ -222,6 +231,11 @@ export class BackgroundQueueService {
    * 프롬프트 수집 작업 추가
    */
   static addPromptCollectionTask(filePath: string, compositeHash: string): void {
+    if (this.stopping) return;
+    this.enqueuePrompt(filePath, compositeHash);
+  }
+
+  private static enqueuePrompt(filePath: string, compositeHash: string): void {
     const task: BackgroundTask = {
       id: `${compositeHash}_prompt_${Date.now()}`,
       type: TaskType.PROMPT_COLLECTION,
@@ -245,8 +259,8 @@ export class BackgroundQueueService {
   /**
    * 큐 처리 (배치 병렬 처리)
    */
-  private static async processQueue(): Promise<void> {
-    if (this.processing || this.queueLength === 0) {
+  private static processQueue(): void {
+    if (this.stopping || this.processing || this.queueLength === 0) {
       return;
     }
 
@@ -256,9 +270,17 @@ export class BackgroundQueueService {
     }
 
     this.processing = true;
+    this.runner = this.runBatches().finally(() => {
+      this.processing = false;
+      this.runner = undefined;
+      if (this.queueLength && !this.lockRetry) this.processQueue();
+    });
+  }
+
+  private static async runBatches(): Promise<void> {
     logger.info(`\n🔄 백그라운드 큐 처리 시작: ${this.queueLength}개 작업`);
 
-    while (this.queueLength > 0) {
+    while (!this.stopping && this.queueLength > 0) {
       if (SystemMaintenanceLockService.isExclusiveActive()) {
         break;
       }
@@ -279,14 +301,17 @@ export class BackgroundQueueService {
           task.retries++;
 
           if (task.retries < task.maxRetries) {
-            logger.warn(`  ⚠️  작업 재시도 (${task.retries}/${task.maxRetries}): ${task.id}`);
-            this.enqueue(task);
-            return;
+            if (!this.stopping) {
+              logger.warn(`  ⚠️  작업 재시도 (${task.retries}/${task.maxRetries}): ${task.id}`);
+              this.enqueue(task);
+              return;
+            }
           } else {
             logger.error(`  ❌ 작업 최종 실패: ${task.id}`, result.reason);
             if (task.type === TaskType.METADATA_EXTRACTION) {
-              MediaPostprocessVisibilityService.finishMetadataExtraction(task.compositeHash, 'failed');
-              QueryCacheService.scheduleGalleryCacheInvalidation();
+              try {
+                MediaPostprocessVisibilityService.finishMetadataExtraction(task.compositeHash, 'failed');
+              } catch (error) { logger.error('Failed to persist metadata extraction failure', error); }
             }
           }
         }
@@ -297,15 +322,13 @@ export class BackgroundQueueService {
         }
       });
       this.activeTasks = this.activeTasks.filter((task) => !batch.includes(task));
-      this.queueChangeListeners.forEach((listener) => listener());
+      this.notifyQueueChange();
 
       // 짧은 대기 (CPU 부하 방지)
-      await new Promise(resolve => setTimeout(resolve, 100));
+      if (!this.stopping && this.queueLength > 0) await new Promise(resolve => setTimeout(resolve, 100));
     }
 
-    this.processing = false;
-
-    if (this.queueLength > 0 && SystemMaintenanceLockService.isExclusiveActive()) {
+    if (!this.stopping && this.queueLength > 0 && SystemMaintenanceLockService.isExclusiveActive()) {
       this.scheduleProcessQueueAfterMaintenanceLock();
       logger.info('⏸️  백그라운드 큐 처리 대기: 시스템 유지보수 잠금 활성\n');
       return;
@@ -315,15 +338,49 @@ export class BackgroundQueueService {
   }
 
   private static scheduleProcessQueueAfterMaintenanceLock(): void {
-    if (this.lockRetryScheduled) {
+    if (this.lockRetry || this.stopping) {
       return;
     }
 
-    this.lockRetryScheduled = true;
-    setTimeout(() => {
-      this.lockRetryScheduled = false;
-      void this.processQueue();
+    this.lockRetry = setTimeout(() => {
+      this.lockRetry = undefined;
+      this.processQueue();
     }, 5000);
+  }
+
+  private static notifyQueueChange(): void {
+    for (const listener of this.queueChangeListeners) {
+      try { listener(); } catch (error) { logger.warn('Metadata queue listener failed', error); }
+    }
+  }
+
+  /** Pending extraction has a durable restart path. Finish active writes and their in-memory prompt work before DB close. */
+  static stopAndDrain(): Promise<void> {
+    if (this.drain) return this.drain;
+    this.stopping = true;
+    clearInterval(this.recoveryTimer);
+    clearTimeout(this.lockRetry);
+    if (this.scheduled) clearImmediate(this.scheduled);
+    const bucket = this.metadataQueue;
+    for (let i = bucket.head; i < bucket.tasks.length; i++) {
+      const task = bucket.tasks[i]!;
+      this.metadataTasks.delete(this.getMetadataExtractionTaskKey(task.filePath, task.compositeHash));
+      task.completion?.resolve(false);
+      this.queueLength--;
+    }
+    bucket.tasks = [];
+    bucket.head = 0;
+    this.notifyQueueChange();
+    this.drain = (async () => {
+      await Promise.allSettled([this.runner, ...this.extractions.values()]);
+      while (this.queueLength > 0) {
+        await SystemMaintenanceLockService.waitUntilUnlocked();
+        for (const task of this.takeBatch()) {
+          try { await this.processPromptCollection(task); } catch (error) { logger.error('Prompt collection failed at shutdown', error); }
+        }
+      }
+    })();
+    return this.drain;
   }
 
   /**
@@ -368,27 +425,54 @@ export class BackgroundQueueService {
    * This is shared by the background queue and the saved-media/folder-scan
    * pipeline so every path uses the exact same parser and persistence logic.
    */
-  static async extractAndPersistMetadata(filePath: string, compositeHash: string): Promise<boolean> {
-    const file = db.prepare(`SELECT file_type FROM image_files WHERE composite_hash = ?
-      AND original_file_path = ? AND file_status = 'active' LIMIT 1`).get(compositeHash, filePath) as { file_type: string } | undefined;
-    if (file?.file_type === 'video') {
-      const stream = db.prepare('SELECT width, height FROM media_metadata WHERE composite_hash = ?').get(compositeHash) as { width: number; height: number } | undefined;
-      if (!stream?.width || !stream.height) {
-        const { VideoProcessor } = await import('./videoProcessor');
-        const metadata = await VideoProcessor.extractMetadata(filePath);
-        db.prepare(`UPDATE media_metadata SET width = ?, height = ?, duration = ?, fps = ?, video_codec = ?, audio_codec = ?, bitrate = ?
-          WHERE composite_hash = ?`).run(metadata.width, metadata.height, metadata.duration, metadata.fps,
-          metadata.video_codec, metadata.audio_codec, metadata.bitrate, compositeHash);
-      }
+  static extractAndPersistMetadata(filePath: string, compositeHash: string): Promise<boolean> {
+    if (this.stopping) return Promise.resolve(false);
+    const key = this.getMetadataExtractionTaskKey(filePath, compositeHash);
+    const running = this.extractions.get(key);
+    if (running) return running;
+    const work = this.extract(path.resolve(resolveUploadsPath(filePath)), compositeHash).finally(() => this.extractions.delete(key));
+    this.extractions.set(key, work);
+    return work;
+  }
+
+  private static async extract(filePath: string, compositeHash: string): Promise<boolean> {
+    const files = db.prepare(`SELECT id, original_file_path, file_type FROM image_files
+      WHERE composite_hash = ? AND file_status = 'active' AND original_file_path IS NOT NULL`).iterate(compositeHash) as Iterable<{
+      id: number; original_file_path: string; file_type: string;
+    }>;
+    const file = Array.from(files).find(source => path.relative(resolveUploadsPath(source.original_file_path), filePath) === '');
+    if (!file) return false;
+    const hasSource = db.prepare(`SELECT 1 FROM image_files WHERE id = ? AND composite_hash = ? AND file_status = 'active' AND original_file_path = ?`);
+    const stillLinked = () => Boolean(hasSource.get(file.id, compositeHash, file.original_file_path));
+    let aiInfo: AIMetadata = {};
+    let saveVideo: (() => void) | undefined;
+    try {
+      if (file.file_type === 'video') {
+        // Video registration usually has the stream metadata already.
+        const stream = db.prepare('SELECT width, height FROM media_metadata WHERE composite_hash = ?').get(compositeHash) as { width: number; height: number } | undefined;
+        if (!stream?.width || !stream.height) {
+          const { VideoProcessor } = await import('./videoProcessor');
+          const metadata = await VideoProcessor.extractMetadata(filePath);
+          saveVideo = () => db.prepare(`UPDATE media_metadata SET width = ?, height = ?, duration = ?, fps = ?, video_codec = ?, audio_codec = ?, bitrate = ?
+            WHERE composite_hash = ?`).run(metadata.width, metadata.height, metadata.duration, metadata.fps,
+            metadata.video_codec, metadata.audio_codec, metadata.bitrate, compositeHash);
+        }
+      } else aiInfo = (await MetadataExtractor.extractMetadata(filePath)).ai_info || {};
+    } catch (error) {
+      if (!stillLinked()) return false;
+      throw error;
     }
-    // Video registration already probes stream metadata; don't read a whole video through the image parser.
-    const aiMetadata = file?.file_type === 'video' ? { ai_info: {} } : await MetadataExtractor.extractMetadata(filePath);
-    const aiInfo = aiMetadata.ai_info || {};
     const persistence = metadataPersistenceFields(aiInfo);
 
     // media_metadata 업데이트
     try {
-      if (file?.file_type !== 'video') MediaMetadataModel.update(compositeHash, persistence.updates);
+      const committed = MediaPostprocessVisibilityService.finishMetadataExtraction(compositeHash, 'completed', () => {
+        if (!stillLinked()) return false;
+        if (file.file_type !== 'video') return MediaMetadataModel.update(compositeHash, persistence.updates);
+        saveVideo?.();
+        return true;
+      });
+      if (!committed) return false;
     } catch (error) {
       if (error instanceof RangeError) {
         logger.error(`  ❌ RangeError during metadata update (skipping): ${path.basename(filePath)}`);
@@ -399,8 +483,6 @@ export class BackgroundQueueService {
       }
       throw error;
     }
-
-    MediaPostprocessVisibilityService.finishMetadataExtraction(compositeHash, 'completed');
 
     logger.debug(`  ✅ 메타데이터 추출 완료: ${path.basename(filePath)}`);
 
@@ -425,7 +507,7 @@ export class BackgroundQueueService {
     // 프롬프트가 있으면 프롬프트 수집 작업 추가
     if (persistence.hasCollectablePrompt) {
       try {
-        this.addPromptCollectionTask(filePath, compositeHash);
+        this.enqueuePrompt(filePath, compositeHash);
       } catch (error) {
         logger.warn(`  ⚠️  프롬프트 수집 작업 추가 실패: ${path.basename(filePath)}`, error);
       }

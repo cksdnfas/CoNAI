@@ -66,7 +66,7 @@ test('metadata re-extraction starts once, backpressures, cancels and reports fin
   let producePrompts = false
   const attempts = new Map<string, number>()
   const processedOrder: string[] = []
-  t.mock.method(BackgroundQueueService, 'extractAndPersistMetadata', async (filePath, compositeHash) => {
+  const extractor = t.mock.method(BackgroundQueueService, 'extractAndPersistMetadata', async (filePath, compositeHash) => {
     if (blocked) {
       firstStarted()
       await gate
@@ -192,4 +192,54 @@ test('metadata re-extraction starts once, backpressures, cancels and reports fin
   assert.equal(stressJob.result.processedCount, 120)
   assert.ok(peakQueue <= 100, `metadata plus generated prompt tasks stayed bounded: ${peakQueue}`)
   await waitFor(() => BackgroundQueueService.getQueueStatus().queueLength === 0 && !BackgroundQueueService.getQueueStatus().processing)
+  extractor.mock.restore()
+
+  await t.test('recovery uses the uploads root, discards a detached source and drains the accepted write on shutdown', async s => {
+    const { MetadataExtractor } = await import('../src/services/metadata')
+    const id = hash(40000), later = hash(40001)
+    const relative = 'legacy/recovery.png'
+    insertMetadata.run(id)
+    insertMetadata.run(later)
+    insertFile.run(id, relative, folder, null, null)
+    const markPending = main.db.prepare("UPDATE media_metadata SET metadata_extraction_status='pending', postprocess_status='pending' WHERE composite_hash=?")
+    markPending.run(id)
+    const state = () => main.db.prepare('SELECT prompt, metadata_extraction_status FROM media_metadata WHERE composite_hash=?').get(id)
+    const calls: string[] = []
+    let notify!: () => void, finish!: () => void
+    let reading = new Promise<void>(resolve => { notify = resolve })
+    let hold = new Promise<void>(resolve => { finish = resolve })
+    s.mock.method(MetadataExtractor, 'extractMetadata', async (source) => {
+      calls.push(source)
+      notify()
+      await hold
+      return { ai_info: { prompt: 'recovered prompt' } }
+    })
+    try {
+      BackgroundQueueService.startMetadataRecovery()
+      const first = BackgroundQueueService.trackMetadataExtractionTask(relative, id)
+      await reading
+      const move = main.db.prepare('UPDATE image_files SET original_file_path=? WHERE composite_hash=?')
+      move.run('legacy/moved.png', id)
+      finish()
+      assert.equal(await first, false)
+      assert.deepEqual(state(), { prompt: null, metadata_extraction_status: 'pending' })
+      assert.deepEqual(calls, [path.join(root, 'uploads', relative)])
+
+      reading = new Promise<void>(resolve => { notify = resolve })
+      hold = new Promise<void>(resolve => { finish = resolve })
+      const accepted = BackgroundQueueService.trackMetadataExtractionTask('legacy/moved.png', id)
+      await reading
+      const waiting = BackgroundQueueService.trackMetadataExtractionTask('later.png', later)
+      const drained = BackgroundQueueService.stopAndDrain()
+      assert.equal(await waiting, false)
+      assert.equal(await BackgroundQueueService.trackMetadataExtractionTask('late.png', later), false)
+      assert.deepEqual(state(), { prompt: null, metadata_extraction_status: 'pending' })
+      finish()
+      assert.equal(await accepted, true)
+      await drained
+      assert.deepEqual(state(), { prompt: 'recovered prompt', metadata_extraction_status: 'completed' })
+      assert.deepEqual(BackgroundQueueService.getQueueStatus(), { queueLength: 0, activeCount: 0, processing: false })
+      assert.equal(calls.length, 2)
+    } finally { finish(); await BackgroundQueueService.stopAndDrain() }
+  })
 })

@@ -22,6 +22,10 @@
 
 `runtimeEventBus.ts`는 각 동기 구독자의 예외를 따로 기록한다. 한 구독자의 실패가 뒤의 캐시 무효화·작업 완료·SSE 알림을 막지 않으며, 반환된 구독 해제 함수는 보호 래퍼까지 제거한다.
 
+워크플로 편집·삭제와 예약 일시정지·삭제는 `graphWorkflowScheduleService.ts`에서 관련 DB 변경을 한 트랜잭션으로 묶는다. 큐 취소 알림과 실행 중인 노드의 중단 요청은 커밋 뒤에만 보낸다. 그래프 폴더 생성 API(`POST /api/graph-workflows/folders`)에 `assign_to: { workflow_id, expected_revision }`를 주면 폴더 생성과 기존 워크플로의 위치 변경도 함께 커밋된다. 이 필드를 생략한 기존 요청은 폴더만 만든다.
+
+종료 시 `PostBotRunner.stop()`은 진행 중인 답글·미디어 첨부까지 기다리고, `CustomNodeRegistryService.stopAndDrain()`은 감시기 밖에서 요청된 재스캔과 이미 접수한 스캐폴드의 DB 반영까지 기다린다. 감시기만 재시작할 때는 `CustomNodeWatcherService.stopAll()`을 쓴다.
+
 `gracefulShutdown.ts`는 생성 서비스 종료 전에 `ChatTaskRunner.stop()`과 `ChatRoutineRunner.stopAndDrain()`을 호출한다. 작업 러너는 이어가기 타이머와 재개 이벤트 구독을 해제하고, 이미 대기하던 이어가기도 모델 호출 전에 종료 여부를 다시 확인한다. 이미 시작된 작업의 모델 호출은 강제로 취소하지 않는다. 루틴 러너는 예약·수동 실행 접수를 모두 닫고 `wakeChatRoom`의 `signal`로 진행 중인 깨우기를 끊는다. 실행 결과가 DB에 기록된 뒤에만 종료를 계속한다. 중단된 예약 1회 루틴은 실패로, 반복 루틴은 연속 실패에 세지 않는 건너뜀(`skipped`)으로 기록한다. `start()`는 접수를 다시 열고, 비정상 재시작으로 다음 실행 시각 없이 남은 예약 1회 루틴도 실패 처리해 자동 재실행하지 않는다.
 
 자동화 방의 공용 생성 경로는 `chatRoomWake.ts`의 `ensureAutomationRoom`이다. 기존 방은 읽기만 하고, 새 방은 같은 계정·키의 연결을 쓰기 트랜잭션 안에서 다시 확인한 뒤 채팅·설정·연결을 함께 저장한다. 워크플로 예약의 실행 수 제한과 큐 등록은 `graphWorkflowScheduleRuns.ts`의 `enqueueScheduleRuns`에서 예약 시각·지금 실행·배경화면 빠른 실행이 공유한다. 자동 예약의 버전·실행 계정·중복 실행 검사는 폴러에 남는다.
@@ -39,6 +43,8 @@
 `AutoScanScheduler.stopAndDrain()`은 자동 스캔·파일 검증의 진행 중 호출, 폴더별 대기 스캔, 후속 해시 배치를 정리한다. `BackgroundProcessorService.stopAndDrain()`은 재시도·후속 배치 타이머를 취소하고 이미 시작한 배치의 DB 쓰기를 기다리며, 스케줄러 재시작 시 다시 활성화한다. 런타임 작업도 임시 파일 삭제·AI 워커 종료 전에 취소·드레인한다. 전체 종료의 기존 강제 종료 제한은 유지한다.
 
 ## 채팅과 페이지 어시스턴트
+
+채팅·플러그인과 파일 보관함을 함께 변경하는 동기 작업은 바깥쪽 경계를 `withFileStoreWrites`로 감싼다. 파일 교체 전 `files/.write-journal/`에 원본 또는 신규 파일 표시를 남기고, `user.db`에는 같은 트랜잭션에서 마지막 커밋 ID를 기록한다. HTTP·MCP는 DB를 열 때 마이그레이션보다 먼저, 기존 프로세스는 다음 쓰기 전에 저널을 확인한다. 커밋되지 않은 쓰기는 역순으로 되돌리고, 커밋된 쓰기는 본문을 보존하고 저널만 정리한다. 이는 프로세스 강제 종료 복구이며 전원 장애 보장은 아니다.
 
 `GET /api/codex-chat/composer-tools?threadId=…` 또는 `?profileId=…`는 소유한 채팅/사용 가능한 프로필의 실제 MCP 등록을 카탈로그 없이 조회해 `{ presets: [{ id, name, instruction, kind }], tools: [{ name, description, scope }] }`를 반환한다(그룹은 빈 목록). 메시지 전송의 선택적 `toolDirective: { presetId } | { tool }`는 같은 턴 권한으로 검증하며, 해당 도구를 직접 노출하고 이번 턴만 사용할 지시를 덧붙인다. 사용자 메시지에는 프리셋 이름을 포함한 스냅샷을 저장한다. 재생성·수정은 현재 권한으로 다시 확인하고 사라진 선택은 실행하지 않는다. 관리자 도구 목록과 호출 시 권한 재검사는 바꾸지 않는다.
 

@@ -15,7 +15,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { ChatProfileAvatar } from '@/features/codex-chat/chat-profile-avatar'
 import { mentionQueryAt } from '@/features/codex-chat/chat-mentions'
 import { useI18n } from '@/i18n'
-import { invalidatePostScope, cancelPostBotRun, createPostComment, deletePostComment, listMentionableProfiles, setPostCommentHidden, updatePostComment } from '@/lib/api-posts'
+import { invalidatePostScope, cancelPostBotRun, deletePostComment, listMentionableProfiles, setPostCommentHidden } from '@/lib/api-posts'
 import { buildApiUrl } from '@/lib/api-url'
 import { getErrorMessage } from '@/lib/error-message'
 import { cn } from '@/lib/utils'
@@ -24,25 +24,18 @@ import { PostAuthorChip, usePostReferenceEntry } from './post-chat-links'
 import { PostMarkdown } from './post-markdown'
 import { usePostPermissions } from './use-post-permissions'
 import { usePostCommentsData } from './use-post-comments'
+import { openCommentEdit, publishCommentDraft, saveCommentDraft, type PostCommentDraft, type SetCommentDraft } from './post-comment-draft'
 
 /** Profiles the comment still names: a picked profile counts only while its `@name` is in the text. */
 function mentionedIds(text: string, picked: Map<number, string>) {
   return [...picked].filter(([, name]) => text.includes(`@${name}`)).map(([id]) => id)
 }
 
-/**
- * What the comment boxes of the open post hold. It lives above the boxes so the connected chat (page assistant) can
- * read and draft it: the box under the post, and the reply box open under one comment.
- */
-/** The open post's comment boxes: the box under the post, the reply box and the edit box of one comment. */
-export type PostCommentDraft = { top: string; reply: { to: number; text: string } | null; edit: { id: number; text: string } | null }
-export const EMPTY_COMMENT_DRAFT: PostCommentDraft = { top: '', reply: null, edit: null }
-
 /** The frame of a one-line box that grows with its text (Textarea `inline`), with its buttons inside (comment, reply and edit boxes). */
 const BOX = 'theme-input-surface flex items-end gap-0.5 rounded-sm border py-1 pr-1 pl-3 transition focus-within:border-primary/55 focus-within:ring-2 focus-within:ring-primary/15'
 
 /** A comment box; `@` opens the list of bots the viewer may call. Its text is held by the caller. */
-function CommentComposer({ postId, parentId, mentionable, autoFocus, onDone, placeholder, text, setText }: {
+function CommentComposer({ postId, parentId, mentionable, autoFocus, onDone, placeholder, text, setText, setDraft }: {
   postId: number
   parentId: number | null
   mentionable: PostMentionableProfile[]
@@ -51,6 +44,7 @@ function CommentComposer({ postId, parentId, mentionable, autoFocus, onDone, pla
   placeholder?: string
   text: string
   setText: (text: string) => void
+  setDraft: SetCommentDraft
 }) {
   const { t } = useI18n()
   const { showSnackbar } = useSnackbar()
@@ -65,15 +59,11 @@ function CommentComposer({ postId, parentId, mentionable, autoFocus, onDone, pla
     ? mentionable.filter((profile) => profile.name.toLowerCase().includes(query.query.toLowerCase())).slice(0, 6)
     : []
   const mutation = useMutation({
-    mutationFn: () => createPostComment(postId, { body: text, parentId, mentions: mentionedIds(text, picked) }),
-    onSuccess: async () => {
-      setText('')
-      setPicked(new Map())
-      onDone?.()
-      await invalidatePostScope(queryClient, postId, 'comment')
-    },
+    mutationFn: () => publishCommentDraft(queryClient, postId, parentId, text, setDraft, mentionedIds(text, picked)),
     onError: (error) => showSnackbar({ tone: 'error', message: getErrorMessage(error, t({ ko: '댓글을 올리지 못했어.', en: 'Could not post the comment.' })) }),
   })
+  const empty = text.length === 0
+  useEffect(() => { if (empty) setPicked(current => current.size ? new Map() : current) }, [empty])
 
   const choose = (profile: PostMentionableProfile) => {
     if (!query) return
@@ -206,11 +196,11 @@ function isReplyClick(event: MouseEvent<HTMLElement>) {
   return !window.getSelection()?.toString()
 }
 
-function CommentRow({ comment, quoted, mentionNames, canReply, onReply, onMention, reply, editing, setEditing, focused = false }: {
+function CommentRow({ comment, quoted, mentionNames, canReply, onReply, onMention, reply, editing, setDraft, focused = false }: {
   comment: PostComment
   /** This comment's edit box text (null: closed); held by the page so the connected chat can draft it. */
-  editing: string | null
-  setEditing: (text: string | null) => void
+  editing: PostCommentDraft['edit']
+  setDraft: SetCommentDraft
   /** Opened from a link to this comment: it is scrolled to and marked for a moment. */
   focused?: boolean
   quoted: PostComment | null
@@ -232,7 +222,9 @@ function CommentRow({ comment, quoted, mentionNames, canReply, onReply, onMentio
   const pointerType = useRef('mouse')
   const refresh = () => invalidatePostScope(queryClient, comment.postId, 'comment')
   const onError = (error: unknown) => showSnackbar({ tone: 'error', message: getErrorMessage(error, t({ ko: '댓글 작업에 실패했어.', en: 'Comment action failed.' })) })
-  const save = useMutation({ mutationFn: (body: string) => updatePostComment(comment.id, { body, expectedRevision: comment.revision }), onSuccess: async () => { setEditing(null); await refresh() }, onError })
+  const setEditing = (text: string | null) => setDraft(draft => draft.edit?.id !== comment.id ? draft
+    : { ...draft, edit: text === null ? null : { ...draft.edit, text } })
+  const save = useMutation({ mutationFn: (edit: NonNullable<PostCommentDraft['edit']>) => saveCommentDraft(queryClient, comment.postId, edit, setDraft), onError })
   const remove = useMutation({ mutationFn: () => deletePostComment(comment.id), onSuccess: refresh, onError })
   const hide = useMutation({ mutationFn: (hidden: boolean) => setPostCommentHidden(comment.id, hidden), onSuccess: refresh, onError })
   const reference = usePostReferenceEntry({ postId: comment.postId, commentId: comment.id, label: `${comment.author.name}: ${comment.body.replace(/\s+/g, ' ').slice(0, 40)}` })
@@ -243,7 +235,7 @@ function CommentRow({ comment, quoted, mentionNames, canReply, onReply, onMentio
   const entries: ActionMenuEntry[] = [
     canReply ? { key: 'reply', icon: MessageSquareReply, label: t({ ko: '답글', en: 'Reply' }), onSelect: onReply } : null,
     reference,
-    comment.canEdit && editing === null ? { key: 'edit', icon: Pencil, label: t({ ko: '고치기', en: 'Edit' }), onSelect: () => setEditing(comment.body) } : null,
+    comment.canEdit && editing === null ? { key: 'edit', icon: Pencil, label: t({ ko: '고치기', en: 'Edit' }), onSelect: () => setDraft(draft => openCommentEdit(draft, comment)) } : null,
     '-',
     isAdmin ? { key: 'hide', icon: comment.status === 'hidden' ? Eye : EyeOff, disabled: hide.isPending, label: comment.status === 'hidden' ? t({ ko: '다시 보이기', en: 'Show' }) : t({ ko: '숨기기', en: 'Hide' }), onSelect: () => hide.mutate(comment.status !== 'hidden') } : null,
     comment.canEdit ? {
@@ -253,7 +245,7 @@ function CommentRow({ comment, quoted, mentionNames, canReply, onReply, onMentio
   ]
   // Clicking the comment itself opens the reply box under it.
   const replyOnClick = canReply && editing === null
-  const saveEdit = () => { if (editing?.trim() && !save.isPending) save.mutate(editing) }
+  const saveEdit = () => { if (editing?.text.trim() && !save.isPending) save.mutate(editing) }
   return (
     <ActionContextMenu entries={entries} onOpenChange={(open) => { if (open && pointerType.current !== 'mouse') touchMenuAt.current = Date.now() }}>
       <div
@@ -278,7 +270,7 @@ function CommentRow({ comment, quoted, mentionNames, canReply, onReply, onMentio
           ) : null}
           {editing !== null ? (
             <div className={BOX}>
-              <Textarea variant="inline" rows={1} value={editing} autoFocus className="flex-1" aria-label={t({ ko: '댓글 고치기', en: 'Edit comment' })}
+              <Textarea variant="inline" rows={1} value={editing.text} autoFocus className="flex-1" aria-label={t({ ko: '댓글 고치기', en: 'Edit comment' })}
                 onChange={(event) => setEditing(event.target.value)}
                 onKeyDown={(event) => {
                   if (event.nativeEvent.isComposing) return
@@ -286,7 +278,7 @@ function CommentRow({ comment, quoted, mentionNames, canReply, onReply, onMentio
                   if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); setEditing(null) }
                 }} />
               <Button type="button" size="xs" variant="ghost" onClick={() => setEditing(null)}>{t({ ko: '취소', en: 'Cancel' })}</Button>
-              <Button type="button" size="xs" variant="default" disabled={!editing.trim() || save.isPending} onClick={saveEdit}>{t({ ko: '저장', en: 'Save' })}</Button>
+              <Button type="button" size="xs" variant="default" disabled={!editing.text.trim() || save.isPending} onClick={saveEdit}>{t({ ko: '저장', en: 'Save' })}</Button>
             </div>
           ) : (
             <PostMarkdown text={comment.body} mentions={mentionNames} className="text-sm [&_.post-media]:max-w-xs" />
@@ -302,9 +294,9 @@ function CommentRow({ comment, quoted, mentionNames, canReply, onReply, onMentio
  * Comments two levels deep (deeper answers quote), bot calls still in progress, and the comment box. `hideHeading`:
  * the caller already labels the list (the post's 댓글 tab).
  */
-export function PostComments({ post, draft, setDraft, hideHeading = false }: { post: PostDetail; draft: PostCommentDraft; setDraft: (update: (current: PostCommentDraft) => PostCommentDraft) => void; hideHeading?: boolean }) {
+export function PostComments({ post, draft, setDraft, hideHeading = false }: { post: PostDetail; draft: PostCommentDraft; setDraft: SetCommentDraft; hideHeading?: boolean }) {
   const { t } = useI18n()
-  const editProps = (id: number) => ({ editing: draft.edit?.id === id ? draft.edit.text : null, setEditing: (text: string | null) => setDraft((current) => ({ ...current, edit: text === null ? null : { id, text } })) })
+  const editProps = (id: number) => ({ editing: draft.edit?.id === id ? draft.edit : null, setDraft })
   const { canComment, canSummon, isAdmin } = usePostPermissions()
   const replyTo = draft.reply?.to ?? null
   // From a bot's name card: the reply box under its comment, starting with @name (replying to a bot calls it anyway).
@@ -356,7 +348,7 @@ export function PostComments({ post, draft, setDraft, hideHeading = false }: { p
   const replyComposer = replyTarget ? (
     <div className="pb-3 pl-10">
       <CommentComposer key={replyTarget.id} postId={post.id} parentId={replyTarget.id} mentionable={mentionable} autoFocus onDone={() => setReplyTo(null)}
-        text={draft.reply?.text ?? ''} setText={(text) => setDraft((current) => (current.reply ? { ...current, reply: { ...current.reply, text } } : current))}
+        setDraft={setDraft} text={draft.reply?.text ?? ''} setText={(text) => setDraft((current) => (current.reply?.to === replyTarget.id ? { ...current, reply: { ...current.reply, text } } : current))}
         placeholder={replyTarget.author.type === 'profile' && canSummon
           ? t({ ko: '@{name}에게 답글 · 봇이 답해', en: 'Reply to @{name} · the bot answers' }, { name: replyTarget.author.name })
           : t({ ko: '@{name}에게 답글', en: 'Reply to @{name}' }, { name: replyTarget.author.name })} />
@@ -387,7 +379,7 @@ export function PostComments({ post, draft, setDraft, hideHeading = false }: { p
       </div>
       {canReply ? (
         <div className="pt-2">
-          <CommentComposer postId={post.id} parentId={null} mentionable={mentionable} text={draft.top} setText={(top) => setDraft((current) => ({ ...current, top }))} placeholder={mentionable.length ? t({ ko: '댓글 쓰기 · @로 봇 부르기', en: 'Write a comment · @ to call a bot' }) : t({ ko: '댓글 쓰기', en: 'Write a comment' })} />
+          <CommentComposer key={post.id} postId={post.id} parentId={null} mentionable={mentionable} setDraft={setDraft} text={draft.top} setText={(top) => setDraft((current) => ({ ...current, top }))} placeholder={mentionable.length ? t({ ko: '댓글 쓰기 · @로 봇 부르기', en: 'Write a comment · @ to call a bot' }) : t({ ko: '댓글 쓰기', en: 'Write a comment' })} />
         </div>
       ) : !open ? <p className="pt-2 text-sm text-muted-foreground">{t({ ko: '댓글이 닫힌 글이야', en: 'Comments are closed' })}</p> : null}
     </section>

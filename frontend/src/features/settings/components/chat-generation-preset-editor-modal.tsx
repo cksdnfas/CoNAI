@@ -1,5 +1,5 @@
-import { useLayoutEffect, useMemo, useState } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMemo } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { Copy, Download, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -13,7 +13,6 @@ import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { Select } from '@/components/ui/select'
 import { SettingRow } from '@/components/ui/setting-row'
 import { SettingsSwitchRow } from '@/components/ui/settings-switch-row'
-import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Textarea } from '@/components/ui/textarea'
 import {
   getNaiFixedFieldsError,
@@ -40,7 +39,7 @@ import {
 import { getGenerationCustomDropdownLists, getGenerationWorkflows } from '@/lib/api-image-generation-workflows'
 import type { WorkflowMarkedField } from '@/lib/api-image-generation-types'
 import { TYPED_FIELD_RANDOM_OPTION_VALUE } from '@/features/shared-fields/typed-field-input'
-import { getErrorMessage } from '@/lib/error-message'
+import { useChatResourceEditor } from './use-chat-resource-editor'
 import { EditorGroup } from '@/components/ui/editor-group'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Text } from '@/components/ui/text'
@@ -305,47 +304,34 @@ function ComfyAssetFieldPicks({ config, fields, onChange }: { config: ChatComfyP
 }
 
 /** Create or edit one generation preset. Saving reaches every profile that links it. */
-export function ChatGenerationPresetEditorModal({ open, preset, onClose, onDuplicate, duplicating }: {
+type GenerationEditorProps = {
   open: boolean
   preset: ChatGenerationPreset | null
   onClose: () => void
   /** Copy the opened preset (only offered when editing an existing one). */
   onDuplicate?: (preset: ChatGenerationPreset) => void
   duplicating?: boolean
-}) {
+}
+
+export function ChatGenerationPresetEditorModal(props: GenerationEditorProps) {
+  return props.open ? <GenerationEditor key={props.preset?.id ?? 'new'} {...props} /> : null
+}
+
+function GenerationEditor({ open, preset: initial, onClose, onDuplicate, duplicating }: GenerationEditorProps) {
   const { t } = useI18n()
-  const { showSnackbar } = useSnackbar()
-  const queryClient = useQueryClient()
-  const [draft, setDraft] = useState<ChatGenerationPresetInput>(() => emptyDraft('nai'))
-  const initial = useMemo<ChatGenerationPresetInput>(() => (preset ? { name: preset.name, instruction: preset.instruction, kind: preset.kind, nai: preset.nai, comfyui: preset.comfyui, prompting: promptingInputOf(preset.prompting) } : emptyDraft('nai')), [preset])
-
-  useLayoutEffect(() => {
-    if (open) setDraft(initial)
-  }, [open, initial])
-
-  const refresh = async () => {
-    await Promise.all([
-      queryClient.invalidateQueries({ queryKey: CHAT_GENERATION_PRESETS_QUERY_KEY }),
-      queryClient.invalidateQueries({ queryKey: CHAT_ADMIN_PROFILES_QUERY_KEY }),
-    ])
-  }
-  // Every save path (button, shortcut, page assistant) stops here: a V5 preset with vibes would fail on every run.
-  const naiVibesProblem = draft.kind === 'nai' && draft.nai && !supportsNaiVibes(draft.nai.model) && draft.nai.vibes.length > 0 ? getNaiVibesUnsupportedMessage(t) : null
-  const saveMutation = useMutation({
-    mutationFn: async () => {
-      if (naiVibesProblem) throw new Error(naiVibesProblem)
-      return preset ? updateChatGenerationPreset(preset.id, draft) : createChatGenerationPreset(draft)
+  const vibesProblem = (value: ChatGenerationPresetInput) => value.kind === 'nai' && value.nai && !supportsNaiVibes(value.nai.model) && value.nai.vibes.length > 0 ? getNaiVibesUnsupportedMessage(t) : null
+  const { base: preset, draft, setDraft, dirty, saveMutation } = useChatResourceEditor({
+    initial, draftOf: (row): ChatGenerationPresetInput => row ? { name: row.name, instruction: row.instruction, kind: row.kind, nai: row.nai, comfyui: row.comfyui, prompting: promptingInputOf(row.prompting) } : emptyDraft('nai'),
+    write: (base, value) => {
+      const problem = vibesProblem(value)
+      if (problem) throw new Error(problem)
+      return base ? updateChatGenerationPreset(base.id, value, base.revision) : createChatGenerationPreset(value)
     },
-    onSuccess: async () => {
-      await refresh()
-      onClose()
-    },
-    onError: (error) => showSnackbar({ message: getErrorMessage(error, t({ ko: '저장하지 못했어.', en: 'Could not save.' })), tone: 'error' }),
+    refresh: [CHAT_GENERATION_PRESETS_QUERY_KEY, CHAT_ADMIN_PROFILES_QUERY_KEY], onClose,
   })
   const deleteMutation = useChatResourceDelete(onClose)
 
   const nameMissing = draft.name.trim().length === 0
-  const dirty = JSON.stringify(draft) !== JSON.stringify(initial)
   useGenerationPresetChatPage({ open, preset, draft, setDraft, dirty, save: () => saveMutation.mutateAsync() })
   const comfyIncomplete = draft.kind === 'comfyui' && !(draft.comfyui?.workflowId)
   const kindLabel = useMemo(() => ({ nai: 'NovelAI', comfyui: 'ComfyUI' }), [])
@@ -365,25 +351,25 @@ export function ChatGenerationPresetEditorModal({ open, preset, onClose, onDupli
       <ModalBody>
         <div className="grid gap-3 md:grid-cols-[1fr_1fr_auto]">
           <Field label={<ChatFilledLabel fieldId="name">{t({ ko: '이름', en: 'Name' })}</ChatFilledLabel>}>
-            <Input variant="settings" value={draft.name} maxLength={80} autoFocus onChange={(event) => setDraft({ ...draft, name: event.target.value })} />
+            <Input variant="settings" value={draft.name} maxLength={80} autoFocus onChange={(event) => setDraft(current => ({ ...current, name: event.target.value }))} />
           </Field>
           <Field label={<ChatFilledLabel fieldId="instruction">{t({ ko: '용도 (모델에게 보여줌)', en: 'Purpose (shown to the model)' })}</ChatFilledLabel>}>
-            <Input variant="settings" value={draft.instruction} maxLength={400} onChange={(event) => setDraft({ ...draft, instruction: event.target.value })} />
+            <Input variant="settings" value={draft.instruction} maxLength={400} onChange={(event) => setDraft(current => ({ ...current, instruction: event.target.value }))} />
           </Field>
           <Field label={t({ ko: '종류', en: 'Kind' })}>
             {preset ? (
               <div className="flex h-10 items-center"><Chip size="sm" tone="muted">{kindLabel[draft.kind]}</Chip></div>
             ) : (
-              <Select variant="settings" value={draft.kind} onChange={(event) => setDraft({ ...emptyDraft(event.target.value as 'nai' | 'comfyui'), name: draft.name, instruction: draft.instruction, prompting: draft.prompting })}>
+              <Select variant="settings" value={draft.kind} onChange={(event) => setDraft(current => ({ ...emptyDraft(event.target.value as 'nai' | 'comfyui'), name: current.name, instruction: current.instruction, prompting: current.prompting }))}>
                 <option value="nai">NovelAI</option>
                 <option value="comfyui">ComfyUI</option>
               </Select>
             )}
           </Field>
         </div>
-        <PresetPromptingFields value={draft.prompting ?? EMPTY_PROMPTING} onChange={(prompting) => setDraft({ ...draft, prompting })} />
-        {draft.kind === 'nai' ? <NaiPresetFields config={draft.nai ?? EMPTY_NAI_PRESET} onChange={(nai) => setDraft({ ...draft, nai })} /> : null}
-        {draft.kind === 'comfyui' && draft.comfyui ? <ComfyPresetFields config={draft.comfyui} onChange={(comfyui) => setDraft({ ...draft, comfyui })} /> : null}
+        <PresetPromptingFields value={draft.prompting ?? EMPTY_PROMPTING} onChange={(prompting) => setDraft(current => ({ ...current, prompting }))} />
+        {draft.kind === 'nai' ? <NaiPresetFields config={draft.nai ?? EMPTY_NAI_PRESET} onChange={(nai) => setDraft(current => ({ ...current, nai }))} /> : null}
+        {draft.kind === 'comfyui' && draft.comfyui ? <ComfyPresetFields config={draft.comfyui} onChange={(comfyui) => setDraft(current => ({ ...current, comfyui }))} /> : null}
       </ModalBody>
       <EditorFooter
         onDelete={preset ? () => deleteMutation.mutate({ kind: 'generation', resource: preset }) : undefined}
@@ -450,7 +436,7 @@ function useGenerationPresetChatPage({ open, preset, draft, setDraft, dirty, sav
     ] : []),
   ]
   useSettingsEditorChatPage({
-    open, dirty, fields,
+    open, dirty, fields, localRevision: String(preset?.revision ?? 'new'),
     title: preset ? t({ ko: '생성 프리셋 편집 · {name}', en: 'Edit generation preset · {name}' }, { name: preset.name }) : t({ ko: '생성 프리셋 추가', en: 'Add generation preset' }),
     resourceId: `generation-preset:${preset?.id ?? 'new'}`,
     data: {

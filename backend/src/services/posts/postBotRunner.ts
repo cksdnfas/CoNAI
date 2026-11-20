@@ -1,4 +1,5 @@
 import { parseMentions } from '@conai/shared';
+import { setTimeout as delay } from 'node:timers/promises';
 import { getUserSettingsDb } from '../../database/userSettingsDb';
 import { getMcpToolScope, type McpRequester } from '../../mcp/context';
 import { AutomationSwitch } from '../automationSwitch';
@@ -28,16 +29,33 @@ const BUSY_RETRIES = 10;
 const JOB_WAIT_MS = 20 * 60_000;
 const JOB_POLL_MS = 5_000;
 
-const running = new Map<number, AbortController>();
+const running = new Map<number, { room: string; controller: AbortController; finished: Promise<unknown> }>();
+const attachments = new Map<AbortController, Promise<void>>();
+const coolingRooms = new Map<string, NodeJS.Timeout>();
 const busyRetries = new Map<number, number>();
 let started = false;
+let listening = false;
+let draining: Promise<void> | null = null;
 let kickTimer: NodeJS.Timeout | null = null;
+const roomOf = (run: BotRunRow) => `${run.run_as_account_id}:${run.profile_id}`;
+const INTERRUPTED = '서버가 다시 시작돼서 멈췄어.';
 
-function setStatus(runId: number, status: BotRunRow['status'], fields: { error?: string | null; result?: number | null } = {}) {
-  db().prepare(`UPDATE post_bot_runs SET status = ?, error = COALESCE(?, error), result_comment_id = COALESCE(?, result_comment_id),
+function setStatus(runId: number, status: BotRunRow['status'], fields: { error?: string | null; result?: number | null } = {}, from = 'running') {
+  return db().prepare(`UPDATE post_bot_runs SET status = ?, error = COALESCE(?, error), result_comment_id = COALESCE(?, result_comment_id),
       started_at = CASE WHEN ? = 'running' THEN CURRENT_TIMESTAMP ELSE started_at END,
       finished_at = CASE WHEN ? IN ('done', 'failed', 'skipped', 'cancelled') THEN CURRENT_TIMESTAMP ELSE finished_at END
-    WHERE id = ?`).run(status, fields.error ?? null, fields.result ?? null, status, status, runId);
+    WHERE id = ? AND status = ?`).run(status, fields.error ?? null, fields.result ?? null, status, status, runId, from).changes === 1;
+}
+
+function postedAnswer(run: BotRunRow) {
+  return db().prepare("SELECT id FROM post_comments WHERE bot_run_id = ? AND post_id = ? AND status = 'visible' ORDER BY id LIMIT 1")
+    .pluck().get(run.id, run.post_id) as number | undefined;
+}
+
+/** The tool may already have published the answer before its room failed or the process stopped. Never post it twice. */
+function finishInterrupted(run: BotRunRow, error: string) {
+  const result = postedAnswer(run);
+  return result === undefined ? setStatus(run.id, 'failed', { error }) : setStatus(run.id, 'done', { result });
 }
 
 function count(sql: string, ...params: unknown[]) {
@@ -45,8 +63,7 @@ function count(sql: string, ...params: unknown[]) {
 }
 
 /** Why this call may not run now, or null. Counted runs are those not skipped. */
-function limitReason(postId: number, profileId: number, requestedBy: number | null) {
-  const { safety } = loadPostsSettings();
+function limitReason(postId: number, profileId: number, requestedBy: number | null, safety: ReturnType<typeof loadPostsSettings>['safety']) {
   if (count(`SELECT COUNT(*) AS count FROM post_bot_runs WHERE post_id = ? AND status <> 'skipped' AND created_at >= datetime('now', '-1 hour')`, postId) >= safety.repliesPerPostPerHour) {
     return `이 글의 시간당 봇 답글 한도(${safety.repliesPerPostPerHour})에 닿았어.`;
   }
@@ -72,6 +89,12 @@ function repliedBot(comment: CommentRow) {
  * A person's comment starts a chain (depth 1) as their account; a bot's reply inside a run continues that chain.
  */
 export function enqueueFromComment(comment: CommentRow, actor: PostActor, post: PostRow) {
+  let picked: number[] = [];
+  try { picked = (JSON.parse(comment.mentions) as unknown[]).filter((id): id is number => Number.isSafeInteger(id)); } catch { /* none */ }
+  const answered = repliedBot(comment);
+  if (!picked.length && answered === null && !comment.body.includes('@')) return;
+  const typed = comment.body.includes('@') ? parseMentions(comment.body, ChatProfileStore.listNames({ enabledOnly: true }), comment.author_profile_id ?? undefined) : [];
+  if (!picked.length && !typed.length && answered === null) return;
   const parentRun = comment.bot_run_id ? db().prepare('SELECT * FROM post_bot_runs WHERE id = ?').get(comment.bot_run_id) as BotRunRow | undefined : undefined;
   const runAs = parentRun ? parentRun.run_as_account_id : actor.accountId;
   const requestedBy = parentRun ? parentRun.requested_by_account_id : actor.accountId;
@@ -80,11 +103,7 @@ export function enqueueFromComment(comment: CommentRow, actor: PostActor, post: 
   const root = parentRun ? parentRun.chain_root_comment_id : comment.id;
 
   const candidates = summonableProfiles(runAs);
-  let picked: number[] = [];
-  try { picked = (JSON.parse(comment.mentions) as unknown[]).filter((id): id is number => Number.isSafeInteger(id)); } catch { /* none */ }
-  const typed = parseMentions(comment.body, ChatProfileStore.listNames({ enabledOnly: true }), comment.author_profile_id ?? undefined);
   const settings = loadPostsSettings();
-  const answered = repliedBot(comment);
   // A person answering a bot's comment calls that bot as if they had written its @name. Only when they could have:
   // otherwise it stays a plain reply, with no refused call shown under it. Bots answering bots still need the @name,
   // or two bots would keep answering each other up to the chain limit.
@@ -109,13 +128,13 @@ export function enqueueFromComment(comment: CommentRow, actor: PostActor, post: 
       else if (depth > 1 && depth - 1 > settings.safety.chainDepth) reason = `봇이 봇을 부르는 단계 한도(${settings.safety.chainDepth})를 넘었어.`;
       else if (index >= settings.safety.botsPerComment) reason = `댓글 하나에 부를 수 있는 봇은 ${settings.safety.botsPerComment}개까지야.`;
       else if (!candidates.some((candidate) => candidate.id === profileId)) reason = '이 계정으로는 부를 수 없는 봇이야.';
-      else reason = limitReason(post.id, profileId, requestedBy);
+      else reason = limitReason(post.id, profileId, requestedBy, settings.safety);
       insert.run(post.id, comment.id, profileId, name, reason ? 'skipped' : 'queued', runAs, requestedBy, root, depth, reason);
       if (reason) db().prepare('UPDATE post_bot_runs SET finished_at = CURRENT_TIMESTAMP WHERE id = last_insert_rowid()').run();
       else queued += 1;
     });
-  })();
-  announcePostChange(post.id, 'run');
+  }).immediate();
+  announcePostChange(post.id, 'bot-run');
   if (queued > 0) kick();
 }
 
@@ -180,31 +199,34 @@ async function waitForGeneratedMedia(threadId: number, replyId: string | null | 
   while (!signal.aborted && Date.now() < deadline) {
     const open = count(`SELECT COUNT(*) AS count FROM generation_queue_jobs WHERE id IN (${marks}) AND status NOT IN ('completed', 'failed', 'cancelled')`, ...jobIds);
     if (open === 0) break;
-    await new Promise((resolve) => setTimeout(resolve, JOB_POLL_MS).unref());
+    await delay(JOB_POLL_MS, undefined, { signal, ref: false });
   }
+  signal.throwIfAborted();
   const images = (db().prepare(`SELECT composite_hash FROM api_generation_history WHERE queue_job_id IN (${marks}) AND generation_status = 'completed' AND composite_hash IS NOT NULL ORDER BY id`).all(...jobIds) as Array<{ composite_hash: string }>)
     .map((row) => `![](media:${row.composite_hash})`);
   const sounds = [...audioCandidatesByQueueJob(jobIds).values()].flat().map((id) => `![](audio:${id})`);
   return [...new Set([...images, ...sounds])];
 }
 
-async function execute(run: BotRunRow, controller: AbortController) {
+async function execute(run: BotRunRow, controller: AbortController): Promise<void> {
+  if (controller.signal.aborted) return;
   let post = db().prepare('SELECT * FROM posts WHERE id = ?').get(run.post_id) as PostRow | undefined;
   let trigger = run.trigger_comment_id ? db().prepare('SELECT * FROM post_comments WHERE id = ?').get(run.trigger_comment_id) as CommentRow | undefined : undefined;
-  if (!post || !trigger || trigger.status !== 'visible') return setStatus(run.id, 'skipped', { error: '글이나 부른 댓글이 사라졌어.' });
+  if (!post || !trigger || trigger.status !== 'visible') return void setStatus(run.id, 'skipped', { error: '글이나 부른 댓글이 사라졌어.' });
   const runAs = resolveAutomationRunAs(run.run_as_account_id, ['posts.view', 'posts.comment']);
-  if (!runAs.ok) return setStatus(run.id, 'failed', { error: runAs.message });
-  if (!summonableProfiles(run.run_as_account_id).some((profile) => profile.id === run.profile_id)) return setStatus(run.id, 'failed', { error: '이 계정으로는 더 이상 부를 수 없는 봇이야.' });
+  if (!runAs.ok) return void setStatus(run.id, 'failed', { error: runAs.message });
+  if (!summonableProfiles(run.run_as_account_id).some((profile) => profile.id === run.profile_id)) return void setStatus(run.id, 'failed', { error: '이 계정으로는 더 이상 부를 수 없는 봇이야.' });
   const requester: McpRequester = runAs.requester;
   const profile = ChatProfileStore.find(run.profile_id);
   // One board room per (account, bot): automation rooms are keyed per account, so the key names the bot.
   const room = await ensureAutomationRoom(requester, run.profile_id, `posts:board:${run.profile_id}`, `게시판 · ${profile?.name ?? run.profile_name}`);
+  if (controller.signal.aborted) return;
   // Creating/recovering the room can await: recheck current publication, trash and caller authority before quoting.
   try {
     post = requirePostRow(actorFromRequester(requester, run.profile_id), run.post_id);
     trigger = db().prepare('SELECT * FROM post_comments WHERE id = ? AND post_id = ? AND status = ?').get(run.trigger_comment_id, post.id, 'visible') as CommentRow | undefined;
-    if (!trigger) return setStatus(run.id, 'skipped', { error: '부른 댓글에 더 이상 접근할 수 없어.' });
-  } catch (error) { return setStatus(run.id, 'skipped', { error: error instanceof Error ? error.message.slice(0, 500) : '글에 더 이상 접근할 수 없어.' }); }
+    if (!trigger) return void setStatus(run.id, 'skipped', { error: '부른 댓글에 더 이상 접근할 수 없어.' });
+  } catch (error) { return void setStatus(run.id, 'skipped', { error: error instanceof Error ? error.message.slice(0, 500) : '글에 더 이상 접근할 수 없어.' }); }
   // Calls from many posts pile up in this one room: its summary keeps the older ones short (LLM chats; Codex compacts).
   if (room.summary_enabled === null) CodexChatStore.updateThreadContext(room.id, { summaryEnabled: true });
   const withTools = profile ? answersWithTools(profile, requester) : false;
@@ -216,12 +238,13 @@ async function execute(run: BotRunRow, controller: AbortController) {
       routing: { source: 'post', id: post.id, name: post.title }, signal: controller.signal,
     });
   } catch (error) {
+    if (controller.signal.aborted) return;
     if (error instanceof ChatWakeBusyError) {
       const tries = (busyRetries.get(run.id) ?? 0) + 1;
       busyRetries.set(run.id, tries);
-      if (tries <= BUSY_RETRIES) {
-        db().prepare(`UPDATE post_bot_runs SET status = 'queued' WHERE id = ? AND status = 'running'`).run(run.id);
-        setTimeout(kick, BUSY_RETRY_MS).unref();
+      if (tries <= BUSY_RETRIES && setStatus(run.id, 'queued')) {
+        const key = roomOf(run);
+        coolingRooms.set(key, setTimeout(() => { coolingRooms.delete(key); kick(); }, BUSY_RETRY_MS).unref());
         return;
       }
     }
@@ -237,75 +260,96 @@ async function execute(run: BotRunRow, controller: AbortController) {
   const replyId = lastReply?.routing?.replyId ?? null;
   const botActor = actorFromRequester(requester, run.profile_id);
   // The answer the bot posted itself (post_comment in this call), else its reply text posted for it.
-  const answered = db().prepare(`SELECT id FROM post_comments WHERE bot_run_id = ? AND post_id = ? AND status = 'visible' ORDER BY id LIMIT 1`).get(run.id, post.id) as { id: number } | undefined;
-  let commentId = answered?.id ?? null;
+  let commentId = postedAnswer(run) ?? null;
   if (commentId === null) {
     const reply = result.replies.filter((message) => message.status === 'completed' && message.content.trim()).at(-1);
     if (!reply) {
       // A failed turn says why (connection, model, tool); otherwise the bot answered nothing.
       const failed = result.replies.filter((message) => message.status !== 'completed' && message.error).at(-1);
-      return setStatus(run.id, 'failed', { error: (failed?.error ?? '봇이 답을 비워 뒀어.').slice(0, 500) });
+      return void setStatus(run.id, 'failed', { error: (failed?.error ?? '봇이 답을 비워 뒀어.').slice(0, 500) });
     }
     commentId = PostCommentStore.create(botActor, post.id, { body: reply.content.trim(), parentId: trigger.id }, { botRunId: run.id, origin: { threadId: room.id, replyId: reply.routing?.replyId ?? replyId } }).id;
   }
   const resultId = commentId;
-  setStatus(run.id, 'done', { result: resultId });
-  announcePostChange(post.id, 'run');
+  if (!setStatus(run.id, 'done', { result: resultId })) return;
   // Generated images and sounds land after the reply; attach the ones the answer does not show yet when their jobs finish.
-  void waitForGeneratedMedia(room.id, replyId, controller.signal).then((embeds) => {
+  const finished = waitForGeneratedMedia(room.id, replyId, controller.signal).then((embeds) => {
+    if (!embeds.length || controller.signal.aborted) return;
     const current = PostCommentStore.get(botActor, resultId);
     const missing = embeds.filter((embed) => !current.body.includes(embed.slice(embed.indexOf('(') + 1, -1)));
     if (!missing.length || current.status !== 'visible') return;
-    PostCommentStore.update(botActor, resultId, { body: `${current.body}\n\n${missing.join('\n')}` });
-  }).catch((error) => console.warn('[posts] Attaching generated media failed:', error instanceof Error ? error.message : error));
+    PostCommentStore.update(botActor, resultId, { body: `${current.body}\n\n${missing.join('\n')}`, expectedRevision: current.revision });
+  }).catch(error => {
+    if (!controller.signal.aborted) console.warn('[posts] Attaching generated media failed:', error instanceof Error ? error.message : error);
+  }).finally(() => attachments.delete(controller));
+  attachments.set(controller, finished);
 }
 
 /** Start queued runs: at most MAX_PARALLEL at once and one per (account, bot) room. */
 export function kick() {
-  if (kickTimer) return;
+  if (!started || kickTimer || running.size >= MAX_PARALLEL) return;
   kickTimer = setTimeout(() => {
     kickTimer = null;
-    const queued = db().prepare(`SELECT * FROM post_bot_runs WHERE status = 'queued' ORDER BY id LIMIT 50`).all() as BotRunRow[];
-    const busyRooms = new Set([...running.keys()].map((id) => {
-      const row = db().prepare('SELECT run_as_account_id, profile_id FROM post_bot_runs WHERE id = ?').get(id) as { run_as_account_id: number | null; profile_id: number } | undefined;
-      return row ? `${row.run_as_account_id}:${row.profile_id}` : '';
-    }));
-    for (const run of queued) {
-      if (running.size >= MAX_PARALLEL) break;
-      const room = `${run.run_as_account_id}:${run.profile_id}`;
-      if (busyRooms.has(room)) continue;
+    const busyRooms = new Set([...coolingRooms.keys(), ...Array.from(running.values(), run => run.room)]);
+    const next = db().prepare(`SELECT * FROM post_bot_runs WHERE status = 'queued'
+      AND (COALESCE(CAST(run_as_account_id AS TEXT), 'null') || ':' || profile_id) NOT IN (SELECT value FROM json_each(?)) ORDER BY id LIMIT 1`);
+    let handled = 0;
+    while (running.size < MAX_PARALLEL && handled < 50) {
+      const run = next.get(JSON.stringify([...busyRooms])) as BotRunRow | undefined;
+      if (!run) break;
+      handled++;
+      if (AutomationSwitch.isPaused()) {
+        if (setStatus(run.id, 'skipped', { error: '자동화가 멈춰 있어.' }, 'queued')) announcePostChange(run.post_id, 'bot-run');
+        continue;
+      }
+      if (!setStatus(run.id, 'running', {}, 'queued')) continue;
+      const room = roomOf(run);
       busyRooms.add(room);
-      if (AutomationSwitch.isPaused()) { setStatus(run.id, 'skipped', { error: '자동화가 멈춰 있어.' }); announcePostChange(run.post_id, 'run'); continue; }
       const controller = new AbortController();
-      running.set(run.id, controller);
-      setStatus(run.id, 'running');
-      announcePostChange(run.post_id, 'run');
-      void execute(run, controller)
-        .catch((error) => setStatus(run.id, 'failed', { error: (error instanceof Error ? error.message : String(error)).slice(0, 500) }))
+      const finished = Promise.resolve().then(() => execute(run, controller))
+        .catch(error => { if (started) finishInterrupted(run, (error instanceof Error ? error.message : String(error)).slice(0, 500)); })
         .finally(() => {
+          if (!started) finishInterrupted(run, INTERRUPTED);
+          if (!coolingRooms.has(room)) busyRetries.delete(run.id);
           running.delete(run.id);
-          announcePostChange(run.post_id, 'run');
+          announcePostChange(run.post_id, 'bot-run');
           kick();
         });
+      running.set(run.id, { controller, room, finished });
+      announcePostChange(run.post_id, 'bot-run');
     }
+    if (handled === 50) kick();
   }, 50);
 }
 
 export const PostBotRunner = {
   start() {
-    if (started) return;
+    if (started || draining) return;
     started = true;
-    // Runs a restart interrupted cannot resume their turn.
-    db().prepare(`UPDATE post_bot_runs SET status = 'failed', error = '서버가 다시 시작돼서 멈췄어.', finished_at = CURRENT_TIMESTAMP WHERE status = 'running'`).run();
-    PostCommentStore.onCreated(enqueueFromComment);
-    PostBotRuns.onCancel((runId) => running.get(runId)?.abort());
+    db().transaction(() => {
+      const interrupted = db().prepare("SELECT * FROM post_bot_runs WHERE status = 'running'").all() as BotRunRow[];
+      for (const run of interrupted) finishInterrupted(run, INTERRUPTED);
+    }).immediate();
+    if (!listening) {
+      listening = true;
+      PostCommentStore.onCreated(enqueueFromComment);
+      PostBotRuns.onCancel(runId => { busyRetries.delete(runId); running.get(runId)?.controller.abort(); });
+    }
     kick();
   },
 
-  /** Stop starting runs and abort running ones (shutdown, tests). */
+  /** Keep accepted queued calls for restart; no reply or media attachment may use SQLite after this settles. */
   stop() {
+    if (draining) return draining;
+    started = false;
     if (kickTimer) clearTimeout(kickTimer);
     kickTimer = null;
-    for (const controller of running.values()) controller.abort();
+    for (const timer of coolingRooms.values()) clearTimeout(timer);
+    coolingRooms.clear();
+    busyRetries.clear();
+    for (const run of running.values()) run.controller.abort();
+    for (const controller of attachments.keys()) controller.abort();
+    draining = Promise.allSettled([...Array.from(running.values(), run => run.finished), ...attachments.values()]).then(() => { draining = null; });
+    return draining;
   },
 };

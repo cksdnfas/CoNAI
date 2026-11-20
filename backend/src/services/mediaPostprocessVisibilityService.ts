@@ -153,6 +153,14 @@ export class MediaPostprocessVisibilityService {
   }
 
   static markReadyIfNoPendingImmediateWork(compositeHash: string): boolean {
+    return this.settle(compositeHash, false);
+  }
+
+  static finishAutoTagging(compositeHash: string): void {
+    this.settle(compositeHash, true);
+  }
+
+  private static settle(compositeHash: string, tagsChanged: boolean): boolean {
     if (!hasPostprocessStatusColumn()) {
       return true;
     }
@@ -169,10 +177,14 @@ export class MediaPostprocessVisibilityService {
 
     const requirements = this.getImmediatePostprocessRequirements(row.auto_tags);
     if (requirements.hasFailedWork) {
-      this.markFailed(compositeHash);
+      this.markFailed(compositeHash, tagsChanged);
       return false;
     }
     if (row.metadata_extraction_status !== 'completed' || requirements.hasPendingWork) {
+      if (tagsChanged) {
+        this.invalidateVisibilityCaches(compositeHash);
+        this.publishLinkedGenerationHistoryEvents([compositeHash]);
+      }
       return false;
     }
 
@@ -229,23 +241,25 @@ export class MediaPostprocessVisibilityService {
     return releasedHashes.length;
   }
 
-  private static markFailed(compositeHash: string): void {
+  private static markFailed(compositeHash: string, tagsChanged = false): void {
     const result = db.prepare(`UPDATE media_metadata SET postprocess_status = 'failed', postprocess_completed_at = NULL,
       metadata_updated_date = CURRENT_TIMESTAMP WHERE composite_hash = ? AND postprocess_status <> 'failed'`).run(compositeHash);
-    if (result.changes) {
+    if (result.changes || tagsChanged) {
       this.invalidateVisibilityCaches(compositeHash);
       this.publishLinkedGenerationHistoryEvents([compositeHash]);
     }
   }
 
-  static finishMetadataExtraction(compositeHash: string, status: 'completed' | 'failed'): void {
-    db.prepare(`UPDATE media_metadata SET metadata_extraction_status = ?,
+  static finishMetadataExtraction(compositeHash: string, status: 'completed' | 'failed', persist?: () => boolean): boolean {
+    const changed = db.transaction(() => (!persist || persist()) && db.prepare(`UPDATE media_metadata SET metadata_extraction_status = ?,
       postprocess_status = CASE WHEN ? = 'failed' THEN 'failed'
         WHEN postprocess_status = 'failed' THEN 'pending' ELSE postprocess_status END,
       postprocess_completed_at = NULL,
       metadata_updated_date = CURRENT_TIMESTAMP
-      WHERE composite_hash = ?`).run(status, status, compositeHash);
+      WHERE composite_hash = ?`).run(status, status, compositeHash).changes > 0)();
+    if (!changed) return false;
     this.invalidateVisibilityCaches(compositeHash);
     this.publishLinkedGenerationHistoryEvents([compositeHash]);
+    return true;
   }
 }

@@ -28,7 +28,7 @@ import { EditorGroup } from '@/components/ui/editor-group'
 import { Modal, ModalBody } from '@/components/ui/modal'
 import { useI18n } from '@/i18n'
 import { useConfirm } from '@/components/ui/confirm-dialog'
-import { buildPromptPresetInsertionText, createPromptPreset, deletePromptPreset, getPromptPresets, updatePromptPreset, type PromptPresetMutationInput, type PromptPresetRecord } from '@/lib/api-prompt-presets'
+import { buildPromptPresetInsertionText, createPromptPreset, deletePromptPreset, getPromptPreset, getPromptPresets, updatePromptPreset, type PromptPresetMutationInput, type PromptPresetRecord } from '@/lib/api-prompt-presets'
 import { ApiRequestError } from '@/lib/api-request'
 import { copyTextToClipboard } from '@/lib/clipboard'
 import { SettingsResourceTable } from '@/features/settings/components/settings-resource-shared'
@@ -330,11 +330,9 @@ export function PromptPresetPanel({ toolbarProps }: { toolbarProps: PromptPageTo
     },
   })
 
-  /** The stored preset's current edit token (the list is the only read that carries it). */
   const readLatestPresetRevision = async (presetId: number) => {
     try {
-      const presets = await queryClient.fetchQuery({ queryKey: PRESETS_QUERY_KEY, queryFn: loadPresetTree, staleTime: 0 })
-      return flattenPromptPresetTree(presets).find((entry) => entry.preset.id === presetId)?.preset.assistant_revision ?? null
+      return (await getPromptPreset(presetId)).assistant_revision ?? null
     } catch (error) {
       showSnackbar({ message: getErrorMessage(error, t({ ko: '최신 내용을 확인하지 못했어.', en: 'Could not check the latest version.' })), tone: 'error' })
       return null

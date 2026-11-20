@@ -9,6 +9,7 @@ import { getUserSettingsDb } from '../../database/userSettingsDb'
 import { ensureFileStoreSchema } from '../../database/fileStoreSchema'
 import { FileStoreError, FileStoreService, TEXT_EXTENSIONS, fileOwnerKey, type FileStoreChange } from '../fileStoreService'
 import { storedFilePath } from '../fileStorePaths'
+import { afterFileStoreCommit, withFileStoreWrites } from '../fileStoreWriteTransaction'
 import { notifySemanticChange } from '../embeddings/semanticSignal'
 import {
   LOREBOOK_NAME_MAX_LENGTH,
@@ -254,11 +255,13 @@ function writeBook(row: LorebookRow, value: ChatLoreEntry[]) {
   const folderId = row.folder_id as string
   const entries = sortLorebookKeys(value)
   // Regenerated from the book on every change, which keeps its own undo: no versions of these two.
-  const json = FileStoreService.writeText(owner, folderId, LOREBOOK_JSON, renderJson(row.name, entries), { silent: true, history: false })
-  FileStoreService.writeText(owner, folderId, LOREBOOK_MARKDOWN, renderMarkdown(row.name, entries), { silent: true, history: false })
-  getUserSettingsDb().prepare('UPDATE chat_lorebooks SET entries = ?, source_stamp = ?, updated_date = CURRENT_TIMESTAMP WHERE id = ?')
-    .run(JSON.stringify(entries), stampOf(owner, json), row.id)
-  notifySemanticChange('lore')
+  withFileStoreWrites(() => {
+    const json = FileStoreService.writeText(owner, folderId, LOREBOOK_JSON, renderJson(row.name, entries), { silent: true, history: false })
+    FileStoreService.writeText(owner, folderId, LOREBOOK_MARKDOWN, renderMarkdown(row.name, entries), { silent: true, history: false })
+    getUserSettingsDb().prepare('UPDATE chat_lorebooks SET entries = ?, source_stamp = ?, updated_date = CURRENT_TIMESTAMP WHERE id = ?')
+      .run(JSON.stringify(entries), stampOf(owner, json), row.id)
+    afterFileStoreCommit(() => notifySemanticChange('lore'))
+  })
 }
 
 /**
@@ -284,7 +287,7 @@ function refreshBook(row: LorebookRow): LorebookRow {
     if (cached !== row.entries) {
       console.warn(`[lorebook] Book ${row.id}: the cache differed from lorebook.json; took the file`)
       getUserSettingsDb().prepare('UPDATE chat_lorebooks SET entries = ?, source_stamp = ?, updated_date = CURRENT_TIMESTAMP WHERE id = ?').run(cached, read.stamp, row.id)
-      notifySemanticChange('lore')
+      afterFileStoreCommit(() => notifySemanticChange('lore'))
     } else if (read.stamp !== row.source_stamp) {
       getUserSettingsDb().prepare('UPDATE chat_lorebooks SET source_stamp = ? WHERE id = ?').run(read.stamp, row.id)
     }
@@ -385,7 +388,7 @@ export function handleFileStoreChange(change: FileStoreChange) {
         removeBookRow(own.id)
         byFolder.delete(entry.id)
         touched.delete(own.id)
-      } else if (change.action === 'rename') {
+      } else if (change.action === 'rename' && own.name !== entry.name.slice(0, LOREBOOK_NAME_MAX_LENGTH)) {
         db.prepare('UPDATE chat_lorebooks SET name = ?, updated_date = CURRENT_TIMESTAMP WHERE id = ?').run(entry.name.slice(0, LOREBOOK_NAME_MAX_LENGTH), own.id)
       }
       continue
@@ -633,7 +636,7 @@ export const OwnedLorebookStore = {
     const name = accountBookName(input.name)
     const connects = connectsChatsOf(input.connectsChats) ?? true
     const db = getUserSettingsDb()
-    const row = db.transaction(() => {
+    const row = withFileStoreWrites(() => {
       const root = lorebookRoot(owner)
       if (FileStoreService.findChild(owner, root.id, name)) throw new LorebookError(`같은 이름의 로어북이 있어: ${name}`, 409)
       const folder = FileStoreService.createFolder(owner, root.id, name)
@@ -642,7 +645,7 @@ export const OwnedLorebookStore = {
       const created = rowById(Number(result.lastInsertRowid)) as LorebookRow
       writeBook(created, preparedEntries(created, input.entries ?? []))
       return rowById(created.id) as LorebookRow
-    }).immediate()
+    })
     return toOwned(row)
   },
 
@@ -655,7 +658,7 @@ export const OwnedLorebookStore = {
     const connects = connectsChatsOf(patch.connectsChats)
     // Refresh may rewrite files; complete it before a later conflict or validation error can roll back the cache.
     requireOwn(bookId, owner)
-    const result = db.transaction(() => {
+    const result = withFileStoreWrites(() => {
       let row = requireOwnRow(bookId, owner)
       if (revision !== undefined) {
         // A file writer can win between refresh and the transaction. Re-read it after releasing the lock.
@@ -685,22 +688,23 @@ export const OwnedLorebookStore = {
       }
       writeBook(row, entries)
       return toOwned(rowById(row.id) as LorebookRow)
-    }).immediate()
+    })
     if (result === undefined) throw new ChatRevisionConflict(toOwned(requireOwn(bookId, owner)))
     return result
   },
 
   /** The book, its folder (files included) and every link to it. */
   delete(bookId: number, owner: string) {
-    const row = requireOwn(bookId, owner)
-    try {
-      FileStoreService.deleteTree(owner, row.folder_id as string, { silent: true })
-    } catch (error) {
-      // A folder already gone is fine; anything else (a file a chat still attaches) stops the delete.
-      if (!(error instanceof FileStoreError && error.status === 404)) throw error
-    }
-    removeBookRow(row.id)
-    return true
+    return withFileStoreWrites(() => {
+      const row = requireOwn(bookId, owner)
+      try {
+        FileStoreService.deleteTree(owner, row.folder_id as string, { silent: true })
+      } catch (error) {
+        if (!(error instanceof FileStoreError && error.status === 404)) throw error
+      }
+      removeBookRow(row.id)
+      return true
+    })
   },
 
   /** Link an account book to a profile; account books are shared like the file store they live in. */
@@ -784,16 +788,16 @@ export const OwnedLorebookStore = {
 
   /** A new empty account book, linked to this chat and made its record book. */
   createForThread(threadId: number, name: unknown): OwnedLorebook {
-    const owner = threadOwner(threadId)
-    if (!owner) throw new LorebookError('채팅을 찾을 수 없어.', 404)
-    const links = OwnedLorebookStore.threadLinks(threadId)
-    if (links.length >= PROFILE_MAX_LOREBOOKS) throw new LorebookError(`채팅에는 로어북을 ${PROFILE_MAX_LOREBOOKS}개까지 연결할 수 있어.`)
-    const book = OwnedLorebookStore.create(owner, { name })
-    getUserSettingsDb().transaction(() => {
+    return withFileStoreWrites(() => {
+      const owner = threadOwner(threadId)
+      if (!owner) throw new LorebookError('채팅을 찾을 수 없어.', 404)
+      const links = OwnedLorebookStore.threadLinks(threadId)
+      if (links.length >= PROFILE_MAX_LOREBOOKS) throw new LorebookError(`채팅에는 로어북을 ${PROFILE_MAX_LOREBOOKS}개까지 연결할 수 있어.`)
+      const book = OwnedLorebookStore.create(owner, { name })
       OwnedLorebookStore.setThreadLinks(threadId, [...links, book.id])
       OwnedLorebookStore.setRecordBook(threadId, book.id)
-    }).immediate()
-    return book
+      return book
+    })
   },
 
   /** The chat's own book, or null while it has had no entries. */
@@ -811,7 +815,7 @@ export const OwnedLorebookStore = {
   saveChatBook(threadId: number, value: unknown, revision?: string): OwnedLorebook | null {
     // Refresh file sources before the checked transaction, as for account-book saves.
     OwnedLorebookStore.chatBookOf(threadId)
-    const result = getUserSettingsDb().transaction(() => {
+    const result = withFileStoreWrites(() => {
       const row = chatBookRow(threadId)
       if (row && sourceChanged(row)) return undefined
       const current = row ? toOwned(row) : null
@@ -821,13 +825,14 @@ export const OwnedLorebookStore = {
       if (entries.length === 0) return null
       assertEntryFiles(entries)
       return toOwned(createChatBook(threadId, entries))
-    }).immediate()
+    })
     if (result === undefined) throw new ChatRevisionConflict(OwnedLorebookStore.chatBookOf(threadId))
     return result
   },
 
   /** Copy a branch's entries and linked files into its own book folder. */
   copyChatBookEntries(source: OwnedLorebook, threadId: number, entries: ChatLoreEntry[]): OwnedLorebook {
+    if (entries.every(entry => !entry.file && !entry.fileId)) return OwnedLorebookStore.saveChatBook(threadId, entries)!
     const owner = (getUserSettingsDb().prepare('SELECT owner_key FROM chat_lorebooks WHERE id = ?').get(source.id) as { owner_key: string }).owner_key
     const target = OwnedLorebookStore.saveChatBook(threadId, entries.map((entry) => ({ ...entry, file: null, fileId: null })))!
     const links = new Map<string, { file: string; fileId: string }>()
@@ -880,7 +885,7 @@ export const OwnedLorebookStore = {
     const owner = row.owner_key as string
     const folderId = row.folder_id as string
     const db = getUserSettingsDb()
-    return db.transaction(() => {
+    return withFileStoreWrites(() => {
       const root = lorebookRoot(owner)
       const name = keepBookName(threadId, row, root.id)
       if (name !== row.name) FileStoreService.rename(owner, folderId, name)
@@ -893,7 +898,7 @@ export const OwnedLorebookStore = {
         if (recorded) OwnedLorebookStore.setRecordBook(threadId, row.id)
       }
       return toOwned(rowById(row.id) as LorebookRow)
-    }).immediate()
+    })
   },
 
   /**
@@ -907,7 +912,8 @@ export const OwnedLorebookStore = {
     try {
       FileStoreService.deleteTree(row.owner_key as string, row.folder_id as string, { silent: true })
     } catch (error) {
-      if (!(error instanceof FileStoreError && error.status === 404)) {
+      if (!(error instanceof FileStoreError) || (error.status !== 404 && error.status !== 409)) throw error
+      if (error.status === 409) {
         console.warn(`[lorebook] Chat ${threadId}: the folder of its book stays in the file store:`, error instanceof Error ? error.message : error)
       }
     }
@@ -972,20 +978,18 @@ export function readEntryFileText(book: LoreFileBook, entry: Pick<ChatLoreEntry,
 type PinnedMemory = { id: string; text: string }
 
 /** The old pinned memories (a JSON list of `{ id, text }`, from the chat row or an old export); blanks dropped. */
-export function parsePinnedMemories(value: string | null | undefined): PinnedMemory[] {
-  try {
-    const parsed: unknown = JSON.parse(value || '[]')
-    if (!Array.isArray(parsed)) return []
-    return parsed.flatMap((item) => (item && typeof item === 'object' && typeof (item as PinnedMemory).id === 'string' && typeof (item as PinnedMemory).text === 'string' && (item as PinnedMemory).text.trim()
-      ? [{ id: (item as PinnedMemory).id, text: (item as PinnedMemory).text }]
-      : []))
-  } catch {
-    return []
-  }
+export function parsePinnedMemories(value: string | null | undefined, mode: 'import' | 'migration' = 'import'): PinnedMemory[] {
+  let parsed: unknown
+  try { parsed = JSON.parse(value ?? '[]') } catch { parsed = null }
+  const list = Array.isArray(parsed) ? parsed : []
+  const items = list.flatMap((item) => (item && typeof item.id === 'string' && typeof item.text === 'string' && item.text.trim()
+    ? [{ id: item.id as string, text: item.text as string }] : []))
+  if (mode === 'migration' && (!Array.isArray(parsed) || items.length !== list.length)) throw new Error('Unrecognized pinned memory data; original retained')
+  return items
 }
 
 /** Pinned memories as "always on" chat book entries: the title is the first 20 characters, the id keeps the memory's. */
-export function pinnedMemoryEntries(items: PinnedMemory[]): Array<Partial<ChatLoreEntry>> {
+export function pinnedMemoryEntries(items: PinnedMemory[]) {
   return items.map((item, index) => ({
     id: `memory-${item.id}`.slice(0, 80),
     title: item.text.trim().slice(0, 20),
@@ -1008,16 +1012,24 @@ export function migratePinnedMemoriesToChatBooks(db: Database.Database) {
   // Only the live database: the file store and the cache must be the same database.
   if (live !== db) return
   ensureFileStoreSchema(db)
-  const rows = db.prepare('SELECT id, memories FROM codex_chat_threads WHERE memories IS NOT NULL').all() as Array<{ id: number; memories: string }>
+  const rows = db.prepare('SELECT id FROM codex_chat_threads WHERE memories IS NOT NULL').all() as Array<{ id: number }>
+  const current = db.prepare('SELECT memories FROM codex_chat_threads WHERE id = ?').pluck()
   let moved = 0
   for (const row of rows) {
     try {
-      const items = parsePinnedMemories(row.memories)
-      db.transaction(() => {
-        if (items.length > 0) OwnedLorebookStore.addChatBookEntries(row.id, pinnedMemoryEntries(items))
+      moved += withFileStoreWrites(() => {
+        const raw = current.get(row.id) as string | null | undefined
+        if (raw == null) return 0
+        const items = parsePinnedMemories(raw, 'migration')
+        if (items.length) {
+          const entries = pinnedMemoryEntries(items)
+          const book = OwnedLorebookStore.addChatBookEntries(row.id, entries)
+          const saved = new Map(book?.entries.map(entry => [entry.id, entry.content]))
+          if (entries.some(entry => saved.get(entry.id) !== entry.content.trim())) throw new Error('Pinned memory contents differ; original retained')
+        }
         db.prepare('UPDATE codex_chat_threads SET memories = NULL WHERE id = ?').run(row.id)
-      }).immediate()
-      moved += items.length
+        return items.length
+      })
     } catch (error) {
       console.warn(`[lorebook] Pinned memories of chat ${row.id} stay for the next start:`, error instanceof Error ? error.message : error)
     }

@@ -652,6 +652,7 @@ function ProfileEditor({ open, profile, setProfile, draft, setDraft, dirty: prof
   const onAssetBusyChange = (busy: boolean) => setAssetImports((count) => Math.max(0, count + (busy ? 1 : -1)))
   const [previewDraft, setPreviewDraft] = useState<(ChatProfileInput & { id?: number }) | null>(null)
   const creatingRef = useRef<{ submitted: Draft; promise: Promise<ChatProfile>; saveRequested: boolean } | null>(null)
+  const savingRef = useRef(false)
   const patch = (next: Partial<Draft>) => setDraft((current) => ({ ...current, ...next }))
   const refreshProfiles = (lorebooksChanged = false) => Promise.all([
     queryClient.invalidateQueries({ queryKey: CHAT_PROFILE_FOLDERS_QUERY_KEY }),
@@ -710,6 +711,8 @@ function ProfileEditor({ open, profile, setProfile, draft, setDraft, dirty: prof
       const latest = error.current as ChatProfile
       if (!mounted.current || !isCurrentPage(pageLocation, latest.id)) throw error
       const conflictDraft = draftRef.current
+      // Retrying against a newer revision cannot authorize text typed after the original save.
+      if (!chatDraftEqual(conflictDraft, submitted)) throw new ChatEditorResolution(t({ ko: '편집이 바뀌었어. 다시 저장해.', en: 'The draft changed. Save again.' }), error)
       const merged = mergeProfileConflict(base, profileRef.current, latest, conflictDraft, defaults, expectedRef.current)
       if (merged.conflicts.length) {
         const load = await confirm({
@@ -743,7 +746,8 @@ function ProfileEditor({ open, profile, setProfile, draft, setDraft, dirty: prof
     const request = { submitted, promise, saveRequested: false }
     creatingRef.current = request
     const clear = () => { if (creatingRef.current === request) creatingRef.current = null }
-    void promise.then(clear, clear)
+    // The response may precede cache refresh and adoption of the new id. A second caller still owns this creation.
+    void promise.catch(clear)
     return request
   }
   /**
@@ -853,7 +857,7 @@ function ProfileEditor({ open, profile, setProfile, draft, setDraft, dirty: prof
     // Synced: the setting's changed look is stored first (a conflict stops here with both drafts kept), then the
     // profile without the look's fields. `confirmEngine`: the person's own save asks before converting chats; a
     // connected chat's save already went through its review card. A declined confirmation resolves null, saving nothing.
-    mutationFn: async (confirmEngine: boolean) => {
+    mutationFn: async ({ confirmEngine, profile, draft, sourceLocation }: { confirmEngine: boolean; profile: ChatProfile | null; draft: Draft; sourceLocation: typeof pageLocation }) => {
       if (confirmEngine && profile && draft.engine !== profile.engine) {
         const { directChats, rooms } = await getChatProfileEngineUsage(profile.id)
         if ((directChats > 0 || rooms > 0) && !await confirm({
@@ -868,7 +872,6 @@ function ProfileEditor({ open, profile, setProfile, draft, setDraft, dirty: prof
         })) return null
       }
       let submitted = draft
-      const sourceLocation = pageLocation
       const pendingCreation = profile ? null : creatingRef.current
       if (pendingCreation) pendingCreation.saveRequested = true
       await link.beforeSave()
@@ -927,6 +930,7 @@ function ProfileEditor({ open, profile, setProfile, draft, setDraft, dirty: prof
       onSaved?.(savedProfile, allowNavigation)
     },
     onError: (error) => showSnackbar({ message: getErrorMessage(error, t({ ko: '저장하지 못했어.', en: 'Could not save.' })), tone: error instanceof ChatEditorResolution ? 'info' : 'error' }),
+    onSettled: () => { savingRef.current = false },
   })
   const deleteMutation = useMutation({
     mutationFn: async () => {
@@ -992,12 +996,21 @@ function ProfileEditor({ open, profile, setProfile, draft, setDraft, dirty: prof
     || (draft.judgePresetId !== null && (!judgePreset || !judgeState.ready))
   const busy = assetBusy || saveMutation.isPending || deleteMutation.isPending || moveMutation.isPending || copyMutation.isPending
   const canSave = !nameMissing && !connectionMissing && !busy
+  const claimSave = (confirmEngine: boolean) => {
+    if (!canSave || savingRef.current) return null
+    savingRef.current = true
+    return { confirmEngine, profile: profileRef.current, draft: draftRef.current, sourceLocation: pageLocation }
+  }
+  const saveFromButton = () => {
+    const request = claimSave(true)
+    if (request) saveMutation.mutate(request)
+  }
   useLayoutEffect(() => {
     onBusyChange(busy)
     return () => onBusyChange(false)
   }, [busy, onBusyChange])
   useImperativeHandle(ref, () => ({
-    save: () => { if (canSave) saveMutation.mutate(true) },
+    save: saveFromButton,
     preview: () => setPreviewDraft({ ...draft, id: profile?.id }),
     copy: () => { if (!busy && profile) copyMutation.mutate() },
     move: () => { if (!busy) setMoving(true) },
@@ -1019,7 +1032,11 @@ function ProfileEditor({ open, profile, setProfile, draft, setDraft, dirty: prof
   // A connected chat reads and fills this draft, opens sections, and asks (by card) to save or generate images.
   const assist = useProfileEditorChatPage({
     open, profile, draft, setDraft, dirty, section, go, slots,
-    lorebooks: linkableLorebooks, blocks: blocksQuery.data, skills: skillsQuery.data, runs, link, save: () => saveMutation.mutateAsync(false),
+    lorebooks: linkableLorebooks, blocks: blocksQuery.data, skills: skillsQuery.data, runs, link, save: async () => {
+      const request = claimSave(false)
+      if (!request) throw new Error(t({ ko: '필수 입력과 진행 중인 작업을 확인한 뒤 저장해줘.', en: 'Complete the required fields and wait for pending work before saving.' }))
+      await saveMutation.mutateAsync(request)
+    },
   })
   const mark = (entry: (typeof sections)[number]) => entry.incomplete
     ? <><span aria-hidden="true" className="size-1.5 rounded-full bg-primary" /><span className="sr-only">{incompleteLabel}</span></>
@@ -1087,7 +1104,7 @@ function ProfileEditor({ open, profile, setProfile, draft, setDraft, dirty: prof
       </div>
       </ModalBody>
       </ProfileAssistContext.Provider>
-      <EditorFooter onSave={() => saveMutation.mutate(true)} canSave={canSave && (dirty || !profile)} saving={saveMutation.isPending} onRevert={() => void handleRevert()} canRevert={dirty && !busy}>
+      <EditorFooter onSave={saveFromButton} canSave={canSave && (dirty || !profile)} saving={saveMutation.isPending} onRevert={() => void handleRevert()} canRevert={dirty && !busy}>
         {nameMissing ? <span className="text-xs text-muted-foreground">{t({ ko: '이름을 적어야 저장할 수 있어', en: 'Needs a name to save' })}</span>
           : connectionMissing ? <span className="text-xs text-muted-foreground">{t({ ko: '모델을 골라야 저장할 수 있어', en: 'Needs a model to save' })}</span> : null}
       </EditorFooter>

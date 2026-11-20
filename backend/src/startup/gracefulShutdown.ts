@@ -64,9 +64,11 @@ export function createProductionGracefulShutdownDependencies(): GracefulShutdown
       ChatTaskRunner.stop();
       const { ChatRoutineRunner } = await import('../services/codex-chat/chatRoutines');
       const routinesDrained = ChatRoutineRunner.stopAndDrain();
+      const { PostBotRunner } = await import('../services/posts/postBotRunner');
+      const boardCallsDrained = PostBotRunner.stop();
       const { ChatAgentRunner } = await import('../services/codex-chat/chatAgentCalls');
       ChatAgentRunner.stop();
-      await routinesDrained;
+      await Promise.all([routinesDrained, boardCallsDrained]);
       const { ChatGenerationReactionService } = await import('../services/codex-chat/chatGenerationReactions');
       await ChatGenerationReactionService.stop();
       const { ChatGenerationPromptingService } = await import('../services/codex-chat/chatGenerationPrompting');
@@ -108,7 +110,9 @@ export function createProductionGracefulShutdownDependencies(): GracefulShutdown
     },
     stopCustomNodeWatcher: async () => {
       const { CustomNodeWatcherService } = await import('../services/customNodeWatcherService');
-      await CustomNodeWatcherService.stopAll();
+      const { CustomNodeRegistryService } = await import('../services/customNodeRegistryService');
+      const registryDrained = CustomNodeRegistryService.stopAndDrain();
+      try { await CustomNodeWatcherService.stopAll(); } finally { await registryDrained; }
     },
     stopAutoScanScheduler: async () => {
       const { AutoScanScheduler } = await import('../services/autoScanScheduler');
@@ -116,7 +120,7 @@ export function createProductionGracefulShutdownDependencies(): GracefulShutdown
     },
     stopAutoTagScheduler: async () => {
       const { autoTagScheduler } = await import('../services/autoTagScheduler');
-      autoTagScheduler.stop();
+      await autoTagScheduler.stopAndDrain();
     },
     stopTempImageCleanupScheduler: async () => {
       const { TempImageCleanupScheduler } = await import('../cron/tempImageCleanup');
@@ -151,6 +155,8 @@ export function createProductionGracefulShutdownDependencies(): GracefulShutdown
       shutdownKnowledgeEvaluationRuntime();
       shutdownPostTopicEvaluationRuntime();
       const interrupted = await RuntimeJobRunner.shutdownAndDrain();
+      const { BackgroundQueueService } = await import('../services/backgroundQueue');
+      await BackgroundQueueService.stopAndDrain();
       // The abort above stops a running backup at its next page step; let it close its handles before the
       // connections are closed.
       await waitForDatabaseBackup();

@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef, useState } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import { JUDGE_OPTION_DEFAULTS, type ChatJudgeFollowUp, type ChatJudgeItem, type ChatJudgeTestTurn } from '@conai/shared'
 import { Copy, Download, LoaderCircle, Play, Plus, Square } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -35,6 +35,7 @@ import { JudgeAssetsPane, JudgeContextPane, JudgeFieldsPane, JudgeRoomPane, judg
 import { CHAT_DOCK_INSET, useSettingsEditorChatPage } from './use-settings-editor-chat-page'
 import { ChatFilledLabel } from '@/features/codex-chat/chat-page-context'
 import { useChatResourceDelete } from './use-chat-resource-actions'
+import { useChatResourceEditor } from './use-chat-resource-editor'
 
 type PresetDraft = Required<Omit<ChatJudgePresetInput, 'providerName' | 'model' | 'escalationProviderName' | 'escalationModel'>>
 
@@ -64,20 +65,29 @@ function newItem(items: ChatJudgeItem[], stage: ChatJudgeItem['stage']): ChatJud
  * the picked one on the right. Saving reaches every profile that references it. The test runs the draft as it stands
  * on one of the editor's own chats (nothing is logged); each item shows its results, and the list their yes count.
  */
-export function ChatJudgePresetEditorModal({ open, preset, initial, onClose, onDuplicate, duplicating }: {
+type JudgeEditorProps = {
   open: boolean
   preset: ChatJudgePreset | null
   initial?: ChatJudgePresetInput
   onClose: () => void
   onDuplicate?: (preset: ChatJudgePreset) => void
   duplicating?: boolean
-}) {
+}
+
+export function ChatJudgePresetEditorModal(props: JudgeEditorProps) {
+  return props.open ? <JudgeEditor key={props.preset?.id ?? 'new'} {...props} /> : null
+}
+
+function JudgeEditor({ open, preset: record, initial, onClose, onDuplicate, duplicating }: JudgeEditorProps) {
   const { t } = useI18n()
   const advanced = useSettingsAdvanced()
   const defaultJudgeLabel = useDefaultJudgeLabel(open)
   const { showSnackbar } = useSnackbar()
-  const queryClient = useQueryClient()
-  const [draft, setDraft] = useState<PresetDraft>(EMPTY)
+  const { base: preset, draft, setDraft, dirty, saveMutation } = useChatResourceEditor({
+    initial: record, draftOf: row => row ? draftOf(row) : { ...EMPTY, ...initial } as PresetDraft,
+    write: (base, value) => base ? updateChatJudgePreset(base.id, value, base.revision) : createChatJudgePreset(value),
+    refresh: [CHAT_JUDGE_PRESETS_QUERY_KEY, CHAT_ADMIN_PROFILES_QUERY_KEY], onClose,
+  })
   /** The section on the right: `base`, `item:<id>`, `follow`, or a built-in judgment. */
   const [pane, setPane] = useState('base')
   /** Phone layout: the section list until one is picked. */
@@ -88,30 +98,11 @@ export function ChatJudgePresetEditorModal({ open, preset, initial, onClose, onD
   const [testTurns, setTestTurns] = useState<ChatJudgeTestTurn[] | null>(null)
   const testAbort = useRef<AbortController | null>(null)
 
-  useLayoutEffect(() => {
-    if (!open) return
-    setDraft(preset ? draftOf(preset) : { ...EMPTY, ...initial } as PresetDraft)
-    setPane('base')
-    setShowingList(true)
-    setTestOpen(false)
-    setTestTurns(null)
-  }, [initial, open, preset])
+  useLayoutEffect(() => () => { testAbort.current?.abort() }, [])
 
   const profilesQuery = useQuery({ queryKey: CHAT_PROFILES_QUERY_KEY, queryFn: listChatProfiles, staleTime: 30_000, enabled: open })
   const profilesById = new Map((profilesQuery.data ?? []).map((profile) => [profile.id, profile]))
 
-  const refresh = () => Promise.all([
-    queryClient.invalidateQueries({ queryKey: CHAT_JUDGE_PRESETS_QUERY_KEY }),
-    queryClient.invalidateQueries({ queryKey: CHAT_ADMIN_PROFILES_QUERY_KEY }),
-  ])
-  const saveMutation = useMutation({
-    mutationFn: () => (preset ? updateChatJudgePreset(preset.id, draft) : createChatJudgePreset(draft)),
-    onSuccess: async () => {
-      await refresh()
-      onClose()
-    },
-    onError: (error) => showSnackbar({ message: getErrorMessage(error, t({ ko: '저장하지 못했어.', en: 'Could not save.' })), tone: 'error' }),
-  })
   const deleteMutation = useChatResourceDelete(onClose)
   const testMutation = useMutation({
     mutationFn: () => {
@@ -142,12 +133,12 @@ export function ChatJudgePresetEditorModal({ open, preset, initial, onClose, onD
 
   const nameMissing = draft.name.trim().length === 0
   const judgeState = useJudgeModelState(open, draft.modelSlotId)
-  const dirty = JSON.stringify(draft) !== JSON.stringify(preset ? draftOf(preset) : { ...EMPTY, ...initial })
   // A connected chat reads the preset and fills its name; the questions themselves stay with the person.
   useSettingsEditorChatPage({
     open,
     title: preset ? t({ ko: '판단 프리셋 편집 · {name}', en: 'Edit judge preset · {name}' }, { name: preset.name }) : t({ ko: '판단 프리셋 추가', en: 'Add judge preset' }),
     resourceId: `judge-preset:${preset?.id ?? 'new'}`,
+    localRevision: String(preset?.revision ?? 'new'),
     dirty,
     fields: [{ id: 'name', label: t({ ko: '이름', en: 'Name' }), type: 'text', value: draft.name }],
     data: { items: draft.items.map((item) => ({ id: item.id, name: item.name, enabled: item.enabled, stage: item.stage, kind: item.kind })), selected: { name: draft.name, items: draft.items.length } },
