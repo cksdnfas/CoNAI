@@ -4,7 +4,7 @@ import type { RuntimeStreamStatus } from '@/features/runtime-events/runtime-even
 import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { createContext, memo, useCallback, useContext, useEffect, useId, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { useQueries, useQuery } from '@tanstack/react-query'
-import { AlertTriangle, Ban, Check, ChevronDown, ChevronLeft, ChevronRight, CircleX, ImageOff, RefreshCw, Repeat, Scissors, SquareCheck, Wrench, X } from 'lucide-react'
+import { AlertTriangle, Ban, BookOpen, Check, ChevronDown, ChevronLeft, ChevronRight, CircleX, ImageOff, RefreshCw, Repeat, Scissors, SquareCheck, Wrench, X } from 'lucide-react'
 import { isCodexChatGenerationTool, stripEchoedAddresses, withChatGenerationProgress } from '@conai/shared'
 import type { ChatAgentResultRouting, ChatFileChange, ChatMessageRouting } from '@conai/shared'
 import { ChatMessageReply } from './chat-reply'
@@ -38,6 +38,7 @@ import { ChatReferenceButton, ChatThumbOverlay } from './chat-reference'
 import { MENTION_CLASS, splitMentions } from './chat-mentions'
 import { chatToolLabel } from './chat-tool-catalog'
 import { ChatMessageIdContext } from './chat-display-block'
+import { loreReason, type ChatAppliedLore } from './chat-context-info'
 import { codexChatHistoryQueryKey } from './codex-chat-context'
 
 const THUMB_CLASS = 'w-auto rounded-sm object-cover'
@@ -458,15 +459,10 @@ function ToolStatusIcon({ status }: { status: CodexChatToolCall['status'] }) {
 
 const HOVER_DELAY_MS = 120
 
-/** The tools a reply used, as one "도구 N번 사용" key; hovering (or tapping) it lists them. */
-function ToolCallsBadge({ calls }: { calls: CodexChatToolCall[] }) {
-  const { t } = useI18n()
+/** A key on a reply's name line ("도구 N번 사용", "로어 N개"); hovering (or tapping) it lists what it counts. */
+function ReplyChip({ icon, label, trailing, children }: { icon: ReactNode; label: string; trailing: ReactNode; children: ReactNode }) {
   const [open, setOpen] = useState(false)
   const timerRef = useRef<number | null>(null)
-  const groups = groupToolCalls(calls)
-  const status: CodexChatToolCall['status'] = calls.some((call) => call.status === 'running')
-    ? 'running'
-    : calls.some((call) => call.status === 'failed') ? 'failed' : 'completed'
   // Hover opens it on PC; touch has no hover, so a tap toggles it instead.
   const hoverTo = (next: boolean) => (event: ReactPointerEvent) => {
     if (event.pointerType !== 'mouse') {
@@ -487,9 +483,9 @@ function ToolCallsBadge({ calls }: { calls: CodexChatToolCall[] }) {
           onPointerEnter={hoverTo(true)}
           onPointerLeave={hoverTo(false)}
         >
-          <Wrench />
-          {t({ ko: '도구 {count}번 사용', en: '{count} tool calls' }, { count: calls.length })}
-          {status !== 'completed' ? <ToolStatusIcon status={status} /> : <ChevronDown />}
+          {icon}
+          {label}
+          {trailing}
         </Button>
       </PopoverTrigger>
       <PopoverContent
@@ -500,20 +496,56 @@ function ToolCallsBadge({ calls }: { calls: CodexChatToolCall[] }) {
         onPointerEnter={hoverTo(true)}
         onPointerLeave={hoverTo(false)}
       >
-        <ul className="space-y-0.5">
-          {groups.map((group) => (
-            <li key={group.tool} className="rounded-sm px-2 py-1 text-xs">
-              <div className="flex items-center gap-1.5">
-                <span className="min-w-0 flex-1 truncate" title={group.tool}>{chatToolLabel(group.tool, t)}</span>
-                {group.count > 1 ? <span className="tabular-nums text-muted-foreground">×{group.count}</span> : null}
-                <span className="text-muted-foreground"><ToolStatusIcon status={group.status} /></span>
-              </div>
-              {group.summary ? <p className="mt-0.5 truncate font-mono text-2xs text-muted-foreground">{group.summary}</p> : null}
-            </li>
-          ))}
-        </ul>
+        <ul className="space-y-0.5">{children}</ul>
       </PopoverContent>
     </Popover>
+  )
+}
+
+/** The tools a reply used, as one "도구 N번 사용" key; hovering (or tapping) it lists them. */
+function ToolCallsBadge({ calls }: { calls: CodexChatToolCall[] }) {
+  const { t } = useI18n()
+  const groups = groupToolCalls(calls)
+  const status: CodexChatToolCall['status'] = calls.some((call) => call.status === 'running')
+    ? 'running'
+    : calls.some((call) => call.status === 'failed') ? 'failed' : 'completed'
+  return (
+    <ReplyChip icon={<Wrench />} label={t({ ko: '도구 {count}번 사용', en: '{count} tool calls' }, { count: calls.length })} trailing={status !== 'completed' ? <ToolStatusIcon status={status} /> : <ChevronDown />}>
+      {groups.map((group) => (
+        <li key={group.tool} className="rounded-sm px-2 py-1 text-xs">
+          <div className="flex items-center gap-1.5">
+            <span className="min-w-0 flex-1 truncate" title={group.tool}>{chatToolLabel(group.tool, t)}</span>
+            {group.count > 1 ? <span className="tabular-nums text-muted-foreground">×{group.count}</span> : null}
+            <span className="text-muted-foreground"><ToolStatusIcon status={group.status} /></span>
+          </div>
+          {group.summary ? <p className="mt-0.5 truncate font-mono text-2xs text-muted-foreground">{group.summary}</p> : null}
+        </li>
+      ))}
+    </ReplyChip>
+  )
+}
+
+/**
+ * The lorebook entries a stored reply's request applied, as one "로어 N개" key; hovering (or tapping) it lists each
+ * with why it went in. "로어 0개" is a search that ran and matched nothing: a plain label, with nothing to list.
+ */
+function LoreAppliedBadge({ entries }: { entries: ChatAppliedLore[] }) {
+  const { t } = useI18n()
+  const label = t({ ko: '로어 {count}개', en: '{count} lore' }, { count: entries.length })
+  if (entries.length === 0) return <Button asChild variant="ghost" size="xs" className="pointer-events-none"><span><BookOpen />{label}</span></Button>
+  return (
+    <ReplyChip icon={<BookOpen />} label={label} trailing={<ChevronDown />}>
+      {entries.map((entry) => {
+        // A v1 record has titles alone.
+        const reason = entry.reason ? loreReason(entry.reason, entry.matched, t, entry.remaining, entry.via) : ''
+        return (
+          <li key={entry.key} className="flex items-center gap-1.5 rounded-sm px-2 py-1 text-xs">
+            <span className="min-w-0 flex-1 truncate" title={entry.title}>{entry.title}</span>
+            {reason ? <span className="max-w-[50%] shrink-0 truncate text-muted-foreground" title={reason}>{reason}</span> : null}
+          </li>
+        )
+      })}
+    </ReplyChip>
   )
 }
 
@@ -813,7 +845,7 @@ function AgentResultCard({ agent, text, imageCount, children }: { agent: ChatAge
   )
 }
 
-export const CodexChatAssistantMessage = memo(function CodexChatAssistantMessage({ content: written, toolCalls, status, error, finishReason = null, reasoning, streaming = false, translating = false, speaker = null, media, appearance = DEFAULT_CHAT_APPEARANCE, createdAt, routing, recipientLabel, threadId, fileChanges, replyId, onRetry, agent = null }: {
+export const CodexChatAssistantMessage = memo(function CodexChatAssistantMessage({ content: written, toolCalls, status, error, finishReason = null, reasoning, streaming = false, translating = false, speaker = null, media, appearance = DEFAULT_CHAT_APPEARANCE, createdAt, routing, recipientLabel, threadId, fileChanges, replyId, onRetry, agent = null, lore = null }: {
   /** A delegated agent's result copied into this room: marked as the agent's, and as failed when it failed. */
   agent?: ChatAgentResultRouting | null
   /** The stored thread this reply belongs to (proposal cards refresh it after a save). */
@@ -843,13 +875,17 @@ export const CodexChatAssistantMessage = memo(function CodexChatAssistantMessage
   createdAt?: string
   /** A failed reply that can be answered again: a "다시 시도" next to its error. */
   onRetry?: () => void
+  /** A stored reply: the lorebook entries its request applied (null: none was searched, or its record is not shown). */
+  lore?: ChatAppliedLore[] | null
 }) {
   const { t } = useI18n()
   // Older stored replies and live streams may still carry the model's copy of the app's [message_id=...] label.
   const content = stripEchoedAddresses(written)
   const { avatarSize } = appearance
   // A delegated agent's result says so (and whether it failed) on its card, under the agent's own name.
-  const ownExtra = toolCalls.length > 0 && appearance.showToolChips ? <ToolCallsBadge calls={toolCalls} /> : null
+  const toolChip = toolCalls.length > 0 && appearance.showToolChips ? <ToolCallsBadge calls={toolCalls} /> : null
+  const loreChip = lore && appearance.showToolChips ? <LoreAppliedBadge entries={lore} /> : null
+  const ownExtra = toolChip || loreChip ? <>{toolChip}{loreChip}</> : null
   const markdown = (text: string) => <ChatMarkdown text={text} roleplay={speaker?.roleplay} blocks={speaker?.blocks} emoticons={speaker?.emoticons} hiddenGroupIds={speaker?.hiddenEmoticonGroupIds} mentions={speaker?.mentions} streaming={streaming} />
   const avatarOf = (who: ChatProfileAssetFields & { id?: number; name: string; avatar?: string | null }, engine: ChatEngine) => avatarSize === 'none' ? null : (
     <ChatProfileAvatar name={who.name} avatar={who.avatar} profile={'id' in who ? who : undefined} engine={engine} size={AVATAR_SIZE[avatarSize]} className={avatarSize === 'lg' ? 'size-14 text-lg' : undefined} />
@@ -953,7 +989,8 @@ export const CodexChatAssistantMessage = memo(function CodexChatAssistantMessage
   return (
     <div className="space-y-5">
       {showOwnRow ? row('own', speaker, speaker?.engine ?? 'llm', ownExtra, ownParts) : null}
-      {castSegments.map((segment, index) => row(`cast-${index}`, segment.speaker ?? speaker, segment.speaker ? 'llm' : speaker?.engine ?? 'llm', null, markdown(segment.text)))}
+      {/* A reply of cast lines alone keeps its lore key on the first name line it has. */}
+      {castSegments.map((segment, index) => row(`cast-${index}`, segment.speaker ?? speaker, segment.speaker ? 'llm' : speaker?.engine ?? 'llm', index === 0 && !showOwnRow ? ownExtra : null, markdown(segment.text)))}
       {footer}
     </div>
   )

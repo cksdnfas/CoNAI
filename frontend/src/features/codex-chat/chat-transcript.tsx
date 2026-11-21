@@ -13,7 +13,7 @@ import { isFromOwnDom } from '@/lib/portal-events'
 import { cn } from '@/lib/utils'
 import type { ChatAppearance } from './chat-appearance'
 import { ChatFileLinks } from './chat-attachments'
-import { ChatContextInfo, parseContextMeta } from './chat-context-info'
+import { ChatContextInfo, appliedLore, parseContextMeta } from './chat-context-info'
 import { ChatReferenceChips } from './chat-reference'
 import { ChatMessageFlags } from './chat-flags'
 import type { CodexChatLiveTurn } from './codex-chat-context'
@@ -128,7 +128,11 @@ const ChatMessageRow = memo(function ChatMessageRow({ message, previousContext, 
   const isUser = message.role === 'user'
   const lastReply = message.id === actions.lastReplyId
   const alternatives = message.alternatives ?? []
-  const contextMeta = look.appearance.showDiagnostics ? parseContextMeta(message.context_meta) : null
+  // A reply's record is read once, for the diagnostics icon and the lore key alike.
+  const { showDiagnostics, showToolChips } = look.appearance
+  const parsedMeta = useMemo(() => !isUser && (showDiagnostics || showToolChips) ? parseContextMeta(message.context_meta) : null, [isUser, showDiagnostics, showToolChips, message.context_meta])
+  const contextMeta = showDiagnostics ? parsedMeta : null
+  const lore = useMemo(() => showToolChips ? appliedLore(parsedMeta) : null, [showToolChips, parsedMeta])
   const editableReply = !isUser && actions.canEditReply(message)
   // Rarer actions (original / translation, hand edits, continuing, orders, branching) live in a named ⋯ menu; the bar
   // stays up while it is open.
@@ -171,7 +175,7 @@ const ChatMessageRow = memo(function ChatMessageRow({ message, previousContext, 
         : (content || message.routing?.replyTo) && <ChatUserMessage content={content} routing={routing} recipientLabel={recipientLabel} mentions={mentions} appearance={look.appearance} createdAt={message.created_date} speaker={userSpeaker} />}<ChatFileLinks files={message.attachments} /><ChatReferenceChips items={message.mediaAttachments} threadId={message.thread_id} /><ChatMessageFlags flags={message.flags} toolDirective={message.toolDirective} /></>
       : actions.editingId === message.id
         ? <ChatMessageEditor message={message} busy={actions.busy} onSave={actions.onEditReply} onCancel={() => actions.onEditingChange(null)} reply />
-        : <ChatMessageIdContext.Provider value={message.id}><CodexChatAssistantMessage content={content} routing={routing} recipientLabel={recipientLabel} toolCalls={message.tool_calls} threadId={message.thread_id} fileChanges={message.fileChanges} replyId={message.routing?.replyId} onRetry={lastReply && actions.canRewrite && !actions.busy ? () => actions.onRegenerate(message.id) : undefined} status={message.status} error={message.error} finishReason={message.finish_reason ?? null} media={media} {...look} createdAt={message.created_date} agent={agent} speaker={agentSpeaker ?? (speakerOf ? speakerOf(message.speaker_profile_id) : look.speaker)} /></ChatMessageIdContext.Provider>}
+        : <ChatMessageIdContext.Provider value={message.id}><CodexChatAssistantMessage content={content} routing={routing} recipientLabel={recipientLabel} toolCalls={message.tool_calls} threadId={message.thread_id} fileChanges={message.fileChanges} replyId={message.routing?.replyId} onRetry={lastReply && actions.canRewrite && !actions.busy ? () => actions.onRegenerate(message.id) : undefined} status={message.status} error={message.error} finishReason={message.finish_reason ?? null} media={media} {...look} createdAt={message.created_date} agent={agent} lore={lore} speaker={agentSpeaker ?? (speakerOf ? speakerOf(message.speaker_profile_id) : look.speaker)} /></ChatMessageIdContext.Provider>}
     {/* The floating bar stays in the tab order, and shows while a key lands on one of its buttons.
         Reply, regenerate and the answer switch stay on the bar; edits and the rarer actions sit under ⋯ with their names. */}
     {inputNotice}

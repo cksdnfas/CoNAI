@@ -106,7 +106,7 @@ function contextChanges(meta: ChatContextMeta, previous: ChatContextMeta, t: T):
   return changes
 }
 
-function loreReason(reason: string, matched: string[], t: T, remaining?: number, via?: string) {
+export function loreReason(reason: string, matched: string[], t: T, remaining?: number, via?: string) {
   if (reason === 'recursive') return [t({ ko: '재귀', en: 'Recursive' }), [via, matched[0]].filter(Boolean).join(' › ')].filter(Boolean).join(' · ')
   if (reason === 'constant') return t({ ko: '상시', en: 'Constant' })
   if (reason === 'regex') return t({ ko: '정규식', en: 'Regex' })
@@ -135,6 +135,23 @@ export function parseContextMeta(value: string | null | undefined): ChatContextM
   } catch {
     return null
   }
+}
+
+/** One lorebook entry a reply's request applied, for the chip on its name line (a v1 record has titles alone). */
+export type ChatAppliedLore = { key: string; title: string; reason: string; matched: string[]; remaining?: number; via?: string }
+
+/**
+ * The lorebook entries a stored reply's request applied, or null when no lorebook was searched for it. A session
+ * (Codex, Claude Code, pi) still holds what it was given on an earlier turn, so an entry skipped as already sent counts.
+ */
+export function appliedLore(meta: ChatContextMeta | null): ChatAppliedLore[] | null {
+  if (!meta) return null
+  // Read as the diagnostics icon reads it: without a v2 view of the request, only the v1 title list.
+  if (meta.version !== 2 || meta.scope === 'none' || !meta.loreEntries) return meta.lore.length ? meta.lore.map((title, index) => ({ key: `${index}:${title}`, title, reason: '', matched: [] })) : null
+  if (meta.loreEntries.length + (meta.loreSkipped?.length ?? 0) + (meta.loreUnmatched ?? 0) === 0) return null
+  const applied: ChatAppliedLore[] = meta.loreEntries.map((entry) => ({ key: loreKey(entry), title: entry.title, reason: entry.reason, matched: entry.matched, remaining: entry.remaining, via: entry.via }))
+  if (meta.opaqueContext || meta.engine === 'codex') for (const entry of meta.loreSkipped ?? []) if (entry.reason === 'codex-sent') applied.push({ key: loreKey(entry), title: entry.title, reason: entry.reason, matched: [] })
+  return applied
 }
 
 /** An icon on a reply that opens what its request carried: why it remembered (or forgot) what it did. */
