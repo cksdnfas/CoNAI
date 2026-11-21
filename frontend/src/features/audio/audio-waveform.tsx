@@ -139,19 +139,23 @@ export function drawPeaks(canvas: HTMLCanvasElement, peaks: Float32Array | null,
 }
 
 /** Small waveform for list rows and chat cards; decodes when it scrolls into view. */
-export function WaveformThumb({ candidateId, fileHash, src, progress, ghost = false, className, duration = 0, onSeek, onToggle }: { candidateId: string; fileHash: string; src?: string; progress?: number; ghost?: boolean; className?: string; duration?: number; onSeek?: (seconds: number) => void; onToggle?: () => void }) {
+export function WaveformThumb({ candidateId, fileHash, src, progress, ghost = false, className, duration: givenDuration = 0, onSeek, onToggle }: { candidateId: string; fileHash: string; src?: string; progress?: number; ghost?: boolean; className?: string; duration?: number; onSeek?: (seconds: number) => void; onToggle?: () => void }) {
   const { t } = useI18n()
   const auth = useAuthStatusQuery()
   const scope = JSON.stringify([auth.data?.accountId, auth.data?.hasCredentials, auth.data?.permissionKeys])
   const [canvasRef, view] = useInView<HTMLCanvasElement>('200px', { once: true })
   const visible = view.seen
   const [peaks, setPeaks] = useState<Float32Array | null>(null)
+  // The decoded length stands in until the caller knows one (a file that has not played yet).
+  const [decodedDuration, setDecodedDuration] = useState(0)
+  const duration = givenDuration > 0 ? givenDuration : decodedDuration
 
   useEffect(() => {
     if (!visible || ghost) return
     const controller = new AbortController()
     setPeaks(null)
-    loadAudioWaveform(candidateId, fileHash, { src, scope, signal: controller.signal }).then((value) => { if (!controller.signal.aborted) setPeaks(value.peaks) }).catch(() => undefined)
+    setDecodedDuration(0)
+    loadAudioWaveform(candidateId, fileHash, { src, scope, signal: controller.signal }).then((value) => { if (!controller.signal.aborted) { setPeaks(value.peaks); setDecodedDuration(value.duration) } }).catch(() => undefined)
     return () => controller.abort()
   }, [visible, ghost, candidateId, fileHash, src, scope])
 
@@ -165,7 +169,9 @@ export function WaveformThumb({ candidateId, fileHash, src, progress, ghost = fa
     return () => observer.disconnect()
   }, [canvasRef, peaks, progress, ghost])
 
-  const canvas = <canvas ref={canvasRef} aria-hidden className={cn('block h-7 w-full border-0 border-primary text-foreground/35', !onSeek && className)} />
+  // With seeking the wrapper takes the caller's size and the canvas fills it.
+  const seekable = !!onSeek && !ghost
+  const canvas = <canvas ref={canvasRef} aria-hidden className={cn('block w-full border-0 border-primary text-foreground/35', seekable ? 'h-full' : 'h-7', !seekable && className)} />
   if (!onSeek || ghost) return canvas
   const position = Math.max(0, Math.min(duration, (progress ?? 0) * duration))
   const seekAt = (clientX: number, target: HTMLDivElement) => {
@@ -182,8 +188,10 @@ export function WaveformThumb({ candidateId, fileHash, src, progress, ghost = fa
     aria-valuetext={`${position.toFixed(2)} / ${duration.toFixed(2)}s`}
     aria-disabled={duration <= 0}
     title={t({ ko: '클릭·드래그로 재생 위치 이동 · ← → 1초 (Shift: 5초) · Space 재생/정지', en: 'Click or drag to seek · ← → 1 s (Shift: 5 s) · Space play/pause' })}
-    className={cn('touch-none cursor-pointer rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring', className)}
+    data-no-select-drag="true"
+    className={cn('h-7 touch-none cursor-pointer rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring', className)}
     onClick={(event) => event.stopPropagation()}
+    onMouseDown={(event) => event.stopPropagation()}
     onPointerDown={(event) => {
       event.stopPropagation()
       if (event.button !== 0 || !event.isPrimary || duration <= 0) return

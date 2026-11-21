@@ -194,6 +194,7 @@ export function NaiGenerationEditorSections({
           hint: getNaiFixedNegativeHint(t),
         } : undefined}
         characterLoad={{ reference: characterReferenceLoad }}
+        styleLoad={{ reference: characterReferenceLoad }}
       />
       <NaiPromptPresetControls naiForm={naiForm} onChange={handleNaiOptionChange} />
     </div>

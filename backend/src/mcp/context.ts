@@ -75,7 +75,7 @@ export function isChatGenerationTool(toolName: string) {
 
 /** Presets constrain generation, not authorized workflow discovery or diagnostics. */
 export const GENERATION_PRESET_BLOCKED_TOOLS = new Set([
-  'generate_nai', 'generate_comfyui', 'generate_comfyui_all_servers', 'submit_generation_job', 'execute_graph_workflow',
+  'generate_nai', 'generate_comfyui', 'generate_comfyui_all_servers', 'submit_generation_job', 'execute_graph_workflow', 'build_refmod',
 ]);
 
 export function isChatMcpSource(source: McpRequestContext['source']) {
@@ -144,7 +144,19 @@ export function requirePublicChatPageTarget(context: McpRequestContext, page: Ch
   return page;
 }
 
+/** The art styles view of the character page (view=styles) registers resource ids `styles` and `style:<id>`. */
+export function isArtStyleChatPage(page: Pick<ChatPageSnapshot, 'path' | 'kind' | 'resourceId'>) {
+  return page.path === '/characters' && page.kind === 'page' && (page.resourceId === 'styles' || !!page.resourceId?.startsWith('style:'));
+}
+
+/** The RefMod view of the character page (view=refmods) registers resource ids `refmods` and `refmod:<id>`. */
+export function isRefModChatPage(page: Pick<ChatPageSnapshot, 'path' | 'kind' | 'resourceId'>) {
+  return page.path === '/characters' && page.kind === 'page' && (page.resourceId === 'refmods' || !!page.resourceId?.startsWith('refmod:'));
+}
+
+/** The styles and RefMod views work through their own screen operations; their tools stay in the catalog. */
 export function chatPageDomainTools(page: ChatPageSnapshot): ReadonlySet<string> | undefined {
+  if (isArtStyleChatPage(page) || isRefModChatPage(page)) return undefined;
   return page.path === '/characters' && page.kind === 'page' ? CHARACTER_PAGE_TOOLS : CHAT_PAGE_KIND_TOOLS[page.kind];
 }
 
@@ -193,6 +205,9 @@ const TOOL_SCOPES: Record<string, McpHttpScope> = {
   fill_character_appearance: 'read',
   manage_character_folders: 'organize',
   propose_character_library: 'organize',
+  list_art_styles: 'read',
+  get_art_style: 'read',
+  propose_art_style: 'organize',
   web_read: 'read',
   get_app_guide: 'read',
   get_current_page: 'read',
@@ -252,6 +267,10 @@ const TOOL_SCOPES: Record<string, McpHttpScope> = {
   list_workflows: 'read',
   list_comfyui_servers: 'read',
   list_comfy_refmods: 'read',
+  list_refmod_entries: 'read',
+  get_refmod_entry: 'read',
+  save_refmod_entry: 'organize',
+  adopt_refmod: 'organize',
   get_generation_routing_options: 'read',
   get_codex_generation_options: 'read',
   get_generation_history_request: 'read',
@@ -306,6 +325,7 @@ const TOOL_SCOPES: Record<string, McpHttpScope> = {
   generate_nai: 'generate',
   execute_graph_workflow: 'generate',
   submit_generation_job: 'generate',
+  build_refmod: 'generate',
   cancel_generation_job: 'generate',
   create_prompt_preset: 'organize',
   batch_create_groups: 'organize',

@@ -8,7 +8,7 @@ import {
   snapRefSimpleReferenceKey,
 } from '@conai/shared'
 import { resolveUploadsPath } from '../config/runtimePaths'
-import { type MarkedField } from '../types/workflow'
+import { isWorkflowMediaFieldType, type MarkedField } from '../types/workflow'
 import { normalizeBase64ImageData } from '../utils/base64ImageData'
 import type { ComfyUIService } from './comfyuiService'
 import { ImageUploadService } from './imageUploadService'
@@ -54,9 +54,20 @@ function sanitizeUploadSegment(value: string) {
   return value.replace(/[^a-zA-Z0-9_-]/g, '_') || 'image'
 }
 
-function buildComfyImageUploadName(fileName: string | undefined, fallbackBase: string) {
-  const sourceName = (fileName || `${fallbackBase}.png`).trim()
-  const ext = path.extname(sourceName) || '.png'
+const MEDIA_MIME_EXTENSIONS: Record<string, string> = {
+  'audio/mpeg': '.mp3', 'audio/mp3': '.mp3', 'audio/wav': '.wav', 'audio/x-wav': '.wav', 'audio/wave': '.wav', 'audio/flac': '.flac', 'audio/x-flac': '.flac',
+  'audio/ogg': '.ogg', 'audio/opus': '.opus', 'audio/mp4': '.m4a', 'audio/x-m4a': '.m4a', 'audio/aac': '.aac', 'audio/webm': '.weba',
+  'video/mp4': '.mp4', 'video/webm': '.webm', 'video/quicktime': '.mov', 'video/x-matroska': '.mkv', 'video/x-msvideo': '.avi',
+}
+
+/** The extension an audio/video upload gets when its file name has none: by MIME type, else the field type's usual one. */
+function mediaFallbackExtension(fieldType: 'audio' | 'video', mimeType: string | undefined) {
+  return MEDIA_MIME_EXTENSIONS[(mimeType ?? '').split(';')[0].trim().toLowerCase()] ?? (fieldType === 'audio' ? '.wav' : '.mp4')
+}
+
+function buildComfyImageUploadName(fileName: string | undefined, fallbackBase: string, fallbackExt = '.png') {
+  const sourceName = (fileName || `${fallbackBase}${fallbackExt}`).trim()
+  const ext = path.extname(sourceName) || fallbackExt
   const baseName = path.basename(sourceName, ext).replace(/[^a-zA-Z0-9_-]/g, '_') || fallbackBase
   return `${baseName}_${Date.now()}${ext}`
 }
@@ -119,7 +130,7 @@ export function validateComfyPromptData(
   let usesLibrary = false
   for (const field of markedFields) {
     const value = promptData[field.id]
-    if (field.type === 'image') {
+    if (field.type === 'image' || isWorkflowMediaFieldType(field.type)) {
       usesLibrary = validateMediaValue(value) || usesLibrary
     } else if (field.type === 'node' && field.node_editor === MINIMAX_H3_DIRECTOR_EDITOR && isRecord(value)) {
       const meta = value[MINIMAX_H3_DIRECTOR_META_KEY]
@@ -483,8 +494,8 @@ async function prepareMiniMaxDirectorNodeValue(
 }
 
 /** Upload one resolved media input to the ComfyUI input folder; null when it carries no bytes. */
-async function uploadComfyMediaInput(comfyService: ComfyUIService, uploadInput: ComfyMediaUploadInput, fallbackBase: string) {
-  const uploadName = buildComfyImageUploadName(uploadInput.fileName, fallbackBase)
+async function uploadComfyMediaInput(comfyService: ComfyUIService, uploadInput: ComfyMediaUploadInput, fallbackBase: string, fallbackExt?: string) {
+  const uploadName = buildComfyImageUploadName(uploadInput.fileName, fallbackBase, fallbackExt)
   // 업로드가 실패하면 소비되지 않은 스트림이 파일을 계속 열어 둬서,
   // Windows에서 해당 이미지 삭제가 EBUSY로 막힌다. 항상 닫는다.
   const fileStream = uploadInput.filePath ? fs.createReadStream(uploadInput.filePath) : null
@@ -525,7 +536,7 @@ async function prepareSnapRefSimpleNodeValue(
   return preparedValue
 }
 
-/** Upload image-marked prompt fields to ComfyUI and replace them with stored input filenames. */
+/** Upload image-, audio- and video-marked prompt fields to ComfyUI and replace them with stored input filenames. */
 export async function prepareComfyPromptData(
   comfyService: ComfyUIService,
   markedFields: MarkedField[],
@@ -553,16 +564,30 @@ export async function prepareComfyPromptData(
       continue
     }
 
-    if (field.type !== 'image') {
+    const mediaType = isWorkflowMediaFieldType(field.type) ? field.type : null
+    if (field.type !== 'image' && !mediaType) {
       continue
     }
 
-    const uploadInput = getComfyMediaUploadInput(preparedPromptData[field.id])
+    const fieldValue = preparedPromptData[field.id]
+    // An audio/video string is a file name in the ComfyUI input folder unless it is a data URL (raw base64 is image-only).
+    if (mediaType && typeof fieldValue === 'string' && !/^data:/i.test(fieldValue)) {
+      continue
+    }
+
+    const uploadInput = getComfyMediaUploadInput(fieldValue)
+    // A data URL stored at enqueue time has no name of its own; the stand-in `<sha>.png` would mislabel audio/video.
+    if (uploadInput && mediaType && isQueueInputRef(fieldValue) && !fieldValue.fileName) {
+      uploadInput.fileName = undefined
+    }
     if (!uploadInput) {
+      if (mediaType && isRecord(fieldValue)) {
+        throw new ComfyInputValidationError(`${field.label || field.id}: not a usable ${mediaType} input. Give an uploaded workflow input, { composite_hash } of a library file, { fileName, dataUrl } or a file name in the ComfyUI input folder`)
+      }
       continue
     }
 
-    const uploadedName = await uploadComfyMediaInput(comfyService, uploadInput, fallbackBase)
+    const uploadedName = await uploadComfyMediaInput(comfyService, uploadInput, fallbackBase, mediaType ? mediaFallbackExtension(mediaType, uploadInput.mimeType) : undefined)
     if (uploadedName !== null) {
       preparedPromptData[field.id] = uploadedName
     }

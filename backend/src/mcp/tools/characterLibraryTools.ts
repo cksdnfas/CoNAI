@@ -9,9 +9,14 @@ import { CHARACTER_FACET_KEYS, fillCharacterAppearance } from '../../services/ch
 import { EmoticonService } from '../../services/emoticonService'
 import { characterLibraryProposalSchema, proposeCharacterLibrary } from '../../services/codex-chat/characterLibraryProposals'
 
+/** Library image hashes are shown and accepted only with the caller's images.view (unbound local callers see them). */
+export function mcpCanViewImages(context: McpRequestContext) {
+  return context.requester ? requesterPermissionKeys(context.requester).includes('images.view') : context.keyGroup !== undefined ? keyGroupPermissionKeys(context.keyGroup).includes('images.view') : true
+}
+
 export function registerCharacterLibraryTools(server: McpServer, context: McpRequestContext) {
   const id = z.number().int().positive().safe()
-  const canViewImages = () => context.requester ? requesterPermissionKeys(context.requester).includes('images.view') : context.keyGroup !== undefined ? keyGroupPermissionKeys(context.keyGroup).includes('images.view') : true
+  const canViewImages = () => mcpCanViewImages(context)
   server.registerTool('list_character_library', {
     description: 'Browse/search character settings; returns path, direct folders and paged summaries without tags. Use get_character_setting for a selected ID. If a folder is missing, browse from the top again.',
     inputSchema: z.object({

@@ -3,6 +3,7 @@ import type { ChatWorkflowProposal } from './chatWorkflow'
 import type { ChatPageActionProposal } from './chatPageAction'
 import type { ChatCharacterAssetsProposal, ChatProfileAssetsProposal } from './chatAssets'
 import type { ChatCharacterLibraryProposal } from './characterLibrary'
+import type { ChatArtStyleProposal } from './artStyle'
 import type { ChatTaskPlanProposal, ChatTaskRouting } from './chatTask'
 import type { ChatRoutineRouting } from './chatRoutine'
 import type { ChatAgentResultRouting } from './chatAgent'
@@ -136,6 +137,7 @@ export type ChatProposal = { id: number; dismissed?: boolean } & (
   | ChatProfileAssetsProposal
   | ChatCharacterAssetsProposal
   | ChatCharacterLibraryProposal
+  | ChatArtStyleProposal
   | ChatTaskPlanProposal
   | ChatChoiceProposal
   | {

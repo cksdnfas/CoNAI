@@ -208,6 +208,14 @@ const TOOLS: Record<string, { group: ChatToolGroupId; label: Copy; ko: string }>
   fill_character_appearance: { group: 'characters', label: { ko: '외형 자동 채우기', en: 'Fill appearance' }, ko: 'Danbooru 캐릭터·이미지 자동 태그·텍스트에서 외형을 항목별로 나눈 초안을 만들어. 저장은 안 해.' },
   manage_character_folders: { group: 'character-ops', label: { ko: '캐릭터 폴더 정리', en: 'Organize character folders' }, ko: '캐릭터 라이브러리 폴더를 만들거나 이름을 바꾸거나 옮겨.' },
   propose_character_library: { group: 'character-ops', label: { ko: '외형 설정 제안', en: 'Propose appearance setting' }, ko: '외형 설정 저장이나 설정·폴더 삭제를 제안해. 저장은 답변 밑 카드에서 네가 눌러.' },
+  list_art_styles: { group: 'characters', label: { ko: '그림 스타일 목록', en: 'List art styles' }, ko: '그림 스타일을 제목·설명·배지·검색어로 찾아.' },
+  get_art_style: { group: 'characters', label: { ko: '그림 스타일 읽기', en: 'Read art style' }, ko: '그림 스타일 하나의 긍정·부정 프롬프트와 이미지를 읽어.' },
+  propose_art_style: { group: 'character-ops', label: { ko: '그림 스타일 제안', en: 'Propose art style' }, ko: '그림 스타일 만들기·수정·삭제를 제안해. 저장은 답변 밑 카드에서 네가 눌러.' },
+  list_refmod_entries: { group: 'characters', label: { ko: 'RefMod 목록', en: 'List RefMods' }, ko: 'RefMod를 이름·설명·검색어로 찾고, 원하면 대표 서버에 있는지와 미등록 RefMod도 봐.' },
+  get_refmod_entry: { group: 'characters', label: { ko: 'RefMod 읽기', en: 'Read RefMod' }, ko: 'RefMod 하나의 소스와 생성 워크플로 입력값을 읽어.' },
+  save_refmod_entry: { group: 'character-ops', label: { ko: 'RefMod 저장', en: 'Save RefMod' }, ko: 'RefMod를 만들거나 이름·설명·소스·입력값을 바로 저장해. 삭제는 화면에서만 해.' },
+  adopt_refmod: { group: 'character-ops', label: { ko: 'RefMod 등록', en: 'Register RefMod' }, ko: '미등록 RefMod(저장된 실행이나 서버에만 있는 것)를 RefMod로 등록해.' },
+  build_refmod: { group: 'workflow-run', label: { ko: 'RefMod 만들기', en: 'Build RefMod' }, ko: '대표 ComfyUI 서버에서 RefMod를 만드는 작업을 접수해.' },
 }
 
 export type ChatToolEntry = {

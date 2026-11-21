@@ -185,7 +185,7 @@ test('mcp tool classification: every registered tool has a scope and a feature p
   t.diagnostic(`pattern-classified (not in the maps): ${PATTERN_CLASSIFIED}`)
 
   // The contexts above must reach every conditionally registered family, or the checks below prove nothing about them.
-  for (const tool of [...CHAT_ROOM_TOOLS, ...CHAT_PAGE_TOOLS, 'read_page_data', 'propose_page_action', 'list_files', 'get_chat_setup_guide']) {
+  for (const tool of [...CHAT_ROOM_TOOLS, ...CHAT_PAGE_TOOLS, 'read_page_data', 'propose_page_action', 'list_files', 'get_chat_setup_guide', 'list_art_styles', 'propose_art_style', 'list_refmod_entries', 'get_refmod_entry', 'save_refmod_entry', 'adopt_refmod', 'build_refmod']) {
     assert.ok(attemptedAll.has(tool), `fixture gap: ${tool} was never registered by the test contexts; extend the contexts`)
   }
 
@@ -219,6 +219,21 @@ test('mcp tool classification: every registered tool has a scope and a feature p
     assert.deepEqual(staleScopes, [], `TOOL_SCOPES entries for tools that are never registered; remove them from src/mcp/context.ts: ${staleScopes.join(', ')}`)
     const staleFeatures = Object.keys(TOOL_FEATURE_PERMISSIONS).filter((tool) => !attemptedAll.has(tool) && !STALE_FEATURE_ALLOWED.has(tool)).sort()
     assert.deepEqual(staleFeatures, [], `TOOL_FEATURE_PERMISSIONS entries for tools that are never registered; remove them from src/mcp/toolAccess.ts: ${staleFeatures.join(', ')}`)
+  })
+
+  await t.test('art style tools follow the character library classification', () => {
+    for (const [tool, scope, permission] of [['list_art_styles', 'read', 'characters.view'], ['get_art_style', 'read', 'characters.view'], ['propose_art_style', 'organize', 'characters.edit']] as const) {
+      assert.deepEqual([getMcpToolScope(tool), TOOL_FEATURE_PERMISSIONS[tool]], [scope, permission], tool)
+    }
+  })
+
+  await t.test('RefMod entry tools: reads and saves follow the character library, a build also needs generation', () => {
+    const tools = [
+      ['list_refmod_entries', 'read', 'characters.view'], ['get_refmod_entry', 'read', 'characters.view'],
+      ['save_refmod_entry', 'organize', 'characters.edit'], ['adopt_refmod', 'organize', 'characters.edit'],
+      ['build_refmod', 'generate', ['characters.edit', 'generation.execute']],
+    ] as const
+    for (const [tool, scope, permission] of tools) assert.deepEqual([getMcpToolScope(tool), TOOL_FEATURE_PERMISSIONS[tool]], [scope, permission], tool)
   })
 
   await t.test('allowlisted exceptions are still needed', () => {

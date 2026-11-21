@@ -6,6 +6,7 @@ import { publishQueueJobEvent } from '../runtime-events/runtimeEventPublishers'
 import { GenerationQueueService } from '../generationQueueService'
 import { assertValidNaiRequest } from '../../utils/nai/requestValidation'
 import { buildWorkflowRoleQueueLimitMessage, checkWorkflowRoleQueueLimit, type WorkflowRoleQueueLimitState } from './queueRoleLimitPolicy'
+import { hasRefModEntryRunKey, REFMOD_ENTRY_RUN_KEY, RefModEntryLinkForgedError, type RefModEntryRunLink } from './queueRefModEntryLink'
 
 /** The requester already holds as many active jobs on this workflow as their role allows. */
 export class QueueRoleLimitError extends Error {
@@ -24,6 +25,11 @@ export interface EnqueueGenerationJobsOptions {
   roleLimitWorkflow?: Pick<WorkflowRecord, 'id' | 'public_queue_role_limits'> | null
   /** Runs inside the creating transaction, so a caller's own bookkeeping commits with the jobs or not at all. */
   withinTransaction?: (created: EnqueuedGenerationJobs) => void
+  /**
+   * Server-only: the RefMod entry this ComfyUI run builds (buildRefModEntry, or a retry copying a stored build).
+   * Written into the payload here; a payload that already carries the key is refused.
+   */
+  refmodEntryLink?: RefModEntryRunLink
 }
 
 export interface EnqueuedGenerationJobs {
@@ -42,6 +48,12 @@ export function enqueueGenerationJobs(data: GenerationQueueJobCreateData, option
   if (options.idempotency && count > 1) throw new Error('An idempotent enqueue creates exactly one job.')
   // Every NovelAI job (screen, chat/MCP, graph, retry) is checked before it can be queued and sent.
   if (data.service_type === 'novelai') assertValidNaiRequest(data.request_payload)
+  // The RefMod entry link reaches a stored job only through the typed option, never through a caller's payload.
+  if (hasRefModEntryRunKey(data.request_payload)) throw new RefModEntryLinkForgedError()
+  if (options.refmodEntryLink) {
+    if (data.service_type !== 'comfyui') throw new Error('A RefMod entry link belongs to a ComfyUI job.')
+    data = { ...data, request_payload: { ...data.request_payload, [REFMOD_ENTRY_RUN_KEY]: options.refmodEntryLink } }
+  }
 
   const created = getUserSettingsDb().transaction((): EnqueuedGenerationJobs => {
     const { idempotency } = options

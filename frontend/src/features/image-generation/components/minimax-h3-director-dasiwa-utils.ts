@@ -9,9 +9,11 @@ import {
   type MiniMaxH3RefModIssue,
 } from '@conai/shared'
 import {
+  buildWorkflowInputAssetUrl,
   WORKFLOW_INPUT_ASSET_REF_KIND,
   type WorkflowInputAssetRef,
 } from '@/lib/api-workflow-input-assets'
+import { isRefModEntryFileRef, refModEntryFileUrl, type RefModEntryFileRef } from '@/lib/api-refmod-entries'
 import { hasMiniMaxDirectorAudio, sortMiniMaxDirectorMedia } from './minimax-h3-director-media'
 import {
   MINIMAX_H3_DIRECTOR_META_KEY,
@@ -500,6 +502,31 @@ export function getMiniMaxH3DirectorAssets(value: unknown) {
   return Object.fromEntries(Object.entries(rawAssets).filter((entry): entry is [string, WorkflowInputAssetRef] => isWorkflowInputAssetRef(entry[1])))
 }
 
+/**
+ * A Director asset: a workflow input upload, or one of a RefMod entry's own source copies (only inside the RefMod entry
+ * editor; it never enters a run).
+ */
+export type MiniMaxH3DirectorAssetRef = WorkflowInputAssetRef | RefModEntryFileRef
+
+/** Every asset of a Director draft, RefMod entry files included: edits keep them; deletions go to input uploads only. */
+export function getMiniMaxH3DirectorAssetRefs(value: unknown): Record<string, MiniMaxH3DirectorAssetRef> {
+  if (!isRecord(value) || !isRecord(value[MINIMAX_H3_DIRECTOR_META_KEY])) {
+    return {}
+  }
+
+  const rawAssets = (value[MINIMAX_H3_DIRECTOR_META_KEY] as Record<string, unknown>).assets
+  if (!isRecord(rawAssets)) {
+    return {}
+  }
+
+  return Object.fromEntries(Object.entries(rawAssets).filter((entry): entry is [string, MiniMaxH3DirectorAssetRef] => isWorkflowInputAssetRef(entry[1]) || isRefModEntryFileRef(entry[1])))
+}
+
+/** The media URL of a Director asset of either kind. */
+export function buildMiniMaxH3DirectorAssetUrl(asset: MiniMaxH3DirectorAssetRef) {
+  return isRefModEntryFileRef(asset) ? refModEntryFileUrl(asset.entryId, asset.id) : buildWorkflowInputAssetUrl(asset)
+}
+
 /** Normalize visible Director inputs without discarding model links or unknown workflow values. */
 export function normalizeMiniMaxH3DirectorNodeValue(value: unknown): Record<string, unknown> & {
   mode: MiniMaxH3DirectorMode | MiniMaxH3DirectorInputLink
@@ -562,7 +589,7 @@ export function buildMiniMaxH3DirectorNodeValue(
   currentValue: unknown,
   inputPatch: Record<string, unknown>,
   timeline?: MiniMaxH3DirectorTimeline,
-  assets?: Record<string, WorkflowInputAssetRef>,
+  assets?: Record<string, MiniMaxH3DirectorAssetRef>,
   builderState?: MiniMaxH3DirectorBuilderState,
 ): Record<string, unknown> {
   const current = normalizeMiniMaxH3DirectorNodeValue(currentValue)
@@ -614,7 +641,7 @@ export function buildMiniMaxH3DirectorNodeValue(
     builder_state: builderStateValue,
     [MINIMAX_H3_DIRECTOR_META_KEY]: {
       ...currentMeta,
-      assets: assets ?? getMiniMaxH3DirectorAssets(current),
+      assets: assets ?? getMiniMaxH3DirectorAssetRefs(current),
     },
   }
 }

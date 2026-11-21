@@ -7,6 +7,7 @@ import { PowerLoraLoaderInput } from './power-lora-loader-input'
 import { MiniMaxH3DirectorDasiwaInput } from './minimax-h3-director-dasiwa-input'
 import { SnapRefSimpleInput } from './snapref-simple-input'
 import { PathOptionTreeSelect } from './path-option-tree-select'
+import { isWorkflowInputAssetRefValue, WorkflowMediaFieldInput } from './workflow-media-field-input'
 import { useI18n } from '@/i18n'
 
 /** Path-like options (two or more with a folder) render as the searchable tree instead of a plain select. */
@@ -98,6 +99,19 @@ export function WorkflowFieldInput({ field, value, hideLabel = false, loraOption
         onChange={onChange}
       />
     ))
+  }
+
+  if (field.type === 'audio' || field.type === 'video') {
+    return wrapField(
+      <WorkflowMediaFieldInput
+        kind={field.type}
+        value={isWorkflowInputAssetRefValue(value) ? value : null}
+        label={field.label}
+        invalid={invalid}
+        errorMessageId={errorMessageId}
+        onChange={commit}
+      />,
+    )
   }
 
   if (field.type === 'select' && shouldUsePathTreeSelect(field.options ?? [])) {

@@ -2,10 +2,10 @@ import { buildMiniMaxH3DirectorSectionedPrompt } from '@conai/shared'
 import type { WorkflowInputAssetRef } from '@/lib/api-workflow-input-assets'
 import {
   buildMiniMaxH3DirectorNodeValue, createMiniMaxH3DirectorBuilderState, createMiniMaxH3DirectorItemId,
-  getMiniMaxH3DirectorActiveItems, getMiniMaxH3DirectorAssets, isMiniMaxH3DirectorInputLink,
+  getMiniMaxH3DirectorActiveItems, getMiniMaxH3DirectorAssetRefs, getMiniMaxH3DirectorAssets, isMiniMaxH3DirectorInputLink,
   MINIMAX_H3_DIRECTOR_MODES, normalizeMiniMaxH3DirectorBuilderState, normalizeMiniMaxH3DirectorNodeValue,
   parseMiniMaxH3DirectorTimeline, validateMiniMaxH3DirectorNodeValue,
-  type MiniMaxH3DirectorMode, type MiniMaxH3DirectorTimelineItem,
+  type MiniMaxH3DirectorAssetRef, type MiniMaxH3DirectorMode, type MiniMaxH3DirectorTimelineItem,
 } from './minimax-h3-director-dasiwa-utils'
 import { fitsMiniMaxDirectorMedia, getMiniMaxDirectorFreeSlot, getMiniMaxDirectorMediaLane, hasMiniMaxDirectorAudio, sortMiniMaxDirectorMedia } from './minimax-h3-director-media'
 
@@ -95,7 +95,7 @@ export function buildMiniMaxDirectorPack(value: Record<string, unknown>, scope: 
 }
 
 /** Prepare the entire import before publishing any change to the current editor. */
-export function applyMiniMaxDirectorPack(value: Record<string, unknown>, pack: MiniMaxDirectorPack, scope: MiniMaxDirectorPackScope, append: boolean, resolvedAssets: Map<number, WorkflowInputAssetRef>) {
+export function applyMiniMaxDirectorPack(value: Record<string, unknown>, pack: MiniMaxDirectorPack, scope: MiniMaxDirectorPackScope, append: boolean, resolvedAssets: Map<number, MiniMaxH3DirectorAssetRef>) {
   const node = normalizeMiniMaxH3DirectorNodeValue(value)
   if (isMiniMaxH3DirectorInputLink(node.mode) || isMiniMaxH3DirectorInputLink(node.timeline_data) || isMiniMaxH3DirectorInputLink(node.builder_state)) throw new Error('Linked Director inputs cannot be replaced by a static pack')
   const timeline = parseMiniMaxH3DirectorTimeline(node.timeline_data).timeline
@@ -103,7 +103,7 @@ export function applyMiniMaxDirectorPack(value: Record<string, unknown>, pack: M
   const wantsPrompt = scope !== 'files' && pack.prompt !== undefined
   if (!wantsFiles && !wantsPrompt) throw new Error('The pack does not contain the selected data')
   let items = wantsFiles && !append ? [] : [...timeline.items]
-  const assets = wantsFiles && !append ? {} : { ...getMiniMaxH3DirectorAssets(value) }
+  const assets: Record<string, MiniMaxH3DirectorAssetRef> = wantsFiles && !append ? {} : { ...getMiniMaxH3DirectorAssetRefs(value) }
   if (wantsFiles) {
     // Promote the legacy closing frame before reserving its slot for appended media.
     if (pack.model_mode === 'L2VA' && !items.some((item) => item.enabled && item.type === 'image' && item.slot === 1)) {

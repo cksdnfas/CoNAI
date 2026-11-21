@@ -1,7 +1,7 @@
 import { readBlobAsDataUrl } from '@/lib/file-data-url'
 import { applyMiniMaxDirectorResolutionBounds } from '@conai/shared'
 import type { WorkflowMarkedField } from '@/lib/api-image-generation-types'
-import { deleteWorkflowInputAsset } from '@/lib/api-workflow-input-assets'
+import { deleteWorkflowInputAsset, WORKFLOW_INPUT_ASSET_REF_KIND, type WorkflowInputAssetRef } from '@/lib/api-workflow-input-assets'
 import type { NAIFormDraft, SelectedImageDraft, WorkflowFieldDraftValue, WorkflowNodeDraftValue, WorkflowTextDraftSegments } from './image-generation-shared'
 import { DEFAULT_NAI_FORM, EMPTY_NAI_CHARACTER_PROMPT } from './image-generation-shared'
 import {
@@ -143,6 +143,13 @@ function isSelectedImageDraft(value: unknown): value is SelectedImageDraft {
   return typeof record.fileName === 'string' && typeof record.dataUrl === 'string'
 }
 
+/** An uploaded audio/video field value (a reference into the workflow input store). */
+function isWorkflowInputAssetDraftValue(value: unknown): value is WorkflowInputAssetRef {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const record = value as Record<string, unknown>
+  return record.__ref === WORKFLOW_INPUT_ASSET_REF_KIND && typeof record.id === 'string' && typeof record.fileName === 'string'
+}
+
 function isWorkflowNodeDraftValue(value: unknown): value is WorkflowNodeDraftValue {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value) && !isSelectedImageDraft(value)
 }
@@ -180,6 +187,11 @@ function normalizeWorkflowDraftValue(field: WorkflowMarkedField, value: unknown)
 
   if (field.type === 'image') {
     return isSelectedImageDraft(value) ? value : ''
+  }
+
+  // The workflow's own file name (default_value) is not a draft value: an empty field runs with it.
+  if (field.type === 'audio' || field.type === 'video') {
+    return isWorkflowInputAssetDraftValue(value) ? { ...value } : ''
   }
 
   if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
@@ -304,10 +316,14 @@ export function isValidWorkflowNumberDraftValue(value: WorkflowFieldDraftValue |
   return Number.isFinite(Number(value))
 }
 
-/** Mark private Director and SnapRef assets for delayed deletion after a draft is discarded. */
+/** Mark private Director, SnapRef and audio/video field assets for delayed deletion after a draft is discarded. */
 export async function deleteComfyWorkflowDraftInputAssets(draft: Record<string, WorkflowFieldDraftValue>) {
   const assetIds = new Set<string>()
   for (const value of Object.values(draft)) {
+    if (isWorkflowInputAssetDraftValue(value)) {
+      assetIds.add(value.id)
+      continue
+    }
     if (!isWorkflowNodeDraftValue(value)) {
       continue
     }
@@ -425,6 +441,11 @@ export function buildWorkflowPromptData(fields: WorkflowMarkedField[], draft: Re
       if (joinedValue.length > 0) {
         payload[field.id] = joinedValue
       }
+      return payload
+    }
+
+    if (field.type === 'audio' || field.type === 'video') {
+      if (isWorkflowInputAssetDraftValue(value)) payload[field.id] = value
       return payload
     }
 

@@ -7,7 +7,7 @@ import { GenerationHistoryService } from '../generationHistoryService'
 import { BackgroundProcessorService } from '../backgroundProcessorService'
 import { createComfyUIService } from '../comfyuiService'
 import { prepareComfyPromptData, validateComfyPromptData } from '../prepareComfyPromptData'
-import { captureRefModRecords, completeRefModRecords, failRefModRecords, linkRefModRecords } from '../comfyui/refmodRecords'
+import { captureRefModRecords, completeRefModRecords, failRefModRecords, linkRefModRecords, readRefModEntryRunLink } from '../comfyui/refmodRecords'
 import { resolveWorkflowPromptValues } from '../workflowPromptValueResolver'
 import { executeComfyGeneration, isComfyGenerationCancelledError } from '../comfyGenerationExecutor'
 import { resolveComfyAbandonedCancelResult } from '../comfyuiService'
@@ -215,6 +215,7 @@ async function executeComfyUiJob(job: GenerationQueueJobRecord, assignedServer: 
     workflowJson: workflow.workflow_json, markedFields, promptData: payload.promptData,
     serverId: assignedServer?.id ?? job.assigned_server_id ?? null,
     workflowId: workflow.id, queueJobId: job.id,
+    entry: readRefModEntryRunLink(parseStoredRequestPayload(job)),
   })
   try {
   const preparedPromptData = await prepareComfyPromptData(comfyService, markedFields, payload.promptData)
@@ -536,7 +537,8 @@ async function executeComfyUiJob(job: GenerationQueueJobRecord, assignedServer: 
     clearGenerationQueueLiveProgress(job.id)
   }
   } catch (error) {
-    await failRefModRecords(refmodRecords, error)
+    // The record shows the same text the queue stores as this job's failure_message.
+    await failRefModRecords(refmodRecords, error, resolveQueueFailureMessage(error) ?? resolveFailureMessage(error))
     throw error
   }
 }

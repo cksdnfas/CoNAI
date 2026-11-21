@@ -175,6 +175,7 @@ export function MiniMaxH3DirectorRefModPanel({ rows, serverId, exportOnly = fals
           open={isRecordsOpen}
           serverId={result.serverId}
           canPick={canPickRecord}
+          libraryEntries={entries}
           onPick={pickRecord}
           onClose={() => setIsRecordsOpen(false)}
         />

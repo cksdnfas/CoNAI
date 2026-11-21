@@ -41,7 +41,7 @@ export function useComfyModuleSave({
     moduleSaveWorkflowFields.map((field) => ({
       key: field.id,
       label: field.label,
-      dataType: field.type === 'number' ? 'number' : field.type === 'image' ? 'image' : field.type === 'node' ? 'json' : 'text',
+      dataType: field.type === 'number' ? 'number' : field.type === 'image' ? 'image' : field.type === 'node' || field.type === 'audio' || field.type === 'video' ? 'json' : 'text',
       options: field.options,
     }))
   ), [moduleSaveWorkflowFields])

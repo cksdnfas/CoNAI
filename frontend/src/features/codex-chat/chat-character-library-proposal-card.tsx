@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
@@ -22,18 +22,9 @@ import { dismissChatProposal, markChatProposalSaved, type CodexChatToolCall } fr
 import { getErrorMessage } from '@/lib/error-message'
 import { ChatMediaAttachments } from './chat-media-picker'
 import { codexChatThreadQueryKey } from './codex-chat-context'
-import { ProposalFooter, ProposalFrame } from './chat-proposal-parts'
+import { ProposalFooter, ProposalFrame, ProposalRow as Row } from './chat-proposal-parts'
 
 type LibraryProposal = Extract<NonNullable<CodexChatToolCall['proposal']>, { kind: 'character_library' }>
-
-function Row({ label, children }: { label: ReactNode; children: ReactNode }) {
-  return (
-    <div className="grid grid-cols-[6rem_minmax(0,1fr)] gap-x-3 text-xs">
-      <span className="pt-px text-muted-foreground">{label}</span>
-      <div className="max-h-28 min-w-0 overflow-auto whitespace-pre-wrap break-words">{children}</div>
-    </div>
-  )
-}
 
 /**
  * A character library change the chat proposed (`propose_character_library`): save a setting (new or against its

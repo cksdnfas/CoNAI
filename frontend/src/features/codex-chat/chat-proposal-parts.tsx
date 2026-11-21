@@ -12,6 +12,16 @@ export function ProposalFooter({ status = false, className, ...props }: Componen
   return <div className={cn('flex items-center gap-2 border-t border-line pt-2', status && 'text-xs text-muted-foreground', className)} {...props} />
 }
 
+/** One proposed value: a muted label beside a capped, scrolling pre-wrap value. */
+export function ProposalRow({ label, children }: { label: ReactNode; children: ReactNode }) {
+  return (
+    <div className="grid grid-cols-[6rem_minmax(0,1fr)] gap-x-3 text-xs">
+      <span className="pt-px text-muted-foreground">{label}</span>
+      <div className="max-h-28 min-w-0 overflow-auto whitespace-pre-wrap break-words">{children}</div>
+    </div>
+  )
+}
+
 const CHANGE_TEXT_CLASS = 'max-h-28 overflow-auto whitespace-pre-wrap break-words'
 
 /** One changed field in a `<dl>`: label over a before / after pair, each side a capped scrolling pre-wrap block. */

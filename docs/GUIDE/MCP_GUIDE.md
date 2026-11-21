@@ -234,6 +234,44 @@ ComfyUI 이미지 입력은 라이브러리 `composite_hash`(이미지 조회 �
 
 ComfyUI 시드(`seed`·`noise_seed`)는 실행마다 새로 뽑힙니다. marked field로 0 이상의 값을 넘기거나, 워크플로 노드의 `_meta.conai_fixed_seeds`에 들어 있는 시드만 그대로 유지됩니다. `import_workflow_definition`은 ComfyUI 편집기 workflow도 받아 API 형식으로 바꿔 등록합니다(fixed였던 시드는 고정 유지).
 
+### RefMod 항목
+
+[RefMod 항목](CHARACTER_LIBRARY.md#refmod)을 화면 없이 다룹니다. 화면과 같은 서비스·검증을 쓰며 카탈로그 범주는 `generation`입니다.
+
+| Tool | 주요 인자와 결과 | 도구 범위 / 계정 권한 |
+| --- | --- | --- |
+| `list_refmod_entries` | `query`(이름·설명·검색어·멤버 설명), `concept`, `include_server`, `limit`, `offset`. 항목마다 `id`·`name`·`concept`·`description`·멤버 수(`members`)·`buildable`·문제 코드(`issues`, 코드만)·`pending`·`lastBuiltAt`만 돌려주고 `total`을 붙입니다. `include_server`를 켜면 대표 ComfyUI 서버에 물어(15초쯤 걸릴 수 있음) 항목마다 `on_server`를, 그리고 미등록 목록(저장된 실행 기록, 서버에만 있는 이름)을 더합니다. | `read` / `characters.view` |
+| `get_refmod_entry` | `entry_id`. 멤버·역할·문제(`required-input-empty`는 비어 있는 입력의 `fields: [{id, label}]` 포함)·`revision`과 연결된 생성 워크플로의 입력 필드(`get_workflow_details`와 같은 설명)를 현재 값과 함께 돌려줍니다. Director 값의 원본은 미디어 항목 `id`와 `source: {file_name, mime_type, kind}`로만 보이고 파일 ID는 나오지 않습니다. | `read` / `characters.view` |
+| `save_refmod_entry` | 만들기는 `entry_id` 없이 `name`(경로·확장자 없는 파일 이름 하나, 아니면 `invalid_name`), 수정은 `entry_id`와 현재 `revision`. 그 밖에 `concept_type`·`description`·`keywords`·`workflow_id`·`inputs`. `inputs`는 그 워크플로에 `submit_generation_job`이 받는 친화 값과 같습니다. Director 미디어는 라이브러리 `composite_hash`(`images.view` 필요)나 `data_url`로 넣으면 RefMod 파일로 복사됩니다. **Director 미디어를 보내면 원본 목록 전체를 바꾸므로** 먼저 항목을 읽고 남길 원본도 `{ "id": … }`로 다시 보냅니다. 바로 저장하고 `buildable`·`issues`와 함께 돌려줍니다. | `organize` / `characters.edit` |
+| `adopt_refmod` | `record_id`나 `name` 중 하나. 저장된 실행 기록은 원본을 복사해 항목으로 만들고, 서버에만 있는 이름은 원본 없이 정보만 가져옵니다. 서버가 알려 준 이름은 하위 폴더(`sub/name`)도 그대로 받지만 그런 항목은 `name-not-plain` 문제로 만들 수 없습니다. 새 항목은 같은 워크플로의 최근 항목 입력값을 처음 값으로 받습니다. | `organize` / `characters.edit` |
+| `build_refmod` | `entry_id`. 대표 ComfyUI 서버에 생성 작업을 넣고 `job_id`를 바로 돌려줍니다. 막는 문제가 있으면 `blocked`(문제 코드와 비어 있는 입력 id), 대표 서버에 같은 이름이 이미 있으면 `exists_on_server`(ComfyUI는 덮어쓰지 않음), 원본이 하나도 없으면 `no_sources`, 원본 파일이 빠진 멤버가 있으면 `missing_source`, 이미 만드는 중이면 `pending`으로 거절합니다. | `generate` / `characters.edit` + `generation.execute` |
+
+삭제 도구는 없습니다. 항목 삭제는 화면에서 합니다. 오래된 `revision`은 `revision_conflict`, 이름 중복은 `name_conflict`로 거절하며 오류 문구에 코드와 현재 `revision`이 붙습니다.
+작업 순서 예(원본 하나를 더하고 다시 만들기):
+
+1. `list_refmod_entries` `{ "query": "hero" }`로 항목의 `id`를 찾습니다.
+2. `get_refmod_entry` `{ "entry_id": 3 }`로 `revision`과 Director 필드(기본 생성 워크플로에서는 `director`)의 `value.media`를 확인합니다.
+3. `save_refmod_entry`로 저장합니다. 남길 원본은 읽은 `id`로 다시 보내고, 바꿀 값만 함께 적습니다.
+
+```json
+{
+  "entry_id": 3,
+  "revision": 5,
+  "inputs": {
+    "director": {
+      "media": [
+        { "id": "<원본 1의 id>" },
+        { "id": "<원본 2의 id>", "prompt": "옆모습" },
+        { "type": "image", "composite_hash": "<라이브러리 이미지 해시>", "prompt": "정면 얼굴" }
+      ]
+    }
+  }
+}
+```
+
+4. 결과의 `buildable`이 `true`면 `build_refmod` `{ "entry_id": 3 }`로 `job_id`를 받습니다.
+5. `get_generation_job` `{ "job_id": … }`로 끝날 때까지 확인합니다. 저장되면 항목의 `lastBuiltAt`이 바뀌고 `include_server` 목록에서 `on_server`가 `true`가 됩니다.
+
 ### 이미지 조회
 
 | Tool | 용도 |
@@ -562,6 +600,9 @@ ComfyUI 시드(`seed`·`noise_seed`)는 실행마다 새로 뽑힙니다. marked
 | `fill_character_appearance` | `source: danbooru`(`character`: 태그 이름 또는 한국어 이름), `image`(`image_hash`), `text`(`text`). 저장하지 않고 항목별 태그와 의상 태그를 반환합니다. Danbooru·이미지 경로는 Danbooru 사전이 필요합니다. | `read` / `characters.view` |
 | `manage_character_folders` | `action: create`는 `name`, 선택 `parent_id`; `rename`은 `folder_id`, `name`; `move`는 `folder_id`, `parent_id`(`null`: 최상위). 즉시 정리하며 순환 이동·형제 이름 중복을 거부합니다. | `organize` / `characters.edit` |
 | `propose_character_library` | `save_setting`, `delete_setting`, `delete_folder` 검토 카드. **채팅 전용**이며 카드 저장 전에는 변경하지 않습니다. | `organize` / `characters.edit` |
+| `list_art_styles` | `query`(제목·설명·배지·검색어), `badges`(모두 맞는 스타일), `favorite`, `limit`, `offset`. [그림 스타일](CHARACTER_LIBRARY.md#그림-스타일)의 `id`·`title`·`description`·`badges`·`imageCount`와 `total`·`hasMore`만 반환합니다. | `read` / `characters.view` |
+| `get_art_style` | `style_id`. 검색어·긍정/부정 프롬프트·이미지(`{ id, name, mimeType, width, height }`, 첫 장이 대표)·`revision`까지 조회합니다. 이미지는 `images.view`가 있을 때만 보입니다. `view_ids`(최대 6개)를 주면 그 이미지도 함께 보여 주며 `images.view`와 이미지를 보는 채팅 프로필이 필요합니다(`files.view`는 필요 없음). | `read` / `characters.view` |
+| `propose_art_style` | `save_style`(생성은 `input`만, 수정은 `style_id`·현재 `revision`·바꿀 `input`), `delete_style`(`style_id`, `revision`) 검토 카드. **채팅 전용**이며 카드 저장 전에는 변경하지 않습니다. 이미지 항목은 `{ id }`(스타일이 가진 이미지)나 `{ composite_hash }`(라이브러리 이미지, 저장할 때 복사)입니다. 삭제하면 참조 이미지(복사본)도 함께 지워집니다. | `organize` / `characters.edit` |
 
 `save_setting`의 생성은 `input: {folderId, name, ...}`이며 `folderId: null`은 최상위입니다. 수정은 `setting_id`, 현재 `revision`, 바꿀 `input`을 전달합니다. `input` 필드명은 REST와 같은 camelCase입니다. `delete_setting`은 `setting_id`와 `revision`, `delete_folder`는 `folder_id`를 받습니다.
 

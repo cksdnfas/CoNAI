@@ -83,8 +83,12 @@ export function storeWorkflowInputAssetFile(
   };
 }
 
-/** Give a graph-to-queue copy its own identity, so an abandoned copy never aliases another job's input. */
-export async function storeGraphQueueInputFile(filePath: string, input: { fileName: string; mimeType?: string; executionId: number }): Promise<WorkflowInputAssetRef> {
+/**
+ * Copy a file into the store under a new identity that is already marked for delayed deletion, so an abandoned copy
+ * never aliases another job's input and is collected once no queue job claims it. A graph copy also names its owning
+ * execution (`graphExecutionId`), which lets pruning release it as soon as that run ends.
+ */
+export async function storeWorkflowInputAssetCopy(filePath: string, input: { fileName: string; mimeType?: string; graphExecutionId?: number }): Promise<WorkflowInputAssetRef> {
   const id = crypto.randomBytes(16).toString('hex');
   const absolutePath = resolveWorkflowInputAssetPath(id)!;
   const markerPath = `${absolutePath}.deleted`;
@@ -96,8 +100,10 @@ export async function storeGraphQueueInputFile(filePath: string, input: { fileNa
   let ownsFile = false;
   let ownsGraphMarker = false;
   try {
-    await fs.promises.writeFile(graphMarkerPath, String(input.executionId), { encoding: 'utf8', flag: 'wx' });
-    ownsGraphMarker = true;
+    if (input.graphExecutionId !== undefined) {
+      await fs.promises.writeFile(graphMarkerPath, String(input.graphExecutionId), { encoding: 'utf8', flag: 'wx' });
+      ownsGraphMarker = true;
+    }
     await fs.promises.copyFile(filePath, stagingPath, fs.constants.COPYFILE_EXCL);
     ownsStage = true;
     const stats = await fs.promises.stat(stagingPath);
@@ -112,6 +118,26 @@ export async function storeGraphQueueInputFile(filePath: string, input: { fileNa
     await fs.promises.rm(markerPath, { force: true });
     throw error;
   }
+}
+
+/** Give a graph-to-queue copy its own identity, so an abandoned copy never aliases another job's input. */
+export async function storeGraphQueueInputFile(filePath: string, input: { fileName: string; mimeType?: string; executionId: number }): Promise<WorkflowInputAssetRef> {
+  return storeWorkflowInputAssetCopy(filePath, { fileName: input.fileName, mimeType: input.mimeType, graphExecutionId: input.executionId });
+}
+
+/** Remove copies made by storeWorkflowInputAssetCopy that no queue job claimed (a build that failed before enqueueing). */
+export function discardUnclaimedWorkflowInputAssetCopies(refs: ReadonlyArray<Pick<WorkflowInputAssetRef, 'id'>>) {
+  if (!refs.length) return;
+  const db = ensureWorkflowInputAssetRefs();
+  const isReferenced = db.prepare('SELECT 1 FROM workflow_input_asset_job_refs WHERE asset_id = ? LIMIT 1');
+  db.transaction(() => {
+    for (const ref of refs) {
+      const file = resolveWorkflowInputAssetPath(ref.id);
+      if (!file || isReferenced.get(ref.id) || !fs.existsSync(`${file}.deleted`)) continue;
+      fs.rmSync(file, { force: true });
+      fs.rmSync(`${file}.deleted`, { force: true });
+    }
+  }).immediate();
 }
 
 /** Mark one removed draft asset for delayed deletion so already queued jobs stay retryable. */

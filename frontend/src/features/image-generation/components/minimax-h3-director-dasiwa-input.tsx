@@ -16,10 +16,8 @@ import { Textarea } from '@/components/ui/textarea'
 import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import {
-  buildWorkflowInputAssetUrl,
   deleteWorkflowInputAsset,
   uploadWorkflowInputAsset,
-  type WorkflowInputAssetRef,
 } from '@/lib/api-workflow-input-assets'
 import type { WorkflowNodeNumericBounds } from '@/lib/api-image-generation-types'
 import { copyTextToClipboard } from '@/lib/clipboard'
@@ -27,12 +25,14 @@ import { isFromOwnDom } from '@/lib/portal-events'
 import { cn } from '@/lib/utils'
 import { Field } from '@/components/ui/field'
 import {
+  buildMiniMaxH3DirectorAssetUrl,
   createMiniMaxH3DirectorItemId,
   createMiniMaxH3DirectorBuilderState,
   getMiniMaxH3DirectorActiveItems,
   hasMiniMaxH3DirectorBuilderContent,
   inferMiniMaxH3DirectorMediaType,
   isMiniMaxH3DirectorInputLink,
+  isWorkflowInputAssetRef,
   MINIMAX_H3_DIRECTOR_DURATION_MAX_SECONDS,
   MINIMAX_H3_DIRECTOR_DURATION_MIN_SECONDS,
   MINIMAX_H3_DIRECTOR_FRAME_RATE_MAX,
@@ -41,6 +41,7 @@ import {
   MINIMAX_H3_DIRECTOR_VISIBLE_FIELDS,
   resolveMiniMaxH3DirectorCanvas,
   validateMiniMaxH3DirectorNodeValue,
+  type MiniMaxH3DirectorAssetRef,
   type MiniMaxH3DirectorBuilderState,
   type MiniMaxH3DirectorGraphInputKey,
   type MiniMaxH3DirectorMediaType,
@@ -119,7 +120,7 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
     [visibleFields],
   )
   const isFieldVisible = (field: MiniMaxH3DirectorVisibleField) => visibleFieldSet.has(field)
-  const assets = directorState.assets
+  const assets = directorState.assetRefs
   const activeItems = timeline.items.filter((item) => item.enabled !== false)
   const displayedItems = sortMiniMaxDirectorMedia(getMiniMaxH3DirectorActiveItems(nodeValue))
   const visualItems = displayedItems.filter((item) => item.type === 'image')
@@ -169,8 +170,9 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
   }
 
 
-  const cleanupAssets = (removableAssets: WorkflowInputAssetRef[]) => {
-    void Promise.all(removableAssets.map((asset) => deleteWorkflowInputAsset(asset.id))).catch((error) => {
+  // Only input uploads are deleted here; a RefMod entry's own files go when the entry is saved without them.
+  const cleanupAssets = (removableAssets: MiniMaxH3DirectorAssetRef[]) => {
+    void Promise.all(removableAssets.filter(isWorkflowInputAssetRef).map((asset) => deleteWorkflowInputAsset(asset.id))).catch((error) => {
       setStatus(error instanceof Error ? error.message : t({ ko: '일부 미디어 자산 정리에 실패했어.', en: 'Failed to clean up some media assets.' }))
     })
   }
@@ -514,7 +516,7 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
 
         {item.type === 'audio' && asset ? (
           <audio
-            src={buildWorkflowInputAssetUrl(asset)}
+            src={buildMiniMaxH3DirectorAssetUrl(asset)}
             aria-label={asset.fileName}
             preload="metadata"
             controls
@@ -675,8 +677,8 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
-          {mode === 'REF2VA' && !ref2vaModelConnected ? <Badge variant="destructive">{t({ ko: 'REF2VA 미연결', en: 'REF2VA missing' })}</Badge> : null}
-          {mode && mode !== 'REF2VA' && !fl2vaModelConnected ? <Badge variant="destructive">{t({ ko: '기본 모델 미연결', en: 'Base model missing' })}</Badge> : null}
+          {!refModExportOnly && mode === 'REF2VA' && !ref2vaModelConnected ? <Badge variant="destructive">{t({ ko: 'REF2VA 미연결', en: 'REF2VA missing' })}</Badge> : null}
+          {!refModExportOnly && mode && mode !== 'REF2VA' && !fl2vaModelConnected ? <Badge variant="destructive">{t({ ko: '기본 모델 미연결', en: 'Base model missing' })}</Badge> : null}
           {mode === null && (!fl2vaModelConnected || !ref2vaModelConnected) ? <Badge variant="destructive">{t({ ko: '동적 모드 모델 확인', en: 'Check dynamic-mode models' })}</Badge> : null}
         </div>
         <div className="flex flex-wrap items-center gap-1">

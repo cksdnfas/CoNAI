@@ -89,7 +89,8 @@ export function resolveWorkflowPromptValues<T extends Record<string, any>>(
   const resolvedPromptData: Record<string, any> = normalizeWorkflowNumericPromptValues(markedFields, promptData)
 
   for (const field of markedFields) {
-    if (field.type === 'image' || field.type === 'number') {
+    // Media values are files, not text: no wildcard parsing or comment stripping.
+    if (field.type === 'image' || field.type === 'audio' || field.type === 'video' || field.type === 'number') {
       continue
     }
 

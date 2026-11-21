@@ -109,6 +109,15 @@ const nativeActionPermissions = {
   'character.catalog_search': 'prompts.view', 'character.catalog_import': 'characters.edit',
   // The scrolled lists' next batch (library and catalog).
   'character.load_more': 'characters.view', 'character.catalog_load_more': 'prompts.view',
+  // Art styles (/characters?view=styles): list view, the open style's draft, favorites, and review-card create/save/delete.
+  'art_style.filter': 'characters.view', 'art_style.load_more': 'characters.view', 'art_style.open': 'characters.view', 'art_style.close': 'characters.view',
+  'art_style.draft': 'characters.edit', 'art_style.images': 'characters.edit', 'art_style.favorite': 'characters.edit',
+  'art_style.create': 'characters.edit', 'art_style.save': 'characters.edit', 'art_style.delete': 'characters.edit',
+  // RefMod entries (/characters?view=refmods): list view and server status, the open entry's draft (its form fields go through
+  // page_fill, comfy.node and media.attach/media.clear like the ComfyUI page), favorites and 등록 at once, review-card create/save/delete/build.
+  'refmod.filter': 'characters.view', 'refmod.load_more': 'characters.view', 'refmod.server': 'characters.view', 'refmod.open': 'characters.view', 'refmod.close': 'characters.view',
+  'refmod.draft': 'characters.edit', 'refmod.favorite': 'characters.edit', 'refmod.adopt': 'characters.edit',
+  'refmod.create': 'characters.edit', 'refmod.save': 'characters.edit', 'refmod.delete': 'characters.edit', 'refmod.build': 'generation.execute',
   'comfy.select': 'workflows.view', 'comfy.refresh': 'workflows.view', 'comfy.open_create': 'workflows.edit', 'comfy.open_edit': 'workflows.edit',
   'comfy.author': 'workflows.view', 'comfy.save': 'workflows.edit', 'comfy.register': 'workflows.edit', 'comfy.node': null,
   // The server check uses the editor's own check route (workflows.edit); suggested fields only mark inputs in the draft.
@@ -134,6 +143,8 @@ const nativeActionPermissions = {
   'profile.character_save': 'characters.edit',
   // Generation pages: copy a character library setting's tags (and reference image) into the form.
   'character_setting.insert': 'characters.view',
+  // Generation pages: copy an art style's prompts (and, when asked, its images) into the form.
+  'art_style.insert': 'characters.view',
   'library.search': 'images.view', 'library.history': 'images.view', 'library.open': 'images.view', 'library.select': 'images.view', 'library.hide_groups': 'images.view',
   'library.filters': 'images.view', 'library.assign_group': 'images.edit', 'library.delete': 'images.delete', 'files.open': 'files.view', 'files.preview': 'files.view',
   // File store: names and moves run directly; deletes, restores and document saves use review cards.
@@ -215,6 +226,16 @@ for (const id of ['character.filter', 'character.catalog_search']) VIEW_ACTIONS.
 for (const id of ['character.load_more', 'character.catalog_load_more']) { VIEW_ACTIONS.add(id); IN_PLACE_VIEW_ACTIONS.add(id) }
 // A favorite mark only changes what the list highlights; it applies at once like a chat pin.
 DIRECT_ACTIONS.add('character.favorite')
+for (const id of ['art_style.open', 'art_style.close']) VIEW_ACTIONS.add(id)
+// The list's scope and its next batch change only what is listed, so an open style's unsaved draft stays.
+for (const id of ['art_style.filter', 'art_style.load_more']) { VIEW_ACTIONS.add(id); IN_PLACE_VIEW_ACTIONS.add(id) }
+for (const id of ['art_style.create', 'art_style.save', 'art_style.delete']) COMMIT_ACTIONS.add(id)
+DIRECT_ACTIONS.add('art_style.favorite')
+for (const id of ['refmod.open', 'refmod.close']) VIEW_ACTIONS.add(id)
+// The list's scope, its next batch and the server status change only what is listed, so an open entry's draft stays.
+for (const id of ['refmod.filter', 'refmod.load_more', 'refmod.server']) { VIEW_ACTIONS.add(id); IN_PLACE_VIEW_ACTIONS.add(id) }
+for (const id of ['refmod.create', 'refmod.save', 'refmod.delete', 'refmod.build']) COMMIT_ACTIONS.add(id)
+for (const id of ['refmod.favorite', 'refmod.adopt']) DIRECT_ACTIONS.add(id)
 for (const id of ['profile.open_folder', 'profile.search']) VIEW_ACTIONS.add(id)
 for (const id of ['profile.folder_create', 'profile.folder_rename', 'profile.folder_move', 'profile.folder_delete', 'profile.move', 'profile.reorder']) COMMIT_ACTIONS.add(id)
 for (const id of ['library.assign_group', 'library.delete', 'group.add_images', 'group.remove_images', 'group.delete_images', 'group.auto_collect_all', 'group.rebuild_folders']) COMMIT_ACTIONS.add(id)
@@ -273,7 +294,12 @@ export function chatPageActionAllowed(path: string, id: string): boolean {
   if (id.startsWith('prompt.') || id === 'preset.create' || id === 'preset.update' || id === 'preset.delete' || id === 'preset.select' || id === 'preset.draft') return path === '/prompts'
   if (id.startsWith('wildcard.')) return path === '/wildcards'
   if (id.startsWith('character.')) return path === '/characters'
+  if (id === 'art_style.insert') return path === '/generation' || /^\/public\/workflows\/[\w-]+$/.test(path)
+  if (id.startsWith('art_style.')) return path === '/characters'
+  if (id.startsWith('refmod.')) return path === '/characters'
   if (id.startsWith('group.')) return /^\/groups(?:\/[\w-]+)?$/.test(path)
+  // The RefMod view's open entry is a ComfyUI form too: its Director and node fields fill like the generation page's.
+  if ((id === 'media.attach' || id === 'media.clear' || id === 'comfy.node') && path === '/characters') return true
   if (id === 'media.attach' || id === 'media.clear' || id === 'preset.insert' || id === 'character_setting.insert') return path === '/generation' || /^\/public\/workflows\/[\w-]+$/.test(path)
   if (['comfy.node', 'comfy.refresh', 'comfy.open_create', 'comfy.open_edit', 'comfy.author', 'comfy.register', 'comfy.save', 'comfy.check', 'comfy.suggest_fields', 'comfy.generate'].includes(id)) return path === '/generation' || /^\/public\/workflows\/[\w-]+$/.test(path)
   return path === '/generation'

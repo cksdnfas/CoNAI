@@ -127,6 +127,11 @@ export const audioPlayer = {
     element.currentTime = Math.max(0, Math.min(seconds, stopAt ?? duration, duration))
     emit({ currentTime: element.currentTime })
   },
+  /** A click on a waveform: move the playing take there, or start it from that point. */
+  seekOrPlay(key: string, seconds: number, options: PlayOptions = {}) {
+    if (state.key === key && state.playing) audioPlayer.seek(seconds)
+    else audioPlayer.play(key, { ...options, start: seconds })
+  },
   get state() {
     return state
   },

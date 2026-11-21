@@ -164,7 +164,8 @@ export interface WorkflowMarkedField {
   jsonPath: string
   source_node_id?: string
   source_node_title?: string
-  type: 'text' | 'number' | 'select' | 'textarea' | 'image' | 'node'
+  /** audio / video: the value is an uploaded workflow input (WorkflowInputAssetRef), sent to ComfyUI's input folder at run time. */
+  type: 'text' | 'number' | 'select' | 'textarea' | 'image' | 'audio' | 'video' | 'node'
   default_collapsed?: boolean
   /** A fixed value: never shown or sent by a generation form; runs with default_value (text/textarea/number/select only). */
   hidden?: boolean

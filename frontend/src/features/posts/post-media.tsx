@@ -233,7 +233,7 @@ export function AudioEmbed({ candidateId, caption }: { candidateId: string; capt
       </IconButton>
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <span className="truncate text-sm font-medium">{caption || candidate?.name || t({ ko: '오디오', en: 'Audio' })}</span>
-        {candidate ? <WaveformThumb candidateId={candidateId} fileHash={candidate.file_hash} progress={progress} className="h-7 w-full" /> : <span className="h-7 w-full animate-pulse rounded-sm bg-surface-low" />}
+        {candidate ? <WaveformThumb candidateId={candidateId} fileHash={candidate.file_hash} progress={progress} duration={player.key === candidateId && player.duration > 0 ? player.duration : candidate.file.duration ?? 0} onToggle={() => audioPlayer.toggle(candidateId)} onSeek={(seconds) => audioPlayer.seekOrPlay(candidateId, seconds)} className="h-7 w-full" /> : <span className="h-7 w-full animate-pulse rounded-sm bg-surface-low" />}
       </div>
       <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{formatDuration(candidate?.file.duration)}</span>
     </div>

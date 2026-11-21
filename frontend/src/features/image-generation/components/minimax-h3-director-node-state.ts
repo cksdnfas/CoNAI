@@ -1,8 +1,8 @@
 import { applyMiniMaxDirectorResolutionBounds } from '@conai/shared'
 import type { WorkflowNodeNumericBounds } from '@/lib/api-image-generation-types'
-import type { WorkflowInputAssetRef } from '@/lib/api-workflow-input-assets'
 import {
   buildMiniMaxH3DirectorNodeValue,
+  getMiniMaxH3DirectorAssetRefs,
   getMiniMaxH3DirectorAssets,
   isMiniMaxH3DirectorInputLink,
   MINIMAX_H3_DIRECTOR_MODES,
@@ -11,6 +11,7 @@ import {
   normalizeMiniMaxH3DirectorPostprocess,
   normalizeMiniMaxH3DirectorResolution,
   parseMiniMaxH3DirectorTimeline,
+  type MiniMaxH3DirectorAssetRef,
   type MiniMaxH3DirectorBuilderState,
   type MiniMaxH3DirectorMode,
   type MiniMaxH3DirectorTimeline,
@@ -66,6 +67,8 @@ export function readMiniMaxH3DirectorState(value: unknown, numericBounds?: Workf
     builderDuration,
     builderState,
     assets: getMiniMaxH3DirectorAssets(nodeValue),
+    /** Every asset, RefMod entry files included (the entry editor's sources); edits pass these on. */
+    assetRefs: getMiniMaxH3DirectorAssetRefs(nodeValue),
   }
 }
 
@@ -80,7 +83,7 @@ export function patchMiniMaxH3DirectorValue(
   numericBounds: WorkflowNodeNumericBounds | undefined,
   inputPatch: Record<string, unknown>,
   nextTimeline?: MiniMaxH3DirectorTimeline,
-  nextAssets: Record<string, WorkflowInputAssetRef> = state.assets,
+  nextAssets: Record<string, MiniMaxH3DirectorAssetRef> = state.assetRefs,
   nextBuilderState?: MiniMaxH3DirectorBuilderState,
 ) {
   let timeline = nextTimeline
@@ -153,7 +156,7 @@ export function changeMiniMaxH3DirectorMode(state: MiniMaxH3DirectorState, numer
     numericBounds,
     { mode: nextMode },
     applyMiniMaxH3DirectorModeTimeline(state.timeline, state.mode, nextMode),
-    state.assets,
+    state.assetRefs,
     { ...state.builderState, mode: nextMode, version: nextMode === 'REF2VA' ? 2 : 1 },
   )
 }

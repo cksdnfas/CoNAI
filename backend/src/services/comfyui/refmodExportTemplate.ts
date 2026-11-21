@@ -25,7 +25,8 @@ export function buildRefModExportTemplate(options: {
     type: choices.length ? 'select' : 'text',
     jsonPath: `${nodeId}.inputs.vae_name`,
     default_value: H3_VAE_FILE_NAMES[index]
-      .map((fileName) => choices.find((choice) => choice.split(/[\\/]/).pop() === fileName))
+      // By base name, case-insensitive: servers list models inside folders ("H3\\minimax_h3_video_vae_fp16.safetensors").
+      .map((fileName) => choices.find((choice) => choice.trim().split(/[\\/]/).pop()?.toLowerCase() === fileName.toLowerCase()))
       .find((choice) => choice !== undefined) ?? '',
     required: true,
     ...(dropdownList ? { dropdown_list_name: dropdownList.name } : choices.length ? { options: choices } : {}),

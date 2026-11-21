@@ -12,6 +12,7 @@ import { HistoryCommandService } from '../services/historyCommandService';
 import { GenerationHistoryService } from '../services/generationHistoryService';
 import { GenerationQueueModel } from '../models/GenerationQueue';
 import { enqueueGenerationJobs } from '../services/generation-queue/queueEnqueue';
+import { hasRefModEntryRunKey } from '../services/generation-queue/queueRefModEntryLink';
 import { externalizeQueueInputDataUrls } from '../services/generation-queue/queueInputStore';
 import { ComfyInputValidationError, validateComfyPromptData } from '../services/prepareComfyPromptData';
 import { WorkflowInputAssetError } from '../services/workflowInputAssetStore';
@@ -474,6 +475,11 @@ router.post('/:slug/queue', asyncHandler(async (req: Request, res: Response) => 
 
   if (Object.prototype.hasOwnProperty.call(request_payload, MCP_QUEUE_IMAGE_GRANT_KEY)) {
     res.status(400).json({ success: false, error: 'MCP queue image authorization is server-issued' });
+    return;
+  }
+
+  if (hasRefModEntryRunKey(request_payload)) {
+    res.status(400).json({ success: false, error: 'RefMod entry link is server-issued' });
     return;
   }
 

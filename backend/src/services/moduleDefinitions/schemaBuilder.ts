@@ -49,7 +49,8 @@ function mapComfyFieldTypeToPortType(type: unknown): ModulePortDataType {
   if (type === 'image') return 'image';
   if (type === 'number') return 'number';
   if (type === 'textarea') return 'prompt';
-  if (type === 'node') return 'json';
+  // An audio/video value is a file reference object (uploaded input or library hash).
+  if (type === 'node' || type === 'audio' || type === 'video') return 'json';
   return 'text';
 }
 

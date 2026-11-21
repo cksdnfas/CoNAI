@@ -4,10 +4,11 @@ import { Badge } from '@/components/ui/badge'
 import { IconButton } from '@/components/ui/icon-button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Tip } from '@/components/ui/tooltip'
-import { buildWorkflowInputAssetUrl, type WorkflowInputAssetRef } from '@/lib/api-workflow-input-assets'
 import { cn } from '@/lib/utils'
 import {
+  buildMiniMaxH3DirectorAssetUrl,
   formatMiniMaxH3DirectorAspectRatio,
+  type MiniMaxH3DirectorAssetRef,
   type MiniMaxH3DirectorTimelineItem,
 } from './minimax-h3-director-dasiwa-utils'
 
@@ -16,7 +17,7 @@ const POINTER_MOVE_TOLERANCE_PX = 8
 
 type MiniMaxH3DirectorMediaCardProps = {
   item: MiniMaxH3DirectorTimelineItem
-  asset?: WorkflowInputAssetRef
+  asset?: MiniMaxH3DirectorAssetRef
   label: string
   hasIssue: boolean
   menuOpen: boolean
@@ -49,10 +50,10 @@ function MiniMaxDirectorMediaPreview({
   onSourceDimensionsChange,
 }: {
   item: MiniMaxH3DirectorTimelineItem
-  asset?: WorkflowInputAssetRef
+  asset?: MiniMaxH3DirectorAssetRef
   onSourceDimensionsChange: (width: number, height: number) => void
 }) {
-  const src = asset ? buildWorkflowInputAssetUrl(asset) : null
+  const src = asset ? buildMiniMaxH3DirectorAssetUrl(asset) : null
   const [videoPoster, setVideoPoster] = useState<string | null>(null)
 
   useEffect(() => {

@@ -1,5 +1,6 @@
 import { ensureChatAssetSchema } from './chatAssetSchema';
 import { ensureCharacterLibrarySchema } from './characterLibrarySchema';
+import { ensureArtStyleSchema } from './artStyleSchema';
 import { chatProfileOrderSql } from '../services/codex-chat/chatProfileOrder';
 import Database from 'better-sqlite3';
 import {
@@ -33,6 +34,7 @@ export const LEGACY_SUMMARY_PLOT_SQL = `INSERT INTO chat_summary_segments (threa
 /** Bootstrap core user-settings tables, indexes, and simple column backfills. */
 export function createUserSettingsSchema(db: Database.Database): void {
   ensureCharacterLibrarySchema(db);
+  ensureArtStyleSchema(db);
   db.exec(`CREATE TABLE IF NOT EXISTS chat_profile_folders (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     parent_id INTEGER REFERENCES chat_profile_folders(id) DEFERRABLE INITIALLY DEFERRED,

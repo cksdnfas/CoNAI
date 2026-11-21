@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils'
 import { appendPromptRowText, getTextSegmentSpreadsheetRows, type TextSegmentSpreadsheetValue } from './prompt-text-segment-helpers'
 import { PromptPresetInlinePicker } from './prompt-preset-inline-picker'
 import { CharacterSettingLoadButton, type CharacterSettingLoadTarget } from './character-setting-load-button'
+import { ArtStyleLoadButton } from './art-style-load-button'
 import type { SelectedImageDraft } from '../image-generation-shared'
 import { WildcardInlinePickerField } from './wildcard-inline-picker-field'
 import type { PromptTypeFilter } from '@/types/prompt'
@@ -30,6 +31,15 @@ export type PromptCharacterLoadOptions = {
   } | null
 }
 
+/**
+ * Offer "스타일 불러오기" on each row: an art style's positive prompt goes into that row; with `negative` its negative
+ * prompt is appended there (otherwise it is left out with a notice); images follow `reference` like a character's.
+ */
+export type PromptStyleLoadOptions = {
+  negative?: { label: string; onLoad: (text: string) => void } | null
+  reference?: PromptCharacterLoadOptions['reference']
+}
+
 type TextSegmentSpreadsheetInputProps = {
   tool: PromptWildcardTool
   value: TextSegmentSpreadsheetValue
@@ -42,6 +52,7 @@ type TextSegmentSpreadsheetInputProps = {
   /** Accessible name of the rows; each row adds its number ("Positive prompt 1"). */
   ariaLabel?: string
   characterLoad?: PromptCharacterLoadOptions
+  styleLoad?: PromptStyleLoadOptions
   onChange: (value: string[]) => void
 }
 
@@ -57,6 +68,7 @@ export function TextSegmentSpreadsheetInput({
   errorMessageId,
   ariaLabel,
   characterLoad,
+  styleLoad,
   onChange,
 }: TextSegmentSpreadsheetInputProps) {
   const { t } = useI18n()
@@ -141,6 +153,21 @@ export function TextSegmentSpreadsheetInput({
                       if (appearance) handleRowChange(index, appendPromptRowText(rows[index] ?? '', appearance))
                       if (first && referenceTarget) characterLoad.reference?.onLoad(referenceTarget, first)
                       if (characterLoad.reference?.onLoadMore) rest.forEach(characterLoad.reference.onLoadMore)
+                    }}
+                  />
+                ) : null}
+                {styleLoad ? (
+                  <ArtStyleLoadButton
+                    label={t({ ko: '{row}행에 스타일 불러오기', en: 'Load an art style into row {row}' }, { row: index + 1 })}
+                    tooltipSide="left"
+                    negativeTargets={styleLoad.negative ? [{ id: 'negative', label: styleLoad.negative.label }] : []}
+                    referenceTargets={styleLoad.reference?.targets ?? []}
+                    referenceMultiple={Boolean(styleLoad.reference?.onLoadMore)}
+                    onLoad={({ positive, negative, references: [first, ...rest], referenceTarget }) => {
+                      if (positive) handleRowChange(index, appendPromptRowText(rows[index] ?? '', positive))
+                      if (negative) styleLoad.negative?.onLoad(negative)
+                      if (first && referenceTarget) styleLoad.reference?.onLoad(referenceTarget, first)
+                      if (styleLoad.reference?.onLoadMore) rest.forEach(styleLoad.reference.onLoadMore)
                     }}
                   />
                 ) : null}

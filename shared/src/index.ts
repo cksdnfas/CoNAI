@@ -20,6 +20,9 @@ export const VERSION = '26.11.05';
 export * from './utils/minimaxDirectorResolution';
 export * from './utils/minimaxDirectorPrompt';
 export * from './types/minimaxRefMod';
+export * from './types/refmodEntry';
+// Named on its own as well (see TOPIC_EVALUATION_LIMITS).
+export { REFMOD_ENTRY_FILE_REF_KIND, REFMOD_ENTRY_LIMITS } from './types/refmodEntry';
 export * from './types/snapRefSimple';
 export * from './types/fileStore';
 export * from './types/workspace';
@@ -29,6 +32,9 @@ export * from './types/contentEvaluation';
 export { TOPIC_EVALUATION_LIMITS } from './types/contentEvaluation';
 export * from './types/chatAssets'
 export * from './types/characterLibrary'
+export * from './types/artStyle'
+// Named on its own as well (see TOPIC_EVALUATION_LIMITS).
+export { ART_STYLE_LIMITS } from './types/artStyle'
 export * from './types/chatProfileFolders'
 export * from './utils/folderHierarchy'
 export * from './utils/chatPortrait'

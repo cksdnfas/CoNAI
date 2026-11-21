@@ -44,6 +44,11 @@ export interface WorkflowRecord {
   deleted_at?: string | null;
 }
 
+/** 오디오·비디오 필드: 값은 업로드한 파일(workflow input asset)·라이브러리 해시·data URL이고, 실행 전에 ComfyUI input 폴더로 올린다. */
+export function isWorkflowMediaFieldType(type: unknown): type is 'audio' | 'video' {
+  return type === 'audio' || type === 'video';
+}
+
 /**
  * 워크플로우 JSON에서 마킹된 필드 정보
  */
@@ -54,7 +59,7 @@ export interface MarkedField {
   jsonPath: string; // JSON 경로 (예: "6.inputs.text")
   source_node_id?: string;
   source_node_title?: string;
-  type: 'text' | 'number' | 'select' | 'textarea' | 'image' | 'node';
+  type: 'text' | 'number' | 'select' | 'textarea' | 'image' | 'audio' | 'video' | 'node';
   default_collapsed?: boolean;
   /** 숨김: 생성 화면·입력 스키마·모듈 포트에 내보내지 않고 실행은 항상 default_value로 (text/textarea/number/select만, workflowHiddenFieldPolicy) */
   hidden?: boolean;

@@ -12,7 +12,7 @@ function convertDefaultValue(value: WorkflowMarkedField['default_value'], nextTy
     const parsed = typeof value === 'number' ? value : Number(String(value).trim())
     return String(value).trim().length > 0 && Number.isFinite(parsed) ? parsed : undefined
   }
-  if (nextType === 'image') return undefined
+  if (nextType === 'image' || nextType === 'audio' || nextType === 'video') return undefined
   return String(value)
 }
 

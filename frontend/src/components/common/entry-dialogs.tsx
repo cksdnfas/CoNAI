@@ -1,3 +1,4 @@
+import { useId } from 'react'
 import { HierarchyPicker } from '@/components/common/hierarchy-picker'
 import { EditorFooter } from '@/components/ui/editor-footer'
 import { Input } from '@/components/ui/input'
@@ -5,7 +6,7 @@ import { Modal, ModalBody } from '@/components/ui/modal'
 import { useI18n } from '@/i18n'
 
 /** One name to type (new folder, rename): an input and a save button; Enter saves. */
-export function NameDialog({ open, title, value, onChange, onSubmit, onClose, busy = false, label, submitLabel, maxLength }: {
+export function NameDialog({ open, title, value, onChange, onSubmit, onClose, busy = false, label, submitLabel, maxLength, error = null }: {
   open: boolean
   title: string
   value: string
@@ -18,13 +19,17 @@ export function NameDialog({ open, title, value, onChange, onSubmit, onClose, bu
   submitLabel?: string
   /** The server's length limit for this name, when it has one. */
   maxLength?: number
+  /** Why the name was refused (a taken name), under the input. */
+  error?: string | null
 }) {
   const { t } = useI18n()
+  const errorId = useId()
   return (
     <Modal open={open} title={title} onClose={() => { if (!busy) onClose() }} size="md">
       <form onSubmit={(event) => { event.preventDefault(); if (!busy && value.trim()) onSubmit() }}>
         <ModalBody>
-          <Input variant="settings" autoFocus aria-label={label ?? t({ ko: '이름', en: 'Name' })} value={value} maxLength={maxLength} onChange={(event) => onChange(event.target.value)} />
+          <Input variant="settings" autoFocus aria-label={label ?? t({ ko: '이름', en: 'Name' })} aria-invalid={error ? true : undefined} aria-describedby={error ? errorId : undefined} value={value} maxLength={maxLength} onChange={(event) => onChange(event.target.value)} />
+          {error ? <p id={errorId} role="alert" className="text-xs text-destructive">{error}</p> : null}
         </ModalBody>
         <EditorFooter saveSubmit canSave={Boolean(value.trim())} saving={busy} saveLabel={submitLabel} />
       </form>

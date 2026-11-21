@@ -126,6 +126,10 @@ function preventOutsideDismiss(event: Event) {
   event.preventDefault()
 }
 
+/** Ctrl/⌘+S, the dialog's save shortcut. */
+const isSaveKey = (event: Pick<KeyboardEvent, 'ctrlKey' | 'metaKey' | 'altKey' | 'shiftKey' | 'code' | 'key'>) =>
+  (event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey && (event.code === 'KeyS' || event.key.toLowerCase() === 's')
+
 /**
  * Render a portal-mounted modal dialog on Radix Dialog with a sticky header, Esc/backdrop/back close and body scroll lock.
  *
@@ -191,6 +195,15 @@ function Modal({ open, title, description, status, actions, headerContent, leadi
     // Decide on Esc after content bubble handlers ran (React dispatches portal events at body), but before window
     // listeners of overlays underneath (image view) so closing this dialog does not also close them.
     const handleKeyDown = (event: KeyboardEvent) => {
+      // Focus fell out of every dialog (its focused key was disabled or removed, e.g. while an upload ran): the top-most
+      // dialog still takes Ctrl/⌘+S, so the browser's "save page" never opens over an editor.
+      if (isSaveKey(event) && (!document.activeElement || document.activeElement === document.body)) {
+        const dialogs = document.querySelectorAll('[role="dialog"], [role="alertdialog"]')
+        if (event.defaultPrevented || dialogs[dialogs.length - 1] !== contentRef.current) return
+        event.preventDefault()
+        if (!event.repeat && onSaveRef.current) window.setTimeout(() => onSaveRef.current?.(), 0)
+        return
+      }
       if (event.key !== 'Escape' || pendingEscapeRef.current !== event) {
         return
       }
@@ -248,7 +261,7 @@ function Modal({ open, title, description, status, actions, headerContent, leadi
   }, [])
 
   const handleContentKeyDown = useCallback((event: ReactKeyboardEvent<HTMLDivElement>) => {
-    if ((event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey && (event.code === 'KeyS' || event.key.toLowerCase() === 's')) {
+    if (isSaveKey(event)) {
       // A dialog opened inside this one already took it: only the innermost dialog saves.
       if (event.defaultPrevented) return
       // Always keep the browser's "save page" away from an open editor; save only when it can.

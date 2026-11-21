@@ -4,6 +4,7 @@ import { useChatPageMedia } from '@/features/codex-chat/use-chat-page-media'
 import { useChatDraftTransaction } from '@/features/codex-chat/use-chat-draft-transaction'
 import { useChatPresetInsertion } from './use-chat-preset-insertion'
 import { useChatCharacterSettingInsertion } from './use-chat-character-setting-insertion'
+import { useChatArtStyleInsertion } from './use-chat-art-style-insertion'
 import { pageChoice, pageFreeText } from '@/features/codex-chat/page-action-helpers'
 import { useGenerationChatRuns } from './use-generation-chat-runs'
 import { IMAGE_GENERATION_TARGET_GROUP_KEY, useGenerationTargetGroupPath } from '@/features/groups/generation-target-group-store'
@@ -24,6 +25,8 @@ export function useCodexChatPage(form: CodexFormDraft, setForm: Dispatch<SetStat
   const characterSettings = useChatCharacterSettingInsertion()
   // In edit mode the image slot is the source to edit, so a setting's reference goes in only as a reference.
   const characterReference = characterSettings.canReference && form.imageMode === 'reference'
+  const artStyles = useChatArtStyleInsertion()
+  const styleImage = artStyles.canImages && form.imageMode === 'reference'
   const commit = useChatDraftTransaction(form, setForm)
   useChatPageRegistration({
     kind: 'codex', title: t({ ko: 'Codex 이미지 생성', en: 'Codex image generation' }), resourceId: 'codex', localRevision: getImageDraftRevision(form),
@@ -46,7 +49,7 @@ export function useCodexChatPage(form: CodexFormDraft, setForm: Dispatch<SetStat
     actions: [...runs.actions, ...media.actions, ...presets.actions, ...characterSettings.actions({
       target: pageChoice(['prompt']),
       ...(characterReference ? { includeReference: { type: 'boolean' as const } } : {}),
-    }, ['target'], 'target prompt = the positive prompt. includeReference (default: when the setting has one) sets its reference image as referenceImage (reference image mode only).')], data: { recentRuns: runs.recentRuns, generating: runs.generating, media: media.candidates, presets: presets.candidates, limits: '5 attachments including source/mask; 10 MiB each, 32 MiB total, 4096px per side. Size is requested, not guaranteed.', selected: { targetGroup: targetGroup ?? '', prompt: pageFreeText(form.prompt.slice(0, 240)), model: form.model || 'default', size: size ?? 'random', samples, queueCount: 1, referenceImage: form.referenceImage?.fileName ?? '', maskImage: form.maskImage?.fileName ?? '', references: form.references.map((reference) => ({ role: reference.role, label: reference.label, fileName: reference.image?.fileName ?? '' })) } },
+    }, ['target'], 'target prompt = the positive prompt. includeReference (default: when the setting has one) sets its reference image as referenceImage (reference image mode only).'), ...artStyles.actions({}, [], 'Positive goes to prompt, negative to negativePrompt.' + (styleImage ? ' One image becomes referenceImage.' : ''), styleImage)], data: { recentRuns: runs.recentRuns, generating: runs.generating, media: media.candidates, presets: presets.candidates, limits: '5 attachments including source/mask; 10 MiB each, 32 MiB total, 4096px per side. Size is requested, not guaranteed.', selected: { targetGroup: targetGroup ?? '', prompt: pageFreeText(form.prompt.slice(0, 240)), model: form.model || 'default', size: size ?? 'random', samples, queueCount: 1, referenceImage: form.referenceImage?.fileName ?? '', maskImage: form.maskImage?.fileName ?? '', references: form.references.map((reference) => ({ role: reference.role, label: reference.label, fileName: reference.image?.fileName ?? '' })) } },
     apply: (patch) => { const next = applyCodexDraftPatch(form, patch, t); setForm(next) },
     applyAction: async (id, args, assertCurrent) => {
       if (id === 'generation.history_load') return commit(historyForm(await runs.loadHistory(args, assertCurrent)))
@@ -59,6 +62,17 @@ export function useCodexChatPage(form: CodexFormDraft, setForm: Dispatch<SetStat
         assertCurrent()
         next.prompt = characterSettings.text(args, form.prompt, loaded.appearance)
         if (loaded.reference) { next.referenceImage = loaded.reference; next.maskImage = undefined }
+      }
+      else if (id === 'art_style.insert') {
+        const loaded = await artStyles.load(args)
+        assertCurrent()
+        next.prompt = artStyles.append(form.prompt, loaded.positive)
+        next.negativePrompt = artStyles.append(form.negativePrompt, loaded.negative)
+        if (loaded.references[0]) {
+          if (!styleImage) throw new Error(t({ ko: '편집 모드에선 스타일 이미지를 참조로 넣을 수 없어.', en: 'Style images go in only in reference image mode.' }))
+          next.referenceImage = loaded.references[0]
+          next.maskImage = undefined
+        }
       }
       else if (id === 'media.clear' || id === 'media.attach') {
         const image = id === 'media.attach' ? await (await media.load(args)).toImage() : undefined

@@ -4,6 +4,7 @@ import { requireAdmin, requirePermission } from '../middleware/authMiddleware'
 import { requireRequesterPermission } from '../middleware/featureAccess'
 import { canRequesterViewImages } from '../middleware/imageAccess'
 import { requireCharacterImageAccess } from '../services/characterLibrary'
+import { requireArtStyleImageAccess } from '../services/artStyles'
 import { ChatProposalStore } from '../services/codex-chat/chatProposals'
 import { applyLoreProposal, undoLoreProposal, LoreProposalError } from '../services/codex-chat/chatLoreProposals'
 import { LorebookError } from '../services/codex-chat/chatLorebookFiles'
@@ -102,7 +103,7 @@ function visibleProposalId(req: Request, res: Response) {
  */
 router.post('/:proposalId/saved', (req, res, next) => {
   const proposal = ChatProposalStore.find(Number(req.params.proposalId))
-  return (proposal?.kind === 'character_library' ? requirePermission('characters.edit') : requireAdmin)(req, res, next)
+  return (proposal?.kind === 'character_library' || proposal?.kind === 'art_style' ? requirePermission('characters.edit') : requireAdmin)(req, res, next)
 }, asyncHandler(async (req: Request, res: Response) => {
   const proposalId = parseId(req.params.proposalId)
   const threadId = proposalId === null ? null : ChatProposalStore.threadIdOf(proposalId)
@@ -115,6 +116,10 @@ router.post('/:proposalId/saved', (req, res, next) => {
   const rawSavedId = (req.body as { savedId?: unknown } | undefined)?.savedId
   if (proposal?.kind === 'character_library' && proposal.action === 'save_setting') {
     try { requireCharacterImageAccess(proposal.input, canRequesterViewImages(getRequester(req))) }
+    catch (error) { res.status(403).json({ success: false, error: error instanceof Error ? error.message : 'Permission required: images.view' }); return }
+  }
+  if (proposal?.kind === 'art_style' && proposal.action === 'save_style') {
+    try { requireArtStyleImageAccess(proposal.input, canRequesterViewImages(getRequester(req))) }
     catch (error) { res.status(403).json({ success: false, error: error instanceof Error ? error.message : 'Permission required: images.view' }); return }
   }
   if (proposal?.kind === 'profile_folder') {
@@ -130,7 +135,7 @@ router.post('/:proposalId/saved', (req, res, next) => {
     res.status(400).json({ success: false, error: '저장한 항목의 id가 올바르지 않아.' })
     return
   }
-  if (proposal?.kind !== 'profile_update' && proposal?.kind !== 'character_library' && savedId === null) {
+  if (proposal?.kind !== 'profile_update' && proposal?.kind !== 'character_library' && proposal?.kind !== 'art_style' && savedId === null) {
     res.status(400).json({ success: false, error: '저장한 항목의 id가 필요해.' })
     return
   }

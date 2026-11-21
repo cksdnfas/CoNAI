@@ -165,7 +165,7 @@ export function buildComfyDraftFromHistoryPayload(
   const draft = buildWorkflowDraft(fields)
   let hasImageInputs = false
   for (const field of fields) {
-    if (field.type === 'image') {
+    if (field.type === 'image' || field.type === 'audio' || field.type === 'video') {
       if (field.id in promptData) {
         hasImageInputs = true
       }
@@ -194,7 +194,7 @@ export function buildComfyDraftFromHistoryPayload(
 
 function serializeComparableWorkflowDraft(fields: WorkflowMarkedField[], draft: Record<string, WorkflowFieldDraftValue>) {
   return JSON.stringify(fields
-    .filter((field) => field.type !== 'image')
+    .filter((field) => field.type !== 'image' && field.type !== 'audio' && field.type !== 'video')
     .map((field) => draft[field.id] ?? ''))
 }
 

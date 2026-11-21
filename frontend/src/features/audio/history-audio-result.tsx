@@ -76,7 +76,7 @@ function HistoryAudioRow({ sound, stage }: { sound: ImageRecordAudio; stage: boo
       >
         {playing ? <Pause className="fill-current" /> : <Play className="fill-current" />}
       </IconButton>
-      <WaveformThumb candidateId={sound.id} fileHash={sound.fileHash} src={sound.src} progress={progress} className={stage ? 'h-14' : 'h-8'} />
+      <WaveformThumb candidateId={sound.id} fileHash={sound.fileHash} src={sound.src} progress={progress} duration={player.key === sound.id && player.duration > 0 ? player.duration : sound.duration ?? 0} onToggle={() => audioPlayer.toggle(sound.id, { src: sound.src })} onSeek={(seconds) => audioPlayer.seekOrPlay(sound.id, seconds, { src: sound.src })} className={stage ? 'h-14' : 'h-8'} />
       <div className="flex min-w-0 items-center gap-2 font-mono text-2xs text-muted-foreground">
         <span className="min-w-0 flex-1 truncate">{sound.name}</span>
         <span className="shrink-0">{formatSeconds(sound.duration)}</span>
@@ -128,7 +128,7 @@ function HistorySoundRow({ sound, floating }: { sound: ImageRecordAudio; floatin
       </IconButton>
       {floating ? <AudioLines className="size-3.5 shrink-0 opacity-80" /> : null}
       <span className={cn('min-w-0 truncate font-mono text-2xs', floating ? 'flex-1' : 'w-40 shrink-0 text-muted-foreground')}>{sound.name}</span>
-      {floating ? null : <WaveformThumb candidateId={sound.id} fileHash={sound.fileHash} src={sound.src} progress={progress} className="h-6 min-w-0 flex-1" />}
+      {floating ? null : <WaveformThumb candidateId={sound.id} fileHash={sound.fileHash} src={sound.src} progress={progress} duration={player.key === sound.id && player.duration > 0 ? player.duration : sound.duration ?? 0} onToggle={() => audioPlayer.toggle(sound.id, { src: sound.src })} onSeek={(seconds) => audioPlayer.seekOrPlay(sound.id, seconds, { src: sound.src })} className="h-6 min-w-0 flex-1" />}
       <span className={cn('shrink-0 font-mono text-2xs', floating ? 'opacity-80' : 'text-muted-foreground')}>{formatSeconds(sound.duration)}</span>
     </div>
   )

@@ -11,6 +11,7 @@ import { ComfyInputValidationError, validateComfyPromptData } from '../../servic
 import { requireImagesView } from '../../middleware/imageAccess'
 import { WorkflowInputAssetError } from '../../services/workflowInputAssetStore'
 import { MCP_QUEUE_IMAGE_GRANT_KEY } from '../../services/generation-queue/queueMcpImageGrant'
+import { hasRefModEntryRunKey, RefModEntryLinkForgedError } from '../../services/generation-queue/queueRefModEntryLink'
 import { enqueueGenerationJobs } from '../../services/generation-queue/queueEnqueue'
 import { hasGenerationQueueServerRoutingTag } from '../../services/generationQueueRouting'
 import { GenerationTargetGroupService } from '../../services/generationTargetGroupService'
@@ -83,6 +84,11 @@ export function createGenerationQueueActionRoutes() {
 
     if (Object.prototype.hasOwnProperty.call(request_payload, MCP_QUEUE_IMAGE_GRANT_KEY)) {
       sendRouteBadRequest(res, 'MCP queue image authorization is server-issued')
+      return
+    }
+
+    if (hasRefModEntryRunKey(request_payload)) {
+      sendRouteBadRequest(res, 'RefMod entry link is server-issued')
       return
     }
 
@@ -406,7 +412,7 @@ export function createGenerationQueueActionRoutes() {
     } catch (error) {
 
       if (sendQueueRoleLimitError(res, error)) return
-      if (error instanceof WorkflowInputAssetError) {
+      if (error instanceof WorkflowInputAssetError || error instanceof RefModEntryLinkForgedError) {
         sendRouteBadRequest(res, error.message)
         return
       }

@@ -17,6 +17,10 @@ import { CHAT_BLOCKED_TOOLS, CHAT_PAGE_TOOLS, CHAT_ROOM_TOOLS, CHAT_SETTINGS_TOO
 export const TOOL_FEATURE_PERMISSIONS: Record<string, string | readonly string[]> = {
   list_character_library: 'characters.view', get_character_setting: 'characters.view', fill_character_appearance: 'characters.view',
   manage_character_folders: 'characters.edit', propose_character_library: 'characters.edit',
+  list_art_styles: 'characters.view', get_art_style: 'characters.view', propose_art_style: 'characters.edit',
+  // RefMod entries: the REST rules (reads characters.view, writes characters.edit, a build also generation.execute).
+  list_refmod_entries: 'characters.view', get_refmod_entry: 'characters.view', save_refmod_entry: 'characters.edit', adopt_refmod: 'characters.edit',
+  build_refmod: ['characters.edit', 'generation.execute'],
   call_agent: [],
   workspace_publish_resources: ['files.view', 'files.edit', 'images.view', 'images.edit'],
   list_group_resources: 'images.view',

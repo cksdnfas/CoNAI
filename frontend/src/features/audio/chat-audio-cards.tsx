@@ -114,10 +114,7 @@ function ChatAudioCard({ groupId, candidates, waiting, failed }: { groupId: stri
                   progress={progress}
                   duration={player.key === candidate.id && player.duration > 0 ? player.duration : candidate.file.duration ?? 0}
                   onToggle={() => audioPlayer.toggle(candidate.id)}
-                  onSeek={(seconds) => {
-                    if (audioPlayer.state.key === candidate.id && audioPlayer.state.playing) audioPlayer.seek(seconds)
-                    else audioPlayer.play(candidate.id, { start: seconds })
-                  }}
+                  onSeek={(seconds) => audioPlayer.seekOrPlay(candidate.id, seconds)}
                   className="h-5"
                 />
                 <p className="truncate font-mono text-2xs text-muted-foreground">{typeof seed === 'number' ? `seed ${seed}` : candidate.name}</p>

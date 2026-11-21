@@ -170,6 +170,33 @@ test('workspace pages, audio deletes and the user guide', { timeout: 60000 }, as
     assert.ok(noPage.has('delete_audio_group') && noPage.has('delete_audio_project'))
   })
 
+  await t.test('character page views: RefMod and art style pages parse for a character viewer and get their own guide', async (sub) => {
+    const { parseChatPageContext, chatPageReference } = await import('../src/services/codex-chat/chatPageContext')
+    const { AuthAccount } = await import('../src/models/AuthAccount')
+    const { AuthAccessControlService } = await import('../src/services/authAccessControlService')
+    let keys = ['page.characters.view', 'characters.view']
+    sub.mock.method(AuthAccount, 'findById', () => ({ id: 77, status: 'active' }))
+    sub.mock.method(AuthAccessControlService, 'hasPermission', (_id: number, key: string) => keys.includes(key))
+    const viewer = { accountId: 77, accountType: 'user' as const }
+    const open = (prefix: string) => ({ id: `${prefix}.open`, label: 'Open', description: 'Open', effect: 'draft', schema: { type: 'object', properties: { id: { type: 'number' } }, required: ['id'] } })
+    const snapshot = (resourceId: string, action: string) => ({ instanceId: 'page-characters-view', connectionId: 'connection-characters-view', revision: 'revision-characters-view', title: 'Characters', path: '/characters', kind: 'page', fields: [], resourceId, actions: [open(action)], data: { view: action } })
+    const cases = [['refmods', 'refmod', 'RefMod entries:'], ['refmod:7', 'refmod', 'RefMod entries:'], ['styles', 'art_style', 'Art styles (그림 스타일)'], ['style:3', 'art_style', 'Art styles (그림 스타일)']] as const
+    for (const [resourceId, action, guide] of cases) {
+      const page = parseChatPageContext(snapshot(resourceId, action), viewer)
+      assert.ok(page, resourceId)
+      assert.equal(page.resourceId, resourceId)
+      assert.deepEqual(page.actions?.map((item) => item.id), [`${action}.open`])
+      const reference = chatPageReference(page, undefined, 'explicit' as never)
+      assert.ok(reference.includes(guide), `${resourceId} gets its guide`)
+      assert.ok(!reference.includes(guide === 'RefMod entries:' ? 'Art styles (그림 스타일)' : 'RefMod entries:'), `${resourceId} gets only its own guide`)
+      assert.ok(!reference.includes('registers no editable inputs'), `${resourceId}: a page with operations is not called read-only`)
+    }
+    const library = chatPageReference(parseChatPageContext({ ...snapshot('library', 'character'), actions: [{ ...open('character'), id: 'character.open_setting' }] }, viewer), undefined, 'explicit' as never)
+    assert.ok(!library.includes('RefMod entries:') && !library.includes('Art styles (그림 스타일)'), 'the appearance library keeps its own guide')
+    keys = ['characters.view']
+    assert.throws(() => parseChatPageContext(snapshot('refmods', 'refmod'), viewer), /권한/, 'the page key is still required')
+  })
+
   await t.test('extract_sprite_sheets_batch can hand back a ZIP', async () => {
     const { client } = await connect({ scopes: ['read', 'organize', 'generate', 'backup', 'restore'] as McpRequestContext['scopes'], requester: admin })
     const batch = (await client.listTools()).tools.find((tool) => tool.name === 'extract_sprite_sheets_batch')

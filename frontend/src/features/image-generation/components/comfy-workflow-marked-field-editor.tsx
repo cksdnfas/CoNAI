@@ -67,6 +67,8 @@ const FIELD_TYPE_OPTIONS: Array<{ value: WorkflowMarkedField['type'], ko: string
   { value: 'number', ko: '숫자', en: 'Number' },
   { value: 'select', ko: '선택', en: 'Select' },
   { value: 'image', ko: '이미지', en: 'Image' },
+  { value: 'audio', ko: '오디오', en: 'Audio' },
+  { value: 'video', ko: '비디오', en: 'Video' },
   { value: 'node', ko: '노드', en: 'Node' },
 ]
 

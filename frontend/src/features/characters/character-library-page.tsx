@@ -54,6 +54,8 @@ import { getErrorMessage } from '@/lib/error-message'
 import { LoadMoreSentinel } from '@/features/posts/post-attach-shared'
 import { folderSubtreeIds, loadNextBatch, refreshCharacterViews, useCharacterFacets, useCharacterFolders, useCharacterSettingsPages } from './character-library-shared'
 import { CharacterCatalogPage } from './character-catalog-page'
+import { ArtStylePage } from '@/features/art-styles/art-style-page'
+import { RefModLibraryPage } from '@/features/refmods/refmod-library-page'
 import { CharacterFacetPanel, hasActiveFilters } from './components/character-facet-panel'
 import { CharacterFolderPickerModal, CharacterFolderSidebar } from './components/character-folder-nav'
 import { CharacterSettingCard } from './components/character-setting-card'
@@ -88,29 +90,37 @@ export function CharacterLibraryPage() {
   }
   if (params.has('setting') || params.has('new')) return <AppearanceLibraryPage />
   if (view === 'catalog' && permissions.has('prompts.view')) return <CharacterCatalogPage viewSwitch={<CharacterViewSwitch />} />
+  if (view === 'styles') return <ArtStylePage viewSwitch={<CharacterViewSwitch />} />
+  if (view === 'refmods') return <RefModLibraryPage viewSwitch={<CharacterViewSwitch />} />
   return <AppearanceLibraryPage />
 }
 
-/** The page's views: the appearance library and the Danbooru character catalog (with the dictionary's `prompts.view`); the switch leads the toolbar and shows when both are there. */
+/** The page's views: the appearance library, the Danbooru character catalog (with the dictionary's `prompts.view`), art styles and RefMods; the switch leads each view's toolbar. */
 function CharacterViewSwitch() {
   const { t } = useI18n()
   const permissions = useFeaturePermissions()
   const [params, setParams] = useSearchParams()
+  // Four keys do not fit a 390px toolbar row: narrow screens show the short names.
+  const label = (full: string, short: string) => <><span className="sm:hidden">{short}</span><span className="hidden sm:inline">{full}</span></>
   const items = [
-    { value: 'appearance', label: t({ ko: '외형 라이브러리', en: 'Appearance library' }) },
-    ...(permissions.has('prompts.view') ? [{ value: 'catalog', label: t({ ko: '캐릭터 카탈로그', en: 'Character catalog' }) }] : []),
+    { value: 'appearance', name: t({ ko: '외형 라이브러리', en: 'Appearance library' }), label: label(t({ ko: '외형 라이브러리', en: 'Appearance library' }), t({ ko: '외형', en: 'Looks' })) },
+    ...(permissions.has('prompts.view') ? [{ value: 'catalog', name: t({ ko: '캐릭터 카탈로그', en: 'Character catalog' }), label: label(t({ ko: '캐릭터 카탈로그', en: 'Character catalog' }), t({ ko: '카탈로그', en: 'Catalog' })) }] : []),
+    { value: 'styles', name: t({ ko: '그림 스타일', en: 'Art styles' }), label: label(t({ ko: '그림 스타일', en: 'Art styles' }), t({ ko: '스타일', en: 'Styles' })) },
+    { value: 'refmods', name: 'RefMod', label: 'RefMod' },
   ]
   // Without the catalog there is nothing to switch to: the page's name leads the toolbar instead.
-  if (items.length < 2) return <Heading level={3} as="h1" className="truncate">{items[0].label}</Heading>
+  if (items.length < 2) return <Heading level={3} as="h1" className="truncate">{items[0].name}</Heading>
   const view = params.get('view')
   return (
     <SegmentedControl
-      value={view === 'catalog' ? view : 'appearance'}
+      value={items.some((item) => item.value === view) ? view! : 'appearance'}
       onChange={(value) => setParams(value === 'appearance' ? {} : { view: value })}
       size="sm"
       semantics="tabs"
       ariaLabel={t({ ko: '캐릭터 보기', en: 'Character views' })}
       items={items}
+      // Four keys on a ~340px phone: one line, tighter keys.
+      className="max-sm:flex-nowrap max-sm:[&>button]:px-1.5"
     />
   )
 }

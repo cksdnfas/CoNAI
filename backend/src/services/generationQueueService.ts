@@ -20,6 +20,7 @@ import { QueueServiceThrottle, type ThrottledServiceType } from './generation-qu
 import { QueueTerminalJobWaiters } from './generation-queue/queueTerminalWaiters'
 import { publishQueueJobEvent } from './runtime-events/runtimeEventPublishers'
 import { enqueueGenerationJobs, type EnqueueGenerationJobsOptions } from './generation-queue/queueEnqueue'
+import { readRefModEntryRunLink, REFMOD_ENTRY_RUN_KEY } from './generation-queue/queueRefModEntryLink'
 import { ALLOWED_QUEUE_TRANSITIONS, buildQueueTransitionUpdates } from './generation-queue/queueTransitions'
 import type { ServiceType } from '../types/generationHistory'
 import { HistoryCommandService } from './historyCommandService'
@@ -504,6 +505,9 @@ export class GenerationQueueService {
       ? `${existing.request_summary} (retry)`
       : `Retry of queue job ${existing.id}`
     const graphOrigin = options?.preserveGraphOrigin === true && GenerationQueueModel.isGraphOrigin(existing.id)
+    // A RefMod entry build stays linked on retry: the stored link is handed back through the server-only option.
+    const { [REFMOD_ENTRY_RUN_KEY]: _storedRefModLink, ...retryPayload } = requestPayload
+    const refmodEntryLink = existing.service_type === 'comfyui' ? readRefModEntryRunLink(requestPayload) : undefined
 
     const [retryJobId] = enqueueGenerationJobs({
       service_type: existing.service_type,
@@ -515,10 +519,11 @@ export class GenerationQueueService {
       requested_group_id: existing.requested_group_id ?? null,
       requested_server_id: existing.requested_server_id ?? null,
       requested_server_tag: existing.requested_server_tag ?? null,
-      request_payload: requestPayload,
+      request_payload: retryPayload,
       request_summary: retrySummary,
     }, {
       roleLimitWorkflow: graphOrigin ? null : options?.roleLimitWorkflow,
+      refmodEntryLink,
       withinTransaction: ({ jobIds }) => {
         const copyChatLink = getUserSettingsDb().prepare(`INSERT INTO chat_generation_links (job_id, thread_id, reply_id, message_id, reaction_target)
           SELECT ?, thread_id, reply_id, message_id, reaction_target FROM chat_generation_links WHERE job_id = ?`)

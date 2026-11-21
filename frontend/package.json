@@ -15,7 +15,7 @@
     "test:media-previews": "tsx --tsconfig tsconfig.app.json --test test/media-preview-lifecycle.test.ts",
     "test:plugins": "tsx --tsconfig tsconfig.app.json --test test/plugin-sdk.test.ts",
     "pretest:chat-page": "npm run build --prefix ../shared",
-    "test:chat-page": "tsx --tsconfig tsconfig.test.json --test test/chat-page-context.test.ts",
+    "test:chat-page": "tsx --tsconfig tsconfig.test.json --test test/chat-page-context.test.ts test/chat-page-characters.test.ts",
     "pretest:characters": "npm run build --prefix ../shared",
     "test:characters": "tsx --tsconfig tsconfig.test.json --test test/character-library.test.tsx",
     "test:image-pagination": "tsx --tsconfig tsconfig.test.json --test test/image-list-pagination.test.ts",

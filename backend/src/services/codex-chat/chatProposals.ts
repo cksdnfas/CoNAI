@@ -37,7 +37,7 @@ function toProposal(row: ProposalRow): ChatProposal {
     if (row.saved === 1) merged.saved = true
   } else if (row.saved === 1) {
     merged.savedId = row.saved_id
-    if (row.kind === 'character_library') merged.saved = true
+    if (row.kind === 'character_library' || row.kind === 'art_style') merged.saved = true
   }
   if (row.dismissed === 1) merged.dismissed = true
   return merged as ChatProposal

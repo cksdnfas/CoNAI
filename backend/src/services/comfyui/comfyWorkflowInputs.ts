@@ -45,7 +45,7 @@ const MINIMAX_SECTION_INPUT_KEYS = [
   'integrated_multimodal_description', 'overall_soundscape', 'non_diegetic_music',
 ]
 
-type MiniMaxMediaInput = {
+export type MiniMaxMediaInput = {
   id?: string
   type?: 'image' | 'video' | 'audio'
   slot?: number
@@ -96,11 +96,16 @@ function parseSuppliedRecord(value: unknown, label: string) {
   throw new Error(`${label} must be a JSON object or an object-valued JSON string`)
 }
 
-function hasMeaningfulValue(value: unknown) {
+export function hasMeaningfulValue(value: unknown) {
   if (value === undefined || value === null) return false
   if (typeof value === 'string') return value.trim().length > 0
   if (Array.isArray(value)) return value.length > 0
   return true
+}
+
+/** A required visible input without a meaningful value: the run path's rule, shared with RefMod entry readiness. */
+export function isMissingRequiredWorkflowInput(field: MarkedField, value: unknown) {
+  return Boolean(field.required) && !isHiddenWorkflowField(field) && !hasMeaningfulValue(value)
 }
 
 export function parseMcpMarkedFields(workflow: WorkflowRecord): MarkedField[] {
@@ -112,7 +117,8 @@ export function parseMcpMarkedFields(workflow: WorkflowRecord): MarkedField[] {
   return parsed as MarkedField[]
 }
 
-function createMiniMaxMediaItem(media: MiniMaxMediaInput, index: number) {
+/** One Director timeline item in the shape the editor reads (also used for RefMod entries adopted from a record). */
+export function createMiniMaxMediaItem(media: MiniMaxMediaInput, index: number) {
   const type = media.type === 'video' || media.type === 'audio' ? media.type : 'image'
   const id = typeof media.id === 'string' && media.id.trim()
     ? media.id.trim()
@@ -450,7 +456,7 @@ export function normalizeMcpWorkflowInputs(markedFields: MarkedField[], supplied
         ? normalizeSnapRefValue(field, suppliedValue)
         : hasSuppliedValue ? requireDropdownChoice(field, suppliedValue) : field.default_value
 
-    if (field.required && !hidden && !hasMeaningfulValue(value)) {
+    if (isMissingRequiredWorkflowInput(field, value)) {
       throw new Error(`Required workflow input is missing: ${field.label || field.id} (${field.id})`)
     }
     if (value !== undefined) normalized[field.id] = value
@@ -689,6 +695,8 @@ export function createMcpWorkflowInputTemplate(markedFields: MarkedField[]) {
     if (field.type === 'number') return [field.id, field.default_value ?? field.min ?? 0]
     if (field.type === 'select') return [field.id, field.default_value ?? workflowDropdownChoices(field)?.options[0] ?? '']
     if (field.type === 'image') return [field.id, { fileName: 'input.png', dataUrl: 'data:image/png;base64,...' }]
+    if (field.type === 'audio') return [field.id, { fileName: 'input.wav', dataUrl: 'data:audio/wav;base64,...' }]
+    if (field.type === 'video') return [field.id, { composite_hash: '<library-video-composite-hash>' }]
     return [field.id, field.default_value ?? '']
   }))
 }

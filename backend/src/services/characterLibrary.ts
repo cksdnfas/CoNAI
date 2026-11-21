@@ -19,12 +19,11 @@ import { publishRuntimeEvent } from './runtime-events/runtimeEventBus'
 import { activeMediaFile, characterMediaGroupPath, ingestMedia } from './codex-chat/chatCardAssets'
 import { ChatProfileStore } from './codex-chat/chatProfiles'
 import { copyExpressionGroup, expressionGroupId } from './codex-chat/chatProfileExpressions'
+import { CharacterLibraryError } from './characterLibraryError'
 import { characterLibraryId as id, characterLibraryName as name, characterSettingFields as fields, characterSettingCreateSchema, characterSettingPatchSchema, characterFolderCreateSchema, characterFolderPatchSchema, characterOutfitsSchema, characterSectionsSchema, characterReferencesSchema, characterReferenceCategoriesSchema } from './characterLibraryInput'
 export { characterSettingCreateSchema, characterSettingPatchSchema, characterFolderCreateSchema, characterFolderPatchSchema } from './characterLibraryInput'
 
-export class CharacterLibraryError extends Error {
-  constructor(message: string, readonly status = 400, readonly revision?: number, readonly code?: 'revision_conflict' | 'name_conflict') { super(message) }
-}
+export { CharacterLibraryError }
 export function characterId(value: unknown): number {
   const number = typeof value === 'string' && /^\d+$/.test(value) ? Number(value) : value
   return parse(id, number)
@@ -294,18 +293,39 @@ function resolveCharacterSetting(input: unknown, settingId?: number, canViewImag
 export function validateCharacterSetting(input: unknown, settingId?: number, canViewImages = true) {
   return resolveCharacterSetting(input, settingId, canViewImages).value
 }
-/** ID-owned groups never follow a name lookup after creation. No image/group is deleted with its setting. */
-function characterGroupLabel(name: string, id: number) {
+/**
+ * ID-owned groups never follow a name lookup after creation. No image/group is deleted with its setting. The helpers
+ * below are shared with other library owners (art styles); they expect the main images database attached.
+ */
+export function libraryGroupLabel(name: string, id: number) {
   return `${characterMediaGroupPath(name, '').slice(1)} #${id}`
+}
+const characterGroupLabel = libraryGroupLabel
+export function libraryGroupExists(groupId: number | null, database: Database.Database): groupId is number {
+  return groupId !== null && Boolean(database.prepare('SELECT 1 FROM groups WHERE id = ?').get(groupId))
+}
+/** The child group `label` of `parent` (case-insensitive), created when missing. */
+export function libraryChildGroup(parent: number, label: string, database: Database.Database): number {
+  const existing = database.prepare('SELECT id FROM groups WHERE parent_id = ? AND TRIM(name) = ? COLLATE NOCASE').get(parent, label) as { id: number } | undefined
+  return existing?.id ?? Number(database.prepare('INSERT INTO groups(parent_id, name) VALUES (?, ?)').run(parent, label).lastInsertRowid)
+}
+/** Puts library images into an owner's group; images already there stay where they are. */
+export function fileIntoLibraryGroup(groupId: number, hashes: string[], database: Database.Database) {
+  const insert = database.prepare("INSERT OR IGNORE INTO image_groups(composite_hash, group_id, collection_type, order_index) VALUES (?, ?, 'manual', 0)")
+  hashes.forEach((hash) => insert.run(hash, groupId))
+}
+/** Follows an owner's rename; a sibling group already named `label` refuses with `conflict`. */
+export function renameLibraryGroup(groupId: number, label: string, database: Database.Database, conflict: () => Error) {
+  attachMainImagesDatabase(database)
+  const collision = database.prepare('SELECT id FROM groups WHERE parent_id IS (SELECT parent_id FROM groups WHERE id = ?) AND TRIM(name) = ? COLLATE NOCASE AND id != ?').get(groupId, label, groupId)
+  if (collision) throw conflict()
+  database.prepare("UPDATE groups SET name = ?, updated_date = CURRENT_TIMESTAMP WHERE id = ? AND name != ?").run(label, groupId, label)
 }
 export function ensureCharacterGroups(settingId: number, database: Database.Database = getUserSettingsDb()) {
   attachMainImagesDatabase(database)
   const row = characterSettingRow(settingId)
-  const exists = (groupId: number | null) => groupId !== null && Boolean(database.prepare('SELECT 1 FROM groups WHERE id = ?').get(groupId))
-  const child = (parent: number, label: string) => {
-    const existing = database.prepare('SELECT id FROM groups WHERE parent_id = ? AND TRIM(name) = ? COLLATE NOCASE').get(parent, label) as { id: number } | undefined
-    return existing?.id ?? Number(database.prepare('INSERT INTO groups(parent_id, name) VALUES (?, ?)').run(parent, label).lastInsertRowid)
-  }
+  const exists = (groupId: number | null) => libraryGroupExists(groupId, database)
+  const child = (parent: number, label: string) => libraryChildGroup(parent, label, database)
   let changed = false
   const result = database.transaction(() => {
     const root = exists(row.asset_group_id) ? row.asset_group_id! : child(GroupPathService.resolveOrCreate('캐릭터 라이브러리', database).groupId, characterGroupLabel(row.name, row.id))
@@ -322,8 +342,7 @@ export function fileCharacterAssets(settingId: number, hashes: Array<string | nu
   const unique = [...new Set(hashes.filter((hash): hash is string => Boolean(hash)))]
   if (!unique.length) return
   const group = ensureCharacterGroups(settingId, database)
-  const insert = database.prepare("INSERT OR IGNORE INTO image_groups(composite_hash, group_id, collection_type, order_index) VALUES (?, ?, 'manual', 0)")
-  unique.forEach((hash) => insert.run(hash, group.assetGroupId))
+  fileIntoLibraryGroup(group.assetGroupId, unique, database)
 }
 export function createCharacterSetting(input: unknown, canViewImages = true) {
   const nested = getUserSettingsDb().inTransaction
@@ -357,11 +376,7 @@ function applyCharacterSetting(settingId: number, { value, gallery }: ReturnType
     gallery ? JSON.stringify(gallery.references) : before.reference_images, gallery ? JSON.stringify(gallery.referenceCategories) : before.reference_categories, settingId)
   if (look) indexCharacterSettingTags(database, settingId, look.appearance, look.outfits)
   if (before.asset_group_id && settingName !== before.name) {
-    attachMainImagesDatabase(database)
-    const label = characterGroupLabel(settingName, settingId)
-    const collision = database.prepare('SELECT id FROM groups WHERE parent_id IS (SELECT parent_id FROM groups WHERE id = ?) AND TRIM(name) = ? COLLATE NOCASE AND id != ?').get(before.asset_group_id, label, before.asset_group_id)
-    if (collision) throw new CharacterLibraryError('캐릭터 이미지 그룹 이름이 다른 이미지 그룹과 겹쳐. 이미지 그룹 이름을 먼저 바꿔줘.', 409, undefined, 'name_conflict')
-    database.prepare("UPDATE groups SET name = ?, updated_date = CURRENT_TIMESTAMP WHERE id = ? AND name != ?").run(label, before.asset_group_id, label)
+    renameLibraryGroup(before.asset_group_id, characterGroupLabel(settingName, settingId), database, () => new CharacterLibraryError('캐릭터 이미지 그룹 이름이 다른 이미지 그룹과 겹쳐. 이미지 그룹 이름을 먼저 바꿔줘.', 409, undefined, 'name_conflict'))
   }
   const storedHashes = new Set(referencesOf(before).map((entry) => entry.hash))
   fileCharacterAssets(settingId, [value.referenceHash ?? null, value.avatarHash ?? null, ...(gallery?.references ?? []).filter((entry) => !storedHashes.has(entry.hash)).map((entry) => entry.hash)], database)
@@ -484,6 +499,55 @@ const exportSchema = z.union([z.object({ ids: idList }).strict(), z.object({ fol
 /** The bundle's document entry; images sit beside it as `images/<hash>.<ext>`. */
 export const CHARACTER_BUNDLE_DOCUMENT = 'character-library.json'
 const BUNDLE_DOCUMENT_MAX_BYTES = 50 * 1024 * 1024
+type BundleZipEntry = ReturnType<AdmZip['getEntries']>[number]
+/**
+ * The library files of the images a bundle names, as `images/<hash>.<ext>` entries (shared by the character and
+ * art-style bundles). `bundled` answers the hash when its file is included, null when disabled (no `images.view`) or gone.
+ */
+export function bundleImageCollector(enabled: boolean) {
+  const files = new Map<string, { name: string; path: string }>()
+  const bundled = (hash: string | null) => {
+    if (!enabled || !hash) return null
+    if (files.has(hash)) return hash
+    const file = activeMediaFile(hash)
+    if (!file) return null
+    files.set(hash, { name: `images/${hash}${path.extname(file.path).toLowerCase()}`, path: file.path })
+    return hash
+  }
+  return { bundled, files: () => [...files.values()] }
+}
+/** Opens an exported bundle: its parsed document (`label` names the bundle kind in errors) and its image entries by hash. */
+export function readLibraryBundle(bundlePath: string, documentName: string, label: string): { raw: unknown; images: Map<string, BundleZipEntry> } {
+  let zip: AdmZip
+  try { zip = new AdmZip(bundlePath) } catch { throw new CharacterLibraryError(`ZIP 파일을 읽지 못했어. CoNAI에서 내보낸 ${label}인지 확인해줘.`) }
+  const entries = zip.getEntries().filter((entry) => zipEntryKind(entry) === 'file')
+  const documentEntry = entries.find((entry) => entry.entryName === documentName)
+  const documentBytes = documentEntry ? zipEntryBytes(documentEntry, BUNDLE_DOCUMENT_MAX_BYTES) : null
+  if (!documentBytes) throw new CharacterLibraryError(`묶음에 ${documentName}가 없어. CoNAI에서 내보낸 ${label}인지 확인해줘.`)
+  let raw: unknown
+  try { raw = JSON.parse(documentBytes.toString('utf8')) } catch { throw new CharacterLibraryError(`${documentName}를 읽지 못했어.`) }
+  const images = new Map(entries.flatMap((entry) => {
+    const match = /^images\/([^/.]+)\.[a-z0-9]+$/i.exec(entry.entryName)
+    return match ? [[match[1], entry] as const] : []
+  }))
+  return { raw, images }
+}
+/**
+ * One bundled image into the library: its file joins it (`canUpload`; already stored ones are reused), else a hash this
+ * library has stays; null (counted as dropped) when neither works or the person may not see images.
+ */
+export async function ingestBundleImage(entry: BundleZipEntry | undefined, hash: string, canViewImages: boolean, canUpload: boolean, counts: { importedImages: number; droppedImages: number }): Promise<string | null> {
+  let stored: string | null = null
+  if (canViewImages) {
+    const bytes = entry && canUpload ? zipEntryBytes(entry, MAX_UPLOAD_FILE_SIZE_BYTES) : null
+    if (bytes) {
+      try { stored = (await ingestMedia(bytes)).compositeHash; counts.importedImages += 1 } catch { /* counted below: not a usable image */ }
+    }
+    if (!stored && activeMediaFile(hash)) stored = hash
+  }
+  if (!stored) counts.droppedImages += 1
+  return stored
+}
 /**
  * Settings as a portable bundle: the document (folder paths from the export's top, the folder exported or the top
  * level) and the library file of every image it names (reference, avatar, gallery, expressions, candidates). Images whose file
@@ -501,15 +565,7 @@ export function exportCharacterLibrary(input: unknown, images: boolean): { docum
     depth = folderPath(folders, value.folderId).length
   }
   if (images) attachMainImagesDatabase(db)
-  const files = new Map<string, { name: string; path: string }>()
-  const bundled = (hash: string | null) => {
-    if (!images || !hash) return null
-    if (files.has(hash)) return hash
-    const file = activeMediaFile(hash)
-    if (!file) return null
-    files.set(hash, { name: `images/${hash}${path.extname(file.path).toLowerCase()}`, path: file.path })
-    return hash
-  }
+  const { bundled, files } = bundleImageCollector(images)
   const groupExists = (groupId: number | null): groupId is number => images && groupId !== null && Boolean(db.prepare('SELECT 1 FROM groups WHERE id = ?').get(groupId))
   const candidateHashes = db.prepare('SELECT composite_hash FROM image_groups WHERE group_id = ? ORDER BY order_index, id')
   const document: CharacterLibraryExport = {
@@ -536,7 +592,7 @@ export function exportCharacterLibrary(input: unknown, images: boolean): { docum
       }
     }),
   }
-  return { document, files: [...files.values()] }
+  return { document, files: files() }
 }
 
 const documentSchema = z.object({
@@ -559,42 +615,22 @@ const documentSchema = z.object({
 export async function importCharacterLibrary(input: { folderId: unknown; bundlePath: string }, canViewImages: boolean, canUpload: boolean): Promise<CharacterLibraryImportResult> {
   const targetFolderId = parse(id.nullable(), input.folderId)
   checkFolder(targetFolderId)
-  let zip: AdmZip
-  try { zip = new AdmZip(input.bundlePath) } catch { throw new CharacterLibraryError('ZIP 파일을 읽지 못했어. CoNAI에서 내보낸 외형 묶음인지 확인해줘.') }
-  const entries = zip.getEntries().filter((entry) => zipEntryKind(entry) === 'file')
-  const documentEntry = entries.find((entry) => entry.entryName === CHARACTER_BUNDLE_DOCUMENT)
-  const documentBytes = documentEntry ? zipEntryBytes(documentEntry, BUNDLE_DOCUMENT_MAX_BYTES) : null
-  if (!documentBytes) throw new CharacterLibraryError(`묶음에 ${CHARACTER_BUNDLE_DOCUMENT}가 없어. CoNAI에서 내보낸 외형 묶음인지 확인해줘.`)
-  let raw: unknown
-  try { raw = JSON.parse(documentBytes.toString('utf8')) } catch { throw new CharacterLibraryError(`${CHARACTER_BUNDLE_DOCUMENT}를 읽지 못했어.`) }
-  const document = parse(documentSchema, raw)
+  const bundle = readLibraryBundle(input.bundlePath, CHARACTER_BUNDLE_DOCUMENT, '외형 묶음')
+  const document = parse(documentSchema, bundle.raw)
   for (const entry of document.settings) checkReferenceCategories(entry.references ?? [], entry.referenceCategories ?? [])
   const result = { createdSettings: 0, createdFolders: 0, renamed: 0, importedImages: 0, droppedImages: 0 }
 
   // Images first (asynchronous): a bundled file joins the library, else a hash this library has stays.
-  const imageEntries = new Map(entries.flatMap((entry) => {
-    const match = /^images\/([^/.]+)\.[a-z0-9]+$/i.exec(entry.entryName)
-    return match ? [[match[1], entry] as const] : []
-  }))
   const hashes = new Map<string, string | null>()
   const galleryHashes = new Set(document.settings.flatMap((setting) => (setting.references ?? []).map((entry) => entry.hash)))
   const galleryEligible = new Set<string>()
   for (const setting of document.settings) {
     for (const hash of [setting.referenceHash, setting.avatarHash, ...(setting.references ?? []).map((entry) => entry.hash), ...setting.expressions.map((entry) => entry.hash), ...setting.candidates]) {
       if (!hash || hashes.has(hash)) continue
-      let stored: string | null = null
-      if (canViewImages) {
-        const entry = imageEntries.get(hash)
-        const bytes = entry && canUpload ? zipEntryBytes(entry, MAX_UPLOAD_FILE_SIZE_BYTES) : null
-        if (bytes) {
-          try { stored = (await ingestMedia(bytes)).compositeHash; result.importedImages += 1 } catch { /* counted below: not a usable image */ }
-        }
-        if (!stored && activeMediaFile(hash)) stored = hash
-        if (stored && galleryHashes.has(hash)) {
-          try { if (normalizeProfileAssetHash(stored)) galleryEligible.add(hash) } catch { /* gallery-only eligibility; other placements keep the stored image */ }
-        }
+      const stored = await ingestBundleImage(bundle.images.get(hash), hash, canViewImages, canUpload, result)
+      if (stored && galleryHashes.has(hash)) {
+        try { if (normalizeProfileAssetHash(stored)) galleryEligible.add(hash) } catch { /* gallery-only eligibility; other placements keep the stored image */ }
       }
-      if (!stored) result.droppedImages += 1
       hashes.set(hash, stored)
     }
   }

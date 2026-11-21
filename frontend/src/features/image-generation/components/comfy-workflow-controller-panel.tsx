@@ -19,6 +19,7 @@ import { usePortalTargetById } from './generation-toolbar-status'
 import { IMAGE_GENERATION_TARGET_GROUP_KEY } from '@/features/groups/generation-target-group-store'
 import { WorkflowFieldGroupList } from './workflow-field-group-list'
 import { CharacterSettingLoadButton } from './character-setting-load-button'
+import { ArtStyleLoadButton } from './art-style-load-button'
 import { appendPromptText } from './prompt-text-segment-helpers'
 import { formatWorkflowFieldLabel } from './workflow-field-disclosure-card'
 import { floatingDropdownMenuClassName, getFloatingDropdownStyle, resolveFloatingDropdownRect, type FloatingDropdownRect } from './floating-dropdown-utils'
@@ -288,6 +289,10 @@ export function ComfyWorkflowControllerPanel({
   // "캐릭터 불러오기": tags go into a marked text field, the reference optionally into a marked image field.
   const characterTextTargets = workflowFields.filter((field) => field.type === 'text' || field.type === 'textarea').map((field) => ({ id: field.id, label: formatWorkflowFieldLabel(field) }))
   const characterImageTargets = workflowFields.filter((field) => field.type === 'image').map((field) => ({ id: field.id, label: formatWorkflowFieldLabel(field) }))
+  // "스타일 불러오기" uses the same fields; a field named like a negative prompt starts as the negative target and last as a positive one.
+  const negativeLike = (target: { id: string; label: string }) => /negative|부정|네거티브/i.test(`${target.id} ${target.label}`)
+  const stylePositiveTargets = [...characterTextTargets.filter((target) => !negativeLike(target)), ...characterTextTargets.filter(negativeLike)]
+  const styleNegativeTargetId = characterTextTargets.find(negativeLike)?.id ?? null
   const missingRequiredFields = useMemo(
     () => workflowFields.filter((field) => field.required && !hasWorkflowFieldValue(workflowDraft[field.id])),
     [workflowDraft, workflowFields],
@@ -514,7 +519,7 @@ export function ComfyWorkflowControllerPanel({
 
       <section className="space-y-3">
         {characterTextTargets.length > 0 ? (
-          <div className="flex justify-end">
+          <div className="flex justify-end gap-1">
             <CharacterSettingLoadButton
               label={t({ ko: '캐릭터 불러오기', en: 'Load character' })}
               textTargets={characterTextTargets}
@@ -524,6 +529,23 @@ export function ComfyWorkflowControllerPanel({
                   const current = workflowDraft[textTargetId]
                   onFieldChange(textTargetId, appendPromptText(typeof current === 'string' || Array.isArray(current) ? current : '', appearance))
                 }
+                if (reference && referenceTarget) void onImageChange(referenceTarget.id, reference)
+              }}
+            />
+            <ArtStyleLoadButton
+              positiveTargets={stylePositiveTargets}
+              negativeTargets={characterTextTargets}
+              defaultNegativeTargetId={styleNegativeTargetId}
+              referenceTargets={characterImageTargets}
+              onLoad={({ positive, negative, positiveTargetId, negativeTargetId, references: [reference], referenceTarget }) => {
+                // Both prompts may go into the same field: append to what the first one wrote.
+                const written: Record<string, WorkflowFieldDraftValue> = {}
+                for (const [fieldId, text] of [[positiveTargetId, positive], [negativeTargetId, negative]] as const) {
+                  if (!fieldId || !text) continue
+                  const current = written[fieldId] ?? workflowDraft[fieldId]
+                  written[fieldId] = appendPromptText(typeof current === 'string' || Array.isArray(current) ? current : '', text)
+                }
+                for (const [fieldId, value] of Object.entries(written)) onFieldChange(fieldId, value)
                 if (reference && referenceTarget) void onImageChange(referenceTarget.id, reference)
               }}
             />

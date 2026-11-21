@@ -12,6 +12,8 @@ import { registerChatGenerationTools } from './tools/chatGenerationTools';
 import { registerWorkflowTransferTools } from './tools/workflowTransferTools';
 import { registerPromptPresetTools } from './tools/promptPresetTools';
 import { registerCharacterLibraryTools } from './tools/characterLibraryTools';
+import { registerArtStyleTools } from './tools/artStyleTools';
+import { registerRefModEntryTools } from './tools/refmodEntryTools';
 import { registerFileStoreTools } from './tools/fileStoreTools';
 import { registerPluginTools } from './tools/pluginTools';
 import { registerPluginAuthoringTools } from './tools/pluginAuthoringTools';
@@ -129,10 +131,14 @@ export function createMcpServer(context: McpRequestContext = { scopes: ALL_MCP_H
     registerSelected(registerPromptOrganizationTools);
     registerSelected(registerResourceTools);
   });
-  inCategory('characters', () => registerSelected(registerCharacterLibraryTools));
+  inCategory('characters', () => {
+    registerSelected(registerCharacterLibraryTools);
+    registerSelected(registerArtStyleTools);
+  });
   inCategory('generation', () => {
     registerSelected(registerGenerationTools);
     registerSelected(registerChatGenerationTools);
+    registerSelected(registerRefModEntryTools);
   });
   inCategory('workflows', () => {
     registerSelected(registerGraphWorkflowTools);

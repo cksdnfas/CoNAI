@@ -121,6 +121,10 @@ function inferWorkflowFieldType(inputKey: string, value: string | number | boole
   }
 
   const normalizedKey = inputKey.toLowerCase()
+  // The file input of a load node (LoadAudio `audio`, VHS_LoadVideo `video`).
+  if (typeof value === 'string' && (normalizedKey === 'audio' || normalizedKey === 'video')) {
+    return normalizedKey
+  }
   if (normalizedKey.includes('image') || normalizedKey.includes('mask') || normalizedKey.includes('pixels')) {
     return 'image'
   }
@@ -496,7 +500,8 @@ export function parseWorkflowGraph(params: {
           key: inputKey,
           label: humanizeWorkflowInputKey(inputKey),
           value: inputValue,
-          inferredType: inferWorkflowFieldType(inputKey, inputValue),
+          // The core LoadVideo node names its file input `file`.
+          inferredType: classType === 'LoadVideo' && inputKey === 'file' && typeof inputValue === 'string' ? 'video' : inferWorkflowFieldType(inputKey, inputValue),
         })
       }
     }
@@ -549,6 +554,7 @@ export function suggestWorkflowMarkedFields(graph: ParsedWorkflowGraph, existing
       if (existingJsonPaths.has(path)) continue
       const wanted = input.inferredType === 'node'
         || (input.inferredType === 'image' && input.key === 'image' && typeof input.value === 'string')
+        || input.inferredType === 'audio' || input.inferredType === 'video'
         || ((input.inferredType === 'textarea' || input.inferredType === 'text') && typeof input.value === 'string' && SUGGESTED_PROMPT_INPUT_KEY.test(input.key) && feedingNodeIds.has(node.id) && !showsText)
         || (input.inferredType === 'number' && (SUGGESTED_NUMBER_INPUT_KEYS.has(input.key) || (makesLatent && SUGGESTED_LATENT_SIZE_KEYS.has(input.key))))
       if (wanted) fields.push(buildWorkflowMarkedFieldFromInput(node.id, node.data.title, node.data.classType, input, inputChoices))
@@ -592,7 +598,9 @@ export function buildWorkflowMarkedFieldFromInput(
   inputChoices?: WorkflowInputChoices | null,
 ): WorkflowMarkedField {
   const resolvedJsonPath = input.jsonPath ?? `${nodeId}.inputs.${input.key}`
-  const comboChoices = autoSelectChoices(input.key, input.value, inputChoices?.[resolvedJsonPath])
+  // A file input stays an upload field even when the node lists the input folder as plain choices (VHS_LoadVideo).
+  const isMediaInput = input.inferredType === 'audio' || input.inferredType === 'video'
+  const comboChoices = isMediaInput ? null : autoSelectChoices(input.key, input.value, inputChoices?.[resolvedJsonPath])
   const fieldType = comboChoices ? 'select' : input.inferredType
   const dropdownOptions = comboChoices ?? (typeof input.value === 'boolean' ? ['true', 'false'] : undefined)
   // No default: an empty seed field (or -1) rolls a new seed every run.

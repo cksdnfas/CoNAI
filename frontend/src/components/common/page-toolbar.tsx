@@ -127,7 +127,8 @@ export function PageToolbar({ title, start, children, actions, className, sticky
         </div>
       ) : null}
       {children ? <div className="flex min-w-0 flex-1 basis-60 items-center gap-2">{children}</div> : <div className="flex-1" />}
-      {actions ? <div className="ml-auto flex shrink-0 items-center gap-1">{actions}</div> : null}
+      {/* Wider than the row (a ~340px phone): the keys wrap instead of being cut off at the edge. */}
+      {actions ? <div className="ml-auto flex max-w-full flex-wrap items-center justify-end gap-1">{actions}</div> : null}
     </div>
   )
 }

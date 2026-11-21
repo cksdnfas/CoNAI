@@ -7,6 +7,7 @@ import { imageRoutes } from '../routes/images/index';
 import { isImageUploadPayloadRequest } from '../routes/images/uploadSecurity';
 import promptCollectionRoutes from '../routes/promptCollection';
 import characterLibraryRoutes from '../routes/character-library.routes';
+import artStyleRoutes from '../routes/art-styles.routes';
 import promptGroupRoutes from '../routes/promptGroups';
 import negativePromptGroupRoutes from '../routes/negativePromptGroups';
 import { groupRoutes } from '../routes/groups';
@@ -17,6 +18,7 @@ import { generationLayoutRoutes } from '../routes/generation-layouts.routes';
 import { workflowRoutes } from '../routes/workflows';
 import { comfyuiServerRoutes } from '../routes/comfyuiServers';
 import refmodRoutes from '../routes/refmods';
+import refmodEntryRoutes from '../routes/refmod-entries.routes';
 import { customDropdownListRoutes } from '../routes/customDropdownLists';
 import { customNodeRoutes } from '../routes/customNodes.routes';
 import { moduleDefinitionRoutes } from '../routes/moduleDefinitions';
@@ -227,6 +229,7 @@ export function registerAppRoutes(app: Express, options: RegisterAppRoutesOption
   }, imageRoutes);
   app.use('/api/prompt-collection', options.readOnlyLimiter, requireReadAccess('prompts.view', ['/resolve-groups']), promptCollectionRoutes);
   app.use('/api/character-library', options.readOnlyLimiter, characterLibraryRoutes);
+  app.use('/api/art-styles', options.readOnlyLimiter, artStyleRoutes);
   app.use('/api/danbooru-browser', options.readOnlyLimiter, requireReadAccess('prompts.view'), danbooruBrowserRoutes);
   app.use('/api/prompt-groups', options.readOnlyLimiter, requireReadAccess('prompts.view'), promptGroupRoutes);
   app.use('/api/negative-prompt-groups', options.readOnlyLimiter, requireReadAccess('prompts.view'), negativePromptGroupRoutes);
@@ -272,6 +275,8 @@ export function registerAppRoutes(app: Express, options: RegisterAppRoutesOption
   app.use('/api/workflows', options.readOnlyLimiter, requireReadAccess('workflows.view'), workflowRoutes);
   app.use('/api/public-workflows', requireAuth, publicWorkflowRoutes);
   app.use('/api/refmods', requireAuth, refmodRoutes);
+  // Reads are guarded in the router like GET /api/refmods (characters.view or the Director picker's own access).
+  app.use('/api/refmod-entries', options.readOnlyLimiter, requireAuth, refmodEntryRoutes);
   app.use('/api/comfyui-servers', (req, res, next) => {
     // The RefMod library backs the Director form, which generation-only accounts also use on published workflow pages.
     // Published workflow pages reach it with their slug even when the viewer holds neither permission.

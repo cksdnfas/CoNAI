@@ -76,6 +76,9 @@ function fieldSchema(field: MarkedField, preset: unknown, canSearch: boolean, gu
     schema = numeric
   } else if (field.type === 'image') {
     schema = z.string().describe('A data URL of the image.')
+  } else if (field.type === 'audio' || field.type === 'video') {
+    schema = z.union([z.string().min(1), z.object({ composite_hash: z.string().min(1) })])
+    notes.push(`Takes a data URL of the ${field.type}, a file name in the ComfyUI input folder${field.type === 'video' ? ', or { composite_hash } of a library video' : ''}.`)
   } else if (field.type === 'node') {
     schema = z.record(z.string(), z.unknown())
   } else {

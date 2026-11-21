@@ -24,12 +24,12 @@ const CATALOG_PAGE_CHARS = 12_000;
 export type ToolCategoryId = 'images' | 'image_groups' | 'characters' | 'emoticons' | 'wallpaper' | 'generation' | 'workflows' | 'prompts' | 'files' | 'posts' | 'audio' | 'sprite' | 'chat_setup' | 'web' | 'external' | 'plugins' | 'guide' | 'chat';
 
 export const TOOL_CATEGORIES: Record<ToolCategoryId, string> = {
-  characters: 'Character library: folders, appearance settings, reference images, avatars and expressions',
+  characters: 'Character library: folders, appearance settings, reference images, avatars and expressions; art styles',
   images: 'Library images/videos: search, metadata, history, downloads, resize',
   image_groups: 'Image groups: list, create, edit, add/move/remove images, auto-collect',
   emoticons: 'Emoticons: list, view, keywords, groups',
   wallpaper: 'Live wallpapers: list saved ones and the schedule, switch the live one, save the time schedule (widgets are edited on the wallpaper page)',
-  generation: 'Generation: NovelAI, ComfyUI workflows, servers, RefMod library, routing, jobs',
+  generation: 'Generation: NovelAI, ComfyUI workflows, servers, RefMod library and entries, routing, jobs',
   workflows: 'Graph workflows and definitions: list, inspect, run, export/import',
   prompts: 'Saved prompts and Danbooru tags/artists/characters (including related tags), prompt groups, presets, wildcards, dropdown lists, backups',
   files: 'Shared file store: list, search, read/write/edit text docs, image generation metadata, folders, rename, move, delete, versions (look at stored images with view_images file_ids)',
@@ -50,7 +50,9 @@ export const TOOL_CATEGORIES: Record<ToolCategoryId, string> = {
  */
 const CONTENTS_PRIMARY_TOOLS = new Set([
   'search_prompts', 'list_prompt_presets', 'search_wildcards', 'preview_random_prompt',
+  'list_art_styles',
   'list_workflows', 'get_workflow_details', 'submit_generation_job', 'get_generation_job', 'generate_nai',
+  'list_refmod_entries',
   'search_images', 'search_images_by_tags', 'search_images_by_meaning', 'find_similar_images', 'get_image_metadata',
   'upload_image',
   'list_files', 'search_files', 'read_file_text', 'write_text_file', 'edit_file_text',

@@ -12,12 +12,12 @@ import { comfyRefModLibraryQueryKey, getComfyRefModLibrary } from '@/lib/api-ima
 import { uploadWorkflowInputAsset, deleteWorkflowInputAsset } from '@/lib/api-workflow-input-assets'
 import { getImageDraftRevision, type WorkflowFieldDraftValue } from '../image-generation-shared'
 import { applyComfyChatNode, comfyNodeChatData, COMFY_NODE_PATCH_SCHEMA } from './comfy-chat-node'
-import { buildMiniMaxH3DirectorNodeValue, normalizeMiniMaxH3DirectorNodeValue, parseMiniMaxH3DirectorTimeline, getMiniMaxH3DirectorAssets, createMiniMaxH3DirectorItemId, type MiniMaxH3DirectorMediaType, isMiniMaxH3DirectorInputLink } from './minimax-h3-director-dasiwa-utils'
-import { fitsMiniMaxDirectorMedia, getMiniMaxDirectorFreeSlot } from './minimax-h3-director-media'
-import { probeMediaDuration, probeMediaDimensions } from './minimax-h3-director-media-probe'
+import { normalizeMiniMaxH3DirectorNodeValue, getMiniMaxH3DirectorAssets, isMiniMaxH3DirectorInputLink } from './minimax-h3-director-dasiwa-utils'
+import { applyMiniMaxDirectorChatMedia } from './comfy-chat-director-media'
 import { getSnapRefSimpleAssets, readSnapRefSimpleSlots, writeSnapRefSimpleSlots } from './snapref-simple-utils'
 import { useChatPresetInsertion } from './use-chat-preset-insertion'
 import { useChatCharacterSettingInsertion } from './use-chat-character-setting-insertion'
+import { useChatArtStyleInsertion } from './use-chat-art-style-insertion'
 import { useGenerationChatRuns, type GenerationSubmitResult } from './use-generation-chat-runs'
 import { buildComfyDraftFromHistoryPayload } from '../history-settings-mapping'
 import type { GenerationHistoryRecord } from '@/lib/api-image-generation-types'
@@ -64,9 +64,16 @@ export function useComfyChatPage(workflow: { id: number; name: string; assistant
     target: pageChoice(promptTargets),
     ...(referenceTargets.length ? { referenceTarget: pageChoice(referenceTargets) } : {}),
   }, ['target'], 'target = a text field id. referenceTarget = an image field id that gets the reference image; omit it for tags only.') : []
+  const artStyles = useChatArtStyleInsertion()
+  const styleImageTargets = artStyles.canImages ? safe.filter((field) => field.type === 'image').map((field) => field.id) : []
+  const artStyleActions = promptTargets.length ? artStyles.actions({
+    target: pageChoice(promptTargets),
+    negativeTarget: pageChoice(promptTargets),
+    ...(styleImageTargets.length ? { imageTarget: pageChoice(styleImageTargets) } : {}),
+  }, ['target'], 'target / negativeTarget = text field ids for the positive / negative prompt (without negativeTarget the negative is left out).' + (styleImageTargets.length ? ' imageTarget = the image field for one image.' : ''), styleImageTargets.length > 0) : []
   const commit = useChatDraftTransaction(draft, (next) => { for (const [id, value] of Object.entries(next)) onChange(id, value) })
   const commitHistory = useChatDraftTransaction(draft, options.replaceDraft)
-  const fields: ChatPageField[] = safe.filter((field) => field.type !== 'image' && field.type !== 'node').slice(0, CHAT_PAGE_LIMITS.fields).flatMap((field) => {
+  const fields: ChatPageField[] = safe.filter((field) => field.type !== 'image' && field.type !== 'audio' && field.type !== 'video' && field.type !== 'node').slice(0, CHAT_PAGE_LIMITS.fields).flatMap((field) => {
     const value = draft[field.id] ?? ''
     if (typeof value !== 'string' && !(Array.isArray(value) && value.every((part) => typeof part === 'string'))) return []
     const select = field.type === 'select' && !!field.options?.length && field.options.length <= CHAT_PAGE_LIMITS.options
@@ -84,7 +91,7 @@ export function useComfyChatPage(workflow: { id: number; name: string; assistant
     kind: 'comfyui', title: workflow ? t({ ko: 'ComfyUI · {name}', en: 'ComfyUI · {name}' }, { name: workflow.name }).slice(0, 160) : 'ComfyUI', resourceId: workflow ? String(workflow.id) : 'comfy-picker', fields, localRevision: JSON.stringify([getImageDraftRevision(draft), marked, workflow?.assistant_revision]),
     data: { recentRuns: runs.recentRuns, generating: runs.generating, workflows: workflowChoices.map((item) => ({ id: item.id, name: item.name })), seedFields: seedFields.map((field) => field.id), nodes: chatNodes, media: media.candidates, presets: presets.candidates,
       options: { ...Object.fromEntries(safe.filter((field) => field.options?.length).map((field) => [field.id, field.options!.slice(0, 512)])), loras: (options.loraOptions ?? []).slice(0, 512) }, selected: { workflowId: workflow?.id ?? 0, ...(options.route !== undefined ? { route: options.route, targetGroup: targetGroup ?? '' } : {}), name: workflow?.name ?? '', queueCount: options.queueCount, inputs: safe.filter((field) => field.type !== 'image' && field.type !== 'node').slice(0, 20).map((field) => ({ id: field.id, label: pageFreeText(field.label), value: pageFreeText(String(draft[field.id] ?? '').slice(0, 240)) })), nodes: chatNodes.slice(0, 10).map(nodeRunSummary), images: mediaFields.map((field) => ({ fieldId: field.id, label: field.label, name: mediaName(draft[field.id]) })) } },
-    actions: [...(workflow && active ? runs.actions : []), ...media.actions, ...presets.actions, ...characterSettingActions,
+    actions: [...(workflow && active ? runs.actions : []), ...media.actions, ...presets.actions, ...characterSettingActions, ...artStyleActions,
       ...(nodeFields.length ? [pageAction('comfy.node', t({ ko: 'H3·LoRA·SnapRef 노드 입력', en: 'Edit H3, LoRA or SnapRef inputs' }), t({ ko: 'nodes에 나온 노드별 schema에 맞춰 patch를 입력해. 타임라인은 기존 미디어 ID만 편집하고 새 미디어는 media.attach로 등록해. SnapRef 사진도 media.attach(slot 1–8)로 넣고, patch는 모드·충실도·어댑터와 사진별 강도·제거만 바꿔.', en: 'Match patch to the node-specific schema in nodes. Edit existing timeline media IDs; attach new media with media.attach. SnapRef pictures also go in with media.attach (slot 1–8); its patch changes mode, fidelity, adapter and each picture\'s strength or removal.' }), pageObject({ fieldId: pageChoice(nodeFields.map((field) => field.id)), patch: COMFY_NODE_PATCH_SCHEMA }, ['fieldId', 'patch']))] : []),
       ...(options.onSelect && workflowChoices.length ? [pageAction('comfy.select', t({ ko: '워크플로 선택', en: 'Select workflow' }), t({ ko: '등록된 워크플로를 선택해. 선택한 화면이 바로 돌아오니 이어서 입력을 채워.', en: 'Select a registered workflow; the new screen comes back so you can fill its inputs next.' }), pageObject({ id: pageChoice(workflowChoices.map((item) => item.id)) }, ['id']))] : []),
       ...(options.onRefresh ? [pageAction('comfy.refresh', t({ ko: '워크플로·선택 목록 최신화', en: 'Refresh workflow and options' }), t({ ko: '서버에 저장된 최신 워크플로와 선택 목록을 다시 읽어.', en: 'Reload the latest saved workflow and input options.' }))] : []),
@@ -118,6 +125,23 @@ export function useComfyChatPage(workflow: { id: number; name: string; assistant
         const before = draft[textField]
         const next = { ...draft, [textField]: characterSettings.text(args, typeof before === 'string' || Array.isArray(before) ? before : '', loaded.appearance) }
         if (imageField && loaded.reference) next[imageField] = loaded.reference
+        return commit(next)
+      }
+      if (id === 'art_style.insert') {
+        const fieldIds = [String(args.target), ...(args.negativeTarget === undefined ? [] : [String(args.negativeTarget)])]
+        const imageField = args.imageTarget === undefined ? null : String(args.imageTarget)
+        if (fieldIds.some((fieldId) => !promptTargets.includes(fieldId)) || (imageField !== null && !styleImageTargets.includes(imageField))) throw new Error('입력 필드가 바뀌었어.')
+        const loaded = await artStyles.load(args)
+        assertCurrent()
+        if (loaded.references.length && !imageField) throw new Error(t({ ko: 'imageIds를 넣을 imageTarget을 함께 줘.', en: 'Give imageTarget for imageIds.' }))
+        const next = { ...draft }
+        // Both prompts may go into the same field: the negative appends to what the positive wrote.
+        for (const [fieldId, text] of [[fieldIds[0], loaded.positive], [fieldIds[1], loaded.negative]] as const) {
+          if (!fieldId || !text) continue
+          const before = next[fieldId]
+          next[fieldId] = artStyles.append(typeof before === 'string' || Array.isArray(before) ? before : '', text)
+        }
+        if (imageField && loaded.references[0]) next[imageField] = loaded.references[0]
         return commit(next)
       }
       const field = safe.find((item) => item.id === args.fieldId)
@@ -160,28 +184,7 @@ export function useComfyChatPage(workflow: { id: number; name: string; assistant
         } else throw new Error('등록되지 않은 미디어 작업이야.')
       }
       else if (field.node_editor === 'minimax_h3_director_dasiwa') {
-        const node = normalizeMiniMaxH3DirectorNodeValue(draft[field.id])
-        const timeline = parseMiniMaxH3DirectorTimeline(node.timeline_data).timeline
-        if (id === 'media.clear') next[field.id] = buildMiniMaxH3DirectorNodeValue(node, {}, { ...timeline, items: args.itemId ? timeline.items.filter((item) => item.id !== args.itemId) : [] })
-        else if (id === 'media.attach') {
-          const loaded = await media.load(args); assertCurrent()
-          const type = loaded.blob.type.split('/')[0] as MiniMaxH3DirectorMediaType
-          if (node.mode === 'T2VA' || (node.mode !== 'REF2VA' && type !== 'image')) throw new Error('현재 H3 모드에는 이 미디어 종류를 등록할 수 없어.')
-          const file = new File([loaded.blob], loaded.fileName, { type: loaded.blob.type })
-          const [duration, dimensions] = await Promise.all([probeMediaDuration(file, type), probeMediaDimensions(file, type)])
-          assertCurrent()
-          if (type !== 'image' && (duration === null || duration < 2)) throw new Error('H3 영상·오디오 참조는 최소 2초 길이가 필요해.')
-          const frameSlots = node.mode === 'L2VA' ? [1] : node.mode === 'I2VA' || node.mode === 'Image Inpaint' ? [0] : [0, 1]
-          const slot = args.slot === undefined ? node.mode === 'REF2VA' ? getMiniMaxDirectorFreeSlot(timeline.items, type) : frameSlots.find((slot) => !timeline.items.some((item) => item.enabled !== false && item.type === type && item.slot === slot)) ?? null : Number(args.slot)
-          if (node.mode !== 'REF2VA' && slot !== null && !frameSlots.includes(slot)) throw new Error('현재 H3 모드의 프레임 슬롯이 아니야.')
-          if (slot === null || timeline.items.some((item) => item.enabled !== false && item.type === type && item.slot === slot)) throw new Error('미디어 슬롯이 가득 찼거나 이미 사용 중이야.')
-          const itemId = createMiniMaxH3DirectorItemId(type)
-          const item = { id: itemId, type, value: loaded.fileName, enabled: true, order: timeline.items.length, slot, start: Number(args.start ?? slot), duration: Number(args.duration ?? (duration === null ? 1 : Math.min(duration, 15))), ...(duration === null ? {} : { source_duration: duration, trim_start: 0, trim_end: Math.min(duration, 15) }), ...(dimensions ?? {}), ...(type === 'video' ? { media_mode: 'video' as const } : {}) }
-          if (!fitsMiniMaxDirectorMedia([...timeline.items, item])) throw new Error('H3 참조 미디어 개수 제한을 넘었어.')
-          const asset = await uploadWorkflowInputAsset(file)
-          try { assertCurrent(); next[field.id] = buildMiniMaxH3DirectorNodeValue(node, {}, { ...timeline, items: [...timeline.items, { ...item, value: asset.fileName }] }, { ...getMiniMaxH3DirectorAssets(node), [itemId]: asset }); return commit(next) }
-          catch (error) { void deleteWorkflowInputAsset(asset.id); throw error }
-        } else throw new Error('등록되지 않은 미디어 작업이야.')
+        return applyMiniMaxDirectorChatMedia({ id, value: draft[field.id], args, load: media.load, assertCurrent, assets: getMiniMaxH3DirectorAssets, commit: (value) => commit({ ...next, [field.id]: value }) })
       } else throw new Error('등록되지 않은 ComfyUI 작업이야.')
       assertCurrent()
       return commitField(next)

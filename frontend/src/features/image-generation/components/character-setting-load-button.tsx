@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState, type ComponentProps } from 'react'
 import { composeCharacterAppearance } from '@conai/shared'
-import { Star, UserRound, UserRoundPlus } from 'lucide-react'
+import { UserRound, UserRoundPlus } from 'lucide-react'
+import { ImageChoiceGrid } from '@/components/common/image-choice-grid'
 import { Field, FieldInfo } from '@/components/ui/field'
 import { IconButton } from '@/components/ui/icon-button'
 import { Modal, ModalBody } from '@/components/ui/modal'
@@ -15,9 +16,7 @@ import { CharacterSettingPickerDialog } from '@/features/characters/components/c
 import { useI18n } from '@/i18n'
 import type { CharacterSetting } from '@/lib/api-character-library'
 import { getErrorMessage } from '@/lib/error-message'
-import { cn } from '@/lib/utils'
 import { characterThumbnailUrl } from '@/features/characters/character-library-shared'
-import { ChatProfileImage } from '@/features/codex-chat/chat-profile-image'
 import { characterSettingImages, loadCharacterImageDraft } from '../character-setting-load'
 import type { SelectedImageDraft } from '../image-generation-shared'
 
@@ -207,33 +206,20 @@ export function CharacterSettingLoadButton({
                           : t({ ko: '넣을 이미지 한 장을 골라.', en: 'Choose one image.' })}
                       </FieldInfo>
                     </div>
-                    <div role="group" aria-labelledby={imagesCaptionId} className="flex flex-wrap gap-2">
-                      {stepImages.map((image, index) => {
-                        const chosen = step.imageHashes.includes(image.hash)
-                        // Several images can share a category, so the position tells them apart.
-                        const name = `${image.isReference ? t({ ko: '기준 이미지', en: 'Reference image' }) : image.category ?? t({ ko: '미분류', en: 'Uncategorized' })} ${index + 1}/${stepImages.length}`
-                        return (
-                          // eslint-disable-next-line no-restricted-syntax -- the thumbnail itself is the control
-                          <button
-                            key={image.hash}
-                            type="button"
-                            disabled={loading}
-                            aria-pressed={chosen}
-                            aria-label={name}
-                            title={name}
-                            onClick={() => toggleImage(image.hash)}
-                            className={cn('relative size-16 shrink-0 cursor-pointer overflow-hidden rounded-sm bg-muted outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed', chosen ? 'ring-2 ring-primary ring-offset-2 ring-offset-background' : 'opacity-60 hover:opacity-100')}
-                          >
-                            {/* A hidden, blocked or deleted image keeps the placeholder instead of a broken image. */}
-                            <ChatProfileImage
-                              src={characterThumbnailUrl(image.hash)}
-                              fallback={<span className="flex size-full items-center justify-center text-muted-foreground"><UserRound className="size-6" /></span>}
-                            />
-                            {image.isReference ? <span className="absolute top-0.5 left-0.5 rounded-sm bg-primary p-0.5 text-primary-foreground"><Star className="size-3 fill-current" /></span> : null}
-                          </button>
-                        )
-                      })}
-                    </div>
+                    <ImageChoiceGrid
+                      labelledBy={imagesCaptionId}
+                      disabled={loading}
+                      chosen={step.imageHashes}
+                      onToggle={toggleImage}
+                      fallback={<span className="flex size-full items-center justify-center text-muted-foreground"><UserRound className="size-6" /></span>}
+                      // Several images can share a category, so the position tells them apart.
+                      images={stepImages.map((image, index) => ({
+                        key: image.hash,
+                        src: characterThumbnailUrl(image.hash),
+                        marked: image.isReference,
+                        label: `${image.isReference ? t({ ko: '기준 이미지', en: 'Reference image' }) : image.category ?? t({ ko: '미분류', en: 'Uncategorized' })} ${index + 1}/${stepImages.length}`,
+                      }))}
+                    />
                   </>
                 ) : null}
               </div>

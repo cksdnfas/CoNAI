@@ -1,7 +1,7 @@
 import { isPageSettingsScope, pageSettingsPermission, pageSettingsScopes } from '@conai/shared'
 import { CHAT_PAGE_ACTION_PERMISSIONS, chatPageActionAllowed, chatPageActionTier, type ChatProposal, chatPagePermission, normalizeChatPageSnapshot, type ChatPageActionProposal, type ChatPageProposal, type ChatPageSnapshot, type ChatWorkflowProposal } from '@conai/shared'
 import { sanitizeChatWorkflowPage } from './chatWorkflowContext'
-import { chatPageDomainTools, type McpRequestContext, type McpRequester } from '../../mcp/context'
+import { chatPageDomainTools, isArtStyleChatPage, isRefModChatPage, type McpRequestContext, type McpRequester } from '../../mcp/context'
 import { AuthAccount } from '../../models/AuthAccount'
 import { AuthAccessControlService } from '../authAccessControlService'
 import { hasConfiguredAuth } from '../auth/sessionAccess'
@@ -262,7 +262,11 @@ function chatPageGuide(page: ChatPageSnapshot) {
     ...(['nai', 'codex', 'comfyui'].includes(page.kind)
       ? ['Fill this generation form, then use its registered nai.generate, codex.generate or comfy.generate commit action for a review card of the current inputs. Only use the action actually listed on this screen. Offered generation job/history/workflow reads can inspect progress and results; when submit_generation_job is offered, it also supports queued Codex generation. Linked generation presets keep their restrictions.']
       : []),
-    ...(page.path === '/characters' && page.kind === 'page'
+    ...(isArtStyleChatPage(page)
+      ? ['Art styles (그림 스타일): a style is reusable prompts with reference images and is never applied on its own; generation pages copy one into their form with art_style.insert. Image items: { id } held or { composite_hash } from the library.']
+      : isRefModChatPage(page)
+      ? ['RefMod entries: named RefMod definitions (sources, creation workflow, field values) built on the default ComfyUI server. An open entry lists its workflow inputs in selected.inputs: fill them with refmod.draft inputs, and its nodes with comfy.node and media.attach / media.clear as on the ComfyUI page; nothing is saved before refmod.save. refmod.build saves an unsaved draft first and queues the run (follow it with get_generation_job). Unregistered rows (saved runs, server-only names) are registered with refmod.adopt. Deleting is a review card.']
+      : page.path === '/characters' && page.kind === 'page'
       ? ['Character library: list_character_library and get_character_setting inspect folders and appearances; propose_character_library creates a reviewed change. Use the screen operations for selection and drafts. These tools require the account\'s character permissions, independently of image access.']
       : []),
     ...(['prompt_search', 'presets', 'wildcards'].includes(page.kind)
@@ -327,6 +331,7 @@ function proposalName(proposal: ChatProposal) {
     case 'profile_assets': return `이미지 ${proposal.action === 'apply' ? '적용' : '생성'} "${proposal.profileName}"`
     case 'character_assets': return `캐릭터 이미지 ${proposal.action === 'apply' ? '적용' : '생성'} "${proposal.settingName}"`
     case 'character_library': return proposal.action === 'delete_folder' ? `캐릭터 폴더 삭제 "${proposal.folderName}"` : `캐릭터 외형 ${proposal.action === 'delete_setting' ? '삭제' : '저장'} "${proposal.settingName}"`
+    case 'art_style': return `그림 스타일 ${proposal.action === 'delete_style' ? '삭제' : '저장'} "${proposal.title}"`
     case 'display_block': return `표시 블록 "${proposal.name}"`
     case 'skill': return `스킬 "${proposal.name}"`
     case 'lore': return `로어 "${proposal.title}"`

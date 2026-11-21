@@ -539,6 +539,12 @@ export function CodexGenerationPanel({
     </div>
   )
 
+  // "캐릭터 불러오기" and "스타일 불러오기" set their image here; in edit mode the slot is the source to edit, not a reference.
+  const codexImageLoad = codexForm.imageMode === 'reference' ? {
+    targets: [{ id: 'referenceImage', label: codexForm.referenceImage ? t({ ko: '참조 이미지 교체', en: 'Replace reference image' }) : t({ ko: '참조 이미지', en: 'Reference image' }) }],
+    onLoad: (_target: unknown, image: SelectedImageDraft) => setCodexForm((current) => ({ ...current, referenceImage: image, maskImage: undefined })),
+  } : null
+
   const editorBlocks: Record<CodexEditorBlock, ReactNode> = {
     model: (
       <Tip content={t({ ko: '프롬프트를 해석하고 이미지를 만들 모델 고르기', en: 'Choose the model that reads the prompt and makes the image' })}>
@@ -560,13 +566,8 @@ export function CodexGenerationPanel({
           negativePrompt={codexForm.negativePrompt}
           onPromptChange={(value) => handleFieldChange('prompt', value)}
           onNegativePromptChange={(value) => handleFieldChange('negativePrompt', value)}
-          characterLoad={{
-            // In edit mode the image slot is the source to edit, not a reference.
-            reference: codexForm.imageMode === 'reference' ? {
-              targets: [{ id: 'referenceImage', label: codexForm.referenceImage ? t({ ko: '참조 이미지 교체', en: 'Replace reference image' }) : t({ ko: '참조 이미지', en: 'Reference image' }) }],
-              onLoad: (_target, image) => setCodexForm((current) => ({ ...current, referenceImage: image, maskImage: undefined })),
-            } : null,
-          }}
+          characterLoad={{ reference: codexImageLoad }}
+          styleLoad={{ reference: codexImageLoad }}
         />
         <div className="flex justify-end">
           <CodexPromptPresetButton prompt={codexForm.prompt} negativePrompt={codexForm.negativePrompt} />

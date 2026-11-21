@@ -162,5 +162,9 @@ export async function startRuntimeSideEffectServices(
     import('../services/codex-chat/chatProfileAssets')
       .then(({ migrateLegacyProfileAssets }) => migrateLegacyProfileAssets())
       .catch((error) => console.warn('⚠️  Failed to move chat profile images into the library:', error instanceof Error ? error.message : error))
+    // Art styles saved before they held their own copies: their library images are copied in once.
+    import('../services/artStyles')
+      .then(({ convertLegacyArtStyleImages }) => convertLegacyArtStyleImages())
+      .catch((error) => console.warn('⚠️  Failed to copy old art style images:', error instanceof Error ? error.message : error))
   }, 90_000).unref()
 }

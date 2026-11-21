@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { CHARACTER_APPEARANCE_SECTION_KEYS, CHAT_PROFILE_TEXT_LIMITS, composeCharacterAppearance, joinPromptParts, tokenizePrompt } from '@conai/shared'
 import { ArrowUpToLine, Copy, ExternalLink, ImageIcon, ListTree, Pencil, Plus, Sparkles, Trash2, UserSearch, Wand2 } from 'lucide-react'
+import { ChipListInput } from '@/components/common/chip-list-input'
 import { NameDialog } from '@/components/common/entry-dialogs'
 import { ActionContextMenu, ActionMenuButton, type ActionMenuEntry } from '@/components/ui/action-menu'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Chip, ToggleChip } from '@/components/ui/chip'
+import { ToggleChip } from '@/components/ui/chip'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { EditorGroup } from '@/components/ui/editor-group'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -212,41 +213,22 @@ function PromptChips({ value, label, editable, disabled, onChange, onDragStart, 
   onMove?: (index: number, target: SectionKey) => void
 }) {
   const { t } = useI18n()
-  const [text, setText] = useState('')
   const tags = promptPieceTexts(value)
-  const add = () => {
-    if (!editable || disabled || !text.trim()) return
-    onChange(appendPromptPiece(value, text))
-    setText('')
-  }
   const moveEntries = (index: number): ActionMenuEntry[] => onMove ? (moveTargets ?? []).map((target) => ({
     key: target.key, label: t({ ko: '{section}(으)로 옮기기', en: 'Move to {section}' }, { section: target.label }), disabled, onSelect: () => onMove(index, target.key),
   })) : []
-  const remove = (index: number) => onChange(removePromptPiece(value, index))
-  return <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-    {tags.map((tag, index) => <ActionContextMenu key={`${index}:${tag}`} disabled={!editable} entries={[
-      ...moveEntries(index),
-      '-',
-      { key: 'remove', label: t({ ko: '빼기', en: 'Remove' }), destructive: true, disabled, onSelect: () => remove(index) },
-    ]}>
-      <span className="group/tag inline-flex max-w-full min-w-0">
-        <Chip draggable={editable && !disabled && Boolean(onDragStart)}
-          onDragStart={(event) => { event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('text/plain', tag); onDragStart?.(index) }}
-          onDragEnd={onDragEnd}
-          onRemove={editable ? () => remove(index) : undefined}
-          removeDisabled={disabled} removeLabel={t({ ko: '{tag} 빼기', en: 'Remove {tag}' }, { tag })}>
-          <span className="truncate">{tag}</span>
-          {/* Shown on hover or focus (always on touch); right-click has the same moves. */}
-          {editable && onMove ? <span className="inline-flex opacity-0 transition-opacity motion-reduce:transition-none group-hover/tag:opacity-100 group-focus-within/tag:opacity-100 pointer-coarse:opacity-100 has-[[data-state=open]]:opacity-100">
-            <ActionMenuButton size="icon-xs" label={t({ ko: '{tag} 옮기기', en: 'Move {tag}' }, { tag })} entries={moveEntries(index)} />
-          </span> : null}
-        </Chip>
-      </span>
-    </ActionContextMenu>)}
-    {editable ? <Input variant="bare" controlSize="compact" className="w-28 min-w-20 flex-1" aria-label={t({ ko: '{section} 태그 추가', en: 'Add {section} tags' }, { section: label })}
-      disabled={disabled} value={text} placeholder={t({ ko: '+ 태그', en: '+ tag' })} onChange={(event) => setText(event.target.value)}
-      onBlur={add} onKeyDown={(event) => { if (event.key === 'Enter' && !event.nativeEvent.isComposing) { event.preventDefault(); add() } }} /> : null}
-  </div>
+  return <ChipListInput items={tags} editable={editable} disabled={disabled}
+    onAdd={(text) => onChange(appendPromptPiece(value, text))}
+    onRemove={(index) => onChange(removePromptPiece(value, index))}
+    addLabel={t({ ko: '{section} 태그 추가', en: 'Add {section} tags' }, { section: label })}
+    removeLabel={(tag) => t({ ko: '{tag} 빼기', en: 'Remove {tag}' }, { tag })}
+    placeholder={t({ ko: '+ 태그', en: '+ tag' })}
+    chipMenu={moveEntries}
+    chipDrag={onDragStart ? { onDragStart, onDragEnd: () => onDragEnd?.() } : undefined}
+    // Shown on hover or focus (always on touch); right-click has the same moves.
+    chipExtra={editable && onMove ? (index) => <span className="inline-flex opacity-0 transition-opacity motion-reduce:transition-none group-hover/tag:opacity-100 group-focus-within/tag:opacity-100 pointer-coarse:opacity-100 has-[[data-state=open]]:opacity-100">
+      <ActionMenuButton size="icon-xs" label={t({ ko: '{tag} 옮기기', en: 'Move {tag}' }, { tag: tags[index] })} entries={moveEntries(index)} />
+    </span> : undefined} />
 }
 
 /**

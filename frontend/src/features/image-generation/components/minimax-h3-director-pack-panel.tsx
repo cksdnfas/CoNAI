@@ -7,8 +7,8 @@ import { Select } from '@/components/ui/select'
 import { Modal } from '@/components/ui/modal'
 import { useI18n } from '@/i18n'
 import { triggerBlobDownload } from '@/lib/api-client'
-import { buildWorkflowInputAssetUrl, deleteWorkflowInputAsset, uploadWorkflowInputAsset, type WorkflowInputAssetRef } from '@/lib/api-workflow-input-assets'
-import { getMiniMaxH3DirectorAssets, inferMiniMaxH3DirectorMediaType, parseMiniMaxH3DirectorTimeline } from './minimax-h3-director-dasiwa-utils'
+import { deleteWorkflowInputAsset, uploadWorkflowInputAsset, type WorkflowInputAssetRef } from '@/lib/api-workflow-input-assets'
+import { buildMiniMaxH3DirectorAssetUrl, getMiniMaxH3DirectorAssetRefs, inferMiniMaxH3DirectorMediaType, parseMiniMaxH3DirectorTimeline, type MiniMaxH3DirectorAssetRef } from './minimax-h3-director-dasiwa-utils'
 import { applyMiniMaxDirectorPack, buildMiniMaxDirectorPack, parseMiniMaxDirectorPack, type MiniMaxDirectorPack, type MiniMaxDirectorPackScope } from './minimax-h3-director-pack'
 
 /** Match native ComfyUI references to user-selected files without interpreting paths as URLs. */
@@ -63,9 +63,9 @@ export function MiniMaxH3DirectorPackPanel({ value, onChange, allowFiles, allowP
       if (!allowMode && pack.model_mode !== value.mode) throw new Error(t({ ko: '지금 모드와 같은 참조 팩을 골라 줘.', en: 'Select a reference pack matching the current mode.' }))
       // Capacity and prompt validation happen before uploading or replacing any media.
       applyMiniMaxDirectorPack(value, pack, effectiveScope, append, new Map())
-      const resolved = new Map<number, WorkflowInputAssetRef>()
+      const resolved = new Map<number, MiniMaxH3DirectorAssetRef>()
       if (effectiveScope !== 'prompt' && pack.items) {
-        const currentAssets = getMiniMaxH3DirectorAssets(value)
+        const currentAssets = getMiniMaxH3DirectorAssetRefs(value)
         const timeline = parseMiniMaxH3DirectorTimeline(value.timeline_data).timeline
         const missing: string[] = []
         const filesToUpload: Array<{ index: number; file: File }> = []
@@ -79,7 +79,7 @@ export function MiniMaxH3DirectorPackPanel({ value, onChange, allowFiles, allowP
           }
           const existing = timeline.items.find((current) => current.value === item.value && current.type === item.type && currentAssets[current.id])
           const asset = item.conai_asset ?? (existing ? currentAssets[existing.id] : undefined)
-          if (asset && (await fetch(buildWorkflowInputAssetUrl(asset), { method: 'HEAD', credentials: 'include' })).ok) resolved.set(index, asset)
+          if (asset && (await fetch(buildMiniMaxH3DirectorAssetUrl(asset), { method: 'HEAD', credentials: 'include' })).ok) resolved.set(index, asset)
           else missing.push(mediaFileName(item.value))
         }
         if (missing.length) throw new Error(t({ ko: '미디어 파일을 연결해 줘: {files}', en: 'Attach the missing media files: {files}' }, { files: missing.join(', ') }))

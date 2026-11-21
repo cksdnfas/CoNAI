@@ -1,31 +1,35 @@
 import { useState } from 'react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
-import type { MiniMaxH3RefModLibraryMember, MiniMaxH3RefModRecord, MiniMaxH3RefModRecordMember, MiniMaxH3RefModRecordStatus } from '@conai/shared'
+import { keepPreviousData, useInfiniteQuery, useQueryClient } from '@tanstack/react-query'
+import type { MiniMaxH3RefModLibraryEntry, MiniMaxH3RefModLibraryMember, MiniMaxH3RefModRecord, MiniMaxH3RefModRecordMember } from '@conai/shared'
+import { Plus } from 'lucide-react'
+import { SearchField } from '@/components/common/search-field'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { DisclosureButton } from '@/components/ui/disclosure-button'
 import { EmptyState } from '@/components/ui/empty-state'
+import { IconButton } from '@/components/ui/icon-button'
 import { Modal, ModalBody } from '@/components/ui/modal'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Text } from '@/components/ui/text'
 import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
 import { useImagePermissions } from '@/features/auth/use-image-permissions'
+import { LoadMoreSentinel } from '@/features/posts/post-attach-shared'
+import { RefModRow } from '@/features/refmods/components/refmod-row'
+import { makeRefModNameLookup, refModConceptLabel, refModEntryThumbs, refModLibraryStatus, refModMemberCounts } from '@/features/refmods/refmod-shared'
 import { useI18n } from '@/i18n'
 import {
   buildMiniMaxH3RefModMediaUrl,
   COMFY_REFMOD_LIBRARY_QUERY_ROOT,
   COMFY_REFMOD_RECORDS_QUERY_ROOT,
-  comfyRefModRecordsQueryKey,
   deleteMiniMaxH3RefModRecord,
-  getMiniMaxH3RefModRecords,
 } from '@/lib/api-image-generation-workflows'
+import { listRefModEntries, refModEntryPagesQueryKey } from '@/lib/api-refmod-entries'
+import { useDebouncedValue } from '@/lib/use-debounced-value'
 import { getErrorMessage } from '../image-generation-shared'
 
 const K = 'image-generation.components.minimax.h3.director.refmod.panel'
-const RECORD_THUMBNAIL_LIMIT = 3
-const STATUS_BADGE: Record<MiniMaxH3RefModRecordStatus, 'info' | 'success' | 'destructive'> = { pending: 'info', saved: 'success', failed: 'destructive' }
 
 /** `mm:ss`, with tenths when the time is fractional (trims are often sub-second). */
 function formatClock(seconds: number) {
@@ -162,60 +166,78 @@ export function RefModSourcesDisclosure({ record, members = [] }: { record?: Min
 
 type MiniMaxH3RefModRecordsDialogProps = {
   open: boolean
-  /** The library's resolved server; only its records are listed. */
+  /** The library's resolved server (the panel only opens this once it knows the server). */
   serverId: number
   /** False when every slot is taken by a named RefMod. */
   canPick: boolean
+  /** The resolved server's library: only an entry saved there can go into a slot (exact name, then case-insensitive). */
+  libraryEntries?: MiniMaxH3RefModLibraryEntry[]
   onPick: (name: string) => void
   onClose: () => void
 }
 
-/** RefMods created through CoNAI workflow runs, newest first; a saved one can be put into a slot. */
-export function MiniMaxH3RefModRecordsDialog({ open, serverId, canPick, onPick, onClose }: MiniMaxH3RefModRecordsDialogProps) {
-  const { t, formatDateTime } = useI18n()
+const PICK_PAGE_SIZE = 50
+
+/**
+ * "CoNAI에서 만든 RefMod": the RefMod entries as the library lists them (same rows), in pick mode. Only the list
+ * endpoint is read, so generation-only accounts and published-workflow pages can use it; without images.view the member
+ * squares are kind icons.
+ */
+export function MiniMaxH3RefModRecordsDialog({ open, canPick, libraryEntries = [], onPick, onClose }: MiniMaxH3RefModRecordsDialogProps) {
+  const { t } = useI18n()
   const { canViewImages } = useImagePermissions()
-  const records = useQuery({
-    queryKey: comfyRefModRecordsQueryKey(serverId),
-    queryFn: () => getMiniMaxH3RefModRecords(serverId),
+  const [searchText, setSearchText] = useState('')
+  const query = useDebouncedValue(searchText.trim(), 300)
+  const scope = { query, concept: '', favorite: false, sort: 'name' as const, limit: PICK_PAGE_SIZE }
+  const entries = useInfiniteQuery({
+    queryKey: [...refModEntryPagesQueryKey(scope), 'pick'],
+    queryFn: ({ pageParam, signal }) => listRefModEntries({ ...scope, offset: pageParam }, signal),
+    initialPageParam: 0,
+    getNextPageParam: (last, pages) => (last.hasMore ? pages.reduce((sum, page) => sum + page.items.length, 0) : undefined),
+    placeholderData: keepPreviousData,
     enabled: open,
   })
+  const onServer = makeRefModNameLookup(libraryEntries.map((entry) => entry.name))
+  const loaded = entries.data?.pages.flatMap((page) => page.items) ?? []
 
   return (
     <Modal open={open} onClose={onClose} size="lg" height="medium" title={t(`${K}.records.title`)}>
       <ModalBody spacing="sm">
-        {records.isPending ? <Text variant="caption" role="status">{t(`${K}.records.loading`)}</Text> : null}
-        {records.isError ? (
+        <SearchField value={searchText} onChange={setSearchText} placeholder={t({ ko: '이름·설명·검색어', en: 'Names, descriptions, keywords' })} />
+        {entries.isPending ? <Text variant="caption" role="status">{t(`${K}.records.loading`)}</Text> : null}
+        {entries.isError && !loaded.length ? (
           <Alert variant="destructive">
             <AlertTitle>{t(`${K}.records.error`)}</AlertTitle>
-            <AlertDescription>{getErrorMessage(records.error, '')}</AlertDescription>
+            <AlertDescription>{getErrorMessage(entries.error, '')}</AlertDescription>
           </Alert>
         ) : null}
-        {records.data?.length === 0 ? <EmptyState size="compact" title={t(`${K}.records.empty`)} /> : null}
-        {records.data?.map((record) => {
-          const thumbnails = canViewImages ? record.members.filter((member) => member.kind === 'image').slice(0, RECORD_THUMBNAIL_LIMIT) : []
-          const name = record.status === 'saved' ? record.name : null
-          return (
-            <div key={record.id} className="space-y-2 border-b border-line py-3 first:pt-0 last:border-b-0 last:pb-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge variant={STATUS_BADGE[record.status]} size="sm">{t(`${K}.records.status.${record.status}`)}</Badge>
-                <Text as="span" variant="label" className="min-w-0 flex-1 truncate">{record.name ?? t(`${K}.records.unnamed`)}</Text>
-                <Text as="span" variant="caption" className="shrink-0">{formatDateTime(record.created_at)}</Text>
-                <Button size="xs" variant="secondary" disabled={!name || !canPick} onClick={() => { if (name) { onPick(name); onClose() } }}>
-                  {t(`${K}.records.pick`)}
-                </Button>
-              </div>
-              {record.error ? <Text variant="caption" tone="destructive">{record.error}</Text> : null}
-              {thumbnails.length > 0 ? (
-                <div className="flex flex-wrap gap-1.5">
-                  {thumbnails.map((member) => (
-                    <img key={member.index} src={buildMiniMaxH3RefModMediaUrl(member)} alt={member.description || member.file_name} loading="lazy" className="size-12 rounded-sm bg-surface-low object-cover" />
-                  ))}
-                </div>
-              ) : null}
-              <RefModSourcesDisclosure record={record} />
-            </div>
-          )
-        })}
+        {entries.isSuccess && !loaded.length ? <EmptyState size="compact" title={t(`${K}.records.empty`)} /> : null}
+        <div>
+          {loaded.map((entry) => {
+            const serverName = onServer(entry.name)
+            const label = !serverName ? t({ ko: '서버에 아직 없어', en: 'Not on the server yet' })
+              : !canPick ? t({ ko: '빈 슬롯이 없어', en: 'No free slot' })
+                : t({ ko: '‘{name}’ 넣기', en: 'Use ‘{name}’' }, { name: entry.name })
+            return (
+              <RefModRow
+                key={entry.id}
+                name={entry.name}
+                concept={refModConceptLabel(t, entry.conceptType)}
+                counts={refModMemberCounts(t, entry.members.map((member) => member.kind))}
+                thumbs={refModEntryThumbs(t, entry.id, entry.members, canViewImages)}
+                status={refModLibraryStatus(t, entry.pending, Boolean(serverName))}
+                favorite={entry.favorite}
+                actions={(
+                  <IconButton variant="secondary" size="icon-sm" disabled={!serverName || !canPick} label={label} onClick={() => { if (serverName) { onPick(serverName); onClose() } }}>
+                    <Plus />
+                  </IconButton>
+                )}
+              />
+            )
+          })}
+          {entries.isFetchNextPageError ? <Text variant="caption" tone="destructive">{getErrorMessage(entries.error, '')}</Text> : null}
+          <LoadMoreSentinel enabled={open && entries.hasNextPage && !entries.isFetchingNextPage} onVisible={() => void entries.fetchNextPage({ cancelRefetch: false })} />
+        </div>
       </ModalBody>
     </Modal>
   )

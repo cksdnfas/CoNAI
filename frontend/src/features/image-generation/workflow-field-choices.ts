@@ -49,6 +49,11 @@ export function resolveWorkflowMarkedField(field: WorkflowMarkedField, dropdownL
   }
 }
 
+/** Audio and video fields hold an uploaded file reference, never text. */
+export function isWorkflowMediaFieldType(type: WorkflowMarkedField['type']): type is 'audio' | 'video' {
+  return type === 'audio' || type === 'video'
+}
+
 /** Whether a field of this type can be hidden (text, textarea, number and select). */
 export function canHideWorkflowField(type: WorkflowMarkedField['type']) {
   return HIDEABLE_FIELD_TYPES.has(type)

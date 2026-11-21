@@ -56,6 +56,7 @@ import { ChatWorkflowProposalCard } from './chat-workflow-proposal-card'
 import { ChatPageActionCard } from './chat-page-action-card'
 import { ChatAssetProposalCard } from './chat-asset-proposal-card'
 import { ChatCharacterLibraryProposalCard } from './chat-character-library-proposal-card'
+import { ChatArtStyleProposalCard } from './chat-art-style-proposal-card'
 import { ChatProfileLinkChange } from './chat-profile-link-change'
 import { ProposalFooter, ProposalFrame } from './chat-proposal-parts'
 import { folderPath } from '@conai/shared'
@@ -102,6 +103,7 @@ function ProposalCard({ proposal, threadId }: { proposal: Proposal; threadId?: n
   if (proposal.kind === 'page_action') return <ChatPageActionCard proposal={proposal} />
   if (proposal.kind === 'profile_assets' || proposal.kind === 'character_assets') return <ChatAssetProposalCard proposal={proposal} threadId={threadId} />
   if (proposal.kind === 'character_library') return <ChatCharacterLibraryProposalCard proposal={proposal} threadId={threadId} />
+  if (proposal.kind === 'art_style') return <ChatArtStyleProposalCard proposal={proposal} threadId={threadId} />
   if (proposal.kind === 'display_block') return <BlockProposalCard proposal={proposal} threadId={threadId} />
   if (proposal.kind === 'skill') return <SkillProposalCard proposal={proposal} threadId={threadId} />
   if (proposal.kind === 'profile') return <ProfileProposalCard proposal={proposal} threadId={threadId} />

@@ -12,6 +12,7 @@ import { HistoryQueryRepository } from '../../repositories/history/HistoryQueryR
 import { externalizeQueueInputDataUrls } from '../../services/generation-queue/queueInputStore';
 import { GenerationQueueService } from '../../services/generationQueueService';
 import { enqueueGenerationJobs, type EnqueueGenerationJobsOptions } from '../../services/generation-queue/queueEnqueue';
+import { hasRefModEntryRunKey } from '../../services/generation-queue/queueRefModEntryLink';
 import { codexGenerationRequestSchema, getCodexModelSuggestions, parseCodexGenerationRequest } from '../../services/codexGenerationOptions';
 import { buildGenerationHistoryRequestSnapshot } from '../../services/generationHistoryRequestSnapshot';
 import { McpArtifactService } from '../../services/mcpArtifactService';
@@ -127,6 +128,7 @@ async function enqueueGenerationJob(context: McpRequestContext, input: McpGenera
   if (request_payload && Object.prototype.hasOwnProperty.call(request_payload, MCP_QUEUE_IMAGE_GRANT_KEY)) {
     throw new Error('MCP queue image authorization is server-issued');
   }
+  if (hasRefModEntryRunKey(request_payload)) throw new Error('RefMod entry link is server-issued');
   let usesImages = false;
   let usesComfyLibrary = false;
   const requireManagedMedia = () => { usesImages = true; requireRequesterPermission(context.requester, 'images.view'); };
