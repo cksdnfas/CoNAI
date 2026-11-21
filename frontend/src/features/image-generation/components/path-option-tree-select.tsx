@@ -4,14 +4,14 @@ import { ChevronDown, File, Folder, RotateCcw } from 'lucide-react'
 import { HierarchyNav, type HierarchyNavItemState } from '@/components/common/hierarchy-nav'
 import { SearchField } from '@/components/common/search-field'
 import { Button } from '@/components/ui/button'
-import { floatingSurfaceClassName } from '@/components/ui/floating-surface'
+import { floatingSurfaceClassName, resolveFloatingLayer, type FloatingLayer } from '@/components/ui/floating-surface'
 import { IconButton } from '@/components/ui/icon-button'
 import { Tip } from '@/components/ui/tooltip'
 import { useOverlayBackClose } from '@/components/ui/use-overlay-back-close'
 import { buildComfyModelThumbnailUrl } from '@/lib/api-image-generation-workflows'
 import { cn } from '@/lib/utils'
 import { useI18n } from '@/i18n'
-import { FLOATING_DROPDOWN_MENU_CLASS, getFloatingDropdownStyle, resolveFloatingDropdownRect, type FloatingDropdownRect } from './floating-dropdown-utils'
+import { floatingDropdownMenuClassName, getFloatingDropdownStyle, resolveFloatingDropdownRect, type FloatingDropdownRect } from './floating-dropdown-utils'
 
 const PATH_RANDOM_OPTION_VALUE = '__random__'
 const MODEL_PREVIEW_HOVER_DELAY_MS = 150
@@ -210,6 +210,7 @@ export function PathOptionTreeSelect({ value, options, placeholder, refreshLabel
   const [isOpen, setIsOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [menuRect, setMenuRect] = useState<FloatingDropdownRect | null>(null)
+  const [menuLayer, setMenuLayer] = useState<FloatingLayer>('popover')
   const [isLocalRefreshing, setIsLocalRefreshing] = useState(false)
   const [modelPreview, setModelPreview] = useState<ModelPreviewState | null>(null)
   const [missingPreviewKeys, setMissingPreviewKeys] = useState<Set<string>>(() => new Set())
@@ -290,6 +291,7 @@ export function PathOptionTreeSelect({ value, options, placeholder, refreshLabel
       }
 
       setMenuRect(resolveFloatingDropdownRect(triggerElement, { minWidth: 320 }))
+      setMenuLayer(resolveFloatingLayer(triggerElement))
     }
 
     const handlePointerDown = (event: PointerEvent) => {
@@ -306,8 +308,11 @@ export function PathOptionTreeSelect({ value, options, placeholder, refreshLabel
       setIsOpen(false)
     }
 
+    // Esc closes only this menu: taken in the capture phase and marked handled, so it runs before the host's own Esc
+    // (an editor's window listener, a Modal's document listener), which skips a defaultPrevented key and stays open.
     const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
+      if (event.key === 'Escape' && !event.defaultPrevented) {
+        event.preventDefault()
         setIsOpen(false)
       }
     }
@@ -316,13 +321,13 @@ export function PathOptionTreeSelect({ value, options, placeholder, refreshLabel
     window.addEventListener('resize', updateMenuRect)
     window.addEventListener('scroll', updateMenuRect, true)
     window.addEventListener('pointerdown', handlePointerDown)
-    window.addEventListener('keydown', handleEscape)
+    document.addEventListener('keydown', handleEscape, true)
 
     return () => {
       window.removeEventListener('resize', updateMenuRect)
       window.removeEventListener('scroll', updateMenuRect, true)
       window.removeEventListener('pointerdown', handlePointerDown)
-      window.removeEventListener('keydown', handleEscape)
+      document.removeEventListener('keydown', handleEscape, true)
     }
   }, [isOpen, menuId])
 
@@ -382,7 +387,7 @@ export function PathOptionTreeSelect({ value, options, placeholder, refreshLabel
             <div
               id={menuId}
               data-surface="high"
-              className={cn(FLOATING_DROPDOWN_MENU_CLASS, 'overflow-auto p-2')}
+              className={cn(floatingDropdownMenuClassName(menuLayer), 'overflow-auto p-2')}
               style={getFloatingDropdownStyle(menuRect)}
             >
               <SearchField
@@ -421,6 +426,7 @@ export function PathOptionTreeSelect({ value, options, placeholder, refreshLabel
           )
         : null}
 
+      {/* Above the menu on either layer: z-floating, and mounted after the menu so it comes later in body when both are floating. */}
       {isOpen && modelPreview && typeof document !== 'undefined'
         ? createPortal(
             <div

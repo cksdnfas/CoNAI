@@ -7,6 +7,22 @@ import { cn } from '@/lib/utils'
  */
 export const floatingSurfaceClassName = 'rounded-md bg-surface-high shadow-elevation-2'
 
+/** The hosts on the modal layer: a Modal, or a full-screen surface with role="dialog" (an editor, a drawer sheet). */
+const MODAL_LAYER_HOST_SELECTOR = '[data-slot="modal"], [role="dialog"]'
+
+export type FloatingLayer = 'popover' | 'floating'
+
+/**
+ * The layer for a popup portaled to body from `anchor`: `floating` (above the modal layer) when the anchor sits inside a
+ * modal-layer host, otherwise `popover`. AnchoredPopup and the fixed dropdown menus share this one rule.
+ */
+export function resolveFloatingLayer(anchor: Pick<Element, 'closest'> | null | undefined): FloatingLayer {
+  return anchor?.closest(MODAL_LAYER_HOST_SELECTOR) ? 'floating' : 'popover'
+}
+
+/** The z-index utility of each floating layer. */
+export const floatingLayerClassName: Record<FloatingLayer, string> = { popover: 'z-popover', floating: 'z-floating' }
+
 /** Radix open / close animation for floating content (fade + zoom, off under reduced motion). */
 export const floatingMotionClassName =
   'motion-safe:data-[state=open]:animate-in motion-safe:data-[state=open]:fade-in-0 motion-safe:data-[state=open]:zoom-in-95 motion-safe:data-[state=closed]:animate-out motion-safe:data-[state=closed]:fade-out-0 motion-safe:data-[state=closed]:zoom-out-95'

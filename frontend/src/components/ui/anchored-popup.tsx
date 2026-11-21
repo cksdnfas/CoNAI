@@ -2,6 +2,7 @@ import { type ComponentPropsWithoutRef, type ReactNode, type RefObject, useEffec
 import { createPortal } from 'react-dom'
 import { stopAtPortalEdge } from '@/lib/portal-events'
 import { cn } from '@/lib/utils'
+import { floatingLayerClassName, resolveFloatingLayer, type FloatingLayer } from './floating-surface'
 import { useOverlayBackClose } from './use-overlay-back-close'
 
 export type AnchoredPopupSide = 'top' | 'bottom'
@@ -25,7 +26,7 @@ interface AnchoredPopupProps {
   className?: string
   closeOnBack?: boolean
   /** Stacking layer: `floating` when the popup opens from inside a Modal (above the modal layer). */
-  layer?: 'popover' | 'floating'
+  layer?: FloatingLayer
   surfaceProps?: Omit<ComponentPropsWithoutRef<'div'>, 'children' | 'className'>
   children: ReactNode
 }
@@ -126,7 +127,7 @@ export function AnchoredPopup({
     }
 
     if (!layer) {
-      setAutoFloating(Boolean(anchorRef.current?.closest('[data-slot="modal"], [role="dialog"]')))
+      setAutoFloating(resolveFloatingLayer(anchorRef.current) === 'floating')
     }
     updatePosition()
     const rafId = window.requestAnimationFrame(updatePosition)
@@ -153,7 +154,7 @@ export function AnchoredPopup({
   return createPortal(
     <div
       ref={panelRef}
-      className={cn(anchoredPopupSurfaceClassName, resolvedLayer === 'floating' ? 'z-floating' : 'z-popover', 'overflow-y-auto overscroll-contain', className)}
+      className={cn(anchoredPopupSurfaceClassName, floatingLayerClassName[resolvedLayer], 'overflow-y-auto overscroll-contain', className)}
       style={{
         position: 'fixed',
         top: position?.top ?? -9999,

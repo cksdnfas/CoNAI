@@ -5,6 +5,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Heading } from '@/components/ui/heading'
+import { resolveFloatingLayer, type FloatingLayer } from '@/components/ui/floating-surface'
 import { IconButton } from '@/components/ui/icon-button'
 import { useOverlayBackClose } from '@/components/ui/use-overlay-back-close'
 import { useI18n } from '@/i18n'
@@ -20,7 +21,7 @@ import { WorkflowFieldGroupList } from './workflow-field-group-list'
 import { CharacterSettingLoadButton } from './character-setting-load-button'
 import { appendPromptText } from './prompt-text-segment-helpers'
 import { formatWorkflowFieldLabel } from './workflow-field-disclosure-card'
-import { FLOATING_DROPDOWN_MENU_CLASS, getFloatingDropdownStyle, resolveFloatingDropdownRect, type FloatingDropdownRect } from './floating-dropdown-utils'
+import { floatingDropdownMenuClassName, getFloatingDropdownStyle, resolveFloatingDropdownRect, type FloatingDropdownRect } from './floating-dropdown-utils'
 import {
   buildComfyWorkflowServerRoutingSummary,
   isComfyWorkflowModalServer,
@@ -56,6 +57,7 @@ function WorkflowTargetSelect({
   const { t } = useI18n()
   const [isOpen, setIsOpen] = useState(false)
   const [menuRect, setMenuRect] = useState<FloatingDropdownRect | null>(null)
+  const [menuLayer, setMenuLayer] = useState<FloatingLayer>('popover')
   const triggerRef = useRef<HTMLDivElement | null>(null)
   const selectedOption = options.find((option) => option.value === value) ?? options[0] ?? null
 
@@ -73,6 +75,7 @@ function WorkflowTargetSelect({
       }
 
       setMenuRect(resolveFloatingDropdownRect(triggerElement, { minWidth: menuMinWidth }))
+      setMenuLayer(resolveFloatingLayer(triggerElement))
     }
 
     const handlePointerDown = (event: PointerEvent) => {
@@ -139,7 +142,7 @@ function WorkflowTargetSelect({
             <div
               id="comfy-workflow-target-select-menu"
               data-surface="high"
-              className={cn(FLOATING_DROPDOWN_MENU_CLASS, 'overflow-auto p-1')}
+              className={cn(floatingDropdownMenuClassName(menuLayer), 'overflow-auto p-1')}
               style={getFloatingDropdownStyle(menuRect)}
               role="listbox"
               aria-label={t({ ko: '생성 타겟 선택', en: 'Select generation target' })}

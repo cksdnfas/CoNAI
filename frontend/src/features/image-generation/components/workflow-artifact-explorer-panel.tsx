@@ -9,6 +9,7 @@ import { CodeBlock } from '@/components/ui/code-block'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Heading } from '@/components/ui/heading'
+import { resolveFloatingLayer } from '@/components/ui/floating-surface'
 import { IconButton } from '@/components/ui/icon-button'
 import { Modal } from '@/components/ui/modal'
 import { useI18n } from '@/i18n'
@@ -18,7 +19,7 @@ import type { WorkflowArtifactEntry } from '@/lib/api-image-generation-types'
 import { getGenerationWorkflowArtifacts } from '@/lib/api-image-generation-workflows'
 import { getPublicGenerationWorkflowArtifacts } from '@/lib/api-public-workflows'
 import { cn } from '@/lib/utils'
-import { FLOATING_DROPDOWN_MENU_CLASS } from './floating-dropdown-utils'
+import { floatingDropdownMenuClassName } from './floating-dropdown-utils'
 import { getErrorMessage } from '../image-generation-shared'
 import { formatFileSize } from '@/lib/format-size'
 import { useDebouncedValue } from '@/lib/use-debounced-value'
@@ -343,7 +344,7 @@ export function WorkflowArtifactExplorerPanel({ workflowId, publicWorkflowSlug =
 
       {hoverPreview?.entry.fileUrl && hoverPreviewStyle ? (
         <div
-          className={cn(FLOATING_DROPDOWN_MENU_CLASS, 'pointer-events-none w-72 p-2 text-foreground')}
+          className={cn(floatingDropdownMenuClassName(resolveFloatingLayer(scrollContainer)), 'pointer-events-none w-72 p-2 text-foreground')}
           style={hoverPreviewStyle}
         >
           <img src={hoverPreview.entry.fileUrl} alt={hoverPreview.entry.name} className="max-h-72 w-full rounded-sm object-contain" />
