@@ -21,7 +21,7 @@ import { isWorkflowInputAssetRef, markWorkflowInputAssetForDeletion, resolveWork
  * keywords. The REST routes, the page assistant and the chat tools all go through these functions. A style owns copies
  * of its images in the shared file store ("그림 스타일/<title>/", kept while the style exists, as RefMod entries keep
  * theirs): a library pick or an upload is copied at save, so the library can change freely, and deleting the style
- * deletes its copies. A copy deleted on the Files page is left out of every read.
+ * deletes its copies. The Files page cannot delete or replace a copy; one lost anyway is left out of every read.
  */
 export class ArtStyleError extends CharacterLibraryError {}
 
@@ -108,7 +108,7 @@ type StyleRow = {
   images: string; folder_id: string | null; favorite: number; revision: number; created_at: string; updated_at: string
 }
 type SummaryRow = Pick<StyleRow, 'id' | 'title' | 'description' | 'badges' | 'favorite' | 'revision' | 'updated_at'> & { cover_id: string | null; image_count: number }
-/** A style's copies that are still in the store (a file deleted on the Files page drops out of every read). */
+/** A style's copies that are still in the store (a copy that is gone from it drops out of every read). */
 const LIVE_FILES = "art_style_files f JOIN stored_file_entries e ON e.id = f.file_id AND e.deleted_at IS NULL AND e.kind = 'file'"
 const SUMMARY_COLUMNS = `id, title, description, badges, favorite, revision, updated_at,
   (SELECT f.file_id FROM ${LIVE_FILES} WHERE f.style_id = art_styles.id ORDER BY f.position LIMIT 1) AS cover_id,
@@ -300,7 +300,7 @@ function afterImagesCommitted(actor: ArtStyleActor, consumed: string[], removed:
   for (const assetId of consumed) {
     try { markWorkflowInputAssetForDeletion(assetId) } catch (error) { console.warn('[Art style] Could not mark a consumed upload:', error) }
   }
-  // A copy already deleted on the Files page has nothing left to release.
+  // A copy already gone from the store has nothing left to release.
   const live = getUserSettingsDb().prepare('SELECT 1 FROM stored_file_entries WHERE id = ? AND deleted_at IS NULL')
   releaseOwnedFiles(ART_STYLE_FILE_KIND, actor.owner, removed.filter((fileId) => live.get(fileId)))
 }

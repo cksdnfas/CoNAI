@@ -146,10 +146,14 @@ test('art styles: own file-store copies, CRUD, conflicts, search and badges, bun
     assert.deepEqual(imageIds(watercolor.id), style.images.map((entry) => entry.id))
   })
 
-  await t.test('a copy deleted on the Files page is skipped on every read', async () => {
+  await t.test('the Files page cannot delete a style copy; one lost anyway is skipped on every read', async () => {
     const copy = await styles.createArtStyle({ title: 'Fragile', images: [{ composite_hash: second }, (await staged('#d5b43a', 'b.png'))] })
     const [gone, kept] = copy.images.map((entry) => entry.id)
-    FileStoreService.delete('bootstrap', [gone])
+    assert.throws(() => FileStoreService.delete('bootstrap', [gone]), /그림 스타일에서 쓰는 파일은 삭제할 수 없어/)
+    assert.throws(() => FileStoreService.deleteTree('bootstrap', stored(gone)!.parentId!), /그림 스타일에서 쓰는 파일은 삭제할 수 없어/)
+    assert.equal(FileStoreService.rename('bootstrap', kept, 'renamed.png').name, 'renamed.png', 'renaming stays allowed')
+    // Lost outside the Files page (its row is gone from the store).
+    db.prepare('UPDATE stored_file_entries SET deleted_at = CURRENT_TIMESTAMP WHERE id = ?').run(gone)
     const read = styles.getArtStyle(copy.id)
     assert.deepEqual([read.images.map((entry) => entry.id), read.coverImageId, read.imageCount], [[kept], kept, 1])
     assert.equal(styles.listArtStyles({ query: 'Fragile' }).items[0].imageCount, 1)

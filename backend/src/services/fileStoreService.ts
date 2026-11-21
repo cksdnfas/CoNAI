@@ -176,13 +176,18 @@ function assertUnreferenced(file: Pick<FileRow, 'id' | 'name'>, action: '삭제�
   if (db.prepare("SELECT 1 FROM post_media_refs WHERE kind = 'file' AND ref = ? UNION ALL SELECT 1 FROM post_knowledge_media_refs WHERE kind = 'file' AND ref = ? LIMIT 1").get(file.id, file.id)) {
     throw new FileStoreError(`게시물에서 쓰는 파일은 ${action} 수 없어: ${file.name}`, 409);
   }
-  assertNotRefModSource(file, action);
+  assertNotOwnedCopy(file, action);
 }
 
-/** A RefMod entry's source copy (refmod_entry_files) is never deleted or replaced; moving and renaming stay allowed. */
-function assertNotRefModSource(file: Pick<FileRow, 'id' | 'name'>, action: '삭제할' | '덮어쓸') {
-  if (getUserSettingsDb().prepare('SELECT 1 FROM refmod_entry_files WHERE file_id = ? LIMIT 1').get(file.id)) {
-    throw new FileStoreError(`RefMod에서 쓰는 파일은 ${action} 수 없어: ${file.name}`, 409);
+/** Copies an owner keeps in the store: a RefMod entry's sources and an art style's images. */
+const OWNED_COPY_TABLES = [['refmod_entry_files', 'RefMod'], ['art_style_files', '그림 스타일']] as const;
+
+/** An owner's copy is never deleted or replaced here (its owner releases it); moving and renaming stay allowed. */
+function assertNotOwnedCopy(file: Pick<FileRow, 'id' | 'name'>, action: '삭제할' | '덮어쓸') {
+  for (const [table, copyOwner] of OWNED_COPY_TABLES) {
+    if (getUserSettingsDb().prepare(`SELECT 1 FROM ${table} WHERE file_id = ? LIMIT 1`).get(file.id)) {
+      throw new FileStoreError(`${copyOwner}에서 쓰는 파일은 ${action} 수 없어: ${file.name}`, 409);
+    }
   }
 }
 
@@ -524,7 +529,7 @@ export const FileStoreService = {
         }
         const id = existing?.id ?? crypto.randomBytes(16).toString('hex');
         if (existing) {
-          assertNotRefModSource(existing, '덮어쓸');
+          assertNotOwnedCopy(existing, '덮어쓸');
           if (options.history !== false && FileStoreRevisions.keep(owner, requireRow(owner, id), storedFilePath(owner, id), options.source ?? null)) {
             FileStoreRevisions.trim(id);
           }
@@ -654,8 +659,10 @@ export const FileStoreService = {
       const reference = db.prepare(`SELECT ref AS id FROM post_media_refs WHERE kind='file' AND ref IN (SELECT value FROM json_each(?))
         UNION ALL SELECT ref AS id FROM post_knowledge_media_refs WHERE kind='file' AND ref IN (SELECT value FROM json_each(?)) LIMIT 1`).get(ids, ids) as { id: string } | undefined;
       if (reference) throw new FileStoreError(`게시물에서 쓰는 파일은 삭제할 수 없어: ${rows.find(row => row.id === reference.id)!.name}`, 409);
-      const refmodSource = db.prepare(`SELECT file_id AS id FROM refmod_entry_files WHERE file_id IN (SELECT value FROM json_each(?)) LIMIT 1`).get(ids) as { id: string } | undefined;
-      if (refmodSource) throw new FileStoreError(`RefMod에서 쓰는 파일은 삭제할 수 없어: ${rows.find(row => row.id === refmodSource.id)!.name}`, 409);
+      for (const [table, copyOwner] of OWNED_COPY_TABLES) {
+        const copy = db.prepare(`SELECT file_id AS id FROM ${table} WHERE file_id IN (SELECT value FROM json_each(?)) LIMIT 1`).get(ids) as { id: string } | undefined;
+        if (copy) throw new FileStoreError(`${copyOwner}에서 쓰는 파일은 삭제할 수 없어: ${rows.find(row => row.id === copy.id)!.name}`, 409);
+      }
       db.prepare('UPDATE stored_file_entries SET deleted_at = CURRENT_TIMESTAMP WHERE id IN (SELECT value FROM json_each(?))').run(ids);
       return rows;
     }).immediate();
