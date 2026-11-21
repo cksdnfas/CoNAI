@@ -15,8 +15,10 @@ import { zipEntryBytes, zipEntryKind } from '../../utils/zipEntries'
 export { PluginError }
 export const pluginIdSchema = z.string().regex(/^[a-z][a-z0-9-]{1,47}$/)
 const reserved = new Set(['page', 'page-settings', 'files', 'workspace', 'library', 'settings', 'profile', 'resource', 'chat', 'audio', 'sprite', 'upload', 'posts', 'wallpaper', 'metadata', 'prompt', 'preset', 'wildcard', 'group', 'media', 'nai', 'comfy', 'workflow'])
+/** Characters of one page or server action description: the guidance the chat reads with the action. */
+export const PLUGIN_ACTION_DESCRIPTION_LIMIT = 1500
 const actionSchema = z.object({
-  id: z.string().max(110), label: z.string().min(1).max(160), description: z.string().max(1000),
+  id: z.string().max(110), label: z.string().min(1).max(160), description: z.string().max(PLUGIN_ACTION_DESCRIPTION_LIMIT),
   effect: z.enum(['draft', 'save']), tier: z.enum(['view', 'draft', 'direct', 'commit']), schema: z.unknown(),
 }).strict()
 const surfacesSchema = z.array(z.enum(GENERATION_LAYOUT_SURFACES as [string, ...string[]])).min(1).max(GENERATION_LAYOUT_SURFACES.length)
@@ -29,7 +31,7 @@ const manifestSchema = z.object({
   capabilities: z.array(z.enum(['files.read', 'files.write', 'files.media', 'workspace.read', 'workspace.write', 'workspace.media', 'media.process', 'server'])).max(8).default([]),
   server: z.object({ entry: z.string().min(1).max(200) }).strict().optional(),
   appTools: z.array(z.string().regex(/^[a-z][a-z0-9_]{1,63}$/)).optional(),
-  serverActions: z.array(z.object({ id: z.string().max(100), label: z.string().min(1).max(160), description: z.string().max(1000), schema: z.unknown(), tool: z.string().max(64), tier: z.enum(['direct', 'commit']).optional(), arguments: z.record(z.string(), z.unknown()).optional() }).strict()).optional(),
+  serverActions: z.array(z.object({ id: z.string().max(100), label: z.string().min(1).max(160), description: z.string().max(PLUGIN_ACTION_DESCRIPTION_LIMIT), schema: z.unknown(), tool: z.string().max(64), tier: z.enum(['direct', 'commit']).optional(), arguments: z.record(z.string(), z.unknown()).optional() }).strict()).optional(),
   pages: z.array(z.object({
     id: pluginIdSchema, title: z.string().min(1).max(160), entry: z.string().min(1).max(200),
     accepts: z.array(z.string().regex(/^\.[a-z0-9]{1,16}$/)).max(40), actions: z.array(actionSchema), serverActions: z.array(z.string().max(100)).optional(),

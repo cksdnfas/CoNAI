@@ -26,6 +26,16 @@ test('trusted extensions preserve package, caller, explicit approval and externa
   const host = await import('../src/services/plugins/pluginHost')
   const { pluginDb } = await import('../src/services/plugins/pluginStore')
   const shared = await import('@conai/shared')
+  await t.test('every package in plugins/ passes the install manifest check', () => {
+    const folder = path.resolve(__dirname, '../../plugins')
+    const manifests = fs.readdirSync(folder).map((name) => path.join(folder, name, 'plugin.json')).filter((file) => fs.existsSync(file))
+    assert.ok(manifests.length >= 3)
+    // A manifest the install check refuses never reaches an instance: the bundled sync only logs it at startup.
+    for (const file of manifests) assert.doesNotThrow(() => registry.parsePluginManifest(JSON.parse(fs.readFileSync(file, 'utf8'))), path.basename(path.dirname(file)))
+    const manifest = (description: string) => ({ apiVersion: 1, id: 'limit-probe', name: 'Limit probe', version: '1.0.0', description: '', pages: [{ id: 'main', title: 'Main', entry: 'index.html', accepts: [], actions: [{ id: 'limit-probe.run', label: 'Run', description, effect: 'draft', tier: 'view', schema: { type: 'object', properties: {} } }] }] })
+    assert.doesNotThrow(() => registry.parsePluginManifest(manifest('x'.repeat(registry.PLUGIN_ACTION_DESCRIPTION_LIMIT))))
+    assert.throws(() => registry.parsePluginManifest(manifest('x'.repeat(registry.PLUGIN_ACTION_DESCRIPTION_LIMIT + 1))))
+  })
   await t.test('native API paths reach all app routes without crossing origins or forging identity', () => {
     const origins = ['http://localhost:1677', 'http://localhost:1666']
     assert.equal(shared.pluginNativeApiPath('http://localhost:1666/api/files?limit=20', origins), '/api/files?limit=20')
