@@ -171,6 +171,46 @@ test('a translation that loses display-block fences, emoticon tokens or cast tag
   assert.equal(await translateReply(translating, original), null, 'cast tag rewritten')
 })
 
+test('a bracketed line keeps its translation whatever its length before or after, in replies and user input', async (t) => {
+  t.mock.method(console, 'warn', () => {})
+  let answer = ''
+  const requests = mockTranslator(t, () => Response.json({ choices: [{ message: { content: answer }, finish_reason: 'stop' }] }))
+  // Long English scene headers become short Korean ones: the line-start tag count must not change with the length.
+  const reply = '[Chapter Two: The Lighthouse Keeper and the Silent Storm]\n[Setting: Harbor Road, North Pier, Late Evening]\n[Mina] *She pulls her coat tighter.* You came back.'
+  answer = '[2장: 등대지기와 고요한 폭풍]\n[장소: 항구 길, 북쪽 부두, 늦은 저녁]\n[미나] *코트를 여민다.* 돌아왔구나.'
+  assert.ok(reply.split('\n').slice(0, 2).every(line => line.length > 42) && answer.split('\n').every(line => line.indexOf(']') < 41), 'the headers cross the old 40-letter bound')
+  assert.equal(await translateReply(translating, reply), answer)
+  // A short Korean bracket line becomes a long English one: plain input, then the structured batch beside a flag.
+  const input = '[다음 날 아침, 둘은 등대 앞에서 다시 만난다]\n오늘은 뭐 할 거야?'
+  const english = '[The next morning, the two of them meet again in front of the lighthouse]\nWhat are you doing today?'
+  answer = english
+  const plain = await translateUserMessage(translating as ChatProfile, input, [])
+  assert.deepEqual([plain.content, plain.display_content, plain.error], [english, input, null])
+  answer = JSON.stringify({ '0': english, '1': '[OOC: Keep every answer short and stay in character for the whole scene]' })
+  const flags = [{ id: 1, icon: '', name: '짧게', content: '[OOC: 장면 내내 짧게, 캐릭터를 유지해줘]' }]
+  const structured = await translateUserMessage(translating as ChatProfile, input, flags)
+  assert.deepEqual([structured.content, structured.flags[0].content, structured.error], [english, '[OOC: Keep every answer short and stay in character for the whole scene]', null])
+  assert.equal(requests.length, 3)
+})
+
+test('a translation that loses or invents a line-start bracket tag is still dropped, long or short', async (t) => {
+  t.mock.method(console, 'warn', () => {})
+  let answer = ''
+  mockTranslator(t, () => Response.json({ choices: [{ message: { content: answer }, finish_reason: 'stop' }] }))
+  const reply = '[Setting: Harbor Road, North Pier, Late Evening]\n[Mina] You came back.'
+  answer = '장소: 항구 길, 북쪽 부두, 늦은 저녁\n[미나] 돌아왔구나.'
+  assert.equal(await translateReply(translating, reply), null, 'long header lost its brackets')
+  answer = '[장소: 항구 길, 북쪽 부두, 늦은 저녁]\n미나: 돌아왔구나.'
+  assert.equal(await translateReply(translating, reply), null, 'short cast tag rewritten')
+  answer = '[Scene: the two of them meet again in front of the old lighthouse at dawn]\nWhat are you doing today?'
+  const invented = await translateUserMessage(translating as ChatProfile, '오늘은 뭐 할 거야?', [])
+  assert.deepEqual([invented.content, invented.display_content], ['오늘은 뭐 할 거야?', null])
+  assert.match(invented.error!, /입력 번역.*원문/, 'an invented tag keeps the original and says so')
+  answer = JSON.stringify({ '0': 'What are you doing today?', '1': 'Answer briefly.' })
+  const lost = await translateUserMessage(translating as ChatProfile, '[다음 날 아침]\n오늘은 뭐 할 거야?', [{ id: 1, icon: '', name: '짧게', content: '짧게 답해줘.' }])
+  assert.match(lost.error!, /입력 번역.*원문/, 'the structured batch drops a lost tag too')
+})
+
 test('a status block ending the reply is held back from the translator, so losing its placeholder cannot drop it', async (t) => {
   t.mock.method(console, 'warn', () => {})
   const vitals = '```vitals\n{"mood": 32}\n```'

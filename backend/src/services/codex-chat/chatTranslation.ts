@@ -285,9 +285,12 @@ export function translationTargetOf(profile: ModelRoleProfile & { maxTokens?: nu
   }
 }
 
-/** Markup the chat depends on must come out of the translation intact; otherwise the original is shown. */
+/**
+ * Markup the chat depends on must come out of the translation intact; otherwise the original is shown. A line-start
+ * `[...]` counts at any length: translating `[Location: …]` changes its length, so a bound would count it on one side.
+ */
 function keepsMarkup(original: string, translated: string) {
-  const checks: RegExp[] = [/```/g, /&\*[^*\n]+\*&/g, /\{\{[^}\n]+\}\}/g, /^[ \t]*\[[^\]\n]{1,40}\]/gm]
+  const checks: RegExp[] = [/```/g, /&\*[^*\n]+\*&/g, /\{\{[^}\n]+\}\}/g, /^[ \t]*\[[^\]\n]+\]/gm]
   return checks.every((pattern) => countMatches(original, pattern) === countMatches(translated, pattern))
 }
 
@@ -317,6 +320,8 @@ export function maskCodeBlocks(text: string): { text: string; blocks: string[] }
 /**
  * The text without its code blocks and preserved tokens: only the prose decides whether a text needs translating.
  * `speakerTags` also drops a leading `[Name]` (replies); a user's own `[다음 날 아침]` or `[OOC: …]` is prose.
+ * Only a name-length tag (40 or less) is dropped, a longer header is prose to translate; one text is read, so no
+ * translation can move a tag across the bound.
  */
 function proseOf(text: string, speakerTags = true) {
   const prose = maskCodeBlocks(text).text
