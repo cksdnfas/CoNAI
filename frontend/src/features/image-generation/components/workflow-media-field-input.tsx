@@ -10,6 +10,7 @@ import { useI18n } from '@/i18n'
 import {
   buildWorkflowInputAssetUrl,
   deleteWorkflowInputAsset,
+  readableUploadName,
   uploadWorkflowInputAsset,
   WORKFLOW_INPUT_ASSET_REF_KIND,
   type WorkflowInputAssetRef,
@@ -124,7 +125,7 @@ export function WorkflowMediaFieldInput({ kind, value, label, invalid = false, e
         <WorkflowAudioPreview asset={value} src={src} />
       )}
       <div className="flex min-w-0 items-center gap-1">
-        <span className="min-w-0 flex-1 truncate font-mono text-2xs text-muted-foreground">{value.fileName}</span>
+        <span className="min-w-0 flex-1 truncate font-mono text-2xs text-muted-foreground">{readableUploadName(value.fileName)}</span>
         <IconButton size="icon-sm" variant="ghost" disabled={isUploading} onClick={() => inputRef.current?.click()} label={t({ ko: '{kind} 바꾸기', en: 'Replace {kind}' }, { kind: kindLabel })}>
           {isUploading ? <LoaderCircle className="animate-spin" /> : <RefreshCw />}
         </IconButton>

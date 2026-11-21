@@ -136,3 +136,12 @@ test('Comfy validation collects every required and numeric field issue', async (
   assert.deepEqual(Object.keys(result.fieldIssues), ['prompt', 'steps'])
   assert.equal(result.summaries.length, 2)
 })
+
+test('an uploaded file name kept as latin1 mojibake is read back; any other name stays as it is', async () => {
+  const { readableUploadName } = await import('../src/lib/api-workflow-input-assets')
+  const korean = '오디오 로드-audio.mp3'
+  assert.equal(readableUploadName(Buffer.from(korean, 'utf8').toString('latin1')), korean)
+  assert.equal(readableUploadName(korean), korean)
+  assert.equal(readableUploadName('café.mp3'), 'café.mp3')
+  assert.equal(readableUploadName('plain.mp3'), 'plain.mp3')
+})

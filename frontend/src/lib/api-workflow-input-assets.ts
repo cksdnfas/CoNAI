@@ -12,6 +12,17 @@ export type WorkflowInputAssetRef = {
   bytes: number
 }
 
+/**
+ * The name to show for an uploaded file. Uploads from before file names were read as UTF-8 came back with Korean
+ * names as latin1 mojibake ("ì\u0098¤"); such a name is read back, any other name is returned as it is.
+ */
+export function readableUploadName(name: string): string {
+  const codes = Array.from(name, (char) => char.codePointAt(0) ?? 0)
+  // Only single-byte characters with at least one high byte can be UTF-8 that was read as latin1.
+  if (codes.some((code) => code > 0xff) || !codes.some((code) => code >= 0x80)) return name
+  try { return new TextDecoder('utf-8', { fatal: true }).decode(Uint8Array.from(codes)) } catch { return name }
+}
+
 /** Upload one Director reference into CoNAI's persistent workflow input store. */
 export async function uploadWorkflowInputAsset(file: File) {
   const formData = new FormData()

@@ -9,7 +9,7 @@ import { IMAGE_GENERATION_TARGET_GROUP_KEY, useGenerationTargetGroupPath } from 
 import { useQuery } from '@tanstack/react-query'
 import type { WorkflowMarkedField } from '@/lib/api-image-generation-types'
 import { comfyRefModLibraryQueryKey, getComfyRefModLibrary } from '@/lib/api-image-generation-workflows'
-import { uploadWorkflowInputAsset, deleteWorkflowInputAsset } from '@/lib/api-workflow-input-assets'
+import { uploadWorkflowInputAsset, deleteWorkflowInputAsset, readableUploadName } from '@/lib/api-workflow-input-assets'
 import { getImageDraftRevision, type WorkflowFieldDraftValue } from '../image-generation-shared'
 import { applyComfyChatNode, comfyNodeChatData, COMFY_NODE_PATCH_SCHEMA } from './comfy-chat-node'
 import { normalizeMiniMaxH3DirectorNodeValue, getMiniMaxH3DirectorAssets, isMiniMaxH3DirectorInputLink } from './minimax-h3-director-dasiwa-utils'
@@ -29,7 +29,7 @@ type Options = { enabled?: boolean; workflows?: Array<{ id: number; name: string
   refModExportOnly?: boolean }
 const SEED_JSON_PATH = /\.inputs\.(seed|noise_seed)$/
 const protectedField = (field: WorkflowMarkedField) => isPrivateChatPageKey(`${field.id}.${field.label}.${field.jsonPath}`)
-function mediaName(value: WorkflowFieldDraftValue | undefined) { return value && typeof value === 'object' && !Array.isArray(value) && 'fileName' in value ? String(value.fileName) : '' }
+function mediaName(value: WorkflowFieldDraftValue | undefined) { return value && typeof value === 'object' && !Array.isArray(value) && 'fileName' in value ? readableUploadName(String(value.fileName)) : '' }
 function nodeRunSummary(value: ChatPageData): ChatPageData {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
   const prompt = value.prompt && typeof value.prompt === 'object' && !Array.isArray(value.prompt)

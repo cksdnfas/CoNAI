@@ -25,6 +25,8 @@ const ALLOWED_MEDIA_EXTENSIONS = new Set([
 ]);
 
 const uploadWorkflowInputAsset = multer({
+  // Browsers send multipart file names as UTF-8; multer's latin1 default turns Korean names into mojibake.
+  defParamCharset: 'utf8',
   storage: multer.diskStorage({
     destination: (_req, _file, callback) => {
       fs.mkdirSync(runtimePaths.tempDir, { recursive: true });

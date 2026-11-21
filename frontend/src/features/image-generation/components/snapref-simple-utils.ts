@@ -6,7 +6,7 @@ import {
   snapRefSimpleReferenceKey,
   snapRefSimpleStrengthKey,
 } from '@conai/shared'
-import { buildWorkflowInputAssetUrl, type WorkflowInputAssetRef } from '@/lib/api-workflow-input-assets'
+import { buildWorkflowInputAssetUrl, readableUploadName, type WorkflowInputAssetRef } from '@/lib/api-workflow-input-assets'
 import { isWorkflowInputAssetRef } from './minimax-h3-director-dasiwa-utils'
 
 /** Authoring-graph input key of the whole-node SnapRef field. */
@@ -72,7 +72,7 @@ export function restoreSnapRefSimpleHistoryValue(value: Record<string, unknown>,
 
 /** Display name and preview URL of one picture value; ComfyUI input files have no CoNAI preview. */
 export function describeSnapRefSimplePicture(picture: unknown): { name: string; previewUrl?: string } {
-  if (isWorkflowInputAssetRef(picture)) return { name: picture.fileName, previewUrl: buildWorkflowInputAssetUrl(picture) }
+  if (isWorkflowInputAssetRef(picture)) return { name: readableUploadName(picture.fileName), previewUrl: buildWorkflowInputAssetUrl(picture) }
   if (typeof picture === 'string') return { name: /^data:/i.test(picture) ? 'image' : isSnapRefSimplePictureSet(picture) ? picture : '' }
   if (isRecord(picture)) {
     const name = picture.fileName ?? picture.composite_hash

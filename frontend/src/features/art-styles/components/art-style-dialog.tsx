@@ -22,7 +22,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { useI18n } from '@/i18n'
 import { artStyleBadgesQueryKey, artStyleImageUrl, artStyleThumbnailUrl, listArtStyleBadges } from '@/lib/api-art-styles'
 import { storedFileThumbnailUrl, storedFileViewUrl } from '@/lib/api-files'
-import { buildWorkflowInputAssetUrl } from '@/lib/api-workflow-input-assets'
+import { buildWorkflowInputAssetUrl, readableUploadName } from '@/lib/api-workflow-input-assets'
 import { copyTextToClipboard } from '@/lib/clipboard'
 import { getErrorMessage } from '@/lib/error-message'
 import { cn } from '@/lib/utils'
@@ -100,7 +100,7 @@ function ArtStyleBody({ library }: { library: ArtStyleLibrary }) {
   const imageSource = (key: string): GalleryImage | null => {
     const image = byKey.get(key)
     if (!image || !base) return null
-    if (isStagedArtStyleImage(image)) { const url = buildWorkflowInputAssetUrl(image); return { thumbnailUrl: url, fullUrl: url, name: image.fileName, mimeType: image.mimeType } }
+    if (isStagedArtStyleImage(image)) { const url = buildWorkflowInputAssetUrl(image); return { thumbnailUrl: url, fullUrl: url, name: readableUploadName(image.fileName), mimeType: image.mimeType } }
     if ('composite_hash' in image) return { libraryHash: image.composite_hash }
     if ('file_id' in image) return { thumbnailUrl: storedFileThumbnailUrl(image.file_id), fullUrl: storedFileViewUrl(image.file_id), name: '' }
     const stored = held.get(image.id)

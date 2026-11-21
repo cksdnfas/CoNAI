@@ -400,6 +400,12 @@ test('permissions: independent pages, features, migration, grants, scopes and ro
     }
     assert.equal(await status('/api/workflow-input-assets/bad', accountId), 403, 'permission checked before asset resolution')
     assert.equal(await status('/api/workflow-input-assets', accountId, 'POST'), 400, 'upload still uses generation.execute')
+    // A Korean file name comes back as it was sent (multer's latin1 default would turn it into mojibake).
+    const named = new FormData()
+    named.append('file', new Blob([new Uint8Array(fixtures[0].bytes)], { type: 'image/png' }), '오디오 로드-audio.png')
+    const uploaded = await fetch(origin + '/api/workflow-input-assets', { method: 'POST', headers: { 'x-test-account': String(accountId) }, body: named })
+    assert.equal(uploaded.status, 201)
+    assert.equal(((await uploaded.json()) as { data: { fileName: string } }).data.fileName, '오디오 로드-audio.png')
     assert.equal(await status('/api/workflow-input-assets/bad', accountId, 'DELETE'), 200, 'delete still uses generation.execute')
     AuthPermissionGroup.updateCustomGroup(group.id, { name: group.name, permissionKeys: ['images.view'] })
     for (const asset of assets) {
