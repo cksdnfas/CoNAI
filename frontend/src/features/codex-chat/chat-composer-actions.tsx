@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { createPortal } from 'react-dom'
-import { Flag, Monitor, Paperclip, Pin, Plus, Sparkles, Wrench, type LucideIcon } from 'lucide-react'
+import { Clapperboard, Flag, Monitor, Paperclip, Pin, Plus, Sparkles, Wrench, type LucideIcon } from 'lucide-react'
 import type { ChatToolDirectiveSnapshot } from '@conai/shared'
 import { IconButton } from '@/components/ui/icon-button'
 import { ListRow } from '@/components/ui/list-row'
@@ -22,9 +22,9 @@ import type { ChatToolSelection, CodexChatApi } from './codex-chat-context'
  * a pin that keeps it in the row), and whatever is switched on shows in the row on its own. With one it shows alone.
  */
 
-type ItemId = 'attach' | 'page' | 'flags' | 'suggest' | 'tools'
-const ITEM_IDS: readonly ItemId[] = ['attach', 'page', 'flags', 'suggest', 'tools']
-const ITEM_ICON: Record<ItemId, LucideIcon> = { attach: Paperclip, page: Monitor, flags: Flag, suggest: Sparkles, tools: Wrench }
+type ItemId = 'attach' | 'page' | 'flags' | 'suggest' | 'tools' | 'narration'
+const ITEM_IDS: readonly ItemId[] = ['attach', 'page', 'flags', 'suggest', 'tools', 'narration']
+const ITEM_ICON: Record<ItemId, LucideIcon> = { attach: Paperclip, page: Monitor, flags: Flag, suggest: Sparkles, tools: Wrench, narration: Clapperboard }
 
 const PINS_STORAGE_PREFIX = 'conai.chat.composer-pins.'
 const NO_SELECTION: ChatToolSelection = { pick: null, keep: false }
@@ -61,7 +61,7 @@ function useComposerPins() {
 /** A tray the composer hosts for one of its items; it renders against whichever key (or the + key) it hangs from. */
 type ItemTray = (anchorRef: RefObject<HTMLButtonElement | null>) => ReactNode
 
-export function ChatComposerActions({ chat, selectionKey, toolsTarget, trayHost, composerRef, attachDisabled, allowPrivateUploads, pageAvailable, pageDisabled, toolsDisabled, flags, suggest }: {
+export function ChatComposerActions({ chat, selectionKey, toolsTarget, trayHost, composerRef, attachDisabled, allowPrivateUploads, pageAvailable, pageDisabled, toolsDisabled, flags, suggest, narration }: {
   chat: CodexChatApi
   /** The chat (or PENDING_DRAFT_KEY) whose picked tool this composer holds. */
   selectionKey: number | null
@@ -79,6 +79,8 @@ export function ChatComposerActions({ chat, selectionKey, toolsTarget, trayHost,
   toolsDisabled: boolean
   flags: { available: boolean; count: number; open: boolean; disabled: boolean; setOpen: (open: boolean) => void; buttonRef: RefObject<HTMLButtonElement | null>; tray: ItemTray }
   suggest: { available: boolean; disabled: boolean; state: ReplySuggestions; buttonRef: RefObject<HTMLButtonElement | null>; tray: ItemTray }
+  /** Marks the caret's line as narration (`$`) or clears it; no tray. Offered only where sent `$` lines are read as narration. */
+  narration: { available: boolean; disabled: boolean; onPress: () => void }
 }) {
   const { t } = useI18n()
   const page = useChatPage()
@@ -94,11 +96,12 @@ export function ChatComposerActions({ chat, selectionKey, toolsTarget, trayHost,
   const stackId = useId()
 
   const selection = selectionKey === null ? NO_SELECTION : chat.toolSelections[selectionKey] ?? NO_SELECTION
-  const offered: Record<ItemId, boolean> = { attach: attach.available, page: pageAvailable, flags: flags.available, suggest: suggest.available, tools: selectionKey !== null && toolsOffer.available }
+  const offered: Record<ItemId, boolean> = { attach: attach.available, page: pageAvailable, flags: flags.available, suggest: suggest.available, tools: selectionKey !== null && toolsOffer.available, narration: narration.available }
   const available = ITEM_IDS.filter((id) => offered[id])
-  const collapsed = available.length >= 2
+  // The narration key alone never folds a lone key behind +: it joins the row beside it.
+  const collapsed = available.filter((id) => id !== 'narration').length >= 2
   // Anything switched on stays in the row; the tools item shows as the chip of its pick instead.
-  const on: Record<ItemId, boolean> = { attach: false, page: page?.enabled === true, flags: flags.count > 0, suggest: false, tools: selection.pick !== null }
+  const on: Record<ItemId, boolean> = { attach: false, page: page?.enabled === true, flags: flags.count > 0, suggest: false, tools: selection.pick !== null, narration: false }
   const inRow = (id: ItemId) => !collapsed || pins.includes(id) || (id !== 'tools' && on[id])
   const anchorFor = (id: ItemId, keyRef: RefObject<HTMLButtonElement | null>) => (inRow(id) ? keyRef : plusRef)
 
@@ -131,6 +134,7 @@ export function ChatComposerActions({ chat, selectionKey, toolsTarget, trayHost,
     flags: t({ ko: '플래그', en: 'Flags' }),
     suggest: t({ ko: '추천 답변', en: 'Suggestions' }),
     tools: t({ ko: '도구', en: 'Tools' }),
+    narration: t({ ko: '나레이션', en: 'Narration' }),
   }
   const state: Record<ItemId, string> = {
     attach: '',
@@ -138,6 +142,7 @@ export function ChatComposerActions({ chat, selectionKey, toolsTarget, trayHost,
     flags: flags.count > 0 ? t({ ko: '{count}개 켜짐', en: '{count} on' }, { count: flags.count }) : '',
     suggest: '',
     tools: selection.pick === null ? '' : chatToolPickLabel(selection.pick, t),
+    narration: '',
   }
   const disabled: Record<ItemId, boolean> = {
     attach: attachDisabled || chat.attachmentsUploading,
@@ -145,8 +150,14 @@ export function ChatComposerActions({ chat, selectionKey, toolsTarget, trayHost,
     flags: flags.disabled,
     suggest: suggest.disabled,
     tools: toolsDisabled,
+    narration: narration.disabled,
   }
 
+  // The draft changes at once and the caret goes back to it, so nothing stays open.
+  const pressNarration = () => {
+    closeTrays()
+    narration.onPress()
+  }
   const openTool = (id: 'flags' | 'suggest' | 'tools') => {
     closeTrays()
     if (id === 'flags') flags.setOpen(true)
@@ -159,6 +170,7 @@ export function ChatComposerActions({ chat, selectionKey, toolsTarget, trayHost,
       openTool(id)
       anchorFor(id, id === 'flags' ? flags.buttonRef : suggest.buttonRef).current?.focus()
     } else if (id === 'tools') openTool('tools')
+    else if (id === 'narration') pressNarration()
   }
 
   const renderKey = (id: ItemId) => {
@@ -169,6 +181,7 @@ export function ChatComposerActions({ chat, selectionKey, toolsTarget, trayHost,
       case 'flags': return <ChatFlagButton key={id} buttonRef={flags.buttonRef} count={flags.count} open={flags.open} disabled={disabled.flags} onToggle={() => { const next = !flags.open; closeTrays(); flags.setOpen(next) }} />
       case 'suggest': return <ChatSuggestButton key={id} buttonRef={suggest.buttonRef} open={suggest.state.open} loading={suggest.state.loading} disabled={disabled.suggest} onToggle={() => { const wasOpen = suggest.state.open; closeTrays(); if (!wasOpen) suggest.state.toggle() }} />
       case 'tools': return <ChatToolsButton key={id} buttonRef={toolsKeyRef} open={toolsOpen} disabled={disabled.tools} onToggle={() => { const next = !toolsOpen; closeTrays(); setToolsOpen(next) }} />
+      case 'narration': return <IconButton key={id} variant="ghost" size="icon-sm" disabled={disabled.narration} onClick={pressNarration} label={label.narration}><Clapperboard /></IconButton>
     }
   }
 

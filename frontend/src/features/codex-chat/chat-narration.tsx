@@ -19,6 +19,58 @@ export function caretOnNarration(text: string, caret: number) {
   return isNarrationLine(text.slice(0, caret).split('\n').pop() ?? '')
 }
 
+const NARRATION_MARK = '$ '
+
+/** How much of a narration line is its mark: `$ `, or `$` alone where the rest would open with a mark again. */
+function markLength(line: string) {
+  return line[1] === ' ' && line[2] !== '$' ? 2 : 1
+}
+
+/**
+ * The composer's narration key on the draft, with the selection after it. On a blank line the caret's line becomes
+ * `$ `; on a line with text a narration line opens at the caret (the line's own start marks the line itself); a
+ * selection marks each line with text; a narration line (or a selection of them alone) loses its mark instead.
+ */
+export function toggleNarrationMark(text: string, selectionStart: number, selectionEnd = selectionStart): { text: string; start: number; end: number } {
+  const from = Math.max(0, Math.min(selectionStart, selectionEnd, text.length))
+  const to = Math.max(from, Math.min(Math.max(selectionStart, selectionEnd), text.length))
+  const lineStart = text.lastIndexOf('\n', from - 1) + 1
+  // A selection that ends where a line starts leaves that line out.
+  const last = to > from && text[to - 1] === '\n' ? to - 1 : to
+  const lineEnd = text.indexOf('\n', last) < 0 ? text.length : text.indexOf('\n', last)
+  const lines = text.slice(lineStart, lineEnd).split('\n')
+  const before = text.slice(0, lineStart)
+  const after = text.slice(lineEnd)
+  // An escaped `$$` line keeps its literal `$` as the narration's first character.
+  const marked = (line: string) => NARRATION_MARK + (line.startsWith('$$') ? line.slice(1) : line)
+  if (to === from || lines.every((line) => !line.trim())) {
+    const line = text.slice(lineStart, text.indexOf('\n', from) < 0 ? text.length : text.indexOf('\n', from))
+    const rest = text.slice(lineStart + line.length)
+    if (isNarrationLine(line)) {
+      const caret = Math.max(lineStart, from - markLength(line))
+      return { text: before + line.slice(markLength(line)) + rest, start: caret, end: caret }
+    }
+    if (!line.trim() || from === lineStart) {
+      const caret = lineStart + NARRATION_MARK.length
+      return { text: before + (line.trim() ? marked(line) : NARRATION_MARK) + rest, start: caret, end: caret }
+    }
+    const caret = from + 1 + NARRATION_MARK.length
+    return { text: `${text.slice(0, from)}\n${NARRATION_MARK}${text.slice(from)}`, start: caret, end: caret }
+  }
+  const unmark = lines.filter((line) => line.trim()).every(isNarrationLine)
+  // Every change sits at a line's start: a position inside a removed mark moves to that start, later ones shift.
+  const edits: Array<{ at: number; removed: number; added: number }> = []
+  let at = lineStart
+  const next = lines.map((line) => {
+    const changed = !line.trim() ? line : unmark ? line.slice(markLength(line)) : isNarrationLine(line) ? line : marked(line)
+    if (changed !== line) edits.push(unmark ? { at, removed: markLength(line), added: 0 } : { at, removed: line.startsWith('$$') ? 1 : 0, added: NARRATION_MARK.length })
+    at += line.length + 1
+    return changed
+  })
+  const map = (position: number) => edits.reduce((moved, edit) => position <= edit.at ? moved : moved + (position < edit.at + edit.removed ? edit.at - position : edit.added - edit.removed), position)
+  return { text: before + next.join('\n') + after, start: map(from), end: map(to) }
+}
+
 /**
  * The composer's text drawn behind its textarea, which then shows only the caret and selection: narration lines in the
  * narration colour on a faint band, their `$` dimmed. It follows the textarea's width and scroll so the lines match.

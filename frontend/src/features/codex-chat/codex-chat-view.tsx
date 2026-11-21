@@ -992,7 +992,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
       ready={activeThreadId !== null || (pendingChat?.greeting != null && !isStartingChat)} profileBlocked={profileMissing || codexUnavailable || Boolean(connectionDown)}
       hasChoice={Boolean(choiceDraft?.labels.length)} suggestEnabled={Boolean(profile?.suggestEnabled)} lastMessageId={messages.at(-1)?.id ?? null}
       onCommand={runCommand} onSend={handleSend}>
-    {({ draft, setDraft, caret, setCaret, setCommandIndex, setMentionIndex, flagTrayOpen, setFlagTrayOpen, flagButtonRef, closeFlagTray, suggestButtonRef, suggestions, pickSuggestion, narrating, isCommand, sendBlocked, canSend, commandListId, matchingCommands, selectedCommand, showCommands, pickCommand, mentionListId, mentionMatches, selectedMention, showMentions, pickMention, handleSend, handleComposerKeyDown }) => {
+    {({ draft, setDraft, caret, setCaret, setCommandIndex, setMentionIndex, flagTrayOpen, setFlagTrayOpen, flagButtonRef, closeFlagTray, suggestButtonRef, suggestions, pickSuggestion, narrating, isCommand, sendBlocked, canSend, commandListId, matchingCommands, selectedCommand, showCommands, pickCommand, mentionListId, mentionMatches, selectedMention, showMentions, pickMention, markNarration, handleSend, handleComposerKeyDown }) => {
       const draftMentioned = isGroup ? parseMentions(draft, draftMembers) : []
       const draftRecipients = draftMentioned.length ? draftMentioned : draftTarget?.role === 'user' ? draftTarget.routing?.recipients ?? [] : draftQuote?.speakerProfileId ? [draftQuote.speakerProfileId] : []
       const draftRecipientLabel = isGroup ? draftRecipients.map((id) => typeof id === 'number' ? profilesById.get(id)?.name : null).filter(Boolean).join(', ') || profile?.name : profile?.name
@@ -1095,6 +1095,8 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
               buttonRef: suggestButtonRef,
               tray: (buttonRef) => <ChatSuggestTray suggestions={suggestions} buttonRef={buttonRef} onPick={pickSuggestion} />,
             }}
+            // Every room this composer sends to (1:1 on any engine, group rooms, a new chat) reads `$` lines as narration.
+            narration={{ available: true, disabled: isCommand || draftKey === null, onPress: markNarration }}
           />
         </div>
         {(isStreaming || serverRunning) && !(isGroup && canSend) ? (

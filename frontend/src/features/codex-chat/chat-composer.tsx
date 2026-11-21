@@ -4,7 +4,7 @@ import { useIsCoarsePointer } from '@/lib/use-is-coarse-pointer'
 import { CHAT_COMMANDS, type ChatCommand } from './chat-commands'
 import { mentionOptions, type MentionOption } from './chat-group'
 import { mentionQueryAt } from './chat-mentions'
-import { draftHasNarration } from './chat-narration'
+import { draftHasNarration, toggleNarrationMark } from './chat-narration'
 import { useReplySuggestions } from './chat-suggestions'
 import { useCodexChatDrafts, type CodexChatApi } from './codex-chat-context'
 
@@ -92,6 +92,19 @@ function useComposer({ chat, draftKey, activeThreadId, composerRef, isTranscript
       composerRef.current?.setSelectionRange(position, position)
     })
   }
+  // The narration key edits the draft where the caret (or the selection) is, as typing there would.
+  const markNarration = () => {
+    const node = composerRef.current
+    const next = toggleNarrationMark(draft, node?.selectionStart ?? caret, node?.selectionEnd ?? caret)
+    setDraft(next.text)
+    setCaret(next.start)
+    setCommandIndex(0)
+    setMentionIndex(0)
+    window.requestAnimationFrame(() => {
+      composerRef.current?.focus()
+      composerRef.current?.setSelectionRange(next.start, next.end)
+    })
+  }
   const runCommand = (text: string) => {
     setDismissedCommand(null)
     setCommandIndex(0)
@@ -140,5 +153,5 @@ function useComposer({ chat, draftKey, activeThreadId, composerRef, isTranscript
       handleSend()
     }
   }
-  return { draft, setDraft, caret, setCaret, setCommandIndex, setMentionIndex, flagTrayOpen, setFlagTrayOpen, flagButtonRef, closeFlagTray, suggestButtonRef, suggestions, pickSuggestion, narrating, isCommand, sendBlocked, canSend, commandListId, matchingCommands, selectedCommand, showCommands, pickCommand, mentionListId, mentionMatches, selectedMention, showMentions, pickMention, handleSend, handleComposerKeyDown }
+  return { draft, setDraft, caret, setCaret, setCommandIndex, setMentionIndex, flagTrayOpen, setFlagTrayOpen, flagButtonRef, closeFlagTray, suggestButtonRef, suggestions, pickSuggestion, narrating, isCommand, sendBlocked, canSend, commandListId, matchingCommands, selectedCommand, showCommands, pickCommand, mentionListId, mentionMatches, selectedMention, showMentions, pickMention, markNarration, handleSend, handleComposerKeyDown }
 }
