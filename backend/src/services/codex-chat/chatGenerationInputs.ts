@@ -3,6 +3,7 @@ import { supportsNaiCharacterPrompts } from '@conai/shared'
 import type { MarkedField, WorkflowRecord } from '../../types/workflow'
 import { mcpDropdownChoices, parseMcpMarkedFields, requireDropdownChoice } from '../comfyui/comfyWorkflowInputs'
 import { comfyAssetFields, resolvePresetWorkflow, type ChatComfyPresetConfig, type ChatGenerationPreset } from './chatGenerationPresets'
+import { isHiddenWorkflowField } from '../workflowHiddenFieldPolicy'
 
 /**
  * What a generation preset asks to be filled: the `generate_image` tool's input in `inline` presets, and the JSON the
@@ -13,6 +14,9 @@ import { comfyAssetFields, resolvePresetWorkflow, type ChatComfyPresetConfig, ty
 export const SCENE_DESCRIPTION = 'What this moment shows, as comma-separated Danbooru-style tags: subject count, pose, action, expression, clothing, setting, lighting, camera angle. Do not add quality, artist or style tags and no negative tags; the preset already holds them.'
 
 const SHARED_SCENE_DESCRIPTION = 'Tags shared by the whole picture, comma-separated Danbooru-style: subject count (2girls, 1boy 1girl), setting, lighting, composition, camera angle. When the picture shows specific characters, put each one\'s looks, clothing, expression, pose and action in its own characters entry, not here. Do not add quality, artist or style tags and no negative tags; the preset already holds them.'
+
+/** Codex reads sentences, so its scene is described in words rather than tags. */
+export const CODEX_SCENE_DESCRIPTION = 'What this moment shows, in plain English sentences: who is in the picture and how many, their looks, clothing, pose, action and expression, the setting, lighting, mood and camera angle. Do not add style, medium or quality words and nothing to avoid; the preset already holds them.'
 
 /** A field description sits closer to the value than the preset's guide, so it defers to the guide by itself. */
 const GUIDE_FIRST_NOTE = 'Where the preset\'s prompt guide says otherwise, follow the guide.'
@@ -104,20 +108,29 @@ function comfyPresetFields(preset: ChatGenerationPreset): { problem: string } | 
   } catch {
     return { problem: `워크플로 "${workflow.name}"의 입력 필드 설정을 읽을 수 없어. 워크플로를 다시 저장해줘.` }
   }
-  const stale = marked.find((field) => !config.exposedFieldIds.includes(field.id) && config.fixedInputs[field.id] !== undefined && !acceptsDropdownChoice(field, config.fixedInputs[field.id]))
+  const stale = marked.find((field) => !isHiddenWorkflowField(field) && !config.exposedFieldIds.includes(field.id) && config.fixedInputs[field.id] !== undefined && !acceptsDropdownChoice(field, config.fixedInputs[field.id]))
   if (stale) return { problem: `프리셋의 고정 값 ${JSON.stringify(config.fixedInputs[stale.id])}이(가) "${stale.label || stale.id}" 드롭다운에 없어. 프리셋 편집기에서 다시 골라줘.` }
   return { config, workflow, marked }
 }
 
 /** Why a preset's tool cannot run now (null: it can); what `presetInputShape` reports, without building the schema. */
 export function presetProblem(preset: ChatGenerationPreset): string | null {
-  if (preset.kind === 'nai') return null
+  if (preset.kind !== 'comfyui') return null
   const fields = comfyPresetFields(preset)
   return 'problem' in fields ? fields.problem : null
 }
 
 /** The fields a preset's caller fills, and the sentence that says which; a ComfyUI preset that cannot run (workflow gone or unreadable, a fixed value outside its dropdown) has a `problem`. */
 export function presetInputShape(preset: ChatGenerationPreset, options: { self?: boolean; canSearch?: boolean } = {}): PresetInputShape {
+  if (preset.kind === 'codex') {
+    const sizes = preset.codex?.sizes ?? []
+    const labels = sizes.map((size) => size.label)
+    const shape: Record<string, z.ZodTypeAny> = { prompt: z.string().min(1).max(4000).describe(isGuided(preset) ? `${CODEX_SCENE_DESCRIPTION} ${GUIDE_FIRST_NOTE}` : CODEX_SCENE_DESCRIPTION) }
+    if (labels.length > 1) {
+      shape.size = z.enum(labels as [string, ...string[]]).optional().describe(`Picture size: ${sizes.map((size) => `${size.label} (${size.width}×${size.height})`).join(', ')}. Default ${labels[0]}.`)
+    }
+    return { shape, fill: labels.length > 1 ? 'Fill prompt and, when the composition calls for it, size.' : 'Fill only prompt.', workflowName: null, problem: null, sceneField: 'prompt' }
+  }
   if (preset.kind === 'nai') {
     const sizes = preset.nai?.sizes ?? []
     const labels = sizes.map((size) => size.label)
@@ -134,7 +147,7 @@ export function presetInputShape(preset: ChatGenerationPreset, options: { self?:
   const fields = comfyPresetFields(preset)
   if ('problem' in fields) return { shape: {}, fill: '', workflowName: null, problem: fields.problem, sceneField: null }
   const { config, workflow, marked } = fields
-  const exposed = marked.filter((field) => config.exposedFieldIds.includes(field.id) && field.id !== config.referenceField)
+  const exposed = marked.filter((field) => config.exposedFieldIds.includes(field.id) && field.id !== config.referenceField && !isHiddenWorkflowField(field))
   const shape: Record<string, z.ZodTypeAny> = {}
   const guided = isGuided(preset)
   for (const field of exposed) shape[field.id] = fieldSchema(field, config.fixedInputs[field.id] ?? field.default_value, options.canSearch === true, guided)

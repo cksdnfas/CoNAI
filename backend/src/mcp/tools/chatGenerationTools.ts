@@ -1,6 +1,6 @@
 import { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
-import { ChatGenerationPresetStore, type ChatGenerationPreset } from '../../services/codex-chat/chatGenerationPresets';
+import { ChatGenerationPresetStore, presetUsesReference, type ChatGenerationPreset } from '../../services/codex-chat/chatGenerationPresets';
 import { presetInputShape } from '../../services/codex-chat/chatGenerationInputs';
 import { presetGuideText, writeEarlyPresetJob } from '../../services/codex-chat/chatGenerationPrompting';
 import { ChatDeferredGenerationStore } from '../../services/codex-chat/chatDeferredGenerations';
@@ -53,10 +53,6 @@ function withGuide(description: string, preset: ChatGenerationPreset) {
   return guide ? `${description}\n\nPrompt guide for this preset. Follow it when you fill the fields; where it differs from a field description or the general generation rules, the guide wins:\n${guide}` : description;
 }
 
-function usesReference(preset: ChatGenerationPreset) {
-  return preset.kind === 'nai' ? preset.nai?.characterReference !== 'none' : Boolean(preset.comfyui?.referenceField);
-}
-
 function generationProfile(context: McpRequestContext, toolName: string, args: Record<string, unknown>, reference: boolean) {
   requireMcpToolAccess(context, toolName, args);
   if (!reference) return null;
@@ -72,7 +68,7 @@ function registerInlinePreset(server: McpServer, context: McpRequestContext, pre
     server.registerTool(toolName, { description: describe(preset, `Currently unavailable: ${problem}`), inputSchema: z.object({}) }, async () => errorResult(problem));
     return;
   }
-  const reference = usesReference(preset);
+  const reference = presetUsesReference(preset);
   const selfField = hasAppearance && sceneField && !(SELF_FIELD in shape) ? sceneField : null;
   const body = `${workflowName ? `${fill} Workflow "${workflowName}".` : fill}${selfField ? ` Also set ${SELF_FIELD}.` : ''}`;
   server.registerTool(
@@ -124,7 +120,7 @@ function registerEarlyPreset(server: McpServer, context: McpRequestContext, pres
     { description: describe(preset, 'Describe the moment in scene; the prompt is written from it and the conversation so far.'), inputSchema: z.object({ scene: z.string().trim().min(1).max(2000).describe('The moment to show, in plain words: who is in it, pose, action, expression, clothing, place, time and mood.') }) },
     async (args: Record<string, unknown>) => {
       try {
-        generationProfile(context, toolName, args, usesReference(preset));
+        generationProfile(context, toolName, args, presetUsesReference(preset));
         return textResult(await writeEarlyPresetJob(context, preset, toolName, String(args.scene ?? '').trim()));
       } catch (error) {
         return errorResult(`Generation job error: ${(error as Error).message}`);

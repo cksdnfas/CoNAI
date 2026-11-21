@@ -12,7 +12,7 @@ import { GroupPathService } from '../groupPathService'
 import { attachMainImagesDatabase } from '../../database/userSettingsBootstrap'
 import { EmoticonService, normalizeKeyword } from '../emoticonService'
 import { ChatProfileStore, type ChatProfileInput } from './chatProfiles'
-import { ChatGenerationPresetStore, comfyAssetFields, resolvePresetWorkflow, type ChatGenerationPreset } from './chatGenerationPresets'
+import { ChatGenerationPresetStore, comfyAssetFields, presetGenerationService, resolvePresetWorkflow, type ChatGenerationPreset } from './chatGenerationPresets'
 import { buildChatGenerationPresetJob, CHAT_NAI_PAYLOAD_MAX_BYTES } from './chatGenerationPayload'
 import { chatCharacterGroupPath, normalizeAvatarCrop, normalizeProfileAssetHash, isProfileAssetHidden } from './chatProfileAssets'
 import { activeMediaFile } from './chatCardAssets'
@@ -146,7 +146,7 @@ export function validateChatAssetBatchProposal(requester: McpRequester, profileI
   const input = parseInput(value)
   const preset = ChatGenerationPresetStore.find(input.presetId)
   if (!preset) throw new ChatAssetError('생성 프리셋을 찾을 수 없어.')
-  const profile = requireChatAssetGeneration(requester, profileId, preset.kind === 'nai' ? 'novelai' : 'comfyui')
+  const profile = requireChatAssetGeneration(requester, profileId, presetGenerationService(preset))
   const slots = recipes(input)
   requireLocalProfileAssets(profileId, slots.every((slot) => slot.kind === 'background'))
   if (chatAssetOwner(profileId).kind === 'setting' && slots.some((slot) => slot.kind === 'background')) throw new ChatAssetError('외형 설정에는 배경 슬롯을 넣을 수 없어.')
@@ -171,7 +171,7 @@ export async function createChatAssetBatch(requester: McpRequester, profileId: C
     }
     const preset = ChatGenerationPresetStore.find(input.presetId)
     if (!preset) throw new ChatAssetError('생성 프리셋을 찾을 수 없어.')
-    const profile = requireChatAssetGeneration(requester, profileId, preset.kind === 'nai' ? 'novelai' : 'comfyui')
+    const profile = requireChatAssetGeneration(requester, profileId, presetGenerationService(preset))
     const slots = recipes(input)
     requireLocalProfileAssets(profileId, slots.every((slot) => slot.kind === 'background'))
     if (owner.kind === 'setting' && slots.some((slot) => slot.kind === 'background')) throw new ChatAssetError('외형 설정에는 배경 슬롯을 넣을 수 없어.')
@@ -206,7 +206,7 @@ async function submitSlot(requester: McpRequester, row: BatchRow, slot: SlotRow,
   const preset = useCurrentPreset ? ChatGenerationPresetStore.find(row.preset_id) : snapshot.preset
   if (!preset) throw new ChatAssetError('현재 생성 프리셋을 찾을 수 없어.')
   const owner = chatAssetRowOwner(row)
-  const profile = requireChatAssetGeneration(requester, owner, preset.kind === 'nai' ? 'novelai' : 'comfyui')
+  const profile = requireChatAssetGeneration(requester, owner, presetGenerationService(preset))
   requireLocalProfileAssets(owner, slotRows(row.id).every((entry) => entry.kind === 'background'))
   const fields = assetFields(preset, snapshot.promptField)
   // Only character slots draw from the reference: a new reference and a background start from the text alone.
@@ -215,8 +215,8 @@ async function submitSlot(requester: McpRequester, row: BatchRow, slot: SlotRow,
   const recipe = snapshot.slots.find((entry) => entry.slotKey === slot.slot_key)!
   if (fields.needsReference && drawsReference && !referenceHash) throw new ChatAssetError('기준 이미지를 먼저 골라줘.', 409)
   const prompt = [snapshot.appearance, recipe.prompt, slot.kind === 'expression' ? EXPRESSION_FRAMING : ''].map((part) => part.trim()).filter(Boolean).join(', ')
-  // NAI slots use only prompt and size, as before; unvalidated recipe inputs must not become NAI characters.
-  const args: Record<string, unknown> = { ...(preset.kind === 'nai' ? {} : recipe.inputs), prompt, size: recipe.size }
+  // NAI and Codex slots use only prompt and size, as before; unvalidated recipe inputs must not become NAI characters.
+  const args: Record<string, unknown> = { ...(preset.kind === 'comfyui' ? recipe.inputs : {}), prompt, size: recipe.size }
   const input = await buildChatGenerationPresetJob(preset, args, { ...profile, referenceHash }, { forceReference: true, omitReference: !referenceHash })
   // The slot prompt follows the field's fixed text, whether the field is exposed to the model or fixed.
   if (preset.comfyui && fields.promptField && 'inputs' in input && input.inputs) {

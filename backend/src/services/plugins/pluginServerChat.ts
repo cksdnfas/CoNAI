@@ -11,8 +11,8 @@ import { PluginError } from './pluginStore'
  * administrators (the /admin rule), and the current text of a guide skill section for any account, since every
  * user's assistant reads the guide a plugin page links when it generates.
  */
-function pluginPreset({ id, name, instruction, kind, nai, comfyui, prompting }: ChatGenerationPreset): PluginGenerationPreset {
-  return { id, name, instruction, kind, nai, comfyui: comfyui && { ...comfyui, promptField: comfyui.promptField ?? null }, prompting }
+function pluginPreset({ id, name, instruction, kind, nai, comfyui, codex, prompting }: ChatGenerationPreset): PluginGenerationPreset {
+  return { id, name, instruction, kind, nai, comfyui: comfyui && { ...comfyui, promptField: comfyui.promptField ?? null }, codex, prompting }
 }
 
 /** What the preset editor's guide picker offers of a skill: each section, and each group as `group/` titled as `skillGuide` titles it. */

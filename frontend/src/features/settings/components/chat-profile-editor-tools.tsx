@@ -9,7 +9,7 @@ import { IconButton } from '@/components/ui/icon-button'
 import { Tip } from '@/components/ui/tooltip'
 import { getChatScopeCopy } from '@/features/codex-chat/chat-scope-copy'
 import { useI18n } from '@/i18n'
-import { CHAT_GENERATION_PRESETS_QUERY_KEY, CHAT_SCOPES, CHAT_TOOL_PRESETS_QUERY_KEY, listChatGenerationPresets, listChatToolPresets, type ChatProfileDefaults, type ChatSkillSummary, type ChatToolPreset, type ChatToolPresetInput } from '@/lib/api-codex-chat'
+import { CHAT_GENERATION_PRESET_KIND_SHORT, CHAT_GENERATION_PRESETS_QUERY_KEY, CHAT_SCOPES, CHAT_TOOL_PRESETS_QUERY_KEY, listChatGenerationPresets, listChatToolPresets, type ChatProfileDefaults, type ChatSkillSummary, type ChatToolPreset, type ChatToolPresetInput } from '@/lib/api-codex-chat'
 import { CHAT_SKILL_LIMITS } from '@conai/shared'
 import { ChatSkillEditorModal } from './chat-skill-editor-modal'
 import { CollapsibleRow } from '@/components/ui/collapsible-row'
@@ -129,7 +129,7 @@ export function ChatProfileToolsPanel({ open, draft, patch, defaults, skills }: 
                         onClick={() => patch({ generationPresetIds: linked ? draft.generationPresetIds.filter((id) => id !== item.id) : [...draft.generationPresetIds, item.id] })}
                       >
                         {item.name}
-                        <span className="font-mono opacity-60">{item.kind === 'nai' ? 'NAI' : 'Comfy'}</span>
+                        <span className="font-mono opacity-60">{CHAT_GENERATION_PRESET_KIND_SHORT[item.kind]}</span>
                       </ToggleChip>
                     </Tip>
                   )

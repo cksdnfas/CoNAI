@@ -3,7 +3,7 @@ import { useConfirm } from '@/components/ui/confirm-dialog'
 import { createPortal } from 'react-dom'
 import { Fragment, useCallback, useMemo, useState, type ReactNode } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowUp, ArrowDown, LogIn, RefreshCw, X } from 'lucide-react'
+import { ArrowUp, ArrowDown, BookmarkPlus, LogIn, RefreshCw, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { FieldInfo } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
@@ -20,6 +20,7 @@ import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { useDebouncedPersist } from '@/lib/use-debounced-persist'
 import { getErrorMessage, type SelectedImageDraft } from '../image-generation-shared'
+import { CODEX_ASPECT_RATIO_OPTIONS, CODEX_RESOLUTION_OPTIONS, isSizedCodexAspectRatioOption, pickCodexAspectRatio, resolveCodexSize } from '../codex-size'
 import { confirmHistorySettingsOverwrite, getHistorySettingsLoadedMessage } from '../history-settings-mapping'
 import { ImageAttachmentPickerButton } from './image-attachment-picker'
 import { refreshGenerationQueueViews } from './generation-queue-actions'
@@ -27,7 +28,8 @@ import { Section } from '@/components/ui/section'
 import { NaiPromptSection } from './nai-generation-panel-sections'
 import { NaiSelectedImageCard } from './nai-selected-image-card'
 import { normalizeTextSegmentSpreadsheetText } from './text-segment-spreadsheet-input'
-import { GenerateActionBar, GenerateActionDock } from './generate-action-bar'
+import { GenerateActionBar, GenerateActionBarIconButton, GenerateActionDock } from './generate-action-bar'
+import { ChatGenerationPresetSaveModal } from '@/features/settings/components/chat-generation-preset-save-modal'
 import { GenerationToolbarStatus, usePortalTargetById } from './generation-toolbar-status'
 import { useGenerationImageSaveOptions } from './use-generation-image-save-options'
 import { useHistorySettingsLoad } from './use-history-settings-load'
@@ -74,21 +76,6 @@ export type CodexFormDraft = {
 const CODEX_COUNT_MIN = 1
 const CODEX_COUNT_MAX = 4
 const CODEX_FORM_DRAFT_STORAGE_KEY = 'conai:image-generation:codex-form-draft:v1'
-
-const CODEX_ASPECT_RATIO_OPTIONS = [
-  { value: 'random', label: 'Random' },
-  { value: '1:1', label: '1:1', width: 1, height: 1 },
-  { value: '4:3', label: '4:3', width: 4, height: 3 },
-  { value: '3:4', label: '3:4', width: 3, height: 4 },
-  { value: '16:9', label: '16:9', width: 16, height: 9 },
-  { value: '9:16', label: '9:16', width: 9, height: 16 },
-] as const
-
-const CODEX_RESOLUTION_OPTIONS = [
-  { value: '1024', label: '1024px' },
-  { value: '1536', label: '1536px' },
-  { value: '2048', label: '2048px' },
-] as const
 
 const DEFAULT_CODEX_FORM: CodexFormDraft = {
   model: '',
@@ -167,45 +154,6 @@ function clampCodexCount(value: string | number, fallback = CODEX_COUNT_MIN) {
   return Math.min(CODEX_COUNT_MAX, Math.max(CODEX_COUNT_MIN, integerValue))
 }
 
-function roundCodexDimension(value: number) {
-  return Math.max(64, Math.round(value / 64) * 64)
-}
-
-function isSizedCodexAspectRatioOption(
-  option: (typeof CODEX_ASPECT_RATIO_OPTIONS)[number],
-): option is Extract<(typeof CODEX_ASPECT_RATIO_OPTIONS)[number], { width: number; height: number }> {
-  return 'width' in option && 'height' in option
-}
-
-function pickCodexAspectRatio(aspectRatio: string) {
-  if (aspectRatio !== 'random') {
-    return aspectRatio
-  }
-
-  const candidateOptions = CODEX_ASPECT_RATIO_OPTIONS.filter(isSizedCodexAspectRatioOption)
-  if (candidateOptions.length === 0) {
-    return '1:1'
-  }
-
-  const randomIndex = Math.floor(Math.random() * candidateOptions.length)
-  return candidateOptions[randomIndex]?.value ?? '1:1'
-}
-
-function resolveCodexSize(aspectRatio: string, resolution: string) {
-  const aspect = CODEX_ASPECT_RATIO_OPTIONS
-    .filter(isSizedCodexAspectRatioOption)
-    .find((option) => option.value === aspectRatio)
-  const longEdge = Number(resolution)
-  if (!aspect || !Number.isFinite(longEdge) || longEdge <= 0) {
-    return undefined
-  }
-
-  const scale = longEdge / Math.max(aspect.width, aspect.height)
-  const width = roundCodexDimension(aspect.width * scale)
-  const height = roundCodexDimension(aspect.height * scale)
-  return `${width}x${height}`
-}
-
 /** Recover the aspect-ratio/resolution pair that produced a stored Codex `size` (e.g. "1024x768"). */
 function resolveCodexAspectRatioAndResolution(size: unknown) {
   if (typeof size !== 'string') {
@@ -256,6 +204,7 @@ export function CodexGenerationPanel({
   const { showSnackbar } = useSnackbar()
   const { t } = useI18n()
   const authStatusQuery = useAuthStatusQuery()
+  const canSaveChatPreset = authStatusQuery.data?.isAdmin === true
   const draftStorageOwner = resolveAccountDraftOwner(authStatusQuery.data)
   const [codexForm, setCodexForm] = useState<CodexFormDraft>(() => loadPersistedCodexFormDraft(draftStorageOwner))
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -311,6 +260,7 @@ export function CodexGenerationPanel({
   const canStartCodexLogin = isAdmin
     && codexStatusQuery.isSuccess && Boolean(codexStatus?.installed) && !codexStatus?.authenticated
   const [isCodexLoginOpen, setIsCodexLoginOpen] = useState(false)
+  const [isChatPresetModalOpen, setIsChatPresetModalOpen] = useState(false)
   const useInlineActionBar = splitPaneScroll
 
   const generateButtonLabel = isSubmitting
@@ -488,6 +438,42 @@ export function CodexGenerationPanel({
     onChange: (value: string) => handleFieldChange('count', value),
   }
 
+  // A random ratio offers every ratio to the chat model; otherwise the panel's one size is fixed.
+  const chatPresetSizes = (codexForm.aspectRatio === 'random' ? CODEX_ASPECT_RATIO_OPTIONS.filter(isSizedCodexAspectRatioOption).map((option) => option.value as string) : [codexForm.aspectRatio])
+    .flatMap((aspect) => {
+      const size = resolveCodexSize(aspect, codexForm.resolution)
+      if (!size) return []
+      const [width, height] = size.split('x').map(Number)
+      return [{ label: aspect, width, height }]
+    })
+  /** The form as a chat generation preset: the prompt becomes the fixed text before the scene the chat model writes. */
+  const buildChatPreset = async () => ({
+    kind: 'codex' as const,
+    nai: null,
+    comfyui: null,
+    codex: {
+      model: codexForm.model.trim(),
+      promptPrefix: normalizeTextSegmentSpreadsheetText(codexForm.prompt).trim(),
+      promptSuffix: '',
+      negativePrompt: normalizeTextSegmentSpreadsheetText(codexForm.negativePrompt).trim(),
+      sizes: chatPresetSizes,
+      characterReference: 'none' as const,
+    },
+  })
+  const chatPresetAction = canSaveChatPreset ? (
+    <GenerateActionBarIconButton label={t({ ko: '채팅 프리셋으로 저장', en: 'Save as chat preset' })} onClick={() => setIsChatPresetModalOpen(true)} disabled={isSubmitting}>
+      <BookmarkPlus />
+    </GenerateActionBarIconButton>
+  ) : null
+  const chatPresetModal = (
+    <ChatGenerationPresetSaveModal
+      open={isChatPresetModalOpen}
+      build={buildChatPreset}
+      summary={['Codex', codexForm.model.trim() || t({ ko: '기본 모델', en: 'Default model' }), chatPresetSizes.map((size) => size.label + ' ' + size.width + '×' + size.height).join(', ')].join(' · ')}
+      onClose={() => setIsChatPresetModalOpen(false)}
+    />
+  )
+
   const actionSection = (
     <GenerateActionBar
       variant="inline"
@@ -497,6 +483,7 @@ export function CodexGenerationPanel({
       isGenerating={isSubmitting}
       repeat={codexRepeat}
       onReset={() => void handleReset()}
+      secondaryActions={chatPresetAction}
       targetGroupStorageKey={IMAGE_GENERATION_TARGET_GROUP_KEY}
     />
   )
@@ -510,6 +497,7 @@ export function CodexGenerationPanel({
       isGenerating={isSubmitting}
       repeat={codexRepeat}
       onReset={() => void handleReset()}
+      secondaryActions={chatPresetAction}
       targetGroupStorageKey={IMAGE_GENERATION_TARGET_GROUP_KEY}
     />
   )
@@ -732,6 +720,7 @@ export function CodexGenerationPanel({
           <GenerationBlockLayout surface="codex" blocks={{ ...editorBlocks, action: actionSection, result: blockLayout.result }} />
         </div>
         <CodexDeviceLoginDialog open={isCodexLoginOpen} onClose={handleCloseCodexLogin} onSucceeded={handleRefreshStatus} />
+      {chatPresetModal}
       </>
     )
   }
@@ -762,6 +751,7 @@ export function CodexGenerationPanel({
       </div>
 
       <CodexDeviceLoginDialog open={isCodexLoginOpen} onClose={handleCloseCodexLogin} onSucceeded={handleRefreshStatus} />
+      {chatPresetModal}
     </>
   )
 }

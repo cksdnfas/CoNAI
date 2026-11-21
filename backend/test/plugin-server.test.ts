@@ -146,7 +146,7 @@ test('trusted plugins run a server module with their own data, hooks and tools',
     const ask = (body: object, requester: typeof admin | typeof guest) => runtime.requestPluginServer('chat-reads', body, requester, {}) as Promise<any>
     assert.deepEqual(await ask({ op: 'get', id: preset.id }, admin), {
       id: preset.id, name: 'Comfy portrait', instruction: 'portraits', kind: 'comfyui', nai: null,
-      comfyui: { workflowId: 7, serverId: null, serverTag: null, fixedInputs: { steps: 20 }, exposedFieldIds: ['prompt'], referenceField: null, promptField: null },
+      comfyui: { workflowId: 7, serverId: null, serverTag: null, fixedInputs: { steps: 20 }, exposedFieldIds: ['prompt'], referenceField: null, promptField: null }, codex: null,
       prompting: { timing: 'after', guide: '', guideSkill: { skillId: skill.id, path: 'guides/', skillName: 'reads guide', title: 'guides/ (1)', updatedDate: preset.prompting.guideSkill!.updatedDate }, previousImages: 0 },
     })
     assert.equal((await ask({ op: 'list' }, admin)).length, 1)

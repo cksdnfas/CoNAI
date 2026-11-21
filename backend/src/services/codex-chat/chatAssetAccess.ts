@@ -29,6 +29,6 @@ export function requireChatAssetGeneration(requester: McpRequester, owner: ChatA
   requireRequesterPermission(requester, 'generation.execute')
   requireRequesterPermission(requester, 'images.edit')
   if (service === 'comfyui') requireRequesterPermission(requester, 'workflows.view')
-  if (service !== 'comfyui' && service !== 'novelai') throw new ChatAssetError('자산 생성은 NAI 또는 ComfyUI 프리셋을 골라줘.')
+  if (service !== 'comfyui' && service !== 'novelai' && service !== 'codex') throw new ChatAssetError('자산 생성은 NAI, ComfyUI 또는 Codex 프리셋을 골라줘.')
   return profile
 }

@@ -29,6 +29,7 @@ import {
   listChatBlocks,
   listChatGenerationPresets,
   listChatLorebooks,
+  CHAT_GENERATION_PRESET_KIND_SHORT,
   listChatSkills,
   listChatToolPresets,
   listOwnLorebooks,
@@ -224,7 +225,7 @@ export function ChatSettingsResources({ tab = 'presets', active = true }: { tab?
     onError: (error) => showSnackbar({ message: getErrorMessage(error, t({ ko: '생성 프리셋을 가져오지 못했어.', en: 'Could not import the generation presets.' })), tone: 'error' }),
   })
   const generationDuplicateMutation = useMutation({
-    mutationFn: (preset: ChatGenerationPreset) => createChatGenerationPreset({ name: t({ ko: '{name} 복사', en: '{name} copy' }, { name: preset.name }), instruction: preset.instruction, kind: preset.kind, nai: preset.nai, comfyui: preset.comfyui }),
+    mutationFn: (preset: ChatGenerationPreset) => createChatGenerationPreset({ name: t({ ko: '{name} 복사', en: '{name} copy' }, { name: preset.name }), instruction: preset.instruction, kind: preset.kind, nai: preset.nai, comfyui: preset.comfyui, codex: preset.codex }),
     onSuccess: async (created) => {
       await refreshGenerationPresets()
       setGenerationEditor({ preset: created })
@@ -319,7 +320,7 @@ export function ChatSettingsResources({ tab = 'presets', active = true }: { tab?
             name={preset.name}
             extra={(
               <>
-                <Tip content={preset.kind === 'nai' ? preset.nai?.model : null}><span className="inline-flex"><Chip size="sm" tone="muted">{preset.kind === 'nai' ? 'NAI' : 'Comfy'}</Chip></span></Tip>
+                <Tip content={preset.kind === 'nai' ? preset.nai?.model : preset.kind === 'codex' ? preset.codex?.model || null : null}><span className="inline-flex"><Chip size="sm" tone="muted">{CHAT_GENERATION_PRESET_KIND_SHORT[preset.kind]}</Chip></span></Tip>
                 {preset.problem ? <Tip content={preset.problem}><span className="inline-flex"><Chip size="sm" tone="warning">{t({ ko: '확인 필요', en: 'Needs attention' })}</Chip></span></Tip> : null}
                 <NotLinked profiles={preset.profiles} />
               </>

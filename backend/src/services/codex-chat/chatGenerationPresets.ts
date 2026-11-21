@@ -10,6 +10,7 @@ import { editChatResource } from './chatResourceWrite'
 import { splitLong } from './chatSkillPackages'
 import { ChatSkillStore, skillChunk, skillGuide, uniqueSkillName } from './chatSkills'
 import type { MarkedField } from '../../types/workflow'
+import { isHiddenWorkflowField } from '../workflowHiddenFieldPolicy'
 
 /**
  * A generation preset: everything a chat bot's image generation needs except what the model should decide. Linked
@@ -17,7 +18,7 @@ import type { MarkedField } from '../../types/workflow'
  * only the exposed fields, and while a profile has any preset the free-form generation and workflow discovery tools
  * are withheld. Editing a preset reaches every linked profile.
  */
-export type ChatGenerationPresetKind = 'nai' | 'comfyui'
+export type ChatGenerationPresetKind = 'nai' | 'comfyui' | 'codex'
 
 export type ChatNaiPresetSize = { label: string; width: number; height: number }
 
@@ -42,6 +43,21 @@ export type ChatNaiPresetConfig = {
   vibes: Array<{ encoded: string; strength: number; information_extracted: number }>
   characterRefs: Array<{ image: string; type: string; strength: number; fidelity: number }>
   characterReference: 'none' | 'replace' | 'append'
+}
+
+/** A Codex image setup: the model writes the scene in plain sentences; the server adds the fixed text around it. */
+export type ChatCodexPresetConfig = {
+  /** Codex agent model ID (codex exec --model); '' runs the server CLI's default. */
+  model: string
+  /** Fixed text put before the model's scene (style, medium, rendering). */
+  promptPrefix: string
+  /** Fixed text put after the scene. */
+  promptSuffix: string
+  negativePrompt: string
+  /** Allowed sizes; one is fixed, two or more are offered to the model as a choice. */
+  sizes: ChatNaiPresetSize[]
+  /** `reference`: the profile's reference image goes along as a visual reference of the character. */
+  characterReference: 'none' | 'reference'
 }
 
 export type ChatComfyPresetConfig = {
@@ -93,6 +109,7 @@ export type ChatGenerationPreset = {
   kind: ChatGenerationPresetKind
   nai: ChatNaiPresetConfig | null
   comfyui: ChatComfyPresetConfig | null
+  codex: ChatCodexPresetConfig | null
   prompting: ChatPresetPrompting
   /** Profiles that link this preset. */
   profiles: Array<{ id: number; name: string }>
@@ -101,7 +118,7 @@ export type ChatGenerationPreset = {
 }
 
 /** `prompting.guideSkill`: `{ skillId, path }` of an existing section or group (null unlinks it); the rest as ChatPresetPrompting. */
-export type ChatGenerationPresetInput = { name?: unknown; instruction?: unknown; kind?: unknown; nai?: unknown; comfyui?: unknown; prompting?: unknown }
+export type ChatGenerationPresetInput = { name?: unknown; instruction?: unknown; kind?: unknown; nai?: unknown; comfyui?: unknown; codex?: unknown; prompting?: unknown }
 
 export const PROFILE_MAX_GENERATION_PRESETS = 8
 const NAME_MAX_LENGTH = 80
@@ -156,17 +173,21 @@ function sizeOf(value: unknown): ChatNaiPresetSize | null {
   return { label: text(value.label, 40) || `${width}×${height}`, width, height }
 }
 
-export function normalizeNaiPresetConfig(value: unknown): ChatNaiPresetConfig {
-  const raw = isRecord(value) ? value : {}
-  if (raw.characterReference !== undefined && !['none', 'replace', 'append'].includes(raw.characterReference as string)) throw new ChatProfileError('기준 이미지 사용은 none, replace 또는 append여야 해.')
-  const sizes = (Array.isArray(raw.sizes) ? raw.sizes : []).map(sizeOf).filter((size): size is ChatNaiPresetSize => size !== null).slice(0, LIST_MAX)
+/** The allowed sizes: valid ones, at most LIST_MAX, one per label (the model picks by label). */
+function sizesOf(value: unknown): ChatNaiPresetSize[] {
   const seen = new Set<string>()
-  const uniqueSizes = sizes.filter((size) => {
+  return (Array.isArray(value) ? value : []).map(sizeOf).filter((size): size is ChatNaiPresetSize => size !== null).slice(0, LIST_MAX).filter((size) => {
     const key = size.label.toLowerCase()
     if (seen.has(key)) return false
     seen.add(key)
     return true
   })
+}
+
+export function normalizeNaiPresetConfig(value: unknown): ChatNaiPresetConfig {
+  const raw = isRecord(value) ? value : {}
+  if (raw.characterReference !== undefined && !['none', 'replace', 'append'].includes(raw.characterReference as string)) throw new ChatProfileError('기준 이미지 사용은 none, replace 또는 append여야 해.')
+  const uniqueSizes = sizesOf(raw.sizes)
   return {
     model: text(raw.model, 80) || DEFAULT_NAI.model,
     sampler: text(raw.sampler, 80) || DEFAULT_NAI.sampler,
@@ -199,6 +220,46 @@ export function normalizeNaiPresetConfig(value: unknown): ChatNaiPresetConfig {
   }
 }
 
+const DEFAULT_CODEX: ChatCodexPresetConfig = {
+  model: '',
+  promptPrefix: '',
+  promptSuffix: '',
+  negativePrompt: '',
+  sizes: [{ label: '1:1', width: 1024, height: 1024 }],
+  characterReference: 'none',
+}
+
+/** Same rule as the Codex request schema: empty, or an ID passed to codex exec --model. */
+const CODEX_MODEL_ID = /^$|^[a-zA-Z0-9][a-zA-Z0-9._:/+-]*$/
+
+export function normalizeCodexPresetConfig(value: unknown): ChatCodexPresetConfig {
+  const raw = isRecord(value) ? value : {}
+  if (raw.characterReference !== undefined && raw.characterReference !== 'none' && raw.characterReference !== 'reference') throw new ChatProfileError('기준 이미지 사용은 none 또는 reference여야 해.')
+  const model = text(raw.model, 200)
+  if (!CODEX_MODEL_ID.test(model)) throw new ChatProfileError('Codex 모델 ID가 올바르지 않아.')
+  const sizes = sizesOf(raw.sizes)
+  return {
+    model,
+    promptPrefix: text(raw.promptPrefix, TEXT_MAX_LENGTH),
+    promptSuffix: text(raw.promptSuffix, TEXT_MAX_LENGTH),
+    negativePrompt: text(raw.negativePrompt, TEXT_MAX_LENGTH),
+    sizes: sizes.length > 0 ? sizes : [...DEFAULT_CODEX.sizes],
+    characterReference: raw.characterReference === 'reference' ? 'reference' : 'none',
+  }
+}
+
+/** The generation queue service a preset's jobs run on. */
+export function presetGenerationService(preset: Pick<ChatGenerationPreset, 'kind'>): 'novelai' | 'comfyui' | 'codex' {
+  return preset.kind === 'nai' ? 'novelai' : preset.kind
+}
+
+/** Whether the preset's chat pictures take the profile's reference image. */
+export function presetUsesReference(preset: Pick<ChatGenerationPreset, 'kind' | 'nai' | 'comfyui' | 'codex'>) {
+  if (preset.kind === 'nai') return preset.nai?.characterReference !== 'none'
+  if (preset.kind === 'codex') return preset.codex?.characterReference === 'reference'
+  return Boolean(preset.comfyui?.referenceField)
+}
+
 function workflowMarkedFields(workflowId: number): MarkedField[] {
   try {
     const fields: unknown = JSON.parse(WorkflowModel.findByIdIncludingDeleted(workflowId)?.marked_fields ?? '[]')
@@ -221,7 +282,8 @@ export function comfyAssetFields(config: ChatComfyPresetConfig, fields: MarkedFi
   const referenceField = config.referenceField && images.some((field) => field.id === config.referenceField)
     ? config.referenceField
     : images.length === 1 ? images[0].id : null
-  const texts = fields.filter(isTextField)
+  // A hidden text field is a fixed value, so the slot prompt never goes there.
+  const texts = fields.filter((field) => isTextField(field) && !isHiddenWorkflowField(field))
   const named = (list: MarkedField[]) => list.filter((field) => /positive|prompt|프롬프트|긍정/i.test(`${field.id} ${field.label}`) && !/negative|neg_|부정|undesired/i.test(`${field.id} ${field.label}`))
   const exposed = texts.filter((field) => config.exposedFieldIds.includes(field.id))
   const pick = [exposed, named(exposed), named(texts), texts].find((list) => list.length === 1)
@@ -245,7 +307,8 @@ export function comfyAssetFields(config: ChatComfyPresetConfig, fields: MarkedFi
 export type ChatPresetAssetSupport = { mode: 'reference' | 'appearance' | null; problem: string | null; promptChoices: Array<{ id: string; label: string }>; imageChoices: Array<{ id: string; label: string }> }
 
 export function chatPresetAssetSupport(preset: Pick<ChatGenerationPreset, 'kind' | 'comfyui'>): ChatPresetAssetSupport {
-  if (preset.kind === 'nai') return { mode: 'reference', problem: null, promptChoices: [], imageChoices: [] }
+  // NAI and Codex draw from the reference when there is one, and from the appearance text alone otherwise.
+  if (preset.kind !== 'comfyui') return { mode: 'reference', problem: null, promptChoices: [], imageChoices: [] }
   if (!preset.comfyui) return { mode: null, problem: 'ComfyUI 프리셋 설정을 찾을 수 없어.', promptChoices: [], imageChoices: [] }
   const { workflow, problem } = resolvePresetWorkflow(preset.comfyui)
   if (!workflow) return { mode: null, problem, promptChoices: [], imageChoices: [] }
@@ -292,8 +355,8 @@ function presetName(value: unknown) {
 }
 
 function kindOf(value: unknown): ChatGenerationPresetKind {
-  if (value === 'nai' || value === 'comfyui') return value
-  throw new ChatProfileError('프리셋 종류는 nai 또는 comfyui여야 해.')
+  if (value === 'nai' || value === 'comfyui' || value === 'codex') return value
+  throw new ChatProfileError('프리셋 종류는 nai, comfyui 또는 codex여야 해.')
 }
 
 export function normalizeGenerationPresetIds(value: unknown): number[] {
@@ -467,18 +530,25 @@ function guideSkillFromFile(file: { owner: string; fileId: string }, presets: st
   return { skillId: skill.id, path: kept.length > 1 ? 'guide/' : 'guide' }
 }
 
-function parseConfig(row: PresetRow): Pick<ChatGenerationPreset, 'kind' | 'nai' | 'comfyui'> {
+function parseConfig(row: PresetRow): Pick<ChatGenerationPreset, 'kind' | 'nai' | 'comfyui' | 'codex'> {
   let raw: unknown = null
   try { raw = JSON.parse(row.config) } catch { raw = null }
-  const kind: ChatGenerationPresetKind = row.kind === 'comfyui' ? 'comfyui' : 'nai'
+  const kind: ChatGenerationPresetKind = row.kind === 'comfyui' || row.kind === 'codex' ? row.kind : 'nai'
   if (kind === 'comfyui') {
     try {
-      return { kind, nai: null, comfyui: normalizeComfyPresetConfig(raw) }
+      return { kind, nai: null, comfyui: normalizeComfyPresetConfig(raw), codex: null }
     } catch {
-      return { kind, nai: null, comfyui: { workflowId: 0, serverId: null, serverTag: null, fixedInputs: {}, exposedFieldIds: [], referenceField: null, promptField: null } }
+      return { kind, nai: null, comfyui: { workflowId: 0, serverId: null, serverTag: null, fixedInputs: {}, exposedFieldIds: [], referenceField: null, promptField: null }, codex: null }
     }
   }
-  return { kind, nai: normalizeNaiPresetConfig(raw), comfyui: null }
+  if (kind === 'codex') {
+    try {
+      return { kind, nai: null, comfyui: null, codex: normalizeCodexPresetConfig(raw) }
+    } catch {
+      return { kind, nai: null, comfyui: null, codex: { ...DEFAULT_CODEX, sizes: [...DEFAULT_CODEX.sizes] } }
+    }
+  }
+  return { kind, nai: normalizeNaiPresetConfig(raw), comfyui: null, codex: null }
 }
 
 function toPreset(row: PresetRow, profiles: ReturnType<typeof linkedProfiles>): ChatGenerationPreset {
@@ -499,7 +569,9 @@ function columnsOf(input: ChatGenerationPresetInput, current: ChatGenerationPres
   const kind = input.kind === undefined && current ? current.kind : kindOf(input.kind)
   const config = kind === 'nai'
     ? normalizeNaiPresetConfig(input.nai === undefined && current ? current.nai : input.nai)
-    : normalizeComfyPresetConfig(input.comfyui === undefined && current ? current.comfyui : input.comfyui)
+    : kind === 'codex'
+      ? normalizeCodexPresetConfig(input.codex === undefined && current ? current.codex : input.codex)
+      : normalizeComfyPresetConfig(input.comfyui === undefined && current ? current.comfyui : input.comfyui)
   return {
     name: input.name === undefined && current ? current.name : presetName(input.name),
     instruction: input.instruction === undefined && current ? current.instruction : text(input.instruction, INSTRUCTION_MAX_LENGTH),
@@ -587,10 +659,10 @@ export function readGenerationPresetFile(value: unknown): ChatGenerationPresetIn
   const read = items.flatMap((item) => {
     if (!isRecord(item)) return []
     const inner = isRecord(item.preset) ? item.preset : item
-    if (inner.kind !== 'nai' && inner.kind !== 'comfyui') return []
+    if (inner.kind !== 'nai' && inner.kind !== 'comfyui' && inner.kind !== 'codex') return []
     // A guide skill is one of this server's skills: an imported preset keeps the writing settings but not the link.
     const prompting = isRecord(inner.prompting) ? { timing: inner.prompting.timing, guide: inner.prompting.guide, previousImages: inner.prompting.previousImages } : undefined
-    return [{ name: item.name ?? inner.name ?? '생성 프리셋', instruction: item.instruction ?? inner.instruction ?? '', kind: inner.kind, nai: inner.nai, comfyui: inner.comfyui, prompting }]
+    return [{ name: item.name ?? inner.name ?? '생성 프리셋', instruction: item.instruction ?? inner.instruction ?? '', kind: inner.kind, nai: inner.nai, comfyui: inner.comfyui, codex: inner.codex, prompting }]
   })
   if (read.length === 0) throw new ChatProfileError('가져올 생성 프리셋이 없어. 내보낸 프리셋 JSON을 골라줘.')
   return read.slice(0, 20)

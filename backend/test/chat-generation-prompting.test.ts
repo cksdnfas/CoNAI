@@ -120,6 +120,54 @@ test('chat generation prompting: preset settings, guide, writer answers and defe
     assert.equal(parseWriterAnswer('no json'), null)
   })
 
+  await t.test('a Codex preset keeps its setup, asks for a sentence scene and builds a one-image Codex job', async () => {
+    const { buildChatGenerationPresetJob } = await import('../src/services/codex-chat/chatGenerationPayload')
+    const { presetGenerationService, presetUsesReference, chatPresetAssetSupport } = await import('../src/services/codex-chat/chatGenerationPresets')
+    const { presetProblem, CODEX_SCENE_DESCRIPTION } = await import('../src/services/codex-chat/chatGenerationInputs')
+    const sizes = [{ label: '3:4', width: 768, height: 1024 }, { label: '16:9', width: 1024, height: 576 }]
+    const preset = ChatGenerationPresetStore.create({ name: 'Codex 장면', kind: 'codex', codex: { model: ' gpt-test ', promptPrefix: 'Soft watercolor illustration.', negativePrompt: 'text', sizes } })
+    assert.equal(preset.kind, 'codex')
+    assert.equal(preset.nai, null)
+    assert.equal(preset.comfyui, null)
+    assert.deepEqual(preset.codex, { model: 'gpt-test', promptPrefix: 'Soft watercolor illustration.', promptSuffix: '', negativePrompt: 'text', sizes, characterReference: 'none' })
+    assert.equal(presetGenerationService(preset), 'codex')
+    assert.equal(presetUsesReference(preset), false)
+    assert.equal(presetProblem(preset), null)
+    assert.equal(chatPresetAssetSupport(preset).mode, 'reference')
+    // A patch without codex keeps the stored setup.
+    const renamed = ChatGenerationPresetStore.update(preset.id, { name: 'Codex 장면 2' })!
+    assert.deepEqual(renamed.codex, preset.codex)
+    assert.throws(() => ChatGenerationPresetStore.create({ name: 'bad', kind: 'codex', codex: { model: 'bad model' } }), /Codex 모델 ID/)
+    assert.throws(() => ChatGenerationPresetStore.create({ name: 'bad', kind: 'codex', codex: { characterReference: 'append' } }), /none 또는 reference/)
+
+    const { shape, fill, sceneField } = presetInputShape(renamed)
+    assert.deepEqual(Object.keys(shape).sort(), ['prompt', 'size'])
+    assert.equal(sceneField, 'prompt')
+    assert.match(fill, /size/)
+    assert.equal(shape.prompt.description, CODEX_SCENE_DESCRIPTION)
+    assert.equal(z.object(shape).safeParse({ prompt: 'A girl smiles.', size: '1:1' }).success, false)
+
+    const job = await buildChatGenerationPresetJob(renamed, { prompt: 'A girl smiles by the window.', size: '16:9' })
+    assert.equal(job.service_type, 'codex')
+    assert.deepEqual('request_payload' in job ? job.request_payload : null, {
+      prompt: 'Soft watercolor illustration.\n\nA girl smiles by the window.',
+      model: 'gpt-test',
+      negative_prompt: 'text',
+      operation: 'generate',
+      size: '1024x576',
+      count: 1,
+      references: undefined,
+    })
+    // With the reference on, a profile without one is refused instead of drawing without it.
+    const withReference = ChatGenerationPresetStore.update(renamed.id, { codex: { ...renamed.codex, characterReference: 'reference' } })!
+    assert.equal(presetUsesReference(withReference), true)
+    await assert.rejects(buildChatGenerationPresetJob(withReference, { prompt: 'x' }, { referenceHash: null } as never), /기준 이미지/)
+
+    const [imported] = readGenerationPresetFile({ conai_generation_preset: 1, name: 'file', instruction: '', preset: { kind: 'codex', codex: { model: '', sizes } } })
+    assert.equal(imported.kind, 'codex')
+    assert.equal(ChatGenerationPresetStore.create(imported).codex?.sizes.length, 2)
+  })
+
   await t.test('a ComfyUI preset offers a dropdown its list, always asks for text and refuses a value outside the list', async () => {
     const { WorkflowModel } = await import('../src/models/Workflow')
     const { CustomDropdownListModel } = await import('../src/models/CustomDropdownList')

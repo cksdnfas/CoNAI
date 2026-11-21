@@ -130,7 +130,22 @@ export interface ChatComfyPresetConfig {
   promptField?: string | null
 }
 
-export type ChatGenerationPresetKind = 'nai' | 'comfyui'
+/** A Codex image setup; the model writes the scene in sentences (and picks a size when several are allowed). */
+export interface ChatCodexPresetConfig {
+  /** Codex agent model ID; '' runs the server CLI default. */
+  model: string
+  promptPrefix: string
+  promptSuffix: string
+  negativePrompt: string
+  sizes: ChatNaiPresetSize[]
+  /** `reference`: the profile's reference image goes along as a visual reference. */
+  characterReference: 'none' | 'reference'
+}
+
+export type ChatGenerationPresetKind = 'nai' | 'comfyui' | 'codex'
+
+/** Short kind labels for chips and option rows. */
+export const CHAT_GENERATION_PRESET_KIND_SHORT: Record<ChatGenerationPresetKind, string> = { nai: 'NAI', comfyui: 'Comfy', codex: 'Codex' }
 
 /** A generation preset; each one a profile links becomes a generate_image tool, and free-form generation is withheld. */
 export interface ChatGenerationPreset {
@@ -142,6 +157,7 @@ export interface ChatGenerationPreset {
   kind: ChatGenerationPresetKind
   nai: ChatNaiPresetConfig | null
   comfyui: ChatComfyPresetConfig | null
+  codex: ChatCodexPresetConfig | null
   prompting: ChatPresetPrompting
   profiles: Array<{ id: number; name: string }>
   createdDate: string
@@ -176,7 +192,7 @@ export type ChatPresetPromptingInput = Pick<ChatPresetPrompting, 'timing' | 'gui
 
 export const CHAT_PRESET_PREVIOUS_IMAGES_MAX = 4
 
-export type ChatGenerationPresetInput = { name: string; instruction: string; kind: ChatGenerationPresetKind; nai: ChatNaiPresetConfig | null; comfyui: ChatComfyPresetConfig | null; prompting?: ChatPresetPromptingInput }
+export type ChatGenerationPresetInput = { name: string; instruction: string; kind: ChatGenerationPresetKind; nai: ChatNaiPresetConfig | null; comfyui: ChatComfyPresetConfig | null; codex?: ChatCodexPresetConfig | null; prompting?: ChatPresetPromptingInput }
 
 /** The file a generation preset exports as; import also takes a bare preset or an array of either. */
 export const CHAT_GENERATION_PRESET_FILE_MARK = 'conai_generation_preset'

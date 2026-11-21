@@ -16,7 +16,7 @@ import { profileContentLimit, slotContentLimit } from './chatContentRating'
 import { ChatDeferredGenerationStore, type DeferredGenerationRow } from './chatDeferredGenerations'
 import { presetInputShape } from './chatGenerationInputs'
 import { buildChatGenerationPresetJob, CHAT_NAI_PAYLOAD_MAX_BYTES } from './chatGenerationPayload'
-import { ChatGenerationPresetStore, type ChatGenerationPreset } from './chatGenerationPresets'
+import { ChatGenerationPresetStore, presetUsesReference, type ChatGenerationPreset } from './chatGenerationPresets'
 import { resolveProfileModel, type ResolvedModel } from './chatModelRoles'
 import { isProfileAssetHidden } from './chatProfileAssets'
 import { ChatProfileStore, profileGenerationOptions, profileSeesImages, type ChatProfile } from './chatProfiles'
@@ -300,7 +300,7 @@ async function writeAndQueue({ context, thread, profile, preset, toolName, messa
     else refused = { answer: stripThinking(answer).trim(), reason: z.prettifyError(parsed.error).replace(/\s+/g, ' ') }
   }
   if (!args) throw new Error(`모델이 쓴 프롬프트를 읽지 못했어.${refused ? ` (${refused.reason})` : ''}`)
-  const usesReference = preset.kind === 'nai' ? preset.nai?.characterReference !== 'none' : Boolean(preset.comfyui?.referenceField)
+  const usesReference = presetUsesReference(preset)
   if (usesReference) requireRequesterPermission(requester, 'images.view')
   // Loaded here: the job tools reach most of the chat services, and this module is loaded by some of them.
   const { enqueueMcpGenerationJob } = await import('../../mcp/tools/generationJobTools')

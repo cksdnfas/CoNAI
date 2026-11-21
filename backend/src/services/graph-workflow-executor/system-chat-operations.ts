@@ -34,6 +34,7 @@ import { saveArtifactBuffer } from './artifacts'
 import { attachGraphImageGrant, buildQueuePayload, resolveQueueBackedOutput } from './execute-comfy'
 import { requireGraphImageAuthority } from './graphImageAuthority'
 import { executeNaiModule } from './execute-nai'
+import { executeCodexImageGenerationNode } from './system-codex-operations'
 import { waitForGraphQueueCompletion } from './queue-wait'
 import { isProfileAllowedForRun } from './workflow-llm-runtime'
 import { buildRuntimeArtifact, completeSystemNode } from './system-module-artifacts'
@@ -304,6 +305,16 @@ export async function executeGenerateWithChatPresetNode(
     const job = await buildChatGenerationPresetJob(preset, { prompt: fullPrompt }, referenceSource, options)
     if (job.service_type !== 'novelai') throw new Error('NAI 프리셋 설정을 찾을 수 없어.')
     await executeNaiModule(context, node, moduleDefinition, job.request_payload)
+  } else if (preset.kind === 'codex') {
+    // As NAI: the job carries a stored reference as image bytes, so it is read under the run's authority here.
+    if (explicitReference === null && referenceHash !== null && preset.codex?.characterReference === 'reference') requireGraphImageAuthority(context)
+    const job = await buildChatGenerationPresetJob(preset, { prompt: fullPrompt }, referenceSource, options)
+    if (job.service_type !== 'codex') throw new Error('Codex 프리셋 설정을 찾을 수 없어.')
+    const payload = job.request_payload
+    const [width, height] = String(payload.size).split('x').map(Number)
+    await executeCodexImageGenerationNode(context, node, moduleDefinition, {
+      prompt: payload.prompt, model: payload.model, negative_prompt: payload.negative_prompt, operation: 'generate', width, height, references: payload.references,
+    })
   } else {
     const config = preset.comfyui
     if (!config) throw new Error('ComfyUI 프리셋 설정을 찾을 수 없어.')

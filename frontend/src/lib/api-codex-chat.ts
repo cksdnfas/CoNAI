@@ -968,7 +968,7 @@ export interface ChatComposerPreset {
   name: string
   /** What the preset is for; shown as a tooltip only. */
   instruction: string
-  kind: 'nai' | 'comfyui'
+  kind: 'nai' | 'comfyui' | 'codex'
 }
 
 /** What a chat offers to direct a message: its profile's generation presets, and its tools. Both empty: nothing to offer. */

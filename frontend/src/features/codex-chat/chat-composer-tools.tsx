@@ -17,7 +17,7 @@ import { getChatScopeCopy } from './chat-scope-copy'
 import { useTrayDismiss } from './chat-tray'
 import { codexChatComposerToolsQueryKey } from './codex-chat-context'
 
-const PRESET_KIND_LABEL: Record<ChatComposerPreset['kind'], string> = { nai: 'NAI', comfyui: 'ComfyUI' }
+const PRESET_KIND_LABEL: Record<ChatComposerPreset['kind'], string> = { nai: 'NAI', comfyui: 'ComfyUI', codex: 'Codex' }
 const NO_PRESETS: ChatComposerPreset[] = []
 const NO_TOOLS: ChatToolInfo[] = []
 const NO_GROUPS: ChatToolGroup[] = []

@@ -18,7 +18,7 @@ function askingOwner(context: NodeOptionContext) {
 export const CHAT_NODE_OPTION_SOURCES: Record<string, NodeOptionSource> = {
   chat_generation_presets: () => ChatGenerationPresetStore.list().map((preset) => ({
     value: String(preset.id),
-    label: `${preset.name} · ${preset.kind === 'nai' ? 'NAI' : 'ComfyUI'}`,
+    label: `${preset.name} · ${preset.kind === 'nai' ? 'NAI' : preset.kind === 'codex' ? 'Codex' : 'ComfyUI'}`,
   })),
 
   // Global books, then the asking account's own books.

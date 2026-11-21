@@ -12,7 +12,7 @@ import { ChatProfileImage } from '@/features/codex-chat/chat-profile-image'
 import { MediaLightbox } from '@/features/images/components/media-lightbox'
 import { useImageFeedSafety } from '@/features/images/components/image-list/use-image-feed-safety'
 import { useI18n } from '@/i18n'
-import { MODEL_SLOTS_QUERY_KEY, listModelSlots } from '@/lib/api-codex-chat'
+import { CHAT_GENERATION_PRESET_KIND_SHORT, MODEL_SLOTS_QUERY_KEY, listModelSlots } from '@/lib/api-codex-chat'
 import { getGroupEmoticons, getGroupsHierarchyAll, groupEmoticonsQueryKey, GROUPS_HIERARCHY_ALL_QUERY_KEY } from '@/lib/api-groups'
 import { getImage, getImageDetailQueryKey, getImagesBatch, IMAGE_BATCH_MAX_COUNT } from '@/lib/api-images'
 import { libraryThumbnailUrl } from '@/lib/api-sprite'
@@ -102,7 +102,7 @@ export function AssetPresetPicker({ runs, showExpressionMenu = false }: { runs: 
         {!preset ? <option value="">{t({ ko: '생성 프리셋', en: 'Generation preset' })}</option> : null}
         {presets.map((entry) => (
           <option key={entry.id} value={entry.id} disabled={!entry.assetSupport?.mode}>
-            {`${entry.kind === 'nai' ? 'NAI' : 'Comfy'} · ${entry.name}${entry.assetSupport?.mode === 'reference' && entry.kind === 'comfyui' ? ' · i2i' : entry.assetSupport?.mode === 'appearance' ? ' · t2i' : ''}`}
+            {`${CHAT_GENERATION_PRESET_KIND_SHORT[entry.kind]} · ${entry.name}${entry.assetSupport?.mode === 'reference' && entry.kind === 'comfyui' ? ' · i2i' : entry.assetSupport?.mode === 'appearance' ? ' · t2i' : ''}`}
           </option>
         ))}
       </Select>

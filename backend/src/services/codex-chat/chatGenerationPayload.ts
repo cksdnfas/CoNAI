@@ -6,6 +6,8 @@ import { parseMcpMarkedFields } from '../comfyui/comfyWorkflowInputs';
 
 export const CHAT_NAI_REFERENCE_MAX_BYTES = 4 * 1024 * 1024;
 export const CHAT_NAI_PAYLOAD_MAX_BYTES = 8 * 1024 * 1024;
+/** One Codex attachment's decoded limit (codexImageInputs). */
+const CHAT_CODEX_REFERENCE_MAX_BYTES = 10 * 1024 * 1024;
 
 export function joinPrompt(parts: string[]) {
   return parts.map((part) => part.trim().replace(/^,+|,+$/g, '').trim()).filter(Boolean).join(', ');
@@ -21,6 +23,31 @@ export async function buildChatGenerationPresetJob(preset: ChatGenerationPreset,
     if (asset.state !== 'file') throw new Error('기준 이미지 파일을 찾을 수 없어.');
     return asset.file;
   };
+  if (preset.kind === 'codex') {
+    const config = preset.codex;
+    if (!config) throw new Error('Codex 프리셋 설정을 찾을 수 없어.');
+    const size = config.sizes.find((entry) => entry.label === args.size) ?? config.sizes[0];
+    const useReference = !options.omitReference && (options.forceReference || config.characterReference === 'reference');
+    let references: Array<{ role: 'reference'; label: string; data_url: string }> | undefined;
+    if (useReference) {
+      const file = reference();
+      if (fs.statSync(file.path).size > CHAT_CODEX_REFERENCE_MAX_BYTES) throw new Error('Codex 기준 이미지는 10MB까지 쓸 수 있어.');
+      const buffer = await fs.promises.readFile(file.path);
+      references = [{ role: 'reference', label: 'Character reference', data_url: `data:${file.mimeType};base64,${buffer.toString('base64')}` }];
+    }
+    // Codex reads sentences: the fixed parts stay their own paragraphs instead of being joined as tags.
+    const prompt = [config.promptPrefix, String(args.prompt ?? ''), config.promptSuffix].map((part) => part.trim()).filter(Boolean).join('\n\n');
+    const payload: Record<string, unknown> = {
+      prompt,
+      model: config.model || undefined,
+      negative_prompt: config.negativePrompt || undefined,
+      operation: 'generate',
+      size: `${size.width}x${size.height}`,
+      count: 1,
+      references,
+    };
+    return { service_type: 'codex' as const, request_payload: payload, request_summary: summary };
+  }
   if (preset.kind === 'nai') {
     const config = preset.nai;
     if (!config) throw new Error('NAI 프리셋 설정을 찾을 수 없어.');

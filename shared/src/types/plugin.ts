@@ -221,8 +221,8 @@ export type PluginGenerationPreset = {
   name: string
   /** What the model is told the preset is for. */
   instruction: string
-  kind: 'nai' | 'comfyui'
-  /** Null for a ComfyUI preset. The preset's NovelAI settings as stored (ChatNaiPresetConfig). */
+  kind: 'nai' | 'comfyui' | 'codex'
+  /** Null unless a NovelAI preset. The preset's NovelAI settings as stored (ChatNaiPresetConfig). */
   nai: {
     model: string; sampler: string; noiseSchedule: string; steps: number; scale: number
     varietyPlus: boolean; transparentBackground: boolean
@@ -236,7 +236,7 @@ export type PluginGenerationPreset = {
     characterRefs: Array<{ image: string; type: string; strength: number; fidelity: number }>
     characterReference: 'none' | 'replace' | 'append'
   } | null
-  /** Null for a NovelAI preset. */
+  /** Null unless a ComfyUI preset. */
   comfyui: {
     workflowId: number
     serverId: number | null
@@ -247,6 +247,15 @@ export type PluginGenerationPreset = {
     exposedFieldIds: string[]
     referenceField: string | null
     promptField: string | null
+  } | null
+  /** Null unless a Codex preset. Model '' runs the server CLI default; the model writes the scene in sentences. */
+  codex: {
+    model: string
+    /** Fixed text before and after the scene. */
+    promptPrefix: string; promptSuffix: string; negativePrompt: string
+    /** Allowed sizes; the first is the default. */
+    sizes: Array<{ label: string; width: number; height: number }>
+    characterReference: 'none' | 'reference'
   } | null
   prompting: {
     timing: 'inline' | 'early' | 'after'

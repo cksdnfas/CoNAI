@@ -31,14 +31,20 @@ import {
   CHAT_GENERATION_PRESETS_QUERY_KEY,
   createChatGenerationPreset,
   updateChatGenerationPreset,
+  type ChatCodexPresetConfig,
   type ChatComfyPresetConfig,
   type ChatGenerationPreset,
+  type ChatGenerationPresetKind,
   type ChatGenerationPresetInput,
   type ChatNaiPresetConfig,
 } from '@/lib/api-codex-chat'
 import { getGenerationCustomDropdownLists, getGenerationWorkflows } from '@/lib/api-image-generation-workflows'
+import { getCodexGenerationModels } from '@/lib/api-image-generation-queue'
+import { CodexModelSelect } from '@/features/image-generation/components/codex-model-select'
+import { CODEX_ASPECT_RATIO_OPTIONS, CODEX_RESOLUTION_OPTIONS, isSizedCodexAspectRatioOption, resolveCodexSize } from '@/features/image-generation/codex-size'
 import type { WorkflowMarkedField } from '@/lib/api-image-generation-types'
 import { TYPED_FIELD_RANDOM_OPTION_VALUE } from '@/features/shared-fields/typed-field-input'
+import { isHiddenWorkflowField } from '@/features/image-generation/workflow-field-choices'
 import { useChatResourceEditor } from './use-chat-resource-editor'
 import { EditorGroup } from '@/components/ui/editor-group'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -68,10 +74,103 @@ export const EMPTY_NAI_PRESET: ChatNaiPresetConfig = {
   characterRefs: [],
 }
 
-function emptyDraft(kind: 'nai' | 'comfyui'): ChatGenerationPresetInput {
-  return kind === 'nai'
-    ? { name: '', instruction: '', kind, nai: EMPTY_NAI_PRESET, comfyui: null, prompting: EMPTY_PROMPTING }
-    : { name: '', instruction: '', kind, nai: null, comfyui: { workflowId: 0, serverId: null, serverTag: null, fixedInputs: {}, exposedFieldIds: [] }, prompting: EMPTY_PROMPTING }
+export const EMPTY_CODEX_PRESET: ChatCodexPresetConfig = {
+  model: '',
+  promptPrefix: '',
+  promptSuffix: '',
+  negativePrompt: '',
+  sizes: [{ label: '1:1', width: 1024, height: 1024 }],
+  characterReference: 'none',
+}
+
+const PRESET_KIND_OPTIONS: Array<{ value: ChatGenerationPresetKind; label: string }> = [
+  { value: 'nai', label: 'NovelAI' },
+  { value: 'comfyui', label: 'ComfyUI' },
+  { value: 'codex', label: 'Codex' },
+]
+
+function emptyDraft(kind: ChatGenerationPresetKind): ChatGenerationPresetInput {
+  if (kind === 'nai') return { name: '', instruction: '', kind, nai: EMPTY_NAI_PRESET, comfyui: null, codex: null, prompting: EMPTY_PROMPTING }
+  if (kind === 'codex') return { name: '', instruction: '', kind, nai: null, comfyui: null, codex: EMPTY_CODEX_PRESET, prompting: EMPTY_PROMPTING }
+  return { name: '', instruction: '', kind, nai: null, comfyui: { workflowId: 0, serverId: null, serverTag: null, fixedInputs: {}, exposedFieldIds: [] }, codex: null, prompting: EMPTY_PROMPTING }
+}
+
+const CODEX_SIZED_ASPECTS = CODEX_ASPECT_RATIO_OPTIONS.filter(isSizedCodexAspectRatioOption)
+
+/** A Codex preset size: the aspect ratio is the label the model picks by, scaled to the preset's long edge. */
+function codexSizeOf(aspect: string, resolution: string) {
+  const [width, height] = (resolveCodexSize(aspect, resolution) ?? '1024x1024').split('x').map(Number)
+  return { label: aspect, width, height }
+}
+
+/** The Codex setup: model, the fixed text around the scene, the sizes the model may pick, and the reference image. */
+function CodexPresetFields({ config, onChange }: { config: ChatCodexPresetConfig; onChange: (config: ChatCodexPresetConfig) => void }) {
+  const { t } = useI18n()
+  const patch = (next: Partial<ChatCodexPresetConfig>) => onChange({ ...config, ...next })
+  const modelsQuery = useQuery({ queryKey: ['codex-generation-models'], queryFn: getCodexGenerationModels, staleTime: 60_000, retry: false })
+  const resolution = String(Math.max(...config.sizes.map((size) => Math.max(size.width, size.height)), 0) || 1024)
+  const resolutionOptions = CODEX_RESOLUTION_OPTIONS.some((option) => option.value === resolution) ? CODEX_RESOLUTION_OPTIONS : [...CODEX_RESOLUTION_OPTIONS, { value: resolution, label: `${resolution}px` }]
+  const sizeKey = (size: { width: number; height: number }) => `${size.width}x${size.height}`
+  const toggleAspect = (aspect: string) => {
+    const option = codexSizeOf(aspect, resolution)
+    const index = config.sizes.findIndex((size) => size.label === aspect || sizeKey(size) === sizeKey(option))
+    if (index >= 0) {
+      if (config.sizes.length === 1) return
+      patch({ sizes: config.sizes.filter((_, i) => i !== index) })
+    } else {
+      patch({ sizes: [...config.sizes, option] })
+    }
+  }
+  // A size saved outside the aspect list (another long edge) stays listed so it can be removed.
+  const custom = config.sizes.filter((size) => !CODEX_SIZED_ASPECTS.some((option) => option.value === size.label && sizeKey(size) === sizeKey(codexSizeOf(option.value, resolution))))
+
+  return (
+    <div className="space-y-4">
+      <EditorGroup label={t({ ko: '생성 설정', en: 'Generation' })}>
+        <div className="grid gap-3 md:grid-cols-2">
+          <Field label={<ChatFilledLabel fieldId="model">{t({ ko: '모델', en: 'Model' })}</ChatFilledLabel>}>
+            <CodexModelSelect variant="settings" value={config.model} models={modelsQuery.data?.data.models} onChange={(model) => patch({ model })} aria-label={t({ ko: 'Codex 모델', en: 'Codex model' })} />
+          </Field>
+          <Field label={t({ ko: '해상도 (긴 변)', en: 'Resolution (long edge)' })}>
+            <Select variant="settings" value={resolution} onChange={(event) => patch({ sizes: config.sizes.map((size) => CODEX_SIZED_ASPECTS.some((option) => option.value === size.label) ? codexSizeOf(size.label, event.target.value) : size) })}>
+              {resolutionOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+            </Select>
+          </Field>
+        </div>
+        <div className="border-t border-line">
+          <SettingsSwitchRow
+            label={t({ ko: '기준 이미지 참고', en: 'Use the reference image' })}
+            info={t({ ko: '프로필의 기준 이미지를 참고 이미지로 함께 보내.', en: "Sends the profile's reference image along as a visual reference." })}
+            checked={config.characterReference === 'reference'}
+            onCheckedChange={(checked) => patch({ characterReference: checked ? 'reference' : 'none' })}
+          />
+        </div>
+      </EditorGroup>
+      <EditorGroup label={t({ ko: '모델이 고를 수 있는 비율', en: 'Ratios the model may pick' })} info={t({ ko: '하나만 고르면 크기 필드가 모델에게 보이지 않아.', en: 'With one ratio picked, the model sees no size field.' })}>
+        <div className="flex flex-wrap gap-1.5">
+          {CODEX_SIZED_ASPECTS.map((option) => {
+            const size = codexSizeOf(option.value, resolution)
+            const pressed = config.sizes.some((entry) => entry.label === option.value || sizeKey(entry) === sizeKey(size))
+            return <ToggleChip key={option.value} size="sm" pressed={pressed} disabled={pressed && config.sizes.length === 1} onClick={() => toggleAspect(option.value)}>{`${option.label} · ${size.width}×${size.height}`}</ToggleChip>
+          })}
+          {custom.filter((size) => !CODEX_SIZED_ASPECTS.some((option) => option.value === size.label)).map((size) => (
+            <ToggleChip key={`custom-${size.label}`} size="sm" pressed disabled={config.sizes.length === 1} onClick={() => patch({ sizes: config.sizes.filter((entry) => entry !== size) })}>{`${size.label} · ${size.width}×${size.height}`}</ToggleChip>
+          ))}
+        </div>
+      </EditorGroup>
+      <EditorGroup label={t({ ko: '고정 프롬프트', en: 'Fixed prompt' })} info={t({ ko: '모델은 장면만 문장으로 써. 서버가 앞부분, 장면, 뒷부분 순서로 합쳐.', en: 'The model writes only the scene, in sentences; the server joins before, scene, after.' })}>
+        <Field label={<ChatFilledLabel fieldId="promptPrefix">{t({ ko: '앞부분 (화풍·매체·표현)', en: 'Before the scene (style, medium, rendering)' })}</ChatFilledLabel>}>
+          <Textarea variant="settings" rows={3} value={config.promptPrefix} onChange={(event) => patch({ promptPrefix: event.target.value })} />
+        </Field>
+        <Field label={<ChatFilledLabel fieldId="promptSuffix">{t({ ko: '뒷부분', en: 'After the scene' })}</ChatFilledLabel>}>
+          <Textarea variant="settings" rows={2} value={config.promptSuffix} onChange={(event) => patch({ promptSuffix: event.target.value })} />
+        </Field>
+        <Field label={<ChatFilledLabel fieldId="negativePrompt">{t({ ko: '네거티브', en: 'Negative prompt' })}</ChatFilledLabel>}>
+          <Textarea variant="settings" rows={2} value={config.negativePrompt} onChange={(event) => patch({ negativePrompt: event.target.value })} />
+        </Field>
+      </EditorGroup>
+    </div>
+  )
 }
 
 function numberOrKeep(value: string, keep: number) {
@@ -188,7 +287,8 @@ function ComfyPresetFields({ config, onChange }: { config: ChatComfyPresetConfig
   const workflowsQuery = useQuery({ queryKey: ['generation-workflows', 'chat-generation-preset'], queryFn: () => getGenerationWorkflows(true), staleTime: 60_000 })
   const workflows = workflowsQuery.data ?? []
   const workflow = workflows.find((entry) => entry.id === config.workflowId) ?? null
-  const fields: WorkflowMarkedField[] = workflow?.marked_fields ?? []
+  // Hidden fields are fixed values of the workflow: neither the model nor the preset fills them.
+  const fields: WorkflowMarkedField[] = (workflow?.marked_fields ?? []).filter((field) => !isHiddenWorkflowField(field))
   const patch = (next: Partial<ChatComfyPresetConfig>) => onChange({ ...config, ...next })
   // A dropdown field takes its custom list's items, as the generation form and the chat tool do; its own options are the fallback.
   const dropdownListsQuery = useQuery({ queryKey: ['image-generation-custom-dropdown-lists'], queryFn: () => getGenerationCustomDropdownLists() })
@@ -321,7 +421,7 @@ function GenerationEditor({ open, preset: initial, onClose, onDuplicate, duplica
   const { t } = useI18n()
   const vibesProblem = (value: ChatGenerationPresetInput) => value.kind === 'nai' && value.nai && !supportsNaiVibes(value.nai.model) && value.nai.vibes.length > 0 ? getNaiVibesUnsupportedMessage(t) : null
   const { base: preset, draft, setDraft, dirty, saveMutation } = useChatResourceEditor({
-    initial, draftOf: (row): ChatGenerationPresetInput => row ? { name: row.name, instruction: row.instruction, kind: row.kind, nai: row.nai, comfyui: row.comfyui, prompting: promptingInputOf(row.prompting) } : emptyDraft('nai'),
+    initial, draftOf: (row): ChatGenerationPresetInput => row ? { name: row.name, instruction: row.instruction, kind: row.kind, nai: row.nai, comfyui: row.comfyui, codex: row.codex, prompting: promptingInputOf(row.prompting) } : emptyDraft('nai'),
     write: (base, value) => {
       const problem = vibesProblem(value)
       if (problem) throw new Error(problem)
@@ -334,7 +434,7 @@ function GenerationEditor({ open, preset: initial, onClose, onDuplicate, duplica
   const nameMissing = draft.name.trim().length === 0
   useGenerationPresetChatPage({ open, preset, draft, setDraft, dirty, save: () => saveMutation.mutateAsync() })
   const comfyIncomplete = draft.kind === 'comfyui' && !(draft.comfyui?.workflowId)
-  const kindLabel = useMemo(() => ({ nai: 'NovelAI', comfyui: 'ComfyUI' }), [])
+  const kindLabel = useMemo(() => Object.fromEntries(PRESET_KIND_OPTIONS.map((option) => [option.value, option.label])) as Record<ChatGenerationPresetKind, string>, [])
   const canSave = !nameMissing && !comfyIncomplete && !saveMutation.isPending && (dirty || !preset)
 
   return (
@@ -360,9 +460,8 @@ function GenerationEditor({ open, preset: initial, onClose, onDuplicate, duplica
             {preset ? (
               <div className="flex h-10 items-center"><Chip size="sm" tone="muted">{kindLabel[draft.kind]}</Chip></div>
             ) : (
-              <Select variant="settings" value={draft.kind} onChange={(event) => setDraft(current => ({ ...emptyDraft(event.target.value as 'nai' | 'comfyui'), name: current.name, instruction: current.instruction, prompting: current.prompting }))}>
-                <option value="nai">NovelAI</option>
-                <option value="comfyui">ComfyUI</option>
+              <Select variant="settings" value={draft.kind} onChange={(event) => setDraft(current => ({ ...emptyDraft(event.target.value as ChatGenerationPresetKind), name: current.name, instruction: current.instruction, prompting: current.prompting }))}>
+                {PRESET_KIND_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
               </Select>
             )}
           </Field>
@@ -370,6 +469,7 @@ function GenerationEditor({ open, preset: initial, onClose, onDuplicate, duplica
         <PresetPromptingFields value={draft.prompting ?? EMPTY_PROMPTING} onChange={(prompting) => setDraft(current => ({ ...current, prompting }))} />
         {draft.kind === 'nai' ? <NaiPresetFields config={draft.nai ?? EMPTY_NAI_PRESET} onChange={(nai) => setDraft(current => ({ ...current, nai }))} /> : null}
         {draft.kind === 'comfyui' && draft.comfyui ? <ComfyPresetFields config={draft.comfyui} onChange={(comfyui) => setDraft(current => ({ ...current, comfyui }))} /> : null}
+        {draft.kind === 'codex' ? <CodexPresetFields config={draft.codex ?? EMPTY_CODEX_PRESET} onChange={(codex) => setDraft(current => ({ ...current, codex }))} /> : null}
       </ModalBody>
       <EditorFooter
         onDelete={preset ? () => deleteMutation.mutate({ kind: 'generation', resource: preset }) : undefined}
@@ -408,6 +508,7 @@ function useGenerationPresetChatPage({ open, preset, draft, setDraft, dirty, sav
   const { t } = useI18n()
   const workflowsQuery = useQuery({ queryKey: ['generation-workflows', 'chat-generation-preset'], queryFn: () => getGenerationWorkflows(true), staleTime: 60_000, enabled: open && draft.kind === 'comfyui' })
   const nai = draft.nai
+  const codex = draft.kind === 'codex' ? draft.codex ?? EMPTY_CODEX_PRESET : null
   const prompting = draft.prompting ?? EMPTY_PROMPTING
   // Fields show what the preset runs with: a model with fixed settings overrides steps, sampler and the negative.
   const fixedSettings = getNaiFixedModelSettings(nai?.model)
@@ -415,7 +516,7 @@ function useGenerationPresetChatPage({ open, preset, draft, setDraft, dirty, sav
   const fields: ChatPageField[] = [
     { id: 'name', label: t({ ko: '이름', en: 'Name' }), type: 'text', value: draft.name },
     { id: 'instruction', label: t({ ko: '용도 (모델에게 보여줌)', en: 'Purpose (shown to the model)' }), type: 'text', value: draft.instruction },
-    ...(preset ? [] : [{ id: 'kind', label: t({ ko: '종류', en: 'Kind' }), type: 'select' as const, value: draft.kind, options: ['nai', 'comfyui'] }]),
+    ...(preset ? [] : [{ id: 'kind', label: t({ ko: '종류', en: 'Kind' }), type: 'select' as const, value: draft.kind, options: PRESET_KIND_OPTIONS.map((option) => option.value) }]),
     { id: 'timing', label: t({ ko: '생성 시점 (inline: 대화 모델이 답변 중에 직접 작성, early: 장면만 받아 따로 작성해 바로 생성, after: 답변 끝난 뒤 따로 작성. 가이드 문서를 연결한 프리셋은 inline 불가)', en: 'When it is generated (inline: the chat model writes it while replying, early: written separately from a described scene and queued at once, after: written separately from the finished reply; inline is not available while a guide document is linked)' }), type: 'select', value: prompting.timing, options: ['inline', 'early', 'after'] },
     { id: 'guide', label: t({ ko: '추가 지시 (몇 줄, 가이드 문서와 함께 전달)', en: 'Extra instructions (a few lines, sent with the guide document)' }), type: 'text', value: prompting.guide },
     { id: 'previousImages', label: t({ ko: '이전 이미지 참고 장수', en: 'Earlier pictures shown' }), type: 'number', value: prompting.previousImages, min: 0, max: 4, integer: true },
@@ -431,6 +532,13 @@ function useGenerationPresetChatPage({ open, preset, draft, setDraft, dirty, sav
       { id: 'promptSuffix', label: t({ ko: '고정 프롬프트 뒷부분', en: 'Fixed prompt after the scene' }), type: 'text' as const, value: nai.promptSuffix },
       { id: 'negativePrompt', label: t({ ko: '네거티브', en: 'Negative prompt' }), type: 'text' as const, value: fixedSettings ? getNaiUcPresetText(nai.model, fixedSettings.ucPreset) ?? '' : nai.negativePrompt, ...fixedField },
     ] : []),
+    ...(draft.kind === 'codex' && codex ? [
+      { id: 'codexModel', label: t({ ko: 'Codex 모델 ID (비우면 서버 기본값)', en: 'Codex model ID (empty: server default)' }), type: 'text' as const, value: codex.model },
+      { id: 'promptPrefix', label: t({ ko: '고정 프롬프트 앞부분 (화풍·매체·표현)', en: 'Fixed prompt before the scene (style, medium, rendering)' }), type: 'text' as const, value: codex.promptPrefix },
+      { id: 'promptSuffix', label: t({ ko: '고정 프롬프트 뒷부분', en: 'Fixed prompt after the scene' }), type: 'text' as const, value: codex.promptSuffix },
+      { id: 'negativePrompt', label: t({ ko: '네거티브', en: 'Negative prompt' }), type: 'text' as const, value: codex.negativePrompt },
+      { id: 'characterReference', label: t({ ko: '기준 이미지 참고', en: 'Use the reference image' }), type: 'boolean' as const, value: codex.characterReference === 'reference' },
+    ] : []),
     ...(draft.kind === 'comfyui' && draft.comfyui && workflowsQuery.data?.length ? [
       { id: 'workflowId', label: t({ ko: 'ComfyUI 워크플로', en: 'ComfyUI workflow' }), type: 'select' as const, value: draft.comfyui.workflowId ? String(draft.comfyui.workflowId) : '', options: ['', ...workflowsQuery.data.map((entry) => String(entry.id))] },
     ] : []),
@@ -440,7 +548,7 @@ function useGenerationPresetChatPage({ open, preset, draft, setDraft, dirty, sav
     title: preset ? t({ ko: '생성 프리셋 편집 · {name}', en: 'Edit generation preset · {name}' }, { name: preset.name }) : t({ ko: '생성 프리셋 추가', en: 'Add generation preset' }),
     resourceId: `generation-preset:${preset?.id ?? 'new'}`,
     data: {
-      sizes: nai ? nai.sizes.map((size) => size.label) : [],
+      sizes: (nai ?? codex)?.sizes.map((size) => size.label) ?? [],
       workflows: (workflowsQuery.data ?? []).map((entry) => ({ id: String(entry.id), name: entry.name })),
       // The guide section (`path` ending in '/': a whole group) is picked in the editor; the chat only reads it.
       guideSkill: prompting.guideSkill,
@@ -454,7 +562,7 @@ function useGenerationPresetChatPage({ open, preset, draft, setDraft, dirty, sav
       if (targetFixedSettings && lockedFields.length > 0) throw new Error(getNaiFixedFieldsError(t, lockedFields, targetFixedSettings))
       setDraft((current) => {
         let next = { ...current }
-        if (patch.kind !== undefined && !preset && patch.kind !== next.kind) next = { ...emptyDraft(patch.kind as 'nai' | 'comfyui'), name: next.name, instruction: next.instruction, prompting: next.prompting }
+        if (patch.kind !== undefined && !preset && patch.kind !== next.kind && PRESET_KIND_OPTIONS.some((option) => option.value === patch.kind)) next = { ...emptyDraft(patch.kind as ChatGenerationPresetKind), name: next.name, instruction: next.instruction, prompting: next.prompting }
         if (patch.name !== undefined) next.name = String(patch.name)
         if (patch.timing !== undefined || patch.guide !== undefined || patch.previousImages !== undefined) {
           const current = next.prompting ?? EMPTY_PROMPTING
@@ -472,6 +580,13 @@ function useGenerationPresetChatPage({ open, preset, draft, setDraft, dirty, sav
           for (const key of ['steps', 'scale'] as const) if (patch[key] !== undefined) naiPatch[key] = Number(patch[key])
           for (const key of ['varietyPlus', 'transparentBackground'] as const) if (patch[key] !== undefined) naiPatch[key] = Boolean(patch[key])
           next = { ...next, nai: { ...next.nai, ...naiPatch } }
+        }
+        if (next.kind === 'codex') {
+          const codexPatch: Partial<ChatCodexPresetConfig> = {}
+          if (patch.codexModel !== undefined) codexPatch.model = String(patch.codexModel).trim()
+          for (const key of NAI_TEXT_KEYS) if (patch[key] !== undefined) codexPatch[key] = String(patch[key])
+          if (patch.characterReference !== undefined) codexPatch.characterReference = patch.characterReference ? 'reference' : 'none'
+          next = { ...next, codex: { ...(next.codex ?? EMPTY_CODEX_PRESET), ...codexPatch } }
         }
         if (next.comfyui && patch.workflowId !== undefined) next = { ...next, comfyui: { ...next.comfyui, workflowId: Number(patch.workflowId) || 0, fixedInputs: {}, exposedFieldIds: [], referenceField: null, promptField: null } }
         return next

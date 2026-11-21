@@ -399,9 +399,10 @@ Jobs use `RuntimeJobRunner` (`plugin-task`), with two processing slots per insta
 `conai.generationPresets.list()` (all, by name) and `conai.generationPresets.get(id)` read the chat generation presets of `ChatGenerationPresetStore` as `PluginGenerationPreset` (`shared/src/types/plugin.ts`). A NovelAI preset has `comfyui: null` and its stored settings in `nai`; a ComfyUI preset has `nai: null`:
 
 ```js
-{ id, name, instruction, kind: 'nai' | 'comfyui',
+{ id, name, instruction, kind: 'nai' | 'comfyui' | 'codex',
   nai: { model, sampler, noiseSchedule, steps, scale, varietyPlus, transparentBackground, promptPrefix, promptSuffix, negativePrompt, sizes, characters, useCoords, vibes, characterRefs, characterReference } | null,
   comfyui: { workflowId, serverId, serverTag, fixedInputs, exposedFieldIds, referenceField, promptField } | null,
+  codex: { model, promptPrefix, promptSuffix, negativePrompt, sizes, characterReference } | null,   // characterReference: 'none' | 'reference'
   prompting: { timing: 'inline' | 'early' | 'after', guide, previousImages,
     guideSkill: { skillId, path, skillName, title, updatedDate } | null } }   // names/date null once the section is gone
 ```
