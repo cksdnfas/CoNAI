@@ -1,6 +1,6 @@
 import { randomUUID, randomInt, createHash } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
-import { adapterOf, applyOps, assertAdapter, buildDirector, buildWorkflowInputs, canonical, checkCut, checkNode, completeProfile, cutEdges, mergeProfile, cutOf, duplicateCanvas, expected, fail, freePosition, generationRequest, generatorOf, inputEdges, nodeOf, normalizeRef, outputOf, profileOf, profilePublication, relabelProfile, representativeTake, resultHash, roleOf, sequenceOf, slotMode, staleUpstream, validateGenInputs, validateProfile, withResults, workflowOption } from './domain.mjs'
+import { adapterOf, applyOps, assertAdapter, buildDirector, buildWorkflowInputs, canonical, checkCut, checkNode, completeProfile, continuationEdges, continuationPort, continuationRoom, cutEdges, cutOf, duplicateCanvas, expected, fail, freePosition, generationRequest, generatorOf, inputEdges, isContinuation, mergeProfile, moveContinuation, nodeOf, normalizeRef, outputOf, previousCut, profileOf, profilePublication, relabelProfile, renameContinuation, representativeTake, resolvePrompt, resultHash, roleOf, sequenceOf, slotMode, staleUpstream, unusedReference, validateGenInputs, validateProfile, withResults, workflowOption } from './domain.mjs'
 import { excerpt, recordPage } from './assistant-state.mjs'
 import { PROFILE_CHANGED, createStore, workflowSourceKey } from './store.mjs'
 export { createStore } from './store.mjs'
@@ -37,6 +37,8 @@ function mediaProgress(job) {
   return filled
 }
 const CHAIN_INPUT_CHANGED = '이어 생성 준비 중에 컷이 바뀌어서 바뀐 입력으로 다시 생성했어.'
+// The warning a cut's sent text gives for a frame it never names (a REF2VA reference image is bound only through its @name), else null.
+const unnamedFrame = (project, cut, name) => resolvePrompt(project, cut).warnings.find(warning => warning === unusedReference(name)) ?? null
 // Resolves after `ms`, or earlier when a listener in `wake` is called; rejects when the signal aborts.
 const pause = (ms, signal, wake) => new Promise((resolve, reject) => {
   const cleanup = () => { clearTimeout(timer); wake?.delete(resume); signal?.removeEventListener('abort', abort) }
@@ -498,7 +500,7 @@ export function createService(conai, store = createStore(conai.db)) {
       const before = store.get(owner, projectId), next = structuredClone(before), extraction = store.extraction(owner, projectId, id)
       if (terminal(extraction.status) && !terminal(job.status)) return { ...extraction, revision: before.revision }
       const nodeIds = [...(extraction.nodeIds ?? [])], savedKeys = [...(extraction.savedKeys ?? [])], rejected = [...(extraction.rejected ?? [])], hashes = [...(extraction.resultHashes ?? [])]
-      let modeChange = extraction.modeChange ?? null
+      let modeChange = extraction.modeChange ?? null, promptChange = extraction.promptChange ?? null, connectedName = extraction.frameName ?? null, unnamed = extraction.unnamed ?? null
       // A cancelled chain's frame stays in the library only: it never becomes a node, a connection or a mode switch.
       const chain = extraction.chainId ? before.chains.find(item => item.id === extraction.chainId) : null
       const cancelled = Boolean(chain?.cancelRequested || chain?.status === 'cancelled')
@@ -517,24 +519,40 @@ export function createService(conai, store = createStore(conai.db)) {
         if (target) {
           // A replacing target (the chain run, a page replace) drops the slot's current image, but only when the new one connects.
           const replaced = target.replace ? next.edges.filter(edge => edge.to === target.cut && edge.port === target.port) : []
-          const connect = applyOps(next, [...replaced.map(edge => ({ op: 'disconnect', id: edge.id })), { op: 'connect', from: node.id, to: target.cut, port: target.port, position: target.position }], next.revision, randomUUID)
-          const connected = connect.applied.some(item => item.op.op === 'connect')
+          // A frame of the previous cut's result is the cut's continuation: it takes over the earlier continuation link on either slot
+          // (a reference image in its place), and the replaced frame's @mentions follow a new name. A chain run's frame continues its cut
+          // whatever the sequence order says (`continues`, set by the chain only), from the cut the chain ran before.
+          const continued = Boolean(target.continues) || isContinuation(next, { from: node.id, to: target.cut, port: target.port })
+          const after = target.continues ? before.takes.find(take => take.id === extraction.source?.takeId)?.cutId : null
+          const earlier = continued ? continuationEdges(next, cutOf(next, target.cut), after).filter(edge => !replaced.includes(edge)) : []
+          const leaving = [...replaced, ...earlier], place = target.position ?? (target.port === 'ref_image' ? earlier.find(edge => edge.port === 'ref_image')?.position : undefined)
+          const trial = structuredClone(next), connectOp = { op: 'connect', from: node.id, to: target.cut, port: target.port, position: place }
+          let renamed = null
+          try {
+            if (continued && target.port === 'ref_image') continuationRoom(trial, cutOf(trial, target.cut), leaving.map(edge => edge.id))
+            if (continued) renamed = renameContinuation(trial, cutOf(trial, target.cut), nodeOf(trial, node.id), earlier.map(edge => nodeOf(trial, edge.from).data.name).find(name => name !== node.data.name))
+          } catch (error) { rejected.push({ op: connectOp, reason: error.message }); continue }
+          const connect = applyOps(trial, [...leaving.map(edge => ({ op: 'disconnect', id: edge.id })), connectOp], trial.revision, randomUUID)
+          const connected = connect.applied.find(item => item.op.op === 'connect')
           rejected.push(...connect.rejected)
           if (connected) {
-            next.edges = connect.project.edges
+            next.nodes = connect.project.nodes; next.edges = connect.project.edges
             // The replaced frame goes with its link when it was extracted, is used nowhere else and the person has not reviewed it.
-            const stale = new Set(replaced.map(edge => nodeOf(next, edge.from)).filter(old => old.kind === 'frame' && old.data.origin && (old.review ?? 'pending') === 'pending'
+            const stale = new Set(leaving.map(edge => nodeOf(next, edge.from)).filter(old => old.kind === 'frame' && old.data.origin && (old.review ?? 'pending') === 'pending'
               && !next.edges.some(edge => edge.from === old.id || edge.to === old.id)).map(old => old.id))
             if (stale.size) next.nodes = next.nodes.filter(old => !stale.has(old.id))
-            // A start/end image the cut's mode ignores switches the mode to one that uses it, in the same edit.
-            const cut = cutOf(next, target.cut), mode = slotMode(cut.data.mode, target.port)
-            if (mode) { modeChange = { cutId: cut.id, from: cut.data.mode, to: mode }; cut.data.mode = mode }
+            // A start/end image the cut's mode ignores switched the mode to one that uses it, in the same edit.
+            if (connected.modeChange) modeChange = connected.modeChange
+            promptChange = renamed ?? promptChange
+            // Whether the cut's sent text names the frame (a REF2VA reference image is bound only through its @name): said only when it does not.
+            connectedName = node.data.name
+            unnamed = unnamedFrame(next, cutOf(next, target.cut), connectedName)
           }
         }
       }
       if (changed) save(owner, before, next)
       return { ...store.setExtraction(owner, projectId, id, { jobId: job.job_id ?? extraction.jobId, status: job.status, progress: mediaProgress(job),
-        error: job.error ?? (job.failed?.length ? JSON.stringify(job.failed) : null), nodeIds, savedKeys, rejected, resultHashes: hashes, modeChange }), revision: store.get(owner, projectId).revision }
+        error: job.error ?? (job.failed?.length ? JSON.stringify(job.failed) : null), nodeIds, savedKeys, rejected, resultHashes: hashes, modeChange, promptChange, ...(connectedName ? { frameName: connectedName } : {}), ...(unnamed ? { unnamed } : {}) }), revision: store.get(owner, projectId).revision }
     })()
   }
   // Media-edit jobs keep their state outside the canvas revision; aborting stops only this wait.
@@ -680,18 +698,30 @@ export function createService(conai, store = createStore(conai.db)) {
       return finishStep(owner, projectId, id, index, running, signal)
     }
     if (index > 0) {
-      if (chain.keepStart && project.edges.some(edge => edge.to === cutId && edge.port === 'start')) {
-        const before = store.get(owner, projectId), next = structuredClone(before), mode = slotMode(cutOf(before, cutId).data.mode, 'start')
-        if (mode) { cutOf(next, cutId).data.mode = mode; save(owner, before, next) }
+      // A REF2VA cut continues among its reference images, every other cut from its start slot, from the cut the chain ran before it.
+      const after = chain.cutIds[index - 1], port = continuationPort(cut.data.mode), held = continuationEdges(project, cut, after)
+      if (chain.keepStart && (port === 'start' ? project.edges.some(edge => edge.to === cutId && edge.port === 'start') : held.length > 0)) {
+        // keep_start keeps the continuation frame the cut has: a start-mode cut whatever its start slot holds, a REF2VA cut its continuation frame,
+        // which moves into its reference images when it was left on the start slot that mode does not use.
+        const before = store.get(owner, projectId), next = structuredClone(before), target = cutOf(next, cutId), mode = slotMode(target.data.mode, 'start')
+        if (port === 'start' && mode) { target.data.mode = mode; save(owner, before, next) }
+        if (port === 'ref_image' && !held.some(edge => edge.port === 'ref_image')) {
+          moveContinuation(next, target, continuationEdges(next, target, after).find(edge => edge.port === 'start'), 'ref_image')
+          save(owner, before, next)
+        }
+        const kept = store.get(owner, projectId), frame = port === 'ref_image' && continuationEdges(kept, cutOf(kept, cutId), after).find(edge => edge.port === 'ref_image')
+        const unnamed = frame && unnamedFrame(kept, cutOf(kept, cutId), nodeOf(kept, frame.from).data.name)
+        if (unnamed) setStep(owner, projectId, id, index, { unnamed })
       } else {
         setStep(owner, projectId, id, index, { status: 'extracting' })
         // An upscaled previous cut continues from the generated take it upscaled.
         const prior = store.chain(owner, projectId, id).steps[index - 1].takeId, previous = store.take(owner, projectId, prior).upscaleOf ?? prior
-        let extraction = await retryStale(() => extract(owner, { project_id: projectId, expected_revision: store.get(owner, projectId).revision, take_id: previous, position: 'last', target: { cut: cutId, port: 'start' }, wait_seconds: 120 }, signal, { replace: true, chainId: id }))
+        let extraction = await retryStale(() => extract(owner, { project_id: projectId, expected_revision: store.get(owner, projectId).revision, take_id: previous, position: 'last', target: { cut: cutId, port }, wait_seconds: 120 }, signal, { replace: port === 'start', chainId: id, continues: true }))
         setStep(owner, projectId, id, index, { extractionId: extraction.id })
         while (!terminal(extraction.status)) extraction = await waitExtraction(owner, projectId, extraction.id, 120, signal)
         if (extraction.status !== 'completed' || !extraction.nodeIds.length) fail(extraction.error ?? '앞 컷의 마지막 프레임을 뽑지 못했어.')
         if (extraction.rejected.length) fail(extraction.rejected.map(item => item.reason).join(' / '))
+        if (extraction.unnamed) setStep(owner, projectId, id, index, { unnamed: extraction.unnamed })
       }
     }
     // Each attempt gets its own request ID: a retry after a concurrent cut edit must not get back the take that edit failed.
@@ -782,7 +812,7 @@ export function createService(conai, store = createStore(conai.db)) {
       throw error
     }
   }
-  async function extract(owner, args, signal, { replace = false, chainId = null } = {}) {
+  async function extract(owner, args, signal, { replace = false, chainId = null, continues = false } = {}) {
     enumArg(args.position, ['first', 'middle', 'last'], 'position'); enumArg(args.format, ['png', 'webp'], 'format'); booleanArg(args.cancel, 'cancel')
     const seconds = waitArg(args.wait_seconds)
     if (args.frame_index !== undefined && (!Number.isInteger(args.frame_index) || args.frame_index < 0)) fail('frame_index는 0 이상 정수로 써줘.')
@@ -814,12 +844,17 @@ export function createService(conai, store = createStore(conai.db)) {
       requiredText(args.target.port, 'target.port'); enumArg(args.target.port, ['start', 'end', 'ref_image'], 'target.port'); cutOf(before, args.target.cut)
       if (args.target.position !== undefined && (!Number.isInteger(args.target.position) || args.target.position < 0)) fail('target.position은 0 이상 정수로 써줘.')
       booleanArg(args.target.replace, 'target.replace')
+      // A continuation among a REF2VA cut's reference images (the last frame of the cut before, or a chain's) needs a free place (the earlier
+      // continuation's counts as one): refused before any frame is made.
+      const cut = cutOf(before, args.target.cut), source = args.take_id ? before.takes.find(item => item.id === args.take_id) : null
+      const continuing = Boolean(source) && (continues || (args.position === 'last' && source.cutId === previousCut(before, cut.id)?.id))
+      if (args.target.port === 'ref_image' && continuing) continuationRoom(before, cut, continuationEdges(before, cut, continues ? source.cutId : null).map(edge => edge.id))
     }
     expected(store.get(owner, before.id), ownRevision(args.expected_revision, moves))
     signal?.throwIfAborted()
     const id = randomUUID()
-    // target.replace (start/end only) lets the extraction take the slot over in its own edit, as a chain run does.
-    const target = args.target ? { cut: args.target.cut, port: args.target.port, position: args.target.position, ...(replace || args.target.replace === true && args.target.port !== 'ref_image' ? { replace: true } : {}) } : null
+    // target.replace (start/end only) lets the extraction take the slot over in its own edit, as a chain run does; `continues` marks a chain's continuation.
+    const target = args.target ? { cut: args.target.cut, port: args.target.port, position: args.target.position, ...(replace || args.target.replace === true && args.target.port !== 'ref_image' ? { replace: true } : {}), ...(continues ? { continues: true } : {}) } : null
     store.addExtraction(owner, before.id, { id, status: 'starting', jobId: null, source: { nodeId: args.node_id ?? null, takeId: args.take_id ?? null }, sourceName, position: args.position, at_seconds: args.at_seconds, frame_index: args.frame_index, target, modeChange: null, ...(chainId ? { chainId } : {}) })
     try {
       const job = await call('save_video_frame', { composite_hash: hash, ...(args.position ? { position: args.position } : {}), ...(args.at_seconds ? { at_seconds: args.at_seconds } : {}), ...(args.frame_index !== undefined ? { frame_index: args.frame_index } : {}), format: args.format ?? 'png', wait_seconds: 0 })
@@ -865,6 +900,9 @@ export function createService(conai, store = createStore(conai.db)) {
     return { revision: project.revision, node, preview, edges: edges.items, takes: takes.items, nextEdgeCursor: edges.nextCursor, nextTakeCursor: takes.nextCursor, totalEdges: edges.total, totalTakes: takes.total }
   }
   const PRESET_EMPTY = '이 생성 프리셋에는 ComfyUI·NovelAI 설정이 없어. 앱에서 프리셋을 확인해줘.'
+  const PRESET_UNSUPPORTED = 'Codex 생성 프리셋은 영상 캔버스에서 아직 못 써. ComfyUI나 NovelAI 프리셋을 골라줘.'
+  // Codex presets have no generation profile shape here: listed, but not importable.
+  const presetProblemOf = preset => preset.kind === 'codex' ? PRESET_UNSUPPORTED : (preset.kind === 'nai' ? preset.nai : preset.comfyui) ? null : PRESET_EMPTY
   const presetsApi = () => {
     if (!conai.generationPresets?.get) fail('이 앱 버전에는 생성 프리셋 가져오기가 없어. 앱을 업데이트한 뒤 다시 해줘.', 501)
     return conai.generationPresets
@@ -872,7 +910,7 @@ export function createService(conai, store = createStore(conai.db)) {
   // Presets are listed for administrators only (the host refuses others).
   async function presetRows() {
     return (await presetsApi().list()).map(preset => ({ id: preset.id, name: preset.name, instruction: preset.instruction, kind: preset.kind,
-      usable: Boolean(preset.kind === 'nai' ? preset.nai : preset.comfyui), ...(preset.kind === 'nai' ? preset.nai : preset.comfyui) ? {} : { reason: PRESET_EMPTY },
+      usable: !presetProblemOf(preset), ...presetProblemOf(preset) ? { reason: presetProblemOf(preset) } : {},
       workflowId: preset.comfyui?.workflowId ?? null, hasGuide: Boolean(preset.prompting?.guide),
       guideSkill: preset.prompting?.guideSkill ? { skillId: preset.prompting.guideSkill.skillId, path: preset.prompting.guideSkill.path, title: preset.prompting.guideSkill.title } : null }))
   }
@@ -888,7 +926,8 @@ export function createService(conai, store = createStore(conai.db)) {
     if (unknown.length) fail(`preset에 쓸 수 없는 키야: ${unknown.join(', ')}. 쓸 수 있는 키는 ${allowed.join(', ')}야. 가이드 스킬은 가져온 뒤 생성 설정을 guideSkill로 저장해서 이어줘(관리자만).`)
     const preset = await presetsApi().get(input.id)
     const { comfyui, nai, prompting } = preset
-    if (!(preset.kind === 'nai' ? nai : comfyui)) fail(PRESET_EMPTY)
+    const problem = presetProblemOf(preset)
+    if (problem) fail(problem)
     const guide = { instruction: preset.instruction ?? '', guide: prompting?.guide ?? '', guideSkill: prompting?.guideSkill ? { skillId: prompting.guideSkill.skillId, path: prompting.guideSkill.path } : null }
     if (preset.kind === 'nai') {
       const { characterReference, ...settings } = nai
@@ -1286,12 +1325,12 @@ export function activate(conai) {
       workflow_options: 'List image and sound workflows: usable/reason and the detected Director/seed fields, adjustable Director defaults (override keys) and other simple marked fields (extraFields) for cuts; `generator` {usable, reason, output (a guess: say video for a video workflow), promptFieldId, seedFieldId, imageFieldIds, imageFields} for generation nodes; plus active ComfyUI servers and routing tags. presets:true (administrators) adds the app generation presets {id, name, instruction, kind comfyui|nai, usable, workflowId, hasGuide, guideSkill}; skills:true (administrators) adds the skill sections a profile guide can link {skillId, name, enabled, sections [{path, title}], groups [{path, title, count}]}. Both are left out for other accounts. `upscale` {usable, reason, videoFields [{id, label}], seedFieldId} is the workflow as an upscale setting. Also returns the account\'s settings library shared by all its projects, `profiles` (each with role cut|gen|upscale and revision, the expected_profile_revision of a save of that entry), and `settings` {cutProfileId, upscaleProfileId}: the defaults new cuts and upscales use. Cut profile: apply_ops profile {workflowId, label?, serverId|serverTag?, overrides?, inputs?}. Generation profile: apply_ops profile {workflowId, output: video|image|audio, label?, promptFieldId?, seedFieldId?, imageFieldIds?, exposedFieldIds?, fixedInputs?, instruction?, guide?, serverId|serverTag?} or apply_ops preset {id, output?, label?, promptFieldId?, seedFieldId?, imageFieldIds?} to copy a preset (NovelAI presets only this way). Upscale profile: apply_ops profile {workflowId, videoFieldId (one of upscale.videoFields), fixedInputs?, seedFieldId?, label?, serverId|serverTag?}; its result is a video.',
       export_sequence: 'Last step of a multi-cut video, after run_chain completed. Join the cuts\' representing takes (data.pickTakeId, else the latest take with a result) into one library video in sequence order, or cut_ids order. Needs expected_revision; cuts without a ready result block it. Returns id/status/jobId/progress/resultHash (and warnings when upscaled and not upscaled cuts are mixed); export_id reads, waits (0..120 s) or cancels.',
       read_canvas: 'Read paged canvas nodes/edges. Each cut row has newestTakeId/newestTakeStatus/newestTakeError, hasReadyResult, representingTakeId and resultHash (generation state); humanReview is only the person\'s review, not a generation state. node_id reads detail, paged edges/takes and preview.inputDigest; for a generation node or a cut whose profile has a guide, preview.guide {text, skill {title, text}, guideWarning} is the prompt guide to follow before writing that node\'s prompt (preview.instruction says what the generator is for). Gen rows carry output and the same generation state as cuts. Pass nextCursor/nextEdgeCursor/nextTakeCursor back only while they are non-null; null or omitted means the first page.',
-      apply_ops: 'Create and edit cuts. Multi-cut video: 1) create_name makes a project (expected_revision is ignored; with profile in the same call it also saves that profile to the account library and returns id, revision and profileId), 2) one ops batch adds the cuts (add_node kind cut with name and fields {prompt, duration, mode}: add_node of a cut or gen node takes the same fields as set; unknown op keys are rejected) in story order, 3) run_chain, 4) export_sequence. Consistency: give every cut of one video the same style/subject/setting description in its prompt and describe only what changes; run_chain continues each later cut from the previous cut\'s last frame. RefMod: set the cut mode to REF2VA, then import_bundle {ref:{name}, target:{cut, port:"refmod", props:{strength, description}}} with a name from list_comfy_refmods, and mention it in the prompt as @name (it becomes <RefMod N>); it cannot be given through set fields or profile overrides. Ops need expected_revision; tempIds and applied/rejected are returned. Connecting an image to a start/end slot the cut\'s mode ignores switches the mode (start: T2VA->I2VA, L2VA->FL2VA; end: T2VA->L2VA, I2VA->FL2VA), reported as modeChange on that connect or add/import op. Nodes without at are placed without overlap. sequence {order:[cutId]} reorders the export sequence (unlisted cuts follow); set {fields:{pickTakeId}} picks the take representing a cut. A profile save of an existing id may pass expected_profile_revision (that entry\'s revision from workflow_options profiles) and fails with 409 when the entry changed since. Settings (profiles) are one library shared by all of the account\'s projects: profile saves a validated profile there (only workflowId is required; an equal one already saved is reused) and returns profileId; settings {cutProfileId, upscaleProfileId} sets the defaults (null clears). A new cut gets the default cut setting (or the only cut setting); give add_node profileId to use another. With no cut setting at all, adding or running a cut creates the default profile of the only usable workflow and makes it the default (reported as autoProfile), and with several usable workflows you save one with profile. set fields upscaleProfileId on a cut picks its upscale setting (null follows the default). undo restores the latest assistant batch (library edits are not undone). Human reviews cannot be supplied by an assistant. Generation nodes: add_node kind gen (gets the generation setting only when the library has exactly one; else give profileId; set fields name/prompt/seed/profileId/pickTakeId, inputs {exposedFieldId: value}, size for a NovelAI profile) runs a generation profile (see workflow_options; preset copies an app preset) with run_cut cut_id=<gen id>; read its preview.guide with read_canvas node_id before writing its prompt. Its input port image takes image/frame nodes (position N fills the profile\'s Nth image field). Its result connects to cut slots by output: image -> start/end/ref_image, video -> ref_video, audio -> ref_audio (connect from the gen node); the slot uses the gen node\'s representing take and blocks until it has a result; once the gen node is regenerated, check and read_canvas node_id warn (stale-input) on nodes whose result used its older result. run_chain does not generate gen nodes.',
+      apply_ops: 'Create and edit cuts. Multi-cut video: 1) create_name makes a project (expected_revision is ignored; with profile in the same call it also saves that profile to the account library and returns id, revision and profileId), 2) one ops batch adds the cuts (add_node kind cut with name and fields {prompt, duration, mode}: add_node of a cut or gen node takes the same fields as set; unknown op keys are rejected) in story order, 3) run_chain, 4) export_sequence. Consistency: give every cut of one video the same style/subject/setting description in its prompt and describe only what changes; run_chain continues each later cut from the previous cut\'s last frame; a REF2VA cut gets it as a reference image named "<previous cut name> 마지막 프레임", used only when its prompt names it as @<that name> (sent as <Picture N>; naming it before the frame exists is fine), e.g. subject_definitions: "@<previous cut name> 마지막 프레임 is the first frame of [Shot 1]." RefMod: set the cut mode to REF2VA, then import_bundle {ref:{name}, target:{cut, port:"refmod", props:{strength, description}}} with a name from list_comfy_refmods, and mention it in the prompt as @name (it becomes <RefMod N>); it cannot be given through set fields or profile overrides. Ops need expected_revision; tempIds and applied/rejected are returned. Connecting an image to a start/end slot the cut\'s mode ignores switches the mode (start: T2VA->I2VA, L2VA->FL2VA; end: T2VA->L2VA, I2VA->FL2VA), reported as modeChange on that connect or add/import op. Nodes without at are placed without overlap. sequence {order:[cutId]} reorders the export sequence (unlisted cuts follow); set {fields:{pickTakeId}} picks the take representing a cut. A profile save of an existing id may pass expected_profile_revision (that entry\'s revision from workflow_options profiles) and fails with 409 when the entry changed since. Settings (profiles) are one library shared by all of the account\'s projects: profile saves a validated profile there (only workflowId is required; an equal one already saved is reused) and returns profileId; settings {cutProfileId, upscaleProfileId} sets the defaults (null clears). A new cut gets the default cut setting (or the only cut setting); give add_node profileId to use another. With no cut setting at all, adding or running a cut creates the default profile of the only usable workflow and makes it the default (reported as autoProfile), and with several usable workflows you save one with profile. set fields upscaleProfileId on a cut picks its upscale setting (null follows the default). undo restores the latest assistant batch (library edits are not undone). Human reviews cannot be supplied by an assistant. Generation nodes: add_node kind gen (gets the generation setting only when the library has exactly one; else give profileId; set fields name/prompt/seed/profileId/pickTakeId, inputs {exposedFieldId: value}, size for a NovelAI profile) runs a generation profile (see workflow_options; preset copies an app preset) with run_cut cut_id=<gen id>; read its preview.guide with read_canvas node_id before writing its prompt. Its input port image takes image/frame nodes (position N fills the profile\'s Nth image field). Its result connects to cut slots by output: image -> start/end/ref_image, video -> ref_video, audio -> ref_audio (connect from the gen node); the slot uses the gen node\'s representing take and blocks until it has a result; once the gen node is regenerated, check and read_canvas node_id warn (stale-input) on nodes whose result used its older result. run_chain does not generate gen nodes.',
       check: 'Check live source fingerprints, permissions, typed slots, limits and prompt names. Missing/permission/required-slot/limit/token errors block; changed files, unused references and results made from a since-regenerated gen node (stale-input) warn.',
       run_cut: 'The normal way to generate one cut now (several cuts of one video: run_chain). New runs need requestId and expected_revision; wait_seconds (0..120) waits for the take to finish with its result hash in the same call. mode propose (cuts only) is only for when the person asked to review before generating; proposals are approved only by a human. take_id + inputs take|canvas reruns with profile_id; action retry/cancel manages a take. action upscale (requestId and expected_revision; take_id = the source take, default the cut\'s representing take; profile_id, default the cut\'s upscaleProfileId while it is in the library, then settings.upscaleProfileId) adds a take to the cut (upscaleOf = its source) that sends the source video through an upscale setting; once it has a result it takes over the cut\'s pick from its source. cut_id may be a generation node: read its preview.guide (read_canvas node_id) before writing its prompt; its take result (image/video/audio) then feeds the cut slots it is connected to.',
       get_take: 'Read a take by take_id, or a cut\'s newest take by cut_id (error holds the failure text). Only when this answer needs the result, wait_seconds (0..120) waits once for it to finish (completed with result hash, failed or cancelled). If still unfinished, do not call again: task_wait its jobId (job_ids) and end the answer.',
-      run_chain: 'Generate several cuts as one continuous video in the background (keeps running after your turn). Starts with expected_revision and optional cut_ids (default: the whole sequence); cuts with a ready result are skipped unless regenerate:true. Every later cut gets the previous cut\'s last frame in its start slot (T2VA becomes I2VA, L2VA becomes FL2VA) and is generated with its own prompt/seed/profile; keep_start:true keeps a start image a cut already has. Stops at the first failure, naming the cut and reason. One active chain per project. Returns id/status/current/steps[{cutId,status,takeId,error}]; chain_id with wait_seconds (0..120) waits, cancel:true cancels the running generation. When completed, call export_sequence.',
-      extract_frame: 'Start a library video or take frame extraction or query extraction_id; wait_seconds (0..120) waits with cancellation/progress. target connects the frame to start/end/ref_image; a start/end slot the cut\'s mode ignores switches the mode (start: T2VA->I2VA, L2VA->FL2VA; end: T2VA->L2VA, I2VA->FL2VA), reported as modeChange. Frames are named after their source and position. Chained cuts: prefer run_chain.',
+      run_chain: 'Generate several cuts as one continuous video in the background (keeps running after your turn). Starts with expected_revision and optional cut_ids (default: the whole sequence); cuts with a ready result are skipped unless regenerate:true. Every later cut gets the last frame of the cut run before it: in its start slot (T2VA becomes I2VA, L2VA becomes FL2VA), or for a REF2VA cut as a reference image (see apply_ops; a step whose prompt does not name it has unnamed). Each cut is generated with its own prompt/seed/profile; keep_start:true keeps the continuation frame a cut already has. Stops at the first failure, naming the cut and reason. One active chain per project. Returns id/status/current/steps[{cutId,status,takeId,error}]; chain_id with wait_seconds (0..120) waits, cancel:true cancels the running generation. When completed, call export_sequence.',
+      extract_frame: 'Start a library video or take frame extraction or query extraction_id; wait_seconds (0..120) waits with cancellation/progress. target connects the frame to start/end/ref_image; a start/end slot the cut\'s mode ignores switches the mode (start: T2VA->I2VA, L2VA->FL2VA; end: T2VA->L2VA, I2VA->FL2VA), reported as modeChange. A frame of the previous cut\'s take on the next cut\'s start, or its last frame into ref_image (REF2VA), replaces that cut\'s earlier continuation frame in place; mentions of the old name follow (promptChange). The result has frameName, and unnamed when the prompt does not name it. Frames are named after their source and position. Chained cuts: prefer run_chain.',
     }[name],
     inputSchema: { type: 'object', properties, required },
     handler: async (args, context) => {

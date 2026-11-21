@@ -93,14 +93,19 @@
     </div>
     <aside id="inspector" class="conai-sidebar end inspector" aria-label="선택 상세">
       <div class="toolbar vc-insp-head">
-        <div class="conai-segmented"><button data-tab="detail" aria-selected="true">선택</button><button data-tab="checks" aria-selected="false">체크</button><button data-tab="assistant" aria-selected="false">어시스턴트</button></div>
+        <div id="insp-tabs" class="conai-segmented" role="tablist" aria-label="상세 보기"><button type="button" role="tab" id="insp-tab-detail" data-tab="detail" aria-controls="insp-panel" aria-selected="true" tabindex="0">선택</button><button type="button" role="tab" id="insp-tab-checks" data-tab="checks" aria-controls="insp-panel" aria-selected="false" tabindex="-1">체크</button><button type="button" role="tab" id="insp-tab-assistant" data-tab="assistant" aria-controls="insp-panel" aria-selected="false" tabindex="-1">어시스턴트</button></div>
         <span class="conai-spacer"></span>
-        <button id="insp-close" class="conai-icon-button sm" data-icon="right" aria-label="상세 접기" title="상세 접기"></button>
+        <button id="insp-close" class="conai-icon-button" data-icon="right" aria-label="상세 접기" title="상세 접기"></button>
       </div>
-      <div id="insp-body"></div>
+      <div id="insp-panel" role="tabpanel" aria-labelledby="insp-tab-detail">
+        <div id="insp-top" class="vc-insp-top" hidden></div>
+        <div id="insp-body"></div>
+      </div>
+      <div class="vc-sr" role="status" aria-live="polite"><span id="insp-live"></span></div>
     </aside>
   </div>
   <div id="menu" class="vc-menu" role="menu" hidden></div>
+  <div id="vc-tip" class="vc-tip" aria-hidden="true" hidden></div>
   <dialog id="modal"></dialog>
   <script type="module" src="main.js"></script>
 </body>

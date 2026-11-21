@@ -124,6 +124,101 @@ function sourceKind(project, node) {
 // The mode that starts using a start/end slot the current mode ignores; other modes and ports stay as they are.
 const SLOT_MODES = { start: { T2VA: 'I2VA', L2VA: 'FL2VA' }, end: { T2VA: 'L2VA', I2VA: 'FL2VA' } }
 export const slotMode = (mode, port) => SLOT_MODES[port]?.[mode] ?? null
+
+// ---- continuation: the previous cut's last frame carried into the next cut ----
+/** The slot a cut takes the previous cut's frame in: a REF2VA cut has no start frame, so the frame becomes one of its reference images. */
+export const continuationPort = mode => mode === 'REF2VA' ? 'ref_image' : 'start'
+const CONTINUATION_PORTS = ['start', 'ref_image']
+/** The cut right before a cut in sequence order, or null. */
+export function previousCut(project, cutId) {
+  const order = sequenceOf(project), index = order.indexOf(cutId)
+  return index > 0 ? project.nodes.find(node => node.id === order[index - 1]) ?? null : null
+}
+/** The cut whose take a frame node was extracted from, or null. */
+function frameCut(project, frame) {
+  const takeId = frame?.kind === 'frame' ? frame.data.origin?.takeId : null
+  return takeId ? (project.takes ?? []).find(item => item.id === takeId)?.cutId ?? null : null
+}
+// On the start slot any frame of the cut before carries it on; among the reference images only its last frame does
+// (a first or middle frame there is a reference the person chose, left alone).
+const carries = (frame, port) => port === 'start' || (port === 'ref_image' && frame?.data.origin?.position === 'last')
+/** True when an edge is a continuation link: a frame of the cut right before it in sequence order on its start slot, or that cut's last frame among its reference images. */
+export function isContinuation(project, edge) {
+  const frame = project.nodes.find(node => node.id === edge.from), from = CONTINUATION_PORTS.includes(edge.port) && carries(frame, edge.port) ? frameCut(project, frame) : null
+  return Boolean(from) && from === previousCut(project, edge.to)?.id
+}
+// A chain run continues each cut from the cut it ran before, which need not be the cut before it in sequence order (cut_ids picks and orders).
+function chainedFrom(project, edge, cutId) {
+  const frame = project.nodes.find(node => node.id === edge.from)
+  return CONTINUATION_PORTS.includes(edge.port) && frame?.data.origin?.position === 'last' && frameCut(project, frame) === cutId
+}
+/** A cut's continuation links (normally none or one). `after` is the cut a chain run continues it from: its last frames on the start or reference image slots count too. */
+export const continuationEdges = (project, cut, after = null) => project.edges.filter(edge => edge.to === cut.id && (isContinuation(project, edge) || (Boolean(after) && chainedFrom(project, edge, after))))
+/** Refuses a continuation a REF2VA cut has no room for among its references; `leaving` are the IDs of links it replaces. */
+export function continuationRoom(project, cut, leaving = []) {
+  if (cut.data.mode !== 'REF2VA') return
+  const edges = cutEdges(project, cut).filter(edge => !leaving.includes(edge.id))
+  if (edges.filter(edge => edge.port === 'ref_image').length >= LIMITS.ref_image) fail(`참조 이미지는 ${LIMITS.ref_image}개까지라 앞 컷 프레임을 넣을 자리가 없어. 참조 이미지를 하나 빼고 다시 이어가줘.`)
+  if (edges.filter(edge => edge.port !== 'refmod').length >= 12) fail('참조 합계는 12개까지라 앞 컷 프레임을 넣을 자리가 없어. 참조를 하나 빼고 다시 이어가줘.')
+}
+// A mention ends where its name does: at the end of the text, a space or a punctuation mark (resolvePrompt reads it the same way).
+const MENTION_END = /[\s.,!?;:()[\]{}"'<>]/u
+const mentionNames = (project, extra = []) => [...new Set([...project.nodes.filter(node => node.kind !== 'cut').map(node => node.data.name), ...extra].filter(Boolean))].sort((a, b) => b.length - a.length)
+/** The text with each @mention's name passed through `map`; the longest node name that fits is the mention, as resolvePrompt reads it. */
+function mapMentions(text, names, map) {
+  return String(text ?? '').split('@').map((part, index) => {
+    if (!index) return part
+    const name = names.find(item => part.startsWith(item) && (!part[item.length] || MENTION_END.test(part[item.length])))
+    return name ? map(name) + part.slice(name.length) : part
+  }).join('@')
+}
+/** The field whose text a cut sends: raw when it has text, else prompt (as resolvePrompt reads it). */
+export const sentField = cut => cut.data.raw ? 'raw' : 'prompt'
+/** The warning for a reference the sent text never names (resolvePrompt's, the page's and the extraction result's). */
+export const unusedReference = name => `쓰지 않은 참조야: @${name}`
+/**
+ * A continuation frame replaced by one named differently (its source cut was renamed) takes over the old name's @mentions in prompt and raw,
+ * or a text that named the old frame would stop resolving. The only text the plugin changes by itself: nothing is added or removed.
+ * Changes the cut in place; returns { cutId, field, name, renamed } or null.
+ */
+export function renameContinuation(project, cut, frame, renamed) {
+  const name = frame.data.name
+  if (!renamed || renamed === name) return null
+  const names = mentionNames(project, [renamed]), fields = ['raw', 'prompt'].filter(key => {
+    const text = String(cut.data[key] ?? ''), next = mapMentions(text, names, item => item === renamed ? name : item)
+    if (next !== text) cut.data[key] = next
+    return next !== text
+  })
+  return fields.length ? { cutId: cut.id, field: fields[0], name, renamed } : null
+}
+/**
+ * The continuation link follows its cut's mode: a cut set to REF2VA takes its continuation frame from the start slot it no longer uses into its
+ * reference images, and a cut set from REF2VA to a mode that uses the start slot takes it back there while that slot is empty. Only continuation
+ * frames move; everything else stays where it is, kept but unused. Returns { move } or null.
+ */
+function followMode(project, cut, from) {
+  const to = cut.data.mode, links = continuationEdges(project, cut)
+  if (to === 'REF2VA' && from !== 'REF2VA') {
+    // Only a frame that continues the cut among reference images (its source's last frame) goes there.
+    const edge = links.find(item => item.port === 'start' && carries(nodeOf(project, item.from), 'ref_image'))
+    if (!edge || links.some(item => item.port === 'ref_image')) return null
+    try { return moveContinuation(project, cut, edge, 'ref_image') } catch { return null }
+  }
+  if (from === 'REF2VA' && to !== 'REF2VA' && activePorts(to).includes('start') && !project.edges.some(edge => edge.to === cut.id && edge.port === 'start')) {
+    const edge = links.find(item => item.port === 'ref_image')
+    return edge ? moveContinuation(project, cut, edge, 'start') : null
+  }
+  return null
+}
+/** Moves a cut's continuation link to `port` (after the slot's other images), refusing when the reference images are full.
+ *  Changes the project in place; returns { move }. */
+export function moveContinuation(project, cut, edge, port) {
+  if (port === 'ref_image') continuationRoom(project, cut, [edge.id])
+  const from = edge.port
+  edge.port = port; edge.position = project.edges.filter(other => other !== edge && other.to === cut.id && other.port === port).length
+  renumber(project)
+  return { move: { cutId: cut.id, edgeId: edge.id, from, to: port } }
+}
 // Server placement uses the page's default node sizes (CSS widths, typical heights) and gap.
 const GAP = 24
 const boxOf = (kind, x = 0, y = 0) => ({ x, y, ...(kind === 'cut' || kind === 'gen' ? { w: 300, h: 300 } : { w: 200, h: 190 }) })
@@ -286,7 +381,7 @@ function applyOne(project, op, aliases, uuid, actor) {
       if (Object.keys(op.fields ?? {}).some(key => key !== 'props')) fail('연결선은 props만 바꿀 수 있어.')
       edge.props = cleanProps({ ...edge.props, ...op.fields.props })
     } else {
-      const node = nodeOf(project, id(op.id))
+      const node = nodeOf(project, id(op.id)), mode = node.data.mode
       for (const [key, value] of Object.entries(op.fields ?? {})) {
         if (['ref', 'refmods', 'builder_state', 'timeline_data', 'assets', 'media'].includes(key)) fail(`${key}는 set으로 넣을 수 없어. 소재와 RefMod는 노드로 가져와 컷 슬롯에 이어줘: RefMod는 컷 mode를 REF2VA로 두고 import_bundle {ref:{name}, target:{cut, port:"refmod"}}.`)
         if (!editable.includes(key) && !genEditable.includes(key)) fail(`바꿀 수 없는 필드야: ${key}`)
@@ -302,6 +397,8 @@ function applyOne(project, op, aliases, uuid, actor) {
       }
       if (node.kind === 'cut') validateData(node.data)
       if (node.kind === 'gen') validateGenData(node.data)
+      const followed = node.kind === 'cut' && node.data.mode !== mode ? followMode(project, node, mode) : null
+      if (followed) return { id: node.id, continuationMove: followed.move }
     }
     return { id: id(op.id) }
   }
@@ -411,33 +508,62 @@ export function labelTable(project, cut) {
   }
   return rows
 }
-export function resolvePrompt(project, cut) {
-  const table = labelTable(project, cut), errors = [], warnings = [], used = new Set()
-  const groups = new Map()
+const LABEL = /<(Picture|Video|Audio|RefMod) (\d+)>/g
+const missingRefMod = slot => `<RefMod ${slot}>에 연결된 RefMod가 없어. REF2VA 컷의 RefMod 슬롯에 번들을 이어줘.`
+/**
+ * A cut's text read as it is sent: each @mention becomes its labels, or stays as typed with why it does not resolve. `marks` locate the
+ * references in the text and `sent` in the result, each { start, end } with the labelTable `rows` it stands for or an `error`; a label typed
+ * as is (<Picture 2>) is marked too (`typed`), with the row in that place. The page marks a prompt with exactly what resolvePrompt sends.
+ */
+export function readPrompt(project, cut, text, table = labelTable(project, cut)) {
+  const groups = new Map(), errors = [], used = new Set(), marks = [], sent = []
   for (const row of table) {
     if (!groups.has(row.name)) groups.set(row.name, [])
     groups.get(row.name).push(row)
   }
   const names = project.nodes.filter(node => node.kind !== 'cut').map(node => node.data.name).filter(Boolean).sort((a, b) => b.length - a.length)
-  const resolve = input => String(input ?? '').replace(/@/g, '\u0000').split('\u0000').map((part, index) => {
-    if (!index) return part
+  const parts = String(text ?? '').split('@')
+  let prompt = parts[0], at = parts[0].length
+  for (const part of parts.slice(1)) {
     const name = names.find(name => part.startsWith(name) && (!part[name.length] || /[\s.,!?;:()[\]{}"'<>]/u.test(part[name.length])))
-    if (!name) { errors.push(`모르는 @이름이야: @${part.split(/[\s.,!?]/u)[0]}`); return `@${part}` }
-    const rows = groups.get(name)
-    if (!rows) { errors.push(`현재 모드 슬롯에 없는 참조야: @${name}`); return `@${part}` }
-    const distinct = new Set(rows.map(row => row.nodeId))
-    const edges = new Set(rows.map(row => row.edgeId))
-    if (distinct.size > 1 || edges.size > 1) { errors.push(`@이름이 겹쳐: @${name}`); return `@${part}` }
-    rows.forEach(row => used.add(row.edgeId))
-    return rows.map(row => row.label).join(' / ') + part.slice(name.length)
-  }).join('')
+    const rows = name ? groups.get(name) : null, word = name ?? part.split(/[\s.,!?]/u)[0], end = at + 1 + word.length
+    const error = !name ? `모르는 @이름이야: @${word}` : !rows ? `현재 모드 슬롯에 없는 참조야: @${name}`
+      : new Set(rows.map(row => row.nodeId)).size > 1 || new Set(rows.map(row => row.edgeId)).size > 1 ? `@이름이 겹쳐: @${name}` : null
+    if (error) {
+      errors.push(error)
+      marks.push({ start: at, end, error })
+      sent.push({ start: prompt.length, end: prompt.length + end - at, error })
+      prompt += `@${part}`
+    } else {
+      rows.forEach(row => used.add(row.edgeId))
+      const labels = rows.map(row => row.label).join(' / ')
+      marks.push({ start: at, end, rows })
+      sent.push({ start: prompt.length, end: prompt.length + labels.length, rows })
+      prompt += labels + part.slice(name.length)
+    }
+    at += 1 + part.length
+  }
+  // A typed label names whatever is in that place. A typed <RefMod N> without a bundle there reaches the Director as a tag with no
+  // reference and fails there; another kind is sent as typed.
+  const typed = (source, found) => {
+    for (const match of source.matchAll(LABEL)) {
+      const [label, kind, number] = match, start = match.index, end = start + label.length
+      const row = kind === 'RefMod' ? table.find(item => item.type === 'bundle' && item.slot === Number(number)) : table.find(item => item.label === `<${kind} ${Number(number)}>`)
+      const error = row ? null : kind === 'RefMod' ? missingRefMod(number) : `${label} 자리에 이어진 소재가 없어.`
+      if (error && kind === 'RefMod' && found === sent) errors.push(error)
+      if (!found.some(mark => mark.start < end && start < mark.end)) found.push(error ? { start, end, error, typed: true } : { start, end, rows: [row], typed: true })
+    }
+    found.sort((a, b) => a.start - b.start)
+  }
+  typed(String(text ?? ''), marks)
+  typed(prompt, sent)
+  return { prompt, errors: [...new Set(errors)], used, marks, sent }
+}
+export function resolvePrompt(project, cut) {
   // The Director takes one prompt text; sound and music are written inside it (overall_soundscape:, non_diegetic_music:).
-  const prompt = resolve(cut.data.raw || cut.data.prompt)
-  // A typed <RefMod N> without a bundle in that slot reaches the Director as a tag with no reference and fails there.
-  const slots = new Set(table.filter(row => row.type === 'bundle').map(row => row.slot))
-  for (const [, slot] of prompt.matchAll(/<RefMod (\d+)>/g)) if (!slots.has(Number(slot))) errors.push(`<RefMod ${slot}>에 연결된 RefMod가 없어. REF2VA 컷의 RefMod 슬롯에 번들을 이어줘.`)
-  for (const edge of cutEdges(project, cut)) if (!['start', 'end'].includes(edge.port) && !used.has(edge.id)) warnings.push(`쓰지 않은 참조야: @${nodeOf(project, edge.from).data.name}`)
-  return { prompt, table, errors: [...new Set(errors)], warnings }
+  const table = labelTable(project, cut), read = readPrompt(project, cut, cut.data.raw || cut.data.prompt, table), warnings = []
+  for (const edge of cutEdges(project, cut)) if (!['start', 'end'].includes(edge.port) && !read.used.has(edge.id)) warnings.push(unusedReference(nodeOf(project, edge.from).data.name))
+  return { prompt: read.prompt, table, errors: read.errors, warnings }
 }
 // Source defects shared by cut slots and generation inputs; a generation node feeds only a result withResults found.
 function sourceIssues(project, edge, kind, assets, add) {

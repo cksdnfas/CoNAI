@@ -1,5 +1,6 @@
 import { $, esc, clamp, ports, thumbUrl, patch } from './util.mjs'
-import { s, ctx, nodeById, cutOrder, allLinks, activeChain, frameSource, frameLabel, trayFrames, SLOT_KINDS } from './state.mjs'
+import { continuationPort, activePorts } from './domain.mjs'
+import { s, ctx, nodeById, cutOrder, allLinks, activeChain, frameSource, frameLabel, trayFrames, continues, activeContinuation, SLOT_KINDS } from './state.mjs'
 import { nodeEl } from './nodes.mjs'
 import { showMenu } from './menu.mjs'
 import { openDetail } from './session.mjs'
@@ -39,7 +40,8 @@ const RUNNING = ['extracting', 'generating']
 /**
  * Redraws every line and the chips that sit on them:
  * - a link (a frame of one cut's result feeding another cut) is a thick line with the frame as a chip at its middle;
- * - cuts that are not linked get a dotted order rail, with a 잇기 chip where the next cut's start is empty;
+ * - cuts that are not linked get a dotted order rail, with a 잇기 chip where the next cut can continue (an empty start slot, or a REF2VA cut);
+ *   a frame on a slot the cut's mode ignores links nothing and draws dashed;
  * - source lines follow the 소재 선 toggle; links and rails always draw.
  */
 export function drawEdges() {
@@ -54,21 +56,23 @@ export function drawEdges() {
   const items = [], chips = []
   const middle = (a, b) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 })
   // order rails between consecutive cuts that are not chained
-  const chained = new Set(allLinks(true).filter(link => ['start', 'end'].includes(link.edge.port) && order[order.indexOf(link.target) - 1]?.id === link.source.id).map(link => link.target.id))
+  // (a continuation frame on the start slot or among a REF2VA cut's reference images, or the cut before's frame on the end slot)
+  const chained = new Set(allLinks(true).filter(link => (link.edge.port === 'end' || activeContinuation(link.edge)) && order[order.indexOf(link.target) - 1]?.id === link.source.id).map(link => link.target.id))
+  const used = edge => { const cut = nodeById(edge.to); return cut?.kind !== 'cut' || activePorts(cut.data.mode).includes(edge.port) }
   order.forEach((cut, index) => {
     if (!index || chained.has(cut.id)) return
     const before = order[index - 1], a = output(before.id), b = mediaLeft(cut.id)
     if (!a || !b) return
     items.push({ cls: 'rail', d: curve(a, b), from: before.id, to: cut.id })
-    if (!s.project.edges.some(edge => edge.to === cut.id && edge.port === 'start')) chips.push({ key: `o:${cut.id}`, cls: 'offer', cut: cut.id, ...middle(a, b), html: '잇기', title: `${before.data.name}의 마지막 프레임으로 이어가기` })
+    if (continuationPort(cut.data.mode) === 'ref_image' || !s.project.edges.some(edge => edge.to === cut.id && edge.port === 'start')) chips.push({ key: `o:${cut.id}`, cls: 'offer', cut: cut.id, ...middle(a, b), html: '잇기', title: `${before.data.name}의 마지막 프레임으로 이어가기` })
   })
   for (const link of links) {
     const a = output(link.source.id), b = at(slots.get(link.edge.id)?.querySelector('.vc-input'))
     if (!a || !b) continue
-    const single = ['start', 'end'].includes(link.edge.port), step = chain?.steps.find(item => item.cutId === link.target.id)
+    const single = used(link.edge) && (['start', 'end'].includes(link.edge.port) || continues(link.edge)), step = chain?.steps.find(item => item.cutId === link.target.id)
     const running = single && chain?.current === link.target.id && RUNNING.includes(step?.status)
     const label = frameLabel(link.frame)
-    items.push({ cls: `${single ? 'chain' : 'refimg'}${link.stale ? ' stale' : ''}${running ? ' run' : ''}`, d: curve(a, b), from: link.source.id, to: link.target.id, edge: link.edge.id, hit: true })
+    items.push({ cls: `${single ? 'chain' : 'refimg'}${used(link.edge) ? '' : ' unused'}${link.stale ? ' stale' : ''}${running ? ' run' : ''}`, d: curve(a, b), from: link.source.id, to: link.target.id, edge: link.edge.id, hit: true })
     chips.push({ key: `l:${link.edge.id}`, cls: 'link', edge: link.edge.id, ...middle(a, b), title: `${label} → ${link.target.data.name} ${ports[link.edge.port]}${link.stale ? ' · 앞 컷이 다시 만들어졌어. 다시 뽑기로 새 결과를 가져와.' : ''}`,
       html: `<img src="${thumbUrl(link.frame.data.ref.compositeHash)}" alt="">${link.stale ? '<span class="conai-overlay-badge xs warn">이전</span>' : ''}` })
   }
@@ -81,7 +85,7 @@ export function drawEdges() {
     if (linkIds.has(edge.id)) continue
     const from = nodeById(edge.from), a = output(edge.from), b = at(slots.get(edge.id)?.querySelector('.vc-input'))
     if (!from || !a || !b) continue
-    const pulled = from.kind === 'frame' && Boolean(frameSource(from)) && ['start', 'end'].includes(edge.port)
+    const pulled = from.kind === 'frame' && Boolean(frameSource(from)) && used(edge) && (['start', 'end'].includes(edge.port) || continues(edge))
     if (!pulled && s.edges !== 'all' && !s.sel.includes(edge.from) && !s.sel.includes(edge.to) && edge.id !== s.edgeSel) continue
     items.push({ cls: pulled ? 'chain' : `src${slots.get(edge.id).classList.contains('unused') ? ' unused' : ''}`, d: curve(a, b), from: edge.from, to: edge.to, edge: edge.id, kind: SLOT_KINDS[edge.port], hit: true })
   }

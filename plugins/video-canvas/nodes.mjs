@@ -1,6 +1,7 @@
-import { MODES, PORTS, activePorts, cutEdges, adapterOf } from './domain.mjs'
+import { MODES, PORTS, activePorts, cutEdges, adapterOf, continuationPort } from './domain.mjs'
 import { $, esc, names, ports, outputNames, reviewNames, assetStates, thumbUrl, fileUrl, audioUrl, patch, icon } from './util.mjs'
-import { s, ctx, nodeById, takesOf, profileOf, repTake, shownTake, cutOrder, prevCut, cutState, finishing, failedTake, frameRole, frameLabel, outputKind, takeOutput, genInputs, staleWarning } from './state.mjs'
+import { s, ctx, nodeById, takesOf, profileOf, repTake, shownTake, cutOrder, prevCut, cutState, finishing, failedTake, frameRole, frameLabel, outputKind, takeOutput, genInputs, staleWarning, continuationOf } from './state.mjs'
+import { inkHtml, inkAll } from './ink.mjs'
 // The one control that names and changes a node's setting: its label is the setting's name, its menu the registered settings.
 const settingButton = (profile, tip) => `<button class="vc-workflow sm" data-action="pick-setting" aria-haspopup="menu" title="${profile ? `${esc(profile.label)} · 설정 바꾸기` : tip}">${profile ? esc(profile.label) : '설정 고르기'}</button>`
 
@@ -14,13 +15,15 @@ export function slotRows(cut) {
     if (edges.length < fields.length) rows.push({ edge: null, port: 'image', active: true, position: edges.length })
     return rows
   }
-  const edges = cutEdges(s.project, cut, false), rows = [], before = prevCut(cut)
+  const edges = cutEdges(s.project, cut, false), rows = []
+  // A cut that follows another and is not continued yet offers its continuation slot (the start slot, a reference image in REF2VA),
+  // so continuing from the cut before it is one click away.
+  const offer = prevCut(cut) && !continuationOf(cut) ? continuationPort(cut.data.mode) : null
   for (const port of Object.keys(PORTS)) {
     const active = activePorts(cut.data.mode).includes(port), peers = edges.filter(edge => edge.port === port)
     peers.forEach(edge => rows.push({ edge, port, active, position: edge.position }))
-    if (active && (!['start', 'end'].includes(port) || !peers.length)) rows.push({ edge: null, port, active, position: peers.length })
-    // A cut that follows another always offers its start slot, so continuing from the cut before it is one click away.
-    else if (port === 'start' && before && !peers.length) rows.push({ edge: null, port, active, position: 0 })
+    if (active && (!['start', 'end'].includes(port) || !peers.length)) rows.push({ edge: null, port, active, position: peers.length, ghost: offer === port })
+    else if (port === 'start' && offer === 'start' && !peers.length) rows.push({ edge: null, port, active, position: 0, ghost: true })
   }
   return rows
 }
@@ -69,26 +72,31 @@ function reasonHtml(state) {
   const text = state.take?.error ?? (state.take?.upscaleOf ? '업스케일이 실패했어.' : '생성이 실패했어.')
   return `<p class="vc-error" title="${esc(text)}">${esc(text)}</p>`
 }
-function actionsHtml(cut, state) {
-  const take = state.take, id = take ? `data-take="${esc(take.id)}"` : ''
+/**
+ * What a cut or generation node can do now, its main action first: [{ action, label, take?, primary?, disabled? }]. The card shows them all
+ * as buttons; the detail panel shows the first as its one text button and puts the rest in its menu.
+ */
+export function cutActions(cut, state) {
+  const take = state.take
   // A cut whose shown take has a result can be upscaled while nothing runs on it (an upscale take upscales the take it came from).
-  const shown = cut.kind === 'cut' ? shownTake(cut) : null, upscale = shown?.resultHash ? `<button data-action="upscale" data-take="${esc(shown.id)}">업스케일</button>` : ''
-  if (state.key === 'empty') return '<button class="primary" data-action="run">생성</button>'
-  if (state.key === 'done') return `<button data-action="run">다시 생성</button>${upscale}`
+  const shown = cut.kind === 'cut' ? shownTake(cut) : null, upscale = shown?.resultHash ? [{ action: 'upscale', label: '업스케일', take: shown.id }] : []
+  if (state.key === 'empty') return [{ action: 'run', label: '생성', primary: true }]
+  if (state.key === 'done') return [{ action: 'run', label: '다시 생성' }, ...upscale]
   // A finished job has nothing left to cancel while its result is being finished.
-  if (state.key === 'queued' || state.key === 'generating') return take?.jobId && !finishing(take) ? `<button data-action="cancel" ${id}>취소</button>` : '<button disabled>취소</button>'
-  if (state.key === 'current') return '<button data-action="chain-cancel">취소</button>'
+  if (state.key === 'queued' || state.key === 'generating') return [take?.jobId && !finishing(take) ? { action: 'cancel', label: '취소', take: take.id } : { label: '취소', disabled: true }]
+  if (state.key === 'current') return [{ action: 'chain-cancel', label: '취소' }]
   // A failed upscale runs again as an upscale: a retry only while its request was made and no job was (a failure while preparing has no request
   // for the server to resend), else a new take on its source. 다시 생성 stays a plain run of the cut.
-  if (state.key === 'failed' && take.upscaleOf) return `<button class="primary" data-action="${take.request && !take.jobId ? 'retry' : 'upscale-again'}" ${id}>다시 업스케일</button><button data-action="run">다시 생성</button>`
-  if (state.key === 'failed') return `<button class="primary" data-action="${take.jobId ? 'rerun-canvas' : 'retry'}" ${id}>다시 생성</button>${upscale}`
-  if (state.key === 'proposed' && cut.kind === 'cut') return `<button class="primary" data-action="approve" ${id}>승인하고 생성</button><button data-action="discard" ${id}>폐기</button>`
-  return `<button disabled>${repTake(cut) ? '다시 생성' : '생성'}</button>`
+  if (state.key === 'failed' && take.upscaleOf) return [{ action: take.request && !take.jobId ? 'retry' : 'upscale-again', label: '다시 업스케일', take: take.id, primary: true }, { action: 'run', label: '다시 생성' }]
+  if (state.key === 'failed') return [{ action: take.jobId ? 'rerun-canvas' : 'retry', label: '다시 생성', take: take.id, primary: true }, ...upscale]
+  if (state.key === 'proposed' && cut.kind === 'cut') return [{ action: 'approve', label: '승인하고 생성', take: take.id, primary: true }, { action: 'discard', label: '폐기', take: take.id }]
+  return [{ label: repTake(cut) ? '다시 생성' : '생성', disabled: true }]
 }
+export const actionButton = item => `<button${item.primary ? ' class="primary"' : ''}${item.action ? ` data-action="${item.action}"` : ''}${item.take ? ` data-take="${esc(item.take)}"` : ''}${item.disabled ? ' disabled' : ''}>${esc(item.label)}</button>`
+const actionsHtml = (cut, state) => cutActions(cut, state).map(actionButton).join('')
 function slotsHtml(cut) {
-  const before = prevCut(cut)
   return `<div class="vc-slots">${slotRows(cut).map(row => {
-    const source = nodeById(row.edge?.from), ghost = !row.edge && row.port === 'start' && before
+    const source = nodeById(row.edge?.from), ghost = !row.edge && row.ghost
     const text = source ? (source.kind === 'frame' && frameRole(source) === 'link' ? frameLabel(source) : source.data.name) : ''
     return `<div class="vc-slot ${row.active ? '' : 'unused'}${ghost ? ' ghost-row' : ''}" data-edge="${esc(row.edge?.id ?? '')}" data-port="${row.port}" data-position="${row.position}"><button class="vc-input" aria-label="${ports[row.port]}에 연결"></button><span class="vc-slot-port">${ports[row.port]} ${['start', 'end'].includes(row.port) ? '' : row.position + 1}</span>${row.edge ? `<span class="vc-slot-src" title="${esc(text)}">${esc(text)}</span><button class="conai-icon-button sm vc-unlink" data-action="disconnect" data-edge="${esc(row.edge.id)}" aria-label="연결 해제" title="연결 해제">${icon('x', 14)}</button>` : ghost ? '<button class="ghost sm vc-ghost" data-action="continue-prev">앞 컷에서 잇기</button>' : '<span class="vc-slot-src muted">비어 있음</span>'}</div>`
   }).join('')}</div>`
@@ -99,7 +107,7 @@ function formHtml(node) {
     <select data-field="mode" aria-label="모드" title="모드">${MODES.map(mode => `<option ${mode === node.data.mode ? 'selected' : ''}>${mode}</option>`).join('')}</select>
     <input class="vc-duration" type="number" data-field="duration" min="1" step="any" value="${esc(node.data.duration)}" aria-label="길이(초)" title="길이(초)"></div>
     ${slotsHtml(node)}
-    <textarea data-field="prompt" rows="2" placeholder="프롬프트 (@이름으로 연결한 소재를 불러)" aria-label="프롬프트">${esc(node.data.prompt)}</textarea>`
+    ${inkHtml(node, `<textarea data-field="prompt" rows="2" placeholder="프롬프트 (@이름으로 연결한 소재를 불러)" aria-label="프롬프트">${esc(node.data.prompt)}</textarea>`)}`
 }
 const genHead = (node, state) => { const kind = outputKind(node); return `<span class="badge vc-out" data-output="${esc(kind ?? '')}">${esc(kind ? outputNames[kind] : '생성 설정 필요')}</span><input class="vc-name" data-field="name" value="${esc(node.data.name)}" aria-label="이름"><span class="vc-state">${esc(state.word)}</span>${moreButton}` }
 function genFormHtml(node) {
@@ -164,6 +172,7 @@ export function renderNodes() {
       patch(region(el, 'status'), reasonHtml(state))
       // The prompt being typed must not share a patched region with the action row, which changes with every progress event.
       patch(region(el, 'form'), cut ? formHtml(node) : genFormHtml(node))
+      if (cut) inkAll(region(el, 'form'))
       patch(region(el, 'actions'), actionsHtml(node, state))
     }
   }

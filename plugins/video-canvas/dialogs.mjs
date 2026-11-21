@@ -1,5 +1,5 @@
 import { $, esc, names, ports, statusNames, progressText, seconds, isTerminal, thumbUrl, fileUrl, audioUrl } from './util.mjs'
-import { s, ctx, nodeById, cuts, profileOf, selected, takeTitle } from './state.mjs'
+import { s, ctx, nodeById, cuts, profileOf, selected, takeTitle, prevCut, continues, promptChangeText } from './state.mjs'
 import { toast, notice } from './toast.mjs'
 import { request, native, http, task, ui, edit, reload, reloadQueued, pinFrames } from './session.mjs'
 import { freeSpots, spotsAt } from './viewport.mjs'
@@ -25,7 +25,7 @@ export function promptDialog(title, label, value, primary) {
     let result = null
     const submit = () => { if (!$('prompt-text').value.trim()) return notice('이름을 써줘.', true); result = $('prompt-text').value.trim(); $('modal').close() }
     $('dialog-primary').onclick = submit
-    $('prompt-text').onkeydown = event => { if (event.key === 'Enter') submit() }
+    $('prompt-text').onkeydown = event => { if (event.key === 'Enter' && !event.isComposing && event.keyCode !== 229) submit() }
     $('modal').addEventListener('close', () => resolve(result), { once: true })
     $('prompt-text').select()
   })
@@ -47,7 +47,7 @@ export async function picker(kind, at) {
     if (picked.length) await ui(() => importRows(picked.map(item => ({ kind: item.kind, name: item.name, ref: { source: 'library', compositeHash: item.compositeHash } })), at))
     return
   }
-  modal(`${names[kind]} 가져오기`, `<form id="asset-form"><label class="conai-search"><input id="asset-query" type="search" aria-label="검색" placeholder="${{ audio: '오디오 그룹', bundle: '번들 이름' }[kind] ?? '프롬프트'}"></label></form><div id="asset-group" class="toolbar" hidden><button id="asset-back" class="ghost">← 그룹</button><b id="asset-group-name"></b></div><div id="asset-results" class="${library ? 'picker-grid' : 'conai-list picker-list'}"></div><div class="toolbar"><button id="asset-next" hidden>더 보기</button></div>`)
+  modal(`${names[kind]} 가져오기`, `<div id="asset-form"><label class="conai-search"><input id="asset-query" type="search" aria-label="검색" placeholder="${{ audio: '오디오 그룹', bundle: '번들 이름' }[kind] ?? '프롬프트'}"></label></div><div id="asset-group" class="toolbar" hidden><button id="asset-back" class="ghost">← 그룹</button><b id="asset-group-name"></b></div><div id="asset-results" class="${library ? 'picker-grid' : 'conai-list picker-list'}"></div><div class="toolbar"><button id="asset-next" hidden>더 보기</button></div>`)
   let page = 1, offset = 0, group = null, cursor = null, rows = []
   async function search(next = false) {
     if (!next) { page = 1; offset = 0; cursor = null; rows = [] }
@@ -99,22 +99,33 @@ export async function picker(kind, at) {
       $('modal').close()
     })
   }
-  $('asset-form').onsubmit = event => { event.preventDefault(); void task(() => search()) }
+  // The page runs without allow-forms, so the search is Enter on its field (not while an IME is composing).
+  $('asset-query').onkeydown = event => { if (event.key === 'Enter' && !event.isComposing && event.keyCode !== 229) { event.preventDefault(); void task(() => search()) } }
   $('asset-back').onclick = () => { group = null; void task(() => search()) }
   $('asset-next').onclick = () => { page++; offset += 20; void task(() => search(true)) }
   await task(() => search())
 }
 /**
- * The target an extraction connects to. A start/end slot is taken over by the server (the frame it held goes with its link when it
- * was extracted, is pending and unused elsewhere); a frame the person pulled out as a card is disconnected here and stays on the
- * canvas. A list slot (ref_image) is left alone: its old link is replaced by `afterFrames` once the new frame is connected.
+ * The target an extraction of `takeId` (its `frame`: first, middle, last, or another place) connects to. A start/end slot is taken over by
+ * the server (the frame it held goes with its link when it was extracted, is pending and unused elsewhere). A frame of the cut right before
+ * on the start slot, or its last frame among the reference images, continues the cut, and the server replaces the cut's earlier
+ * continuation link (on the start slot or among the reference images) with it, the new frame taking its place.
+ * A frame of a replaced link the person pulled out as a card is disconnected here and stays on the canvas. Any other list slot
+ * (ref_image) link is left alone: it is replaced by `afterFrames` once the new frame is connected.
  */
-export async function extractionTarget(cutId, port, position) {
-  if (port === 'ref_image') return { cut: cutId, port, ...(position === undefined ? {} : { position }) }
-  const held = s.project.edges.find(edge => edge.to === cutId && edge.port === port)
-  if (!held || !s.open.includes(held.from)) return { cut: cutId, port, replace: true }
-  await edit([{ op: 'disconnect', id: held.id }])
-  return { cut: cutId, port }
+export async function extractionTarget(cutId, port, position, takeId, frame) {
+  const take = s.project.takes.find(item => item.id === takeId)
+  const continuing = (port === 'start' || (port === 'ref_image' && frame === 'last')) && take && prevCut(nodeById(cutId))?.id === take.cutId
+  const kept = continuing ? s.project.edges.filter(edge => edge.to === cutId && continues(edge) && s.open.includes(edge.from)) : []
+  const disconnect = edges => edges.length ? edit(edges.map(edge => ({ op: 'disconnect', id: edge.id }))) : null
+  if (port === 'ref_image') {
+    const place = position ?? kept.find(edge => edge.port === 'ref_image')?.position
+    await disconnect(kept)
+    return { cut: cutId, port, ...(place === undefined ? {} : { position: place }) }
+  }
+  const held = s.project.edges.find(edge => edge.to === cutId && edge.port === port), pinned = held && s.open.includes(held.from)
+  await disconnect(pinned && !kept.includes(held) ? [...kept, held] : kept)
+  return { cut: cutId, port, ...(pinned ? {} : { replace: true }) }
 }
 export async function extractionDialog({ nodeId, takeId, target: preset, after } = {}) {
   const node = nodeById(nodeId), take = s.project.takes.find(take => take.id === takeId)
@@ -144,7 +155,7 @@ export async function extractionDialog({ nodeId, takeId, target: preset, after }
     const position = $('frame-position').value, [cutId, port] = $('frame-target').value.split('|')
     // The link this dialog was opened to replace is only replaced when its slot is still the chosen target.
     const replacing = Boolean(preset) && `${preset.cut}|${preset.port}` === $('frame-target').value
-    const target = cutId ? await extractionTarget(cutId, port, replacing ? preset.position : undefined) : null
+    const target = cutId ? await extractionTarget(cutId, port, replacing ? preset.position : undefined, takeId, position) : null
     const result = await request('extract_frame', { expected_revision: s.project.revision, node_id: nodeId, take_id: takeId, format: $('frame-format').value,
       ...(['first', 'middle', 'last'].includes(position) ? { position } : position === 'index' ? { frame_index: Number($('frame-index').value) } : { at_seconds: [position === 'current' ? $('frame-player').currentTime : Number($('frame-seconds').value)] }),
       ...(target ? { target } : {}) })
@@ -164,7 +175,10 @@ export async function extractionDialog({ nodeId, takeId, target: preset, after }
 const afterExtraction = new Map()
 /** Runs `run(nodeIds)` once the extraction has ended with frames; a failed or cancelled one leaves everything as it was. */
 export const afterFrames = (id, run) => afterExtraction.set(id, run)
+const toldPrompt = new Set()
 export function settleExtraction(result) {
+  // A continuation frame replaced by one named differently took its @mentions along: said once per extraction, whichever poll sees it first.
+  if (result.promptChange && !toldPrompt.has(result.id)) { toldPrompt.add(result.id); toast(promptChangeText(result.promptChange)) }
   const run = afterExtraction.get(result.id)
   if (!run || !isTerminal(result.status)) return
   afterExtraction.delete(result.id)

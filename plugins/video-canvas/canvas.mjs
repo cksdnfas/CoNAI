@@ -6,7 +6,7 @@ import { transform, zoomAt, toStage, fit } from './viewport.mjs'
 import { nodeEl } from './nodes.mjs'
 import { drawEdges, center, curve, inStage } from './links.mjs'
 import { picker } from './dialogs.mjs'
-import { applySelection, addCut, genMenu, duplicateCuts, announceModeChange, removeNodes, removeEdge, pickTake, takeAction, runFor, chooseSetting, extractFrom, continueFromPrevious, connectCutResult, disconnectOps, linkMenu, foldFrame, arrangeOps } from './actions.mjs'
+import { applySelection, addCut, genMenu, duplicateCuts, announceChanges, removeNodes, removeEdge, pickTake, takeAction, runFor, chooseSetting, extractFrom, continueFromPrevious, connectCutResult, disconnectOps, linkMenu, foldFrame, arrangeOps } from './actions.mjs'
 
 // ---- connecting: drag from an output port, live line, snap, drop ----
 const RESULT_PORTS = ['ref_video', 'start', 'end', 'ref_image']
@@ -75,8 +75,8 @@ function releaseLink(event) {
     let position = target.edgeId && !replace.length ? target.position : undefined
     // Taking the connection out of the same slot list shifts the later positions up by one.
     if (position !== undefined && reroute?.to === target.cut && reroute.port === target.port && reroute.position < position) position--
-    void ui(async () => announceModeChange(await edit([...(reroute ? [{ op: 'disconnect', id: reroute.id }] : []), ...replace, { op: 'connect', from, to: target.cut, port: target.port, ...(position === undefined ? {} : { position }), ...(reroute ? { props: reroute.props } : {}) }])))
-  } else if (reroute) void ui(() => edit([{ op: 'disconnect', id: reroute.id }]))
+    void ui(async () => announceChanges(await edit([...(reroute ? [{ op: 'disconnect', id: reroute.id }] : []), ...replace, { op: 'connect', from, to: target.cut, port: target.port, ...(position === undefined ? {} : { position }), ...(reroute ? { props: reroute.props } : {}) }])))
+  } else if (reroute) void ui(async () => announceChanges(await edit([{ op: 'disconnect', id: reroute.id }])))
 }
 
 // ---- selection bar: only for several nodes (one node has its ⋯ menu and the context menu) ----
@@ -212,7 +212,8 @@ function onPointerUp(event) {
   void ui(() => edit(ops))
 }
 function onKeyDown(event) {
-  if (!s.project || $('modal').open) return
+  // The detail panel and the menus own their keys: Escape there is no "clear the selection", Delete on a focused button no "delete the node".
+  if (!s.project || $('modal').open || event.target.closest?.('#inspector, #menu')) return
   if (event.key === 'Escape') {
     if (link) endLink()
     else if (s.sel.length || s.edgeSel) applySelection([])

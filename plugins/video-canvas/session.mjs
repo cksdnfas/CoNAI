@@ -181,7 +181,7 @@ export async function runCut(args = {}, op = 'run_cut') {
   toast(take.upscaleOf ? `업스케일 ${statusNames[take.status] ?? take.status}` : `${statusNames[take.status] ?? take.status} · seed ${take.seed ?? '—'}`)
   return take
 }
-const RUN_ACTIONS = ['run', 'propose', 'approve', 'discard', 'retry', 'cancel', 'rerun-take', 'rerun-canvas', 'rerun-new', 'upscale', 'upscale-again']
+export const RUN_ACTIONS = ['run', 'propose', 'approve', 'discard', 'retry', 'cancel', 'rerun-take', 'rerun-canvas', 'rerun-new', 'upscale', 'upscale-again']
 export function lockRunButtons() {
   // A button locked because its cut is running stays disabled when the page's own run ends.
   for (const button of document.querySelectorAll('[data-action]')) if (RUN_ACTIONS.includes(button.dataset.action)) button.disabled = s.runBusy || 'locked' in button.dataset

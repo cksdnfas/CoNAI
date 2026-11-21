@@ -12,9 +12,10 @@ import { renderSequence, bindSequence, startSequencePlayback, playExport, watchE
 import { loadProjects, renderHome, chooseProject, createProject, newProjectDialog, bindHome, bindTitle, settled, hasChosen } from './home.mjs'
 import { drawEdges, renderTray, bindLinks } from './links.mjs'
 import { renderFloat, bindCanvas, sourceItems } from './canvas.mjs'
-import { select, focusNode, focusFrame, addCut, genMenu, bindGen, announceModeChange } from './actions.mjs'
+import { select, focusNode, focusFrame, addCut, genMenu, announceChanges } from './actions.mjs'
 import { openSettings, bindSettings } from './settings.mjs'
 import { bindDispatch } from './dispatch.mjs'
+import { bindInk } from './ink.mjs'
 
 // Every `task` below belongs to a page action from the assistant (the person's own two launch-bar tasks use `queued`).
 const task = assistantTask
@@ -65,7 +66,7 @@ function bindHeader() {
   $('launch').onclick = event => {
     const action = event.target.closest('[data-launch]')?.dataset.launch
     if (action === 'dismiss') void queued(async () => { s.launch = null; render(); await ctx.api.navigation.open('/ext/video-canvas/canvas') })
-    if (action === 'import') void queued(async () => { const [cut, port] = $('launch-target').value.split('|'); announceModeChange(await edit([{ op: 'import_launch', ...(cut ? { target: { cut, port } } : {}) }])) })
+    if (action === 'import') void queued(async () => { const [cut, port] = $('launch-target').value.split('|'); announceChanges(await edit([{ op: 'import_launch', ...(cut ? { target: { cut, port } } : {}) }])) })
   }
   $('modal').onclick = event => { if (event.target.closest('[data-close]')) $('modal').close() }
   $('modal').addEventListener('close', () => {
@@ -198,7 +199,7 @@ const gated = Object.fromEntries(Object.entries(actions).map(([id, handler]) => 
   return handler(args, { ...context, deadline })
 }]))
 ctx.api = await connectPlugin(gated)
-fillIcons(); initToasts(); initMenu(); bindHeader(); bindNodes(); bindCanvas(); bindLinks(); bindDispatch(); bindGen(); bindSettings(); bindHome(); bindTitle(); bindSequence()
+fillIcons(); initToasts(); initMenu(); bindHeader(); bindNodes(); bindCanvas(); bindLinks(); bindDispatch(); bindInk(); bindSettings(); bindHome(); bindTitle(); bindSequence()
 if (ctx.api.supports('launch.image') && ctx.api.launch?.image) {
   s.launch = { compositeHash: ctx.api.launch.image.compositeHash, kind: 'image' }
   libraryName(s.launch.compositeHash).then(name => { launchName = name; ctx.launchName = name; renderLaunch() }, error => notice(error.message, true))

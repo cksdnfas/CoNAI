@@ -1,5 +1,5 @@
 import { $, esc, clamp, statusNames, isTerminal, fileUrl, thumbUrl, progressText, fraction, patch, icon } from './util.mjs'
-import { s, ctx, nodeById, repTake, cutOrder, profileOf, cutDefault, activeChain, stepOf, cutState, runningWord, allLinks, DOCK_H } from './state.mjs'
+import { s, ctx, nodeById, repTake, cutOrder, profileOf, cutDefault, activeChain, stepOf, cutState, runningWord, allLinks, activeContinuation, DOCK_H } from './state.mjs'
 import { toast } from './toast.mjs'
 import { showMenu } from './menu.mjs'
 import { request, ui, edit, reload, reloadQueued, saveView } from './session.mjs'
@@ -56,7 +56,7 @@ const stepNames = { pending: '대기', skipped: '건너뜀', extracting: '프레
 const sameList = (a, b) => a.length === b.length && a.every((id, index) => id === b[index])
 function jointHtml(cut, link) {
   return link
-    ? `<button class="vc-seq-join chained" data-join="${esc(cut.id)}" data-edge="${esc(link.edge.id)}" title="${link.stale ? '앞 컷에서 이어진 프레임 · 앞 컷이 다시 만들어졌어' : '앞 컷에서 이어진 프레임'}" aria-label="앞 컷에서 이어진 프레임" aria-haspopup="menu">${icon('link', 12)}</button>`
+    ? `<button class="vc-seq-join chained${link.stale ? ' stale' : ''}" data-join="${esc(cut.id)}" data-edge="${esc(link.edge.id)}" title="${link.stale ? '앞 컷에서 이어진 프레임 · 앞 컷이 다시 만들어졌어' : '앞 컷에서 이어진 프레임'}" aria-label="${link.stale ? '앞 컷에서 이어진 프레임, 이전 결과' : '앞 컷에서 이어진 프레임'}" aria-haspopup="menu">${icon('link', 12)}</button>`
     : `<button class="vc-seq-join" data-join="${esc(cut.id)}" title="앞 컷에서 잇기" aria-label="앞 컷에서 잇기">${icon('plus', 12)}</button>`
 }
 function itemHtml(cut, index, order, links, length) {
@@ -103,7 +103,7 @@ export function renderSequence() {
   const lengths = order.map(lengthOf), links = allLinks(true)
   $('seq-total').textContent = order.length ? `${order.length}컷 · ${lengths.every(length => length.real) ? '' : '~'}${secs(lengths.reduce((sum, length) => sum + length.value, 0))}` : ''
   patch($('seq-scrub'), scrubHtml(order, lengths))
-  patch($('seq-list'), order.map((cut, index) => (index ? jointHtml(cut, links.find(link => link.target.id === cut.id && ['start', 'end'].includes(link.edge.port) && link.source.id === order[index - 1].id)) : '') + itemHtml(cut, index, order, links, lengths[index])).join(''))
+  patch($('seq-list'), order.map((cut, index) => (index ? jointHtml(cut, links.find(link => link.target.id === cut.id && (link.edge.port === 'end' || activeContinuation(link.edge)) && link.source.id === order[index - 1].id)) : '') + itemHtml(cut, index, order, links, lengths[index])).join(''))
   patch($('seq-export'), exportHtml(order, chain))
   patch($('seq-chain-state'), chainHtml(chain))
   $('seq-chain-state').hidden = !chain

@@ -4,7 +4,7 @@ import Database from 'better-sqlite3'
 import path from 'node:path'
 import fs from 'node:fs'
 import { randomUUID } from 'node:crypto'
-import { applyOps, buildDirector, checkCut, generationRequest, labelTable, mediaItems, newProject, normalizeRef, profilePublication, resolvePrompt, resultHash, roleOf } from '../../plugins/video-canvas/domain.mjs'
+import { applyOps, buildDirector, checkCut, continuationEdges, continuationPort, continuationRoom, generationRequest, isContinuation, labelTable, mediaItems, newProject, normalizeRef, profilePublication, renameContinuation, resolvePrompt, resultHash, roleOf, unusedReference } from '../../plugins/video-canvas/domain.mjs'
 import { activate, createStore, unwrap } from '../../plugins/video-canvas/server.mjs'
 import { createAssistantState, createRefreshQueue, excerpt, rejectedMessage } from '../../plugins/video-canvas/assistant-state.mjs'
 import { normalizeMcpWorkflowInputs } from '../src/services/comfyui/comfyWorkflowInputs'
@@ -1399,5 +1399,295 @@ test('video canvas upscales a finished cut take into a new take of the cut and m
     // Upscaling the upscaled take again starts from the generated take.
     const again = await f.dispatch('run_cut', { project_id: project.id, cut_id: cut.id, action: 'upscale', requestId: randomUUID(), expected_revision: after.revision })
     assert.equal(again.upscaleOf, source.id)
+  } finally { f.db.close() }
+})
+
+// ---- continuation into the next cut: start for most modes, a reference image for REF2VA that its prompt names ----
+// The node's own wording for a first-frame reference (what an assistant writes; the plugin never writes it).
+const FIRST = (name: string) => '@' + name + ' is the first frame of [Shot 1].'
+const count = (text: string, part: string) => text.split(part).length - 1
+function continuationCanvas() {
+  let project: any = ops(newProject('project', '영상'), [
+    { op: 'add_node', kind: 'cut', name: '앞', tempId: 'a' },
+    { op: 'add_node', kind: 'cut', name: '뒤', tempId: 'b' },
+    { op: 'add_node', kind: 'image', name: '크림', ref: image, tempId: 'cream' },
+    { op: 'add_node', kind: 'image', name: '포즈', ref: { source: 'library', compositeHash: otherHash }, tempId: 'pose' },
+    { op: 'add_node', kind: 'frame', name: '앞 마지막 프레임', ref: image, tempId: 'frame' },
+  ]).project
+  const [a, b, cream, pose, frame] = project.nodes
+  project.takes = [{ id: 'take-a', cutId: a.id, status: 'completed', resultHash: hash }]
+  frame.data.origin = { nodeId: null, takeId: 'take-a', position: 'last', seconds: 4.9 }
+  return { project, a, b, cream, pose, frame }
+}
+test('video canvas continuation rules: the port follows the mode, the text stays the person\'s and a REF2VA frame is bound by its mention', () => {
+  assert.deepEqual(['T2VA', 'I2VA', 'FL2VA', 'L2VA', 'REF2VA'].map(continuationPort), ['start', 'start', 'start', 'start', 'ref_image'])
+  let { project, b, cream, pose, frame } = continuationCanvas()
+  const prompt = 'subject_definitions:\nGhost: cream body.\nsummary:\nThe ghost rises.'
+  project = ops(project, [{ op: 'set', id: b.id, fields: { mode: 'REF2VA', prompt } }]).project
+  // The earlier reference image keeps its <Picture 1>; the continuation is appended after it, and nothing is written into the text.
+  let result = ops(project, [{ op: 'connect', from: cream.id, to: b.id, port: 'ref_image' }, { op: 'connect', from: frame.id, to: b.id, port: 'ref_image' }, { op: 'connect', from: pose.id, to: b.id, port: 'end' }])
+  project = result.project
+  let cut = project.nodes.find((node: any) => node.id === b.id)
+  assert.ok(result.applied.every((item: any) => item.promptChange === undefined))
+  assert.equal(cut.data.prompt, prompt)
+  assert.deepEqual(continuationEdges(project, cut).map((edge: any) => [edge.port, edge.position]), [['ref_image', 1]])
+  assert.deepEqual(labelTable(project, cut).filter((row: any) => row.type === 'image').map((row: any) => [row.name, row.label]), [['크림', '<Picture 1>'], ['앞 마지막 프레임', '<Picture 2>']])
+  // Unnamed, it is a reference the text does not use: a warning, not an error that blocks the cut.
+  let resolved = resolvePrompt(project, cut)
+  assert.deepEqual(resolved.errors, [])
+  assert.ok(resolved.warnings.includes(unusedReference('앞 마지막 프레임')))
+  // Named in the sent text (raw when it has text), it is that Picture.
+  const named = structuredClone(project), namedCut = named.nodes.find((node: any) => node.id === b.id)
+  namedCut.data.raw = 'subject_definitions:\n' + FIRST('앞 마지막 프레임') + '\nThe ghost rises.'
+  resolved = resolvePrompt(named, namedCut)
+  assert.deepEqual(resolved.errors, [])
+  assert.match(resolved.prompt, /^subject_definitions:\n<Picture 2> is the first frame of \[Shot 1\]\.\nThe ghost rises\.$/)
+  assert.ok(!resolved.warnings.includes(unusedReference('앞 마지막 프레임')))
+  // A replacement frame named differently takes the old mentions along, in both texts; the same name or no mention changes nothing.
+  namedCut.data.prompt = 'Keep @앞 마지막 프레임.'
+  const renamedFrame = named.nodes.find((node: any) => node.id === frame.id)
+  renamedFrame.data.name = '첫 컷 마지막 프레임'
+  assert.deepEqual(renameContinuation(named, namedCut, renamedFrame, '앞 마지막 프레임'), { cutId: b.id, field: 'raw', name: '첫 컷 마지막 프레임', renamed: '앞 마지막 프레임' })
+  assert.equal(namedCut.data.raw, 'subject_definitions:\n' + FIRST('첫 컷 마지막 프레임') + '\nThe ghost rises.')
+  assert.equal(namedCut.data.prompt, 'Keep @첫 컷 마지막 프레임.')
+  assert.deepEqual(resolvePrompt(named, namedCut).errors, [])
+  assert.equal(renameContinuation(named, namedCut, renamedFrame, '첫 컷 마지막 프레임'), null)
+  assert.equal(renameContinuation(project, cut, frame, '다른 프레임'), null)
+  assert.equal(cut.data.prompt, prompt)
+
+  // The continuation link follows the mode both ways, the text untouched; the image on the end slot is no continuation and stays.
+  result = ops(project, [{ op: 'set', id: b.id, fields: { mode: 'I2VA' } }])
+  assert.deepEqual(result.applied[0].continuationMove, { cutId: b.id, edgeId: continuationEdges(project, cut)[0].id, from: 'ref_image', to: 'start' })
+  assert.equal(result.applied[0].promptChange, undefined)
+  let moved = result.project
+  assert.deepEqual(moved.edges.filter((edge: any) => edge.to === b.id).map((edge: any) => [edge.from, edge.port, edge.position]).sort(), [[cream.id, 'ref_image', 0], [frame.id, 'start', 0], [pose.id, 'end', 0]].sort())
+  // Back to REF2VA: the frame returns after the other reference images; the text is still exactly what was set.
+  result = ops(moved, [{ op: 'set', id: b.id, fields: { prompt: 'summary:\nThe ghost rises.', mode: 'REF2VA' } }])
+  assert.equal(result.applied[0].continuationMove.to, 'ref_image')
+  assert.equal(result.applied[0].promptChange, undefined)
+  moved = result.project
+  assert.equal(moved.nodes.find((node: any) => node.id === b.id).data.prompt, 'summary:\nThe ghost rises.')
+  assert.deepEqual(moved.edges.filter((edge: any) => edge.to === b.id && edge.port === 'ref_image').map((edge: any) => [edge.from, edge.position]), [[cream.id, 0], [frame.id, 1]])
+  // T2VA uses no start slot: the frame stays among the (now unused) reference images, as every other connection does.
+  result = ops(moved, [{ op: 'set', id: b.id, fields: { mode: 'T2VA' } }])
+  assert.equal(result.applied[0].continuationMove, undefined)
+  assert.equal(result.project.edges.find((edge: any) => edge.from === frame.id).port, 'ref_image')
+  // A cut set to I2VA whose start slot holds another image keeps both where they are.
+  const held = ops(moved, [{ op: 'connect', from: pose.id, to: b.id, port: 'start' }, { op: 'set', id: b.id, fields: { mode: 'I2VA' } }])
+  assert.equal(held.applied[1].continuationMove, undefined)
+  assert.equal(held.project.edges.find((edge: any) => edge.from === frame.id).port, 'ref_image')
+  // Only a frame of the cut right before is a continuation.
+  const reordered = ops(moved, [{ op: 'sequence', order: [b.id] }]).project
+  assert.equal(isContinuation(reordered, reordered.edges.find((edge: any) => edge.from === frame.id)), false)
+  // A full set of reference images has no room for it.
+  const full = structuredClone(moved), fullCut = full.nodes.find((node: any) => node.id === b.id)
+  for (let index = 0; index < 7; index++) full.edges.push({ id: 'extra-' + index, from: cream.id, to: b.id, port: 'ref_image', position: 2 + index, props: {} })
+  assert.throws(() => continuationRoom(full, fullCut), /9개/)
+  assert.doesNotThrow(() => continuationRoom(full, fullCut, [continuationEdges(full, fullCut)[0].id]))
+})
+test('video canvas extraction into a REF2VA cut lands among its reference images, says when it is unnamed and replaces the earlier continuation', async () => {
+  const f = serviceFixture()
+  try {
+    f.state.historyPerJob = true
+    const project = await fixtureProject(f), first = project.nodes[0]
+    const take = await f.dispatch('run_cut', await runArgs(f, project))
+    await f.dispatch('get_take', { project_id: project.id, take_id: take.id })
+    const prompt = 'subject_definitions:\n@유나 기준: the girl.\nsummary:\nShe turns.'
+    const added = await f.dispatch('apply_ops', { project_id: project.id, expected_revision: 1, ops: [
+      { op: 'add_node', kind: 'cut', name: '둘째', tempId: 'b', fields: { mode: 'REF2VA', prompt } },
+      { op: 'connect', from: project.nodes[1].id, to: 'b', port: 'ref_image' },
+    ] })
+    const b = added.tempIds.b
+    const read = () => f.service.store.get('account:1', project.id), cutB = () => read().nodes.find((node: any) => node.id === b)
+    const refs = () => read().edges.filter((edge: any) => edge.to === b && edge.port === 'ref_image').sort((x: any, y: any) => x.position - y.position).map((edge: any) => read().nodes.find((node: any) => node.id === edge.from).data.name)
+    const first_ = await f.dispatch('extract_frame', { project_id: project.id, expected_revision: added.revision, take_id: take.id, position: 'last', target: { cut: b, port: 'ref_image' } })
+    assert.deepEqual([first_.modeChange, first_.promptChange, first_.frameName, first_.unnamed], [null, null, '컷 마지막 프레임', unusedReference('컷 마지막 프레임')])
+    assert.deepEqual(refs(), ['유나 기준', '컷 마지막 프레임'])
+    assert.equal(cutB().data.prompt, prompt)
+    assert.ok(!read().edges.some((edge: any) => edge.to === b && edge.port === 'start'))
+    // The Director gets it as a timeline item with its own asset; once the prompt names it, the prompt binds it as that Picture.
+    const named = await f.dispatch('apply_ops', { project_id: project.id, expected_revision: first_.revision, ops: [{ op: 'set', id: b, fields: { prompt: 'subject_definitions:\n' + FIRST('컷 마지막 프레임') + '\n@유나 기준: the girl.\nsummary:\nShe turns.' } }] })
+    const value = buildDirector(read(), cutB())
+    const item = JSON.parse(value.timeline_data).items.find((entry: any) => entry.value === '컷 마지막 프레임')
+    assert.deepEqual([item.type, item.slot], ['image', 1])
+    assert.equal(value.assets[item.id].composite_hash, otherHash)
+    assert.match(value.simple_prompt, /^subject_definitions:\n<Picture 2> is the first frame of \[Shot 1\]\.\n<Picture 1>: the girl\./)
+    // Again (an image added after it meanwhile): the new frame takes the old one's place, the orphan frame goes, the text is left alone.
+    const extra = await f.dispatch('apply_ops', { project_id: project.id, expected_revision: named.revision, ops: [{ op: 'connect', from: project.nodes[2].id, to: b, port: 'ref_image' }] })
+    const oldFrame = first_.nodeIds[0], namedText = cutB().data.prompt
+    const again = await f.dispatch('extract_frame', { project_id: project.id, expected_revision: extra.revision, take_id: take.id, position: 'last', target: { cut: b, port: 'ref_image' } })
+    assert.deepEqual([again.promptChange, again.frameName, again.unnamed], [null, '컷 마지막 프레임', undefined])
+    assert.deepEqual(refs(), ['유나 기준', '컷 마지막 프레임', '배경'])
+    assert.equal(read().nodes.some((node: any) => node.id === oldFrame), false)
+    assert.equal(cutB().data.prompt, namedText)
+    // A renamed source names its frame differently: the mention follows instead of blocking the cut as an unknown name.
+    const renamed = await f.dispatch('apply_ops', { project_id: project.id, expected_revision: again.revision, ops: [{ op: 'set', id: first.id, fields: { name: '첫 컷' } }] })
+    const third = await f.dispatch('extract_frame', { project_id: project.id, expected_revision: renamed.revision, take_id: take.id, position: 'last', target: { cut: b, port: 'ref_image' } })
+    assert.deepEqual(third.promptChange, { cutId: b, field: 'prompt', name: '첫 컷 마지막 프레임', renamed: '컷 마지막 프레임' })
+    assert.deepEqual([third.frameName, third.unnamed], ['첫 컷 마지막 프레임', undefined])
+    assert.equal(cutB().data.prompt, 'subject_definitions:\n' + FIRST('첫 컷 마지막 프레임') + '\n@유나 기준: the girl.\nsummary:\nShe turns.')
+    assert.deepEqual(resolvePrompt(read(), cutB()).errors, [])
+    // A continuation left on the start slot REF2VA ignores (older data) is replaced by the next one too.
+    const current = read(), broken = structuredClone(current)
+    const link = broken.edges.find((edge: any) => edge.to === b && edge.from === third.nodeIds[0])
+    Object.assign(link, { port: 'start', position: 0 })
+    f.service.store.save('account:1', current, { ...broken, revision: current.revision + 1 })
+    const fixed = await f.dispatch('extract_frame', { project_id: project.id, expected_revision: current.revision + 1, take_id: take.id, position: 'last', target: { cut: b, port: 'ref_image' } })
+    assert.ok(!read().edges.some((edge: any) => edge.to === b && edge.port === 'start'))
+    assert.deepEqual(refs(), ['유나 기준', '배경', '첫 컷 마지막 프레임'])
+    assert.equal(fixed.promptChange, null)
+    // No room left among nine reference images: refused before a frame is made.
+    const before = read(), filled = structuredClone(before)
+    filled.edges = filled.edges.filter((edge: any) => !(edge.to === b && edge.from === fixed.nodeIds[0]))
+    for (let index = 0; index < 7; index++) filled.edges.push({ id: 'fill-' + index, from: project.nodes[1].id, to: b, port: 'ref_image', position: 2 + index, props: {} })
+    f.service.store.save('account:1', before, { ...filled, revision: before.revision + 1 })
+    const frames = f.calls.filter(call => call.name === 'save_video_frame').length
+    await assert.rejects(() => f.dispatch('extract_frame', { project_id: project.id, expected_revision: before.revision + 1, take_id: take.id, position: 'last', target: { cut: b, port: 'ref_image' } }), /9개/)
+    assert.equal(f.calls.filter(call => call.name === 'save_video_frame').length, frames)
+  } finally { f.db.close() }
+})
+test('video canvas chain binds a continuation frame a REF2VA prompt named before it existed, and a start-mode cut continues from its start slot', async () => {
+  const f = serviceFixture()
+  try {
+    f.state.historyPerJob = true
+    const project = await fixtureProject(f)
+    // An assistant writes every prompt first: cut B already names the frame the chain will make from cut 컷.
+    const prompt = 'subject_definitions:\n' + FIRST('컷 마지막 프레임') + '\n@유나 기준: the girl.\nsummary:\nShe turns.'
+    const added = await f.dispatch('apply_ops', { project_id: project.id, expected_revision: 1, ops: [
+      { op: 'add_node', kind: 'cut', name: '둘째', tempId: 'b', fields: { mode: 'REF2VA', prompt } },
+      { op: 'connect', from: project.nodes[1].id, to: 'b', port: 'ref_image' },
+      { op: 'add_node', kind: 'cut', name: '셋째', tempId: 'c', fields: { prompt: 'She walks away.' } },
+    ] })
+    assert.deepEqual(added.rejected, [])
+    const { b, c } = added.tempIds
+    const read = () => f.service.store.get('account:1', project.id), node = (id: string) => read().nodes.find((item: any) => item.id === id)
+    const into = (cut: string) => read().edges.filter((edge: any) => edge.to === cut && ['start', 'ref_image'].includes(edge.port)).map((edge: any) => [edge.port, node(edge.from).data.name])
+    const chain = await f.dispatch('run_chain', { project_id: project.id, expected_revision: added.revision, wait_seconds: 120 })
+    assert.equal(chain.status, 'completed', chain.error)
+    assert.deepEqual(f.calls.filter(call => call.name === 'save_video_frame').map(call => call.args.composite_hash), [jobHash(481), jobHash(482)])
+    assert.deepEqual(into(b), [['ref_image', '유나 기준'], ['ref_image', '컷 마지막 프레임']])
+    assert.deepEqual([node(b).data.mode, node(b).data.prompt], ['REF2VA', prompt])
+    // Not REF2VA: unchanged, the start slot and T2VA -> I2VA.
+    assert.deepEqual(into(c), [['start', '둘째 마지막 프레임']])
+    assert.equal(node(c).data.mode, 'I2VA')
+    // The Director payload cut B was submitted with binds the frame as its Picture.
+    const takeB = read().takes.find((take: any) => take.id === chain.steps[1].takeId)
+    const director = f.calls.filter(call => call.name === 'submit_generation_job')[1].args.inputs.director
+    const item = JSON.parse(director.timeline_data).items.find((entry: any) => entry.value === '컷 마지막 프레임')
+    assert.deepEqual([item.type, item.slot, director.assets[item.id].composite_hash], ['image', 1, otherHash])
+    assert.match(director.simple_prompt, /^subject_definitions:\n<Picture 2> is the first frame of \[Shot 1\]\.\n<Picture 1>: the girl\./)
+    assert.ok(takeB.resolved.table.some((row: any) => row.name === '컷 마지막 프레임' && row.label === '<Picture 2>'))
+    const extraction = read().extractions.find((item: any) => item.id === chain.steps[1].extractionId)
+    assert.deepEqual([extraction.promptChange, extraction.frameName, extraction.unnamed, chain.steps[1].unnamed, chain.steps[2].unnamed], [null, '컷 마지막 프레임', undefined, undefined, undefined])
+    // Running it again replaces the continuation instead of piling reference images up.
+    const firstFrame = read().edges.find((edge: any) => edge.to === b && node(edge.from).data.name === '컷 마지막 프레임').from
+    const again = await f.dispatch('run_chain', { project_id: project.id, expected_revision: read().revision, regenerate: true, wait_seconds: 120 })
+    assert.equal(again.status, 'completed', again.error)
+    assert.deepEqual(into(b), [['ref_image', '유나 기준'], ['ref_image', '컷 마지막 프레임']])
+    assert.equal(node(firstFrame), undefined)
+    assert.equal(node(b).data.prompt, prompt)
+    // keep_start on a REF2VA cut keeps its continuation frame: one left on the unused start slot moves into the reference images, nothing is
+    // extracted for it and nothing is written; the step says the text does not name it.
+    const current = read(), broken = structuredClone(current), link = broken.edges.find((edge: any) => edge.to === b && edge.port === 'ref_image' && edge.position === 1)
+    Object.assign(link, { port: 'start', position: 0 })
+    broken.nodes.find((item: any) => item.id === b).data.prompt = 'summary:\nShe turns.'
+    f.service.store.save('account:1', current, { ...broken, revision: current.revision + 1 })
+    const frames = f.calls.filter(call => call.name === 'save_video_frame').length
+    const kept = await f.dispatch('run_chain', { project_id: project.id, expected_revision: current.revision + 1, regenerate: true, keep_start: true, wait_seconds: 120 })
+    assert.equal(kept.status, 'completed', kept.error)
+    assert.equal(f.calls.filter(call => call.name === 'save_video_frame').length, frames)
+    assert.deepEqual(into(b), [['ref_image', '유나 기준'], ['ref_image', '컷 마지막 프레임']])
+    assert.equal(read().edges.find((edge: any) => edge.to === b && edge.port === 'ref_image' && edge.position === 1).from, link.from)
+    assert.equal(node(b).data.prompt, 'summary:\nShe turns.')
+    assert.deepEqual([kept.steps[1].unnamed, kept.steps[2].unnamed], [unusedReference('컷 마지막 프레임'), undefined])
+    assert.deepEqual(into(c), [['start', '둘째 마지막 프레임']])
+  } finally { f.db.close() }
+})
+test('video canvas continues among reference images only with the last frame, and taking it out leaves the text alone', () => {
+  let { project, b, frame } = continuationCanvas()
+  const prompt = 'subject_definitions:\n' + FIRST('앞 마지막 프레임') + '\nGhost: cream body.'
+  project = ops(project, [{ op: 'set', id: b.id, fields: { mode: 'REF2VA', prompt } }]).project
+  const cutOf = (state: any) => state.nodes.find((node: any) => node.id === b.id)
+  // A first or middle frame of the cut before is a reference the person chose: no continuation. On the start slot any frame continues.
+  const middle = structuredClone(project)
+  middle.nodes.find((node: any) => node.id === frame.id).data.origin.position = 'middle'
+  let result = ops(middle, [{ op: 'connect', from: frame.id, to: b.id, port: 'ref_image' }])
+  const chosen = result.project.edges.find((edge: any) => edge.from === frame.id)
+  assert.equal(result.applied[0].promptChange, undefined)
+  assert.equal(isContinuation(result.project, chosen), false)
+  assert.equal(isContinuation(result.project, { ...chosen, port: 'start' }), true)
+  assert.deepEqual(continuationEdges(result.project, cutOf(result.project)), [])
+  // The last frame continues; disconnecting or removing it changes no text (the person's mention then reads as unknown, as any other would).
+  project = ops(project, [{ op: 'connect', from: frame.id, to: b.id, port: 'ref_image' }]).project
+  const edge = project.edges.find((item: any) => item.from === frame.id)
+  assert.deepEqual(continuationEdges(project, cutOf(project)).map((item: any) => item.id), [edge.id])
+  assert.deepEqual(resolvePrompt(project, cutOf(project)).errors, [])
+  for (const op of [{ op: 'disconnect', id: edge.id }, { op: 'remove', id: frame.id }]) {
+    result = ops(project, [op])
+    assert.equal(result.applied[0].promptChange, undefined)
+    assert.equal(cutOf(result.project).data.prompt, prompt)
+    assert.equal(count(cutOf(result.project).data.prompt, '앞 마지막 프레임'), 1)
+  }
+})
+test('video canvas extracts a middle frame of the cut before into reference images as a plain reference, replacing nothing', async () => {
+  const f = serviceFixture()
+  try {
+    f.state.historyPerJob = true
+    const project = await fixtureProject(f)
+    const take = await f.dispatch('run_cut', await runArgs(f, project))
+    await f.dispatch('get_take', { project_id: project.id, take_id: take.id })
+    const added = await f.dispatch('apply_ops', { project_id: project.id, expected_revision: 1, ops: [{ op: 'add_node', kind: 'cut', name: '둘째', tempId: 'b', fields: { mode: 'REF2VA', prompt: 'summary:\nShe turns.' } }] })
+    const b = added.tempIds.b, read = () => f.service.store.get('account:1', project.id), cutB = () => read().nodes.find((node: any) => node.id === b)
+    const refs = () => read().edges.filter((edge: any) => edge.to === b && edge.port === 'ref_image').sort((x: any, y: any) => x.position - y.position).map((edge: any) => edge.from)
+    const last = await f.dispatch('extract_frame', { project_id: project.id, expected_revision: added.revision, take_id: take.id, position: 'last', target: { cut: b, port: 'ref_image' } })
+    assert.deepEqual([last.promptChange, last.unnamed], [null, unusedReference('컷 마지막 프레임')])
+    const middle = await f.dispatch('extract_frame', { project_id: project.id, expected_revision: last.revision, take_id: take.id, position: 'middle', target: { cut: b, port: 'ref_image' } })
+    assert.deepEqual([middle.promptChange, middle.frameName, middle.unnamed], [null, '컷 가운데 프레임', unusedReference('컷 가운데 프레임')])
+    assert.deepEqual(refs(), [last.nodeIds[0], middle.nodeIds[0]])
+    assert.equal(cutB().data.prompt, 'summary:\nShe turns.')
+    assert.deepEqual(continuationEdges(read(), cutB()).map((edge: any) => edge.from), [last.nodeIds[0]])
+  } finally { f.db.close() }
+})
+test('video canvas chain over chosen cuts continues each from the cut it ran before and keeps one reference frame its prompt named early', async () => {
+  const f = serviceFixture()
+  try {
+    f.state.historyPerJob = true
+    const project = await fixtureProject(f), a = project.nodes[0].id
+    const prompt = 'subject_definitions:\n' + FIRST('컷 마지막 프레임') + '\n@유나 기준: the girl.\nsummary:\nShe turns.'
+    const added = await f.dispatch('apply_ops', { project_id: project.id, expected_revision: 1, ops: [
+      { op: 'add_node', kind: 'cut', name: '둘째', tempId: 'b', fields: { prompt: 'She waits.' } },
+      { op: 'add_node', kind: 'cut', name: '셋째', tempId: 'c', fields: { mode: 'REF2VA', prompt } },
+      { op: 'connect', from: project.nodes[1].id, to: 'c', port: 'ref_image' },
+    ] })
+    const { b, c } = added.tempIds
+    const read = () => f.service.store.get('account:1', project.id), node = (id: string) => read().nodes.find((item: any) => item.id === id)
+    const fromA = () => read().edges.filter((edge: any) => edge.to === c && ['start', 'ref_image'].includes(edge.port) && node(edge.from).data.origin?.takeId).map((edge: any) => [edge.port, node(edge.from).data.name])
+    // Cut C runs right after A (B is skipped), so it continues from A although A is not the cut before it in the sequence.
+    const first = await f.dispatch('run_chain', { project_id: project.id, expected_revision: added.revision, cut_ids: [a, c], regenerate: true, wait_seconds: 120 })
+    assert.equal(first.status, 'completed', first.error)
+    assert.deepEqual(fromA(), [['ref_image', '컷 마지막 프레임']])
+    const extraction = read().extractions.find((item: any) => item.id === first.steps[1].extractionId)
+    assert.deepEqual([extraction.promptChange, extraction.frameName, extraction.unnamed], [null, '컷 마지막 프레임', undefined])
+    const firstFrame = read().edges.find((edge: any) => edge.to === c && node(edge.from).data.origin?.takeId).from
+    // Again: the frame is replaced in its place, not piled up, and the text is untouched.
+    const second = await f.dispatch('run_chain', { project_id: project.id, expected_revision: read().revision, cut_ids: [a, c], regenerate: true, wait_seconds: 120 })
+    assert.equal(second.status, 'completed', second.error)
+    assert.deepEqual(fromA(), [['ref_image', '컷 마지막 프레임']])
+    assert.equal(node(firstFrame), undefined)
+    assert.equal(node(c).data.prompt, prompt)
+    assert.deepEqual(read().edges.filter((edge: any) => edge.to === b), [])
+    // Cut C's Director payload has the frame as a reference image its prompt binds.
+    const value = buildDirector(read(), node(c)), item = JSON.parse(value.timeline_data).items.find((entry: any) => entry.value === '컷 마지막 프레임')
+    assert.deepEqual([item.type, item.slot], ['image', 1])
+    assert.match(value.simple_prompt, /^subject_definitions:\n<Picture 2> is the first frame of \[Shot 1\]\.\n<Picture 1>: the girl\./)
+    const takeC = read().takes.find((take: any) => take.id === second.steps[1].takeId)
+    assert.match(takeC.resolved.prompt, /<Picture 2> is the first frame of \[Shot 1\]\./)
+    // keep_start keeps that frame: nothing is extracted for C.
+    const frames = f.calls.filter(call => call.name === 'save_video_frame').length
+    const kept = await f.dispatch('run_chain', { project_id: project.id, expected_revision: read().revision, cut_ids: [a, c], regenerate: true, keep_start: true, wait_seconds: 120 })
+    assert.equal(kept.status, 'completed', kept.error)
+    assert.equal(f.calls.filter(call => call.name === 'save_video_frame').length, frames)
+    assert.deepEqual(fromA(), [['ref_image', '컷 마지막 프레임']])
+    assert.equal(kept.steps[1].unnamed, undefined)
   } finally { f.db.close() }
 })

@@ -1,6 +1,6 @@
-import { PORTS, cutEdges, outputOf } from './domain.mjs'
+import { PORTS, cutEdges, outputOf, continuationPort, continuationRoom } from './domain.mjs'
 import { esc, fileUrl, isTerminal, ports, outputNames } from './util.mjs'
-import { s, ctx, nodeById, cuts, profileOf, repTake, frameTake, shownTake, takesOf, cutOrder, frameRole, frameSource, frameLabel, settingsOf, genProfiles, defaultOf, cutDefault, upscaleSettingOf } from './state.mjs'
+import { s, ctx, nodeById, cuts, profileOf, repTake, frameTake, shownTake, takesOf, cutOrder, prevCut, continues, frameRole, frameSource, frameLabel, settingsOf, genProfiles, defaultOf, cutDefault, upscaleSettingOf, promptChangeText, moveText } from './state.mjs'
 import { toast } from './toast.mjs'
 import { showMenu } from './menu.mjs'
 import { request, ui, edit, reload, launchRun, lockRunButtons, publish, saveView } from './session.mjs'
@@ -92,21 +92,27 @@ export function chooseSetting(nodeId, anchor = nodeEl(nodeId)?.querySelector('[d
   if (!settingsOf(role).length) return void openSettings(role)
   showMenu(rect.left, rect.bottom + 4, settingMenu(node))
 }
-/** The inspector's buttons of a generation node: edit this setting, register a new one, import a preset. They all go through the settings dialog;
- *  a setting created or imported there is put on the node. */
-export function bindGen() {
-  document.addEventListener('click', async event => {
-    const target = event.target.closest('[data-gen]'), nodeId = target?.closest('[data-id]')?.dataset.id
-    if (!target || target.disabled || nodeById(nodeId)?.kind !== 'gen') return
-    const profile = profileOf(nodeById(nodeId)), action = target.dataset.gen
-    const id = await openSettings('gen', { start: action, ...(action === 'edit' ? { id: profile.id } : {}) })
-    if (id && id !== profile?.id) await useSetting(nodeById(nodeId), id)
-  })
+/** The detail panel's generation setting menu: edit the node's setting, register a new one or import a preset (`action` `edit`, `new`, `import`),
+ *  all through the settings dialog; a setting created or imported there is put on the node. */
+export async function genSetting(nodeId, action) {
+  if (nodeById(nodeId)?.kind !== 'gen') return
+  const profile = profileOf(nodeById(nodeId))
+  const id = await openSettings('gen', { start: action, ...(action === 'edit' ? { id: profile.id } : {}) })
+  if (id && id !== profile?.id) await useSetting(nodeById(nodeId), id)
 }
 const modeText = change => `모드는 ${change.from} → ${change.to}로 바뀌었어.`
-/** A connection to a start/end slot the cut's mode ignored switches the mode (the server says so on that operation, a `connect` or a node added or imported with a `target`): tell the person, as an extraction does. */
-export function announceModeChange(result) {
-  for (const { op, modeChange: change } of result.applied) if (change) toast(`${nodeById(change.cutId)?.data.name ?? '컷'}의 ${ports[op.port ?? op.target?.port]} 슬롯에 연결했어. ${modeText(change)}`)
+/**
+ * Says what an edit changed besides what was asked, as the server reports it on each operation: a connection to a start/end slot the
+ * cut's mode ignored switched the mode (a `connect`, or a node added or imported with a `target`), a mode change carried the cut's
+ * continuation frame to the slot that mode uses.
+ */
+export function announceChanges(result) {
+  for (const { op, modeChange: change, continuationMove: move, promptChange } of result.applied) {
+    if (change) toast(`${nodeById(change.cutId)?.data.name ?? '컷'}의 ${ports[op.port ?? op.target?.port]} 슬롯에 연결했어. ${modeText(change)}`)
+    if (move) toast(moveText(move))
+    if (promptChange) toast(promptChangeText(promptChange))
+  }
+  return result
 }
 const defined = fields => Object.fromEntries(Object.entries(fields).filter(([, value]) => value !== undefined))
 /** Copies cuts and generation nodes (values, setting and input connections; no takes) next to their originals, in one edit.
@@ -135,7 +141,7 @@ export async function removeNodes(ids) {
   if (!nodes.length) return
   const ok = await confirmDialog(nodes.length === 1 ? '이 노드를 지울까?' : `노드 ${nodes.length}개를 지울까?`, `<p>${nodes.map(node => esc(node.data.name)).join(', ')}와 연결선을 지워. 생성 이력은 남아.</p>`, '지우기')
   if (!ok) return
-  await ui(async () => { await edit(nodes.map(node => ({ op: 'remove', id: node.id }))); applySelection(s.sel.filter(id => nodeById(id))); ctx.hooks.render() })
+  await ui(async () => { announceChanges(await edit(nodes.map(node => ({ op: 'remove', id: node.id })))); applySelection(s.sel.filter(id => nodeById(id))); ctx.hooks.render() })
 }
 /** Ops that cut one connection; an extracted frame nothing else uses goes with its link, as the server's replace does it:
  *  only while its review is pending and the person has not pulled it out as a card. */
@@ -144,9 +150,10 @@ export function disconnectOps(edgeId) {
   const orphan = frame?.kind === 'frame' && frame.data.origin && (frame.review ?? 'pending') === 'pending' && !s.open.includes(frame.id) && !s.project.edges.some(other => other.id !== edgeId && (other.from === frame.id || other.to === frame.id))
   return [{ op: 'disconnect', id: edgeId }, ...(orphan ? [{ op: 'remove', id: frame.id }] : [])]
 }
+/** Cuts a connection; a continuation frame's line in the cut's text goes with it (the server says so). */
 export function removeEdge(id) {
   s.edgeSel = null
-  return ui(() => edit(disconnectOps(id)))
+  return ui(async () => announceChanges(await edit(disconnectOps(id))))
 }
 // ---- takes ----
 export const pickTake = (cutId, takeId) => ui(() => edit([{ op: 'set', id: cutId, fields: { pickTakeId: takeId } }]))
@@ -183,11 +190,12 @@ export function upscaleCut(cutId, takeId, profileId) {
 export function extractFrom({ nodeId, takeId, target, after }) {
   return ui(() => extractionDialog({ nodeId, takeId, target, after }))
 }
-/** Takes the last frame of the cut before this one (sequence order) into this cut's start slot. */
+/** Takes the last frame of the cut before this one (sequence order) into this cut's continuation slot: its start slot, or a reference image in REF2VA.
+ *  Its earlier continuation link, wherever it is, is replaced (that is also how a frame left on the wrong slot is put right). */
 export async function continueFromPrevious(cutId) {
-  const order = cutOrder(), prev = nodeById(order[order.indexOf(cutId) - 1])
+  const cut = nodeById(cutId), prev = prevCut(cut)
   if (!prev) return toast('앞 컷이 없어. 시퀀스에서 앞에 컷이 있어야 해.', { error: true })
-  return pullFrame(prev.id, cutId, 'start', 'last', true)
+  return pullFrame(prev.id, cutId, continuationPort(cut.data.mode), 'last', true)
 }
 const FRAME_POSITIONS = { first: '첫 프레임', last: '마지막 프레임' }
 /**
@@ -209,11 +217,14 @@ async function pullFrame(fromId, cutId, port, position, confirm = false, replace
   const from = nodeById(fromId), take = frameTake(from)
   if (!take?.resultHash) return toast(`${from.data.name}에 쓸 결과가 아직 없어. 먼저 생성해줘.`, { error: true })
   const cut = nodeById(cutId), single = ['start', 'end'].includes(port), existing = single ? cutEdges(s.project, cut, false).find(edge => edge.port === port) : null
-  if (existing && confirm && !await confirmDialog(`${ports[port]}을 바꿀까?`, `<p>${esc(cut.data.name)}의 ${ports[port]} 연결을 ${esc(from.data.name)}의 ${FRAME_POSITIONS[position]}으로 바꿔.</p>`, '바꾸기', false)) return
+  // A continuation (onto the start slot, or the last frame among the reference images) replaces the cut's earlier one without asking;
+  // only another image on the start slot is worth a question.
+  const continuing = prevCut(cut)?.id === fromId && (port === 'start' || (port === 'ref_image' && position === 'last'))
+  if (existing && confirm && !(continuing && continues(existing)) && !await confirmDialog(`${ports[port]}을 바꿀까?`, `<p>${esc(cut.data.name)}의 ${ports[port]} 연결을 ${esc(from.data.name)}의 ${FRAME_POSITIONS[position]}으로 바꿔.</p>`, '바꾸기', false)) return
   await ui(async () => {
     // The server switches the cut's mode when its current mode ignores the slot.
-    const old = replaces && s.project.edges.find(edge => edge.id === replaces)
-    const target = await extractionTarget(cutId, port, old?.position)
+    const old = !continuing && replaces && s.project.edges.find(edge => edge.id === replaces)
+    const target = await extractionTarget(cutId, port, old?.position, take.id, position)
     const result = await request('extract_frame', { expected_revision: s.project.revision, take_id: take.id, position, format: 'png', target })
     if (old) afterFrames(result.id, replaceLink(old.id, cutId, port))
     await reload()
@@ -237,12 +248,29 @@ export async function connectCutResult(fromId, { cut: cutId, port }) {
 }
 // ---- links: a frame of one cut's result between two cuts ----
 const sourceOf = edge => { const frame = nodeById(edge.from), source = frame && frameSource(frame); return source && { frame, ...source, target: nodeById(edge.to) } }
-/** Takes the frame again from the source cut's current result (the first/last/middle it was taken from, last by default). */
+/** Takes the frame again from the source cut's current result (the first/last/middle it was taken from, last by default). A continuation
+ *  goes to the slot the cut's mode continues in (as the last frame among a REF2VA cut's reference images), so taking it again also moves one
+ *  left on a slot the mode ignores. */
 export function repull(edgeId) {
   const edge = s.project.edges.find(item => item.id === edgeId), link = edge && sourceOf(edge)
   if (!link) return
   const position = ['first', 'middle', 'last'].includes(link.frame.data.origin.position) ? link.frame.data.origin.position : 'last'
+  const port = continuationPort(link.target.data.mode)
+  if (continues(edge)) return pullFrame(link.cut.id, link.target.id, port, port === 'ref_image' ? 'last' : position)
   return pullFrame(link.cut.id, link.target.id, edge.port, position, false, edge.port === 'ref_image' ? edgeId : null)
+}
+/**
+ * Moves a connection to another slot of its cut (a link the cut's mode ignores, to the slot it uses), after that slot's other images.
+ * A continuation frame moved among a REF2VA cut's reference images needs room there.
+ */
+export function moveLink(edgeId, port) {
+  const edge = s.project.edges.find(item => item.id === edgeId), cut = edge && nodeById(edge.to)
+  if (!cut) return
+  return ui(async () => {
+    if (port === 'ref_image' && continues({ ...edge, port })) continuationRoom(s.project, cut, [edge.id])
+    announceChanges(await edit([{ op: 'disconnect', id: edgeId }, { op: 'connect', from: edge.from, to: cut.id, port, props: edge.props }]))
+    toast(`${ports[port]} 슬롯으로 옮겼어: ${nodeById(edge.from)?.data.name ?? '소재'}`)
+  })
 }
 function pickFrame(edgeId) {
   const edge = s.project.edges.find(item => item.id === edgeId), link = edge && sourceOf(edge), take = link && frameTake(link.cut)
@@ -362,7 +390,7 @@ async function applyFieldChange(target) {
   const id = target.closest('[data-id]')?.dataset.id
   if (!id) return
   if (target.dataset.pf) return onProfileChange(target)
-  if (target.dataset.field) return edit([{ op: 'set', id, fields: { [target.dataset.field]: ['seed', 'duration'].includes(target.dataset.field) ? Number(target.value) : target.value } }])
+  if (target.dataset.field) return announceChanges(await edit([{ op: 'set', id, fields: { [target.dataset.field]: ['seed', 'duration'].includes(target.dataset.field) ? Number(target.value) : target.value } }]))
   if (target.dataset.prop) return edit([{ op: 'set', id: target.dataset.edge, fields: { props: { [target.dataset.prop]: ['description', 'media_mode'].includes(target.dataset.prop) ? target.value : Number(target.value) } } }])
   if (target.dataset.memo) {
     const item = nodeById(target.dataset.memo) ?? s.project.takes.find(take => take.id === target.dataset.memo)

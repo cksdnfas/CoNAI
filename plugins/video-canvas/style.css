@@ -1,4 +1,12 @@
 :root { --vc-image: color-mix(in srgb, var(--conai-foreground) 65%, var(--conai-primary)); --vc-video: var(--conai-warning); --vc-audio: var(--conai-success); --vc-bundle: var(--conai-muted-foreground); --vc-cut-width: 300px }
+/* Reference marks (prompt marks, 전송 labels, input row chips): one clear hue per kind, the destructive tone for one that does not resolve. */
+:root { --vc-mark-image: #7db4ff; --vc-mark-video: var(--conai-warning); --vc-mark-audio: var(--conai-success); --vc-mark-bundle: #c8a0ff; --vc-mark-error: var(--conai-destructive) }
+:root[data-theme=light] { --vc-mark-image: #1f66d1; --vc-mark-bundle: #7c3fd6 }
+.k-image { --k: var(--vc-mark-image) }
+.k-video { --k: var(--vc-mark-video) }
+.k-audio { --k: var(--vc-mark-audio) }
+.k-bundle { --k: var(--vc-mark-bundle) }
+.k-error { --k: var(--vc-mark-error) }
 [hidden] { display: none !important }
 body { min-height: 680px }
 .conai-header { flex-wrap: wrap }
@@ -53,6 +61,7 @@ img.vc-big { display: block; max-width: 100%; max-height: 70vh; margin: 0 auto }
 .vc-edge.src.hot .line { stroke-width: 2.5; stroke-opacity: 1 }
 .vc-edge.chain .line { stroke: var(--vc-video); stroke-width: 3; marker-end: url(#vc-arr-video) }
 .vc-edge.refimg .line { stroke: var(--vc-video); stroke-width: 1.5 }
+.vc-edge.refimg.unused .line { stroke-dasharray: 5 4; opacity: .5 }
 .vc-edge.stale .line { stroke-dasharray: 6 4 }
 .vc-edge.run .line { stroke-dasharray: 6 4; animation: vc-flow .7s linear infinite }
 .vc-edge.rail .line { stroke-opacity: .5; stroke-dasharray: 1 5; stroke-linecap: round; marker-end: url(#vc-arr-muted) }
@@ -191,17 +200,17 @@ img.vc-big { display: block; max-width: 100%; max-height: 70vh; margin: 0 auto }
 .vc-tray-item .toolbar { flex-wrap: nowrap }
 
 /* sequence dock: 212px by default (154px at least), head 40px; collapsed it is the head only */
-.vc-sequence { --vc-th: calc(var(--vc-dock-h) - 66px); position: relative; display: flex; flex: none; flex-direction: column; height: var(--vc-dock-h); border-top: 1px solid var(--conai-line); background: var(--conai-background); container-type: inline-size }
-.vc-sequence.collapsed { height: 40px }
+/* the dock is its head (one row of groups, more when they wrap on a narrow screen) over a strip of --vc-dock-h minus one head row */
+.vc-sequence { --vc-th: calc(var(--vc-dock-h) - 66px); position: relative; display: flex; flex: none; flex-direction: column; border-top: 1px solid var(--conai-line); background: var(--conai-background); container-type: inline-size }
 .vc-sequence.collapsed .vc-seq-row { display: none }
 .vc-seq-resize { position: absolute; z-index: 3; top: -3px; right: 0; left: 0; height: 6px; cursor: ns-resize }
 .vc-seq-resize:hover, .vc-seq-resize:focus-visible { outline: 0; background: color-mix(in srgb, var(--conai-primary) 45%, transparent) }
 .vc-sequence.collapsed .vc-seq-resize { pointer-events: none }
-.vc-seq-head { display: flex; flex: none; align-items: center; height: 40px; padding: 0 var(--conai-text-inset); white-space: nowrap }
-.vc-seq-group { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 0 12px; border-left: 1px solid var(--conai-line) }
+.vc-seq-head { display: flex; flex: none; flex-wrap: wrap; align-items: center; min-height: 40px; padding: 0 var(--conai-text-inset); white-space: nowrap }
+.vc-seq-group { display: flex; align-items: center; gap: 8px; min-width: 0; min-height: 40px; padding: 0 12px; border-left: 1px solid var(--conai-line) }
 .vc-seq-group:first-child { padding-left: 0; border-left: 0 }
-.vc-transport { flex: 1 }
-.vc-production { flex: none }
+.vc-transport { flex: 1 1 auto }
+.vc-production { flex: none; margin-left: auto }
 .vc-seq-head b { font-size: 13px }
 #seq-play { min-width: 112px }
 #seq-play > svg { flex: none }
@@ -218,7 +227,13 @@ img.vc-big { display: block; max-width: 100%; max-height: 70vh; margin: 0 auto }
   #seq-time, .vc-long { display: none }
   .vc-short { display: inline }
 }
-.vc-seq-row { display: flex; flex: 1; min-height: 0 }
+/* too narrow for one row: the groups wrap in their order (no separators at a row start), the scrub takes what is left of its row */
+@container (max-width: 679px) {
+  .vc-seq-head { column-gap: 16px }
+  .vc-seq-group { padding: 0; border-left: 0 }
+  .vc-scrub { min-width: 0 }
+}
+.vc-seq-row { display: flex; flex: none; height: calc(var(--vc-dock-h) - 41px); min-height: 0 }
 .vc-seq-list { display: flex; flex: 1; align-items: flex-start; min-width: 0; min-height: 0; padding: 10px 12px 0; overflow-x: auto; overflow-y: hidden; scrollbar-width: thin }
 .vc-seq-item { position: relative; flex: none; width: calc(var(--vc-th) * 16 / 9); cursor: grab }
 .vc-seq-item > .conai-media { width: 100%; height: var(--vc-th) }
@@ -232,6 +247,7 @@ img.vc-big { display: block; max-width: 100%; max-height: 70vh; margin: 0 auto }
 .vc-seq-join { flex: none; width: 16px; min-height: 0; height: var(--vc-th); padding: 0; border-radius: 0; background: transparent; color: var(--conai-muted-foreground); opacity: .45 }
 .vc-seq-join:hover:not(:disabled) { background: var(--conai-fill); opacity: 1 }
 .vc-seq-join.chained { color: var(--vc-video); opacity: 1 }
+.vc-seq-join.chained.stale { background: color-mix(in srgb, var(--conai-warning) 14%, transparent) }
 .vc-seq-side { flex: none; padding: 10px 12px 0; border-left: 1px solid var(--conai-line) }
 .vc-seq-side:empty { display: none }
 .vc-seq-export { position: relative; width: min(calc(var(--vc-th) * 16 / 9), 32cqw) }
@@ -249,13 +265,134 @@ img.vc-big { display: block; max-width: 100%; max-height: 70vh; margin: 0 auto }
 .vc-seq-screen video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; visibility: hidden }
 .vc-seq-screen video.front { visibility: visible }
 
-/* inspector */
-.inspector { --conai-sidebar-width: 390px }
+/* inspector: a sticky head (the tabs, then the node with its main action) over flat sections of hairline rows */
+/* position: the panel holds its screen-reader-only text, or that text would stretch the page below the panel where the panel scrolls with it */
+.inspector { --conai-sidebar-width: 390px; --vc-tabs-h: 40px; --vc-label-w: 76px; --vc-hit: 28px; position: relative; gap: 0; scroll-padding-top: calc(var(--vc-tabs-h) + 72px) }
 .inspector pre { overflow-wrap: anywhere }
 .workspace.insp-closed .inspector { display: none }
-.vc-insp-head { position: sticky; top: 0; z-index: 1; background: var(--conai-background) }
-#insp-body section + section { margin-top: 16px }
+/* the tab row also covers the sidebar's top padding, which a sticky box would otherwise let the content scroll through */
+.vc-insp-head { position: sticky; top: calc(-1 * var(--conai-sidebar-pad-top)); z-index: 2; flex: none; flex-wrap: nowrap; height: calc(var(--vc-tabs-h) + var(--conai-sidebar-pad-top)); margin-top: calc(-1 * var(--conai-sidebar-pad-top)); padding-top: var(--conai-sidebar-pad-top); background: var(--conai-background) }
+#insp-panel { min-width: 0; container-type: inline-size }
+.vc-insp-top { position: sticky; top: var(--vc-tabs-h); z-index: 1; padding: 8px 0; border-bottom: 1px solid var(--conai-line); background: var(--conai-background) }
+.vc-ihead { display: flex; align-items: center; gap: 6px; min-width: 0 }
+.vc-ihead-text { display: flex; flex: 1; flex-direction: column; min-width: 0 }
+.vc-ihead-name { margin: 0; overflow: hidden; font-size: 15px; text-overflow: ellipsis; white-space: nowrap }
+.vc-ihead-meta { overflow: hidden; color: var(--conai-muted-foreground); font-size: 12px; text-overflow: ellipsis; white-space: nowrap }
+.vc-ihead > button:not(.conai-icon-button) { flex: none }
+.inspector .conai-icon-button { width: 28px; min-height: 28px }
+#insp-body { padding-bottom: 16px }
+#insp-body > :first-child { margin-top: 12px }
+#insp-body section + section, #insp-body > * + section, #insp-body > * + details { margin-top: 20px }
 #insp-body label.vc-check { display: flex; align-items: center; gap: 8px }
+.vc-count { margin-left: auto; color: var(--conai-muted-foreground); font-size: 12px; font-weight: 500; font-variant-numeric: tabular-nums }
+.vc-sr { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); border: 0; white-space: nowrap }
+/* settings: label left, control right; mode, length and seed share one row */
+.vc-field-row { display: grid; grid-template-columns: var(--vc-label-w) minmax(0, 1fr); align-items: center; gap: var(--conai-text-inset); margin: 8px 0 }
+.vc-field-row > label, .vc-cell > label { margin: 0 }
+.vc-field-row > :is(select, input) { width: 100%; min-width: 0 }
+.vc-control { display: flex; align-items: center; gap: 2px; min-width: 0 }
+.vc-control > :is(input, select) { flex: 1; width: 100%; min-width: 0 }
+.vc-trio { display: grid; grid-template-columns: minmax(86px, 1fr) minmax(48px, .5fr) minmax(0, 1.7fr); gap: var(--conai-text-inset); margin-top: 10px }
+.vc-cell { display: flex; flex-direction: column; gap: 4px; min-width: 0 }
+.vc-cell > :is(input, select), .vc-cell input { width: 100%; min-width: 0; padding-inline: 8px }
+/* a seed is a long random number with its own dice button: no spinner eating its digits */
+.inspector input[data-field=seed] { appearance: textfield }
+.inspector input[data-field=seed]::-webkit-inner-spin-button { margin: 0; appearance: none }
+.vc-form > label { display: grid; grid-template-columns: var(--vc-label-w) minmax(0, 1fr); align-items: center; gap: var(--conai-text-inset); margin: 8px 0 }
+.vc-form > label > :is(input, select, textarea) { margin-top: 0 }
+.vc-form > label.vc-check { display: flex }
+/* inputs: a hairline row per connection, grouped by slot */
+.vc-port-head { display: flex; align-items: center; gap: 8px; min-height: 28px; margin: 6px 0 0; color: var(--conai-muted-foreground); font-size: 12px; font-weight: 600 }
+.vc-in { display: grid; grid-template-columns: 32px minmax(0, 1fr) auto; align-items: center; column-gap: var(--conai-text-inset); min-height: 40px; padding: 4px 0; border-bottom: 1px solid var(--conai-line) }
+.vc-in:last-child { border-bottom: 0 }
+.vc-tile { display: grid; flex: none; place-items: center; width: 32px; height: 32px; border-radius: var(--conai-radius); background: var(--conai-field); color: var(--conai-muted-foreground) }
+.vc-tile.wide { width: 56px }
+.vc-in-main { display: flex; flex-direction: column; gap: 2px; min-width: 0 }
+.vc-in-marks { display: flex; flex-wrap: wrap; align-items: center; gap: 4px }
+.vc-mark { display: inline-flex; color: var(--vc-video) }
+/* a cut's reference label is a chip that puts its @name into the prompt; dashed in the warning tone when the sent text never names it */
+.inspector .vc-in-marks .vc-label { flex: none; min-height: 24px; height: 24px; padding: 0 8px; background: color-mix(in srgb, var(--k) 16%, transparent); color: color-mix(in srgb, var(--k) 78%, var(--conai-foreground)); font-size: 11px; font-weight: 600; text-decoration: underline 1px var(--k); text-underline-offset: 3px }
+.inspector .vc-in-marks .vc-label:hover:not(:disabled) { background: color-mix(in srgb, var(--k) 28%, transparent); color: color-mix(in srgb, var(--k) 78%, var(--conai-foreground)) }
+.inspector .vc-in-marks .vc-label.missing, .inspector .vc-in-marks .vc-label.missing:hover:not(:disabled) { border: 1px dashed var(--conai-warning); background: transparent }
+.vc-in-tools, .vc-take-tools { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 2px }
+.vc-in-props { display: grid; grid-column: 2 / -1; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); column-gap: var(--conai-text-inset); padding-bottom: 4px }
+.vc-in-props > label { margin: 4px 0 }
+.vc-in-props > .wide { grid-column: 1 / -1 }
+.vc-in.unused .conai-row-title { color: var(--conai-muted-foreground) }
+.vc-in.unused .vc-tile { opacity: .6 }
+.vc-in-offer { grid-template-columns: minmax(0, 1fr) }
+.vc-offer { justify-content: flex-start; gap: 8px; width: 100%; padding: 0 var(--conai-text-inset); color: var(--conai-muted-foreground) }
+.vc-offer:hover:not(:disabled) { color: var(--conai-foreground) }
+.vc-unused { margin-top: 6px; padding: 0; border-top: 0 }
+.vc-unused > summary { display: flex; align-items: center; gap: 4px; min-height: 32px; color: var(--conai-muted-foreground); font-size: 12px }
+.vc-unused[open] > summary { margin-bottom: 0 }
+@container (max-width: 249px) {
+  .vc-in { grid-template-columns: 32px minmax(0, 1fr) }
+  .vc-in-tools { grid-column: 2 }
+}
+@container (max-width: 279px) {
+  .vc-trio { grid-template-columns: repeat(2, minmax(0, 1fr)) }
+  .vc-trio > :last-child { grid-column: 1 / -1 }
+}
+/* the prompt: one field frame with text tabs inside it */
+.vc-frame { border: 1px solid transparent; border-radius: var(--conai-radius); background: var(--conai-field) }
+.vc-frame:has(textarea:focus-visible) { border-color: color-mix(in srgb, var(--conai-primary) 55%, transparent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--conai-primary) 14%, transparent) }
+.vc-frame-tabs { display: flex; gap: 8px; padding: 0 6px; border-bottom: 1px solid var(--conai-line) }
+.vc-frame-tabs > button { position: relative; min-width: 28px; min-height: 32px; padding: 0 4px; border-radius: 0; background: transparent; color: var(--conai-muted-foreground); font-size: 12px }
+.vc-frame-tabs > button:hover:not(:disabled) { background: transparent; color: var(--conai-foreground) }
+.vc-frame-tabs > button[aria-selected=true] { color: var(--conai-foreground) }
+.vc-frame-tabs > button[aria-selected=true]::after { content: ""; position: absolute; right: 0; bottom: -1px; left: 0; height: 2px; background: var(--conai-primary) }
+.vc-frame-tabs > button.unsent { text-decoration: line-through }
+.vc-tab-dot { width: 6px; height: 6px; margin-left: 5px; border-radius: 50%; background: var(--conai-primary) }
+.vc-frame textarea { display: block; width: 100%; min-height: 6em; margin: 0; border: 0; border-radius: 0 0 var(--conai-radius) var(--conai-radius); background: transparent; box-shadow: none }
+.vc-frame textarea:focus-visible { border: 0; box-shadow: none }
+.vc-sent { max-height: 24em; border-radius: 0; background: transparent }
+.vc-frame .label-table { border-top: 1px solid var(--conai-line) }
+.vc-tokens { margin-top: 8px }
+.inspector .conai-chip { min-height: 28px }
+.vc-issues:empty { display: none }
+.vc-issues > p { margin: 6px 0 0; font-size: 12px }
+/* prompt references: a mirror under the field draws the same text with marks; the field on top keeps its own text, caret and undo */
+.vc-ink { position: relative; isolation: isolate }
+.vc-ink > textarea { position: relative; z-index: 1; background: transparent; white-space: pre-wrap; overflow-wrap: break-word; word-break: normal; scrollbar-gutter: stable }
+.vc-ink-mirror { position: absolute; inset: 0; z-index: 0; margin: 0; overflow: hidden; scrollbar-gutter: stable; border: 0 solid transparent; color: transparent; white-space: pre-wrap; overflow-wrap: break-word; word-break: normal; pointer-events: none; user-select: none }
+.vc-node .vc-ink { border-radius: var(--conai-radius); background: var(--conai-field) }
+/* a mark: a translucent wash of its kind's hue, and an underline whose style tells the kind without the colour */
+mark.vc-ref { border-radius: 2px; background: color-mix(in srgb, var(--k) 26%, transparent); color: inherit; text-decoration: underline 1px var(--k); text-underline-offset: 3px }
+:is(mark.vc-ref, .vc-label).k-video { text-decoration-style: double }
+:is(mark.vc-ref, .vc-label).k-audio { text-decoration-style: dashed }
+:is(mark.vc-ref, .vc-label).k-bundle { text-decoration-style: dotted }
+:is(mark.vc-ref, .vc-label).k-error { text-decoration-style: wavy }
+.vc-caret-line { min-height: 18px; margin: 4px 0 0; overflow: hidden; color: var(--conai-muted-foreground); font-size: 12px; line-height: 18px; white-space: nowrap; text-overflow: ellipsis }
+.vc-caret-line + .vc-tokens { margin-top: 4px }
+.label-table mark.vc-ref { white-space: nowrap }
+.vc-tip { position: fixed; z-index: 60; max-width: min(360px, calc(100vw - 16px)); padding: 5px var(--conai-text-inset); background: var(--conai-surface-high); border: 1px solid var(--conai-line); border-radius: var(--conai-radius-md); box-shadow: var(--conai-float-shadow); color: var(--conai-foreground); font-size: 12px; line-height: 1.45; overflow-wrap: anywhere; pointer-events: none }
+.vc-issues > .vc-warn-token { justify-content: flex-start; gap: 6px; width: 100%; min-height: 28px; margin-top: 4px; padding: 0 var(--conai-text-inset); background: color-mix(in srgb, var(--conai-warning) 8%, transparent); font-size: 12px; font-weight: 500; text-align: left; white-space: normal }
+.vc-issues > .vc-warn-token:hover:not(:disabled) { background: color-mix(in srgb, var(--conai-warning) 16%, transparent) }
+.vc-warn-token > span { min-width: 0; overflow-wrap: anywhere }
+/* history: a row per take, the result tile at the left, its actions on a line of icons */
+.vc-take { display: grid; grid-template-columns: 56px minmax(0, 1fr); column-gap: 10px; row-gap: 2px; padding: 8px 0; border-bottom: 1px solid var(--conai-line) }
+.vc-take:last-child { border-bottom: 0 }
+.vc-take > .vc-tile { grid-row: span 2 }
+.vc-take-main { display: flex; flex-direction: column; gap: 2px; min-width: 0 }
+.vc-take-title { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; min-width: 0 }
+.vc-take-tools { grid-column: 2; justify-content: flex-start; margin-left: -4px }
+.vc-take-error { display: -webkit-box; grid-column: 1 / -1; margin: 4px 0 0; overflow: hidden; font-size: 12px; overflow-wrap: anywhere; -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical }
+.vc-take.open .vc-take-error { display: block }
+.vc-take-detail { grid-column: 1 / -1; padding-top: 6px }
+.vc-take-detail pre { max-height: 18em; font-size: 11px }
+.vc-review { display: flex; flex-wrap: wrap; align-items: center; gap: 6px var(--conai-text-inset); margin-top: 6px }
+.vc-review > input { flex: 1 1 8em; min-width: 0 }
+/* rows that lead to a node: the check list and the uses list */
+.vc-row-link { justify-content: flex-start; min-width: 0; min-height: var(--vc-hit); max-width: 100%; padding: 0; overflow: hidden; background: transparent; font-weight: 500; text-align: left; text-overflow: ellipsis }
+.vc-row-link:hover:not(:disabled) { background: transparent; text-decoration: underline }
+.vc-check-row { display: flex; align-items: flex-start; gap: var(--conai-text-inset); padding: 6px 0; border-bottom: 1px solid var(--conai-line); cursor: pointer }
+.vc-check-row:last-child { border-bottom: 0 }
+.vc-check-main { flex: 1; min-width: 0 }
+.vc-check-main > p { margin: 2px 0 0; font-size: 12px }
+.vc-check-end { display: flex; flex: none; align-items: center; gap: 2px; min-height: var(--vc-hit) }
+.vc-guide-box > summary { display: flex; align-items: center; gap: 4px; font-size: 14px; font-weight: 700 }
+:is(.vc-guide-box, .vc-unused)[open] > summary > .vc-icon { rotate: 90deg }
 .vc-guide { white-space: pre-wrap; overflow-wrap: anywhere }
 .vc-gfield { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 11em); align-items: center; gap: 4px var(--conai-text-inset); margin: 4px 0 }
 .vc-gfield-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
@@ -289,12 +426,26 @@ dialog video { width: 100%; max-height: 260px }
 .picker-grid .conai-media { aspect-ratio: 1 }
 .picker-list audio { width: 100%; height: var(--conai-control-height) }
 
+/* touch: every control of the detail panel and the menus is a finger wide */
+@media (pointer: coarse) {
+  .inspector :is(button, select, input:not([type=checkbox]):not([type=radio]):not([type=range])), .vc-menu button { min-height: 40px }
+  .inspector { --vc-hit: 40px }
+  .inspector .conai-icon-button { width: 40px; min-height: 40px }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important }
+}
 @media (min-width: 900px) and (max-width: 1199px) {
   .inspector { --conai-sidebar-width: 320px }
   :root { --vc-cut-width: 290px }
 }
 @media (max-width: 899px) {
-  .workspace { flex-direction: column }
+  /* the page scrolls here, not the panel: the tab row keeps its top padding in view, and a focused row scrolls clear of the sticky head */
+  .vc-insp-head { top: 0 }
+  .vc-insp-top { top: calc(var(--vc-tabs-h) + var(--conai-sidebar-pad-top)) }
+  .workspace { flex-direction: column; scroll-padding-top: calc(var(--vc-tabs-h) + var(--conai-sidebar-pad-top) + 72px) }
+  /* the panel spans the screen: its text keeps an inset from both edges (an overlay scrollbar sits on the right one) */
+  .workspace > .inspector { padding-inline: calc(var(--conai-edge) + var(--conai-text-inset)) }
   .vc-main { flex: none }
   .canvas { min-height: 520px; flex: none; width: 100% }
   .inspector { width: 100% }

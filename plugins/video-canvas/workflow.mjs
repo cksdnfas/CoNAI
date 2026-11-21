@@ -1,5 +1,5 @@
 import { adapterOf, outputOf, roleOf, sameValue } from './domain.mjs'
-import { $, esc, outputNames } from './util.mjs'
+import { $, esc, outputNames, icon, iconButton } from './util.mjs'
 import { s, ctx, nodeById, profileOf, genProfiles, settingsOf, defaultOf, cutDefault } from './state.mjs'
 import { toast } from './toast.mjs'
 import { request, accountRequest, edit, ui } from './session.mjs'
@@ -58,7 +58,7 @@ function changedSettings(profile, wf) {
   const inputs = Object.keys(profile.inputs ?? {}).length
   return [...changed, ...(inputs ? [`추가 입력 ${inputs}개`] : [])].join(' · ')
 }
-/** What tells one setting from another: [{ key, text, warn? }], for the settings dialog's rows and the inspector's summary. */
+/** What tells one setting from another: [{ key, text, warn? }], for the settings dialog's rows and the inspector's tooltip and warnings. */
 export function profileFacts(profile) {
   const role = roleOf(profile), wf = wfOf(profile), facts = []
   if (adapterOf(profile) === 'nai') facts.push({ key: '종류', text: `NovelAI · ${profile.nai.model}` })
@@ -85,7 +85,6 @@ function fieldFacts(profile, wf) {
   const perNode = (profile.exposedFieldIds ?? []).filter(id => id !== profile.promptFieldId && id !== profile.seedFieldId).map(id => fieldLabel(wf, id))
   return [...(fixed.length ? [{ key: '고정값', text: `고정값 ${fixed.join(', ')}` }] : []), ...(perNode.length ? [{ key: '노드마다', text: `노드마다 ${perNode.join(', ')}` }] : [])]
 }
-const factsHtml = profile => `<dl class="conai-kv">${profileFacts(profile).map(fact => `<dt>${esc(fact.key)}</dt><dd${fact.warn ? ' class="warning"' : ''}>${esc(fact.text)}</dd>`).join('')}</dl>`
 export const valueOf = target => target.dataset.ptype === 'boolean' ? target.checked : target.dataset.ptype === 'number' ? (target.value === '' ? undefined : Number(target.value)) : target.tagName === 'SELECT' ? JSON.parse(target.value) : target.value
 // Defaults are single values plus nested groups such as `resolution`; a group field is addressed as "group/key".
 const defaultFields = defaults => Object.entries(defaults ?? {}).filter(([key]) => !RESERVED.includes(key)).flatMap(([key, value]) =>
@@ -103,16 +102,23 @@ function fieldHtml(field, attr = 'pf') {
   return `<label class="${field.kind === 'boolean' ? 'vc-check' : ''}">${esc(field.label)}${input}</label>`
 }
 const kindOf = type => ['number', 'integer', 'int', 'float'].includes(type) ? 'number' : ['boolean', 'bool', 'checkbox'].includes(type) ? 'boolean' : 'text'
-/** Section 1 of a cut's detail: the cut setting and the upscale setting it uses (both chosen among the registered ones), the chosen setting in short, and the way to the library. */
+/** A label on the left and its control on the right (`control` carries the id the label names, `extra` an icon button after it). */
+export const fieldRow = (label, id, control, extra = '') => `<div class="vc-field-row"><label for="${id}">${esc(label)}</label>${extra ? `<span class="vc-control">${control}${extra}</span>` : control}</div>`
+const warningsHtml = list => list.map(text => `<p class="warning">${esc(text)}</p>`).join('')
+/** The settings rows of a cut's detail: the cut setting (its facts as the select's tooltip) and the upscale setting it uses, both chosen among the
+ *  registered ones, the way to the library, and what is wrong with them (a deleted setting, a missing or unusable workflow). */
 export function cutSettingsHtml(cut) {
   const profile = profileOf(cut), own = cut.data.upscaleProfileId, upscales = settingsOf('upscale'), fallback = defaultOf('upscale'), main = defaultOf('cut')
   // What a deleted setting leaves behind: a cut keeps the ID, gets the default cut setting when it generates and follows the default upscale setting.
   const lost = cut.data.profileId && !profile, replacement = cutDefault()
-  return `<h2 class="conai-group-head">1 · 설정</h2>
-    <label>영상 설정<select data-pf="profile">${profile ? '' : '<option value="">골라줘</option>'}${settingsOf('cut').map(item => opt(item.id, item.id === main?.id ? `${item.label} · 대표` : item.label, profile?.id)).join('')}</select></label>
-    ${lost ? `<p class="warning">이 컷이 쓰던 영상 설정은 지워졌어. ${replacement ? `생성하면 대표 영상 설정(${esc(replacement.label)})을 받아.` : '쓸 설정을 골라줘.'}</p>` : ''}
-    <label>업스케일 설정<select data-pf="upscale">${opt('', `대표 설정 따름 · ${fallback?.label ?? '없음'}`, own ?? '')}${upscales.map(item => opt(item.id, item.label, own)).join('')}${own && !upscales.some(item => item.id === own) ? opt(own, `지워진 설정 · 대표 설정을 따름 (${fallback?.label ?? '없음'})`, own) : ''}</select></label>
-    ${profile ? factsHtml(profile) : ''}<div class="toolbar"><button data-action="manage-settings" data-role="cut">설정 관리</button></div>`
+  const warnings = [
+    ...(lost ? [`이 컷이 쓰던 영상 설정은 지워졌어. ${replacement ? `생성하면 대표 영상 설정(${replacement.label})을 받아.` : '쓸 설정을 골라줘.'}`] : []),
+    ...(profile ? profileFacts(profile).filter(fact => fact.warn).map(fact => fact.text) : []),
+  ]
+  return fieldRow('영상 설정', 'insp-profile', `<select id="insp-profile" data-pf="profile" title="${esc(profile ? factsLine(profile) : '')}">${profile ? '' : '<option value="">골라줘</option>'}${settingsOf('cut').map(item => opt(item.id, item.id === main?.id ? `${item.label} · 대표` : item.label, profile?.id)).join('')}</select>`,
+    iconButton('settings', '설정 관리', 'data-action="manage-settings" data-role="cut"'))
+    + fieldRow('업스케일', 'insp-upscale', `<select id="insp-upscale" data-pf="upscale">${opt('', `대표 설정 따름 · ${fallback?.label ?? '없음'}`, own ?? '')}${upscales.map(item => opt(item.id, item.label, own)).join('')}${own && !upscales.some(item => item.id === own) ? opt(own, `지워진 설정 · 대표 설정을 따름 (${fallback?.label ?? '없음'})`, own) : ''}</select>`)
+    + warningsHtml(warnings)
 }
 /** The adjustable settings of a cut setting as form fields (`draft` carries its overrides, inputs and the JSON text being edited); raw overrides only under "고급". */
 export function cutFieldsHtml(draft, wf) {
@@ -169,13 +175,23 @@ export function guideTitle(link) {
   const read = s.nodeDetail?.preview?.guide?.skill
   return listed ?? known ?? (read?.skillId === link.skillId && read.path === link.path ? read.title : null) ?? `스킬 #${link.skillId} · ${link.path}`
 }
-/** Section 1 of a generation node's settings: which generation settings it uses, and where to register or import one. */
+/** The settings row of a generation node's detail: which generation setting it uses (what it is as the select's tooltip) and a menu to register,
+ *  change or import one (`genSettingItems`). */
 export function genSettingsHtml(node) {
   const profile = profileOf(node), used = profile ? s.project.nodes.filter(item => item.kind === 'gen' && item.data.profileId === profile.id).length : 0
-  return `<h2 class="conai-group-head">1 · 생성 설정</h2><label>생성 설정<select data-pf="profile">${profile ? '' : '<option value="">골라줘</option>'}${genProfiles().map(item => opt(item.id, `${item.label} · ${outputNames[outputOf(item)]}`, profile?.id)).join('')}</select></label>
-    <div class="toolbar">${profile ? '<button data-gen="edit">생성 설정 고치기</button>' : ''}<button data-gen="new">새 생성 설정</button>${presetsAvailable() ? '<button data-gen="import">생성 프리셋에서 가져오기</button>' : ''}</div>
-    ${profile ? `<p class="muted">${adapterNames[adapterOf(profile)]} · 결과 종류 ${outputNames[outputOf(profile)]}${used > 1 ? ` · 이 프로젝트에서 ${used}개 노드가 사용` : ''}</p><p class="muted">모든 프로젝트가 같이 쓰는 설정이라, 고치면 다른 프로젝트의 노드에도 반영돼.</p>`
-      : `<p class="conai-empty">${node.data.profileId ? '이 노드가 쓰던 생성 설정은 지워졌어. 다른 설정을 골라줘.' : '생성 설정을 먼저 골라줘.'}</p>`}`
+  const about = profile ? `${adapterNames[adapterOf(profile)]} · 결과 종류 ${outputNames[outputOf(profile)]}${used > 1 ? ` · 이 프로젝트에서 ${used}개 노드가 사용` : ''}` : ''
+  return fieldRow('생성 설정', 'insp-profile', `<select id="insp-profile" data-pf="profile" title="${esc(about)}">${profile ? '' : '<option value="">골라줘</option>'}${genProfiles().map(item => opt(item.id, `${item.label} · ${outputNames[outputOf(item)]}`, profile?.id)).join('')}</select>`,
+    `<button type="button" class="conai-icon-button" data-imenu="gen-settings" aria-haspopup="menu" aria-expanded="false" aria-label="설정 관리" title="설정 관리">${icon('settings')}</button>`)
+    + (node.data.profileId && !profile ? warningsHtml(['이 노드가 쓰던 생성 설정은 지워졌어. 다른 설정을 골라줘.']) : '')
+}
+/** The generation setting menu of a node: `run(action)` opens the settings dialog on that action (`edit`, `new`, `import`). */
+export function genSettingItems(node, run) {
+  const profile = profileOf(node)
+  return [
+    profile && { label: '생성 설정 고치기', meta: '모든 프로젝트가 같이 쓰는 설정이라, 고치면 다른 프로젝트의 노드에도 반영돼.', run: () => run('edit') },
+    { label: '새 생성 설정', run: () => run('new') },
+    presetsAvailable() && { label: '생성 프리셋에서 가져오기', run: () => run('import') },
+  ]
 }
 /** The fields a generation node fills itself (the profile marks them "노드마다"). */
 export function genFieldsHtml(node) {

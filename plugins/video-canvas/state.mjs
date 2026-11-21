@@ -1,5 +1,5 @@
 import { createAssistantState } from './assistant-state.mjs'
-import { PORTS, GEN_PORTS, outputOf, roleOf, withResults, staleUpstream } from './domain.mjs'
+import { PORTS, GEN_PORTS, outputOf, roleOf, withResults, staleUpstream, isContinuation, activePorts } from './domain.mjs'
 import { isTerminal, fraction } from './util.mjs'
 
 export const DOCK_H = 212
@@ -10,6 +10,9 @@ export const s = {
   sel: [], selection: null, edgeSel: null, edges: 'all', x: 24, y: 24, zoom: 1, open: [], ghostEdge: null,
   launch: null, checks: null, tab: 'detail', batch: null, runBusy: false,
   wf: null, viewTake: {}, inspectorOpen: false, seqOpen: true, seqH: DOCK_H,
+  // The detail panel's own view state, kept across redraws: expanded rows (`edge:<id>`, `take:<id>`), the prompt tab, textarea height and
+  // 안 쓰는 연결 group the person opened or closed of each node, and the caret of the prompt texts (a chip inserts there after the field lost the focus).
+  insp: { expanded: new Set(), tab: {}, height: {}, unused: {}, caret: {} },
 }
 // hooks let lower modules call the renderers without importing them (no import cycles).
 export const ctx = { api: null, hooks: {}, launchName: null, view: { last: null, views: {}, inspector: false, seq: true, seqH: DOCK_H } }
@@ -165,6 +168,22 @@ export function allLinks(withOpen = false) {
   }
   return links
 }
+/** True when an edge is its cut's continuation link: a frame of the cut right before it in sequence order on its start slot, or its last frame among the reference images.
+ *  Whatever the cut's mode: a new continuation replaces it on either slot. */
+export const continues = edge => Boolean(s.project) && isContinuation(s.project, edge)
+/** True when an edge shows its cut as continued: a continuation link on a slot the cut's mode uses. One left on a slot the mode ignores is a stray
+ *  the cut does not generate from, so the cut still offers to continue (which replaces it). */
+export const activeContinuation = edge => continues(edge) && activePorts(nodeById(edge.to)?.data.mode).includes(edge.port)
+const FIELD_NAMES = { prompt: '프롬프트', raw: '원문' }, INTO = { start: '시작 프레임으로', ref_image: '참조 이미지로' }
+/** The one text change the server makes by itself (a `promptChange`): a replaced continuation frame's @mentions renamed to the new frame, as a toast line. */
+export function promptChangeText(change) {
+  const cut = nodeById(change.cutId)?.data.name ?? '컷', field = FIELD_NAMES[change.field] ?? '프롬프트'
+  return `${cut}의 ${field}에서 앞 컷 프레임 이름을 바꿨어: @${change.renamed} → @${change.name}`
+}
+/** A continuation link that followed its cut's new mode (a `continuationMove`). */
+export const moveText = move => `${nodeById(move.cutId)?.data.name ?? '컷'}의 앞 컷 프레임을 ${INTO[move.to] ?? move.to} 옮겼어.`
+/** The cut's continuation link on a slot its mode uses, as allLinks gives it ({ edge, frame, source, take, target, stale }), or null. */
+export const continuationOf = cut => allLinks(true).find(link => link.target.id === cut.id && activeContinuation(link.edge)) ?? null
 const POSITIONS = { first: '처음', middle: '가운데', last: '마지막' }
 /** "Cut 1 · 마지막": which cut, and where in it, a frame was taken from. */
 export function frameLabel(frame) {
