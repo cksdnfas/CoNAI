@@ -246,6 +246,8 @@ export type ComfyWorkflowCheckResult = {
   servers: ComfyWorkflowServerCheck[]
   output_node_ids: string[] | null
   unused_node_ids: string[] | null
+  /** The first answering server's choices per literal combo input, keyed like a marked field's jsonPath. */
+  input_choices?: Record<string, string[]> | null
 }
 
 /** Check an API workflow against the ComfyUI servers that may run it (the workflow's linked ones when it has an id). */

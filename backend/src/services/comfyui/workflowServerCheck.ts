@@ -25,11 +25,19 @@ export type ComfyWorkflowCheckResult = {
   /** Null until some server answered. */
   output_node_ids: string[] | null;
   unused_node_ids: string[] | null;
+  /**
+   * The choices of each literal (unlinked) combo input, keyed "<nodeId>.inputs.<key>" like a marked field's jsonPath,
+   * as the first server that answered lists them. Dynamic (empty) combos, upload pickers and lists longer than
+   * INPUT_CHOICES_MAX are left out. Null until some server answered.
+   */
+  input_choices: Record<string, string[]> | null;
 };
 
 type ApiNode = { class_type?: unknown; inputs?: Record<string, unknown> };
 
 const MAX_CHECK_SERVERS = 6;
+/** A combo with more choices than this (model lists run to thousands) is not sent; a dropdown list covers those. */
+const INPUT_CHOICES_MAX = 256;
 
 function isLink(value: unknown): value is [string, number] {
   return Array.isArray(value) && value.length === 2 && (typeof value[0] === 'string' || typeof value[0] === 'number') && typeof value[1] === 'number';
@@ -76,6 +84,28 @@ function checkNodes(graph: Record<string, ApiNode>, infos: Map<string, ComfyObje
   return issues;
 }
 
+/** The server's choices for each literal combo input, for the editor's option import and new select fields. */
+function collectInputChoices(graph: Record<string, ApiNode>, infos: Map<string, ComfyObjectInfoNode | null>): Record<string, string[]> {
+  const choicesByPath: Record<string, string[]> = {};
+  for (const [nodeId, node] of Object.entries(graph)) {
+    const info = typeof node.class_type === 'string' ? infos.get(node.class_type) : null;
+    if (!info) continue;
+    for (const [name, value] of Object.entries(isRecord(node.inputs) ? node.inputs : {})) {
+      if (isLink(value)) continue;
+      const spec = specOf(info, name);
+      const choices = spec ? comboChoices(spec) : null;
+      if (!spec || !choices) continue;
+      // Upload pickers list the server's input folder, and remote combos load theirs on demand: neither is a fixed set.
+      const options = specOptions(spec);
+      if (options.remote !== undefined || Object.entries(options).some(([key, flag]) => key.endsWith('_upload') && flag === true)) continue;
+      const strings = choices.filter((choice): choice is string => typeof choice === 'string');
+      if (strings.length === 0 || strings.length > INPUT_CHOICES_MAX) continue;
+      choicesByPath[`${nodeId}.inputs.${name}`] = strings;
+    }
+  }
+  return choicesByPath;
+}
+
 /** Nodes an output node never reaches through its inputs: ComfyUI skips them. */
 function findUnusedNodes(graph: Record<string, ApiNode>, outputIds: string[]) {
   const reached = new Set<string>();
@@ -104,7 +134,7 @@ export async function checkComfyWorkflowAgainst(
   const graph = Object.fromEntries(Object.entries(parsed).filter(([, node]) => isRecord(node))) as Record<string, ApiNode>;
   const classTypes = [...new Set(Object.values(graph).map((node) => node.class_type).filter((value): value is string => typeof value === 'string'))];
 
-  const result: ComfyWorkflowCheckResult = { servers: [], output_node_ids: null, unused_node_ids: null };
+  const result: ComfyWorkflowCheckResult = { servers: [], output_node_ids: null, unused_node_ids: null, input_choices: null };
   for (const server of servers) {
     let infos: Map<string, ComfyObjectInfoNode | null>;
     try {
@@ -118,6 +148,7 @@ export async function checkComfyWorkflowAgainst(
     if (!result.output_node_ids) {
       result.output_node_ids = Object.keys(graph).filter((id) => infos.get(String(graph[id].class_type))?.output_node === true);
       result.unused_node_ids = findUnusedNodes(graph, result.output_node_ids);
+      result.input_choices = collectInputChoices(graph, infos);
     }
   }
   return result;

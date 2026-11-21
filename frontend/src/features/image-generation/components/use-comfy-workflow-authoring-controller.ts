@@ -6,7 +6,7 @@ import { DEFAULT_APPEARANCE_SETTINGS } from '@/lib/appearance'
 import { useI18n } from '@/i18n'
 import { useGlobalAppearanceSettingsQuery } from '@/lib/use-global-appearance-settings'
 import { useIsCoarsePointer } from '@/lib/use-is-coarse-pointer'
-import type { CustomDropdownList, GenerationWorkflowDetail, WorkflowKind, WorkflowMarkedField } from '@/lib/api-image-generation-types'
+import type { GenerationWorkflowDetail, WorkflowKind, WorkflowMarkedField } from '@/lib/api-image-generation-types'
 import { checkComfyWorkflow, convertComfyUiWorkflow, createGenerationWorkflow, getGenerationWorkflow, updateGenerationWorkflow } from '@/lib/api-image-generation-workflows'
 import { useComfyAuthorChatPage } from './use-comfy-author-chat-page'
 import { listAuthPermissionGroups } from '@/lib/api-auth'
@@ -22,6 +22,7 @@ import {
   type AuthoringGraphLayout,
   type AuthoringNode,
   type EditableWorkflowInput,
+  type WorkflowInputChoices,
 } from './comfy-workflow-authoring-graph'
 import { getErrorMessage } from '../image-generation-shared'
 import {
@@ -62,7 +63,6 @@ export type ComfyWorkflowDraft = {
 }
 
 export interface UseComfyWorkflowAuthoringControllerOptions {
-  dropdownLists: CustomDropdownList[]
   initialData?: ComfyWorkflowAuthoringModalInitialData | null
   mode: 'create' | 'edit'
   onClose: () => void
@@ -130,7 +130,6 @@ function findJsonMatches(workflowJson: string, query: string) {
 
 /** Own authoring state, graph/search effects, validation, and create/update orchestration. */
 export function useComfyWorkflowAuthoringController({
-  dropdownLists,
   initialData,
   mode,
   onClose,
@@ -166,6 +165,8 @@ export function useComfyWorkflowAuthoringController({
   const isCoarsePointer = useIsCoarsePointer()
   const [authoringFlowInstance, setAuthoringFlowInstance] = useState<ReactFlowInstance<AuthoringNode, AuthoringEdge> | null>(null)
   const jsonTextareaRef = useRef<HTMLTextAreaElement | null>(null)
+  // The server check's combo choices, read when an input is marked; a ref keeps the graph from re-parsing when they arrive.
+  const inputChoicesRef = useRef<WorkflowInputChoices | null>(null)
 
   const permissionGroupsQuery = useQuery({
     queryKey: ['auth-permission-groups', 'all'],
@@ -274,7 +275,7 @@ export function useComfyWorkflowAuthoringController({
   // An unmarked input becomes a field; a marked one is selected for editing. Removing goes through the field panel.
   // Selection is keyed by JSON path, which stays unique per field and is known here without reading the draft.
   const handleInputSelect = useCallback((nodeId: string, nodeTitle: string, classType: string, input: EditableWorkflowInput) => {
-    const field = buildWorkflowMarkedFieldFromInput(nodeId, nodeTitle, classType, input)
+    const field = buildWorkflowMarkedFieldFromInput(nodeId, nodeTitle, classType, input, inputChoicesRef.current)
     setDraft((current) => (
       current.markedFields.some((item) => item.jsonPath === field.jsonPath)
         ? current
@@ -348,6 +349,11 @@ export function useComfyWorkflowAuthoringController({
     return byNode
   }, [workflowCheck])
   const unusedNodeIds = useMemo(() => new Set(workflowCheck?.unused_node_ids ?? []), [workflowCheck])
+  // Unknown until the check for the current JSON is in (or when no server answered): new fields keep today's types then.
+  const inputChoices = workflowCheck?.input_choices ?? null
+  useEffect(() => {
+    inputChoicesRef.current = inputChoices
+  }, [inputChoices])
   /** One line per server for the editor bar: none = nothing to show. */
   const serverCheckSummary = useMemo(() => {
     const servers = workflowCheck?.servers ?? []
@@ -370,6 +376,7 @@ export function useComfyWorkflowAuthoringController({
   const markedFieldsWithNodeSources = useMemo(() => enrichWorkflowMarkedFieldsWithNodeSources(draft.markedFields, workflowNodeSources), [draft.markedFields, workflowNodeSources])
   const selectedField = useMemo(() => markedFieldsWithNodeSources.find((field) => field.jsonPath === selectedFieldPath) ?? null, [markedFieldsWithNodeSources, selectedFieldPath])
   const selectedFieldNodeId = selectedField ? resolveWorkflowMarkedFieldNodeSource(selectedField).nodeId : null
+  const selectedFieldInputChoices = selectedField ? inputChoices?.[selectedField.jsonPath] : undefined
 
   const graphSearchMatches = useMemo(() => parsedGraph ? findAuthoringGraphMatches(parsedGraph.nodes, searchQuery) : [], [searchQuery, parsedGraph])
   const jsonSearchMatches = useMemo(() => findJsonMatches(draft.workflowJson, searchQuery), [searchQuery, draft.workflowJson])
@@ -398,10 +405,10 @@ export function useComfyWorkflowAuthoringController({
   const addSuggestedFields = useCallback(() => {
     if (!parsedGraph) return 0
     const graph = { ...parsedGraph, nodes: parsedGraph.nodes.map((node) => ({ ...node, data: { ...node.data, unused: unusedNodeIds.has(node.id) } })) }
-    const suggested = suggestWorkflowMarkedFields(graph, new Set(draft.markedFields.map((field) => field.jsonPath)))
+    const suggested = suggestWorkflowMarkedFields(graph, new Set(draft.markedFields.map((field) => field.jsonPath)), inputChoices)
     if (suggested.length > 0) setDraft((current) => ({ ...current, markedFields: [...current.markedFields, ...suggested.filter((field) => !current.markedFields.some((item) => item.jsonPath === field.jsonPath))] }))
     return suggested.length
-  }, [draft.markedFields, parsedGraph, unusedNodeIds])
+  }, [draft.markedFields, inputChoices, parsedGraph, unusedNodeIds])
   const handleSuggestFields = () => {
     const added = addSuggestedFields()
     showSnackbar({
@@ -627,12 +634,12 @@ export function useComfyWorkflowAuthoringController({
 
   return {
     activeSearchCount, authoringMiniMapBgColor, authoringMiniMapMaskColor, authoringMiniMapNodeColor, conflict, overwriteConflict,
-    dropdownListNames: dropdownLists.map((list) => list.name), draft, editorTab, graphNodes, handleFieldLocate,
+    draft, editorTab, graphNodes, handleFieldLocate,
     handleFieldPatch, handleFieldRemove, handleFieldSelect, handleFileUpload, handleReorderMarkedField,
     handleReorderMarkedFieldGroup, handleSave, handleWorkflowJsonChange, isCoarsePointer, isConvertingUiWorkflow, isDirty, isSaving,
     jsonError: jsonError ?? uiConversionError, focusNextCheckIssue, graphLayout, handleSuggestFields, missingFieldIds,
     serverCheckSummary, toggleGraphLayout,
     jsonTextareaRef, markedFieldsWithNodeSources, parsedGraph, patchDraft, reactFlowColorMode, roleLimitGroups,
-    searchIndex, searchQuery, selectedField, setAuthoringFlowInstance, setEditorTab, setSearchQuery, stepSearch,
+    searchIndex, searchQuery, selectedField, selectedFieldInputChoices, setAuthoringFlowInstance, setEditorTab, setSearchQuery, stepSearch,
   }
 }

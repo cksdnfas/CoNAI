@@ -15,6 +15,10 @@ import {
 } from './minimax-h3-director-dasiwa-utils'
 import { SNAPREF_SIMPLE_CLASS_TYPE, SNAPREF_SIMPLE_NODE_EDITOR } from '@conai/shared'
 import { SNAPREF_SIMPLE_NODE_INPUT_KEY } from './snapref-simple-utils'
+import { autoSelectChoices } from '../workflow-field-choices'
+
+/** The server's choices per literal combo input, keyed like a marked field's jsonPath (the editor's server check). */
+export type WorkflowInputChoices = Readonly<Record<string, string[]>>
 
 type WorkflowJsonNodeRecord = {
   title?: string
@@ -532,7 +536,7 @@ const MAX_SUGGESTED_FIELDS = 20
  * Fields most workflows want exposed: prompt texts, the image to load, node editors (LoRA rows, director), seed,
  * steps, CFG and the size. Linked inputs, nodes that never run and inputs already marked are skipped.
  */
-export function suggestWorkflowMarkedFields(graph: ParsedWorkflowGraph, existingJsonPaths: ReadonlySet<string>) {
+export function suggestWorkflowMarkedFields(graph: ParsedWorkflowGraph, existingJsonPaths: ReadonlySet<string>, inputChoices?: WorkflowInputChoices | null) {
   const fields: WorkflowMarkedField[] = []
   // A text that feeds nothing is a display (Show Text and the like), not a prompt.
   const feedingNodeIds = new Set(graph.edges.map((edge) => edge.source))
@@ -547,7 +551,7 @@ export function suggestWorkflowMarkedFields(graph: ParsedWorkflowGraph, existing
         || (input.inferredType === 'image' && input.key === 'image' && typeof input.value === 'string')
         || ((input.inferredType === 'textarea' || input.inferredType === 'text') && typeof input.value === 'string' && SUGGESTED_PROMPT_INPUT_KEY.test(input.key) && feedingNodeIds.has(node.id) && !showsText)
         || (input.inferredType === 'number' && (SUGGESTED_NUMBER_INPUT_KEYS.has(input.key) || (makesLatent && SUGGESTED_LATENT_SIZE_KEYS.has(input.key))))
-      if (wanted) fields.push(buildWorkflowMarkedFieldFromInput(node.id, node.data.title, node.data.classType, input))
+      if (wanted) fields.push(buildWorkflowMarkedFieldFromInput(node.id, node.data.title, node.data.classType, input, inputChoices))
       if (fields.length >= MAX_SUGGESTED_FIELDS) return fields
     }
   }
@@ -576,16 +580,21 @@ export function findMissingMarkedFieldIds(workflowJson: string, fields: readonly
 /** Seed inputs the backend rolls per run unless a value is given (mirrors backend comfyui/seedControl). */
 const RANDOMIZED_SEED_INPUT_KEYS = new Set(['seed', 'noise_seed'])
 
-/** Build a marked-field draft from a clicked graph input. */
+/**
+ * Build a marked-field draft from a clicked graph input. With `inputChoices` from the server check, a small literal
+ * combo (not a model path) becomes a select of the server's choices, its current value the default.
+ */
 export function buildWorkflowMarkedFieldFromInput(
   nodeId: string,
   nodeTitle: string,
   classType: string,
   input: EditableWorkflowInput,
+  inputChoices?: WorkflowInputChoices | null,
 ): WorkflowMarkedField {
-  const fieldType = input.inferredType
-  const dropdownOptions = typeof input.value === 'boolean' ? ['true', 'false'] : undefined
   const resolvedJsonPath = input.jsonPath ?? `${nodeId}.inputs.${input.key}`
+  const comboChoices = autoSelectChoices(input.key, input.value, inputChoices?.[resolvedJsonPath])
+  const fieldType = comboChoices ? 'select' : input.inferredType
+  const dropdownOptions = comboChoices ?? (typeof input.value === 'boolean' ? ['true', 'false'] : undefined)
   // No default: an empty seed field (or -1) rolls a new seed every run.
   const isRandomSeed = fieldType === 'number' && RANDOMIZED_SEED_INPUT_KEYS.has(input.key)
 

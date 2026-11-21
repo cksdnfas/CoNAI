@@ -1,4 +1,5 @@
 import type { WorkflowMarkedField } from '@/lib/api-image-generation-types'
+import { canHideWorkflowField } from '../workflow-field-choices'
 
 type MarkedFieldType = WorkflowMarkedField['type']
 
@@ -17,7 +18,8 @@ function convertDefaultValue(value: WorkflowMarkedField['default_value'], nextTy
 
 /**
  * Apply an editor patch to one marked field. A type change also drops the settings only the old type used
- * (number bounds, select options, image upload mode) and converts the default value, so no stale config is saved.
+ * (number bounds, select options, image upload mode, hidden on image/node) and converts the default value, so no stale
+ * config is saved.
  */
 export function applyMarkedFieldPatch(field: WorkflowMarkedField, patch: Partial<WorkflowMarkedField>): WorkflowMarkedField {
   const next = { ...field, ...patch }
@@ -34,6 +36,7 @@ export function applyMarkedFieldPatch(field: WorkflowMarkedField, patch: Partial
     delete next.dropdown_list_name
   }
   if (nextType !== 'image') delete next.simple_upload_only
+  if (!canHideWorkflowField(nextType)) delete next.hidden
   if (!('default_value' in patch)) next.default_value = convertDefaultValue(field.default_value, nextType)
   return next
 }
@@ -44,6 +47,11 @@ export function addMarkedFieldOption(options: readonly string[] | undefined, raw
   const current = options ?? []
   if (value.length === 0 || current.includes(value)) return [...current]
   return [...current, value]
+}
+
+/** Add one option per line of pasted text; blank and duplicate lines are ignored, commas stay part of a value. */
+export function addMarkedFieldOptionLines(options: readonly string[] | undefined, rawText: string) {
+  return rawText.split(/\r?\n/).reduce<string[]>((current, line) => addMarkedFieldOption(current, line), [...(options ?? [])])
 }
 
 /** Match a marked field against the field-list search (label, JSON path, source node title). */

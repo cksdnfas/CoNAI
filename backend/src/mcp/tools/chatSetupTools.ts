@@ -23,6 +23,7 @@ import { chatAssetBatchInputSchema, getChatAssetBatch, latestChatAssetBatchId, r
 import { ChatGenerationPresetStore, resolvePresetWorkflow } from '../../services/codex-chat/chatGenerationPresets';
 import { PromptPresetModel } from '../../models/PromptPreset';
 import { parseMcpMarkedFields } from '../../services/comfyui/comfyWorkflowInputs';
+import { visibleWorkflowFields } from '../../services/workflowHiddenFieldPolicy';
 import { errorResult, textResult } from '../toolResults';
 import { checkedProfileFolder, listChatProfileFolders, profileFolderPaths } from '../../services/codex-chat/chatProfileFolders';
 import { profileFolderMutationSchema, proposeProfileFolder } from '../../services/codex-chat/chatProfileFolderProposals';
@@ -687,7 +688,7 @@ function profileAssetsGuide(context: McpRequestContext) {
     profile: profile ? { id: profile.id, name: profile.name, appearance: profile.appearance, hasReference: Boolean(profile.referenceHash) } : null,
     generationPresets: ChatGenerationPresetStore.list().map((preset) => {
       const workflow = preset.comfyui ? resolvePresetWorkflow(preset.comfyui).workflow : null;
-      return { id: preset.id, name: preset.name, kind: preset.kind, instruction: preset.instruction, ...(preset.comfyui ? { referenceField: preset.comfyui.referenceField, promptFields: workflow ? parseMcpMarkedFields(workflow).filter((field) => preset.comfyui!.exposedFieldIds.includes(field.id) && ['text', 'textarea'].includes(field.type)).map((field) => ({ id: field.id, label: field.label })) : [] } : {}) };
+      return { id: preset.id, name: preset.name, kind: preset.kind, instruction: preset.instruction, ...(preset.comfyui ? { referenceField: preset.comfyui.referenceField, promptFields: workflow ? visibleWorkflowFields(parseMcpMarkedFields(workflow)).filter((field) => preset.comfyui!.exposedFieldIds.includes(field.id) && ['text', 'textarea'].includes(field.type)).map((field) => ({ id: field.id, label: field.label })) : [] } : {}) };
     }),
     // Emotion names are the item descriptions; the prompt text behind them stays on the server.
     expressionPresets: PromptPresetModel.findAllWithItems().map((preset) => ({ id: preset.id, name: preset.name, emotions: preset.items.map(({ description }) => description) })),

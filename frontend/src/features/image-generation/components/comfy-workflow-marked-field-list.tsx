@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent } from 'react'
-import { GripVertical, ListPlus, Search, TriangleAlert, X } from 'lucide-react'
+import { EyeOff, GripVertical, ListPlus, Search, TriangleAlert, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { SearchField } from '@/components/common/search-field'
@@ -10,6 +10,7 @@ import { useI18n } from '@/i18n'
 import type { WorkflowMarkedField } from '@/lib/api-image-generation-types'
 import { cn } from '@/lib/utils'
 import { groupWorkflowMarkedFieldsByNode } from '../workflow-marked-field-groups'
+import { isHiddenWorkflowField } from '../workflow-field-choices'
 import { markedFieldMatchesQuery } from './comfy-workflow-marked-field-utils'
 import { useMarkedFieldTypeLabel } from './comfy-workflow-marked-field-editor'
 
@@ -178,6 +179,7 @@ export function ComfyWorkflowMarkedFieldList({
             </div>
             {group.fields.map((field) => {
               const isSelected = field.id === selectedFieldId
+              const isHidden = isHiddenWorkflowField(field)
               return (
                 <div
                   key={field.id}
@@ -210,7 +212,14 @@ export function ComfyWorkflowMarkedFieldList({
                     className="h-full min-w-0 flex-1"
                   >
                     <span className={cn('min-w-0 truncate', isSelected ? 'font-semibold text-secondary-text' : 'text-foreground')}>{field.label || field.id}</span>
-                    {field.required ? <span role="img" className="size-1.5 shrink-0 rounded-full bg-secondary-text" aria-label={t({ ko: '필수', en: 'Required' })} /> : null}
+                    {field.required && !isHidden ? <span role="img" className="size-1.5 shrink-0 rounded-full bg-secondary-text" aria-label={t({ ko: '필수', en: 'Required' })} /> : null}
+                    {isHidden ? (
+                      <Tip content={t({ ko: '숨김: 고정값으로 실행돼', en: 'Hidden: runs with its fixed value' })}>
+                        <span role="img" aria-label={t({ ko: '숨김', en: 'Hidden' })} className="shrink-0 text-muted-foreground">
+                          <EyeOff className="size-3.5" />
+                        </span>
+                      </Tip>
+                    ) : null}
                     {missingFieldIds?.has(field.id) ? (
                       <Tip content={t({ ko: '워크플로에 이 입력이 없어', en: 'This input is not in the workflow' })}>
                         <span role="img" aria-label={t({ ko: '워크플로에 이 입력이 없어', en: 'This input is not in the workflow' })} className="shrink-0 text-warning">

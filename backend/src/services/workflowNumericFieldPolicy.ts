@@ -1,4 +1,5 @@
 import { applyMiniMaxDirectorResolutionBounds } from '@conai/shared'
+import { isEmptyHiddenWorkflowFieldValue, withoutHiddenWorkflowFieldValues } from './workflowHiddenFieldPolicy'
 
 export type WorkflowNumericFieldLike = {
   id: string
@@ -10,6 +11,7 @@ export type WorkflowNumericFieldLike = {
   step?: unknown
   node_editor?: string
   node_numeric_bounds?: unknown
+  hidden?: unknown
 }
 
 const MINIMAX_H3_DIRECTOR_EDITOR = 'minimax_h3_director_dasiwa'
@@ -204,8 +206,23 @@ export function normalizeWorkflowNumericFieldValue(field: WorkflowNumericFieldLi
   return normalizedValue
 }
 
-/** Normalize every numeric marked-field value while preserving unrelated prompt data. */
+/**
+ * Normalize caller-supplied prompt data: values given for hidden fields are dropped (each runs with its default), then
+ * every numeric marked-field value is clamped. Every entry path (routes, queue, MCP, chat, module graph, audio) and
+ * resolveWorkflowPromptValues pass through here before a value is resolved.
+ */
 export function normalizeWorkflowNumericPromptValues<T extends Record<string, any>>(
+  markedFields: WorkflowNumericFieldLike[],
+  promptData: T,
+): T {
+  return clampWorkflowNumericPromptValues(markedFields, withoutHiddenWorkflowFieldValues(markedFields, promptData))
+}
+
+/**
+ * Clamp every numeric marked-field value while preserving unrelated prompt data. For values already resolved
+ * (substitution), where a hidden field holds its resolved default and must keep it.
+ */
+export function clampWorkflowNumericPromptValues<T extends Record<string, any>>(
   markedFields: WorkflowNumericFieldLike[],
   promptData: T,
 ): T {
@@ -273,7 +290,7 @@ export function normalizeWorkflowNumericPromptValues<T extends Record<string, an
     }
 
     const rawValue = normalizedPromptData[field.id] ?? field.default_value
-    if (rawValue === undefined || rawValue === null) {
+    if (rawValue === undefined || rawValue === null || isEmptyHiddenWorkflowFieldValue(field, rawValue)) {
       continue
     }
 

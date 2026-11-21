@@ -6,6 +6,7 @@ import { normalizeComparableModelOption, reconcileComfyModelSelectionValues } fr
 import { ComfyInputValidationError, prepareComfyPromptData, validateComfyPromptData } from '../prepareComfyPromptData'
 import { DROPDOWN_RANDOM_OPTION_VALUE, resolveWorkflowPromptValues, workflowDropdownChoices } from '../workflowPromptValueResolver'
 import { isComfySeedJsonPath } from './seedControl'
+import { isHiddenWorkflowField, visibleWorkflowFields } from '../workflowHiddenFieldPolicy'
 import { isChatMcpSource, type McpRequestContext } from '../../mcp/context'
 import { validateMcpToolArguments } from '../../mcp/requestSecurity'
 import { requireContextPermission, requireRequesterPermission } from '../../middleware/featureAccess'
@@ -439,7 +440,9 @@ export function normalizeMcpWorkflowInputs(markedFields: MarkedField[], supplied
 
   const normalized: Record<string, any> = {}
   for (const field of markedFields) {
-    const hasSuppliedValue = Object.prototype.hasOwnProperty.call(suppliedInputs, field.id)
+    // A hidden field is a fixed value: what a caller (or a stale draft) sends for it is ignored, and it is never missing.
+    const hidden = isHiddenWorkflowField(field)
+    const hasSuppliedValue = !hidden && Object.prototype.hasOwnProperty.call(suppliedInputs, field.id)
     const suppliedValue = hasSuppliedValue ? suppliedInputs[field.id] : undefined
     const value = field.type === 'node' && field.node_editor === MINIMAX_DIRECTOR_EDITOR
       ? normalizeMiniMaxValue(field, suppliedValue)
@@ -447,7 +450,7 @@ export function normalizeMcpWorkflowInputs(markedFields: MarkedField[], supplied
         ? normalizeSnapRefValue(field, suppliedValue)
         : hasSuppliedValue ? requireDropdownChoice(field, suppliedValue) : field.default_value
 
-    if (field.required && !hasMeaningfulValue(value)) {
+    if (field.required && !hidden && !hasMeaningfulValue(value)) {
       throw new Error(`Required workflow input is missing: ${field.label || field.id} (${field.id})`)
     }
     if (value !== undefined) normalized[field.id] = value
@@ -666,8 +669,9 @@ export function describeMcpMarkedField(field: MarkedField) {
   }
 }
 
+/** Hidden fields are fixed values, not inputs, so the template leaves them out. */
 export function createMcpWorkflowInputTemplate(markedFields: MarkedField[]) {
-  return Object.fromEntries(markedFields.map((field) => {
+  return Object.fromEntries(visibleWorkflowFields(markedFields).map((field) => {
     if (field.type === 'node' && field.node_editor === MINIMAX_DIRECTOR_EDITOR) {
       return [field.id, {
         mode: 'T2VA',

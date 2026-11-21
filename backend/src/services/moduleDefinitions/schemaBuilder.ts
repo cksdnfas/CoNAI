@@ -1,6 +1,7 @@
 import type { ModulePortDataType, ModulePortDefinition, ModuleUiFieldDefinition } from '../../types/moduleGraph';
 import { inferPortLabel } from './labels';
 import { buildMiniMaxDirectorPorts, isMiniMaxDirectorField } from './minimaxDirectorPorts';
+import { isHiddenWorkflowField } from '../workflowHiddenFieldPolicy';
 
 function isPowerLoraLoaderEntryValue(value: unknown) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -155,11 +156,12 @@ export function normalizeNaiExposedFields(fields: any[] | undefined, snapshot: R
   });
 }
 
+/** Hidden fields are fixed values: they get no port and keep their default as an internal fixed value. */
 export function convertMarkedFieldsToPorts(markedFields: any[], exposedFieldIds?: string[]): ModulePortDefinition[] {
   const allowedIds = exposedFieldIds && exposedFieldIds.length > 0 ? new Set(exposedFieldIds) : null;
 
   return markedFields
-    .filter((field) => !allowedIds || allowedIds.has(field.id))
+    .filter((field) => (!allowedIds || allowedIds.has(field.id)) && !isHiddenWorkflowField(field))
     .flatMap((field): ModulePortDefinition[] => {
       if (isMiniMaxDirectorField(field)) {
         return buildMiniMaxDirectorPorts(field);
@@ -187,7 +189,7 @@ export function buildUiSchemaFromMarkedFields(markedFields: any[], exposedFieldI
   const allowedIds = exposedFieldIds && exposedFieldIds.length > 0 ? new Set(exposedFieldIds) : null;
 
   return markedFields
-    .filter((field) => !allowedIds || allowedIds.has(field.id))
+    .filter((field) => (!allowedIds || allowedIds.has(field.id)) && !isHiddenWorkflowField(field))
     .map((field): ModuleUiFieldDefinition => ({
       key: field.id,
       label: field.label || inferPortLabel(field.id),

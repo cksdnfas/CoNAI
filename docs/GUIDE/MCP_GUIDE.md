@@ -230,6 +230,8 @@ ComfyUI 이미지 입력은 라이브러리 `composite_hash`(이미지 조회 �
 
 채팅의 직접 도구·카탈로그 도구와 플러그인 도구에는 암묵적 호출 기한이 없어. 중단은 취소를 전달하고 설정된 모델·작업 제한은 유지돼. 외부 MCP 도구는 연결마다 정한 호출 제한 시간을 따로 적용해.
 
+워크플로 편집기에서 숨긴 marked field(고정값)는 `list_workflows`·`get_workflow_details`와 입력 템플릿에 나오지 않습니다. 그 필드 이름으로 값을 보내도 무시하고 고정값으로 실행합니다.
+
 ComfyUI 시드(`seed`·`noise_seed`)는 실행마다 새로 뽑힙니다. marked field로 0 이상의 값을 넘기거나, 워크플로 노드의 `_meta.conai_fixed_seeds`에 들어 있는 시드만 그대로 유지됩니다. `import_workflow_definition`은 ComfyUI 편집기 workflow도 받아 API 형식으로 바꿔 등록합니다(fixed였던 시드는 고정 유지).
 
 ### 이미지 조회

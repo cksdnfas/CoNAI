@@ -25,6 +25,7 @@ import {
   normalizeWorkflowNumericPromptValues,
   WorkflowNumericFieldValidationError,
 } from '../services/workflowNumericFieldPolicy';
+import { visibleWorkflowFields } from '../services/workflowHiddenFieldPolicy';
 import type { MarkedField, WorkflowRecord } from '../types/workflow';
 import { applyHistoryAccessScope } from './generation-history/historyRouteHelpers';
 import { removeDisplayFailedHistory } from './generation-history/cleanupRouteHandlers';
@@ -172,7 +173,8 @@ function serializePublicWorkflow(workflow: WorkflowRecord, dropdownListMap: Map<
     public_queue_max_count: resolvePublicQueueMaxCount(workflow),
     result_view_mode: workflow.result_view_mode,
     artifact_directory_mode: workflow.artifact_directory_mode,
-    marked_fields: resolveCustomDropdownMarkedFields(parseMarkedFields(workflow.marked_fields), dropdownListMap),
+    // Hidden fields are fixed values: guests never receive them (the queue route still runs them with their defaults).
+    marked_fields: resolveCustomDropdownMarkedFields(visibleWorkflowFields(parseMarkedFields(workflow.marked_fields)), dropdownListMap),
   };
 }
 

@@ -166,6 +166,8 @@ export interface WorkflowMarkedField {
   source_node_title?: string
   type: 'text' | 'number' | 'select' | 'textarea' | 'image' | 'node'
   default_collapsed?: boolean
+  /** A fixed value: never shown or sent by a generation form; runs with default_value (text/textarea/number/select only). */
+  hidden?: boolean
   simple_upload_only?: boolean
   default_value?: string | number | boolean | Record<string, unknown> | null
   placeholder?: string

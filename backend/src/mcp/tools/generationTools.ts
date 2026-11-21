@@ -27,6 +27,7 @@ import { canRequesterViewImages } from '../../middleware/imageAccess';
 import { isChatMcpSource } from '../context';
 import { COMFY_SEED_RULE } from '../../services/comfyui/seedControl';
 import { checkComfyWorkflowOnServers } from '../../services/comfyui/workflowServerCheck';
+import { visibleWorkflowFields } from '../../services/workflowHiddenFieldPolicy';
 import { ComfyUiWorkflowConversionError, describeComfyUiWorkflowConversionFailure, resolveApiWorkflowJson } from '../../services/comfyui/uiWorkflowConversion';
 import { errorResult, textResult } from '../toolResults';
 import { fetchMiniMaxH3RefModLibrary } from '../../services/comfyui/refmodLibrary';
@@ -87,7 +88,7 @@ function registerWorkflowListTools(server: McpServer): void {
             is_active: w.is_active,
             kind: w.kind,
             api_endpoint: w.api_endpoint,
-            input_fields: markedFields.map(field => ({
+            input_fields: visibleWorkflowFields(markedFields).map(field => ({
               id: field.id,
               label: field.label,
               type: field.type,
@@ -342,7 +343,8 @@ function registerWorkflowDetailTools(server: McpServer, context: McpRequestConte
         const markedFields = parseMcpMarkedFields(workflow);
         const mcpBodyLimitMiB = resolveRequestBodyLimitsMb().mcp;
         const routingOptions = getMcpGenerationRoutingOptions(workflow_id);
-        const inputSchema = markedFields.map(describeMcpMarkedField);
+        // Hidden fields are fixed values: neither the schema nor the template offers them.
+        const inputSchema = visibleWorkflowFields(markedFields).map(describeMcpMarkedField);
         const inputTemplate = createMcpWorkflowInputTemplate(markedFields);
 
         return textResult({

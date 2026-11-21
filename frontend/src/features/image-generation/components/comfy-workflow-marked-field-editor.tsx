@@ -1,5 +1,5 @@
-import { useState, type ReactNode } from 'react'
-import { LocateFixed, X } from 'lucide-react'
+import { useMemo, useState, type ReactNode } from 'react'
+import { Import, LocateFixed, TriangleAlert, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Field, FieldGroup } from '@/components/ui/field'
@@ -10,9 +10,19 @@ import { Select } from '@/components/ui/select'
 import { SettingRow } from '@/components/ui/setting-row'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
+import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
-import type { WorkflowMarkedField, WorkflowNodeNumericBounds } from '@/lib/api-image-generation-types'
-import { addMarkedFieldOption } from './comfy-workflow-marked-field-utils'
+import type { CustomDropdownList, WorkflowMarkedField, WorkflowNodeNumericBounds } from '@/lib/api-image-generation-types'
+import {
+  canHideWorkflowField,
+  findWorkflowFieldChoice,
+  isHiddenWorkflowField,
+  partitionDropdownListsByValue,
+  resolveWorkflowMarkedField,
+  workflowFieldChoices,
+} from '../workflow-field-choices'
+import { addMarkedFieldOption, addMarkedFieldOptionLines } from './comfy-workflow-marked-field-utils'
+import { shouldUsePathTreeSelect, WorkflowFieldInput } from './workflow-field-input'
 import {
   MINIMAX_H3_DIRECTOR_VISIBLE_FIELDS,
   type MiniMaxH3DirectorVisibleField,
@@ -118,10 +128,25 @@ function CheckboxRow({ checked, onCheckedChange, children }: { checked: boolean,
   )
 }
 
-/** Select options as removable chips; Enter adds the typed value as one option, commas included. */
-function MarkedFieldOptionsEditor({ options, onChange }: { options: string[], onChange: (options: string[] | undefined) => void }) {
+/** Warning icon with its reason in a tooltip, as the field list marks an input the workflow lost. */
+function WarningMarker({ label }: { label: string }) {
+  return (
+    <Tip content={label}>
+      <span role="img" aria-label={label} className="shrink-0 text-warning">
+        <TriangleAlert className="size-3.5" />
+      </span>
+    </Tip>
+  )
+}
+
+/**
+ * Select options as removable chips; Enter adds the typed value as one option, commas included, and a multi-line paste
+ * adds one option per line. `importChoices`: the node's choices on the ComfyUI server, offered as a replacement.
+ */
+function MarkedFieldOptionsEditor({ options, importChoices, onChange }: { options: string[], importChoices?: string[], onChange: (options: string[] | undefined) => void }) {
   const { t } = useI18n()
   const [draftOption, setDraftOption] = useState('')
+  const importsNothing = importChoices !== undefined && importChoices.length === options.length && importChoices.every((choice, index) => choice === options[index])
   const commitDraftOption = () => {
     const nextOptions = addMarkedFieldOption(options, draftOption)
     if (nextOptions.length !== options.length) onChange(nextOptions)
@@ -150,25 +175,47 @@ function MarkedFieldOptionsEditor({ options, onChange }: { options: string[], on
           ))}
         </div>
       ) : null}
-      <Input
-        variant="settings"
-        value={draftOption}
-        onChange={(event) => setDraftOption(event.target.value)}
-        onKeyDown={(event) => {
-          if (event.key !== 'Enter' || event.nativeEvent.isComposing) return
-          event.preventDefault()
-          commitDraftOption()
-        }}
-        onBlur={() => { if (draftOption.trim()) commitDraftOption() }}
-        placeholder={t({ ko: '옵션 입력 후 Enter', en: 'Type an option, then Enter' })}
-      />
+      <div className="flex min-w-0 items-center gap-2">
+        <Input
+          variant="settings"
+          className="min-w-0 flex-1"
+          value={draftOption}
+          onChange={(event) => setDraftOption(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key !== 'Enter' || event.nativeEvent.isComposing) return
+            event.preventDefault()
+            commitDraftOption()
+          }}
+          onPaste={(event) => {
+            const pasted = event.clipboardData.getData('text')
+            if (!/[\r\n]/.test(pasted)) return
+            event.preventDefault()
+            const nextOptions = addMarkedFieldOptionLines(options, pasted)
+            if (nextOptions.length !== options.length) onChange(nextOptions)
+          }}
+          onBlur={() => { if (draftOption.trim()) commitDraftOption() }}
+          placeholder={t({ ko: '옵션 입력 후 Enter', en: 'Type an option, then Enter' })}
+        />
+        {importChoices && importChoices.length > 0 ? (
+          <IconButton
+            variant="ghost"
+            disabled={importsNothing}
+            onClick={() => onChange([...importChoices])}
+            label={t({ ko: 'ComfyUI에서 옵션 가져오기', en: 'Get options from ComfyUI' })}
+          >
+            <Import />
+          </IconButton>
+        ) : null}
+      </div>
     </div>
   )
 }
 
 type ComfyWorkflowMarkedFieldEditorProps = {
   field: WorkflowMarkedField
-  dropdownListNames: string[]
+  dropdownLists: CustomDropdownList[]
+  /** The node's choices for this input on the ComfyUI server (the editor's server check); absent when unknown. */
+  inputChoices?: string[]
   canLocate: boolean
   onPatch: (patch: Partial<WorkflowMarkedField>) => void
   onRemove: () => void
@@ -176,10 +223,26 @@ type ComfyWorkflowMarkedFieldEditorProps = {
 }
 
 /** Edit the one marked field selected in the field panel. */
-export function ComfyWorkflowMarkedFieldEditor({ field, dropdownListNames, canLocate, onPatch, onRemove, onLocate }: ComfyWorkflowMarkedFieldEditorProps) {
+export function ComfyWorkflowMarkedFieldEditor({ field, dropdownLists, inputChoices, canLocate, onPatch, onRemove, onLocate }: ComfyWorkflowMarkedFieldEditorProps) {
   const { t } = useI18n()
   const noneLabel = t({ ko: '없음', en: 'None' })
   const isDirectorNode = field.type === 'node' && field.node_editor === 'minimax_h3_director_dasiwa'
+  const isHidden = isHiddenWorkflowField(field)
+  const defaultLabel = isHidden ? t({ ko: '고정값', en: 'Fixed value' }) : t({ ko: '기본값', en: 'Default' })
+  const dropdownListByName = useMemo(() => new Map(dropdownLists.map((list) => [list.name, list])), [dropdownLists])
+  // The default is picked from what the generation form offers for this field (its dropdown list, else its options).
+  const resolvedField = resolveWorkflowMarkedField(field, dropdownListByName)
+  const defaultChoices = field.type === 'select' ? workflowFieldChoices(resolvedField) : []
+  const defaultText = stringifyDefaultValue(field.default_value)
+  const matchedDefault = findWorkflowFieldChoice(defaultChoices, field.default_value)
+  // A stored value the choices no longer hold stays as it is and is marked; a plain select shows it as an extra entry.
+  const isStaleDefault = defaultChoices.length > 0 && defaultText.length > 0 && matchedDefault === null
+  const defaultControlField: WorkflowMarkedField = {
+    ...resolvedField,
+    options: isStaleDefault && !shouldUsePathTreeSelect(defaultChoices) ? [...defaultChoices, defaultText] : defaultChoices,
+  }
+  const missingListName = field.type === 'select' && field.dropdown_list_name && !dropdownListByName.has(field.dropdown_list_name) ? field.dropdown_list_name : null
+  const listGroups = partitionDropdownListsByValue(dropdownLists, field.default_value)
 
   return (
     <div className="space-y-3">
@@ -220,7 +283,7 @@ export function ComfyWorkflowMarkedFieldEditor({ field, dropdownListNames, canLo
 
       {field.type === 'number' ? (
         <div className="grid grid-cols-2 gap-3">
-          <Field label={t({ ko: '기본값', en: 'Default' })}>
+          <Field label={defaultLabel}>
             <NumberStepperInput
               variant="settings"
               min={field.min}
@@ -261,8 +324,31 @@ export function ComfyWorkflowMarkedFieldEditor({ field, dropdownListNames, canLo
             />
           </Field>
         </div>
+      ) : defaultChoices.length > 0 ? (
+        <FieldGroup label={defaultLabel}>
+          <div className="flex min-w-0 items-center gap-2">
+            <div className="min-w-0 flex-1">
+              <WorkflowFieldInput
+                field={defaultControlField}
+                value={matchedDefault ?? defaultText}
+                hideLabel
+                onChange={(value) => onPatch({ default_value: typeof value === 'string' && value.length > 0 ? value : undefined })}
+                onImageChange={() => undefined}
+              />
+            </div>
+            {isStaleDefault ? <WarningMarker label={t({ ko: '목록에 없는 값이야', en: 'This value is not in the list' })} /> : null}
+            <IconButton
+              variant="ghost"
+              disabled={defaultText.length === 0}
+              onClick={() => onPatch({ default_value: undefined })}
+              label={isHidden ? t({ ko: '고정값 지우기', en: 'Clear fixed value' }) : t({ ko: '기본값 지우기', en: 'Clear default' })}
+            >
+              <X />
+            </IconButton>
+          </div>
+        </FieldGroup>
       ) : (
-        <Field label={field.type === 'node' ? t({ ko: '기본값 (JSON)', en: 'Default (JSON)' }) : t({ ko: '기본값', en: 'Default' })}>
+        <Field label={field.type === 'node' ? t({ ko: '기본값 (JSON)', en: 'Default (JSON)' }) : defaultLabel}>
           {field.type === 'textarea' ? (
             <Textarea
               variant="settings"
@@ -279,15 +365,6 @@ export function ComfyWorkflowMarkedFieldEditor({ field, dropdownListNames, canLo
               textSize="xs"
               value={field.default_value && typeof field.default_value === 'object' ? JSON.stringify(field.default_value, null, 2) : ''}
             />
-          ) : field.type === 'select' && (field.options?.length ?? 0) > 0 ? (
-            <Select
-              variant="settings"
-              value={stringifyDefaultValue(field.default_value)}
-              onChange={(event) => onPatch({ default_value: event.target.value || undefined })}
-            >
-              <option value="">{noneLabel}</option>
-              {(field.options ?? []).map((option) => <option key={option} value={option}>{option}</option>)}
-            </Select>
           ) : (
             <Input
               variant="settings"
@@ -301,17 +378,32 @@ export function ComfyWorkflowMarkedFieldEditor({ field, dropdownListNames, canLo
       {field.type === 'select' ? (
         <>
           <Field label={t({ ko: '드롭다운 목록', en: 'Dropdown list' })}>
-            <Select
-              variant="settings"
-              value={field.dropdown_list_name ?? ''}
-              onChange={(event) => onPatch({ dropdown_list_name: event.target.value || undefined })}
-            >
-              <option value="">{noneLabel}</option>
-              {dropdownListNames.map((name) => <option key={name} value={name}>{name}</option>)}
-            </Select>
+            <div className="flex min-w-0 items-center gap-2">
+              <Select
+                variant="settings"
+                value={field.dropdown_list_name ?? ''}
+                onChange={(event) => onPatch({ dropdown_list_name: event.target.value || undefined })}
+              >
+                <option value="">{noneLabel}</option>
+                {missingListName ? <option value={missingListName}>{t({ ko: '{name} (없는 목록)', en: '{name} (missing list)' }, { name: missingListName })}</option> : null}
+                {listGroups.holding.length > 0 ? (
+                  <>
+                    <optgroup label={isHidden ? t({ ko: '고정값이 든 목록', en: 'Lists with the fixed value' }) : t({ ko: '기본값이 든 목록', en: 'Lists with the default' })}>
+                      {listGroups.holding.map((list) => <option key={list.id} value={list.name}>{list.name}</option>)}
+                    </optgroup>
+                    {listGroups.others.length > 0 ? (
+                      <optgroup label={t({ ko: '다른 목록', en: 'Other lists' })}>
+                        {listGroups.others.map((list) => <option key={list.id} value={list.name}>{list.name}</option>)}
+                      </optgroup>
+                    ) : null}
+                  </>
+                ) : listGroups.others.map((list) => <option key={list.id} value={list.name}>{list.name}</option>)}
+              </Select>
+              {missingListName ? <WarningMarker label={t({ ko: '이 드롭다운 목록이 없어', en: 'This dropdown list no longer exists' })} /> : null}
+            </div>
           </Field>
           <FieldGroup label={t({ ko: '직접 입력 옵션', en: 'Manual options' })}>
-            <MarkedFieldOptionsEditor options={field.options ?? []} onChange={(options) => onPatch({ options })} />
+            <MarkedFieldOptionsEditor options={field.options ?? []} importChoices={inputChoices} onChange={(options) => onPatch({ options })} />
           </FieldGroup>
         </>
       ) : null}
@@ -395,11 +487,16 @@ export function ComfyWorkflowMarkedFieldEditor({ field, dropdownListNames, canLo
 
       <div>
         <SettingRow label={t({ ko: '필수', en: 'Required' })} className="min-h-10">
-          <Switch checked={field.required === true} onCheckedChange={(checked) => onPatch({ required: checked })} aria-label={t({ ko: '필수', en: 'Required' })} />
+          <Switch checked={field.required === true} disabled={isHidden} onCheckedChange={(checked) => onPatch({ required: checked })} aria-label={t({ ko: '필수', en: 'Required' })} />
         </SettingRow>
         <SettingRow label={t({ ko: '기본으로 접기', en: 'Collapsed by default' })} className="min-h-10">
-          <Switch checked={field.default_collapsed === true} onCheckedChange={(checked) => onPatch({ default_collapsed: checked })} aria-label={t({ ko: '기본으로 접기', en: 'Collapsed by default' })} />
+          <Switch checked={field.default_collapsed === true} disabled={isHidden} onCheckedChange={(checked) => onPatch({ default_collapsed: checked })} aria-label={t({ ko: '기본으로 접기', en: 'Collapsed by default' })} />
         </SettingRow>
+        {canHideWorkflowField(field.type) ? (
+          <SettingRow label={t({ ko: '숨김', en: 'Hidden' })} className="min-h-10">
+            <Switch checked={isHidden} onCheckedChange={(checked) => onPatch({ hidden: checked ? true : undefined })} aria-label={t({ ko: '숨김', en: 'Hidden' })} />
+          </SettingRow>
+        ) : null}
         {field.type === 'image' ? (
           <SettingRow label={t({ ko: '간단 업로드', en: 'Simple upload' })} className="min-h-10">
             <Switch checked={field.simple_upload_only === true} onCheckedChange={(checked) => onPatch({ simple_upload_only: checked })} aria-label={t({ ko: '간단 업로드', en: 'Simple upload' })} />

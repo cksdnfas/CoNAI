@@ -9,7 +9,8 @@ import { SnapRefSimpleInput } from './snapref-simple-input'
 import { PathOptionTreeSelect } from './path-option-tree-select'
 import { useI18n } from '@/i18n'
 
-function shouldUsePathTreeSelect(options: string[]) {
+/** Path-like options (two or more with a folder) render as the searchable tree instead of a plain select. */
+export function shouldUsePathTreeSelect(options: string[]) {
   const pathLikeOptions = options.filter((option) => option !== TYPED_FIELD_RANDOM_OPTION_VALUE && /[\\/]/.test(option))
   return pathLikeOptions.length >= 2
 }

@@ -6,7 +6,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { hasMiniMaxH3RefModExportNode } from '@conai/shared'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { useSnackbar } from '@/components/ui/snackbar-context'
-import type { CustomDropdownList, GenerationHistoryRecord, GenerationWorkflow, GenerationWorkflowDetail } from '@/lib/api-image-generation-types'
+import type { GenerationHistoryRecord, GenerationWorkflow, GenerationWorkflowDetail } from '@/lib/api-image-generation-types'
 import {
   createGenerationWorkflow,
   createMiniMaxH3RefModExportWorkflow,
@@ -35,6 +35,7 @@ import {
   hasWorkflowDraftDifference,
 } from '../history-settings-mapping'
 import { ComfyWorkflowListSection } from './comfy-home-sections'
+import { resolveVisibleWorkflowFields } from '../workflow-field-choices'
 import { useI18n } from '@/i18n'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { ComfyManagementArea } from './comfy-management-area'
@@ -91,18 +92,6 @@ function ComfyHomeLayout({ blocks, columns }: { blocks: Record<'workflows' | 'ma
 
 type ComfyWorkflowEditorState = {
   workflow: GenerationWorkflowDetail
-}
-
-const COMFY_AUTO_COLLECT_SOURCE_PATH = 'comfyui-default-server-api'
-const COMFY_MODEL_PREVIEW_FOLDERS = new Set(['checkpoints', 'loras', 'diffusion_models', 'unet_gguf'])
-
-function resolveComfyModelPreviewFolder(dropdownList: CustomDropdownList) {
-  if (!dropdownList.is_auto_collected || dropdownList.source_path !== COMFY_AUTO_COLLECT_SOURCE_PATH) {
-    return undefined
-  }
-
-  const rootFolder = dropdownList.name.replace(/\s*\(통합\)$/, '').split('/')[0]?.trim()
-  return rootFolder && COMFY_MODEL_PREVIEW_FOLDERS.has(rootFolder) ? rootFolder : undefined
 }
 
 /** Render the ComfyUI home/workflow views and coordinate server-targeted generation. */
@@ -169,32 +158,10 @@ function ComfyGenerationPanelContent({
     [dropdownListsQuery.data],
   )
 
-  const buildDropdownSelectOptions = useCallback((items: string[]) => [
-    '__random__',
-    ...items.filter((item) => item.trim().length > 0 && item !== '__random__'),
-  ], [])
-
-  const resolveWorkflowFields = useCallback((workflow: GenerationWorkflow | null) => {
-    if (!workflow) {
-      return []
-    }
-
-    return (workflow.marked_fields ?? []).map((field) => {
-      if (field.dropdown_list_name) {
-        const dropdownList = dropdownListByName.get(field.dropdown_list_name)
-        if (dropdownList) {
-          return {
-            ...field,
-            type: 'select' as const,
-            options: buildDropdownSelectOptions(dropdownList.items),
-            model_preview_folder: resolveComfyModelPreviewFolder(dropdownList),
-          }
-        }
-      }
-
-      return field
-    })
-  }, [buildDropdownSelectOptions, dropdownListByName])
+  // Hidden fields are fixed values: the form, its draft, validation, payload and module save never hold them.
+  const resolveWorkflowFields = useCallback((workflow: GenerationWorkflow | null) => (
+    workflow ? resolveVisibleWorkflowFields(workflow.marked_fields ?? [], dropdownListByName) : []
+  ), [dropdownListByName])
 
   const selectedWorkflowFields = useMemo(() => resolveWorkflowFields(selectedWorkflow), [resolveWorkflowFields, selectedWorkflow])
   // The list carries no graph; only a workflow with a Director field loads its detail to learn whether it merely saves a RefMod.

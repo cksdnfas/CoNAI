@@ -119,7 +119,6 @@ export function ComfyWorkflowAuthoringModal({
     conflict,
     overwriteConflict,
     draft,
-    dropdownListNames,
     editorTab,
     graphNodes,
     handleFieldLocate,
@@ -151,12 +150,12 @@ export function ComfyWorkflowAuthoringModal({
     searchIndex,
     searchQuery,
     selectedField,
+    selectedFieldInputChoices,
     setAuthoringFlowInstance,
     setEditorTab,
     setSearchQuery,
     stepSearch,
   } = useComfyWorkflowAuthoringController({
-    dropdownLists,
     initialData,
     mode,
     onClose,
@@ -377,7 +376,8 @@ export function ComfyWorkflowAuthoringModal({
           <ComfyWorkflowMarkedFieldEditor
             key={selectedField.id}
             field={selectedField}
-            dropdownListNames={dropdownListNames}
+            dropdownLists={dropdownLists}
+            inputChoices={selectedFieldInputChoices}
             canLocate={Boolean(parsedGraph && selectedFieldNodeId)}
             onPatch={(patch) => handleFieldPatch(selectedField.id, patch)}
             onRemove={() => handleFieldRemove(selectedField.id)}

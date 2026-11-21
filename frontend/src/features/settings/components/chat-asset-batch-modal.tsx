@@ -20,6 +20,7 @@ import { useImageFeedSafety } from '@/features/images/components/image-list/use-
 import { useI18n } from '@/i18n'
 import { MODEL_SLOTS_QUERY_KEY, listModelSlots, reviewChatAssetVision, applyChatAssetBatch, cancelChatAssetSlot, chatAssetBatchQueryKey, CHAT_GENERATION_PRESETS_QUERY_KEY, chooseChatAssetSlot, createChatAssetBatch, getChatAssetBatch, listChatGenerationPresets, regenerateChatAssetSlot, type ChatAssetBatch, type ChatAssetBatchInput, type ChatAssetOwner, type ChatAssetReview, chatAssetOwnerKey } from '@/lib/api-codex-chat'
 import { getGenerationWorkflows } from '@/lib/api-image-generation-workflows'
+import { isHiddenWorkflowField } from '@/features/image-generation/workflow-field-choices'
 import { getImage, getImageDetailQueryKey } from '@/lib/api-images'
 import { getPromptPresets } from '@/lib/api-prompt-presets'
 import { libraryThumbnailUrl } from '@/lib/api-sprite'
@@ -120,7 +121,7 @@ export function ChatAssetBatchModal({ target, initialBatchId, referenceOnly = fa
   const preset = presets.data?.find((entry) => entry.id === presetId)
   const emotionNames = (expressionPresets.data?.find((entry) => entry.id === expressionPresetId)?.items ?? []).map((entry) => entry.description).filter(Boolean)
   const workflows = useQuery({ queryKey: ['generation-workflows', 'chat-generation-preset'], queryFn: () => getGenerationWorkflows(true), enabled: preset?.kind === 'comfyui', staleTime: 60000 })
-  const promptFields = (workflows.data?.find((entry) => entry.id === preset?.comfyui?.workflowId)?.marked_fields ?? []).filter((field) => ['text', 'textarea'].includes(field.type) && preset?.comfyui?.exposedFieldIds.includes(field.id))
+  const promptFields = (workflows.data?.find((entry) => entry.id === preset?.comfyui?.workflowId)?.marked_fields ?? []).filter((field) => ['text', 'textarea'].includes(field.type) && !isHiddenWorkflowField(field) && preset?.comfyui?.exposedFieldIds.includes(field.id))
   const promptField = promptFields.some((field) => field.id === promptChoice) ? promptChoice : promptFields.length === 1 ? promptFields[0].id : ''
   const queryKey = chatAssetBatchQueryKey(owner, batchId ?? 0)
   const batchQuery = useQuery({ queryKey, queryFn: ({ signal }) => getChatAssetBatch(owner, batchId!, signal), enabled: !!owner.id && batchId !== null, retry: false, refetchInterval: (query) => running(query.state.data) ? 3000 : false })

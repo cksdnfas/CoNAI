@@ -1,5 +1,6 @@
 import type { MarkedField } from '../../types/workflow';
-import { normalizeWorkflowNumericPromptValues } from '../workflowNumericFieldPolicy';
+import { clampWorkflowNumericPromptValues } from '../workflowNumericFieldPolicy';
+import { isEmptyHiddenWorkflowFieldValue } from '../workflowHiddenFieldPolicy';
 import { randomizeComfyWorkflowSeeds } from './seedControl';
 import { parseJsonRecord } from '../../utils/json';
 import { randomUUID } from 'node:crypto';
@@ -233,11 +234,15 @@ export function substituteComfyPromptData(
   promptData: Record<string, any>
 ): any {
   const workflow = JSON.parse(workflowJson);
-  const normalizedPromptData = normalizeWorkflowNumericPromptValues(markedFields, promptData);
+  // The values are resolved already (resolveWorkflowPromptValues dropped caller values for hidden fields and resolved
+  // their defaults), so only the numeric clamp is repeated here.
+  const normalizedPromptData = clampWorkflowNumericPromptValues(markedFields, promptData);
   const pinnedJsonPaths = new Set<string>();
 
   for (const field of markedFields) {
     let value = normalizedPromptData[field.id] ?? field.default_value;
+    // A hidden field with an empty fixed value keeps the workflow's own input (a seed there still rolls).
+    if (isEmptyHiddenWorkflowFieldValue(field, value)) continue;
     const editableKeys = field.node_editor === 'minimax_h3_director_dasiwa'
       ? MINIMAX_DIRECTOR_EDITABLE_KEYS
       : field.node_editor === SNAPREF_SIMPLE_NODE_EDITOR ? SNAPREF_EDITABLE_KEYS : null;
