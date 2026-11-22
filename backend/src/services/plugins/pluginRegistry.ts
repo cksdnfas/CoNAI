@@ -9,7 +9,7 @@ import { WINDOWS_RESERVED_NAME } from '../../utils/pathResolver'
 import { pluginChanged, pluginDb, PluginError } from './pluginStore'
 import { removePluginData } from './pluginData'
 import { pluginAppToolScope } from './pluginAppPolicy'
-import { isPluginAppRoute } from './pluginAppRoutes'
+import { isPluginAppRoute, pluginAppRouteIds } from './pluginAppRoutes'
 import { RuntimeJobRunner } from '../runtimeJobs/runtimeJobRunner'
 import { zipEntryBytes, zipEntryKind } from '../../utils/zipEntries'
 
@@ -75,7 +75,7 @@ export function parsePluginManifest(value: unknown, stored = false): PluginManif
   // Native REST routes it calls, as ids of the core's table (pluginAppRoutes); lent on a shared page like appTools.
   const routes = [...new Set(raw.appRoutes ?? [])]
   const unknownRoutes = routes.filter(id => !isPluginAppRoute(id))
-  if (unknownRoutes.length && !stored) throw new PluginError(`appRoutes에 없는 경로 ID가 있어: ${unknownRoutes.join(', ')}`)
+  if (unknownRoutes.length && !stored) throw new PluginError(`appRoutes에 없는 경로 ID가 있어: ${unknownRoutes.join(', ')}. 쓸 수 있는 ID: ${pluginAppRouteIds().join(', ')}`)
   const appRoutes = routes.filter(id => isPluginAppRoute(id))
   const retired = new Set((raw.serverActions ?? []).filter(action => !pluginAppToolScope(action.tool)).map(action => action.id))
   if (stored && retired.size) raw.pages = raw.pages.map(page => ({ ...page, serverActions: page.serverActions?.filter(id => !retired.has(id)) }))

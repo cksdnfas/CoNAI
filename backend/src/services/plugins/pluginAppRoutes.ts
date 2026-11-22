@@ -49,6 +49,9 @@ export type PluginAppRouteId = keyof typeof PLUGIN_APP_ROUTES
 export const isPluginAppRoute = (id: string): id is PluginAppRouteId =>
   Object.prototype.hasOwnProperty.call(PLUGIN_APP_ROUTES, id) && !(PLUGIN_APP_ROUTES[id as PluginAppRouteId] as AppRoute).capability
 
+/** The ids `appRoutes` accepts, for error messages and guides. */
+export const pluginAppRouteIds = () => (Object.keys(PLUGIN_APP_ROUTES) as PluginAppRouteId[]).filter(isPluginAppRoute)
+
 /**
  * Route ids whose rules cover this request (path without its query). Without `body` only method and path are
  * compared (a candidate); pass the parsed body for the final answer.

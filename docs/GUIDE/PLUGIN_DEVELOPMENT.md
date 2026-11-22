@@ -192,7 +192,24 @@ node scripts/build-plugin.mjs --local my-plugin
 
 플러그인 설정 화면에 같은 의미의 한도·토큰·문맥 턴 입력을 따로 두지 않습니다. 동작을 바꿀 필요가 있으면 사용할 프로필을 고르게 하고, 프로필 편집기나 전역 설정으로 안내합니다. 엄격한 격리가 필요한 조사(`research`)만 이전 대화·로어·기억을 가져오지 않는 예외입니다.
 
-설치·활성화한 플러그인은 앱 기능입니다. 서버 모듈이 없어도 기존 권한으로 앱 API와 LLM을 사용할 수 있습니다. `capabilities`·`appTools`는 관리자가 페이지를 공용으로 공개했을 때 보는 계정에게 빌려줄 범위입니다. 페이지·서버 모듈이 부르는 앱 도구는 모두 `appTools`에, 쓰는 호스트 기능은 `capabilities`(`files.*`, `workspace.*`, `media.process`, `media.read` — `conai.media.resolve`·미리보기·작업 결과 미디어, `media.save` — `conai.media.save`, `media.pick` — 호스트 미디어 선택기 `api.pickMedia`가 열려 있는 동안의 라이브러리·그룹·검색, `jobs` — `conai.jobs`)에 적습니다. 빌려주는 판단은 호스트(`backend/src/services/plugins/pluginPublicScope.ts`)가 매 호출 다시 하며, 페이지·서버 모듈이 직접 부르는 네이티브 REST는 코어 경로 표(`backend/src/services/plugins/pluginAppRoutes.ts`)의 ID로 `appRoutes`에 적습니다. 그 창에서 온 요청만 빌리며, `api.app.fetch`·`conai.app.fetch`는 창 정보를 자동으로 붙이고 `<img>`·`<video>`·`<audio>` 주소는 `api.app.url(path)`(또는 SDK의 `appUrl`)로 만듭니다. 표에 없는 경로, 삭제 권한·관리자 전용·configure 범위·LLM은 빌려주지 않습니다. 선언을 바꾸면 관리자가 다시 공개해야 새 목록이 적용됩니다. 개인 채팅·세션·작업의 계정 경계와 인스턴스 공용 파일함의 정책은 [보안과 권한](./SECURITY_AND_PERMISSIONS.md)을 따릅니다.
+설치·활성화한 플러그인은 앱 기능입니다. 서버 모듈이 없어도 기존 권한으로 앱 API와 LLM을 사용할 수 있습니다. `capabilities`·`appTools`는 관리자가 페이지를 공용으로 공개했을 때 보는 계정에게 빌려줄 범위입니다. 페이지·서버 모듈이 부르는 앱 도구는 모두 `appTools`에, 쓰는 호스트 기능은 `capabilities`(`files.*`, `workspace.*`, `media.process`, `media.read` — `conai.media.resolve`·미리보기·작업 결과 미디어, `media.save` — `conai.media.save`, `media.pick` — 호스트 미디어 선택기 `api.pickMedia`가 열려 있는 동안의 라이브러리·그룹·검색, `jobs` — `conai.jobs`)에 적습니다. 빌려주는 판단은 호스트(`backend/src/services/plugins/pluginPublicScope.ts`)가 매 호출 다시 하며, 페이지·서버 모듈이 직접 부르는 네이티브 REST는 코어 경로 표(`backend/src/services/plugins/pluginAppRoutes.ts`)의 ID로 `appRoutes`에 적습니다. 그 창에서 온 요청만 빌리며, `api.app.fetch`·`conai.app.fetch`는 창 정보를 자동으로 붙이고 `<img>`·`<video>`·`<audio>` 주소는 `api.app.url(path)`(또는 SDK의 `appUrl`)로 만듭니다. 표에 없는 경로, 삭제 권한·관리자 전용·configure 범위·LLM은 빌려주지 않습니다. 선언을 바꾸면 관리자가 다시 공개해야 새 목록이 적용됩니다.
+
+`appRoutes`에 쓸 수 있는 ID(없는 ID는 설치 거절):
+
+| ID | 경로 |
+| --- | --- |
+| `images.read` | `GET /api/images/<hash>`, `/file`, `/thumbnail` |
+| `images.extract-metadata` | `POST /api/images/extract-metadata`(저장 안 함) |
+| `audio.candidate-file` | `GET /api/audio/candidates/<id>/file` |
+| `files.thumbnail` | `GET /api/files/<id>/thumbnail` |
+| `refmods.read` | `GET /api/refmods` |
+| `workflows.read` | `GET /api/workflows`, `/<id>`, `/<id>/servers` |
+| `custom-dropdown-lists.read` | `GET /api/custom-dropdown-lists`, `/<id>`, `/by-name/<name>` |
+| `workflow-input-assets` | `POST /api/workflow-input-assets`, `GET`·`DELETE /<id>` |
+| `generation-history.read` | `GET /api/generation-history`, `/<id>`, `/<id>/<file·thumbnail·image·request>`(보는 계정 기록만) |
+| `generation-queue` | `POST /api/generation-queue`(ComfyUI만), `GET /<id>`, `POST /<id>/cancel`(자기 작업만) |
+
+목록 화면·검색·통계(`/api/images/count`, `/random`, `/semantic-search` 등)는 표에 없습니다. 라이브러리 탐색이 필요하면 `appTools`의 `search_images` 또는 `capabilities`의 `media.pick`(호스트 선택기)을 씁니다. 개인 채팅·세션·작업의 계정 경계와 인스턴스 공용 파일함의 정책은 [보안과 권한](./SECURITY_AND_PERMISSIONS.md)을 따릅니다.
 
 ## 5. 내부 이미지·영상·오디오 사용하기
 
