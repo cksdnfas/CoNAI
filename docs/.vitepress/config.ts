@@ -59,7 +59,7 @@ export default {
       {
         text: '릴리즈 노트',
         items: [
-          { text: '최신 안정 릴리즈 · 26.11.05', link: '/RELEASE-MD/RELEASE_26.11.05' },
+          { text: '최신 안정 릴리즈 · 26.11.22', link: '/RELEASE-MD/RELEASE_26.11.22' },
           { text: '전체 릴리즈 보기', link: '/RELEASE-MD/' },
         ],
       },

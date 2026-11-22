@@ -5,11 +5,11 @@
 **이미지·영상·생성물을 관리하고, 지식을 축적하며, AI 어시스턴트로 작업을 이어가는 개인화 앱**
 
 [![Docs](https://img.shields.io/badge/docs-GitHub%20Pages-2ea44f?style=for-the-badge)](https://cksdnfas.github.io/CoNAI/)
-[![Release](https://img.shields.io/badge/release-26.11.05-4f46e5?style=for-the-badge)](docs/RELEASE-MD/RELEASE_26.11.05.md)
+[![Release](https://img.shields.io/badge/release-26.11.22-4f46e5?style=for-the-badge)](docs/RELEASE-MD/RELEASE_26.11.22.md)
 [![Node](https://img.shields.io/badge/node-%3E%3D22.13.0-339933?style=for-the-badge)](package.json)
 [![Docs Deploy](https://img.shields.io/github/actions/workflow/status/cksdnfas/CoNAI/docs-pages.yml?branch=main&label=pages&style=for-the-badge)](https://github.com/cksdnfas/CoNAI/actions/workflows/docs-pages.yml)
 
-[📘 GitHub Pages 문서](https://cksdnfas.github.io/CoNAI/) · [🚀 처음 시작하기](https://cksdnfas.github.io/CoNAI/GUIDE/START_HERE.html) · [🧩 MCP 가이드](https://cksdnfas.github.io/CoNAI/GUIDE/MCP_GUIDE.html) · [📝 26.11.05 릴리즈 노트](docs/RELEASE-MD/RELEASE_26.11.05.md)
+[📘 GitHub Pages 문서](https://cksdnfas.github.io/CoNAI/) · [🚀 처음 시작하기](https://cksdnfas.github.io/CoNAI/GUIDE/START_HERE.html) · [🧩 MCP 가이드](https://cksdnfas.github.io/CoNAI/GUIDE/MCP_GUIDE.html) · [📝 26.11.22 릴리즈 노트](docs/RELEASE-MD/RELEASE_26.11.22.md)
 
 </div>
 
@@ -25,16 +25,15 @@ CoNAI는 이미지·영상·생성물 관리를 기반으로 지식을 축적하
 
 ---
 
-## 26.11.05 릴리즈
+## 26.11.22 릴리즈
 
-- 채팅: 페이지 작업·검토 카드 확대, 프로필 에이전트 위임, 공유 스킬, pi 실행, 웹 검색·외부 MCP와 대표모델
-- 캐릭터: 외형·의상·참고 이미지 라이브러리, Danbooru 카탈로그, 채팅 프로필 동기화와 생성 화면 불러오기
-- 월페이퍼: 자유 배치 편집기, 실제 채팅·생성 현황 위젯, Lively·Wallpaper Engine 연동과 시간별 일정
-- 이미지·생성: 설명·내용·화풍 검색, 레이어 이미지 편집·AI 지우기, 랜덤 프롬프트 선택창과 ComfyUI·NovelAI·Codex 생성 확장
-- 파일·지식·확장: 공용 파일·프로젝트, 개인 채팅 첨부, 게시판 지식 평가·주제 관련도, 플러그인 제작·Git 설치
-- UI·MCP·안정성: 탐색·설정 개편, 미디어 편집·라이브러리·바이너리 파일 MCP 도구 14개 추가, 대형 목록·후처리·종료 처리 개선
+- 플러그인: MOSS BBox Studio·Video Canvas·HyperFrames 공식 플러그인 포함, 플러그인 페이지 공용 공유와 선언 범위 권한
+- 채팅: 대화별·그룹 멤버별 모델 지정, 프로필 엔진 변경, 입력창 + 메뉴·생성 프리셋, 로어 개수 칩, 토큰 절감
+- 캐릭터: 그림 스타일 저장·불러오기·ZIP 이전, CoNAI에서 만든 RefMod 관리
+- 생성: MiniMax H3 Director 프롬프트 통합, SnapRef, 워크플로 숨김 필드·기본값 선택, 모델 자동수집 경로 확장
+- UI·안정성: 접근성·단축키·홈 검색 정리, 파일 보관함 강제 종료 복구
 
-자세한 내용은 [`docs/RELEASE-MD/RELEASE_26.11.05.md`](docs/RELEASE-MD/RELEASE_26.11.05.md)에서 확인합니다.
+자세한 내용은 [`docs/RELEASE-MD/RELEASE_26.11.22.md`](docs/RELEASE-MD/RELEASE_26.11.22.md)에서 확인합니다.
 
 ---
 
@@ -49,8 +48,8 @@ CoNAI는 이미지·영상·생성물 관리를 기반으로 지식을 축적하
 | 이미지 생성 개요 | https://cksdnfas.github.io/CoNAI/GUIDE/GENERATION_OVERVIEW.html |
 | 워크플로우 편집 | https://cksdnfas.github.io/CoNAI/GUIDE/WORKFLOW_EDITOR.html |
 | MCP 가이드 | https://cksdnfas.github.io/CoNAI/GUIDE/MCP_GUIDE.html |
-| 최신 안정 릴리즈 | [GitHub Release 26.11.05](https://github.com/cksdnfas/CoNAI/releases/tag/26.11.05) |
-| 26.11.05 릴리즈 노트 | [`docs/RELEASE-MD/RELEASE_26.11.05.md`](docs/RELEASE-MD/RELEASE_26.11.05.md) |
+| 최신 안정 릴리즈 | [GitHub Release 26.11.22](https://github.com/cksdnfas/CoNAI/releases/tag/26.11.22) |
+| 26.11.22 릴리즈 노트 | [`docs/RELEASE-MD/RELEASE_26.11.22.md`](docs/RELEASE-MD/RELEASE_26.11.22.md) |
 | 전체 릴리즈 노트 | [`docs/RELEASE-MD/`](docs/RELEASE-MD) |
 
 ---

@@ -4,11 +4,12 @@
 
 ## 빠르게 보기
 
-- [최신 안정 릴리즈 26.11.05](./RELEASE_26.11.05.md)
-- [GitHub Release 26.11.05](https://github.com/cksdnfas/CoNAI/releases/tag/26.11.05)
+- [최신 안정 릴리즈 26.11.22](./RELEASE_26.11.22.md)
+- [GitHub Release 26.11.22](https://github.com/cksdnfas/CoNAI/releases/tag/26.11.22)
 
 ## 전체 문서
 
+- [26.11.22](./RELEASE_26.11.22.md)
 - [26.11.05](./RELEASE_26.11.05.md)
 - [26.10.10](./RELEASE_26.10.10.md)
 - [26.9.29](./RELEASE_26.9.29.md)
