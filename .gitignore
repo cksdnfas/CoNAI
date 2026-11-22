@@ -109,9 +109,9 @@ jspm_packages/
 ehthumbs.db
 Thumbs.db
 
-# Temporary files
-.tmp/
+# Temporary files: all repo scratch lives under tmp/ (layout in AI_Guidelines.md); the other names stay ignored as a guard
 tmp/
+.tmp/
 temp/
 _shots/
 */Work_Plan/
