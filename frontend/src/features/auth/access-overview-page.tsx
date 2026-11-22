@@ -12,6 +12,8 @@ import { Text } from '@/components/ui/text'
 import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import { getPublicGenerationWorkflows } from '@/lib/api-public-workflows'
+import { listPublicPluginPages, PUBLIC_PLUGIN_PAGES_QUERY_KEY } from '@/lib/api-plugins'
+import { pluginPageIcon } from '@/features/plugins/plugin-page-icon'
 import { cn } from '@/lib/utils'
 import { resolveRoutePermissionKey } from './auth-route-permissions'
 import { PAGE_ACCESS_CATALOG } from './page-access-catalog'
@@ -130,6 +132,13 @@ export function AccessOverviewPage() {
     staleTime: 30_000,
   })
 
+  const publicPluginPagesQuery = useQuery({
+    queryKey: PUBLIC_PLUGIN_PAGES_QUERY_KEY,
+    queryFn: listPublicPluginPages,
+    enabled: authStatus?.hasCredentials === true && authStatus?.authenticated === true,
+    staleTime: 30_000,
+  })
+
   if (authStatusQuery.isLoading) {
     return <div className="min-h-[40vh] rounded-sm bg-fill animate-pulse" />
   }
@@ -141,6 +150,7 @@ export function AccessOverviewPage() {
     ...(others.length ? [{ id: 'manage', label: t({ ko: '관리', en: 'Manage' }), links: others }] : []),
   ]
   const publicWorkflows = publicWorkflowsQuery.data ?? []
+  const publicPluginPages = publicPluginPagesQuery.data ?? []
 
   return (
     <div className="space-y-6">
@@ -155,7 +165,7 @@ export function AccessOverviewPage() {
         />
       ) : null}
 
-      {sections.length === 0 && publicWorkflows.length === 0 ? (
+      {sections.length === 0 && publicWorkflows.length === 0 && publicPluginPages.length === 0 ? (
         <EmptyState icon={ShieldCheck} title={t({ ko: '지금 열 수 있는 페이지가 없어', en: 'There are no pages available right now' })} />
       ) : (
         <div className="space-y-10">
@@ -185,6 +195,23 @@ export function AccessOverviewPage() {
                     label={workflow.name}
                     description={workflow.description?.trim()}
                     icon={Wand}
+                  />
+                ))}
+              </div>
+            </section>
+          ) : null}
+
+          {publicPluginPages.length > 0 ? (
+            <section className="space-y-2">
+              <Heading level={3}>{t({ ko: '공용 플러그인', en: 'Shared plugins' })}</Heading>
+              <div className="grid md:grid-cols-2 md:gap-x-8 xl:grid-cols-3">
+                {publicPluginPages.map((page) => (
+                  <AccessEntryCard
+                    key={`${page.pluginId}/${page.pageId}`}
+                    href={`/public/ext/${page.pluginId}/${page.pageId}`}
+                    label={page.title}
+                    description={page.pluginName !== page.title ? page.pluginName : null}
+                    icon={pluginPageIcon(page.icon)}
                   />
                 ))}
               </div>

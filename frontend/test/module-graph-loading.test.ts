@@ -36,7 +36,7 @@ test('workflow loads preserve newer navigation and edits made while loading', as
     const promise = new Promise<Graph>((done) => { resolve = done })
     pending.set(id, { promise, resolve })
   }
-  t.mock.method(client, 'fetchQuery', async (options) => {
+  t.mock.method(client, 'fetchQuery', async (options: { queryKey: readonly unknown[] }) => {
     const id = Number(options.queryKey[1])
     requested.push(id)
     return pending.get(id)!.promise

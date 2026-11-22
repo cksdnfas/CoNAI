@@ -16,6 +16,8 @@ import {
   bulkRefModEntries,
   createRefModEntry,
   deleteRefModEntry,
+  deleteUnregisteredRefModRecord,
+  getRefModDraftTemplate,
   getRefModEntry,
   getRefModPresence,
   listRefModEntries,
@@ -74,15 +76,30 @@ function handle(run: (req: Request, res: Response) => unknown | Promise<unknown>
 
 const query = (value: unknown) => typeof value === 'string' ? value : undefined;
 
-router.get('/', listRead, handle((req) => listRefModEntries({
-  query: query(req.query.query),
-  concept: query(req.query.concept),
-  favorite: req.query.favorite === '1',
-  sort: query(req.query.sort),
-  limit: req.query.limit === undefined ? undefined : Number(req.query.limit),
-  offset: req.query.offset === undefined ? undefined : Number(req.query.offset),
-})));
+router.get('/', listRead, handle((req) => {
+  const rawRegistered = query(req.query.registered);
+  const registered = rawRegistered === 'all' ? 'all' : rawRegistered === '0' || rawRegistered === 'false' ? false : true;
+  return listRefModEntries({
+    query: query(req.query.query),
+    concept: query(req.query.concept),
+    favorite: req.query.favorite === '1',
+    registered,
+    sort: query(req.query.sort),
+    limit: req.query.limit === undefined ? undefined : Number(req.query.limit),
+    offset: req.query.offset === undefined ? undefined : Number(req.query.offset),
+  });
+}));
+router.get('/template', read, handle((req) => {
+  const raw = query(req.query.workflowId);
+  if (raw === undefined) return getRefModDraftTemplate();
+  if (raw === '') return getRefModDraftTemplate(null);
+  return getRefModDraftTemplate(refModEntryId(raw));
+}));
 router.get('/unregistered', read, handle(() => listUnregisteredRefModRecords()));
+router.delete('/unregistered/:recordId', edit, handle(async (req) => {
+  await deleteUnregisteredRefModRecord(refModEntryId(routeParam(req.params.recordId)));
+  return { deleted: true };
+}));
 router.get('/presence', read, handle(() => getRefModPresence()));
 router.get('/workflows', read, handle(() => listRefModWorkflowCandidates()));
 router.post('/adopt', edit, handle((req) => adoptRefMods(req.body, actor(req))));

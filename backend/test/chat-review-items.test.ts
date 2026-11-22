@@ -104,7 +104,7 @@ test('chat review items: lore conditions, card import report, post sections, att
         ] },
       },
     }
-    const imported = await importChatCard(Buffer.from(JSON.stringify(card)), 'test')
+    const imported = await importChatCard(Buffer.from(JSON.stringify(card)), null)
     assert.deepEqual(imported.promptSections?.find((section) => section.id === 'card-post_history_instructions')?.kind, 'post')
     assert.equal(imported.authorNote, '카이는 비밀을 숨긴다.')
     const report = imported.importReport

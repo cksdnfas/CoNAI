@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ChevronDown, Files, RefreshCw, TriangleAlert } from 'lucide-react'
 import { EmptyState } from '@/components/ui/empty-state'
 import { copyChatPageData, type ChatPageData, type GenerationLayoutSurface, type PluginInstance, type PluginLaunch, type PluginMediaPickOptions, type PluginMediaPickItem, type PluginSnapshot, type PluginWorkspaceProposal, type PluginMediaProposal, type StoredFileEntry } from '@conai/shared'
@@ -34,6 +34,12 @@ import { useCodexChat } from '@/features/codex-chat/codex-chat-context'
 import { getCodexChatThread } from '@/lib/api-codex-chat'
 import { MediaLibraryPicker, type MediaLibrarySelection } from '@/components/media/media-library-picker'
 import { getImagesBatch, IMAGE_BATCH_MAX_COUNT } from '@/lib/api-images'
+/** A short FNV-1a hash of a snapshot, for pages that publish without their own revision. */
+function contentRevision(text: string) {
+  let hash = 0x811c9dc5
+  for (let index = 0; index < text.length; index++) hash = Math.imul(hash ^ text.charCodeAt(index), 0x01000193)
+  return (hash >>> 0).toString(16)
+}
 /** A library image's composite hash: 32 hex characters. */
 const LIBRARY_HASH_PATTERN = /^(?:[a-f0-9]{32}|[a-f0-9]{48})$/i
 const proposalRoute = (proposal: PluginProposal) => 'source' in proposal ? proposal.source === 'media' ? 'media-proposals' : 'workspace-proposals' : 'proposals'
@@ -69,7 +75,10 @@ export function PluginPage() {
   const [reload, setReload] = useState(0)
   const confirm = useConfirm()
   const plugins = useQuery({ queryKey: PLUGINS_QUERY_KEY, queryFn: listPlugins })
-  const definition = plugins.data?.find((plugin) => plugin.enabled && plugin.manifest.id === pluginId)?.manifest
+  const plugin = plugins.data?.find((item) => item.enabled && item.manifest.id === pluginId)
+  // The shared address (/public/ext/…) opens only while an administrator keeps that page shared.
+  const shared = useLocation().pathname.startsWith('/public/ext/')
+  const definition = shared && !plugin?.publicPages?.includes(pageId) ? undefined : plugin?.manifest
   const page = definition?.pages.find((item) => item.id === pageId)
   const [picker, setPicker] = useState(false)
   const [folder, setFolder] = useState<string | null>(null)
@@ -80,7 +89,7 @@ export function PluginPage() {
   }
   const discardDraft = async () => !hasDraft || await confirm({ title: t({ ko: '지금 초안과 검토를 닫고 다시 열까?', en: 'Discard current drafts and reopen?' }) })
   if (plugins.isPending) return <LoadingState />
-  if (!page || !definition) return <ErrorState description={t({ ko: '플러그인이 없거나 꺼져 있어.', en: 'The plugin is unavailable or disabled.' })} />
+  if (!page || !definition) return <ErrorState description={shared && plugin ? t({ ko: '공용으로 열린 페이지가 아니야.', en: 'This page is not shared.' }) : t({ ko: '플러그인이 없거나 꺼져 있어.', en: 'The plugin is unavailable or disabled.' })} />
   const canFiles = hasAuthPermission(auth.data?.permissionKeys, 'files.view')
   // Only pages that declare the file types they open need a host file picker; other plugins manage their own inputs.
   const usesFiles = canFiles && page.accepts.length > 0
@@ -244,10 +253,12 @@ function PluginFrame({ instance, onDirty, embed, launch }: { instance: PluginIns
 
   const takeSnapshot = (state: PluginSnapshot | null) => {
     try {
-      if (JSON.stringify(state).length > 200_000) throw new Error('화면 정보가 너무 커.')
-      if (!state || typeof state.revision !== 'string' || state.revision.length > 100 || !state.data || Array.isArray(state.data)) throw new Error('화면 정보가 올바르지 않아.')
+      const serialized = JSON.stringify(state)
+      if (serialized.length > 200_000) throw new Error('화면 정보가 너무 커.')
+      if (!state || (state.revision !== undefined && (typeof state.revision !== 'string' || state.revision.length > 100)) || !state.data || typeof state.data !== 'object' || Array.isArray(state.data)) throw new Error('화면 정보가 올바르지 않아.')
       const data = copyChatPageData(state.data) as Record<string, ChatPageData>
-      setSnapshot({ revision: state.revision, dirty: state.dirty === true, data })
+      // A page that leaves out revision (the old template did) gets one from its content: the same screen keeps the same revision.
+      setSnapshot({ revision: state.revision ?? `auto-${contentRevision(serialized)}`, dirty: state.dirty === true, data })
     } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)) }
   }
   const connect = () => {

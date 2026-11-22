@@ -51,7 +51,7 @@ test('graph API inputs never read request paths and resolve only authorized refe
   const module = { name: 'api' } as any
   let body: unknown
   let fetches = 0
-  t.mock.method(globalThis, 'fetch', async (_url, init) => {
+  t.mock.method(globalThis, 'fetch', async (_url: string | URL | Request, init?: RequestInit) => {
     fetches += 1
     if (init?.body instanceof FormData) {
       const values: Record<string, string> = {}
@@ -84,7 +84,7 @@ test('graph API inputs never read request paths and resolve only authorized refe
     assert.deepEqual(body, { image: secret })
     let upload: Buffer | undefined
     const comfy = { uploadInputImage: async (_name: string, value: Buffer) => { upload = value; return 'input.png' } } as any
-    await prepareComfyPromptData(comfy, [{ id: 'image', type: 'image' }], { image: secret })
+    await prepareComfyPromptData(comfy, [{ id: 'image', label: 'image', jsonPath: '1.inputs.image', type: 'image' }], { image: secret })
     assert.ok(Buffer.isBuffer(upload))
     assert.notDeepEqual(upload, secretBytes)
   })

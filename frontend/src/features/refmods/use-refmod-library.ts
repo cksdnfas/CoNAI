@@ -19,9 +19,11 @@ import {
   buildRefModEntry,
   bulkRefModEntries,
   createRefModEntry,
+  deleteUnregisteredRefModRecord,
   downloadRefModExport,
   getRefModBuildJob,
   getRefModEntry,
+  getRefModPresence,
   importRefModBundle,
   invalidateRefModEntries,
   isRefModNameConflict,
@@ -29,7 +31,6 @@ import {
   listRefModEntryNames,
   listRefModWorkflows,
   listUnregisteredRefMods,
-  getRefModPresence,
   REFMOD_ENTRIES_PAGE_SIZE,
   REFMOD_ENTRY_SORTS,
   refModEntryNamesQueryKey,
@@ -50,21 +51,20 @@ import {
   makeRefModNameLookup,
   REFMOD_CONCEPTS,
   REFMOD_SERVER_FILTERS,
+  refModEntryThumbs,
   refModLightboxItems,
   refModRecordThumbs,
   type RefModRowThumb,
   type RefModServerFilter,
 } from './refmod-shared'
-import { useRefModEntryEditor } from './use-refmod-entry-editor'
+import { useRefModEntryEditor, type RefModEditorTarget, type RefModRecordPreview, type RefModServerSeed } from './use-refmod-entry-editor'
 
 const ACTIVE_QUEUE_STATUSES: Array<GenerationQueueJobRecord['status']> = ['queued', 'dispatching', 'running']
-/** The header queue widget's cache entry: the runtime-event bridge keeps it current, so following a build adds no polling. */
 const ACTIVE_QUEUE_QUERY_KEY = ['image-generation-queue', 'header-widget', 'global-active'] as const
 const ADOPT_BATCH = 500
 
 const leavesEntry = (current: Location, next: Location) => current.pathname !== next.pathname || new URLSearchParams(current.search).get('entry') !== new URLSearchParams(next.search).get('entry')
 
-/** A copy's name: ` (2)`, ` (3)`… after the original, within the name limit. */
 function copyName(name: string, copy: number) {
   const suffix = ` (${copy})`
   return name.slice(0, REFMOD_ENTRY_LIMITS.name - suffix.length) + suffix
@@ -75,21 +75,14 @@ function matchesText(terms: string[], ...texts: string[]) {
   return terms.every((term) => haystack.includes(term))
 }
 
-/** A row with no entry: a saved run record, or a name only the default server's library has. */
+/** An unregistered row: a moved-out CoNAI entry (keeps config & files), a saved legacy run, or a server-only name. */
 export type RefModUnregisteredRow =
+  | { kind: 'entry'; key: string; entry: RefModEntrySummary; name: string; conceptType: string; description: string; keywords: string[]; thumbs: RefModRowThumb[]; kinds: MiniMaxH3RefModKind[] }
   | { kind: 'record'; key: string; recordId: number; name: string; conceptType: string; description: string; thumbs: RefModRowThumb[]; kinds: MiniMaxH3RefModKind[]; createdAt: string }
   | { kind: 'server'; key: string; name: string; conceptType: string; description: string; thumbs: RefModRowThumb[]; kinds: MiniMaxH3RefModKind[] }
 
-/** A build this page started: its queue job, when it was seen, and the entry's latest run before it (its own run is newer). */
 type FollowedBuild = { jobId: number; since: number; name: string; afterRecordId: number }
 
-/**
- * Everything the RefMod view holds (/characters?view=refmods): the URL state (`q` search, `sv` server filter, `c`
- * concept, `sort`, `entry` the open entry), the scrolled list, the default server's library (loaded on its own, the
- * list never waits for it), the unregistered rows, the several-select, the open entry's editor, the builds being
- * followed and every action the screen offers. The page renders from it; the page assistant (stage B3) reads and drives
- * the same state and actions.
- */
 export function useRefModLibrary() {
   const { t } = useI18n()
   const confirm = useConfirm()
@@ -108,9 +101,28 @@ export function useRefModLibrary() {
   const serverFilter: RefModServerFilter = serverParam && REFMOD_SERVER_FILTERS.includes(serverParam) ? serverParam : 'all'
   const conceptParam = params.get('c') ?? ''
   const concept = (REFMOD_CONCEPTS as readonly string[]).includes(conceptParam) ? conceptParam : ''
-  const openEntryId = positiveLibraryId(params.get('entry'))
+  const entryParam = params.get('entry')
+  const openEntryId = positiveLibraryId(entryParam)
 
-  const editor = useRefModEntryEditor({ entryId: openEntryId, onClose: () => update({ entry: null }) })
+  /** Opening a legacy record or server-only row from 미등록 (no DB id yet). */
+  const [inspectedUnregistered, setInspectedUnregistered] = useState<{ kind: 'new'; seed: RefModServerSeed } | { kind: 'record'; record: RefModRecordPreview } | null>(null)
+  const editorTarget: RefModEditorTarget = entryParam === 'new' && canEdit
+    ? { kind: 'new' }
+    : openEntryId !== null
+      ? { kind: 'entry', entryId: openEntryId }
+      : inspectedUnregistered
+
+  const editor = useRefModEntryEditor({
+    target: editorTarget,
+    onCreated: (created) => {
+      setInspectedUnregistered(null)
+      update({ entry: String(created.id) }, true)
+    },
+    onClose: () => {
+      setInspectedUnregistered(null)
+      if (params.has('entry')) update({ entry: null })
+    },
+  })
   const allowLeave = useCallback((current: Location, next: Location) => current.pathname === next.pathname && editor.deletedRef.current && !new URLSearchParams(next.search).has('entry'), [editor.deletedRef])
   useEditorPageGuard(canEdit && editor.dirty, t({ ko: 'RefMod에 저장하지 않은 변경이 있어. 나가면 사라져.', en: 'This RefMod has unsaved changes that will be lost.' }), leavesEntry, allowLeave)
 
@@ -120,12 +132,40 @@ export function useRefModLibrary() {
     ...(changes.concept !== undefined ? { c: changes.concept || null } : {}),
   })
   const search = (text: string, replace = false) => update({ q: text.trim() || null }, replace)
-  const openEntry = (id: number) => { if (!editor.isBusy()) update({ entry: String(id) }) }
-  const closeEntry = () => {
-    if (editor.isBusy()) showSnackbar({ message: t({ ko: '저장이나 업로드가 끝난 뒤 닫을 수 있어.', en: 'Close it after the save or upload finishes.' }), tone: 'info' })
-    else update({ entry: null })
+  const openEntry = (id: number) => {
+    if (editor.isBusy()) return
+    setInspectedUnregistered(null)
+    update({ entry: String(id) })
   }
-  // The shared location stops its search debounce while an entry is open; the field still searches (keeping it open).
+  const openNewEntry = () => {
+    if (!canEdit || editor.isBusy()) return
+    setInspectedUnregistered(null)
+    update({ entry: 'new' })
+  }
+  const openUnregisteredRow = (row: RefModUnregisteredRow) => {
+    if (editor.isBusy()) return
+    if (row.kind === 'entry') {
+      openEntry(row.entry.id)
+      return
+    }
+    if (params.has('entry')) update({ entry: null })
+    if (row.kind === 'record') {
+      setInspectedUnregistered({
+        kind: 'record',
+        record: { recordId: row.recordId, name: row.name, conceptType: row.conceptType, description: row.description, thumbs: row.thumbs, kinds: row.kinds, createdAt: row.createdAt },
+      })
+    } else {
+      setInspectedUnregistered({
+        kind: 'new',
+        seed: { name: row.name, conceptType: row.conceptType, description: row.description, members: row.thumbs.map((thumb) => ({ kind: thumb.kind, label: thumb.label })) },
+      })
+    }
+  }
+  const closeEntry = () => {
+    if (editor.isBusy()) { showSnackbar({ message: t({ ko: '저장이나 업로드가 끝난 뒤 닫을 수 있어.', en: 'Close it after the save or upload finishes.' }), tone: 'info' }); return }
+    setInspectedUnregistered(null)
+    if (params.has('entry')) update({ entry: null })
+  }
   const searchOpenEditor = useEffectEvent((text: string) => search(text, true))
   useEffect(() => {
     if (!editor.open || searchText.trim() === query) return
@@ -134,12 +174,10 @@ export function useRefModLibrary() {
   }, [editor.open, searchText, query])
 
   // ---------------------------------------------------------------- builds being followed
-  /** Builds this page started, by entry, until their queue job leaves the active queue. */
   const [builds, setBuilds] = useState<ReadonlyMap<number, FollowedBuild>>(new Map())
-  /** Entries whose build request is on its way (the key shows pending right away). */
   const [starting, setStarting] = useState<ReadonlySet<number>>(new Set())
 
-  const scope: RefModEntryScope = { query, concept, favorite: false, sort, limit: REFMOD_ENTRIES_PAGE_SIZE }
+  const scope: RefModEntryScope = { query, concept, favorite: false, registered: true, sort, limit: REFMOD_ENTRIES_PAGE_SIZE }
   const [listPending, setListPending] = useState(false)
   const list = useInfiniteQuery({
     queryKey: refModEntryPagesQueryKey(scope),
@@ -147,34 +185,50 @@ export function useRefModLibrary() {
     initialPageParam: 0,
     getNextPageParam: (last, pages) => (last.hasMore ? pages.reduce((sum, page) => sum + page.items.length, 0) : undefined),
     placeholderData: keepPreviousData,
-    // A run that ends while nobody follows its job (another tab, a reload) shows up on a slow re-read.
     refetchInterval: listPending ? 15_000 : false,
   })
-  /** Every loaded entry of the scope, in order (undefined until the first batch lands). */
   const loaded = list.data?.pages.flatMap((batch) => batch.items)
   const total = list.data?.pages[0]?.total
   const loadMore = list.hasNextPage ? async () => (await loadNextBatch(list)).flatMap((batch) => batch.items) : null
-  const anyPending = Boolean(loaded?.some((entry) => entry.pending)) || Boolean(editor.latest?.pending)
+
+  /** Unregistered CoNAI entries (registered = 0): kept with full config and file-store copies. */
+  const unregisteredEntriesScope: RefModEntryScope = { query: '', concept: '', favorite: false, registered: false, sort, limit: 200 }
+  const unregisteredEntriesQuery = useQuery({
+    queryKey: refModEntryPagesQueryKey(unregisteredEntriesScope),
+    queryFn: ({ signal }) => listRefModEntries({ ...unregisteredEntriesScope, offset: 0 }, signal),
+    placeholderData: keepPreviousData,
+  })
+  const unregisteredEntryItems = unregisteredEntriesQuery.data?.items ?? []
+
+  const anyPending = Boolean(loaded?.some((entry) => entry.pending)) || Boolean(unregisteredEntryItems.some((entry) => entry.pending)) || Boolean(editor.latest?.pending)
   if (listPending !== anyPending) setListPending(anyPending)
 
-  /** The default server's library, read live and on its own: the list never waits for it. */
   const presence = useQuery({ queryKey: refModPresenceQueryKey, queryFn: ({ signal }) => getRefModPresence(signal), staleTime: 60_000, retry: false })
   const presenceOk = presence.data?.status === 'ok' ? presence.data : null
   const onServerName = makeRefModNameLookup(presenceOk?.entries.map((entry) => entry.name) ?? [])
   const isOnServer = (name: string) => onServerName(name) !== null
-  /** The default server's id: the Director editor's RefMod library and the build target. */
   const defaultServerId = presenceOk?.serverId
 
-  const showsUnregistered = serverFilter === 'all' || serverFilter === 'unregistered'
-  const unregistered = useQuery({ queryKey: refModUnregisteredQueryKey, queryFn: ({ signal }) => listUnregisteredRefMods(signal), enabled: showsUnregistered })
-  const entryNames = useQuery({ queryKey: refModEntryNamesQueryKey, queryFn: ({ signal }) => listRefModEntryNames(signal), enabled: showsUnregistered && Boolean(presenceOk) })
+  const unregistered = useQuery({ queryKey: refModUnregisteredQueryKey, queryFn: ({ signal }) => listUnregisteredRefMods(signal) })
+  const entryNames = useQuery({ queryKey: refModEntryNamesQueryKey, queryFn: ({ signal }) => listRefModEntryNames(signal), enabled: Boolean(presenceOk) })
   const terms = query.toLowerCase().split(/\s+/).filter(Boolean)
+
+  const entryRows: RefModUnregisteredRow[] = unregisteredEntryItems.map((entry) => ({
+    kind: 'entry',
+    key: `entry:${entry.id}`,
+    entry,
+    name: entry.name,
+    conceptType: entry.conceptType,
+    description: entry.description,
+    keywords: entry.keywords,
+    thumbs: refModEntryThumbs(t, entry.id, entry.members, canViewImages),
+    kinds: entry.members.map((member) => member.kind),
+  }))
   const recordRows: RefModUnregisteredRow[] = (unregistered.data ?? []).map((record) => ({
     kind: 'record', key: `record:${record.recordId}`, recordId: record.recordId, name: record.name, conceptType: record.conceptType,
     description: record.description, thumbs: refModRecordThumbs(t, record.recordId, record.members, canViewImages),
     kinds: record.members.map((member) => member.kind), createdAt: record.createdAt,
   }))
-  // A server name no entry and no unregistered record has (exact, then case-insensitive); known once every name is read.
   const entryName = makeRefModNameLookup(entryNames.data ?? [])
   const recordName = makeRefModNameLookup(recordRows.map((row) => row.name))
   const serverRows: RefModUnregisteredRow[] = presenceOk && entryNames.data ? presenceOk.entries
@@ -184,16 +238,18 @@ export function useRefModLibrary() {
       kinds: entry.members.map((member) => member.kind),
       thumbs: entry.members.map((member, index) => ({ key: String(index), kind: member.kind, label: member.description || `${member.kind} ${index + 1}`, thumbnailUrl: null, fileUrl: null })),
     })) : []
-  /** Unregistered rows of the scope (search and concept apply). */
-  const unregisteredRows = showsUnregistered ? [...recordRows, ...serverRows].filter((row) => (!concept || row.conceptType === concept)
-    && matchesText(terms, row.name, row.description, ...row.thumbs.map((thumb) => thumb.label))) : []
+
+  const allUnregisteredRows: RefModUnregisteredRow[] = [...entryRows, ...recordRows, ...serverRows]
+  /** Unregistered rows only render inside the 미등록 tab (filtered by concept and search terms). */
+  const unregisteredRows = serverFilter === 'unregistered'
+    ? allUnregisteredRows.filter((row) => (!concept || row.conceptType === concept)
+      && matchesText(terms, row.name, row.description, ...(row.kind === 'entry' ? row.keywords : []), ...row.thumbs.map((thumb) => thumb.label)))
+    : []
   const visibleEntries = serverFilter === 'unregistered' ? []
     : (serverFilter === 'on' || serverFilter === 'off') && presenceOk ? loaded?.filter((entry) => isOnServer(entry.name) === (serverFilter === 'on'))
       : loaded
   const isPending = (entry: Pick<RefModEntrySummary, 'id' | 'pending'>) => entry.pending || builds.has(entry.id) || starting.has(entry.id)
 
-  // A run can register a new entry, adopt a reported name or add a server name, so the names and unregistered rows are
-  // read again with the server's library (the server-only rows are its names minus the entries').
   const refreshAfterRun = (entryIds: number[]) => Promise.all([
     invalidateRefModEntries(queryClient, { entryIds, listsChanged: entryIds.length === 0 }),
     queryClient.invalidateQueries({ queryKey: refModEntryNamesQueryKey }),
@@ -209,11 +265,6 @@ export function useRefModLibrary() {
     queryFn: () => getGenerationQueue({ status: ACTIVE_QUEUE_STATUSES }),
     enabled: canViewQueue && (builds.size > 0 || anyPending),
   })
-  /**
-   * A followed build left the active queue: refresh the entry, the list and the server, and say how it went (a failure
-   * with the server's reason). The run record is saved a moment after the job, so the entry is read again a few times
-   * until its run settles; a job that is still active goes back to being followed.
-   */
   const finishBuild = async (entryId: number, build: FollowedBuild) => {
     const job = await getRefModBuildJob(build.jobId).catch(() => null)
     if (job && ACTIVE_QUEUE_STATUSES.includes(job.status)) {
@@ -233,7 +284,6 @@ export function useRefModLibrary() {
       if (delay) await new Promise((resolve) => window.setTimeout(resolve, delay))
       await refreshAfterRun([entryId])
       const entry = await queryClient.fetchQuery({ queryKey: refModEntryQueryKey(entryId), queryFn: ({ signal }) => getRefModEntry(entryId, signal), staleTime: 0 }).catch(() => null)
-      // Runs are newest first; this build's run is the newest one after the run seen when it started.
       const run = entry?.records.find((record) => record.id > build.afterRecordId) ?? null
       if (run?.status === 'failed') { failed(run.error || job?.failure_message); return }
       if (job?.status === 'failed' && (!run || run.status !== 'pending')) { failed(job.failure_message || job.failure_code); return }
@@ -258,7 +308,6 @@ export function useRefModLibrary() {
       })
       for (const [entryId, build] of ended) void finishBuild(entryId, build)
     }
-    // Another job left the queue while rows wait on a run nobody here follows: read the list again.
     const previous = previousActiveIds.current
     previousActiveIds.current = active
     if (!ended.length && anyPending && previous && [...previous].some((id) => !active.has(id))) void refreshAfterRun([])
@@ -267,16 +316,12 @@ export function useRefModLibrary() {
 
   const onError = (error: unknown, fallback: string) => showSnackbar({ message: getErrorMessage(error, fallback), tone: 'error' })
 
-  /**
-   * Build on the default server: an unsaved open draft is saved first; the row and window follow the queue job. True
-   * once the build is queued (the page assistant reports a refusal, which the snackbar already showed).
-   */
   const build = async (entry: Pick<RefModEntrySummary, 'id' | 'name' | 'lastRecord'>): Promise<boolean> => {
     if (starting.has(entry.id) || builds.has(entry.id)) return false
     setStarting((current) => new Set(current).add(entry.id))
     try {
       if (editor.base?.id === entry.id && editor.dirty) {
-        try { await editor.save() } catch { return false } // The editor reported why.
+        try { await editor.save() } catch { return false }
       }
       const afterRecordId = Math.max(entry.lastRecord?.id ?? 0, ...(editor.latest?.id === entry.id ? editor.latest.records.map((record) => record.id) : []))
       const result = await buildRefModEntry(entry.id)
@@ -295,7 +340,6 @@ export function useRefModLibrary() {
   }
 
   // ---------------------------------------------------------------- selection
-  /** Entries chosen for a bulk action, kept across scopes; `selectMode` makes a row click choose instead of open. */
   const [selected, setSelected] = useState<ReadonlyMap<number, RefModEntrySummary>>(new Map())
   const [selectMode, setSelectMode] = useState(false)
   const toggleSelected = (entry: RefModEntrySummary) => setSelected((current) => {
@@ -304,32 +348,40 @@ export function useRefModLibrary() {
     else next.set(entry.id, entry)
     return next
   })
-  const selectAllLoaded = () => setSelected((current) => new Map([...current, ...(visibleEntries ?? []).map((item) => [item.id, item] as const)]))
+  const selectableEntries = serverFilter === 'unregistered'
+    ? unregisteredRows.flatMap((row) => row.kind === 'entry' ? [row.entry] : [])
+    : (visibleEntries ?? [])
+  const selectAllLoaded = () => setSelected((current) => new Map([...current, ...selectableEntries.map((item) => [item.id, item] as const)]))
   const clearSelection = () => { setSelected(new Map()); setSelectMode(false) }
 
+  // Clear selection when switching between registered and unregistered views so actions always match the tab.
+  const prevTabKind = useRef(serverFilter === 'unregistered')
+  useEffect(() => {
+    const inUnregistered = serverFilter === 'unregistered'
+    if (prevTabKind.current !== inUnregistered) {
+      prevTabKind.current = inUnregistered
+      clearSelection()
+    }
+  }, [serverFilter])
+
   // ---------------------------------------------------------------- actions
-  /** The "새 RefMod" name prompt: its text and a refused name's reason. */
-  const [creating, setCreating] = useState<{ name: string; error: string | null } | null>(null)
   const [createPending, setCreatePending] = useState(false)
   const create = async (name: string) => {
     setCreatePending(true)
     try {
       const entry = await createRefModEntry({ name: name.trim() })
-      setCreating(null)
       void invalidateRefModEntries(queryClient, { entryIds: [entry.id], listsChanged: true })
       queryClient.setQueryData(refModEntryQueryKey(entry.id), entry)
       openEntry(entry.id)
       return entry
     } catch (error) {
-      if (isRefModNameConflict(error)) setCreating({ name, error: getErrorMessage(error, t({ ko: '같은 이름의 RefMod가 있어.', en: 'A RefMod with this name exists.' })) })
-      else onError(error, t({ ko: 'RefMod를 만들지 못했어.', en: 'Could not create the RefMod.' }))
+      onError(error, t({ ko: 'RefMod를 만들지 못했어.', en: 'Could not create the RefMod.' }))
       return null
     } finally {
       setCreatePending(false)
     }
   }
 
-  /** A copy under the next free " (n)" name; its sources are copied too. */
   const duplicate = async (entry: Pick<RefModEntrySummary, 'id' | 'name'>) => {
     try {
       for (let copy = 2; copy < 100; copy += 1) {
@@ -350,8 +402,8 @@ export function useRefModLibrary() {
     setBulkPending(true)
     try {
       const result = await bulkRefModEntries(input)
-      if (input.action === 'delete') editor.closeIfDeleted(input.ids)
-      void invalidateRefModEntries(queryClient, { entryIds: input.ids, listsChanged: input.action === 'delete' })
+      if (input.action === 'delete' || input.action === 'unregister') editor.closeIfDeleted(input.ids)
+      void invalidateRefModEntries(queryClient, { entryIds: input.ids, listsChanged: input.action !== 'favorite' })
       if (input.action !== 'favorite' || input.ids.length > 1) clearSelection()
       return result
     } catch (error) {
@@ -363,34 +415,71 @@ export function useRefModLibrary() {
     }
   }
   const toggleFavorite = (entry: Pick<RefModEntrySummary, 'id' | 'favorite'>) => void bulk({ action: 'favorite', ids: [entry.id], favorite: !entry.favorite })
-  const remove = async (entry: Pick<RefModEntrySummary, 'id' | 'name'>) => {
+
+  /** Registered entry -> move to 미등록 (keeps config & files). Unregistered entry -> permanent delete (with files). */
+  const remove = async (entry: Pick<RefModEntrySummary, 'id' | 'name' | 'registered'>) => {
     if (editor.isBusy()) return
-    const ok = await confirm({
-      title: t({ ko: '‘{name}’ 삭제', en: 'Delete ‘{name}’' }, { name: entry.name }),
-      description: t({ ko: '원본과 실행 기록도 같이 지워져. ComfyUI에 저장된 RefMod 파일은 남아.', en: 'Its sources and run records go too. The RefMod file saved in ComfyUI stays.' }),
-      confirmLabel: t({ ko: '삭제', en: 'Delete' }),
-      tone: 'destructive',
-    })
-    if (ok) await bulk({ action: 'delete', ids: [entry.id] })
-  }
-  const removeSelected = async () => {
-    const ok = await confirm({
-      title: t({ ko: 'RefMod {count}개 삭제', en: 'Delete {count} RefMods' }, { count: selected.size }),
-      description: t({ ko: '선택한 RefMod와 그 원본, 실행 기록을 지울까? ComfyUI에 저장된 RefMod 파일은 남아.', en: 'Delete the selected RefMods with their sources and run records? The RefMod files saved in ComfyUI stay.' }),
-      confirmLabel: t({ ko: '삭제', en: 'Delete' }),
-      tone: 'destructive',
-    })
-    if (ok) await bulk({ action: 'delete', ids: [...selected.keys()] })
+    const permanent = !entry.registered
+    const ok = permanent
+      ? await confirm({
+          title: t({ ko: '‘{name}’ 영구 삭제', en: 'Permanently delete ‘{name}’' }, { name: entry.name }),
+          description: t({ ko: '항목과 파일함의 원본 파일·실행 기록을 모두 지워. 되돌릴 수 없어.', en: 'Deletes this RefMod, its file-store copies and run records permanently. This cannot be undone.' }),
+          confirmLabel: t({ ko: '영구 삭제', en: 'Delete permanently' }),
+          tone: 'destructive',
+        })
+      : await confirm({
+          title: t({ ko: '‘{name}’ 미등록으로 이동', en: 'Move ‘{name}’ to Unregistered' }, { name: entry.name }),
+          description: t({ ko: 'RefMod 목록에서 내리고 미등록으로 옮겨. 구성 정보와 파일함의 원본 파일은 유지돼.', en: 'Removes from RefMod list and moves to Unregistered. Configuration and source files in the file store stay.' }),
+          confirmLabel: t({ ko: '미등록으로 이동', en: 'Move to Unregistered' }),
+        })
+    if (!ok) return
+    const result = await bulk({ action: permanent ? 'delete' : 'unregister', ids: [entry.id] })
+    if (result && !permanent) showSnackbar({ message: t({ ko: '‘{name}’을(를) 미등록으로 옮겼어.', en: 'Moved ‘{name}’ to Unregistered.' }, { name: entry.name }), tone: 'info' })
   }
 
-  /** `{}` exports every entry (not only the listed ones). */
+  const removeUnregisteredRecord = async (record: Pick<RefModRecordPreview, 'recordId' | 'name'>) => {
+    if (editor.isBusy()) return false
+    const ok = await confirm({
+      title: t({ ko: '‘{name}’ 영구 삭제', en: 'Permanently delete ‘{name}’' }, { name: record.name }),
+      description: t({ ko: '실행 기록과 보관된 원본 파일을 모두 지워. 되돌릴 수 없어.', en: 'Deletes this run record and its retained source files permanently. This cannot be undone.' }),
+      confirmLabel: t({ ko: '영구 삭제', en: 'Delete permanently' }),
+      tone: 'destructive',
+    })
+    if (!ok) return false
+    try {
+      await deleteUnregisteredRefModRecord(record.recordId)
+      void invalidateRefModEntries(queryClient, { entryIds: [], listsChanged: true })
+      if (inspectedUnregistered?.kind === 'record' && inspectedUnregistered.record.recordId === record.recordId) setInspectedUnregistered(null)
+      return true
+    } catch (error) {
+      onError(error, t({ ko: '삭제하지 못했어.', en: 'Could not delete.' }))
+      return false
+    }
+  }
+
+  const removeSelected = async () => {
+    const permanent = serverFilter === 'unregistered'
+    const ok = permanent
+      ? await confirm({
+          title: t({ ko: 'RefMod {count}개 영구 삭제', en: 'Permanently delete {count} RefMods' }, { count: selected.size }),
+          description: t({ ko: '선택한 항목과 파일함의 원본 파일·실행 기록을 모두 지워. 되돌릴 수 없어.', en: 'Deletes the selected items, their file-store copies and run records permanently. This cannot be undone.' }),
+          confirmLabel: t({ ko: '영구 삭제', en: 'Delete permanently' }),
+          tone: 'destructive',
+        })
+      : await confirm({
+          title: t({ ko: 'RefMod {count}개 미등록으로 이동', en: 'Move {count} RefMods to Unregistered' }, { count: selected.size }),
+          description: t({ ko: 'RefMod 목록에서 내리고 미등록으로 옮겨. 구성 정보와 파일함의 원본 파일은 유지돼.', en: 'Removes from RefMod list and moves to Unregistered. Configuration and source files in the file store stay.' }),
+          confirmLabel: t({ ko: '미등록으로 이동', en: 'Move to Unregistered' }),
+        })
+    if (ok) await bulk({ action: permanent ? 'delete' : 'unregister', ids: [...selected.keys()] })
+  }
+
   const exportEntries = async (input: { ids?: number[] }, name: string) => {
     try {
       const count = await downloadRefModExport(input, name)
       showSnackbar({ message: t({ ko: 'RefMod {count}개를 내보냈어.', en: 'Exported {count} RefMods.' }, { count }), tone: 'info' })
     } catch (error) { onError(error, t({ ko: '내보내지 못했어.', en: 'Could not export.' })) }
   }
-  /** The bundle picked for import, waiting for the 건너뛰기 / 덮어쓰기 choice. */
   const [importing, setImporting] = useState<{ file: File; conflict: RefModImportConflict } | null>(null)
   const [importPending, setImportPending] = useState(false)
   const importFile = async (file: File, conflict: RefModImportConflict) => {
@@ -418,20 +507,23 @@ export function useRefModLibrary() {
     }
   }
 
-  /** Register unregistered rows: records copy their sources, server names bring metadata only. */
   const [adoptPending, setAdoptPending] = useState(false)
   const adopt = async (rows: readonly RefModUnregisteredRow[]) => {
     if (!rows.length) return null
     setAdoptPending(true)
     try {
+      const entryIds = rows.flatMap((row) => row.kind === 'entry' ? [row.entry.id] : [])
       const recordIds = rows.flatMap((row) => row.kind === 'record' ? [row.recordId] : [])
       const names = rows.flatMap((row) => row.kind === 'server' ? [row.name] : [])
-      const totals = { created: 0, linked: 0, skipped: 0 }
-      for (let offset = 0; offset < Math.max(recordIds.length, names.length); offset += ADOPT_BATCH) {
+      const totals = { created: 0, linked: 0, skipped: 0, firstId: null as number | null }
+      const maxLen = Math.max(entryIds.length, recordIds.length, names.length)
+      for (let offset = 0; offset < maxLen; offset += ADOPT_BATCH) {
         const result = await adoptRefMods({
+          ...(entryIds.length > offset ? { entryIds: entryIds.slice(offset, offset + ADOPT_BATCH) } : {}),
           ...(recordIds.length > offset ? { recordIds: recordIds.slice(offset, offset + ADOPT_BATCH) } : {}),
           ...(names.length > offset ? { names: names.slice(offset, offset + ADOPT_BATCH) } : {}),
         })
+        if (totals.firstId === null && result.created[0]) totals.firstId = result.created[0].id
         totals.created += result.created.length
         totals.linked += result.linked
         totals.skipped += result.skipped.length
@@ -449,13 +541,11 @@ export function useRefModLibrary() {
       onError(error, t({ ko: '등록하지 못했어.', en: 'Could not register.' }))
       return null
     } finally {
-      // A batch can fail after part of it was registered (records first, then server names).
       void invalidateRefModEntries(queryClient, { entryIds: [], listsChanged: true })
       setAdoptPending(false)
     }
   }
-  /** Every unregistered row of every scope (not only the searched ones). */
-  const adoptAll = () => adopt([...recordRows, ...serverRows])
+  const adoptAll = () => adopt(allUnregisteredRows)
 
   const [addingWorkflow, setAddingWorkflow] = useState(false)
   const addCreationWorkflow = async () => {
@@ -475,10 +565,8 @@ export function useRefModLibrary() {
     }
   }
 
-  /** The workflows an entry can link (the window's Select). */
   const workflows = useQuery({ queryKey: refModWorkflowsQueryKey, queryFn: ({ signal }) => listRefModWorkflows(signal), enabled: editor.open })
 
-  /** The app's media viewer over one row's images and videos. */
   const [lightbox, setLightbox] = useState<{ items: ImageRecord[]; index: number } | null>(null)
   const openMedia = (thumbs: readonly RefModRowThumb[], thumb: RefModRowThumb) => {
     const entries = refModLightboxItems(thumbs)
@@ -491,24 +579,17 @@ export function useRefModLibrary() {
     canBuild,
     canAddWorkflow,
     canViewImages,
-    // List state (URL)
     query, searchText, setSearchText, search,
     sort, serverFilter, concept, setListView,
-    // List data
     list, loaded, visibleEntries, total, loadMore,
-    // The default server
     presence, presenceOk, defaultServerId, isOnServer, refreshPresence: () => refreshAfterRun([]),
-    // Unregistered rows
-    unregistered, unregisteredRows, unregisteredCount: recordRows.length + serverRows.length, adopt, adoptAll, adoptPending,
-    // Builds
+    unregistered, unregisteredEntriesQuery, unregisteredRows, allUnregisteredRows,
+    unregisteredCount: allUnregisteredRows.length, adopt, adoptAll, adoptPending,
     isPending, build, buildStarting: starting,
-    // Selection
-    selected, selectMode, setSelectMode, toggleSelected, selectAllLoaded, clearSelection,
-    // The open entry
-    openEntryId, editor, openEntry, closeEntry, workflows,
-    // Actions
-    creating, setCreating, create, createPending,
-    duplicate, bulk, bulkPending, toggleFavorite, remove, removeSelected,
+    selected, selectMode, setSelectMode, toggleSelected, selectableEntries, selectAllLoaded, clearSelection,
+    openEntryId, editor, openEntry, openNewEntry, openUnregisteredRow, closeEntry, workflows,
+    create, createPending,
+    duplicate, bulk, bulkPending, toggleFavorite, remove, removeUnregisteredRecord, removeSelected,
     exportEntries, importing, setImporting, importFile, importPending,
     addCreationWorkflow, addingWorkflow,
     lightbox, setLightbox, openMedia,

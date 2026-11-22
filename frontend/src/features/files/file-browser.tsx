@@ -90,13 +90,13 @@ function SearchHits({ hits, terms, truncated, search, onOpen, onRetry, retrying 
       </p>
       {search && (['disabled', 'unavailable', 'partial', 'not_indexed'].includes(search.semantic) || search.keywordTermsLimited || search.unsupportedFiles + search.pendingDocuments + search.partialDocuments + search.failedDocuments > 0) ? <p className="text-xs text-muted-foreground" role="status">
         {search.mode === 'hybrid' ? t({ ko: '키워드 + 의미 검색', en: 'Keyword + semantic search' }) : t({ ko: '키워드 검색', en: 'Keyword search' })}
-        {search.semantic === 'disabled' ? ` · ${t({ ko: '의미 검색 꺼짐', en: 'Semantic search is off' })}` : null}
-        {search.semantic === 'unavailable' ? ` · ${t({ ko: '의미 검색이 응답하지 않아 키워드 결과만 표시', en: 'Semantic search unavailable; showing keyword matches' })}` : null}
-        {['partial', 'not_indexed'].includes(search.semantic) ? ` · ${t({ ko: '의미 색인 {done}/{total}개', en: 'Semantic index: {done}/{total} files' }, { done: search.indexedFiles, total: search.searchableFiles })}` : null}
-        {search.pendingDocuments > 0 ? ` · ${t({ ko: '본문 추출 대기 {count}개', en: '{count} documents awaiting extraction' }, { count: search.pendingDocuments })}` : null}
-        {search.partialDocuments + search.failedDocuments > 0 ? ` · ${t({ ko: '본문 추출이 불완전한 파일 {count}개', en: '{count} files with incomplete text extraction' }, { count: search.partialDocuments + search.failedDocuments })}` : null}
-        {search.keywordTermsLimited ? ` · ${t({ ko: '긴 문장은 의미 검색에 전체를 사용하고 키워드 검색에는 앞 8개 검색어를 사용', en: 'Full sentence used for semantic search; first 8 terms used for keyword search' })}` : null}
-        {search.unsupportedFiles > 0 ? ` · ${t({ ko: '파일명만 검색하는 파일 {count}개', en: '{count} files searchable by name only' }, { count: search.unsupportedFiles })}` : null}
+        {search.semantic === 'disabled' ? ` · ${t({ ko: '의미 검색 꺼짐', en: 'Semantic off' })}` : null}
+        {search.semantic === 'unavailable' ? ` · ${t({ ko: '의미 검색 불가 (키워드만 표시)', en: 'Semantic unavailable (keyword only)' })}` : null}
+        {['partial', 'not_indexed'].includes(search.semantic) ? ` · ${t({ ko: '의미 색인 {done}/{total}', en: 'Semantic index {done}/{total}' }, { done: search.indexedFiles, total: search.searchableFiles })}` : null}
+        {search.pendingDocuments > 0 ? ` · ${t({ ko: '추출 대기 {count}', en: 'Extraction pending {count}' }, { count: search.pendingDocuments })}` : null}
+        {search.partialDocuments + search.failedDocuments > 0 ? ` · ${t({ ko: '추출 불완전 {count}', en: 'Incomplete extraction {count}' }, { count: search.partialDocuments + search.failedDocuments })}` : null}
+        {search.keywordTermsLimited ? ` · ${t({ ko: '키워드 앞 8어 적용', en: 'First 8 keyword terms used' })}` : null}
+        {search.unsupportedFiles > 0 ? ` · ${t({ ko: '파일명 검색 {count}', en: 'Name-only {count}' }, { count: search.unsupportedFiles })}` : null}
       </p> : null}
       <ul className="divide-y divide-line">
         {hits.map(({ entry, path, snippet, location, extractionState }) => (

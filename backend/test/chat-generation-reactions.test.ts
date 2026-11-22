@@ -88,7 +88,7 @@ test('generation reactions: opt-in, one-shot recovery, user precedence and speak
     await reactions.reconcile(thread.id)
     assert.equal(calls, 0)
     assert.equal(state(linked.replyId), undefined)
-    assert.equal(db().prepare('SELECT reaction_target FROM chat_generation_links WHERE job_id = ?').get(linked.jobIds[0])!.reaction_target, 0)
+    assert.equal((db().prepare('SELECT reaction_target FROM chat_generation_links WHERE job_id = ?').get(linked.jobIds[0]) as { reaction_target: number } | undefined)!.reaction_target, 0)
   })
 
   await t.test('profile reactions inherit defaults, honor nullable chat overrides, and resolve missing models safely', async (s) => {
@@ -136,7 +136,7 @@ test('generation reactions: opt-in, one-shot recovery, user precedence and speak
     db().prepare("INSERT INTO api_generation_history (service_type, generation_status, composite_hash, queue_job_id, requested_by_account_id) VALUES ('novelai', 'completed', 'image', ?, 1)").run(linked.jobIds[0])
     let calls = 0
     let input: any
-    s.mock.method(globalThis, 'fetch', async (_url, init) => { if (!init?.method || init.method === 'GET') return new Response('', { status: 404 }); calls++; input = JSON.parse(String(init?.body)); return replyResponse('완성됐어.') })
+    s.mock.method(globalThis, 'fetch', async (_url: string | URL | Request, init?: RequestInit) => { if (!init?.method || init.method === 'GET') return new Response('', { status: 404 }); calls++; input = JSON.parse(String(init?.body)); return replyResponse('완성됐어.') })
     const events: RuntimeEventRecord[] = []
     const unsubscribe = subscribeToRuntimeEvents((event) => { if (event.name === 'chat.reaction.created') events.push(event) })
     s.after(unsubscribe)
@@ -218,7 +218,7 @@ test('generation reactions: opt-in, one-shot recovery, user precedence and speak
     let ready!: () => void
     const started = new Promise<void>((resolve) => { ready = resolve })
     let calls = 0
-    s.mock.method(globalThis, 'fetch', async (_url, init) => {
+    s.mock.method(globalThis, 'fetch', async (_url: string | URL | Request, init?: RequestInit) => {
       calls++
       if (calls > 1) return replyResponse('새 요청에 답해.')
       ready()
@@ -270,7 +270,7 @@ test('generation reactions: opt-in, one-shot recovery, user precedence and speak
     CodexChatStore.updateThreadContext(room.id, { reactionEnabled: true, reactionModelSlotId: slot.id })
     const linked = attach(room, ['completed'], speaker.id)
     let body: any
-    s.mock.method(globalThis, 'fetch', async (_url, init) => { body = JSON.parse(String(init?.body)); return replyResponse('솔의 반응이야.') })
+    s.mock.method(globalThis, 'fetch', async (_url: string | URL | Request, init?: RequestInit) => { body = JSON.parse(String(init?.body)); return replyResponse('솔의 반응이야.') })
     await reactions.reconcile(room.id)
     const message = CodexChatStore.listMessages(room.id).at(-1)!
     assert.equal(message.speaker_profile_id, speaker.id)
@@ -341,7 +341,7 @@ test('generation reactions: opt-in, one-shot recovery, user precedence and speak
     let ready!: () => void
     const started = new Promise<void>((resolve) => { ready = resolve })
     let calls = 0
-    s.mock.method(globalThis, 'fetch', async (_url, init) => {
+    s.mock.method(globalThis, 'fetch', async (_url: string | URL | Request, init?: RequestInit) => {
       calls++
       if (calls > 1) return replyResponse('사용자 차례야.')
       ready()
@@ -427,7 +427,7 @@ test('generation reactions: opt-in, one-shot recovery, user precedence and speak
     let canView = true
     s.mock.method(AuthAccessControlService, 'resolveForAccountId', () => ({ permissionKeys: ['chat.use', ...(canView ? ['images.view'] : [])] }))
     const bodies: any[] = []
-    s.mock.method(globalThis, 'fetch', async (_url, init) => { bodies.push(JSON.parse(String(init?.body))); return replyResponse('그림을 봤어.') })
+    s.mock.method(globalThis, 'fetch', async (_url: string | URL | Request, init?: RequestInit) => { bodies.push(JSON.parse(String(init?.body))); return replyResponse('그림을 봤어.') })
     const run = async () => {
       const thread = threadOf(true, 'llm', visionProfile.id)
       const linked = attach(thread, ['completed'], visionProfile.id)

@@ -23,6 +23,10 @@ export type PluginPackageReview = {
   baseDigest: string | null
   updated: boolean
   enabled: boolean
+  /** The installed package the review compared against (null: not installed); installation requires it unchanged. */
+  installedDigest: string | null
+  /** How that installation relates to the draft's base: changed elsewhere, or removed since the draft was based on it. */
+  conflict: 'none' | 'changed' | 'removed'
   server: boolean
   size: number
   files: Array<{ name: string; size: number; change: 'added' | 'changed' | 'unchanged' | 'removed' }>

@@ -84,6 +84,6 @@ test('sprite page connection: sprite tools stay listed on /sprite and retain gra
   assert.ok(onPrompts.has('get_current_page'))
   assert.ok((await list()).has('extract_sprite_sheet'), 'without a page the sprite tools are offered (through the catalog)')
 
-  assert.match(chatPageReference(spritePage), /extract_sprite_sheet/)
-  assert.doesNotMatch(chatPageReference(promptsPage), /extract_sprite_sheet/)
+  assert.match(chatPageReference(spritePage, undefined, null), /extract_sprite_sheet/)
+  assert.doesNotMatch(chatPageReference(promptsPage, undefined, null), /extract_sprite_sheet/)
 })

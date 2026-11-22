@@ -21,6 +21,7 @@ test('trusted extensions preserve package, caller, explicit approval and externa
   user.initializeUserSettingsDb()
   const { AuthPermissionGroup } = await import('../src/models/AuthPermissionGroup')
   const { invalidateConfiguredAuthCache } = await import('../src/services/auth/sessionAccess')
+  const authAccess = await import('../src/services/authAccessControlService')
   const { FileStoreService } = await import('../src/services/fileStoreService')
   const registry = await import('../src/services/plugins/pluginRegistry')
   const host = await import('../src/services/plugins/pluginHost')
@@ -60,8 +61,8 @@ test('trusted extensions preserve package, caller, explicit approval and externa
   AuthPermissionGroup.addAccountMembership(group.id, aliceId)
   AuthPermissionGroup.addAccountMembership(group.id, bobId)
   invalidateConfiguredAuthCache()
-  const alice = { requester: { accountId: aliceId, accountType: 'guest' }, sessionId: 'alice-session' }
-  const bob = { requester: { accountId: bobId, accountType: 'guest' }, sessionId: 'bob-session' }
+  const alice = { requester: { accountId: aliceId, accountType: 'guest' as const }, sessionId: 'alice-session' }
+  const bob = { requester: { accountId: bobId, accountType: 'guest' as const }, sessionId: 'bob-session' }
   const file = FileStoreService.writeText(`account:${aliceId}`, null, 'resource.json', '{"frame":1}', { create: true })
   const foreign = FileStoreService.writeText(`account:${bobId}`, null, 'private.json', '{"private":true}', { create: true })
   const zip = new AdmZip()
@@ -126,11 +127,41 @@ test('trusted extensions preserve package, caller, explicit approval and externa
     assert.equal(host.readPluginFile(instance.id, foreign.id, alice).text, '{"private":true}')
     assert.equal(host.readPluginFile(instance.id, file.id, alice).text, '{"frame":1}')
     const pageOnly = { requester: { accountId: addAccount('plugin-no-files'), accountType: 'guest' as const }, sessionId: 'page-only-session' }
+    AuthPermissionGroup.addAccountMembership(AuthPermissionGroup.createCustomGroup({ name: 'plugin-page-only', permissionKeys: ['plugins.view'] }).id, pageOnly.requester.accountId)
     const empty = host.openPluginInstance('text-editor', 'editor', [], pageOnly)
     assert.equal(host.requirePluginInstance(empty.id, pageOnly).page.id, 'editor', 'opening a plugin needs no unrelated file permission')
     assert.throws(() => host.readPluginFile(empty.id, file.id, pageOnly), /권한/)
     assert.throws(() => host.openPluginInstance('text-editor', 'editor', [file.id], pageOnly), /권한/)
     host.closePluginInstance(empty.id, pageOnly)
+  })
+  await t.test('a shared page opens without the plugin permission and closes when the share ends', () => {
+    const { invalidateResolvedAuthAccessCache } = authAccess
+    const guestGrant = () => auth.prepare(`SELECT g.id AS group_id, p.id AS permission_id FROM auth_permission_groups g, auth_permissions p WHERE g.group_key = 'guest' AND p.permission_key = 'plugins.view'`).get() as { group_id: number; permission_id: number }
+    const { group_id, permission_id } = guestGrant()
+    auth.prepare('DELETE FROM auth_group_permissions WHERE group_id = ? AND permission_id = ?').run(group_id, permission_id)
+    invalidateResolvedAuthAccessCache()
+    try {
+      const viewer = { requester: { accountId: addAccount('plugin-shared-viewer'), accountType: 'guest' as const }, sessionId: 'shared-viewer-session' }
+      assert.throws(() => host.openPluginInstance('text-editor', 'editor', [], viewer), /권한/, 'no plugin permission, no share: refused')
+      assert.equal(shared.chatPagePermission('/public/ext/text-editor/editor'), '', 'the shared address needs no page permission')
+      assert.equal(shared.chatPagePermission('/ext/text-editor/editor'), 'page.extensions.view')
+      assert.throws(() => registry.requirePluginPage({ path: '/public/ext/text-editor/editor' }), /공개/)
+      assert.throws(() => registry.setPluginPagePublic('text-editor', 'missing-page', true), /페이지/)
+      registry.setPluginPagePublic('text-editor', 'editor', true)
+      assert.equal(registry.isPublicPluginPage('text-editor', 'editor'), true)
+      assert.deepEqual(registry.listPlugins().find((plugin) => plugin.manifest.id === 'text-editor')?.publicPages, ['editor'])
+      assert.deepEqual(registry.listPublicPluginPages().map((page) => `${page.pluginId}/${page.pageId}`), ['text-editor/editor'])
+      assert.equal(registry.requirePluginPage({ path: '/public/ext/text-editor/editor' }).id, 'editor')
+      const opened = host.openPluginInstance('text-editor', 'editor', [], viewer)
+      assert.equal(host.renewPluginInstance(opened.id, viewer).expiresAt > Date.now(), true)
+      registry.setPluginPagePublic('text-editor', 'editor', false)
+      assert.throws(() => host.renewPluginInstance(opened.id, viewer), /권한/, 'ending the share ends the open window')
+      assert.equal(registry.listPlugins().find((plugin) => plugin.manifest.id === 'text-editor')?.publicPages, undefined)
+      host.closePluginInstance(opened.id, viewer)
+    } finally {
+      auth.prepare('INSERT OR IGNORE INTO auth_group_permissions (group_id, permission_id, allowed) VALUES (?, ?, 1)').run(group_id, permission_id)
+      invalidateResolvedAuthAccessCache()
+    }
   })
   await t.test('only host approval applies the immutable proposal; retries do not write twice', () => {
     const before = host.readPluginFile(instance.id, file.id, alice)
@@ -248,15 +279,15 @@ test('trusted extensions preserve package, caller, explicit approval and externa
     const requester = { accountId: adminId, accountType: 'admin' as const }
     const before = shared.normalizeChatPageSnapshot({ instanceId: randomUUID(), connectionId: randomUUID(), path: '/ext/text-editor/editor', title: 'Text', kind: 'extension', resourceId: '1.0.0', fields: [], actions: instance.page.actions, revision: randomUUID(), dirty: true, data: { selected: { excerpt: 'x'.repeat(8000) }, note: 'keep' } })
     const next = { ...before, revision: randomUUID() }
-    const unchanged = pageOperationView(requester, before, next).page as { data: unknown; unchangedData: string[]; removedData?: string[] }
+    const unchanged = pageOperationView(requester, before, next, null).page as { data: unknown; unchangedData: string[]; removedData?: string[] }
     assert.deepEqual(unchanged.data, {})
     assert.deepEqual(unchanged.unchangedData, ['selected', 'note'])
     const oldShape = { ...unchanged, data: before.data, unchangedData: undefined }
     t.diagnostic(`Unchanged 8000-character extension excerpt: result before=${Buffer.byteLength(JSON.stringify(oldShape))} bytes; delta=${Buffer.byteLength(JSON.stringify(unchanged))} bytes.`)
-    const changed = pageOperationView(requester, before, { ...next, data: { selected: { excerpt: 'new' } } }).page as { data: unknown; removedData: string[] }
+    const changed = pageOperationView(requester, before, { ...next, data: { selected: { excerpt: 'new' } } }, null).page as { data: unknown; removedData: string[] }
     assert.deepEqual(changed.data, { selected: { excerpt: 'new' } })
     assert.deepEqual(changed.removedData, ['note'])
-    const reopened = pageOperationView(requester, before, { ...next, instanceId: randomUUID() }).page as { data: unknown }
+    const reopened = pageOperationView(requester, before, { ...next, instanceId: randomUUID() }, null).page as { data: unknown }
     assert.deepEqual(reopened.data, before.data, 'a different screen must send its document even when the excerpt matches')
   })
   await t.test('project extensions share CAS, retry and media-reference boundaries with agents', async () => {
@@ -309,6 +340,7 @@ test('trusted extensions preserve package, caller, explicit approval and externa
       assert.equal(batchResult.status, 'completed')
       assert.deepEqual(await projectHost.applyPluginWorkspaceWrite(batch.id, batchApproval.approval!, alice), batchResult)
       const folderInfo = await projectHost.statPluginWorkspace(connected.id, { target: 'batch' }, alice)
+      assert.ok('revision' in folderInfo && folderInfo.revision, 'a single stat answers with the folder revision')
       const docInfo = (await projectHost.readPluginWorkspace(connected.id, { targets: [{ target: 'batch/note.json' }] }, alice)).files[0]
       const moving = await projectHost.proposePluginWorkspaceChanges(connected.id, { operations: [{ kind: 'move', target: 'batch', destination: 'moved', expectedRevision: folderInfo.revision }, { kind: 'write', target: 'moved/note.json', text: '{"moved":true}', expectedRevision: docInfo.revision }] }, alice)
       const movingApproval = await projectHost.approvePluginWorkspaceWrite(moving.id, alice)
@@ -619,7 +651,7 @@ test('trusted extensions preserve package, caller, explicit approval and externa
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
     const origin = `http://127.0.0.1:${(server.address() as { port: number }).port}`
     try {
-      for (const metadata of [{}, { 'Sec-Fetch-Site': 'cross-site' }]) {
+      for (const metadata of [{}, { 'Sec-Fetch-Site': 'cross-site' }] as Array<Record<string, string>>) {
         const asset = await fetch(`${origin}/api/plugin-assets/text-editor/1.0.0/main.js`, { headers: { Origin: 'null', ...metadata } })
         assert.equal(asset.status, 200)
         assert.equal(asset.headers.get('access-control-allow-origin'), '*')
@@ -660,7 +692,7 @@ test('trusted extensions preserve package, caller, explicit approval and externa
       const files = { 'pic.png': { source: 'files', fileId: picture.id }, 'lib/main.js': { source: 'package', path: 'main.js' } }
       const created = await call('POST', '', { html: '<img src="pic.png"><script src="lib/main.js"></script>', files })
       assert.equal(created.status, 200)
-      const { token } = (await created.json()).data as { token: string }
+      const { token } = (await created.json() as { data: { token: string } }).data
       const base = `${origin}/api/plugin-media/preview/${token}/`
       const document = await fetch(base)
       const policy = document.headers.get('content-security-policy')!
@@ -690,7 +722,7 @@ test('trusted extensions preserve package, caller, explicit approval and externa
       await assert.rejects(previews.issuePluginPreview(page.id, { html: 'x' }, alice, token.replace(/^./, token[0] === 'a' ? 'b' : 'a')), /만료/)
       // Redrawing keeps the address.
       const updated = await call('PUT', `/${token}`, { html: '<p>v2</p>', files })
-      assert.equal((await updated.json()).data.token, token)
+      assert.equal((await updated.json() as { data: { token: string } }).data.token, token)
       assert.equal(await (await fetch(base)).text(), '<p>v2</p>')
       // Losing image access or closing the window ends the media and the document.
       AuthPermissionGroup.removeAccountMembership(group.id, aliceId)

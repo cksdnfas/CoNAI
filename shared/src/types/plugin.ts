@@ -97,7 +97,11 @@ export type InstalledPlugin = {
   updatedAt?: string; previousVersion?: string
   /** An official package that this app start replaced with a newer build. */
   bundledUpdated?: boolean
+  /** Page ids an administrator shared with every signed-in account (`/public/ext/<plugin>/<page>`); absent when none. */
+  publicPages?: string[]
 }
+/** A shared plugin page, as the access page lists it. */
+export type PublicPluginPage = { pluginId: string; pageId: string; title: string; pluginName: string; icon?: PluginPageIcon }
 /** An official package the startup sync could not install or update; `pluginId` is null when its manifest did not read. */
 export type BundledPluginFailure = { file: string; pluginId: string | null; error: string }
 /** `updated`: the ids a sync on demand installed or replaced. */

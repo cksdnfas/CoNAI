@@ -177,7 +177,7 @@ test('graph workflow covers: newest library image per workflow, refreshed when a
     const accepted = await client.callTool({ name: 'execute_graph_workflow', arguments: { workflow_id: graphId, input_values: {} } })
     assert.notEqual(accepted.isError, true)
     assert.equal(execute.mock.callCount(), 1)
-    assert.deepEqual(execute.mock.calls[0].arguments[1].runtimeInputValues, { amount: 0, enabled: false })
+    assert.deepEqual(execute.mock.calls[0].arguments[1]?.runtimeInputValues, { amount: 0, enabled: false })
     const saved = JSON.parse((accepted.content![0] as { text: string }).text)
     assert.equal(saved.execution.id, execution.id)
     assert.equal(saved.final_results.length, 1)

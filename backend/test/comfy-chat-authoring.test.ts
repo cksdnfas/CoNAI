@@ -140,10 +140,10 @@ test('comfy chat authoring: seed rule, check_comfy_workflow, editor operations',
   assert.equal(chatPageActionTier('comfy.suggest_fields'), 'draft')
   assert.throws(() => normalizeChatPageSnapshot({ instanceId: 'page-presets', connectionId: 'connection-presets', path: '/prompts', title: 'x', kind: 'presets', resourceId: 'presets', revision: 'revision-1', fields: [], actions: [{ id: 'comfy.check', label: 'Check', description: 'Check', effect: 'draft', schema: { type: 'object', properties: {} } }] }), /페이지 작업/)
 
-  const authorGuide = chatPageReference(author)
+  const authorGuide = chatPageReference(author, undefined, null)
   assert.ok(authorGuide.includes('comfy.check') && authorGuide.includes('fixedSeeds') && authorGuide.includes(COMFY_SEED_RULE), 'the editor guide covers conversion, the check, fixed seeds and the seed rule')
   const form = normalizeChatPageSnapshot({ instanceId: 'page-form', connectionId: 'connection-form', path: '/generation', title: 'ComfyUI · Test', kind: 'comfyui', resourceId: '1', fields: [{ id: 'seed', label: 'Seed', type: 'number', value: '', allowEmpty: true }], data: { seedFields: ['seed'] } })
-  assert.ok(chatPageReference(form).includes('data.seedFields') && chatPageReference(form).includes(COMFY_SEED_RULE), 'the generation form guide explains seed fields')
+  assert.ok(chatPageReference(form, undefined, null).includes('data.seedFields') && chatPageReference(form, undefined, null).includes(COMFY_SEED_RULE), 'the generation form guide explains seed fields')
 
   await t.test('MiniMax RefMods: validated Director rows, export snapshots and library discovery', async (t) => {
     const { normalizeMcpWorkflowInputs, createMcpComfyService } = await import('../src/services/comfyui/comfyWorkflowInputs')

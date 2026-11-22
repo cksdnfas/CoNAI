@@ -88,15 +88,17 @@ test('paged directory snapshots preserve boundaries, names, paths and scope acro
     const originalReaddir = fs.promises.readdir
     const originalStat = fs.promises.stat
     let delayed = false
-    fs.promises.readdir = (async (target: fs.PathLike, options?: Parameters<typeof originalReaddir>[1]) => {
-      const result = await originalReaddir(target, options)
+    // readdir is overloaded: the delaying wrapper forwards whichever options form the caller used.
+    const forwardReaddir = originalReaddir as (target: fs.PathLike, options?: unknown) => Promise<unknown>
+    fs.promises.readdir = (async (target: fs.PathLike, options?: unknown) => {
+      const result = await forwardReaddir(target, options)
       if (!delayed && path.resolve(String(target)) === directory) {
         delayed = true
         signalStarted()
         await blocked
       }
       return result
-    }) as typeof fs.promises.readdir
+    }) as unknown as typeof fs.promises.readdir
     fs.promises.stat = (async (target: fs.PathLike, options?: Parameters<typeof originalStat>[1]) => {
       const result = await originalStat(target, options)
       if (delayed && path.resolve(String(target)) === directory) signalRelist()

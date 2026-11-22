@@ -237,7 +237,7 @@ test('audio workspace: store, lifecycle, routes and MCP tools', { timeout: 18000
     const started = new Promise<void>(resolve => { cleaning = resolve })
     const gate = new Promise<void>(resolve => { finish = resolve })
     const rm = fs.promises.rm
-    t.mock.method(fs.promises, 'rm', async (file, options) => {
+    t.mock.method(fs.promises, 'rm', async (...[file, options]: Parameters<typeof rm>) => {
       if (file === incoming) { cleaning(); await gate }
       return rm(file, options)
     })
@@ -354,7 +354,7 @@ test('audio workspace: store, lifecycle, routes and MCP tools', { timeout: 18000
     assert.equal(back.notes, 'keep')
     assert.equal(back.group_id, stone.id)
     assert.ok(store.getAudioFile(lone.file_hash))
-    assert.equal(audioDb.prepare('SELECT count(*) AS n FROM audio_purged_files').get().n, 0)
+    assert.equal((audioDb.prepare('SELECT count(*) AS n FROM audio_purged_files').get() as { n: number }).n, 0)
   })
 
   await t.test('deleting a group releases its unused blobs; a restore lands in the project inbox', async () => {

@@ -401,7 +401,7 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
       ],
     })
     assert.deepEqual(snapshot.data?.profile, profile, 'the whole editor remains readable with token limits present')
-    assert.equal(chatPageView(admin, snapshot).actions?.length, 2)
+    assert.equal(chatPageView(admin, snapshot, null).actions?.length, 2)
     const draft = snapshot.actions![0]
     const patch = { systemPrompt: 'Revised character traits', appearance: 'black hair' }
     assert.deepEqual(validateChatPageArguments(draft.schema, patch), patch, 'character-only edits do not trip other schema fields')
@@ -463,7 +463,7 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
     const { chatPageView } = await import('../src/mcp/tools/chatPageView')
     const data = { profile: { name: 'Long profile', systemPrompt: 'character '.repeat(20000) }, section: 'character' }
     const snapshot = normalizeChatPageSnapshot({ ...page, path: '/settings', kind: 'settings', resourceId: 'profile:1', fields: [], data })
-    const view = chatPageView({ accountId: null, accountType: 'admin' }, snapshot)
+    const view = chatPageView({ accountId: null, accountType: 'admin' }, snapshot, null)
     const bounded = boundedPageView(view)
     assert.ok(JSON.stringify(view).length > PAGE_VIEW_BUDGET)
     assert.ok(bounded.length <= PAGE_VIEW_BUDGET)
@@ -528,6 +528,86 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
       unregister()
       assert.ok((await bridge.call('propose_page_action', { actionId: 'preset.update', arguments: args })).isError)
     } finally { unregister(); await bridge.close() }
+  })
+
+  await t.test('auto-approve: an opted-in send saves in the turn, deletions and other sends keep their cards', async () => {
+    const { PromptPresetModel } = await import('../src/models/PromptPreset')
+    const { nativeEditRevision } = await import('../src/services/nativeEditRevision')
+    const { chatAutoApprovable } = await import('@conai/shared')
+    const preset = PromptPresetModel.create({ name: 'Auto fixture', items: [{ description: 'Style', value: 'old' }] })
+    const saved = PromptPresetModel.findByIdWithItems(preset.id)!
+    const schema = { type: 'object' as const, properties: { id: { type: 'number' as const, enum: [preset.id] } }, required: ['id'] }
+    const update = { id: 'preset.update', label: 'Edit preset', description: '', effect: 'save' as const, schema }
+    const remove = { id: 'preset.delete', label: 'Delete preset', description: '', effect: 'save' as const, schema }
+    const snapshot = normalizeChatPageSnapshot({ ...page, connectionId: 'auto-approve-connection', path: '/prompts', kind: 'presets', resourceId: String(preset.id), fields: [], revision: 'auto-approve-revision', actions: [update, remove], data: { selected: { id: preset.id, revision: nativeEditRevision(saved) } } })
+    const autoProfile = ChatProfileStore.create({ name: 'Auto assistant', engine: 'llm', providerName: 'conn', mcpEnabled: true, mcpScopes: ['read'], toolAllowlist: ['get_current_page', 'propose_page_action'], pageAssist: true })
+    const autoThreadId = CodexChatStore.createThread(null, 'auto chat', 'llm', autoProfile.id)
+    const requester = { accountId: null, accountType: 'admin' as const }
+    const commands: import('@conai/shared').ChatPageCommandEvent[] = []
+    setChatPageCommandTimeout(2000)
+    const stop = subscribeToRuntimeEvents((record) => {
+      if (record.name !== 'chat.page.command') return
+      const event = record.payload as import('@conai/shared').ChatPageCommandEvent
+      commands.push(event)
+      if (event.type === 'action') setImmediate(() => resolveChatPageCommand(requester, event.commandId, tabAutoOff ? { ok: false, error: '자동 승인이 꺼져 있어. propose_page_action으로 검토 카드를 만들어.' } : { ok: true, page: { ...snapshot, revision: 'after-auto-save' } }))
+    })
+    let tabAutoOff = false
+    const open = async (autoApprove?: string) => {
+      const context: ChatExecutionContext = { threadId: autoThreadId, profileId: autoProfile.id, kind: 'direct', replyId: `auto-approve-${autoApprove ?? 'off'}`, page: snapshot, ...(autoApprove ? { autoApprove } : {}) }
+      const unregister = registerChatReply(context, controller.signal, () => ({ replyTo: null, recipients: ['user'] }))
+      const bridge = await openChatMcpBridge(requester, ['read', 'generate', 'organize', 'configure'], null, { chatContext: context })
+      return { bridge, close: async () => { unregister(); await bridge.close() } }
+    }
+    try {
+      assert.equal(chatAutoApprovable('preset.update'), true)
+      assert.equal(chatAutoApprovable('settings.flag', { operation: 'save' }), true)
+      for (const operation of ['delete', 'remove', 'verify_files']) assert.equal(chatAutoApprovable('settings.flag', { operation }), false, operation)
+      for (const id of ['settings.ai_runtime', 'settings.mcp_http', 'settings.mcp_server', 'wallpaper.issue_key']) assert.equal(chatAutoApprovable(id), false, id)
+      const { readAutoApprove } = await import('../src/services/codex-chat/chatSendPreparation')
+      assert.equal(readAutoApprove({ kind: 'direct' }, { autoApprove: 'tab-auto-approve-1' }), 'tab-auto-approve-1')
+      assert.equal(readAutoApprove({ kind: 'group' }, { autoApprove: 'tab-auto-approve-1' }), undefined, 'rooms keep their cards')
+      assert.equal(readAutoApprove({ kind: 'direct' }, { autoApprove: 'tab-auto-approve-1', routine: {} as never }), undefined, 'a routine never runs unasked')
+      assert.equal(readAutoApprove({ kind: 'direct' }, { autoApprove: 'tab-auto-approve-1', task: {} as never }), 'tab-auto-approve-1', 'a task approved with it on keeps it')
+      for (const bad of ['short', 'has space in it', 42, null]) assert.equal(readAutoApprove({ kind: 'direct' }, { autoApprove: bad }), undefined)
+      for (const id of ['preset.delete', 'group.delete_images', 'plugin_author.install', 'plugin_source.install', 'plugin_bundled.sync', 'video-canvas.delete_node']) assert.equal(chatAutoApprovable(id), false, id)
+
+      const off = await open()
+      try {
+        assert.match(JSON.stringify((await off.bridge.call('page_act', { action: 'preset.update', arguments: { id: preset.id } })).content), /propose_page_action/, 'without auto-approve a save stays a card')
+        const card = await off.bridge.call('propose_page_action', { actionId: 'preset.update', arguments: { id: preset.id } })
+        assert.equal(JSON.parse((card.content?.[0] as { text: string }).text).status, 'awaiting_user_apply')
+        assert.equal((card.structuredContent as { proposal: { autoApprove?: string } }).proposal.autoApprove, undefined)
+        assert.equal(commands.length, 0, 'nothing reached the tab')
+      } finally { await off.close() }
+
+      const on = await open('tab-auto-approve-1')
+      try {
+        const proposed = await on.bridge.call('propose_page_action', { actionId: 'preset.update', arguments: { id: preset.id } })
+        assert.ok(!proposed.isError, JSON.stringify(proposed.content))
+        assert.equal(JSON.parse((proposed.content?.[0] as { text: string }).text).status, 'saved', 'the model is told it saved')
+        assert.deepEqual((proposed.structuredContent as { pageOperation: { tier: string } }).pageOperation.tier, 'commit')
+        const command = commands.find((event) => event.type === 'action')
+        assert.ok(command?.type === 'action')
+        assert.equal(command.tier, 'commit')
+        assert.equal(command.revision, 'auto-approve-revision', 'the save is bound to the screen it was checked on')
+        assert.equal(command.nativeRevision, nativeEditRevision(saved), 'and to the stored record, as a reviewed card is')
+        const viaAct = await on.bridge.call('page_act', { action: 'preset.update', arguments: { id: preset.id } })
+        assert.ok(!viaAct.isError, JSON.stringify(viaAct.content))
+        assert.equal(commands.filter((event) => event.type === 'action').length, 2)
+        const before = commands.length
+        assert.match(JSON.stringify((await on.bridge.call('page_act', { action: 'preset.delete', arguments: { id: preset.id } })).content), /propose_page_action/, 'a deletion never runs unasked')
+        const deletion = await on.bridge.call('propose_page_action', { actionId: 'preset.delete', arguments: { id: preset.id } })
+        assert.equal(JSON.parse((deletion.content?.[0] as { text: string }).text).status, 'awaiting_user_apply')
+        assert.equal(commands.length, before)
+        assert.equal(ChatProposalStore.find((deletion.structuredContent as { proposal: { id: number } }).proposal.id)?.autoApprove, 'tab-auto-approve-1', 'cards of an auto-approve send name the sending tab')
+        assert.equal(command.before !== undefined, true, 'the save carries what a review card would check')
+        tabAutoOff = true
+        const fallback = await on.bridge.call('propose_page_action', { actionId: 'preset.update', arguments: { id: preset.id } })
+        assert.ok(!fallback.isError, JSON.stringify(fallback.content))
+        assert.equal(JSON.parse((fallback.content?.[0] as { text: string }).text).status, 'awaiting_user_apply', 'switched off mid-reply, the save becomes a card')
+        tabAutoOff = false
+      } finally { await on.close() }
+    } finally { stop(); setChatPageCommandTimeout(100) }
   })
 
   await t.test('native reviewed writes: compare-and-swap protects prompts, presets, wildcards and Comfy workflows', async (sub) => {
@@ -922,12 +1002,13 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
     const retry = await enqueueMcpGenerationJob(caller(7), input)
     assert.notEqual(first?.id, second?.id)
     assert.equal(retry?.id, first?.id)
-    assert.equal(retry?.idempotency_reused, true)
+    assert.ok(retry && 'idempotency_reused' in retry)
+    assert.equal(retry.idempotency_reused, true)
   })
 
   await t.test('configure scope: permission, HTTP exclusion, tool gating', async () => {
     assert.ok((CHAT_SCOPES as readonly string[]).includes('configure'))
-    const access = (scopes: Array<typeof CHAT_SCOPES[number]>) => ({ codex: true, llm: true, scopes })
+    const access = (scopes: Array<typeof CHAT_SCOPES[number]>) => ({ claude: true, codex: true, llm: true, scopes, diagnostics: 'none' as const, isAdmin: false, groupKeys: [], permissionKeys: [] })
     assert.deepEqual(intersectChatScopes(['read', 'configure'], access(['read'])), ['read'])
     assert.deepEqual(intersectChatScopes(['read', 'configure'], access(['read', 'configure'])), ['read', 'configure'])
     assert.ok(!(MCP_HTTP_SCOPES as readonly string[]).includes('configure'))

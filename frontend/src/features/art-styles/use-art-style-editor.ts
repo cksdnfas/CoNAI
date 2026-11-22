@@ -7,6 +7,7 @@ import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { useI18n } from '@/i18n'
 import {
   artStyleQueryKey,
+  createArtStyle,
   deleteArtStyle,
   getArtStyle,
   invalidateArtStyles,
@@ -14,6 +15,7 @@ import {
   isArtStyleRevisionConflict,
   updateArtStyle,
   type ArtStyle,
+  type ArtStyleCreateInput,
   type ArtStylePatch,
 } from '@/lib/api-art-styles'
 import { deleteWorkflowInputAsset, uploadWorkflowInputAsset, WORKFLOW_INPUT_ASSET_REF_KIND, type WorkflowInputAssetRef } from '@/lib/api-workflow-input-assets'
@@ -69,13 +71,22 @@ function mergeDraft(previous: ArtStyleDraft, latest: ArtStyleDraft, draft: ArtSt
  * the draft over the newer version). A taken title is `titleError`, shown on the title. Uploads are staged (never a
  * library image) and deleted again when the draft that holds them is dropped unsaved (closed, stepped away, reverted).
  */
-export function useArtStyleEditor({ styleId, onClose }: { styleId: number | null; onClose: () => void }) {
+export type ArtStyleEditorTarget = { styleId: number } | { new: true } | null
+
+export function useArtStyleEditor({ target, onCreated, onClose }: {
+  target: ArtStyleEditorTarget
+  onCreated: (style: ArtStyle) => void
+  onClose: () => void
+}) {
   const { t } = useI18n()
   const confirm = useConfirm()
   const { showSnackbar } = useSnackbar()
   const queryClient = useQueryClient()
   // Without images.view the stored list reads as empty and the server refuses `images`, so it is never sent.
   const { canViewImages } = useImagePermissions()
+  const styleId = target && 'styleId' in target ? target.styleId : null
+  const isNew = Boolean(target && 'new' in target)
+  const targetKey = !target ? '' : 'styleId' in target ? `style:${target.styleId}` : 'new'
   const query = useQuery({ queryKey: artStyleQueryKey(styleId ?? 0), queryFn: ({ signal }) => getArtStyle(styleId!, signal), enabled: styleId !== null })
   const [base, setBase] = useState<ArtStyle | null>(null)
   const [draft, setDraft] = useState(emptyArtStyleDraft)
@@ -99,23 +110,25 @@ export function useArtStyleEditor({ styleId, onClose }: { styleId: number | null
   }
   const discardStagedOnLeave = useRef(discardStaged)
   discardStagedOnLeave.current = discardStaged
-  useEffect(() => () => discardStagedOnLeave.current(), [styleId])
+  useEffect(() => () => discardStagedOnLeave.current(), [targetKey])
 
   const sessionRef = useRef(0)
   const operationsRef = useRef({ session: 0, count: 0 })
   const [operations, setOperations] = useState(operationsRef.current)
-  const [loadedId, setLoadedId] = useState<number | null>(null)
-  if (loadedId !== styleId) {
-    setLoadedId(styleId)
-    sessionRef.current += 1
+  const [loadedKey, setLoadedKey] = useState('')
+  if (loadedKey !== targetKey) {
+    setLoadedKey(targetKey)
     deletedRef.current = false
-    setBase(null)
-    setDraft(emptyArtStyleDraft())
-    setConflict(null)
-    setTitleError(null)
+    if (!(loadedKey === 'new' && styleId !== null && base?.id === styleId)) {
+      sessionRef.current += 1
+      setBase(null)
+      setDraft(emptyArtStyleDraft())
+      setConflict(null)
+      setTitleError(null)
+    }
   }
   const data = query.data
-  if (data && data.id === styleId && loadedId === styleId) {
+  if (data && data.id === styleId && loadedKey === targetKey) {
     if (base?.id !== data.id) {
       setBase(data)
       setDraft(artStyleDraftOf(data))
@@ -128,8 +141,8 @@ export function useArtStyleEditor({ styleId, onClose }: { styleId: number | null
       }
     }
   }
-  const ready = styleId !== null && base?.id === styleId
-  const dirty = ready && !same(draft, artStyleDraftOf(base))
+  const ready = target !== null && (styleId === null || base?.id === styleId)
+  const dirty = ready && !same(draft, base ? artStyleDraftOf(base) : emptyArtStyleDraft())
   const session = sessionRef.current
   const isCurrent = () => sessionRef.current === session
   const onBusyChange = (busy: boolean) => {
@@ -166,13 +179,25 @@ export function useArtStyleEditor({ styleId, onClose }: { styleId: number | null
     mutationFn: async () => {
       const sourceSession = sessionRef.current
       let current = baseRef.current
-      if (!current) throw new Error(t({ ko: '스타일을 아직 불러오는 중이야.', en: 'The style is still loading.' }))
+      if (!current) {
+        const submitted = draftRef.current
+        const payload: ArtStyleCreateInput = {
+          title: submitted.title.trim(),
+          description: submitted.description,
+          badges: submitted.badges,
+          keywords: submitted.keywords,
+          positive: submitted.positive,
+          negative: submitted.negative,
+          ...(canViewImages && submitted.images.length ? { images: submitted.images } : {}),
+        }
+        return { saved: await createArtStyle(payload), submitted, sourceSession, created: true }
+      }
       for (let attempt = 0; ; attempt += 1) {
         const submitted = draftRef.current
         const changes = changesFrom(current)
-        if (!Object.keys(changes).length) return { saved: current, submitted, sourceSession }
+        if (!Object.keys(changes).length) return { saved: current, submitted, sourceSession, created: false }
         try {
-          return { saved: await updateArtStyle(current.id, { ...changes, revision: current.revision } satisfies ArtStylePatch), submitted, sourceSession }
+          return { saved: await updateArtStyle(current.id, { ...changes, revision: current.revision } satisfies ArtStylePatch), submitted, sourceSession, created: false }
         } catch (error) {
           if (attempt > 0 || !isArtStyleRevisionConflict(error)) throw error
           const latest = await getArtStyle(current.id)
@@ -184,8 +209,8 @@ export function useArtStyleEditor({ styleId, onClose }: { styleId: number | null
         }
       }
     },
-    onSuccess: ({ saved, submitted, sourceSession }) => {
-      void invalidateArtStyles(queryClient, { styleIds: [saved.id] })
+    onSuccess: ({ saved, submitted, sourceSession, created }) => {
+      void invalidateArtStyles(queryClient, { styleIds: [saved.id], listsChanged: created })
       // The save took over (and consumed) the uploads it sent.
       for (const image of submitted.images) if (isStagedArtStyleImage(image)) stagedRef.current.delete(image.id)
       if (sessionRef.current !== sourceSession) return
@@ -193,6 +218,7 @@ export function useArtStyleEditor({ styleId, onClose }: { styleId: number | null
       adopt(saved, mergeDraft(submitted, artStyleDraftOf(saved), draftRef.current).draft)
       setConflict(null)
       setTitleError(null)
+      if (created) onCreated(saved)
     },
     onError: (error) => {
       if (isArtStyleNameConflict(error)) { setTitleError(getErrorMessage(error, t({ ko: '같은 이름의 스타일이 있어.', en: 'A style with this title exists.' }))); return }
@@ -238,8 +264,9 @@ export function useArtStyleEditor({ styleId, onClose }: { styleId: number | null
     || draft.positive.length > ART_STYLE_LIMITS.prompt || draft.negative.length > ART_STYLE_LIMITS.prompt
   return {
     styleId,
-    open: styleId !== null,
-    /** The stored style has loaded (nothing to read or fill before that). */
+    isNew,
+    open: target !== null,
+    /** The stored style has loaded (or a brand-new draft is open). */
     ready,
     session,
     isCurrent,
@@ -272,8 +299,8 @@ export function useArtStyleEditor({ styleId, onClose }: { styleId: number | null
       setDraft(draftRef.current)
       if (next.title !== undefined) setTitleError(null)
     },
-    /** Put the draft back to the stored style (staged uploads are deleted). */
-    revert: () => { if (baseRef.current && isCurrent()) { draftRef.current = artStyleDraftOf(baseRef.current); setDraft(draftRef.current); discardStaged() } },
+    /** Put the draft back to the stored style (or empty for a new draft); staged uploads are deleted. */
+    revert: () => { if (isCurrent()) { draftRef.current = baseRef.current ? artStyleDraftOf(baseRef.current) : emptyArtStyleDraft(); setDraft(draftRef.current); setTitleError(null); discardStaged() } },
     /**
      * Stage image files (never a library import) and append them to the draft as they land; a 저장 copies them into the
      * style. Stops at the image limit or when the open style changes (an upload that lands late is deleted).

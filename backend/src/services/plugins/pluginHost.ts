@@ -7,7 +7,8 @@ import { withFileStoreWrites } from '../fileStoreWriteTransaction'
 import { refreshMcpRequester } from '../../mcp/toolAccess'
 import { requireFileStoreOwner, requireFileStoreAction } from '../fileStoreAccess'
 import { pluginDb, pluginToken, sha256 as hash, PluginError, requireProposalRoom, issueProposalApproval, PluginMediaGrants } from './pluginStore'
-import { getPlugin } from './pluginRegistry'
+import { getPlugin, isPublicPluginPage } from './pluginRegistry'
+import { AuthAccessControlService } from '../authAccessControlService'
 import { ensurePluginFolder } from './pluginFolder'
 
 export const pluginTokenSchema = z.string().regex(/^[a-f0-9]{48}$/)
@@ -28,6 +29,11 @@ function cleanup() {
   db.prepare('DELETE FROM plugin_proposals WHERE expires_at < ? OR instance_id NOT IN (SELECT id FROM plugin_instances)').run(Date.now())
   lastCleanup = Date.now()
 }
+/** A plugin page needs the plugin permission unless an administrator shared that page with every signed-in account. */
+function requirePluginPageAccess(requester: McpRequester, pluginId: string, pageId: string) {
+  if (requester.accountId === null || AuthAccessControlService.hasPermission(requester.accountId, 'plugins.view') || isPublicPluginPage(pluginId, pageId)) return
+  throw new PluginError('이 확장 페이지를 열 권한이 없어.', 403)
+}
 export function requirePluginInstance(id: string, caller: PluginCaller) {
   pluginTokenSchema.parse(id)
   if (!caller.sessionId) throw new PluginError('세션이 필요해.', 401)
@@ -39,6 +45,8 @@ export function requirePluginInstance(id: string, caller: PluginCaller) {
   if (plugin.version !== row.version || plugin.digest !== row.digest) throw new PluginError('확장 버전이 바뀌었어. 다시 열어줘.', 409)
   const page = plugin.definition.pages.find((item) => item.id === row.page_id)
   if (!page) throw new PluginError('페이지가 없어.', 404)
+  // Rechecked on every call: revoking the permission or the share ends windows already open.
+  requirePluginPageAccess(caller.requester, row.plugin_id, row.page_id)
   return { row, plugin: plugin.definition, page, fileIds: JSON.parse(row.files) as string[], workspace: row.workspace ? JSON.parse(row.workspace) as { id: string; name: string; write: boolean } : undefined, owner }
 }
 export function openPluginInstance(pluginId: string, pageId: string, input: unknown, caller: PluginCaller): PluginInstance {
@@ -48,6 +56,7 @@ export function openPluginInstance(pluginId: string, pageId: string, input: unkn
   if (!page) throw new PluginError('페이지가 없어.', 404)
   const ids = [...new Set(z.array(fileIdSchema).max(20).parse(input))]
   refreshMcpRequester(caller.requester)
+  requirePluginPageAccess(caller.requester, pluginId, pageId)
   const owner = fileOwnerKey(caller.requester.accountId)
   if (ids.length) requireFileStoreOwner(caller.requester)
   if (!caller.sessionId) throw new PluginError('세션이 필요해.', 401)

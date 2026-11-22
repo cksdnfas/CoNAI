@@ -51,8 +51,8 @@ export function useArtStyleChatPage(library: ArtStyleLibrary) {
 
   useChatPageRegistration({
     kind: 'page',
-    title: editor.open ? (base ? t({ ko: '그림 스타일 · {name}', en: 'Art style · {name}' }, { name: base.title }) : t({ ko: '그림 스타일', en: 'Art style' })) : t({ ko: '그림 스타일', en: 'Art styles' }),
-    resourceId: editor.open ? `style:${editor.styleId}` : 'styles',
+    title: editor.open ? (base ? t({ ko: '그림 스타일 · {name}', en: 'Art style · {name}' }, { name: base.title }) : t({ ko: '새 그림 스타일', en: 'New art style' })) : t({ ko: '그림 스타일', en: 'Art styles' }),
+    resourceId: editor.open ? (editor.styleId !== null ? `style:${editor.styleId}` : 'style:new') : 'styles',
     priority: editor.open ? 10 : 0,
     dirty: editor.dirty,
     fields: [],

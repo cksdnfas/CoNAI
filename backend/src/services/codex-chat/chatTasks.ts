@@ -17,7 +17,7 @@ import { withLlmUsageContext } from '../llmUsage'
 
 /** Extra options of a send that the person did not type: a task continuation or an automation's wake is marked so it shows as one thin line. */
 /** `choice`: the request body's answer to the chat's question card, unchecked (see readChoiceAnswer). */
-export type ChatSendOptions = { task?: ChatTaskRouting; routine?: ChatRoutineRouting; choice?: unknown; toolDirective?: unknown; onDelivered?: (messageId: number) => void }
+export type ChatSendOptions = { task?: ChatTaskRouting; routine?: ChatRoutineRouting; choice?: unknown; toolDirective?: unknown; autoApprove?: unknown; onDelivered?: (messageId: number) => void }
 
 type TaskRow = { id: number; thread_id: number; goal: string; steps: string; status: ChatTaskStatus; wait: ChatTaskWait | null; wait_ids: string | null; reason: string | null; budget: string; used: string; progress: string | null; stalled: number; active_since: string | null; waiting_since: string | null; created_at: string; updated_at: string }
 
@@ -272,6 +272,15 @@ const timers = new Map<number, NodeJS.Timeout>()
  */
 type RunnerTurn = { taskId: number; delivered: boolean; stop: () => Promise<void> }
 const running = new Map<number, RunnerTurn>()
+/**
+ * Tasks approved from a tab with auto-approve on: their continuations carry that tab's id like the person's own sends
+ * (ChatExecutionContext.autoApprove). Kept in memory only: a tab id means nothing after a restart or a reload.
+ */
+const autoApprovedTasks = new Map<number, string>()
+export function setTaskAutoApprove(taskId: number, tab: string | undefined) {
+  if (tab) autoApprovedTasks.set(taskId, tab)
+  else autoApprovedTasks.delete(taskId)
+}
 const subscriptions: Array<() => void> = []
 let waitCheck: NodeJS.Timeout | null = null
 // Requests may schedule before subscriptions start; only explicit shutdown blocks new continuations.
@@ -535,7 +544,7 @@ export const ChatTaskRunner = {
     try {
       await withLlmUsageContext({ taskId: task.id, threadId }, () => turn
         ? GroupChatService.sendMessage(requester, threadId, text, listener, undefined, undefined, undefined, undefined, undefined, { task: routing, recipients: [turn.member.id] })
-        : CodexChatService.sendMessage(requester, threadId, text, listener, undefined, undefined, undefined, undefined, undefined, page, { task: routing }))
+        : CodexChatService.sendMessage(requester, threadId, text, listener, undefined, undefined, undefined, undefined, undefined, page, { task: routing, autoApprove: autoApprovedTasks.get(task.id) }))
     } catch (error) {
       // A reply already running finishes first and its end schedules the next continuation; in case it ended just
       // before, this one is given back and tried again a little later.

@@ -93,7 +93,7 @@ test('overlapping manual and scheduled results preserve the latest tags, score, 
   let started!: () => void, resume!: () => void
   let called = new Promise<void>(resolve => { started = resolve })
   let gate = new Promise<void>(resolve => { resume = resolve })
-  t.mock.method(imageTaggerService, 'analyze', async (target, _video, _tasks, options) => {
+  t.mock.method(imageTaggerService, 'analyze', async (...[target, _video, _tasks, options]: Parameters<typeof imageTaggerService.analyze>) => {
     assert.equal(target, file)
     if (options?.priority === 'low') {
       started()

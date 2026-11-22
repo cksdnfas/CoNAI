@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type PropsWithChildr
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
+import { CHAT_AUTO_APPROVE_TAB, chatAutoApproveOn } from './chat-auto-approve'
 import { CHAT_APPEARANCE_QUERY_KEY, CHAT_FLAGS_QUERY_KEY, createCodexChatThread, type CodexChatThread, getCodexChatStatus, getCodexChatThread, previewChatGreeting, interruptCodexChatThread, pickSnapshot, choiceSnapshot, readThreadFlagIds, streamCodexChatMessage, streamChatContinue, streamChatRewrite, toolDirectiveRequest, TOOL_DIRECTIVE_UNAVAILABLE, type ChatComposerTools, type ChatFlag, type ChatMediaAttachment, type CodexChatMessage, type CodexChatStreamEvent, type CodexChatThreadDetail } from '@/lib/api-codex-chat'
 import { ApiRequestError } from '@/lib/api-request'
 import { getErrorMessage } from '@/lib/error-message'
@@ -632,7 +633,7 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
       }
       if (rewrite?.continue) await streamChatContinue(sentThreadId, rewrite.messageId, onEvent, controller.signal)
       else if (rewrite) await streamChatRewrite(sentThreadId, rewrite.messageId, rewrite.content, onEvent, controller.signal)
-      else await streamCodexChatMessage(sentThreadId, text, onEvent, controller.signal, attachments.map((file) => file.id), flags.map((flag) => flag.id), picked, mediaAttachments.map((item) => item.compositeHash), replyingTo?.quote.messageId, pageAllowed && !chosen?.withoutPage ? capturePage?.() : undefined, chosen ? { proposalId: chosen.proposalId, answers: chosen.labels } : undefined, toolDirective ? toolDirectiveRequest(toolDirective) : undefined)
+      else await streamCodexChatMessage(sentThreadId, text, onEvent, controller.signal, attachments.map((file) => file.id), flags.map((flag) => flag.id), picked, mediaAttachments.map((item) => item.compositeHash), replyingTo?.quote.messageId, pageAllowed && !chosen?.withoutPage ? capturePage?.() : undefined, chosen ? { proposalId: chosen.proposalId, answers: chosen.labels } : undefined, toolDirective ? toolDirectiveRequest(toolDirective) : undefined, !isGroup && chatAutoApproveOn() ? CHAT_AUTO_APPROVE_TAB : undefined)
     } catch (error) {
       if (!controller.signal.aborted) {
         showSnackbar({ message: summarizeChatError(getErrorMessage(error, t({ ko: '응답 실패', en: 'Reply failed' })), t), tone: 'error' })

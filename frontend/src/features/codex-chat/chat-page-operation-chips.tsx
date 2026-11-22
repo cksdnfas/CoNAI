@@ -1,4 +1,4 @@
-import { AppWindow, ArrowUpRight, PencilLine } from 'lucide-react'
+import { AppWindow, ArrowUpRight, PencilLine, Save } from 'lucide-react'
 import type { ChatPageOperation } from '@conai/shared'
 import { Button } from '@/components/ui/button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
@@ -48,11 +48,12 @@ export function ChatPageOperationChips({ calls }: { calls: CodexChatToolCall[] }
       {operations.map((operation) => {
         const entry = page?.activity.find((item) => item.id === operation.commandId)
         const navigate = operation.tool === 'page_act' && operation.label.startsWith('/')
-        const Icon = operation.tier === 'draft' ? PencilLine : navigate ? ArrowUpRight : AppWindow
+        // A save auto-approve ran without a card shows as one: it cannot be undone from here.
+        const Icon = operation.tier === 'draft' ? PencilLine : operation.tier === 'commit' ? Save : navigate ? ArrowUpRight : AppWindow
         return (
           <span
             key={operation.id}
-            className={cn('inline-flex h-6 max-w-full items-center gap-1.5 rounded-full bg-muted px-2.5 text-xs text-muted-foreground', operation.tier === 'draft' && 'text-foreground', entry?.state === 'undone' && 'line-through opacity-60')}
+            className={cn('inline-flex h-6 max-w-full items-center gap-1.5 rounded-full bg-muted px-2.5 text-xs text-muted-foreground', (operation.tier === 'draft' || operation.tier === 'commit') && 'text-foreground', entry?.state === 'undone' && 'line-through opacity-60')}
           >
             <Icon className="size-3 shrink-0" />
             <span className="min-w-0 truncate">{navigate ? destination(operation.label) : operation.label}</span>

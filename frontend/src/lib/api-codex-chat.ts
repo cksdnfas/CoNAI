@@ -1261,8 +1261,8 @@ export function interruptCodexChatThread(threadId: number) {
  * Send a message and read the NDJSON turn stream. No timeout: a turn with generation jobs can run for minutes.
  * Aborting only stops reading; the server finishes and stores the reply.
  */
-export async function streamCodexChatMessage(threadId: number, text: string, onEvent: (event: CodexChatStreamEvent) => void, signal?: AbortSignal, fileIds: string[] = [], flagIds: number[] = [], picks: string[] = [], mediaHashes: string[] = [], replyToMessageId?: number, pageContext?: ChatPageSnapshot, choice?: ChatChoiceAnswer, toolDirective?: ChatToolDirective) {
-  return streamChatOperation(`/api/codex-chat/threads/${threadId}/messages`, 'POST', { text, fileIds, flagIds, picks, mediaHashes, replyToMessageId, pageContext, choice, toolDirective }, onEvent, signal)
+export async function streamCodexChatMessage(threadId: number, text: string, onEvent: (event: CodexChatStreamEvent) => void, signal?: AbortSignal, fileIds: string[] = [], flagIds: number[] = [], picks: string[] = [], mediaHashes: string[] = [], replyToMessageId?: number, pageContext?: ChatPageSnapshot, choice?: ChatChoiceAnswer, toolDirective?: ChatToolDirective, autoApprove?: string) {
+  return streamChatOperation(`/api/codex-chat/threads/${threadId}/messages`, 'POST', { text, fileIds, flagIds, picks, mediaHashes, replyToMessageId, pageContext, choice, toolDirective, autoApprove }, onEvent, signal)
 }
 
 /**
@@ -1297,8 +1297,8 @@ export function setChatTaskState(threadId: number, action: 'pause' | 'resume' | 
 }
 
 /** Approve a task plan card; the server starts the task. */
-export function approveChatTaskPlan(proposalId: number) {
-  return requestApiData<unknown>(`/api/chat-proposals/${proposalId}/task-approve`, { method: 'POST' })
+export function approveChatTaskPlan(proposalId: number, autoApprove?: string) {
+  return requestApiData<unknown>(`/api/chat-proposals/${proposalId}/task-approve`, { method: 'POST', ...(autoApprove ? { headers: JSON_HEADERS, body: JSON.stringify({ autoApprove }) } : {}) })
 }
 
 /** The connected tab's answer to a page operation the chat ran: the new screen, or why it could not run and the screen it left. */

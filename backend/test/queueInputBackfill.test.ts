@@ -91,7 +91,7 @@ test('NovelAI inputs survive externalization and hydration with references claim
   const storedPayload = parseNaiQueuePayload(storedJob)
   assert.deepEqual(hydrateQueueInputDataUrls(storedPayload), JSON.parse(JSON.stringify(payload)))
   // retryJob preserves the stored payload and creates another row through the same createMany path.
-  const retryId = GenerationQueueModel.create({ service_type: 'novelai', request_payload: storedPayload })
+  const retryId = GenerationQueueModel.create({ service_type: 'novelai', request_payload: { ...storedPayload } })
   const refRows = getUserSettingsDb().prepare(
     `SELECT job_id FROM generation_queue_input_refs WHERE job_id IN (${[...jobIds, retryId].map(() => '?').join(',')})`,
   ).all(...jobIds, retryId) as Array<{ job_id: number }>
@@ -186,7 +186,7 @@ test('Codex CLI attaches unchanged files in order and never discovers them as ou
   const image = `data:image/png;base64,${buffer.toString('base64')}`
   const payload = await parseCodexGenerationRequest({ prompt: 'edit', operation: 'infill', image, mask: image, references: [{ role: 'item', label: 'boots', data_url: image }] })
   const directory = await fs.mkdtemp(path.join(scratchDir, 'attachments-'))
-  const files = []
+  const files: string[] = []
   for (let index = 0; index < 3; index++) files.push(await writeAttachedImage(directory, `attachment-${index}`, image))
   for (const file of files) assert.deepEqual(await fs.readFile(file), buffer)
   const args = buildCodexExecArgs(directory, 'prompt', files, 'agent-model')
@@ -334,6 +334,7 @@ test('MCP idempotency reuses identical Codex requests and conflicts on reference
   const context = { scopes: ['generate' as const], source: 'http' as const, keyId: 'reference-test-key' }
   const first = await enqueueMcpGenerationJob(context, input)
   const again = await enqueueMcpGenerationJob(context, input)
+  assert.ok(first && again && 'idempotency_reused' in again)
   assert.equal(again.id, first.id)
   assert.equal(again.idempotency_reused, true)
   for (const changed of [

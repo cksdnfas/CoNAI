@@ -114,7 +114,7 @@ export function PluginSourceInstall({ state }: { state: ReturnType<typeof usePlu
             </div>
           </div> : null}
         </PluginPackageReviewSummary> : null}
-        {review && state.pluginId && review.pluginId !== state.pluginId ? <Text role="status" tone="warning">{t({ ko: '저장소의 플러그인 ID가 {next}(으)로 바뀌었어. 적용하면 {current}을 업데이트하지 않고 새 플러그인으로 설치해.', en: 'The repository plugin ID is now {next}. Applying installs a new plugin instead of updating {current}.' }, { next: review.pluginId, current: state.pluginId })}</Text> : null}
+        {review && state.pluginId && review.pluginId !== state.pluginId ? <Text role="status" tone="warning">{t({ ko: '저장소 플러그인 ID가 {next}(으)로 바뀌어 {current} 업데이트 대신 새로 설치돼.', en: 'Repository plugin ID changed to {next}; installs as a new plugin instead of updating {current}.' }, { next: review.pluginId, current: state.pluginId })}</Text> : null}
       </ModalBody>
       <EditorFooter onSave={() => void state.install().catch(() => undefined)} canSave={Boolean(review) && !busy} saving={busy} saveLabel={t({ ko: '설치', en: 'Install' })}>
         <Button variant="secondary" disabled={busy || !input.url.trim()} onClick={() => void state.prepare().catch(() => undefined)}>{t({ ko: '검토', en: 'Review' })}</Button>

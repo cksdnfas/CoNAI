@@ -6,6 +6,7 @@ import {
   REFMOD_ENTRY_LIMITS,
   type MiniMaxH3RefModKind,
   type RefModAdoptResult,
+  type RefModDraftTemplate,
   type RefModEntryBulkResult,
   type RefModEntryDetail,
   type RefModEntryFileRef,
@@ -74,7 +75,7 @@ const ENTRY_ID_SQL = `json_extract(request_payload, '$.${REFMOD_ENTRY_RUN_KEY}.e
 export type RefModEntryRow = {
   id: number; name: string; concept_type: string; description: string; keywords: string; workflow_id: number | null;
   director_value: string | null; extra_values: string; members: string; folder_id: string | null; favorite: number;
-  revision: number; created_at: string; updated_at: string; last_built_at: string | null; last_record_id: number | null;
+  registered: number; revision: number; created_at: string; updated_at: string; last_built_at: string | null; last_record_id: number | null;
 };
 
 /** Who acts: the file-store writer key and whether library images may be read. */
@@ -140,6 +141,11 @@ const workflowIdSchema = z.number().int().positive().nullable();
 const createSchema = z.object({
   name: z.unknown(),
   workflowId: workflowIdSchema.optional(),
+  conceptType: conceptSchema.optional(),
+  description: descriptionSchema.optional(),
+  keywords: keywordsSchema.optional(),
+  values: z.record(z.string(), z.unknown()).optional(),
+  registered: z.boolean().optional(),
   /** Copy another entry (its sources are copied, never shared). */
   duplicateOf: z.number().int().positive().optional(),
 }).strict();
@@ -151,6 +157,7 @@ const patchSchema = z.object({
   description: descriptionSchema.optional(),
   keywords: keywordsSchema.optional(),
   favorite: z.boolean().optional(),
+  registered: z.boolean().optional(),
   workflowId: workflowIdSchema.optional(),
   values: z.record(z.string(), z.unknown()).optional(),
 }).strict();
@@ -292,6 +299,7 @@ function summarize(rows: RefModEntryRow[]): RefModEntrySummary[] {
       lastBuiltAt: iso(row.last_built_at),
       lastRecord: run ? { id: run.id, status: run.status, error: run.error, serverId: run.serverId, createdAt: run.createdAt } : null,
       favorite: row.favorite === 1,
+      registered: row.registered !== 0,
       revision: row.revision,
       updatedAt: iso(row.updated_at)!,
     };
@@ -309,13 +317,17 @@ const SORTS: Record<string, string> = {
 
 const likePattern = (term: string) => `%${term.replace(/[\\%_]/g, (char) => `\\${char}`)}%`;
 
-export function listRefModEntries(input: { query?: unknown; concept?: unknown; favorite?: boolean; sort?: unknown; limit?: unknown; offset?: unknown } = {}): RefModEntryPage {
+export function listRefModEntries(input: { query?: unknown; concept?: unknown; favorite?: boolean; registered?: boolean | 'all'; sort?: unknown; limit?: unknown; offset?: unknown } = {}): RefModEntryPage {
   const sort = typeof input.sort === 'string' && SORTS[input.sort] ? SORTS[input.sort] : SORTS.updated;
   const limit = input.limit === undefined ? 50 : Number(input.limit);
   const offset = input.offset === undefined ? 0 : Number(input.offset);
   if (!Number.isSafeInteger(limit) || limit < 1 || limit > 200 || !Number.isSafeInteger(offset) || offset < 0) throw new RefModEntryError('잘못된 목록 범위야.');
   const where: string[] = [];
   const params: unknown[] = [];
+  if (input.registered !== 'all') {
+    where.push('registered = ?');
+    params.push(input.registered === false ? 0 : 1);
+  }
   const terms = typeof input.query === 'string' ? input.query.trim().split(/\s+/).filter(Boolean).slice(0, 12) : [];
   for (const term of terms) {
     const pattern = likePattern(term);
@@ -371,24 +383,59 @@ function entryReadiness(row: RefModEntryRow, info: WorkflowInfo | null): { issue
  * most recently updated other entry on that workflow (a select's value only while it is one of its options). The values
  * are stored now, never filled in at read time. Revision and update time stay as they are.
  */
+function carriedExtrasForWorkflow(info: WorkflowInfo, excludeEntryId?: number): Record<string, unknown> {
+  if (!info.roles.linkable) return {};
+  const roleIds = new Set(Object.values(info.roles.roles).filter((value): value is string => typeof value === 'string'));
+  const wanted = visibleWorkflowFields(info.fields).filter((field) => !roleIds.has(field.id) && field.type !== 'image' && field.type !== 'audio' && field.type !== 'video' && field.type !== 'node'
+    && !hasMeaningfulValue(field.default_value));
+  if (!wanted.length) return {};
+  const others = (excludeEntryId === undefined
+    ? db().prepare('SELECT extra_values FROM refmod_entries WHERE workflow_id = ? ORDER BY updated_at DESC, id DESC LIMIT 200').all(info.workflow.id)
+    : db().prepare('SELECT extra_values FROM refmod_entries WHERE workflow_id = ? AND id != ? ORDER BY updated_at DESC, id DESC LIMIT 200').all(info.workflow.id, excludeEntryId)
+  ) as Array<{ extra_values: string }>;
+  const parsed = others.map((other) => parseJson<Record<string, unknown>>(other.extra_values, {}));
+  const carried: Record<string, unknown> = {};
+  for (const field of wanted) {
+    const options = field.type === 'select' && Array.isArray(field.options) && field.options.length ? field.options.map(String) : null;
+    const source = parsed.find((other) => hasMeaningfulValue(other[field.id]) && (!options || options.includes(String(other[field.id]))));
+    if (source) carried[field.id] = source[field.id];
+  }
+  return carried;
+}
+
 function storeCarriedInputs(id: number): void {
   const row = requireRow(id);
   const info = makeWorkflowCache()(row.workflow_id);
   if (!info || !info.roles.linkable) return;
-  const roleIds = new Set(Object.values(info.roles.roles).filter((value): value is string => typeof value === 'string'));
   const extras = parseJson<Record<string, unknown>>(row.extra_values, {});
-  const wanted = visibleWorkflowFields(info.fields).filter((field) => !roleIds.has(field.id) && field.type !== 'image' && field.type !== 'audio' && field.type !== 'video' && field.type !== 'node'
-    && !Object.prototype.hasOwnProperty.call(extras, field.id) && !hasMeaningfulValue(field.default_value));
-  if (!wanted.length) return;
-  const others = (db().prepare('SELECT extra_values FROM refmod_entries WHERE workflow_id = ? AND id != ? ORDER BY updated_at DESC, id DESC LIMIT 200')
-    .all(row.workflow_id, id) as Array<{ extra_values: string }>).map((other) => parseJson<Record<string, unknown>>(other.extra_values, {}));
-  const carried: Record<string, unknown> = {};
-  for (const field of wanted) {
-    const options = field.type === 'select' && Array.isArray(field.options) && field.options.length ? field.options.map(String) : null;
-    const source = others.find((other) => hasMeaningfulValue(other[field.id]) && (!options || options.includes(String(other[field.id]))));
-    if (source) carried[field.id] = source[field.id];
+  const carried = carriedExtrasForWorkflow(info, id);
+  const missing: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(carried)) {
+    if (!Object.prototype.hasOwnProperty.call(extras, key)) missing[key] = value;
   }
-  if (Object.keys(carried).length) db().prepare('UPDATE refmod_entries SET extra_values = ? WHERE id = ?').run(JSON.stringify({ ...extras, ...carried }), id);
+  if (Object.keys(missing).length) db().prepare('UPDATE refmod_entries SET extra_values = ? WHERE id = ?').run(JSON.stringify({ ...extras, ...missing }), id);
+}
+
+/** Blank form for a brand-new unsaved RefMod (default or chosen workflow, carried non-role inputs prefilled). */
+export function getRefModDraftTemplate(workflowId?: number | null): RefModDraftTemplate {
+  const resolvedId = workflowId === undefined ? defaultRefModWorkflowId() : workflowId;
+  const info = resolvedId !== null ? makeWorkflowCache()(resolvedId) : null;
+  if (!info || !info.roles.linkable) return { workflowId: null, form: null };
+  const extras = carriedExtrasForWorkflow(info);
+  const blankRow = {
+    id: 0, name: '', concept_type: 'generic', description: '', keywords: '[]', workflow_id: info.workflow.id,
+    director_value: null, extra_values: JSON.stringify(extras), members: '[]', folder_id: null,
+    favorite: 0, registered: 1, revision: 1, created_at: '', updated_at: '', last_built_at: null, last_record_id: null,
+  } satisfies RefModEntryRow;
+  return {
+    workflowId: info.workflow.id,
+    form: {
+      workflow: { id: info.workflow.id, name: info.workflow.name },
+      fields: visibleWorkflowFields(info.fields) as unknown as Array<Record<string, unknown>>,
+      values: composeRefModEntryValues(blankRow, info),
+      roles: info.roles.roles,
+    },
+  };
 }
 
 export function getRefModEntry(id: number): RefModEntryDetail {
@@ -579,22 +626,49 @@ function decomposeValues(values: Record<string, unknown>, info: WorkflowInfo | n
 
 export async function createRefModEntry(input: unknown, actor: RefModEntryActor): Promise<RefModEntryDetail> {
   const value = parseInput(createSchema, input);
-  const name = normalizeRefModEntryName(value.name);
-  if (nameTaken(name)) throw nameConflict(name);
   const source = value.duplicateOf !== undefined ? requireRow(value.duplicateOf) : null;
   const workflowId = value.workflowId !== undefined
     ? (value.workflowId === null ? null : requireLinkableWorkflow(value.workflowId).workflow.id)
     : source ? source.workflow_id : defaultRefModWorkflowId();
+  const info = workflowId === null ? null : makeWorkflowCache()(workflowId);
+  const decomposed = value.values ? decomposeValues(value.values, info) : { extras: {} as Record<string, unknown> } as ReturnType<typeof decomposeValues>;
+  const name = normalizeRefModEntryName(value.name !== undefined && String(value.name).trim() ? value.name : decomposed.name ?? value.name);
+  if (nameTaken(name)) throw nameConflict(name);
+  const conceptType = value.conceptType ?? (decomposed.conceptType !== undefined ? parseInput(conceptSchema, decomposed.conceptType) : source?.concept_type ?? 'generic');
+  const description = value.description ?? (decomposed.description !== undefined ? parseInput(descriptionSchema, decomposed.description ?? '') : source?.description ?? '');
+  const keywords = value.keywords ? JSON.stringify(value.keywords) : source?.keywords ?? '[]';
+  const extraValues = value.values ? JSON.stringify(decomposed.extras) : source?.extra_values ?? '{}';
+  const registered = value.registered === false ? 0 : 1;
   let id: number;
   try {
-    id = Number(db().prepare(`INSERT INTO refmod_entries (name, workflow_id, concept_type, description, keywords, extra_values, members)
-      VALUES (?, ?, ?, ?, ?, ?, ?)`).run(name, workflowId, source?.concept_type ?? 'generic', source?.description ?? '', source?.keywords ?? '[]',
-      source?.extra_values ?? '{}', source && source.director_value === null ? source.members : '[]').lastInsertRowid);
+    id = Number(db().prepare(`INSERT INTO refmod_entries (name, workflow_id, concept_type, description, keywords, extra_values, members, registered)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(name, workflowId, conceptType, description, keywords,
+      extraValues, source && source.director_value === null ? source.members : '[]', registered).lastInsertRowid);
   } catch (error) {
     if (isUniqueViolation(error)) throw nameConflict(name);
     throw error;
   }
-  if (source?.director_value) {
+  if (decomposed.director !== undefined) {
+    const folder: { id: string | null } = { id: null };
+    let normalized: NormalizedDirector | null = null;
+    try {
+      const row = requireRow(id);
+      normalized = decomposed.director === null
+        ? { value: null, members: [], fileIds: new Set<string>(), created: [], consumed: [] }
+        : await normalizeDirectorSources(row, decomposed.director, actor, folder);
+      db().transaction(() => {
+        replaceEntryFiles(id, normalized!.fileIds);
+        db().prepare('UPDATE refmod_entries SET director_value = ?, members = ?, folder_id = COALESCE(?, folder_id) WHERE id = ?')
+          .run(normalized!.value ? JSON.stringify(normalized!.value) : null, JSON.stringify(normalized!.members), folder.id, id);
+      }).immediate();
+      afterSourcesCommitted(actor, normalized.consumed, []);
+    } catch (error) {
+      deleteEntryRows(id);
+      if (normalized) releaseRefModFiles(actor.owner, normalized.created);
+      releaseRefModFolder(actor.owner, folder.id);
+      throw error;
+    }
+  } else if (source?.director_value) {
     try {
       await copyDirectorFrom(source, requireRow(id), actor);
     } catch (error) {
@@ -672,10 +746,13 @@ export async function patchRefModEntry(id: number, input: unknown, actor: RefMod
       if (name !== current.name && nameTaken(name, id)) throw nameConflict(name);
       if (normalized) removed = replaceEntryFiles(id, normalized.fileIds);
       db().prepare(`UPDATE refmod_entries SET name = ?, concept_type = ?, description = ?, keywords = COALESCE(?, keywords), favorite = COALESCE(?, favorite),
+        registered = COALESCE(?, registered),
         workflow_id = ?, extra_values = COALESCE(?, extra_values), director_value = CASE WHEN ? THEN ? ELSE director_value END,
         members = COALESCE(?, members), folder_id = COALESCE(?, folder_id), revision = revision + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(
         name, conceptType, description, patch.keywords ? JSON.stringify(patch.keywords) : null,
-        patch.favorite === undefined ? null : patch.favorite ? 1 : 0, workflowId, extras ? JSON.stringify(extras) : null,
+        patch.favorite === undefined ? null : patch.favorite ? 1 : 0,
+        patch.registered === undefined ? null : patch.registered ? 1 : 0,
+        workflowId, extras ? JSON.stringify(extras) : null,
         normalized ? 1 : 0, normalized?.value ? JSON.stringify(normalized.value) : null,
         normalized ? JSON.stringify(normalized.members) : null, folder.id, id);
     }).immediate();
@@ -730,7 +807,7 @@ export async function deleteRefModEntry(id: number, actor: Pick<RefModEntryActor
 
 const bulkSchema = z.object({
   ids: z.array(z.number().int().positive()).min(1).max(200),
-  action: z.enum(['favorite', 'delete']),
+  action: z.enum(['favorite', 'delete', 'register', 'unregister']),
   favorite: z.boolean().optional(),
 }).strict();
 
@@ -741,6 +818,12 @@ export async function bulkRefModEntries(input: unknown, actor: Pick<RefModEntryA
     if (value.favorite === undefined) throw new RefModEntryError('favorite 값을 보내줘.');
     const update = db().prepare('UPDATE refmod_entries SET favorite = ? WHERE id = ?');
     const updated = db().transaction(() => ids.reduce((count, id) => count + update.run(value.favorite ? 1 : 0, id).changes, 0))();
+    return { updated, deleted: 0 };
+  }
+  if (value.action === 'register' || value.action === 'unregister') {
+    const nextRegistered = value.action === 'register' ? 1 : 0;
+    const update = db().prepare('UPDATE refmod_entries SET registered = ?, revision = revision + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND registered != ?');
+    const updated = db().transaction(() => ids.reduce((count, id) => count + update.run(nextRegistered, id, nextRegistered).changes, 0))();
     return { updated, deleted: 0 };
   }
   const pending = pendingEntryIds(ids);
@@ -1002,15 +1085,35 @@ export async function adoptCompletedRefModRecord(recordId: number): Promise<void
   if (row) await adoptRecord(row, { owner: 'bootstrap', canViewImages: true });
 }
 
+/** Delete an unregistered (unlinked) saved run record and its retained source files on disk. */
+export async function deleteUnregisteredRefModRecord(recordId: number): Promise<void> {
+  const row = db().prepare('SELECT id, entry_id FROM minimax_refmod_records WHERE id = ?').get(recordId) as { id: number; entry_id: number | null } | undefined;
+  if (!row || row.entry_id !== null) throw new RefModEntryError('미등록 실행 기록을 찾을 수 없어.', 404);
+  try {
+    await deleteRefModRecord(recordId);
+  } catch (error) {
+    if (error instanceof ComfyInputValidationError) throw deletePendingError();
+    throw error;
+  }
+}
+
 const adoptSchema = z.object({
+  entryIds: z.array(z.number().int().positive()).max(500).optional(),
   recordIds: z.array(z.number().int().positive()).max(500).optional(),
   names: z.array(z.string().min(1).max(REFMOD_ENTRY_LIMITS.name)).max(500).optional(),
 }).strict();
 
-/** Entries from unregistered records (sources copied) and from server-only library names (metadata only, no sources). */
+/** Entries from unregistered entries (re-registered), unregistered records (sources copied) and server-only names (metadata only). */
 export async function adoptRefMods(input: unknown, actor: RefModEntryActor): Promise<RefModAdoptResult> {
   const value = parseInput(adoptSchema, input);
   const result: RefModAdoptResult = { created: [], linked: 0, skipped: [] };
+  for (const entryId of new Set(value.entryIds ?? [])) {
+    const row = db().prepare('SELECT id, name, registered FROM refmod_entries WHERE id = ?').get(entryId) as { id: number; name: string; registered: number } | undefined;
+    if (!row) { result.skipped.push({ name: String(entryId), reason: 'not-found' }); continue; }
+    if (row.registered !== 0) { result.skipped.push({ name: row.name, reason: 'registered' }); continue; }
+    db().prepare('UPDATE refmod_entries SET registered = 1, revision = revision + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(row.id);
+    result.created.push({ id: row.id, name: row.name });
+  }
   for (const recordId of new Set(value.recordIds ?? [])) {
     const row = db().prepare("SELECT * FROM minimax_refmod_records WHERE id = ? AND status = 'saved'").get(recordId) as RefModRecordRow | undefined;
     if (!row || !row.name) { result.skipped.push({ name: String(recordId), reason: 'not-saved' }); continue; }
@@ -1058,7 +1161,7 @@ export async function adoptRefMods(input: unknown, actor: RefModEntryActor): Pro
 
 export function refModEntryRowsForExport(ids?: number[]): RefModEntryRow[] {
   if (ids) return db().prepare('SELECT * FROM refmod_entries WHERE id IN (SELECT value FROM json_each(?)) ORDER BY name COLLATE NOCASE, id').all(JSON.stringify(ids)) as RefModEntryRow[];
-  return db().prepare('SELECT * FROM refmod_entries ORDER BY name COLLATE NOCASE, id').all() as RefModEntryRow[];
+  return db().prepare('SELECT * FROM refmod_entries WHERE registered = 1 ORDER BY name COLLATE NOCASE, id').all() as RefModEntryRow[];
 }
 
 export const refModEntryInternals = {

@@ -82,7 +82,7 @@ test('workspace pages, audio deletes and the user guide', { timeout: 60000 }, as
         batch: { running: true, counts: { done: 30, running: 1, waiting: 69 }, items: Array.from({ length: 31 }, (_, index) => ({ videoHash: videos[index], status: index === 30 ? 'running' : 'done', sheetHash: hash(500 + index) })) },
       },
     })
-    const spriteReference = chatPageReference(sprite, admin)
+    const spriteReference = chatPageReference(sprite, admin, null)
     const upload = shared.normalizeChatPageSnapshot({
       ...base, title: '업로드', path: '/upload', kind: 'upload', resourceId: 'upload-1',
       fields: [{ id: 'mode', label: 'mode', type: 'select', value: 'inspect', options: ['library', 'inspect'] }, { id: 'prompt', label: 'Prompt', type: 'text', value: 'tag, '.repeat(600) }],
@@ -93,7 +93,7 @@ test('workspace pages, audio deletes and the user guide', { timeout: 60000 }, as
         tagger: { rating: [{ name: 'general', score: 0.9 }], general: Array.from({ length: 25 }, (_, index) => ({ name: `tag_${index}`, score: 0.5 })) },
       },
     })
-    const uploadReference = chatPageReference(upload, admin)
+    const uploadReference = chatPageReference(upload, admin, null)
     t.diagnostic(`page view chars: sprite extract (100 videos, batch running) ${spriteReference.length}, upload inspect (long prompt) ${uploadReference.length}`)
     assert.ok(spriteReference.length < 12_500 && uploadReference.length < 12_500, 'within the page view budget')
     assert.match(spriteReference, /"videos":\{"count":100/, 'a long video list travels as its size')
@@ -138,7 +138,7 @@ test('workspace pages, audio deletes and the user guide', { timeout: 60000 }, as
       assert.equal(getMcpToolScope(tool), 'organize')
       assert.deepEqual(TOOL_FEATURE_PERMISSIONS[tool], ['audio.view', 'audio.edit'])
     }
-    const project = audio.createAudioProject({ name: '숲' })
+    const project = audio.createAudioProject({ name: '숲' }, null)
     const folder = audio.createAudioFolder(project.id, { name: 'UI' })
     const group = audio.createAudioGroup(project.id, { name: '발소리', label: 'footstep_[00]', folder_id: folder.id })
     const { client } = await connect({ scopes: ['read', 'organize'], requester: admin })
@@ -177,7 +177,7 @@ test('workspace pages, audio deletes and the user guide', { timeout: 60000 }, as
     let keys = ['page.characters.view', 'characters.view']
     sub.mock.method(AuthAccount, 'findById', () => ({ id: 77, status: 'active' }))
     sub.mock.method(AuthAccessControlService, 'hasPermission', (_id: number, key: string) => keys.includes(key))
-    const viewer = { accountId: 77, accountType: 'user' as const }
+    const viewer = { accountId: 77, accountType: 'guest' as const }
     const open = (prefix: string) => ({ id: `${prefix}.open`, label: 'Open', description: 'Open', effect: 'draft', schema: { type: 'object', properties: { id: { type: 'number' } }, required: ['id'] } })
     const snapshot = (resourceId: string, action: string) => ({ instanceId: 'page-characters-view', connectionId: 'connection-characters-view', revision: 'revision-characters-view', title: 'Characters', path: '/characters', kind: 'page', fields: [], resourceId, actions: [open(action)], data: { view: action } })
     const cases = [['refmods', 'refmod', 'RefMod entries:'], ['refmod:7', 'refmod', 'RefMod entries:'], ['styles', 'art_style', 'Art styles (그림 스타일)'], ['style:3', 'art_style', 'Art styles (그림 스타일)']] as const
@@ -186,12 +186,12 @@ test('workspace pages, audio deletes and the user guide', { timeout: 60000 }, as
       assert.ok(page, resourceId)
       assert.equal(page.resourceId, resourceId)
       assert.deepEqual(page.actions?.map((item) => item.id), [`${action}.open`])
-      const reference = chatPageReference(page, undefined, 'explicit' as never)
+      const reference = chatPageReference(page, undefined, null)
       assert.ok(reference.includes(guide), `${resourceId} gets its guide`)
       assert.ok(!reference.includes(guide === 'RefMod entries:' ? 'Art styles (그림 스타일)' : 'RefMod entries:'), `${resourceId} gets only its own guide`)
       assert.ok(!reference.includes('registers no editable inputs'), `${resourceId}: a page with operations is not called read-only`)
     }
-    const library = chatPageReference(parseChatPageContext({ ...snapshot('library', 'character'), actions: [{ ...open('character'), id: 'character.open_setting' }] }, viewer), undefined, 'explicit' as never)
+    const library = chatPageReference(parseChatPageContext({ ...snapshot('library', 'character'), actions: [{ ...open('character'), id: 'character.open_setting' }] }, viewer), undefined, null)
     assert.ok(!library.includes('RefMod entries:') && !library.includes('Art styles (그림 스타일)'), 'the appearance library keeps its own guide')
     keys = ['characters.view']
     assert.throws(() => parseChatPageContext(snapshot('refmods', 'refmod'), viewer), /권한/, 'the page key is still required')

@@ -171,6 +171,14 @@ export const appRouter = createHashRouter([
         element: <PublicComfyWorkflowRoute />,
       },
       {
+        // A page an administrator shared: any signed-in account opens it; the server checks the share on every call.
+        path: 'public/ext/:pluginId/:pageId',
+        lazy: async () => {
+          const { PluginPage } = await import('@/features/plugins/plugin-page')
+          return { Component: PluginPage }
+        },
+      },
+      {
         path: 'graph',
         element: <Navigate to="/generation?tab=workflows" replace />,
       },

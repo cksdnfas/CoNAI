@@ -85,7 +85,7 @@ test('claude sessions: forked turns, input once, resets and cleanup', { timeout:
       const profile = ChatProfileStore.find(CodexChatStore.findThreadById(threadId)!.profile_id!)!
       const { readReplyHistory } = await import('../src/services/codex-chat/chatJudge')
       const historySource = { threadId }
-      const params = { requester, threadId, profile, withTools: false }
+      const params = { requester, threadId, profile, withTools: false as const }
       const full = await buildClaudeSessionTurn({ ...params, history: CodexChatStore.listMessages(threadId) })
       const bounded = await buildClaudeSessionTurn({ ...params, history: readReplyHistory(profile, historySource), historySource })
       assert.deepEqual(bounded.messages, full.messages)
@@ -164,7 +164,7 @@ test('claude sessions: forked turns, input once, resets and cleanup', { timeout:
     const historySource = { threadId }
     const history = readReplyHistory(profile, historySource)
     const complete = CodexChatStore.listMessages(threadId)
-    const params = { requester, threadId, profile, withTools: false }
+    const params = { requester, threadId, profile, withTools: false as const }
     const expected = await buildClaudeSessionTurn({ ...params, history: complete })
     const bounded = await buildClaudeSessionTurn({ ...params, history, historySource })
     assert.deepEqual(bounded.messages, expected.messages)
@@ -193,7 +193,7 @@ test('claude sessions: forked turns, input once, resets and cleanup', { timeout:
     const build = async (profileId: number) => {
       const members = ChatGroupStore.members(roomId).map((member) => ChatProfileStore.find(member.profile_id)!)
       const { readGroupReplyHistory } = await import('../src/services/codex-chat/groupChatContext')
-      const params = { requester, thread: CodexChatStore.findThreadById(roomId)!, members, profile: members.find((member) => member.id === profileId)!, windowLimit: 20, withTools: false }
+      const params = { requester, thread: CodexChatStore.findThreadById(roomId)!, members, profile: members.find((member) => member.id === profileId)!, windowLimit: 20, withTools: false as const }
       const full = await buildClaudeGroupSessionTurn({ ...params, messages: CodexChatStore.listMessages(roomId) })
       const bounded = await buildClaudeGroupSessionTurn({ ...params, ...readGroupReplyHistory(params.thread, params.profile, { threadId: roomId }) })
       assert.deepEqual(bounded.messages, full.messages)

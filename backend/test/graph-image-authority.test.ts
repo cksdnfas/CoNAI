@@ -153,7 +153,7 @@ test('accountless graph callers use explicit key, stdio, or legacy-schedule auth
   await t.test('key authority is rechecked between library input reads', async (sub) => {
     let lookups = 0
     const resolve = ImageUploadService.getActiveFilePath.bind(ImageUploadService)
-    sub.mock.method(ImageUploadService, 'getActiveFilePath', (compositeHash) => {
+    sub.mock.method(ImageUploadService, 'getActiveFilePath', (compositeHash: string) => {
       const result = resolve(compositeHash)
       if (++lookups === 1) {
         stored.keys.find((item: { id: string }) => item.id === key.id).groupKey = denied.group_key

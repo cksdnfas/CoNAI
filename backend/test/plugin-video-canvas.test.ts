@@ -59,7 +59,8 @@ test('video canvas writes are account isolated, revision guarded and updates kee
     const store = createStore(db), project = store.create('account:1', '프로젝트')
     assert.throws(() => store.get('account:2', project.id), /접근/)
     const result = ops(project, [{ op: 'add_node', kind: 'cut' }])
-    store.save('account:1', project, result.project, { ops: [], actor: 'assistant' })
+    // as never: allowJs infers store.mjs `save(..., log = null)` as null-only; the store takes a log object here.
+    store.save('account:1', project, result.project, { ops: [], actor: 'assistant' } as never)
     assert.equal(store.list('account:1')[0].nodeCount, 1)
     assert.deepEqual(store.list('account:2'), [])
     assert.throws(() => store.save('account:1', project, result.project), (error: any) => error.status === 409)
@@ -154,6 +155,7 @@ test('video canvas builds raw Director timelines/assets with trim and audio mode
   assert.equal(director.refmods[0].slot, 8)
   assert.match(director.simple_prompt, /<RefMod 8>/)
   const request = generationRequest(profile, director, 0, randomUUID())
+  assert.ok('inputs' in request)
   assert.equal(request.inputs.seed, 0)
   assert.match(request.idempotency_key, /^video-canvas-[0-9a-f-]{36}$/)
   assert.throws(() => generationRequest(profile, director, undefined, 'take'))
@@ -250,7 +252,7 @@ function serviceFixture() {
       throw new Error(`Unexpected URL: ${url}`)
     } },
     generationPresets: {
-      async list() { if (!state.admin) throw refused(); return Object.values(state.presets).map(structuredClone) },
+      async list() { if (!state.admin) throw refused(); return Object.values(state.presets).map((preset) => structuredClone(preset)) },
       async get(id: number) { if (!state.admin) throw refused(); if (!state.presets[id]) throw Object.assign(new Error('프리셋이 없어.'), { status: 404 }); return structuredClone(state.presets[id]) },
     },
     skills: { async section({ skillId, path }: any) {
@@ -429,7 +431,7 @@ test('video canvas keeps one assistant undo batch without logging human drags or
     const log = f.service.store.lastLog(project.id)
     for (let index = 0; index < 4; index++) await f.dispatch('apply_ops', { project_id: project.id, expected_revision: 2 + index, ops: [{ op: 'move', id: project.nodes[1].id, x: index, y: index }] }, 'human')
     assert.equal(f.service.store.lastLog(project.id).before_data, log.before_data)
-    assert.equal(f.db.prepare('SELECT COUNT(*) AS n FROM vc_undo').get().n, 1)
+    assert.equal((f.db.prepare('SELECT COUNT(*) AS n FROM vc_undo').get() as { n: number }).n, 1)
     const batch = await f.dispatch('apply_ops', { project_id: project.id, expected_revision: 6, ops: [{ op: 'set', id: project.nodes[0].id, fields: { prompt: '바뀐 장면' } }] })
     await f.dispatch('run_cut', await runArgs(f, project))
     await f.dispatch('check', { project_id: project.id })
@@ -523,7 +525,8 @@ test('video canvas canvas/node pages and bounded published outcomes preserve all
     for (let index = 0; index < 25; index++) f.service.store.addTake('account:1', project.id, { id: `take-${index}`, cutId: cut.id, seed: index, status: 'proposed', profile, resolved: {} })
     const ids: string[] = [], takes: string[] = []
     let cursor: string | null = null
-    do { const page = excerpt(f.service.store.get('account:1', project.id), { edge_cursor: cursor, limit: 7 }); ids.push(...page.edges.map((edge: any) => edge.id)); cursor = page.nextEdgeCursor } while (cursor)
+    // as never: allowJs infers excerpt()'s options from its defaulted keys only; it reads edge_cursor and limit too.
+    do { const page = excerpt(f.service.store.get('account:1', project.id), { edge_cursor: cursor, limit: 7 } as never); ids.push(...page.edges.map((edge: any) => edge.id)); cursor = page.nextEdgeCursor } while (cursor)
     assert.equal(new Set(ids).size, 102)
     cursor = null
     do { const page = await f.tool('read_canvas', { project_id: project.id, node_id: cut.id, take_cursor: cursor, limit: 7 }); takes.push(...page.takes.map((take: any) => take.id)); assert.ok(page.edges.length); cursor = page.nextTakeCursor } while (cursor)
@@ -697,7 +700,7 @@ test('video canvas project list, rename, archive, duplicate and delete stay acco
     assert.equal((await f.page({ op: 'delete_project', project_id: project.id, name: '다른 이름' })).status, 409)
     assert.deepEqual(await f.page({ op: 'delete_project', project_id: project.id, name: '새 영화', origin: 'assistant' }), { id: project.id, deleted: true, cleanupErrors: [] })
     assert.equal(f.calls.filter(call => call.options?.method === 'DELETE').length, 1)
-    for (const table of ['vc_take', 'vc_take_upload', 'vc_upload', 'vc_run_request']) assert.equal(f.db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get().n, 0)
+    for (const table of ['vc_take', 'vc_take_upload', 'vc_upload', 'vc_run_request']) assert.equal((f.db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get() as { n: number }).n, 0)
     assert.equal((await f.dispatch('list_projects')).total, 2)
   } finally { f.db.close() }
 })

@@ -9,6 +9,27 @@ const JOB_RESULT_TOOLS = new Set(['submit_generation_job', 'get_generation_job',
 /** Tools whose result is an audio order: several queue jobs (`job_ids`, with per-job status in `jobs`). */
 const AUDIO_ORDER_RESULT_TOOLS = new Set(['order_audio', 'get_audio_order', 'wait_audio_order', 'cancel_audio_order', 'retry_audio_order_job'])
 const AUDIO_CANDIDATE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+/** Shared file-store tools whose results list entries the reader opens with their own session (`/api/files/:id/view`). */
+const FILE_STORE_RESULT_TOOLS = new Set(['list_files', 'search_files', 'get_file_info', 'get_file_download', 'write_binary_file', 'copy_library_media_to_files', 'rename_file'])
+const STORED_FILE_ID = /^[a-f0-9]{32}$/
+const AUDIO_FILE_EXTENSION = /\.(?:mp3|wav|ogg|oga|opus|flac|m4a|aac|weba)$/i
+
+/** Audio entries of a file-store result (a search hit's `entry`, a listing's `entries`, one entry), by id. */
+function collectAudioFiles(value: unknown, fileIds: Set<string>, depth = 0) {
+  if (depth > 6 || value === null || typeof value !== 'object' || fileIds.size >= MAX_REFERENCES_PER_CALL) return
+  if (Array.isArray(value)) {
+    value.forEach((item) => collectAudioFiles(item, fileIds, depth + 1))
+    return
+  }
+  const entry = value as Record<string, unknown>
+  const id = entry.id ?? entry.file_id ?? entry.fileId
+  if (typeof id === 'string' && STORED_FILE_ID.test(id) && (entry.kind === undefined || entry.kind === 'file') && !entry.chatAttachment) {
+    const mime = typeof entry.mimeType === 'string' ? entry.mimeType : typeof entry.mime_type === 'string' ? entry.mime_type : ''
+    const name = typeof entry.name === 'string' ? entry.name : ''
+    if (mime.startsWith('audio/') || (!/^(?:image|video)\//.test(mime) && AUDIO_FILE_EXTENSION.test(name))) fileIds.add(id)
+  }
+  Object.values(entry).forEach((child) => collectAudioFiles(child, fileIds, depth + 1))
+}
 
 /** Queue job ids of an audio order result and the ones not finished yet. */
 function readAudioOrderJobs(value: unknown, jobIds: Set<number>, pendingJobIds: Set<number>) {
@@ -55,13 +76,17 @@ export function truncateToolSummary(value: string) {
   return value.length > TOOL_SUMMARY_LENGTH ? `${value.slice(0, TOOL_SUMMARY_LENGTH)}…` : value
 }
 
-/** Pull history ids, composite hashes and audio candidate ids out of a tool result so the UI can show them. */
-function collectReferences(value: unknown, historyIds: Set<number>, compositeHashes: Set<string>, depth = 0, audioCandidateIds?: Set<string>) {
+/**
+ * Pull history ids, composite hashes and audio candidate ids out of a tool result so the UI can show them. Audio
+ * workspace tools name a take `candidate_id` (candidateSummary); `candidateKeys` lets those count as well, while
+ * `parent_candidate_id` and other tools' `candidate_id` keys never do.
+ */
+function collectReferences(value: unknown, historyIds: Set<number>, compositeHashes: Set<string>, depth = 0, audioCandidateIds?: Set<string>, candidateKeys = false) {
   if (depth > 8 || value === null || typeof value !== 'object') {
     return
   }
   if (Array.isArray(value)) {
-    value.forEach((item) => collectReferences(item, historyIds, compositeHashes, depth + 1, audioCandidateIds))
+    value.forEach((item) => collectReferences(item, historyIds, compositeHashes, depth + 1, audioCandidateIds, candidateKeys))
     return
   }
   for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
@@ -77,14 +102,14 @@ function collectReferences(value: unknown, historyIds: Set<number>, compositeHas
           compositeHashes.add(hash)
         }
       }
-    } else if (audioCandidateIds && /^audio_?candidate_?ids?$/i.test(key)) {
+    } else if (audioCandidateIds && (/^audio_?candidate_?ids?$/i.test(key) || (candidateKeys && /^candidate_?ids?$/i.test(key)))) {
       for (const id of Array.isArray(entry) ? entry : [entry]) {
         if (typeof id === 'string' && AUDIO_CANDIDATE_ID.test(id) && audioCandidateIds.size < MAX_REFERENCES_PER_CALL) {
           audioCandidateIds.add(id)
         }
       }
     } else {
-      collectReferences(entry, historyIds, compositeHashes, depth + 1, audioCandidateIds)
+      collectReferences(entry, historyIds, compositeHashes, depth + 1, audioCandidateIds, candidateKeys)
     }
   }
 }
@@ -99,7 +124,10 @@ export function readMcpToolResult(result: McpToolResult, toolName?: string) {
   const jobIds = new Set<number>()
   const pendingJobIds = new Set<number>()
   const audioCandidateIds = new Set<string>()
+  const audioFileIds = new Set<string>()
   const texts: string[] = []
+  const readsCandidates = toolName !== undefined && /audio/.test(toolName)
+  const readsFiles = toolName !== undefined && FILE_STORE_RESULT_TOOLS.has(toolName)
   const readsJob = toolName !== undefined && (JOB_RESULT_TOOLS.has(toolName) || /^generate_image(_\d+)?$/.test(toolName))
   const readsAudioOrder = toolName !== undefined && AUDIO_ORDER_RESULT_TOOLS.has(toolName)
 
@@ -111,7 +139,8 @@ export function readMcpToolResult(result: McpToolResult, toolName?: string) {
     texts.push(text)
     try {
       const parsed = JSON.parse(text)
-      collectReferences(parsed, historyIds, compositeHashes, 0, audioCandidateIds)
+      collectReferences(parsed, historyIds, compositeHashes, 0, audioCandidateIds, readsCandidates)
+      if (readsFiles) collectAudioFiles(parsed, audioFileIds)
       if (readsAudioOrder) readAudioOrderJobs(parsed, jobIds, pendingJobIds)
       const jobId = readsJob ? readJobId(parsed) : null
       if (jobId !== null) {
@@ -123,7 +152,8 @@ export function readMcpToolResult(result: McpToolResult, toolName?: string) {
     }
   }
   if (result?.structuredContent) {
-    collectReferences(result.structuredContent, historyIds, compositeHashes, 0, audioCandidateIds)
+    collectReferences(result.structuredContent, historyIds, compositeHashes, 0, audioCandidateIds, readsCandidates)
+    if (readsFiles) collectAudioFiles(result.structuredContent, audioFileIds)
     if (readsAudioOrder) readAudioOrderJobs(result.structuredContent, jobIds, pendingJobIds)
     const jobId = readsJob ? readJobId(result.structuredContent) : null
     if (jobId !== null) {
@@ -149,7 +179,7 @@ export function readMcpToolResult(result: McpToolResult, toolName?: string) {
     if (hash) compositeHashes.add(hash)
   }
 
-  return { texts, historyIds: [...historyIds], compositeHashes: [...compositeHashes], jobIds: [...jobIds], pendingJobIds: [...pendingJobIds], audioCandidateIds: [...audioCandidateIds], pageOperation: readPageOperation(result?.structuredContent) }
+  return { texts, historyIds: [...historyIds], compositeHashes: [...compositeHashes], jobIds: [...jobIds], pendingJobIds: [...pendingJobIds], audioCandidateIds: [...audioCandidateIds], audioFileIds: [...audioFileIds], pageOperation: readPageOperation(result?.structuredContent) }
 }
 
 /** The page operation a page_act/page_fill result names; its screen snapshot is never kept on the stored call. */
@@ -157,6 +187,6 @@ function readPageOperation(value: unknown): ChatPageOperation | undefined {
   const operation = value && typeof value === 'object' ? (value as { pageOperation?: unknown }).pageOperation : undefined
   if (!operation || typeof operation !== 'object') return undefined
   const { commandId, tier, label } = operation as Record<string, unknown>
-  if (typeof commandId !== 'string' || (tier !== 'view' && tier !== 'draft' && tier !== 'direct') || typeof label !== 'string') return undefined
+  if (typeof commandId !== 'string' || (tier !== 'view' && tier !== 'draft' && tier !== 'direct' && tier !== 'commit') || typeof label !== 'string') return undefined
   return { commandId: commandId.slice(0, 80), tier, label: label.slice(0, 200) }
 }

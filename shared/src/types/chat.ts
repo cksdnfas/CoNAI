@@ -74,6 +74,12 @@ export type ChatExecutionContext = {
   directTool?: string
   /** Validated, opted-in browser state for this reply only; never grants server-side authority. */
   page?: ChatPageSnapshot
+  /**
+   * The sending tab's id when the person sent this message with auto-approve on (a direct chat only). Registered saves on
+   * the connected page then run in the turn, and review cards it creates carry the id so that tab saves them. Deletions
+   * and plugin code installs stay review cards (chatAutoApprovable). Never populated from model arguments.
+   */
+  autoApprove?: string
 }
 
 /**
@@ -90,7 +96,7 @@ export type ChatFileChange = {
 }
 
 /** Wire contracts shared by the chat server and client. */
-export type ChatPageOperation = { commandId: string; tier: 'view' | 'draft' | 'direct'; label: string }
+export type ChatPageOperation = { commandId: string; tier: 'view' | 'draft' | 'direct' | 'commit'; label: string }
 
 export type ChatToolCall = {
   id: string
@@ -105,6 +111,8 @@ export type ChatToolCall = {
    * client plays them through `/api/audio/candidates/:id/file`; absent when the call has none.
    */
   audioCandidateIds?: string[]
+  /** Audio files of the shared file store this call listed or found; the client plays them through `/api/files/:id/view`. */
+  audioFileIds?: string[]
   /** Truncated tool output retained for later model requests. */
   output?: string
   /** A view/draft operation the chat ran on the connected page; the reader's tab keeps the undo for drafts under this id. */
@@ -130,7 +138,8 @@ export type ChatToolCall = {
  * `savedId` / `saved` are written back once a person saves the proposal from the card; `dismissed` once they set it
  * aside (무시).
  */
-export type ChatProposal = { id: number; dismissed?: boolean } & (
+/** `autoApprove`: the tab id of an auto-approve send that created it (ChatExecutionContext.autoApprove); that tab saves it unasked. */
+export type ChatProposal = { id: number; dismissed?: boolean; autoApprove?: string } & (
   | ChatPageProposal
   | ChatWorkflowProposal
   | ChatPageActionProposal

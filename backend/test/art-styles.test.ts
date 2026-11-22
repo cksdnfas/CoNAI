@@ -407,7 +407,7 @@ test('art styles: own file-store copies, CRUD, conflicts, search and badges, bun
       assert.equal(applied.body.data.positive, 'ocean light, glow')
       assert.deepEqual(applied.body.data.images.map((entry: any) => entry.id).slice(1), [held.id])
       assert.equal((await markSaved(card.id, ocean.id)).status, 200)
-      assert.equal(ChatProposalStore.find(card.id)?.saved, true)
+      assert.equal((ChatProposalStore.find(card.id) as typeof card | null)?.saved, true)
 
       // A create card: the title and images are checked when proposing and the card's POST creates it.
       assert.equal(await refused(bridge, 'propose_art_style', { action: 'save_style', input: { title: 'ocean glow' } }), true)

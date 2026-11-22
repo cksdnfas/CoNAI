@@ -461,13 +461,13 @@ test('mcp posts and file version tools', { timeout: 120000 }, async (t) => {
         action('files.doc_append', '문서 끝에 이어 쓰기', '', object({ text: { type: 'string', maxLength: 100_000 } }, ['text'])),
       ],
     })
-    const sizes = { posts: chatPageReference(posts, requester).length, document: chatPageReference(document, requester).length }
+    const sizes = { posts: chatPageReference(posts, requester, null).length, document: chatPageReference(document, requester, null).length }
     const { chatPageView } = await import('../src/mcp/tools/chatPageView')
-    const views = { posts: JSON.stringify(chatPageView(requester, posts)).length, document: JSON.stringify(chatPageView(requester, document)).length }
+    const views = { posts: JSON.stringify(chatPageView(requester, posts, null)).length, document: JSON.stringify(chatPageView(requester, document, null)).length }
     t.diagnostic(`per-request page reference: posts open post ${sizes.posts} chars (view ${views.posts}), files open document ${sizes.document} chars (view ${views.document})`)
     for (const [name, size] of Object.entries(sizes)) assert.ok(size < PAGE_VIEW_BUDGET, `${name}: ${size}`)
     // Neither long text rides along whole.
-    assert.ok(!chatPageReference(posts, requester).includes('본문 '.repeat(1001)))
+    assert.ok(!chatPageReference(posts, requester, null).includes('본문 '.repeat(1001)))
   })
 
   await t.test('knowledge MCP and connected page cannot bypass human proposal approval', async () => {
@@ -600,7 +600,7 @@ test('mcp posts and file version tools', { timeout: 120000 }, async (t) => {
     const started = new Promise<AbortSignal | undefined>(resolve => { entered = resolve })
     const ended = new Promise<unknown>(resolve => { stopped = resolve })
     const list = PostStore.list.bind(PostStore)
-    t.mock.method(PostStore, 'list', async (actor, query, options) => {
+    t.mock.method(PostStore, 'list', async (actor: Parameters<typeof list>[0], query: Parameters<typeof list>[1], options?: Parameters<typeof list>[2]) => {
       entered(options?.signal)
       try { return await list(actor, query, options) }
       catch (error) { stopped(error); throw error }

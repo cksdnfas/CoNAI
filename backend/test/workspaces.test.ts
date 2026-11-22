@@ -85,7 +85,7 @@ test('project files share files while preserving revisions, execution boundaries
   })
   await t.test('a chat links up to the limit, each project once', async () => {
     const crowded = CodexChatStore.createThread(null, 'Crowded chat', 'llm', profile.id)
-    const created = []
+    const created: Array<Awaited<ReturnType<typeof service.create>>> = []
     for (let index = 0; index <= MAX_WORKSPACE_LINKS; index++) created.push(await service.create('bootstrap', `연결 한도 ${index}`))
     for (const item of created.slice(0, MAX_WORKSPACE_LINKS)) service.setChatProject('bootstrap', crowded, item.id, 'read')
     assert.throws(() => service.setChatProject('bootstrap', crowded, created[MAX_WORKSPACE_LINKS].id, 'read'), /개까지/)

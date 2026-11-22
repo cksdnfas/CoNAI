@@ -108,7 +108,7 @@ test('RecycleBin retention is off by default and deletes only old top-level file
   userDb.prepare("UPDATE recycle_bin_entries SET deleted_at = '2000-01-01' WHERE bin_name = ?").run(path.basename(recordedNew))
   const offline = `${bin}-unmounted`
   const unlink = fs.promises.unlink
-  const disconnect = t.mock.method(fs.promises, 'unlink', async target => {
+  const disconnect = t.mock.method(fs.promises, 'unlink', async (target: Parameters<typeof unlink>[0]) => {
     if (String(target) === recordedNew) fs.renameSync(bin, offline)
     return unlink(target)
   })

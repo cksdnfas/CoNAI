@@ -5,6 +5,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { test } from 'node:test'
 import Database from 'better-sqlite3'
+import type { ImageMetadataRecord } from '../src/types/image'
 
 /**
  * File lifecycle maintenance: thumbnail path resolution, the user-facing delete path, the orphan collector
@@ -218,7 +219,7 @@ test('backup import recognizes original-format video fallbacks and simultaneous 
   const converted = await importBackupFile({ ...source, import_mode: 'convert_webp' }, mirror, image, true, signal)
   assert.equal(converted, path.join(mirror, '..album', 'page.webp'))
   assert.equal((await sharp(converted!).metadata()).format, 'webp')
-  const encode = t.mock.method(video, 'transcodeToMp4', async (_file, out) => {
+  const encode = t.mock.method(video, 'transcodeToMp4', async (_file: string, out: string) => {
     fs.writeFileSync(out, 'larger than the original')
     return { outputPath: out, fileSize: fs.statSync(out).size, mimeType: 'video/mp4' }
   })
@@ -228,7 +229,7 @@ test('backup import recognizes original-format video fallbacks and simultaneous 
   assert.equal(encode.mock.callCount(), 1, 'the saved original is a complete mirror, not another encoding job')
 
   // Both calls reach the encoder before either can publish. Distinct bytes prove we kept both outputs.
-  encode.mock.mockImplementation(async (file, out) => {
+  encode.mock.mockImplementation(async (file: string, out: string) => {
     const bytes = fs.readFileSync(file).subarray(0, 1)
     await fs.promises.writeFile(out, bytes)
     return { outputPath: out, fileSize: 1, mimeType: 'video/mp4' }
@@ -287,7 +288,7 @@ test('background processing shutdown drains its active write and cancels schedul
   const started = new Promise<void>((resolve) => { entered = resolve })
   const access = fs.promises.access
   let checks = 0
-  t.mock.method(fs.promises, 'access', async (file, mode) => {
+  t.mock.method(fs.promises, 'access', async (file: fs.PathLike, mode?: number) => {
     if (String(file) !== missing) return access(file, mode)
     checks++
     entered()
@@ -344,7 +345,7 @@ test('thumbnail batch lookups share bounded asynchronous misses and preserve res
   const { ImageSafetyService } = await import('../src/services/imageSafetyService')
   const { MediaPostprocessVisibilityService } = await import('../src/services/mediaPostprocessVisibilityService')
   const hashes = Array.from({ length: 32 }, (_, index) => index.toString(16).padStart(48, '0'))
-  t.mock.method(MediaMetadataModel, 'findByHashes', (requested) => requested
+  t.mock.method(MediaMetadataModel, 'findByHashes', (requested: string[]) => requested
     .filter((hash) => hash !== hashes[5])
     .map((hash) => {
       const index = hashes.indexOf(hash)
@@ -354,15 +355,15 @@ test('thumbnail batch lookups share bounded asynchronous misses and preserve res
         rating_score: index === 6 ? 1 : 0,
       } as any
     }))
-  t.mock.method(ImageFileModel, 'findActiveByHashes', (requested) => requested
+  t.mock.method(ImageFileModel, 'findActiveByHashes', (requested: string[]) => requested
     .filter((hash) => hash !== hashes[7])
     .map((hash) => ({
       composite_hash: hash,
       original_file_path: `original-${hash}`,
       mime_type: hash === hashes[2] || hash === hashes[3] ? 'video/mp4' : 'image/png',
     } as any)))
-  t.mock.method(ImageSafetyService, 'isHidden', (score) => score === 1)
-  t.mock.method(MediaPostprocessVisibilityService, 'isReadyRecord', (metadata) => metadata.composite_hash !== hashes[8])
+  t.mock.method(ImageSafetyService, 'isHidden', (score: number | null | undefined) => score === 1)
+  t.mock.method(MediaPostprocessVisibilityService, 'isReadyRecord', (metadata: ImageMetadataRecord) => metadata.composite_hash !== hashes[8])
 
   let release!: () => void
   const gate = new Promise<void>((resolve) => { release = resolve })
@@ -373,7 +374,7 @@ test('thumbnail batch lookups share bounded asynchronous misses and preserve res
   let peakActive = 0
   let checks = 0
   t.mock.method(fs, 'existsSync', () => { throw new Error('synchronous existence check') })
-  t.mock.method(fs.promises, 'access', async (filePath) => {
+  t.mock.method(fs.promises, 'access', async (filePath: fs.PathLike) => {
     checks++
     active++
     peakActive = Math.max(peakActive, active)
@@ -670,7 +671,7 @@ test('database backup writes openable copies and keeps only the newest N stamped
   fs.mkdirSync(path.join(backupRoot, 'images.before-manual-copy'), { recursive: true })
 
   const base = new Date(2026, 9, 8, 12, 0, 0)
-  let last
+  let last: Awaited<ReturnType<typeof runDatabaseBackup>> | undefined
   for (let i = 0; i < 3; i++) {
     last = await runDatabaseBackup({ root: backupRoot, keep: 2, now: new Date(base.getTime() + i * 60_000) })
   }

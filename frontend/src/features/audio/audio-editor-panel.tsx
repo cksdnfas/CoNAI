@@ -3,7 +3,7 @@ import { Headphones, LoaderCircle, Pause, Play, X } from 'lucide-react'
 import { IconButton } from '@/components/ui/icon-button'
 import { Button } from '@/components/ui/button'
 import { floatingSurfaceClassName } from '@/components/ui/floating-surface'
-import { Field } from '@/components/ui/field'
+import { Field, FieldInfo } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { SliderRow } from '@/components/ui/slider-row'
 import { Textarea } from '@/components/ui/textarea'
@@ -244,6 +244,11 @@ export function AudioEditorPanel({ candidate, canEdit, onClose, onSaved, classNa
       <div className="flex flex-wrap items-center gap-2">
         <Button size="xs" variant={selectRegion ? 'ghost' : 'secondary'} aria-pressed={!selectRegion} onClick={() => setSelectRegion(false)}>{t({ ko: '재생 탐색', en: 'Seek' })}</Button>
         <Button size="xs" variant={selectRegion ? 'secondary' : 'ghost'} aria-pressed={selectRegion} onClick={() => setSelectRegion(true)}>{t({ ko: '구간 선택', en: 'Select region' })}</Button>
+        <FieldInfo>
+          {selectRegion
+            ? t({ ko: '양 끝 드래그: 구간 조절 · 안쪽 드래그: 이동 · Shift+드래그: 새 구간', en: 'Drag edges to trim · Drag inside to move · Shift+drag for a new region' })
+            : t({ ko: '클릭·드래그: 탐색 재생 · 양 끝 손잡이: 구간 조절 · Shift+드래그: 구간 선택 · Space: 재생/정지 · ← →: 1초 (Shift: 5초)', en: 'Click/drag to seek · Edge handles to trim · Shift+drag to select · Space: play/pause · ← →: 1 s (Shift: 5 s)' })}
+        </FieldInfo>
         <span className="ml-auto font-mono text-xs tabular-nums text-muted-foreground">{number(playhead ?? 0, 2)} / {number(duration, 2)}s</span>
       </div>
       <div
@@ -284,7 +289,6 @@ export function AudioEditorPanel({ candidate, canEdit, onClose, onSaved, classNa
           </span>
         )) : null}
       </div>
-      <p className="-mt-2 text-2xs text-muted-foreground">{selectRegion ? t({ ko: '양 끝을 드래그해 구간 조절 · 안쪽 드래그로 이동 · Shift+드래그로 새 구간', en: 'Drag edges to trim · Drag inside to move · Shift+drag for a new region' }) : t({ ko: '클릭·드래그로 해당 위치 재생 · 양 끝 손잡이로 구간 조절 · Shift+드래그로 구간 선택 · 파형에 포커스: Space 재생/정지, ← → 1초 이동 (Shift: 5초)', en: 'Click or drag to seek and play · Drag edge handles to trim · Shift+drag to select · Waveform focused: Space play/pause, ← → 1 s (Shift: 5 s)' })}</p>
 
       <div className="grid grid-cols-2 gap-3">
         <Field label={t({ ko: '시작', en: 'Start' })} className="min-w-0">

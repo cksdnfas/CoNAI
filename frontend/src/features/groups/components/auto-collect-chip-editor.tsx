@@ -90,9 +90,9 @@ export function AutoCollectChipEditor({ initialJsonText, onChange }: AutoCollect
     setJsonText(parsedState.jsonText)
     setWarningMessage(
       parsedState.warningMessage === 'parse-error'
-        ? t({ ko: '저장된 자동수집 JSON을 파싱하지 못해서 직접 편집 모드로 열었어.', en: 'Could not parse the saved auto-collect JSON, so it opened in direct edit mode.' })
+        ? t({ ko: '자동수집 JSON 파싱 실패 · 직접 편집 모드로 열림', en: 'Failed to parse auto-collect JSON · opened in direct edit mode.' })
         : parsedState.warningMessage === 'unsupported-condition'
-          ? t({ ko: '기존 자동수집 규칙에 칩 편집기로 표현 못 하는 조건이 있어서 JSON 직접 편집 모드로 열었어.', en: 'Some existing auto-collect conditions cannot be represented in the chip editor, so it opened in direct JSON edit mode.' })
+          ? t({ ko: '칩으로 표현할 수 없는 조건 포함 · 직접 편집 모드로 열림', en: 'Contains conditions unsupported by the chip editor · opened in direct JSON mode.' })
           : null,
     )
     setSearchInput('')

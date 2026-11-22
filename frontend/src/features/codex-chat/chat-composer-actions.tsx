@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { createPortal } from 'react-dom'
-import { Clapperboard, Flag, Monitor, Paperclip, Pin, Plus, Sparkles, Wrench, type LucideIcon } from 'lucide-react'
+import { Clapperboard, FastForward, Flag, Monitor, Paperclip, Pin, Plus, Sparkles, Wrench, type LucideIcon } from 'lucide-react'
 import type { ChatToolDirectiveSnapshot } from '@conai/shared'
 import { IconButton } from '@/components/ui/icon-button'
 import { ListRow } from '@/components/ui/list-row'
@@ -14,6 +14,7 @@ import { ChatPageConnectButton, useChatPage } from './chat-page-context'
 import { ChatSuggestButton, type ReplySuggestions } from './chat-suggestions'
 import { ChatToolsButton, ChatToolsChip, ChatToolsTray, chatToolPickLabel, useChatComposerTools } from './chat-composer-tools'
 import { useTrayDismiss } from './chat-tray'
+import { useChatAutoApprove } from './chat-auto-approve'
 import type { ChatComposerToolsTarget } from '@/lib/api-codex-chat'
 import type { ChatToolSelection, CodexChatApi } from './codex-chat-context'
 
@@ -22,9 +23,11 @@ import type { ChatToolSelection, CodexChatApi } from './codex-chat-context'
  * a pin that keeps it in the row), and whatever is switched on shows in the row on its own. With one it shows alone.
  */
 
-type ItemId = 'attach' | 'page' | 'flags' | 'suggest' | 'tools' | 'narration'
-const ITEM_IDS: readonly ItemId[] = ['attach', 'page', 'flags', 'suggest', 'tools', 'narration']
-const ITEM_ICON: Record<ItemId, LucideIcon> = { attach: Paperclip, page: Monitor, flags: Flag, suggest: Sparkles, tools: Wrench, narration: Clapperboard }
+type ItemId = 'attach' | 'page' | 'flags' | 'suggest' | 'tools' | 'narration' | 'auto'
+const ITEM_IDS: readonly ItemId[] = ['attach', 'page', 'flags', 'suggest', 'tools', 'narration', 'auto']
+const ITEM_ICON: Record<ItemId, LucideIcon> = { attach: Paperclip, page: Monitor, flags: Flag, suggest: Sparkles, tools: Wrench, narration: Clapperboard, auto: FastForward }
+/** Keys that never fold a lone key behind +: they join the row beside it instead. */
+const NEVER_FOLDS: readonly ItemId[] = ['narration', 'auto']
 
 const PINS_STORAGE_PREFIX = 'conai.chat.composer-pins.'
 const NO_SELECTION: ChatToolSelection = { pick: null, keep: false }
@@ -61,7 +64,7 @@ function useComposerPins() {
 /** A tray the composer hosts for one of its items; it renders against whichever key (or the + key) it hangs from. */
 type ItemTray = (anchorRef: RefObject<HTMLButtonElement | null>) => ReactNode
 
-export function ChatComposerActions({ chat, selectionKey, toolsTarget, trayHost, composerRef, attachDisabled, allowPrivateUploads, pageAvailable, pageDisabled, toolsDisabled, flags, suggest, narration }: {
+export function ChatComposerActions({ chat, selectionKey, toolsTarget, trayHost, composerRef, attachDisabled, allowPrivateUploads, pageAvailable, pageDisabled, toolsDisabled, flags, suggest, narration, autoApprove }: {
   chat: CodexChatApi
   /** The chat (or PENDING_DRAFT_KEY) whose picked tool this composer holds. */
   selectionKey: number | null
@@ -81,12 +84,15 @@ export function ChatComposerActions({ chat, selectionKey, toolsTarget, trayHost,
   suggest: { available: boolean; disabled: boolean; state: ReplySuggestions; buttonRef: RefObject<HTMLButtonElement | null>; tray: ItemTray }
   /** Marks the caret's line as narration (`$`) or clears it; no tray. Offered only where sent `$` lines are read as narration. */
   narration: { available: boolean; disabled: boolean; onPress: () => void }
+  /** Auto-approve (chat-auto-approve): saves and review cards go through without a click. Offered where the chat can send it (1:1 chats). */
+  autoApprove: { available: boolean }
 }) {
   const { t } = useI18n()
   const page = useChatPage()
   const attach = useChatAttach(allowPrivateUploads)
   const toolsOffer = useChatComposerTools(toolsTarget)
   const { pins, togglePin } = useComposerPins()
+  const auto = useChatAutoApprove()
   const [stackOpen, setStackOpen] = useState(false)
   const [toolsOpen, setToolsOpen] = useState(false)
   const plusRef = useRef<HTMLButtonElement | null>(null)
@@ -96,12 +102,11 @@ export function ChatComposerActions({ chat, selectionKey, toolsTarget, trayHost,
   const stackId = useId()
 
   const selection = selectionKey === null ? NO_SELECTION : chat.toolSelections[selectionKey] ?? NO_SELECTION
-  const offered: Record<ItemId, boolean> = { attach: attach.available, page: pageAvailable, flags: flags.available, suggest: suggest.available, tools: selectionKey !== null && toolsOffer.available, narration: narration.available }
+  const offered: Record<ItemId, boolean> = { attach: attach.available, page: pageAvailable, flags: flags.available, suggest: suggest.available, tools: selectionKey !== null && toolsOffer.available, narration: narration.available, auto: autoApprove.available }
   const available = ITEM_IDS.filter((id) => offered[id])
-  // The narration key alone never folds a lone key behind +: it joins the row beside it.
-  const collapsed = available.filter((id) => id !== 'narration').length >= 2
+  const collapsed = available.filter((id) => !NEVER_FOLDS.includes(id)).length >= 2
   // Anything switched on stays in the row; the tools item shows as the chip of its pick instead.
-  const on: Record<ItemId, boolean> = { attach: false, page: page?.enabled === true, flags: flags.count > 0, suggest: false, tools: selection.pick !== null, narration: false }
+  const on: Record<ItemId, boolean> = { attach: false, page: page?.enabled === true, flags: flags.count > 0, suggest: false, tools: selection.pick !== null, narration: false, auto: auto.on }
   const inRow = (id: ItemId) => !collapsed || pins.includes(id) || (id !== 'tools' && on[id])
   const anchorFor = (id: ItemId, keyRef: RefObject<HTMLButtonElement | null>) => (inRow(id) ? keyRef : plusRef)
 
@@ -135,6 +140,7 @@ export function ChatComposerActions({ chat, selectionKey, toolsTarget, trayHost,
     suggest: t({ ko: '추천 답변', en: 'Suggestions' }),
     tools: t({ ko: '도구', en: 'Tools' }),
     narration: t({ ko: '나레이션', en: 'Narration' }),
+    auto: t({ ko: '자동 승인', en: 'Auto-approve' }),
   }
   const state: Record<ItemId, string> = {
     attach: '',
@@ -143,6 +149,7 @@ export function ChatComposerActions({ chat, selectionKey, toolsTarget, trayHost,
     suggest: '',
     tools: selection.pick === null ? '' : chatToolPickLabel(selection.pick, t),
     narration: '',
+    auto: auto.on ? t({ ko: '켜짐', en: 'On' }) : t({ ko: '꺼짐', en: 'Off' }),
   }
   const disabled: Record<ItemId, boolean> = {
     attach: attachDisabled || chat.attachmentsUploading,
@@ -151,6 +158,7 @@ export function ChatComposerActions({ chat, selectionKey, toolsTarget, trayHost,
     suggest: suggest.disabled,
     tools: toolsDisabled,
     narration: narration.disabled,
+    auto: false,
   }
 
   // The draft changes at once and the caret goes back to it, so nothing stays open.
@@ -171,6 +179,7 @@ export function ChatComposerActions({ chat, selectionKey, toolsTarget, trayHost,
       anchorFor(id, id === 'flags' ? flags.buttonRef : suggest.buttonRef).current?.focus()
     } else if (id === 'tools') openTool('tools')
     else if (id === 'narration') pressNarration()
+    else if (id === 'auto') auto.toggle()
   }
 
   const renderKey = (id: ItemId) => {
@@ -182,6 +191,8 @@ export function ChatComposerActions({ chat, selectionKey, toolsTarget, trayHost,
       case 'suggest': return <ChatSuggestButton key={id} buttonRef={suggest.buttonRef} open={suggest.state.open} loading={suggest.state.loading} disabled={disabled.suggest} onToggle={() => { const wasOpen = suggest.state.open; closeTrays(); if (!wasOpen) suggest.state.toggle() }} />
       case 'tools': return <ChatToolsButton key={id} buttonRef={toolsKeyRef} open={toolsOpen} disabled={disabled.tools} onToggle={() => { const next = !toolsOpen; closeTrays(); setToolsOpen(next) }} />
       case 'narration': return <IconButton key={id} variant="ghost" size="icon-sm" disabled={disabled.narration} onClick={pressNarration} label={label.narration}><Clapperboard /></IconButton>
+      // Turned off, the key leaves the row unless pinned (as the page link's does): focus moves to + before it goes.
+      case 'auto': return <IconButton key={id} variant="ghost" size="icon-sm" active={auto.on} aria-pressed={auto.on} onClick={() => { if (auto.on && collapsed && !pins.includes('auto')) plusRef.current?.focus(); auto.toggle() }} label={[label.auto, state.auto].join(' · ')}><FastForward /></IconButton>
     }
   }
 
@@ -217,7 +228,7 @@ export function ChatComposerActions({ chat, selectionKey, toolsTarget, trayHost,
             const pinned = pins.includes(id)
             const row = (
               <ListRow asChild interactive size="sm" selected={on[id]} leading={<Icon className="size-4" aria-hidden />}>
-                <button type="button" disabled={disabled[id]} aria-pressed={id === 'page' ? on.page : undefined} onClick={id === 'attach' ? undefined : () => pressChip(id)}>
+                <button type="button" disabled={disabled[id]} aria-pressed={id === 'page' || id === 'auto' ? on[id] : undefined} onClick={id === 'attach' ? undefined : () => pressChip(id)}>
                   <span className="shrink-0 font-semibold">{label[id]}</span>
                   {state[id] ? <span className="min-w-0 truncate text-xs text-muted-foreground">{state[id]}</span> : null}
                 </button>

@@ -175,7 +175,7 @@ export function NodeInspectorPanel({
       : port.key === 'negative_prompt'
         ? getNaiFixedNegativeHint(t)
         : port.key === 'steps' || port.key === 'sampler'
-          ? t({ ko: '모델 고정: 이 모델은 스텝 {steps}·{sampler}로 생성해서 이 값은 쓰지 않아.', en: 'Fixed by model: it runs {steps} steps with {sampler}, so this value is not used.' }, { steps: naiFixedSettings.steps, sampler: naiFixedSettings.sampler })
+          ? t({ ko: '모델 고정 ({steps}스텝 · {sampler})', en: 'Fixed by model ({steps} steps · {sampler})' }, { steps: naiFixedSettings.steps, sampler: naiFixedSettings.sampler })
           : null
     // A thin left accent instead of a tinted card: info for the focused port, warning for a missing required value.
     const cardStyle = isHighlightedPort

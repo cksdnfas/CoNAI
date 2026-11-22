@@ -3,7 +3,7 @@ import path from 'path'
 import { createHash, randomBytes } from 'crypto'
 import AdmZip from 'adm-zip'
 import { z } from 'zod'
-import { GENERATION_LAYOUT_SURFACES, PLUGIN_PAGE_ICONS, normalizeChatPageSchema, normalizeChatPageActions, validateChatPageArguments, type ChatPageSnapshot, type GenerationLayoutSurface, type PluginManifest, type InstalledPlugin } from '@conai/shared'
+import { GENERATION_LAYOUT_SURFACES, PLUGIN_PAGE_ICONS, normalizeChatPageSchema, normalizeChatPageActions, pluginPageRoute, validateChatPageArguments, type ChatPageSnapshot, type GenerationLayoutSurface, type PluginManifest, type InstalledPlugin, type PublicPluginPage } from '@conai/shared'
 import { runtimePaths } from '../../config/runtimePaths'
 import { WINDOWS_RESERVED_NAME } from '../../utils/pathResolver'
 import { pluginChanged, pluginDb, PluginError } from './pluginStore'
@@ -14,6 +14,7 @@ import { zipEntryBytes, zipEntryKind } from '../../utils/zipEntries'
 
 export { PluginError }
 export const pluginIdSchema = z.string().regex(/^[a-z][a-z0-9-]{1,47}$/)
+const pluginPageIdPattern = /^[a-z][a-z0-9-]{1,47}$/
 const reserved = new Set(['page', 'page-settings', 'files', 'workspace', 'library', 'settings', 'profile', 'resource', 'chat', 'audio', 'sprite', 'upload', 'posts', 'wallpaper', 'metadata', 'prompt', 'preset', 'wildcard', 'group', 'media', 'nai', 'comfy', 'workflow'])
 /** Characters of one page or server action description: the guidance the chat reads with the action. */
 export const PLUGIN_ACTION_DESCRIPTION_LIMIT = 1500
@@ -130,10 +131,43 @@ export function getPlugin(id: string, enabled = true) {
   if (enabled && !row.enabled) throw new PluginError('플러그인이 없거나 비활성화됐어.', 404)
   return { ...row, definition: definitionOf(row) }
 }
+/** The shared page ids of each plugin, including rows for pages a later version dropped (callers match against the manifest). */
+function publicPageRows() {
+  const map = new Map<string, Set<string>>()
+  for (const row of pluginDb().prepare('SELECT plugin_id, page_id FROM plugin_public_pages').all() as Array<{ plugin_id: string; page_id: string }>) {
+    map.set(row.plugin_id, (map.get(row.plugin_id) ?? new Set()).add(row.page_id))
+  }
+  return map
+}
+/** Whether an enabled plugin's existing page is shared with every signed-in account (`/public/ext/<plugin>/<page>`). */
+export function isPublicPluginPage(pluginId: string, pageId: string) {
+  if (!pluginPageIdPattern.test(pluginId) || !pluginPageIdPattern.test(pageId)) return false
+  if (!pluginDb().prepare('SELECT 1 FROM plugin_public_pages WHERE plugin_id = ? AND page_id = ?').get(pluginId, pageId)) return false
+  try { return getPlugin(pluginId).definition.pages.some((page) => page.id === pageId) } catch { return false }
+}
+/** Administrator: share one page with every signed-in account, or stop sharing it. Windows opened through the share close on their next check. */
+export function setPluginPagePublic(pluginId: string, pageId: string, value: boolean) {
+  const plugin = getPlugin(pluginId, false)
+  if (!plugin.definition.pages.some((page) => page.id === pageId)) throw new PluginError('페이지가 없어.', 404)
+  const db = pluginDb()
+  if (value) db.prepare('INSERT OR IGNORE INTO plugin_public_pages (plugin_id, page_id) VALUES (?, ?)').run(pluginId, pageId)
+  else db.prepare('DELETE FROM plugin_public_pages WHERE plugin_id = ? AND page_id = ?').run(pluginId, pageId)
+}
+/** Shared pages of enabled plugins, for the access page. */
+export function listPublicPluginPages(): PublicPluginPage[] {
+  return listPlugins().flatMap(({ manifest, publicPages }) => manifest.pages.filter((page) => publicPages?.includes(page.id)).map((page) => ({
+    pluginId: manifest.id, pageId: page.id, title: page.title, pluginName: manifest.name, ...(page.icon ? { icon: page.icon } : {}),
+  })))
+}
 export function listPlugins(includeDisabled = false): InstalledPlugin[] {
   const rows = pluginDb().prepare(`SELECT * FROM plugins ${includeDisabled ? '' : 'WHERE enabled = 1'} ORDER BY id LIMIT 100`).all() as Row[]
+  const shared = publicPageRows()
   return rows.flatMap((row): InstalledPlugin[] => {
-    try { return [{ manifest: definitionOf(row), enabled: !!row.enabled, installedAt: row.installed_at, ...(row.bundled ? { bundled: true } : {}), ...(row.updated_at ? { updatedAt: row.updated_at, previousVersion: row.previous_version ?? undefined } : {}) }] } catch {
+    try {
+      const manifest = definitionOf(row)
+      const publicPages = manifest.pages.filter((page) => shared.get(row.id)?.has(page.id)).map((page) => page.id)
+      return [{ manifest, enabled: !!row.enabled, installedAt: row.installed_at, ...(row.bundled ? { bundled: true } : {}), ...(row.updated_at ? { updatedAt: row.updated_at, previousVersion: row.previous_version ?? undefined } : {}), ...(publicPages.length ? { publicPages } : {}) }]
+    } catch {
       // One unreadable package must not hide the others; management still lists it so it can be removed.
       if (!includeDisabled) return []
       return [{ manifest: { apiVersion: 1, id: row.id, name: row.id, version: row.version, description: '설치 정보를 읽을 수 없어. 제거한 뒤 다시 설치해줘.', capabilities: [], appTools: [], serverActions: [], pages: [] }, enabled: false, installedAt: row.installed_at }]
@@ -340,6 +374,7 @@ export async function removePlugin(id: string) {
   db.transaction(() => {
     db.prepare('DELETE FROM plugins WHERE id = ?').run(id)
     db.prepare('DELETE FROM plugin_sources WHERE plugin_id = ?').run(id)
+    db.prepare('DELETE FROM plugin_public_pages WHERE plugin_id = ?').run(id)
     db.prepare('DELETE FROM plugin_storage WHERE plugin_id = ?').run(id)
     db.prepare("DELETE FROM plugin_app_requests WHERE plugin_id = ? AND status NOT IN ('starting','running')").run(id)
   })()
@@ -354,11 +389,12 @@ export async function removePlugin(id: string) {
 }
 
 export function requirePluginPage(page: Pick<ChatPageSnapshot, 'path'> & Partial<Pick<ChatPageSnapshot, 'resourceId'>>) {
-  const match = /^\/ext\/([a-z][a-z0-9-]{1,47})\/([a-z][a-z0-9-]{1,47})$/.exec(page.path)
-  if (!match) throw new PluginError('확장 페이지 경로가 올바르지 않아.', 403)
-  const plugin = getPlugin(match[1])
+  const route = pluginPageRoute(page.path)
+  if (!route) throw new PluginError('확장 페이지 경로가 올바르지 않아.', 403)
+  const plugin = getPlugin(route.pluginId)
   if (page.resourceId !== undefined && page.resourceId !== plugin.version) throw new PluginError('확장 버전이 바뀌었어.', 409)
-  const definition = plugin.definition.pages.find((item) => item.id === match[2])
+  if (route.public && !isPublicPluginPage(route.pluginId, route.pageId)) throw new PluginError('공개가 해제된 확장 페이지야.', 403)
+  const definition = plugin.definition.pages.find((item) => item.id === route.pageId)
   if (!definition) throw new PluginError('등록되지 않은 확장 페이지야.', 403)
   return definition
 }

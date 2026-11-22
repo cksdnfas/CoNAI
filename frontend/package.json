@@ -9,6 +9,7 @@
     "build:compiler-off": "node scripts/build-production.mjs --compiler=off",
     "build:compiler-on": "node scripts/build-production.mjs --compiler=on",
     "typecheck": "tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.node.json --noEmit",
+    "typecheck:tests": "tsc -p tsconfig.test-check.json",
     "test:posts-editor": "tsx --test test/post-rich-editor.test.ts",
     "test:post-comments": "tsx --tsconfig tsconfig.app.json --test test/post-comments.test.ts",
     "test:audio-waveform": "tsx --tsconfig tsconfig.app.json --test test/audio-waveform.test.ts",

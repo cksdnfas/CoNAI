@@ -111,7 +111,7 @@ test('model rows: connection ▸ models, legacy pairs, resolution, sync, deletio
     assert.equal(CodexChatStore.findThreadById(thread)!.chat_model_slot_id, null)
     assert.equal(CodexChatStore.findThreadById(thread)!.reaction_model_slot_id, null)
     assert.equal(ChatProfileStore.find(profile.id, thread)!.modelSlotId, own)
-    assert.equal(db.prepare('SELECT chat_model_slot_id FROM chat_group_members WHERE thread_id = ?').get(thread)!.chat_model_slot_id, null)
+    assert.equal((db.prepare('SELECT chat_model_slot_id FROM chat_group_members WHERE thread_id = ?').get(thread) as { chat_model_slot_id: number | null } | undefined)!.chat_model_slot_id, null)
     const changing = ModelSlotStore.ensure('conn-b', 'changing-override')!
     const route = ModelSlotStore.createRoute({ name: 'override only', targetSlotId: changing })!
     CodexChatStore.updateThreadContext(thread, { chatModelSlotId: route.id, reactionModelSlotId: route.id })

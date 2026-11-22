@@ -92,16 +92,16 @@ export function SelectedExecutionSummary({
             {finalResultLifecycleWarning.kind === 'source_artifact_missing'
               ? finalResultLifecycleWarningSourceLabel
                 ? t({
-                  ko: '최종 결과 노드는 실행됐지만 {source} 출력이 저장된 결과물을 만들지 못했어.',
-                  en: 'The final result node ran, but the {source} output did not create a saved result.',
+                  ko: '{source} 출력에서 저장된 최종 결과물이 생성되지 않았어.',
+                  en: '{source} output did not produce a saved final result.',
                 }, { source: finalResultLifecycleWarningSourceLabel })
-                : t({ ko: '최종 결과 노드는 실행됐지만 연결된 출력이 저장된 결과물을 만들지 못했어.', en: 'The final result node ran, but the connected output did not create a saved result.' })
+                : t({ ko: '연결된 출력에서 저장된 최종 결과물이 생성되지 않았어.', en: 'Connected output did not produce a saved final result.' })
               : finalResultLifecycleWarningSourceLabel
                 ? t({
-                  ko: '최종 결과는 저장됐지만 {source} 출력의 생성 기록 연결은 실패했어.',
-                  en: 'The final result was saved, but linking the {source} output into generation history failed.',
+                  ko: '최종 결과는 저장됐으나 {source} 생성 기록 연결 실패',
+                  en: 'Final result saved, but linking {source} to generation history failed.',
                 }, { source: finalResultLifecycleWarningSourceLabel })
-                : t({ ko: '최종 결과는 저장됐지만 생성 기록 연결은 실패했어.', en: 'The final result was saved, but linking it into generation history failed.' })}
+                : t({ ko: '최종 결과는 저장됐으나 생성 기록 연결 실패', en: 'Final result saved, but linking to generation history failed.' })}
           </div>
           {additionalFinalResultWarningCount > 0 ? (
             <div className="mt-1 text-xs text-warning-soft-foreground/80">

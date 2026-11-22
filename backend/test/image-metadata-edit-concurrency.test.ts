@@ -48,7 +48,7 @@ function blockFirstRewrite(t: import('node:test').TestContext) {
   const gate = new Promise<void>((resolve) => { release = resolve })
   const original = ImageMetadataWriteService.writeBufferAsFormatBuffer.bind(ImageMetadataWriteService)
   let calls = 0
-  t.mock.method(ImageMetadataWriteService, 'writeBufferAsFormatBuffer', async (...args) => {
+  t.mock.method(ImageMetadataWriteService, 'writeBufferAsFormatBuffer', async (...args: Parameters<typeof original>) => {
     calls += 1
     if (calls === 1) {
       started()

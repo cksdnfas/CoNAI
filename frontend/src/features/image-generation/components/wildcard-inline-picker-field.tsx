@@ -722,8 +722,8 @@ export function WildcardInlinePickerField({
         <div className="flex items-center justify-between gap-2 rounded-sm bg-primary/8 px-3 py-1.5 text-xs">
           <span>
             {legacyUndo
-              ? t({ ko: `예전 문법 ${legacyUndo.count}곳을 새 문법으로 바꿨어요.`, en: `Converted ${legacyUndo.count} old syntax token(s).` })
-              : t({ ko: `예전 문법이 ${legacyConversion.count}곳 있어요. 뜻은 그대로 두고 새 문법으로 바꿀 수 있어요.`, en: `${legacyConversion.count} token(s) use the old syntax and can be converted without changing meaning.` })}
+              ? t({ ko: `예전 문법 ${legacyUndo.count}곳 변환됨`, en: `Converted ${legacyUndo.count} old syntax token(s).` })
+              : t({ ko: `예전 문법 ${legacyConversion.count}곳 감지됨`, en: `${legacyConversion.count} old syntax token(s) detected.` })}
           </span>
           <Button
             type="button"
@@ -758,7 +758,7 @@ export function WildcardInlinePickerField({
           {missingTokens.map(({ token, status }) => (
             <div key={token.key} className="flex flex-wrap items-center gap-1">
               <TriangleAlert className="size-3.5 shrink-0" />
-              <span>{t({ ko: `${token.name}: 찾을 수 없어 생성할 때 빈 값으로 들어가요.`, en: `${token.name}: not found, becomes empty at generation.` })}</span>
+              <span>{t({ ko: `${token.name}: 찾을 수 없음 (빈 값 처리)`, en: `${token.name}: not found (empty at generation)` })}</span>
               {status.suggestion ? (
                 <Button type="button" size="xs" variant="link" onClick={() => handleRenameRandomToken(token, status.source, status.suggestion ?? token.name)}>
                   {t({ ko: `혹시 ${status.suggestion}?`, en: `Did you mean ${status.suggestion}?` })}

@@ -42,6 +42,7 @@ export function ensureRefModRecordsSchema(db: Database.Database): void {
       members TEXT NOT NULL DEFAULT '[]',
       folder_id TEXT,
       favorite INTEGER NOT NULL DEFAULT 0,
+      registered INTEGER NOT NULL DEFAULT 1,
       revision INTEGER NOT NULL DEFAULT 1,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -59,5 +60,7 @@ export function ensureRefModRecordsSchema(db: Database.Database): void {
   `);
   if (!hasColumn(db, 'minimax_refmod_records', 'entry_id')) db.exec('ALTER TABLE minimax_refmod_records ADD COLUMN entry_id INTEGER');
   if (!hasColumn(db, 'minimax_refmod_records', 'director_value')) db.exec('ALTER TABLE minimax_refmod_records ADD COLUMN director_value TEXT');
+  if (!hasColumn(db, 'refmod_entries', 'registered')) db.exec('ALTER TABLE refmod_entries ADD COLUMN registered INTEGER NOT NULL DEFAULT 1');
   db.exec('CREATE INDEX IF NOT EXISTS idx_refmod_records_entry ON minimax_refmod_records(entry_id, id DESC)');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_refmod_entries_registered ON refmod_entries(registered, updated_at DESC, id DESC)');
 }

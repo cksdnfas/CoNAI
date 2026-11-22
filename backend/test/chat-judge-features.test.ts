@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import path from 'node:path'
 import { test } from 'node:test'
+import type { ChatJudgeItem } from '@conai/shared'
 
 test('judge beyond turn items: group rooms, status fields, lore and recall, expression assets', { timeout: 60000 }, async (t) => {
   // Load runtime modules only after isolating every data path. Never open the user's databases.
@@ -270,10 +271,11 @@ test('judge beyond turn items: group rooms, status fields, lore and recall, expr
       { keys: ['등대지기'], title: '등대 마을 축제', content: '등대 마을 축제는 매년 가을 바닷가 등대 앞에서 열린다.' },
       { keys: ['용광로'], title: '대장간', content: '대장간은 산 위에 있다.' },
     ] })
+    // Partial items on purpose: the store normalizes them (normalizeJudgeItems fills the missing fields with defaults).
     const lorePreset = ChatJudgePresetStore.create({ name: '로어', providerName: 'jev', items: [
       { id: 'lore-0', name: '안내', stage: 'before', instructions: 'Offer guidance?', directive: '[판단] 안내해.', window: JUDGE_OPTION_DEFAULTS.context.window },
       { id: 'other-window', name: '다른 범위', stage: 'before', instructions: 'Other window?', window: JUDGE_OPTION_DEFAULTS.context.window + 1 },
-    ], context: { ...JUDGE_OPTION_DEFAULTS.context, recall: { enabled: false, threshold: 0.35 } } })
+    ] as unknown as ChatJudgeItem[], context: { ...JUDGE_OPTION_DEFAULTS.context, recall: { enabled: false, threshold: 0.35 } } })
     const guide = ChatProfileStore.create({ name: '안내인', engine: 'llm', providerName: 'chat', model: 'chat-model', summaryEnabled: false, mcpEnabled: false, lorebookIds: [book.id], judgePresetId: lorePreset.id })
     const calls = route(s, (body) => Object.fromEntries(Object.keys(body.questions).map((id) => [id, { type: 'noul', noul: 0.9 }])))
     const thread = CodexChatStore.findThreadById(CodexChatStore.createThread(1, '로어', 'llm', guide.id))!

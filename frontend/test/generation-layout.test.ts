@@ -125,7 +125,7 @@ test('plugin placements survive disabled plugins and stay within the saved layou
   assert.deepEqual(added.columns[1].blocks, ['result', 'recent', 'plugin:helper:notes'])
   const moved = moveLayoutBlock('nai', added, 'plugin:helper:notes', { column: 0, index: 0 })
   assert.deepEqual(withPluginBlocks(moved, ['plugin:helper:notes']), moved)
-  const single = { ...preset, columns: [{ weight: 100, blocks: preset.columns.flatMap((column) => column.blocks).filter((block) => block !== 'action').concat('action') }] }
+  const single = { ...preset, columns: [{ weight: 100, blocks: preset.columns.flatMap((column) => column.blocks).filter((block): boolean => block !== 'action').concat('action') }] }
   assert.deepEqual(withPluginBlocks(single, ['plugin:helper:notes']).columns[0].blocks.slice(-2), ['plugin:helper:notes', 'action'])
   const hidden = setLayoutBlockHidden(moved, 'plugin:helper:notes', true)
   const disabled = withPluginBlocks(hidden, [], ['helper'])

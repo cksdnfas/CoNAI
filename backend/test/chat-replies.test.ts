@@ -224,7 +224,8 @@ test('message replies: storage, delivery, context, and generation ownership', { 
     const translator = ChatProfileStore.create({ name: 'Room translator', engine: 'llm', providerName: 'test', model: 'room-chat', translationProviderName: 'test', translationModel: 'room-translator', summaryEnabled: false, mcpEnabled: false })
     const room = GroupChatService.create(requester, { profileIds: [a.id, translator.id], representativeId: a.id, userProfileId: null })
     const representative = { ...a, suggestEnabled: true }
-    const history = [{ id: 1, thread_id: room.id, role: 'user', content: '안녕', tool_calls: [], status: 'completed', error: null } as CodexChatMessageRecord]
+    // Partial mock row: suggestions only read the history fields given here.
+    const history = [{ id: 1, thread_id: room.id, role: 'user', content: '안녕', tool_calls: [], status: 'completed', error: null } as unknown as CodexChatMessageRecord]
     let expire = false
     let cancel: AbortController | undefined
     let translations = 0
@@ -259,7 +260,7 @@ test('message replies: storage, delivery, context, and generation ownership', { 
     let bCalls = 0
     let bInput = ''
     let bCallsWhenCFinished = -1
-    s.mock.method(globalThis, 'fetch', async (_url, init) => {
+    s.mock.method(globalThis, 'fetch', async (_url: unknown, init?: RequestInit) => {
       const request = JSON.parse(String(init?.body))
       if (request.model === 'C') { await cGate; return response('C finished independently.') }
       if (request.model === 'B-next') { bCalls += 1; bInput = JSON.stringify(request.messages); return response('Here is the requested result.') }
@@ -296,7 +297,7 @@ test('message replies: storage, delivery, context, and generation ownership', { 
     const room = createRoom()
     const originalId = CodexChatStore.addMessage({ thread_id: room.id, role: 'assistant', speaker_profile_id: b.id, content: 'Choose the blue one.', tool_calls: [], status: 'completed', error: null })
     const models: string[] = []
-    s.mock.method(globalThis, 'fetch', async (_url, init) => { models.push(JSON.parse(String(init?.body)).model); return response('Understood.') })
+    s.mock.method(globalThis, 'fetch', async (_url: unknown, init?: RequestInit) => { models.push(JSON.parse(String(init?.body)).model); return response('Understood.') })
     await GroupChatService.sendMessage(requester, room.id, 'I choose this.', () => {}, undefined, undefined, undefined, undefined, originalId)
     assert.deepEqual(models, ['B'])
     await GroupChatService.sendMessage(requester, room.id, '@C what do you think?', () => {}, undefined, undefined, undefined, undefined, originalId)
@@ -317,7 +318,7 @@ test('message replies: storage, delivery, context, and generation ownership', { 
     GroupChatService.updateRoom(requester, room.id, { chainLimit: 0 })
     let calls = 0
     let toolOutput = ''
-    s.mock.method(globalThis, 'fetch', async (_url, init) => {
+    s.mock.method(globalThis, 'fetch', async (_url: unknown, init?: RequestInit) => {
       const request = JSON.parse(String(init?.body))
       calls += 1
       if (calls === 1) return response('', { name: 'room_call_member', args: { room_id: room.id, names: ['B'] } })
@@ -335,7 +336,7 @@ test('message replies: storage, delivery, context, and generation ownership', { 
     const startedWaiting = new Promise<void>((resolve) => { waiting = resolve })
     let aCalls = 0
     const models: string[] = []
-    s.mock.method(globalThis, 'fetch', async (_url, init) => {
+    s.mock.method(globalThis, 'fetch', async (_url: unknown, init?: RequestInit) => {
       const request = JSON.parse(String(init?.body))
       models.push(request.model)
       if (request.model !== 'A') return response('New user request accepted.')
@@ -366,7 +367,7 @@ test('message replies: storage, delivery, context, and generation ownership', { 
     ChatSummaryStore.replaceAll(threadId, 'Earlier conversation summarized.', CodexChatStore.listMessages(threadId)[11].id)
     CodexChatStore.updateThreadContext(threadId, { summaryEnabled: true, contextTurns: 1 })
     let input = ''
-    s.mock.method(globalThis, 'fetch', async (_url, init) => { input = String(init?.body); return response('I understand the earlier scene.') })
+    s.mock.method(globalThis, 'fetch', async (_url: unknown, init?: RequestInit) => { input = String(init?.body); return response('I understand the earlier scene.') })
     const thread = CodexChatStore.findThreadById(threadId)!
     await LlmChatService.sendMessage(requester, thread, 'About this earlier answer…', () => {}, undefined, undefined, undefined, undefined, target.id)
     assert.ok(input.includes('old-3'))
@@ -412,7 +413,7 @@ test('message replies: storage, delivery, context, and generation ownership', { 
     assert.match(restored, /message-30\b/)
     // Turning summaries off must not turn the bounded history read back into a full transcript load.
     const recent = CodexChatStore.listContextMessages(source, { afterId: Number.MAX_SAFE_INTEGER, recentMessages: 4, textMessages: 4, recentTurns: 2 })
-    const unsummarized = { ...CodexChatStore.findThreadById(id)!, summary_enabled: 0 }
+    const unsummarized = { ...CodexChatStore.findThreadById(id)!, summary_enabled: 0 as const }
     const withoutSummary = { profile: a, thread: unsummarized, config: resolveContextConfig(unsummarized, a), tools: [] }
     assert.deepEqual(buildChatMessages({ ...withoutSummary, messages: recent, historySource: source }), buildChatMessages({ ...withoutSummary, messages: full }))
     s.diagnostic(`summary-off hydrated bodies: ${full.length} -> ${recent.length}`)
@@ -431,7 +432,7 @@ test('message replies: storage, delivery, context, and generation ownership', { 
     for (let i = 0; i < 240; i++) CodexChatStore.addMessage({
       thread_id: room.id, role: i % 2 ? 'assistant' : 'user', content: i % 11 === 0 ? ' \n' : `room-${i}`,
       speaker_profile_id: i % 2 ? (i % 3 ? a.id : b.id) : null,
-      routing: i % 4 === 0 ? { recipients: [a.id], routine: { source: 'routine', id: 1, name: 'repeat' } } : null,
+      routing: i % 4 === 0 ? { replyTo: null, recipients: [a.id], routine: { source: 'routine', id: 1, name: 'repeat' } } : null,
       tool_calls: [], status: 'completed', error: null,
     })
     const rows = CodexChatStore.listMessages(room.id)
@@ -447,7 +448,7 @@ test('message replies: storage, delivery, context, and generation ownership', { 
     assert.deepEqual(bounded.history.outline.filter(row => row.sendable).map(row => row.id), sendableMessages(full).map(row => row.id))
     assert.ok(bounded.messages.length < 30)
     const routing = full.at(-1)!.routing ?? undefined
-    const params = { profile: a, thread, members: profiles, routing, windowLimit: 6, tools: [], withTools: false, maxTokens: null }
+    const params = { profile: a, thread, members: profiles, routing, windowLimit: 6, tools: [], withTools: false as const, maxTokens: null }
     let expectedMeta: unknown
     let actualMeta: unknown
     const expected = buildGroupLlmMessages({ ...params, messages: full, onMeta: meta => { expectedMeta = meta } })
@@ -464,7 +465,7 @@ test('message replies: storage, delivery, context, and generation ownership', { 
     assert.equal(requireReplyTarget(room.id, rows[1].id, bounded.messages, source)?.id, rows[1].id)
     assert.throws(() => requireReplyTarget(room.id, source.excludeMessageId, bounded.messages, source))
     s.diagnostic(`group startup bodies: ${full.length} -> ${bounded.messages.length}; outline: ${bounded.history.outline.length} body-free rows`)
-    CodexChatStore.setMessageRouting(room.id, rows[1].id, { replyId: 'active-generation-owner', recipients: ['user'] })
+    CodexChatStore.setMessageRouting(room.id, rows[1].id, { replyId: 'active-generation-owner', replyTo: null, recipients: ['user'] })
     assert.equal(CodexChatStore.findMessageByReplyId(room.id, 'active-generation-owner', 'assistant')?.id, rows[1].id)
     assert.equal(CodexChatStore.findMessageByReplyId(room.id, 'active-generation-owner', 'user'), undefined)
     assert.equal(CodexChatStore.findMessageByReplyId(createRoom().id, 'active-generation-owner'), undefined)
@@ -496,7 +497,7 @@ test('message replies: storage, delivery, context, and generation ownership', { 
     const rows = [
       { id: 1, thread_id: room.id, role: 'assistant', tool_calls: [call('lookup', 'wait_generation_job')] },
       { id: 2, thread_id: room.id, role: 'assistant', routing, tool_calls: [call('submit', 'generate_image_2'), call('wait', 'wait_generation_job')] },
-    ] as CodexChatMessageRecord[]
+    ] as unknown as CodexChatMessageRecord[] // partial mock rows: job attachment reads only these fields
     const enriched = attachResolvedJobResults(rows, new Map([[100, [901]]]), new Set(), new Map([[100, 'creator-B']]))
     assert.deepEqual(enriched[0].tool_calls[0].historyIds, [])
     assert.equal(enriched[0].tool_calls[0].generated, false)
@@ -523,7 +524,7 @@ test('message replies: storage, delivery, context, and generation ownership', { 
     const controller = new AbortController()
     const context: ChatExecutionContext = { threadId: room.id, profileId: a.id, kind: 'group', replyId: 'boundary' }
     const close = registerChatReply(context, controller.signal, () => ({ replyTo: null, recipients: ['user'] }))
-    const bridge = await openChatMcpBridge(requester, [], null, { roomTools: 'all', chatContext: context })
+    const bridge = await openChatMcpBridge(requester, [], null, { chatContext: context })
     try {
       const result = await bridge.call('room_history_read', { room_id: other.id, message_id: 1 })
       assert.equal(result.isError, true)
@@ -573,7 +574,7 @@ test('message replies: storage, delivery, context, and generation ownership', { 
   await t.test('save_lore stays listed in every round; after a stored lore proposal, not a failed one, the next call is refused', async s => {
     const thread = directChat()
     const bodies: Array<{ tools?: Array<{ function: { name: string } }>; messages: Array<{ role: string; content?: unknown }> }> = []
-    s.mock.method(globalThis, 'fetch', async (_url, init) => {
+    s.mock.method(globalThis, 'fetch', async (_url: unknown, init?: RequestInit) => {
       bodies.push(JSON.parse(String(init?.body)))
       const calls = bodies.length
       if (calls <= 3) return response('', { name: 'save_lore', args: { title: ['', 'Favorite tea', 'Favorite cup'][calls - 1], keys: ['oolong'], content: 'The user prefers oolong tea.' } })
@@ -594,7 +595,7 @@ test('message replies: storage, delivery, context, and generation ownership', { 
     const { NO_PAGE_NOTE } = await import('../src/services/codex-chat/chatPageContext')
     const { isChatOwnTool } = await import('../src/mcp/context')
     const bodies: Array<{ model: string; tools?: Array<{ function: { name: string } }>; messages: unknown[] }> = []
-    s.mock.method(globalThis, 'fetch', async (_url, init) => {
+    s.mock.method(globalThis, 'fetch', async (_url: unknown, init?: RequestInit) => {
       if (!init?.body) return new Response('', { status: 404 })
       bodies.push(JSON.parse(String(init.body)))
       return response('응.')
@@ -631,7 +632,7 @@ test('message replies: storage, delivery, context, and generation ownership', { 
     s.after(() => updateChatSettings({ toolRoundLimit: previousLimit }))
     calls = 0; streamed = ''
     const escaped = markup.replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    s.mock.method(globalThis, 'fetch', async (_url, init) => {
+    s.mock.method(globalThis, 'fetch', async (_url: unknown, init?: RequestInit) => {
       calls++
       if (calls === 1) return sse(text(escaped, 'stop'))
       assert.equal(JSON.parse(String(init?.body)).tool_choice, 'none')
@@ -660,7 +661,7 @@ test('message replies: storage, delivery, context, and generation ownership', { 
   await t.test('tool calls cut by the output cap fail the reply, never run and never go out again', async (s) => {
     const thread = directChat()
     const bodies: Array<{ messages: Array<{ role: string; tool_calls?: unknown[]; content?: unknown }>; tools?: Array<{ function: { name: string } }> }> = []
-    s.mock.method(globalThis, 'fetch', async (_url, init) => {
+    s.mock.method(globalThis, 'fetch', async (_url: unknown, init?: RequestInit) => {
       bodies.push(JSON.parse(String(init?.body)))
       return bodies.length === 1
         ? sse(text('잠깐만.'), toolCall('save_lore', '{"title":"등', 'length'))

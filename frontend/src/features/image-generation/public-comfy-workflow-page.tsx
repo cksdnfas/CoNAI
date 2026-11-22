@@ -244,8 +244,8 @@ function PublicComfyWorkflowPageContent() {
   if (authStatusQuery.data?.hasCredentials === false) {
     return (
       <Alert variant="destructive">
-        <AlertTitle>{t({ ko: '게스트 로그인 전용 페이지야', en: 'This page is for guest login only' })}</AlertTitle>
-        <AlertDescription>{t({ ko: '이 공용 워크플로우 페이지는 로컬 인증과 게스트 계정 구성이 먼저 필요해.', en: 'This public workflow page requires local authentication and guest account setup first.' })}</AlertDescription>
+        <AlertTitle>{t({ ko: '게스트 로그인 전용 페이지야', en: 'Guest login only' })}</AlertTitle>
+        <AlertDescription>{t({ ko: '로컬 인증과 게스트 계정 설정이 필요해.', en: 'Requires local authentication and guest account setup.' })}</AlertDescription>
       </Alert>
     )
   }
@@ -262,16 +262,16 @@ function PublicComfyWorkflowPageContent() {
       <AlertDescription>
         {viewerQueueRoleLimit <= 0
           ? t(
-            { ko: '{role} 등급은 이 워크플로우에서 대기열을 만들 수 없어.', en: 'The {role} role cannot create queue jobs on this workflow.' },
+            { ko: '{role} 등급은 대기열을 만들 수 없어.', en: 'The {role} role cannot enqueue jobs here.' },
             { role: viewerRoleName },
           )
           : viewerQueueRoleLimitReached
             ? t(
-              { ko: '{role} 등급은 이 워크플로우에서 동시에 {limit}개까지만 대기열을 만들 수 있어. 진행 중인 {active}개가 끝난 뒤에 다시 등록할 수 있어.', en: 'The {role} role can keep at most {limit} active queue job(s) on this workflow. You can enqueue again after your {active} active job(s) finish.' },
+              { ko: '{role} 등급 동시 대기열 한도 도달 ({active}/{limit}). 진행 중인 작업 완료 후 등록 가능.', en: '{role} concurrent queue limit reached ({active}/{limit}). Wait for active jobs to finish.' },
               { role: viewerRoleName, limit: viewerQueueRoleLimit, active: viewerQueueRoleActive },
             )
             : t(
-              { ko: '{role} 등급은 이 워크플로우에서 동시에 {limit}개까지 대기열을 만들 수 있어. (현재 {active}개 진행 중)', en: 'The {role} role can keep up to {limit} active queue job(s) on this workflow. ({active} in progress now)' },
+              { ko: '{role} 등급 동시 대기열 한도: {active}/{limit}', en: '{role} concurrent queue limit: {active}/{limit}' },
               { role: viewerRoleName, limit: viewerQueueRoleLimit, active: viewerQueueRoleActive },
             )}
       </AlertDescription>

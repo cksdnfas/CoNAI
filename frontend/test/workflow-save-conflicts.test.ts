@@ -29,7 +29,7 @@ test('graph editor saves and test runs use the loaded revision, not a refreshed 
   let conflict = true
   let nextRevision = 3
   let pendingResponse: Promise<Response> | null = null
-  t.mock.method(globalThis, 'fetch', async (input, init) => {
+  t.mock.method(globalThis, 'fetch', async (input: string | URL | Request, init?: RequestInit) => {
     requests.push({ url: String(input), body: JSON.parse(String(init?.body)) })
     if (String(input).endsWith('/execute')) return Response.json({ success: true, data: { executionId: 42, status: 'queued' } })
     if (pendingResponse) return pendingResponse
@@ -146,7 +146,7 @@ test('ComfyUI human and assistant saves keep the opened token and draft after a 
   })
   const headers: string[] = []
   let stored = { name: 'newer server value', token: 'newer-token' }
-  t.mock.method(globalThis, 'fetch', async (input, init) => {
+  t.mock.method(globalThis, 'fetch', async (input: string | URL | Request, init?: RequestInit) => {
     if (!init?.method || init.method === 'GET') {
       assert.ok(String(input).endsWith('/api/workflows/7'))
       return Response.json({ success: true, data: { ...workflow, name: stored.name, assistant_revision: stored.token, color: '#ff0000' } })
@@ -168,7 +168,7 @@ test('ComfyUI human and assistant saves keep the opened token and draft after a 
   let initialData = { workflow }
   const snackbar = { showSnackbar: ({ message }: { message: string }) => messages.push(message), closeSnackbar: () => {} }
   function Editor() {
-    const value = useComfyWorkflowAuthoringController({ open: true, mode: 'edit', initialData: initialData as never, dropdownLists: [], onClose: () => { closes += 1 } })
+    const value = useComfyWorkflowAuthoringController({ open: true, mode: 'edit', initialData: initialData as never, onClose: () => { closes += 1 } })
     useLayoutEffect(() => { controller = value })
     return null
   }
@@ -240,7 +240,7 @@ test('schedule editor keeps its reviewed revisions and draft when the schedule c
   let workflowVersion = 3
   let workflowLoads = 0
   let rejectSave = true
-  t.mock.method(globalThis, 'fetch', async (input, init) => {
+  t.mock.method(globalThis, 'fetch', async (input: string | URL | Request, init?: RequestInit) => {
     if (String(input).endsWith('/api/graph-workflows/7')) {
       workflowLoads += 1
       return Response.json({ success: true, data: { id: 7, version: workflowVersion, graph: { nodes: [], edges: [], metadata: {} } } })

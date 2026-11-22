@@ -52,7 +52,7 @@ test('canvas images keep newest-first metadata and page ties without omissions',
   const seen: string[] = []
   let cursor: string | null = null
   do {
-    const response = await fetch(`${base}?limit=2${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`)
+    const response: Response = await fetch(`${base}?limit=2${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`)
     assert.equal(response.status, 200)
     const page = await response.json() as any
     assert.ok(page.data.length > 0 && page.data.length <= 2)

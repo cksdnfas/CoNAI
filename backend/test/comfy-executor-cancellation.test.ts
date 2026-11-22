@@ -101,12 +101,12 @@ test('ComfyUI collected outputs are cleaned or handed off across cancellation an
     const first = await makeOutput()
     const second = await makeOutput()
     const originalRm = fs.promises.rm
-    t.mock.method(fs.promises, 'rm', async (target, options) => {
+    t.mock.method(fs.promises, 'rm', async (target: fs.PathLike, options?: fs.RmOptions) => {
       if (String(target) === first.tempPath) throw new Error('cleanup denied')
       return originalRm(target, options)
     })
     const { APIImageProcessor } = await import('../src/services/APIImageProcessor')
-    t.mock.method(APIImageProcessor, 'processGeneratedFile', async (tempPath) => ({
+    t.mock.method(APIImageProcessor, 'processGeneratedFile', async (tempPath: Parameters<typeof APIImageProcessor.processGeneratedFile>[0]) => ({
       originalPath: String(tempPath), fileSize: 1, compositeHash: String(tempPath),
     }) as any)
     let saved = 0
@@ -128,7 +128,7 @@ test('ComfyUI collected outputs are cleaned or handed off across cancellation an
     const { executeComfyModule } = await import('../src/services/graph-workflow-executor/execute-comfy')
     const controller = new AbortController()
     t.mock.method(ComfyUIService.prototype, 'submitPrompt', async () => 'graph-prompt')
-    t.mock.method(ComfyUIService.prototype, 'collectGeneratedOutputs', async (_promptId, options) => {
+    t.mock.method(ComfyUIService.prototype, 'collectGeneratedOutputs', async (_promptId: string, options?: Parameters<typeof ComfyUIService.prototype.collectGeneratedOutputs>[1]) => {
       assert.equal(options?.signal, controller.signal)
       controller.abort()
       throw new Error(COMFYUI_EXECUTION_CANCELLED_MESSAGE)

@@ -75,7 +75,7 @@ export function ComfyModuleSaveModal({
           {selectedOverwriteModule ? (
             <div role="status" className="rounded-sm bg-warning-soft px-3 py-2 text-xs text-warning-soft-foreground md:col-span-2">
               {t(
-                { ko: '#{id} 모듈을 같은 ID로 덮어써. 기존 그래프 연결은 포트 key가 유지되는 항목만 그대로 살아남아.', en: 'This will overwrite module #{id} with the same ID. Existing graph links only survive for items that keep the same port key.' },
+                { ko: '#{id} 모듈을 덮어써. 포트 key가 같은 기존 연결만 유지돼.', en: 'Overwrites module #{id}. Only existing links with matching port keys stay.' },
                 { id: selectedOverwriteModule.id },
               )}
             </div>

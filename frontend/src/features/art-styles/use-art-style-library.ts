@@ -29,7 +29,7 @@ import {
 } from '@/lib/api-art-styles'
 import { copyTextToClipboard } from '@/lib/clipboard'
 import { getErrorMessage } from '@/lib/error-message'
-import { useArtStyleEditor } from './use-art-style-editor'
+import { useArtStyleEditor, type ArtStyleEditorTarget } from './use-art-style-editor'
 
 const SORTS: readonly ArtStyleSort[] = ['name', 'updated', 'created', 'created_asc']
 /** The URL's `b` (selected badges as a JSON array: a badge may hold a comma); anything malformed reads as none. */
@@ -67,9 +67,11 @@ export function useArtStyleLibrary() {
   const sort: ArtStyleSort = sortParam && SORTS.includes(sortParam) ? sortParam : 'name'
   const favoriteOnly = params.get('fav') === '1'
   const badges = parseBadges(params.get('b'))
-  const openStyleId = positiveLibraryId(params.get('style'))
+  const styleParam = params.get('style')
+  const openStyleId = positiveLibraryId(styleParam)
+  const editorTarget: ArtStyleEditorTarget = styleParam === 'new' && canEdit ? { new: true } : openStyleId !== null ? { styleId: openStyleId } : null
 
-  const editor = useArtStyleEditor({ styleId: openStyleId, onClose: () => update({ style: null }) })
+  const editor = useArtStyleEditor({ target: editorTarget, onCreated: (style) => update({ style: String(style.id) }, true), onClose: () => update({ style: null }) })
   const allowLeave = useCallback((current: Location, next: Location) => current.pathname === next.pathname && editor.deletedRef.current && !new URLSearchParams(next.search).has('style'), [editor.deletedRef])
   useEditorPageGuard(canEdit && editor.dirty, t({ ko: '스타일에 저장하지 않은 변경이 있어. 나가면 사라져.', en: 'This style has unsaved changes that will be lost.' }), leavesStyle, allowLeave)
 
@@ -83,6 +85,7 @@ export function useArtStyleLibrary() {
   const toggleBadge = (badge: string) => setListView({ badges: badges.includes(badge) ? badges.filter((item) => item !== badge) : [...badges, badge].slice(0, ART_STYLE_LIMITS.badges) })
   const search = (text: string, replace = false) => update({ q: text.trim() || null }, replace)
   const openStyle = (id: number) => { if (!editor.isBusy()) update({ style: String(id) }) }
+  const openNewStyle = () => { if (canEdit && !editor.isBusy()) update({ style: 'new' }) }
   const closeStyle = () => {
     if (editor.isBusy()) showSnackbar({ message: t({ ko: '이미지 작업이나 저장이 끝난 뒤 닫을 수 있어.', en: 'Close it after the image operation or save finishes.' }), tone: 'info' })
     else update({ style: null })
@@ -129,18 +132,14 @@ export function useArtStyleLibrary() {
 
   const onError = (error: unknown, fallback: string) => showSnackbar({ message: getErrorMessage(error, fallback), tone: 'error' })
 
-  /** The "새 스타일" title prompt: its text and a refused title's reason. */
-  const [creating, setCreating] = useState<{ title: string; error: string | null } | null>(null)
   const createMutation = useMutation({
     mutationFn: (input: ArtStyleCreateInput) => createArtStyle(input),
     onSuccess: (style) => {
-      setCreating(null)
       void invalidateArtStyles(queryClient, { styleIds: [style.id], listsChanged: true })
       openStyle(style.id)
     },
-    onError: (error, input) => {
-      if (isArtStyleNameConflict(error)) setCreating({ title: input.title, error: getErrorMessage(error, t({ ko: '같은 이름의 스타일이 있어.', en: 'A style with this title exists.' })) })
-      else onError(error, t({ ko: '스타일을 만들지 못했어.', en: 'Could not create the style.' }))
+    onError: (error) => {
+      onError(error, t({ ko: '스타일을 만들지 못했어.', en: 'Could not create the style.' }))
     },
   })
   const create = (title: string) => createMutation.mutateAsync({ title: title.trim() })
@@ -243,9 +242,9 @@ export function useArtStyleLibrary() {
     // Selection
     selected, selectMode, setSelectMode, toggleSelected, selectAllLoaded, clearSelection,
     // The open style
-    openStyleId, editor, openStyle, closeStyle,
+    openStyleId, editor, openStyle, openNewStyle, closeStyle,
     // Actions
-    creating, setCreating, create, createPending: createMutation.isPending,
+    create, createPending: createMutation.isPending,
     duplicate, bulk, bulkPending: bulkMutation.isPending, toggleFavorite, remove, removeSelected,
     copyPositive, exportStyles, importFile,
   }

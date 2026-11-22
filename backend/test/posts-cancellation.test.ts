@@ -30,10 +30,10 @@ test('post list HTTP disconnect aborts request-owned search', { timeout: 15000 }
   })
   let entered!: () => void
   let aborted!: () => void
-  t.mock.method(PostStore, 'list', async (_actor, _query, options) => {
+  t.mock.method(PostStore, 'list', async (_actor: unknown, _query: unknown, options?: Parameters<typeof PostStore.list>[2]) => {
     assert.ok(options?.signal)
     entered()
-    await new Promise<void>(resolve => options.signal!.addEventListener('abort', resolve, { once: true }))
+    await new Promise<unknown>(resolve => options.signal!.addEventListener('abort', resolve, { once: true }))
     aborted()
     options.signal.throwIfAborted()
     throw new Error('search continued after disconnect')

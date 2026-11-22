@@ -226,7 +226,7 @@ test('chat-only uploads stay account-private through send, shared APIs, tools an
   assert.throws(() => callChatAgent({ accountId: stranger, accountType: 'guest' }, delegated, { agentProfileId: agent.id, instruction: 'read', fileIds: [file.id] }))
   const originalFetch = globalThis.fetch
   let agentRequests = 0
-  const network = t.mock.method(globalThis, 'fetch', async (url, init) => {
+  const network = t.mock.method(globalThis, 'fetch', async (url: Parameters<typeof fetch>[0], init?: RequestInit) => {
     if (!String(url).startsWith('http://unused.invalid')) return originalFetch(url, init)
     const request = JSON.parse(String(init?.body))
     agentRequests++

@@ -69,7 +69,7 @@ function ResizeDialog({ engine, snapshot }: { engine: EditorEngine; snapshot: Ed
           <Field label={t({ ko: '높이 (px)', en: 'Height (px)' })}>
             <Input type="number" min={1} step={1} value={height} onChange={(event) => change(event.target.value, false)} />
           </Field>
-          {willShrink ? <Text variant="caption" tone="warning">{t({ ko: '적용하면 브라우저 한도에 맞춰 줄여. 한 변 최대 {side}px, 전체 최대 {pixels}픽셀이야.', en: 'Applying will shrink the result to the browser limit: {side}px per side and {pixels} total pixels.' }, { side: RESIZE_LIMITS.dimension, pixels: RESIZE_LIMITS.pixels })}</Text> : null}
+          {willShrink ? <Text variant="caption" tone="warning">{t({ ko: '브라우저 한도(한 변 {side}px · 최대 {pixels}px²)로 축소돼.', en: 'Will shrink to the browser limit ({side}px/side · {pixels}px² max).' }, { side: RESIZE_LIMITS.dimension, pixels: RESIZE_LIMITS.pixels })}</Text> : null}
           <IconButton active={locked} variant="ghost" label={t({ ko: '비율 잠금', en: 'Lock aspect ratio' })} onClick={() => {
             if (!locked && valid) setRatio(Number(width) / Number(height))
             setLocked(!locked)

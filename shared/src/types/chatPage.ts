@@ -58,10 +58,11 @@ export type ChatPageProposal = {
   saved?: boolean
 }
 
-/** One page operation the chat runs in the connected browser tab (see backend chatPageBridge). Review-required saves never travel this way. */
+/** One page operation the chat runs in the connected browser tab (see backend chatPageBridge). A save (`commit`) travels this way only while the person's auto-approve is on, and the tab checks its own toggle before running it. */
 export type ChatPageCommand =
   | { type: 'capture' }
-  | { type: 'action'; actionId: string; label: string; tier: 'view' | 'draft' | 'direct'; revision?: string; arguments: Record<string, ChatPageData> }
+  /** A `commit` carries what a review card would: `before` and `revisionScope` let an action-scoped save survive unrelated screen updates (progress, lists). */
+  | { type: 'action'; actionId: string; label: string; tier: 'view' | 'draft' | 'direct' | 'commit'; revision?: string; nativeRevision?: string; revisionScope?: 'action'; before?: ChatPageData; arguments: Record<string, ChatPageData> }
   | { type: 'fields'; changes: ChatPageChange[] }
   /** A node-graph transaction already checked against the editor's revision; the editor re-checks it before writing. */
   | { type: 'workflow'; revision: string; operations: ChatWorkflowOperation[]; modules: ChatWorkflowModule[]; label: string }

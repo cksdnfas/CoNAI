@@ -110,7 +110,8 @@ test('frame capture falls back after a bundled decoder failure without retrying 
         child.emit('close', 69)
       }
     })
-    return child as ReturnType<typeof spawn>
+    // A partial ChildProcess: only the events and streams captureVideoFrame uses.
+    return child as unknown as ReturnType<typeof spawn>
   })
 
   assert.equal(await captureVideoFrame(source, { frameIndex: 0 }, output), 0)

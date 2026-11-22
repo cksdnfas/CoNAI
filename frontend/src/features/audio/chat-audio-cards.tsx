@@ -1,6 +1,6 @@
 import { useQueries, useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import { AudioLines, CircleAlert, ExternalLink, LoaderCircle, Pause, Play } from 'lucide-react'
+import { AudioLines, CircleAlert, Download, ExternalLink, LoaderCircle, Music, Pause, Play } from 'lucide-react'
 import type { ChatToolCall } from '@conai/shared'
 import { IconButton } from '@/components/ui/icon-button'
 import { hasAuthPermission } from '@/features/auth/auth-permissions'
@@ -8,6 +8,7 @@ import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { useStreamFallbackInterval } from '@/features/runtime-events/use-runtime-event-stream'
 import { useI18n } from '@/i18n'
 import { AUDIO_QUERY_KEY, getAudioCandidate, getAudioGroup, listAudioCandidates, type AudioCandidate } from '@/lib/api-audio'
+import { FILES_QUERY_KEY, getStoredFile, storedFileDownloadUrl, storedFileViewUrl } from '@/lib/api-files'
 import { formatSeconds, ReviewPill } from './audio-candidate-list'
 import { audioPlayer, useAudioPlayer } from './audio-player'
 import { WaveformThumb } from './audio-waveform'
@@ -22,6 +23,9 @@ function isChatAudioCall(call: ChatToolCall) {
   return isAudioWorkspaceCall(call) || Boolean(call.audioCandidateIds?.length)
 }
 
+/** Larger files play but skip the waveform: drawing one decodes the whole file in the browser. */
+const FILE_WAVEFORM_MAX_BYTES = 20 * 1024 * 1024
+
 function argumentGroupId(call: ChatToolCall): string | null {
   const args = call.arguments as Record<string, unknown> | null
   const value = args && typeof args === 'object' ? args.audio_group_id ?? args.group_id : null
@@ -34,15 +38,72 @@ function argumentGroupId(call: ChatToolCall): string | null {
  */
 export function ChatAudioCards({ calls }: { calls: ChatToolCall[] }) {
   const auth = useAuthStatusQuery().data
-  const canView = !!auth?.authenticated && (auth.hasCredentials === false || hasAuthPermission(auth.permissionKeys, 'audio.view'))
+  const signedIn = !!auth?.authenticated
+  const canView = signedIn && (auth.hasCredentials === false || hasAuthPermission(auth.permissionKeys, 'audio.view'))
+  const canViewFiles = signedIn && (auth.hasCredentials === false || hasAuthPermission(auth.permissionKeys, 'files.view'))
+  // Audio files the reply's file-store lookups found: played straight from the file store.
+  const fileIds = canViewFiles ? [...new Set(calls.flatMap((call) => call.audioFileIds ?? []))] : []
+  const fileCard = fileIds.length > 0 ? <ChatAudioFileCard ids={fileIds} /> : null
   const audioCalls = calls.filter(isChatAudioCall)
   const ids = [...new Set(audioCalls.flatMap((call) => call.audioCandidateIds ?? []))]
   // Jobs still running when the reply was stored: matched to their takes by job id once they land.
   const pending = audioCalls.flatMap((call) => (call.pendingJobIds ?? []).map((jobId) => ({ jobId, groupId: argumentGroupId(call) })))
   // Failed audio jobs: the image grid skips audio calls, so the card reports them.
   const failed = [...new Map(calls.filter(isAudioWorkspaceCall).flatMap((call) => (call.failedJobs ?? []).map((job) => [job.jobId, { ...job, groupId: argumentGroupId(call) }] as const))).values()]
-  if (!canView || (ids.length === 0 && pending.length === 0 && failed.length === 0)) return null
-  return <ChatAudioCardList ids={ids} pending={pending} failed={failed} />
+  if (!canView || (ids.length === 0 && pending.length === 0 && failed.length === 0)) return fileCard
+  return <>{<ChatAudioCardList ids={ids} pending={pending} failed={failed} />}{fileCard}</>
+}
+
+/** Shared files a reply found, one row each: play in place with the same player and waveform as the takes. */
+function ChatAudioFileCard({ ids }: { ids: string[] }) {
+  const { t } = useI18n()
+  const player = useAudioPlayer()
+  // A file deleted or moved out of reach since the reply drops out of the card.
+  const queries = useQueries({ queries: ids.map((id) => ({ queryKey: [...FILES_QUERY_KEY, 'chat-audio', id], queryFn: () => getStoredFile(id), retry: false, staleTime: 30_000 })) })
+  const files = queries.flatMap((query) => (query.data && query.data.kind === 'file' ? [query.data] : []))
+  if (files.length === 0) return null
+  return (
+    <div className="mt-2 max-w-md rounded-md border border-line">
+      <div className="flex items-center gap-2 border-b border-line py-1.5 pr-3 pl-3 text-sm font-semibold">
+        <Music className="size-4 shrink-0 text-muted-foreground" />
+        <span className="min-w-0 flex-1 truncate">{t({ ko: '파일', en: 'Files' })}</span>
+        <span className="font-mono text-xs font-normal text-muted-foreground">{files.length}</span>
+      </div>
+      <div className="divide-y divide-line">
+        {files.map((file) => {
+          const key = `file:${file.id}`
+          const src = storedFileViewUrl(file.id)
+          const active = player.key === key
+          const playing = active && player.playing
+          return (
+            <div key={file.id} className="grid grid-cols-[2rem_minmax(0,1fr)_auto_auto] items-center gap-x-3 py-1.5 pr-1.5 pl-2">
+              <IconButton variant={playing ? 'secondary' : 'ghost'} size="icon-sm" label={playing ? t({ ko: '정지', en: 'Pause' }) : t({ ko: '재생', en: 'Play' })} onClick={() => audioPlayer.toggle(key, { src })}>
+                {playing ? <Pause className="fill-current" /> : <Play className="fill-current" />}
+              </IconButton>
+              <div className="min-w-0">
+                <WaveformThumb
+                  candidateId={key}
+                  fileHash={file.updatedAt}
+                  src={src}
+                  ghost={file.size > FILE_WAVEFORM_MAX_BYTES}
+                  progress={active && player.duration > 0 ? player.currentTime / player.duration : undefined}
+                  duration={active && player.duration > 0 ? player.duration : 0}
+                  onToggle={() => audioPlayer.toggle(key, { src })}
+                  onSeek={(seconds) => audioPlayer.seekOrPlay(key, seconds, { src })}
+                  className="h-5"
+                />
+                <p className="truncate text-2xs text-muted-foreground" title={file.name}>{file.name}</p>
+              </div>
+              <span className="font-mono text-2xs text-muted-foreground">{active && player.duration > 0 ? formatSeconds(player.duration) : ''}</span>
+              <IconButton asChild variant="ghost" size="icon-xs" label={t({ ko: '내려받기', en: 'Download' })}>
+                <a href={storedFileDownloadUrl(file.id)} download={file.name}><Download /></a>
+              </IconButton>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
 }
 
 type FailedAudioJob = NonNullable<ChatToolCall['failedJobs']>[number] & { groupId: string | null }

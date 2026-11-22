@@ -240,17 +240,17 @@ test('lorebook merge: chat book end of life (delete, keep, merge), duplicates, d
     assert.equal(deleted.status, 200, JSON.stringify(deleted.json))
     assert.equal(deleted.json.data.lorebook.action, 'delete')
     assert.equal(threadExists(threadId), false)
-    assert.equal(db.prepare('SELECT COUNT(*) AS count FROM chat_lorebooks WHERE id = ?').get(chatBook.id).count, 0)
+    assert.equal((db.prepare('SELECT COUNT(*) AS count FROM chat_lorebooks WHERE id = ?').get(chatBook.id) as { count: number }).count, 0)
     assert.throws(() => FileStoreService.get(me, chatBook.folderId!), { status: 404 }, 'the folder is hidden immediately')
     await assert.rejects(FileStoreService.readText(me, file.id), { status: 404 }, 'its attached file is hidden too')
     // Drive the existing background cleanup without depending on when setImmediate runs.
     while (FileStoreService.purgeDeleted() > 0) { /* drain the deleted tree */ }
-    assert.equal(db.prepare('SELECT COUNT(*) AS count FROM stored_file_entries WHERE id = ?').get(chatBook.folderId).count, 0, 'cleanup removes the folder row')
+    assert.equal((db.prepare('SELECT COUNT(*) AS count FROM stored_file_entries WHERE id = ?').get(chatBook.folderId) as { count: number }).count, 0, 'cleanup removes the folder row')
     assert.equal(fs.existsSync(storedFilePath(me, file.id)), false, 'cleanup removes the file blob')
     // The store hook covers every path, not only the route.
     const other = chatWithBook('다른 채팅', [{ id: 'x', content: '메모.' }])
     CodexChatStore.deleteThread(other.threadId)
-    assert.equal(db.prepare('SELECT COUNT(*) AS count FROM chat_lorebooks WHERE thread_id = ?').get(other.threadId).count, 0)
+    assert.equal((db.prepare('SELECT COUNT(*) AS count FROM chat_lorebooks WHERE thread_id = ?').get(other.threadId) as { count: number }).count, 0)
   })
 
   await t.test('deleting a chat with merge: 409 with the preview until every duplicate has a decision', async () => {
@@ -270,7 +270,7 @@ test('lorebook merge: chat book end of life (delete, keep, merge), duplicates, d
     assert.equal(merged.status, 200, JSON.stringify(merged.json))
     assert.deepEqual(merged.json.data.lorebook, { action: 'merge', bookId: target.id, merge: { added: 1, updated: 1, skipped: 0, files: 0 } })
     assert.equal(threadExists(threadId), false)
-    assert.equal(db.prepare('SELECT COUNT(*) AS count FROM chat_lorebooks WHERE id = ?').get(chatBook.id).count, 0)
+    assert.equal((db.prepare('SELECT COUNT(*) AS count FROM chat_lorebooks WHERE id = ?').get(chatBook.id) as { count: number }).count, 0)
     assert.deepEqual(book(target.id).entries.map((entry) => [entry.title, entry.content, entry.keys.join(',')]), [['항구', '안개 낀 항구. 배가 많다.', '항구,배'], ['노을', '노을이 진다.', '노을']])
   })
 

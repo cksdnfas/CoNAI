@@ -12,6 +12,20 @@ import { parseChatPageContext } from './chatPageContext'
 import { userReplyRouting } from './chatReplies'
 import { resolveChatToolDirective } from './chatComposerTools'
 
+/**
+ * The sending tab's auto-approve id: a person's own send in a direct chat, or a step of a task they approved with it on
+ * (set by the task runner, never by the browser), carries it; a routine never does. A malformed one is ignored rather
+ * than refused, so the message still goes out with review cards.
+ */
+export function readAutoApprove(thread: Pick<CodexChatThreadRecord, 'kind'>, options: ChatSendOptions) {
+  const value = options.autoApprove
+  return thread.kind === 'direct' && !options.routine && isAutoApproveTab(value) ? value : undefined
+}
+
+export function isAutoApproveTab(value: unknown): value is string {
+  return typeof value === 'string' && /^[\w-]{8,80}$/.test(value)
+}
+
 /** Read-only preparation shared by the engines. No task/page state changes before delivery. */
 export async function prepareChatSend(
   requester: McpRequester, thread: CodexChatThreadRecord, profile: ChatProfile, text: string,
@@ -31,5 +45,5 @@ export async function prepareChatSend(
   if (!trimmed && attachments.length === 0 && mediaAttachments.length === 0) throw new ErrorType('메시지를 입력해줘.')
   const routing = { ...userReplyRouting(thread, replyToMessageId), ...(options.task ? { task: options.task } : {}), ...(options.routine ? { routine: options.routine } : {}) }
   const toolDirective = await resolveChatToolDirective(requester, thread, profile, options.toolDirective, page)
-  return { page, attachments, mediaAttachments, flags, trimmed, routing, toolDirective }
+  return { page, attachments, mediaAttachments, flags, trimmed, routing, toolDirective, autoApprove: readAutoApprove(thread, options) }
 }

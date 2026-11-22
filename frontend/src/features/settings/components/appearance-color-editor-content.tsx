@@ -85,7 +85,7 @@ export function AppearanceThemeRows({
       </SettingRow>
 
       <SettingsAdvanced count={2}>
-        {appearanceDraft.accentPreset !== 'custom' ? <p className="text-xs text-muted-foreground">{t({ ko: '강조색을 사용자 지정으로 고르면 바꿀 수 있어.', en: 'Choose a custom accent to edit these colors.' })}</p> : null}
+        {appearanceDraft.accentPreset !== 'custom' ? <p className="text-xs text-muted-foreground">{t({ ko: '사용자 지정 강조색에서 편집 가능', en: 'Editable with custom accent' })}</p> : null}
         <fieldset disabled={appearanceDraft.accentPreset !== 'custom'}>
           <AppearanceColorRow
             fieldId="appearance.customPrimaryColor"
@@ -132,7 +132,7 @@ export function AppearanceThemeRows({
       </SettingRow>
 
       <SettingsAdvanced count={5}>
-        {appearanceDraft.surfacePreset !== 'custom' ? <p className="text-xs text-muted-foreground">{t({ ko: '배경을 사용자 지정으로 고르면 바꿀 수 있어.', en: 'Choose a custom surface to edit these colors.' })}</p> : null}
+        {appearanceDraft.surfacePreset !== 'custom' ? <p className="text-xs text-muted-foreground">{t({ ko: '사용자 지정 표면에서 편집 가능', en: 'Editable with custom surface' })}</p> : null}
         <fieldset disabled={appearanceDraft.surfacePreset !== 'custom'}>
           <AppearanceColorRow
             fieldId="appearance.customSurfaceBackgroundColor"

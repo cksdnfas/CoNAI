@@ -74,7 +74,7 @@ export function SkillOverviewPane({ draft, onChange, readOnly, categories, token
           <Textarea variant="settings" rows={14} value={draft.instructions} maxLength={CHAT_SKILL_LIMITS.instructions} readOnly={readOnly} onChange={(event) => onChange({ instructions: event.target.value })} />
         </Field>
         <Text variant="caption">
-          {t({ ko: '섹션 {count}/{max} · 전체 {tokens} 토큰 (모델은 개요와 고른 섹션만 읽어)', en: '{count}/{max} sections · {tokens} tokens in all (the model reads the overview and the sections it picks)' }, { count: draft.sections.length, max: CHAT_SKILL_LIMITS.sections, tokens: tokenLabel(tokens.total) })}
+          {t({ ko: '섹션 {count}/{max} · 전체 {tokens} 토큰', en: '{count}/{max} sections · {tokens} tokens total' }, { count: draft.sections.length, max: CHAT_SKILL_LIMITS.sections, tokens: tokenLabel(tokens.total) })}
         </Text>
         {skill ? <UsageLine usage={skill} /> : null}
         {skill && skill.profiles.length > 0 ? (
@@ -103,7 +103,7 @@ export function SkillSectionPane({ section, problem, onChange, onMove, onRemove,
   const { t } = useI18n()
   const tokenLabel = useTokenLabel()
   const pathMessage = problem === 'path'
-    ? t({ ko: '"이름" 또는 "그룹/이름"으로 적어 ({max}자까지). 글자·숫자로 시작하고 글자·숫자·.·_·-만 써.', en: 'Write "name" or "group/name" (up to {max} characters): start with a letter or digit, then letters, digits, ".", "_" or "-".' }, { max: CHAT_SKILL_LIMITS.sectionPath })
+    ? t({ ko: '경로 형식 오류 (이름 또는 그룹/이름, 최대 {max}자, 영숫자·.·_·-)', en: 'Invalid path ("name" or "group/name", max {max} chars, alphanumerics and . _ -).' }, { max: CHAT_SKILL_LIMITS.sectionPath })
     : problem === 'duplicate' ? t({ ko: '같은 경로의 섹션이 이미 있어.', en: 'Another section has this path.' }) : null
   return (
     <div>
@@ -127,8 +127,8 @@ export function SkillSectionPane({ section, problem, onChange, onMove, onRemove,
           </Field>
         </div>
         {pathMessage ? <Text variant="caption" tone="destructive">{pathMessage}</Text> : null}
-        {problem === 'length' ? <Text variant="caption" tone="destructive">{t({ ko: '너무 길어: 제목 {title}·목차 요약 {summary}·내용 {content}자까지야.', en: 'Too long: title {title}, table line {summary}, content {content} characters at most.' }, { title: CHAT_SKILL_LIMITS.sectionTitle, summary: CHAT_SKILL_LIMITS.sectionSummary, content: CHAT_SKILL_LIMITS.sectionContent })}</Text> : null}
-        {renamedGuides.length > 0 ? <Text variant="caption" tone="warning">{t({ ko: '생성 프리셋 {names}이(가) 저장된 경로 "{path}"를 가이드로 써. 경로를 바꿔 저장하면 그 가이드를 다시 골라줘.', en: 'Generation presets {names} use the saved path "{path}" as their guide. After saving the new path, pick their guide again.' }, { names: renamedGuides.join(', '), path: section.savedPath ?? '' })}</Text> : null}
+        {problem === 'length' ? <Text variant="caption" tone="destructive">{t({ ko: '글자 수 초과 (제목 {title} · 요약 {summary} · 내용 {content}자)', en: 'Too long (title {title} · summary {summary} · content {content} chars max).' }, { title: CHAT_SKILL_LIMITS.sectionTitle, summary: CHAT_SKILL_LIMITS.sectionSummary, content: CHAT_SKILL_LIMITS.sectionContent })}</Text> : null}
+        {renamedGuides.length > 0 ? <Text variant="caption" tone="warning">{t({ ko: '생성 프리셋({names})이 "{path}"를 가이드로 사용 중 · 저장 후 다시 선택 필요', en: 'Generation presets ({names}) reference "{path}" · re-select their guide after saving.' }, { names: renamedGuides.join(', '), path: section.savedPath ?? '' })}</Text> : null}
         <Field label={t({ ko: '목차 요약 — 언제 읽는지', en: 'Table line — when to read it' })} info={t({ ko: '모델이 개요를 읽을 때 목차에 보이는 한 줄이야. 이걸 보고 이 섹션을 읽을지 정해.', en: 'The line the model sees in the table of sections; it decides from this whether to read the section.' })}>
           <Input variant="settings" value={section.summary} maxLength={CHAT_SKILL_LIMITS.sectionSummary} readOnly={readOnly} placeholder={t({ ko: '예: NAI v4로 그릴 때', en: 'e.g. When drawing with NAI v4' })} onChange={(event) => onChange({ summary: event.target.value })} />
         </Field>

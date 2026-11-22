@@ -1,7 +1,5 @@
 import { useRef, type ReactNode } from 'react'
-import { ART_STYLE_LIMITS } from '@conai/shared'
 import { CheckCheck, CheckSquare, Copy, CopyPlus, Download, Palette, Plus, SquarePen, Star, StarOff, Trash2, Upload } from 'lucide-react'
-import { NameDialog } from '@/components/common/entry-dialogs'
 import { PageToolbar } from '@/components/common/page-toolbar'
 import { PageWithSidebar } from '@/components/common/page-with-sidebar'
 import { ToolbarSearchField } from '@/components/common/search-field'
@@ -76,7 +74,7 @@ export function ArtStylePage({ viewSwitch }: { viewSwitch: ReactNode }) {
               canEdit ? { key: 'import', label: t({ ko: '스타일 묶음 ZIP 가져오기', en: 'Import a style bundle' }), icon: Upload, onSelect: () => importInput.current?.click() } : null,
             ]}
           />
-          {canEdit ? <Button size="sm" onClick={() => library.setCreating({ title: '', error: null })}><Plus />{t({ ko: '새 스타일', en: 'New style' })}</Button> : null}
+          {canEdit ? <Button size="sm" onClick={library.openNewStyle}><Plus />{t({ ko: '새 스타일', en: 'New style' })}</Button> : null}
           <input ref={importInput} type="file" accept=".zip,application/zip" hidden onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ''; if (file) void library.importFile(file) }} />
         </>
       )}
@@ -141,22 +139,6 @@ export function ArtStylePage({ viewSwitch }: { viewSwitch: ReactNode }) {
             <SelectionBarAction icon={Download} label={t({ ko: '내보내기', en: 'Export' })} onClick={() => void library.exportStyles({ ids: [...selected.keys()] }, t({ ko: '선택한 스타일', en: 'selected styles' }))} />
             <SelectionBarAction icon={Trash2} label={t({ ko: '삭제', en: 'Delete' })} disabled={library.bulkPending} onClick={() => void library.removeSelected()} />
           </>}
-        />
-      ) : null}
-
-      {library.creating ? (
-        <NameDialog
-          open
-          title={t({ ko: '새 스타일', en: 'New style' })}
-          label={t({ ko: '스타일 제목', en: 'Style title' })}
-          submitLabel={t({ ko: '만들고 편집하기', en: 'Create and edit' })}
-          maxLength={ART_STYLE_LIMITS.title}
-          value={library.creating.title}
-          error={library.creating.error}
-          busy={library.createPending}
-          onChange={(title) => library.setCreating({ title, error: null })}
-          onSubmit={() => void library.create(library.creating!.title).catch(() => undefined)}
-          onClose={() => library.setCreating(null)}
         />
       ) : null}
     </PageWithSidebar>

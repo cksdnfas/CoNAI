@@ -65,13 +65,14 @@ test('accountless MCP image jobs retain only their authenticated key authority',
   requireMcpToolAccess(deniedContext, 'submit_generation_job', input)
   await assert.rejects(enqueueMcpGenerationJob(deniedContext, input), /images\.view/)
   const queued = await enqueueMcpGenerationJob(allowedContext, input)
+  assert.ok(queued?.id)
   const job = GenerationQueueModel.findById(queued.id)!
   const payload = JSON.parse(job.request_payload)
   assert.equal(job.requested_by_account_id, null)
   assert.ok(payload.__conaiMcpImageGrant)
 
   let uploads = 0
-  t.mock.method(ComfyUIService.prototype, 'uploadInputImage', async (_name, stream) => {
+  t.mock.method(ComfyUIService.prototype, 'uploadInputImage', async (_name: string, stream: Buffer | fs.ReadStream) => {
     const chunks: Buffer[] = []
     for await (const chunk of stream as AsyncIterable<Buffer>) chunks.push(Buffer.from(chunk))
     assert.deepEqual(Buffer.concat(chunks), bytes)
@@ -91,6 +92,7 @@ test('accountless MCP image jobs retain only their authenticated key authority',
   await assert.rejects(executeGenerationQueueJob(retry, null, {} as any), /upload reached/)
   assert.equal(uploads, 2)
   const stdio = await enqueueMcpGenerationJob({ scopes: ['generate'] }, input)
+  assert.ok(stdio?.id)
   const stdioJob = GenerationQueueModel.findById(stdio.id)!
   assert.equal(JSON.parse(stdioJob.request_payload).__conaiMcpImageGrant.kind, 'stdio')
   await assert.rejects(executeGenerationQueueJob(stdioJob, null, {} as any), /upload reached/)
@@ -106,6 +108,7 @@ test('accountless MCP image jobs retain only their authenticated key authority',
   stored.keys.find((key: { id: string }) => key.id === allowedKey.id).groupKey = alsoAllowed.group_key
   await fs.promises.writeFile(keyFile, JSON.stringify(stored))
   const movedJob = await enqueueMcpGenerationJob(allowedContext, input)
+  assert.ok(movedJob?.id)
   const movedPayload = JSON.parse(GenerationQueueModel.findById(movedJob.id)!.request_payload)
   assert.equal(movedPayload.__conaiMcpImageGrant.groupKey, alsoAllowed.group_key)
   await assert.rejects(executeGenerationQueueJob(GenerationQueueModel.findById(movedJob.id)!, null, {} as any), /upload reached/)

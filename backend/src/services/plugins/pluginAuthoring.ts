@@ -31,7 +31,7 @@ export const pluginDraftChangeSchema = z.object({
   ])).min(1).max(32),
 }).strict()
 export const pluginDraftRevisionSchema = z.object({ draftId, revision }).strict()
-export const pluginDraftInstallSchema = pluginDraftRevisionSchema.extend({ digest: z.string().regex(/^[a-f0-9]{64}$/), enabled: z.boolean() }).strict()
+export const pluginDraftInstallSchema = pluginDraftRevisionSchema.extend({ digest: z.string().regex(/^[a-f0-9]{64}$/), installedDigest: z.string().regex(/^[a-f0-9]{64}$/).nullable(), enabled: z.boolean() }).strict()
 export const pluginDraftUploadSchema = pluginDraftRevisionSchema.extend({ requestId, target, replace: z.boolean().default(false) }).strict()
 type DraftRow = { id: string; plugin_id: string; name: string; revision: number; base_digest: string | null; created_input: string; last_request: string | null; last_input: string | null; updated_at: string }
 
@@ -150,7 +150,7 @@ export function createPluginDraft(requester: McpRequester, value: z.input<typeof
       assets.set('plugin.json', Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`))
       assets.set('index.html', Buffer.from('<!doctype html>\n<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="conai-plugin.css"><link rel="stylesheet" href="style.css"></head><body><main class="conai-page"><h1 id="title"></h1><p>플러그인을 만들 준비가 됐어.</p></main><script type="module" src="app.js"></script></body></html>\n'))
       assets.set('style.css', Buffer.from('/* Layout only. Page spacing and widgets come from conai-plugin.css (class reference: plugins/README.md). */\n'))
-      assets.set('app.js', Buffer.from(`import { connectPlugin } from './conai-plugin.js'\nconst api = await connectPlugin({})\ndocument.querySelector('#title').textContent = ${JSON.stringify(name)}\napi.publish({ dirty: false, data: { ready: true } })\n`))
+      assets.set('app.js', Buffer.from(`import { connectPlugin } from './conai-plugin.js'\nconst api = await connectPlugin({})\ndocument.querySelector('#title').textContent = ${JSON.stringify(name)}\napi.publish({ revision: '1', dirty: false, data: { ready: true } })\n`))
     }
     db().prepare('INSERT INTO plugin_drafts(id,plugin_id,name,base_digest,created_input) VALUES(?,?,?,?,?)').run(id, input.pluginId, name, baseDigest, fingerprint)
     saveFiles(id, assets)
@@ -247,11 +247,14 @@ export function buildPluginDraft(requester: McpRequester, id: string, expectedRe
 export function reviewPluginDraft(requester: McpRequester, id: string, expectedRevision: number): PluginPackageReview {
   const built = buildPluginDraft(requester, id, expectedRevision)
   const installed = db().prepare('SELECT digest,enabled FROM plugins WHERE id=?').get(built.manifest.id) as { digest: string; enabled: number } | undefined
-  if ((installed?.digest ?? null) !== built.current.base_digest && installed?.digest !== built.digest) throw new PluginError('설치된 버전이 변경됐어. 최신 플러그인에서 새 초안을 만들어 변경 내용을 옮겨줘.', 409)
+  // An installation that moved away from the draft's base (another draft, a ZIP, a removal) is shown, not refused:
+  // the changes below compare against what is installed now, and installing replaces exactly that.
+  const installedDigest = installed?.digest ?? null
+  const conflict = installedDigest === built.current.base_digest || installedDigest === built.digest ? 'none' : installedDigest === null ? 'removed' : 'changed'
   const previous = installed ? readInstalledPluginAssets(built.manifest.id).assets : new Map<string, Buffer>()
   return {
     draftId: id, revision: expectedRevision, pluginId: built.manifest.id, name: built.manifest.name, version: built.manifest.version,
-    digest: built.digest, baseDigest: built.current.base_digest, updated: !!installed, enabled: !!installed?.enabled, server: !!built.manifest.server, size: built.bytes.length,
+    digest: built.digest, baseDigest: built.current.base_digest, installedDigest, conflict, updated: !!installed, enabled: !!installed?.enabled, server: !!built.manifest.server, size: built.bytes.length,
     files: packageFileChanges(built.assets, previous),
   }
 }
@@ -263,8 +266,9 @@ export async function installPluginDraft(requester: McpRequester, value: z.input
   const current = db().prepare('SELECT digest,enabled FROM plugins WHERE id=?').get(built.manifest.id) as { digest: string; enabled: number } | undefined
   // Retry a completed installation, including when the client lost its response.
   if (current?.digest !== built.digest) {
-    if ((current?.digest ?? null) === built.current.base_digest && !!current?.enabled !== input.enabled) throw new PluginError('검토 뒤 플러그인의 활성 상태가 바뀌었어. 다시 검토해줘.', 409)
-    await installPlugin(built.bytes, built.current.base_digest)
+    if ((current?.digest ?? null) !== input.installedDigest) throw new PluginError('검토한 뒤 설치본이 바뀌었어. 다시 검토해줘.', 409)
+    if (!!current?.enabled !== input.enabled) throw new PluginError('검토 뒤 플러그인의 활성 상태가 바뀌었어. 다시 검토해줘.', 409)
+    await installPlugin(built.bytes, input.installedDigest)
   }
   requirePluginAuthor(requester)
   // An edit made while the server module restarted remains an edit; only advance the base installation.

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { once } from 'node:events'
 import { MessageChannel } from 'node:worker_threads'
+import { ReadableStream } from 'node:stream/web'
 import { connectPlugin } from '../../plugins/sdk/conai-plugin.js'
 
 test('plugin SDK preserves cancellation, structured errors, binary uploads and response backpressure', { timeout: 15000 }, async t => {

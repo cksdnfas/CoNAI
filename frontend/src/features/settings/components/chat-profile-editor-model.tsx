@@ -313,7 +313,7 @@ export function ChatProfileModelPanel({ draft, patch, defaults, slots, slotsRead
               </Select>
               {anthropicNoCache ? (
                 <Text variant="caption" tone="warning" role="note">
-                  {t({ ko: '이 연결(api.anthropic.com)은 CoNAI 직접 방식에서 프롬프트 캐시가 적용되지 않아. pi 에이전트로 바꾸면 API 키 사용 시 캐시돼.', en: 'With this connection (api.anthropic.com), prompt caching does not apply in CoNAI direct mode. Switch to the pi agent to get caching with an API key.' })}
+                  {t({ ko: 'CoNAI 직접 방식에서는 api.anthropic.com 프롬프트 캐시 미지원 (pi 에이전트 사용)', en: 'Prompt caching for api.anthropic.com is unavailable in CoNAI direct mode (use pi agent).' })}
                 </Text>
               ) : null}
             </Field>

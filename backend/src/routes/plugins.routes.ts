@@ -4,7 +4,7 @@ import multer from 'multer'
 import { z } from 'zod'
 import { requireAdmin, requirePermission } from '../middleware/authMiddleware'
 import { getRequesterAccountId, getRequesterAccountType, isAdminRequest } from './requester-session-helpers'
-import { getPlugin, installPlugin, listPlugins, setPluginEnabled, removePlugin, PLUGIN_ZIP_LIMIT } from '../services/plugins/pluginRegistry'
+import { getPlugin, installPlugin, listPlugins, listPublicPluginPages, setPluginEnabled, setPluginPagePublic, removePlugin, PLUGIN_ZIP_LIMIT } from '../services/plugins/pluginRegistry'
 import { openPluginInstance, requirePluginInstance, renewPluginInstance, closePluginInstance, readPluginFile, proposePluginWrite, approvePluginWrite, applyPluginWrite, dismissPluginWrite, issuePluginMedia } from '../services/plugins/pluginHost'
 import { asyncHandler, cancellableAsyncHandler } from '../middleware/asyncHandler'
 import { checkPluginSources, installPluginSource, listPluginSources, reviewPluginSource, unlinkPluginSource } from '../services/plugins/pluginSources'
@@ -95,6 +95,13 @@ router.get('/', (req, res) => {
   const sources = admin ? listPluginSources() : null
   res.json({ success: true, data: listPlugins(admin).map(plugin => withBundled(withServer(sources ? withSource(plugin, sources) : plugin))) })
 })
+/** Pages shared with every signed-in account (`/public/ext/<plugin>/<page>`), for the access page. */
+router.get('/public-pages', (_req, res) => { res.json({ success: true, data: listPublicPluginPages() }) })
+/** Administrator: share one page with every signed-in account; the plugin's code still runs with each viewer's own permissions. */
+router.put('/:pluginId/pages/:pageId/public', requireAdmin, (req, res) => {
+  setPluginPagePublic(param(req, 'pluginId'), param(req, 'pageId'), z.object({ public: z.boolean() }).strict().parse(req.body).public)
+  res.json({ success: true })
+})
 /** Official packages: what the startup sync could not apply, and a retry of that sync (it only touches packages whose build differs). */
 router.get('/bundled', requireAdmin, (_req, res) => { res.json({ success: true, data: { failures: bundledPluginFailures() } }) })
 // On demand the same sync also answers which packages it installed or replaced.
@@ -147,7 +154,8 @@ router.post('/:pluginId/generation-actions/:actionId', cancellableAsyncHandler(a
   if (!action || !(action.surfaces as string[]).includes(input.surface)) { res.status(404).json({ error: '이 화면에 없는 플러그인 버튼이야.' }); return }
   res.json({ success: true, data: await runGenerationActionHook(plugin.id, { action: action.id, surface: input.surface, fields: input.fields }, caller(req).requester, signal) })
 }))
-router.post('/:pluginId/pages/:pageId/instances', requirePermission('plugins.view'), (req, res) => {
+// plugins.view, or a page an administrator shared: openPluginInstance checks it and every later call rechecks it.
+router.post('/:pluginId/pages/:pageId/instances', (req, res) => {
   const input = z.object({ files: z.array(z.string()).max(20) }).strict().parse(req.body)
   res.status(201).json({ success: true, data: openPluginInstance(param(req, 'pluginId'), param(req, 'pageId'), input.files, caller(req)) })
 })

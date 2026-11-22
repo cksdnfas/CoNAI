@@ -63,7 +63,7 @@ test('permissions: independent pages, features, migration, grants, scopes and ro
     assert.deepEqual(keys('anonymous'), ['auth.guest.create', 'images.view'], 'visitors keep only what a signed-out visitor can use')
     assert.ok(keys('guest').includes('prompts.view'), 'member-only anonymous grants move to the group every account inherits')
     assert.deepEqual(keys('admin'), [...PERMISSION_KEYS].sort())
-    assert.equal(db.prepare(`SELECT COUNT(*) AS n FROM auth_permissions WHERE permission_key NOT IN (${PERMISSION_KEYS.map(() => '?').join(', ')})`).get(...PERMISSION_KEYS).n, 0)
+    assert.equal((db.prepare(`SELECT COUNT(*) AS n FROM auth_permissions WHERE permission_key NOT IN (${PERMISSION_KEYS.map(() => '?').join(', ')})`).get(...PERMISSION_KEYS) as { n: number }).n, 0)
     db.prepare("DELETE FROM auth_group_permissions WHERE group_id = (SELECT id FROM auth_permission_groups WHERE group_key = 'editor') AND permission_id = (SELECT id FROM auth_permissions WHERE permission_key = 'images.edit')").run()
     seedAccessControlDefaults(db)
     assert.ok(!keys('editor').includes('images.edit'), 'restart never restores a later revocation')
@@ -1141,7 +1141,7 @@ test('permissions: independent pages, features, migration, grants, scopes and ro
     assert.equal(resolveFeaturePermissions(['prompts.view', 'workflows.view'], true).canUpdateWorkflows, false)
     const keys = ['page.home.view', 'images.view', 'images.edit', 'images.edit']
     assert.deepEqual(setPermissionGrant(keys, 'page.home.view', false), keys.slice(1))
-    const available = AuthPermissionGroup.listBuiltInEditablePermissions().map((row) => ({ permissionKey: row.permission_key, label: row.description ?? row.permission_key }))
+    const available = AuthPermissionGroup.listBuiltInEditablePermissions().map((row) => ({ permissionKey: row.permission_key, label: row.description ?? row.permission_key, description: row.description }))
     const memberRows = buildPermissionSections(available, 'guest').flatMap((section) => section.rows.map((row) => row.key))
     assert.ok(memberRows.every((key) => !key.startsWith('page.')), 'pages are never granted')
     assert.ok(!memberRows.includes('auth.guest.create'), 'guest signup is only for visitors')

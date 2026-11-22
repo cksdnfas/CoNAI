@@ -43,7 +43,7 @@ export function ArtStyleDialog({ library }: { library: ArtStyleLibrary }) {
   return (
     <LibraryItemDialog
       title={editor.ready
-        ? <EditorTitleInput as="span" value={draft.title} label={t({ ko: '스타일 제목', en: 'Style title' })} placeholder={t({ ko: '제목', en: 'Title' })} maxLength={ART_STYLE_LIMITS.title} readOnly={!canEdit} invalid={Boolean(editor.titleError) || (editor.ready && !draft.title.trim())} onChange={(title) => editor.patch({ title })} />
+        ? <EditorTitleInput as="span" autoFocus={editor.isNew} value={draft.title} label={t({ ko: '스타일 제목', en: 'Style title' })} placeholder={t({ ko: '스타일 제목', en: 'Style title' })} maxLength={ART_STYLE_LIMITS.title} readOnly={!canEdit} invalid={Boolean(editor.titleError) || (!editor.isNew && editor.ready && !draft.title.trim())} onChange={(title) => editor.patch({ title })} />
         : t({ ko: '그림 스타일', en: 'Art style' })}
       description={editor.titleError ? <span role="alert" className="text-destructive">{editor.titleError}</span> : undefined}
       actions={editor.ready && base ? <>
@@ -99,10 +99,11 @@ function ArtStyleBody({ library }: { library: ArtStyleLibrary }) {
   const held = new Map((base?.images ?? []).map((image) => [image.id, image]))
   const imageSource = (key: string): GalleryImage | null => {
     const image = byKey.get(key)
-    if (!image || !base) return null
+    if (!image) return null
     if (isStagedArtStyleImage(image)) { const url = buildWorkflowInputAssetUrl(image); return { thumbnailUrl: url, fullUrl: url, name: readableUploadName(image.fileName), mimeType: image.mimeType } }
     if ('composite_hash' in image) return { libraryHash: image.composite_hash }
     if ('file_id' in image) return { thumbnailUrl: storedFileThumbnailUrl(image.file_id), fullUrl: storedFileViewUrl(image.file_id), name: '' }
+    if (!base) return null
     const stored = held.get(image.id)
     return { thumbnailUrl: artStyleThumbnailUrl(base.id, image.id), fullUrl: artStyleImageUrl(base.id, image.id), name: stored?.name ?? '', mimeType: stored?.mimeType, width: stored?.width, height: stored?.height }
   }
@@ -132,7 +133,7 @@ function ArtStyleBody({ library }: { library: ArtStyleLibrary }) {
 
   if (editor.loading) return <ModalBody><LoadingState variant="inline" /></ModalBody>
   if (editor.error) return <ModalBody><ErrorState title={t({ ko: '스타일을 불러오지 못했어', en: 'Could not load the style' })} error={editor.error} onRetry={editor.retry} /></ModalBody>
-  if (!editor.ready || !base) return <ModalBody />
+  if (!editor.ready) return <ModalBody />
   return (
     <ModalBody>
       {editor.conflict ? (

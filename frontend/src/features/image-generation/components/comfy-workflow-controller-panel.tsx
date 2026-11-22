@@ -307,7 +307,7 @@ export function ComfyWorkflowControllerPanel({
     const issues: string[] = []
 
     if (workflowFields.length === 0) {
-      issues.push(t({ ko: '노출된 입력 필드가 없어 큐 등록을 막았어.', en: 'Queueing is blocked because this workflow has no exposed input fields.' }))
+      issues.push(t({ ko: '노출된 입력 필드가 없어.', en: 'This workflow has no exposed input fields.' }))
     }
 
     if (missingRequiredFields.length > 0) {
@@ -315,30 +315,30 @@ export function ComfyWorkflowControllerPanel({
       const suffix = missingRequiredFields.length > 3
         ? t({ ko: ' 외 {count}개', en: ' and {count} more' }, { count: missingRequiredFields.length - 3 })
         : ''
-      issues.push(t({ ko: '필수 입력을 채워줘: {labels}{suffix}', en: 'Fill required inputs: {labels}{suffix}' }, { labels, suffix }))
+      issues.push(t({ ko: '필수 입력 누락: {labels}{suffix}', en: 'Missing required inputs: {labels}{suffix}' }, { labels, suffix }))
     }
 
     if (!serverRouting) {
       // The server routes the job; nothing to check here.
     } else if (servers.length === 0) {
-      issues.push(t({ ko: '활성 ComfyUI 서버가 없어. 서버를 등록하거나 비활성 서버를 켜줘.', en: 'There are no active ComfyUI servers. Register a server or enable a disabled one.' }))
+      issues.push(t({ ko: '활성 ComfyUI 서버가 없어.', en: 'No active ComfyUI servers.' }))
     } else if (!routingCanGenerate) {
       if (selectedTarget === 'auto') {
-        issues.push(t({ ko: '자동 분산에 연결 확인된 일반 ComfyUI 서버가 없어. 서버 테스트를 실행하거나 개별 서버를 골라줘.', en: 'Auto routing has no connected regular ComfyUI server. Test a server or choose a specific target.' }))
+        issues.push(t({ ko: '자동 분산 가능한 ComfyUI 서버가 없어. 연결 테스트나 서버 선택을 확인해.', en: 'No connected ComfyUI server for auto routing. Test or select a server.' }))
       } else if (selectedTag) {
-        issues.push(t({ ko: '#{tag} 라우팅에 사용 가능한 서버가 없어. 서버 태그와 연결 상태를 확인해줘.', en: 'No server is available for #{tag}. Check server tags and connection state.' }, { tag: selectedTag }))
+        issues.push(t({ ko: '#{tag} 태그에 사용 가능한 서버가 없어.', en: 'No available server for #{tag}.' }, { tag: selectedTag }))
       } else {
-        issues.push(t({ ko: '선택한 서버가 실행 가능한 상태가 아니야. 연결 테스트 또는 활성 상태를 확인해줘.', en: 'The selected server is not ready to run. Check its connection test or active state.' }))
+        issues.push(t({ ko: '선택한 서버를 사용할 수 없어. 연결 상태를 확인해.', en: 'The selected server is not ready. Check its connection.' }))
       }
     }
 
     if (!queueRegistrationCountValid) {
-      issues.push(t({ ko: '큐 등록 개수는 1부터 {max} 사이의 정수여야 해.', en: 'Queue count must be an integer between 1 and {max}.' }, { max: queueMaxCount }))
+      issues.push(t({ ko: '큐 등록 개수는 1~{max} 정수여야 해.', en: 'Queue count must be an integer from 1 to {max}.' }, { max: queueMaxCount }))
     }
 
     if (refModExportError !== null) {
       issues.push(t(
-        { ko: '워크플로 정보를 불러오지 못해 RefMod 생성 전용인지 확인하지 못했어: {message}', en: 'Could not load the workflow to check whether it only creates a RefMod: {message}' },
+        { ko: '워크플로 정보 확인 실패: {message}', en: 'Could not check workflow details: {message}' },
         { message: refModExportError },
       ))
     }

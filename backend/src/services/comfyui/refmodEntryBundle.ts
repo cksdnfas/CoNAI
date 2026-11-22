@@ -253,7 +253,7 @@ async function importOne(
     let removed: string[] = [];
     db().transaction(() => {
       removed = internals.replaceEntryFiles(target.id, new Set(created));
-      db().prepare(`UPDATE refmod_entries SET concept_type = ?, description = ?, keywords = ?, favorite = ?, director_value = ?, members = ?,
+      db().prepare(`UPDATE refmod_entries SET concept_type = ?, description = ?, keywords = ?, favorite = ?, registered = 1, director_value = ?, members = ?,
         extra_values = ?, workflow_id = ?, folder_id = COALESCE(?, folder_id), revision = revision + ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(
         bundled.conceptType, bundled.description, JSON.stringify([...new Map(bundled.keywords.map((item) => [item.toLowerCase(), item])).values()]),
         bundled.favorite ? 1 : 0, director ? JSON.stringify(director) : null, JSON.stringify(members), JSON.stringify(extras), workflowId,

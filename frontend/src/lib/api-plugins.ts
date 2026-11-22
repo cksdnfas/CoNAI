@@ -1,4 +1,4 @@
-import type { BundledPluginStatus, ChatPageField, GenerationLayoutSurface, InstalledPlugin, PluginGenerationActionResult, PluginInstallResult, PluginInstance, PluginSourceCheck, PluginSourceInput, PluginSourceReview, PluginWriteProposal } from '@conai/shared'
+import type { BundledPluginStatus, ChatPageField, GenerationLayoutSurface, InstalledPlugin, PublicPluginPage, PluginGenerationActionResult, PluginInstallResult, PluginInstance, PluginSourceCheck, PluginSourceInput, PluginSourceReview, PluginWriteProposal } from '@conai/shared'
 import { requestApiData } from './api-request'
 import { buildApiUrl } from './api-url'
 
@@ -13,6 +13,10 @@ export function pluginRequest<T>(suffix: string, method = 'GET', body?: unknown,
 }
 export const PLUGINS_QUERY_KEY = ['plugins'] as const
 export const listPlugins = () => pluginRequest<InstalledPlugin[]>('')
+/** Pages an administrator shared with every signed-in account (`/public/ext/<plugin>/<page>`). */
+export const PUBLIC_PLUGIN_PAGES_QUERY_KEY = ['plugins', 'public-pages'] as const
+export const listPublicPluginPages = () => pluginRequest<PublicPluginPage[]>('/public-pages')
+export const setPluginPagePublic = (pluginId: string, pageId: string, value: boolean) => pluginRequest<void>(`/${encodeURIComponent(pluginId)}/pages/${encodeURIComponent(pageId)}/public`, 'PUT', { public: value })
 export const BUNDLED_PLUGINS_QUERY_KEY = ['plugins', 'bundled'] as const
 export const getBundledPluginStatus = () => pluginRequest<BundledPluginStatus>('/bundled')
 export const syncBundledPlugins = () => pluginRequest<BundledPluginStatus>('/bundled/sync', 'POST')

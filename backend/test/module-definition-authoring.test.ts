@@ -6,6 +6,9 @@ import os from 'node:os'
 import path from 'node:path'
 import { test } from 'node:test'
 
+// Promise.withResolvers is ES2024: the Node runtime has it, but the test tsconfig lib (ES2023) does not declare it.
+type WithResolversConstructor = PromiseConstructor & { withResolvers<T>(): { promise: Promise<T>; resolve: (value: T | PromiseLike<T>) => void; reject: (reason?: unknown) => void } }
+
 test('module authoring preserves saved definitions and engine isolation', async (t) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'conai-module-authoring-'))
   process.env.RUNTIME_BASE_PATH = root
@@ -73,12 +76,12 @@ test('module authoring preserves saved definitions and engine isolation', async 
       // Codex snapshots are stored with the form's reference/preserve defaults filled in.
       const engineDefaults = engine === 'codex' ? { references: [], preserve: '' } : {}
       assert.deepEqual(JSON.parse(record.template_defaults), { ...engineDefaults, ...snapshot })
-      assert.deepEqual(JSON.parse(record.internal_fixed_values), { ...engineDefaults, steps: 12 })
+      assert.deepEqual(JSON.parse(record.internal_fixed_values!), { ...engineDefaults, steps: 12 })
       assert.deepEqual(JSON.parse(record.exposed_inputs).map((port: { key: string; source_path: string; default_value: unknown }) => ({
         key: port.key, source: port.source_path, value: port.default_value,
       })), [{ key: 'prompt', source: 'prompt', value: 'blue sky' }, { key: 'seed', source: 'seed', value: 7 }])
       assert.deepEqual(JSON.parse(record.output_ports).map((port: { key: string }) => port.key), ['image', 'metadata'])
-      assert.deepEqual(JSON.parse(record.ui_schema).map((field: { key: string }) => field.key), ['prompt', 'seed'])
+      assert.deepEqual(JSON.parse(record.ui_schema!).map((field: { key: string }) => field.key), ['prompt', 'seed'])
 
       const duplicate = await post(engine, input)
       assert.equal(duplicate.status, 409)
@@ -104,9 +107,9 @@ test('module authoring preserves saved definitions and engine isolation', async 
       assert.equal(updated.category, 'custom')
       assert.equal(Boolean(updated.is_active), true)
       assert.equal(updated.version, 2)
-      assert.deepEqual(JSON.parse(updated.internal_fixed_values), { ...engineDefaults, steps: 24 })
+      assert.deepEqual(JSON.parse(updated.internal_fixed_values!), { ...engineDefaults, steps: 24 })
       assert.deepEqual(JSON.parse(updated.output_ports), outputPorts)
-      assert.deepEqual(JSON.parse(updated.ui_schema), uiSchema)
+      assert.deepEqual(JSON.parse(updated.ui_schema!), uiSchema)
     })
   }
 
@@ -178,8 +181,8 @@ test('module authoring preserves saved definitions and engine isolation', async 
     assert.equal(watch.mock.callCount(), 0)
     await Promise.all([service.initialize(), service.initialize()])
     assert.equal(watch.mock.callCount(), 1)
-    const entered = Promise.withResolvers<void>()
-    const release = Promise.withResolvers<void>()
+    const entered = (Promise as WithResolversConstructor).withResolvers<void>()
+    const release = (Promise as WithResolversConstructor).withResolvers<void>()
     const list = fs.promises.readdir.bind(fs.promises)
     const reads = t.mock.method(fs.promises, 'readdir', async (...args: Parameters<typeof list>) => {
       entered.resolve()
@@ -212,8 +215,8 @@ test('module authoring preserves saved definitions and engine isolation', async 
 
   await t.test('registry shutdown finishes accepted HTTP and scaffold writes but rejects new ones', async t => {
     const { CustomNodeRegistryService: registry } = await import('../src/services/customNodeRegistryService')
-    const entered = Promise.withResolvers<void>()
-    const release = Promise.withResolvers<void>()
+    const entered = (Promise as WithResolversConstructor).withResolvers<void>()
+    const release = (Promise as WithResolversConstructor).withResolvers<void>()
     const list = fs.promises.readdir.bind(fs.promises)
     t.mock.method(fs.promises, 'readdir', async (...args: Parameters<typeof list>) => {
       const entries = await list(...args)

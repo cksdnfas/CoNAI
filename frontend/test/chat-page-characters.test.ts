@@ -73,7 +73,10 @@ test('character page assistants: RefMod and art style registrations survive the 
   const mount = (location: string, key: string, screen: ReturnType<typeof h>) => act(async () => root.render(h(QueryClientProvider, { client }, h(MemoryRouter, { key, initialEntries: [location] },
     h(I18nProvider, null, h(SnackbarContext.Provider, { value: { showSnackbar() {}, closeSnackbar() {} } }, h(ChatPageProvider, null, screen, h(Page))))))))
   let sequence = 0
-  async function send(command: ChatPageCommand) {
+  /** Action commands carry the operation's label as the chat shows it; the tests name the action id instead. */
+  type SentCommand = Exclude<ChatPageCommand, { type: 'action' }> | (Omit<Extract<ChatPageCommand, { type: 'action' }>, 'label'> & { label?: string })
+  async function send(sent: SentCommand) {
+    const command: ChatPageCommand = sent.type === 'action' ? { ...sent, label: sent.label ?? sent.actionId } : sent
     const snapshot = page.capture()!
     const commandId = `characters-command-${++sequence}`
     const answer = new Promise<{ ok: boolean; error?: string; page?: ChatPageSnapshot }>((resolve) => replies.set(commandId, resolve))
@@ -106,7 +109,7 @@ test('character page assistants: RefMod and art style registrations survive the 
   const member = (kind: 'image' | 'video' | 'audio', index: number) => ({ index, kind, description: `${kind} member`, fileId: `file-${kind}-${index}`, fileName: `${kind}.bin`, mimeType: `${kind}/x`, mediaMode: null, trimStart: null, trimEnd: null, sourceWidth: null, sourceHeight: null, sourceDuration: null })
   const summary = (id: number, name: string, extra: Partial<Summary> = {}): Summary => ({
     id, name, conceptType: 'identity', description: `${name} bundle`, keywords: ['hero'], members: [member('image', 0), member('video', 1), member('audio', 2)],
-    workflowId: 3, workflowName: 'MiniMax H3 RefMod', issues: [], buildable: true, pending: false, lastBuiltAt: null, lastRecord: null, favorite: false, revision: 2, updatedAt: '2026-11-21T00:00:00Z', ...extra,
+    workflowId: 3, workflowName: 'MiniMax H3 RefMod', registered: true, issues: [], buildable: true, pending: false, lastBuiltAt: null, lastRecord: null, favorite: false, revision: 2, updatedAt: '2026-11-21T00:00:00Z', ...extra,
   })
   const entries = [
     summary(7, 'group-hero'),
@@ -147,6 +150,7 @@ test('character page assistants: RefMod and art style registrations survive the 
     useLayoutEffect(() => { refmodState.values = values }, [values])
     const editor = {
       open, entryId: open ? 7 : null, ready: open, base: open ? detail : null, latest: open ? detail : null, fields: open ? fields : [],
+      activeForm: open ? detail.form : null, isNew: false, recordPreview: null,
       draft: open ? draft : { name: '', keywords: [], values: {} }, draftRef, dirty: false, busy: false, isBusy: () => false, nameValue: 'group-hero', draftError: undefined,
       setName() {}, setKeywords,
       setValue(id: string, value: unknown) { draftRef.current = { ...draftRef.current, values: { ...draftRef.current.values, [id]: value } }; setValues((old) => ({ ...old, [id]: value })) },
@@ -155,7 +159,7 @@ test('character page assistants: RefMod and art style registrations survive the 
     const library = {
       editor, canEdit: true, canBuild: true, loadMore: async () => {}, presence: { isPending: false, isError: false, data: presence }, presenceOk: true,
       visibleEntries: entries, total: 12, query: '', serverFilter: 'all', concept: '', sort: 'updated',
-      unregisteredRows, unregisteredCount: unregisteredRows.length, isPending: (entry: Summary) => entry.pending, isOnServer: (name: string) => presence.entries.some((item) => item.name === name),
+      unregisteredRows, allUnregisteredRows: unregisteredRows, unregisteredCount: unregisteredRows.length, isPending: (entry: Summary) => entry.pending, isOnServer: (name: string) => presence.entries.some((item) => item.name === name),
       search() {}, setListView() {}, refreshPresence: async () => {}, openEntry() {}, closeEntry() {}, create: async () => null, setCreating() {},
       bulk: async () => ({ updated: 1, deleted: 0 }), adopt: async () => ({ created: [], linked: 1, skipped: [] }), build: async (entry: Summary) => { refmodState.builds.push(entry.id); return true },
     }

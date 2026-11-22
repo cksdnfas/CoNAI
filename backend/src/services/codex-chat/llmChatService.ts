@@ -261,7 +261,7 @@ export async function runToolCall(turn: LlmTurn, bridge: ChatMcpBridge, call: { 
       // The card shows the stored proposal: the tool result may carry a copy with text above the rating ceiling hidden.
       if (structured?.proposal?.kind === 'page_fields' || structured?.proposal?.kind === 'workflow_graph' || structured?.proposal?.kind === 'page_action') record.proposal = ChatProposalStore.find(structured.proposal.id) ?? structured.proposal
     }
-    const { texts, historyIds, compositeHashes, jobIds, pendingJobIds, audioCandidateIds, pageOperation } = readMcpToolResult(result, record.tool)
+    const { texts, historyIds, compositeHashes, jobIds, pendingJobIds, audioCandidateIds, audioFileIds, pageOperation } = readMcpToolResult(result, record.tool)
     if (pageOperation && !result.isError) record.pageOperation = pageOperation
     if (result.isError && (record.tool === 'page_act' || record.tool === 'page_fill') && texts.length > 1) refusedPageText = texts[0]
     output = texts.join('\n') || (result.structuredContent ? JSON.stringify(result.structuredContent) : '')
@@ -276,6 +276,7 @@ export async function runToolCall(turn: LlmTurn, bridge: ChatMcpBridge, call: { 
     if (jobIds.length > 0) record.jobIds = jobIds
     if (jobIds.length > 0) record.pendingJobIds = pendingJobIds
     if (audioCandidateIds.length > 0) record.audioCandidateIds = audioCandidateIds
+    if (audioFileIds.length > 0) record.audioFileIds = audioFileIds
   } catch (error) {
     output = `Error: ${error instanceof Error ? error.message : String(error)}`
     shownPageView = undefined
@@ -843,11 +844,11 @@ const CONTINUE_DIRECTIVE = '[Continue] Your last reply was cut off by the length
  * carried on — the turn starts with its text and tool calls, and is stored as a new variant of it.
  */
 function startReply(requester: McpRequester, thread: CodexChatThreadRecord, profile: ChatProfile, listener: (event: CodexChatStreamEvent) => void,
-  prepare: () => CodexChatStreamEvent, replacingMessageId?: number, continuing?: CodexChatMessageRecord, page?: ChatPageSnapshot, reaction?: undefined, toolDirective?: ResolvedChatToolDirective): Promise<CodexChatMessageRecord>
+  prepare: () => CodexChatStreamEvent, replacingMessageId?: number, continuing?: CodexChatMessageRecord, page?: ChatPageSnapshot, reaction?: undefined, toolDirective?: ResolvedChatToolDirective, autoApprove?: string): Promise<CodexChatMessageRecord>
 function startReply(requester: McpRequester, thread: CodexChatThreadRecord, profile: ChatProfile, listener: (event: CodexChatStreamEvent) => void,
   prepare: null, replacingMessageId: undefined, continuing: undefined, page: undefined, reaction: GenerationReaction): Promise<CodexChatMessageRecord | null>
 function startReply(requester: McpRequester, thread: CodexChatThreadRecord, profile: ChatProfile, listener: (event: CodexChatStreamEvent) => void,
-  prepare: (() => CodexChatStreamEvent) | null, replacingMessageId?: number, continuing?: CodexChatMessageRecord, page?: ChatPageSnapshot, reaction?: GenerationReaction, toolDirective?: ResolvedChatToolDirective) {
+  prepare: (() => CodexChatStreamEvent) | null, replacingMessageId?: number, continuing?: CodexChatMessageRecord, page?: ChatPageSnapshot, reaction?: GenerationReaction, toolDirective?: ResolvedChatToolDirective, autoApprove?: string) {
   return withChatTokenModel(profile, () => {
   if (busy(thread.id)) throw new LlmChatError('이전 답변이 아직 진행 중이야.', 409)
   let resolveFinished: (message: CodexChatMessageRecord | null) => void = () => {}
@@ -890,6 +891,7 @@ function startReply(requester: McpRequester, thread: CodexChatThreadRecord, prof
   turn.history = history
   turn.delivery = beginDirectReply(updatedThread, profile.id, history, [...history].reverse().find((entry) => entry.role === 'user') ?? null, turn.controller.signal, (routing) => emit(turn, { type: 'routing', routing }), turn.historySource)
   if (reaction) turn.delivery.routing = { ...turn.delivery.routing, replyTo: null, recipients: ['user'] }
+  if (autoApprove) turn.delivery.context.autoApprove = autoApprove
   if (page) turn.chatContext = { ...turn.delivery.context, page }
   // A cancelled preparation (or a failed translation) may have left only the user's original row. Both retry
   // actions use the same translation promise as a new send, before API or session request construction.
@@ -1061,7 +1063,7 @@ export const LlmChatService = {
   async sendMessage(requester: McpRequester, thread: CodexChatThreadRecord, text: string, listener: (event: CodexChatStreamEvent) => void, fileIds?: unknown, flagIds?: unknown, picks?: unknown, mediaHashes?: unknown, replyToMessageId?: unknown, pageContext?: unknown, options: ChatSendOptions = {}) {
     assertLlmChatAvailable(requester)
     const profile = requireUsableProfile(thread.profile_id, requester, thread.id)
-    const { page, attachments, mediaAttachments, flags, trimmed, routing, toolDirective } = await prepareChatSend(requester, thread, profile, text,
+    const { page, attachments, mediaAttachments, flags, trimmed, routing, toolDirective, autoApprove } = await prepareChatSend(requester, thread, profile, text,
       { fileIds, flagIds, picks, mediaHashes, replyToMessageId, pageContext, options }, LlmChatError)
     LlmChatService.skipReaction(thread.id)
     cancelJudgeFollowUp(thread.id)
@@ -1082,7 +1084,7 @@ export const LlmChatService = {
       ChatFlagStore.setThreadFlags(thread.id, flags.filter((flag) => !flag.pick).map((flag) => flag.id))
       if (firstTitle !== null) namedFromMessage = CodexChatStore.renameThreadIf(thread.id, '', firstTitle)
       return { type: 'user', message: CodexChatStore.findMessage(thread.id, userMessageId) as CodexChatMessageRecord }
-    }, undefined, undefined, page, undefined, toolDirective)
+    }, undefined, undefined, page, undefined, toolDirective, autoApprove)
     if (firstTitle !== null && namedFromMessage) void titleAfterFirstReply(profile, thread, firstTitle, trimmed, reply)
     return reply
   },

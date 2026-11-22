@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { ExternalLink, FileText, GitBranch, PackageCheck, Puzzle, RefreshCw, ServerCog, TriangleAlert, Upload, Webhook, Wrench } from 'lucide-react'
+import { ExternalLink, FileText, GitBranch, Link2, PackageCheck, Puzzle, RefreshCw, ServerCog, TriangleAlert, Upload, Webhook, Wrench } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { EmptyState } from '@/components/ui/empty-state'
 import type { InstalledPlugin, PluginInstallResult, PluginServerStatus, PluginSourceProvider } from '@conai/shared'
@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Chip } from '@/components/ui/chip'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { ErrorState } from '@/components/ui/error-state'
+import { FieldInfo } from '@/components/ui/field'
 import { IconButton } from '@/components/ui/icon-button'
 import { ListRow } from '@/components/ui/list-row'
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
@@ -18,12 +19,14 @@ import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Switch } from '@/components/ui/switch'
 import { SwitchLine } from '@/components/ui/switch-line'
 import { Text } from '@/components/ui/text'
+import { Tip } from '@/components/ui/tooltip'
+import { copyTextToClipboard } from '@/lib/clipboard'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { pageAction, pageChoice, pageFreeText, pageObject, pageText } from '@/features/codex-chat/page-action-helpers'
 import { resolveStreamFallbackInterval } from '@/features/runtime-events/runtime-event-fallback'
 import { useRuntimeEventStream } from '@/features/runtime-events/use-runtime-event-stream'
 import { useI18n } from '@/i18n'
-import { BUNDLED_PLUGINS_QUERY_KEY, checkPluginSources, getBundledPluginStatus, listPlugins, pluginRequest, PLUGINS_QUERY_KEY, syncBundledPlugins, unlinkPluginSource } from '@/lib/api-plugins'
+import { BUNDLED_PLUGINS_QUERY_KEY, checkPluginSources, getBundledPluginStatus, listPlugins, pluginRequest, PLUGINS_QUERY_KEY, PUBLIC_PLUGIN_PAGES_QUERY_KEY, setPluginPagePublic, syncBundledPlugins, unlinkPluginSource } from '@/lib/api-plugins'
 import { getErrorMessage } from '@/lib/error-message'
 import { PluginAuthoring, type PluginManagementPage } from './plugin-authoring'
 import { PluginSourceInstall, usePluginSourceInstall } from './plugin-source-install'
@@ -73,6 +76,18 @@ export function PluginManagement({ assistantPage, pageContext }: { assistantPage
     const { manifest } = plugin
     await pluginRequest(`/${manifest.id}/enabled`, 'PUT', { enabled })
   })
+  // A shared page opens at /public/ext/… for every signed-in account; its code still runs with each viewer's permissions.
+  const publicPageUrl = (pluginId: string, pageId: string) => `${window.location.origin}${window.location.pathname}#/public/ext/${pluginId}/${pageId}`
+  const setPagePublic = (plugin: InstalledPlugin, pageId: string, value: boolean) => run(async () => {
+    await setPluginPagePublic(plugin.manifest.id, pageId, value)
+    await cache.invalidateQueries({ queryKey: PUBLIC_PLUGIN_PAGES_QUERY_KEY })
+  })
+  const copyPublicPageUrl = async (pluginId: string, pageId: string) => {
+    try {
+      await copyTextToClipboard(publicPageUrl(pluginId, pageId))
+      showSnackbar({ tone: 'info', message: t({ ko: '공용 페이지 주소를 복사했어.', en: 'Copied the shared page address.' }) })
+    } catch { showSnackbar({ tone: 'error', message: t({ ko: '주소를 복사하지 못했어.', en: 'Could not copy the address.' }) }) }
+  }
   const showInstallResult = (result: PluginInstallResult) => {
     const { name, version } = result.plugin.manifest
     showSnackbar({
@@ -191,7 +206,7 @@ export function PluginManagement({ assistantPage, pageContext }: { assistantPage
           <TriangleAlert />
           <AlertDescription className="flex flex-wrap items-center gap-2">
             <span className="min-w-0 flex-1">
-              {t({ ko: '앱에 포함된 공식 플러그인을 적용하지 못했어. 지금은 이전 버전이 쓰이고 있어.', en: 'An official plugin that ships with the app could not be applied. The earlier version is still in use.' })}
+              {t({ ko: '공식 플러그인 적용 실패 (이전 버전 유지)', en: 'Official plugin update failed (previous version kept).' })}
               {bundledFailures.map((failure) => <span key={failure.file} className="block break-all font-mono text-xs">{failure.pluginId ?? failure.file}: {failure.error}</span>)}
             </span>
             <Button size="sm" variant="secondary" disabled={busy} onClick={() => void retryBundled()}>{t({ ko: '다시 적용', en: 'Reapply' })}</Button>
@@ -251,12 +266,11 @@ export function PluginManagement({ assistantPage, pageContext }: { assistantPage
       {isAdmin ? <PluginAuthoring page={sourcePage} /> : null}
       {isAdmin ? <PluginSourceInstall state={sourceInstall} /> : null}
 
-      <Modal open={opened !== null} onClose={() => setDetail(null)} title={opened ? <span className="flex items-center gap-2">{opened.manifest.name}<Chip size="sm" tone="muted" mono>{opened.manifest.version}</Chip></span> : ''} size="md">
+      <Modal open={opened !== null} onClose={() => setDetail(null)} title={opened ? <span className="flex items-center gap-2">{opened.manifest.name}<Chip size="sm" tone="muted" mono>{opened.manifest.version}</Chip>{opened.bundled ? <><Chip size="sm">{t({ ko: '공식', en: 'Official' })}</Chip><FieldInfo>{t({ ko: '앱 내장 공식 플러그인 · 앱 업데이트와 함께 갱신', en: 'Official bundled plugin · updates with the app' })}</FieldInfo></> : null}</span> : ''} size="md">
         {opened ? (
           <>
             <ModalBody spacing="lg">
               {opened.manifest.description ? <p className="text-sm">{opened.manifest.description}</p> : null}
-              {opened.bundled ? <p className="text-sm text-muted-foreground">{t({ ko: '앱에 포함된 공식 플러그인이야. 켜고 끌 수만 있고, 앱을 업데이트하면 함께 바뀌어.', en: 'An official plugin that ships with the app. You can turn it on or off; it updates with the app.' })}</p> : null}
               {opened.updatedAt ? (
                 <Text variant="caption">
                   {opened.bundledUpdated ? t({ ko: '이번 앱 시작에서 업데이트됨', en: 'Updated at this app start' }) : t({ ko: '마지막 업데이트', en: 'Last update' })}
@@ -276,7 +290,7 @@ export function PluginManagement({ assistantPage, pageContext }: { assistantPage
                     {opened.source.checkedAt ? <Text variant="caption"><time dateTime={opened.source.checkedAt}>{new Date(opened.source.checkedAt).toLocaleString()}</time></Text> : null}
                   </div>
                 </ListRow>
-                {opened.source.modified ? <p className="py-2 text-sm text-warning">{t({ ko: '지금 설치본은 ZIP이나 편집기로 설치한 버전이야. Git에서 다시 설치하면 덮어써.', en: 'The installed version came from a ZIP or the editor. Reinstalling from Git overwrites it.' })}</p> : null}
+                {opened.source.modified ? <p className="py-2 text-sm text-warning">{t({ ko: '로컬 설치본이라 Git 재설치 시 덮어써.', en: 'Installed locally; reinstalling from Git overwrites it.' })}</p> : null}
                 <div className="flex flex-wrap gap-2 pt-2">
                   <Button size="sm" variant="secondary" disabled={busy || sourceInstall.busy} onClick={() => void reviewLinked(opened).catch(() => undefined)}>{t({ ko: '업데이트 검토', en: 'Review update' })}</Button>
                   <Button size="sm" variant="ghost" disabled={busy || sourceInstall.busy} onClick={() => void unlink(opened)}>{t({ ko: '연결 해제', en: 'Unlink' })}</Button>
@@ -306,6 +320,8 @@ export function PluginManagement({ assistantPage, pageContext }: { assistantPage
                     trailing={(
                       <>
                         {page.accepts.length ? <span className="text-xs">{page.accepts.join(' ')}</span> : null}
+                        {isAdmin && opened.publicPages?.includes(page.id) ? <IconButton size="icon-sm" variant="ghost" label={t({ ko: '공용 주소 복사', en: 'Copy shared address' })} onClick={() => void copyPublicPageUrl(opened.manifest.id, page.id)}><Link2 /></IconButton> : null}
+                        {isAdmin ? <Tip content={t({ ko: '공용 페이지: 로그인한 누구나 열 수 있어', en: 'Shared page: any signed-in account can open it' })}><span className="inline-flex"><Switch size="sm" checked={!!opened.publicPages?.includes(page.id)} disabled={busy} aria-label={t({ ko: '{name} 공용 페이지', en: 'Share {name}' }, { name: page.title })} onCheckedChange={(value) => void setPagePublic(opened, page.id, value)} /></span></Tip> : null}
                         <IconButton size="icon-sm" variant="ghost" disabled={!opened.enabled || !!pageContext?.blocked} label={pageContext?.blocked ?? t({ ko: '열기', en: 'Open' })} onClick={() => navigate(`/ext/${opened.manifest.id}/${page.id}${pageContext?.search ? `?${pageContext.search}` : ''}`)}><ExternalLink /></IconButton>
                       </>
                     )}

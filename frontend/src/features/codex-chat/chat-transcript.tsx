@@ -3,6 +3,7 @@ import { Bookmark, ChevronLeft, ChevronRight, Ellipsis, GitBranch, Image as Imag
 import { Button } from '@/components/ui/button'
 import type { ChatMessageRouting } from '@conai/shared'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { FieldInfo } from '@/components/ui/field'
 import { IconButton } from '@/components/ui/icon-button'
 import { Panel } from '@/components/ui/panel'
 import { Tip } from '@/components/ui/tooltip'
@@ -258,16 +259,14 @@ export const ChatSavedMessages = memo(function ChatSavedMessages({ messages, con
     const from = t(CHAT_ENGINE_LABELS[change.from])
     const to = t(CHAT_ENGINE_LABELS[change.to])
     const name = change.profileId === undefined ? undefined : look.speakerOf?.(change.profileId)?.name
-    return <div key={index} className="flex flex-col gap-1">
-      <div role="separator" className="flex items-center gap-3 text-xs text-muted-foreground"><span className="h-px flex-1 bg-line" />{name
-        ? t({ ko: '{name} 엔진 변경 · {from} → {to}', en: '{name}: engine changed · {from} → {to}' }, { name, from, to })
-        : t({ ko: '엔진 변경 · {from} → {to}', en: 'Engine changed · {from} → {to}' }, { from, to })}<span className="h-px flex-1 bg-line" /></div>
-      <p className="text-center text-xs text-muted-foreground">{change.profileId !== undefined
-        ? t({ ko: '방의 메시지와 요약은 그대로야. 이 멤버의 이전 엔진 내부 기억(세션)은 초기화됐고, 새 엔진은 방의 요약과 최근 대화에서 이어가.', en: "The room's messages and summary are kept. This member's previous engine memory (session) was reset; the new engine continues from the room's summary and recent conversation." })
-        : change.to === 'llm'
-        ? t({ ko: '메시지와 저장된 요약은 그대로야. 이전 엔진의 내부 기억(세션)은 초기화됐고, 새 엔진은 최근 대화와 (요약이 켜져 있으면) 저장된 요약만 이어받아. 그보다 오래된 내용은 요약에 있는 것만 남아.', en: "Messages and the stored summary are kept. The previous engine's own memory (session) was reset; the new engine picks up only the recent conversation and, with the summary on, the stored summary. Anything older survives only where the summary has it." })
-        : t({ ko: '메시지와 저장된 요약은 그대로야. 이전 엔진의 내부 기억(세션)은 초기화됐고, 새 엔진은 저장된 요약과 최근 메시지를 한 번 전달받아 새 세션으로 이어가.', en: "Messages and the stored summary are kept. The previous engine's own memory (session) was reset; the new engine starts a new session, told the stored summary and the latest messages once." })}</p>
-    </div>
+    const detail = change.profileId !== undefined
+      ? t({ ko: '메시지와 요약은 유지돼. 이 멤버의 이전 엔진 세션은 초기화되고, 요약과 최근 대화에서 이어가.', en: "Messages and summary are kept. This member's previous session was reset; the new engine continues from the summary and recent turns." })
+      : change.to === 'llm'
+        ? t({ ko: '메시지와 요약은 유지돼. 이전 엔진 세션은 초기화되고, 최근 대화와 저장된 요약만 이어받아.', en: "Messages and stored summary are kept. The previous session was reset; the new engine picks up recent turns and the stored summary." })
+        : t({ ko: '메시지와 요약은 유지돼. 이전 엔진 세션은 초기화되고, 저장된 요약과 최근 메시지로 새 세션을 시작해.', en: "Messages and stored summary are kept. The previous session was reset; the new engine starts a fresh session from the summary and latest messages." })
+    return <div key={index} role="separator" className="flex items-center gap-3 text-xs text-muted-foreground"><span className="h-px flex-1 bg-line" /><span className="inline-flex items-center gap-1">{name
+      ? t({ ko: '{name} 엔진 변경 · {from} → {to}', en: '{name}: engine changed · {from} → {to}' }, { name, from, to })
+      : t({ ko: '엔진 변경 · {from} → {to}', en: 'Engine changed · {from} → {to}' }, { from, to })}<FieldInfo>{detail}</FieldInfo></span><span className="h-px flex-1 bg-line" /></div>
   }
   return <>
     {summaryUntilId !== null && messages[0]?.id > summaryUntilId ? divider : null}

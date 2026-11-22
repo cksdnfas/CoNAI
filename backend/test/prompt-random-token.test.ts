@@ -114,7 +114,7 @@ test('wildcard previews preserve weighted nested expansion with bounded request-
   const prepare = db.prepare.bind(db)
   t.mock.method(db, 'prepare', (sql: string) => { queries.push(sql); return prepare(sql) })
   const withItems = WildcardModel.withItems.bind(WildcardModel)
-  t.mock.method(WildcardModel, 'withItems', (records, itemIds) => {
+  t.mock.method(WildcardModel, 'withItems', (records: Parameters<typeof withItems>[0], itemIds: Parameters<typeof withItems>[1]) => {
     loadedIds.push(...records.map(record => record.id))
     return withItems(records, itemIds)
   })

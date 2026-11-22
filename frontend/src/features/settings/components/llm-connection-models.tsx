@@ -152,7 +152,7 @@ export function UnconfiguredConsumersAlert({ slot }: { slot: ModelSlot | null | 
     <Alert variant="warning">
       <TriangleAlert aria-hidden />
       <AlertDescription>
-        <p>{t({ ko: '쓸 모델이 없어서 꺼진 곳이 있어. 판단 대표모델을 정하거나 각 설정에서 모델을 다시 골라.', en: 'Some settings have no usable model and are off. Point the judge representative model somewhere or pick a model in each setting.' })}</p>
+        <p>{t({ ko: '모델이 없어 꺼진 항목이 있어. 각 설정에서 모델을 다시 지정해.', en: 'Some settings are off without a model. Reassign a model in each setting.' })}</p>
         <ul className="mt-1 space-y-0.5">{lines.map((line) => <li key={line} className="break-words">{line}</li>)}</ul>
       </AlertDescription>
     </Alert>
@@ -218,7 +218,7 @@ function ModelReplacementDialog({ request, onSettle }: { request: RemovalRequest
   return (
     <Modal open={request !== null} onClose={() => onSettle(null)} title={t({ ko: '쓰는 곳이 있는 모델 삭제', en: 'Delete a model in use' })} size="md">
       <ModalBody spacing="sm">
-        <p className="text-sm text-muted-foreground">{t({ ko: '아래 설정이 이 모델을 쓰고 있어. 대신 쓸 모델을 고르거나 비워 둬.', en: 'The settings below use this model. Pick a model to take over, or leave them blank.' })}</p>
+        <p className="text-sm text-muted-foreground">{t({ ko: '사용 중인 설정이 있어. 대체 모델을 고르거나 비워 둬.', en: 'Settings below use this model. Pick a replacement or leave blank.' })}</p>
         {rows.filter((row) => slotHoldCount(row) > 0).map((row) => (
           <EditorGroup key={row.id} label={row.label}>
             <ul className="space-y-1 text-sm">{describe(row, 0, true).map((line) => <li key={line} className="break-words">{line}</li>)}</ul>
@@ -250,8 +250,7 @@ function ModelReplacementDialog({ request, onSettle }: { request: RemovalRequest
           <Alert variant="warning">
             <TriangleAlert aria-hidden />
             <AlertDescription>
-              <p>{t({ ko: '비워 두면 이 모델을 쓰던 프로필 역할과 기능이 모델 없이 남아서 꺼져. 대화 모델이 비는 프로필은 프로필 자체가 꺼져.', en: 'Left blank, the profile roles and features using this model keep no model and turn off. A profile left without its chat model is turned off itself.' })}</p>
-              <p>{t({ ko: '꺼진 프로필과 역할은 프로필 목록과 편집기에 경고로 보여. 다시 모델을 고르면 돼.', en: 'Affected profiles show a warning in the profile list and editor until a model is picked again.' })}</p>
+              <p>{t({ ko: '비워 두면 연결된 역할·기능이 꺼지고, 대화 모델이 비는 프로필은 비활성화돼.', en: 'Leaving blank disables linked roles and features, and deactivates profiles missing a chat model.' })}</p>
             </AlertDescription>
           </Alert>
         ) : null}

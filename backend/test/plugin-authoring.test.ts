@@ -39,7 +39,7 @@ test('plugin authoring keeps executable installation behind administrator review
   const { isContextToolAllowed } = await import('../src/mcp/toolAccess')
   const { pluginAppToolScope } = await import('../src/services/plugins/pluginAppPolicy')
   const shared = await import('@conai/shared')
-  const install = (review: PluginPackageReview) => author.installPluginDraft(admin, { draftId: review.draftId, revision: review.revision, digest: review.digest, enabled: review.enabled })
+  const install = (review: PluginPackageReview) => author.installPluginDraft(admin, { draftId: review.draftId, revision: review.revision, digest: review.digest, installedDigest: review.installedDigest, enabled: review.enabled })
   let draft: PluginDraft
   const read = (target: string) => author.readPluginDraft(admin, { draftId: draft.id, target }) as PluginDraftFile
 
@@ -67,7 +67,7 @@ test('plugin authoring keeps executable installation behind administrator review
 
   await t.test('installation binds the reviewed revision and digest, and retries are safe', async () => {
     const review = author.reviewPluginDraft(admin, draft.id, draft.revision)
-    await assert.rejects(author.installPluginDraft(admin, { draftId: draft.id, revision: draft.revision, digest: '0'.repeat(64), enabled: false }), /패키지/)
+    await assert.rejects(author.installPluginDraft(admin, { draftId: draft.id, revision: draft.revision, digest: '0'.repeat(64), installedDigest: null, enabled: false }), /패키지/)
     const installed = await install(review)
     assert.equal(installed.enabled, false)
     assert.deepEqual(await install(review), installed)
@@ -85,13 +85,42 @@ test('plugin authoring keeps executable installation behind administrator review
     await registry.setPluginEnabled(draft.pluginId, true, accountId)
     assert.equal((await install(nextReview)).enabled, true)
     assert.equal(fs.readFileSync(privateFile, 'utf8'), 'DO NOT EXPORT')
-    await assert.rejects(install(review), /플러그인이 바뀌/)
+    await assert.rejects(install(review), /설치본이 바뀌/)
     const exported = author.exportInstalledPlugin(admin, draft.pluginId)
     assert.ok(!registry.unpackPlugin(exported.bytes).assets.has('private.txt'))
     const fork = author.createPluginDraft(admin, { requestId: 'copy-source-002', pluginId: draft.pluginId, fromInstalled: true })
     const oldReview = author.reviewPluginDraft(admin, fork.id, fork.revision)
     author.changePluginDraft(admin, { draftId: fork.id, revision: fork.revision, requestId: 'edit-source-002', operations: [{ kind: 'write', target: 'style.css', text: 'main {}' }] })
     await assert.rejects(install(oldReview), /초안이 변경/)
+  })
+
+  await t.test('a draft whose installed base changed or was removed is reviewed against the installation and can replace it', async () => {
+    let first = author.createPluginDraft(admin, { requestId: 'conflict-draft-01', pluginId: 'conflict-test' })
+    await install(author.reviewPluginDraft(admin, first.id, first.revision))
+    const copy = author.createPluginDraft(admin, { requestId: 'conflict-copy-01', pluginId: 'conflict-test', fromInstalled: true })
+    first = author.changePluginDraft(admin, { draftId: first.id, revision: first.revision, requestId: 'conflict-edit-01', operations: [{ kind: 'write', target: 'style.css', text: 'a {}' }] })
+    await install(author.reviewPluginDraft(admin, first.id, first.revision))
+    const second = author.changePluginDraft(admin, { draftId: copy.id, revision: copy.revision, requestId: 'conflict-edit-02', operations: [{ kind: 'write', target: 'style.css', text: 'b {}' }] })
+    const changed = author.reviewPluginDraft(admin, second.id, second.revision)
+    assert.equal(changed.conflict, 'changed')
+    assert.equal(changed.updated, true)
+    assert.equal(changed.installedDigest, registry.getPlugin('conflict-test', false).digest)
+    assert.equal(changed.files.find(file => file.name === 'style.css')?.change, 'changed')
+    await install(changed)
+    assert.equal(registry.getPlugin('conflict-test', false).digest, changed.digest)
+    assert.equal(author.getPluginDraft(admin, second.id).baseDigest, changed.digest)
+    assert.equal(author.reviewPluginDraft(admin, second.id, second.revision).conflict, 'none')
+    // The first draft's base is now stale too; a review taken before another install is refused at install time.
+    const stale = author.reviewPluginDraft(admin, first.id, first.revision)
+    assert.equal(stale.conflict, 'changed')
+    await registry.removePlugin('conflict-test')
+    await assert.rejects(install(stale), /설치본이 바뀌/)
+    const removed = author.reviewPluginDraft(admin, second.id, second.revision)
+    assert.equal(removed.conflict, 'removed')
+    assert.equal(removed.installedDigest, null)
+    assert.equal(removed.updated, false)
+    await install(removed)
+    assert.equal(registry.getPlugin('conflict-test', false).digest, removed.digest)
   })
 
   await t.test('export round-trips binary assets and refuses filesystem links', async () => {
@@ -167,11 +196,20 @@ test('plugin authoring keeps executable installation behind administrator review
       assert.equal(review.status, 'needs_human_review')
       assert.throws(() => registry.getPlugin('mcp-author', false))
       assert.equal(shared.chatPageActionTier('plugin_author.install'), 'commit')
-      assert.equal(shared.chatPageActionTier('plugin_author.edit'), 'draft')
+      // Draft sources are inactive: the assistant's page edits save directly, installing stays a never-auto-approved card.
+      assert.equal(shared.chatPageActionTier('plugin_author.edit'), 'direct')
+      assert.equal(shared.chatPageActionTier('plugin_author.write'), 'direct')
+      assert.equal(shared.chatPageActionTier('plugin_author.at'), 'view')
+      assert.equal(shared.chatPageActionLeavesScreen('plugin_author.at'), false)
+      assert.equal(shared.chatAutoApprovable('plugin_author.install'), false)
       assert.equal(shared.chatPageActionAllowed('/ext/author-test/main', 'plugin_author.install'), false)
       // Plugin management also lives on /extensions, captured as a plain `page`; other pages never offer these actions.
       assert.equal(shared.chatPageActionAllowed('/extensions', 'plugin_author.install'), true)
       assert.equal(shared.chatPageActionAllowed('/extensions', 'plugin_source.install'), true)
+      // The administrator's plugin list registers the official-plugin update; an unlisted id rejects the whole page snapshot.
+      assert.equal(shared.chatPageActionAllowed('/extensions', 'plugin_bundled.sync'), true)
+      assert.equal(shared.chatPageActionAllowed('/settings', 'plugin_bundled.sync'), true)
+      assert.equal(shared.chatPageActionAllowed('/files', 'plugin_bundled.sync'), false)
       assert.equal(shared.chatPageActionAllowed('/files', 'plugin_source.review'), false)
       assert.equal(shared.normalizeChatPageSnapshot({ instanceId: 'instance-0001', connectionId: 'connection-0001', revision: 'revision-0001', path: '/extensions', kind: 'page', title: 'Plugins', resourceId: 'plugin-authoring', fields: [],
         actions: [{ id: 'plugin_source.check', label: 'Check', description: '', effect: 'draft', schema: { type: 'object', properties: {}, required: [] } }] }).actions?.[0].id, 'plugin_source.check')

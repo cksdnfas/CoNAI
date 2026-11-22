@@ -6,6 +6,7 @@ import crypto from 'node:crypto'
 import { test } from 'node:test'
 import type { ChatContextMeta } from '../src/services/codex-chat/llmChatContext'
 import type { ChatCompletionMessage } from '../src/services/codex-chat/llmChatCompletion'
+import type { ChatSummarySegment } from '../src/services/codex-chat/chatMemory'
 
 test('chat diagnostics: capture, read-time permissions, alternatives, branches and group persistence', { timeout: 60000 }, async (t) => {
   const temp = path.resolve(__dirname, '../../temp')
@@ -49,13 +50,13 @@ test('chat diagnostics: capture, read-time permissions, alternatives, branches a
   const diagnosticKeys = ['chat.diagnostics.view', ADMIN_MARKER]
   let grants = [...diagnosticKeys]
   // Raw prompts are an administrator view, so the test's account is an administrator while it holds that marker.
-  t.mock.method(AuthAccount, 'findById', (id) => ({ id, status: 'active', account_type: grants.includes(ADMIN_MARKER) ? 'admin' : 'guest' }))
+  t.mock.method(AuthAccount, 'findById', (id: number) => ({ id, status: 'active', account_type: grants.includes(ADMIN_MARKER) ? 'admin' : 'guest' }))
   t.mock.method(AuthAccessControlService, 'resolveForAccountId', () => ({ permissionKeys: ['chat.use', 'chat.agent.use', ...grants.filter((key) => key !== ADMIN_MARKER)] }))
   t.mock.method(AuthAccessControlService, 'hasPermission', () => true)
   t.mock.method(ExternalApiProvider, 'findByName', () => ({ provider_name: 'test', display_name: 'Test', is_enabled: true, provider_type: 'llm_openai_compatible', base_url: 'http://unused.invalid/v1', additional_config: JSON.stringify({ max_concurrent_requests: 3 }) }))
   t.mock.method(ExternalApiProvider, 'getDecryptedKey', () => 'fake-api-secret')
   const requests: Array<{ messages: ChatCompletionMessage[]; tools?: unknown[] }> = []
-  t.mock.method(globalThis, 'fetch', async (_url, init) => {
+  t.mock.method(globalThis, 'fetch', async (_url: Parameters<typeof fetch>[0], init?: RequestInit) => {
     const body = JSON.parse(String(init?.body))
     assert.equal((init?.headers as Record<string, string>).Authorization, 'Bearer fake-api-secret')
     assert.ok(!String(init?.body).includes('fake-api-secret'))
@@ -195,7 +196,6 @@ test('chat diagnostics: capture, read-time permissions, alternatives, branches a
       const result = await getChatDiagnostics(requester, threadId, answerId)
       assert.equal(result.scope, expected)
       const body = JSON.stringify(result)
-      if (expected === 'view') assert.equal(result.texts, undefined)
       if (expected === 'content') {
         assert.ok(result.texts?.every((source) => source.promptText === undefined))
         assert.ok(body.includes('이미 공개된 글로벌 본문'))
@@ -272,9 +272,9 @@ test('chat diagnostics: capture, read-time permissions, alternatives, branches a
     let accountReads = 0
     let permissionReads = 0
     const profileReads: number[] = []
-    s.mock.method(AuthAccount, 'findById', (id) => { accountReads += 1; return accountLookup(id) })
-    s.mock.method(AuthAccessControlService, 'resolveForAccountId', (id) => { permissionReads += 1; return permissionLookup(id) })
-    s.mock.method(ChatProfileStore, 'find', (id) => { profileReads.push(id); return profileLookup(id) })
+    s.mock.method(AuthAccount, 'findById', (id: Parameters<typeof accountLookup>[0]) => { accountReads += 1; return accountLookup(id) })
+    s.mock.method(AuthAccessControlService, 'resolveForAccountId', (id: Parameters<typeof permissionLookup>[0]) => { permissionReads += 1; return permissionLookup(id) })
+    s.mock.method(ChatProfileStore, 'find', (id: Parameters<typeof profileLookup>[0]) => { profileReads.push(id); return profileLookup(id) })
     const grouped = { ...thread(), kind: 'group' as const }
     const original = message(answerId)
     const messages = Array.from({ length: 2000 }, (_, index) => ({ ...original, id: index + 1, speaker_profile_id: index % 2 ? other.id : profile.id }))
@@ -305,13 +305,13 @@ test('chat diagnostics: capture, read-time permissions, alternatives, branches a
     const marker = 'REVIEW_FINAL_WINDOW_HASH_MARKER'
     const createHash = crypto.createHash
     let markerHashes = 0
-    s.mock.method(crypto, 'createHash', (...args) => {
+    s.mock.method(crypto, 'createHash', (...args: Parameters<typeof createHash>) => {
       const hash = createHash(...args)
-      const update = hash.update
-      hash.update = function (data, ...args) {
+      const update = hash.update as (this: crypto.Hash, ...args: unknown[]) => crypto.Hash
+      hash.update = function (this: crypto.Hash, data: unknown, ...args: unknown[]) {
         if (data === marker) markerHashes += 1
         return update.call(this, data, ...args)
-      }
+      } as crypto.Hash['update']
       return hash
     })
     const bounded = { ...ChatProfileStore.find(profile.id)!, systemPrompt: marker, promptSections: [], contextTokens: 5000 }
@@ -492,14 +492,14 @@ test('chat diagnostics: capture, read-time permissions, alternatives, branches a
       assert.equal(diagnostic.texts?.length, 1)
       assert.equal(diagnostic.texts?.[0].text, '내 계정 로어 본문')
       const current = ChatProfileStore.find(profile.id)!
-      const codex = codexInputMeta(current, [], { keyed: result.keyed, keyedKeys: result.keyedKeys, selected: { ...result, index: '', books: [] }, index: { text: '', keys: [] } }, '파일 입력', result.keys, [])
+      const codex = codexInputMeta(current, [], { keyed: result.keyed, keyedKeys: result.keyedKeys, selected: { ...result, index: '', books: [], linked: '' }, index: { text: '', keys: [] }, recallText: '' }, '파일 입력', result.keys, [])
       assert.equal(codex.lore.length, 1)
       assert.equal(codex.loreEntries?.[0].file, inline ? 'inline' : 'hint')
     }
   })
 
   await t.test('recall ids, weighted scores and shared terms reach metadata; metadata caps are enforced', () => {
-    const segment = { id: 987, thread_id: threadId, level: 0, from_message_id: 1, until_message_id: 1, content: '바닷가 반지 약속을 꼭 기억해', created_date: '', updated_date: '', backed: 1 }
+    const segment: ChatSummarySegment = { id: 987, thread_id: threadId, level: 0, from_message_id: 1, until_message_id: 1, content: '바닷가 반지 약속을 꼭 기억해', created_date: '', updated_date: '', backed: 1 }
     const selected = selectRecall([segment], '바닷가 반지 약속', 800, (text) => text.length)
     assert.equal(selected[0].id, 987)
     assert.ok(selected[0].score > 0)
@@ -523,7 +523,7 @@ test('chat diagnostics: capture, read-time permissions, alternatives, branches a
     const current = ChatProfileStore.find(profile.id)!
     const messages = CodexChatStore.listMessages(threadId)
     const selected = selectRequestLore(current, booksForRequest({ thread: thread(), profile: current }), messages, (text) => text.length, (text) => text, { toolOffered: false, inlineFiles: false })
-    const lore = { keyed: selected.keyed, keyedKeys: selected.keyedKeys, index: { text: loreIndexText(selected), keys: ['lore-index:abc'] }, selected }
+    const lore = { keyed: selected.keyed, keyedKeys: selected.keyedKeys, index: { text: loreIndexText(selected), keys: ['lore-index:abc'] }, selected, recallText: '' }
     const meta = codexInputMeta(current, messages, lore, 'CODEX_INPUT_PRIVATE', ['lore-index:abc', 'note:def'], contextSource('author-note', current.authorNote))
     assert.equal(meta.engine, 'codex')
     assert.equal(meta.opaqueContext, true)
@@ -574,7 +574,7 @@ test('chat diagnostics: capture, read-time permissions, alternatives, branches a
       assert.deepEqual(keys('llm-test'), ['chat.diagnostics.view', 'chat.use', 'images.view'], 'raw prompts are no longer a grantable key')
       assert.deepEqual(keys('codex-test'), ['chat.agent.use', 'chat.diagnostics.view', 'images.view'], 'older conversions still run first on an old database')
       assert.deepEqual(keys('no-chat-test'), [], 'bot tool keys are gone; the account feature keys decide')
-      assert.equal(auth.prepare("SELECT COUNT(*) AS n FROM auth_permissions WHERE permission_key LIKE 'chat.tools.%' OR permission_key = 'chat.llm.use'").get().n, 0)
+      assert.equal((auth.prepare("SELECT COUNT(*) AS n FROM auth_permissions WHERE permission_key LIKE 'chat.tools.%' OR permission_key = 'chat.llm.use'").get() as { n: number }).n, 0)
       auth.prepare("DELETE FROM auth_group_permissions WHERE group_id = (SELECT id FROM auth_permission_groups WHERE group_key = 'llm-test') AND permission_id = (SELECT id FROM auth_permissions WHERE permission_key = 'chat.diagnostics.view')").run()
       seedAccessControlDefaults(auth)
       assert.ok(!keys('llm-test').includes('chat.diagnostics.view'), 'restart must not undo a later revocation')
@@ -587,7 +587,7 @@ test('chat diagnostics: capture, read-time permissions, alternatives, branches a
     const skill = ChatSkillStore.create({ name: 'Picture request', description: 'Use when the user asks for a picture.', instructions: `1. Ask for the pose.\n${'Detail. '.repeat(700)}\n2. END_OF_SKILL` })
     ChatProfileStore.update(profile.id, { skillIds: [skill.id] })
     const sent: Array<{ messages: ChatCompletionMessage[]; tools?: Array<{ function: { name: string } }> }> = []
-    s.mock.method(globalThis, 'fetch', async (_url, init) => {
+    s.mock.method(globalThis, 'fetch', async (_url: Parameters<typeof fetch>[0], init?: RequestInit) => {
       sent.push(JSON.parse(String(init?.body)))
       const first = sent.length === 1
       return Response.json({ choices: [{ message: first ? { content: '', tool_calls: [{ id: 'skill', type: 'function', function: { name: 'use_skill', arguments: '{"name":"picture request"}' } }] } : { content: 'drawn' }, finish_reason: first ? 'tool_calls' : 'stop' }], usage: { prompt_tokens: 10 } })

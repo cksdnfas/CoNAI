@@ -85,7 +85,7 @@ test('manual Codex compaction cancels a waiting instruction hook and releases th
         return {}
       },
     })
-    return client as unknown as CodexAppServerClient
+    return client as unknown as Awaited<ReturnType<typeof CodexAppServerClient.start>>
   })
   const zip = new AdmZip()
   zip.addFile('plugin.json', Buffer.from(JSON.stringify({ apiVersion: 1, id: 'compact-test', name: 'Compaction test', version: '1.0.0', description: '', server: { entry: 'server.mjs' }, pages: [{ id: 'main', title: 'Test', entry: 'index.html', accepts: [], actions: [] }] })))
@@ -195,7 +195,7 @@ test('a stopped Codex compaction keeps the chat until its turn completes, so tha
         return { turn: { id: 'reply-turn' } }
       },
     })
-    return client as unknown as CodexAppServerClient
+    return client as unknown as Awaited<ReturnType<typeof CodexAppServerClient.start>>
   })
   const profile = ChatProfileStore.create({ name: 'Compact stop', engine: 'codex', mcpEnabled: false })
   const thread = CodexChatService.createThread(requester, profile.id)
@@ -462,7 +462,7 @@ test('summary includes tool schema cost before old turns leave the request', asy
   mockModelRows(t, { 1: ['test', 'test'] }, 1)
   const profile = ChatProfileStore.draft({ name: 'Character', contextTurns: 50, maxTokens: 100, summaryEnabled: true, summaryTriggerTurns: 1, mcpEnabled: true })
   const thread = { id: 123, account_id: null, user_profile_id: null, context_turns: null, max_tokens: null, summary_enabled: null, summary: null, summary_until_message_id: null, context_revision: 0, block_edits: null, author_note: null, author_note_depth: null } as CodexChatThreadRecord
-  const messages = Array.from({ length: 21 }, (_, index) => ({ id: index + 1, role: index % 2 === 0 ? 'user' : 'assistant', content: `message-${index + 1}: ${'a'.repeat(400)}`, tool_calls: [] })) as CodexChatMessageRecord[]
+  const messages = Array.from({ length: 21 }, (_, index) => ({ id: index + 1, role: index % 2 === 0 ? 'user' : 'assistant', content: `message-${index + 1}: ${'a'.repeat(400)}`, tool_calls: [] })) as unknown as CodexChatMessageRecord[] // intentionally partial records: only the fields the context builders read
   const tools: ChatCompletionTool[] = [{ type: 'function', function: { name: 'read', description: 'schema '.repeat(1800), parameters: {} } }]
   const full = buildChatMessages({ profile, thread, messages, config: resolveContextConfig(thread, profile), tools })
   profile.contextTokens = estimateMessagesTokens(profile.id, full, tools) + 100 - 500
@@ -499,8 +499,8 @@ test('group history fits the member token budget while retaining the latest mess
   mockModelRows(t, { 1: ['test', 'test'] }, 1)
   const profile = ChatProfileStore.draft({ name: 'Character', maxTokens: 100 }, 7)
   const thread = { id: 456, account_id: null, user_profile_id: null, profile_id: 7, title: 'Room', block_edits: null, author_note: null, author_note_depth: null } as CodexChatThreadRecord
-  const messages = Array.from({ length: 15 }, (_, index) => ({ id: index + 1, role: 'user', content: `message-${index + 1}: ${'a'.repeat(400)}`, tool_calls: [] })) as CodexChatMessageRecord[]
-  const params = { profile, thread, members: [profile], messages, windowLimit: 20, withTools: false, tools: [], maxTokens: 100 }
+  const messages = Array.from({ length: 15 }, (_, index) => ({ id: index + 1, role: 'user', content: `message-${index + 1}: ${'a'.repeat(400)}`, tool_calls: [] })) as unknown as CodexChatMessageRecord[] // intentionally partial records: only the fields the context builders read
+  const params = { profile, thread, members: [profile], messages, windowLimit: 20, withTools: false as const, tools: [], maxTokens: 100 }
   const full = buildGroupLlmMessages(params)
   profile.contextTokens = estimateMessagesTokens(profile.id, full) + 100 - 600
   const fitted = buildGroupLlmMessages(params)

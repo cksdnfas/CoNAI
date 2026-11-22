@@ -148,7 +148,7 @@ test('profile agents: admission, no recursion, expiry logs and unread isolation'
     const files = new Map<number, { created: string; modified: string }>()
     const deleted: number[] = []
     const originalDelete = CodexChatService.deleteThread
-    const deletion = t.mock.method(CodexChatService, 'deleteThread', async (who, roomId) => {
+    const deletion = t.mock.method(CodexChatService, 'deleteThread', async (who: Parameters<typeof originalDelete>[0], roomId: number) => {
       deleted.push(roomId)
       const row = db.prepare('SELECT status, log_file_id FROM chat_agent_calls WHERE agent_thread_id = ?').get(roomId) as { status: string; log_file_id: string | null }
       assert.equal(row.log_file_id !== null, row.status === 'failed', 'log is committed before room deletion')
@@ -272,7 +272,8 @@ test('profile agents: admission, no recursion, expiry logs and unread isolation'
       assert.ok(result.id > callerReplies.get(id)!, 'the result follows the caller reply')
       wakes.push(id)
     }
-    child.mock.method(CodexChatService, 'sendMessage', wake as typeof CodexChatService.sendMessage)
+    // Partial mock: the reaction only needs to be observed; it never produces the reply record sendMessage returns.
+    child.mock.method(CodexChatService, 'sendMessage', wake as unknown as typeof CodexChatService.sendMessage)
     child.mock.method(GroupChatService, 'sendMessage', wake as typeof GroupChatService.sendMessage)
     const now = new Date()
     const targets: number[] = []

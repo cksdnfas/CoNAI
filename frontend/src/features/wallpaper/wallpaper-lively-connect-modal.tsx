@@ -115,7 +115,7 @@ export function WallpaperLivelyConnectModal({ open, onClose, presets, initialIss
                 {t({ ko: 'Wallpaper Engine 패키지 받기', en: 'Get Wallpaper Engine package' })}
               </Button>
             </div>
-            <div className="text-xs text-muted-foreground">{t({ ko: '키는 지금만 보여. 보기 전용이고(빠른 실행 버튼만 예외) 언제든 폐기할 수 있어.', en: 'The key is shown only now. It only views (except quick-run buttons) and can be revoked any time.' })}</div>
+            <div className="text-xs text-muted-foreground">{t({ ko: '키는 지금만 표시 · 보기 전용 (언제든 폐기 가능)', en: 'Shown once · view-only (revocable any time)' })}</div>
           </div>
         ) : null}
 

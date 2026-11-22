@@ -80,7 +80,7 @@ test('a new chat sends the references and images picked while it was prepared, w
   client.setQueryData(['auth-status'], { authenticated: true, hasCredentials: true, accountId: 1, permissionKeys: ['chat.use'] })
   client.setQueryData(CHAT_STATUS_QUERY_KEY, { canUse: true })
   const hash = 'a'.repeat(48)
-  let sent: { text: string; mediaHashes: string[] } | null = null
+  let sent = null as { text: string; mediaHashes: string[] } | null
   t.mock.method(globalThis, 'fetch', async (url: string | URL | Request, init?: RequestInit) => {
     const path = String(url)
     if (path.endsWith('/profiles/7/greeting')) return json({ index: 0, text: 'Hi', greetings: ['Hi'], userProfileId: null, before: [], after: [] })
@@ -159,7 +159,7 @@ test('a picked tool goes with the first message of a new chat, stays only when k
   await act(async () => { api.setToolPick(PENDING_DRAFT_KEY, { presetId: 3, name: 'Scene' }) })
   await act(async () => { await api.sendPending('draw') })
   assert.deepEqual(bodies.at(-1)?.toolDirective, { presetId: 3 })
-  assert.equal(api.toolSelections[5], undefined, 'a pick meant for one message is gone once it is sent')
+  assert.equal<(typeof api.toolSelections)[number] | undefined>(api.toolSelections[5], undefined, 'a pick meant for one message is gone once it is sent')
   assert.equal(api.toolSelections[PENDING_DRAFT_KEY], undefined)
 
   // Kept: it goes with every message and survives a reload (saved for the account in this browser).

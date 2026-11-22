@@ -11,10 +11,10 @@ export const listPluginDrafts = () => pluginRequest<PluginDraftSummary[]>(`${roo
 export const getPluginDraft = (id: string) => pluginRequest<PluginDraft>(`${root}/drafts/${id}`)
 export const createPluginDraft = (input: { requestId: string; pluginId: string; name?: string; fromInstalled?: boolean }) => pluginRequest<PluginDraft>(`${root}/drafts`, 'POST', input)
 export const readPluginDraft = (draftId: string, target: string, revision: number, offset = 0) => pluginRequest<PluginDraftFile>(`${root}/read`, 'POST', { draftId, target, revision, offset, limit: 128 * 1024 })
-export type PluginDraftChange = { kind: 'write'; target: string; text: string } | { kind: 'delete'; target: string } | { kind: 'move'; target: string; destination: string }
+export type PluginDraftChange = { kind: 'write'; target: string; text: string } | { kind: 'edit'; target: string; edits: Array<{ old_text: string; new_text: string; replace_all?: boolean }> } | { kind: 'delete'; target: string } | { kind: 'move'; target: string; destination: string }
 export const changePluginDraft = (draftId: string, revision: number, requestId: string, operations: PluginDraftChange[]) => pluginRequest<PluginDraft>(`${root}/changes`, 'POST', { draftId, revision, requestId, operations })
 export const reviewPluginDraft = (draftId: string, revision: number) => pluginRequest<PluginPackageReview>(`${root}/review`, 'POST', { draftId, revision })
-export const installPluginDraft = (review: PluginPackageReview) => pluginRequest<{ pluginId: string; version: string; enabled: boolean }>(`${root}/install`, 'POST', { draftId: review.draftId, revision: review.revision, digest: review.digest, enabled: review.enabled })
+export const installPluginDraft = (review: PluginPackageReview) => pluginRequest<{ pluginId: string; version: string; enabled: boolean }>(`${root}/install`, 'POST', { draftId: review.draftId, revision: review.revision, digest: review.digest, installedDigest: review.installedDigest, enabled: review.enabled })
 export const deletePluginDraft = (draftId: string, revision: number) => pluginRequest(`${root}/drafts/${draftId}`, 'DELETE', { revision })
 export function uploadPluginDraftAsset(draftId: string, revision: number, requestId: string, target: string, file: File, replace: boolean) {
   const body = new FormData()

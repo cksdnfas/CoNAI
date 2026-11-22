@@ -45,6 +45,6 @@ export function registerPluginAuthoringTools(server: McpServer, context: McpRequ
     }),
   }, input => output(() => changePluginDraft(context.requester!, input)))
   server.registerTool('prepare_plugin_install', {
-    description: 'Validate this exact draft revision\'s package contract, not functionality. Returns changed files, digest and a human review/install/export link; never executes, installs, activates or approves. If stale, read_plugin_draft before preparing again.', inputSchema: pluginDraftRevisionSchema,
+    description: 'Validate this exact draft revision\'s package contract, not functionality. Returns files changed against the current installation, digest, conflict (installation changed/removed since the draft\'s base; the human install replaces it) and a review/install/export link; never executes, installs, activates or approves. If stale, read_plugin_draft before preparing again.', inputSchema: pluginDraftRevisionSchema,
   }, input => output(() => ({ review: reviewPluginDraft(context.requester!, input.draftId, input.revision), url: `/#/settings?section=plugins&draft=${input.draftId}`, status: 'needs_human_review' })))
 }

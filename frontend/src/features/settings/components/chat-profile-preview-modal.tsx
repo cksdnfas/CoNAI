@@ -53,7 +53,7 @@ export function ChatProfilePreviewModal({ open, draft, onClose }: { open: boolea
                 </dt><dd className={cn('tabular-nums font-semibold', overBudget && 'text-destructive')}>≈ {formatNumber(preview.tokens.total)}</dd></div>
               <div><dt className="text-xs text-muted-foreground">{t({ ko: '컨텍스트 길이', en: 'Context length' })}</dt><dd className="tabular-nums">{budget !== null ? formatNumber(budget) : t({ ko: '제한 없음', en: 'No limit' })}</dd></div>
             </dl>
-            {overBudget ? <p className="text-xs text-destructive">{t({ ko: '대화 전에 이미 컨텍스트 길이를 넘어. 섹션을 줄이거나 도구를 덜 고르거나 길이를 늘려줘.', en: 'This already exceeds the context length before any conversation.' })}</p> : null}
+            {overBudget ? <p className="text-xs text-destructive">{t({ ko: '대화 전부터 컨텍스트 길이를 초과해.', en: 'This already exceeds the context length before any conversation.' })}</p> : null}
             <div className="space-y-4 border-t border-line pt-4">
               {preview.messages.map((message, index) => (
                 <EditorGroup key={index} label={t(ROLE_LABELS[message.role] ?? { ko: message.role, en: message.role })}>

@@ -2,6 +2,7 @@ import type { InfiniteData, QueryClient } from '@tanstack/react-query'
 import {
   REFMOD_ENTRY_FILE_REF_KIND,
   type RefModAdoptResult,
+  type RefModDraftTemplate,
   type RefModEntryBulkResult,
   type RefModEntryDetail,
   type RefModEntryFileRef,
@@ -20,6 +21,7 @@ import { withPublicWorkflowScope } from '@/lib/public-workflow-scope'
 
 export type {
   RefModAdoptResult,
+  RefModDraftTemplate,
   RefModEntryDetail,
   RefModEntryFileRef,
   RefModEntryForm,
@@ -47,6 +49,7 @@ export type RefModEntryScope = {
   query: string
   concept: string
   favorite: boolean
+  registered?: boolean | 'all'
   sort: RefModEntrySort
   limit: number
 }
@@ -54,8 +57,9 @@ export const REFMOD_ENTRIES_PAGE_SIZE = 50
 
 export const REFMOD_ENTRIES_QUERY_KEY = 'refmod-entries'
 /** The scrolled list: every loaded batch of one scope. */
-export const refModEntryPagesQueryKey = (scope: RefModEntryScope) => [REFMOD_ENTRIES_QUERY_KEY, 'list', scope.query, scope.concept, scope.favorite ? 1 : 0, scope.sort, scope.limit] as const
+export const refModEntryPagesQueryKey = (scope: RefModEntryScope) => [REFMOD_ENTRIES_QUERY_KEY, 'list', scope.query, scope.concept, scope.favorite ? 1 : 0, scope.registered ?? true, scope.sort, scope.limit] as const
 export const refModEntryQueryKey = (entryId: number) => [REFMOD_ENTRIES_QUERY_KEY, 'entry', entryId] as const
+export const refModTemplateQueryKey = (workflowId?: number | null) => [REFMOD_ENTRIES_QUERY_KEY, 'template', workflowId === undefined ? 'default' : workflowId === null ? 'none' : workflowId] as const
 export const refModPresenceQueryKey = [REFMOD_ENTRIES_QUERY_KEY, 'presence'] as const
 export const refModUnregisteredQueryKey = [REFMOD_ENTRIES_QUERY_KEY, 'unregistered'] as const
 export const refModWorkflowsQueryKey = [REFMOD_ENTRIES_QUERY_KEY, 'workflows'] as const
@@ -71,16 +75,18 @@ export function listRefModEntries(scope: RefModEntryScope & { offset: number }, 
   if (scope.query) params.set('query', scope.query)
   if (scope.concept) params.set('concept', scope.concept)
   if (scope.favorite) params.set('favorite', '1')
+  if (scope.registered === false) params.set('registered', '0')
+  else if (scope.registered === 'all') params.set('registered', 'all')
   params.set('sort', scope.sort)
   params.set('limit', String(scope.limit))
   params.set('offset', String(scope.offset))
   return requestApiData<RefModEntryPage>(withPublicWorkflowScope(BASE, params), { signal })
 }
-/** The names of every entry, read in batches of 200 (bounded at 4,000). */
+/** The names of every entry (registered and unregistered), read in batches of 200 (bounded at 4,000). */
 export async function listRefModEntryNames(signal?: AbortSignal) {
   const names: string[] = []
   for (let offset = 0; offset < 4000;) {
-    const page = await listRefModEntries({ query: '', concept: '', favorite: false, sort: 'name', limit: 200, offset }, signal)
+    const page = await listRefModEntries({ query: '', concept: '', favorite: false, registered: 'all', sort: 'name', limit: 200, offset }, signal)
     names.push(...page.items.map((item) => item.name))
     if (!page.hasMore || !page.items.length) break
     offset += page.items.length
@@ -90,9 +96,18 @@ export async function listRefModEntryNames(signal?: AbortSignal) {
 export function getRefModEntry(entryId: number, signal?: AbortSignal) {
   return requestApiData<RefModEntryDetail>(`${BASE}/${entryId}`, { signal, cache: 'no-store' })
 }
+/** Blank creation form for a brand-new unsaved RefMod (default workflow when `workflowId` is omitted). */
+export function getRefModDraftTemplate(workflowId?: number | null, signal?: AbortSignal) {
+  const query = workflowId === undefined ? '' : `?workflowId=${workflowId === null ? '' : workflowId}`
+  return requestApiData<RefModDraftTemplate>(`${BASE}/template${query}`, { signal })
+}
 /** Saved run records whose name no entry has (latest per name). */
 export function listUnregisteredRefMods(signal?: AbortSignal) {
   return requestApiData<RefModUnregisteredRecord[]>(`${BASE}/unregistered`, { signal })
+}
+/** Permanently delete an unregistered saved run record and its retained source files. */
+export function deleteUnregisteredRefModRecord(recordId: number) {
+  return requestApiData<{ deleted: boolean }>(`${BASE}/unregistered/${recordId}`, { method: 'DELETE' })
 }
 /** The default server's RefMod library, read live (may take a while when the server is slow). */
 export function getRefModPresence(signal?: AbortSignal) {
@@ -103,10 +118,19 @@ export function listRefModWorkflows(signal?: AbortSignal) {
   return requestApiData<RefModWorkflowCandidate[]>(`${BASE}/workflows`, { signal })
 }
 
-export type RefModEntryCreateInput = { name: string; workflowId?: number | null; duplicateOf?: number }
+export type RefModEntryCreateInput = {
+  name: string
+  workflowId?: number | null
+  conceptType?: string
+  description?: string
+  keywords?: string[]
+  values?: Record<string, unknown>
+  registered?: boolean
+  duplicateOf?: number
+}
 /** Refused with 409 `name_conflict` when the name is taken. `duplicateOf` copies another entry (its sources are copied). */
 export function createRefModEntry(input: RefModEntryCreateInput) {
-  return requestApiData<RefModEntryDetail>(BASE, { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(input) }, { timeoutMs: 120_000 })
+  return requestApiData<RefModEntryDetail>(BASE, { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(input) }, { timeoutMs: 300_000 })
 }
 
 export type RefModEntryPatch = {
@@ -116,6 +140,7 @@ export type RefModEntryPatch = {
   description?: string
   keywords?: string[]
   favorite?: boolean
+  registered?: boolean
   workflowId?: number | null
   /** The linked workflow's whole form keyed by field id; the server splits it by roles and stores the sources. */
   values?: Record<string, unknown>
@@ -128,12 +153,12 @@ export function patchRefModEntry(entryId: number, patch: RefModEntryPatch) {
 export function deleteRefModEntry(entryId: number, revision?: number) {
   return requestApiData<{ deleted: boolean }>(`${BASE}/${entryId}${revision === undefined ? '' : `?revision=${revision}`}`, { method: 'DELETE' })
 }
-export type RefModEntryBulkInput = { ids: number[]; action: 'favorite' | 'delete'; favorite?: boolean }
+export type RefModEntryBulkInput = { ids: number[]; action: 'favorite' | 'delete' | 'register' | 'unregister'; favorite?: boolean }
 export function bulkRefModEntries(input: RefModEntryBulkInput) {
   return requestApiData<RefModEntryBulkResult>(`${BASE}/bulk`, { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(input) })
 }
-/** Entries from unregistered records (sources copied) and server-only names (exactly as the server lists them). */
-export function adoptRefMods(input: { recordIds?: number[]; names?: string[] }) {
+/** Entries from unregistered entries (re-registered), unregistered records (sources copied) and server-only names. */
+export function adoptRefMods(input: { entryIds?: number[]; recordIds?: number[]; names?: string[] }) {
   return requestApiData<RefModAdoptResult>(`${BASE}/adopt`, { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(input) }, { timeoutMs: 300_000 })
 }
 /** Queue a build on the default server; 409 with `code` (blocked, no_default_server, server_not_linked, pending…) when it cannot. */

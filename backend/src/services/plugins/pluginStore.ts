@@ -49,6 +49,9 @@ export function pluginDb(): Database.Database {
       CREATE TABLE IF NOT EXISTS plugin_sources (
         plugin_id TEXT PRIMARY KEY, url TEXT NOT NULL, provider TEXT NOT NULL, ref TEXT NOT NULL, path TEXT NOT NULL,
         commit_sha TEXT NOT NULL, digest TEXT NOT NULL, latest_commit TEXT, checked_at TEXT, check_error TEXT);
+      -- Pages an administrator shared with every signed-in account; kept across updates, void while the page is gone.
+      CREATE TABLE IF NOT EXISTS plugin_public_pages (
+        plugin_id TEXT NOT NULL, page_id TEXT NOT NULL, PRIMARY KEY(plugin_id, page_id));
     `)
     if (!(db.prepare('PRAGMA table_info(plugin_instances)').all() as Array<{ name: string }>).some(column => column.name === 'workspace')) db.exec('ALTER TABLE plugin_instances ADD COLUMN workspace TEXT')
     if (!(db.prepare('PRAGMA table_info(plugin_llm_requests)').all() as Array<{ name: string }>).some(column => column.name === 'delivery')) db.exec('ALTER TABLE plugin_llm_requests ADD COLUMN delivery TEXT')

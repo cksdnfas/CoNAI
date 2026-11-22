@@ -1,0 +1,30 @@
+{
+  "extends": "./tsconfig.test.json",
+  "compilerOptions": {
+    "paths": {
+      "@/*": [
+        "./src/*"
+      ],
+      "@conai/shared": [
+        "../shared/src/index.ts"
+      ]
+    },
+    "lib": [
+      "ES2024",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "types": [
+      "vite/client",
+      "node"
+    ],
+    "allowJs": true,
+    "checkJs": false
+  },
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "test/**/*.ts",
+    "test/**/*.tsx"
+  ]
+}

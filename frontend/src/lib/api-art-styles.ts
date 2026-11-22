@@ -16,7 +16,7 @@ import { ApiRequestError, requestApiData } from '@/lib/api-request'
 import { buildApiUrl } from '@/lib/api-url'
 import { readDownloadBlob } from '@/lib/download-utils'
 
-export type { ArtStyle, ArtStyleBadgeCount, ArtStyleImage, ArtStyleImageInput, ArtStyleImportResult, ArtStylePage, ArtStylePatch, ArtStyleSort, ArtStyleSummary } from '@conai/shared'
+export type { ArtStyle, ArtStyleBadgeCount, ArtStyleCreateInput, ArtStyleImage, ArtStyleImageInput, ArtStyleImportResult, ArtStylePage, ArtStylePatch, ArtStyleSort, ArtStyleSummary } from '@conai/shared'
 
 const BASE = '/api/art-styles'
 const JSON_HEADERS = { 'Content-Type': 'application/json' }

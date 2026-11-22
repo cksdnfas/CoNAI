@@ -21,6 +21,7 @@ import {
 import { dismissChatProposal, markChatProposalSaved, type CodexChatToolCall } from '@/lib/api-codex-chat'
 import { getErrorMessage } from '@/lib/error-message'
 import { ChatMediaAttachments } from './chat-media-picker'
+import { useAutoApproveCard } from './chat-auto-approve'
 import { codexChatThreadQueryKey } from './codex-chat-context'
 import { ProposalFooter, ProposalFrame, ProposalRow as Row } from './chat-proposal-parts'
 
@@ -88,6 +89,8 @@ export function ChatCharacterLibraryProposalCard({ proposal, threadId }: { propo
   const dismiss = useMutation({ mutationFn: () => dismissChatProposal(proposal.id), onSuccess: async () => { setState('dismissed'); await refreshThread() }, onError })
   const busy = apply.isPending || dismiss.isPending
   const deleting = proposal.action !== 'save_setting'
+  // Auto-approve: the sending tab saves the card as it arrives (chat-auto-approve); deletions wait for a click.
+  useAutoApproveCard(proposal, canEdit && !deleting, saved || dismissed || busy, () => apply.mutateAsync())
 
   const byId = new Map((foldersQuery.data ?? []).map((folder) => [folder.id, folder]))
   const folderLabel = (folderId: number | null) => [t({ ko: '최상위', en: 'Top level' }), ...folderPath(byId, folderId).map((folder) => folder.name)].join(' / ')

@@ -75,7 +75,7 @@ export function PromptDanbooruInstallation({ available }: { available: boolean }
   }, [queryClient, status?.installedRevision])
 
   if (status?.canInstall === false) {
-    return available ? null : <p className="text-xs text-muted-foreground">{t({ ko: '사용자 지정 DB 경로를 쓰고 있어. 자동 설치를 사용하려면 DANBOORU_SQLITE_PATH 설정을 해제해.', en: 'A custom DB path is configured. Remove DANBOORU_SQLITE_PATH to enable automatic installation.' })}</p>
+    return available ? null : <p className="text-xs text-muted-foreground">{t({ ko: 'DANBOORU_SQLITE_PATH 지정 중 · 자동 설치 불가', en: 'Custom DANBOORU_SQLITE_PATH set · automatic install unavailable' })}</p>
   }
 
   const busy = install.isPending || isRunning(status?.phase)

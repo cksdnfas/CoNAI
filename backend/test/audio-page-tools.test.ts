@@ -96,5 +96,5 @@ test('audio page: connected pages preserve authorized tools and audio adds its b
   assert.ok(noPage.has('order_audio') && noPage.has('create_audio_folder') && noPage.has('move_audio_candidates'), 'without a page the audio tools are offered too')
   assert.ok(noPage.has('open_tools') && noPage.has('run_tool'), 'through the tool catalog')
 
-  assert.match(chatPageReference(audioPage), /오디오/)
+  assert.match(chatPageReference(audioPage, undefined, null), /오디오/)
 })

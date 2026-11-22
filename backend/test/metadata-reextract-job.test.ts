@@ -53,7 +53,7 @@ test('metadata re-extraction starts once, backpressures, cancels and reports fin
   })()
 
   const originalAccess = fs.promises.access.bind(fs.promises)
-  t.mock.method(fs.promises, 'access', async (filePath, mode) => {
+  t.mock.method(fs.promises, 'access', async (filePath: fs.PathLike, mode?: number) => {
     if (String(filePath).startsWith(path.join(root, 'candidates'))) {
       if (String(filePath).endsWith(`${path.sep}missing.png`)) throw new Error('missing')
       return
@@ -66,7 +66,7 @@ test('metadata re-extraction starts once, backpressures, cancels and reports fin
   let producePrompts = false
   const attempts = new Map<string, number>()
   const processedOrder: string[] = []
-  const extractor = t.mock.method(BackgroundQueueService, 'extractAndPersistMetadata', async (filePath, compositeHash) => {
+  const extractor = t.mock.method(BackgroundQueueService, 'extractAndPersistMetadata', async (filePath: string, compositeHash: string) => {
     if (blocked) {
       firstStarted()
       await gate
@@ -173,12 +173,12 @@ test('metadata re-extraction starts once, backpressures, cancels and reports fin
   const observeQueue = () => { peakQueue = Math.max(peakQueue, BackgroundQueueService.getQueueStatus().queueLength) }
   const originalTrack = BackgroundQueueService.trackMetadataExtractionTask.bind(BackgroundQueueService)
   const originalPrompt = BackgroundQueueService.addPromptCollectionTask.bind(BackgroundQueueService)
-  t.mock.method(BackgroundQueueService, 'trackMetadataExtractionTask', (filePath, compositeHash) => {
+  t.mock.method(BackgroundQueueService, 'trackMetadataExtractionTask', (filePath: string, compositeHash: string) => {
     const task = originalTrack(filePath, compositeHash)
     observeQueue()
     return task
   })
-  t.mock.method(BackgroundQueueService, 'addPromptCollectionTask', (filePath, compositeHash) => {
+  t.mock.method(BackgroundQueueService, 'addPromptCollectionTask', (filePath: string, compositeHash: string) => {
     originalPrompt(filePath, compositeHash)
     observeQueue()
   })
@@ -208,7 +208,7 @@ test('metadata re-extraction starts once, backpressures, cancels and reports fin
     let notify!: () => void, finish!: () => void
     let reading = new Promise<void>(resolve => { notify = resolve })
     let hold = new Promise<void>(resolve => { finish = resolve })
-    s.mock.method(MetadataExtractor, 'extractMetadata', async (source) => {
+    s.mock.method(MetadataExtractor, 'extractMetadata', async (source: string) => {
       calls.push(source)
       notify()
       await hold

@@ -125,7 +125,7 @@ test('chat web research: settings gate, isolated runs, page text', { timeout: 60
     const blocked = new Promise<void>((resolve) => { finish = resolve })
     const running = new Promise<void>((resolve) => { started = resolve })
     let calls = 0
-    const runner = t.mock.method(research.researchRunners, 'claude', async (_requester, _question, _model, signal) => {
+    const runner = t.mock.method(research.researchRunners, 'claude', async (...[_requester, _question, _model, signal]: Parameters<typeof research.researchRunners.claude>) => {
       calls += 1
       engineSignal = signal!
       started()
@@ -171,7 +171,7 @@ test('chat web research: settings gate, isolated runs, page text', { timeout: 60
     let engineSignal!: AbortSignal
     let started!: () => void
     const running = new Promise<void>((resolve) => { started = resolve })
-    const runner = t.mock.method(research.researchRunners, 'claude', async (_requester, _question, _model, signal) => {
+    const runner = t.mock.method(research.researchRunners, 'claude', async (...[_requester, _question, _model, signal]: Parameters<typeof research.researchRunners.claude>) => {
       engineSignal = signal!
       started()
       await new Promise<void>((_resolve, reject) => signal!.addEventListener('abort', () => reject(signal!.reason), { once: true }))
@@ -201,7 +201,7 @@ test('chat web research: settings gate, isolated runs, page text', { timeout: 60
 
   await t.test('the waiting queue is bounded; identical queued callers share a slot and cancellation frees capacity', async () => {
     const requester = { accountId: null, accountType: 'admin' as const }
-    const runner = t.mock.method(research.researchRunners, 'claude', async (_requester, _question, _model, signal) => {
+    const runner = t.mock.method(research.researchRunners, 'claude', async (...[_requester, _question, _model, signal]: Parameters<typeof research.researchRunners.claude>) => {
       await new Promise<void>((_resolve, reject) => signal!.addEventListener('abort', () => reject(signal!.reason), { once: true }))
       return { text: 'unreachable', tokens: null }
     })

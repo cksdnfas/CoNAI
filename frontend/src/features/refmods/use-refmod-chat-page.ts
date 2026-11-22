@@ -39,18 +39,18 @@ const terms = (value: ChatPageData | undefined) => {
 export function useRefModChatPage(library: RefModLibrary) {
   const { t } = useI18n()
   const { editor, canEdit, canBuild, loadMore, presence } = library
-  const { base, latest, draft, ready } = editor
+  const { base, latest, draft, ready, activeForm } = editor
   const visible = library.visibleEntries
   const listed = visible?.slice(-ENTRY_LIMIT) ?? []
   const listedIds = listed.map((entry) => entry.id)
-  const unregistered = library.unregisteredRows.slice(0, UNREGISTERED_LIMIT)
+  const unregistered = library.allUnregisteredRows.slice(0, UNREGISTERED_LIMIT)
   // The open entry is built under its draft name, after its unsaved changes are saved (as the window's build key).
   const blockOf = (entry: RefModEntrySummary) => refModBuildBlockReason(t, {
     ...entry, pending: library.isPending(entry), ...(entry.id === base?.id ? { name: editor.nameValue.trim() || entry.name } : {}),
   }, presence.data, entry.id === base?.id && editor.dirty)
 
   // The open entry's form, as the ComfyUI page offers a workflow's: plain fields, node editors and media inputs.
-  const editable = canEdit && ready && Boolean(base?.form)
+  const editable = canEdit && ready && Boolean(activeForm)
   const safe = editable ? editor.fields.filter((field) => !protectedField(field)) : []
   const nodeFields = safe.filter((field) => field.type === 'node' && NODE_EDITORS.includes(field.node_editor ?? ''))
   // SnapRef pictures are attached on the generation page only; comfy.node still edits a SnapRef node here.
@@ -67,7 +67,7 @@ export function useRefModChatPage(library: RefModLibrary) {
       ...(field.type === 'number' ? { min: field.min, max: field.max, integer: Number.isInteger(field.step) && (field.step ?? 0) >= 1, allowEmpty: !field.required } : {}), ...(select ? { options: field.options } : {}) }]
   })
   const chatNodes = nodeFields.map((field) => comfyNodeChatData(field, draft.values[field.id], { refModExportOnly: true }))
-  const nameField = base?.form?.roles.name ?? null
+  const nameField = activeForm?.roles.name ?? null
   const inputSchema = Object.fromEntries(fields.map((field) => [field.id, field.type === 'number' ? pageNumber(field.min, field.max, field.integer)
     : field.type === 'select' && field.options?.length ? pageChoice(field.options) : Array.isArray(field.value) ? pageArray(pageText(CHAT_PAGE_LIMITS.text)) : pageText(CHAT_PAGE_LIMITS.text)]))
   /** Validate the whole patch before any input changes, as the ComfyUI page does. */
@@ -88,8 +88,14 @@ export function useRefModChatPage(library: RefModLibrary) {
 
   useChatPageRegistration({
     kind: 'page',
-    title: editor.open ? (base ? t({ ko: 'RefMod · {name}', en: 'RefMod · {name}' }, { name: base.name }).slice(0, 160) : 'RefMod') : 'RefMod',
-    resourceId: editor.open ? `refmod:${editor.entryId}` : 'refmods',
+    title: editor.open
+      ? (base ? t({ ko: 'RefMod · {name}', en: 'RefMod · {name}' }, { name: base.name }).slice(0, 160)
+        : editor.isNew ? t({ ko: '새 RefMod', en: 'New RefMod' })
+          : editor.recordPreview ? t({ ko: 'RefMod · {name}', en: 'RefMod · {name}' }, { name: editor.recordPreview.name }).slice(0, 160) : 'RefMod')
+      : 'RefMod',
+    resourceId: editor.open
+      ? (editor.entryId !== null ? `refmod:${editor.entryId}` : editor.recordPreview ? `refmod:record:${editor.recordPreview.recordId}` : 'refmod:new')
+      : 'refmods',
     priority: editor.open ? 10 : 0,
     dirty: editor.dirty,
     // A 'page' registration carries no page fields (the shared normaliser refuses them): the plain inputs fill through refmod.draft.
@@ -114,30 +120,49 @@ export function useRefModChatPage(library: RefModLibrary) {
         total: library.unregisteredCount,
         items: unregistered.map((row) => ({ key: row.key, kind: row.kind, name: pageFreeText(row.name), concept: row.conceptType, members: counts(row.kinds) })),
       },
-      selected: !editor.open ? null : !ready || !base || !latest ? { ready: false, id: editor.entryId } : {
-        ready: true,
-        id: base.id,
-        revision: base.revision,
-        dirty: editor.dirty,
-        busy: editor.busy,
-        favorite: latest.favorite,
-        name: pageFreeText(editor.nameValue),
-        nameField,
-        concept: latest.conceptType,
-        description: clip(latest.description),
-        keywords: draft.keywords,
-        workflow: base.form ? { id: base.form.workflow.id, name: pageFreeText(base.form.workflow.name) } : null,
-        roles: base.form?.roles ?? null,
-        issues: latest.issues.map((issue) => ({ code: issue.code, severity: issue.severity, ...(issue.fields ? { fields: issue.fields.map((field) => ({ id: field.id, label: pageFreeText(field.label) })) } : {}) })),
-        buildable: latest.buildable,
-        pending: library.isPending(latest),
-        buildBlock: blockOf(latest),
-        draftError: editor.draftError,
-        members: latest.members.map((member) => ({ kind: member.kind, description: clip(member.description) })),
-        runs: latest.records.slice(0, 3).map((record) => ({ status: record.status, error: record.error ? clip(record.error) : null, createdAt: record.createdAt })),
-        inputs: editable ? fields : editor.fields.filter((field) => field.type !== 'image' && field.type !== 'node' && !protectedField(field)).slice(0, 20).map((field) => ({ id: field.id, label: pageFreeText(field.label), value: clip(draft.values[field.id]) })),
-        images: mediaFields.map((field) => ({ fieldId: field.id, label: field.label })),
-      },
+      selected: !editor.open ? null
+        : editor.recordPreview ? { ready: true, recordId: editor.recordPreview.recordId, registered: false, name: pageFreeText(editor.recordPreview.name), concept: editor.recordPreview.conceptType, description: clip(editor.recordPreview.description) }
+          : !ready ? { ready: false, id: editor.entryId }
+            : !base || !latest ? {
+              ready: true,
+              id: null,
+              isNew: true,
+              registered: false,
+              dirty: editor.dirty,
+              busy: editor.busy,
+              name: pageFreeText(editor.nameValue),
+              nameField,
+              keywords: draft.keywords,
+              workflow: activeForm ? { id: activeForm.workflow.id, name: pageFreeText(activeForm.workflow.name) } : null,
+              roles: activeForm?.roles ?? null,
+              draftError: editor.draftError,
+              inputs: editable ? fields : [],
+              images: mediaFields.map((field) => ({ fieldId: field.id, label: field.label })),
+            } : {
+              ready: true,
+              id: base.id,
+              registered: latest.registered,
+              revision: base.revision,
+              dirty: editor.dirty,
+              busy: editor.busy,
+              favorite: latest.favorite,
+              name: pageFreeText(editor.nameValue),
+              nameField,
+              concept: latest.conceptType,
+              description: clip(latest.description),
+              keywords: draft.keywords,
+              workflow: base.form ? { id: base.form.workflow.id, name: pageFreeText(base.form.workflow.name) } : null,
+              roles: base.form?.roles ?? null,
+              issues: latest.issues.map((issue) => ({ code: issue.code, severity: issue.severity, ...(issue.fields ? { fields: issue.fields.map((field) => ({ id: field.id, label: pageFreeText(field.label) })) } : {}) })),
+              buildable: latest.buildable,
+              pending: library.isPending(latest),
+              buildBlock: blockOf(latest),
+              draftError: editor.draftError,
+              members: latest.members.map((member) => ({ kind: member.kind, description: clip(member.description) })),
+              runs: latest.records.slice(0, 3).map((record) => ({ status: record.status, error: record.error ? clip(record.error) : null, createdAt: record.createdAt })),
+              inputs: editable ? fields : editor.fields.filter((field) => field.type !== 'image' && field.type !== 'node' && !protectedField(field)).slice(0, 20).map((field) => ({ id: field.id, label: pageFreeText(field.label), value: clip(draft.values[field.id]) })),
+              images: mediaFields.map((field) => ({ fieldId: field.id, label: field.label })),
+            },
       nodes: chatNodes,
       media: media.candidates,
     } as Record<string, ChatPageData>,
@@ -150,8 +175,8 @@ export function useRefModChatPage(library: RefModLibrary) {
       ...(canEdit ? [
         pageAction('refmod.create', t({ ko: '새 RefMod 만들기', en: 'Create RefMod' }), t({ ko: '이 이름(파일 이름 하나, 경로 없이)으로 새 RefMod를 만들고 열어. 같은 이름은 거절돼.', en: 'Create a RefMod with this name (one plain file name, no path) and open it; a taken name is refused.' }), pageObject({ name: pageText(REFMOD_ENTRY_LIMITS.name) }, ['name']), 'save'),
         ...(listedIds.length ? [pageAction('refmod.favorite', t({ ko: '즐겨찾기 표시', en: 'Mark favorites' }), t({ ko: 'data.entries의 RefMod에 즐겨찾기를 켜거나 꺼. 바로 반영돼.', en: 'Turn the favorite mark of listed RefMods on or off; applies at once.' }), pageObject({ entryIds: pageArray(pageChoice(listedIds), listedIds.length, 1), favorite: { type: 'boolean' } }, ['entryIds', 'favorite']), 'save')] : []),
-        ...(unregisteredKeys.length ? [pageAction('refmod.adopt', t({ ko: '미등록 RefMod 등록', en: 'Register unregistered RefMods' }), t({ ko: 'data.unregistered의 항목을 key로 등록해. 저장된 실행은 소스를 복사하고, 서버에만 있는 이름은 정보만 가져와. 바로 반영돼.', en: 'Register data.unregistered rows by key: saved runs copy their sources, server-only names bring their metadata only. Applies at once.' }), pageObject({ keys: pageArray(pageChoice(unregisteredKeys), unregisteredKeys.length, 1) }, ['keys']), 'save')] : []),
-        ...(editor.open && ready ? [
+        ...(unregisteredKeys.length ? [pageAction('refmod.adopt', t({ ko: '미등록 RefMod 등록', en: 'Register unregistered RefMods' }), t({ ko: 'data.unregistered의 항목을 key로 등록해. 보관된 항목·실행은 소스를 유지·복사하고, 서버에만 있는 이름은 정보만 가져와. 바로 반영돼.', en: 'Register data.unregistered rows by key: kept entries and saved runs keep or copy sources, server-only names bring metadata only. Applies at once.' }), pageObject({ keys: pageArray(pageChoice(unregisteredKeys), unregisteredKeys.length, 1) }, ['keys']), 'save')] : []),
+        ...(editor.open && ready && !editor.recordPreview ? [
           pageAction('refmod.draft', t({ ko: 'RefMod 초안 채우기', en: 'Fill RefMod draft' }), t({ ko: '열린 RefMod 초안의 주어진 항목만 바꿔. 검색어는 목록 전체를 바꿔. inputs는 selected.inputs에 나온 워크플로 입력을 id로 채우고, 노드 입력은 comfy.node로 채워. 저장하지 않아.', en: 'Change only the given fields of the open RefMod’s draft; keywords replace the whole list. inputs sets the workflow’s plain inputs listed in selected.inputs by id; node inputs fill through comfy.node. Nothing is saved.' }), pageObject({
             ...(nameField ? {} : { name: pageText(REFMOD_ENTRY_LIMITS.name) }),
             keywords: pageArray(pageText(REFMOD_ENTRY_LIMITS.keyword), REFMOD_ENTRY_LIMITS.keywords),
@@ -159,8 +184,8 @@ export function useRefModChatPage(library: RefModLibrary) {
           })),
           ...(nodeFields.length ? [pageAction('comfy.node', t({ ko: 'H3·LoRA·SnapRef 노드 입력', en: 'Edit H3, LoRA or SnapRef inputs' }), t({ ko: 'nodes에 나온 노드별 schema에 맞춰 patch를 입력해. 타임라인은 기존 미디어 ID만 편집하고 새 소스는 media.attach로 넣어.', en: 'Match patch to the node-specific schema in nodes. Edit existing timeline media IDs; add new sources with media.attach.' }), pageObject({ fieldId: pageChoice(nodeFields.map((field) => field.id)), patch: COMFY_NODE_PATCH_SCHEMA }, ['fieldId', 'patch']))] : []),
           ...media.actions,
-          pageAction('refmod.save', t({ ko: 'RefMod 저장', en: 'Save RefMod' }), t({ ko: '열린 RefMod의 지금 초안을 selected.revision 기준으로 저장해. 소스는 RefMod 파일로 복사돼.', en: 'Save the open RefMod’s draft against selected.revision; sources are copied into the RefMod’s own files.' }), pageObject({}), 'save'),
-          pageAction('refmod.delete', t({ ko: 'RefMod 삭제', en: 'Delete RefMod' }), t({ ko: '열린 RefMod를 지워. 소스와 실행 기록도 지워지고 ComfyUI에 저장된 파일은 남아.', en: 'Delete the open RefMod with its sources and run records; the file saved in ComfyUI stays.' }), pageObject({}), 'save'),
+          pageAction('refmod.save', t({ ko: 'RefMod 저장', en: 'Save RefMod' }), t({ ko: '열린 RefMod의 지금 초안을 저장해. 소스는 RefMod 파일로 복사돼.', en: 'Save the open RefMod’s draft; sources are copied into the RefMod’s own files.' }), pageObject({}), 'save'),
+          ...(base ? [pageAction('refmod.delete', t({ ko: 'RefMod 삭제', en: 'Delete RefMod' }), t({ ko: '등록된 RefMod는 파일함을 유지한 채 미등록으로 옮기고, 미등록 항목은 원본 파일·실행 기록까지 영구 삭제해.', en: 'Moves a registered RefMod to Unregistered keeping its files, or permanently deletes an unregistered RefMod with its files and run records.' }), pageObject({}), 'save')] : []),
         ] : []),
       ] : []),
       ...(canBuild && buildIds.length ? [pageAction('refmod.build', t({ ko: 'RefMod 만들기', en: 'Build RefMod' }), t({ ko: '대표 ComfyUI 서버에서 RefMod를 만들어. 열린 RefMod에 저장하지 않은 변경이 있으면 먼저 저장해. buildBlock이 있는 항목은 거절돼.', en: 'Build a RefMod on the default ComfyUI server; an open RefMod with unsaved changes is saved first. Entries with a buildBlock are refused.' }), pageObject({ entryId: pageChoice(buildIds) }, ['entryId']), 'save')] : []),
@@ -188,7 +213,6 @@ export function useRefModChatPage(library: RefModLibrary) {
       if (id === 'refmod.close') { library.closeEntry(); return }
       if (id === 'refmod.create') {
         if (!await library.create(String(args.name ?? ''))) {
-          library.setCreating(null)
           throw new Error(t({ ko: 'RefMod를 만들지 못했어. 이름을 확인해줘.', en: 'Could not create the RefMod. Check the name.' }))
         }
         return
@@ -199,7 +223,7 @@ export function useRefModChatPage(library: RefModLibrary) {
       }
       if (id === 'refmod.adopt') {
         const keys = new Set(terms(args.keys))
-        const rows = library.unregisteredRows.filter((row) => keys.has(row.key))
+        const rows = library.allUnregisteredRows.filter((row) => keys.has(row.key))
         if (!rows.length) throw new Error(t({ ko: '등록할 미등록 항목이 목록에 없어.', en: 'Those unregistered rows are no longer listed.' }))
         const result = await library.adopt(rows)
         if (!result || (!result.created && !result.linked)) throw new Error(t({ ko: '등록하지 못했어.', en: 'Could not register.' }))

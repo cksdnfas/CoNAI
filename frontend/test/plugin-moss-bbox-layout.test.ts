@@ -5,6 +5,11 @@ import {
   sizeFromRatio, splitOptionFields, stringifyLayout, withDropdownOptions,
 } from '../../plugins/moss-bbox-studio/layout.js'
 
+// layout.js is plain JS: allowJs infers its `[]` literals as never[] and its computed-key objects as number-indexed,
+// so the tests read drafts and request data through these local types.
+type Draft = { size: number[]; summary: string; meta: string[]; canvas: string; items: Array<{ label: string; caption: string; text: string; box: number[] }> }
+type PromptData = Record<string, unknown>
+
 // MOSS-Image USERGUIDE: on a 1536×1024 canvas the editable draft box [176,224,800,864] (xyxy, from the top-left)
 // is [-288,-592,352,32] in the model prompt (yxyx, from the centre).
 const MOSS_DRAFT_BOX = [176 / 1536, 224 / 1024, 800 / 1536, 864 / 1024]
@@ -21,7 +26,7 @@ test('boxes are written in the model coordinate system', () => {
 })
 
 test('a layout written by the plugin reads back to the same boxes, and other box formats are understood', () => {
-  const draft = newDraft([1088, 1920])
+  const draft: Draft = newDraft([1088, 1920])
   draft.summary = 'Two women.'
   draft.meta = ['illustration']
   addRegion(draft, { label: 'character', caption: 'A blonde woman.', box: [0, 0.08, 0.49, 0.98] })
@@ -36,7 +41,7 @@ test('a layout written by the plugin reads back to the same boxes, and other box
     item.box.forEach((value: number, corner: number) => assert.ok(Math.abs(value - draft.items[index].box[corner]) < 0.002))
   })
 
-  const relative = parseLayoutPrompt(JSON.stringify({ summary: { caption: 'x' }, bbox_format: 'xywh', bbox_coord_space: 'relative', items: [{ type: 'text', caption: 'WAR', bbox: [0.68, 0.1, 0.25, 0.1] }] }), [1280, 720])
+  const relative = parseLayoutPrompt(JSON.stringify({ summary: { caption: 'x' }, bbox_format: 'xywh', bbox_coord_space: 'relative', items: [{ type: 'text', caption: 'WAR', bbox: [0.68, 0.1, 0.25, 0.1] }] }), [1280, 720]) as { draft: Draft } | null
   assert.deepEqual(relative?.draft.items[0].box.map((value: number) => Number(value.toFixed(2))), [0.68, 0.1, 0.93, 0.2])
   assert.equal(relative?.draft.items[0].label, 'text')
 })
@@ -61,10 +66,10 @@ test('marked fields are matched by role and the request carries only what is con
   assert.deepEqual(mappingIssues(fields, { ...mapping, prompt: 'gone' }).length, 2)
 
   const draft = newDraft([1024, 1024])
-  const data = buildPromptData(mapping, { draft, negative: 'bad anatomy', seed: '' })
+  const data = buildPromptData(mapping, { draft, negative: 'bad anatomy', seed: '' }) as PromptData
   assert.deepEqual(Object.keys(data).sort(), ['f1', 'f2', 'f3', 'f4'])
   assert.equal(data.f3, 1024)
-  assert.equal(buildPromptData(mapping, { draft, seed: '42' }).f5, 42)
+  assert.equal((buildPromptData(mapping, { draft, seed: '42' }) as PromptData).f5, 42)
   assert.equal('f5' in buildPromptData(mapping, { draft, seed: '-1' }), false)
 })
 
@@ -79,7 +84,8 @@ test('a workflow that takes an aspect ratio and megapixels gets those instead of
   assert.deepEqual(mappingIssues(fields, mapping, [1088, 1920]), [])
 
   const draft = newDraft([1088, 1920])
-  const data = buildPromptData(mapping, { draft, fields })
+  // JS default-parameter inference types `fields = []` as never[].
+  const data = buildPromptData(mapping, { draft, fields } as Parameters<typeof buildPromptData>[1])
   assert.deepEqual(data, { p: stringifyLayout(draft), r: '9:16 (portrait)', m: 2.09 })
   assert.equal(mappingIssues(fields, mapping, [1024, 1536]).length, 1, 'a canvas no option fits is reported')
   assert.deepEqual(sizeFromRatio(parseRatio('9:16 (portrait)') as number, 2.09), [1088, 1920])
@@ -102,7 +108,7 @@ test('a select that takes its choices from a dropdown list sends the list text, 
   const mapping = guessFieldMapping(fields)
   assert.deepEqual([mapping.sizeMode, mapping.prompt, mapping.negative, mapping.ratio, mapping.megapixels], ['ratio', 'p', 'n', 'r', 'm'])
   const draft = newDraft([1536, 1152])
-  assert.equal(buildPromptData(mapping, { draft, fields }).r, '4:3 (Standard)')
+  assert.equal((buildPromptData(mapping, { draft, fields }) as PromptData).r, '4:3 (Standard)')
 
   const { adjustable, fixed } = splitOptionFields(fields, mapping)
   assert.deepEqual(adjustable.map((field: { id: string }) => field.id), ['steps'])
@@ -111,7 +117,7 @@ test('a select that takes its choices from a dropdown list sends the list text, 
 
   const steps = adjustable[0]
   const options = setOptionValue({}, steps, '6')
-  assert.equal(buildPromptData(mapping, { draft, fields, options }).steps, 6)
+  assert.equal((buildPromptData(mapping, { draft, fields, options }) as PromptData).steps, 6)
   assert.deepEqual(setOptionValue(options, steps, ''), {}, 'a blank entry hands the field back to the workflow')
   assert.match(optionProblem(steps, '99'), /2~10/)
   assert.equal(optionProblem(steps, '6'), '')

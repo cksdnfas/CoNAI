@@ -25,7 +25,7 @@ export type EditorSectionEntry<T extends string> = {
 }
 
 /** The page heading as a field: the name is edited in place (a new item starts empty, showing its placeholder). */
-export function EditorTitleInput({ value, onChange, label, placeholder, maxLength, readOnly = false, invalid = false, as: Heading = 'h1' }: {
+export function EditorTitleInput({ value, onChange, label, placeholder, maxLength, readOnly = false, invalid = false, autoFocus = false, as: Heading = 'h1' }: {
   value: string
   onChange: (value: string) => void
   label: string
@@ -33,6 +33,7 @@ export function EditorTitleInput({ value, onChange, label, placeholder, maxLengt
   maxLength?: number
   readOnly?: boolean
   invalid?: boolean
+  autoFocus?: boolean
   /** `span` inside a heading that already exists (a dialog's title). */
   as?: 'h1' | 'span'
 }) {
@@ -46,6 +47,7 @@ export function EditorTitleInput({ value, onChange, label, placeholder, maxLengt
         placeholder={placeholder}
         maxLength={maxLength}
         readOnly={readOnly}
+        autoFocus={autoFocus}
         className={cn(
           '-mx-1.5 w-full min-w-0 rounded-sm bg-transparent px-1.5 py-0.5 text-xl font-semibold tracking-tight text-foreground outline-none placeholder:text-muted-foreground/60',
           !readOnly && 'hover:bg-fill focus-visible:bg-fill focus-visible:ring-2 focus-visible:ring-ring/40',

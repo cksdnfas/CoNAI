@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import path from 'node:path'
 import { test } from 'node:test'
+import type { ChatJudgeFollowUp, ChatJudgeItem } from '@conai/shared'
 
 test('judge presets: no-judge parity, original text, tool steering, fallback, logs and follow-ups', { timeout: 60000 }, async (t) => {
   // Load runtime modules only after isolating every data path. Never open the user's databases.
@@ -63,14 +64,16 @@ test('judge presets: no-judge parity, original text, tool steering, fallback, lo
     const last = users[users.length - 1]
     return typeof last.content === 'string' ? last.content : JSON.stringify(last.content)
   }
+  // Sparse items and follow-up on purpose: the store fills every omitted field (normalizeJudgeItems and its follow-up default).
+  const sparseItems = (items: Array<Partial<ChatJudgeItem>>) => items as ChatJudgeItem[]
   const preset = ChatJudgePresetStore.create({
     name: '테스트',
     providerName: 'jev',
-    items: [
+    items: sparseItems([
       { id: 'lore', name: '로어', stage: 'before', instructions: 'Lasting fact?', tools: ['save_lore'], directive: '[판단] 로어를 제안해.', yesThreshold: 0.7, noThreshold: 0.3 },
       { id: 'follow-up', name: '후속', stage: 'after', instructions: 'Follow up?', yesThreshold: 0.8, noThreshold: 0.4 },
-    ],
-    followUp: { maxConsecutive: 1, delaySeconds: 0 },
+    ]),
+    followUp: { maxConsecutive: 1, delaySeconds: 0 } as ChatJudgeFollowUp,
   })
   const plain = ChatProfileStore.create({ name: '루나', engine: 'llm', providerName: 'chat', model: 'chat-model', summaryEnabled: false, mcpEnabled: false })
   const judged = ChatProfileStore.create({ name: '솔', engine: 'llm', providerName: 'chat', model: 'chat-model', summaryEnabled: false, mcpEnabled: false, judgePresetId: preset.id })
@@ -496,9 +499,9 @@ test('judge presets: no-judge parity, original text, tool steering, fallback, lo
   })
 
   await t.test('tools the turn does not offer need no judge request or directive', async (s) => {
-    const imageOnly = ChatJudgePresetStore.create({ name: '이미지', providerName: 'jev', items: [
+    const imageOnly = ChatJudgePresetStore.create({ name: '이미지', providerName: 'jev', items: sparseItems([
       { id: 'image', name: '이미지', instructions: 'Show an image?', tools: ['generate_image*'], directive: '[판단] 이미지를 그려.' },
-    ] })
+    ]) })
     const profile = ChatProfileStore.create({ name: '달', engine: 'llm', providerName: 'chat', model: 'chat-model', summaryEnabled: false, mcpEnabled: false, judgePresetId: imageOnly.id })
     const calls = route(s, () => ({ image: { type: 'noul', noul: 0.95 } }))
     const thread = threadOf(profile.id)
@@ -523,10 +526,10 @@ test('judge presets: no-judge parity, original text, tool steering, fallback, lo
   })
 
   await t.test('uncertain answers follow the item setting, including asking an LLM again', async (s) => {
-    const uncertain = ChatJudgePresetStore.create({ name: '애매', providerName: 'jev', items: [
+    const uncertain = ChatJudgePresetStore.create({ name: '애매', providerName: 'jev', items: sparseItems([
       { id: 'a', name: 'A', instructions: 'A?', tools: ['save_lore'], uncertain: 'yes' },
       { id: 'b', name: 'B', instructions: 'B?', tools: ['save_lore'], uncertain: 'llm' },
-    ] })
+    ]) })
     const profile = ChatProfileStore.create({ name: '별', engine: 'llm', providerName: 'chat', model: 'chat-model', summaryEnabled: false, mcpEnabled: false, judgePresetId: uncertain.id })
     let escalated = 0
     route(s, () => ({ a: { type: 'noul', noul: 0.5 }, b: { type: 'noul', noul: 0.5 } }), (body) => {

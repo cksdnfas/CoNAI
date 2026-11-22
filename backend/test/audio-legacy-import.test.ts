@@ -335,7 +335,7 @@ test('audio legacy import: old SFX manager data into audio.db', { timeout: 18000
     const zip = new AdmZip()
     zip.addLocalFolder(legacyDir, 'data')
     const form = new FormData()
-    form.append('archive', new Blob([zip.toBuffer()]), 'sfx-data.zip')
+    form.append('archive', new Blob([new Uint8Array(zip.toBuffer())]), 'sfx-data.zip')
     const uploaded = await call('/api/audio/legacy-import/uploads', adminId, { method: 'POST', body: form })
     assert.equal(uploaded.status, 201, uploaded.buffer.toString())
     const uploadId = uploaded.json().data.upload_id as string

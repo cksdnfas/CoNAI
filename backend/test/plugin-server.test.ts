@@ -8,6 +8,7 @@ import AdmZip from 'adm-zip'
 import childProcess from 'node:child_process'
 import { EventEmitter } from 'node:events'
 import { PassThrough } from 'node:stream'
+import type { ChatJudgeFollowUp, ChatJudgeItem } from '@conai/shared'
 
 const SDK = path.resolve(__dirname, '../../plugins/sdk/conai-plugin.js')
 
@@ -377,6 +378,8 @@ test('trusted plugins run a server module with their own data, hooks and tools',
     await registry.installPlugin(packageOf(folder, m => { m.id = 'web-llm'; delete m.server; delete m.capabilities }))
     await registry.setPluginEnabled('web-llm', true, adminId)
     const { openPluginInstance, closePluginInstance } = await import('../src/services/plugins/pluginHost')
+    // Opening a page needs the plugin permission (or a shared page); the LLM below still needs only chat permission.
+    AuthPermissionGroup.addAccountMembership(AuthPermissionGroup.createCustomGroup({ name: 'web-llm-page', permissionKeys: ['plugins.view'] }).id, guest.accountId)
     const webCaller = { requester: guest, sessionId: 'web-llm-user' }
     const webPage = openPluginInstance('web-llm', 'rules', [], webCaller)
     assert.ok(llm.listPluginLlmProfiles('web-llm', guest).some(item => item.id === profile.id), 'LLM use needs chat permission, not server code or file permission')
@@ -568,13 +571,14 @@ test('trusted plugins run a server module with their own data, hooks and tools',
     ExternalApiProvider.create({ provider_name: 'plugin-decision', display_name: 'decision', provider_type: 'decision_typesafe', base_url: 'https://decision.invalid', is_enabled: true, additional_config: {} })
     const decisionRow = ModelSlotStore.ensure('plugin-decision', 'decision-model', { kinds: ['decision_typesafe'] })!
     const presetRow = ModelSlotStore.ensure('plugin-test', 'preset-judge')!
+    // Partial items and follow-up: the store fills in every omitted setting with its default (normalizeJudgeItems).
     const judgePreset = ChatJudgePresetStore.create({ name: 'Plugin judge', modelSlotId: presetRow, items: [
       { id: 'offer', name: '인사', stage: 'before', instructions: 'Greet?', tools: ['wave*'], directive: 'Say hello.', window: 2 },
       { id: 'withhold', name: '이동', stage: 'before', instructions: 'Leave?', tools: ['leave'], window: 2 },
       { id: 'absent', name: '숨김', stage: 'before', instructions: 'Missing action?', tools: ['missing'], window: 2 },
       { id: 'note', name: '안내', stage: 'before', instructions: 'Be kind?', directive: 'Be kind.', window: 2 },
       { id: 'follow', name: '후속', stage: 'after', instructions: 'Follow up?', window: 2 },
-    ], followUp: { maxConsecutive: 2, delaySeconds: 3, directive: 'd'.repeat(1100) } })
+    ] as ChatJudgeItem[], followUp: { maxConsecutive: 2, delaySeconds: 3, directive: 'd'.repeat(1100) } })
     ChatProfileStore.update(profile.id, { judgePresetId: judgePreset.id, judgeSlotId: decisionRow })
     ModelSlotStore.setDefaultJudge(judgeRow, true)
     judgeAnswers = {
@@ -844,7 +848,7 @@ test('trusted plugins run a server module with their own data, hooks and tools',
     const result = await done(job.jobId)
     assert.equal(result.status, 'completed', result.error ?? '')
     assert.equal(result.result?.text, '실행 결과를 확인했어.')
-    assert.ok(budgets.length > 0 && budgets.every(value => value === 8192), `omitted profile limit uses its full budget, including tool rounds: ${JSON.stringify(budgets)}`)
+    assert.ok(budgets.length > 0 && budgets.every((value): boolean => value === 8192), `omitted profile limit uses its full budget, including tool rounds: ${JSON.stringify(budgets)}`)
     assert.ok(results.some(output => output.includes(folderName)), 'the native tool result returns to the model')
     assert.equal(FileStoreService.list(`account:${adminId}`, null).entries.filter(entry => entry.name === folderName).length, 1)
     const run = result.result!.profileRun!
@@ -957,7 +961,7 @@ test('trusted plugins run a server module with their own data, hooks and tools',
       assert.ok([...removedIds].every(id => CodexChatStore.findMessage(discardedRun.threadId, id)))
       const viaSdk = await serverTools.callPluginServerTool(requestedTool, { discardJobId: first.jobId }, admin)
       assert.notEqual(viaSdk.isError, true, JSON.stringify(viaSdk))
-      assert.deepEqual(JSON.parse((viaSdk.content[0] as { text: string }).text), { jobId: first.jobId, deleted: removedIds.size })
+      assert.deepEqual(JSON.parse(viaSdk.content[0].text as string), { jobId: first.jobId, deleted: removedIds.size })
       assert.deepEqual(CodexChatStore.listMessages(discardedRun.threadId).map(message => message.id), expected)
       assert.deepEqual(CodexChatStore.listMessages(run.threadId).map(message => message.id), untouched)
       assert.equal(ChatProposalStore.find(card.id), null)
@@ -1027,7 +1031,7 @@ test('trusted plugins run a server module with their own data, hooks and tools',
     const { RuntimeJobStore } = await import('../src/services/runtimeJobs/runtimeJobStore')
     const { acquireLlmRequestSlot } = await import('../src/services/llmRequestScheduler')
     const delayedPreset = ChatJudgePresetStore.create({ name: 'Delayed plugin follow-up', modelSlotId: ModelSlotStore.ensure('plugin-decision', 'decision-model', { kinds: ['decision_typesafe'] })!,
-      items: [{ id: 'follow', name: 'Follow', stage: 'after', instructions: 'Follow up?' }], followUp: { maxConsecutive: 1, delaySeconds: 600 } })
+      items: [{ id: 'follow', name: 'Follow', stage: 'after', instructions: 'Follow up?' }] as ChatJudgeItem[], followUp: { maxConsecutive: 1, delaySeconds: 600 } as ChatJudgeFollowUp })
     ChatProfileStore.update(independentProfile.id, { judgePresetId: delayedPreset.id, judgeSlotId: ModelSlotStore.ensure('plugin-decision', 'decision-model', { kinds: ['decision_typesafe'] })! })
     const delayed = llm.startPluginLlmJob('chat-instructions', admin, { ...input, profileId: independentProfile.id, requestId: 'follow-deadline', roomKey: 'delayed', timeoutMs: 2000 })
     await until(() => RuntimeJobStore.get(delayed.jobId)?.phase === 'follow-up', 'primary reply releases execution slot')
@@ -1401,7 +1405,7 @@ test('trusted plugins run a server module with their own data, hooks and tools',
           return { turn: { id: 'turn' } }
         },
       })
-      return client as unknown as CodexAppServerClient
+      return client as unknown as Awaited<ReturnType<typeof CodexAppServerClient.start>>
     })
     st.mock.method(globalThis, 'fetch', () => { assert.fail('Native execution must not fall back to a direct API') })
     for (const [engine, purpose] of [['codex', 'research'], ['codex', 'summary'], ['claude', 'summary'], ['claude', 'summary']] as const) {

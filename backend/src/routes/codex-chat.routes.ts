@@ -1683,7 +1683,7 @@ router.post('/threads/:threadId/messages', requireChatAccess, asyncHandler(async
   }
   await streamChatReply(req, res, (write) => isGroupThread(req, threadId)
     ? GroupChatService.sendMessage(requesterFrom(req), threadId, text, write, req.body?.fileIds, req.body?.flagIds, req.body?.mediaHashes, req.body?.picks, req.body?.replyToMessageId)
-    : CodexChatService.sendMessage(requesterFrom(req), threadId, text, write, req.body?.fileIds, req.body?.flagIds, req.body?.picks, req.body?.mediaHashes, req.body?.replyToMessageId, req.body?.pageContext, { choice: req.body?.choice, toolDirective: req.body?.toolDirective }))
+    : CodexChatService.sendMessage(requesterFrom(req), threadId, text, write, req.body?.fileIds, req.body?.flagIds, req.body?.picks, req.body?.mediaHashes, req.body?.replyToMessageId, req.body?.pageContext, { choice: req.body?.choice, toolDirective: req.body?.toolDirective, autoApprove: req.body?.autoApprove }))
 }))
 
 // ---- Chat user profiles: who the account is in a chat (name, persona, avatar), one per chat ----------------------

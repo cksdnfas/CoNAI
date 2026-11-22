@@ -54,7 +54,7 @@ test('character asset batches: durable jobs, dependencies, review and approved a
   const baseSettings = settingsService.loadSettings()
   let taggerEnabled = false
   t.mock.method(settingsService, 'loadSettings', () => ({ ...baseSettings, tagger: { ...baseSettings.tagger, enabled: taggerEnabled } }))
-  t.mock.method(imageTaggerService, 'tagImage', async () => { throw new Error('Unmocked tagger call') })
+  const tagImageMock = t.mock.method(imageTaggerService, 'tagImage', async () => { throw new Error('Unmocked tagger call') })
   t.after(async () => {
     taggerEnabled = false
     // Flush the service's deferred review callbacks while its isolated DB is still open.
@@ -134,7 +134,7 @@ test('character asset batches: durable jobs, dependencies, review and approved a
       if (slot.kind === 'background') assert.equal(payload(batch, slot.slotKey).character_refs, undefined)
       else assert.match(payload(batch, slot.slotKey).character_refs[0].image, /^data:image\/png;base64,/)
       assert.match(payload(batch, slot.slotKey).prompt, /quality, blue hair, blue eyes/)
-      assert.equal(db().prepare('SELECT idempotency_key FROM generation_queue_idempotency WHERE job_id = ?').get(job.id)?.idempotency_key, `asset:${batch.id}:${slot.slotKey}:1`)
+      assert.equal((db().prepare('SELECT idempotency_key FROM generation_queue_idempotency WHERE job_id = ?').get(job.id) as { idempotency_key: string } | undefined)?.idempotency_key, `asset:${batch.id}:${slot.slotKey}:1`)
       requireQueuedChatGenerationAccess(job)
     }
     await assert.rejects(batches.createChatAssetBatch(requester, profile.id, { ...input, presetId: preset.id + 100 }), /멱등/)
@@ -203,7 +203,7 @@ test('character asset batches: durable jobs, dependencies, review and approved a
     await assert.rejects(batches.chooseChatAssetSlot(requester, batch.id, '기쁨', other), /성공/)
     for (const key of ['기쁨', '슬픔', '배경', '아바타']) batch = await batches.chooseChatAssetSlot(requester, batch.id, key, candidate)
     assert.ok(batch.slots.every((slot) => !slot.attempts.at(-1)!.candidates[0].review))
-    assert.equal(imageTaggerService.tagImage.mock.calls.length, 0)
+    assert.equal(tagImageMock.mock.calls.length, 0)
   })
 
   await t.test('deferred mocked tagger review is cached, read does not wait, and disabled hides old cache', async (sub) => {

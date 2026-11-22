@@ -338,7 +338,7 @@ test('preserved tokens and unchanged mixed-script input never produce translatio
   assert.equal(requests.length, 0, 'preserved tokens do not trigger translation')
   // One-letter replies and a user's own bracketed scene notes are prose: translated, and an echo is no failure.
   for (const text of ['응', '한 hi', '[다음 날 아침]']) {
-    const before = requests.length
+    const before: number = requests.length
     const result = await translateUserMessage(english, text, [])
     assert.equal(requests.length, before + 1, `${text} is sent to the translator`)
     assert.equal(result.error, null)

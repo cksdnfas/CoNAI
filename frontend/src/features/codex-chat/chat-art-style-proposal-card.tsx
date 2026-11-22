@@ -11,6 +11,7 @@ import { artStyleThumbnailUrl, createArtStyle, deleteArtStyle, invalidateArtStyl
 import { dismissChatProposal, markChatProposalSaved, type CodexChatToolCall } from '@/lib/api-codex-chat'
 import { getErrorMessage } from '@/lib/error-message'
 import { ChatMediaAttachments } from './chat-media-picker'
+import { useAutoApproveCard } from './chat-auto-approve'
 import { ChatProfileImage } from './chat-profile-image'
 import { codexChatThreadQueryKey } from './codex-chat-context'
 import { ProposalFooter, ProposalFrame, ProposalRow } from './chat-proposal-parts'
@@ -71,6 +72,8 @@ export function ChatArtStyleProposalCard({ proposal, threadId }: { proposal: Sty
     onError: (error) => showSnackbar({ message: getErrorMessage(error, t({ ko: '제안을 처리하지 못했어.', en: 'Could not process proposal.' })), tone: 'error' }),
   })
   const busy = apply.isPending || dismiss.isPending
+  // Auto-approve: the sending tab saves the card as it arrives (chat-auto-approve); deletions wait for a click.
+  useAutoApproveCard(proposal, canEdit && !deleting, saved || dismissed || busy, () => apply.mutateAsync())
   const none = t({ ko: '없음', en: 'None' })
   const header = deleting ? t({ ko: '그림 스타일 삭제 제안', en: 'Delete art style' })
     : proposal.styleId === null ? t({ ko: '새 그림 스타일 제안', en: 'New art style' }) : t({ ko: '그림 스타일 수정 제안', en: 'Art style update' })

@@ -59,7 +59,7 @@ test('chat workflow reach: field choices, room list, image refs, run and autorun
   const fakeServer = { registerTool: (name: string, _definition: unknown, handler: never) => { handlers.set(name, handler) } }
   const listRooms = async (accountId: number | null, input: Record<string, unknown> = {}) => {
     handlers.clear()
-    registerChatRoomListTools(fakeServer as never, { scopes: ['read'], requester: { accountId, accountType: 'user' } })
+    registerChatRoomListTools(fakeServer as never, { scopes: ['read'], requester: { accountId, accountType: 'guest' } })
     return JSON.parse((await handlers.get('list_chat_rooms')!(input)).content[0].text) as {
       total: number; rooms: Array<Record<string, unknown>>; has_more: boolean; next_cursor: string | null; nextOffset: number | null
     }

@@ -283,7 +283,8 @@ test('composer selections stay inside the chat grant and apply only to their use
       const listTools = async () => {
         const binding = authenticateCodexChatMcpRequest({ socket: { remoteAddress: '127.0.0.1' }, headers: {} } as never, options.env.CONAI_CHAT_MCP_TOKEN!)
         assert.ok(binding)
-        const bridge = await openChatMcpBridge(binding.requester!, binding.scopes, binding.toolAllowlist, { generationPresetIds: binding.generationPresetIds, chatContext: binding.chatContext, source: 'codex-chat' })
+        // A chat token's binding only carries chat scopes (issued from ChatScope[]); the auth result type is the wider MCP one.
+        const bridge = await openChatMcpBridge(binding.requester!, binding.scopes as Parameters<typeof openChatMcpBridge>[1], binding.toolAllowlist, { generationPresetIds: binding.generationPresetIds, chatContext: binding.chatContext, source: 'codex-chat' })
         try { names = bridge.tools.map(tool => tool.function.name) } finally { await bridge.close() }
       }
       const client = Object.assign(new EventEmitter(), { whenExited: Promise.resolve(), close: () => {}, isAlive: true,
@@ -309,7 +310,7 @@ test('composer selections stay inside the chat grant and apply only to their use
           return { turn: { id } }
         },
       })
-      return client as unknown as InstanceType<typeof CodexAppServerClient>
+      return client as unknown as Awaited<ReturnType<typeof CodexAppServerClient.start>>
     })
     const codex = ChatProfileStore.create({ name: 'Codex selections', engine: 'codex', mcpEnabled: true, mcpScopes: ['read'], generationPresetIds: [first.id, second.id] })
     const chatId = CodexChatStore.createThread(adminId, 'Codex continuity', 'codex', codex.id)

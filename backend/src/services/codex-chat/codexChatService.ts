@@ -405,7 +405,7 @@ function toToolCall(item: Record<string, unknown>): CodexChatToolCall {
   // A catalog run_tool call is recorded as the tool it ran.
   const { tool: called, arguments: calledArguments } = unwrapCatalogCall(String(item.tool ?? ''), item.arguments ?? null)
   const tool = called
-  const { texts, historyIds, compositeHashes, jobIds, pendingJobIds, audioCandidateIds, pageOperation } = readMcpToolResult(result, tool)
+  const { texts, historyIds, compositeHashes, jobIds, pendingJobIds, audioCandidateIds, audioFileIds, pageOperation } = readMcpToolResult(result, tool)
 
   return {
     id: String(item.id ?? ''),
@@ -418,6 +418,7 @@ function toToolCall(item: Record<string, unknown>): CodexChatToolCall {
     compositeHashes,
     ...(jobIds.length > 0 ? { jobIds, pendingJobIds } : {}),
     ...(audioCandidateIds.length > 0 ? { audioCandidateIds } : {}),
+    ...(audioFileIds.length > 0 ? { audioFileIds } : {}),
     generated: isCodexChatCreationTool(tool),
   }
 }
@@ -1477,7 +1478,7 @@ export const CodexChatService = {
     }
     assertChatAvailable(requester)
     const profile = requireCodexProfile(thread.profile_id, requester, thread.id)
-    const { attachments, mediaAttachments, flags, trimmed, page, routing, toolDirective } = await prepareChatSend(requester, thread, profile, text,
+    const { attachments, mediaAttachments, flags, trimmed, page, routing, toolDirective, autoApprove } = await prepareChatSend(requester, thread, profile, text,
       { fileIds, flagIds, picks, mediaHashes, replyToMessageId, pageContext, options }, CodexChatError)
     if (CodexChatService.isRunning(threadId)) {
       throw new CodexChatError('이전 답변이 아직 진행 중이야.', 409)
@@ -1551,6 +1552,7 @@ export const CodexChatService = {
       const knowledgePage = page ? knowledgePageForExecution({ requester, chatContext: turn.delivery.context, source: 'codex-chat', scopes }, page) : undefined
       turn.delivery.context.page = knowledgePage
       if (directTool) turn.delivery.context.directTool = directTool
+      if (autoApprove) turn.delivery.context.autoApprove = autoApprove
       setCodexChatExecution(session.token, turn.delivery.context)
 
         // Codex keeps every turn's input in its memory, so lore already given since the last compaction (same entry,

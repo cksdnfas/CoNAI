@@ -45,7 +45,7 @@ test('stage 5: lore provenance, usage, undo, branches, greetings and tone', { ti
   const owner = fileOwnerKey(1)
   const freshThread = () => CodexChatStore.createThread(1, '5단계', 'llm', profile.id)
   const thread = (id: number) => CodexChatStore.findThreadById(id)!
-  const say = (threadId: number, replyId?: string) => CodexChatStore.addMessage({ thread_id: threadId, role: 'assistant', content: '답변', tool_calls: [], status: 'completed', error: null, ...(replyId ? { routing: { replyId, recipients: [] } } : {}) })
+  const say = (threadId: number, replyId?: string) => CodexChatStore.addMessage({ thread_id: threadId, role: 'assistant', content: '답변', tool_calls: [], status: 'completed', error: null, ...(replyId ? { routing: { replyId, replyTo: null, recipients: [] } } : {}) })
   const proposal = (threadId: number, replyId: string, replaces?: string) => ChatProposalStore.add({ threadId, replyId, profileId: profile.id, kind: 'direct' }, { kind: 'lore', title: '약속', keys: ['바다'], content: '새 약속', constant: true, ...(replaces ? { replaces, before: { title: '약속', keys: [], content: '옛 약속', constant: false, file: null } } : {}) })
 
   await t.test('E1: saving new and replacement proposals preserves source through normalization and JSON import', () => {
@@ -71,7 +71,7 @@ test('stage 5: lore provenance, usage, undo, branches, greetings and tone', { ti
     const usage = () => threadLorebooks(thread(id), [profile]).entryUsage
     assert.deepEqual(usage()[`${book.id}:used`], { turnsAgo: 1, sourceMessageId: firstId })
     assert.equal(usage()[`${book.id}:never`], undefined)
-    CodexChatStore.addAlternative(id, secondId, { content: '변형', tool_calls: [], status: 'completed', error: null, created_at: new Date().toISOString(), context_meta: JSON.stringify(meta), routing: { replyId: 'variant', recipients: [] } })
+    CodexChatStore.addAlternative(id, secondId, { content: '변형', tool_calls: [], status: 'completed', error: null, created_at: new Date().toISOString(), context_meta: JSON.stringify(meta), routing: { replyId: 'variant', replyTo: null, recipients: [] } })
     assert.equal(usage()[`${book.id}:used`].turnsAgo, 0)
     CodexChatStore.selectAlternative(id, secondId, 0)
     assert.equal(usage()[`${book.id}:used`].turnsAgo, 1)

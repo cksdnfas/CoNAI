@@ -318,7 +318,7 @@ test('chat list: previews, pin/archive/rename, branch origin', { timeout: 60000 
       for (let index = 0; index < 100; index++) say(room.id, 'user', `group ${index}`)
       const originalList = CodexChatStore.listMessages.bind(CodexChatStore)
       const reads: Array<number | undefined> = []
-      st.mock.method(CodexChatStore, 'listMessages', (threadId, options = {}) => {
+      st.mock.method(CodexChatStore, 'listMessages', (threadId: number, options: Parameters<typeof originalList>[1] = {}) => {
         reads.push(options.tail)
         return originalList(threadId, options)
       })

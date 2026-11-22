@@ -128,7 +128,7 @@ test('chat setup: profile settings proposals and the chat settings card', { time
     assert.equal(view.translationDisplayLanguage, 'ja')
     assert.equal(view.loreRecursionDepth, 5)
     assert.deepEqual(view.notProposable, { engine: 'llm', pageAssist: false })
-    assert.deepEqual((view.linkedFiles as Array<{ name: string | null }>).map((link) => link.name), ['일지', '메모.md'])
+    assert.deepEqual((view.linkedFiles as Array<{ id: string; name?: string | null }>).map((link) => link.name), ['일지', '메모.md'])
     const created = setup.buildProfileProposal({ name: '새 캐릭터', system_prompt: 'x', settings: { summary_enabled: true, translationDisplayLanguage: 'zh' } }, me)
     assert.equal(created.input.summaryEnabled, true)
     assert.equal(created.input.translationDisplayLanguage, 'zh')
@@ -163,11 +163,11 @@ test('chat setup: profile settings proposals and the chat settings card', { time
     assert.throws(() => settings.applyChatSettingsProposal({ accountId: null, accountType: 'admin' }, card.id), /save marker failed/)
     markSaved.mock.restore()
     assert.deepEqual(OwnedLorebookStore.threadLinks(threadId), [], 'mutations roll back if the saved marker fails')
-    assert.equal(Boolean(ChatProposalStore.find(card.id)!.saved), false)
+    assert.equal(Boolean((ChatProposalStore.find(card.id) as { saved?: boolean } | undefined)!.saved), false)
     LinkedFileStore.setThreadLinks(threadId, [{ id: memo.id, write: false }])
     assert.throws(() => settings.applyChatSettingsProposal({ accountId: null, accountType: 'admin' }, card.id),
       (error: unknown) => error instanceof settings.ChatSettingsError && error.status === 409)
-    assert.equal(Boolean(ChatProposalStore.find(card.id)!.saved), false, 'conflicts leave the card unsaved')
+    assert.equal(Boolean((ChatProposalStore.find(card.id) as { saved?: boolean } | undefined)!.saved), false, 'conflicts leave the card unsaved')
     assert.deepEqual(OwnedLorebookStore.threadLinks(threadId), [], 'a conflict changes none of the other touched fields')
     LinkedFileStore.setThreadLinks(threadId, [])
     assert.deepEqual(notifications, [], 'failed saves and conflicts publish no resolution')
@@ -191,6 +191,9 @@ test('chat setup: profile settings proposals and the chat settings card', { time
     const context: ChatExecutionContext = { threadId, profileId: profile.id, kind: 'direct', replyId: 'settings-tools' }
     const unregister = registerChatReply(context, controller.signal, () => ({ replyTo: null, recipients: ['user'] }))
     const names = (bridge: { tools: Array<{ function: { name: string } }>; catalogTools: Set<string> }) => [...bridge.tools.map((tool) => tool.function.name), ...bridge.catalogTools]
+    // The view has chatModel for a direct chat and memberChatModels for a room.
+    const directModel = (id: number) => { const view = settings.chatSettingsView(id); assert.ok('chatModel' in view); return view.chatModel }
+    const memberModels = (id: number) => { const view = settings.chatSettingsView(id); assert.ok('memberChatModels' in view); return view.memberChatModels }
     // A chat with no app tools has no catalog to hold them, so they are listed directly and stay reachable.
     const bare = await openChatMcpBridge({ accountId: null, accountType: 'admin' }, [], null, { chatContext: context })
     try {
@@ -207,7 +210,7 @@ test('chat setup: profile settings proposals and the chat settings card', { time
       const { ModelSlotStore } = await import('../src/services/codex-chat/modelSlots')
       const proposedSlot = ModelSlotStore.ensure('conn', 'proposed-model')!
       const profileBefore = ChatProfileStore.find(profile.id)!
-      const modelView = settings.chatSettingsView(threadId).chatModel!
+      const modelView = directModel(threadId)!
       assert.equal(modelView.label, 'Conn · m')
       assert.equal(modelView.profileLabel, 'Conn · m')
       assert.equal(modelView.followingProfile, true)
@@ -226,8 +229,8 @@ test('chat setup: profile settings proposals and the chat settings card', { time
       assert.throws(() => settings.applyChatSettingsProposal({ accountId: null, accountType: 'admin' }, card.id), /제안 이후/)
       CodexChatStore.updateThreadContext(threadId, { chatModelSlotId: null })
       settings.applyChatSettingsProposal({ accountId: null, accountType: 'admin' }, card.id)
-      assert.equal(settings.chatSettingsView(threadId).chatModel!.label, 'Conn · proposed-model')
-      assert.equal(settings.chatSettingsView(threadId).chatModel!.profileLabel, 'Conn · m')
+      assert.equal(directModel(threadId)!.label, 'Conn · proposed-model')
+      assert.equal(directModel(threadId)!.profileLabel, 'Conn · m')
       assert.deepEqual(ChatProfileStore.find(profile.id), profileBefore)
       const { ChatGroupStore } = await import('../src/services/codex-chat/chatGroupStore')
       const claude = ChatProfileStore.create({ name: 'Claude member', engine: 'claude', model: 'sonnet' })
@@ -236,7 +239,7 @@ test('chat setup: profile settings proposals and the chat settings card', { time
       const unregisterGroup = registerChatReply(groupContext, controller.signal, () => ({ replyTo: null, recipients: ['room'] }))
       const groupBridge = await openChatMcpBridge({ accountId: null, accountType: 'admin' }, [], null, { chatContext: groupContext })
       try {
-        const members = settings.chatSettingsView(roomId).memberChatModels!
+        const members = memberModels(roomId)!
         assert.equal(members[claude.id].profileLabel, 'Claude Code · sonnet')
         assert.ok(settings.chatSettingsView(roomId).slots.some(slot => slot.id === proposedSlot && slot.label === 'Conn · proposed-model'))
         const groupRead = await groupBridge.call('get_chat_settings', {})
@@ -262,7 +265,7 @@ test('chat setup: profile settings proposals and the chat settings card', { time
         assert.equal(ChatProfileStore.find(claude.id)!.model, 'sonnet')
         const clear = settings.proposeChatSettings(groupContext, { memberChatModels: { [claude.id]: { chatModel: '' } } })
         settings.applyChatSettingsProposal({ accountId: null, accountType: 'admin' }, clear.id)
-        assert.equal(settings.chatSettingsView(roomId).memberChatModels![claude.id].followingProfile, true)
+        assert.equal(memberModels(roomId)![claude.id].followingProfile, true)
       } finally { await groupBridge.close(); unregisterGroup() }
     } finally { await full.close(); unregister() }
     const { CHAT_FEATURES_GUIDE } = await import('../src/mcp/tools/chatSettingsTools')

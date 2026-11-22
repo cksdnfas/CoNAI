@@ -42,7 +42,7 @@ test('wallpaper remount fetches a fresh revision but never adopts a changed or d
   saveWallpaperLayoutDraft(cloneWallpaperPresetToDraft(view), createWallpaperDraftBase(view))
 
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: 30_000, gcTime: Infinity }, mutations: { retry: false, gcTime: Infinity } } })
-  const appearance = { ...DEFAULT_APPEARANCE_SETTINGS, wallpaperLayoutPresets: [preset], wallpaperActivePresetId: preset.id }
+  const appearance = { ...DEFAULT_APPEARANCE_SETTINGS, wallpaperLayoutPresets: [preset], wallpaperActivePresetId: preset.id as string | null }
   let server = { appearance, general: {}, pageSettingsRevisions: { appearance: 'theme-new' } }
   client.setQueryData(['app-settings'], { ...server, pageSettingsRevisions: { appearance: 'theme-old' } })
   client.setQueryData(['global-appearance-settings'], DEFAULT_APPEARANCE_SETTINGS)
@@ -131,10 +131,11 @@ test('wallpaper remount fetches a fresh revision but never adopts a changed or d
   })
 
   await render()
+  // The save bar only floats up once something is unsaved, so make the edit before the mount fetch answers.
+  await editName('My saved preset')
   assert.ok(saveButton()?.disabled, 'cached settings cannot enable saving before the mount fetch completes')
   await act(async () => { releaseFirst(); await settle() })
   assert.equal(saveButton()?.disabled, false)
-  await editName('My saved preset')
   await click(saveButton())
   assert.equal(writes[0].revision, 'theme-new')
   assert.equal((client.getQueryData(['app-settings']) as typeof server).pageSettingsRevisions.appearance, 'saved-1')

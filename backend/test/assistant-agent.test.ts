@@ -98,16 +98,16 @@ test('assistant agent: proposal outcomes, page operation records, task plan and 
     const { chatPageReference } = await import('../src/services/codex-chat/chatPageContext')
     const page = normalizeChatPageSnapshot({ instanceId: 'inst-ref-1', connectionId: 'conn-ref-1', path: '/settings', title: '설정 · 채팅 프로필', kind: 'settings', resourceId: 'chat', fields: [], revision: 'rev-ref-1',
       actions: [{ id: 'profile.open_create', label: '새 프로필 편집기 열기', description: '빈 편집기를 열어.', effect: 'draft', schema: { type: 'object', properties: {} } }], data: { profiles: [{ id: 1, name: 'A' }] } })
-    const reference = chatPageReference(page, { accountId: null, accountType: 'admin' })
+    const reference = chatPageReference(page, { accountId: null, accountType: 'admin' }, null)
     assert.match(reference, /"id":"profile\.open_create"/)
     assert.match(reference, /"tier":"view"/)
     assert.match(reference, /"profiles":\[\{"id":1,"name":"A"\}\]/, 'a small collection travels whole, so an item is picked by name without reading it')
     const { chatPageView } = await import('../src/mcp/tools/chatPageView')
-    const many = chatPageView({ accountId: null, accountType: 'admin' }, normalizeChatPageSnapshot({ ...page, data: { profiles: Array.from({ length: 40 }, (_, index) => ({ id: index + 1, name: `P${index}` })) } }))
+    const many = chatPageView({ accountId: null, accountType: 'admin' }, normalizeChatPageSnapshot({ ...page, data: { profiles: Array.from({ length: 40 }, (_, index) => ({ id: index + 1, name: `P${index}` })) } }), null)
     assert.deepEqual(many.data?.profiles, { count: 40, readWith: 'read_page_data' }, 'a larger one travels as its size')
     assert.match(reference, /do not call get_current_page first/)
     const big = normalizeChatPageSnapshot({ ...page, fields: Array.from({ length: 40 }, (_, index) => ({ id: `f${index}`, label: `Field ${index}`, type: 'text', value: 'x'.repeat(2000) })) })
-    const shortened = chatPageReference(big, { accountId: null, accountType: 'admin' })
+    const shortened = chatPageReference(big, { accountId: null, accountType: 'admin' }, null)
     assert.match(shortened, /shortened/)
     assert.ok(shortened.length < 30_000, 'a large screen stays bounded')
   })
@@ -120,24 +120,24 @@ test('assistant agent: proposal outcomes, page operation records, task plan and 
     const page = normalizeChatPageSnapshot({ instanceId: 'inst-codex-1', connectionId: 'conn-codex-1', path: '/settings', title: '설정', kind: 'settings', resourceId: 'chat', revision: 'rev-codex-1',
       fields: [{ id: 'name', label: '이름', type: 'text', value: 'A' }], actions: [{ id: 'profile.open_create', label: '새 프로필', description: '', effect: 'draft', schema: { type: 'object', properties: {} } }] })
     const sent = new Set<string>()
-    const first = pendingPageReference(page, admin, sent)
+    const first = pendingPageReference(page, admin, sent, null)
     assert.match(first.text, /profile\.open_create/)
     assert.match(first.text, /untrusted data/)
     assert.equal(first.keys.length, 2, 'view and guide')
     first.keys.forEach((key) => sent.add(key))
-    const again = pendingPageReference(page, admin, sent)
+    const again = pendingPageReference(page, admin, sent, null)
     assert.deepEqual(again.keys, [])
     assert.match(again.text, /Same screen/)
     assert.doesNotMatch(again.text, /profile\.open_create|untrusted data/)
-    const changed = pendingPageReference(normalizeChatPageSnapshot({ ...page, fields: [{ id: 'name', label: '이름', type: 'text', value: 'B' }] }), admin, sent)
+    const changed = pendingPageReference(normalizeChatPageSnapshot({ ...page, fields: [{ id: 'name', label: '이름', type: 'text', value: 'B' }] }), admin, sent, null)
     assert.equal(changed.keys.length, 1, 'a changed screen goes again, the guidance does not')
     assert.match(changed.text, /"value":"B"/)
-    const none = pendingPageReference(undefined, admin, sent)
+    const none = pendingPageReference(undefined, admin, sent, null)
     assert.equal(none.text, NO_PAGE_NOTE)
     none.keys.forEach((key) => sent.add(key))
-    assert.equal(pendingPageReference(undefined, admin, sent).text, '', 'the no-page note goes once')
+    assert.equal(pendingPageReference(undefined, admin, sent, null).text, '', 'the no-page note goes once')
     const huge = normalizeChatPageSnapshot({ ...page, fields: Array.from({ length: 30 }, (_, index) => ({ id: `f${index}`, label: `Field ${index}`, type: 'text', value: 'x'.repeat(500) })) })
-    const bounded = boundedPageView(chatPageView(admin, huge), 2000)
+    const bounded = boundedPageView(chatPageView(admin, huge, null), 2000)
     assert.doesNotThrow(() => JSON.parse(bounded), 'a shortened screen is still valid JSON')
     assert.match(bounded, /Field values are left out/)
   })
@@ -151,7 +151,7 @@ test('assistant agent: proposal outcomes, page operation records, task plan and 
       fields: [{ id: 'name', label: '이름', type: 'text', value: '' }, { id: 'prompt', label: '프롬프트', type: 'text', value: 'p'.repeat(4000) }],
       actions: [{ id: 'profile.open_create', label: '새 프로필', description: '', effect: 'draft', schema: { type: 'object', properties: {} } }] })
     const filled = normalizeChatPageSnapshot({ ...before, revision: 'rev-op-2', fields: [{ ...before.fields[0], value: '세라' }, before.fields[1]] })
-    const operation = pageOperationView(admin, before, filled)
+    const operation = pageOperationView(admin, before, filled, null)
     const same = operation.page as { fields: Array<{ id: string }>; actions: unknown; otherFields?: string; changesOnly?: unknown }
     assert.deepEqual(same.fields.map((field) => field.id), ['name'])
     assert.match(String(same.actions), /unchanged/)
@@ -172,19 +172,19 @@ test('assistant agent: proposal outcomes, page operation records, task plan and 
     notePageViewShown(ctx, before, null)
     notePageViewShown(ctx, filled, null, operation)
     assert.match(nextRequest(), /Same screen/, 'the same delta on a known base does not resend the screen')
-    const trimmed = pageOperationView(admin, before, normalizeChatPageSnapshot({ ...before, revision: 'rev-op-5', fields: [before.fields[0]], actions: undefined })).page as { removedFields?: string[]; removedActions?: string[]; actions?: unknown }
+    const trimmed = pageOperationView(admin, before, normalizeChatPageSnapshot({ ...before, revision: 'rev-op-5', fields: [before.fields[0]], actions: undefined }), null).page as { removedFields?: string[]; removedActions?: string[]; actions?: unknown }
     assert.deepEqual([trimmed.removedFields, trimmed.removedActions, trimmed.actions], [['prompt'], ['profile.open_create'], undefined], 'a removed field or operation is named, never left as unchanged')
-    const elsewhere = pageOperationView(admin, before, normalizeChatPageSnapshot({ ...filled, instanceId: 'inst-op-2' })).page as { fields: unknown[]; actions: unknown }
+    const elsewhere = pageOperationView(admin, before, normalizeChatPageSnapshot({ ...filled, instanceId: 'inst-op-2' }), null).page as { fields: unknown[]; actions: unknown }
     assert.equal(elsewhere.fields.length, 2, 'another screen comes back whole')
     assert.ok(Array.isArray(elsewhere.actions))
     // Any screen leaves its unchanged data out (here option lists), and an oversized changed value keeps the answer a
     // changed-parts view with that value read by key.
     const options = { sampler: Array.from({ length: 300 }, (_, index) => `sampler_${index}`) }
     const listed = normalizeChatPageSnapshot({ ...before, data: { options, node: 'old' } })
-    const read = pageOperationView(admin, listed, normalizeChatPageSnapshot({ ...listed, revision: 'rev-op-3', data: { options, node: 'new' } })).page as { data: unknown; unchangedData: string[] }
+    const read = pageOperationView(admin, listed, normalizeChatPageSnapshot({ ...listed, revision: 'rev-op-3', data: { options, node: 'new' } }), null).page as { data: unknown; unchangedData: string[] }
     assert.deepEqual(read.data, { node: 'new' })
     assert.deepEqual(read.unchangedData, ['options'])
-    const largeOperation = pageOperationView(admin, listed, normalizeChatPageSnapshot({ ...listed, revision: 'rev-op-4', data: { options, node: 'n'.repeat(20_000) } }))
+    const largeOperation = pageOperationView(admin, listed, normalizeChatPageSnapshot({ ...listed, revision: 'rev-op-4', data: { options, node: 'n'.repeat(20_000) } }), null)
     assert.equal(largeOperation.key, PAGE_VIEW_UNKNOWN, 'a shortened change leaves the new screen unknown')
     const large = largeOperation.page as { fields: unknown[]; actions: unknown; data: unknown; unchangedData: string[] }
     assert.deepEqual(large.data, { node: { readWith: 'read_page_data' } })
@@ -201,7 +201,7 @@ test('assistant agent: proposal outcomes, page operation records, task plan and 
     const page = normalizeChatPageSnapshot({ instanceId: 'inst-res-1', connectionId: 'conn-res-1', path: '/settings', title: '설정', kind: 'settings', resourceId: 'chat', revision: 'rev-res-1',
       fields: [{ id: 'name', label: '이름', type: 'text', value: 'A' }, { id: 'prompt', label: '프롬프트', type: 'text', value: 'p'.repeat(4000) }],
       actions: [{ id: 'profile.open_create', label: '새 프로필', description: '', effect: 'draft', schema: { type: 'object', properties: {} } }], data: { options: ['a', 'b'], node: 'old' } })
-    const view = (snapshot: typeof page, budget?: number) => JSON.parse(boundedPageView(chatPageView(admin, snapshot), budget))
+    const view = (snapshot: typeof page, budget?: number) => JSON.parse(boundedPageView(chatPageView(admin, snapshot, null), budget))
     const older = view(page)
     const newer = view(normalizeChatPageSnapshot({ ...page, revision: 'rev-res-2', fields: [{ ...page.fields[0], value: 'B' }, page.fields[1]], data: { options: ['a', 'b'], node: 'new' } }))
     const residual = pageViewResidual(older, newer)
@@ -276,7 +276,8 @@ test('assistant agent: proposal outcomes, page operation records, task plan and 
   await t.test('a page operation is kept as a small record, never its screen', () => {
     const { pageOperation } = readMcpToolResult({ content: [{ type: 'text', text: '{"page":{"fields":[]}}' }], structuredContent: { pageOperation: { commandId: 'cmd-1', tier: 'draft', label: '이름, 인사말' } } }, 'page_fill')
     assert.deepEqual(pageOperation, { commandId: 'cmd-1', tier: 'draft', label: '이름, 인사말' })
-    assert.equal(readMcpToolResult({ structuredContent: { pageOperation: { commandId: 'x', tier: 'commit', label: 'y' } } }).pageOperation, undefined, 'only view and draft operations are recorded')
+    assert.deepEqual(readMcpToolResult({ structuredContent: { pageOperation: { commandId: 'x', tier: 'commit', label: 'y' } } }).pageOperation, { commandId: 'x', tier: 'commit', label: 'y' }, 'an auto-approved save is recorded too')
+    assert.equal(readMcpToolResult({ structuredContent: { pageOperation: { commandId: 'x', tier: 'publish', label: 'y' } } }).pageOperation, undefined, 'an unknown tier is not recorded')
   })
 
   await t.test('a plan card starts nothing until approved; the runner then moves the task on', async (sub) => {

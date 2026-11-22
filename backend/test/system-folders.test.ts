@@ -533,7 +533,7 @@ test('administrators browse server folders and manage the RecycleBin safely', { 
     fs.mkdirSync(offline)
     fs.writeFileSync(second, 'b')
     const access = fs.promises.access
-    t.mock.method(fs.promises, 'access', async (target, mode) => {
+    t.mock.method(fs.promises, 'access', async (...[target, mode]: Parameters<typeof access>) => {
       if (String(target) === first && !fs.existsSync(late)) {
         fs.writeFileSync(late, 'c')
         insert.run(hash, late, firstFolder)

@@ -267,13 +267,13 @@ export function NaiGenerationPanel({
     ? [
         naiClickCost > (naiUserQuery.data?.anlasBalance ?? 0)
           ? t(
-              { ko: 'Anlas 가 부족할 수 있어 (예상 {cost} / 보유 {balance}). 예상치라 생성은 막지 않아.', en: 'You may not have enough Anlas (est. {cost} / balance {balance}). This is an estimate, so generation is not blocked.' },
+              { ko: 'Anlas 부족 예상 (예상 {cost} / 보유 {balance})', en: 'Anlas may be insufficient (est. {cost} / balance {balance})' },
               { cost: formatNumber(naiClickCost), balance: formatNumber(naiUserQuery.data?.anlasBalance ?? 0) },
             )
           : null,
         naiCostInputs.n_samples > naiMaxSampleCount
           ? t(
-              { ko: '현재 크기/잔액으로는 최대 {max}장까지 권장돼.', en: 'Up to {max} images are recommended at this size and balance.' },
+              { ko: '최대 {max}장 권장', en: 'Up to {max} images recommended' },
               { max: formatNumber(naiMaxSampleCount) },
             )
           : null,

@@ -11,6 +11,7 @@ import { getPromptPresets } from '@/lib/api-prompt-presets'
 import { codexChatThreadQueryKey } from './codex-chat-context'
 import { ChatMediaAttachments } from './chat-media-picker'
 import { ProposalFooter, ProposalFrame } from './chat-proposal-parts'
+import { useAutoApproveCard } from './chat-auto-approve'
 import { refreshOwnerAssets } from '@/features/settings/components/chat-profile-asset-runs'
 
 // Opened on demand from an approved card; keeps the settings asset editor out of the chat bundle.
@@ -55,6 +56,8 @@ export function ChatAssetProposalCard({ proposal, threadId }: { proposal: Assets
   })
   const dismiss = useMutation({ mutationFn: () => dismissChatProposal(proposal.id), onSuccess: async () => { setState('dismissed'); await refresh() }, onError })
   const busy = approve.isPending || dismiss.isPending
+  // Auto-approve: the sending tab saves the card as it arrives (chat-auto-approve); deletions wait for a click.
+  useAutoApproveCard(proposal, admin, saved || dismissed || busy, () => approve.mutateAsync())
   const expressionCount = proposal.action === 'create' ? proposal.input.expressions?.length ?? presets.data?.find((preset) => preset.id === proposal.input.expressionPresetId)?.items?.length : undefined
   const parts = proposal.action === 'create' ? [
     ...(proposal.input.expressionPresetId ? [expressionCount === undefined ? t({ ko: '표정', en: 'Expressions' }) : t({ ko: '표정 {count}', en: '{count} expressions' }, { count: expressionCount })] : []),

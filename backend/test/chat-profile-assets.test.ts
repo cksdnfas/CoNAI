@@ -88,7 +88,7 @@ test('chat profile assets: library migration, access, imports and generation ref
         try { Promise.resolve(layer.handle(req, res, next)).catch(reject) } catch (error) { reject(error) }
       }
       next()
-      if (options.multipart) req.end(options.multipart)
+      if (options.multipart) (req as unknown as PassThrough).end(options.multipart) // req is the PassThrough cast to Request above
     })
   }
 
@@ -155,7 +155,7 @@ test('chat profile assets: library migration, access, imports and generation ref
     const allowed = ChatProfileStore.create({ name: 'Allowed profile', engine: 'codex', folderId: child.id })
     const denied = ChatProfileStore.create({ name: 'Denied profile', engine: 'codex', folderId: hidden.id, allowedGroupKeys: ['admin'] })
     const disabled = ChatProfileStore.create({ name: 'Disabled profile', engine: 'codex', folderId: hidden.id, isEnabled: false })
-    const access = { codex: true, claude: true, llm: true, isAdmin: false, groupKeys: ['reader'], scopes: [], diagnostics: 'none' as const }
+    const access = { codex: true, claude: true, llm: true, isAdmin: false, groupKeys: ['reader'], permissionKeys: [], scopes: [], diagnostics: 'none' as const }
     const paths = folders.profileFolderPaths([allowed, denied, disabled], (profile) => profile.isEnabled && canUseChatProfile(access, profile))
     assert.deepEqual(paths.get(allowed.id)?.map((folder) => folder.name), ['Visible ancestor', 'Visible leaf'])
     assert.deepEqual(paths.get(denied.id), [])

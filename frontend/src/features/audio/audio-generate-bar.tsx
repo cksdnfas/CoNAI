@@ -222,7 +222,7 @@ export function AudioGenerateBar({ group, draft, autoFocus = false, canGenerate,
   }
 
   const order = async () => {
-    if (!runnable || !valid || !workflow) throw new Error(t({ ko: '지금은 생성할 수 없어. 프롬프트·길이·개수·seed와 생성 바의 워크플로 상태를 확인해.', en: 'Cannot generate now. Check the prompt, length, count, seed and the bar\'s workflow status.' }))
+    if (!runnable || !valid || !workflow) throw new Error(t({ ko: '생성할 수 없어. 입력값과 워크플로 상태를 확인해.', en: 'Cannot generate now. Check the inputs and workflow status.' }))
     if (busy) throw new Error(t({ ko: '생성 바가 다른 작업 중이야.', en: 'The generate bar is busy.' }))
     setBusy('order')
     try {

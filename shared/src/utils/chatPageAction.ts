@@ -87,6 +87,7 @@ export function validateChatPageArguments(schema: ChatPageSchema, input: unknown
 const nativeActionPermissions = {
   'plugin_author.open': null, 'plugin_author.create': null, 'plugin_author.file': null, 'plugin_author.edit': null,
   'plugin_author.save': null, 'plugin_author.review': null, 'plugin_author.install': null, 'plugin_author.export': null, 'plugin_author.refresh': null,
+  'plugin_author.write': null, 'plugin_author.at': null,
   // Plugin management's Git sources (administrator routes): check and review install nothing; install is a review card.
   'plugin_source.check': null, 'plugin_source.review': null, 'plugin_source.install': null,
   // Retrying the startup sync of official packages replaces plugin code, so it is a review card.
@@ -213,6 +214,10 @@ const IN_PLACE_VIEW_ACTIONS = new Set(['page.settings_open', 'comfy.check', 'pro
 for (const id of ['workspace.create', 'workspace.save']) COMMIT_ACTIONS.add(id)
 for (const id of ['plugin_author.create', 'plugin_author.save', 'plugin_author.install']) COMMIT_ACTIONS.add(id)
 for (const id of ['plugin_author.open', 'plugin_author.file', 'plugin_author.review', 'plugin_author.export', 'plugin_author.refresh']) VIEW_ACTIONS.add(id)
+// A draft is inactive source: the assistant's edits save straight into it (revision-checked, like edit_plugin_draft),
+// and the one human decision is installing the reviewed package (plugin_author.install, a card never auto-approved).
+for (const id of ['plugin_author.edit', 'plugin_author.write']) DIRECT_ACTIONS.add(id)
+VIEW_ACTIONS.add('plugin_author.at'); IN_PLACE_VIEW_ACTIONS.add('plugin_author.at')
 COMMIT_ACTIONS.add('plugin_source.install'); COMMIT_ACTIONS.add('plugin_bundled.sync')
 VIEW_ACTIONS.add('plugin_source.check'); IN_PLACE_VIEW_ACTIONS.add('plugin_source.check')
 for (const id of ['workspace.open', 'workspace.new', 'workspace.search', 'workspace.mkdir']) VIEW_ACTIONS.add(id)
@@ -258,20 +263,37 @@ export function chatPageActionTier(id: string, action?: { tier?: ChatPageActionT
 export function chatPageActionLeavesScreen(id: string, action?: Pick<ChatPageAction, 'tier'>) {
   return chatPageActionTier(id, action) === 'view' && !IN_PLACE_VIEW_ACTIONS.has(id)
 }
+/**
+ * Operations auto-approve never runs: code installs (plugins, official plugin updates, the AI runtime), what opens
+ * access from outside (HTTP MCP, outside MCP servers, wallpaper runtime keys), and deletions without delete in the id.
+ */
+const NEVER_AUTO_APPROVED = new Set(['plugin_author.install', 'plugin_source.install', 'plugin_bundled.sync', 'settings.ai_runtime', 'settings.mcp_http', 'settings.mcp_server', 'wallpaper.issue_key', 'wallpaper.revoke_key', 'workflow.runs_cleanup'])
+/** Argument values that turn a save-or-delete operation (settings.flag, settings.llm_preset, settings.routine …) into a deletion. */
+const DELETING_OPERATION = /^(?:delete|remove|verify_files)$/
+/** A save or run the chat may perform without a review card while the person's auto-approve is on; deletions stay cards. */
+export function chatAutoApprovable(id: string, args?: Record<string, unknown>): boolean {
+  if (NEVER_AUTO_APPROVED.has(id) || /delete/.test(id)) return false
+  return !args || !['operation', 'op', 'action'].some((key) => typeof args[key] === 'string' && DELETING_OPERATION.test(args[key] as string))
+}
 /** The AI connection operations (representative models, MCP servers, usage) that Settings › AI 연결 and the chat's AI 연결 tab share. */
 const CHAT_LLM_SCREEN_ACTIONS = new Set(['settings.default_model', 'settings.default_judge', 'settings.mcp_server', 'settings.mcp_server_draft', 'settings.usage_period'])
+/** A plugin page route: `/ext/<plugin>/<page>`, or `/public/ext/<plugin>/<page>` for a page an administrator shared with every signed-in account. */
+export function pluginPageRoute(path: string): { pluginId: string; pageId: string; public: boolean } | null {
+  const match = /^(\/public)?\/ext\/([a-z][a-z0-9-]{1,47})\/([a-z][a-z0-9-]{1,47})$/.exec(path)
+  return match ? { pluginId: match[2], pageId: match[3], public: !!match[1] } : null
+}
 export function chatPageActionAllowed(path: string, id: string): boolean {
-  // Plugin management (drafts and Git sources) appears in Settings and on the 플러그인 page; the server requires an administrator.
-  if (id.startsWith('plugin_author.') || id.startsWith('plugin_source.')) return (path === '/settings' || path === '/extensions') && own(CHAT_PAGE_ACTION_PERMISSIONS, id)
-  const extension = /^\/ext\/([a-z][a-z0-9-]{1,47})\/([a-z][a-z0-9-]{1,47})$/.exec(path)
+  // Plugin management (drafts, Git sources, official plugin updates) appears in Settings and on the 플러그인 page; the server requires an administrator.
+  if (id.startsWith('plugin_author.') || id.startsWith('plugin_source.') || id.startsWith('plugin_bundled.')) return (path === '/settings' || path === '/extensions') && own(CHAT_PAGE_ACTION_PERMISSIONS, id)
+  const extension = pluginPageRoute(path)
   // Structural validation only. The server additionally checks the installed manifest on every use.
-  if (extension && !own(CHAT_PAGE_ACTION_PERMISSIONS, id)) return id.startsWith(`${extension[1]}.`) && /^[a-z][a-z0-9-]*\.[a-z][a-z0-9_]{0,47}$/.test(id)
+  if (extension && !own(CHAT_PAGE_ACTION_PERMISSIONS, id)) return id.startsWith(`${extension.pluginId}.`) && /^[a-z][a-z0-9-]*\.[a-z][a-z0-9_]{0,47}$/.test(id)
   if (id.startsWith('workspace.')) return path === '/files' && own(CHAT_PAGE_ACTION_PERMISSIONS, id)
   if (!own(CHAT_PAGE_ACTION_PERMISSIONS, id)) return false
   if (id.startsWith('page_settings.') || id === 'page.settings_open') return pageSettingsScopes(path).length > 0
   if (id.startsWith('page.')) return true
   // The editor opens over library, group, detail and generation pages; extension pages never host it.
-  if (id.startsWith('image_editor.') || id.startsWith('image_detail.')) return !path.startsWith('/ext/')
+  if (id.startsWith('image_editor.') || id.startsWith('image_detail.')) return !pluginPageRoute(path)
   if (id === 'generation.history_load') return path === '/generation' || /^\/public\/workflows\/[\w-]+$/.test(path)
   // The chat management screens live in the chat workspace (/chat/…) and in Settings › 채팅; the same operations serve both.
   if (id.startsWith('profile.')) return path === '/settings' || path === '/chat/profiles'
@@ -322,7 +344,7 @@ export function normalizeChatPageActions(path: string, input: unknown): ChatPage
       if (keys.some(key => typeof key !== 'string' || !key || key.length > 200 || isPrivateChatPageKey(key)) || !own(schema.properties ?? {}, target.argument)) throw new Error('작업 대상 정의가 올바르지 않아.')
       return { argument: target.argument, collection: target.collection, id: target.id, keys: [...new Set(target.keys)].sort() }
     })
-    if (path.startsWith('/ext/') && !own(CHAT_PAGE_ACTION_PERMISSIONS, raw.id)) {
+    if (pluginPageRoute(path) && !own(CHAT_PAGE_ACTION_PERMISSIONS, raw.id)) {
       return { id: raw.id, label: raw.label, description: raw.description, effect: raw.effect, schema, tier }
     }
     return { id: raw.id, label: raw.label, description: raw.description, effect: raw.effect, schema, ...inputs, ...(targets ? { targets } : {}), ...(raw.revisionScope === 'action' ? { revisionScope: 'action' as const } : {}) }

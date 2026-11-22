@@ -59,12 +59,12 @@ test('settings page connection: field hints, settings operation tiers and bindin
     assert.equal(snapshot.fields[0].hint, 'pixai-v1: more tags, CUDA GPU only')
     assert.equal(normalizeChatPageSnapshot({ ...page, fields: [{ id: 'a', label: 'A', type: 'text', value: '' }] }).fields[0].hint, undefined, 'no hint, no key')
     assert.throws(() => normalizeChatPageSnapshot({ ...page, fields: [{ id: 'a', label: 'A', type: 'text', value: '', hint: 'x'.repeat(CHAT_PAGE_LIMITS.hint + 1) }] }))
-    assert.match(JSON.stringify(chatPageView(admin, snapshot)), /"hint":"pixai-v1/)
+    assert.match(JSON.stringify(chatPageView(admin, snapshot, null)), /"hint":"pixai-v1/)
   })
 
   await t.test('a long screen drops the hints before anything else', () => {
     const fields = Array.from({ length: 20 }, (_, index) => ({ id: `f${index}`, label: `Field ${index}`, type: 'text' as const, value: 'v'.repeat(100), hint: 'h'.repeat(60) }))
-    const view = chatPageView(admin, normalizeChatPageSnapshot({ ...page, fields }))
+    const view = chatPageView(admin, normalizeChatPageSnapshot({ ...page, fields }), null)
     const full = JSON.stringify(view)
     const withoutHints = JSON.stringify({ ...view, fields: view.fields.map(({ hint: _hint, ...field }) => field) })
     const bounded = boundedPageView(view, withoutHints.length + 10)
@@ -94,13 +94,13 @@ test('settings page connection: field hints, settings operation tiers and bindin
 
   await t.test('content evaluation exposes its real settings and draft actions without model connection secrets', async () => {
     const { contentEvaluationChatActions, contentEvaluationChatData, contentEvaluationModelPatch } = await import('../../frontend/src/features/settings/components/content-evaluation-chat')
-    const models: import('../../frontend/src/lib/api-codex-chat').ModelSlot[] = [{ id: 7, providerName: 'judge', providerLabel: 'Judge', providerType: 'decision_typesafe', model: 'model-a', label: 'Judge · model-a', isDefault: false, sortOrder: 0, contentRatingTierId: null, profiles: [], judgePresets: [], userProfiles: 0, chats: 0, createdDate: '', updatedDate: '' }]
+    const models: import('../../frontend/src/lib/api-codex-chat').ModelSlot[] = [{ id: 7, providerName: 'judge', providerLabel: 'Judge', kind: 'model', providerType: 'decision_typesafe', model: 'model-a', label: 'Judge · model-a', isDefault: false, isDefaultJudge: false, sortOrder: 0, routeKey: null, routeName: null, targetSlotId: null, followsChat: false, prompt: '', routes: [], contentRatingTierId: null, profiles: [], judgePresets: [], userProfiles: 0, chats: 0, createdDate: '', updatedDate: '' }]
     const topics = Array.from({ length: 100 }, (_, index) => ({ id: `topic-${index}`, name: `Topic ${index}`, description: index === 0 ? 'https://example.invalid/criteria' : 'Assess this topic', enabled: index < 20 }))
     const draft = { revision: 2, definitionVersion: 2, modelSlotId: 7, modelReady: true, topics }
     const translate = ((dictionary: { en?: string }) => dictionary.en ?? '') as Parameters<typeof contentEvaluationChatActions>[0]
     const actions = contentEvaluationChatActions(translate)
     const snapshot = normalizeChatPageSnapshot({ ...page, resourceId: 'content-evaluation', fields: [], actions, data: contentEvaluationChatData(draft, models) })
-    const view = chatPageView(admin, snapshot)
+    const view = chatPageView(admin, snapshot, null)
     assert.equal((snapshot.data!.topics as unknown[]).length, 100, 'archived topics beyond the 64-field limit remain readable')
     assert.match(JSON.stringify(view), /content-evaluation/)
     assert.equal(actions.find(action => action.id === 'settings.save')?.effect, 'save')

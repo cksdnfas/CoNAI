@@ -362,16 +362,16 @@ export function resolveNaiSamplingSettings(form: Pick<NAIFormDraft, 'model' | 's
 /** Why a V5 model cannot take vibes (submit, chat preset save, module-graph vibe inputs). */
 export function getNaiVibesUnsupportedMessage(t: (input: TranslationInput) => string) {
   return t({
-    ko: 'NovelAI가 V5 모델의 바이브 트랜스퍼를 아직 공개하지 않았어. 바이브를 지우거나 다른 모델을 골라줘.',
-    en: 'NovelAI has not released Vibe Transfer for V5 models yet. Remove the vibes or pick another model.',
+    ko: 'V5 모델은 바이브 트랜스퍼 미지원. 바이브를 빼거나 다른 모델을 골라줘.',
+    en: 'Vibe Transfer is not available on V5 models. Remove vibes or pick another model.',
   })
 }
 
 /** Why the negative prompt is read-only on a model with fixed settings (NAI tab, chat preset editor). */
 export function getNaiFixedNegativeHint(t: (input: TranslationInput) => string) {
   return t({
-    ko: '이 모델은 고정된 Heavy UC만 써. 빼고 싶은 요소는 프롬프트에 -2::hat:: 처럼 음수 가중치로 넣어줘.',
-    en: 'This model always uses the fixed Heavy UC. Put unwanted elements in the prompt as negative weights, e.g. -2::hat::.',
+    ko: '고정 Heavy UC 모델 (제외 요소는 프롬프트에 -2::hat:: 형식 사용)',
+    en: 'Fixed Heavy UC (use negative weights like -2::hat:: in the prompt).',
   })
 }
 
@@ -381,8 +381,8 @@ export const NAI_FIXED_MODEL_FIELD_HINT = 'Fixed by the selected model (NAI Diff
 /** Page-assistant refusal for a patch to inputs a model with fixed settings decides. */
 export function getNaiFixedFieldsError(t: (input: TranslationInput, params?: TranslationParams) => string, fields: readonly string[], settings: NaiFixedModelSettings) {
   return t({
-    ko: '{fields}: 선택한 모델은 스텝 {steps}·{sampler}·Heavy UC로 고정이라 바꿀 수 없어. 빼고 싶은 요소는 프롬프트에 -2::hat:: 처럼 음수 가중치로 넣어줘.',
-    en: '{fields}: the selected model fixes {steps} steps, {sampler} and the Heavy UC, so these cannot change. Put unwanted elements in the prompt as negative weights like -2::hat::.',
+    ko: '{fields}: 스텝 {steps}·{sampler}·Heavy UC 고정 모델 (제외 요소는 -2::hat:: 형식 사용)',
+    en: '{fields}: fixed to {steps} steps, {sampler} and Heavy UC (use negative weights like -2::hat::).',
   }, { fields: fields.join(', '), steps: settings.steps, sampler: settings.sampler })
 }
 

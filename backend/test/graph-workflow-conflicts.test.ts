@@ -298,7 +298,7 @@ test('workflow and schedule revisions protect reviewed saves and preserve legacy
   const otherConnection = new Database(user.getUserSettingsDb().name)
   otherConnection.pragma('busy_timeout = 0')
   const originalUpdate = WorkflowModel.update.bind(WorkflowModel)
-  const mockedUpdate = t.mock.method(WorkflowModel, 'update', (id, data) => {
+  const mockedUpdate = t.mock.method(WorkflowModel, 'update', (id: number, data: Parameters<typeof WorkflowModel.update>[1]) => {
     assert.throws(() => otherConnection.prepare('UPDATE workflows SET name = ? WHERE id = ?').run('concurrent', id), /locked/)
     return originalUpdate(id, data)
   })

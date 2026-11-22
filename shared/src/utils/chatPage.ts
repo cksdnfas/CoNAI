@@ -1,7 +1,7 @@
 import { isPageSettingsScope, pageSettingsScopes } from '../constants/pageSettings'
 import type { ChatPageField, ChatPageProposal, ChatPageSnapshot, ChatPageTarget, ChatPageValue } from '../types/chatPage'
 import { CHAT_WORKFLOW_LIMITS, normalizeChatWorkflowSnapshot } from './chatWorkflow'
-import { CHAT_PAGE_ACTION_LIMITS, copyChatPageData, normalizeChatPageActions } from './chatPageAction'
+import { CHAT_PAGE_ACTION_LIMITS, copyChatPageData, normalizeChatPageActions, pluginPageRoute } from './chatPageAction'
 
 export const CHAT_PAGE_LIMITS = { fields: 64, changes: 24, text: 8000, options: 100, hint: 400, snapshot: 24000, lifetimeMs: 5 * 60_000 } as const
 
@@ -30,6 +30,9 @@ export function chatPagePermission(path: string): string | null {
   if (path === '/chat' || path === '/chat/mine') return 'page.chat.view'
   if (CHAT_ADMIN_PATHS.includes(path)) return 'page.settings.view'
   if (path === '/access' || /^\/public\/workflows\/[\w-]+$/.test(path)) return ''
+  // A shared plugin page opens for any signed-in account; the server checks that the page is still shared.
+  const pluginPage = pluginPageRoute(path)
+  if (pluginPage) return pluginPage.public ? '' : 'page.extensions.view'
   if (path === '/generation') return 'page.generation.view'
   if (path === '/sprite') return 'page.sprite.view'
   if (path === '/prompts') return 'page.prompts.view'
@@ -37,7 +40,7 @@ export function chatPagePermission(path: string): string | null {
   if (path === '/wildcards') return 'page.wildcards.view'
   if (path === '/characters') return 'page.characters.view'
   if (path === '/files') return 'page.files.view'
-  if (path === '/extensions' || /^\/ext\/[a-z][a-z0-9-]{1,47}\/[a-z][a-z0-9-]{1,47}$/.test(path)) return 'page.extensions.view'
+  if (path === '/extensions') return 'page.extensions.view'
   if (path === '/audio') return 'page.audio.view'
   if (path === '/posts') return 'page.posts.view'
   if (path === '/upload') return 'page.upload.view'
@@ -56,7 +59,7 @@ export function normalizeChatPageSnapshot(value: unknown): ChatPageSnapshot {
   if (chatPagePermission(path) === null) throw new Error('이 페이지는 채팅에 연결할 수 없어.')
   const kind = raw.kind
   if (!['page', 'nai', 'codex', 'comfyui', 'comfy_author', 'library', 'prompt_search', 'presets', 'wildcards', 'metadata', 'workflow', 'workflow_runner', 'groups', 'files', 'upload', 'settings', 'page_settings', 'wallpaper', 'image_detail', 'image_editor', 'audio', 'sprite', 'posts', 'extension'].includes(kind as string)) throw new Error('페이지 종류가 올바르지 않아.')
-  if ((kind === 'extension') !== path.startsWith('/ext/')) throw new Error('확장 페이지 종류와 경로가 맞지 않아.')
+  if ((kind === 'extension') !== (pluginPageRoute(path) !== null)) throw new Error('확장 페이지 종류와 경로가 맞지 않아.')
   if (kind === 'extension' && (!Array.isArray(raw.fields) || raw.fields.length !== 0)) throw new Error('확장은 등록된 작업으로 초안을 변경해줘.')
   if (kind === 'page_settings' && (typeof raw.resourceId !== 'string' || !isPageSettingsScope(raw.resourceId) || !pageSettingsScopes(path).includes(raw.resourceId))) throw new Error('이 페이지의 설정 항목이 아니야.')
   const metadataHash = /^\/images\/([\w.-]+)\/metadata$/.exec(path)?.[1]

@@ -68,7 +68,7 @@ test('lorebook files: account and chat books as file store folders, cache sync, 
     try {
       assert.throws(() => OwnedLorebookStore.update(book.id, me, { name: 'after rename', entries: [{ content: 'changed' }] }), /held cache/)
       assert.deepEqual(texts(), original)
-      assert.equal(FileStoreService.get(me, book.folderId).name, 'before rename')
+      assert.equal(FileStoreService.get(me, book.folderId!).name, 'before rename')
       assert.equal(cached(book.id)[0].content, 'original')
     } finally { db.exec('DROP TRIGGER refuse_lore_cache') }
     // Restoring the old bytes can change ctime: a reopened editor uses the fresh filesystem token.
@@ -79,7 +79,7 @@ test('lorebook files: account and chat books as file store folders, cache sync, 
     db.exec(`CREATE TEMP TRIGGER refuse_book_delete BEFORE DELETE ON chat_lorebooks WHEN OLD.id=${book.id} BEGIN SELECT RAISE(ABORT, 'held book'); END`)
     try {
       assert.throws(() => OwnedLorebookStore.delete(book.id, me), /held book/)
-      assert.equal(FileStoreService.get(me, book.folderId).name, 'after rename')
+      assert.equal(FileStoreService.get(me, book.folderId!).name, 'after rename')
       assert.equal(OwnedLorebookStore.requireOwn(book.id, me).revision, renamed.revision)
     } finally { db.exec('DROP TRIGGER refuse_book_delete') }
   })

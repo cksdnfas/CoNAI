@@ -13,7 +13,8 @@ test('hello plus reset resyncs once per connection while reset still clears the 
     static instances: Source[] = []
     listeners = new Map<string, (event: { data: string }) => void>()
     onerror: (() => void) | null = null
-    constructor(public url: string) { Source.instances.push(this) }
+    url: string
+    constructor(url: string) { this.url = url; Source.instances.push(this) }
     addEventListener(name: string, listener: (event: { data: string }) => void) { this.listeners.set(name, listener) }
     close() {}
     emit(name: string, payload: unknown = {}) { this.listeners.get(name)?.({ data: JSON.stringify(payload) }) }

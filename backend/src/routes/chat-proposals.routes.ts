@@ -20,7 +20,8 @@ import { chatPageNativeActionRevision } from '../services/codex-chat/chatPageNat
 import { applyProfileAssetsProposal } from '../services/codex-chat/chatAssetProposals'
 import { ChatAssetError } from '../services/codex-chat/chatAssetAccess'
 import { hasAdminAccess } from '../middleware/authMiddleware'
-import { ChatTaskRunner } from '../services/codex-chat/chatTasks'
+import { ChatTaskRunner, setTaskAutoApprove } from '../services/codex-chat/chatTasks'
+import { isAutoApproveTab } from '../services/codex-chat/chatSendPreparation'
 import { applyChatSettingsProposal, ChatSettingsError } from '../services/codex-chat/chatSettingsProposals'
 import { applyProfileFolderProposal, ProfileFolderProposalError } from '../services/codex-chat/chatProfileFolderProposals'
 import { ChatProfileError } from '../services/codex-chat/chatProfileError'
@@ -219,6 +220,8 @@ router.post('/:proposalId/task-approve', (req: Request, res: Response) => {
     return
   }
   try {
+    // Approved with auto-approve on: the task's steps run their saves and save their cards like the person's own sends.
+    setTaskAutoApprove(proposal.taskId, isAutoApproveTab(req.body?.autoApprove) ? req.body.autoApprove : undefined)
     ChatTaskRunner.approve(proposal.taskId)
     res.json({ success: true, data: ChatProposalStore.markSaved(proposalId, proposal.taskId) })
   } catch (error) {

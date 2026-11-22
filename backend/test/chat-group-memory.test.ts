@@ -128,7 +128,7 @@ test('group room memory: the room summary, what its members see, and recall', { 
     assert.ok(ChatSummaryStore.addSegment(directId, { from: firstId, until: firstId, content: '인사를 나눴다.' }, CodexChatStore.findThreadById(directId)!.context_revision))
     db.prepare("UPDATE codex_chat_threads SET codex_thread_id = 'old-codex', codex_input_tokens = 10, codex_lore_sent = '[\"k\"]', chat_model = 'gpt-old', updated_date = '2001-02-03 04:05:06' WHERE id = ?").run(directId)
     ChatGroupStore.addMembers(threadId, [nova.id, stella.id])
-    ChatGroupStore.setMemberCodexThread(threadId, nova.id, 'old-member')
+    ChatGroupStore.setMemberCodexThread(threadId, nova.id, 'old-member', 'old-fingerprint')
     ChatGroupStore.setLastSeen(threadId, nova.id, CodexChatStore.latestMessageId(threadId)!)
     ChatGroupStore.setMemberChatModel(threadId, nova.id, { chatModel: 'gpt-old' })
     // A compacted chat: the session moved the cursor past every message without writing a summary.

@@ -319,8 +319,8 @@ export function ChatSkillEditorModal({ open, skillId, initial, imported, onClose
             <Info />
             <AlertDescription>
               {base?.enabled
-                ? t({ ko: '플러그인 {name}의 스킬이라 여기서는 읽기만 할 수 있어.', en: 'This skill belongs to the plugin {name}; it is read-only here.' }, { name: pluginName })
-                : t({ ko: '플러그인 {name}의 스킬이라 읽기만 할 수 있어. 플러그인이 꺼져 있어서 지금은 모델에 보이지 않아.', en: 'This skill belongs to the plugin {name} and is read-only. The plugin is off, so models do not see it now.' }, { name: pluginName })}
+                ? t({ ko: '플러그인({name}) 스킬 · 읽기 전용', en: 'Plugin ({name}) skill · read-only' }, { name: pluginName })
+                : t({ ko: '플러그인({name}) 스킬 · 읽기 전용 (플러그인 꺼짐)', en: 'Plugin ({name}) skill · read-only (plugin off)' }, { name: pluginName })}
             </AlertDescription>
           </Alert>
         ) : null}
@@ -421,8 +421,8 @@ export function ChatSkillEditorModal({ open, skillId, initial, imported, onClose
           <span className="inline-flex items-center gap-1 text-xs text-destructive">
             <TriangleAlert className="size-3.5" aria-hidden />
             {overLimit === 'count'
-              ? t({ ko: '섹션은 {max}개까지야. 몇 개 지우거나 합쳐줘.', en: 'At most {max} sections. Delete or merge some.' }, { max: CHAT_SKILL_LIMITS.sections })
-              : t({ ko: '개요 쪽 칸이 너무 길어 (이름 {name}·언제 쓰는지 {description}·분류 {category}·개요 {instructions}자까지).', en: 'An overview field is too long (name {name}, when to use {description}, category {category}, overview {instructions} characters).' }, { name: CHAT_SKILL_LIMITS.name, description: CHAT_SKILL_LIMITS.description, category: CHAT_SKILL_LIMITS.category, instructions: CHAT_SKILL_LIMITS.instructions })}
+              ? t({ ko: '섹션 최대 {max}개 초과', en: 'Exceeds {max}-section limit' }, { max: CHAT_SKILL_LIMITS.sections })
+              : t({ ko: '개요 글자 수 초과 (이름 {name} · 언제 쓰는지 {description} · 분류 {category} · 개요 {instructions}자)', en: 'Overview limit exceeded (name {name} · when to use {description} · category {category} · overview {instructions})' }, { name: CHAT_SKILL_LIMITS.name, description: CHAT_SKILL_LIMITS.description, category: CHAT_SKILL_LIMITS.category, instructions: CHAT_SKILL_LIMITS.instructions })}
           </span>
         ) : null}
         {brokenGuides.length > 0 && !readOnly ? (
@@ -431,7 +431,7 @@ export function ChatSkillEditorModal({ open, skillId, initial, imported, onClose
             : t({ ko: '"{path}" 경로 바뀜 → 생성 프리셋 {names}', en: '"{path}" renamed → generation presets {names}' }, { path: guide.path, names: guide.presets.join(', ') }))).join('\n')}>
             <span className="inline-flex items-center gap-1 text-xs text-warning">
               <TriangleAlert className="size-3.5" aria-hidden />
-              {t({ ko: '저장하면 생성 프리셋 가이드 {count}곳이 끊겨. 저장한 뒤 그 가이드를 다시 골라줘.', en: 'Saving breaks {count} generation preset guides. Pick those guides again after saving.' }, { count: brokenGuides.length })}
+              {t({ ko: '저장 시 생성 프리셋 가이드 {count}곳 연결 끊김', en: 'Saving disconnects {count} preset guide(s)' }, { count: brokenGuides.length })}
             </span>
           </Tip>
         ) : null}

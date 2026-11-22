@@ -145,7 +145,7 @@ test('lore context: books per request, the index, always-on entries, linked file
 
   await t.test('index caps: 40 titles a book, then the whole index, global books giving up their titles first', () => {
     const book = (id: number, label: string, kind: 'chat' | 'account' | 'global', count: number, title = (index: number) => `항목${index}`) => ({
-      id, name: label, label, kind, via: kind === 'chat' ? 'chat' as const : 'profile' as const, owner: null, folderId: null,
+      id, revision: '1:', name: label, label, kind, via: kind === 'chat' ? 'chat' as const : 'profile' as const, owner: null, folderId: null,
       entries: normalizeLorebook(Array.from({ length: count }, (_, index) => ({ title: title(index), content: 'x' }))),
     })
     const estimate = (text: string) => text.length
@@ -446,7 +446,7 @@ test('lore context: books per request, the index, always-on entries, linked file
         assert.equal(choose([{ role: 'assistant', content: 'other', context_meta }]).keys.length, 0)
       }
       const diagnostic = metadataOnly({ version: 2, lore: [], ...loreDiagnostics(choose(historyAt(2)).decisions, 0) })
-      assert.equal(diagnostic.loreEntries?.[0].remaining, 2)
+      assert.equal((diagnostic.loreEntries as Array<{ remaining?: number }> | undefined)?.[0].remaining, 2)
       assert.equal(loreDiagnostics(choose(historyAt(5, true)).decisions, 0).loreSkipped?.[0].reason, 'cooldown')
     })
 
@@ -476,7 +476,7 @@ test('lore context: books per request, the index, always-on entries, linked file
       const codex = choose([{ role: 'user', content: 'trigger' }], entries.map((entry) => ({ ...entry, delay: 100 })), false)
       assert.equal(codex.keys.length, 3)
       assert.equal(choose(historyAt(2), entries, false).keys.length, 0)
-      const books = [{ id: 41, name: 'timed', label: 'timed', kind: 'global' as const, via: 'profile' as const, owner: null, folderId: null, entries: normalizeLorebook(entries.map((entry) => ({ ...entry, delay: 100 }))) }]
+      const books = [{ id: 41, revision: '1:', name: 'timed', label: 'timed', kind: 'global' as const, via: 'profile' as const, owner: null, folderId: null, entries: normalizeLorebook(entries.map((entry) => ({ ...entry, delay: 100 }))) }]
       assert.equal(selectChatLore({ ...kai, engine: 'codex' }, [{ content: 'trigger' }], null, { books }).keys.length, 3)
     })
 
@@ -576,7 +576,7 @@ test('lore context: books per request, the index, always-on entries, linked file
         { id: 'override', content: 'override', keys: ['trigger'], order: -10, extensions: { sticky: 4, cooldown: 3, delay: 2, group: 'scene', groupOverride: true, groupWeight: 25, useGroupScoring: true } },
         { id: 'row', content: 'row', sticky: 2, cooldown: 1, delay: 3, group: 'other', groupOverride: true, groupWeight: 10, useGroupScoring: false },
       ]
-      const imported = await importChatCard(Buffer.from(JSON.stringify({ spec: 'chara_card_v2', data: { name: '시간 카드', character_book: { entries: raw } } })), 'conn')
+      const imported = await importChatCard(Buffer.from(JSON.stringify({ spec: 'chara_card_v2', data: { name: '시간 카드', character_book: { entries: raw } } })), null)
       const book = ChatLorebookStore.find(imported.lorebookIds![0])!
       const winner = book.entries.find((entry) => entry.id === 'override')!
       assert.deepEqual([winner.sticky, winner.cooldown, winner.delay, winner.group], [4, 3, 2, 'scene'])

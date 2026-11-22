@@ -123,7 +123,7 @@ test('shared resource editors preserve drafts and protect confirmed deletion', a
     id: 7, revision: '1', name: 'Named lorebook', kind: 'global', entries: [], profiles: [], createdDate: '', updatedDate: '',
   }
   const generation: import('../src/lib/api-codex-chat').ChatGenerationPreset = {
-    id: 8, revision: 1, name: 'In-use preset', instruction: '', kind: 'nai', nai: null, comfyui: null,
+    id: 8, revision: 1, name: 'In-use preset', instruction: '', kind: 'nai', nai: null, comfyui: null, codex: null,
     prompting: { timing: 'inline', guide: '', guideSkill: null, previousImages: 0 },
     profiles: [{ id: 1, name: 'Linked profile' }], createdDate: '', updatedDate: '',
   }
@@ -135,7 +135,7 @@ test('shared resource editors preserve drafts and protect confirmed deletion', a
   const removal = new Promise<Response>(resolve => { resolveRemoval = resolve })
   let resolveDeleted!: () => void
   const deleted = new Promise<void>(resolve => { resolveDeleted = resolve })
-  const fetchMock = t.mock.method(globalThis, 'fetch', async (url, options) => {
+  const fetchMock = t.mock.method(globalThis, 'fetch', async (url: string | URL | Request, options?: RequestInit) => {
     requests.push({ url: String(url), method: options?.method })
     if (options?.method === 'DELETE') return removal
     throw new Error('Usage unavailable')
@@ -219,7 +219,7 @@ test('shared resource editors preserve drafts and protect confirmed deletion', a
       client.setQueryData(host.account ? ownLorebookQueryKey(7) : chatLorebookQueryKey(7), stored)
       client.setQueryData(CHAT_STATUS_QUERY_KEY, { loreKeyLanguage: null })
       let removed = false
-      const modalFetch = t.mock.method(globalThis, 'fetch', async (url, options) => {
+      const modalFetch = t.mock.method(globalThis, 'fetch', async (url: string | URL | Request, options?: RequestInit) => {
         if (options?.method === 'DELETE') {
           assert.equal(String(url), host.account ? '/api/codex-chat/lorebooks/7' : '/api/codex-chat/admin/lorebooks/7')
           removed = true
@@ -267,7 +267,7 @@ test('shared resource editors preserve drafts and protect confirmed deletion', a
       const first = new Promise<Response>(resolve => { answer = resolve })
       const sent: Array<[string, string | undefined, string, number | undefined]> = []
       const saved = (name: string, revision: number) => ({ id: 97, name, revision, block, profiles: [], createdDate: '', updatedDate: '' })
-      s.mock.method(globalThis, 'fetch', async (url, init) => {
+      s.mock.method(globalThis, 'fetch', async (url: string | URL | Request, init?: RequestInit) => {
         const body = JSON.parse(String(init?.body))
         sent.push([String(url), init?.method, body.name, body.revision])
         return sent.length === 1 ? first : Response.json({ success: true, data: saved(body.name, 2) })
@@ -348,7 +348,8 @@ test('profile loading keeps one overlay and a dirty close preserves the draft un
   t.mock.method(globalThis, 'fetch', async () => Response.json({ success: true, data: [] }))
   const push = t.mock.method(dom.window.history, 'pushState')
   const back = t.mock.method(dom.window.history, 'back', () => {})
-  const defaults = { style: { emoticonGroupIds: [] } } as import('../src/lib/api-codex-chat').ChatProfileDefaults
+  // Partial defaults: the editor modal reads only the style here.
+  const defaults = { style: { emoticonGroupIds: [] } } as unknown as import('../src/lib/api-codex-chat').ChatProfileDefaults
   const initialDraft = { name: 'Unsaved copy', engine: 'codex' as const }
   let closed = 0
   const root = createRoot(document.getElementById('root')!)
@@ -388,7 +389,7 @@ test('profile loading keeps one overlay and a dirty close preserves the draft un
       let answer!: (value: Response) => void
       const conflict = new Promise<Response>(resolve => { answer = resolve })
       const writes: Array<[string, string, string | undefined]> = []
-      s.mock.method(globalThis, 'fetch', async (_url, init) => {
+      s.mock.method(globalThis, 'fetch', async (_url: string | URL | Request, init?: RequestInit) => {
         if (init?.method !== 'POST' && init?.method !== 'PUT') return Response.json({ success: true, data: [] })
         const body = JSON.parse(String(init.body))
         writes.push([init.method, body.name, body.revision])
@@ -413,6 +414,10 @@ test('profile loading keeps one overlay and a dirty close preserves the draft un
         answer(Response.json({ success: false, code: 'revision_conflict', error: 'changed', data: { ...saved, tagline: 'other change', revision: 'newer' } }, { status: 409 }))
         await new Promise<void>(resolve => notifyManager.schedule(resolve))
       })
+      // The refused save settles after the 409 body is read and the editor re-renders from the mutation's notification;
+      // both can take more than one tick, so wait (bounded) for the footer to come back before checking it.
+      for (let tick = 0; tick < 50 && (client.isMutating() > 0 || button('Save').disabled); tick++) await act(async () => { await new Promise<void>(resolve => setTimeout(resolve, 10)) })
+      assert.equal(client.isMutating(), 0, 'the refused save has settled')
       assert.deepEqual(writes, [['POST', 'Unsaved copy', undefined], ['PUT', 'submitted', 'opened']])
       assert.equal(name().value, 'typed later')
       assert.equal(button('Save').disabled, false)
@@ -528,7 +533,7 @@ test('warm and delayed-default profile drafts become ready without dirtying unto
       let resolveResponse!: (value: Response) => void
       response = new Promise<Response>((resolve) => { resolveResponse = resolve })
       await act(async () => root.render(h(QueryClientProvider, { client }, h(Editor, { cold: true, imported }))))
-      assert.equal(state.draft, null)
+      assert.equal<ReturnType<typeof useProfileEditorDraft>['draft']>(state.draft, null)
       assert.equal(document.getElementById('root')!.textContent, 'loading')
       await act(async () => {
         resolveResponse(Response.json({ success: true, data: { ...defaults, style: { typeface: 'sans' }, systemPrompt: 'Loaded defaults' } }))
@@ -595,7 +600,7 @@ test('lorebook creation preserves in-flight edits and one dialog across deferred
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity, gcTime: Infinity }, mutations: { gcTime: Infinity } } })
   client.setQueryData(['runtime-language-settings'], { general: { language: 'en' } })
   client.setQueryData(CHAT_STATUS_QUERY_KEY, { loreKeyLanguage: null })
-  t.mock.method(globalThis, 'fetch', async (url, options) => {
+  t.mock.method(globalThis, 'fetch', async (url: string | URL | Request, options?: RequestInit) => {
     if (String(url) === '/api/codex-chat/lorebooks' && options?.method === 'POST') return creation.promise
     if (String(url) === '/api/codex-chat/admin/lorebooks/42') return detail.promise
     throw new Error(`Unexpected request: ${options?.method ?? 'GET'} ${url}`)
@@ -751,7 +756,7 @@ test('editor merges preserve unrelated drafts and do not misidentify their own a
   const setting = { id: 11, revision: 2, appearance: 'Blue hair', referenceHash: null, avatarHash: null, avatarCrop: null, expressionGroupId: 7 } as Setting
   const linkedBase = { ...base, expressionGroupId: 1, appearance: 'Old look', referenceHash: null, avatarHash: null, avatarCrop: null, style: { ...base.style, emoticonGroupIds: [1, 8] } }
   const submittedLink = { ...buildDraft(linkedBase, undefined), style: { ...linkedBase.style, backgroundDim: 25 } }
-  const linkedLatest = { ...linkedBase, revision: '4', expressionGroupId: 7, characterLink: { settingId: 11, synced: true, revision: 2, settingName: 'Look', path: [], linkedProfileCount: 1 }, appearance: 'Blue hair', avatar: null, style: { ...linkedBase.style, emoticonGroupIds: [7, 8] } }
+  const linkedLatest = { ...linkedBase, revision: '4', expressionGroupId: 7, characterLink: { settingId: 11, synced: true, revision: 2, settingName: 'Look', path: [], linkedProfileCount: 1, outfit: null }, appearance: 'Blue hair', avatar: null, style: { ...linkedBase.style, emoticonGroupIds: [7, 8] } }
   const settingEffect = { kind: 'setting' as const, setting, submitted: submittedLink, previousGroupId: 1 }
   const settingMerge = mergeOwnProfileDraft(linkedBase, linkedLatest, submittedLink, undefined, settingEffect)
   assert.deepEqual(settingMerge.conflicts, [])
@@ -857,7 +862,7 @@ test('chat streams close on malformed lines and callback failures and retain API
     return true
   })
   const preview = { items: [] }
-  t.mock.method(globalThis, 'fetch', async (_url, init) => {
+  t.mock.method(globalThis, 'fetch', async (_url: string | URL | Request, init?: RequestInit) => {
     assert.equal(init?.signal, undefined, 'merge requests retain their no-timeout contract')
     return Response.json({ success: false, error: 'Choose', data: { status: 'decisions', preview, missing: ['entry'] } }, { status: 409 })
   })
@@ -1087,7 +1092,8 @@ test('chat notifications share directory refreshes, refetch only the new-message
     } }).subscribe(() => {}),
     new QueryObserver(client, { queryKey: ['codex-chat-thread', 1, 'attachments'], initialData: {}, queryFn: async () => { nestedReads++; return {} } }).subscribe(() => {}),
   ]
-  const chat = { canUse: true, selectedThreadId: 1, listOpen: false, isPanelOpen: false, currentLiveTurn: () => null } as import('../src/features/codex-chat/codex-chat-context').CodexChatApi
+  // Partial chat API: the notifications hook reads only these fields.
+  const chat = { canUse: true, selectedThreadId: 1, listOpen: false, isPanelOpen: false, currentLiveTurn: () => null } as unknown as import('../src/features/codex-chat/codex-chat-context').CodexChatApi
   function Notifications() { useChatGenerationNotifications(); return null }
   const root = createRoot(document.getElementById('root')!)
   try {
@@ -1143,7 +1149,7 @@ test('revision conflict errors carry the current record without a follow-up read
     })
   }
   assert.equal(calls, 4)
-  t.mock.method(globalThis, 'fetch', async (_url, init) => {
+  t.mock.method(globalThis, 'fetch', async (_url: string | URL | Request, init?: RequestInit) => {
     assert.deepEqual(JSON.parse(String(init?.body)), { entries: [], revision: 'absent' })
     return Response.json({ success: false, code: 'revision_conflict', error: 'Changed', data: null }, { status: 409 })
   })
@@ -1743,10 +1749,11 @@ test('page commands preserve draft undo, screen identity and reviewed saves', { 
     const [resource, setResource] = useState('one')
     const [payload, setPayload] = useState<{ text: string | number | null }>({ text: 'original data' })
     const [selectedThreadId, setSelectedThreadId] = useState<number | undefined>(41)
+    // Partial chat API: the thread actions read only these fields.
     const actions = useChatThreadActions({
       selectedThreadId, selectThread: setSelectedThreadId, setListOpen: (open: boolean) => { listOpened = open },
       currentDrafts: () => ({}), keepDrafts: () => {},
-    } as import('../src/features/codex-chat/codex-chat-context').CodexChatApi)
+    } as unknown as import('../src/features/codex-chat/codex-chat-context').CodexChatApi)
     useLayoutEffect(() => { threadActions = actions; selectChat = setSelectedThreadId; selectedChat = selectedThreadId }, [actions, selectedThreadId])
     useLayoutEffect(() => { editData = setPayload }, [])
     const commit = useChatDraftTransaction(value, setValue)
@@ -1845,7 +1852,10 @@ test('page commands preserve draft undo, screen identity and reviewed saves', { 
     replies.get(id)!(JSON.parse(String(init?.body)))
     return Response.json({ success: true, data: null })
   })
-  async function send(command: ChatPageCommand, extra: { expiresAt?: number; requiresClaim?: boolean } = {}) {
+  /** Action commands carry the operation's label as the chat shows it; the tests name the action id instead. */
+  type SentCommand = Exclude<ChatPageCommand, { type: 'action' }> | (Omit<Extract<ChatPageCommand, { type: 'action' }>, 'label'> & { label?: string })
+  async function send(sent: SentCommand, extra: { expiresAt?: number; requiresClaim?: boolean } = {}) {
+    const command: ChatPageCommand = sent.type === 'action' ? { ...sent, label: sent.label ?? sent.actionId } : sent
     const snapshot = page.capture()!
     const commandId = `command-${++sequence}`
     const answer = new Promise<{ ok: boolean; error?: string; page?: ChatPageSnapshot }>(resolve => replies.set(commandId, resolve))
@@ -1937,6 +1947,23 @@ test('page commands preserve draft undo, screen identity and reviewed saves', { 
     await act(async () => assert.equal((await command.answer).ok, false))
     assert.equal(saves, 0)
   })
+  await t.test('a save runs from a command only while this tab has auto-approve on, against the checked screen', async () => {
+    const { setChatAutoApprove } = await import('../src/features/codex-chat/chat-auto-approve')
+    const revision = page.capture()!.revision
+    const off = await send({ type: 'action', actionId: 'profile.save', tier: 'commit', revision, arguments: {} })
+    await act(async () => assert.match((await off.answer).error ?? '', /자동 승인/))
+    assert.equal(saves, 0, 'the server cannot turn a save on for a tab that has it off')
+    setChatAutoApprove(true)
+    try {
+      const stale = await send({ type: 'action', actionId: 'profile.save', tier: 'commit', revision: 'some-other-revision', arguments: {} })
+      await act(async () => assert.equal((await stale.answer).ok, false))
+      assert.equal(saves, 0, 'a changed screen refuses the save')
+      const saved = await send({ type: 'action', actionId: 'profile.save', tier: 'commit', revision: page.capture()!.revision, arguments: {} })
+      await act(async () => assert.equal((await saved.answer).ok, true))
+      assert.equal(saves, 1)
+      assert.equal(page.commandActions.some(action => action.id === 'profile.save'), false, 'the command palette never offers a save')
+    } finally { setChatAutoApprove(false); saves = 0 }
+  })
   await t.test('profile delegation stays manual while assistant drafts cannot escalate and reviewed saves retain it', async () => {
     const { ChatProfileToolsPanel } = await import('../src/features/settings/components/chat-profile-editor-tools')
     const { useProfileEditorDraft } = await import('../src/features/settings/components/chat-profile-editor')
@@ -1959,7 +1986,7 @@ test('page commands preserve draft undo, screen identity and reviewed saves', { 
       })
       useLayoutEffect(() => { page = api; state = editor }, [api, editor])
       return h(ProfileAssistContext.Provider, { value: assist }, h(ChatProfileToolsPanel, {
-        open: false, draft, defaults, patch: next => editor.setDraft(current => ({ ...current, ...next })),
+        open: false, draft, defaults, skills: undefined, patch: next => editor.setDraft(current => ({ ...current, ...next })),
       }))
     }
     client.setQueryData(['workspaces', 'list', 1, 'pages'], { pages: [[]], pageParams: [0] })
@@ -2186,13 +2213,13 @@ test('page commands preserve draft undo, screen identity and reviewed saves', { 
     const initial = Array.from({ length: 41 }, (_, index) => ({ hash: index.toString(16).padStart(32, '0'), name: String(index), width: 8, height: 8, options: sheetOptions }))
     const added = { ...initial[0], hash: 'f'.repeat(32) }
     let changeLast!: () => void
-    let release!: (value: typeof initial) => void
-    let visibleSheets = initial
+    let release!: (value: Parameters<typeof useSpriteNormalizeChatPage>[0]['sheets']) => void
+    let visibleSheets: Parameters<typeof useSpriteNormalizeChatPage>[0]['sheets'] = initial
     function NormalizeEditor() {
       const api = useChatPage()!
-      const [sheets, setSheets] = useState(initial)
+      const [sheets, setSheets] = useState<Parameters<typeof useSpriteNormalizeChatPage>[0]['sheets']>(initial)
       const [selected, setSelected] = useState<string | null>(initial[0].hash)
-      const [options, setOptions] = useState({ mode: 'per_sheet' as const, alphaThreshold: 20, padding: 2, outputSpacing: 0, anchorPolicy: 'bottom_center' as const, outputFormat: 'png' as const, outputQuality: 90 })
+      const [options, setOptions] = useState<Parameters<typeof useSpriteNormalizeChatPage>[0]['options']>({ mode: 'per_sheet' as const, alphaThreshold: 20, padding: 2, outputSpacing: 0, anchorPolicy: 'bottom_center' as const, outputFormat: 'png' as const, outputQuality: 90 })
       useLayoutEffect(() => {
         page = api
         visibleSheets = sheets

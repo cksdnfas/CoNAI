@@ -53,7 +53,7 @@ export function ChatProfileAppearancePanel({ draft, patch, profile, dirty, onBus
 function useAppearanceWarning(draft: Draft, appearance: string | undefined) {
   const { t } = useI18n()
   const missing = draft.mcpEnabled && !appearance?.trim() && draft.generationPresetIds.length > 0
-  return missing ? t({ ko: '생성 프리셋은 이 설명만 보고 캐릭터를 그려. 비어 있으니 직접 쓰거나 \'AI 초안\'으로 채워 줘.', en: 'Generation presets draw the character from this text alone. Write it, or fill it with “AI draft”.' }) : null
+  return missing ? t({ ko: '외형 설명이 비어 있어 생성 프리셋에 반영되지 않아.', en: 'Appearance text is empty and will not be sent to generation presets.' }) : null
 }
 
 /** Other emoticon groups the profile's chats may use (a profile field in every link state). */
@@ -145,7 +145,7 @@ function OwnAppearance({ draft, patch, profile, onBusyChange, busy, runs, ensure
   const groupSource: CharacterGroupSource = expressionSettingId === null ? { characterName } : { expressionGroupId: settingGroupId, candidateGroupId: null }
   const expressionsNote = expressionSettingId === null || settingGroupId !== null ? null
     : expressionSetting
-      ? t({ ko: '표정은 연결된 라이브러리 설정 거야. 그 설정엔 아직 표정이 없어.', en: 'Expressions come from the linked library setting, which has none yet.' })
+      ? t({ ko: '연결된 라이브러리 설정에 표정이 없어.', en: 'The linked library setting has no expressions yet.' })
       : t({ ko: '표정은 연결된 라이브러리 설정 거야.', en: 'Expressions come from the linked library setting.' })
 
   // Errors surface in the shared editor's snackbar.

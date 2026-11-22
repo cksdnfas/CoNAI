@@ -102,14 +102,14 @@ test('ComfyUI transfer streams output and removes incomplete files', { timeout: 
     const retained = path.join(root, 'temp', 'retained.png')
     await fs.promises.writeFile(retained, bytes)
     const originalRm = fs.promises.rm
-    t.mock.method(fs.promises, 'rm', async (target, options) => {
+    t.mock.method(fs.promises, 'rm', async (target: Parameters<typeof originalRm>[0], options?: Parameters<typeof originalRm>[1]) => {
       if (String(target) === retained) throw new Error('cleanup denied')
       return originalRm(target, options)
     })
     const controller = new AbortController()
     let cancel = true
     let downloadFailure = new Error('download failed')
-    t.mock.method(service, 'downloadOutputFile', async (filename) => {
+    t.mock.method(service, 'downloadOutputFile', async (filename: string) => {
       if (filename === 'first.png') return retained
       if (cancel) controller.abort()
       throw downloadFailure
@@ -139,7 +139,7 @@ test('ComfyUI transfer streams output and removes incomplete files', { timeout: 
   const retainedModalPaths: string[] = []
   await t.test('discard cleanup failure does not fail a successful Modal result', async t => {
     const originalRm = fs.promises.rm
-    t.mock.method(fs.promises, 'rm', async (target, options) => {
+    t.mock.method(fs.promises, 'rm', async (target: Parameters<typeof originalRm>[0], options?: Parameters<typeof originalRm>[1]) => {
       if (String(target).includes('modal_comfyui_')) {
         retainedModalPaths.push(String(target))
         throw new Error('cleanup denied')
@@ -165,7 +165,7 @@ test('ComfyUI transfer streams output and removes incomplete files', { timeout: 
   const failedModalPaths: string[] = []
   await t.test('Modal write cleanup failure keeps the original abort', async t => {
     const originalRm = fs.promises.rm
-    t.mock.method(fs.promises, 'rm', async (target, options) => {
+    t.mock.method(fs.promises, 'rm', async (target: Parameters<typeof originalRm>[0], options?: Parameters<typeof originalRm>[1]) => {
       if (String(target).includes('modal_comfyui_')) {
         failedModalPaths.push(String(target))
         throw new Error('cleanup denied')

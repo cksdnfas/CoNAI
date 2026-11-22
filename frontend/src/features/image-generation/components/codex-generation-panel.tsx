@@ -590,7 +590,7 @@ export function CodexGenerationPanel({
             tierHint={outputSizeHint}
             onTierChange={(value) => handleFieldChange('resolution', value)}
           />
-        </div> : <p className="text-xs text-muted-foreground">{t({ ko: '엄격 보존 중에는 원본 크기를 그대로 써.', en: 'Strict preservation keeps the source size.' })}</p>}
+        </div> : <p className="text-xs text-muted-foreground">{t({ ko: '엄격 보존 중 · 원본 크기 유지', en: 'Strict preservation · source size kept' })}</p>}
       </Section>
     ),
     images: (
@@ -668,7 +668,8 @@ export function CodexGenerationPanel({
         {codexForm.imageMode === 'edit' ? (
           <label className="flex items-center gap-2">
             <Checkbox checked={codexForm.strictPreservation} disabled={!canEnableCodexStrict(codexForm) && !codexForm.strictPreservation} onCheckedChange={(checked) => handleFieldChange('strictPreservation', checked === true)} />
-            <Text variant="label">{t({ ko: '엄격 마스크 보존 · 검정 픽셀 고정, 원본 크기 PNG만 저장', en: 'Strict mask preservation · lock black pixels, source-sized PNG only' })}</Text>
+            <Text variant="label">{t({ ko: '엄격 마스크 보존', en: 'Strict mask preservation' })}</Text>
+            <FieldInfo>{t({ ko: '검정 픽셀 고정 · 원본 크기 PNG만 저장', en: 'Lock black pixels, source-sized PNG only' })}</FieldInfo>
           </label>
         ) : null}
         <div className="flex items-center gap-1">

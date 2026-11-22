@@ -549,7 +549,7 @@ test('chat tool catalog: contents, open, run, validation and routing', { timeout
       assert.equal(await bridge.refresh(), true)
       const updated = bridge.tools.find(item => item.function.name === tool.name)!
       assert.match(updated.function.description ?? '', /^Read a selected item\b/)
-      assert.deepEqual(updated.function.parameters.required, ['item'])
+      assert.deepEqual((updated.function.parameters as { required?: string[] }).required, ['item'])
       clearPluginServerTools(tool.pluginId)
       assert.equal(await bridge.refresh(), true)
       assert.ok(!bridge.tools.some(item => item.function.name === tool.name))

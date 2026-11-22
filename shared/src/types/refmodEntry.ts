@@ -125,6 +125,8 @@ export type RefModEntrySummary = {
   lastBuiltAt: string | null
   lastRecord: Omit<RefModEntryRun, 'name'> | null
   favorite: boolean
+  /** Registered in the RefMod library (false: moved to Unregistered, keeping config and files). */
+  registered: boolean
   revision: number
   updatedAt: string
 }
@@ -136,6 +138,12 @@ export type RefModEntryForm = {
   /** Composed promptData keyed by field id (role fields from the entry, the rest from its stored values or defaults). */
   values: Record<string, unknown>
   roles: RefModWorkflowRoles
+}
+
+/** Blank form for drafting a new RefMod without creating a DB row first. */
+export type RefModDraftTemplate = {
+  workflowId: number | null
+  form: RefModEntryForm | null
 }
 
 export type RefModEntryDetail = RefModEntrySummary & {

@@ -246,9 +246,11 @@ test('content rating ceilings: what a model may be shown', { timeout: 60000 }, a
       assert.equal(shown.rating_restricted, true)
       assert.equal(shown.before.selected.steps, 28)
       assert.equal(shown.before.fields.steps, 28)
-      const stored = ChatProposalStore.find(shown.id) as { before: { selected: Record<string, unknown>; fields: Record<string, unknown> } }
-      assert.equal(stored.before.selected.prompt, 'page probe', 'the review card keeps the live values')
-      assert.equal(stored.before.fields.negativePrompt, 'neg probe')
+      const stored = ChatProposalStore.find(shown.id)
+      assert.ok(stored?.kind === 'page_action')
+      const before = stored.before as { selected: Record<string, unknown>; fields: Record<string, unknown> }
+      assert.equal(before.selected.prompt, 'page probe', 'the review card keeps the live values')
+      assert.equal(before.fields.negativePrompt, 'neg probe')
     } finally {
       await bridge.close()
       unregister()

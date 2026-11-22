@@ -347,7 +347,7 @@ test('verification removes confirmed missing files, not offline, unreadable or r
   })
   const access = fs.promises.access
   let replaced = false
-  t.mock.method(fs.promises, 'access', async (file, mode) => {
+  t.mock.method(fs.promises, 'access', async (file: Parameters<typeof access>[0], mode?: Parameters<typeof access>[1]) => {
     if (String(file) === newThumb && !fs.existsSync(newThumb)) {
       writeFile(newThumb)
       throw Object.assign(new Error('thumbnail regenerated'), { code: 'ENOENT' })

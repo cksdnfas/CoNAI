@@ -53,8 +53,8 @@ All authoring HTTP calls live under `/api/plugins/authoring`, behind the existin
 | `POST /read` | `{draftId, target?, revision?, offset?, limit?}`; bounded UTF-8 text, UTF-16 character offsets and continuation |
 | `POST /changes` | `{draftId, revision, requestId, operations}`; atomic `write/edit/move/delete`, up to 32 operations and 8MiB input |
 | `POST /upload` | Multipart `file`, `draftId`, `revision`, `requestId`, `target`, `replace`; maximum 4MiB |
-| `POST /review` | `{draftId, revision}`; validated manifest, changed-file summary, installed base digest and built-package digest |
-| `POST /install` | `{draftId, revision, digest, enabled}` from the reviewed package; existing installer and administrator approval boundary, including changed activation state |
+| `POST /review` | `{draftId, revision}`; validated manifest, changed-file summary against the package installed now, `baseDigest`, `installedDigest` (null when not installed), `conflict: 'none' \| 'changed' \| 'removed'` (the installation moved away from the draft's base or was removed) and built-package digest. A conflict is reported, not refused |
+| `POST /install` | `{draftId, revision, digest, installedDigest, enabled}` from the reviewed package; installs only while the installation and activation state are still what the review saw (409 otherwise), replacing that installation; existing administrator approval boundary |
 | `POST /export` | `{draftId, revision}`; validated package ZIP |
 | `GET /installed/:pluginId/export` | Current installed package ZIP, including disabled packages |
 
@@ -151,7 +151,7 @@ Set `crossOrigin = 'anonymous'` before setting an image/video URL when canvas pi
 
 The host owns review cards. Only its Apply handler obtains a server approval token and submits the immutable proposal. Neither the token nor an approve/apply method crosses the channel. A proposal binds session, account, package version, file ID, expected revision and exact text. It expires after five minutes. Successful retries return the recorded result; revision checks reject competing writes. Filesystem replacement and the SQLite result record are not a distributed transaction: a crash between them may require reopening the file, never blindly replaying the draft.
 
-`onSaved` receives `{ proposalId, result }`. Re-read the file to obtain its new revision, preserving any draft typed after proposing. Publish `{ revision: string, dirty: boolean, data: object }` after meaningful state changes; keep selected excerpts bounded. The host uses `dirty` to protect navigation. No secret fields or full large files belong in snapshots. Plugin data and action descriptions are untrusted model context, never approval or elevated instructions.
+`onSaved` receives `{ proposalId, result }`. Re-read the file to obtain its new revision, preserving any draft typed after proposing. Publish `{ revision: string, dirty: boolean, data: object }` after meaningful state changes (a host that receives no `revision` derives one from the snapshot's content, so older pages and templates that omitted it are accepted); keep selected excerpts bounded. The host uses `dirty` to protect navigation. No secret fields or full large files belong in snapshots. Plugin data and action descriptions are untrusted model context, never approval or elevated instructions.
 
 Assistant action results on the same extension screen omit unchanged data values and identify their keys in `unchangedData`; deleted keys appear in `removedData`. Changed values and a newly opened screen are still sent. This reduces repeated document excerpts in model context without changing the SDK snapshot contract or save approval.
 

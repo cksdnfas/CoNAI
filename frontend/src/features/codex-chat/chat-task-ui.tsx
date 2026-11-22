@@ -15,6 +15,7 @@ import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import { approveChatTaskPlan, CHAT_PROFILES_QUERY_KEY, chatTaskQueryKey, dismissChatProposal, getChatTask, listChatProfiles, setChatTaskState } from '@/lib/api-codex-chat'
 import { ChatProfileAvatar } from './chat-profile-avatar'
+import { CHAT_AUTO_APPROVE_TAB, chatAutoApproveOn, useAutoApproveCard } from './chat-auto-approve'
 import { ProposalFooter, ProposalFrame } from './chat-proposal-parts'
 import { codexChatThreadQueryKey } from './codex-chat-context'
 import { getErrorMessage } from '@/lib/error-message'
@@ -119,9 +120,11 @@ export function TaskPlanCard({ proposal, threadId }: { proposal: PlanProposal; t
     await Promise.all([queryClient.invalidateQueries({ queryKey: chatTaskQueryKey(threadId) }), queryClient.invalidateQueries({ queryKey: codexChatThreadQueryKey(threadId) })])
   }
   const onError = (error: unknown) => showSnackbar({ message: getErrorMessage(error, t({ ko: '처리하지 못했어.', en: 'Could not do that.' })), tone: 'error' })
-  const approve = useMutation({ mutationFn: () => approveChatTaskPlan(proposal.id), onSuccess: async () => { setState('approved'); await refresh() }, onError })
+  const approve = useMutation({ mutationFn: () => approveChatTaskPlan(proposal.id, chatAutoApproveOn() ? CHAT_AUTO_APPROVE_TAB : undefined), onSuccess: async () => { setState('approved'); await refresh() }, onError })
   const dismiss = useMutation({ mutationFn: () => dismissChatProposal(proposal.id), onSuccess: async () => { setState('dismissed'); await refresh() }, onError })
   const busy = approve.isPending || dismiss.isPending
+  // Auto-approve: the sending tab saves the card as it arrives (chat-auto-approve); deletions wait for a click.
+  useAutoApproveCard(proposal, true, state !== 'open' || busy, () => approve.mutateAsync())
   const [unfolded, setUnfolded] = useState(false)
   // A decided plan folds to one line; the live steps are on the bar above the composer.
   if (state !== 'open' && !unfolded) return (
@@ -171,10 +174,10 @@ function TaskBudgetResume({ task, busy, onResume }: { task: ChatTask; busy: bool
   const keys: Array<keyof ChatTask['budget']> = task.budget.tokens === undefined ? ['continuations', 'images'] : ['continuations', 'images', 'tokens']
   const capped = keys.some((key) => (task.used[key] ?? 0) >= CHAT_TASK_LIMITS[key])
   const valid = keys.every((key) => Number.isSafeInteger(budget[key]) && (budget[key] ?? 0) >= (task.budget[key] ?? 0) && (budget[key] ?? 0) > (task.used[key] ?? 0) && (budget[key] ?? 0) <= CHAT_TASK_LIMITS[key])
-  if (capped) return <p className="mb-2 text-xs text-muted-foreground">{t({ ko: '작업 최대 예산에 도달했어. 현재 작업을 중단한 뒤 새 플랜을 승인해줘.', en: 'This task reached its maximum budget. Stop it before approving a new plan.' })}</p>
+  if (capped) return <p className="mb-2 text-xs text-muted-foreground">{t({ ko: '최대 예산 도달 · 중단 후 새 플랜 승인 필요', en: 'Max budget reached · stop before approving a new plan.' })}</p>
   return (
     <form className="mb-2 flex flex-wrap items-end gap-2 border-b border-line pb-2" onSubmit={(event) => { event.preventDefault(); if (valid && !busy) onResume(budget) }}>
-      <p className="w-full text-xs text-muted-foreground">{t({ ko: '예산을 다 썼어. 지금까지 사용한 양을 포함한 새 총한도를 승인하면 이어갈게.', en: 'Budget exhausted. Approve new total limits, including usage so far, to resume.' })}</p>
+      <p className="w-full text-xs text-muted-foreground">{t({ ko: '예산 소진 · 누적 사용량을 포함한 새 총한도를 승인해.', en: 'Budget exhausted · approve new total limits including current usage.' })}</p>
       {keys.map((key) => (
         <label key={key} className="flex flex-col gap-1 text-xs">
           <span>{key === 'continuations' ? t({ ko: '이어가기 총한도', en: 'Total turns' }) : key === 'images' ? t({ ko: '이미지 총한도', en: 'Total images' }) : t({ ko: '토큰 총한도', en: 'Total tokens' })} · {t({ ko: '{count} 사용', en: '{count} used' }, { count: task.used[key] ?? 0 })}</span>
@@ -224,7 +227,11 @@ export function ChatTaskStrip({ threadId, warning, fallback = null }: { threadId
           if (await confirm({ title: t({ ko: '작업 중단', en: 'Stop task' }), description: t({ ko: '이 작업을 중단할까? 남은 단계는 진행하지 않아.', en: 'Stop this task? The remaining steps will not run.' }), confirmLabel: t({ ko: '중단', en: 'Stop' }), tone: 'destructive' })) change.mutate({ action: 'cancel' })
         })()}><CircleStop /></IconButton>
       </div>
-      {task.budget.tokens !== undefined ? <p className="text-2xs text-muted-foreground">{t({ ko: '토큰 {used} / {limit} · 턴 사이 확인', en: 'Tokens {used} / {limit} · checked between turns' }, { used: task.used.tokens ?? 0, limit: task.budget.tokens })}</p> : null}
+      {task.budget.tokens !== undefined ? (
+        <Tip content={t({ ko: '턴 사이에 확인', en: 'Checked between turns' })}>
+          <p className="w-fit text-2xs tabular-nums text-muted-foreground">{t({ ko: '토큰 {used} / {limit}', en: 'Tokens {used} / {limit}' }, { used: task.used.tokens ?? 0, limit: task.budget.tokens })}</p>
+        </Tip>
+      ) : null}
       {canResume && exhausted ? <TaskBudgetResume key={`${task.id}:${task.budget.continuations}:${task.budget.images}:${task.budget.tokens}:${task.used.continuations}:${task.used.images}:${task.used.tokens}`} task={task} busy={change.isPending} onResume={(budget) => change.mutate({ action: 'resume', extension: { taskId: task.id, budget } })} /> : null}
     </>
   )

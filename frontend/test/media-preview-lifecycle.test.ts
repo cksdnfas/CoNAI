@@ -85,9 +85,10 @@ test('media previews release resources and ignore cancelled work', async (t) => 
         ? { src: '/poster', videoSrc: '/video' }
         : { src: '/thumbnail', fullSrc: '/original' })
       useEffect(() => {
+        // A partial pointer event: the hover handler reads only pointerType and currentTarget.
         open = () => preview.triggerProps.onPointerEnter({
           pointerType: 'mouse', currentTarget: target,
-        } as Parameters<typeof preview.triggerProps.onPointerEnter>[0])
+        } as unknown as Parameters<typeof preview.triggerProps.onPointerEnter>[0])
         hide = preview.hide
       }, [preview])
       return preview.preview
@@ -279,7 +280,7 @@ test('media previews release resources and ignore cancelled work', async (t) => 
     }
     const queryKey = (group = 1) => ['wallpaper-runtime-data', 'group-pool', 'background', group, true, 40]
     const media = (id: string, video = false) => ({ id, composite_hash: id, image_url: `/media/${id}`, mime_type: video ? 'video/mp4' : 'image/png' }) as unknown as ImageRecord
-    const background = (groupId: number): WallpaperBackground => ({ kind: 'group-slideshow', groupId, includeChildren: true, intervalSec: 10, transition: 'fade', fit: 'cover' })
+    const background = (groupId: number): WallpaperBackground => ({ kind: 'group-slideshow', groupId, includeChildren: true, intervalSec: 10, order: 'random', transition: 'fade', fit: 'cover' })
     const render = async (groupId = 1) => {
       await act(async () => root.render(createElement(QueryClientProvider, { client }, createElement(WallpaperBackgroundLayer, { background: background(groupId) }))))
     }

@@ -1,0 +1,40 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "declaration": false,
+    "declarationMap": false,
+    "sourceMap": false,
+    "lib": [
+      "ES2024",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "jsx": "react-jsx",
+    "paths": {
+      "@/*": [
+        "../frontend/src/*"
+      ],
+      "@conai/shared": [
+        "../shared/src/index.ts"
+      ],
+      "@conai/shared/*": [
+        "../shared/src/*"
+      ]
+    },
+    "module": "preserve",
+    "moduleResolution": "bundler",
+    "types": [
+      "node",
+      "vite/client"
+    ],
+    "allowJs": true,
+    "checkJs": false
+  },
+  "include": [
+    "src/**/*.ts",
+    "test/**/*.ts",
+    "test/**/*.tsx",
+    "test/**/*.d.ts"
+  ]
+}

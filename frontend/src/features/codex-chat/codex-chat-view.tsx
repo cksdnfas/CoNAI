@@ -1097,6 +1097,8 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
             }}
             // Every room this composer sends to (1:1 on any engine, group rooms, a new chat) reads `$` lines as narration.
             narration={{ available: true, disabled: isCommand || draftKey === null, onPress: markNarration }}
+            // Group rooms take no auto-approve (as they take no tool pick): their replies keep review cards.
+            autoApprove={{ available: !isGroup }}
           />
         </div>
         {(isStreaming || serverRunning) && !(isGroup && canSend) ? (

@@ -25,6 +25,8 @@ type PageRequest =
 // The fake hosts answer any page request; their bodies are read loosely.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type ServerBody = { op: string } & Record<string, any>
+/** excerpt's options as inferred from its JS default parameters; page requests are cast to it. */
+type Excerpt = Parameters<typeof publication.excerpt>[1]
 const section = <T>(data: Record<string, unknown>, name: string) => (data[name] as { data: T }).data
 const pluginRoot = fileURLToPath(new URL('../../plugins/video-canvas', import.meta.url))
 /** Runs the page in a JSDOM window with `api` as its SDK connection and resolves with the page actions it registered. */
@@ -89,7 +91,8 @@ test('video canvas publishes page-action outcomes when return values are discard
       if (body.op === 'list_projects') return { projects: [project, otherProject].map(item => ({ id: item.id, name: item.name, nodeCount: item.nodes.length })), nextOffset: null }
       if (body.op === 'read_canvas') {
         const current = body.project_id === otherProject.id ? otherProject : project
-        return body.full ? structuredClone(current) : publication.excerpt(current, body)
+        // JS default-parameter inference narrows excerpt's options to { cursor?, selection?: never[], launch?: null }.
+        return body.full ? structuredClone(current) : publication.excerpt(current, body as Excerpt)
       }
       if (body.op === 'workflow_options') return { workflows: [], servers: [], tags: [], profiles: [], settings: {} }
       if (body.op === 'read_node') return nodeDetail(body.id)
@@ -251,7 +254,7 @@ test('video canvas detail panel groups inputs by slot, edits the prompt in its t
     async server(body: ServerBody) {
       requests.push(body.op)
       if (body.op === 'list_projects') return { projects: [{ id: project.id, name: project.name, nodeCount: project.nodes.length }], nextOffset: null }
-      if (body.op === 'read_canvas') return body.full ? structuredClone(project) : publication.excerpt(project, body)
+      if (body.op === 'read_canvas') return body.full ? structuredClone(project) : publication.excerpt(project, body as Excerpt)
       if (body.op === 'workflow_options') return { workflows: [], servers: [], tags: [], profiles: [], settings: {} }
       if (body.op === 'read_node') return { revision: project.revision, node: domain.nodeOf(project, body.id), preview: { inputDigest: '0'.repeat(64) }, edges: project.edges, takes: project.takes, nextEdgeCursor: null, nextTakeCursor: null }
       if (body.op === 'apply_ops') {
@@ -456,7 +459,7 @@ test('video canvas offers to continue a REF2VA cut whose continuation frame sits
     publish() {},
     async server(body: ServerBody) {
       if (body.op === 'list_projects') return { projects: [{ id: project.id, name: project.name, nodeCount: project.nodes.length }], nextOffset: null }
-      if (body.op === 'read_canvas') return body.full ? structuredClone(project) : publication.excerpt(project, body)
+      if (body.op === 'read_canvas') return body.full ? structuredClone(project) : publication.excerpt(project, body as Excerpt)
       if (body.op === 'workflow_options') return { workflows: [], servers: [], tags: [], profiles: [], settings: {} }
       if (body.op === 'read_node') return { revision: project.revision, node: domain.nodeOf(project, body.id), preview: { inputDigest: '0'.repeat(64) }, edges: project.edges, takes: project.takes, nextEdgeCursor: null, nextTakeCursor: null }
       if (body.op === 'apply_ops') {
@@ -550,7 +553,7 @@ test('video canvas marks each reference in the prompt by kind, as it is sent, in
     publish() {},
     async server(body: ServerBody) {
       if (body.op === 'list_projects') return { projects: [{ id: project.id, name: project.name, nodeCount: project.nodes.length }], nextOffset: null }
-      if (body.op === 'read_canvas') return body.full ? structuredClone(project) : publication.excerpt(project, body)
+      if (body.op === 'read_canvas') return body.full ? structuredClone(project) : publication.excerpt(project, body as Excerpt)
       if (body.op === 'workflow_options') return { workflows: [], servers: [], tags: [], profiles: [], settings: {} }
       if (body.op === 'read_node') return { revision: project.revision, node: domain.nodeOf(project, body.id), preview: { inputDigest: '0'.repeat(64) }, edges: project.edges, takes: project.takes, nextEdgeCursor: null, nextTakeCursor: null }
       if (body.op === 'apply_ops') {
@@ -576,7 +579,7 @@ test('video canvas marks each reference in the prompt by kind, as it is sent, in
 
   // Each reference is marked by kind with what it becomes in the request (resolvePrompt's label), a typed label with the source it names,
   // a mention that does not resolve with its error; [Shot 1] is a shot marker, not a reference.
-  const label = (name: string) => domain.resolvePrompt(project, cutB()).table.find((row: { name: string }) => row.name === name).label
+  const label = (name: string) => domain.resolvePrompt(project, cutB()).table.find((row: { name: string }) => row.name === name)!.label
   assert.deepEqual(marks(mirror()), [
     ['@크림', 'image', label('크림') + ' · 참조 이미지 1 · 크림'],
     ['<Picture 1>', 'image', '<Picture 1> · 참조 이미지 1 · @크림'],

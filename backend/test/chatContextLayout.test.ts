@@ -101,16 +101,16 @@ const profile = {
 } as unknown as ChatProfile
 
 function record(id: number, role: 'user' | 'assistant', content: string, flags: CodexChatMessageRecord['flags'] = []): CodexChatMessageRecord {
-  return { id, thread_id: 7, role, content, speaker_profile_id: null, tool_calls: [], status: 'completed', error: null, alternatives: [], active_alternative: 0, flags, created_date: '2026-10-05 00:00:00' }
+  return { id, thread_id: 7, role, content, speaker_profile_id: null, tool_calls: [], status: 'completed', error: null, finish_reason: null, alternatives: [], active_alternative: 0, flags, created_date: '2026-10-05 00:00:00' }
 }
 
 /** Books as booksForRequest resolves them, without a database: the chat's own book and a global one, no files. */
 const books: AttachedLoreBook[] = [
-  { id: 1, name: '바다 약속', label: '이 채팅', kind: 'chat', via: 'chat', owner: null, folderId: null, entries: normalizeLorebook([
+  { id: 1, revision: '1:', name: '바다 약속', label: '이 채팅', kind: 'chat', via: 'chat', owner: null, folderId: null, entries: normalizeLorebook([
     { title: '바다 약속', content: '{{char}}는 내일 저녁 바다에서\n반지를 받는다.', constant: true },
     { title: '먹물 실종', keys: ['먹물'], content: '고양이 먹물이 사흘째 안 보인다.' },
   ]) },
-  { id: 2, name: '항구 도시 설정', label: '항구 도시 설정', kind: 'global', via: 'profile', owner: null, folderId: null, entries: normalizeLorebook([{ keys: ['항구'], content: '항구 도시.' }]) },
+  { id: 2, revision: '2:', name: '항구 도시 설정', label: '항구 도시 설정', kind: 'global', via: 'profile', owner: null, folderId: null, entries: normalizeLorebook([{ keys: ['항구'], content: '항구 도시.' }]) },
 ]
 
 test('direct automatic continuations retain turn results and events while replaying the plan only once', () => {
@@ -122,7 +122,7 @@ test('direct automatic continuations retain turn results and events while replay
     record(2, 'assistant', 'Source read failed: access denied.'),
     { ...record(3, 'user', `${plan} latest budget`), routing: { replyTo: null, recipients: [], task: { ...task, step: 2, event: 'retry' } } },
   ]
-  const config = { contextTurns: 20, contextTokens: null, replyReserveTokens: 2048, summaryEnabled: false, summaryTriggerTurns: 6, summaryPrompt: '' }
+  const config = { contextTurns: 20, contextTokens: null, replyReserveTokens: 2048, maxTokens: null, summaryEnabled: false, summaryTriggerTurns: 6, summaryPrompt: '' }
   const result = buildChatMessages({ profile: { ...profile, promptSections: [] }, thread, messages, config, tools: [], books: [] })
   assert.deepEqual(result.map((message) => message.role), ['system', 'user', 'assistant', 'user'])
   assert.match(String(result[1].content), /previous attempt failed/)
@@ -169,7 +169,7 @@ test('a request is: one system message (persona, then lore index + always-on ent
     record(3, 'user', '오늘 뭐 해?'), record(4, 'assistant', '산책'),
     record(5, 'user', '같이 갈까?', [{ id: 1, icon: '', name: '짧게', content: '짧게 답해' }]),
   ]
-  const config = { contextTurns: 20, contextTokens: null, replyReserveTokens: 2048, summaryEnabled: true, summaryTriggerTurns: 6, summaryPrompt: '요약해' }
+  const config = { contextTurns: 20, contextTokens: null, replyReserveTokens: 2048, maxTokens: null, summaryEnabled: true, summaryTriggerTurns: 6, summaryPrompt: '요약해' }
   const result = buildChatMessages({ profile, thread, messages, config, tools: [], books })
 
   // Chat templates such as Qwen's reject a system message that is not the first one.
@@ -224,7 +224,7 @@ test('new chats and resets save the filled history around the greeting as ordina
   ExternalApiProvider.create({ provider_name: 'opening', display_name: 'Opening', provider_type: 'llm_openai_compatible', base_url: 'http://unused.invalid', is_enabled: true, additional_config: { default_model: 'm' } })
   const requester = { accountId: 1, accountType: 'admin' as const }
   const user = ChatUserProfileStore.create(1, { name: '민준', persona: '' })
-  const config = { contextTurns: 20, contextTokens: null, replyReserveTokens: 2048, summaryEnabled: false, summaryTriggerTurns: 6, summaryPrompt: '' }
+  const config = { contextTurns: 20, contextTokens: null, replyReserveTokens: 2048, maxTokens: null, summaryEnabled: false, summaryTriggerTurns: 6, summaryPrompt: '' }
   const openingHistory = [{ role: 'user' as const, content: '{{char}}, 나는 {{user}}야.' }, { role: 'assistant' as const, content: '{{user}}, 어서 와. {{char}}는 웃었다.' }]
   const expected = [
     { role: 'user', content: '카이, 나는 민준야.' },
@@ -250,7 +250,7 @@ test('new chats and resets save the filled history around the greeting as ordina
     const latest = CodexChatStore.addMessage({ thread_id: thread.id, role: 'user', content: '오늘은?', tool_calls: [], status: 'completed', error: null })
     const historySource = { threadId: thread.id }
     if (engine === 'llm') {
-      const run = (options = config, current = thread) => buildChatMessages({ profile: saved, thread: current, messages: messages(), config: options, tools: [], books: [], user: userPersonaOf(user) })
+      const run = (options = config, current = thread) => buildChatMessages({ profile: saved, thread: current, messages: messages(), config: options, tools: [], books: [] })
       const sent = run()
       assert.match(String(sent[0].content), /first user\/assistant turns right after this system message are examples of tone and format only/)
       assert.deepEqual(sent.slice(1, 3).map(({ content }) => content), ['안녕', '반가워'])
@@ -367,7 +367,7 @@ test('new chats and resets save the filled history around the greeting as ordina
           return { turn: { id: 'turn' } }
         },
       })
-      return client as unknown as CodexAppServerClient
+      return client as unknown as Awaited<ReturnType<typeof CodexAppServerClient.start>>
     })
     const saved = ChatProfileStore.create({ name: '카이', engine: 'codex', openingHistory, greetingPosition: 1, greeting: expected[1].content })
     for (const failure of ['failure', 'cancellation', 'registration'] as const) {
@@ -533,7 +533,7 @@ test('new chats and resets save the filled history around the greeting as ordina
 test("a keyword entry of an attached book goes into [Reference] at the lore depth, not into the system messages", () => {
   const thread = { id: 9, summary: null, summary_until_message_id: null, context_turns: null, summary_enabled: null } as unknown as CodexChatThreadRecord
   const messages = [record(1, 'user', '먹물 봤어?'), record(2, 'assistant', '아니'), record(3, 'user', '찾아보자')]
-  const config = { contextTurns: 20, contextTokens: null, replyReserveTokens: 2048, summaryEnabled: false, summaryTriggerTurns: 6, summaryPrompt: '요약해' }
+  const config = { contextTurns: 20, contextTokens: null, replyReserveTokens: 2048, maxTokens: null, summaryEnabled: false, summaryTriggerTurns: 6, summaryPrompt: '요약해' }
   const result = buildChatMessages({ profile, thread, messages, config, tools: [], books })
   assert.ok(!JSON.stringify(result.filter((message) => message.role === 'system')).includes('사흘째'))
   assert.deepEqual(userContents(result.slice(3)), ['[Reference]\n고양이 먹물이 사흘째 안 보인다.\n[/Reference]\n\n[message_id=1; from=user]\n먹물 봤어?', '[message_id=3; from=user]\n찾아보자'])
@@ -564,7 +564,7 @@ test('lore and note share one block at the same depth, two blocks otherwise', ()
 test("the chat's note lands in the conversation at its depth", () => {
   const thread = { id: 8, summary: null, summary_until_message_id: null, context_turns: null, summary_enabled: null, author_note: '비가 온다.', author_note_depth: 1 } as unknown as CodexChatThreadRecord
   const messages = [record(1, 'user', '처음'), record(2, 'assistant', '응'), record(3, 'user', '오늘 뭐 해?'), record(4, 'assistant', '산책'), record(5, 'user', '같이 갈까?')]
-  const config = { contextTurns: 20, contextTokens: null, replyReserveTokens: 2048, summaryEnabled: false, summaryTriggerTurns: 6, summaryPrompt: '요약해' }
+  const config = { contextTurns: 20, contextTokens: null, replyReserveTokens: 2048, maxTokens: null, summaryEnabled: false, summaryTriggerTurns: 6, summaryPrompt: '요약해' }
   const result = buildChatMessages({ profile: noteProfile, thread, messages, config, tools: [], books: [] })
   assert.deepEqual(userContents(result.slice(3)), ['[message_id=1; from=user]\n처음', '[Reference]\n## Author\'s note\n비가 온다.\n[/Reference]\n\n[message_id=3; from=user]\n오늘 뭐 해?', '[message_id=5; from=user]\n같이 갈까?'])
 })

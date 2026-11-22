@@ -65,7 +65,7 @@ test('graph input copies are retained only by committed jobs and queue orphans a
   }
 
   await t.test('direct modules stream the trusted artifact without making a queue copy', async (sub) => {
-    sub.mock.method(ComfyUIService.prototype, 'uploadInputImage', async (_name, input) => {
+    sub.mock.method(ComfyUIService.prototype, 'uploadInputImage', async (_name: string, input: Buffer | fs.ReadStream) => {
       const chunks: Buffer[] = []
       for await (const chunk of input as AsyncIterable<Buffer>) chunks.push(Buffer.from(chunk))
       assert.deepEqual(Buffer.concat(chunks), bytes)
@@ -83,7 +83,7 @@ test('graph input copies are retained only by committed jobs and queue orphans a
   })
 
   await t.test('a failed partial copy is discarded', async (sub) => {
-    sub.mock.method(fs.promises, 'copyFile', async (_source, destination) => {
+    sub.mock.method(fs.promises, 'copyFile', async (_source: fs.PathLike, destination: fs.PathLike) => {
       await fs.promises.writeFile(destination, 'partial')
       throw new Error('copy failed')
     })

@@ -3,7 +3,7 @@ import { type PageSettingsScopeId } from '@conai/shared'
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type PropsWithChildren, type ReactNode } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Monitor } from 'lucide-react'
-import { CHAT_PAGE_ACTION_PERMISSIONS, chatPageActionAllowed, normalizeChatPageValue, chatPageActionLeavesScreen, chatPageActionTier, chatPagePatch, chatPagePermission, chatPageTarget, validateChatPageArguments, type ChatPageCommandEvent, normalizeChatPageSnapshot, requireChatPageTarget, requireChatPageActionState, type ChatPageAction, type ChatPageData, type ChatPageField, type ChatPageSnapshot, type ChatPageValue, type ChatProposal, type ChatWorkflowSnapshot } from '@conai/shared'
+import { CHAT_PAGE_ACTION_PERMISSIONS, chatAutoApprovable, chatPageActionAllowed, normalizeChatPageValue, chatPageActionLeavesScreen, chatPageActionTier, chatPagePatch, chatPagePermission, chatPageTarget, validateChatPageArguments, type ChatPageCommandEvent, normalizeChatPageSnapshot, requireChatPageTarget, requireChatPageActionState, type ChatPageAction, type ChatPageData, type ChatPageField, type ChatPageSnapshot, type ChatPageValue, type ChatProposal, type ChatWorkflowSnapshot } from '@conai/shared'
 import { Tip } from '@/components/ui/tooltip'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
@@ -21,6 +21,7 @@ import { pageAction, pageChoice, pageObject } from './page-action-helpers'
 import { CHAT_RESOURCE_TABS, CHAT_SETTINGS_GROUPS } from './chat-admin-location'
 import { IconButton } from '@/components/ui/icon-button'
 import { chatDraftEqual } from './chat-draft-equal'
+import { chatAutoApproveOn } from './chat-auto-approve'
 
 type PageProposal = Extract<ChatProposal, { kind: 'page_fields' }>
 export type PageActionProposal = Extract<ChatProposal, { kind: 'page_action' }>
@@ -64,7 +65,7 @@ type PageApi = {
 }
 const PageContext = createContext<PageApi | null>(null)
 
-export type ChatPageActivity = { id: string; threadId: number; label: string; tier: 'view' | 'draft' | 'direct'; at: number; state: 'done' | 'undone'; undo?: () => void }
+export type ChatPageActivity = { id: string; threadId: number; label: string; tier: 'view' | 'draft' | 'direct' | 'commit'; at: number; state: 'done' | 'undone'; undo?: () => void }
 const ACTIVITY_LIMIT = 30
 
 /**
@@ -127,14 +128,17 @@ function withNavigation(editor: Editor | null, navigation: Editor | undefined): 
   }
 }
 
-/** The one way a registered operation runs, for chat commands and the command palette alike. */
-async function runRegisteredAction(editor: Editor, actionId: string, tier: 'view' | 'draft' | 'direct', input: unknown, assertCurrent: () => void, signal?: AbortSignal) {
+/**
+ * The one way a registered operation runs, for chat commands and the command palette alike. A save (`commit`) runs only
+ * for a chat command while this tab's auto-approve is on (the caller checks); the palette never asks for one.
+ */
+async function runRegisteredAction(editor: Editor, actionId: string, tier: 'view' | 'draft' | 'direct' | 'commit', input: unknown, assertCurrent: () => void, signal?: AbortSignal, nativeRevision?: string) {
   const action = editor.actions?.find((item) => item.id === actionId)
-  if (!action || chatPageActionTier(action.id, action) === 'commit' || chatPageActionTier(action.id, action) !== tier) throw new Error('이 화면에서 바로 실행할 수 없는 작업이야.')
+  if (!action || chatPageActionTier(action.id, action) !== tier || (tier === 'commit' && (!chatAutoApproveOn() || !chatAutoApprovable(action.id, input as Record<string, unknown>)))) throw new Error('이 화면에서 바로 실행할 수 없는 작업이야.')
   if (chatPageActionLeavesScreen(action.id, action) && editor.dirty) throw new Error('저장하지 않은 변경이 있어. 사용자가 저장하거나 버린 뒤에 다시 해.')
   const args = validateChatPageArguments(action.schema, input) as Record<string, ChatPageData>
   if (!editor.applyAction) throw new Error('페이지 작업 편집기가 닫혔어.')
-  return { action, undo: await editor.applyAction(action.id, args, assertCurrent, undefined, signal) }
+  return { action, undo: await editor.applyAction(action.id, args, assertCurrent, nativeRevision, signal) }
 }
 
 const NO_ACTIONS: ChatPageAction[] = []
@@ -413,8 +417,16 @@ export function ChatPageProvider({ children }: PropsWithChildren) {
         if (event.type === 'action' && event.tier === 'draft' && live.snapshot!.kind !== 'extension' && current.current.snapshot!.revision !== live.snapshot!.revision) throw new Error('그사이 입력이나 선택이 바뀌었어. 바뀐 화면을 보고 다시 요청해줘. 화면이 함께 오지 않았으면 get_current_page로 읽어줘.')
       }
       if (event.type === 'action') {
+        // A save without review needs this tab's auto-approve still on, and the screen a review card would need: the same
+        // page revision, or for an action-scoped save the same selection and consumed inputs (progress and lists may move).
+        if (event.tier === 'commit') {
+          if (!chatAutoApproveOn()) throw new Error('자동 승인이 꺼져 있어. propose_page_action으로 검토 카드를 만들어.')
+          const action = live.snapshot.actions?.find((item) => item.id === event.actionId)
+          if (!action || !event.revision) throw new Error('이 화면에서 바로 실행할 수 없는 작업이야.')
+          requireChatPageActionState(live.snapshot, { kind: 'page_action', page: target, revision: event.revision, ...(event.revisionScope ? { revisionScope: event.revisionScope } : {}), action, arguments: event.arguments, before: event.before ?? null, expiresAt: event.expiresAt })
+        }
         if (event.tier === 'direct' && (!event.revision || live.snapshot.revision !== event.revision)) throw new Error('그사이 화면이나 선택이 바뀌었어. 바뀐 화면을 보고 다시 요청해줘. 화면이 함께 오지 않았으면 get_current_page로 읽어줘.')
-        const { action, undo } = await runRegisteredAction(live.editor, event.actionId, event.tier, event.arguments, assertCurrent, controller.signal)
+        const { action, undo } = await runRegisteredAction(live.editor, event.actionId, event.tier, event.arguments, assertCurrent, controller.signal, event.tier === 'commit' ? event.nativeRevision : undefined)
         record({ id: event.commandId, threadId: event.threadId, label: action.label, tier: event.tier, ...(undo && event.tier === 'draft' ? { undo: () => { assertTargetCurrent(); if (!undo.isCurrent()) throw new Error('그 뒤에 입력이 바뀌어서 되돌리지 않았어.'); undo.restore() } } : {}) })
       } else if (event.type === 'workflow') {
         if (!live.snapshot.workflow || !live.editor.applyWorkflow) throw new Error('노드 워크플로 편집기가 닫혔어.')

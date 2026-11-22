@@ -70,6 +70,7 @@ type LoreProposal = Extract<Proposal, { kind: 'lore' }>
 type ChatSettingsProposal = Extract<Proposal, { kind: 'chat_settings' }>
 
 import { TaskPlanCard } from './chat-task-ui'
+import { useAutoApproveCard } from './chat-auto-approve'
 
 // The settings editors are large and only open on demand, so they stay out of the chat bundle until then.
 const ChatBlockEditorModal = lazy(() => import('@/features/settings/components/chat-block-editor-modal').then((module) => ({ default: module.ChatBlockEditorModal })))
@@ -217,6 +218,9 @@ function BlockProposalCard({ proposal, threadId }: { proposal: BlockProposal; th
     onError: (error) => showSnackbar({ message: getErrorMessage(error, t({ ko: '저장하지 못했어.', en: 'Could not save.' })), tone: 'error' }),
   })
 
+  // Auto-approve: the sending tab saves the card as it arrives (chat-auto-approve).
+  useAutoApproveCard(proposal, admin, saved || saveMutation.isPending, () => saveMutation.mutateAsync())
+
   // The editor created the block itself; only the proposal's mark is left.
   const handleEditorSaved = (created: ChatSharedBlock) => {
     setSavedNow(true)
@@ -348,6 +352,9 @@ function SkillProposalCard({ proposal, threadId }: { proposal: SkillProposal; th
     }),
   })
 
+  // Auto-approve: the sending tab saves the card as it arrives (chat-auto-approve).
+  useAutoApproveCard(proposal, admin, saved || saveMutation.isPending, () => saveMutation.mutateAsync())
+
   // The editor created the skill itself; only the proposal's mark is left.
   const handleEditorSaved = (created: ChatSkill) => {
     setSavedNow(true)
@@ -413,6 +420,9 @@ function ProfileProposalCard({ proposal, threadId }: { proposal: ProfileProposal
     },
     onError: (error) => showSnackbar({ message: getErrorMessage(error, t({ ko: '저장하지 못했어.', en: 'Could not save.' })), tone: 'error' }),
   })
+
+  // Auto-approve: the sending tab saves the card as it arrives (chat-auto-approve).
+  useAutoApproveCard(proposal, admin, saved || saveMutation.isPending, () => saveMutation.mutateAsync())
 
   const meta = [
     t({ ko: '시스템 프롬프트 {count}자', en: 'System prompt {count} chars' }, { count: (input.systemPrompt ?? '').length }),
@@ -597,6 +607,9 @@ function ProfileUpdateCard({ proposal, threadId }: { proposal: UpdateProposal; t
     onError: (error) => showSnackbar({ message: getErrorMessage(error, t({ ko: '저장하지 못했어.', en: 'Could not save.' })), tone: 'error' }),
   })
 
+  // Auto-approve: the sending tab saves the card as it arrives (chat-auto-approve).
+  useAutoApproveCard(proposal, admin, saved || saveMutation.isPending || checking, () => void handleSave())
+
   // The editor saves the profile itself; once it closes, a profile that now holds every proposed value counts as saved.
   const handleEditorClose = () => {
     setEditorOpen(false)
@@ -652,6 +665,9 @@ function ProfileFolderProposalCard({ proposal, threadId }: { proposal: Extract<P
     onSuccess: async () => { setSavedNow(true); await refresh() },
     onError: (error) => showSnackbar({ message: getErrorMessage(error, t({ ko: '폴더 제안을 저장하지 못했어.', en: 'Could not apply folder proposal.' })), tone: 'error' }),
   })
+  // A folder deletion always waits for a click.
+  // Auto-approve: the sending tab saves the card as it arrives (chat-auto-approve).
+  useAutoApproveCard(proposal, admin && proposal.action !== 'delete', savedNow || proposal.saved === true || proposal.dismissed === true || save.isPending, () => save.mutateAsync())
   const labels = {
     create: t({ ko: '폴더 만들기 제안', en: 'Create folder proposal' }),
     rename: t({ ko: '폴더 이름 변경 제안', en: 'Rename folder proposal' }),
@@ -688,6 +704,8 @@ function ChatSettingsCard({ proposal, threadId }: { proposal: ChatSettingsPropos
     },
     onError: (error) => showSnackbar({ message: getErrorMessage(error, t({ ko: '저장하지 못했어.', en: 'Could not save.' })), tone: 'error' }),
   })
+  // Auto-approve: the sending tab saves the card as it arrives (chat-auto-approve).
+  useAutoApproveCard(proposal, true, saved || proposal.dismissed === true || saveMutation.isPending, () => saveMutation.mutateAsync())
   return (
     <ProposalFrame>
       <Header label={t({ ko: '채팅 설정 제안', en: 'Chat settings proposal' })} />
@@ -747,6 +765,8 @@ function LoreProposalCard({ proposal, threadId }: { proposal: LoreProposal; thre
     onError,
   })
   const busy = saveMutation.isPending || dismissMutation.isPending || undoMutation.isPending
+  // Auto-approve: the sending tab saves the card as it arrives (chat-auto-approve).
+  useAutoApproveCard(proposal, true, saved || dismissed || busy, () => saveMutation.mutateAsync())
   const before = proposal.replaces ? proposal.before : undefined
   const beforeText = before?.translation ?? before
   const afterText = proposal.translation ?? proposal

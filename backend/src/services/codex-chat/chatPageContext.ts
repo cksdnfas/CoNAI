@@ -1,5 +1,5 @@
 import { isPageSettingsScope, pageSettingsPermission, pageSettingsScopes } from '@conai/shared'
-import { CHAT_PAGE_ACTION_PERMISSIONS, chatPageActionAllowed, chatPageActionTier, type ChatProposal, chatPagePermission, normalizeChatPageSnapshot, type ChatPageActionProposal, type ChatPageProposal, type ChatPageSnapshot, type ChatWorkflowProposal } from '@conai/shared'
+import { CHAT_PAGE_ACTION_PERMISSIONS, chatPageActionAllowed, chatPageActionTier, type ChatProposal, chatPagePermission, normalizeChatPageSnapshot, pluginPageRoute, type ChatPageActionProposal, type ChatPageProposal, type ChatPageSnapshot, type ChatWorkflowProposal } from '@conai/shared'
 import { sanitizeChatWorkflowPage } from './chatWorkflowContext'
 import { chatPageDomainTools, isArtStyleChatPage, isRefModChatPage, type McpRequestContext, type McpRequester } from '../../mcp/context'
 import { AuthAccount } from '../../models/AuthAccount'
@@ -30,7 +30,7 @@ export function requireChatPageAccess(requester: McpRequester, page: Pick<ChatPa
     ? !hasConfiguredAuth()
     : AuthAccount.findById(id)?.status === 'active' && permission !== null && (permission === '' || AuthAccessControlService.hasPermission(id, permission))
   if (permission === null || !permitted) throw new ChatPageContextError('이 페이지에 접근할 권한이 없어.', 403)
-  if (page.path.startsWith('/ext/')) requirePluginPage(page)
+  if (pluginPageRoute(page.path)) requirePluginPage(page)
   if (page.kind === 'page_settings') requirePageSettingsAccess(requester, page.path, page.resourceId)
   const slug = /^\/public\/workflows\/([\w-]+)$/.exec(page.path)?.[1]
   if (slug) {
@@ -46,8 +46,8 @@ function requirePageSettingsAccess(requester: McpRequester, path: string, scope:
 export function requireChatPageActionAccess(requester: McpRequester, page: Pick<ChatPageSnapshot, 'path'> & Partial<Pick<ChatPageSnapshot, 'resourceId' | 'data' | 'kind'>>, actionId: string, args?: Record<string, unknown>) {
   if ((page.path === '/settings' || page.path === '/chat/mine') && page.resourceId === 'mine'
     && !['settings.user_profile', 'settings.flag', 'page.navigate', 'page.refresh', 'page.settings_open'].includes(actionId)) throw new ChatPageContextError('내 설정에서 사용할 수 없는 작업이야.', 403)
-  if (actionId.startsWith('plugin_author.') || actionId.startsWith('plugin_source.')) requirePluginAuthor(requester)
-  if (page.path.startsWith('/ext/') && !actionId.startsWith('page.')) {
+  if (actionId.startsWith('plugin_author.') || actionId.startsWith('plugin_source.') || actionId.startsWith('plugin_bundled.')) requirePluginAuthor(requester)
+  if (pluginPageRoute(page.path) && !actionId.startsWith('page.')) {
     requireChatPageAccess(requester, page)
     requirePluginPageAction(page, actionId, args)
     return

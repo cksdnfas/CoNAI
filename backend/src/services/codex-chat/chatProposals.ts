@@ -58,7 +58,7 @@ export const ChatProposalStore = {
     const id = db.transaction(() => {
       const { count } = db.prepare('SELECT COUNT(*) AS count FROM chat_proposals WHERE thread_id = ? AND reply_id = ?').get(context.threadId, context.replyId) as { count: number }
       const result = db.prepare('INSERT INTO chat_proposals (thread_id, reply_id, seq, kind, proposal) VALUES (?, ?, ?, ?, ?)')
-        .run(context.threadId, context.replyId, count, proposal.kind, JSON.stringify(proposal))
+        .run(context.threadId, context.replyId, count, proposal.kind, JSON.stringify(context.autoApprove ? { ...proposal, autoApprove: context.autoApprove } : proposal))
       return Number(result.lastInsertRowid)
     })()
     return ChatProposalStore.find(id) as ChatProposal
