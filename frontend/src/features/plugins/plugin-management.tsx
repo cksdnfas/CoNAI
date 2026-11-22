@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { ExternalLink, FileText, GitBranch, Link2, PackageCheck, Puzzle, RefreshCw, ServerCog, TriangleAlert, Upload, Webhook, Wrench } from 'lucide-react'
+import { ExternalLink, FileText, GitBranch, Globe, Link2, PackageCheck, Puzzle, RefreshCw, ServerCog, TriangleAlert, Upload, Webhook, Wrench } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { EmptyState } from '@/components/ui/empty-state'
 import type { InstalledPlugin, PluginInstallResult, PluginServerStatus, PluginSourceProvider } from '@conai/shared'
@@ -94,6 +94,12 @@ export function PluginManagement({ assistantPage, pageContext }: { assistantPage
     await setPluginPagePublic(plugin.manifest.id, pageId, value)
     await cache.invalidateQueries({ queryKey: PUBLIC_PLUGIN_PAGES_QUERY_KEY })
   })
+  // Pages whose share no longer lends (an update changed the declarations), shared again under the current list.
+  const reshareStale = (plugin: InstalledPlugin) => run(async () => {
+    for (const pageId of plugin.publicLendStale ?? []) await setPluginPagePublic(plugin.manifest.id, pageId, true)
+    await cache.invalidateQueries({ queryKey: PUBLIC_PLUGIN_PAGES_QUERY_KEY })
+  })
+  const pageTitles = (plugin: InstalledPlugin, pageIds: string[]) => pageIds.map((id) => plugin.manifest.pages.find((page) => page.id === id)?.title ?? id).join(', ')
   const copyPublicPageUrl = async (pluginId: string, pageId: string) => {
     try {
       await copyTextToClipboard(publicPageUrl(pluginId, pageId))
@@ -265,9 +271,15 @@ export function PluginManagement({ assistantPage, pageContext }: { assistantPage
                   <ResourceRowStat icon={FileText} tip={manifest.pages.map((page) => page.title).join(', ')}>{manifest.pages.length}</ResourceRowStat>
                   {plugin.server ? <ResourceRowStat icon={ServerCog} tip={serverStateLabel(plugin.server, t)}>{plugin.server.tools.length}</ResourceRowStat> : null}
                   {isAdmin && plugin.source ? <ResourceRowStat icon={GitBranch} tip={`${plugin.source.url}@${plugin.source.ref}`}>Git</ResourceRowStat> : null}
+                  {plugin.publicPages?.length ? <ResourceRowStat icon={Globe} tip={`${t({ ko: '공용 페이지', en: 'Shared pages' })}: ${pageTitles(plugin, plugin.publicPages)}`}>{plugin.publicPages.length}</ResourceRowStat> : null}
                 </>
               )}
-              trailing={isAdmin ? <Switch checked={enabled} disabled={busy} aria-label={t({ ko: '{name} 켜기', en: 'Enable {name}' }, { name: manifest.name })} onCheckedChange={(value) => void setEnabled(plugin, value)} /> : undefined}
+              trailing={isAdmin ? (
+                <>
+                  {plugin.publicLendStale?.length ? <IconButton size="icon-sm" variant="destructive-ghost" disabled={busy} label={t({ ko: '업데이트로 기능 목록이 바뀌어서 공용 페이지({pages})가 멈췄어. 눌러서 다시 공개해', en: 'An update changed what {pages} uses, so sharing lends nothing. Click to share again' }, { pages: pageTitles(plugin, plugin.publicLendStale) })} onClick={() => void reshareStale(plugin)}><TriangleAlert /></IconButton> : null}
+                  <Switch checked={enabled} disabled={busy} aria-label={t({ ko: '{name} 켜기', en: 'Enable {name}' }, { name: manifest.name })} onCheckedChange={(value) => void setEnabled(plugin, value)} />
+                </>
+              ) : undefined}
               onOpen={() => setDetail(manifest.id)}
               openLabel={t({ ko: '자세히', en: 'Details' })}
             />
@@ -333,7 +345,7 @@ export function PluginManagement({ assistantPage, pageContext }: { assistantPage
                       <>
                         {page.accepts.length ? <span className="text-xs">{page.accepts.join(' ')}</span> : null}
                         {isAdmin && opened.publicPages?.includes(page.id) ? <IconButton size="icon-sm" variant="ghost" label={t({ ko: '공용 주소 복사', en: 'Copy shared address' })} onClick={() => void copyPublicPageUrl(opened.manifest.id, page.id)}><Link2 /></IconButton> : null}
-                        {isAdmin && opened.publicLendStale?.includes(page.id) ? <IconButton size="icon-sm" variant="ghost" className="text-destructive" disabled={busy} label={t({ ko: '업데이트로 기능 목록이 바뀌어서 공용 사용자에게 멈췄어. 눌러서 다시 공개해', en: 'An update changed what this page uses, so sharing it lends nothing. Click to share again' })} onClick={() => void setPagePublic(opened, page.id, true)}><TriangleAlert /></IconButton> : null}
+                        {isAdmin && opened.publicLendStale?.includes(page.id) ? <IconButton size="icon-sm" variant="destructive-ghost" disabled={busy} label={t({ ko: '업데이트로 기능 목록이 바뀌어서 공용 사용자에게 멈췄어. 눌러서 다시 공개해', en: 'An update changed what this page uses, so sharing it lends nothing. Click to share again' })} onClick={() => void setPagePublic(opened, page.id, true)}><TriangleAlert /></IconButton> : null}
                         {isAdmin ? <Tip content={shareTip(opened)}><span className="inline-flex"><Switch size="sm" checked={!!opened.publicPages?.includes(page.id)} disabled={busy} aria-label={t({ ko: '{name} 공용 페이지', en: 'Share {name}' }, { name: page.title })} onCheckedChange={(value) => void setPagePublic(opened, page.id, value)} /></span></Tip> : null}
                         <IconButton size="icon-sm" variant="ghost" disabled={!opened.enabled || !!pageContext?.blocked} label={pageContext?.blocked ?? t({ ko: '열기', en: 'Open' })} onClick={() => navigate(`/ext/${opened.manifest.id}/${page.id}${pageContext?.search ? `?${pageContext.search}` : ''}`)}><ExternalLink /></IconButton>
                       </>
