@@ -2,7 +2,7 @@ import { Router, type Request, type Response, type NextFunction } from 'express'
 import pluginAuthoringRouter from './plugin-authoring.routes'
 import multer from 'multer'
 import { z } from 'zod'
-import { requireAdmin, requirePermission } from '../middleware/authMiddleware'
+import { requireAdmin } from '../middleware/authMiddleware'
 import { getRequesterAccountId, getRequesterAccountType, isAdminRequest } from './requester-session-helpers'
 import { getPlugin, installPlugin, listPlugins, listPublicPluginPages, setPluginEnabled, setPluginPagePublic, removePlugin, PLUGIN_ZIP_LIMIT } from '../services/plugins/pluginRegistry'
 import { openPluginInstance, requirePluginInstance, renewPluginInstance, closePluginInstance, readPluginFile, proposePluginWrite, approvePluginWrite, applyPluginWrite, dismissPluginWrite, issuePluginMedia } from '../services/plugins/pluginHost'
@@ -139,7 +139,7 @@ router.post('/instances/:instanceId/server', cancellableAsyncHandler(async (req,
   if (!instance.plugin.server) { res.status(403).json({ error: '서버 모듈이 없는 플러그인이야.' }); return }
   const page = { id: instance.page.id, files: instance.fileIds, ...(instance.workspace ? { workspace: instance.workspace } : {}) }
   const bound = pluginInstanceAppContext(instance.row.id, caller(req), baseUrl(req))
-  res.json({ success: true, data: await requestPluginServer(instance.plugin.id, req.body?.body ?? null, caller(req).requester, page, baseUrl(req), bound.context.workspace, signal) })
+  res.json({ success: true, data: await requestPluginServer(instance.plugin.id, req.body?.body ?? null, caller(req).requester, page, baseUrl(req), bound.context.workspace, signal, instance.publicScope) })
 }))
 const actionValueSchema = z.union([z.string().max(CHAT_PAGE_LIMITS.text), z.number(), z.boolean(), z.array(z.string().max(CHAT_PAGE_LIMITS.text)).max(32)])
 const generationActionSchema = z.object({
@@ -167,9 +167,9 @@ router.delete('/instances/:instanceId', (req, res) => { closePluginInstance(para
 router.post('/instances/:instanceId/renew', (req, res) => res.json({ success: true, data: renewPluginInstance(param(req, 'instanceId'), caller(req)) }))
 router.get('/instances/:instanceId/files/:fileId', (req, res) => res.json({ success: true, data: readPluginFile(param(req, 'instanceId'), param(req, 'fileId'), caller(req)) }))
 router.post('/instances/:instanceId/media/:fileId', (req, res) => res.json({ success: true, data: issuePluginMedia(param(req, 'instanceId'), param(req, 'fileId'), caller(req)) }))
-router.post('/instances/:instanceId/proposals', requirePermission('files.edit'), (req, res) => res.json({ success: true, data: proposePluginWrite(param(req, 'instanceId'), req.body, caller(req)) }))
-router.post('/proposals/:proposalId/approve', requirePermission('files.edit'), (req, res) => res.json({ success: true, data: approvePluginWrite(param(req, 'proposalId'), caller(req)) }))
-router.post('/proposals/:proposalId/apply', requirePermission('files.edit'), (req, res) => {
+router.post('/instances/:instanceId/proposals', (req, res) => res.json({ success: true, data: proposePluginWrite(param(req, 'instanceId'), req.body, caller(req)) }))
+router.post('/proposals/:proposalId/approve', (req, res) => res.json({ success: true, data: approvePluginWrite(param(req, 'proposalId'), caller(req)) }))
+router.post('/proposals/:proposalId/apply', (req, res) => {
   const { approval } = z.object({ approval: z.string() }).strict().parse(req.body)
   res.json({ success: true, data: applyPluginWrite(param(req, 'proposalId'), approval, caller(req)) })
 })
@@ -177,16 +177,16 @@ router.delete('/proposals/:proposalId', (req, res) => { dismissPluginWrite(param
 router.post('/instances/:instanceId/workspace/list', asyncHandler(async (req, res) => res.json({ success: true, data: await listPluginWorkspace(param(req, 'instanceId'), req.body, caller(req)) })))
 router.post('/instances/:instanceId/workspace/read', asyncHandler(async (req, res) => res.json({ success: true, data: await readPluginWorkspace(param(req, 'instanceId'), req.body, caller(req)) })))
 router.post('/instances/:instanceId/workspace/media', asyncHandler(async (req, res) => res.json({ success: true, data: await issuePluginWorkspaceMedia(param(req, 'instanceId'), req.body, caller(req)) })))
-router.post('/instances/:instanceId/workspace/proposals', requirePermission('files.edit'), asyncHandler(async (req, res) => res.json({ success: true, data: await proposePluginWorkspaceWrite(param(req, 'instanceId'), req.body, caller(req)) })))
-router.post('/workspace-proposals/:proposalId/approve', requirePermission('files.edit'), asyncHandler(async (req, res) => res.json({ success: true, data: await approvePluginWorkspaceWrite(param(req, 'proposalId'), caller(req)) })))
-router.post('/workspace-proposals/:proposalId/apply', requirePermission('files.edit'), asyncHandler(async (req, res) => {
+router.post('/instances/:instanceId/workspace/proposals', asyncHandler(async (req, res) => res.json({ success: true, data: await proposePluginWorkspaceWrite(param(req, 'instanceId'), req.body, caller(req)) })))
+router.post('/workspace-proposals/:proposalId/approve', asyncHandler(async (req, res) => res.json({ success: true, data: await approvePluginWorkspaceWrite(param(req, 'proposalId'), caller(req)) })))
+router.post('/workspace-proposals/:proposalId/apply', asyncHandler(async (req, res) => {
   const { approval } = z.object({ approval: z.string() }).strict().parse(req.body)
   res.json({ success: true, data: await applyPluginWorkspaceWrite(param(req, 'proposalId'), approval, caller(req)) })
 }))
 router.delete('/workspace-proposals/:proposalId', (req, res) => { dismissPluginWorkspaceWrite(param(req, 'proposalId'), caller(req)); res.json({ success: true }) })
 router.post('/instances/:instanceId/workspace/stat', asyncHandler(async (req, res) => res.json({ success: true, data: await statPluginWorkspace(param(req, 'instanceId'), req.body, caller(req)) })))
-router.post('/instances/:instanceId/workspace/changes', requirePermission('files.edit'), asyncHandler(async (req, res) => res.json({ success: true, data: await proposePluginWorkspaceChanges(param(req, 'instanceId'), req.body, caller(req)) })))
-router.post('/instances/:instanceId/media-proposals', requirePermission('files.edit'), asyncHandler(async (req, res) => res.json({ success: true, data: await proposePluginMedia(param(req, 'instanceId'), req.body, caller(req)) })))
+router.post('/instances/:instanceId/workspace/changes', asyncHandler(async (req, res) => res.json({ success: true, data: await proposePluginWorkspaceChanges(param(req, 'instanceId'), req.body, caller(req)) })))
+router.post('/instances/:instanceId/media-proposals', asyncHandler(async (req, res) => res.json({ success: true, data: await proposePluginMedia(param(req, 'instanceId'), req.body, caller(req)) })))
 router.post('/media-proposals/:proposalId/approve', asyncHandler(async (req, res) => res.json({ success: true, data: await approvePluginMedia(param(req, 'proposalId'), caller(req)) })))
 router.post('/media-proposals/:proposalId/apply', asyncHandler(async (req, res) => {
   const { approval } = z.object({ approval: z.string() }).strict().parse(req.body)

@@ -5,6 +5,18 @@
  * the first request for it can fail. A library picture that failed is asked for again for about a minute instead of
  * staying broken until the page is reloaded; it is hidden meanwhile.
  */
+/** The plugin window's id once connected; `appUrl` adds it so a shared page's declared routes serve media to every viewer. */
+let instanceId = ''
+/**
+ * A native media address for `<img>`, `<video>`, `<audio>` or a download link (`/api/images/<hash>/thumbnail`, …). It names
+ * this plugin window, so on a page an administrator shared, the routes the package declares in `appRoutes` answer viewers
+ * without that permission. Before the page connects (or on an older host) it returns the path unchanged.
+ */
+export function appUrl(path) {
+  if (!instanceId || typeof path !== 'string' || !path.startsWith('/api/')) return path
+  return `${path}${path.includes('?') ? '&' : '?'}conaiPluginInstance=${encodeURIComponent(instanceId)}`
+}
+
 if (typeof document !== 'undefined') {
   document.addEventListener('error', event => {
     const img = event.target, source = img.tagName === 'IMG' ? img.getAttribute('src') ?? '' : ''
@@ -12,7 +24,9 @@ if (typeof document !== 'undefined') {
     if (!source.startsWith('/api/images/') || tries >= 20) return
     img.dataset.conaiRetry = tries + 1
     img.style.visibility = 'hidden'
-    setTimeout(() => { if (img.isConnected && img.getAttribute('src') === source) img.src = `${source.split('?')[0]}?retry=${tries + 1}` }, 3000)
+    // Keeps the address's other parameters (the window id appUrl added) and only changes the retry counter.
+    const retried = () => { const url = new URL(source, location.href); url.searchParams.set('retry', String(tries + 1)); return `${url.pathname}${url.search}` }
+    setTimeout(() => { if (img.isConnected && img.getAttribute('src') === source) img.src = retried() }, 3000)
   }, true)
   document.addEventListener('load', event => { if (event.target.tagName === 'IMG' && event.target.dataset.conaiRetry) event.target.style.visibility = '' }, true)
 }
@@ -37,6 +51,7 @@ export function connectPlugin(handlers = {}) {
       window.removeEventListener('message', connect)
       clearTimeout(connectionTimeout)
       applyTheme(event.data.theme)
+      if (typeof event.data.instance === 'string' && /^[a-f0-9]{48}$/.test(event.data.instance)) instanceId = event.data.instance
       const port = event.ports[0], pending = new Map(), saved = new Set(), listeners = new Map(), actions = new Map()
       let closed = false
       // Snapshots follow typing: the first goes at once, then the newest one every 100 ms at most.
@@ -75,6 +90,8 @@ export function connectPlugin(handlers = {}) {
       // crypto.randomUUID exists only on secure origins; a LAN address over HTTP has getRandomValues alone.
       const uuid = () => typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : '10000000-1000-4000-8000-100000000000'.replace(/[018]/g, digit => (digit ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> digit / 4).toString(16))
       api.app = {
+        /** See appUrl: a native media address that names this window. */
+        url: appUrl,
         tools: (query = {}, options) => api.request('app.tools', query, options),
         call: (tool, args = {}, requestId = uuid(), options) => api.request('app.call', { tool, arguments: args, requestId }, options),
         run: (action, args = {}, requestId = uuid(), options) => api.request('app.action', { action, arguments: args, requestId }, options),

@@ -29,6 +29,8 @@ export interface McpRequestContext {
   chatContext?: ChatExecutionContext;
   /** Preserve the original public-page boundary when deferred work omits the page snapshot. */
   publicChatPage?: true;
+  /** A plugin window's page (services/plugins/pluginPublicScope): a shared page lends its declared tools. Host-set only. */
+  pluginPublicScope?: { pluginId: string; pageId: string; action?: string };
   scopes: McpHttpScope[];
   keyId?: string;
   keyName?: string;

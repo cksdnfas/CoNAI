@@ -9,6 +9,7 @@ import { WINDOWS_RESERVED_NAME } from '../../utils/pathResolver'
 import { pluginChanged, pluginDb, PluginError } from './pluginStore'
 import { removePluginData } from './pluginData'
 import { pluginAppToolScope } from './pluginAppPolicy'
+import { isPluginAppRoute } from './pluginAppRoutes'
 import { RuntimeJobRunner } from '../runtimeJobs/runtimeJobRunner'
 import { zipEntryBytes, zipEntryKind } from '../../utils/zipEntries'
 
@@ -29,9 +30,10 @@ const imagePromptPatternSchema = z.string().refine((source) => {
 const manifestSchema = z.object({
   apiVersion: z.literal(1), id: pluginIdSchema, name: z.string().min(1).max(100),
   version: z.string().regex(/^\d{1,4}\.\d{1,4}\.\d{1,4}$/), description: z.string().max(1000),
-  capabilities: z.array(z.enum(['files.read', 'files.write', 'files.media', 'workspace.read', 'workspace.write', 'workspace.media', 'media.process', 'server'])).max(8).default([]),
+  capabilities: z.array(z.enum(['files.read', 'files.write', 'files.media', 'workspace.read', 'workspace.write', 'workspace.media', 'media.process', 'media.read', 'media.save', 'media.pick', 'jobs', 'server'])).max(12).default([]),
   server: z.object({ entry: z.string().min(1).max(200) }).strict().optional(),
   appTools: z.array(z.string().regex(/^[a-z][a-z0-9_]{1,63}$/)).optional(),
+  appRoutes: z.array(z.string().max(64)).max(32).optional(),
   serverActions: z.array(z.object({ id: z.string().max(100), label: z.string().min(1).max(160), description: z.string().max(PLUGIN_ACTION_DESCRIPTION_LIMIT), schema: z.unknown(), tool: z.string().max(64), tier: z.enum(['direct', 'commit']).optional(), arguments: z.record(z.string(), z.unknown()).optional() }).strict()).optional(),
   pages: z.array(z.object({
     id: pluginIdSchema, title: z.string().min(1).max(160), entry: z.string().min(1).max(200),
@@ -65,8 +67,16 @@ export function pluginAssetName(value: string): string {
 export function parsePluginManifest(value: unknown, stored = false): PluginManifest {
   const raw = manifestSchema.parse(value)
   if (raw.server && (!/\.m?js$/.test(pluginAssetName(raw.server.entry)))) throw new PluginError('서버 모듈은 .mjs나 .js 파일이어야 해.')
-  // Legacy declarations remain readable metadata, not a second permission system.
-  const appTools = [...new Set(raw.appTools ?? [])]
+  // The app tools the package calls: on a shared page these (and nothing else) run without the viewer's own keys.
+  const declared = [...new Set(raw.appTools ?? [])]
+  const unknownTools = declared.filter(name => !pluginAppToolScope(name))
+  if (unknownTools.length && !stored) throw new PluginError(`appTools에 플러그인에서 실행할 수 없는 앱 도구가 있어: ${unknownTools.join(', ')}`)
+  const appTools = declared.filter(name => pluginAppToolScope(name))
+  // Native REST routes it calls, as ids of the core's table (pluginAppRoutes); lent on a shared page like appTools.
+  const routes = [...new Set(raw.appRoutes ?? [])]
+  const unknownRoutes = routes.filter(id => !isPluginAppRoute(id))
+  if (unknownRoutes.length && !stored) throw new PluginError(`appRoutes에 없는 경로 ID가 있어: ${unknownRoutes.join(', ')}`)
+  const appRoutes = routes.filter(id => isPluginAppRoute(id))
   const retired = new Set((raw.serverActions ?? []).filter(action => !pluginAppToolScope(action.tool)).map(action => action.id))
   if (stored && retired.size) raw.pages = raw.pages.map(page => ({ ...page, serverActions: page.serverActions?.filter(id => !retired.has(id)) }))
   const actionIds = new Set<string>()
@@ -84,7 +94,7 @@ export function parsePluginManifest(value: unknown, stored = false): PluginManif
     if (new Set(raw.skills.map((folder) => folder.toLowerCase())).size !== raw.skills.length) throw new PluginError('스킬 폴더가 겹쳐.')
   }
   const generation = raw.generation ? parseGeneration(raw.generation, raw.pages.map(page => page.id), !!raw.server) : undefined
-  return { ...raw, appTools, serverActions, generation, pages: raw.pages.map((page) => {
+  return { ...raw, appTools, ...(appRoutes.length ? { appRoutes } : {}), serverActions, generation, pages: raw.pages.map((page) => {
     pluginAssetName(page.entry)
     if (!page.entry.endsWith('.html')) throw new PluginError('페이지 진입 파일은 HTML이어야 해.')
     const ids = new Set<string>()
@@ -131,13 +141,30 @@ export function getPlugin(id: string, enabled = true) {
   if (enabled && !row.enabled) throw new PluginError('플러그인이 없거나 비활성화됐어.', 404)
   return { ...row, definition: definitionOf(row) }
 }
-/** The shared page ids of each plugin, including rows for pages a later version dropped (callers match against the manifest). */
+/** The shared pages of each plugin with the declarations digest they were shared under, including pages a later version dropped (callers match against the manifest). */
 function publicPageRows() {
-  const map = new Map<string, Set<string>>()
-  for (const row of pluginDb().prepare('SELECT plugin_id, page_id FROM plugin_public_pages').all() as Array<{ plugin_id: string; page_id: string }>) {
-    map.set(row.plugin_id, (map.get(row.plugin_id) ?? new Set()).add(row.page_id))
+  const map = new Map<string, Map<string, string | null>>()
+  for (const row of pluginDb().prepare('SELECT plugin_id, page_id, scope FROM plugin_public_pages').all() as Array<{ plugin_id: string; page_id: string; scope: string | null }>) {
+    map.set(row.plugin_id, (map.get(row.plugin_id) ?? new Map()).set(row.page_id, row.scope))
   }
   return map
+}
+/**
+ * What a shared page lends (pluginPublicScope): the package's declared app tools, server actions and host features.
+ * Stored when an administrator shares the page, so an update that widens them lends nothing until it is shared again.
+ */
+export function pluginLendDigest(manifest: PluginManifest) {
+  return createHash('sha256').update(JSON.stringify({
+    appTools: [...(manifest.appTools ?? [])].sort(),
+    serverActions: (manifest.serverActions ?? []).map((action) => ({ id: action.id, tool: action.tool, arguments: action.arguments ?? null })),
+    capabilities: [...manifest.capabilities].sort(),
+    ...(manifest.appRoutes?.length ? { appRoutes: [...manifest.appRoutes].sort() } : {}),
+  })).digest('hex')
+}
+/** The declarations digest a shared page was shared under; null when it isn't shared or predates lending. */
+export function publicPageLendDigest(pluginId: string, pageId: string): string | null {
+  const row = pluginDb().prepare('SELECT scope FROM plugin_public_pages WHERE plugin_id = ? AND page_id = ?').get(pluginId, pageId) as { scope: string | null } | undefined
+  return row?.scope ?? null
 }
 /** Whether an enabled plugin's existing page is shared with every signed-in account (`/public/ext/<plugin>/<page>`). */
 export function isPublicPluginPage(pluginId: string, pageId: string) {
@@ -150,7 +177,8 @@ export function setPluginPagePublic(pluginId: string, pageId: string, value: boo
   const plugin = getPlugin(pluginId, false)
   if (!plugin.definition.pages.some((page) => page.id === pageId)) throw new PluginError('페이지가 없어.', 404)
   const db = pluginDb()
-  if (value) db.prepare('INSERT OR IGNORE INTO plugin_public_pages (plugin_id, page_id) VALUES (?, ?)').run(pluginId, pageId)
+  // Sharing again after an update re-acknowledges the package's current declarations.
+  if (value) db.prepare('INSERT INTO plugin_public_pages (plugin_id, page_id, scope) VALUES (?, ?, ?) ON CONFLICT(plugin_id, page_id) DO UPDATE SET scope = excluded.scope').run(pluginId, pageId, pluginLendDigest(plugin.definition))
   else db.prepare('DELETE FROM plugin_public_pages WHERE plugin_id = ? AND page_id = ?').run(pluginId, pageId)
 }
 /** Shared pages of enabled plugins, for the access page. */
@@ -165,8 +193,13 @@ export function listPlugins(includeDisabled = false): InstalledPlugin[] {
   return rows.flatMap((row): InstalledPlugin[] => {
     try {
       const manifest = definitionOf(row)
-      const publicPages = manifest.pages.filter((page) => shared.get(row.id)?.has(page.id)).map((page) => page.id)
-      return [{ manifest, enabled: !!row.enabled, installedAt: row.installed_at, ...(row.bundled ? { bundled: true } : {}), ...(row.updated_at ? { updatedAt: row.updated_at, previousVersion: row.previous_version ?? undefined } : {}), ...(publicPages.length ? { publicPages } : {}) }]
+      const pages = shared.get(row.id)
+      const publicPages = manifest.pages.filter((page) => pages?.has(page.id)).map((page) => page.id)
+      const digest = publicPages.length ? pluginLendDigest(manifest) : ''
+      // A package declaring nothing lendable has nothing to re-acknowledge.
+      const lends = !!manifest.appTools?.length || !!manifest.appRoutes?.length || !!manifest.serverActions?.length || manifest.capabilities.some((capability) => capability !== 'server')
+      const publicLendStale = lends ? publicPages.filter((page) => pages?.get(page) !== digest) : []
+      return [{ manifest, enabled: !!row.enabled, installedAt: row.installed_at, ...(row.bundled ? { bundled: true } : {}), ...(row.updated_at ? { updatedAt: row.updated_at, previousVersion: row.previous_version ?? undefined } : {}), ...(publicPages.length ? { publicPages } : {}), ...(publicLendStale.length ? { publicLendStale } : {}) }]
     } catch {
       // One unreadable package must not hide the others; management still lists it so it can be removed.
       if (!includeDisabled) return []

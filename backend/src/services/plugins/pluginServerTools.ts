@@ -14,7 +14,8 @@ export type PluginServerTool = {
 }
 type ToolContent = { type: string; [key: string]: unknown }
 export type PluginServerToolResult = { content: ToolContent[]; isError?: boolean }
-type Invoker = (tool: PluginServerTool, args: Record<string, unknown>, requester: McpRequester | undefined, signal?: AbortSignal, run?: PluginProfileRunIdentity) => Promise<PluginServerToolResult>
+type PublicScope = { pluginId: string; pageId: string; action?: string }
+type Invoker = (tool: PluginServerTool, args: Record<string, unknown>, requester: McpRequester | undefined, signal?: AbortSignal, run?: PluginProfileRunIdentity, publicScope?: PublicScope) => Promise<PluginServerToolResult>
 
 const tools = new Map<string, PluginServerTool>()
 let toolsRevision = 0
@@ -64,11 +65,12 @@ export function pluginServerToolsSignature() {
   return String(toolsRevision)
 }
 export function setPluginServerToolInvoker(next: Invoker) { invoker = next }
-export async function callPluginServerTool(name: string, args: Record<string, unknown>, requester: McpRequester | undefined, signal?: AbortSignal, chat?: ChatExecutionContext): Promise<PluginServerToolResult> {
+/** `publicScope`: the plugin window behind a plugin's own call; the invoker keeps it only for that same plugin's tools. */
+export async function callPluginServerTool(name: string, args: Record<string, unknown>, requester: McpRequester | undefined, signal?: AbortSignal, chat?: ChatExecutionContext, publicScope?: PublicScope): Promise<PluginServerToolResult> {
   const tool = findPluginServerTool(name)
   if (!tool || !invoker) return { isError: true, content: [{ type: 'text', text: `${name}: 플러그인 서버가 실행 중이 아니야.` }] }
   const run = chat && profileRuns.get(chat.threadId)
   const identity = run && run.pluginId === tool.pluginId && run.accountId === requester?.accountId && run.profileId === chat?.profileId
     ? { requestId: run.requestId, profileId: run.profileId, threadId: run.threadId } : undefined
-  return invoker(tool, args, requester, signal, identity)
+  return invoker(tool, args, requester, signal, identity, publicScope)
 }

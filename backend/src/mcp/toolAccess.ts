@@ -1,6 +1,6 @@
 import { AuthAccount } from '../models/AuthAccount';
 import { hasConfiguredAuth } from '../services/auth/sessionAccess';
-import { isRequesterAdmin, keyGroupPermissionKeys, requesterPermissionKeys, requireContextPermission, requireRequesterPermission } from '../middleware/featureAccess';
+import { isRequesterAdmin, keyGroupPermissionKeys, requesterPermissionKeys, requireContextPermission, requireRequesterPermission, withRequesterPermissionGrant } from '../middleware/featureAccess';
 import { ChatProfileStore, isVisionTool, profileSeesImages } from '../services/codex-chat/chatProfiles';
 import { requireChatMcpAccountAccess } from '../services/codex-chat/codexChatAccess';
 import { chatMcpRequester } from '../services/codex-chat/chatProfilePermissions';
@@ -130,6 +130,22 @@ const BOARD_CALL_BLOCKED_POST_TOOLS = new Set(['posts_delete', 'posts_restore_re
  * Writes the web allows administrators only; HTTP keys hold no administrator role.
  */
 const ADMIN_ONLY_TOOLS = new Set(['set_live_wallpaper', 'save_wallpaper_schedule']);
+export const isAdminOnlyTool = (toolName: string) => ADMIN_ONLY_TOOLS.has(toolName);
+
+/**
+ * Keys a shared plugin page lends for one tool (services/plugins/pluginPublicScope registers this; until then none, so
+ * an unregistered build fails closed). Role checks (configure scope, administrator-only tools) are never lent.
+ */
+type PublicPluginToolKeys = (scope: NonNullable<McpRequestContext['pluginPublicScope']>, toolName: string) => readonly string[];
+// `var` without an initializer on purpose: the registering module loads inside this module's import cycle, before this
+// line runs; a `let` would be in its temporal dead zone then, and an initializer would erase the registration.
+// eslint-disable-next-line no-var
+var publicPluginToolKeys: PublicPluginToolKeys | undefined;
+export function setPublicPluginToolKeys(next: PublicPluginToolKeys) { publicPluginToolKeys = next; }
+const lentKeysFor = (scope: NonNullable<McpRequestContext['pluginPublicScope']>, toolName: string) => publicPluginToolKeys?.(scope, toolName) ?? [];
+function lentToolKeys(context: McpRequestContext, toolName: string): readonly string[] {
+  return context.source === 'plugin' && context.pluginPublicScope && context.requester ? lentKeysFor(context.pluginPublicScope, toolName) : [];
+}
 
 /** A tool's feature keys; external MCP tools need none (their server's scope and the profile decide). Undefined: unclassified. */
 function featurePermissionOf(toolName: string): string | readonly string[] | undefined {
@@ -164,7 +180,11 @@ function factsFor(context: McpRequestContext) {
 /** What the account itself must hold: the same key the web needs for that action, and the admin role for chat setup. */
 function accountHoldsTool(context: McpRequestContext, toolName: string): boolean {
   const { keys, admin, profile } = factsFor(context);
-  if (!requiredToolKeys(toolName).every((key) => keys.has(key))) return false;
+  const required = requiredToolKeys(toolName);
+  if (!required.every((key) => keys.has(key))) {
+    const lent = lentToolKeys(context, toolName);
+    if (!required.every((key) => keys.has(key) || lent.includes(key))) return false;
+  }
   if (getMcpToolScope(toolName) === 'configure' && !admin) return false;
   if (ADMIN_ONLY_TOOLS.has(toolName) && !admin) return false;
   if (isChatMcpSource(context.source) && CHAT_PAGE_TOOLS.has(toolName) && !profile?.pageAssist) return false;
@@ -268,6 +288,10 @@ export function requireMcpToolAccess(context: McpRequestContext, toolName: strin
   context.requester = chatMcpRequester(context);
   if (!isContextToolAllowed(context, toolName, false)) throw new Error('Unknown or not permitted tool.');
   refreshMcpRequester(context.requester);
+  // A shared plugin page lends this tool's keys to the viewer (live: stopping the share revokes them mid-call too). The
+  // grant rides on the requester, so the handler's own rechecks see it; the scope is re-read, never trusted from a copy.
+  const scope = context.pluginPublicScope;
+  if (scope && lentToolKeys(context, toolName).length) context.requester = withRequesterPermissionGrant(context.requester!, () => lentKeysFor(scope, toolName));
   if (isChatMcpSource(context.source)) {
     requireChatMcpAccountAccess(context, toolName);
     if (execution !== 'queued') {

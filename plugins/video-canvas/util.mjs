@@ -1,3 +1,4 @@
+import { appUrl } from './conai-plugin.js'
 export const $ = id => document.getElementById(id)
 export const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c])
 export const names = { image: '이미지', video: '비디오', audio: '오디오', bundle: '레퍼런스 번들', cut: '영상 컷', frame: '프레임', gen: '생성 노드' }
@@ -58,9 +59,10 @@ export const iconButton = (name, label, attrs = '', cls = '') => `<button type="
 export const icon = (name, size = 16) => `<svg class="vc-icon" viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name]}</svg>`
 /** Fills every `[data-icon]` control of the static page with its icon. */
 export function fillIcons() { document.querySelectorAll('[data-icon]').forEach(el => { el.innerHTML = icon(el.dataset.icon) }) }
-export const fileUrl = hash => `/api/images/${encodeURIComponent(hash)}/file`
-export const thumbUrl = hash => `/api/images/${encodeURIComponent(hash)}/thumbnail`
-export const audioUrl = id => `/api/audio/candidates/${encodeURIComponent(id)}/file`
+// appUrl names this window, so a shared page serves media to viewers without the library permission.
+export const fileUrl = hash => appUrl(`/api/images/${encodeURIComponent(hash)}/file`)
+export const thumbUrl = hash => appUrl(`/api/images/${encodeURIComponent(hash)}/thumbnail`)
+export const audioUrl = id => appUrl(`/api/audio/candidates/${encodeURIComponent(id)}/file`)
 const rendered = new WeakMap()
 const FOCUSABLE = 'button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), summary, [tabindex]:not([tabindex="-1"])'
 /**

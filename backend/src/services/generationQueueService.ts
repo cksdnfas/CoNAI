@@ -489,7 +489,7 @@ export class GenerationQueueService {
       if (!promptData || typeof promptData !== 'object' || Array.isArray(promptData)) {
         throw new Error('Invalid MCP queue image authorization')
       }
-      requireMcpQueueImageGrant(requestPayload[MCP_QUEUE_IMAGE_GRANT_KEY], existing.workflow_id, promptData as Record<string, unknown>)
+      requireMcpQueueImageGrant(requestPayload[MCP_QUEUE_IMAGE_GRANT_KEY], existing.workflow_id, promptData as Record<string, unknown>, existing.requested_by_account_id ?? null)
     }
 
     // CC-3: NovelAI 는 접수 시점에 Anlas 가 빠지므로 모호한 실패의 자동 재시도는 이중 과금이 된다.

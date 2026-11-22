@@ -9,13 +9,15 @@ import { canAccessSpriteWorkspace, getSpriteWorkspace } from '../sprite/spriteCa
 import { canAccessAudioExport, getAudioExportWorkspace } from '../audio/audioExport'
 import { requirePluginInstance, pluginTokenSchema, type PluginCaller } from './pluginHost'
 import { PluginMediaGrants, PluginError } from './pluginStore'
+import { publicScopeRequester } from './pluginPublicScope'
 
 const grants = new PluginMediaGrants<{ instanceId: string; artifactId: string; caller: PluginCaller; fingerprint: string }>()
 function resolve(instanceId: string, artifactId: string, caller: PluginCaller) {
-  requirePluginInstance(instanceId, caller)
+  const instance = requirePluginInstance(instanceId, caller)
   const identity = McpArtifactService.identity(artifactId)
   if (!identity || identity.kind === 'graph') throw new PluginError('이 미디어 결과를 열 수 없어.', 404)
-  const requester = caller.requester
+  // A shared page that declares media.read lends viewing; ownership checks below still apply to the viewer.
+  const requester = publicScopeRequester(caller.requester, instance.publicScope, 'media.read')
   if (identity.kind === 'audio' || identity.kind === 'audio-export') requireRequesterPermission(requester, 'audio.view')
   else requireRequesterImagePermission(requester)
   if (identity.kind === 'history') requireMcpResourceOwner({ scopes: [], requester }, HistoryQueryRepository.findAllWithMetadata({ ids: [identity.id], limit: 1 })[0], true)

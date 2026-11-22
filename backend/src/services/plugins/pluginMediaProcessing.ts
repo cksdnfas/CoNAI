@@ -16,6 +16,7 @@ import { saveSpriteOutputToLibrary } from '../sprite/spriteLibrary'
 import { runAudioFfmpeg } from '../audio/audioFfmpeg'
 import { ensureNamedAudioProjectInbox } from '../audio/audioMaintenance'
 import { importAudioUpload } from '../audio/audioService'
+import { publicScopeRequester } from './pluginPublicScope'
 
 const coordinate = z.number().int().min(0).max(32768)
 const size = z.number().int().min(1).max(8192)
@@ -29,7 +30,8 @@ const schema = z.object({
 }).strict()
 function access(id: string, caller: PluginCaller, kind: string) {
   const instance = requirePluginWorkspace(id, caller, 'workspace.write')
-  for (const permission of kind === 'crop' ? ['images.view', 'images.edit', 'images.upload'] : ['images.view', 'audio.view', 'audio.edit']) requireRequesterPermission(caller.requester, permission)
+  const requester = publicScopeRequester(caller.requester, instance.publicScope, 'media.process')
+  for (const permission of kind === 'crop' ? ['images.view', 'images.edit', 'images.upload'] : ['images.view', 'audio.view', 'audio.edit']) requireRequesterPermission(requester, permission)
   return instance
 }
 async function outputRevision(id: string, target: string, caller: PluginCaller) {

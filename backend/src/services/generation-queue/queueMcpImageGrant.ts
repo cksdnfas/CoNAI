@@ -20,6 +20,24 @@ type TrustedQueueImageGrant = {
   signature: string
 }
 
+/** A shared plugin page lent `submit_generation_job` (with images.view) to an account that lacks it. */
+type PluginPublicQueueImageGrant = {
+  kind: 'plugin-public'
+  pluginId: string
+  pageId: string
+  action?: string
+  accountId: number | null
+  signature: string
+}
+type PluginPublicScope = { pluginId: string; pageId: string; action?: string }
+/** Registered by services/plugins/pluginPublicScope; unregistered (another process) it lends nothing and fails closed. */
+// `var` without an initializer: the registering module may load inside this module's import cycle (see toolAccess).
+// eslint-disable-next-line no-var
+var pluginPublicLendsImages: ((scope: PluginPublicScope) => boolean) | undefined
+export function setPluginPublicImageLending(next: (scope: PluginPublicScope) => boolean) { pluginPublicLendsImages = next }
+export const isPluginPublicQueueImageGrant = (value: unknown): boolean =>
+  !!value && typeof value === 'object' && (value as { kind?: unknown }).kind === 'plugin-public'
+
 /** Read the key file, not the per-process settings cache: API and queue workers can be separate processes. */
 export function requireCurrentMcpKeyImagePermission(keyId: string): string {
   const settings = JSON.parse(fs.readFileSync(path.join(runtimePaths.basePath, 'config', 'mcp-http.json'), 'utf8')) as {
@@ -70,10 +88,35 @@ export function createTrustedQueueImageGrant(kind: TrustedQueueImageGrant['kind'
   return { kind, signature: signTrustedGrant(kind, workflowId, promptData) }
 }
 
-/** Verify the server-issued grant and re-read an HTTP key's current permissions. */
-export function requireMcpQueueImageGrant(value: unknown, workflowId: number, promptData: Record<string, unknown>): void {
+function signPluginPublicGrant(scope: PluginPublicScope, accountId: number | null, workflowId: number, promptData: Record<string, unknown>) {
+  return crypto.createHmac('sha256', mcpHttpSettingsService.getSigningSecret())
+    .update('conai:plugin-public-queue-image:v1\0')
+    .update(JSON.stringify({ pluginId: scope.pluginId, pageId: scope.pageId, action: scope.action ?? null, accountId, workflowId, promptData }))
+    .digest('hex')
+}
+
+/** Bound to the account, the page and the normalized input; re-checked against the share when the job runs. */
+export function createPluginPublicQueueImageGrant(scope: PluginPublicScope, accountId: number | null, workflowId: number, promptData: Record<string, unknown>): PluginPublicQueueImageGrant {
+  return { kind: 'plugin-public', pluginId: scope.pluginId, pageId: scope.pageId, ...(scope.action ? { action: scope.action } : {}), accountId, signature: signPluginPublicGrant(scope, accountId, workflowId, promptData) }
+}
+
+/**
+ * Verify the server-issued grant and re-read an HTTP key's current permissions. `accountId`: the job's account, which a
+ * shared plugin page's grant must name; that grant also needs the page still shared and lending images.view.
+ */
+export function requireMcpQueueImageGrant(value: unknown, workflowId: number, promptData: Record<string, unknown>, accountId?: number | null): void {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Invalid MCP queue image authorization')
-  const grant = value as Partial<McpQueueImageGrant & TrustedQueueImageGrant>
+  const grant = value as Partial<McpQueueImageGrant & Omit<TrustedQueueImageGrant, 'kind'>> & Partial<Omit<PluginPublicQueueImageGrant, 'kind'>> & { kind?: string }
+  if (grant.kind === 'plugin-public') {
+    if (typeof grant.pluginId !== 'string' || typeof grant.pageId !== 'string' || (grant.action !== undefined && typeof grant.action !== 'string')
+      || grant.accountId === undefined || grant.accountId !== (accountId ?? null)
+      || typeof grant.signature !== 'string' || !/^[a-f0-9]{64}$/.test(grant.signature)) throw new Error('Invalid MCP queue image authorization')
+    const scope = { pluginId: grant.pluginId, pageId: grant.pageId, ...(grant.action ? { action: grant.action } : {}) }
+    const expected = signPluginPublicGrant(scope, grant.accountId, workflowId, promptData)
+    if (!crypto.timingSafeEqual(Buffer.from(grant.signature, 'hex'), Buffer.from(expected, 'hex'))) throw new Error('Invalid MCP queue image authorization')
+    if (!pluginPublicLendsImages?.(scope)) throw new Error('Permission required: images.view')
+    return
+  }
   if ((grant.kind === 'stdio' || grant.kind === 'legacy-schedule')
     && typeof grant.signature === 'string' && /^[a-f0-9]{64}$/.test(grant.signature)) {
     const expected = signTrustedGrant(grant.kind, workflowId, promptData)

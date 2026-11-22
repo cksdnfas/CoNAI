@@ -1,7 +1,10 @@
 {
-  "apiVersion": 1, "id": "hyperframes", "name": "HyperFrames 영상 제작", "version": "1.5.1",
+  "apiVersion": 1, "id": "hyperframes", "name": "HyperFrames 영상 제작", "version": "1.5.2",
   "description": "내부 이미지·영상으로 영상을 만들고 AI와 수정해. 프로젝트 저장, 렌더링과 결과 라이브러리 연결을 지원해.",
   "server": { "entry": "server.mjs" },
+  "capabilities": ["media.read", "media.save", "jobs"],
+  "appRoutes": ["images.read", "files.thumbnail"],
+  "appTools": ["search_files", "search_images", "search_images_by_meaning", "get_media_download", "get_file_info", "read_file_text", "update_file_text", "write_text_file", "list_files"],
   "pages": [{ "id": "studio", "title": "영상 제작", "entry": "index.html", "accepts": [], "actions": [
     { "id": "hyperframes.projects", "label": "프로젝트 목록", "description": "저장한 프로젝트를 제목과 상태로 검색한다. 20개씩 조회하며 보관한 프로젝트는 기본 목록에서 제외한다.", "effect": "draft", "tier": "view", "schema": { "type": "object", "properties": { "query": { "type": "string", "maxLength": 100 }, "stage": { "type": "string", "enum": ["active", "all", "draft", "completed", "archived"] }, "offset": { "type": "number", "integer": true, "minimum": 0, "maximum": 1000000 } } } },
     { "id": "hyperframes.details", "label": "제목·제작 상태 편집", "description": "프로젝트 제목과 제작 중/완료/보관 상태를 초안에서 바꾼다. 반영하려면 별도로 저장한다. 완료 상태는 출력 성공을 의미하지 않는다.", "effect": "draft", "tier": "draft", "schema": { "type": "object", "properties": { "title": { "type": "string", "maxLength": 100 }, "stage": { "type": "string", "enum": ["draft", "completed", "archived"] } } } },

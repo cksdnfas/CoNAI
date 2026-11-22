@@ -15,6 +15,8 @@ export async function fetchPluginNative(instanceId: string, value: unknown, sign
   const method = input.method?.toUpperCase() ?? 'GET'
   if (!['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) throw new ApiRequestError('지원하지 않는 HTTP 메서드야.', 400)
   const headers = pluginNativeApiHeaders(input.headers)
+  // Names the window, so a shared page's declared routes are lent to this request (backend pluginRouteLending).
+  headers.set('X-CoNAI-Plugin-Instance', instanceId)
   let body: BodyInit | undefined
   if (input.form !== undefined) {
     if (!Array.isArray(input.form) || input.form.length > 100 || input.body !== undefined) throw new ApiRequestError('업로드 형식이 올바르지 않아.', 400)

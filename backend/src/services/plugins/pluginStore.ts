@@ -54,6 +54,8 @@ export function pluginDb(): Database.Database {
         plugin_id TEXT NOT NULL, page_id TEXT NOT NULL, PRIMARY KEY(plugin_id, page_id));
     `)
     if (!(db.prepare('PRAGMA table_info(plugin_instances)').all() as Array<{ name: string }>).some(column => column.name === 'workspace')) db.exec('ALTER TABLE plugin_instances ADD COLUMN workspace TEXT')
+    // The package declarations (pluginLendDigest) an administrator saw when sharing a page: lending stops when they change.
+    if (!(db.prepare('PRAGMA table_info(plugin_public_pages)').all() as Array<{ name: string }>).some(column => column.name === 'scope')) db.exec('ALTER TABLE plugin_public_pages ADD COLUMN scope TEXT')
     if (!(db.prepare('PRAGMA table_info(plugin_llm_requests)').all() as Array<{ name: string }>).some(column => column.name === 'delivery')) db.exec('ALTER TABLE plugin_llm_requests ADD COLUMN delivery TEXT')
     // The administrator who turned a plugin on: its server module's own calls (timers, startup) run as them.
     if (!(db.prepare('PRAGMA table_info(plugins)').all() as Array<{ name: string }>).some(column => column.name === 'enabled_by')) db.exec('ALTER TABLE plugins ADD COLUMN enabled_by INTEGER')

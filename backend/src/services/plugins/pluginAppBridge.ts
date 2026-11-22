@@ -37,15 +37,16 @@ export async function callPluginAppTool(context: McpRequestContext, name: string
 }
 
 /** A server module's calls: every scope, bounded by the requester's own permissions (requireMcpToolAccess). */
-function trustedContext(requester: McpRequester, baseUrl?: string, workspace?: McpRequestContext['workspace']): McpRequestContext {
-  return { requester, scopes: [...ALL_MCP_HTTP_SCOPES, 'configure'], baseUrl, workspace, source: 'plugin' }
+/** `publicScope`: the plugin window the call came from, so a shared page lends its declared tools here too. */
+function trustedContext(requester: McpRequester, baseUrl?: string, workspace?: McpRequestContext['workspace'], publicScope?: McpRequestContext['pluginPublicScope']): McpRequestContext {
+  return { requester, scopes: [...ALL_MCP_HTTP_SCOPES, 'configure'], baseUrl, workspace, source: 'plugin', ...(publicScope ? { pluginPublicScope: publicScope } : {}) }
 }
-export async function callTrustedAppTool(requester: McpRequester | undefined, name: string, args: Record<string, unknown>, baseUrl?: string, workspace?: McpRequestContext['workspace'], signal?: AbortSignal) {
+export async function callTrustedAppTool(requester: McpRequester | undefined, name: string, args: Record<string, unknown>, baseUrl?: string, workspace?: McpRequestContext['workspace'], signal?: AbortSignal, publicScope?: McpRequestContext['pluginPublicScope']) {
   // Without an account nothing would bound the call; the module's own work runs as the administrator who enabled it.
   if (!requester) throw new PluginError('계정이 연결된 호출에서만 앱 도구를 쓸 수 있어.', 403)
-  return callPluginAppTool(trustedContext(requester, baseUrl ?? '/', workspace), name, args, signal)
+  return callPluginAppTool(trustedContext(requester, baseUrl ?? '/', workspace, publicScope), name, args, signal)
 }
-export async function trustedAppToolDefinitions(requester: McpRequester | undefined, baseUrl?: string, workspace?: McpRequestContext['workspace']) {
+export async function trustedAppToolDefinitions(requester: McpRequester | undefined, baseUrl?: string, workspace?: McpRequestContext['workspace'], publicScope?: McpRequestContext['pluginPublicScope']) {
   if (!requester) throw new PluginError('계정이 연결된 호출에서만 앱 도구를 쓸 수 있어.', 403)
-  return pluginAppDefinitions(trustedContext(requester, baseUrl, workspace), pluginAppTools())
+  return pluginAppDefinitions(trustedContext(requester, baseUrl, workspace, publicScope), pluginAppTools())
 }

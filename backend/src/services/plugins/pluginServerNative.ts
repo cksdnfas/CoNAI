@@ -23,7 +23,8 @@ const RESPONSE_MAX_BYTES = 64 * 1024 * 1024
 const METHODS = new Set(['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE'])
 const NULL_BODY = new Set([101, 103, 204, 205, 304])
 
-type Grant = { accountId: number | null; method: string; path: string; expiresAt: number }
+/** `publicScope`: the plugin window behind the call, so a shared page's declared routes are lent here too. */
+type Grant = { accountId: number | null; method: string; path: string; expiresAt: number; publicScope?: { pluginId: string; pageId: string; action?: string } }
 const grants = new Map<string, Grant>()
 let nativeApp: Express | null = null
 let loopback: Promise<string> | null = null
@@ -81,6 +82,7 @@ export function pluginNativeCallSession(req: Request, res: Response, next: NextF
   if (!session) { res.status(401).json({ error: 'Invalid plugin call' }); return }
   req.session = session as unknown as Request['session']
   ;(req as { sessionID: string }).sessionID = `plugin-call:${crypto.randomUUID()}`
+  if (grant?.publicScope) req.pluginPublicScope = grant.publicScope
   next()
 }
 
@@ -94,7 +96,7 @@ function requestBody(value: unknown): string | Uint8Array<ArrayBuffer> | undefin
 }
 
 /** One native call from a server module, returning the status, headers and the whole body for the worker. */
-export async function callPluginServerNative(requester: McpRequester | undefined, raw: unknown, signal?: AbortSignal) {
+export async function callPluginServerNative(requester: McpRequester | undefined, raw: unknown, signal?: AbortSignal, publicScope?: Grant['publicScope']) {
   // Without an account nothing would bound the call; the module's own work runs as the administrator who enabled it.
   if (!requester) throw new PluginError('계정이 연결된 호출에서만 앱 API를 쓸 수 있어.', 403)
   const input = (raw && typeof raw === 'object' ? raw : {}) as { path?: unknown; method?: unknown; headers?: unknown; body?: unknown }
@@ -115,7 +117,7 @@ export async function callPluginServerNative(requester: McpRequester | undefined
   const body = requestBody(input.body)
   if ((method === 'GET' || method === 'HEAD') && body !== undefined) throw new PluginError('조회 요청에는 본문을 넣을 수 없어.', 400)
   const token = crypto.randomBytes(32).toString('base64url')
-  grants.set(token, { accountId: requester.accountId, method, path, expiresAt: Date.now() + GRANT_TTL_MS })
+  grants.set(token, { accountId: requester.accountId, method, path, expiresAt: Date.now() + GRANT_TTL_MS, ...(publicScope ? { publicScope } : {}) })
   try {
     const response = await fetch(`${origin}${path}`, { method, headers: { ...headers, [CALL_HEADER]: token }, body, redirect: 'error', signal })
     const chunks: Uint8Array[] = []

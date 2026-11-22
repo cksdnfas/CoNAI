@@ -10,6 +10,7 @@ import { pluginDb, pluginToken, sha256 as hash, PluginError, requireProposalRoom
 import { getPlugin, isPublicPluginPage } from './pluginRegistry'
 import { AuthAccessControlService } from '../authAccessControlService'
 import { ensurePluginFolder } from './pluginFolder'
+import { publicScopeRequester } from './pluginPublicScope'
 
 export const pluginTokenSchema = z.string().regex(/^[a-f0-9]{48}$/)
 const fileIdSchema = z.string().regex(/^[a-f0-9]{32}$/)
@@ -47,7 +48,9 @@ export function requirePluginInstance(id: string, caller: PluginCaller) {
   if (!page) throw new PluginError('페이지가 없어.', 404)
   // Rechecked on every call: revoking the permission or the share ends windows already open.
   requirePluginPageAccess(caller.requester, row.plugin_id, row.page_id)
-  return { row, plugin: plugin.definition, page, fileIds: JSON.parse(row.files) as string[], workspace: row.workspace ? JSON.parse(row.workspace) as { id: string; name: string; write: boolean } : undefined, owner }
+  // Every window carries its page; pluginPublicScope decides, per check, whether that page is shared and what it lends.
+  const publicScope = { pluginId: row.plugin_id, pageId: row.page_id }
+  return { row, plugin: plugin.definition, page, fileIds: JSON.parse(row.files) as string[], workspace: row.workspace ? JSON.parse(row.workspace) as { id: string; name: string; write: boolean } : undefined, owner, publicScope }
 }
 export function openPluginInstance(pluginId: string, pageId: string, input: unknown, caller: PluginCaller): PluginInstance {
   cleanup()
@@ -58,7 +61,9 @@ export function openPluginInstance(pluginId: string, pageId: string, input: unkn
   refreshMcpRequester(caller.requester)
   requirePluginPageAccess(caller.requester, pluginId, pageId)
   const owner = fileOwnerKey(caller.requester.accountId)
-  if (ids.length) requireFileStoreOwner(caller.requester)
+  // A shared page lends the file and workspace features its package declared (pluginPublicScope).
+  const scope = { pluginId, pageId }
+  if (ids.length) requireFileStoreOwner(publicScopeRequester(caller.requester, scope, ['files.read', 'files.write', 'files.media']))
   if (!caller.sessionId) throw new PluginError('세션이 필요해.', 401)
   const files = ids.map((id) => {
     const file = FileStoreService.get(owner, id)
@@ -69,10 +74,10 @@ export function openPluginInstance(pluginId: string, pageId: string, input: unkn
   // A plugin that declares workspace access works in its own file-box folder; accounts without file access get no workspace.
   if (plugin.definition.capabilities.some((capability) => capability.startsWith('workspace.'))) {
     let allowed = true
-    try { requireFileStoreOwner(caller.requester) } catch { allowed = false }
+    try { requireFileStoreOwner(publicScopeRequester(caller.requester, scope, ['workspace.read', 'workspace.write', 'workspace.media'])) } catch { allowed = false }
     if (allowed) {
       let write = true
-      try { requireFileStoreAction(caller.requester, 'organize') } catch { write = false }
+      try { requireFileStoreAction(publicScopeRequester(caller.requester, scope, 'workspace.write'), 'organize') } catch { write = false }
       const folder = ensurePluginFolder(owner, { id: plugin.definition.id, name: plugin.definition.name })
       workspace = { id: folder.id, name: folder.name, write }
     }
@@ -109,8 +114,9 @@ export function closePluginSession(sessionId: string) {
 function requireFile(instanceId: string, fileId: string, caller: PluginCaller, capability: 'files.read' | 'files.write' | 'files.media') {
   fileIdSchema.parse(fileId)
   const instance = requirePluginInstance(instanceId, caller)
-  requireFileStoreOwner(caller.requester)
-  if (capability === 'files.write') requireFileStoreAction(caller.requester, 'organize')
+  const requester = publicScopeRequester(caller.requester, instance.publicScope, capability)
+  requireFileStoreOwner(requester)
+  if (capability === 'files.write') requireFileStoreAction(requester, 'organize')
   return instance
 }
 export function readPluginFile(instanceId: string, fileId: string, caller: PluginCaller) {

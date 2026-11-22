@@ -8,9 +8,9 @@ import { GenerationQueueService } from '../../services/generationQueueService'
 import { parseCodexGenerationRequest } from '../../services/codexGenerationOptions'
 import { externalizeQueueInputDataUrls } from '../../services/generation-queue/queueInputStore'
 import { ComfyInputValidationError, validateComfyPromptData } from '../../services/prepareComfyPromptData'
-import { requireImagesView } from '../../middleware/imageAccess'
+import { canRequesterViewImages, requireImagesView } from '../../middleware/imageAccess'
 import { WorkflowInputAssetError } from '../../services/workflowInputAssetStore'
-import { MCP_QUEUE_IMAGE_GRANT_KEY } from '../../services/generation-queue/queueMcpImageGrant'
+import { createPluginPublicQueueImageGrant, MCP_QUEUE_IMAGE_GRANT_KEY } from '../../services/generation-queue/queueMcpImageGrant'
 import { hasRefModEntryRunKey, RefModEntryLinkForgedError } from '../../services/generation-queue/queueRefModEntryLink'
 import { enqueueGenerationJobs } from '../../services/generation-queue/queueEnqueue'
 import { hasGenerationQueueServerRoutingTag } from '../../services/generationQueueRouting'
@@ -20,7 +20,7 @@ import {
   WorkflowNumericFieldValidationError,
 } from '../../services/workflowNumericFieldPolicy'
 import type { WorkflowRecord } from '../../types/workflow'
-import { isAdminRequest } from '../requester-session-helpers'
+import { getRequesterAccountType, isAdminRequest } from '../requester-session-helpers'
 import { parsePositiveInteger, sendRouteBadRequest } from '../routeValidation'
 import {
   getRequesterAccountId,
@@ -273,6 +273,7 @@ export function createGenerationQueueActionRoutes() {
     }
 
     let normalizedRequestPayload = request_payload
+    let usesLibraryImages = false
 
     if (service_type === 'codex') {
       try {
@@ -298,6 +299,7 @@ export function createGenerationQueueActionRoutes() {
       try {
         const normalizedPromptData = normalizeWorkflowNumericPromptValues(workflowMarkedFields, promptData)
         if (validateComfyPromptData(workflowMarkedFields, normalizedPromptData)) {
+          usesLibraryImages = true
           let allowed = false
           requireImagesView(req, res, () => { allowed = true })
           if (!allowed) return
@@ -337,6 +339,13 @@ export function createGenerationQueueActionRoutes() {
     }
 
     const requesterAccountId = getRequesterAccountId(req)
+
+    // Library inputs lent by a shared plugin page (middleware/pluginRouteLending): the queue re-checks that share when
+    // the job runs, since the account itself cannot read the library.
+    if (usesLibraryImages && req.pluginPublicScope && typeof workflowIdNumber === 'number'
+      && !canRequesterViewImages({ accountId: requesterAccountId, accountType: getRequesterAccountType(req) })) {
+      normalizedRequestPayload = { ...normalizedRequestPayload, [MCP_QUEUE_IMAGE_GRANT_KEY]: createPluginPublicQueueImageGrant(req.pluginPublicScope, requesterAccountId, workflowIdNumber, (normalizedRequestPayload as { prompt_data: Record<string, unknown> }).prompt_data) }
+    }
 
     // 경로는 없는 그룹을 만들기 때문에 다른 검증을 모두 통과한 뒤에 해석한다.
     const targetGroup = GenerationTargetGroupService.resolveForAccount(requesterAccountId, {

@@ -22,16 +22,18 @@ import { requireRequesterPermission } from '../../middleware/featureAccess'
 import { audioCandidateFile } from '../audio/audioService'
 import { audioBlobPath, AUDIO_MIME_BY_EXTENSION } from '../audio/audioStore'
 import type { McpRequester } from '../../mcp/context'
+import { publicScopeRequester, type PluginPublicScope } from './pluginPublicScope'
 
 const MAX_TEXT = 1024 * 1024
 const revision = z.string().regex(/^[a-f0-9]{64}$/)
 export function requirePluginWorkspace(id: string, caller: PluginCaller, capability: 'workspace.read' | 'workspace.write' | 'workspace.media' = 'workspace.read') {
   const instance = requirePluginInstance(id, caller)
   if (!instance.workspace) throw new PluginError('프로젝트를 연결해줘.', 400)
-  requireFileStoreOwner(caller.requester)
+  const requester = publicScopeRequester(caller.requester, instance.publicScope, capability)
+  requireFileStoreOwner(requester)
   if (capability === 'workspace.write') {
     if (!instance.workspace.write) throw new PluginError('읽기 전용 프로젝트 연결이야.', 403)
-    requireFileStoreAction(caller.requester, 'organize')
+    requireFileStoreAction(requester, 'organize')
   }
   PluginFolder.get(instance.owner, instance.workspace.id)
   return { ...instance, workspace: instance.workspace }
@@ -166,23 +168,28 @@ export async function mediaTarget(id: string, target: string, caller: PluginCall
   let value: unknown
   try { value = JSON.parse(file.text) } catch { throw new PluginError('미디어 참조 문서의 JSON 형식을 확인해줘.') }
   const reference = mediaReferenceSchema.parse(value)
-  return { ...await resolvePluginMediaReference(reference, caller.requester), revision: file.revision }
+  return { ...await resolvePluginMediaReference(reference, caller.requester, instance.publicScope, ['workspace.media', 'media.read']), revision: file.revision }
 }
-/** Shared resolver for project previews and trusted server-side processing. Paths never reach the iframe. */
-export async function resolvePluginMediaReference(value: unknown, requester: McpRequester | undefined) {
+/**
+ * Shared resolver for project previews and trusted server-side processing. Paths never reach the iframe.
+ * `publicScope`/`features`: the plugin window behind the call; a shared page lends those declared features.
+ */
+export async function resolvePluginMediaReference(value: unknown, requester: McpRequester | undefined, publicScope?: PluginPublicScope, features: Array<'workspace.media' | 'media.read'> = ['media.read']) {
   if (!requester) throw new PluginError('미디어 접근에는 계정이 필요해.', 403)
   const reference = mediaReferenceSchema.parse(value)
+  // Plugins act as the account alone: a plain copy drops a chat profile's delegated permissions; only a shared page's
+  // declared features are added back.
+  const actor = publicScopeRequester({ accountId: requester.accountId, accountType: requester.accountType }, publicScope, features)
   let resolved: { entry: StoredFileEntry; filePath: string }
   if (reference.source === 'files') {
-    // Plugins act as the account alone: a plain copy drops a chat profile's delegated file permissions.
-    resolved = FileStoreService.resolveFile(requireFileStoreOwner({ accountId: requester.accountId, accountType: requester.accountType }), reference.fileId)
+    resolved = FileStoreService.resolveFile(requireFileStoreOwner(actor), reference.fileId)
   } else if (reference.source === 'audio') {
-    requireRequesterPermission(requester, 'audio.view')
+    requireRequesterPermission(publicScope ? actor : requester, 'audio.view')
     const { candidate, file } = audioCandidateFile(reference.candidateId)
     if (candidate.deleted_at) throw new PluginError('지운 오디오는 열 수 없어.', 404)
     resolved = { filePath: audioBlobPath(file.hash, file.ext), entry: { id: candidate.id, parentId: null, kind: 'file', name: `${candidate.name}.${file.ext}`, mimeType: AUDIO_MIME_BY_EXTENSION[file.ext], size: file.size, createdAt: '', updatedAt: '' } }
   } else {
-    requireRequesterImagePermission(requester)
+    requireRequesterImagePermission(publicScope ? actor : requester)
     if (reference.groupId !== undefined && !db.prepare('SELECT 1 FROM image_groups WHERE group_id=? AND composite_hash=?').get(reference.groupId, reference.compositeHash)) throw new PluginError('그룹에서 미디어 참조를 찾을 수 없어.', 404)
     const metadata = MediaMetadataFileQueries.findVisibilityGuardByHash(reference.compositeHash)
     if (!metadata || !MediaPostprocessVisibilityService.isReadyRecord(metadata)) throw new PluginError('아직 사용할 수 없는 미디어야.', 404)

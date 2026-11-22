@@ -34,6 +34,8 @@ import { useCodexChat } from '@/features/codex-chat/codex-chat-context'
 import { getCodexChatThread } from '@/lib/api-codex-chat'
 import { MediaLibraryPicker, type MediaLibrarySelection } from '@/components/media/media-library-picker'
 import { getImagesBatch, IMAGE_BATCH_MAX_COUNT } from '@/lib/api-images'
+import { openPluginLendWindow } from '@/lib/plugin-lend-window'
+import { ImagePermissionsContext, useImagePermissions } from '@/features/auth/use-image-permissions'
 /** A short FNV-1a hash of a snapshot, for pages that publish without their own revision. */
 function contentRevision(text: string) {
   let hash = 0x811c9dc5
@@ -138,6 +140,13 @@ function PluginFrame({ instance, onDirty, embed, launch }: { instance: PluginIns
   const initialized = useRef(false)
   const alive = useRef(true)
   const requests = useRef(new Map<string, { controller: AbortController; finish: () => void }>())
+  const imagePermissions = useImagePermissions()
+  const sharedPlugins = useQuery({ queryKey: PLUGINS_QUERY_KEY, queryFn: listPlugins })
+  // A shared page that declares media.pick lends its library view to the host picker (backend pluginAppRoutes); a ref so
+  // the channel handler, bound once, reads the current answer.
+  const pickLends = useRef(false)
+  pickLends.current = instance.plugin.capabilities.includes('media.pick')
+    && !!sharedPlugins.data?.find((item) => item.manifest.id === instance.plugin.id)?.publicPages?.includes(instance.page.id)
   const eventSubscription = useRef<(() => void) | null>(null)
   // Snapshots follow typing; the latest one is taken at most every 150 ms and never counts as a request.
   const latestSnapshot = useRef<PluginSnapshot | null>(null)
@@ -317,6 +326,9 @@ function PluginFrame({ instance, onDirty, embed, launch }: { instance: PluginIns
           }
           await request(`/instances/${instance.id}`)
           controller.signal.throwIfAborted()
+          // On a shared page that declares media.pick, the picker's requests name this window until the picks are read.
+          const releaseLend = pickLends.current ? openPluginLendWindow(instance.id) : () => {}
+          try {
           const selected = await new Promise<MediaLibrarySelection[]>((resolve, reject) => {
             const remove = () => {
               controller.signal.removeEventListener('abort', abort)
@@ -337,6 +349,7 @@ function PluginFrame({ instance, onDirty, embed, launch }: { instance: PluginIns
             }
           }
           return result
+          } finally { releaseLend() }
         }
         if (message.method === 'app.download') {
           const path = pluginNativeApiPath(String(args?.path ?? ''), [window.location.origin, new URL(buildApiUrl('/'), window.location.href).origin])
@@ -432,7 +445,7 @@ function PluginFrame({ instance, onDirty, embed, launch }: { instance: PluginIns
         } else respond(result)
       }).catch((reason: unknown) => { controller.abort(); respond(reason, true) }).finally(() => { if (!streaming) finish() })
     }
-    frame.current?.contentWindow?.postMessage({ type: 'conai-plugin-connect', version: 1, features: PLUGIN_SDK_FEATURES, nativeApiRoots: PLUGIN_NATIVE_API_ROOTS, files: instance.files, workspace: instance.workspace, actions: instance.page.actions, language: document.documentElement.lang || 'ko', theme: hostTheme(), context: embed ? { kind: 'generation-block', surface: embed.surface } : null, launch }, '*', [connection.port2])
+    frame.current?.contentWindow?.postMessage({ type: 'conai-plugin-connect', version: 1, instance: instance.id, features: PLUGIN_SDK_FEATURES, nativeApiRoots: PLUGIN_NATIVE_API_ROOTS, files: instance.files, workspace: instance.workspace, actions: instance.page.actions, language: document.documentElement.lang || 'ko', theme: hostTheme(), context: embed ? { kind: 'generation-block', surface: embed.surface } : null, launch }, '*', [connection.port2])
   }
   const apply = async (proposal: PluginProposal) => {
     setBusy(true); setError('')
@@ -459,7 +472,9 @@ function PluginFrame({ instance, onDirty, embed, launch }: { instance: PluginIns
     {connectionError ? <Alert variant="warning" className="mb-2"><TriangleAlert /><AlertDescription className="flex flex-wrap items-center gap-2"><span className="min-w-0 flex-1">{connectionError}</span>{closed ? null : <Button size="sm" variant="secondary" onClick={() => void checkConnection()}>{t({ ko: '다시 확인', en: 'Retry' })}</Button>}</AlertDescription></Alert> : null}
     {blockedFrame ? null : <iframe ref={frame} title={instance.page.title} allow="autoplay" referrerPolicy="no-referrer" src={`/api/plugin-assets/${instance.plugin.id}/${instance.plugin.version}/${instance.page.entry}`} onLoad={connect} style={embed ? { height: embed.height } : undefined} className={cn('w-full rounded-sm border-0', !embed && // Everything around the frame: shell header, page toolbar (3.5rem) and the shell's bottom padding.
       'h-[max(420px,calc(100dvh-var(--theme-shell-header-height)-var(--theme-shell-main-padding-bottom)-var(--shell-bottom-inset,0px)-3.5rem))]')} />}
-    {mediaPicks[0] ? <MediaLibraryPicker key={mediaPicks[0].id} initial={[]} mediaKind={mediaPicks[0].input.kind ?? 'all'} maxCount={mediaPicks[0].input.max ?? Infinity} title={mediaPicks[0].input.title} onPick={mediaPicks[0].resolve} onClose={() => mediaPicks[0].resolve([])} /> : null}
+    {mediaPicks[0] ? <ImagePermissionsContext.Provider value={pickLends.current ? { ...imagePermissions, canViewImages: true } : imagePermissions}>
+      <MediaLibraryPicker key={mediaPicks[0].id} initial={[]} mediaKind={mediaPicks[0].input.kind ?? 'all'} maxCount={mediaPicks[0].input.max ?? Infinity} title={mediaPicks[0].input.title} onPick={mediaPicks[0].resolve} onClose={() => mediaPicks[0].resolve([])} />
+    </ImagePermissionsContext.Provider> : null}
     {/* App operations started here report their job result back to the plugin page. */}
     {appRequests.filter(request => request.jobId).map(request => <AppRequestJob key={request.id} jobId={request.jobId!} showProgress={false} onFinished={result => { channel.current?.postMessage({ type: 'saved', proposalId: request.id, result }); setAppResult(appResultSummary(result)) }} />)}
     <PluginReviewBar

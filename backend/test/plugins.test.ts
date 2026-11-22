@@ -496,10 +496,10 @@ test('trusted extensions preserve package, caller, explicit approval and externa
     const { pluginDb } = await import('../src/services/plugins/pluginStore')
     const stored = pluginDb().prepare("SELECT manifest,digest FROM plugins WHERE id='app-workbench'").get() as { manifest: string; digest: string }
     const retired = JSON.parse(stored.manifest) as typeof parsed.manifest
-    retired.appTools = [...retired.appTools!, 'retired_native_tool']
+    retired.appTools = [...(retired.appTools ?? []), 'retired_native_tool']
     retired.serverActions = [...retired.serverActions!, { id: 'app-workbench.retired', label: 'retired', description: '', schema: { type: 'object', properties: {} }, tool: 'retired_native_tool' }]
     pluginDb().prepare("UPDATE plugins SET manifest=?, digest='retired-tool-test' WHERE id='app-workbench'").run(JSON.stringify(retired))
-    assert.equal(registry.getPlugin('app-workbench').definition.appTools!.includes('retired_native_tool'), true)
+    assert.equal(registry.getPlugin('app-workbench').definition.appTools!.includes('retired_native_tool'), false, 'a stored package drops app tools that no longer exist instead of lending them')
     assert.equal(registry.getPlugin('app-workbench').definition.serverActions!.some(action => action.id === 'app-workbench.retired'), false)
     assert.ok(registry.listPlugins(false).some(plugin => plugin.manifest.id === 'app-workbench'))
     pluginDb().prepare("UPDATE plugins SET manifest=?, digest=? WHERE id='app-workbench'").run(stored.manifest, stored.digest)

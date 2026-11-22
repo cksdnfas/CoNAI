@@ -4,6 +4,7 @@ import { requirePluginInstance, pluginTokenSchema, type PluginCaller } from './p
 import { resolvePluginMediaReference } from './pluginWorkspace'
 import { packageFile } from './pluginRegistry'
 import { pluginToken, sha256, PluginError } from './pluginStore'
+import { publicScopeRequester, type PluginPublicScope } from './pluginPublicScope'
 
 /**
  * A page's live preview: its own HTML document plus named files mapped to library/files/audio media (read with the
@@ -28,11 +29,11 @@ const MEDIA = /^(image|video|audio)\//
 function prune(now = Date.now()) {
   for (const [key, preview] of previews) if (preview.expiresAt <= now) previews.delete(key)
 }
-async function mediaFile(reference: unknown, caller: PluginCaller) {
-  const media = await resolvePluginMediaReference(reference, caller.requester)
+async function mediaFile(reference: unknown, caller: PluginCaller, scope: PluginPublicScope) {
+  const media = await resolvePluginMediaReference(reference, caller.requester, scope)
   const mimeType = media.entry.mimeType ?? ''
   if (!MEDIA.test(mimeType)) throw new PluginError('미리보기에는 이미지·영상·오디오만 연결할 수 있어.', 415)
-  if (!mimeType.startsWith('audio/') && caller.requester.accountId !== null) requireRequesterPermission(caller.requester, 'images.view')
+  if (!mimeType.startsWith('audio/') && caller.requester.accountId !== null) requireRequesterPermission(publicScopeRequester(caller.requester, scope, 'media.read'), 'images.view')
   return { media, mimeType }
 }
 /** A new preview, or with `token` the same address with new contents, so a page can redraw it as it is edited. */
@@ -45,7 +46,7 @@ export async function issuePluginPreview(instanceId: string, raw: unknown, calle
   const files = new Map<string, PreviewFile>()
   for (const [name, reference] of Object.entries(input.files)) {
     if (reference.source === 'package') { packageFile(instance.plugin.id, instance.plugin.version, reference.path); files.set(name, { source: 'package', path: reference.path }); continue }
-    const { media, mimeType } = await mediaFile(reference, caller)
+    const { media, mimeType } = await mediaFile(reference, caller, instance.publicScope)
     files.set(name, { source: 'media', reference, fingerprint: media.fingerprint, mimeType })
   }
   requirePluginInstance(instanceId, caller)
@@ -69,13 +70,13 @@ export async function resolvePluginPreview(token: string, name: string) {
   pluginTokenSchema.parse(token)
   const key = sha256(token), preview = previews.get(key)
   if (!preview || preview.expiresAt <= Date.now()) { previews.delete(key); throw new PluginError('미리보기가 만료됐어.', 410) }
-  requirePluginInstance(preview.instanceId, preview.caller)
+  const instance = requirePluginInstance(preview.instanceId, preview.caller)
   preview.expiresAt = Date.now() + PLUGIN_PREVIEW_LIMITS.ttlMs
   if (name === '' || name === 'index.html') return { kind: 'html' as const, html: preview.html }
   const file = preview.files.get(name)
   if (!file) throw new PluginError('미리보기에 없는 파일이야.', 404)
   if (file.source === 'package') return { kind: 'file' as const, filePath: packageFile(preview.pluginId, preview.version, file.path), immutable: true }
-  const { media, mimeType } = await mediaFile(file.reference, preview.caller)
+  const { media, mimeType } = await mediaFile(file.reference, preview.caller, instance.publicScope)
   if (media.fingerprint !== file.fingerprint) throw new PluginError('원본 미디어가 변경됐어. 미리보기를 다시 열어줘.', 409)
   return { kind: 'file' as const, filePath: media.filePath, mimeType }
 }

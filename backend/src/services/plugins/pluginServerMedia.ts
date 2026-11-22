@@ -12,9 +12,13 @@ import { BackgroundProcessorService } from '../backgroundProcessorService'
 import { resolveSpriteGroup } from '../sprite/spriteLibrary'
 import { assignGeneratedMediaToGroup } from '../generationTargetGroupService'
 import { generateDatedRandomFilename, getDateFolder } from '../../utils/mediaStoragePaths'
+import { publicScopeRequester, type PluginPublicScope } from './pluginPublicScope'
 
-/** Only trusted server modules receive paths. Browser clients keep short-lived, permission-checked media grants. */
-export async function callPluginServerMedia(pluginId: string, requester: McpRequester | undefined, method: string, raw: unknown, signal?: AbortSignal) {
+/**
+ * Only trusted server modules receive paths. Browser clients keep short-lived, permission-checked media grants.
+ * `publicScope`: the plugin window behind the call; a shared page lends its declared media.read / media.save.
+ */
+export async function callPluginServerMedia(pluginId: string, requester: McpRequester | undefined, method: string, raw: unknown, signal?: AbortSignal, publicScope?: PluginPublicScope) {
   const digest = getPlugin(pluginId).digest
   if (!requester) throw new PluginError('미디어 처리에는 계정이 필요해.', 403)
   const check = () => {
@@ -23,13 +27,14 @@ export async function callPluginServerMedia(pluginId: string, requester: McpRequ
   }
   check()
   if (method === 'resolve') {
-    const source = await resolvePluginMediaReference(raw, requester)
+    const source = await resolvePluginMediaReference(raw, requester, publicScope)
     check()
     return { path: source.filePath, name: source.entry.name, mimeType: source.entry.mimeType, size: source.size, fingerprint: source.fingerprint }
   }
   if (method !== 'save') throw new PluginError('알 수 없는 미디어 작업이야.')
   const input = z.object({ path: z.string().min(1).max(1000), groupPath: z.string().trim().min(1).max(200).optional() }).strict().parse(raw)
-  const authorize = () => { check(); for (const permission of ['images.view', 'images.upload', 'images.edit']) requireRequesterPermission(requester, permission) }
+  const saver = publicScopeRequester(requester, publicScope, 'media.save')
+  const authorize = () => { check(); for (const permission of ['images.view', 'images.upload', 'images.edit']) requireRequesterPermission(saver, permission) }
   authorize()
   // Restrict imports to ordinary output files underneath this package's private data folder.
   const root = pluginDataDir(pluginId), source = path.resolve(root, input.path), relative = path.relative(root, source)

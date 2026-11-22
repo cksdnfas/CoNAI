@@ -6,8 +6,10 @@ import { RuntimeJobRunner, type RuntimeJobContext } from '../runtimeJobs/runtime
 import { RuntimeJobStore, RuntimeJobConflictError, RUNTIME_JOB_TTL_MS } from '../runtimeJobs/runtimeJobStore'
 import { getPlugin } from './pluginRegistry'
 import { onPluginChanged, pluginDb, PluginError, sha256 } from './pluginStore'
+import { publicScopeRequester, scopeForPlugin, type PluginPublicScope } from './pluginPublicScope'
 
-type Params = { pluginId: string; digest: string; requester: McpRequester; inputKey: string; slot: number }
+/** `publicScope`: the plugin window that started the job; a shared page that declares `jobs` lends generation.execute. */
+type Params = { pluginId: string; digest: string; requester: McpRequester; inputKey: string; slot: number; publicScope?: PluginPublicScope }
 type Row = { plugin_id: string; owner_key: string; request_key: string; fingerprint: string; digest: string; job_id: string; expires_at: number }
 type Input = { requestId: string; data: Record<string, unknown> }
 type Invoker = (pluginId: string, data: Record<string, unknown>, requester: McpRequester, ctx: RuntimeJobContext<Params>) => Promise<unknown>
@@ -15,10 +17,10 @@ const inputs = new Map<string, Input>()
 let invoke: Invoker | undefined
 export function setPluginTaskInvoker(value: Invoker) { invoke = value }
 
-function access(pluginId: string, requester: McpRequester | undefined, digest?: string) {
+function access(pluginId: string, requester: McpRequester | undefined, digest?: string, publicScope?: PluginPublicScope) {
   const plugin = getPlugin(pluginId)
   if (!requester) throw new PluginError('플러그인 작업에는 로그인한 계정이 필요해.', 403)
-  requireRequesterPermission(requester, 'generation.execute')
+  requireRequesterPermission(publicScopeRequester(requester, scopeForPlugin(publicScope, pluginId), 'jobs'), 'generation.execute')
   if (digest && plugin.digest !== digest) throw new PluginError('플러그인 버전이 바뀌었어.', 409)
   return { plugin, requester, owner: String(requester.accountId ?? 'bootstrap') }
 }
@@ -32,18 +34,18 @@ function register() {
   if (RuntimeJobRunner.isRegistered('plugin-task')) return
   RuntimeJobRunner.register<Params, unknown>({ kind: 'plugin-task', singletonKey: p => `plugin-task:${p.slot}`, handler: async ctx => {
     await ctx.yield()
-    const { pluginId, digest, requester, inputKey } = ctx.params
+    const { pluginId, digest, requester, inputKey, publicScope } = ctx.params
     const input = inputs.get(inputKey)
     inputs.delete(inputKey)
     if (!input || !invoke) throw new PluginError('중단된 플러그인 작업은 자동 재실행하지 않아.')
-    access(pluginId, requester, digest); ctx.throwIfCancelled()
+    access(pluginId, requester, digest, publicScope); ctx.throwIfCancelled()
     const permissionCheck = setInterval(() => {
-      try { access(pluginId, requester, digest) } catch { RuntimeJobRunner.cancel(ctx.jobId) }
+      try { access(pluginId, requester, digest, publicScope) } catch { RuntimeJobRunner.cancel(ctx.jobId) }
     }, 1000)
     permissionCheck.unref()
     try {
       const result = await invoke(pluginId, input.data, requester, ctx)
-      access(pluginId, requester, digest); ctx.throwIfCancelled()
+      access(pluginId, requester, digest, publicScope); ctx.throwIfCancelled()
       if (Buffer.byteLength(JSON.stringify(result ?? null)) > 60 * 1024) throw new PluginError('작업 결과가 너무 커. 파일 참조를 반환해줘.')
       ctx.flush({ total: 100, processed: 100, succeeded: 100, phase: 'completed' })
       return result
@@ -52,8 +54,9 @@ function register() {
 }
 
 /** Background processing for trusted server modules, using the host's durable jobs and cancellation. */
-export function callPluginTask(pluginId: string, requester: McpRequester | undefined, method: string, raw: unknown) {
-  const { plugin, requester: actor, owner } = access(pluginId, requester)
+export function callPluginTask(pluginId: string, requester: McpRequester | undefined, method: string, raw: unknown, publicScope?: PluginPublicScope) {
+  const scope = scopeForPlugin(publicScope, pluginId)
+  const { plugin, requester: actor, owner } = access(pluginId, requester, undefined, scope)
   const db = pluginDb()
   if (method !== 'start') {
     const { jobId } = z.object({ jobId: z.string().uuid() }).strict().parse(raw)
@@ -84,7 +87,7 @@ export function callPluginTask(pluginId: string, requester: McpRequester | undef
     try {
       let job: ReturnType<typeof RuntimeJobRunner.start> | undefined
       for (const slot of [0, 1]) {
-        try { job = RuntimeJobRunner.start('plugin-task', { pluginId, digest: plugin.digest, requester: actor, inputKey, slot }, { requestedByAccountId: actor.accountId, total: 100 }); break }
+        try { job = RuntimeJobRunner.start('plugin-task', { pluginId, digest: plugin.digest, requester: { accountId: actor.accountId, accountType: actor.accountType }, inputKey, slot, ...(scope ? { publicScope: scope } : {}) }, { requestedByAccountId: actor.accountId, total: 100 }); break }
         catch (error) { if (!(error instanceof RuntimeJobConflictError)) throw error }
       }
       if (!job) throw new PluginError('플러그인 처리 작업 2개가 실행 중이야. 완료 후 같은 요청 ID로 다시 시도해줘.', 429)

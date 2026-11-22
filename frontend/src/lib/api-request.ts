@@ -1,5 +1,6 @@
 import { createApiFallbackError, type ApiErrorFallbackKey } from '@/i18n/api-error-fallbacks'
 import { buildApiUrl } from '@/lib/api-url'
+import { pluginLendWindow } from '@/lib/plugin-lend-window'
 
 const DEFAULT_TIMEOUT_MS = 30_000
 const LONG_RUNNING_TIMEOUT_MS = 300_000
@@ -118,6 +119,8 @@ function errorDataFromPayload(payload: ResponsePayload) {
 
 /** Execute a JSON API request with a default abort timeout and surface backend error messages. */
 export async function requestJson<T>(path: string, init?: RequestInit, options: RequestJsonOptions = {}): Promise<T> {
+  // A shared plugin page's picker is open: name its window (lib/plugin-lend-window).
+  const lendWindow = pluginLendWindow()
   const response = await fetch(buildApiUrl(path), {
     ...init,
     credentials: init?.credentials ?? 'include',
@@ -125,6 +128,7 @@ export async function requestJson<T>(path: string, init?: RequestInit, options: 
     signal: resolveRequestSignal(path, init, options),
     headers: {
       Accept: 'application/json',
+      ...(lendWindow ? { 'X-CoNAI-Plugin-Instance': lendWindow } : {}),
       ...(init?.headers ?? {}),
     },
   })

@@ -22,7 +22,7 @@ import { parseGenerationQueueRoutingTag } from '../../services/generationQueueRo
 import { assertChatNaiSampleCount, isChatMcpSource, type McpRequestContext } from '../context';
 import { normalizeMcpWorkflowInputs, parseMcpMarkedFields, requireChatWorkflowInputs } from '../../services/comfyui/comfyWorkflowInputs';
 import { validateComfyPromptData } from '../../services/prepareComfyPromptData';
-import { createMcpQueueImageGrant, createTrustedQueueImageGrant, MCP_QUEUE_IMAGE_GRANT_KEY, requireCurrentMcpKeyImagePermission } from '../../services/generation-queue/queueMcpImageGrant';
+import { createMcpQueueImageGrant, createPluginPublicQueueImageGrant, createTrustedQueueImageGrant, MCP_QUEUE_IMAGE_GRANT_KEY, requireCurrentMcpKeyImagePermission } from '../../services/generation-queue/queueMcpImageGrant';
 import { mcpGroupPathSchema, resolveMcpTargetGroup } from './mcpTargetGroup';
 import { requireMcpResourceOwner, requireMcpToolAccess } from '../toolAccess';
 import { requireContextPermission, requireRequesterPermission } from '../../middleware/featureAccess';
@@ -221,6 +221,10 @@ async function enqueueGenerationJob(context: McpRequestContext, input: McpGenera
       payload = { ...payload, [MCP_QUEUE_IMAGE_GRANT_KEY]: createMcpQueueImageGrant(context, workflow_id, payload.prompt_data as Record<string, unknown>) };
     } else if (usesComfyLibrary && !context.requester && context.keyGroup === undefined && context.source === undefined) {
       payload = { ...payload, [MCP_QUEUE_IMAGE_GRANT_KEY]: createTrustedQueueImageGrant('stdio', workflow_id, payload.prompt_data as Record<string, unknown>) };
+    } else if (usesComfyLibrary && context.requester && context.source === 'plugin' && context.pluginPublicScope
+      && !canRequesterViewImages({ accountId: context.requester.accountId, accountType: context.requester.accountType })) {
+      // A shared plugin page lent images.view for this submit; the queue re-checks the share when the job runs.
+      payload = { ...payload, [MCP_QUEUE_IMAGE_GRANT_KEY]: createPluginPublicQueueImageGrant(context.pluginPublicScope, context.requester.accountId, workflow_id, payload.prompt_data as Record<string, unknown>) };
     }
   } else {
     routing = resolveMcpGenerationRoutingInput({

@@ -1,6 +1,6 @@
 // MOSS BBox Studio: draw boxes, write the prompt of each one, and send the layout JSON to a registered ComfyUI workflow.
 // No server module: settings and the draft live in api.storage, everything else goes through native /api routes.
-import { connectPlugin } from './conai-plugin.js'
+import { appUrl, connectPlugin } from './conai-plugin.js'
 import {
   KINDS, RANDOM_OPTION, REGION_COLORS, SIZE_PRESETS, addRegion, buildLayout, buildPromptData, cloneDraft, compatibleFields, describeDraft, emptyMapping,
   emptySetup, guessFieldMapping, kindId, mappingIssues, megapixelsOf, moveRegion, nearestRatio, newDraft, normalizeBox, optionProblem, optionValue,
@@ -312,7 +312,7 @@ function renderResults() {
     const title = esc(`#${job.id} · ${job.workflowName} · 영역 ${job.regions}개 · ${job.size[0]}×${job.size[1]}`)
     // Dropping a tile only clears it from this list: a stuck job stays in the queue and images stay in the library.
     const forget = `<button type="button" class="conai-icon-button sm" data-forget="${job.id}" title="목록에서 지우기" aria-label="목록에서 지우기">${ICON.trash}</button>`
-    if (job.hashes.length) return job.hashes.map((hash) => `<div class="tile" title="${title}"><div class="conai-media" style="--ratio:${ratio}"><img src="/api/images/${hash}/thumbnail" alt="작업 #${job.id} 결과" loading="lazy"><div class="tile-actions"><button type="button" class="conai-icon-button sm" data-edit="${job.id}:${hash}" title="편집기로 불러오기" aria-label="편집기로 불러오기">${ICON.edit}</button><button type="button" class="conai-icon-button sm" data-open="${hash}" title="상세 보기" aria-label="상세 보기">${ICON.open}</button>${forget}</div></div></div>`).join('')
+    if (job.hashes.length) return job.hashes.map((hash) => `<div class="tile" title="${title}"><div class="conai-media" style="--ratio:${ratio}"><img src="${appUrl(`/api/images/${hash}/thumbnail`)}" alt="작업 #${job.id} 결과" loading="lazy"><div class="tile-actions"><button type="button" class="conai-icon-button sm" data-edit="${job.id}:${hash}" title="편집기로 불러오기" aria-label="편집기로 불러오기">${ICON.edit}</button><button type="button" class="conai-icon-button sm" data-open="${hash}" title="상세 보기" aria-label="상세 보기">${ICON.open}</button>${forget}</div></div></div>`).join('')
     const failed = job.status === 'failed' || Boolean(job.error)
     const cancelling = !TERMINAL.has(job.status) && job.cancelRequested
     const tone = failed ? 'destructive' : job.status === 'completed' ? 'ok' : TERMINAL.has(job.status) ? '' : 'warn'
@@ -412,7 +412,7 @@ async function importFromHash(hash) {
   const { data } = await call(`/api/images/${hash}`)
   applySource({
     kind: 'library', hash, name: String(data.original_file_path ?? '').split(/[\\/]/).pop() || '이미지',
-    url: `/api/images/${hash}/thumbnail`, size: [data.width, data.height], prompt: data.ai_metadata?.prompts?.prompt,
+    url: appUrl(`/api/images/${hash}/thumbnail`), size: [data.width, data.height], prompt: data.ai_metadata?.prompts?.prompt,
   })
 }
 
@@ -430,7 +430,7 @@ async function editResult(jobId, hash) {
   if (!job) return
   // The layout we sent is exact; without it (an older job) the saved image's own prompt is read like any imported image.
   if (!job.layout) { await importFromHash(hash); return }
-  applySource({ kind: 'result', hash, name: `작업 #${job.id}`, url: `/api/images/${hash}/thumbnail`, size: job.size, prompt: job.layout })
+  applySource({ kind: 'result', hash, name: `작업 #${job.id}`, url: appUrl(`/api/images/${hash}/thumbnail`), size: job.size, prompt: job.layout })
 }
 
 // ---- generation -------------------------------------------------------------------------------------------------

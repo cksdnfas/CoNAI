@@ -72,6 +72,7 @@ import {
 } from '../middleware/authMiddleware';
 import { buildAuthStatusPayload } from '../services/auth/sessionAccess';
 import { settingsService } from '../services/settingsService';
+import { pluginRouteLending } from '../middleware/pluginRouteLending';
 
 export interface RegisterAppRoutesOptions {
   uploadsDir: string;
@@ -169,6 +170,8 @@ function requireReadAccess(permissionKey: string, readPostPaths: readonly string
 /** Register API routes, runtime static directories, frontend assets, and terminal handlers. */
 export function registerAppRoutes(app: Express, options: RegisterAppRoutesOptions): RegisterAppRoutesResult {
   app.use('/api', dropRevokedWallpaperKeyLogin);
+  // Requests from a shared plugin page borrow the keys of the native routes its package declared (pluginAppRoutes).
+  app.use('/api', pluginRouteLending);
   // The audio store lives under uploads but is only served through /api/audio (audio.view), never statically.
   // Resolve the request like serve-static would, so `//audio`, `%2e%2e` or case tricks cannot reach it either.
   app.use('/uploads', (req, res, next) => {

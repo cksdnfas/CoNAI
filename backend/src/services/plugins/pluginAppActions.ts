@@ -14,8 +14,9 @@ import { RuntimeJobRunner } from '../runtimeJobs/runtimeJobRunner'
 import { RuntimeJobStore, RuntimeJobConflictError } from '../runtimeJobs/runtimeJobStore'
 import { WorkspaceService } from '../workspaceService'
 import { requireFileStoreOwner } from '../fileStoreAccess'
+import { pluginPublicScopeSchema, scopeForPlugin } from './pluginPublicScope'
 
-type Context = Pick<McpRequestContext, 'requester' | 'scopes' | 'keyId' | 'keyGroup' | 'baseUrl' | 'contentRatingLimit' | 'toolAllowlist' | 'workspace'> & { autoApply?: boolean; projectGrant?: { id: string; revision: number; write: boolean; threadId?: number; profileId?: number; bindingRevision?: string } }
+type Context = Pick<McpRequestContext, 'requester' | 'scopes' | 'keyId' | 'keyGroup' | 'baseUrl' | 'contentRatingLimit' | 'toolAllowlist' | 'workspace' | 'pluginPublicScope'> & { autoApply?: boolean; projectGrant?: { id: string; revision: number; write: boolean; threadId?: number; profileId?: number; bindingRevision?: string } }
 type Row = { id: string; owner_key: string; request_key: string; fingerprint: string; plugin_id: string; digest: string; body: string; context: string; status: PluginAppRequest['status']; job_id: string | null; expires_at: number }
 const REQUEST_LIFETIME_MS = 24 * 60 * 60_000
 const requestKey = z.string().regex(/^[a-zA-Z0-9_-]{8,100}$/)
@@ -37,7 +38,9 @@ function fresh(context: Context) {
   const opensFiles = () => { try { requireFileStoreOwner(requester); return true } catch { return false } }
   const bound = context.workspace ?? (origin.workspaces?.length === 1 && opensFiles() ? origin.workspaces[0] : undefined)
   const projectGrant = context.projectGrant ?? (bound ? { id: bound.project.id, revision: bound.project.revision, write: bound.write, threadId: origin.chatContext?.threadId, profileId: origin.chatContext?.profileId, bindingRevision: origin.chatContext ? bound.bindingRevision : undefined } : undefined)
-  context = { requester, scopes: [...context.scopes], keyId: context.keyId, keyGroup: context.keyGroup, baseUrl: context.baseUrl, contentRatingLimit: context.contentRatingLimit, toolAllowlist: context.toolAllowlist ? [...context.toolAllowlist] : undefined, projectGrant }
+  // The window's page marker survives storage as plain data; what it lends is re-derived at every check.
+  const pluginPublicScope = context.pluginPublicScope ? pluginPublicScopeSchema.parse(context.pluginPublicScope) : undefined
+  context = { requester, scopes: [...context.scopes], keyId: context.keyId, keyGroup: context.keyGroup, baseUrl: context.baseUrl, contentRatingLimit: context.contentRatingLimit, toolAllowlist: context.toolAllowlist ? [...context.toolAllowlist] : undefined, projectGrant, ...(pluginPublicScope ? { pluginPublicScope } : {}) }
   owner(context)
   if (projectGrant) {
     const actor = requireFileStoreOwner(context.requester)
@@ -62,6 +65,8 @@ function authorize(pluginId: string, tool: string, context: Context, args: Recor
   const plugin = getPlugin(pluginId), scope = pluginAppToolScope(tool)
   if (!scope) throw new PluginError(`플러그인 실행 문맥에서 지원하지 않는 앱 도구야: ${tool}`, 400)
   context = fresh(tool.startsWith('workspace_') ? context : { ...context, workspace: undefined, projectGrant: undefined })
+  // A window's marker lends only for its own plugin.
+  if (context.pluginPublicScope && context.pluginPublicScope.pluginId !== pluginId) context = { ...context, pluginPublicScope: undefined }
   // Preserve the calling account/key/profile's scope and tool restrictions.
   if (!context.scopes.includes(scope) || (context.toolAllowlist && !context.toolAllowlist.includes(tool))) throw new PluginError('요청 주체에게 허용되지 않은 앱 기능이야.', 403)
   requireMcpToolAccess({ ...context, source: 'plugin' }, tool, args)
@@ -104,7 +109,9 @@ export async function runPluginServerAction(value: unknown, context: Context, si
   if (!action) throw new PluginError('등록된 서버 작업이 없어.', 404)
   const validated = validateChatPageArguments(action.schema, args.arguments) as Record<string, unknown>
   const resolved = action.arguments ? inputValue(action.arguments, validated) as Record<string, unknown> : validated
-  return runPluginAppTool(args.pluginId, { tool: action.tool, arguments: resolved, requestId: args.requestId }, context, action.label, signal)
+  // The action's tool is lent on a shared page only through this manifest action (its fixed argument template).
+  const scope = scopeForPlugin(context.pluginPublicScope, args.pluginId)
+  return runPluginAppTool(args.pluginId, { tool: action.tool, arguments: resolved, requestId: args.requestId }, { ...context, pluginPublicScope: scope && { ...scope, action: action.id } }, action.label, signal)
 }
 export async function runPluginAppTool(pluginId: string, value: unknown, context: Context, label?: string, signal?: AbortSignal) {
   signal?.throwIfAborted()
@@ -232,6 +239,6 @@ export function cancelPluginAppRequest(id: string, context: Context, admin = fal
 }
 export function pluginInstanceAppContext(id: string, caller: PluginCaller, baseUrl: string, review = false) {
   const instance = requirePluginInstance(id, caller)
-  const context = pluginBrowserContext(caller, baseUrl, review)
+  const context: Context = { ...pluginBrowserContext(caller, baseUrl, review), pluginPublicScope: instance.publicScope }
   return { pluginId: instance.plugin.id, context }
 }

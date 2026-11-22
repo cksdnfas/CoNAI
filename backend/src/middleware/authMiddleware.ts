@@ -177,6 +177,15 @@ function withWallpaperRuntimeImageView(req: Request, permissionKeys: string[]): 
   return [...permissionKeys, IMAGE_VIEW_PERMISSION_KEY];
 }
 
+/**
+ * Keys a shared plugin page lends to this one request (middleware/pluginRouteLending), added on top of the account's
+ * own; they never enter the session's access cache.
+ */
+function withPluginLentKeys(req: Request, permissionKeys: string[]): string[] {
+  const lent = req.pluginLentKeys?.() ?? [];
+  return lent.length ? [...new Set([...permissionKeys, ...lent])] : permissionKeys;
+}
+
 /** Resolve the current request as bootstrap, authenticated, or anonymous access. */
 function resolveRequestPermissionKeys(req: Request): { permissionKeys: string[]; authenticated: boolean } {
   const hasCredentials = hasConfiguredAuth();
@@ -192,7 +201,7 @@ function resolveRequestPermissionKeys(req: Request): { permissionKeys: string[];
   }
 
   if (req.session?.authenticated === true) {
-    const permissionKeys = refreshSessionAccess(req);
+    const permissionKeys = withPluginLentKeys(req, refreshSessionAccess(req));
     return { permissionKeys, authenticated: req.session.authenticated === true };
   }
 
@@ -227,7 +236,7 @@ export const requirePermission = (permissionKey: string) => (req: Request, res: 
     res.status(401).json({ error: 'Unauthorized' });
     return;
   }
-  if (permissionKeys.includes(permissionKey)) {
+  if (permissionKeys.includes(permissionKey) || withPluginLentKeys(req, []).includes(permissionKey)) {
     next();
     return;
   }

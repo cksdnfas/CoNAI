@@ -5,8 +5,11 @@ import type { WorkspaceOperation } from './workspace'
 import type { PluginPackageReview } from './pluginAuthoring'
 import type { ChatJudgeItemResult, ChatJudgePreset } from './chatJudge'
 
-/** Legacy manifest metadata; installed plugins use native account permissions instead of capability grants. */
-export type PluginCapability = 'files.read' | 'files.write' | 'files.media' | 'workspace.read' | 'workspace.write' | 'workspace.media' | 'media.process' | 'server'
+/**
+ * Host features a package uses. Pages run with the viewer's own permissions; on a page an administrator shared, the
+ * declared features (and the declared `appTools`) are lent to every viewer, nothing beyond them.
+ */
+export type PluginCapability = 'files.read' | 'files.write' | 'files.media' | 'workspace.read' | 'workspace.write' | 'workspace.media' | 'media.process' | 'media.read' | 'media.save' | 'media.pick' | 'jobs' | 'server'
 /** Icons a page may name as `icon`; the host draws its own set, never package files. Append only: installed manifests keep their names. */
 export const PLUGIN_PAGE_ICONS = [
   'audio-lines', 'book-open', 'bot', 'box', 'braces', 'calendar', 'chart-column', 'code', 'database', 'dices', 'file-text', 'film', 'fish',
@@ -50,6 +53,8 @@ export type PluginManifest = {
   apiVersion: 1; id: string; name: string; version: string; description: string
   capabilities: PluginCapability[]; pages: PluginPage[]
   appTools?: string[]; serverActions?: PluginServerAction[]
+  /** Native REST route ids from the host's table (backend pluginAppRoutes) the package calls; lent on a shared page. */
+  appRoutes?: string[]
   /** Optional server module; independent of legacy capability declarations. */
   server?: { entry: string }
   /** Blocks and Generate-bar buttons on the generation layouts. */
@@ -99,6 +104,8 @@ export type InstalledPlugin = {
   bundledUpdated?: boolean
   /** Page ids an administrator shared with every signed-in account (`/public/ext/<plugin>/<page>`); absent when none. */
   publicPages?: string[]
+  /** Shared pages whose share predates the package's current declarations, so they lend nothing until shared again. */
+  publicLendStale?: string[]
 }
 /** A shared plugin page, as the access page lists it. */
 export type PublicPluginPage = { pluginId: string; pageId: string; title: string; pluginName: string; icon?: PluginPageIcon }

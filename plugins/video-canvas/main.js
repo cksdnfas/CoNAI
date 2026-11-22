@@ -1,5 +1,5 @@
 import { connectPlugin } from './conai-plugin.js'
-import { $, esc, names, ports, isTerminal, fillIcons } from './util.mjs'
+import { $, esc, names, ports, isTerminal, fillIcons, thumbUrl } from './util.mjs'
 import { s, ctx, cuts, assistant } from './state.mjs'
 import { notice, initToasts, dockToasts } from './toast.mjs'
 import { initMenu, showMenu } from './menu.mjs'
@@ -31,7 +31,7 @@ let launchName = null
 function renderLaunch() {
   $('launch').hidden = !s.launch
   if (!s.launch) return
-  $('launch').innerHTML = `<span class="conai-media launch-thumb"><img src="/api/images/${encodeURIComponent(s.launch.compositeHash)}/thumbnail" alt=""></span><b>${esc(launchName ?? names.image)}</b><select id="launch-target" aria-label="이미지 가져올 곳"><option value="">새 이미지 노드</option>${cuts().flatMap(cut => ['start', 'end', 'ref_image'].map(port => `<option value="${esc(`${cut.id}|${port}`)}">${esc(cut.data.name)} · ${ports[port]}</option>`)).join('')}</select><button data-launch="import" class="primary" ${s.project ? '' : 'disabled'}>가져오기</button><button data-launch="dismiss" class="ghost">그만두기</button>${s.project ? '' : '<span class="muted">프로젝트를 먼저 골라줘.</span>'}`
+  $('launch').innerHTML = `<span class="conai-media launch-thumb"><img src="${thumbUrl(s.launch.compositeHash)}" alt=""></span><b>${esc(launchName ?? names.image)}</b><select id="launch-target" aria-label="이미지 가져올 곳"><option value="">새 이미지 노드</option>${cuts().flatMap(cut => ['start', 'end', 'ref_image'].map(port => `<option value="${esc(`${cut.id}|${port}`)}">${esc(cut.data.name)} · ${ports[port]}</option>`)).join('')}</select><button data-launch="import" class="primary" ${s.project ? '' : 'disabled'}>가져오기</button><button data-launch="dismiss" class="ghost">그만두기</button>${s.project ? '' : '<span class="muted">프로젝트를 먼저 골라줘.</span>'}`
 }
 function render() {
   const open = Boolean(s.project)

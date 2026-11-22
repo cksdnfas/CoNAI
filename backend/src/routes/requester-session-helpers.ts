@@ -2,6 +2,7 @@ import type { Request } from 'express';
 import { hasAdminAccess } from '../middleware/authMiddleware';
 import type { McpRequester } from '../mcp/context';
 import { hasConfiguredAuth } from '../services/auth/sessionAccess';
+import { withRequesterPermissionGrant } from '../middleware/featureAccess';
 
 const REQUESTER_ACCOUNT_TYPES = ['admin', 'guest'] as const;
 type RequesterAccountType = (typeof REQUESTER_ACCOUNT_TYPES)[number];
@@ -25,7 +26,10 @@ export function getRequesterAccountType(req: Request) {
 export function getRequester(req: Request): McpRequester {
   const accountId = getRequesterAccountId(req);
   const accountType = getRequesterAccountType(req);
-  return { accountId, accountType: accountType ?? (accountId === null && !hasConfiguredAuth() ? 'admin' : null) };
+  const requester = { accountId, accountType: accountType ?? (accountId === null && !hasConfiguredAuth() ? 'admin' : null) };
+  // A shared plugin page's lent route keys (middleware/pluginRouteLending) reach the services this request calls.
+  const lent = req.pluginLentKeys;
+  return lent ? withRequesterPermissionGrant(requester, () => [...lent()]) : requester;
 }
 
 /** Check whether the current request is attached to an admin account, re-read so a demoted admin loses access at once. */

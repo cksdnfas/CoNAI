@@ -33,7 +33,8 @@ import { clearGenerationQueueLiveProgress, setGenerationQueueLiveProgress } from
 import { publishQueueJobEvent, publishQueueJobProgressEvent } from '../runtime-events/runtimeEventPublishers'
 import { requireMcpToolAccess } from '../../mcp/toolAccess'
 import { requireRequesterPermission } from '../../middleware/featureAccess'
-import { requireMcpQueueImageGrant } from './queueMcpImageGrant'
+import { isPluginPublicQueueImageGrant, requireMcpQueueImageGrant } from './queueMcpImageGrant'
+import { canRequesterViewImages } from '../../middleware/imageAccess'
 import { isChatMcpSource, type McpRequester, type McpRequestContext } from '../../mcp/context'
 import { parseStoredRequestPayload } from './queuePayloads'
 import { getUserSettingsDb } from '../../database/userSettingsDb'
@@ -205,8 +206,11 @@ async function executeComfyUiJob(job: GenerationQueueJobRecord, assignedServer: 
   const comfyService = createComfyUIService(apiEndpoint, assignedServer)
   const markedFields = workflow.marked_fields ? JSON.parse(workflow.marked_fields) : []
   if (validateComfyPromptData(markedFields, payload.promptData)) {
-    if (job.requested_by_account_id == null && payload.mcpImageGrant !== undefined) {
+    if (job.requested_by_account_id == null && payload.mcpImageGrant !== undefined && !isPluginPublicQueueImageGrant(payload.mcpImageGrant)) {
       requireMcpQueueImageGrant(payload.mcpImageGrant, workflow.id, payload.promptData)
+    } else if (isPluginPublicQueueImageGrant(payload.mcpImageGrant) && !(requester && canRequesterViewImages(requester))) {
+      // Submitted from a shared plugin page that lent images.view: valid while that page still lends it.
+      requireMcpQueueImageGrant(payload.mcpImageGrant, workflow.id, payload.promptData, job.requested_by_account_id ?? null)
     } else {
       requireRequesterPermission(requester, 'images.view')
     }

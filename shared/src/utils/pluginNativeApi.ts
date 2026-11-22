@@ -30,11 +30,11 @@ export function pluginNativeApiPath(input: string, origins: readonly string[]): 
 export function pluginNativeApiHeaders(input: Record<string, string> = {}): Headers {
   const headers = new Headers(input)
   for (const name of headers.keys()) {
-    if (/^(?:authorization|proxy-authorization|cookie|host|origin|referer|forwarded|connection|content-length|x-conai-plugin-call)$|^(?:x-forwarded-|sec-)/i.test(name)) throw new Error('인증·연결 헤더는 앱이 관리해.')
+    if (/^(?:authorization|proxy-authorization|cookie|host|origin|referer|forwarded|connection|content-length|x-conai-plugin-call|x-conai-plugin-instance)$|^(?:x-forwarded-|sec-)/i.test(name)) throw new Error('인증·연결 헤더는 앱이 관리해.')
   }
   return headers
 }
 
 /** No plugin-specific deadline; callers may set one and can always cancel. */
 export const PLUGIN_REQUEST_TIMEOUT_MS = 0
-export const PLUGIN_SDK_FEATURES = ['app.fetch', 'app.cancel', 'app.wait', 'media.open', 'preview', 'storage', 'events', 'navigation', 'request.abort', 'errors.structured', 'llm.asset', 'llm.profile', 'llm.judge', 'llm.decide', 'llm.measure', 'llm.room', 'llm.forgetRooms', 'llm.discard', 'page.form', 'launch.image', 'pickMedia', 'generationPresets.read', 'skills.section', 'skills.list'] as const
+export const PLUGIN_SDK_FEATURES = ['app.fetch', 'app.url', 'app.cancel', 'app.wait', 'media.open', 'preview', 'storage', 'events', 'navigation', 'request.abort', 'errors.structured', 'llm.asset', 'llm.profile', 'llm.judge', 'llm.decide', 'llm.measure', 'llm.room', 'llm.forgetRooms', 'llm.discard', 'page.form', 'launch.image', 'pickMedia', 'generationPresets.read', 'skills.section', 'skills.list'] as const

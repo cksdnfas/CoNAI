@@ -19,6 +19,7 @@ import { callPluginServerMedia } from './pluginServerMedia'
 import { callPluginServerNative } from './pluginServerNative'
 import { callPluginServerChat } from './pluginServerChat'
 import type { RuntimeJobContext } from '../runtimeJobs/runtimeJobRunner'
+import { scopeForPlugin, type PluginPublicScope } from './pluginPublicScope'
 
 /**
  * Optional server modules (`server.entry`): one worker thread per enabled plugin,
@@ -35,7 +36,8 @@ const NOTIFY_TIMEOUT_MS = 10_000
 const CRASH_WINDOW_MS = 5 * 60_000
 const CRASH_LIMIT = 3
 
-type Invocation = { requester: McpRequester | undefined; baseUrl?: string; workspace?: McpRequestContext['workspace']; signal?: AbortSignal; job?: RuntimeJobContext }
+/** `publicScope`: the plugin window behind the call (its own plugin only); a shared page lends its declarations to it. */
+type Invocation = { requester: McpRequester | undefined; baseUrl?: string; workspace?: McpRequestContext['workspace']; signal?: AbortSignal; job?: RuntimeJobContext; publicScope?: PluginPublicScope }
 type Waiting = { resolve: (value: unknown) => void; reject: (error: Error) => void; timer: NodeJS.Timeout | undefined; invocation: string; controller: AbortController; cleanup: () => void }
 type Server = {
   pluginId: string; digest: string; worker: Worker | null
@@ -244,6 +246,8 @@ async function answerCall(server: Server, message: { id: number; method: string;
     // A delayed handler must never inherit the enabling administrator after its caller's lease ended.
     if (message.invocation && !invocation) throw new PluginError('호출 문맥이 만료됐어. 새 요청에서 다시 호출해줘.', 410)
     const requester = invocation ? invocation.requester : backgroundRequester(server.pluginId)
+    // Hooks and the module's background work never carry a window, so they never borrow a shared page's keys.
+    const publicScope = scopeForPlugin(invocation?.publicScope, server.pluginId)
     if (message.method === 'background.account') {
       // Which account the module's own calls run as, so it can keep per-account data apart from them.
       reply({ value: accountOf(backgroundRequester(server.pluginId)) })
@@ -251,11 +255,11 @@ async function answerCall(server: Server, message: { id: number; method: string;
       reply({ value: await callPluginLlm(server.pluginId, requester, message.method.slice(4), message.params) })
     } else if (message.method.startsWith('jobs.')) {
       if (invocation?.job && message.method === 'jobs.start') throw new PluginError('작업 안에서 새 작업을 시작할 수 없어.')
-      reply({ value: callPluginTask(server.pluginId, requester, message.method.slice(5), message.params) })
+      reply({ value: callPluginTask(server.pluginId, requester, message.method.slice(5), message.params, publicScope) })
     } else if (message.method.startsWith('media.')) {
-      reply({ value: await callPluginServerMedia(server.pluginId, requester, message.method.slice(6), message.params, invocation?.signal) })
+      reply({ value: await callPluginServerMedia(server.pluginId, requester, message.method.slice(6), message.params, invocation?.signal, publicScope) })
     } else if (message.method === 'app.fetch') {
-      reply({ value: await callPluginServerNative(requester, message.params, invocation?.signal) })
+      reply({ value: await callPluginServerNative(requester, message.params, invocation?.signal, publicScope) })
     } else if (message.method.startsWith('generationPresets.') || message.method.startsWith('skills.')) {
       reply({ value: callPluginServerChat(requester, message.method, message.params) })
     } else if (message.method === 'job.progress') {
@@ -270,9 +274,9 @@ async function answerCall(server: Server, message: { id: number; method: string;
     } else if (message.method === 'tool') {
       const name = String(message.params.name ?? '')
       const args = message.params.arguments && typeof message.params.arguments === 'object' && !Array.isArray(message.params.arguments) ? message.params.arguments as Record<string, unknown> : {}
-      reply({ value: await callTrustedAppTool(requester, name, args, invocation?.baseUrl, invocation?.workspace, invocation?.signal) })
+      reply({ value: await callTrustedAppTool(requester, name, args, invocation?.baseUrl, invocation?.workspace, invocation?.signal, publicScope) })
     } else if (message.method === 'tools') {
-      const tools = await trustedAppToolDefinitions(requester, invocation?.baseUrl, invocation?.workspace)
+      const tools = await trustedAppToolDefinitions(requester, invocation?.baseUrl, invocation?.workspace, publicScope)
       reply({ value: tools.map(tool => ({ name: tool.name, description: tool.description ?? '', inputSchema: tool.inputSchema })) })
     } else reply({ error: `Unknown call: ${message.method}` })
   } catch (error) {
@@ -477,12 +481,13 @@ function invoke(pluginId: string, kind: 'hook' | 'tool' | 'request' | 'job', nam
 
 const accountOf = (requester: McpRequester | undefined) => requester ? { id: requester.accountId, type: requester.accountType } : null
 
+// A job a plugin window started keeps that window's page, so a shared page's declarations still apply inside it.
 setPluginTaskInvoker((pluginId, data, requester, job) => invoke(pluginId, 'job', '', data,
-  { account: accountOf(requester), jobId: job.jobId }, { requester, job }, undefined, job.signal))
+  { account: accountOf(requester), jobId: job.jobId }, { requester, job, publicScope: scopeForPlugin(job.params.publicScope, pluginId) }, undefined, job.signal))
 
 /** A plugin page's `api.server(body)`: the module's `onRequest({ body, account, page })`. */
-export async function requestPluginServer(pluginId: string, body: unknown, requester: McpRequester | undefined, page: Record<string, unknown>, baseUrl?: string, workspace?: McpRequestContext['workspace'], signal?: AbortSignal) {
-  return invoke(pluginId, 'request', '', { body, account: accountOf(requester), page }, { account: accountOf(requester) }, { requester, baseUrl, workspace }, undefined, signal)
+export async function requestPluginServer(pluginId: string, body: unknown, requester: McpRequester | undefined, page: Record<string, unknown>, baseUrl?: string, workspace?: McpRequestContext['workspace'], signal?: AbortSignal, publicScope?: PluginPublicScope) {
+  return invoke(pluginId, 'request', '', { body, account: accountOf(requester), page }, { account: accountOf(requester) }, { requester, baseUrl, workspace, publicScope: scopeForPlugin(publicScope, pluginId) }, undefined, signal)
 }
 
 /** Text, an MCP result as is (`{ content: [...] }`), or any other value as JSON. */
@@ -490,10 +495,10 @@ function toolResult(value: unknown): PluginServerToolResult {
   if (value && typeof value === 'object' && Array.isArray((value as { content?: unknown }).content)) return value as PluginServerToolResult
   return { content: [{ type: 'text', text: typeof value === 'string' ? value : JSON.stringify(value ?? null, null, 2) }] }
 }
-setPluginServerToolInvoker(async (tool, args, requester, signal, run) => {
+setPluginServerToolInvoker(async (tool, args, requester, signal, run, publicScope) => {
   try {
     if (signal?.aborted) throw new PluginError('취소됐어.', 499)
-    return toolResult(await invoke(tool.pluginId, 'tool', tool.localName, args, { account: accountOf(requester), tool: tool.name, ...(run ? { run } : {}) }, { requester }, undefined, signal))
+    return toolResult(await invoke(tool.pluginId, 'tool', tool.localName, args, { account: accountOf(requester), tool: tool.name, ...(run ? { run } : {}) }, { requester, publicScope: scopeForPlugin(publicScope, tool.pluginId) }, undefined, signal))
   } catch (error) {
     return { isError: true, content: [{ type: 'text', text: error instanceof Error ? error.message : String(error) }] }
   }

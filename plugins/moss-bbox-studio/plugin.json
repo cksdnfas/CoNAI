@@ -1,5 +1,7 @@
 {
-  "apiVersion": 1, "id": "moss-bbox-studio", "name": "MOSS BBox Studio", "version": "1.1.2",
+  "apiVersion": 1, "id": "moss-bbox-studio", "name": "MOSS BBox Studio", "version": "1.1.3",
+  "capabilities": ["media.pick"],
+  "appRoutes": ["images.read", "images.extract-metadata", "generation-queue", "generation-history.read", "workflows.read", "custom-dropdown-lists.read"],
   "description": "MOSS-Image 레이아웃 프롬프트를 영역 박스로 만들고 고쳐서, 등록한 ComfyUI 워크플로우로 생성 요청해.",
   "pages": [{
     "id": "studio", "title": "MOSS BBox Studio", "entry": "index.html", "icon": "layout-dashboard", "accepts": [], "opensImages": { "prompt": "^\\s*\\{[\\s\\S]*(?:\"items\"\\s*:\\s*\\[|\"summary\"\\s*:\\s*\\{)[\\s\\S]*\\}\\s*$" },

@@ -76,7 +76,19 @@ export function PluginManagement({ assistantPage, pageContext }: { assistantPage
     const { manifest } = plugin
     await pluginRequest(`/${manifest.id}/enabled`, 'PUT', { enabled })
   })
-  // A shared page opens at /public/ext/… for every signed-in account; its code still runs with each viewer's permissions.
+  // A shared page opens at /public/ext/… for every signed-in account and lends what its package declares (appTools,
+  // server actions, capabilities) to each viewer; everything else still runs with the viewer's own permissions.
+  const lentFeatures = (plugin: InstalledPlugin) => [...(plugin.manifest.appTools ?? []), ...(plugin.manifest.appRoutes ?? []), ...(plugin.manifest.serverActions ?? []).map((action) => action.tool), ...plugin.manifest.capabilities.filter((capability) => capability !== 'server')]
+    .filter((name, index, all) => all.indexOf(name) === index)
+  const shareTip = (plugin: InstalledPlugin) => {
+    const lent = lentFeatures(plugin)
+    return (
+      <>
+        <span className="block">{t({ ko: '공용 페이지: 로그인한 누구나 열 수 있어', en: 'Shared page: any signed-in account can open it' })}</span>
+        {lent.length ? <span className="block font-mono font-normal text-muted-foreground">{t({ ko: '권한 없이 쓰는 기능', en: 'Usable without own permission' })}: {lent.join(', ')}</span> : null}
+      </>
+    )
+  }
   const publicPageUrl = (pluginId: string, pageId: string) => `${window.location.origin}${window.location.pathname}#/public/ext/${pluginId}/${pageId}`
   const setPagePublic = (plugin: InstalledPlugin, pageId: string, value: boolean) => run(async () => {
     await setPluginPagePublic(plugin.manifest.id, pageId, value)
@@ -321,7 +333,8 @@ export function PluginManagement({ assistantPage, pageContext }: { assistantPage
                       <>
                         {page.accepts.length ? <span className="text-xs">{page.accepts.join(' ')}</span> : null}
                         {isAdmin && opened.publicPages?.includes(page.id) ? <IconButton size="icon-sm" variant="ghost" label={t({ ko: '공용 주소 복사', en: 'Copy shared address' })} onClick={() => void copyPublicPageUrl(opened.manifest.id, page.id)}><Link2 /></IconButton> : null}
-                        {isAdmin ? <Tip content={t({ ko: '공용 페이지: 로그인한 누구나 열 수 있어', en: 'Shared page: any signed-in account can open it' })}><span className="inline-flex"><Switch size="sm" checked={!!opened.publicPages?.includes(page.id)} disabled={busy} aria-label={t({ ko: '{name} 공용 페이지', en: 'Share {name}' }, { name: page.title })} onCheckedChange={(value) => void setPagePublic(opened, page.id, value)} /></span></Tip> : null}
+                        {isAdmin && opened.publicLendStale?.includes(page.id) ? <IconButton size="icon-sm" variant="ghost" className="text-destructive" disabled={busy} label={t({ ko: '업데이트로 기능 목록이 바뀌어서 공용 사용자에게 멈췄어. 눌러서 다시 공개해', en: 'An update changed what this page uses, so sharing it lends nothing. Click to share again' })} onClick={() => void setPagePublic(opened, page.id, true)}><TriangleAlert /></IconButton> : null}
+                        {isAdmin ? <Tip content={shareTip(opened)}><span className="inline-flex"><Switch size="sm" checked={!!opened.publicPages?.includes(page.id)} disabled={busy} aria-label={t({ ko: '{name} 공용 페이지', en: 'Share {name}' }, { name: page.title })} onCheckedChange={(value) => void setPagePublic(opened, page.id, value)} /></span></Tip> : null}
                         <IconButton size="icon-sm" variant="ghost" disabled={!opened.enabled || !!pageContext?.blocked} label={pageContext?.blocked ?? t({ ko: '열기', en: 'Open' })} onClick={() => navigate(`/ext/${opened.manifest.id}/${page.id}${pageContext?.search ? `?${pageContext.search}` : ''}`)}><ExternalLink /></IconButton>
                       </>
                     )}
