@@ -209,7 +209,11 @@ node scripts/build-plugin.mjs --local my-plugin
 | `generation-history.read` | `GET /api/generation-history`, `/<id>`, `/<id>/<file·thumbnail·image·request>`(보는 계정 기록만) |
 | `generation-queue` | `POST /api/generation-queue`(ComfyUI만), `GET /<id>`, `POST /<id>/cancel`(자기 작업만) |
 
-목록 화면·검색·통계(`/api/images/count`, `/random`, `/semantic-search` 등)는 표에 없습니다. 라이브러리 탐색이 필요하면 `appTools`의 `search_images` 또는 `capabilities`의 `media.pick`(호스트 선택기)을 씁니다. 개인 채팅·세션·작업의 계정 경계와 인스턴스 공용 파일함의 정책은 [보안과 권한](./SECURITY_AND_PERMISSIONS.md)을 따릅니다.
+목록 화면·검색·통계(`/api/images/count`, `/random`, `/semantic-search` 등)는 표에 없습니다. 라이브러리 탐색이 필요하면 `appTools`의 `search_images` 또는 `capabilities`의 `media.pick`(호스트 선택기)을 씁니다.
+
+오디오도 같습니다. 빌려주는 REST는 재생 파일(`audio.candidate-file`)뿐이고, 프로젝트·효과음·후보 목록과 후보 상세 경로(`/api/audio/projects`, `/api/audio/groups`, `/api/audio/candidates/<id>` 등)는 표에 없습니다. 보는 계정이 음원을 고르게 하려면 `appTools`에 `list_audio_groups`·`list_audio_candidates`(필요하면 `list_audio_projects`·`get_audio_candidate`)를 적거나, 플러그인이 저장해 둔 후보 ID를 씁니다. `capabilities`에 `audio.read` 같은 값은 없습니다.
+
+개인 채팅·세션·작업의 계정 경계와 인스턴스 공용 파일함의 정책은 [보안과 권한](./SECURITY_AND_PERMISSIONS.md)을 따릅니다.
 
 ## 5. 내부 이미지·영상·오디오 사용하기
 
@@ -222,6 +226,16 @@ node scripts/build-plugin.mjs --local my-plugin
 3. 프로젝트에는 `{source:'library', compositeHash}`, `{source:'files', fileId}`, `{source:'audio', candidateId}` 같은 안정된 참조를 저장합니다. 만료되는 재생 URL과 원본 절대 경로를 영구 참조로 사용하지 않습니다.
 4. 신뢰된 서버 모듈은 `conai.media.resolve(reference)`로 현재 권한에 맞는 원본과 `fingerprint`를 얻습니다. 반환된 경로는 서버 내부에만 두고 원본 복사·사용 전후 및 결과 등록 전에 변경 여부를 검사합니다. 이 함수 자체가 원본 복사나 원본 버전 고정을 수행하지는 않습니다.
 5. 처리 결과는 플러그인 데이터 폴더에 만든 뒤 `conai.media.save({path, groupPath?})`로 기존 라이브러리에 등록합니다. 원본을 보존하고 결과와 사용한 원본 참조·리비전을 연결합니다.
+
+화면에서 재생할 주소는 참조 종류마다 다르게 만듭니다. 공용 페이지에서도 같은 방식이 그대로 동작합니다.
+
+| 참조 | 화면 주소 | 공용 페이지 선언 |
+| --- | --- | --- |
+| `{source:'library', compositeHash}` | `api.app.url('/api/images/<hash>/file')`(썸네일은 `/thumbnail`) | `appRoutes`: `images.read` |
+| `{source:'audio', candidateId}` | `api.app.url('/api/audio/candidates/<id>/file')` | `appRoutes`: `audio.candidate-file` |
+| 앱 도구 결과의 미디어 | `api.media.open(artifactId)` → `{url, expiresAt, mimeType, name}` | `capabilities`: `media.read` |
+
+`api.media.open`은 앱 도구 결과에 들어 있는 `artifact_id`만 받습니다. 후보 ID·해시·파일 ID를 넘기면 실패합니다. 오디오 후보를 이 방식으로 열려면 `get_audio_download({candidate_id})` 결과의 `artifact.artifact_id`를 쓰고 `appTools`에 `get_audio_download`를 적습니다. 저장해 둔 참조를 재생할 때는 위 표의 앱 주소가 더 단순합니다. 경로 문자열을 `src`에 그대로 넣으면 공용 페이지에서 권한을 빌리지 못하니 항상 `api.app.url`로 감쌉니다.
 
 서버의 `conai.media`와 브라우저의 `api.media.open`을 혼동하지 마세요. `resolve`는 현재 계정의 해당 소재 조회 권한을 검사하며, `save`는 `images.view`, `images.upload`, `images.edit`를 요구합니다. `save`의 `path`는 해당 패키지 데이터 폴더 내부 상대 경로이고 링크·경로 탈출·크기 제한 검사를 거칩니다. 세부 형식과 한도는 [Server processing jobs and internal media](../../plugins/README.md#server-processing-jobs-and-internal-media)에 있습니다.
 
