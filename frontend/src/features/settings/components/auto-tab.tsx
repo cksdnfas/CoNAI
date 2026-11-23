@@ -59,7 +59,7 @@ export function AutoTab({
   return (
     <div className="space-y-8">
       <SettingsContents groups={[{ id: 'runtime', label: t({ ko: 'AI 런타임', en: 'AI runtime' }) }, { id: 'kaloscope', label: 'Kaloscope' }, { id: 'tagger', label: t({ ko: '태거', en: 'Tagger' }) }, { id: 'embedding', label: t({ ko: '의미 검색', en: 'Semantic search' }) }, { id: 'ratings', label: t({ ko: '평가', en: 'Ratings' }) }]} />
-      <section data-settings-group="runtime">
+      <section data-settings-group="runtime" className="scroll-mt-36">
         <AiRuntimeSettingsCard
           draftLocked={draftLocked}
           heading={t({ ko: 'AI 런타임', en: 'AI runtime' })}
@@ -85,7 +85,7 @@ export function AutoTab({
         />
       </section>
 
-      <section data-settings-group="kaloscope">
+      <section data-settings-group="kaloscope" className="scroll-mt-36">
         <KaloscopeSettingsCard
           draftLocked={draftLocked}
           heading="Kaloscope"
@@ -98,7 +98,7 @@ export function AutoTab({
         />
       </section>
 
-      <section data-settings-group="tagger">
+      <section data-settings-group="tagger" className="scroll-mt-36">
         <fieldset disabled={draftLocked} className="contents"><TaggerSettingsCard
           heading={t({ ko: '태거', en: 'Tagger' })}
           actions={(
@@ -113,7 +113,7 @@ export function AutoTab({
         /></fieldset>
       </section>
 
-      <section data-settings-group="embedding">
+      <section data-settings-group="embedding" className="scroll-mt-36">
         <fieldset disabled={draftLocked} className="contents"><EmbeddingSettingsCard
           heading="임베딩 · EmbeddingGemma 2"
           actions={<SectionDirtyBadge dirty={hasEmbeddingChanges} />}
@@ -123,7 +123,7 @@ export function AutoTab({
         /></fieldset>
       </section>
 
-      <section data-settings-group="ratings">
+      <section data-settings-group="ratings" className="scroll-mt-36">
         <RatingWeightSettingsCard
           draftLocked={draftLocked}
           heading={t({ ko: '평가 가중치', en: 'Rating weights' })}

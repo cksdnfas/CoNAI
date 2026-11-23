@@ -40,6 +40,7 @@ export function VideoOptimizationTab({
   return (
     <RowGroup
       data-settings-group="video-optimization"
+      className="scroll-mt-36"
       heading={<>{t({ ko: '영상 저장', en: 'Video saving' })} <FieldInfo>{t({ ko: 'H.264 MP4로 저장하고, 원본 크기는 유지해. 원본은 따로 남기지 않아.', en: 'Save as H.264 MP4, keep the original dimensions, and do not keep a separate original copy.' })}</FieldInfo></>}
       actions={<SectionDirtyBadge dirty={hasChanges} />}
     >
