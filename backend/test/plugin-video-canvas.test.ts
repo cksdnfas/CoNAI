@@ -6,7 +6,7 @@ import fs from 'node:fs'
 import { randomUUID } from 'node:crypto'
 import { applyOps, buildDirector, checkCut, continuationEdges, continuationPort, continuationRoom, generationRequest, isContinuation, labelTable, mediaItems, newProject, normalizeRef, profilePublication, renameContinuation, resolvePrompt, resultHash, roleOf, unusedReference } from '../../plugins/video-canvas/domain.mjs'
 import { activate, createStore, unwrap } from '../../plugins/video-canvas/server.mjs'
-import { createAssistantState, createRefreshQueue, excerpt, rejectedMessage } from '../../plugins/video-canvas/assistant-state.mjs'
+import { createAssistantState, createRefreshQueue, excerpt, projectRows, rejectedMessage } from '../../plugins/video-canvas/assistant-state.mjs'
 import { normalizeMcpWorkflowInputs } from '../src/services/comfyui/comfyWorkflowInputs'
 import { CHAT_PAGE_ACTION_LIMITS, copyChatPageData, isPrivateChatPageKey, normalizeChatPageSchema, validateChatPageArguments } from '../../shared/src/utils/chatPageAction'
 
@@ -827,6 +827,18 @@ test('video canvas waits for a take by take or cut and carries the generation fa
     const before = publication.snapshot({}, 1).data.lastRun.fresh
     publication.set('lastRun', { id: run.id })
     assert.notEqual(publication.snapshot({}, 1).data.lastRun.fresh.seq, before.seq)
+    // Republished state keeps its stamp while its value stands, so an operation that left it alone does not send it back.
+    publication.keep('canvas', { id: project.id, nodes: [] }, { total: 0 })
+    const held = publication.snapshot({}, 1).data.canvas.fresh
+    publication.keep('canvas', { id: project.id, nodes: [] }, { total: 0 })
+    assert.equal(publication.snapshot({}, 1).data.canvas.fresh.seq, held.seq)
+    publication.keep('canvas', { id: project.id, nodes: [cut.id] }, { total: 1 })
+    assert.notEqual(publication.snapshot({}, 1).data.canvas.fresh.seq, held.seq)
+    // An edit moves the open project's revision, time and counts: its listed row leaves them to `canvas`, so the list stands.
+    const listed = (revision: number) => projectRows([{ id: 'a', name: 'A', revision, updated: `t${revision}`, created: 'c', nodeCount: revision, cutCount: revision, archived: false, cover: null },
+      { id: 'b', name: 'B', revision: 4, updated: 'u', created: 'c', nodeCount: 2, cutCount: 1, archived: false, cover: null }], 'a')
+    assert.deepEqual(listed(1), listed(2))
+    assert.deepEqual(listed(1), [{ id: 'a', name: 'A', open: true, created: 'c', archived: false, cover: null }, { id: 'b', name: 'B', revision: 4, updated: 'u', created: 'c', nodeCount: 2, cutCount: 1, archived: false, cover: null }])
   } finally { f.db.close() }
 })
 test('video canvas extraction targets switch the cut mode, frames are named after their source and nodes are placed apart', async () => {

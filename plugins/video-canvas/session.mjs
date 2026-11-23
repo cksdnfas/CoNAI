@@ -102,12 +102,12 @@ export function publish() {
   if (!api()) return
   if (s.project) {
     s.projects = s.projects.map(project => project.id === s.project.id ? currentRow(project, s.project) : project)
-    assistant.set('canvas', excerpt(s.project))
+    assistant.keep('canvas', excerpt(s.project))
   }
-  assistant.set('projects', projectRows(s.projects), { total: s.projectTotal || s.projects.length, nextOffset: s.nextOffset })
-  assistant.set('pendingExports', exportStates(s.project))
-  assistant.set('pendingChains', chainStates(s.project))
-  assistant.set('pendingExtractions', (s.project?.extractions ?? []).map(({ id, jobId, status, progress, resultHashes, nodeIds, error, rejected }) => ({ id, jobId, status, progress, resultHashes, nodeIds, error, rejected })))
+  assistant.keep('projects', projectRows(s.projects, s.project?.id), { total: s.projectTotal || s.projects.length, nextOffset: s.nextOffset })
+  assistant.keep('pendingExports', exportStates(s.project))
+  assistant.keep('pendingChains', chainStates(s.project))
+  assistant.keep('pendingExtractions',(s.project?.extractions ?? []).map(({ id, jobId, status, progress, resultHashes, nodeIds, error, rejected }) => ({ id, jobId, status, progress, resultHashes, nodeIds, error, rejected })))
   api().publish(assistant.snapshot({ projectId: s.project?.id ?? null, selection: [...s.sel], launch: s.launch }, s.project?.revision ?? 0))
 }
 /** A chain that ended since the last read: success offers to play the sequence, failure names the cut and the reason. */

@@ -74,8 +74,10 @@ export function excerpt(project, { offset, cursor = offset, edge_cursor, limit, 
   return { id: project.id, revision: project.revision, nodes: nodes.items, edges: edges.items, sequence: sequenceOf(project), selection, launch,
     total: nodes.total, totalEdges: edges.total, nextCursor: nodes.nextCursor, nextEdgeCursor: edges.nextCursor, nextOffset: nodes.nextCursor === null ? null : Number(nodes.nextCursor) }
 }
-// Published `projects` rows; long lists page through the snapshot like any other section.
-export const projectRows = projects => projects.map(({ id, name, revision, updated, created, nodeCount, cutCount, archived, cover }) => ({ id, name, revision, updated, created, nodeCount, cutCount, archived, cover }))
+// Published `projects` rows; long lists page through the snapshot like any other section. The open project's row says `open: true` in
+// place of what every edit moves (revision, updated, node and cut counts: `canvas` has them), so an edit does not republish the list.
+export const projectRows = (projects, openId) => projects.map(({ id, name, revision, updated, created, nodeCount, cutCount, archived, cover }) =>
+  id === openId ? { id, name, open: true, created, archived, cover } : { id, name, revision, updated, created, nodeCount, cutCount, archived, cover })
 // Published `pendingExports`, like pendingExtractions.
 export const exportStates = project => (project?.exports ?? []).map(({ id, status, jobId, progress, resultHash, error, cutIds, takeIds, warnings }) => ({ id, status, jobId, progress, resultHash, error, cutIds, takeIds, warnings }))
 // Published `pendingChains` (and the shape of `lastChain`). `jobId` is the chain's runtime job (task_wait runtime_job_ids); null means it has none.
@@ -90,6 +92,13 @@ export function createAssistantState() {
       if (!sections.has(name) || !sameValue(sections.get(name).value, value)) cursors.delete(name)
       // The stamp changes on every call, so a repeated identical answer is still visibly a new one.
       sections.set(name, { value, summary, fresh: { seq: ++calls, at: new Date().toISOString() } })
+    },
+    // Current state the page republishes on every draw (the canvas, the project list, pending work), unlike the answer to a call:
+    // its stamp moves only with its value, so the host does not send it back as changed after an operation that left it alone.
+    keep(name, value, summary = {}) {
+      const held = sections.get(name)
+      if (held && sameValue(held.value, value) && sameValue(held.summary, summary)) return
+      this.set(name, value, summary)
     },
     clear() { sections.clear(); cursors.clear() },
     page(name, cursor) {
