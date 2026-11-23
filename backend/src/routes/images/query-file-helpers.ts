@@ -15,6 +15,7 @@ import { MediaPostprocessVisibilityService } from '../../services/mediaPostproce
 import { requestThumbnailRepair } from '../../services/runtimeJobs/handlers/thumbnailRepairHandlers';
 import { requestVideoPoster } from '../../services/runtimeJobs/handlers/videoPosterHandlers';
 import { ThumbnailGenerator } from '../../utils/thumbnailGenerator';
+import { createArchiveEntryNamer } from '../../utils/archiveEntryNames';
 import type { ImageFileRecord, ImageMetadataRecord } from '../../types/image';
 import {
   getCompositeHashOrBlock,
@@ -340,7 +341,7 @@ async function prepareBatchDownloadArchive(
   downloadType: ImageDownloadType = 'original',
   options: { includeHidden?: boolean; includePending?: boolean } = {},
 ) {
-  const usedNames = new Map<string, number>();
+  const entryName = createArchiveEntryNamer();
   let totalSourceBytes = 0;
   const limitedHashes = compositeHashes.slice(0, MAX_BATCH_DOWNLOAD_FILE_COUNT);
   const metadataByHash = new Map(
@@ -385,19 +386,7 @@ async function prepareBatchDownloadArchive(
     const extension = downloadType === 'thumbnail'
       ? resolved.extension || '.webp'
       : (parsedName.ext || resolved.extension || '.bin');
-    const candidateName = `${baseName}${extension}`;
-    let duplicateCount = usedNames.get(candidateName) || 0;
-    let finalName = duplicateCount === 0
-      ? candidateName
-      : `${baseName}-${duplicateCount}${extension}`;
-    while (usedNames.has(finalName)) {
-      duplicateCount += 1;
-      finalName = `${baseName}-${duplicateCount}${extension}`;
-    }
-    usedNames.set(candidateName, duplicateCount + 1);
-    usedNames.set(finalName, 1);
-
-    entries.push({ filePath: resolved.filePath, name: finalName });
+    entries.push({ filePath: resolved.filePath, name: entryName(baseName, extension) });
   }
 
   if (entries.length === 0) {

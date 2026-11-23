@@ -9,6 +9,7 @@ import fs from 'fs';
 import { tmpdir } from 'os';
 import { ImageWithFileView } from '../types/image';
 import { writeZip, type ZipEntry } from '../utils/zipArchive';
+import { archiveCaptionName, createArchiveEntryNamer } from '../utils/archiveEntryNames';
 
 const zipLimit = pLimit(2);
 
@@ -75,7 +76,7 @@ export class GroupDownloadService {
     const zipLabel = captionOptions ? 'lora-dataset' : downloadType;
     // A download's disk path is private to the request, independent of its display filename.
     const zipPath = path.join(tmpdir(), `conai-group-${randomUUID()}.zip`);
-    const usedNames = new Map<string, number>();
+    const entryName = createArchiveEntryNamer({ captions: Boolean(captionOptions) });
     let fileCount = 0;
     const service = this;
     async function* entries(): AsyncGenerator<ZipEntry> {
@@ -85,9 +86,9 @@ export class GroupDownloadService {
         const baseName = image.original_file_path
           ? path.basename(image.original_file_path, path.extname(image.original_file_path))
           : 'image';
-        const name = service.getUniqueFileName(baseName, resolved.extension, usedNames, Boolean(captionOptions));
+        const name = entryName(baseName, resolved.extension);
         yield { name, file: resolved.filePath };
-        if (captionOptions) yield { name: name.replace(/\.[^.]+$/, '.txt'), data: Buffer.from(service.generateCaptionContent(image, captionOptions.captionMode), 'utf-8') };
+        if (captionOptions) yield { name: archiveCaptionName(name), data: Buffer.from(service.generateCaptionContent(image, captionOptions.captionMode), 'utf-8') };
         fileCount++;
       }
       if (fileCount === 0) throw new Error(`No ${downloadType} files found in group`);
@@ -209,29 +210,6 @@ export class GroupDownloadService {
       isVideo,
       isAnimated
     };
-  }
-
-  /**
-   * 중복되지 않는 고유한 파일명 생성
-   */
-  private static getUniqueFileName(
-    baseName: string,
-    extension: string,
-    usedNames: Map<string, number>,
-    withCaption: boolean
-  ): string {
-    const counterKey = `${baseName}${withCaption ? '.txt' : extension}`.toLowerCase();
-    for (let count = usedNames.get(counterKey) ?? 0; ; count++) {
-      const stem = count === 0 ? baseName : `${baseName}_${String(count).padStart(3, '0')}`;
-      const name = `${stem}${extension}`;
-      const caption = `${stem}.txt`;
-      // Also reserve the caption stem: a.png and a.jpg must not share a.txt.
-      if (usedNames.has(name.toLowerCase()) || (withCaption && usedNames.has(caption.toLowerCase()))) continue;
-      usedNames.set(name.toLowerCase(), 1);
-      if (withCaption) usedNames.set(caption.toLowerCase(), 1);
-      usedNames.set(counterKey, count + 1);
-      return name;
-    }
   }
 
   /**
