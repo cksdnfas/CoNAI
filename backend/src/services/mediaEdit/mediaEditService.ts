@@ -1,6 +1,5 @@
 import fs from 'fs'
 import path from 'path'
-import { randomUUID } from 'crypto'
 import sharp, { type Sharp } from 'sharp'
 import { runtimePaths } from '../../config/runtimePaths'
 import { MediaMetadataModel } from '../../models/Image/MediaMetadataModel'
@@ -10,7 +9,7 @@ import { CONTENT_RATING_BLOCKED, libraryMediaAllowed, type ContentRatingLimit } 
 import { ImageSafetyService } from '../imageSafetyService'
 import { ImageManagementService } from '../imageManagementService'
 import { assignGeneratedMediaToGroup } from '../generationTargetGroupService'
-import { saveMediaBytesToLibrary, saveMediaFileToLibrary } from '../libraryMediaIngest'
+import { saveMediaBytesToLibrary, saveMediaFileToLibrary, storeMediaBytesInLibrary } from '../libraryMediaIngest'
 import { MediaPostprocessVisibilityService } from '../mediaPostprocessVisibilityService'
 import { RuntimeJobRunner, type RuntimeJobContext } from '../runtimeJobs/runtimeJobRunner'
 import { findLibraryMedia, resolveSpriteGroup, type LibraryMedia } from '../sprite/spriteLibrary'
@@ -190,11 +189,10 @@ async function editImages(ctx: RuntimeJobContext<MediaEditParams>, params: CropI
           const bytes = await (format === 'png' ? image.png() : image.toFormat(format, { quality })).toBuffer()
           ctx.throwIfCancelled()
           const extension = format === 'jpeg' ? 'jpg' : format
-          // The ingest filename preserves this UUID suffix, so concurrent uploads of identical pixels are never deleted.
-          const name = `media-edit-${randomUUID()}.${extension}`
-          const compositeHash = await saveMediaBytesToLibrary({ bytes, extension, mimeType: `image/${format}`, groupId: null, name })
+          // The output's own stored path picks its registration, so concurrent uploads of identical pixels are never deleted.
+          const { compositeHash, filePath } = await storeMediaBytesInLibrary({ bytes, extension, mimeType: `image/${format}`, groupId: null })
           if (compositeHash === source) {
-            const duplicate = ImageFileModel.findAllByHash(source).find((file) => path.basename(file.original_file_path).endsWith(`_${name}`))
+            const duplicate = ImageFileModel.findAllByHash(source).find((file) => path.resolve(file.original_file_path) === path.resolve(filePath))
             if (!duplicate) throw new Error('Could not locate the identical output file registration.')
             const removed = await ImageManagementService.deleteImageFilesBulk([duplicate.id])
             if (removed.details.failed) throw new Error(removed.details.errors.join('; '))

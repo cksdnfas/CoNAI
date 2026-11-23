@@ -123,6 +123,21 @@ export interface GeneralSettings {
   generationHistoryMaxItems: number;
   /** Admin-chosen badge colours per permission group key (`#rgb` / `#rrggbb`); missing keys use the built-in palette. */
   permissionGroupColors?: Record<string, string>;
+  /**
+   * IANA zone the server's clock runs in (file names, date folders and every other server-side local time); '' keeps
+   * the server's own zone. Applied process-wide at start and on save (backend/src/services/appTimeZone.ts).
+   */
+  timeZone?: string;
+}
+
+/** `GET /api/settings/time-zone`: the zone the server runs in now, and its clock. */
+export interface ServerTimeZoneInfo {
+  /** The zone the server runs in without the setting (its OS or container zone). */
+  serverTimeZone: string;
+  /** The zone the server's clock uses now (the setting, or `serverTimeZone`). */
+  timeZone: string;
+  /** Server clock, ISO 8601. */
+  now: string;
 }
 
 export type StealthScanMode = 'full' | 'fast' | 'skip';
@@ -464,6 +479,16 @@ export interface ImageSaveSettings {
   applyToWorkflowOutputs: boolean;
 }
 
+/** Stored media file names (patterns: shared/src/utils/fileNaming.ts). Images and videos, uploads and results. */
+export interface FileNamingSettings {
+  /** Uploaded files; `{name}` is the original name without its extension. */
+  upload: string;
+  /** Generated and other unnamed results; no `{name}`. */
+  generated: string;
+  /** Applied to the first name when it is taken in the folder; must contain `{name}`. */
+  collision: string;
+}
+
 export type GenerationThrottleScheduleMode = 'even' | 'random';
 
 export interface GenerationThrottleServiceSettings {
@@ -631,6 +656,7 @@ export interface AppSettings {
   metadataExtraction: MetadataExtractionSettings;
   thumbnail: ThumbnailSettings;
   imageSave: ImageSaveSettings;
+  fileNaming: FileNamingSettings;
   generationThrottle: GenerationThrottleSettings;
   videoOptimization: VideoOptimizationSettings;
   llm: LlmSettings;

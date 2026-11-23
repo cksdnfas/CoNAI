@@ -128,24 +128,30 @@ export function GenerationBlockLayout({ surface, blocks, active = true, flow = '
   )
 }
 
+/** One-row blocks that sit above a column's tab strip instead of becoming a tab of their own. */
+const UNTABBED_BLOCKS: ReadonlySet<GenerationLayoutBlock> = new Set(['filename'])
+
 function ViewColumn({ column, hidden, blocks, pageFlow }: { column: GenerationLayoutColumn; hidden: Set<GenerationLayoutBlock>; blocks: GenerationLayoutBlockNodes; pageFlow: boolean }) {
   const blockLabel = useGenerationLayoutBlockLabel()
   const visible = column.blocks.filter((block) => block !== 'recent' && !hidden.has(block) && blocks[block] != null)
   const body: GenerationLayoutBlock[] = visible.filter((block) => block !== 'action')
   const dock = visible.includes('action') ? <GenerateActionDock>{blocks.action}</GenerateActionDock> : null
   const [pickedTab, setPickedTab] = useState<GenerationLayoutBlock | null>(null)
-  const tabbed = column.tabs === true && body.length > 1
+  const tabBlocks = body.filter((block) => !UNTABBED_BLOCKS.has(block))
+  const tabbed = column.tabs === true && tabBlocks.length > 1
+  const aboveTabs = tabbed ? body.filter((block) => UNTABBED_BLOCKS.has(block)).map((block) => <div key={block} className="min-w-0 shrink-0">{blocks[block]}</div>) : null
 
   // Page flow: the page scrolls, so blocks simply stack (or sit behind tabs) at their own height.
   if (pageFlow) {
-    const active = tabbed ? (pickedTab && body.includes(pickedTab) ? pickedTab : body[0]) : null
+    const active = tabbed ? (pickedTab && tabBlocks.includes(pickedTab) ? pickedTab : tabBlocks[0]) : null
     return (
       <div className="flex flex-col gap-6">
         {active ? (
           <>
+            {aboveTabs}
             <TextTabs<GenerationLayoutBlock>
               value={active}
-              items={body.map((block) => ({ value: block, label: blockLabel(block), icon: generationLayoutBlockIcon(block) }))}
+              items={tabBlocks.map((block) => ({ value: block, label: blockLabel(block), icon: generationLayoutBlockIcon(block) }))}
               onChange={setPickedTab}
             />
             <div className="min-w-0">{blocks[active]}</div>
@@ -170,12 +176,13 @@ function ViewColumn({ column, hidden, blocks, pageFlow }: { column: GenerationLa
 
   // Tab column: one block at a time under text tabs.
   if (tabbed) {
-    const active = pickedTab && body.includes(pickedTab) ? pickedTab : body[0]
+    const active = pickedTab && tabBlocks.includes(pickedTab) ? pickedTab : tabBlocks[0]
     return (
       <div className="flex min-h-0 flex-1 flex-col gap-4">
+        {aboveTabs}
         <TextTabs<GenerationLayoutBlock>
           value={active}
-          items={body.map((block) => ({ value: block, label: blockLabel(block), icon: generationLayoutBlockIcon(block) }))}
+          items={tabBlocks.map((block) => ({ value: block, label: blockLabel(block), icon: generationLayoutBlockIcon(block) }))}
           onChange={setPickedTab}
           className="shrink-0"
         />

@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { randomUUID } from 'crypto';
 import type { VideoOptimizationSettings } from '@conai/shared';
-import { copyToAvailablePath, writeToAvailablePath } from '../utils/availableFilePath';
+import { writeToAvailablePath } from '../utils/availableFilePath';
 import { moveFileWithoutReplacing } from '../utils/recycleBin';
 import { MediaProcessError, MediaRenderSlots, runMediaProcess } from '../utils/mediaProcess';
 import { VideoProcessor } from './videoProcessor';
@@ -11,6 +11,12 @@ export type VideoOptimizationRunOptions = Pick<VideoOptimizationSettings, 'crf' 
   logLabel?: string;
   signal?: AbortSignal;
 };
+
+/**
+ * Publishes a result under a free name: `extension` is `.mp4` for an encoded file or the source's own, and
+ * `write` fails with EEXIST when its target exists. The default takes the requested path, then ` (N)` variants.
+ */
+export type VideoOutputPlacement = (extension: string, write: (target: string) => Promise<void>) => Promise<string>;
 
 export type VideoOptimizationPersistResult = {
   outputPath: string;
@@ -143,8 +149,11 @@ export class VideoOptimizationService {
     targetBasePath: string,
     originalExtension: string,
     options: VideoOptimizationRunOptions,
+    place?: VideoOutputPlacement,
   ): Promise<VideoOptimizationPersistResult> {
     const requested = this.outputPaths(targetBasePath, originalExtension || path.extname(inputPath));
+    const publish: VideoOutputPlacement = place ?? ((extension, write) => writeToAvailablePath(
+      extension === this.OUTPUT_EXTENSION ? requested.optimized : requested.original, write));
     const staging = path.join(path.dirname(targetBasePath), `.conai-${randomUUID()}.part`);
     const sourceStats = await fs.promises.stat(inputPath);
     try {
@@ -157,14 +166,14 @@ export class VideoOptimizationService {
       }
       options.signal?.throwIfAborted();
       if (encoded && encoded.fileSize < sourceStats.size) {
-        const outputPath = await writeToAvailablePath(requested.optimized, candidate => moveFileWithoutReplacing(staging, candidate));
+        const outputPath = await publish(this.OUTPUT_EXTENSION, candidate => moveFileWithoutReplacing(staging, candidate));
         if (options.logLabel) console.log(`🎞️ Video optimized (${options.logLabel}): ${path.basename(outputPath)} (${Math.round(encoded.fileSize / 1024)}KB)`);
         return { ...encoded, outputPath, optimized: true };
       }
       if (encoded && options.logLabel) {
         console.log(`↩️ Video optimization skipped (${options.logLabel}): kept original because encoded file was not smaller.`);
       }
-      const outputPath = await copyToAvailablePath(inputPath, requested.original);
+      const outputPath = await publish(path.extname(requested.original), candidate => fs.promises.copyFile(inputPath, candidate, fs.constants.COPYFILE_EXCL));
       return {
         outputPath,
         fileSize: (await fs.promises.stat(outputPath)).size,

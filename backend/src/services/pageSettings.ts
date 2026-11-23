@@ -8,7 +8,7 @@ import { nativeSettingsRevision } from './nativeEditRevision';
 export function readPageSettings(scope: PageSettingsScopeId): PageSettingsSnapshot {
   const settings = settingsService.loadSettings();
   const source = scope === 'posts' ? loadPostsSettings() : scope === 'chat' ? loadChatSettings()
-    : scope === 'metadata' ? settings.metadataExtraction : scope === 'image-save' ? settings.imageSave
+    : scope === 'metadata' ? settings.metadataExtraction : scope === 'image-save' ? settings.imageSave : scope === 'file-naming' ? settings.fileNaming
       : scope === 'video-optimization' ? settings.videoOptimization : scope === 'generation-throttle' ? settings.generationThrottle : settings[scope];
   const values = selectPageSettings(scope, source);
   // Group colours have their own immediate writer and are never part of a checked general draft.

@@ -332,7 +332,11 @@ Save 선택기와 워크플로 산출물(비공개·공개) 목록은 `directory
 
 이미지 상세의 픽셀 필터는 `renderPixelPreviewSample`이 화면·PNG 저장에 같은 설정과 워커·실패 시 처리를 제공한다. 화면 캔버스는 필터 샘플 해상도를 유지하고 CSS로 표시 크기를 맞추며, PNG 저장만 선택한 소스 크기로 확대한다. 취소된 로딩과 워커 요청은 종료 결과를 반환하고 임시 캔버스를 해제한다. 공용 오디오 플레이어는 현재 재생 요청의 실패만 반영하고 지연된 미디어 이벤트는 실제 재생 상태로 판단한다. 편집기를 닫을 때는 해당 편집기의 구간·편집본 미리듣기를 중단한다.
 
-그룹 다운로드는 소속 해시를 먼저 선택한 뒤 메타데이터를 최대 500개씩 읽는다. 파일 개수 조회도 같은 배치 조회를 쓰고 원본·썸네일 존재 여부를 한 번씩 확인한다. `utils/zipArchive.ts`는 그룹과 스프라이트의 ZIP 기록을 공유하며, 항목 하나의 기록이 끝난 뒤 다음 파일·캡션을 읽는다. 그룹 ZIP은 최대 2개 생성·20개 대기로 제한하고 요청별 임시 경로를 사용한다. HTTP 연결 종료 시 생성을 취소하며 실패한 부분 ZIP과 전송이 끝난 파일은 정리한다. 이미지 이름뿐 아니라 캡션 이름도 예약해 확장자가 다른 동명 이미지나 자동 접미사와의 충돌을 막는다.
+그룹 다운로드는 소속 해시를 먼저 선택한 뒤 메타데이터를 최대 500개씩 읽는다. 파일 개수 조회도 같은 배치 조회를 쓰고 원본·썸네일 존재 여부를 한 번씩 확인한다. `utils/zipArchive.ts`는 그룹과 스프라이트의 ZIP 기록을 공유하며, 항목 하나의 기록이 끝난 뒤 다음 파일·캡션을 읽는다. 그룹 ZIP은 최대 2개 생성·20개 대기로 제한하고 요청별 임시 경로를 사용한다. HTTP 연결 종료 시 생성을 취소하며 실패한 부분 ZIP과 전송이 끝난 파일은 정리한다. ZIP 안 이름은 그룹 ZIP과 선택 다운로드(`query-file-helpers.ts`)가 함께 쓰는 `utils/archiveEntryNames.ts`가 정한다: 겹치면 `cat (1).png`, 대소문자 무시 비교, 캡션 ZIP은 이미지 이름과 함께 `<stem>.txt`도 예약해 확장자만 다른 동명 이미지가 캡션을 나눠 쓰지 않는다.
+
+새 라이브러리 미디어의 저장 이름은 설정 `fileNaming`(업로드·생성물·겹칠 때 패턴)을 따른다. 패턴 파싱·검증·렌더·이름 정리·후보 순서·미리보기는 shared `utils/fileNaming.ts` 한 곳이고, 백엔드 `utils/mediaFileNames.ts`의 `writeMediaFileWithUniqueName`이 대상 폴더의 파일 목록과 그 폴더를 가리키는 `image_files` 행(파일이 없어도)을 대소문자 무시로 피하고, 프로세스 안의 예약으로 동시 저장끼리도 갈라 준 뒤 배타적 쓰기(`exclusiveWrites`: `wx`·`COPYFILE_EXCL`, 또는 `moveFileWithoutReplacing`)가 EEXIST로 실패하면 다음 후보로 넘어간다. 업로드(이미지·영상), 생성 결과(`FileSaver`, 검증 저장은 임시 폴더에서 검증한 뒤 이 할당기로 옮김), 라이브러리 수집(`libraryMediaIngest`, `name`이 있으면 업로드 패턴), 플러그인 서버 미디어가 모두 이 경로를 쓰고 직접 파일 이름을 만들지 않는다. 생성 화면에서 적은 이름은 `imageSaveOptions.fileName`으로 오고 생성물 패턴 대신 쓰인다(Codex는 MCP에 공개되는 zod 스키마를 바꾸지 않고 `parseCodexGenerationRequest`가 원본 값에서 따로 읽는다). 공개 워크플로 페이지는 서버에서 `imageSaveOptions`를 지우므로 방문자가 이름을 정할 수 없다. 라이브러리 항목의 휴지통 복원(되돌리기와 관리자 이름 바꿔 복원)은 `kind: 'keep'`으로 원래 이름을 먼저, 막혀 있으면 겹칠 때 패턴 이름을 쓴다.
+
+앱 시간대(`general.timeZone`, 설정 → 시스템 → 안전·정리)는 `services/appTimeZone.ts`가 `process.env.TZ`로 프로세스 전체에 적용한다. `settingsService`가 첫 로드와 매 저장 때 부르므로 재시작 없이 바뀌고, 이름 검증·정규화는 shared `utils/timeZone.ts`의 `normalizeTimeZoneName`(Intl이 아는 IANA 이름만, 오프셋·POSIX 규칙 거부, 정식 철자로 저장)이다. ''와 서버 시작 시간대는 TZ를 건드리지 않고 시작 상태로 되돌린다(Windows Node는 `delete process.env.TZ` 뒤에도 마지막 시간대를 유지해 시작 시간대 이름을 다시 넣는다). 로컬 getter를 쓰는 곳(파일 이름 토큰, `getDateFolder`, 채팅 회의록, DB 백업 폴더 이름, 월페이퍼 MCP의 `server_clock`)이 따라가고, 이후 띄우는 자식 프로세스도 TZ를 물려받는다. SQLite `CURRENT_TIMESTAMP`·로그·휴지통 이름은 UTC, 예약·루틴은 행별 `timezone`, LLM 사용량·월페이퍼 통계는 브라우저가 보낸 오프셋으로 계산해 영향이 없다. 백엔드 SQL은 `'localtime'`을 쓰지 않는다(Linux SQLite는 TZ 변경을 따르지만 Windows는 따르지 않는다). DB의 `YYYY-MM-DD HH:MM:SS`(UTC) 문자열을 `Date`로 읽을 때는 `Z`를 붙여야 한다: 붙이지 않으면 서버 시간대가 UTC가 아닐 때 어긋난다. 설정 화면은 `GET /api/settings/time-zone`(서버 시작 시간대·현재 시간대·서버 시각)으로 시각을 보여 주고, 파일 이름 미리보기는 `previewFileNamePattern(..., { timeZone })`으로 서버 시간대에 맞춘다.
 
 워크플로 진행 카드는 노드 시작·완료·실패 로그가 기록될 때 발행되는 `graph.execution.progress`로 `/api/graph-workflows/executions/:id/progress`를 다시 읽고, 스트림이 끊기면 3초 폴링으로 돌아간다. 실행 상태 SSE는 해당 워크플로 목록·실행 조회를 갱신한다. 플러그인 서버 상태는 `plugin.server.changed`(식별자 없음), 채팅 루틴은 `chat.routine.changed`(관리자 한정), 지식 평가 요청 상태는 `posts.changed`(kind `run`)로 갱신하고 기존 폴링은 폴백으로만 남긴다. `posts.changed`는 변경된 글의 상세 캐시와 공용 목록을 갱신한다. SSE 구독자의 미전송 버퍼가 256KB를 넘으면 연결을 닫고 기존 재연결·재생 경로로 복구한다.
 
@@ -458,6 +462,8 @@ Git 저장소 설치·업데이트는 `pluginSources.ts`가 담당한다. 호스
 - 오디오 파형 공유·취소·계정 경계: `npm run test:audio-waveform --prefix frontend`.
 - 미리보기 자원 해제·필터 워커 취소·오디오 재생 경합·배경화면 로딩 취소: `npm run test:media-previews --prefix frontend`. 썸네일 동시 생성·실패 복구는 `backend/test/media-lifecycle.test.ts`, 서버 폴더 원본 변경 검사는 `backend/test/system-folders.test.ts`.
 - 그룹 ZIP 선택 범위·동시 다운로드·캡션 무결성·HTTP 취소: `npx tsx --test backend/test/group-download.test.ts`.
+- 저장 이름 패턴·폴더 중복 회피(동시 저장 포함)·ZIP 안 이름: `npx tsx --test backend/test/file-naming.test.ts`.
+- 앱 시간대 검증·런타임 적용·기본값 유지: `npx tsx --test backend/test/app-time-zone.test.ts`.
 - 채팅: `npm run test:chat --prefix backend` 또는 해당 기존 테스트 파일.
 - 지식·게시글: `npm run test:posts-knowledge --prefix backend`.
 - 댓글 페이지·직접 링크·조회 중 숨김 반영: `npm run test:post-comments --prefix frontend`.

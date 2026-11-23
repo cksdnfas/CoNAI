@@ -16,6 +16,7 @@ export interface PageSettingField {
 const flag =(id: string, ko: string, en: string): PageSettingField => ({ id, label: { ko, en }, type: 'boolean' });
 const number = (id: string, ko: string, en: string, min: number, max?: number, integer = true): PageSettingField => ({ id, label: { ko, en }, type: 'number', min, max, integer });
 const choice = (id: string, ko: string, en: string, options: readonly (string | number)[]): PageSettingField => ({ id, label: { ko, en }, type: typeof options[0] === 'number' ? 'number' : 'string', options });
+const text = (id: string, ko: string, en: string): PageSettingField => ({ id, label: { ko, en }, type: 'string' });
 export interface PageSettingsScope {
   label: { ko: string; en: string };
   permission: string;
@@ -74,6 +75,10 @@ export const PAGE_SETTINGS_SCOPES = {
     flag('applyToEditorSave', '생성 입력 편집에 적용', 'Apply to input edits'),
     flag('applyToCanvasSave', '라이브러리 편집본에 적용', 'Apply to library edits'),
     flag('applyToUpload', '업로드에 적용', 'Apply to uploads'), flag('applyToWorkflowOutputs', '워크플로 출력에 적용', 'Apply to workflow outputs'),
+  ] },
+  // Pattern text is checked by the native route (validateFileNamePattern), like every other field's range.
+  'file-naming': { label: { ko: '파일 이름', en: 'File names' }, permission: 'settings.media.manage', section: 'media', fields: [
+    text('upload', '업로드', 'Uploads'), text('generated', '생성물', 'Generated files'), text('collision', '이름이 겹칠 때', 'When a name is taken'),
   ] },
   thumbnail: { label: { ko: '썸네일', en: 'Thumbnails' }, permission: 'settings.media.manage', section: 'media', fields: [
     choice('size', '썸네일 크기', 'Thumbnail size', ['original', '2048', '1080', '720', '512']), number('quality', '품질', 'Quality', 60, 100),
@@ -146,6 +151,7 @@ const SETTING_SCOPE_LOCATION: Record<PageSettingsScopeId, { section: string; gro
   similarity: { section: 'library', group: 'similarity', prefix: '' },
   metadata: { section: 'library', group: 'metadata', prefix: 'metadata.' },
   'image-save': { section: 'media', group: 'image-save', prefix: 'imageSave.' },
+  'file-naming': { section: 'media', group: 'file-naming', prefix: 'fileNaming.' },
   thumbnail: { section: 'media', group: 'thumbnail', prefix: 'thumbnail.' },
   'video-optimization': { section: 'media', group: 'video-optimization', prefix: 'videoOptimization.' },
   'generation-throttle': { section: 'generation', group: 'pacing', prefix: 'generationThrottle.' },
@@ -235,6 +241,7 @@ const SETTINGS_ROW_DEFINITIONS: readonly SettingRowDefinition[] = [
   ...settingGroup('auto', 'kaloscope', 'kaloscope.', [['artistLinkUrlTemplate', 'Artist 링크 URL', 'Artist link URL']]),
   ...settingGroup('auto', 'ratings', 'ratingWeights.', [['general_weight', 'General 가중치', 'General weight'], ['sensitive_weight', 'Sensitive 가중치', 'Sensitive weight'], ['questionable_weight', 'Questionable 가중치', 'Questionable weight'], ['explicit_weight', 'Explicit 가중치', 'Explicit weight']]),
   ...settingGroup('system', 'safety', '', [['deleteProtection.enabled', '삭제할 때 휴지통으로 보호', 'Protect deleted files with the recycle bin'], ['deleteProtection.recycleBinRetentionDays', '휴지통 보관 기간 (일)', 'Recycle bin retention (days)'], ['generationHistoryMaxItems', '생성 히스토리 최대 항목 수', 'Generation history maximum items'], ['autoCleanupCanvasOnShutdown', '종료 시 캔버스 임시 데이터 자동 정리', 'Clean up temporary canvas data on exit'], ['applyRatingSafetyToGenerationHistory', '생성 히스토리에도 등급 표시 규칙 적용', 'Apply rating visibility rules to generation history']]),
+  setting('timeZone', '시간대', 'Time zone', NO_DESCRIPTION, 'system', 'safety', 'page.settings.view', false, 'shared', ['timezone', 'TZ', '시각', '시계', 'clock']),
   ...settingGroup('posts', 'topics', 'posts.topicEvaluation.', [['reevaluateOnEdit', '수정하면 다시 평가', 'Re-evaluate after edits'], ['minimumScore', '목록 최소 관련도 (%)', 'Minimum list score (%)'], ['maximumTopics', '목록 주제 수', 'Maximum topics in lists']]),
   setting('language', '기본 언어', 'Default language', { ko: '앱 공용 기본 언어야. 브라우저의 계정 메뉴에서 선택한 언어가 우선해.', en: 'The shared default language. The browser’s account-menu override takes precedence.' }, 'general', 'display', 'page.settings.view'),
   setting('promptForDownloadLocation', '다운로드할 때 파일명과 위치 확인', 'Ask for file name and save location', { ko: '다운로드 전에 저장 위치를 확인해.', en: 'Ask for a destination before downloading.' }, 'general', 'display', 'page.settings.view'),

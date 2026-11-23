@@ -5,6 +5,7 @@ import { errorResponse } from '@conai/shared';
 import { ImageProcessor } from '../../services/imageProcessor';
 import { AIMetadata } from '../../services/metadata';
 import { ImageMetadataWriteService, ImageOutputFormat } from '../../services/imageMetadataWriteService';
+import { exclusiveWrites, writeMediaFileWithUniqueName } from '../../utils/mediaFileNames';
 import {
   UploadValidationError,
   cleanupStoredUpload,
@@ -150,9 +151,7 @@ export async function processImageUploadWithSettings(
 
   const folders = await ImageProcessor.createUploadFolders(baseUploadPath);
   const requestedExtension = targetFormat === 'jpeg' ? 'jpg' : targetFormat;
-  const originalBaseName = path.basename(file.originalname, path.extname(file.originalname));
-  const filename = ImageProcessor.generateUniqueFilename(`${originalBaseName}.${requestedExtension}`);
-  const outputPath = path.join(folders.targetFolder, filename);
+  let outputPath: string | undefined;
 
   try {
     const rewritten = await ImageMetadataWriteService.writeFileAsFormatBuffer(file.path, {
@@ -165,10 +164,13 @@ export async function processImageUploadWithSettings(
       maxHeight: options.resizeEnabled ? options.maxHeight : undefined,
     });
 
-    await fs.promises.writeFile(outputPath, rewritten.buffer);
+    outputPath = await writeMediaFileWithUniqueName(
+      { directory: folders.targetFolder, extension: requestedExtension, kind: 'upload', originalName: file.originalname },
+      exclusiveWrites.bytes(rewritten.buffer),
+    );
 
     return {
-      filename,
+      filename: path.basename(outputPath),
       originalPath: path.relative(baseUploadPath, outputPath).replace(/\\/g, '/'),
       thumbnailPath: '',
       width: rewritten.info.width || 0,
@@ -180,7 +182,7 @@ export async function processImageUploadWithSettings(
       mimeType: buildOutputMimeType(targetFormat),
     };
   } catch (error) {
-    await cleanupStoredUpload(baseUploadPath, path.relative(baseUploadPath, outputPath));
+    if (outputPath) await cleanupStoredUpload(baseUploadPath, path.relative(baseUploadPath, outputPath));
     throw error;
   } finally {
     await cleanupTemporaryUpload(file);

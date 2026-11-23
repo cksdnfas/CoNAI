@@ -45,6 +45,7 @@ import type { GenerationHistoryRecord } from '@/lib/api-image-generation-types'
 import { GenerationBlockLayout, StackedPluginBlocks } from '../layout/generation-block-layout'
 import { useGenerationLayoutSurface } from '../layout/generation-layout-context'
 import { stackedLayoutBlocks } from '../layout/generation-layout-ops'
+import { GenerationFileNameField } from './generation-file-name-field'
 
 type CodexGenerationPanelProps = {
   onHistoryRefresh: () => void
@@ -57,7 +58,7 @@ type CodexGenerationPanelProps = {
   blockLayout?: { result: ReactNode }
 }
 
-type CodexEditorBlock = 'model' | 'prompt' | 'output' | 'images'
+type CodexEditorBlock = 'filename' | 'model' | 'prompt' | 'output' | 'images'
 
 export type CodexFormDraft = {
   model: string
@@ -546,6 +547,7 @@ export function CodexGenerationPanel({
   } : null
 
   const editorBlocks: Record<CodexEditorBlock, ReactNode> = {
+    filename: <GenerationFileNameField />,
     model: (
       <Tip content={t({ ko: '프롬프트를 해석하고 이미지를 만들 모델 고르기', en: 'Choose the model that reads the prompt and makes the image' })}>
         <div>

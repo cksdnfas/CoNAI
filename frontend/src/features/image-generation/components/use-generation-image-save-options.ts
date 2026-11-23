@@ -1,8 +1,9 @@
 import { useQuery } from '@tanstack/react-query'
 import { getRuntimeImageSaveSettings } from '@/lib/api-settings'
 import { DEFAULT_IMAGE_SAVE_SETTINGS } from '@/lib/image-save-output'
+import { useGenerationFileName } from '../generation-file-name-store'
 
-/** The same runtime image-save settings and queue payload for every generation surface. */
+/** The same runtime image-save settings and queue payload for every generation surface, with the typed file name. */
 export function useGenerationImageSaveOptions(enabled = true) {
   const query = useQuery({
     queryKey: ['runtime-image-save-settings'],
@@ -10,6 +11,7 @@ export function useGenerationImageSaveOptions(enabled = true) {
     enabled,
   })
   const settings = query.data?.imageSave ?? DEFAULT_IMAGE_SAVE_SETTINGS
+  const { requestFileName } = useGenerationFileName()
   return {
     settings,
     options: {
@@ -18,6 +20,7 @@ export function useGenerationImageSaveOptions(enabled = true) {
       resizeEnabled: settings.resizeEnabled,
       maxWidth: settings.maxWidth,
       maxHeight: settings.maxHeight,
+      ...(requestFileName ? { fileName: requestFileName } : {}),
     },
   }
 }

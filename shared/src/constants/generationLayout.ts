@@ -6,27 +6,27 @@
 
 export const GENERATION_LAYOUT_SURFACE_DEFINITIONS = {
   nai: {
-    blocks: ['prompt', 'characters', 'settings', 'images', 'references', 'vibes', 'action', 'result', 'recent'],
+    blocks: ['filename', 'prompt', 'characters', 'settings', 'images', 'references', 'vibes', 'action', 'result', 'recent'],
     required: ['action', 'result'],
     columns: [
-      { weight: 40, blocks: ['prompt', 'characters', 'settings', 'images', 'references', 'vibes', 'action'] },
+      { weight: 40, blocks: ['filename', 'prompt', 'characters', 'settings', 'images', 'references', 'vibes', 'action'] },
       { weight: 60, blocks: ['result', 'recent'] },
     ],
   },
   codex: {
-    blocks: ['model', 'prompt', 'output', 'images', 'action', 'result', 'recent'],
+    blocks: ['filename', 'model', 'prompt', 'output', 'images', 'action', 'result', 'recent'],
     required: ['action', 'result'],
     columns: [
-      { weight: 40, blocks: ['model', 'prompt', 'output', 'images', 'action'] },
+      { weight: 40, blocks: ['filename', 'model', 'prompt', 'output', 'images', 'action'] },
       { weight: 60, blocks: ['result', 'recent'] },
     ],
   },
-  /** A selected ComfyUI workflow. */
+  /** A selected ComfyUI workflow. Public workflow pages render no `filename` (visitors never name server files). */
   comfy: {
-    blocks: ['workflow', 'fields', 'action', 'result', 'recent'],
+    blocks: ['filename', 'workflow', 'fields', 'action', 'result', 'recent'],
     required: ['workflow', 'fields', 'action', 'result'],
     columns: [
-      { weight: 40, blocks: ['workflow', 'fields', 'action'] },
+      { weight: 40, blocks: ['filename', 'workflow', 'fields', 'action'] },
       { weight: 60, blocks: ['result', 'recent'] },
     ],
   },
@@ -97,6 +97,9 @@ export type GenerationLayoutBlock = GenerationLayoutBuiltinBlock | GenerationLay
 export const GENERATION_LAYOUT_LIMITS = { columns: 4, presets: 20, nameLength: 40, minWeight: 10, maxWeight: 100, pluginBlocks: 8 } as const;
 
 const PLUGIN_BLOCK_PATTERN = /^plugin:[a-z][a-z0-9-]{1,47}:[a-z][a-z0-9-]{1,47}$/;
+
+/** Blocks that a saved layout without them shows at the top of its controls column. */
+const LEADING_LAYOUT_BLOCKS: ReadonlySet<string> = new Set(['filename']);
 
 export function isGenerationLayoutPluginBlock(value: unknown): value is GenerationLayoutPluginBlock {
   return typeof value === 'string' && PLUGIN_BLOCK_PATTERN.test(value);
@@ -182,9 +185,13 @@ export function normalizeGenerationLayoutColumns(surface: GenerationLayoutSurfac
   if (!options.keepEmptyColumns) columns = columns.filter((column) => column.blocks.length > 0);
   if (columns.length === 0) return createDefaultGenerationLayoutPreset(surface).columns;
 
-  // Blocks this layout does not know yet (added in a later version) join the first column.
+  // Blocks this layout does not know yet (added in a later version) join the first column; a leading block (the
+  // result file name) goes on top of the column with the generate button instead, where it sits by default.
   const missing = known.filter((block): block is GenerationLayoutBuiltinBlock => !seen.has(block) && block !== 'recent');
-  if (missing.length) columns[0].blocks.push(...missing);
+  const leading = missing.filter((block) => LEADING_LAYOUT_BLOCKS.has(block));
+  const trailing = missing.filter((block) => !LEADING_LAYOUT_BLOCKS.has(block));
+  if (trailing.length) columns[0].blocks.push(...trailing);
+  if (leading.length) (columns.find((column) => column.blocks.includes('action')) ?? columns[0]).blocks.unshift(...leading);
 
   if (known.includes('recent')) {
     const resultColumn = columns.find((column) => column.blocks.includes('result'))!;

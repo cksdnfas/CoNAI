@@ -329,14 +329,14 @@ test('administrators browse server folders and manage the RecycleBin safely', { 
     assert.ok(fs.existsSync(path.join(bin, unrelatedName)), 'image undo cannot restore other server files')
     assert.equal((await call('/api/images/restore', editorId, 'POST', { names: ['../escape'] })).status, 400)
 
-    // A conflict affects only that entry and never overwrites a newly created file.
-    fs.writeFileSync(first, 'newer')
-    const restored = await call('/api/images/restore', editorId, 'POST', { names: details.recycleBinEntries })
+    // Copies come back one at a time here, so the later one can be checked against edits made in between.
+    const origins = recycle.readRecycleBinOrigins(details.recycleBinEntries)
+    const firstEntry = details.recycleBinEntries.find((name: string) => path.resolve(origins.get(name)!.originalPath) === path.resolve(first))
+    const secondEntry = details.recycleBinEntries.find((name: string) => name !== firstEntry)
+    const restored = await call('/api/images/restore', editorId, 'POST', { names: [secondEntry] })
     assert.equal(restored.status, 200)
     assert.equal(restored.body.data.done.length, 1)
-    assert.equal(restored.body.data.failed.length, 1)
-    assert.equal(restored.body.data.failed[0].code, 'conflict')
-    assert.equal(fs.readFileSync(first, 'utf8'), 'newer')
+    assert.equal(restored.body.data.failed.length, 0)
     assert.equal(fs.readFileSync(second, 'utf8'), 'undo-second.png')
     assert.equal((db.prepare('SELECT first_seen_date FROM media_metadata WHERE composite_hash = ?').get(hash) as { first_seen_date: string }).first_seen_date, '2020-01-01 00:00:00')
     const membership = db.prepare('SELECT order_index, emote_keywords FROM image_groups WHERE composite_hash = ? AND group_id = ?')
@@ -350,12 +350,16 @@ test('administrators browse server folders and manage the RecycleBin safely', { 
       JOIN auto_tag_terms t ON t.term_id = mat.term_id
       JOIN media_metadata m ON m.media_id = mat.media_id WHERE m.composite_hash = ?`).all(hash), [{ tag_key: 'undo_tag', score: 0.875 }], 'auto-tag search rows are rebuilt from metadata')
     assert.equal((db.prepare("SELECT usage_count FROM prompt_collection WHERE prompt = 'undo_prompt'").get() as { usage_count: number }).usage_count, 2, 'restoring copies increments usage only once')
-    fs.unlinkSync(first)
+    // A file that took the original name meanwhile is never overwritten: the copy comes back under the collision name.
+    fs.writeFileSync(first, 'newer')
     db.prepare(`UPDATE image_groups SET emote_keywords = '[]' WHERE composite_hash = ? AND group_id = ?`).run(hash, groupId)
-    const retry = await call('/api/images/restore', editorId, 'POST', { names: restored.body.data.failed.map((entry: { name: string }) => entry.name) })
+    const retry = await call('/api/images/restore', editorId, 'POST', { names: [firstEntry] })
     assert.equal(retry.body.data.done.length, 1)
     assert.deepEqual(membership.get(hash, groupId), { order_index: 7, emote_keywords: '[]' }, 'another copy must not revert a later keyword edit')
-    assert.equal(fs.readFileSync(first, 'utf8'), 'undo-first.png')
+    const renamedFirst = path.join(uploads, 'undo-first_001.png')
+    assert.equal(fs.readFileSync(first, 'utf8'), 'newer')
+    assert.equal(fs.readFileSync(renamedFirst, 'utf8'), 'undo-first.png')
+    assert.ok(db.prepare('SELECT 1 FROM image_files WHERE composite_hash = ? AND original_file_path = ?').get(hash, renamedFirst))
     assert.equal((db.prepare('SELECT COUNT(*) AS count FROM image_files WHERE composite_hash = ?').get(hash) as { count: number }).count, 2)
     assert.equal((db.prepare("SELECT usage_count FROM prompt_collection WHERE prompt = 'undo_prompt'").get() as { usage_count: number }).usage_count, 2)
 
@@ -607,6 +611,16 @@ test('administrators browse server folders and manage the RecycleBin safely', { 
         })
       }
       const undo = await call('/api/images/restore', adminId, 'POST', { names: [name] })
+      if (reason === 'registered-path') {
+        // A name another library row still holds is never reused: Undo brings the image back under the collision name.
+        const renamedTo = path.join(directory, 'recover_001.png')
+        assert.equal(undo.body.data.done.length, 1, reason)
+        assert.equal(fs.readFileSync(renamedTo, 'utf8'), 'recoverable content')
+        assert.equal(fs.existsSync(original), false)
+        assert.ok(db.prepare('SELECT 1 FROM image_files WHERE composite_hash = ? AND original_file_path = ?').get(hash, renamedTo))
+        assert.ok(db.prepare('SELECT 1 FROM image_files WHERE composite_hash = ? AND original_file_path = ?').get('ef'.repeat(24), original), 'the other row keeps its path')
+        continue
+      }
       assert.equal(undo.body.data.done.length, 0, reason)
       assert.equal(undo.body.data.failed.length, 1, reason)
       assert.equal(fs.existsSync(original), false, 'strict Undo rolls the physical file back')
@@ -620,7 +634,8 @@ test('administrators browse server folders and manage the RecycleBin safely', { 
       assert.equal(result.body.data.done.length, 1, reason)
       assert.equal(result.body.data.failed.length, 0, reason)
       assert.ok(result.body.data.done[0].warning, 'file-only recovery is explicitly warned about')
-      const restoredTo = renamed ? path.join(directory, 'recover (복원 1).png') : original
+      // Library media renamed on restore takes the collision-name pattern (settings › 파일 이름), not ` (복원 N)`.
+      const restoredTo = renamed ? path.join(directory, 'recover_001.png') : original
       assert.equal(result.body.data.done[0].restoredTo, restoredTo)
       assert.equal(fs.readFileSync(restoredTo, 'utf8'), 'recoverable content')
       if (renamed) assert.equal(fs.readFileSync(original, 'utf8'), 'newer content')

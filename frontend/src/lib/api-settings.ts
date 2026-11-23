@@ -3,6 +3,7 @@ import { requestApiData, requestJson } from '@/lib/api-request'
 import type { ApiResponse } from '@/types/image'
 import type {
   AppSettings,
+  FileNamingSettings,
   GenerationThrottleSettings,
   ImageSaveSettings,
   MetadataExtractionSettings,
@@ -207,6 +208,17 @@ export async function startDataRematchJob(request: DataRematchStartRequest) {
 
 export async function updateImageSaveSettings(settings: Partial<ImageSaveSettings>, revision?: string) {
   return requestApiData<AppSettings & PageSettingsVersions>('/api/settings/image-save', 'settings.imageSave.update', {
+    method: 'PUT',
+    headers: {
+      ...(revision ? { 'If-Match': revision } : {}), 'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(settings),
+  })
+
+}
+
+export async function updateFileNamingSettings(settings: Partial<FileNamingSettings>, revision?: string) {
+  return requestApiData<AppSettings & PageSettingsVersions>('/api/settings/file-naming', 'settings.fileNaming.update', {
     method: 'PUT',
     headers: {
       ...(revision ? { 'If-Match': revision } : {}), 'Content-Type': 'application/json',

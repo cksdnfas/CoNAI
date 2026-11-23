@@ -5,6 +5,7 @@ import {
   AiRuntimeSettings,
   AppSettings,
   EmbeddingSettings,
+  FileNamingSettings,
   GenerationThrottleSettings,
   GeneralSettings,
   TaggerSettings,
@@ -21,6 +22,7 @@ import {
   SupportedLanguage,
 } from '@conai/shared';
 import { cleanupUnusedAppearanceFontFiles } from './appearanceFontAssetService';
+import { applyAppTimeZone } from './appTimeZone';
 import { withBuiltinLlmPresets } from './llmBuiltinPresets';
 import {
   SETTINGS_FILE_PATH,
@@ -35,6 +37,7 @@ import {
   applyAiRuntimeSettingsUpdate,
   applyEmbeddingSettingsUpdate,
   applyAppearanceSettingsUpdate,
+  applyFileNamingSettingsUpdate,
   applyGenerationThrottleSettingsUpdate,
   applyGeneralSettingsUpdate,
   applyImageSaveSettingsUpdate,
@@ -123,6 +126,9 @@ class SettingsService {
       this.saveSettings({ ...this.settings, llm: seededLlm });
     }
 
+    // The first read sets the app time zone, before anything names a file or folder by date.
+    applyAppTimeZone(this.settings!.general.timeZone);
+
     // TypeScript guard: this.settings should never be null at this point
     return this.settings!;
   }
@@ -134,6 +140,7 @@ class SettingsService {
     try {
       writeSettingsFile(settings);
       this.settings = settings;
+      applyAppTimeZone(settings.general.timeZone);
     } catch (error) {
       console.error('[SettingsService] Error saving settings:', error);
       throw new Error('Failed to save settings');
@@ -233,6 +240,16 @@ class SettingsService {
   updateImageSaveSettings(imageSaveSettings: Partial<AppSettings['imageSave']>): AppSettings {
     const currentSettings = this.loadSettings();
     const updatedSettings = applyImageSaveSettingsUpdate(currentSettings, imageSaveSettings);
+    this.saveSettings(updatedSettings);
+    return updatedSettings;
+  }
+
+  /**
+   * Update stored file name patterns
+   */
+  updateFileNamingSettings(fileNamingSettings: Partial<FileNamingSettings>): AppSettings {
+    const currentSettings = this.loadSettings();
+    const updatedSettings = applyFileNamingSettingsUpdate(currentSettings, fileNamingSettings);
     this.saveSettings(updatedSettings);
     return updatedSettings;
   }

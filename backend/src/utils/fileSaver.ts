@@ -4,8 +4,9 @@ import sharp from 'sharp';
 import { ImageMetadataWriteService, type ImageOutputFormat } from '../services/imageMetadataWriteService';
 import type { AIMetadata } from '../services/metadata/types';
 import { runtimePaths } from '../config/runtimePaths';
-import { generateDatedRandomFilename, getDateFolder, normalizeRelativePath } from './mediaStoragePaths';
-import { relocateFile } from './recycleBin';
+import { getDateFolder, normalizeRelativePath } from './mediaStoragePaths';
+import { exclusiveWrites, writeMediaFileWithUniqueName } from './mediaFileNames';
+import { moveFileWithoutReplacing } from './recycleBin';
 
 export type GeneratedImageSaveOptions = {
   format?: 'original' | ImageOutputFormat;
@@ -15,7 +16,13 @@ export type GeneratedImageSaveOptions = {
   maxHeight?: number;
   sourcePathForMetadata?: string;
   sourceMimeType?: string;
+  /** Embedded source name for metadata only; never the stored name. */
   originalFileName?: string;
+  /**
+   * Stored name the user typed on the generation screen (no extension). Replaces the generated-name pattern; the
+   * collision pattern still keeps it unique in the folder. Missing or blank: the generated-name pattern.
+   */
+  fileName?: string;
   metadataPatch?: Partial<AIMetadata>;
   /** Server-only integrity check, after final encoding/write and before library registration. */
   verifySavedFile?: (absolutePath: string) => Promise<void>;
@@ -104,8 +111,8 @@ export class FileSaver {
       // 'original' (or no format) keeps the source's own format.
       const outputFormat = requestedFormat ?? sourceFormat ?? 'png';
       const outputExtension = outputFormat === 'jpeg' ? 'jpg' : outputFormat;
-      const filename = generateDatedRandomFilename(outputExtension);
-      const fullPath = path.join(dateFolderPath, filename);
+      const naming = { directory: dateFolderPath, extension: outputExtension, kind: 'generated' as const, requestedName: options?.fileName, engine: serviceType };
+      let fullPath: string;
 
       // Keep the original bytes and metadata when nothing would change. An explicit jpeg/webp request is
       // still re-encoded at its quality even if the source already has that format; only png is lossless.
@@ -149,16 +156,17 @@ export class FileSaver {
         await fs.promises.mkdir(runtimePaths.tempDir, { recursive: true });
         const stagingDirectory = await fs.promises.mkdtemp(path.join(runtimePaths.tempDir, 'verified-image-'));
         try {
-          const stagedPath = path.join(stagingDirectory, filename);
+          const stagedPath = path.join(stagingDirectory, `output.${outputExtension}`);
           await fs.promises.writeFile(stagedPath, outputBuffer);
           await options.verifySavedFile(stagedPath);
-          // Temp and uploads can sit on different volumes (configured data paths, Docker mounts): copy when rename can't.
-          await relocateFile(stagedPath, fullPath);
+          // The name is chosen only now, and the move never replaces a file that took it meanwhile. Temp and uploads
+          // can sit on different volumes (configured data paths, Docker mounts): the move copies when it can't link.
+          fullPath = await writeMediaFileWithUniqueName(naming, (target) => moveFileWithoutReplacing(stagedPath, target));
         } finally {
           await fs.promises.rm(stagingDirectory, { recursive: true, force: true });
         }
       } else {
-        await fs.promises.writeFile(fullPath, outputBuffer);
+        fullPath = await writeMediaFileWithUniqueName(naming, exclusiveWrites.bytes(outputBuffer));
       }
 
       const stats = await fs.promises.stat(fullPath);
@@ -204,12 +212,12 @@ export class FileSaver {
       await fs.promises.mkdir(targetDir, { recursive: true });
 
       const sourceExtension = path.extname(sourceFilePath) || '.bin';
-      const filename = generateDatedRandomFilename(sourceExtension.replace(/^\./, ''));
-      const initialPath = path.join(targetDir, filename);
       // Register and preview the original; optimization produces a separate background derivative.
-      const finalPath = initialPath;
+      const finalPath = await writeMediaFileWithUniqueName(
+        { directory: targetDir, extension: sourceExtension, kind: 'generated', requestedName: options?.fileName, engine: serviceType },
+        exclusiveWrites.copy(sourceFilePath),
+      );
       const finalMimeType = sourceMimeType;
-      await fs.promises.copyFile(sourceFilePath, finalPath);
 
       const stats = await fs.promises.stat(finalPath);
       const relativePath = normalizeRelativePath(finalPath, runtimePaths.uploadsDir);

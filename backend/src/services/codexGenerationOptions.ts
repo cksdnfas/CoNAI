@@ -51,15 +51,28 @@ export async function parseCodexGenerationRequest(value: unknown) {
     throw new Error('Codex strict preservation requires infill, source and matching PNG mask')
   }
   const normalized = await validateCodexImageInputs(request)
+  const fileName = rawImageSaveFileName(value)
+  const imageSaveOptions = fileName ? { ...request.imageSaveOptions, fileName } : request.imageSaveOptions
   return {
     ...request,
     ...normalized,
+    ...(imageSaveOptions ? { imageSaveOptions } : {}),
     ...(request.preserve === 'strict' ? {
       size: `${normalized.attachment_descriptors[0].width}x${normalized.attachment_descriptors[0].height}`,
       output_format: 'png' as const,
-      imageSaveOptions: { ...request.imageSaveOptions, format: 'png' as const, resizeEnabled: false },
+      imageSaveOptions: { ...imageSaveOptions, format: 'png' as const, resizeEnabled: false },
     } : {}),
   }
+}
+
+/**
+ * The stored-file name typed on the generation screen (`imageSaveOptions.fileName`). Read beside the schema instead
+ * of from it: the schema is what tools publish to assistants, and the name is a screen-only choice.
+ */
+function rawImageSaveFileName(value: unknown): string | undefined {
+  const options = value && typeof value === 'object' ? (value as { imageSaveOptions?: unknown }).imageSaveOptions : undefined
+  const fileName = options && typeof options === 'object' ? (options as { fileName?: unknown }).fileName : undefined
+  return typeof fileName === 'string' && fileName.trim() ? fileName.slice(0, 1000) : undefined
 }
 
 type CodexModelSuggestion = CodexModelOption

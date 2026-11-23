@@ -1,8 +1,9 @@
-import { BookImage, Bookmark, BrainCircuit, Brush, Combine, Contact, Eye, FileOutput, FilePen, FolderOutput, Hash, History, ImageIcon, Images, Info, List, ListChecks, ListMusic, ListVideo, PenLine, Play, Puzzle, Server, SlidersHorizontal, SquarePen, Tags, TextCursorInput, Wand, Waves, Workflow, type LucideIcon } from 'lucide-react'
+import { BookImage, Bookmark, BrainCircuit, Brush, Combine, Contact, Eye, FileOutput, FilePen, FileText, FolderOutput, Hash, History, ImageIcon, Images, Info, List, ListChecks, ListMusic, ListVideo, PenLine, Play, Puzzle, Server, SlidersHorizontal, SquarePen, Tags, TextCursorInput, Wand, Waves, Workflow, type LucideIcon } from 'lucide-react'
 import { isGenerationLayoutPluginBlock, type GenerationLayoutBlock, type GenerationLayoutBuiltinBlock } from '@conai/shared'
 import type { TranslationDictionary } from '@/i18n'
 
 export const GENERATION_LAYOUT_BLOCK_LABELS: Record<GenerationLayoutBuiltinBlock, TranslationDictionary> = {
+  filename: { ko: '파일 이름', en: 'File name' },
   prompt: { ko: '프롬프트', en: 'Prompt' },
   characters: { ko: '캐릭터 프롬프트', en: 'Character prompt' },
   settings: { ko: '설정', en: 'Settings' },
@@ -40,6 +41,7 @@ export const GENERATION_LAYOUT_BLOCK_LABELS: Record<GenerationLayoutBuiltinBlock
 }
 
 const GENERATION_LAYOUT_BLOCK_ICONS: Record<GenerationLayoutBuiltinBlock, LucideIcon> = {
+  filename: FileText,
   prompt: PenLine,
   characters: Contact,
   settings: SlidersHorizontal,

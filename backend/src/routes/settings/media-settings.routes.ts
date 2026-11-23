@@ -12,7 +12,7 @@ import { RuntimeJobRunner } from '../../services/runtimeJobs/runtimeJobRunner';
 import { RuntimeJobConflictError } from '../../services/runtimeJobs/runtimeJobStore';
 import { getRequesterAccountId } from '../requester-session-helpers';
 import { settingsService } from '../../services/settingsService';
-import { GenerationThrottleSettings, ImageSaveSettings, MetadataExtractionSettings, SimilaritySettings, ThumbnailSettings, VideoOptimizationSettings } from '@conai/shared';
+import { describeFileNamePatternIssue, validateFileNamePattern, type FileNamePatternRole, type FileNamingSettings, GenerationThrottleSettings, ImageSaveSettings, MetadataExtractionSettings, SimilaritySettings, ThumbnailSettings, VideoOptimizationSettings } from '@conai/shared';
 
 const router = Router();
 
@@ -172,6 +172,40 @@ router.put(
       success: true,
       data: updatedSettings,
       message: 'Image save settings updated successfully',
+    });
+    return;
+  }),
+);
+
+router.put(
+  '/file-naming',
+  asyncHandler(async (req: Request, res: Response) => {
+    const body: unknown = req.body;
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
+      res.status(400).json({ success: false, error: 'File naming settings must be an object' });
+      return;
+    }
+    const patch: Partial<FileNamingSettings> = {};
+    for (const [key, value] of Object.entries(body)) {
+      if (key !== 'upload' && key !== 'generated' && key !== 'collision') {
+        res.status(400).json({ success: false, error: `Unknown file naming field: ${key}` });
+        return;
+      }
+      const issue = validateFileNamePattern(value, key as FileNamePatternRole);
+      if (issue) {
+        res.status(400).json({ success: false, error: `${key}: ${describeFileNamePatternIssue(issue).en}` });
+        return;
+      }
+      patch[key] = value as string;
+    }
+
+    if (!verifyPageSettingsWrite(res)) return;
+    const updatedSettings = settingsService.updateFileNamingSettings(patch);
+
+    res.json({
+      success: true,
+      data: updatedSettings,
+      message: 'File naming settings updated successfully',
     });
     return;
   }),

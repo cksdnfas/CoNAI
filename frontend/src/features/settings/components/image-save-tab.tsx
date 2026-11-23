@@ -6,7 +6,7 @@ import { IconButton } from '@/components/ui/icon-button'
 import { RowGroup } from '@/components/ui/row-group'
 import { Select } from '@/components/ui/select'
 import { SettingRow } from '@/components/ui/setting-row'
-import type { GenerationThrottleSettings, ImageSaveSettings, ThumbnailSettings, VideoOptimizationSettings } from '@conai/shared'
+import type { FileNamingSettings, GenerationThrottleSettings, ImageSaveSettings, ThumbnailSettings, VideoOptimizationSettings } from '@conai/shared'
 import { useI18n } from '@/i18n'
 import { VideoOptimizationTab } from './video-optimization-tab'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
@@ -15,6 +15,7 @@ import { SettingsSwitchRow } from '@/components/ui/settings-switch-row'
 import { ChatFilledLabel } from './settings-filled-label'
 import { SettingsContents } from './settings-navigation'
 import { SettingsRowsSkeleton } from './settings-rows'
+import { FileNamingSettingsGroup } from './file-naming-settings-group'
 
 const IMAGE_SAVE_SIZE_PRESETS = [
   { label: '720p', width: 1280, height: 720 },
@@ -54,6 +55,9 @@ interface ImageSaveTabProps {
   /** Which generation-throttle groups to show: the reservation policy (예약 작업), the provider pacing (실행 간격), both or none. */
   throttle?: 'all' | 'reservations' | 'pacing' | 'none'
   showMediaSettings?: boolean
+  fileNamingDraft: FileNamingSettings | null
+  onPatchFileNaming: (patch: Partial<FileNamingSettings>) => void
+  hasFileNamingChanges: boolean
   imageSaveDraft: ImageSaveSettings | null
   onPatchImageSave: (patch: Partial<ImageSaveSettings>) => void
   hasImageSaveChanges: boolean
@@ -135,6 +139,9 @@ function ProviderHeading({ icon, children }: { icon: ReactNode; children: ReactN
 export function ImageSaveTab({
   throttle = 'all',
   showMediaSettings = true,
+  fileNamingDraft,
+  onPatchFileNaming,
+  hasFileNamingChanges,
   imageSaveDraft,
   onPatchImageSave,
   hasImageSaveChanges,
@@ -246,8 +253,10 @@ export function ImageSaveTab({
 
       {showMediaSettings ? (
         <>
-          <SettingsContents groups={[{ id: 'image-save', label: t({ ko: '이미지 저장', en: 'Image saving' }) }, { id: 'thumbnail', label: t({ ko: '썸네일', en: 'Thumbnails' }) }, { id: 'video-optimization', label: t({ ko: '영상 저장', en: 'Video saving' }) }]} />
-          <RowGroup data-settings-group="image-save" heading={t({ ko: '이미지 저장', en: 'Image saving' })} actions={<SectionDirtyBadge dirty={hasImageSaveChanges} />}>
+          <SettingsContents groups={[{ id: 'file-naming', label: t({ ko: '파일 이름', en: 'File names' }) }, { id: 'image-save', label: t({ ko: '이미지 저장', en: 'Image saving' }) }, { id: 'thumbnail', label: t({ ko: '썸네일', en: 'Thumbnails' }) }, { id: 'video-optimization', label: t({ ko: '영상 저장', en: 'Video saving' }) }]} />
+          <FileNamingSettingsGroup draft={fileNamingDraft} onPatch={onPatchFileNaming} dirty={hasFileNamingChanges} />
+
+          <RowGroup data-settings-group="image-save" className="scroll-mt-36" heading={t({ ko: '이미지 저장', en: 'Image saving' })} actions={<SectionDirtyBadge dirty={hasImageSaveChanges} />}>
             {imageSaveDraft ? (
               <>
                 <SettingRow label={<ChatFilledLabel fieldId="imageSave.defaultFormat">{labels.format}</ChatFilledLabel>} controlWidth="standard">
@@ -337,7 +346,7 @@ export function ImageSaveTab({
             )}
           </RowGroup>
 
-          <RowGroup data-settings-group="thumbnail" heading={t({ ko: '썸네일', en: 'Thumbnail' })} actions={<SectionDirtyBadge dirty={hasThumbnailChanges} />}>
+          <RowGroup data-settings-group="thumbnail" className="scroll-mt-36" heading={t({ ko: '썸네일', en: 'Thumbnail' })} actions={<SectionDirtyBadge dirty={hasThumbnailChanges} />}>
             {thumbnailDraft ? (
               <>
                 <SettingRow label={<ChatFilledLabel fieldId="thumbnail.size">{labels.thumbnailSize}</ChatFilledLabel>} controlWidth="standard">

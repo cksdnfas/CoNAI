@@ -18,6 +18,7 @@ import {
 import { fileStoreRoot } from './fileStorePaths';
 import { isPathInside } from '../utils/pathResolver';
 import { filePreviewMime, renderPreviewWebp } from './fileStorePreview';
+import { writeMediaFileWithUniqueName } from '../utils/mediaFileNames';
 
 /**
  * Administrator view of server folders (RecycleBin, uploads, save, temp, logs) next to the file store.
@@ -276,7 +277,9 @@ export const SystemFolderService = {
 
   /**
    * Put RecycleBin files back where they were deleted from. An occupied original location fails the item, or with
-   * `rename` gets a free ` (복원 N)` name next to it. Files without a recorded origin cannot be restored.
+   * `rename` gets a free ` (복원 N)` name next to it. Library media (and every library undo, `libraryOnly`) takes
+   * the collision-name pattern of settings › 파일 이름 instead, also skipping names other library rows still hold.
+   * Files without a recorded origin cannot be restored.
    */
   async restore(names: string[], conflict: 'fail' | 'rename', libraryOnly = false): Promise<SystemFolderBatchResult> {
     const result: SystemFolderBatchResult = { done: [], failed: [] };
@@ -297,7 +300,12 @@ export const SystemFolderService = {
         if (isDenied(targetDirectory, roots.denied) || within(roots.binRoot, targetDirectory)) throw new SystemFolderError('이 위치로는 복원할 수 없어.', 403);
         await fs.promises.mkdir(path.dirname(original), { recursive: true });
         // The move itself refuses an occupied name (EEXIST), so a file created after any check is never replaced.
-        let restoredTo = await restoreWithoutReplacing(absolute, original, conflict);
+        let restoredTo = libraryData && (libraryOnly || conflict === 'rename')
+          ? await writeMediaFileWithUniqueName(
+            { directory: path.dirname(original), extension: path.extname(original), kind: 'keep', keepName: path.basename(original), ownHash: libraryRestoreHash(libraryData) },
+            (target) => moveFileWithoutReplacing(absolute, target),
+          )
+          : await restoreWithoutReplacing(absolute, original, conflict);
         let warning: string | undefined;
         if (libraryData) {
           try {
@@ -367,6 +375,16 @@ export const SystemFolderService = {
     return { deleted: deletedNames.length, failed };
   },
 };
+
+/** The image a library restore snapshot belongs to; its own leftover row does not make its old name taken. */
+function libraryRestoreHash(data: string): string | undefined {
+  try {
+    const hash = (JSON.parse(data) as { metadata?: { composite_hash?: unknown } }).metadata?.composite_hash;
+    return typeof hash === 'string' ? hash : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 const isTaken = (error: unknown) => (error as NodeJS.ErrnoException | undefined)?.code === 'EEXIST';
 

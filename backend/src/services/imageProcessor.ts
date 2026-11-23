@@ -6,7 +6,8 @@ import { ImageSimilarityService } from './imageSimilarity';
 import { settingsService } from './settingsService';
 import { MetadataExtractor } from './metadata';
 import { logger } from '../utils/logger';
-import { getDateFolder, generateUniqueOriginalFilename, normalizeRelativePath } from '../utils/mediaStoragePaths';
+import { getDateFolder, normalizeRelativePath } from '../utils/mediaStoragePaths';
+import { exclusiveWrites, writeMediaFileWithUniqueName } from '../utils/mediaFileNames';
 import { toWindowsLongPathIfNeeded } from '../utils/pathResolver';
 
 export interface ProcessedImage {
@@ -45,17 +46,6 @@ export class ImageProcessor {
       dateFolder: path.join('images', dateFolder),
       targetFolder
     };
-  }
-
-  /**
-   * 원본 파일명 기반으로 고유한 파일명 생성
-   * 중복 방지를 위해 타임스탬프와 랜덤 문자열을 파일명 앞에 추가
-   *
-   * @param originalName 원본 파일명 (예: "한글 테스트.png")
-   * @returns 고유한 파일명 (예: "20250109_143025_abc123_한글 테스트.png")
-   */
-  static generateUniqueFilename(originalName: string): string {
-    return generateUniqueOriginalFilename(originalName);
   }
 
   /**
@@ -152,24 +142,17 @@ export class ImageProcessor {
       const folders = await this.createUploadFolders(baseUploadPath);
       logger.debug(`⏱️ [ImageProcessor] Folder creation: ${Date.now() - folderStart}ms`);
 
-      // 고유한 파일명 생성
-      const filename = this.generateUniqueFilename(file.originalname);
-      const originalPath = path.join(folders.targetFolder, filename);
-      storedFilePath = originalPath;
-
-      // diskStorage 사용: file.path에서 임시 파일 읽기
-      // memoryStorage 사용: file.buffer 사용 (하위 호환성)
+      // diskStorage: file.path의 임시 파일을 복사, memoryStorage(레거시): file.buffer를 저장.
+      // 이름은 업로드 이름 규칙으로 폴더 안에서 겹치지 않게 정하고, 쓰기는 기존 파일을 덮지 않는다.
       const copyStart = Date.now();
-      if (file.path) {
-        // diskStorage: 임시 파일 복사
-        tempFilePath = file.path;
-        await fs.promises.copyFile(file.path, originalPath);
-      } else if (file.buffer) {
-        // memoryStorage (레거시): 버퍼에서 저장
-        await fs.promises.writeFile(originalPath, file.buffer);
-      } else {
-        throw new Error('No file data available (neither path nor buffer)');
-      }
+      if (file.path) tempFilePath = file.path;
+      else if (!file.buffer) throw new Error('No file data available (neither path nor buffer)');
+      const originalPath = await writeMediaFileWithUniqueName(
+        { directory: folders.targetFolder, extension: path.extname(file.originalname), kind: 'upload', originalName: file.originalname },
+        file.path ? exclusiveWrites.copy(file.path) : exclusiveWrites.bytes(file.buffer),
+      );
+      const filename = path.basename(originalPath);
+      storedFilePath = originalPath;
       logger.debug(`⏱️ [ImageProcessor] File copy: ${Date.now() - copyStart}ms`);
 
       // 이미지 기본 정보만 추출 (width, height)

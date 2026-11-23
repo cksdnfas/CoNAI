@@ -18,7 +18,7 @@ const inputVariants = cva(
       },
       controlSize: { compact: 'h-7 px-2 text-xs' },
       mono: { true: 'font-mono tabular-nums', false: '' },
-      /** Space for SearchField's leading icon and trailing clear key. */
+      /** Space for IconInputField's (SearchField's) leading icon and trailing clear key. */
       adornments: { search: 'pr-9 pl-9 [&::-webkit-search-cancel-button]:hidden' },
       assisted: { true: 'ring-1 ring-primary/50', false: '' },
     },

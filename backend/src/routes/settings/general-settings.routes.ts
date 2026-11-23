@@ -5,6 +5,7 @@ import {
   isHeaderNavigationPageKey,
   MAX_RECYCLE_BIN_RETENTION_DAYS,
   normalizeRecycleBinRetentionDays,
+  normalizeTimeZoneName,
   type GeneralSettings,
   type ImageSimilarityCheckMode,
   type SupportedLanguage,
@@ -22,8 +23,15 @@ import {
   MIN_GENERATION_HISTORY_MAX_ITEMS,
 } from '../../constants/generationHistory';
 import { requestGenerationResultRetentionPrune } from '../../services/generationResultRetentionService';
+import { getServerTimeZoneInfo } from '../../services/appTimeZone';
 
 const router = Router();
+
+/** The zone the server runs in and its clock: the time zone row and the file name preview read the server's time. */
+router.get('/time-zone', (_req: Request, res: Response) => {
+  res.setHeader('Cache-Control', 'no-store');
+  res.json({ success: true, data: getServerTimeZoneInfo() });
+});
 const validLanguages: SupportedLanguage[] = ['ko', 'en'];
 const validImageSimilarityCheckModes: ImageSimilarityCheckMode[] = ['manual', 'always'];
 const HEX_COLOR_PATTERN = /^#(?:[0-9a-fA-F]{3}){1,2}$/;
@@ -50,6 +58,16 @@ router.put(
       MAX_GENERATION_HISTORY_MAX_ITEMS,
       `generationHistoryMaxItems must be an integer between ${MIN_GENERATION_HISTORY_MAX_ITEMS} and ${MAX_GENERATION_HISTORY_MAX_ITEMS}`,
     )) return;
+
+    if (generalSettings.timeZone !== undefined) {
+      // '' keeps the server's own zone; anything else must be an IANA zone this runtime knows (stored canonical).
+      const timeZone = normalizeTimeZoneName(generalSettings.timeZone);
+      if (generalSettings.timeZone !== '' && !timeZone) {
+        sendRouteBadRequest(res, 'timeZone must be an IANA time zone name such as Asia/Seoul, or empty for the server time zone');
+        return;
+      }
+      generalSettings.timeZone = timeZone;
+    }
 
     if (generalSettings.deleteProtection !== undefined) {
       if (generalSettings.deleteProtection && typeof generalSettings.deleteProtection !== 'object') {

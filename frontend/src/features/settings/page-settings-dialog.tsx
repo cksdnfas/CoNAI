@@ -29,7 +29,7 @@ import { VIDEO_OPTIMIZATION_PRESETS } from './video-optimization-presets'
 const affectedQueries: Record<PageSettingsScopeId, string[]> = {
   appearance: ['app-settings', 'global-appearance-settings', 'runtime-appearance-settings', 'runtime-appearance'],
   general: ['app-settings', 'image-viewer-settings'], similarity: ['app-settings', 'image-viewer-settings', 'similar-images'],
-  metadata: ['app-settings'], 'image-save': ['app-settings', 'image-save-settings', 'runtime-image-save-settings'],
+  metadata: ['app-settings'], 'image-save': ['app-settings', 'image-save-settings', 'runtime-image-save-settings'], 'file-naming': ['app-settings'],
   thumbnail: ['app-settings'], 'video-optimization': ['app-settings', 'runtime-video-optimization-settings'],
   'generation-throttle': ['app-settings', 'runtime-generation-throttle-settings'],
   tagger: ['app-settings', 'tagger-status', 'tagger-models'], kaloscope: ['app-settings', 'kaloscope-status'],

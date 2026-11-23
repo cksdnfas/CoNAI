@@ -91,6 +91,10 @@ export const API_ERROR_FALLBACKS = {
     ko: '설정을 불러오지 못했어.',
     en: 'Failed to load settings.',
   },
+  'settings.timeZone.load': {
+    ko: '서버 시간대를 불러오지 못했어.',
+    en: 'Failed to load the server time zone.',
+  },
   'settings.appearancePublic.load': {
     ko: '공용 화면 설정을 불러오지 못했어.',
     en: 'Failed to load public appearance settings.',
@@ -142,6 +146,10 @@ export const API_ERROR_FALLBACKS = {
   'settings.imageSave.update': {
     ko: '이미지 저장 설정을 저장하지 못했어.',
     en: 'Failed to save image save settings.',
+  },
+  'settings.fileNaming.update': {
+    ko: '파일 이름 설정을 저장하지 못했어.',
+    en: 'Failed to save file name settings.',
   },
   'settings.thumbnail.update': {
     ko: '썸네일 설정을 저장하지 못했어.',

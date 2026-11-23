@@ -22,8 +22,11 @@ export function statRevision(info: fs.BigIntStats): string {
  * @returns MD5 해시 (32자 hex 문자열)
  * @throws 파일이 존재하지 않거나 읽기 오류 발생 시
  */
-/** Copy a file and return the MD5 of what was copied, reading the source once. */
-export async function copyFileWithHash(sourcePath: string, targetPath: string): Promise<string> {
+/**
+ * Copy a file and return the MD5 of what was copied, reading the source once. `flags: 'wx'` makes the copy fail with
+ * EEXIST instead of replacing an existing target; a copy that fails after creating the target leaves it behind.
+ */
+export async function copyFileWithHash(sourcePath: string, targetPath: string, options: { flags?: 'w' | 'wx' } = {}): Promise<string> {
   const hash = crypto.createHash('md5');
   await pipeline(
     fs.createReadStream(sourcePath),
@@ -33,7 +36,7 @@ export async function copyFileWithHash(sourcePath: string, targetPath: string): 
         callback(null, chunk);
       },
     }),
-    fs.createWriteStream(targetPath),
+    fs.createWriteStream(targetPath, { flags: options.flags ?? 'w' }),
   );
   return hash.digest('hex');
 }

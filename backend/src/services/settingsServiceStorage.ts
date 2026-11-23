@@ -11,6 +11,9 @@ import {
   AppearanceThemeSettings,
   DeleteProtectionSettings,
   DEFAULT_APPEARANCE_THEME,
+  DEFAULT_FILE_NAMING_SETTINGS,
+  normalizeFileNamingSettings,
+  normalizeTimeZoneName,
   createDefaultAppearancePresetSlots as getDefaultAppearancePresetSlots,
   getDefaultHeaderNavigationSettings,
   HEADER_NAVIGATION_PAGE_KEYS,
@@ -382,6 +385,8 @@ export function getDefaultSettingsFromEnvironment(): AppSettings {
         process.env.CONAI_GENERATION_RESULT_RETENTION_LIMIT,
         DEFAULT_GENERATION_HISTORY_MAX_ITEMS,
       ),
+      // The server's own zone; nothing changes until someone picks one.
+      timeZone: '',
     },
     aiRuntime: {
       pythonSource: 'auto',
@@ -494,6 +499,7 @@ export function getDefaultSettingsFromEnvironment(): AppSettings {
       applyToUpload: true,
       applyToWorkflowOutputs: true,
     },
+    fileNaming: { ...DEFAULT_FILE_NAMING_SETTINGS },
     generationThrottle: {
       novelai: {
         maxConcurrentJobs: 1,
@@ -548,6 +554,8 @@ export function mergeLoadedSettingsWithDefaults(loadedSettings: any, defaults: A
       headerNavigationOrder: normalizeHeaderNavigationOrder(navigationStoredAsPins ? loadedSettings.general?.headerNavigationOrder : undefined),
       headerNavigationVersion: HEADER_NAVIGATION_VERSION,
       deleteProtection: normalizeDeleteProtectionSettings(loadedSettings.general?.deleteProtection, defaults.general.deleteProtection),
+      // A hand-edited or no longer known zone falls back to the server's own.
+      timeZone: normalizeTimeZoneName(loadedSettings.general?.timeZone),
     },
     aiRuntime: normalizeAiRuntimeSettings(loadedSettings.aiRuntime, loadedSettings.tagger?.pythonPath, defaults.aiRuntime),
     tagger: {
@@ -614,6 +622,8 @@ export function mergeLoadedSettingsWithDefaults(loadedSettings: any, defaults: A
       ...defaults.imageSave,
       ...loadedSettings.imageSave,
     },
+    // An older file has no section; a hand-edited invalid pattern falls back to its default.
+    fileNaming: normalizeFileNamingSettings(loadedSettings.fileNaming),
     generationThrottle: {
       novelai: {
         ...defaults.generationThrottle.novelai,
@@ -653,6 +663,7 @@ export function hasMissingSettingsFields(loaded: any, defaults: AppSettings): bo
     [defaults.metadataExtraction, loaded.metadataExtraction],
     [defaults.thumbnail, loaded.thumbnail],
     [defaults.imageSave, loaded.imageSave],
+    [defaults.fileNaming, loaded.fileNaming],
     [defaults.generationThrottle.novelai, loaded.generationThrottle?.novelai],
     [defaults.generationThrottle.codex, loaded.generationThrottle?.codex],
     [defaults.generationThrottle.reservations, loaded.generationThrottle?.reservations],

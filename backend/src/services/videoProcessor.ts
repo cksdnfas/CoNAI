@@ -8,7 +8,9 @@ const ffprobeStatic = require('ffprobe-static');
 import { settingsService } from './settingsService';
 import { VideoOptimizationService } from './videoOptimizationService';
 import { copyFileWithHash, generateBufferHash, generateFileHash } from '../utils/fileHash';
-import { getDateFolder, generateUniqueOriginalFilename, normalizeRelativePath } from '../utils/mediaStoragePaths';
+import { randomUUID } from 'crypto';
+import { getDateFolder, normalizeRelativePath } from '../utils/mediaStoragePaths';
+import { exclusiveWrites, writeMediaFileWithUniqueName } from '../utils/mediaFileNames';
 
 export interface VideoMetadata {
   duration: number;          // 초 단위
@@ -75,7 +77,6 @@ export class VideoProcessor {
 
   static async createUploadFolders(
     baseUploadPath: string,
-    videoFilename: string
   ): Promise<{
     dateFolder: string;
     originFolder: string;
@@ -93,17 +94,6 @@ export class VideoProcessor {
       dateFolder: path.join('videos', dateFolder),
       originFolder
     };
-  }
-
-  /**
-   * 원본 파일명 기반으로 고유한 파일명 생성
-   * 중복 방지를 위해 타임스탬프와 랜덤 문자열을 파일명 앞에 추가
-   *
-   * @param originalName 원본 파일명 (예: "한글 비디오.mp4")
-   * @returns 고유한 파일명 (예: "20250109_143025_abc123_한글 비디오.mp4")
-   */
-  static generateUniqueFilename(originalName: string, forcedExtension?: string): string {
-    return generateUniqueOriginalFilename(originalName, forcedExtension);
   }
 
   /**
@@ -323,17 +313,18 @@ export class VideoProcessor {
       const videoOptimizationSettings = settingsService.loadSettings().videoOptimization;
       const shouldOptimizeVideo = videoOptimizationSettings.enabled && videoOptimizationSettings.applyToUpload;
 
-      // 고유한 파일명 생성
-      const filename = this.generateUniqueFilename(file.originalname);
       const sourceExtension = path.extname(file.originalname) || '.mp4';
 
       // 폴더 구조 생성 (videos/YYYY-MM-DD/Origin/)
-      const folders = await this.createUploadFolders(baseUploadPath, filename);
+      const folders = await this.createUploadFolders(baseUploadPath);
 
-      const initialPath = path.join(folders.originFolder, filename);
-      const targetBasePath = path.join(folders.originFolder, path.parse(filename).name);
-      let finalPath = initialPath;
-      storedFilePath = finalPath;
+      // Stored by the upload-name pattern (settings › 파일 이름) with the extension of what is kept: `.mp4` when an
+      // optimized encode replaces the source. The write never replaces an existing file.
+      const place = (extension: string, write: (target: string) => Promise<void>) => writeMediaFileWithUniqueName(
+        { directory: folders.originFolder, extension, kind: 'upload', originalName: file.originalname }, write);
+      // Only the optimizer's staging folder comes from this; the stored name is chosen by `place`.
+      const targetBasePath = path.join(folders.originFolder, 'upload');
+      let finalPath = '';
       // Known while the bytes pass through unchanged; an optimized file is hashed after it is written.
       let fileHash: string | null = null;
 
@@ -345,26 +336,31 @@ export class VideoProcessor {
             crf: videoOptimizationSettings.crf,
             audioBitrateKbps: videoOptimizationSettings.audioBitrateKbps,
             logLabel: 'upload',
-          });
+          }, place);
           finalPath = optimizationResult.outputPath;
           storedFilePath = finalPath;
         } else {
-          fileHash = await copyFileWithHash(file.path, finalPath);
+          const sourcePath = file.path;
+          finalPath = await place(sourceExtension, async (target) => {
+            fileHash = await copyFileWithHash(sourcePath, target, { flags: 'wx' });
+          });
+          storedFilePath = finalPath;
         }
       } else if (file.buffer) {
         if (shouldOptimizeVideo) {
-          const stagedInputPath = path.join(folders.originFolder, `${path.parse(filename).name}.source${sourceExtension}`);
+          const stagedInputPath = path.join(folders.originFolder, `.conai-${randomUUID()}.source${sourceExtension}`);
           tempFilePath = stagedInputPath;
           await fs.promises.writeFile(stagedInputPath, file.buffer);
           const optimizationResult = await VideoOptimizationService.persistWithFallback(stagedInputPath, targetBasePath, sourceExtension, {
             crf: videoOptimizationSettings.crf,
             audioBitrateKbps: videoOptimizationSettings.audioBitrateKbps,
             logLabel: 'upload',
-          });
+          }, place);
           finalPath = optimizationResult.outputPath;
           storedFilePath = finalPath;
         } else {
-          await fs.promises.writeFile(finalPath, file.buffer);
+          finalPath = await place(sourceExtension, exclusiveWrites.bytes(file.buffer));
+          storedFilePath = finalPath;
           fileHash = generateBufferHash(file.buffer);
         }
       } else {

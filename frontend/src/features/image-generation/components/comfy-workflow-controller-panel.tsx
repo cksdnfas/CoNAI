@@ -202,6 +202,8 @@ type ComfyWorkflowControllerPanelProps = {
   compactActionBarContentTargetId?: string
   /** Wide page: render the form and `result` as the shared block layout instead of a single scroll column. */
   blockLayout?: { result: ReactNode }
+  /** The `filename` layout block (the stored name of results); omitted on public pages, whose visitors never name server files. */
+  fileNameField?: ReactNode
   onBack: () => void
   onSelectTarget: (target: string) => void
   onQueueRegistrationCountChange: (value: string) => void
@@ -248,6 +250,7 @@ export function ComfyWorkflowControllerPanel({
   splitPaneScroll = false,
   compactActionBarContentTargetId,
   blockLayout,
+  fileNameField,
   onBack,
   onSelectTarget,
   onQueueRegistrationCountChange,
@@ -577,10 +580,13 @@ export function ComfyWorkflowControllerPanel({
   const { preset: layoutPreset } = useGenerationLayoutSurface('comfy')
   const stackedBlocks = stackedLayoutBlocks(layoutPreset)
   const workflowAfterFields = stackedBlocks.indexOf('workflow') > stackedBlocks.indexOf('fields')
+  // The name row follows the preset too: above the workflow header when it comes first, else on top of the fields.
+  const fileNameAt = !fileNameField || !stackedBlocks.includes('filename') ? null
+    : !workflowAfterFields && stackedBlocks.indexOf('filename') < stackedBlocks.indexOf('workflow') ? 'header' : 'fields'
 
   if (blockLayout) {
     return (
-      <GenerationBlockLayout surface="comfy" blocks={{ workflow: desktopHeaderContent, fields: fieldsContent, action: inlineActionBar, result: blockLayout.result }} />
+      <GenerationBlockLayout surface="comfy" blocks={{ filename: fileNameField, workflow: desktopHeaderContent, fields: fieldsContent, action: inlineActionBar, result: blockLayout.result }} />
     )
   }
 
@@ -588,6 +594,7 @@ export function ComfyWorkflowControllerPanel({
     <section className={cn(splitPaneScroll ? 'flex min-h-0 flex-1 flex-col gap-6' : 'space-y-6')}>
       {workflowAfterFields ? null : (
           <div className="shrink-0 space-y-3">
+            {fileNameAt === 'header' ? fileNameField : null}
             {desktopHeaderContent}
           </div>
         )}
@@ -596,6 +603,7 @@ export function ComfyWorkflowControllerPanel({
         'space-y-6',
         splitPaneScroll && 'min-h-0 flex-1 overflow-y-auto pr-2 pb-1',
       )}>
+        {fileNameAt === 'fields' ? fileNameField : null}
         {fieldsContent}
         {workflowAfterFields ? desktopHeaderContent : null}
         <StackedPluginBlocks surface="comfy" />

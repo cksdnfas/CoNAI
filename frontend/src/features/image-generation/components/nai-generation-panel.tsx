@@ -42,6 +42,7 @@ import { NaiGenerationEditorSections, type NaiEditorBlockNodes } from './nai-gen
 import { GenerationBlockLayout, StackedPluginBlocks } from '../layout/generation-block-layout'
 import { useGenerationLayoutSurface } from '../layout/generation-layout-context'
 import { stackedLayoutBlocks } from '../layout/generation-layout-ops'
+import { GenerationFileNameField } from './generation-file-name-field'
 import { NaiActionSection, NaiConnectionHeader, NaiToolbarStatus } from './nai-generation-panel-sections'
 import { usePortalTargetById } from './generation-toolbar-status'
 import { useGenerationImageSaveOptions } from './use-generation-image-save-options'
@@ -418,17 +419,20 @@ export function NaiGenerationPanel({
 
   // Narrow screens stack the preset's visible sections in column order; the generate bar keeps its own sticky slot.
   const { preset: layoutPreset } = useGenerationLayoutSurface('nai')
-  const renderEditorBlocks = (blocks: NaiEditorBlockNodes) => blockLayout
-    ? <GenerationBlockLayout surface="nai" blocks={{ ...blocks, action: actionSection, result: blockLayout.result }} />
-    : (
-      <>
-        {stackedLayoutBlocks(layoutPreset).map((block) => (
-          <Fragment key={block}>
-            {block in blocks ? blocks[block as keyof NaiEditorBlockNodes] : <StackedPluginBlocks surface="nai" block={block} />}
-          </Fragment>
-        ))}
-      </>
-    )
+  const renderEditorBlocks = (editorBlocks: NaiEditorBlockNodes) => {
+    const blocks = { filename: <GenerationFileNameField />, ...editorBlocks }
+    return blockLayout
+      ? <GenerationBlockLayout surface="nai" blocks={{ ...blocks, action: actionSection, result: blockLayout.result }} />
+      : (
+        <>
+          {stackedLayoutBlocks(layoutPreset).map((block) => (
+            <Fragment key={block}>
+              {block in blocks ? blocks[block as keyof typeof blocks] : <StackedPluginBlocks surface="nai" block={block} />}
+            </Fragment>
+          ))}
+        </>
+      )
+  }
 
   const editorSections = (
     <NaiGenerationEditorSections

@@ -3,6 +3,7 @@ import type {
   AppSettings,
   AppearanceSettings,
   EmbeddingSettings,
+  FileNamingSettings,
   GenerationThrottleSettings,
   GeneralSettings,
   KaloscopeSettings,
@@ -170,6 +171,17 @@ export function applyImageSaveSettingsUpdate(currentSettings: AppSettings, image
     imageSave: {
       ...currentSettings.imageSave,
       ...imageSaveSettings,
+    },
+  };
+}
+
+/** Build the next settings state after applying a file-naming patch (patterns are validated by the route). */
+export function applyFileNamingSettingsUpdate(currentSettings: AppSettings, fileNamingSettings: Partial<FileNamingSettings>): AppSettings {
+  return {
+    ...currentSettings,
+    fileNaming: {
+      ...currentSettings.fileNaming,
+      ...fileNamingSettings,
     },
   };
 }

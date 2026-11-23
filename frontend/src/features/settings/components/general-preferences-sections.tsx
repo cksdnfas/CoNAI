@@ -18,6 +18,7 @@ import { cn } from '@/lib/utils'
 import { SettingsSwitchRow } from '@/components/ui/settings-switch-row'
 import { SectionDirtyBadge } from './settings-section-status'
 import { SettingsRowsSkeleton } from './settings-rows'
+import { TimeZoneSettingRow } from './time-zone-setting-row'
 
 export type GeneralPreferenceSection = 'basic' | 'appearance' | 'library' | 'safety'
 
@@ -271,6 +272,7 @@ export function GeneralPreferencesSections({
             onCheckedChange={(checked) => onPatchGeneral({ applyRatingSafetyToGenerationHistory: checked })}
             label={<ChatFilledLabel fieldId="applyRatingSafetyToGenerationHistory">{t({ ko: '생성 히스토리에도 등급 표시 규칙 적용', en: 'Apply rating visibility rules to generation history' })}</ChatFilledLabel>}
           />
+          <TimeZoneSettingRow value={generalDraft.timeZone ?? ''} onChange={(timeZone) => onPatchGeneral({ timeZone })} />
         </RowGroup>
       ) : null}
     </div>

@@ -11,9 +11,9 @@ import { Button } from '@/components/ui/button'
 import { ErrorState } from '@/components/ui/error-state'
 import { EmptyState } from '@/components/ui/empty-state'
 import { useSnackbar } from '@/components/ui/snackbar-context'
-import { reextractAllImageMetadata, updateGenerationThrottleSettings, updateImageSaveSettings, updateMetadataSettings, updateThumbnailSettings, updateVideoOptimizationSettings, type MetadataReextractAllResult } from '@/lib/api-settings'
+import { reextractAllImageMetadata, updateFileNamingSettings, updateGenerationThrottleSettings, updateImageSaveSettings, updateMetadataSettings, updateThumbnailSettings, updateVideoOptimizationSettings, type MetadataReextractAllResult } from '@/lib/api-settings'
 import { useRuntimeJobAction } from '@/lib/use-runtime-job'
-import { getAppSettings, updateGeneralSettings } from '@/lib/api-settings-general'
+import { getAppSettings, SERVER_TIME_ZONE_QUERY_KEY, updateGeneralSettings } from '@/lib/api-settings-general'
 import { getPostsSettings, updatePostsSettings } from '@/lib/api-posts'
 import { getMcpHttpSettings, updateMcpHttpEnabled } from '@/lib/api-settings-mcp'
 import { DEFAULT_APPEARANCE_SETTINGS } from '@/lib/appearance'
@@ -22,12 +22,13 @@ import { APP_BRAND_TOOLTIP, APP_VERSION_LABEL } from '@/lib/app-metadata'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { usePluginPages } from '@/features/plugins/use-plugin-pages'
 import { useI18n } from '@/i18n'
-import { SETTINGS_ROW_BY_ID } from '@conai/shared'
+import { SETTINGS_ROW_BY_ID, describeFileNamePatternIssue, validateFileNamePattern } from '@conai/shared'
 import type {
   ChatPageData,
   GenerationThrottleSettings,
   GeneralSettings,
   ImageSaveSettings,
+  FileNamingSettings,
   MetadataExtractionSettings,
   PostsSafetySettings,
   PostsSettings,
@@ -126,7 +127,7 @@ const GENERAL_SECTION_FIELDS = {
   basic: ['language', 'promptForDownloadLocation'],
   appearance: ['enableGallery', 'showRatingBadges', 'headerNavigation', 'headerNavigationOrder'],
   library: ['imageSimilarityCheckMode'],
-  safety: ['deleteProtection', 'generationHistoryMaxItems', 'autoCleanupCanvasOnShutdown', 'applyRatingSafetyToGenerationHistory'],
+  safety: ['deleteProtection', 'generationHistoryMaxItems', 'autoCleanupCanvasOnShutdown', 'applyRatingSafetyToGenerationHistory', 'timeZone'],
 } as const satisfies Record<GeneralPreferenceSection, ReadonlyArray<keyof GeneralSettings>>
 
 /** Tab that renders each general preference section. */
@@ -254,6 +255,19 @@ export function SettingsPage() {
       return { draft: settings.imageSave, sync: () => syncSettingsCache(settings) }
     },
   })
+  const { draft: effectiveFileNamingDraft, setDraft: setFileNamingDraft, section: fileNamingSection } = useSettingsDraftSlot<FileNamingSettings>({
+    id: 'file-naming', label: t({ ko: '파일 이름', en: 'File names' }), tab: 'media',
+    saved: settingsQuery.data?.fileNaming, revision: settingsQuery.data?.pageSettingsRevisions?.['file-naming'],
+    update: async (draft, revision) => {
+      // The server refuses these too; checked here, the save bar names the problem in the page language.
+      for (const role of ['upload', 'generated', 'collision'] as const) {
+        const issue = validateFileNamePattern(draft[role], role)
+        if (issue) throw new Error(`${t({ ko: '파일 이름', en: 'File names' })}: ${t(describeFileNamePatternIssue(issue))}`)
+      }
+      const settings = await updateFileNamingSettings(draft, revision)
+      return { draft: settings.fileNaming, sync: () => syncSettingsCache(settings) }
+    },
+  })
   const { draft: effectiveThumbnailDraft, setDraft: setThumbnailDraft, section: thumbnailSection } = useSettingsDraftSlot<ThumbnailSettings>({
     id: 'thumbnail', label: t({ ko: '썸네일', en: 'Thumbnail' }), tab: 'media',
     saved: settingsQuery.data?.thumbnail, revision: settingsQuery.data?.pageSettingsRevisions?.thumbnail,
@@ -322,6 +336,8 @@ export function SettingsPage() {
     onSuccess: (settings, savedFields) => {
       generalRevision(settings.pageSettingsRevisions?.general)
       syncSettingsCache(settings)
+      // The server clock and the file name preview follow the zone just applied.
+      if ('timeZone' in savedFields) void queryClient.invalidateQueries({ queryKey: SERVER_TIME_ZONE_QUERY_KEY })
       // Only refresh the saved section's fields so unsaved edits in other sections stay in the draft.
       const savedKeys = Object.keys(savedFields) as Array<keyof GeneralSettings>
       setGeneralDraft((currentDraft) => currentDraft ? { ...currentDraft, ...pickGeneralFields(settings.general, savedKeys) } : null)
@@ -372,6 +388,7 @@ export function SettingsPage() {
     })),
     appearanceDraftSection,
     metadataSection,
+    fileNamingSection,
     imageSaveSection,
     thumbnailSection,
     videoOptimizationSection,
@@ -574,6 +591,11 @@ export function SettingsPage() {
     setImageSaveDraft({ ...effectiveImageSaveDraft, ...patch })
   }
 
+  const patchFileNamingDraft = (patch: Partial<FileNamingSettings>) => {
+    if (!effectiveFileNamingDraft) return
+    setFileNamingDraft({ ...effectiveFileNamingDraft, ...patch })
+  }
+
   const patchThumbnailDraft = (patch: Partial<ThumbnailSettings>) => {
     if (!effectiveThumbnailDraft) return
     setThumbnailDraft({ ...effectiveThumbnailDraft, ...patch })
@@ -612,6 +634,9 @@ export function SettingsPage() {
   }
 
   const imageSaveTabProps = {
+    fileNamingDraft: effectiveFileNamingDraft,
+    onPatchFileNaming: patchFileNamingDraft,
+    hasFileNamingChanges: fileNamingSection.isDirty,
     imageSaveDraft: effectiveImageSaveDraft,
     onPatchImageSave: patchImageSaveDraft,
     hasImageSaveChanges: isImageSaveDraftDirty,

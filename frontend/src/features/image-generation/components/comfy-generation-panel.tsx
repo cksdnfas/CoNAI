@@ -42,6 +42,7 @@ import { ComfyManagementArea } from './comfy-management-area'
 import { ComfyModuleSaveModal } from './comfy-module-save-modal'
 import { ComfyServerRegistrationModal } from './comfy-server-registration-modal'
 import { ComfyWorkflowControllerPanel } from './comfy-workflow-controller-panel'
+import { GenerationFileNameField } from './generation-file-name-field'
 
 const ComfyWorkflowAuthoringModalLazy = lazy(() => import('./comfy-workflow-authoring-modal').then((module) => ({ default: module.ComfyWorkflowAuthoringModal })))
 import { GenerationBlockLayout } from '../layout/generation-block-layout'
@@ -527,6 +528,7 @@ function ComfyGenerationPanelContent({
             splitPaneScroll={splitPaneScroll}
             compactActionBarContentTargetId={compactActionBarContentTargetId}
             blockLayout={blockLayout}
+            fileNameField={<GenerationFileNameField />}
             onBack={() => onSelectedWorkflowChange(null)}
             onSelectTarget={setSelectedTarget}
             onQueueRegistrationCountChange={setQueueRegistrationCount}

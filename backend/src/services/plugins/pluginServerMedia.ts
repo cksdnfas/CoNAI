@@ -11,7 +11,8 @@ import { runtimePaths } from '../../config/runtimePaths'
 import { BackgroundProcessorService } from '../backgroundProcessorService'
 import { resolveSpriteGroup } from '../sprite/spriteLibrary'
 import { assignGeneratedMediaToGroup } from '../generationTargetGroupService'
-import { generateDatedRandomFilename, getDateFolder } from '../../utils/mediaStoragePaths'
+import { getDateFolder } from '../../utils/mediaStoragePaths'
+import { exclusiveWrites, writeMediaFileWithUniqueName } from '../../utils/mediaFileNames'
 import { publicScopeRequester, type PluginPublicScope } from './pluginPublicScope'
 
 /**
@@ -50,11 +51,10 @@ export async function callPluginServerMedia(pluginId: string, requester: McpRequ
   const before = await fs.promises.stat(source, { bigint: true })
   if (!mimeType || !before.isFile() || before.nlink !== 1n || before.size < 1n || before.size > 512n * 1024n * 1024n) throw new PluginError('지원하는 이미지·영상 결과(512MB 이하)만 저장할 수 있어.')
   const directory = path.join(runtimePaths.uploadsDir, ...(mimeType.startsWith('video/') ? ['videos', 'API'] : ['API', 'images']), getDateFolder())
-  await fs.promises.mkdir(directory, { recursive: true })
-  const target = path.join(directory, generateDatedRandomFilename(extension))
+  let target: string | undefined
   let processing = false
   try {
-    await fs.promises.copyFile(source, target, fs.constants.COPYFILE_EXCL)
+    target = await writeMediaFileWithUniqueName({ directory, extension, kind: 'generated' }, exclusiveWrites.copy(source))
     const after = await fs.promises.stat(source, { bigint: true })
     if (before.ino !== after.ino || before.size !== after.size || before.mtimeNs !== after.mtimeNs || before.ctimeNs !== after.ctimeNs) throw new PluginError('저장 도중 결과 파일이 바뀌었어.', 409)
     authorize()
@@ -66,7 +66,7 @@ export async function callPluginServerMedia(pluginId: string, requester: McpRequ
     assignGeneratedMediaToGroup(groupId, [result.compositeHash])
     return { source: 'library', compositeHash: result.compositeHash, groupId }
   } catch (error) {
-    if (!processing) await fs.promises.unlink(target).catch(() => undefined)
+    if (!processing && target) await fs.promises.unlink(target).catch(() => undefined)
     throw error
   }
 }

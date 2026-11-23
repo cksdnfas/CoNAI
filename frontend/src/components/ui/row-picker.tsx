@@ -1,14 +1,15 @@
 import { Fragment, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Check, ChevronDown, Search } from 'lucide-react'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { selectVariants } from '@/components/ui/select'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 
 export type RowPickerItem = {
   id: string
   group?: string
-  /** The face on the row's start (avatar, avatar stack, thumbnail). */
-  media: ReactNode
+  /** The face on the row's start (avatar, avatar stack, thumbnail); rows of plain names leave it out. */
+  media?: ReactNode
   title: ReactNode
   subtitle?: ReactNode
   /** On the row's end in the list (a time, a count). */
@@ -20,7 +21,7 @@ export type RowPickerItem = {
 function PickerRow({ item, compact = false }: { item: RowPickerItem; compact?: boolean }) {
   return (
     <>
-      <span className="flex shrink-0">{item.media}</span>
+      {item.media !== undefined ? <span className="flex shrink-0">{item.media}</span> : null}
       <span className="grid min-w-0 flex-1 text-left">
         <span className="flex min-w-0 items-center gap-1.5 truncate text-sm font-semibold text-foreground">{item.title}</span>
         {item.subtitle ? <span className="truncate text-xs text-muted-foreground">{item.subtitle}</span> : null}
@@ -33,8 +34,10 @@ function PickerRow({ item, compact = false }: { item: RowPickerItem; compact?: b
 /**
  * A field that picks one row out of a list of faces (rooms, characters, workflows). Closed it shows the picked row;
  * open, a search box over the list. Arrow keys move, Enter picks. Sits inside a field frame, so it has no surface of its own.
+ * `variant="settings"`: a settings-row control instead, framed and sized like `Select variant="settings"`, showing
+ * only the picked row's title (a long list of names: time zones).
  */
-export function RowPicker({ items, value, onChange, placeholder, searchPlaceholder, emptyLabel, disabled, ariaLabel, onSearchChange, onOpenChange, footer, pickedItem }: {
+export function RowPicker({ items, value, onChange, placeholder, searchPlaceholder, emptyLabel, disabled, ariaLabel, onSearchChange, onOpenChange, footer, pickedItem, variant = 'field' }: {
   items: RowPickerItem[]
   value: string
   onChange: (id: string) => void
@@ -48,6 +51,7 @@ export function RowPicker({ items, value, onChange, placeholder, searchPlacehold
   onOpenChange?: (open: boolean) => void
   footer?: ReactNode
   pickedItem?: RowPickerItem
+  variant?: 'field' | 'settings'
 }) {
   const { t } = useI18n()
   const listId = useId()
@@ -88,9 +92,12 @@ export function RowPicker({ items, value, onChange, placeholder, searchPlacehold
           type="button"
           aria-label={ariaLabel}
           aria-haspopup="listbox"
-          className="flex min-h-12 w-full items-center gap-2.5 px-3 py-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-primary/25 disabled:cursor-not-allowed disabled:opacity-50"
+          className={variant === 'settings'
+            ? cn(selectVariants({ variant: 'settings' }), 'flex items-center gap-2 text-left')
+            : 'flex min-h-12 w-full items-center gap-2.5 px-3 py-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-primary/25 disabled:cursor-not-allowed disabled:opacity-50'}
         >
-          {picked ? <PickerRow item={picked} compact /> : <span className="flex-1 text-sm text-muted-foreground">{placeholder}</span>}
+          {picked && variant === 'settings' ? <span className="min-w-0 flex-1 truncate">{picked.title}</span>
+            : picked ? <PickerRow item={picked} compact /> : <span className="flex-1 text-sm text-muted-foreground">{placeholder}</span>}
           <ChevronDown className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
         </button>
       </PopoverTrigger>

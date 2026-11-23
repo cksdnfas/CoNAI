@@ -67,8 +67,8 @@ test('moving blocks between columns and placing the filmstrip', () => {
   assert.ok(!preset.columns[0].blocks.includes('settings'))
 
   // Within one column the index counts the dragged block's old slot.
-  preset = moveLayoutBlock('nai', preset, 'prompt', { column: 0, index: 3 })
-  assert.deepEqual(preset.columns[0].blocks.slice(0, 3), ['characters', 'images', 'prompt'])
+  preset = moveLayoutBlock('nai', preset, 'prompt', { column: 0, index: 4 })
+  assert.deepEqual(preset.columns[0].blocks.slice(0, 4), ['filename', 'characters', 'images', 'prompt'])
 
   // The filmstrip snaps back beside the result; above it means a top strip.
   preset = moveLayoutBlock('nai', preset, 'recent', { column: 1, index: 0 })
@@ -87,10 +87,24 @@ test('other surfaces move their own blocks; hidden ones leave the narrow stack',
   let preset = moveLayoutBlock('codex', createDefaultGenerationLayoutPreset('codex'), 'images', { column: 1, index: 0 })
   assert.deepEqual(preset.columns[1].blocks, ['images', 'result', 'recent'])
   preset = setLayoutBlockHidden(preset, 'output', true)
-  assert.deepEqual(stackedLayoutBlocks(preset), ['model', 'prompt', 'action', 'images', 'result', 'recent'])
+  assert.deepEqual(stackedLayoutBlocks(preset), ['filename', 'model', 'prompt', 'action', 'images', 'result', 'recent'])
 
   const browse = moveLayoutBlock('workflow-browse', createDefaultGenerationLayoutPreset('workflow-browse'), 'outputs', { column: 0, index: 0 })
   assert.deepEqual(browse.columns[0].blocks, ['outputs', 'list'])
+})
+
+test('a saved layout from before the file name block shows it on top of the generate column', () => {
+  const [nai] = normalizeGenerationLayoutPresets('nai', [{ id: 'saved', name: 'Saved', columns: [
+    { weight: 40, blocks: ['prompt', 'characters', 'settings', 'images', 'references', 'vibes', 'action'] },
+    { weight: 60, blocks: ['result', 'recent'] },
+  ], hidden: [] }])
+  assert.deepEqual(nai.columns[0].blocks.slice(0, 2), ['filename', 'prompt'])
+  const [moved] = normalizeGenerationLayoutPresets('codex', [{ id: 'saved', name: 'Saved', columns: [
+    { weight: 40, blocks: ['model', 'prompt', 'output', 'images'] },
+    { weight: 60, blocks: ['action', 'result', 'recent'] },
+  ], hidden: [] }])
+  assert.deepEqual(moved.columns[1].blocks[0], 'filename', 'the generate button moved: the name row follows it')
+  assert.ok(!moved.columns[0].blocks.includes('filename'))
 })
 
 test('resizing keeps the pair total and the minimum width; only empty columns can be removed', () => {

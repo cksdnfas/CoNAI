@@ -3,7 +3,8 @@ import path from 'path'
 import { runtimePaths } from '../config/runtimePaths'
 import { BackgroundProcessorService } from './backgroundProcessorService'
 import { assignGeneratedMediaToGroup } from './generationTargetGroupService'
-import { generateDatedRandomFilename, generateUniqueOriginalFilename, getDateFolder } from '../utils/mediaStoragePaths'
+import { getDateFolder } from '../utils/mediaStoragePaths'
+import { exclusiveWrites, writeMediaFileWithUniqueName } from '../utils/mediaFileNames'
 
 /**
  * Write in-app output (sprite sheets, captured frames, converted media, agent uploads…) into the image library the
@@ -24,15 +25,15 @@ export interface LibraryIngestInput {
   mimeType: string
   /** Custom group the new item is filed under, or null for an ungrouped upload. */
   groupId: number | null
-  /** Optional original name; the stored name still includes a unique generated prefix. */
+  /** Optional original name: stored by the upload-name pattern; without one, by the generated-name pattern. */
   name?: string
 }
 
-async function allocateLibraryPath(extension: string, mimeType: string, name?: string): Promise<string> {
-  const isVideo = mimeType.startsWith('video/')
+/** Write a new library file under a free name in today's folder (settings › 파일 이름). */
+function writeLibraryFile(input: LibraryIngestInput, write: (target: string) => Promise<void>): Promise<string> {
+  const isVideo = input.mimeType.startsWith('video/')
   const directory = path.join(runtimePaths.uploadsDir, ...(isVideo ? ['videos', 'API'] : ['API', 'images']), getDateFolder())
-  await fs.promises.mkdir(directory, { recursive: true })
-  return path.join(directory, name ? generateUniqueOriginalFilename(name, extension) : generateDatedRandomFilename(extension))
+  return writeMediaFileWithUniqueName({ directory, extension: input.extension, kind: input.name ? 'upload' : 'generated', originalName: input.name }, write)
 }
 
 async function registerLibraryFile(filePath: string, mimeType: string, groupId: number | null): Promise<string> {
@@ -42,23 +43,26 @@ async function registerLibraryFile(filePath: string, mimeType: string, groupId: 
   return processed.compositeHash
 }
 
-/** Save bytes held in memory as a new library item; returns its composite hash. */
-export async function saveMediaBytesToLibrary(input: LibraryIngestInput & { bytes: Buffer }): Promise<string> {
-  const filePath = await allocateLibraryPath(input.extension, input.mimeType, input.name)
+/** Save bytes held in memory as a new library item; returns its composite hash and the stored file. */
+export async function storeMediaBytesInLibrary(input: LibraryIngestInput & { bytes: Buffer }): Promise<{ compositeHash: string; filePath: string }> {
+  const filePath = await writeLibraryFile(input, exclusiveWrites.bytes(input.bytes))
   try {
-    await fs.promises.writeFile(filePath, input.bytes)
-    return await registerLibraryFile(filePath, input.mimeType, input.groupId)
+    return { compositeHash: await registerLibraryFile(filePath, input.mimeType, input.groupId), filePath }
   } catch (error) {
     await fs.promises.rm(filePath, { force: true })
     throw error
   }
 }
 
+/** Save bytes held in memory as a new library item; returns its composite hash. */
+export async function saveMediaBytesToLibrary(input: LibraryIngestInput & { bytes: Buffer }): Promise<string> {
+  return (await storeMediaBytesInLibrary(input)).compositeHash
+}
+
 /** Copy an existing file (a stored file, a temp ffmpeg output…) into the library; the source is left in place. */
 export async function saveMediaFileToLibrary(input: LibraryIngestInput & { sourcePath: string }): Promise<string> {
-  const filePath = await allocateLibraryPath(input.extension, input.mimeType, input.name)
+  const filePath = await writeLibraryFile(input, exclusiveWrites.copy(input.sourcePath))
   try {
-    await fs.promises.copyFile(input.sourcePath, filePath)
     return await registerLibraryFile(filePath, input.mimeType, input.groupId)
   } catch (error) {
     await fs.promises.rm(filePath, { force: true })

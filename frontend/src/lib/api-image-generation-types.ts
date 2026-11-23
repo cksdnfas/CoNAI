@@ -443,6 +443,8 @@ export interface GenerationImageSaveOptions {
   resizeEnabled?: boolean
   maxWidth?: number
   maxHeight?: number
+  /** Stored name typed on the generation screen (no extension); the server keeps it unique in the folder. */
+  fileName?: string
 }
 
 export interface ComfyUIGenerationPayload {
