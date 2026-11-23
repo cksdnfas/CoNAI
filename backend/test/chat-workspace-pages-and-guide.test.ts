@@ -124,6 +124,11 @@ test('workspace pages, audio deletes and the user guide', { timeout: 60000 }, as
     const long = guides.readAppGuide('MCP_GUIDE', { limit: 8000 })
     assert.ok(!('error' in long) && 'sections' in long && long.sections.length > 40)
     assert.deepEqual(contents.guides.find((entry: Record<string, unknown>) => entry.topic === 'MCP_GUIDE').sections, long.sections, 'every heading of a long guide is listed, the same ones its outline gives')
+    // A word alone finds its place: the guides with such a heading, not the whole contents; no hit gives the contents.
+    const hit = JSON.parse((await call(client, 'get_app_guide', { section: 'video canvas' })).text)
+    assert.ok(hit.guides.length < 5 && hit.guides.some((entry: { topic: string; sections: string[] }) => entry.topic === 'PLUGINS' && entry.sections.length < 5 && entry.sections.some((heading) => /Video Canvas/.test(heading))), 'only the guides and headings with the word')
+    const miss = JSON.parse((await call(client, 'get_app_guide', { section: 'zz no such heading zz' })).text)
+    assert.ok(miss.note && miss.guides.length === contents.guides.length, 'a word no heading has gives every topic in the same call')
     const missing = await call(client, 'get_app_guide', { topic: 'NOPE' })
     assert.ok(missing.error && /CHAT/.test(missing.text), 'a wrong topic lists the right ones')
   })

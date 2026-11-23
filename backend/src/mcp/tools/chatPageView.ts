@@ -1,4 +1,4 @@
-import { chatPageActionTier, type ChatPageData, type ChatPageSnapshot } from '@conai/shared'
+import { chatPageActionTier, type ChatPageData, type ChatPageSchema, type ChatPageSnapshot } from '@conai/shared'
 import type { McpRequestContext, McpRequester } from '../context'
 import { boundedPageView, ChatPageContextError, notePageViewShown, PAGE_VIEW_BUDGET, PAGE_VIEW_UNKNOWN, pageViewTextKey, requireChatPageActionAccess, requireChatPageDataAccess, takePageViewFolded, type PageViewShown } from '../../services/codex-chat/chatPageContext'
 import { contextContentLimit, hideRatingRestrictedText, RATING_RESTRICTED_TEXT, ratingRestrictedHashesUnder } from '../../services/codex-chat/chatContentRating'
@@ -48,6 +48,62 @@ function collectionView(value: unknown[]) {
   return value.length <= INLINE_ITEMS && JSON.stringify(value).length <= INLINE_CHARS ? value : { count: value.length, readWith: 'read_page_data' }
 }
 
+/** A choice list this long in an operation's schema is named by the screen data that lists its values, not spelled out. */
+const LISTED_CHOICE_CHARS = 400
+
+/** Where the screen's data lists every one of `values`: `data.images[].hash`, or `data.tags` for a plain list. */
+function listedIn(data: Record<string, ChatPageData>, values: Array<string | number>) {
+  for (const [key, value] of Object.entries(data)) {
+    if (!Array.isArray(value) || value.length < values.length) continue
+    const rows = value.filter((item): item is Record<string, ChatPageData> => !!item && typeof item === 'object' && !Array.isArray(item))
+    if (!rows.length) {
+      const listed = new Set<ChatPageData>(value)
+      if (values.every((item) => listed.has(item))) return `data.${key}`
+      continue
+    }
+    for (const property of Object.keys(rows[0])) {
+      const listed = new Set<ChatPageData>(rows.map((row) => row[property]))
+      if (values.every((item) => listed.has(item))) return `data.${key}[].${property}`
+    }
+  }
+  return null
+}
+
+/**
+ * Choices that differ only after their last `=` written once: `/settings?section=a`, `/settings?section=b` become
+ * `/settings?section=a|b` (the destinations of page.navigate). Null when the values do not allow it or it saves little.
+ */
+function groupedChoices(values: Array<string | number>) {
+  if (!values.every((value): value is string => typeof value === 'string' && !/[\s|]/.test(value))) return null
+  const groups = new Map<string, string[]>()
+  for (const value of values) {
+    const at = value.lastIndexOf('=')
+    const stem = at < 0 ? value : value.slice(0, at + 1)
+    groups.set(stem, [...(groups.get(stem) ?? []), ...(at < 0 ? [] : [value.slice(at + 1)])])
+  }
+  const text = [...groups].map(([stem, tails]) => `${stem}${tails.join('|')}`).join(' ')
+  return text.length * 10 < JSON.stringify(values).length * 7 ? text : null
+}
+
+/**
+ * An operation's schema as the model reads it. A long choice list whose values the screen's data already lists (the
+ * hashes of the images shown, the ids of the rows) says where to take them from: spelled out, the same list rides in
+ * every request and comes back with the operations each time the list changes. Another long list is written with its
+ * shared stems once when that is much shorter. The operation is still checked against the full list (resolveAction
+ * reads the screen's own schema).
+ */
+function shownSchema(schema: ChatPageSchema, data: Record<string, ChatPageData>): ChatPageSchema {
+  const long = !!schema.enum && JSON.stringify(schema.enum).length > LISTED_CHOICE_CHARS
+  const source = long ? listedIn(data, schema.enum!) : null
+  const grouped = long && !source ? groupedChoices(schema.enum!) : null
+  const { enum: choices, ...rest } = schema
+  const where = source ? `One of ${source} (${choices!.length} listed; read_page_data).` : grouped ? `One of these; a|b after "=" is a choice of one: ${grouped}` : null
+  const next: ChatPageSchema = where ? { ...rest, description: [schema.description, where].filter(Boolean).join(' ') } : { ...schema }
+  if (next.properties) next.properties = Object.fromEntries(Object.entries(next.properties).map(([key, item]) => [key, shownSchema(item, data)]))
+  if (next.items) next.items = shownSchema(next.items, data)
+  return next
+}
+
 /**
  * What the model may see of a screen: fields, permitted operations with their tier, small collections whole, larger
  * ones as sizes; the text of media above its content rating `limit` hidden (ratingFilteredPage).
@@ -56,8 +112,9 @@ export function chatPageView(requester: McpRequester, live: ChatPageSnapshot, li
   const page = ratingFilteredPage(live, limit)
   const { data, workflow, ...summary } = page
   const allowedData = Object.entries(data ?? {}).filter(([key]) => { try { requireChatPageDataAccess(requester, key); return true } catch { return false } })
+  const readable = Object.fromEntries(allowedData)
   const actions = (page.actions ?? []).filter((action) => { try { requireChatPageActionAccess(requester, page, action.id); return true } catch { return false } })
-    .map((action) => ({ ...action, tier: chatPageActionTier(action.id, action) }))
+    .map((action) => ({ ...action, schema: shownSchema(action.schema, readable), tier: chatPageActionTier(action.id, action) }))
   return {
     ...summary,
     ...(page.actions ? { actions } : {}),

@@ -7,6 +7,7 @@ import { errorResult } from './toolResults';
 import { PLUGIN_SERVER_TOOL_PREFIX, pluginProfileTools } from '../services/plugins/pluginServerTools';
 import { chatProposalToolRefusal, isChatProposalToolAvailable } from '../services/codex-chat/chatProposals';
 import { inProcessMcpClient, NO_TOOL_DEADLINE } from './inProcessClient';
+import { slimToolSchema } from './toolSchemaSlim';
 
 /**
  * A chat agent sees the app's tools as a table of contents instead of every definition at once: the chat's own tools
@@ -151,6 +152,8 @@ export function createToolCatalog(server: McpServer, registerDirect: (args: unkn
         await inner.close().catch(() => undefined);
       };
 
+      /** The tools whose full definition this server has already shown (opened, or returned with a failed call). */
+      const seen = new Set<string>();
       const categories = [...new Set(catalogued.map((tool) => tool.category))];
       const contents = categories.map((category) => `- ${category}: ${TOOL_CATEGORIES[category]}\n  ${contentsLine(catalogued.filter((tool) => tool.category === category).map((tool) => tool.name))}`).join('\n');
       registerDirect([CATALOG_OPEN_TOOL, { description: [
@@ -161,16 +164,18 @@ export function createToolCatalog(server: McpServer, registerDirect: (args: unkn
         contents,
       ].join('\n'), inputSchema: z.object({
         category: z.string().optional().describe('A category id from the contents, e.g. "audio"'),
-        tools: z.array(z.string()).max(20).optional().describe('Tool names to open instead of (or besides) a category'),
+        tools: z.array(z.string()).max(20).optional().describe('Tool names to open; with a category, only these'),
         query: z.string().trim().max(200).optional().describe('Words to match in tool names and descriptions; filters the selection'),
         detail: z.enum(['summary', 'schema']).optional().describe('summary: short discovery list; schema (default): complete input definitions'),
         max_tokens: z.number().int().min(256).max(12000).optional().describe('Approximate response token budget, also limited by remaining chat context'),
         offset: z.number().int().min(0).optional().describe('Continue the same selection from next_offset in the previous result'),
       }) }, async ({ category, tools, query, detail = 'schema', max_tokens = 3000, offset = 0 }: { category?: string; tools?: string[]; query?: string; detail?: 'summary' | 'schema'; max_tokens?: number; offset?: number }) => {
         const terms = (query ?? '').toLowerCase().split(/\s+/).filter(Boolean);
+        // Named tools narrow the selection: a model that names a tool and its category wants that tool, and a whole
+        // category's schemas beside it would cost thousands of tokens it did not ask for.
+        const named = (tools ?? []).filter((name) => byName.has(name));
         const wanted = new Set([
-          ...(category ? catalogued.filter((tool) => tool.category === category).map((tool) => tool.name) : []),
-          ...(tools ?? []).filter((name) => byName.has(name)),
+          ...(named.length ? named : category ? catalogued.filter((tool) => tool.category === category).map((tool) => tool.name) : []),
           ...(!category && !tools?.length && terms.length ? pending.map((tool) => tool.name) : []),
         ]);
         for (const name of wanted) {
@@ -178,7 +183,7 @@ export function createToolCatalog(server: McpServer, registerDirect: (args: unkn
           const text = `${name} ${(tool.args[1] as { description?: string })?.description ?? tool.summary}`.toLowerCase();
           if (!isChatProposalToolAvailable(chatContext, name) || !terms.every((term) => text.includes(term))) wanted.delete(name);
         }
-        if (wanted.size === 0) return errorResult(`Nothing to open. Categories: ${categories.join(', ')}.`);
+        if (wanted.size === 0) return errorResult(`Nothing to open. Pass "tools": ["<name>"], a "category" or a "query". Categories: ${categories.join(', ')}.`);
         const { tools: listed } = await listDefinitions();
         const selected = listed.filter((tool) => wanted.has(tool.name));
         const opened: Array<{ name: string; description?: string; input_schema?: unknown; direct?: boolean }> = [];
@@ -187,7 +192,7 @@ export function createToolCatalog(server: McpServer, registerDirect: (args: unkn
         const budget = Math.max(0, Math.min(max_tokens, remainingTokens?.() ?? max_tokens) - 150);
         for (const tool of selected.slice(offset)) {
           const definition = {
-            ...(detail === 'summary' ? { name: tool.name, description: byName.get(tool.name)?.summary } : { name: tool.name, description: tool.description, input_schema: tool.inputSchema }),
+            ...(detail === 'summary' ? { name: tool.name, description: byName.get(tool.name)?.summary } : { name: tool.name, description: tool.description, input_schema: slimToolSchema(tool.inputSchema) }),
             ...(byName.get(tool.name)?.direct ? { direct: true } : {}),
           };
           const serialized = JSON.stringify(definition);
@@ -198,6 +203,7 @@ export function createToolCatalog(server: McpServer, registerDirect: (args: unkn
             break;
           }
           opened.push(definition);
+          if (detail !== 'summary') seen.add(tool.name);
           chars += size;
           tokens += cost;
         }
@@ -223,12 +229,18 @@ export function createToolCatalog(server: McpServer, registerDirect: (args: unkn
           const connected = await client();
           const result = await connected.callTool({ name: tool, arguments: args ?? {} }, { signal: ctx?.mcpReq?.signal, timeout: NO_TOOL_DEADLINE });
           const content = Array.isArray(result.content) ? result.content as Array<{ type?: string; text?: string }> : [];
-          // Wrong arguments come back with the tool's schema, so the next call can be right without another lookup.
-          if (result.isError && content.some((part) => part.type === 'text' && part.text?.includes('Input validation error'))) {
-            const schema = (await listDefinitions()).tools.find((listed) => listed.name === tool)?.inputSchema;
-            return { ...result, content: [...content, { type: 'text' as const, text: `Input schema of ${tool} (from open_tools): ${JSON.stringify(schema ?? {})}` }] };
-          }
-          return result;
+          if (!result.isError) return result;
+          // A failed call comes back with what the next one needs, so it can be right without another lookup: the
+          // whole definition when this reply never opened the tool (the model called it from memory or by guess; its
+          // description may hold the format the arguments follow), the schema alone for wrong arguments after that.
+          const blind = !seen.has(tool);
+          if (!blind && !content.some((part) => part.type === 'text' && part.text?.includes('Input validation error'))) return result;
+          const listed = (await listDefinitions()).tools.find((entry) => entry.name === tool);
+          const schema = slimToolSchema(listed?.inputSchema ?? {});
+          seen.add(tool);
+          return { ...result, content: [...content, { type: 'text' as const, text: blind
+            ? `Definition of ${tool} (from open_tools): ${JSON.stringify({ description: listed?.description, input_schema: schema })}`
+            : `Input schema of ${tool} (from open_tools): ${JSON.stringify(schema)}` }] };
         } catch (error) {
           return errorResult(`${error instanceof Error ? error.message : String(error)} (open_tools {"tools": ["${tool}"]} shows its input schema)`);
         }

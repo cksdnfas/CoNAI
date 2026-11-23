@@ -105,6 +105,22 @@ test('assistant agent: proposal outcomes, page operation records, task plan and 
     const { chatPageView } = await import('../src/mcp/tools/chatPageView')
     const many = chatPageView({ accountId: null, accountType: 'admin' }, normalizeChatPageSnapshot({ ...page, data: { profiles: Array.from({ length: 40 }, (_, index) => ({ id: index + 1, name: `P${index}` })) } }), null)
     assert.deepEqual(many.data?.profiles, { count: 40, readWith: 'read_page_data' }, 'a larger one travels as its size')
+    // A long choice list the data already holds is named by where it is, a short one or one found nowhere stays spelled out.
+    const hashes = Array.from({ length: 30 }, (_, index) => `${index}`.padStart(32, 'a'))
+    const choice = (values: Array<string | number>) => ({ type: 'string' as const, enum: values })
+    const listed = chatPageView({ accountId: null, accountType: 'admin' }, normalizeChatPageSnapshot({ ...page, path: '/', kind: 'library', title: '이미지 라이브러리', resourceId: 'library', data: { images: hashes.map((hash) => ({ hash, width: 1 })), sorts: ['new', 'old'] }, actions: [
+      { id: 'library.open', label: '열기', description: '이미지를 열어.', effect: 'draft', schema: { type: 'object', properties: { hash: choice(hashes), sort: choice(['new', 'old']), to: choice(hashes.map((hash) => `/x/${hash}`)) }, required: ['hash'] } },
+      { id: 'library.select', label: '선택', description: '이미지를 골라.', effect: 'draft', schema: { type: 'object', properties: { hashes: { type: 'array', items: choice(hashes) } } } },
+    ] }), null)
+    const [open, select] = listed.actions!
+    assert.deepEqual(open.schema.properties!.hash, { type: 'string', description: 'One of data.images[].hash (30 listed; read_page_data).' })
+    assert.deepEqual(select.schema.properties!.hashes.items, open.schema.properties!.hash)
+    assert.deepEqual(open.schema.properties!.sort.enum, ['new', 'old'])
+    assert.equal(open.schema.properties!.to.enum?.length, 30, 'values the data does not list stay in the schema')
+    // Destinations that share a stem are written once; the operation itself still checks the full list.
+    const sections = Array.from({ length: 30 }, (_, index) => `/settings?section=part${index}`)
+    const routed = chatPageView({ accountId: null, accountType: 'admin' }, normalizeChatPageSnapshot({ ...page, actions: [{ id: 'page.navigate', label: '이동', description: '이동해.', effect: 'draft', schema: { type: 'object', properties: { to: choice(['/', '/groups', ...sections]) }, required: ['to'] } }] }), null)
+    assert.deepEqual(routed.actions![0].schema.properties!.to, { type: 'string', description: `One of these; a|b after "=" is a choice of one: / /groups /settings?section=${sections.map((value) => value.split('=')[1]).join('|')}` })
     assert.match(reference, /do not call get_current_page first/)
     const big = normalizeChatPageSnapshot({ ...page, fields: Array.from({ length: 40 }, (_, index) => ({ id: `f${index}`, label: `Field ${index}`, type: 'text', value: 'x'.repeat(2000) })) })
     const shortened = chatPageReference(big, { accountId: null, accountType: 'admin' }, null)

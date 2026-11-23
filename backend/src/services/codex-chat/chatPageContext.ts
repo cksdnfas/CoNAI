@@ -107,7 +107,7 @@ export function boundedPageView(view: Omit<PageView, 'actions'> & { actions?: Pa
   if (plain.length <= budget) return plain
   const clip = (value: unknown) => (typeof value === 'string' && value.length > 200 ? `${value.slice(0, 200)}…` : Array.isArray(value) ? value.slice(0, 8) : value)
   const actions = Array.isArray(view.actions) ? { actions: view.actions.map((action) => ({ id: action.id, label: action.label, tier: chatPageActionTier(action.id, action), arguments: Object.keys(action.schema.properties ?? {}) })) } : {}
-  const note = 'Operation schemas and long values are shortened here; call get_current_page for the exact schema before using a shortened operation.'
+  const note = 'Operation schemas and long values are shortened here; call get_current_page with actions: [<operation id>] for the exact schema before using a shortened operation.'
   const compact = JSON.stringify({ ...view, fields: unhinted.map((field) => ({ ...field, value: clip(field.value), ...(field.options ? { options: field.options.slice(0, 20) } : {}) })), ...actions, truncated: note })
   if (compact.length <= budget) return compact
   const fields = view.fields.map((field) => ({ id: field.id, label: field.label, type: field.type, ...(field.editable === false ? { editable: false } : {}) }))

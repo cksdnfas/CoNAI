@@ -23,7 +23,9 @@ export function registerChatChoiceTools(server: McpServer, context: McpRequestCo
     options: z.array(z.object({
       label: z.string().min(1).max(CHAT_CHOICE_LIMITS.label).describe('As the person would say it; sent as their message'),
       detail: z.string().max(CHAT_CHOICE_LIMITS.detail).optional().describe('One short line on what it does'),
-      without_page: z.boolean().optional().describe('Only with a page connected: send this answer without its page context. Ordinary page connections already preserve granted tools; do not ask to disconnect just to use them'),
+      // The advice on when to use it goes out only while a page is connected (the list is rebuilt when the person
+      // connects one; a Codex session keeps its first list, so it always carries the advice).
+      without_page: z.boolean().optional().describe(chat.page || context.source === 'codex-chat' ? 'Only with a page connected: send this answer without its page context. Ordinary page connections already preserve granted tools; do not ask to disconnect just to use them' : 'Only with a page connected.'),
     })).min(CHAT_CHOICE_LIMITS.minOptions).max(CHAT_CHOICE_LIMITS.maxOptions),
     multiple: z.boolean().optional().describe('Allow several options instead of one.'),
   }) }, async ({ question, options, multiple }) => {

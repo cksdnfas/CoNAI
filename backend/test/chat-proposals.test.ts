@@ -752,6 +752,12 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
       const read = await bridge.call('get_current_page', {})
       assert.ok(!read.isError)
       assert.match(JSON.stringify(read.content), /editable/)
+      // Named operations answer with their schemas alone: no screen, and no new view noted for the reply.
+      const schemas = await bridge.call('get_current_page', { actions: ['no.such.operation'] })
+      assert.ok(!schemas.isError)
+      assert.match(JSON.stringify(schemas.content), /missing/)
+      assert.doesNotMatch(JSON.stringify(schemas.content), /editable|instanceId/)
+      assert.equal((schemas.structuredContent as { pageView?: unknown } | undefined)?.pageView, undefined)
       assert.ok((await bridge.call('page_fill', { changes: [{ fieldId: 'steps', value: 30 }] })).isError)
     } finally { unregister(); await bridge.close() }
   })

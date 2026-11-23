@@ -616,3 +616,52 @@ test('the tool catalog pages complete schemas and retains a single oversized def
     await server.close()
   }
 })
+
+test('the tool catalog opens only the named tools, sends schemas without filler, and returns the definition with a blind failed call', async () => {
+  const { McpServer } = await import('@modelcontextprotocol/server')
+  const { Client, InMemoryTransport } = await import('@modelcontextprotocol/client')
+  const { z } = await import('zod')
+  const { createToolCatalog } = await import('../src/mcp/toolCatalog')
+  const server = new McpServer({ name: 'catalog-slim-test', version: '1' })
+  const register = server.registerTool.bind(server) as (...args: unknown[]) => unknown
+  const catalog = createToolCatalog(server, (args) => { register(...args) })
+  for (let index = 0; index < 11; index++) catalog.add(`tool_${index}`, 'files', [
+    `tool_${index}`, { description: `Read test document ${index}. Format: a list of rows.`, inputSchema: z.object({ id: z.number().int().positive(), job: z.string().uuid().optional(), extra: z.record(z.string(), z.unknown()).optional(), name: z.string().min(1).max(40).optional() }) },
+    async () => (index === 2 ? { isError: true, content: [{ type: 'text', text: 'Rows must be a list.' }] } : { content: [{ type: 'text', text: 'ok' }] }),
+  ])
+  catalog.install()
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
+  const client = new Client({ name: 'catalog-slim-test-client', version: '1' })
+  const text = (result: { content?: unknown }) => (result.content as Array<{ type: string; text: string }>).map((part) => part.text).join('\n')
+  try {
+    await server.connect(serverTransport)
+    await client.connect(clientTransport)
+    const listed = (await client.listTools()).tools.find((tool) => tool.name === 'open_tools')
+    assert.ok(!JSON.stringify(listed?.inputSchema).includes('besides'))
+
+    const opened = JSON.parse(text(await client.callTool({ name: 'open_tools', arguments: { category: 'files', tools: ['tool_1'] } })))
+    assert.deepEqual(opened.tools.map((tool: { name: string }) => tool.name), ['tool_1'], 'a named tool narrows its category')
+    const schema = opened.tools[0].input_schema
+    assert.equal(schema.$schema, undefined)
+    assert.deepEqual(schema.properties.id, { type: 'integer', exclusiveMinimum: 0 }, 'no safe-integer ceiling')
+    assert.deepEqual(schema.properties.job, { type: 'string', format: 'uuid' }, 'no pattern beside the uuid format')
+    assert.deepEqual(schema.properties.extra, { type: 'object' }, 'a free-form object is just an object')
+    assert.deepEqual(schema.properties.name, { type: 'string', minLength: 1, maxLength: 40 }, 'real limits stay')
+    assert.deepEqual(schema.required, ['id'])
+
+    const nothing = await client.callTool({ name: 'open_tools', arguments: { tool: 'tool_1' } })
+    assert.ok(nothing.isError && text(nothing).includes('"tools"'), 'a wrong key is answered with the right one')
+
+    const blind = await client.callTool({ name: 'run_tool', arguments: { tool: 'tool_2', arguments: { id: 1 } } })
+    assert.ok(blind.isError && text(blind).includes('Rows must be a list.'))
+    assert.ok(text(blind).includes('Definition of tool_2') && text(blind).includes('Format: a list of rows.'), 'a tool this reply never opened fails with its definition')
+    const again = await client.callTool({ name: 'run_tool', arguments: { tool: 'tool_2', arguments: { id: 1 } } })
+    assert.ok(again.isError && !text(again).includes('Definition of tool_2'), 'the definition is returned once')
+    const wrong = await client.callTool({ name: 'run_tool', arguments: { tool: 'tool_1', arguments: { id: 'x' } } })
+    assert.ok(wrong.isError && text(wrong).includes('Input schema of tool_1') && !text(wrong).includes('Definition of'), 'an opened tool gets its schema alone')
+    assert.ok(!text(wrong).includes('$schema'))
+  } finally {
+    await client.close()
+    await server.close()
+  }
+})

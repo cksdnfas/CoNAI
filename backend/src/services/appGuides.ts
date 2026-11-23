@@ -84,6 +84,26 @@ export function listAppGuides(): AppGuideTopic[] {
     })
 }
 
+/**
+ * The guides with a heading that contains `query` (case-insensitive; failing that, every word of it), each with only
+ * the headings that matched. A guide whose topic or title matches comes with all of its headings.
+ */
+export function findAppGuideSections(query: string): Array<Pick<AppGuideTopic, 'topic' | 'title' | 'sections'>> {
+  const wanted = query.trim().toLowerCase()
+  if (!wanted) return []
+  const guides = listAppGuides()
+  const words = wanted.split(/\s+/)
+  for (const has of [(text: string) => text.toLowerCase().includes(wanted), (text: string) => words.every((word) => text.toLowerCase().includes(word))]) {
+    const found = guides.flatMap(({ topic, title, sections }) => {
+      if (has(topic.replace(/_/g, ' ')) || has(title)) return [{ topic, title, sections }]
+      const matching = sections.filter(has)
+      return matching.length ? [{ topic, title, sections: matching }] : []
+    })
+    if (found.length) return found
+  }
+  return []
+}
+
 /** The sections of a guide whose heading contains `section` (case-insensitive), each running to the next heading of its level or above. */
 function sectionsOf(text: string, section: string) {
   const lines = text.split('\n')

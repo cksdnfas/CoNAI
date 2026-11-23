@@ -5,6 +5,7 @@ import type { ChatResearchExecution } from './chatResearch'
 import { createMcpServer } from '../../mcp/server'
 import { CATALOG_RUN_TOOL, catalogToolNames } from '../../mcp/toolCatalog'
 import { inProcessMcpClient, NO_TOOL_DEADLINE } from '../../mcp/inProcessClient'
+import { slimToolSchema } from '../../mcp/toolSchemaSlim'
 import type { ChatScope } from './chatSettings'
 import type { ChatCompletionTool } from './llmChatCompletion'
 import { currentChatPage } from './chatPageBridge'
@@ -51,7 +52,7 @@ export async function openChatMcpBridge(requester: McpRequester, scopes: ChatSco
   let binding = await connect()
   const publish = () => {
     chatTools.splice(0, chatTools.length, ...binding.tools.map((tool): ChatCompletionTool => ({
-      type: 'function', function: { name: tool.name, description: tool.description, parameters: tool.inputSchema },
+      type: 'function', function: { name: tool.name, description: tool.description, parameters: slimToolSchema(tool.inputSchema) },
     })))
     catalogTools.clear()
     for (const name of catalogToolNames(binding.server)) catalogTools.add(name)

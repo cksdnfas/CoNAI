@@ -53,7 +53,13 @@ export function normalizeChatPageSchema(input: unknown, depth = 0): ChatPageSche
 
 /** What the schema accepts at a path, for failure messages. Read from the schema itself and never from the rejected value. */
 function acceptedChatPageInput(schema: ChatPageSchema) {
-  if (schema.enum) return `가능한 값: ${schema.enum.join(', ')}.`
+  // A shortened screen shows no choices, so this message is where the model reads them: whole up to 3000 characters (the
+  // navigation destinations fit), a longer list (the hashes of the images a screen lists) by its first values.
+  if (schema.enum) {
+    let length = 0
+    const shown = schema.enum.filter((value) => (length += String(value).length + 2) <= 3000)
+    return `가능한 값: ${shown.join(', ')}${schema.enum.length > shown.length ? ` 외 ${schema.enum.length - shown.length}개` : ''}.`
+  }
   if (schema.type === 'boolean') return '가능한 입력: true 또는 false.'
   if (schema.type === 'object') return '가능한 입력: 객체 또는 그 JSON 문자열.'
   if (schema.type === 'array') return `가능한 입력: 항목 ${schema.minItems ?? 0}개 이상 ${Math.min(schema.maxItems ?? 512, 512)}개 이하의 배열 또는 그 JSON 문자열.`
