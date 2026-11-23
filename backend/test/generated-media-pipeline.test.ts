@@ -271,7 +271,9 @@ test('generated previews precede enrichment and video copies preserve the origin
       if (extractions === 1) await extractionBarrier;
       return { ai_info: { ai_tool: 'NovelAI', prompt: 'race prompt' }, extractedAt: new Date().toISOString() };
     });
-    const collect = t.mock.method(BackgroundQueueService, 'addPromptCollectionTask', () => {});
+    // The queue's own prompt task (enqueued internally since the shutdown guard) ends in the collector.
+    const { PromptCollectionService } = await import('../src/services/promptCollectionService');
+    const collect = t.mock.method(PromptCollectionService, 'collectFromImage', async () => {});
     const historyId = await GenerationHistoryService.createNAIHistory({ model: 'test' });
     let batch: Promise<unknown> | undefined;
     try {
@@ -292,7 +294,7 @@ test('generated previews precede enrichment and video copies preserve the origin
       assert.ok(record.actual_composite_hash);
       assert.equal((main.db.prepare('SELECT COUNT(*) AS count FROM image_files WHERE composite_hash = ?').get(record.actual_composite_hash) as { count: number }).count, 1);
       assert.equal(extractions, 1);
-      assert.deepEqual(collect.mock.calls.map((call) => call.arguments[1]), [record.actual_composite_hash]);
+      assert.deepEqual(collect.mock.calls.map((call) => call.arguments[0]), ['race prompt']);
     } finally {
       releaseThumbnail();
       releaseExtraction();
