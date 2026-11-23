@@ -163,7 +163,8 @@ export function NumberStepperInput({
         disabled={disabled}
         aria-label={ariaLabel}
         aria-invalid={invalid || props['aria-invalid']}
-        className="h-auto min-h-11 min-w-0 flex-1 rounded-none text-center tabular-nums sm:min-h-9"
+        // The number is centred between the keys, so it needs no side padding; a variant's px-3 left a 96–112px stepper no room for it.
+        className="h-auto min-h-11 min-w-0 flex-1 rounded-none px-0 text-center tabular-nums sm:min-h-9"
         onChange={(event) => {
           const nextDraft = event.target.value
           setDraft(nextDraft)
