@@ -16,7 +16,6 @@ import { Spinner } from '@/components/ui/loading-state'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { ImagePreviewMedia } from '@/features/images/components/image-preview-media'
 import { MediaLightbox } from '@/features/images/components/media-lightbox'
-import { useImageListColumnCount } from '@/features/images/components/image-list/use-image-list-column-count'
 import { useI18n } from '@/i18n'
 import { ChatAudioCards, isAudioWorkspaceCall } from '@/features/audio/chat-audio-cards'
 import type { ChatProfileAssetFields, ChatDisplayBlock, ChatEngine, CodexChatMediaInfo, CodexChatMessage, CodexChatToolCall } from '@/lib/api-codex-chat'
@@ -32,6 +31,8 @@ import { ChatPostCards, ChatPostRefChip, splitPostRefLines } from './chat-post-c
 import { ChatProfileAvatar } from './chat-profile-avatar'
 import { ChatProposalCards } from './chat-proposal-card'
 import { ChatChoiceLines } from './chat-choice'
+import { ChatFormCards } from './chat-form-card'
+import { ChatMediaMasonry } from './chat-media-masonry'
 import { ChatPageOperationChips } from './chat-page-operation-chips'
 import { ChatFileChangeChips } from './chat-file-change-chips'
 import { ChatReferenceButton, ChatThumbOverlay } from './chat-reference'
@@ -549,27 +550,6 @@ function LoreAppliedBadge({ entries }: { entries: ChatAppliedLore[] }) {
   )
 }
 
-/** The narrowest masonry column per size setting; the column count follows the transcript's width. */
-const MASONRY_MIN_COLUMN_PX: Record<ChatImageSize, number> = { sm: 120, md: 180, full: 240 }
-const MASONRY_GAP_PX = 8
-
-/**
- * Several results of one reply, like the library's masonry: each tile at its own ratio, in reading order across the
- * columns (round-robin, so a placeholder turning into its image never moves the others to another column). `full`
- * spreads a few results over the whole width; smaller sizes keep their column width and leave the rest empty.
- */
-function ChatMediaMasonry({ tiles, size }: { tiles: ReactNode[]; size: ChatImageSize }) {
-  const [element, setElement] = useState<HTMLDivElement | null>(null)
-  const fit = useImageListColumnCount(element, MASONRY_MIN_COLUMN_PX[size], MASONRY_GAP_PX)
-  const columnCount = Math.max(2, size === 'full' ? Math.min(fit, tiles.length) : fit)
-  const columns = Array.from({ length: columnCount }, (_, column) => tiles.filter((_, index) => index % columnCount === column))
-  return (
-    <div ref={setElement} className="flex items-start gap-2">
-      {columns.map((column, index) => <div key={index} className="flex min-w-0 flex-1 flex-col gap-2">{column}</div>)}
-    </div>
-  )
-}
-
 /**
  * Images and videos the reply's tools produced (one at the reader's size; several as a masonry, or one under another
  * with the `column` layout) followed by the ones it only looked up (a compact paged grid). An image in both groups
@@ -941,6 +921,7 @@ export const CodexChatAssistantMessage = memo(function CodexChatAssistantMessage
       <ChatPageOperationChips calls={toolCalls} />
       {streaming ? null : <ChatPostCards calls={toolCalls} text={content} />}
       {ownText && !agentCard ? markdown(ownText) : null}
+      <ChatFormCards calls={toolCalls} threadId={threadId} />
       <ChatChoiceLines calls={toolCalls} />
       <ChatFileChangeChips changes={fileChanges} threadId={threadId} replyId={replyId ?? routing?.replyId} />
     </div>

@@ -7,7 +7,7 @@ import type { ChatAssetVisionReview, ChatAssetBatch, ChatAssetBatchInput, ChatAs
 export type { ChatAssetBatch, ChatAssetBatchInput, ChatAssetKind, ChatAssetReview, ChatAssetVisionReview, ChatAssetCandidate, ChatAssetAttempt, ChatAssetApplyInput, ChatAssetApplyResult, ChatAssetOwner } from '@conai/shared'
 import type { ChatJudgeDiagnostics, ChatFileChange, ChatProfileAgentSettings } from '@conai/shared'
 export type { ChatSkillSectionChange, ChatSkillSectionFields } from '@conai/shared'
-import type { ChatStreamEvent, ChatTranslationLanguage, CodexReasoningEffort, StoredFileEntry, ChatMessageRouting, ChatPageSnapshot, ChatProposal, ChatTask, ChatChoiceAnswer, ChatToolDirective, ChatToolDirectiveSnapshot } from '@conai/shared'
+import type { ChatStreamEvent, ChatTranslationLanguage, CodexReasoningEffort, StoredFileEntry, ChatMessageRouting, ChatPageSnapshot, ChatProposal, ChatTask, ChatChoiceAnswer, ChatFormAnswer, ChatToolDirective, ChatToolDirectiveSnapshot } from '@conai/shared'
 import { JSON_HEADERS, requestRevisionChecked } from './api-codex-chat-core'
 import type { ChatScope } from './api-codex-chat-core'
 import type { ChatBlocksState, ChatDisplayBlock, ChatTypeface } from './api-codex-chat-resources'
@@ -1261,7 +1261,7 @@ export function interruptCodexChatThread(threadId: number) {
  * Send a message and read the NDJSON turn stream. No timeout: a turn with generation jobs can run for minutes.
  * Aborting only stops reading; the server finishes and stores the reply.
  */
-export async function streamCodexChatMessage(threadId: number, text: string, onEvent: (event: CodexChatStreamEvent) => void, signal?: AbortSignal, fileIds: string[] = [], flagIds: number[] = [], picks: string[] = [], mediaHashes: string[] = [], replyToMessageId?: number, pageContext?: ChatPageSnapshot, choice?: ChatChoiceAnswer, toolDirective?: ChatToolDirective, autoApprove?: string) {
+export async function streamCodexChatMessage(threadId: number, text: string, onEvent: (event: CodexChatStreamEvent) => void, signal?: AbortSignal, fileIds: string[] = [], flagIds: number[] = [], picks: string[] = [], mediaHashes: string[] = [], replyToMessageId?: number, pageContext?: ChatPageSnapshot, choice?: ChatChoiceAnswer | ChatFormAnswer, toolDirective?: ChatToolDirective, autoApprove?: string) {
   return streamChatOperation(`/api/codex-chat/threads/${threadId}/messages`, 'POST', { text, fileIds, flagIds, picks, mediaHashes, replyToMessageId, pageContext, choice, toolDirective, autoApprove }, onEvent, signal)
 }
 

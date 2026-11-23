@@ -36,6 +36,8 @@ const UNSCOPED_ALLOWED = new Set<string>([
   ...CHAT_ROOM_TOOL_NAMES,
   // The chat's own settings card is offered by CHAT_SETTINGS_TOOLS the same way (behind the tool catalog only).
   'get_chat_settings', 'propose_chat_settings',
+  // The input form card sits in the same set: a chat's own card, answered by the person's next message.
+  'show_form',
 ])
 const FEATURE_UNCLASSIFIED_ALLOWED = new Set<string>([])
 // Publishing registers only for workspace-bound chat/plugin contexts, absent from this test.

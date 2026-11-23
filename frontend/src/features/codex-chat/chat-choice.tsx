@@ -9,11 +9,19 @@ import type { ChatChoiceCard } from './codex-chat-context'
 
 /*
  * Question cards (offer_choices): the open one sits above the composer; once the chat moves on, the reply that asked
- * keeps one line saying what was answered, or that it was passed over.
+ * keeps one line saying what was answered, or that it was passed over. An input form (show_form) is answered the same
+ * way and leaves the same line; while open it is drawn under its reply (chat-form-card.tsx).
  */
 
 function choiceOf(call: CodexChatToolCall): ChatChoiceCard | null {
   return call.proposal?.kind === 'choice' ? call.proposal : null
+}
+
+/** A card the next message answers, by the name its line shows: a question card or an input form. */
+function cardOf(call: CodexChatToolCall): { id: number; question: string; form: boolean } | null {
+  const proposal = call.proposal
+  if (proposal?.kind === 'choice') return { id: proposal.id, question: proposal.question, form: false }
+  return proposal?.kind === 'form' ? { id: proposal.id, question: proposal.title, form: true } : null
 }
 
 /** The card the chat's newest message asks, when that message is a finished reply. */
@@ -31,9 +39,13 @@ export function chatChoiceStates(messages: CodexChatMessage[]) {
   messages.forEach((message, index) => {
     if (message.role !== 'assistant') return
     const next = messages.slice(index + 1).find((entry) => entry.role === 'user')
-    if (!next) return
-    for (const card of message.tool_calls.map(choiceOf)) {
+    for (const card of message.tool_calls.map(cardOf)) {
       if (!card) continue
+      if (!next) {
+        // A form stays open only under the newest message, as the question card's dock does.
+        if (card.form && index !== messages.length - 1) states.set(card.id, 'passed')
+        continue
+      }
       const answers = (next.flags ?? []).filter((flag) => flag.choice?.id === card.id).map((flag) => flag.name)
       states.set(card.id, answers.length ? { answers } : 'passed')
     }
@@ -46,21 +58,26 @@ export const ChatChoiceStatesContext = createContext<Map<number, ChatChoiceState
 /** Under a reply that asked: what was answered, or that it was passed over (nothing while it is open). */
 export function ChatChoiceLines({ calls }: { calls: CodexChatToolCall[] }) {
   const states = useContext(ChatChoiceStatesContext)
-  const cards = calls.map(choiceOf).filter((card) => card !== null)
+  const cards = calls.map(cardOf).filter((card) => card !== null)
   if (!states || cards.length === 0) return null
   return cards.map((card) => {
     const state = states.get(card.id)
     if (!state) return null
-    return state === 'passed' ? (
-      <p key={card.id} className="flex items-center gap-1.5 text-xs text-muted-foreground/75">
-        <CircleMinus className="size-3 shrink-0" /><span className="min-w-0 truncate line-through">{card.question}</span>
-      </p>
-    ) : (
+    return state === 'passed' ? <ChatChoicePassedLine key={card.id} question={card.question} /> : (
       <p key={card.id} className="flex items-center gap-1.5 text-xs text-muted-foreground">
         <Check className="size-3 shrink-0 text-success" /><span className="min-w-0 truncate">{card.question} · {state.answers.join(', ')}</span>
       </p>
     )
   })
+}
+
+/** A card nobody answered: its question, struck through. */
+export function ChatChoicePassedLine({ question }: { question: string }) {
+  return (
+    <p className="flex items-center gap-1.5 text-xs text-muted-foreground/75">
+      <CircleMinus className="size-3 shrink-0" /><span className="min-w-0 truncate line-through">{question}</span>
+    </p>
+  )
 }
 
 /**

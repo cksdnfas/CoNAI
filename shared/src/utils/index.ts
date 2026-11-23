@@ -18,6 +18,7 @@ export * from './workflowNodeVariantTransition';
 export * from './chatPageAction';
 export * from './chatEditing';
 export * from './chatNarration';
+export * from './chatForm';
 export * from './loreKeyLanguage';
 export * from './groupAutoCollect';
 export * from './promptRandomToken';

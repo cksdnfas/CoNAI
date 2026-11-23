@@ -8,6 +8,7 @@ import type { ChatTaskPlanProposal, ChatTaskRouting } from './chatTask'
 import type { ChatRoutineRouting } from './chatRoutine'
 import type { ChatAgentResultRouting } from './chatAgent'
 import type { ChatChoiceProposal } from './chatChoice'
+import type { ChatFormProposal } from './chatForm'
 import type { PostKnowledgeTaskPurpose } from './postKnowledgeRuntime'
 
 /** Native chat title storage limit; also used by plugin room title validation/composition. */
@@ -149,6 +150,7 @@ export type ChatProposal = { id: number; dismissed?: boolean; autoApprove?: stri
   | ChatArtStyleProposal
   | ChatTaskPlanProposal
   | ChatChoiceProposal
+  | ChatFormProposal
   | {
       kind: 'profile_folder'
       action: 'create' | 'rename' | 'move' | 'delete'

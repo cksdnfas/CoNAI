@@ -1,14 +1,16 @@
 import { createContext, useContext } from 'react'
 import type { ChatComposerToolsTarget, ChatFlagSnapshot, ChatMediaAttachment, ChatOpeningMessage, CodexChatThread, CodexChatToolCall } from '@/lib/api-codex-chat'
-import type { StoredFileEntry, ChatMessageRouting, ChatReplyQuote, ChatChoiceProposal, ChatToolDirectiveSnapshot } from '@conai/shared'
+import type { StoredFileEntry, ChatMessageRouting, ChatReplyQuote, ChatChoiceProposal, ChatFormProposal, ChatToolDirectiveSnapshot } from '@conai/shared'
 
 /** A post or comment put on the next message with 참조 (sent as a `post:` link line above the text). */
 export type ChatPostReference = { postId: number; commentId: number | null; label: string }
 
 /** A question card as stored (offer_choices). */
 export type ChatChoiceCard = ChatChoiceProposal & { id: number }
-/** What the composer holds of a card's answer until it is sent. */
-export type ChatChoiceDraft = { threadId: number; proposalId: number; question: string; labels: string[]; withoutPage: boolean }
+/** An input form as stored (show_form). */
+export type ChatFormCardData = ChatFormProposal & { id: number }
+/** What the composer holds of a card's answer until it is sent. `form`: an input form's pressed button and values. */
+export type ChatChoiceDraft = { threadId: number; proposalId: number; question: string; labels: string[]; withoutPage: boolean; form?: { action: string; values: Record<string, unknown> } }
 
 export const CODEX_CHAT_ROUTE = '/chat'
 export const CODEX_CHAT_THREADS_QUERY_KEY = ['codex-chat-threads'] as const
@@ -162,6 +164,8 @@ export interface CodexChatApi {
   /** Pick or unpick one option (a single-answer card keeps only the latest). */
   toggleChoice: (threadId: number, proposal: ChatChoiceCard, label: string) => void
   clearChoice: () => void
+  /** Send an input form's answer (the pressed button's event and the values) as the chat's next message. */
+  answerForm: (threadId: number, form: ChatFormCardData, action: string, values: Record<string, unknown>) => Promise<void>
   /**
    * The reply streaming right now, read when needed (event handlers). Components that show it use
    * useCodexChatLiveTurn: it changes with every token, and the rest of the API must not re-render the app shell then.

@@ -8,7 +8,7 @@ import { ApiRequestError } from '@/lib/api-request'
 import { getErrorMessage } from '@/lib/error-message'
 import { CHAT_HEALTH_QUERY_KEY, CHAT_MESSAGE_PAGE_SIZE, CHAT_PROFILES_QUERY_KEY, CHAT_STATUS_QUERY_KEY, threadLorebooksQueryKey, type ChatProfileSummary } from '@/lib/api-codex-chat'
 import { summarizeChatError } from './chat-error-chip'
-import { postLink, type ChatToolDirectiveSnapshot, type StoredFileEntry } from '@conai/shared'
+import { chatFormAnswerLines, postLink, type ChatToolDirectiveSnapshot, type StoredFileEntry } from '@conai/shared'
 import type { CodexChatMediaItem } from '@/lib/api-codex-chat'
 import type { GenerationHistoryRecord } from '@/lib/api-image-generation-types'
 import { uploadStoredFiles } from '@/lib/api-files'
@@ -31,6 +31,7 @@ import {
   PENDING_DRAFT_KEY,
   type ChatChoiceCard,
   type ChatChoiceDraft,
+  type ChatFormCardData,
   type ChatPostReference,
   type ChatToolSelection,
   type CodexChatApi,
@@ -623,7 +624,7 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
           // An open chat shows the live reply until its refetch lands; a chat nobody has open has no such bubble, so its cached thread takes the reply now.
           if (!hasActiveChatQuery(queryClient, codexChatThreadQueryKey(sentThreadId))) putMessage(event.message)
           // Proposals are attached when the thread is read, so a reply that proposed something reloads it now.
-          if (event.message.tool_calls.some((call) => call.tool.startsWith('propose_') || call.tool === 'offer_choices')) void refetchActiveChatQuery(queryClient, codexChatThreadQueryKey(sentThreadId))
+          if (event.message.tool_calls.some((call) => call.tool.startsWith('propose_') || call.tool === 'offer_choices' || call.tool === 'show_form')) void refetchActiveChatQuery(queryClient, codexChatThreadQueryKey(sentThreadId))
           updateLiveTurn((current) => current ? { ...current, replacingMessageId: event.message.id, text: event.message.display_content ?? event.message.content, userText: '', userRouting: undefined, flags: [], toolDirective: undefined, attachments: [], mediaAttachments: [] } : current)
         } else if (event.type === 'error') {
           // The full text stays on the failed message (its error chip); the toast only names the reason.
@@ -633,7 +634,7 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
       }
       if (rewrite?.continue) await streamChatContinue(sentThreadId, rewrite.messageId, onEvent, controller.signal)
       else if (rewrite) await streamChatRewrite(sentThreadId, rewrite.messageId, rewrite.content, onEvent, controller.signal)
-      else await streamCodexChatMessage(sentThreadId, text, onEvent, controller.signal, attachments.map((file) => file.id), flags.map((flag) => flag.id), picked, mediaAttachments.map((item) => item.compositeHash), replyingTo?.quote.messageId, pageAllowed && !chosen?.withoutPage ? capturePage?.() : undefined, chosen ? { proposalId: chosen.proposalId, answers: chosen.labels } : undefined, toolDirective ? toolDirectiveRequest(toolDirective) : undefined, !isGroup && chatAutoApproveOn() ? CHAT_AUTO_APPROVE_TAB : undefined)
+      else await streamCodexChatMessage(sentThreadId, text, onEvent, controller.signal, attachments.map((file) => file.id), flags.map((flag) => flag.id), picked, mediaAttachments.map((item) => item.compositeHash), replyingTo?.quote.messageId, pageAllowed && !chosen?.withoutPage ? capturePage?.() : undefined, chosen ? (chosen.form ? { proposalId: chosen.proposalId, ...chosen.form } : { proposalId: chosen.proposalId, answers: chosen.labels }) : undefined, toolDirective ? toolDirectiveRequest(toolDirective) : undefined, !isGroup && chatAutoApproveOn() ? CHAT_AUTO_APPROVE_TAB : undefined)
     } catch (error) {
       if (!controller.signal.aborted) {
         showSnackbar({ message: summarizeChatError(getErrorMessage(error, t({ ko: '응답 실패', en: 'Reply failed' })), t), tone: 'error' })
@@ -658,7 +659,8 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
           setDraftPostRefs(postRefs)
           postRefsRef.current = postRefs
           setPicks(picked)
-          if (chosen && !choiceRef.current) setChoice(chosen)
+          // A form keeps its values on its own card; holding its answer here would send it with an unrelated message.
+          if (chosen && !chosen.form && !choiceRef.current) setChoice(chosen)
         }
       }
     } finally {
@@ -684,6 +686,13 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
   }, [capturePage, queryClient, showSnackbar, t, setDraftReply, setDraft, setChoice, patchLiveTurn, changeToolSelection])
 
   const send = useCallback(async (threadId: number, text?: string) => { await reply(threadId, undefined, text) }, [reply])
+
+  const answerForm = useCallback(async (threadId: number, form: ChatFormCardData, action: string, values: Record<string, unknown>) => {
+    setChoice({ threadId, proposalId: form.id, question: form.title, labels: chatFormAnswerLines(form, values, action).map((line) => line.name), withoutPage: false, form: { action, values } })
+    await reply(threadId)
+    // A send that never started (a reply still streaming, an upload in progress) leaves nothing held.
+    if (choiceRef.current?.form && choiceRef.current.proposalId === form.id) setChoice(null)
+  }, [reply, setChoice])
 
   const selectPendingGreeting = useCallback((index: number) => {
     const pending = pendingRef.current
@@ -812,6 +821,7 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
     choice,
     toggleChoice,
     clearChoice,
+    answerForm,
     currentLiveTurn,
     currentDrafts,
     draftAttachments,
@@ -833,7 +843,7 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
     messageFocus,
     focusMessage,
     clearMessageFocus,
-  }), [draftReply, setDraftReply, canUse, clearMessageFocus, closePanel, registerPanelCloseGuard, setDraft, keepDrafts, focusMessage, isPanelOpen, isStartingChat, currentLiveTurn, currentDrafts, messageFocus, openPanel, toolSelections, setToolPick, setToolKeep, picks, togglePick, removePick, choice, toggleChoice, clearChoice, selectThread, settleSelection, selectedThreadId, listOpen, showList, send, regenerate, continueReply, editMessage, pendingChat, prepareChat, selectPendingGreeting, togglePendingFlag, sendPending, stop, view, draftAttachments, draftMediaAttachments, setMediaAttachments, removeMediaAttachment, toggleMediaAttachment, draftPostRefs, togglePostReference, attachmentsUploading, addAttachments, removeAttachment, uploadAttachments])
+  }), [draftReply, setDraftReply, canUse, clearMessageFocus, closePanel, registerPanelCloseGuard, setDraft, keepDrafts, focusMessage, isPanelOpen, isStartingChat, currentLiveTurn, currentDrafts, messageFocus, openPanel, toolSelections, setToolPick, setToolKeep, picks, togglePick, removePick, choice, toggleChoice, clearChoice, answerForm, selectThread, settleSelection, selectedThreadId, listOpen, showList, send, regenerate, continueReply, editMessage, pendingChat, prepareChat, selectPendingGreeting, togglePendingFlag, sendPending, stop, view, draftAttachments, draftMediaAttachments, setMediaAttachments, removeMediaAttachment, toggleMediaAttachment, draftPostRefs, togglePostReference, attachmentsUploading, addAttachments, removeAttachment, uploadAttachments])
 
   const referencePanelOpen = canUse && isPanelOpen
   const referenceApi = useMemo<CodexChatReferenceApi>(() => ({ panelOpen: referencePanelOpen, draftMediaAttachments, toggleMediaAttachment, draftPostRefs, togglePostReference, draftAttachments, addAttachments, removeAttachment, focusMessage }), [referencePanelOpen, draftMediaAttachments, toggleMediaAttachment, draftPostRefs, togglePostReference, draftAttachments, addAttachments, removeAttachment, focusMessage])

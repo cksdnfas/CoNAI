@@ -340,6 +340,7 @@ function proposalName(proposal: ChatProposal) {
     case 'workflow_graph': return '워크플로 편집'
     case 'task_plan': return `작업 플랜 "${proposal.goal}"`
     case 'choice': return `선택지 "${(proposal as typeof proposal & { modelQuestion?: string }).modelQuestion ?? proposal.question}"`
+    case 'form': return `입력 카드 "${(proposal as typeof proposal & { model?: { title: string } }).model?.title ?? proposal.title}"`
   }
 }
 
@@ -352,8 +353,8 @@ const OUTCOME_MAX_AGE_MS = 6 * 60 * 60_000
  */
 export function proposalOutcomeNote(threadId: number | null | undefined) {
   if (!threadId) return ''
-  // A question card is answered by the person's next message itself; it has no save or dismiss to report.
-  const rows = ChatProposalStore.listForThread(threadId).filter((row) => row.proposal.kind !== 'choice').slice(-OUTCOME_LIMIT)
+  // A question card or input form is answered by the person's next message itself; it has no save or dismiss to report.
+  const rows = ChatProposalStore.listForThread(threadId).filter((row) => row.proposal.kind !== 'choice' && row.proposal.kind !== 'form').slice(-OUTCOME_LIMIT)
     .filter((row) => Date.now() - Date.parse(`${row.createdAt.replace(' ', 'T')}Z`) < OUTCOME_MAX_AGE_MS)
   if (!rows.length) return ''
   const lines = rows.map(({ id, proposal }) => {

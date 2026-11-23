@@ -111,11 +111,12 @@ const PROPOSAL_TOOLS: Record<ChatProposal['kind'], string> = {
   page_action: 'propose_page_action',
   task_plan: 'task_propose',
   choice: 'offer_choices',
+  form: 'show_form',
 }
 
 /** Tools whose call leaves a proposal card under the reply. */
 export function isProposalTool(tool: string) {
-  return tool.startsWith('propose_') || tool === 'manage_chat_profile_folders' || tool === 'save_lore' || tool === 'offer_choices'
+  return tool.startsWith('propose_') || tool === 'manage_chat_profile_folders' || tool === 'save_lore' || tool === 'offer_choices' || tool === 'show_form'
 }
 
 /**

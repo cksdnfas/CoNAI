@@ -104,6 +104,44 @@ test('chat question cards: offer_choices, answers checked against the open card,
     assert.ok('error' in (readChoiceAnswer(threadId, { proposalId: single.id, answers: ['화면 참조 없이 진행'] }) ?? {}), 'a message in between passes the card')
   })
 
+  await t.test('show_form: a catalogued card, answered with its own button and values only', async () => {
+    const context: ChatExecutionContext = { threadId, profileId: profile.id, kind: 'direct', replyId: 'ask-3' }
+    const unregister = registerChatReply(context, controller.signal, () => ({ replyTo: null, recipients: ['user'] }))
+    const bridge = await openChatMcpBridge(admin, ['read'], null, { chatContext: context })
+    const components = [
+      { id: 'root', component: 'Column', children: ['size', 'steps', 'seed', 'go', 'skip'] },
+      { id: 'size', component: 'ChoicePicker', label: '크기', options: [{ label: '세로', value: 'portrait' }, { label: '가로', value: 'landscape' }], value: { '@path': '/size' } },
+      { id: 'steps', component: 'Slider', label: '스텝', min: 1, max: 50, value: { '@path': '/steps' } },
+      { id: 'seed', component: 'CheckBox', label: '시드 고정', value: { '@path': '/seed' } },
+      { id: 'go', component: 'Button', child: 'goText', variant: 'primary', action: { event: { name: 'generate' } } },
+      { id: 'goText', component: 'Text', text: '생성' },
+      { id: 'skip', component: 'Button', child: 'skipText', action: { event: { name: 'skip' } } },
+      { id: 'skipText', component: 'Text', text: '건너뛰기' },
+    ]
+    try {
+      assert.ok(!bridge.tools.some((tool) => tool.function.name === 'show_form'), 'its catalog text stays behind open_tools')
+      const refused = await bridge.call('run_tool', { tool: 'show_form', arguments: { title: '생성 설정', components: [...components, { id: 'x', component: 'Modal' }] } })
+      assert.ok(refused.isError, 'a component outside the catalog is refused')
+      const made = await bridge.call('run_tool', { tool: 'show_form', arguments: { title: '생성 설정', components, dataModel: { size: ['portrait'], steps: 28 } } })
+      assert.ok(!made.isError)
+      assert.ok((await bridge.call('run_tool', { tool: 'show_form', arguments: { title: '또', components } })).isError, 'one form per reply')
+    } finally {
+      await bridge.close()
+      unregister()
+    }
+    const form = ChatProposalStore.forReply(threadId, 'ask-3', 'form')[0]
+    assert.deepEqual((form as { dataModel?: unknown }).dataModel, { size: ['portrait'], steps: 28, seed: false }, 'starting values are held to the inputs')
+    reply('ask-3')
+    const answer = readChoiceAnswer(threadId, { proposalId: form.id, action: 'generate', values: { size: ['landscape'], steps: 30, seed: true, extra: 'dropped' } })
+    assert.ok(answer && !('error' in answer))
+    assert.deepEqual(answer.flags.map((flag) => [flag.name, flag.content]), [['가로', '크기: landscape'], ['스텝 30', '스텝: 30'], ['시드 고정', '시드 고정: yes'], ['생성', 'Pressed: generate']])
+    assert.ok(answer.flags.every((flag) => flag.pick && flag.choice?.id === form.id && flag.choice.question === '생성 설정'))
+    assert.ok('error' in (readChoiceAnswer(threadId, { proposalId: form.id, action: 'delete', values: { size: ['landscape'], steps: 30, seed: true } }) ?? {}), 'a button the card does not have')
+    assert.ok('error' in (readChoiceAnswer(threadId, { proposalId: form.id, action: 'generate', values: { size: ['square'], steps: 30, seed: true } }) ?? {}), 'a choice the card does not offer')
+    assert.ok('error' in (readChoiceAnswer(threadId, { proposalId: form.id, action: 'generate', values: { size: ['landscape'], steps: 500, seed: true } }) ?? {}), 'a number outside the slider')
+    assert.equal(proposalOutcomeNote(threadId), '', 'forms stay out of the review-card outcome note')
+  })
+
   await t.test('directive: answers grouped under their question, apart from status picks', () => {
     const directive = buildFlagDirective([
       { id: 0, icon: 'lucide:target', name: '검', content: '검', pick: true },
