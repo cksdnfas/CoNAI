@@ -169,6 +169,10 @@ export interface WorkflowMarkedField {
   default_collapsed?: boolean
   /** A fixed value: never shown or sent by a generation form; runs with default_value (text/textarea/number/select only). */
   hidden?: boolean
+  /**
+   * Pictures come from a plain file upload only. An image field defaults to the full picker (true narrows it); a
+   * SnapRef or Director node field defaults to plain upload (false opens the in-app picker).
+   */
   simple_upload_only?: boolean
   default_value?: string | number | boolean | Record<string, unknown> | null
   placeholder?: string

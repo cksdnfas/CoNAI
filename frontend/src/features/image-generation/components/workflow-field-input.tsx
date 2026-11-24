@@ -85,11 +85,14 @@ export function WorkflowFieldInput({ field, value, hideLabel = false, loraOption
         loraOptions={loraOptions}
         isRefreshingLoraOptions={isRefreshingOptions}
         onRefreshLoraOptions={onRefreshOptions}
+        allowBrowse={field.simple_upload_only === false}
+        comfyServerId={comfyServerId}
         onChange={onChange}
       />
     ) : (
       <MiniMaxH3DirectorDasiwaInput
         value={nodeValue}
+        allowBrowse={field.simple_upload_only === false}
         visibleFields={field.node_visible_fields}
         hiddenControls={field.node_hidden_controls}
         numericBounds={field.node_numeric_bounds}

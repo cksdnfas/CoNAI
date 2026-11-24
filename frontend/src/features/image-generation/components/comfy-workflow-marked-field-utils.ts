@@ -35,7 +35,7 @@ export function applyMarkedFieldPatch(field: WorkflowMarkedField, patch: Partial
     delete next.options
     delete next.dropdown_list_name
   }
-  if (nextType !== 'image') delete next.simple_upload_only
+  if (nextType !== 'image' && nextType !== 'node') delete next.simple_upload_only
   if (!canHideWorkflowField(nextType)) delete next.hidden
   if (!('default_value' in patch)) next.default_value = convertDefaultValue(field.default_value, nextType)
   return next

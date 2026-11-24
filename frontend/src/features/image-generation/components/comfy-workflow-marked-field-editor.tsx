@@ -504,6 +504,12 @@ export function ComfyWorkflowMarkedFieldEditor({ field, dropdownLists, inputChoi
             <Switch checked={field.simple_upload_only === true} onCheckedChange={(checked) => onPatch({ simple_upload_only: checked })} aria-label={t({ ko: '간단 업로드', en: 'Simple upload' })} />
           </SettingRow>
         ) : null}
+        {/* A node editor's pictures are plain uploads unless this is turned off. */}
+        {isDirectorNode || field.node_editor === 'snapref_simple' ? (
+          <SettingRow label={t({ ko: '간단 업로드', en: 'Simple upload' })} className="min-h-10">
+            <Switch checked={field.simple_upload_only !== false} onCheckedChange={(checked) => onPatch({ simple_upload_only: checked ? undefined : false })} aria-label={t({ ko: '간단 업로드', en: 'Simple upload' })} />
+          </SettingRow>
+        ) : null}
       </div>
     </div>
   )

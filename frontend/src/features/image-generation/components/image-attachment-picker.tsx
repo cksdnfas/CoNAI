@@ -31,6 +31,7 @@ import {
   type ImageSaveOutputInput,
   type ImageSaveSourceInfo,
 } from '@/lib/image-save-output'
+import { createFileFromBase64 } from '@/lib/appearance-package'
 import type { ImageRecord } from '@/types/image'
 import type { ImageSaveSettings } from '@conai/shared'
 import {
@@ -171,6 +172,13 @@ function ImageAttachmentBrowserSection({
       )}
     </div>
   )
+}
+
+/** A picked image is a base64 data URL; editors that keep pictures as workflow input uploads take it back as a file. */
+export function selectedImageToFile(image: SelectedImageDraft) {
+  const [header, base64 = ''] = image.dataUrl.split(',', 2)
+  const mimeType = image.mimeType || /^data:([^;,]+)/.exec(header)?.[1] || 'image/png'
+  return createFileFromBase64(base64, image.fileName || 'image.png', mimeType)
 }
 
 /** Render a shared image attachment button backed by upload/system/save picker sources. */

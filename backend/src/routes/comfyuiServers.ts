@@ -1,3 +1,5 @@
+import axios from 'axios';
+import { pipeline } from 'stream/promises';
 import { requireAdmin } from '../middleware/authMiddleware';
 import { Router, Request, Response } from 'express';
 import { routeParam } from './routeParam';
@@ -203,6 +205,50 @@ router.get('/refmods', asyncHandler(async (req: Request, res: Response) => {
   } catch (error) {
     return res.status(error instanceof MiniMaxH3RefModLibraryError ? error.statusCode : 502)
       .json({ success: false, error: (error as Error).message });
+  }
+}));
+
+/**
+ * A picture in a ComfyUI server's input folder, for previews of the file names a workflow saved (SnapRef pictures).
+ * GET /api/comfyui-servers/input-image?name=&workflowId=&serverId=
+ */
+router.get('/input-image', asyncHandler(async (req: Request, res: Response) => {
+  const workflowId = parsePositiveIntegerQuery(req.query.workflowId === '' ? undefined : req.query.workflowId, 0, { error: 'workflowId must be a positive integer' });
+  const serverId = parsePositiveIntegerQuery(req.query.serverId === '' ? undefined : req.query.serverId, 0, { error: 'serverId must be a positive integer' });
+  if (!workflowId.ok) return sendRouteBadRequest(res, workflowId.error);
+  if (!serverId.ok) return sendRouteBadRequest(res, serverId.error);
+  // ComfyUI keeps subfolders in the name and may annotate the folder ("a.png [input]"); only the input folder is served.
+  const name = (typeof req.query.name === 'string' ? req.query.name : '').trim().replace(/ \[input\]$/, '').replace(/\\/g, '/');
+  if (!name || name.length > 500 || name.startsWith('/') || name.split('/').includes('..')) return sendRouteBadRequest(res, 'name must be an input file name');
+
+  let server;
+  try {
+    server = resolveMcpComfyServer(workflowId.value || undefined, serverId.value || undefined);
+  } catch (error) {
+    return res.status(404).json({ success: false, error: (error as Error).message });
+  }
+  // Modal backends expose no ComfyUI REST routes.
+  if (server.backend_type === 'modal') return res.status(404).json({ success: false, error: 'Input pictures are not available on a Modal server' });
+  const slash = name.lastIndexOf('/');
+  try {
+    const upstream = await axios.get('/view', {
+      baseURL: server.endpoint, timeout: 15_000, responseType: 'stream',
+      params: { filename: name.slice(slash + 1), subfolder: slash < 0 ? '' : name.slice(0, slash), type: 'input' },
+    });
+    const contentType = String(upstream.headers['content-type'] ?? '');
+    // SVG can carry script and this is served from the app's origin.
+    if (!contentType.startsWith('image/') || contentType.includes('svg')) {
+      upstream.data.destroy();
+      return res.status(415).json({ success: false, error: 'Not a picture' });
+    }
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Cache-Control', 'private, max-age=300');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    await pipeline(upstream.data, res);
+    return res;
+  } catch (error) {
+    if (res.headersSent) return res.destroy();
+    return res.status(axios.isAxiosError(error) && error.response ? 404 : 502).json({ success: false, error: 'Input picture not found on the ComfyUI server' });
   }
 }));
 

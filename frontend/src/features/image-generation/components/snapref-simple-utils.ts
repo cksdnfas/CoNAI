@@ -6,6 +6,7 @@ import {
   snapRefSimpleReferenceKey,
   snapRefSimpleStrengthKey,
 } from '@conai/shared'
+import { buildApiUrl } from '@/lib/api-url'
 import { buildWorkflowInputAssetUrl, readableUploadName, type WorkflowInputAssetRef } from '@/lib/api-workflow-input-assets'
 import { isWorkflowInputAssetRef } from './minimax-h3-director-dasiwa-utils'
 
@@ -70,13 +71,23 @@ export function restoreSnapRefSimpleHistoryValue(value: Record<string, unknown>,
   return { value: restored, hasDroppedPictures }
 }
 
-/** Display name and preview URL of one picture value; ComfyUI input files have no CoNAI preview. */
-export function describeSnapRefSimplePicture(picture: unknown): { name: string; previewUrl?: string } {
+/**
+ * Display name and preview URL of one picture value. A file name is a picture in the ComfyUI input folder, read from
+ * the chosen server (the default one when none is chosen); a library image is shown from the library.
+ */
+export function describeSnapRefSimplePicture(picture: unknown, comfyServerId?: number): { name: string; previewUrl?: string } {
   if (isWorkflowInputAssetRef(picture)) return { name: readableUploadName(picture.fileName), previewUrl: buildWorkflowInputAssetUrl(picture) }
-  if (typeof picture === 'string') return { name: /^data:/i.test(picture) ? 'image' : isSnapRefSimplePictureSet(picture) ? picture : '' }
+  if (typeof picture === 'string') {
+    if (/^data:/i.test(picture)) return { name: 'image', previewUrl: picture }
+    if (!isSnapRefSimplePictureSet(picture)) return { name: '' }
+    const params = new URLSearchParams({ name: picture, ...(comfyServerId ? { serverId: String(comfyServerId) } : {}) })
+    return { name: picture, previewUrl: buildApiUrl(`/api/comfyui-servers/input-image?${params.toString()}`) }
+  }
   if (isRecord(picture)) {
     const name = picture.fileName ?? picture.composite_hash
-    return { name: typeof name === 'string' ? name : '' }
+    const previewUrl = typeof picture.dataUrl === 'string' ? picture.dataUrl
+      : typeof picture.composite_hash === 'string' && picture.composite_hash ? buildApiUrl(`/api/images/${picture.composite_hash}/thumbnail`) : undefined
+    return { name: typeof name === 'string' ? name : '', previewUrl }
   }
   return { name: '' }
 }

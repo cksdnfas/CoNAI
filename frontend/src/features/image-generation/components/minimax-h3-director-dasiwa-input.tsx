@@ -51,6 +51,7 @@ import {
   type MiniMaxH3DirectorVideoMode,
   type MiniMaxH3DirectorVisibleField,
 } from './minimax-h3-director-dasiwa-utils'
+import { ImageAttachmentPickerButton, selectedImageToFile } from './image-attachment-picker'
 import { MiniMaxH3DirectorMediaCard } from './minimax-h3-director-media-card'
 import { MiniMaxH3DirectorPostprocessPanel } from './minimax-h3-director-postprocess-panel'
 import { MiniMaxH3DirectorPromptBuilder } from './minimax-h3-director-prompt-builder'
@@ -76,6 +77,8 @@ type MiniMaxH3DirectorDasiwaInputProps = {
   refModExportOnly?: boolean
   /** The surrounding form already lists the Director's validation issues, so the inner list is left out. */
   issuesShownByHost?: boolean
+  /** Images are picked with the in-app picker (library, save folder) instead of a plain file upload. */
+  allowBrowse?: boolean
   onChange: (value: Record<string, unknown>) => void
   renderInputPort?: (inputKey: MiniMaxH3DirectorGraphInputKey) => ReactNode
 }
@@ -87,7 +90,7 @@ function formatMediaTypeLabel(type: MiniMaxH3DirectorMediaType, index: number) {
 }
 
 /** Render DaSiWa MiniMax H3 Director inputs as a CoNAI-native reference board. */
-export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenControls, numericBounds, comfyServerId, refModExportOnly = false, issuesShownByHost = false, onChange, renderInputPort }: MiniMaxH3DirectorDasiwaInputProps) {
+export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenControls, numericBounds, comfyServerId, refModExportOnly = false, issuesShownByHost = false, allowBrowse = false, onChange, renderInputPort }: MiniMaxH3DirectorDasiwaInputProps) {
   const { t } = useI18n()
   const visualInputRef = useRef<HTMLInputElement>(null)
   const videoInputRef = useRef<HTMLInputElement>(null)
@@ -96,6 +99,8 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
   const requestedFrameSlotRef = useRef<number | null>(null)
   const [menuItemId, setMenuItemId] = useState<string | null>(null)
   const [replacementItemId, setReplacementItemId] = useState<string | null>(null)
+  // The in-app picker's target: a frame slot (or the next free place) for a new image, or the image to replace.
+  const [imageBrowse, setImageBrowse] = useState<{ slot: number | null; itemId?: string } | null>(null)
   const [sortingItemId, setSortingItemId] = useState<string | null>(null)
   const [selectedLane, setSelectedLane] = useState<MediaLane>('image')
   const [status, setStatus] = useState<string | null>(null)
@@ -454,9 +459,17 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
     if (other) swapTimelineItems(item.id, other.id)
   }
 
+  /** Plain upload opens the file dialog; a field that allows browsing opens the in-app picker. */
+  const pickImages = (slot: number | null = null) => {
+    if (allowBrowse) { setImageBrowse({ slot }); return }
+    requestedFrameSlotRef.current = slot
+    visualInputRef.current?.click()
+  }
+
   const requestReplacement = (itemId: string) => {
-    setReplacementItemId(itemId)
     setMenuItemId(null)
+    if (allowBrowse && timeline.items.find((item) => item.id === itemId)?.type === 'image') { setImageBrowse({ slot: null, itemId }); return }
+    setReplacementItemId(itemId)
     window.setTimeout(() => replacementInputRef.current?.click(), 0)
   }
 
@@ -592,10 +605,7 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
           type="button"
           disabled={isUploading}
           className="flex flex-col items-center justify-center gap-2 text-xs whitespace-normal"
-          onClick={() => {
-            requestedFrameSlotRef.current = slot
-            visualInputRef.current?.click()
-          }}
+          onClick={() => pickImages(slot)}
           onDragOver={(event) => event.preventDefault()}
           onDrop={(event) => { event.stopPropagation(); handleLaneDrop(event, 'image', slot) }}
         >
@@ -674,6 +684,21 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
         setReplacementItemId(null)
         if (itemId && file) void replaceTimelineItem(itemId, file)
       }} />
+      {allowBrowse ? (
+        <ImageAttachmentPickerButton
+          hideTrigger
+          label={t({ ko: '이미지 선택', en: 'Choose image' })}
+          allowSaveDialog={false}
+          open={imageBrowse !== null}
+          onOpenChange={(nextOpen) => { if (!nextOpen) setImageBrowse(null) }}
+          onSelect={(image) => {
+            if (!image || !imageBrowse) return
+            const file = selectedImageToFile(image)
+            if (imageBrowse.itemId) void replaceTimelineItem(imageBrowse.itemId, file)
+            else void handleFiles([file], 'image', imageBrowse.slot)
+          }}
+        />
+      ) : null}
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
@@ -839,7 +864,7 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
               </IconButton>
             ) : null}
             {mode !== 'T2VA' ? (
-              <IconButton size="icon-sm" variant="secondary" disabled={isUploading || baseFrameCapacityReached} onClick={() => visualInputRef.current?.click()} label={isReferenceMediaMode ? t({ ko: '참조 이미지 추가', en: 'Add reference image' }) : t({ ko: '키 프레임 이미지 추가', en: 'Add key frame image' })}>
+              <IconButton size="icon-sm" variant="secondary" disabled={isUploading || baseFrameCapacityReached} onClick={() => pickImages()} label={isReferenceMediaMode ? t({ ko: '참조 이미지 추가', en: 'Add reference image' }) : t({ ko: '키 프레임 이미지 추가', en: 'Add key frame image' })}>
                 <Plus className="h-4 w-4" />
               </IconButton>
             ) : null}
@@ -871,7 +896,7 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
         ) : renderDropZone(
           t({ ko: '참조 이미지 추가 (여기에 끌어다 놓아도 돼)', en: 'Add reference images (or drop them here)' }),
           <ImagePlus className="h-4 w-4" />,
-          () => visualInputRef.current?.click(),
+          () => pickImages(),
         )}
       </div>
       ) : null}

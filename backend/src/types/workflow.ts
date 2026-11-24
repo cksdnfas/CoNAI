@@ -63,6 +63,7 @@ export interface MarkedField {
   default_collapsed?: boolean;
   /** 숨김: 생성 화면·입력 스키마·모듈 포트에 내보내지 않고 실행은 항상 default_value로 (text/textarea/number/select만, workflowHiddenFieldPolicy) */
   hidden?: boolean;
+  /** 간단 업로드: 이미지 필드는 기본 꺼짐(전체 선택창), SnapRef·Director 노드 필드는 기본 켜짐(false면 앱 내부 선택창 허용) */
   simple_upload_only?: boolean;
   default_value?: any;
   placeholder?: string;

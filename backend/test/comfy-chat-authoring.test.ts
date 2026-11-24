@@ -203,6 +203,15 @@ test('comfy chat authoring: seed rule, check_comfy_workflow, editor operations',
         res.end(JSON.stringify(exportHistory))
         return
       }
+      if (req.url?.startsWith('/view?')) {
+        const view = new URL(req.url, 'http://upstream').searchParams
+        const type = view.get('type') !== 'input' ? null
+          : view.get('filename') === 'ok.png' && view.get('subfolder') === 'sub' ? 'image/png'
+            : view.get('filename') === 'x.svg' ? 'image/svg+xml' : null
+        res.writeHead(type ? 200 : 404, { 'Content-Type': type ?? 'text/plain' })
+        res.end('picture')
+        return
+      }
       assert.equal(req.url, '/dasiwa/refmods')
       res.writeHead(upstreamStatus, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify([
@@ -271,6 +280,14 @@ test('comfy chat authoring: seed rule, check_comfy_workflow, editor operations',
       assert.equal(response.status, 200)
       assert.deepEqual(await response.json(), { success: true, data: expected })
     }
+    // Input-folder pictures are previewed through the server: input folder only, raster images only.
+    const inputImage = (name: string) => fetch(`http://127.0.0.1:${proxyAddress.port}/api/comfyui-servers/input-image?serverId=${serverId}&name=${encodeURIComponent(name)}`)
+    const picture = await inputImage('sub\\ok.png [input]')
+    assert.equal(picture.status, 200)
+    assert.equal(picture.headers.get('content-type'), 'image/png')
+    assert.equal(await picture.text(), 'picture')
+    assert.deepEqual(await Promise.all(['../ok.png', 'sub/../../ok.png', '/ok.png', '', 'x.svg', 'missing.png'].map(async (name) => (await inputImage(name)).status)), [400, 400, 400, 400, 415, 404])
+
     const tools = (await mcp.client.listTools()).tools
     assert.ok(tools.some((tool) => tool.name === 'list_comfy_refmods'))
     const library = await mcp.client.callTool({ name: 'list_comfy_refmods', arguments: { workflow_id: workflowId } })
