@@ -160,6 +160,10 @@ test('chat question cards: offer_choices, answers checked against the open card,
       { id: 't1', component: 'Text', text: '만들기', variant: 'body' },
     ])
     assert.deepEqual(guessed.dataModel, { hair: ['Blond'], height: 140, glasses: true })
+    // Buttons named one by one: the cancelling one is the second button.
+    const pair = decodeChatForm({ title: '시트', fields: [{ key: 'name', label: '이름', type: 'text' }], submitLabel: '만들기', cancel_label: '취소' })
+    assert.ok(!('error' in pair), JSON.stringify(pair))
+    assert.deepEqual(pair.components.filter((component) => component.component === 'Text').map((component) => component.text), ['만들기', '취소'])
 
     // A step size becomes steps; steps read as a size or as positions are dropped.
     const sliders = decodeChatForm({ title: '설정', fields: [{ key: 'scale', label: 'Scale', type: 'slider', min: 0, max: 1, step: 0.05 }, { key: 'n', label: 'N', type: 'range', min: 10, max: 50, steps: 9 }], buttons: [{ label: 'Go', event: 'go' }] })

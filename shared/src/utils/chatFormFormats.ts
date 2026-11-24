@@ -257,7 +257,9 @@ function decodeFields(input: Raw): Decoded {
     const named = Array.isArray(input.buttons) && input.buttons.length > 0 ? input.buttons : null
     const fallback = [input.submit_label, input.submitLabel, input.submit].find((value) => typeof value === 'string' && value.trim())
     const events = new Set<string>()
-    ;(named ?? [fallback ?? 'OK']).forEach((button, index) => {
+    // A guessed call names its buttons one by one; the cancelling one is a second button, not a dropped key.
+    const cancel = [input.cancel_label, input.cancelLabel, input.cancel].find((value) => typeof value === 'string' && value.trim())
+    ;(named ?? [fallback ?? 'OK', ...(cancel ? [cancel] : [])]).forEach((button, index) => {
       const entry = isRecord(button) ? button : {}
       const label = typeof button === 'string' ? text(button) : text(entry.label) || text(entry.text)
       if (!label) fail(`Button ${index + 1}: give a "label".`)
