@@ -6,7 +6,8 @@
 export const SNAPREF_SIMPLE_CLASS_TYPE = 'SnapRefSimple'
 export const SNAPREF_SIMPLE_NODE_EDITOR = 'snapref_simple'
 export const SNAPREF_SIMPLE_MAX_REFERENCES = 8
-export const SNAPREF_SIMPLE_MODES = ['Character & Style', 'Character'] as const
+// `Style` needs an adapter with a style branch (e.g. snapref_v2s_pre1); the node itself refuses any other adapter.
+export const SNAPREF_SIMPLE_MODES = ['Character & Style', 'Character', 'Style'] as const
 /** The node's value for an unused optional picture slot (reference_2 … reference_8). */
 export const SNAPREF_SIMPLE_UNUSED = 'none'
 export const SNAPREF_SIMPLE_STRENGTH = { min: 0, max: 2, step: 0.05, default: 1 } as const

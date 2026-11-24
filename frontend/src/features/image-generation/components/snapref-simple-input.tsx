@@ -47,7 +47,7 @@ function selectedImageToFile(image: SelectedImageDraft) {
   return createFileFromBase64(base64, image.fileName || 'snapref.png', mimeType)
 }
 
-/** SnapRef (SnapRefSimple) inputs: up to eight pictures of one character with a weight each, mode, fidelity and adapter. */
+/** SnapRef (SnapRefSimple) inputs: up to eight pictures of one character (Style mode: of one art style) with a weight each, mode, fidelity and adapter. */
 export function SnapRefSimpleInput({ value, onChange, loraOptions, isRefreshingLoraOptions = false, onRefreshLoraOptions }: SnapRefSimpleInputProps) {
   const { t } = useI18n()
   // Slot index the picker fills; an index past the used slots adds a picture.
@@ -68,6 +68,7 @@ export function SnapRefSimpleInput({ value, onChange, loraOptions, isRefreshingL
   const modeLabels: Record<SnapRefSimpleMode, string> = {
     'Character & Style': t({ ko: '캐릭터 + 스타일', en: 'Character & Style' }),
     Character: t({ ko: '캐릭터만', en: 'Character only' }),
+    Style: t({ ko: '스타일만', en: 'Style only' }),
   }
 
   const releasePicture = (picture: unknown) => {
@@ -107,7 +108,7 @@ export function SnapRefSimpleInput({ value, onChange, loraOptions, isRefreshingL
   return (
     <fieldset disabled={isUploading} aria-busy={isUploading || undefined} className="min-w-0 space-y-3">
       <div className="grid grid-cols-2 gap-3">
-        <Field label={t({ ko: '모드', en: 'Mode' })} info={t({ ko: '캐릭터 + 스타일은 사진의 캐릭터와 그림체를 가져오고, 캐릭터만은 그림체를 모델과 프롬프트에 맡겨.', en: 'Character & Style takes the character and art style from the pictures; Character only leaves the style to the model and prompt.' })}>
+        <Field label={t({ ko: '모드', en: 'Mode' })} info={t({ ko: '캐릭터 + 스타일은 사진의 캐릭터와 그림체를 가져오고, 캐릭터만은 그림체를 모델과 프롬프트에 맡겨. 스타일만은 사진의 그림체만 가져오니까 캐릭터와 장면은 프롬프트에 쓰고, 스타일 브랜치가 있는 어댑터(snapref_v2s_pre 등)를 골라.', en: 'Character & Style takes the character and art style from the pictures; Character only leaves the style to the model and prompt. Style only takes just the art style, so write the character and scene in the prompt and choose an adapter with a style branch (e.g. snapref_v2s_pre).' })}>
           <Select value={mode} onChange={(event) => onChange({ ...value, mode: event.target.value })}>
             {SNAPREF_SIMPLE_MODES.map((option) => <option key={option} value={option}>{modeLabels[option]}</option>)}
           </Select>

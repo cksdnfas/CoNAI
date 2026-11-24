@@ -32,7 +32,7 @@ test('SnapRef node field: normalize, validate, upload and substitute', async () 
   assert.deepEqual(normalized.snapref.model, ['4', 0])
 
   const refused: Array<[Record<string, unknown>, RegExp]> = [
-    [{ mode: 'Style' }, /mode must be one of/],
+    [{ mode: 'Pose' }, /mode must be one of/],
     [{ strength_2: 2.5 }, /strength_2 must be a number from 0 to 2/],
     [{ fidelity: -0.1 }, /fidelity must be a number from 0 to 1/],
     [{ reference: 'none' }, /reference \(picture 1\) is required/],
@@ -46,7 +46,10 @@ test('SnapRef node field: normalize, validate, upload and substitute', async () 
     assert.throws(() => normalizeMcpWorkflowInputs(fields, { snapref: value }), reason)
   }
   // The generation screen and queue paths validate the same way without MCP normalization.
-  assert.throws(() => validateComfyPromptData(fields, { snapref: { ...snapRefInputs, mode: 'Style' } }), ComfyInputValidationError)
+  assert.throws(() => validateComfyPromptData(fields, { snapref: { ...snapRefInputs, mode: 'Pose' } }), ComfyInputValidationError)
+  // Style (snapref v2s) is a node mode: accepted on both paths.
+  assert.equal(normalizeMcpWorkflowInputs(fields, { snapref: { mode: 'Style' } }).snapref.mode, 'Style')
+  assert.doesNotThrow(() => validateComfyPromptData(fields, { snapref: { ...snapRefInputs, mode: 'Style' } }))
   assert.throws(() => validateComfyPromptData(fields, { snapref: { reference_2: { path: 'C:/secret.png' } } }), /경로/)
   assert.equal(validateComfyPromptData(fields, { snapref: { reference: { composite_hash: 'a'.repeat(32) } } }), true)
 

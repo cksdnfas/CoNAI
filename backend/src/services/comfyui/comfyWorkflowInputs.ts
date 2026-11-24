@@ -621,13 +621,13 @@ function snapRefInputSchema(field: MarkedField) {
   const strength = { type: 'number', minimum: SNAPREF_SIMPLE_STRENGTH.min, maximum: SNAPREF_SIMPLE_STRENGTH.max, step: SNAPREF_SIMPLE_STRENGTH.step, default: SNAPREF_SIMPLE_STRENGTH.default }
   const properties: Record<string, unknown> = {
     adapter: { type: 'string', description: 'SnapRef weights file in the server\'s models/loras.', default: defaults.adapter },
-    mode: { type: 'string', enum: [...SNAPREF_SIMPLE_MODES], default: SNAPREF_SIMPLE_MODES[0], description: 'Character & Style: character and art style from the pictures. Character: only the character; style comes from the model and prompt.' },
+    mode: { type: 'string', enum: [...SNAPREF_SIMPLE_MODES], default: SNAPREF_SIMPLE_MODES[0], description: 'Character & Style: character and art style from the pictures. Character: only the character; style comes from the model and prompt. Style: only the art style of the pictures, so the prompt describes the character and scene; needs an adapter with a style branch (e.g. snapref_v2s_pre1).' },
     fidelity: { type: 'number', minimum: SNAPREF_SIMPLE_FIDELITY.min, maximum: SNAPREF_SIMPLE_FIDELITY.max, step: SNAPREF_SIMPLE_FIDELITY.step, default: SNAPREF_SIMPLE_FIDELITY.default, description: '1 keeps every detail of the pictures; lower follows the prompt more freely.' },
-    reference: { type: 'picture', required: true, description: 'Picture 1 of the character (required).' },
+    reference: { type: 'picture', required: true, description: 'Picture 1 of the character, or in Style mode of the art style (required).' },
     strength: { ...strength, description: 'Weight of picture 1: 1 = as trained, 0 = off.' },
   }
   for (let slot = 2; slot <= SNAPREF_SIMPLE_MAX_REFERENCES; slot++) {
-    properties[`reference_${slot}`] = { type: 'picture', default: SNAPREF_SIMPLE_UNUSED, description: `Picture ${slot} of the same character, or "${SNAPREF_SIMPLE_UNUSED}" when unused.` }
+    properties[`reference_${slot}`] = { type: 'picture', default: SNAPREF_SIMPLE_UNUSED, description: `Picture ${slot} of the same character (Style mode: the same art style), or "${SNAPREF_SIMPLE_UNUSED}" when unused.` }
     properties[`strength_${slot}`] = { ...strength, description: `Weight of picture ${slot}.` }
   }
   return {
@@ -635,7 +635,7 @@ function snapRefInputSchema(field: MarkedField) {
     accepts_partial_value: true,
     max_pictures: SNAPREF_SIMPLE_MAX_REFERENCES,
     properties,
-    picture_values: 'A picture is { composite_hash } of a CoNAI library image, { fileName, dataUrl } with a data:image/...;base64 URL, or a file name already in the ComfyUI server input folder. CoNAI uploads image values to the server before the run. Every picture shows the same character; model, clip and vae stay as the workflow links them.',
+    picture_values: 'A picture is { composite_hash } of a CoNAI library image, { fileName, dataUrl } with a data:image/...;base64 URL, or a file name already in the ComfyUI server input folder. CoNAI uploads image values to the server before the run. Every picture shows the same character (Style mode: the same art style); model, clip and vae stay as the workflow links them.',
     examples: {
       two_pictures: {
         mode: SNAPREF_SIMPLE_MODES[0],

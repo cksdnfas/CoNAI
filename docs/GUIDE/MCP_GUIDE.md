@@ -224,7 +224,7 @@ stdio:
 
 생성 도구는 실제 파일과 생성 이력을 만듭니다. 프롬프트, 서버, 그룹 ID를 확인하고 실행합니다.
 
-SnapRef 필드 값은 노드 입력 이름 그대로인 객체야. `reference`(사진 1, 필수)와 `reference_2`~`reference_8`(안 쓰는 칸은 `"none"`), 사진별 `strength`·`strength_2`~`strength_8`(0–2), `mode`(`Character & Style` 또는 `Character`), `fidelity`(0–1), `adapter`(`models/loras`의 SnapRef 가중치 파일)를 받아. 일부만 보내면 나머지는 워크플로에 저장된 값을 쓰고, 없는 입력 이름·범위 밖 값·빈 사진 1은 작업 등록 전에 거절해. 사진은 아래 이미지 입력 형식이나 ComfyUI 서버 입력 폴더의 파일 이름이고, 이미지 값은 실행 전에 서버로 올려 파일 이름으로 바꿔.
+SnapRef 필드 값은 노드 입력 이름 그대로인 객체야. `reference`(사진 1, 필수)와 `reference_2`~`reference_8`(안 쓰는 칸은 `"none"`), 사진별 `strength`·`strength_2`~`strength_8`(0–2), `mode`(`Character & Style`, `Character`, 또는 스타일 브랜치 어댑터가 필요한 `Style`), `fidelity`(0–1), `adapter`(`models/loras`의 SnapRef 가중치 파일)를 받아. 일부만 보내면 나머지는 워크플로에 저장된 값을 쓰고, 없는 입력 이름·범위 밖 값·빈 사진 1은 작업 등록 전에 거절해. 사진은 아래 이미지 입력 형식이나 ComfyUI 서버 입력 폴더의 파일 이름이고, 이미지 값은 실행 전에 서버로 올려 파일 이름으로 바꿔.
 
 ComfyUI 이미지 입력은 라이브러리 `composite_hash`(이미지 조회 권한 필요), workflow-input-asset 또는 queue-input 참조, data URL이나 base64를 써. 이미지 객체에 `path`, `file_path`, `filePath`, `storagePath`, `originalPath`, `original_file_path`로 서버 파일 경로를 넣으면 거부돼. HTTP 요청은 400을 반환하고 MCP 도구는 오류로 알려 줘. 그래프 HTTP 실행도 미디어 객체와 API 파일 참조의 경로 필드를 실행 전에 거부해. 내장 API와 ComfyUI의 단독 이미지 문자열은 서버 파일 경로가 아니라 데이터로 다뤄. custom JS 노드의 신뢰 경계는 [워크플로우 편집](./WORKFLOW_EDITOR.md#실행)을 참고해.
 
