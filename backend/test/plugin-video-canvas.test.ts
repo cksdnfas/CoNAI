@@ -221,6 +221,8 @@ function serviceFixture() {
     media: { async resolve(ref: any) {
       calls.push({ name: 'resolve', args: ref })
       if (!['library', 'audio', 'files'].includes(ref.source)) throw new Error('invalid media reference')
+      // New library media is hidden until its postprocessing ends.
+      if (state.pendingMedia > 0) { state.pendingMedia--; throw Object.assign(new Error('아직 사용할 수 없는 미디어야.'), { status: 404 }) }
       return { fingerprint: state.fingerprint, mimeType: ref.source === 'audio' ? 'audio/ogg' : 'image/png', name: ref.source === 'audio' ? 'voice.ogg' : 'image.png', path: state.filePath ?? path.resolve(__dirname, 'fixtures/av-golden/audio/exports/short_blip_default_ogg.ogg') }
     } },
     app: { async fetch(url: string, options: any) {
@@ -893,8 +895,11 @@ test('video canvas chain run generates the sequence from each previous last fram
     const take = await f.dispatch('run_cut', await runArgs(f, project))
     const added = await f.dispatch('apply_ops', { project_id: project.id, expected_revision: 1, ops: [{ op: 'add_node', kind: 'cut', name: '둘째', tempId: 'b' }, { op: 'add_node', kind: 'cut', name: '셋째', tempId: 'c' }] })
     const { b, c } = added.tempIds
+    // The first extracted frame is still postprocessing when its job ends: the chain waits for it instead of failing the cut.
+    f.state.pendingMedia = 1
     const chain = await f.dispatch('run_chain', { project_id: project.id, expected_revision: added.revision, wait_seconds: 120 })
     assert.equal(chain.status, 'completed')
+    assert.equal(f.state.pendingMedia, 0)
     assert.equal(chain.current, null)
     assert.deepEqual(chain.steps.map((step: any) => [step.cutId, step.status, step.error]), [[first.id, 'skipped', null], [b, 'completed', null], [c, 'completed', null]])
     assert.equal(chain.steps[0].takeId, take.id)

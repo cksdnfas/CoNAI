@@ -36,7 +36,9 @@ function mediaProgress(job) {
   const { succeeded, failed, skipped, ...filled } = job.progress
   return filled
 }
-const CHAIN_INPUT_CHANGED = '이어 생성 준비 중에 컷이 바뀌어서 바뀐 입력으로 다시 생성했어.'
+const FRAME_READY_MS = 5 * 60_000
+const FRAME_NOT_READY = '앞 컷의 마지막 프레임이 라이브러리 후처리를 끝내지 못했어. 프레임을 확인한 뒤 다시 실행해줘.'
+const CHAIN_INPUT_CHANGED ='이어 생성 준비 중에 컷이 바뀌어서 바뀐 입력으로 다시 생성했어.'
 // The warning a cut's sent text gives for a frame it never names (a REF2VA reference image is bound only through its @name), else null.
 const unnamedFrame = (project, cut, name) => resolvePrompt(project, cut).warnings.find(warning => warning === unusedReference(name)) ?? null
 // Resolves after `ms`, or earlier when a listener in `wake` is called; rejects when the signal aborts.
@@ -684,6 +686,21 @@ export function createService(conai, store = createStore(conai.db)) {
     if (chain.jobId) await conai.jobs.cancel(chain.jobId)
     return finishChain(owner, projectId, id, 'cancelled')
   }
+  // The frame job ends when the frame is saved, but the library hides new media (404) until its postprocessing (auto tagging) ends:
+  // the cut would be refused as missing its start image. A frame removed meanwhile is left to the cut's own check.
+  async function frameReady(owner, projectId, nodeIds, signal) {
+    const deadline = Date.now() + FRAME_READY_MS
+    for (const nodeId of nodeIds) {
+      const ref = store.get(owner, projectId).nodes.find(node => node.id === nodeId)?.data.ref
+      while (ref) {
+        try { await conai.media.resolve(ref); break } catch (error) {
+          if (error.status !== 404) throw error
+          if (Date.now() >= deadline) fail(FRAME_NOT_READY)
+          await pause(1000, signal)
+        }
+      }
+    }
+  }
   async function chainStep(owner, projectId, id, index, signal) {
     const chain = store.chain(owner, projectId, id), cutId = chain.cutIds[index]
     updateChain(owner, projectId, id, { current: cutId })
@@ -722,6 +739,7 @@ export function createService(conai, store = createStore(conai.db)) {
         if (extraction.status !== 'completed' || !extraction.nodeIds.length) fail(extraction.error ?? '앞 컷의 마지막 프레임을 뽑지 못했어.')
         if (extraction.rejected.length) fail(extraction.rejected.map(item => item.reason).join(' / '))
         if (extraction.unnamed) setStep(owner, projectId, id, index, { unnamed: extraction.unnamed })
+        await frameReady(owner, projectId, extraction.nodeIds, signal)
       }
     }
     // Each attempt gets its own request ID: a retry after a concurrent cut edit must not get back the take that edit failed.
