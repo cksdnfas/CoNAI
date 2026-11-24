@@ -13,6 +13,7 @@ import {
   WORKFLOW_INPUT_ASSET_REF_KIND,
   type WorkflowInputAssetRef,
 } from '@/lib/api-workflow-input-assets'
+import { buildApiUrl } from '@/lib/api-url'
 import { isRefModEntryFileRef, refModEntryFileUrl, type RefModEntryFileRef } from '@/lib/api-refmod-entries'
 import { hasMiniMaxDirectorAudio, sortMiniMaxDirectorMedia } from './minimax-h3-director-media'
 import {
@@ -506,7 +507,17 @@ export function getMiniMaxH3DirectorAssets(value: unknown) {
  * A Director asset: a workflow input upload, or one of a RefMod entry's own source copies (only inside the RefMod entry
  * editor; it never enters a run).
  */
-export type MiniMaxH3DirectorAssetRef = WorkflowInputAssetRef | RefModEntryFileRef
+export type MiniMaxH3DirectorAssetRef = WorkflowInputAssetRef | RefModEntryFileRef | LibraryMediaAssetRef
+
+/**
+ * A CoNAI library image or video by hash: how Video Canvas and MCP runs attach media, so a record loaded from history
+ * carries it. Shown from the library and sent as it is (the server uploads it for the run); never deleted here.
+ */
+export type LibraryMediaAssetRef = { composite_hash: string; id?: undefined; fileName?: undefined }
+
+export function isLibraryMediaAssetRef(value: unknown): value is LibraryMediaAssetRef {
+  return isRecord(value) && value.__ref === undefined && typeof value.composite_hash === 'string' && value.composite_hash !== ''
+}
 
 /** Every asset of a Director draft, RefMod entry files included: edits keep them; deletions go to input uploads only. */
 export function getMiniMaxH3DirectorAssetRefs(value: unknown): Record<string, MiniMaxH3DirectorAssetRef> {
@@ -519,11 +530,12 @@ export function getMiniMaxH3DirectorAssetRefs(value: unknown): Record<string, Mi
     return {}
   }
 
-  return Object.fromEntries(Object.entries(rawAssets).filter((entry): entry is [string, MiniMaxH3DirectorAssetRef] => isWorkflowInputAssetRef(entry[1]) || isRefModEntryFileRef(entry[1])))
+  return Object.fromEntries(Object.entries(rawAssets).filter((entry): entry is [string, MiniMaxH3DirectorAssetRef] => isWorkflowInputAssetRef(entry[1]) || isRefModEntryFileRef(entry[1]) || isLibraryMediaAssetRef(entry[1])))
 }
 
 /** The media URL of a Director asset of either kind. */
 export function buildMiniMaxH3DirectorAssetUrl(asset: MiniMaxH3DirectorAssetRef) {
+  if (isLibraryMediaAssetRef(asset)) return buildApiUrl(`/api/images/${asset.composite_hash}/file`)
   return isRefModEntryFileRef(asset) ? refModEntryFileUrl(asset.entryId, asset.id) : buildWorkflowInputAssetUrl(asset)
 }
 

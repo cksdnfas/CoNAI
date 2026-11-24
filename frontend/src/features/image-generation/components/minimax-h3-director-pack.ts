@@ -128,7 +128,7 @@ export function applyMiniMaxDirectorPack(value: Record<string, unknown>, pack: M
         next.audioSlot = audioSlot
       }
       const asset = resolvedAssets.get(index)
-      if (asset) { assets[id] = asset; next.value = asset.fileName }
+      if (asset) { assets[id] = asset; next.value = asset.fileName ?? next.value }
       items.push(next)
     }
   }
