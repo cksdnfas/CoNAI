@@ -179,11 +179,12 @@ export function GenerateActionBar({
   const generateButton = (
       <Tip content={<>{`${generateButtonLabel} (${shortcutHint})`}{generateSuffix && !isGenerating && generateSuffixHint ? <> · {generateSuffixHint}</> : null}</>}>
         {/* A disabled button swallows hover and focus, so the span carries the tooltip that says why it is off. */}
-        <span className="inline-flex shrink-0" tabIndex={canGenerate ? undefined : 0}>
+        <span className={cn('inline-flex shrink-0', isSticky && 'grow')} tabIndex={canGenerate ? undefined : 0}>
         <Button
           type="button"
           variant="default"
           size={isSticky ? 'touch' : 'default'}
+          className={isSticky ? 'grow' : undefined}
           onClick={onGenerate}
           disabled={!canGenerate}
           aria-busy={isGenerating || undefined}
@@ -200,13 +201,14 @@ export function GenerateActionBar({
   const repeatStepper = repeat ? (
     <Tip content={repeatHint}>
       <div className="flex shrink-0 items-center gap-1">
-        <span className="text-xs font-medium text-muted-foreground select-none" aria-hidden="true">×</span>
+        <span className={cn('text-xs font-medium text-muted-foreground select-none', isSticky && 'max-sm:hidden')} aria-hidden="true">×</span>
         <NumberStepperInput
           min={repeat.min ?? 1}
           max={repeat.max}
           step={1}
           variant="detail"
-          className="w-28 min-w-28 shrink-0 sm:w-24 sm:min-w-24"
+          narrowKeys
+          className="w-24 min-w-24 shrink-0"
           value={repeat.value}
           onValueCommit={repeat.onChange}
           disabled={isGenerating || repeat.disabled}
@@ -270,12 +272,17 @@ export function GenerateActionBar({
               <span>{message}</span>
             </div>
           ) : null}
+          {/* One row on a phone (344px and up). If a long cost label still overflows, the icons take their own row and Generate fills the second. */}
           <div className="flex max-w-full flex-wrap items-center justify-end gap-1">
-            {moreActions}
-            {leading}
-            {groupPicker}
-            {repeatStepper}
-            {generateButton}
+            <div className="flex shrink-0 items-center empty:hidden max-sm:-space-x-1 sm:gap-1">
+              {moreActions}
+              {leading}
+              {groupPicker}
+            </div>
+            <div className="flex min-w-0 grow items-center gap-1">
+              {repeatStepper}
+              {generateButton}
+            </div>
           </div>
         </div>
       </GenerateActionBarVariantContext.Provider>

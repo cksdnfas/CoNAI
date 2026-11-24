@@ -84,7 +84,7 @@ const buttonVariants = cva(
         sm: "h-8 gap-2 rounded-sm px-3 has-[>svg]:px-3",
         lg: "h-10 rounded-sm px-6 has-[>svg]:px-4",
         /** Touch-first worded key in a bottom-docked bar: 44px on phones, `default` (36px) from sm up. */
-        touch: "h-11 px-5 has-[>svg]:px-4 sm:h-9 sm:px-4 sm:has-[>svg]:px-3",
+        touch: "h-11 px-5 has-[>svg]:px-3 sm:h-9 sm:px-4",
         icon: "size-9",
         /** Touch-first key in a bottom-docked bar: 44px on phones, `icon` (36px) from sm up. */
         "icon-touch": "size-11 sm:size-9",

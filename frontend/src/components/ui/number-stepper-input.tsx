@@ -16,6 +16,8 @@ type NumberStepperInputProps = {
   allowEmpty?: boolean
   /** Also read "260K", "1.5M" and thousands separators (token counts). */
   shorthand?: boolean
+  /** 36px-wide − / + keys on phones too (still 44px tall), for a bar where width is scarce. */
+  narrowKeys?: boolean
   onValueCommit?: (value: string) => void
   onValidPreview?: (value: number) => void
 } & Omit<React.ComponentProps<'input'>, 'value' | 'onChange' | 'type' | 'min' | 'max' | 'step'>
@@ -43,6 +45,7 @@ export function NumberStepperInput({
   precision,
   allowEmpty = false,
   shorthand = false,
+  narrowKeys = false,
   onValueCommit,
   onValidPreview,
   className,
@@ -59,7 +62,6 @@ export function NumberStepperInput({
   const externalValue = value == null ? '' : String(value)
   const [draft, setDraft] = React.useState(externalValue)
   const [invalid, setInvalid] = React.useState(false)
-  const inputRef = React.useRef<HTMLInputElement>(null)
   const focusedRef = React.useRef(false)
   const lastCommittedRef = React.useRef(externalValue)
   const minValue = toFiniteNumber(min)
@@ -128,14 +130,15 @@ export function NumberStepperInput({
     const normalized = format(clamp(base + direction * stepValue), true)
     setDraft(normalized)
     setInvalid(false)
+    // Focus stays where it is: focusing the field from a − / + tap would raise the phone keypad.
     emitCommit(normalized)
-    inputRef.current?.focus({ preventScroll: true })
   }, [clamp, draft, emitCommit, format, minValue, stepValue])
 
   const currentNumber = draft.trim() === '' ? Number.NaN : Number(draft)
   const decreaseDisabled = disabled || (Number.isFinite(currentNumber) && minValue !== undefined && currentNumber <= minValue)
   const increaseDisabled = disabled || (Number.isFinite(currentNumber) && maxValue !== undefined && currentNumber >= maxValue)
   const fieldLabel = ariaLabel || props.name || t({ ko: '숫자 값', en: 'Numeric value' })
+  const keyClassName = cn('h-auto min-h-11 p-0 sm:min-h-9 sm:min-w-9', narrowKeys ? 'min-w-9' : 'min-w-11')
 
   return (
     <div
@@ -146,7 +149,7 @@ export function NumberStepperInput({
         type="button"
         variant="secondary"
         size="icon"
-        className="h-auto min-h-11 min-w-11 rounded-r-none border-r-0 p-0 sm:min-h-9 sm:min-w-9"
+        className={cn(keyClassName, 'rounded-r-none border-r-0')}
         aria-label={t({ ko: `${fieldLabel} 감소`, en: `Decrease ${fieldLabel}` })}
         disabled={decreaseDisabled}
         onClick={() => stepBy(-1)}
@@ -155,7 +158,6 @@ export function NumberStepperInput({
       </Button>
       <Input
         {...props}
-        ref={inputRef}
         type="text"
         inputMode={inputMode ?? (shorthand ? 'text' : stepPrecision === 0 && minValue !== undefined && minValue >= 0 ? 'numeric' : 'decimal')}
         value={draft}
@@ -204,7 +206,7 @@ export function NumberStepperInput({
         type="button"
         variant="secondary"
         size="icon"
-        className="h-auto min-h-11 min-w-11 rounded-l-none border-l-0 p-0 sm:min-h-9 sm:min-w-9"
+        className={cn(keyClassName, 'rounded-l-none border-l-0')}
         aria-label={t({ ko: `${fieldLabel} 증가`, en: `Increase ${fieldLabel}` })}
         disabled={increaseDisabled}
         onClick={() => stepBy(1)}
