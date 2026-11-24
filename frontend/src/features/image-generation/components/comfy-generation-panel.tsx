@@ -17,6 +17,7 @@ import {
   getGenerationWorkflow,
   getGenerationWorkflows,
 } from '@/lib/api-image-generation-workflows'
+import { ApiRequestError } from '@/lib/api-request'
 import { cn } from '@/lib/utils'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { resolveAccountDraftOwner } from '@/features/auth/auth-permissions'
@@ -366,24 +367,27 @@ function ComfyGenerationPanelContent({
 
       const currentNames = new Set((workflowsQuery.data ?? []).map((item) => item.name))
       const baseName = `${workflow.name} 복사본`
-      let nextName = baseName
-      let suffix = 2
-      while (currentNames.has(nextName)) {
-        nextName = `${baseName} ${suffix}`
-        suffix += 1
+      // The list holds active workflows only, but an inactive or trashed one still owns its name: a 409 moves on to the next suffix.
+      for (let suffix = 1; ; suffix += 1) {
+        const nextName = suffix === 1 ? baseName : `${baseName} ${suffix}`
+        if (currentNames.has(nextName)) continue
+        try {
+          await createGenerationWorkflow({
+            name: nextName,
+            description: workflow.description,
+            workflow_json: workflow.workflow_json,
+            marked_fields: workflow.marked_fields,
+            is_active: workflow.is_active,
+            result_view_mode: workflow.result_view_mode,
+            artifact_directory_mode: workflow.artifact_directory_mode,
+            artifact_root_path: workflow.artifact_root_path ?? null,
+            color: workflow.color,
+          })
+          break
+        } catch (error) {
+          if (!(error instanceof ApiRequestError && error.status === 409) || suffix >= 50) throw error
+        }
       }
-
-      await createGenerationWorkflow({
-        name: nextName,
-        description: workflow.description,
-        workflow_json: workflow.workflow_json,
-        marked_fields: workflow.marked_fields,
-        is_active: workflow.is_active,
-        result_view_mode: workflow.result_view_mode,
-        artifact_directory_mode: workflow.artifact_directory_mode,
-        artifact_root_path: workflow.artifact_root_path ?? null,
-        color: workflow.color,
-      })
 
       await workflowsQuery.refetch()
       showSnackbar({ message: t({ ko: 'ComfyUI 워크플로우를 복사했어.', en: 'Copied the ComfyUI workflow.' }), tone: 'info' })
