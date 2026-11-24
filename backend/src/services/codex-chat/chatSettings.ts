@@ -122,6 +122,11 @@ export function chatToolRoundLimit() {
   return loadChatSettings().toolRoundLimit
 }
 
+/** Told to the model past the limit: at the end of a reply's text-only last request, or as a late call's result. */
+export const TOOL_BUDGET_NOTE = 'The tool budget for this reply is used up. Do not call tools; answer now with what you have.'
+/** A reply whose text-only last request still says nothing (only a call, or nothing at all) fails with this. */
+export const TOOL_BUDGET_FAILURE = '도구 사용 한도에 닿아서 답을 마치지 못했어.'
+
 export function updateChatSettings(patch: { enabled?: boolean; diagnostics?: Partial<ChatSettings['diagnostics']>; loreAutoSave?: boolean; loreKeyLanguage?: string | null; webResearch?: Partial<WebResearchSettings>; piCodemode?: boolean; toolRoundLimit?: number; loreSelectionLimit?: number }): ChatSettings {
   const current = loadChatSettings()
   const next: ChatSettings = {

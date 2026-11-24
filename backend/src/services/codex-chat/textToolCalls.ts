@@ -5,7 +5,8 @@ import type { ChatCompletionTool, ChatCompletionToolCall } from './llmChatComple
  * Tool calls a model wrote into its reply text because its server did not turn them into `tool_calls` (a server
  * without the model's tool-call parser, or one that drops calls to tools missing from the request): the Hermes form
  * `<tool_call>{"name": …, "arguments": {…}}</tool_call>` and the Qwen XML form
- * `<tool_call><function=name><parameter=key>value</parameter></function></tool_call>`, also with `&lt;` written for `<`.
+ * `<tool_call><function=name><parameter=key>value</parameter></function></tool_call>`, also with `&lt;` written for `<`,
+ * and DeepSeek's DSML form (below).
  * Only calls to tools this request offers are recovered: a direct tool by name, a catalogued one through run_tool.
  */
 export type TextToolCallTools = { tools: ChatCompletionTool[]; catalogued: ReadonlySet<string> }
@@ -17,8 +18,19 @@ const FUNCTION = new RegExp(`${LT}function=([\\w.-]+)${GT}([\\s\\S]*?)(?:${LT}/f
 const PARAMETER = new RegExp(`${LT}parameter=([\\w.-]+)${GT}([\\s\\S]*?)(?=${LT}/parameter${GT}|${LT}parameter=|$)(?:${LT}/parameter${GT})?`, 'g')
 /** A matched call that reached its closing tag (BLOCK and FUNCTION also take one the text ends inside of). */
 const CLOSED = new RegExp(`${LT}/(?:tool_call|function)${GT}$`)
+/**
+ * DeepSeek's DSML form, `<｜DSML｜function_calls><｜DSML｜invoke name="…"><｜DSML｜parameter name="…" string="true">…
+ * </｜DSML｜parameter></｜DSML｜invoke></｜DSML｜function_calls>`, which its models write as text in a request without
+ * tools; the bars full-width or not, doubled or spaced as servers render the special tokens.
+ */
+const DSML = '[｜|]+\\s*DSML\\s*[｜|]+\\s*'
+const DSML_BLOCK = new RegExp(`<${DSML}(?:function_|tool_)?calls\\s*>([\\s\\S]*?)(?:</${DSML}(?:function_|tool_)?calls\\s*>|$)`, 'g')
+const DSML_INVOKE = new RegExp(`<${DSML}invoke\\s+name="([^"]+)"\\s*>([\\s\\S]*?)(?:</${DSML}invoke\\s*>|$)`, 'g')
+const DSML_PARAMETER = new RegExp(`<${DSML}parameter\\s+name="([^"]+)"(?:\\s+string="(true|false)")?\\s*>([\\s\\S]*?)(?:</${DSML}parameter\\s*>|(?=<${DSML}parameter|</${DSML}invoke)|$)`, 'g')
+const DSML_CLOSED = new RegExp(`</${DSML}(?:function_|tool_)?calls\\s*>$`)
+const DSML_CALL_START = new RegExp(`^<${DSML}invoke`)
 /** Where a written tool call starts; the stream holds text back from the first of these. */
-const MARKERS = ['<tool_call>', '&lt;tool_call>', '&lt;tool_call&gt;', '<function=', '&lt;function=']
+const MARKERS = ['<tool_call>', '&lt;tool_call>', '&lt;tool_call&gt;', '<function=', '&lt;function=', '<｜DSML', '<｜｜DSML', '<|DSML']
 
 const isObject = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 const unescapeHtml = (text: string) => text.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&amp;/g, '&')
@@ -61,6 +73,17 @@ function readCall(body: string, coerce: (tool: string, key: string, value: strin
   return { name, args }
 }
 
+const readJson = (value: string) => { try { return JSON.parse(value.trim()) } catch { return value } }
+
+/** The calls of one DSML block; `string="true"` keeps a value as written, `"false"` reads it as JSON. */
+function readDsmlCalls(body: string, coerce: (tool: string, key: string, value: string) => unknown) {
+  const invokes = [...body.matchAll(DSML_INVOKE)]
+  return invokes.length === 0 ? null : invokes.map(([, name, inner]) => ({
+    name,
+    args: Object.fromEntries([...inner.matchAll(DSML_PARAMETER)].map(([, key, string, value]) => [key, string === 'true' ? value : string === 'false' ? readJson(value) : coerce(name, key, value)])),
+  }))
+}
+
 /**
  * The calls written in `text` (outside code blocks) and the text from `from` on without them, or null unless every
  * written call is a usable one. `from`: where the part of the text not yet shown to the reader starts. `cut`: the text
@@ -76,25 +99,30 @@ function readTextToolCalls(text: string, available: TextToolCallTools | null, fr
   }
   const fences = fencedRanges(text)
   const usable = (match: RegExpMatchArray) => match.index! >= from && !fences.some(([start, end]) => match.index! >= start && match.index! < end)
-  const spanOf = (match: RegExpMatchArray, body: string) => ({ start: match.index!, end: match.index! + match[0].length, body: match[0].startsWith('&lt;') ? unescapeHtml(body) : body, closed: CLOSED.test(match[0]) })
+  const spanOf = (match: RegExpMatchArray, body: string, closed = CLOSED) => ({ start: match.index!, end: match.index! + match[0].length, body: match[0].startsWith('&lt;') ? unescapeHtml(body) : body, closed: closed.test(match[0]) })
   let spans = [...text.matchAll(BLOCK)].filter(usable).map((match) => spanOf(match, match[1]))
   if (spans.length === 0) spans = [...text.matchAll(FUNCTION)].filter(usable).map((match) => spanOf(match, match[0]))
+  const dsml = spans.length === 0
+  if (dsml) spans = [...text.matchAll(DSML_BLOCK)].filter(usable).map((match) => spanOf(match, match[1], DSML_CLOSED))
   if (spans.length === 0) return null
   // Only a span that starts like a call is one the cut ended inside of; a mere mention of the tag in prose is read
   // (and so refused) as if nothing were cut.
   const last = spans[spans.length - 1]
-  const read = cut && !last.closed && /^(?:\{|<function=|&lt;function=)/.test(last.body.trim()) ? spans.slice(0, -1) : spans
+  const read = cut && !last.closed && (dsml ? DSML_CALL_START : /^(?:\{|<function=|&lt;function=)/).test(last.body.trim()) ? spans.slice(0, -1) : spans
   const calls: ChatCompletionToolCall[] = []
-  for (const [index, span] of read.entries()) {
-    const call = readCall(span.body, coerce)
-    if (!call) return null
-    const name = !available || direct.has(call.name) ? call.name : available.catalogued.has(call.name) && direct.has(CATALOG_RUN_TOOL) ? CATALOG_RUN_TOOL : null
-    if (!name) return null
-    calls.push({
-      id: `call_text_${index}_${Date.now().toString(36)}`,
-      type: 'function',
-      function: { name, arguments: JSON.stringify(name === call.name ? call.args : { tool: call.name, arguments: call.args }) },
-    })
+  for (const span of read) {
+    const written = dsml ? readDsmlCalls(span.body, coerce) : [readCall(span.body, coerce)]
+    if (!written) return null
+    for (const call of written) {
+      if (!call) return null
+      const name = !available || direct.has(call.name) ? call.name : available.catalogued.has(call.name) && direct.has(CATALOG_RUN_TOOL) ? CATALOG_RUN_TOOL : null
+      if (!name) return null
+      calls.push({
+        id: `call_text_${calls.length}_${Date.now().toString(36)}`,
+        type: 'function',
+        function: { name, arguments: JSON.stringify(name === call.name ? call.args : { tool: call.name, arguments: call.args }) },
+      })
+    }
   }
   let rest = ''
   let at = from

@@ -29,7 +29,7 @@ import { titleAfterFirstReply } from './chatAutoTitle'
 import { withoutNarrationMarks } from '@conai/shared'
 import { finishReplyText } from './chatReplyFinish'
 import { ChatUserProfileStore, userPersonaForThread, userPersonaOf } from './chatUserProfiles'
-import { chatToolRoundLimit, loadChatSettings } from './chatSettings'
+import { chatToolRoundLimit, loadChatSettings, TOOL_BUDGET_FAILURE, TOOL_BUDGET_NOTE } from './chatSettings'
 import { canUseChatProfile, resolveChatProfileToolGrant, resolveChatAccess } from './codexChatAccess'
 import { CodexChatStore, type ChatHistorySource, type CodexChatMessageRecord, type CodexChatThreadRecord, type CodexChatToolCall } from './codexChatStore'
 import { withGenerationOutcomes } from './codexChatMedia'
@@ -82,6 +82,7 @@ export const REPLY_FAILURES = {
   toolCallsCut: '출력 상한에 걸려 도구 호출이 잘렸어. 최대 출력 토큰을 늘려줘.',
   emptyAtCap: '생각만 하다가 출력 상한에 닿았어. 최대 출력 토큰을 늘리거나 추론을 줄여줘.',
   empty: '빈 답변이 왔어.',
+  toolBudget: TOOL_BUDGET_FAILURE,
 } as const
 
 export class LlmChatError extends Error {
@@ -608,10 +609,15 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
       }
       // The last round keeps the same tool list (and so the cached prompt) and tells the model to answer in text.
       const researchFinal = turn.research?.finalModelRound() ?? false
+      // A direct reply past its tool budget (session engines count their own rounds inside their run).
+      const budgetRound = !turn.research && !target.transport && round > toolRounds
       const lastRound = wrapUp || (!turn.research && round > toolRounds) || researchFinal
       if (turn.research && lastRound) tools = []
+      // That request alone ends with the budget note, after everything sent before as it was (and cached); a wrap-up
+      // carries its own. `messages` never holds it, so no later request does either.
+      const request = budgetRound && !wrapUp ? [...messages, markContextMessage({ role: 'user', content: TOOL_BUDGET_NOTE }, 'last-instruction')] : messages
       // The cap goes out cut to the room this round's prompt leaves.
-      target.generation = { ...target.generation, maxTokens: replyCapFor(profile, messages, tools, replyCap) }
+      target.generation = { ...target.generation, maxTokens: replyCapFor(profile, request, tools, replyCap) }
       const rawEstimate = round === 1 ? rawMessagesEstimate(messages, tools) : 0
       if (turn.contextMeta?.version === 2 && round === 1) {
         turn.contextMeta = limitContextMeta({ ...turn.contextMeta, sections: contextSections(messages, tools, (text) => estimateTokens(profile.id, text)), estimatedTokens: estimateMessagesTokens(profile.id, messages, tools) })
@@ -640,7 +646,7 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
         const textFilter = textToolCallFilter(filter.push)
         return streamChatCompletion({
           target,
-          messages,
+          messages: request,
           tools,
           appTools: tools.some((tool) => !isChatOwnTool(tool.function.name)),
           refreshTools: lastRound ? undefined : refreshTools,
@@ -727,8 +733,10 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
         if (turn.research && lastRound && result.toolCalls.length > 0 && turn.research.result.stopReason === 'completed') turn.research.result.stopReason = 'model_limit'
         turn.finishReason = result.finishReason
         // Nothing to show at all (thinking ate the cap, or the model said nothing) is a failure the reader can retry.
-        if (!turn.reaction && !turn.order && turn.continuing === undefined && turn.toolCalls.size === 0 && !finishReplyText(turn.text, { source: 'llm', chat: turn.chatContext ?? turn.delivery?.context })) {
-          throw new LlmChatError(result.finishReason === 'length' ? REPLY_FAILURES.emptyAtCap : REPLY_FAILURES.empty)
+        // Past the tool budget too, whatever tools ran: told to answer in text, the model only called another (a native
+        // call, or markup kept out of the reply) or said nothing. The calls the reply made stay on it.
+        if (!turn.reaction && !turn.order && turn.continuing === undefined && (turn.toolCalls.size === 0 || budgetRound) && !finishReplyText(turn.text, { source: 'llm', chat: turn.chatContext ?? turn.delivery?.context })) {
+          throw new LlmChatError(result.finishReason === 'length' ? REPLY_FAILURES.emptyAtCap : turn.toolCalls.size === 0 ? REPLY_FAILURES.empty : REPLY_FAILURES.toolBudget)
         }
         return
       }

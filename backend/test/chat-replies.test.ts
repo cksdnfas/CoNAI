@@ -658,6 +658,43 @@ test('message replies: storage, delivery, context, and generation ownership', { 
     assert.deepEqual(cut.tool_calls, [], 'a capped text-form call cannot execute')
   })
 
+  await t.test('past the tool budget the last request alone ends with the budget note; a last answer of only a call fails and keeps the calls made', async s => {
+    const { TOOL_BUDGET_NOTE } = await import('../src/services/codex-chat/chatSettings')
+    const previousLimit = loadChatSettings().toolRoundLimit
+    updateChatSettings({ toolRoundLimit: 1 })
+    s.after(() => updateChatSettings({ toolRoundLimit: previousLimit }))
+    const lore = JSON.stringify({ title: 'Tea', keys: ['tea'], content: 'The user likes tea.' })
+    const dsml = '<｜DSML｜function_calls>\n<｜DSML｜invoke name="save_lore">\n<｜DSML｜parameter name="title" string="true">Cup</｜DSML｜parameter>\n<｜DSML｜parameter name="keys" string="false">["cup"]</｜DSML｜parameter>\n</｜DSML｜invoke>\n</｜DSML｜function_calls>'
+    // A server refusing tool_choice gets the last request again without tools (llmChatCompletion): same guarantees.
+    for (const refusesToolChoice of [false, true]) {
+      for (const last of ['native', 'markup'] as const) {
+        const bodies: Array<{ messages: unknown[]; tools?: unknown[]; tool_choice?: string }> = []
+        let streamed = ''
+        s.mock.method(globalThis, 'fetch', async (_url: unknown, init?: RequestInit) => {
+          const body = JSON.parse(String(init?.body))
+          bodies.push(body)
+          if (bodies.length === 1) return sse(toolCall('save_lore', lore, 'tool_calls'))
+          if (refusesToolChoice && body.tool_choice) return Response.json({ error: { message: 'tool_choice is not supported' } }, { status: 400 })
+          return last === 'native' ? sse(toolCall('save_lore', lore, 'tool_calls')) : sse(text(dsml, 'stop'))
+        })
+        const reply = await LlmChatService.sendMessage(requester, directChat(), 'Remember that I like tea.', event => { if (event.type === 'delta') streamed += event.text })
+        const label = `${last}${refusesToolChoice ? ', tool_choice refused' : ''}`
+        assert.equal(reply.status, 'failed', label)
+        assert.equal(reply.error, REPLY_FAILURES.toolBudget, label)
+        assert.equal(reply.content, '', label)
+        assert.doesNotMatch(streamed, /DSML/, label)
+        assert.deepEqual(reply.tool_calls.map(call => [call.tool, call.status]), [['save_lore', 'completed']], `${label}: the call the reply made stays on it`)
+        const final = bodies.at(-1)!
+        assert.equal(bodies.length, refusesToolChoice ? 3 : 2, label)
+        assert.deepEqual(final.messages.slice(0, bodies[0].messages.length), bodies[0].messages, `${label}: earlier messages go as they were`)
+        assert.deepEqual(final.messages.at(-1), { role: 'user', content: TOOL_BUDGET_NOTE }, label)
+        assert.ok(!JSON.stringify(bodies[0].messages).includes(TOOL_BUDGET_NOTE), label)
+        assert.equal(final.tool_choice, refusesToolChoice ? undefined : 'none', label)
+        assert.equal(final.tools?.length ?? 0, refusesToolChoice ? 0 : bodies[0].tools!.length, label)
+      }
+    }
+  })
+
   await t.test('tool calls cut by the output cap fail the reply, never run and never go out again', async (s) => {
     const thread = directChat()
     const bodies: Array<{ messages: Array<{ role: string; tool_calls?: unknown[]; content?: unknown }>; tools?: Array<{ function: { name: string } }> }> = []

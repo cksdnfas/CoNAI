@@ -8,7 +8,7 @@ import type { AddressInfo } from 'node:net'
 
 /** A fake OpenAI-compatible server answering from a script: a tool call, a text, or an error; summaries on request. */
 function scriptedServer() {
-  const script: Array<{ kind: 'tool'; promptTokens?: number; name?: string; args?: Record<string, unknown> } | { kind: 'text'; text: string; reasoning?: string; hold?: boolean } | { kind: 'error'; message?: string }> = []
+  const script: Array<{ kind: 'tool'; promptTokens?: number; name?: string; args?: Record<string, unknown>; silent?: boolean } | { kind: 'text'; text: string; reasoning?: string; hold?: boolean } | { kind: 'error'; message?: string }> = []
   let closedStreams = 0
   const requests: Array<{ messages: Array<{ role: string; content: unknown }>; tools: unknown[]; summary: boolean; body: Record<string, unknown>; usage: { inputTokens: number; outputTokens: number } }> = []
   const server = http.createServer((req, res) => {
@@ -29,7 +29,7 @@ function scriptedServer() {
       res.writeHead(200, { 'content-type': 'text/event-stream' })
       const send = (delta: unknown, finish: string | null = null) => res.write(`data: ${JSON.stringify({ id: 'x', object: 'chat.completion.chunk', created: 0, model: request.model, choices: [{ index: 0, delta, finish_reason: finish }] })}\n\n`)
       if (step.kind === 'tool') {
-        send({ role: 'assistant', content: 'Looking it up.' })
+        if (!step.silent) send({ role: 'assistant', content: 'Looking it up.' })
         send({ tool_calls: [{ index: 0, id: `call_${requests.length}`, type: 'function', function: { name: step.name ?? 'lookup', arguments: JSON.stringify(step.args ?? { topic: 'apples' }) } }] })
         send({}, 'tool_calls')
       } else {
@@ -259,7 +259,40 @@ test('pi sessions: tool rounds, forked turns, failures leave no trace, compactio
     assert.match(result.content, /Answering now\./)
     assert.equal(mock.requests[0].tools.length, 1)
     assert.equal(mock.requests[1].tools.length, 0)
+    // The last request alone ends with the budget note, after the messages the first one sent, unchanged.
+    const { TOOL_BUDGET_NOTE, TOOL_BUDGET_FAILURE } = await import('../src/services/codex-chat/chatSettings')
+    const first = mock.requests[0].messages
+    assert.deepEqual(mock.requests[1].messages.slice(0, first.length), first)
+    assert.deepEqual(mock.requests[1].messages.at(-1), { role: 'user', content: TOOL_BUDGET_NOTE })
+    assert.ok(!first.some((message) => JSON.stringify(message).includes(TOOL_BUDGET_NOTE)))
+    assert.ok(!fs.readFileSync(path.join(dir, 'sessions', `${done[0]}.jsonl`), 'utf8').includes(TOOL_BUDGET_NOTE), 'the session never holds the note')
     sessionId = done[0]
+
+    // A final answer that is only a DeepSeek DSML call is dropped, never shown or run: with the earlier round's words
+    // the reply is those; with none it fails, and the session stays put.
+    const dsml = '<｜｜DSML｜｜ calls> <｜｜DSML｜｜ invoke name="lookup"> <｜｜DSML｜｜ parameter name="topic" string="true">pears</｜｜DSML｜｜ parameter> </｜｜DSML｜｜ invoke> </｜｜DSML｜｜ calls>'
+    for (const silent of [false, true]) {
+      mock.script.push({ kind: 'tool', silent }, { kind: 'text', text: dsml })
+      let streamed = ''
+      const calls: string[] = []
+      const kept: string[] = []
+      const answer = streamPiChatCompletion({
+        target: target({ resumeId: sessionId, onDone: (id) => kept.push(id) }),
+        messages: [{ role: 'system', content: 'You are a test.' }, { role: 'user', content: 'budget again' }],
+        tools, signal: new AbortController().signal, maxToolRounds: 1, onContent: (text) => { streamed += text },
+        callTool: async (name) => { calls.push(name); return { content: [{ type: 'text', text: 'ok' }] } },
+      })
+      if (silent) {
+        await assert.rejects(answer, new RegExp(TOOL_BUDGET_FAILURE))
+        assert.deepEqual(kept, [])
+        assert.deepEqual(files(), [`${sessionId}.jsonl`])
+      } else {
+        assert.equal((await answer).content, 'Looking it up.')
+        sessionId = kept[0]
+      }
+      assert.deepEqual(calls, ['lookup'], 'the written call never runs')
+      assert.doesNotMatch(streamed, /DSML/)
+    }
   })
 
   await t.test('with codemode on, a script\'s calls run through CoNAI and stop at the per-script cap', async () => {

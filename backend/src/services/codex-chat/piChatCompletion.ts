@@ -13,7 +13,7 @@ import type { ChatMcpToolResult } from './chatMcpBridge'
 import type { ClaudeChatSession } from './claudeChatCompletion'
 import { cacheMarksRefusedBy, isCacheMarksRefusal, llmConnectError, noteCacheMarksRefused, type ChatCompletionMessage, type ChatCompletionResult, type ChatCompletionTarget, type ChatCompletionTool } from './llmChatCompletion'
 import { CATALOG_RUN_TOOL } from '../../mcp/toolCatalog'
-import { chatToolRoundLimit, loadChatSettings } from './chatSettings'
+import { chatToolRoundLimit, loadChatSettings, TOOL_BUDGET_FAILURE, TOOL_BUDGET_NOTE } from './chatSettings'
 import { noteTextToolCalls, recoverTextToolCalls, textToolCallFilter, type TextToolCallTools } from './textToolCalls'
 import { createRepetitionWatch, withoutRepetition } from './repetitionGuard'
 import { supersededPageViewEdits } from './piPageViewEdits'
@@ -41,7 +41,6 @@ export type PiChatSession = ClaudeChatSession & { onCompaction?: () => void }
 /** The provider id the profile's connection is registered under, in a model runtime of its own per run. */
 const PI_PROVIDER = 'conai'
 const PI_SESSION_ID = /^[\w.-]{1,160}$/
-const TOOL_BUDGET_NOTE = 'The tool budget for this reply is used up. Do not call tools; answer now with what you have.'
 const CODEMODE_TOOL = 'codemode'
 /** One codemode script makes at most as many tool calls as the reply has rounds; past it they fail, so a loop in a script cannot run the tools up. */
 const codemodeBudgetNote = (calls: number) => `A codemode script may make at most ${calls} tool calls. Return what you have.`
@@ -425,6 +424,15 @@ export function verifyPiTools(active: readonly string[], tools: ChatCompletionTo
   if (active.some((name) => !allowed.has(name))) throw new Error('pi 채팅 도구 격리를 확인하지 못했어.')
 }
 
+/**
+ * A request body (OpenAI-compatible or Anthropic's) with TOOL_BUDGET_NOTE as one more user message at its end: every
+ * message before it goes as pi built it (and stays cached), and pi's session never holds the note.
+ */
+function withToolBudgetNote(payload: unknown) {
+  const body = payload as { messages?: unknown }
+  return Array.isArray(body?.messages) ? { ...body, messages: [...body.messages, { role: 'user', content: TOOL_BUDGET_NOTE }] } : payload
+}
+
 const addUsage = (total: LlmTokenCounts, usage: { input?: number; output?: number; cacheRead?: number; cacheWrite?: number } | undefined) => {
   if (!usage) return
   total.inputTokens += (usage.input ?? 0) + (usage.cacheRead ?? 0) + (usage.cacheWrite ?? 0)
@@ -526,6 +534,10 @@ async function runPiChatCompletion(params: {
   // Tool calls written as text are recovered while the model has tools (they go once the budget is used up); after
   // that, their markup is still kept out of the reply.
   let recovering = tools.length > 0
+  // A chat reply's tools went with its budget (not a research run's): its requests from then on end with the note,
+  // and `pastBudget` once a turn started without them.
+  let budgetSpent = false
+  let pastBudget = false
   // Each assistant message's text starts a paragraph of its own (a round's note, then the answer).
   const emitText = (text: string) => {
     if (!text || looping) return
@@ -614,10 +626,12 @@ async function runPiChatCompletion(params: {
     const ok = message.stopReason !== 'error' && (message.stopReason !== 'aborted' || looping)
     params.onRequest?.({ tokens: reported ? own : null, latencyMs: message.durationMs ?? null, ok, compaction: compacting })
   }
+  // Compaction summaries are requests of their own: only the model's answer is told.
+  const noted = (payload: unknown) => budgetSpent && !compacting ? withToolBudgetNote(payload) : payload
   const send: typeof stream = (requestModel, context, options) => stream(requestModel, context, requestOptions ? {
     ...options,
     ...requestOptions,
-    onPayload: async (payload, model) => withFittingThinking(withToolSchemas(await options?.onPayload?.(payload, model) ?? payload, toolSchemas)),
+    onPayload: async (payload, model) => noted(withFittingThinking(withToolSchemas(await options?.onPayload?.(payload, model) ?? payload, toolSchemas))),
   } : {
     ...options,
     ...(marksFetch ? { fetch: marksFetch } : {}),
@@ -626,7 +640,7 @@ async function runPiChatCompletion(params: {
       delete body.max_tokens
       delete body.max_completion_tokens
       if (payloadMaxTokens != null) body.max_tokens = payloadMaxTokens
-      return body
+      return noted(body)
     },
   })
   // Every provider request pi makes passes here, its compaction summaries too (synthetic failure messages do not):
@@ -659,6 +673,7 @@ async function runPiChatCompletion(params: {
         void agent.abort()
         return
       }
+      if (budgetSpent) pastBudget = true
       round += 1
       params.research?.takeTurn()
     }
@@ -668,6 +683,7 @@ async function runPiChatCompletion(params: {
       : round >= toolRounds)) {
       agent.setActiveToolsByName([])
       recovering = false
+      if (!params.research) budgetSpent = true
     }
     // A noncompliant provider can still emit tool calls after tools were removed. Stop the native loop too,
     // rather than advertising a turn cap that only compliant model output would respect.
@@ -726,6 +742,9 @@ async function runPiChatCompletion(params: {
     if (last.stopReason === 'error') throw new Error(`pi 요청에 실패했어: ${last.errorMessage ?? '알 수 없는 오류'}`)
     if (last.stopReason === 'aborted') throw new Error('pi 요청이 중단됐어.')
     const finalText = last.content.flatMap((part) => (part.type === 'text' ? [part.text] : [])).join('')
+    // Told to answer in text, the model still said nothing (only a call, written and dropped, or nothing at all): the
+    // reply fails as a direct one does (llmChatService), and like any failed turn leaves the session where it was.
+    if (pastBudget && !content.trim() && !finalText.trim()) throw new Error(TOOL_BUDGET_FAILURE)
     if (!content && finalText) { content = finalText; params.onContent?.(finalText) }
     const sessionFile = agent.sessionFile
     if (!sessionFile || !fs.existsSync(sessionFile)) throw new Error('pi 세션 파일을 저장하지 못했어.')
