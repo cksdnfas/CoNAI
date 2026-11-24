@@ -1,4 +1,4 @@
-import { lazy, Suspense, useMemo, useState } from 'react'
+import { lazy, Suspense, useMemo, useState, type ReactNode } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { FileText, SquarePen } from 'lucide-react'
@@ -57,6 +57,7 @@ import { ChatPageActionCard } from './chat-page-action-card'
 import { ChatAssetProposalCard } from './chat-asset-proposal-card'
 import { ChatCharacterLibraryProposalCard } from './chat-character-library-proposal-card'
 import { ChatArtStyleProposalCard } from './chat-art-style-proposal-card'
+import { ChatFormProposalCard } from './chat-form-card'
 import { ChatProfileLinkChange } from './chat-profile-link-change'
 import { ProposalFooter, ProposalFrame } from './chat-proposal-parts'
 import { folderPath } from '@conai/shared'
@@ -79,41 +80,61 @@ const ChatProfileEditorModal = lazy(() => import('@/features/settings/components
 
 const LONG_TEXT = 160
 
-/** Cards for the settings a reply proposed (and a slim row for one still being written). */
-export function ChatProposalCards({ calls, threadId }: { calls: CodexChatToolCall[]; threadId?: number }) {
+/** Where a card sits: above the reply's text, below it, or not in the message (the question dock above the composer). */
+type Place = 'above' | 'below' | 'dock'
+type ProposalView<K extends Proposal['kind']> = { place: Place; Card: ((props: { proposal: Extract<Proposal, { kind: K }>; threadId?: number }) => ReactNode) | null }
+
+/** Each kind of card: its place and its component. A new kind fails typecheck until it has a row. */
+const PROPOSAL_VIEWS: { [K in Proposal['kind']]: ProposalView<K> } = {
+  page_fields: { place: 'above', Card: ChatPageProposalCard },
+  workflow_graph: { place: 'above', Card: ChatWorkflowProposalCard },
+  page_action: { place: 'above', Card: ChatPageActionCard },
+  profile_assets: { place: 'above', Card: ChatAssetProposalCard },
+  character_assets: { place: 'above', Card: ChatAssetProposalCard },
+  character_library: { place: 'above', Card: ChatCharacterLibraryProposalCard },
+  art_style: { place: 'above', Card: ChatArtStyleProposalCard },
+  display_block: { place: 'above', Card: BlockProposalCard },
+  skill: { place: 'above', Card: SkillProposalCard },
+  profile: { place: 'above', Card: ProfileProposalCard },
+  lore: { place: 'above', Card: LoreProposalCard },
+  profile_update: { place: 'above', Card: ProfileUpdateCard },
+  profile_folder: { place: 'above', Card: ProfileFolderProposalCard },
+  chat_settings: { place: 'above', Card: ChatSettingsCard },
+  task_plan: { place: 'above', Card: TaskPlanCard },
+  // Both leave their own line once answered or passed (ChatChoiceLines).
+  choice: { place: 'dock', Card: null },
+  form: { place: 'below', Card: ChatFormProposalCard },
+}
+
+function proposalView(proposal: Proposal) {
+  return PROPOSAL_VIEWS[proposal.kind] as ProposalView<Proposal['kind']>
+}
+
+/** The cards of a reply drawn at one place (and, above the text, a slim row for one still being written). */
+export function ChatProposalCards({ calls, threadId, place = 'above' }: { calls: CodexChatToolCall[]; threadId?: number; place?: Place }) {
   const { t } = useI18n()
+  // A card can come both live and on its call; it is drawn once.
+  const seen = new Set<number>()
   const items = calls.flatMap((call): Array<{ key: string; proposal: Proposal | null }> => {
-    // A question card waits above the composer and an input form under the reply's text (ChatFormCards); both leave their own line (ChatChoiceLines).
-    if (call.proposal) return call.proposal.kind === 'choice' || call.proposal.kind === 'form' ? [] : [{ key: call.id, proposal: call.proposal }]
-    if (call.tool.startsWith('propose_') && call.status === 'running') return [{ key: call.id, proposal: null }]
+    if (call.proposal) {
+      if (proposalView(call.proposal).place !== place || seen.has(call.proposal.id)) return []
+      seen.add(call.proposal.id)
+      return [{ key: `proposal-${call.proposal.id}`, proposal: call.proposal }]
+    }
+    if (place === 'above' && call.tool.startsWith('propose_') && call.status === 'running') return [{ key: call.id, proposal: null }]
     return []
   })
   if (items.length === 0) return null
-  return (
-    <div className="space-y-2">
-      {items.map((item) => item.proposal === null
-        ? <div key={item.key} className="flex items-center gap-2 py-1.5 text-xs text-muted-foreground"><Spinner className="size-3" />{t({ ko: '제안 만드는 중…', en: 'Writing a proposal…' })}</div>
-        : <ProposalCard key={item.key} proposal={item.proposal} threadId={threadId} />)}
-    </div>
-  )
+  const cards = items.map((item) => item.proposal === null
+    ? <div key={item.key} className="flex items-center gap-2 py-1.5 text-xs text-muted-foreground"><Spinner className="size-3" />{t({ ko: '제안 만드는 중…', en: 'Writing a proposal…' })}</div>
+    : <ProposalCard key={item.key} proposal={item.proposal} threadId={threadId} />)
+  // Below the text a card may draw nothing (an answered form): no wrapper, so it leaves no gap in the reply's column.
+  return place === 'above' ? <div className="space-y-2">{cards}</div> : cards
 }
 
 function ProposalCard({ proposal, threadId }: { proposal: Proposal; threadId?: number }) {
-  if (proposal.kind === 'page_fields') return <ChatPageProposalCard proposal={proposal} />
-  if (proposal.kind === 'workflow_graph') return <ChatWorkflowProposalCard proposal={proposal} />
-  if (proposal.kind === 'page_action') return <ChatPageActionCard proposal={proposal} />
-  if (proposal.kind === 'profile_assets' || proposal.kind === 'character_assets') return <ChatAssetProposalCard proposal={proposal} threadId={threadId} />
-  if (proposal.kind === 'character_library') return <ChatCharacterLibraryProposalCard proposal={proposal} threadId={threadId} />
-  if (proposal.kind === 'art_style') return <ChatArtStyleProposalCard proposal={proposal} threadId={threadId} />
-  if (proposal.kind === 'display_block') return <BlockProposalCard proposal={proposal} threadId={threadId} />
-  if (proposal.kind === 'skill') return <SkillProposalCard proposal={proposal} threadId={threadId} />
-  if (proposal.kind === 'profile') return <ProfileProposalCard proposal={proposal} threadId={threadId} />
-  if (proposal.kind === 'lore') return <LoreProposalCard proposal={proposal} threadId={threadId} />
-  if (proposal.kind === 'profile_update') return <ProfileUpdateCard proposal={proposal} threadId={threadId} />
-  if (proposal.kind === 'profile_folder') return <ProfileFolderProposalCard proposal={proposal} threadId={threadId} />
-  if (proposal.kind === 'chat_settings') return <ChatSettingsCard proposal={proposal} threadId={threadId} />
-  if (proposal.kind === 'task_plan') return <TaskPlanCard proposal={proposal} threadId={threadId} />
-  return null
+  const { Card } = proposalView(proposal)
+  return Card ? <Card proposal={proposal} threadId={threadId} /> : null
 }
 
 /** Refreshes what a save touched, plus the thread so the card reloads as saved. */

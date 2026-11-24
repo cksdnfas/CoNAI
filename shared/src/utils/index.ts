@@ -19,6 +19,8 @@ export * from './chatPageAction';
 export * from './chatEditing';
 export * from './chatNarration';
 export * from './chatForm';
+export * from './chatFormFormats';
+export * from './chatProposals';
 export * from './loreKeyLanguage';
 export * from './groupAutoCollect';
 export * from './promptRandomToken';

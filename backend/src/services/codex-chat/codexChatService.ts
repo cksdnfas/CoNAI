@@ -1544,7 +1544,7 @@ export const CodexChatService = {
       emit(turn, { type: 'user', message: userMessage })
       if (translated.error) emit(turn, { type: 'error', message: translated.error })
       const historySource = { threadId, untilMessageId: userMessageId }
-      turn.delivery = beginDirectReply(thread, profile.id, [userMessage], userMessage, controller.signal, (delivery) => emit(turn, { type: 'routing', routing: delivery }), historySource)
+      turn.delivery = beginDirectReply(thread, profile.id, [userMessage], userMessage, controller.signal, (delivery) => emit(turn, { type: 'routing', routing: delivery }), historySource, (proposal) => emit(turn, { type: 'card', proposal }))
       turn.delivery.context.knowledgeProvider = 'codex'
       turn.delivery.context.knowledgeOutputLimit = profile.toolOutputLimit
       turn.delivery.context.knowledgeModel = run.model ?? session.catalog.models.find(item => item.isDefault)?.id ?? 'unspecified'

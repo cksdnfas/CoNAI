@@ -1,4 +1,4 @@
-import { isCodexChatGenerationTool, isCodexChatCreationTool, type ChatProposal } from '@conai/shared'
+import { CHAT_PROPOSAL_TOOLS, chatProposalCall, isCodexChatGenerationTool, isCodexChatCreationTool, isProposalTool, type ChatProposal } from '@conai/shared'
 import { getUserSettingsDb } from '../../database/userSettingsDb'
 import { ChatProposalStore } from './chatProposals'
 import { attachFileChanges } from './chatFileChanges'
@@ -94,31 +94,6 @@ export function countPendingChatJobs(threadId: number) {
   return pending
 }
 
-const PROPOSAL_TOOLS: Record<ChatProposal['kind'], string> = {
-  display_block: 'propose_display_block',
-  skill: 'propose_skill',
-  profile: 'propose_chat_profile',
-  profile_update: 'propose_profile_update',
-  profile_folder: 'manage_chat_profile_folders',
-  chat_settings: 'propose_chat_settings',
-  profile_assets: 'propose_profile_assets',
-  character_assets: 'propose_profile_assets',
-  character_library: 'propose_character_library',
-  art_style: 'propose_art_style',
-  lore: 'save_lore',
-  page_fields: 'propose_page_changes',
-  workflow_graph: 'propose_workflow_changes',
-  page_action: 'propose_page_action',
-  task_plan: 'task_propose',
-  choice: 'offer_choices',
-  form: 'show_form',
-}
-
-/** Tools whose call leaves a proposal card under the reply. */
-export function isProposalTool(tool: string) {
-  return tool.startsWith('propose_') || tool === 'manage_chat_profile_folders' || tool === 'save_lore' || tool === 'offer_choices' || tool === 'show_form'
-}
-
 /**
  * Attach stored proposals by tool and per-tool order. Reads and failed calls never consume a card.
  * Replies without recorded calls (Codex can keep only a summary) get the remaining proposals as synthetic calls.
@@ -141,11 +116,11 @@ export function attachProposals(messages: CodexChatMessageRecord[]): CodexChatMe
       if (!isProposalTool(call.tool) || call.status === 'failed') return call
       // The folder tool also lists without proposing; never attach a later write card to that read.
       if (call.tool === 'manage_chat_profile_folders' && (!call.arguments || typeof call.arguments !== 'object' || !('action' in call.arguments) || call.arguments.action === 'list')) return call
-      const next = remaining.findIndex(({ proposal }) => PROPOSAL_TOOLS[proposal.kind] === call.tool)
+      const next = remaining.findIndex(({ proposal }) => CHAT_PROPOSAL_TOOLS[proposal.kind] === call.tool)
       if (next < 0) return call
       return { ...call, proposal: remaining.splice(next, 1)[0].proposal }
     })
-    const extra = remaining.map(({ id, proposal }) => ({ id: `proposal-${id}`, tool: PROPOSAL_TOOLS[proposal.kind], status: 'completed' as const, arguments: null, summary: null, historyIds: [], compositeHashes: [], proposal }))
+    const extra = remaining.map(({ proposal }) => chatProposalCall(proposal))
     return { ...message, tool_calls: [...calls, ...extra] }
   })
 }

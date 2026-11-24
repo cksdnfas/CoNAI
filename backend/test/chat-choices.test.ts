@@ -4,7 +4,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { test } from 'node:test'
-import type { ChatExecutionContext } from '@conai/shared'
+import { chatFormLayout, decodeChatForm, type ChatExecutionContext, type ChatFormProposal } from '@conai/shared'
 
 test('chat question cards: offer_choices, answers checked against the open card, directive', { timeout: 60000 }, async (t) => {
   // Load runtime modules only after isolating every data path. Never open the user's databases.
@@ -134,12 +134,91 @@ test('chat question cards: offer_choices, answers checked against the open card,
     reply('ask-3')
     const answer = readChoiceAnswer(threadId, { proposalId: form.id, action: 'generate', values: { size: ['landscape'], steps: 30, seed: true, extra: 'dropped' } })
     assert.ok(answer && !('error' in answer))
-    assert.deepEqual(answer.flags.map((flag) => [flag.name, flag.content]), [['가로', '크기: landscape'], ['스텝 30', '스텝: 30'], ['시드 고정', '시드 고정: yes'], ['생성', 'Pressed: generate']])
+    assert.deepEqual(answer.flags.map((flag) => [flag.name, flag.content]), [['가로', '크기: landscape'], ['스텝 30', '스텝: 30'], ['시드 고정', '시드 고정: yes'], ['생성', 'Pressed: 생성']])
     assert.ok(answer.flags.every((flag) => flag.pick && flag.choice?.id === form.id && flag.choice.question === '생성 설정'))
     assert.ok('error' in (readChoiceAnswer(threadId, { proposalId: form.id, action: 'delete', values: { size: ['landscape'], steps: 30, seed: true } }) ?? {}), 'a button the card does not have')
     assert.ok('error' in (readChoiceAnswer(threadId, { proposalId: form.id, action: 'generate', values: { size: ['square'], steps: 30, seed: true } }) ?? {}), 'a choice the card does not offer')
     assert.ok('error' in (readChoiceAnswer(threadId, { proposalId: form.id, action: 'generate', values: { size: ['landscape'], steps: 500, seed: true } }) ?? {}), 'a number outside the slider')
     assert.equal(proposalOutcomeNote(threadId), '', 'forms stay out of the review-card outcome note')
+  })
+
+  await t.test('show_form formats: the compact fields call and A2UI slips decode to the stored card', async () => {
+    // The shape models guess without opening the definition: aliases, string options, a default by label.
+    const guessed = decodeChatForm({ title: '캐릭터', description: '원하는 걸 골라 줘', fields: [
+      { key: 'hair', label: '머리색', type: 'select', options: ['Black', 'Blond'], default: 'blond', required: true },
+      { name: 'height', label: '키', type: 'number', min: 140, max: 200 },
+      { key: 'glasses', label: '안경', type: 'switch', default: 'yes' },
+    ], submit_label: '만들기' })
+    assert.ok(!('error' in guessed), JSON.stringify(guessed))
+    assert.deepEqual(guessed.components, [
+      { id: 'root', component: 'Column', children: ['note', 'f1', 'f2', 'f3', 'b1'] },
+      { id: 'note', component: 'Text', text: '원하는 걸 골라 줘', variant: 'caption' },
+      { id: 'f1', component: 'ChoicePicker', label: '머리색', options: [{ label: 'Black', value: 'Black' }, { label: 'Blond', value: 'Blond' }], value: { '@path': '/hair' }, variant: 'mutuallyExclusive' },
+      { id: 'f2', component: 'Slider', label: '키', min: 140, max: 200, value: { '@path': '/height' } },
+      { id: 'f3', component: 'CheckBox', label: '안경', value: { '@path': '/glasses' } },
+      { id: 'b1', component: 'Button', child: 't1', variant: 'primary', action: { event: { name: 'button_1' } } },
+      { id: 't1', component: 'Text', text: '만들기', variant: 'body' },
+    ])
+    assert.deepEqual(guessed.dataModel, { hair: ['Blond'], height: 140, glasses: true })
+
+    // A step size becomes steps; steps read as a size or as positions are dropped.
+    const sliders = decodeChatForm({ title: '설정', fields: [{ key: 'scale', label: 'Scale', type: 'slider', min: 0, max: 1, step: 0.05 }, { key: 'n', label: 'N', type: 'range', min: 10, max: 50, steps: 9 }], buttons: [{ label: 'Go', event: 'go' }] })
+    assert.ok(!('error' in sliders), JSON.stringify(sliders))
+    assert.deepEqual(sliders.components.filter((row) => row.component === 'Slider').map((row) => [row.id, 'steps' in row ? row.steps : null]), [['f1', 20], ['f2', null]])
+    const slips = decodeChatForm({ title: '설정', components: [
+      { id: 'root', component: 'Column', children: ['intro', 'hairText', 'hair', 'steps', 'cfg', 'ok'] },
+      { id: 'intro', component: 'Text', text: '한 번에 정해 줘' },
+      { id: 'hairText', component: 'Text', text: 'Hair' },
+      { id: 'hair', component: 'TextField', label: 'Hair (color)', value: { '@path': '/look/hair' } },
+      { id: 'steps', component: 'Slider', label: '스텝', min: 1, max: 50, steps: 1, value: { '@path': '/steps' } },
+      { id: 'cfg', component: 'Slider', label: 'CFG', min: 0, max: 1, steps: 20, value: { '@path': '/cfg' } },
+      { id: 'ok', component: 'Button', child: 'okText', action: { event: { name: 'ok' } } },
+      { id: 'okText', component: 'Text', text: 'OK' },
+    ], dataModel: { '/look/hair': 'black', '/steps': 20, steps: 30 } })
+    assert.ok(!('error' in slips), JSON.stringify(slips))
+    assert.deepEqual(slips.components[0], { id: 'root', component: 'Column', children: ['intro', 'hair', 'steps', 'cfg', 'ok'] }, 'the caption repeating the next label goes, the note stays')
+    assert.deepEqual(slips.components.filter((row) => row.component === 'Slider').map((row) => [row.id, 'steps' in row ? row.steps : null]), [['steps', null], ['cfg', 20]])
+    assert.deepEqual(slips.dataModel, { look: { hair: 'black' }, steps: 30, cfg: 0 }, 'path keys are read; a plain key wins')
+
+    assert.deepEqual(decodeChatForm({ title: 'x', fields: [{ key: 'when', label: '언제', type: 'date' }] }), { error: 'Field "when": type "date" is not offered (text, longtext, number, select, multi, slider, switch, media).' })
+    assert.deepEqual(decodeChatForm({ title: 'x', fields: [{ key: 'size', label: '크기', type: 'radio', options: ['S', 'M'], default: 'XL' }] }), { error: 'Field "size": default "XL" is not one of its options.' })
+    assert.deepEqual(decodeChatForm({ title: 'x' }), { error: 'Give "fields": a list of {key, label, type}.' })
+
+    // Through the real tool: the input schema lets the alias keys reach the decoder.
+    const context: ChatExecutionContext = { threadId, profileId: profile.id, kind: 'direct', replyId: 'ask-4' }
+    const unregister = registerChatReply(context, controller.signal, () => ({ replyTo: null, recipients: ['user'] }))
+    const bridge = await openChatMcpBridge(admin, ['read'], null, { chatContext: context })
+    try {
+      const made = await bridge.call('run_tool', { tool: 'show_form', arguments: { title: '머리', description: '골라 줘', fields: [{ name: 'hair', label: '머리색', type: 'radio', options: ['검정', '금발'], value: '금발' }], submitLabel: '확인' } })
+      assert.ok(!made.isError, JSON.stringify(made.content))
+    } finally {
+      await bridge.close()
+      unregister()
+    }
+    const form = ChatProposalStore.forReply(threadId, 'ask-4', 'form')[0] as unknown as ChatFormProposal
+    assert.equal(form.kind, 'form')
+    assert.deepEqual(form.dataModel, { hair: ['금발'] })
+    assert.deepEqual(chatFormLayout(form).buttons, [{ event: 'button_1', label: '확인', primary: true }])
+    assert.deepEqual(chatFormLayout(form).rows.map((row) => row.component), ['Text', 'ChoicePicker'])
+  })
+
+  await t.test('cards on the stream: a running reply is told of each stored card once; others store as before', () => {
+    const card = { kind: 'choice' as const, question: '어디로?', options: [{ label: '여기' }, { label: '저기' }], multiple: false }
+    const context: ChatExecutionContext = { threadId: otherThreadId, profileId: profile.id, kind: 'direct', replyId: 'live-1' }
+    const announced: Array<{ id: number }> = []
+    const unregister = registerChatReply(context, controller.signal, () => ({ replyTo: null, recipients: ['user'] }), (proposal) => { announced.push(proposal) })
+    const stored = ChatProposalStore.add(context, card)
+    assert.deepEqual(announced, [ChatProposalStore.find(stored.id)], 'the stored card, with its id, once')
+    unregister()
+    ChatProposalStore.add(context, card)
+    assert.equal(announced.length, 1, 'an ended reply is not told')
+    assert.doesNotThrow(() => ChatProposalStore.add({ ...context, replyId: 'headless' }, card), 'a reply with no listener stores as before')
+    const unregisterThrowing = registerChatReply({ ...context, replyId: 'live-2' }, controller.signal, () => ({ replyTo: null, recipients: ['user'] }), () => { throw new Error('closed stream') })
+    try {
+      assert.ok(ChatProposalStore.add({ ...context, replyId: 'live-2' }, card).id > 0, 'a failing listener does not fail the store')
+    } finally {
+      unregisterThrowing()
+    }
   })
 
   await t.test('directive: answers grouped under their question, apart from status picks', () => {

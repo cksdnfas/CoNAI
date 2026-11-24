@@ -284,7 +284,7 @@ async function replyAs(run: GroupRun, requester: McpRequester, profile: ChatProf
     if (event.type === 'delta') active.text += event.text
     if (event.type === 'text') active.text = event.text
     if (event.type === 'tool') active.toolCalls.set(event.call.id, event.call)
-    emit(run, event.type === 'delta' || event.type === 'text' || event.type === 'reasoning' || event.type === 'tool' || event.type === 'routing' || event.type === 'translating' ? { ...event, profileId: profile.id } : event)
+    emit(run, event.type === 'delta' || event.type === 'text' || event.type === 'reasoning' || event.type === 'tool' || event.type === 'card' || event.type === 'routing' || event.type === 'translating' ? { ...event, profileId: profile.id } : event)
   }
   let others: string[] = []
   const persist = async ({ contextMeta, requestCapture, ...raw }: GroupReplyResult) => {
@@ -337,7 +337,7 @@ async function replyAs(run: GroupRun, requester: McpRequester, profile: ChatProf
 
   let message: CodexChatMessageRecord
   try {
-    unregister = registerChatReply(context, controller.signal, route)
+    unregister = registerChatReply(context, controller.signal, route, (proposal) => forward({ type: 'card', proposal }))
     others = [userPersonaForThread(thread).name, ...members.filter((member) => member.id !== profile.id).map((member) => member.name)]
     // A member that cannot read files itself gets text attachments' contents in the transcript.
     // Claude chooses its missed window after checking whether its session still exists.

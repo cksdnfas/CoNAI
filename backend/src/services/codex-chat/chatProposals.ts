@@ -1,6 +1,7 @@
 import type { ChatExecutionContext, ChatProposal } from '@conai/shared'
 import { getUserSettingsDb } from '../../database/userSettingsDb'
 import { isAgentRoom } from './chatRoomWake'
+import { announceChatReplyCard } from './chatReplyRegistry'
 
 /** A proposal before it is stored: the shared contract without the row id. */
 export type NewChatProposal = ChatProposal extends infer P ? (P extends { id: number } ? Omit<P, 'id'> : never) : never
@@ -61,7 +62,10 @@ export const ChatProposalStore = {
         .run(context.threadId, context.replyId, count, proposal.kind, JSON.stringify(context.autoApprove ? { ...proposal, autoApprove: context.autoApprove } : proposal))
       return Number(result.lastInsertRowid)
     })()
-    return ChatProposalStore.find(id) as ChatProposal
+    const stored = ChatProposalStore.find(id) as ChatProposal
+    // Every engine's cards reach the live reply here, as stored (a tool result's copy can hide rated text).
+    announceChatReplyCard(context, stored)
+    return stored
   },
 
   /** Every proposal of a chat, in reply then seq order. */

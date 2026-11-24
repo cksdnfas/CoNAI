@@ -309,6 +309,6 @@ export function chatFormAnswerLines(form: Pick<ChatFormProposal, 'components'>, 
     }
   }
   const pressed = buttons.find((button) => button.event === action)
-  if (pressed && (buttons.length > 1 || lines.length === 0)) lines.push({ name: pressed.label, content: `Pressed: ${pressed.event}` })
+  if (pressed && (buttons.length > 1 || lines.length === 0)) lines.push({ name: pressed.label, content: `Pressed: ${pressed.label}` })
   return lines
 }

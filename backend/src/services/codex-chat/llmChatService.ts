@@ -5,9 +5,9 @@ import { requirePrivateAttachmentRun } from './chatAttachmentPrivacy'
 import { deletingThreads } from './chatThreadReservation'
 import { requestChatModel, withChatTokenModel } from './llmChatContext'
 import { addChatOpening } from './chatGreeting'
-import type { ChatExecutionContext, ChatPageSnapshot, ChatProposal } from '@conai/shared'
+import type { ChatExecutionContext, ChatPageSnapshot } from '@conai/shared'
 import { isCodexChatCreationTool } from '@conai/shared'
-import { ChatProposalStore, chatProposalToolRefusal, isChatProposalToolAvailable } from './chatProposals'
+import { chatProposalToolRefusal, isChatProposalToolAvailable } from './chatProposals'
 import { beginDirectReply } from './chatReplies'
 import { isChatOwnTool, type McpRequester } from '../../mcp/context'
 import type { LlmGenerationOptions } from '../llmGenerationOptions'
@@ -255,12 +255,6 @@ export async function runToolCall(turn: LlmTurn, bridge: ChatMcpBridge, call: { 
     if (typeof pageView === 'string' && pageView.startsWith(PAGE_VIEW_KEY)) shownPageView = { key: pageView, ...(typeof pageViewBase === 'string' ? { base: pageViewBase } : {}) }
     const result = shownPageView === undefined ? called : { ...called, structuredContent: Object.keys(structured).length ? structured : undefined }
     nativeResult = result
-    if (['propose_page_changes', 'propose_workflow_changes', 'propose_page_action'].includes(record.tool) && !result.isError) {
-      // propose_page_changes / propose_workflow_changes are retired; the names stay for chats recorded before.
-      const structured = result.structuredContent as { proposal?: ChatProposal } | undefined
-      // The card shows the stored proposal: the tool result may carry a copy with text above the rating ceiling hidden.
-      if (structured?.proposal?.kind === 'page_fields' || structured?.proposal?.kind === 'workflow_graph' || structured?.proposal?.kind === 'page_action') record.proposal = ChatProposalStore.find(structured.proposal.id) ?? structured.proposal
-    }
     const { texts, historyIds, compositeHashes, jobIds, pendingJobIds, audioCandidateIds, audioFileIds, pageOperation } = readMcpToolResult(result, record.tool)
     if (pageOperation && !result.isError) record.pageOperation = pageOperation
     if (result.isError && (record.tool === 'page_act' || record.tool === 'page_fill') && texts.length > 1) refusedPageText = texts[0]
@@ -889,7 +883,7 @@ function startReply(requester: McpRequester, thread: CodexChatThreadRecord, prof
   turn.historySource = source
   turn.groupHistory = group?.history
   turn.history = history
-  turn.delivery = beginDirectReply(updatedThread, profile.id, history, [...history].reverse().find((entry) => entry.role === 'user') ?? null, turn.controller.signal, (routing) => emit(turn, { type: 'routing', routing }), turn.historySource)
+  turn.delivery = beginDirectReply(updatedThread, profile.id, history, [...history].reverse().find((entry) => entry.role === 'user') ?? null, turn.controller.signal, (routing) => emit(turn, { type: 'routing', routing }), turn.historySource, (proposal) => emit(turn, { type: 'card', proposal }))
   if (reaction) turn.delivery.routing = { ...turn.delivery.routing, replyTo: null, recipients: ['user'] }
   if (autoApprove) turn.delivery.context.autoApprove = autoApprove
   if (page) turn.chatContext = { ...turn.delivery.context, page }

@@ -262,6 +262,8 @@ export type ChatStreamEvent<Message> =
   | { type: 'delta'; text: string; profileId?: number }
   | { type: 'reasoning'; text: string; profileId?: number }
   | { type: 'tool'; call: ChatToolCall; profileId?: number }
+  /** A card the reply just stored (ChatProposalStore.add), as the thread read attaches it to its call. */
+  | { type: 'card'; proposal: ChatProposal; profileId?: number }
   | { type: 'done'; message: Message }
   | { type: 'error'; message: string }
   | { type: 'speaker'; profileId: number; speakers: number[]; queue: number[] }

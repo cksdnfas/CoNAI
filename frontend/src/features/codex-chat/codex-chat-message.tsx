@@ -31,7 +31,6 @@ import { ChatPostCards, ChatPostRefChip, splitPostRefLines } from './chat-post-c
 import { ChatProfileAvatar } from './chat-profile-avatar'
 import { ChatProposalCards } from './chat-proposal-card'
 import { ChatChoiceLines } from './chat-choice'
-import { ChatFormCards } from './chat-form-card'
 import { ChatMediaMasonry } from './chat-media-masonry'
 import { ChatPageOperationChips } from './chat-page-operation-chips'
 import { ChatFileChangeChips } from './chat-file-change-chips'
@@ -921,7 +920,7 @@ export const CodexChatAssistantMessage = memo(function CodexChatAssistantMessage
       <ChatPageOperationChips calls={toolCalls} />
       {streaming ? null : <ChatPostCards calls={toolCalls} text={content} />}
       {ownText && !agentCard ? markdown(ownText) : null}
-      <ChatFormCards calls={toolCalls} threadId={threadId} />
+      <ChatProposalCards calls={toolCalls} threadId={threadId} place="below" />
       <ChatChoiceLines calls={toolCalls} />
       <ChatFileChangeChips changes={fileChanges} threadId={threadId} replyId={replyId ?? routing?.replyId} />
     </div>

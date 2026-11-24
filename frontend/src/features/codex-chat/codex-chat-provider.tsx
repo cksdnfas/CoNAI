@@ -8,7 +8,7 @@ import { ApiRequestError } from '@/lib/api-request'
 import { getErrorMessage } from '@/lib/error-message'
 import { CHAT_HEALTH_QUERY_KEY, CHAT_MESSAGE_PAGE_SIZE, CHAT_PROFILES_QUERY_KEY, CHAT_STATUS_QUERY_KEY, threadLorebooksQueryKey, type ChatProfileSummary } from '@/lib/api-codex-chat'
 import { summarizeChatError } from './chat-error-chip'
-import { chatFormAnswerLines, postLink, type ChatToolDirectiveSnapshot, type StoredFileEntry } from '@conai/shared'
+import { chatFormAnswerLines, chatProposalCall, isProposalTool, postLink, type ChatToolDirectiveSnapshot, type StoredFileEntry } from '@conai/shared'
 import type { CodexChatMediaItem } from '@/lib/api-codex-chat'
 import type { GenerationHistoryRecord } from '@/lib/api-image-generation-types'
 import { uploadStoredFiles } from '@/lib/api-files'
@@ -611,6 +611,11 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
             toolCalls.set(event.call.id, event.call)
             return { ...current, toolCalls }
           })
+        } else if (event.type === 'card') {
+          // A stored card joins the live reply as the call a thread read gives it; told again (saved), it is replaced.
+          const call = chatProposalCall(event.proposal)
+          if (event.profileId !== undefined) updateReply(event.profileId, (reply) => ({ ...reply, toolCalls: new Map(reply.toolCalls).set(call.id, call) }))
+          else updateLiveTurn((current) => current ? { ...current, toolCalls: new Map(current.toolCalls).set(call.id, call) } : current)
         } else if (event.type === 'rewind') {
           accepted = true
           queryClient.setQueryData<CodexChatThreadDetail>(codexChatThreadQueryKey(sentThreadId), (current) => current ? {
@@ -624,7 +629,7 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
           // An open chat shows the live reply until its refetch lands; a chat nobody has open has no such bubble, so its cached thread takes the reply now.
           if (!hasActiveChatQuery(queryClient, codexChatThreadQueryKey(sentThreadId))) putMessage(event.message)
           // Proposals are attached when the thread is read, so a reply that proposed something reloads it now.
-          if (event.message.tool_calls.some((call) => call.tool.startsWith('propose_') || call.tool === 'offer_choices' || call.tool === 'show_form')) void refetchActiveChatQuery(queryClient, codexChatThreadQueryKey(sentThreadId))
+          if (event.message.tool_calls.some((call) => call.proposal || isProposalTool(call.tool))) void refetchActiveChatQuery(queryClient, codexChatThreadQueryKey(sentThreadId))
           updateLiveTurn((current) => current ? { ...current, replacingMessageId: event.message.id, text: event.message.display_content ?? event.message.content, userText: '', userRouting: undefined, flags: [], toolDirective: undefined, attachments: [], mediaAttachments: [] } : current)
         } else if (event.type === 'error') {
           // The full text stays on the failed message (its error chip); the toast only names the reason.

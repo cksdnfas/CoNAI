@@ -1,6 +1,6 @@
 import type { McpServer } from '@modelcontextprotocol/server'
 import { z } from 'zod'
-import { CHAT_FORM_LIMITS, chatFormLayout, normalizeChatForm } from '@conai/shared'
+import { chatFormLayout, decodeChatForm, describeChatFormFields } from '@conai/shared'
 import type { McpRequestContext } from '../context'
 import { translateForm } from '../../services/codex-chat/chatChoices'
 import { ChatProfileStore } from '../../services/codex-chat/chatProfiles'
@@ -12,31 +12,37 @@ import { offersChatWorkTools } from './chatTaskTools'
 
 /**
  * An input card in a 1:1 chat: several values asked at once, drawn under the reply and answered by the person's next
- * message (the pressed button and the values), like a question card. The call is an A2UI `createSurface` subset over
- * the app's own catalog (see shared chatForm). Offered with the chat's other work tools, behind the tool catalog.
+ * message (the pressed button and the values), like a question card. The call is the compact `fields` format (or an
+ * A2UI `createSurface` subset), decoded to the stored card by shared chatFormFormats. Offered with the chat's other work
+ * tools, behind the tool catalog.
  */
 export function registerChatFormTools(server: McpServer, context: McpRequestContext) {
   const chat = context.chatContext
   if (!chat || chat.kind !== 'direct' || !offersChatWorkTools(context)) return
 
+  // Loose objects: the decoder reads the aliases models write (submit_label, name, description…), which zod would drop.
+  const field = z.looseObject({ key: z.string(), label: z.string(), type: z.string() }).partial()
   server.registerTool('show_form', { description: [
     'Show an input card under your reply to ask several values at once (choices, sliders, switches, text, library images).',
     'The pressed button and the values come back as the person\'s next message. Call once, last, then end your reply; do not repeat the fields in text. For one question with ready answers use offer_choices.',
-    'Format: an A2UI v1.0 createSurface subset. components is a flat list; the one with id "root" is a Column whose children order the rows.',
-    'Catalog: Column{children:[id]}; Text{text,variant?:"caption"}; TextField{label,value,placeholder?,variant?:"shortText"|"longText"|"number"}; CheckBox{label,value}; ChoicePicker{label,options:[{label,value}],value,variant?:"mutuallyExclusive"|"multipleSelection"}; Slider{label,min?,max,steps?,value}; MediaPicker{label,items:[composite hash],value,variant?} to pick library images; Button{child:<id of a Text>,variant?:"primary",action:{event:{name}}}.',
-    'Every input\'s value is {"@path":"/key"}; its starting value sits at that path in dataModel (ChoicePicker and MediaPicker hold lists of option values or hashes). Labels are literal strings in the person\'s language and name their rows; add a Text only for a note the labels cannot carry. At least one Button.',
-  ].join(' '), inputSchema: z.object({
-    title: z.string().min(1).max(CHAT_FORM_LIMITS.title).describe('Card title, in the person\'s language'),
-    components: z.array(z.record(z.string(), z.unknown())).min(1).max(CHAT_FORM_LIMITS.components).describe('Each {id, component, …} from the catalog'),
-    dataModel: z.record(z.string(), z.unknown()).optional().describe('Starting values at the inputs\' paths'),
-  }) }, async ({ title, components, dataModel }) => {
+    describeChatFormFields(),
+    'Labels in the person\'s language. Never ask for passwords or keys.',
+  ].join(' '), inputSchema: z.looseObject({
+    // Optional here so a call without one gets the decoder's short message, not a schema dump.
+    title: z.string().optional(),
+    note: z.string().optional(),
+    fields: z.array(field).optional(),
+    buttons: z.array(z.unknown()).optional(),
+    components: z.array(z.unknown()).optional(),
+    dataModel: z.record(z.string(), z.unknown()).optional(),
+  }) }, async (args) => {
     try {
       if (!chat.replyId) throw new Error('A form needs an active chat reply.')
       if (ChatProposalStore.forReply(chat.threadId, chat.replyId, 'form').length > 0) throw new Error('This reply already shows a form (one per reply). End your reply; the answer comes as the person\'s next message.')
-      const form = normalizeChatForm({ title, components, dataModel })
+      const form = decodeChatForm(args)
       if ('error' in form) throw new Error(form.error)
       const missing = chatFormLayout(form).rows.flatMap((row) => (row.component === 'MediaPicker' ? row.items : [])).filter((hash) => !activeMediaFile(hash))
-      if (missing.length > 0) throw new Error(`MediaPicker: not in the library: ${missing.join(', ')}. Use composite hashes from an image search.`)
+      if (missing.length > 0) throw new Error(`Not in the library: ${missing.join(', ')}. Use composite hashes from an image search.`)
       const { signal } = requireActiveChatReply(chat)
       const profile = ChatProfileStore.find(chat.profileId)
       if (!profile) throw new Error('The chat profile is no longer available.')

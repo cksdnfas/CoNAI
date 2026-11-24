@@ -288,9 +288,9 @@ export const ChatLiveMessage = memo(function ChatLiveMessage({ turn, speakerOf, 
     <ChatFileLinks files={turn.attachments} />
     <ChatReferenceChips items={turn.mediaAttachments} threadId={turn.threadId} />
     <ChatMessageFlags flags={turn.flags} toolDirective={turn.toolDirective} />
-    {/* Group rooms: one bubble per member answering now; none between members. */}
+    {/* Group rooms: one bubble per member answering now; none between members. The thread id lets a card that arrives mid-reply (an input form) draw; it stays disabled while the turn runs. */}
     {turn.replies
-      ? turn.replies.map((reply) => <CodexChatAssistantMessage key={reply.routing?.replyId ?? reply.profileId} content={reply.text} routing={reply.routing} recipientLabel={recipients(reply.routing)} toolCalls={[...reply.toolCalls.values()]} reasoning={reply.reasoning} streaming translating={reply.translating} {...look} speaker={speakerOf ? speakerOf(reply.profileId) : look.speaker} />)
-      : <CodexChatAssistantMessage content={turn.text} toolCalls={[...turn.toolCalls.values()]} reasoning={turn.reasoning} streaming translating={turn.translating} {...look} />}
+      ? turn.replies.map((reply) => <CodexChatAssistantMessage key={reply.routing?.replyId ?? reply.profileId} content={reply.text} routing={reply.routing} recipientLabel={recipients(reply.routing)} toolCalls={[...reply.toolCalls.values()]} threadId={turn.threadId} reasoning={reply.reasoning} streaming translating={reply.translating} {...look} speaker={speakerOf ? speakerOf(reply.profileId) : look.speaker} />)
+      : <CodexChatAssistantMessage content={turn.text} toolCalls={[...turn.toolCalls.values()]} threadId={turn.threadId} reasoning={turn.reasoning} streaming translating={turn.translating} {...look} />}
   </>
 })

@@ -1,4 +1,4 @@
-import { useContext, useId, useState } from 'react'
+import { useContext, useId, useState, type ReactNode } from 'react'
 import { useQueries } from '@tanstack/react-query'
 import { Check, ImageOff } from 'lucide-react'
 import { chatFormLayout, chatFormSliderStep, readChatFormPath, writeChatFormPath, type ChatFormChoicePicker, type ChatFormInput, type ChatFormMediaPicker } from '@conai/shared'
@@ -15,7 +15,6 @@ import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { useImageFeedSafety } from '@/features/images/components/image-list/use-image-feed-safety'
 import { useI18n } from '@/i18n'
 import { buildApiUrl } from '@/lib/api-client'
-import type { CodexChatToolCall } from '@/lib/api-codex-chat'
 import { getImage, getImageDetailQueryKey } from '@/lib/api-images'
 import { cn } from '@/lib/utils'
 import { ChatChoicePassedLine, ChatChoiceStatesContext } from './chat-choice'
@@ -93,9 +92,11 @@ function MediaControl({ input, picked, disabled, onChange }: { input: ChatFormMe
   return <ChatMediaMasonry tiles={tiles} size="sm" />
 }
 
-function FormRow({ input, value, disabled, onChange }: { input: ChatFormInput; value: unknown; disabled: boolean; onChange: (value: unknown) => void }) {
-  const id = useId()
-  if (input.component === 'TextField') {
+type RowProps<T extends ChatFormInput> = { id: string; input: T; value: unknown; disabled: boolean; onChange: (value: unknown) => void }
+
+/** One renderer per canonical input: a new member of ChatFormInput fails typecheck until it has one. */
+const FORM_ROWS: { [K in ChatFormInput['component']]: (props: RowProps<Extract<ChatFormInput, { component: K }>>) => ReactNode } = {
+  TextField: ({ id, input, value, disabled, onChange }) => {
     const text = typeof value === 'string' ? value : ''
     if (input.variant === 'longText') {
       return <SettingRow stacked label={input.label} htmlFor={id}><Textarea id={id} autoGrow value={text} placeholder={input.placeholder} disabled={disabled} onChange={(event) => onChange(event.target.value)} /></SettingRow>
@@ -107,11 +108,11 @@ function FormRow({ input, value, disabled, onChange }: { input: ChatFormInput; v
           onChange={(event) => { if (!numeric || /^-?\d*\.?\d*$/.test(event.target.value)) onChange(event.target.value) }} />
       </SettingRow>
     )
-  }
-  if (input.component === 'CheckBox') {
-    return <SettingRow label={input.label} htmlFor={id}><Switch id={id} checked={value === true} disabled={disabled} onCheckedChange={onChange} /></SettingRow>
-  }
-  if (input.component === 'Slider') {
+  },
+  CheckBox: ({ id, input, value, disabled, onChange }) => (
+    <SettingRow label={input.label} htmlFor={id}><Switch id={id} checked={value === true} disabled={disabled} onCheckedChange={onChange} /></SettingRow>
+  ),
+  Slider: ({ input, value, disabled, onChange }) => {
     const number = typeof value === 'number' ? value : input.min
     return (
       <SettingRow label={input.label} controlWidth="standard">
@@ -119,17 +120,25 @@ function FormRow({ input, value, disabled, onChange }: { input: ChatFormInput; v
         <span className="min-w-8 text-right font-mono text-xs tabular-nums text-muted-foreground">{Number.isInteger(number) ? number : Number(number.toFixed(2))}</span>
       </SettingRow>
     )
-  }
-  const picked = stringList(value)
-  if (input.component === 'ChoicePicker') {
+  },
+  ChoicePicker: ({ id, input, value, disabled, onChange }) => {
     const multiple = input.variant === 'multipleSelection'
-    return <SettingRow label={input.label} htmlFor={multiple ? undefined : id} align={multiple ? 'start' : 'center'} controlWidth={multiple ? undefined : 'standard'}><ChoiceControl id={id} input={input} picked={picked} disabled={disabled} onChange={onChange} /></SettingRow>
-  }
-  return (
-    <SettingRow stacked label={<>{input.label}<span className="ml-2 font-mono text-xs tabular-nums text-muted-foreground">{picked.length}/{input.items.length}</span></>}>
-      <MediaControl input={input} picked={picked} disabled={disabled} onChange={onChange} />
-    </SettingRow>
-  )
+    return <SettingRow label={input.label} htmlFor={multiple ? undefined : id} align={multiple ? 'start' : 'center'} controlWidth={multiple ? undefined : 'standard'}><ChoiceControl id={id} input={input} picked={stringList(value)} disabled={disabled} onChange={onChange} /></SettingRow>
+  },
+  MediaPicker: ({ input, value, disabled, onChange }) => {
+    const picked = stringList(value)
+    return (
+      <SettingRow stacked label={<>{input.label}<span className="ml-2 font-mono text-xs tabular-nums text-muted-foreground">{picked.length}/{input.items.length}</span></>}>
+        <MediaControl input={input} picked={picked} disabled={disabled} onChange={onChange} />
+      </SettingRow>
+    )
+  },
+}
+
+function FormRow({ input, value, disabled, onChange }: Omit<RowProps<ChatFormInput>, 'id'>) {
+  const id = useId()
+  const render = FORM_ROWS[input.component] as (props: RowProps<ChatFormInput>) => ReactNode
+  return render({ id, input, value, disabled, onChange })
 }
 
 /** A number field left half-typed ("-", ".") goes out empty rather than as a value the card would refuse. */
@@ -161,16 +170,17 @@ function ChatFormCard({ form, threadId }: { form: ChatFormCardData; threadId: nu
         {buttons.map((button) => (
           <Button key={button.event} size="xs" variant={button.primary ? 'default' : 'subtle'} disabled={busy} onClick={() => void chat.answerForm(threadId, form, button.event, sendable(form, values))}>{button.label}</Button>
         ))}
-        <Button size="xs" variant="ghost" onClick={() => setClosed(true)}>{t({ ko: '무시', en: 'Dismiss' })}</Button>
+        {/* Not while the reply runs: the live bubble gives way to the stored message, which would bring a dismissed card back. */}
+        <Button size="xs" variant="ghost" disabled={busy} onClick={() => setClosed(true)}>{t({ ko: '무시', en: 'Dismiss' })}</Button>
       </ProposalFooter>
     </ProposalFrame>
   )
 }
 
-/** The input forms of a reply that still wait for an answer, under its text. */
-export function ChatFormCards({ calls, threadId }: { calls: CodexChatToolCall[]; threadId?: number }) {
+/** An input form of a reply while it still waits for an answer, under its text. */
+export function ChatFormProposalCard({ proposal, threadId }: { proposal: ChatFormCardData; threadId?: number }) {
   const states = useContext(ChatChoiceStatesContext)
   // Outside the chat view (no card states) a form has nowhere to send its answer.
-  if (!states || threadId === undefined) return null
-  return calls.map((call) => (call.proposal?.kind === 'form' && !states.has(call.proposal.id) ? <ChatFormCard key={call.proposal.id} form={call.proposal} threadId={threadId} /> : null))
+  if (!states || threadId === undefined || states.has(proposal.id)) return null
+  return <ChatFormCard form={proposal} threadId={threadId} />
 }

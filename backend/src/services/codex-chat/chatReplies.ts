@@ -1,4 +1,4 @@
-import type { ChatMessageRouting, ChatRecipient, ChatReplyQuote } from '@conai/shared'
+import type { ChatMessageRouting, ChatProposal, ChatRecipient, ChatReplyQuote } from '@conai/shared'
 import type { ChatExecutionContext } from '@conai/shared'
 import { randomUUID } from 'crypto'
 import { registerChatReply } from './chatReplyRegistry'
@@ -72,7 +72,8 @@ export function messageAddress(message: CodexChatMessageRecord) {
   return `message_id=${message.id}${routing ? `; to=${JSON.stringify(routing.recipients)}${routing.replyTo ? `; reply_to=${routing.replyTo.messageId}` : ''}` : ''}`
 }
 
-export function beginDirectReply(thread: CodexChatThreadRecord, profileId: number, messages: CodexChatMessageRecord[], source: CodexChatMessageRecord | null, signal: AbortSignal, onRouting: (routing: ChatMessageRouting) => void, historySource?: ChatHistorySource) {
+/** `onCard`: the reply's stream, for each card stored while it runs (announceChatReplyCard). */
+export function beginDirectReply(thread: CodexChatThreadRecord, profileId: number, messages: CodexChatMessageRecord[], source: CodexChatMessageRecord | null, signal: AbortSignal, onRouting: (routing: ChatMessageRouting) => void, historySource?: ChatHistorySource, onCard?: (proposal: ChatProposal) => void) {
   const replyId = randomUUID()
   const context: ChatExecutionContext = { threadId: thread.id, profileId, kind: 'direct', replyId, rootExecutionId: chatExecutionRoot(thread.id, source?.id) }
   const state = { context, routing: automaticReplyRouting(thread, source, replyId), close: () => {} }
@@ -83,7 +84,7 @@ export function beginDirectReply(thread: CodexChatThreadRecord, profileId: numbe
     state.routing = { replyId, replyTo: target ? quoteMessage(thread, target) : state.routing.replyTo, recipients: [...new Set(recipients)] }
     onRouting(state.routing)
     return state.routing
-  })
+  }, onCard)
   onRouting(state.routing)
   return state
 }

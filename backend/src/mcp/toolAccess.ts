@@ -6,7 +6,7 @@ import { requireChatMcpAccountAccess } from '../services/codex-chat/codexChatAcc
 import { chatMcpRequester } from '../services/codex-chat/chatProfilePermissions';
 import { requireActiveChatReply } from '../services/codex-chat/chatReplyRegistry';
 import { isAgentRoom } from '../services/codex-chat/chatRoomWake';
-import { isProposalTool } from '../services/codex-chat/codexChatMedia';
+import { isProposalTool } from '@conai/shared';
 import { BoardCallRooms } from '../services/posts/boardCallRooms';
 import { validateMcpToolArguments } from './requestSecurity';
 import { currentMcpChatPage } from './context';

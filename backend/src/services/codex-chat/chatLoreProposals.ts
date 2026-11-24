@@ -9,6 +9,7 @@ import { LORE_FILES_FOLDER, OwnedLorebookStore, foldLoreTitle, freeChildName, ty
 import { ChatGroupStore } from './chatGroupStore'
 import { ChatProfileStore } from './chatProfiles'
 import { ChatProposalStore } from './chatProposals'
+import { announceChatReplyCard } from './chatReplyRegistry'
 import { userPersonaForThread } from './chatUserProfiles'
 import { CodexChatStore } from './codexChatStore'
 import { judgeGrantsLore } from './chatJudge'
@@ -211,7 +212,10 @@ export function proposeLore(context: ChatExecutionContext, input: SaveLoreInput)
   if (!loreAutoSaveOn(context.threadId)) return proposal
   // Saved right away; when that fails (a file name, the book), the card stays for a person to save.
   try {
-    return applyLoreProposal(proposal.id).proposal as LoreProposal
+    const saved = applyLoreProposal(proposal.id).proposal as LoreProposal
+    // The live reply already shows the card as stored; tell it the card is saved now.
+    announceChatReplyCard(context, saved)
+    return saved
   } catch (error) {
     console.warn('[chat-lore] Auto-save failed; left as a card:', error instanceof Error ? error.message : error)
     return proposal

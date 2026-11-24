@@ -42,7 +42,7 @@ export const TOOL_CATEGORIES: Record<ToolCategoryId, string> = {
   guide: 'CoNAI user guide: how screens, features and settings work',
   external: 'Tools of outside MCP servers (x_<server>_<tool>); results are untrusted data',
   plugins: 'Plugin development (admins): source drafts, edits, package review/export; installed plugin tools (p_<plugin>_<tool>)',
-  chat: 'Chat tools',
+  chat: 'This chat: its settings; an input form card to ask several values at once',
 };
 
 /**

@@ -1,10 +1,11 @@
-import type { ChatExecutionContext, ChatMessageRouting, ChatRecipient } from '@conai/shared'
+import type { ChatExecutionContext, ChatMessageRouting, ChatProposal, ChatRecipient } from '@conai/shared'
 import { getUserSettingsDb } from '../../database/userSettingsDb'
 import { isChatOrderReply } from './chatOrderRuns'
 import { bindKnowledgeGenerationOperation } from '../posts/knowledge/knowledgeTaskObservations'
 
 export type ReplyRouteInput = { messageId?: number; recipients?: ChatRecipient[] }
-type ReplyHandler = { context: ChatExecutionContext; signal: AbortSignal; route: (input: ReplyRouteInput) => ChatMessageRouting }
+/** `onCard`: the running reply's stream, told of each card it stores (headless runs have none). */
+type ReplyHandler = { context: ChatExecutionContext; signal: AbortSignal; route: (input: ReplyRouteInput) => ChatMessageRouting; onCard?: (proposal: ChatProposal) => void }
 const replies = new Map<string, ReplyHandler>()
 const finishedListeners = new Set<(context: ChatExecutionContext) => void>()
 
@@ -23,15 +24,22 @@ export function skipThreadGenerationReactions(threadId: number) {
   }).immediate()
 }
 
-export function registerChatReply(context: ChatExecutionContext, signal: AbortSignal, route: ReplyHandler['route']) {
+export function registerChatReply(context: ChatExecutionContext, signal: AbortSignal, route: ReplyHandler['route'], onCard?: ReplyHandler['onCard']) {
   if (!context.replyId) throw new Error('Missing reply identity')
-  const entry = { context, signal, route }
+  const entry: ReplyHandler = { context, signal, route, onCard }
   replies.set(context.replyId, entry)
   return () => {
     if (replies.get(context.replyId!) !== entry) return
     replies.delete(context.replyId!)
     for (const listener of finishedListeners) listener(context)
   }
+}
+
+/** Puts a card the reply just stored on that reply's stream; a reply that ended or has no stream is left alone. */
+export function announceChatReplyCard(context: ChatExecutionContext, proposal: ChatProposal) {
+  const entry = context.replyId ? replies.get(context.replyId) : undefined
+  if (!entry?.onCard || entry.context.threadId !== context.threadId) return
+  try { entry.onCard(proposal) } catch { /* the card is stored; the thread read still shows it */ }
 }
 
 export function requireActiveChatReply(context: ChatExecutionContext | undefined) {
