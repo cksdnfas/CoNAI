@@ -78,7 +78,8 @@ function selection(value: unknown, allowed: readonly string[], single: boolean, 
   return picked
 }
 
-function mediaHash(item: string) {
+/** The composite hash in a library media id as the model writes it, or ''. */
+export function chatMediaHash(item: string) {
   return MEDIA_ITEM.exec(item.trim())?.[1] ?? ''
 }
 
@@ -125,10 +126,10 @@ function inputComponent(raw: Raw, id: string, model: unknown): { component: Chat
     }
     default: {
       const listed = Array.isArray(raw.items) ? raw.items : []
-      const items = [...new Set(listed.map((item) => (typeof item === 'string' ? mediaHash(item) : '')))]
+      const items = [...new Set(listed.map((item) => (typeof item === 'string' ? chatMediaHash(item) : '')))]
       if (items.length === 0 || items.length > CHAT_FORM_LIMITS.mediaItems || items.includes('')) fail(`${where}: "items" needs 1 to ${CHAT_FORM_LIMITS.mediaItems} library media ids (a composite hash or "media:<hash>.<ext>").`)
       const variant = raw.variant === 'mutuallyExclusive' ? 'mutuallyExclusive' : 'multipleSelection'
-      return { component: { id, component: 'MediaPicker', label, items, value, variant }, value: selection(initial, items, variant === 'mutuallyExclusive', where, mediaHash) }
+      return { component: { id, component: 'MediaPicker', label, items, value, variant }, value: selection(initial, items, variant === 'mutuallyExclusive', where, chatMediaHash) }
     }
   }
 }

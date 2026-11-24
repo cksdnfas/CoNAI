@@ -1,6 +1,7 @@
 import './support/testTemp'
 import assert from 'node:assert/strict'
 import { test, type TestContext } from 'node:test'
+import { decodeChatView } from '@conai/shared'
 import { ExternalApiProvider } from '../src/models/ExternalApiProvider'
 import { maskCodeBlocks, modelLanguageGuidance, planStructuredTranslation, restoreCodeBlocks, structuredProseIn, translateReply, translateUserInput, translateUserMessage, translatorOf, translateStructuredFields } from '../src/services/codex-chat/chatTranslation'
 import type { ChatProfile } from '../src/services/codex-chat/chatProfiles'
@@ -243,6 +244,35 @@ test('code blocks never reach the translator and come back untouched', async (t)
   await translateReply(translating, 'Here:\n```\nunclosed, tags')
   assert.equal(requests.at(-1)?.messages.at(-1)?.content, 'Here:', 'an unclosed fence runs to the end (and, ending the text, is held back)')
   assert.equal(requests.length, 3)
+})
+
+test('card blocks are translated in one structured request beside the prose; a block whose rows change kind stays as written', async (t) => {
+  const warn = t.mock.method(console, 'warn', () => {})
+  const hash = '3f9a0c1e5b7d2468ace0135799bdf024681357acefdb9e7c'
+  const card = ['```card', '# Party', 'Gold: 1,250', 'Place: forest', 'HP: 72/100 (poisoned)', 'Mana: 45%', '---', `images: ${hash}`, 'We head out at dawn.', '```'].join('\n')
+  const shown = ['```card', '# 파티', '골드: 1,250', '장소: 숲', '체력: 72/100 (중독)', 'Mana: 45%', '---', `images: ${hash}`, '새벽에 출발한다.', '```'].join('\n')
+  const words: Record<string, string> = { Party: '파티', Gold: '골드', Place: '장소', forest: '숲', HP: '체력', '72/100 (poisoned)': '72/100 (중독)', 'We head out at dawn.': '새벽에 출발한다.' }
+  const requests = mockTranslator(t, () => {
+    const [system, user] = requests.at(-1)!.messages
+    if (!system.content.startsWith('Translate every JSON string value')) return Response.json({ choices: [{ message: { content: '*고개를 끄덕인다.* 가자.' }, finish_reason: 'stop' }] })
+    const strings = JSON.parse(user.content) as Record<string, string>
+    return Response.json({ choices: [{ message: { content: JSON.stringify(Object.fromEntries(Object.entries(strings).map(([key, text]) => [key, words[text] ?? text]))) }, finish_reason: 'stop' }] })
+  })
+  const rowKinds = (block: string) => decodeChatView(block.split('\n').slice(1, -1).join('\n'))?.rows.map(row => row.component === 'Text' ? row.variant : row.component)
+
+  assert.equal(await translateReply(translating, `*nods.* Let's go.\n\n${card}`), `*고개를 끄덕인다.* 가자.\n\n${shown}`)
+  assert.equal(requests.length, 2, 'the prose and every card go as two requests')
+  const sent = Object.values(JSON.parse(requests.find(request => request.messages[0].content.startsWith('Translate every JSON'))!.messages[1].content))
+  assert.deepEqual(sent, ['Party', 'Gold', 'Place', 'forest', 'HP', '72/100 (poisoned)', 'Mana', 'We head out at dawn.'], 'hashes, dividers and bare numbers are not sent')
+  assert.deepEqual(rowKinds(shown), rowKinds(card))
+
+  requests.length = 0
+  assert.equal(await translateReply(translating, `좋아, 가자.\n\n${card}`), `좋아, 가자.\n\n${shown}`, 'prose already in the display language: only the card changes')
+  assert.equal(requests.length, 1)
+
+  words['We head out at dawn.'] = '출발: 새벽'
+  assert.equal(await translateReply(translating, `*nods.* Let's go.\n\n${card}`), `*고개를 끄덕인다.* 가자.\n\n${card}`, 'a text line now reading as a Stat keeps the block as written')
+  assert.ok(warn.mock.calls.some(call => String(call.arguments[0]).includes('card translation dropped')))
 })
 
 test('masked code blocks: nested fence lengths, and a lost or doubled placeholder fails', () => {

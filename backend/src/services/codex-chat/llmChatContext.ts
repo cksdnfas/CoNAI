@@ -8,7 +8,7 @@ import { resolveChatAccess } from './codexChatAccess'
 import { modelLanguageGuidance, replyTranslationPrompt, userTranslationPrompt } from './chatTranslation'
 import { contextContentText, contextHash, contextSections, contextSource, limitContextMeta, loreDiagnostics, markContextMessage, markContextParts, contextKindOf, contextPartsOf, type ChatDiagnosticsFields, type ChatContextSectionKind, type ContextSource } from './chatContextDiagnostics'
 import { buildReplyContext } from './chatReplyContext'
-import { bothSidesSpeak, isCodexChatCreationTool, splitExampleDialogue, stripEchoedAddresses, type WorkspaceText } from '@conai/shared'
+import { bothSidesSpeak, CHAT_VIEW_LANGUAGE, describeChatViewLines, isCodexChatCreationTool, splitExampleDialogue, stripEchoedAddresses, type WorkspaceText } from '@conai/shared'
 import { messageAddress, REPLY_GUIDANCE } from './chatReplies'
 import { CHAT_ROOM_TOOLS, GENERATION_PRESET_BLOCKED_TOOLS, isChatGenerationTool, isChatOwnTool } from '../../mcp/context'
 import { CATALOG_OPEN_TOOL } from '../../mcp/toolCatalog'
@@ -117,7 +117,7 @@ export const REPLY_FORMAT_GUIDANCE = [
   'The chat window renders GitHub-flavoured Markdown: headings, bold/italic, lists, tables, links, blockquotes, inline code and fenced code blocks.',
   'Use formatting only when it helps (code, steps, comparisons); ordinary conversation stays plain prose.',
   'Always put code in a fenced block with a language tag (```python, ```json, ...); the user gets a copy button.',
-  'Raw HTML outside a code block is shown as text, not rendered. To show a web page, widget or SVG, write the complete document in a ```html (or ```svg) block: the user can open it in a sandboxed live preview where scripts run but nothing can reach the app, the network session or other pages.',
+  `Raw HTML outside a code block is shown as text. For a panel, summary, progress or library images write a \`\`\`${CHAT_VIEW_LANGUAGE} block, one item per line (n/m or n% draws a bar), e.g.\n${describeChatViewLines()}\n\`\`\`html/\`\`\`svg only for a requested page/drawing.`,
 ].join('\n')
 
 export type LlmChatContextConfig = {

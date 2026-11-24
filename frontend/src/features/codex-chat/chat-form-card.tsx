@@ -17,6 +17,7 @@ import { useI18n } from '@/i18n'
 import { buildApiUrl } from '@/lib/api-client'
 import { getImage, getImageDetailQueryKey } from '@/lib/api-images'
 import { cn } from '@/lib/utils'
+import type { ImageRecord } from '@/types/image'
 import { ChatChoicePassedLine, ChatChoiceStatesContext } from './chat-choice'
 import { buildChatLibraryImageRecord } from './chat-image-record'
 import { ChatMediaMasonry } from './chat-media-masonry'
@@ -61,17 +62,33 @@ function ChoiceControl({ id, input, picked, disabled, onChange }: { id: string; 
   )
 }
 
-/** Library media to pick from, as the chat shows any library tile: by-hash thumbnails, the reader's safety blur. */
+type ChatLibraryThumb = { image: ImageRecord; src: string; blurred: boolean }
+
+/**
+ * Library media by hash as the chat shows any library tile: the library record and thumbnail for gallery readers, the
+ * chat's by-hash routes for the others, and the reader's safety blur. Null for media the reader's library does not show.
+ */
+export function useChatLibraryThumbs(items: string[]): (hash: string) => ChatLibraryThumb | null {
+  const { canViewImages } = useImagePermissions()
+  const queries = useQueries({ queries: items.map((hash) => ({ enabled: canViewImages, queryKey: getImageDetailQueryKey(hash), queryFn: ({ signal }: { signal: AbortSignal }) => getImage(hash, { signal }), retry: false })) })
+  const images = queries.flatMap((query) => (query.data ? [query.data] : []))
+  const safety = useImageFeedSafety({ items: images, enabled: items.length > 0 })
+  const visible = new Map(safety.visibleItems.map((image) => [image.composite_hash, image]))
+  return (hash) => {
+    const image = canViewImages ? visible.get(hash) : buildChatLibraryImageRecord(hash)
+    if (!image) return null
+    return canViewImages
+      ? { image, src: buildApiUrl(`/api/images/${encodeURIComponent(hash)}/thumbnail`), blurred: safety.shouldBlurItemPreview(image) }
+      : { image, src: image.thumbnail_url ?? '', blurred: false }
+  }
+}
+
+/** Library media to pick from. */
 function MediaControl({ input, picked, disabled, onChange }: { input: ChatFormMediaPicker; picked: string[]; disabled: boolean; onChange: (next: string[]) => void }) {
   const { t } = useI18n()
-  const { canViewImages } = useImagePermissions()
-  const queries = useQueries({ queries: input.items.map((hash) => ({ enabled: canViewImages, queryKey: getImageDetailQueryKey(hash), queryFn: ({ signal }: { signal: AbortSignal }) => getImage(hash, { signal }), retry: false })) })
-  const images = queries.flatMap((query) => (query.data ? [query.data] : []))
-  const safety = useImageFeedSafety({ items: images, enabled: input.items.length > 0 })
-  const visible = new Map(safety.visibleItems.map((image) => [image.composite_hash, image]))
+  const thumbOf = useChatLibraryThumbs(input.items)
   const tiles = input.items.map((hash, index) => {
-    // Readers without gallery access see the media through the chat's by-hash routes.
-    const image = canViewImages ? visible.get(hash) : buildChatLibraryImageRecord(hash)
+    const thumb = thumbOf(hash)
     const on = picked.includes(hash)
     return (
       <MediaCard
@@ -82,8 +99,8 @@ function MediaControl({ input, picked, disabled, onChange }: { input: ChatFormMe
         aria-pressed={on}
         aria-label={t({ ko: '{index}번 이미지', en: 'Image {index}' }, { index: index + 1 })}
         onClick={() => onChange(toggled(picked, hash, input.variant === 'mutuallyExclusive'))}
-        media={image
-          ? <img src={canViewImages ? buildApiUrl(`/api/images/${encodeURIComponent(hash)}/thumbnail`) : image.thumbnail_url ?? ''} alt="" loading="lazy" className={cn('block w-full', canViewImages && safety.shouldBlurItemPreview(image) && 'blur-md')} />
+        media={thumb
+          ? <img src={thumb.src} alt="" loading="lazy" className={cn('block w-full', thumb.blurred && 'blur-md')} />
           : <span className="flex aspect-square items-center justify-center"><ImageOff className="size-5 text-muted-foreground" /></span>}
         overlay={on ? <span className="absolute left-1.5 top-1.5 flex size-5 items-center justify-center rounded-full bg-primary text-primary-foreground"><Check className="size-3" /></span> : null}
       />

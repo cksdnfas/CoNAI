@@ -4,7 +4,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { test } from 'node:test'
-import { chatFormLayout, decodeChatForm, type ChatExecutionContext, type ChatFormProposal } from '@conai/shared'
+import { chatFormLayout, decodeChatForm, decodeChatView, encodeChatView, type ChatExecutionContext, type ChatFormProposal } from '@conai/shared'
 
 test('chat question cards: offer_choices, answers checked against the open card, directive', { timeout: 60000 }, async (t) => {
   // Load runtime modules only after isolating every data path. Never open the user's databases.
@@ -204,6 +204,78 @@ test('chat question cards: offer_choices, answers checked against the open card,
     assert.deepEqual(form.dataModel, { hair: ['금발'] })
     assert.deepEqual(chatFormLayout(form).buttons, [{ event: 'button_1', label: '확인', primary: true }])
     assert.deepEqual(chatFormLayout(form).rows.map((row) => row.component), ['Text', 'ChoicePicker'])
+  })
+
+  await t.test('card blocks: reply lines decode to view rows, limits cut, nothing drawable is null', () => {
+    const first = '3f9a0c1e5b7d2468ace0135799bdf024681357acefdb9e7c'
+    const second = '0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e'
+    const view = decodeChatView([
+      '## 파티 상태',
+      '**HP**: 72/100',
+      '골드：1,250',
+      '`레벨`: Lv.12',
+      '마나: 45%',
+      '탄약: 3/10 발',
+      '- 열쇠: 2/3',
+      '호감도: 40/100 ████████░░░░',
+      '날짜: 2026/11/24',
+      '# 다운로드; A: 30%; B: 완료',
+      '상태: 1개 끝; 2개 진행 중',
+      '**이름:** 방랑자',
+      '*가진 것이 없다.*',
+      '* 낡은 지도',
+      '',
+      '---',
+      `images: ${first}, \`${second}\`, nope`,
+      '  오늘은 숲으로 간다.  ',
+      '출발 12:30 예정',
+      'https://example.com/map',
+    ].join('\n'))
+    assert.deepEqual(view?.rows, [
+      { component: 'Text', text: '파티 상태', variant: 'heading' },
+      { component: 'Progress', label: 'HP', value: 72, max: 100, text: '72/100' },
+      { component: 'Stat', label: '골드', value: '1,250' },
+      { component: 'Stat', label: '레벨', value: 'Lv.12' },
+      { component: 'Progress', label: '마나', value: 45, max: 100, text: '45%' },
+      { component: 'Progress', label: '탄약', value: 3, max: 10, text: '3/10 발' },
+      { component: 'Progress', label: '열쇠', value: 2, max: 3, text: '2/3' },
+      { component: 'Progress', label: '호감도', value: 40, max: 100, text: '40/100' },
+      { component: 'Stat', label: '날짜', value: '2026/11/24' },
+      { component: 'Text', text: '다운로드', variant: 'heading' },
+      { component: 'Progress', label: 'A', value: 30, max: 100, text: '30%' },
+      { component: 'Stat', label: 'B', value: '완료' },
+      { component: 'Stat', label: '상태', value: '1개 끝; 2개 진행 중' },
+      { component: 'Stat', label: '이름', value: '방랑자' },
+      { component: 'Text', text: '가진 것이 없다.', variant: 'body' },
+      { component: 'Text', text: '낡은 지도', variant: 'body' },
+      { component: 'Divider' },
+      { component: 'Media', items: [first, second] },
+      { component: 'Text', text: '오늘은 숲으로 간다.', variant: 'body' },
+      { component: 'Text', text: '출발 12:30 예정', variant: 'body' },
+      { component: 'Text', text: 'https://example.com/map', variant: 'body' },
+    ])
+    assert.deepEqual(decodeChatView(encodeChatView(view!))?.rows, view?.rows, 'the canonical lines read back as the same rows')
+
+    const hashes = Array.from({ length: 30 }, (_, index) => index.toString(16).padStart(32, '0'))
+    const cut = decodeChatView([
+      `images: ${hashes.slice(0, 15).join(', ')}`,
+      hashes.slice(15).join(' '),
+      `images: ${hashes[29]}`,
+      'x'.repeat(400),
+      `${'라'.repeat(41)}: 값`,
+      ...Array.from({ length: 50 }, (_, index) => `줄 ${index}`),
+    ].join('\n'))
+    assert.equal(cut?.rows.length, 40)
+    assert.deepEqual(cut?.rows.slice(0, 4), [
+      { component: 'Media', items: hashes.slice(0, 12) },
+      { component: 'Media', items: hashes.slice(15, 27) },
+      { component: 'Text', text: 'x'.repeat(300), variant: 'body' },
+      { component: 'Text', text: `${'라'.repeat(41)}: 값`, variant: 'body' },
+    ], '12 per row, 24 in all (the third images line drops), long text cut, an overlong label stays text')
+
+    assert.equal(decodeChatView(''), null)
+    assert.equal(decodeChatView(' \n\n  \n'), null)
+    assert.equal(decodeChatView('---\n-----'), null)
   })
 
   await t.test('cards on the stream: a running reply is told of each stored card once; others store as before', () => {

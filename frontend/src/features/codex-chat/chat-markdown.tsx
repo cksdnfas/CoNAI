@@ -17,7 +17,8 @@ import { buildApiUrl } from '@/lib/api-url'
 import { BlockChangeChips, ChatDisplayBlocksContext, parseBlockPayload, useChatDisplayBlock } from './chat-display-block'
 import { isolatedChatPreview } from './chat-preview'
 import { splitSettledMarkdown } from './chat-markdown-stream'
-import { injectChatEmoticons, type ChatEmoticonMap } from '@conai/shared'
+import { CHAT_VIEW_LANGUAGE, decodeChatView, injectChatEmoticons, type ChatEmoticonMap } from '@conai/shared'
+import { ChatViewCard } from './chat-view-card'
 /** The profile's emoticons for this reply: keyword (lower case) → image, and whose emoticon route serves them. */
 export type { ChatEmoticonMap } from '@conai/shared'
 
@@ -86,11 +87,16 @@ function CodeBlock({ language, code }: { language: string | null; code: string }
   )
 }
 
-/** A fenced block: the chips of a display block update when its name matches and the values parse, else plain code. */
+/**
+ * A fenced block: the chips of a display block update when its name matches and the values parse, a ```card block that
+ * decodes is drawn as its card, else plain code.
+ */
 function FencedBlock({ language, code }: { language: string | null; code: string }) {
   const block = useChatDisplayBlock(language)
   const data = block ? parseBlockPayload(code) : null
-  return block && data ? <BlockChangeChips blockKey={block.key} data={data} /> : <CodeBlock language={language} code={code} />
+  if (block && data) return <BlockChangeChips blockKey={block.key} data={data} />
+  const view = language === CHAT_VIEW_LANGUAGE ? decodeChatView(code) : null
+  return view ? <ChatViewCard view={view} /> : <CodeBlock language={language} code={code} />
 }
 
 const ChatEmoticonsContext = createContext<ChatEmoticonMap | null>(null)

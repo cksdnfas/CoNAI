@@ -1,4 +1,4 @@
-import { CHAT_TRANSLATION_DEFAULTS, CHAT_TRANSLATION_LANGUAGES, narrationLineCount, type ChatTranslationLanguage } from '@conai/shared'
+import { CHAT_TRANSLATION_DEFAULTS, CHAT_TRANSLATION_LANGUAGES, CHAT_VIEW_LANGUAGE, decodeChatView, encodeChatView, narrationLineCount, type ChatTranslationLanguage, type ChatViewRow } from '@conai/shared'
 import { hasTranslation, resolveProfileModel, type ModelRoleProfile } from './chatModelRoles'
 import type { ChatProfile } from './chatProfiles'
 import { auxiliaryMaxTokens } from './chatAuxiliarySettings'
@@ -421,18 +421,74 @@ export async function translateUserMessage(profile: ChatProfile | null | undefin
   }
 }
 
+/** The strings of a card row that are prose; a Progress row's written value goes whole and must keep its number. */
+const CARD_PROSE_KEYS: Record<ChatViewRow['component'], string[]> = { Text: ['text'], Divider: [], Stat: ['label', 'value'], Progress: ['label', 'text'], Media: [] }
+const cardStrings = (row: ChatViewRow) => row as unknown as Record<string, string>
+
+/** The reply's ```card blocks (as maskCodeBlocks cuts them) with the strings that need translating into `language`. */
+function cardBlocksOf(text: string, language: ChatTranslationLanguage) {
+  return maskCodeBlocks(text).blocks.flatMap((block) => {
+    const lines = block.split('\n')
+    const fence = /^[ \t]*(`{3,}|~{3,})[ \t]*([\w+-]*)/.exec(lines[0])
+    if (fence?.[2].toLowerCase() !== CHAT_VIEW_LANGUAGE) return []
+    // An unclosed block runs to the end of the reply and has no closing line.
+    const last = lines.at(-1)!.trim()
+    const closed = lines.length > 1 && last.length >= fence[1].length && [...last].every((char) => char === fence[1][0])
+    const view = decodeChatView(lines.slice(1, closed ? -1 : undefined).join('\n'))
+    if (!view) return []
+    const leaves = view.rows.flatMap((row, index) => CARD_PROSE_KEYS[row.component].filter((key) => needsLanguageTranslation(cardStrings(row)[key], language)).map((key) => ({ index, key })))
+    return leaves.length ? [{ block, head: lines[0], tail: closed ? lines.at(-1)! : null, rows: view.rows, leaves }] : []
+  })
+}
+
 /**
- * The reply as the reader should see it (in the display language), or null when the chat does not translate, the reply
- * is already mostly in the display language, or the translation failed (the reply is then shown as written). The
+ * The reply's card blocks in `language`, keyed by the block as written: one structured request for every card. A block
+ * whose translated lines do not read back as the same rows (a text now reading as `Label: value`, a label split at a
+ * new colon, a bar without its number) or that comes back unchanged is left out, so it stays as the model wrote it.
+ */
+async function translateCardBlocks(profile: ModelRoleProfile & TranslationLanguages & { id?: number; translationInstructions?: string }, text: string, language: ChatTranslationLanguage, signal?: AbortSignal, attribution?: Omit<LlmUsageTag, 'purpose'>) {
+  const cards = cardBlocksOf(text, language)
+  if (!cards.length) return null
+  const strings = cards.flatMap((card) => card.leaves.map((leaf) => cardStrings(card.rows[leaf.index])[leaf.key]))
+  const result = await translateStructuredFields(profile, { strings }, ['strings.*'], language, signal, attribution) as { strings: string[] } | null
+  if (!result) return null
+  const translated = new Map<string, string>()
+  let at = 0
+  for (const card of cards) {
+    const rows = structuredClone(card.rows)
+    for (const leaf of card.leaves) cardStrings(rows[leaf.index])[leaf.key] = result.strings[at++].trim()
+    const lines = encodeChatView({ rows })
+    if (lines === encodeChatView({ rows: card.rows })) continue
+    const decoded = decodeChatView(lines)
+    if (!decoded || JSON.stringify(decoded.rows) !== JSON.stringify(rows)) { console.warn('[chat-translation] card translation dropped: rows changed'); continue }
+    translated.set(card.block, [card.head, lines, ...(card.tail === null ? [] : [card.tail])].join('\n'))
+  }
+  return translated
+}
+
+/** The text with its translated card blocks in place of the written ones. */
+function withCardBlocks(text: string, cards: Map<string, string>) {
+  const masked = maskCodeBlocks(text)
+  return restoreCodeBlocks(masked.text, masked.blocks.map((block) => cards.get(block) ?? block)) ?? text
+}
+
+/**
+ * The reply as the reader should see it (in the display language), or null when the chat does not translate, nothing in
+ * it needs translating, or the translation failed (the reply is then shown as written). The prose goes when it is not
+ * mostly in the display language; its card blocks, masked from it, go beside it as one structured request. The
  * translator is told who speaks and the profile's translation notes (`userName` fills their `{{user}}`).
  */
 export async function translateReply(profile: (ModelRoleProfile & TranslationLanguages & { id?: number; name?: string; translationInstructions?: string }) | null | undefined, text: string, signal?: AbortSignal, userName?: string, attribution?: Omit<LlmUsageTag, 'purpose'>) {
   const target = profile ? translationTargetOf(profile, attribution?.threadId) : null
   const trimmed = text.trim()
   if (!profile || !target || !trimmed) return null
-  const letters = letterCounts(proseOf(trimmed), languagesOf(profile).display)
-  if (letters.other === 0 || letters.own > letters.other) return null
-  const translated = await translate(target, replyTranslationPrompt(profile, userName), trimmed, signal, { profileId: profile.id, ...attribution })
+  const display = languagesOf(profile).display
+  const letters = letterCounts(proseOf(trimmed), display)
+  const [prose, cards] = await Promise.all([
+    letters.other === 0 || letters.own > letters.other ? null : translate(target, replyTranslationPrompt(profile, userName), trimmed, signal, { profileId: profile.id, ...attribution }),
+    translateCardBlocks(profile, trimmed, display, signal, attribution),
+  ])
+  const translated = cards?.size ? withCardBlocks(prose ?? trimmed, cards) : prose
   return translated && translated !== trimmed ? translated : null
 }
 
