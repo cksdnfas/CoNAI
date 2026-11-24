@@ -50,7 +50,7 @@ function readFormAnswer(form: BilingualForm & { id: number }, input: { action?: 
   // A translated card answers the model in the words it wrote; the person's message shows the words they saw.
   const written = form.model ? chatFormAnswerLines({ ...form, ...form.model }, checked.values, action) : null
   return {
-    flags: chatFormAnswerLines(form, checked.values, action).map((line, index) => ({ id: 0, icon: CHOICE_ICON, name: line.name, content: written?.[index]?.content ?? line.content, ...(written ? { displayContent: line.content } : {}), pick: true, choice: { id: form.id, question: form.model?.title ?? form.title } })),
+    flags: chatFormAnswerLines(form, checked.values, action).map((line, index) => ({ id: 0, icon: CHOICE_ICON, name: line.name, content: written?.[index]?.content ?? line.content, ...(written ? { displayContent: line.content } : {}), pick: true, choice: { id: form.id, question: form.model?.title ?? form.title, form: true } })),
     withoutPage: false,
   }
 }

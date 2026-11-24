@@ -18,7 +18,7 @@ export function registerChatChoiceTools(server: McpServer, context: McpRequestCo
   // Listed exactly when the task tools are: a profile with nothing to work with keeps its tool list empty.
   if (!chat || chat.kind !== 'direct' || !offersChatWorkTools(context)) return
 
-  server.registerTool('offer_choices', { description: 'Show choices above the composer for ambiguity or a blocked next step; the choice or typed answer becomes the next user message. Returns a choice card. Call once, last, then end your reply; keep text short and do not repeat options. For several values in one card (a form), not HTML: run_tool show_form {title, fields:[{key,label,type,…}]}.', inputSchema: z.object({
+  server.registerTool('offer_choices', { description: 'Show choices above the composer for one open question or a blocked next step; the choice or typed answer becomes the next user message. Call once, last, then end your reply; keep text short and do not repeat options. When a request to make a page, document or plan gives no content or details, first ask them in one input card, defaults filled in, then make it from the answer: run_tool show_form {title, fields:[{key,label,type,…}]}; a request that gives its details or says to decide is made right away. Never ask with HTML or a ```card block.', inputSchema: z.object({
     question: z.string().min(1).max(CHAT_CHOICE_LIMITS.question).describe('In the person\'s language'),
     options: z.array(z.object({
       label: z.string().min(1).max(CHAT_CHOICE_LIMITS.label).describe('As the person would say it; sent as their message'),

@@ -4,7 +4,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { test } from 'node:test'
-import { chatFormLayout, decodeChatForm, decodeChatView, encodeChatView, type ChatExecutionContext, type ChatFormProposal } from '@conai/shared'
+import { CHAT_FORM_LIMITS, chatFormLayout, decodeChatForm, decodeChatView, encodeChatView, type ChatExecutionContext, type ChatFormProposal } from '@conai/shared'
 
 test('chat question cards: offer_choices, answers checked against the open card, directive', { timeout: 60000 }, async (t) => {
   // Load runtime modules only after isolating every data path. Never open the user's databases.
@@ -33,7 +33,7 @@ test('chat question cards: offer_choices, answers checked against the open card,
   const { updateChatSettings } = await import('../src/services/codex-chat/chatSettings')
   updateChatSettings({ enabled: true })
   const { readChoiceAnswer } = await import('../src/services/codex-chat/chatChoices')
-  const { buildFlagDirective } = await import('../src/services/codex-chat/chatFlags')
+  const { buildFlagDirective, parseFlagSnapshots } = await import('../src/services/codex-chat/chatFlags')
   const { proposalOutcomeNote } = await import('../src/services/codex-chat/chatPageContext')
   const { openChatMcpBridge } = await import('../src/services/codex-chat/chatMcpBridge')
   const { registerChatReply } = await import('../src/services/codex-chat/chatReplyRegistry')
@@ -135,7 +135,8 @@ test('chat question cards: offer_choices, answers checked against the open card,
     const answer = readChoiceAnswer(threadId, { proposalId: form.id, action: 'generate', values: { size: ['landscape'], steps: 30, seed: true, extra: 'dropped' } })
     assert.ok(answer && !('error' in answer))
     assert.deepEqual(answer.flags.map((flag) => [flag.name, flag.content]), [['가로', '크기: landscape'], ['스텝 30', '스텝: 30'], ['시드 고정', '시드 고정: yes'], ['생성', 'Pressed: 생성']])
-    assert.ok(answer.flags.every((flag) => flag.pick && flag.choice?.id === form.id && flag.choice.question === '생성 설정'))
+    assert.ok(answer.flags.every((flag) => flag.pick && flag.choice?.id === form.id && flag.choice.question === '생성 설정' && flag.choice.form === true))
+    assert.equal(buildFlagDirective(answer.flags), '[Answer to your form: 생성 설정]\n- 크기: landscape\n- 스텝: 30\n- 시드 고정: yes\n- Pressed: 생성\nGo on from this answer; decide what is left open yourself, without asking again.', 'a form answer tells the model to go on without asking again')
     assert.ok('error' in (readChoiceAnswer(threadId, { proposalId: form.id, action: 'delete', values: { size: ['landscape'], steps: 30, seed: true } }) ?? {}), 'a button the card does not have')
     assert.ok('error' in (readChoiceAnswer(threadId, { proposalId: form.id, action: 'generate', values: { size: ['square'], steps: 30, seed: true } }) ?? {}), 'a choice the card does not offer')
     assert.ok('error' in (readChoiceAnswer(threadId, { proposalId: form.id, action: 'generate', values: { size: ['landscape'], steps: 500, seed: true } }) ?? {}), 'a number outside the slider')
@@ -164,6 +165,10 @@ test('chat question cards: offer_choices, answers checked against the open card,
     const pair = decodeChatForm({ title: '시트', fields: [{ key: 'name', label: '이름', type: 'text' }], submitLabel: '만들기', cancel_label: '취소' })
     assert.ok(!('error' in pair), JSON.stringify(pair))
     assert.deepEqual(pair.components.filter((component) => component.component === 'Text').map((component) => component.text), ['만들기', '취소'])
+    // A hint longer than the card shows is cut, not refused: the call still makes its card.
+    const hinted = decodeChatForm({ title: '시트', fields: [{ key: 'likes', label: '관심사', type: 'text', placeholder: 'x'.repeat(CHAT_FORM_LIMITS.placeholder + 20) }] })
+    assert.ok(!('error' in hinted), JSON.stringify(hinted))
+    assert.equal(hinted.components.find((component) => component.component === 'TextField')?.placeholder?.length, CHAT_FORM_LIMITS.placeholder)
 
     // A step size becomes steps; steps read as a size or as positions are dropped.
     const sliders = decodeChatForm({ title: '설정', fields: [{ key: 'scale', label: 'Scale', type: 'slider', min: 0, max: 1, step: 0.05 }, { key: 'n', label: 'N', type: 'range', min: 10, max: 50, steps: 9 }], buttons: [{ label: 'Go', event: 'go' }] })
@@ -304,5 +309,8 @@ test('chat question cards: offer_choices, answers checked against the open card,
       { id: 0, icon: 'lucide:list-checks', name: '설경', content: '설경', pick: true, choice: { id: 1, question: '배경 분위기' } },
     ])
     assert.equal(directive, '[User picks from the status panel]\n- 검\n\n[Answer to the choice: 배경 분위기]\n- 노을\n- 설경')
+    // Snapshots stored before forms were marked carry no `form` and keep reading as a question card's answer.
+    const stored = parseFlagSnapshots(JSON.stringify([{ id: 0, icon: 'lucide:list-checks', name: '노을', content: '분위기: 노을', pick: true, choice: { id: 2, question: '배경' } }]))
+    assert.equal(buildFlagDirective(stored), '[Answer to the choice: 배경]\n- 분위기: 노을')
   })
 })

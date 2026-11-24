@@ -232,7 +232,7 @@ function decodeFields(input: Raw): Decoded {
       let component: Raw
       switch (spec.component) {
         case 'TextField':
-          component = { id, component: 'TextField', label, value, variant: spec.variant, ...(typeof field.placeholder === 'string' ? { placeholder: field.placeholder } : {}) }
+          component = { id, component: 'TextField', label, value, variant: spec.variant, ...(typeof field.placeholder === 'string' ? { placeholder: field.placeholder.slice(0, CHAT_FORM_LIMITS.placeholder) } : {}) }
           break
         case 'ChoicePicker':
           component = { id, component: 'ChoicePicker', label, options, value, variant: spec.variant }
