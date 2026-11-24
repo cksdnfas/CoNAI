@@ -21,7 +21,7 @@ import { ChatProfileStore, sessionRuntimeOf, type ChatProfile } from './chatProf
 import { translateReply, translateUserMessage, translatorOf } from './chatTranslation'
 import { hasTranslation, resolveProfileModel } from './chatModelRoles'
 import { chatModelLabel, validateChatModelPatch, warmClaudeChatModel, withChatModelLabel } from './chatModelOverride'
-import { stripEchoedAddresses } from '@conai/shared'
+import { finishReplyText } from './chatReplyFinish'
 import { ChatUserProfileStore, userPersonaForThread, type ChatUserProfile } from './chatUserProfiles'
 import { loadChatSettings } from './chatSettings'
 import { limitContextMeta, legacyContextMeta } from './chatContextDiagnostics'
@@ -31,7 +31,7 @@ import { CodexChatError, CodexChatService, deleteCodexRollout, runCodexGroupRepl
 import { buildClaudeGroupSessionTurn, deleteClaudeMemberSession, deleteClaudeSessions } from './claudeChatSessions'
 import { CodexChatStore, type ChatBranchPurpose, type CodexChatMessageRecord, type CodexChatThreadRecord, type CodexChatToolCall } from './codexChatStore'
 import { withGenerationOutcomes } from './codexChatMedia'
-import { buildGroupCodexInput, buildGroupLlmMessages, groupMissedMessages, groupSummaryOn, parseMentions, readGroupReplyHistory, resolveMemberName, trimForeignSpeakerLines, withoutStaleWakes } from './groupChatContext'
+import { buildGroupCodexInput, buildGroupLlmMessages, groupMissedMessages, groupSummaryOn, parseMentions, readGroupReplyHistory, resolveMemberName, withoutStaleWakes } from './groupChatContext'
 import { flagDirectiveFor, latestWindow, postHistoryText, groupSummarizer, sendableMessages, summarizeGroupAhead, summarizeGroupAll, toolGuidanceFor, unsummarizedMessages } from './llmChatContext'
 import { withServerContextLimit } from './serverContextLimit'
 import { skillReminderText } from './chatSkills'
@@ -303,8 +303,7 @@ async function replyAs(run: GroupRun, requester: McpRequester, profile: ChatProf
     const reply = !raw.content.trim() && raw.tool_calls.length === 0 && raw.status === 'completed'
       ? { ...raw, status: 'failed' as const, error: '빈 답변이 왔어. 다시 생성해봐.' }
       : raw
-    const written = stripEchoedAddresses(reply.content)
-    const content = trimForeignSpeakerLines(written, profile.name, others) || written.trim()
+    const content = finishReplyText(reply.content, { source: 'room', chat: context, speakers: { self: profile.name, others } })
     if (reply.status === 'completed' && !explicitlyRouted && run.chain) {
       const mentioned = parseMentions(content, members, profile.id)
       const recipients = mentioned.length ? mentioned : active.routing.recipients.filter((id) => id !== profile.id)

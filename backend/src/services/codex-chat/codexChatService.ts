@@ -53,7 +53,8 @@ import { hasTranslation } from './chatModelRoles'
 import { titleAfterFirstReply } from './chatAutoTitle'
 import { endJudgedTurn, judgeBeforeReply, judgeDirectiveText, readReplyHistory, type JudgedTurn } from './chatJudge'
 import { judgeStatusFields } from './chatJudgeFields'
-import { stripEchoedAddresses, withoutNarrationMarks } from '@conai/shared'
+import { withoutNarrationMarks } from '@conai/shared'
+import { finishReplyText } from './chatReplyFinish'
 import { currentLlmUsageContext, recordLlmUsage, type LlmTokenCounts, type LlmUsageTag } from '../llmUsage'
 import { LlmChatService, STOP_WAIT_MS, type GroupReplyResult } from './llmChatService'
 import { ChatGroupStore } from './chatGroupStore'
@@ -439,7 +440,7 @@ export function finishTurn(session: Session, turn: TurnState, status: CodexChatM
 
   const finalTexts = [...turn.agentMessages.entries()].filter(([itemId]) => !turn.commentaryItems.has(itemId)).map(([, text]) => text)
   const content = (finalTexts.length > 0 ? finalTexts : [...turn.agentMessages.values()])
-    .map((text) => stripEchoedAddresses(text).trim())
+    .map((text) => finishReplyText(text, { source: 'codex', chat: turn.delivery?.context }))
     .filter(Boolean)
     .join('\n\n')
   const toolCalls = [...turn.toolCalls.values()].map((call) => (call.status === 'running' ? { ...call, status: 'failed' as const } : call))

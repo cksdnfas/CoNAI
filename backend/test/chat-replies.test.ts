@@ -730,6 +730,13 @@ test('message replies: storage, delivery, context, and generation ownership', { 
     assert.equal(reply.content, '안녕, 반가워.')
   })
 
+  await t.test('every engine finishes reply text through the same steps: thinking for llm only, other speakers for rooms only', async () => {
+    const { finishReplyText } = await import('../src/services/codex-chat/chatReplyFinish')
+    assert.equal(finishReplyText('<think>계획</think>\n[message_id=12; to=["user"]; reply_to=11; from=3] 안녕.  ', { source: 'llm' }), '안녕.')
+    assert.equal(finishReplyText('  <think>그대로</think> 둬.\n', { source: 'codex' }), '<think>그대로</think> 둬.')
+    assert.equal(finishReplyText('[A; message_id=12; to=[3]]\nA: 내 말이야.\nB: 남의 말.', { source: 'room', speakers: { self: 'A', others: ['B'] } }), '내 말이야.')
+  })
+
   await t.test('a looping reply is hung up on, and the loop is taken back off the live text and the stored reply', async (s) => {
     const thread = directChat()
     const said = '"좋아, 존. 그땐 네가 1번 회원으로 가입하는 거야.'

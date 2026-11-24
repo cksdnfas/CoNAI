@@ -26,7 +26,8 @@ import { ChatProfileStore, isVisionTool, sessionRuntimeOf, type ChatProfile } fr
 import { translateReply, translateUserMessage } from './chatTranslation'
 import { hasTranslation, resolveProfileModel } from './chatModelRoles'
 import { titleAfterFirstReply } from './chatAutoTitle'
-import { stripEchoedAddresses, withoutNarrationMarks } from '@conai/shared'
+import { withoutNarrationMarks } from '@conai/shared'
+import { finishReplyText } from './chatReplyFinish'
 import { ChatUserProfileStore, userPersonaForThread, userPersonaOf } from './chatUserProfiles'
 import { chatToolRoundLimit, loadChatSettings } from './chatSettings'
 import { canUseChatProfile, resolveChatProfileToolGrant, resolveChatAccess } from './codexChatAccess'
@@ -38,7 +39,7 @@ import type { EngineSession } from './claudeChatSessions'
 import type { CodexChatStreamEvent } from './codexChatService'
 import { resolveChatCompletionTarget, streamChatCompletion, toolsRefusedBy, type ChatCompletionMessage, type ChatCompletionTool } from './llmChatCompletion'
 import { ChatSummaryStore } from './chatMemory'
-import { appendUserDirective, buildChatMessages, toolGuidanceFor, cutToolOutput, directContextTurns, estimateMessagesTokens, estimateTokens, type ChatContextMeta, fillCharacterPlaceholders, fitChatContext, fitThreadSummary, fitWorkspaceRead, latestWindow, prefixUserContent, rawMessagesEstimate, recordPromptUsage, replyCapFor, resolveContextConfig, sendableMessages, stripThinking, summarizeAhead, summarizeAll, unsummarizedMessages, wrapUpRequest } from './llmChatContext'
+import { appendUserDirective, buildChatMessages, toolGuidanceFor, cutToolOutput, directContextTurns, estimateMessagesTokens, estimateTokens, type ChatContextMeta, fillCharacterPlaceholders, fitChatContext, fitThreadSummary, fitWorkspaceRead, latestWindow, prefixUserContent, rawMessagesEstimate, recordPromptUsage, replyCapFor, resolveContextConfig, sendableMessages, summarizeAhead, summarizeAll, unsummarizedMessages, wrapUpRequest } from './llmChatContext'
 import { addressLabelFilter, restatement, roundSeparator } from './chatReplyText'
 import { noteTextToolCalls, recoverTextToolCalls, textToolCallFilter } from './textToolCalls'
 import { chatPageReference, NO_PAGE_NOTE, notePageViewFolded, PAGE_VIEW_KEY, PAGE_VIEW_TOOLS, PAGE_VIEW_UNKNOWN, pageViewAfter, proposalOutcomeNote, takePageViewFolded, type PageViewShown } from './chatPageContext'
@@ -82,11 +83,6 @@ export const REPLY_FAILURES = {
   emptyAtCap: '생각만 하다가 출력 상한에 닿았어. 최대 출력 토큰을 늘리거나 추론을 줄여줘.',
   empty: '빈 답변이 왔어.',
 } as const
-
-/** The reply as stored: no inline thinking, no echoed address labels. */
-function replyContent(text: string) {
-  return stripEchoedAddresses(stripThinking(text)).trim()
-}
 
 export class LlmChatError extends Error {
   constructor(message: string, readonly status = 400) {
@@ -731,7 +727,7 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
         if (turn.research && lastRound && result.toolCalls.length > 0 && turn.research.result.stopReason === 'completed') turn.research.result.stopReason = 'model_limit'
         turn.finishReason = result.finishReason
         // Nothing to show at all (thinking ate the cap, or the model said nothing) is a failure the reader can retry.
-        if (!turn.reaction && !turn.order && turn.continuing === undefined && turn.toolCalls.size === 0 && !replyContent(turn.text)) {
+        if (!turn.reaction && !turn.order && turn.continuing === undefined && turn.toolCalls.size === 0 && !finishReplyText(turn.text, { source: 'llm', chat: turn.chatContext ?? turn.delivery?.context })) {
           throw new LlmChatError(result.finishReason === 'length' ? REPLY_FAILURES.emptyAtCap : REPLY_FAILURES.empty)
         }
         return
@@ -774,7 +770,7 @@ async function finishTurn(turn: LlmTurn, profile: ChatProfile, status: CodexChat
     throw new LlmChatError(error ?? '완료 반응을 만들지 못했어.')
   }
   const toolCalls = [...turn.toolCalls.values()].map((call) => (call.status === 'running' ? { ...call, status: 'failed' as const } : call))
-  const content = replyContent(turn.text)
+  const content = finishReplyText(turn.text, { source: 'llm', chat: turn.chatContext ?? turn.delivery?.context })
   const finishReason = status === 'completed' ? turn.finishReason : null
   let displayContent: string | null = null
   if (status === 'completed' && content && hasTranslation(profile)) {
@@ -1000,7 +996,7 @@ async function runHeadlessReply(params: HeadlessReplyParams, order?: LlmTurn['or
     params.signal.removeEventListener('abort', abort)
   }
   const toolCalls = [...turn.toolCalls.values()].map((call) => (call.status === 'running' ? { ...call, status: 'failed' as const } : call))
-  return { content: replyContent(turn.text), tool_calls: toolCalls, status, error, finish_reason: status === 'completed' ? turn.finishReason : null, contextMeta: turn.requestSent ? turn.contextMeta : undefined, requestCapture: turn.requestCapture }
+  return { content: finishReplyText(turn.text, { source: 'llm', chat: turn.chatContext }), tool_calls: toolCalls, status, error, finish_reason: status === 'completed' ? turn.finishReason : null, contextMeta: turn.requestSent ? turn.contextMeta : undefined, requestCapture: turn.requestCapture }
 }
 
 export const LlmChatService = {
