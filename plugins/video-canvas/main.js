@@ -1,6 +1,6 @@
 import { connectPlugin } from './conai-plugin.js'
 import { $, esc, names, ports, isTerminal, fillIcons, thumbUrl } from './util.mjs'
-import { s, ctx, cuts, assistant } from './state.mjs'
+import { s, ctx, cuts, assistant, finishing } from './state.mjs'
 import { notice, initToasts, dockToasts } from './toast.mjs'
 import { initMenu, showMenu } from './menu.mjs'
 import { request, accountRequest, recordEdits, queued, assistantTask, ui, edit, reload, publish, lockRunButtons, launchRun, doCheck, refreshQueued, loadView, saveView, openDetail, showInspector, forgetProject } from './session.mjs'
@@ -228,3 +228,12 @@ const refresh = event => {
 ctx.api.events.on('queue.job.status', refresh)
 ctx.api.events.on('history.record.status', refresh)
 ctx.api.events.on('resync', refresh)
+// A take being finished is read again without an event: history events follow the account's own images.view, so a viewer
+// of a shared page never gets them. Ten minutes per take, so one whose result never comes stops being asked about.
+const finishingSince = new Map()
+setInterval(() => {
+  const now = Date.now(), waiting = (s.project?.takes ?? []).filter(finishing)
+  for (const id of finishingSince.keys()) if (!waiting.some(take => take.id === id)) finishingSince.delete(id)
+  for (const take of waiting) if (!finishingSince.has(take.id)) finishingSince.set(take.id, now)
+  if (waiting.some(take => now - finishingSince.get(take.id) < 10 * 60_000)) refresh()
+}, 4000)

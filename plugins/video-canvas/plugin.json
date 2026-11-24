@@ -2,7 +2,7 @@
   "apiVersion": 1,
   "id": "video-canvas",
   "name": "Video Canvas",
-  "version": "1.5.3",
+  "version": "1.5.4",
   "description": "앱의 이미지·영상·오디오·RefMod를 컷 입력 슬롯에 잇고, 계정에 한 번 등록한 컷·업스케일·생성 설정(DaSiWa Director 워크플로, 영상 업스케일 워크플로, 앱 생성 프리셋)을 프로젝트마다 골라 써서 생성·검수·프레임 추출·업스케일해. 생성 노드는 이미지·영상·오디오를 만들어 컷 슬롯에 이어. 여러 컷은 앞 컷의 마지막 프레임에서 이어 한 번에 생성하고, 컷 순서대로 대표 take를 한 영상으로 내보내. 프로젝트를 검색·보관·복제해.",
   "server": { "entry": "server.mjs" },
   "capabilities": ["media.read", "media.pick", "jobs"],
