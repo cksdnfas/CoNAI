@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import sharp from 'sharp';
+import type { NaiCharacterReference, NaiCharacterReferenceType } from '@conai/shared';
 import { publicUrls, runtimePaths } from '../config/runtimePaths';
 import { normalizeBase64ImageData } from '../utils/nai/requestBuilder';
 
@@ -28,9 +29,10 @@ export interface StoredNaiCharacterReferenceAsset extends StoredNaiAssetImageFie
   id: string;
   label: string;
   description?: string | null;
-  type: 'character' | 'style' | 'character&style';
+  type: NaiCharacterReferenceType;
   strength: number;
   fidelity: number;
+  prefer_same_outfit?: boolean;
   created_date: string;
   has_letterbox: boolean;
 }
@@ -452,13 +454,9 @@ async function updateNaiVibeAssetUnlocked(assetId: string, input: {
 }
 
 /** Persist one character-reference image and its prepared letterboxed derivative. */
-async function saveNaiCharacterReferenceAssetUnlocked(input: {
+async function saveNaiCharacterReferenceAssetUnlocked(input: NaiCharacterReference & {
   label?: string;
   description?: string;
-  image: string;
-  type?: 'character' | 'style' | 'character&style';
-  strength?: number;
-  fidelity?: number;
 }) {
   await ensureDirectory(CHARACTER_REFERENCE_ROOT);
   await ensureDirectory(CHARACTER_REFERENCE_LETTERBOX_ROOT);
@@ -484,6 +482,7 @@ async function saveNaiCharacterReferenceAssetUnlocked(input: {
     type: input.type || 'character&style',
     strength: typeof input.strength === 'number' ? input.strength : 0.6,
     fidelity: typeof input.fidelity === 'number' ? input.fidelity : 1,
+    prefer_same_outfit: input.prefer_same_outfit,
     created_date: new Date().toISOString(),
     has_letterbox: true,
   };

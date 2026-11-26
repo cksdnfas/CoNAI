@@ -22,27 +22,31 @@ interface NaiConnectionHeaderProps {
   tierName?: string
   anlasBalance?: number
   opusRemainingPercent?: number | null
+  opusExtraPercent?: number | null
   onOpenAuth: () => void
   compact?: boolean
 }
 
-function NaiOpusUsage({ percent }: { percent: number }) {
+function NaiOpusUsage({ percent, extraPercent = 0 }: { percent: number; extraPercent?: number }) {
   const { t, formatNumber } = useI18n()
   const label = `Opus ${formatNumber(percent, { maximumFractionDigits: 1 })}%`
+  const extra = extraPercent > 0 ? ` +${formatNumber(extraPercent, { maximumFractionDigits: 1 })}%` : ''
 
   return (
-    <Chip size="sm" tone="muted" mono asChild>
-      <div>
-        <span>{label}</span>
-        <Progress
-          size="sm"
-          value={percent}
-          className="ml-1 w-10"
-          aria-label={t({ ko: 'Opus 잔여량', en: 'Opus remaining' })}
-          aria-valuetext={label}
-        />
-      </div>
-    </Chip>
+    <Tip content={t({ ko: 'NovelAI에서 Opus 사용량 부스트 관리', en: 'Manage Opus Usage Boosts on NovelAI' })}>
+      <Chip size="sm" tone="muted" mono asChild>
+        <a href="https://novelai.net/image" target="_blank" rel="noreferrer noopener">
+          <span>{label}{extra}</span>
+          <Progress
+            size="sm"
+            value={percent}
+            className="ml-1 w-10"
+            aria-label={t({ ko: 'Opus 기본 잔여량', en: 'Regular Opus usage remaining' })}
+            aria-valuetext={label}
+          />
+        </a>
+      </Chip>
+    </Tip>
   )
 }
 
@@ -61,7 +65,7 @@ function NaiAuthButton({ onOpenAuth, variant }: { onOpenAuth: () => void; varian
 }
 
 /** Render the NovelAI connection header with auth status and external link. */
-export function NaiConnectionHeader({ connected, tierName, anlasBalance, opusRemainingPercent, onOpenAuth, compact = false }: NaiConnectionHeaderProps) {
+export function NaiConnectionHeader({ connected, tierName, anlasBalance, opusRemainingPercent, opusExtraPercent, onOpenAuth, compact = false }: NaiConnectionHeaderProps) {
   const { t, formatNumber } = useI18n()
   const novelAiHomeLabel = t('image-generation.components.nai.generation.panel.sections.open.novelai.homepage')
 
@@ -75,7 +79,8 @@ export function NaiConnectionHeader({ connected, tierName, anlasBalance, opusRem
             : <Chip size="sm" tone="muted">{t('image-generation.components.nai.generation.panel.sections.disconnected')}</Chip>}
           {connected && tierName ? <Chip size="sm" tone="muted">{tierName}</Chip> : null}
           {connected && anlasBalance !== undefined ? <Chip size="sm" tone="muted" mono>Anlas {formatNumber(anlasBalance)}</Chip> : null}
-          {connected && tierName === 'Opus' && opusRemainingPercent != null ? <NaiOpusUsage percent={opusRemainingPercent} /> : null}
+          {connected && tierName === 'Opus' && (opusRemainingPercent != null || opusExtraPercent != null)
+            ? <NaiOpusUsage percent={opusRemainingPercent ?? 0} extraPercent={opusExtraPercent ?? 0} /> : null}
         </div>
         <div className="flex items-center gap-2">
           {!connected ? (
@@ -95,7 +100,7 @@ export function NaiConnectionHeader({ connected, tierName, anlasBalance, opusRem
 }
 
 /** NovelAI connection state for the page toolbar: dot + tier, Anlas chip, and login/home icon actions. */
-export function NaiToolbarStatus({ connected, tierName, anlasBalance, opusRemainingPercent, onOpenAuth }: Omit<NaiConnectionHeaderProps, 'compact'>) {
+export function NaiToolbarStatus({ connected, tierName, anlasBalance, opusRemainingPercent, opusExtraPercent, onOpenAuth }: Omit<NaiConnectionHeaderProps, 'compact'>) {
   const { t, formatNumber } = useI18n()
   const novelAiHomeLabel = t('image-generation.components.nai.generation.panel.sections.open.novelai.homepage')
   const statusLabel = connected
@@ -105,7 +110,8 @@ export function NaiToolbarStatus({ connected, tierName, anlasBalance, opusRemain
   return (
     <GenerationToolbarStatus tone={connected ? 'ready' : 'off'} label={statusLabel}>
       {connected && anlasBalance !== undefined ? <Chip size="sm" tone="muted" mono>Anlas {formatNumber(anlasBalance)}</Chip> : null}
-      {connected && tierName === 'Opus' && opusRemainingPercent != null ? <NaiOpusUsage percent={opusRemainingPercent} /> : null}
+      {connected && tierName === 'Opus' && (opusRemainingPercent != null || opusExtraPercent != null)
+        ? <NaiOpusUsage percent={opusRemainingPercent ?? 0} extraPercent={opusExtraPercent ?? 0} /> : null}
       {!connected ? (
         <NaiAuthButton variant="ghost" onOpenAuth={onOpenAuth} />
       ) : null}

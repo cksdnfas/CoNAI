@@ -1,4 +1,5 @@
 import { requestJson } from './api-image-generation-request'
+import type { NaiCharacterReference } from '@conai/shared'
 import type {
   NAICostEstimate,
   NAIEncodeVibePayload,
@@ -35,6 +36,7 @@ export async function getNaiCostEstimate(payload: {
   height: number
   steps: number
   n_samples: number
+  referenceCount?: number
   subscriptionTier: number
   anlasBalance: number
   /** img2img strength; omit for text-to-image. */
@@ -144,13 +146,9 @@ export async function listNaiCharacterReferenceAssets() {
 }
 
 /** Save one reusable character-reference asset. */
-export async function saveNaiCharacterReferenceAsset(payload: {
+export async function saveNaiCharacterReferenceAsset(payload: NaiCharacterReference & {
   label?: string
   description?: string
-  image: string
-  type?: 'character' | 'style' | 'character&style'
-  strength?: number
-  fidelity?: number
 }) {
   return requestJson<StoredNaiCharacterReferenceAsset>('/api/nai/store/character-references', {
     method: 'POST',

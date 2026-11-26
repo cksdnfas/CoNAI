@@ -107,7 +107,7 @@ export function WorkflowInputFields({
     }
 
     if (isNaiCharacterReferencePort(inputDefinition.port_key, inputDefinition.data_type)) {
-      return <NaiReusableAssetInput kind="character_refs" value={rawValue} onChange={onChange} />
+      return <NaiReusableAssetInput kind="character_refs" value={rawValue} onChange={onChange} model={getExposedNodeModel(inputDefinition.node_id)} />
     }
 
     const dataType = inputDefinition.data_type

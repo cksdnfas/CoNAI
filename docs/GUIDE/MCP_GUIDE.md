@@ -722,6 +722,8 @@ ComfyUI 워크플로우 목록과 서버 목록을 보여줘.
 
 ### NovelAI 생성
 
+`submit_generation_job(service_type="novelai")`의 `request_payload.character_refs`에 `[{image, type, strength, prefer_same_outfit?}]`를 넣으면 V5 정밀 참조를 쓸 수 있습니다. `image`는 이미지 data URL입니다. `type`은 `character`, `style`, `character&style`, `outfit` 중 하나이고 `strength`는 0~5입니다. `prefer_same_outfit`은 캐릭터 계열에서 사용합니다. V5에서는 `generate`와 `img2img`에 적용되며, 결과 이미지 한 장당 참조 하나에 5 Anlas가 듭니다. V4.5는 의상 외 세 유형과 0~1의 `strength`, `fidelity`를 지원합니다.
+
 ```json
 {
   "prompt": "1girl, solo, long hair, sunset",

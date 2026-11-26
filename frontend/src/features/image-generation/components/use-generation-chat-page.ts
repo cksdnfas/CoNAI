@@ -1,5 +1,5 @@
 import type { Dispatch, SetStateAction } from 'react'
-import { getNaiFixedModelSettings, getNaiQualityTags, getNaiUcPresetIds, getNaiUcPresetText, NAI_ENHANCE_AMOUNTS, type ChatPageField } from '@conai/shared'
+import { getNaiFixedModelSettings, getNaiQualityTags, getNaiUcPresetIds, getNaiUcPresetText, isNaiV5Model, NAI_CHARACTER_REFERENCE_ANLAS, NAI_CHARACTER_REFERENCE_TYPES, NAI_ENHANCE_AMOUNTS, type ChatPageField, type ChatPageSchema } from '@conai/shared'
 import { useI18n } from '@/i18n'
 import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
 import {
@@ -43,14 +43,16 @@ export function useNaiChatPage(form: NAIFormDraft, setForm: Dispatch<SetStateAct
   const { t } = useI18n()
   const runs = useGenerationChatRuns('nai.generate', 'novelai', records, generate)
   const { requestPath: targetGroup } = useGenerationTargetGroupPath(IMAGE_GENERATION_TARGET_GROUP_KEY)
-  const media = useChatPageMedia(['sourceImage', 'maskImage', ...(supportsNaiVibes(form.model) ? ['vibe:new', ...form.vibes.map((_, i) => `vibe:${i}`)] : []), ...(supportsNaiCharacterReferences(form.model) ? ['characterReference:new', ...form.characterReferences.map((_, i) => `characterReference:${i}`)] : [])])
+  const v5 = isNaiV5Model(form.model)
+  const supportsReferences = supportsNaiCharacterReferences(form.model, form.action)
+  const media = useChatPageMedia(['sourceImage', 'maskImage', ...(supportsNaiVibes(form.model) ? ['vibe:new', ...form.vibes.map((_, i) => `vibe:${i}`)] : []), ...(supportsReferences ? ['characterReference:new', ...form.characterReferences.map((_, i) => `characterReference:${i}`)] : [])])
   // Fields show what the request uses: a model with fixed settings overrides steps, sampler and the negatives.
   const fixedSettings = getNaiFixedModelSettings(form.model)
   const fixedField = fixedSettings ? { editable: false as const, hint: NAI_FIXED_MODEL_FIELD_HINT } : {}
   const presets = useChatPresetInsertion(fixedSettings ? ['prompt'] : ['prompt', 'negativePrompt'])
   const characterSettings = useChatCharacterSettingInsertion()
   const characterPrompts = supportsNaiCharacterPrompts(form.model)
-  const characterReferences = characterSettings.canReference && supportsNaiCharacterReferences(form.model)
+  const characterReferences = characterSettings.canReference && supportsReferences
   const characterSettingActions = characterSettings.actions({
     target: pageChoice(['prompt', ...(characterPrompts ? [...(form.characters.length ? ['character'] : []), 'newCharacter'] : [])]),
     ...(characterPrompts && form.characters.length ? { characterIndex: pageNumber(0, form.characters.length - 1, true) } : {}),
@@ -60,7 +62,7 @@ export function useNaiChatPage(form: NAIFormDraft, setForm: Dispatch<SetStateAct
     } : {}),
   }, ['target'], 'target prompt = main prompt, character = data.characters[characterIndex] (0-based), newCharacter = add one. includeReference (default: when the setting has a reference image) adds the images as character reference rows; referenceIndex (0-based) replaces that row\'s image instead (an image is then required) and further hashes add rows. NAI blends character references, so rows are not tied to characterIndex.')
   const artStyles = useChatArtStyleInsertion()
-  const styleImages = artStyles.canImages && supportsNaiCharacterReferences(form.model)
+  const styleImages = artStyles.canImages && supportsReferences
   const artStyleActions = artStyles.actions({}, [], (fixedSettings ? 'Positive goes to prompt; this model fixes the negative, so it is left out.' : 'Positive goes to prompt, negative to negativePrompt.') + (styleImages ? ' Images become new character reference rows.' : ''), styleImages)
   const commit = useChatDraftTransaction(form, setForm)
   const promptPresets = resolveNaiPromptPresets(form)
@@ -70,8 +72,12 @@ export function useNaiChatPage(form: NAIFormDraft, setForm: Dispatch<SetStateAct
   const vibeCount = form.vibes.filter((vibe) => vibe.image || vibe.encoded.trim()).length
   const encodingAnlas = chargeVibes ? needsEncoding.filter(Boolean).length * 2 : 0
   const extraVibeAnlas = chargeVibes ? Math.max(0, vibeCount - 4) * 2 * clampNaiQueueCount(form.queueCount) : 0
-  const referenceAnlas = supportsNaiCharacterReferences(form.model) ? form.characterReferences.filter((reference) => reference.image).length * 5 * clampNaiSampleCount(form.samples) * clampNaiQueueCount(form.queueCount) : 0
-  const extraAnlas = encodingAnlas + extraVibeAnlas + referenceAnlas
+  const referenceAnlas = supportsReferences ? form.characterReferences.filter((reference) => reference.image).length * NAI_CHARACTER_REFERENCE_ANLAS * clampNaiSampleCount(form.samples) * clampNaiQueueCount(form.queueCount) : 0
+  const extraAnlas = encodingAnlas + extraVibeAnlas
+  const referenceOptions: Record<string, ChatPageSchema> = {
+    type: pageChoice(NAI_CHARACTER_REFERENCE_TYPES.filter((type) => v5 || type !== 'outfit')),
+    ...(v5 ? { preferSameOutfit: { type: 'boolean' } } : { fidelity: pageNumber(0, 1) }),
+  }
   const fields: ChatPageField[] = [
     { id: 'prompt', label: t({ ko: '포지티브 프롬프트', en: 'Positive prompt' }), type: 'text', value: form.prompt, ...(characterPrompts ? { hint: 'Shared tags only: character count (2girls), scene, background, composition, style. Put each character\'s own tags (hair, eyes, outfit, expression, pose) in the nai.characters action, not here.' } : {}) },
     { id: 'negativePrompt', label: t({ ko: '네거티브 프롬프트', en: 'Negative prompt' }), type: 'text', value: fixedSettings ? getNaiUcPresetText(form.model, fixedSettings.ucPreset) ?? '' : form.negativePrompt, ...fixedField },
@@ -98,8 +104,8 @@ export function useNaiChatPage(form: NAIFormDraft, setForm: Dispatch<SetStateAct
   if (supportsNaiTransparentBackground(form.model)) fields.push({ id: 'transparentBackground', label: t({ ko: '투명 배경', en: 'Transparent background' }), type: 'boolean', value: form.transparentBackground })
   useChatPageRegistration({
     kind: 'nai', title: t({ ko: 'NovelAI 생성', en: 'NovelAI generation' }), resourceId: 'novelai', fields, localRevision: getImageDraftRevision(form),
-    data: { recentRuns: runs.recentRuns, generating: runs.generating, media: media.candidates, presets: presets.candidates, characters: form.characters.map((item) => ({ ...item })), enhance: { sourceSize: sourceImageSize ? `${sourceImageSize.width}x${sourceImageSize.height}` : '', amounts: Object.fromEntries(NAI_ENHANCE_AMOUNTS.map((amount) => [amount, planNaiFormEnhance(form, sourceImageSize, amount).issue ?? 'available'])) }, selected: { targetGroup: targetGroup ?? '', prompt: pageFreeText(form.prompt.slice(0, 240)), model: form.model, size: `${cost.width}x${cost.height}`, samples: clampNaiSampleCount(form.samples), queueCount: clampNaiQueueCount(form.queueCount), anlasEstimate: cost.estimate === null ? null : cost.estimate + extraAnlas, free: extraAnlas > 0 ? false : cost.free, vibeEncodingAnlas: encodingAnlas, extraVibeAnlas, referenceAnlas, extraUpscaleCost: cost.extraUpscale, sourceImage: form.sourceImage?.fileName ?? '', maskImage: form.maskImage?.fileName ?? '', vibes: form.vibes.map((item, index) => ({ image: item.image?.fileName ?? '', strength: item.strength, informationExtracted: item.informationExtracted, needsEncoding: needsEncoding[index] })), characterReferences: form.characterReferences.map((item) => ({ image: item.image?.fileName ?? '', type: item.type, strength: item.strength, fidelity: item.fidelity })) } },
-    actions: [...runs.actions, ...media.actions, ...presets.actions, ...characterSettingActions, ...artStyleActions, ...(form.vibes.length || form.characterReferences.length ? [pageAction('nai.references', t({ ko: '참조 설정 변경', en: 'Edit reference settings' }), t({ ko: '바이브 또는 캐릭터 참조의 0부터 시작하는 index와 변경할 설정을 지정해.', en: 'Set a vibe or character reference by its zero-based index.' }), pageObject({ kind: pageChoice(['vibe', 'characterReference']), index: pageNumber(0, Math.max(form.vibes.length, form.characterReferences.length) - 1, true), strength: pageNumber(0, 1), informationExtracted: pageNumber(0.01, 1), fidelity: pageNumber(0, 1), type: pageChoice(['character', 'style', 'character&style']) }, ['kind', 'index']))] : []), ...(supportsNaiCharacterPrompts(form.model) ? [pageAction('nai.characters', t({ ko: '캐릭터 프롬프트 편집', en: 'Edit character prompts' }), t({ ko: '캐릭터별 프롬프트·네거티브 프롬프트·위치의 전체 목록을 입력해. 캐릭터마다 외모·옷·표정·동작 태그를 한 항목씩 넣고, 메인 prompt에는 인원수(2girls)·장면·배경·구도·화풍 같은 공통 태그만 둬. 기존 캐릭터를 유지하려면 data.characters 항목도 함께 보내. center 0.5가 가운데야.', en: 'Set the complete list of character prompts, negative prompts and positions. Give each character one entry with its own tags (hair, eyes, outfit, expression, pose) and keep only shared tags (character count such as 2girls, scene, background, composition, style) in the main prompt. Include the existing data.characters entries to keep them. center 0.5 is the middle.' }), pageObject({ characters: pageArray(pageObject({ prompt: pageText(), uc: pageText(), centerX: pageChoice(['0.1', '0.3', '0.5', '0.7', '0.9']), centerY: pageChoice(['0.1', '0.3', '0.5', '0.7', '0.9']) }, ['prompt', 'uc', 'centerX', 'centerY']), 6) }, ['characters']))] : [])],
+    data: { recentRuns: runs.recentRuns, generating: runs.generating, media: media.candidates, presets: presets.candidates, characters: form.characters.map((item) => ({ ...item })), enhance: { sourceSize: sourceImageSize ? `${sourceImageSize.width}x${sourceImageSize.height}` : '', amounts: Object.fromEntries(NAI_ENHANCE_AMOUNTS.map((amount) => [amount, planNaiFormEnhance(form, sourceImageSize, amount).issue ?? 'available'])) }, selected: { targetGroup: targetGroup ?? '', prompt: pageFreeText(form.prompt.slice(0, 240)), model: form.model, size: `${cost.width}x${cost.height}`, samples: clampNaiSampleCount(form.samples), queueCount: clampNaiQueueCount(form.queueCount), anlasEstimate: cost.estimate === null ? null : cost.estimate + extraAnlas, free: extraAnlas > 0 ? false : cost.free, vibeEncodingAnlas: encodingAnlas, extraVibeAnlas, referenceAnlas, extraUpscaleCost: cost.extraUpscale, sourceImage: form.sourceImage?.fileName ?? '', maskImage: form.maskImage?.fileName ?? '', vibes: form.vibes.map((item, index) => ({ image: item.image?.fileName ?? '', strength: item.strength, informationExtracted: item.informationExtracted, needsEncoding: needsEncoding[index] })), characterReferences: form.characterReferences.map((item) => ({ image: item.image?.fileName ?? '', type: item.type, strength: item.strength, ...(v5 ? { preferSameOutfit: item.preferSameOutfit === true } : { fidelity: item.fidelity }) })) } },
+    actions: [...runs.actions, ...media.actions, ...presets.actions, ...characterSettingActions, ...artStyleActions, ...(form.vibes.length || form.characterReferences.length ? [pageAction('nai.references', t({ ko: '참조 설정 변경', en: 'Edit reference settings' }), t({ ko: '바이브 또는 캐릭터 참조의 0부터 시작하는 index와 변경할 설정을 지정해.', en: 'Set a vibe or character reference by its zero-based index.' }), pageObject({ kind: pageChoice(['vibe', 'characterReference']), index: pageNumber(0, Math.max(form.vibes.length, form.characterReferences.length) - 1, true), strength: pageNumber(0, v5 && form.characterReferences.length ? 5 : 1), informationExtracted: pageNumber(0.01, 1), ...referenceOptions }, ['kind', 'index']))] : []), ...(supportsNaiCharacterPrompts(form.model) ? [pageAction('nai.characters', t({ ko: '캐릭터 프롬프트 편집', en: 'Edit character prompts' }), t({ ko: '캐릭터별 프롬프트·네거티브 프롬프트·위치의 전체 목록을 입력해. 캐릭터마다 외모·옷·표정·동작 태그를 한 항목씩 넣고, 메인 prompt에는 인원수(2girls)·장면·배경·구도·화풍 같은 공통 태그만 둬. 기존 캐릭터를 유지하려면 data.characters 항목도 함께 보내. center 0.5가 가운데야.', en: 'Set the complete list of character prompts, negative prompts and positions. Give each character one entry with its own tags (hair, eyes, outfit, expression, pose) and keep only shared tags (character count such as 2girls, scene, background, composition, style) in the main prompt. Include the existing data.characters entries to keep them. center 0.5 is the middle.' }), pageObject({ characters: pageArray(pageObject({ prompt: pageText(), uc: pageText(), centerX: pageChoice(['0.1', '0.3', '0.5', '0.7', '0.9']), centerY: pageChoice(['0.1', '0.3', '0.5', '0.7', '0.9']) }, ['prompt', 'uc', 'centerX', 'centerY']), 6) }, ['characters']))] : [])],
     apply: (values) => {
       const patch = values as Partial<NAIFormDraft>
       const model = patch.model ?? form.model
@@ -127,7 +133,8 @@ export function useNaiChatPage(form: NAIFormDraft, setForm: Dispatch<SetStateAct
         const index = Number(args.index)
         if (args.kind === 'vibe') {
           const vibe = next.vibes[index]
-          if (!vibe || args.type !== undefined || args.fidelity !== undefined || (args.strength !== undefined && Number(args.strength) < 0.01)) throw new Error('바이브 참조 설정을 확인해줘.')
+          if (!vibe || args.type !== undefined || args.fidelity !== undefined || args.preferSameOutfit !== undefined
+            || (args.strength !== undefined && (Number(args.strength) < 0.01 || Number(args.strength) > 1))) throw new Error('바이브 참조 설정을 확인해줘.')
           let updated = vibe
           if (args.strength !== undefined) updated = updateNaiVibeField(updated, 'strength', String(args.strength))
           if (args.informationExtracted !== undefined) updated = updateNaiVibeField(updated, 'informationExtracted', String(args.informationExtracted))
@@ -135,7 +142,15 @@ export function useNaiChatPage(form: NAIFormDraft, setForm: Dispatch<SetStateAct
         } else {
           const reference = next.characterReferences[index]
           if (!reference || args.informationExtracted !== undefined) throw new Error('캐릭터 참조 설정을 확인해줘.')
-          next.characterReferences[index] = { ...reference, strength: args.strength === undefined ? reference.strength : String(args.strength), fidelity: args.fidelity === undefined ? reference.fidelity : String(args.fidelity), type: args.type === undefined ? reference.type : args.type as typeof reference.type }
+          const type = args.type === undefined ? reference.type : args.type as typeof reference.type
+          if (args.preferSameOutfit !== undefined && type !== 'character' && type !== 'character&style') throw new Error('같은 의상 우선은 캐릭터 또는 캐릭터+스타일 참조에서 쓸 수 있어.')
+          next.characterReferences[index] = {
+            ...reference,
+            type,
+            strength: args.strength === undefined ? reference.strength : String(args.strength),
+            fidelity: args.fidelity === undefined ? reference.fidelity : String(args.fidelity),
+            preferSameOutfit: typeof args.preferSameOutfit === 'boolean' ? args.preferSameOutfit : reference.preferSameOutfit,
+          }
         }
       }
       else if (id === 'character_setting.insert') {

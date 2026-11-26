@@ -1,4 +1,4 @@
-import { isNaiV5Model } from '@conai/shared';
+import { getNaiFixedModelSettings, isNaiV5Model } from '@conai/shared';
 
 /**
  * Anlas 비용 계산 유틸리티 (SMEA 비활성화 버전)
@@ -41,10 +41,9 @@ export function calculateAnlasCost(params: CostCalculationParams): number {
   const modelFactor = isNaiV5Model(model) ? 1.5 : 1.0;
 
   // 기본 비용 계산
-  let perSample = Math.ceil(
-    2.951823174884865e-6 * resolution +
-    5.753298233447344e-7 * resolution * steps
-  ) * smeaFactor * modelFactor;
+  const baseCost = (stepCount: number) => 2.951823174884865e-6 * resolution + 5.753298233447344e-7 * resolution * stepCount;
+  // Medium Effort is priced as a discount on the 23-step Full generation.
+  let perSample = (getNaiFixedModelSettings(model) ? baseCost(23) / 1.75 : Math.ceil(baseCost(steps))) * smeaFactor * modelFactor;
 
   // img2img strength 적용
   perSample = Math.max(Math.ceil(perSample * strength), 2);
@@ -69,7 +68,7 @@ const OPUS_FREE_MAX_STEPS = 28;
  * NovelAI 규칙: Opus 티어 + 픽셀 수 <= 1024x1024 + steps <= 28 + 1장 생성일 때만 무료다.
  * V5 무료 생성은 Opus 사용량 풀에서 깎이고, 그 풀이 0% 면 같은 조건도 Anlas 로 청구된다.
  * 잔여량을 모르면(null) 기존처럼 무료로 본다. V4.5 이하 무료 생성은 사용량 제한이 없다.
- * (바이브/캐릭터 레퍼런스 등 추가 비용 요소는 검증된 규칙이 없어 반영하지 않는다.)
+ * 여기서는 기본 생성 비용의 면제 조건만 확인한다. 참조 추가 비용은 호출자가 합산한다.
  */
 export function isOpusFreeGeneration(
   params: { width: number; height: number; steps: number; n_samples: number; model?: string },
@@ -87,7 +86,7 @@ export function isOpusFreeGeneration(
  * 잔액으로 생성 가능한 최대 샘플 수 계산
  */
 export function getMaxSamples(
-  params: { width: number; height: number; steps: number; strength?: number; model?: string },
+  params: { width: number; height: number; steps: number; strength?: number; model?: string; referenceCostPerSample?: number },
   anlasBalance: number,
   subscriptionTier: number,
   opusRemainingPercent: number | null = null
@@ -97,12 +96,14 @@ export function getMaxSamples(
     n_samples: 1
   });
 
+  const freeSamples = isOpusFreeGeneration({ ...params, n_samples: 1 }, subscriptionTier, opusRemainingPercent) ? 1 : 0;
+  const referenceCost = params.referenceCostPerSample ?? 0;
+  const maxByResolution = getMaxSamplesByResolution(params.width, params.height);
+  if (referenceCost > 0) {
+    return Math.min(Math.floor((anlasBalance + freeSamples * costPerSample) / (costPerSample + referenceCost)), maxByResolution);
+  }
   // 잔액으로 생성 가능한 최대 수. Opus 무료 조건이면 잔액과 무관하게 1장은 가능하다.
   const maxByBalance = Math.floor(anlasBalance / costPerSample);
-  const freeSamples = isOpusFreeGeneration({ ...params, n_samples: 1 }, subscriptionTier, opusRemainingPercent) ? 1 : 0;
-
-  // 해상도 제한과 비교하여 최소값 반환
-  const maxByResolution = getMaxSamplesByResolution(params.width, params.height);
 
   return Math.min(Math.max(maxByBalance, freeSamples), maxByResolution);
 }

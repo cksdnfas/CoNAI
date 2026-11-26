@@ -3,7 +3,7 @@ import { chatProfileOrderSql } from './chatProfileOrder'
 import { createHash } from 'crypto'
 import path from 'path'
 import { WorkflowModel } from '../../models/Workflow'
-import { CHAT_SKILL_LIMITS, normalizeSkillSectionPath } from '@conai/shared'
+import { CHAT_SKILL_LIMITS, isNaiV5Model, NAI_CHARACTER_REFERENCE_TYPES, normalizeSkillSectionPath, type NaiCharacterReference, type NaiCharacterReferenceType } from '@conai/shared'
 import { FileStoreService } from '../fileStoreService'
 import { ChatProfileError } from './chatProfileError'
 import { editChatResource } from './chatResourceWrite'
@@ -41,7 +41,7 @@ export type ChatNaiPresetConfig = {
   characters: Array<{ prompt: string; uc: string; center_x: number; center_y: number }>
   useCoords: boolean
   vibes: Array<{ encoded: string; strength: number; information_extracted: number }>
-  characterRefs: Array<{ image: string; type: string; strength: number; fidelity: number }>
+  characterRefs: Array<NaiCharacterReference & { type: NaiCharacterReferenceType; strength: number; fidelity: number }>
   characterReference: 'none' | 'replace' | 'append'
 }
 
@@ -188,8 +188,9 @@ export function normalizeNaiPresetConfig(value: unknown): ChatNaiPresetConfig {
   const raw = isRecord(value) ? value : {}
   if (raw.characterReference !== undefined && !['none', 'replace', 'append'].includes(raw.characterReference as string)) throw new ChatProfileError('기준 이미지 사용은 none, replace 또는 append여야 해.')
   const uniqueSizes = sizesOf(raw.sizes)
+  const model = text(raw.model, 80) || DEFAULT_NAI.model
   return {
-    model: text(raw.model, 80) || DEFAULT_NAI.model,
+    model,
     sampler: text(raw.sampler, 80) || DEFAULT_NAI.sampler,
     noiseSchedule: text(raw.noiseSchedule, 40) || DEFAULT_NAI.noiseSchedule,
     steps: number(raw.steps, { min: 1, max: 50 }, DEFAULT_NAI.steps, true),
@@ -214,8 +215,14 @@ export function normalizeNaiPresetConfig(value: unknown): ChatNaiPresetConfig {
     }).slice(0, LIST_MAX),
     characterRefs: (Array.isArray(raw.characterRefs) ? raw.characterRefs : []).flatMap((entry) => {
       if (!isRecord(entry) || typeof entry.image !== 'string' || !entry.image.startsWith('data:image/')) return []
-      const type = entry.type === 'style' || entry.type === 'character&style' ? entry.type : 'character'
-      return [{ image: entry.image, type, strength: number(entry.strength, { min: 0, max: 1 }, 0.6), fidelity: number(entry.fidelity, { min: 0, max: 1 }, 1) }]
+      const type = NAI_CHARACTER_REFERENCE_TYPES.find((candidate) => candidate === entry.type) ?? 'character'
+      return [{
+        image: entry.image,
+        type,
+        strength: number(entry.strength, { min: 0, max: isNaiV5Model(model) ? 5 : 1 }, 0.6),
+        fidelity: number(entry.fidelity, { min: 0, max: 1 }, 1),
+        prefer_same_outfit: entry.prefer_same_outfit === true,
+      }]
     }).slice(0, LIST_MAX),
   }
 }

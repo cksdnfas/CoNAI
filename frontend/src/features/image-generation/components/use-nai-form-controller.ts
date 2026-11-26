@@ -23,6 +23,7 @@ import {
   supportsNaiCharacterReferences,
   type NAICharacterPromptDraft,
   type NAICharacterReferenceDraft,
+  type NaiCharacterReferencePatch,
   type NAIFormDraft,
   type NAIVibeDraft,
   type SelectedImageDraft,
@@ -110,7 +111,7 @@ export function useNaiFormController({
   const [selectedCharacterIndex, setSelectedCharacterIndex] = useState<number | null>(persistedDraft.selectedCharacterIndex)
   const [naiForm, setNaiForm] = useState<NAIFormDraft>(persistedDraft.form)
   const supportsCharacterPrompts = useMemo(() => supportsNaiCharacterPrompts(naiForm.model), [naiForm.model])
-  const supportsCharacterReference = useMemo(() => supportsNaiCharacterReferences(naiForm.model), [naiForm.model])
+  const supportsCharacterReference = supportsNaiCharacterReferences(naiForm.model, naiForm.action)
   const canUseCharacterPositions = useMemo(() => canUseNaiCharacterPositions(naiForm.characters.length), [naiForm.characters.length])
   const useCharacterPositions = useMemo(() => shouldUseNaiCharacterPositions(naiForm), [naiForm])
 
@@ -350,14 +351,14 @@ export function useNaiFormController({
   }
 
   /** Update one editable character-reference field. */
-  const handleCharacterReferenceFieldChange = (index: number, field: 'type' | 'strength' | 'fidelity', value: string) => {
+  const handleCharacterReferenceFieldChange = (index: number, patch: NaiCharacterReferencePatch) => {
     setNaiForm((current) => ({
       ...current,
       characterReferences: current.characterReferences.map((reference, referenceIndex) => (
         referenceIndex === index
           ? {
             ...reference,
-            [field]: value,
+            ...patch,
           }
           : reference
       )),

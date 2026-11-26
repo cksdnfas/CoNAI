@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { getNaiFixedModelSettings, PROMPT_LEGACY_WILDCARD_PATTERN, PROMPT_RANDOM_TOKEN_PATTERN } from '@conai/shared'
+import { getNaiFixedModelSettings, isNaiV5Model, PROMPT_LEGACY_WILDCARD_PATTERN, PROMPT_RANDOM_TOKEN_PATTERN } from '@conai/shared'
 import { useI18n } from '@/i18n'
 import { triggerBlobDownload } from '@/lib/api-client'
 import { createGenerationQueueJob } from '@/lib/api-image-generation-queue'
@@ -101,7 +101,12 @@ export function useNaiGenerationActions({
     }
 
     if (!supportsCharacterReference && naiForm.characterReferences.length > 0) {
-      showSnackbar({ message: t('image-generation.components.use.nai.generation.actions.character.reference.is.only.available.with.nai'), tone: 'error' })
+      showSnackbar({ message: t({ ko: '정밀 참조는 V4.5 또는 인페인트를 제외한 V5 생성에서 쓸 수 있어.', en: 'Precise Reference requires V4.5 or V5 generation without inpainting.' }), tone: 'error' })
+      return false
+    }
+
+    if (!isNaiV5Model(naiForm.model) && naiForm.characterReferences.some((ref) => ref.type === 'outfit' || Number(ref.strength) > 1)) {
+      showSnackbar({ message: t({ ko: '의상 참조와 1을 초과하는 참조 강도는 V5에서 쓸 수 있어.', en: 'Outfit references and reference strengths above 1 require V5.' }), tone: 'error' })
       return false
     }
 

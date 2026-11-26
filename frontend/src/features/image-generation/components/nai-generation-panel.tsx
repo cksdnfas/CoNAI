@@ -217,6 +217,7 @@ export function NaiGenerationPanel({
   const naiCostHeight = naiEnhancePlan?.height ?? parseNumberInput(naiForm.height, 1024)
   // A model with fixed settings runs its own steps, whatever the form stores.
   const naiSampling = resolveNaiSamplingSettings(naiForm)
+  const referenceCount = supportsCharacterReference ? naiForm.characterReferences.filter((reference) => reference.image).length : 0
   const naiCostInputs = useMemo(
     () => {
       // 계산기가 모델링하는 img2img strength 만 넘긴다(인페인트/바이브 비용은 검증된 규칙이 없다).
@@ -226,22 +227,26 @@ export function NaiGenerationPanel({
         height: naiCostHeight,
         steps: parseNumberInput(naiSampling.steps, 28),
         n_samples: clampNaiSampleCount(naiForm.samples),
+        referenceCount,
         model: naiForm.model,
         action: naiForm.action,
         ...(naiForm.action === 'img2img' && strength > 0 && strength <= 1 ? { strength } : {}),
       }
     },
-    [naiCostHeight, naiCostWidth, naiForm.action, naiForm.model, naiForm.samples, naiSampling.steps, naiForm.strength],
+    [naiCostHeight, naiCostWidth, naiForm.action, naiForm.model, naiForm.samples, naiSampling.steps, naiForm.strength, referenceCount],
   )
 
+  const opusRemaining = naiUserQuery.data?.opusRemainingPercent ?? null
+  const opusExtra = naiUserQuery.data?.opusExtraPercent ?? null
+  const opusAvailable = opusRemaining === null && opusExtra === null ? null : (opusRemaining ?? 0) + (opusExtra ?? 0)
   const naiCostQuery = useQuery({
-    queryKey: ['image-generation-nai-cost', naiCostInputs, naiUserQuery.data?.subscription.tier, naiUserQuery.data?.anlasBalance, naiUserQuery.data?.opusRemainingPercent],
+    queryKey: ['image-generation-nai-cost', naiCostInputs, naiUserQuery.data?.subscription.tier, naiUserQuery.data?.anlasBalance, opusAvailable],
     queryFn: () =>
       getNaiCostEstimate({
         ...naiCostInputs,
         subscriptionTier: naiUserQuery.data?.subscription.tier ?? 0,
         anlasBalance: naiUserQuery.data?.anlasBalance ?? 0,
-        opusRemainingPercent: naiUserQuery.data?.opusRemainingPercent ?? null,
+        opusRemainingPercent: opusAvailable,
       }),
     enabled:
       connected &&
@@ -493,7 +498,8 @@ export function NaiGenerationPanel({
         connected={connected}
         tierName={naiUserQuery.data?.subscription.tierName}
         anlasBalance={naiUserQuery.data?.anlasBalance}
-        opusRemainingPercent={naiUserQuery.data?.opusRemainingPercent}
+        opusRemainingPercent={opusRemaining}
+        opusExtraPercent={opusExtra}
         onOpenAuth={handleOpenNaiAuthModal}
         compact
       />
@@ -509,7 +515,8 @@ export function NaiGenerationPanel({
               connected={connected}
               tierName={naiUserQuery.data?.subscription.tierName}
               anlasBalance={naiUserQuery.data?.anlasBalance}
-              opusRemainingPercent={naiUserQuery.data?.opusRemainingPercent}
+              opusRemainingPercent={opusRemaining}
+              opusExtraPercent={opusExtra}
               onOpenAuth={handleOpenNaiAuthModal}
             />,
             statusPortalTarget,
@@ -524,7 +531,8 @@ export function NaiGenerationPanel({
               connected={connected}
               tierName={naiUserQuery.data?.subscription.tierName}
               anlasBalance={naiUserQuery.data?.anlasBalance}
-              opusRemainingPercent={naiUserQuery.data?.opusRemainingPercent}
+              opusRemainingPercent={opusRemaining}
+              opusExtraPercent={opusExtra}
               onOpenAuth={handleOpenNaiAuthModal}
             />,
             statusPortalTarget,
@@ -540,7 +548,8 @@ export function NaiGenerationPanel({
               connected={connected}
               tierName={naiUserQuery.data?.subscription.tierName}
               anlasBalance={naiUserQuery.data?.anlasBalance}
-              opusRemainingPercent={naiUserQuery.data?.opusRemainingPercent}
+              opusRemainingPercent={opusRemaining}
+              opusExtraPercent={opusExtra}
               onOpenAuth={handleOpenNaiAuthModal}
             />
           )}

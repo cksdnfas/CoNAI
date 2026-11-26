@@ -71,6 +71,7 @@ router.get('/data', requirePermission('generation.execute'), async (req: Request
 
       let anlasBalance = 0;
       let opusRemainingPercent: number | null = null;
+      let opusExtraPercent: number | null = null;
       if (anlasResponse.ok) {
         const subscriptionData: any = await anlasResponse.json();
         // Anlas 잔액 = 구독 지급분(fixedTrainingStepsLeft) + 구매분(purchasedTrainingSteps).
@@ -81,6 +82,9 @@ router.get('/data', requirePermission('generation.execute'), async (req: Request
         const usage = subscriptionData.usage;
         if (typeof usage?.percent === 'number' && Number.isFinite(usage.percent)) {
           opusRemainingPercent = usage.isNegative === true ? 0 : Math.max(0, usage.percent);
+        }
+        if (typeof usage?.purchasedPercent === 'number' && Number.isFinite(usage.purchasedPercent)) {
+          opusExtraPercent = Math.max(0, usage.purchasedPercent);
         }
       }
 
@@ -97,6 +101,7 @@ router.get('/data', requirePermission('generation.execute'), async (req: Request
         },
         anlasBalance,
         opusRemainingPercent,
+        opusExtraPercent,
       });
 
     } catch (error) {
@@ -124,6 +129,7 @@ function createDisconnectedUserData(reason: 'missing_token' | 'invalid_token') {
     },
     anlasBalance: 0,
     opusRemainingPercent: null,
+    opusExtraPercent: null,
   };
 }
 

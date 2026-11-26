@@ -31,6 +31,23 @@ export const NAI_NOISE_SCHEDULE_IDS = ['karras', 'native', 'exponential', 'polye
 
 export const NAI_ACTION_IDS = ['generate', 'img2img', 'infill'] as const
 
+export const NAI_CHARACTER_REFERENCE_TYPES = ['character', 'style', 'character&style', 'outfit'] as const
+export type NaiCharacterReferenceType = typeof NAI_CHARACTER_REFERENCE_TYPES[number]
+export const NAI_CHARACTER_REFERENCE_ANLAS = 5
+
+export interface NaiCharacterReference {
+  image: string
+  type?: NaiCharacterReferenceType
+  strength?: number
+  fidelity?: number
+  prefer_same_outfit?: boolean
+}
+
+export function supportsNaiCharacterReferences(model: string | null | undefined, action?: string): boolean {
+  return (model ?? '').includes('nai-diffusion-4-5')
+    || (isNaiV5Model(model) && action !== 'infill' && !model?.endsWith('-inpainting'))
+}
+
 /** Inpainting strength the web UI starts from: the masked area is redrawn fully (img2img keeps its own lower default). */
 export const NAI_INFILL_DEFAULT_STRENGTH = 1
 

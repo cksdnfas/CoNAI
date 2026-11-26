@@ -59,7 +59,7 @@ export async function buildChatGenerationPresetJob(preset: ChatGenerationPreset,
       if (fs.statSync(file.path).size > CHAT_NAI_REFERENCE_MAX_BYTES) throw new Error('NAI 기준 이미지는 4MB까지 쓸 수 있어.');
       const buffer = await fs.promises.readFile(file.path);
       if (buffer.length > CHAT_NAI_REFERENCE_MAX_BYTES) throw new Error('NAI 기준 이미지는 4MB까지 쓸 수 있어.');
-      const item = { image: `data:${file.mimeType};base64,${buffer.toString('base64')}`, type: 'character', strength: 0.6, fidelity: 1 };
+      const item = { image: `data:${file.mimeType};base64,${buffer.toString('base64')}`, type: 'character' as const, strength: 0.6, fidelity: 1 };
       characterRefs = referenceMode === 'append' ? [...characterRefs, item] : [item];
     }
     // Characters the chat model wrote replace the preset's fixed ones; positions count only when it gave some.

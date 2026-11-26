@@ -1,4 +1,4 @@
-import type { GenerationQueueJobStatus, GenerationQueueLiveProgress, GenerationQueueProviderSubmitState, ServiceType, WorkflowNodeNumericBounds } from '@conai/shared'
+import type { GenerationQueueJobStatus, GenerationQueueLiveProgress, GenerationQueueProviderSubmitState, NaiCharacterReference, NaiCharacterReferenceType, ServiceType, WorkflowNodeNumericBounds } from '@conai/shared'
 
 export type GenerationServiceType = ServiceType
 export type { GenerationQueueJobStatus, GenerationQueueLiveProgress, GenerationQueueProgressPhase, GenerationQueueProviderSubmitState } from '@conai/shared'
@@ -301,6 +301,7 @@ export interface NAIUserData {
   }
   anlasBalance: number
   opusRemainingPercent: number | null
+  opusExtraPercent?: number | null
 }
 
 export interface NAICostEstimate {
@@ -353,12 +354,7 @@ export interface NAIImageGenerationPayload {
     strength?: number
     information_extracted?: number
   }>
-  character_refs?: Array<{
-    image: string
-    type?: 'character' | 'style' | 'character&style'
-    strength?: number
-    fidelity?: number
-  }>
+  character_refs?: NaiCharacterReference[]
 }
 
 export interface NAIImageGenerationResponse {
@@ -419,9 +415,10 @@ export interface StoredNaiCharacterReferenceAsset {
   image_data_url?: string
   image_url?: string
   thumbnail_url?: string
-  type: 'character' | 'style' | 'character&style'
+  type: NaiCharacterReferenceType
   strength: number
   fidelity: number
+  prefer_same_outfit?: boolean
   created_date: string
   has_letterbox: boolean
 }

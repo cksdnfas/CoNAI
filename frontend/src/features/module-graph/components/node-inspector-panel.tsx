@@ -262,7 +262,7 @@ export function NodeInspectorPanel({
     }
 
     if (isNaiCharacterReferencePort(port.key, port.data_type)) {
-      return renderPortCard(<NaiReusableAssetInput kind="character_refs" value={rawValue} onChange={changePortValue} />)
+      return renderPortCard(<NaiReusableAssetInput kind="character_refs" value={rawValue} onChange={changePortValue} model={naiModel} />)
     }
 
     const powerLoraLoaderValue = rawValue ?? port.default_value ?? uiField?.default_value

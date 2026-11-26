@@ -33,6 +33,7 @@ import {
   supportsNaiTransparentBackground,
   supportsNaiVibes,
   type NAIFormDraft,
+  type NaiCharacterReferencePatch,
   type NaiImageSize,
   type SelectedImageDraft,
 } from '../image-generation-shared'
@@ -136,7 +137,7 @@ export function NaiGenerationEditorSections({
   handleCharacterPromptChange: (index: number, field: 'prompt' | 'uc' | 'centerX' | 'centerY', value: string) => void
   handleRemoveCharacterPrompt: (index: number) => void
   handleAddCharacterReference: (image: SelectedImageDraft) => void
-  handleCharacterReferenceFieldChange: (index: number, field: 'type' | 'strength' | 'fidelity', value: string) => void
+  handleCharacterReferenceFieldChange: (index: number, patch: NaiCharacterReferencePatch) => void
   handleCharacterReferenceImageChange: (index: number, image?: SelectedImageDraft) => void
   /** A loaded character setting's reference: into the chosen reference row, or a new row. */
   handleLoadCharacterReference: (placement: NaiCharacterReferencePlacement) => void
@@ -434,7 +435,9 @@ export function NaiGenerationEditorSections({
 
   const references = (
     <NaiCharacterReferencesEditor
+      defaultOpen={supportsCharacterReference}
       supportsCharacterReference={supportsCharacterReference}
+      model={naiForm.model}
       references={naiForm.characterReferences}
       onAddImage={handleAddCharacterReference}
       onRemove={handleRemoveCharacterReference}

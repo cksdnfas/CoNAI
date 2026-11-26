@@ -1,6 +1,6 @@
 import { allowAnonymousAnyPermission } from '../../middleware/authMiddleware';
 import { Router, Request, Response } from 'express';
-import { resolveNaiRequestModel } from '@conai/shared';
+import { NAI_CHARACTER_REFERENCE_ANLAS, resolveNaiRequestModel, supportsNaiCharacterReferences } from '@conai/shared';
 import { calculateAnlasCost, getMaxSamples, isOpusFreeGeneration } from '../../utils/nai/anlasCost';
 
 const router = Router();
@@ -10,6 +10,7 @@ interface CostCalculationRequest {
   height: number;
   steps: number;
   n_samples: number;
+  referenceCount?: number;
   subscriptionTier: number;
   anlasBalance?: number;
   /** img2img strength (0-1]; omitted for text-to-image. */
@@ -33,6 +34,7 @@ router.post('/calculate', allowAnonymousAnyPermission(['workflows.view', 'genera
       height,
       steps,
       n_samples,
+      referenceCount = 0,
       subscriptionTier,
       anlasBalance = 0,
       strength: rawStrength,
@@ -69,25 +71,30 @@ router.post('/calculate', allowAnonymousAnyPermission(['workflows.view', 'genera
       : undefined;
 
     // 비용 계산 (SMEA 비활성화)
+    const referenceCostPerSample = Number.isSafeInteger(referenceCount) && referenceCount > 0
+      && supportsNaiCharacterReferences(typeof rawModel === 'string' ? rawModel : undefined, action)
+      ? referenceCount * NAI_CHARACTER_REFERENCE_ANLAS : 0;
+    // Opus can cover the first image's base cost. Every image still incurs the reference surcharge.
+    const firstSampleFree = isOpusFreeGeneration({ width, height, steps, n_samples: 1, model }, subscriptionTier, opusRemainingPercent);
     const estimatedCost = calculateAnlasCost({
       width,
       height,
       steps,
-      n_samples,
+      n_samples: referenceCostPerSample && firstSampleFree ? n_samples - 1 : n_samples,
       strength,
       model,
-    });
+    }) + referenceCostPerSample * n_samples;
 
     // 최대 샘플 수 계산
     const maxSamples = getMaxSamples(
-      { width, height, steps, strength, model },
+      { width, height, steps, strength, model, referenceCostPerSample },
       anlasBalance,
       subscriptionTier,
       opusRemainingPercent
     );
 
     // Opus 무료는 크기/스텝/장수 조건을 모두 만족하고, V5 는 사용량이 남아 있을 때만이다.
-    const isOpusFree = isOpusFreeGeneration({ width, height, steps, n_samples, model }, subscriptionTier, opusRemainingPercent);
+    const isOpusFree = firstSampleFree && n_samples === 1 && referenceCostPerSample === 0;
 
     // 잔액이 충분한지 확인
     const canAfford = isOpusFree || anlasBalance >= estimatedCost;

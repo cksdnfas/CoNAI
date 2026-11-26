@@ -343,6 +343,7 @@ export function useNaiAssetLibrary({
           type: asset.type,
           strength: String(asset.strength),
           fidelity: String(asset.fidelity),
+          preferSameOutfit: asset.prefer_same_outfit,
         }],
       }))
       showSnackbar({ message: t('image-generation.components.use.nai.asset.library.asset.loaded', { label: asset.label }), tone: 'info' })
@@ -447,6 +448,7 @@ export function useNaiAssetLibrary({
           type: reference.type,
           strength: parseNumberInput(reference.strength, 0.6),
           fidelity: parseNumberInput(reference.fidelity, 1),
+          prefer_same_outfit: reference.preferSameOutfit,
         })
         await savedCharacterReferencesQuery.refetch()
         showSnackbar({

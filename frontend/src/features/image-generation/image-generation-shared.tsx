@@ -4,6 +4,7 @@ import {
   getNaiUcPresetIds,
   NAI_ENHANCE_AMOUNTS,
   planNaiEnhance,
+  type NaiCharacterReferenceType,
   type NaiEnhanceAmount,
   type NaiEnhancePlan,
   type NaiEnhanceUnavailableReason,
@@ -77,10 +78,13 @@ export type NAIVibeDraft = {
 
 export type NAICharacterReferenceDraft = {
   image?: SelectedImageDraft
-  type: 'character' | 'style' | 'character&style'
+  type: NaiCharacterReferenceType
   strength: string
   fidelity: string
+  preferSameOutfit?: boolean
 }
+
+export type NaiCharacterReferencePatch = Partial<Omit<NAICharacterReferenceDraft, 'image'>>
 
 export type NAIResolutionPreset = {
   key: string
@@ -325,16 +329,11 @@ export function shouldUseNaiCharacterPositions(form: Pick<NAIFormDraft, 'charact
   return canUseNaiCharacterPositions(form.characters.length) && !form.characterPositionAiChoice
 }
 
-export { supportsNaiCharacterPrompts } from '@conai/shared'
+export { supportsNaiCharacterPrompts, supportsNaiCharacterReferences } from '@conai/shared'
 
 /** Check whether the selected NAI model can generate an alpha channel from prompt tags. */
 export function supportsNaiTransparentBackground(model: string) {
   return model.includes('nai-diffusion-5')
-}
-
-/** Check whether the selected NAI model supports 4.5-only character references. */
-export function supportsNaiCharacterReferences(model: string) {
-  return model.includes('nai-diffusion-4-5')
 }
 
 /** Check whether the selected NAI model supports Vibe Transfer; NovelAI has not released it for V5. */
@@ -464,6 +463,7 @@ export function buildNaiCharacterReferencePayload(characterReferences: NAICharac
       type: reference.type,
       strength: parseNumberInput(reference.strength, 0.6),
       fidelity: parseNumberInput(reference.fidelity, 1),
+      prefer_same_outfit: reference.preferSameOutfit,
     }))
     .filter((reference) => reference.image.length > 0)
 }

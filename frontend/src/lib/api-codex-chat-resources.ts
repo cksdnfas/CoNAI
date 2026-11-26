@@ -4,7 +4,7 @@
 import { requestApiData } from '@/lib/api-request'
 import { buildApiUrl } from '@/lib/api-url'
 import { getDownloadFileName, prepareDownloadTarget, readDownloadBlob, saveDownloadBlob } from '@/lib/download-utils'
-import type { ChatSkillSectionChange, ChatSkillSectionFields } from '@conai/shared'
+import type { ChatSkillSectionChange, ChatSkillSectionFields, NaiCharacterReference } from '@conai/shared'
 import { JSON_HEADERS, requestRevisionChecked } from './api-codex-chat-core'
 import type { ChatScope } from './api-codex-chat-core'
 
@@ -114,7 +114,7 @@ export interface ChatNaiPresetConfig {
   characters: Array<{ prompt: string; uc: string; center_x: number; center_y: number }>
   useCoords: boolean
   vibes: Array<{ encoded: string; strength: number; information_extracted: number }>
-  characterRefs: Array<{ image: string; type: string; strength: number; fidelity: number }>
+  characterRefs: NaiCharacterReference[]
   characterReference?: 'none' | 'replace' | 'append'
 }
 

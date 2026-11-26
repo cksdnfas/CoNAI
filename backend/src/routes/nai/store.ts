@@ -1,5 +1,6 @@
 import { requirePermission } from '../../middleware/authMiddleware';
 import { Router, type Request, type Response } from 'express';
+import { NAI_CHARACTER_REFERENCE_TYPES, type NaiCharacterReference } from '@conai/shared';
 import {
   deleteNaiCharacterReferenceAsset,
   deleteNaiVibeAsset,
@@ -101,17 +102,21 @@ router.get('/character-references', requirePermission('workflows.view'), require
   res.json({ items: await listNaiCharacterReferenceAssets() });
 });
 
-router.post('/character-references', requirePermission('workflows.edit'), requirePermission('images.view'), async (req: Request<{}, {}, {
+router.post('/character-references', requirePermission('workflows.edit'), requirePermission('images.view'), async (req: Request<{}, {}, Partial<NaiCharacterReference> & {
   label?: string;
   description?: string;
-  image?: string;
-  type?: 'character' | 'style' | 'character&style';
-  strength?: number;
-  fidelity?: number;
 }>, res: Response) => {
-  const image = req.body.image?.trim();
+  const image = typeof req.body.image === 'string' ? req.body.image.trim() : '';
   if (!image) {
     res.status(400).json({ error: 'image is required' });
+    return;
+  }
+  const { type, strength, fidelity, prefer_same_outfit } = req.body;
+  if ((type !== undefined && !NAI_CHARACTER_REFERENCE_TYPES.includes(type))
+    || (strength !== undefined && (!Number.isFinite(strength) || strength < 0 || strength > 5))
+    || (fidelity !== undefined && (!Number.isFinite(fidelity) || fidelity < 0 || fidelity > 1))
+    || (prefer_same_outfit !== undefined && typeof prefer_same_outfit !== 'boolean')) {
+    res.status(400).json({ error: 'Invalid Precise Reference settings' });
     return;
   }
 
@@ -119,9 +124,10 @@ router.post('/character-references', requirePermission('workflows.edit'), requir
     label: req.body.label,
     description: req.body.description,
     image,
-    type: req.body.type,
-    strength: req.body.strength,
-    fidelity: req.body.fidelity,
+    type,
+    strength,
+    fidelity,
+    prefer_same_outfit,
   });
 
   res.status(201).json(item);

@@ -1,7 +1,8 @@
 import sharp from 'sharp'
-import { isNaiV5Model, NAI_INFILL_DEFAULT_STRENGTH, resolveNaiRequestModel } from '@conai/shared'
+import { isNaiV5Model, NAI_INFILL_DEFAULT_STRENGTH, resolveNaiRequestModel, supportsNaiCharacterReferences, type NaiCharacterReference } from '@conai/shared'
 import { normalizeBase64ImageData } from '../base64ImageData'
-import { type NAICharacterReference, type NAICharacterPrompt, type NAIMetadataParams } from './metadata'
+import { type NAICharacterPrompt, type NAIMetadataParams } from './metadata'
+import { NaiRequestValidationError } from './requestValidation'
 import { normalizeNaiWeightSyntax } from './weightSyntax'
 
 export { normalizeBase64ImageData }
@@ -22,10 +23,29 @@ function getCharacterReferenceCanvas(width: number, height: number) {
     : { width: 1024, height: 1536 }
 }
 
-/** Letterbox one reference image into the NAI-friendly director-reference canvas. */
-async function buildCharacterReferenceImage(image: string) {
+/** V5 center-crops to the nearest aspect bucket. The long edge advances in steps of 64 from 1024 to 4096. */
+function getV5ReferenceCanvas(width: number, height: number) {
+  const aspect = Math.log(Math.max(width, height) / Math.min(width, height))
+  let best = { short: 1024, long: 1024 }
+  let distance = aspect
+  for (let long = 1088; long <= 4096; long += 64) {
+    const short = Math.floor(1024 * 1024 / long / 64) * 64
+    const nextDistance = Math.abs(aspect - Math.log(long / short))
+    if (nextDistance < distance) {
+      best = { short, long }
+      distance = nextDistance
+    }
+  }
+  return width >= height ? { width: best.long, height: best.short } : { width: best.short, height: best.long }
+}
+
+async function buildCharacterReferenceImage(image: string, v5: boolean) {
   const input = decodeBase64Image(image)
   const metadata = await sharp(input).metadata()
+  if (v5) {
+    const { width, height } = getV5ReferenceCanvas(metadata.width ?? 1024, metadata.height ?? 1024)
+    return sharp(input).resize(width, height, { fit: 'cover' }).png().toBuffer()
+  }
   const canvas = getCharacterReferenceCanvas(metadata.width ?? 1024, metadata.height ?? 1024)
 
   return sharp(input)
@@ -35,6 +55,16 @@ async function buildCharacterReferenceImage(image: string) {
     })
     .png()
     .toBuffer()
+}
+
+/** NovelAI uses distinct captions for the V5 outfit variants of character references. */
+function getCharacterReferenceCaption(reference: NaiCharacterReference, v5: boolean) {
+  const type = reference.type ?? 'character&style'
+  if (!v5) return type
+  if (type === 'outfit') return 'costume'
+  if (type === 'character') return reference.prefer_same_outfit ? 'character_mainoutfit' : type
+  if (type === 'character&style' && !reference.prefer_same_outfit) return 'character&style_anyoutfit'
+  return type
 }
 
 /** Convert typed character prompts into the v4 caption payload shape. */
@@ -186,20 +216,23 @@ export async function buildNaiRequestBody(metadata: NAIMetadataParams) {
   }
 
   if (metadata.character_refs && metadata.character_refs.length > 0) {
-    if (!metadata.model?.includes('nai-diffusion-4-5')) {
-      throw new Error('Character reference is only supported on NAI Diffusion 4.5 models')
+    if (!supportsNaiCharacterReferences(metadata.model, metadata.action)) {
+      throw new NaiRequestValidationError(['Precise Reference requires NAI Diffusion V4.5 or a V5 generation without inpainting'])
+    }
+    if (metadata.character_refs.some((entry) => (!isV5Family && entry.type === 'outfit') || (entry.strength !== undefined && (entry.strength < 0 || entry.strength > (isV5Family ? 5 : 1))))) {
+      throw new NaiRequestValidationError(['Check the Precise Reference type and strength for the selected model'])
     }
 
     const directorImages = await Promise.all(
-      metadata.character_refs.map((entry: NAICharacterReference) => buildCharacterReferenceImage(entry.image)),
+      metadata.character_refs.map((entry) => buildCharacterReferenceImage(entry.image, isV5Family)),
     )
 
     baseParams.director_reference_images = directorImages.map((entry) => entry.toString('base64'))
     baseParams.director_reference_strength_values = metadata.character_refs.map((entry) => entry.strength ?? 0.6)
-    baseParams.director_reference_secondary_strength_values = metadata.character_refs.map((entry) => 1 - (entry.fidelity ?? 1))
+    baseParams.director_reference_secondary_strength_values = metadata.character_refs.map((entry) => isV5Family ? 0 : 1 - (entry.fidelity ?? 1))
     baseParams.director_reference_descriptions = metadata.character_refs.map((entry) => ({
       caption: {
-        base_caption: entry.type || 'character&style',
+        base_caption: getCharacterReferenceCaption(entry, isV5Family),
         char_captions: [],
       },
       legacy_uc: false,

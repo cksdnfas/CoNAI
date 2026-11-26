@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useSerializedDrafts } from './use-serialized-drafts'
 import { useQuery } from '@tanstack/react-query'
+import { NAI_CHARACTER_REFERENCE_TYPES, supportsNaiCharacterReferences } from '@conai/shared'
 import { NaiCharacterReferencesEditor } from '@/features/image-generation/components/nai-assets/nai-character-references-editor'
 import { sortNaiSavedAssets, useNaiSavedAssetPreferences } from '@/features/image-generation/components/nai-assets/nai-saved-asset-preferences'
 import { NaiVibesEditor } from '@/features/image-generation/components/nai-assets/nai-vibes-editor'
@@ -41,11 +42,8 @@ type NaiVibeDraft = {
   informationExtracted: string
 }
 
-type NaiCharacterReferenceDraft = {
+type NaiCharacterReferenceDraft = Omit<NAICharacterReferenceDraft, 'image'> & {
   image?: string
-  type: 'character' | 'style' | 'character&style'
-  strength: string
-  fidelity: string
 }
 
 /** Detect whether one JSON input should render the reusable vibe picker/editor. */
@@ -134,10 +132,8 @@ function parseNaiCharacterReferenceDrafts(value: unknown): NaiCharacterReference
     const rawEntry = entry as Record<string, unknown>
     return {
       image: typeof rawEntry.image === 'string' ? rawEntry.image : undefined,
-      type:
-        rawEntry.type === 'character' || rawEntry.type === 'style' || rawEntry.type === 'character&style'
-          ? rawEntry.type
-          : 'character&style',
+      type: NAI_CHARACTER_REFERENCE_TYPES.find((type) => type === rawEntry.type) ?? 'character&style',
+      preferSameOutfit: rawEntry.prefer_same_outfit === true,
       strength: typeof rawEntry.strength === 'number' ? String(rawEntry.strength) : typeof rawEntry.strength === 'string' ? rawEntry.strength : '0.6',
       fidelity: typeof rawEntry.fidelity === 'number' ? String(rawEntry.fidelity) : typeof rawEntry.fidelity === 'string' ? rawEntry.fidelity : '1',
     }
@@ -166,6 +162,7 @@ function buildNaiCharacterReferenceValue(drafts: NaiCharacterReferenceDraft[]) {
       type: draft.type,
       strength: Number(draft.strength),
       fidelity: Number(draft.fidelity),
+      prefer_same_outfit: draft.preferSameOutfit,
     }))
     .filter((draft) => typeof draft.image === 'string' && draft.image.length > 0)
 
@@ -185,7 +182,7 @@ function replaceAt<T>(items: T[], index: number, patch: Partial<T>) {
 export function NaiReusableAssetInput({ kind, value, onChange, model }: NaiReusableAssetInputProps) {
   return kind === 'vibes'
     ? <NaiVibeNodeInput value={value} onChange={onChange} model={model} />
-    : <NaiCharacterReferenceNodeInput value={value} onChange={onChange} />
+    : <NaiCharacterReferenceNodeInput value={value} onChange={onChange} model={model} />
 }
 
 function NaiVibeNodeInput({ value, onChange, model }: Omit<NaiReusableAssetInputProps, 'kind'>) {
@@ -273,7 +270,7 @@ function NaiVibeNodeInput({ value, onChange, model }: Omit<NaiReusableAssetInput
   )
 }
 
-function NaiCharacterReferenceNodeInput({ value, onChange }: Omit<NaiReusableAssetInputProps, 'kind'>) {
+function NaiCharacterReferenceNodeInput({ value, onChange, model }: Omit<NaiReusableAssetInputProps, 'kind'>) {
   const { t, locale } = useI18n()
   const [search, setSearch] = useState('')
   const preferences = useNaiSavedAssetPreferences('conai.nai.character_refs')
@@ -314,6 +311,7 @@ function NaiCharacterReferenceNodeInput({ value, onChange }: Omit<NaiReusableAss
         type: asset.type,
         strength: String(asset.strength),
         fidelity: String(asset.fidelity),
+        preferSameOutfit: asset.prefer_same_outfit,
       },
     ])
     preferences.markRecent(asset.id)
@@ -322,15 +320,13 @@ function NaiCharacterReferenceNodeInput({ value, onChange }: Omit<NaiReusableAss
   return (
     <NaiCharacterReferencesEditor
       references={formDrafts}
+      model={model}
+      supportsCharacterReference={!model || supportsNaiCharacterReferences(model)}
       defaultOpen
       onAddImage={(image) => updateCharacterReferences([...drafts, { image: image.dataUrl, type: 'character&style', strength: '0.6', fidelity: '1' }])}
       onRemove={(index) => updateCharacterReferences(drafts.filter((_, draftIndex) => draftIndex !== index))}
       onImageChange={(index, image) => updateCharacterReferences(replaceAt(drafts, index, { image: image?.dataUrl }))}
-      onFieldChange={(index, field, nextValue) => updateCharacterReferences(replaceAt(drafts, index, (
-        field === 'type'
-          ? { type: nextValue as NaiCharacterReferenceDraft['type'] }
-          : { [field]: nextValue }
-      )))}
+      onFieldChange={(index, patch) => updateCharacterReferences(replaceAt(drafts, index, patch))}
       library={{
         assets: filteredSavedCharacterReferences,
         searchValue: search,

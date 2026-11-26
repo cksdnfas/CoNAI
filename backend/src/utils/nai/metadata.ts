@@ -4,9 +4,11 @@
 import {
   appendNaiQualityTags,
   getNaiFixedModelSettings,
+  NAI_CHARACTER_REFERENCE_TYPES,
   NAI_ENHANCE_DEFAULT_STRENGTH,
   NAI_INFILL_DEFAULT_STRENGTH,
   prependNaiUcPreset,
+  type NaiCharacterReference,
   type NaiEnhanceAmount,
   type NaiUcPresetId,
 } from '@conai/shared'
@@ -25,13 +27,6 @@ export interface NAIVibeTransfer {
   encoded: string
   strength?: number
   information_extracted?: number
-}
-
-export interface NAICharacterReference {
-  image: string
-  type?: 'character' | 'style' | 'character&style'
-  strength?: number
-  fidelity?: number
 }
 
 export interface NAIMetadataParams {
@@ -74,14 +69,14 @@ export interface NAIMetadataParams {
   director_reference_descriptions?: Array<Record<string, unknown>>
   characters?: NAICharacterPrompt[]
   vibes?: NAIVibeTransfer[]
-  character_refs?: NAICharacterReference[]
+  character_refs?: NaiCharacterReference[]
   groupId?: number
 }
 
 export interface NAIMetadataInputParams extends Omit<NAIMetadataParams, 'characters' | 'vibes' | 'character_refs' | 'upscaled_enhance'> {
   characters?: NAICharacterPrompt[] | string
   vibes?: NAIVibeTransfer[] | string
-  character_refs?: NAICharacterReference[] | string
+  character_refs?: NaiCharacterReference[] | string
 }
 
 const CHARACTER_GRID_VALUES = [0.1, 0.3, 0.5, 0.7, 0.9] as const
@@ -190,8 +185,8 @@ function normalizeVibes(value: NAIMetadataInputParams['vibes']): NAIVibeTransfer
 }
 
 /** Normalize character-reference entries into a typed payload. */
-function normalizeCharacterReferences(value: NAIMetadataInputParams['character_refs']): NAICharacterReference[] {
-  const normalized: NAICharacterReference[] = []
+function normalizeCharacterReferences(value: NAIMetadataInputParams['character_refs']): NaiCharacterReference[] {
+  const normalized: NaiCharacterReference[] = []
 
   for (const entry of normalizeListInput(value)) {
     if (!entry || typeof entry !== 'object') {
@@ -206,15 +201,15 @@ function normalizeCharacterReferences(value: NAIMetadataInputParams['character_r
 
     const strength = typeof rawEntry.strength === 'number' ? rawEntry.strength : Number(rawEntry.strength ?? 0.6)
     const fidelity = typeof rawEntry.fidelity === 'number' ? rawEntry.fidelity : Number(rawEntry.fidelity ?? 1)
-    const type = rawEntry.type === 'character' || rawEntry.type === 'style' || rawEntry.type === 'character&style'
-      ? rawEntry.type
-      : 'character&style'
+    const type = NAI_CHARACTER_REFERENCE_TYPES.find((candidate) => candidate === rawEntry.type)
+      ?? 'character&style'
 
     normalized.push({
       image,
       type,
       strength: Number.isFinite(strength) ? strength : 0.6,
       fidelity: Number.isFinite(fidelity) ? fidelity : 1,
+      prefer_same_outfit: rawEntry.prefer_same_outfit === true,
     })
   }
 

@@ -300,11 +300,14 @@ Codex 프로젝트 홈과 Claude·Pi 프로젝트 세션은 기존 일반 채팅
 | 라이브러리·목록 | [MediaMetadataModel.ts](backend/src/models/Image/MediaMetadataModel.ts), [ImageSearchModel.ts](backend/src/models/Image/ImageSearchModel.ts), [image-list](frontend/src/features/images/components/image-list/image-list.tsx) | [라이브러리](docs/GUIDE/MEDIA_LIBRARY_BASICS.md) |
 | 감시 폴더 | [fileWatcherService.ts](backend/src/services/fileWatcherService.ts) | [감시 폴더](docs/GUIDE/WATCHED_FOLDERS.md) |
 | 생성 큐 | [generationQueueService.ts](backend/src/services/generationQueueService.ts), [queueJobExecutors.ts](backend/src/services/generation-queue/queueJobExecutors.ts) | [생성](docs/GUIDE/GENERATION_OVERVIEW.md) |
+| NAI 생성 | [naiGenerationExecutor.ts](backend/src/services/naiGenerationExecutor.ts), [requestBuilder.ts](backend/src/utils/nai/requestBuilder.ts) | [NAI 생성](docs/GUIDE/NAI_GENERATION.md) |
 | 생성물 저장 | [APIImageProcessor.ts](backend/src/services/APIImageProcessor.ts), [fileSaver.ts](backend/src/utils/fileSaver.ts) | [업로드](docs/GUIDE/UPLOAD_AND_METADATA_EXTRACT.md), [메타데이터 수정](docs/GUIDE/EDIT_IMAGE_METADATA.md) |
 | Codex 이미지 생성 | [codexGenerationExecutor.ts](backend/src/services/codexGenerationExecutor.ts) | [Codex 생성](docs/GUIDE/CODEX_GENERATION.md) |
 | 노드 워크플로 | [graphWorkflowExecutor.ts](backend/src/services/graphWorkflowExecutor.ts), `frontend/src/features/module-graph/` | [워크플로 편집](docs/GUIDE/WORKFLOW_EDITOR.md) |
 | 파일 보관함 | [fileStoreService.ts](backend/src/services/fileStoreService.ts), `frontend/src/features/files/` | [파일](docs/GUIDE/FILES.md) |
 | AI 워커 | `backend/python/`, [설명](backend/python/README.md) | [설정](docs/GUIDE/SETTINGS_OVERVIEW.md) |
+
+NAI 화면·그래프·채팅 프리셋·MCP는 `character_refs`를 같은 실행기로 보낸다. V5는 화면의 의상 참조 값 `outfit`과 `prefer_same_outfit`을 NovelAI 참조 캡션으로 매핑하고, 참조를 종횡비에 맞춰 자른 PNG를 multipart 요청에 싣는다. V5 인페인트의 참조는 NovelAI에 전송하기 전에 거부된다. V4.5는 기존 캔버스·충실도 설정과 JSON 요청을 쓴다. `/api/nai/cost/calculate`는 결과 이미지마다 참조 요금을 더하며 `/api/nai/user/data`의 기본·추가 Opus 사용량을 화면에서 합산해 비용 추정에 사용한다.
 
 와일드카드 탐색과 인라인 추천은 `/api/wildcards?hierarchical=true&withItems=false`의 메타데이터·도구별 `item_counts` 트리를 공유한다. 선택 상세·편집은 `GET /api/wildcards/:id`에서 자신의 항목과 완전한 레코드의 편집 리비전을 읽는다. 미리보기의 `GET /api/wildcards/:id/items?tool=general|nai|comfyui|codex&limit=10`는 `WildcardService`의 요청별 선택 조회를 재사용해 `include_children`·`only_children`과 노드별 도구 fallback이 적용된 항목을 `limit`개까지 반환한다(기본 50, 최대 200). 두 조회 모두 기존 `wildcards.view` 권한을 유지하며, 생성·파싱과 MCP 조회 계약은 바뀌지 않는다.
 

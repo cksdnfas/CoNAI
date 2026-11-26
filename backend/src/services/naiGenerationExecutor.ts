@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { createHmac, randomBytes } from 'node:crypto'
 import sharp from 'sharp'
 import { isNaiEnhanceAmount, isNaiV5Model, planNaiEnhance } from '@conai/shared'
 // @ts-ignore - no types available
@@ -149,7 +150,7 @@ const NAI_MULTIPART_IMAGE_FIELDS = ['image', 'mask'] as const
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
 
 /**
- * V5 models only accept multipart/form-data: the JSON body goes in a `request` part, and image/mask bytes go in
+ * V5 models only accept multipart/form-data: the JSON body goes in a `request` part, and image bytes go in
  * their own PNG parts that the JSON references by part name (base64 in the JSON is rejected with HTTP 400).
  * Earlier models keep the plain JSON body.
  */
@@ -168,6 +169,22 @@ async function buildNaiHttpBody(requestBody: Awaited<ReturnType<typeof buildNaiR
     const png = bytes.subarray(0, PNG_SIGNATURE.length).equals(PNG_SIGNATURE) ? bytes : await sharp(bytes).png().toBuffer()
     imageParts.push({ field, bytes: png })
     parameters[field] = field
+  }
+
+  const referenceImages = parameters.director_reference_images
+  if (Array.isArray(referenceImages) && referenceImages.length > 0) {
+    // The multipart API takes cache entries even when sending each reference's bytes with the request.
+    const requestKey = randomBytes(32)
+    const added = new Set<string>()
+    parameters.director_reference_images_cached = referenceImages.map((image: string, index: number) => {
+      const cache_secret_key = createHmac('sha256', requestKey).update(image).digest('hex')
+      if (added.has(cache_secret_key)) return { cache_secret_key }
+      added.add(cache_secret_key)
+      const field = `director_ref_${index}`
+      imageParts.push({ field, bytes: Buffer.from(image, 'base64') })
+      return { cache_secret_key, data: field }
+    })
+    delete parameters.director_reference_images
   }
 
   const form = new FormData()
