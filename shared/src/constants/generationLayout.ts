@@ -21,12 +21,15 @@ export const GENERATION_LAYOUT_SURFACE_DEFINITIONS = {
       { weight: 60, blocks: ['result', 'recent'] },
     ],
   },
-  /** A selected ComfyUI workflow. Public workflow pages render no `filename` (visitors never name server files). */
+  /**
+   * A selected ComfyUI workflow: the file name line sits under the workflow header (back + name). Public workflow
+   * pages render no `filename` (visitors never name server files).
+   */
   comfy: {
-    blocks: ['filename', 'workflow', 'fields', 'action', 'result', 'recent'],
+    blocks: ['workflow', 'filename', 'fields', 'action', 'result', 'recent'],
     required: ['workflow', 'fields', 'action', 'result'],
     columns: [
-      { weight: 40, blocks: ['filename', 'workflow', 'fields', 'action'] },
+      { weight: 40, blocks: ['workflow', 'filename', 'fields', 'action'] },
       { weight: 60, blocks: ['result', 'recent'] },
     ],
   },
@@ -191,7 +194,11 @@ export function normalizeGenerationLayoutColumns(surface: GenerationLayoutSurfac
   const leading = missing.filter((block) => LEADING_LAYOUT_BLOCKS.has(block));
   const trailing = missing.filter((block) => !LEADING_LAYOUT_BLOCKS.has(block));
   if (trailing.length) columns[0].blocks.push(...trailing);
-  if (leading.length) (columns.find((column) => column.blocks.includes('action')) ?? columns[0]).blocks.unshift(...leading);
+  if (leading.length) {
+    // Under a page header (a ComfyUI workflow's back + name) when the column has one, else on top.
+    const column = columns.find((item) => item.blocks.includes('action')) ?? columns[0];
+    column.blocks.splice(column.blocks.indexOf('workflow') + 1, 0, ...leading);
+  }
 
   if (known.includes('recent')) {
     const resultColumn = columns.find((column) => column.blocks.includes('result'))!;

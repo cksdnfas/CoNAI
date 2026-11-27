@@ -109,7 +109,7 @@ test('generation layout presets are readable by every account and editable only 
     const after = (await call('/api/generation-layouts', guestId)).body.data
     assert.equal(after.nai.revision, saved.body.data.revision)
     for (const surface of GENERATION_LAYOUT_SURFACES.filter((item) => item !== 'nai')) assert.equal(after[surface].revision, before[surface].revision, surface)
-    assert.equal(JSON.parse(fs.readFileSync(layoutsFile, 'utf8')).version, 2)
+    assert.equal(JSON.parse(fs.readFileSync(layoutsFile, 'utf8')).version, 3)
   })
 
   await t.test('a save from a stale revision conflicts and keeps the newer list', async () => {
@@ -128,5 +128,16 @@ test('generation layout presets are readable by every account and editable only 
     const data = (await call('/api/generation-layouts', adminId)).body.data
     assert.deepEqual(data.nai.presets.map((preset: { id: string }) => preset.id), ['legacy-only'])
     assert.ok(data.comfy.presets.length > 0)
+  })
+
+  await t.test('a version 2 file moves the ComfyUI file name under the workflow header once', async () => {
+    const old = { id: 'old', name: 'old', columns: [{ weight: 40, blocks: ['filename', 'workflow', 'fields', 'action'] }, { weight: 60, blocks: ['result', 'recent'] }], hidden: [] }
+    fs.writeFileSync(layoutsFile, JSON.stringify({ version: 2, surfaces: { comfy: [old] } }))
+    const read = (await call('/api/generation-layouts', adminId)).body.data.comfy
+    assert.deepEqual(read.presets[0].columns[0].blocks, ['workflow', 'filename', 'fields', 'action'])
+    // Saved again on purpose with the name on top: version 3 keeps that choice.
+    const saved = await call('/api/generation-layouts/comfy', adminId, 'PUT', { presets: [old] }, { 'If-Match': read.revision })
+    assert.equal(saved.status, 200)
+    assert.deepEqual((await call('/api/generation-layouts', adminId)).body.data.comfy.presets[0].columns[0].blocks, ['filename', 'workflow', 'fields', 'action'])
   })
 })

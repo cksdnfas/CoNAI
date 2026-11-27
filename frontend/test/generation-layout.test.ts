@@ -105,6 +105,11 @@ test('a saved layout from before the file name block shows it on top of the gene
   ], hidden: [] }])
   assert.deepEqual(moved.columns[1].blocks[0], 'filename', 'the generate button moved: the name row follows it')
   assert.ok(!moved.columns[0].blocks.includes('filename'))
+  const [comfy] = normalizeGenerationLayoutPresets('comfy', [{ id: 'saved', name: 'Saved', columns: [
+    { weight: 40, blocks: ['workflow', 'fields', 'action'] },
+    { weight: 60, blocks: ['result', 'recent'] },
+  ], hidden: [] }])
+  assert.deepEqual(comfy.columns[0].blocks.slice(0, 2), ['workflow', 'filename'], 'the name row goes under the workflow header')
 })
 
 test('resizing keeps the pair total and the minimum width; only empty columns can be removed', () => {
