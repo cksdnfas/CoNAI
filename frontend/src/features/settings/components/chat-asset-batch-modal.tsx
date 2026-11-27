@@ -289,7 +289,7 @@ export function ChatAssetBatchModal({ target, initialBatchId, referenceOnly = fa
                   aria-label={t({ ko: '{name} 후보 {index} 고르기', en: 'Choose {name} candidate {index}' }, { name: entry.slotKey, index: index + 1 })}
                   onClick={() => { if (!image) { void imageQuery?.refetch(); return } if (!busy) slotMutation.mutate({ slotKey: entry.slotKey, action: 'choose', hash: candidate.compositeHash }) }}
                   onDoubleClick={() => { const index = safety.visibleItems.findIndex((image) => image.composite_hash === candidate.compositeHash); if (index >= 0) setLightboxIndex(index) }}
-                  media={image ? <><ChatProfileImage src={libraryThumbnailUrl(candidate.compositeHash)} className={safety.shouldBlurItemPreview(image) ? 'blur-lg' : undefined} />{safety.renderItemPersistentOverlay(image)}</> : <span className="flex h-full items-center justify-center text-muted-foreground">{loading ? <Spinner /> : <ImageOff />}</span>}
+                  media={image ? <><ChatProfileImage src={libraryThumbnailUrl(candidate.compositeHash)} className={safety.shouldBlurItemPreview(image) ? 'blur-[calc(var(--theme-sensitive-blur)*0.4)]' : undefined} />{safety.renderItemPersistentOverlay(image)}</> : <span className="flex h-full items-center justify-center text-muted-foreground">{loading ? <Spinner /> : <ImageOff />}</span>}
                   overlay={selected ? <ChosenCheckBadge /> : null}
                 /></Tip>
               })}

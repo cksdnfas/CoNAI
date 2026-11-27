@@ -70,7 +70,7 @@ export function useSafeAssetImages(hashes: string[], batch = false) {
     render: (hash: string, className = 'size-full object-cover') => {
       const image = visible.get(hash)
       if (!image) return images[Math.floor(unique.indexOf(hash) / (batch ? IMAGE_BATCH_MAX_COUNT : 1))]?.isPending ? <span className="flex size-full items-center justify-center"><Spinner /></span> : null
-      return <><ChatProfileImage src={libraryThumbnailUrl(hash)} className={cn(className, safety.shouldBlurItemPreview(image) && 'blur-lg')} />{safety.renderItemPersistentOverlay(image)}</>
+      return <><ChatProfileImage src={libraryThumbnailUrl(hash)} className={cn(className, safety.shouldBlurItemPreview(image) && 'blur-[calc(var(--theme-sensitive-blur)*0.4)]')} />{safety.renderItemPersistentOverlay(image)}</>
     },
     open: (hash: string) => { const index = safety.visibleItems.findIndex((image) => image.composite_hash === hash); if (index >= 0) setLightbox(index) },
     lightbox: <MediaLightbox items={safety.visibleItems} index={lightbox} onIndexChange={setLightbox} onClose={() => setLightbox(null)} />,

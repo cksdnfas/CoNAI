@@ -73,14 +73,14 @@ export function NaiSavedAssetTile({
       tabIndex={0}
       onClick={onSelect}
       onKeyDown={handleKeyDown}
-      className="group relative isolate mb-3 block w-full cursor-pointer break-inside-avoid overflow-hidden rounded-sm text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/40"
+      className="group relative isolate mb-[calc(0.75rem*var(--theme-image-gap-scale,1))] block w-full cursor-pointer break-inside-avoid overflow-hidden rounded-(--theme-image-tile-radius) text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/40"
     >
       {previewImage && previewState === 'ready' ? (
         <ImagePreviewMedia
           image={previewImage}
           alt={title}
           loading="lazy"
-          className="block h-auto w-full transition-opacity duration-150 group-hover:opacity-85"
+          className="block h-auto w-full transition-[opacity,scale] duration-150 group-hover:opacity-(--theme-image-hover-opacity) group-hover:scale-(--theme-image-hover-scale)"
           onError={() => setHasPreviewError(true)}
         />
       ) : (

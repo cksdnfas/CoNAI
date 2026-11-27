@@ -214,6 +214,8 @@ const appearanceRows = settingGroup('general', 'appearance', 'appearance.', [
   ['bodyFontWeightPreset', '본문 굵기', 'Body weight'], ['emphasisFontWeightPreset', '강조 굵기', 'Emphasis weight'],
   ['desktopPageColumnsMinWidth', '데스크톱 본문 2칼럼 전환폭 (px)', 'Desktop content two-column breakpoint (px)'],
   ['selectionOutlineWidth', '선택 테두리 두께 (px)', 'Selection border width (px)'], ['groupExplorerCardStyle', '그룹 카드 스타일', 'Group card style'],
+  ['imageListGap', '이미지 간격 (px)', 'Image gap (px)'], ['imageTileRadius', '썸네일 모서리', 'Thumbnail corners'], ['imageHoverEffect', '썸네일 호버 효과', 'Thumbnail hover effect'],
+  ['sensitiveBlurPx', '가림 블러 강도 (px)', 'Hidden preview blur (px)'], ['reduceMotion', '애니메이션 줄이기', 'Reduce motion'],
   ['detailRelatedImageMobileColumns', '유사 이미지 한 줄 카드 수 (모바일)', 'Similar images per row (mobile)'],
   ['detailRelatedImageColumns', '유사 이미지 한 줄 카드 수 (데스크톱)', 'Similar images per row (desktop)'], ['detailRelatedImageAspectRatio', '유사 이미지 카드 비율', 'Similar image card ratio'],
   ['positiveBadgeColor', '포지티브 배지', 'Positive badge'], ['negativeBadgeColor', '네거티브 배지', 'Negative badge'], ['autoBadgeColor', '오토 배지', 'Auto badge'], ['ratingBadgeColor', '평가 배지', 'Rating badge'],

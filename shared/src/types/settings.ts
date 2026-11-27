@@ -296,6 +296,9 @@ export type BodyFontWeightPreset = 'regular' | 'medium';
 export type EmphasisFontWeightPreset = 'standard' | 'bold';
 export type RelatedImageCardAspectRatio = 'original' | 'square' | 'portrait' | 'landscape';
 export type GroupExplorerCardStyle = 'compact-row' | 'media-tile';
+/** Image tile corners; `theme` follows the global radius preset. */
+export type ImageTileRadius = 'theme' | 'none' | 'small' | 'medium' | 'large';
+export type ImageHoverEffect = 'dim' | 'zoom' | 'none';
 export type AppearancePresetSlotId = 'slot-1' | 'slot-2' | 'slot-3';
 export const WALLPAPER_WIDGET_TYPES = [
   'clock',
@@ -434,6 +437,13 @@ export interface AppearanceThemeSettings {
   detailRelatedImageAspectRatio: RelatedImageCardAspectRatio;
   groupExplorerCardStyle: GroupExplorerCardStyle;
   selectionOutlineWidth: number;
+  /** Image list gap in px at the home gallery; other lists scale theirs by the same ratio. */
+  imageListGap: number;
+  imageTileRadius: ImageTileRadius;
+  imageHoverEffect: ImageHoverEffect;
+  /** Blur radius (px) for hidden/sensitive previews. */
+  sensitiveBlurPx: number;
+  reduceMotion: boolean;
   positiveBadgeColor: string;
   negativeBadgeColor: string;
   autoBadgeColor: string;

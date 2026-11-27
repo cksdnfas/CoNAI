@@ -114,7 +114,7 @@ const ImageListItemComponent = memo(function ImageListItemComponent({
     mediaKind === 'video' ? (
       // 호버 딤은 포스터·영상 레이어가 아니라 묶음에 한 번 건다. 레이어마다 걸면 group-hover 가 숨긴 포스터의
       // opacity-0 보다 우선해서, 정지 포스터가 재생 중인 영상 위에 반투명하게 겹친다.
-      <div className="transition-opacity duration-150 group-hover:opacity-85">
+      <div className="transition-[opacity,scale] duration-150 group-hover:opacity-(--theme-image-hover-opacity) group-hover:scale-(--theme-image-hover-scale)">
         {/* key: 가상화 레이아웃이 컴포넌트 인스턴스를 다른 미디어에 재활용해도 <video> DOM 이
             함께 재활용되어 이전 프레임이 남는 일이 없도록, 미디어 identity 로 서브트리를 교체한다. */}
         <ImageListVideoPreview
@@ -132,7 +132,7 @@ const ImageListItemComponent = memo(function ImageListItemComponent({
       <ImagePreviewMedia
         image={image}
         alt={displayName}
-        className="h-full w-full object-cover transition-opacity duration-150 group-hover:opacity-85"
+        className="h-full w-full object-cover transition-[opacity,scale] duration-150 group-hover:opacity-(--theme-image-hover-opacity) group-hover:scale-(--theme-image-hover-scale)"
         style={mediaFrameStyle}
         loading="lazy"
         draggable={false}
@@ -214,7 +214,7 @@ const ImageListItemComponent = memo(function ImageListItemComponent({
       role={interactive ? 'button' : undefined}
       tabIndex={interactive ? 0 : undefined}
       className={cn(
-        'theme-list-shadow image-list-selectable group relative isolate block w-full select-none rounded-sm bg-surface-low text-left transition-transform duration-300 [-webkit-touch-callout:none] focus:outline-none focus:ring-2 focus:ring-primary/60 hover:z-10 focus-within:z-10',
+        'theme-list-shadow image-list-selectable group relative isolate block w-full select-none rounded-(--theme-image-tile-radius) bg-surface-low text-left transition-transform duration-300 [-webkit-touch-callout:none] focus:outline-none focus:ring-2 focus:ring-primary/60 hover:z-10 focus-within:z-10',
         'data-[drag-armed=true]:scale-[0.97] data-[drag-armed=true]:cursor-grabbing',
         selected && 'is-selected',
         selectionMode || !interactive ? 'cursor-default' : 'cursor-pointer',
@@ -240,8 +240,8 @@ const ImageListItemComponent = memo(function ImageListItemComponent({
       onClick={interactive ? handleClick : undefined}
       onKeyDown={handleKeyDown}
     >
-      <div className="relative overflow-hidden rounded-sm bg-surface-lowest select-none">
-        <div className={cn('transition duration-300', blurPreview && 'scale-103 blur-2xl saturate-55')}>
+      <div className="relative overflow-hidden rounded-(--theme-image-tile-radius) bg-surface-lowest select-none">
+        <div className={cn('transition duration-300', blurPreview && 'scale-103 blur-(--theme-sensitive-blur) saturate-55')}>
           {content}
         </div>
         {blurPreview ? <div className="pointer-events-none absolute inset-0 z-10 bg-backdrop/25" /> : null}
@@ -249,7 +249,7 @@ const ImageListItemComponent = memo(function ImageListItemComponent({
       {renderPersistentOverlay || soundBar ? <div className="absolute inset-x-0 bottom-0 z-30 space-y-1 p-2">{soundBar}{renderPersistentOverlay}</div> : null}
       {quickActions}
       {touchMenu}
-      <div className="image-list-selection-frame pointer-events-none absolute inset-0 z-20 rounded-sm" />
+      <div className="image-list-selection-frame pointer-events-none absolute inset-0 z-20 rounded-(--theme-image-tile-radius)" />
     </div>
   )
   const menuTile = menuEntries ? <ActionContextMenu entries={menuEntries} mouseOnly motion="pop">{tile}</ActionContextMenu> : tile

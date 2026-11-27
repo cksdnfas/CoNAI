@@ -28,6 +28,8 @@ const validFontPresets = ['manrope', 'system', 'custom']
 const validBodyFontWeightPresets = ['regular', 'medium']
 const validEmphasisFontWeightPresets = ['standard', 'bold']
 const validGroupExplorerCardStyles = ['compact-row', 'media-tile']
+const validImageTileRadii = ['theme', 'none', 'small', 'medium', 'large']
+const validImageHoverEffects = ['dim', 'zoom', 'none']
 const validAppearancePresetSlotIds = ['slot-1', 'slot-2', 'slot-3']
 const appearanceFontDir = path.join(runtimePaths.uploadsDir, 'theme-fonts')
 const allowedFontExtensions = new Set(['.ttf', '.otf', '.woff', '.woff2'])
@@ -158,6 +160,18 @@ function validateAppearanceThemeSettings(appearanceSettings: Partial<AppearanceT
     return `groupExplorerCardStyle must be one of: ${validGroupExplorerCardStyles.join(', ')}`
   }
 
+  if (appearanceSettings.imageTileRadius !== undefined && !validImageTileRadii.includes(appearanceSettings.imageTileRadius)) {
+    return `imageTileRadius must be one of: ${validImageTileRadii.join(', ')}`
+  }
+
+  if (appearanceSettings.imageHoverEffect !== undefined && !validImageHoverEffects.includes(appearanceSettings.imageHoverEffect)) {
+    return `imageHoverEffect must be one of: ${validImageHoverEffects.join(', ')}`
+  }
+
+  if (appearanceSettings.reduceMotion !== undefined && typeof appearanceSettings.reduceMotion !== 'boolean') {
+    return 'reduceMotion must be a boolean'
+  }
+
   const hexColorFields: Array<keyof Pick<AppearanceThemeSettings,
     'customSurfaceBackgroundColor' |
     'customSurfaceLowestColor' |
@@ -219,7 +233,9 @@ function validateAppearanceThemeSettings(appearanceSettings: Partial<AppearanceT
     'desktopPageColumnsMinWidth' |
     'detailRelatedImageMobileColumns' |
     'detailRelatedImageColumns' |
-    'selectionOutlineWidth'
+    'selectionOutlineWidth' |
+    'imageListGap' |
+    'sensitiveBlurPx'
   >; min: number; max: number }> = [
     { key: 'fontScalePercent', min: 85, max: 200 },
     { key: 'textScalePercent', min: 85, max: 200 },
@@ -229,6 +245,8 @@ function validateAppearanceThemeSettings(appearanceSettings: Partial<AppearanceT
     { key: 'detailRelatedImageMobileColumns', min: 1, max: 6 },
     { key: 'detailRelatedImageColumns', min: 1, max: 6 },
     { key: 'selectionOutlineWidth', min: 1, max: 8 },
+    { key: 'imageListGap', min: 0, max: 40 },
+    { key: 'sensitiveBlurPx', min: 8, max: 64 },
   ]
 
   for (const { key, min, max } of boundedIntegers) {

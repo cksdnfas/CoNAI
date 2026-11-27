@@ -1366,3 +1366,15 @@ html:lang(ko) {
     animation: none;
   }
 }
+
+/* Appearance "reduce motion" toggle (html.reduce-motion): no transitions or decorative loops; spinners keep turning so loading stays visible. */
+html.reduce-motion {
+  scroll-behavior: auto;
+}
+
+html.reduce-motion *:not(.animate-spin),
+html.reduce-motion *::before,
+html.reduce-motion *::after {
+  transition: none !important;
+  animation: none !important;
+}

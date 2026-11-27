@@ -354,14 +354,14 @@ export function GenerationResultStage({
                 src={selected.image_url ?? undefined}
                 poster={selected.thumbnail_url ?? undefined}
                 controls
-                className={cn('max-w-full object-contain', compact ? 'max-h-[62vh]' : 'max-h-full', isBlurred && 'blur-2xl saturate-55')}
+                className={cn('max-w-full object-contain', compact ? 'max-h-[62vh]' : 'max-h-full', isBlurred && 'blur-(--theme-sensitive-blur) saturate-55')}
               />
             ) : (
               <img
                 key={selectedId}
                 src={selected.image_url ?? selected.thumbnail_url ?? undefined}
                 alt=""
-                className={cn('bg-checker max-w-full object-contain', compact ? 'max-h-[62vh]' : 'max-h-full', isBlurred && 'blur-2xl saturate-55')}
+                className={cn('bg-checker max-w-full object-contain', compact ? 'max-h-[62vh]' : 'max-h-full', isBlurred && 'blur-(--theme-sensitive-blur) saturate-55')}
               />
             )
           ) : activeJob ? null : (

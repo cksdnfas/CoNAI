@@ -47,6 +47,11 @@ export function extractAppearanceTheme(appearance: AppearanceSettings | Appearan
     detailRelatedImageAspectRatio: appearance.detailRelatedImageAspectRatio,
     groupExplorerCardStyle: appearance.groupExplorerCardStyle,
     selectionOutlineWidth: appearance.selectionOutlineWidth,
+    imageListGap: appearance.imageListGap,
+    imageTileRadius: appearance.imageTileRadius,
+    imageHoverEffect: appearance.imageHoverEffect,
+    sensitiveBlurPx: appearance.sensitiveBlurPx,
+    reduceMotion: appearance.reduceMotion,
     positiveBadgeColor: appearance.positiveBadgeColor,
     negativeBadgeColor: appearance.negativeBadgeColor,
     autoBadgeColor: appearance.autoBadgeColor,
@@ -162,6 +167,21 @@ function normalizeAppearanceThemeImport(raw: unknown, fallback: AppearanceThemeS
     next.groupExplorerCardStyle = source.groupExplorerCardStyle
   }
 
+  if (source.imageTileRadius !== undefined) {
+    if (!isEnumValue(source.imageTileRadius, ['theme', 'none', 'small', 'medium', 'large'])) return null
+    next.imageTileRadius = source.imageTileRadius
+  }
+
+  if (source.imageHoverEffect !== undefined) {
+    if (!isEnumValue(source.imageHoverEffect, ['dim', 'zoom', 'none'])) return null
+    next.imageHoverEffect = source.imageHoverEffect
+  }
+
+  if (source.reduceMotion !== undefined) {
+    if (typeof source.reduceMotion !== 'boolean') return null
+    next.reduceMotion = source.reduceMotion
+  }
+
   if (source.customFontFamily !== undefined) {
     if (typeof source.customFontFamily !== 'string') return null
     next.customFontFamily = source.customFontFamily
@@ -200,7 +220,9 @@ function normalizeAppearanceThemeImport(raw: unknown, fallback: AppearanceThemeS
     'desktopPageColumnsMinWidth' |
     'detailRelatedImageMobileColumns' |
     'detailRelatedImageColumns' |
-    'selectionOutlineWidth'
+    'selectionOutlineWidth' |
+    'imageListGap' |
+    'sensitiveBlurPx'
   >; min: number; max: number }> = [
     { key: 'fontScalePercent', min: 85, max: 200 },
     { key: 'textScalePercent', min: 85, max: 200 },
@@ -210,6 +232,8 @@ function normalizeAppearanceThemeImport(raw: unknown, fallback: AppearanceThemeS
     { key: 'detailRelatedImageMobileColumns', min: 1, max: 6 },
     { key: 'detailRelatedImageColumns', min: 1, max: 6 },
     { key: 'selectionOutlineWidth', min: 1, max: 8 },
+    { key: 'imageListGap', min: 0, max: 40 },
+    { key: 'sensitiveBlurPx', min: 8, max: 64 },
   ]
 
   for (const { key, min, max } of boundedIntegerFields) {

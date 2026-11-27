@@ -1,6 +1,7 @@
 import type { AppearanceThemeSettings } from '@conai/shared'
 import {
   APPEARANCE_PRESETS,
+  DEFAULT_APPEARANCE_THEME,
   DENSITY_PRESETS,
   FONT_PRESETS,
   GLASS_PRESETS,
@@ -43,6 +44,14 @@ const EMPHASIS_FONT_WEIGHT_VALUES = {
     extrabold: '900',
   },
 } as const
+
+const IMAGE_TILE_RADIUS_VALUES: Record<AppearanceThemeSettings['imageTileRadius'], string> = {
+  theme: 'max(0px, calc(var(--radius) - 4px))',
+  none: '0px',
+  small: '4px',
+  medium: '8px',
+  large: '16px',
+}
 
 export function resolveAppearanceColors(appearance: AppearanceThemeSettings) {
   if (appearance.accentPreset === 'custom') {
@@ -222,6 +231,11 @@ export function buildAppearanceVariables(appearance: AppearanceThemeSettings) {
     '--theme-text-scale': `${appearance.textScalePercent / 100}`,
     '--theme-selection-outline-width': `${appearance.selectionOutlineWidth}px`,
     '--theme-selection-outline-width-strong': `calc(${appearance.selectionOutlineWidth}px + 1px)`,
+    '--theme-image-gap-scale': `${(appearance.imageListGap ?? DEFAULT_APPEARANCE_THEME.imageListGap) / DEFAULT_APPEARANCE_THEME.imageListGap}`,
+    '--theme-image-tile-radius': IMAGE_TILE_RADIUS_VALUES[appearance.imageTileRadius] ?? IMAGE_TILE_RADIUS_VALUES.theme,
+    '--theme-image-hover-opacity': appearance.imageHoverEffect === 'dim' ? '0.85' : '1',
+    '--theme-image-hover-scale': appearance.imageHoverEffect === 'zoom' ? '1.04' : '1',
+    '--theme-sensitive-blur': `${appearance.sensitiveBlurPx ?? 40}px`,
     '--theme-badge-positive': positiveBadge,
     '--theme-badge-positive-soft': toAlphaColor(positiveBadge, mode === 'light' ? 0.12 : 0.14),
     '--theme-badge-negative': negativeBadge,
@@ -270,6 +284,7 @@ export function applyAppearanceTheme(appearance: AppearanceThemeSettings) {
   const mode = resolveThemeMode(appearance.themeMode)
   root.classList.toggle('light', mode === 'light')
   root.classList.toggle('dark', mode === 'dark')
+  root.classList.toggle('reduce-motion', appearance.reduceMotion === true)
 
   if (appearance.fontPreset === 'custom') {
     ensureUploadedFontFaceLoaded(CUSTOM_SANS_FONT_ALIAS, appearance.customFontUrl)

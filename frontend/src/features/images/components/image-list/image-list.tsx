@@ -2,6 +2,8 @@ import { Suspense, lazy, useCallback, useEffect, useId, useMemo, useRef, useStat
 import { useQueryClient } from '@tanstack/react-query'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { cn } from '@/lib/utils'
+import { DEFAULT_APPEARANCE_SETTINGS } from '@/lib/appearance'
+import { useGlobalAppearanceSettingsQuery } from '@/lib/use-global-appearance-settings'
 import { hasOpenDialog, isTypingTarget } from '@/lib/keyboard-shortcut'
 import { useImageViewModal, type ImageViewSequenceTotal } from '@/features/images/components/detail/image-view-modal-context'
 import { prepareImageSourceState } from '@/features/images/image-source-navigation'
@@ -48,8 +50,8 @@ export function ImageList({
   onLoadMore,
   minColumnWidth = 300,
   preferredColumnCount,
-  columnGap = 24,
-  rowGap = 24,
+  columnGap: baseColumnGap = 24,
+  rowGap: baseRowGap = 24,
   gridItemHeight = 280,
   className,
   scrollMode = 'window',
@@ -66,6 +68,10 @@ export function ImageList({
   onItemDragStart,
 }: ImageListProps) {
   const queryClient = useQueryClient()
+  // Appearance image gap is set in px for the home gallery (default); every list scales its own gap by that ratio.
+  const gapScale = (useGlobalAppearanceSettingsQuery().data?.imageListGap ?? DEFAULT_APPEARANCE_SETTINGS.imageListGap) / DEFAULT_APPEARANCE_SETTINGS.imageListGap
+  const columnGap = Math.round(baseColumnGap * gapScale)
+  const rowGap = Math.round(baseRowGap * gapScale)
   const navigate = useNavigate()
   const location = useLocation()
   const imageViewModal = useImageViewModal()
