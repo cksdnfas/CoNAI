@@ -24,7 +24,7 @@ current screen state. See `components/layout/app-shell.tsx`; these providers are
 | `/access` | `features/auth` | shell |
 | `/groups`, `/groups/:groupId` | `features/groups` | `page.groups.view` |
 | `/prompts` | `features/prompts` | `page.prompts.view` |
-| `/characters` (`?view=catalog`, `?folder=`, `?q=`, `?page=`, `?setting=`, `?new=`) | `features/characters` (외형 라이브러리 / 캐릭터 카탈로그) | `page.characters.view`; catalog also needs `prompts.view` |
+| `/characters` (`?view=catalog`, `?folder=`, `?q=`, `?page=`, `?setting=`, `?new=`) | `features/characters` (외형 라이브러리 / 캐릭터 카탈로그) | `page.characters.view`; catalog also needs `content.read` |
 | `/generation` (NAI, ComfyUI, workflows, queue) | `features/image-generation`, `features/module-graph` | `page.generation.view` |
 | `/wildcards` | `features/image-generation` | `page.wildcards.view` |
 | `/public/workflows/:slug` | `features/image-generation` | public workflow page |
@@ -113,8 +113,8 @@ and ordering for profile selectors, using only server-authorized directory paths
 
 `features/characters/character-library-page.tsx` owns the folder tree, paged name search and editor URL state.
 `lib/api-character-library.ts` uses `/api/character-library`; shared contracts live in
-`shared/src/types/characterLibrary.ts`. Access is `characters.view`/`characters.edit`, header key `characters`;
-image fields additionally require `images.view`, candidate generation administrator access plus edit permission.
+`shared/src/types/characterLibrary.ts`. Access is `content.read`/`content.edit`/`content.delete`, header key `characters`;
+candidate generation needs administrator access.
 
 - `use-character-setting-editor.ts` preserves drafts and checks revisions; on a stale revision it merges non-overlapping
   changes and retries once, otherwise asks the user to resolve the conflict.
@@ -133,7 +133,7 @@ image fields additionally require `images.view`, candidate generation administra
 - `use-character-library-chat-page.ts` registers `character.*`; the profile adapter exposes `profile.draft` with
   `characterLink` and reviewed `profile.character_save`. Generation adapters expose `character_setting.insert` through
   `use-chat-character-setting-insertion.ts`. Shared action permissions and path checks remain authoritative.
-  The profile adapter refuses switching settings over a dirty synced draft, requires `characters.edit` for synced
+  The profile adapter refuses switching settings over a dirty synced draft, requires `content.edit` for synced
   appearance edits, exposes up to 50 `syncedProfiles` names and separates background from setting-owned `profile.assets`.
 - Runtime topic `characters`, event `characters.changed`, refreshes affected library/profile queries through
   `features/runtime-events/use-runtime-event-query-bridge.ts`.

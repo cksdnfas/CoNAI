@@ -291,7 +291,7 @@ buttons up one tone.
   whose first step is the page (files, groups, posts, character library). Tabs over a list inside the page sit in a
   TextTabs row right under the toolbar (posts). Chat's 자원 screen switches 프리셋 / 표시 블록 / 로어북 with a
   SegmentedControl below the workspace row. The generation and 캐릭터 pages lead with their view switch instead,
-  since it names the page; 캐릭터 switches only 외형 라이브러리 / 캐릭터 카탈로그 (catalog needs `prompts.view`).
+  since it names the page; 캐릭터 switches only 외형 라이브러리 / 캐릭터 카탈로그 (catalog needs `content.read`).
   A page root takes the full content width (no
   `mx-auto max-w-*`); a form inside may narrow itself.
 - Empty states: a page, list, menu or picker with nothing in it shows `EmptyState`, never a hand-written muted line.

@@ -6,13 +6,13 @@ CoNAI는 MCP(Model Context Protocol) 서버를 제공합니다. Claude Code, Her
 
 ## 핵심 요약
 
-### 채팅 프로필의 기능 권한 위임
+### 채팅 프로필의 도구 권한
 
-관리자는 프로필 도구 설정의 `delegatedPermissions`로 기능 권한을 위임할 수 있습니다. 채팅 도구는 사용자 기능 권한에 해당 프로필의 위임을 더하되, 도구 범위·목록·생성 프리셋과 계정·대화 소유권은 그대로 검사합니다. 목록과 실행, 지연 생성 및 큐 실행에서 현재 권한을 확인합니다. 사용자 직접 페이지·API, 외부 HTTP MCP 키, 다른 프로필에는 권한이 생기지 않습니다. 관리자·계정·채팅 진입·서버 설정 권한은 위임 대상이 아니며 공개 페이지 제한도 유지합니다. 이미지 검색·확인은 `images.view`, 생성은 `generation.execute`, ComfyUI는 추가로 `workflows.view`가 필요합니다.
+채팅 도구는 **대화하는 계정의 권한**과 **프로필 도구 설정**(범위·도구 목록·생성 프리셋·페이지 어시스턴트)이 모두 허락할 때만 보이고 실행됩니다. 프로필에 주지 않은 기능은 그 채팅의 어떤 경로로도 쓸 수 없고, 계정·대화 소유권과 공개 페이지 제한도 그대로 검사합니다. 목록과 실행, 지연 생성 및 큐 실행에서 현재 권한을 확인합니다. 이미지 검색·확인은 읽기 권한, 생성은 로그인만 필요합니다.
 
 ### 연결 페이지와 채팅 도구 탐색
 
-페이지 어시스턴트는 현재 화면의 도메인 조회 도구를 프로필의 일반 도구 목록과 별도로 제공하며, 계정 기능 권한과 호출 시 재검사는 유지합니다. `/characters`의 캐릭터 라이브러리만 캐릭터 도구를 추가하고 일반 `page` 종류 전체에 권한을 주지 않습니다. 공개 페이지는 다른 영역의 도구를 얻지 못하며 생성 프리셋 제한도 유지됩니다.
+연결한 페이지의 도메인 도구는 직접 목록에 올라오지만 프로필의 도구 목록·범위와 계정 권한을 그대로 따릅니다. 페이지를 읽고 입력을 채우는 페이지 도구만 페이지 어시스턴트 설정을 따릅니다. `/characters`의 캐릭터 라이브러리만 캐릭터 도구를 추가하고 일반 `page` 종류 전체에는 추가하지 않습니다. 공개 페이지는 다른 영역의 도구를 얻지 못하며 생성 프리셋 제한도 유지됩니다.
 
 `open_tools`는 카탈로그 도구와 직접 제공된 도구의 스키마를 모두 조회합니다. 도구 이름(`tools`)을 주면 분류를 함께 줘도 그 도구만 엽니다. 직접 도구를 `run_tool`로 호출하면 직접 호출 방법을 안내합니다. 열어 보지 않은 도구를 `run_tool`로 호출해 실패하면 그 도구의 설명과 입력 스키마가 결과에 함께 옵니다. 작은 도구 목록에서는 설정 조회·제안도 직접 제공하므로 사라지지 않습니다. 페이지 이동 시 API 브리지는 시작 화면을 유지한 채 도구를 다시 연결하고 Claude는 현재 도구 호출의 요청 ID로 연결된 응답 스트림에 목록 변경 알림을 보냅니다. pi의 직접 도구 목록은 실행 시작 때 고정됩니다. Codex 세션 키에는 도메인 도구 집합·노드 편집기 여부·공개 여부가 포함되며 연결 페이지에서는 카탈로그를 항상 유지해 같은 답변에서 새로 얻은 도구를 조회·실행합니다. 시작 화면이나 현재 화면 중 하나라도 공개이면 공개 제한은 계속 적용됩니다.
 
@@ -46,9 +46,9 @@ npm run dev
 
 HTTP 방식은 설정 → 계정 및 시스템 → MCP에서 활성화합니다. 같은 화면에서 MCP URL과 API 키를 확인·복사·교체할 수 있으며 재시작은 필요 없습니다.
 
-API 키마다 **권한 그룹**을 하나 고릅니다. 키는 계정처럼 그 그룹의 기능 권한만큼만 도구를 보고 실행하며, 키에 권한을 따로 주는 방법은 없습니다. 그룹의 권한을 바꾸면 키에도 바로 반영됩니다. 그룹이 없는 예전 키는 그룹을 고르기 전까지 어떤 도구도 쓰지 못합니다.
+API 키마다 **권한 그룹**을 하나 고릅니다. 키는 계정처럼 그 그룹의 기본 권한(읽기·수정·삭제)만큼만 도구를 보고 실행하며, 키에 권한을 따로 주는 방법은 없습니다. 그룹의 권한을 바꾸면 키에도 바로 반영됩니다. 그룹이 없는 예전 키는 그룹을 고르기 전까지 어떤 도구도 쓰지 못합니다.
 
-라이브러리 이미지를 쓰는 HTTP MCP 생성은 큐 등록·실행 직전·관리자 재시도 때 키의 현재 그룹에서 `images.view`를 다시 확인해. 그래프도 라이브러리 이미지를 읽을 때마다 확인해. 키가 삭제되거나 현재 그룹에서 권한을 잃으면 접근할 수 없지만, 옮긴 그룹에도 조회 권한이 있으면 계속 사용할 수 있어. 계정 없는 큐 작업은 서버가 키와 워크플로·입력에 묶어 서명한 권한을 사용해. 로컬 stdio와 계정 없는 예전 예약은 서버가 기록한 신뢰 출처를 쓰고, 로그인하지 않는 설정은 기존 내부 접근 방식을 유지해.
+라이브러리 이미지를 쓰는 HTTP MCP 생성은 큐 등록·실행 직전·관리자 재시도 때 키의 현재 그룹에서 읽기 권한을 다시 확인해. 그래프도 라이브러리 이미지를 읽을 때마다 확인해. 키가 삭제되거나 현재 그룹에서 권한을 잃으면 접근할 수 없지만, 옮긴 그룹에도 조회 권한이 있으면 계속 사용할 수 있어. 계정 없는 큐 작업은 서버가 키와 워크플로·입력에 묶어 서명한 권한을 사용해. 로컬 stdio와 계정 없는 예전 예약은 서버가 기록한 신뢰 출처를 쓰고, 로그인하지 않는 설정은 기존 내부 접근 방식을 유지해.
 
 클라이언트는 모든 `/mcp` 요청에 다음 헤더 중 하나를 전송해야 합니다.
 
@@ -183,9 +183,9 @@ stdio:
 
 그룹 이동에서 선택한 하위 그룹은 선택한 조상과 함께 한 번만 이동하며 `moved`는 독립적으로 이동한 선택 루트 수입니다. 충돌 목록은 전체 원본·대상 경로와 ID를 포함합니다. 조상 대상 병합은 거부합니다. 원본 자동 소속은 병합 시 수동 소속으로 보존합니다. 완료된 생성 이력도 병합을 막는 참조입니다. 이력을 삭제하지 말고 원본을 유지하거나 이름을 바꿔 일반 이동하세요.
 
-`move_image_groups`는 기본적으로 이름 충돌을 거부합니다. `preview:true`로 재귀 병합 목록과 `merge_token`을 조회하고 원본·대상 ID 및 원본 설정 소실을 사용자에게 알린 뒤 명시적으로 승인된 토큰만 실행에 사용하세요. 미리보기는 저장하지 않으며 변경된 그룹/소속은 다시 확인해야 합니다. 최상위 이동도 지원합니다. 일반 이동은 `images.edit`, 병합 실행은 `images.delete`도 검사합니다. 외부 DB 참조(생성 큐/이력·런타임 작업·채팅 프로필)가 있는 원본은 병합을 거부하며 원본을 보존합니다.
+`move_image_groups`는 기본적으로 이름 충돌을 거부합니다. `preview:true`로 재귀 병합 목록과 `merge_token`을 조회하고 원본·대상 ID 및 원본 설정 소실을 사용자에게 알린 뒤 명시적으로 승인된 토큰만 실행에 사용하세요. 미리보기는 저장하지 않으며 변경된 그룹/소속은 다시 확인해야 합니다. 최상위 이동도 지원합니다. 일반 이동은 수정, 병합 실행은 삭제 권한도 검사합니다. 외부 DB 참조(생성 큐/이력·런타임 작업·채팅 프로필)가 있는 원본은 병합을 거부하며 원본을 보존합니다.
 
-표의 **도구 범위**는 채팅 프로필·도구 프리셋에서 고르는 범위입니다. HTTP 키는 범위가 아니라 권한 그룹의 기능 권한(웹에서 같은 기능에 필요한 권한, 표의 **계정 권한**)으로 정해집니다. `configure` 도구는 HTTP 키에 제공되지 않습니다.
+표의 **도구 범위**는 채팅 프로필·도구 프리셋에서 고르는 범위이며, 계정(HTTP 키는 권한 그룹)에 필요한 권한도 이 범위로 정해집니다: `read`·`backup`은 읽기, `generate`는 로그인, `organize`·`restore`는 수정, `delete`는 삭제, `configure`는 관리자. 게시판 글·댓글·평가, 플러그인·페이지 도구, 웹 검색, 생성 작업 조회는 로그인만 필요하고, 라이브러리 미디어로 새 사본을 만드는 도구(크기 바꾸기·자르기·변환·스프라이트·오디오 주문·내보내기)는 읽기만 필요합니다. `configure` 도구는 HTTP 키에 제공되지 않습니다.
 
 ### 프롬프트 탐색
 
@@ -238,13 +238,13 @@ ComfyUI 시드(`seed`·`noise_seed`)는 실행마다 새로 뽑힙니다. marked
 
 [RefMod 항목](CHARACTER_LIBRARY.md#refmod)을 화면 없이 다룹니다. 화면과 같은 서비스·검증을 쓰며 카탈로그 범주는 `generation`입니다.
 
-| Tool | 주요 인자와 결과 | 도구 범위 / 계정 권한 |
+| Tool | 주요 인자와 결과 | 도구 범위 |
 | --- | --- | --- |
-| `list_refmod_entries` | `query`(이름·설명·검색어·멤버 설명), `concept`, `include_server`, `limit`, `offset`. 항목마다 `id`·`name`·`concept`·`description`·멤버 수(`members`)·`buildable`·문제 코드(`issues`, 코드만)·`pending`·`lastBuiltAt`만 돌려주고 `total`을 붙입니다. `include_server`를 켜면 대표 ComfyUI 서버에 물어(15초쯤 걸릴 수 있음) 항목마다 `on_server`를, 그리고 미등록 목록(저장된 실행 기록, 서버에만 있는 이름)을 더합니다. | `read` / `characters.view` |
-| `get_refmod_entry` | `entry_id`. 멤버·역할·문제(`required-input-empty`는 비어 있는 입력의 `fields: [{id, label}]` 포함)·`revision`과 연결된 생성 워크플로의 입력 필드(`get_workflow_details`와 같은 설명)를 현재 값과 함께 돌려줍니다. Director 값의 원본은 미디어 항목 `id`와 `source: {file_name, mime_type, kind}`로만 보이고 파일 ID는 나오지 않습니다. | `read` / `characters.view` |
-| `save_refmod_entry` | 만들기는 `entry_id` 없이 `name`(경로·확장자 없는 파일 이름 하나, 아니면 `invalid_name`), 수정은 `entry_id`와 현재 `revision`. 그 밖에 `concept_type`·`description`·`keywords`·`workflow_id`·`inputs`. `inputs`는 그 워크플로에 `submit_generation_job`이 받는 친화 값과 같습니다. Director 미디어는 라이브러리 `composite_hash`(`images.view` 필요)나 `data_url`로 넣으면 RefMod 파일로 복사됩니다. **Director 미디어를 보내면 원본 목록 전체를 바꾸므로** 먼저 항목을 읽고 남길 원본도 `{ "id": … }`로 다시 보냅니다. 바로 저장하고 `buildable`·`issues`와 함께 돌려줍니다. | `organize` / `characters.edit` |
-| `adopt_refmod` | `record_id`나 `name` 중 하나. 저장된 실행 기록은 원본을 복사해 항목으로 만들고, 서버에만 있는 이름은 원본 없이 정보만 가져옵니다. 서버가 알려 준 이름은 하위 폴더(`sub/name`)도 그대로 받지만 그런 항목은 `name-not-plain` 문제로 만들 수 없습니다. 새 항목은 같은 워크플로의 최근 항목 입력값을 처음 값으로 받습니다. | `organize` / `characters.edit` |
-| `build_refmod` | `entry_id`. 대표 ComfyUI 서버에 생성 작업을 넣고 `job_id`를 바로 돌려줍니다. 막는 문제가 있으면 `blocked`(문제 코드와 비어 있는 입력 id), 대표 서버에 같은 이름이 이미 있으면 `exists_on_server`(ComfyUI는 덮어쓰지 않음), 원본이 하나도 없으면 `no_sources`, 원본 파일이 빠진 멤버가 있으면 `missing_source`, 이미 만드는 중이면 `pending`으로 거절합니다. | `generate` / `characters.edit` + `generation.execute` |
+| `list_refmod_entries` | `query`(이름·설명·검색어·멤버 설명), `concept`, `include_server`, `limit`, `offset`. 항목마다 `id`·`name`·`concept`·`description`·멤버 수(`members`)·`buildable`·문제 코드(`issues`, 코드만)·`pending`·`lastBuiltAt`만 돌려주고 `total`을 붙입니다. `include_server`를 켜면 대표 ComfyUI 서버에 물어(15초쯤 걸릴 수 있음) 항목마다 `on_server`를, 그리고 미등록 목록(저장된 실행 기록, 서버에만 있는 이름)을 더합니다. | `read` |
+| `get_refmod_entry` | `entry_id`. 멤버·역할·문제(`required-input-empty`는 비어 있는 입력의 `fields: [{id, label}]` 포함)·`revision`과 연결된 생성 워크플로의 입력 필드(`get_workflow_details`와 같은 설명)를 현재 값과 함께 돌려줍니다. Director 값의 원본은 미디어 항목 `id`와 `source: {file_name, mime_type, kind}`로만 보이고 파일 ID는 나오지 않습니다. | `read` |
+| `save_refmod_entry` | 만들기는 `entry_id` 없이 `name`(경로·확장자 없는 파일 이름 하나, 아니면 `invalid_name`), 수정은 `entry_id`와 현재 `revision`. 그 밖에 `concept_type`·`description`·`keywords`·`workflow_id`·`inputs`. `inputs`는 그 워크플로에 `submit_generation_job`이 받는 친화 값과 같습니다. Director 미디어는 라이브러리 `composite_hash`나 `data_url`로 넣으면 RefMod 파일로 복사됩니다. **Director 미디어를 보내면 원본 목록 전체를 바꾸므로** 먼저 항목을 읽고 남길 원본도 `{ "id": … }`로 다시 보냅니다. 바로 저장하고 `buildable`·`issues`와 함께 돌려줍니다. | `organize` |
+| `adopt_refmod` | `record_id`나 `name` 중 하나. 저장된 실행 기록은 원본을 복사해 항목으로 만들고, 서버에만 있는 이름은 원본 없이 정보만 가져옵니다. 서버가 알려 준 이름은 하위 폴더(`sub/name`)도 그대로 받지만 그런 항목은 `name-not-plain` 문제로 만들 수 없습니다. 새 항목은 같은 워크플로의 최근 항목 입력값을 처음 값으로 받습니다. | `organize` |
+| `build_refmod` | `entry_id`. 대표 ComfyUI 서버에 생성 작업을 넣고 `job_id`를 바로 돌려줍니다. 막는 문제가 있으면 `blocked`(문제 코드와 비어 있는 입력 id), 대표 서버에 같은 이름이 이미 있으면 `exists_on_server`(ComfyUI는 덮어쓰지 않음), 원본이 하나도 없으면 `no_sources`, 원본 파일이 빠진 멤버가 있으면 `missing_source`, 이미 만드는 중이면 `pending`으로 거절합니다. | `generate` |
 
 삭제 도구는 없습니다. 항목 삭제는 화면에서 합니다. 오래된 `revision`은 `revision_conflict`, 이름 중복은 `name_conflict`로 거절하며 오류 문구에 코드와 현재 `revision`이 붙습니다.
 작업 순서 예(원본 하나를 더하고 다시 만들기):
@@ -286,15 +286,15 @@ ComfyUI 시드(`seed`·`noise_seed`)는 실행마다 새로 뽑힙니다. marked
 
 ### 이미지 라이브러리 관리
 
-웹 UI의 업로드·메타데이터 수정·자동 태깅·삭제와 같은 서비스를 그대로 사용합니다. 도구 범위는 모두 `organize`입니다.
+웹 UI의 업로드·메타데이터 수정·자동 태깅·삭제와 같은 서비스를 그대로 사용합니다.
 
-| Tool | 용도 | 계정 권한 |
+| Tool | 용도 | 도구 범위 |
 | --- | --- | --- |
-| `upload_image` | base64 이미지·영상 `data_url`을 라이브러리에 추가(웹 업로드와 같은 형식 허용 목록·시그니처·디코딩 검사). 이름과 그룹 ID/경로 선택 가능. 새 항목은 후처리가 끝날 때까지 `processing`이라 `get_image_metadata`·`get_media_download`는 잠시 뒤 다시 호출 | `images.upload`, 그룹 지정 시 `images.edit` |
-| `update_image_metadata` | 정지 이미지의 프롬프트·네거티브·모델·스텝·샘플러 수정(`null`은 지우기). `revision_conflict`가 나면 `get_image_metadata`로 다시 읽고 수정 | `images.edit` |
-| `tag_images` | 이미지·영상 최대 100개 자동 태깅. 항목별 태그·등급과 실패 반환 | `images.edit` |
-| `delete_images` | 사용자가 명시적으로 요청한 이미지·영상 최대 500개를 휴지통으로 이동. 복원용 `recycleBinEntries` 반환. 삭제 보호(휴지통)가 꺼져 있으면 거부 | `images.delete` |
-| `restore_deleted_images` | 삭제 결과의 `recycleBinEntries`를 `names`로 전달해 최대 1,000개 복원. 새 파일을 덮어쓰지 않고 항목별 실패 반환 | `images.delete` |
+| `upload_image` | base64 이미지·영상 `data_url`을 라이브러리에 추가(웹 업로드와 같은 형식 허용 목록·시그니처·디코딩 검사). 이름과 그룹 ID/경로 선택 가능. 새 항목은 후처리가 끝날 때까지 `processing`이라 `get_image_metadata`·`get_media_download`는 잠시 뒤 다시 호출 | `organize` |
+| `update_image_metadata` | 정지 이미지의 프롬프트·네거티브·모델·스텝·샘플러 수정(`null`은 지우기). `revision_conflict`가 나면 `get_image_metadata`로 다시 읽고 수정 | `organize` |
+| `tag_images` | 이미지·영상 최대 100개 자동 태깅. 항목별 태그·등급과 실패 반환 | `organize` |
+| `delete_images` | 사용자가 명시적으로 요청한 이미지·영상 최대 500개를 휴지통으로 이동. 복원용 `recycleBinEntries` 반환. 삭제 보호(휴지통)가 꺼져 있으면 거부 | `delete` |
+| `restore_deleted_images` | 삭제 결과의 `recycleBinEntries`를 `names`로 전달해 최대 1,000개 복원. 새 파일을 덮어쓰지 않고 항목별 실패 반환 | `delete` |
 
 ### 이미지 그룹 정리
 
@@ -310,7 +310,7 @@ ComfyUI 시드(`seed`·`noise_seed`)는 실행마다 새로 뽑힙니다. marked
 | `update_image_group` | 이름·설명·색·자동수집 켜기/끄기·규칙 교체 | `organize` |
 | `run_group_auto_collect` | 자동수집이 켜진 그룹을 한 번 더 수집 (백그라운드 작업) | `organize` |
 | `move_image_groups` | 그룹 여러 개를 다른 그룹 아래나 최상위로 이동. 잘못된 이동이 하나라도 있으면 전체 취소 | `organize` |
-| `delete_image_groups` | 그룹 여러 개 삭제. `confirm_names`에 각 그룹의 지금 이름을 같은 순서로 적어야 함(다르면 거부). 하위 그룹은 기본적으로 최상위로 올리고 `cascade: true`면 함께 삭제. 이미지는 지우지 않음. `images.delete` 권한 필요 | `organize` |
+| `delete_image_groups` | 그룹 여러 개 삭제. `confirm_names`에 각 그룹의 지금 이름을 같은 순서로 적어야 함(다르면 거부). 하위 그룹은 기본적으로 최상위로 올리고 `cascade: true`면 함께 삭제. 이미지는 지우지 않음 | `delete` |
 | `add_images_to_group` | 기존 이미지를 그룹에 추가, 자동수집 소속은 수동으로 전환 | `organize` |
 | `move_images_between_groups` | 선택 이미지를 원본 그룹에서 대상 그룹으로 이동 | `organize` |
 | `remove_images_from_group` | 특정 그룹에서 선택 이미지의 소속 제거 | `organize` |
@@ -401,7 +401,7 @@ ComfyUI 시드(`seed`·`noise_seed`)는 실행마다 새로 뽑힙니다. marked
 | `set_live_wallpaper` | 저장된 월페이퍼(`preset_id`)를 라이브로 지정. 관리자 전용 | `organize` |
 | `save_wallpaper_schedule` | 일정 전체 교체: `{ enabled, entries: [{ preset_id, days, start, end }] }`, 최대 48개. `days`는 0(일)~6(토), 생략·`[]`은 매일, 시각은 `HH:MM`. 관리자 전용 | `organize` |
 
-- 세 도구 모두 이미지 보기 권한(`images.view`, 월페이퍼 화면과 같은 권한)이 필요하고, 변경 두 개는 편집 화면의 저장처럼 **관리자 계정**만 실행합니다. 관리자가 아닌 계정이나 HTTP 키의 호출은 `Administrator access required` 오류로 거부됩니다. 추가 승인 카드는 없습니다.
+- 세 도구 모두 읽기 권한이 필요하고, 변경 두 개는 편집 화면의 저장처럼 **관리자 계정**만 실행합니다. 관리자가 아닌 계정이나 HTTP 키의 호출은 `Administrator access required` 오류로 거부됩니다. 추가 승인 카드는 없습니다.
 - 저장은 편집 화면과 같은 검증·저장 경로를 씁니다. 없는 월페이퍼 ID, 잘못된 시각·요일, 49개 이상의 구간은 거부되고 아무것도 바뀌지 않습니다.
 - 겹치는 구간은 **위쪽(앞) 항목**이 이깁니다. 끝이 시작보다 이르면 자정을 넘기며 시작한 요일에 속하고, 시작과 끝이 같으면 하루 종일입니다. 일정 밖에서는 라이브 월페이퍼가 나옵니다.
 - 런타임 키·`?preset` 링크·Lively/Wallpaper Engine 선택으로 고정된 화면은 일정과 라이브 지정보다 우선합니다. 일정 시각은 라이브 화면을 띄운 기기의 시계로 계산되며 `showing_now`는 서버 시계 기준입니다.
@@ -409,12 +409,12 @@ ComfyUI 시드(`seed`·`noise_seed`)는 실행마다 새로 뽑힙니다. marked
 
 ### 파일 보관함
 
-인스턴스 공용 파일 보관함입니다. 조회·편집·삭제 기능 권한은 유지합니다. 이미지 라이브러리와 따로 저장됩니다. 계정과 연결되지 않은 HTTP 키에는 제공되지 않습니다.
+인스턴스 공용 파일 보관함입니다. 읽기·수정·삭제 권한으로 제한합니다. 이미지 라이브러리와 따로 저장됩니다. 계정과 연결되지 않은 HTTP 키에는 제공되지 않습니다.
 
 | Tool | 용도 | 도구 범위 |
 | --- | --- | --- |
 | `list_files` | 폴더 내용 조회 | `read` |
-| `get_file_info` | 파일·폴더 정보 조회. 이미지 파일에 `include_image_metadata: true`를 주면 라이브러리에 가져오지 않고 파일에 담긴 생성 정보(프롬프트·모델·LoRA·샘플러·시드·NovelAI 원본 파라미터)를 함께 읽음(`images.view`와 콘텐츠 등급 제한 적용) | `read` |
+| `get_file_info` | 파일·폴더 정보 조회. 이미지 파일에 `include_image_metadata: true`를 주면 라이브러리에 가져오지 않고 파일에 담긴 생성 정보(프롬프트·모델·LoRA·샘플러·시드·NovelAI 원본 파라미터)를 함께 읽음(콘텐츠 등급 제한 적용) | `read` |
 | `read_file_text` | UTF-8 텍스트 파일을 나눠 읽기 | `read` |
 | `search_files` | 이름·내용으로 파일 찾기 (띄어 쓴 단어 모두 포함, `"문장"`은 그대로) | `read` |
 | `list_file_versions` | 텍스트 파일의 이전 버전 목록(최대 30개)과 누가 언제 바꿨는지 | `read` |
@@ -425,38 +425,38 @@ ComfyUI 시드(`seed`·`noise_seed`)는 실행마다 새로 뽑힙니다. marked
 | `create_file_folder` | 폴더 만들기 | `organize` |
 | `rename_file` | 이름 바꾸기 | `organize` |
 | `move_files` | 폴더로 옮기기 (폴더는 내용과 함께) | `organize` |
-| `delete_files` | 파일·빈 폴더 삭제 (채팅에 첨부된 파일은 보호) | `organize` |
+| `delete_files` | 파일·빈 폴더 삭제 (채팅에 첨부된 파일은 보호) | `delete` |
 | `restore_file_version` | 이전 버전으로 되돌리기 (지금 내용은 버전으로 남음) | `organize` |
-| `get_file_download` | 보관함 파일의 로그인 필요 다운로드 경로 조회 (공개 링크 아님, 이미지·영상 원본은 `images.view`도 필요) | `read` |
+| `get_file_download` | 보관함 파일의 로그인 필요 다운로드 경로 조회 (공개 링크 아님) | `read` |
 | `write_binary_file` | base64 `data_url`을 어떤 MIME이든 보관함에 저장. 저장 MIME과 허용 확장자 정책은 `name`의 확장자로 정하며 웹 업로드와 같은 크기 한도. `overwrite`면 같은 ID로 교체하되 채팅 첨부·게시글이 참조하는 파일은 거부 | `organize` |
-| `copy_library_media_to_files` | 라이브러리 원본 최대 50개를 보관함 폴더로 복사 (숨김 등급·접근 불가 항목 제외, 계정 본인의 `images.view` 필요) | `organize` |
+| `copy_library_media_to_files` | 라이브러리 원본 최대 50개를 보관함 폴더로 복사 (숨김 등급·접근 불가 항목 제외) | `organize` |
 | `import_files_to_library` | 보관함 이미지·애니메이션·영상 최대 50개를 지정 그룹으로 복사 등록 (웹 업로드와 같은 시그니처·디코딩 검사, 미디어 외 파일 제외) | `organize` |
 
 - 문서 쓰기 도구는 텍스트 확장자(.md, .html, .txt, .json, .csv, .yaml 등)만, 2MB까지 씁니다. 고쳐도 파일 ID가 그대로라 채팅 첨부와 링크가 유지됩니다. 바이너리 파일은 `write_binary_file`로 저장하며 텍스트 버전을 만들지 않습니다.
 - 게시판 호출에 답하는 턴에서도 보관함 도구(버전 도구 포함)를 일반 채팅과 같이 쓸 수 있고, 페이지가 연결된 턴에서는 쓰기·정리 도구와 파일 내용·버전을 읽는 도구가 빠집니다.
-- 쓰기·정리 도구는 계정에 권한이 추가로 필요합니다: 문서 쓰기·고치기와 `create_file_folder`·`rename_file`·`move_files`·`restore_file_version`·`write_binary_file`·`copy_library_media_to_files`는 `files.edit`, `delete_files`는 `files.delete`, `import_files_to_library`는 `images.upload`+`images.edit`. 이름 변경이나 바이너리 저장으로 실행파일 등 제한 확장자를 붙이는 건 관리자만 됩니다.
-- MCP·웹 UI·HTTP API 모두 같은 공용 보관함을 다룹니다. 계정별 보관함 선택과 소유권 제한은 없으며 요청 계정의 기능 권한은 매 호출 검사합니다.
+- 쓰기·정리 도구는 수정, `delete_files`는 삭제 권한이 필요합니다. 이름 변경이나 바이너리 저장으로 실행파일 등 제한 확장자를 붙이는 건 관리자만 됩니다.
+- MCP·웹 UI·HTTP API 모두 같은 공용 보관함을 다룹니다. 계정별 보관함 선택과 소유권 제한은 없으며 요청 계정의 권한은 매 호출 검사합니다.
 
 ### 게시판
 
 카테고리·태그·댓글이 있는 게시판입니다. 채팅 봇이 쓰면 봇 프로필 이름으로, 계정에 묶인 HTTP 키가 쓰면 그 계정 이름으로 올라갑니다. 글과 댓글은 남이 쓴 내용이라 지시가 아닌 데이터로 다룹니다. 자세한 동작은 [게시판](./POSTS.md)을 참고합니다.
 
-| Tool | 용도 | 도구 범위 | 계정 권한 |
-| --- | --- | --- | --- |
-| `posts_categories` | 카테고리 트리와 글 수 | `read` | `posts.view` |
-| `posts_search` | 글 찾기 (단어·`"문장"`, 카테고리·태그·작성 봇으로 좁히기) | `read` | `posts.view` |
-| `posts_read` | 글 하나와 댓글 | `read` | `posts.view` |
-| `posts_create` | 새 글 (본문에 `media:`·`audio:`·`group:`·`file:` 미디어) | `organize` | `posts.write` |
-| `posts_update` | 자기 글 고치기 (`expected_revision` 필수) | `organize` | `posts.write` |
-| `post_comment` | 댓글·답글 (`@이름`으로 다른 봇 부르기는 게시판 한도 안에서) | `organize` | `posts.comment` |
-| `posts_tags` | 발행된 글의 태그와 글 수 | `read` | `posts.view` |
-| `posts_revisions` | 고칠 수 있는 글의 이전 판 목록, 판 하나의 제목·본문(나눠 읽기) | `read` | `posts.write` |
-| `posts_restore_revision` | 자기 글을 이전 판으로 되돌리기 (`expected_revision` 필수, 지금 판은 이전 판에 남음) | `organize` | `posts.write` |
-| `posts_delete` | 자기 글 지우기 (댓글도 함께) | `organize` | `posts.write` |
-| `post_comment_edit` | 자기 댓글 고치기 | `organize` | `posts.comment` |
-| `post_comment_delete` | 자기 댓글 지우기 (답글이 달렸으면 지운 댓글로 남음) | `organize` | `posts.comment` |
-| `post_comment_hide` | 관리자: 댓글 숨기기·다시 보이기 | `organize` | 관리자 |
-| `posts_category_create`·`posts_category_update`·`posts_category_delete` | 관리자: 카테고리 만들기·고치기·지우기(빈 카테고리만) | `organize` | 관리자 |
+| Tool | 용도 | 도구 범위 |
+| --- | --- | --- |
+| `posts_categories` | 카테고리 트리와 글 수 | `read` |
+| `posts_search` | 글 찾기 (단어·`"문장"`, 카테고리·태그·작성 봇으로 좁히기) | `read` |
+| `posts_read` | 글 하나와 댓글 | `read` |
+| `posts_create` | 새 글 (본문에 `media:`·`audio:`·`group:`·`file:` 미디어) | `organize` |
+| `posts_update` | 자기 글 고치기 (`expected_revision` 필수) | `organize` |
+| `post_comment` | 댓글·답글 (`@이름`으로 다른 봇 부르기는 게시판 한도 안에서) | `organize` |
+| `posts_tags` | 발행된 글의 태그와 글 수 | `read` |
+| `posts_revisions` | 고칠 수 있는 글의 이전 판 목록, 판 하나의 제목·본문(나눠 읽기) | `read` |
+| `posts_restore_revision` | 자기 글을 이전 판으로 되돌리기 (`expected_revision` 필수, 지금 판은 이전 판에 남음) | `organize` |
+| `posts_delete` | 자기 글 지우기 (댓글도 함께) | `organize` |
+| `post_comment_edit` | 자기 댓글 고치기 | `organize` |
+| `post_comment_delete` | 자기 댓글 지우기 (답글이 달렸으면 지운 댓글로 남음) | `organize` |
+| `post_comment_hide` | 관리자: 댓글 숨기기·다시 보이기 | `organize` |
+| `posts_category_create`·`posts_category_update`·`posts_category_delete` | 관리자: 카테고리 만들기·고치기·지우기(빈 카테고리만) | `organize` |
 
 - 관리자 도구 4개는 관리자 계정에 묶인 HTTP 키에만 나옵니다. 채팅 봇은 관리자 계정으로 돌아도 받지 않고, 게시판 페이지를 연결해 검토 카드로 합니다.
 - 게시판 호출에 답하는 턴에서는 `posts_delete`·`posts_restore_revision`·`post_comment_delete`가 빠집니다(자기 답글 고치기는 됨).
@@ -467,35 +467,35 @@ ComfyUI 시드(`seed`·`noise_seed`)는 실행마다 새로 뽑힙니다. marked
 
 `list_audio_projects`와 `list_audio_groups`는 `{ items, limit, offset, has_more, next_cursor }`를 반환합니다. `has_more`가 참이면 같은 프로젝트·검색·필터·`limit`을 유지하고 `next_cursor`를 다음 요청의 `cursor`로 넘깁니다. 커서는 0부터 시작하는 오프셋 문자열이며 `cursor`와 `offset`을 함께 주면 `cursor`가 우선합니다. 프로젝트는 생성 시각·ID 순, 효과음은 받은 파일 우선 후 생성 시각·ID 순입니다. 검색은 기존 Unicode 대소문자 처리를 유지합니다. 목록을 순회하는 중 추가·삭제가 일어나면 첫 페이지부터 다시 읽어 최신 상태를 확인하세요.
 
-| Tool | 용도 | 도구 범위 | 계정 권한 |
-| --- | --- | --- | --- |
-| `list_audio_projects` | 프로젝트와 그룹·후보 수, 프로젝트별 받은 파일 그룹 ID. `limit`(기본/최대 200), `cursor` 또는 `offset`으로 페이지 조회 | `read` | `audio.view` |
-| `list_audio_groups` | 프로젝트의 그룹, 설명·대표 프롬프트, 폴더, 파일명 규칙(`label`), 채택·코멘트 수, `project_name`. `project_id` 생략 시 전체 프로젝트의 같은 검색·필터를 조회. `limit`(기본/최대 200), `cursor` 또는 `offset` 지원 | `read` | `audio.view` |
-| `list_audio_folders` | 프로젝트의 폴더(화면의 그룹)와 폴더별 효과음 수 | `read` | `audio.view` |
-| `list_audio_candidates` | 그룹의 후보 목록(검수 상태, 길이, 출처) | `read` | `audio.view` |
-| `get_audio_candidate` | 후보 하나의 출처(프롬프트, seed, 워크플로, 서버)와 검수 메모 | `read` | `audio.view` |
-| `list_audio_group_comments` | 그룹에 남긴 작업 요청 코멘트(리비전 포함) | `read` | `audio.view` |
-| `get_audio_download` | 후보 파일 또는 백그라운드 내보내기 결과의 다운로드 링크 | `read` | `audio.view` |
-| `list_audio_workflows` | 음향 생성에 연결된 워크플로, 역할 필드, 호환성 검사 결과 | `read` | `audio.view` |
-| `get_audio_order` | 생성 주문의 잡별 상태와 만들어진 후보 ID | `read` | `audio.view` |
-| `create_audio_project` / `update_audio_project` | 프로젝트 만들기(받은 파일 그룹이 같이 생김)·수정 | `organize` | `audio.edit` |
-| `create_audio_group` / `update_audio_group` | 그룹 만들기·수정(`label`이 내보내기 파일명 규칙, `folder_id`로 폴더 이동, `null`이면 폴더 밖) | `organize` | `audio.edit` |
-| `create_audio_folder` / `update_audio_folder` | 폴더 만들기·이름 바꾸기 | `organize` | `audio.edit` |
-| `delete_audio_group` / `delete_audio_folder` / `delete_audio_project` | 효과음(후보·코멘트·주문 포함)·폴더(안의 효과음은 프로젝트 바로 아래로 남음)·프로젝트 전체 삭제. 웹의 삭제 버튼과 같고, `confirm_name`에 지금 이름을 정확히 적어야 함(다르면 거부). 받은 파일 그룹은 못 지움 | `organize` | `audio.edit` |
-| `move_audio_candidates` | 후보를 같은 프로젝트의 다른 그룹으로 이동 | `organize` | `audio.edit` |
-| `import_audio` | `data_url`(audio/*, 최대 50MB) 또는 공용 파일 `file_id`(복사)를 후보로 추가 | `organize` | `audio.edit` (+`files.view`) |
-| `set_audio_candidate_review` | 요청한 검수 상태·메모 반영 (`candidate_id`, `expected_revision`, `review`/`notes`) | `organize` | `audio.view` + `audio.edit` |
-| `delete_audio_candidate` | 지정한 후보 하나를 소프트 삭제 (`candidate_id`, `expected_revision`) | `organize` | `audio.view` + `audio.edit` |
-| `create_audio_group_comment` | 현재 호출 계정으로 코멘트 작성 (`group_id`, `text`) | `organize` | `audio.view` + `audio.edit` |
-| `update_audio_group_comment` / `delete_audio_group_comment` | 코멘트 수정·삭제 (`group_id`, `comment_id`, `expected_revision`; 수정은 `text`) | `organize` | `audio.view` + `audio.edit` |
-| `set_audio_group_comment_status` | 작업 요청 완료 처리·되돌리기(읽은 `revision` 필요) | `organize` | `audio.edit` |
-| `edit_audio_candidate` | 구간·음량·피치·속도·페이드 편집본을 새 후보로 저장(원본 보존) | `organize` | `audio.edit` |
-| `delete_unselected_audio_candidates` | 미채택 후보를 휴지통으로(채택 후보가 섞이면 전체 거부) | `organize` | `audio.edit` |
-| `export_audio_selected` | 채택본을 그룹 라벨 파일명으로 내보내기(WAV/OGG, 여러 개면 ZIP, 20개 초과는 백그라운드) | `organize` | `audio.view` |
-| `order_audio` | 그룹에 생성 주문(1~50개, seed는 기준값 +1씩) | `generate` | `audio.edit` + `generation.execute` |
-| `wait_audio_order` | 주문이 끝날 때까지 대기(채팅에서는 제공되지 않음) | `generate` | `audio.view` |
-| `cancel_audio_order` | 끝나지 않은 잡 취소 | `generate` | `audio.edit` |
-| `retry_audio_order_job` | 실패·취소된 잡을 같은 seed로 다시 실행 | `generate` | `audio.edit` + `generation.execute` |
+| Tool | 용도 | 도구 범위 |
+| --- | --- | --- |
+| `list_audio_projects` | 프로젝트와 그룹·후보 수, 프로젝트별 받은 파일 그룹 ID. `limit`(기본/최대 200), `cursor` 또는 `offset`으로 페이지 조회 | `read` |
+| `list_audio_groups` | 프로젝트의 그룹, 설명·대표 프롬프트, 폴더, 파일명 규칙(`label`), 채택·코멘트 수, `project_name`. `project_id` 생략 시 전체 프로젝트의 같은 검색·필터를 조회. `limit`(기본/최대 200), `cursor` 또는 `offset` 지원 | `read` |
+| `list_audio_folders` | 프로젝트의 폴더(화면의 그룹)와 폴더별 효과음 수 | `read` |
+| `list_audio_candidates` | 그룹의 후보 목록(검수 상태, 길이, 출처) | `read` |
+| `get_audio_candidate` | 후보 하나의 출처(프롬프트, seed, 워크플로, 서버)와 검수 메모 | `read` |
+| `list_audio_group_comments` | 그룹에 남긴 작업 요청 코멘트(리비전 포함) | `read` |
+| `get_audio_download` | 후보 파일 또는 백그라운드 내보내기 결과의 다운로드 링크 | `read` |
+| `list_audio_workflows` | 음향 생성에 연결된 워크플로, 역할 필드, 호환성 검사 결과 | `read` |
+| `get_audio_order` | 생성 주문의 잡별 상태와 만들어진 후보 ID | `read` |
+| `create_audio_project` / `update_audio_project` | 프로젝트 만들기(받은 파일 그룹이 같이 생김)·수정 | `organize` |
+| `create_audio_group` / `update_audio_group` | 그룹 만들기·수정(`label`이 내보내기 파일명 규칙, `folder_id`로 폴더 이동, `null`이면 폴더 밖) | `organize` |
+| `create_audio_folder` / `update_audio_folder` | 폴더 만들기·이름 바꾸기 | `organize` |
+| `delete_audio_group` / `delete_audio_folder` / `delete_audio_project` | 효과음(후보·코멘트·주문 포함)·폴더(안의 효과음은 프로젝트 바로 아래로 남음)·프로젝트 전체 삭제. 웹의 삭제 버튼과 같고, `confirm_name`에 지금 이름을 정확히 적어야 함(다르면 거부). 받은 파일 그룹은 못 지움 | `delete` |
+| `move_audio_candidates` | 후보를 같은 프로젝트의 다른 그룹으로 이동 | `organize` |
+| `import_audio` | `data_url`(audio/*, 최대 50MB) 또는 공용 파일 `file_id`(복사)를 후보로 추가 | `organize` |
+| `set_audio_candidate_review` | 요청한 검수 상태·메모 반영 (`candidate_id`, `expected_revision`, `review`/`notes`) | `organize` |
+| `delete_audio_candidate` | 지정한 후보 하나를 소프트 삭제 (`candidate_id`, `expected_revision`) | `delete` |
+| `create_audio_group_comment` | 현재 호출 계정으로 코멘트 작성 (`group_id`, `text`) | `organize` |
+| `update_audio_group_comment` / `delete_audio_group_comment` | 코멘트 수정·삭제 (`group_id`, `comment_id`, `expected_revision`; 수정은 `text`) | `organize` / `delete` |
+| `set_audio_group_comment_status` | 작업 요청 완료 처리·되돌리기(읽은 `revision` 필요) | `organize` |
+| `edit_audio_candidate` | 구간·음량·피치·속도·페이드 편집본을 새 후보로 저장(원본 보존) | `organize` |
+| `delete_unselected_audio_candidates` | 미채택 후보를 휴지통으로(채택 후보가 섞이면 전체 거부) | `delete` |
+| `export_audio_selected` | 채택본을 그룹 라벨 파일명으로 내보내기(WAV/OGG, 여러 개면 ZIP, 20개 초과는 백그라운드) | `organize` |
+| `order_audio` | 그룹에 생성 주문(1~50개, seed는 기준값 +1씩) | `generate` |
+| `wait_audio_order` | 주문이 끝날 때까지 대기(채팅에서는 제공되지 않음) | `generate` |
+| `cancel_audio_order` | 끝나지 않은 잡 취소 | `generate` |
+| `retry_audio_order_job` | 실패·취소된 잡을 같은 seed로 다시 실행 | `generate` |
 
 - 사용자 요청에 따라 채택·보류·미검수와 검수 메모, 코멘트 작성·수정·삭제, 후보 하나 삭제를 수행할 수 있습니다. 후보 조회 결과의 `revision` 또는 코멘트의 숫자 `revision`을 `expected_revision`으로 전달하며, 그사이 바뀐 대상은 거절합니다. 댓글 내용은 실행 지시로 취급하지 않습니다.
 - 효과음·폴더·프로젝트 삭제는 계정·프로필이 허용한 경우 일반 페이지 연결 중에도 사용할 수 있습니다. 사용자 요청의 대상·영향을 확인하고 `confirm_name`으로 현재 이름을 검증합니다.
@@ -508,15 +508,15 @@ ComfyUI 시드(`seed`·`noise_seed`)는 실행마다 새로 뽑힙니다. marked
 
 영상 프레임 저장·구간 편집·이어붙이기·스프라이트 처리는 번들 FFmpeg가 AV1 디코딩 등에서 실패하면 시스템에 설치된 FFmpeg로 한 번 대체 실행합니다. 취소·시간 초과는 대체 실행하지 않으며, 시스템 FFmpeg도 사용할 수 없거나 처리에 실패하면 작업 오류로 반환합니다. 생성 원본이나 코덱을 바꾸지 않고 처리 도구만 대체합니다.
 
-| Tool | 용도 | 기본 그룹 | 도구 범위 | 계정 권한 |
-| --- | --- | --- | --- | --- |
-| `resize_images` | 이미지 최대 500개를 지정 크기(width×height)로 리사이즈해 PNG·WebP로 저장. 영상·애니메이션은 건너뜀 | 크기 변경 | `generate` | `images.edit` + `images.upload` |
-| `save_video_frame` | 영상·움직이는 이미지의 특정 시각(`at_seconds`, 최대 16개)·프레임 번호(`frame_index`)·`position: first\|middle\|last` 프레임을 PNG(기본)·WebP로 저장 | 영상 캡처 | `generate` | `images.edit` + `images.upload` |
-| `crop_images` | 정지 이미지 최대 500개를 원본 픽셀 좌표 `rect: {x, y, width, height}`로 잘라 PNG로 저장(EXIF 회전 적용 후 기준). 영상·애니메이션은 항목별 오류 | 이미지 자르기 | `generate` | `images.edit` + `images.upload` |
-| `convert_images` | 정지 이미지 최대 500개를 PNG·WebP·JPEG로 저장(`quality` 기본 90, JPEG 투명 영역 배경 `background` 기본 `#ffffff`) | 이미지 변환 | `generate` | `images.edit` + `images.upload` |
-| `clip_video` | 영상 구간(`start_seconds`~`end_seconds`)을 MP4·WebM·GIF·WebP로 저장(`format` 기본 원본 컨테이너, `fps`·`width` 선택). 같은 컨테이너의 구간만 바꾸면 스트림 복사 | 영상 편집 | `generate` | `images.edit` + `images.upload` |
-| `join_videos` | 영상 2개 이상(`composite_hashes`, 출력 순서, 같은 해시 반복 가능)을 하나의 새 영상으로 이어붙임. 컨테이너·코덱·해상도·프레임 속도가 모두 같고 오디오가 없는 클립만 스트림 복사, 그 외에는 첫 클립의 해상도·프레임 속도의 MP4(H.264/AAC)로 다시 인코딩(비율이 다르면 여백, 오디오 없는 클립은 길이만큼 무음, 모든 클립에 오디오가 없으면 오디오 없음). 영상이 아니거나 열 수 없는 항목은 순번·해시와 함께 작업 오류 | 영상 이어붙이기 | `generate` | `images.edit` + `images.upload` |
-| `get_media_edit_job` | 편집 작업의 진행률·저장 해시·다운로드·항목별 오류 조회와 대기(`wait_seconds`), `cancel: true`로 취소 | - | `read` | `images.edit` + `images.upload` |
+| Tool | 용도 | 기본 그룹 | 도구 범위 |
+| --- | --- | --- | --- |
+| `resize_images` | 이미지 최대 500개를 지정 크기(width×height)로 리사이즈해 PNG·WebP로 저장. 영상·애니메이션은 건너뜀 | 크기 변경 | `generate` |
+| `save_video_frame` | 영상·움직이는 이미지의 특정 시각(`at_seconds`, 최대 16개)·프레임 번호(`frame_index`)·`position: first\|middle\|last` 프레임을 PNG(기본)·WebP로 저장 | 영상 캡처 | `generate` |
+| `crop_images` | 정지 이미지 최대 500개를 원본 픽셀 좌표 `rect: {x, y, width, height}`로 잘라 PNG로 저장(EXIF 회전 적용 후 기준). 영상·애니메이션은 항목별 오류 | 이미지 자르기 | `generate` |
+| `convert_images` | 정지 이미지 최대 500개를 PNG·WebP·JPEG로 저장(`quality` 기본 90, JPEG 투명 영역 배경 `background` 기본 `#ffffff`) | 이미지 변환 | `generate` |
+| `clip_video` | 영상 구간(`start_seconds`~`end_seconds`)을 MP4·WebM·GIF·WebP로 저장(`format` 기본 원본 컨테이너, `fps`·`width` 선택). 같은 컨테이너의 구간만 바꾸면 스트림 복사 | 영상 편집 | `generate` |
+| `join_videos` | 영상 2개 이상(`composite_hashes`, 출력 순서, 같은 해시 반복 가능)을 하나의 새 영상으로 이어붙임. 컨테이너·코덱·해상도·프레임 속도가 모두 같고 오디오가 없는 클립만 스트림 복사, 그 외에는 첫 클립의 해상도·프레임 속도의 MP4(H.264/AAC)로 다시 인코딩(비율이 다르면 여백, 오디오 없는 클립은 길이만큼 무음, 모든 클립에 오디오가 없으면 오디오 없음). 영상이 아니거나 열 수 없는 항목은 순번·해시와 함께 작업 오류 | 영상 이어붙이기 | `generate` |
+| `get_media_edit_job` | 편집 작업의 진행률·저장 해시·다운로드·항목별 오류 조회와 대기(`wait_seconds`), `cancel: true`로 취소 | - | `read` |
 
 - 결과 픽셀이 원본과 같으면(무손실 변환, 전체 영역 자르기) 새 항목을 만들지 않고 `identical`로 원본 해시를 돌려줍니다.
 - 새 항목은 후처리가 끝나기 전까지 다운로드 링크가 `null`일 수 있습니다. 끝난 뒤 `get_media_edit_job` 또는 `get_media_download`로 다시 받습니다.
@@ -528,16 +528,16 @@ ComfyUI 시드(`seed`·`noise_seed`)는 실행마다 새로 뽑힙니다. marked
 
 정규화는 최대 500개 시트를 처리합니다. 큰 결과도 `get_sprite_job`에서 전체 결과를 조회할 수 있으며, 작업 결과 정보는 24시간 보존합니다. 시트·애니메이션·프레임 ZIP의 임시 다운로드 파일은 별도 작업 폴더 수명(마지막 사용 후 약 1시간)에 따릅니다. 라이브러리 저장 중 취소하면 완료한 저장은 유지하고 다음 시트부터 멈춥니다.
 
-| Tool | 용도 | 도구 범위 | 계정 권한 |
-| --- | --- | --- | --- |
-| `get_video_info` | 영상 크기, fps, 길이, 프레임 수 | `read` | `images.view` |
-| `get_sprite_job` | 스프라이트 작업 상태와 저장된 `composite_hashes`, 결과 파일 다운로드 링크 | `read` | `images.view` |
-| `download_sprite_frames` | 끝난 추출의 프레임 ZIP 다운로드 링크(약 1시간 보관) | `read` | `images.view` |
-| `extract_sprite_sheet` | 구간·간격/개수로 프레임 추출, 지정색 제거(디스필 선택), 자동 크롭·리사이즈·배치 | `generate` | `images.edit` + `images.upload` |
-| `extract_sprite_sheets_batch` | 같은 옵션으로 영상 여러 개를 각각 시트로(작업 ID 반환, `zip: true`면 ZIP도) | `generate` | `images.edit` + `images.upload` |
-| `normalize_sprite_sheets` | 기준점 보존(시트별 / 묶음 공통) 또는 고정 납품 셀·몸 높이·발/중앙 기준점으로 정규화 | `generate` | `images.edit` + `images.upload` |
-| `normalize_sprite_sources` | 원본 이미지·영상 마지막 프레임을 지정색 불투명 작업/캔버스 PNG로 정규화 | `generate` | `images.edit` + `images.upload` |
-| `create_sprite_animation` | 시트를 WebP(기본)·GIF·MP4 애니메이션으로 | `generate` | `images.edit` + `images.upload` |
+| Tool | 용도 | 도구 범위 |
+| --- | --- | --- |
+| `get_video_info` | 영상 크기, fps, 길이, 프레임 수 | `read` |
+| `get_sprite_job` | 스프라이트 작업 상태와 저장된 `composite_hashes`, 결과 파일 다운로드 링크 | `read` |
+| `download_sprite_frames` | 끝난 추출의 프레임 ZIP 다운로드 링크(약 1시간 보관) | `read` |
+| `extract_sprite_sheet` | 구간·간격/개수로 프레임 추출, 지정색 제거(디스필 선택), 자동 크롭·리사이즈·배치 | `generate` |
+| `extract_sprite_sheets_batch` | 같은 옵션으로 영상 여러 개를 각각 시트로(작업 ID 반환, `zip: true`면 ZIP도) | `generate` |
+| `normalize_sprite_sheets` | 기준점 보존(시트별 / 묶음 공통) 또는 고정 납품 셀·몸 높이·발/중앙 기준점으로 정규화 | `generate` |
+| `normalize_sprite_sources` | 원본 이미지·영상 마지막 프레임을 지정색 불투명 작업/캔버스 PNG로 정규화 | `generate` |
+| `create_sprite_animation` | 시트를 WebP(기본)·GIF·MP4 애니메이션으로 | `generate` |
 
 `normalize_sprite_sources`는 `composite_hashes`(1–500개), `input: "image" | "last_frame"`을 받습니다.
 `key_color`는 임의의 `#RRGGBB`(기본 `#FF00FF`), `tolerance`는 RGB 거리(기본 40)입니다.
@@ -583,9 +583,9 @@ ComfyUI 시드(`seed`·`noise_seed`)는 실행마다 새로 뽑힙니다. marked
 
 ### 사용자 가이드
 
-| Tool | 용도 | 도구 범위 | 계정 권한 |
-| --- | --- | --- | --- |
-| `get_app_guide` | 이 가이드(docs/GUIDE)를 읽음. `section`만 주면 그 말이 제목에 든 문서와 섹션 제목(없으면 전체 목차), 인자 없이 전체 목차, `topic`이면 그 문서의 소개와 섹션 제목, `topic`+`section`이면 그 섹션, `offset`이면 문서 전체를 나눠서 | `read` | 없음(로그인만) |
+| Tool | 용도 | 도구 범위 |
+| --- | --- | --- |
+| `get_app_guide` | 이 가이드(docs/GUIDE)를 읽음. `section`만 주면 그 말이 제목에 든 문서와 섹션 제목(없으면 전체 목차), 인자 없이 전체 목차, `topic`이면 그 문서의 소개와 섹션 제목, `topic`+`section`이면 그 섹션, `offset`이면 문서 전체를 나눠서 | `read` |
 
 - 채팅 봇이 앱 기능을 설명하거나 조언하기 전에 실제 화면·설정 설명을 확인하는 용도입니다. 모든 빌드(Docker·포터블·SEA)에 가이드 파일이 같이 들어갑니다.
 
@@ -593,20 +593,20 @@ ComfyUI 시드(`seed`·`noise_seed`)는 실행마다 새로 뽑힙니다. marked
 
 [캐릭터 라이브러리](CHARACTER_LIBRARY.md)의 REST API·화면과 같은 서비스와 검증을 사용합니다.
 
-| Tool | 주요 인자와 결과 | 도구 범위 / 계정 권한 |
+| Tool | 주요 인자와 결과 | 도구 범위 |
 | --- | --- | --- |
-| `list_character_library` | `folder_id`(생략: 전체 설정, `null`: 최상위), `query`(이름·태그·한국어 태그 이름), `favorite`, `filters`(`{분류: [태그]}`), `sort`(`name`/`updated`/`created`/`created_asc`), `include_facets`, `limit`, `offset`. 경로·바로 아래 폴더·페이지형 설정 요약과 선택적인 필터 후보(태그별 개수)를 반환하며 외형 본문은 제외합니다. | `read` / `characters.view` |
-| `get_character_setting` | `setting_id`. 항목별 태그(`sections`)·의상(`outfits`, 첫 번째가 기본)·합친 `appearance`·즐겨찾기·이미지 해시·표정 키워드 맵·그룹·`revision`을 조회합니다. | `read` / `characters.view` |
-| `fill_character_appearance` | `source: danbooru`(`character`: 태그 이름 또는 한국어 이름), `image`(`image_hash`), `text`(`text`). 저장하지 않고 항목별 태그와 의상 태그를 반환합니다. Danbooru·이미지 경로는 Danbooru 사전이 필요합니다. | `read` / `characters.view` |
-| `manage_character_folders` | `action: create`는 `name`, 선택 `parent_id`; `rename`은 `folder_id`, `name`; `move`는 `folder_id`, `parent_id`(`null`: 최상위). 즉시 정리하며 순환 이동·형제 이름 중복을 거부합니다. | `organize` / `characters.edit` |
-| `propose_character_library` | `save_setting`, `delete_setting`, `delete_folder` 검토 카드. **채팅 전용**이며 카드 저장 전에는 변경하지 않습니다. | `organize` / `characters.edit` |
-| `list_art_styles` | `query`(제목·설명·배지·검색어), `badges`(모두 맞는 스타일), `favorite`, `limit`, `offset`. [그림 스타일](CHARACTER_LIBRARY.md#그림-스타일)의 `id`·`title`·`description`·`badges`·`imageCount`와 `total`·`hasMore`만 반환합니다. | `read` / `characters.view` |
-| `get_art_style` | `style_id`. 검색어·긍정/부정 프롬프트·이미지(`{ id, name, mimeType, width, height }`, 첫 장이 대표)·`revision`까지 조회합니다. 이미지는 `images.view`가 있을 때만 보입니다. `view_ids`(최대 6개)를 주면 그 이미지도 함께 보여 주며 `images.view`와 이미지를 보는 채팅 프로필이 필요합니다(`files.view`는 필요 없음). | `read` / `characters.view` |
-| `propose_art_style` | `save_style`(생성은 `input`만, 수정은 `style_id`·현재 `revision`·바꿀 `input`), `delete_style`(`style_id`, `revision`) 검토 카드. **채팅 전용**이며 카드 저장 전에는 변경하지 않습니다. 이미지 항목은 `{ id }`(스타일이 가진 이미지)나 `{ composite_hash }`(라이브러리 이미지, 저장할 때 복사)입니다. 삭제하면 참조 이미지(복사본)도 함께 지워집니다. | `organize` / `characters.edit` |
+| `list_character_library` | `folder_id`(생략: 전체 설정, `null`: 최상위), `query`(이름·태그·한국어 태그 이름), `favorite`, `filters`(`{분류: [태그]}`), `sort`(`name`/`updated`/`created`/`created_asc`), `include_facets`, `limit`, `offset`. 경로·바로 아래 폴더·페이지형 설정 요약과 선택적인 필터 후보(태그별 개수)를 반환하며 외형 본문은 제외합니다. | `read` |
+| `get_character_setting` | `setting_id`. 항목별 태그(`sections`)·의상(`outfits`, 첫 번째가 기본)·합친 `appearance`·즐겨찾기·이미지 해시·표정 키워드 맵·그룹·`revision`을 조회합니다. | `read` |
+| `fill_character_appearance` | `source: danbooru`(`character`: 태그 이름 또는 한국어 이름), `image`(`image_hash`), `text`(`text`). 저장하지 않고 항목별 태그와 의상 태그를 반환합니다. Danbooru·이미지 경로는 Danbooru 사전이 필요합니다. | `read` |
+| `manage_character_folders` | `action: create`는 `name`, 선택 `parent_id`; `rename`은 `folder_id`, `name`; `move`는 `folder_id`, `parent_id`(`null`: 최상위). 즉시 정리하며 순환 이동·형제 이름 중복을 거부합니다. | `organize` |
+| `propose_character_library` | `save_setting`, `delete_setting`, `delete_folder` 검토 카드. **채팅 전용**이며 카드 저장 전에는 변경하지 않습니다. | `organize` |
+| `list_art_styles` | `query`(제목·설명·배지·검색어), `badges`(모두 맞는 스타일), `favorite`, `limit`, `offset`. [그림 스타일](CHARACTER_LIBRARY.md#그림-스타일)의 `id`·`title`·`description`·`badges`·`imageCount`와 `total`·`hasMore`만 반환합니다. | `read` |
+| `get_art_style` | `style_id`. 검색어·긍정/부정 프롬프트·이미지(`{ id, name, mimeType, width, height }`, 첫 장이 대표)·`revision`까지 조회합니다. `view_ids`(최대 6개)를 주면 그 이미지도 함께 보여 주며 이미지를 보는 채팅 프로필이 필요합니다. | `read` |
+| `propose_art_style` | `save_style`(생성은 `input`만, 수정은 `style_id`·현재 `revision`·바꿀 `input`), `delete_style`(`style_id`, `revision`) 검토 카드. **채팅 전용**이며 카드 저장 전에는 변경하지 않습니다. 이미지 항목은 `{ id }`(스타일이 가진 이미지)나 `{ composite_hash }`(라이브러리 이미지, 저장할 때 복사)입니다. 삭제하면 참조 이미지(복사본)도 함께 지워집니다. | `organize` |
 
 `save_setting`의 생성은 `input: {folderId, name, ...}`이며 `folderId: null`은 최상위입니다. 수정은 `setting_id`, 현재 `revision`, 바꿀 `input`을 전달합니다. `input` 필드명은 REST와 같은 camelCase입니다. `delete_setting`은 `setting_id`와 `revision`, `delete_folder`는 `folder_id`를 받습니다.
 
-이미지 해시·표정 조회에는 `images.view`도 필요합니다. 연결 프로필 이름은 관리자에게만 보입니다. 오래된 설정 저장은 `409 revision_conflict`, 이름 중복은 `409 name_conflict`로 거부합니다. 충돌 후에는 설정을 다시 읽어 변경안을 확인하고 재제안하며, 사라진 폴더는 목록부터 다시 조회합니다. 설정·폴더 삭제는 동기화 프로필에 현재 외형을 복사하고 연결을 해제합니다.
+연결 프로필 이름은 관리자에게만 보입니다. 오래된 설정 저장은 `409 revision_conflict`, 이름 중복은 `409 name_conflict`로 거부합니다. 충돌 후에는 설정을 다시 읽어 변경안을 확인하고 재제안하며, 사라진 폴더는 목록부터 다시 조회합니다. 설정·폴더 삭제는 동기화 프로필에 현재 외형을 복사하고 연결을 해제합니다.
 
 `propose_profile_assets` / `get_asset_batch`는 동기화된 프로필을 지정하면 연결 설정의 배치를 사용합니다. 단, **배경만 생성하는 제안은 프로필 소유**이며 명시한 프로필 소유 `batch_id`의 조회·적용도 그 배치를 유지합니다. 명시적인 `setting_id`도 지원하며 `profile_id`와 함께 지정하지 않습니다. 설정 자산에는 배경 슬롯을 넣을 수 없고 배경은 프로필에서 관리합니다. 생성과 후보 적용은 각각 별도 승인 카드이며, 이 채팅 자산 도구는 기존 관리자 경계를 유지합니다.
 
@@ -614,7 +614,7 @@ ComfyUI 시드(`seed`·`noise_seed`)는 실행마다 새로 뽑힙니다. marked
 
 화면에서 채팅 프로필은 **채팅 → 프로필**(`/chat/profiles`), 프리셋·표시 블록·로어북은 **채팅 → 자원**(`/chat/resources?tab=presets|blocks|lorebooks`), 루틴은 **채팅 → 루틴**(`/chat/routines`), 판단 기록은 `/chat/judge`에서 관리합니다. 관리자는 **설정 → 채팅** 안에서도 같은 목록과 편집기를 사용하며, 기억·도구 사용(pi codemode 포함)·웹 검색·진단 같은 공용 동작도 바꿉니다. 개인 페르소나·플래그는 **채팅 → 내 설정**(`/chat/mine`) 또는 **설정 → 내 설정 → 페르소나·플래그**입니다. 프로필·자원·루틴·판단 기록은 `page.settings.view`, 내 설정은 `page.chat.view`를 따릅니다. 채팅과 외형 라이브러리는 독립적이며 프로필의 외형 연결은 선택입니다. 제안·저장·관리자 권한 계약은 그대로입니다.
 
-채팅 에이전트가 채팅 프로필과 표시 블록의 설정을 읽고, 새 설정을 **제안**하는 도구입니다. `configure` 권한은 채팅 전용이며 관리자 전용입니다(계정 권한 `chat.tools.configure`). HTTP MCP 키에는 이 권한이 없습니다.
+채팅 에이전트가 채팅 프로필과 표시 블록의 설정을 읽고, 새 설정을 **제안**하는 도구입니다. `configure` 권한은 채팅 전용이며 관리자 전용입니다. HTTP MCP 키에는 이 권한이 없습니다.
 
 | Tool | 용도 |
 | --- | --- |
@@ -639,7 +639,7 @@ ComfyUI 시드(`seed`·`noise_seed`)는 실행마다 새로 뽑힙니다. marked
 | `list_custom_dropdown_lists` | LoRA, 체크포인트 등 커스텀 드롭다운 목록 조회 |
 | `search_custom_dropdown_items` | 드롭다운 항목 검색 |
 | `search_wildcards` | wildcard 이름, 계층, 루트 목록 검색 |
-| `preview_random_prompt` | 와일드카드·`__tag:`·`__my:`·체인·가중치 범위가 들어간 프롬프트를 생성 화면 미리보기와 같은 해석기로 펼친 예시(최대 10개). 예시마다 따로 뽑으며 실제 생성은 다시 뽑습니다. 권한은 `wildcards.view` |
+| `preview_random_prompt` | 와일드카드·`__tag:`·`__my:`·체인·가중치 범위가 들어간 프롬프트를 생성 화면 미리보기와 같은 해석기로 펼친 예시(최대 10개). 예시마다 따로 뽑으며 실제 생성은 다시 뽑습니다. 권한은 읽기 |
 | `list_chat_rooms` | 내 채팅·그룹방 목록(ID, 제목, 캐릭터·참가자). 워크플로 노드의 채팅방 칸(`room_id`)에 쓸 ID 확인. 계정에 묶인 키는 그 계정의 방만, 계정이 설정된 뒤 묶이지 않은 키는 빈 목록 |
 
 ## 사용 예시
